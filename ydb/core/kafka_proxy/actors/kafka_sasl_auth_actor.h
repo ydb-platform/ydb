@@ -2,6 +2,8 @@
 
 #include "ydb/library/aclib/aclib.h"
 #include <ydb/core/base/ticket_parser.h>
+#include <ydb/core/kafka_proxy/kafka_events.h>
+#include <ydb/core/security/sasl/events.h>
 #include <ydb/core/tx/scheme_board/events.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/public/api/grpc/ydb_auth_v1.grpc.pb.h>
@@ -17,80 +19,111 @@ using namespace NKikimr;
 
 class TKafkaSaslAuthActor: public NActors::TActorBootstrapped<TKafkaSaslAuthActor> {
 
-struct TEvPrivate {
-    enum EEv {
-        EvTokenReady = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
-        EvAuthFailed,
-        EvEnd
-    };
-
-    static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE)");
-
-    struct TEvTokenReady : NActors::TEventLocal<TEvTokenReady, EvTokenReady> {
-        Ydb::Auth::LoginResult LoginResult;
-        TString Database;
-    };
-
-    struct TEvAuthFailed : NActors::TEventLocal<TEvAuthFailed, EvAuthFailed> {
-        TString ErrorMessage;
-    };
-};
-
 struct TAuthData {
     TString UserName;
     TString Password;
-    TString Database;
-};
-
-enum ENavigateRequestState : ui32 {
-    DESCRIBING_DATABASE = 0,
-    RESOLVING_DOMAIN_KEY = 1
 };
 
 public:
-    TKafkaSaslAuthActor(const TContext::TPtr context, const ui64 correlationId, NKikimr::NRawSocket::TSocketDescriptor::TSocketAddressType address, const TMessagePtr<TSaslAuthenticateRequestData>& message)
+    TKafkaSaslAuthActor(const TContext::TPtr context, NRawSocket::TSocketDescriptor::TSocketAddressType address)
         : Context(context)
-        , CorrelationId(correlationId)
-        , AuthenticateRequestData(message)
         , Address(address) {
     }
 
-    void Bootstrap(const NActors::TActorContext& ctx);
+    void Bootstrap();
 
 private:
     STATEFN(StateWork) {
         KAFKA_LOG_T("Received event: " << (*ev.Get()).GetTypeName());
         switch (ev->GetTypeRewrite()) {
-            HFunc(NKikimr::TEvTicketParser::TEvAuthorizeTicketResult, Handle);
-            HFunc(TEvPrivate::TEvTokenReady, Handle);
-            HFunc(TEvPrivate::TEvAuthFailed, Handle);
-            HFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
+            HFunc(TEvKafka::TEvAuthRequest, HandleAuthRequest);
+            CFunc(TEvents::TEvPoison::EventType, Die);
         }
     }
 
-    void Handle(NKikimr::TEvTicketParser::TEvAuthorizeTicketResult::TPtr& ev, const NActors::TActorContext& ctx);
-    void Handle(TEvPrivate::TEvTokenReady::TPtr& ev, const NActors::TActorContext& ctx);
-    void Handle(TEvPrivate::TEvAuthFailed::TPtr& ev, const NActors::TActorContext& ctx);
-    void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx);
+    STATEFN(StateResolveDatabase) {
+        KAFKA_LOG_T("Received event: " << (*ev.Get()).GetTypeName());
+        switch (ev->GetTypeRewrite()) {
+            HFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleNavigate);
+            CFunc(TEvents::TEvPoison::EventType, Die);
+        }
+    }
+
+    STATEFN(StateResolveSharedDatabase) {
+        KAFKA_LOG_T("Received event: " << (*ev.Get()).GetTypeName());
+        switch (ev->GetTypeRewrite()) {
+            HFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleNavigate);
+            CFunc(TEvents::TEvPoison::EventType, Die);
+        }
+    }
+
+    STATEFN(StateSaslPlainLogin) {
+        KAFKA_LOG_T("Received event: " << (*ev.Get()).GetTypeName());
+        switch (ev->GetTypeRewrite()) {
+            HFunc(NSasl::TEvSasl::TEvSaslPlainLoginResponse, HandleLoginResult);
+            HFunc(NSasl::TEvSasl::TEvSaslPlainLdapLoginResponse, HandleLoginResult);
+            CFunc(TEvents::TSystem::Wakeup, HandleTimeout);
+            CFunc(TEvents::TEvPoison::EventType, Die);
+        }
+    }
+
+    STATEFN(StateSaslScramLogin) {
+        KAFKA_LOG_T("Received event: " << (*ev.Get()).GetTypeName());
+        switch (ev->GetTypeRewrite()) {
+            hFunc(NSasl::TEvSasl::TEvSaslScramFirstServerResponse, HandleFirstLoginResponse);
+            HFunc(TEvKafka::TEvAuthRequest, HandleAuthRequest);
+            HFunc(NSasl::TEvSasl::TEvSaslScramFinalServerResponse, HandleLoginResult);
+            CFunc(TEvents::TSystem::Wakeup, HandleTimeout);
+            CFunc(TEvents::TEvPoison::EventType, CleanupAndDie);
+        }
+    }
+
+    STATEFN(StateTicketResolve) {
+        KAFKA_LOG_T("Received event: " << (*ev.Get()).GetTypeName());
+        switch (ev->GetTypeRewrite()) {
+            HFunc(TEvTicketParser::TEvAuthorizeTicketResult, Handle);
+            CFunc(TEvents::TEvPoison::EventType, Die);
+        }
+    }
+
+    void Handle(TEvTicketParser::TEvAuthorizeTicketResult::TPtr& ev, const NActors::TActorContext& ctx);
+    void HandleFirstLoginResponse(NSasl::TEvSasl::TEvSaslScramFirstServerResponse::TPtr& ev);
+    void HandleAuthRequest(TEvKafka::TEvAuthRequest::TPtr& ev, const NActors::TActorContext& ctx);
+    void HandleLoginResult(const NYql::TIssue& issue, const std::string& reason, const std::string& token,
+        const std::string& sanitizedToken, bool isAdmin, const NActors::TActorContext& ctx);
+    void HandleLoginResult(NSasl::TEvSasl::TEvSaslPlainLoginResponse::TPtr& ev, const NActors::TActorContext& ctx);
+    void HandleLoginResult(NSasl::TEvSasl::TEvSaslPlainLdapLoginResponse::TPtr& ev, const NActors::TActorContext& ctx);
+    void HandleLoginResult(NSasl::TEvSasl::TEvSaslScramFinalServerResponse::TPtr& ev, const NActors::TActorContext& ctx);
+    void HandleTimeout(const NActors::TActorContext& ctx);
+    void HandleNavigate(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx);
 
     void StartPlainAuth(const NActors::TActorContext& ctx);
-    void SendLoginRequest(TKafkaSaslAuthActor::TAuthData authData, const NActors::TActorContext& ctx);
-    void SendApiKeyRequest();
-    void SendDescribeRequest(const NActors::TActorContext& ctx);
+    void StartScramAuth();
+    void SendPlainLoginRequest(const NActors::TActorContext& ctx);
+    void SendScramLoginRequest(const NActors::TActorContext& ctx);
+    void SendTicketParserRequest();
+    void SendDescribeRequest();
     bool TryParseAuthDataTo(TKafkaSaslAuthActor::TAuthData& authData, const NActors::TActorContext& ctx);
+    void CleanupAndDie(const NActors::TActorContext& ctx);
+    void SendResponse();
     void SendResponseAndDie(EKafkaErrors errorCode, const TString& errorMessage, const TString& details, const NActors::TActorContext& ctx);
-    void GetPathByPathId(const TPathId& pathId, const TActorContext& ctx);
+    void GetPathByPathId(const TPathId& pathId);
 
 private:
     const TContext::TPtr Context;
-    const ui64 CorrelationId;
+    ui64 CorrelationId;
 
-    const TMessagePtr<TSaslAuthenticateRequestData> AuthenticateRequestData;
-    const NKikimr::NRawSocket::TNetworkConfig::TSocketAddressType Address;
+    TString AuthRequest = "";
+    TString AuthResponse = "";
+    const NRawSocket::TNetworkConfig::TSocketAddressType Address;
+
+    static const TDuration Timeout;
 
     TAuthData ClientAuthData;
-
     TString DatabasePath;
+
+    TString Ticket;
+    TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry> TicketParserEntries;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     TString FolderId;
     TString ServiceAccountId;
@@ -102,7 +135,7 @@ private:
     TString ResourseDatabasePath;
     bool IsServerless = false;
 
-    ENavigateRequestState RequestState;
+    TActorId ScramAuthActor;
 };
 
 } // NKafka

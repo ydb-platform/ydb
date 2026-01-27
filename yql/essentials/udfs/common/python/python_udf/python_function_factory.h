@@ -39,7 +39,7 @@ public:
     {
     }
 
-    ~TPythonFunctionFactory() {
+    ~TPythonFunctionFactory() override {
         Ctx_->Cleanup();
         PyCleanup();
     }

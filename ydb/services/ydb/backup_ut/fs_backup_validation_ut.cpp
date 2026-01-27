@@ -24,6 +24,7 @@ public:
     TFsBackupParamsValidationTestFixture() = default;
 
     void SetUp(NUnitTest::TTestContext& /* context */) override {
+        Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableFsBackups(true);
         auto res = YdbQueryClient().ExecuteQuery(R"sql(
             CREATE TABLE `/Root/FsExportParamsValidation/dir1/Table1` (
                 Key Uint32 NOT NULL,

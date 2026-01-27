@@ -24,7 +24,7 @@ private:
     TFsPath Path_;
 
 public:
-    TTestDir(const TString& name) {
+    explicit TTestDir(const TString& name) {
         Y_ENSURE(name.length() > 0, "have to specify name");
         Y_ENSURE(name.find('.') == TString::npos, "must be simple name");
         Y_ENSURE(name.find('/') == TString::npos, "must be simple name");
@@ -125,9 +125,9 @@ Y_UNIT_TEST(DisplaceByCount) {
     TFileLinkPtr file3 = PutFileWithSleep("test3.file", *storage);
 
     // after putting 3rd file we exceeded the limit by count
-    // and cleaned up half of the original maxCount files
-    UNIT_ASSERT_VALUES_EQUAL(storage->GetCount(), maxCount / 2);
-    UNIT_ASSERT_VALUES_EQUAL(storage->GetOccupiedSize(), (maxCount / 2) * DATA.size());
+    // and cleaned up to the original maxCount files
+    UNIT_ASSERT_VALUES_EQUAL(storage->GetCount(), maxCount);
+    UNIT_ASSERT_VALUES_EQUAL(storage->GetOccupiedSize(), maxCount * DATA.size());
 
     // despite of file1 and file2 are displaced from storage, we still
     // have temporary hardlinks to it
@@ -137,14 +137,14 @@ Y_UNIT_TEST(DisplaceByCount) {
 
     TVector<TString> filesInStorage;
     storage->GetRoot().ListNames(filesInStorage);
-    UNIT_ASSERT_EQUAL(filesInStorage.size(), 3); // 1 file + 1 hardlink directory + 1 locks directory
+    UNIT_ASSERT_EQUAL(filesInStorage.size(), 4); // 2 files + 1 hardlink directory + 1 locks directory
 
     auto beg = filesInStorage.begin(),
          end = filesInStorage.end();
 
-    // file1 and file2 were displaced
+    // file1 was displaced
     UNIT_ASSERT(Find(beg, end, file1->GetStorageFileName()) == end);
-    UNIT_ASSERT(Find(beg, end, file2->GetStorageFileName()) == end);
+    UNIT_ASSERT(Find(beg, end, file2->GetStorageFileName()) != end);
     UNIT_ASSERT(Find(beg, end, file3->GetStorageFileName()) != end);
 }
 
@@ -162,9 +162,9 @@ Y_UNIT_TEST(DisplaceBySize) {
     TFileLinkPtr file3 = PutFileWithSleep("test3.file", *storage);
 
     // after putting 3rd file we exceeded the limit by size
-    // and cleaned up files till we get half of the original maxSize
-    UNIT_ASSERT_VALUES_EQUAL(storage->GetCount(), 1);
-    UNIT_ASSERT_VALUES_EQUAL(storage->GetOccupiedSize(), DATA.size());
+    // and cleaned up files till we get the original maxSize
+    UNIT_ASSERT_VALUES_EQUAL(storage->GetCount(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(storage->GetOccupiedSize(), 2 * DATA.size());
 
     // despite of file1 and file2 are displaced from storage, we still
     // have temporary hardlinks to it
@@ -174,14 +174,14 @@ Y_UNIT_TEST(DisplaceBySize) {
 
     TVector<TString> filesInStorage;
     storage->GetRoot().ListNames(filesInStorage);
-    UNIT_ASSERT_EQUAL(filesInStorage.size(), 3); // 1 file + 1 hardlink directory + 1 locks folder
+    UNIT_ASSERT_EQUAL(filesInStorage.size(), 4); // 2 files + 1 hardlink directory + 1 locks folder
 
     auto beg = filesInStorage.begin(),
          end = filesInStorage.end();
 
-    // file1 and file2 were displaced
+    // file1 was displaced
     UNIT_ASSERT(Find(beg, end, file1->GetStorageFileName()) == end);
-    UNIT_ASSERT(Find(beg, end, file2->GetStorageFileName()) == end);
+    UNIT_ASSERT(Find(beg, end, file2->GetStorageFileName()) != end);
     UNIT_ASSERT(Find(beg, end, file3->GetStorageFileName()) != end);
 }
 

@@ -119,6 +119,8 @@ namespace NLs {
     void IsSecret(const NKikimrScheme::TEvDescribeSchemeResult& record);
     void IsStreamingQuery(const NKikimrScheme::TEvDescribeSchemeResult& record);
     void IsDirectory(const NKikimrScheme::TEvDescribeSchemeResult& record);
+    void IsReplication(const NKikimrScheme::TEvDescribeSchemeResult& record);
+    void IsTransfer(const NKikimrScheme::TEvDescribeSchemeResult& record);
     void CheckPathType(const NKikimrScheme::TEvDescribeSchemeResult& record, const NKikimrSchemeOp::EPathType pathType);
     TCheckFunc CheckColumns(const TString& name, const TSet<TString>& columns, const TSet<TString>& droppedColumns, const TSet<TString> keyColumns, bool strictCount = false);
     TCheckFunc CheckColumnType(const ui64 columnIndex, const TString& columnTypename);

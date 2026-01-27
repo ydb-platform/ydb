@@ -2,6 +2,8 @@
 #include <yt/yt/client/table_client/unversioned_row.h>
 #include <yt/yt/client/table_client/row_buffer.h>
 
+#include <yt/yt/core/ytree/fluent.h>
+
 #include <yt/yt/core/test_framework/framework.h>
 
 #include <library/cpp/yt/yson_string/string.h>
@@ -21,11 +23,11 @@ TEST(TUnversionedOwningValueTest, DefaultCtor)
 
 TEST(TUnversionedOwningValueTest, String)
 {
-    TString string = "Hello world!";
+    std::string string = "Hello world!";
     TUnversionedOwningValue owningValue(MakeUnversionedStringValue(string));
     TUnversionedValue value = owningValue;
     ASSERT_EQ(owningValue.Type(), EValueType::String);
-    ASSERT_EQ(TString(value.Data.String, value.Length), string);
+    ASSERT_EQ(TStringBuf(value.Data.String, value.Length), string);
     ASSERT_EQ(owningValue.GetStringRef().ToStringBuf(), string);
 }
 
@@ -140,6 +142,20 @@ TEST_F(TToUnversionedCompositeValueTest, NullValue)
 
 #undef XX
 
+}
+
+TEST(TUnversionedRowTest, YsonNullValue)
+{
+    auto unversioned = MakeUnversionedNullValue();
+
+    TYsonString ysonMap = NYTree::BuildYsonStringFluently().BeginMap().EndMap();
+    TYsonString str = ysonMap;
+    FromUnversionedValue(&str, unversioned);
+    EXPECT_FALSE(str);
+
+    TYsonStringBuf buf = ysonMap;
+    FromUnversionedValue(&buf, unversioned);
+    EXPECT_FALSE(buf);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -693,15 +693,9 @@ public:
         }
     }
 
-    TUnversionedOwningRow(const TUnversionedOwningRow& other)
-        : RowData_(other.RowData_)
-        , StringData_(other.StringData_)
-    { }
+    TUnversionedOwningRow(const TUnversionedOwningRow& other) noexcept = default;
 
-    TUnversionedOwningRow(TUnversionedOwningRow&& other)
-        : RowData_(std::move(other.RowData_))
-        , StringData_(std::move(other.StringData_))
-    { }
+    TUnversionedOwningRow(TUnversionedOwningRow&& other) noexcept = default;
 
     explicit operator bool() const
     {

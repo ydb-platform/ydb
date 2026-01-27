@@ -1,5 +1,5 @@
---- contrib/tools/python3/Objects/unicodeobject.c	(index)
-+++ contrib/tools/python3/Objects/unicodeobject.c	(working tree)
+--- a/Objects/unicodeobject.c	(index)
++++ b/Objects/unicodeobject.c	(working tree)
 @@ -14977,7 +14977,7 @@ intern_static(PyInterpreterState *interp, PyObject *s /* stolen */)
       * per-interpreter interned_dict, which might contain duplicates.
       */

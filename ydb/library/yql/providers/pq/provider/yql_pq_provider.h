@@ -1,12 +1,17 @@
 #pragma once
+
 #include "yql_pq_settings.h"
-#include "yql_pq_gateway.h"
+
+#include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h>
+#include <ydb/library/yql/providers/pq/expr_nodes/yql_pq_expr_nodes.h>
+#include <ydb/library/yql/providers/pq/gateway/abstract/yql_pq_gateway.h>
+#include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 
 #include <yql/essentials/core/yql_data_provider.h>
 #include <yql/essentials/core/dq_integration/yql_dq_integration.h>
-#include <ydb/library/yql/providers/pq/expr_nodes/yql_pq_expr_nodes.h>
-#include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h>
-#include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
+
+#include <yt/yql/providers/ytflow/integration/interface/yql_ytflow_integration.h>
+#include <yt/yql/providers/ytflow/integration/interface/yql_ytflow_optimization.h>
 
 namespace NKikimr::NMiniKQL {
 class IFunctionRegistry;
@@ -47,6 +52,7 @@ public:
     bool SupportRtmrMode = false;
     bool UseActorSystemThreadsInTopicClient = true;
     bool AllowTransparentSystemColumns = true;
+    bool StreamingTopicsReadByDefault = true;
     const TString SessionId;
     THashMap<std::pair<TString, TString>, TTopicMeta> Topics;
 
@@ -55,6 +61,8 @@ public:
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry = nullptr;
     IPqGateway::TPtr Gateway;
     THolder<IDqIntegration> DqIntegration;
+    THolder<IYtflowIntegration> YtflowIntegration;
+    THolder<IYtflowOptimization> YtflowOptimization;
     THashMap<std::pair<TString, NYql::EDatabaseType>, NYql::TDatabaseAuth> DatabaseIds;
     std::shared_ptr<NYql::IDatabaseAsyncResolver> DbResolver;
     NPq::NProto::StreamingDisposition Disposition;
@@ -69,7 +77,8 @@ TDataProviderInitializer GetPqDataProviderInitializer(
     const NPq::NProto::StreamingDisposition& disposition = {},
     const std::vector<std::pair<TString, TString>>& taskSensorLabels = {},
     const std::vector<ui64>& nodeIds = {},
-    bool useActorSystemThreadsInTopicClient = true
+    bool useActorSystemThreadsInTopicClient = true,
+    bool useYtflowEngine = false
 );
 
 TIntrusivePtr<IDataProvider> CreatePqDataSource(TPqState::TPtr state, IPqGateway::TPtr gateway);

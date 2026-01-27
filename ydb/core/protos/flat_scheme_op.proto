@@ -5,6 +5,7 @@ import "ydb/core/protos/channel_purpose.proto";
 import "ydb/core/protos/compaction.proto";
 import "ydb/core/protos/filestore_config.proto";
 import "ydb/core/protos/follower_group.proto";
+import "ydb/core/protos/fs_settings.proto";
 import "ydb/core/protos/index_builder.proto";
 import "ydb/core/protos/pqconfig.proto";
 import "ydb/core/protos/replication.proto";
@@ -92,6 +93,11 @@ enum EMvccState {
     MvccDisabled = 2;
 }
 
+message TColumnCompression {
+    optional string Algorithm = 1;
+    optional int64 Level = 2;
+}
+
 message TColumnDescription {
     optional string Name = 1;
     optional string Type = 2;
@@ -109,6 +115,7 @@ message TColumnDescription {
     // flag that indicates that column is currently under the build
     // operation.
     optional bool IsBuildInProgress = 11 [default = false];
+    optional TColumnCompression Compression = 13;
 }
 
 message TStorageSettings {
@@ -346,6 +353,11 @@ message TTableDescription {
     optional bool AllowUnderSameOperation = 44 [default = false];
     // Create only as-well. Used for CopyTable to create table in desired state instead of default
     optional EPathState PathState = 46;
+    // Skip automatic index/impl table copying - indexes will be handled separately
+    optional bool OmitIndexes = 47 [default = false];
+    optional TDropCdcStream DropSrcCdcStream = 48;
+    // Coordinated schema version for backup operations - persisted with AlterData
+    optional uint64 CoordinatedSchemaVersion = 49;
 }
 
 message TDictionaryEncodingSettings {
@@ -389,14 +401,14 @@ message TOlapColumnDescription {
     optional NKikimrProto.TTypeInfo TypeInfo = 6;
     optional bool NotNull = 7;
 
-    optional TCompressionOptions Compression = 8[deprecated = true];
+    optional TCompressionOptions Compression = 8 [deprecated = true];
     optional TDictionaryEncodingSettings DictionaryEncoding = 9;
     optional TOlapColumn.TSerializer Serializer = 10;
     optional string StorageId = 11;
     optional NKikimrColumnShardColumnDefaults.TColumnDefault DefaultValue = 12;
     optional NKikimrArrowAccessorProto.TConstructor DataAccessorConstructor = 13;
-    optional uint32 ColumnFamilyId = 14;
-    optional string ColumnFamilyName = 15;
+    optional uint32 ColumnFamilyId = 14 [deprecated = true];
+    optional string ColumnFamilyName = 15 [deprecated = true];
 }
 
 message TIndexDataExtractor {
@@ -951,14 +963,16 @@ message TLoginCreateUser {
     optional string User = 1;
     optional string Password = 2;
     optional bool CanLogin = 3 [default = true];
-    optional bool IsHashedPassword = 4 [default = false];
+    optional bool IsHashedPassword = 4 [default = false, deprecated = true];
+    optional string HashedPassword = 5;
 }
 
 message TLoginModifyUser {
     optional string User = 1;
     optional string Password = 2;
     optional bool CanLogin = 3;
-    optional bool IsHashedPassword = 4 [default = false];
+    optional bool IsHashedPassword = 4 [default = false, deprecated = true];
+    optional string HashedPassword = 5;
 }
 
 message TLoginRemoveUser {
@@ -1155,13 +1169,18 @@ message TCreateLongIncrementalBackupOp {
     repeated NKikimrProto.TPathID StreamPathIds = 1;
 }
 
+message TTruncateTable {
+    optional string TableName = 1;
+}
+
 enum EIndexType {
     EIndexTypeInvalid = 0;
     EIndexTypeGlobal = 1;
     EIndexTypeGlobalAsync = 2;
     EIndexTypeGlobalUnique = 3;
     EIndexTypeGlobalVectorKmeansTree = 4;
-    EIndexTypeGlobalFulltext = 5;
+    EIndexTypeGlobalFulltextPlain = 5;
+    EIndexTypeGlobalFulltextRelevance = 6;
 }
 
 enum EIndexState {
@@ -1282,6 +1301,14 @@ message TCopyTableConfig { //TTableDescription implemets copying a table in orig
     optional bool AllowUnderSameOperation = 7 [default = false];
 
     optional NKikimrSchemeOp.EPathState TargetPathTargetState = 8;
+
+    // Map from index name to CDC stream config for incremental backups
+    // Key: index name (e.g., "age_index", "name_index")
+    // Value: CDC stream configuration to create on that index's impl table
+    map<string, TCreateCdcStream> IndexImplTableCdcStreams = 9;
+    // additionally dropes cdc stream on src table consistently with taking snapshot
+    optional TDropCdcStream DropSrcCdcStream = 10;
+    map<string, TDropCdcStream> IndexImplTableDropCdcStreams = 11;
 }
 
 message TConsistentTableCopyingConfig {
@@ -1320,6 +1347,7 @@ message TBackupTask {
     oneof Settings {
         TYTSettings YTSettings = 4;
         NKikimrSchemeOp.TS3Settings S3Settings = 9;
+        NKikimrSchemeOp.TFSSettings FSSettings = 20;
     }
 
     optional TPathDescription Table = 10; // for further restore
@@ -1367,6 +1395,7 @@ message TRestoreTask {
 
     oneof Settings {
         NKikimrSchemeOp.TS3Settings S3Settings = 6;
+        NKikimrSchemeOp.TFSSettings FSSettings = 9;
     }
 
     optional bool ValidateChecksums = 7; // currently available for s3
@@ -1919,6 +1948,12 @@ message TModifyScheme {
     optional TSecretSchemaOp AlterSecret = 89;
 
     optional TStreamingQueryDescription CreateStreamingQuery = 90;
+
+    // This field is needed, because the "truncate table" feature is implemented as a schema operation.
+    // As of right now, it does not actually change the schema,
+    // but in the future it may have an indirect impact on the schema,
+    // for example, by resetting all sequences.
+    optional TTruncateTable TruncateTable = 92;
 
     // Some entries are grouped by semantics, so are out of order
 }

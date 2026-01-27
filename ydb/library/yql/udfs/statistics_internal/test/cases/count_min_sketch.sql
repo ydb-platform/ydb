@@ -1,11 +1,11 @@
 $get_factory = ($width, $depth) -> { return AggregationFactory(
         "UDAF",
-        ($item, $parent) -> { return Udf(StatisticsInternal::CountMinSketchCreate, $parent as Depends)($item, $width, $depth) },
-        ($state, $item, $parent) -> { return Udf(StatisticsInternal::CountMinSketchAddValue, $parent as Depends)($state, $item) },
-        StatisticsInternal::CountMinSketchMerge,
-        StatisticsInternal::CountMinSketchFinalize,
-        StatisticsInternal::CountMinSketchSerialize,
-        StatisticsInternal::CountMinSketchDeserialize,
+        ($item, $parent) -> { return Udf(StatisticsInternal::CMSCreate, $parent as Depends)($item, $width, $depth) },
+        ($state, $item, $parent) -> { return Udf(StatisticsInternal::CMSAddValue, $parent as Depends)($state, $item) },
+        StatisticsInternal::CMSMerge,
+        StatisticsInternal::CMSFinalize,
+        StatisticsInternal::CMSSerialize,
+        StatisticsInternal::CMSDeserialize,
     )
 };
 

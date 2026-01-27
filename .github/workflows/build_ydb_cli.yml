@@ -163,11 +163,11 @@ jobs:
             echo "Matrix after adding linux-arm: $MATRIX"
           fi
           if [ "${{ inputs.build-darwin-amd }}" == "true" ]; then
-            MATRIX=$(echo $MATRIX | jq -c '.include += [{"os": "darwin-amd", "runner": "macos-13", "shell": "bash", "binary": "ydb", "platform": "DEFAULT-DARWIN-X86_64"}]')
+            MATRIX=$(echo $MATRIX | jq -c '.include += [{"os": "darwin-amd", "runner": "macos-latest", "shell": "bash", "binary": "ydb", "platform": "DEFAULT-DARWIN-X86_64"}]')
             echo "Matrix after adding darwin-amd: $MATRIX"
           fi
           if [ "${{ inputs.build-darwin-arm }}" == "true" ]; then
-            MATRIX=$(echo $MATRIX | jq -c '.include += [{"os": "darwin-arm", "runner": "macos-13", "shell": "bash", "binary": "ydb", "platform": "DEFAULT-DARWIN-ARM64"}]')
+            MATRIX=$(echo $MATRIX | jq -c '.include += [{"os": "darwin-arm", "runner": "macos-latest", "shell": "bash", "binary": "ydb", "platform": "DEFAULT-DARWIN-ARM64"}]')
             echo "Matrix after adding darwin-arm: $MATRIX"
           fi
           if [ "${{ inputs.build-windows-amd }}" == "true" ]; then

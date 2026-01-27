@@ -74,10 +74,10 @@ TEST_F(TSuspendableInvokerTest, SuspendableDoubleWaitFor)
     auto promise = NewPromise<void>();
 
     auto setFlagFuture = BIND([&] {
-        WaitFor(VoidFuture)
+        WaitFor(OKFuture)
             .ThrowOnError();
         Sleep(SleepQuantum);
-        WaitFor(VoidFuture)
+        WaitFor(OKFuture)
             .ThrowOnError();
         promise.Set();
 

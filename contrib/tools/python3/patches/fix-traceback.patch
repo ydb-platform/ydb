@@ -9,8 +9,8 @@ revision: 5216942
     REVIEW: 869505
     Note: mandatory check (NEED_CHECK) was skipped
 
---- contrib/tools/python3/Lib/linecache.py	(69071b279955ab8dd08fad10b2540b9f6bae2825)
-+++ contrib/tools/python3/Lib/linecache.py	(8a9d74e955c9e66e23ca423181d6b4f3b2f35234)
+--- a/Lib/linecache.py	(69071b279955ab8dd08fad10b2540b9f6bae2825)
++++ b/Lib/linecache.py	(8a9d74e955c9e66e23ca423181d6b4f3b2f35234)
 @@ -88,6 +88,18 @@ def updatecache(filename, module_globals=None):
      if not filename or (filename.startswith('<') and filename.endswith('>')):
          return []

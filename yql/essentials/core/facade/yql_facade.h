@@ -121,7 +121,7 @@ public:
     using TFutureStatus = NThreading::TFuture<TStatus>;
 
 public:
-    ~TProgram();
+    ~TProgram() override;
 
     void SetLanguageVersion(TLangVersion version);
     void SetMaxLanguageVersion(TLangVersion version);
@@ -135,6 +135,8 @@ public:
     bool ParseYql();
     bool ParseSql();
     bool ParseSql(const NSQLTranslation::TTranslationSettings& settings);
+
+    TStatus TestPartialTypecheck();
 
     bool Compile(const TString& username, bool skipLibraries = false);
 

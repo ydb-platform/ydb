@@ -380,7 +380,7 @@ private:
     ui8 CacheIndex_ = 0U;
 
 public:
-    TPlainArrayCache(ui32 size)
+    explicit TPlainArrayCache(ui32 size)
         : Size_(size)
     {
         Clear();

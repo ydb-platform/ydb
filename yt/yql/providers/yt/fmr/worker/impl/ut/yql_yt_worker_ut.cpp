@@ -1,35 +1,12 @@
-#include <library/cpp/testing/unittest/registar.h>
-#include <library/cpp/threading/future/async.h>
-#include <util/stream/output.h>
-#include <util/string/cast.h>
-#include <util/system/mutex.h>
-#include <util/thread/pool.h>
-#include <yt/yql/providers/yt/fmr/worker/impl/yql_yt_worker_impl.h>
-#include <yt/yql/providers/yt/fmr/coordinator/impl/yql_yt_coordinator_impl.h>
-#include <yt/yql/providers/yt/fmr/coordinator/yt_coordinator_service/file/yql_yt_file_coordinator_service.h>
-#include <yt/yql/providers/yt/fmr/job_factory/impl/yql_yt_job_factory_impl.h>
+#include <yt/yql/providers/yt/fmr/coordinator/impl/ut/yql_yt_coordinator_ut.h>
 
 namespace NYql::NFmr {
 
-TDownloadOperationParams downloadOperationParams{
-    .Input = TYtTableRef("Cluster", "Path", "Filepath"),
-    .Output = TFmrTableRef{{"Cluster", "Path"}}
-};
-
-TStartOperationRequest CreateOperationRequest(ETaskType taskType = ETaskType::Download, TOperationParams operationParams = downloadOperationParams) {
-    return TStartOperationRequest{
-        .TaskType = taskType,
-        .OperationParams = operationParams,
-        .SessionId = "test-session-id",
-        .IdempotencyKey = "IdempotencyKey",
-        .ClusterConnections = {{TFmrTableId("Cluster", "Path"), TClusterConnection{.TransactionId = "transaction_id", .YtServerName = "hahn.yt.yandex.net", .Token = "token"}}}
-    };
-}
-
 Y_UNIT_TEST_SUITE(FmrWorkerTests) {
     Y_UNIT_TEST(GetSuccessfulOperationResult) {
-        auto coordinator = MakeFmrCoordinator(TFmrCoordinatorSettings(), MakeFileYtCoordinatorService());
-        coordinator->OpenSession({.SessionId = "test-session-id"}).GetValueSync();
+        TFmrTestSetup setup;
+        auto coordinator = setup.GetFmrCoordinator();
+
         auto operationResults = std::make_shared<TString>("no_result_yet");
         auto func = [&] (TTask::TPtr /*task*/, std::shared_ptr<std::atomic<bool>> cancelFlag) {
             while (!cancelFlag->load()) {
@@ -38,21 +15,19 @@ Y_UNIT_TEST_SUITE(FmrWorkerTests) {
             }
             return TJobResult{.TaskStatus = ETaskStatus::Failed, .Stats = TStatistics()};
         };
-        TFmrJobFactorySettings settings{.NumThreads = 3, .Function = func};
 
-        auto factory = MakeFmrJobFactory(settings);
-        TFmrWorkerSettings workerSettings{.WorkerId = 0, .RandomProvider = CreateDeterministicRandomProvider(1)};
-        auto worker = MakeFmrWorker(coordinator, factory, workerSettings);
-        worker->Start();
-        coordinator->StartOperation(CreateOperationRequest()).GetValueSync();
+        auto worker = setup.GetFmrWorker(coordinator, 3, func);
+
+        coordinator->StartOperation(setup.CreateOperationRequest()).GetValueSync();
         Sleep(TDuration::Seconds(2));
         worker->Stop();
         UNIT_ASSERT_NO_DIFF(*operationResults, "operation_result");
     }
 
     Y_UNIT_TEST(CancelOperation) {
-        auto coordinator = MakeFmrCoordinator(TFmrCoordinatorSettings(), MakeFileYtCoordinatorService());
-        coordinator->OpenSession({.SessionId = "test-session-id"}).GetValueSync();
+        TFmrTestSetup setup;
+        auto coordinator = setup.GetFmrCoordinator();
+
         auto operationResults = std::make_shared<TString>("no_result_yet");
         auto func = [&] (TTask::TPtr /*task*/, std::shared_ptr<std::atomic<bool>> cancelFlag) {
             int numIterations = 0;
@@ -67,12 +42,10 @@ Y_UNIT_TEST_SUITE(FmrWorkerTests) {
             *operationResults = "operation_cancelled";
             return TJobResult{.TaskStatus = ETaskStatus::Failed, .Stats = TStatistics()};
         };
-        TFmrJobFactorySettings settings{.NumThreads =3, .Function=func};
-        auto factory = MakeFmrJobFactory(settings);
-        TFmrWorkerSettings workerSettings{.WorkerId = 0, .RandomProvider = CreateDeterministicRandomProvider(1)};
-        auto worker = MakeFmrWorker(coordinator, factory, workerSettings);
-        worker->Start();
-        auto operationId = coordinator->StartOperation(CreateOperationRequest()).GetValueSync().OperationId;
+
+        auto worker = setup.GetFmrWorker(coordinator, 3, func);
+
+        auto operationId = coordinator->StartOperation(setup.CreateOperationRequest()).GetValueSync().OperationId;
         Sleep(TDuration::Seconds(3));
         coordinator->DeleteOperation({operationId}).GetValueSync();
         Sleep(TDuration::Seconds(5));
@@ -80,11 +53,13 @@ Y_UNIT_TEST_SUITE(FmrWorkerTests) {
         UNIT_ASSERT_NO_DIFF(*operationResults, "operation_cancelled");
     }
     Y_UNIT_TEST(CreateSeveralWorkers) {
+        TFmrTestSetup setup;
+
         TFmrCoordinatorSettings coordinatorSettings{};
         coordinatorSettings.WorkersNum = 2;
         coordinatorSettings.RandomProvider = CreateDeterministicRandomProvider(3);
-        auto coordinator = MakeFmrCoordinator(coordinatorSettings, MakeFileYtCoordinatorService());
-        coordinator->OpenSession({.SessionId = "test-session-id"}).GetValueSync();
+        auto coordinator = setup.GetFmrCoordinator(coordinatorSettings);
+
         std::shared_ptr<std::atomic<ui32>> operationResult = std::make_shared<std::atomic<ui32>>(0);
         auto func = [&] (TTask::TPtr /*task*/, std::shared_ptr<std::atomic<bool>> cancelFlag) {
             while (!cancelFlag->load()) {
@@ -94,24 +69,26 @@ Y_UNIT_TEST_SUITE(FmrWorkerTests) {
             }
             return TJobResult{.TaskStatus = ETaskStatus::Failed, .Stats = TStatistics()};
         };
-        TFmrJobFactorySettings settings{.NumThreads =3, .Function=func};
-        auto factory = MakeFmrJobFactory(settings);
+
         TFmrWorkerSettings firstWorkerSettings{.WorkerId = 0, .RandomProvider = CreateDeterministicRandomProvider(1)};
         TFmrWorkerSettings secondWorkerSettings{.WorkerId = 1, .RandomProvider = CreateDeterministicRandomProvider(2)};
-        auto firstWorker = MakeFmrWorker(coordinator, factory, firstWorkerSettings);
-        auto secondWorker = MakeFmrWorker(coordinator, factory, secondWorkerSettings);
-        firstWorker->Start();
-        secondWorker->Start();
-        coordinator->StartOperation(CreateOperationRequest()).GetValueSync();
+
+        auto firstWorker = setup.GetFmrWorker(coordinator, 3, func, firstWorkerSettings);
+        auto secondWorker = setup.GetFmrWorker(coordinator, 3, func, secondWorkerSettings);
+
+
+        coordinator->StartOperation(setup.CreateOperationRequest()).GetValueSync();
         Sleep(TDuration::Seconds(3));
         UNIT_ASSERT_VALUES_EQUAL(operationResult->load(), 1);
     }
     Y_UNIT_TEST(SimpleWorkerFailover) {
+        TFmrTestSetup setup;
+
         TFmrCoordinatorSettings coordinatorSettings{};
         coordinatorSettings.WorkersNum = 2;
         coordinatorSettings.RandomProvider = CreateDeterministicRandomProvider(3);
-        auto coordinator = MakeFmrCoordinator(coordinatorSettings, MakeFileYtCoordinatorService());
-        coordinator->OpenSession({.SessionId = "test-session-id"}).GetValueSync();
+        auto coordinator = setup.GetFmrCoordinator(coordinatorSettings);
+
         std::shared_ptr<std::atomic<ui32>> operationResult = std::make_shared<std::atomic<ui32>>(0);
         // TODO - maybe improve test
         ui64 numIterations = 5;
@@ -128,13 +105,15 @@ Y_UNIT_TEST_SUITE(FmrWorkerTests) {
             *operationResult = 0; // reset counter in case of cancel
             return TJobResult{.TaskStatus = ETaskStatus::Failed, .Stats = TStatistics()};
         };
-        TFmrJobFactorySettings settings{.NumThreads = 3, .Function=func};
+
         TFmrWorkerSettings firstWorkerSettings{.WorkerId = 0, .RandomProvider = CreateDeterministicRandomProvider(1)};
         TFmrWorkerSettings secondWorkerSettings{.WorkerId = 1, .RandomProvider = CreateDeterministicRandomProvider(2)};
-        auto firstWorker = MakeFmrWorker(coordinator,  MakeFmrJobFactory(settings), firstWorkerSettings);
-        auto secondWorker = MakeFmrWorker(coordinator,  MakeFmrJobFactory(settings), secondWorkerSettings);
+
+        auto firstWorker = setup.GetFmrWorker(coordinator, 3, func, firstWorkerSettings, false);
+        auto secondWorker = setup.GetFmrWorker(coordinator, 3, func, secondWorkerSettings, false);
+
         firstWorker->Start();
-        coordinator->StartOperation(CreateOperationRequest()).GetValueSync();
+        coordinator->StartOperation(setup.CreateOperationRequest()).GetValueSync();
         Sleep(TDuration::Seconds(2));
         firstWorker->Stop();
         secondWorker->Start();

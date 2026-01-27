@@ -402,11 +402,7 @@ char *yytext;
 #define INITIAL 0
 #line 2 "tokenizer.l"
 /*
-<<<<<<< tokenizer.c
-* $Id: tokenizer.c,v 1.11 2008/07/22 23:20:20 jms Exp $
-=======
-* $Id: tokenizer.c,v 1.11 2008/07/22 23:20:20 jms Exp $
->>>>>>> 1.9.8.1
+ $Id: tokenizer.c,v 1.11 2008/07/22 23:20:20 jms Exp $
 *
 * This software contains proprietary and confidential information of Gradient
 * Systems Inc.  By accepting transfer of this copy, Recipient agrees

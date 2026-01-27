@@ -23,6 +23,8 @@
 #include <yql/essentials/public/issue/yql_issue_message.h>
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/yql_panic.h>
+#include <ydb/core/base/appdata_fwd.h>
+#include <ydb/core/base/feature_flags.h>
 #include <ydb/core/fq/libs/events/events.h>
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 
@@ -77,7 +79,7 @@ LWTRACE_USING(DQ_PQ_PROVIDER);
 } // namespace
 
 struct TRowDispatcherReadActorMetrics {
-    explicit TRowDispatcherReadActorMetrics(const TTxId& txId, ui64 taskId, const ::NMonitoring::TDynamicCounterPtr& counters, const NPq::NProto::TDqPqTopicSource& sourceParams)
+    explicit TRowDispatcherReadActorMetrics(const TTxId& txId, ui64 taskId, const ::NMonitoring::TDynamicCounterPtr& counters, const NPq::NProto::TDqPqTopicSource& sourceParams, bool enableStreamingQueriesCounters)
         : TxId(std::visit([](auto arg) { return ToString(arg); }, txId))
         , Counters(counters) {
         if (Counters) {
@@ -85,11 +87,15 @@ struct TRowDispatcherReadActorMetrics {
         } else {
             SubGroup = MakeIntrusive<::NMonitoring::TDynamicCounters>();
         }
-        for (const auto& sensor : sourceParams.GetTaskSensorLabel()) {
-            SubGroup = SubGroup->GetSubgroup(sensor.GetLabel(), sensor.GetValue());
+
+        auto task = SubGroup;
+        if (enableStreamingQueriesCounters) {
+            for (const auto& sensor : sourceParams.GetTaskSensorLabel()) {
+                SubGroup = SubGroup->GetSubgroup(sensor.GetLabel(), sensor.GetValue());
+            }
+            Source = SubGroup->GetSubgroup("tx_id", TxId);
+            task = Source->GetSubgroup("task_id", ToString(taskId));
         }
-        auto source = SubGroup->GetSubgroup("tx_id", TxId);
-        auto task = source->GetSubgroup("task_id", ToString(taskId));
         InFlyGetNextBatch = task->GetCounter("InFlyGetNextBatch");
         InFlyAsyncInputData = task->GetCounter("InFlyAsyncInputData");
         ReInit = task->GetCounter("ReInit", true);
@@ -105,6 +111,7 @@ struct TRowDispatcherReadActorMetrics {
     TString TxId;
     ::NMonitoring::TDynamicCounterPtr Counters;
     ::NMonitoring::TDynamicCounterPtr SubGroup;
+    ::NMonitoring::TDynamicCounterPtr Source;
     ::NMonitoring::TDynamicCounters::TCounterPtr InFlyGetNextBatch;
     ::NMonitoring::TDynamicCounters::TCounterPtr InFlyAsyncInputData;
     ::NMonitoring::TDynamicCounters::TCounterPtr ReInit;
@@ -318,6 +325,7 @@ private:
     // Set on Parent
     ui64 NextGeneration = 0;
     ui64 NextEventQueueId = 0;
+    bool EnableStreamingQueriesCounters = false;
 
     TMap<NActors::TActorId, TSet<ui32>> LastUsedPartitionDistribution;
     TMap<NActors::TActorId, TSet<ui32>> LastReceivedPartitionDistribution;
@@ -341,6 +349,7 @@ public:
         const ::NMonitoring::TDynamicCounterPtr& counters,
         i64 bufferSize,
         const IPqGateway::TPtr& pqGateway,
+        bool enableStreamingQueriesCounters,
         TDqPqRdReadActor* parent = nullptr,
         const TString& cluster = {});
 
@@ -527,6 +536,7 @@ TDqPqRdReadActor::TDqPqRdReadActor(
         const ::NMonitoring::TDynamicCounterPtr& counters,
         i64 bufferSize,
         const IPqGateway::TPtr& pqGateway,
+        bool enableStreamingQueriesCounters,
         TDqPqRdReadActor* parent,
         const TString& cluster)
         : TActor<TDqPqRdReadActor>(&TDqPqRdReadActor::StateFunc)
@@ -535,13 +545,14 @@ TDqPqRdReadActor::TDqPqRdReadActor(
         , Cluster(cluster)
         , Token(token)
         , LocalRowDispatcherActorId(localRowDispatcherActorId)
-        , Metrics(txId, taskId, counters, SourceParams)
+        , Metrics(txId, taskId, counters, SourceParams, enableStreamingQueriesCounters)
         , PqGateway(pqGateway)
         , HolderFactory(holderFactory)
         , TypeEnv(typeEnv)
         , Driver(std::move(driver))
         , CredentialsProviderFactory(std::move(credentialsProviderFactory))
         , MaxBufferSize(bufferSize)
+        , EnableStreamingQueriesCounters(enableStreamingQueriesCounters)
 {
     SRC_LOG_I("Start read actor, local row dispatcher " << LocalRowDispatcherActorId.ToString() << ", metadatafields: " << JoinSeq(',', SourceParams.GetMetadataFields())
         << ", partitions: " << JoinSeq(',', GetPartitionsToRead()) << ", skip json errors: " << SourceParams.GetSkipJsonErrors());
@@ -552,9 +563,10 @@ TDqPqRdReadActor::TDqPqRdReadActor(
     const auto programBuilder = std::make_unique<TProgramBuilder>(typeEnv, *holderFactory.GetFunctionRegistry());
 
     // Parse output schema (expected struct output type)
-    const auto& outputTypeYson = SourceParams.GetRowType();
-    const auto outputItemType = NCommon::ParseTypeFromYson(TStringBuf(outputTypeYson), *programBuilder, Cerr);
-    YQL_ENSURE(outputItemType, "Failed to parse output type: " << outputTypeYson);
+    const TStringBuf outputTypeYson(SourceParams.GetRowType());
+    TStringStream error;
+    const auto outputItemType = NCommon::ParseTypeFromYson(outputTypeYson, *programBuilder, error);
+    YQL_ENSURE(outputItemType, "Failed to parse output type: " << outputTypeYson << ", reason: " << error.Str());
     YQL_ENSURE(outputItemType->IsStruct(), "Output type " << outputTypeYson << " is not struct");
     const auto structType = static_cast<TStructType*>(outputItemType);
 
@@ -825,6 +837,7 @@ void TDqPqRdReadActor::SchedulePartitionIdlenessCheck(TInstant at) {
 }
 
 void TDqPqRdReadActor::InitWatermarkTracker() {
+    Y_DEBUG_ABORT_UNLESS(Parent == this); // called on Parent
     auto lateArrivalDelayUs = SourceParams.GetWatermarks().GetLateArrivalDelayUs();
     auto idleTimeoutUs = // TODO remove fallback
         SourceParams.GetWatermarks().HasIdleTimeoutUs() ?
@@ -832,7 +845,8 @@ void TDqPqRdReadActor::InitWatermarkTracker() {
         lateArrivalDelayUs;
     TDqPqReadActorBase::InitWatermarkTracker(
             TDuration::Zero(), // lateArrivalDelay is embedded into calculation of WatermarkExpr
-            TDuration::MicroSeconds(idleTimeoutUs));
+            TDuration::MicroSeconds(idleTimeoutUs),
+            Metrics.Counters ? Metrics.Source : nullptr);
 }
 
 std::vector<ui64> TDqPqRdReadActor::GetPartitionsToRead() const {
@@ -1269,6 +1283,11 @@ TString TDqPqRdReadActor::GetInternalState() {
         }
         str << "\n";
     }
+    if (Parent->WatermarkTracker) {
+        str << "WatermarksTracker:";
+        Parent->WatermarkTracker->Out(str);
+        str << "\n";
+    }
     return str.Str();
 }
 
@@ -1331,7 +1350,7 @@ void TDqPqRdReadActor::SendNoSession(const NActors::TActorId& recipient, ui64 co
 }
 
 void TDqPqRdReadActor::NotifyCA() {
-    // called on Parent
+    Y_DEBUG_ABORT_UNLESS(Parent == this); // called on Parent
     Metrics.InFlyAsyncInputData->Set(1);
     InFlyAsyncInputData = true;
     Counters.NotifyCA++;
@@ -1536,6 +1555,7 @@ void TDqPqRdReadActor::StartCluster(ui32 clusterIndex) {
         {},
         MaxBufferSize,
         PqGateway,
+        EnableStreamingQueriesCounters,
         this,
         TString(Clusters[clusterIndex].Info.Name));
     Clusters[clusterIndex].Child = actor;
@@ -1576,7 +1596,8 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqRdReadActor(
     const NKikimr::NMiniKQL::THolderFactory& holderFactory,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     i64 bufferSize,
-    const IPqGateway::TPtr& pqGateway)
+    const IPqGateway::TPtr& pqGateway,
+    bool enableStreamingQueriesCounters)
 {
     const TString& tokenName = settings.GetToken().GetName();
     const TString token = secureParams.Value(tokenName, TString());
@@ -1598,7 +1619,8 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqRdReadActor(
         token,
         counters,
         bufferSize,
-        pqGateway);
+        pqGateway,
+        enableStreamingQueriesCounters);
 
     return {actor, actor};
 }

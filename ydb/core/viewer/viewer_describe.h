@@ -18,6 +18,7 @@ class TJsonDescribe : public TViewerPipeClient {
     TRequestResponse<TEvSchemeShard::TEvDescribeSchemeResult> SchemeShardResult;
     TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult> CacheResult;
     bool ExpandSubElements = true;
+    NKikimrScheme::EStatus SchemeShardStatus = NKikimrScheme::EStatus::StatusSuccess;
 
     enum class EAskSchemeCache {
         First,
@@ -85,6 +86,18 @@ public:
                 request->Record.SetUserToken(tokenObj);
             }
             SchemeShardResult = MakeRequest<TEvSchemeShard::TEvDescribeSchemeResult>(MakeTxProxyID(), request.Release());
+            if (SchemeShardResult.Span) {
+                if (options.HasPath()) {
+                    SchemeShardResult.Span.Attribute("path", options.GetPath());
+                }
+                if (options.HasPathId()) {
+                    SchemeShardResult.Span.Attribute("schemeshard_id", TStringBuilder() << options.GetSchemeshardId());
+                    SchemeShardResult.Span.Attribute("path_id", TStringBuilder() << options.GetPathId());
+                }
+                if (tokenObj) {
+                    SchemeShardResult.Span.Attribute("user", NACLib::TUserToken(tokenObj).GetUserSID());
+                }
+            }
         }
     }
 
@@ -107,6 +120,17 @@ public:
             request->UserToken = new NACLib::TUserToken(tokenObj);
         }
         CacheResult = MakeRequest<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request));
+        if (CacheResult.Span) {
+            if (Params.Has("path")) {
+                CacheResult.Span.Attribute("path", Params.Get("path"));
+            } else if (Params.Has("path_id")) {
+                CacheResult.Span.Attribute("schemeshard_id", TStringBuilder() << GetSchemeShardId());
+                CacheResult.Span.Attribute("path_id", Params.Get("path_id"));
+            }
+            if (tokenObj) {
+                CacheResult.Span.Attribute("user", NACLib::TUserToken(tokenObj).GetUserSID());
+            }
+        }
     }
 
     void Bootstrap() override {
@@ -160,6 +184,7 @@ public:
     }
 
     void Handle(TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
+        SchemeShardStatus = ev->Get()->GetRecord().GetStatus();
         if (SchemeShardResult.Set(std::move(ev))) {
             if (!SchemeShardResult.IsOk() && AskSchemeCache == EAskSchemeCache::Second) {
                 RequestSchemeCache();
@@ -313,6 +338,22 @@ public:
             describe = GetSchemeShardDescribeSchemeInfo();
         } else if (CacheResult.IsOk()) {
             describe = GetCacheDescribeSchemeInfo();
+        } else {
+            if (SchemeShardStatus == NKikimrScheme::EStatus::StatusAccessDenied) {
+                return ReplyAndPassAway(GetHTTPFORBIDDEN("text/plain", "Forbidden"));
+            }
+            TStringBuilder error;
+            if (SchemeShardResult.IsError()) {
+                error << "SchemeShard error: " << SchemeShardResult.GetError() << Endl;
+            }
+            if (CacheResult.IsError()) {
+                error << "SchemeCache error: " << CacheResult.GetError() << Endl;
+            }
+            if (error) {
+                return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", error));
+            } else {
+                return ReplyAndPassAway(GetHTTPINTERNALERROR("text/plain", "No response received"));
+            }
         }
         NJson::TJsonValue json;
         if (describe != nullptr) {

@@ -32,6 +32,8 @@ TScanCounters::TScanCounters(const TString& module)
     , RecordsDeniedByHeader(TBase::GetDeriviative("Headers/Denied/Records"))
     , HangingRequests(TBase::GetDeriviative("HangingRequests"))
 
+    , HistogramReadMetadataDurationMs(TBase::GetHistogram("Portions/ReadMetadataDurationMs", NMonitoring::ExponentialHistogram(15, 2, 8)))
+
     , PortionBytes(TBase::GetDeriviative("PortionBytes"))
     , FilterBytes(TBase::GetDeriviative("FilterBytes"))
     , PostFilterBytes(TBase::GetDeriviative("PostFilterBytes"))
@@ -95,8 +97,8 @@ TScanCounters::TScanCounters(const TString& module)
         HistogramIntervalMemoryReduceSize = std::make_shared<TDeriviativeHistogram>(module, "IntervalMemory/Reduce/Bytes", "", borders);
     }
     {
-        const std::map<i64, TString> borders = {{0, "0"}, {64LLU * 1024 * 1024, "64Mb"}, 
-            {128LLU * 1024 * 1024, "128Mb"}, {256LLU * 1024 * 1024, "256Mb"}, {512LLU * 1024 * 1024, "512Mb"}, 
+        const std::map<i64, TString> borders = {{0, "0"}, {64LLU * 1024 * 1024, "64Mb"},
+            {128LLU * 1024 * 1024, "128Mb"}, {256LLU * 1024 * 1024, "256Mb"}, {512LLU * 1024 * 1024, "512Mb"},
             {1024LLU * 1024 * 1024, "1024Mb"}, {2LLU * 1024 * 1024 * 1024, "2Gb"}, {3LLU * 1024 * 1024 * 1024, "3Gb"}
             };
         HistogramIntervalMemoryRequiredAfterReduce = std::make_shared<TDeriviativeHistogram>(module, "IntervalMemory/RequiredAfterReduce/Bytes", "", borders);

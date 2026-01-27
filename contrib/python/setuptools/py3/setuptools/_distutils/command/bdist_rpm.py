@@ -7,6 +7,7 @@ import os
 import subprocess
 import sys
 from distutils._log import log
+from typing import ClassVar
 
 from ..core import Command
 from ..debug import DEBUG
@@ -136,7 +137,7 @@ class bdist_rpm(Command):
         ('quiet', 'q', "Run the INSTALL phase of RPM building in quiet mode"),
     ]
 
-    boolean_options = [
+    boolean_options: ClassVar[list[str]] = [
         'keep-temp',
         'use-rpm-opt-flags',
         'rpm3-mode',
@@ -144,7 +145,7 @@ class bdist_rpm(Command):
         'quiet',
     ]
 
-    negative_opt = {
+    negative_opt: ClassVar[dict[str, str]] = {
         'no-keep-temp': 'keep-temp',
         'no-rpm-opt-flags': 'use-rpm-opt-flags',
         'rpm2-mode': 'rpm3-mode',
@@ -195,7 +196,7 @@ class bdist_rpm(Command):
         self.force_arch = None
         self.quiet = False
 
-    def finalize_options(self):
+    def finalize_options(self) -> None:
         self.set_undefined_options('bdist', ('bdist_base', 'bdist_base'))
         if self.rpm_base is None:
             if not self.rpm3_mode:
@@ -228,7 +229,7 @@ class bdist_rpm(Command):
         self.set_undefined_options('bdist', ('dist_dir', 'dist_dir'))
         self.finalize_package_data()
 
-    def finalize_package_data(self):
+    def finalize_package_data(self) -> None:
         self.ensure_string('group', "Development/Libraries")
         self.ensure_string(
             'vendor',
@@ -274,7 +275,7 @@ class bdist_rpm(Command):
 
         self.ensure_string('force_arch')
 
-    def run(self):  # noqa: C901
+    def run(self) -> None:  # noqa: C901
         if DEBUG:
             print("before _get_package_data():")
             print("vendor =", self.vendor)

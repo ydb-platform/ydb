@@ -25,6 +25,7 @@ SRCS(
     crash_handler_ut.cpp
     default_map_ut.cpp
     digest_ut.cpp
+    duration_moving_average_ut.cpp
     ema_counter_ut.cpp
     enum_ut.cpp
     error_ut.cpp

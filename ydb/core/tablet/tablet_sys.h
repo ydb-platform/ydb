@@ -295,6 +295,8 @@ class TTablet : public TActor<TTablet> {
     THashMap<ui32, TInterconnectPending> InterconnectPending;
     ui64 LastInterconnectSubscribeCookie = 0;
 
+    TMessageRelevanceOwner Relevance = std::make_shared<TMessageRelevanceTracker>();
+
     ui64 TabletID() const;
 
     void ReportTabletStateChange(ETabletState state);
@@ -742,7 +744,7 @@ public:
             );
 
     TAutoPtr<IEventHandle> AfterRegister(const TActorId &self, const TActorId &parentId) override;
-    static void ExternalWriteZeroEntry(TTabletStorageInfo *info, ui32 gen, TActorIdentity owner);
+    static void ExternalWriteZeroEntry(TTabletStorageInfo *info, ui32 gen, TActorIdentity owner, TMessageRelevanceWatcher relevance);
 };
 
 }

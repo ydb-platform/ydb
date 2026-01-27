@@ -3,7 +3,7 @@ service: buildroot
 
 arcanum:
     review:
-        ignore_self_ship: true
+        ignore_self_ship: false
         min_approvers_count: 1
         disabling_policy: denied
         override_policy: append
@@ -11,35 +11,20 @@ arcanum:
           - name: reviewers
             roles:
               - "cc:duty"
-          - name: owners
-            roles:
-              - "cc:duty"
               - "cc:developer"
+              - "cc:consultant"
         rules:
           - reviewers:
               - name: reviewers
-                ship: 0
-                assign: 1
-            ignore_self_ship: false
-
-          - subpaths: "a.yaml"
-            reviewers:
-              - name: reviewers
-                ship: 0
-                assign: 1
-              - name: owners
                 ship: 1
-                assign: 0
-            ignore_self_ship: false
+                assign: 1
 
     auto_merge:
         requirements:
           - system: arcanum
             type: st_issue_linked
-            disabling_policy: denied
+            disabling_policy: need_reason
             override_policy: final
-            data:
-                in_commit_message: true
           - system: arcanum
             type: comment_issues_closed
             disabling_policy: need_reason
@@ -76,12 +61,12 @@ ci:
       - service: ya_make
 
   releases:
-    release-gdb-16:
-      title: "Release gdb16"
+    release-gdb-17:
+      title: "Release gdb17"
       flow: build-and-release-gdb
       flow-vars:
-        ix_package: ynd/bin/gdb/16
-        toolchain_name: gdb16
+        ix_package: ynd/bin/gdb/17
+        toolchain_name: gdb17
         mapping_path: build/external_resources/gdb/resources.json
       flow-vars-ui:
         schema:

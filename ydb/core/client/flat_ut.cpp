@@ -926,7 +926,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
     Y_UNIT_TEST(Ls) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
-        TServer cleverServer = TServer(TServerSettings(port).SetEnableRealSystemViewPaths(true));
+        TServer cleverServer = TServer(TServerSettings(port));
 
         TFlatMsgBusClient annoyingClient(port);
         annoyingClient.InitRoot();
@@ -1019,7 +1019,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
     Y_UNIT_TEST(PathSorting) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
-        TServer cleverServer = TServer(TServerSettings(port).SetEnableRealSystemViewPaths(true));
+        TServer cleverServer = TServer(TServerSettings(port));
 
         TFlatMsgBusClient annoyingClient(port);
 
@@ -1073,15 +1073,23 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         ui64 schemeshardId = res->Record.GetPathDescription().GetChildren(0).GetSchemeshardId();
 
         annoyingClient.InitRoot();
+        size_t pathsInsideDomain = 1;
         TestLsPathIdSuccess(annoyingClient, schemeshardId, 1, "dc-1", {".sys"});
-        TestLsUknownPathId(annoyingClient, schemeshardId, 2);
+        ++pathsInsideDomain;
+        res = annoyingClient.Ls("/dc-1/.sys");
+        pathsInsideDomain += res->Record.GetPathDescription().ChildrenSize();
+        TestLsUknownPathId(annoyingClient, schemeshardId, pathsInsideDomain + 1);
+
         annoyingClient.MkDir("/dc-1", "Berkanavt");
+        ++pathsInsideDomain;
         TestLsPathIdSuccess(annoyingClient, schemeshardId, 1, "dc-1", {".sys", "Berkanavt"});
-        TestLsPathIdSuccess(annoyingClient, schemeshardId, 2, "Berkanavt", {});
-        TestLsUknownPathId(annoyingClient, schemeshardId, 3);
+        TestLsPathIdSuccess(annoyingClient, schemeshardId, pathsInsideDomain, "Berkanavt", {});
+        TestLsUknownPathId(annoyingClient, schemeshardId, pathsInsideDomain + 1);
+
         annoyingClient.MkDir("/dc-1", "arcadia");
+        ++pathsInsideDomain;
         TestLsPathIdSuccess(annoyingClient, schemeshardId, 1, "dc-1", {".sys", "Berkanavt", "arcadia"});
-        TestLsPathIdSuccess(annoyingClient, schemeshardId, 3, "arcadia", {});
+        TestLsPathIdSuccess(annoyingClient, schemeshardId, pathsInsideDomain, "arcadia", {});
     }
 
     ui32 TestInitRoot(TFlatMsgBusClient& annoyingClient, const TString& name) {

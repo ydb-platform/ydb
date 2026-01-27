@@ -234,8 +234,8 @@ private:
 
 class TimeFormatter {
 public:
-    static std::string Format(uint64_t valueNs, ui64 uncertaintyNs);
-    static std::string Format(uint64_t valueNs);
+    static std::string Format(ui64 valueNs, ui64 uncertaintyNs);
+    static std::string Format(ui64 valueNs);
 };
 
 void DumpTimeStatistics(const TComputedStatistics& stats, IOutputStream& os);

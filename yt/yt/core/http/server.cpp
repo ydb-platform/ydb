@@ -27,8 +27,6 @@ using namespace NConcurrency;
 using namespace NProfiling;
 using namespace NNet;
 
-constinit const auto Logger = HttpLogger;
-
 ////////////////////////////////////////////////////////////////////////////////
 
 TCallbackHandler::TCallbackHandler(TCallback<void(const IRequestPtr&, const IResponseWriterPtr&)> handler)
@@ -43,7 +41,7 @@ void TCallbackHandler::HandleRequest(const IRequestPtr& req, const IResponseWrit
 ////////////////////////////////////////////////////////////////////////////////
 
 void IServer::AddHandler(
-    const TString& pattern,
+    const std::string& pattern,
     TCallback<void(const IRequestPtr&, const IResponseWriterPtr&)> handler)
 {
     AddHandler(pattern, New<TCallbackHandler>(handler));
@@ -66,16 +64,18 @@ public:
         IRequestPathMatcherPtr requestPathMatcher,
         bool ownPoller = false)
         : Config_(std::move(config))
+        , Logger(HttpLogger().WithTag("ServerName: %v", Config_->ServerName))
         , Listener_(std::move(listener))
         , Poller_(std::move(poller))
         , Acceptor_(std::move(acceptor))
         , Invoker_(std::move(invoker))
         , OwnPoller_(ownPoller)
         , Address_(Listener_ ? Listener_->GetAddress() : TNetworkAddress::CreateIPv6Any(Config_->Port))
+        , Profiling_(HttpProfiler.WithTag("server", Config_->ServerName), Config_->EnablePerPathRequestProfiling)
         , RequestPathMatcher_(std::move(requestPathMatcher))
     { }
 
-    void AddHandler(const TString& path, const IHttpHandlerPtr& handler) override
+    void AddHandler(const std::string& path, const IHttpHandlerPtr& handler) override
     {
         YT_VERIFY(!Started_);
         RequestPathMatcher_->Add(path, handler);
@@ -136,22 +136,101 @@ public:
     }
 
 private:
+    class TProfiling
+    {
+    public:
+        struct TStatusCodeCounter
+        {
+            explicit TStatusCodeCounter(TProfiler profiler)
+                : Profiler_(std::move(profiler))
+            { }
+
+            TCounter* GetCounter(EStatusCode statusCode)
+            {
+                return StatusCodeCounter_.FindOrInsert(statusCode, [&] {
+                    return Profiler_
+                        .WithTag("status", ToString(statusCode))
+                        .Counter("/status_count");
+                }).first;
+            }
+
+        private:
+            const TProfiler Profiler_;
+
+            TSyncMap<EStatusCode, TCounter> StatusCodeCounter_;
+        };
+
+        struct TRequestProfiling
+            : public TRefCounted
+        {
+            explicit TRequestProfiling(const TProfiler& profiler)
+                : RequestCounter(profiler.Counter("/request_count"))
+                , TotalTimeCounter(profiler.TimeCounter("/request_time/total"))
+                , StatusCodeCounter(profiler)
+            { }
+
+            TCounter RequestCounter;
+            TCounter FailedRequestCounter;
+            TCounter RequestWithoutHandlerCount;
+
+            TTimeCounter TotalTimeCounter;
+
+            TStatusCodeCounter StatusCodeCounter;
+        };
+
+        explicit TProfiling(const TProfiler& profiler, bool enablePerPathRequestProfiling)
+            : ConnectionsActive(profiler.Gauge("/connections_active"))
+            , ConnectionsAccepted(profiler.Counter("/connections_accepted"))
+            , ConnectionsDropped(profiler.Counter("/connections_dropped"))
+            , RequestsMissingHeaders(profiler.Counter("/requests_missing_headers"))
+            , EnablePerPathRequestProfiling_(enablePerPathRequestProfiling)
+            , Profiler_(profiler)
+        { }
+
+        TGauge ConnectionsActive;
+        TCounter ConnectionsAccepted;
+        TCounter ConnectionsDropped;
+        TCounter RequestsMissingHeaders;
+
+        TRequestProfiling* GetRequestProfiling(const THttpInputPtr& httpRequest)
+        {
+            if (EnablePerPathRequestProfiling_) {
+                TRequestProfilingKey profilingKey{httpRequest->GetUrl().Path};
+                return RequestProfilingMap_.FindOrInsert(profilingKey, [&] {
+                    return New<TRequestProfiling>(Profiler_
+                        .WithTag("path", std::get<0>(profilingKey)));
+                }).first->Get();
+            } else {
+                return RequestProfilingMap_.FindOrInsert(TRequestProfilingKey{}, [&] {
+                    return New<TRequestProfiling>(Profiler_);
+                }).first->Get();
+            }
+        }
+
+    private:
+        const bool EnablePerPathRequestProfiling_;
+        const TProfiler Profiler_;
+
+        // Path.
+        using TRequestProfilingKey = std::tuple<std::string>;
+        NConcurrency::TSyncMap<TRequestProfilingKey, TIntrusivePtr<TRequestProfiling>> RequestProfilingMap_;
+    };
+
     const TServerConfigPtr Config_;
+    const NLogging::TLogger Logger;
     IListenerPtr Listener_;
     const IPollerPtr Poller_;
     const IPollerPtr Acceptor_;
     const IInvokerPtr Invoker_;
     const bool OwnPoller_ = false;
-
     const TNetworkAddress Address_;
+
+    TProfiling Profiling_;
     IRequestPathMatcherPtr RequestPathMatcher_;
     bool Started_ = false;
     std::atomic<bool> Stopped_ = false;
 
     std::atomic<int> ActiveConnections_ = 0;
-    TGauge ConnectionsActive_ = HttpProfiler.Gauge("/connections_active");
-    TCounter ConnectionsAccepted_ = HttpProfiler.Counter("/connections_accepted");
-    TCounter ConnectionsDropped_ = HttpProfiler.Counter("/connections_dropped");
 
     void AsyncAcceptConnection()
     {
@@ -178,14 +257,14 @@ private:
 
         auto count = ActiveConnections_.fetch_add(1) + 1;
         if (count >= Config_->MaxSimultaneousConnections) {
-            ConnectionsDropped_.Increment();
+            Profiling_.ConnectionsDropped.Increment();
             ActiveConnections_--;
             YT_LOG_WARNING("Server is over max active connection limit (RemoteAddress: %v)",
                 connection->GetRemoteAddress());
             return;
         }
-        ConnectionsActive_.Update(count);
-        ConnectionsAccepted_.Increment();
+        Profiling_.ConnectionsActive.Update(count);
+        Profiling_.ConnectionsAccepted.Increment();
 
         YT_LOG_DEBUG("Connection accepted (ConnectionId: %v, RemoteAddress: %v, LocalAddress: %v)",
             connection->GetId(),
@@ -203,8 +282,14 @@ private:
         bool closeResponse = true;
         try {
             if (!request->ReceiveHeaders()) {
+                Profiling_.RequestsMissingHeaders.Increment();
                 return false;
             }
+            auto* requestProfiling = Profiling_.GetRequestProfiling(request);
+            requestProfiling->RequestCounter.Increment();
+            auto finallyGuard = Finally([requestProfiling, &response] {
+                requestProfiling->StatusCodeCounter.GetCounter(*response->GetStatus())->Increment();
+            });
 
             const auto& path = request->GetUrl().Path;
 
@@ -244,6 +329,8 @@ private:
 
                 NTracing::FlushCurrentTraceContextElapsedTime();
 
+                requestProfiling->TotalTimeCounter.Add(timer.GetElapsedTime());
+
                 YT_LOG_DEBUG("Finished handling HTTP request (RequestId: %v, WallTime: %v, CpuTime: %v)",
                     request->GetRequestId(),
                     timer.GetElapsedTime(),
@@ -281,7 +368,7 @@ private:
     void HandleConnection(const IConnectionPtr& connection)
     {
         try {
-            connection->SubscribePeerDisconnect(BIND([config = Config_, canceler = GetCurrentFiberCanceler(), connectionId = connection->GetId()] {
+            connection->SubscribePeerDisconnect(BIND([Logger = Logger, config = Config_, canceler = GetCurrentFiberCanceler(), connectionId = connection->GetId()] {
                 YT_LOG_DEBUG("Client closed TCP socket (ConnectionId: %v)", connectionId);
 
                 if (config->CancelFiberOnConnectionClose.value_or(false)) {
@@ -291,7 +378,7 @@ private:
 
             auto finally = Finally([&] {
                 auto count = ActiveConnections_.fetch_sub(1) - 1;
-                ConnectionsActive_.Update(count);
+                Profiling_.ConnectionsActive.Update(count);
             });
 
             if (Config_->NoDelay) {
@@ -311,6 +398,7 @@ private:
             connection->GetRemoteAddress(),
             GetCurrentInvoker(),
             EMessageType::Request,
+            /*requestMethod*/ std::nullopt,
             Config_);
 
         if (Config_->IsHttps) {
@@ -330,6 +418,7 @@ private:
             response->SetRequestId(requestId);
 
             bool ok = HandleRequest(request, response);
+
             if (!ok) {
                 break;
             }
@@ -535,13 +624,13 @@ IServerPtr CreateServer(
  *  - trailing-slash redirection: matching "/path/" implies "/path"
  *  - end of path wildcard: "/path/{$}" matches only "/path/" and "/path"
  */
-void TRequestPathMatcher::Add(const TString& pattern, const IHttpHandlerPtr& handler)
+void TRequestPathMatcher::Add(const std::string& pattern, const IHttpHandlerPtr& handler)
 {
     if (pattern.empty()) {
         THROW_ERROR_EXCEPTION("Empty pattern is invalid");
     }
 
-    if (pattern.EndsWith("/{$}")) {
+    if (pattern.ends_with("/{$}")) {
         auto withoutWildcard = pattern.substr(0, pattern.size() - 3);
 
         Exact_[withoutWildcard] = handler;
@@ -558,7 +647,7 @@ void TRequestPathMatcher::Add(const TString& pattern, const IHttpHandlerPtr& han
     }
 }
 
-void TRequestPathMatcher::Add(const TString& pattern, TCallback<void(const IRequestPtr&, const IResponseWriterPtr&)> handler)
+void TRequestPathMatcher::Add(const std::string& pattern, TCallback<void(const IRequestPtr&, const IResponseWriterPtr&)> handler)
 {
     Add(pattern, New<TCallbackHandler>(handler));
 }

@@ -36,11 +36,14 @@ TExprBase MakeInsertIndexRows(const NYql::NNodes::TExprBase& inputRows, const TK
             rowTuples.emplace_back(tuple);
         } else {
             auto columnType = table.GetColumnType(TString(column));
+            const auto* optionalColumnType = columnType->IsOptionalOrNull()
+                ? columnType
+                : ctx.MakeType<TOptionalExprType>(columnType);
 
             auto tuple = Build<TCoNameValueTuple>(ctx, pos)
                 .Name(columnAtom)
                 .Value<TCoNothing>()
-                    .OptionalType(NCommon::BuildTypeExpr(pos, *columnType, ctx))
+                    .OptionalType(NCommon::BuildTypeExpr(pos, *optionalColumnType, ctx))
                     .Build()
                 .Done();
 
@@ -104,13 +107,14 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
 
     auto indexes = BuildAffectedIndexTables(table, insert.Pos(), ctx, nullptr);
     YQL_ENSURE(indexes);
-    const bool useStreamIndex = isSink && kqpCtx.Config->EnableIndexStreamWrite;
+    const bool useStreamIndex = isSink && kqpCtx.Config->GetEnableIndexStreamWrite();
 
     const bool needPrecompute = !useStreamIndex
         || !abortOnError
         || std::any_of(indexes.begin(), indexes.end(), [](const auto& index) {
             return index.second->Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree
-                || index.second->Type == TIndexDescription::EType::GlobalFulltext;
+                || index.second->Type == TIndexDescription::EType::GlobalFulltextPlain
+                || index.second->Type == TIndexDescription::EType::GlobalFulltextRelevance;
         });
 
     TVector<TStringBuf> insertColumns;
@@ -157,6 +161,7 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
             .Columns(BuildColumnsList(insertColumns, insert.Pos(), ctx))
             .ReturningColumns(insert.ReturningColumns())
             .IsBatch(ctx.NewAtom(insert.Pos(), "false"))
+            .DefaultColumns<TCoAtomList>().Build()
             .Settings(insert.Settings())
             .Done());
     } else {
@@ -166,6 +171,7 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
             .Columns(insert.Columns())
             .ReturningColumns(insert.ReturningColumns())
             .IsBatch(ctx.NewAtom(insert.Pos(), "false"))
+            .DefaultColumns<TCoAtomList>().Build()
             .Done());
     }
 
@@ -227,10 +233,40 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
                 indexTableColumns = BuildVectorIndexPostingColumns(table, indexDesc);
                 break;
             }
-            case TIndexDescription::EType::GlobalFulltext: {
+            case TIndexDescription::EType::GlobalFulltextPlain:
+            case TIndexDescription::EType::GlobalFulltextRelevance: {
                 // For fulltext indexes, we need to tokenize the text and create inserted rows
-                upsertIndexRows = BuildFulltextIndexRows(table, indexDesc, *insertRows, inputColumnsSet, indexTableColumns, /*includeDataColumns=*/true,
-                    insert.Pos(), ctx);
+                auto insertPrecompute = ReadInputToPrecompute(*insertRows, insert.Pos(), ctx);
+                upsertIndexRows = BuildFulltextIndexRows(table, indexDesc, insertPrecompute, inputColumnsSet, indexTableColumns,
+                    false /*forDelete*/, insert.Pos(), ctx);
+                const auto* fulltextDesc = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&indexDesc->SpecializedIndexDescription);
+                YQL_ENSURE(fulltextDesc);
+                const bool withRelevance = fulltextDesc->GetSettings().layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE;
+                if (withRelevance) {
+                    // Update dictionary rows
+                    const auto& dictTable = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, TStringBuilder() << insert.Table().Path().Value()
+                        << "/" << indexDesc->Name << "/" << NKikimr::NTableIndex::NFulltext::DictTable);
+                    auto dictRows = BuildFulltextDictRows(*upsertIndexRows, false /*useSum*/, true /*useStage*/, insert.Pos(), ctx);
+                    effects.emplace_back(BuildFulltextDictUpsert(dictTable, dictRows, insert.Pos(), ctx));
+                    // Insert document rows
+                    const auto& docsTable = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, TStringBuilder() << insert.Table().Path().Value()
+                        << "/" << indexDesc->Name << "/" << NKikimr::NTableIndex::NFulltext::DocsTable);
+                    TVector<TStringBuf> docsColumns;
+                    TExprBase docsRows = BuildFulltextDocsRows(table, indexDesc, insertPrecompute,
+                        inputColumnsSet, docsColumns, false /*forDelete*/, insert.Pos(), ctx);
+                    effects.emplace_back(Build<TKqlUpsertRows>(ctx, insert.Pos())
+                        .Table(BuildTableMeta(docsTable, insert.Pos(), ctx))
+                        .Input(docsRows)
+                        .Columns(BuildColumnsList(docsColumns, insert.Pos(), ctx))
+                        .ReturningColumns<TCoAtomList>().Build()
+                        .IsBatch(ctx.NewAtom(insert.Pos(), "false"))
+                        .DefaultColumns<TCoAtomList>().Build()
+                        .Done());
+                    // Update statistics
+                    const auto& statsTable = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, TStringBuilder() << insert.Table().Path().Value()
+                        << "/" << indexDesc->Name << "/" << NKikimr::NTableIndex::NFulltext::StatsTable);
+                    effects.emplace_back(BuildFulltextStatsUpsert(statsTable, docsRows, nullptr, insert.Pos(), ctx));
+                }
                 break;
             }
         }
@@ -243,6 +279,7 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
             .Columns(BuildColumnsList(indexTableColumns, insert.Pos(), ctx))
             .ReturningColumns<TCoAtomList>().Build()
             .IsBatch(ctx.NewAtom(insert.Pos(), "false"))
+            .DefaultColumns<TCoAtomList>().Build()
             .Done();
 
         effects.emplace_back(upsertIndex);

@@ -80,12 +80,12 @@ public:
 
     class TTypeProxy: public NYql::IAutoParamTypeBuilder {
     public:
-        TTypeProxy(TTestAutoParamBuilder& owner)
+        explicit TTypeProxy(TTestAutoParamBuilder& owner)
             : Owner(owner)
         {
         }
 
-        void Pg(const TString& name) {
+        void Pg(const TString& name) override {
             Owner.State[Owner.CurrentParam].first.push_back(name);
         }
 
@@ -117,7 +117,7 @@ public:
 
     class TDataProxy: public NYql::IAutoParamDataBuilder {
     public:
-        TDataProxy(TTestAutoParamBuilder& owner)
+        explicit TDataProxy(TTestAutoParamBuilder& owner)
             : Owner(owner)
         {
         }

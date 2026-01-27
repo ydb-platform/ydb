@@ -101,7 +101,6 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "11.3.0",
       "targets": [
         {
           "datasource": {
@@ -219,7 +218,6 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "11.3.0",
       "targets": [
         {
           "datasource": {
@@ -400,7 +398,6 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "11.3.0",
       "targets": [
         {
           "datasource": {
@@ -424,14 +421,13 @@
   ],
   "preload": false,
   "schemaVersion": 40,
-  "tags": [],
+  "tags": [
+    "ydb"
+  ],
   "templating": {
     "list": [
       {
-        "current": {
-          "text": "prometheus",
-          "value": "ce1xrujy8ag3ke"
-        },
+        "current": {},
         "name": "ds",
         "options": [],
         "query": "prometheus",
@@ -440,10 +436,7 @@
         "type": "datasource"
       },
       {
-        "current": {
-          "text": "static",
-          "value": "static"
-        },
+        "current": {},
         "definition": "label_values(storagePool)",
         "description": "storagePool",
         "label": "storagePool",
@@ -459,10 +452,7 @@
         "type": "query"
       },
       {
-        "current": {
-          "text": "000000000",
-          "value": "000000000"
-        },
+        "current": {},
         "definition": "label_values({storagePool=\"$storagePool\"},group)",
         "description": "",
         "includeAll": true,
@@ -486,8 +476,8 @@
   },
   "timepicker": {},
   "timezone": "browser",
-  "title": "Distributed Storage performance metrics",
-  "uid": "ce1xsce90d24ge",
-  "version": 47,
+  "title": "Distributed Storage Performance Metrics",
+  "uid": "ydb-distributed-storage-perf",
+  "version": 1,
   "weekStart": ""
 }

@@ -1,12 +1,13 @@
 #include "kqp_host_impl.h"
 
+#include <ydb/core/formats/arrow/serializer/parsing.h>
+#include <ydb/core/formats/arrow/serializer/utils.h>
 #include <ydb/core/grpc_services/table_settings.h>
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/column_families.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
-#include <ydb/public/sdk/cpp/src/client/impl/internal/common/parser.h>
 #include <ydb/services/metadata/abstract/kqp_common.h>
 #include <ydb/services/lib/actors/pq_schema_actor.h>
 
@@ -355,9 +356,20 @@ void FillCreateTableColumnDesc(NKikimrSchemeOp::TTableDescription& tableDesc, co
         if (NScheme::NTypeIds::IsParametrizedType(columnIt->second.TypeInfo.GetTypeId())) {
             ProtoFromTypeInfo(columnIt->second.TypeInfo, columnIt->second.TypeMod, *columnDesc.MutableTypeInfo());
         }
+
+        const auto& maybeCompression = columnIt->second.Compression;
+        if (maybeCompression) {
+            auto& compression = *columnDesc.MutableCompression();
+            if (const auto maybeAlgorithm = maybeCompression->Algorithm) {
+                compression.SetAlgorithm(maybeAlgorithm->c_str());
+            }
+            if (const auto maybeLevel = maybeCompression->Level) {
+                compression.SetLevel(*maybeLevel);
+            }
+        }
     }
 
-    for (TString& keyColumn : metadata->KeyColumnNames) {
+    for (const TString& keyColumn : metadata->KeyColumnNames) {
         tableDesc.AddKeyColumnNames(keyColumn);
     }
 }
@@ -389,71 +401,70 @@ bool FillCreateTableDesc(NYql::TKikimrTableMetadataPtr metadata, NKikimrSchemeOp
     return true;
 }
 
+bool FillSerializer(
+    const TMaybe<TColumnCompression>& from, const std::string& name,
+    NKikimrSchemeOp::TOlapColumnDescription& to,
+    TString& error, Ydb::StatusIds::StatusCode& code) {
+
+    if (!from) {
+        return true;
+    }
+
+    TString algoName;
+
+    auto serializer = to.MutableSerializer();
+    if (from->Algorithm) {
+        serializer->SetClassName("ARROW_SERIALIZER");
+        auto arrowCompression = serializer->MutableArrowCompression();
+
+        NKikimrSchemeOp::EColumnCodec codec;
+        algoName = to_lower(from->Algorithm.GetRef());
+        if (algoName == "off") {
+            codec = NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain;
+        } else if (algoName == "zstd") {
+            codec = NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD;
+        } else if (algoName == "lz4") {
+            codec = NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4;
+        } else {
+            code = Ydb::StatusIds::BAD_REQUEST;
+            error = TStringBuilder() << "Unknown compression algorithm '" << algoName << "' for a column " << name;
+            return false;
+        }
+        arrowCompression->SetCodec(codec);
+    }
+    if (from->Level) {
+        auto arrowCompression = serializer->MutableArrowCompression();
+
+        const auto level = *from->Level;
+        if (!from->Algorithm) {
+            error = TStringBuilder() << "Compression level " << level <<" for a column `" << name << "` specified without an algorithm";
+            return false;
+        }
+
+        const auto codec = NArrow::CompressionFromProto(arrowCompression->GetCodec());
+
+        if (!NArrow::SupportsCompressionLevel(codec.value())) {
+            error = TStringBuilder()
+                << "Column `" << name << "`: algorithm `" << algoName
+                << "` does not support compression level";
+            return false;
+        }
+
+        arrowCompression->SetLevel(level);
+    }
+
+    return true;
+}
+
 template <typename T>
 bool FillColumnTableSchema(NKikimrSchemeOp::TColumnTableSchema& schema, const T& metadata, Ydb::StatusIds::StatusCode& code, TString& error) {
     Y_ENSURE(metadata.ColumnOrder.size() == metadata.Columns.size());
 
-    THashMap<TString, ui32> columnFamiliesByName;
-    ui32 columnFamilyId = 1;
-    for (const auto& family : metadata.ColumnFamilies) {
-        if (family.Data.Defined()) {
-            code = Ydb::StatusIds::BAD_REQUEST;
-            error = TStringBuilder() << "Field `DATA` is not supported for OLAP tables in column family '" << family.Name << "'";
-            return false;
-        }
-        if (family.CacheMode.Defined()) {
-            code = Ydb::StatusIds::BAD_REQUEST;
-            error = TStringBuilder() << "Field `CACHE_MODE` is not supported for OLAP tables in column family '" << family.Name << "'";
-            return false;
-        }
-        auto columnFamilyIt = columnFamiliesByName.find(family.Name);
-        if (!columnFamilyIt.IsEnd()) {
-            code = Ydb::StatusIds::BAD_REQUEST;
-            error = TStringBuilder() << "Duplicate column family `" << family.Name << '`';
-            return false;
-        }
-        auto familyDescription = schema.AddColumnFamilies();
-        familyDescription->SetName(family.Name);
-        if (familyDescription->GetName() == "default") {
-            familyDescription->SetId(0);
-        } else {
-            familyDescription->SetId(columnFamilyId++);
-        }
-        Y_ENSURE(columnFamiliesByName.emplace(familyDescription->GetName(), familyDescription->GetId()).second);
-        if (family.Compression.Defined()) {
-            NKikimrSchemeOp::EColumnCodec codec;
-            auto codecName = to_lower(family.Compression.GetRef());
-            if (codecName == "off") {
-                codec = NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain;
-            } else if (codecName == "zstd") {
-                codec = NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD;
-            } else if (codecName == "lz4") {
-                codec = NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4;
-            } else {
-                code = Ydb::StatusIds::BAD_REQUEST;
-                error = TStringBuilder() << "Unknown compression '" << family.Compression.GetRef() << "' for a column family";
-                return false;
-            }
-            familyDescription->SetColumnCodec(codec);
-        } else {
-            if (family.Name != "default") {
-                code = Ydb::StatusIds::BAD_REQUEST;
-                error = TStringBuilder() << "Compression is not set for non `default` column family '" << family.Name << "'";
-                return false;
-            }
-        }
-
-        if (family.CompressionLevel.Defined()) {
-            if (!family.Compression.Defined()) {
-                code = Ydb::StatusIds::BAD_REQUEST;
-                error = TStringBuilder() << "Compression is not set for column family '" << family.Name << "', but compression level is set";
-                return false;
-            }
-            familyDescription->SetColumnCodecLevel(family.CompressionLevel.GetRef());
-        }
+    if (!metadata.ColumnFamilies.empty()) {
+        code = Ydb::StatusIds::BAD_REQUEST;
+        error = TStringBuilder() << "Column FAMILY is not supported for column tables";
+        return false;
     }
-
-    schema.SetNextColumnFamilyId(columnFamilyId);
 
     for (const auto& name : metadata.ColumnOrder) {
         auto columnIt = metadata.Columns.find(name);
@@ -481,21 +492,8 @@ bool FillColumnTableSchema(NKikimrSchemeOp::TColumnTableSchema& schema, const T&
             *columnDesc.MutableTypeInfo() = *columnType.TypeInfo;
         }
 
-        if (!columnFamiliesByName.empty()) {
-            TString columnFamilyName = "default";
-            ui32 columnFamilyId = 0;
-            if (columnIt->second.Families.size()) {
-                columnFamilyName = *columnIt->second.Families.begin();
-                auto columnFamilyIdIt = columnFamiliesByName.find(columnFamilyName);
-                if (columnFamilyIdIt.IsEnd()) {
-                    code = Ydb::StatusIds::BAD_REQUEST;
-                    error = TStringBuilder() << "Unknown column family `" << columnFamilyName << "` for column `" << columnDesc.GetName() << "`";
-                    return false;
-                }
-                columnFamilyId = columnFamilyIdIt->second;
-            }
-            columnDesc.SetColumnFamilyName(columnFamilyName);
-            columnDesc.SetColumnFamilyId(columnFamilyId);
+        if (!FillSerializer(columnIt->second.Compression, name, columnDesc, error, code)) {
+            return false;
         }
     }
 
@@ -595,6 +593,53 @@ bool IsDdlPrepareAllowed(TKikimrSessionContext& sessionCtx) {
     }
 
     return true;
+}
+
+struct TConnectionData {
+    std::string Endpoint = "";
+    std::string Database = "";
+    bool EnableSsl = false;
+};
+
+TConnectionData GetDataFromConnectionString(const std::string& connectionString) {
+    if (connectionString.empty()) {
+        throw yexception() << "Empty connection string";
+    }
+
+    constexpr std::string_view databaseFlag = "/?database=";
+    constexpr std::string_view grpcProtocol = "grpc://";
+    constexpr std::string_view grpcsProtocol = "grpcs://";
+    constexpr std::string_view localhostDomain = "localhost:";
+
+    TConnectionData connectionData;
+    std::string endpoint;
+
+    size_t pathIndex = connectionString.find(databaseFlag);
+    if (pathIndex == std::string::npos){
+        pathIndex = connectionString.size();
+    }
+    if (pathIndex != connectionString.size()) {
+        connectionData.Database = connectionString.substr(pathIndex + databaseFlag.size());
+        endpoint = connectionString.substr(0, pathIndex);
+    } else {
+        endpoint = connectionString;
+    }
+
+    if (!endpoint.starts_with(grpcProtocol) && !endpoint.starts_with(grpcsProtocol) && !endpoint.starts_with(localhostDomain)) {
+        connectionData.Endpoint = endpoint;
+        connectionData.EnableSsl = true;
+    } else if (endpoint.starts_with(grpcProtocol)) {
+        connectionData.Endpoint = endpoint.substr(grpcProtocol.size());
+        connectionData.EnableSsl = false;
+    } else if (endpoint.starts_with(grpcsProtocol)) {
+        connectionData.Endpoint = endpoint.substr(grpcsProtocol.size());
+        connectionData.EnableSsl = true;
+    } else {
+        connectionData.Endpoint = endpoint;
+        connectionData.EnableSsl = false;
+    }
+
+    return connectionData;
 }
 
 #define FORWARD_ENSURE_NO_PREPARE(name, ...) \
@@ -766,6 +811,58 @@ public:
         }
     }
 
+    TGenericResult PrepareTruncateTable(const TTruncateTableSettings& settings, NKikimrSchemeOp::TModifyScheme& modifyScheme, const TString& cluster) {
+        TString workingDir;
+        TString tableName;
+        {
+            auto metadata = SessionCtx->Tables().GetTable(cluster, settings.TablePath).Metadata;
+
+            std::pair<TString, TString> pathPair;
+            TString error;
+            if (!NSchemeHelpers::SplitTablePath(metadata->Name, GetDatabase(), pathPair, error, false)) {
+                return ResultFromError<TGenericResult>(error);
+            }
+
+            workingDir = pathPair.first;
+            tableName = pathPair.second;
+        }
+
+        modifyScheme.SetWorkingDir(workingDir);
+        modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpTruncateTable);
+        modifyScheme.MutableTruncateTable()->SetTableName(tableName);
+
+        TGenericResult result;
+        result.SetSuccess();
+        return result;
+    }
+
+    TFuture<TGenericResult> TruncateTable(const TString& cluster, const TTruncateTableSettings& settings) override {
+        CHECK_PREPARED_DDL(TruncateTable);
+
+        try {
+            if (cluster != SessionCtx->GetCluster()) {
+                return InvalidCluster<TGenericResult>(cluster);
+            }
+
+            NKikimrSchemeOp::TModifyScheme modifyScheme;
+            auto preparation = PrepareTruncateTable(settings, modifyScheme, cluster);
+            if (!preparation.Success()) {
+                return MakeFuture<TGenericResult>(preparation);
+            }
+
+            if (IsPrepare()) {
+                auto& phyTx = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery()->AddTransactions();
+                phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+                phyTx.MutableSchemeOperation()->MutableTruncateTable()->Swap(&modifyScheme);
+                return MakeFuture<TGenericResult>(preparation);
+            }
+
+            return Gateway->ModifyScheme(std::move(modifyScheme));
+        } catch (yexception& e) {
+            return MakeFuture(ResultFromException<TGenericResult>(e));
+        }
+    }
+
     TFuture<TGenericResult> CreateTable(TKikimrTableMetadataPtr metadata, bool createDir, bool existingOk, bool replaceIfExists) override {
         Y_UNUSED(replaceIfExists);
         CHECK_PREPARED_DDL(CreateTable);
@@ -821,8 +918,9 @@ public:
                             case TIndexDescription::EType::GlobalSyncVectorKMeansTree:
                                 *indexDesc->MutableVectorIndexKmeansTreeDescription()->MutableSettings() = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(index.SpecializedIndexDescription).GetSettings();
                                 break;
-                            case TIndexDescription::EType::GlobalFulltext:
-                                *indexDesc->MutableFulltextIndexDescription()->MutableSettings() = std::get<NKikimrKqp::TFulltextIndexDescription>(index.SpecializedIndexDescription).GetSettings();
+                            case TIndexDescription::EType::GlobalFulltextPlain:
+                            case TIndexDescription::EType::GlobalFulltextRelevance:
+                                *indexDesc->MutableFulltextIndexDescription()->MutableSettings() = std::get<NKikimrSchemeOp::TFulltextIndexDescription>(index.SpecializedIndexDescription).GetSettings();
                                 break;
                         }
                     }
@@ -1489,7 +1587,7 @@ public:
 
             auto& op = *tx.MutableDrop();
             op.SetName(settings.Name);
-            
+
             auto& dropBackupOp = *tx.MutableDropBackupCollection();
             dropBackupOp.SetName(settings.Name);
 
@@ -1658,11 +1756,8 @@ public:
             auto& createUser = *schemeTx.MutableAlterLogin()->MutableCreateUser();
 
             createUser.SetUser(settings.UserName);
-            if (settings.Password) {
-                createUser.SetPassword(settings.Password);
-                createUser.SetIsHashedPassword(settings.IsHashedPassword);
-            }
-
+            createUser.SetPassword(settings.Password);
+            createUser.SetHashedPassword(settings.HashedPassword);
             createUser.SetCanLogin(settings.CanLogin);
 
             auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
@@ -1700,7 +1795,10 @@ public:
 
             if (settings.Password.has_value()) {
                 alterUser.SetPassword(settings.Password.value());
-                alterUser.SetIsHashedPassword(settings.IsHashedPassword);
+            }
+
+            if (settings.HashedPassword.has_value()) {
+                alterUser.SetHashedPassword(settings.HashedPassword.value());
             }
 
             if (settings.CanLogin.has_value()) {
@@ -2566,7 +2664,7 @@ public:
             auto& config = *op.MutableConfig();
             auto& params = *config.MutableSrcConnectionParams();
             if (const auto& connectionString = settings.Settings.ConnectionString) {
-                const auto parseResult = NYdb::ParseConnectionString(*connectionString);
+                const auto parseResult = GetDataFromConnectionString(*connectionString);
                 params.SetEndpoint(TString{parseResult.Endpoint});
                 params.SetDatabase(TString{parseResult.Database});
                 params.SetEnableSsl(parseResult.EnableSsl);
@@ -2671,7 +2769,7 @@ public:
                 auto& config = *op.MutableConfig();
                 auto& params = *config.MutableSrcConnectionParams();
                 if (const auto& connectionString = settings.Settings.ConnectionString) {
-                    const auto parseResult = NYdb::ParseConnectionString(*connectionString);
+                    const auto parseResult = GetDataFromConnectionString(*connectionString);
                     params.SetEndpoint(TString{parseResult.Endpoint});
                     params.SetDatabase(TString{parseResult.Database});
                     params.SetEnableSsl(parseResult.EnableSsl);
@@ -2787,7 +2885,7 @@ public:
             auto& config = *op.MutableConfig();
             auto& params = *config.MutableSrcConnectionParams();
             if (const auto& connectionString = settings.Settings.ConnectionString) {
-                const auto parseResult = NYdb::ParseConnectionString(*connectionString);
+                const auto parseResult = GetDataFromConnectionString(*connectionString);
                 params.SetEndpoint(TString{parseResult.Endpoint});
                 params.SetDatabase(TString{parseResult.Database});
                 params.SetEnableSsl(parseResult.EnableSsl);
@@ -2914,7 +3012,7 @@ public:
                 auto& config = *op.MutableConfig();
                 auto& params = *config.MutableSrcConnectionParams();
                 if (const auto& connectionString = settings.Settings.ConnectionString) {
-                    const auto parseResult = NYdb::ParseConnectionString(*connectionString);
+                    const auto parseResult = GetDataFromConnectionString(*connectionString);
                     params.SetEndpoint(TString{parseResult.Endpoint});
                     params.SetDatabase(TString{parseResult.Database});
                     params.SetEnableSsl(parseResult.EnableSsl);

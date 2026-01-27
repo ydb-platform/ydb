@@ -23,7 +23,6 @@
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/mind/tenant_slot_broker.h>
-#include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/util/proto_duration.h>
@@ -73,6 +72,10 @@ using namespace NConsole;
 using namespace NNodeWhiteboard;
 using NNodeWhiteboard::TTabletId;
 
+const TString NONE = "none";
+const TString BLOCK_4_2 = "block-4-2";
+const TString MIRROR_3_DC = "mirror-3-dc";
+
 void RemoveUnrequestedEntries(Ydb::Monitoring::SelfCheckResult& result, const Ydb::Monitoring::SelfCheckRequest& request) {
     if (!request.return_verbose_status()) {
         result.clear_database_status();
@@ -96,25 +99,6 @@ void RemoveUnrequestedEntries(Ydb::Monitoring::SelfCheckResult& result, const Yd
         }
     }
 }
-
-struct TEvPrivate {
-    enum EEv {
-        EvRetryNodeWhiteboard = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
-        EvEnd
-    };
-
-    static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
-
-    struct TEvRetryNodeWhiteboard : NActors::TEventLocal<TEvRetryNodeWhiteboard, EvRetryNodeWhiteboard> {
-        TNodeId NodeId;
-        int EventId;
-
-        TEvRetryNodeWhiteboard(TNodeId nodeId, int eventId)
-            : NodeId(nodeId)
-            , EventId(eventId)
-        {}
-    };
-};
 
 class TSelfCheckRequest : public TActorBootstrapped<TSelfCheckRequest> {
 public:
@@ -1101,9 +1085,12 @@ public:
         return RequestTabletPipe<TEvSysView::TEvGetPartitionStatsResult>(schemeShardId, request.Release(), TTabletRequestsState::RequestGetPartitionStats);
     }
 
-    [[nodiscard]] TRequestResponse<TEvHive::TEvResponseHiveInfo> RequestHiveInfo(TTabletId hiveId) {
+    [[nodiscard]] TRequestResponse<TEvHive::TEvResponseHiveInfo> RequestHiveInfo(TTabletId hiveId, std::optional<TSubDomainKey> filterDomain) {
         THolder<TEvHive::TEvRequestHiveInfo> request = MakeHolder<TEvHive::TEvRequestHiveInfo>();
         request->Record.SetReturnFollowers(true);
+        if (filterDomain) {
+            request->Record.MutableFilterTabletsByObjectDomain()->CopyFrom(*filterDomain);
+        }
         return RequestTabletPipe<TEvHive::TEvResponseHiveInfo>(hiveId, request.Release());
     }
 
@@ -1708,7 +1695,7 @@ public:
         return HiveNodeStats.count(hiveId) == 0 || HiveInfo.count(hiveId) == 0;
     }
 
-    void AskHive(const TString& database, TTabletId hiveId) {
+    void AskHive(const TString& database, TTabletId hiveId, std::optional<TSubDomainKey> filterDomain) {
         TabletRequests.TabletStates[hiveId].Database = database;
         TabletRequests.TabletStates[hiveId].Type = TTabletTypes::Hive;
         if (HiveNodeStats.count(hiveId) == 0) {
@@ -1716,7 +1703,7 @@ public:
             ++HiveNodeStatsToGo;
         }
         if (HiveInfo.count(hiveId) == 0) {
-            HiveInfo[hiveId] = RequestHiveInfo(hiveId);
+            HiveInfo[hiveId] = RequestHiveInfo(hiveId, filterDomain);
         }
     }
 
@@ -1747,14 +1734,15 @@ public:
             FilterDomainKey[subDomainKey] = path;
 
             TTabletId hiveId = domainInfo->Params.GetHive();
+            auto filterDomain = IsSpecificDatabaseFilter() ? std::make_optional(subDomainKey) : std::nullopt;
             if (hiveId) {
                 DatabaseState[path].HiveId = hiveId;
                 if (NeedToAskHive(hiveId)) {
-                    AskHive(path, hiveId);
+                    AskHive(path, hiveId, filterDomain);
                 }
             } else if (RootHiveId && NeedToAskHive(RootHiveId)) {
                 DatabaseState[DomainPath].HiveId = RootHiveId;
-                AskHive(DomainPath, RootHiveId);
+                AskHive(DomainPath, RootHiveId, filterDomain);
             }
 
             TTabletId schemeShardId = domainInfo->Params.GetSchemeShard();
@@ -2987,9 +2975,6 @@ public:
         storageGroupStatus.set_overall(context.GetOverallStatus());
     }
 
-    static const inline TString NONE = "none";
-    static const inline TString BLOCK_4_2 = "block-4-2";
-    static const inline TString MIRROR_3_DC = "mirror-3-dc";
     static const int MERGING_IGNORE_SIZE = 4;
 
     struct TMergeIssuesContext {

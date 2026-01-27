@@ -7,7 +7,6 @@
 #include "partition_init.h"
 #include "partition_sourcemanager.h"
 #include "partition_types.h"
-#include "read_quoter.h"
 #include "sourceid.h"
 #include "subscriber.h"
 #include "user_info.h"
@@ -20,6 +19,7 @@
 #include <ydb/core/persqueue/common/key.h>
 #include <ydb/core/persqueue/pqtablet/blob/blob.h>
 #include <ydb/core/persqueue/pqtablet/blob/header.h>
+#include <ydb/core/persqueue/pqtablet/quota/quota.h>
 #include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/library/actors/core/actor.h>
@@ -35,10 +35,6 @@ static const ui32 DEFAULT_BUCKET_COUNTER_MULTIPLIER = 20;
 static const ui32 MAX_USER_ACTS = 1000;
 static const ui32 BATCH_UNPACK_SIZE_BORDER = 500_KB;
 static const ui32 MAX_INLINE_SIZE = 1000;
-
-using TPartitionLabeledCounters =
-    TProtobufTabletLabeledCounters<EPartitionLabeledCounters_descriptor>;
-using TPartitionExtendedLabeledCounters = TProtobufTabletLabeledCounters<EPartitionExtendedLabeledCounters_descriptor>;
 
 ui64 GetOffsetEstimate(const std::deque<TDataKey>& container, TInstant timestamp, ui64 headOffset);
 TMaybe<ui64> GetOffsetEstimate(const std::deque<TDataKey>& container, TInstant timestamp);
@@ -127,6 +123,11 @@ struct TTransaction {
 
     TInstant WriteInfoResponseTimestamp;
     TInstant CalcPredicateTimestamp;
+
+    TMaybe<NKikimrPQ::TTransaction> SerializedTx;
+    TMaybe<NKikimrPQ::TPQTabletConfig> TabletConfig;
+    TMaybe<NKikimrPQ::TBootstrapConfig> BootstrapConfig;
+    TMaybe<NKikimrPQ::TPartitions> PartitionsData;
 };
 class TPartitionCompaction;
 
@@ -217,9 +218,9 @@ private:
     void FilterDeadlinedWrites(const TActorContext& ctx);
     void FilterDeadlinedWrites(const TActorContext& ctx, TMessageQueue& requests);
 
-    void Handle(NReadQuoterEvents::TEvAccountQuotaCountersUpdated::TPtr& ev, const TActorContext& ctx);
-    void Handle(NReadQuoterEvents::TEvQuotaCountersUpdated::TPtr& ev, const TActorContext& ctx);
-    void Handle(NReadQuoterEvents::TEvQuotaUpdated::TPtr& ev, const TActorContext& ctx);
+    void Handle(NQuoterEvents::TEvAccountQuotaCountersUpdated::TPtr& ev, const TActorContext& ctx);
+    void Handle(NQuoterEvents::TEvQuotaCountersUpdated::TPtr& ev, const TActorContext& ctx);
+    void Handle(NQuoterEvents::TEvQuotaUpdated::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvApproveReadQuota::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvBlobResponse::TPtr& ev, const TActorContext& ctx);
@@ -272,6 +273,7 @@ private:
     void HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& ctx);
     void HandleWakeup(const TActorContext& ctx);
     void HandleWriteResponse(const TActorContext& ctx);
+    void Handle(TEvPQ::TEvMLPConsumerMonRequest::TPtr& ev);
 
     void InitComplete(const TActorContext& ctx);
     void InitUserInfoForImportantClients(const TActorContext& ctx);
@@ -311,7 +313,7 @@ private:
     void HandleQuotaWaitingRequests(const TActorContext& ctx);
     void RequestQuotaForWriteBlobRequest(size_t dataSize, ui64 cookie);
     bool RequestBlobQuota();
-    void RequestBlobQuota(size_t quotaSize);
+    void RequestBlobQuota(size_t quotaSize, size_t deduplicationIdQuotaSize);
     void ConsumeBlobQuota();
     void UpdateAfterWriteCounters(bool writeComplete);
 
@@ -427,8 +429,8 @@ private:
                               NKikimrPQ::TEvProposeTransactionResult::EStatus statusCode,
                               NKikimrPQ::TError::EKind kind,
                               const TString& reason);
-    void ScheduleReplyCommitDone(ui64 step, ui64 txId,
-                                 NWilson::TSpan&& commitSpan);
+    void ScheduleReplyTxDone(ui64 step, ui64 txId,
+                             NWilson::TSpan&& commitSpan);
     void ScheduleDropPartitionLabeledCounters(const TString& group);
     void SchedulePartitionConfigChanged();
 
@@ -461,7 +463,7 @@ private:
                                                                         NKikimrPQ::TEvProposeTransactionResult::EStatus statusCode,
                                                                         NKikimrPQ::TError::EKind kind,
                                                                         const TString& reason);
-    THolder<TEvPQ::TEvTxCommitDone> MakeCommitDone(ui64 step, ui64 txId);
+    THolder<TEvPQ::TEvTxDone> MakeTxDone(ui64 step, ui64 txId) const;
 
     bool BeginTransactionConfig();
 
@@ -533,7 +535,6 @@ private:
     ::NMonitoring::TDynamicCounterPtr GetPerPartitionCounterSubgroup() const;
     void SetupDetailedMetrics();
     void ResetDetailedMetrics();
-    bool DetailedMetricsAreEnabled() const;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -614,9 +615,9 @@ private:
             HFuncTraced(TEvPQ::TEvTxCommit, HandleOnInit);
             HFuncTraced(TEvPQ::TEvTxRollback, HandleOnInit);
             HFuncTraced(TEvPQ::TEvSubDomainStatus, Handle);
-            HFuncTraced(NReadQuoterEvents::TEvQuotaUpdated, Handle);
-            HFuncTraced(NReadQuoterEvents::TEvAccountQuotaCountersUpdated, Handle);
-            HFuncTraced(NReadQuoterEvents::TEvQuotaCountersUpdated, Handle);
+            HFuncTraced(NQuoterEvents::TEvQuotaUpdated, Handle);
+            HFuncTraced(NQuoterEvents::TEvAccountQuotaCountersUpdated, Handle);
+            HFuncTraced(NQuoterEvents::TEvQuotaCountersUpdated, Handle);
             HFuncTraced(TEvPQ::TEvGetWriteInfoRequest, HandleOnInit);
             hFuncTraced(TEvPQ::TEvExclusiveLockAcquired, Handle);
             HFuncTraced(TEvPQ::TEvGetWriteInfoResponse, HandleOnInit);
@@ -630,6 +631,8 @@ private:
             hFuncTraced(TEvPQ::TEvMLPUnlockRequest, Handle);
             hFuncTraced(TEvPQ::TEvMLPChangeMessageDeadlineRequest, Handle);
             hFuncTraced(TEvPQ::TEvGetMLPConsumerStateRequest, Handle);
+            hFuncTraced(TEvPQ::TEvMLPConsumerState, Handle);
+            hFuncTraced(TEvPQ::TEvMLPConsumerMonRequest, Handle);
         default:
             if (!Initializer.Handle(ev)) {
                 ALOG_ERROR(NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateInit", ev));
@@ -691,9 +694,9 @@ private:
             HFuncTraced(TEvPQ::TEvSubDomainStatus, Handle);
             hFuncTraced(TEvPQ::TEvExclusiveLockAcquired, Handle);
             HFuncTraced(TEvPQ::TEvCheckPartitionStatusRequest, Handle);
-            HFuncTraced(NReadQuoterEvents::TEvQuotaUpdated, Handle);
-            HFuncTraced(NReadQuoterEvents::TEvAccountQuotaCountersUpdated, Handle);
-            HFuncTraced(NReadQuoterEvents::TEvQuotaCountersUpdated, Handle);
+            HFuncTraced(NQuoterEvents::TEvQuotaUpdated, Handle);
+            HFuncTraced(NQuoterEvents::TEvAccountQuotaCountersUpdated, Handle);
+            HFuncTraced(NQuoterEvents::TEvQuotaCountersUpdated, Handle);
             HFuncTraced(TEvPQ::TEvProcessChangeOwnerRequests, Handle);
             HFuncTraced(TEvPQ::TEvDeletePartition, Handle);
             IgnoreFunc(TEvPQ::TEvTxBatchComplete);
@@ -704,6 +707,8 @@ private:
             hFuncTraced(TEvPQ::TEvMLPUnlockRequest, Handle);
             hFuncTraced(TEvPQ::TEvMLPChangeMessageDeadlineRequest, Handle);
             hFuncTraced(TEvPQ::TEvGetMLPConsumerStateRequest, Handle);
+            hFuncTraced(TEvPQ::TEvMLPConsumerState, Handle);
+            hFuncTraced(TEvPQ::TEvMLPConsumerMonRequest, Handle);
         default:
             ALOG_ERROR(NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateIdle", ev));
             break;
@@ -963,10 +968,9 @@ private:
     std::deque<THolder<TEvPQ::TEvChangeOwner>> WaitToChangeOwner;
 
     TTabletCountersBase TabletCounters;
-    THolder<TPartitionLabeledCounters> PartitionCountersLabeled;
-    THolder<TPartitionExtendedLabeledCounters> PartitionCountersExtended;
-
-    THolder<TPartitionKeyCompactionCounters> PartitionCompactionCounters;
+    std::optional<TTabletLabeledCountersBase> PartitionCountersLabeled;
+    std::optional<TTabletLabeledCountersBase> PartitionCountersExtended;
+    std::optional<TTabletLabeledCountersBase> PartitionKeyCompactionCounters;
 
     // Per partition counters
     NMonitoring::TDynamicCounters::TCounterPtr WriteTimeLagMsByLastWritePerPartition;
@@ -1062,6 +1066,7 @@ private:
     ui64 TopicQuotaRequestCookie = 0;
     ui64 NextTopicWriteQuotaRequestCookie = 1;
     ui64 BlobQuotaSize = 0;
+    ui64 DeduplicationIdQuotaSize = 0;
     bool NeedDeletePartition = false;
 
     // Wait topic quota metrics
@@ -1235,16 +1240,19 @@ private:
     void Handle(TEvPQ::TEvMLPUnlockRequest::TPtr&);
     void Handle(TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr&);
     void Handle(TEvPQ::TEvGetMLPConsumerStateRequest::TPtr&);
+    void Handle(TEvPQ::TEvMLPConsumerState::TPtr&);
 
     void ProcessMLPPendingEvents();
     template<typename TEventHandle>
     void ForwardToMLPConsumer(const TString& consumer, TAutoPtr<TEventHandle>& ev);
 
     void InitializeMLPConsumers();
+    void DropDataOfMLPConsumer(NKikimrClient::TKeyValueRequest& request, const TString& consumer);
     void NotifyEndOffsetChanged();
 
     struct TMLPConsumerInfo {
         TActorId ActorId;
+        NKikimrPQ::TAggregatedCounters::TMLPConsumerCounters Metrics;
     };
     std::unordered_map<TString, TMLPConsumerInfo> MLPConsumers;
 
@@ -1259,8 +1267,10 @@ private:
     ui64 LastNotifiedEndOffset = 0;
 
     TMessageIdDeduplicator MessageIdDeduplicator;
-    void AddMessageDeduplicatorKeys(TEvKeyValue::TEvRequest* request);
+    bool AddMessageDeduplicatorKeys(TEvKeyValue::TEvRequest* request);
     std::optional<ui64> DeduplicateByMessageId(const TEvPQ::TEvWrite::TMsg& msg, const ui64 offset);
+
+    void TryAddCmdWriteForTransaction(const TTransaction& tx);
 };
 
 inline ui64 TPartition::GetStartOffset() const {

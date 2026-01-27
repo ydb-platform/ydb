@@ -163,7 +163,7 @@ void TYqlUserJobBase::DoImpl() {
     YQL_ENSURE(LambdaCode);
     TRuntimeNode rootNode = DeserializeRuntimeNode(LambdaCode, *Env);
     THashMap<TString, TRuntimeNode> extraArgs;
-    rootNode = builder.TransformAndOptimizeProgram(rootNode, MakeTransformProvider(&extraArgs, GetJobFactoryPrefix()));
+    rootNode = builder.TransformAndOptimizeProgram(rootNode, MakeTransformProvider(&extraArgs));
 
     MkqlIOSpecs.Reset(new TMkqlIOSpecs());
     if (UseSkiff) {
@@ -196,7 +196,7 @@ void TYqlUserJobBase::DoImpl() {
     }
     auto maxRss = TRusage::Get().MaxRss;
     CompGraph = builder.BuildGraph(
-        GetJobFactory(*CodecCtx, OptLLVM, MkqlIOSpecs.Get(), reader.Get(), mkqlWriter.Get(), GetJobFactoryPrefix()),
+        GetJobFactory(*CodecCtx, OptLLVM, MkqlIOSpecs.Get(), reader.Get(), mkqlWriter.Get()),
         UdfValidateMode,
         NUdf::EValidatePolicy::Fail, OptLLVM,
         EGraphPerProcess::Single,
@@ -235,6 +235,12 @@ void TYqlUserJobBase::DoImpl() {
         YQL_ENSURE(status == NUdf::EFetchStatus::Finish);
     } else {
         YQL_ENSURE(value.IsFinish());
+    }
+
+    value = {};
+    CompGraph->Invalidate();
+    if (auto pos = CompGraph->GetNotConsumedLinear()) {
+        UdfTerminate((TStringBuilder() << pos << " Linear value is not consumed").c_str());
     }
 
     MKQL_SET_STAT(JobStats, Job_CalcTime, (ThreadCPUTime() - beginCalcTime) / 1000);

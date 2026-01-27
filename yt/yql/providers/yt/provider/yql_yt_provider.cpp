@@ -313,6 +313,9 @@ void TYtState::Reset() {
     WalkFoldersState.clear();
     NextEpochId = 1;
     FlowDependsOnId = 0;
+    if (FullCapture_) {
+        FullCapture_ = CreateYtFullCapture();
+    }
 }
 
 void TYtState::EnterEvaluation(ui64 id) {
@@ -481,16 +484,10 @@ TDataProviderInitializer GetYtNativeDataProviderInitializer(IYtGateway::TPtr gat
                 return {};
             }
 
-            // todo: get token by cluster name from Auth when it will be implemented
-            if (auto token = ytState->Configuration->Auth.Get()) {
+            if (auto token = ytState->ResolveClusterToken(cluster)) {
                 return *token;
             }
 
-            if (cluster) {
-                if (auto p = ytState->Configuration->Tokens.FindPtr(cluster)) {
-                    return *p;
-                }
-            }
             return {};
         };
 
@@ -548,6 +545,8 @@ struct TYtDataSinkFunctions {
         Names.insert(TYtTouch::CallableName());
         Names.insert(TYtCreateTable::CallableName());
         Names.insert(TYtDropTable::CallableName());
+        Names.insert(TYtCreateView::CallableName());
+        Names.insert(TYtDropView::CallableName());
         Names.insert(TCoCommit::CallableName());
         Names.insert(TYtPublish::CallableName());
         Names.insert(TYtEquiJoin::CallableName());
@@ -577,6 +576,27 @@ bool TYtState::IsHybridEnabledForCluster(const std::string_view& cluster) const 
 bool TYtState::HybridTakesTooLong() const {
     return TimeSpentInHybrid + (HybridInFlightOprations.empty() ? TDuration::Zero() : NMonotonic::TMonotonic::Now() - HybridStartTime)
             > Configuration->HybridDqTimeSpentLimit.Get().GetOrElse(TDuration::Minutes(20));
+}
+
+TMaybe<TString> TYtState::ResolveClusterToken(const TString& cluster) {
+    // todo: get token by cluster name from Auth when it will be implemented
+    if (auto token = Configuration->Auth.Get()) {
+        return *token;
+    }
+
+    if (cluster) {
+        if (auto* token = Configuration->Tokens.FindPtr(cluster)) {
+            if (*token) {
+                return *token;
+            }
+        }
+
+        if (auto ytTokenResolver = Gateway->GetYtTokenResolver()) {
+            return ytTokenResolver->ResolveClusterToken(cluster);
+        }
+    }
+
+    return {};
 }
 
 }

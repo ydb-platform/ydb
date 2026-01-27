@@ -17,6 +17,7 @@ from six.moves.queue import Queue
 import yatest
 
 from ydb.tests.library.common.wait_for import wait_for
+from ydb.tests.library.common.types import FailDomainType
 from . import daemon
 from . import kikimr_config
 from . import kikimr_node_interface
@@ -491,7 +492,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             ))
             raise
 
-    def start(self, timeout_seconds: int = 240):
+    def start(self, timeout_seconds=240):
         """
         Safely starts kikimr instance.
         Do not override this method.
@@ -536,7 +537,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
                 time.sleep(interval)
         raise last_exception
 
-    def __run(self, timeout_seconds: int = 240):
+    def __run(self, timeout_seconds=240):
         self.prepare()
 
         for node_id in self.__configurator.all_node_ids():
@@ -563,6 +564,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
                 name=p['name'],
                 kind=p['kind'],
                 pdisk_user_kind=p['pdisk_user_kind'],
+                num_groups=p.get('num_groups'),
             )
             pools[p['name']] = p['kind']
 
@@ -635,12 +637,30 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             slot.start()
         return slots
 
+    def write_encryption_key(self, slug):
+        workdir = os.path.join(self.__configurator.working_dir, self.__cluster_name)
+        secret_path = os.path.join(workdir, slug + "_secret.txt")
+        with open(secret_path, "w") as writer:
+            writer.write("fake_secret_data_for_%s" % slug)
+        keyfile_path = os.path.join(workdir, slug + "_key.txt")
+        with open(keyfile_path, "w") as writer:
+            writer.write('Keys { ContainerPath: "%s" Pin: "" Id: "%s" Version: 1 } ' % (secret_path, slug))
+        return keyfile_path
+
     def __register_slot(self, tenant_affiliation=None, encryption_key=None, seed_nodes_file=None):
         slot_index = next(self._slot_index_allocator)
         node_broker_port = (
             self.nodes[1].grpc_ssl_port if self.__configurator.grpc_ssl_enable
             else self.nodes[1].grpc_port
         )
+
+        if tenant_affiliation is None:
+            tenant_affiliation = "dynamic"
+
+        if encryption_key is None and self.__configurator.enable_pool_encryption:
+            slug = tenant_affiliation.replace('/', '_')
+            encryption_key = self.write_encryption_key(slug)
+
         self._slots[slot_index] = KiKiMRNode(
             node_id=slot_index,
             config_path=self.config_path,
@@ -650,7 +670,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             udfs_dir=self.__common_udfs_dir,
             role='slot',
             node_broker_port=node_broker_port,
-            tenant_affiliation=tenant_affiliation if tenant_affiliation is not None else 'dynamic',
+            tenant_affiliation=tenant_affiliation,
             encryption_key=encryption_key,
             binary_path=self.__configurator.get_binary_path(slot_index),
             seed_nodes_file=seed_nodes_file,
@@ -859,9 +879,11 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
                 if retries == 0:
                     raise
 
-    def add_storage_pool(self, name=None, kind="rot", pdisk_user_kind=0, erasure=None):
+    def add_storage_pool(self, name=None, kind="rot", pdisk_user_kind=0, erasure=None, num_groups=None):
         if erasure is None:
             erasure = self.__configurator.static_erasure
+        if num_groups is None:
+            num_groups = 2
         request = bs.TConfigRequest()
         cmd = request.Command.add()
         cmd.DefineStoragePool.BoxId = 1
@@ -874,7 +896,13 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         cmd.DefineStoragePool.Kind = kind
         cmd.DefineStoragePool.ErasureSpecies = str(erasure)
         cmd.DefineStoragePool.VDiskKind = "Default"
-        cmd.DefineStoragePool.NumGroups = 2
+        cmd.DefineStoragePool.NumGroups = num_groups
+
+        if str(erasure) == "mirror-3-dc" and len(self.__configurator.all_node_ids()) == 3:
+            cmd.DefineStoragePool.Geometry.RealmLevelBegin = int(FailDomainType.DC)
+            cmd.DefineStoragePool.Geometry.RealmLevelEnd = int(FailDomainType.Room)
+            cmd.DefineStoragePool.Geometry.DomainLevelBegin = int(FailDomainType.DC)
+            cmd.DefineStoragePool.Geometry.DomainLevelEnd = int(FailDomainType.Disk) + 1
 
         pdisk_filter = cmd.DefineStoragePool.PDiskFilter.add()
         pdisk_filter.Property.add().Type = 0
@@ -882,7 +910,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         self._bs_config_invoke(request)
         return name
 
-    def __wait_for_bs_controller_to_start(self, timeout_seconds: int = 240):
+    def __wait_for_bs_controller_to_start(self, timeout_seconds=240):
         monitors = [node.monitor for node in self.nodes.values()]
 
         def predicate():

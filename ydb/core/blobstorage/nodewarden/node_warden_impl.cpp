@@ -81,6 +81,7 @@ TNodeWarden::TNodeWarden(const TIntrusivePtr<TNodeWardenConfig> &cfg)
     , ReportingControllerBucketSize(1, 1, 100'000)
     , ReportingControllerLeakDurationMs(60'000, 1, 3'600'000)
     , ReportingControllerLeakRate(1, 1, 100'000)
+    , MaxPutTimeoutSeconds(DefaultMaxPutTimeout.Seconds(), 1, 1'000'000)
     , EnableDeepScrubbing(false, false, true)
 {
     Y_ABORT_UNLESS(Cfg->BlobStorageConfig.GetServiceSet().AvailabilityDomainsSize() <= 1);
@@ -194,6 +195,10 @@ STATEFN(TNodeWarden::StateOnline) {
         hFunc(TEvNodeWardenQueryCacheResult, Handle);
 
         hFunc(TEvNodeWardenNotifySyncerFinished, Handle);
+
+        hFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, Handle);
+        hFunc(NConsole::TEvConfigsDispatcher::TEvRemoveConfigSubscriptionResponse, Handle);
+        hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
 
         default:
             EnqueuePendingMessage(ev);
@@ -337,6 +342,10 @@ void TNodeWarden::StartRequestReportingThrottler() {
 
 void TNodeWarden::PassAway() {
     STLOG(PRI_DEBUG, BS_NODE, NW25, "PassAway");
+
+    Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
+        new NConsole::TEvConfigsDispatcher::TEvRemoveConfigSubscriptionRequest(SelfId()));
+
     NTabletPipe::CloseClient(SelfId(), PipeClientId);
     StopInvalidGroupProxy();
     TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, DsProxyNodeMonActor, {}, nullptr, 0));
@@ -448,6 +457,7 @@ void TNodeWarden::Bootstrap() {
         TControlBoard::RegisterSharedControl(ReportingControllerBucketSize, icb->DSProxyControls.RequestReportingSettings.BucketSize);
         TControlBoard::RegisterSharedControl(ReportingControllerLeakDurationMs, icb->DSProxyControls.RequestReportingSettings.LeakDurationMs);
         TControlBoard::RegisterSharedControl(ReportingControllerLeakRate, icb->DSProxyControls.RequestReportingSettings.LeakRate);
+        TControlBoard::RegisterSharedControl(MaxPutTimeoutSeconds, icb->DSProxyControls.MaxPutTimeoutSeconds);
     }
 
     // start replication broker
@@ -501,6 +511,11 @@ void TNodeWarden::Bootstrap() {
     StorageConfig = std::move(config);
 
     YamlConfig = std::move(Cfg->YamlConfig);
+
+    InferPDiskSlotCountSettings.CopyFrom(Cfg->BlobStorageConfig.GetInferPDiskSlotCountSettings());
+    ui32 blobStorageConfigItem = NKikimrConsole::TConfigItem::BlobStorageConfigItem;
+    Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
+        new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest(blobStorageConfigItem));
 
     // Start a statically configured set
     if (Cfg->BlobStorageConfig.HasServiceSet()) {
@@ -1259,8 +1274,49 @@ void TNodeWarden::Handle(TEvStatusUpdate::TPtr ev) {
     }
 }
 
+void TNodeWarden::Handle(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr /*ev*/)
+{}
+
+void TNodeWarden::Handle(NConsole::TEvConfigsDispatcher::TEvRemoveConfigSubscriptionResponse::TPtr /*ev*/)
+{}
+
+void TNodeWarden::Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr ev) {
+    auto& record = ev->Get()->Record;
+    if (record.HasConfig() && record.GetConfig().HasBlobStorageConfig()) {
+        auto inferSettings = record.GetConfig().GetBlobStorageConfig().GetInferPDiskSlotCountSettings();
+        auto equals = ::google::protobuf::util::MessageDifferencer::Equals;
+        if (!equals(InferPDiskSlotCountSettings, inferSettings)) {
+            InferPDiskSlotCountSettings.CopyFrom(inferSettings);
+            for (auto& [key, localPDisk] : LocalPDisks) {
+                TIntrusivePtr<TPDiskConfig> newPDiskConfig = CreatePDiskConfig(localPDisk.Record);
+                ui64 newExpectedSlotCount = newPDiskConfig->ExpectedSlotCount;
+                ui32 newSlotSizeInUnits = newPDiskConfig->SlotSizeInUnits;
+
+                if (newExpectedSlotCount != localPDisk.ExpectedSlotCount ||
+                        newSlotSizeInUnits != localPDisk.SlotSizeInUnits) {
+                    STLOG(PRI_DEBUG, BS_NODE, NW112, "SendChangeExpectedSlotCount from config notification",
+                        (PDiskId, key.PDiskId),
+                        (ExpectedSlotCount, newExpectedSlotCount),
+                        (SlotSizeInUnits, newSlotSizeInUnits));
+
+                    const TActorId pdiskActorId = MakeBlobStoragePDiskID(LocalNodeId, key.PDiskId);
+                    Send(pdiskActorId, new NPDisk::TEvChangeExpectedSlotCount(newExpectedSlotCount, newSlotSizeInUnits));
+
+                    localPDisk.ExpectedSlotCount = newExpectedSlotCount;
+                    localPDisk.SlotSizeInUnits = newSlotSizeInUnits;
+                }
+            }
+        }
+    }
+    Send(ev->Sender, new NConsole::TEvConsole::TEvConfigNotificationResponse(record), 0, ev->Cookie);
+}
+
 void TNodeWarden::FillInVDiskStatus(google::protobuf::RepeatedPtrField<NKikimrBlobStorage::TVDiskStatus> *pb, bool initial) {
     for (auto& [vslotId, vdisk] : LocalVDisks) {
+        if (vdisk.RuntimeData && vdisk.RuntimeData->DDisk) {
+            continue; // do not report DDisks here
+        }
+
         const NKikimrBlobStorage::EVDiskStatus status = vdisk.RuntimeData
             ? vdisk.Status
             : NKikimrBlobStorage::EVDiskStatus::ERROR;

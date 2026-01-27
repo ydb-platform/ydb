@@ -1,4 +1,5 @@
-# coding: utf-8
+
+from __future__ import annotations
 
 from ruamel.yaml.reader import Reader
 from ruamel.yaml.scanner import Scanner, RoundTripScanner
@@ -12,8 +13,9 @@ from ruamel.yaml.constructor import (
 )
 from ruamel.yaml.resolver import VersionedResolver
 
-from typing import Any, Dict, List, Union, Optional  # NOQA
-from ruamel.yaml.compat import StreamTextType, VersionType  # NOQA
+if False:  # MYPY
+    from typing import Any, Dict, List, Union, Optional  # NOQA
+    from ruamel.yaml.compat import StreamTextType, VersionType  # NOQA
 
 __all__ = ['BaseLoader', 'SafeLoader', 'Loader', 'RoundTripLoader']
 

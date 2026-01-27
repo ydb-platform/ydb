@@ -238,10 +238,12 @@ class TDataShard
     class TTxHandleSafeSampleKScan;
     class TTxHandleSafeLocalKMeansScan;
     class TTxHandleSafePrefixKMeansScan;
+    class TTxHandleSafeFilterKMeansScan;
     class TTxHandleSafeReshuffleKMeansScan;
     class TTxHandleSafeRecomputeKMeansScan;
     class TTxHandleSafeStatisticsScan;
     class TTxHandleSafeBuildFulltextIndexScan;
+    class TTxHandleSafeBuildFulltextDictScan;
 
     class TTxMediatorStateRestored;
 
@@ -337,7 +339,6 @@ class TDataShard
             EvPersistScanState,
             EvPersistScanStateAck,
             EvConditionalEraseRowsRegistered,
-            EvAsyncJobComplete,
             EvSubDomainPathIdFound, // unused
             EvRequestChangeRecords,
             EvRemoveChangeRecords,
@@ -481,15 +482,6 @@ class TDataShard
 
             const ui64 TxId;
             const TActorId ActorId;
-        };
-
-        struct TEvAsyncJobComplete : public TEventLocal<TEvAsyncJobComplete, EvAsyncJobComplete> {
-            explicit TEvAsyncJobComplete(TAutoPtr<IDestructable> prod)
-                : Prod(prod)
-            {
-            }
-
-            TAutoPtr<IDestructable> Prod;
         };
 
         struct TEvRequestChangeRecords : public TEventLocal<TEvRequestChangeRecords, EvRequestChangeRecords> {};
@@ -1350,12 +1342,16 @@ class TDataShard
     void HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvPrefixKMeansRequest::TPtr& ev, const TActorContext& ctx);
     void HandleSafe(TEvDataShard::TEvPrefixKMeansRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvFilterKMeansRequest::TPtr& ev, const TActorContext& ctx);
+    void HandleSafe(TEvDataShard::TEvFilterKMeansRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvBuildFulltextIndexRequest::TPtr& ev, const TActorContext& ctx);
     void HandleSafe(TEvDataShard::TEvBuildFulltextIndexRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvBuildFulltextDictRequest::TPtr& ev, const TActorContext& ctx);
+    void HandleSafe(TEvDataShard::TEvBuildFulltextDictRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvCdcStreamScanRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvCdcStreamScanRegistered::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvCdcStreamScanProgress::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvPrivate::TEvAsyncJobComplete::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvAsyncJobComplete::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvRestartOperation::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvBlockFailPointUnblock::TPtr& ev, const TActorContext& ctx);
     void Handle(NStat::TEvStatistics::TEvStatisticsRequest::TPtr& ev, const TActorContext& ctx);
@@ -3243,11 +3239,13 @@ protected:
             HFunc(TEvDataShard::TEvRecomputeKMeansRequest, Handle);
             HFunc(TEvDataShard::TEvLocalKMeansRequest, Handle);
             HFunc(TEvDataShard::TEvPrefixKMeansRequest, Handle);
+            HFunc(TEvDataShard::TEvFilterKMeansRequest, Handle);
             HFunc(TEvDataShard::TEvBuildFulltextIndexRequest, Handle);
+            HFunc(TEvDataShard::TEvBuildFulltextDictRequest, Handle);
             HFunc(TEvDataShard::TEvCdcStreamScanRequest, Handle);
             HFunc(TEvPrivate::TEvCdcStreamScanRegistered, Handle);
             HFunc(TEvPrivate::TEvCdcStreamScanProgress, Handle);
-            HFunc(TEvPrivate::TEvAsyncJobComplete, Handle);
+            HFunc(TEvDataShard::TEvAsyncJobComplete, Handle);
             HFunc(TEvPrivate::TEvRestartOperation, Handle);
             HFunc(TEvPrivate::TEvBlockFailPointUnblock, Handle);
             HFunc(TEvPrivate::TEvPeriodicWakeup, DoPeriodicTasks);
@@ -3443,10 +3441,10 @@ protected:
             ev->Record.MutableTableStats()->SetPlannedTxCompleted(TabletCounters->Cumulative()[COUNTER_PLANNED_TX_COMPLETE].Get());
             ev->Record.MutableTableStats()->SetTxRejectedByOverload(TabletCounters->Cumulative()[COUNTER_PREPARE_OVERLOADED].Get() + TabletCounters->Cumulative()[COUNTER_WRITE_OVERLOADED].Get());
             ev->Record.MutableTableStats()->SetTxRejectedBySpace(
-                TabletCounters->Cumulative()[COUNTER_PREPARE_OUT_OF_SPACE].Get()
-              + TabletCounters->Cumulative()[COUNTER_PREPARE_DISK_SPACE_EXHAUSTED].Get()
-              + TabletCounters->Cumulative()[COUNTER_WRITE_OUT_OF_SPACE].Get()
-              + TabletCounters->Cumulative()[COUNTER_WRITE_DISK_SPACE_EXHAUSTED].Get()
+                TabletCounters->Cumulative()[COUNTER_PREPARE_DISK_GROUP_OUT_OF_SPACE].Get()
+              + TabletCounters->Cumulative()[COUNTER_PREPARE_DATABASE_DISK_SPACE_QUOTA_EXCEEDED].Get()
+              + TabletCounters->Cumulative()[COUNTER_WRITE_DISK_GROUP_OUT_OF_SPACE].Get()
+              + TabletCounters->Cumulative()[COUNTER_WRITE_DATABASE_DISK_SPACE_QUOTA_EXCEEDED].Get()
             );
 
             ev->Record.MutableTableStats()->SetTxCompleteLagMsec(TabletCounters->Simple()[COUNTER_TX_COMPLETE_LAG].Get());

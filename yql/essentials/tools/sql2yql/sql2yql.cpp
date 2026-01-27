@@ -42,7 +42,7 @@ struct TPosOutput {
     ui32 Line;
     ui32 Column;
 
-    TPosOutput(IOutputStream& out)
+    explicit TPosOutput(IOutputStream& out)
         : Out(out)
         , Line(1)
         , Column(0)
@@ -142,7 +142,7 @@ bool TestComplete(const TString& query, NYql::TAstNode& root) {
 
 class TStoreMappingFunctor: public NLastGetopt::IOptHandler {
 public:
-    TStoreMappingFunctor(THashMap<TString, TString>* target, char delim = '@')
+    explicit TStoreMappingFunctor(THashMap<TString, TString>* target, char delim = '@')
         : Target_(target)
         , Delim_(delim)
     {

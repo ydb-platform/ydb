@@ -8,13 +8,22 @@
 namespace NKikimr {
 namespace NStat {
 
+namespace {
+
+TTableInfo PrepareDatabaseAndTable(TTestEnv& env, bool isServerless) {
+    if (isServerless) {
+        CreateDatabase(env, "Shared", 1, true);
+        CreateServerlessDatabase(env, "Database", "/Root/Shared");
+    } else {
+        CreateDatabase(env, "Database");
+    }
+    return PrepareColumnTable(env, "Database", "Table", 10);
+}
+
 void AnalyzeTest(bool isServerless) {
     TTestEnv env(1, 1);
     auto& runtime = *env.GetServer().GetRuntime();
-    const auto databaseInfo = isServerless
-        ? PrepareServerlessDatabaseColumnTables(env, 1, 10)
-        : PrepareDatabaseColumnTables(env, 1, 10);
-    const auto& tableInfo = databaseInfo.Tables[0];
+    const auto tableInfo = PrepareDatabaseAndTable(env, isServerless);
     const auto sender = runtime.AllocateEdgeActor();
 
     runtime.Register(new THttpRequest(THttpRequest::ERequestType::ANALYZE, {
@@ -34,10 +43,8 @@ void AnalyzeTest(bool isServerless) {
 void ProbeTest(bool isServerless) {
     TTestEnv env(1, 1);
     auto& runtime = *env.GetServer().GetRuntime();
-    const auto databaseInfo = isServerless
-        ? PrepareServerlessDatabaseColumnTables(env, 1, 10)
-        : PrepareDatabaseColumnTables(env, 1, 10);
-    const auto& tableInfo = databaseInfo.Tables[0];
+    const auto tableInfo = PrepareDatabaseAndTable(env, isServerless);
+
     TString columnName = "Value";
     const auto sender = runtime.AllocateEdgeActor();
 
@@ -62,7 +69,7 @@ void ProbeTest(bool isServerless) {
     runtime.Register(new THttpRequest(THttpRequest::ERequestType::PROBE_COUNT_MIN_SKETCH, {
             { THttpRequest::EParamType::PATH, tableInfo.Path },
             { THttpRequest::EParamType::COLUMN_NAME, columnName },
-            { THttpRequest::EParamType::CELL_VALUE, "1" }
+            { THttpRequest::EParamType::CELL_VALUE, "\"1\"" }
         },
         THttpRequest::EResponseContentType::HTML,
         sender));
@@ -116,6 +123,8 @@ void ProbeBaseStatsTest(bool isServerless) {
     UNIT_ASSERT_VALUES_EQUAL(json["row_count"].GetIntegerSafe(), ColumnTableRowsNumber);
 }
 
+} // namespace
+
 Y_UNIT_TEST_SUITE(HttpRequest) {
     Y_UNIT_TEST(Analyze) {
         AnalyzeTest(false);
@@ -128,8 +137,7 @@ Y_UNIT_TEST_SUITE(HttpRequest) {
     Y_UNIT_TEST(Status) {
         TTestEnv env(1, 1);
         auto& runtime = *env.GetServer().GetRuntime();
-        const auto databaseInfo = PrepareDatabaseColumnTables(env, 1, 10);
-        const auto& tableInfo = databaseInfo.Tables[0];
+        const auto tableInfo = PrepareDatabaseAndTable(env, /*isServerless=*/false);
 
         const auto sender = runtime.AllocateEdgeActor();
         const auto operationId = TULIDGenerator().Next(TInstant::Now()).ToString();

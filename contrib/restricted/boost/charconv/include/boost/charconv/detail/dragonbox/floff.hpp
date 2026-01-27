@@ -1526,13 +1526,13 @@ BOOST_CHARCONV_SAFEBUFFERS to_chars_result floff(const double x, int precision, 
         if (fmt == boost::charconv::chars_format::scientific)
         {
             remaining_digits = precision + 1;
-            int exponent_print_length =
-                decimal_exponent_normalized >= 100 ? 5 :
-                decimal_exponent_normalized <= -100 ? 6 :
-                decimal_exponent_normalized >= 0 ? 4 : 5;
+
+            // e+XX or e+XXX since we always print at least two characters e.g. e+02
+            const int exponent_print_length =
+                decimal_exponent_normalized > -100 && decimal_exponent_normalized < 100 ? 4 : 5;
 
             // No trailing decimal dot.
-            auto minimum_required_buffer_size =
+            const auto minimum_required_buffer_size =
                 static_cast<std::size_t>(remaining_digits + exponent_print_length + (precision != 0 ? 1 : 0));
             if (buffer_size < minimum_required_buffer_size)
             {

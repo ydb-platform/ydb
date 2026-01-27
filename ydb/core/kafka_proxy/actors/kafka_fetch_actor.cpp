@@ -2,6 +2,7 @@
 #include <ydb/core/kafka_proxy/kafka_events.h>
 #include <ydb/core/base/ticket_parser.h>
 #include "ydb/core/kafka_proxy/kafka_metrics.h"
+#include "ydb/core/kafka_proxy/kafka_constants.h"
 #include <ydb/core/persqueue/public/fetcher/fetch_request_actor.h>
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/persqueue/public/write_meta/write_meta.h>
@@ -30,7 +31,7 @@ void TKafkaFetchActor::Bootstrap(const NActors::TActorContext& ctx) {
 
 void TKafkaFetchActor::SendFetchRequests(const TActorContext& ctx) {
     Response->Responses.resize(FetchRequestData->Topics.size());
-    KAFKA_LOG_D(TStringBuilder() << "Fetch actor: New request. DatabasePath: " << Context->DatabasePath 
+    KAFKA_LOG_D(TStringBuilder() << "Fetch actor: New request. DatabasePath: " << Context->DatabasePath
         << " MaxWaitMs: " << FetchRequestData->MaxWaitMs << " MaxBytes: " << FetchRequestData->MaxBytes);
     for (size_t topicIndex = 0; topicIndex <  Response->Responses.size(); topicIndex++) {
         auto partPQRequests = PrepareFetchRequestData(topicIndex);
@@ -122,12 +123,16 @@ void TKafkaFetchActor::HandleSuccessResponse(const NKikimr::TEvPQ::TEvFetchRespo
     for (i32 partitionIndex = 0; partitionIndex < ev->Get()->Response.GetPartResult().size(); partitionIndex++) {
         auto partPQResponse = ev->Get()->Response.GetPartResult()[partitionIndex];
         auto& partKafkaResponse = topicResponse.Partitions[partitionIndex];
+        std::optional<TString> timestampType;
+        if (ev->Get()->Response.HasTimestampType()) {
+            timestampType = ev->Get()->Response.GetTimestampType();
+        }
 
         partKafkaResponse.PartitionIndex = partPQResponse.GetPartition();
         partKafkaResponse.ErrorCode = ConvertErrorCode(partPQResponse.GetReadResult().GetErrorCode());
 
         if (partPQResponse.GetReadResult().GetErrorCode() != NPersQueue::NErrorCode::EErrorCode::OK) {
-            KAFKA_LOG_ERROR("Fetch actor: Failed to get responses for topic: " << topicResponse.Topic <<
+            KAFKA_LOG_D("Fetch actor: Failed to get responses for topic: " << topicResponse.Topic <<
                 ", partition: " << partPQResponse.GetPartition() <<
                 ". Code: " << static_cast<size_t>(partPQResponse.GetReadResult().GetErrorCode()) <<
                 ". Reason: " + partPQResponse.GetReadResult().GetErrorReason());
@@ -140,11 +145,14 @@ void TKafkaFetchActor::HandleSuccessResponse(const NKikimr::TEvPQ::TEvFetchRespo
         }
 
         auto& recordsBatch = partKafkaResponse.Records.emplace();
-        FillRecordsBatch(partPQResponse, recordsBatch, ctx);
+        FillRecordsBatch(partPQResponse, recordsBatch, timestampType, ctx);
     }
 }
 
-void TKafkaFetchActor::FillRecordsBatch(const NKikimrClient::TPersQueueFetchResponse_TPartResult& partPQResponse, TKafkaRecordBatch& recordsBatch, const TActorContext& ctx) {
+void TKafkaFetchActor::FillRecordsBatch(const NKikimrClient::TPersQueueFetchResponse_TPartResult& partPQResponse,
+                                        TKafkaRecordBatch& recordsBatch,
+                                        const std::optional<TString> timestampType,
+                                        const TActorContext& ctx) {
     recordsBatch.Records.resize(partPQResponse.GetReadResult().GetResult().size());
 
     ui64 baseOffset = 0;
@@ -156,15 +164,22 @@ void TKafkaFetchActor::FillRecordsBatch(const NKikimrClient::TPersQueueFetchResp
 
     for (i32 recordIndex = 0; recordIndex < partPQResponse.GetReadResult().GetResult().size(); recordIndex++) {
         auto& result = partPQResponse.GetReadResult().GetResult()[recordIndex];
+        auto fillTimestamp = [&timestampType, &result]() {
+            if (timestampType == MESSAGE_TIMESTAMP_LOG_APPEND) {
+                return result.GetWriteTimestampMS();
+            }
+            return result.GetCreateTimestampMS();
+        };
         if (first) {
             baseOffset = result.GetOffset();
-            baseTimestamp = result.GetWriteTimestampMS();
+            baseTimestamp = fillTimestamp();
             baseSequense = result.GetSeqNo();
             first = false;
         }
 
         lastOffset = result.GetOffset();
-        lastTimestamp = result.GetCreateTimestampMS();
+        lastTimestamp = fillTimestamp();
+
         auto& record = recordsBatch.Records[recordIndex];
 
         record.DataChunk = NKikimr::GetDeserializedData(result.GetData());
@@ -208,7 +223,9 @@ void TKafkaFetchActor::FillRecordsBatch(const NKikimrClient::TPersQueueFetchResp
         header.Value = header.CodecValueStr;
         record.Headers.push_back(header);
 
-        record.Value = record.DataChunk.GetData();
+        if (record.DataChunk.HasData()) {
+            record.Value = record.DataChunk.GetData();
+        }
         record.OffsetDelta = lastOffset - baseOffset;
         record.TimestampDelta = lastTimestamp - baseTimestamp;
 
@@ -240,5 +257,8 @@ void TKafkaFetchActor::RespondIfRequired(const TActorContext& ctx) {
     }
 }
 
+void TKafkaFetchActor::Handle(TEvKafka::TEvFetchActorStateRequest::TPtr& ev) {
+    Send(ev->Sender, new TEvKafka::TEvFetchActorStateResponse(TopicIndexes));
+}
 
 } // namespace NKafka

@@ -125,7 +125,7 @@ namespace NActors {
         Y_ABORT_UNLESS(count > 0);
         Y_ABORT_UNLESS(!Chunks.empty());
         TChunk& buf = Chunks.back();
-        Y_ABORT_UNLESS((size_t)count <= buf.second);
+        Y_ABORT_UNLESS((size_t)count <= buf.second, "count# %d buf.second# %zu", count, buf.second);
         Y_ABORT_UNLESS(buf.first + buf.second == BufferPtr, "buf# %p:%zu BufferPtr# %p SizeRemain# %zu NumChunks# %zu",
             buf.first, buf.second, BufferPtr, SizeRemain, Chunks.size());
         buf.second -= count;
@@ -188,6 +188,7 @@ namespace NActors {
         while (!CancelFlag) {
             Y_ABORT_UNLESS(Event);
             SerializationSuccess = !AbortFlag && Event->SerializeToArcadiaStream(this);
+            CodedOutputStream.reset();
             Event = nullptr;
             if (!CancelFlag) { // cancel flag may have been received during serialization
                 InnerContext.SwitchTo(BufFeedContext);
@@ -459,37 +460,38 @@ namespace NActors {
         return true;
     }
 
-    TEventSerializationInfo CreateSerializationInfoImpl(size_t preserializedSize, bool allowExternalDataChannel, const TVector<TRope> &payload, ssize_t recordSize) {
-            TEventSerializationInfo info;
-            info.IsExtendedFormat = static_cast<bool>(payload);
+    TEventSerializationInfo CreateSerializationInfoImpl(size_t preserializedSize, bool allowExternalDataChannel,
+            const TVector<TRope> &payload, ssize_t recordSize) {
+        TEventSerializationInfo info;
+        info.IsExtendedFormat = static_cast<bool>(payload);
 
-            if (allowExternalDataChannel) {
-                if (payload) {
-                    char temp[MaxNumberBytes];
-                    size_t headerLen = 1 + SerializeNumber(payload.size(), temp);
-                    for (const TRope& rope : payload) {
-                        headerLen += SerializeNumber(rope.size(), temp);
-                    }
-                    info.Sections.push_back(TEventSectionInfo{0, headerLen, 0, 0, true, true});
-                    for (const TRope& rope : payload) {
-                        info.Sections.push_back(TEventSectionInfo{0, rope.size(), 0, 0, false, IsRdma(rope)});
-                    }
+        if (allowExternalDataChannel) {
+            if (payload) {
+                char temp[MaxNumberBytes];
+                size_t headerLen = 1 + SerializeNumber(payload.size(), temp);
+                for (const TRope& rope : payload) {
+                    headerLen += SerializeNumber(rope.size(), temp);
                 }
-
-                const size_t byteSize = Max<ssize_t>(0, recordSize) + preserializedSize;
-                info.Sections.push_back(TEventSectionInfo{0, byteSize, 0, 0, true, true}); // protobuf itself
-
-#ifndef NDEBUG
-                size_t total = 0;
-                for (const auto& section : info.Sections) {
-                    total += section.Size;
+                info.Sections.push_back(TEventSectionInfo{0, headerLen, 0, 0, true, true});
+                for (const TRope& rope : payload) {
+                    info.Sections.push_back(TEventSectionInfo{0, rope.size(), 0, 0, false, IsRdma(rope)});
                 }
-                size_t serialized = CalculateSerializedSizeImpl(payload, recordSize);
-                Y_ENSURE(total == serialized, "total# " << total << " serialized# " << serialized
-                    << " byteSize# " << byteSize << " payload.size# " << payload.size());
-#endif
             }
 
-            return info;
+            const size_t byteSize = Max<ssize_t>(0, recordSize) + preserializedSize;
+            info.Sections.push_back(TEventSectionInfo{0, byteSize, 0, 0, true, true}); // protobuf itself
+
+#ifndef NDEBUG
+            size_t total = 0;
+            for (const auto& section : info.Sections) {
+                total += section.Size;
+            }
+            size_t serialized = CalculateSerializedSizeImpl(payload, recordSize);
+            Y_ENSURE(total == serialized, "total# " << total << " serialized# " << serialized
+                << " byteSize# " << byteSize << " payload.size# " << payload.size());
+#endif
         }
+
+        return info;
+    }
 }

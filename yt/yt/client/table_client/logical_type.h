@@ -98,6 +98,10 @@ public:
     // Return fields for Struct,VariantStruct
     const std::vector<TStructField>& GetFields() const;
 
+    //
+    // Return stable names of removed fields for Struct,VariantStruct
+    const std::vector<std::string>& GetRemovedFieldStableNames() const;
+
 private:
     const ELogicalMetatype Metatype_;
 };
@@ -106,7 +110,7 @@ DEFINE_REFCOUNTED_TYPE(TLogicalType)
 
 TLogicalTypePtr ParseType(TStringBuf typeString);
 TString ToString(const TLogicalType& logicalType);
-void FormatValue(TStringBuilderBase* builder, const TLogicalType& logicalType, TStringBuf /*spec*/);
+void FormatValue(TStringBuilderBase* builder, const TLogicalType& logicalType, TStringBuf spec);
 
 //! Debug printers for Gtest unittests.
 void PrintTo(ELogicalMetatype type, std::ostream* os);
@@ -116,17 +120,26 @@ void PrintTo(const TLogicalTypePtr& type, std::ostream* os);
 bool operator==(const TLogicalType& lhs, const TLogicalType& rhs);
 bool operator==(const TLogicalTypePtr& lhs, const TLogicalTypePtr& rhs) = delete;
 
-void ValidateLogicalType(const TComplexTypeFieldDescriptor& descriptor, std::optional<int> depthLimit = std::nullopt);
+struct TLogicalTypeValidationOptions
+{
+    std::optional<int> DepthLimit;
+};
+
+void ValidateLogicalType(
+    const TComplexTypeFieldDescriptor& descriptor,
+    const TLogicalTypeValidationOptions& options = {});
 
 // Function converts new type to old typesystem.
 // The first element of result is ESimpleLogicalValue type corresponding to logicalType
 // (as seen in `type` field of column schema).
-// The second element of result is false if logicalType is Null or it is optional<A> where A is any type otherwise it's true.
+// The second element of result is false if logicalType is Null
+// or it is optional<A> where A is any type otherwise it's true.
 std::pair<ESimpleLogicalValueType, bool> CastToV1Type(const TLogicalTypePtr& logicalType);
 
 EValueType GetWireType(const TLogicalTypePtr& logicalType);
 
-// Return true if given type is pure v1 type (i.e. expressible with `type` and `required` fields in schema).
+// Return true if given type is pure v1 type
+// (i.e. expressible with `type` and `required` fields in schema).
 bool IsV1Type(const TLogicalTypePtr& logicalType);
 
 // Return true if this is new type expressible with EValueType::Composite type.
@@ -183,6 +196,7 @@ public:
     i64 GetMemoryUsage(i64 threshold) const override;
     int GetTypeComplexity() const override;
     void ValidateNode(const TWalkContext& context) const override;
+
     bool IsNullable() const override;
 
     Y_FORCE_INLINE int GetPrecision() const;
@@ -212,6 +226,7 @@ public:
     i64 GetMemoryUsage(i64 threshold) const override;
     int GetTypeComplexity() const override;
     void ValidateNode(const TWalkContext& context) const override;
+
     bool IsNullable() const override;
 
 private:
@@ -233,6 +248,7 @@ public:
     i64 GetMemoryUsage(i64 threshold) const override;
     int GetTypeComplexity() const override;
     void ValidateNode(const TWalkContext& context) const override;
+
     bool IsNullable() const override;
 
 private:
@@ -253,6 +269,7 @@ public:
     i64 GetMemoryUsage(i64 threshold) const override;
     int GetTypeComplexity() const override;
     void ValidateNode(const TWalkContext& context) const override;
+
     bool IsNullable() const override;
 
 private:
@@ -296,8 +313,14 @@ private:
 
 struct TStructField
 {
+    // While field name is allowed to change, stable name must always stay the same.
+    // If stable name is absent in proto, is gets filled from regular name.
     std::string Name;
+    std::string StableName;
+
     TLogicalTypePtr Type;
+
+    bool operator==(const TStructField& other) const;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -308,15 +331,17 @@ class TStructLogicalTypeBase
 {
 public:
     TStructLogicalTypeBase(ELogicalMetatype metatype, std::vector<TStructField> fields);
+
     Y_FORCE_INLINE const std::vector<TStructField>& GetFields() const;
 
     i64 GetMemoryUsage() const override;
     i64 GetMemoryUsage(i64 threshold) const override;
     int GetTypeComplexity() const override;
     void ValidateNode(const TWalkContext& context) const override;
+
     bool IsNullable() const override;
 
-private:
+protected:
     std::vector<TStructField> Fields_;
 };
 
@@ -326,7 +351,9 @@ class TTupleLogicalTypeBase
     : public TLogicalType
 {
 public:
-    explicit TTupleLogicalTypeBase(ELogicalMetatype metatype, std::vector<TLogicalTypePtr> elements);
+    explicit TTupleLogicalTypeBase(
+        ELogicalMetatype metatype,
+        std::vector<TLogicalTypePtr> elements);
 
     Y_FORCE_INLINE const std::vector<TLogicalTypePtr>& GetElements() const;
 
@@ -334,6 +361,7 @@ public:
     i64 GetMemoryUsage(i64 threshold) const override;
     int GetTypeComplexity() const override;
     void ValidateNode(const TWalkContext& context) const override;
+
     bool IsNullable() const override;
 
 private:
@@ -346,7 +374,17 @@ class TStructLogicalType
     : public TStructLogicalTypeBase
 {
 public:
-    TStructLogicalType(std::vector<TStructField> fields);
+    TStructLogicalType(
+        std::vector<TStructField> fields,
+        std::vector<std::string> removedFieldStableNames);
+
+    Y_FORCE_INLINE const std::vector<std::string>& GetRemovedFieldStableNames() const;
+
+    int GetTypeComplexity() const override;
+    void ValidateNode(const TWalkContext& context) const override;
+
+private:
+    std::vector<std::string> RemovedFieldStableNames_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -355,7 +393,7 @@ class TTupleLogicalType
     : public TTupleLogicalTypeBase
 {
 public:
-    TTupleLogicalType(std::vector<TLogicalTypePtr> elements);
+    explicit TTupleLogicalType(std::vector<TLogicalTypePtr> elements);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -391,6 +429,7 @@ public:
     i64 GetMemoryUsage(i64 threshold) const override;
     int GetTypeComplexity() const override;
     void ValidateNode(const TWalkContext& context) const override;
+
     bool IsNullable() const override;
 
 private:
@@ -413,6 +452,7 @@ public:
     i64 GetMemoryUsage(i64 threshold) const override;
     int GetTypeComplexity() const override;
     void ValidateNode(const TWalkContext& context) const override;
+
     bool IsNullable() const override;
 
 private:
@@ -426,10 +466,16 @@ TLogicalTypePtr SimpleLogicalType(ESimpleLogicalValueType element);
 TLogicalTypePtr DecimalLogicalType(int precision, int scale);
 TLogicalTypePtr OptionalLogicalType(TLogicalTypePtr element);
 TLogicalTypePtr ListLogicalType(TLogicalTypePtr element);
-TLogicalTypePtr StructLogicalType(std::vector<TStructField> fields);
-TLogicalTypePtr TupleLogicalType(std::vector<TLogicalTypePtr> elements);
+
+TLogicalTypePtr StructLogicalType(
+    std::vector<TStructField> fields,
+    std::vector<std::string> removedFieldStableNames);
+
 TLogicalTypePtr VariantStructLogicalType(std::vector<TStructField> fields);
+
+TLogicalTypePtr TupleLogicalType(std::vector<TLogicalTypePtr> elements);
 TLogicalTypePtr VariantTupleLogicalType(std::vector<TLogicalTypePtr> elements);
+
 TLogicalTypePtr DictLogicalType(TLogicalTypePtr key, TLogicalTypePtr value);
 TLogicalTypePtr TaggedLogicalType(TString tag, TLogicalTypePtr element);
 TLogicalTypePtr NullLogicalType();

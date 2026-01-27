@@ -1,7 +1,7 @@
 #include "print_utils.h"
 #include "progress_indication.h"
 
-#include <library/cpp/colorizer/colors.h>
+#include <ydb/public/lib/ydb_cli/common/colors.h>
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
 
 namespace NYdb {
@@ -36,7 +36,7 @@ void TProgressIndication::Render()
     if (!GetTerminalWidth())
         return;
 
-    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+    NColorizer::TColors colors = NConsoleClient::AutoColors(Cout);
 
     Cerr << "\r" "\033[K";
     Cerr << colors.LightGreen();

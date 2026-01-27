@@ -1,5 +1,7 @@
 #include "version.h"
 
+#include <yt/yt/core/misc/serialize.h>
+
 #include <library/cpp/yt/string/format.h>
 
 namespace NYT::NHydra {
@@ -58,38 +60,101 @@ TVersion::TVersion(int segmentId, int recordId) noexcept
     , RecordId(recordId)
 { }
 
-// std::strong_ordering TVersion::operator <=> (const TVersion& other) const
-// {
-//     if (SegmentId != other.SegmentId) {
-//         return SegmentId <=> other.SegmentId;
-//     }
-//     return RecordId <=> other.RecordId;
-// }
-
 TRevision TVersion::ToRevision() const
 {
     return TRevision((static_cast<ui64>(SegmentId) << 32) | static_cast<ui64>(RecordId));
 }
 
-TVersion TVersion::FromRevision(TRevision revision)
+void TVersion::Save(TStreamSaveContext& context) const
 {
-    return TVersion(revision.Underlying() >> 32, revision.Underlying() & 0xffffffff);
+    using NYT::Save;
+
+    Save(context, SegmentId);
+    Save(context, RecordId);
 }
 
-TVersion TVersion::Advance(int delta) const
+void TVersion::Load(TStreamLoadContext& context)
 {
-    YT_ASSERT(delta >= 0);
-    return TVersion(SegmentId, RecordId + delta);
-}
+    using NYT::Load;
 
-TVersion TVersion::Rotate() const
-{
-    return TVersion(SegmentId + 1, 0);
+    Load(context, SegmentId);
+    Load(context, RecordId);
 }
 
 void FormatValue(TStringBuilderBase* builder, TVersion version, TStringBuf /* spec */)
 {
     builder->AppendFormat("%v:%v", version.SegmentId, version.RecordId);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TLogicalVersion TLogicalVersion::FromRevision(TRevision revision)
+{
+    return TLogicalVersion(revision.Underlying() >> 32, revision.Underlying() & 0xffffffff);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TAutomatonVersion::TAutomatonVersion(
+    int segmentId,
+    int physicalRecordId,
+    int logicalRecordId)
+    : SegmentId_(segmentId)
+    , PhysicalRecordId_(physicalRecordId)
+    , LogicalRecordId_(logicalRecordId)
+{
+    YT_VERIFY(physicalRecordId <= logicalRecordId);
+}
+
+TAutomatonVersion::TAutomatonVersion(
+    TPhysicalVersion physicalVersion,
+    TLogicalVersion logicalVersion)
+    : SegmentId_(physicalVersion.SegmentId)
+    , PhysicalRecordId_(physicalVersion.RecordId)
+    , LogicalRecordId_(logicalVersion.RecordId)
+{
+    YT_VERIFY(physicalVersion.SegmentId == logicalVersion.SegmentId);
+    YT_VERIFY(physicalVersion.RecordId <= logicalVersion.RecordId);
+}
+
+TPhysicalVersion TAutomatonVersion::GetPhysicalVersion() const
+{
+    return TPhysicalVersion(SegmentId_, PhysicalRecordId_);
+}
+
+TLogicalVersion TAutomatonVersion::GetLogicalVersion() const
+{
+    return TLogicalVersion(SegmentId_, LogicalRecordId_);
+}
+
+int TAutomatonVersion::GetSegmentId() const
+{
+    return SegmentId_;
+}
+
+TRevision TAutomatonVersion::GetLogicalRevision() const
+{
+    return TLogicalVersion(SegmentId_, LogicalRecordId_).ToRevision();
+}
+
+TAutomatonVersion TAutomatonVersion::Advance() const
+{
+    return TAutomatonVersion(
+        std::move(GetPhysicalVersion().Advance()),
+        std::move(GetLogicalVersion().Advance()));
+}
+
+void FormatValue(TStringBuilderBase* builder, TAutomatonVersion version, TStringBuf /* spec */)
+{
+    auto logicalVersion = version.GetLogicalVersion();
+    auto physicalVersion = version.GetPhysicalVersion();
+
+    YT_ASSERT(physicalVersion.SegmentId == logicalVersion.SegmentId);
+
+    builder->AppendFormat("%v:%v(%v)",
+        physicalVersion.SegmentId,
+        physicalVersion.RecordId,
+        logicalVersion.RecordId);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

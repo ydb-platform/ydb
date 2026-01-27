@@ -90,9 +90,13 @@ template <>
 TUnit MakeUnit<EUnitKind::QuotedIdentifier>(TSyntax& s) {
     return {
         .Kind = EUnitKind::QuotedIdentifier,
+        .RangePatterns = {
+            {R"(`)", R"(`)", R"re(\\.)re"},
+        },
         .Patterns = {
             {s.Get("ID_QUOTED")},
-            {s.Concat({"COMMAT", "ID_PLAIN"})}},
+            {s.Concat({"COMMAT", "ID_PLAIN"})},
+        },
         .IsPlain = false,
     };
 }

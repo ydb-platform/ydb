@@ -23,8 +23,6 @@ protected:
 
     TIntrusivePtr<TMkqlWriterImpl> MakeMkqlJobWriter() override;
 
-    TString GetJobFactoryPrefix() const override;
-
 private:
     TFile InputFile_;
     TVector<TFile> OutputFileList_;

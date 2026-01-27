@@ -671,5 +671,16 @@ TBatch TBlobIterator::GetBatch()
     return TBatch(Header, Data + sizeof(ui16) + Header.ByteSize());
 }
 
+TVector<TBatch> GetUnpackedBatches(const TKey& key, const TString& blob)
+{
+    TVector<TBatch> batches;
+    for (TBlobIterator iterator(key, blob); iterator.IsValid(); iterator.Next()) {
+        auto batch = iterator.GetBatch();
+        batch.Unpack();
+        batches.push_back(std::move(batch));
+    }
+    return batches;
+}
+
 }// NPQ
 }// NKikimr

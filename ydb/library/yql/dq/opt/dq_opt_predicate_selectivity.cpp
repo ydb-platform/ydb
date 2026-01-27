@@ -36,7 +36,7 @@ namespace {
         } else if (input.Ptr()->IsCallable("PgCast")) {
             auto child = TExprBase(input.Ptr()->ChildRef(0));
             return IsAttribute(child);
-        } else if (input.Ptr()->IsCallable("FromPg")) {
+        } else if (input.Ptr()->IsCallable("FromPg") || input.Ptr()->IsCallable("ToPg")) {
             auto child = TExprBase(input.Ptr()->ChildRef(0));
             return IsAttribute(child);
         } else if (auto exists = input.Maybe<TCoExists>()) {
@@ -66,7 +66,7 @@ namespace {
         } else if (input.Ptr()->IsCallable("PgCast")) {
             auto child = TExprBase(input.Ptr()->ChildRef(0));
             return IsMember(child);
-        } else if (input.Ptr()->IsCallable("FromPg")) {
+        } else if (input.Ptr()->IsCallable("FromPg") || input.Ptr()->IsCallable("ToPg")) {
             auto child = TExprBase(input.Ptr()->ChildRef(0));
             return IsMember(child);
         } else if (auto exists = input.Maybe<TCoExists>()) {
@@ -247,9 +247,9 @@ TExprNode::TPtr FindNode(const TExprBase& input) {
 }
 
 double NYql::NDq::TPredicateSelectivityComputer::ComputeInequalitySelectivity(const TExprBase& left, const TExprBase& right,
-                                                                              EInequalityPredicateType predicate) {
+                                                                              EInequalityPredicateType predicate, bool collectMembers) {
     if (IsAttribute(right) && IsConstantExprWithParams(left.Ptr())) {
-        return ComputeInequalitySelectivity(right, left, GetOppositePredicateType(predicate));
+        return ComputeInequalitySelectivity(right, left, GetOppositePredicateType(predicate), collectMembers);
     }
 
     if (auto attribute = IsAttribute(left)) {
@@ -263,6 +263,12 @@ double NYql::NDq::TPredicateSelectivityComputer::ComputeInequalitySelectivity(co
             }
 
             if (!Stats || !Stats->ColumnStatistics) {
+                if (CollectColumnsStatUsedMembers) {
+                    if (auto maybeMember = IsMember(left)) {
+                        ColumnStatsUsedMembers.AddInequality(*maybeMember.Get());
+                    }
+                }
+
                 return DefaultSelectivity(Stats, attributeName);
             }
 
@@ -443,28 +449,28 @@ double TPredicateSelectivityComputer::ComputeImpl(
         auto left = less.Cast().Left();
         auto right = less.Cast().Right();
 
-        resSelectivity = ComputeInequalitySelectivity(left, right, EInequalityPredicateType::Less);
+        resSelectivity = ComputeInequalitySelectivity(left, right, EInequalityPredicateType::Less, collectMembers);
     }
 
     else if (auto less = input.Maybe<TCoCmpGreater>()) {
         auto left = less.Cast().Left();
         auto right = less.Cast().Right();
 
-        resSelectivity = ComputeInequalitySelectivity(left, right, EInequalityPredicateType::Greater);
+        resSelectivity = ComputeInequalitySelectivity(left, right, EInequalityPredicateType::Greater, collectMembers);
     }
 
     else if (auto less = input.Maybe<TCoCmpLessOrEqual>()) {
         auto left = less.Cast().Left();
         auto right = less.Cast().Right();
 
-        resSelectivity = ComputeInequalitySelectivity(left, right, EInequalityPredicateType::LessOrEqual);
+        resSelectivity = ComputeInequalitySelectivity(left, right, EInequalityPredicateType::LessOrEqual, collectMembers);
     }
 
     else if (auto less = input.Maybe<TCoCmpGreaterOrEqual>()) {
         auto left = less.Cast().Left();
         auto right = less.Cast().Right();
 
-        resSelectivity = ComputeInequalitySelectivity(left, right, EInequalityPredicateType::GreaterOrEqual);
+        resSelectivity = ComputeInequalitySelectivity(left, right, EInequalityPredicateType::GreaterOrEqual, collectMembers);
     }
 
     else if (input.Ptr()->IsCallable("PgResolvedOp") && input.Ptr()->ChildPtr(0)->Content()=="=") {
@@ -503,7 +509,7 @@ double TPredicateSelectivityComputer::ComputeImpl(
         auto left = TExprBase(input.Ptr()->ChildPtr(2));
         auto right = TExprBase(input.Ptr()->ChildPtr(3));
         resSelectivity =
-            ComputeInequalitySelectivity(left, right, StringToInequalityPredicateMap[input.Ptr()->ChildPtr(0)->Content()]);
+            ComputeInequalitySelectivity(left, right, StringToInequalityPredicateMap[input.Ptr()->ChildPtr(0)->Content()], collectMembers);
     }
 
     // Process SqlIn

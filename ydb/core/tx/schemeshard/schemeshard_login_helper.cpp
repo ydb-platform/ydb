@@ -26,7 +26,7 @@ public:
 
 private:
     void VerifyPassword(TEvPrivate::TEvVerifyPassword::TPtr& ev) {
-        const bool isSuccessVerifying = LoginProvider_.VerifyHash(ev->Get()->Request, ev->Get()->PasswordHash);
+        const bool isSuccessVerifying = LoginProvider_.VerifyArgonHash(ev->Get()->Request, ev->Get()->PasswordHash);
         if (!isSuccessVerifying) {
             ev->Get()->CheckResult.Status = NLogin::TLoginProvider::TLoginUserResponse::EStatus::INVALID_PASSWORD;
             ev->Get()->CheckResult.Error = "Invalid password";

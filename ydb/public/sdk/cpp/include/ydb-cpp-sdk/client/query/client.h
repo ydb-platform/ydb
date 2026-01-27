@@ -22,6 +22,10 @@ namespace NYdb::inline Dev {
         template <typename TClient, typename TStatusType>
         class TRetryContext;
     } // namespace NRetry::Sync
+    namespace NRetry {
+        template <typename TClient>
+        class TRetryDeadlineHelper;
+    } // namespace NRetry
 }
 
 namespace NYdb::inline Dev::NQuery {
@@ -129,8 +133,11 @@ class TSession {
     friend class TQueryClient;
     friend class TTransaction;
     friend class TExecuteQueryIterator;
+    friend class NRetry::TRetryDeadlineHelper<TQueryClient>;
 public:
     const std::string& GetId() const;
+
+    const std::optional<TDeadline>& GetPropagatedDeadline() const;
 
     TAsyncExecuteQueryResult ExecuteQuery(const std::string& query, const TTxControl& txControl,
         const TExecuteQuerySettings& settings = TExecuteQuerySettings());
@@ -152,6 +159,8 @@ private:
     TSession();
     TSession(std::shared_ptr<TQueryClient::TImpl> client); // Create broken session
     TSession(std::shared_ptr<TQueryClient::TImpl> client, TSession::TImpl* sessionImpl);
+
+    void SetPropagatedDeadline(const TDeadline& deadline);
 
     std::shared_ptr<TQueryClient::TImpl> Client_;
     std::shared_ptr<TSession::TImpl> SessionImpl_;
@@ -215,6 +224,7 @@ public:
         return TTxControl(settings);
     }
 
+    // Do not explicitly set the transaction mode. YDB determines the behavior automatically
     static TTxControl NoTx() {
         return TTxControl();
     }

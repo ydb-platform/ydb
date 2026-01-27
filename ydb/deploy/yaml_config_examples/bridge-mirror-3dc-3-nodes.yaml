@@ -53,21 +53,21 @@ config:
       bridge_pile_name: pile_1
       data_center: 'zone-c'
       rack: '3'
-  - host: ydb-node-zone-b.local
+  - host: ydb-node-zone-d.local
     host_config_id: 1
     location:
       body: 4
       bridge_pile_name: pile_2
       data_center: 'zone-d'
       rack: '4'
-  - host: ydb-node-zone-b.local
+  - host: ydb-node-zone-e.local
     host_config_id: 1
     location:
       body: 5
       bridge_pile_name: pile_2
       data_center: 'zone-e'
       rack: '5'
-  - host: ydb-node-zone-c.local
+  - host: ydb-node-zone-f.local
     host_config_id: 1
     location:
       body: 6

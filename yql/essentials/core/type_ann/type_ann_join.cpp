@@ -94,12 +94,19 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Repeat;
         }
 
-        if (!EnsureOneOrTupleOfDataOrOptionalOfData(*lambda1, ctx.Expr)) {
+        bool isUniversal1;
+        if (!EnsureOneOrTupleOfDataOrOptionalOfData(*lambda1, ctx.Expr, isUniversal1)) {
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (!EnsureOneOrTupleOfDataOrOptionalOfData(*lambda2, ctx.Expr)) {
+        bool isUniversal2;
+        if (!EnsureOneOrTupleOfDataOrOptionalOfData(*lambda2, ctx.Expr, isUniversal2)) {
             return IGraphTransformer::TStatus::Error;
+        }
+
+        if (isUniversal1 || isUniversal2) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+            return IGraphTransformer::TStatus::Ok;
         }
 
         if (!EnsureComparableKey(lambda1->Pos(), lambda1->GetTypeAnn(), ctx.Expr)) {
@@ -261,11 +268,22 @@ namespace NTypeAnnImpl {
             }
 
             const auto& list = listPair.Head();
+            if (list.GetTypeAnn() && list.GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+                input->SetTypeAnn(list.GetTypeAnn());
+                return IGraphTransformer::TStatus::Ok;
+            }
+
             if (!EnsureListType(list, ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
             }
 
             const TTypeAnnotationNode* itemType = list.GetTypeAnn()->Cast<TListExprType>()->GetItemType();
+            if (itemType->GetKind() == ETypeAnnotationKind::Universal ||
+                itemType->GetKind() == ETypeAnnotationKind::UniversalStruct) {
+                input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+                return IGraphTransformer::TStatus::Ok;
+            }
+
             if (itemType->GetKind() != ETypeAnnotationKind::Struct) {
                 ctx.Expr.AddError(TIssue(
                     ctx.Expr.GetPosition(list.Pos()),
@@ -659,8 +677,14 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (const auto status = NormalizeTupleOfAtoms(input, 7U, output, ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
+        bool isUniversal;
+        if (const auto status = NormalizeTupleOfAtoms(input, 7U, output, ctx.Expr, isUniversal); status != IGraphTransformer::TStatus::Ok) {
             return status;
+        }
+
+        if (isUniversal) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+            return IGraphTransformer::TStatus::Ok;
         }
 
         return GraceJoinCoreWrapperImp(input, *leftItemType->Cast<TMultiExprType>(), *rightItemType->Cast<TMultiExprType>(), ctx, 2);
@@ -680,8 +704,14 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (const auto status = NormalizeTupleOfAtoms(input, 6U, output, ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
+        bool isUniversal;
+        if (const auto status = NormalizeTupleOfAtoms(input, 6U, output, ctx.Expr, isUniversal); status != IGraphTransformer::TStatus::Ok) {
             return status;
+        }
+
+        if (isUniversal) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+            return IGraphTransformer::TStatus::Ok;
         }
 
         return GraceJoinCoreWrapperImp(input, *leftItemType->Cast<TMultiExprType>(), *leftItemType->Cast<TMultiExprType>(), ctx, 1);

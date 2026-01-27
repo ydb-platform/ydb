@@ -142,9 +142,9 @@ static constexpr const char *kFaasTrigger = "faas.trigger";
   (Services):</strong> The <a
   href="https://cloud.google.com/run/docs/managing/revisions">revision</a> (i.e., the function name
   plus the revision suffix).</li> <li><strong>Google Cloud Functions:</strong> The value of the <a
-  href="https://cloud.google.com/functions/docs/env-var#runtime_environment_variables_set_automatically">@code
-  K_REVISION @endcode environment variable</a>.</li> <li><strong>Azure Functions:</strong> Not
-  applicable. Do not set this attribute.</li>
+  href="https://cloud.google.com/run/docs/container-contract#services-env-vars">@code K_REVISION
+  @endcode environment variable</a>.</li> <li><strong>Azure Functions:</strong> Not applicable. Do
+  not set this attribute.</li>
   </ul>
  */
 static constexpr const char *kFaasVersion = "faas.version";

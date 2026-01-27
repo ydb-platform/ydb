@@ -7,7 +7,7 @@ namespace NKikimr {
     // Actor for legacy protocol
     // New instance of the actor is created to prepare every TEvVSyncFullResult message
     // Reads part of snapshot, starting from given key*
-    // Passes away when TEvVSyncFullResult is sent 
+    // Passes away when TEvVSyncFullResult is sent
     class TDb;
     IActor* CreateHullSyncFullActorLegacyProtocol(
             const TIntrusivePtr<TVDiskConfig> &config,

@@ -1,7 +1,70 @@
 #include "yql_yt_fmr_initializer.h"
 #include <util/stream/file.h>
+#include <util/string/strip.h>
 
 namespace NYql::NFmr {
+
+TFmrInitializationOptions GetFmrInitializationInfoFromConfig(
+    const TFmrInstance& fmrConfiguration,
+    const google::protobuf::RepeatedPtrField<TFmrFileRemoteCache>& fileCacheConfigurations
+) {
+    // initializing fmr file metadata and upload services
+    TString coordinatorUrl = fmrConfiguration.GetCoordinatorUrl();
+    if (!fmrConfiguration.HasFileRemoteCacheName()) {
+        return TFmrInitializationOptions{coordinatorUrl, nullptr, nullptr};
+    }
+    TString fmrRemoteCacheName = fmrConfiguration.GetFileRemoteCacheName();
+
+    YQL_CLOG(INFO, FastMapReduce) << "Searching for distributed cache configuration with name " << fmrRemoteCacheName;
+    TFmrFileRemoteCache fileCacheInfo;
+    bool foundCacheConfiguration = false;
+    for (auto& fileCache: fileCacheConfigurations) {
+        if (fileCache.GetName() == fmrRemoteCacheName) {
+            foundCacheConfiguration = true;
+            fileCacheInfo = fileCache;
+            break;
+        }
+    }
+    YQL_ENSURE(foundCacheConfiguration, "Failed to find configuration with name " << fmrRemoteCacheName);
+
+    YQL_ENSURE(!fileCacheInfo.GetCluster().empty() && !fileCacheInfo.GetPath().empty(), "Yt path and server name for fmr remote file cache should be set");
+
+    TString distCacheYtCluster = fileCacheInfo.GetCluster(), distCacheYtPath = fileCacheInfo.GetPath();
+    NFmr::TYtFileMetadataServiceOptions metadataOptions {
+        .RemotePath = distCacheYtPath,
+        .YtServerName = distCacheYtCluster
+    };
+    NFmr::TYtFileUploadServiceOptions uploadOptions{
+        .RemotePath = distCacheYtPath,
+        .YtServerName = distCacheYtCluster
+    };
+    if (fileCacheInfo.HasFileExpirationInterval()) {
+        uploadOptions.ExpirationInterval = TDuration::Seconds(fileCacheInfo.GetFileExpirationInterval());
+    }
+    TString distCacheYtToken;
+    if (fileCacheInfo.HasTokenFile()) {
+        TString tokenFile = fileCacheInfo.GetTokenFile();
+        YQL_ENSURE(NFs::Exists(tokenFile), "Token file should exist, if it is set in gateways.conf");
+        distCacheYtToken = StripStringRight(TFileInput(tokenFile).ReadLine());
+        metadataOptions.YtToken = distCacheYtToken;
+        uploadOptions.YtToken = distCacheYtToken;
+        YQL_CLOG(DEBUG, FastMapReduce) << "Found token for writing to fmr dist cache";
+    }
+    YQL_CLOG(DEBUG, FastMapReduce) << "Successfully initialized fmr remote file cache with cluster: " << distCacheYtCluster << " and path: " << distCacheYtPath;
+
+    TFmrDistributedCacheSettings fmrDistCacheSettings{
+        .Path = distCacheYtPath,
+        .YtServerName = distCacheYtCluster,
+        .YtToken = distCacheYtToken
+    };
+
+    return NFmr::TFmrInitializationOptions {
+        .FmrCoordinatorUrl = coordinatorUrl,
+        .FmrFileMetadataService =  NFmr::MakeYtFileMetadataService(metadataOptions),
+        .FmrFileUploadService = NFmr::MakeYtFileUploadService(uploadOptions),
+        .FmrDistributedCacheSettings = fmrDistCacheSettings
+    };
+}
 
 std::pair<IYtGateway::TPtr, IFmrWorker::TPtr> InitializeFmrGateway(IYtGateway::TPtr slave, const TFmrServices::TPtr fmrServices) {
     TFmrCoordinatorSettings coordinatorSettings{};
@@ -52,7 +115,8 @@ std::pair<IYtGateway::TPtr, IFmrWorker::TPtr> InitializeFmrGateway(IYtGateway::T
         auto jobFactory = MakeFmrJobFactory(settings);
         NFmr::TFmrWorkerSettings workerSettings{.WorkerId = 0, .RandomProvider = CreateDefaultRandomProvider(),
             .TimeToSleepBetweenRequests=TDuration::Seconds(1)};
-        worker = MakeFmrWorker(coordinator, jobFactory, workerSettings);
+
+        worker = MakeFmrWorker(coordinator, jobFactory, fmrServices->JobPreparer, workerSettings);
         worker->Start();
     }
     return std::pair<IYtGateway::TPtr, IFmrWorker::TPtr>{CreateYtFmrGateway(slave, coordinator, fmrServices), std::move(worker)};

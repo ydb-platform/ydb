@@ -9,12 +9,19 @@
 
 namespace NSQLTranslationV1 {
 
+NYql::TLangVersion YqlSelectLangVersion();
+
 std::unexpected<ESQLError> YqlSelectUnsupported(TContext& ctx, TStringBuf message);
 
-TNodeResult BuildYqlSelect(
+TNodeResult BuildYqlSelectStatement(
     TContext& ctx,
     NSQLTranslation::ESqlMode mode,
     const NSQLv1Generated::TRule_select_stmt& rule);
+
+TNodeResult BuildYqlSelectStatement(
+    TContext& ctx,
+    NSQLTranslation::ESqlMode mode,
+    const NSQLv1Generated::TRule_values_stmt& rule);
 
 TNodeResult BuildYqlSelectSubExpr(
     TContext& ctx,
@@ -22,14 +29,14 @@ TNodeResult BuildYqlSelectSubExpr(
     const NSQLv1Generated::TRule_select_subexpr& rule,
     EColumnRefState state);
 
+TNodeResult BuildYqlSelectSubExpr(
+    TContext& ctx,
+    NSQLTranslation::ESqlMode mode,
+    const NSQLv1Generated::TRule_select_unparenthesized_stmt& rule);
+
 TNodeResult BuildYqlExists(
     TContext& ctx,
     NSQLTranslation::ESqlMode mode,
     const NSQLv1Generated::TRule_exists_expr& rule);
-
-TNodeResult BuildYqlSelect(
-    TContext& ctx,
-    NSQLTranslation::ESqlMode mode,
-    const NSQLv1Generated::TRule_values_stmt& rule);
 
 } // namespace NSQLTranslationV1

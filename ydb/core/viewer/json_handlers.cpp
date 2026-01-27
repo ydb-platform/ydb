@@ -37,6 +37,13 @@ void TSimpleYamlBuilder::AddParameter(TParameter parameter) {
         param["default"] = TString(parameter.Default);
     }
     param["required"] = parameter.Required;
+    if (!parameter.EnumValues.empty()) {
+        YAML::Node enumNode;
+        for (const auto& enumValue : parameter.EnumValues) {
+            enumNode.push_back(TString(enumValue));
+        }
+        param["enum"] = enumNode;
+    }
     Method["parameters"].push_back(param);
 }
 

@@ -70,10 +70,13 @@ class StaticConfigGenerator(object):
         self._enable_modules = template.get("enable_modules", enable_modules)
 
         self.__cluster_details = base.ClusterDetailsProvider(template, host_info_provider, validator=schema_validator, database=database, enable_modules=self._enable_modules)
+        self.__use_auth_token_file = template.get("use_auth_token_file", False)
         if self.__cluster_details.use_k8s_api:
             self._host_info_provider._init_k8s_labels(self.__cluster_details.k8s_rack_label, self.__cluster_details.k8s_dc_label)
 
         self._yaml_config_enabled = template.get("yaml_config_enabled", False)
+        # New option: whether to include kikimr_auth_token_file in generated configs
+        self._use_auth_token_file = template.get("use_auth_token_file", False)
         self.__is_dynamic_node = True if database is not None else False
         self._database = database
         self._skip_location = skip_location
@@ -369,6 +372,7 @@ class StaticConfigGenerator(object):
                 metering_txt_enabled=self.metering_txt_enabled,
                 audit_txt_enabled=self.audit_txt_enabled,
                 fq_txt_enabled=self.fq_txt_enabled,
+                use_auth_token_file=self._use_auth_token_file,
             )
 
         if self.__cluster_details.use_new_style_kikimr_cfg:
@@ -381,6 +385,7 @@ class StaticConfigGenerator(object):
                 kikimr_home=self.__kikimr_home,
                 cert_params=self.__cluster_details.ic_cert_params,
                 mbus_enabled=self.mbus_enabled,
+                use_auth_token_file=self._use_auth_token_file,
             )
 
         return kikimr_cfg_for_static_node(
@@ -398,6 +403,7 @@ class StaticConfigGenerator(object):
             audit_txt_enabled=self.audit_txt_enabled,
             fq_txt_enabled=self.fq_txt_enabled,
             mbus_enabled=self.mbus_enabled,
+            use_auth_token_file=self._use_auth_token_file,
         )
 
     def get_all_configs(self):
@@ -1692,7 +1698,7 @@ class StaticConfigGenerator(object):
     @property
     def dynamic_server_common_args(self):
         if self.__cluster_details.use_new_style_kikimr_cfg:
-            return dynamic_cfg_new_style(self._enable_cores)
+            return dynamic_cfg_new_style(self._enable_cores, use_auth_token_file=self.__use_auth_token_file)
         return kikimr_cfg_for_dynamic_slot(
             self._enable_cores, cert_params=self.__cluster_details.ic_cert_params
         )

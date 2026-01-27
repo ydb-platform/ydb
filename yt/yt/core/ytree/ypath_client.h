@@ -261,7 +261,7 @@ SyncExecuteVerb(
     NLogging::ELogLevel logLevel = NLogging::ELogLevel::Debug);
 
 //! Executes |GetKey| verb assuming #service handles requests synchronously. Throws if an error has occurred.
-TString SyncYPathGetKey(
+std::string SyncYPathGetKey(
     const IYPathServicePtr& service,
     const TYPath& path);
 
@@ -318,13 +318,13 @@ void SyncYPathRemove(
     bool force = false);
 
 //! Executes |List| verb assuming #service handles requests synchronously. Throws if an error has occurred.
-std::vector<TString> SyncYPathList(
+std::vector<std::string> SyncYPathList(
     const IYPathServicePtr& service,
     const TYPath& path,
     std::optional<i64> limit = std::nullopt);
 
 //! Asynchronously executes |List| verb.
-TFuture<std::vector<TString>> AsyncYPathList(
+TFuture<std::vector<std::string>> AsyncYPathList(
     const IYPathServicePtr& service,
     const TYPath& path,
     std::optional<i64> limit = std::nullopt);
@@ -359,8 +359,8 @@ bool AreNodesEqual(
 
 struct TNodeWalkOptions
 {
-    std::function<INodePtr(const TString&)> MissingAttributeHandler;
-    std::function<INodePtr(const IMapNodePtr&, const TString&)> MissingChildKeyHandler;
+    std::function<INodePtr(const std::string&)> MissingAttributeHandler;
+    std::function<INodePtr(const IMapNodePtr&, const std::string&)> MissingChildKeyHandler;
     std::function<INodePtr(const IListNodePtr&, int)> MissingChildIndexHandler;
     std::function<INodePtr(const INodePtr&)> NodeCannotHaveChildrenHandler;
 };

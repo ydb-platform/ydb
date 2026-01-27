@@ -144,7 +144,7 @@ void TKqpPlanner::LogMemoryStatistics(const TLogFunc& logFunc) {
     logFunc(TStringBuilder() << "Total tasks: " << ResourceEstimations.size() << ", total memory: " << totalMemory);
 }
 
-bool TKqpPlanner::SendStartKqpTasksRequest(ui32 requestId, const TActorId& target) {
+bool TKqpPlanner::SendStartKqpTasksRequest(ui32 requestId, const TActorId& target, bool isShutdown) {
     YQL_ENSURE(requestId < Requests.size());
 
     auto& requestData = Requests[requestId];
@@ -160,18 +160,29 @@ bool TKqpPlanner::SendStartKqpTasksRequest(ui32 requestId, const TActorId& targe
         ev = SerializeRequest(requestData);
     }
 
+    if (isShutdown) {
+        requestData.RetryNumber = ExecuterRetriesConfig.GetMaxRetryNumber();
+        YQL_ENSURE(requestData.NodeId != target.NodeId());
+        LOG_D("Try to retry after NODE_SHUTTING_DOWN, run tasks locally, requestId: " << requestId);
+        requestData.NodeId = target.NodeId();
+        TlsActivationContext->Send(std::make_unique<NActors::IEventHandle>(target, ExecuterId, ev.release(),
+            CalcSendMessageFlagsForNode(target.NodeId()), requestId, nullptr, ExecuterSpan.GetTraceId()));
+        return true;
+    }
+
     if (requestData.RetryNumber == ExecuterRetriesConfig.GetMaxRetryNumber()) {
         LOG_E("Retry failed by retries limit, requestId: " << requestId);
         TMaybe<ui32> targetNode;
         for (size_t i = 0; i < ResourcesSnapshot.size(); ++i) {
-            if (!TrackingNodes.contains(ResourcesSnapshot[i].nodeid())) {
-                targetNode = ResourcesSnapshot[i].nodeid();
+            if (!TrackingNodes.contains(ResourcesSnapshot[i].GetNodeId())) {
+                targetNode = ResourcesSnapshot[i].GetNodeId();
                 break;
             }
         }
         if (targetNode) {
             LOG_D("Try to retry to another node, nodeId: " << *targetNode << ", requestId: " << requestId);
             auto anotherTarget = MakeKqpNodeServiceID(*targetNode);
+            requestData.NodeId = *targetNode;
             TlsActivationContext->Send(std::make_unique<NActors::IEventHandle>(anotherTarget, ExecuterId, ev.release(),
                 CalcSendMessageFlagsForNode(*targetNode), requestId,  nullptr, ExecuterSpan.GetTraceId()));
             requestData.RetryNumber++;
@@ -223,6 +234,7 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
         if (BufferPageAllocSize) {
             serializedTask->SetBufferPageAllocSize(*BufferPageAllocSize);
         }
+        serializedTask->SetDqChannelVersion(TasksGraph.GetMeta().DqChannelVersion);
         request.AddTasks()->Swap(serializedTask);
     }
 
@@ -261,6 +273,11 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
     if (UserRequestContext->PoolConfig.has_value()) {
         request.SetMemoryPoolPercent(UserRequestContext->PoolConfig->QueryMemoryLimitPercentPerNode);
         request.SetPoolMaxCpuShare(UserRequestContext->PoolConfig->TotalCpuLimitPercentPerNode / 100.0);
+    }
+
+    if (UserRequestContext->IsStreamingQuery) {
+        request.MutableRuntimeSettings()->SetMinStatsSendIntervalMs(1000);
+        request.MutableRuntimeSettings()->SetMaxStatsSendIntervalMs(5000);
     }
 
     if (UserToken) {
@@ -486,6 +503,7 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
         taskDesc->SetBufferPageAllocSize(*BufferPageAllocSize);
     }
 
+    taskDesc->SetDqChannelVersion(TasksGraph.GetMeta().DqChannelVersion);
     auto startResult = CaFactory_->CreateKqpComputeActor({
         .ExecuterId = ExecuterId,
         .TxId = TxId,
@@ -520,6 +538,15 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
     TActorId* actorId = std::get_if<TActorId>(&startResult);
     Y_ABORT_UNLESS(actorId);
     Y_ABORT_UNLESS(AcknowledgeCA(taskId, *actorId, nullptr));
+
+    for (auto& output : task.Outputs) {
+        for (auto channelId : output.Channels) {
+            auto& channel = TasksGraph.GetChannel(channelId);
+            if (!channel.DstTask) {
+                ResultChannels.emplace(channelId, task.ComputeActorId);
+            }
+        }
+    }
 
     THashMap<TActorId, THashSet<ui64>> updates;
     CollectTaskChannelsUpdates(task, updates);
@@ -729,6 +756,17 @@ bool TKqpPlanner::CompletedCA(ui64 taskId, TActorId computeActor) {
     LOG_I("Compute actor has finished execution: " << computeActor.ToString());
 
     return true;
+}
+
+TMaybe<ui64> TKqpPlanner::GetActualNodeIdForTask(ui64 taskId) const {
+    for (const auto& request : Requests) {
+        for (ui64 tid : request.TaskIds) {
+            if (tid == taskId) {
+                return request.NodeId;
+            }
+        }
+    }
+    return Nothing();
 }
 
 void TKqpPlanner::TaskNotStarted(ui64 taskId) {

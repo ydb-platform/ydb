@@ -59,7 +59,7 @@ public:
     template <bool NoSwap>
     class TIterator: public TManagedBoxedValue {
     public:
-        TIterator(const TMapNode* parent);
+        explicit TIterator(const TMapNode* parent);
 
     private:
         bool Skip() final;
@@ -74,7 +74,7 @@ public:
 
     TMapNode(TMapNode&& src);
 
-    ~TMapNode();
+    ~TMapNode() override;
 
     TUnboxedValue Lookup(const TStringRef& key) const;
 
@@ -157,7 +157,7 @@ inline TUnboxedValuePod MakeDict(const TPair* items, ui32 count) {
 }
 
 struct TDebugPrinter {
-    TDebugPrinter(const TUnboxedValuePod& node);
+    explicit TDebugPrinter(const TUnboxedValuePod& node);
     class IOutputStream& Out(class IOutputStream& o) const;
     const TUnboxedValuePod& Node;
 };

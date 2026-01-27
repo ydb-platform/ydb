@@ -5289,7 +5289,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                                   Data { PreferredPoolKind: "hdd-1" }
                                 }
                               }
-                            })", {NKikimrScheme::StatusSchemeError});
+                            })", {NKikimrScheme::StatusInvalidParameter});
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
                             Name: "Table1"
@@ -11501,7 +11501,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
     Y_UNIT_TEST(TopicWithAutopartitioningReserveSize) {
         TTestEnvOptions opts;
         opts.EnableTopicSplitMerge(true);
-        opts.EnablePQConfigTransactionsAtSchemeShard(true);
 
         TTestBasicRuntime runtime;
 
@@ -12465,6 +12464,47 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                 PartitionConfig {
                     ChannelProfileId: 1
                 }
+            )", {TEvSchemeShard::EStatus::StatusInvalidParameter});
+    }
+
+    Y_UNIT_TEST(AlterFamilyWithMultipleStoragePools) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().NStoragePools(1));
+        ui64 txId = 100;
+
+        // StorageConfig won't be inferred with multiple StoragePools
+        TestAlterSubDomain(runtime, ++txId,  "/", R"(
+                Name: "MyRoot"
+                StoragePools {
+                    Name: "pool-1"
+                    Kind: "pool-kind-1"
+                }
+                StoragePools {
+                    Name: "pool-2"
+                    Kind: "pool-kind-2"
+                }
+            )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+                Name: "Table1"
+                Columns { Name: "key"   Type: "Uint32" }
+                Columns { Name: "value" Type: "Uint32" }
+                KeyColumnNames: ["key"]
+                PartitionConfig {
+                    ColumnFamilies {
+                        Id: 0
+                        ColumnCodec: ColumnCodecLZ4
+                        ColumnCacheMode: ColumnCacheModeTryKeepInMemory
+                    }
+                }
+            )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Should fail because there is no StorageConfig
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+                Name: "Table1"
+                Columns { Name: "value"  FamilyName: "new_family" }
             )", {TEvSchemeShard::EStatus::StatusInvalidParameter});
     }
 }

@@ -50,8 +50,7 @@ import datetime
 import json
 import urllib
 
-import cachetools
-
+from google.auth import _cache
 from google.auth import _helpers
 from google.auth import _service_account_info
 from google.auth import crypt
@@ -59,17 +58,18 @@ from google.auth import exceptions
 import google.auth.credentials
 
 try:
-    from google.auth.crypt import es256
+    from google.auth.crypt import es
 except ImportError:  # pragma: NO COVER
-    es256 = None  # type: ignore
+    es = None  # type: ignore
 
 _DEFAULT_TOKEN_LIFETIME_SECS = 3600  # 1 hour in seconds
 _DEFAULT_MAX_CACHE_SIZE = 10
 _ALGORITHM_TO_VERIFIER_CLASS = {"RS256": crypt.RSAVerifier}
-_CRYPTOGRAPHY_BASED_ALGORITHMS = frozenset(["ES256"])
+_CRYPTOGRAPHY_BASED_ALGORITHMS = frozenset(["ES256", "ES384"])
 
-if es256 is not None:  # pragma: NO COVER
-    _ALGORITHM_TO_VERIFIER_CLASS["ES256"] = es256.ES256Verifier  # type: ignore
+if es is not None:  # pragma: NO COVER
+    _ALGORITHM_TO_VERIFIER_CLASS["ES256"] = es.EsVerifier  # type: ignore
+    _ALGORITHM_TO_VERIFIER_CLASS["ES384"] = es.EsVerifier  # type: ignore
 
 
 def encode(signer, payload, header=None, key_id=None):
@@ -95,8 +95,8 @@ def encode(signer, payload, header=None, key_id=None):
     header.update({"typ": "JWT"})
 
     if "alg" not in header:
-        if es256 is not None and isinstance(signer, es256.ES256Signer):
-            header.update({"alg": "ES256"})
+        if es is not None and isinstance(signer, es.EsSigner):
+            header.update({"alg": signer.algorithm})
         else:
             header.update({"alg": "RS256"})
 
@@ -585,7 +585,7 @@ class Credentials(
 
     @property  # type: ignore
     def additional_claims(self):
-        """ Additional claims the JWT object was created with."""
+        """Additional claims the JWT object was created with."""
         return self._additional_claims
 
 
@@ -629,7 +629,7 @@ class OnDemandCredentials(
             token_lifetime (int): The amount of time in seconds for
                 which the token is valid. Defaults to 1 hour.
             max_cache_size (int): The maximum number of JWT tokens to keep in
-                cache. Tokens are cached using :class:`cachetools.LRUCache`.
+                cache. Tokens are cached using :class:`google.auth._cache.LRUCache`.
             quota_project_id (Optional[str]): The project ID used for quota
                 and billing.
 
@@ -645,7 +645,7 @@ class OnDemandCredentials(
             additional_claims = {}
 
         self._additional_claims = additional_claims
-        self._cache = cachetools.LRUCache(maxsize=max_cache_size)
+        self._cache = _cache.LRUCache(maxsize=max_cache_size)
 
     @classmethod
     def _from_signer_and_info(cls, signer, info, **kwargs):
@@ -759,7 +759,6 @@ class OnDemandCredentials(
 
     @_helpers.copy_docstring(google.auth.credentials.CredentialsWithQuotaProject)
     def with_quota_project(self, quota_project_id):
-
         return self.__class__(
             self._signer,
             issuer=self._issuer,

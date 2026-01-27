@@ -63,7 +63,7 @@ class ScenarioTestHelper:
         )
         assert sth.get_table_rows_count(table_name) == 2
         sth.bulk_upsert(table_name, dg.DataGeneratorPerColumn(schema, 100), comment="100 sequetial ids")
-        sth.execute_scheme_query(DropTable(table_name), retries=2)
+        sth.execute_scheme_query(DropTable(table_name), retries=5)
     """
 
     DEFAULT_RETRIABLE_ERRORS = {
@@ -746,11 +746,11 @@ class ScenarioTestHelper:
         root_path = self.get_full_path(folder)
         for e in self.list_path(path, folder):
             if e.is_any_table():
-                self.execute_scheme_query(dh.DropTable(os.path.join(folder, e.name)), retries=2)
+                self.execute_scheme_query(dh.DropTable(os.path.join(folder, e.name)), retries=5)
             elif e.is_column_store():
-                self.execute_scheme_query(dh.DropTableStore(os.path.join(folder, e.name)), retries=2)
+                self.execute_scheme_query(dh.DropTableStore(os.path.join(folder, e.name)), retries=5)
             elif e.is_external_data_source():
-                self.execute_scheme_query(dh.DropExternalDataSource(os.path.join(folder, e.name)), retries=2)
+                self.execute_scheme_query(dh.DropExternalDataSource(os.path.join(folder, e.name)), retries=5)
             elif e.is_directory():
                 self._run_with_expected_status(
                     lambda: YdbCluster.get_ydb_driver().scheme_client.remove_directory(os.path.join(root_path, e.name)),

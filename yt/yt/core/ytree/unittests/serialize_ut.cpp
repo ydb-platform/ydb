@@ -306,6 +306,13 @@ TEST(TSerializationTest, Set)
     TestSerializationDeserialization(original, EYsonType::ListFragment);
 }
 
+TEST(TSerializationTest, CompactFlatSet)
+{
+    TCompactFlatSet<TString, 4> original{"First", "Second", "Third"};
+    TestSerializationDeserialization(original);
+    TestSerializationDeserialization(original, EYsonType::ListFragment);
+}
+
 TEST(TSerializationTest, CompactSet)
 {
     TCompactSet<TString, 4> original{"First", "Second", "Third"};

@@ -90,7 +90,7 @@ public:
         }
     }
 
-    ~TPythonModule() {
+    ~TPythonModule() override {
         if (Standalone_) {
             PyEval_RestoreThread(MainThreadState_);
             Py_Finalize();

@@ -908,6 +908,10 @@ namespace NActors {
         return NodeCount;
     }
 
+    void TTestActorRuntimeBase::ResetFirstNodeId() {
+        NextNodeId = 1;
+    }
+
     ui64 TTestActorRuntimeBase::AllocateLocalId() {
         TGuard<TMutex> guard(Mutex);
         ui64 nextId = ++LocalId;
@@ -1895,8 +1899,8 @@ namespace NActors {
         Y_ABORT("Don't use this method.");
     }
 
-    TActorSystem* TTestActorRuntimeBase::GetActorSystem(ui32 nodeId) {
-        auto it = Nodes.find(GetNodeId(nodeId));
+    TActorSystem* TTestActorRuntimeBase::GetActorSystem(ui32 nodeIdx) {
+        auto it = Nodes.find(GetNodeId(nodeIdx));
         Y_ABORT_UNLESS(it != Nodes.end());
         return it->second->ActorSystem.Get();
     }

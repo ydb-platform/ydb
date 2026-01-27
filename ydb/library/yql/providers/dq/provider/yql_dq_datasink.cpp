@@ -227,6 +227,11 @@ public:
         return State->IsFullCaptureReady;
     }
 
+    void Reset() override {
+        TDataProviderBase::Reset();
+        State->IsFullCaptureReady = true;
+    }
+
     const TDqState::TPtr State;
 
     TLazyInitHolder<IGraphTransformer> LogOptTransformer;

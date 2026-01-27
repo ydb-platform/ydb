@@ -582,15 +582,21 @@ Y_UNIT_TEST_SUITE(KqpYql) {
         CompareYson(R"([[3]])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST(Discard) {
-        auto kikimr = DefaultKikimrRunner();
-        auto db = kikimr.GetQueryClient();
+    Y_UNIT_TEST_TWIN(Discard, DiscardSelectIsOn) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableDiscardSelect(DiscardSelectIsOn);
 
+        TKikimrRunner kikimr{TKikimrSettings(appConfig)};
+        auto db = kikimr.GetQueryClient();
         auto result = db.ExecuteQuery(R"(
             DISCARD SELECT 1;
         )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-        UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_BAD_OPERATION));
+        if (DiscardSelectIsOn) {
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_BAD_OPERATION));
+        }
     }
 
     Y_UNIT_TEST(AnsiIn) {

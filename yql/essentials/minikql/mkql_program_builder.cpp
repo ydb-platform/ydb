@@ -2576,7 +2576,7 @@ TRuntimeNode TProgramBuilder::NewVariant(TRuntimeNode item, const std::string_vi
     return TRuntimeNode(TVariantLiteral::Create(item, index, type, Env_), true);
 }
 
-TRuntimeNode TProgramBuilder::ToDynamicLinear(TRuntimeNode item) {
+TRuntimeNode TProgramBuilder::ToDynamicLinear(TRuntimeNode item, const std::string_view& file, ui32 row, ui32 column) {
     if constexpr (RuntimeVersion < 68U) {
         THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
     }
@@ -2588,6 +2588,12 @@ TRuntimeNode TProgramBuilder::ToDynamicLinear(TRuntimeNode item) {
 
     TCallableBuilder callableBuilder(Env_, __func__, retType);
     callableBuilder.Add(item);
+    if constexpr (RuntimeVersion >= 71U) {
+        callableBuilder.Add(NewDataLiteral<NUdf::EDataSlot::String>(file));
+        callableBuilder.Add(NewDataLiteral(row));
+        callableBuilder.Add(NewDataLiteral(column));
+    }
+
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
@@ -3673,6 +3679,55 @@ TRuntimeNode TProgramBuilder::PreserveStream(TRuntimeNode stream, TRuntimeNode q
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
+TRuntimeNode TProgramBuilder::WinFramesCollector(TRuntimeNode stream, TRuntimeNode storage, TRuntimeNode winBounds) {
+    auto streamType = AS_TYPE(TStreamType, stream);
+    auto storageType = AS_TYPE(TResourceType, storage);
+    auto winBoundsType = AS_TYPE(TStructType, winBounds);
+    MKQL_ENSURE(winBoundsType != nullptr, "WinFramesCollector: winBounds must be struct literal.");
+    const auto tag = storageType->GetTag();
+    MKQL_ENSURE(tag.StartsWith(ResourceQueuePrefix), "WinFramesCollector: Expected queue resource.");
+    TCallableBuilder callableBuilder(Env_, __func__, streamType);
+    callableBuilder.Add(stream);
+    callableBuilder.Add(storage);
+    callableBuilder.Add(winBounds);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
+}
+
+TRuntimeNode TProgramBuilder::WinFrame(TRuntimeNode queue,
+                                       TRuntimeNode handle,
+                                       TRuntimeNode isIncremental,
+                                       TRuntimeNode isRange,
+                                       TRuntimeNode isSingleElement,
+                                       const TArrayRef<const TRuntimeNode>& dependentNodes,
+                                       TType* returnType) {
+    auto queueType = AS_TYPE(TResourceType, queue);
+    auto handleType = AS_TYPE(TDataType, handle);
+    MKQL_ENSURE(handleType->GetSchemeType() == NUdf::TDataType<ui64>::Id, "WinFrame: handle must be ui64");
+
+    auto isIncrementalType = AS_TYPE(TDataType, isIncremental);
+    MKQL_ENSURE(isIncrementalType->GetSchemeType() == NUdf::TDataType<bool>::Id, "WinFrame: isIncremental must be bool");
+
+    auto isRangeType = AS_TYPE(TDataType, isRange);
+    MKQL_ENSURE(isRangeType->GetSchemeType() == NUdf::TDataType<bool>::Id, "WinFrame: isRange must be bool");
+
+    auto isSingleElementType = AS_TYPE(TDataType, isSingleElement);
+    MKQL_ENSURE(isSingleElementType->GetSchemeType() == NUdf::TDataType<bool>::Id, "WinFrame: isSingleElement must be bool");
+
+    const auto tag = queueType->GetTag();
+    MKQL_ENSURE(tag.StartsWith(ResourceQueuePrefix), "WinFrame: Expected Queue resource");
+
+    TCallableBuilder callableBuilder(Env_, __func__, returnType);
+    callableBuilder.Add(queue);
+    callableBuilder.Add(handle);
+    callableBuilder.Add(isIncremental);
+    callableBuilder.Add(isRange);
+    callableBuilder.Add(isSingleElement);
+    for (auto node : dependentNodes) {
+        callableBuilder.Add(node);
+    }
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
 TRuntimeNode TProgramBuilder::Seq(const TArrayRef<const TRuntimeNode>& args, TType* returnType) {
     TCallableBuilder callableBuilder(Env_, __func__, returnType);
     for (auto node : args) {
@@ -4632,7 +4687,7 @@ TRuntimeNode TProgramBuilder::Udf(
 
     TFunctionTypeInfo funcInfo;
     TStatus status = FunctionRegistry_.FindFunctionTypeInfo(
-        LangVer_, Env_, TypeInfoHelper_, nullptr, funcName, userType, typeConfig, flags, {}, nullptr, nullptr, &funcInfo);
+        LangVer_, Env_, TypeInfoHelper_, nullptr, funcName, userType, typeConfig, flags, NYql::NUdf::TSourcePosition(), nullptr, nullptr, &funcInfo);
     MKQL_ENSURE(status.IsOk(), status.GetError());
     if (funcInfo.MinLangVer != NYql::UnknownLangVersion && LangVer_ != NYql::UnknownLangVersion && LangVer_ < funcInfo.MinLangVer) {
         throw yexception() << "UDF " << funcName << " is not available in given language version yet";
@@ -5678,7 +5733,9 @@ TRuntimeNode TProgramBuilder::MultiHoppingCore(TRuntimeNode list,
                                                const TBinaryLambda& merge,
                                                const TTernaryLambda& finish,
                                                TRuntimeNode hop, TRuntimeNode interval, TRuntimeNode delay,
-                                               TRuntimeNode dataWatermarks, TRuntimeNode watermarksMode)
+                                               TRuntimeNode dataWatermarks, TRuntimeNode watermarksMode,
+                                               TRuntimeNode farFutureSizeLimit, TRuntimeNode farFutureTimeLimit,
+                                               TRuntimeNode earlyPolicy, TRuntimeNode latePolicy)
 {
     auto streamType = AS_TYPE(TStreamType, list);
     auto itemType = AS_TYPE(TStructType, streamType->GetItemType());
@@ -5745,6 +5802,15 @@ TRuntimeNode TProgramBuilder::MultiHoppingCore(TRuntimeNode list,
     callableBuilder.Add(delay);
     callableBuilder.Add(dataWatermarks);
     callableBuilder.Add(watermarksMode);
+    if (farFutureSizeLimit || farFutureTimeLimit || earlyPolicy || latePolicy) {
+        if constexpr (RuntimeVersion < 70U) {
+            THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+        }
+        callableBuilder.Add(farFutureSizeLimit);
+        callableBuilder.Add(farFutureTimeLimit);
+        callableBuilder.Add(earlyPolicy);
+        callableBuilder.Add(latePolicy);
+    }
 
     return TRuntimeNode(callableBuilder.Build(), false);
 }

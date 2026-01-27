@@ -843,7 +843,7 @@ public:
 
     void ErrorHandle(NPDisk::TEvChunkReserve::TPtr &ev) {
         PDisk->Mon.ChunkReserve.CountRequest();
-        Send(ev->Sender, new NPDisk::TEvChunkReserveResult(NKikimrProto::CORRUPTED, 0, StateErrorReason));
+        Send(ev->Sender, new NPDisk::TEvChunkReserveResult(NKikimrProto::CORRUPTED, 0, StateErrorReason), 0, ev->Cookie);
         PDisk->Mon.ChunkReserve.CountResponse();
     }
 
@@ -994,7 +994,7 @@ public:
     }
 
     void Handle(NPDisk::TEvChunkReserve::TPtr &ev) {
-        auto* request = PDisk->ReqCreator.CreateFromEv<TChunkReserve>(*ev->Get(), ev->Sender);
+        auto* request = PDisk->ReqCreator.CreateFromEv<TChunkReserve>(*ev->Get(), ev->Sender, ev->Cookie);
         PDisk->InputRequest(request);
     }
 

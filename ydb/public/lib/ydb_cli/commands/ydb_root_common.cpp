@@ -18,7 +18,13 @@
 #include "ydb_workload.h"
 
 #include <ydb/public/lib/ydb_cli/commands/interactive/interactive_cli.h>
+#include <ydb/public/lib/ydb_cli/common/log.h>
+
+#if !defined(_win32_)
+#include <ydb/core/base/backtrace.h>
+#endif
 #include <ydb/public/lib/ydb_cli/common/cert_format_converter.h>
+#include <ydb/public/lib/ydb_cli/common/colors.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/credentials.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/from_file.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/jwt_token_source.h>
@@ -28,9 +34,61 @@
 #include <util/string/strip.h>
 #include <util/string/builder.h>
 #include <util/system/env.h>
+#include <util/system/execpath.h>
 
-namespace NYdb {
-namespace NConsoleClient {
+namespace NYdb::NConsoleClient {
+
+namespace {
+
+#ifndef NDEBUG
+std::terminate_handler DefaultTerminateHandler;
+
+void TerminateHandler() {
+    NColorizer::TColors colors = NConsoleClient::AutoColors(Cerr);
+
+    Cerr << colors.Red() << "======= terminate() call stack ========" << colors.Default() << Endl;
+    FormatBackTrace(&Cerr);
+    if (const auto& backtrace = TBackTrace::FromCurrentException(); backtrace.size() > 0) {
+        Cerr << colors.Red() << "======== exception call stack =========" << colors.Default() << Endl;
+        backtrace.PrintTo(Cerr);
+    }
+    Cerr << colors.Red() << "=======================================" << colors.Default() << Endl;
+
+    if (DefaultTerminateHandler) {
+        DefaultTerminateHandler();
+    } else {
+        abort();
+    }
+}
+
+TString SignalToString(int signal) {
+#ifndef _unix_
+    return TStringBuilder() << "signal " << signal;
+#else
+    return strsignal(signal);
+#endif
+}
+
+void BackTraceSignalHandler(int signal) {
+    NColorizer::TColors colors = NConsoleClient::AutoColors(Cerr);
+
+    Cerr << colors.Red() << "======= " << SignalToString(signal) << " call stack ========" << colors.Default() << Endl;
+    FormatBackTrace(&Cerr);
+    Cerr << colors.Red() << "===============================================" << colors.Default() << Endl;
+
+    abort();
+}
+
+void SetupSignalActions() {
+    DefaultTerminateHandler = std::set_terminate(&TerminateHandler);
+
+    for (auto sig : {SIGFPE, SIGILL, SIGSEGV}) {
+        signal(sig, &BackTraceSignalHandler);
+    }
+}
+#endif
+
+} // anonymous namespace
 
 TClientCommandRootCommon::TClientCommandRootCommon(const TString& name, const TClientSettings& settings)
     : TClientCommandRootBase(name)
@@ -90,6 +148,21 @@ void TClientCommandRootCommon::FillConfig(TConfig& config) {
     config.UseOauth2TokenExchange = Settings.UseOauth2TokenExchange.GetRef();
     config.UseExportToYt = Settings.UseExportToYt.GetRef();
     config.StorageUrl = Settings.StorageUrl;
+
+    if (Settings.EnableAiInteractive) {
+        config.EnableAiInteractive = *Settings.EnableAiInteractive;
+    }
+    config.AiTokenGetter = [getter = Settings.AiTokenGetter]() -> TAiTokenConfig {
+        if (getter) {
+            auto req = getter();
+            return {req.Token, req.WasUpdated};
+        }
+        return {};
+    };
+    for (const auto& profile : Settings.AiPredefinedProfiles) {
+        config.AiPredefinedProfiles.push_back({profile.Name, profile.ApiType, profile.ApiEndpoint, profile.ModelName});
+    }
+
     SetCredentialsGetter(config);
 }
 
@@ -117,10 +190,17 @@ void TClientCommandRootCommon::SetCredentialsGetter(TConfig& config) {
 }
 
 void TClientCommandRootCommon::Config(TConfig& config) {
+#if !defined(_win32_)
+    NKikimr::EnableYDBBacktraceFormat();
+#endif
+#ifndef NDEBUG
+    SetupSignalActions();
+#endif
+
     FillConfig(config);
     TClientCommandOptions& opts = *config.Opts;
 
-    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+    NColorizer::TColors colors = NConsoleClient::AutoColors(Cout);
 
     TStringBuilder endpointHelp;
     endpointHelp << "Endpoint to connect. Protocols: "
@@ -242,10 +322,10 @@ void TClientCommandRootCommon::Config(TConfig& config) {
         auto userParser = [this](const YAML::Node& authData, TString* value, bool* isFileName, std::vector<TString>* errors, bool parseOnly) -> bool {
             Y_UNUSED(isFileName);
             Y_UNUSED(errors);
-            TString user;
-            if (authData["user"]) {
-                user = authData["user"].as<TString>();
+            if (!authData["user"]) {
+                return false;
             }
+            TString user = authData["user"].as<TString>();
             if (value) {
                 *value = user;
             }
@@ -418,8 +498,11 @@ void TClientCommandRootCommon::Config(TConfig& config) {
         oauth2TokenExchangeAuth
     );
 
+    const TString programName(config.ArgC > 0 ? config.ArgV[0] : GetExecPath().data());
     TStringStream stream;
-    stream << " [options...] <subcommand>" << Endl << Endl
+    stream
+        << "├─ Interactive:  " << programName << " [options...]" << Endl
+        << "└─ Command line: " << programName << " [options...] <subcommand>" << Endl << Endl
         << colors.BoldColor() << "Subcommands" << colors.OldColor() << ":" << Endl;
     RenderCommandDescription(stream, config.HelpCommandVerbosiltyLevel > 1, colors, BEGIN, "", true);
     stream << Endl << Endl << colors.BoldColor() << "Commands in " << colors.Red() << colors.BoldColor() <<  "admin" << colors.OldColor() << colors.BoldColor() << " subtree may treat global flags and profile differently, see corresponding help" << colors.OldColor() << Endl;
@@ -429,6 +512,7 @@ void TClientCommandRootCommon::Config(TConfig& config) {
     stream << colors.Green() << "-hh" << colors.OldColor() << ": Print detailed help" << Endl;
 
     opts.GetOpts().SetCmdLineDescr(stream.Str());
+    opts.GetOpts().SetCustomUsage("\n");
 
     opts.GetOpts().GetLongOption("time").Hidden();
     opts.GetOpts().GetLongOption("progress").Hidden();
@@ -439,6 +523,7 @@ void TClientCommandRootCommon::Config(TConfig& config) {
 void TClientCommandRootCommon::Parse(TConfig& config) {
     TClientCommandRootBase::Parse(config);
     config.VerbosityLevel = VerbosityLevel;
+    SetupGlobalLogger(VerbosityLevel);
 }
 
 void TClientCommandRootCommon::ExtractParams(TConfig& config) {
@@ -508,17 +593,56 @@ void TClientCommandRootCommon::ParseStaticCredentials(TConfig& config) {
         return;
     }
 
+    const TOptionParseResult* userResult = ParseResult->FindResult("user");
+    const TOptionParseResult* passwordResult = ParseResult->FindResult("password-file");
+    // Handle explicit --password-file without any user before auth method is chosen.
+    // Example: "ydb --password-file pwd.txt scheme ls" should fail even if
+    // static-credentials wasn't selected as the auth method.
+    if (passwordResult) {
+        const EOptionValueSource passwordSource = passwordResult->GetValueSource();
+        const bool hasUser =
+            userResult && userResult->GetValueSource() != EOptionValueSource::DefaultValue;
+        if (passwordSource == EOptionValueSource::Explicit && !hasUser) {
+            MisuseErrors.push_back("User password was provided without user name");
+            return;
+        }
+        if (passwordSource == EOptionValueSource::EnvironmentVariable && !hasUser) {
+            // Ignore YDB_PASSWORD without any user, even if static-credentials isn't selected.
+            Password.reset();
+            PasswordFile.clear();
+        }
+    }
+
     if (ParseResult->GetChosenAuthMethod() != "static-credentials") {
         return;
     }
 
-    const TOptionParseResult* userResult = ParseResult->FindResult("user");
-    const TOptionParseResult* passwordResult = ParseResult->FindResult("password-file");
-    if (passwordResult && userResult) {
-        if (passwordResult->GetValueSource() != EOptionValueSource::DefaultValue && userResult->GetValueSource() == EOptionValueSource::DefaultValue) { // Both from command line or both from env
-            MisuseErrors.push_back("User password was provided without user name");
-            return;
+    if (passwordResult) {
+        const EOptionValueSource passwordSource = passwordResult->GetValueSource();
+        const EOptionValueSource userSource = userResult
+            ? userResult->GetValueSource()
+            : EOptionValueSource::DefaultValue;
+        // Ignore profile password if user comes from a different source.
+        const bool ignoreExplicitProfilePassword =
+            passwordSource == EOptionValueSource::ExplicitProfile &&
+            userSource != EOptionValueSource::ExplicitProfile;
+        const bool ignoreActiveProfilePassword =
+            passwordSource == EOptionValueSource::ActiveProfile &&
+            userSource != EOptionValueSource::ActiveProfile;
+        if (ignoreExplicitProfilePassword || ignoreActiveProfilePassword) {
+            Password.reset();
+            PasswordFile.clear();
+            if (IsVerbose()) {
+                Cerr << "Ignoring profile password because username is not from the same profile" << Endl;
+            }
+            if (TMaybe<TString> envPassword = TryGetEnv("YDB_PASSWORD")) {
+                Password = envPassword.GetRef();
+            }
         }
+    }
+
+    if (!MisuseErrors.empty()) {
+        return;
     }
 
     if (UserName.empty()) {
@@ -650,9 +774,9 @@ int TClientCommandRootCommon::Run(TConfig& config) {
 
     TString prompt;
     if (!ProfileName.empty()) {
-        prompt = ProfileName + "> ";
-    } else {
-        prompt = "ydb> ";
+        prompt = ProfileName;
+    } if (const auto& activeProfileName = ProfileManager->GetActiveProfileName(); !config.OnlyExplicitProfile && activeProfileName) {
+        prompt = activeProfileName;
     }
 
     TInteractiveCLI interactiveCLI(prompt);
@@ -663,5 +787,4 @@ void TClientCommandRootCommon::ParseCredentials(TConfig& config) {
     Y_UNUSED(config);
 }
 
-}
-}
+} // namespace NYdb::NConsoleClient

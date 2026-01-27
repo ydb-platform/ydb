@@ -41,6 +41,10 @@ TKqpScanComputeActor::TKqpScanComputeActor(NScheduler::TSchedulableActorOptions 
     YQL_ENSURE(Meta.GetTable().GetTableKind() != (ui32)ETableKind::SysView);
 }
 
+TKqpScanComputeActor::~TKqpScanComputeActor() {
+    FreeComputeCtxData();
+}
+
 void TKqpScanComputeActor::ProcessRlNoResourceAndDie() {
     const NYql::TIssue issue = MakeIssue(NKikimrIssues::TIssuesIds::YDB_RESOURCE_USAGE_LIMITED,
         "Throughput limit exceeded for query");
@@ -247,6 +251,7 @@ void TKqpScanComputeActor::DoBootstrap() {
     execCtx.ApplyCtx = nullptr;
     execCtx.TypeEnv = nullptr;
     execCtx.PatternCache = GetKqpResourceManager()->GetPatternCache();
+    execCtx.ChannelService = RuntimeSettings.ChannelService;
 
     const TActorSystem* actorSystem = TlsActivationContext->ActorSystem();
 

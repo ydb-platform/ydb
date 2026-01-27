@@ -1,5 +1,5 @@
---- contrib/tools/python3/Include/cpython/pystate.h	(index)
-+++ contrib/tools/python3/Include/cpython/pystate.h	(working tree)
+--- a/Include/cpython/pystate.h	(index)
++++ b/Include/cpython/pystate.h	(working tree)
 @@ -255,7 +255,7 @@ struct _ts {
  #  if defined(__wasi__)
  #    define C_RECURSION_LIMIT 150

@@ -7,6 +7,7 @@
 #include <ydb/library/actors/interconnect/poller/poller_actor.h>
 #include <ydb/library/actors/interconnect/rdma/ctx.h>
 #include <ydb/library/actors/interconnect/rdma/events.h>
+#include <ydb/library/actors/interconnect/rdma/mem_pool.h>
 #include <ydb/library/actors/interconnect/rdma/rdma.h>
 
 #include <contrib/libs/ibdrv/include/infiniband/verbs.h>
@@ -16,6 +17,8 @@ using namespace NActors;
 namespace NInterconnect::NRdma {
 
 using TCqFactory = std::function<ICq::TPtr(const TRdmaCtx*)>;
+
+static const TDuration PeriodicActionInterval = TDuration::Seconds(1);
 
 class TCqActor: public TInterconnectLoggingBase, public TActorBootstrapped<TCqActor> {
     class TAsyncEventDesctiptor : public TSharedDescriptor {
@@ -45,12 +48,23 @@ public:
 
     void Bootstrap() {
         Become(&TCqActor::StateFunc);
+
+        TActorSystem* as = TlsActivationContext->AsActorContext().ActorSystem();
+
+        if (IRcBufAllocator* rcBufAlloc = as->GetRcBufAllocator()) {
+            if (TRdmaAllocatorWithFallback* rdmaAlloc = dynamic_cast<TRdmaAllocatorWithFallback*>(rcBufAlloc)) {
+                MemPool = rdmaAlloc->GetRdmaMemPool();
+            }
+        }
+
+        Schedule(PeriodicActionInterval, new TEvents::TEvWakeup());
     }
 
     STRICT_STFUNC(StateFunc,
         hFunc(TEvGetCqHandle, Handle);
         hFunc(NActors::TEvPollerRegisterResult, Handle);
         hFunc(NActors::TEvPollerReady, Handle);
+        hFunc(TEvents::TEvWakeup, Handle);
     )
 
     bool RegisterForAsyncEvent(const TRdmaCtx* ctx) {
@@ -121,6 +135,15 @@ public:
     void Handle(NActors::TEvPollerReady::TPtr& ev) {
         auto res = ProcessIbvAsyncEvents(static_cast<TAsyncEventDesctiptor*>(ev->Get()->Socket.Get()));
         Y_ABORT_UNLESS(res, "unable to get async event while poller told us is's ready");
+    }
+
+    void Handle(TEvents::TEvWakeup::TPtr&) {
+        NActors::TMonotonic time = TlsActivationContext->AsActorContext().Monotonic();
+        if (MemPool) {
+            MemPool->Tick(time);
+        }
+
+        Schedule(PeriodicActionInterval, new TEvents::TEvWakeup());
     }
 private:
 
@@ -224,6 +247,7 @@ private:
     };
     std::map<const TRdmaCtx*, std::variant<TCtxData, TWaitPollerReg>> CqMap;
     TCqFactory CqFactory;
+    std::shared_ptr<NInterconnect::NRdma::IMemPool> MemPool;
 };
 
 NActors::IActor* CreateCqActor(int maxCqe, int maxWr, ECqMode mode, NMonitoring::TDynamicCounters* counters) {

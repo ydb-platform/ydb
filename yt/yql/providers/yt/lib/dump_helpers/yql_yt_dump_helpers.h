@@ -6,10 +6,11 @@
 
 namespace NYql {
 
+inline const TString NonExistentTableDumpPrefix = "//tmp/yql/_qdump";
 inline const TString YtGateway_FileDumpPath = "YtGateway_FileDumpPath";
 
 TString MakeDumpKey(const TStringBuf& name, const TStringBuf& cluster);
-TString MakeDumpPath(const TString& srcPath, const TString& cluster, const TYqlOperationOptions& opOptions, const TYtSettings::TConstPtr& configuration, bool out = false);
+TString MakeDumpPath(const TString& srcPath, const TString& cluster, const TYqlOperationOptions& opOptions, const TYtSettings::TConstPtr& configuration, bool exists = true);
 
 TMaybe<TString> GetDumpPath(const TStringBuf& name, const TStringBuf& cluster, const TString& component, const TQContext& qContext);
 

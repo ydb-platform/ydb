@@ -295,7 +295,7 @@ bool TGroupByClause::OrdinaryGroupingSet(const TRule_ordinary_grouping_set& node
     TNodePtr namedExprNode;
     {
         TColumnRefScope scope(Ctx_, EColumnRefState::Allow);
-        namedExprNode = NamedExpr(node.GetRule_named_expr1(), EExpr::GroupBy);
+        namedExprNode = Unwrap(NamedExpr(node.GetRule_named_expr1(), EExpr::GroupBy));
     }
     if (!namedExprNode) {
         return false;

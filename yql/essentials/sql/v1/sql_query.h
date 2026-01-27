@@ -66,13 +66,7 @@ private:
         humanStatementName.clear();
         const auto& descr = AltDescription(node);
         TVector<TString> parts;
-        if (!Ctx_.Settings.Antlr4Parser) {
-            const auto pos = descr.find(": ");
-            Y_DEBUG_ABORT_UNLESS(pos != TString::npos);
-            Split(TString(descr.begin() + pos + 2, descr.end()), "_", parts);
-        } else {
-            Split(descr, "_", parts);
-        }
+        Split(descr, "_", parts);
         Y_DEBUG_ABORT_UNLESS(parts.size() > 1);
         parts.pop_back();
         for (auto& part : parts) {

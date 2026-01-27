@@ -142,18 +142,16 @@ static int __test_io(const char *file, struct io_uring *ring, int tc, int read,
 
 		if (sqthread)
 			use_fd = 0;
+		if (nonvec)
+			io_uring_prep_uring_cmd(sqe, NVME_URING_CMD_IO, use_fd);
+		else
+			io_uring_prep_uring_cmd(sqe, NVME_URING_CMD_IO_VEC, use_fd);
 		if (fixed && (i & 1))
 			do_fixed = 0;
 		if (do_fixed)
 			sqe->buf_index = 0;
 		if (async)
 			sqe->flags |= IOSQE_ASYNC;
-		if (nonvec)
-			sqe->cmd_op = NVME_URING_CMD_IO;
-		else
-			sqe->cmd_op = NVME_URING_CMD_IO_VEC;
-		sqe->fd = use_fd;
-		sqe->opcode = IORING_OP_URING_CMD;
 		if (do_fixed)
 			sqe->uring_cmd_flags |= IORING_URING_CMD_FIXED;
 		sqe->user_data = ((uint64_t)offset << 32) | i;
@@ -329,9 +327,7 @@ static int test_invalid_passthru_submit(const char *file)
 	}
 
 	sqe = io_uring_get_sqe(&ring);
-	io_uring_prep_read(sqe, fd, vecs[0].iov_base, vecs[0].iov_len, 0);
-	sqe->cmd_op = NVME_URING_CMD_IO;
-	sqe->opcode = IORING_OP_URING_CMD;
+	io_uring_prep_uring_cmd(sqe, NVME_URING_CMD_IO, fd);
 	sqe->user_data = 1;
 	cmd = (struct nvme_uring_cmd *)sqe->cmd;
 	memset(cmd, 0, sizeof(struct nvme_uring_cmd));
@@ -402,10 +398,8 @@ static int test_io_uring_submit_enters(const char *file)
 		__u32 nlb;
 
 		sqe = io_uring_get_sqe(&ring);
-		io_uring_prep_readv(sqe, fd, &vecs[i], 1, offset);
+		io_uring_prep_uring_cmd(sqe, NVME_URING_CMD_IO, fd);
 		sqe->user_data = i;
-		sqe->opcode = IORING_OP_URING_CMD;
-		sqe->cmd_op = NVME_URING_CMD_IO;
 		cmd = (struct nvme_uring_cmd *)sqe->cmd;
 		memset(cmd, 0, sizeof(struct nvme_uring_cmd));
 

@@ -131,6 +131,11 @@ protected:
         YQL_ENSURE(ctx.Settings.Mode == mode);
     }
 
+public:
+    void SetYqlSelectProduced(bool value) noexcept {
+        IsYqlSelectProduced_ = value;
+    }
+
 protected:
     enum class EExpr {
         Regular,
@@ -138,13 +143,13 @@ protected:
         SqlLambdaParams,
     };
 
-    TNodePtr NamedExpr(
+    TNodeResult NamedExpr(
         const TRule_expr& exprTree,
         const TRule_an_id_or_type* nameTree,
         EExpr exprMode = EExpr::Regular);
 
-    TNodePtr NamedExpr(const TRule_named_expr& node, EExpr exprMode = EExpr::Regular);
-    bool NamedExprList(const TRule_named_expr_list& node, TVector<TNodePtr>& exprs, EExpr exprMode = EExpr::Regular);
+    TNodeResult NamedExpr(const TRule_named_expr& node, EExpr exprMode = EExpr::Regular);
+    TSQLStatus NamedExprList(const TRule_named_expr_list& node, TVector<TNodePtr>& exprs, EExpr exprMode = EExpr::Regular);
     bool BindList(const TRule_bind_parameter_list& node, TVector<TSymbolNameWithPos>& bindNames);
     bool ActionOrSubqueryArgs(const TRule_action_or_subquery_args& node, TVector<TSymbolNameWithPos>& bindNames, ui32& optionalArgsCount);
     bool ModulePath(const TRule_module_path& node, TVector<TString>& path);
@@ -159,7 +164,7 @@ protected:
     bool DefineActionOrSubqueryBody(TSqlQuery& query, TBlocks& blocks, const TRule_define_action_or_subquery_body& body);
     TNodePtr IfStatement(const TRule_if_stmt& stmt);
     TNodePtr ForStatement(const TRule_for_stmt& stmt);
-    TMaybe<TTableArg> TableArgImpl(const TRule_table_arg& node);
+    TSQLResult<TTableArg> TableArgImpl(const TRule_table_arg& node);
     bool TableRefImpl(const TRule_table_ref& node, TTableRef& result, bool unorderedSubquery);
     TMaybe<TSourcePtr> AsTableImpl(const TRule_table_ref& node);
     bool ClusterExpr(const TRule_cluster_expr& node, bool allowWildcard, TString& service, TDeferredAtom& cluster);
@@ -299,6 +304,10 @@ protected:
 
     TNodePtr ReturningList(const ::NSQLv1Generated::TRule_returning_columns_list& columns);
 
+    TNodePtr YqlSelectOrLegacy(
+        std::function<TNodeResult()> yqlSelect,
+        std::function<TNodePtr()> legacy);
+
 private:
     bool SimpleTableRefCoreImpl(const TRule_simple_table_ref_core& node, TTableRef& result);
     static bool IsValidFrameSettings(TContext& ctx, const TFrameSpecification& frameSpec, size_t sortSpecSize);
@@ -314,6 +323,7 @@ private:
 
 protected:
     NSQLTranslation::ESqlMode Mode_;
+    bool IsYqlSelectProduced_ = false;
 };
 
 TNodePtr LiteralNumber(TContext& ctx, const TRule_integer& node);
@@ -373,6 +383,6 @@ TVector<TPatternComponent<TChar>> SplitPattern(const TBasicString<TChar>& patter
 
 bool ParseNumbers(TContext& ctx, const TString& strOrig, ui64& value, TString& suffix);
 
-std::string::size_type GetQueryPosition(const TString& query, const NSQLv1Generated::TToken& token, bool antlr4);
+std::string::size_type GetQueryPosition(const TString& query, const NSQLv1Generated::TToken& token);
 
 } // namespace NSQLTranslationV1

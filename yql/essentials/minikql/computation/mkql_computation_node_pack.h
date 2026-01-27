@@ -164,5 +164,8 @@ public:
     TValuePackerBoxed(TMemoryUsageInfo* memInfo, bool stable, const TType* type);
 };
 
+bool IsLegacyStructBlock(const TType* type, ui32& blockLengthIndex, TVector<const TBlockType*>& items);
+bool IsMultiBlock(const TType* type, ui32& blockLengthIndex, TVector<const TBlockType*>& items);
+
 } // namespace NMiniKQL
 } // namespace NKikimr

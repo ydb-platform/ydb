@@ -393,7 +393,7 @@ void TKqpScanFetcherActor::HandleExecute(TEvents::TEvUndelivered::TPtr& ev) {
             return;
         }
     }
-    AFL_ENSURE("Unexpected event type ")("source_type", ev->Get()->SourceType);
+    AFL_ENSURE(false && "Unexpected event type")("source_type", ev->Get()->SourceType);
 }
 
 void TKqpScanFetcherActor::HandleExecute(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {

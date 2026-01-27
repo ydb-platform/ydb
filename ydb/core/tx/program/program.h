@@ -2,6 +2,7 @@
 
 #include "registry.h"
 
+#include <ydb/core/formats/arrow/printer/printer.h>
 #include <ydb/core/formats/arrow/process_columns.h>
 #include <ydb/core/formats/arrow/program/custom_registry.h>
 #include <ydb/core/formats/arrow/program/graph_execute.h>
@@ -35,7 +36,11 @@ public:
     const THashSet<ui32>& GetProcessingColumns() const;
 
     TString ProtoDebugString() const {
-        return ProgramProto.DebugString();
+        return TStringBuilder{}
+            << "Proto:" << Endl
+            << ProgramProto.DebugString()
+            << "Pretty:" << Endl
+            << NKikimr::NArrow::NPrinter::SSAToPrettyString(ProgramProto);
     }
 
     TString DebugString() const {

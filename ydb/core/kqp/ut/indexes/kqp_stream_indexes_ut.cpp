@@ -13,7 +13,14 @@ using namespace NYdb;
 using namespace NYdb::NQuery;
 
 Y_UNIT_TEST_SUITE(KqpStreamIndexes) {
-    void RunTest(TString query, TString mainResult, TString indexResult, bool exists, bool indexOverlap, bool pkOverlap = false, bool cover = false) {
+    void RunTest(TString query,
+                TString mainResult,
+                TString indexResult,
+                bool exists,
+                bool indexOverlap,
+                bool pkOverlap = false,
+                bool cover = false,
+                bool indexDefault = false) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(true);
@@ -26,12 +33,16 @@ Y_UNIT_TEST_SUITE(KqpStreamIndexes) {
         const TString createQuery = Sprintf(R"(
             CREATE TABLE `/Root/DataShard` (
                 Col1 Uint64,
-                Col2 Uint64,
+                Col2 Uint64 %s,
                 Col3 Uint64,
                 INDEX idx GLOBAL ON (Col2 %s) %s,
                 PRIMARY KEY (Col1 %s)
             );
-        )", indexOverlap ? ", Col1" : "",  cover ? "COVER (Col3)" : "", pkOverlap ? ", Col2" : "");
+        )",
+        indexDefault ? "DEFAULT 42" : "",
+        indexOverlap ? ", Col1" : "",
+        cover ? "COVER (Col3)" : "",
+        pkOverlap ? ", Col2" : "");
 
         auto result = session.ExecuteSchemeQuery(createQuery).GetValueSync();
         UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
@@ -109,6 +120,18 @@ Y_UNIT_TEST_SUITE(KqpStreamIndexes) {
             overlap);
     }
 
+    Y_UNIT_TEST_TWIN(InsertDefaultColumn, overlap) {
+        RunTest(
+            "INSERT INTO `/Root/DataShard` (Col1, Col3) VALUES (0u, 0u);",
+            R"([[[0u];[42u];[0u]]])",
+            R"([[[0u];[42u]]])",
+            false,
+            overlap,
+            false,
+            false,
+            true);
+    }
+
     Y_UNIT_TEST_TWIN(InsertNoColumn2, overlap) {
         RunTest(
             "INSERT INTO `/Root/DataShard` (Col1, Col2) VALUES (0u, 0u);",
@@ -152,6 +175,54 @@ Y_UNIT_TEST_SUITE(KqpStreamIndexes) {
             R"([[[0u];[1u]]])",
             true,
             overlap);
+    }
+
+    Y_UNIT_TEST_TWIN(UpsertDefaultColumnNotExists, overlap) {
+        RunTest(
+            "UPSERT INTO `/Root/DataShard` (Col1, Col3) VALUES (0u, 0u);",
+            R"([[[0u];[42u];[0u]]])",
+            R"([[[0u];[42u]]])",
+            false,
+            overlap,
+            false,
+            false,
+            true);
+    }
+
+    Y_UNIT_TEST_TWIN(UpsertDefaultColumnExists, overlap) {
+        RunTest(
+            "UPSERT INTO `/Root/DataShard` (Col1, Col3) VALUES (0u, 0u);",
+            R"([[[0u];[1u];[0u]]])",
+            R"([[[0u];[1u]]])",
+            true,
+            overlap,
+            false,
+            false,
+            true);
+    }
+
+    Y_UNIT_TEST_TWIN(UpsertDefaultColumnNotExists2, overlap) {
+        RunTest(
+            "UPSERT INTO `/Root/DataShard` (Col1, Col2) VALUES (0u, 0u);",
+            R"([[[0u];[0u];#]])",
+            R"([[[0u];[0u]]])",
+            false,
+            overlap,
+            false,
+            false,
+            true);
+    }
+
+    Y_UNIT_TEST_TWIN(UpsertDefaultColumnExists2, overlap) {
+        RunTest(
+            "UPSERT INTO `/Root/DataShard` (Col1, Col2) VALUES (0u, 0u);",
+            R"([[[0u];[0u];[1u]]])",
+            R"([[[0u];[0u]]])",
+            true,
+            overlap,
+            false,
+            false,
+            true);
     }
 
     Y_UNIT_TEST_TWIN(UpsertNoColumnNotExists2, overlap) {
@@ -284,6 +355,197 @@ Y_UNIT_TEST_SUITE(KqpStreamIndexes) {
             true);
     }
 
+    Y_UNIT_TEST(SecondaryIsPrimaryPrefix) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(true);
+
+        TKikimrRunner kikimr(settings);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+
+        const TString createQuery = Sprintf(R"(
+            CREATE TABLE `/Root/DataShard` (
+                c0 Int64, c1 Int32, c2 Utf8, c3 Bool, c4 Int8, c5 Uint64, c6 Uint8, c7 Int32,
+                PRIMARY KEY (c0, c1),
+                INDEX idx0 GLOBAL UNIQUE SYNC ON (c0),
+                INDEX idx1 GLOBAL SYNC ON (c3),
+            );
+        )");
+
+        auto result = session.ExecuteSchemeQuery(createQuery).GetValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto client = kikimr.GetQueryClient();
+
+        {
+            auto it = client.ExecuteQuery(
+                R"(INSERT INTO `/Root/DataShard` (c0, c1, c2, c3, c4) VALUES (0, 0, "test", true, 0);)",
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx(),
+                TExecuteQuerySettings().ClientTimeout(TDuration::MilliSeconds(1000))).ExtractValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        }
+
+        {
+            auto it = client.ExecuteQuery(
+                R"(UPSERT INTO `/Root/DataShard` (c0, c1, c2, c3, c4) VALUES (0, 1, "test", true, 0);)",
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx(),
+                TExecuteQuerySettings().ClientTimeout(TDuration::MilliSeconds(1000))).ExtractValueSync();
+            UNIT_ASSERT_C(it.GetStatus() == NYdb::EStatus::PRECONDITION_FAILED, it.GetIssues().ToString());
+        }
+
+        {
+            auto it = client.StreamExecuteQuery(R"(
+                SELECT c0, c1 FROM `/Root/DataShard` ORDER BY c0, c1;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().ClientTimeout(TDuration::MilliSeconds(1000))).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            TString output = StreamResultToYson(it);
+            CompareYson(output, R"([[[0];[0]]])");
+        }
+
+        {
+            auto it = client.StreamExecuteQuery(R"(
+                SELECT c0, c1 FROM `/Root/DataShard/idx0/indexImplTable` ORDER BY c0, c1;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().ClientTimeout(TDuration::MilliSeconds(1000))).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            TString output = StreamResultToYson(it);
+            CompareYson(output, R"([[[0];[0]]])");
+        }
+    }
+
+    Y_UNIT_TEST(SecondaryNullDelete) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(true);
+
+        TKikimrRunner kikimr(settings);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+
+        const TString createQuery = Sprintf(R"(
+            CREATE TABLE `/Root/DataShard` (
+                c0 Bool, c1 Uint32, c2 Bool,
+                PRIMARY KEY (c0),
+                INDEX idx0 GLOBAL SYNC ON (c2) COVER (c1),
+            );
+        )");
+
+        auto result = session.ExecuteSchemeQuery(createQuery).GetValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto client = kikimr.GetQueryClient();
+
+        {
+            auto it = client.ExecuteQuery(
+                R"(
+                    INSERT INTO `/Root/DataShard` (c0, c1, c2) VALUES
+                    (true, 0, true),
+                    (false, 0, false),
+                    (NULL, 0, true);
+                )",
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx(),
+                TExecuteQuerySettings().ClientTimeout(TDuration::MilliSeconds(1000))).ExtractValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        }
+
+        {
+            auto it = client.ExecuteQuery(
+                R"(
+                    DELETE FROM `/Root/DataShard` ON (c0) VALUES (true), (false);
+                    INSERT INTO `/Root/DataShard` (c0, c1, c2) VALUES (false, 0, false);
+                )",
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx(),
+                TExecuteQuerySettings().ClientTimeout(TDuration::MilliSeconds(1000))).ExtractValueSync();
+            UNIT_ASSERT_C(it.GetStatus() == NYdb::EStatus::SUCCESS, it.GetIssues().ToString());
+        }
+
+        {
+            auto it = client.StreamExecuteQuery(R"(
+                $main = SELECT COUNT(*) FROM `/Root/DataShard`;
+                $index = SELECT COUNT(*) FROM `/Root/DataShard/idx0/indexImplTable`;
+                SELECT $main, $index;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().ClientTimeout(TDuration::MilliSeconds(1000))).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            TString output = StreamResultToYson(it);
+            CompareYson(output, R"([[[2u];[2u]]])");
+        }
+
+        {
+            auto it = client.StreamExecuteQuery(R"(
+                SELECT c0, c1, c2 FROM `/Root/DataShard` ORDER BY c0, c1;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().ClientTimeout(TDuration::MilliSeconds(1000))).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            TString output = StreamResultToYson(it);
+            CompareYson(output, R"([[#;[0u];[%true]];[[%false];[0u];[%false]]])");
+        }
+
+        {
+            auto it = client.StreamExecuteQuery(R"(
+                SELECT c0, c1, c2 FROM `/Root/DataShard/idx0/indexImplTable` ORDER BY c0, c1;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().ClientTimeout(TDuration::MilliSeconds(1000))).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            TString output = StreamResultToYson(it);
+            CompareYson(output, R"([[#;[0u];[%true]];[[%false];[0u];[%false]]])");
+        }
+    }
+
+    Y_UNIT_TEST(SecondaryUniqueCheckTwoRows) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(true);
+
+        TKikimrRunner kikimr(settings);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+
+        const TString createQuery = Sprintf(R"(
+            CREATE TABLE `/Root/DataShard` (
+                c0 Bool, c1 Int64, c2 Bool,
+                PRIMARY KEY (c0),
+                INDEX idx0 GLOBAL UNIQUE SYNC ON (c2),
+            );
+        )");
+
+        auto result = session.ExecuteSchemeQuery(createQuery).GetValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto client = kikimr.GetQueryClient();
+
+        {
+            auto it = client.ExecuteQuery(
+                R"(
+                    INSERT INTO `/Root/DataShard` (c0, c1, c2) VALUES
+                        (false, 0, true),
+                        (NULL, NULL, false);
+                )",
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        }
+
+
+        {
+            auto it = client.ExecuteQuery(
+                R"(
+                    UPSERT INTO `/Root/DataShard` (c0, c1, c2) VALUES
+                        (false, 2817, false),
+                        (true, 60403, true);
+                )",
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::PRECONDITION_FAILED, it.GetIssues().ToString());
+        }
+
+        {
+            auto it = client.StreamExecuteQuery(R"(
+                SELECT c0, c1, c2 FROM `/Root/DataShard` ORDER BY c0, c1, c2;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            TString output = StreamResultToYson(it);
+            CompareYson(output, R"([[#;#;[%false]];[[%false];[0];[%true]]])");
+        }
+    }
 }
 }
 }

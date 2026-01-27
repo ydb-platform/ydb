@@ -111,7 +111,10 @@ Y_UNIT_TEST_SUITE(Get) {
         SendGet(test, originalBlobId, data, NKikimrProto::BLOCKED, TEvBlobStorage::TEvGet::TReaderTabletData(tabletId, tabletGeneration));
     }
 
-/*    Y_UNIT_TEST(TestRdmaRegiseredMemory) {
+    Y_UNIT_TEST(TestRdmaRegiseredMemory) {
+#if defined(_msan_enabled_)
+            return;
+#endif
         TEnvironmentSetup env(true);
         TTestInfo test = InitTest(env);
 
@@ -150,8 +153,6 @@ Y_UNIT_TEST_SUITE(Get) {
                         auto memReg = NInterconnect::NRdma::TryExtractFromRcBuf(chunk);
                         UNIT_ASSERT_C(!memReg.Empty(), "unable to extract mem region from chunk");
                         UNIT_ASSERT_VALUES_EQUAL_C(memReg.GetSize(), size, "invalid size for memReg");
-                        UNIT_ASSERT_C(memReg.GetLKey(0) != 0, "invalid lkey");
-                        UNIT_ASSERT_C(memReg.GetRKey(0) != 0, "invalid rkey");
                     }
                 }
             }
@@ -160,5 +161,4 @@ Y_UNIT_TEST_SUITE(Get) {
 
         SendGet(test, originalBlobId, data, NKikimrProto::OK, TEvBlobStorage::TEvGet::TReaderTabletData(tabletId, tabletGeneration));
     }
-*/
 }

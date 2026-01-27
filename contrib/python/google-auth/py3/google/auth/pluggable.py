@@ -37,6 +37,7 @@ except ImportError:  # pragma: NO COVER
     from collections import Mapping  # type: ignore
 import json
 import os
+import shlex
 import subprocess
 import sys
 import time
@@ -65,7 +66,8 @@ class Credentials(external_account.Credentials):
     is used.
     When the credential configuration is accepted from an
     untrusted source, you should validate it before using.
-    Refer https://cloud.google.com/docs/authentication/external/externally-sourced-credentials for more details."""
+    Refer https://cloud.google.com/docs/authentication/external/externally-sourced-credentials for more details.
+    """
 
     def __init__(
         self,
@@ -128,17 +130,17 @@ class Credentials(external_account.Credentials):
             raise exceptions.MalformedError(
                 "Missing credential_source. An 'executable' must be provided."
             )
-        self._credential_source_executable_command = self._credential_source_executable.get(
-            "command"
+        self._credential_source_executable_command = (
+            self._credential_source_executable.get("command")
         )
-        self._credential_source_executable_timeout_millis = self._credential_source_executable.get(
-            "timeout_millis"
+        self._credential_source_executable_timeout_millis = (
+            self._credential_source_executable.get("timeout_millis")
         )
-        self._credential_source_executable_interactive_timeout_millis = self._credential_source_executable.get(
-            "interactive_timeout_millis"
+        self._credential_source_executable_interactive_timeout_millis = (
+            self._credential_source_executable.get("interactive_timeout_millis")
         )
-        self._credential_source_executable_output_file = self._credential_source_executable.get(
-            "output_file"
+        self._credential_source_executable_output_file = (
+            self._credential_source_executable.get("output_file")
         )
 
         # Dummy value. This variable is only used via injection, not exposed to ctor
@@ -199,11 +201,6 @@ class Credentials(external_account.Credentials):
                 else:
                     return subject_token
 
-        if not _helpers.is_python_3():
-            raise exceptions.RefreshError(
-                "Pluggable auth is only supported for python 3.7+"
-            )
-
         # Inject env vars.
         env = os.environ.copy()
         self._inject_env_variables(env)
@@ -220,7 +217,7 @@ class Credentials(external_account.Credentials):
         exe_stderr = sys.stdout if self.interactive else subprocess.STDOUT
 
         result = subprocess.run(
-            self._credential_source_executable_command.split(),
+            shlex.split(self._credential_source_executable_command),
             timeout=exe_timeout,
             stdin=exe_stdin,
             stdout=exe_stdout,
@@ -261,11 +258,6 @@ class Credentials(external_account.Credentials):
             )
         self._validate_running_mode()
 
-        if not _helpers.is_python_3():
-            raise exceptions.RefreshError(
-                "Pluggable auth is only supported for python 3.7+"
-            )
-
         # Inject variables
         env = os.environ.copy()
         self._inject_env_variables(env)
@@ -273,7 +265,7 @@ class Credentials(external_account.Credentials):
 
         # Run executable
         result = subprocess.run(
-            self._credential_source_executable_command.split(),
+            shlex.split(self._credential_source_executable_command),
             timeout=self._credential_source_executable_interactive_timeout_millis
             / 1000,
             stdout=subprocess.PIPE,

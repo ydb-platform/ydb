@@ -8,6 +8,7 @@
 #include "reserve.h"
 #include "stream_logic.h"
 
+#include <ydb/core/formats/arrow/accessor/sub_columns/json_value_path.h>
 #include <ydb/library/arrow_kernels/operations.h>
 #include <ydb/library/formats/arrow/switch/switch_type.h>
 
@@ -363,13 +364,7 @@ std::optional<TResourceAddress> TGraph::GetOriginalAddress(TGraphNode* condNode)
         TString path;
         if (constProc->GetScalarConstant()->type->id() == arrow::utf8()->id() ||
             constProc->GetScalarConstant()->type->id() == arrow::binary()->id()) {
-            path = constProc->GetScalarConstant()->ToString();
-            if (path.StartsWith("$.")) {
-                path = path.substr(2);
-            }
-            if (!path) {
-                return std::nullopt;
-            }
+            path = NAccessor::NSubColumns::ToSubcolumnName(constProc->GetScalarConstant()->ToString());
         } else {
             return std::nullopt;
         }

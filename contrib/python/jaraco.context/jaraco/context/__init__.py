@@ -12,8 +12,7 @@ import subprocess
 import sys
 import tempfile
 import urllib.request
-from typing import Iterator
-
+from collections.abc import Iterator
 
 if sys.version_info < (3, 12):
     from backports import tarfile
@@ -181,6 +180,8 @@ def repo_context(
     If dest_ctx is supplied, it should be a context manager
     to yield the target directory for the check out.
 
+    >>> getfixture('ensure_git')
+    >>> getfixture('needs_internet')
     >>> repo = repo_context('https://github.com/jaraco/jaraco.context')
     >>> with repo as dest:
     ...     listing = os.listdir(dest)

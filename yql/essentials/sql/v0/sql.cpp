@@ -1417,7 +1417,7 @@ TNodePtr TSqlExpression::UnaryExpr(const TUnarySubExprType& node) {
                     Ctx_.IncrementMonCounter("sql_errors", "FailedToParsePos");
                     return nullptr;
                 }
-                ids.push_back(pos);
+                ids.push_back(INode::TIdPart(pos));
                 break;
             }
             case TUnarySubExprType::TBlock3::TBlock2::kAlt3: {

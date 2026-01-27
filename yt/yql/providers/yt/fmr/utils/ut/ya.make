@@ -4,13 +4,14 @@ SRCS(
     yql_yt_util_helpers_ut.cpp
     yql_yt_parser_fragment_list_index_ut.cpp
     yql_yt_binary_yson_comparator_ut.cpp
+    yql_yt_index_serialisation_ut.cpp
 )
 
 PEERDIR(
     yt/yql/providers/yt/fmr/test_tools/yson
     yt/yql/providers/yt/fmr/utils
     yt/yql/providers/yt/fmr/request_options
-    yt/yql/providers/yt/fmr/yt_job_service/mock
+    yt/yql/providers/yt/fmr/yt_job_service/file
     yql/essentials/parser/pg_wrapper
     yql/essentials/parser/pg_wrapper/interface
     yql/essentials/public/udf

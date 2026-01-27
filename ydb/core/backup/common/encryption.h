@@ -58,6 +58,9 @@ enum class EBackupFileType : unsigned char {
     // Replication
     AsyncReplicationCreate = 10,
 
+    // Transfer
+    TransferCreate = 10,
+
     // External data source
     ExternalDataSourceCreate = 10,
 

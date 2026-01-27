@@ -107,7 +107,7 @@ class DriverConfig(object):
         auth_token=None,
         channel_options=None,
         credentials=None,
-        use_all_nodes=False,
+        use_all_nodes=True,
         root_certificates=None,
         certificate_chain=None,
         private_key=None,
@@ -272,6 +272,7 @@ class Driver(pool.ConnectionPool):
         :param credentials: A credentials. If not specifed credentials constructed by default.
         """
         from . import topic  # local import for prevent cycle import error
+        from . import coordination  # local import for prevent cycle import error
 
         driver_config = get_config(
             driver_config,
@@ -289,6 +290,7 @@ class Driver(pool.ConnectionPool):
         self.scheme_client = scheme.SchemeClient(self)
         self.table_client = table.TableClient(self, driver_config.table_client_settings)
         self.topic_client = topic.TopicClient(self, driver_config.topic_client_settings)
+        self.coordination_client = coordination.CoordinationClient(self)
 
     def stop(self, timeout=10):
         self.table_client._stop_pool_if_needed(timeout=timeout)

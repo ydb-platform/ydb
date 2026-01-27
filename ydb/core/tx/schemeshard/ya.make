@@ -11,7 +11,9 @@ RECURSE_FOR_TESTS(
     ut_cdc_stream
     ut_cdc_stream_reboots
     ut_column_build
+    ut_column_build_reboots
     ut_compaction
+    ut_consistent_copy_tables
     ut_continuous_backup
     ut_continuous_backup_reboots
     ut_shred
@@ -67,6 +69,8 @@ RECURSE_FOR_TESTS(
     ut_topic_splitmerge
     ut_topic_set_boundaries
     ut_transfer
+    ut_truncate_table_reboots
+    ut_truncate_table_simple
     ut_ttl
     ut_user_attributes
     ut_user_attributes_reboots
@@ -219,6 +223,7 @@ SRCS(
     schemeshard__operation_side_effects.cpp
     schemeshard__operation_side_effects.h
     schemeshard__operation_split_merge.cpp
+    schemeshard__operation_truncate_table.cpp
     schemeshard__operation_upgrade_subdomain.cpp
     schemeshard__pq_stats.cpp
     schemeshard__publish_to_scheme_board.cpp
@@ -261,12 +266,15 @@ SRCS(
     schemeshard_domain_links.h
     schemeshard_effective_acl.cpp
     schemeshard_effective_acl.h
+    schemeshard_scheme_builders.cpp
+    schemeshard_scheme_builders.h
     schemeshard_export.cpp
     schemeshard_export__cancel.cpp
     schemeshard_export__create.cpp
     schemeshard_export__forget.cpp
     schemeshard_export__get.cpp
     schemeshard_export__list.cpp
+    schemeshard_export_helpers.cpp
     schemeshard_export_flow_proposals.cpp
     schemeshard_identificators.cpp
     schemeshard_impl.cpp
@@ -280,6 +288,10 @@ SRCS(
     schemeshard_import__list.cpp
     schemeshard_import_flow_proposals.cpp
     schemeshard_import_scheme_query_executor.cpp
+    schemeshard_index_build_info.cpp
+    schemeshard_index_build_info.h
+    schemeshard_index_utils.cpp
+    schemeshard_index_utils.h
     schemeshard_info_types.cpp
     schemeshard_info_types.h
     schemeshard_login_helper.cpp
@@ -289,6 +301,7 @@ SRCS(
     schemeshard_path_describer.cpp
     schemeshard_path_element.cpp
     schemeshard_path_element.h
+    schemeshard_pq_helpers.h
     schemeshard_schema.h
     schemeshard_self_pinger.cpp
     schemeshard_self_pinger.h
@@ -308,8 +321,6 @@ SRCS(
     schemeshard_types.cpp
     schemeshard_types.h
     schemeshard_user_attr_limits.h
-    schemeshard_utils.cpp
-    schemeshard_utils.h
     schemeshard_validate_ttl.cpp
     schemeshard_xxport__helpers.cpp
     user_attributes.cpp
@@ -323,6 +334,8 @@ GENERATE_ENUM_SERIALIZATION(schemeshard_subop_state_types.h)
 
 GENERATE_ENUM_SERIALIZATION(schemeshard_info_types.h)
 
+GENERATE_ENUM_SERIALIZATION(schemeshard_index_build_info.h)
+
 GENERATE_ENUM_SERIALIZATION(schemeshard_types.h)
 
 GENERATE_ENUM_SERIALIZATION(operation_queue_timer.h)
@@ -333,9 +346,11 @@ PEERDIR(
     library/cpp/html/pcdata
     library/cpp/json
     library/cpp/protobuf/json
+    library/cpp/regex/pcre
     ydb/core/actorlib_impl
     ydb/core/audit
     ydb/core/base
+    ydb/core/backup/regexp
     ydb/core/blob_depot
     ydb/core/blobstorage/base
     ydb/core/blockstore/core

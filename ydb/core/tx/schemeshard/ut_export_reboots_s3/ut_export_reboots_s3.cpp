@@ -528,10 +528,34 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
             return TopicScheme;
         }
 
+        static const TTypedScheme& Replication() {
+            return ReplicationScheme;
+        }
+
+        static const TTypedScheme& Transfer() {
+            return TransferScheme;
+        }
+
+        static const TTypedScheme& ExternalDataSource() {
+            return ExternalDataSourceScheme;
+        }
+
+        static const TTypedScheme& ExternalTable() {
+            return ExternalTableScheme;
+        }
+
         static TString Request(EPathType pathType = EPathType::EPathTypeTable) {
             switch (pathType) {
             case EPathType::EPathTypeTable:
                 return RequestStringTable;
+            case EPathType::EPathTypeReplication:
+                return RequestStringReplication;
+            case EPathType::EPathTypeTransfer:
+                return RequestStringTransfer;
+            case EPathType::EPathTypeExternalDataSource:
+                return RequestStringExternalDataSource;
+            case EPathType::EPathTypeExternalTable:
+                return RequestStringExternalTable;
             default:
                 Y_ABORT("not supported");
             }
@@ -543,8 +567,18 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         static const TTypedScheme TableScheme;
         static const TTypedScheme ChangefeedScheme;
         static const TTypedScheme TopicScheme;
-        static const TString RequestStringTable;
+        static const TTypedScheme ReplicationScheme;
+        static const TTypedScheme TransferScheme;
+        static const TTypedScheme ExternalDataSourceScheme;
+        static const TTypedScheme ExternalTableScheme;
         static const TTypedScheme IndexedTableScheme;
+
+        static const TString RequestStringTable;
+        static const TString RequestStringReplication;
+        static const TString RequestStringTransfer;
+        static const TString RequestStringExternalDataSource;
+        static const TString RequestStringExternalTable;
+
     };
 
     const char* TTestData::TableName = "Table";
@@ -572,6 +606,77 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         )", TableName)
     };
 
+    const TTypedScheme TTestData::ReplicationScheme = TTypedScheme {
+        EPathTypeReplication,
+        R"(
+            Name: "Replication"
+            Config {
+                SrcConnectionParams {
+                    StaticCredentials {
+                        User: "user"
+                        Password: "pwd"
+                    }
+                }
+                Specific {
+                    Targets {
+                        SrcPath: "/MyRoot/Table1"
+                        DstPath: "/MyRoot/Table1Replica"
+                    }
+                    Targets {
+                        SrcPath: "/MyRoot/Table2"
+                        DstPath: "/MyRoot/Table2Replica"
+                    }
+                }
+            }
+        )"
+    };
+
+    const TTypedScheme TTestData::TransferScheme = TTypedScheme {
+        EPathTypeTransfer,
+        R"(
+            Name: "Transfer"
+            Config {
+                TransferSpecific {
+                    Target {
+                        SrcPath: "/MyRoot/Topic"
+                        DstPath: "/MyRoot/Table"
+                        TransformLambda: "PRAGMA OrderedColumns;$transformation_lambda = ($msg) -> { return [ <| partition: $msg._partition, offset: $msg._offset, message: CAST($msg._data AS Utf8) |> ]; };$__ydb_transfer_lambda = $transformation_lambda;"
+                        ConsumerName: "consumerName"
+                    }
+                }
+            }
+        )"
+    };
+
+    const TTypedScheme TTestData::ExternalDataSourceScheme = TTypedScheme {
+        EPathTypeExternalDataSource,
+        R"(
+            Name: "DataSource"
+            SourceType: "ObjectStorage"
+            Location: "https://s3.cloud.net/bucket"
+            Auth {
+                Aws {
+                    AwsAccessKeyIdSecretName: "id_secret",
+                    AwsSecretAccessKeySecretName: "access_secret"
+                    AwsRegion: "ru-central-1"
+                }
+            }
+        )"
+    };
+
+    const TTypedScheme TTestData::ExternalTableScheme = TTypedScheme {
+        EPathTypeExternalTable,
+        R"(
+            Name: "ExternalTable"
+            SourceType: "General"
+            DataSourcePath: "/MyRoot/DataSource"
+            Location: "bucket"
+            Columns { Name: "key" Type: "Uint64" NotNull: true }
+            Columns { Name: "value1" Type: "Uint64" }
+            Columns { Name: "value2" Type: "Utf8" NotNull: true }
+        )"
+    };
+
     const TTypedScheme TTestData::IndexedTableScheme = TTypedScheme {
         EPathTypeTableIndex, // TODO: Replace with IndexedTable
         Sprintf(R"(
@@ -592,6 +697,50 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
             scheme: HTTP
             items {
                 source_path: "/MyRoot/Table"
+                destination_prefix: ""
+            }
+        }
+    )";
+
+    const TString TTestData::RequestStringReplication = R"(
+        ExportToS3Settings {
+            endpoint: "localhost:%d"
+            scheme: HTTP
+            items {
+                source_path: "/MyRoot/Replication"
+                destination_prefix: ""
+            }
+        }
+    )";
+
+    const TString TTestData::RequestStringTransfer = R"(
+        ExportToS3Settings {
+            endpoint: "localhost:%d"
+            scheme: HTTP
+            items {
+                source_path: "/MyRoot/Transfer"
+                destination_prefix: ""
+            }
+        }
+    )";
+
+    const TString TTestData::RequestStringExternalDataSource = R"(
+        ExportToS3Settings {
+            endpoint: "localhost:%d"
+            scheme: HTTP
+            items {
+                source_path: "/MyRoot/DataSource"
+                destination_prefix: ""
+            }
+        }
+    )";
+
+    const TString TTestData::RequestStringExternalTable = R"(
+        ExportToS3Settings {
+            endpoint: "localhost:%d"
+            scheme: HTTP
+            items {
+                source_path: "/MyRoot/ExternalTable"
                 destination_prefix: ""
             }
         }
@@ -728,11 +877,123 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         TestSingleTopic(&RunS3);
     }
 
-    Y_UNIT_TEST(CancelOnOnSingleTopic) {
+    Y_UNIT_TEST(CancelOnSingleTopic) {
         TestSingleTopic(&CancelS3);
     }
 
-    Y_UNIT_TEST(ForgetShouldSucceedOnOnSingleTopic) {
+    Y_UNIT_TEST(ForgetShouldSucceedOnSingleTopic) {
         TestSingleTopic(&ForgetS3);
+    }
+
+    Y_UNIT_TEST(IndexMaterialization) {
+        RunS3({
+            {
+                EPathTypeTableIndex,
+                R"(
+                    TableDescription {
+                      Name: "Table"
+                      Columns { Name: "key" Type: "Utf8" }
+                      Columns { Name: "value" Type: "Utf8" }
+                      KeyColumnNames: ["key"]
+                    }
+                    IndexDescription {
+                      Name: "index"
+                      KeyColumnNames: ["value"]
+                    }
+                )",
+            },
+        }, R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              include_index_data: true
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: ""
+              }
+            }
+        )", TTestEnvOptions().EnableIndexMaterialization(true));
+    }
+
+    // Async Replication
+    Y_UNIT_TEST(ShouldSucceedOnSingleReplication) {
+        RunS3({
+            TTestData::Replication()
+        }, TTestData::Request(EPathTypeReplication));
+    }
+
+    Y_UNIT_TEST(CancelShouldSucceedOnSingleReplication) {
+        CancelS3({
+            TTestData::Replication()
+        }, TTestData::Request(EPathTypeReplication));
+    }
+
+    Y_UNIT_TEST(ForgetShouldSucceedOnSingleReplication) {
+        ForgetS3({
+            TTestData::Replication()
+        }, TTestData::Request(EPathTypeReplication));
+    }
+
+    // Transfer
+    Y_UNIT_TEST(ShouldSucceedOnSingleTransfer) {
+        RunS3({
+            TTestData::Table(),
+            TTestData::Transfer(),
+        }, TTestData::Request(EPathTypeTransfer));
+    }
+
+    Y_UNIT_TEST(CancelShouldSucceedOnSingleTransfer) {
+        CancelS3({
+            TTestData::Table(),
+            TTestData::Transfer(),
+        }, TTestData::Request(EPathTypeTransfer));
+    }
+
+    Y_UNIT_TEST(ForgetShouldSucceedOnSingleTransfer) {
+        ForgetS3({
+            TTestData::Table(),
+            TTestData::Transfer(),
+        }, TTestData::Request(EPathTypeTransfer));
+    }
+
+    // External Data Source
+    Y_UNIT_TEST(ShouldSucceedOnSingleExternalDataSource) {
+        RunS3({
+            TTestData::ExternalDataSource(),
+        }, TTestData::Request(EPathTypeExternalDataSource));
+    }
+
+    Y_UNIT_TEST(CancelShouldSucceedOnSingleExternalDataSource) {
+        CancelS3({
+            TTestData::ExternalDataSource(),
+        }, TTestData::Request(EPathTypeExternalDataSource));
+    }
+
+    Y_UNIT_TEST(ForgetShouldSucceedOnSingleExternalDataSource) {
+        ForgetS3({
+            TTestData::ExternalDataSource(),
+        }, TTestData::Request(EPathTypeExternalDataSource));
+    }
+
+    // External Table
+    Y_UNIT_TEST(ShouldSucceedOnSingleExternalTable) {
+        RunS3({
+            TTestData::ExternalDataSource(),
+            TTestData::ExternalTable(),
+        }, TTestData::Request(EPathTypeExternalTable));
+    }
+
+    Y_UNIT_TEST(CancelShouldSucceedOnSingleExternalTable) {
+        CancelS3({
+            TTestData::ExternalDataSource(),
+            TTestData::ExternalTable(),
+        }, TTestData::Request(EPathTypeExternalTable));
+    }
+
+    Y_UNIT_TEST(ForgetShouldSucceedOnSingleExternalTable) {
+        ForgetS3({
+            TTestData::ExternalDataSource(),
+            TTestData::ExternalTable(),
+        }, TTestData::Request(EPathTypeExternalTable));
     }
 }

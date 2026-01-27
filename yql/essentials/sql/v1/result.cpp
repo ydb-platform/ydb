@@ -1,5 +1,7 @@
 #include "result.h"
 
+#include "context.h"
+
 #include <util/stream/output.h>
 
 namespace NSQLTranslationV1 {
@@ -7,6 +9,14 @@ namespace NSQLTranslationV1 {
 bool Unwrap(TSQLStatus status) {
     EnsureUnwrappable(status);
     return static_cast<bool>(status);
+}
+
+std::unexpected<ESQLError> UnsupportedYqlSelect(TContext& ctx, TStringBuf message) {
+    if (ctx.GetYqlSelectMode() == EYqlSelectMode::Force) {
+        ctx.Error() << "YqlSelect unsupported: " << message;
+    }
+
+    return std::unexpected(ESQLError::UnsupportedYqlSelect);
 }
 
 } // namespace NSQLTranslationV1

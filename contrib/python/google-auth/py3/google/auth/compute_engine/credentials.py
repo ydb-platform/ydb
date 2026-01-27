@@ -123,7 +123,7 @@ class Credentials(
     def _metric_header_for_usage(self):
         return metrics.CRED_TYPE_SA_MDS
 
-    def _refresh_token(self, request):
+    def _perform_refresh_token(self, request):
         """Refresh the access token and scopes.
 
         Args:
@@ -135,9 +135,9 @@ class Credentials(
                 service can't be reached if if the instance has not
                 credentials.
         """
-        scopes = self._scopes if self._scopes is not None else self._default_scopes
         try:
             self._retrieve_info(request)
+            scopes = self._scopes if self._scopes is not None else self._default_scopes
             # Always fetch token with default service account email.
             self.token, self.expiry = _metadata.get_service_account_token(
                 request, service_account="default", scopes=scopes
@@ -399,7 +399,6 @@ class IDTokenCredentials(
 
     @_helpers.copy_docstring(credentials.CredentialsWithQuotaProject)
     def with_quota_project(self, quota_project_id):
-
         # since the signer is already instantiated,
         # the request is not needed
         if self._use_metadata_identity_endpoint:
@@ -423,7 +422,6 @@ class IDTokenCredentials(
 
     @_helpers.copy_docstring(credentials.CredentialsWithTokenUri)
     def with_token_uri(self, token_uri):
-
         # since the signer is already instantiated,
         # the request is not needed
         if self._use_metadata_identity_endpoint:

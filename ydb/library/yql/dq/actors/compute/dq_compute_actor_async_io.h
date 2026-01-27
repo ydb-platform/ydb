@@ -139,12 +139,12 @@ struct IDqComputeActorAsyncInput {
     virtual void FillExtraStats(NDqProto::TDqTaskStats* /* stats */, bool /* finalized stats */, const NYql::NDq::TDqMeteringStats*) { }
 
     // The same signature as IActor::PassAway().
-    // It is guaranted that this method will be called with bound MKQL allocator.
+    // It is guaranteed that this method will be called with bound MKQL allocator.
     // So, it is the right place to destroy all internal UnboxedValues.
     virtual void PassAway() = 0;
 
-    // Do not destroy UnboxedValues inside destructor!!!
-    // It is called from actor system thread, and MKQL allocator is not bound in this case.
+    // You must also destroy all internal UnboxedValues inside destructor (same as in PassAway)
+    // But you should explicitly bind MKQL allocator here, because it is called from actor system thread.
     virtual ~IDqComputeActorAsyncInput() = default;
 };
 
@@ -188,7 +188,7 @@ struct IDqComputeActorAsyncOutput {
     virtual const TDqAsyncStats& GetEgressStats() const = 0;
 
     // Sends data.
-    // Method shoud be called under bound mkql allocator.
+    // Method should be called under bound mkql allocator.
     // Could throw YQL errors.
     // Checkpoint (if any) is supposed to be ordered after batch,
     // and finished flag is supposed to be ordered after checkpoint.
@@ -205,6 +205,8 @@ struct IDqComputeActorAsyncOutput {
 
     virtual void PassAway() = 0; // The same signature as IActor::PassAway()
 
+    // You must also destroy all internal UnboxedValues inside destructor (same as in PassAway)
+    // But you should explicitly bind MKQL allocator here, because it is called from actor system thread.
     virtual ~IDqComputeActorAsyncOutput() = default;
 };
 
@@ -279,6 +281,7 @@ public:
         const NKikimr::NMiniKQL::THolderFactory& HolderFactory;
         const THashMap<TString, TString>& SecureParams;
         size_t MaxKeysInRequest;
+        const bool IsMultiMatches;
     };
 
     struct TSinkArguments {
@@ -312,6 +315,7 @@ public:
         const NKikimr::NMiniKQL::TTypeEnvironment& TypeEnv;
         const NKikimr::NMiniKQL::THolderFactory& HolderFactory;
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
+        TDqComputeActorWatermarks* WatermarksTracker = nullptr;
         NWilson::TTraceId TraceId;
     };
 

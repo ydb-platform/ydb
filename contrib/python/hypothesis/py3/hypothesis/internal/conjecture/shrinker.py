@@ -490,6 +490,17 @@ class Shrinker:
             ):
                 continue
 
+            # Skip slices that are subsets of already-explained slices.
+            # If a larger slice can vary freely, so can its sub-slices.
+            # Note: (0, 0) is a special marker for the "together" comment that
+            # applies to the whole test, not a specific slice, so we exclude it.
+            if any(
+                s <= start and end <= e
+                for s, e in self.shrink_target.slice_comments
+                if (s, e) != (0, 0)
+            ):
+                continue
+
             # Run our experiments
             n_same_failures = 0
             note = "or any other generated value"
@@ -569,7 +580,10 @@ class Shrinker:
         if len(self.shrink_target.slice_comments) <= 1:
             return
         n_same_failures_together = 0
-        chunks_by_start_index = sorted(chunks.items())
+        # Only include slices that were actually added to slice_comments
+        chunks_by_start_index = sorted(
+            (k, v) for k, v in chunks.items() if k in self.shrink_target.slice_comments
+        )
         for _ in range(500):  # pragma: no branch
             # no-branch here because we don't coverage-test the abort-at-500 logic.
             new_choices: list[ChoiceT] = []
@@ -710,10 +724,12 @@ class Shrinker:
                 continue
             self.incorporate_test_data(random_attempt)
             for j in spans:
-                initial_ex = initial.spans[j]
-                attempt_ex = random_attempt.spans[j]
-                contents = random_attempt.nodes[attempt_ex.start : attempt_ex.end]
-                self.consider_new_nodes(nodes[:i] + contents + nodes[initial_ex.end :])
+                initial_span = initial.spans[j]
+                attempt_span = random_attempt.spans[j]
+                contents = random_attempt.nodes[attempt_span.start : attempt_span.end]
+                self.consider_new_nodes(
+                    nodes[:i] + contents + nodes[initial_span.end :]
+                )
                 if initial is not self.shrink_target:
                     return True
         return False
@@ -1558,8 +1574,8 @@ class Shrinker:
 
         prev = self.shrink_target
         nodes = self.shrink_target.nodes
-        ex = self.spans[i]
-        prefix = nodes[: ex.start]
+        span = self.spans[i]
+        prefix = nodes[: span.start]
         replacement = tuple(
             [
                 (
@@ -1569,18 +1585,18 @@ class Shrinker:
                         with_value=choice_from_index(0, node.type, node.constraints)
                     )
                 )
-                for node in nodes[ex.start : ex.end]
+                for node in nodes[span.start : span.end]
             ]
         )
-        suffix = nodes[ex.end :]
+        suffix = nodes[span.end :]
         attempt = self.cached_test_function(prefix + replacement + suffix)[1]
 
         if self.shrink_target is not prev:
             return
 
         if isinstance(attempt, ConjectureResult):
-            new_ex = attempt.spans[i]
-            new_replacement = attempt.nodes[new_ex.start : new_ex.end]
+            new_span = attempt.spans[i]
+            new_replacement = attempt.nodes[new_span.start : new_span.end]
             self.consider_new_nodes(prefix + new_replacement + suffix)
 
     def minimize_individual_choices(self, chooser):
@@ -1660,8 +1676,8 @@ class Shrinker:
             hi = len(self.spans)
             while lo + 1 < hi:
                 mid = (lo + hi) // 2
-                ex = self.spans[mid]
-                if ex.start >= node.index:
+                span = self.spans[mid]
+                if span.start >= node.index:
                     hi = mid
                 else:
                     lo = mid
@@ -1672,13 +1688,13 @@ class Shrinker:
         # consecutive nodes (that don't cross a span boundary) for say
         # n <= 2 or n <= 3.
         if chooser.choose([True, False]):
-            ex = self.spans[
+            span = self.spans[
                 chooser.choose(
                     range(first_span_after_node, len(self.spans)),
                     lambda i: self.spans[i].choice_count > 0,
                 )
             ]
-            self.consider_new_nodes(lowered[: ex.start] + lowered[ex.end :])
+            self.consider_new_nodes(lowered[: span.start] + lowered[span.end :])
         else:
             node = self.nodes[chooser.choose(range(node.index + 1, len(self.nodes)))]
             self.consider_new_nodes(lowered[: node.index] + lowered[node.index + 1 :])
@@ -1702,14 +1718,15 @@ class Shrinker:
         ``x=""``, ``y="0"``, or the other way around. With reordering it will
         reliably fail with ``x=""``, ``y="0"``.
         """
-        ex = chooser.choose(self.spans)
-        label = chooser.choose(ex.children).label
+        span = chooser.choose(self.spans)
 
-        spans = [c for c in ex.children if c.label == label]
+        label = chooser.choose(span.children).label
+        spans = [c for c in span.children if c.label == label]
         if len(spans) <= 1:
             return
+
+        endpoints = [(span.start, span.end) for span in spans]
         st = self.shrink_target
-        endpoints = [(ex.start, ex.end) for ex in spans]
 
         Ordering.shrink(
             range(len(spans)),

@@ -71,11 +71,14 @@ TString CreateDatabase(TTestEnv& env, const TString& databaseName,
 
 TString CreateServerlessDatabase(TTestEnv& env, const TString& databaseName, const TString& sharedName, size_t nodeCount = 0);
 
-// Create empty column table with the requested number of shards.
-void CreateColumnTable(TTestEnv& env, const TString& databaseName, const TString& tableName, int shardCount);
-// Create a column table, enable count-min-sketch column statistics,
-// and insert ColumnTableRowsNumber rows.
-void PrepareColumnTable(TTestEnv& env, const TString& databaseName, const TString& tableName, int shardCount);
+struct TColumnDesc {
+    TString Name;
+    NScheme::TTypeId TypeId;
+    std::function<void(ui64, Ydb::Value&)> AddValue; // void AddValue(key, row)
+};
+
+// One value column with low-cardinality String.
+const std::vector<TColumnDesc>& SimpleColumnList();
 
 struct TTableInfo {
     std::vector<ui64> ShardIds;
@@ -85,13 +88,21 @@ struct TTableInfo {
     TString Path;
 };
 
-struct TDatabaseInfo {
-    TString FullDatabaseName;
-    std::vector<TTableInfo> Tables;
-};
+// Create empty column table with the requested number of shards.
+TTableInfo CreateColumnTable(
+    TTestEnv& env, const TString& databaseName, const TString& tableName,
+    int shardCount, const std::vector<TColumnDesc>& valueColumns = SimpleColumnList());
 
-TDatabaseInfo PrepareDatabaseColumnTables(TTestEnv& env, ui8 tableCount, ui8 shardCount);
-TDatabaseInfo PrepareServerlessDatabaseColumnTables(TTestEnv& env, ui8 tableCount, ui8 shardCount);
+void InsertDataIntoTable(
+    TTestEnv& env, const TString& databaseName, const TString& tableName,
+    size_t rowCount, const std::vector<TColumnDesc>& valueColumns = SimpleColumnList());
+
+// Create a column table and insert ColumnTableRowsNumber rows.
+TTableInfo PrepareColumnTable(TTestEnv& env, const TString& databaseName, const TString& tableName, int shardCount);
+
+// Create a column table, enable count-min-sketch column indexes,
+// and insert ColumnTableRowsNumber rows with some overlap to trigger compaction.
+TTableInfo PrepareColumnTableWithIndexes(TTestEnv& env, const TString& databaseName, const TString& tableName, int shardCount);
 
 TPathId ResolvePathId(TTestActorRuntime& runtime, const TString& path, TPathId* domainKey = nullptr, ui64* saTabletId = nullptr);
 
@@ -100,14 +111,33 @@ NKikimrScheme::TEvDescribeSchemeResult DescribeTable(
 TVector<ui64> GetTableShards(TTestActorRuntime& runtime, TActorId sender, const TString &path);
 TVector<ui64> GetColumnTableShards(TTestActorRuntime& runtime, TActorId sender,const TString &path);
 
+// Create a datashard table with 4 uniform shards.
 void CreateUniformTable(TTestEnv& env, const TString& databaseName, const TString& tableName);
+// Create a datashard table with 4 uniform shards and insert 1 row into each shard.
+void PrepareUniformTable(TTestEnv& env, const TString& databaseName, const TString& tableName);
+
 void DropTable(TTestEnv& env, const TString& databaseName, const TString& tableName);
 
-std::shared_ptr<TCountMinSketch> ExtractCountMin(TTestActorRuntime& runtime, const TPathId& pathId, ui64 columnTag = 1);
-void ValidateCountMinColumnshard(TTestActorRuntime& runtime, const TPathId& pathId, ui64 expectedProbe);
+std::vector<TResponse> GetStatistics(
+    TTestActorRuntime&, const TPathId&, EStatType,
+    const std::vector<std::optional<ui32>>& columnTags, ui32 nodeIdx = 1);
 
-void ValidateCountMinDatashard(TTestActorRuntime& runtime, TPathId pathId);
-void ValidateCountMinAbsence(TTestActorRuntime& runtime, TPathId pathId);
+std::shared_ptr<TCountMinSketch> ExtractCountMin(TTestActorRuntime& runtime, const TPathId& pathId, ui64 columnTag = 1);
+
+struct TCountMinSketchProbes {
+    struct TProbe {
+        TString Value;
+        ui64 Expected;
+    };
+
+    ui16 Tag;
+    // If nullopt, absence of count-min sketch is expected.
+    std::optional<std::vector<TProbe>> Probes;
+};
+
+void CheckCountMinSketch(
+    TTestActorRuntime& runtime, const TPathId& pathId,
+    const std::vector<TCountMinSketchProbes>& expected);
 
 struct TAnalyzedTable {
     TPathId PathId;

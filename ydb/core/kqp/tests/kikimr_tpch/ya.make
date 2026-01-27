@@ -2,7 +2,7 @@ UNITTEST()
 
 ENV(YDB_HARD_MEMORY_LIMIT_BYTES="107374182400")
 INCLUDE(${ARCADIA_ROOT}/ydb/public/tools/ydb_recipe/recipe.inc)
-INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 
 DEPENDS(
     ydb/public/tools/ydb_recipe

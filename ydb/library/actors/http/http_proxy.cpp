@@ -471,7 +471,7 @@ TString ToHex(size_t value) {
 
 bool IsReadableContent(TStringBuf contentType) {
     auto type = contentType.Before(';');
-    if (type.StartsWith("text/") || type == "application/json") {
+    if (type.StartsWith("text/") || type == "application/json" || type == "application/x-www-form-urlencoded") {
         return true;
     }
     return false;

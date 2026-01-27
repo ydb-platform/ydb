@@ -3,6 +3,7 @@
 #include "datashard_s3_download.h"
 #include "datashard_s3_upload.h"
 
+#include <ydb/core/tablet_flat/util_basics.h>
 #include <ydb/core/tx/tx.h>
 #include <ydb/core/tx/data_events/events.h>
 #include <ydb/core/tx/message_seqno.h>
@@ -356,6 +357,9 @@ namespace TEvDataShard {
         EvPrefixKMeansRequest,
         EvPrefixKMeansResponse,
 
+        EvFilterKMeansRequest,
+        EvFilterKMeansResponse,
+
         EvRecomputeKMeansRequest,
         EvRecomputeKMeansResponse,
 
@@ -368,6 +372,11 @@ namespace TEvDataShard {
 
         EvBuildFulltextIndexRequest,
         EvBuildFulltextIndexResponse,
+        
+        EvAsyncJobComplete,
+
+        EvBuildFulltextDictRequest,
+        EvBuildFulltextDictResponse,
 
         EvEnd
     };
@@ -1466,6 +1475,15 @@ namespace TEvDataShard {
         }
     };
 
+    struct TEvAsyncJobComplete : public TEventLocal<TEvAsyncJobComplete, TEvDataShard::EvAsyncJobComplete> {
+        explicit TEvAsyncJobComplete(TAutoPtr<IDestructable> prod)
+            : Prod(prod)
+        {
+        }
+
+        TAutoPtr<IDestructable> Prod;
+    };
+
     struct TEvObjectStorageListingRequest
         : public TEventPB<TEvObjectStorageListingRequest,
                             NKikimrTxDataShard::TEvObjectStorageListingRequest,
@@ -1587,6 +1605,18 @@ namespace TEvDataShard {
                           TEvDataShard::EvPrefixKMeansResponse> {
     };
 
+    struct TEvFilterKMeansRequest
+        : public TEventPB<TEvFilterKMeansRequest,
+                          NKikimrTxDataShard::TEvFilterKMeansRequest,
+                          TEvDataShard::EvFilterKMeansRequest> {
+    };
+
+    struct TEvFilterKMeansResponse
+        : public TEventPB<TEvFilterKMeansResponse,
+                          NKikimrTxDataShard::TEvFilterKMeansResponse,
+                          TEvDataShard::EvFilterKMeansResponse> {
+    };
+
     struct TEvBuildFulltextIndexRequest
         : public TEventPB<TEvBuildFulltextIndexRequest,
                           NKikimrTxDataShard::TEvBuildFulltextIndexRequest,
@@ -1597,6 +1627,18 @@ namespace TEvDataShard {
         : public TEventPB<TEvBuildFulltextIndexResponse,
                           NKikimrTxDataShard::TEvBuildFulltextIndexResponse,
                           TEvDataShard::EvBuildFulltextIndexResponse> {
+    };
+
+    struct TEvBuildFulltextDictRequest
+        : public TEventPB<TEvBuildFulltextDictRequest,
+                          NKikimrTxDataShard::TEvBuildFulltextDictRequest,
+                          TEvDataShard::EvBuildFulltextDictRequest> {
+    };
+
+    struct TEvBuildFulltextDictResponse
+        : public TEventPB<TEvBuildFulltextDictResponse,
+                          NKikimrTxDataShard::TEvBuildFulltextDictResponse,
+                          TEvDataShard::EvBuildFulltextDictResponse> {
     };
 
     struct TEvIncrementalRestoreResponse

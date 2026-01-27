@@ -20,6 +20,10 @@
 #include <ydb/public/lib/ydb_cli/common/retry_func.h>
 #include <ydb/public/lib/ydb_cli/dump/files/files.h>
 #include <ydb/public/lib/ydb_cli/dump/util/util.h>
+#include <ydb/public/lib/ydb_cli/dump/util/external_data_source_utils.h>
+#include <ydb/public/lib/ydb_cli/dump/util/external_table_utils.h>
+#include <ydb/public/lib/ydb_cli/dump/util/query_utils.h>
+#include <ydb/public/lib/ydb_cli/dump/util/replication_utils.h>
 #include <ydb/public/lib/ydb_cli/dump/util/view_utils.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_view.h>
@@ -55,9 +59,6 @@
 
 #include <google/protobuf/text_format.h>
 
-#include <format>
-#include <ranges>
-
 namespace NYdb::NBackup {
 
 static constexpr size_t IO_BUFFER_SIZE = 2 << 20; // 2 MiB
@@ -65,7 +66,6 @@ static constexpr i64 FILE_SPLIT_THRESHOLD = 128 << 20; // 128 MiB
 static constexpr i64 READ_TABLE_RETRIES = 100;
 static const std::string ATTR_ASYNC_REPLICATION = "__async_replication";
 static const std::string ATTR_ASYNC_REPLICA = "__async_replica";
-constexpr TStringBuf TRANSFER_LAMBDA_DEFAULT_NAME = "$__ydb_transfer_lambda";
 
 ////////////////////////////////////////////////////////////////////////////////
 //                               Util
@@ -738,83 +738,6 @@ void BackupCoordinationNode(TDriver driver, const TString& dbPath, const TFsPath
     BackupPermissions(driver, dbPath, fsBackupFolder);
 }
 
-namespace {
-
-TString BuildConnectionString(const NReplication::TConnectionParams& params) {
-    return TStringBuilder()
-        << (params.GetEnableSsl() ? "grpcs://" : "grpc://")
-        << params.GetDiscoveryEndpoint()
-        << "/?database=" << params.GetDatabase();
-}
-
-inline TString BuildTarget(const char* src, const char* dst) {
-    return TStringBuilder() << "  `" << src << "` AS `" << dst << "`";
-}
-
-inline TString Quote(const char* value) {
-    return TStringBuilder() << "'" << value << "'";
-}
-
-template <typename StringType>
-inline TString Quote(const StringType& value) {
-    return Quote(value.c_str());
-}
-
-inline TString BuildOption(const char* key, const TString& value) {
-    return TStringBuilder() << "  " << key << " = " << value << "";
-}
-
-inline TString Interval(const TDuration& value) {
-    return TStringBuilder() << "Interval('PT" << value.Seconds() << "S')";
-}
-
-void AddConnectionOptions(const NReplication::TConnectionParams& connectionParams, TVector<TString>& options) {
-    options.push_back(BuildOption("CONNECTION_STRING", Quote(BuildConnectionString(connectionParams))));
-    switch (connectionParams.GetCredentials()) {
-        case NReplication::TConnectionParams::ECredentials::Static:
-            options.push_back(BuildOption("USER", Quote(connectionParams.GetStaticCredentials().User)));
-            options.push_back(BuildOption("PASSWORD_SECRET_NAME", Quote(connectionParams.GetStaticCredentials().PasswordSecretName)));
-            break;
-        case NReplication::TConnectionParams::ECredentials::OAuth:
-            if (const auto& secret = connectionParams.GetOAuthCredentials().TokenSecretName; !secret.empty()) {
-                options.push_back(BuildOption("TOKEN_SECRET_NAME", Quote(secret)));
-            }
-            break;
-    }
-}
-
-TString BuildCreateReplicationQuery(
-        const TString& db,
-        const TString& backupRoot,
-        const TString& name,
-        const NReplication::TReplicationDescription& desc)
-{
-    TVector<TString> targets(::Reserve(desc.GetItems().size()));
-    for (const auto& item : desc.GetItems()) {
-        if (!item.DstPath.ends_with("/indexImplTable")) { // TODO(ilnaz): get rid of this hack
-            targets.push_back(BuildTarget(item.SrcPath.c_str(), item.DstPath.c_str()));
-        }
-    }
-
-    TVector<TString> opts(::Reserve(5 /* max options */));
-        
-    const auto& params = desc.GetConnectionParams();
-    AddConnectionOptions(params, opts);
-
-    opts.push_back(BuildOption("CONSISTENCY_LEVEL", Quote(ToString(desc.GetConsistencyLevel()))));
-    if (desc.GetConsistencyLevel() == NReplication::TReplicationDescription::EConsistencyLevel::Global) {
-        opts.push_back(BuildOption("COMMIT_INTERVAL", Interval(desc.GetGlobalConsistency().GetCommitInterval())));
-    }
-
-    return std::format(
-            "-- database: \"{}\"\n"
-            "-- backup root: \"{}\"\n"
-            "CREATE ASYNC REPLICATION `{}`\nFOR\n{}\nWITH (\n{}\n);",
-        db.c_str(), backupRoot.c_str(), name.c_str(), JoinSeq(",\n", targets).c_str(), JoinSeq(",\n", opts).c_str());
-}
-
-}
-
 void BackupReplication(
     TDriver driver,
     const TString& db,
@@ -830,92 +753,11 @@ void BackupReplication(
     NReplication::TReplicationClient replicationClient(driver);
     TMaybe<NReplication::TReplicationDescription> desc;
     VerifyStatusOrSkip(NDump::DescribeReplication(replicationClient, dbPath, desc), "error describing replication");
-    const auto creationQuery = BuildCreateReplicationQuery(db, dbBackupRoot, fsBackupFolder.GetName(), *desc);
+    const auto creationQuery = NDump::BuildCreateReplicationQuery(db, dbBackupRoot, fsBackupFolder.GetName(), *desc);
 
     WriteCreationQueryToFile(creationQuery, fsBackupFolder, NDump::NFiles::CreateAsyncReplication());
     BackupPermissions(driver, dbPath, fsBackupFolder);
 }
-
-namespace {
-
-TString ExtractTransformationLambdaName(const TString& lambdaCreateQuery) {
-    const TString lambdaNameStartPattern = TStringBuilder() << TRANSFER_LAMBDA_DEFAULT_NAME << " = ";
-    const TString lambdaNameEndPattern = ";";
-    
-    size_t startPos = lambdaCreateQuery.find(lambdaNameStartPattern);
-    if (startPos == TString::npos) {
-        LOG_E(Sprintf("Unexpected transfer lambda name: '%s' was not found", lambdaNameStartPattern.c_str()));
-        return "";
-    }
-
-    startPos += lambdaNameStartPattern.length();
-
-    size_t endPos = lambdaCreateQuery.rfind(lambdaNameEndPattern);
-    if (endPos == TString::npos) {
-        LOG_E("Unexpected transfer lambda name: end semicolon was not found");
-        return "";
-    }
-
-    if (startPos >= endPos) {
-        LOG_E("Unexpected transfer lambda name");
-        return "";
-    }
-    
-    return lambdaCreateQuery.substr(startPos, endPos - startPos);
-}
-
-void CleanQuery(TString& query, const TString& patternToRemove) {    
-    if (patternToRemove.empty()) {
-        return;
-    }
-
-    size_t patternLength = patternToRemove.length();
-    size_t position;
-    while ((position = query.find(patternToRemove)) != TString::npos) {
-        query.erase(position, patternLength);
-    }    
-}
-
-TString BuildCreateTransferQuery(
-        const TString& db,
-        const TString& backupRoot,
-        const TString& name,
-        const NReplication::TTransferDescription& desc)
-{            
-    TVector<TString> options(::Reserve(7));
-    
-    const auto& connectionParams = desc.GetConnectionParams();
-    AddConnectionOptions(connectionParams, options);
-
-    options.push_back(BuildOption("CONSUMER", Quote(desc.GetConsumerName())));
-
-    const auto& batchingSettings = desc.GetBatchingSettings();
-    options.push_back(BuildOption("BATCH_SIZE_BYTES", ToString(batchingSettings.SizeBytes)));
-    options.push_back(BuildOption("FLUSH_INTERVAL", Interval(batchingSettings.FlushInterval)));
-
-    const TString& lambdaCreateQuery = desc.GetTransformationLambda().c_str();
-    const TString& lambdaName = ExtractTransformationLambdaName(lambdaCreateQuery.c_str()).c_str();
-
-    TString cleanedLambdaCreateQuery = lambdaCreateQuery;
-    CleanQuery(cleanedLambdaCreateQuery, "PRAGMA OrderedColumns;");
-    CleanQuery(cleanedLambdaCreateQuery, TStringBuilder() << TRANSFER_LAMBDA_DEFAULT_NAME << " = " << lambdaName << ";");
-
-    return std::format(
-            "-- database: \"{}\"\n"
-            "-- backup root: \"{}\"\n"
-            "{}\n\n"
-            "CREATE TRANSFER `{}`\n"
-            "FROM `{}` TO `{}` USING {}\n"
-            "WITH (\n{}\n);",
-            db.c_str(), backupRoot.c_str(),
-            cleanedLambdaCreateQuery.c_str(),
-            name.c_str(), 
-            desc.GetSrcPath().c_str(), desc.GetDstPath().c_str(), lambdaName.c_str(),
-            JoinSeq(",\n", options).c_str()
-        );        
-}
-
-} // namespace
 
 void BackupTransfer(
     TDriver driver,
@@ -932,48 +774,21 @@ void BackupTransfer(
     NReplication::TReplicationClient client(driver);
     TMaybe<NReplication::TTransferDescription> desc;
     VerifyStatus(NDump::DescribeTransfer(client, dbPath, desc), "describe transfer");
-    const auto creationTransferQuery = BuildCreateTransferQuery(db, dbBackupRoot, fsBackupFolder.GetName(), *desc);
+    const auto creationTransferQuery = NDump::BuildCreateTransferQuery(db, dbBackupRoot, fsBackupFolder.GetName(), *desc);
 
     WriteCreationQueryToFile(creationTransferQuery, fsBackupFolder, NDump::NFiles::CreateTransfer());
-    BackupPermissions(driver, dbPath, fsBackupFolder);    
+    BackupPermissions(driver, dbPath, fsBackupFolder);
 }
 
 namespace {
-
-std::string ToString(std::string_view key, std::string_view value) {
-    // indented to follow the default YQL formatting
-    return std::format(R"(  {} = '{}')", key, value);
-}
-
-namespace NExternalDataSource {
-
-    std::string PropertyToString(const std::pair<TProtoStringType, TProtoStringType>& property) {
-        const auto& [key, value] = property;
-        return ToString(key, value);
-    }
-
-}
 
 void CanonizeForBackup(Ydb::Table::DescribeExternalDataSourceResult& desc) {
     desc.mutable_properties()->erase("REFERENCES");
 }
 
-TString BuildCreateExternalDataSourceQuery(const Ydb::Table::DescribeExternalDataSourceResult& description) {
-    return std::format(
-        "CREATE EXTERNAL DATA SOURCE IF NOT EXISTS `{}` WITH (\n{},\n{}{}\n);",
-        description.self().name().c_str(),
-        ToString("SOURCE_TYPE", description.source_type()),
-        ToString("LOCATION", description.location()),
-        description.properties().empty()
-            ? ""
-            : std::string(",\n") +
-                JoinSeq(",\n", std::views::transform(description.properties(), NExternalDataSource::PropertyToString)).c_str()
-    );
 }
 
-}
-
-void BackupExternalDataSource(TDriver driver, const TString& dbPath, const TFsPath& fsBackupFolder) {
+void BackupExternalDataSource(TDriver driver, const TString& db, const TString& dbPath, const TFsPath& fsBackupFolder) {
     Y_ENSURE(!dbPath.empty());
     LOG_I("Backup external data source " << dbPath.Quote() << " to " << fsBackupFolder.GetPath().Quote());
 
@@ -981,7 +796,7 @@ void BackupExternalDataSource(TDriver driver, const TString& dbPath, const TFsPa
     NTable::TTableClient client(driver);
     VerifyStatusOrSkip(NDump::DescribeExternalDataSource(client, dbPath, description), "error describing external data source");
     CanonizeForBackup(description);
-    const auto creationQuery = BuildCreateExternalDataSourceQuery(description);
+    const auto creationQuery = NDump::BuildCreateExternalDataSourceQuery(description, db);
 
     WriteCreationQueryToFile(creationQuery, fsBackupFolder, NDump::NFiles::CreateExternalDataSource());
     BackupPermissions(driver, dbPath, fsBackupFolder);
@@ -1003,46 +818,6 @@ Ydb::Table::DescribeExternalTableResult DescribeExternalTable(TDriver driver, co
     return description;
 }
 
-namespace NExternalTable {
-
-    std::string PropertyToString(const std::pair<TProtoStringType, TProtoStringType>& property) {
-        const auto& [key, json] = property;
-        const auto items = NJson::ReadJsonFastTree(json).GetArray();
-        Y_ENSURE(!items.empty(), "Empty items for an external table property: " << key);
-        if (items.size() == 1) {
-            return ToString(key, items.front().GetString());
-        } else {
-            return ToString(key, std::format("[{}]", JoinSeq(", ", items).c_str()));
-        }
-    }
-
-}
-
-std::string ColumnToString(const Ydb::Table::ColumnMeta& column) {
-    const auto& type = column.type();
-    const bool notNull = !type.has_optional_type() || (type.has_pg_type() && column.not_null());
-    return std::format(
-        "    {} {}{}",
-        column.name().c_str(),
-        TType(type).ToString(),
-        notNull ? " NOT NULL" : ""
-    );
-}
-
-TString BuildCreateExternalTableQuery(const Ydb::Table::DescribeExternalTableResult& description) {
-    return std::format(
-        "CREATE EXTERNAL TABLE IF NOT EXISTS `{}` (\n{}\n) WITH (\n{},\n{}{}\n);",
-        description.self().name().c_str(),
-        JoinSeq(",\n", std::views::transform(description.columns(), ColumnToString)).c_str(),
-        ToString("DATA_SOURCE", description.data_source_path()),
-        ToString("LOCATION", description.location()),
-        description.content().empty()
-            ? ""
-            : std::string(",\n") +
-                JoinSeq(",\n", std::views::transform(description.content(), NExternalTable::PropertyToString)).c_str()
-    );
-}
-
 Ydb::Table::DescribeSystemViewResult DescribeSystemView(TDriver driver, const TString& path) {
     NTable::TTableClient client(driver);
     Ydb::Table::DescribeSystemViewResult description;
@@ -1054,12 +829,20 @@ Ydb::Table::DescribeSystemViewResult DescribeSystemView(TDriver driver, const TS
 
 }
 
-void BackupExternalTable(TDriver driver, const TString& dbPath, const TFsPath& fsBackupFolder) {
-    Y_ENSURE(!dbPath.empty());
+void BackupExternalTable(
+    TDriver driver,
+    const TString& db,
+    const TString& dbBackupRoot,
+    const TString& dbPathRelativeToBackupRoot,
+    const TFsPath& fsBackupFolder)
+{
+    Y_ENSURE(!dbPathRelativeToBackupRoot.empty());
+    const auto dbPath = JoinDatabasePath(dbBackupRoot, dbPathRelativeToBackupRoot);
+
     LOG_I("Backup external table " << dbPath.Quote() << " to " << fsBackupFolder.GetPath().Quote());
 
     const auto description = DescribeExternalTable(driver, dbPath);
-    const auto creationQuery = BuildCreateExternalTableQuery(description);
+    const auto creationQuery = NDump::BuildCreateExternalTableQuery(db, dbBackupRoot, description);
 
     WriteCreationQueryToFile(creationQuery, fsBackupFolder, NDump::NFiles::CreateExternalTable());
     BackupPermissions(driver, dbPath, fsBackupFolder);
@@ -1117,6 +900,22 @@ static void MaybeCreateEmptyFile(const TFsPath& folderPath) {
     }
 }
 
+bool SkipItem(const TVector<TRegExMatch>& exclusionPatterns, const THashSet<TString>& seenItems,
+        TDbIterator<ETraverseType::Postordering>& dbIt
+) {
+    if (IsExcluded(dbIt.GetFullPath(), exclusionPatterns)) {
+        LOG_D("Skip " << dbIt.GetFullPath().Quote());
+        dbIt.Next();
+        return true;
+    }
+    if (!seenItems.contains(dbIt.GetFullPath())) {
+        LOG_W("Skip " << dbIt.GetFullPath().Quote() << ": it was created after the dumping had started");
+        dbIt.Next();
+        return true;
+    }
+    return false;
+}
+
 void BackupFolderImpl(TDriver driver, const TString& database, const TString& dbPrefix, const TString& backupPrefix,
         const TFsPath folderPath, const TVector<TRegExMatch>& exclusionPatterns,
         bool schemaOnly, bool useConsistentCopyTable, bool avoidCopy, bool preservePoolKinds, bool ordered,
@@ -1125,7 +924,10 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
     TFile(folderPath.Child(NDump::NFiles::Incomplete().FileName), CreateAlways).Close();
 
     TMap<TString, TAsyncStatus> copiedTablesStatuses;
+    // Track items seen during first iteration to skip the new ones created after
+    THashSet<TString> seenItems;
     TVector<NTable::TCopyItem> tablesToCopy;
+
     // Copy all tables to temporal folder and backup other scheme objects along the way.
     {
         TDbIterator<ETraverseType::Preordering> dbIt(driver, dbPrefix);
@@ -1135,6 +937,7 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
                 dbIt.Next();
                 continue;
             }
+            seenItems.insert(dbIt.GetFullPath());
 
             auto childFolderPath = CreateDirectory(folderPath, dbIt.GetRelPath());
             TFile(childFolderPath.Child(NDump::NFiles::Incomplete().FileName), CreateAlways).Close();
@@ -1168,9 +971,9 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
                 } else if (dbIt.IsReplication()) {
                     BackupReplication(driver, database, dbIt.GetTraverseRoot(), dbIt.GetRelPath(), childFolderPath);
                 } else if (dbIt.IsExternalDataSource()) {
-                    BackupExternalDataSource(driver, dbIt.GetFullPath(), childFolderPath);
+                    BackupExternalDataSource(driver, database, dbIt.GetFullPath(), childFolderPath);
                 } else if (dbIt.IsExternalTable()) {
-                    BackupExternalTable(driver, dbIt.GetFullPath(), childFolderPath);
+                    BackupExternalTable(driver, database, dbIt.GetTraverseRoot(), dbIt.GetRelPath(), childFolderPath);
                 } else if (dbIt.IsSystemView()) {
                     BackupSystemView(driver, dbIt.GetFullPath(), childFolderPath);
                 } else if (dbIt.IsTransfer()) {
@@ -1190,9 +993,7 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
     if (schemaOnly) {
         TDbIterator<ETraverseType::Postordering> dbIt(driver, dbPrefix);
         while (dbIt) {
-            if (IsExcluded(dbIt.GetFullPath(), exclusionPatterns)) {
-                LOG_D("Skip " << dbIt.GetFullPath().Quote());
-                dbIt.Next();
+            if (SkipItem(exclusionPatterns, seenItems, dbIt)) {
                 continue;
             }
 
@@ -1220,9 +1021,7 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
     {
         TDbIterator<ETraverseType::Postordering> dbIt(driver, dbPrefix);
         while (dbIt) {
-            if (IsExcluded(dbIt.GetFullPath(), exclusionPatterns)) {
-                LOG_D("Skip " << dbIt.GetFullPath().Quote());
-                dbIt.Next();
+            if (SkipItem(exclusionPatterns, seenItems, dbIt)) {
                 continue;
             }
 

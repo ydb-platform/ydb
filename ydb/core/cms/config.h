@@ -263,7 +263,7 @@ struct TCmsLogConfig {
 };
 
 struct TCmsConfig {
-    bool Enable = true;
+    bool DisableMaintenance = false;
     TDuration DefaultRetryTime;
     TDuration DefaultPermissionDuration;
     TDuration DefaultWalleCleanupPeriod = TDuration::Minutes(1);
@@ -282,7 +282,7 @@ struct TCmsConfig {
     }
 
     void Serialize(NKikimrCms::TCmsConfig &config) const {
-        config.SetEnable(Enable);
+        config.SetDisableMaintenance(DisableMaintenance);
         config.SetDefaultRetryTime(DefaultRetryTime.GetValue());
         config.SetDefaultPermissionDuration(DefaultPermissionDuration.GetValue());
         config.SetInfoCollectionTimeout(InfoCollectionTimeout.GetValue());
@@ -293,7 +293,7 @@ struct TCmsConfig {
     }
 
     void Deserialize(const NKikimrCms::TCmsConfig &config) {
-        Enable = config.GetEnable();
+        DisableMaintenance = config.GetDisableMaintenance();
         DefaultRetryTime = TDuration::MicroSeconds(config.GetDefaultRetryTime());
         DefaultPermissionDuration = TDuration::MicroSeconds(config.GetDefaultPermissionDuration());
         InfoCollectionTimeout = TDuration::MicroSeconds(config.GetInfoCollectionTimeout());

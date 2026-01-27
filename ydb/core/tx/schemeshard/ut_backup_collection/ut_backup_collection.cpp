@@ -115,6 +115,19 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
         return TestModificationResults(runtime, txId, {expectedResult});
     }
 
+    void TestAlterTable(TTestBasicRuntime& runtime, ui64 txId, const TString& workingDir, const TString& request, const TExpectedResult& expectedResult = {NKikimrScheme::StatusAccepted}) {
+        auto modifyTx = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>(txId, TTestTxConfig::SchemeShard);
+        auto transaction = modifyTx->Record.AddTransaction();
+        transaction->SetWorkingDir(workingDir);
+        transaction->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable);
+
+        bool parseOk = ::google::protobuf::TextFormat::ParseFromString(request, transaction->MutableAlterTable());
+        UNIT_ASSERT(parseOk);
+
+        AsyncSend(runtime, TTestTxConfig::SchemeShard, modifyTx.release(), 0);
+        TestModificationResults(runtime, txId, {expectedResult});
+    }
+
     Y_UNIT_TEST(HiddenByFeatureFlag) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions());
@@ -1622,10 +1635,10 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
 
         runtime.AdvanceCurrentTime(TDuration::Seconds(1));
 
-        // TEvDataEnd should be received before TEvHandshake with writer
+        // TEvTerminateWriter should be received before TEvHandshake with writer
         TBlockEvents<NReplication::NService::TEvWorker::TEvHandshake> block(runtime);
         runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == NReplication::NService::TEvWorker::TEvDataEnd::EventType) {
+            if (ev->GetTypeRewrite() == NReplication::NService::TEvWorker::TEvTerminateWriter::EventType) {
                 block.Unblock();
             }
             return TTestActorRuntime::EEventAction::PROCESS;
@@ -2546,5 +2559,553 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
         
         // Verify ChildrenExist flag is set by default (index exists as child)
         UNIT_ASSERT(tableDesc.GetPathDescription().GetSelf().GetChildrenExist());
+    }
+
+    Y_UNIT_TEST(CdcStreamRotationDuringIncrementalBackups) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true).EnableProtoSourceIdInfo(true));
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+        PrepareDirs(runtime, env, txId);
+
+        TString collectionSettings = R"(
+            Name: "RotationTestCollection"
+            ExplicitEntryList {
+                Entries {
+                    Type: ETypeTable
+                    Path: "/MyRoot/TestTable"
+                }
+            }
+            Cluster: {}
+            IncrementalBackupConfig: {}
+        )";
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "TestTable"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", collectionSettings);
+        env.TestWaitNotification(runtime, txId);
+
+        TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/RotationTestCollection")");
+        env.TestWaitNotification(runtime, txId);
+
+        auto tableDesc1 = DescribePrivatePath(runtime, "/MyRoot/TestTable", true, true);
+        UNIT_ASSERT(tableDesc1.GetPathDescription().HasTable());
+        UNIT_ASSERT_VALUES_EQUAL(tableDesc1.GetPathDescription().GetTable().CdcStreamsSize(), 1);
+
+        TString firstCdcStreamName = tableDesc1.GetPathDescription().GetTable().GetCdcStreams(0).GetName();
+        UNIT_ASSERT_C(firstCdcStreamName.EndsWith("_continuousBackupImpl"), 
+            "CDC stream should end with '_continuousBackupImpl', got: " + firstCdcStreamName);
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/TestTable/" + firstCdcStreamName), {
+            NLs::PathExist,
+            NLs::StreamMode(NKikimrSchemeOp::ECdcStreamModeUpdate),
+            NLs::StreamFormat(NKikimrSchemeOp::ECdcStreamFormatProto),
+            NLs::StreamState(NKikimrSchemeOp::ECdcStreamStateReady),
+        });
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/TestTable/" + firstCdcStreamName + "/streamImpl"), {
+            NLs::PathExist,
+        });
+
+        runtime.AdvanceCurrentTime(TDuration::Seconds(2));
+
+        TestBackupIncrementalBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/RotationTestCollection")");
+        env.TestWaitNotification(runtime, txId);
+
+        env.SimulateSleep(runtime, TDuration::Seconds(5));
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/TestTable/" + firstCdcStreamName), {
+            NLs::PathNotExist
+        });
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/TestTable/" + firstCdcStreamName + "/streamImpl"), {
+            NLs::PathNotExist
+        });
+
+        auto tableDesc2 = DescribePrivatePath(runtime, "/MyRoot/TestTable", true, true);
+        UNIT_ASSERT(tableDesc2.GetPathDescription().HasTable());
+        UNIT_ASSERT_VALUES_EQUAL(tableDesc2.GetPathDescription().GetTable().CdcStreamsSize(), 1);
+
+        TString secondCdcStreamName = tableDesc2.GetPathDescription().GetTable().GetCdcStreams(0).GetName();
+        UNIT_ASSERT_C(secondCdcStreamName.EndsWith("_continuousBackupImpl"), 
+            "New CDC stream should end with '_continuousBackupImpl', got: " + secondCdcStreamName);
+        UNIT_ASSERT_C(firstCdcStreamName != secondCdcStreamName, 
+            "CDC stream name should change after rotation");
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/TestTable/" + secondCdcStreamName), {
+            NLs::PathExist,
+            NLs::StreamMode(NKikimrSchemeOp::ECdcStreamModeUpdate),
+            NLs::StreamFormat(NKikimrSchemeOp::ECdcStreamFormatProto),
+            NLs::StreamState(NKikimrSchemeOp::ECdcStreamStateReady),
+        });
+
+        runtime.AdvanceCurrentTime(TDuration::Seconds(2));
+
+        TestBackupIncrementalBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/RotationTestCollection")");
+        env.TestWaitNotification(runtime, txId);
+
+        env.SimulateSleep(runtime, TDuration::Seconds(5));
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/TestTable/" + secondCdcStreamName), {
+            NLs::PathNotExist
+        });
+
+        auto tableDesc3 = DescribePrivatePath(runtime, "/MyRoot/TestTable", true, true);
+        UNIT_ASSERT(tableDesc3.GetPathDescription().HasTable());
+        UNIT_ASSERT_VALUES_EQUAL(tableDesc3.GetPathDescription().GetTable().CdcStreamsSize(), 1);
+
+        TString thirdCdcStreamName = tableDesc3.GetPathDescription().GetTable().GetCdcStreams(0).GetName();
+        UNIT_ASSERT_C(thirdCdcStreamName != secondCdcStreamName, 
+            "CDC stream name should change after second rotation");
+
+        TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/RotationTestCollection")");
+        env.TestWaitNotification(runtime, txId);
+
+        env.SimulateSleep(runtime, TDuration::Seconds(5));
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/TestTable/" + thirdCdcStreamName), {
+            NLs::PathNotExist
+        });
+
+        auto tableDesc4 = DescribePrivatePath(runtime, "/MyRoot/TestTable", true, true);
+        UNIT_ASSERT(tableDesc4.GetPathDescription().HasTable());
+        // Now full backup rotate streams like incremental backup
+        UNIT_ASSERT_VALUES_EQUAL(tableDesc4.GetPathDescription().GetTable().CdcStreamsSize(), 1);
+    }
+
+    Y_UNIT_TEST(DropCollectionAfterIncrementalRestore) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+        PrepareDirs(runtime, env, txId);
+
+        TString collectionSettings = R"(
+            Name: ")" DEFAULT_NAME_1 R"("
+            ExplicitEntryList {
+                Entries {
+                    Type: ETypeTable
+                    Path: "/MyRoot/Table1"
+                }
+            }
+            Cluster: {}
+            IncrementalBackupConfig: {}
+        )";
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", collectionSettings);
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table1"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
+        env.TestWaitNotification(runtime, txId);
+
+        runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+
+        TestBackupIncrementalBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDropTable(runtime, ++txId, "/MyRoot", "Table1");
+        env.TestWaitNotification(runtime, txId);
+
+        runtime.SimulateSleep(TDuration::MilliSeconds(100));
+
+        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
+        env.TestWaitNotification(runtime, txId);
+
+        runtime.SimulateSleep(TDuration::MilliSeconds(100));
+
+        TestDropBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", 
+            "Name: \"" DEFAULT_NAME_1 "\"");
+        env.TestWaitNotification(runtime, txId);
+
+        runtime.SimulateSleep(TDuration::MilliSeconds(100));
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/.backups/collections/" DEFAULT_NAME_1), {NLs::PathNotExist});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table1"), {NLs::PathExist});
+    }
+
+    Y_UNIT_TEST(IndexCdcStreamCountRotation) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true).EnableProtoSourceIdInfo(true));
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+        PrepareDirs(runtime, env, txId);
+
+        TString collectionSettings = R"(
+            Name: "CountTestCollection"
+            ExplicitEntryList {
+                Entries {
+                    Type: ETypeTable
+                    Path: "/MyRoot/TableWithIndex"
+                }
+            }
+            Cluster: {}
+            IncrementalBackupConfig: {}
+        )";
+        
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", collectionSettings);
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+                Name: "TableWithIndex"
+                Columns { Name: "key" Type: "Uint32" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            }
+            IndexDescription {
+                Name: "ValueIndex"
+                KeyColumnNames: ["value"]
+                Type: EIndexTypeGlobal
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto getBackupStreamCount = [&](const TString& path) -> size_t {
+            auto desc = DescribePrivatePath(runtime, path, true, true);
+            if (!desc.GetPathDescription().HasTable()) return 0;
+            
+            size_t count = 0;
+            const auto& table = desc.GetPathDescription().GetTable();
+            for (size_t i = 0; i < table.CdcStreamsSize(); ++i) {
+                if (table.GetCdcStreams(i).GetName().EndsWith("_continuousBackupImpl")) {
+                    count++;
+                }
+            }
+            return count;
+        };
+
+        auto getIndexImplPath = [&](const TString& tablePath, const TString& indexName) -> TString {
+            auto indexDesc = DescribePrivatePath(runtime, tablePath + "/" + indexName, true, true);
+            if (indexDesc.GetPathDescription().ChildrenSize() == 0) return "";
+            return tablePath + "/" + indexName + "/" + indexDesc.GetPathDescription().GetChildren(0).GetName();
+        };
+
+        auto getCurrentStreamName = [&](const TString& path) -> TString {
+            auto desc = DescribePrivatePath(runtime, path, true, true);
+            if (!desc.GetPathDescription().HasTable()) return "";
+            const auto& table = desc.GetPathDescription().GetTable();
+            for (size_t i = 0; i < table.CdcStreamsSize(); ++i) {
+                if (table.GetCdcStreams(i).GetName().EndsWith("_continuousBackupImpl")) {
+                    return table.GetCdcStreams(i).GetName();
+                }
+            }
+            return "";
+        };
+
+        TString tablePath = "/MyRoot/TableWithIndex";
+        TString indexPath = getIndexImplPath(tablePath, "ValueIndex");
+
+        UNIT_ASSERT_VALUES_EQUAL(getBackupStreamCount(tablePath), 0);
+        UNIT_ASSERT_VALUES_EQUAL(getBackupStreamCount(indexPath), 0);
+
+        TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/CountTestCollection")");
+        env.TestWaitNotification(runtime, txId);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(getBackupStreamCount(tablePath), 1, "Table should have exactly 1 stream after 1st backup");
+        UNIT_ASSERT_VALUES_EQUAL_C(getBackupStreamCount(indexPath), 1, "Index should have exactly 1 stream after 1st backup");
+        
+        TString streamNameV1 = getCurrentStreamName(tablePath);
+        TString indexStreamNameV1 = getCurrentStreamName(indexPath);
+        UNIT_ASSERT_VALUES_EQUAL(streamNameV1, indexStreamNameV1);
+
+        runtime.AdvanceCurrentTime(TDuration::Seconds(2));
+
+        TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/CountTestCollection")");
+        env.TestWaitNotification(runtime, txId);
+
+        env.SimulateSleep(runtime, TDuration::Seconds(1));
+
+        UNIT_ASSERT_VALUES_EQUAL_C(getBackupStreamCount(tablePath), 1, "Table must have exactly 1 stream after rotation (old deleted, new added)");
+        UNIT_ASSERT_VALUES_EQUAL_C(getBackupStreamCount(indexPath), 1, "Index must have exactly 1 stream after rotation");
+
+        TString streamNameV2 = getCurrentStreamName(tablePath);
+        TString indexStreamNameV2 = getCurrentStreamName(indexPath);
+
+        UNIT_ASSERT_C(streamNameV1 != streamNameV2, "Stream name should have changed");
+        UNIT_ASSERT_VALUES_EQUAL(streamNameV2, indexStreamNameV2);
+
+        runtime.AdvanceCurrentTime(TDuration::Seconds(2));
+
+        TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/CountTestCollection")");
+        env.TestWaitNotification(runtime, txId);
+        env.SimulateSleep(runtime, TDuration::Seconds(1));
+
+        UNIT_ASSERT_VALUES_EQUAL_C(getBackupStreamCount(tablePath), 1, "Table stream count stable at 1");
+        UNIT_ASSERT_VALUES_EQUAL_C(getBackupStreamCount(indexPath), 1, "Index stream count stable at 1");
+
+        TString streamNameV3 = getCurrentStreamName(tablePath);
+        UNIT_ASSERT_C(streamNameV2 != streamNameV3, "Stream name changed again");
+    }
+
+    Y_UNIT_TEST(StreamRotationSafetyWithUserStreams) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true).EnableProtoSourceIdInfo(true));
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+        PrepareDirs(runtime, env, txId);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table1"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TString collectionSettings = R"(
+            Name: "SafetyCollection"
+            ExplicitEntryList {
+                Entries {
+                    Type: ETypeTable
+                    Path: "/MyRoot/Table1"
+                }
+            }
+            Cluster: {}
+            IncrementalBackupConfig: {}
+        )";
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", collectionSettings);
+        env.TestWaitNotification(runtime, txId);
+
+        TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/SafetyCollection")");
+        env.TestWaitNotification(runtime, txId);
+
+        TString prevSystemStreamName;
+        {
+            auto desc = DescribePrivatePath(runtime, "/MyRoot/Table1", true, true);
+            for (const auto& stream : desc.GetPathDescription().GetTable().GetCdcStreams()) {
+                if (stream.GetName().EndsWith("_continuousBackupImpl")) {
+                    prevSystemStreamName = stream.GetName();
+                    break;
+                }
+            }
+        }
+        UNIT_ASSERT_C(!prevSystemStreamName.empty(), "Initial system stream must exist");
+
+        THashSet<TString> knownUserStreams;
+        TVector<TString> trickyNames = {
+            "000000000000000A_continuousBackupImpl",
+            "09700101000000Z_continuousBackupImpl",
+            "_continuousBackupImpl"
+        };
+
+        for (const auto& name : trickyNames) {
+            // User cannot set PROTO format
+            TString request = TStringBuilder() << R"(
+                TableName: "Table1"
+                StreamDescription {
+                  Name: ")" << name << R"("
+                  Mode: ECdcStreamModeKeysOnly
+                  Format: ECdcStreamFormatJson
+                }
+            )";
+
+            TestCreateCdcStream(runtime, ++txId, "/MyRoot", request);
+            env.TestWaitNotification(runtime, txId);
+            knownUserStreams.insert(name);
+        }
+
+        const int iterations = 3;
+        for (int i = 0; i < iterations; ++i) {
+            runtime.AdvanceCurrentTime(TDuration::Seconds(5));
+
+            TestBackupIncrementalBackupCollection(runtime, ++txId, "/MyRoot",
+                R"(Name: ".backups/collections/SafetyCollection")");
+            env.TestWaitNotification(runtime, txId);
+
+            env.SimulateSleep(runtime, TDuration::Seconds(2));
+
+            auto desc = DescribePrivatePath(runtime, "/MyRoot/Table1", true, true);
+            const auto& allStreams = desc.GetPathDescription().GetTable().GetCdcStreams();
+
+            TString newSystemStreamName;
+            int systemStreamsCount = 0;
+            int foundUserStreamsCount = 0;
+
+            for (const auto& stream : allStreams) {
+                TString name = stream.GetName();
+
+                if (knownUserStreams.contains(name)) {
+                    foundUserStreamsCount++;
+                } else {
+                    systemStreamsCount++;
+                    newSystemStreamName = name;
+                    
+                    UNIT_ASSERT_C(name.EndsWith("_continuousBackupImpl"), 
+                        "Unknown stream " << name << " found, expected system stream ending with _continuousBackupImpl");
+                }
+            }
+
+            UNIT_ASSERT_VALUES_EQUAL_C(foundUserStreamsCount, knownUserStreams.size(), 
+                "All user streams must survive the backup rotation");
+
+            UNIT_ASSERT_VALUES_EQUAL_C(systemStreamsCount, 1, 
+                "There must be exactly one system stream visible after rotation");
+
+            UNIT_ASSERT_VALUES_UNEQUAL_C(prevSystemStreamName, newSystemStreamName, 
+                "System stream must be rotated");
+
+            prevSystemStreamName = newSystemStreamName;
+        }
+    }
+
+    Y_UNIT_TEST(BackupRestoreCoveringIndex) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+        PrepareDirs(runtime, env, txId);
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+                Name: "CoverTable"
+                Columns { Name: "id" Type: "Uint64" }
+                Columns { Name: "name" Type: "Utf8" }
+                Columns { Name: "age" Type: "Uint64" }
+                Columns { Name: "ega" Type: "Uint64" }
+                KeyColumnNames: ["id"]
+            }
+            IndexDescription {
+                Name: "idx_name_age"
+                KeyColumnNames: ["name", "age"]
+                DataColumnNames: ["ega"]     # This corresponds to COVER (ega)
+                Type: EIndexTypeGlobal
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/CoverTable/idx_name_age"), {
+            NLs::PathExist,
+            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobal),
+            NLs::IndexKeys({"name", "age"}),
+            NLs::IndexDataColumns({"ega"})
+        });
+
+        TString collectionSettings = R"(
+            Name: "CoverCollection"
+            ExplicitEntryList {
+                Entries {
+                    Type: ETypeTable
+                    Path: "/MyRoot/CoverTable"
+                }
+            }
+            Cluster: {}
+            IncrementalBackupConfig: {}
+        )";
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", collectionSettings);
+        env.TestWaitNotification(runtime, txId);
+
+        TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/CoverCollection")");
+        env.TestWaitNotification(runtime, txId);
+
+        runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+        TestBackupIncrementalBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/CoverCollection")");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDropTable(runtime, ++txId, "/MyRoot", "CoverTable");
+        env.TestWaitNotification(runtime, txId);
+
+        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/CoverCollection")");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/CoverTable"), {
+            NLs::PathExist,
+            NLs::IndexesCount(1)
+        });
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/CoverTable/idx_name_age"), {
+            NLs::PathExist,
+            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobal),
+            NLs::IndexKeys({"name", "age"}),
+            NLs::IndexDataColumns({"ega"})
+        });
+    }
+
+    Y_UNIT_TEST(AlterTableInBackupCollectionProtection) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+        PrepareDirs(runtime, env, txId);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ProtectedTable"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TString collectionSettings = R"(
+            Name: "ProtectionCollection"
+            ExplicitEntryList {
+                Entries {
+                    Type: ETypeTable
+                    Path: "/MyRoot/ProtectedTable"
+                }
+            }
+        )";
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", collectionSettings);
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ProtectedTable"
+            Columns { Name: "new_column" Type: "Uint64" }
+        )", {NKikimrScheme::StatusPreconditionFailed});
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/ProtectedTable"), {
+            NLs::CheckColumns("ProtectedTable", {"key", "value"}, {}, {"key"})
+        });
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ProtectedTable"
+            DropColumns { Name: "value" }
+        )", {NKikimrScheme::StatusPreconditionFailed});
+        env.TestWaitNotification(runtime, txId);
+
+        TestDropBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", "Name: \"ProtectionCollection\"");
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ProtectedTable"
+            Columns { Name: "new_column" Type: "Uint64" }
+        )", {NKikimrScheme::StatusAccepted});
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/ProtectedTable"), {
+            NLs::CheckColumns("ProtectedTable", {"key", "value", "new_column"}, {}, {"key"})
+        });
     }
 } // TBackupCollectionTests

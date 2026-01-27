@@ -1,3 +1,4 @@
+#define INCLUDE_YDB_INTERNAL_H
 #include "getenv.h"
 
 #include <stdlib.h>

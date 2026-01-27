@@ -16,6 +16,7 @@
 #include <util/string/type.h>
 #include <util/system/info.h>
 #include <string>
+#include <functional>
 
 namespace NYdb {
 namespace NConsoleClient {
@@ -23,6 +24,18 @@ namespace NConsoleClient {
 struct TCommandFlags {
     bool Dangerous = false;
     bool OnlyExplicitProfile = false;
+};
+
+struct TAiPresetConfig {
+    TString Name;
+    TString ApiType;
+    TString ApiEndpoint;
+    TString ModelName;
+};
+
+struct TAiTokenConfig {
+    TString Token;
+    bool WasUpdated = false;
 };
 
 class TClientCommand {
@@ -89,9 +102,6 @@ public:
             TArgSetting Max;
         };
 
-        static ELogPriority VerbosityLevelToELogPriority(ui32 lvl);
-        static ELogPriority VerbosityLevelToELogPriorityChatty(ui32 lvl);
-
         int ArgC;
         char** ArgV;
         int InitialArgC;
@@ -152,6 +162,7 @@ public:
         TString ChosenAuthMethod;
 
         TString ProfileFile;
+        TString AiProfileFile = GetHomeDir() + "/.config/ydb/ai_profiles.yaml";
         bool UseAccessToken = true;
         bool UseIamAuth = false;
         bool UseStaticCredentials = false;
@@ -166,6 +177,11 @@ public:
         bool OnlyExplicitProfile = false;
         bool AssumeYes = false;
         std::optional<std::string> StorageUrl = std::nullopt;
+
+        // AI configuration
+        bool EnableAiInteractive = false;
+        std::vector<TAiPresetConfig> AiPredefinedProfiles;
+        std::function<TAiTokenConfig()> AiTokenGetter;
 
         TCredentialsGetter CredentialsGetter;
         std::shared_ptr<ICredentialsProviderFactory> SingletonCredentialsProviderFactory = nullptr;
@@ -306,12 +322,17 @@ public:
                 } else if (cpuCount >= 32 && cpuCount < 64) {
                     // leave the half of CPUs to the client's logic
                     return cpuCount / 2;
-                } else if (cpuCount >= 16 && cpuCount < 32) {
+                } else if (cpuCount > 16 && cpuCount < 32) {
                     // Originally here we had a constant value 16.
                     // To not break things this heuristic tries to use this constant as well.
                     return 16;
-                } else {
-                    return std::min(size_t(2), cpuCount / 2);
+                } else if (cpuCount == 16) {
+                    // Again originally here we had a constant value 16.
+                    // But it seems a bad idea to create 16 network threads if we have just 16 cores.
+                    // To not break things here we return slightly more than 16 / 2, but not 16.
+                    return 12;
+                } else if (cpuCount >= 4 && cpuCount < 16) {
+                    return cpuCount / 2;
                 }
             }
             return 1; // TODO: check default

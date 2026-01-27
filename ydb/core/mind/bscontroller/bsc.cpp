@@ -39,7 +39,8 @@ TBlobStorageController::TVSlotInfo::TVSlotInfo(TVSlotId vSlotId, TPDiskInfo *pdi
         Table::GroupGeneration::Type groupPrevGeneration, Table::GroupGeneration::Type groupGeneration,
         Table::Category::Type kind, Table::RingIdx::Type ringIdx, Table::FailDomainIdx::Type failDomainIdx,
         Table::VDiskIdx::Type vDiskIdx, Table::Mood::Type mood, TGroupInfo *group,
-        TVSlotReadyTimestampQ *vslotReadyTimestampQ, TInstant lastSeenReady, TDuration replicationTime)
+        TVSlotReadyTimestampQ *vslotReadyTimestampQ, TInstant lastSeenReady, TDuration replicationTime,
+        Table::DDiskNumVChunksClaimed::Type ddiskNumVChunksClaimed)
     : VSlotId(vSlotId)
     , PDisk(pdisk)
     , GroupId(groupId)
@@ -52,6 +53,7 @@ TBlobStorageController::TVSlotInfo::TVSlotInfo(TVSlotId vSlotId, TPDiskInfo *pdi
     , Mood(mood)
     , LastSeenReady(lastSeenReady)
     , ReplicationTime(replicationTime)
+    , DDiskNumVChunksClaimed(ddiskNumVChunksClaimed)
     , VSlotReadyTimestampQ(*vslotReadyTimestampQ)
 {
     Y_ABORT_UNLESS(pdisk);
@@ -867,16 +869,6 @@ void TBlobStorageController::IssueInitialGroupContent() {
     Send(StatProcessorActorId, ev.Release());
 }
 
-void TBlobStorageController::NotifyNodesAwaitingKeysForGroups(ui32 groupId) {
-    if (const auto it = NodesAwaitingKeysForGroup.find(groupId); it != NodesAwaitingKeysForGroup.end()) {
-        TSet<ui32> nodes = std::move(it->second);
-        NodesAwaitingKeysForGroup.erase(it);
-        for (const TNodeId nodeId : nodes) {
-            Send(SelfId(), new TEvBlobStorage::TEvControllerGetGroup(nodeId, groupId));
-        }
-    }
-}
-
 void TBlobStorageController::ValidateInternalState() {
     // here we compare different structures to ensure that the memory state is sane
 #ifndef NDEBUG
@@ -1003,6 +995,7 @@ STFUNC(TBlobStorageController::StateWork) {
         hFunc(NStorage::TEvNodeConfigInvokeOnRootResult, Handle);
         cFunc(TEvPrivate::EvCheckSyncerDisconnectedNodes, CheckSyncerDisconnectedNodes);
         hFunc(TEvBlobStorage::TEvControllerUpdateSyncerState, Handle);
+        hFunc(TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup, Handle);
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
                 STLOG(PRI_ERROR, BS_CONTROLLER, BSC06, "StateWork unexpected event", (Type, type),
@@ -1164,6 +1157,11 @@ ui32 TBlobStorageController::GetEventPriority(IEventHandle *ev) {
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kMovePDisk:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kUpdateBridgeGroupInfo:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kReconfigureVirtualGroup:
+                    case NKikimrBlobStorage::TConfigRequest::TCommand::kRecommissionGroups:
+                    case NKikimrBlobStorage::TConfigRequest::TCommand::kDefineDDiskPool:
+                    case NKikimrBlobStorage::TConfigRequest::TCommand::kReadDDiskPool:
+                    case NKikimrBlobStorage::TConfigRequest::TCommand::kDeleteDDiskPool:
+                    case NKikimrBlobStorage::TConfigRequest::TCommand::kMoveDDisk:
                         return 2; // read-write commands go with higher priority as they are needed to keep cluster intact
 
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kReadHostConfig:

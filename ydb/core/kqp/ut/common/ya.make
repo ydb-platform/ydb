@@ -2,16 +2,9 @@ LIBRARY()
 
 SRCS(
     arrow_builders.cpp
-    json2_udf.cpp
     kqp_ut_common.cpp
     kqp_ut_common.h
-    re2_udf.cpp
-    string_udf.cpp
     columnshard.cpp
-    datetime2_udf.cpp
-    math_udf.cpp
-    unicode_udf.cpp
-    digest_udf.cpp
     kqp_benches.cpp
 )
 
@@ -21,8 +14,12 @@ PEERDIR(
     ydb/core/testlib
     ydb/library/yql/providers/s3/actors_factory
     yql/essentials/public/udf
-    yql/essentials/udfs/common/string
+    yql/essentials/udfs/common/datetime2
+    yql/essentials/udfs/common/digest
+    yql/essentials/udfs/common/json2
     yql/essentials/udfs/common/math
+    yql/essentials/udfs/common/re2
+    yql/essentials/udfs/common/string
     yql/essentials/udfs/common/unicode_base
     yql/essentials/utils/backtrace
     ydb/public/lib/yson_value

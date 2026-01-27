@@ -35,11 +35,91 @@ struct TNonAssignable
     const int Value = 0;
 };
 
+TEST_F(TFutureTest, UniqueVoidOK)
+{
+    auto promise = NewPromise<void>();
+    auto future = promise.ToFuture();
+    auto uniqueFuture = future.AsUnique();
+    EXPECT_FALSE(uniqueFuture.IsSet());
+    promise.Set();
+    EXPECT_TRUE(uniqueFuture.IsSet());
+    EXPECT_TRUE(uniqueFuture.Get().IsOK());
+}
+
+TEST_F(TFutureTest, UniqueVoidError)
+{
+    auto promise = NewPromise<void>();
+    auto future = promise.ToFuture();
+    auto uniqueFuture = future.AsUnique();
+    EXPECT_FALSE(uniqueFuture.IsSet());
+    promise.Set(TError("oops"));
+    EXPECT_TRUE(uniqueFuture.IsSet());
+    EXPECT_EQ(uniqueFuture.Get().GetCode(), NYT::EErrorCode::Generic);
+}
+
+TEST_F(TFutureTest, VoidUniqueApply)
+{
+    auto promise = NewPromise<void>();
+    auto future = promise.ToFuture();
+    // Try various chaining scenarios.
+    auto chainedFuture = future
+        .AsUnique()
+        .Apply(BIND([] (TError&& error) {
+            EXPECT_TRUE(error.IsOK());
+        }))
+        .AsUnique()
+        .Apply(BIND([] {
+        }))
+        .AsUnique()
+        .Apply(BIND([] {
+            return 123;
+        }))
+        .AsVoid()
+        .AsUnique()
+        .Apply(BIND([] {
+            return MakeFuture<int>(456);
+        }))
+        .AsVoid()
+        .AsUnique()
+        .Apply(BIND([] {
+            return MakeFuture<int>(888).AsUnique();
+        }));
+    EXPECT_FALSE(chainedFuture.IsSet());
+    promise.Set();
+    EXPECT_TRUE(chainedFuture.IsSet());
+    EXPECT_EQ(chainedFuture.Get().ValueOrThrow(), 888);
+}
+
+TEST_F(TFutureTest, WellKnownUniqueFuture)
+{
+    auto future = OKFuture.AsUnique();
+    // Multiple subscriptions are fine.
+    EXPECT_TRUE(future.IsSet());
+    EXPECT_TRUE(future.Get().IsOK());
+    EXPECT_TRUE(future.Get().IsOK());
+    {
+        bool invoked = false;
+        future.Subscribe(BIND([&] (const TError& error) {
+            EXPECT_TRUE(error.IsOK());
+            invoked = true;
+        }));
+        EXPECT_TRUE(invoked);
+    }
+    {
+        bool invoked = false;
+        future.Subscribe(BIND([&] (TError&& error) {
+            EXPECT_TRUE(error.IsOK());
+            invoked = true;
+        }));
+        EXPECT_TRUE(invoked);
+    }
+}
+
 TEST_F(TFutureTest, NoncopyableGet)
 {
     auto f = MakeFuture<std::unique_ptr<int>>(std::make_unique<int>(1));
     EXPECT_TRUE(f.IsSet());
-    auto result =  f.AsUnique().Get();
+    auto result = f.AsUnique().Get();
     EXPECT_TRUE(result.IsOK());
     EXPECT_EQ(1, *result.Value());
 }
@@ -130,7 +210,7 @@ TEST_F(TFutureTest, NoncopyableApply7)
 
 TEST_F(TFutureTest, NoncopyableApply8)
 {
-    auto f = VoidFuture;
+    auto f = OKFuture;
     auto g = f.Apply(BIND([] {
         return MakeFuture<std::unique_ptr<double>>(nullptr).AsUnique();
     }));
@@ -180,7 +260,7 @@ TEST_F(TFutureTest, NoncopyableApplySO5086)
 TEST_F(TFutureTest, NonAssignable1)
 {
     auto f = MakeFuture<TNonAssignable>({
-        .Value = 1
+        .Value = 1,
     });
 
     auto g = f.AsUnique().Apply(BIND([] (TNonAssignable&& object) {
@@ -194,7 +274,7 @@ TEST_F(TFutureTest, NonAssignable1)
 TEST_F(TFutureTest, NonAssignable2)
 {
     auto f = MakeFuture<TNonAssignable>({
-        .Value = 1
+        .Value = 1,
     });
 
     std::vector<decltype(f)> futures;
@@ -215,7 +295,7 @@ TEST_F(TFutureTest, NonAssignable2)
 TEST_F(TFutureTest, NonAssignable3)
 {
     auto f = MakeFuture<TNonAssignable>({
-        .Value = 1
+        .Value = 1,
     });
 
     std::vector<decltype(f)> futures;
@@ -293,7 +373,7 @@ TEST_F(TFutureTest, IsNull)
 TEST_F(TFutureTest, IsNullVoid)
 {
     TFuture<void> empty;
-    TFuture<void> nonEmpty = VoidFuture;
+    TFuture<void> nonEmpty = OKFuture;
 
     EXPECT_FALSE(empty);
     EXPECT_TRUE(nonEmpty);
@@ -842,6 +922,64 @@ TEST_F(TFutureTest, TestCancelDelayed)
     EXPECT_FALSE(future.Get().IsOK());
 }
 
+TEST_F(TFutureTest, CancelDoesntSpuriouslyFail)
+{
+    constexpr auto timeLimit = TDuration::Seconds(10);
+    const auto t0 = TInstant::Now();
+
+    std::atomic<i64> counter = 0;
+
+    auto wait = [&counter] (i64 expected) -> i64 {
+        while (true) {
+            auto value = counter.load();
+            if (value == expected || value == -1) {
+                return value;
+            }
+        }
+    };
+
+    TPromise<void>* promisePtr = nullptr;
+
+    auto setter = [&] () {
+        i64 i = 0;
+        while (true) {
+            ++i;
+            if (wait(i) == -1) {
+                return;
+            }
+
+            promisePtr->Set();
+
+            ++i;
+            counter.fetch_add(1);
+        }
+    };
+
+    ::TThread thread(setter);
+    thread.Start();
+
+    i64 i = 0;
+    while (TInstant::Now() - t0 < timeLimit) {
+        auto promise = NewPromise<void>();
+        auto future = promise.ToFuture().AsCancelable();
+        promisePtr = &promise;
+
+        ++i;
+        counter.fetch_add(1);
+
+        bool cancelSuccess = future.Cancel(TError());
+
+        EXPECT_EQ(cancelSuccess, promise.IsCanceled());
+
+        ++i;
+        wait(i);
+
+        promisePtr = nullptr;
+    }
+
+    counter.store(-1);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 TEST_F(TFutureTest, AnyCombiner)
@@ -1091,7 +1229,7 @@ TEST_F(TFutureTest, AllCombinerCancel)
 TEST_F(TFutureTest, AllCombinerVoid0)
 {
     std::vector<TFuture<void>> futures;
-    EXPECT_EQ(VoidFuture, AllSucceeded(futures));
+    EXPECT_EQ(OKFuture, AllSucceeded(futures));
 }
 
 TEST_F(TFutureTest, AllCombinerVoid1)
@@ -2013,6 +2151,24 @@ TEST_W(TFutureTest, WaitForUniqueFast)
     EXPECT_FALSE(switchTracker.IsSwitched());
     EXPECT_TRUE(result.IsOK());
     EXPECT_EQ(*result.Value(), 123);
+}
+
+TEST_F(TFutureTest, TrySetDoesNotMoveValueOnFailure)
+{
+    auto promise = NewPromise<std::vector<int>>();
+    auto v = std::vector{1, 2, 3};
+    promise.Set(v);
+    EXPECT_FALSE(promise.TrySet(std::move(v)));
+    EXPECT_EQ(std::ssize(v), 3);
+}
+
+TEST_F(TFutureTest, TrySetDoesNotMoveErrorOnFailure)
+{
+    auto promise = NewPromise<std::vector<int>>();
+    auto err = TError("oops");
+    promise.Set(err);
+    EXPECT_FALSE(promise.TrySet(std::move(err)));
+    EXPECT_FALSE(err.IsOK());
 }
 
 ////////////////////////////////////////////////////////////////////////////////

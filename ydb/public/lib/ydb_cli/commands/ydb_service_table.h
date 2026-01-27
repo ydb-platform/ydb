@@ -4,15 +4,14 @@
 #include "ydb_common.h"
 
 #include <ydb/public/lib/ydb_cli/common/format.h>
-#include <ydb/public/lib/ydb_cli/common/interruptible.h>
+#include <ydb/public/lib/ydb_cli/common/interruptable.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_scripting.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/lib/ydb_cli/common/parameters.h>
 #include <ydb/public/lib/json_value/ydb_json_value.h>
 
-namespace NYdb {
-namespace NConsoleClient {
+namespace NYdb::NConsoleClient {
 
 class TCommandTable : public TClientCommandTree {
 public:
@@ -94,7 +93,7 @@ protected:
 };
 
 class TCommandExecuteQuery : public TTableCommand, TCommandQueryBase, TCommandWithParameters, public TCommandWithOutput,
-    public TInterruptibleCommand
+    public TInterruptableCommand
 {
 public:
     TCommandExecuteQuery();
@@ -121,13 +120,13 @@ public:
 private:
     TString CollectStatsMode;
     TMaybe<TString> FlameGraphPath;
-    TString TxMode;
+    TString TxMode = "serializable-rw";
     TString QueryType;
     bool BasicStats = false;
     TString DiagnosticsFile;
 };
 
-class TCommandExplain : public TTableCommand, public TCommandWithOutput, TCommandQueryBase, TInterruptibleCommand {
+class TCommandExplain : public TTableCommand, public TCommandWithOutput, TCommandQueryBase, TInterruptableCommand {
 public:
     TCommandExplain();
     TCommandExplain(TString query, TString queryType = "data", bool printAst = false);
@@ -147,7 +146,7 @@ private:
 };
 
 class TCommandReadTable : public TYdbCommand, public TCommandWithPath,
-    public TCommandWithInput, public TCommandWithOutput, public TInterruptibleCommand
+    public TCommandWithInput, public TCommandWithOutput, public TInterruptableCommand
 {
 public:
     TCommandReadTable();
@@ -267,5 +266,4 @@ public:
     virtual int Run(TConfig& config) override;
 };
 
-}
-}
+} // namespace NYdb::NConsoleClient

@@ -438,6 +438,13 @@ public:
                     default:
                         break;
                 }
+                if (request.has_seed_node_fetch_requestor()) {
+                    auto& r = request.seed_node_fetch_requestor();
+                    for (const auto& host : r.host()) {
+                        record->AddRequestorHost(host);
+                    }
+                    record->SetRequestorPort(r.port());
+                }
                 break;
 
             case Ydb::Config::FetchConfigRequest::ModeCase::kTarget:
@@ -474,6 +481,9 @@ public:
             identity.set_cluster(AppData()->ClusterName);
             identity.mutable_storage();
             config.set_config(conf);
+        }
+        if (res.GetTransient()) {
+            result.set_transient(true);
         }
     }
 

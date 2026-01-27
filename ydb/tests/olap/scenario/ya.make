@@ -7,7 +7,6 @@ PY3TEST()
     FORK_TESTS()
 
     TEST_SRCS(
-        test_alter_compression.py
         test_alter_tiering.py
         test_insert.py
         test_read_update_write_load.py
@@ -15,7 +14,7 @@ PY3TEST()
         test_simple.py
     )
 
-    INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
     DEPENDS(
         )
 

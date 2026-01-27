@@ -80,28 +80,49 @@ namespace NKikimr::NStorage {
         }
     }
 
-    void TInvokeRequestHandlerActor::FetchStorageConfig(bool fetchMain, bool fetchStorage, bool addExplicitMgmtSections,
-            bool addV1) {
+    void TInvokeRequestHandlerActor::FetchStorageConfig(const TQuery::TFetchStorageConfig& request) {
         RunCommonChecks();
 
         if (!Self->MainConfigYaml) {
             throw TExError() << "No stored YAML for storage config";
         }
 
+        if (request.RequestorHostSize()) {
+            bool found = false;
+            for (const auto& host : request.GetRequestorHost()) {
+                if (Self->Hosts.contains(std::make_tuple(host, request.GetRequestorPort()))) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                STLOG(PRI_DEBUG, BS_NODE, NWDC62, "FetchStorageConfig: requestor put to pending queue", (SelfId, SelfId()),
+                    (Request, request));
+                DetachQuery();
+                Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvNodeWardenQueryStorageConfig(true));
+                TActivationContext::Schedule(TDuration::Seconds(3), new IEventHandle(TEvents::TSystem::Wakeup, 0,
+                    SelfId(), {}, nullptr, 0));
+                return;
+            }
+        }
+
         Finish(TResult::OK, std::nullopt, [&](TResult *record) {
             auto *res = record->MutableFetchStorageConfig();
-            if (fetchMain) {
+            if (request.GetMainConfig()) {
                 res->SetYAML(Self->MainConfigYaml);
             }
-            if (fetchStorage && Self->StorageConfigYaml) {
+            if (request.GetStorageConfig() && Self->StorageConfigYaml) {
                 res->SetStorageYAML(*Self->StorageConfigYaml);
             }
+
+            const bool addV1 = request.GetAddSectionsForMigrationToV1();
+            const bool addExplicitMgmtSections = request.GetAddExplicitConfigs();
 
             if (addExplicitMgmtSections && addV1) {
                 throw TExError() << "Can't provide both explicit sections and config suitable for downgrade to v1";
             } else if (Self->StorageConfigYaml && addV1) {
                 throw TExError() << "Can't downgrade to v1 when dedicated storage section is enabled";
-            } else if (addExplicitMgmtSections && Self->StorageConfigYaml && !fetchStorage) {
+            } else if (addExplicitMgmtSections && Self->StorageConfigYaml && !request.GetStorageConfig()) {
                 throw TExError() << "Can't add explicit sections to storage config as it is not fetched";
             }
 
@@ -185,12 +206,78 @@ namespace NKikimr::NStorage {
         });
     }
 
+    void TInvokeRequestHandlerActor::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
+        Y_ABORT_UNLESS(std::holds_alternative<TInvokeExternalOperation>(Query));
+        auto& op = std::get<TInvokeExternalOperation>(Query);
+        Y_ABORT_UNLESS(op.Command.HasFetchStorageConfig());
+        auto& cmd = op.Command.GetFetchStorageConfig();
+        Y_ABORT_UNLESS(cmd.RequestorHostSize());
+        const auto& hosts = cmd.GetRequestorHost();
+        THashSet<TString> requestorHosts(hosts.begin(), hosts.end());
+        auto& config = *ev->Get()->Config;
+        bool transient = ev->Cookie;
+        for (const auto& node : config.GetAllNodes()) {
+            if (requestorHosts.contains(node.GetHost()) && node.GetPort() == cmd.GetRequestorPort()) {
+                STLOG(PRI_DEBUG, BS_NODE, NWDC82, "FetchStorageConfig: TEvNodeWardenStorageConfig received, host found",
+                    (SelfId, SelfId()));
+
+                std::optional<TString> mainConfigYaml;
+                std::optional<TString> storageConfigYaml;
+
+                if (cmd.GetMainConfig() && config.HasConfigComposite()) {
+                    if (DecomposeConfig(config.GetConfigComposite(), &mainConfigYaml.emplace(), nullptr, nullptr)) {
+                        mainConfigYaml.reset(); // error has occured during config decomposition
+                    }
+                }
+                if (cmd.GetStorageConfig()) {
+                    storageConfigYaml = GetStorageYaml(config);
+                }
+
+                ReplyToFetchStorageConfig(mainConfigYaml, storageConfigYaml, transient);
+
+                return PassAway();
+            }
+        }
+        STLOG(PRI_DEBUG, BS_NODE, NWDC86, "FetchConfigConfig: TEvNodeWardenStorageConfig received, host still not found",
+            (SelfId, SelfId()));
+    }
+
+    void TInvokeRequestHandlerActor::HandleWakeup() {
+        STLOG(PRI_DEBUG, BS_NODE, NWDC87, "FetchStorageConfig: timed out", (SelfId, SelfId()));
+        ReplyToFetchStorageConfig(std::nullopt, std::nullopt, false);
+        PassAway();
+    }
+
+    void TInvokeRequestHandlerActor::ReplyToFetchStorageConfig(const std::optional<TString>& mainConfigYaml,
+            const std::optional<TString>& storageConfigYaml, bool transient) {
+        auto ev = std::make_unique<TEvNodeConfigInvokeOnRootResult>();
+
+        // prepare record
+        auto& record = ev->Record;
+        record.SetStatus(TResult::OK);
+        auto *res = record.MutableFetchStorageConfig();
+        if (mainConfigYaml) {
+            res->SetYAML(*mainConfigYaml);
+        }
+        if (storageConfigYaml) {
+            res->SetStorageYAML(*storageConfigYaml);
+        }
+        if (transient) {
+            res->SetTransient(true);
+        }
+
+        // issue it to the sender
+        auto& op = std::get<TInvokeExternalOperation>(Query);
+        Y_ABORT_UNLESS(op.Command.HasFetchStorageConfig());
+        auto handle = std::make_unique<IEventHandle>(op.Sender, SelfId(), ev.release(), 0, op.Cookie);
+        if (op.SessionId) {
+            handle->Rewrite(TEvInterconnect::EvForward, op.SessionId);
+        }
+        TActivationContext::Send(handle.release());
+    }
+
     void TInvokeRequestHandlerActor::ReplaceStorageConfig(const TQuery::TReplaceStorageConfig& request) {
         RunCommonChecks();
-
-        if (!Self->ConfigCommittedToConsole && Self->SelfManagementEnabled) {
-            throw TExRace() << "Previous config has not been committed to Console yet";
-        }
 
         // extract YAML files provided by the user
         NewYaml = request.HasYAML() ? std::make_optional(request.GetYAML()) : std::nullopt;
@@ -298,8 +385,8 @@ namespace NKikimr::NStorage {
         }
     }
 
-    void TInvokeRequestHandlerActor::ReplaceStorageConfigResume(const std::optional<TString>& storageConfigYaml, ui64 expectedMainYamlVersion,
-            ui64 expectedStorageYamlVersion, bool enablingDistconf) {
+    void TInvokeRequestHandlerActor::ReplaceStorageConfigResume(const std::optional<TString>& storageConfigYaml,
+            ui64 expectedMainYamlVersion, ui64 expectedStorageYamlVersion, bool enablingDistconf) {
         auto *op = std::get_if<TInvokeExternalOperation>(&Query);
         Y_ABORT_UNLESS(op);
         const auto& request = op->Command.GetReplaceStorageConfig();
@@ -366,13 +453,23 @@ namespace NKikimr::NStorage {
             ProposedStorageConfig.ClearCompressedStorageYaml();
         }
 
+        EnablingDistconf = enablingDistconf;
         if (request.GetSkipConsoleValidation() || !NewYaml) {
-            StartProposition(&ProposedStorageConfig, /*mindPrev=*/ true, /*propositionBase=*/ nullptr, enablingDistconf);
+            ReplaceStorageConfigExecute();
         } else if (!Self->EnqueueConsoleConfigValidation(SelfId(), enablingDistconf, *NewYaml)) {
             throw TExRace() << "Console pipe is not available";
-        } else {
-            EnablingDistconf = enablingDistconf;
         }
+    }
+
+    void TInvokeRequestHandlerActor::ReplaceStorageConfigExecute() {
+        Y_ABORT_UNLESS(!LifetimeToken.expired());
+        for (const auto& actorId : Self->DetachedQueries) {
+            Send(actorId, new TEvNodeWardenStorageConfig(std::make_shared<const NKikimrBlobStorage::TStorageConfig>(
+                ProposedStorageConfig), false, nullptr, nullptr), 0, 1);
+        }
+
+        return StartProposition(&ProposedStorageConfig, /*mindPrev=*/ true, /*propositionBase=*/ nullptr,
+            /*fromBootstrap=*/ EnablingDistconf);
     }
 
     void TInvokeRequestHandlerActor::TryEnableDistconf() {
@@ -568,7 +665,7 @@ namespace NKikimr::NStorage {
                 if (const auto& error = UpdateConfigComposite(ProposedStorageConfig, *NewYaml, record.GetYAML())) {
                     throw TExError() << "Failed to update config yaml: " << *error;
                 }
-                return StartProposition(&ProposedStorageConfig, /*mindPrev=*/ true, /*propositionBase=*/ nullptr, EnablingDistconf);
+                return ReplaceStorageConfigExecute();
         }
     }
 
@@ -601,13 +698,15 @@ namespace NKikimr::NStorage {
             } else if (r.ConfigToPropose) {
                 // config validation, which is basically done in Console
                 TString mainYaml;
-                if (auto err = DecomposeConfig(r.ConfigToPropose->GetConfigComposite(), &mainYaml, /*mainConfigVersion=*/ nullptr, /*mainConfigFetchYaml=*/ nullptr)) {
+                if (auto err = DecomposeConfig(r.ConfigToPropose->GetConfigComposite(), &mainYaml,
+                        /*mainConfigVersion=*/ nullptr, /*mainConfigFetchYaml=*/ nullptr)) {
                     throw TExError() << "Failed to decompose composite config: " << *err;
                 }
                 if (auto err = LocalYamlValidate(mainYaml, /*allowUnknown=*/ true)) {
                     throw TExError() << "YAML validation failed: " << *err;
                 }
-                StartProposition(&r.ConfigToPropose.value(), /*mindPrev=*/ true, /*propositionBase=*/ nullptr, /*fromBootstrap=*/ true);
+                StartProposition(&r.ConfigToPropose.value(), /*mindPrev=*/ true, /*propositionBase=*/ nullptr,
+                    /*fromBootstrap=*/ true);
             } else { // no new proposition has been made
                 Finish(TResult::OK, std::nullopt);
             }

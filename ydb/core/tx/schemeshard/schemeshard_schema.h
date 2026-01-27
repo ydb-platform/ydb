@@ -1247,6 +1247,7 @@ struct Schema : NIceDb::Schema {
 
         struct EnableChecksums : Column<17, NScheme::NTypeIds::Bool> {};
         struct EnablePermissions : Column<18, NScheme::NTypeIds::Bool> {};
+        struct IncludeIndexData : Column<21, NScheme::NTypeIds::Bool> {};
 
         struct ExportMetadata : Column<19, NScheme::NTypeIds::String> { using Type = NKikimrSchemeOp::TExportMetadata; };
 
@@ -1271,7 +1272,8 @@ struct Schema : NIceDb::Schema {
             EnableChecksums,
             EnablePermissions,
             ExportMetadata,
-            SanitizedToken
+            SanitizedToken,
+            IncludeIndexData
         >;
     };
 
@@ -1286,6 +1288,7 @@ struct Schema : NIceDb::Schema {
         struct Issue : Column<7, NScheme::NTypeIds::Utf8> {};
         struct SourceOwnerPathId : Column<8, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
         struct SourcePathType : Column<9, NScheme::NTypeIds::Uint32> { using Type = NKikimrSchemeOp::EPathType; static constexpr Type Default = NKikimrSchemeOp::EPathTypeTable; };
+        struct ParentIndex : Column<10, NScheme::NTypeIds::Uint32> {};
 
         using TKey = TableKey<ExportId, Index>;
         using TColumns = TableColumns<
@@ -1297,7 +1300,8 @@ struct Schema : NIceDb::Schema {
             BackupTxId,
             Issue,
             SourceOwnerPathId,
-            SourcePathType
+            SourcePathType,
+            ParentIndex
         >;
     };
 
@@ -1564,6 +1568,14 @@ struct Schema : NIceDb::Schema {
 
         struct CpuTimeUsProcessed : Column<13, NScheme::NTypeIds::Uint64> {};
 
+        // For fulltext indexes
+        struct DocCount : Column<14, NScheme::NTypeIds::Uint64> {};
+        struct TotalDocLength : Column<15, NScheme::NTypeIds::Uint64> {};
+        struct FirstToken : Column<16, NScheme::NTypeIds::String> {};
+        struct LastToken : Column<17, NScheme::NTypeIds::String> {};
+        struct FirstTokenRows : Column<18, NScheme::NTypeIds::Uint64> {};
+        struct LastTokenRows : Column<19, NScheme::NTypeIds::Uint64> {};
+
         using TKey = TableKey<Id, OwnerShardIdx, LocalShardIdx>;
         using TColumns = TableColumns<
             Id,
@@ -1578,7 +1590,13 @@ struct Schema : NIceDb::Schema {
             BytesProcessed,
             ReadRowsProcessed,
             ReadBytesProcessed,
-            CpuTimeUsProcessed
+            CpuTimeUsProcessed,
+            DocCount,
+            TotalDocLength,
+            FirstToken,
+            LastToken,
+            FirstTokenRows,
+            LastTokenRows
         >;
     };
 
@@ -1676,6 +1694,7 @@ struct Schema : NIceDb::Schema {
         struct SrcPrefix : Column<17, NScheme::NTypeIds::Utf8> {};
         struct EncryptionIV : Column<18, NScheme::NTypeIds::String> {};
         struct SrcPath : Column<19, NScheme::NTypeIds::Utf8> {};
+        struct ParentIndex : Column<21, NScheme::NTypeIds::Uint32> {};
 
         using TKey = TableKey<ImportId, Index>;
         using TColumns = TableColumns<
@@ -1698,7 +1717,8 @@ struct Schema : NIceDb::Schema {
             SrcPrefix,
             EncryptionIV,
             SrcPath,
-            Topic
+            Topic,
+            ParentIndex
         >;
     };
 
@@ -1764,6 +1784,7 @@ struct Schema : NIceDb::Schema {
         struct FailedAttemptCount : Column<6, NScheme::NTypeIds::Uint32> {using Type = ui32; static constexpr Type Default = 0;};
         struct CreatedAt : Column<7, NScheme::NTypeIds::Timestamp> {};
         struct IsEnabled : Column<8, NScheme::NTypeIds::Bool> { using Type = bool; static constexpr Type Default = true; };
+        struct PasswordHashes : Column<9, NScheme::NTypeIds::Utf8> {}; // Base64 encoded JSON map with hash type and hash secrets
 
         using TKey = TableKey<SidName>;
         using TColumns = TableColumns<
@@ -1774,7 +1795,8 @@ struct Schema : NIceDb::Schema {
             LastFailedAttempt,
             FailedAttemptCount,
             CreatedAt,
-            IsEnabled
+            IsEnabled,
+            PasswordHashes
         >;
     };
 
@@ -2226,7 +2248,7 @@ struct Schema : NIceDb::Schema {
     struct Secrets : Table<127> {
         struct PathId : Column<1, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
         struct AlterVersion : Column<2, NScheme::NTypeIds::Uint64> {};
-        struct Description : Column<3, NScheme::NTypeIds::String> {};
+        struct Description : Column<3, NScheme::NTypeIds::String, false, true> {}; // Sensitive column
 
         using TKey = TableKey<PathId>;
         using TColumns = TableColumns<PathId, AlterVersion, Description>;
@@ -2235,7 +2257,7 @@ struct Schema : NIceDb::Schema {
     struct SecretsAlterData : Table<128> {
         struct PathId : Column<1, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
         struct AlterVersion : Column<2, NScheme::NTypeIds::Uint64> {};
-        struct Description : Column<3, NScheme::NTypeIds::String> {};
+        struct Description : Column<3, NScheme::NTypeIds::String, false, true> {}; // Sensitive column
 
         using TKey = TableKey<PathId>;
         using TColumns = TableColumns<PathId, AlterVersion, Description>;

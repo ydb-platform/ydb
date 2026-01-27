@@ -14,7 +14,7 @@ public:
 
 class TCheckRunnerBase: public ICheckRunner {
 public:
-    virtual TCheckResponse Run(const TChecksRequest& request) final;
+    TCheckResponse Run(const TChecksRequest& request) final;
 
 protected:
     virtual TCheckResponse DoRun(const TChecksRequest& request) = 0;

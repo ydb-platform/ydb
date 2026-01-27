@@ -203,6 +203,18 @@ TNode SerializeParamsForAlterTable(
     const TYPath& path,
     const TAlterTableOptions& options);
 
+TNode SerializeParamsForStartDistributedFileSession(
+    const TTransactionId& transactionId,
+    const TRichYPath& richPath,
+    i64 cookieCount,
+    const TStartDistributedWriteFileOptions& options);
+
+TNode SerializeParamsForStartDistributedTableSession(
+    const TTransactionId& transactionId,
+    const TRichYPath& richPath,
+    i64 cookieCount,
+    const TStartDistributedWriteTableOptions& options);
+
 TNode SerializeParamsForGetTableColumnarStatistics(
     const TTransactionId& transactionId,
     const TVector<TRichYPath>& paths,

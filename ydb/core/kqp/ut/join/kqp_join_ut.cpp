@@ -353,7 +353,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
     }
 
     Y_UNIT_TEST(IdxLookupPartialWithTempTable) {
-        TKikimrRunner kikimr(SyntaxV1Settings());
+        TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -487,7 +487,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
     }
 
     Y_UNIT_TEST(IdxLookupSelf) {
-        TKikimrRunner kikimr(SyntaxV1Settings());
+        TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -736,7 +736,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
 
     // join on not key column => Full Scan
     Y_UNIT_TEST(RightSemiJoin_FullScan) {
-        TKikimrRunner kikimr(SyntaxV1Settings());
+        TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -778,7 +778,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
 
     // join on key (simple and full) column => index-lookup
     Y_UNIT_TEST(RightSemiJoin_SimpleKey) {
-        TKikimrRunner kikimr(SyntaxV1Settings());
+        TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -821,7 +821,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
 
     // join on key (complex and full) column => index-lookup
     Y_UNIT_TEST(RightSemiJoin_ComplexKey) {
-        TKikimrRunner kikimr(SyntaxV1Settings());
+        TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -938,7 +938,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
 
     // join on key prefix => index-lookup
     Y_UNIT_TEST(RightSemiJoin_KeyPrefix) {
-        TKikimrRunner kikimr(SyntaxV1Settings());
+        TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -984,7 +984,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
 
     // join on secondary index => index-lookup
     Y_UNIT_TEST(RightSemiJoin_SecondaryIndex) {
-        TKikimrRunner kikimr(SyntaxV1Settings());
+        TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -1050,7 +1050,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
 
     // join on complex secondary index => index-lookup
     Y_UNIT_TEST(RightSemiJoin_ComplexSecondaryIndex) {
-        TKikimrRunner kikimr(SyntaxV1Settings());
+        TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -1105,7 +1105,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
 
     // join on secondary index prefix => index-lookup
     Y_UNIT_TEST(RightSemiJoin_ComplexSecondaryIndexPrefix) {
-        TKikimrRunner kikimr(SyntaxV1Settings());
+        TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -1154,7 +1154,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
     }
 
     void TestInnerJoinWithPredicate(const TString& predicate, const TString& expected) {
-        TKikimrRunner kikimr(SyntaxV1Settings());
+        TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 

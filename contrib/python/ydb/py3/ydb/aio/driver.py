@@ -41,6 +41,7 @@ class Driver(pool.ConnectionPool):
         **kwargs
     ):
         from .. import topic  # local import for prevent cycle import error
+        from . import coordination  # local import for prevent cycle import error
 
         config = get_config(
             driver_config,
@@ -59,6 +60,7 @@ class Driver(pool.ConnectionPool):
         self.scheme_client = scheme.SchemeClient(self)
         self.table_client = table.TableClient(self, config.table_client_settings)
         self.topic_client = topic.TopicClientAsyncIO(self, config.topic_client_settings)
+        self.coordination_client = coordination.CoordinationClient(self)
 
     async def stop(self, timeout=10):
         await self.table_client._stop_pool_if_needed(timeout=timeout)

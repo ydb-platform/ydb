@@ -197,7 +197,8 @@ class QuerySessionPool:
           1) QuerySerializableReadWrite() which is default mode;
           2) QueryOnlineReadOnly(allow_inconsistent_reads=False);
           3) QuerySnapshotReadOnly();
-          4) QueryStaleReadOnly().
+          4) QuerySnapshotReadWrite();
+          5) QueryStaleReadOnly().
         :param retry_settings: RetrySettings object.
 
         :return: Result sets or exception in case of execution errors.

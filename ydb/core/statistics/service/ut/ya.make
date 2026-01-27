@@ -19,6 +19,8 @@ PEERDIR(
     ydb/core/protos
     ydb/core/testlib/default
     ydb/core/statistics/ut_common
+    yql/essentials/udfs/common/digest
+    yql/essentials/udfs/common/hyperloglog
 )
 
 SRCS(

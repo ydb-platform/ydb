@@ -64,7 +64,7 @@ void TPQDescribeTopicActor::StateWork(TAutoPtr<IEventHandle>& ev) {
 
 
 void TPQDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-    Y_ABORT_UNLESS(ev->Get()->Request.Get()->ResultSet.size() == 1); // describe for only one topic
+    AFL_ENSURE(ev->Get()->Request.Get()->ResultSet.size() == 1); // describe for only one topic
     if (ReplyIfNotTopic(ev)) {
         return;
     }
@@ -111,6 +111,9 @@ void TPQDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::T
         }
         if (config.GetEnableCompactification()) {
             (*settings->mutable_attributes())["_cleanup_policy"] = "compact";
+        }
+        if (config.HasMetricsLevel()) {
+            settings->set_metrics_level(config.GetMetricsLevel());
         }
         bool local = config.GetLocalDC();
         settings->set_client_write_disabled(!local);
@@ -510,6 +513,12 @@ bool TDescribeTopicActorImpl::StateWork(TAutoPtr<IEventHandle>& ev, const TActor
     return true;
 }
 
+void TDescribeTopicActorImpl::PassAway(const TActorContext& ctx) {
+    for (auto& [_, tablet] : Tablets) {
+        NTabletPipe::CloseClient(ctx, tablet.Pipe);
+    }
+}
+
 void TDescribeTopicActor::StateWork(TAutoPtr<IEventHandle>& ev) {
     if (!TDescribeTopicActorImpl::StateWork(ev, this->ActorContext())) {
         TBase::StateWork(ev);
@@ -583,17 +592,17 @@ void TDescribeTopicActorImpl::Handle(TEvPQProxy::TEvRequestTablet::TPtr& ev, con
             return;
         }
         if (!GotLocation) {
-            Y_ABORT_UNLESS(RequestsInfly > 0);
+            AFL_ENSURE(RequestsInfly > 0);
             --RequestsInfly;
         }
         if (!GotReadSessions) {
-            Y_ABORT_UNLESS(RequestsInfly > 0);
+            AFL_ENSURE(RequestsInfly > 0);
             --RequestsInfly;
         }
     } else if (tabletInfo.ResultRecived) {
         return;
     } else {
-        Y_ABORT_UNLESS(RequestsInfly > 0);
+        AFL_ENSURE(RequestsInfly > 0);
         --RequestsInfly;
     }
 
@@ -626,7 +635,7 @@ void TDescribeTopicActorImpl::RequestTablet(TTabletInfo& tablet, const TActorCon
 }
 
 void TDescribeTopicActorImpl::RequestBalancer(const TActorContext& ctx) {
-    Y_ABORT_UNLESS(BalancerTabletId);
+    AFL_ENSURE(BalancerTabletId);
     if (Settings.RequireLocation) {
         if (!GotLocation) {
             RequestPartitionsLocation(ctx);
@@ -686,7 +695,7 @@ void TDescribeTopicActorImpl::RequestPartitionsLocation(const TActorContext& ctx
 }
 
 void TDescribeTopicActorImpl::RequestReadSessionsInfo(const TActorContext& ctx) {
-    Y_ABORT_UNLESS(Settings.Mode == TDescribeTopicActorSettings::EMode::DescribeConsumer);
+    AFL_ENSURE(Settings.Mode == TDescribeTopicActorSettings::EMode::DescribeConsumer);
     NTabletPipe::SendData(
             ctx, *BalancerPipe,
                     new TEvPersQueue::TEvGetReadSessionsInfo(NPersQueue::ConvertNewConsumerName(Settings.Consumer, ctx))
@@ -719,7 +728,7 @@ void TDescribeTopicActorImpl::Handle(NKikimr::TEvPersQueue::TEvStatusResponse::T
     }
 
     tabletInfo.ResultRecived = true;
-    Y_ABORT_UNLESS(RequestsInfly > 0);
+    AFL_ENSURE(RequestsInfly > 0);
     --RequestsInfly;
 
     NTabletPipe::CloseClient(ctx, tabletInfo.Pipe);
@@ -740,10 +749,10 @@ void TDescribeTopicActorImpl::Handle(NKikimr::TEvPersQueue::TEvReadSessionsInfoR
         return;
 
     auto it = Tablets.find(BalancerTabletId);
-    Y_ABORT_UNLESS(it != Tablets.end());
+    AFL_ENSURE(it != Tablets.end());
 
     GotReadSessions = true;
-    Y_ABORT_UNLESS(RequestsInfly > 0);
+    AFL_ENSURE(RequestsInfly > 0);
     --RequestsInfly;
 
     CheckCloseBalancerPipe(ctx);
@@ -761,14 +770,14 @@ void TDescribeTopicActorImpl::Handle(TEvPersQueue::TEvGetPartitionsLocationRespo
         return;
 
     auto it = Tablets.find(BalancerTabletId);
-    Y_ABORT_UNLESS(it != Tablets.end());
+    AFL_ENSURE(it != Tablets.end());
 
     const auto& record = ev->Get()->Record;
     if (record.GetStatus()) {
         auto res = ApplyResponse(ev, ctx);
         if (res) {
             GotLocation = true;
-            Y_ABORT_UNLESS(RequestsInfly > 0);
+            AFL_ENSURE(RequestsInfly > 0);
             --RequestsInfly;
 
             CheckCloseBalancerPipe(ctx);
@@ -908,7 +917,7 @@ bool TDescribeTopicActor::ApplyResponse(
         TEvPersQueue::TEvGetPartitionsLocationResponse::TPtr& ev, const TActorContext&
 ) {
     const auto& record = ev->Get()->Record;
-    Y_ABORT_UNLESS(Settings.RequireLocation);
+    AFL_ENSURE(Settings.RequireLocation);
 
     for (auto i = 0u; i < std::min<ui64>(record.LocationsSize(), TotalPartitions); ++i) {
         const auto& location = record.GetLocations(i);
@@ -918,6 +927,10 @@ bool TDescribeTopicActor::ApplyResponse(
     return true;
 }
 
+void TDescribeTopicActor::PassAway() {
+    TDescribeTopicActorImpl::PassAway(ActorContext());
+    TBase::PassAway();
+}
 
 
 void TDescribeTopicActor::Reply(const TActorContext& ctx) {
@@ -1023,7 +1036,7 @@ bool TDescribeConsumerActor::ApplyResponse(
         TEvPersQueue::TEvGetPartitionsLocationResponse::TPtr& ev, const TActorContext&
 ) {
     const auto& record = ev->Get()->Record;
-    Y_ABORT_UNLESS(Settings.RequireLocation);
+    AFL_ENSURE(Settings.RequireLocation);
     for (auto i = 0u; i < std::min<ui64>(record.LocationsSize(), TotalPartitions); ++i) {
         const auto& location = record.GetLocations(i);
         auto* locationResult = Result.mutable_partitions(i)->mutable_partition_location();
@@ -1032,9 +1045,13 @@ bool TDescribeConsumerActor::ApplyResponse(
     return true;
 }
 
+void TDescribeConsumerActor::PassAway() {
+    TDescribeTopicActorImpl::PassAway(ActorContext());
+    TBase::PassAway();
+}
 
 void TDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-    Y_ABORT_UNLESS(ev->Get()->Request.Get()->ResultSet.size() == 1); // describe for only one topic
+    AFL_ENSURE(ev->Get()->Request.Get()->ResultSet.size() == 1); // describe for only one topic
     if (ReplyIfNotTopic(ev)) {
         return;
     }
@@ -1084,7 +1101,7 @@ void TDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEv
 }
 
 void TDescribeConsumerActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-    Y_ABORT_UNLESS(ev->Get()->Request.Get()->ResultSet.size() == 1); // describe for only one topic
+    AFL_ENSURE(ev->Get()->Request.Get()->ResultSet.size() == 1); // describe for only one topic
     if (ReplyIfNotTopic(ev)) {
         return;
     }
@@ -1258,7 +1275,7 @@ bool TDescribePartitionActor::NeedToRequestWithDescribeSchema(TAutoPtr<IEventHan
 
     auto evNav = *reinterpret_cast<typename TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr*>(&ev);
     auto const& entries = evNav->Get()->Request.Get()->ResultSet;
-    Y_ABORT_UNLESS(entries.size() == 1);
+    AFL_ENSURE(entries.size() == 1);
 
     if (entries.front().Status != NSchemeCache::TSchemeCacheNavigate::EStatus::AccessDenied) {
         // We do have access to the requested entity or there was an error.
@@ -1272,7 +1289,7 @@ bool TDescribePartitionActor::NeedToRequestWithDescribeSchema(TAutoPtr<IEventHan
 
 void TDescribePartitionActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
     auto const& entries = ev->Get()->Request.Get()->ResultSet;
-    Y_ABORT_UNLESS(entries.size() == 1); // describe for only one topic
+    AFL_ENSURE(entries.size() == 1); // describe for only one topic
     if (ReplyIfNotTopic(ev)) {
         return;
     }
@@ -1294,7 +1311,7 @@ void TDescribePartitionActor::ApplyResponse(TTabletInfo& tabletInfo, NKikimr::TE
     for (auto partData : record.GetPartResult()) {
         if ((ui32)partData.GetPartition() != Settings.Partitions[0])
             continue;
-        Y_ABORT_UNLESS((ui32)(partData.GetPartition()) == Settings.Partitions[0]);
+        AFL_ENSURE((ui32)(partData.GetPartition()) == Settings.Partitions[0]);
         partResult->set_partition_id(partData.GetPartition());
         partResult->set_active(true);
         FillPartitionStats(partData, partResult->mutable_partition_stats(), tabletInfo.NodeId);
@@ -1306,7 +1323,7 @@ bool TDescribePartitionActor::ApplyResponse(
 ) {
     const auto& record = ev->Get()->Record;
     if (Settings.Partitions) {
-        Y_ABORT_UNLESS(record.LocationsSize() == 1);
+        AFL_ENSURE(record.LocationsSize() == 1);
     }
 
     const auto& location = record.GetLocations(0);
@@ -1316,6 +1333,11 @@ bool TDescribePartitionActor::ApplyResponse(
     auto* locationResult = pResult->mutable_partition_location();
     SetPartitionLocation(location, locationResult);
     return true;
+}
+
+void TDescribePartitionActor::PassAway() {
+    TDescribeTopicActorImpl::PassAway(ActorContext());
+    TBase::PassAway();
 }
 
 void TDescribePartitionActor::RaiseError(
@@ -1333,7 +1355,7 @@ void TDescribePartitionActor::Reply(const TActorContext& ctx) {
         return;
     }
     if (Settings.RequireLocation) {
-        Y_ABORT_UNLESS(Result.partition().has_partition_location());
+        AFL_ENSURE(Result.partition().has_partition_location());
     }
     return ReplyWithResult(Ydb::StatusIds::SUCCESS, Result, ctx);
 }
@@ -1379,6 +1401,11 @@ bool TPartitionsLocationActor::ApplyResponse(
         TEvPersQueue::TEvGetPartitionsLocationResponse::TPtr& ev, const TActorContext&
 ) {
     const auto& record = ev->Get()->Record;
+    if (!record.GetStatus()) {
+        this->RaiseError("Partition locations are not available", Ydb::PersQueue::ErrorCode::TABLET_PIPE_DISCONNECTED,
+            Ydb::StatusIds::UNAVAILABLE, ActorContext());
+        return false;
+    }
     for (auto i = 0u; i < record.LocationsSize(); i++) {
         const auto& part = record.GetLocations(i);
         TEvPQProxy::TPartitionLocationInfo partLocation;
@@ -1393,11 +1420,20 @@ bool TPartitionsLocationActor::ApplyResponse(
     return true;
 }
 
+void TPartitionsLocationActor::PassAway() {
+    TDescribeTopicActorImpl::PassAway(ActorContext());
+    TBase::PassAway();
+}
+
 void TPartitionsLocationActor::Finalize() {
     if (Settings.Partitions) {
-        Y_ABORT_UNLESS(Response->Partitions.size() == Settings.Partitions.size());
+        AFL_ENSURE(Response->Partitions.size() == Settings.Partitions.size())
+            ("l", Response->Partitions.size())
+            ("r", Settings.Partitions.size());
     } else {
-        Y_ABORT_UNLESS(Response->Partitions.size() == PQGroupInfo->Description.PartitionsSize());
+        AFL_ENSURE(Response->Partitions.size() >= PQGroupInfo->Description.PartitionsSize())
+            ("l", Response->Partitions.size())
+            ("r", PQGroupInfo->Description.PartitionsSize());
     }
     TBase::RespondWithCode(Ydb::StatusIds::SUCCESS);
 }
@@ -1405,6 +1441,16 @@ void TPartitionsLocationActor::Finalize() {
 void TPartitionsLocationActor::RaiseError(const TString& error, const Ydb::PersQueue::ErrorCode::ErrorCode errorCode, const Ydb::StatusIds::StatusCode status, const TActorContext&) {
     this->AddIssue(FillIssue(error, errorCode));
     this->RespondWithCode(status);
+}
+
+bool TPartitionsLocationActor::OnUnhandledException(const std::exception& exc) {
+    ALOG_ERROR(NKikimrServices::PQ_READ_PROXY, "unhandled exception "
+        << TypeName(exc) << ": " << exc.what() << Endl
+        << TBackTrace::FromCurrentException().PrintToString());
+
+    this->RaiseError("Unhandled exception", Ydb::PersQueue::ErrorCode::ERROR, Ydb::StatusIds::UNAVAILABLE, ActorContext());
+
+    return true;
 }
 
 TAlterTopicActorInternal::TAlterTopicActorInternal(

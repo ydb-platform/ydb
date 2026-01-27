@@ -1030,7 +1030,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
             << ", writtenRows# " << WrittenRows);
 
         TAutoPtr<IDestructable> prod = new TImportJobProduct(success, error, WrittenBytes, WrittenRows);
-        Send(DataShard, new TDataShard::TEvPrivate::TEvAsyncJobComplete(prod), 0, TxId);
+        Send(DataShard, new TEvDataShard::TEvAsyncJobComplete(prod), 0, TxId);
 
         Y_ENSURE(TaskId);
         Send(MakeResourceBrokerID(), new TEvResourceBroker::TEvFinishTask(TaskId));
@@ -1065,7 +1065,7 @@ public:
         : ExternalStorageConfig(new NExternalStorage::TS3ExternalStorageConfig(task.GetS3Settings()))
         , DataShard(dataShard)
         , TxId(txId)
-        , Settings(TS3Settings::FromRestoreTask(task))
+        , Settings(TStorageSettings::FromRestoreTask<NKikimrSchemeOp::TS3Settings>(task))
         , DataFormat(NBackupRestoreTraits::EDataFormat::Csv)
         , CompressionCodec(NBackupRestoreTraits::ECompressionCodec::None)
         , TableInfo(tableInfo)
@@ -1126,7 +1126,7 @@ private:
     NWrappers::IExternalStorageConfig::TPtr ExternalStorageConfig;
     const TActorId DataShard;
     const ui64 TxId;
-    const NDataShard::TS3Settings Settings;
+    const TStorageSettings Settings;
     const NBackupRestoreTraits::EDataFormat DataFormat;
     NBackupRestoreTraits::ECompressionCodec CompressionCodec;
     const TTableInfo TableInfo;

@@ -6,6 +6,8 @@
 #include <ydb/core/testlib/common_helper.h>
 #include <ydb/core/kqp/provider/yql_kikimr_expr_nodes.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
+#include <ydb/core/kqp/executer_actor/kqp_executer.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 #include <yql/essentials/ast/yql_ast.h>
@@ -14,6 +16,7 @@
 #include <yql/essentials/public/udf/udf_data_type.h>
 
 #include <library/cpp/json/json_reader.h>
+#include <library/cpp/iterator/functools.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -34,6 +37,16 @@ static void CheckStatusAfterTimeout(TSession& session, const TString& query, con
         // Do not fire too much CPU
         Sleep(TDuration::MilliSeconds(10));
     }
+}
+
+static auto ExecuteQueryAndCheckResultSets(NYdb::NQuery::TQueryClient& db, const TString& query, ui32 expectedResultSetsCount, const TString& testCaseName = "")
+{
+    auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+    TString prefix = testCaseName.empty() ? "" : testCaseName + ": ";
+    UNIT_ASSERT_C(result.IsSuccess(), prefix << "Query failed: " << result.GetIssues().ToString());
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetResultSets().size(), expectedResultSetsCount,
+        prefix << "Expected " << expectedResultSetsCount << " result sets, got " << result.GetResultSets().size());
+    return result;
 }
 
 Y_UNIT_TEST_SUITE(KqpQuery) {
@@ -1025,11 +1038,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
     }
 
     Y_UNIT_TEST(YqlTableSample) {
-        auto setting = NKikimrKqp::TKqpSetting();
-        setting.SetName("_KqpYqlSyntaxVersion");
-        setting.SetValue("1");
-
-        TKikimrRunner kikimr({setting});
+        TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -3385,6 +3394,281 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
             TString output = StreamResultToYson(it);
             CompareYson(output, R"([[1u;1u]])");
         }
+    }
+}
+Y_UNIT_TEST_SUITE(KqpQueryDiscard) {
+    TKikimrRunner CreateKikimrWithDiscardSelect(bool useRealThreads = true) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableDiscardSelect(true);
+        auto settings = TKikimrSettings(appConfig).SetUseRealThreads(useRealThreads);
+        return TKikimrRunner(settings);
+    }
+
+    Y_UNIT_TEST(DiscardSelectSupport) {
+        auto kikimr = CreateKikimrWithDiscardSelect();
+        auto db = kikimr.GetQueryClient();
+        auto tableClient = kikimr.GetTableClient();
+
+        TVector<TString> queries = {
+            "DISCARD SELECT 1",
+            "DISCARD SELECT COUNT(*) FROM `/Root/EightShard`",
+            "DISCARD SELECT 5 FROM (SELECT Key FROM `/Root/EightShard`)",
+            R"(DISCARD SELECT e1.Key, e2.Value1
+            FROM `/Root/EightShard` AS e1
+            JOIN `/Root/TwoShard` AS e2 ON e1.Key = e2.Key)"
+        };
+
+        TVector<TString> invalidQueries = {
+            "SELECT 5 FROM (DISCARD SELECT Key FROM `/Root/EightShard`)",
+            "SELECT * FROM `/Root/EightShard` WHERE Key IN (DISCARD SELECT 1)",
+            "SELECT 1 UNION ALL (DISCARD SELECT 2)",
+            "SELECT (DISCARD SELECT 1) as result"
+        };
+        TVector<TString> invalidQueriesForDml = {
+            "SELECT 1 UNION ALL DISCARD SELECT 2"
+        };
+
+        TVector<TString> intoResultQueries = {
+            "SELECT 1 UNION ALL (SELECT 2 INTO RESULT foo)",
+            "SELECT 1 UNION ALL (SELECT 2 INTO RESULT foo) UNION ALL SELECT 3"
+        };
+
+        for (const auto& query : queries) {
+            auto result = db.ExecuteQuery(query,
+                    NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetResultSets().size(), 0,
+                "DISCARD SELECT should return no result sets for query: " << query);
+        }
+        {
+            auto multiLineQuery = R"(SELECT 1; DISCARD SELECT 2; DISCARD SELECT COUNT(*) FROM `/Root/EightShard`;
+                        SELECT MIN(Key) FROM `/Root/TwoShard`)";
+
+                auto result = db.ExecuteQuery(multiLineQuery,
+                        NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetResultSets().size(), 2,
+                "expect 2 result sets, got " << result.GetResultSets().size() << " instead");
+        }
+
+        //  backward compatibility: INTO RESULT in parentheses
+        for (const auto& query : intoResultQueries) {
+            auto result = db.ExecuteQuery(query,
+                    NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(),
+                "INTO RESULT in parentheses should work (backward compatibility): " << query << ", error: " << result.GetIssues().ToString());
+        }
+
+        for (const auto& query : Concatenate(invalidQueries, invalidQueriesForDml)) {
+            auto result = db.ExecuteQuery(query,
+                    NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(),
+                "Query should fail: " << query);
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
+                "DISCARD");
+        }
+        // backward compatibility test: dml
+        {
+            auto session = tableClient.CreateSession().GetValueSync().GetSession();
+            for (auto& query : Concatenate(queries, invalidQueries)) {
+                auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), TExecDataQuerySettings()).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                UNIT_ASSERT_C(result.GetResultSets().size() > 0,
+                    "DISCARD SELECT should return result sets for dml (backward compatibility) but got: " << result.GetResultSets().size() << " for query " << query);
+            }
+        }
+        // backward compatibility test: scan
+        for (auto& query : Concatenate(queries, invalidQueries)) {
+            auto it = tableClient.StreamExecuteScanQuery(query).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            auto collected = CollectStreamResult(it);
+            UNIT_ASSERT_C(!collected.ResultSetYson.empty(),
+                "DISCARD SELECT should return result sets for Scan query (backward compatibility), got empty for query: " << query);
+        }
+
+    }
+
+    Y_UNIT_TEST(DiscardSelectEnsureExecuted) {
+        auto kikimr = CreateKikimrWithDiscardSelect();
+        auto db = kikimr.GetQueryClient();
+
+        auto failingEnsureQuery = std::vector{R"(
+            DISCARD SELECT Ensure(Data, Data > 1000000, "some error message") AS value
+            FROM `/Root/EightShard`)",
+            R"(DISCARD SELECT Ensure(r2, r2 > 100, "some error message") AS final
+                FROM (SELECT Ensure(r1, r1 IS NOT NULL, "ok") AS r2
+                FROM (SELECT Ensure(1, true, "ok") AS r1) AS t1) AS t2;)"
+            };
+
+        for (const auto& query : failingEnsureQuery) {
+            auto result = db.ExecuteQuery(query,
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+
+            UNIT_ASSERT_C(!result.IsSuccess(),
+                "Query with DISCARD and failing Ensure should fail, proving Ensure is executed. Got status: " << result.GetStatus());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "some error message");
+        }
+        auto passingEnsureQuery = R"(
+            DISCARD SELECT Ensure(Data, Data < 1000000, "Data value out of range") AS value
+            FROM `/Root/EightShard`
+        )";
+
+        auto result2 = db.ExecuteQuery(passingEnsureQuery,
+            NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+
+        UNIT_ASSERT_C(result2.IsSuccess(), result2.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(result2.GetResultSets().size(), 0,
+            "DISCARD SELECT should return no result sets, got: " << result2.GetResultSets().size());
+    }
+
+    Y_UNIT_TEST(NoChannelDataEventsWhenDiscard) {
+        auto kikimr = CreateKikimrWithDiscardSelect(false);
+        auto db = kikimr.GetQueryClient();
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+
+        ui32 channelDataCount = 0;
+        TActorId executerId;
+        bool executerIdCaptured = false;
+
+        auto observer = [&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NKikimr::NKqp::TEvKqpExecuter::TEvTxRequest::EventType && !executerIdCaptured) {
+                executerId = ev->Recipient;
+                executerIdCaptured = true;
+                Cerr << "Captured ExecuterId: " << executerId << Endl;
+            }
+            if (ev->GetTypeRewrite() == NYql::NDq::TEvDqCompute::TEvChannelData::EventType) {
+                auto& record = ev->Get<NYql::NDq::TEvDqCompute::TEvChannelData>()->Record;
+                    Cerr << "ChannelData event detected, channelId: " << record.GetChannelData().GetChannelId()
+                        << ", sender: " << ev->Sender << ", recipient: " << ev->Recipient << Endl;
+
+                    if (executerIdCaptured && ev->Recipient == executerId) {
+                        ++channelDataCount;
+                        Cerr << "ChannelData sent to Executer! Count: " << channelDataCount << Endl;
+                        return TTestActorRuntime::EEventAction::PROCESS;
+                    }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        runtime.SetObserverFunc(observer);
+
+        Y_DEFER {
+            runtime.SetObserverFunc(TTestActorRuntime::DefaultObserverFunc);
+        };
+
+        {
+            auto result = kikimr.RunCall([&] {
+                return db.ExecuteQuery(R"(
+                    pragma ydb.DqChannelVersion = "1";
+                    DISCARD SELECT COUNT(*) FROM `/Root/TwoShard`;
+                )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            });
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetResultSets().size(), 0,
+                "DISCARD SELECT should return no result sets");
+
+            UNIT_ASSERT_VALUES_EQUAL_C(channelDataCount, 0,
+                "ChannelData should not be sent when DISCARD is used, count: " << channelDataCount);
+        }
+        {
+            channelDataCount = 0;
+            executerIdCaptured = false;
+
+            auto result = kikimr.RunCall([&] {
+                return db.ExecuteQuery(R"(
+                    pragma ydb.DqChannelVersion = "1";
+                    SELECT COUNT(*) FROM `/Root/TwoShard`;
+                )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            });
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT(result.GetResultSets().size() > 0);
+
+            UNIT_ASSERT_C(channelDataCount > 0,
+                "ChannelDataCount for SELECT: " << channelDataCount);
+        }
+    }
+
+    Y_UNIT_TEST(DiscardSelectMultiLine) {
+        auto kikimr = CreateKikimrWithDiscardSelect();
+        auto db = kikimr.GetQueryClient();
+
+        auto verifyResultValue = [](auto& result, ui32 resultSetIndex, i32 expectedValue) {
+            TResultSetParser parser(result.GetResultSet(resultSetIndex));
+            UNIT_ASSERT_C(parser.TryNextRow(),
+                "Failed to get row from result set " << resultSetIndex);
+            UNIT_ASSERT_VALUES_EQUAL_C(parser.ColumnParser(0).GetInt32(), expectedValue,
+                "Result set " << resultSetIndex << " has wrong value");
+        };
+
+        ExecuteQueryAndCheckResultSets(db,
+            "DISCARD SELECT 1; DISCARD SELECT 2; DISCARD SELECT 3",
+            0, "All DISCARD");
+
+        ExecuteQueryAndCheckResultSets(db, R"(
+            SELECT 1;
+            DISCARD SELECT Ensure(Data, Data < 1000000, "Data value too large")
+                FROM `/Root/EightShard`;
+            SELECT 2
+        )", 2, "DISCARD with Ensure");
+
+        {
+            auto result = ExecuteQueryAndCheckResultSets(db,
+                "DISCARD SELECT 1; DISCARD SELECT 2; DISCARD SELECT 3; SELECT 4",
+                1, "Interleaved DISCARD and normal results");
+            verifyResultValue(result, 0, 4);
+        }
+
+        ExecuteQueryAndCheckResultSets(db, R"(
+            DISCARD SELECT Key, COUNT(*) FROM `/Root/EightShard` GROUP BY Key;
+            SELECT MIN(Key) FROM `/Root/TwoShard`
+        )", 1, "DISCARD with aggregation");
+
+        ExecuteQueryAndCheckResultSets(db, R"(
+            DISCARD SELECT e1.Key, e2.Value1
+            FROM `/Root/EightShard` AS e1
+            JOIN `/Root/TwoShard` AS e2 ON e1.Key = e2.Key;
+            SELECT 1
+        )", 1, "DISCARD with JOIN");
+
+        ExecuteQueryAndCheckResultSets(db, R"(
+            DISCARD SELECT * FROM `/Root/EightShard` WHERE Key = 999999;
+            SELECT 1
+        )", 1, "DISCARD with empty result");
+
+        ExecuteQueryAndCheckResultSets(db, R"(
+            SELECT 3;
+            DISCARD SELECT * FROM (SELECT Key FROM `/Root/EightShard` WHERE Key > 100);
+            DISCARD SELECT 1;
+            SELECT COUNT(*) FROM `/Root/TwoShard`;
+        )", 2, "DISCARD with subquery");
+        {
+            auto result = ExecuteQueryAndCheckResultSets(db, R"(
+                DISCARD SELECT * FROM `/Root/EightShard` LIMIT 5;
+                SELECT COUNT(*) as cnt FROM `/Root/TwoShard`;
+                DISCARD SELECT Key FROM `/Root/EightShard` WHERE Key < 200;
+                SELECT MIN(Key) as min_key FROM `/Root/EightShard`
+            )", 2, "Data Executor only");
+        }
+        {
+            auto result = ExecuteQueryAndCheckResultSets(db, R"(SELECT 1; DISCARD SELECT 2; SELECT 3;
+                                                                DISCARD SELECT 4; SELECT 5; DISCARD SELECT 6;
+                                                                SELECT 7)", 4, "Many transactions (> 2)");
+            auto resultValues = std::vector{1, 3, 5, 7};
+            for (auto&& [i, value] : Enumerate(resultValues)) {
+                verifyResultValue(result, i, value);
+            }
+        }
+        {
+            auto query = R"(sub = (DISCARD SELECT 1);
+                                            SELECT * FROM $sub)";
+            auto result = db.ExecuteQuery(query,
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(),
+                "Query should fail: " << query);
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
+                "DISCARD");
+        }
+
     }
 }
 

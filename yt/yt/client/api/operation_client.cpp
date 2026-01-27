@@ -21,7 +21,7 @@ void TListJobsContinuationTokenSerializer::Register(TRegistrar registrar)
         .Default(0)
         .DontSerializeDefault();
 
-    registrar.ExternalBaseClassParameter("distributed_group_main_job_id", &TListJobsOptions::DistributedGroupMainJobId)
+    registrar.ExternalBaseClassParameter("collective_id", &TListJobsOptions::CollectiveId)
         .Default()
         .DontSerializeDefault();
 
@@ -339,8 +339,8 @@ void Serialize(const TJob& job, NYson::IYsonConsumer* consumer, TStringBuf idKey
             .OptionalItem("monitoring_descriptor", job.MonitoringDescriptor)
             .OptionalItem("is_stale", job.IsStale)
             .OptionalItem("job_cookie", job.JobCookie)
-            .OptionalItem("distributed_group_job_index", job.DistributedGroupJobIndex)
-            .OptionalItem("distributed_group_main_job_id", job.DistributedGroupMainJobId)
+            .OptionalItem("collective_member_rank", job.CollectiveMemberRank)
+            .OptionalItem("collective_id", job.CollectiveId)
             .OptionalItem("archive_features", job.ArchiveFeatures)
             .OptionalItem("operation_incarnation", job.OperationIncarnation)
             .OptionalItem("allocation_id", job.AllocationId)

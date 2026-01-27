@@ -99,35 +99,13 @@ SIMPLE_UDF(TRandString, char*(ui32)) {
 }
 
 SIMPLE_MODULE(TTestUdfsModule, TTestFilter, TTestFilterTerminate, TRandString);
-NYql::NUdf::TUniquePtr<NYql::NUdf::IUdfModule> CreateJson2Module();
-NYql::NUdf::TUniquePtr<NYql::NUdf::IUdfModule> CreateRe2Module();
-NYql::NUdf::TUniquePtr<NYql::NUdf::IUdfModule> CreateStringModule();
-NYql::NUdf::TUniquePtr<NYql::NUdf::IUdfModule> CreateDateTime2Module();
-NYql::NUdf::TUniquePtr<NYql::NUdf::IUdfModule> CreateMathModule();
-NYql::NUdf::TUniquePtr<NYql::NUdf::IUdfModule> CreateUnicodeModule();
-NYql::NUdf::TUniquePtr<NYql::NUdf::IUdfModule> CreateDigestModule();
+REGISTER_MODULES(TTestUdfsModule)
 
 NMiniKQL::IFunctionRegistry* UdfFrFactory(const NScheme::TTypeRegistry& typeRegistry) {
     Y_UNUSED(typeRegistry);
     auto funcRegistry = NMiniKQL::CreateFunctionRegistry(NMiniKQL::CreateBuiltinRegistry())->Clone();
-    funcRegistry->AddModule("", "TestUdfs", new TTestUdfsModule());
-    funcRegistry->AddModule("", "Json2", CreateJson2Module());
-    funcRegistry->AddModule("", "Re2", CreateRe2Module());
-    funcRegistry->AddModule("", "String", CreateStringModule());
-    funcRegistry->AddModule("", "DateTime", CreateDateTime2Module());
-    funcRegistry->AddModule("", "Math", CreateMathModule());
-    funcRegistry->AddModule("", "Unicode", CreateUnicodeModule());
-    funcRegistry->AddModule("", "Digest", CreateDigestModule());
-
     NKikimr::NMiniKQL::FillStaticModules(*funcRegistry);
     return funcRegistry.Release();
-}
-
-TVector<NKikimrKqp::TKqpSetting> SyntaxV1Settings() {
-    auto setting = NKikimrKqp::TKqpSetting();
-    setting.SetName("_KqpYqlSyntaxVersion");
-    setting.SetValue("1");
-    return {setting};
 }
 
 TTestLogSettings& TTestLogSettings::AddLogPriority(NKikimrServices::EServiceKikimr service, NLog::EPriority priority) {
@@ -149,7 +127,9 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     auto mbusPort = PortManager.GetPort();
     auto grpcPort = PortManager.GetPort();
 
-    Cerr << "Trying to start YDB, gRPC: " << grpcPort << ", MsgBus: " << mbusPort << Endl;
+    if (settings.Verbose) {
+        Cerr << "Trying to start YDB, gRPC: " << grpcPort << ", MsgBus: " << mbusPort << Endl;
+    }
 
     TVector<NKikimrKqp::TKqpSetting> effectiveKqpSettings;
 
@@ -169,6 +149,7 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     ServerSettings.Reset(MakeHolder<Tests::TServerSettings>(mbusPort, authConfig, settings.PQConfig));
     ServerSettings->SetDomainName(settings.DomainRoot);
     ServerSettings->SetKqpSettings(effectiveKqpSettings);
+    ServerSettings->SetVerbose(settings.Verbose);
 
     NKikimrConfig::TAppConfig appConfig = settings.AppConfig;
     appConfig.MutableColumnShardConfig()->SetDisabledOnSchemeShard(false);

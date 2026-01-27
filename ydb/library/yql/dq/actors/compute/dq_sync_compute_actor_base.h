@@ -89,7 +89,15 @@ protected:
         return true;  // returns true, when channels were handled synchronously
     }
 
-protected: //TDqComputeActorChannels::ICallbacks
+    void TaskRunnerMonitoringInfo(TStringStream& str) override {
+        if (TaskRunner) {
+            str << Endl << "TaskRunner" << Endl
+                << "  LastFetchTime: " << TaskRunner->LastFetchTime << Endl
+                << "  LastFetchStatus: " << TaskRunner->LastFetchStatus << Endl;
+        }
+    }
+
+protected: //TDqComputeActorChannels::ICalbacks
     i64 GetInputChannelFreeSpace(ui64 channelId) const override final {
         const auto* inputChannel = this->InputChannelsMap.FindPtr(channelId);
         YQL_ENSURE(inputChannel, "task: " << this->Task.GetId() << ", unknown input channelId: " << channelId);
@@ -266,7 +274,7 @@ protected:
             TaskRunner->SetSpillerFactory(std::make_shared<TDqSpillerFactory>(execCtx.GetTxId(), NActors::TActivationContext::ActorSystem(), execCtx.GetWakeupCallback(), execCtx.GetErrorCallback()));
         }
 
-        TaskRunner->Prepare(this->Task, limits, execCtx);
+        TaskRunner->Prepare(this->Task, limits, execCtx, &this->WatermarksTracker);
 
         for (auto& [channelId, channel] : this->InputChannelsMap) {
             channel.Channel = TaskRunner->GetInputChannel(channelId);
@@ -283,6 +291,9 @@ protected:
 
         for (auto& [channelId, channel] : this->OutputChannelsMap) {
             channel.Channel = TaskRunner->GetOutputChannel(channelId);
+            if (this->Task.GetDqChannelVersion() >= 2u && channel.HasPeer) {
+                channel.Channel->Bind(this->SelfId(), channel.PeerId);
+            }
         }
 
         for (auto& [outputIndex, transform] : this->OutputTransformsMap) {
@@ -313,6 +324,10 @@ protected:
 
     const IDqAsyncOutputBuffer* GetSink(ui64, const typename TBase::TAsyncOutputInfoBase& sinkInfo) const override final {
         return sinkInfo.Buffer.Get();
+    }
+
+    TDqComputeActorWatermarks *GetInputTransformWatermarksTracker(ui64 inputId) override {
+        return TaskRunner ? TaskRunner->GetInputTransformWatermarksTracker(inputId): nullptr;
     }
 
 protected:

@@ -592,11 +592,16 @@ TEST_F(TSslTest, MutualVerificationFailedWithWrongClientCertificate)
         auto message = CreateMessage(1);
         auto sendFuture = bus->Send(message, {.TrackingLevel = EDeliveryTrackingLevel::Full});
         auto error = sendFuture.Get();
-        EXPECT_EQ(error.GetCode(), EErrorCode::SslError);
-        EXPECT_THROW_MESSAGE_HAS_SUBSTR(
-            error.ThrowOnError(),
-            NYT::TErrorException,
-            "alert unknown ca");
+        if (ToString(error).Contains("Connection reset by peer")) {
+            // This can happen if SSL_shutdown failed with EWOULDBLOCK.
+            EXPECT_EQ(error.GetCode(), EErrorCode::TransportError);
+        } else {
+            EXPECT_EQ(error.GetCode(), EErrorCode::SslError);
+            EXPECT_THROW_MESSAGE_HAS_SUBSTR(
+                error.ThrowOnError(),
+                NYT::TErrorException,
+                "alert unknown ca");
+        }
     }
 
     server->Stop()
@@ -736,10 +741,9 @@ TEST_F(TSslTest, ServerStop)
     auto sendFuture = bus->Send(message, {.TrackingLevel = EDeliveryTrackingLevel::Full});
     auto error = sendFuture.Get();
     EXPECT_EQ(error.GetCode(), EErrorCode::TransportError);
-    EXPECT_THROW_MESSAGE_HAS_SUBSTR(
-        error.ThrowOnError(),
-        NYT::TErrorException,
-        "Socket was closed");
+
+    auto errorMessage = ToString(error);
+    EXPECT_TRUE(errorMessage.Contains("Connection reset by peer") || errorMessage.Contains("Socket was closed"));
 }
 
 TEST_F(TSslTest, BlackHole)

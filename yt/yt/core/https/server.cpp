@@ -37,7 +37,7 @@ public:
     { }
 
     void AddHandler(
-        const TString& pattern,
+        const std::string& pattern,
         const IHttpHandlerPtr& handler) override
     {
         Underlying_->AddHandler(pattern, handler);

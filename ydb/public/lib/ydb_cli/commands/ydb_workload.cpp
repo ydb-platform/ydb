@@ -5,13 +5,20 @@
 
 #include "topic_workload/topic_workload.h"
 #include "transfer_workload/transfer_workload.h"
+
+#ifndef _win_
+#include "sqs_workload/sqs_workload.h"
+#endif
+
 #include "ydb_benchmark.h"
 
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
+#include <ydb/library/workload/abstract/colors.h>
 #include <ydb/library/workload/abstract/workload_factory.h>
 #include <ydb/library/workload/vector/vector.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_common.h>
+#include <ydb/public/lib/ydb_cli/common/colors.h>
 #include <ydb/public/lib/ydb_cli/common/recursive_remove.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
@@ -25,6 +32,18 @@
 #include <iomanip>
 
 namespace NYdb::NConsoleClient {
+
+namespace {
+
+struct TWorkloadColorsInitializer {
+    TWorkloadColorsInitializer() {
+        NYdbWorkload::SetColorsProvider(&AutoColors);
+    }
+};
+
+const TWorkloadColorsInitializer WorkloadColorsInitializer;
+
+} // namespace
 
 struct TWorkloadStats {
     ui64 OpsCount;
@@ -48,6 +67,9 @@ TCommandWorkload::TCommandWorkload()
     : TClientCommandTree("workload", {}, "YDB workload service")
 {
     AddCommand(std::make_unique<TCommandWorkloadTopic>());
+#ifndef _win_
+    AddHiddenCommand(std::make_unique<TCommandWorkloadSqs>());
+#endif
     AddCommand(std::make_unique<TCommandWorkloadTransfer>());
     AddCommand(std::make_unique<TCommandTPCC>());
     AddCommand(std::make_unique<TCommandVector>());
@@ -62,9 +84,6 @@ TWorkloadCommand::TWorkloadCommand(const TString& name, const std::initializer_l
     , TotalSec(0)
     , Threads(0)
     , Rate(0)
-    , ClientTimeoutMs(0)
-    , OperationTimeoutMs(0)
-    , CancelAfterTimeoutMs(0)
     , WindowSec(0)
     , Quiet(false)
     , Verbose(false)
@@ -101,12 +120,12 @@ void TWorkloadCommand::Config(TConfig& config) {
         .StoreTrue(&Quiet);
     config.Opts->AddLongOption("print-timestamp", "Print timestamp each second with statistics.")
         .StoreTrue(&PrintTimestamp);
-    config.Opts->AddLongOption("client-timeout", "Client timeout in ms.")
-        .DefaultValue(1000).StoreResult(&ClientTimeoutMs);
-    config.Opts->AddLongOption("operation-timeout", "Operation timeout in ms.")
-        .DefaultValue(800).StoreResult(&OperationTimeoutMs);
-    config.Opts->AddLongOption("cancel-after", "Cancel after timeout in ms.")
-        .DefaultValue(800).StoreResult(&CancelAfterTimeoutMs);
+    config.Opts->AddLongOption("client-timeout", "Client timeout. Supports time units (e.g., '5s', '1m'). Plain number interpreted as milliseconds.")
+        .DefaultValue("1000").StoreResult(&ClientTimeoutStr);
+    config.Opts->AddLongOption("operation-timeout", "Operation timeout. Supports time units (e.g., '5s', '1m'). Plain number interpreted as milliseconds.")
+        .DefaultValue("800").StoreResult(&OperationTimeoutStr);
+    config.Opts->AddLongOption("cancel-after", "Cancel after timeout. Supports time units (e.g., '5s', '1m'). Plain number interpreted as milliseconds.")
+        .DefaultValue("800").StoreResult(&CancelAfterTimeoutStr);
     config.Opts->AddLongOption("window", "Window duration in seconds.")
         .DefaultValue(1).StoreResult(&WindowSec);
     config.Opts->AddLongOption("executer", "Query executer type (data or generic).")
@@ -148,11 +167,11 @@ void TWorkloadCommand::PrepareForRun(TConfig& config) {
 void TWorkloadCommand::WorkerFn(int taskId, NYdbWorkload::IWorkloadQueryGenerator& workloadGen, const int type) {
     const auto dataQuerySettings = NYdb::NTable::TExecDataQuerySettings()
             .KeepInQueryCache(true)
-            .OperationTimeout(TDuration::MilliSeconds(OperationTimeoutMs))
-            .ClientTimeout(TDuration::MilliSeconds(ClientTimeoutMs))
-            .CancelAfter(TDuration::MilliSeconds(CancelAfterTimeoutMs));
+            .OperationTimeout(ParseDurationMilliseconds(OperationTimeoutStr))
+            .ClientTimeout(ParseDurationMilliseconds(ClientTimeoutStr))
+            .CancelAfter(ParseDurationMilliseconds(CancelAfterTimeoutStr));
     const auto genericQuerySettings = NYdb::NQuery::TExecuteQuerySettings()
-            .ClientTimeout(TDuration::MilliSeconds(ClientTimeoutMs));
+            .ClientTimeout(ParseDurationMilliseconds(ClientTimeoutStr));
     int retryCount = -1;
     NYdbWorkload::TQueryInfo queryInfo;
 

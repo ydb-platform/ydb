@@ -164,6 +164,12 @@ namespace {
         return alterDatabaseSettings;
     }
 
+    TTruncateTableSettings ParseTruncateTableSettings(TKiTruncateTable truncateTable) {
+        TTruncateTableSettings truncateTableSettings;
+        truncateTableSettings.TablePath = truncateTable.TablePath().Value();
+        return truncateTableSettings;
+    }
+
     TCreateUserSettings ParseCreateUserSettings(TKiCreateUser createUser) {
         TCreateUserSettings createUserSettings;
         createUserSettings.UserName = TString(createUser.UserName());
@@ -178,8 +184,7 @@ namespace {
             } else if (name == "passwordEncrypted") {
                 // PasswordEncrypted is never used
             } else if (name == "hash") {
-                createUserSettings.IsHashedPassword = true;
-                createUserSettings.Password = setting.Value().Cast<TCoAtom>().StringValue();
+                createUserSettings.HashedPassword = setting.Value().Cast<TCoAtom>().StringValue();
             } else if (name == "login") {
                 createUserSettings.CanLogin = true;
             } else if (name == "noLogin") {
@@ -204,8 +209,7 @@ namespace {
             } else if (name == "passwordEncrypted") {
                 // PasswordEncrypted is never used
             } else if (name == "hash") {
-                alterUserSettings.IsHashedPassword = true;
-                alterUserSettings.Password = setting.Value().Cast<TCoAtom>().StringValue();
+                alterUserSettings.HashedPassword = setting.Value().Cast<TCoAtom>().StringValue();
             } else if (name == "login") {
                 alterUserSettings.CanLogin = true;
             } else if (name == "noLogin") {
@@ -1173,7 +1177,7 @@ public:
                 return SyncStatus(status);
             }
 
-            auto literalResult = Gateway->ExecuteLiteralInstant(program, SessionCtx->Config().LangVer, resultType, SessionCtx->Query().QueryData->GetAllocState());
+            auto literalResult = Gateway->ExecuteLiteralInstant(program, SessionCtx->Config().GetDefaultLangVer(), resultType, SessionCtx->Query().QueryData->GetAllocState());
 
             if (!literalResult.Success()) {
                 for (const auto& issue : literalResult.Issues()) {
@@ -1287,7 +1291,14 @@ private:
 
         IDataProvider::TFillSettings fillSettings = NCommon::GetFillSettings(res.Ref());
 
-        if (IsIn({EKikimrQueryType::Query, EKikimrQueryType::Script}, SessionCtx->Query().Type)) {
+        if (SessionCtx->Query().Type == EKikimrQueryType::Script) {
+            if (fillSettings.Discard) {
+                ctx.AddError(YqlIssue(ctx.GetPosition(res.Pos()), TIssuesIds::KIKIMR_BAD_OPERATION, TStringBuilder()
+                    << "DISCARD not supported in YDB scripts"));
+                return SyncError();
+            }
+        }
+        if (!SessionCtx->Config().GetEnableDiscardSelect() && SessionCtx->Query().Type == EKikimrQueryType::Query) {
             if (fillSettings.Discard) {
                 ctx.AddError(YqlIssue(ctx.GetPosition(res.Pos()), TIssuesIds::KIKIMR_BAD_OPERATION, TStringBuilder()
                     << "DISCARD not supported in YDB queries"));
@@ -1480,6 +1491,44 @@ public:
     using TBase::TBase;
 };
 
+bool ParseCompressionSettings(
+    const TExprList& alterColumnList,
+    Ydb::Table::ColumnMeta* alter_columns,
+    TExprContext& ctx) {
+
+    auto compression = alter_columns->mutable_compression();
+    const auto settings = alterColumnList.Item(1).Cast<TExprList>();
+    for (const auto setting : settings) {
+        const auto sKV = setting.Cast<TExprList>();
+        const auto key = sKV.Item(0).Cast<TCoAtom>().Value();
+        const auto& settingVal = sKV.Item(1).Ref();
+        if (key == "algorithm" && settingVal.IsCallable("String")) {
+            const auto algoVal = settingVal.Child(0)->Content();
+            if (algoVal == "lz4") {
+                compression->set_algorithm(Ydb::Table::ColumnCompression::ALGORITHM_LZ4);
+            } else if (algoVal == "zstd") {
+                compression->set_algorithm(Ydb::Table::ColumnCompression::ALGORITHM_ZSTD);
+            } else if (algoVal == "off") {
+                compression->set_algorithm(Ydb::Table::ColumnCompression::ALGORITHM_OFF);
+            } else {
+                ctx.AddError(TIssue(ctx.GetPosition(settingVal.Pos()), TStringBuilder()
+                    << "Unknown compression algorithm: " << algoVal));
+                return false;
+            }
+        } else if (key == "level" && (settingVal.IsCallable("Uint64") || settingVal.IsCallable("Int64"))) {
+            compression->set_compression_level(FromString<i64>(settingVal.Child(0)->Content()));
+        } else {
+            ctx.AddError(TIssue(ctx.GetPosition(sKV.Pos()), TStringBuilder()
+                << " Column: \"" << alter_columns->name()
+                << "\". Setting: \"" << key
+                << "\". Only algorithm and level settings supported for column COMPRESSION"));
+            return false;
+        }
+    }
+
+    return true;
+}
+
 class TKiSinkCallableExecutionTransformer : public TAsyncCallbackTransformer<TKiSinkCallableExecutionTransformer> {
 public:
     TKiSinkCallableExecutionTransformer(
@@ -1546,6 +1595,31 @@ public:
                 auto resultNode = ctx.NewWorld(input->Pos());
                 return resultNode;
             }, "Executing ALTER DATABASE");
+        }
+
+        if (auto maybeTruncateTable = TMaybeNode<TKiTruncateTable>(input)) {
+            if (!SessionCtx->Config().FeatureFlags.GetEnableTruncateTable()) {
+                ctx.AddError(TIssue(ctx.GetPosition(input->Pos()),
+                    TStringBuilder() << "TRUNCATE TABLE statement is disabled. Please contact your system administrator to enable it"));
+                return SyncError();
+            }
+
+            auto requireStatus = RequireChild(*input, TKiExecDataQuery::idx_World);
+            if (requireStatus.Level != TStatus::Ok) {
+                return SyncStatus(requireStatus);
+            }
+
+            auto cluster = TString(maybeTruncateTable.Cast().DataSink().Cluster());
+            TTruncateTableSettings truncateTableSettings = ParseTruncateTableSettings(maybeTruncateTable.Cast());
+
+            auto future = Gateway->TruncateTable(cluster, truncateTableSettings);
+
+            return WrapFuture(future,
+                [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
+                Y_UNUSED(res);
+                auto resultNode = ctx.NewWorld(input->Pos());
+                return resultNode;
+            }, "Executing TRUNCATE TABLE");
         }
 
         if (auto maybeCreate = TMaybeNode<TKiCreateTable>(input)) {
@@ -1886,9 +1960,13 @@ public:
                                     << "Unknown operation in changeColumnConstraints"));
                                 return SyncError();
                             }
+                        } else if (alterColumnAction == "changeCompression") {
+                            if (!ParseCompressionSettings(alterColumnList, alter_columns, ctx)) {
+                                return SyncError();
+                            }
                         } else {
                             ctx.AddError(TIssue(ctx.GetPosition(alterColumnList.Pos()),
-                                    TStringBuilder() << "Unsupported action to alter column"));
+                                    TStringBuilder() << "Unsupported action to alter column: " << alterColumnAction));
                             return SyncError();
                         }
                     }
@@ -2032,19 +2110,21 @@ public:
                             } else if (type == "asyncGlobal") {
                                 add_index->mutable_global_async_index();
                             } else if (type == "globalVectorKmeansTree") {
-                                if (!SessionCtx->Config().FeatureFlags.GetEnableVectorIndex()) {
-                                    ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),
-                                        TStringBuilder() << "Vector index support is disabled"));
-                                    return SyncError();
-                                }
                                 add_index->mutable_global_vector_kmeans_tree_index();
-                            } else if (type == "globalFulltext") {
+                            } else if (type == "globalFulltextPlain") {
                                 if (!SessionCtx->Config().FeatureFlags.GetEnableFulltextIndex()) {
                                     ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),
                                         TStringBuilder() << "Fulltext index support is disabled"));
                                     return SyncError();
                                 }
-                                add_index->mutable_global_fulltext_index();
+                                add_index->mutable_global_fulltext_plain_index();
+                            } else if (type == "globalFulltextRelevance") {
+                                if (!SessionCtx->Config().FeatureFlags.GetEnableFulltextIndex()) {
+                                    ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),
+                                        TStringBuilder() << "Fulltext index support is disabled"));
+                                    return SyncError();
+                                }
+                                add_index->mutable_global_fulltext_relevance_index();
                             } else {
                                 ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),
                                     TStringBuilder() << "Unknown index type: " << type));
@@ -2077,9 +2157,14 @@ public:
                                 }
                             }
                         } else if (name == "indexSettings") {
-                            if (add_index->type_case() == Ydb::Table::TableIndex::kGlobalFulltextIndex) {
+                            if (add_index->type_case() == Ydb::Table::TableIndex::kGlobalFulltextPlainIndex) {
                                 // fulltext index has per-column analyzers settings, single value for now
-                                add_index->mutable_global_fulltext_index()->mutable_fulltext_settings()->add_columns()->set_column(
+                                add_index->mutable_global_fulltext_plain_index()->mutable_fulltext_settings()->add_columns()->set_column(
+                                    add_index->index_columns().empty() ? "<none>" : *add_index->index_columns().rbegin()
+                                );
+                            } else if (add_index->type_case() == Ydb::Table::TableIndex::kGlobalFulltextRelevanceIndex) {
+                                // fulltext index has per-column analyzers settings, single value for now
+                                add_index->mutable_global_fulltext_relevance_index()->mutable_fulltext_settings()->add_columns()->set_column(
                                     add_index->index_columns().empty() ? "<none>" : *add_index->index_columns().rbegin()
                                 );
                             }
@@ -2097,9 +2182,15 @@ public:
                                             name.StringValue(), value.StringValue(), error);
                                         break;
                                     }
-                                    case Ydb::Table::TableIndex::kGlobalFulltextIndex: {
+                                    case Ydb::Table::TableIndex::kGlobalFulltextPlainIndex: {
                                         NKikimr::NFulltext::FillSetting(
-                                            *add_index->mutable_global_fulltext_index()->mutable_fulltext_settings(),
+                                            *add_index->mutable_global_fulltext_plain_index()->mutable_fulltext_settings(),
+                                            name.StringValue(), value.StringValue(), error);
+                                        break;
+                                    }
+                                    case Ydb::Table::TableIndex::kGlobalFulltextRelevanceIndex: {
+                                        NKikimr::NFulltext::FillSetting(
+                                            *add_index->mutable_global_fulltext_relevance_index()->mutable_fulltext_settings(),
                                             name.StringValue(), value.StringValue(), error);
                                         break;
                                     }
@@ -2144,9 +2235,21 @@ public:
                             }
                             break;
                         }
-                        case Ydb::Table::TableIndex::kGlobalFulltextIndex: {
+                        case Ydb::Table::TableIndex::kGlobalFulltextPlainIndex: {
+                            // Set layout based on index type
+                            add_index->mutable_global_fulltext_plain_index()->mutable_fulltext_settings()->set_layout(Ydb::Table::FulltextIndexSettings::FLAT);
                             TString error;
-                            if (!NKikimr::NFulltext::ValidateSettings(add_index->global_fulltext_index().fulltext_settings(), error)) {
+                            if (!NKikimr::NFulltext::ValidateSettings(add_index->global_fulltext_plain_index().fulltext_settings(), error)) {
+                                ctx.AddError(TIssue(ctx.GetPosition(action.Pos()), error));
+                                return SyncError();
+                            }
+                            break;
+                        }
+                        case Ydb::Table::TableIndex::kGlobalFulltextRelevanceIndex: {
+                            // Set layout based on index type
+                            add_index->mutable_global_fulltext_relevance_index()->mutable_fulltext_settings()->set_layout(Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE);
+                            TString error;
+                            if (!NKikimr::NFulltext::ValidateSettings(add_index->global_fulltext_relevance_index().fulltext_settings(), error)) {
                                 ctx.AddError(TIssue(ctx.GetPosition(action.Pos()), error));
                                 return SyncError();
                             }

@@ -279,10 +279,9 @@ bool TPartition::CompactRequestedBlob(const TRequestedBlob& requestedBlob,
 
     ui64 offset = requestedBlob.Key.GetOffset();
 
-    for (TBlobIterator it(requestedBlob.Key, requestedBlob.Value); it.IsValid(); it.Next()) {
-        TBatch batch = it.GetBatch();
-        batch.Unpack();
-
+    auto batches = requestedBlob.GetBatches();
+    AFL_ENSURE(batches != nullptr);
+    for (const auto& batch : *batches) {
         for (const auto& blob : batch.Blobs) {
             LOG_D("Try append part " << offset << "." << blob.GetPartNo() << "/" << blob.GetTotalParts());
 
@@ -470,7 +469,6 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
     AFL_ENSURE(CompactionBlobEncoder.NewHead.GetBatches().empty());
 
     TInstant blobCreationUnixTime = TInstant::Zero();
-
     for (size_t i = 0; i < KeysForCompaction.size(); ++i) {
         auto& [k, pos] = KeysForCompaction[i];
         bool needToCompactHead = (parameters.CurOffset < k.Key.GetOffset());

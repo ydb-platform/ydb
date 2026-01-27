@@ -64,6 +64,10 @@ TValidatedWriteTx::TValidatedWriteTx(TDataShard* self, ui64 globalTxId, TInstant
         MvccSnapshot.emplace(record.GetMvccSnapshot().GetStep(), record.GetMvccSnapshot().GetTxId());
     }
 
+    if (record.HasLockMode()) {
+        LockMode = TDataShardUserDb::ELockMode(record.GetLockMode());
+    }
+
     OverloadSubscribe = record.HasOverloadSubscribe() ? record.GetOverloadSubscribe() : std::optional<ui64>{};
 
     NKikimrTxDataShard::TKqpTransaction::TDataTaskMeta meta;
@@ -104,6 +108,7 @@ std::tuple<NKikimrTxDataShard::TError::EKind, TString> TValidatedWriteTxOperatio
         case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT:
         case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE:
         case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INCREMENT:
+        case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT_INCREMENT:
             break;
         default:
             return {NKikimrTxDataShard::TError::BAD_ARGUMENT, TStringBuilder() << OperationType << " operation is not supported now"};
@@ -201,7 +206,8 @@ std::tuple<NKikimrTxDataShard::TError::EKind, TString> TValidatedWriteTxOperatio
                                                                             ColumnIds.size() - tableInfo.KeyColumnIds.size()};
     }
 
-    if (OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INCREMENT) {
+    if (OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INCREMENT ||
+        OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT_INCREMENT) {
         for (size_t i = tableInfo.KeyColumnIds.size(); i < ColumnIds.size(); i++) { // only data columns
             auto* col = tableInfo.Columns.FindPtr(ColumnIds[i]);
             if (col->IsKey) {
@@ -220,7 +226,7 @@ std::tuple<NKikimrTxDataShard::TError::EKind, TString> TValidatedWriteTxOperatio
                     break;
                 default:
                     return {NKikimrTxDataShard::TError::BAD_ARGUMENT, TStringBuilder() << "Only integer types are supported by increment, but column " << ColumnIds[i] << " is not"};
-            }        
+            }
         }
     }
     TableId = TTableId(tableIdRecord.GetOwnerId(), tableIdRecord.GetTableId(), tableIdRecord.GetSchemaVersion());
@@ -431,7 +437,7 @@ TString TWriteOperation::GetTxBody() const {
     TAllocChunkSerializer serializer;
     bool success = WriteRequest->SerializeToArcadiaStream(&serializer);
     Y_ENSURE(success);
-    TEventSerializationInfo serializationInfo = WriteRequest->CreateSerializationInfo();
+    TEventSerializationInfo serializationInfo = WriteRequest->CreateSerializationInfo(false);
 
     NKikimrTxDataShard::TSerializedEvent proto;
     proto.SetIsExtendedFormat(serializationInfo.IsExtendedFormat);
@@ -673,7 +679,7 @@ void TWriteOperation::BuildExecutionPlan(bool loaded)
 }
 
 std::optional<TString> TWriteOperation::OnMigration(TDataShard& self, const TActorContext&) {
-    if (!IsImmediate() && HasVolatilePrepareFlag() && !HasCompletedFlag() && !HasResultSentFlag() && !Result()) {
+    if (!IsImmediate() && HasVolatilePrepareFlag() && !HasCompletedFlag() && !HasResultSentFlag() && !GetWriteResult()) {
         self.SendRestartNotification(this);
         return GetTxBody();
     }
@@ -749,7 +755,7 @@ bool TWriteOperation::OnStopping(TDataShard& self, const TActorContext& ctx) {
     } else if (HasVolatilePrepareFlag()) {
         // Volatile transactions may be aborted at any time unless executed,
         // but we want them to migrate and run to completion when possible.
-        if (!HasCompletedFlag() && !HasResultSentFlag() && !Result()) {
+        if (!HasCompletedFlag() && !HasResultSentFlag() && !GetWriteResult()) {
             // It is possible this transaction already migrated or will migrate soon
             self.SendRestartNotification(this);
             return false;

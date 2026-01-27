@@ -18,6 +18,8 @@ SRCS(
     yql_pq_settings.cpp
     yql_pq_topic_key_parser.cpp
     yql_pq_helpers.cpp
+    yql_pq_ytflow_integration.cpp
+    yql_pq_ytflow_optimize.cpp
 )
 
 PEERDIR(
@@ -35,6 +37,7 @@ PEERDIR(
     ydb/library/yql/providers/pq/cm_client
     ydb/library/yql/providers/pq/common
     ydb/library/yql/providers/pq/expr_nodes
+    ydb/library/yql/providers/pq/gateway/abstract
     ydb/library/yql/providers/pq/proto
     ydb/public/sdk/cpp/src/client/driver
 
@@ -52,6 +55,10 @@ PEERDIR(
     yql/essentials/providers/common/transform
     yql/essentials/providers/result/expr_nodes
     yql/essentials/public/udf
+
+    yt/yql/providers/ytflow/integration/interface
+    yt/yql/providers/ytflow/integration/proto
+    yt/yql/providers/ytflow/expr_nodes
 )
 
 YQL_LAST_ABI_VERSION()

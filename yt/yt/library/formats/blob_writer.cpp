@@ -76,9 +76,9 @@ void TBlobWriter::DoWrite(TRange<TUnversionedRow> rows)
         auto dataValue = GetTypedValue(row, DataColumnId_, DataColumnName_, EValueType::String);
         output->Write(dataValue.AsStringBuf());
 
-        TryFlushBuffer(false);
+        MaybeFlushBuffer(/*force*/ false);
     }
-    TryFlushBuffer(true);
+    MaybeFlushBuffer(/*force*/ true);
 }
 
 TUnversionedValue TBlobWriter::GetTypedValue(

@@ -1,6 +1,8 @@
 /*.md @ydb-platform/docs
 /CHANGELOG.md @ydb-platform/changelog-reviewers
 
+/.github/docker @ydb-platform/appteam
+
 /build @ydb-platform/ci
 /certs @ydb-platform/ci
 /contrib @ydb-platform/ci
@@ -17,13 +19,14 @@
 /ydb/core/kqp/ @ydb-platform/qp
 /ydb/core/kqp/ut/federated_query @ydb-platform/fq
 /ydb/core/kqp/ut/olap/ @ydb-platform/cs
-/ydb/core/kqp/ut/indexes/*vector*
+/ydb/core/kqp/ut/indexes/ @ydb-platform/qp @ydb-platform/datashard
+/ydb/core/kqp/ut/knn/ @ydb-platform/datashard
 /ydb/core/public_http/ @ydb-platform/fq
 
 /ydb/docs/ @ydb-platform/docs
 
 /ydb/library/yql/ @ydb-platform/qp
-/ydb/library/yql/dq @ydb-platform/qp @ydb-platform/yql 
+/ydb/library/yql/dq @ydb-platform/qp @ydb-platform/yql
 /ydb/library/yql/dq/actors/common @ydb-platform/fq
 /ydb/library/yql/providers/common/http_gateway @ydb-platform/fq
 /ydb/library/yql/providers/common/db_id_async_resolver @ydb-platform/fq
@@ -85,7 +88,9 @@
 
 /ydb/apps/ydb @ydb-platform/cli
 /ydb/public/lib/ydb_cli @ydb-platform/cli
+/ydb/public/lib/ydb_cli/dump @ydb-platform/core
 /ydb/public/sdk/cpp @ydb-platform/cpp-sdk
+/ydb/public/tools/local_ydb/ @ydb-platform/appteam
 
 /ydb/core/security @ydb-platform/Security
 /ydb/core/tx/schemeshard/ut_login* @ydb-platform/Security
@@ -97,3 +102,4 @@
 /ydb/core/sys_view/common/registry.cpp @ydb-platform/Security
 /ydb/core/sys_view/ut_registry.cpp @ydb-platform/Security
 /ydb/tests/compatibility/test_system_views.py @ydb-platform/Security
+/ydb/tests/functional/tenants/test_system_views.py @ydb-platform/Security

@@ -118,7 +118,7 @@ public:
             TSysTables::TLocksTable::GetInfo(Columns, KeyTypes, true);
             break;
         default:
-            Y_ASSERT("Unexpected system table id");
+            Y_ASSERT(false && "Unexpected system table id");
         }
     }
 
@@ -144,7 +144,7 @@ public:
         Y_UNUSED(row);
         Y_UNUSED(commands);
 
-        Y_ASSERT("Not supported");
+        Y_ASSERT(false && "Not supported");
     }
 
     void EraseRow(const TArrayRef<const TCell>& row) const {
@@ -397,9 +397,9 @@ public:
         UserDb.UpdateRow(tableId, key, ops, userSID);
     }
 
-    void IncrementRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops,
-                      const TString& userSID) override {
-        UserDb.IncrementRow(tableId, key, ops, userSID);
+    void IncrementRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops, 
+                      bool insertMissing, const TString& userSID) override {
+        UserDb.IncrementRow(tableId, key, ops, insertMissing, userSID);
     }
     
     void EraseRow(const TTableId& tableId, const TArrayRef<const TCell>& row, const TString& userSID) override {

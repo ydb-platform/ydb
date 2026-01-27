@@ -1502,7 +1502,7 @@ bool TSysLocks::HasWriteLocks(const TTableId& tableId) const {
     return false;
 }
 
-EEnsureCurrentLock TSysLocks::EnsureCurrentLock() {
+EEnsureCurrentLock TSysLocks::EnsureCurrentLock(bool createMissing) {
     Y_ENSURE(Update && Update->LockTxId);
     Y_ENSURE(Db, "EnsureCurrentLock needs a valid locks database");
 
@@ -1524,6 +1524,10 @@ EEnsureCurrentLock TSysLocks::EnsureCurrentLock() {
 
     if (!Db->MayAddLock(Update->LockTxId)) {
         return EEnsureCurrentLock::Abort;
+    }
+
+    if (!createMissing) {
+        return EEnsureCurrentLock::Missing;
     }
 
     Update->Lock = Locker.GetOrAddLock(Update->LockTxId, Update->LockNodeId);

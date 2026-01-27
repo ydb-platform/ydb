@@ -91,18 +91,25 @@ namespace NSQLTranslationV0 {
             TPtr Expr;
             i32 Pos = -1;
 
+            // Is so heavily used in a legacy code
+            // NOLINTNEXTLINE(google-explicit-constructor)
             TIdPart(const TString& name)
                 : Name(name)
             {
             }
+
+            // Is so heavily used in a legacy code
+            // NOLINTNEXTLINE(google-explicit-constructor)
             TIdPart(TPtr expr)
                 : Expr(expr)
             {
             }
-            TIdPart(i32 pos)
+
+            explicit TIdPart(i32 pos)
                 : Pos(pos)
             {
             }
+
             TIdPart Clone() const {
                 TIdPart res(Name);
                 res.Pos = Pos;
@@ -112,7 +119,7 @@ namespace NSQLTranslationV0 {
         };
 
     public:
-        INode(TPosition pos);
+        explicit INode(TPosition pos);
         virtual ~INode();
 
         TPosition GetPos() const;
@@ -259,7 +266,7 @@ namespace NSQLTranslationV0 {
 
     class TAstDirectNode final: public INode {
     public:
-        TAstDirectNode(TAstNode* node);
+        explicit TAstDirectNode(TAstNode* node);
 
         TAstNode* Translate(TContext& ctx) const override;
 
@@ -272,13 +279,13 @@ namespace NSQLTranslationV0 {
 
     class TAstListNode: public INode {
     public:
-        TAstListNode(TPosition pos);
-        virtual ~TAstListNode();
+        explicit TAstListNode(TPosition pos);
+        ~TAstListNode() override;
 
         TAstNode* Translate(TContext& ctx) const override;
 
     protected:
-        explicit TAstListNode(const TAstListNode& node);
+        TAstListNode(const TAstListNode& node);
         explicit TAstListNode(TPosition pos, TVector<TNodePtr>&& nodes);
         TPtr ShallowCopy() const override;
         bool DoInit(TContext& ctx, ISource* src) override;
@@ -295,7 +302,7 @@ namespace NSQLTranslationV0 {
 
     class TAstListNodeImpl final: public TAstListNode {
     public:
-        TAstListNodeImpl(TPosition pos);
+        explicit TAstListNodeImpl(TPosition pos);
         TAstListNodeImpl(TPosition pos, TVector<TNodePtr> nodes);
 
     protected:
@@ -399,7 +406,7 @@ namespace NSQLTranslationV0 {
             WRITE
         };
 
-        ITableKeys(TPosition pos);
+        explicit ITableKeys(TPosition pos);
         virtual const TString* GetTableName() const;
         virtual TNodePtr BuildKeys(TContext& ctx, EBuildKeysMode mode) = 0;
 
@@ -551,7 +558,7 @@ namespace NSQLTranslationV0 {
         TColumnNode(TPosition pos, const TString& column, const TString& source);
         TColumnNode(TPosition pos, const TNodePtr& column, const TString& source);
 
-        virtual ~TColumnNode();
+        ~TColumnNode() override;
         bool IsAsterisk() const override;
         virtual bool IsArtificial() const;
         const TString* GetColumnName() const override;
@@ -694,7 +701,7 @@ namespace NSQLTranslationV0 {
     class IJoin;
     class ISource: public INode {
     public:
-        virtual ~ISource();
+        ~ISource() override;
 
         virtual bool IsFake() const;
         virtual void AllColumns();
@@ -741,13 +748,13 @@ namespace NSQLTranslationV0 {
         virtual TNodePtr BuildSort(TContext& ctx, const TString& label);
         virtual IJoin* GetJoin();
         virtual ISource* GetCompositeSource();
-        virtual bool IsSelect() const;
+        bool IsSelect() const override;
         virtual bool IsTableSource() const;
         virtual bool ShouldUseSourceAsColumn(const TString& source);
         virtual bool IsJoinKeysInitializing() const;
         virtual const TString* GetWindowName() const;
 
-        virtual bool DoInit(TContext& ctx, ISource* src);
+        bool DoInit(TContext& ctx, ISource* src) override;
         virtual TNodePtr Build(TContext& ctx) = 0;
 
         virtual TMaybe<TString> FindColumnMistype(const TString& name) const;
@@ -764,8 +771,8 @@ namespace NSQLTranslationV0 {
         TIntrusivePtr<ISource> CloneSource() const;
 
     protected:
-        ISource(TPosition pos);
-        virtual TAstNode* Translate(TContext& ctx) const;
+        explicit ISource(TPosition pos);
+        TAstNode* Translate(TContext& ctx) const override;
 
         void FillSortParts(const TVector<TSortSpecificationPtr>& orderBy, TNodePtr& sortKeySelector, TNodePtr& sortDirection);
         TNodePtr BuildSortSpec(const TVector<TSortSpecificationPtr>& orderBy, const TString& label, const TNodePtr& ground, bool traits = false);
@@ -805,16 +812,16 @@ namespace NSQLTranslationV0 {
 
     class IJoin: public ISource {
     public:
-        virtual ~IJoin();
+        ~IJoin() override;
 
-        virtual IJoin* GetJoin();
+        IJoin* GetJoin() override;
         virtual TNodePtr BuildJoinKeys(TContext& ctx, const TVector<TDeferredAtom>& names) = 0;
         virtual void SetupJoin(const TString& joinOp, TNodePtr joinExpr) = 0;
         virtual const THashMap<TString, THashSet<TString>>& GetSameKeysMap() const = 0;
         virtual const TSet<TString> GetJoinLabels() const = 0;
 
     protected:
-        IJoin(TPosition pos);
+        explicit IJoin(TPosition pos);
     };
 
     class TListOfNamedNodes final: public INode {
@@ -849,7 +856,7 @@ namespace NSQLTranslationV0 {
     class TLiteralNumberNode: public TLiteralNode {
     public:
         TLiteralNumberNode(TPosition pos, const TString& type, const TString& value);
-        TPtr DoClone() const override final;
+        TPtr DoClone() const final;
         bool DoInit(TContext& ctx, ISource* src) override;
         bool IsIntegerLiteral() const override;
     };

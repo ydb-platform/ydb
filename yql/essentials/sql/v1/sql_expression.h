@@ -39,10 +39,6 @@ public:
         MaybeUnnamedSmartParenOnTop_ = false;
     }
 
-    void ProduceYqlSelect() {
-        IsYqlSelectProduced_ = true;
-    }
-
     TMaybe<TExprOrIdent> LiteralExpr(const TRule_literal_value& node);
 
 private:
@@ -53,10 +49,10 @@ private:
 
     TNodePtr BindParameterRule(const TRule_bind_parameter& rule, const TTrailingQuestions& tail);
     TNodeResult LambdaRule(const TRule_lambda& rule);
-    TNodePtr CastRule(const TRule_cast_expr& rule);
+    TNodeResult CastRule(const TRule_cast_expr& rule);
     TNodePtr BitCastRule(const TRule_bitcast_expr& rule);
     TNodeResult ExistsRule(const TRule_exists_expr& rule);
-    TNodePtr CaseRule(const TRule_case_expr& rule);
+    TNodeResult CaseRule(const TRule_case_expr& rule);
 
     TSQLResult<TExprOrIdent> AtomExpr(const TRule_atom_expr& node, const TTrailingQuestions& tail);
     TSQLResult<TExprOrIdent> InAtomExpr(const TRule_in_atom_expr& node, const TTrailingQuestions& tail);
@@ -132,7 +128,7 @@ private:
         TNodePtr Pred;
         TNodePtr Value;
     };
-    TCaseBranch ReduceCaseBranches(TVector<TCaseBranch>::const_iterator begin, TVector<TCaseBranch>::const_iterator end) const;
+    TSQLResult<TCaseBranch> ReduceCaseBranches(TVector<TCaseBranch>::const_iterator begin, TVector<TCaseBranch>::const_iterator end) const;
 
     template <typename TNode, typename TGetNode, typename TIter>
     TNodeResult BinOper(const TString& operName, const TNode& node, TGetNode getNode, TIter begin, TIter end, const TTrailingQuestions& tail);
@@ -152,10 +148,11 @@ private:
     TNodePtr EmptyTuple();
     TNodeResult SmartParenthesis(const TRule_smart_parenthesis& node);
 
+    TNodePtr GetNamedNode(const TString& name);
+
     ESmartParenthesis SmartParenthesisMode_ = ESmartParenthesis::Default;
     bool MaybeUnnamedSmartParenOnTop_ = true;
     bool IsSourceAllowed_ = true;
-    bool IsYqlSelectProduced_ = false;
 
     THashMap<TString, TNodePtr> ExprShortcuts_;
 };

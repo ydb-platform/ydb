@@ -17,9 +17,9 @@ import datetime
 import http.client as http_client
 import json
 import os
+from unittest import mock
 import urllib
 
-import mock
 from OpenSSL import crypto
 import pytest  # type: ignore
 
@@ -38,8 +38,10 @@ SERVICE_ACCOUNT_EMAIL = "service-1234@service-name.iam.gserviceaccount.com"
 SERVICE_ACCOUNT_IMPERSONATION_URL_BASE = (
     "https://us-east1-iamcredentials.googleapis.com"
 )
-SERVICE_ACCOUNT_IMPERSONATION_URL_ROUTE = "/v1/projects/-/serviceAccounts/{}:generateAccessToken".format(
-    SERVICE_ACCOUNT_EMAIL
+SERVICE_ACCOUNT_IMPERSONATION_URL_ROUTE = (
+    "/v1/projects/-/serviceAccounts/{}:generateAccessToken".format(
+        SERVICE_ACCOUNT_EMAIL
+    )
 )
 SERVICE_ACCOUNT_IMPERSONATION_URL = (
     SERVICE_ACCOUNT_IMPERSONATION_URL_BASE + SERVICE_ACCOUNT_IMPERSONATION_URL_ROUTE
@@ -1052,7 +1054,6 @@ class TestCredentials(object):
     def test_retrieve_subject_token_certificate_trust_chain_invalid_order(
         self, mock_get_workload_cert_and_key_paths
     ):
-
         credentials = self.make_credentials(
             credential_source=self.CREDENTIAL_SOURCE_CERTIFICATE_TRUST_CHAIN_WRONG_ORDER
         )
@@ -1071,7 +1072,6 @@ class TestCredentials(object):
     def test_retrieve_subject_token_certificate_trust_chain_file_does_not_exist(
         self, mock_get_workload_cert_and_key_paths
     ):
-
         credentials = self.make_credentials(
             credential_source={
                 "certificate": {
@@ -1093,7 +1093,6 @@ class TestCredentials(object):
     def test_retrieve_subject_token_certificate_invalid_trust_chain_file(
         self, mock_get_workload_cert_and_key_paths
     ):
-
         credentials = self.make_credentials(
             credential_source={
                 "certificate": {
@@ -1773,3 +1772,59 @@ class TestCredentials(object):
         assert excinfo.match(
             'The credential is not configured to use mtls requests. The credential should include a "certificate" section in the credential source.'
         )
+
+    @mock.patch("google.auth._agent_identity_utils.parse_certificate")
+    @mock.patch(
+        "google.auth._agent_identity_utils.should_request_bound_token",
+        return_value=True,
+    )
+    @mock.patch(
+        "google.auth._agent_identity_utils.calculate_certificate_fingerprint",
+        return_value="fingerprint",
+    )
+    @mock.patch.object(
+        identity_pool.Credentials, "_get_cert_bytes", return_value=b"cert"
+    )
+    @mock.patch.object(external_account.Credentials, "_perform_refresh_token")
+    def test_refresh_with_agent_identity(
+        self,
+        mock_refresh_token,
+        mock_get_cert_bytes,
+        mock_calculate_fingerprint,
+        mock_should_request,
+        mock_parse_certificate,
+    ):
+        mock_parse_certificate.return_value = mock.sentinel.cert
+        credentials = self.make_credentials(
+            credential_source=self.CREDENTIAL_SOURCE_CERTIFICATE.copy()
+        )
+        credentials.refresh(None)
+        mock_parse_certificate.assert_called_once_with(b"cert")
+        mock_should_request.assert_called_once_with(mock.sentinel.cert)
+        mock_calculate_fingerprint.assert_called_once_with(mock.sentinel.cert)
+        mock_refresh_token.assert_called_once_with(None, cert_fingerprint="fingerprint")
+
+    @mock.patch("google.auth._agent_identity_utils.parse_certificate")
+    @mock.patch(
+        "google.auth._agent_identity_utils.should_request_bound_token",
+        return_value=False,
+    )
+    @mock.patch.object(
+        identity_pool.Credentials, "_get_cert_bytes", return_value=b"cert"
+    )
+    @mock.patch.object(external_account.Credentials, "_perform_refresh_token")
+    def test_refresh_with_agent_identity_opt_out_or_not_agent(
+        self,
+        mock_refresh_token,
+        mock_get_cert_bytes,
+        mock_should_request,
+        mock_parse_certificate,
+    ):
+        mock_parse_certificate.return_value = mock.sentinel.cert
+        credentials = self.make_credentials(
+            credential_source=self.CREDENTIAL_SOURCE_CERTIFICATE.copy()
+        )
+        credentials.refresh(None)
+        mock_parse_certificate.assert_called_once_with(b"cert")
+        mock_should_request.assert_called_once_with(mock.sentinel.cert)
+        mock_refresh_token.assert_called_once_with(None, cert_fingerprint=None)

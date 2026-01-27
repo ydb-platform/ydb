@@ -50,6 +50,8 @@ public:
             return Level != other;
         }
 
+        // Using ELevel as TStatus is a common pattern
+        // NOLINTNEXTLINE(google-explicit-constructor)
         TStatus(ELevel level, bool hasRestart = false)
             : Level(level)
             , HasRestart(hasRestart)
@@ -174,7 +176,7 @@ public:
         return scope.HandleStatus(DoApplyAsyncChanges(input, output, ctx));
     }
 
-    virtual TStatistics GetStatistics() const override { return Statistics_; }
+    TStatistics GetStatistics() const override { return Statistics_; }
 
 public:
     virtual TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) = 0;
@@ -279,7 +281,7 @@ public:
 template <typename TFunctor>
 class TFunctorTransformer: public TSyncTransformerBase {
 public:
-    TFunctorTransformer(TFunctor functor)
+    explicit TFunctorTransformer(TFunctor functor)
         : Functor_(std::move(functor)) {}
 
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override {
@@ -300,7 +302,7 @@ template <typename TFunctor>
 class TSinglePassFunctorTransformer final: public TFunctorTransformer<TFunctor> {
     using TBase = TFunctorTransformer<TFunctor>;
 public:
-    TSinglePassFunctorTransformer(TFunctor functor)
+    explicit TSinglePassFunctorTransformer(TFunctor functor)
         : TFunctorTransformer<TFunctor>(std::move(functor))
     {}
 

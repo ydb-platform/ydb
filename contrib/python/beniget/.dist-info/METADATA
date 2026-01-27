@@ -1,6 +1,6 @@
-Metadata-Version: 2.1
+Metadata-Version: 2.4
 Name: beniget
-Version: 0.4.2.post1
+Version: 0.5.0
 Summary: Extract semantic information about static Python code
 Home-page: https://github.com/serge-sans-paille/beniget/
 Author: serge-sans-paille
@@ -14,7 +14,17 @@ Classifier: Natural Language :: English
 Classifier: Programming Language :: Python :: 3
 Requires-Python: >=3.6
 License-File: LICENSE
-Requires-Dist: gast >=0.5.0
+Requires-Dist: gast>=0.7.0
+Dynamic: author
+Dynamic: author-email
+Dynamic: classifier
+Dynamic: description
+Dynamic: home-page
+Dynamic: license
+Dynamic: license-file
+Dynamic: requires-dist
+Dynamic: requires-python
+Dynamic: summary
 
 
 A static analyzer for Python code.

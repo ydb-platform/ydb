@@ -643,17 +643,17 @@ inline TTableReaderPtr<TNode> IIOClient::CreateTablePartitionReader<TNode>(
 
 template <class T>
 inline TTableReaderPtr<T> IIOClient::CreateTablePartitionReader(
-    const TString& path, const TTablePartitionReaderOptions& options)
+    const TString& cookie, const TTablePartitionReaderOptions& options)
 {
     if constexpr (TIsBaseOf<Message, T>::Value) {
         T prototype;
-        return new TTableReader<T>(CreateProtoReader(path, options, &prototype));
+        return new TTableReader<T>(CreateProtoTablePartitionReader(cookie, options, &prototype));
     } else if constexpr (TIsSkiffRow<T>::value) {
         const auto& hints = options.FormatHints_ ? options.FormatHints_->SkiffRowHints_ : Nothing();
         auto requestedSchema = GetSkiffSchema<T>(hints);
         auto parserSchema = GetParserSkiffSchema<T>(hints);
         auto skipper = CreateSkiffSkipper<T>(hints);
-        return new TTableReader<T>(CreateSkiffRowReader(path, options, skipper, requestedSchema, parserSchema), hints);
+        return new TTableReader<T>(CreateSkiffRowTablePartitionReader(cookie, options, skipper, requestedSchema, parserSchema), hints);
     } else {
         static_assert(TDependentFalse<T>, "Unsupported type for table reader");
     }

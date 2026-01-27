@@ -1,4 +1,5 @@
 import os
+import pytest
 import random
 import string
 
@@ -6,17 +7,20 @@ from ydb.tests.fq.streaming.common import Kikimr
 from ydb.tests.library.common.types import Erasure
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 
-import pytest
-
 
 @pytest.fixture(scope="module")
 def kikimr(request):
+    enable_watermarks = getattr(request, "param", {}).get("enable_watermarks", False)
+
     def get_ydb_config():
         config = KikimrConfigGenerator(
             erasure=Erasure.MIRROR_3_DC,
+            pq_client_service_types=["yandex-query"],
             extra_feature_flags={
                 "enable_external_data_sources": True,
-                "enable_streaming_queries": True
+                "enable_streaming_queries": True,
+                "enable_streaming_queries_counters": True,
+                "enable_topics_sql_io_operations": True,
             },
             query_service_config={
                 "available_external_data_sources": ["ObjectStorage", "Ydb", "YdbTopics"],
@@ -25,14 +29,17 @@ def kikimr(request):
                     "external_storage": {
                         "database_connection": {
                             "endpoint": os.getenv("YDB_ENDPOINT"),
-                            "database": os.getenv("YDB_DATABASE")
-                        }
-                    }
-                }
+                            "database": os.getenv("YDB_DATABASE"),
+                        },
+                    },
+                },
             },
-            table_service_config={},
+            table_service_config={
+                "enable_watermarks": enable_watermarks,
+                "dq_channel_version": 1,
+            },
             default_clusteradmin="root@builtin",
-            use_in_memory_pdisks=False
+            use_in_memory_pdisks=False,
         )
 
         config.yaml_config["log_config"]["default_level"] = 8

@@ -2,7 +2,7 @@
 #include "schemeshard_build_index_helpers.h"
 #include "schemeshard_build_index_tx_base.h"
 #include "schemeshard_impl.h"
-#include "schemeshard_utils.h"  // for NTableIndex::CommonCheck
+#include "schemeshard_index_utils.h"
 #include "schemeshard_xxport__helpers.h"
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
@@ -83,7 +83,7 @@ public:
             }
         }
 
-        TIndexBuildInfo::TPtr buildInfo = new TIndexBuildInfo();
+        auto buildInfo = std::make_shared<TIndexBuildInfo>();
         buildInfo->Id = BuildId;
         buildInfo->Uid = uid;
         buildInfo->DomainPathId = domainPath.Base()->PathId;
@@ -122,13 +122,7 @@ public:
                     // Even an cluster admin or the system inself will not be able to force a reserved name for this index.
                     // If that will become an issue at some point, then a real userToken should be passed here.
                     .IsValidLeafName(/*userToken*/ nullptr)
-                    .PathsLimit(2) // index and impl-table
                     .DirChildrenLimit();
-
-                if (!request.GetInternal()) {
-                    checks
-                        .ShardsLimit(1); // impl-table
-                }
 
                 if (!checks) {
                     return Reply(checks.GetStatus(), checks.GetError());
@@ -171,8 +165,33 @@ public:
                                           explain)) {
                 return Reply(Ydb::StatusIds::BAD_REQUEST, explain);
             }
+
+            {
+                const auto checks = indexPath.Check();
+
+                // Tables are actually created in schemeshard__operation_create_build_index so limits are rechecked there too
+                auto counts = NTableIndex::GetIndexObjectCounts(indexDesc);
+                if (counts.SequenceCount > 0 && domainInfo->GetSequenceShards().empty()) {
+                    ++counts.IndexTableShards;
+                }
+
+                checks.PathsLimit(1 + counts.IndexTableCount + counts.SequenceCount);
+                if (!request.GetInternal()) {
+                    checks
+                        .ShardsLimit(counts.IndexTableShards)
+                        .PathShardsLimit(counts.ShardsPerPath);
+                }
+
+                if (!checks) {
+                    return Reply(checks.GetStatus(), checks.GetError());
+                }
+            }
         } else if (settings.has_column_build_operation()) {
-            buildInfo->TargetName = settings.source_path();
+            if (!Self->EnableAddColumsWithDefaults) {
+                return Reply(Ydb::StatusIds::PRECONDITION_FAILED, "Adding columns with defaults is disabled");
+            }
+
+            buildInfo->TargetName = tablePath.PathString();
             // put some validation here for the build operation
             buildInfo->BuildKind = TIndexBuildInfo::EBuildKind::BuildColumns;
             buildInfo->BuildColumns.reserve(settings.column_build_operation().column_size());
@@ -200,21 +219,10 @@ public:
 
         Self->PersistCreateBuildIndex(db, *buildInfo);
 
-        if (buildInfo->IsBuildColumns()) {
-            buildInfo->State = TIndexBuildInfo::EState::AlterMainTable;
-        } else {
-            Y_ASSERT(buildInfo->IsBuildIndex());
-            buildInfo->State = TIndexBuildInfo::EState::Locking;
-        }
+        buildInfo->State = TIndexBuildInfo::EState::Locking;
 
         Self->PersistBuildIndexState(db, *buildInfo);
-
-        auto [it, emplaced] = Self->IndexBuilds.emplace(BuildId, buildInfo);
-        Y_ASSERT(emplaced);
-        if (uid) {
-            std::tie(std::ignore, emplaced) = Self->IndexBuildsByUid.emplace(uid, buildInfo);
-            Y_ASSERT(emplaced);
-        }
+        Self->AddIndexBuild(buildInfo);
 
         Progress(BuildId);
 
@@ -250,38 +258,57 @@ private:
             break;
         }
         case Ydb::Table::TableIndex::TypeCase::kGlobalVectorKmeansTreeIndex: {
-            if (!Self->EnableVectorIndex) {
-                explain = "Vector index support is disabled";
-                return false;
-            }
             buildInfo.BuildKind = index.index_columns().size() == 1
                 ? TIndexBuildInfo::EBuildKind::BuildVectorIndex
                 : TIndexBuildInfo::EBuildKind::BuildPrefixedVectorIndex;
             buildInfo.IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree;
             NKikimrSchemeOp::TVectorIndexKmeansTreeDescription vectorIndexKmeansTreeDescription;
             *vectorIndexKmeansTreeDescription.MutableSettings() = index.global_vector_kmeans_tree_index().vector_settings();
-            if (!NKikimr::NKMeans::ValidateSettings(vectorIndexKmeansTreeDescription.GetSettings(), explain)) {
+            const auto& settings = vectorIndexKmeansTreeDescription.GetSettings();
+            if (!NKikimr::NKMeans::ValidateSettings(settings, explain)) {
                 return false;
             }
             buildInfo.SpecializedIndexDescription = vectorIndexKmeansTreeDescription;
-            buildInfo.KMeans.K = vectorIndexKmeansTreeDescription.GetSettings().clusters();
-            buildInfo.KMeans.Levels = buildInfo.IsBuildPrefixedVectorIndex() + vectorIndexKmeansTreeDescription.GetSettings().levels();
+            buildInfo.KMeans.K = settings.clusters();
+            buildInfo.KMeans.Levels = buildInfo.IsBuildPrefixedVectorIndex() + settings.levels();
+            buildInfo.KMeans.IsPrefixed = buildInfo.IsBuildPrefixedVectorIndex();
             buildInfo.KMeans.Rounds = NTableIndex::NKMeans::DefaultKMeansRounds;
-            buildInfo.Clusters = NKikimr::NKMeans::CreateClusters(vectorIndexKmeansTreeDescription.GetSettings().settings(), buildInfo.KMeans.Rounds, explain);
+            buildInfo.KMeans.OverlapClusters = settings.overlap_clusters()
+                ? settings.overlap_clusters()
+                : NTableIndex::NKMeans::DefaultOverlapClusters;
+            buildInfo.KMeans.OverlapRatio = settings.has_overlap_ratio()
+                ? settings.overlap_ratio()
+                : NTableIndex::NKMeans::DefaultOverlapRatio;
+            buildInfo.Clusters = NKikimr::NKMeans::CreateClusters(settings.settings(), buildInfo.KMeans.Rounds, explain);
             if (!buildInfo.Clusters) {
                 return false;
             }
             break;
         }
-        case Ydb::Table::TableIndex::TypeCase::kGlobalFulltextIndex: {
+        case Ydb::Table::TableIndex::TypeCase::kGlobalFulltextPlainIndex: {
             if (!Self->EnableFulltextIndex) {
                 explain = "Fulltext index support is disabled";
                 return false;
             }
             buildInfo.BuildKind = TIndexBuildInfo::EBuildKind::BuildFulltext;
-            buildInfo.IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltext;
+            buildInfo.IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextPlain;
             NKikimrSchemeOp::TFulltextIndexDescription fulltextIndexDescription;
-            *fulltextIndexDescription.MutableSettings() = index.global_fulltext_index().fulltext_settings();
+            *fulltextIndexDescription.MutableSettings() = index.global_fulltext_plain_index().fulltext_settings();
+            if (!NKikimr::NFulltext::ValidateSettings(fulltextIndexDescription.GetSettings(), explain)) {
+                return false;
+            }
+            buildInfo.SpecializedIndexDescription = fulltextIndexDescription;
+            break;
+        }
+        case Ydb::Table::TableIndex::TypeCase::kGlobalFulltextRelevanceIndex: {
+            if (!Self->EnableFulltextIndex) {
+                explain = "Fulltext index support is disabled";
+                return false;
+            }
+            buildInfo.BuildKind = TIndexBuildInfo::EBuildKind::BuildFulltext;
+            buildInfo.IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextRelevance;
+            NKikimrSchemeOp::TFulltextIndexDescription fulltextIndexDescription;
+            *fulltextIndexDescription.MutableSettings() = index.global_fulltext_relevance_index().fulltext_settings();
             if (!NKikimr::NFulltext::ValidateSettings(fulltextIndexDescription.GetSettings(), explain)) {
                 return false;
             }

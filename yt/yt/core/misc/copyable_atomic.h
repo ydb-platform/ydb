@@ -36,7 +36,7 @@ public:
         return *this;
     }
 
-    TCopyableAtomic(TCopyableAtomic&& other)
+    TCopyableAtomic(TCopyableAtomic&& other) noexcept
         : T_(other.T_.load())
     { }
 

@@ -86,12 +86,12 @@ void TPersQueueCacheL2::AddBlobs(const TActorContext& ctx, ui64 tabletId, const 
 {
     ui32 numUnused = 0;
     for (const TCacheBlobL2& blob : blobs) {
-        AFL_ENSURE(blob.Value->DataSize())("d", "Trying to place empty blob into L2 cache");
+        AFL_ENSURE(blob.Value->GetDataSize())("d", "Trying to place empty blob into L2 cache");
 
         TKey key(tabletId, blob);
         // PQ tablet could send some data twice (if it's restored after die)
         if (Cache.FindWithoutPromote(key) != Cache.End()) {
-            LOG_WARN_S(ctx, NKikimrServices::PERSQUEUE, "PQ Cache (L2). Same blob insertion. " << key.ToString() << " size " << blob.Value->DataSize());
+            LOG_WARN_S(ctx, NKikimrServices::PERSQUEUE, "PQ Cache (L2). Same blob insertion. " << key.ToString() << " size " << blob.Value->GetDataSize());
             continue;
         }
 
@@ -101,7 +101,7 @@ void TPersQueueCacheL2::AddBlobs(const TActorContext& ctx, ui64 tabletId, const 
             ("Cache.Size", Cache.Size())
             ("MAX_BLOB_SIZE", MAX_BLOB_SIZE);
 
-        CurrentSize += blob.Value->DataSize();
+        CurrentSize += blob.Value->GetDataSize();
 
         // manualy manage LRU size
         while (CurrentSize > MaxSize) {
@@ -111,7 +111,7 @@ void TPersQueueCacheL2::AddBlobs(const TActorContext& ctx, ui64 tabletId, const 
                 ("Cache.Size()", Cache.Size())
                 ("CurrentSize", CurrentSize)
                 ("MaxSize", MaxSize)
-                ("blob.Value->DataSize()", blob.Value->DataSize())
+                ("blob.Value->GetDataSize()", blob.Value->GetDataSize())
                 ("blobs.size()", blobs.size())
                 ("outEvicted.size()", outEvicted.size());
 
@@ -120,13 +120,13 @@ void TPersQueueCacheL2::AddBlobs(const TActorContext& ctx, ui64 tabletId, const 
             if (value->GetAccessCount() == 0)
                 ++numUnused;
 
-            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "PQ Cache (L2). Evicting blob. " << oldest.Key().ToString() << " size " << value->DataSize());
+            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "PQ Cache (L2). Evicting blob. " << oldest.Key().ToString() << " size " << value->GetDataSize());
 
-            CurrentSize -= value->DataSize();
+            CurrentSize -= value->GetDataSize();
             Cache.Erase(oldest);
         }
 
-        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "PQ Cache (L2). Adding blob. " << key.ToString() << " size " << blob.Value->DataSize());
+        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "PQ Cache (L2). Adding blob. " << key.ToString() << " size " << blob.Value->GetDataSize());
 
         Cache.Insert(key, blob.Value);
     }
@@ -148,11 +148,11 @@ void TPersQueueCacheL2::RemoveBlobs(const TActorContext& ctx, ui64 tabletId, con
         TKey key(tabletId, blob);
         auto it = Cache.FindWithoutPromote(key);
         if (it != Cache.End()) {
-            CurrentSize -= (*it)->DataSize();
+            CurrentSize -= (*it)->GetDataSize();
             numEvicted++;
             if ((*it)->GetAccessCount() == 0)
                 ++numUnused;
-            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "PQ Cache (L2). Removed. " << key.ToString() << " size " << (*it)->DataSize());
+            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "PQ Cache (L2). Removed. " << key.ToString() << " size " << (*it)->GetDataSize());
             Cache.Erase(it);
         } else {
             LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "PQ Cache (L2). Miss in remove. " << key.ToString());

@@ -208,6 +208,10 @@ namespace NActors {
             bool WriteString(const TString *s) override {
                 return WriteAliasedRaw(s->data(), s->size());
             }
+
+            NProtoBuf::io::CodedOutputStream *GetCodedOutputStream() override {
+                return nullptr;
+            }
         };
 
         TSerializerChecker checker;

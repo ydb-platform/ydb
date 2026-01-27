@@ -245,7 +245,7 @@ void BatchSpanProcessor::Export()
   do
   {
     std::vector<std::unique_ptr<Recordable>> spans_arr;
-    size_t num_records_to_export;
+    size_t num_records_to_export{};
     std::uint64_t notify_force_flush =
         synchronization_data_->force_flush_pending_sequence.load(std::memory_order_acquire);
     if (notify_force_flush)

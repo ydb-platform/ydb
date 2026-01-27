@@ -1,6 +1,6 @@
 #include "mlp_reader.h"
-#include "mlp_message_attributes.h"
 
+#include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/codecs.h>
@@ -135,7 +135,7 @@ void TReaderActor::Handle(TEvPQ::TEvMLPReadResponse::TPtr& ev) {
         }
 
         TString messageGroupId;
-        auto it = messageMetaAttr.find(MESSAGE_KEY);
+        auto it = messageMetaAttr.find(MESSAGE_ATTRIBUTE_KEY);
         if (it != messageMetaAttr.end()) {
             messageGroupId = std::move(it->second);
         }
@@ -157,7 +157,6 @@ void TReaderActor::Handle(TEvPQ::TEvMLPErrorResponse::TPtr& ev) {
     // TODO MLP Retry
     LOG_D("Handle TEvPQ::TEvMLPErrorResponse " << ev->Get()->Record.ShortDebugString());
     ReplyErrorAndDie(ev->Get()->GetStatus(), std::move(ev->Get()->GetErrorMessage()));
-    PassAway();
 }
 
 void TReaderActor::HandleOnRead(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
@@ -198,6 +197,7 @@ void TReaderActor::PassAway() {
         Send(ChildActorId, new TEvents::TEvPoison());
     }
     Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvUnlink(0));
+    TBaseActor::PassAway();
 }
 
 bool TReaderActor::OnUnhandledException(const std::exception& exc) {

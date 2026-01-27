@@ -2,7 +2,6 @@
 
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
-#include "schemeshard_utils.h"  // for TransactionTemplate
 
 #define LOG_D(stream) LOG_DEBUG_S (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
 #define LOG_I(stream) LOG_INFO_S  (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
@@ -232,7 +231,12 @@ protected:
 
         auto& notice = *tx.MutableDropCdcStreamNotice();
         pathId.ToProto(notice.MutablePathId());
-        notice.SetTableSchemaVersion(table->AlterVersion + 1);
+
+        table->InitAlterData(OperationId);
+        notice.SetTableSchemaVersion(*table->AlterData->CoordinatedSchemaVersion);
+
+        NIceDb::TNiceDb db(context.GetDB());
+        context.SS->PersistAddAlterTable(db, pathId, table->AlterData);
 
         // Collect all streams planned for drop on this table
         TVector<TPathId> streamPathIds;
@@ -428,7 +432,6 @@ public:
         auto table = context.SS->Tables.at(tablePath.Base()->PathId);
 
         Y_ABORT_UNLESS(table->AlterVersion != 0);
-        Y_ABORT_UNLESS(!table->AlterData);
 
         // Validate and mark all streams for drop in single transaction
         for (const auto& streamPath : streamPaths) {

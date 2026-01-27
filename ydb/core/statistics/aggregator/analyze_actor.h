@@ -1,5 +1,7 @@
 #pragma once
 
+#include "column_statistic_eval.h"
+
 #include <ydb/core/statistics/events.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -12,7 +14,7 @@ class TAnalyzeActor : public NActors::TActorBootstrapped<TAnalyzeActor> {
     TString OperationId;
     TString DatabaseName;
     TPathId PathId;
-    TVector<ui32> ColumnTags;
+    TVector<ui32> RequestedColumnTags;
 
     void FinishWithFailure(TEvStatistics::TEvFinishTraversal::EStatus);
 
@@ -23,14 +25,33 @@ class TAnalyzeActor : public NActors::TActorBootstrapped<TAnalyzeActor> {
     // StateQuery
 
     struct TColumnDesc {
-        explicit TColumnDesc(ui32 tag, ui32 seq)
-        : Tag(tag), Seq(seq)
-        {}
-
         ui32 Tag;
-        ui32 Seq;
+        NScheme::TTypeInfo Type;
+        TString PgTypeMod;
+        TString Name;
+
+        std::optional<ui32> CountDistinctSeq;
+        std::optional<ui32> MinSeq;
+        std::optional<ui32> MaxSeq;
+        TVector<IColumnStatisticEval::TPtr> Statistics;
+
+        explicit TColumnDesc(ui32 tag, NScheme::TTypeInfo type, TString pgTypeMod, TString name)
+            : Tag(tag)
+            , Type(type)
+            , PgTypeMod(std::move(pgTypeMod))
+            , Name(std::move(name))
+        {}
+        TColumnDesc(TColumnDesc&&) noexcept = default;
+        TColumnDesc& operator=(TColumnDesc&&) noexcept = default;
+
+        NKikimrStat::TSimpleColumnStatistics ExtractSimpleStats(
+            ui64 count, const TVector<NYdb::TValue>& aggColumns) const;
     };
+
+    TString TableName;
+    std::optional<ui32> CountSeq;
     TVector<TColumnDesc> Columns;
+    TVector<TStatisticsItem> Results;
 
     struct TEvPrivate {
         enum EEv {
@@ -65,7 +86,8 @@ class TAnalyzeActor : public NActors::TActorBootstrapped<TAnalyzeActor> {
 
     class TScanActor;
 
-    void Handle(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev);
+    void HandleStage1(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev);
+    void HandleStage2(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev);
 
 public:
     TAnalyzeActor(
@@ -78,7 +100,7 @@ public:
     , OperationId(std::move(operationId))
     , DatabaseName(std::move(databaseName))
     , PathId(std::move(pathId))
-    , ColumnTags(std::move(columnTags))
+    , RequestedColumnTags(std::move(columnTags))
     {}
 
     void Bootstrap();
@@ -89,9 +111,18 @@ public:
         }
     }
 
-    STFUNC(StateQuery) {
+    // Calculate simple column statistics (count, count distinct) and
+    // determine the parameters for heavy statistics.
+    STFUNC(StateQueryStage1) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvPrivate::TEvAnalyzeScanResult, Handle);
+            hFunc(TEvPrivate::TEvAnalyzeScanResult, HandleStage1);
+        }
+    }
+
+    // Calculate "heavy" statistics requested from stage 1.
+    STFUNC(StateQueryStage2) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvPrivate::TEvAnalyzeScanResult, HandleStage2);
         }
     }
 };

@@ -1,0 +1,1 @@
+{"s_suppkey"=1;"s_comment"="each slyly above the careful";"s_address"=" N kD4on9OM Ipw3,gf0JBoQDd7tgrzrddZ";"s_acctbal"=5755.94;"s_nationkey"=17;"s_name"="Supplier#000000001";"s_phone"="27-918-335-1736";};

@@ -32,6 +32,19 @@ Y_UNIT_TEST(AlterDatabase) {
     setup.Run(cases);
 }
 
+Y_UNIT_TEST(TruncateTable) {
+    TCases cases{
+        {"use plato;truncate table `/Root/test/table`;",
+         "USE plato;\n\nTRUNCATE TABLE `/Root/test/table`;\n"},
+
+        {"use plato;truncate table `/Root/test/table` with();",
+         "USE plato;\n\nTRUNCATE TABLE `/Root/test/table` WITH ();\n"},
+    };
+
+    TSetup setup;
+    setup.Run(cases);
+}
+
 Y_UNIT_TEST(GrantPermissions) {
     TCases cases{
         {"use plato;grant connect, modify tables, list on `/Root` to user;", "USE plato;\n\nGRANT CONNECT, MODIFY TABLES, LIST ON `/Root` TO user;\n"},
@@ -236,6 +249,7 @@ Y_UNIT_TEST(Values) {
     TCases cases = {
         {"values (1);", "VALUES\n\t(1)\n;\n"},
         {"values (1,2),(3,4);", "VALUES\n\t(1, 2),\n\t(3, 4)\n;\n"},
+        {"values (1,2),(3,4),;", "VALUES\n\t(1, 2),\n\t(3, 4),\n;\n"},
         {"values ('a\nb');", "VALUES\n\t('a\nb')\n;\n"},
     };
 
@@ -920,6 +934,8 @@ Y_UNIT_TEST(Select) {
          "SELECT\n\t1\nFROM\n\tuser AS user (\n\t\tuser\n\t)\n;\n"},
         {"select 1 from user as user(user, user)",
          "SELECT\n\t1\nFROM\n\tuser AS user (\n\t\tuser,\n\t\tuser\n\t)\n;\n"},
+        {"select 1 from user as user(user, user,)",
+         "SELECT\n\t1\nFROM\n\tuser AS user (\n\t\tuser,\n\t\tuser,\n\t)\n;\n"},
         {"select 1 from user with user=user",
          "SELECT\n\t1\nFROM\n\tuser WITH user = user\n;\n"},
         {"select 1 from user with (user=user, user=user)",
@@ -1942,8 +1958,8 @@ Y_UNIT_TEST(CreateStreamingQuery) {
                      "CREATE STREAMING QUERY IF NOT EXISTS TheQuery AS DO BEGIN\nINSERT INTO TheTable\nSELECT\n\t1\n;\nEND DO;\n"},
                     {"creAte oR ReplAce sTReaMing qUErY TheQuery As dO BeGin ;;\n\nInSeRT iNTo TheTable SELect 1;; eNd Do",
                      "CREATE OR REPLACE STREAMING QUERY TheQuery AS DO BEGIN\nINSERT INTO TheTable\nSELECT\n\t1\n;\nEND DO;\n"},
-                    {"creAte sTReaMing qUErY TheQuery wiTh (option = tRuE) As dO BeGin ;;\n\nInSeRT iNTo TheTable SELect 1;; eNd Do",
-                     "CREATE STREAMING QUERY TheQuery WITH (\n\toption = TRUE\n) AS DO BEGIN\nINSERT INTO TheTable\nSELECT\n\t1\n;\nEND DO;\n"}};
+                    {"creAte sTReaMing qUErY TheQuery wiTh (option = tRuE,nested_setting= (x=TrUe), other =(a = b, c=TrUe)) As dO BeGin ;;\n\nInSeRT iNTo TheTable SELect 1;; eNd Do",
+                     "CREATE STREAMING QUERY TheQuery WITH (\n\toption = TRUE,\n\tnested_setting = (\n\t\tx = TRUE\n\t),\n\tother = (\n\t\ta = b,\n\t\tc = TRUE\n\t)\n) AS DO BEGIN\nINSERT INTO TheTable\nSELECT\n\t1\n;\nEND DO;\n"}};
 
     TSetup setup;
     setup.Run(cases);
@@ -1954,10 +1970,10 @@ Y_UNIT_TEST(AlterStreamingQuery) {
                      "ALTER STREAMING QUERY TheQuery AS DO BEGIN\nINSERT INTO TheTable\nSELECT\n\t1\n;\nEND DO;\n"},
                     {"aLTer sTReaMing qUErY If ExIsTs TheQuery As dO BeGin ;;\n\nInSeRT iNTo TheTable SELect 1;; eNd Do",
                      "ALTER STREAMING QUERY IF EXISTS TheQuery AS DO BEGIN\nINSERT INTO TheTable\nSELECT\n\t1\n;\nEND DO;\n"},
-                    {"aLTer sTReaMing qUErY TheQuery sEt (option = tRuE)",
-                     "ALTER STREAMING QUERY TheQuery SET (\n\toption = TRUE\n);\n"},
-                    {"aLTer sTReaMing qUErY TheQuery sEt (option = tRuE) As dO BeGin ;;\n\nInSeRT iNTo TheTable SELect 1;; eNd Do",
-                     "ALTER STREAMING QUERY TheQuery SET (\n\toption = TRUE\n) AS DO BEGIN\nINSERT INTO TheTable\nSELECT\n\t1\n;\nEND DO;\n"}};
+                    {"aLTer sTReaMing qUErY TheQuery sEt (option = tRuE,nested_setting= (x=TrUe), other =(a = b, c=TrUe))",
+                     "ALTER STREAMING QUERY TheQuery SET (\n\toption = TRUE,\n\tnested_setting = (\n\t\tx = TRUE\n\t),\n\tother = (\n\t\ta = b,\n\t\tc = TRUE\n\t)\n);\n"},
+                    {"aLTer sTReaMing qUErY TheQuery sEt (option = tRuE,nested_setting= (x=TrUe), other =(a = b, c=TrUe)) As dO BeGin ;;\n\nInSeRT iNTo TheTable SELect 1;; eNd Do",
+                     "ALTER STREAMING QUERY TheQuery SET (\n\toption = TRUE,\n\tnested_setting = (\n\t\tx = TRUE\n\t),\n\tother = (\n\t\ta = b,\n\t\tc = TRUE\n\t)\n) AS DO BEGIN\nINSERT INTO TheTable\nSELECT\n\t1\n;\nEND DO;\n"}};
 
     TSetup setup;
     setup.Run(cases);

@@ -24,7 +24,7 @@ class TExprTypeSaver: public TSaver<TExprTypeSaver<TSaver>> {
     struct TStructAdaptor {
         const TStructExprType* Type;
 
-        TStructAdaptor(const TStructExprType* type)
+        explicit TStructAdaptor(const TStructExprType* type)
             : Type(type)
         {
         }
@@ -84,7 +84,7 @@ class TExprTypeSaver: public TSaver<TExprTypeSaver<TSaver>> {
     struct TTupleAdaptor {
         const TTupleExprType* Type;
 
-        TTupleAdaptor(const TTupleExprType* type)
+        explicit TTupleAdaptor(const TTupleExprType* type)
             : Type(type)
         {
         }
@@ -101,7 +101,7 @@ class TExprTypeSaver: public TSaver<TExprTypeSaver<TSaver>> {
     struct TCallableAdaptor {
         const TCallableExprType* Type;
 
-        TCallableAdaptor(const TCallableExprType* type)
+        explicit TCallableAdaptor(const TCallableExprType* type)
             : Type(type)
         {
         }
@@ -199,6 +199,12 @@ public:
             case ETypeAnnotationKind::Unit:
                 TBase::SaveUnitType();
                 break;
+            case ETypeAnnotationKind::Universal:
+                TBase::SaveUniversalType();
+                break;
+            case ETypeAnnotationKind::UniversalStruct:
+                TBase::SaveUniversalStructType();
+                break;
             case ETypeAnnotationKind::EmptyList:
                 TBase::SaveEmptyListType();
                 break;
@@ -284,7 +290,7 @@ struct TExprTypeLoader {
     TExprContext& Ctx;
     TPosition Pos;
 
-    TExprTypeLoader(TExprContext& ctx, const TPosition& pos = TPosition())
+    explicit TExprTypeLoader(TExprContext& ctx, const TPosition& pos = TPosition())
         : Ctx(ctx)
         , Pos(pos)
     {
@@ -297,6 +303,12 @@ struct TExprTypeLoader {
     }
     TMaybe<TType> LoadUnitType(ui32 /*level*/) {
         return Ctx.MakeType<TUnitExprType>();
+    }
+    TMaybe<TType> LoadUniversalType(ui32 /*level*/) {
+        return Ctx.MakeType<TUniversalExprType>();
+    }
+    TMaybe<TType> LoadUniversalStructType(ui32 /*level*/) {
+        return Ctx.MakeType<TUniversalStructExprType>();
     }
     TMaybe<TType> LoadGenericType(ui32 /*level*/) {
         return Ctx.MakeType<TGenericExprType>();

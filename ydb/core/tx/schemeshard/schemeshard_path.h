@@ -37,6 +37,7 @@ public:
         const TChecker& Fail(EStatus status, const TString& error) const;
 
     public:
+        using TCheckerMethodPtr = const TChecker& (TChecker::*)(EStatus status) const;
         explicit TChecker(const TPath& path, const NCompat::TSourceLocation location = NCompat::TSourceLocation::current());
 
         explicit operator bool() const;
@@ -116,6 +117,7 @@ public:
         const TChecker& IsSysView(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& IsSecret(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& IsStreamingQuery(EStatus status = EStatus::StatusNameConflict) const;
+        const TChecker& Or(TCheckerMethodPtr leftFunc, TCheckerMethodPtr rightFunc, EStatus status = EStatus::StatusNameConflict) const;
     };
 
 public:
@@ -172,6 +174,7 @@ public:
     bool IsUnderDeleting() const;
     bool IsUnderMoving() const;
     bool IsUnderOutgoingIncrementalRestore() const;
+    bool IsUnderIncomingIncrementalRestore() const;
     TPath& RiseUntilOlapStore();
     TPath FindOlapStore() const;
     bool IsCommonSensePath() const;

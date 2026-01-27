@@ -3,8 +3,6 @@
 #include "client.h"
 #include "private.h"
 
-#include <yt/yt/core/misc/hedging_manager.h>
-
 #include <yt/yt/core/ytree/fluent.h>
 
 #include <yt/yt/core/concurrency/delayed_executor.h>
@@ -76,8 +74,6 @@ public:
         , BackupChannel_(std::move(backupChannel))
         , HedgingOptions_(hedgingOptions)
     {
-        HedgingDelay_ = HedgingOptions_.HedgingManager->OnPrimaryRequestsStarted(/*requestCount*/ 1);
-
         auto hedgingResponseHandler = New<THedgingResponseHandler>(this, false);
 
         auto requestControl = PrimaryChannel_->Send(
@@ -87,12 +83,12 @@ public:
 
         RegisterSentRequest(std::move(requestControl));
 
-        if (HedgingDelay_ == TDuration::Zero()) {
+        if (HedgingOptions_.HedgingDelay == TDuration::Zero()) {
             OnDeadlineReached(false);
         } else {
             DeadlineCookie_ = TDelayedExecutor::Submit(
                 BIND(&THedgingSession::OnDeadlineReached, MakeWeak(this)),
-                HedgingDelay_);
+                HedgingOptions_.HedgingDelay);
         }
     }
 
@@ -204,8 +200,6 @@ private:
     const IChannelPtr BackupChannel_;
     const THedgingChannelOptions HedgingOptions_;
 
-    TDuration HedgingDelay_;
-
     TDelayedExecutorCookie DeadlineCookie_;
 
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
@@ -240,11 +234,11 @@ private:
         }
 
         auto timeout = *SendOptions_.Timeout;
-        if (timeout < HedgingDelay_) {
+        if (timeout < HedgingOptions_.HedgingDelay) {
             return TDuration::Zero();
         }
 
-        return timeout - HedgingDelay_;
+        return timeout - HedgingOptions_.HedgingDelay;
     }
 
     void OnDeadlineReached(bool aborted)
@@ -259,18 +253,12 @@ private:
             return;
         }
 
-        if (!HedgingOptions_.HedgingManager->OnHedgingDelayPassed(/*requestCount*/ 1)) {
-            YT_LOG_DEBUG("Hedging manager restrained sending backup request (RequestId: %v)",
-                Request_->GetRequestId());
-            return;
-        }
-
         {
             auto guard = Guard(SpinLock_);
             if (Responded_ || !ResponseHandler_) {
                 return;
             }
-            if (HedgingOptions_.CancelPrimaryOnHedging && HedgingDelay_ != TDuration::Zero()) {
+            if (HedgingOptions_.CancelPrimaryOnHedging && HedgingOptions_.HedgingDelay != TDuration::Zero()) {
                 PrimaryCanceled_ = true;
                 CancelSentRequests(std::move(guard));
             }
@@ -416,7 +404,6 @@ IChannelPtr CreateHedgingChannel(
 {
     YT_VERIFY(primaryChannel);
     YT_VERIFY(backupChannel);
-    YT_VERIFY(options.HedgingManager);
 
     return New<THedgingChannel>(
         std::move(primaryChannel),

@@ -1,10 +1,12 @@
 #include "ut_helpers.h"
 
-#include <yql/essentials/minikql/mkql_string_util.h>
-#include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.h>
-
 #include <ydb/core/base/backtrace.h>
 #include <ydb/core/testlib/basics/appdata.h>
+#include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/datastreams/datastreams.h>
+
+#include <yql/essentials/minikql/mkql_string_util.h>
+#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 
 #include <util/system/env.h>
 
@@ -99,6 +101,7 @@ void TPqIoTestFixture::InitAsyncOutput(
             &actor.GetAsyncOutputCallbacks(),
             MakeIntrusive<NMonitoring::TDynamicCounters>(),
             CreatePqNativeGateway(std::move(pqServices)),
+            true,
             freeSpace);
 
         actor.InitAsyncOutput(dqAsyncOutput, dqAsyncOutputAsActor);

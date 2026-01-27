@@ -69,8 +69,6 @@ struct TModuleResolverState : public TThrRefBase {
     THolder<NYql::TExprContext::TFreezeGuard> FreezeGuardHolder;
 };
 
-void ApplyServiceConfig(NYql::TKikimrConfiguration& kqpConfig, const NKikimrConfig::TTableServiceConfig& serviceConfig);
-
 enum class ELocksOp {
     Unspecified = 0,
     Commit,
@@ -158,7 +156,7 @@ public:
         TKqpSnapshot Snapshot = TKqpSnapshot();
         std::shared_ptr<NKikimr::NKqp::NRm::IKqpResourceManager> ResourceManager_;
         std::shared_ptr<NKikimr::NKqp::NComputeActor::IKqpNodeComputeActorFactory> CaFactory_;
-        NKikimrKqp::EIsolationLevel IsolationLevel = NKikimrKqp::ISOLATION_LEVEL_UNDEFINED;
+        NKqpProto::EIsolationLevel IsolationLevel = NKqpProto::ISOLATION_LEVEL_UNDEFINED;
         TMaybe<NKikimrKqp::TRlPath> RlPath;
         bool NeedTxId = true;
         bool UseImmediateEffects = false;

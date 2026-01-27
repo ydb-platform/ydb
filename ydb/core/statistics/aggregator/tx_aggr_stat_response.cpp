@@ -37,6 +37,10 @@ struct TStatisticsAggregator::TTxAggregateStatisticsResponse : public TTxBase {
             auto tag = column.GetTag();
             for (auto& statistic : column.GetStatistics()) {
                 if (statistic.GetType() == NKikimr::NStat::COUNT_MIN_SKETCH) {
+                    if (!Self->ColumnNames.contains(tag)) {
+                        continue;
+                    }
+
                     const auto& cmsStr = statistic.GetData();
                     std::unique_ptr<TCountMinSketch> cms(TCountMinSketch::FromString(
                         cmsStr.data(), cmsStr.size()));

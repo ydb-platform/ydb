@@ -2,6 +2,7 @@
 #include "settings.h"
 
 #include <ydb/core/formats/arrow/accessor/abstract/constructor.h>
+#include <ydb/core/formats/arrow/accessor/sub_columns/json_value_path.h>
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/actors/core/log.h>
@@ -17,11 +18,27 @@ class TSplittedColumns;
 
 class TDictStats {
 private:
+    using TJsonPathAccessorTriePtr = std::shared_ptr<NKikimr::NArrow::NAccessor::NSubColumns::TJsonPathAccessorTrie>;
+
     std::shared_ptr<arrow::RecordBatch> Original;
     std::shared_ptr<arrow::BinaryArray> DataNames;
     std::shared_ptr<arrow::UInt32Array> DataRecordsCount;
     std::shared_ptr<arrow::UInt32Array> DataSize;
     std::shared_ptr<arrow::UInt8Array> AccessorType;
+    TJsonPathAccessorTriePtr CachedJsonPathAccessorTrie;
+
+    TJsonPathAccessorTriePtr GenerateJsonPathAccessorTrie() const {
+        auto jsonPathAccessorTrie = std::make_shared<NKikimr::NArrow::NAccessor::NSubColumns::TJsonPathAccessorTrie>();
+        for (ui32 i = 0; i < DataNames->length(); ++i) {
+            const auto arrView = DataNames->GetView(i);
+            auto insertResult = jsonPathAccessorTrie->Insert(ToJsonPath(TStringBuf(arrView.data(), arrView.size())), nullptr, i);
+            AFL_VERIFY(insertResult.IsSuccess())("key_name", TStringBuf(arrView.data(), arrView.size()))
+                ("json_path", ToJsonPath(TStringBuf(arrView.data(), arrView.size())))
+                ("error", insertResult.GetErrorMessage());
+        }
+
+        return jsonPathAccessorTrie;
+    }
 
 public:
     ui32 GetFilledValuesCount() const {
@@ -43,25 +60,28 @@ public:
     static TDictStats BuildEmpty();
     TString SerializeAsString(const std::shared_ptr<NSerialization::ISerializer>& serializer) const;
 
+    void CreateJsonPathAccessorTrieCache() {
+        CachedJsonPathAccessorTrie = GenerateJsonPathAccessorTrie();
+    }
+
     std::optional<ui32> GetKeyIndexOptional(const std::string_view keyName) const {
-        for (ui32 i = 0; i < DataNames->length(); ++i) {
-            const auto arrView = DataNames->GetView(i);
-            if (std::string_view(arrView.data(), arrView.size()) == keyName) {
-                return i;
-            }
+        auto accessorResult = CachedJsonPathAccessorTrie ? CachedJsonPathAccessorTrie->GetAccessor(ToJsonPath(keyName))
+                                                         : GenerateJsonPathAccessorTrie()->GetAccessor(ToJsonPath(keyName));
+        AFL_VERIFY(accessorResult.IsSuccess())("keyName", keyName)("jsonPath", ToJsonPath(keyName))("error", accessorResult.GetErrorMessage());
+
+        auto accessor = accessorResult.DetachResult();
+        if (!accessor) {
+            return std::nullopt;
         }
-        return std::nullopt;
+
+        return accessor->GetCookie();
     }
 
     ui32 GetKeyIndexVerified(const std::string_view keyName) const {
-        for (ui32 i = 0; i < DataNames->length(); ++i) {
-            const auto arrView = DataNames->GetView(i);
-            if (std::string_view(arrView.data(), arrView.size()) == keyName) {
-                return i;
-            }
-        }
-        AFL_VERIFY(false);
-        return 0;
+        auto idx = GetKeyIndexOptional(keyName);
+        AFL_VERIFY(idx.has_value());
+
+        return idx.value();
     }
 
     class TRTStatsValue {
@@ -162,6 +182,10 @@ public:
     TRTStats GetRTStats(const ui32 index) const {
         auto view = GetColumnName(index);
         return TRTStats(TString(view.data(), view.size()), GetColumnRecordsCount(index), GetColumnSize(index));
+    }
+
+    ui32 GetDataNamesCount() const {
+        return DataNames->length();
     }
 
     ui32 GetColumnsCount() const {

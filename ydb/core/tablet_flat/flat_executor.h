@@ -358,6 +358,14 @@ class TExecutor
         LowPriority,
     };
 
+    enum class EBrokenReason {
+        Storage,
+        Exception,
+        Transaction,
+    };
+
+    static const TString& BrokenAlertName(EBrokenReason);
+
     const TIntrusivePtr<ITimeProvider> Time = nullptr;
     NFlatExecutorSetup::ITablet * Owner;
     const TActorId OwnerActorId;
@@ -505,7 +513,7 @@ class TExecutor
     ui64 Stamp() const noexcept;
     void Registered(TActorSystem*, const TActorId&) override;
     void PassAway() override;
-    void Broken();
+    void Broken(EBrokenReason reason);
     void Active(const TActorContext &ctx);
     void ActivateFollower(const TActorContext &ctx);
     void RecreatePrivateCache();
@@ -548,7 +556,7 @@ class TExecutor
     void AddPageCollection(const TIntrusivePtr<TPrivatePageCache::TPageCollection> &pageCollection);
     void DropPartStorePageCollections(const NTable::TPart &part);
     void DropPageCollection(const TLogoBlobID& pageCollectionId);
-    void StartBackup();
+    void StartNewBackup();
 
     void UpdateCacheModesForPartStore(NTable::TPartView& partView, const THashMap<NTable::TTag, ECacheMode>& cacheModes);
     void UpdateCachePagesForDatabase(bool pendingOnly = false);
@@ -643,6 +651,8 @@ class TExecutor
 
     void RenderHtmlCounters(TStringStream& str) const;
     void RenderJsonCounters(TStringStream& str) const;
+
+    float CalcRejectProbability() const;
 
 public:
     void Describe(IOutputStream &out) const override

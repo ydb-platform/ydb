@@ -48,10 +48,13 @@ protected:
     const TActorId ResponseActorId;
 
     TTags ScanTags;
-    ui32 EmbeddingPos = 0;
+    NTable::TPos EmbeddingPos = 0;
 
     ui64 ReadRows = 0;
     ui64 ReadBytes = 0;
+
+    bool InForeign = false;
+    NTable::TPos IsForeignPos = 0;
 
     IDriver* Driver = nullptr;
     NYql::TIssues Issues;
@@ -80,10 +83,11 @@ public:
     {
         LOG_I("Create " << Debug());
 
+        InForeign = request.GetSkipOverlapForeign();
+
         const auto& embedding = request.GetEmbeddingColumn();
-        NTable::TTag embeddingTag;
-        ui32 dataPos = 0;
-        ScanTags = MakeScanTags(table, embedding, {}, EmbeddingPos, dataPos, embeddingTag);
+        NTable::TPos dataPos = 0;
+        ScanTags = MakeScanTags(table, embedding, {}, false, EmbeddingPos, dataPos, InForeign ? &IsForeignPos : nullptr);
         Lead.SetTags(ScanTags);
     }
 
@@ -193,6 +197,13 @@ protected:
 
     void Feed(TArrayRef<const TCell>, TArrayRef<const TCell> row)
     {
+        if (InForeign) {
+            bool foreign = row.at(IsForeignPos).AsValue<bool>();
+            if (foreign) {
+                // Skip rows from "non-domestic" clusters to not affect K-means centroids
+                return;
+            }
+        }
         if (auto pos = Clusters->FindCluster(row, EmbeddingPos); pos) {
             Clusters->AggregateToCluster(*pos, row.at(EmbeddingPos).AsRef());
         }

@@ -612,7 +612,7 @@ namespace NKikimr {
                 if (Config->UseCostTracker) {
                     NPDisk::EDeviceType trueMediaType = LocRecCtx->PDiskCtx->Dsk->TrueMediaType;
                     if (trueMediaType == NPDisk::DEVICE_TYPE_UNKNOWN) {
-                        // Unable to resolve type from PDisk's properties, using type from VDisk config 
+                        // Unable to resolve type from PDisk's properties, using type from VDisk config
                         trueMediaType = Config->BaseInfo.DeviceType;
                     }
                     if (trueMediaType != NPDisk::DEVICE_TYPE_UNKNOWN) {

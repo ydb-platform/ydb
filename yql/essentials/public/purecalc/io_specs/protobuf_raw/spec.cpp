@@ -860,6 +860,7 @@ public:
             TUnboxedValue result;
             Converter_.DoConvert(message, result);
             WorkerHolder_->Push(std::move(result));
+            WorkerHolder_->CheckState(false);
         }
     }
 
@@ -868,6 +869,7 @@ public:
 
         with_lock (WorkerHolder_->GetScopedAlloc()) {
             WorkerHolder_->OnFinish();
+            WorkerHolder_->CheckState(true);
         }
     }
 };
@@ -900,6 +902,7 @@ public:
             YQL_ENSURE(status != EFetchStatus::Yield, "Yield is not supported in pull mode");
 
             if (status == EFetchStatus::Finish) {
+                WorkerHolder_->CheckState(true);
                 return TOutputSpecTraits<TOutputSpec>::StreamSentinel;
             }
 
@@ -932,6 +935,7 @@ public:
             TUnboxedValue value;
 
             if (!WorkerHolder_->GetOutputIterator().Next(value)) {
+                WorkerHolder_->CheckState(true);
                 return TOutputSpecTraits<TOutputSpec>::StreamSentinel;
             }
 

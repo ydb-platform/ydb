@@ -22,7 +22,6 @@
 #include <yt/yt/core/concurrency/periodic_executor.h>
 #include <yt/yt/core/concurrency/pollable_detail.h>
 
-#include <library/cpp/yt/threading/rw_spin_lock.h>
 #include <library/cpp/yt/threading/spin_lock.h>
 
 #include <library/cpp/yt/memory/atomic_intrusive_ptr.h>
@@ -100,7 +99,20 @@ public:
         UnarmPoller();
 
         return Poller_->Unregister(this).Apply(BIND([this, this_ = MakeStrong(this)] {
-            YT_LOG_INFO("Bus server stopped");
+            {
+                auto guard = Guard(ConnectionsSpinLock_);
+                YT_VERIFY(!AllConnectionsTerminatedPromise_);
+                AllConnectionsTerminatedPromise_ = NewPromise<void>();
+
+                if (Connections_.empty()) {
+                    guard.Release();
+                    AllConnectionsTerminatedPromise_.Set();
+                }
+            }
+
+            return AllConnectionsTerminatedPromise_.ToFuture().Apply(BIND([this, this_ = MakeStrong(this)] {
+                YT_LOG_INFO("Bus server stopped");
+            }));
         }));
     }
 
@@ -124,8 +136,8 @@ public:
 
         decltype(Connections_) connections;
         {
-            auto guard = WriterGuard(ConnectionsSpinLock_);
-            std::swap(connections, Connections_);
+            auto guard = Guard(ConnectionsSpinLock_);
+            connections = Connections_;
         }
 
         for (const auto& connection : connections) {
@@ -148,8 +160,9 @@ protected:
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, ControlSpinLock_);
     SOCKET ServerSocket_ = INVALID_SOCKET;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, ConnectionsSpinLock_);
+    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, ConnectionsSpinLock_);
     THashSet<TTcpConnectionPtr> Connections_;
+    TPromise<void> AllConnectionsTerminatedPromise_;
 
     virtual void CreateServerSocket() = 0;
     virtual void InitClientSocket(SOCKET clientSocket) = 0;
@@ -168,9 +181,12 @@ protected:
 
     void OnConnectionTerminated(const TTcpConnectionPtr& connection, const TError& /*error*/)
     {
-        auto guard = WriterGuard(ConnectionsSpinLock_);
-        // NB: Connection could be missing, see OnShutdown.
-        Connections_.erase(connection);
+        auto guard = Guard(ConnectionsSpinLock_);
+        EraseOrCrash(Connections_, connection);
+        if (Connections_.empty() && AllConnectionsTerminatedPromise_) {
+            guard.Release();
+            AllConnectionsTerminatedPromise_.Set();
+        }
     }
 
     void OpenServerSocket()
@@ -288,7 +304,8 @@ protected:
                 DynamicConfig_.Acquire()->RejectConnectionOnMemoryOvercommit);
 
             {
-                auto guard = WriterGuard(ConnectionsSpinLock_);
+                auto guard = Guard(ConnectionsSpinLock_);
+                YT_VERIFY(!AllConnectionsTerminatedPromise_);
                 EmplaceOrCrash(Connections_, connection);
             }
 
@@ -427,22 +444,20 @@ public:
         TBusServerConfigPtr config,
         IPacketTranscoderFactory* packetTranscoderFactory,
         IMemoryUsageTrackerPtr memoryUsageTracker,
-        std::optional<TProfiler> profiler,
-        IInvokerPtr invoker)
+        std::optional<TCertProfiler> certProfiler)
         : Config_(std::move(config))
         , PacketTranscoderFactory_(packetTranscoderFactory)
         , MemoryUsageTracker_(std::move(memoryUsageTracker))
-        , Profiler_(std::move(profiler))
-        , Invoker_(std::move(invoker))
+        , CertProfiler_(std::move(certProfiler))
     {
         YT_VERIFY(Config_);
         YT_VERIFY(MemoryUsageTracker_);
 
-        // Update cert sensors periodically.
-        if (Profiler_ && Invoker_ && Config_->CertificateChain) {
-            CertChainToExpiry_ = Profiler_->Gauge("/cert_chain_to_expiry");
+        if (CertProfiler_ && Config_->CertificateChain) {
+            // There is certificate so update cert sensors periodically.
+            CertChainToExpiry_ = CertProfiler_->Profiler.Gauge("/cert_chain_to_expiry");
             UpdateCertSensorsExecutor_ = New<TPeriodicExecutor>(
-                Invoker_,
+                CertProfiler_->Invoker,
                 BIND_NO_PROPAGATE(&TTcpBusServerProxy::UpdateCertSensors, MakeWeak(this)),
                 TDuration::Minutes(5));
         }
@@ -491,7 +506,7 @@ public:
         if (auto server = Server_.Exchange(nullptr)) {
             return server->Stop();
         } else {
-            return VoidFuture;
+            return OKFuture;
         }
     }
 
@@ -509,9 +524,8 @@ private:
 
     TAtomicIntrusivePtr<TServer> Server_;
 
-    const std::optional<TProfiler> Profiler_;
+    const std::optional<TCertProfiler> CertProfiler_;
     std::optional<TGauge> CertChainToExpiry_;
-    const IInvokerPtr Invoker_;
     TPeriodicExecutorPtr UpdateCertSensorsExecutor_;
 
     void UpdateCertSensors()
@@ -729,35 +743,30 @@ IBusServerPtr CreatePublicTcpBusServer(
     TBusServerConfigPtr config,
     IPacketTranscoderFactory* packetTranscoderFactory,
     IMemoryUsageTrackerPtr memoryUsageTracker,
-    std::optional<TProfiler> profiler,
-    IInvokerPtr invoker)
+    std::optional<TCertProfiler> certProfiler)
 {
     YT_VERIFY(config->Port.has_value());
     return New<TTcpBusServerProxy<TRemoteTcpBusServer>>(
         config,
         packetTranscoderFactory,
         memoryUsageTracker,
-        std::move(profiler),
-        std::move(invoker));
+        std::move(certProfiler));
 }
 
 IBusServerPtr CreateLocalTcpBusServer(
     TBusServerConfigPtr config,
     IPacketTranscoderFactory* packetTranscoderFactory,
     IMemoryUsageTrackerPtr memoryUsageTracker,
-    std::optional<TProfiler> profiler,
-    IInvokerPtr invoker)
+    std::optional<TCertProfiler> certProfiler)
 {
 #ifdef _linux_
     return New<TTcpBusServerProxy<TLocalTcpBusServer>>(
         config,
         packetTranscoderFactory,
         memoryUsageTracker,
-        std::move(profiler),
-        std::move(invoker));
+        std::move(certProfiler));
 #else
-    Y_UNUSED(profiler);
-    Y_UNUSED(invoker);
+    Y_UNUSED(certProfiler);
     Y_UNUSED(config, packetTranscoderFactory, memoryUsageTracker);
     YT_ABORT();
 #endif
@@ -767,8 +776,7 @@ IBusServerPtr CreateBusServer(
     TBusServerConfigPtr config,
     IPacketTranscoderFactory* packetTranscoderFactory,
     IMemoryUsageTrackerPtr memoryUsageTracker,
-    std::optional<TProfiler> profiler,
-    IInvokerPtr invoker)
+    std::optional<TCertProfiler> certProfiler)
 {
     std::vector<IBusServerPtr> servers;
 
@@ -777,20 +785,18 @@ IBusServerPtr CreateBusServer(
             config,
             packetTranscoderFactory,
             memoryUsageTracker,
-            profiler,
-            invoker));
+            certProfiler));
     }
 
 #ifdef _linux_
     // Abstract unix sockets are supported only on Linux.
     if (servers.empty()) {
-        // Pass profiler/invoker only to the first server.
+        // Pass cert profiler only to the first server.
         servers.push_back(CreateLocalTcpBusServer(
             config,
             packetTranscoderFactory,
             memoryUsageTracker,
-            std::move(profiler),
-            std::move(invoker)));
+            std::move(certProfiler)));
     } else {
         servers.push_back(CreateLocalTcpBusServer(
             config,
@@ -807,4 +813,3 @@ IBusServerPtr CreateBusServer(
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NBus
-

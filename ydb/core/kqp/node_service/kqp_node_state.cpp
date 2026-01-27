@@ -14,10 +14,40 @@ void TNodeState::AddRequest(TNodeRequest&& request) {
     }
 }
 
+bool TNodeState::AddTasksToRequest(ui64 txId, TActorId executerId, const TVector<ui64>& taskIds) {
+    auto& bucket = GetBucketByTxId(txId);
+    TWriteGuard guard(bucket.Mutex);
+
+    const auto [requestsBegin, requestsEnd] = bucket.Requests.equal_range(txId);
+    for (auto requestIt = requestsBegin; requestIt != requestsEnd; ++requestIt) {
+        if (requestIt->second.ExecuterId == executerId) {
+            YQL_ENSURE(!requestIt->second.ExecutionCancelled, "Request TxId: " << txId << " is already cancelled");
+            for (ui64 taskId : taskIds) {
+                auto [_, inserted] = requestIt->second.Tasks.emplace(taskId, std::nullopt);
+                YQL_ENSURE(inserted, "Task " << taskId << " already exists in request TxId: " << txId);
+            }
+            return true;
+        }
+    }
+    return false;
+}
 bool TNodeState::HasRequest(ui64 txId) const {
     const auto& bucket = GetBucketByTxId(txId);
     TReadGuard guard(bucket.Mutex);
     return bucket.Requests.contains(txId);
+}
+
+bool TNodeState::IsRequestCancelled(ui64 txId, TActorId executerId) const {
+    const auto& bucket = GetBucketByTxId(txId);
+    TReadGuard guard(bucket.Mutex);
+
+    const auto [requestsBegin, requestsEnd] = bucket.Requests.equal_range(txId);
+    for (auto requestIt = requestsBegin; requestIt != requestsEnd; ++requestIt) {
+        if (requestIt->second.ExecuterId == executerId) {
+            return requestIt->second.ExecutionCancelled;
+        }
+    }
+    return false;
 }
 
 std::vector<ui64> TNodeState::ClearExpiredRequests() {
@@ -112,32 +142,130 @@ std::vector<TNodeRequest::TTaskInfo> TNodeState::GetTasksByTxId(ui64 txId) const
     return tasks;
 }
 
-void TNodeState::DumpInfo(TStringStream& str) const {
-    for (const auto& bucket : Buckets) {
-        TReadGuard guard(bucket.Mutex);
-        TMap<ui64, TVector<std::pair<const TActorId, const TNodeRequest*>>> byTx;
+void TNodeState::MarkRequestAsCancelled(ui64 txId) {
+    auto& bucket = GetBucketByTxId(txId);
+    TWriteGuard guard(bucket.Mutex);
 
-        for (const auto& [txId, request] : bucket.Requests) {
-            byTx[txId].emplace_back(request.ExecuterId, &request);
+    const auto [requestsBegin, requestsEnd] = bucket.Requests.equal_range(txId);
+    for (auto requestIt = requestsBegin; requestIt != requestsEnd; ++requestIt) {
+        requestIt->second.ExecutionCancelled = true;
+    }
+}
+
+void TNodeState::DumpInfo(TStringStream& str) const {
+    HTML(str) {
+        str << Endl << "Transactions:" << Endl;
+        TABLE_SORTABLE_CLASS("table table-condensed") {
+            TABLEHEAD() {
+                TABLER() {
+                    TABLEH() {str << "TxId";}
+                    TABLEH() {str << "Executer";}
+                    TABLEH() {str << "StartTime";}
+                    TABLEH() {str << "Deadline";}
+                }
+            }
+            TABLEBODY() {
+                for (const auto& bucket : Buckets) {
+                    TReadGuard guard(bucket.Mutex);
+                    TMap<ui64, TVector<std::pair<const TActorId, const TNodeRequest*>>> byTx;
+
+                    for (const auto& [txId, request] : bucket.Requests) {
+                        byTx[txId].emplace_back(request.ExecuterId, &request);
+                    }
+
+                    for (const auto& [txId, requests] : byTx) {
+                        for (auto& [requester, request] : requests) {
+                            TABLER() {
+                                TABLED() {str << txId;}
+                                TABLED() {
+                                    HREF(TStringBuilder() << "/node/" << requester.NodeId() << "/actors/kqp_node?ex=" << requester)  {
+                                        str << requester;
+                                    }
+                                }
+                                TABLED() {str << request->StartTime;}
+                                TABLED() {str << request->Deadline;}
+                            }
+                        }
+                    }
+                }
+            }
         }
-        for (const auto& [txId, requests] : byTx) {
-            str << "    Requests:" << Endl;
-            for (auto& [requester, request] : requests) {
-                str << "      Requester: " << requester << Endl;
-                str << "        StartTime: " << request->StartTime << Endl;
-                str << "        Deadline: " << request->Deadline << Endl;
-                str << "        In-fly tasks:" << Endl;
-                for (auto& [taskId, actorId] : request->Tasks) {
-                    str << "          Task: " << taskId << Endl;
-                    if (actorId) {
-                        str << "            Compute actor: " << *actorId << Endl;
-                    } else {
-                        str << "            Compute actor: (task not started yet)" << Endl;
+
+        str << Endl << "Tasks:" << Endl;
+        TABLE_SORTABLE_CLASS("table table-condensed") {
+            TABLEHEAD() {
+                TABLER() {
+                    TABLEH() {str << "TxId";}
+                    TABLEH() {str << "Executer";}
+                    TABLEH() {str << "TaskId";}
+                    TABLEH() {str << "ComputeActorId";}
+                }
+            }
+            TABLEBODY() {
+                for (const auto& bucket : Buckets) {
+                    TReadGuard guard(bucket.Mutex);
+                    TMap<ui64, TVector<std::pair<const TActorId, const TNodeRequest*>>> byTx;
+
+                    for (const auto& [txId, request] : bucket.Requests) {
+                        byTx[txId].emplace_back(request.ExecuterId, &request);
+                    }
+
+                    for (const auto& [txId, requests] : byTx) {
+                        for (auto& [requester, request] : requests) {
+                            for (auto& [taskId, actorId] : request->Tasks) {
+                                TABLER() {
+                                    TABLED() {str << txId;}
+                                    TABLED() {
+                                        HREF(TStringBuilder() << "/node/" << requester.NodeId() << "/actors/kqp_node?ex=" << requester)  {
+                                            str << requester;
+                                        }
+                                    }
+                                    TABLED() {str << taskId;}
+                                    TABLED() {
+                                        if (actorId) {
+                                            HREF(TStringBuilder() << "/node/" << actorId->NodeId() << "/actors/kqp_node?ca=" << *actorId)  {
+                                                str << *actorId;
+                                            }
+                                        } else {
+                                            str << "N/A";
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
         }
     }
+}
+
+bool TNodeState::ValidateComputeActorId(const TString& computeActorId, TActorId& id) const {
+    for (const auto& bucket : Buckets) {
+        TReadGuard guard(bucket.Mutex);
+        for (const auto& [_, request] : bucket.Requests) {
+            for (auto& [_, actorId] : request.Tasks) {
+                if (actorId && ToString(*actorId) == computeActorId) {
+                    id = *actorId;
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
+bool TNodeState::ValidateKqpExecuterId(const TString& kqpExecuterId, ui32 nodeId, TActorId& id) const {
+    for (const auto& bucket : Buckets) {
+        TReadGuard guard(bucket.Mutex);
+        for (const auto& [_, request] : bucket.Requests) {
+            if (ToString(request.ExecuterId) == kqpExecuterId && request.ExecuterId.NodeId() == nodeId) {
+                id = request.ExecuterId;
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 } // namespace NKikimr::NKqp::NKqpNode

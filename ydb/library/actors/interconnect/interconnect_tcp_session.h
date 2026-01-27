@@ -223,7 +223,7 @@ namespace NActors {
 
     public:
         static constexpr EActivityType ActorActivityType() {
-            return EActivityType::INTERCONNECT_SESSION_TCP;
+            return EActivityType::INTERCONNECT_INPUT_SESSION_TCP;
         }
 
         TInputSessionTCP(const TActorId& sessionId,
@@ -453,6 +453,7 @@ namespace NActors {
 
         void Init();
         void CloseInputSession();
+        bool IsRdmaInUse();
 
         static TEvTerminate* NewEvTerminate(TDisconnectReason reason) {
             return new TEvTerminate(std::move(reason));

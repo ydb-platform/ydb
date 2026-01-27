@@ -249,29 +249,29 @@ public:
     void SetIsolationLevel(const Ydb::Table::TransactionSettings& settings) {
         switch (settings.tx_mode_case()) {
             case Ydb::Table::TransactionSettings::kSerializableReadWrite:
-                EffectiveIsolationLevel = NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE;
+                EffectiveIsolationLevel = NKqpProto::ISOLATION_LEVEL_SERIALIZABLE;
                 Readonly = false;
                 break;
 
             case Ydb::Table::TransactionSettings::kOnlineReadOnly:
                 EffectiveIsolationLevel = settings.online_read_only().allow_inconsistent_reads()
-                    ? NKikimrKqp::ISOLATION_LEVEL_READ_UNCOMMITTED
-                    : NKikimrKqp::ISOLATION_LEVEL_READ_COMMITTED;
+                    ? NKqpProto::ISOLATION_LEVEL_READ_UNCOMMITTED
+                    : NKqpProto::ISOLATION_LEVEL_READ_COMMITTED;
                 Readonly = true;
                 break;
 
             case Ydb::Table::TransactionSettings::kStaleReadOnly:
-                EffectiveIsolationLevel = NKikimrKqp::ISOLATION_LEVEL_READ_STALE;
+                EffectiveIsolationLevel = NKqpProto::ISOLATION_LEVEL_READ_STALE;
                 Readonly = true;
                 break;
 
             case Ydb::Table::TransactionSettings::kSnapshotReadOnly:
-                EffectiveIsolationLevel = NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RO;
+                EffectiveIsolationLevel = NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RO;
                 Readonly = true;
                 break;
 
             case Ydb::Table::TransactionSettings::kSnapshotReadWrite:
-                EffectiveIsolationLevel = NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW;
+                EffectiveIsolationLevel = NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW;
                 Readonly = false;
                 break;
 
@@ -281,11 +281,8 @@ public:
         };
     }
 
-    bool ShouldExecuteDeferredEffects(const TKqpPhyTxHolder::TConstPtr& tx) const {
+    bool ShouldExecuteDeferredEffects() const {
         if (NeedUncommittedChangesFlush || HasOlapTable) {
-            return !DeferredEffects.Empty();
-        }
-        if (EffectiveIsolationLevel == NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW && !tx && HasTableRead) {
             return !DeferredEffects.Empty();
         }
 

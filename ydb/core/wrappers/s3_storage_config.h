@@ -50,7 +50,7 @@ public:
     TS3ExternalStorageConfig(const Ydb::Import::ImportFromS3Settings& settings);
     TS3ExternalStorageConfig(const Ydb::Import::ListObjectsInS3ExportSettings& settings);
     TS3ExternalStorageConfig(const Ydb::Export::ExportToS3Settings& settings);
-    TS3ExternalStorageConfig(const Aws::Auth::AWSCredentials& credentials, const Aws::Client::ClientConfiguration& config, const TString& bucket);
+    TS3ExternalStorageConfig(const Aws::Auth::AWSCredentials& credentials, const Aws::Client::ClientConfiguration& config, const TString& bucket, bool useVirtualAddressing = true, Aws::S3::Model::StorageClass storageClass = Aws::S3::Model::StorageClass::STANDARD);
 };
 
 } // NKikimr::NWrappers::NExternalStorage

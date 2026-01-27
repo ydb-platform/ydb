@@ -178,47 +178,38 @@ IExternalStorageOperator::TPtr TS3ExternalStorageConfig::DoConstructStorageOpera
     return std::make_shared<TS3ExternalStorage>(Config, Credentials, Bucket, StorageClass, verbose, UseVirtualAddressing);
 }
 
-TS3ExternalStorageConfig::TS3ExternalStorageConfig(const Ydb::Import::ImportFromS3Settings& settings)
-    : Config(ConfigFromSettings(settings))
-    , Credentials(CredentialsFromSettings(settings))
-    , UseVirtualAddressing(!settings.disable_virtual_addressing())
-{
-    Bucket = settings.bucket();
-}
-
-TS3ExternalStorageConfig::TS3ExternalStorageConfig(const Ydb::Import::ListObjectsInS3ExportSettings& settings)
-    : Config(ConfigFromSettings(settings))
-    , Credentials(CredentialsFromSettings(settings))
-    , UseVirtualAddressing(!settings.disable_virtual_addressing())
-{
-    Bucket = settings.bucket();
-}
-
-TS3ExternalStorageConfig::TS3ExternalStorageConfig(const Ydb::Export::ExportToS3Settings& settings)
-    : Config(ConfigFromSettings(settings))
-    , Credentials(CredentialsFromSettings(settings))
-    , UseVirtualAddressing(!settings.disable_virtual_addressing())
-{
-    Bucket = settings.bucket();
-}
-
 TS3ExternalStorageConfig::TS3ExternalStorageConfig(
         const Aws::Auth::AWSCredentials& credentials,
         const Aws::Client::ClientConfiguration& config,
-        const TString& bucket)
-    : Config(config)
+        const TString& bucket,
+        bool useVirtualAddressing,
+        Aws::S3::Model::StorageClass storageClass)
+    : Bucket(bucket)
+    , Config(config)
     , Credentials(credentials)
+    , StorageClass(storageClass)
+    , UseVirtualAddressing(useVirtualAddressing)
 {
-    Bucket = bucket;
+}
+
+TS3ExternalStorageConfig::TS3ExternalStorageConfig(const Ydb::Import::ImportFromS3Settings& settings)
+    : TS3ExternalStorageConfig(CredentialsFromSettings(settings), ConfigFromSettings(settings), settings.bucket(), !settings.disable_virtual_addressing())
+{
+}
+
+TS3ExternalStorageConfig::TS3ExternalStorageConfig(const Ydb::Import::ListObjectsInS3ExportSettings& settings)
+    : TS3ExternalStorageConfig(CredentialsFromSettings(settings), ConfigFromSettings(settings), settings.bucket(), !settings.disable_virtual_addressing())
+{
+}
+
+TS3ExternalStorageConfig::TS3ExternalStorageConfig(const Ydb::Export::ExportToS3Settings& settings)
+    : TS3ExternalStorageConfig(CredentialsFromSettings(settings), ConfigFromSettings(settings), settings.bucket(), !settings.disable_virtual_addressing())
+{
 }
 
 TS3ExternalStorageConfig::TS3ExternalStorageConfig(const NKikimrSchemeOp::TS3Settings& settings)
-    : Config(ConfigFromSettings(settings))
-    , Credentials(CredentialsFromSettings(settings))
-    , StorageClass(ConvertStorageClass(settings.GetStorageClass()))
-    , UseVirtualAddressing(settings.GetUseVirtualAddressing())
+    : TS3ExternalStorageConfig(CredentialsFromSettings(settings), ConfigFromSettings(settings), settings.GetBucket(), settings.GetUseVirtualAddressing(), ConvertStorageClass(settings.GetStorageClass()))
 {
-    Bucket = settings.GetBucket();
 }
 
 Aws::S3::Model::StorageClass TS3ExternalStorageConfig::ConvertStorageClass(const Ydb::Export::ExportToS3Settings::StorageClass storage) {

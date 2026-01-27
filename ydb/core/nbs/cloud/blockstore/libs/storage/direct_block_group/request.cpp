@@ -7,6 +7,7 @@ namespace NYdb::NBS::NStorage::NPartitionDirect {
 IRequest::IRequest(TActorId sender, ui64 startIndex)
     : Sender(sender)
     , StartIndex(startIndex)
+    , StartOffset(startIndex * BlockSize)
 {}
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -26,20 +27,30 @@ ui64 TWriteRequest::GetDataSize() const
     return Data.size();
 }
 
-void TWriteRequest::OnDDiskWriteRequested(ui64 requestId, ui8 ddiskIndex)
+void TWriteRequest::OnWriteRequested(ui64 requestId, ui8 persistentBufferIndex, ui64 lsn)
 {
-    DDiskIndexByRequestId[requestId] = ddiskIndex;
+    PersistentBufferWriteMetaByRequestId.emplace(requestId, TPersistentBufferWriteMeta(persistentBufferIndex, lsn));
 }
 
 bool TWriteRequest::IsCompleted(ui64 requestId)
 {
-    auto processedDDiskIndex = DDiskIndexByRequestId[requestId];
-    if (!(DDisksAcksMask & (1 << processedDDiskIndex))) {
-        DDisksAcksMask |= (1 << processedDDiskIndex);
+    auto processedPersistentBufferIndex = PersistentBufferWriteMetaByRequestId.at(requestId).Index;
+    if (!(AcksMask & (1 << processedPersistentBufferIndex))) {
+        AcksMask |= (1 << processedPersistentBufferIndex);
         AckCount++;
     }
 
     return AckCount >= RequiredAckCount;
+}
+
+TVector<TWriteRequest::TPersistentBufferWriteMeta> TWriteRequest::GetPersistentBufferWritesMeta() const
+{
+    TVector<TPersistentBufferWriteMeta> result;
+    for (const auto& [_, persistentBufferWriteMeta] : PersistentBufferWriteMetaByRequestId) {
+        result.push_back(persistentBufferWriteMeta);
+    }
+
+    return result;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

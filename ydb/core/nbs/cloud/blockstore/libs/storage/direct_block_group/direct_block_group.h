@@ -38,6 +38,7 @@ private:
 
     ui64 RequestId = 0;
     std::unordered_map<ui64, std::shared_ptr<IRequest>> RequestById;
+    TVector<std::unordered_map<ui64, ui64>> PersistentBufferBlocksLsn;
 
 public:
     TDirectBlockGroup(ui64 tabletId, ui32 generation,

@@ -15,8 +15,9 @@ constexpr size_t BlockSize = 4096;
 class IRequest {
 public:
     TActorId Sender;
-    // In bytes.
     ui64 StartIndex;
+    // In bytes.
+    ui64 StartOffset;
 
     IRequest(
         TActorId sender,
@@ -30,7 +31,17 @@ public:
 };
 
 class TWriteRequest : public IRequest {
-public:
+public:;
+    struct TPersistentBufferWriteMeta {
+        ui8 Index;
+        ui64 Lsn;
+
+        TPersistentBufferWriteMeta(ui8 index, ui64 lsn)
+            : Index(index)
+            , Lsn(lsn)
+        {}
+    };
+    
     TWriteRequest(
         TActorId sender,
         ui64 startIndex,
@@ -42,16 +53,18 @@ public:
 
     ui64 GetDataSize() const override;
 
-    void OnDDiskWriteRequested(ui64 requestId, ui8 ddiskIndex);
+    void OnWriteRequested(ui64 requestId, ui8 persistentBufferIndex, ui64 lsn);
     
     bool IsCompleted(ui64 requestId) override;
+
+    [[nodiscard]] TVector<TPersistentBufferWriteMeta> GetPersistentBufferWritesMeta() const;
 
 private:
     const TString Data;
     const ui8 RequiredAckCount = 3;
     ui8 AckCount = 0;
-    ui8 DDisksAcksMask = 0;
-    TMap<ui64, ui8> DDiskIndexByRequestId;
+    ui8 AcksMask = 0;
+    std::unordered_map<ui64, TPersistentBufferWriteMeta> PersistentBufferWriteMetaByRequestId;
 };
 
 class TReadRequest : public IRequest {

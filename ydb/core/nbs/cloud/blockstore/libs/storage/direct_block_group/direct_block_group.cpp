@@ -14,10 +14,18 @@ TDirectBlockGroup::TDirectBlockGroup(
                                    TVector<TDDiskConnection>& ddiskConnections,
                                    bool fromPersistentBuffer)
     {
-        for (const auto& ddiskId: ddisksIds) {
+        if (fromPersistentBuffer) {
+            PersistentBufferBlocksLsn.resize(ddisksIds.size());
+        }
+
+        for (const auto& ddiskId: ddisksIds) {            
             ddiskConnections.emplace_back(
-                ddiskId, NDDisk::TQueryCredentials(tabletId, generation, std::nullopt,
-                                           fromPersistentBuffer));
+                ddiskId,
+                NDDisk::TQueryCredentials(
+                    tabletId,
+                    generation,
+                    std::nullopt,                    
+                    fromPersistentBuffer));
         }
     };
 
@@ -32,6 +40,7 @@ void TDirectBlockGroup::EstablishConnections(const TActorContext& ctx)
     for (size_t i = 0; i < PersistentBufferConnections.size(); i++) {
         auto request =
             std::make_unique<NDDisk::TEvConnect>(PersistentBufferConnections[i].Credentials);
+
         ctx.Send(
             PersistentBufferConnections[i].GetServiceId(),
             request.release(),
@@ -94,22 +103,40 @@ void TDirectBlockGroup::HandleWriteBlocksRequest(
     }
     memset(ptr, 0, data.end() - ptr);
 
-    auto request = std::make_shared<TWriteRequest>(ev->Sender, startIndex,
-                                                   std::move(data));
+    // now we expect only 1 block writes
+    Y_ABORT_UNLESS(totalSize == 4096);
+
+    auto request = std::make_shared<TWriteRequest>(
+        ev->Sender,
+        startIndex,
+        std::move(data));
+
     for (size_t i = 0; i < 3; i++) {
+        ++RequestId;
+
         auto requestToDDisk = std::make_unique<NDDisk::TEvWritePersistentBuffer>(
             PersistentBufferConnections[i].Credentials,
-            NDDisk::TBlockSelector(0, request->StartIndex, request->GetDataSize()),
-            RequestId,
+            NDDisk::TBlockSelector(
+                0, // vChunkIndex
+                request->StartOffset,
+                request->GetDataSize()),
+            RequestId, // lsn
             NDDisk::TWriteInstruction(0));
 
         requestToDDisk->AddPayload(TRope(request->GetData()));
 
-        ctx.Send(PersistentBufferConnections[i].GetServiceId(), requestToDDisk.release(),
-                 0, RequestId);
+        ctx.Send(
+            PersistentBufferConnections[i].GetServiceId(),
+            requestToDDisk.release(),
+            0, // flags
+            RequestId);
+
         RequestById[RequestId] = request;
-        request->OnDDiskWriteRequested(RequestId, i);
-        RequestId++;
+        request->OnWriteRequested(
+            RequestId,
+            i, // persistentBufferIndex
+            RequestId // lsn
+        );
     }
 }
 
@@ -125,18 +152,23 @@ void TDirectBlockGroup::HandlePersistentBufferWriteResult(
 
     if (msg->Record.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK) {
         auto requestId = ev->Cookie;
-        auto& request = RequestById[requestId];
-        if (request->IsCompleted(requestId)) {
-            auto response =
-                std::make_unique<TEvService::TEvWriteBlocksResponse>();
+        TWriteRequest& request = static_cast<TWriteRequest&>(*RequestById[requestId]);
+        if (request.IsCompleted(requestId)) {
+            for (const auto& meta : request.GetPersistentBufferWritesMeta()) {
+                if (PersistentBufferBlocksLsn[meta.Index][request.StartIndex] < meta.Lsn) {
+                    PersistentBufferBlocksLsn[meta.Index][request.StartIndex] = meta.Lsn;
+                }
+            }
+
+            auto response = std::make_unique<TEvService::TEvWriteBlocksResponse>();
             response->Record.MutableError()->CopyFrom(MakeError(S_OK));
-            ctx.Send(request->Sender, std::move(response));
+            ctx.Send(request.Sender, std::move(response));
 
             RequestById.erase(requestId);
         }
     } else {
         LOG_ERROR(ctx, NKikimrServices::NBS_PARTITION,
-                  "HandleDDiskWriteResult finished with error: %s, reason: %s",
+                  "HandlePersistentBufferWriteResult finished with error: %d, reason: %s",
                   msg->Record.GetStatus(),
                   msg->Record.GetErrorReason().data());
     }
@@ -154,15 +186,25 @@ void TDirectBlockGroup::HandleReadBlocksRequest(
 
     const ui64 startIndex = msg->Record.GetStartIndex();
     const ui64 blocksCount = msg->Record.GetBlocksCount();
+    Y_ABORT_UNLESS(blocksCount == 1);
 
-    auto request =
-        std::make_shared<TReadRequest>(ev->Sender, startIndex, blocksCount);
+    if (!PersistentBufferBlocksLsn[0].contains(startIndex)) {
+        auto response = std::make_unique<TEvService::TEvReadBlocksResponse>();
+        response->Record.MutableError()->CopyFrom(MakeError(S_OK));
+        auto& blocks = *response->Record.MutableBlocks();
+        blocks.AddBuffers(TString(4096, 0));
+
+        ctx.Send(ev->Sender, std::move(response));
+        return;
+    }
+
+    auto request = std::make_shared<TReadRequest>(ev->Sender, startIndex, blocksCount);
     auto& ddiskConnection = PersistentBufferConnections[0];
 
     auto requestToDDisk = std::make_unique<NDDisk::TEvReadPersistentBuffer>(
         ddiskConnection.Credentials,
-        NDDisk::TBlockSelector(0, request->StartIndex, request->GetDataSize()),
-        0,
+        NDDisk::TBlockSelector(0, request->StartOffset, request->GetDataSize()),
+        PersistentBufferBlocksLsn[0][startIndex],
         NDDisk::TReadInstruction(1));
 
     ctx.Send(PersistentBufferConnections[0].GetServiceId(), requestToDDisk.release(), 0,

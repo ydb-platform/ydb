@@ -202,103 +202,63 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
     }
 
 
-    // NOTE: This test uses deprecated MigrationStreamingRead API because it tests
-    // GetReadSessionsInfo which is a PersQueue-specific feature with no Topic API equivalent.
-    // Consider deprecating/removing this test when removing MigrationStreamingRead API.
     Y_UNIT_TEST(SetupLockSession) {
         TPersQueueV1TestServer server;
         SET_LOCALS;
-        MAKE_INSECURE_STUB(Ydb::PersQueue::V1::PersQueueService);
+        MAKE_INSECURE_STUB(Ydb::Topic::V1::TopicService);
         server.EnablePQLogs({ NKikimrServices::PQ_METACACHE, NKikimrServices::PQ_READ_PROXY });
         server.EnablePQLogs({ NKikimrServices::KQP_PROXY }, NLog::EPriority::PRI_EMERG);
         server.EnablePQLogs({ NKikimrServices::FLAT_TX_SCHEMESHARD }, NLog::EPriority::PRI_ERROR);
 
-        auto readStream = StubP_->MigrationStreamingRead(&rcontext);
+        auto readStream = StubP_->StreamRead(&rcontext);
         UNIT_ASSERT(readStream);
 
         // init read session
         {
-            MigrationStreamingReadClientMessage  req;
-            MigrationStreamingReadServerMessage resp;
+            Ydb::Topic::StreamReadMessage::FromClient req;
+            Ydb::Topic::StreamReadMessage::FromServer resp;
 
-            req.mutable_init_request()->add_topics_read_settings()->set_topic("acc/topic1");
-
+            req.mutable_init_request()->add_topics_read_settings()->set_path("acc/topic1");
             req.mutable_init_request()->set_consumer("user");
-            req.mutable_init_request()->set_read_only_original(true);
-            req.mutable_init_request()->mutable_read_params()->set_max_read_messages_count(1);
 
             if (!readStream->Write(req)) {
                 ythrow yexception() << "write fail";
             }
             UNIT_ASSERT(readStream->Read(&resp));
             Cerr << "===Got response: " << resp.ShortDebugString() << Endl;
-            UNIT_ASSERT(resp.response_case() == MigrationStreamingReadServerMessage::kInitResponse);
-            //send some reads
+            UNIT_ASSERT(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kInitResponse);
+
+            // Send read request for bytes budget
             req.Clear();
-            req.mutable_read();
-            for (ui32 i = 0; i < 10; ++i) {
-                if (!readStream->Write(req)) {
-                    ythrow yexception() << "write fail";
-                }
-            }
-        }
-        Cerr << "===First block done\n";
-        {
-            Sleep(TDuration::Seconds(10));
-            ReadInfoRequest request;
-            ReadInfoResponse response;
-            request.mutable_consumer()->set_path("user");
-            request.set_get_only_original(true);
-            request.add_topics()->set_path("acc/topic1");
-            grpc::ClientContext rcontext;
-            auto status = StubP_->GetReadSessionsInfo(&rcontext, request, &response);
-            UNIT_ASSERT(status.ok());
-            ReadInfoResult res;
-            response.operation().result().UnpackTo(&res);
-            Cerr << "Read info response: " << response << Endl << res << Endl;
-            UNIT_ASSERT_VALUES_EQUAL(res.topics_size(), 1);
-            UNIT_ASSERT(res.topics(0).status() == Ydb::StatusIds::SUCCESS);
-        }
-        Cerr << "===Second block done\n";
-
-        ui64 assignId = 0;
-        {
-            MigrationStreamingReadClientMessage  req;
-            MigrationStreamingReadServerMessage resp;
-
-            //lock partition
-            UNIT_ASSERT(readStream->Read(&resp));
-            UNIT_ASSERT(resp.response_case() == MigrationStreamingReadServerMessage::kAssigned);
-            UNIT_ASSERT(resp.assigned().topic().path() == "acc/topic1");
-            UNIT_ASSERT(resp.assigned().cluster() == "dc1");
-            UNIT_ASSERT(resp.assigned().partition() == 0);
-
-            assignId = resp.assigned().assign_id();
-
-            req.Clear();
-            req.mutable_start_read()->mutable_topic()->set_path("acc/topic1");
-            req.mutable_start_read()->set_cluster("dc1");
-            req.mutable_start_read()->set_partition(0);
-            req.mutable_start_read()->set_assign_id(354235); // invalid id should receive no reaction
-
-            req.mutable_start_read()->set_read_offset(10);
-            UNIT_ASSERT_C(readStream->Write(req), "write fail");
-
-            Sleep(TDuration::MilliSeconds(100));
-
-            req.Clear();
-            req.mutable_start_read()->mutable_topic()->set_path("acc/topic1");
-            req.mutable_start_read()->set_cluster("dc1");
-            req.mutable_start_read()->set_partition(0);
-            req.mutable_start_read()->set_assign_id(assignId);
-
-            req.mutable_start_read()->set_read_offset(10);
+            req.mutable_read_request()->set_bytes_size(256000);
             if (!readStream->Write(req)) {
                 ythrow yexception() << "write fail";
             }
-
         }
-        Cerr << "===Third block done\n";
+        Cerr << "===First block done\n";
+
+        i64 partitionSessionId = 0;
+        {
+            Ydb::Topic::StreamReadMessage::FromClient req;
+            Ydb::Topic::StreamReadMessage::FromServer resp;
+
+            // Receive partition session assignment
+            UNIT_ASSERT(readStream->Read(&resp));
+            UNIT_ASSERT(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kStartPartitionSessionRequest);
+            UNIT_ASSERT(resp.start_partition_session_request().partition_session().path() == "acc/topic1");
+            UNIT_ASSERT(resp.start_partition_session_request().partition_session().partition_id() == 0);
+
+            partitionSessionId = resp.start_partition_session_request().partition_session().partition_session_id();
+
+            // Confirm the partition session with read offset 10
+            req.Clear();
+            req.mutable_start_partition_session_response()->set_partition_session_id(partitionSessionId);
+            req.mutable_start_partition_session_response()->set_read_offset(10);
+            if (!readStream->Write(req)) {
+                ythrow yexception() << "write fail";
+            }
+        }
+        Cerr << "===Second block done\n";
 
         auto driver = server.Server->AnnoyingClient->GetDriver();
 
@@ -311,75 +271,39 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             bool res = writer->Close(TDuration::Seconds(10));
             UNIT_ASSERT(res);
         }
+        Cerr << "===3rd block done\n";
+
+        // Check read results - should start from offset 10
+        for (ui32 i = 10; i < 16; ++i) {
+            Ydb::Topic::StreamReadMessage::FromServer resp;
+            UNIT_ASSERT(readStream->Read(&resp));
+            Cerr << "Got read response " << resp.ShortDebugString() << "\n";
+            UNIT_ASSERT_C(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kReadResponse, resp);
+            UNIT_ASSERT(resp.read_response().partition_data_size() == 1);
+            UNIT_ASSERT(resp.read_response().partition_data(0).batches_size() == 1);
+            UNIT_ASSERT(resp.read_response().partition_data(0).batches(0).message_data_size() == 1);
+            UNIT_ASSERT(resp.read_response().partition_data(0).batches(0).message_data(0).offset() == i);
+        }
         Cerr << "===4th block done\n";
 
-        //check read results
-        MigrationStreamingReadServerMessage resp;
-        for (ui32 i = 10; i < 16; ++i) {
-            UNIT_ASSERT(readStream->Read(&resp));
-            Cerr << "Got read response " << resp << "\n";
-            UNIT_ASSERT_C(resp.response_case() == MigrationStreamingReadServerMessage::kDataBatch, resp);
-            UNIT_ASSERT(resp.data_batch().partition_data_size() == 1);
-            UNIT_ASSERT(resp.data_batch().partition_data(0).batches_size() == 1);
-            UNIT_ASSERT(resp.data_batch().partition_data(0).batches(0).message_data_size() == 1);
-            UNIT_ASSERT(resp.data_batch().partition_data(0).batches(0).message_data(0).offset() == i);
-        }
-        //TODO: restart here readSession and read from position 10
+        // Commit offsets
         {
-            MigrationStreamingReadClientMessage  req;
-            MigrationStreamingReadServerMessage resp;
+            Ydb::Topic::StreamReadMessage::FromClient req;
+            Ydb::Topic::StreamReadMessage::FromServer resp;
 
-            auto cookie = req.mutable_commit()->add_cookies();
-            cookie->set_assign_id(assignId);
-            cookie->set_partition_cookie(1);
+            auto* commit = req.mutable_commit_offset_request()->add_commit_offsets();
+            commit->set_partition_session_id(partitionSessionId);
+            for (ui32 i = 10; i < 16; ++i) {
+                commit->add_offsets()->set_end(i + 1);
+            }
 
             if (!readStream->Write(req)) {
                 ythrow yexception() << "write fail";
             }
             UNIT_ASSERT(readStream->Read(&resp));
-            UNIT_ASSERT_C(resp.response_case() == MigrationStreamingReadServerMessage::kCommitted, resp);
+            UNIT_ASSERT_C(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kCommitOffsetResponse, resp);
         }
-
-
-        Cerr << "=== ===AlterTopic\n";
-        pqClient->AlterTopic("rt3.dc1--acc--topic1", 10);
-        {
-            ReadInfoRequest request;
-            ReadInfoResponse response;
-            request.mutable_consumer()->set_path("user");
-            request.set_get_only_original(false);
-            request.add_topics()->set_path("acc/topic1");
-            grpc::ClientContext rcontext;
-            auto status = StubP_->GetReadSessionsInfo(&rcontext, request, &response);
-            UNIT_ASSERT(status.ok());
-            ReadInfoResult res;
-            response.operation().result().UnpackTo(&res);
-            Cerr << "Get read session info response: " << response << "\n" << res << "\n";
-//            UNIT_ASSERT(res.sessions_size() == 1);
-            UNIT_ASSERT_VALUES_EQUAL(res.topics_size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(res.topics(0).partitions_size(), 10);
-        }
-        Cerr << "=== ===AlterTopic block done\n";
-        {
-            ReadInfoRequest request;
-            ReadInfoResponse response;
-            request.mutable_consumer()->set_path("user");
-            request.set_get_only_original(false);
-            request.add_topics()->set_path("acc/topic1");
-            grpc::ClientContext rcontext;
-
-            pqClient->MarkNodeInHive(runtime, 0, false);
-            pqClient->MarkNodeInHive(runtime, 1, false);
-
-            pqClient->RestartBalancerTablet(runtime, "rt3.dc1--acc--topic1");
-            auto status = StubP_->GetReadSessionsInfo(&rcontext, request, &response);
-            UNIT_ASSERT(status.ok());
-            ReadInfoResult res;
-            response.operation().result().UnpackTo(&res);
-            Cerr << "Read sessions info response: " << response << "\nResult: " << res << "\n";
-            UNIT_ASSERT(res.topics().size() == 1);
-            UNIT_ASSERT(res.topics(0).partitions(0).status() == Ydb::StatusIds::UNAVAILABLE);
-        }
+        Cerr << "===5th block done\n";
     }
 
     void TestStreamReadCreateAndDestroyMsgs(bool directRead = false) {

@@ -412,6 +412,21 @@ namespace NKikimr {
             // Useful when tablet is already resolved externally
             TActorId HintTablet{}; // e.g. TEvInfo::CurrentLeader
             TActorId HintTabletActor{}; // e.g. TEvInfo::CurrentLeaderTablet
+
+            /**
+             * The specific follower ID to connect to.
+             *
+             * @note If this field is not set, then AllowFollower and ForceFollower
+             *       fields are used to select the appropriate leader/follower.
+             *       If this field is set, then AllowFollower and ForceFollower
+             *       fields are ignored. In this case, the value of 0 is interpreted
+             *       as "connect to the leader". Non-zero values are interpreted
+             *       as "connect to the follower with the given follower ID".
+             *
+             * @warning If this field is specified and the follower with the given follower ID
+             *          does not exit, the request will fail with an error.
+             */
+            TMaybe<ui32> FollowerId;
         };
 
         // Allow implicit conversion from retry policy to client config

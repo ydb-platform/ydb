@@ -512,7 +512,7 @@ void TTablet::HandleByFollower(TEvTablet::TEvFollowerUpdate::TPtr &ev) {
         }
 
         if (!FollowerStStGuardian)
-            FollowerStStGuardian = Register(CreateStateStorageFollowerGuardian(TabletID(), SelfId()));
+            FollowerStStGuardian = Register(CreateStateStorageFollowerGuardian(TabletID(), FollowerId, SelfId()));
 
         FollowerInfo.EpochGenStep = MakeGenStepPair(record.GetGeneration(), record.GetStep());
 
@@ -929,8 +929,8 @@ void TTablet::HandleStateStorageInfoUpgrade(TEvStateStorage::TEvInfo::TPtr &ev) 
         { // ok, we marked ourselves as generation owner
             NeedCleanupOnLockedPath = false;
             StateStorageInfo.Update(msg);
-            for (const auto &xpair : msg->Followers) {
-                if (xpair.first == SelfId())
+            for (const auto& followerInfo : msg->Followers) {
+                if (followerInfo.Follower == SelfId())
                     continue;
                 if (LeaderInfo.empty()) {
                     // Consider sending follower updates starting with the next commit
@@ -938,8 +938,8 @@ void TTablet::HandleStateStorageInfoUpgrade(TEvStateStorage::TEvInfo::TPtr &ev) 
                 }
                 auto itPair = LeaderInfo.emplace(
                     std::piecewise_construct,
-                    std::forward_as_tuple(xpair.first),
-                    std::forward_as_tuple(xpair.first, EFollowerSyncState::NeedSync));
+                    std::forward_as_tuple(followerInfo.Follower),
+                    std::forward_as_tuple(followerInfo.Follower, EFollowerSyncState::NeedSync));
                 // some followers could be already present by active TEvFollowerAttach
                 if (itPair.second)
                     TrySyncToFollower(itPair.first);
@@ -2292,7 +2292,7 @@ void TTablet::RetryFollowerBootstrapOrWait() {
 void TTablet::BootstrapFollower() {
     // create guardians right now and schedule offline follower boot
     if (!FollowerStStGuardian) {
-        FollowerStStGuardian = Register(CreateStateStorageFollowerGuardian(TabletID(), SelfId()));
+        FollowerStStGuardian = Register(CreateStateStorageFollowerGuardian(TabletID(), FollowerId, SelfId()));
         Schedule(OfflineFollowerWaitFirst, new TEvTabletBase::TEvTryBuildFollowerGraph());
     }
 

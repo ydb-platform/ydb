@@ -1,6 +1,7 @@
 'use strict';
 
 var TabletId;
+var FollowerId;
 
 function main() {
     // making main container wider
@@ -24,6 +25,9 @@ function main() {
     window.location.search.substr(1).split('&').forEach((o) => { var a = o.split('='); args[a[0]] = decodeURIComponent(a[1]); } );
     if (args.TabletID !== undefined) {
         TabletId = args.TabletID;
+    }
+    if (args.FollowerID !== undefined) {
+        FollowerId = args.FollowerID;
     }
 
     document.getElementById('host-ref').textContent += " - " + window.location.hostname;

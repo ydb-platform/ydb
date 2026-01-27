@@ -35,10 +35,10 @@ public:
         return NKikimrServices::TActivity::TABLET_FORWARDING_ACTOR;
     }
 
-    TForwardingActor(const TTabletMonitoringProxyConfig& config, ui64 targetTablet, bool forceFollower, const TActorId& sender, const NMonitoring::IMonHttpRequest& request, const TString& userToken)
+    TForwardingActor(const TTabletMonitoringProxyConfig& config, ui64 targetTablet, TMaybe<ui32> followerId, const TActorId& sender, const NMonitoring::IMonHttpRequest& request, const TString& userToken)
         : Config(config)
         , TargetTablet(targetTablet)
-        , ForceFollower(forceFollower)
+        , FollowerId(followerId)
         , Sender(sender)
         , Request(ConvertRequestToProtobuf(request, userToken))
     {}
@@ -76,8 +76,9 @@ public:
 
     void Bootstrap(const TActorContext& ctx) {
         NTabletPipe::TClientConfig config;
-        config.AllowFollower = ForceFollower;
-        config.ForceFollower = ForceFollower;
+
+        config.AllowFollower = (FollowerId.Defined() && (*FollowerId.Get() != 0));
+        config.FollowerId = FollowerId;
         config.PreferLocal = Config.PreferLocal;
         config.RetryPolicy = Config.RetryPolicy;
 
@@ -101,9 +102,11 @@ public:
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx) {
         if (!ev->Get()->ServerId) {
-            auto reply = Sprintf("Tablet pipe with %" PRIu64 " is not connected with status: %s"
+            auto reply = Sprintf("Tablet pipe with %" PRIu64 " (follower ID %" PRIu64
+                                 ") is not connected with status: %s"
                                  " (<a href=\"?SsId=%" PRIu64 "\">see State Storage</a>)",
                                  ev->Get()->TabletId,
+                                 (FollowerId.Defined()) ? *FollowerId.Get() : 0,
                                  NKikimrProto::EReplyStatus_Name(ev->Get()->Status).c_str(),
                                  ev->Get()->TabletId);
             Notify(ctx, reply);
@@ -174,7 +177,7 @@ public:
 private:
     const TTabletMonitoringProxyConfig Config;
     const ui64 TargetTablet;
-    const bool ForceFollower;
+    const TMaybe<ui32> FollowerId;
     const TActorId Sender;
     NActorsProto::TRemoteHttpInfo Request;
     TActorId PipeClient;
@@ -243,7 +246,6 @@ static ui64 TryParseTabletId(TStringBuf tabletIdParam) {
 ////////////////////////////////////////////
 void
 TTabletMonitoringProxyActor::Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorContext &ctx) {
-    //
     NMon::TEvHttpInfo* msg = ev->Get();
     const TCgiParameters* cgi;
 
@@ -262,7 +264,6 @@ TTabletMonitoringProxyActor::Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorCon
             return;
         }
     }
-    //
 
     // temporary copy-paste
     if (cgi->Has("RestartTabletID")) {
@@ -273,24 +274,29 @@ TTabletMonitoringProxyActor::Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorCon
             return;
         }
     }
-    //
 
-    bool hasFollowerParam = cgi->Has("FollowerID");
-    if (hasFollowerParam) {
-        const TString &tabletIdParam = cgi->Get("FollowerID");
-        const ui64 tabletId = TryParseTabletId(tabletIdParam);
-        if (tabletId) {
-            ctx.Register(new TForwardingActor(Config, tabletId, true, ev->Sender, msg->Request, msg->UserToken));
-            return;
-        }
+    // NOTE: This forces the leader, if the followerId parameter is not specified
+    ui32 followerId = 0;
+
+    if (cgi->Has("FollowerID")) {
+        TryFromString(cgi->Get("FollowerID"), followerId);
     }
 
-    bool hasIdParam = cgi->Has("TabletID");
-    if (hasIdParam) {
-        const TString &tabletIdParam = cgi->Get("TabletID");
-        const ui64 tabletId = TryParseTabletId(tabletIdParam);
+    if (cgi->Has("TabletID")) {
+        const ui64 tabletId = TryParseTabletId(cgi->Get("TabletID"));
+
         if (tabletId) {
-            ctx.Register(new TForwardingActor(Config, tabletId, false, ev->Sender, msg->Request, msg->UserToken));
+            ctx.Register(
+                new TForwardingActor(
+                    Config,
+                    tabletId,
+                    followerId,
+                    ev->Sender,
+                    msg->Request,
+                    msg->UserToken
+                )
+            );
+
             return;
         }
     }

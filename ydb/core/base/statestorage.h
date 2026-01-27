@@ -282,6 +282,62 @@ struct TEvStateStorage {
     };
 
     struct TEvInfo : public TEventLocal<TEvInfo, EvInfo> {
+        /**
+         * The information about a follower for the given tablet.
+         */
+        struct TFollowerInfo {
+            /**
+             * The actor ID for the follower itself.
+             */
+            TActorId Follower;
+
+            /**
+             * The actor ID for the follower tablet;
+             */
+            TActorId FollowerTablet;
+
+            /**
+             * The follower ID for the given follower.
+             *
+             * @warning There are some situations, when this value is not known.
+             *          For example, this may happen, if the given follower is running
+             *          on an older node, which does not support reporting follower IDs.
+             */
+            TMaybe<ui32> FollowerId;
+
+            TFollowerInfo(const TActorId& follower, const TActorId& followerTablet, const TMaybe<ui32>& followerId)
+                : Follower(follower)
+                , FollowerTablet(followerTablet)
+                , FollowerId(followerId)
+            {
+            }
+
+            TFollowerInfo(const TFollowerInfo&) = default;
+            TFollowerInfo(TFollowerInfo&&) = default;
+            TFollowerInfo& operator=(const TFollowerInfo&) = default;
+
+            /*
+            TFollowerInfo& operator=(const TFollowerInfo& other) {
+                Follower = other.Follower;
+                FollowerTablet = other.FollowerTablet;
+                FollowerId = other.FollowerId;
+
+                return *this;
+            };
+            */
+
+            TString ToString() const {
+                TStringStream str;
+
+                str << "{Follower: " << Follower.ToString();
+                str << " FollowerTablet: " << FollowerTablet.ToString();
+                str << " FollowerId: " << FollowerId;
+                str << '}';
+
+                return str.Str();
+            }
+        };
+
         const NKikimrProto::EReplyStatus Status;
         const ui64 TabletID;
         const ui64 Cookie;
@@ -292,9 +348,9 @@ struct TEvStateStorage {
         const bool Locked;
         const ui64 LockedFor;
         const TSignature Signature;
-        TVector<std::pair<TActorId, TActorId>> Followers;
+        const TVector<TFollowerInfo> Followers;
 
-        TEvInfo(NKikimrProto::EReplyStatus status, ui64 tabletId, ui64 cookie, const TActorId &leader, const TActorId &leaderTablet, ui32 gen, ui32 step, bool locked, ui64 lockedFor, const TSignature &sig, const TMap<TActorId, TActorId> &followers)
+        TEvInfo(NKikimrProto::EReplyStatus status, ui64 tabletId, ui64 cookie, const TActorId &leader, const TActorId &leaderTablet, ui32 gen, ui32 step, bool locked, ui64 lockedFor, const TSignature &sig, const TMap<TActorId, TFollowerInfo> &followers)
             : Status(status)
             , TabletID(tabletId)
             , Cookie(cookie)
@@ -305,7 +361,7 @@ struct TEvStateStorage {
             , Locked(locked)
             , LockedFor(lockedFor)
             , Signature(sig)
-            , Followers(followers.begin(), followers.end())
+            , Followers(std::views::values(followers).begin(), std::views::values(followers).end())
         {}
 
         TString ToString() const {
@@ -324,9 +380,9 @@ struct TEvStateStorage {
                 str << " Followers: [";
                 for (auto it = Followers.begin(); it != Followers.end(); ++it) {
                     if (it != Followers.begin()) {
-                        str << ',';
+                        str << ", ";
                     }
-                    str << '{' << it->first.ToString() << ',' << it->second.ToString() << '}';
+                    str << it->ToString();
                 }
                 str << "]";
             }
@@ -410,7 +466,7 @@ struct TEvStateStorage {
         TEvReplicaRegFollower()
         {}
 
-        TEvReplicaRegFollower(ui64 tabletId, TActorId follower, TActorId tablet, bool isCandidate, ui64 clusterStateGeneration, ui64 clusterStateGuid)
+        TEvReplicaRegFollower(ui64 tabletId, ui32 followerId, TActorId follower, TActorId tablet, bool isCandidate, ui64 clusterStateGeneration, ui64 clusterStateGuid)
         {
             Record.SetTabletID(tabletId);
             Record.SetClusterStateGeneration(clusterStateGeneration);
@@ -418,6 +474,7 @@ struct TEvStateStorage {
             ActorIdToProto(follower, Record.MutableFollower());
             ActorIdToProto(tablet, Record.MutableFollowerTablet());
             Record.SetCandidate(isCandidate);
+            Record.SetFollowerId(followerId);
         }
     };
 
@@ -425,12 +482,13 @@ struct TEvStateStorage {
         TEvReplicaUnregFollower()
         {}
 
-        TEvReplicaUnregFollower(ui64 tabletId, const TActorId &follower, ui64 clusterStateGeneration, ui64 clusterStateGuid)
+        TEvReplicaUnregFollower(ui64 tabletId, ui32 followerId, const TActorId &follower, ui64 clusterStateGeneration, ui64 clusterStateGuid)
         {
             Record.SetTabletID(tabletId);
             Record.SetClusterStateGeneration(clusterStateGeneration);
             Record.SetClusterStateGuid(clusterStateGuid);
             ActorIdToProto(follower, Record.MutableFollower());
+            Record.SetFollowerId(followerId);
         }
     };
 
@@ -584,7 +642,7 @@ IActor* CreateStateStorageProxyStub();
 IActor* CreateStateStorageReplica(const TIntrusivePtr<TStateStorageInfo> &info, ui32 replicaIndex);
 IActor* CreateStateStorageMonitoringActor(ui64 targetTablet, const TActorId &sender, const TString &query);
 IActor* CreateStateStorageTabletGuardian(ui64 tabletId, const TActorId &leader, const TActorId &tabletLeader, ui32 generation);
-IActor* CreateStateStorageFollowerGuardian(ui64 tabletId, const TActorId &follower); // created as followerCandidate
+IActor* CreateStateStorageFollowerGuardian(ui64 tabletId, ui32 followerId, const TActorId &follower); // created as followerCandidate
 IActor* CreateStateStorageBoardReplica(const TIntrusivePtr<TStateStorageInfo> &, ui32);
 IActor* CreateSchemeBoardReplica(const TIntrusivePtr<TStateStorageInfo>&, ui32);
 IActor* CreateBoardLookupActor(

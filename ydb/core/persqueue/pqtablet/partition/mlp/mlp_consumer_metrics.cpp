@@ -20,7 +20,7 @@ void TConsumerActor::UpdateMetrics() {
     values->Set(EMLPConsumerLabeledCounters::METRIC_INFLIGHT_LOCKED_COUNT, metrics.LockedMessageCount);
     values->Set(EMLPConsumerLabeledCounters::METRIC_INFLIGHT_DELAYED_COUNT, metrics.DelayedMessageCount);
     values->Set(EMLPConsumerLabeledCounters::METRIC_INFLIGHT_UNLOCKED_COUNT, metrics.UnprocessedMessageCount);
-    values->Set(EMLPConsumerLabeledCounters::METRIC_INFLIGHT_SCHEDULED_TO_DLQ_COUNT, metrics.TotalScheduledToDLQMessageCount);
+    values->Set(EMLPConsumerLabeledCounters::METRIC_SCHEDULED_TO_DLQ_COUNT, metrics.TotalScheduledToDLQMessageCount);
     values->Set(EMLPConsumerLabeledCounters::METRIC_COMMITTED_COUNT, metrics.TotalCommittedMessageCount);
     values->Set(EMLPConsumerLabeledCounters::METRIC_PURGED_COUNT, metrics.TotalPurgedMessageCount);
 
@@ -57,13 +57,13 @@ TDetailedMetrics::TDetailedMetrics(const NKikimrPQ::TPQTabletConfig::TConsumer& 
     InflightLockedCount = consumerGroup->GetExpiringNamedCounter("name", "topic.partition.inflight.locked_messages", false);
     InflightDelayedCount = consumerGroup->GetExpiringNamedCounter("name", "topic.partition.inflight.delayed_messages", false);
     InflightUnlockedCount = consumerGroup->GetExpiringNamedCounter("name", "topic.partition.inflight.unlocked_messages", false);
-    InflightScheduledToDLQCount = consumerGroup->GetExpiringNamedCounter("name", "topic.partition.inflight.scheduled_to_dlq_messages", true);
+    InflightScheduledToDLQCount = consumerGroup->GetExpiringNamedCounter("name", "topic.partition.scheduled_to_dlq_messages", true);
     CommittedCount = consumerGroup->GetExpiringNamedCounter("name", "topic.partition.committed_messages", true);
     PurgedCount = consumerGroup->GetExpiringNamedCounter("name", "topic.partition.purged_messages", true);
 
-    MessageLocks = consumerGroup->GetExpiringNamedHistogram("name", "topic.partition.message_lock_attempts", NMonitoring::ExplicitHistogram(MLP_LOCKS_BOUNDS));
-    MessageLockingDuration = consumerGroup->GetExpiringNamedHistogram("name", "topic.partition.message_locking_duration_milliseconds", NMonitoring::ExplicitHistogram(SLOW_LATENCY_BOUNDS));
-    WaitingLockingDuration = consumerGroup->GetExpiringNamedHistogram("name", "topic.partition.waiting_locking_duration_milliseconds", NMonitoring::ExplicitHistogram(SLOW_LATENCY_BOUNDS));
+    MessageLocks = consumerGroup->GetExpiringNamedHistogram("name", "topic.partition.message_lock_attempts", NMonitoring::ExplicitHistogram(MLP_LOCKS_BOUNDS), true);
+    MessageLockingDuration = consumerGroup->GetExpiringNamedHistogram("name", "topic.partition.message_locking_duration_milliseconds", NMonitoring::ExplicitHistogram(SLOW_LATENCY_BOUNDS), true);
+    WaitingLockingDuration = consumerGroup->GetExpiringNamedHistogram("name", "topic.partition.waiting_locking_duration_milliseconds", NMonitoring::ExplicitHistogram(SLOW_LATENCY_BOUNDS), true);
 
     auto deletedMessagesGroup = consumerGroup->GetSubgroup("name", "topic.partition.deleted_messages");
     DeletedByRetentionPolicy = deletedMessagesGroup->GetExpiringNamedCounter("reason", "retention", true);

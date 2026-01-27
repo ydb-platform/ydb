@@ -146,6 +146,7 @@ TString TConcreteScanCounters::TPerStepCounters::DebugString() const {
                             << "WaitDuration:" << NKqp::FormatDurationAsMilliseconds(WaitDuration) << ";"
                             << "RawBytesRead:" << RawBytesRead;
 }
+
 THashMap<TString, TConcreteScanCounters::TPerStepCounters> TConcreteScanCounters::ReadStepsCounters() const {
     THashMap<TString, TPerStepCounters> counters;
     auto lock = AtomicStepCounters.ReadGuard();

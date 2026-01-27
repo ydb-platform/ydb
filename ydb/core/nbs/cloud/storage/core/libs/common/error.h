@@ -255,19 +255,6 @@ public:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString FormatError(const NProto::TError& e);
-TString FormatResultCode(ui32 code);
-NJson::TJsonValue FormatErrorJson(const NProto::TError& e);
-
-NProto::TError MakeError(ui32 code, TString message = {}, ui32 flags = 0);
-
-#define STORAGE_THROW_SERVICE_ERROR(x) throw TServiceError(                    \
-    __FILE__ ":" Y_STRINGIZE(__LINE__) ": ",                                   \
-    x)                                                                         \
-// STORAGE_ERROR
-
-////////////////////////////////////////////////////////////////////////////////
-
 template <typename T>
 concept TAcceptsError = requires(T a)
 {

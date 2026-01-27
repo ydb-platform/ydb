@@ -653,4 +653,8 @@ void CmdRunCompaction(const ui32 partition,
 
 THolder<TEvPersQueue::TEvPeriodicTopicStats> GetReadBalancerPeriodicTopicStats(TTestActorRuntime& runtime, ui64 balancerId);
 
+void CmdRenameKey(const TString& oldKey,
+                  const TString& newKey,
+                  TTestContext& tc);
+
 } // namespace NKikimr::NPQ

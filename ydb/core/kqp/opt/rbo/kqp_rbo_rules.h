@@ -85,12 +85,22 @@ class TPushLimitIntoSortRule : public ISimplifiedRule {
 };
 
 /**
+ * Push filter though non-projecting map
+ */
+class TPushFilterUnderMapRule : public ISimplifiedRule {
+  public:
+    TPushFilterUnderMapRule() : ISimplifiedRule("Push filter under map", ERuleProperties::RequireParents) {}
+
+    virtual std::shared_ptr<IOperator> SimpleMatchAndApply(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
+};
+
+/**
  * Push down filter through joins, adding join conditions to the join operator and potentially
  * converting left join into inner join
  */
-class TPushFilterRule : public ISimplifiedRule {
+class TPushFilterIntoJoinRule : public ISimplifiedRule {
   public:
-    TPushFilterRule() : ISimplifiedRule("Push filter", ERuleProperties::RequireParents) {}
+    TPushFilterIntoJoinRule() : ISimplifiedRule("Push filter into join", ERuleProperties::RequireParents) {}
 
     virtual std::shared_ptr<IOperator> SimpleMatchAndApply(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
 };

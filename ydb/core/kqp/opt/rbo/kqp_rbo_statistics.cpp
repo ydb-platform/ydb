@@ -5,10 +5,54 @@ namespace NKikimr {
 namespace NKqp {
 
 
+void TColumnLineage::AddMapping(const TInfoUnit& unit, const TColumnLineageEntry& entry) {
+    auto rawAlias = entry.GetRawAlias();
+
+    if (entry.DuplicateNo != 0) {
+        int duplicateId = entry.DuplicateNo;
+        if (MaxDuplicateId.contains(rawAlias)) {
+            int maxId = MaxDuplicateId.at(rawAlias);
+            if (maxId > duplicateId) {
+                duplicateId = maxId;
+            }
+        }
+        Mapping.insert({unit, entry});
+        MaxDuplicateId.insert({rawAlias, duplicateId});
+    } else {
+        Mapping.insert({unit, entry});
+        MaxDuplicateId.insert({rawAlias, 0});
+    }
+    ReverseMapping.insert({TInfoUnit(entry.GetCannonicalAlias(), entry.ColumnName), unit});
+}
+
+int TColumnLineage::AddAlias(TString alias, TString tableName) {
+    auto rawAlias = alias != "" ? alias : tableName;
+    int duplicateId = 0;
+    if (MaxDuplicateId.contains(rawAlias)) {
+        duplicateId = MaxDuplicateId.at(rawAlias) + 1;
+    }
+    MaxDuplicateId.insert({rawAlias, duplicateId});
+    return duplicateId;
+}
+
+void TColumnLineage::Merge(const TColumnLineage& other) {
+    // We'll be adding mappings one by one, so MaxDuplicateId will be
+    // changing. Thus we save here before we start merging to detect
+    // conficts correctly
+    auto currDuplicates = MaxDuplicateId;
+
+    for (auto [iu, entry] : other.Mapping) {
+        auto rawAlias = entry.GetRawAlias();
+        if (currDuplicates.contains(rawAlias)) {
+            entry.DuplicateNo = currDuplicates.at(rawAlias) + 1;
+        }
+        AddMapping(iu, entry);
+    }
+}
+
 TInfoUnit TRBOMetadata::MapColumn(TInfoUnit key) {
-    auto fullName = key.GetFullName();
-    if (ColumnLineage.contains(fullName)) {
-        return TInfoUnit(ColumnLineage.at(fullName).GetCannonicalAlias(), ColumnLineage.at(fullName).ColumnName);
+    if (ColumnLineage.Mapping.contains(key)) {
+        return ColumnLineage.Mapping.at(key).GetInfoUnit();
     } else {
         return key;
     }
@@ -84,10 +128,11 @@ TString TRBOMetadata::ToString(ui32 printOptions) {
 
     if (printOptions & EPrintPlanOptions::PrintFullMetadata) {
         builder << ", Lineage: {";
-        for (auto &[k, v] : ColumnLineage) {
-            builder << k << ": <ColName: " << v.ColumnName 
+        for (auto &[k, v] : ColumnLineage.Mapping) {
+            builder << k.GetFullName() << ": <ColName: " << v.ColumnName 
                 << ", Alias: " << v.SourceAlias 
                 << ", Table: " << v.TableName
+                << ", DuplicateNo: " << v.DuplicateNo
                 << ">, ";
         }
         builder << "}";

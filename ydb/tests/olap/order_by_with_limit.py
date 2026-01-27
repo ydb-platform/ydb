@@ -243,3 +243,44 @@ class TestOrderBy(object):
         )
 
         assert len(result_sets[0].rows) == 1000
+
+    def test_reproduce(self):
+        test_dir = f"{self.ydb_client.database}/{self.test_name}"
+        table_path = f"{test_dir}/test_reproduce"
+
+        self.ydb_client.query(
+            f"""
+            CREATE TABLE `{table_path}` (
+                id Uint64 NOT NULL,
+                value Uint64 NOT NULL,
+                PRIMARY KEY(id, value),
+            )
+            WITH (
+                STORE = COLUMN,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1
+            )
+            """
+        )
+
+        column_types = ydb.BulkUpsertColumns()
+        column_types.add_column("id", ydb.PrimitiveType.Uint64)
+        column_types.add_column("value", ydb.PrimitiveType.Uint64)
+
+        portions = [
+            [(10, 4)],
+            [(9, 0), (10, 5)],
+            [(9, 0), (10, 5)],
+            [(10, 3)]
+        ]
+
+        for portion in portions:
+            self.ydb_client.bulk_upsert(table_path, column_types, map(lambda tup: {"id": tup[0], "value": tup[1]}, portion))
+
+        result_sets = self.ydb_client.query(
+            f"""
+            select id from `{table_path}`
+            order by id limit 100
+            """
+        )
+
+        assert len(result_sets[0].rows) == 1000

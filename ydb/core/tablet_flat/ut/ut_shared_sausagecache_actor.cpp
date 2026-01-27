@@ -105,16 +105,20 @@ private:
 };
 
 struct TSharedPageCacheMock {
-    TSharedPageCacheMock(ui64 memoryLimit = DefaultMemoryLimit, bool enableSchedule = false, ui64 inMemoryInFlyLimit = 10 * PAGE_TOTAL_SIZE) {
+    static TSharedCacheConfig DefaultConfig() {
+        TSharedCacheConfig config;
+        config.SetMemoryLimit(DefaultMemoryLimit);
+        config.SetAsyncQueueInFlyLimit(19); // 2 in-fly pages
+        config.SetInMemoryInFlyLimit(10 * PAGE_TOTAL_SIZE);
+        return config;
+    }
+
+    TSharedPageCacheMock(const TSharedCacheConfig& config = DefaultConfig(), bool enableSchedule = false) {
         TAutoPtr<TAppPrepare> app = new TAppPrepare();
         Runtime.Initialize(app->Unwrap());
         Runtime.SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NLog::PRI_TRACE);
         Runtime.SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NLog::PRI_TRACE);
 
-        TSharedCacheConfig config;
-        config.SetMemoryLimit(memoryLimit);
-        config.SetAsyncQueueInFlyLimit(19); // 2 in-fly pages
-        config.SetInMemoryInFlyLimit(inMemoryInFlyLimit);
         ActorId = Runtime.Register(CreateSharedPageCache(config, Runtime.GetDynamicCounters()));
         if (enableSchedule) {
             Runtime.EnableScheduleForActor(ActorId);
@@ -1952,7 +1956,9 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
 
     Y_UNIT_TEST(InMemory_ReloadPages) {
         ui64 pageSize = sizeof(TPage) + 10;
-        TSharedPageCacheMock sharedCache(8 * pageSize);
+        auto config = TSharedPageCacheMock::DefaultConfig();
+        config.SetMemoryLimit(8 * pageSize);
+        TSharedPageCacheMock sharedCache(config);
         sharedCache.SetLimit(4 * pageSize);
         sharedCache.Collection1 = MakeIntrusiveConst<TPageCollectionMock>(1ul, 6u);
         ui64 collection1TotalSize = 6 * pageSize;
@@ -2018,7 +2024,10 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
 
     Y_UNIT_TEST(InMemory_ReloadPagesLimitedInFly) {
         ui64 pageSize = sizeof(TPage) + 10;
-        TSharedPageCacheMock sharedCache(5 * pageSize, false, 2 * pageSize);
+        auto config = TSharedPageCacheMock::DefaultConfig();
+        config.SetMemoryLimit(5 * pageSize);
+        config.SetInMemoryInFlyLimit(2 * pageSize);
+        TSharedPageCacheMock sharedCache(config);
 
         sharedCache.Collection1 = MakeIntrusiveConst<TPageCollectionMock>(1ul, 5u);
         ui64 collection1TotalSize = 5 * pageSize;
@@ -2108,7 +2117,9 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
     }
 
     Y_UNIT_TEST(GC_Manual) {
-        TSharedPageCacheMock sharedCache(0);
+        auto config = TSharedPageCacheMock::DefaultConfig();
+        config.SetMemoryLimit(0);
+        TSharedPageCacheMock sharedCache(config);
         ui64 fetchNo = 0;
 
         sharedCache.Request(sharedCache.Sender1, sharedCache.Collection1, {1, 2, 3});
@@ -2141,7 +2152,9 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
     }
 
     Y_UNIT_TEST(GC_Scheduled) {
-        TSharedPageCacheMock sharedCache(0, true);
+        auto config = TSharedPageCacheMock::DefaultConfig();
+        config.SetMemoryLimit(0);
+        TSharedPageCacheMock sharedCache(config, true);
         ui64 fetchNo = 0;
 
         sharedCache.Request(sharedCache.Sender1, sharedCache.Collection1, {1, 2, 3});
@@ -2348,6 +2361,43 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
         sharedCache.CheckResults({
             TFetch{++fetchNo, sharedCache.Collection1, {1, 2, 3}}
         });
+    }
+
+    Y_UNIT_TEST(IncrementalGC) {
+        auto config = TSharedPageCacheMock::DefaultConfig();
+        config.SetMaxEvictedBytesInSingleGCRun(PAGE_TOTAL_SIZE);
+        TSharedPageCacheMock sharedCache(config);
+        ui64 fetchNo = 0;
+
+        sharedCache.Request(sharedCache.Sender1, sharedCache.Collection1, {1, 2, 3, 4});
+        sharedCache.CheckFetches({
+            TFetch{40, sharedCache.Collection1, {1, 2, 3, 4}}
+        });
+        sharedCache.Provide(sharedCache.Collection1, {1, 2, 3, 4});
+        sharedCache.CheckResults({
+            TFetch{++fetchNo, sharedCache.Collection1, {1, 2, 3, 4}}
+        });
+
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePages->Val(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->EvictedPages->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->UnfinishedGCRuns->Val(), 0);
+
+        sharedCache.SetLimit(PAGE_TOTAL_SIZE);
+
+        // First run is unfinished, evicts only 2 pages.
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePages->Val(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->EvictedPages->Val(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->EvictedBytes->Val(), 2 * PAGE_TOTAL_SIZE);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->S3FIFOEvictOps->Val(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->UnfinishedGCRuns->Val(), 1);
+
+        TWaitForFirstEvent<TKikimrEvents::TEvWakeup> waiter(sharedCache.Runtime);
+        waiter.Wait();
+
+        // Second run evicts the last page over the limit.
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePages->Val(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->EvictedPages->Val(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->UnfinishedGCRuns->Val(), 1);
     }
 }
 }

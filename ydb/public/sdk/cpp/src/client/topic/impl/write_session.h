@@ -233,7 +233,6 @@ private:
         void DoWork();
         NThreading::TFuture<void> Wait();
         bool IsDone();
-        void AddPartition(ui64 partition);
             
     private:
         TKeyedWriteSession* Session;

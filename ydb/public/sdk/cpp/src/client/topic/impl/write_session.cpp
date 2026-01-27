@@ -483,7 +483,7 @@ void TKeyedWriteSession::TEventsWorker::TransferEventsToOutputQueue() {
         if (acksQueue.size() > 0) {
             TWriteSessionEvent::TAcksEvent ackEvent;
             std::copy(acksQueue.begin(), acksQueue.end(), std::back_inserter(ackEvent.Acks));
-            PartitionsEventQueues[partition].push_back(std::move(ackEvent));
+            PartitionsEventQueues[partition].push_front(std::move(ackEvent));
         }
     }
 

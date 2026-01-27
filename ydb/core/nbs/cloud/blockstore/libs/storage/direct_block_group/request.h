@@ -16,8 +16,6 @@ class IRequest {
 public:
     TActorId Sender;
     ui64 StartIndex;
-    // In bytes.
-    ui64 StartOffset;
 
     IRequest(
         TActorId sender,
@@ -28,6 +26,8 @@ public:
     [[nodiscard]] virtual ui64 GetDataSize() const = 0;
 
     [[nodiscard]] virtual bool IsCompleted(ui64 requestId) = 0;
+
+    [[nodiscard]] ui64 GetStartOffset() const;
 };
 
 class TWriteRequest : public IRequest {
@@ -57,14 +57,14 @@ public:;
     
     bool IsCompleted(ui64 requestId) override;
 
-    [[nodiscard]] TVector<TPersistentBufferWriteMeta> GetPersistentBufferWritesMeta() const;
+    [[nodiscard]] TVector<TPersistentBufferWriteMeta> GetWritesMeta() const;
 
 private:
     const TString Data;
     const ui8 RequiredAckCount = 3;
     ui8 AckCount = 0;
     ui8 AcksMask = 0;
-    std::unordered_map<ui64, TPersistentBufferWriteMeta> PersistentBufferWriteMetaByRequestId;
+    std::unordered_map<ui64, TPersistentBufferWriteMeta> WriteMetaByRequestId;
 };
 
 class TReadRequest : public IRequest {

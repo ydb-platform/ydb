@@ -58,18 +58,9 @@ void TPartitionActor::HandleControllerAllocateDDiskBlockGroupResult(
         msg->Record.DebugString().data());
 
     if (msg->Record.GetStatus() == NKikimrProto::EReplyStatus::OK) {
-        LOG_ERROR(ctx, NKikimrServices::NBS_PARTITION,
-            "Responses size: %d",
-            msg->Record.GetResponses().size());
         Y_ABORT_UNLESS(msg->Record.GetResponses().size() == 1);
         const auto& response = msg->Record.GetResponses()[0];
-        LOG_ERROR(ctx, NKikimrServices::NBS_PARTITION,
-            "DirectBlockGroupId: %d",
-            response.GetDirectBlockGroupId());
         Y_ABORT_UNLESS(response.GetDirectBlockGroupId() == 0);
-        LOG_ERROR(ctx, NKikimrServices::NBS_PARTITION,
-            "ActualNumVChunks: %d",
-            response.GetActualNumVChunks());
         Y_ABORT_UNLESS(response.GetActualNumVChunks() == 1);
         
         TVector<NBsController::TDDiskId> ddiskIds;
@@ -99,6 +90,7 @@ void TPartitionActor::HandleControllerAllocateDDiskBlockGroupResult(
 ///////////////////////////////////////////////////////////////////////////////
 
 // Forward events to DirectBlockGroup
+// TODO: Handle IO requests only after partition and direct block group are ready
 
 void TPartitionActor::HandleDDiskConnectResult(
     const NDDisk::TEvConnectResult::TPtr& ev,

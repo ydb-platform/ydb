@@ -18,11 +18,7 @@ SRCS(
 
 PEERDIR(
     ydb/core/base
-    ydb/core/blobstorage/dsproxy
-    ydb/core/blobstorage/groupinfo
     ydb/core/blobstorage/ut_blobstorage/lib
-    ydb/core/blobstorage/vdisk/common
-    ydb/core/blobstorage/vdisk/scrub
 )
 
 END()

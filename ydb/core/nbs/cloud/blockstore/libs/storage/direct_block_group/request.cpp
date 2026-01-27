@@ -7,8 +7,12 @@ namespace NYdb::NBS::NStorage::NPartitionDirect {
 IRequest::IRequest(TActorId sender, ui64 startIndex)
     : Sender(sender)
     , StartIndex(startIndex)
-    , StartOffset(startIndex * BlockSize)
 {}
+
+ui64 IRequest::GetStartOffset() const
+{
+    return StartIndex * BlockSize;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -29,12 +33,12 @@ ui64 TWriteRequest::GetDataSize() const
 
 void TWriteRequest::OnWriteRequested(ui64 requestId, ui8 persistentBufferIndex, ui64 lsn)
 {
-    PersistentBufferWriteMetaByRequestId.emplace(requestId, TPersistentBufferWriteMeta(persistentBufferIndex, lsn));
+    WriteMetaByRequestId.emplace(requestId, TPersistentBufferWriteMeta(persistentBufferIndex, lsn));
 }
 
 bool TWriteRequest::IsCompleted(ui64 requestId)
 {
-    auto processedPersistentBufferIndex = PersistentBufferWriteMetaByRequestId.at(requestId).Index;
+    auto processedPersistentBufferIndex = WriteMetaByRequestId.at(requestId).Index;
     if (!(AcksMask & (1 << processedPersistentBufferIndex))) {
         AcksMask |= (1 << processedPersistentBufferIndex);
         AckCount++;
@@ -43,11 +47,11 @@ bool TWriteRequest::IsCompleted(ui64 requestId)
     return AckCount >= RequiredAckCount;
 }
 
-TVector<TWriteRequest::TPersistentBufferWriteMeta> TWriteRequest::GetPersistentBufferWritesMeta() const
+TVector<TWriteRequest::TPersistentBufferWriteMeta> TWriteRequest::GetWritesMeta() const
 {
     TVector<TPersistentBufferWriteMeta> result;
-    for (const auto& [_, persistentBufferWriteMeta] : PersistentBufferWriteMetaByRequestId) {
-        result.push_back(persistentBufferWriteMeta);
+    for (const auto& [_, writeMeta] : WriteMetaByRequestId) {
+        result.push_back(writeMeta);
     }
 
     return result;

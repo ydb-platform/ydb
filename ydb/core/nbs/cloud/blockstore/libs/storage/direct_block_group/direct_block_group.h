@@ -47,8 +47,9 @@ public:
 
     void EstablishConnections(const TActorContext& ctx);
 
-    void HandleDDiskConnectResult(const NDDisk::TEvConnectResult::TPtr& ev,
-                                  const TActorContext& ctx);
+    void HandleDDiskConnectResult(
+        const NDDisk::TEvConnectResult::TPtr& ev,
+        const TActorContext& ctx);
 
     void HandleWriteBlocksRequest(
         const TEvService::TEvWriteBlocksRequest::TPtr& ev,
@@ -58,18 +59,21 @@ public:
         const TActorContext& ctx,
         const std::shared_ptr<TWriteRequest>& request);
 
-    void HandlePersistentBufferWriteResult(const NDDisk::TEvWritePersistentBufferResult::TPtr& ev,
-                                const TActorContext& ctx);
+    void HandlePersistentBufferWriteResult(
+        const NDDisk::TEvWritePersistentBufferResult::TPtr& ev,
+        const TActorContext& ctx);
 
     void HandleReadBlocksRequest(
         const TEvService::TEvReadBlocksRequest::TPtr& ev,
         const TActorContext& ctx);
 
-    void SendReadRequestsToPersistentBuffer(const TActorContext& ctx,
-                                 const std::shared_ptr<TReadRequest>& request);
+    void SendReadRequestsToPersistentBuffer(
+        const TActorContext& ctx,
+        const std::shared_ptr<TReadRequest>& request);
 
-    void HandlePersistentBufferReadResult(const NDDisk::TEvReadPersistentBufferResult::TPtr& ev,
-                               const TActorContext& ctx);
+    void HandlePersistentBufferReadResult(
+        const NDDisk::TEvReadPersistentBufferResult::TPtr& ev,
+        const TActorContext& ctx);
 };
 
 }   // namespace NYdb::NBS::NStorage::NPartitionDirect

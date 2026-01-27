@@ -67,7 +67,7 @@ void TDirectBlockGroup::HandleDDiskConnectResult(
     } else {
         LOG_ERROR(
             ctx, NKikimrServices::NBS_PARTITION,
-            "HandleDDiskConnectResult finished with error: %s, reason: %s",
+            "HandleDDiskConnectResult finished with error: %d, reason: %s",
             msg->Record.GetStatus(),
             msg->Record.GetErrorReason().data());
     }
@@ -118,7 +118,7 @@ void TDirectBlockGroup::HandleWriteBlocksRequest(
             PersistentBufferConnections[i].Credentials,
             NDDisk::TBlockSelector(
                 0, // vChunkIndex
-                request->StartOffset,
+                request->GetStartOffset(),
                 request->GetDataSize()),
             RequestId, // lsn
             NDDisk::TWriteInstruction(0));
@@ -152,9 +152,9 @@ void TDirectBlockGroup::HandlePersistentBufferWriteResult(
 
     if (msg->Record.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK) {
         auto requestId = ev->Cookie;
-        TWriteRequest& request = static_cast<TWriteRequest&>(*RequestById[requestId]);
+        auto& request = static_cast<TWriteRequest&>(*RequestById[requestId]);
         if (request.IsCompleted(requestId)) {
-            for (const auto& meta : request.GetPersistentBufferWritesMeta()) {
+            for (const auto& meta : request.GetWritesMeta()) {
                 if (PersistentBufferBlocksLsn[meta.Index][request.StartIndex] < meta.Lsn) {
                     PersistentBufferBlocksLsn[meta.Index][request.StartIndex] = meta.Lsn;
                 }
@@ -200,17 +200,24 @@ void TDirectBlockGroup::HandleReadBlocksRequest(
 
     auto request = std::make_shared<TReadRequest>(ev->Sender, startIndex, blocksCount);
     auto& ddiskConnection = PersistentBufferConnections[0];
+    ++RequestId;
 
     auto requestToDDisk = std::make_unique<NDDisk::TEvReadPersistentBuffer>(
         ddiskConnection.Credentials,
-        NDDisk::TBlockSelector(0, request->StartOffset, request->GetDataSize()),
+        NDDisk::TBlockSelector(
+            0, // vChunkIndex
+            request->GetStartOffset(),
+            request->GetDataSize()),
         PersistentBufferBlocksLsn[0][startIndex],
         NDDisk::TReadInstruction(1));
 
-    ctx.Send(PersistentBufferConnections[0].GetServiceId(), requestToDDisk.release(), 0,
-             RequestId);
+    ctx.Send(
+        PersistentBufferConnections[0].GetServiceId(),
+        requestToDDisk.release(),
+        0, // flags
+        RequestId);
+
     RequestById[RequestId] = request;
-    RequestId++;
 }
 
 void TDirectBlockGroup::HandlePersistentBufferReadResult(
@@ -225,8 +232,8 @@ void TDirectBlockGroup::HandlePersistentBufferReadResult(
 
     if (msg->Record.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK) {
         auto requestId = ev->Cookie;
-        auto& request = RequestById[requestId];
-        if (request->IsCompleted(requestId)) {
+        auto& request = static_cast<TReadRequest&>(*RequestById[requestId]);
+        if (request.IsCompleted(requestId)) {
             Y_ABORT_UNLESS(msg->Record.HasReadResult());
             const auto& result = msg->Record.GetReadResult();
             Y_ABORT_UNLESS(result.HasPayloadId());
@@ -242,7 +249,7 @@ void TDirectBlockGroup::HandlePersistentBufferReadResult(
             auto& blocks = *response->Record.MutableBlocks();
             blocks.AddBuffers(rope.ConvertToString());
 
-            ctx.Send(request->Sender, std::move(response));
+            ctx.Send(request.Sender, std::move(response));
 
             RequestById.erase(requestId);
         }

@@ -43,7 +43,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest) {
 
         auto partition = runtime->Register(new TPartitionActor(), 1);
 
-        // wait ready
+        // Wait for partition and direct block group to be ready
         env.Sim(TDuration::Seconds(5));
                 
         const TActorId& edge = runtime->AllocateEdgeActor(env.Settings.ControllerNodeId, __FILE__, __LINE__);

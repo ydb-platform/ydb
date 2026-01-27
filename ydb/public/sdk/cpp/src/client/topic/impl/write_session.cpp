@@ -686,7 +686,6 @@ TKeyedWriteSession::TMessagesWorker::TMessagesWorker(TKeyedWriteSession* session
 
 void TKeyedWriteSession::TMessagesWorker::DoWork() {
     auto sessionsWorker = Get(SessionsWorker);
-    // bool wroteSomething = false;
     while (!PendingMessages.empty()) {
         auto& head = PendingMessages.front();
         Y_ENSURE(head.Message.SeqNo_.has_value(), "SeqNo is not set");
@@ -700,7 +699,6 @@ void TKeyedWriteSession::TMessagesWorker::DoWork() {
             break;
         }
 
-        // wroteSomething = true;
         PendingMessages.pop_front();
         sessionsWorker->OnWriteToSession(wrappedSession);
         PushInFlightMessage(msgToSave.Partition, std::move(msgToSave));
@@ -731,7 +729,6 @@ void TKeyedWriteSession::TMessagesWorker::DoWork() {
             }
 
             sessionsWorker->OnWriteToSession(wrappedSession);
-            // wroteSomething = true;
             ++iter;
         }
 

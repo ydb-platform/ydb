@@ -94,7 +94,7 @@ TWriteSession::~TWriteSession() {
 // TKeyedWriteSession
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// TPartitionInfo
+// TKeyedWriteSession::TPartitionInfo
 
 bool TKeyedWriteSession::TPartitionInfo::InRange(const std::string_view key) const {
     if (FromBound_ > key) {
@@ -111,7 +111,7 @@ bool TKeyedWriteSession::TPartitionInfo::operator<(const std::string_view key) c
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// TWriteSessionWrapper
+// TKeyedWriteSession::TWriteSessionWrapper
 
 TKeyedWriteSession::TWriteSessionWrapper::TWriteSessionWrapper(WriteSessionPtr session, ui64 partition)
     : Session(std::move(session))
@@ -136,7 +136,7 @@ bool TKeyedWriteSession::TWriteSessionWrapper::RemoveFromQueue(ui64 delta) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// TIdleSession
+// TKeyedWriteSession::TIdleSession
 
 bool TKeyedWriteSession::TIdleSession::Less(const std::shared_ptr<TIdleSession>& other) const {
     if (EmptySince == other->EmptySince) {
@@ -157,7 +157,7 @@ bool TKeyedWriteSession::TIdleSession::IsExpired() const {
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// TSplittedPartitionWorker
+// TKeyedWriteSession::TSplittedPartitionWorker
 
 TKeyedWriteSession::TSplittedPartitionWorker::TSplittedPartitionWorker(TKeyedWriteSession* session, ui32 partitionId, ui64 partitionIdx, std::shared_ptr<TSessionsWorker> sessionsWorker, std::shared_ptr<TMessagesWorker> messagesWorker)
     : Session(session), SessionsWorker(sessionsWorker), MessagesWorker(messagesWorker), PartitionId(partitionId), PartitionIdx(partitionIdx)
@@ -294,7 +294,7 @@ NThreading::TFuture<void> TKeyedWriteSession::TSplittedPartitionWorker::Wait() {
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// TEventsWorker
+// TKeyedWriteSession::TEventsWorkerWrapper
 
 TKeyedWriteSession::TEventsWorker::TEventsWorker(TKeyedWriteSession* session, std::shared_ptr<TSessionsWorker> sessionsWorker, std::shared_ptr<TMessagesWorker> messagesWorker)
     : Session(session), SessionsWorker(sessionsWorker), MessagesWorker(messagesWorker)
@@ -470,6 +470,23 @@ void TKeyedWriteSession::TEventsWorker::TransferEventsToOutputQueue() {
         finishWithAck();
     }
 
+    // this case handles situation:
+    // 1st message is written to partition 0
+    // 2nd message is written to partition 1
+    // 3rd message is written to partition 0
+    // 4th message is written to partition 1
+    // but AcksEvent for partition 0 looks like:
+    // [ack1, ack3]
+    // In this case we can not just forget about ack3, because 3rd message is in-flight
+    // so we will push 'AcksEvent' back to the queue for partition 0
+    for (auto& [partition, acksQueue] : acks) {
+        if (acksQueue.size() > 0) {
+            TWriteSessionEvent::TAcksEvent ackEvent;
+            std::copy(acksQueue.begin(), acksQueue.end(), std::back_inserter(ackEvent.Acks));
+            PartitionsEventQueues[partition].push_back(std::move(ackEvent));
+        }
+    }
+
     if (shouldAddReadyToAcceptEvent) {
         AddReadyToAcceptEvent();
     }
@@ -549,7 +566,7 @@ void TKeyedWriteSession::TEventsWorker::UnsubscribeFromPartition(ui64 partition)
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// TSessionsWorker
+// TKeyedWriteSession::TSessionsWorker
 
 TKeyedWriteSession::TSessionsWorker::TSessionsWorker(TKeyedWriteSession* session)
     : Session(session) {}
@@ -647,7 +664,7 @@ void TKeyedWriteSession::TSessionsWorker::SetEventsWorker(std::shared_ptr<TEvent
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// TMessagesWorker
+// TKeyedWriteSession::TMessagesWorker
 
 TKeyedWriteSession::TMessagesWorker::TMessagesWorker(TKeyedWriteSession* session, std::shared_ptr<TSessionsWorker> sessionsWorker)
     : Session(session), SessionsWorker(sessionsWorker)
@@ -970,12 +987,6 @@ void TKeyedWriteSession::RunSplittedPartitionWorkers() {
     for (const auto& partition : toRemove) {
         SplittedPartitionWorkers.erase(partition);
     }
-}
-
-void TKeyedWriteSession::RemoveSplittedPartition(ui32 partitionId) {
-    auto partitionIt = PartitionIdsMapping.find(partitionId);
-    Y_ABORT_UNLESS(partitionIt != PartitionIdsMapping.end(), "Partition not found");
-    SplittedPartitionWorkers.erase(partitionIt->second);
 }
 
 void* TKeyedWriteSession::RunMainWorkerThread(void* arg) {

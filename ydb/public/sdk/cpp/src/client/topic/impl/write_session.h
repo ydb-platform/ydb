@@ -212,7 +212,7 @@ private:
         ui64 MemoryUsage = 0;
     };
 
-    struct TSplittedPartitionWorker : std::enable_shared_from_this<TSplittedPartitionWorker>, TWorker {
+    struct TSplittedPartitionWorker : TWorker {
     private:
         enum class EState {
             Init,
@@ -328,8 +328,6 @@ private:
     void HandleAutoPartitioning(ui64 partition);
 
     void RunSplittedPartitionWorkers();
-
-    void RemoveSplittedPartition(ui32 partitionId);
 
     void Wait();
 

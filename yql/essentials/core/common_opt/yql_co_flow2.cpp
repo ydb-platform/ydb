@@ -2464,13 +2464,9 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
         auto subsetType = ctx.MakeType<TStructExprType>(subsetItems);
         YQL_CLOG(DEBUG, Core) << "FieldSubset for HoppingTraits";
         return Build<TCoHoppingTraits>(ctx, node->Pos())
+            .InitFrom(self)
             .ItemType(ExpandType(node->Pos(), *subsetType, ctx))
             .TimeExtractor(ctx.DeepCopyLambda(self.TimeExtractor().Ref()))
-            .Hop(self.Hop())
-            .Interval(self.Interval())
-            .Delay(self.Delay())
-            .DataWatermarks(self.DataWatermarks())
-            .Version(self.Version())
             .Done().Ptr();
     };
 

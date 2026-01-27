@@ -5047,7 +5047,9 @@ TRuntimeNode TProgramBuilder::MultiHoppingCore(TRuntimeNode list,
     const TBinaryLambda& merge,
     const TTernaryLambda& finish,
     TRuntimeNode hop, TRuntimeNode interval, TRuntimeNode delay,
-    TRuntimeNode dataWatermarks, TRuntimeNode watermarksMode)
+    TRuntimeNode dataWatermarks, TRuntimeNode watermarksMode,
+    TRuntimeNode farFutureSizeLimit, TRuntimeNode farFutureTimeLimit,
+    TRuntimeNode earlyPolicy, TRuntimeNode latePolicy)
 {
     auto streamType = AS_TYPE(TStreamType, list);
     auto itemType = AS_TYPE(TStructType, streamType->GetItemType());
@@ -5114,6 +5116,15 @@ TRuntimeNode TProgramBuilder::MultiHoppingCore(TRuntimeNode list,
     callableBuilder.Add(delay);
     callableBuilder.Add(dataWatermarks);
     callableBuilder.Add(watermarksMode);
+    if (farFutureSizeLimit || farFutureTimeLimit || earlyPolicy || latePolicy) {
+        if constexpr (RuntimeVersion < 70U) {
+            THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+        }
+        callableBuilder.Add(farFutureSizeLimit);
+        callableBuilder.Add(farFutureTimeLimit);
+        callableBuilder.Add(earlyPolicy);
+        callableBuilder.Add(latePolicy);
+    }
 
     return TRuntimeNode(callableBuilder.Build(), false);
 }

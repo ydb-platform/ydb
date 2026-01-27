@@ -6774,9 +6774,9 @@ namespace {
         return IGraphTransformer::TStatus::Ok;
     }
 
-    IGraphTransformer::TStatus HoppingTraitsWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus HoppingTraitsWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         Y_UNUSED(output);
-        if (!EnsureArgsCount(*input, 7, ctx.Expr)) {
+        if (!EnsureMinMaxArgsCount(*input, TCoHoppingTraits::idx_Version + 1, TCoHoppingTraits::idx_LatePolicy + 1, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
         if (auto status = EnsureTypeRewrite(input->HeadRef(), ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
@@ -6848,6 +6848,59 @@ namespace {
                 << "Expected unit type, but got: "
                 << *dataWatermarksNodePtr->GetTypeAnn()));
             return IGraphTransformer::TStatus::Error;
+        }
+
+        if (TCoHoppingTraits::idx_SizeLimit < input->ChildrenSize()) {
+            auto& farFutureSizeLimit = input->ChildRef(TCoHoppingTraits::idx_SizeLimit);
+            if (!farFutureSizeLimit->IsCallable("Void")) {
+                if (farFutureSizeLimit->IsCallable("String") && farFutureSizeLimit->Child(0)->Content() == "max") {
+                    // special cast
+                    farFutureSizeLimit = ctx.Expr.Builder(farFutureSizeLimit->Pos())
+                        .Callable("Uint64")
+                            .Atom(0, ToString(Max<ui64>()))
+                        .Seal()
+                        .Build();
+                    return IGraphTransformer::TStatus::Repeat;
+                }
+                const TTypeAnnotationNode* expectedType = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Uint64);
+                auto convertStatus = TryConvertTo(farFutureSizeLimit, *expectedType, ctx.Expr);
+                if (convertStatus.Level != IGraphTransformer::TStatus::Ok) {
+                    return convertStatus;
+                }
+            }
+        }
+        if (TCoHoppingTraits::idx_TimeLimit < input->ChildrenSize()) {
+            auto& farFutureTimeLimit = input->ChildRef(TCoHoppingTraits::idx_TimeLimit);
+            if (!farFutureTimeLimit->IsCallable("Void")) {
+                if (farFutureTimeLimit->IsCallable("String") && farFutureTimeLimit->Child(0)->Content() == "max") {
+                    // special cast
+                    farFutureTimeLimit = ctx.Expr.Builder(farFutureTimeLimit->Pos())
+                        .Callable("Interval")
+                            .Atom(0, ToString(NUdf::MAX_TIMESTAMP - 1))
+                        .Seal()
+                        .Build();
+                    return IGraphTransformer::TStatus::Repeat;
+                }
+                if (!EnsureSpecificDataType(*farFutureTimeLimit, EDataSlot::Interval, ctx.Expr, /*allowOptional=*/true)) {
+                    return IGraphTransformer::TStatus::Error;
+                }
+            }
+        }
+        if (TCoHoppingTraits::idx_EarlyPolicy < input->ChildrenSize()) {
+            auto* earlyPolicy = input->Child(TCoHoppingTraits::idx_EarlyPolicy);
+            if (!earlyPolicy->IsCallable("Void")) {
+                if (!EnsureSpecificDataType(*earlyPolicy, EDataSlot::String, ctx.Expr, /*allowOptional=*/true)) {
+                    return IGraphTransformer::TStatus::Error;
+                }
+            }
+        }
+        if (TCoHoppingTraits::idx_LatePolicy < input->ChildrenSize()) {
+            auto* latePolicy = input->Child(TCoHoppingTraits::idx_LatePolicy);
+            if (!latePolicy->IsCallable("Void")) {
+                if (!EnsureSpecificDataType(*latePolicy, EDataSlot::String, ctx.Expr, /*allowOptional=*/true)) {
+                    return IGraphTransformer::TStatus::Error;
+                }
+            }
         }
 
         input->SetTypeAnn(ctx.Expr.MakeType<TUnitExprType>());
@@ -7009,7 +7062,7 @@ namespace {
 
     IGraphTransformer::TStatus MultiHoppingCoreWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         Y_UNUSED(output);
-        if (!EnsureArgsCount(*input, 15, ctx.Expr)) {
+        if (!EnsureMinMaxArgsCount(*input, TCoMultiHoppingCore::idx_HoppingColumn + 1, TCoMultiHoppingCore::idx_LatePolicy + 1, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
         auto& item = input->ChildRef(0);
@@ -7082,6 +7135,39 @@ namespace {
 
         if (!EnsureAtom(*dataWatermarks, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
+        }
+
+        if (TCoMultiHoppingCore::idx_SizeLimit < input->ChildrenSize()) {
+            auto* farFutureSizeLimit = input->Child(TCoMultiHoppingCore::idx_SizeLimit);
+            if (!farFutureSizeLimit->IsCallable("Void")) {
+                if (!EnsureSpecificDataType(*farFutureSizeLimit, EDataSlot::Uint64, ctx.Expr, /*allowOptional=*/true)) {
+                    return IGraphTransformer::TStatus::Error;
+                }
+            }
+        }
+        if (TCoMultiHoppingCore::idx_TimeLimit < input->ChildrenSize()) {
+            auto* farFutureTimeLimit = input->Child(TCoMultiHoppingCore::idx_TimeLimit);
+            if (!farFutureTimeLimit->IsCallable("Void")) {
+                if (!EnsureSpecificDataType(*farFutureTimeLimit, EDataSlot::Interval, ctx.Expr, /*allowOptional=*/true)) {
+                    return IGraphTransformer::TStatus::Error;
+                }
+            }
+        }
+        if (TCoMultiHoppingCore::idx_EarlyPolicy < input->ChildrenSize()) {
+            auto* earlyPolicy = input->Child(TCoMultiHoppingCore::idx_EarlyPolicy);
+            if (!earlyPolicy->IsCallable("Void")) {
+                if (!EnsureSpecificDataType(*earlyPolicy, EDataSlot::Uint32, ctx.Expr, /*allowOptional=*/true)) {
+                    return IGraphTransformer::TStatus::Error;
+                }
+            }
+        }
+        if (TCoMultiHoppingCore::idx_LatePolicy < input->ChildrenSize()) {
+            auto* latePolicy = input->Child(TCoMultiHoppingCore::idx_LatePolicy);
+            if (!latePolicy->IsCallable("Void")) {
+                if (!EnsureSpecificDataType(*latePolicy, EDataSlot::Uint32, ctx.Expr, /*allowOptional=*/true)) {
+                    return IGraphTransformer::TStatus::Error;
+                }
+            }
         }
 
         if (!UpdateLambdaAllArgumentsTypes(lambdaInit, {itemType}, ctx.Expr)) {

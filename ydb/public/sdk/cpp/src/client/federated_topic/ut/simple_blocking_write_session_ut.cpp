@@ -195,6 +195,9 @@ public:
         readSession->Close();
     }
 
+    TFederatedTopicClient* GetTopicClient() { return TopicClient.get(); }
+    IThreadPool* GetThreadPool() { return ThreadPool.Get(); }
+
 private:
     std::shared_ptr<NPersQueue::NTests::TPersQueueYdbSdkTestSetup> Setup;
     TFederationDiscoveryServiceMock FdsMock;
@@ -366,6 +369,32 @@ Y_UNIT_TEST_SUITE(SimpleBlockingFederatedWriteSession) {
 
         // Verify the message was written correctly
         fixture.VerifyMessagesWritten({message});
+    }
+
+    Y_UNIT_TEST(IsAliveAfterClose) {
+        TSimpleBlockingWriteSessionTestFixture fixture(TEST_CASE_NAME);
+
+        auto session = fixture.CreateWriteSessionWithSingleDatabaseFdsResponse();
+        UNIT_ASSERT(session);
+
+        // Session should be alive after creation
+        UNIT_ASSERT(session->IsAlive());
+
+        // Write a message to verify session is working
+        UNIT_ASSERT(session->Write("test message"));
+
+        // Session still alive after write
+        UNIT_ASSERT(session->IsAlive());
+
+        // Close the session
+        session->Close();
+
+        // After close, session should no longer be alive
+        UNIT_ASSERT(!session->IsAlive());
+
+        // Write should fail after session is closed
+        UNIT_ASSERT_C(!session->Write("after close", std::nullopt, std::nullopt, TDuration::MilliSeconds(100)),
+                      "Write should fail after session is closed");
     }
 
 }

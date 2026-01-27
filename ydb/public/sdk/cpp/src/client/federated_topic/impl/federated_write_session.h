@@ -175,13 +175,13 @@ public:
         return TryGetImpl()->GetInitSeqNo();
     }
     void Write(NTopic::TContinuationToken&& continuationToken, NTopic::TWriteMessage&& message, TTransactionBase* tx = nullptr) override {
-        if (tx) {
+        if (tx || message.GetTxPtr()) {
             ythrow yexception() << "transactions are not supported";
         }
         TryGetImpl()->Write(std::move(continuationToken), std::move(message));
     }
     void WriteEncoded(NTopic::TContinuationToken&& continuationToken, NTopic::TWriteMessage&& params, TTransactionBase* tx = nullptr) override {
-        if (tx) {
+        if (tx || params.GetTxPtr()) {
             ythrow yexception() << "transactions are not supported";
         }
         TryGetImpl()->WriteEncoded(std::move(continuationToken), std::move(params));
@@ -230,6 +230,8 @@ public:
     uint64_t GetInitSeqNo() override;
 
     bool Close(TDuration closeTimeout = TDuration::Max()) override;
+
+    ~TSimpleBlockingFederatedWriteSession();
     bool IsAlive() const override;
 
     NTopic::TWriterCounters::TPtr GetCounters() override;

@@ -1,6 +1,7 @@
 #include "federated_write_session.h"
 
 #include <ydb/public/sdk/cpp/src/client/topic/common/log_lazy.h>
+#include <ydb/public/sdk/cpp/src/client/topic/common/simple_blocking_helpers.h>
 #include <ydb/public/sdk/cpp/src/client/topic/impl/topic_impl.h>
 
 #define INCLUDE_YDB_INTERNAL_H
@@ -479,10 +480,23 @@ TSimpleBlockingFederatedWriteSession::TSimpleBlockingFederatedWriteSession(
         IExecutor::TPtr subsessionHandlersExecutor
 ) {
     TFederatedWriteSessionSettings subSettings = settings;
-    subSettings.EventHandlers_.AcksHandler({});
-    subSettings.EventHandlers_.ReadyToAcceptHandler({});
-    subSettings.EventHandlers_.SessionClosedHandler({});
-    subSettings.EventHandlers_.CommonHandler({});
+    auto& log = connections->GetLog();
+    if (settings.EventHandlers_.AcksHandler_) {
+        LOG_LAZY(log, TLOG_WARNING, "TSimpleBlockingFederatedWriteSession: Cannot use AcksHandler, resetting.");
+        subSettings.EventHandlers_.AcksHandler({});
+    }
+    if (settings.EventHandlers_.ReadyToAcceptHandler_) {
+        LOG_LAZY(log, TLOG_WARNING, "TSimpleBlockingFederatedWriteSession: Cannot use ReadyToAcceptHandler, resetting.");
+        subSettings.EventHandlers_.ReadyToAcceptHandler({});
+    }
+    if (settings.EventHandlers_.SessionClosedHandler_) {
+        LOG_LAZY(log, TLOG_WARNING, "TSimpleBlockingFederatedWriteSession: Cannot use SessionClosedHandler, resetting.");
+        subSettings.EventHandlers_.SessionClosedHandler({});
+    }
+    if (settings.EventHandlers_.CommonHandler_) {
+        LOG_LAZY(log, TLOG_WARNING, "TSimpleBlockingFederatedWriteSession: Cannot use CommonHandler, resetting.");
+        subSettings.EventHandlers_.CommonHandler({});
+    }
 
     Writer = std::make_shared<TFederatedWriteSession>(
         subSettings, std::move(connections), clientSettings, std::move(observer), std::move(codecs), std::move(subsessionHandlersExecutor));
@@ -505,7 +519,7 @@ bool TSimpleBlockingFederatedWriteSession::Write(
 bool TSimpleBlockingFederatedWriteSession::Write(
         NTopic::TWriteMessage&& message, TTransactionBase* tx, const TDuration& blockTimeout
 ) {
-    if (tx) {
+    if (tx || message.GetTxPtr()) {
         ythrow yexception() << "transactions are not supported";
     }
     auto continuationToken = WaitForToken(blockTimeout);
@@ -517,38 +531,11 @@ bool TSimpleBlockingFederatedWriteSession::Write(
 }
 
 std::optional<NTopic::TContinuationToken> TSimpleBlockingFederatedWriteSession::WaitForToken(const TDuration& timeout) {
-    TInstant startTime = TInstant::Now();
-    TDuration remainingTime = timeout;
-
-    std::optional<NTopic::TContinuationToken> token = std::nullopt;
-
-    while (IsAlive() && remainingTime > TDuration::Zero()) {
-        Writer->WaitEvent().Wait(remainingTime);
-
-        for (auto event : Writer->GetEvents(false, std::nullopt)) {
-            if (auto* readyEvent = std::get_if<NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(&event)) {
-                Y_ABORT_UNLESS(!token.has_value());
-                token = std::move(readyEvent->ContinuationToken);
-            } else if (std::get_if<NTopic::TWriteSessionEvent::TAcksEvent>(&event)) {
-                // discard
-            } else if (std::get_if<NTopic::TSessionClosedEvent>(&event)) {
-                Closed.store(true);
-                return std::nullopt;
-            }
-        }
-
-        if (token.has_value()) {
-            return token;
-        }
-
-        remainingTime = timeout - (TInstant::Now() - startTime);
-    }
-
-    return std::nullopt;
+    return NTopic::NDetail::WaitForToken(*Writer, Closed, timeout);
 }
 
 NTopic::TWriterCounters::TPtr TSimpleBlockingFederatedWriteSession::GetCounters() {
-    return Writer->GetCounters();
+    ythrow yexception() << "GetCounters is not yet implemented for federated write sessions";
 }
 
 bool TSimpleBlockingFederatedWriteSession::IsAlive() const {
@@ -557,7 +544,13 @@ bool TSimpleBlockingFederatedWriteSession::IsAlive() const {
 
 bool TSimpleBlockingFederatedWriteSession::Close(TDuration closeTimeout) {
     Closed.store(true);
-    return Writer->Close(std::move(closeTimeout));
+    return Writer->Close(closeTimeout);
+}
+
+TSimpleBlockingFederatedWriteSession::~TSimpleBlockingFederatedWriteSession() {
+    if (!Closed.load()) {
+        Close(TDuration::Zero());
+    }
 }
 
 }  // namespace NYdb::NFederatedTopic

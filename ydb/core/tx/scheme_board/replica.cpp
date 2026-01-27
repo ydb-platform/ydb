@@ -565,7 +565,7 @@ private:
 
     void UpsertDescriptionWithRelinkSubscribers(const TString& path, const TPathId& pathId, TOpaquePathDescription&& pathDescription)
     {
-        TDescription* oldDesc = Descriptions.FindPtr(path);
+        const TDescription* oldDesc = Descriptions.FindPtr(path);
         auto subscribers = oldDesc->GetSubscribers(SUBSCRIPTION_BY_PATH);
 
         Descriptions.DeleteIndex(path);

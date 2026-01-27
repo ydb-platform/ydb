@@ -1,6 +1,14 @@
 # Запись в таблицы 
 
-Запись результата в таблицу {{ ydb-short-name }} возможна с помощью [UPSERT INTO](../../yql/reference/syntax/upsert_into).
+{% note alert %}
+
+Не поддерживаются:
+* команда [INSERT INTO](../../yql/reference/syntax/insert_into);
+* запись в таблицы {{ ydb-short-name }}, находящихся во внешних БД.
+
+{% endnote %}
+
+Запись результата [потокового запроса](../../concepts/glossary.md#streaming-query) в таблицу {{ ydb-short-name }} возможна с помощью [UPSERT INTO](../../yql/reference/syntax/upsert_into).
 
 ```yql
 CREATE STREAMING QUERY query_with_table_write AS
@@ -25,11 +33,3 @@ WITH (
 
 END DO
 ```
-
-{% note alert %}
-
-Не поддерживаются:
-* команда [INSERT INTO](../../yql/reference/syntax/insert_into);
-* запись в таблицы {{ ydb-short-name }}, находящихся во внешних БД
-
-{% endnote %}

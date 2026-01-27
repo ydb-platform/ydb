@@ -793,11 +793,19 @@ void TTableDescription::AddVectorKMeansTreeIndex(const std::string& indexName, c
 }
 
 void TTableDescription::AddFulltextIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const TFulltextIndexSettings& indexSettings) {
-    Impl_->AddFulltextIndex(indexName, EIndexType::GlobalFulltext, indexColumns, indexSettings);
+    EIndexType indexType = EIndexType::GlobalFulltextPlain;
+    if (indexSettings.Layout.has_value() && indexSettings.Layout.value() == TFulltextIndexSettings::ELayout::FlatRelevance) {
+        indexType = EIndexType::GlobalFulltextRelevance;
+    }
+    Impl_->AddFulltextIndex(indexName, indexType, indexColumns, indexSettings);
 }
 
 void TTableDescription::AddFulltextIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const std::vector<std::string>& dataColumns, const TFulltextIndexSettings& indexSettings) {
-    Impl_->AddFulltextIndex(indexName, EIndexType::GlobalFulltext, indexColumns, dataColumns, indexSettings);
+    EIndexType indexType = EIndexType::GlobalFulltextPlain;
+    if (indexSettings.Layout.has_value() && indexSettings.Layout.value() == TFulltextIndexSettings::ELayout::FlatRelevance) {
+        indexType = EIndexType::GlobalFulltextRelevance;
+    }
+    Impl_->AddFulltextIndex(indexName, indexType, indexColumns, dataColumns, indexSettings);
 }
 
 void TTableDescription::AddSecondaryIndex(const std::string& indexName, const std::vector<std::string>& indexColumns) {
@@ -1677,6 +1685,9 @@ TSession::TSession(std::shared_ptr<TTableClient::TImpl> client, std::shared_ptr<
 TFuture<TStatus> TSession::CreateTable(const std::string& path, TTableDescription&& tableDesc,
         const TCreateTableSettings& settings)
 {
+    auto rpcSettings = TRpcRequestSettings::Make(settings)
+        .TryUpdateDeadline(GetPropagatedDeadline());
+
     auto request = MakeOperationRequest<Ydb::Table::CreateTableRequest>(settings);
     request.set_session_id(TStringType{SessionImpl_->GetId()});
     request.set_path(TStringType{path});
@@ -1687,7 +1698,7 @@ TFuture<TStatus> TSession::CreateTable(const std::string& path, TTableDescriptio
 
     return InjectSessionStatusInterception(
         SessionImpl_,
-        Client_->CreateTable(std::move(request), settings),
+        Client_->CreateTable(std::move(request), rpcSettings),
         false,
         GetMinTimeToTouch(Client_->Settings_.SessionPoolSettings_));
 }
@@ -1695,7 +1706,7 @@ TFuture<TStatus> TSession::CreateTable(const std::string& path, TTableDescriptio
 TFuture<TStatus> TSession::DropTable(const std::string& path, const TDropTableSettings& settings) {
     return InjectSessionStatusInterception(
         SessionImpl_,
-        Client_->DropTable(SessionImpl_->GetId(), path, settings),
+        Client_->DropTable(*this, path, settings),
         false,
         GetMinTimeToTouch(Client_->Settings_.SessionPoolSettings_));
 }
@@ -1793,57 +1804,43 @@ static Ydb::Table::AlterTableRequest MakeAlterTableProtoRequest(
 }
 
 TAsyncStatus TSession::AlterTable(const std::string& path, const TAlterTableSettings& settings) {
+    auto rpcSettings = TRpcRequestSettings::Make(settings)
+        .TryUpdateDeadline(GetPropagatedDeadline());
+
     auto request = MakeAlterTableProtoRequest(path, settings, SessionImpl_->GetId());
 
     return InjectSessionStatusInterception(
         SessionImpl_,
-        Client_->AlterTable(std::move(request), settings),
+        Client_->AlterTable(std::move(request), rpcSettings),
         false,
         GetMinTimeToTouch(Client_->Settings_.SessionPoolSettings_));
 }
 
 TAsyncOperation TSession::AlterTableLong(const std::string& path, const TAlterTableSettings& settings) {
+    auto rpcSettings = TRpcRequestSettings::Make(settings)
+        .TryUpdateDeadline(GetPropagatedDeadline());
+
     auto request = MakeAlterTableProtoRequest(path, settings, SessionImpl_->GetId());
 
     return InjectSessionStatusInterception(
         SessionImpl_,
-        Client_->AlterTableLong(std::move(request), settings),
+        Client_->AlterTableLong(std::move(request), rpcSettings),
         false,
         GetMinTimeToTouch(Client_->Settings_.SessionPoolSettings_));
 }
 
 TAsyncStatus TSession::RenameTables(const std::vector<TRenameItem>& renameItems, const TRenameTablesSettings& settings) {
-    auto request = MakeOperationRequest<Ydb::Table::RenameTablesRequest>(settings);
-    request.set_session_id(TStringType{SessionImpl_->GetId()});
-
-    for (const auto& item: renameItems) {
-        auto add = request.add_tables();
-        add->set_source_path(TStringType{item.SourcePath()});
-        add->set_destination_path(TStringType{item.DestinationPath()});
-        add->set_replace_destination(item.ReplaceDestination());
-    }
-
     return InjectSessionStatusInterception(
         SessionImpl_,
-        Client_->RenameTables(std::move(request), settings),
+        Client_->RenameTables(*this, renameItems, settings),
         false,
         GetMinTimeToTouch(Client_->Settings_.SessionPoolSettings_));
 }
 
 TAsyncStatus TSession::CopyTables(const std::vector<TCopyItem>& copyItems, const TCopyTablesSettings& settings) {
-    auto request = MakeOperationRequest<Ydb::Table::CopyTablesRequest>(settings);
-    request.set_session_id(TStringType{SessionImpl_->GetId()});
-
-    for (const auto& item: copyItems) {
-        auto add = request.add_tables();
-        add->set_source_path(TStringType{item.SourcePath()});
-        add->set_destination_path(TStringType{item.DestinationPath()});
-        add->set_omit_indexes(item.OmitIndexes());
-    }
-
     return InjectSessionStatusInterception(
         SessionImpl_,
-        Client_->CopyTables(std::move(request), settings),
+        Client_->CopyTables(*this, copyItems, settings),
         false,
         GetMinTimeToTouch(Client_->Settings_.SessionPoolSettings_));
 }
@@ -1851,27 +1848,27 @@ TAsyncStatus TSession::CopyTables(const std::vector<TCopyItem>& copyItems, const
 TFuture<TStatus> TSession::CopyTable(const std::string& src, const std::string& dst, const TCopyTableSettings& settings) {
     return InjectSessionStatusInterception(
         SessionImpl_,
-        Client_->CopyTable(SessionImpl_->GetId(), src, dst, settings),
+        Client_->CopyTable(*this, src, dst, settings),
         false,
         GetMinTimeToTouch(Client_->Settings_.SessionPoolSettings_));
 }
 
 TAsyncDescribeTableResult TSession::DescribeTable(const std::string& path, const TDescribeTableSettings& settings) {
-    return Client_->DescribeTable(SessionImpl_->GetId(), path, settings);
+    return Client_->DescribeTable(*this, path, settings);
 }
 
 TAsyncDescribeExternalDataSourceResult TSession::DescribeExternalDataSource(const std::string& path, const TDescribeExternalDataSourceSettings& settings) {
-    return Client_->DescribeExternalDataSource(path, settings);
+    return Client_->DescribeExternalDataSource(*this, path, settings);
 }
 
 TAsyncDescribeExternalTableResult TSession::DescribeExternalTable(const std::string& path, const TDescribeExternalTableSettings& settings) {
-    return Client_->DescribeExternalTable(path, settings);
+    return Client_->DescribeExternalTable(*this, path, settings);
 }
 
 TAsyncDescribeSystemViewResult TSession::DescribeSystemView(const std::string& path,
         const TDescribeSystemViewSettings& settings)
 {
-    return Client_->DescribeSystemView(path, settings);
+    return Client_->DescribeSystemView(*this, path, settings);
 }
 
 TAsyncDataQueryResult TSession::ExecuteDataQuery(const std::string& query, const TTxControl& txControl,
@@ -1929,7 +1926,7 @@ TAsyncPrepareQueryResult TSession::PrepareDataQuery(const std::string& query, co
 TAsyncStatus TSession::ExecuteSchemeQuery(const std::string& query, const TExecSchemeQuerySettings& settings) {
     return InjectSessionStatusInterception(
         SessionImpl_,
-        Client_->ExecuteSchemeQuery(SessionImpl_->GetId(), query, settings),
+        Client_->ExecuteSchemeQuery(*this, query, settings),
         true,
         GetMinTimeToTouch(Client_->Settings_.SessionPoolSettings_));
 }
@@ -1966,7 +1963,7 @@ TAsyncTablePartIterator TSession::ReadTable(const std::string& path,
                 pair.second, pair.first.Endpoint) : nullptr, std::move(pair.first))
             );
     };
-    Client_->ReadTable(SessionImpl_->GetId(), path, settings).Subscribe(readTableIteratorBuilder);
+    Client_->ReadTable(*this, path, settings).Subscribe(readTableIteratorBuilder);
     return InjectSessionStatusInterception(
         SessionImpl_,
         promise.GetFuture(),
@@ -2004,6 +2001,14 @@ TTypeBuilder TSession::GetTypeBuilder() {
 
 const std::string& TSession::GetId() const {
     return SessionImpl_->GetId();
+}
+
+const std::optional<TDeadline>& TSession::GetPropagatedDeadline() const {
+    return SessionImpl_->PropagatedDeadline_;
+}
+
+void TSession::SetPropagatedDeadline(const TDeadline& deadline) {
+    SessionImpl_->PropagatedDeadline_ = deadline;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2561,6 +2566,8 @@ TKMeansTreeSettings TKMeansTreeSettings::FromProto(const Ydb::Table::KMeansTreeS
         .Settings = TVectorIndexSettings::FromProto(proto.settings()),
         .Clusters = proto.clusters(),
         .Levels = proto.levels(),
+        .OverlapClusters = proto.overlap_clusters(),
+        .OverlapRatio = proto.overlap_ratio(),
     };
 }
 
@@ -2568,6 +2575,8 @@ void TKMeansTreeSettings::SerializeTo(Ydb::Table::KMeansTreeSettings& settings) 
     Settings.SerializeTo(*settings.mutable_settings());
     settings.set_clusters(Clusters);
     settings.set_levels(Levels);
+    settings.set_overlap_clusters(OverlapClusters);
+    settings.set_overlap_ratio(OverlapRatio);
 }
 
 void TKMeansTreeSettings::Out(IOutputStream& o) const {
@@ -2593,7 +2602,7 @@ TFulltextIndexSettings::TAnalyzers FromProto(const Ydb::Table::FulltextIndexSett
 
     TAnalyzers result;
     result.Tokenizer = convertTokenizer();
-    
+
     if (proto.has_language()) {
         result.Language = proto.language();
     }
@@ -2624,13 +2633,13 @@ TFulltextIndexSettings::TAnalyzers FromProto(const Ydb::Table::FulltextIndexSett
     if (proto.has_filter_length_max()) {
         result.FilterLengthMax = proto.filter_length_max();
     }
-    
+
     return result;
 }
 
 Ydb::Table::FulltextIndexSettings::Analyzers ToProto(const TFulltextIndexSettings::TAnalyzers& analyzers) {
     using ETokenizer = TFulltextIndexSettings::ETokenizer;
-    
+
     auto convertTokenizer = [&] {
         switch (*analyzers.Tokenizer) {
         case ETokenizer::Whitespace:
@@ -2710,6 +2719,8 @@ TFulltextIndexSettings TFulltextIndexSettings::FromProto(const Ydb::Table::Fullt
         switch (proto.layout()) {
         case Ydb::Table::FulltextIndexSettings::FLAT:
             return ELayout::Flat;
+        case Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE:
+            return ELayout::FlatRelevance;
         default:
             return ELayout::Unspecified;
         }
@@ -2729,6 +2740,8 @@ void TFulltextIndexSettings::SerializeTo(Ydb::Table::FulltextIndexSettings& sett
         switch (*Layout) {
         case ELayout::Flat:
             return Ydb::Table::FulltextIndexSettings::FLAT;
+        case ELayout::FlatRelevance:
+            return Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE;
         case ELayout::Unspecified:
             return Ydb::Table::FulltextIndexSettings::LAYOUT_UNSPECIFIED;
         }
@@ -2738,7 +2751,7 @@ void TFulltextIndexSettings::SerializeTo(Ydb::Table::FulltextIndexSettings& sett
     if (Layout.has_value()) {
         settings.set_layout(convertLayout());
     }
-    
+
     for (const auto& column : Columns) {
         *settings.add_columns() = ToProto(column);
     }
@@ -2784,9 +2797,16 @@ TIndexDescription TIndexDescription::FromProto(const TProto& proto) {
         specializedIndexSettings = TKMeansTreeSettings::FromProto(vectorProto.vector_settings());
         break;
     }
-    case TProto::kGlobalFulltextIndex: {
-        type = EIndexType::GlobalFulltext;
-        const auto& fulltextProto = proto.global_fulltext_index();
+    case TProto::kGlobalFulltextPlainIndex: {
+        type = EIndexType::GlobalFulltextPlain;
+        const auto& fulltextProto = proto.global_fulltext_plain_index();
+        globalIndexSettings.emplace_back(TGlobalIndexSettings::FromProto(fulltextProto.settings()));
+        specializedIndexSettings = TFulltextIndexSettings::FromProto(fulltextProto.fulltext_settings());
+        break;
+    }
+    case TProto::kGlobalFulltextRelevanceIndex: {
+        type = EIndexType::GlobalFulltextRelevance;
+        const auto& fulltextProto = proto.global_fulltext_relevance_index();
         globalIndexSettings.emplace_back(TGlobalIndexSettings::FromProto(fulltextProto.settings()));
         specializedIndexSettings = TFulltextIndexSettings::FromProto(fulltextProto.fulltext_settings());
         break;
@@ -2846,8 +2866,20 @@ void TIndexDescription::SerializeTo(Ydb::Table::TableIndex& proto) const {
         }
         break;
     }
-    case EIndexType::GlobalFulltext: {
-        auto* global_fulltext_index = proto.mutable_global_fulltext_index();
+    case EIndexType::GlobalFulltextPlain: {
+        auto* global_fulltext_index = proto.mutable_global_fulltext_plain_index();
+        auto& settings = *global_fulltext_index->mutable_settings();
+        auto& fulltext_settings = *global_fulltext_index->mutable_fulltext_settings();
+        if (GlobalIndexSettings_.size() == 1) {
+            GlobalIndexSettings_[0].SerializeTo(settings);
+        }
+        if (const auto* ftSettings = std::get_if<TFulltextIndexSettings>(&SpecializedIndexSettings_)) {
+            ftSettings->SerializeTo(fulltext_settings);
+        }
+        break;
+    }
+    case EIndexType::GlobalFulltextRelevance: {
+        auto* global_fulltext_index = proto.mutable_global_fulltext_relevance_index();
         auto& settings = *global_fulltext_index->mutable_settings();
         auto& fulltext_settings = *global_fulltext_index->mutable_fulltext_settings();
         if (GlobalIndexSettings_.size() == 1) {
@@ -2890,7 +2922,8 @@ void TIndexDescription::Out(IOutputStream& o) const {
             o << ", vector_settings: " << *settings;
         }
         break;
-    case EIndexType::GlobalFulltext:
+    case EIndexType::GlobalFulltextPlain:
+    case EIndexType::GlobalFulltextRelevance:
         if (auto settings = std::get_if<TFulltextIndexSettings>(&SpecializedIndexSettings_)) {
             o << ", fulltext_settings: " << *settings;
         }

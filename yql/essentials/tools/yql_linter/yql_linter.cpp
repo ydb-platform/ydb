@@ -41,6 +41,7 @@ int Run(int argc, char* argv[]) {
     opts.AddLongOption("cluster-system", "cluster system").StoreResult(&clusterSystem);
     opts.AddLongOption("custom-udf-filter", "JSON file with allowed UDFs").StoreResult(&customUdfFilter);
     opts.AddLongOption("ansi-lexer", "use ansi lexer").NoArgument();
+    opts.AddLongOption("type-check", "do partial type checking").NoArgument();
     opts.AddLongOption("no-colors", "disable colors for output").NoArgument();
     opts.AddLongOption("langver", "Set current language version").Optional().RequiredArgument("VER").Handler1T<TString>([&](const TString& str) {
         if (!NYql::ParseLangVersion(str, langver)) {
@@ -95,6 +96,7 @@ int Run(int argc, char* argv[]) {
     checkReq.Syntax = FromString<NYql::NFastCheck::ESyntax>(syntaxStr);
     checkReq.ClusterMode = FromString<NYql::NFastCheck::EClusterMode>(clusterModeStr);
     checkReq.ClusterSystem = clusterSystem;
+    checkReq.WithTypeCheck = res.Has("type-check");
     TMaybe<NYql::NFastCheck::TUdfFilter> udfFilter;
     if (customUdfFilter) {
         TFileInput filterFile(customUdfFilter);

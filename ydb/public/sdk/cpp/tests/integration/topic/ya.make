@@ -24,11 +24,11 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 SRCS(
-    basic_usage.cpp
-    describe_topic.cpp
-    local_partition.cpp
-    topic_to_table.cpp
-    trace.cpp
+    basic_usage_it.cpp
+    describe_topic_it.cpp
+    local_partition_it.cpp
+    topic_to_table_it.cpp
+    trace_it.cpp
 )
 
 END()

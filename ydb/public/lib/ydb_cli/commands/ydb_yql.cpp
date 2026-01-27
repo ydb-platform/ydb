@@ -1,6 +1,7 @@
 #include "ydb_yql.h"
 
 #include <ydb/public/lib/json_value/ydb_json_value.h>
+#include <ydb/public/lib/ydb_cli/common/common.h>
 #include <ydb/public/lib/stat_visualization/flame_graph_builder.h>
 #include <ydb/public/lib/ydb_cli/common/pretty_table.h>
 #include <ydb/public/lib/ydb_cli/common/print_operation.h>
@@ -108,7 +109,7 @@ int TCommandYql::RunCommand(TConfig& config, const TString& script) {
                     FillSettings(settings)
             );
 
-            if (!WaitInterruptible(asyncResult)) {
+            if (!WaitInterruptable(asyncResult)) {
                 return EXIT_FAILURE;
             }
 
@@ -124,7 +125,7 @@ int TCommandYql::RunCommand(TConfig& config, const TString& script) {
             FillSettings(settings)
         );
 
-        if (!WaitInterruptible(asyncResult)) {
+        if (!WaitInterruptable(asyncResult)) {
             return EXIT_FAILURE;
         }
 
@@ -147,7 +148,7 @@ bool TCommandYql::PrintResponse(NScripting::TYqlResultPartIterator& result) {
         while (!IsInterrupted()) {
             auto asyncStreamPart = result.ReadNext();
 
-            if (!WaitInterruptible(asyncStreamPart)) {
+            if (!WaitInterruptable(asyncStreamPart)) {
                 return EXIT_FAILURE;
             }
             auto streamPart = asyncStreamPart.GetValue();

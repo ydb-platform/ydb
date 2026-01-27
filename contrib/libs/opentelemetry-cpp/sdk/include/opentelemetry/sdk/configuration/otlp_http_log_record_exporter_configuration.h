@@ -7,6 +7,7 @@
 #include <string>
 
 #include "opentelemetry/sdk/configuration/headers_configuration.h"
+#include "opentelemetry/sdk/configuration/http_tls_configuration.h"
 #include "opentelemetry/sdk/configuration/log_record_exporter_configuration.h"
 #include "opentelemetry/sdk/configuration/log_record_exporter_configuration_visitor.h"
 #include "opentelemetry/sdk/configuration/otlp_http_encoding.h"
@@ -29,9 +30,7 @@ public:
   }
 
   std::string endpoint;
-  std::string certificate_file;
-  std::string client_key_file;
-  std::string client_certificate_file;
+  std::unique_ptr<HttpTlsConfiguration> tls;
   std::unique_ptr<HeadersConfiguration> headers;
   std::string headers_list;
   std::string compression;

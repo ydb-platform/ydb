@@ -4,15 +4,27 @@ INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/fq_runner/ydb_runner_with_datastreams.in
 
 TEST_SRCS(
     test_streaming.py
-    test_udfs.py
+    test_watermarks.py
 )
+
+IF (OS_LINUX)
+    TEST_SRCS(
+        test_udfs.py
+    )
+ENDIF()
 
 PY_SRCS(
     common.py
     conftest.py
 )
 
-SIZE(MEDIUM)
+IF (SANITIZER_TYPE)
+    SIZE(LARGE)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
+    REQUIREMENTS(ram:20)
+ELSE()
+    SIZE(MEDIUM)
+ENDIF()
 
 PEERDIR(
     ydb/tests/library

@@ -435,7 +435,7 @@ namespace NKikimr {
                             NFake::INode* factory, NFake::TStorage storage, const NSharedCache::TSharedCacheConfig* sharedCacheConfig, bool forceFollowers,
                             TVector<TIntrusivePtr<NFake::TProxyDS>> dsProxies)
     {
-        runtime.SetDispatchTimeout(storage.UseDisk ? DISK_DISPATCH_TIMEOUT : DEFAULT_DISPATCH_TIMEOUT);
+        runtime.SetDispatchTimeout(storage.UseDisk ? storage.EventDispatchTimeout.value_or(DISK_DISPATCH_TIMEOUT) : DEFAULT_DISPATCH_TIMEOUT);
 
         bool addGroups = dsProxies.empty();
         TTestStorageFactory disk(runtime, storage, mock, addGroups);

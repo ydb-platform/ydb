@@ -1,6 +1,7 @@
 #include <ydb/public/api/protos/ydb_export.pb.h>
 
 #include <ydb/core/backup/common/encryption.h>
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/metering/metering.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tablet_flat/shared_cache_events.h>
@@ -691,6 +692,231 @@ namespace {
                     UNIT_ASSERT(topicExpected.GetPermissions().CompareWithString(GetS3FileContent(permissionsPath)));
                 }
             }
+        }
+
+        void CheckPathWithChecksum(const TString& path) {
+            UNIT_ASSERT(HasS3File(path));
+            UNIT_ASSERT(HasS3File(path + ".sha256"));
+        }
+
+        void TestReplication(const TString& scheme, const TString& expected) {
+            auto options = TTestEnvOptions()
+                .InitYdbDriver(true);
+            TTestEnv env(Runtime(), options);
+            ui64 txId = 100;
+
+            TestCreateReplication(Runtime(), ++txId, "/MyRoot", scheme);
+            env.TestWaitNotification(Runtime(), txId);
+
+            TString request = Sprintf(R"(
+                ExportToS3Settings {
+                    endpoint: "localhost:%d"
+                    scheme: HTTP
+                    items {
+                        source_path: "/MyRoot/Replication"
+                        destination_prefix: "Replication"
+                    }
+                }
+            )", S3Port());
+
+            TestExport(Runtime(), ++txId, "/MyRoot", request);
+            env.TestWaitNotification(Runtime(), txId);
+
+            TestGetExport(Runtime(), txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+
+            CheckPathWithChecksum("/Replication/create_async_replication.sql");
+            const auto content = GetS3FileContent("/Replication/create_async_replication.sql");
+            UNIT_ASSERT_EQUAL_C(
+                content, expected,
+                TStringBuilder() << "\nExpected:\n\n" << expected << "\n\nActual:\n\n" << content);
+
+            CheckPathWithChecksum("/Replication/permissions.pb");
+            const auto permissions = GetS3FileContent("/Replication/permissions.pb");
+            const auto permissions_expected = "actions {\n  change_owner: \"root@builtin\"\n}\n";
+            UNIT_ASSERT_EQUAL_C(
+                permissions, permissions_expected,
+                TStringBuilder() << "\nExpected:\n\n" << permissions_expected << "\n\nActual:\n\n" << permissions);
+
+        }
+
+        void TestTransfer(const TString& scheme, const TString& expected) {
+            auto options = TTestEnvOptions()
+                .InitYdbDriver(true);
+            TTestEnv env(Runtime(), options);
+            ui64 txId = 100;
+
+            TestCreateTable(Runtime(), ++txId, "/MyRoot", R"(
+                Name: "Table"
+                Columns { Name: "key" Type: "Utf8" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            )");
+            env.TestWaitNotification(Runtime(), txId);
+
+            auto topic = NDescUT::TSimpleTopic(0, 0);
+            TestCreatePQGroup(Runtime(), ++txId, "/MyRoot", topic.GetPrivateProto().DebugString());
+            env.TestWaitNotification(Runtime(), txId);
+
+            TestCreateTransfer(Runtime(), ++txId, "/MyRoot", scheme);
+            env.TestWaitNotification(Runtime(), txId);
+
+            TString request = Sprintf(R"(
+                ExportToS3Settings {
+                    endpoint: "localhost:%d"
+                    scheme: HTTP
+                    items {
+                        source_path: "/MyRoot/Transfer"
+                        destination_prefix: "Transfer"
+                    }
+                }
+            )", S3Port());
+
+            TestExport(Runtime(), ++txId, "/MyRoot", request);
+            env.TestWaitNotification(Runtime(), txId);
+
+            TestGetExport(Runtime(), txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+
+            CheckPathWithChecksum("/Transfer/create_transfer.sql");
+            const auto content = GetS3FileContent("/Transfer/create_transfer.sql");
+            UNIT_ASSERT_EQUAL_C(
+                content, expected,
+                TStringBuilder() << "\nExpected:\n\n" << expected << "\n\nActual:\n\n" << content);
+
+            CheckPathWithChecksum("/Transfer/permissions.pb");
+            const auto permissions = GetS3FileContent("/Transfer/permissions.pb");
+            const auto permissions_expected = "actions {\n  change_owner: \"root@builtin\"\n}\n";
+            UNIT_ASSERT_EQUAL_C(
+                permissions, permissions_expected,
+                TStringBuilder() << "\nExpected:\n\n" << permissions_expected << "\n\nActual:\n\n" << permissions);
+
+        }
+
+        void TestExternalDataSource(
+            const TString& scheme,
+            const TVector<TString>& expectedProperties)
+        {
+            Env();
+            ui64 txId = 100;
+
+            TestCreateExternalDataSource(Runtime(), ++txId, "/MyRoot", scheme);
+            Env().TestWaitNotification(Runtime(), txId);
+
+            TString request = Sprintf(R"(
+                ExportToS3Settings {
+                    endpoint: "localhost:%d"
+                    scheme: HTTP
+                    items {
+                        source_path: "/MyRoot/DataSource"
+                        destination_prefix: "DataSource"
+                    }
+                }
+            )", S3Port());
+
+            TestExport(Runtime(), ++txId, "/MyRoot", request);
+            Env().TestWaitNotification(Runtime(), txId);
+
+            TestGetExport(Runtime(), txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+
+            CheckPathWithChecksum("/DataSource/create_external_data_source.sql");
+            const auto content = GetS3FileContent("/DataSource/create_external_data_source.sql");
+
+            TString expectedHeader = "-- database: \"/MyRoot\"\n"
+                "CREATE EXTERNAL DATA SOURCE IF NOT EXISTS `DataSource`\n"
+                "WITH (";
+            UNIT_ASSERT_C(content.find(expectedHeader) != TString::npos,
+                TStringBuilder() << "\nExpected query to start from:\n\n"
+                    << expectedHeader << "\n\nActual query:\n\n" << content);
+
+            // Check if all expected properties are presented
+            for (const auto& property : expectedProperties) {
+                UNIT_ASSERT_C(content.find(property) != TString::npos,
+                    TStringBuilder() << "Property not found:\n"
+                    << "\nExpected property:\n\n" << property << "\n\nActual query:\n\n" << content);
+            }
+
+            // Check if no other properties are presented
+            UNIT_ASSERT_EQUAL_C(
+                std::ranges::count(content, ','),
+                static_cast<long>(expectedProperties.size()) - 1,
+                "Properties count mismatch");
+
+            CheckPathWithChecksum("/DataSource/permissions.pb");
+            const auto permissions = GetS3FileContent("/DataSource/permissions.pb");
+            const auto permissions_expected = "actions {\n  change_owner: \"root@builtin\"\n}\n";
+            UNIT_ASSERT_EQUAL_C(
+                permissions, permissions_expected,
+                TStringBuilder() << "\nExpected:\n\n" << permissions_expected << "\n\nActual:\n\n" << permissions);
+        }
+
+        void TestExternalTable(
+            const TString& scheme,
+            const TString& expectedStartsWith,
+            const TVector<TString>& expectedProperties)
+        {
+            Env();
+            ui64 txId = 100;
+
+            const auto dataSourceScheme = R"(
+                Name: "DataSource"
+                SourceType: "ObjectStorage"
+                Location: "https://s3.cloud.net/bucket"
+                Auth {
+                    Aws {
+                        AwsAccessKeyIdSecretName: "id_secret",
+                        AwsSecretAccessKeySecretName: "access_secret"
+                        AwsRegion: "ru-central-1"
+                    }
+                }
+            )";
+
+            TestCreateExternalDataSource(Runtime(), ++txId, "/MyRoot", dataSourceScheme);
+            Env().TestWaitNotification(Runtime(), txId);
+
+            TestCreateExternalTable(Runtime(), ++txId, "/MyRoot", scheme);
+            Env().TestWaitNotification(Runtime(), txId);
+
+            TString request = Sprintf(R"(
+                ExportToS3Settings {
+                    endpoint: "localhost:%d"
+                    scheme: HTTP
+                    items {
+                        source_path: "/MyRoot/ExternalTable"
+                        destination_prefix: "ExternalTable"
+                    }
+                }
+            )", S3Port());
+
+            TestExport(Runtime(), ++txId, "/MyRoot", request);
+            Env().TestWaitNotification(Runtime(), txId);
+
+            TestGetExport(Runtime(), txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+
+            CheckPathWithChecksum("/ExternalTable/create_external_table.sql");
+            const auto content = GetS3FileContent("/ExternalTable/create_external_table.sql");
+
+            UNIT_ASSERT_C(content.find(expectedStartsWith) != TString::npos,
+                TStringBuilder() << "\nExpected query to start with:\n\n"
+                    << expectedStartsWith << "\n\nActual query:\n\n" << content);
+
+            // Check if all expected properties are presented
+            for (const auto& property : expectedProperties) {
+                UNIT_ASSERT_C(content.find(property) != TString::npos,
+                    TStringBuilder() << "Property not found:\n"
+                    << "\nExpected property:\n\n" << property << "\n\nActual query:\n\n" << content);
+            }
+
+            // Check if no other properties are presented
+            UNIT_ASSERT_EQUAL_C(
+                std::ranges::count(content, '='),
+                static_cast<long>(expectedProperties.size()),
+                TStringBuilder() << "Properties count mismatch: ");
+
+            CheckPathWithChecksum("/ExternalTable/permissions.pb");
+            const auto permissions = GetS3FileContent("/ExternalTable/permissions.pb");
+            const auto permissions_expected = "actions {\n  change_owner: \"root@builtin\"\n}\n";
+            UNIT_ASSERT_EQUAL_C(
+                permissions, permissions_expected,
+                TStringBuilder() << "\nExpected:\n\n" << permissions_expected << "\n\nActual:\n\n" << permissions);
         }
 
     protected:
@@ -2441,7 +2667,7 @@ partitioning_settings {
 
         const auto* metadataChecksum = S3Mock().GetData().FindPtr("/metadata.json.sha256");
         UNIT_ASSERT(metadataChecksum);
-        UNIT_ASSERT_VALUES_EQUAL(*metadataChecksum, "29c79eb8109b4142731fc894869185d6c0e99c4b2f605ea3fc726b0328b8e316 metadata.json");
+        UNIT_ASSERT_VALUES_EQUAL(*metadataChecksum, "a5a7ca9bce00ac9d7e5b48a30a46f139592845cad0664b3fda92af32583b7d52 metadata.json");
 
         const auto* schemeChecksum = S3Mock().GetData().FindPtr("/scheme.pb.sha256");
         UNIT_ASSERT(schemeChecksum);
@@ -2508,7 +2734,7 @@ partitioning_settings {
 
         const auto* metadataChecksum = S3Mock().GetData().FindPtr("/metadata.json.sha256");
         UNIT_ASSERT(metadataChecksum);
-        UNIT_ASSERT_VALUES_EQUAL(*metadataChecksum, "29c79eb8109b4142731fc894869185d6c0e99c4b2f605ea3fc726b0328b8e316 metadata.json");
+        UNIT_ASSERT_VALUES_EQUAL(*metadataChecksum, "a5a7ca9bce00ac9d7e5b48a30a46f139592845cad0664b3fda92af32583b7d52 metadata.json");
 
         const auto* schemeChecksum = S3Mock().GetData().FindPtr("/scheme.pb.sha256");
         UNIT_ASSERT(schemeChecksum);
@@ -2613,6 +2839,10 @@ attributes {
 attributes {
   key: "_message_group_seqno_retention_period_ms"
   value: "1382400000"
+}
+attributes {
+  key: "_timestamp_type"
+  value: "CreateTime"
 }
 )", i));
 
@@ -3091,4 +3321,624 @@ attributes {
 
         TestGetExport(Runtime(), txId, "/MyRoot", Ydb::StatusIds::CANCELLED);
     }
+
+    void IndexMaterialization(TTestEnv& env, TTestBasicRuntime& runtime, TS3Mock& s3Mock, ui16 s3Port, bool enabled, const TString& indexDesc) {
+        ui64 txId = 100;
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            TableDescription {
+              Name: "Table"
+              Columns { Name: "key" Type: "Uint32" }
+              Columns { Name: "embedding" Type: "String" }
+              Columns { Name: "prefix" Type: "String" }
+              Columns { Name: "value" Type: "Utf8" }
+              KeyColumnNames: ["key"]
+            }
+            %s
+        )", indexDesc.c_str()));
+        env.TestWaitNotification(runtime, txId);
+
+        const auto expectedStatus = enabled ? Ydb::StatusIds::SUCCESS : Ydb::StatusIds::PRECONDITION_FAILED;
+        TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              include_index_data: true
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: ""
+              }
+            }
+        )", s3Port), "", "", expectedStatus);
+
+        if (!enabled) {
+            return;
+        }
+
+        env.TestWaitNotification(runtime, txId);
+
+        auto desc = DescribePrivatePath(runtime, "/MyRoot/Table/index");
+        const auto& tableIndex = desc.GetPathDescription().GetTableIndex();
+        const auto indexType = tableIndex.GetType();
+        const TVector<TString> indexColumns(tableIndex.GetKeyColumnNames().begin(), tableIndex.GetKeyColumnNames().end());
+
+        for (const auto implTable : NTableIndex::GetImplTables(indexType, indexColumns)) {
+            UNIT_ASSERT(s3Mock.GetData().FindPtr(TStringBuilder() << "/index/" << implTable << "/scheme.pb"));
+        }
+    }
+
+    Y_UNIT_TEST(IndexMaterializationDisabled) {
+        EnvOptions().EnableIndexMaterialization(false);
+        IndexMaterialization(Env(), Runtime(), S3Mock(), S3Port(), false, R"(
+            IndexDescription {
+              Name: "index"
+              KeyColumnNames: ["value"]
+            }
+        )");
+    }
+
+    Y_UNIT_TEST(IndexMaterialization) {
+        EnvOptions().EnableIndexMaterialization(true);
+        IndexMaterialization(Env(), Runtime(), S3Mock(), S3Port(), true, R"(
+            IndexDescription {
+              Name: "index"
+              KeyColumnNames: ["value"]
+            }
+        )");
+    }
+
+    Y_UNIT_TEST(IndexMaterializationGlobal) {
+        EnvOptions().EnableIndexMaterialization(true);
+        IndexMaterialization(Env(), Runtime(), S3Mock(), S3Port(), true, R"(
+            IndexDescription {
+              Name: "index"
+              KeyColumnNames: ["value"]
+              Type: EIndexTypeGlobal
+            }
+        )");
+    }
+
+    Y_UNIT_TEST(IndexMaterializationGlobalAsync) {
+        EnvOptions().EnableIndexMaterialization(true);
+        IndexMaterialization(Env(), Runtime(), S3Mock(), S3Port(), true, R"(
+            IndexDescription {
+              Name: "index"
+              KeyColumnNames: ["value"]
+              Type: EIndexTypeGlobalAsync
+            }
+        )");
+    }
+
+    Y_UNIT_TEST(IndexMaterializationGlobalVectorKmeansTree) {
+        EnvOptions().EnableIndexMaterialization(true);
+        IndexMaterialization(Env(), Runtime(), S3Mock(), S3Port(), true, R"(
+            IndexDescription {
+              Name: "index"
+              KeyColumnNames: ["embedding"]
+              Type: EIndexTypeGlobalVectorKmeansTree
+              VectorIndexKmeansTreeDescription {
+                Settings {
+                  settings {
+                    metric: DISTANCE_COSINE
+                    vector_type: VECTOR_TYPE_FLOAT
+                    vector_dimension: 1024
+                  }
+                  clusters: 4
+                  levels: 5
+                }
+              }
+            }
+        )");
+    }
+
+    Y_UNIT_TEST(IndexMaterializationGlobalVectorKmeansTreePrefix) {
+        EnvOptions().EnableIndexMaterialization(true);
+        IndexMaterialization(Env(), Runtime(), S3Mock(), S3Port(), true, R"(
+            IndexDescription {
+              Name: "index"
+              KeyColumnNames: ["prefix", "embedding"]
+              Type: EIndexTypeGlobalVectorKmeansTree
+              VectorIndexKmeansTreeDescription {
+                Settings {
+                  settings {
+                    metric: DISTANCE_COSINE
+                    vector_type: VECTOR_TYPE_FLOAT
+                    vector_dimension: 1024
+                  }
+                  clusters: 4
+                  levels: 5
+                }
+              }
+            }
+        )");
+    }
+
+    Y_UNIT_TEST(IndexMaterializationTwoTables) {
+        EnvOptions().EnableIndexMaterialization(true);
+        auto& env = Env();
+        auto& runtime = Runtime();
+        ui64 txId = 100;
+
+        for (const auto tableName : {"Table1", "Table2"}) {
+            TestCreateIndexedTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
+                TableDescription {
+                  Name: "%s"
+                  Columns { Name: "key" Type: "Uint32" }
+                  Columns { Name: "value" Type: "Utf8" }
+                  KeyColumnNames: ["key"]
+                }
+                IndexDescription {
+                  Name: "index"
+                  KeyColumnNames: ["value"]
+                }
+            )", tableName));
+            env.TestWaitNotification(runtime, txId);
+        }
+
+        TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              include_index_data: true
+              items {
+                source_path: "/MyRoot/Table1"
+                destination_prefix: "table1"
+              }
+              items {
+                source_path: "/MyRoot/Table2"
+                destination_prefix: "table2"
+              }
+            }
+        )", S3Port()));
+
+        env.TestWaitNotification(runtime, txId);
+    }
+
+    Y_UNIT_TEST(ReplicationExportWithStaticCredentials) {
+        TString scheme = R"(
+            Name: "Replication"
+            Config {
+                SrcConnectionParams {
+                    Endpoint: "localhost:2135"
+                    Database: "/MyRoot"
+                    StaticCredentials {
+                        User: "user"
+                        Password: "pwd"
+                        PasswordSecretName: "pwd-secret-name"
+                    }
+                }
+                Specific {
+                    Targets {
+                        SrcPath: "/MyRoot/Table1"
+                        DstPath: "/MyRoot/Table1Replica"
+                    }
+                }
+            }
+        )";
+        // As passwords are not backuped
+        TString expected = R"(-- database: "/MyRoot"
+-- backup root: "/MyRoot"
+CREATE ASYNC REPLICATION `Replication`
+FOR
+  `/MyRoot/Table1` AS `/MyRoot/Table1Replica`
+WITH (
+  CONNECTION_STRING = 'grpc://localhost:2135/?database=/MyRoot',
+  USER = 'user',
+  PASSWORD_SECRET_NAME = 'pwd-secret-name',
+  CONSISTENCY_LEVEL = 'Row'
+);)";
+        TestReplication(scheme, expected);
+    }
+
+    Y_UNIT_TEST(ReplicationExportWithOAuthCredentials) {
+        TString scheme = R"(
+            Name: "Replication"
+            Config {
+                SrcConnectionParams {
+                    Endpoint: "localhost:2135"
+                    Database: "/MyRoot"
+                    OAuthToken {
+                        Token: "super-secret-token"
+                        TokenSecretName: "token-secret-name"
+                    }
+                }
+                Specific {
+                    Targets {
+                        SrcPath: "/MyRoot/Table1"
+                        DstPath: "/MyRoot/Table1Replica"
+                    }
+                }
+            }
+        )";
+        // As OAuth tokens are not backuped
+        TString expected = R"(-- database: "/MyRoot"
+-- backup root: "/MyRoot"
+CREATE ASYNC REPLICATION `Replication`
+FOR
+  `/MyRoot/Table1` AS `/MyRoot/Table1Replica`
+WITH (
+  CONNECTION_STRING = 'grpc://localhost:2135/?database=/MyRoot',
+  TOKEN_SECRET_NAME = 'token-secret-name',
+  CONSISTENCY_LEVEL = 'Row'
+);)";
+        TestReplication(scheme, expected);
+    }
+
+    Y_UNIT_TEST(ReplicationExportMultipleItems) {
+        TString scheme = R"(
+            Name: "Replication"
+            Config {
+                SrcConnectionParams {
+                    Endpoint: "localhost:2135"
+                    Database: "/MyRoot"
+                }
+                Specific {
+                    Targets {
+                        SrcPath: "/MyRoot/Table1"
+                        DstPath: "/MyRoot/Table1Replica"
+                    }
+                    Targets {
+                        SrcPath: "/MyRoot/Table2"
+                        DstPath: "/MyRoot/Table2Replica"
+                    }
+                    Targets {
+                        SrcPath: "/MyRoot/Table3"
+                        DstPath: "/MyRoot/Table3Replica"
+                    }
+                }
+            }
+        )";
+        TString expected = R"(-- database: "/MyRoot"
+-- backup root: "/MyRoot"
+CREATE ASYNC REPLICATION `Replication`
+FOR
+  `/MyRoot/Table1` AS `/MyRoot/Table1Replica`,
+  `/MyRoot/Table2` AS `/MyRoot/Table2Replica`,
+  `/MyRoot/Table3` AS `/MyRoot/Table3Replica`
+WITH (
+  CONNECTION_STRING = 'grpc://localhost:2135/?database=/MyRoot',
+  CONSISTENCY_LEVEL = 'Row'
+);)";
+        TestReplication(scheme, expected);
+    }
+
+    Y_UNIT_TEST(ReplicationExportGlobalConsistency) {
+        TString scheme = R"(
+            Name: "Replication"
+            Config {
+                SrcConnectionParams {
+                    Endpoint: "localhost:2135"
+                    Database: "/MyRoot"
+                }
+                ConsistencySettings {
+                    Global {
+                        CommitIntervalMilliSeconds: 17000
+                    }
+                }
+                Specific {
+                    Targets {
+                        SrcPath: "/MyRoot/Table1"
+                        DstPath: "/MyRoot/Table1Replica"
+                    }
+                }
+            }
+        )";
+        TString expected = R"(-- database: "/MyRoot"
+-- backup root: "/MyRoot"
+CREATE ASYNC REPLICATION `Replication`
+FOR
+  `/MyRoot/Table1` AS `/MyRoot/Table1Replica`
+WITH (
+  CONNECTION_STRING = 'grpc://localhost:2135/?database=/MyRoot',
+  CONSISTENCY_LEVEL = 'Global',
+  COMMIT_INTERVAL = Interval('PT17S')
+);)";
+        TestReplication(scheme, expected);
+    }
+
+    Y_UNIT_TEST(ReplicatedTableExport) {
+        Env();
+        ui64 txId = 100;
+
+        TestCreateTable(Runtime(), ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+            ReplicationConfig {
+                Mode: REPLICATION_MODE_READ_ONLY
+            }
+        )");
+        Env().TestWaitNotification(Runtime(), txId);
+
+        TestDescribeResult(DescribePath(Runtime(), "/MyRoot/Table"), {
+            NLs::ReplicationMode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY),
+            NLs::UserAttrsEqual({{"__async_replica", "true"}}),
+        });
+
+        TString request = Sprintf(R"(
+            ExportToS3Settings {
+                endpoint: "localhost:%d"
+                scheme: HTTP
+                items {
+                    source_path: "/MyRoot/Table"
+                    destination_prefix: "Table"
+                }
+            }
+        )", S3Port());
+
+        TestExport(Runtime(), ++txId, "/MyRoot", request, "", "", Ydb::StatusIds::BAD_REQUEST);
+        TestGetExport(Runtime(), txId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+    }
+
+    Y_UNIT_TEST(TransferExportNoConnString) {
+        auto lambda = "PRAGMA OrderedColumns;$transformation_lambda = ($msg) -> { return [ <| partition: $msg._partition, offset: $msg._offset, message: CAST($msg._data AS Utf8) |> ]; };$__ydb_transfer_lambda = $transformation_lambda;";
+
+        TString scheme = Sprintf(R"(
+            Name: "Transfer"
+            Config {
+                TransferSpecific {
+                    Target {
+                        SrcPath: "/MyRoot/Topic_0"
+                        DstPath: "/MyRoot/Table"
+                        TransformLambda: "%s"
+                    }
+                }
+            }
+        )", lambda);
+        TString expected = R"(-- database: "/MyRoot"
+-- backup root: "/MyRoot"
+$transformation_lambda = ($msg) -> { return [ <| partition: $msg._partition, offset: $msg._offset, message: CAST($msg._data AS Utf8) |> ]; };
+
+CREATE TRANSFER `Transfer`
+FROM `/MyRoot/Topic_0` TO `/MyRoot/Table` USING $transformation_lambda
+WITH (
+  CONNECTION_STRING = 'grpc:///?database=',
+  BATCH_SIZE_BYTES = 8388608,
+  FLUSH_INTERVAL = Interval('PT60S')
+);)";
+        TestTransfer(scheme, expected);
+    }
+
+    Y_UNIT_TEST(TransferExportWithConnString) {
+        auto lambda = "PRAGMA OrderedColumns;$transformation_lambda = ($msg) -> { return [ <| partition: $msg._partition, offset: $msg._offset, message: CAST($msg._data AS Utf8) |> ]; };$__ydb_transfer_lambda = $transformation_lambda;";
+
+        TString scheme = Sprintf(R"(
+            Name: "Transfer"
+            Config {
+                SrcConnectionParams {
+                    Endpoint: "localhost:2135"
+                    Database: "/MyRoot"
+                }
+                TransferSpecific {
+                    Target {
+                        SrcPath: "/MyRoot/Topic_0"
+                        DstPath: "/MyRoot/Table"
+                        TransformLambda: "%s"
+                    }
+                }
+            }
+        )", lambda);
+        TString expected = R"(-- database: "/MyRoot"
+-- backup root: "/MyRoot"
+$transformation_lambda = ($msg) -> { return [ <| partition: $msg._partition, offset: $msg._offset, message: CAST($msg._data AS Utf8) |> ]; };
+
+CREATE TRANSFER `Transfer`
+FROM `/MyRoot/Topic_0` TO `/MyRoot/Table` USING $transformation_lambda
+WITH (
+  CONNECTION_STRING = 'grpc://localhost:2135/?database=/MyRoot',
+  BATCH_SIZE_BYTES = 8388608,
+  FLUSH_INTERVAL = Interval('PT60S')
+);)";
+        TestTransfer(scheme, expected);
+    }
+
+    Y_UNIT_TEST(TransferExportWithConsumer) {
+        auto lambda = "PRAGMA OrderedColumns;$transformation_lambda = ($msg) -> { return [ <| partition: $msg._partition, offset: $msg._offset, message: CAST($msg._data AS Utf8) |> ]; };$__ydb_transfer_lambda = $transformation_lambda;";
+
+        TString scheme = Sprintf(R"(
+            Name: "Transfer"
+            Config {
+                TransferSpecific {
+                    Target {
+                        SrcPath: "/MyRoot/Topic_0"
+                        DstPath: "/MyRoot/Table"
+                        TransformLambda: "%s"
+                        ConsumerName: "consumerName"
+                    }
+                }
+            }
+        )", lambda);
+        TString expected = R"(-- database: "/MyRoot"
+-- backup root: "/MyRoot"
+$transformation_lambda = ($msg) -> { return [ <| partition: $msg._partition, offset: $msg._offset, message: CAST($msg._data AS Utf8) |> ]; };
+
+CREATE TRANSFER `Transfer`
+FROM `/MyRoot/Topic_0` TO `/MyRoot/Table` USING $transformation_lambda
+WITH (
+  CONNECTION_STRING = 'grpc:///?database=',
+  CONSUMER = 'consumerName',
+  BATCH_SIZE_BYTES = 8388608,
+  FLUSH_INTERVAL = Interval('PT60S')
+);)";
+        TestTransfer(scheme, expected);
+    }
+
+    Y_UNIT_TEST(ExternalDataSourceAuthNone) {
+        TString scheme = R"(
+            Name: "DataSource"
+            SourceType: "ObjectStorage"
+            Location: "https://s3.cloud.net/bucket"
+            Auth {
+                None {}
+            }
+        )";
+
+        TVector<TString> expectedProperties = {
+            "SOURCE_TYPE = 'ObjectStorage'",
+            "LOCATION = 'https://s3.cloud.net/bucket'",
+            "AUTH_METHOD = 'NONE'",
+        };
+
+        TestExternalDataSource(scheme, expectedProperties);
+    }
+
+    Y_UNIT_TEST(ExternalDataSourceAuthBasic) {
+        TString scheme = R"(
+            Name: "DataSource"
+            SourceType: "ClickHouse"
+            Location: "https://clickhousedb.net"
+            Auth {
+                Basic {
+                    Login: "my_login",
+                    PasswordSecretName: "password_secret"
+                }
+            }
+            Properties {
+                Properties {
+                    key: "database_name",
+                    value: "clickhouse"
+                }
+                Properties {
+                    key: "protocol",
+                    value: "NATIVE"
+                }
+                Properties {
+                    key: "use_tls",
+                    value: "TRUE"
+                }
+            }
+        )";
+
+        TVector<TString> expectedProperties = {
+            "SOURCE_TYPE = 'ClickHouse'",
+            "LOCATION = 'https://clickhousedb.net'",
+            "PASSWORD_SECRET_NAME = 'password_secret'",
+            "AUTH_METHOD = 'BASIC'",
+            "DATABASE_NAME = 'clickhouse'",
+            "LOGIN = 'my_login'",
+            "PROTOCOL = 'NATIVE'",
+            "USE_TLS = 'TRUE'",
+        };
+
+        TestExternalDataSource(scheme, expectedProperties);
+    }
+
+    Y_UNIT_TEST(ExternalDataSourceAuthAWS) {
+        TString scheme = R"(
+            Name: "DataSource"
+            SourceType: "ObjectStorage"
+            Location: "https://s3.cloud.net/bucket"
+            Auth {
+                Aws {
+                    AwsAccessKeyIdSecretName: "id_secret",
+                    AwsSecretAccessKeySecretName: "access_secret"
+                    AwsRegion: "ru-central-1"
+                }
+            }
+        )";
+
+        TVector<TString> expectedProperties = {
+            "SOURCE_TYPE = 'ObjectStorage'",
+            "LOCATION = 'https://s3.cloud.net/bucket'",
+            "AUTH_METHOD = 'AWS'",
+            "AWS_ACCESS_KEY_ID_SECRET_NAME = 'id_secret'",
+            "AWS_SECRET_ACCESS_KEY_SECRET_NAME = 'access_secret'",
+            "AWS_REGION = 'ru-central-1'",
+        };
+
+        TestExternalDataSource(scheme, expectedProperties);
+    }
+
+    Y_UNIT_TEST(ExternalDataSourceAuthServiceAccount) {
+        TString scheme = R"(
+            Name: "DataSource"
+            SourceType: "ObjectStorage"
+            Location: "https://s3.cloud.net/bucket"
+            Auth {
+                ServiceAccount {
+                    Id: "id",
+                    SecretName: "service_secret"
+                }
+            }
+        )";
+
+        TVector<TString> expectedProperties = {
+            "SOURCE_TYPE = 'ObjectStorage'",
+            "LOCATION = 'https://s3.cloud.net/bucket'",
+            "AUTH_METHOD = 'SERVICE_ACCOUNT'",
+            "SERVICE_ACCOUNT_ID = 'id'",
+            "SERVICE_ACCOUNT_SECRET_NAME = 'service_secret'",
+        };
+
+        TestExternalDataSource(scheme, expectedProperties);
+    }
+
+    Y_UNIT_TEST(ExternalDataSourceAuthMdbBasic) {
+        TString scheme = R"(
+            Name: "DataSource"
+            SourceType: "PostgreSQL"
+            Location: "https://postgresdb.net"
+            Auth {
+                MdbBasic {
+                    ServiceAccountId: "id",
+                    ServiceAccountSecretName: "service_secret",
+                    Login: "login",
+                    PasswordSecretName: "pwd_secret"
+                }
+            }
+            Properties {
+                Properties {
+                    key: "mdb_cluster_id",
+                    value: "id"
+                }
+                Properties {
+                    key: "database_name",
+                    value: "postgres"
+                }
+            }
+        )";
+
+        TVector<TString> expectedProperties = {
+            "SOURCE_TYPE = 'PostgreSQL'",
+            "LOCATION = 'https://postgresdb.net'",
+            "AUTH_METHOD = 'MDB_BASIC'",
+            "SERVICE_ACCOUNT_ID = 'id'",
+            "SERVICE_ACCOUNT_SECRET_NAME = 'service_secret'",
+            "LOGIN = 'login'",
+            "PASSWORD_SECRET_NAME = 'pwd_secret'",
+            "DATABASE_NAME = 'postgres'",
+            "MDB_CLUSTER_ID = 'id'",
+        };
+
+        TestExternalDataSource(scheme, expectedProperties);
+    }
+
+    Y_UNIT_TEST(ExternalTable) {
+        TString scheme = R"(
+            Name: "ExternalTable"
+            SourceType: "General"
+            DataSourcePath: "/MyRoot/DataSource"
+            Location: "bucket"
+            Columns { Name: "key" Type: "Uint64" NotNull: true }
+            Columns { Name: "value1" Type: "Uint64" }
+            Columns { Name: "value2" Type: "Utf8" NotNull: true }
+        )";
+
+        TString expectedStartsWith = R"(-- database: "/MyRoot"
+-- backup root: "/MyRoot"
+CREATE EXTERNAL TABLE IF NOT EXISTS `ExternalTable` (
+      key Uint64 NOT NULL,
+    value1 Uint64?,
+    value2 Utf8 NOT NULL
+) WITH ()";
+
+        TVector<TString> expectedProperties = {
+            "DATA_SOURCE = '/MyRoot/DataSource'",
+            "LOCATION = 'bucket'"
+        };
+
+        TestExternalTable(scheme, expectedStartsWith, expectedProperties);
+    }
+
 }

@@ -1,12 +1,13 @@
 #include "record_codegen_cpp.h"
 
-#include <yt/yt/library/formats/format.h>
+#include <yt/yt/core/json/json_parser.h>
 
 #include <yt/yt/core/ytree/convert.h>
 
 namespace NYT::NTableClient::NDetail {
 
-using namespace NFormats;
+using namespace NJson;
+using namespace NYson;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -39,8 +40,11 @@ void ValidateRowValueCount(TUnversionedRow row, int id)
 
 TLogicalTypePtr FromRecordCodegenTypeV3(TStringBuf data)
 {
-    TMemoryInput input(data);
-    auto producer = CreateProducerForFormat(TFormat(EFormatType::Json), EDataType::Structured, &input);
+    auto producer = TYsonProducer(BIND([&] (IYsonConsumer* consumer) {
+        TMemoryInput input(data);
+
+        ParseJson(&input, consumer);
+    }));
 
     return ConvertTo<TLogicalTypePtr>(producer);
 }

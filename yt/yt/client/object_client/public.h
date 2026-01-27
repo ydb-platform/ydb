@@ -10,6 +10,7 @@
 #include <library/cpp/yt/misc/strong_typedef.h>
 
 #include <library/cpp/yt/compact_containers/compact_vector.h>
+#include <library/cpp/yt/compact_containers/compact_flat_set.h>
 
 #include <library/cpp/yt/string/string_builder.h>
 
@@ -92,6 +93,7 @@ constexpr auto InvalidCellTag = TCellTag(0xf004);
 //! A static limit for the number of secondary master cells.
 constexpr int MaxSecondaryMasterCells = 48;
 
+using TCellTagSet = TCompactFlatSet<TCellTag, MaxSecondaryMasterCells + 1>;
 using TCellTagList = TCompactVector<TCellTag, MaxSecondaryMasterCells + 1>;
 using TCellIdList = TCompactVector<TCellId, MaxSecondaryMasterCells + 1>;
 

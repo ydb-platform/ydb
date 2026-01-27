@@ -19,7 +19,7 @@ PEERDIR(
     library/cpp/string_utils/relaxed_escaper
 )
 
-GENERATE_ENUM_SERIALIZATION(scheme.h)
+GENERATE_ENUM_SERIALIZATION_WITH_HEADER(scheme.h)
 
 END()
 

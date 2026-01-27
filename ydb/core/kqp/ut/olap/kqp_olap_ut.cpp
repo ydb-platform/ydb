@@ -1752,6 +1752,82 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
+    Y_UNIT_TEST(PushdownIfWithParams)
+    {
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        auto tableClient = kikimr.GetTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto result = queryClient.GetSession().GetValueSync();
+        NStatusHelpers::ThrowOnError(result);
+        auto session2 = result.GetSession();
+
+        auto res = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/t1` (
+                a Int64	NOT NULL,
+                b Uint8,
+                primary key(a)
+            )
+            PARTITION BY HASH(a)
+            WITH (STORE = COLUMN);
+        )").GetValueSync();
+        UNIT_ASSERT(res.IsSuccess());
+
+        std::vector<TString> queries = {
+            R"(
+                declare $str_param as String;
+
+                $filter = ($filter_param)->{
+                    RETURN case
+                        WHEN $str_param = "One" THEN IF($filter_param=1, True, False)
+                        ELSE True
+                        END
+                    };
+                select t1.a from `/Root/t1` as t1 where $filter(t1.b);
+            )",
+            R"(
+                declare $str_param as String;
+
+                $filter = ($filter_param)->{
+                   RETURN case
+                       WHEN $str_param = "One" THEN IF($filter_param=1, True, False)
+                       WHEN $str_param = "Two" THEN IF($filter_param=2, True, False)
+                       ELSE True
+                       END
+                };
+                select t1.a from `/Root/t1` as t1 where $filter(t1.b);
+            )",
+            R"(
+                declare $str_param as String;
+
+                $filter = ($filter_param)->{
+                   RETURN case
+                       WHEN $str_param = "One" THEN IF($filter_param=1, True, False)
+                       WHEN $str_param = "Two" THEN IF($filter_param=2, True, False)
+                       WHEN $str_param = "Three" THEN IF($filter_param=3, True, False)
+                       ELSE True
+                       END
+                };
+                select t1.a from `/Root/t1` as t1 where $filter(t1.b);
+            )"
+        };
+
+        for (ui32 i = 0; i < queries.size(); ++i) {
+            const auto query = queries[i];
+            auto result =
+                session2
+                    .ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain))
+                    .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            auto ast = *result.GetStats()->GetAst();
+            UNIT_ASSERT_C(ast.find("KqpOlapFilter") != std::string::npos, TStringBuilder() << "Olap filter not pushed down. Query: " << query);
+        }
+    }
+
     Y_UNIT_TEST(ProjectionPushDown) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);
@@ -2344,7 +2420,11 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         runtime->SetObserverFunc(captureEvents);
         auto streamSender = runtime->AllocateEdgeActor();
-        NDataShard::NKqpHelpers::SendRequest(*runtime, streamSender, NDataShard::NKqpHelpers::MakeStreamRequest(streamSender, "SELECT * FROM `/Root/selectStore/selectTable` LIMIT 1;", false));
+        NDataShard::NKqpHelpers::SendRequest(*runtime, streamSender,
+            NDataShard::NKqpHelpers::MakeStreamRequest(streamSender, R"(
+                pragma ydb.DqChannelVersion = "1";
+                SELECT * FROM `/Root/selectStore/selectTable` LIMIT 1;
+            )", false));
         auto ev = runtime->GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(streamSender);
         UNIT_ASSERT_VALUES_EQUAL(result, 1);
     }
@@ -2894,10 +2974,10 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         UNIT_ASSERT(TExtLocalHelper(kikimr).TryCreateTable("olapStore", "olapTable_9", 9));
     }
 
-    void TestOlapUpsert(ui32 numShards) {
+    void TestOlapUpsert(ui32 numShards, bool allowOlapDataQuery) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        settings.AppConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(allowOlapDataQuery);
         TKikimrRunner kikimr(settings);
 
         auto tableClient = kikimr.GetTableClient();
@@ -2929,7 +3009,15 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 (1, 15, 'ccccccc', 23, 1);
         )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync(); // TODO: snapshot isolation?
 
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        if (allowOlapDataQuery) {
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_C(
+                result.GetIssues().ToString().contains(
+                    "Data manipulation queries with column-oriented tables are supported only by API QueryService."),
+                result.GetIssues().ToString());
+        }
 
         {
             TString query = R"(
@@ -2941,19 +3029,31 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
             auto it = session.ExecuteDataQuery(query, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).GetValueSync();
 
-            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-            TString result = FormatResultSetYson(it.GetResultSet(0));
-            Cout << result << Endl;
-            CompareYson(result, R"([[15;0];[15;1]])");
+            if (allowOlapDataQuery) {
+                UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+                TString result = FormatResultSetYson(it.GetResultSet(0));
+                Cout << result << Endl;
+                CompareYson(result, R"([[15;0];[15;1]])");
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+                UNIT_ASSERT_C(
+                    result.GetIssues().ToString().contains(
+                        "Data manipulation queries with column-oriented tables are supported only by API QueryService."),
+                    result.GetIssues().ToString());
+            }
         }
     }
 
-    Y_UNIT_TEST(OlapUpsertImmediate) {
-        TestOlapUpsert(1);
+    Y_UNIT_TEST(OlapUpsertOneShard) {
+        TestOlapUpsert(1, true);
     }
 
-    Y_UNIT_TEST(OlapUpsert) {
-        TestOlapUpsert(2);
+    Y_UNIT_TEST(OlapUpsertTwoShards) {
+        TestOlapUpsert(2, true);
+    }
+
+    Y_UNIT_TEST(OlapUpsertDisabled) {
+        TestOlapUpsert(2, false);
     }
 
     Y_UNIT_TEST(OlapDeleteImmediate) {
@@ -4713,7 +4813,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS_C(
                 result.GetIssues().ToString(),
-                "Read from column tables is not supported in Online Read-Only or Stale Read-Only transaction modes.",
+                "Read from column-oriented tables is not supported in Online Read-Only or Stale Read-Only transaction modes.",
                 result.GetIssues().ToString());
         }
 
@@ -4724,7 +4824,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS_C(
                 result.GetIssues().ToString(),
-                "Read from column tables is not supported in Online Read-Only or Stale Read-Only transaction modes.",
+                "Read from column-oriented tables is not supported in Online Read-Only or Stale Read-Only transaction modes.",
                 result.GetIssues().ToString());
         }
     }

@@ -9,9 +9,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(21.1.5)
+VERSION(21.1.8)
 
-ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/archive/llvmorg-21.1.5.tar.gz)
+ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/archive/llvmorg-21.1.8.tar.gz)
 
 ADDINCL(
     GLOBAL contrib/libs/llvm/flang-rt/flang-rt/include

@@ -269,6 +269,8 @@ def do_format(merge_llvm):
             result_mem = sample['maxRssDelta']
             ref_mem = sample['referenceMaxRssDelta']
             memlimit = sample['combinerMemLimit']
+            if not memlimit:
+                memlimit = 128 * 1024 * 1024
             cols.append(gen_chart(
                 ref_mem,
                 result_mem,

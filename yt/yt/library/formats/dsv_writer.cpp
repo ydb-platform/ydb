@@ -82,9 +82,9 @@ private:
             }
 
             output->Write(Config_->RecordSeparator);
-            TryFlushBuffer(false);
+            MaybeFlushBuffer(/*force*/ false);
         }
-        TryFlushBuffer(true);
+        MaybeFlushBuffer(/*force*/ true);
     }
 
     void WriteValue(const TUnversionedValue& value)

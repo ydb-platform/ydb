@@ -106,12 +106,11 @@ struct TIntTUnitPairHash {
  * Global stage that removed unnecessary renames and unused columns
  */
 
-TRenameStage::TRenameStage() {
+TRenameStage::TRenameStage() : IRBOStage("Remove redundant maps") {
     Props = ERuleProperties::RequireParents;
 }
 
 void TRenameStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
-
     // We need to build scopes for the plan, because same aliases and variable names may be
     // used multiple times in different scopes
     auto scopes = Scopes();
@@ -134,24 +133,30 @@ void TRenameStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
     THashSet<std::pair<int, TInfoUnit>, TIntTUnitPairHash> poison;
 
     for (auto iter : root) {
+        // FIXME: If there is no scope for this operator, that means it from a subplan that we didn't process
+        // while building the scope map. We skip them for now
+        if (!scopes.RevScopeMap.contains(iter.Current)) {
+            continue;
+        }
+
         TVector<TInfoUnit> mapsTo;
         THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> mapsFrom;
         
         if (iter.Current->Kind == EOperator::Map && CastOperator<TOpMap>(iter.Current)->Project) {
             auto map = CastOperator<TOpMap>(iter.Current);
-            for (auto [to, body] : map->MapElements) {
-                mapsTo.push_back(to);
-                if (std::holds_alternative<TInfoUnit>(body)) {
-                    auto from = std::get<TInfoUnit>(body);
-                    if (to != from) {
-                        mapsFrom[to] = from;
+            for (const auto& mapElement: map->MapElements) {
+                mapsTo.push_back(mapElement.GetElementName());
+                if (mapElement.IsRename()) {
+                    auto from = mapElement.GetRename();
+                    if (mapElement.GetElementName() != from) {
+                        mapsFrom[mapElement.GetElementName()] = from;
                     }
                 }
             }
         }
         else if (iter.Current->Kind == EOperator::Source) {
             auto read = CastOperator<TOpRead>(iter.Current);
-            for (size_t i=0; i<read->OutputIUs.size(); i++) {
+            for (size_t i = 0; i < read->OutputIUs.size(); i++) {
                 auto from = TInfoUnit(read->Alias, read->Columns[i]);
                 auto to = read->OutputIUs[i];
                 mapsTo.push_back(to);
@@ -162,15 +167,24 @@ void TRenameStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
         }
         else if (iter.Current->Kind == EOperator::Aggregate) {
             auto agg = CastOperator<TOpAggregate>(iter.Current);
-            for (auto col : agg->KeyColumns) {
+            for (const auto& col : agg->KeyColumns) {
                 mapsTo.push_back(col);
             }
-            for (auto trait : agg->AggregationTraitsList) {
+            for (const auto& trait : agg->AggregationTraitsList) {
+                // FIXME: We break the rename chain in aggregate right now, need to figure out whether this is
+                // the correct thing to do
                 mapsTo.push_back(trait.OriginalColName);
+
+                //auto from = trait.OriginalColName;
+                //auto to = trait.ResultColName;
+                //mapsTo.push_back(to);
+                //if (to != from) {
+                //    mapsFrom[to] = from;
+                //}
             }
         }
 
-        for (auto to : mapsTo) {
+        for (const auto& to : mapsTo) {
             auto scopeId = scopes.RevScopeMap.at(iter.Current);
             auto scope = scopes.ScopeMap.at(scopeId);
             auto parentScopes = scope.ParentScopes;
@@ -211,7 +225,7 @@ void TRenameStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
                                     << (*value.begin()).second.GetFullName() << "," << (*value.begin()).first;
         } else {
             YQL_CLOG(TRACE, CoreDq) << "Full Rename map: " << key.second.GetFullName() << "," << key.first << " -> ";
-            for (auto v : value) {
+            for (const auto& v : value) {
                 YQL_CLOG(TRACE, CoreDq) << v.second.GetFullName() << "," << v.first;
             }
         }
@@ -303,6 +317,12 @@ void TRenameStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
     // Iterate through the plan, applying renames to one operator at a time
 
     for (auto it : root) {
+        // FIXME: If there is no scope for this operator, that means it from a subplan that we didn't process
+        // while building the scope map. We skip them for now
+        if (!scopes.RevScopeMap.contains(it.Current)) {
+            continue;
+        }
+
         // Build a subset of the map for the current scope only
         auto scopeId = scopes.RevScopeMap.at(it.Current);
 
@@ -322,7 +342,7 @@ void TRenameStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
         }
 
         // If we have anything but the map operator, apply the stop list to the mapping
-        if (it.Current->Kind != EOperator::Map) {
+        if (it.Current->Kind != EOperator::Map && it.Current->Kind != EOperator::Aggregate) {
             for (auto s : scopedStopList) {
                 if (scopedRenameMap.contains(s)) {
                     scopedRenameMap.erase(s);

@@ -236,62 +236,30 @@ public:
         }
         Self->ProcessVDiskStatus(record.GetVDiskStatus());
 
-        // create map of group ids to their generations as reported by the node warden
-        TMap<ui32, ui32> startedGroups;
-        if (record.GroupsSize() == record.GroupGenerationsSize()) {
-            for (size_t i = 0; i < record.GroupsSize(); ++i) {
-                startedGroups.emplace(record.GetGroups(i), record.GetGroupGenerations(i));
-            }
-        } else {
-            for (ui32 groupId : record.GetGroups()) {
-                startedGroups.emplace(groupId, 0);
-            }
-        }
-
         Response = std::make_unique<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>(NKikimrProto::OK, nodeId);
 
-        TSet<ui32> groupIDsToRead;
+        TSet<TGroupId> groupIDsToRead;
+        TSet<TGroupId> groupsToDiscard;
+
         const TPDiskId minPDiskId(TPDiskId::MinForNode(nodeId));
         const TVSlotId vslotId = TVSlotId::MinForPDisk(minPDiskId);
         for (auto it = Self->VSlots.lower_bound(vslotId); it != Self->VSlots.end() && it->first.NodeId == nodeId; ++it) {
             Self->ReadVSlot(*it->second, Response.get());
             if (!it->second->IsBeingDeleted()) {
-                groupIDsToRead.insert(it->second->GroupId.GetRawId());
+                groupIDsToRead.insert(it->second->GroupId);
             }
         }
 
-        TSet<ui32> groupsToDiscard;
-
-        auto processGroup = [&](const auto& p, TGroupInfo *group) {
-            auto&& [groupId, generation] = p;
-            if (!group) {
+        const auto& groups = record.GetGroups();
+        const bool hasGenerations = groups.size() == record.GetGroupGenerations().size();
+        for (int i = 0; i < groups.size(); ++i) {
+            const TGroupId groupId = TGroupId::FromValue(groups[i]);
+            if (const TGroupInfo *group = Self->FindGroup(groupId); !group) { // group has vanished
                 groupsToDiscard.insert(groupsToDiscard.end(), groupId);
-            } else if (group->Generation > generation) {
+            } else if (!hasGenerations || record.GetGroupGenerations(i) < group->Generation) { // group is obsolete at NW
                 groupIDsToRead.insert(groupId);
             }
         };
-
-        if (startedGroups.size() <= Self->GroupMap.size() / 10) {
-            for (const auto& p : startedGroups) {
-                processGroup(p, Self->FindGroup(TGroupId::FromValue(p.first)));
-            }
-        } else {
-            auto started = startedGroups.begin();
-            auto groupIt = Self->GroupMap.begin();
-
-            while (started != startedGroups.end()) {
-                TGroupInfo *group = nullptr;
-
-                // scan through groups until we find matching one
-                for (; groupIt != Self->GroupMap.end() && groupIt->first.GetRawId() <= started->first; ++groupIt) {
-                    if (groupIt->first.GetRawId() == started->first) {
-                        group = groupIt->second.Get();
-                    }
-                }
-
-                processGroup(*started++, group);
-            }
-        }
 
         Self->ApplySyncerState(nodeId, record.GetSyncerState(), groupIDsToRead, /*comprehensive=*/ true);
         Self->SerializeSyncers(nodeId, &Response->Record, groupIDsToRead);
@@ -300,6 +268,7 @@ public:
         Y_ABORT_UNLESS(groupIDsToRead.empty());
 
         Self->ReadGroups(groupsToDiscard, true, Response.get(), nodeId);
+        Y_ABORT_UNLESS(groupsToDiscard.empty());
 
         for (auto it = Self->PDisks.lower_bound(minPDiskId); it != Self->PDisks.end() && it->first.NodeId == nodeId; ++it) {
             auto& pdisk = it->second;
@@ -439,10 +408,10 @@ public:
     void Complete(const TActorContext&) override {}
 };
 
-void TBlobStorageController::ReadGroups(TSet<ui32>& groupIDsToRead, bool discard,
+void TBlobStorageController::ReadGroups(TSet<TGroupId>& groupIDsToRead, bool discard,
         TEvBlobStorage::TEvControllerNodeServiceSetUpdate *result, TNodeId nodeId) {
     for (auto it = groupIDsToRead.begin(); it != groupIDsToRead.end(); ) {
-        const TGroupId groupId = TGroupId::FromValue(*it);
+        const TGroupId groupId = *it;
         TGroupInfo *group = FindGroup(groupId);
         if (group || discard) {
             NKikimrBlobStorage::TNodeWardenServiceSet *serviceSetProto = result->Record.MutableServiceSet();
@@ -460,7 +429,7 @@ void TBlobStorageController::ReadGroups(TSet<ui32>& groupIDsToRead, bool discard
                     Y_ABORT_UNLESS(!info.SchemeshardId && !info.PathItemId);
                 }
 
-                SerializeGroupInfo(groupProto, *group, info.Name, scopeId);
+                SerializeGroupInfo(groupProto, *group, info, scopeId);
             } else if (nodeId) {
                 // group is not listable, so we have to postpone the request from NW
                 group->WaitingNodes.insert(nodeId);
@@ -494,12 +463,6 @@ void TBlobStorageController::ReadPDisk(const TPDiskId& pdiskId, const TPDiskInfo
         if (pdisk.PDiskConfig && !pDisk->MutablePDiskConfig()->ParseFromString(pdisk.PDiskConfig)) {
             STLOG(PRI_CRIT, BS_CONTROLLER, BSCTXRN02, "PDiskConfig invalid", (NodeId, pdiskId.NodeId),
                 (PDiskId, pdiskId.PDiskId));
-        }
-        if (pdisk.InferPDiskSlotCountFromUnitSize) {
-            pDisk->SetInferPDiskSlotCountFromUnitSize(pdisk.InferPDiskSlotCountFromUnitSize);
-        }
-        if (pdisk.InferPDiskSlotCountMax) {
-            pDisk->SetInferPDiskSlotCountMax(pdisk.InferPDiskSlotCountMax);
         }
     }
     pDisk->SetExpectedSerial(pdisk.ExpectedSerial);

@@ -39,6 +39,7 @@ public:
     TOwnerRound OwnerRound;
     ui8 PriorityClass;
     EOwnerGroupType OwnerGroupType;
+    ui64 Cookie = 0;
 
     // Classification
     ui64 TotalCost = 0; // Total request cost in nanoseconds
@@ -76,6 +77,10 @@ public:
 
     void SetOwnerGroupType(bool isStaticGroupOwner) {
         OwnerGroupType = (isStaticGroupOwner ? EOwnerGroupType::Static : EOwnerGroupType::Dynamic);
+    }
+
+    void SetCookie(ui64 cookie) {
+        Cookie = cookie;
     }
 
     virtual void Abort(TActorSystem* /*actorSystem*/) {

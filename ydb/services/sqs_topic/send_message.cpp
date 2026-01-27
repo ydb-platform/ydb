@@ -4,6 +4,7 @@
 #include "request.h"
 
 #include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/core/http_proxy/events.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/public/mlp/mlp.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
@@ -33,8 +34,8 @@
 #include <ydb/library/grpc/server/grpc_server.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
+#include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/persqueue/public/describer/describer.h>
-#include <ydb/core/persqueue/public/mlp/mlp_message_attributes.h>
 
 #include <ydb/library/actors/core/log.h>
 #include <ydb/services/sqs_topic/statuses.h>
@@ -95,12 +96,6 @@ namespace NKikimr::NSqsTopic::V1 {
                 return this->ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE, "Invalid QueueUrl"));
             }
 
-            TString serializedToken = this->Request_->GetSerializedToken();
-            NPQ::NDescriber::TDescribeSettings describeSettings{
-                .UserToken = MakeIntrusive<NACLib::TUserToken>(serializedToken),
-                .AccessRights = NACLib::EAccessRights::UpdateRow,
-            };
-
             NACLib::TUserToken token(this->Request_->GetSerializedToken());
             ShouldBeCharged_ = FindPtr(AppData(ctx)->PQConfig.GetNonChargeableUser(), token.GetUserSID()) == nullptr;
 
@@ -138,11 +133,33 @@ namespace NKikimr::NSqsTopic::V1 {
                 }
             }
 
+            this->Send(NHttpProxy::MakeMetricsServiceID(),
+                new NHttpProxy::TEvServerlessProxy::TEvCounter{
+                    static_cast<i64>(Items.size()), true, true,
+                    GetRequestMessageCountMetricsLabels(
+                        QueueUrl_->Database,
+                        FullTopicPath_,
+                        QueueUrl_->Consumer,
+                        TDerived::Method)
+                });
+
+            this->Send(NHttpProxy::MakeMetricsServiceID(),
+                new NHttpProxy::TEvServerlessProxy::TEvCounter{
+                    static_cast<i64>(Request().ByteSizeLong()), true, true,
+                    GetRequestSizeMetricsLabels(
+                        QueueUrl_->Database,
+                        FullTopicPath_,
+                        QueueUrl_->Consumer,
+                        TDerived::Method)
+                });
+
+            auto userToken = MakeIntrusive<NACLib::TUserToken>(this->Request_->GetSerializedToken());
             NPQ::NMLP::TWriterSettings writerSettings{
                 .DatabasePath = QueueUrl_->Database,
                 .TopicName = FullTopicPath_,
                 .Messages = std::move(validItems),
                 .ShouldBeCharged = ShouldBeCharged_,
+                .UserToken = std::move(userToken),
             };
             WriterActor_ = this->RegisterWithSameMailbox(NPQ::NMLP::CreateWriter(this->SelfId(), std::move(writerSettings)));
         }
@@ -156,11 +173,38 @@ namespace NKikimr::NSqsTopic::V1 {
                 return;
             }
 
+            ssize_t successCount = 0;
+            ssize_t failedCount = 0;
+
             for (auto& message : ev->Get()->Messages) {
                 if (message.MessageId.has_value()) {
                     Items[message.Index].MessageId = message.MessageId.value();
+                    ++successCount;
+                } else {
+                    ++failedCount;
                 }
             }
+
+            this->Send(NHttpProxy::MakeMetricsServiceID(),
+                new NHttpProxy::TEvServerlessProxy::TEvCounter{
+                    successCount, true, true,
+                    GetResponseMessageCountMetricsLabels(
+                        QueueUrl_->Database,
+                        FullTopicPath_,
+                        QueueUrl_->Consumer,
+                        TDerived::Method,
+                        "success")
+                });
+            this->Send(NHttpProxy::MakeMetricsServiceID(),
+                new NHttpProxy::TEvServerlessProxy::TEvCounter{
+                    failedCount, true, true,
+                    GetResponseMessageCountMetricsLabels(
+                        QueueUrl_->Database,
+                        FullTopicPath_,
+                        QueueUrl_->Consumer,
+                        TDerived::Method,
+                        "failed")
+                });
 
             static_cast<TDerived*>(this)->ReplyAndDie(TlsActivationContext->AsActorContext());
         }
@@ -297,6 +341,7 @@ namespace NKikimr::NSqsTopic::V1 {
     }
 
     class TSendMessageActor: public TSendMessageActorBase<TSendMessageActor, TEvSqsTopicSendMessageRequest> {
+    public:
         const static inline TString Method = "SendMessage";
 
     public:
@@ -330,6 +375,7 @@ namespace NKikimr::NSqsTopic::V1 {
     };
 
     class TSendMessageBatchActor: public TSendMessageActorBase<TSendMessageBatchActor, TEvSqsTopicSendMessageBatchRequest> {
+    public:
         const static inline TString Method = "SendMessageBatch";
 
     public:

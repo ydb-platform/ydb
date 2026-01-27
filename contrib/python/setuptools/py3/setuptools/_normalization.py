@@ -4,6 +4,7 @@ and core metadata
 """
 
 import re
+from typing import TYPE_CHECKING
 
 import packaging
 
@@ -35,7 +36,6 @@ def safe_name(component: str) -> str:
     >>> safe_name("hello_world")
     'hello_world'
     """
-    # See pkg_resources.safe_name
     return _UNSAFE_NAME_CHARS.sub("-", component)
 
 
@@ -80,7 +80,6 @@ def best_effort_version(version: str) -> str:
     >>> best_effort_version("42.+?1")
     '42.dev0+sanitized.1'
     """
-    # See pkg_resources._forgiving_version
     try:
         return safe_version(version)
     except packaging.version.InvalidVersion:
@@ -148,3 +147,31 @@ def safer_best_effort_version(value: str) -> str:
     # See bdist_wheel.safer_verion
     # TODO: Replace with only safe_version in the future (no need for best effort)
     return filename_component(best_effort_version(value))
+
+
+def _missing_canonicalize_license_expression(expression: str) -> str:
+    """
+    Defer import error to affect only users that actually use it
+    https://github.com/pypa/setuptools/issues/4894
+    >>> _missing_canonicalize_license_expression("a OR b")
+    Traceback (most recent call last):
+    ...
+    ImportError: ...Cannot import `packaging.licenses`...
+    """
+    raise ImportError(
+        "Cannot import `packaging.licenses`."
+        """
+        Setuptools>=77.0.0 requires "packaging>=24.2" to work properly.
+        Please make sure you have a suitable version installed.
+        """
+    )
+
+
+try:
+    from packaging.licenses import (
+        canonicalize_license_expression as _canonicalize_license_expression,
+    )
+except ImportError:  # pragma: nocover
+    if not TYPE_CHECKING:
+        # XXX: pyright is still upset even with # pyright: ignore[reportAssignmentType]
+        _canonicalize_license_expression = _missing_canonicalize_license_expression

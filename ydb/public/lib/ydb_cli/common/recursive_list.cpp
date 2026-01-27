@@ -40,7 +40,8 @@ namespace {
             switch (child.Type) {
                 case ESchemeEntryType::SubDomain:
                 case ESchemeEntryType::ColumnStore:
-                case ESchemeEntryType::Directory: {
+                case ESchemeEntryType::Directory:
+                case ESchemeEntryType::BackupCollection: {
                     auto status = RecursiveList(dst, client, Join('/', path, child.Name), settings);
                     if (!status.IsSuccess()) {
                         return status;

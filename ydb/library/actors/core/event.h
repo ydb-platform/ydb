@@ -44,7 +44,7 @@ namespace NActors {
         virtual ui32 CalculateSerializedSizeCached() const {
             return CalculateSerializedSize();
         }
-        virtual TEventSerializationInfo CreateSerializationInfo() const { return {}; }
+        virtual TEventSerializationInfo CreateSerializationInfo(bool /*allowExternalDataChannel*/) const { return {}; }
     };
 
     template <typename TEventType>
@@ -141,6 +141,7 @@ namespace NActors {
             FlagGenerateUnsureUndelivered = 1 << 4,
             FlagExtendedFormat = 1 << 5,
             FlagDebugTrackReceive = 1 << 6,
+            FlagFailFastWhenDisconnected = 1 << 7,
         };
         using TEventFlags = ui32;
 

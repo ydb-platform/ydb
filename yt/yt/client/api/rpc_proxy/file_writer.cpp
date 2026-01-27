@@ -42,7 +42,7 @@ public:
         ValidateNotClosed();
 
         if (!data) {
-            return VoidFuture;
+            return OKFuture;
         }
 
         return Underlying_->Write(data);
@@ -128,7 +128,7 @@ public:
         ValidateNotClosed();
 
         if (!data) {
-            return VoidFuture;
+            return OKFuture;
         }
 
         return Underlying_->Write(data);

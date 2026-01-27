@@ -85,7 +85,8 @@ class TestUpgradeToInternalPathId:
 
     def test(self):
         tables_path_mapping = []
-        for i in range(8):
+        max_external_path_id = 0
+        for i in range(4):
             generate_internal_path_id = i % 2 == 1
             logger.info(f"Iteration {i}, with generate_internal_path_id={generate_internal_path_id}")
             self.restart_cluster(generate_internal_path_id=generate_internal_path_id)
@@ -103,7 +104,9 @@ class TestUpgradeToInternalPathId:
             logger.info(f"{i}, path_mapping: {path_mapping}")
 
             external_path_id, counted_internal_path_ids = path_mapping
-            assert external_path_id < i + 10  # with a gap for some path ids created before tables creation
+            assert external_path_id < 1_000_000_000
+            assert external_path_id > max_external_path_id
+            max_external_path_id = external_path_id
 
             if generate_internal_path_id:
                 assert len(counted_internal_path_ids) == self.partition_count

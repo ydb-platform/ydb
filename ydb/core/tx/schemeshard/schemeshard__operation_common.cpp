@@ -728,7 +728,7 @@ void AckAllSchemaChanges(const TOperationId &operationId, TTxState &txState, TOp
     }
 }
 
-bool CheckPartitioningChangedForTableModification(TTxState &txState, TOperationContext &context) {
+bool CheckPartitioningChangedForTableModificationImpl(TTxState &txState, TOperationContext &context) {
     Y_ABORT_UNLESS(context.SS->Tables.contains(txState.TargetPathId));
     TTableInfo::TPtr table = context.SS->Tables.at(txState.TargetPathId);
 
@@ -745,6 +745,34 @@ bool CheckPartitioningChangedForTableModification(TTxState &txState, TOperationC
 
     // Any new partitions?
     return !shardIdxsLeft.empty();
+}
+
+bool CheckPartitioningChangedForColumnTableModificationImpl(TTxState &txState, TOperationContext &context) {
+    Y_ABORT_UNLESS(context.SS->ColumnTables.contains(txState.TargetPathId));
+    auto table = context.SS->ColumnTables.at(txState.TargetPathId);
+
+    THashSet<TShardIdx> shardIdxsLeft;
+    for (auto& shard : table->GetOwnedColumnShardsVerified()) {
+        TShardIdx shardIdx = TShardIdx::BuildFromProto(shard).DetachResult();
+        shardIdxsLeft.insert(shardIdx);
+    }
+
+    for (auto& shardOp : txState.Shards) {
+        // Is this shard still on the list of partitions?
+        if (shardIdxsLeft.erase(shardOp.Idx) == 0)
+            return true;
+    }
+
+    // Any new partitions?
+    return !shardIdxsLeft.empty();
+}
+
+bool CheckPartitioningChangedForTableModification(TTxState &txState, TOperationContext &context) {
+    TPath dstPath = TPath::Init(txState.TargetPathId, context.SS);
+    if (dstPath->IsColumnTable()) {
+        return CheckPartitioningChangedForColumnTableModificationImpl(txState, context);
+    }
+    return CheckPartitioningChangedForTableModificationImpl(txState, context);
 }
 
 void UpdatePartitioningForTableModification(TOperationId operationId, TTxState &txState, TOperationContext &context) {
@@ -802,6 +830,8 @@ void UpdatePartitioningForTableModification(TOperationId operationId, TTxState &
     } else if (txState.TxType == TTxState::TxRotateCdcStreamAtTable) {
         commonShardOp = TTxState::ConfigureParts;
     } else if (txState.TxType == TTxState::TxRestoreIncrementalBackupAtTable) {
+        commonShardOp = TTxState::ConfigureParts;
+    } else if (txState.TxType == TTxState::TxTruncateTable) {
         commonShardOp = TTxState::ConfigureParts;
     } else {
         Y_ABORT("UNREACHABLE");
@@ -1029,7 +1059,7 @@ TVector<TTableShardInfo> ApplyPartitioningCopyTable(const TShardInfo &templateDa
 }
 
 // NTableState::TProposedWaitParts
-//
+// Must be in sync with NTableState::TMoveTableProposedWaitParts
 TProposedWaitParts::TProposedWaitParts(TOperationId id, TTxState::ETxState nextState)
     : OperationId(id)
     , NextState(nextState)
@@ -1038,6 +1068,7 @@ TProposedWaitParts::TProposedWaitParts(TOperationId id, TTxState::ETxState nextS
     IgnoreMessages(DebugHint(),
         { TEvHive::TEvCreateTabletReply::EventType
         , TEvDataShard::TEvProposeTransactionResult::EventType
+        , TEvColumnShard::TEvProposeTransactionResult::EventType
         , TEvPrivate::TEvOperationPlan::EventType }
     );
 }

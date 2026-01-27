@@ -1,9 +1,11 @@
 #pragma once
 
 #include "defs.h"
+
 #include "config.h"
 #include "downtime.h"
 #include "node_checkers.h"
+#include "priority_lock.h"
 #include "services.h"
 
 #include <ydb/core/base/blobstorage.h>
@@ -12,11 +14,11 @@
 #include <ydb/core/blobstorage/base/blobstorage_vdiskid.h>
 #include <ydb/core/mind/tenant_pool.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
+#include <ydb/core/protos/blobstorage_config.pb.h>
+#include <ydb/core/protos/bootstrap.pb.h>
 #include <ydb/core/protos/cms.pb.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/console.pb.h>
-#include <ydb/core/protos/blobstorage_config.pb.h>
-#include <ydb/core/protos/bootstrap.pb.h>
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
@@ -50,12 +52,13 @@ struct TPermissionInfo {
     TPermissionInfo(TPermissionInfo &&other) = default;
 
     TPermissionInfo(const NKikimrCms::TPermission &permission, const TString &requestId,
-                    const TString &owner)
+                    const TString &owner, i32 priority)
         : PermissionId(permission.GetId())
         , RequestId(requestId)
         , Owner(owner)
         , Action(permission.GetAction())
         , Deadline(TInstant::MicroSeconds(permission.GetDeadline()))
+        , Priority(priority)
     {
     }
 
@@ -73,6 +76,7 @@ struct TPermissionInfo {
     TString Owner;
     NKikimrCms::TAction Action;
     TInstant Deadline;
+    i32 Priority = 0;
 };
 
 /**
@@ -131,15 +135,17 @@ struct TNotificationInfo {
  * Base class for entity which can be locked by CMS user. There are three
  * types of locks used.
  *
- * TLock - lock by issued permission. Only one such lock is possible per item.
+ * TLock - lock by issued permission. Multiple locks are possible per item.
+ * Locks are ordered by priority and request cannot get permission for an item if
+ * it has a lock with higher or the same priority.
  *
  * TExternalLock - lock caused by some external activity (not permitted by CMS)
  * reported via CMS notifications. This lock may have delayed effect which allows
  * to notify about some actions in the future.
  *
  * TScheduledLock - lock by scheduled request. Multiple scheduled locks are allowed.
- * Scheduled locks are ordered and request cannot get permission for an item if
- * it has a scheduled lock with lower order.
+ * Scheduled locks are ordered by priority and request cannot get permission for an item if
+ * it has a scheduled lock with higher priority.
  *
  * TTemporaryLock - temporary lock used for action processing. Used to identify
  * conflicts within a single action and between actions in a single request.
@@ -170,6 +176,7 @@ public:
             PermissionId = permission.PermissionId;
             LockDeadline = permission.Deadline;
             ActionDeadline = LockDeadline + TDuration::MicroSeconds(Action.GetDuration());
+            Priority = permission.Priority;
         }
 
         TLock(const TLock &other) = default;
@@ -181,6 +188,7 @@ public:
         TString PermissionId;
         TInstant LockDeadline;
         TInstant ActionDeadline;
+        i32 Priority = 0;
     };
 
     struct TExternalLock : TBaseLock {
@@ -250,8 +258,7 @@ public:
     }
 
     void AddLock(const TPermissionInfo &permission) {
-        Y_ABORT_UNLESS(Lock.Empty());
-        Lock.ConstructInPlace(permission);
+        AddPriorityLock(Locks, TLock(permission));
     }
 
     void AddExternalLock(const TNotificationInfo &notification,
@@ -276,8 +283,9 @@ public:
 
     void RollbackLocks(ui64 point);
 
-    void DeactivateScheduledLocks(i32 priority);
-    void ReactivateScheduledLocks();
+    void SetPriorityToCheck(i32 priority);
+    void ResetPriorityToCheck();
+
     void RemoveScheduledLocks(const TString &requestId);
 
     // Fill some item info (e.g. Downtime) basing on previous item state.
@@ -290,11 +298,12 @@ public:
     // Recent item downtimes.
     TDowntime Downtime = TDowntime(TDuration::Zero());
 
-    TMaybe<TLock> Lock;
+    std::list<TLock> Locks;
     std::list<TExternalLock> ExternalLocks;
     std::list<TScheduledLock> ScheduledLocks;
     TVector<TTemporaryLock> TempLocks;
-    i32 DeactivatedLocksPriority = Max<i32>();
+    // Used to check locks against priority of currently processed request
+    i32 PriorityToCheck = Max<i32>();
     THashSet<NKikimrCms::EMarker> Markers;
 };
 
@@ -574,14 +583,16 @@ public:
 class TLockNodeOperation : public TOperationBase {
 public:
     const ui32 NodeId;
+    const i32 Priority;
 
 private:
     TSimpleSharedPtr<INodesChecker> NodesState;
 
 public:
-    TLockNodeOperation(ui32 nodeId, TSimpleSharedPtr<INodesChecker> nodesState)
+    TLockNodeOperation(ui32 nodeId, i32 priority, TSimpleSharedPtr<INodesChecker> nodesState)
         : TOperationBase(OPERATION_TYPE_LOCK_NODE)
         , NodeId(nodeId)
+        , Priority(priority)
         , NodesState(nodesState)
     {
     }
@@ -589,11 +600,11 @@ public:
     ~TLockNodeOperation() = default;
 
     void Do() override final {
-        NodesState->LockNode(NodeId);
+        NodesState->LockNode(NodeId, Priority);
     }
 
     void Undo() override final {
-        NodesState->UnlockNode(NodeId);
+        NodesState->UnlockNode(NodeId, Priority);
     }
 };
 
@@ -621,8 +632,8 @@ public:
         Log.emplace_back(new TLogRollbackPoint());
     }
 
-    void AddNodeLockOperation(ui32 nodeId, TSimpleSharedPtr<INodesChecker> nodesState) {
-        Log.emplace_back(new TLockNodeOperation(nodeId, nodesState))->Do();
+    void AddNodeLockOperation(ui32 nodeId, i32 priority, TSimpleSharedPtr<INodesChecker> nodesState) {
+        Log.emplace_back(new TLockNodeOperation(nodeId, priority, nodesState))->Do();
     }
 
     void RollbackOperations() {
@@ -636,7 +647,7 @@ public:
         }
     }
 
-    void ApplyAction(const NKikimrCms::TAction &action, TClusterInfoPtr clusterState);
+    void ApplyAction(const NKikimrCms::TAction &action, i32 priority, TClusterInfoPtr clusterState);
 };
 
 /**
@@ -668,7 +679,7 @@ public:
     TOperationLogManager LogManager;
     TOperationLogManager ScheduledLogManager;
 
-    void ApplyActionWithoutLog(const NKikimrCms::TAction &action);
+    void ApplyActionWithoutLog(const NKikimrCms::TAction &action, i32 priority);
     void ApplyNodeLimits(ui32 clusterLimit, ui32 clusterRatioLimit, ui32 tenantLimit, ui32 tenantRatioLimit);
 
     TClusterInfo() = default;
@@ -897,9 +908,9 @@ public:
     ui64 AddLocks(const TPermissionInfo &permission, const TActorContext *ctx);
 
     ui64 AddLocks(const NKikimrCms::TPermission &permission, const TString &requestId,
-            const TString &owner, const TActorContext *ctx)
+            const TString &owner, i32 priority, const TActorContext *ctx)
     {
-        return AddLocks({permission, requestId, owner}, ctx);
+        return AddLocks({permission, requestId, owner, priority}, ctx);
     }
 
     ui64 AddExternalLocks(const TNotificationInfo &notification, const TActorContext *ctx);
@@ -912,11 +923,12 @@ public:
     void ApplyDowntimes(const TDowntimes &downtimes);
     void UpdateDowntimes(TDowntimes &downtimes, const TActorContext &ctx);
 
-    ui64 AddTempLocks(const NKikimrCms::TAction &action, const TActorContext *ctx);
+    ui64 AddTempLocks(const NKikimrCms::TAction &action, i32 priority, const TActorContext *ctx);
     ui64 ScheduleActions(const TRequestInfo &request, const TActorContext *ctx);
     void UnscheduleActions(const TString &requestId);
-    void DeactivateScheduledLocks(i32 priority);
-    void ReactivateScheduledLocks();
+
+    void SetPriorityToCheck(i32 priority);
+    void ResetPriorityToCheck();
 
     void RollbackLocks(ui64 point);
     ui64 PushRollbackPoint() {

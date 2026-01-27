@@ -572,11 +572,14 @@ void ToUnversionedValue(
 
 void FromUnversionedValue(TYsonString* value, TUnversionedValue unversionedValue)
 {
-    if (!IsAnyOrComposite(unversionedValue.Type)) {
+    if (unversionedValue.Type == EValueType::Null) {
+        *value = TYsonString();
+    } else if (!IsAnyOrComposite(unversionedValue.Type)) {
         THROW_ERROR_EXCEPTION("Cannot parse YSON string from %Qlv",
             unversionedValue.Type);
+    } else {
+        *value = TYsonString(unversionedValue.AsString());
     }
-    *value = TYsonString(unversionedValue.AsString());
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -594,11 +597,14 @@ void ToUnversionedValue(
 
 void FromUnversionedValue(NYson::TYsonStringBuf* value, TUnversionedValue unversionedValue)
 {
-    if (!IsAnyOrComposite(unversionedValue.Type)) {
+    if (unversionedValue.Type == EValueType::Null) {
+        *value = TYsonStringBuf();
+    } else if (!IsAnyOrComposite(unversionedValue.Type)) {
         THROW_ERROR_EXCEPTION("Cannot parse YSON string from %Qlv",
             unversionedValue.Type);
+    } else {
+        *value = TYsonStringBuf(unversionedValue.AsStringBuf());
     }
-    *value = TYsonStringBuf(unversionedValue.AsStringBuf());
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1592,26 +1598,26 @@ TSharedRange<TUnversionedRow> TUnversionedRowsBuilder::Build()
 REGISTER_INTERMEDIATE_PROTO_INTEROP_BYTES_FIELD_REPRESENTATION(
     NProto::TDataBlockMeta,
     /*last_key*/ 9,
-    TUnversionedOwningRow)
+    TUnversionedOwningRow);
 
 REGISTER_INTERMEDIATE_PROTO_INTEROP_BYTES_FIELD_REPRESENTATION(
     NProto::TBoundaryKeysExt,
     /*min*/ 1,
-    TUnversionedOwningRow)
+    TUnversionedOwningRow);
 REGISTER_INTERMEDIATE_PROTO_INTEROP_BYTES_FIELD_REPRESENTATION(
     NProto::TBoundaryKeysExt,
     /*max*/ 2,
-    TUnversionedOwningRow)
+    TUnversionedOwningRow);
 
 REGISTER_INTERMEDIATE_PROTO_INTEROP_BYTES_FIELD_REPRESENTATION(
     NProto::TSamplesExt,
     /*entries*/ 1,
-    TUnversionedOwningRow)
+    TUnversionedOwningRow);
 
 REGISTER_INTERMEDIATE_PROTO_INTEROP_BYTES_FIELD_REPRESENTATION(
     NProto::THeavyColumnStatisticsExt,
     /*column_data_weights*/ 5,
-    TUnversionedOwningRow)
+    TUnversionedOwningRow);
 
 ////////////////////////////////////////////////////////////////////////////////
 

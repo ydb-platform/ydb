@@ -30,7 +30,7 @@ namespace NKikimr::NBlobDepot {
 
             void CheckBlockedGeneration() {
                 if (!DoneWithBlockedGeneration) {
-                    DoneWithBlockedGeneration = !Request.DiscoverBlockedGeneration || 
+                    DoneWithBlockedGeneration = !Request.DiscoverBlockedGeneration ||
                         CheckBlockForTablet(Request.TabletId, std::nullopt, &BlockedGeneration) == NKikimrProto::OK;
                 }
                 CheckIfDone();
@@ -177,7 +177,7 @@ namespace NKikimr::NBlobDepot {
                 BDEV_QUERY(BDEV18, "TEvDiscover_end", (Status, status), (ErrorReason, errorReason));
                 TBlobStorageQuery::EndWithError(status, errorReason);
             }
-            
+
             ui64 GetTabletId() const override {
                 return Request.TabletId;
             }

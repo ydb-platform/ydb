@@ -13,6 +13,8 @@
 
 #include <yt/yt/client/hive/public.h>
 
+#include <yt/yt/library/tvm/service/public.h>
+
 #include <yt/yt/core/actions/callback.h>
 
 #include <yt/yt/core/rpc/authentication_identity.h>
@@ -46,10 +48,13 @@ struct TTransactionParticipantOptions
 struct IConnection
     : public virtual TRefCounted
 {
+    using TConnectionOptions = NApi::TConnectionOptions;
+
     virtual TClusterTag GetClusterTag() const = 0;
     virtual const std::string& GetLoggingTag() const = 0;
     virtual const std::string& GetClusterId() const = 0;
     virtual const std::optional<std::string>& GetClusterName() const = 0;
+    virtual const std::optional<NAuth::TTvmId>& GetTvmId() const = 0;
     virtual IInvokerPtr GetInvoker() = 0;
 
     // TODO(gritukan): Fix alien transaction creation for RPC proxy connection

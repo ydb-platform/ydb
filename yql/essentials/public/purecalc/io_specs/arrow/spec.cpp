@@ -42,18 +42,18 @@ private:
     }
 
 public:
-    TArrowIStreamImpl(THolder<IArrowIStream> stream)
+    explicit TArrowIStreamImpl(THolder<IArrowIStream> stream)
         : TArrowIStreamImpl(stream.Get(), nullptr)
     {
         Owned_ = std::move(stream);
     }
 
-    TArrowIStreamImpl(IArrowIStream* stream)
+    explicit TArrowIStreamImpl(IArrowIStream* stream)
         : TArrowIStreamImpl(stream, nullptr)
     {
     }
 
-    InputItemType Fetch() {
+    InputItemType Fetch() override {
         return Underlying_->Fetch();
     }
 };
@@ -187,6 +187,10 @@ public:
         *batch = arrow::compute::ExecBatch(std::move(datums), length);
         return batch;
     }
+
+    void Finish() {
+        Batch_.Reset();
+    }
 };
 
 /**
@@ -290,6 +294,8 @@ public:
             TUnboxedValue value;
 
             if (!WorkerHolder_->GetOutputIterator().Next(value)) {
+                Converter_.Finish();
+                WorkerHolder_->CheckState(true);
                 return TOutputSpecTraits<TArrowOutputSpec>::StreamSentinel;
             }
 
@@ -323,6 +329,8 @@ public:
             YQL_ENSURE(status != EFetchStatus::Yield, "Yield is not supported in pull mode");
 
             if (status == EFetchStatus::Finish) {
+                Converter_.Finish();
+                WorkerHolder_->CheckState(true);
                 return TOutputSpecTraits<TArrowOutputSpec>::StreamSentinel;
             }
 

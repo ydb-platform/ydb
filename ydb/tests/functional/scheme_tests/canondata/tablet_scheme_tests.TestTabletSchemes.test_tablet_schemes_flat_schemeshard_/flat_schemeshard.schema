@@ -3268,6 +3268,11 @@
                 "ColumnId": 20,
                 "ColumnName": "SanitizedToken",
                 "ColumnType": "Utf8"
+            },
+            {
+                "ColumnId": 21,
+                "ColumnName": "IncludeIndexData",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -3293,7 +3298,8 @@
                     17,
                     18,
                     19,
-                    20
+                    20,
+                    21
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -3366,6 +3372,11 @@
                 "ColumnId": 9,
                 "ColumnName": "SourcePathType",
                 "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 10,
+                "ColumnName": "ParentIndex",
+                "ColumnType": "Uint32"
             }
         ],
         "ColumnsDropped": [],
@@ -3380,7 +3391,8 @@
                     6,
                     7,
                     8,
-                    9
+                    9,
+                    10
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -5643,6 +5655,36 @@
                 "ColumnId": 13,
                 "ColumnName": "CpuTimeUsProcessed",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 14,
+                "ColumnName": "DocCount",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 15,
+                "ColumnName": "TotalDocLength",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 16,
+                "ColumnName": "FirstToken",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 17,
+                "ColumnName": "LastToken",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 18,
+                "ColumnName": "FirstTokenRows",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 19,
+                "ColumnName": "LastTokenRows",
+                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
@@ -5661,7 +5703,13 @@
                     10,
                     11,
                     12,
-                    13
+                    13,
+                    14,
+                    15,
+                    16,
+                    17,
+                    18,
+                    19
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -6471,6 +6519,11 @@
                 "ColumnId": 20,
                 "ColumnName": "Topic",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 21,
+                "ColumnName": "ParentIndex",
+                "ColumnType": "Uint32"
             }
         ],
         "ColumnsDropped": [],
@@ -6496,7 +6549,8 @@
                     17,
                     18,
                     19,
-                    20
+                    20,
+                    21
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -6937,6 +6991,11 @@
                 "ColumnId": 8,
                 "ColumnName": "IsEnabled",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 9,
+                "ColumnName": "PasswordHashes",
+                "ColumnType": "Utf8"
             }
         ],
         "ColumnsDropped": [],
@@ -6950,7 +7009,8 @@
                     5,
                     6,
                     7,
-                    8
+                    8,
+                    9
                 ],
                 "RoomID": 0,
                 "Codec": 0,

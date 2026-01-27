@@ -451,8 +451,14 @@ namespace NKikimr {
                                     TABLED() {str << TotalDefragRuns;}
                                 }
                                 TABLER() {
-                                    TABLED() {str << "FreeSpaceShare/Threshold";}
+                                    TABLED() {str << "FreeSpaceShare";}
                                     TABLED() {str << DCtx->VCtx->GetOutOfSpaceState().GetFreeSpaceShare();}
+                                }
+                                TABLER() {
+                                    TABLED() {str << "VDisk Used Chunks";}
+                                    TABLED() {
+                                        str << DCtx->VCtx->GetOutOfSpaceState().GetLocalUsedChunks();
+                                    }
                                 }
                                 TABLER() {
                                     TABLED() {str << "CanBeFreed/Used Huge Heap Chunks";}
@@ -462,13 +468,24 @@ namespace NKikimr {
                                     }
                                 }
                                 TABLER() {
-                                    TABLED() {str << "VDisk Used Chunks";}
+                                    TABLED() {str << "Fragmentation (aka garbage)";}
                                     TABLED() {
-                                        str << DCtx->VCtx->GetOutOfSpaceState().GetLocalUsedChunks();
+                                        auto stat = DCtx->VCtx->GetHugeHeapFragmentation().Get();
+                                        str << double(stat.CanBeFreedChunks) / stat.CurrentlyUsedChunks;
+
                                     }
                                 }
                                 TABLER() {
-                                    TABLED() {str << "DefragThresholdToRunCompaction";}
+                                    TABLED() {str << "Current garbage threshold to run defrag";}
+                                    TABLED() {
+                                        const auto& oos = DCtx->VCtx->GetOutOfSpaceState();
+                                        double defaultPercent = DCtx->VCfg->DefaultHugeGarbagePerMille / 1000.0;
+                                        double hugeDefragFreeSpaceBorder = DCtx->VCfg->HugeDefragFreeSpaceBorderPerMille / 1000.0;
+                                        str << DefragThreshold(oos, defaultPercent, hugeDefragFreeSpaceBorder);
+                                    }
+                                }
+                                TABLER() {
+                                    TABLED() {str << "Garbage threshold to run full compaction";}
                                     TABLED() {
                                         str << static_cast<ui64>(DCtx->VCfg->GarbageThresholdToRunFullCompactionPerMille) / 1000.0;
                                     }

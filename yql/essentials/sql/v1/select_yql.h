@@ -15,6 +15,7 @@ struct TYqlSource {
 };
 
 enum class EYqlJoinKind {
+    Cross,
     Inner,
     Left,
     Right,
@@ -22,7 +23,7 @@ enum class EYqlJoinKind {
 
 struct TYqlJoinConstraint {
     EYqlJoinKind Kind;
-    TNodePtr Condition;
+    TNullable<TNodePtr> Condition;
 };
 
 struct TYqlJoin {
@@ -36,6 +37,10 @@ using TProjection = std::variant<
     TVector<TNodePtr>,
     TPlainAsterisk>;
 
+struct TGroupBy {
+    TVector<TNodePtr> Keys;
+};
+
 struct TOrderBy {
     TVector<TSortSpecificationPtr> Keys;
 };
@@ -44,6 +49,7 @@ struct TYqlTableRefArgs {
     TString Service;
     TString Cluster;
     TString Key;
+    bool IsAnonymous = false;
 };
 
 struct TYqlValuesArgs {
@@ -56,8 +62,14 @@ struct TYqlSelectArgs {
     TMaybe<TNodePtr> Where;
     TMaybe<TNodePtr> Limit;
     TMaybe<TNodePtr> Offset;
+    TMaybe<TGroupBy> GroupBy;
+    TMaybe<TNodePtr> Having;
     TMaybe<TOrderBy> OrderBy;
 };
+
+TNodePtr GetYqlSource(const TNodePtr& node);
+
+TNodePtr ToTableExpression(TNodePtr source);
 
 TNodePtr BuildYqlTableRef(TPosition position, TYqlTableRefArgs&& args);
 

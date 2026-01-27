@@ -325,7 +325,7 @@ TSkiffToUnversionedValueConverter CreateSimpleValueConverter(
                     EWireType::Boolean,
                     EWireType::String32,
                     EWireType::Nothing,
-                    EWireType::Yson32
+                    EWireType::Yson32,
                 });
             return CreatePrimitiveTypeConverter(wireType, required, columnId, ysonConverter);
 

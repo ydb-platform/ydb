@@ -10,6 +10,8 @@ namespace NKikimr::NViewer {
 
 using namespace NActors;
 using namespace NKikimrTabletBase;
+using namespace NNodeWhiteboard;
+using namespace NSysView;
 namespace TEvSchemeShard = NSchemeShard::TEvSchemeShard;
 using TNavigate = NSchemeCache::TSchemeCacheNavigate;
 
@@ -33,6 +35,7 @@ class TJsonStorageStats : public TViewerPipeClient {
 
     struct TTabletStorageInfo {
         TTabletTypes::EType Type = TTabletTypes::Unknown;
+        ui64 TabletCount = 0;
         ui64 DataSize = 0;
         ui64 IndexSize = 0;
         std::unordered_map<TGroupId, TGroupStorageInfo> Groups;
@@ -47,16 +50,25 @@ class TJsonStorageStats : public TViewerPipeClient {
         {}
     };
 
+    enum class EGroupBy {
+        Path,
+        TabletType,
+    };
+
+    TSubDomainKey SubDomainKey;
     std::vector<TString> Paths;
+    EGroupBy GroupBy = EGroupBy::Path;
     std::unordered_set<TString> StoragePoolNames;
     NKikimrSysView::TStoragePoolEntry StaticStoragePool;
     std::unordered_map<TStoragePoolId, const NKikimrSysView::TStoragePoolEntry&> StoragePools;
     std::unordered_map<TGroupId, const NKikimrSysView::TGroupEntry&> StorageGroups;
-    TRequestResponse<NSysView::TEvSysView::TEvGetVSlotsResponse> VSlotsResponse;
-    TRequestResponse<NSysView::TEvSysView::TEvGetGroupsResponse> GroupsResponse;
-    TRequestResponse<NSysView::TEvSysView::TEvGetStoragePoolsResponse> PoolsResponse;
+    TRequestResponse<TEvSysView::TEvGetVSlotsResponse> VSlotsResponse;
+    TRequestResponse<TEvSysView::TEvGetGroupsResponse> GroupsResponse;
+    TRequestResponse<TEvSysView::TEvGetStoragePoolsResponse> PoolsResponse;
+    std::unordered_map<TNodeId, TRequestResponse<TEvWhiteboard::TEvTabletStateResponse>> TabletStateResponse;
     std::unordered_map<TString, TRequestResponse<TEvSchemeShard::TEvDescribeSchemeResult>> SchemeShardResult;
     std::unordered_map<TGroupId, std::vector<TActorId>> GroupToVDiskActorId;
+    std::unordered_map<TNodeId, std::vector<TActorId>> NodeToVDiskActorId;
     std::vector<TVDiskRequestInfo> VDiskRequests;
     std::unordered_map<TActorId, size_t> VDiskRequestIndex;
     std::unordered_map<TTabletId, TTabletStorageInfo> TabletStorageInfo;
@@ -139,7 +151,17 @@ public:
                 }
             }
         }
-        if (Paths.empty()) {
+        if (Params.Has("group_by")) {
+            const TString& groupBy = Params.Get("group_by");
+            if (groupBy == "tablet_type") {
+                GroupBy = EGroupBy::TabletType;
+            } else if (groupBy == "path") {
+                GroupBy = EGroupBy::Path;
+            } else {
+                return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Invalid group_by value"));
+            }
+        }
+        if (Paths.empty() && GroupBy == EGroupBy::Path) {
             return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "No path specified"));
         }
         for (const auto& path : Paths) {
@@ -152,6 +174,12 @@ public:
         }
         if (DatabaseNavigateResponse && DatabaseNavigateResponse->IsOk()) {
             CollectStoragePoolsAllowed(DatabaseNavigateResponse->GetRef());
+            TSchemeCacheNavigate::TEntry& entry(DatabaseNavigateResponse->Get()->Request->ResultSet.front());
+            if (entry.Self && entry.DomainInfo) {
+                const auto ownerId = entry.DomainInfo->DomainKey.OwnerId;
+                const auto localPathId = entry.DomainInfo->DomainKey.LocalPathId;
+                SubDomainKey = TSubDomainKey(ownerId, localPathId);
+            }
         }
         if (StoragePoolNames.empty()) {
             return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "No storage pools found"));
@@ -166,8 +194,25 @@ public:
         for (const auto& path : Paths) {
             RequestSchemeShard(MakeFullPath(path));
         }
+        if (Paths.empty() && GroupBy == EGroupBy::TabletType) {
+            RequestTabletInfo();
+        }
         ProcessResponses(); // for cached responses
         Become(&TThis::StateRequestedDescribe, Timeout, new TEvents::TEvWakeup());
+    }
+
+    void RequestTabletInfo() {
+        auto databaseNodes = GetDatabaseNodes();
+        for (TNodeId nodeId : databaseNodes) {
+            auto request = std::make_unique<TEvWhiteboard::TEvTabletStateRequest>();
+            request->Record.AddFieldsRequired(NKikimrWhiteboard::TTabletStateInfo::kTabletIdFieldNumber);
+            request->Record.AddFieldsRequired(NKikimrWhiteboard::TTabletStateInfo::kTenantIdFieldNumber);
+            request->Record.AddFieldsRequired(NKikimrWhiteboard::TTabletStateInfo::kTypeFieldNumber);
+            if (SubDomainKey) {
+                request->Record.MutableFilterTenantId()->CopyFrom(SubDomainKey);
+            }
+            TabletStateResponse.emplace(nodeId, MakeWhiteboardRequest(nodeId, request.release()));
+        }
     }
 
     void ProcessDescribe(const TEvSchemeShard::TEvDescribeSchemeResult& describeResult) {
@@ -360,7 +405,9 @@ public:
                 if (StorageGroups.count(vslot.GetInfo().GetGroupId()) == 0) {
                     continue;
                 }
-                GroupToVDiskActorId[vslot.GetInfo().GetGroupId()].emplace_back(MakeBlobStorageVDiskID(vslot.GetKey().GetNodeId(), vslot.GetKey().GetPDiskId(), vslot.GetKey().GetVSlotId()));
+                auto vDiskActorId(MakeBlobStorageVDiskID(vslot.GetKey().GetNodeId(), vslot.GetKey().GetPDiskId(), vslot.GetKey().GetVSlotId()));
+                GroupToVDiskActorId[vslot.GetInfo().GetGroupId()].emplace_back(vDiskActorId);
+                NodeToVDiskActorId[vslot.GetKey().GetNodeId()].emplace_back(vDiskActorId);
                 ++vdisks;
             }
             VDiskRequests.reserve(vdisks);
@@ -392,31 +439,34 @@ public:
 
     STATEFN(StateRequestedDescribe) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(NSysView::TEvSysView::TEvGetVSlotsResponse, Handle);
-            hFunc(NSysView::TEvSysView::TEvGetGroupsResponse, Handle);
-            hFunc(NSysView::TEvSysView::TEvGetStoragePoolsResponse, Handle);
+            hFunc(TEvSysView::TEvGetVSlotsResponse, Handle);
+            hFunc(TEvSysView::TEvGetGroupsResponse, Handle);
+            hFunc(TEvSysView::TEvGetStoragePoolsResponse, Handle);
             hFunc(TEvGetLogoBlobIndexStatResponse, Handle);
+            hFunc(TEvWhiteboard::TEvTabletStateResponse, Handle);
+            hFunc(TEvents::TEvUndelivered, Handle);
+            hFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
             hFunc(TEvSchemeShard::TEvDescribeSchemeResult, Handle);
             hFunc(TEvTabletPipe::TEvClientConnected, TBase::Handle);
             cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
         }
     }
 
-    void Handle(NSysView::TEvSysView::TEvGetStoragePoolsResponse::TPtr& ev) {
+    void Handle(TEvSysView::TEvGetStoragePoolsResponse::TPtr& ev) {
         if (PoolsResponse.Set(std::move(ev))) {
             ProcessResponses();
             RequestDone();
         }
     }
 
-    void Handle(NSysView::TEvSysView::TEvGetGroupsResponse::TPtr& ev) {
+    void Handle(TEvSysView::TEvGetGroupsResponse::TPtr& ev) {
         if (GroupsResponse.Set(std::move(ev))) {
             ProcessResponses();
             RequestDone();
         }
     }
 
-    void Handle(NSysView::TEvSysView::TEvGetVSlotsResponse::TPtr& ev) {
+    void Handle(TEvSysView::TEvGetVSlotsResponse::TPtr& ev) {
         if (VSlotsResponse.Set(std::move(ev))) {
             ProcessResponses();
             RequestDone();
@@ -444,103 +494,236 @@ public:
         }
     }
 
+    void Handle(TEvWhiteboard::TEvTabletStateResponse::TPtr& ev) {
+        auto it = TabletStateResponse.find(ev->Cookie);
+        if (it != TabletStateResponse.end()) {
+            if (it->second.Set(std::move(ev))) {
+                const auto& record(it->second.Get()->Record);
+                for (const auto& tabletInfo : record.GetTabletStateInfo()) {
+                    if (SubDomainKey && tabletInfo.HasTenantId()) {
+                        TSubDomainKey tenantId;
+                        tenantId.first = tabletInfo.GetTenantId().GetSchemeShard();
+                        tenantId.second = tabletInfo.GetTenantId().GetPathId();
+                        if (tenantId != SubDomainKey) {
+                            continue;
+                        }
+                    }
+                    TTabletId tabletId = tabletInfo.GetTabletId();
+                    auto& tabletStorageInfo(TabletStorageInfo[tabletId]);
+                    tabletStorageInfo.Type = static_cast<TTabletTypes::EType>(tabletInfo.GetType());
+                }
+                RequestDone();
+            }
+        } else {
+            AddEvent("Unknown TEvTabletStateResponse");
+        }
+    }
+
+    void HandleNodeError(TNodeId nodeId, const TString& error) {
+        {
+            auto it = TabletStateResponse.find(nodeId);
+            if (it != TabletStateResponse.end()) {
+                if (it->second.Error(error)) {
+                    RequestDone();
+                }
+            }
+        }
+        {
+            auto it = NodeToVDiskActorId.find(nodeId);
+            if (it != NodeToVDiskActorId.end()) {
+                for (const auto& vdiskActorId : it->second) {
+                    auto reqIt = VDiskRequestIndex.find(vdiskActorId);
+                    if (reqIt != VDiskRequestIndex.end()) {
+                        size_t requestIndex = reqIt->second;
+                        if (VDiskRequests[requestIndex].VDiskRequest.Error(error)) {
+                            RequestDone();
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    void Handle(TEvents::TEvUndelivered::TPtr& ev) {
+        static const TString error = "Undelivered";
+        TNodeId nodeId = ev.Get()->Cookie;
+        HandleNodeError(nodeId, error);
+    }
+
+    void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
+        static const TString error = "NodeDisconnected";
+        TNodeId nodeId = ev->Get()->NodeId;
+        HandleNodeError(nodeId, error);
+    }
+
     void ReplyAndPassAway() override {
         bool returnEverything = FromStringWithDefault<bool>(Params.Get("everything"), false);
         bool returnGroups = FromStringWithDefault<bool>(Params.Get("groups"), returnEverything);
         bool returnTablets = FromStringWithDefault<bool>(Params.Get("tablets"), returnEverything);
         bool returnMedia = FromStringWithDefault<bool>(Params.Get("media"), returnEverything);
         NJson::TJsonValue json;
-        NJson::TJsonValue& jsonPaths(json["Paths"]);
-        for (const auto& path : Paths) {
-            NJson::TJsonValue& jsonPath(jsonPaths.AppendValue({}));
-            auto fullPath(MakeFullPath(path));
-            jsonPath["Path"] = path ? path : fullPath;
-            jsonPath["FullPath"] = fullPath;
-            const auto& pathStorageInfo(PathStorageInfo[fullPath]);
-            ui64 dataSize = 0;
-            ui64 indexSize = 0;
-            ui64 storageSize = 0;
-            ui64 storageCount = 0;
-            NJson::TJsonValue& jsonTablets(jsonPath["Tablets"]);
+        if (GroupBy == EGroupBy::TabletType) {
+            NJson::TJsonValue& jsonTablets(json["Tablets"]);
             if (returnTablets) {
                 jsonTablets.SetType(NJson::JSON_ARRAY);
             }
-            std::map<TGroupId, TGroupStorageInfo> groupsAccumulated;
-            std::map<TString, TGroupStorageInfo> mediaAccumulated;
-            for (TTabletId tabletId : pathStorageInfo.Tablets) {
-                const auto& tabletStorageInfo(TabletStorageInfo[tabletId]);
-                dataSize += tabletStorageInfo.DataSize;
-                indexSize += tabletStorageInfo.IndexSize;
-                ui64 shardStorageSize = 0;
-                ui64 shardStorageCount = 0;
+            std::map<TTabletTypes::EType, TTabletStorageInfo> tabletTypeAccumulated;
+            for (const auto& [tabletId, tabletStorageInfo] : TabletStorageInfo) {
+                auto& typeAccumulated = tabletTypeAccumulated[tabletStorageInfo.Type];
+                typeAccumulated.TabletCount += 1;
+                typeAccumulated.DataSize += tabletStorageInfo.DataSize;
+                typeAccumulated.IndexSize += tabletStorageInfo.IndexSize;
                 for (const auto& [groupId, groupStorageInfo] : tabletStorageInfo.Groups) {
-                    auto& groupAccumulated = groupsAccumulated[groupId];
-                    groupAccumulated.StorageSize += groupStorageInfo.StorageSize;
-                    groupAccumulated.StorageCount += groupStorageInfo.StorageCount;
+                    typeAccumulated.Groups[groupId].StorageSize += groupStorageInfo.StorageSize;
+                    typeAccumulated.Groups[groupId].StorageCount += groupStorageInfo.StorageCount;
+                }
+            }
+            for (const auto& [tabletType, tabletStorageInfo] : tabletTypeAccumulated) {
+                NJson::TJsonValue& jsonTablet(jsonTablets.AppendValue({}));
+                jsonTablet["Type"] = TTabletTypes::TypeToStr(tabletType);
+                NJson::TJsonValue& jsonGroups(jsonTablet["Groups"]);
+                if (returnGroups) {
+                    jsonGroups.SetType(NJson::JSON_ARRAY);
+                }
+                std::map<TString, TGroupStorageInfo> mediaAccumulated;
+                ui64 tabletStorageSize = 0;
+                ui64 tabletStorageCount = 0;
+                for (const auto& [groupId, groupStorageInfo] : tabletStorageInfo.Groups) {
                     const auto& groupInfo(StorageGroups.find(groupId)->second.GetInfo());
                     TStoragePoolId poolId(groupInfo.GetBoxId(), groupInfo.GetStoragePoolId());
                     const auto& poolInfo(StoragePools.find(poolId)->second.GetInfo());
                     auto& mediaAccumulatedEntry = mediaAccumulated[poolInfo.GetKind()];
                     mediaAccumulatedEntry.StorageSize += groupStorageInfo.StorageSize;
                     mediaAccumulatedEntry.StorageCount += groupStorageInfo.StorageCount;
-                    shardStorageSize += groupStorageInfo.StorageSize;
-                    shardStorageCount += groupStorageInfo.StorageCount;
-                    storageSize += groupStorageInfo.StorageSize;
-                    storageCount += groupStorageInfo.StorageCount;
+                    tabletStorageSize += groupStorageInfo.StorageSize;
+                    tabletStorageCount += groupStorageInfo.StorageCount;
+                    if (returnGroups) {
+                        NJson::TJsonValue& jsonGroup(jsonGroups.AppendValue({}));
+                        jsonGroup["GroupId"] = TStringBuilder() << groupId;
+                        jsonGroup["StorageSize"] = groupStorageInfo.StorageSize;
+                        jsonGroup["StorageCount"] = groupStorageInfo.StorageCount;
+                    }
                 }
-                if (!returnTablets) {
-                    continue;
+                if (!returnGroups) {
+                    jsonGroups = tabletStorageInfo.Groups.size();
                 }
-                NJson::TJsonValue& jsonTablet(jsonTablets.AppendValue({}));
-                jsonTablet["Type"] = TTabletTypes::TypeToStr(tabletStorageInfo.Type);
-                jsonTablet["TabletId"] = TStringBuilder() << tabletId;
                 if (tabletStorageInfo.DataSize) {
                     jsonTablet["DataSize"] = tabletStorageInfo.DataSize;
                 }
                 if (tabletStorageInfo.IndexSize) {
                     jsonTablet["IndexSize"] = tabletStorageInfo.IndexSize;
                 }
-                jsonTablet["StorageSize"] = shardStorageSize;
-                jsonTablet["StorageCount"] = shardStorageCount;
-            }
-            if (dataSize == 0) {
-                dataSize = pathStorageInfo.DataSize;
-                indexSize = pathStorageInfo.IndexSize;
-            }
-            if (dataSize) {
-                jsonPath["DataSize"] = dataSize;
-            }
-            if (indexSize) {
-                jsonPath["IndexSize"] = indexSize;
-            }
-            jsonPath["StorageSize"] = storageSize;
-            jsonPath["StorageCount"] = storageCount;
-            if (!returnTablets) {
-                jsonTablets = pathStorageInfo.Tablets.size();
-            }
-            NJson::TJsonValue& jsonGroups(jsonPath["Groups"]);
-            if (returnGroups) {
-                jsonGroups.SetType(NJson::JSON_ARRAY);
-                for (const auto& [groupId, groupStorageInfo] : groupsAccumulated) {
-                    NJson::TJsonValue& jsonGroup(jsonGroups.AppendValue({}));
-                    jsonGroup["GroupId"] = TStringBuilder() << groupId;
-                    jsonGroup["StorageSize"] = groupStorageInfo.StorageSize;
-                    jsonGroup["StorageCount"] = groupStorageInfo.StorageCount;
+                jsonTablet["StorageSize"] = tabletStorageSize;
+                jsonTablet["StorageCount"] = tabletStorageCount;
+                if (tabletStorageInfo.TabletCount) {
+                    jsonTablet["TabletCount"] = tabletStorageInfo.TabletCount;
                 }
-            } else {
-                jsonGroups = groupsAccumulated.size();
-            }
-            NJson::TJsonValue& jsonMedia(jsonPath["Media"]);
-            if (returnMedia) {
-                jsonMedia.SetType(NJson::JSON_ARRAY);
-                for (const auto& [mediaKind, groupStorageInfo] : mediaAccumulated) {
-                    NJson::TJsonValue& jsonMediaEntry(jsonMedia.AppendValue({}));
-                    jsonMediaEntry["Kind"] = mediaKind;
-                    jsonMediaEntry["StorageSize"] = groupStorageInfo.StorageSize;
-                    jsonMediaEntry["StorageCount"] = groupStorageInfo.StorageCount;
+                NJson::TJsonValue& jsonMedia(jsonTablet["Media"]);
+                if (returnMedia) {
+                    jsonMedia.SetType(NJson::JSON_ARRAY);
+                    for (const auto& [mediaKind, groupStorageInfo] : mediaAccumulated) {
+                        NJson::TJsonValue& jsonMediaEntry(jsonMedia.AppendValue({}));
+                        jsonMediaEntry["Kind"] = mediaKind;
+                        jsonMediaEntry["StorageSize"] = groupStorageInfo.StorageSize;
+                        jsonMediaEntry["StorageCount"] = groupStorageInfo.StorageCount;
+                    }
+                } else {
+                    jsonMedia = mediaAccumulated.size();
                 }
-            } else {
-                jsonMedia = mediaAccumulated.size();
+            }
+        } else {
+            NJson::TJsonValue& jsonPaths(json["Paths"]);
+            for (const auto& path : Paths) {
+                NJson::TJsonValue& jsonPath(jsonPaths.AppendValue({}));
+                auto fullPath(MakeFullPath(path));
+                jsonPath["Path"] = path ? path : fullPath;
+                jsonPath["FullPath"] = fullPath;
+                const auto& pathStorageInfo(PathStorageInfo[fullPath]);
+                ui64 dataSize = 0;
+                ui64 indexSize = 0;
+                ui64 storageSize = 0;
+                ui64 storageCount = 0;
+                NJson::TJsonValue& jsonTablets(jsonPath["Tablets"]);
+                if (returnTablets) {
+                    jsonTablets.SetType(NJson::JSON_ARRAY);
+                }
+                std::map<TGroupId, TGroupStorageInfo> groupsAccumulated;
+                std::map<TString, TGroupStorageInfo> mediaAccumulated;
+                for (TTabletId tabletId : pathStorageInfo.Tablets) {
+                    const auto& tabletStorageInfo(TabletStorageInfo[tabletId]);
+                    dataSize += tabletStorageInfo.DataSize;
+                    indexSize += tabletStorageInfo.IndexSize;
+                    ui64 shardStorageSize = 0;
+                    ui64 shardStorageCount = 0;
+                    for (const auto& [groupId, groupStorageInfo] : tabletStorageInfo.Groups) {
+                        auto& groupAccumulated = groupsAccumulated[groupId];
+                        groupAccumulated.StorageSize += groupStorageInfo.StorageSize;
+                        groupAccumulated.StorageCount += groupStorageInfo.StorageCount;
+                        const auto& groupInfo(StorageGroups.find(groupId)->second.GetInfo());
+                        TStoragePoolId poolId(groupInfo.GetBoxId(), groupInfo.GetStoragePoolId());
+                        const auto& poolInfo(StoragePools.find(poolId)->second.GetInfo());
+                        auto& mediaAccumulatedEntry = mediaAccumulated[poolInfo.GetKind()];
+                        mediaAccumulatedEntry.StorageSize += groupStorageInfo.StorageSize;
+                        mediaAccumulatedEntry.StorageCount += groupStorageInfo.StorageCount;
+                        shardStorageSize += groupStorageInfo.StorageSize;
+                        shardStorageCount += groupStorageInfo.StorageCount;
+                        storageSize += groupStorageInfo.StorageSize;
+                        storageCount += groupStorageInfo.StorageCount;
+                    }
+                    if (!returnTablets) {
+                        continue;
+                    }
+                    NJson::TJsonValue& jsonTablet(jsonTablets.AppendValue({}));
+                    jsonTablet["Type"] = TTabletTypes::TypeToStr(tabletStorageInfo.Type);
+                    jsonTablet["TabletId"] = TStringBuilder() << tabletId;
+                    if (tabletStorageInfo.DataSize) {
+                        jsonTablet["DataSize"] = tabletStorageInfo.DataSize;
+                    }
+                    if (tabletStorageInfo.IndexSize) {
+                        jsonTablet["IndexSize"] = tabletStorageInfo.IndexSize;
+                    }
+                    jsonTablet["StorageSize"] = shardStorageSize;
+                    jsonTablet["StorageCount"] = shardStorageCount;
+                }
+                if (dataSize == 0) {
+                    dataSize = pathStorageInfo.DataSize;
+                    indexSize = pathStorageInfo.IndexSize;
+                }
+                if (dataSize) {
+                    jsonPath["DataSize"] = dataSize;
+                }
+                if (indexSize) {
+                    jsonPath["IndexSize"] = indexSize;
+                }
+                jsonPath["StorageSize"] = storageSize;
+                jsonPath["StorageCount"] = storageCount;
+                if (!returnTablets) {
+                    jsonTablets = pathStorageInfo.Tablets.size();
+                }
+                NJson::TJsonValue& jsonGroups(jsonPath["Groups"]);
+                if (returnGroups) {
+                    jsonGroups.SetType(NJson::JSON_ARRAY);
+                    for (const auto& [groupId, groupStorageInfo] : groupsAccumulated) {
+                        NJson::TJsonValue& jsonGroup(jsonGroups.AppendValue({}));
+                        jsonGroup["GroupId"] = TStringBuilder() << groupId;
+                        jsonGroup["StorageSize"] = groupStorageInfo.StorageSize;
+                        jsonGroup["StorageCount"] = groupStorageInfo.StorageCount;
+                    }
+                } else {
+                    jsonGroups = groupsAccumulated.size();
+                }
+                NJson::TJsonValue& jsonMedia(jsonPath["Media"]);
+                if (returnMedia) {
+                    jsonMedia.SetType(NJson::JSON_ARRAY);
+                    for (const auto& [mediaKind, groupStorageInfo] : mediaAccumulated) {
+                        NJson::TJsonValue& jsonMediaEntry(jsonMedia.AppendValue({}));
+                        jsonMediaEntry["Kind"] = mediaKind;
+                        jsonMediaEntry["StorageSize"] = groupStorageInfo.StorageSize;
+                        jsonMediaEntry["StorageCount"] = groupStorageInfo.StorageCount;
+                    }
+                } else {
+                    jsonMedia = mediaAccumulated.size();
+                }
             }
         }
         ReplyAndPassAway(GetHTTPOKJSON(json));
@@ -557,6 +740,13 @@ public:
             .Name = "path",
             .Description = "schema path, could be many paths separated by comma or multiple path parameters",
             .Type = "string",
+        });
+        yaml.AddParameter({
+            .Name = "group_by",
+            .Description = "grouping of the result, possible values: tablet_type, path",
+            .Type = "string",
+            .Default = "path",
+            .EnumValues = {"tablet_type", "path"},
         });
         yaml.AddParameter({
             .Name = "everything",

@@ -77,7 +77,7 @@ TAsyncExecuteQueryResult GetCustomerById(
         .AddParam("$c_id").Int32(customerID).Build()
         .Build();
 
-    auto txControl = tx ? TTxControl::Tx(*tx) : TTxControl::BeginTx(TTxSettings::SerializableRW());
+    auto txControl = tx ? TTxControl::Tx(*tx) : TTxControl::BeginTx(context.TxMode);
 
     auto result = session.ExecuteQuery(
         query,
@@ -122,7 +122,7 @@ TAsyncExecuteQueryResult GetCustomersByLastName(
         .AddParam("$c_last").Utf8(lastName).Build()
         .Build();
 
-    auto txControl = tx ? TTxControl::Tx(*tx) : TTxControl::BeginTx(TTxSettings::SerializableRW());
+    auto txControl = tx ? TTxControl::Tx(*tx) : TTxControl::BeginTx(context.TxMode);
     auto result = session.ExecuteQuery(
         query,
         txControl,

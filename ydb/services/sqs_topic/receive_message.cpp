@@ -5,6 +5,7 @@
 #include "receipt.h"
 #include "utils.h"
 
+#include <ydb/core/http_proxy/events.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/core/ymq/attributes/attributes_md5.h>
 #include <ydb/core/ymq/attributes/attribute_name.h>
@@ -33,7 +34,7 @@
 #include <ydb/library/grpc/server/grpc_server.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
-#include <ydb/core/persqueue/public/mlp/mlp_message_attributes.h>
+#include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/persqueue/public/mlp/mlp.h>
 
 #include <ydb/library/actors/core/log.h>
@@ -158,13 +159,13 @@ namespace NKikimr::NSqsTopic::V1 {
             if (message.SentTimestamp) {
                 result.mutable_attributes()->emplace("SentTimestamp", ToString(message.SentTimestamp.MilliSeconds()));
             }
-            if (auto* const value = message.MessageMetaAttributes.FindPtr(NPQ::NMLP::NMessageConsts::MessageDeduplicationId)) {
+            if (auto* const value = message.MessageMetaAttributes.FindPtr(NPQ::MESSAGE_ATTRIBUTE_DEDUPLICATION_ID)) {
                 result.mutable_attributes()->emplace("MessageDeduplicationId", *value);
             }
 
             result.set_message_id(GenerateMessageId(message.MessageId));
 
-            if (auto* const value = message.MessageMetaAttributes.FindPtr(NPQ::NMLP::NMessageConsts::MessageAttributes)) {
+            if (auto* const value = message.MessageMetaAttributes.FindPtr(NPQ::MESSAGE_ATTRIBUTE_ATTRIBUTES)) {
                 NKikimr::NSQS::TMessageAttributes messageAttributes;
                 if (messageAttributes.ParseFromString(*value)) {
                     result.set_m_d_5_of_message_attributes(NSQS::CalcMD5OfMessageAttributes(messageAttributes.attributes()));
@@ -209,6 +210,29 @@ namespace NKikimr::NSqsTopic::V1 {
                     ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE, std::format("Error reading from topic: {}", response.ErrorDescription.ConstRef())));
                     return;
                 }
+            }
+
+            ctx.Send(NHttpProxy::MakeMetricsServiceID(),
+                new NHttpProxy::TEvServerlessProxy::TEvCounter{
+                    static_cast<i64>(response.Messages.size()), true, true,
+                    GetResponseMessageCountMetricsLabels(
+                        QueueUrl_->Database,
+                        FullTopicPath_,
+                        QueueUrl_->Consumer,
+                        "ReceiveMessage",
+                        "success")
+                });
+
+            if (response.Messages.empty()) {
+                ctx.Send(NHttpProxy::MakeMetricsServiceID(),
+                    new NHttpProxy::TEvServerlessProxy::TEvCounter{
+                        1, true, true,
+                        GetResponseEmptyCountMetricsLabels(
+                            QueueUrl_->Database,
+                            FullTopicPath_,
+                            QueueUrl_->Consumer,
+                            "ReceiveMessage")
+                    });
             }
 
             Ydb::Ymq::V1::ReceiveMessageResult result;

@@ -9,6 +9,7 @@
 #include <ydb/library/actors/core/event.h>
 #include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
+#include <util/string/strip.h>
 
 namespace NKikimr::NViewer {
 
@@ -176,6 +177,27 @@ struct TRequestState {
         return {};
     }
 
+    bool Accepts(const TString& type) const {
+        const TString acceptHeader = GetHeader("Accept");
+        if (acceptHeader.empty()) {
+            return false;
+        }
+        TVector<TString> acceptedTypes = StringSplitter(acceptHeader).Split(',');
+        for (const auto& token : acceptedTypes) {
+            TString trimmed = StripString(token);
+            if (trimmed.empty()) {
+                continue;
+            }
+            if (const size_t semicolonPos = trimmed.find(';'); semicolonPos != TString::npos) {
+                trimmed = StripString(trimmed.substr(0, semicolonPos));
+            }
+            if (trimmed == type) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     explicit operator bool() const {
         return Request.index() != 0;
     }
@@ -300,7 +322,7 @@ public:
     virtual bool CheckAccessViewer(const TRequestState& request) = 0;
     virtual bool CheckAccessMonitoring(const TRequestState& request) = 0;
     virtual bool CheckAccessAdministration(const TRequestState& request) = 0;
-    virtual void TranslateFromBSC2Human(const NKikimrBlobStorage::TConfigResponse& response, const TRequestState& request, TString& bscError, bool& forceRetryPossible) = 0;
+    virtual void BSCError2JSON(const NKikimrBlobStorage::TConfigResponse& response, const TRequestState& request, NJson::TJsonValue& json, bool forced) = 0;
     virtual TString MakeForward(const TRequestState& request, const std::vector<ui32>& nodes) = 0;
 
     virtual void AddRunningQuery(const TString& queryId, const TActorId& actorId) = 0;

@@ -197,7 +197,7 @@ void TDbWrapper::WriteIndex(const TPortionDataAccessor& acc, const TPortionInfo&
 void TDbWrapper::EraseIndex(const TPortionInfo& portion, const TIndexChunk& row) {
     NIceDb::TNiceDb db(Database);
     using IndexIndexes = NColumnShard::Schema::IndexIndexes;
-    db.Table<IndexIndexes>().Key(portion.GetPathId().GetRawValue(), portion.GetPortionId(), row.GetIndexId(), 0).Delete();
+    db.Table<IndexIndexes>().Key(portion.GetPathId().GetRawValue(), portion.GetPortionId(), row.GetIndexId(), row.GetChunkIdx()).Delete();
 }
 
 bool TDbWrapper::LoadIndexes(const std::optional<TInternalPathId> pathId,

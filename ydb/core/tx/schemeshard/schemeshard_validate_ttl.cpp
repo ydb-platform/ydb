@@ -43,7 +43,7 @@ bool ValidateTtlSettings(const NKikimrSchemeOp::TTTLSettings& ttl,
         } else if (auto x = sourceColumns.find(colId); x != sourceColumns.end()) {
             column = &x->second;
         } else {
-            Y_ABORT_UNLESS("Unknown column");
+            Y_ABORT("Unknown column");
         }
 
         if (IsDropped(*column)) {

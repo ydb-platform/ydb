@@ -10,7 +10,7 @@ namespace {
 
 class TPgDqIntegration: public TDqIntegrationBase {
 public:
-    TPgDqIntegration(TPgState::TPtr state)
+    explicit TPgDqIntegration(TPgState::TPtr state)
         : State_(state)
     {
     }

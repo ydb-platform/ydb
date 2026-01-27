@@ -57,6 +57,11 @@ template <typename TClient, typename TStatusType>
 class TRetryContext;
 } // namespace NRetry::Sync
 
+namespace NRetry {
+template <typename TClient>
+class TRetryDeadlineHelper;
+} // namespace NRetry
+
 namespace NScheme {
 struct TPermissions;
 } // namespace NScheme
@@ -288,6 +293,8 @@ public:
     TVectorIndexSettings Settings;
     uint32_t Clusters = 0;
     uint32_t Levels = 0;
+    uint32_t OverlapClusters = 0;
+    double OverlapRatio = 0;
 
     static TKMeansTreeSettings FromProto(const Ydb::Table::KMeansTreeSettings& proto);
 
@@ -301,6 +308,7 @@ public:
     enum class ELayout {
         Unspecified = 0,
         Flat,
+        FlatRelevance,
     };
 
     enum class ETokenizer {
@@ -1854,6 +1862,7 @@ class TSession {
     friend class TDataQuery;
     friend class TTransaction;
     friend class TSessionPool;
+    friend class NRetry::TRetryDeadlineHelper<TTableClient>;
 
 public:
     //! The following methods perform corresponding calls.
@@ -1928,10 +1937,14 @@ public:
     //! Returns session id
     const std::string& GetId() const;
 
+    const std::optional<TDeadline>& GetPropagatedDeadline() const;
+
     class TImpl;
 private:
     TSession(std::shared_ptr<TTableClient::TImpl> client, const std::string& sessionId, const std::string& endpointId, bool isOwnedBySessionPool);
     TSession(std::shared_ptr<TTableClient::TImpl> client, std::shared_ptr<TSession::TImpl> SessionImpl_);
+
+    void SetPropagatedDeadline(const TDeadline& deadline);
 
     std::shared_ptr<TTableClient::TImpl> Client_;
     std::shared_ptr<TSession::TImpl> SessionImpl_;

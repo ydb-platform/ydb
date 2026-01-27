@@ -21,6 +21,7 @@ replace_has_extension_in_type_traits()
 }
 
 replace_has_builtin_in_type_traits __array_extent extent.h
+replace_has_builtin_in_type_traits __builtin_common_type common_type.h
 replace_has_builtin_in_type_traits __is_compound is_compound.h
 replace_has_builtin_in_type_traits __is_const is_const.h
 replace_has_builtin_in_type_traits __is_destructible is_destructible.h

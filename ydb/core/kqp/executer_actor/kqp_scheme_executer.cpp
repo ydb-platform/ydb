@@ -242,7 +242,7 @@ public:
             const auto errText = TStringBuilder()
                 << "Cannot resolve working dir."
                 << " path# " << JoinPath(dirPath);
-            LOG_D(errText);
+            KQP_STLOG_D(KQPSCHEME, errText);
 
             const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::RESOLVE_LOOKUP_ERROR, errText);
             return ReplyErrorAndDie(Ydb::StatusIds::BAD_REQUEST, issue);
@@ -643,6 +643,12 @@ public:
                 break;
             }
 
+            case NKqpProto::TKqpSchemeOperation::kTruncateTable: {
+                const auto& modifyScheme = schemeOp.GetTruncateTable();
+                ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                break;
+            }
+
             default:
                 InternalError(TStringBuilder() << "Unexpected scheme operation: "
                     << (ui32) schemeOp.GetOperationCase());
@@ -861,7 +867,8 @@ public:
     }
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-        LOG_D("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult, errors# " << ev->Get()->Request.Get()->ErrorCount);
+        KQP_STLOG_D(KQPSCHEME, "Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult",
+            (error_count, ev->Get()->Request.Get()->ErrorCount));
 
         NSchemeCache::TSchemeCacheNavigate* resp = ev->Get()->Request.Get();
 
@@ -884,20 +891,20 @@ public:
             }
 
             TString error(builder);
-            LOG_E(error);
+            KQP_STLOG_E(KQPSCHEME, error);
             return ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR, NYql::TIssue(error));
         }
 
         AFL_ENSURE(resp->ResultSet.size() <= 2);
 
         if (UserToken && !UserToken->GetSerializedToken().empty() && !CheckAlterAccess(*UserToken, resp)) {
-            LOG_E("Access check failed");
+            KQP_STLOG_E(KQPSCHEME, "Access check failed");
             return ReplyErrorAndDie(Ydb::StatusIds::UNAUTHORIZED, NYql::TIssue("Unauthorized"));
         }
 
         auto domainInfo = resp->ResultSet.front().DomainInfo;
         if (!domainInfo) {
-            LOG_E("Got empty domain info");
+            KQP_STLOG_E(KQPSCHEME, "Got empty domain info");
             return ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, NYql::TIssue("empty domain info"));
         }
 
@@ -928,7 +935,8 @@ public:
         const auto status = response.GetStatus();
         auto issuesProto = response.GetIssues();
 
-        LOG_D("Handle TEvIndexBuilder::TEvCreateResponse " << response.ShortUtf8DebugString());
+        KQP_STLOG_D(KQPSCHEME, "Handle TEvIndexBuilder::TEvCreateResponse",
+            (response, response.ShortUtf8DebugString()));
 
         if (status == Ydb::StatusIds::SUCCESS) {
             if (response.HasSchemeStatus() && response.GetSchemeStatus() == NKikimrScheme::EStatus::StatusAlreadyExists) {
@@ -977,7 +985,8 @@ public:
 
     void Handle(NSchemeShard::TEvIndexBuilder::TEvGetResponse::TPtr& ev) {
         auto& record = ev->Get()->Record;
-        LOG_D("Handle TEvIndexBuilder::TEvGetResponse: record# " << record.ShortDebugString());
+        KQP_STLOG_D(KQPSCHEME, "Handle TEvIndexBuilder::TEvGetResponse",
+            (record, record.ShortDebugString()));
         if (record.GetStatus() != Ydb::StatusIds::SUCCESS) {
             // Internal error: we made incorrect request to get status of index build operation
             NYql::TIssues responseIssues;
@@ -1025,8 +1034,9 @@ public:
     void HandleAbortExecution(TEvKqp::TEvAbortExecution::TPtr& ev) {
         auto& msg = ev->Get()->Record;
         NYql::TIssues issues = ev->Get()->GetIssues();
-        LOG_D("Got EvAbortExecution, status: " << NYql::NDqProto::StatusIds_StatusCode_Name(msg.GetStatusCode())
-            << ", message: " << issues.ToOneLineString());
+        KQP_STLOG_D(KQPSCHEME, "Got EvAbortExecution",
+            (status, NYql::NDqProto::StatusIds_StatusCode_Name(msg.GetStatusCode())),
+            (issues, issues.ToOneLineString()));
 
         ReplyErrorAndDie(NYql::NDq::DqStatusToYdbStatus(msg.GetStatusCode()), issues);
     }
@@ -1046,8 +1056,10 @@ private:
     }
 
     void UnexpectedEvent(const TString& state, ui32 eventType) {
-        LOG_C("TKqpSchemeExecuter, unexpected event: " << eventType
-            << ", at state:" << state << ", selfID: " << SelfId());
+        KQP_STLOG_C(KQPSCHEME, "TKqpSchemeExecuter, unexpected event",
+            (event_type, eventType),
+            (state, state),
+            (self_id, SelfId()));
 
         InternalError(TStringBuilder() << "Unexpected event at TKqpSchemeExecuter, state: " << state
             << ", event: " << eventType);
@@ -1067,7 +1079,7 @@ private:
     }
 
     void InternalError(const NYql::TIssues& issues) {
-        LOG_E(issues.ToOneLineString());
+        KQP_STLOG_E(KQPSCHEME, issues.ToOneLineString());
         auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::UNEXPECTED,
             "Internal error while executing scheme operation.");
 

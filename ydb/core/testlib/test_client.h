@@ -30,8 +30,8 @@
 #include <ydb/core/protos/console_tenant.pb.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/kesus/tablet/events.h>
+#include <ydb/core/kqp/federated_query/actors/kqp_federated_query_actors.h>
 #include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
-#include <ydb/core/kqp/federated_query/kqp_federated_query_actors.h>
 #include <ydb/core/security/ticket_parser.h>
 #include <ydb/core/security/ticket_parser_settings.h>
 #include <ydb/core/security/token_manager/token_manager.h>
@@ -134,7 +134,7 @@ namespace Tests {
         ui32 DynamicNodeCount = 0;
         std::optional<ui32> DataCenterCount;
         ui64 StorageGeneration = 0;
-        bool FetchPoolsGeneration = false;
+        bool FetchActualGeneration = false;
         NFake::TStorage CustomDiskParams;
         TControls Controls;
         TAppPrepare::TFnReg FrFactory = &DefaultFrFactory;
@@ -182,7 +182,7 @@ namespace Tests {
         NYql::TTaskTransformFactory DqTaskTransformFactory;
         bool InitializeFederatedQuerySetupFactory = false;
         TString ServerCertFilePath;
-        bool Verbose = true;
+        bool Verbose = false;
         bool UseSectorMap = false;
         TVector<TIntrusivePtr<NFake::TProxyDS>> ProxyDSMocks;
         bool EnableStorage = true;
@@ -204,7 +204,7 @@ namespace Tests {
         TServerSettings& SetNodeCount(ui32 value) { NodeCount = value; return *this; }
         TServerSettings& SetDynamicNodeCount(ui32 value) { DynamicNodeCount = value; return *this; }
         TServerSettings& SetDataCenterCount(ui32 value) { DataCenterCount = value; return *this; }
-        TServerSettings& SetStorageGeneration(ui64 storageGeneration, bool fetchPoolsGeneration = false) { StorageGeneration = storageGeneration; FetchPoolsGeneration = fetchPoolsGeneration; return *this; }
+        TServerSettings& SetStorageGeneration(ui64 storageGeneration, bool fetchActualGeneration = false) { StorageGeneration = storageGeneration; FetchActualGeneration = fetchActualGeneration; return *this; }
         TServerSettings& SetCustomDiskParams(const NFake::TStorage& value) { CustomDiskParams = value; return *this; }
         TServerSettings& SetControls(const TControls& value) { Controls = value; return *this; }
         TServerSettings& SetFrFactory(const TAppPrepare::TFnReg& value) { FrFactory = value; return *this; }
@@ -708,7 +708,8 @@ namespace Tests {
         TAutoPtr<NMsgBusProxy::TBusResponse> HiveCreateTablet(ui32 domainUid, ui64 owner, ui64 owner_index, TTabletTypes::EType tablet_type,
                 const TVector<ui32>& allowed_node_ids, const TVector<TSubDomainKey>& allowed_domains = {}, const TChannelsBindings& binding = {});
 
-        TString SendTabletMonQuery(TTestActorRuntime* runtime, ui64 tabletId, TString query);
+        template <typename... TArgs>
+        TString SendTabletMonQuery(TTestActorRuntime* runtime, ui64 tabletId, TArgs&&... args);
         TString MarkNodeInHive(TTestActorRuntime* runtime, ui32 nodeIdx, bool up);
         TString KickNodeInHive(TTestActorRuntime* runtime, ui32 nodeIdx);
         bool WaitForTabletAlive(TTestActorRuntime* runtime, ui64 tabletId, bool leader, TDuration timeout);

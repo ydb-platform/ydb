@@ -417,7 +417,7 @@ TEST_P(TReplicationProgressSerializationTest, Simple)
 {
     const auto& params = GetParam();
     auto progress = ConvertTo<TReplicationProgress>(TYsonStringBuf(std::get<0>(params)));
-    auto expected = TString(std::get<1>(params));
+    auto expected = std::string(std::get<1>(params));
 
     auto result = ToString(progress);
 
@@ -463,7 +463,7 @@ TEST_P(TReplicationProgressProjectedSerializationTest, Simple)
     auto progress = ConvertTo<TReplicationProgress>(TYsonStringBuf(std::get<0>(params)));
     auto from = ConvertTo<TUnversionedOwningRow>(TYsonStringBuf(std::get<1>(params)));
     auto to = ConvertTo<TUnversionedOwningRow>(TYsonStringBuf(std::get<2>(params)));
-    auto expected = TString(std::get<3>(params));
+    auto expected = std::string(std::get<3>(params));
 
     TStringBuilder builder;
     FormatValue(&builder, progress, {}, {{from,  to}});

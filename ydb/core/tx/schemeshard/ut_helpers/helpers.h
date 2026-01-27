@@ -397,6 +397,11 @@ namespace NSchemeShardUT_Private {
     void TestMoveSequence(TTestActorRuntime& runtime, ui64 txId, const TString& srcMove, const TString& dstMove, const TVector<TExpectedResult>& expectedResults = {NKikimrScheme::StatusAccepted});
     void TestMoveSequence(TTestActorRuntime& runtime, ui64 schemeShard, ui64 txId, const TString& srcMove, const TString& dstMove, const TVector<TExpectedResult>& expectedResults = {NKikimrScheme::StatusAccepted});
 
+    TEvTx* TruncateTableRequest(ui64 txId, const TString& workingDir, const TString& tableName, ui64 schemeShard, const TApplyIf& applyIf = {});
+    void AsyncTruncateTable(TTestActorRuntime& runtime, ui64 txId, const TString& workingDir, const TString& tableName, ui64 schemeShard);
+    void TestTruncateTable(TTestActorRuntime& runtime, ui64 txId, const TString& workingDir, const TString& tableName, const TVector<TExpectedResult>& expectedResults = {NKikimrScheme::StatusAccepted});
+    void TestTruncateTable(TTestActorRuntime& runtime, ui64 schemeShard, ui64 txId, const TString& workingDir, const TString& tableName, const TVector<TExpectedResult>& expectedResults = {NKikimrScheme::StatusAccepted});
+
     // locks
     TEvTx* LockRequest(ui64 txId, const TString &parentPath, const TString& name);
     void AsyncLock(TTestActorRuntime& runtime, ui64 schemeShard, ui64 txId, const TString& parentPath, const TString& name);
@@ -416,7 +421,7 @@ namespace NSchemeShardUT_Private {
         NKikimrSchemeOp::EIndexType IndexType = NKikimrSchemeOp::EIndexTypeGlobal;
         TVector<TString> IndexColumns;
         TVector<TString> DataColumns;
-        TVector<NYdb::NTable::TGlobalIndexSettings> GlobalIndexSettings = {};
+        TVector<NYdb::NTable::TGlobalIndexSettings> GlobalIndexSettings;
         // implementation note: it was made a pointer, not optional, to enable forward declaration
         std::unique_ptr<NYdb::NTable::TKMeansTreeSettings> KMeansTreeSettings = {};
     };
@@ -431,7 +436,7 @@ namespace NSchemeShardUT_Private {
     void AsyncBuildUniqIndex(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName, const TString &src, const TString &name, TVector<TString> columns, TVector<TString> dataColumns = {});
     void AsyncBuildVectorIndex(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName, const TString &src, const TString &name, TVector<TString> columns, TVector<TString> dataColumns = {});
     void TestBuildColumn(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName,
-        const TString &src, const TString& columnName, const Ydb::TypedValue& literal, Ydb::StatusIds::StatusCode expectedStatus);
+        const TString &src, const TString& columnName, const Ydb::TypedValue& literal, Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
     void TestBuildIndex(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName, const TString &src, const Ydb::Table::TableIndex& index, Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
     void TestBuildIndex(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName, const TString &src, const TBuildIndexConfig &cfg, Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
     void TestBuildIndex(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName, const TString &src, const TString &name, TVector<TString> columns, Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
@@ -592,6 +597,10 @@ namespace NSchemeShardUT_Private {
         const TString& user, const TString& password,
         const TVector<TExpectedResult>& expectedResults = {{NKikimrScheme::StatusSuccess}});
 
+    void CreateAlterLoginCreateUser(TTestActorRuntime& runtime, ui64 txId, const TString& database,
+        const TString& user, const TString& hashedPassword, const TString& hashedPasswordOldFormat,
+        const TVector<TExpectedResult>& expectedResults = {{NKikimrScheme::StatusSuccess}});
+
     void CreateAlterLoginRemoveUser(TTestActorRuntime& runtime, ui64 txId, const TString& database,
         const TString& user,
         const TVector<TExpectedResult>& expectedResults = {{NKikimrScheme::StatusSuccess}});
@@ -612,6 +621,10 @@ namespace NSchemeShardUT_Private {
 
     NKikimrScheme::TEvLoginResult Login(TTestActorRuntime& runtime,
         const TString& user, const TString& password);
+
+    NKikimrScheme::TEvLoginResult Login(TTestActorRuntime& runtime,
+        const TString& user, NLoginProto::ESaslAuthMech::SaslAuthMech authMech,
+        NLoginProto::EHashType::HashType hashType, const TString& hash, const TString& authMessage = "");
 
     NKikimrScheme::TEvLoginResult LoginFinalize(
         TTestActorRuntime& runtime,

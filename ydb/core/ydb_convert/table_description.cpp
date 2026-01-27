@@ -825,6 +825,43 @@ bool FillColumnFamily(
     return true;
 }
 
+
+bool FillColumnCompression(
+    const Ydb::Table::ColumnMeta& from, NKikimrSchemeOp::TOlapColumnDiff* to, Ydb::StatusIds::StatusCode& status, TString& error) {
+    to->SetName(from.name());
+    if (from.has_compression()) {
+        const auto fromCompression = from.compression();
+        auto toSerializer = to->MutableSerializer();
+
+        if (from.compression().algorithm()) {
+            toSerializer->SetClassName("ARROW_SERIALIZER");
+            auto arrowCompression = toSerializer->MutableArrowCompression();
+            switch (fromCompression.algorithm()) {
+                case Ydb::Table::ColumnCompression::ALGORITHM_OFF:
+                    arrowCompression->SetCodec(::NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain);
+                    break;
+                case Ydb::Table::ColumnCompression::ALGORITHM_LZ4:
+                    arrowCompression->SetCodec(::NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4);
+                    break;
+                case Ydb::Table::ColumnCompression::ALGORITHM_ZSTD:
+                    arrowCompression->SetCodec(::NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD);
+                    break;
+
+                default:
+                    status = Ydb::StatusIds::BAD_REQUEST;
+                    error = TStringBuilder() << "Unsupported compression algorithm " << (ui32)fromCompression.Getalgorithm() << " in compression settings";
+                    return false;
+            }
+        }
+
+        if (from.compression().has_compression_level()) {
+            auto arrowCompression = toSerializer->MutableArrowCompression();
+            arrowCompression->SetLevel(fromCompression.compression_level());
+        }
+    }
+    return true;
+}
+
 bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::AlterTableRequest* req,
     NKikimrSchemeOp::TModifyScheme* modifyScheme, Ydb::StatusIds::StatusCode& status, TString& error) {
     const auto ops = GetAlterOperationKinds(req);
@@ -873,6 +910,12 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
 
             if (!alter.family().empty()) {
                 alterColumn->SetColumnFamilyName(alter.family());
+            }
+
+            if (alter.has_compression()) {
+                if (!FillColumnCompression(alter, alterColumn, status, error)) {
+                    return false;
+                }
             }
         }
 
@@ -1100,13 +1143,22 @@ void FillIndexDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TTableDescr
 
             break;
         }
-        case NKikimrSchemeOp::EIndexTypeGlobalFulltext:
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
             FillGlobalIndexSettings(
-                *index->mutable_global_fulltext_index()->mutable_settings(),
+                *index->mutable_global_fulltext_plain_index()->mutable_settings(),
                 tableIndex.GetIndexImplTableDescriptions(0)
             );
 
-            *index->mutable_global_fulltext_index()->mutable_fulltext_settings() = tableIndex.GetFulltextIndexDescription().GetSettings();
+            *index->mutable_global_fulltext_plain_index()->mutable_fulltext_settings() = tableIndex.GetFulltextIndexDescription().GetSettings();
+
+            break;
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
+            FillGlobalIndexSettings(
+                *index->mutable_global_fulltext_relevance_index()->mutable_settings(),
+                tableIndex.GetIndexImplTableDescriptions(0)
+            );
+
+            *index->mutable_global_fulltext_relevance_index()->mutable_fulltext_settings() = tableIndex.GetFulltextIndexDescription().GetSettings();
 
             break;
         default:
@@ -1182,9 +1234,14 @@ bool FillIndexDescription(NKikimrSchemeOp::TIndexedTableCreationConfig& out,
             *indexDesc->MutableVectorIndexKmeansTreeDescription()->MutableSettings() = index.global_vector_kmeans_tree_index().vector_settings();
             break;
 
-        case Ydb::Table::TableIndex::kGlobalFulltextIndex:
-            indexDesc->SetType(NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltext);
-            *indexDesc->MutableFulltextIndexDescription()->MutableSettings() = index.global_fulltext_index().fulltext_settings();
+        case Ydb::Table::TableIndex::kGlobalFulltextPlainIndex:
+            indexDesc->SetType(NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextPlain);
+            *indexDesc->MutableFulltextIndexDescription()->MutableSettings() = index.global_fulltext_plain_index().fulltext_settings();
+            break;
+
+        case Ydb::Table::TableIndex::kGlobalFulltextRelevanceIndex:
+            indexDesc->SetType(NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextRelevance);
+            *indexDesc->MutableFulltextIndexDescription()->MutableSettings() = index.global_fulltext_relevance_index().fulltext_settings();
             break;
 
         case Ydb::Table::TableIndex::TYPE_NOT_SET:

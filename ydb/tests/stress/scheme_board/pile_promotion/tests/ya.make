@@ -1,5 +1,5 @@
 PY3TEST()
-INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 ENV(STRESS_TEST_UTILITY="ydb/tests/stress/scheme_board/pile_promotion/pile_promotion_workload")
 
 TEST_SRCS(

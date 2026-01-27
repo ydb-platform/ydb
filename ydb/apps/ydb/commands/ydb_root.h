@@ -2,8 +2,7 @@
 
 #include <ydb/public/lib/ydb_cli/commands/ydb_root_common.h>
 
-namespace NYdb {
-namespace NConsoleClient {
+namespace NYdb::NConsoleClient {
 
 class TClientCommandRoot : public TClientCommandRootCommon {
 public:
@@ -23,5 +22,4 @@ public:
 
 int NewYdbClient(int argc, char** argv);
 
-}
-}
+} // namespace NYdb::NConsoleClient

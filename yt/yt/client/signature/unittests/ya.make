@@ -4,6 +4,8 @@ INCLUDE(${ARCADIA_ROOT}/yt/ya_cpp.make.inc)
 
 SRCS(
     dummy_ut.cpp
+    dynamic_ut.cpp
+    provided_ut.cpp
     signature_ut.cpp
 )
 

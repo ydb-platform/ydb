@@ -5,7 +5,8 @@ from ydb.tests.oss.ydb_sdk_import import ydb
 
 
 pytest_plugins = ['ydb.tests.library.fixtures', 'ydb.tests.library.flavours']
-DATABASE = "/Root/test"
+ROOT = "/Root"
+DATABASE = f"{ROOT}/test"
 USE_SECRET_GRANTS = ["ydb.granular.describe_schema", "ydb.granular.select_row"]
 ALTER_SECRET_GRANTS = ["ydb.granular.describe_schema", "ydb.granular.alter_schema"]
 DROP_SECRET_GRANTS = ["ydb.granular.describe_schema", "ydb.granular.remove_schema"]
@@ -86,3 +87,10 @@ def create_secrets(user_config, secret_paths, secret_values):
         query += f"CREATE SECRET `{secret_path}` WITH ( value='{secret_value}' );\n"
 
     run_with_assert(user_config, query)
+
+
+def write_message_to_topic(user_config, topic_name, messages_cnt):
+    with ydb.Driver(user_config) as driver:
+        with driver.topic_client.writer(topic_name) as writer:
+            writer.write(ydb.TopicWriterMessage(f'message # {messages_cnt}'))
+    return messages_cnt + 1

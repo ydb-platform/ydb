@@ -100,15 +100,6 @@ template <class TContainer, class... TArgs>
 auto EmplaceOrCrash(TContainer&& container, TArgs&&... args);
 
 /*!
- * This function is supposed to replace a frequent pattern
- *    YT_VERIFY(map.try_emplace(key, value).second);
- * with
- *    TryEmplaceOrCrash(map, key, value);
- */
-template <class TContainer, class... TArgs>
-auto TryEmplaceOrCrash(TContainer&& container, TArgs&&... args);
-
-/*!
  * This function emplaces default value at the given key.
  */
 template <class TMap, class TKey>

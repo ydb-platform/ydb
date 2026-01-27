@@ -8,7 +8,7 @@
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/public/udf/arrow/args_dechunker.h>
 #include <yql/essentials/public/udf/arrow/block_builder.h>
-
+#include <ydb/library/yql/dq/comp_nodes/hash_join_utils/print_unboxed_value.h>
 namespace NKikimr::NMiniKQL {
 namespace {
 bool IsOptionalOrNull(const TType* type) {
@@ -229,6 +229,7 @@ void CompareVectorsIgnoringOrder(const TType* type, TVector<NYql::NUdf::TUnboxed
     const auto itemType = AS_TYPE(TListType, type)->GetItemType();
     const NUdf::ICompare::TPtr compare = MakeCompareImpl(itemType);
     const NUdf::IEquate::TPtr equate = MakeEquateImpl(itemType);
+    const IPrint::TPtr print = MakePrinter(itemType);
     // XXX: Stub both keyTypes and isTuple arguments, since
     // ICompare/IEquate are used.
     TKeyTypes keyTypesStub;
@@ -240,7 +241,7 @@ void CompareVectorsIgnoringOrder(const TType* type, TVector<NYql::NUdf::TUnboxed
     Sort(expectedItems, valueLess);
     Sort(gotItems, valueLess);
     for (size_t i = 0; i < expectedItems.size(); i++) {
-        UNIT_ASSERT(valueEqual(gotItems[i], expectedItems[i]));
+        UNIT_ASSERT_C(valueEqual(gotItems[i], expectedItems[i]), std::format("index {}: {} vs {}", i, print->Stringify(gotItems[i]), print->Stringify(expectedItems[i])));
     }
 }
 

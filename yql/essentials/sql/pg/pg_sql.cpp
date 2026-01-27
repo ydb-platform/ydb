@@ -413,7 +413,7 @@ public:
         }
     }
 
-    void OnResult(const List* raw) {
+    void OnResult(const List* raw) override {
         if (!PerStatementResult_) {
             AstParseResults_[StatementId_].Pool = std::make_unique<TMemoryPool>(4096);
             AstParseResults_[StatementId_].Root = ParseResult(raw);
@@ -432,7 +432,7 @@ public:
         }
     }
 
-    void OnError(const TIssue& issue) {
+    void OnError(const TIssue& issue) override {
         AstParseResults_[StatementId_].Issues.AddIssue(issue);
     }
 
@@ -6208,7 +6208,7 @@ public:
 
 class TSystemFunctionsHandler: public IPGParseEvents {
 public:
-    TSystemFunctionsHandler(TVector<NPg::TProcDesc>& procs)
+    explicit TSystemFunctionsHandler(TVector<NPg::TProcDesc>& procs)
         : Procs_(procs)
     {
     }

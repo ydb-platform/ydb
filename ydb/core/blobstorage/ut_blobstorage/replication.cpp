@@ -457,7 +457,7 @@ Y_UNIT_TEST_SUITE(ReplicationSpace) {
                 occupancy = 1 - res->Get()->Record.GetApproximateFreeSpaceShare();
                 isReplicated = res->Get()->Record.GetReplicated();
             });
-    
+
             return { occupancy, isReplicated };
         };
 
@@ -546,7 +546,7 @@ Y_UNIT_TEST_SUITE(ReplicationSpace) {
         }
 
         Ctest << "Evicting second VDisk" << Endl;
-    
+
         // wait for replication
         ctx.Env->Sim(TDuration::Hours(12));
 

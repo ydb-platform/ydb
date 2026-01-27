@@ -17,6 +17,12 @@ PY_SRCS(
     cyson/__init__.py
 )
 
+IF (PYTHON2)
+    CYTHON_FLAGS(-EPYTHON2=1)
+ELSE()
+    CYTHON_FLAGS(-EPYTHON2=0)
+ENDIF()
+
 END()
 
 RECURSE(

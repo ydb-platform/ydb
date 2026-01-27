@@ -1,7 +1,5 @@
 #pragma once
 
-#include "account_read_quoter.h"
-
 #include "working_time_counter.h"
 #include "subscriber.h"
 #include <ydb/core/persqueue/public/counters/percentile_counter.h>
@@ -34,8 +32,6 @@ namespace NDeprecatedUserData {
 
 static const ui32 MAX_USER_TS_CACHE_SIZE = 10'000;
 static const ui64 MIN_TIMESTAMP_MS = 1'000'000'000'000ll; // around 2002 year
-
-typedef TProtobufTabletLabeledCounters<EClientLabeledCounters_descriptor> TUserLabeledCounters;
 
 struct TMessageInfo {
     TInstant CreateTimestamp;
@@ -145,7 +141,7 @@ public:
     std::deque<std::pair<ui64, std::pair<TInstant, TInstant>>> Cache;
 
     bool HasReadRule = false;
-    THolder<TUserLabeledCounters> LabeledCounters;
+    std::optional<TTabletLabeledCountersBase> LabeledCounters;
     NPersQueue::TTopicConverterPtr TopicConverter;
 
     TWorkingTimeCounter Counter;
@@ -196,8 +192,7 @@ public:
         const TString& DbId,
         const TString& DbPath,
         const bool isServerless,
-        const TString& FolderId,
-        const TString& MonitoringProjectId);
+        const TString& FolderId);
 
     void Init(TActorId tabletActor, TActorId partitionActor, const TActorContext& ctx);
 
@@ -243,7 +238,6 @@ public:
     ::NMonitoring::TDynamicCounterPtr GetPartitionCounterSubgroup(const TActorContext& ctx) const;
     void SetupDetailedMetrics(const TActorContext& ctx);
     void ResetDetailedMetrics();
-    bool DetailedMetricsAreEnabled() const;
 
     void SetImportant(TUserInfo& userInfo, bool important, TDuration availabilityPeriod);
 
@@ -285,7 +279,6 @@ private:
     TString DbPath;
     bool IsServerless;
     TString FolderId;
-    TString MonitoringProjectId;
     mutable ui64 CurReadRuleGeneration;
 };
 

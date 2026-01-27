@@ -255,7 +255,7 @@ THashMap<ui64, std::shared_ptr<arrow::RecordBatch>> IShardingBase::SplitByShards
 
 TConclusion<THashMap<ui64, std::vector<NArrow::TSerializedBatch>>> IShardingBase::SplitByShards(const std::shared_ptr<arrow::RecordBatch>& batch, const ui64 chunkBytesLimit) {
     auto splitted = SplitByShardsToArrowBatches(batch);
-    NArrow::TBatchSplitttingContext context(chunkBytesLimit);
+    NArrow::TBatchSplittingContext context(chunkBytesLimit);
     THashMap<ui64, std::vector<NArrow::TSerializedBatch>> result;
     for (auto&& [tabletId, chunk] : splitted) {
         if (!chunk) {

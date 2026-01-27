@@ -5,5 +5,7 @@ if [ "${DEBUG}" = "true" ]; then
     set -x
 fi
 
-/ydb config profile activate local >/dev/null 2>&1 || true
-/ydb --no-discovery monitoring healthcheck | grep -q GOOD || exit 1
+/ydb --endpoint grpc://localhost:${GRPC_PORT} --database /local --no-discovery sql -s "select 1" >/dev/null
+/ydb --endpoint grpc://localhost:${GRPC_PORT} --database /local --no-discovery scheme ls /local >/dev/null
+/ydb --endpoint grpc://localhost:${GRPC_PORT} --database /local --no-discovery sql -s 'create table if not exists `/local/.sys_health/test` (key int32, value utf8, primary key(key))' >/dev/null
+/ydb --endpoint grpc://localhost:${GRPC_PORT} --database /local --no-discovery sql -s 'drop table `/local/.sys_health/test`' >/dev/null

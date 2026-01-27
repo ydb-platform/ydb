@@ -414,6 +414,19 @@ void FromProtoArrayImpl(
 }
 
 // Does not check for duplicates.
+template <class TOriginal, size_t N, class TSerializedArray>
+void FromProtoArrayImpl(
+    TCompactFlatSet<TOriginal, N>* originalArray,
+    const TSerializedArray& serializedArray)
+{
+    originalArray->clear();
+    originalArray->reserve(serializedArray.size());
+    for (int i = 0; i < serializedArray.size(); ++i) {
+        originalArray->insert(FromProto<TOriginal>(serializedArray.Get(i)));
+    }
+}
+
+// Does not check for duplicates.
 template <class TOriginalKey, class TOriginalValue, class TSerializedArray>
 void FromProtoArrayImpl(
     THashMap<TOriginalKey, TOriginalValue>* originalArray,

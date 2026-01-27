@@ -86,6 +86,7 @@ sql_stmt_core:
   | create_secret_stmt
   | alter_secret_stmt
   | drop_secret_stmt
+  | truncate_table_stmt
 ;
 
 expr:
@@ -248,7 +249,7 @@ smart_parenthesis: LPAREN (select_subexpr | COMMA?) RPAREN;
 
 expr_list: expr (COMMA expr)*;
 
-pure_column_list: LPAREN an_id (COMMA an_id)* RPAREN;
+pure_column_list: LPAREN an_id (COMMA an_id)* COMMA? RPAREN;
 
 pure_column_or_named: bind_parameter | an_id;
 pure_column_or_named_list: LPAREN pure_column_or_named (COMMA pure_column_or_named)* RPAREN;
@@ -591,7 +592,16 @@ repeatable_clause: REPEATABLE LPAREN expr RPAREN;
 
 join_op:
     COMMA
-  | (NATURAL)? ((LEFT (ONLY | SEMI)? | RIGHT (ONLY | SEMI)? | EXCLUSION | FULL)? (OUTER)? | INNER | CROSS) JOIN
+  | (NATURAL)? (
+      (
+          LEFT  (ONLY | SEMI)?
+        | RIGHT (ONLY | SEMI)?
+        | EXCLUSION
+        | FULL
+      )? (OUTER)?
+      | INNER
+      | CROSS
+    ) JOIN
 ;
 
 join_constraint:
@@ -611,7 +621,7 @@ into_values_source:
 values_stmt: VALUES values_source_row_list;
 
 values_source: values_stmt | select_stmt;
-values_source_row_list: values_source_row (COMMA values_source_row)*;
+values_source_row_list: values_source_row (COMMA values_source_row)* COMMA?;
 values_source_row: LPAREN expr_list RPAREN;
 
 create_external_data_source_stmt: CREATE (OR REPLACE)? EXTERNAL DATA SOURCE (IF NOT EXISTS)? object_ref
@@ -651,6 +661,7 @@ streaming_query_setting_value:
     id_or_type
   | STRING_VALUE
   | bool_value
+  | streaming_query_settings
 ;
 
 streaming_query_definition: AS DO inline_action;
@@ -749,6 +760,9 @@ database_setting_value:
   | integer
   | STRING_VALUE
 ;
+
+truncate_table_stmt: TRUNCATE TABLE simple_table_ref with_truncate_table_settings?;
+with_truncate_table_settings: WITH LPAREN RPAREN;
 
 table_inherits: INHERITS LPAREN simple_table_ref_core (COMMA simple_table_ref_core)* RPAREN;
 table_partition_by: PARTITION BY HASH pure_column_list;
@@ -1613,6 +1627,7 @@ keyword_as_compat:
   | TRANSACTION
   | TRANSFER
   | TRIGGER
+  | TRUNCATE
   | TYPE
   | UNCONDITIONAL
   | UNIQUE
@@ -1848,6 +1863,7 @@ keyword_compat: (
   | TRANSACTION
   | TRANSFER
   | TRIGGER
+  | TRUNCATE
   | TYPE
   | UNCONDITIONAL
   | UNIQUE
@@ -2238,6 +2254,7 @@ TRANSACTION: T R A N S A C T I O N;
 TRANSFER: T R A N S F E R;
 TRIGGER: T R I G G E R;
 TRUE: T R U E;
+TRUNCATE: T R U N C A T E;
 TUPLE: T U P L E;
 TYPE: T Y P E;
 UNBOUNDED: U N B O U N D E D;

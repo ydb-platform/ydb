@@ -120,6 +120,32 @@ const THashMap<TString, TString>* TDataProviderBase::GetClusterTokens() {
     return nullptr;
 }
 
+TMaybe<TString> TDataProviderBase::ResolveClusterToken(const TString& cluster) {
+    if (auto* tokens = GetClusterTokens()) {
+        if (auto* token = tokens->FindPtr(cluster)) {
+            return *token;
+        }
+    }
+
+    return {};
+}
+
+// TODO: drop this compatibility implementation once all descendants
+// provide their own overloads
+const THashSet<TString>& TDataProviderBase::GetValidClusters() {
+    if (ValidClusters_) {
+        return ValidClusters_;
+    }
+
+    if (auto* tokens = GetClusterTokens()) {
+        for (const auto& [clusterName, _] : *tokens) {
+            ValidClusters_.emplace(clusterName);
+        }
+    }
+
+    return ValidClusters_;
+}
+
 IGraphTransformer& TDataProviderBase::GetIODiscoveryTransformer() {
     return NullTransformer_;
 }

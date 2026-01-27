@@ -8,7 +8,7 @@ on:
       branches:
         description: 'Comma-separated list of branches to process'
         required: false
-        default: 'main,stable-25-2,stable-25-2-1,stable-25-3,stable-25-3-1,stream-nb-25-1'
+        default: 'main,stable-25-2,stable-25-2-1,stable-25-3,stable-25-3-1,stable-25-4,stable-25-4-1,stream-nb-25-1'
 
 env:
   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -29,7 +29,7 @@ jobs:
           if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
             echo "branches=$(echo '${{ github.event.inputs.branches }}' | jq -R -s -c 'split(",")')" >> $GITHUB_OUTPUT
           else
-            echo "branches=$(echo '["main","stable-25-2","stable-25-2-1","stable-25-3","stable-25-3-1","stream-nb-25-1"]' | jq -c .)" >> $GITHUB_OUTPUT
+            echo "branches=$(echo '["main","stable-25-2","stable-25-2-1","stable-25-3","stable-25-3-1","stable-25-4","stable-25-4-1","stream-nb-25-1"]' | jq -c .)" >> $GITHUB_OUTPUT
           fi
 
   collect-testowners:
@@ -71,6 +71,7 @@ jobs:
       - name: Checkout main branch
         uses: actions/checkout@v4
         with:
+          token: ${{ secrets.YDBOT_TOKEN }}
           ref: main
           fetch-depth: 0
 
@@ -96,7 +97,7 @@ jobs:
         run: python3 .github/scripts/analytics/flaky_tests_history.py --branch=${{ env.BASE_BRANCH }} --build_type=${{ env.BUILD_TYPE }}
       
       - name: Update muted tests in DB
-        run: python3 .github/scripts/tests/get_muted_tests.py upload_muted_tests --branch=${{ env.BASE_BRANCH }} --build_type=${{ env.BUILD_TYPE }} 
+        run: python3 .github/scripts/tests/get_muted_tests.py upload_muted_tests --branch=${{ env.BASE_BRANCH }} --build_type=${{ env.BUILD_TYPE }} --muted_ya_file=base_muted_ya.txt 
       
       - name: Update test monitor
         run: python3 .github/scripts/analytics/tests_monitor.py --branch=${{ env.BASE_BRANCH }} --build_type=${{ env.BUILD_TYPE }}
@@ -206,11 +207,34 @@ jobs:
 
       - name: Push PR branch
         if: env.changes == 'true'
-        uses: ad-m/github-push-action@v0.8.0
-        with:
-          github_token: ${{ secrets.YDBOT_TOKEN }}
-          branch: ${{ env.PR_BRANCH }}
-          force: true
+        run: |
+          # Retry logic for transient GitHub API timeouts
+          MAX_RETRIES=5
+          RETRY_DELAY=10
+          ATTEMPT=1
+          
+          while [ $ATTEMPT -le $MAX_RETRIES ]; do
+            echo "Attempt $ATTEMPT of $MAX_RETRIES to push branch ${{ env.PR_BRANCH }}"
+            
+            if git push origin ${{ env.PR_BRANCH }} --force; then
+              echo "✓ Successfully pushed branch ${{ env.PR_BRANCH }}"
+              exit 0
+            else
+              EXIT_CODE=$?
+              echo "⚠️  Push failed with exit code $EXIT_CODE"
+              
+              if [ $ATTEMPT -lt $MAX_RETRIES ]; then
+                echo "Waiting ${RETRY_DELAY} seconds before retry..."
+                sleep $RETRY_DELAY
+                RETRY_DELAY=$((RETRY_DELAY * 2))  # Exponential backoff
+              else
+                echo "❌ Failed to push after $MAX_RETRIES attempts"
+                exit $EXIT_CODE
+              fi
+            fi
+            
+            ATTEMPT=$((ATTEMPT + 1))
+          done
 
       - name: Create or update PR
         if: env.changes == 'true'

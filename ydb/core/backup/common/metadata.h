@@ -41,6 +41,11 @@ struct TChangefeedMetadata {
     TString Name;
 };
 
+struct TIndexMetadata {
+    TString ExportPrefix;
+    TString ImplTablePrefix;
+};
+
 class TMetadata {
 public:
     TMetadata() = default;
@@ -52,8 +57,12 @@ public:
     void SetVersion(ui64 version);
     bool HasVersion() const;
     ui64 GetVersion() const;
+
     void AddChangefeed(const TChangefeedMetadata& changefeed);
     const std::optional<std::vector<TChangefeedMetadata>>& GetChangefeeds() const;
+
+    void AddIndex(const TIndexMetadata& index);
+    const std::optional<std::vector<TIndexMetadata>>& GetIndexes() const;
 
     void SetEnablePermissions(bool enablePermissions = true);
     bool HasEnablePermissions() const;
@@ -73,6 +82,12 @@ private:
     // []: The export has no changefeeds
     // [...]: The export must have all changefeeds listed here
     std::optional<std::vector<TChangefeedMetadata>> Changefeeds;
+
+    // Indexes:
+    // Undefined (previous versions): we don't know if we see the export with _materialized_ indexes or without them, so list suitable S3 files to find out all materialized indexes
+    // []: The export has no materialized indexes
+    // [...]: The export must have all materialized indexes listed here
+    std::optional<std::vector<TIndexMetadata>> Indexes;
 
     // EnablePermissions:
     // Undefined (previous versions): we don't know if we see the export with permissions or without them, so check S3 for the permissions file existence

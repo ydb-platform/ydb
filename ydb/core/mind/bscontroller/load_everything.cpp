@@ -228,7 +228,8 @@ public:
                                                    storagePoolId,
                                                    std::get<0>(geom),
                                                    std::get<1>(geom),
-                                                   std::get<2>(geom));
+                                                   std::get<2>(geom),
+                                                   false /* ddisk, will fill in later */);
 
                 group.DecommitStatus = groups.GetValueOrDefault<T::DecommitStatus>();
                 if (group.DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::DONE) {
@@ -353,9 +354,7 @@ public:
                     Self->DefaultMaxSlots, disks.GetValue<T::Status>(), disks.GetValue<T::Timestamp>(),
                     disks.GetValue<T::DecommitStatus>(), disks.GetValue<T::Mood>(), disks.GetValue<T::ExpectedSerial>(),
                     disks.GetValue<T::LastSeenSerial>(), disks.GetValue<T::LastSeenPath>(), staticSlotUsage,
-                    disks.GetValueOrDefault<T::ShredComplete>(), disks.GetValueOrDefault<T::MaintenanceStatus>(),
-                    disks.GetValueOrDefault<T::InferPDiskSlotCountFromUnitSize>(),
-                    disks.GetValueOrDefault<T::InferPDiskSlotCountMax>());
+                    disks.GetValueOrDefault<T::ShredComplete>(), disks.GetValueOrDefault<T::MaintenanceStatus>());
 
                 if (!disks.Next())
                     return false;
@@ -404,7 +403,7 @@ public:
                     slot.GetValue<T::GroupGeneration>(), slot.GetValue<T::Category>(), slot.GetValue<T::RingIdx>(),
                     slot.GetValue<T::FailDomainIdx>(), slot.GetValue<T::VDiskIdx>(), slot.GetValueOrDefault<T::Mood>(),
                     Self->FindGroup(groupId), &Self->VSlotReadyTimestampQ, slot.GetValue<T::LastSeenReady>(),
-                    slot.GetValue<T::ReplicationTime>());
+                    slot.GetValue<T::ReplicationTime>(), slot.GetValueOrDefault<T::DDiskNumVChunksClaimed>(0));
                 if (x.LastSeenReady != TInstant::Zero()) {
                     Self->NotReadyVSlotIds.insert(x.VSlotId);
                 }
@@ -580,6 +579,13 @@ public:
             });
         }
 
+        // fill in DDisk property for groups
+        for (const auto& [id, group] : Self->GroupMap) {
+            const auto it = Self->StoragePools.find(group->StoragePoolId);
+            Y_ABORT_UNLESS(it != Self->StoragePools.end());
+            group->DDisk = it->second.DDisk;
+        }
+
         // primitive garbage collection for obsolete metrics
         for (const auto& key : pdiskMetricsToDelete) {
             db.Table<Schema::PDiskMetrics>().Key(key).Delete();
@@ -690,7 +696,7 @@ public:
                 }
 
                 NKikimrBlobStorage::TGroupInfo proto;
-                SerializeGroupInfo(&proto, *groupInfo, info.Name, scopeId);
+                SerializeGroupInfo(&proto, *groupInfo, info, scopeId);
                 const bool success = proto.SerializeToString(kvp->MutableValue());
                 Y_DEBUG_ABORT_UNLESS(success);
             }

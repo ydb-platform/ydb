@@ -8,6 +8,7 @@
 #include <library/cpp/digest/md5/md5.h>
 
 #include <util/system/hostname.h>
+#include <util/system/unaligned_mem.h>
 
 #include <format>
 
@@ -57,5 +58,108 @@ namespace NKikimr::NSqsTopic {
             res << (EqualToOneOf(i, 4, 6, 8, 10) ? "-" : "") << Hex(digest[i], HF_FULL);
         }
         return res;
+    }
+
+    TVector<std::pair<TString, TString>> GetMetricsLabels(
+        const TString& databasePath,
+        const TString& topicPath,
+        const TString& consumerName,
+        const TString& method,
+        TVector<std::pair<TString, TString>>&& labels
+    ) {
+        TString fullDatabasePath = databasePath + "/";
+        TString adjustedTopicPath;
+        if (topicPath.StartsWith(fullDatabasePath)) {
+            adjustedTopicPath = topicPath.substr(fullDatabasePath.size());
+        } else {
+            adjustedTopicPath = topicPath;
+        }
+
+        TVector<std::pair<TString, TString>> common{
+            {"database", databasePath},
+            {"method", method},
+            {"topic", adjustedTopicPath},
+            {"consumer", consumerName},
+        };
+        std::move(labels.begin(), labels.end(), std::back_inserter(common));
+        return common;
+    }
+
+    TVector<std::pair<TString, TString>> GetRequestMessageCountMetricsLabels(
+        const TString& databasePath,
+        const TString& topicPath,
+        const TString& consumer,
+        const TString& method
+    ) {
+        return GetMetricsLabels(
+            databasePath,
+            topicPath,
+            consumer,
+            method,
+            {
+                {"name", "api.sqs.request.message_count"}
+            }
+        );
+    }
+
+    TVector<std::pair<TString, TString>> GetResponseMessageCountMetricsLabels(
+        const TString& databasePath,
+        const TString& topicPath,
+        const TString& consumer,
+        const TString& method,
+        const TString& status
+    ) {
+        return GetMetricsLabels(
+            databasePath,
+            topicPath,
+            consumer,
+            method,
+            {
+                {"name", "api.sqs.response.message_count"},
+                {"status", status}
+            }
+        );
+    }
+
+    TVector<std::pair<TString, TString>> GetResponseEmptyCountMetricsLabels(
+        const TString& databasePath,
+        const TString& topicPath,
+        const TString& consumer,
+        const TString& method
+    ) {
+        return GetMetricsLabels(
+            databasePath,
+            topicPath,
+            consumer,
+            method,
+            {
+                {"name", "api.sqs.response.empty_count"}
+            }
+        );
+    }
+
+    TVector<std::pair<TString, TString>> GetRequestSizeMetricsLabels(
+        const TString& databasePath,
+        const TString& topicPath,
+        const TString& consumer,
+        const TString& method
+    ) {
+        return GetMetricsLabels(
+            databasePath,
+            topicPath,
+            consumer,
+            method,
+            {
+                {"name", "api.sqs.request.bytes"}
+            }
+        );
+    }
+
+
+    ui64 SampleIdFromRequestId(const TStringBuf requestId) {
+        if (sizeof(ui64) <= requestId.size()) [[likely]] {
+            return ReadUnaligned<ui64>(requestId.data());
+        }
+        return 0;
     }
 } // namespace NKikimr::NSqsTopic

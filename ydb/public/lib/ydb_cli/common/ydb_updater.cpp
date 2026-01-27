@@ -1,4 +1,6 @@
 #include "ydb_updater.h"
+#include "download_manager.h"
+#include "progress_bar.h"
 
 #include <library/cpp/json/writer/json.h>
 #include <library/cpp/resource/resource.h>
@@ -12,6 +14,7 @@
 #include <util/system/execpath.h>
 #include <util/system/shellcommand.h>
 #include <library/cpp/colorizer/output.h>
+#include <ydb/public/lib/ydb_cli/common/colors.h>
 
 #ifndef _win32_
 #include <sys/utsname.h>
@@ -86,10 +89,23 @@ int TYdbUpdater::Update(bool forceUpdate) {
     const TString downloadUrl = TStringBuilder() << StorageUrl << '/' << LatestVersion << '/' << osVersion
         << '/' << osArch << '/' << binaryName;
     Cout << "Downloading binary from url " << downloadUrl << Endl;
-    TShellCommand curlCmd(TStringBuilder() << "curl --connect-timeout 60 " << downloadUrl << " -o " << tmpPathToBinary.GetPath());
-    curlCmd.Run().Wait();
-    if (curlCmd.GetExitCode() != 0) {
-        Cerr << "Failed to download from url \"" << downloadUrl << "\". " << curlCmd.GetError() << Endl;
+
+    TBytesProgressBar progressBar;
+    TDownloadResult downloadResult = DownloadFile(
+        downloadUrl,
+        tmpPathToBinary.GetPath(),
+        [&progressBar](ui64 downloaded, ui64 total) {
+            if (total > 0 && progressBar.GetTotalBytes() == 0) {
+                progressBar.SetTotal(total);
+            }
+            progressBar.SetProgress(downloaded);
+        }
+    );
+
+    if (!downloadResult.Success) {
+        Cerr << Endl << "Failed to download from url \"" << downloadUrl << "\". " << downloadResult.ErrorMessage << Endl;
+        Cerr << "If the problem persists, consider reinstalling YDB CLI: https://ydb.tech/docs/en/reference/ydb-cli/install" << Endl;
+        tmpPathToBinary.DeleteIfExists();
         return EXIT_FAILURE;
     }
     Cout << "Downloaded to " << tmpPathToBinary.GetPath() << Endl;
@@ -207,8 +223,7 @@ bool TYdbUpdater::GetLatestVersion() {
         SetConfigValue("last_check", TInstant::Now().Seconds());
         return true;
     }
-    Cerr << "(!) Couldn't get latest version from url \"" << versionUrl << "\". " << curlCmd.GetError() << Endl
-        << "You can disable further version checks with 'ydb version --disable-checks' command." << Endl;
+    Cerr << "(!) Couldn't get latest version from url \"" << versionUrl << "\". " << curlCmd.GetError() << Endl;
     return false;
 }
 
@@ -219,16 +234,17 @@ void TYdbUpdater::PrintUpdateMessageIfNeeded(bool forceVersionCheck) {
         return;
     }
     if (!GetLatestVersion()) {
+        Cerr << "You can disable further version checks with 'ydb version --disable-checks' command." << Endl;
         return;
     }
     if (MyVersion != LatestVersion) {
-        NColorizer::TColors colors = NColorizer::AutoColors(Cerr);
+        NColorizer::TColors colors = NConsoleClient::AutoColors(Cerr);
         Cerr << colors.Green() << "(!) New version of YDB CLI is available. Current version: \"" << MyVersion
             << "\", Latest recommended version available: \"" << LatestVersion << "\". Run 'ydb update' command for update. "
             << "You can also disable further version checks with 'ydb version --disable-checks' command."
             << colors.OldColor() << Endl;
     } else if (forceVersionCheck) {
-        NColorizer::TColors colors = NColorizer::AutoColors(Cerr);
+        NColorizer::TColors colors = NConsoleClient::AutoColors(Cerr);
         Cerr << colors.GreenColor() << "Current version is up to date"
             << colors.OldColor() << Endl;
     }

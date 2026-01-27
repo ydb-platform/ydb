@@ -21,7 +21,7 @@ constexpr auto SmallRankToSize = std::to_array<size_t>({
     0,
     16, 32, 48, 64, 96, 128,
     192, 256, 384, 512, 768, 1024, 1536, 2048,
-    3072, 4096, 6144, 8192, 12288, 16384, 24576, 32768
+    3072, 4096, 6144, 8192, 12288, 16384, 24576, 32768,
 });
 
 // Helper array for mapping size to small chunk rank.
@@ -533,4 +533,3 @@ void TSlabAllocator::Free(void* ptr)
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT
-

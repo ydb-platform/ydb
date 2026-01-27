@@ -238,7 +238,7 @@ public:
 
         TIssues issues { TIssue(metricsReadError->Get()->Record.GetIssues()) };
         SOURCE_LOG_W("Got " << "error list metrics response[" << metricsReadError->Cookie << "] from solomon: " << issues.ToOneLineString());
-        Send(ComputeActorId, new TEvAsyncInputError(InputIndex, issues, NYql::NDqProto::StatusIds::EXTERNAL_ERROR));
+        Send(ComputeActorId, new TEvAsyncInputError(InputIndex, issues, NYql::NDqProto::StatusIds::BAD_REQUEST));
         return;
     }
 
@@ -248,7 +248,7 @@ public:
         if (batch.Response.Status != NSo::EStatus::STATUS_OK) {
             TIssues issues { TIssue(batch.Response.Error) };
             SOURCE_LOG_W("Got " << "error points count response[" << pointsCountBatch->Cookie << "] from solomon: " << issues.ToOneLineString());
-            Send(ComputeActorId, new TEvAsyncInputError(InputIndex, issues, NYql::NDqProto::StatusIds::EXTERNAL_ERROR));
+            Send(ComputeActorId, new TEvAsyncInputError(InputIndex, issues, NYql::NDqProto::StatusIds::BAD_REQUEST));
             return;
         }
 
@@ -282,10 +282,14 @@ public:
         NThreading::TFuture<NSo::TGetDataResponse> dataRequestFuture;
         
         auto request = std::move(retryDataEvent.Request);
-        if (UseMetricsQueue) {
-            dataRequestFuture = SolomonClient->GetData(request.Selectors, request.From, request.To);
-        } else {
-            dataRequestFuture = SolomonClient->GetData(request.Program, request.From, request.To);
+        try {
+            if (UseMetricsQueue) {
+                dataRequestFuture = SolomonClient->GetData(request.Selectors, request.From, request.To);
+            } else {
+                dataRequestFuture = SolomonClient->GetData(request.Program, request.From, request.To);
+            }
+        } catch (const std::exception& ex) {
+            dataRequestFuture = NThreading::MakeFuture(NSo::TGetDataResponse(TString(ex.what())));
         }
 
         dataRequestFuture.Subscribe([request = std::move(request), actorSystem = TActivationContext::ActorSystem(), selfId = SelfId()](
@@ -502,10 +506,14 @@ private:
         MetricsWithTimeRange.pop_back();
         CurrentInflight++;
 
-        if (UseMetricsQueue) {
-            dataRequestFuture = SolomonClient->GetData(request.Selectors, request.From, request.To);
-        } else {
-            dataRequestFuture = SolomonClient->GetData(request.Program, request.From, request.To);
+        try {
+            if (UseMetricsQueue) {
+                dataRequestFuture = SolomonClient->GetData(request.Selectors, request.From, request.To);
+            } else {
+                dataRequestFuture = SolomonClient->GetData(request.Program, request.From, request.To);
+            }
+        } catch (const std::exception& ex) {
+            dataRequestFuture = NThreading::MakeFuture(NSo::TGetDataResponse(TString(ex.what())));
         }
 
         PendingDataRequests_[request] = RetryPolicy->CreateRetryState();
@@ -573,7 +581,7 @@ private:
         if (batch.Response.Status != NSo::EStatus::STATUS_OK) {
             TIssues issues { TIssue(batch.Response.Error) };
             SOURCE_LOG_W("Got " << "error data response[" << newDataBatch->Cookie << "] from solomon: " << issues.ToOneLineString());
-            Send(ComputeActorId, new TEvAsyncInputError(InputIndex, issues, NYql::NDqProto::StatusIds::EXTERNAL_ERROR));
+            Send(ComputeActorId, new TEvAsyncInputError(InputIndex, issues, NYql::NDqProto::StatusIds::BAD_REQUEST));
             return false;
         }
 

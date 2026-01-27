@@ -170,7 +170,7 @@ protected:
 
 class TBlockDeserializerBase: public IBlockDeserializer {
 public:
-    TBlockDeserializerBase(const TBlockSerializerParams& params)
+    explicit TBlockDeserializerBase(const TBlockSerializerParams& params)
         : ShouldLoadOffset_(params.ShouldSerializeOffset())
     {
     }
@@ -190,7 +190,7 @@ public:
         DoLoadMetadata(metaSource);
     }
 
-    virtual std::shared_ptr<arrow::ArrayData> LoadArray(TChunkedBuffer& src, ui64 blockLen, TMaybe<size_t> offset) final {
+    std::shared_ptr<arrow::ArrayData> LoadArray(TChunkedBuffer& src, ui64 blockLen, TMaybe<size_t> offset) final {
         YQL_ENSURE(blockLen > 0, "Should be handled earlier");
         std::shared_ptr<arrow::Buffer> nulls;
         i64 nullsCount = 0;
@@ -305,7 +305,7 @@ class TFixedSizeBlockDeserializer final: public TBlockDeserializerBase {
     using TBase = TBlockDeserializerBase;
 
 public:
-    TFixedSizeBlockDeserializer(const TBlockSerializerParams& params)
+    explicit TFixedSizeBlockDeserializer(const TBlockSerializerParams& params)
         : TBase(params)
     {
     }

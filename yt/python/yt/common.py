@@ -330,6 +330,10 @@ class YtError(Exception):
         """Hunk tablet store toggle conflict."""
         return self.contains_code(1745)
 
+    def is_hunk_store_allocation_failed(self):
+        """Hunk store allocation failed."""
+        return self.contains_code(1746)
+
     def is_no_such_tablet(self):
         """No such tablet."""
         return self.contains_code(1701)

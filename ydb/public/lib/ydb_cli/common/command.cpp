@@ -3,9 +3,9 @@
 #include "normalize_path.h"
 
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
+#include <ydb/public/lib/ydb_cli/common/colors.h>
 
-namespace NYdb {
-namespace NConsoleClient {
+namespace NYdb::NConsoleClient {
 
 bool TClientCommand::TIME_REQUESTS = false; // measure time of requests
 bool TClientCommand::PROGRESS_REQUESTS = false; // display progress of long requests
@@ -41,7 +41,7 @@ TClientCommand::TClientCommand(
         .IfPresentDisableCompletion()
         .Handler(&PrintSvnVersionAndThrowHelpPrinted)
         .Hidden();
-    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+    NColorizer::TColors colors = NConsoleClient::AutoColors(Cout);
     Opts.AddLongOption('h', "help", TStringBuilder() << "Print usage, " << colors.Green() << "-hh" << colors.OldColor() << " for detailed help")
         .HasArg(NLastGetopt::EHasArg::NO_ARGUMENT)
         .IfPresentDisableCompletion()
@@ -51,28 +51,6 @@ TClientCommand::TClientCommand(
     Opts.GetOpts().SetWrap(Max(Opts.GetOpts().Wrap_, static_cast<ui32>(lineLength)));
 }
 
-ELogPriority TClientCommand::TConfig::VerbosityLevelToELogPriority(ui32 lvl) {
-    switch (lvl) {
-        case 0:
-            return ELogPriority::TLOG_WARNING;
-        case 1:
-            return ELogPriority::TLOG_NOTICE;
-        case 2:
-            return ELogPriority::TLOG_INFO;
-        case 3:
-        default:
-            return ELogPriority::TLOG_DEBUG;
-    }
-}
-
-ELogPriority TClientCommand::TConfig::VerbosityLevelToELogPriorityChatty(ui32 lvl) {
-    switch (lvl) {
-        case 0:
-            return ELogPriority::TLOG_INFO;
-        default:
-            return ELogPriority::TLOG_DEBUG;
-    }
-}
 
 size_t TClientCommand::TConfig::ParseHelpCommandVerbosilty(int argc, char** argv) {
     size_t cnt = 0;
@@ -227,7 +205,7 @@ void TClientCommand::Config(TConfig& config) {
     config.Opts = &Opts;
     config.OnlyExplicitProfile = OnlyExplicitProfile;
     TStringStream stream;
-    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+    NColorizer::TColors colors = NConsoleClient::AutoColors(Cout);
     stream << Endl << Endl
         << colors.BoldColor() << "Description" << colors.OldColor() << ": " << Description << Endl << Endl;
     PrintParentOptions(stream, config, colors);
@@ -450,7 +428,7 @@ void TClientCommandTree::Config(TConfig& config) {
     TString commands;
     SetFreeArgTitle(0, "<subcommand>", commands);
     TStringStream stream;
-    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+    NColorizer::TColors colors = NConsoleClient::AutoColors(Cout);
     stream << Endl << Endl
         << colors.BoldColor() << "Description" << colors.OldColor() << ": " << Description << Endl << Endl
         << colors.BoldColor() << "Subcommands" << colors.OldColor() << ":" << Endl;
@@ -583,5 +561,4 @@ void TCommandWithTopicName::ParseTopicName(const TClientCommand::TConfig &config
     TopicName = config.ParseResult->GetFreeArgs()[argPos];
 }
 
-}
-}
+} // namespace NYdb::NConsoleClient

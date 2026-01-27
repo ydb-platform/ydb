@@ -195,17 +195,19 @@ public:
             (Sender, sender.LocalId()),
             (ReqId, AtomicGet(LastReqId)));
         auto req = MakeHolder<TReq>(ev, PCtx->PDiskId, AtomicIncrement(LastReqId));
+        req->SetCookie(ev->Cookie);
         NewRequest(req.Get(), burstMs);
         return req.Release();
     }
 
     template<typename TReq, typename TEv>
-    [[nodiscard]] TReq* CreateFromEv(TEv &&ev, const TActorId &sender, double *burstMs = nullptr) {
+    [[nodiscard]] TReq* CreateFromEv(TEv &&ev, const TActorId &sender, ui64 cookie = 0, double *burstMs = nullptr) {
         P_LOG(PRI_DEBUG, BPD01, "CreateReqFromEv with sender",
             (ev, ToString(ev)),
             (Sender, sender.LocalId()),
             (ReqId, AtomicGet(LastReqId)));
         auto req = MakeHolder<TReq>(std::forward<TEv>(ev), sender, AtomicIncrement(LastReqId));
+        req->SetCookie(cookie);
         NewRequest(req.Get(), burstMs);
         return req.Release();
     }

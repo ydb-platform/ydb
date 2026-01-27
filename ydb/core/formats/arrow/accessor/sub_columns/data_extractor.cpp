@@ -32,8 +32,8 @@ TConclusionStatus TJsonScanExtractor::DoAddDataToBuilders(const std::shared_ptr<
 
         if (cursor.GetType() == NBinaryJson::EContainerType::Object) {
             iterators.push_back(std::make_unique<TKVExtractor>(cursor.GetObjectIterator(), TStringBuf(), FirstLevelOnly));
-        } else if (cursor.GetType() == NBinaryJson::EContainerType::Array) {
-            iterators.push_back(std::make_unique<TArrayExtractor>(cursor.GetArrayIterator(), TStringBuf(), FirstLevelOnly));
+        } else {
+            return TConclusionStatus::Fail("Only top-level objects are supported in JSON subcolumns");
         }
 
         while (iterators.size()) {

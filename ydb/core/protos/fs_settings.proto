@@ -1,0 +1,7 @@
+package NKikimrSchemeOp;
+option java_package = "ru.yandex.kikimr.proto";
+
+message TFSSettings {
+    optional string BasePath = 1; // Base path on the file system (e.g., /mnt/exports)
+    optional string Path = 2; // Relative path for this specific backup/restore operation
+}

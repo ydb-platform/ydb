@@ -34,7 +34,7 @@ bool TTTLValidator::ValidateColumnTableTtl(const NKikimrSchemeOp::TColumnDataLif
     } else if (sourceColumns.contains(colId)) {
         column = &sourceColumns.at(colId);
     } else {
-        Y_ABORT_UNLESS("Unknown column");
+        Y_ABORT("Unknown column");
     }
 
     if (IsDropped(*column)) {

@@ -55,7 +55,8 @@ struct TTopicCounters {
 };
 
 
-class TPartitionActor : public NActors::TActorBootstrapped<TPartitionActor> {
+class TPartitionActor : public NActors::TActorBootstrapped<TPartitionActor>
+                      , public NActors::IActorExceptionHandler {
 private:
     static constexpr TDuration READ_TIMEOUT_DURATION = TDuration::Seconds(1);
 
@@ -82,7 +83,7 @@ public:
 
     void Bootstrap(const NActors::TActorContext& ctx);
     void Die(const NActors::TActorContext& ctx) override;
-
+    bool OnUnhandledException(const std::exception& exc) override;
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() { return NKikimrServices::TActivity::FRONT_PQ_PARTITION; }
 private:
@@ -163,7 +164,7 @@ private:
                                                                       ui64 maxSize, ui64 maxTimeLagMs, ui64 readTimestampMs,
                                                                       ui64 directReadId, ui64 sizeEstimate = 0) const;
 
-    const std::set<NPQ::TPartitionGraph::Node*>& GetParents() const;
+    const std::set<NPQ::TPartitionGraph::Node*>& GetParents(std::shared_ptr<NPQ::TPartitionGraph> partitionGraph) const;
 
 private:
     const TActorId ParentId;

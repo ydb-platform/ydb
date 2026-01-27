@@ -380,7 +380,12 @@ int main(int argc, char **argv) {
         OutputCout = false;
     }
 
-    TBlobStorageGroupType type(TBlobStorageGroupType::ErasureSpeciesByName(argv[1]));
+    TBlobStorageGroupType::EErasureSpecies species;
+    if (!TBlobStorageGroupType::ParseErasureName(species, argv[1])) {
+        Cerr << "invalid erasure species name: " << argv[1] << Endl;
+        return 1;
+    }
+    TBlobStorageGroupType type(species);
     TotalPartCount = type.TotalPartCount();
     BlobSubgroupSize = type.BlobSubgroupSize();
 

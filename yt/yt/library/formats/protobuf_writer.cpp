@@ -970,7 +970,7 @@ private:
 
     void TryFlushBufferAndUpdateWriter(bool force)
     {
-        TryFlushBuffer(force);
+        MaybeFlushBuffer(force);
         // |StreamWriter_| could have been reset in |FlushWriter()|.
         if (!StreamWriter_) {
             StreamWriter_.emplace(GetOutputStream());

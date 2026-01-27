@@ -100,6 +100,7 @@ public:
         if (settings.AbcId_) (*props.mutable_attributes())["_abc_id"] = ToString(*settings.AbcId_);
         if (settings.AbcSlug_) (*props.mutable_attributes())["_abc_slug"] = *settings.AbcSlug_;
         if (settings.FederationAccount_) (*props.mutable_attributes())["_federation_account"] = ToString(*settings.FederationAccount_);
+        if (settings.MetricsLevel_.has_value()) { props.set_metrics_level(*settings.MetricsLevel_); }
 
         for (const auto& readRule : settings.ReadRules_) {
             Ydb::PersQueue::V1::TopicSettings::ReadRule& rrProps = *props.add_read_rules();

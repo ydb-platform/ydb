@@ -29,18 +29,26 @@ protected:
     }
 
 public:
+    // TStringRef is actually a std::string_view
+    // NOLINTNEXTLINE(google-explicit-constructor)
     inline constexpr operator std::string_view() const noexcept {
         return {Data_, Size_};
     }
+
+    // TStringRef is actually a TStringBuf
+    // NOLINTNEXTLINE(google-explicit-constructor)
     inline constexpr operator TStringBuf() const noexcept {
         return {Data_, Size_};
     }
+
     inline constexpr TDataType Data() const noexcept {
         return Data_;
     }
+
     inline constexpr ui32 Size() const noexcept {
         return Size_;
     }
+
     inline constexpr bool Empty() const noexcept {
         return Size_ == 0;
     }
@@ -48,9 +56,11 @@ public:
     inline constexpr TDataType data() const noexcept {
         return Data_;
     }
+
     inline constexpr ui32 size() const noexcept {
         return Size_;
     }
+
     inline constexpr bool empty() const noexcept {
         return Size_ == 0;
     }
@@ -90,18 +100,22 @@ public:
     {
     }
 
-    template <size_t Size>
+    // Allow a string literal construction
+    template <size_t Size> // NOLINTNEXTLINE(google-explicit-constructor)
     inline constexpr TStringRef(const char (&data)[Size]) noexcept
         : TBase(data, Size - 1)
     {
     }
 
+    // Readonly view is okay
+    // NOLINTNEXTLINE(google-explicit-constructor)
     inline constexpr TStringRef(const TMutableStringRef& buf) noexcept
         : TBase(buf.Data(), buf.Size())
     {
     }
 
-    template <typename TStringType>
+    // Readonly view is okay
+    template <typename TStringType> // NOLINTNEXTLINE(google-explicit-constructor)
     inline constexpr TStringRef(const TStringType& buf) noexcept
         : TBase(TGetData<TStringType>::Get(buf), TGetSize<TStringType>::Get(buf))
     {

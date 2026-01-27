@@ -2,7 +2,7 @@
 
 {% cut "Article under development" %}
 
-{% include [new](../_includes/configuration-version-note.md) %}
+{% include [_](../_includes/experimental_v2.md) %}
 
 If you need to decommission a {{ ydb-short-name }} cluster node that contains part of [State Storage](../../../reference/configuration/domains_config.md#domains-state), you need to move it to another node.
 

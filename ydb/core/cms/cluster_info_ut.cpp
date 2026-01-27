@@ -369,15 +369,16 @@ Y_UNIT_TEST_SUITE(TClusterInfoTest) {
         permission.Deadline = now + TDuration::Seconds(60);
         UNIT_ASSERT_VALUES_EQUAL(cluster->AddLocks(permission, nullptr), 1);
         UNIT_ASSERT_VALUES_EQUAL(cluster->HostNodes("test2").size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(cluster->HostNodes("test2")[0]->Lock->Action.GetType(), TAction::SHUTDOWN_HOST);
-        UNIT_ASSERT_VALUES_EQUAL(cluster->HostNodes("test2")[0]->Lock->ActionDeadline, now + TDuration::Minutes(2));
+        UNIT_ASSERT_VALUES_EQUAL(cluster->HostNodes("test2")[0]->Locks.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(cluster->HostNodes("test2")[0]->Locks.begin()->Action.GetType(), TAction::SHUTDOWN_HOST);
+        UNIT_ASSERT_VALUES_EQUAL(cluster->HostNodes("test2")[0]->Locks.begin()->ActionDeadline, now + TDuration::Minutes(2));
 
         permission.Action.SetHost("2");
         permission.Deadline = now - TDuration::Seconds(30);
         cluster->SetNodeState(2, DOWN, MakeSystemStateInfo("1"));
         UNIT_ASSERT_VALUES_EQUAL(cluster->AddLocks(permission, nullptr), 1);
         UNIT_ASSERT_VALUES_EQUAL(cluster->Node(2).State, EState::RESTART);
-        UNIT_ASSERT_VALUES_EQUAL(cluster->Node(2).Lock->ActionDeadline, now + TDuration::Seconds(30));
+        UNIT_ASSERT_VALUES_EQUAL(cluster->Node(2).Locks.begin()->ActionDeadline, now + TDuration::Seconds(30));
 
         cluster->ClearNode(1);
         UNIT_ASSERT(!cluster->HasTablet(1));
@@ -386,7 +387,7 @@ Y_UNIT_TEST_SUITE(TClusterInfoTest) {
 
         auto point1 = cluster->PushRollbackPoint();
         auto action1 = MakeAction(TAction::SHUTDOWN_HOST, 3, 60000000);
-        UNIT_ASSERT_VALUES_EQUAL(cluster->AddTempLocks(action1, nullptr), 1);
+        UNIT_ASSERT_VALUES_EQUAL(cluster->AddTempLocks(action1, 0, nullptr), 1);
         UNIT_ASSERT_VALUES_EQUAL(cluster->Node(3).TempLocks.size(), 1);
 
         cluster->RollbackLocks(point1);
@@ -397,17 +398,17 @@ Y_UNIT_TEST_SUITE(TClusterInfoTest) {
                                   "pdisk-1-1", "vdisk-0-1-0-1-0");
         permission.Action = action2;
         permission.Deadline = now + TDuration::Seconds(60);
-        UNIT_ASSERT(!cluster->PDisk(NCms::TPDiskID(1, 1)).Lock.Defined());
-        UNIT_ASSERT(!cluster->VDisk(TVDiskID(0, 1, 0, 1, 0)).Lock.Defined());
+        UNIT_ASSERT(cluster->PDisk(NCms::TPDiskID(1, 1)).Locks.empty());
+        UNIT_ASSERT(cluster->VDisk(TVDiskID(0, 1, 0, 1, 0)).Locks.empty());
         UNIT_ASSERT_VALUES_EQUAL(cluster->AddLocks(permission, nullptr), 2);
-        UNIT_ASSERT(cluster->PDisk(NCms::TPDiskID(1, 1)).Lock.Defined());
-        UNIT_ASSERT(cluster->VDisk(TVDiskID(0, 1, 0, 1, 0)).Lock.Defined());
-        UNIT_ASSERT_VALUES_EQUAL(cluster->AddTempLocks(action2, nullptr), 2);
+        UNIT_ASSERT(!cluster->PDisk(NCms::TPDiskID(1, 1)).Locks.empty());
+        UNIT_ASSERT(!cluster->VDisk(TVDiskID(0, 1, 0, 1, 0)).Locks.empty());
+        UNIT_ASSERT_VALUES_EQUAL(cluster->AddTempLocks(action2, 0, nullptr), 2);
         UNIT_ASSERT_VALUES_EQUAL(cluster->PDisk(NCms::TPDiskID(1, 1)).TempLocks.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(cluster->VDisk(TVDiskID(0, 1, 0, 1, 0)).TempLocks.size(), 1);
         cluster->RollbackLocks(point2);
-        UNIT_ASSERT(cluster->PDisk(NCms::TPDiskID(1, 1)).Lock.Defined());
-        UNIT_ASSERT(cluster->VDisk(TVDiskID(0, 1, 0, 1, 0)).Lock.Defined());
+        UNIT_ASSERT(!cluster->PDisk(NCms::TPDiskID(1, 1)).Locks.empty());
+        UNIT_ASSERT(!cluster->VDisk(TVDiskID(0, 1, 0, 1, 0)).Locks.empty());
         UNIT_ASSERT_VALUES_EQUAL(cluster->PDisk(NCms::TPDiskID(1, 1)).TempLocks.size(), 0);
         UNIT_ASSERT_VALUES_EQUAL(cluster->VDisk(TVDiskID(0, 1, 0, 1, 0)).TempLocks.size(), 0);
 
@@ -442,13 +443,13 @@ Y_UNIT_TEST_SUITE(TClusterInfoTest) {
                             "request-3", "user-3", 3,
                             "request-4", "user-4", 4);
 
-        cluster->DeactivateScheduledLocks(request2.Priority);
+        cluster->SetPriorityToCheck(request2.Priority);
 
         TErrorInfo error;
         UNIT_ASSERT(cluster->Node(1).IsLocked(error, TDuration(), Now(), TDuration()));
         UNIT_ASSERT(!cluster->Node(3).IsLocked(error, TDuration(), Now(), TDuration()));
 
-        cluster->ReactivateScheduledLocks();
+        cluster->ResetPriorityToCheck();
 
         UNIT_ASSERT(cluster->Node(1).IsLocked(error, TDuration(), Now(), TDuration()));
         UNIT_ASSERT(cluster->Node(3).IsLocked(error, TDuration(), Now(), TDuration()));

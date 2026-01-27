@@ -110,12 +110,16 @@ namespace NKikimr::NBlobDepot {
         if (!rows.IsReady()) {
             return false;
         }
+        const ui32 generation = Self->Executor()->Generation();
         while (rows.IsValid()) {
             TS3Locator item{
                 .Len = rows.GetValue<Schema::TrashS3::Len>(),
                 .Generation = rows.GetValue<Schema::TrashS3::Generation>(),
                 .KeyId = rows.GetValue<Schema::TrashS3::KeyId>(),
             };
+            if (item.Generation == generation) {
+                return true; // we don't want to read newly added items by this tablet's generation
+            }
             if (item != from) {
                 Self->S3Manager->AddTrashToCollect(item);
                 from = item;
@@ -204,6 +208,7 @@ namespace NKikimr::NBlobDepot {
 
     void TBlobDepot::OnDataLoadComplete() {
         BarrierServer->OnDataLoaded();
+        S3Manager->OnDataLoaded();
         StartGroupAssimilator();
         TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_MODE_LOADING_KEYS] = 0;
         TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_MODE_LOADED] = 1;

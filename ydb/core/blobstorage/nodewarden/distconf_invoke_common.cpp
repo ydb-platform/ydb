@@ -129,11 +129,8 @@ namespace NKikimr::NStorage {
                     case TQuery::kAdvanceGeneration:
                         return AdvanceGeneration();
 
-                    case TQuery::kFetchStorageConfig: {
-                        const auto& request = op.Command.GetFetchStorageConfig();
-                        return FetchStorageConfig(request.GetMainConfig(), request.GetStorageConfig(),
-                            request.GetAddExplicitConfigs(), request.GetAddSectionsForMigrationToV1());
-                    }
+                    case TQuery::kFetchStorageConfig:
+                        return FetchStorageConfig(op.Command.GetFetchStorageConfig());
 
                     case TQuery::kReplaceStorageConfig:
                         return ReplaceStorageConfig(op.Command.GetReplaceStorageConfig());
@@ -408,15 +405,47 @@ namespace NKikimr::NStorage {
         }
     }
 
-    void TInvokeRequestHandlerActor::PassAway() {
-        if (!WaitingReplyFromNode && !LifetimeToken.expired()) {
-            TActivationContext::Send(new IEventHandle(TEvPrivate::EvQueryFinished, 0, Self->SelfId(), SelfId(), nullptr,
-                InvokePipelineGeneration));
+    void TInvokeRequestHandlerActor::DetachQuery() {
+        Y_ABORT_UNLESS(!LifetimeToken.expired()); // otherwise we shouldn't handle this message at all
+        Y_ABORT_UNLESS(!WaitingReplyFromNode); // same thing
+        Y_ABORT_UNLESS(!Detached); // can't be called twice
+
+        Detached = true;
+        Self->DetachedQueries.insert(SelfId());
+
+        // reset parent state in the same way we would do when we finish processing this query
+        if (InvokePipelineGeneration == Self->InvokePipelineGeneration && !Self->CurrentProposition && !InvokedWithoutScepter) {
+            if (Self->RootState == ERootState::IN_PROGRESS) {
+                Self->RootState = ERootState::RELAX;
+            } else {
+                Y_ABORT_UNLESS(Self->RootState == ERootState::INITIAL);
+            }
         }
+
+        // notify parent actor so it could continue processing queries
+        TActivationContext::Send(new IEventHandle(TEvPrivate::EvQueryFinished, 0, Self->SelfId(), SelfId(), nullptr,
+            InvokePipelineGeneration));
+    }
+
+    void TInvokeRequestHandlerActor::PassAway() {
+        if (!LifetimeToken.expired()) {
+            if (Detached) {
+                const size_t n = Self->DetachedQueries.erase(SelfId());
+                Y_ABORT_UNLESS(n == 1);
+                TActivationContext::Send(new IEventHandle(TEvents::TSystem::Unsubscribe, 0, MakeBlobStorageNodeWardenID(
+                    SelfId().NodeId()), SelfId(), nullptr, 0)); // unsubscribe from receiving config updates
+            } else if (!WaitingReplyFromNode) {
+                TActivationContext::Send(new IEventHandle(TEvPrivate::EvQueryFinished, 0, Self->SelfId(), SelfId(),
+                    nullptr, InvokePipelineGeneration));
+            }
+        }
+
         if (ControllerPipeId) {
             NTabletPipe::CloseAndForgetClient(SelfId(), ControllerPipeId);
         }
+
         UnsubscribeInterconnect();
+
         TActor::PassAway();
     }
 
@@ -442,6 +471,8 @@ namespace NKikimr::NStorage {
                 hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
                 hFunc(TEvBlobStorage::TEvControllerConfigResponse, Handle);
                 hFunc(TEvBlobStorage::TEvControllerDistconfResponse, Handle);
+                hFunc(TEvNodeWardenStorageConfig, Handle);
+                cFunc(TEvents::TSystem::Wakeup, HandleWakeup);
             )
         } catch (const TExError& error) {
             Finish(error.Status, error.what());

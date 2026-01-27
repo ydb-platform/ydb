@@ -11,6 +11,7 @@
 #include <ydb/core/kqp/runtime/kqp_stream_lookup_factory.h>
 #include <ydb/core/kqp/runtime/kqp_vector_actor.h>
 #include <ydb/core/kqp/runtime/kqp_write_actor.h>
+#include <ydb/core/kqp/runtime/kqp_full_text_source.h>
 #include <ydb/library/formats/arrow/protos/ssa.pb.h>
 #include <ydb/library/yql/dq/actors/input_transforms/dq_input_transform_lookup_factory.h>
 #include <ydb/library/yql/dq/comp_nodes/dq_block_hash_join.h>
@@ -74,6 +75,10 @@ TComputationNodeFactory GetKqpActorComputeFactory(TKqpScanComputeContext* comput
                 return WrapDqHashCombine(callable, ctx);
             }
 
+            if (name == "DqHashAggregate"sv) {
+                return WrapDqHashAggregate(callable, ctx);
+            }
+
             if (name == "FulltextAnalyze"sv) {
                 return WrapFulltextAnalyze(callable, ctx);
             }
@@ -96,6 +101,7 @@ NYql::NDq::IDqAsyncIoFactory::TPtr CreateKqpAsyncIoFactory(
     RegisterKqpWriteActor(*factory, counters);
     RegisterSequencerActorFactory(*factory, counters);
     RegisterKqpVectorResolveActor(*factory, counters);
+    RegisterKqpFullTextSource(*factory, counters);
     NYql::NDq::RegisterDqInputTransformLookupActorFactory(*factory);
 
     if (federatedQuerySetup) {
@@ -109,8 +115,9 @@ NYql::NDq::IDqAsyncIoFactory::TPtr CreateKqpAsyncIoFactory(
 
         NYql::NDq::RegisterDQSolomonReadActorFactory(*factory, federatedQuerySetup->CredentialsFactory);
         NYql::NDq::RegisterDQSolomonWriteActorFactory(*factory, federatedQuerySetup->CredentialsFactory);
-        NYql::NDq::RegisterDqPqReadActorFactory(*factory, *federatedQuerySetup->Driver, federatedQuerySetup->CredentialsFactory, federatedQuerySetup->PqGateway, nullptr);
-        NYql::NDq::RegisterDqPqWriteActorFactory(*factory, *federatedQuerySetup->Driver, federatedQuerySetup->CredentialsFactory, federatedQuerySetup->PqGateway, nullptr);
+        bool enableStreamingQueriesCounters = NKikimr::AppData()->FeatureFlags.GetEnableStreamingQueriesCounters();
+        NYql::NDq::RegisterDqPqReadActorFactory(*factory, *federatedQuerySetup->Driver, federatedQuerySetup->CredentialsFactory, federatedQuerySetup->PqGateway, counters->GetKqpCounters()->GetSubgroup("subsystem", "DqSourceTracker"), {}, enableStreamingQueriesCounters);
+        NYql::NDq::RegisterDqPqWriteActorFactory(*factory, *federatedQuerySetup->Driver, federatedQuerySetup->CredentialsFactory, federatedQuerySetup->PqGateway, counters->GetKqpCounters()->GetSubgroup("subsystem", "DqSinkTracker"), enableStreamingQueriesCounters);
     }
 
     return factory;

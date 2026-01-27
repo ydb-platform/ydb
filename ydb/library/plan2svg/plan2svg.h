@@ -87,9 +87,10 @@ public:
 class TConnection {
 
 public:
-    TConnection(TStage& stage, const TString& nodeType, ui32 planNodeId) : Stage(stage), NodeType(nodeType), PlanNodeId(planNodeId) {
+    TConnection(ui32 groupId, TStage& stage, const TString& nodeType, ui32 planNodeId) : GroupId(groupId), Stage(stage), NodeType(nodeType), PlanNodeId(planNodeId) {
     }
 
+    const ui32 GroupId;
     TStage& Stage;
     TString NodeType;
     std::shared_ptr<TStage> FromStage;
@@ -106,7 +107,8 @@ public:
     std::shared_ptr<TSingleMetric> CteOutputRows;
     const NJson::TJsonValue* StatsNode = nullptr;
     const ui32 PlanNodeId;
-    TStringBuilder Builder;
+    TStringBuilder _Builder;
+    TStringBuilder _CteBuilder;
     bool Blocks = false;
 };
 
@@ -148,9 +150,10 @@ class TPlan;
 class TStage {
 
 public:
-    TStage(TPlan* plan, const TString& nodeType) : Plan(plan), NodeType(nodeType) {
+    TStage(ui32 groupId, TPlan* plan, const TString& nodeType) : GroupId(groupId), Plan(plan), NodeType(nodeType) {
     }
 
+    const ui32 GroupId;
     TPlan* Plan;
     TString NodeType;
     std::vector<std::shared_ptr<TConnection>> Connections;
@@ -188,7 +191,7 @@ public:
     ui64 MaxTime = 0;
     ui64 UpdateTime = 0;
     bool External = false;
-    TStringBuilder Builder;
+    TStringBuilder _Builder;
     TConnection* IngressConnection = nullptr;
 };
 
@@ -253,8 +256,8 @@ class TPlanVisualizer;
 class TPlan {
 
 public:
-    TPlan(const TString& nodeType, TPlanViewConfig& config, TPlanVisualizer& viz)
-        : NodeType(nodeType), Config(config), Viz(viz) {
+    TPlan(ui32 groupId, const TString& nodeType, TPlanViewConfig& config, TPlanVisualizer& viz)
+        : GroupId(groupId), NodeType(nodeType), Config(config), Viz(viz) {
         CpuTime = std::make_shared<TSummaryMetric>();
         ExternalCpuTime = std::make_shared<TSummaryMetric>();
         WaitInputTime = std::make_shared<TSummaryMetric>();
@@ -297,6 +300,8 @@ public:
     void PrintStageSummary(TStringBuilder& background, ui32 viewLeft, ui32 viewWidth, ui32 y0, ui32 h, std::shared_ptr<TSingleMetric> metric, const TString& mediumColor, const TString& lightColor, const TString& textSum, const TString& tooltip, ui32 taskCount, const TString& iconRef, const TString& iconColor, const TString& iconScale, bool backgroundRect = false, const TString& peerId = "");
     void PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY);
     void PrintSvg(TStringBuilder& builder);
+    void PrintStage(TStringBuilder& builder, std::shared_ptr<TStage>& stage, TConnection* c);
+    const ui32 GroupId;
     TString NodeType;
     std::vector<std::shared_ptr<TStage>> Stages;
     std::shared_ptr<TSummaryMetric> CpuTime;
@@ -330,6 +335,7 @@ public:
     ui64 BaseTime = 0;
     ui64 TimeOffset = 0;
     ui32 OffsetY = 0;
+    ui32 Height = 0;
     ui32 Tasks = 0;
     ui64 UpdateTime = 0;
     std::vector<std::pair<std::string, std::shared_ptr<TConnection>>> CteRefs;
@@ -340,7 +346,7 @@ public:
     std::unordered_map<ui32, TConnection*> NodeToConnection;
     std::unordered_map<TStage*, TConnection*> StageToExternalConnection;
     std::unordered_set<ui32> NodeToSource;
-    TStringBuilder Builder;
+    TStringBuilder _Builder;
 };
 
 class TPlanVisualizer {
@@ -353,6 +359,7 @@ public:
     void PostProcessPlans();
     TString PrintSvg();
     TString PrintSvgSafe();
+    ui32 NextGroupId() { return ++GroupId; }
 
     std::vector<std::shared_ptr<TPlan>> Plans;
     ui64 MaxTime = 1000;
@@ -361,4 +368,5 @@ public:
     TPlanViewConfig Config;
     std::map<std::string, std::shared_ptr<TStage>> CteStages;
     std::map<std::string, TPlan*> CteSubPlans;
+    ui32 GroupId = 0;
 };

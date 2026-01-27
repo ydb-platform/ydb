@@ -133,7 +133,7 @@ void SetupServices(TTestActorRuntime &runtime) {
         TChannelProfiles::TProfile &profile = channelProfiles->Profiles.back();
         for (ui32 channelIdx = 0; channelIdx < 3; ++channelIdx) {
             profile.Channels.push_back(
-                TChannelProfiles::TProfile::TChannel(TBlobStorageGroupType::ErasureMirror3, 0, NKikimrBlobStorage::TVDiskKind::Default));
+                TChannelProfiles::TProfile::TChannel(TBlobStorageGroupType::Erasure4Plus2Block, 0, NKikimrBlobStorage::TVDiskKind::Default));
         }
         app.SetChannels(std::move(channelProfiles));
     }
@@ -162,11 +162,27 @@ void SetupServices(TTestActorRuntime &runtime) {
         str << "    VDiskID { GroupID: " << groupId << " GroupGeneration: 1 Ring: 0 Domain: 3 VDisk: 0 }" << Endl;
         str << "    VDiskLocation { NodeID: $Node1 PDiskID: 0 PDiskGuid: 1 VDiskSlotID: 3 }" << Endl;
         str << "}" << Endl;
+        str << "VDisks {" << Endl;
+        str << "    VDiskID { GroupID: " << groupId << " GroupGeneration: 1 Ring: 0 Domain: 4 VDisk: 0 }" << Endl;
+        str << "    VDiskLocation { NodeID: $Node1 PDiskID: 0 PDiskGuid: 1 VDiskSlotID: 4 }" << Endl;
+        str << "}" << Endl;
+                str << "VDisks {" << Endl;
+        str << "    VDiskID { GroupID: " << groupId << " GroupGeneration: 1 Ring: 0 Domain: 5 VDisk: 0 }" << Endl;
+        str << "    VDiskLocation { NodeID: $Node1 PDiskID: 0 PDiskGuid: 1 VDiskSlotID: 5 }" << Endl;
+        str << "}" << Endl;
+                str << "VDisks {" << Endl;
+        str << "    VDiskID { GroupID: " << groupId << " GroupGeneration: 1 Ring: 0 Domain: 6 VDisk: 0 }" << Endl;
+        str << "    VDiskLocation { NodeID: $Node1 PDiskID: 0 PDiskGuid: 1 VDiskSlotID: 6 }" << Endl;
+        str << "}" << Endl;
+                str << "VDisks {" << Endl;
+        str << "    VDiskID { GroupID: " << groupId << " GroupGeneration: 1 Ring: 0 Domain: 7 VDisk: 0 }" << Endl;
+        str << "    VDiskLocation { NodeID: $Node1 PDiskID: 0 PDiskGuid: 1 VDiskSlotID: 7 }" << Endl;
+        str << "}" << Endl;
         str << "" << Endl;
         str << "Groups {" << Endl;
         str << "    GroupID: " << groupId << Endl;
         str << "    GroupGeneration: 1 " << Endl;
-        str << "    ErasureSpecies: 1 " << Endl;// Mirror3
+        str << "    ErasureSpecies: 4 " << Endl;// Block42
         str << "    Rings {" << Endl;
         str << "        FailDomains {" << Endl;
         str << "            VDiskLocations { NodeID: $Node1 PDiskID: 0 VDiskSlotID: 0 PDiskGuid: 1 }" << Endl;
@@ -179,6 +195,18 @@ void SetupServices(TTestActorRuntime &runtime) {
         str << "        }" << Endl;
         str << "        FailDomains {" << Endl;
         str << "            VDiskLocations { NodeID: $Node1 PDiskID: 0 VDiskSlotID: 3 PDiskGuid: 1 }" << Endl;
+        str << "        }" << Endl;
+        str << "        FailDomains {" << Endl;
+        str << "            VDiskLocations { NodeID: $Node1 PDiskID: 0 VDiskSlotID: 4 PDiskGuid: 1 }" << Endl;
+        str << "        }" << Endl;
+        str << "        FailDomains {" << Endl;
+        str << "            VDiskLocations { NodeID: $Node1 PDiskID: 0 VDiskSlotID: 5 PDiskGuid: 1 }" << Endl;
+        str << "        }" << Endl;
+        str << "        FailDomains {" << Endl;
+        str << "            VDiskLocations { NodeID: $Node1 PDiskID: 0 VDiskSlotID: 6 PDiskGuid: 1 }" << Endl;
+        str << "        }" << Endl;
+        str << "        FailDomains {" << Endl;
+        str << "            VDiskLocations { NodeID: $Node1 PDiskID: 0 VDiskSlotID: 7 PDiskGuid: 1 }" << Endl;
         str << "        }" << Endl;
         str << "    }" << Endl;
         str << "}";
@@ -230,7 +258,7 @@ void SetupServices(TTestActorRuntime &runtime) {
     }
 
     CreateTestBootstrapper(runtime, CreateTestTabletInfo(MakeBSControllerID(),
-        TTabletTypes::BSController, TBlobStorageGroupType::ErasureMirror3, groupId),
+        TTabletTypes::BSController, TBlobStorageGroupType::Erasure4Plus2Block, groupId),
         &CreateFlatBsController);
 }
 
@@ -350,13 +378,13 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
     }
 
     void VGet(TTestActorRuntime &runtime, TActorId &sender, ui32 groupId, ui32 nodeId, TLogoBlobID logoBlobId,
-            TString data, EExpected expected) {
+            TString data, EExpected expected, ui32 generation = 1) {
         VERBOSE_COUT(" Sending TEvVGet");
         ui64 cookie = 6543210;
         ui32 pDiskId = 1000;
         ui32 vDiskSlotId = 1000;
         TActorId vDiskActor = MakeBlobStorageVDiskID(nodeId, pDiskId, vDiskSlotId);
-        TVDiskID vDiskId(groupId, 1, 0, 0 , 0); // GroupID: 1040187392 GroupGeneration: 1 Ring: 0 Domain: 1 VDisk: 0 }}
+        TVDiskID vDiskId(groupId, generation, 0, 0 , 0);
         TLogoBlobID id(logoBlobId, 1);
         auto x = TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(vDiskId,
                 TInstant::Max(),
@@ -418,7 +446,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         Put(runtime, sender0, groupId, TLogoBlobID(100, 0, 0, 0, 3, 0), "xxx");
         Get(runtime, sender0, groupId, TLogoBlobID(100, 0, 0, 0, 3, 0), "xxx");
         VGet(runtime, sender0, groupId, runtime.GetNodeId(0), TLogoBlobID(100, 0, 0, 0, 3, 0), "xxx",
-                EExpectedDifferentData);
+                EExpectedDifferentData, 2);
 
         // TODO: the proxy just should not be there, check that instead!
         TActorId proxy = MakeBlobStorageProxyID(groupId);

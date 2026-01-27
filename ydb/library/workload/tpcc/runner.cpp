@@ -137,7 +137,9 @@ TPCCRunner::TPCCRunner(const NConsoleClient::TClientCommand::TConfig& connection
         std::exit(1);
     }
 
-    CheckPathForRun(connectionConfig, Config.Path, Config.WarehouseCount);
+    if (Config.SimulateTransactionMs == 0 && Config.SimulateTransactionSelect1Count == 0) {
+        CheckPathForRun(connectionConfig, Config.Path, Config.WarehouseCount);
+    }
 
     const size_t terminalsCount = Config.WarehouseCount * TERMINALS_PER_WAREHOUSE;
 
@@ -232,7 +234,7 @@ TPCCRunner::TPCCRunner(const NConsoleClient::TClientCommand::TConfig& connection
 
     PerThreadTerminalStats.reserve(threadCount);
     for (size_t i = 0; i < threadCount; ++i) {
-        PerThreadTerminalStats.emplace_back(std::make_shared<TTerminalStats>());
+        PerThreadTerminalStats.emplace_back(std::make_shared<TTerminalStats>(Config.HighResHistogram));
     }
 
     const size_t maxTerminalsPerThread = (terminalsCount + threadCount - 1) / threadCount;
@@ -262,6 +264,7 @@ TPCCRunner::TPCCRunner(const NConsoleClient::TClientCommand::TConfig& connection
             Config.NoDelays,
             Config.SimulateTransactionMs,
             Config.SimulateTransactionSelect1Count,
+            Config.TxMode,
             TerminalsStopSource.get_token(),
             StopWarmup,
             PerThreadTerminalStats[i % threadCount],
@@ -383,6 +386,10 @@ void TPCCRunner::RunSync() {
         Tui = std::make_unique<TRunnerTui>(Log, *LogBackend, DataToDisplay);
     }
 
+#ifndef NDEBUG
+    LOG_W("You're running a CLI binary built without NDEBUG defined, results will be much worse than expected");
+#endif
+
     if (forcedWarmup) {
         LOG_I("Forced minimal warmup time: " << TDuration::Seconds(warmupSeconds));
     }
@@ -430,7 +437,10 @@ void TPCCRunner::RunSync() {
     StopDeadline = MeasurementsStartTs + std::chrono::seconds(Config.RunDuration.Seconds());
 
     // reset statistics
-    DataToDisplay = std::make_shared<TRunDisplayData>(PerThreadTerminalStats.size(), MeasurementsStartTs);
+    DataToDisplay = std::make_shared<TRunDisplayData>(
+        PerThreadTerminalStats.size(),
+        MeasurementsStartTs,
+        Config.HighResHistogram);
 
     while (!GetGlobalInterruptSource().stop_requested()) {
         if (now >= StopDeadline) {
@@ -583,9 +593,10 @@ void TPCCRunner::UpdateDisplayTextMode() {
 }
 
 void TPCCRunner::CollectDataToDisplay(Clock::time_point now) {
-    auto newDisplayData = std::make_shared<TRunDisplayData>(PerThreadTerminalStats.size(), now);
+    auto newDisplayData = std::make_shared<TRunDisplayData>(PerThreadTerminalStats.size(), now, Config.HighResHistogram);
+    newDisplayData->WarehouseCount = Config.WarehouseCount;
 
-    // order makes sence here
+    // order makes sense here
     CollectStatistics(newDisplayData->Statistics);
     CalculateStatusData(now, *newDisplayData);
 

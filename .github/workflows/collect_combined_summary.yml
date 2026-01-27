@@ -1,0 +1,29 @@
+name: Collect Combined Summary
+
+on:
+  workflow_call:
+
+jobs:
+  collect_combined_summary:
+    name: Collect Combined Summary
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download all summary artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: job-summary-*
+          merge-multiple: true
+          path: summary_artifacts
+
+      - name: Clear old summary and add combined
+        run: |
+          # Clear existing summary
+          > $GITHUB_STEP_SUMMARY
+          # Add combined summary
+          python3 .github/scripts/tests/collect_combined_summary.py \
+            --artifacts-dir summary_artifacts \
+            --output $GITHUB_STEP_SUMMARY

@@ -573,7 +573,7 @@ void TBlackboard::GetWorstPredictedDelaysNs(const TBlobStorageGroupInfo &info, T
     outNWorst->resize(totalVDisks);
     for (ui32 orderNumber = 0; orderNumber < totalVDisks; ++orderNumber) {
         ui64 predictedDelayNs = groupQueues.GetPredictedDelayNsByOrderNumber(orderNumber, queueId);
-        (*outNWorst)[orderNumber] = { 
+        (*outNWorst)[orderNumber] = {
             static_cast<ui64>(predictedDelayNs * accelerationParams.PredictedDelayMultiplier),
             orderNumber
         };
@@ -657,7 +657,7 @@ void TBlackboard::MarkSlowDisks(TBlobState& state, bool isPut, const TAccelerati
         // all disks cannot be slow
         return;
     }
-    
+
     TDiskDelayPredictions worstDisks;
     state.GetWorstPredictedDelaysNs(*Info, *GroupQueues,
             (isPut ? HandleClassToQueueId(PutHandleClass) : HandleClassToQueueId(GetHandleClass)),

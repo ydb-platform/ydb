@@ -59,6 +59,7 @@ enum EServiceKikimr {
     BS_PROXY_BRIDGE = 2604;
     BS_CLUSTER_BALANCING = 2605;
     BS_BRIDGE_SYNC = 2606;
+    BS_PHANTOM_FLAG_STORAGE = 2607;
 
     // DATASHARD section //
     TX_DATASHARD = 290;  //
@@ -209,6 +210,7 @@ enum EServiceKikimr {
     TICKET_PARSER = 455;
     BLACKBOX_VALIDATOR = 460;
     LDAP_AUTH_PROVIDER = 2650;
+    SASL_AUTH = 2651;
 
     GRPC_CLIENT = 461;
 
@@ -259,6 +261,7 @@ enum EServiceKikimr {
     KQP_COMPILE_COMPUTATION_PATTERN_SERVICE = 546;
     KQP_WORKLOAD_SERVICE = 547;
     KQP_COMPUTE_SCHEDULER = 548;
+    KQP_CHANNELS = 549;
 
     TABLET_RESOURCE_BROKER = 540;
 
@@ -319,6 +322,7 @@ enum EServiceKikimr {
     IMPORT = 802;
     S3_WRAPPER = 803;
     CONTINUOUS_BACKUP = 804;
+    FS_WRAPPER = 805;
 
     TX_COLUMNSHARD_ACTUALIZATION = 850;
     TX_COLUMNSHARD_COMPACTION = 851;
@@ -432,6 +436,7 @@ enum EServiceKikimr {
 
     // Distributed storage debugging
     BS_REQUEST_COST = 2500;
+    BS_DDISK = 2501;
 
     GROUPED_MEMORY_LIMITER = 2700;
 
@@ -452,6 +457,8 @@ enum EServiceKikimr {
     LOCAL_DB_BACKUP = 3700;
 
     SCHEMA_SECRET_CACHE = 3800;
+
+    NBS_PARTITION = 3900;
 };
 
 message TActivity {
@@ -1132,5 +1139,9 @@ message TActivity {
         BS_VDISK_METADATA_ACTOR = 671;
         BUILD_FULLTEXT_INDEX = 672;
         BS_PHANTOM_FLAG_STORAGE_BUILDER = 673;
+        BUILD_FULLTEXT_DICTIONARY = 674;
+        FILTER_KMEANS_SCAN_ACTOR = 675;
+        BS_SYNC_SST_WRITER = 676;
+        BS_ASYNC_SYNC_SST_COMMITTER = 677;
     };
 };

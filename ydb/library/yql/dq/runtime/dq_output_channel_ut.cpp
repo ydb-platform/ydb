@@ -219,13 +219,18 @@ void ConsumeRow(const TTestContext& ctx, TUnboxedValueBatch&& row, const IDqOutp
 }
 
 void TestSingleRead(TTestContext& ctx) {
-    TDqOutputChannelSettings settings;
-    settings.MaxStoredBytes = 1000;
-    settings.MaxChunkBytes = 200;
-    settings.Level = TCollectStatsLevel::Profile;
-    settings.TransportVersion = ctx.TransportVersion;
+    TDqChannelSettings settings = {
+        .RowType = ctx.GetOutputType(),
+        .HolderFactory = &ctx.HolderFactory,
+        .ChannelId = 1,
+        .DstStageId = 1000,
+        .Level = TCollectStatsLevel::Profile,
+        .TransportVersion = ctx.TransportVersion,
+        .MaxStoredBytes = 1000,
+        .MaxChunkBytes = 200
+    };
 
-    auto ch = CreateDqOutputChannel(1, 1000, ctx.GetOutputType(), ctx.HolderFactory, settings, Log);
+    auto ch = CreateDqOutputChannel(settings, Log);
 
     for (i32 i = 0; i < 10; ++i) {
         auto row = ctx.CreateRow(i);
@@ -257,13 +262,18 @@ void TestSingleRead(TTestContext& ctx) {
 }
 
 void TestPartialRead(TTestContext& ctx) {
-    TDqOutputChannelSettings settings;
-    settings.MaxStoredBytes = 1000;
-    settings.MaxChunkBytes = 17;
-    settings.Level = TCollectStatsLevel::Profile;
-    settings.TransportVersion = ctx.TransportVersion;
+    TDqChannelSettings settings = {
+        .RowType = ctx.GetOutputType(),
+        .HolderFactory = &ctx.HolderFactory,
+        .ChannelId = 1,
+        .DstStageId = 1000,
+        .Level = TCollectStatsLevel::Profile,
+        .TransportVersion = ctx.TransportVersion,
+        .MaxStoredBytes = 1000,
+        .MaxChunkBytes = 17
+    };
 
-    auto ch = CreateDqOutputChannel(1, 1000, ctx.GetOutputType(), ctx.HolderFactory, settings, Log);
+    auto ch = CreateDqOutputChannel(settings, Log);
 
     for (i32 i = 0; i < 9; ++i) {
         auto row = ctx.CreateRow(i);
@@ -305,13 +315,18 @@ void TestPartialRead(TTestContext& ctx) {
 }
 
 void TestOverflow(TTestContext& ctx) {
-    TDqOutputChannelSettings settings;
-    settings.MaxStoredBytes = 30;
-    settings.MaxChunkBytes = 10;
-    settings.Level = TCollectStatsLevel::Profile;
-    settings.TransportVersion = ctx.TransportVersion;
+    TDqChannelSettings settings = {
+        .RowType = ctx.GetOutputType(),
+        .HolderFactory = &ctx.HolderFactory,
+        .ChannelId = 1,
+        .DstStageId = 1000,
+        .Level = TCollectStatsLevel::Profile,
+        .TransportVersion = ctx.TransportVersion,
+        .MaxStoredBytes = 30,
+        .MaxChunkBytes = 10
+    };
 
-    auto ch = CreateDqOutputChannel(1, 1000, ctx.GetOutputType(), ctx.HolderFactory, settings, Log);
+    auto ch = CreateDqOutputChannel(settings, Log);
 
     for (i32 i = 0; i < 8; ++i) {
         auto row = ctx.CreateRow(i);
@@ -329,13 +344,18 @@ void TestOverflow(TTestContext& ctx) {
 }
 
 void TestPopAll(TTestContext& ctx) {
-    TDqOutputChannelSettings settings;
-    settings.MaxStoredBytes = 1000;
-    settings.MaxChunkBytes = 10;
-    settings.Level = TCollectStatsLevel::Profile;
-    settings.TransportVersion = ctx.TransportVersion;
+    TDqChannelSettings settings = {
+        .RowType = ctx.GetOutputType(),
+        .HolderFactory = &ctx.HolderFactory,
+        .ChannelId = 1,
+        .DstStageId = 1000,
+        .Level = TCollectStatsLevel::Profile,
+        .TransportVersion = ctx.TransportVersion,
+        .MaxStoredBytes = 1000,
+        .MaxChunkBytes = 10
+    };
 
-    auto ch = CreateDqOutputChannel(1, 1000, ctx.GetOutputType(), ctx.HolderFactory, settings, Log);
+    auto ch = CreateDqOutputChannel(settings, Log);
 
     for (i32 i = 0; i < 50; ++i) {
         auto row = ctx.CreateRow(i);
@@ -360,13 +380,18 @@ void TestPopAll(TTestContext& ctx) {
 }
 
 void TestBigRow(TTestContext& ctx) {
-    TDqOutputChannelSettings settings;
-    settings.MaxStoredBytes = std::numeric_limits<ui32>::max();
-    settings.MaxChunkBytes = 2_MB;
-    settings.Level = TCollectStatsLevel::Profile;
-    settings.TransportVersion = ctx.TransportVersion;
+    TDqChannelSettings settings = {
+        .RowType = ctx.GetOutputType(),
+        .HolderFactory = &ctx.HolderFactory,
+        .ChannelId = 1,
+        .DstStageId = 1000,
+        .Level = TCollectStatsLevel::Profile,
+        .TransportVersion = ctx.TransportVersion,
+        .MaxStoredBytes = std::numeric_limits<ui32>::max(),
+        .MaxChunkBytes = 2_MB
+    };
 
-    auto ch = CreateDqOutputChannel(1, 1000, ctx.GetOutputType(), ctx.HolderFactory, settings, Log);
+    auto ch = CreateDqOutputChannel(settings, Log);
 
     {
         auto row = ctx.CreateRow(1);
@@ -447,16 +472,19 @@ void TestBigRow(TTestContext& ctx) {
 }
 
 void TestSpillWithMockStorage(TTestContext& ctx) {
-    TDqOutputChannelSettings settings;
-    settings.MaxStoredBytes = 100;
-    settings.MaxChunkBytes = 20;
-    settings.Level = TCollectStatsLevel::Profile;
-    settings.TransportVersion = ctx.TransportVersion;
+    TDqChannelSettings settings = {
+        .RowType = ctx.GetOutputType(),
+        .HolderFactory = &ctx.HolderFactory,
+        .ChannelId = 1,
+        .DstStageId = 1000,
+        .Level = TCollectStatsLevel::Profile,
+        .TransportVersion = ctx.TransportVersion,
+        .MaxStoredBytes = 100,
+        .MaxChunkBytes = 20,
+        .ChannelStorage = MakeIntrusive<TMockChannelStorage>(100'500ul)
+    };
 
-    auto storage = MakeIntrusive<TMockChannelStorage>(100'500ul);
-    settings.ChannelStorage = storage;
-
-    auto ch = CreateDqOutputChannel(1, 1000, ctx.GetOutputType(), ctx.HolderFactory, settings, Log);
+    auto ch = CreateDqOutputChannel(settings, Log);
 
     for (i32 i = 0; i < 35; ++i) {
         auto row = ctx.CreateRow(i);
@@ -511,16 +539,19 @@ void TestSpillWithMockStorage(TTestContext& ctx) {
 }
 
 void TestOverflowWithMockStorage(TTestContext& ctx) {
-    TDqOutputChannelSettings settings;
-    settings.MaxStoredBytes = 500;
-    settings.MaxChunkBytes = 10;
-    settings.Level = TCollectStatsLevel::Profile;
-    settings.TransportVersion = ctx.TransportVersion;
+    TDqChannelSettings settings = {
+        .RowType = ctx.GetOutputType(),
+        .HolderFactory = &ctx.HolderFactory,
+        .ChannelId = 1,
+        .DstStageId = 1000,
+        .Level = TCollectStatsLevel::Profile,
+        .TransportVersion = ctx.TransportVersion,
+        .MaxStoredBytes = 500,
+        .MaxChunkBytes = 10,
+        .ChannelStorage = MakeIntrusive<TMockChannelStorage>(500ul)
+    };
 
-    auto storage = MakeIntrusive<TMockChannelStorage>(500ul);
-    settings.ChannelStorage = storage;
-
-    auto ch = CreateDqOutputChannel(1, 1000, ctx.GetOutputType(), ctx.HolderFactory, settings, Log);
+    auto ch = CreateDqOutputChannel(settings, Log);
 
     for (i32 i = 0; i < 42; ++i) {
         auto row = ctx.CreateRow(i);
@@ -541,14 +572,19 @@ void TestOverflowWithMockStorage(TTestContext& ctx) {
 }
 
 void TestChunkSizeLimit(TTestContext& ctx) {
-    TDqOutputChannelSettings settings;
-    settings.MaxStoredBytes = 500;
-    settings.MaxChunkBytes = 100;
-    settings.ChunkSizeLimit = 100000;
-    settings.Level = TCollectStatsLevel::Profile;
-    settings.TransportVersion = ctx.TransportVersion;
+    TDqChannelSettings settings = {
+        .RowType = ctx.GetOutputType(),
+        .HolderFactory = &ctx.HolderFactory,
+        .ChannelId = 1,
+        .DstStageId = 1000,
+        .Level = TCollectStatsLevel::Profile,
+        .TransportVersion = ctx.TransportVersion,
+        .MaxStoredBytes = 500,
+        .MaxChunkBytes = 100,
+        .ChunkSizeLimit = 100000
+    };
 
-    auto ch = CreateDqOutputChannel(1, 1000, ctx.GetOutputType(), ctx.HolderFactory, settings, Log);
+    auto ch = CreateDqOutputChannel(settings, Log);
 
     for (i32 i = 0; i < 10; ++i) {
         auto row = ctx.CreateRow(i);
@@ -667,20 +703,24 @@ Y_UNIT_TEST(Overflow) {
 }
 
 void TestBackPressureInMemory(TTestContext& ctx, bool multi) {
-    TDqOutputChannelSettings settings;
-    settings.MaxStoredBytes = 100;
-    settings.MaxChunkBytes = 100;
-    settings.Level = TCollectStatsLevel::Profile;
-    settings.TransportVersion = ctx.TransportVersion;
+    TDqChannelSettings settings = {
+        .RowType = ctx.GetOutputType(),
+        .HolderFactory = &ctx.HolderFactory,
+        .DstStageId = 1000,
+        .Level = TCollectStatsLevel::Profile,
+        .TransportVersion = ctx.TransportVersion,
+        .MaxStoredBytes = 100,
+        .MaxChunkBytes = 100
+    };
 
     TVector<IDqOutputChannel::TPtr> channels;
-
     constexpr ui32 CHANNEL_BITS = 3;
     constexpr ui32 CHANNEL_COUNT = 1 << CHANNEL_BITS;
     constexpr ui32 MSG_PER_CHANNEL = 4;
 
     for (ui32 i = 0; i < CHANNEL_COUNT; i++) {
-        auto channel = CreateDqOutputChannel(i, 1000, ctx.GetOutputType(), ctx.HolderFactory, settings, Log);
+        settings.ChannelId = i;
+        auto channel = CreateDqOutputChannel(settings, Log);
         channels.emplace_back(channel);
     }
 
@@ -763,22 +803,26 @@ void TestBackPressureInMemory(TTestContext& ctx, bool multi) {
 }
 
 void TestBackPressureWithSpilling(TTestContext& ctx, bool multi) {
-    TDqOutputChannelSettings settings;
-    settings.MaxStoredBytes = 100;
-    settings.MaxChunkBytes = 100;
-    settings.Level = TCollectStatsLevel::Profile;
-    settings.TransportVersion = ctx.TransportVersion;
+    TDqChannelSettings settings = {
+        .RowType = ctx.GetOutputType(),
+        .HolderFactory = &ctx.HolderFactory,
+        .DstStageId = 1000,
+        .Level = TCollectStatsLevel::Profile,
+        .TransportVersion = ctx.TransportVersion,
+        .MaxStoredBytes = 100,
+        .MaxChunkBytes = 100
+    };
 
     TVector<IDqOutputChannel::TPtr> channels;
-
     constexpr ui32 CHANNEL_BITS = 3;
     constexpr ui32 CHANNEL_COUNT = 1 << CHANNEL_BITS;
     constexpr ui32 MSG_PER_CHANNEL = 4;
 
     for (ui32 i = 0; i < CHANNEL_COUNT; i++) {
         // separate Storage for each channel is required
+        settings.ChannelId = i;
         settings.ChannelStorage = MakeIntrusive<TMockChannelStorage>(100000ul);
-        auto channel = CreateDqOutputChannel(i, 1000, ctx.GetOutputType(), ctx.HolderFactory, settings, Log);
+        auto channel = CreateDqOutputChannel(settings, Log);
         channels.emplace_back(channel);
     }
 
@@ -866,20 +910,24 @@ void TestBackPressureWithSpilling(TTestContext& ctx, bool multi) {
 }
 
 void TestBackPressureInMemoryLoad(TTestContext& ctx) {
-    TDqOutputChannelSettings settings;
-    settings.MaxStoredBytes = 100;
-    settings.MaxChunkBytes = 100;
-    settings.Level = TCollectStatsLevel::Profile;
-    settings.TransportVersion = ctx.TransportVersion;
+    TDqChannelSettings settings = {
+        .RowType = ctx.GetOutputType(),
+        .HolderFactory = &ctx.HolderFactory,
+        .DstStageId = 1000,
+        .Level = TCollectStatsLevel::Profile,
+        .TransportVersion = ctx.TransportVersion,
+        .MaxStoredBytes = 500,
+        .MaxChunkBytes = 100
+    };
 
     TVector<IDqOutputChannel::TPtr> channels;
-
     constexpr ui32 CHANNEL_BITS = 3;
     constexpr ui32 CHANNEL_COUNT = 1 << CHANNEL_BITS;
     // constexpr ui32 MSG_PER_CHANNEL = 4;
 
     for (ui32 i = 0; i < CHANNEL_COUNT; i++) {
-        auto channel = CreateDqOutputChannel(i, 1000, ctx.GetOutputType(), ctx.HolderFactory, settings, Log);
+        settings.ChannelId = i;
+        auto channel = CreateDqOutputChannel(settings, Log);
         channels.emplace_back(channel);
     }
 
@@ -934,22 +982,26 @@ void TestBackPressureInMemoryLoad(TTestContext& ctx) {
 }
 
 void TestBackPressureWithSpillingLoad(TTestContext& ctx) {
-    TDqOutputChannelSettings settings;
-    settings.MaxStoredBytes = 100;
-    settings.MaxChunkBytes = 100;
-    settings.Level = TCollectStatsLevel::Profile;
-    settings.TransportVersion = ctx.TransportVersion;
+    TDqChannelSettings settings = {
+        .RowType = ctx.GetOutputType(),
+        .HolderFactory = &ctx.HolderFactory,
+        .DstStageId = 1000,
+        .Level = TCollectStatsLevel::Profile,
+        .TransportVersion = ctx.TransportVersion,
+        .MaxStoredBytes = 100,
+        .MaxChunkBytes = 100
+    };
 
     TVector<IDqOutputChannel::TPtr> channels;
-
     constexpr ui32 CHANNEL_BITS = 3;
     constexpr ui32 CHANNEL_COUNT = 1 << CHANNEL_BITS;
     // constexpr ui32 MSG_PER_CHANNEL = 4;
 
     for (ui32 i = 0; i < CHANNEL_COUNT; i++) {
         // separate Storage for each channel is required
+        settings.ChannelId = i;
         settings.ChannelStorage = MakeIntrusive<TMockChannelStorage>(100000ul);
-        auto channel = CreateDqOutputChannel(i, 1000, ctx.GetOutputType(), ctx.HolderFactory, settings, Log);
+        auto channel = CreateDqOutputChannel(settings, Log);
         channels.emplace_back(channel);
     }
 

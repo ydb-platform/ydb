@@ -34,6 +34,7 @@ message TPartitionMeta {
     optional TPartitionCounterData CounterData = 4;
     optional uint64 EndWriteTimestamp = 5;
     optional uint64 FirstUncompactedOffset = 6; //deprecated
+    optional uint64 NextMessageIdDeduplicatorWAL = 7 [default = 1];
 }
 
 message TPartitionTxMeta {
@@ -219,6 +220,7 @@ message TPQConfig {
     }
 
     optional TCompactionConfig CompactionConfig = 58;
+    optional uint64 MaxMessageSizeBytes = 59 [default = 125829120]; // 120MB
 }
 
 message TChannelProfile {
@@ -269,6 +271,7 @@ message TPartitionConfig {
 
     optional uint64 WriteSpeedInBytesPerSecond = 7 [default = 50000000];
     optional uint64 BurstSize = 8 [default = 50000000];
+    optional uint64 WriteMessageDeduplicationIdPerSecond = 17 [default = 1000];
 
     message TReadQuota {
         optional string ClientId = 1;
@@ -470,6 +473,8 @@ message TPQTabletConfig {
 
     // The ID of the Monitoring project that will be used as the value of `project` label for detailed metrics level.
     optional string MonitoringProjectId = 41;
+
+    optional string TimestampType = 42;
 }
 
 message THeartbeat {
@@ -761,9 +766,11 @@ message TClientInfo {
 
 message TAggregatedCounters {
     repeated uint64 Values = 1;
+
     repeated TConsumerAggregatedCounters ConsumerAggregatedCounters = 2;
     optional TCompactionCounters CompactionCounters = 3;
     optional TExtendedCounters ExtendedCounters = 4;
+    repeated TMLPConsumerCounters MLPConsumerCounters = 5;
 
     message TConsumerAggregatedCounters {
         optional string Consumer = 1;
@@ -775,6 +782,22 @@ message TAggregatedCounters {
 
     message TExtendedCounters {
         repeated uint64 Values = 1;
+    }
+
+    message TMLPConsumerCounters {
+        optional string Consumer = 1;
+
+        repeated uint64 CountersValues = 2;
+        repeated uint64 MessageLocksValues = 3;
+        repeated uint64 MessageLockingDurationValues = 4;
+
+        optional uint64 DeletedByRetentionPolicy = 5;
+        optional uint64 DeletedByDeadlinePolicy = 6;
+        optional uint64 DeletedByMovedToDLQ = 7;
+
+        optional uint64 CPUUsage = 8;
+
+        repeated uint64 WaitingLockingDurationValues = 9;
     }
 }
 
@@ -1349,11 +1372,14 @@ message TEvMLPUnlockResponse {
 // To PQTablet
 // Изменяет дедлайн сообщения
 message TEvMLPChangeMessageDeadlineRequest {
+    message TOffsetWithDeadline {
+        optional uint64 Offset = 1;
+        optional uint64 DeadlineTimestampSeconds = 2;
+    }
     optional string Topic = 1; // PathId? Нужен для возможности в одной таблетке хранить несколько топиков
     optional string Consumer = 2;
     optional uint32 PartitionId = 3;
-    optional uint64 DeadlineTimestampSeconds = 4;
-    repeated uint64 Offset = 5;
+    repeated TOffsetWithDeadline Message = 6;
 }
 
 // From PQTablet
@@ -1361,7 +1387,12 @@ message TEvMLPChangeMessageDeadlineResponse {
 }
 
 message TMLPMetrics {
+    optional uint64 TotalCommittedMessageCount = 2;
+    optional uint64 TotalMovedToDLQMessageCount = 3;
     optional uint64 TotalScheduledToDLQMessageCount = 1;
+    optional uint64 TotalPurgedMessageCount = 4;
+    optional uint64 TotalDeletedByDeadlinePolicyMessageCount = 5;
+    optional uint64 TotalDeletedByRetentionMessageCount = 6;
 }
 
 message TMLPStorageSnapshot {
@@ -1415,11 +1446,10 @@ message TMLPStorageWAL {
 }
 
 message TMessageDeduplicationIdWAL {
-    optional uint64 ExpirationTimestampMilliseconds = 1;
-
     message TMessage {
         optional string DeduplicationId = 1;
-        optional uint64 Offset = 2;
+        optional uint64 OffsetDelta = 2;
+        optional uint64 ExpirationTimestampMillisecondsDelta = 3;
     }
-    repeated TMessage Message = 2;
+    repeated TMessage Message = 1;
 };

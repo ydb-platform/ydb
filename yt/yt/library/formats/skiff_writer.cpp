@@ -492,7 +492,7 @@ TUnversionedValueToSkiffConverter CreateSimpleValueConverter(
                 EWireType::Boolean,
                 EWireType::Double,
                 EWireType::Nothing,
-                EWireType::Yson32
+                EWireType::Yson32,
             });
             return CreatePrimitiveValueConverter(wireType, required);
 
@@ -1088,7 +1088,7 @@ private:
             }
 
             SkiffWriter_->Flush();
-            TryFlushBuffer(false);
+            MaybeFlushBuffer(/*force*/ false);
         }
         YT_UNUSED_FUTURE(Flush());
     }

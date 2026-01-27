@@ -22,7 +22,7 @@ static int nr_msgs;
 static int use_tcp;
 static int classic_buffers;
 
-#define RECV_BIDS	8192
+#define RECV_BIDS	16384
 #define RECV_BID_MASK	(RECV_BIDS - 1)
 
 #include "liburing.h"

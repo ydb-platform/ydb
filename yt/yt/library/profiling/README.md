@@ -100,8 +100,26 @@ The table shows which aggregate subsets are exported depending on tag settings.
 
 ## Monitoring aggregates
 
-Current Monitoring aggregates can compute metric sums during writing.
+Monitoring can compute metric aggregates during writing.
 
-Summing only makes sense for some sensor types. To avoid pointless graphs in Solomon, the library marks all values for which aggregates make sense with the tag `yt_aggr=1`.
+**Sum only aggregate**.
+This is a default mode.
+
+To avoid pointless graphs in Solomon, the library marks values for which aggregation is meaningful with the tag yt_aggr=1.
 
 In shard settings, there must be a single rule enabled: `host=*, yt_aggr=1 -> host=Aggr, yt_aggr=1`.
+
+**Full monitoring aggregates support**.
+This is an experimental feature, disabled by default.
+To enable it, set the option `enable_solomon_aggregates` to `%true`.
+
+In this mode, the library tags values that can be meaningfully aggregated with tag `yt_aggr=X`,
+where `X` indicates the aggregate method to use: `max`, `min`, `sum` or `avg`.
+
+In service settings, there must be the following rules:
+```
+{"condition": {host: "*", yt_aggr: "sum"}, "target": {host: "Aggr", yt_aggr: "-"}, "function": "SUM"}
+{"condition": {host: "*", yt_aggr: "max"}, "target": {host: "Aggr", yt_aggr: "-"}, "function": "MAX"}
+{"condition": {host: "*", yt_aggr: "min"}, "target": {host: "Aggr", yt_aggr: "-"}, "function": "MIN"}
+{"condition": {host: "*", yt_aggr: "avg"}, "target": {host: "Aggr", yt_aggr: "-"}, "function": "AVG"}
+```

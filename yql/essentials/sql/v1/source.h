@@ -30,7 +30,7 @@ typedef TVector<TTableRef> TTableList;
 class IJoin;
 class ISource: public INode {
 public:
-    virtual ~ISource();
+    ~ISource() override;
 
     virtual bool IsFake() const;
     virtual void AllColumns();
@@ -92,14 +92,14 @@ public:
     virtual bool SetSamplingRate(TContext& ctx, ESampleClause clause, TNodePtr samplingRate);
     virtual IJoin* GetJoin();
     virtual ISource* GetCompositeSource();
-    virtual bool IsSelect() const;
+    bool IsSelect() const override;
     virtual bool IsTableSource() const;
     virtual bool ShouldUseSourceAsColumn(const TString& source) const;
     virtual bool IsJoinKeysInitializing() const;
     virtual const TString* GetWindowName() const;
     virtual bool HasMatchRecognize() const;
     virtual TNodePtr BuildMatchRecognize(TContext& ctx, TString&& inputTable);
-    virtual bool DoInit(TContext& ctx, ISource* src);
+    bool DoInit(TContext& ctx, ISource* src) override;
     virtual TNodePtr Build(TContext& ctx) = 0;
 
     virtual TMaybe<TString> FindColumnMistype(const TString& name) const;
@@ -118,15 +118,15 @@ public:
     TNodePtr BuildSortSpec(const TVector<TSortSpecificationPtr>& orderBy, const TString& label, bool traits, bool assume);
 
 protected:
-    ISource(TPosition pos);
-    virtual TAstNode* Translate(TContext& ctx) const;
+    explicit ISource(TPosition pos);
+    TAstNode* Translate(TContext& ctx) const override;
 
     void FillSortParts(const TVector<TSortSpecificationPtr>& orderBy, TNodePtr& sortKeySelector, TNodePtr& sortDirection);
 
     TVector<TNodePtr>& Expressions(EExprSeat exprSeat);
     TNodePtr AliasOrColumn(const TNodePtr& node, bool withSource);
 
-    TNodePtr BuildWindowFrame(const TFrameSpecification& spec, bool isCompact);
+    TNodePtr BuildWindowFrame(TContext& ctx, const TFrameSpecification& spec, bool isCompact, TNodePtr sortSpec);
 
     THashSet<TString> ExprAliases_;
     THashSet<TString> FlattenByAliases_;
@@ -180,16 +180,16 @@ struct TJoinLinkSettings {
 
 class IJoin: public ISource {
 public:
-    virtual ~IJoin();
+    ~IJoin() override;
 
-    virtual IJoin* GetJoin();
+    IJoin* GetJoin() override;
     virtual TNodePtr BuildJoinKeys(TContext& ctx, const TVector<TDeferredAtom>& names) = 0;
     virtual void SetupJoin(const TString& joinOp, TNodePtr joinExpr, const TJoinLinkSettings& linkSettings) = 0;
     virtual const THashMap<TString, THashSet<TString>>& GetSameKeysMap() const = 0;
     virtual TVector<TString> GetJoinLabels() const = 0;
 
 protected:
-    IJoin(TPosition pos);
+    explicit IJoin(TPosition pos);
 };
 
 class TSessionWindow final: public INode {
@@ -213,7 +213,7 @@ private:
 
 class THoppingWindow final: public INode {
 public:
-    THoppingWindow(TPosition pos, TVector<TNodePtr> args);
+    THoppingWindow(TPosition pos, TVector<TNodePtr> args, bool useNamed);
     TNodePtr BuildTraits(const TString& label) const;
     TNodePtr GetInterval() const;
     void MarkValid();
@@ -232,8 +232,13 @@ private:
     TNodePtr TimeExtractor_;
     TNodePtr Hop_;
     TNodePtr Interval_;
+    TNodePtr SizeLimit_;
+    TNodePtr TimeLimit_;
+    TNodePtr EarlyPolicy_;
+    TNodePtr LatePolicy_;
     const TNodePtr Delay_ = Y("Interval", Q("0"));
     const TString DataWatermarks_ = "true";
+    bool UseNamed_ = false;
     bool Valid_;
 };
 
@@ -245,6 +250,9 @@ TSourcePtr BuildEquiJoin(TPosition pos, TVector<TSourcePtr>&& sources, TVector<b
 TNodePtr BuildSubquery(TSourcePtr source, const TString& alias, bool inSubquery, int ensureTupleSize, TScopedStatePtr scoped);
 TNodePtr BuildSubqueryRef(TNodePtr subquery, const TString& alias, int tupleIndex = -1);
 bool IsSubqueryRef(const TSourcePtr& source);
+TNodePtr BuildYqlSubquery(TNodePtr source, TString alias);
+TNodePtr BuildYqlSubqueryRef(TNodePtr subquery, TString ref);
+bool IsYqlSubqueryRef(const TNodePtr& source);
 
 TNodePtr BuildInvalidSubqueryRef(TPosition subqueryPos);
 TNodePtr BuildSourceNode(TPosition pos, TSourcePtr source, bool checkExist = false, bool withTables = false);
@@ -312,6 +320,7 @@ TNodePtr BuildDelete(TPosition pos, TScopedStatePtr scoped, const TTableRef& tab
 TNodePtr BuildBatchDelete(TPosition pos, TScopedStatePtr scoped, const TTableRef& table, TSourcePtr source, TNodePtr options = nullptr);
 
 // Implemented in query.cpp
+TNodePtr BuildTruncateTable(TPosition pos, const TTableRef& tr, const TTruncateTableParameters& params, TScopedStatePtr scoped);
 TNodePtr BuildAlterTable(TPosition pos, const TTableRef& tr, const TAlterTableParameters& params, TScopedStatePtr scoped);
 TNodePtr BuildAlterDatabase(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TAlterDatabaseParameters& params, TScopedStatePtr scoped);
 TNodePtr BuildTableKey(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name, const TViewDescription& view);

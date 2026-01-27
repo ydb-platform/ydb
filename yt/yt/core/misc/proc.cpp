@@ -74,7 +74,7 @@ namespace {
 
 YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "Proc");
 
-TString LinuxErrorCodeFormatter(int code)
+std::string LinuxErrorCodeFormatter(int code)
 {
     return TEnumTraits<ELinuxErrorCode>::ToString(static_cast<ELinuxErrorCode>(code));
 }
@@ -158,7 +158,7 @@ std::optional<int> GetParentPid(int pid)
     TFileInput in(Format("/proc/%v/status", pid));
     TString line;
     while (in.ReadLine(line)) {
-        const TString ppidMarker = "PPid:\t";
+        const std::string ppidMarker = "PPid:\t";
         if (line.StartsWith(ppidMarker)) {
             line = line.substr(ppidMarker.size());
             return FromString<int>(line);
@@ -173,7 +173,7 @@ std::vector<int> GetNamespacePids(int pid)
     TFileInput in(Format("/proc/%v/status", pid));
     TString line;
     while (in.ReadLine(line)) {
-        const TString nstgidMarker = "NStgid:\t";
+        const std::string nstgidMarker = "NStgid:\t";
         if (line.StartsWith(nstgidMarker)) {
             line = line.substr(nstgidMarker.size());
             auto pidFields = SplitString(line, " ");
@@ -387,7 +387,7 @@ bool IsUserspaceThread(size_t tid)
 #endif
 }
 
-void ChownChmodDirectory(const TString& path, const std::optional<uid_t>& userId, const std::optional<int>& permissions)
+void ChownChmodDirectory(const std::string& path, const std::optional<uid_t>& userId, const std::optional<int>& permissions)
 {
 #ifdef _unix_
     if (userId) {
@@ -412,7 +412,7 @@ void ChownChmodDirectory(const TString& path, const std::optional<uid_t>& userId
 #endif
 }
 
-void ChownChmodDirectoriesRecursively(const TString& path, const std::optional<uid_t>& userId, const std::optional<int>& permissions)
+void ChownChmodDirectoriesRecursively(const std::string& path, const std::optional<uid_t>& userId, const std::optional<int>& permissions)
 {
 #ifdef _unix_
     for (const auto& directoryPath : NFS::EnumerateDirectories(path)) {
@@ -442,7 +442,7 @@ void SetThreadPriority(int tid, int priority)
 TMemoryUsage GetProcessMemoryUsage(int pid)
 {
 #ifdef _linux_
-    TString path = "/proc/self/statm";
+    std::string path = "/proc/self/statm";
     if (pid != -1) {
         path = Format("/proc/%v/statm", pid);
     }
@@ -462,7 +462,7 @@ TMemoryUsage GetProcessMemoryUsage(int pid)
 std::vector<TProcessCgroup> GetProcessCgroups(int pid)
 {
 #ifdef _linux_
-    TString path = "/proc/self/cgroup";
+    std::string path = "/proc/self/cgroup";
     if (pid != -1) {
         path = Format("/proc/%v/cgroup", pid);
     }
@@ -485,7 +485,7 @@ std::vector<TProcessCgroup> GetProcessCgroups(int pid)
         TProcessCgroup group;
         group.HierarchyId = FromString<ui64>(fields[0]);
         group.ControllersName = fields[1];
-        group.Controllers = SplitString(fields[1], ",");
+        group.Controllers = StringSplitter(fields[1]).Split(',');
         group.Path = fields[2];
 
         groups.push_back(group);
@@ -499,12 +499,12 @@ std::vector<TProcessCgroup> GetProcessCgroups(int pid)
 }
 
 TCgroupCpuStat GetCgroupCpuStat(
-    const TString& controllerName,
-    const TString& cgroupPath,
-    const TString& cgroupMountPoint)
+    const std::string& controllerName,
+    const std::string& cgroupPath,
+    const std::string& cgroupMountPoint)
 {
 #ifdef _linux_
-    TString path = cgroupMountPoint + "/" + controllerName + cgroupPath + "/cpu.stat";
+    std::string path = cgroupMountPoint + "/" + controllerName + cgroupPath + "/cpu.stat";
 
     TCgroupCpuStat stat;
 
@@ -537,11 +537,11 @@ TCgroupCpuStat GetCgroupCpuStat(
 }
 
 TCgroupMemoryStat GetCgroupMemoryStat(
-    const TString& cgroupPath,
-    const TString& cgroupMountPoint)
+    const std::string& cgroupPath,
+    const std::string& cgroupMountPoint)
 {
 #ifdef _linux_
-    TString path = cgroupMountPoint + "/memory" + cgroupPath + "/memory.stat";
+    std::string path = cgroupMountPoint + "/memory" + cgroupPath + "/memory.stat";
 
     TCgroupMemoryStat stat;
 
@@ -579,11 +579,11 @@ TCgroupMemoryStat GetCgroupMemoryStat(
 }
 
 std::optional<i64> GetCgroupAnonymousMemoryLimit(
-    const TString& cgroupPath,
-    const TString& cgroupMountPoint)
+    const std::string& cgroupPath,
+    const std::string& cgroupMountPoint)
 {
 #ifdef _linux_
-    TString path = cgroupMountPoint + "/memory" + cgroupPath + "/memory.anon.limit";
+    std::string path = cgroupMountPoint + "/memory" + cgroupPath + "/memory.anon.limit";
     return FromString<i64>(Trim(TUnbufferedFileInput(path).ReadAll(), "\n"));
 #else
     Y_UNUSED(cgroupPath, cgroupMountPoint);
@@ -591,11 +591,11 @@ std::optional<i64> GetCgroupAnonymousMemoryLimit(
 #endif
 }
 
-THashMap<TString, i64> GetVmstat()
+THashMap<std::string, i64> GetVmstat()
 {
 #ifdef _linux_
-    THashMap<TString, i64> result;
-    TString path = "/proc/vmstat";
+    THashMap<std::string, i64> result;
+    std::string path = "/proc/vmstat";
     TFileInput vmstatFile(path);
     auto data = vmstatFile.ReadAll();
     auto lines = SplitString(data, "\n");
@@ -616,7 +616,7 @@ THashMap<TString, i64> GetVmstat()
 ui64 GetProcessCumulativeMajorPageFaults(int pid)
 {
 #ifdef _linux_
-    TString path = "/proc/self/stat";
+    std::string path = "/proc/self/stat";
     if (pid != -1) {
         path = Format("/proc/%v/stat", pid);
     }
@@ -630,27 +630,27 @@ ui64 GetProcessCumulativeMajorPageFaults(int pid)
 #endif
 }
 
-TString GetProcessName(int pid)
+std::string GetProcessName(int pid)
 {
 #ifdef _linux_
-    TString path = Format("/proc/%v/comm", pid);
-    return TString(Trim(TUnbufferedFileInput(path).ReadAll(), "\n"));
+    std::string path = Format("/proc/%v/comm", pid);
+    return std::string(Trim(TUnbufferedFileInput(path).ReadAll(), "\n"));
 #else
     Y_UNUSED(pid);
     return "";
 #endif
 }
 
-std::vector<TString> GetProcessCommandLine(int pid)
+std::vector<std::string> GetProcessCommandLine(int pid)
 {
 #ifdef _linux_
-    TString path = Format("/proc/%v/cmdline", pid);
+    std::string path = Format("/proc/%v/cmdline", pid);
     auto raw = TUnbufferedFileInput(path).ReadAll();
-    std::vector<TString> result;
+    std::vector<std::string> result;
     auto begin = 0;
     while (begin < std::ssize(raw)) {
         auto end = raw.find('\0', begin);
-        if (end == TString::npos) {
+        if (end == std::string::npos) {
             result.push_back(raw.substr(begin));
             begin = raw.length();
         } else {
@@ -662,7 +662,7 @@ std::vector<TString> GetProcessCommandLine(int pid)
     return result;
 #else
     Y_UNUSED(pid);
-    return std::vector<TString>();
+    return std::vector<std::string>();
 #endif
 }
 
@@ -1057,7 +1057,7 @@ void SafeSetUid(int uid)
     }
 }
 
-TString SafeGetUsernameByUid(int uid)
+std::string SafeGetUsernameByUid(int uid)
 {
     int bufferSize = ::sysconf(_SC_GETPW_R_SIZE_MAX);
     if (bufferSize < 0) {
@@ -1159,7 +1159,7 @@ void SafeSetUid(int /*uid*/)
     YT_UNIMPLEMENTED();
 }
 
-TString SafeGetUsernameByUid(int /*uid*/)
+std::string SafeGetUsernameByUid(int /*uid*/)
 {
     YT_UNIMPLEMENTED();
 }
@@ -1216,7 +1216,7 @@ int GetFileDescriptorCount()
     return descriptorCount;
 }
 
-void SafeCreateStderrFile(TString fileName)
+void SafeCreateStderrFile(std::string fileName)
 {
 #ifdef _unix_
     if (freopen(fileName.data(), "a", stderr) == nullptr) {
@@ -1261,7 +1261,7 @@ TNetworkInterfaceStatisticsMap GetNetworkInterfaceStatistics()
     TNetworkInterfaceStatisticsMap interfaceToStatistics;
     for (TString line; procNetDev.ReadLine(line) != 0; ) {
         TNetworkInterfaceStatistics statistics;
-        TVector<TString> lineParts = StringSplitter(line).SplitBySet(": ").SkipEmpty();
+        std::vector<std::string> lineParts = StringSplitter(line).SplitBySet(": ").SkipEmpty();
         YT_VERIFY(lineParts.size() == 1 + sizeof(TNetworkInterfaceStatistics) / sizeof(ui64));
         auto interfaceName = lineParts[0];
 
@@ -1293,7 +1293,7 @@ TNetworkInterfaceStatisticsMap GetNetworkInterfaceStatistics()
 #endif
 }
 
-void SendSignal(const std::vector<int>& pids, const TString& signalName)
+void SendSignal(const std::vector<int>& pids, const std::string& signalName)
 {
 #ifdef _unix_
     ValidateSignalName(signalName);
@@ -1309,9 +1309,9 @@ void SendSignal(const std::vector<int>& pids, const TString& signalName)
 #endif
 }
 
-std::optional<int> FindSignalIdBySignalName(std::string_view signalName)
+std::optional<int> FindSignalIdBySignalName(const std::string& signalName)
 {
-    static const THashMap<TString, int> SignalNameToNumber{
+    static const THashMap<std::string, int> SignalNameToNumber{
         { "SIGTERM", SIGTERM },
         { "SIGINT",  SIGINT },
         { "SIGALRM", SIGALRM },
@@ -1328,7 +1328,7 @@ std::optional<int> FindSignalIdBySignalName(std::string_view signalName)
     return it == SignalNameToNumber.end() ? std::nullopt : std::make_optional(it->second);
 }
 
-void ValidateSignalName(const TString& signalName)
+void ValidateSignalName(const std::string& signalName)
 {
     auto signal = FindSignalIdBySignalName(signalName);
     if (!signal) {
@@ -1369,9 +1369,9 @@ TMemoryMappingStatistics operator+(TMemoryMappingStatistics lhs, const TMemoryMa
     return lhs;
 }
 
-std::vector<TMemoryMapping> ParseMemoryMappings(const TString& rawSMaps)
+std::vector<TMemoryMapping> ParseMemoryMappings(const std::string& rawSMaps)
 {
-    auto parseMemoryAmount = [] (const TString& strValue, const TString& unit) {
+    auto parseMemoryAmount = [] (const std::string& strValue, const std::string& unit) {
         YT_VERIFY(unit == "kB");
         auto value = FromString<ui64>(strValue);
         return value * 1_KB;
@@ -1395,7 +1395,7 @@ std::vector<TMemoryMapping> ParseMemoryMappings(const TString& rawSMaps)
             }
         };
 
-        std::vector<TString> words;
+        std::vector<std::string> words;
         StringSplitter(line).SplitBySet(" \t").SkipEmpty().Collect(&words);
 
         // Memory mapping description starts with boundary addresses which consists of lowercase
@@ -1471,7 +1471,7 @@ std::vector<TMemoryMapping> ParseMemoryMappings(const TString& rawSMaps)
                 mapping.ProtectionKey = FromString<ui64>(words[1]);
             } else if (property == "VmFlags") {
                 for (const auto& flag : words) {
-                    if (auto optionalEnumFlag = TEnumTraits<EVMFlag>::FindValueByLiteral(to_upper(flag))) {
+                    if (auto optionalEnumFlag = TEnumTraits<EVMFlag>::FindValueByLiteral(to_upper(TString(flag)))) {
                         mapping.VMFlags |= *optionalEnumFlag;
                     } else {
                         // Unknown flag, do not crash.
@@ -1565,7 +1565,7 @@ std::vector<TMemoryMapping> GetProcessMemoryMappings(int pid)
 }
 
 template <typename TField>
-static bool TryParseField(const TVector<TString>& fields, int index, TField& field)
+static bool TryParseField(const std::vector<TStringBuf>& fields, int index, TField& field)
 {
     if (std::ssize(fields) <= index) {
         return false;
@@ -1573,7 +1573,7 @@ static bool TryParseField(const TVector<TString>& fields, int index, TField& fie
     return TryFromString(fields[index], field);
 }
 
-static bool TryParseField(const TVector<TString>& fields, int index, TDuration& field)
+static bool TryParseField(const std::vector<TStringBuf>& fields, int index, TDuration& field)
 {
     i64 value = 0;
     if (TryParseField(fields, index, value)) {
@@ -1583,9 +1583,9 @@ static bool TryParseField(const TVector<TString>& fields, int index, TDuration& 
     return false;
 }
 
-TBlockDeviceStat ParseBlockDeviceStat(const TString& statLine)
+TBlockDeviceStat ParseBlockDeviceStat(const std::string& statLine)
 {
-    auto buffer = SplitString(statLine, " ");
+    std::vector<TStringBuf> buffer = StringSplitter(statLine).Split(' ');
     TBlockDeviceStat result;
     TryParseField(buffer, 0, result.ReadsCompleted);
     TryParseField(buffer, 1, result.ReadsMerged);
@@ -1607,10 +1607,10 @@ TBlockDeviceStat ParseBlockDeviceStat(const TString& statLine)
     return result;
 }
 
-std::optional<TBlockDeviceStat> GetBlockDeviceStat(const TString& deviceName)
+std::optional<TBlockDeviceStat> GetBlockDeviceStat(const std::string& deviceName)
 {
 #ifdef _linux_
-    const TString path = Format("/sys/block/%v/stat", deviceName);
+    const auto path = Format("/sys/block/%v/stat", deviceName);
     TFileInput diskStatsFile(path);
     auto data = diskStatsFile.ReadAll();
     return ParseBlockDeviceStat(Strip(data));
@@ -1624,7 +1624,7 @@ std::optional<TBlockDeviceStat> GetBlockDeviceStat(NFS::TDeviceId deviceId)
 {
 #ifdef _linux_
     if (deviceId.first != NFS::UnnamedDeviceMajor) {
-        const TString path = Format("/sys/dev/block/%v:%v/stat", deviceId.first, deviceId.second);
+        const std::string path = Format("/sys/dev/block/%v:%v/stat", deviceId.first, deviceId.second);
         TFileInput diskStatsFile(path);
         auto data = diskStatsFile.ReadAll();
         return ParseBlockDeviceStat(Strip(data));
@@ -1635,10 +1635,10 @@ std::optional<TBlockDeviceStat> GetBlockDeviceStat(NFS::TDeviceId deviceId)
     return std::nullopt;
 }
 
-NFS::TDeviceId GetBlockDeviceId(const TString& deviceName)
+NFS::TDeviceId GetBlockDeviceId(const std::string& deviceName)
 {
 #ifdef _linux_
-    const TString path = Format("/sys/block/%v/dev", deviceName);
+    const auto path = Format("/sys/block/%v/dev", deviceName);
     TFileInput blockDevFile(path);
     auto majorMinor = SplitString(Strip(blockDevFile.ReadAll()), ":", 2);
     ui32 major, minor;
@@ -1654,12 +1654,12 @@ NFS::TDeviceId GetBlockDeviceId(const TString& deviceName)
     return {0, 0};
 }
 
-TString GetBlockDeviceName(NFS::TDeviceId deviceId)
+std::string GetBlockDeviceName(NFS::TDeviceId deviceId)
 {
 #ifdef _linux_
     if (deviceId.first != NFS::UnnamedDeviceMajor) {
         auto link = NFs::ReadLink(Format("/sys/dev/block/%v:%v", deviceId.first, deviceId.second));
-        return NFS::GetFileName(link);
+        return std::string(NFS::GetFileName(link));
     }
 #else
     Y_UNUSED(deviceId);
@@ -1667,10 +1667,10 @@ TString GetBlockDeviceName(NFS::TDeviceId deviceId)
     return "";
 }
 
-std::vector<TString> ListDisks()
+std::vector<std::string> ListDisks()
 {
 #ifdef _linux_
-    std::vector<TString> disks;
+    std::vector<std::string> disks;
 
     for (const auto& entry : TDirIterator("/sys/block", TDirIterator::TOptions().SetMaxLevel(1))) {
         if (entry.fts_info == FTS_D || entry.fts_info == FTS_DP) {
@@ -1690,7 +1690,7 @@ std::vector<TString> ListDisks()
 TTaskDiskStatistics GetSelfThreadTaskDiskStatistics()
 {
 #ifdef _linux_
-    static const TString path = "/proc/thread-self/io";
+    static const std::string path = "/proc/thread-self/io";
     static std::atomic<bool> supported = true;
 
     TTaskDiskStatistics stat;
@@ -1732,7 +1732,7 @@ TTaskDiskStatistics GetSelfThreadTaskDiskStatistics()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TFile MemfdCreate(const TString& name)
+TFile MemfdCreate(const std::string& name)
 {
 #ifdef _linux_
     int fd = memfd_create(name.c_str(), 0);
@@ -1751,10 +1751,10 @@ TFile MemfdCreate(const TString& name)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const TString& GetLinuxKernelVersion()
+const std::string& GetLinuxKernelVersion()
 {
 #ifdef _linux_
-    static TString release = [] () -> TString {
+    static std::string release = [] () -> std::string {
         utsname buf{};
         if (uname(&buf) != 0) {
             return "unknown";
@@ -1766,7 +1766,7 @@ const TString& GetLinuxKernelVersion()
 
     return release;
 #else
-    static TString release = "unknown";
+    static std::string release = "unknown";
     return release;
 #endif
 }

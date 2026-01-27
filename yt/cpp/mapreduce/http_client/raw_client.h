@@ -289,12 +289,12 @@ public:
     std::unique_ptr<IInputStream> ReadTable(
         const TTransactionId& transactionId,
         const TRichYPath& path,
-        const TMaybe<TFormat>& format,
+        const TFormat& format,
         const TTableReaderOptions& options = {}) override;
 
     std::unique_ptr<IInputStream> ReadTablePartition(
         const TString& cookie,
-        const TMaybe<TFormat>& format,
+        const TFormat& format,
         const TTablePartitionReaderOptions& options = {}) override;
 
     std::unique_ptr<IInputStream> ReadBlobTable(
@@ -331,6 +331,7 @@ public:
 
     TDistributedWriteTableSessionWithCookies StartDistributedWriteTableSession(
         TMutationId& mutationId,
+        const TTransactionId& transactionId,
         const TRichYPath& richPath,
         i64 cookieCount,
         const TStartDistributedWriteTableOptions& options = {}) override;
@@ -352,6 +353,7 @@ public:
 
     TDistributedWriteFileSessionWithCookies StartDistributedWriteFileSession(
         TMutationId& mutationId,
+        const TTransactionId& transactionId,
         const TRichYPath& richPath,
         i64 cookieCount,
         const TStartDistributedWriteFileOptions& options = {}) override;

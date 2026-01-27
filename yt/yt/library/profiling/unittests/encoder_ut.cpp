@@ -43,7 +43,7 @@ TEST(TSensorEncoderTest, Encode)
 
     auto sensorDump = encoder.BuildSensorDump();
 
-    TString sensorDumpText;
+    TProtoStringType sensorDumpText;
     EXPECT_TRUE(NProtoBuf::TextFormat::PrintToString(sensorDump, &sensorDumpText));
     Cerr << "Sensor dump:\n" << sensorDumpText << Endl;
 

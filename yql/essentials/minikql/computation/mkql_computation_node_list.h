@@ -31,7 +31,7 @@ public:
         return ptr;
     }
 
-    TListChunk(ui64 size)
+    explicit TListChunk(ui64 size)
         : Magic_(TListChunkMagic)
         , Refs_(1)
         , DataEnd_(DataBegin() + size)
@@ -126,7 +126,7 @@ public:
         {
         }
 
-        TIterator(const TListRepresentation& owner)
+        explicit TIterator(const TListRepresentation& owner)
             : Owner(&owner)
             , Position(owner.Begin_)
         {
@@ -173,13 +173,13 @@ public:
         {
         }
 
-        TReverseIterator(const TListRepresentation& owner)
+        explicit TReverseIterator(const TListRepresentation& owner)
             : Owner_(&owner)
             , Position_(owner.End_)
         {
         }
 
-        TReverseIterator(const TIterator& other)
+        explicit TReverseIterator(const TIterator& other)
             : Owner_(other.Owner)
             , Position_(other.Position)
         {
@@ -296,7 +296,7 @@ public:
         *Begin_ = std::move(element);
     }
 
-    TListRepresentation(T&& element)
+    explicit TListRepresentation(T&& element)
     {
         FromSingleElement(std::move(element));
     }

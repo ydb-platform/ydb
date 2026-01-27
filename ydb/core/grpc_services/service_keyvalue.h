@@ -5,6 +5,7 @@
 namespace NKikimr::NGRpcService {
 
     class IRequestOpCtx;
+    class IRequestNoOpCtx;
     class IFacilityProvider;
 
     void DoCreateVolumeKeyValue(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&);
@@ -19,5 +20,12 @@ namespace NKikimr::NGRpcService {
     void DoReadRangeKeyValue(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&);
     void DoListRangeKeyValue(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&);
     void DoGetStorageChannelStatusKeyValue(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&);
+
+    void DoAcquireLockKeyValueV2(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider&);
+    void DoExecuteTransactionKeyValueV2(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider&);
+    void DoReadKeyValueV2(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider&);
+    void DoReadRangeKeyValueV2(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider&);
+    void DoListRangeKeyValueV2(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider&);
+    void DoGetStorageChannelStatusKeyValueV2(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider&);
 
 } // NKikimr::NGRpcService

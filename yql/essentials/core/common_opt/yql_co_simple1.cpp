@@ -1,6 +1,7 @@
 #include "yql_co.h"
 #include "yql_co_sqlin.h"
 #include "yql_co_pgselect.h"
+#include "yql_co_yqlselect.h"
 
 #include <yql/essentials/core/sql_types/yql_atom_enums.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
@@ -1667,7 +1668,7 @@ TPredicateChainNode ParsePredicateChainNode(const TExprNode::TPtr& predicate, co
     if (isMemberOf(leftArg, topLambdaArg)) {
         // left side of IN is column reference
         result.LeftArgColumns.emplace_back(leftArg->Child(1)->Content());
-    } else if (leftArg->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Tuple) {
+    } else if (leftArg->IsList()) {
         // if leftArg is tuple of members then replace tuple with its members
         for (const auto& tupleItem : leftArg->Children()) {
             if (isMemberOf(tupleItem, topLambdaArg)) {
@@ -1713,12 +1714,13 @@ TPredicateChainNode ParsePredicateChainNode(const TExprNode::TPtr& predicate, co
                     .Done()
                     .Ptr();
 
-            if (!result.LeftArgColumns.empty()) {
+            const auto tupleSize = itemType->GetItemType()->Cast<TTupleExprType>()->GetItems().size();
+            if (leftArg->IsList() && result.LeftArgColumns.size() == tupleSize) {
                 auto rowArg = Build<TCoArgument>(ctx, sqlIn.Pos())
                         .Name("row")
                         .Done();
                 auto asStructBuilder = Build<TCoAsStruct>(ctx, sqlIn.Pos());
-                for (size_t i = 0; i < itemType->GetItemType()->Cast<TTupleExprType>()->GetItems().size(); ++i) {
+                for (size_t i = 0; i < tupleSize; ++i) {
                     const TString columnName = TStringBuilder() << "_yql_sqlin_tuple_" << i;
                     asStructBuilder.Add<TCoNameValueTuple>()
                             .Name().Build(columnName)
@@ -3100,8 +3102,6 @@ TExprNode::TPtr DoNormalizeFrames(const TExprNode::TPtr& frames, TExprContext& c
 
         TWindowFrameSettings frameSettings = TWindowFrameSettings::Parse(*winOn, ctx);
         if (frameSettings.GetFrameType() == EFrameType::FrameByRange) {
-            YQL_ENSURE(IsUnbounded(frameSettings.GetFirst()));
-            YQL_ENSURE(IsCurrentRow(frameSettings.GetLast()));
             continue;
         }
 
@@ -3470,7 +3470,32 @@ TExprNode::TPtr RewriteAsHoppingWindowFullOutput(const TCoAggregate& aggregate, 
         .LoadHandler(loadLambda)
         .WatermarkMode<TCoAtom>().Build(ToString(false))
         .HoppingColumn<TCoAtom>().Build(hopTraits.Column);
-
+    if (TCoHoppingTraits::idx_SizeLimit < hopTraits.Traits.Raw()->ChildrenSize()) {
+        if (hopTraits.Traits.SizeLimit()) {
+            multiHoppingCoreBuilder.SizeLimit(hopTraits.Traits.SizeLimit());
+        } else {
+            multiHoppingCoreBuilder.SizeLimit<TCoVoid>().Build();
+        }
+        if (hopTraits.Traits.TimeLimit()) {
+            multiHoppingCoreBuilder.TimeLimit(hopTraits.Traits.TimeLimit());
+        } else {
+            multiHoppingCoreBuilder.TimeLimit<TCoVoid>().Build();
+        }
+        if (hopTraits.EarlyPolicy) {
+            multiHoppingCoreBuilder.EarlyPolicy<TCoUint32>()
+                .Literal().Build(ToString((ui32)*hopTraits.EarlyPolicy))
+            .Build();
+        } else {
+            multiHoppingCoreBuilder.EarlyPolicy<TCoVoid>().Build();
+        }
+        if (hopTraits.LatePolicy) {
+            multiHoppingCoreBuilder.LatePolicy<TCoUint32>()
+                .Literal().Build(ToString((ui32)*hopTraits.LatePolicy))
+            .Build();
+        } else {
+            multiHoppingCoreBuilder.LatePolicy<TCoVoid>().Build();
+        }
+    }
     return Build<TCoPartitionsByKeys>(ctx, pos)
         .Input(aggregate.Input())
         .KeySelectorLambda(keyLambda)
@@ -4105,6 +4130,11 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
                 res = KeepWorld(res, *node, ctx, *optCtx.Types);
                 return res;
             }
+        }
+
+        if (IsIdentityLambda(*node->Child(1))) {
+            YQL_CLOG(DEBUG, Core) << "Trivial lambda: " << node->Content();
+            return node->HeadPtr();
         }
 
         return node;
@@ -7109,6 +7139,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
 
     map["YqlSelect"] = &ExpandPgSelect;
     map["YqlIterate"] = &ExpandPgIterate;
+    map["YqlIterateAll"] = &ExpandPgIterate;
 
     map["PgLike"] = &ExpandPgLike;
     map["PgILike"] = &ExpandPgLike;

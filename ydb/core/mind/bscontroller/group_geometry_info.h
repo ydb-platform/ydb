@@ -8,7 +8,9 @@
 
 namespace NKikimr::NBsController {
 
-    struct TExFitGroupError : yexception {};
+    struct TExFitGroupError : yexception {
+        std::optional<TGroupMapperError> GroupMapperError;
+    };
 
     class TGroupGeometryInfo {
         TBlobStorageGroupType Type;
@@ -87,14 +89,17 @@ namespace NKikimr::NBsController {
                 TGroupMapper::TGroupConstraintsDefinition& constrainsts,
                 const THashMap<TVDiskIdShort, TPDiskId>& replacedDisks, TGroupMapper::TForbiddenPDisks forbid,
                 ui32 groupSizeInUnits, i64 requiredSpace, TBridgePileId bridgePileId) const {
-            TString error;
+            TGroupMapperError error;
             for (const bool requireOperational : {true, false}) {
                 if (mapper.AllocateGroup(groupId.GetRawId(), group, constrainsts, replacedDisks, forbid, groupSizeInUnits, requiredSpace,
                         requireOperational, bridgePileId, error)) {
                     return;
                 }
-            }
-            throw TExFitGroupError() << "failed to allocate group: " << error;
+            };
+            TExFitGroupError errorException;
+            errorException << "failed to allocate group: " << error.ErrorMessage;
+            errorException.GroupMapperError = std::move(error);
+            throw errorException;
         }
 
         // returns pair of previous VDisk and PDisk id's
@@ -183,6 +188,11 @@ namespace NKikimr::NBsController {
 
         TBlobStorageGroupType::EErasureSpecies GetErasure() const {
             return Type.GetErasure();
+        }
+
+        std::shared_ptr<TBlobStorageGroupInfo::TTopology> CreateTopology() const {
+            return std::make_shared<TBlobStorageGroupInfo::TTopology>(GetType(), GetNumFailRealms(),
+                GetNumFailDomainsPerFailRealm(), GetNumVDisksPerFailDomain());
         }
     };
 

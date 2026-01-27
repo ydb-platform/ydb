@@ -3,6 +3,7 @@
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/pqtablet/partition/partition.h>
 #include <ydb/core/persqueue/ut/common/pq_ut_common.h>
+#include <ydb/core/quoter/public/quoter.h>
 #include <ydb/core/security/ticket_parser.h>
 
 #include <ydb/core/protos/grpc_pq_old.pb.h>
@@ -437,7 +438,7 @@ Y_UNIT_TEST(TestPartitionWriteQuota) {
         tc.Prepare(dispatchName, setup, activeZone);
         activeZone = false;
 
-        tc.Runtime->SetScheduledLimit(1000);
+        tc.Runtime->SetScheduledLimit(10'000);
         tc.Runtime->GetAppData(0).PQConfig.MutableQuotingConfig()->SetEnableQuoting(true);
         PQTabletPrepare({.partitions = 1, .writeSpeed = 100_KB}, {{"important_user", true}}, tc);
 

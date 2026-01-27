@@ -34,7 +34,7 @@ public:
                 TStringBuilder() << "Index build process with id <" << BuildId << "> not found"
             );
         }
-        auto& indexBuildInfo = *indexBuildInfoPtr->Get();
+        auto& indexBuildInfo = *indexBuildInfoPtr->get();
         if (indexBuildInfo.DomainPathId != domainPathId) {
             return Reply(
                 Ydb::StatusIds::NOT_FOUND,
@@ -65,6 +65,10 @@ public:
 
         NIceDb::TNiceDb db(txc.DB);
         indexBuildInfo.CancelRequested = true;
+        indexBuildInfo.IsBroken = false; // allow to recover by cancelling broken index builds
+        if (indexBuildInfo.State == TIndexBuildInfo::EState::Invalid) {
+            indexBuildInfo.State = TIndexBuildInfo::EState::Filling;
+        }
         Self->PersistBuildIndexCancelRequest(db, indexBuildInfo);
 
         Progress(indexBuildInfo.Id);

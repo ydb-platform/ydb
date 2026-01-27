@@ -317,10 +317,10 @@ Y_UNIT_TEST(ProposeErrorEvWrite) {
          Ydb::StatusIds::ABORTED,
          NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED,
          "Transaction locks invalidated.");
-    
-    test(NKikimrDataEvents::TEvWriteResult::STATUS_DISK_SPACE_EXHAUSTED,
+
+    test(NKikimrDataEvents::TEvWriteResult::STATUS_DATABASE_DISK_SPACE_QUOTA_EXCEEDED,
          Ydb::StatusIds::UNAVAILABLE,
-         NYql::TIssuesIds::KIKIMR_DISK_SPACE_EXHAUSTED,
+         NYql::TIssuesIds::KIKIMR_DATABASE_DISK_SPACE_QUOTA_EXCEEDED,
          "Disk space exhausted.");
 
     test(NKikimrDataEvents::TEvWriteResult::STATUS_WRONG_SHARD_STATE,
@@ -332,10 +332,10 @@ Y_UNIT_TEST(ProposeErrorEvWrite) {
          Ydb::StatusIds::PRECONDITION_FAILED,
          NYql::TIssuesIds::KIKIMR_CONSTRAINT_VIOLATION,
          "Constraint violated.");
-    
-    test(NKikimrDataEvents::TEvWriteResult::STATUS_OUT_OF_SPACE,
-         Ydb::StatusIds::OVERLOADED,
-         NYql::TIssuesIds::KIKIMR_OVERLOADED,
+
+    test(NKikimrDataEvents::TEvWriteResult::STATUS_DISK_GROUP_OUT_OF_SPACE,
+         Ydb::StatusIds::UNAVAILABLE,
+         NYql::TIssuesIds::KIKIMR_DISK_GROUP_OUT_OF_SPACE,
          "out of space.");
 }
 

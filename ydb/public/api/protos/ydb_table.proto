@@ -90,8 +90,12 @@ message KMeansTreeSettings {
     VectorIndexSettings settings = 1;
 
     optional uint32 clusters = 2;
-    
+
     optional uint32 levels = 3;
+
+    optional uint32 overlap_clusters = 4;
+
+    optional double overlap_ratio = 5;
 }
 
 message GlobalIndex {
@@ -118,7 +122,9 @@ message FulltextIndexSettings {
     enum Layout {
         LAYOUT_UNSPECIFIED = 0;
 
-        // Uses a single flat inverted index table (indexImplTable)
+        // Simplest possible layout without support for relevance.
+        // Uses a single flat inverted index table (indexImplTable).
+        // Supports a single column only.
         // Example source table:
         //     ┌────┬────────────────────────────┐
         //     │ id │ text                       │
@@ -130,17 +136,66 @@ message FulltextIndexSettings {
         //     ┌──────────────┬────┐
         //     │ __ydb_token  │ id │
         //     ├──────────────┼────┤
+        //     │ "The"        │ 1  │
+        //     │ "The"        │ 2  │
         //     │ "blue"       │ 2  │
         //     │ "brown"      │ 1  │
         //     │ "fox"        │ 1  │
         //     │ "hare"       │ 2  │
         //     │ "quick"      │ 1  │
         //     │ "quick"      │ 2  │
-        //     │ "The"        │ 1  │
-        //     │ "The"        │ 2  │
         //     └──────────────┴────┘
-        // Supports a single column only
         FLAT = 1;
+
+        // Simple layout like FLAT, but with support for relevance.
+        // Uses multiple index tables. Supports a single column only.
+        // Example source table:
+        //     ┌────┬───────────────────────────────────────┐
+        //     │ id │ text                                  │
+        //     ├────┼───────────────────────────────────────┤
+        //     │ 1  │ "A quick fox catches quick hare"      │
+        //     │ 2  │ "The quick blue hare"                 │
+        //     └────┴───────────────────────────────────────┘
+        // Example inverted index table with term frequencies (indexImplTable):
+        //     ┌──────────────┬────┬────────────┐
+        //     │ __ydb_token  │ id │ __ydb_freq │
+        //     ├──────────────┼────┼────────────┤
+        //     │ "A"          │ 1  │ 1          │
+        //     │ "The"        │ 2  │ 1          │
+        //     │ "blue"       │ 2  │ 1          │
+        //     │ "catches"    │ 1  │ 1          │
+        //     │ "fox"        │ 1  │ 1          │
+        //     │ "hare"       │ 1  │ 1          │
+        //     │ "hare"       │ 2  │ 1          │
+        //     │ "quick"      │ 1  │ 2          │
+        //     │ "quick"      │ 2  │ 1          │
+        //     └──────────────┴────┴────────────┘
+        // Term dictionary table (indexImplDictTable):
+        //     ┌──────────────┬────────────┐
+        //     │ __ydb_token  │ __ydb_freq │
+        //     ├──────────────┼────────────┤
+        //     │ "A"          │ 1          │
+        //     │ "The"        │ 1          │
+        //     │ "blue"       │ 1          │
+        //     │ "catches"    │ 1          │
+        //     │ "fox"        │ 1          │
+        //     │ "hare"       │ 2          │
+        //     │ "quick"      │ 2          │
+        //     └──────────────┴────────────┘
+        // Document statistics table (indexImplDocsTable):
+        //     ┌────┬──────────────┐
+        //     │ id │ __ydb_length │
+        //     ├────┼──────────────┤
+        //     │ 1  │ 6            │
+        //     │ 2  │ 4            │
+        //     └────┴──────────────┘
+        // Global statistics table (indexImplStatsTable):
+        //     ┌──────────┬─────────────────┬────────────────────┐
+        //     │ __ydb_id │ __ydb_doc_count │ __ydb_total_length │
+        //     ├──────────┼─────────────────┼────────────────────┤
+        //     │ 1        │ 2               │ 10                 │
+        //     └──────────┴─────────────────┴────────────────────┘
+        FLAT_RELEVANCE = 2;
     }
 
     // Specifies how text is tokenized during indexing
@@ -173,59 +228,59 @@ message FulltextIndexSettings {
     message Analyzers {
         // See Tokenizer enum
         optional Tokenizer tokenizer = 1;
-    
+
         // Language used for language-sensitive operations like stopword filtering and stemming
         // Example: language = "english"
         // By default is not specified and no language-specific logic is applied
         optional string language = 2;
-    
+
         // Whether to convert tokens to lowercase
         // Example:
         //   Token: "Quick"
         //   Output: "quick"
         optional bool use_filter_lowercase = 100;
-    
+
         // Whether to remove common stopwords like "the", "a", "is"
         // Example: language = "english"
         //   Tokens: ["the", "quick", "brown"]
         //   Output: ["quick", "brown"]
         optional bool use_filter_stopwords = 110;
-    
+
         // Whether to apply character n-gram indexing to each token
         // Must be used with filter_ngram_min_length and filter_ngram_max_length
         // Example: filter_ngram_min_length = 3, filter_ngram_max_length = 4
         //   Token: "search"
         //   Output: ["sea", "ear", "arc", "rch", "sear", "earc", "arch"]
         optional bool use_filter_ngram = 120;
-    
+
         // Whether to apply edge n-gram indexing (prefix-based) to each token
         // Used with filter_ngram_min_length and filter_ngram_max_length
         // Example: filter_ngram_min_length = 3, filter_ngram_max_length = 4
         //   Token: "search"
         //   Output: ["sea", "sear"]
         optional bool use_filter_edge_ngram = 121;
-    
+
         // Minimum length of n-grams to generate (inclusive)
         // Must be used with use_filter_ngram or use_filter_edge_ngram
         // Default value is 3
         optional int32 filter_ngram_min_length = 122 [(Ydb.value) = ">= 0"];
-    
+
         // Maximum length of n-grams to generate (inclusive)
         // Must be used with use_filter_ngram or use_filter_edge_ngram
         // Default value is 4
         optional int32 filter_ngram_max_length = 123 [(Ydb.value) = ">= 0"];
-    
+
         // Whether to filter tokens by their length
         // Must be used with filter_length_min or filter_length_max
         // Example: filter_length_min = 4, filter_length_max = 6
         //   Tokens: ["foo", "fooba", "foobar", "foobarbaz"]
         //   Output: ["fooba", "foobar"]
         optional bool use_filter_length = 130;
-    
+
         // Minimum token length to keep (inclusive)
         // Must be used with use_filter_length
         optional int32 filter_length_min = 131 [(Ydb.value) = ">= 0"];
-    
+
         // Maximum token length to keep (inclusive)
         // Must be used with use_filter_length
         optional int32 filter_length_max = 132 [(Ydb.value) = ">= 0"];
@@ -257,7 +312,12 @@ message FulltextIndexSettings {
     repeated ColumnAnalyzers columns = 2;
 }
 
-message GlobalFulltextIndex {
+message GlobalFulltextPlainIndex {
+    GlobalIndexSettings settings = 1;
+    FulltextIndexSettings fulltext_settings = 2;
+}
+
+message GlobalFulltextRelevanceIndex {
     GlobalIndexSettings settings = 1;
     FulltextIndexSettings fulltext_settings = 2;
 }
@@ -274,7 +334,8 @@ message TableIndex {
        GlobalAsyncIndex global_async_index = 4;
        GlobalUniqueIndex global_unique_index = 6;
        GlobalVectorKMeansTreeIndex global_vector_kmeans_tree_index = 7;
-       GlobalFulltextIndex global_fulltext_index = 8;
+       GlobalFulltextPlainIndex global_fulltext_plain_index = 8;
+       GlobalFulltextRelevanceIndex global_fulltext_relevance_index = 9;
     }
     // list of columns content to be copied in to index table
     repeated string data_columns = 5;
@@ -299,7 +360,8 @@ message TableIndexDescription {
        GlobalAsyncIndex global_async_index = 5;
        GlobalUniqueIndex global_unique_index = 8;
        GlobalVectorKMeansTreeIndex global_vector_kmeans_tree_index = 9;
-       GlobalFulltextIndex global_fulltext_index = 10;
+       GlobalFulltextPlainIndex global_fulltext_plain_index = 10;
+       GlobalFulltextRelevanceIndex global_fulltext_relevance_index = 11;
     }
     Status status = 4;
     // list of columns content to be copied in to index table
@@ -582,6 +644,22 @@ message SequenceDescription {
     optional Type data_type = 9; // data type of the sequence
 }
 
+// TODO: merge it with Column Family Compression
+message ColumnCompression {
+    enum Algorithm {
+        ALGORITHM_UNSPECIFIED = 0;
+        ALGORITHM_OFF = 1;
+        ALGORITHM_LZ4 = 2;
+        ALGORITHM_ZSTD = 3;
+    }
+
+    optional Algorithm algorithm = 1;
+
+    // Set the compression level for selected compression type. If no value is specified, default value will be chosen.
+    // For ZSTD compression level must be in range [-131072:22]
+    optional int32 compression_level = 2;
+}
+
 message ColumnMeta {
     // Name of column
     string name = 1;
@@ -597,6 +675,7 @@ message ColumnMeta {
         SequenceDescription from_sequence = 6;
         google.protobuf.NullValue empty_default = 7;
     }
+    optional ColumnCompression compression = 8;
 }
 
 message EvictionToExternalStorageSettings {

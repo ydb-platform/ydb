@@ -10,6 +10,16 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+namespace NDetail {
+
+template <class TContainer>
+struct TRangeToTag
+{ };
+
+} // namespace NDetail
+
+////////////////////////////////////////////////////////////////////////////////
+
 //! An equivalent of Python's `zip()`, but resulting range consists of tuples
 //! of pointers and has length equal to the length of the shortest container.
 //! Implementation with mutable references depends on "lifetime extension in
@@ -21,6 +31,15 @@ auto ZipMutable(TRanges&&... ranges);
 //! This is a simplified equivalent of std::ranges::to from ranges-v3.
 template <class TContainer, std::ranges::input_range TRange>
 auto RangeTo(TRange&& range);
+
+//! Range to for monadic operations
+template <class TContainer>
+constexpr auto RangeTo();
+
+//! Monadic operations to use RangeTo. Example:
+//! auto filteredHashSet = vec | std::views::filter(pred) | RangeTo<THashSet<int>>();
+template<std::ranges::input_range TRange, class TContainer>
+auto operator|(TRange&& range, NDetail::TRangeToTag<TContainer>);
 
 //! Converts a parameter pack into the specified container.
 //! Useful for constructing containers of move-only types.

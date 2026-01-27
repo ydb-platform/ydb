@@ -9,7 +9,7 @@ import time
 import ydb
 from get_diff_lines_of_file import get_diff_lines_of_file
 from mute_utils import pattern_to_re
-from transform_ya_junit import YaMuteCheck
+from mute_check import YaMuteCheck
 
 # Add analytics directory to path for ydb_wrapper import
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'analytics'))
@@ -197,10 +197,11 @@ def mute_applier(args):
     all_tests_file = os.path.join(output_path, '1_all_tests.txt')
     all_muted_tests_file = os.path.join(output_path, '1_all_muted_tests.txt')
 
-    # all muted
-    print(f'📋 Loading mute rules from: {muted_ya_path}')
+    # Use the provided path or default path
+    current_muted_ya_path = getattr(args, 'muted_ya_file', None) or muted_ya_path
+    print(f'📋 Loading mute rules from: {current_muted_ya_path}')
     mute_check = YaMuteCheck()
-    mute_check.load(muted_ya_path)
+    mute_check.load(current_muted_ya_path)
     print(f'✅ Mute rules loaded successfully')
 
     if args.mode == 'upload_muted_tests':
@@ -252,7 +253,8 @@ def mute_applier(args):
         removed_mute_lines_file = os.path.join(output_path, '3_removed_mute_lines.txt')
         unmuted_tests_file = os.path.join(output_path, '3_unmuted_tests.txt')
 
-        added_lines, removed_lines = get_diff_lines_of_file(args.base_sha, args.head_sha, muted_ya_path)
+        current_muted_ya_path = getattr(args, 'muted_ya_file', None) or muted_ya_path
+        added_lines, removed_lines = get_diff_lines_of_file(args.base_sha, args.head_sha, current_muted_ya_path)
 
         # checking added lines
         write_to_file('\n'.join(added_lines), added_mute_lines_file)
@@ -300,7 +302,7 @@ def mute_applier(args):
 if __name__ == "__main__":
     print(f'🚀 Starting get_muted_tests.py script')
     print(f'📅 Current time: {datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}')
-    print(f'📋 Muted YA file path: {muted_ya_path}')
+    print(f'📋 Muted YA file path (default): {muted_ya_path}')
     
     parser = argparse.ArgumentParser(description="Generate diff files for mute_ya.txt")
 
@@ -321,6 +323,11 @@ if __name__ == "__main__":
     )
     upload_muted_tests_parser.add_argument(
         '--build_type', required=True, help='build type for filtering tests'
+    )
+    upload_muted_tests_parser.add_argument(
+        '--muted_ya_file',
+        type=str,
+        help='Path to muted_ya.txt file (default: .github/config/muted_ya.txt)'
     )
 
     get_mute_details_parser = subparsers.add_parser(

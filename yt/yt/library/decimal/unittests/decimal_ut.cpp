@@ -9,7 +9,7 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString RoundConvertText(TStringBuf textValue, int precision, int scale)
+std::string RoundConvertText(TStringBuf textValue, int precision, int scale)
 {
     auto binary = TDecimal::TextToBinary(textValue, precision, scale);
     return TDecimal::BinaryToText(binary, precision, scale);
@@ -318,22 +318,22 @@ public:
         return result;
     }
 
-    static TString GetTextNines(int precision)
+    static std::string GetTextNines(int precision)
     {
-        return TString(precision, '9');
+        return std::string(precision, '9');
     }
 
-    static TString GetTextMinusNines(int precision)
+    static std::string GetTextMinusNines(int precision)
     {
         return "-" + GetTextNines(precision);
     }
 
-    static TString GetTextZillion(int precision)
+    static std::string GetTextZillion(int precision)
     {
-        return "1" + TString(precision, '0');
+        return "1" + std::string(precision, '0');
     }
 
-    static TString GetTextMinusZillion(int precision)
+    static std::string GetTextMinusZillion(int precision)
     {
         return "-" + GetTextZillion(precision);
     }

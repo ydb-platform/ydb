@@ -27,6 +27,10 @@ namespace NKikimr::NColumnShard  {
         GROUPS("Cleanup"), \
         TYPES(ui64, ui64, ui64, ui64, ui64, ui64, ui64, ui64, bool, ui64, ui64), \
         NAMES("tabletId", "totalPortionsCount", "totalPortions", "portionsPrepared", "drop", "skip", "portionsBatchCount", "chunksBatchCount", "limitExceeded", "maxPortionsBatchLimit", "maxChunksBatchLimit")) \
+    PROBE(ColumnEngineForLogsSelect, \
+        GROUPS("Read"), \
+        TYPES(TString, ui64, ui64, ui64, ui64, ui64), \
+        NAMES("pathId", "timeOfInsertedIsUsedMs", "timeOfCompactedIsUsedMs", "totalPortionsCount", "totalFilteredPortionsCount", "totalResultSize")) \
 
 LWTRACE_DECLARE_PROVIDER(YDB_CS)
 

@@ -6,7 +6,9 @@
 #include "extstorage_usage_config.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/fs_settings.pb.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/backup/common/checksum.h>
 #include <ydb/core/backup/common/metadata.h>
@@ -45,7 +47,12 @@ struct TChangefeedExportDescriptions {
     TString Prefix;
 };
 
-class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
+template <typename TSettings>
+constexpr bool RequiresHttpResolver = std::is_same_v<TSettings, NKikimrSchemeOp::TS3Settings>;
+
+template <typename TSettings>
+class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
+    using TThis = TS3Uploader;
     using TS3ExternalStorageConfig = NWrappers::NExternalStorage::TS3ExternalStorageConfig;
     using THttpResolverConfig = NKikimrConfig::TS3ProxyResolverConfig::THttpResolverConfig;
     using TEvExternalStorage = NWrappers::TEvExternalStorage;
@@ -68,6 +75,9 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
     }
 
     static TMaybe<THttpResolverConfig> GetHttpResolverConfig(const TS3ExternalStorageConfig& settings) {
+        if constexpr (!RequiresHttpResolver<TSettings>) {
+            return Nothing();
+        }
         return GetHttpResolverConfig(NormalizeEndpoint(settings.GetConfig().endpointOverride));
     }
 
@@ -111,35 +121,35 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
 
     void ResolveProxy() {
         if (!HttpProxy) {
-            HttpProxy = Register(NHttp::CreateHttpProxy(NMonitoring::TMetricRegistry::SharedInstance()));
+            HttpProxy = this->Register(NHttp::CreateHttpProxy(NMonitoring::TMetricRegistry::SharedInstance()));
         }
 
-        Send(HttpProxy, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(
+        this->Send(HttpProxy, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(
             NHttp::THttpOutgoingRequest::CreateRequestGet(GetResolveProxyUrl(*GetS3StorageConfig())),
             TDuration::Seconds(10)
         ));
 
-        Become(&TThis::StateResolveProxy);
+        this->Become(&TThis::StateResolveProxy);
     }
 
     void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr& ev) {
         const auto& msg = *ev->Get();
 
         EXPORT_LOG_D("Handle NHttp::TEvHttpProxy::TEvHttpIncomingResponse"
-            << ": self# " << SelfId()
+            << ": self# " << this->SelfId()
             << ", status# " << (msg.Response ? msg.Response->Status : "null")
             << ", body# " << (msg.Response ? msg.Response->Body : "null"));
 
         if (!msg.Response || !msg.Response->Status.StartsWith("200")) {
             EXPORT_LOG_E("Error at 'GetProxy'"
-                << ": self# " << SelfId()
+                << ": self# " << this->SelfId()
                 << ", error# " << msg.GetError());
             return RetryOrFinish(Aws::S3::S3Error({Aws::S3::S3Errors::SERVICE_UNAVAILABLE, true}));
         }
 
         if (msg.Response->Body.find('<') != TStringBuf::npos) {
             EXPORT_LOG_E("Error at 'GetProxy'"
-                << ": self# " << SelfId()
+                << ": self# " << this->SelfId()
                 << ", error# " << "invalid body"
                 << ", body# " << msg.Response->Body);
             return RetryOrFinish(Aws::S3::S3Error({Aws::S3::S3Errors::SERVICE_UNAVAILABLE, true}));
@@ -167,7 +177,8 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
             this->Send(std::exchange(Client, TActorId()), new TEvents::TEvPoisonPill());
         }
 
-        Client = this->RegisterWithSameMailbox(NWrappers::CreateS3Wrapper(ExternalStorageConfig->ConstructStorageOperator()));
+        auto storageOperator = ExternalStorageConfig->ConstructStorageOperator();
+        Client = this->RegisterWithSameMailbox(NWrappers::CreateS3Wrapper(std::move(storageOperator)));
 
         if (!MetadataUploaded) {
             UploadMetadata();
@@ -637,7 +648,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
             Retry();
         } else {
             Error = error.GetMessage().c_str();
-            PassAway();
+            this->PassAway();
         }
     }
 
@@ -660,7 +671,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
             Y_ENSURE(Error);
             Error = TStringBuilder() << *Error << " Additionally, 'AbortMultipartUpload' has failed: "
                 << error.GetMessage();
-            PassAway();
+            this->PassAway();
         }
     }
 
@@ -713,7 +724,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
                 return;
             }
 
-            PassAway();
+            this->PassAway();
         } else {
             if (success) {
                 this->Send(DataShard, new TEvDataShard::TEvChangeS3UploadStatus(this->SelfId(), TxId,
@@ -722,13 +733,13 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
                 this->Send(DataShard, new TEvDataShard::TEvChangeS3UploadStatus(this->SelfId(), TxId,
                     TS3Upload::EStatus::Abort, *Error));
             }
-            Become(&TThis::StateUploadData);
+            this->Become(&TThis::StateUploadData);
         }
     }
 
     void PassAway() override {
         if (HttpProxy) {
-            Send(HttpProxy, new TEvents::TEvPoisonPill());
+            this->Send(HttpProxy, new TEvents::TEvPoisonPill());
         }
 
         if (Scanner) {
@@ -749,6 +760,8 @@ public:
         return "s3"sv;
     }
 
+    static TSettings GetSettings(const NKikimrSchemeOp::TBackupTask& task);
+
     explicit TS3Uploader(
             const TActorId& dataShard, ui64 txId,
             const NKikimrSchemeOp::TBackupTask& task,
@@ -756,8 +769,8 @@ public:
             TVector<TChangefeedExportDescriptions> changefeeds,
             TMaybe<Ydb::Scheme::ModifyPermissionsRequest>&& permissions,
             TString&& metadata)
-        : ExternalStorageConfig(new TS3ExternalStorageConfig(task.GetS3Settings()))
-        , Settings(TS3Settings::FromBackupTask(task))
+        : ExternalStorageConfig(NWrappers::IExternalStorageConfig::Construct(GetSettings(task)))
+        , Settings(TStorageSettings::FromBackupTask<TSettings>(task))
         , DataFormat(EDataFormat::Csv)
         , CompressionCodec(CodecFromTask(task))
         , ShardNum(task.GetShardNum())
@@ -785,7 +798,12 @@ public:
             << ": self# " << this->SelfId()
             << ", attempt# " << Attempt);
 
-        ProxyResolved = !HttpResolverConfig.Defined();
+        if constexpr (!RequiresHttpResolver<TSettings>) {
+            ProxyResolved = true;
+        } else {
+            ProxyResolved = !HttpResolverConfig.Defined();
+        }
+
         if (!ProxyResolved) {
             ResolveProxy();
         } else {
@@ -875,7 +893,7 @@ public:
 
 private:
     NWrappers::IExternalStorageConfig::TPtr ExternalStorageConfig;
-    TS3Settings Settings;
+    TStorageSettings Settings;
     const EDataFormat DataFormat;
     const ECompressionCodec CompressionCodec;
     const ui32 ShardNum;
@@ -925,6 +943,44 @@ private:
     std::function<void()> ChecksumUploadedCallback;
 
 }; // TS3Uploader
+
+template <>
+NKikimrSchemeOp::TS3Settings TS3Uploader<NKikimrSchemeOp::TS3Settings>::GetSettings(
+    const NKikimrSchemeOp::TBackupTask& task)
+{
+    return task.GetS3Settings();
+}
+
+template <>
+NKikimrSchemeOp::TFSSettings TS3Uploader<NKikimrSchemeOp::TFSSettings>::GetSettings(
+    const NKikimrSchemeOp::TBackupTask& task)
+{
+    return task.GetFSSettings();
+}
+
+IActor* CreateUploaderBySettingsType(
+    const TActorId& dataShard,
+    ui64 txId,
+    const NKikimrSchemeOp::TBackupTask& task,
+    TMaybe<Ydb::Table::CreateTableRequest>&& scheme,
+    TVector<TChangefeedExportDescriptions>&& changefeeds,
+    TMaybe<Ydb::Scheme::ModifyPermissionsRequest>&& permissions,
+    TString&& metadata)
+{
+    if (task.HasS3Settings()) {
+        return new TS3Uploader<NKikimrSchemeOp::TS3Settings>(
+            dataShard, txId, task,
+            std::move(scheme), std::move(changefeeds),
+            std::move(permissions), std::move(metadata));
+    } else if (task.HasFSSettings()) {
+        return new TS3Uploader<NKikimrSchemeOp::TFSSettings>(
+            dataShard, txId, task,
+            std::move(scheme), std::move(changefeeds),
+            std::move(permissions), std::move(metadata));
+    }
+
+    Y_ABORT("Unsupported storage type in backup task");
+}
 
 IActor* TS3Export::CreateUploader(const TActorId& dataShard, ui64 txId) const {
     auto scheme = (Task.GetShardNum() == 0)
@@ -978,10 +1034,34 @@ IActor* TS3Export::CreateUploader(const TActorId& dataShard, ui64 txId) const {
         }
     }
 
+    if (scheme) {
+        int idx = changefeeds.size() + 1;
+        for (const auto& index : scheme->indexes()) {
+            const auto indexType = NTableIndex::ConvertIndexType(index.type_case());
+            const TVector<TString> indexColumns(index.index_columns().begin(), index.index_columns().end());
+
+            for (const auto& implTable : NTableIndex::GetImplTables(indexType, indexColumns)) {
+                const TString implTablePrefix = TStringBuilder() << index.name() << "/" << implTable;
+                TString exportPrefix;
+                if (encrypted) {
+                    std::stringstream prefix;
+                    prefix << std::setfill('0') << std::setw(3) << std::right << idx++;
+                    exportPrefix = prefix.str();
+                } else {
+                    exportPrefix = implTablePrefix;
+                }
+
+                metadata.AddIndex(TIndexMetadata{
+                    .ExportPrefix = exportPrefix,
+                    .ImplTablePrefix = implTablePrefix,
+                });
+            }
+        }
+    }
+
     auto permissions = (Task.GetEnablePermissions() && Task.GetShardNum() == 0)
         ? GenYdbPermissions(Task.GetTable())
         : Nothing();
-
     TFullBackupMetadata::TPtr backup = new TFullBackupMetadata{
         .SnapshotVts = TVirtualTimestamp(
             Task.GetSnapshotStep(),
@@ -989,8 +1069,10 @@ IActor* TS3Export::CreateUploader(const TActorId& dataShard, ui64 txId) const {
     };
     metadata.AddFullBackup(backup);
 
-    return new TS3Uploader(
-        dataShard, txId, Task, std::move(scheme), std::move(changefeeds), std::move(permissions), metadata.Serialize());
+    return CreateUploaderBySettingsType(
+        dataShard, txId, Task,
+        std::move(scheme), std::move(changefeeds),
+        std::move(permissions), metadata.Serialize());
 }
 
 } // NDataShard

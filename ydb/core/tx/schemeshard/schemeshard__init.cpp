@@ -1,6 +1,7 @@
 #include "schemeshard__shred_manager.h"
 #include "schemeshard_impl.h"
-#include "schemeshard_utils.h"  // for PQGroupReserve
+#include "schemeshard_index_build_info.h"
+#include "schemeshard_pq_helpers.h"  // for PQGroupReserve
 
 #include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/protos/table_stats.pb.h>  // for TStoragePoolsStats
@@ -1856,6 +1857,11 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     bool parseOk = ParseFromStringNoSizeLimit(tableDesc, alterTabletFull);
                     Y_ABORT_UNLESS(parseOk);
 
+                    // Load CoordinatedSchemaVersion from proto (for crash recovery)
+                    if (tableDesc.HasCoordinatedSchemaVersion()) {
+                        tableInfo->AlterData->CoordinatedSchemaVersion = tableDesc.GetCoordinatedSchemaVersion();
+                    }
+
                     if (tableDesc.HasPartitionConfig() &&
                         tableDesc.GetPartitionConfig().ColumnFamiliesSize() > 1)
                     {
@@ -2049,6 +2055,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 backupCollection->AlterVersion = rowset.GetValue<Schema::BackupCollection::AlterVersion>();
                 Y_PROTOBUF_SUPPRESS_NODISCARD backupCollection->Description.ParseFromString(rowset.GetValue<Schema::BackupCollection::Description>());
                 Self->IncrementPathDbRefCount(pathId);
+                Self->RegisterBackupCollectionTables(backupCollection);
 
                 if (!rowset.Next()) {
                     return false;
@@ -4047,7 +4054,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 auto& sid = *securityState.AddSids();
                 sid.SetName(rowset.GetValue<Schema::LoginSids::SidName>());
                 sid.SetType(rowset.GetValue<Schema::LoginSids::SidType>());
-                sid.SetHash(rowset.GetValue<Schema::LoginSids::SidHash>());
+                sid.SetArgonHash(rowset.GetValue<Schema::LoginSids::SidHash>());
+                sid.SetPasswordHashes(rowset.GetValue<Schema::LoginSids::PasswordHashes>());
                 sid.SetCreatedAt(rowset.GetValueOrDefault<Schema::LoginSids::CreatedAt>());
                 sid.SetFailedLoginAttemptCount(rowset.GetValueOrDefault<Schema::LoginSids::FailedAttemptCount>());
                 sid.SetLastFailedLogin(rowset.GetValueOrDefault<Schema::LoginSids::LastFailedAttempt>());
@@ -4457,15 +4465,13 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     exportInfo->EndTime = TInstant::Seconds(rowset.GetValueOrDefault<Schema::Exports::EndTime>());
                     exportInfo->EnableChecksums = rowset.GetValueOrDefault<Schema::Exports::EnableChecksums>(false);
                     exportInfo->EnablePermissions = rowset.GetValueOrDefault<Schema::Exports::EnablePermissions>(false);
+                    exportInfo->IncludeIndexData = rowset.GetValueOrDefault<Schema::Exports::IncludeIndexData>(false);
 
                     if (rowset.HaveValue<Schema::Exports::ExportMetadata>()) {
                         exportInfo->ExportMetadata = rowset.GetValue<Schema::Exports::ExportMetadata>();
                     }
 
-                    Self->Exports[id] = exportInfo;
-                    if (uid) {
-                        Self->ExportsByUid[uid] = exportInfo;
-                    }
+                    Self->AddExport(exportInfo);
 
                     if (exportInfo->WaitTxId != InvalidTxId) {
                         Self->TxIdToExport[exportInfo->WaitTxId] = {id, Max<ui32>()};
@@ -4506,6 +4512,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     item.SourcePathId.OwnerId = rowset.GetValueOrDefault<Schema::ExportItems::SourceOwnerPathId>(selfId);
                     item.SourcePathId.LocalPathId = rowset.GetValue<Schema::ExportItems::SourcePathId>();
                     item.SourcePathType = rowset.GetValue<Schema::ExportItems::SourcePathType>();
+                    item.ParentIdx = rowset.GetValueOrDefault<Schema::ExportItems::ParentIndex>(Max<ui32>());
 
                     item.State = static_cast<TExportInfo::EState>(rowset.GetValue<Schema::ExportItems::State>());
                     item.WaitTxId = rowset.GetValueOrDefault<Schema::ExportItems::BackupTxId>(InvalidTxId);
@@ -4541,9 +4548,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                                                 rowset.GetValue<Schema::Imports::DomainPathLocalId>());
                     TString peerName = rowset.GetValueOrDefault<Schema::Imports::PeerName>();
 
-                    Ydb::Import::ImportFromS3Settings settings;
-                    Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(settings, rowset.GetValue<Schema::Imports::Settings>()));
-
+                    TString settings = rowset.GetValue<Schema::Imports::Settings>();
                     TImportInfo::TPtr importInfo = new TImportInfo(id, uid, kind, settings, domainPathId, peerName);
 
                     if (rowset.HaveValue<Schema::Imports::UserSID>()) {
@@ -4560,10 +4565,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     importInfo->StartTime = TInstant::Seconds(rowset.GetValueOrDefault<Schema::Imports::StartTime>());
                     importInfo->EndTime = TInstant::Seconds(rowset.GetValueOrDefault<Schema::Imports::EndTime>());
 
-                    Self->Imports[id] = importInfo;
-                    if (uid) {
-                        Self->ImportsByUid[uid] = importInfo;
-                    }
+                    Self->AddImport(importInfo);
 
                     switch (importInfo->State) {
                     case TImportInfo::EState::DownloadExportMetadata:
@@ -4651,6 +4653,17 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     item.Issue = rowset.GetValueOrDefault<Schema::ImportItems::Issue>(TString());
                     item.SrcPrefix = rowset.GetValueOrDefault<Schema::ImportItems::SrcPrefix>(TString());
                     item.SrcPath = rowset.GetValueOrDefault<Schema::ImportItems::SrcPath>(TString());
+
+                    item.ParentIdx = rowset.GetValueOrDefault<Schema::ImportItems::ParentIndex>(Max<ui32>());
+                    if (item.ParentIdx != Max<ui32>()) {
+                        Y_VERIFY_S(item.ParentIdx < importInfo->Items.size(), "Invalid item's index"
+                                   << ": importId# " << importId
+                                   << ", itemIdx# " << item.ParentIdx);
+
+                        TImportInfo::TItem& parentItem = importInfo->Items[item.ParentIdx];
+                        parentItem.ChildItems.push_back(itemIdx);
+                    }
+
                     if (rowset.HaveValue<Schema::ImportItems::EncryptionIV>()) {
                         item.ExportItemIV = NBackup::TEncryptionIV::FromBinaryString(rowset.GetValue<Schema::ImportItems::EncryptionIV>());
                     }
@@ -4692,7 +4705,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         "Init " << stepName << " BuildInfo not found: id#" << id);
                     return;
                 }
-                auto& buildInfo = *buildInfoPtr->Get();
+                auto& buildInfo = *buildInfoPtr->get();
                 if (!buildInfo.IsBroken) {
                     fillBuildInfoSafe(buildInfo, stepName, fill);
                 }
@@ -4706,23 +4719,22 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 }
 
                 while (!rowset.EndOfSet()) {
-                    TIndexBuildInfo::TPtr buildInfo = new TIndexBuildInfo();
+                    auto buildInfo = std::make_shared<TIndexBuildInfo>();
                     fillBuildInfoSafe(*buildInfo, "IndexBuild", [&](TIndexBuildInfo& buildInfo) {
                         TIndexBuildInfo::FillFromRow(rowset, &buildInfo);
                     });
 
-                    if (!Self->EnableVectorIndex) { // prevent build index from progress
-                        buildInfo->IsBroken = true;
+                    if (buildInfo->IsBuildColumns()) {
+                        if (!Self->PathsById.contains(buildInfo->TablePathId)) {
+                            buildInfo->IsBroken = true;
+                            buildInfo->AddIssue(TStringBuilder() << "Table path id not found: " << buildInfo->TablePathId.ToString());
+                        }
+
+                        buildInfo->TargetName = TPath::Init(buildInfo->TablePathId, Self).PathString();
                     }
 
                     // Note: broken build are also added to IndexBuilds
-                    Y_ASSERT(!Self->IndexBuilds.contains(buildInfo->Id));
-                    Self->IndexBuilds[buildInfo->Id] = buildInfo;
-
-                    if (buildInfo->Uid) {
-                        Y_ASSERT(!Self->IndexBuildsByUid.contains(buildInfo->Uid));
-                        Self->IndexBuildsByUid[buildInfo->Uid] = buildInfo;
-                    }
+                    Self->AddIndexBuild(buildInfo);
 
                     OnComplete.ToProgress(buildInfo->Id);
 
@@ -4782,10 +4794,15 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 while (!rowset.EndOfSet()) {
                     TIndexBuildId id = rowset.GetValue<Schema::KMeansTreeSample::Id>();
                     fillBuildInfoByIdSafe(id, "KMeansTreeSample", [&](TIndexBuildInfo& buildInfo) {
-                        buildInfo.Sample.Add(
-                            rowset.GetValue<Schema::KMeansTreeSample::Probability>(),
-                            rowset.GetValue<Schema::KMeansTreeSample::Data>()
-                        );
+                        if (buildInfo.KMeans.State == TIndexBuildInfo::TKMeans::Filter ||
+                            buildInfo.KMeans.State == TIndexBuildInfo::TKMeans::FilterBorders) {
+                            buildInfo.KMeans.FilterBorderRows.push_back(rowset.GetValue<Schema::KMeansTreeSample::Data>());
+                        } else {
+                            buildInfo.Sample.Add(
+                                rowset.GetValue<Schema::KMeansTreeSample::Probability>(),
+                                rowset.GetValue<Schema::KMeansTreeSample::Data>()
+                            );
+                        }
                     });
                     sampleCount++;
 

@@ -5,6 +5,7 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_private_events.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/generic/hullds_idx.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/bulksst_add/hulldb_bulksst_add.h>
+#include <ydb/core/blobstorage/vdisk/hulldb/bulksst_add/hulldb_fullsyncsst_add.h>
 #include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclog_context.h>
 
 namespace NKikimr {
@@ -92,6 +93,13 @@ namespace NKikimr {
                 , NumRecoveredBlobs(numRecoveredBlobs)
                 , DeleteToDecommitted(false)
             {}
+
+            // constructor for sync sst committer
+            THullCommitMeta(TVector<ui32>&& chunksAdded)
+                : CommitChunks(std::move(chunksAdded))
+                , NumRecoveredBlobs(0)
+                , DeleteToDecommitted(false)
+            {}
         };
 
         std::shared_ptr<THullLogCtx> HullLogCtx;
@@ -99,6 +107,7 @@ namespace NKikimr {
         TIntrusivePtr<TLevelIndex> LevelIndex;
         TActorId NotifyID;
         TActorId SecondNotifyID;
+        std::unique_ptr<IEventBase> SecondNotifyEvent;
         THullCommitMeta Metadata;
         std::unique_ptr<NPDisk::TEvLog> CommitMsg;
         TLsnSeg LsnSeg;
@@ -184,7 +193,7 @@ namespace NKikimr {
             // notify sender & die
             ctx.Send(NotifyID, new THullCommitFinished(NotifyType));
             if (SecondNotifyID)
-                ctx.Send(SecondNotifyID, new TEvAddBulkSstResult);
+                ctx.Send(SecondNotifyID, SecondNotifyEvent.release());
             TThis::Die(ctx);
         }
 
@@ -304,6 +313,7 @@ namespace NKikimr {
                 TIntrusivePtr<TLevelIndex> levelIndex,
                 const TActorId& notifyID,
                 const TActorId& secondNotifyID,
+                std::unique_ptr<IEventBase> secondNotifyEvent,
                 THullCommitMeta&& metadata,
                 const TString &callerInfo,
                 ui64 wId)
@@ -312,6 +322,7 @@ namespace NKikimr {
             , LevelIndex(std::move(levelIndex))
             , NotifyID(notifyID)
             , SecondNotifyID(secondNotifyID)
+            , SecondNotifyEvent(std::move(secondNotifyEvent))
             , Metadata(std::move(metadata))
             , CallerInfo(callerInfo)
             , WId(wId)
@@ -343,6 +354,7 @@ namespace NKikimr {
                     std::move(levelIndex),
                     notifyID,
                     TActorId(),
+                    nullptr,
                     {TVector<ui32>(), TVector<ui32>(), TDiskPartVec(), TDiskPartVec(), false},
                     callerInfo,
                     0)
@@ -379,6 +391,7 @@ namespace NKikimr {
                     std::move(levelIndex),
                     notifyID,
                     TActorId(),
+                    nullptr,
                     {std::move(chunksAdded), std::move(chunksDeleted), std::move(removedHugeBlobs), std::move(allocatedHugeBlobs), false},
                     callerInfo,
                     wId)
@@ -411,6 +424,7 @@ namespace NKikimr {
                     std::move(levelIndex),
                     notifyID,
                     TActorId(),
+                    nullptr,
                     {std::move(chunksAdded), std::move(chunksDeleted), std::move(removedHugeBlobs), std::move(allocatedHugeBlobs), true},
                     TString(),
                     wId)
@@ -444,7 +458,39 @@ namespace NKikimr {
                     std::move(levelIndex),
                     notifyID,
                     secondNotifyID,
+                    std::move(std::unique_ptr<IEventBase>(new TEvAddBulkSstResult)),
                     {std::move(chunksAdded), std::move(chunksDeleted), std::move(replSst), numRecoveredBlobs},
+                    TString(),
+                    0)
+        {}
+    };
+
+    ////////////////////////////////////////////////////////////////////////////////
+    // TAsyncSyncSstCommitter
+    ////////////////////////////////////////////////////////////////////////////////
+
+    template<typename TKey, typename TMemRec>
+    class TAsyncSyncSstCommitter
+        : public TBaseHullDbCommitter<TKey, TMemRec, THullCommitFinished::CommitSyncSst, NKikimrServices::TActivity::BS_ASYNC_SYNC_SST_COMMITTER>
+    {
+        using TBase = TBaseHullDbCommitter<TKey, TMemRec, THullCommitFinished::CommitSyncSst,  NKikimrServices::TActivity::BS_ASYNC_SYNC_SST_COMMITTER>;
+        using TLevelSegment = NKikimr::TLevelSegment<TKey, TMemRec>;
+
+    public:
+        TAsyncSyncSstCommitter(
+                std::shared_ptr<THullLogCtx> hullLogCtx,
+                THullDbCommitterCtxPtr ctx,
+                TIntrusivePtr<typename TBase::TLevelIndex> levelIndex,
+                const TActorId& notifyID,
+                const TActorId& secondNotifyID,
+                TVector<ui32>&& chunksAdded)
+            : TBase(std::move(hullLogCtx),
+                    std::move(ctx),
+                    std::move(levelIndex),
+                    notifyID,
+                    secondNotifyID,
+                    std::move(std::unique_ptr<IEventBase>(new TEvAddFullSyncSstsResult)),
+                    std::move(chunksAdded),
                     TString(),
                     0)
         {}

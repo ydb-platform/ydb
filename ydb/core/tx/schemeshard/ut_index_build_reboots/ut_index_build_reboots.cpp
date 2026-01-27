@@ -141,7 +141,7 @@ Y_UNIT_TEST_SUITE(IndexBuildTestReboots) {
                 }
             }
 
-            AsyncBuildIndex(runtime,  ++t.TxId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/dir/Table", TBuildIndexConfig{"index1", indexType, {"index"}, {}});
+            AsyncBuildIndex(runtime,  ++t.TxId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/dir/Table", TBuildIndexConfig{"index1", indexType, {"index"}, {}, {}});
             ui64 buildIndexId = t.TxId;
 
             {
@@ -231,7 +231,7 @@ Y_UNIT_TEST_SUITE(IndexBuildTestReboots) {
                 }
             }
 
-            AsyncBuildIndex(runtime,  ++t.TxId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/dir/Table", TBuildIndexConfig{"index1", indexType, {"index"}, {"value"}});
+            AsyncBuildIndex(runtime,  ++t.TxId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/dir/Table", TBuildIndexConfig{"index1", indexType, {"index"}, {"value"}, {}});
             ui64 buildIndexId = t.TxId;
 
             {
@@ -496,7 +496,7 @@ Y_UNIT_TEST_SUITE(IndexBuildTestReboots) {
                     fnWriteRow(TTestTxConfig::FakeHiveTablets, 1 + delta, 100 + delta);
                 }
 
-                TestBuildIndex(runtime,  ++t.TxId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/dir/Table", TBuildIndexConfig{"index1", indexType, {"index"}, {}});
+                TestBuildIndex(runtime,  ++t.TxId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/dir/Table", TBuildIndexConfig{"index1", indexType, {"index"}, {}, {}});
             }
 
             ui64 buildId = t.TxId;

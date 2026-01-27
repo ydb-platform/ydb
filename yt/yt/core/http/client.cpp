@@ -37,14 +37,14 @@ public:
     { }
 
     TFuture<IResponsePtr> Get(
-        const TString& url,
+        const std::string& url,
         const THeadersPtr& headers) override
     {
         return Request(EMethod::Get, url, std::nullopt, headers);
     }
 
     TFuture<IResponsePtr> Post(
-        const TString& url,
+        const std::string& url,
         const TSharedRef& body,
         const THeadersPtr& headers) override
     {
@@ -52,7 +52,7 @@ public:
     }
 
     TFuture<IResponsePtr> Patch(
-        const TString& url,
+        const std::string& url,
         const TSharedRef& body,
         const THeadersPtr& headers) override
     {
@@ -60,7 +60,7 @@ public:
     }
 
     TFuture<IResponsePtr> Put(
-        const TString& url,
+        const std::string& url,
         const TSharedRef& body,
         const THeadersPtr& headers) override
     {
@@ -68,28 +68,28 @@ public:
     }
 
     TFuture<IResponsePtr> Delete(
-        const TString& url,
+        const std::string& url,
         const THeadersPtr& headers) override
     {
         return Request(EMethod::Delete, url, std::nullopt, headers);
     }
 
     TFuture<IActiveRequestPtr> StartPost(
-        const TString& url,
+        const std::string& url,
         const THeadersPtr& headers) override
     {
         return StartRequest(EMethod::Post, url, headers);
     }
 
     TFuture<IActiveRequestPtr> StartPatch(
-        const TString& url,
+        const std::string& url,
         const THeadersPtr& headers) override
     {
         return StartRequest(EMethod::Patch, url, headers);
     }
 
     TFuture<IActiveRequestPtr> StartPut(
-        const TString& url,
+        const std::string& url,
         const THeadersPtr& headers) override
     {
         return StartRequest(EMethod::Put, url, headers);
@@ -97,7 +97,7 @@ public:
 
     TFuture<IResponsePtr> Request(
         EMethod method,
-        const TString& url,
+        const std::string& url,
         const std::optional<TSharedRef>& body,
         const THeadersPtr& headers) override
     {
@@ -137,10 +137,18 @@ private:
         return TNetworkAddress(address, parsedUrl.Port.value_or(GetDefaultPort(parsedUrl)));
     }
 
-    std::pair<THttpOutputPtr, THttpInputPtr> Connect(const TUrlRef& urlRef)
+    struct TRequestData
+    {
+        IConnectionPtr Conection;
+        THttpOutputPtr Request;
+        THttpInputPtr Response;
+    };
+
+    TRequestData Connect(EMethod method, const TUrlRef& urlRef)
     {
         auto context = New<TDialerContext>();
         context->Host = urlRef.Host;
+        context->BypassTLS = urlRef.Protocol == "http";
 
         auto address = GetAddress(urlRef);
 
@@ -154,6 +162,7 @@ private:
                 address,
                 Invoker_,
                 EMessageType::Response,
+                method,
                 Config_);
 
             auto output = New<THttpOutput>(
@@ -161,7 +170,7 @@ private:
                 EMessageType::Request,
                 Config_);
 
-            return {std::move(output), std::move(input)};
+            return {std::move(connection), std::move(output), std::move(input)};
         } else {
             auto connection = WaitFor(ConnectionPool_->Connect(address, std::move(context)))
                 .ValueOrThrow();
@@ -173,6 +182,7 @@ private:
                 address,
                 Invoker_,
                 EMessageType::Response,
+                method,
                 Config_);
             input->SetReusableState(reusableState);
 
@@ -182,12 +192,12 @@ private:
                 Config_);
             output->SetReusableState(reusableState);
 
-            return {std::move(output), std::move(input)};
+            return {std::move(connection), std::move(output), std::move(input)};
         }
     }
 
     template <typename T>
-    TFuture<T> WrapError(const TString& url, TCallback<T()> action)
+    TFuture<T> WrapError(const std::string& url, TCallback<T()> action)
     {
         return BIND([=, this_ = MakeStrong(this), action = std::move(action)] {
             try {
@@ -207,61 +217,59 @@ private:
     {
     public:
         TActiveRequest(
-            THttpOutputPtr request,
-            THttpInputPtr response,
             TIntrusivePtr<TClient> client,
-            TString url)
-            : Request_(std::move(request))
-            , Response_(std::move(response))
-            , Client_(std::move(client))
+            TRequestData data,
+            std::string url)
+            : Client_(std::move(client))
+            , Data_(std::move(data))
             , Url_(std::move(url))
         { }
 
         TFuture<IResponsePtr> Finish() override
         {
-            return Client_->WrapError(Url_, BIND([this, this_ = MakeStrong(this)] {
-                WaitFor(Request_->Close())
+            return Client_->WrapError(Url_, BIND([this, this_ = MakeStrong(this)] () -> IResponsePtr {
+                WaitFor(Data_.Request->Close())
                     .ThrowOnError();
 
                 // Waits for response headers internally.
-                Response_->GetStatusCode();
+                Data_.Response->GetStatusCode();
 
-                return IResponsePtr(Response_);
+                return Data_.Response;
             }));
         }
 
-        NConcurrency::IAsyncOutputStreamPtr GetRequestStream() override
+        TFuture<void> Abort() override
         {
-            return Request_;
+            return Data_.Conection->Abort();
+        }
+
+        IAsyncOutputStreamPtr GetRequestStream() override
+        {
+            return Data_.Request;
         }
 
         IResponsePtr GetResponse() override
         {
-            return Response_;
+            return Data_.Response;
         }
 
     private:
-        const THttpOutputPtr Request_;
-        const THttpInputPtr Response_;
         const TIntrusivePtr<TClient> Client_;
-        const TString Url_;
+        const TRequestData Data_;
+        const std::string Url_;
     };
 
-    std::pair<THttpOutputPtr, THttpInputPtr> StartAndWriteHeaders(
+    TRequestData StartAndWriteHeaders(
         EMethod method,
-        const TString& url,
+        const std::string& url,
         const THeadersPtr& headers)
     {
-        THttpOutputPtr request;
-        THttpInputPtr response;
-
         auto urlRef = ParseUrl(url);
+        auto requestData = Connect(method, urlRef);
+        requestData.Request->SetHost(urlRef.Host, urlRef.PortStr);
 
-        std::tie(request, response) = Connect(urlRef);
-
-        request->SetHost(urlRef.Host, urlRef.PortStr);
         if (headers) {
-            request->SetHeaders(headers);
+            requestData.Request->SetHeaders(headers);
         }
 
         auto urlPath = TString(urlRef.Path);
@@ -271,52 +279,52 @@ private:
         auto requestPath = (urlRef.RawQuery.empty() && Config_->OmitQuestionMarkForEmptyQuery)
             ? urlPath
             : Format("%v?%v", urlPath, urlRef.RawQuery);
-        request->WriteRequest(method, requestPath);
+        requestData.Request->WriteRequest(method, requestPath);
 
-        return {std::move(request), std::move(response)};
+        return requestData;
     }
 
     TFuture<IActiveRequestPtr> StartRequest(
         EMethod method,
-        const TString& url,
+        const std::string& url,
         const THeadersPtr& headers)
     {
-        return WrapError(url, BIND([=, this, this_ = MakeStrong(this)] {
-            auto [request, response] = StartAndWriteHeaders(method, url, headers);
-            return IActiveRequestPtr(New<TActiveRequest>(request, response, this_, url));
+        return WrapError(url, BIND([=, this, this_ = MakeStrong(this)] () mutable -> IActiveRequestPtr {
+            auto requestData = StartAndWriteHeaders(method, url, headers);
+            return New<TActiveRequest>(std::move(this_), std::move(requestData), url);
         }));
     }
 
     IResponsePtr DoRequest(
         EMethod method,
-        const TString& url,
+        const std::string& url,
         const std::optional<TSharedRef>& body,
         const THeadersPtr& headers,
         int redirectCount = 0)
     {
-        auto [request, response] = StartAndWriteHeaders(method, url, headers);
+        auto requestData = StartAndWriteHeaders(method, url, headers);
 
         if (body) {
-            WaitFor(request->WriteBody(*body))
+            WaitFor(requestData.Request->WriteBody(*body))
                 .ThrowOnError();
         } else {
-            WaitFor(request->Close())
+            WaitFor(requestData.Request->Close())
                 .ThrowOnError();
         }
 
         if (Config_->IgnoreContinueResponses) {
-            while (response->GetStatusCode() == EStatusCode::Continue) {
-                response->Reset();
+            while (requestData.Response->GetStatusCode() == EStatusCode::Continue) {
+                requestData.Response->Reset();
             }
         }
 
         // Waits for response headers internally.
-        auto redirectUrl = response->TryGetRedirectUrl();
+        auto redirectUrl = requestData.Response->TryGetRedirectUrl();
         if (redirectUrl && redirectCount < Config_->MaxRedirectCount) {
             return DoRequest(method, *redirectUrl, body, headers, redirectCount + 1);
         }
 
-        return response;
+        return requestData.Response;
     }
 };
 

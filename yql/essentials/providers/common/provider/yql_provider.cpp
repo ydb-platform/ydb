@@ -1101,23 +1101,15 @@ void GetToken(const TString& string, TString& out, const TTypeAnnotationContext&
                 TStringBuf clusterName = p1;
                 if (clusterName.SkipPrefix("default_")) {
                     for (auto& x : type.DataSources) {
-                        auto tokens = x->GetClusterTokens();
-                        if (tokens) {
-                            auto token = tokens->FindPtr(clusterName);
-                            if (token) {
-                                out = *token;
-                                return;
-                            }
+                        if (auto token = x->ResolveClusterToken(TString(clusterName))) {
+                            out = *token;
+                            return;
                         }
                     }
                     for (auto& x : type.DataSinks) {
-                        auto tokens = x->GetClusterTokens();
-                        if (tokens) {
-                            auto token = tokens->FindPtr(clusterName);
-                            if (token) {
-                                out = *token;
-                                return;
-                            }
+                        if (auto token = x->ResolveClusterToken(TString(clusterName))) {
+                            out = *token;
+                            return;
                         }
                     }
                 }

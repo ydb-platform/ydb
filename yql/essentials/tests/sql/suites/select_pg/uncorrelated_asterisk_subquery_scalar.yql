@@ -1,0 +1,12 @@
+--!syntax_pg
+
+SELECT
+    (
+        SELECT
+            *
+        FROM (
+            SELECT
+                1 AS a
+        ) AS x
+    )
+;

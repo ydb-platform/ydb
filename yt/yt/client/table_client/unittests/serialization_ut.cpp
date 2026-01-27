@@ -1,3 +1,4 @@
+#include <yt/yt/client/table_client/constrained_schema.h>
 #include <yt/yt/client/table_client/helpers.h>
 #include <yt/yt/client/table_client/schema.h>
 
@@ -12,16 +13,20 @@
 #include <yt/yt/core/test_framework/framework.h>
 
 namespace NYT::NTableClient {
+
+using namespace NYson;
+using namespace NYTree;
+
 namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
 TEST(TSchemaSerializationTest, ParseUsingNodeAndSerialize)
 {
-    const char* schemaString = "<strict=%true;unique_keys=%false>"
+    const TStringBuf schemaString = "<strict=%true;unique_keys=%false>"
         "[{name=a;required=%false;type=int64;};{deleted=%true;stable_name=b}]";
     TTableSchema schema;
-    Deserialize(schema, NYTree::ConvertToNode(NYson::TYsonString(TString(schemaString))));
+    Deserialize(schema, NYTree::ConvertToNode(NYson::TYsonString(schemaString)));
 
     EXPECT_EQ(1, std::ssize(schema.Columns()));
     EXPECT_EQ("a", schema.Columns()[0].Name());
@@ -38,7 +43,7 @@ TEST(TSchemaSerializationTest, ParseUsingNodeAndSerialize)
     auto ref = buffer.Flush();
     auto buf = ref.ToStringBuf();
 
-    EXPECT_EQ(TString(buf.data(), buf.size()),
+    EXPECT_EQ(TStringBuf(buf.data(), buf.size()),
 R"RR({"$attributes":{"strict":true,"unique_keys":false},"$value":[{"name":"a","required":false,"type":"int64","type_v3":{"type_name":"optional","item":"int64"}},{"stable_name":"b","deleted":true}]})RR");
 }
 
@@ -54,7 +59,7 @@ TEST(TSchemaSerializationTest, ParseEntityUsingNodeAndSerialize)
     auto ref = buffer.Flush();
     auto buf = ref.ToStringBuf();
 
-    EXPECT_EQ(TString(buf.data(), buf.size()), "null");
+    EXPECT_EQ(TStringBuf(buf.data(), buf.size()), "null");
 }
 
 TEST(TSchemaSerializationTest, Cursor)
@@ -77,13 +82,94 @@ TEST(TSchemaSerializationTest, Cursor)
 
 TEST(TSchemaSerializationTest, Deleted)
 {
-    const char* schemaString = "<strict=%true;unique_keys=%false>"
+    const TStringBuf schemaString = "<strict=%true;unique_keys=%false>"
         "[{name=a;required=%false;type=int64;};{deleted=%true;name=b}]";
 
     TTableSchema schema;
     EXPECT_THROW_WITH_SUBSTRING(
-        Deserialize(schema, NYTree::ConvertToNode(NYson::TYsonString(TString(schemaString)))),
+        Deserialize(schema, NYTree::ConvertToNode(NYson::TYsonString(schemaString))),
         "Stable name should be set for a deleted column");
+}
+
+TEST(TConstrainedSchemaSerialization, YsonDeserializeAndSerialize)
+{
+    std::string schemaString = "<strict=%true;unique_keys=%false>"
+        "[{name=a;stable_name=_a;required=%false;type=int64;constraint=\"BETWEEN 2 AND 3\"};{deleted=%true;stable_name=b}]";
+
+    auto checkSchemaAndSerialize = [] (const TConstrainedTableSchema& schema) {
+        EXPECT_EQ(1, std::ssize(schema.TableSchema().Columns()));
+        const auto& column = schema.TableSchema().Columns()[0];
+        EXPECT_EQ("a", column.Name());
+        EXPECT_EQ("_a", column.StableName().Underlying());
+        EXPECT_EQ(1, std::ssize(schema.TableSchema().DeletedColumns()));
+        EXPECT_EQ("b", schema.TableSchema().DeletedColumns()[0].StableName().Underlying());
+        EXPECT_EQ(1, std::ssize(schema.ColumnToConstraint()));
+        EXPECT_EQ("BETWEEN 2 AND 3", GetOrCrash(schema.ColumnToConstraint(), "a"));
+
+        NFormats::TFormat format(NFormats::EFormatType::Json);
+
+        TBlobOutput buffer;
+        auto consumer = CreateConsumerForFormat(format, NFormats::EDataType::Structured, &buffer);
+
+        Serialize(schema, consumer.get());
+        consumer->Flush();
+        auto ref = buffer.Flush();
+        auto buf = ref.ToStringBuf();
+
+        auto serializedSchema = R"RR({"$attributes":{"strict":true,"unique_keys":false},"$value":[{"constraint":"BETWEEN 2 AND 3","name":"a","required":false,"stable_name":"_a","type":"int64","type_v3":{"type_name":"optional","item":"int64"}},{"stable_name":"b","deleted":true}]})RR";
+        EXPECT_EQ(TString(buf.data(), buf.size()), serializedSchema);
+    };
+
+    // Deserialization via INode.
+    {
+        TConstrainedTableSchema schema;
+        Deserialize(schema, ConvertToNode(TYsonString(schemaString)));
+        checkSchemaAndSerialize(schema);
+    }
+
+    // Deserialization via TYsonPullParserCursor.
+    {
+        TMemoryInput input(schemaString);
+        TYsonPullParser parser(&input, EYsonType::Node);
+        TYsonPullParserCursor cursor(&parser);
+
+        TConstrainedTableSchema schema;
+        Deserialize(schema, &cursor);
+        checkSchemaAndSerialize(schema);
+    }
+}
+
+TEST(TConstraintMap, NameToStableNameMapConversions)
+{
+    // StableNameToConstraintMap -> NameToConstraintMap
+    {
+        auto column = TColumnSchema("stable_a", ESimpleLogicalValueType::Int64);
+        column.SetName("a");
+        auto schema = TTableSchema({
+            std::move(column),
+        });
+        TColumnStableNameToConstraintMap columnStableNameToConstraintMap;
+        EmplaceOrCrash(columnStableNameToConstraintMap, TColumnStableName("stable_a"), "BETWEEN 1 AND 2");
+
+        auto columnNameToConstraintMap = MakeColumnNameToConstraintMap(schema, std::move(columnStableNameToConstraintMap), 1);
+        EXPECT_EQ(std::ssize(columnNameToConstraintMap), 1);
+        EXPECT_EQ(GetOrCrash(columnNameToConstraintMap, "a"), "BETWEEN 1 AND 2");
+    }
+
+    // NameToConstraintMap -> StableNameToConstraintMap
+    {
+        auto column = TColumnSchema("stable_a", ESimpleLogicalValueType::Int64);
+        column.SetName("a");
+        auto schema = TTableSchema({
+            std::move(column),
+        });
+        TColumnNameToConstraintMap columnNameToConstraintMap;
+        EmplaceOrCrash(columnNameToConstraintMap, "a", "BETWEEN 1 AND 2");
+
+        auto columnStableNameToConstraintMap = MakeColumnStableNameToConstraintMap(schema, std::move(columnNameToConstraintMap), 1);
+        EXPECT_EQ(std::ssize(columnStableNameToConstraintMap), 1);
+        EXPECT_EQ(GetOrCrash(columnStableNameToConstraintMap, TColumnStableName("stable_a")), "BETWEEN 1 AND 2");
+    }
 }
 
 TEST(TInstantSerializationTest, YsonCompatibility)

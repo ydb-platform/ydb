@@ -193,7 +193,6 @@
   - __mbstate_t.h:                                         contrib/libs/cxxsupp/libcxx/include/__mbstate_t.h
   - __node_handle:                                         contrib/libs/cxxsupp/libcxx/include/__node_handle
   - __split_buffer:                                        contrib/libs/cxxsupp/libcxx/include/__split_buffer
-  - __std_clang_module:                                    contrib/libs/cxxsupp/libcxx/include/__std_clang_module
   - __std_mbstate_t.h:                                     contrib/libs/cxxsupp/libcxx/include/__std_mbstate_t.h
   - __tree:                                                contrib/libs/cxxsupp/libcxx/include/__tree
   - __undef_macros:                                        contrib/libs/cxxsupp/libcxx/include/__undef_macros
@@ -222,7 +221,6 @@
   - __algorithm/find_if.h:                                 contrib/libs/cxxsupp/libcxx/include/__algorithm/find_if.h
   - __algorithm/find_if_not.h:                             contrib/libs/cxxsupp/libcxx/include/__algorithm/find_if_not.h
   - __algorithm/find_segment_if.h:                         contrib/libs/cxxsupp/libcxx/include/__algorithm/find_segment_if.h
-  - __algorithm/fold.h:                                    contrib/libs/cxxsupp/libcxx/include/__algorithm/fold.h
   - __algorithm/for_each.h:                                contrib/libs/cxxsupp/libcxx/include/__algorithm/for_each.h
   - __algorithm/for_each_n.h:                              contrib/libs/cxxsupp/libcxx/include/__algorithm/for_each_n.h
   - __algorithm/for_each_segment.h:                        contrib/libs/cxxsupp/libcxx/include/__algorithm/for_each_segment.h
@@ -297,6 +295,7 @@
   - __algorithm/ranges_find_if.h:                          contrib/libs/cxxsupp/libcxx/include/__algorithm/ranges_find_if.h
   - __algorithm/ranges_find_if_not.h:                      contrib/libs/cxxsupp/libcxx/include/__algorithm/ranges_find_if_not.h
   - __algorithm/ranges_find_last.h:                        contrib/libs/cxxsupp/libcxx/include/__algorithm/ranges_find_last.h
+  - __algorithm/ranges_fold.h:                             contrib/libs/cxxsupp/libcxx/include/__algorithm/ranges_fold.h
   - __algorithm/ranges_for_each.h:                         contrib/libs/cxxsupp/libcxx/include/__algorithm/ranges_for_each.h
   - __algorithm/ranges_for_each_n.h:                       contrib/libs/cxxsupp/libcxx/include/__algorithm/ranges_for_each_n.h
   - __algorithm/ranges_generate.h:                         contrib/libs/cxxsupp/libcxx/include/__algorithm/ranges_generate.h
@@ -730,6 +729,7 @@
   - __memory/allocator_const.h:                            contrib/libs/cxxsupp/libcxx/include/__memory/allocator_const.h
   - __memory/allocator_destructor.h:                       contrib/libs/cxxsupp/libcxx/include/__memory/allocator_destructor.h
   - __memory/allocator_traits.h:                           contrib/libs/cxxsupp/libcxx/include/__memory/allocator_traits.h
+  - __memory/array_cookie.h:                               contrib/libs/cxxsupp/libcxx/include/__memory/array_cookie.h
   - __memory/assume_aligned.h:                             contrib/libs/cxxsupp/libcxx/include/__memory/assume_aligned.h
   - __memory/auto_ptr.h:                                   contrib/libs/cxxsupp/libcxx/include/__memory/auto_ptr.h
   - __memory/builtin_new_allocator.h:                      contrib/libs/cxxsupp/libcxx/include/__memory/builtin_new_allocator.h
@@ -754,7 +754,6 @@
   - __memory/unique_temporary_buffer.h:                    contrib/libs/cxxsupp/libcxx/include/__memory/unique_temporary_buffer.h
   - __memory/uses_allocator.h:                             contrib/libs/cxxsupp/libcxx/include/__memory/uses_allocator.h
   - __memory/uses_allocator_construction.h:                contrib/libs/cxxsupp/libcxx/include/__memory/uses_allocator_construction.h
-  - __memory/voidify.h:                                    contrib/libs/cxxsupp/libcxx/include/__memory/voidify.h
   - __memory_resource/memory_resource.h:                   contrib/libs/cxxsupp/libcxx/include/__memory_resource/memory_resource.h
   - __memory_resource/monotonic_buffer_resource.h:         contrib/libs/cxxsupp/libcxx/include/__memory_resource/monotonic_buffer_resource.h
   - __memory_resource/polymorphic_allocator.h:             contrib/libs/cxxsupp/libcxx/include/__memory_resource/polymorphic_allocator.h
@@ -939,6 +938,7 @@
   - __type_traits/common_type.h:                           contrib/libs/cxxsupp/libcxx/include/__type_traits/common_type.h
   - __type_traits/conditional.h:                           contrib/libs/cxxsupp/libcxx/include/__type_traits/conditional.h
   - __type_traits/conjunction.h:                           contrib/libs/cxxsupp/libcxx/include/__type_traits/conjunction.h
+  - __type_traits/container_traits.h:                      contrib/libs/cxxsupp/libcxx/include/__type_traits/container_traits.h
   - __type_traits/copy_cv.h:                               contrib/libs/cxxsupp/libcxx/include/__type_traits/copy_cv.h
   - __type_traits/copy_cvref.h:                            contrib/libs/cxxsupp/libcxx/include/__type_traits/copy_cvref.h
   - __type_traits/datasizeof.h:                            contrib/libs/cxxsupp/libcxx/include/__type_traits/datasizeof.h
@@ -979,6 +979,7 @@
   - __type_traits/is_floating_point.h:                     contrib/libs/cxxsupp/libcxx/include/__type_traits/is_floating_point.h
   - __type_traits/is_function.h:                           contrib/libs/cxxsupp/libcxx/include/__type_traits/is_function.h
   - __type_traits/is_fundamental.h:                        contrib/libs/cxxsupp/libcxx/include/__type_traits/is_fundamental.h
+  - __type_traits/is_implicit_lifetime.h:                  contrib/libs/cxxsupp/libcxx/include/__type_traits/is_implicit_lifetime.h
   - __type_traits/is_implicitly_default_constructible.h:   contrib/libs/cxxsupp/libcxx/include/__type_traits/is_implicitly_default_constructible.h
   - __type_traits/is_integral.h:                           contrib/libs/cxxsupp/libcxx/include/__type_traits/is_integral.h
   - __type_traits/is_literal_type.h:                       contrib/libs/cxxsupp/libcxx/include/__type_traits/is_literal_type.h

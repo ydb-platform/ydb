@@ -1,6 +1,5 @@
 # Expanding a Cluster
 
-{% include [deprecated](_includes/deprecated.md) %}
 
 You can expand a {{ ydb-short-name }} cluster by adding new nodes to its configuration. Below is the list of actions for expanding a {{ ydb-short-name }} cluster installed manually on VM instances or physical servers. In the Kubernetes environment, clusters are expanded by adjusting the {{ ydb-short-name }} controller settings for Kubernetes.
 

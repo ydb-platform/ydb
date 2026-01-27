@@ -58,7 +58,7 @@ namespace NKikimr::NPDisk::NMeta {
         }, *m);
     }
 
-    // TMetadataPart -- a fragment of metadata (half-chunk) that has been read into memory, but not processed yet. 
+    // TMetadataPart -- a fragment of metadata (half-chunk) that has been read into memory, but not processed yet.
     struct TPart {
         TSlotKey Key;
         TMetadataHeader Header;

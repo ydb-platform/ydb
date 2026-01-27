@@ -95,7 +95,6 @@ public:
     explicit TUserToken(const TString& token);
     bool IsExist(const TSID& someSID) const; // check for presence of SID specified in the token
     TSID GetUserSID() const;
-    using NACLibProto::TUserToken::GetAuthType;
     using NACLibProto::TUserToken::GetSanitizedToken;
     using NACLibProto::TUserToken::SetSanitizedToken;
     using NACLibProto::TUserToken::GetSubjectType;

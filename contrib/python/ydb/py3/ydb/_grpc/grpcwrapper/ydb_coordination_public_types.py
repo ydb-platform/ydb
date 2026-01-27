@@ -2,7 +2,6 @@ from dataclasses import dataclass
 from enum import IntEnum
 import typing
 
-
 try:
     from ydb.public.api.protos import ydb_coordination_pb2
 except ImportError:
@@ -55,3 +54,60 @@ class DescribeResult:
         result = ydb_coordination_pb2.DescribeNodeResult()
         msg.operation.result.Unpack(result)
         return NodeConfig.from_proto(result.config)
+
+
+@dataclass
+class AcquireSemaphoreResult:
+    req_id: int
+    acquired: bool
+    status: int
+
+    @staticmethod
+    def from_proto(msg: ydb_coordination_pb2.SessionResponse.AcquireSemaphoreResult) -> "AcquireSemaphoreResult":
+        return AcquireSemaphoreResult(
+            req_id=msg.req_id,
+            acquired=msg.acquired,
+            status=msg.status,
+        )
+
+
+@dataclass
+class CreateSemaphoreResult:
+    req_id: int
+    status: int
+
+    @staticmethod
+    def from_proto(msg: ydb_coordination_pb2.SessionResponse.CreateSemaphoreResult) -> "CreateSemaphoreResult":
+        return CreateSemaphoreResult(
+            req_id=msg.req_id,
+            status=msg.status,
+        )
+
+
+@dataclass
+class DescribeLockResult:
+    req_id: int
+    status: int
+    watch_added: bool
+    count: int
+    data: bytes
+    ephemeral: bool
+    limit: int
+    name: str
+    owners: list
+    waiters: list
+
+    @staticmethod
+    def from_proto(msg: ydb_coordination_pb2.SessionResponse.DescribeSemaphoreResult) -> "DescribeLockResult":
+        return DescribeLockResult(
+            req_id=msg.req_id,
+            status=msg.status,
+            watch_added=msg.watch_added,
+            count=msg.semaphore_description.count,
+            data=msg.semaphore_description.data,
+            ephemeral=msg.semaphore_description.ephemeral,
+            limit=msg.semaphore_description.limit,
+            name=msg.semaphore_description.name,
+            owners=msg.semaphore_description.owners,
+            waiters=msg.semaphore_description.waiters,
+        )

@@ -30,9 +30,10 @@ struct Schema : NIceDb::Schema {
         struct Action : Column<3, NScheme::NTypeIds::Utf8> {};
         struct Deadline : Column<4, NScheme::NTypeIds::Uint64> {};
         struct RequestID : Column<5, NScheme::NTypeIds::Utf8> {};
+        struct Priority : Column<6, NScheme::NTypeIds::Int32> {};
 
         using TKey = TableKey<ID>;
-        using TColumns = TableColumns<ID, Owner, Action, Deadline, RequestID>;
+        using TColumns = TableColumns<ID, Owner, Action, Deadline, RequestID, Priority>;
     };
 
     struct Request : Table<3> {

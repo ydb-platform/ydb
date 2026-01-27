@@ -3,6 +3,7 @@
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/persqueue/public/mlp/ut/common/common.h>
 #include <ydb/core/testlib/tablet_helpers.h>
+#include <ydb/library/actors/core/mon.h>
 
 namespace NKikimr::NPQ::NMLP {
 
@@ -143,6 +144,159 @@ Y_UNIT_TEST(AlterConsumer) {
     }
 }
 
+Y_UNIT_TEST(RecreateConsumer) {
+    auto setup = CreateSetup();
+    auto& runtime = setup->GetRuntime();
+
+    auto driver = TDriver(setup->MakeDriverConfig());
+    auto client = TTopicClient(driver);
+
+    client.CreateTopic("/Root/topic1", NYdb::NTopic::TCreateTopicSettings()
+            .RetentionPeriod(TDuration::Seconds(3))
+            .BeginAddSharedConsumer("mlp-consumer")
+                .KeepMessagesOrder(false)
+                .DefaultProcessingTimeout(TDuration::Seconds(13))
+                .BeginDeadLetterPolicy()
+                    .Enable()
+                    .BeginCondition()
+                        .MaxProcessingAttempts(1000)
+                    .EndCondition()
+                    .DeleteAction()
+                .EndDeadLetterPolicy()
+            .EndAddConsumer()).GetValueSync();
+
+    Cerr << ">>>>> Write many messages for creating WAL (if message count is small every will create the snapshot)" << Endl;
+    for (size_t i = 0; i < 50; ++i) {
+        CreateWriterActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Messages = {
+                {
+                    .Index = 0,
+                    .MessageBody = "message_body",
+                    .MessageGroupId = TStringBuilder() << "message_group_id_" << i
+                },
+            }
+        });
+
+        auto response = GetWriteResponse(runtime);
+        UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
+    }
+
+    Cerr << ">>>>> many iteration for creating many WAL records" << Endl;
+    for (size_t i = 0; i < 50; ++i) {
+        CreateReaderActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Consumer = "mlp-consumer",
+            .WaitTime = TDuration::Seconds(1),
+            .VisibilityTimeout = TDuration::Seconds(30),
+            .MaxNumberOfMessage = 1
+        });
+        GetReadResponse(runtime);
+
+        CreateUnlockerActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Consumer = "mlp-consumer",
+            .Messages = { TMessageId(0, 0) }
+        });
+        GetChangeResponse(runtime);
+    }
+
+    Cerr << ">>>>> Commit message" << Endl;
+    {
+        CreateCommitterActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Consumer = "mlp-consumer",
+            .Messages = { TMessageId(0, 0) }
+        });
+
+        auto result = GetChangeResponse(runtime);
+        UNIT_ASSERT_VALUES_EQUAL(result->Status, Ydb::StatusIds::SUCCESS);
+    }
+
+    Cerr << ">>>>> drop consumer" << Endl;
+    auto result = client.AlterTopic("/Root/topic1", NYdb::NTopic::TAlterTopicSettings()
+            .SetRetentionPeriod(TDuration::Seconds(103))
+            .AppendDropConsumers("mlp-consumer")
+        ).GetValueSync();
+
+    Cerr << ">>>>> add consumer" << Endl;
+    client.AlterTopic("/Root/topic1", NYdb::NTopic::TAlterTopicSettings()
+            .SetRetentionPeriod(TDuration::Seconds(103))
+            .BeginAddSharedConsumer("mlp-consumer")
+                .KeepMessagesOrder(false)
+                .DefaultProcessingTimeout(TDuration::Seconds(13))
+                .BeginDeadLetterPolicy()
+                    .Enable()
+                    .BeginCondition()
+                        .MaxProcessingAttempts(17)
+                    .EndCondition()
+                    .DeleteAction()
+                .EndDeadLetterPolicy()
+            .EndAddConsumer()
+        ).GetValueSync();
+
+    Cerr << ">>>>> read message (write snapshot)" << Endl;
+    {
+        CreateReaderActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Consumer = "mlp-consumer",
+            .WaitTime = TDuration::Seconds(1),
+            .VisibilityTimeout = TDuration::Seconds(30),
+            .MaxNumberOfMessage = 1
+        });
+
+        auto result = GetReadResponse(runtime);
+        UNIT_ASSERT_VALUES_EQUAL(result->Status, Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(result->Messages.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].MessageId.PartitionId, 0);
+        UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].MessageId.Offset, 0);
+    }
+
+    Cerr << ">>>>> read message (write WAL)" << Endl;
+    {
+        CreateReaderActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Consumer = "mlp-consumer",
+            .WaitTime = TDuration::Seconds(1),
+            .VisibilityTimeout = TDuration::Seconds(30),
+            .MaxNumberOfMessage = 1
+        });
+
+        auto result = GetReadResponse(runtime);
+        UNIT_ASSERT_VALUES_EQUAL(result->Status, Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(result->Messages.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].MessageId.PartitionId, 0);
+        UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].MessageId.Offset, 1);
+    }
+
+    Cerr << ">>>>> reload pq tablet" << Endl;
+    ReloadPQTablet(setup, "/Root", "/Root/topic1", 0);
+
+    Cerr << ">>>>> read message after reload" << Endl;
+    {
+        CreateReaderActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Consumer = "mlp-consumer",
+            .WaitTime = TDuration::Seconds(1),
+            .VisibilityTimeout = TDuration::Seconds(30),
+            .MaxNumberOfMessage = 1
+        });
+
+        auto result = GetReadResponse(runtime);
+        UNIT_ASSERT_VALUES_EQUAL(result->Status, Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(result->Messages.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].MessageId.PartitionId, 0);
+        UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].MessageId.Offset, 2);
+    }
+}
+
 Y_UNIT_TEST(ReloadPQTabletAfterAlterConsumer) {
     auto setup = CreateSetup();
     auto& runtime = setup->GetRuntime();
@@ -216,8 +370,7 @@ Y_UNIT_TEST(ReloadPQTabletAfterAlterConsumer) {
     }
 }
 
-
-Y_UNIT_TEST(RetentionStorage) {
+void HtmlApp(std::string_view consumer, size_t partitionId, std::string_view expected) {
     auto setup = CreateSetup();
     auto& runtime = setup->GetRuntime();
 
@@ -225,67 +378,36 @@ Y_UNIT_TEST(RetentionStorage) {
     auto client = TTopicClient(driver);
 
     client.CreateTopic("/Root/topic1", NYdb::NTopic::TCreateTopicSettings()
-            .RetentionStorageMb(8)
             .BeginAddSharedConsumer("mlp-consumer")
                 .KeepMessagesOrder(false)
-            .EndAddConsumer());
+            .EndAddConsumer()).GetValueSync();
 
     Sleep(TDuration::Seconds(1));
 
-    WriteMany(setup, "/Root/topic1", 0, 1_MB, 25);
+    auto tabletId = GetTabletId(setup, "/Root", "/Root/topic1", 0);
+    auto url = TStringBuilder() << "/app?TabletID=" << tabletId
+        << "&consumer=" << consumer
+        << "&partitionId=" << partitionId;
+    runtime.SendToPipe(tabletId, runtime.AllocateEdgeActor(),
+        new NMon::TEvRemoteHttpInfo(url, HTTP_METHOD_GET));
 
-    Sleep(TDuration::Seconds(1));
+    auto response = runtime.GrabEdgeEvent<NMon::TEvRemoteHttpInfoRes>();
+    UNIT_ASSERT(response);
 
-    {
-        // check that message with offset 0 wasn`t removed by retention
-        CreateReaderActor(runtime, TReaderSettings{
-            .DatabasePath = "/Root",
-            .TopicName = "/Root/topic1",
-            .Consumer = "mlp-consumer",
-        });
-        auto response = GetReadResponse(runtime);
-        UNIT_ASSERT_VALUES_EQUAL_C(response->Status, Ydb::StatusIds::SUCCESS, response->ErrorDescription);
-        UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].MessageId.PartitionId, 0);
-        UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].MessageId.Offset, 0);
-    }
+    Cerr << (TStringBuilder() <<">>>>> " << response->Html << Endl);
+    UNIT_ASSERT(response->Html.find(expected) != TString::npos);
 }
 
-Y_UNIT_TEST(RetentionStorageAfterReload) {
-    auto setup = CreateSetup();
-    auto& runtime = setup->GetRuntime();
+Y_UNIT_TEST(HtmlApp_Success) {
+    HtmlApp("mlp-consumer", 0, "Total metrics");
+}
 
-    auto driver = TDriver(setup->MakeDriverConfig());
-    auto client = TTopicClient(driver);
+Y_UNIT_TEST(HtmlApp_BadConsumer) {
+    HtmlApp("mlp-consumer-not-exists", 0, "MLP consumer 'mlp-consumer-not-exists' not found");
+}
 
-    client.CreateTopic("/Root/topic1", NYdb::NTopic::TCreateTopicSettings()
-            .RetentionStorageMb(8)
-            .BeginAddSharedConsumer("mlp-consumer")
-                .KeepMessagesOrder(false)
-            .EndAddConsumer());
-
-    Sleep(TDuration::Seconds(1));
-
-    WriteMany(setup, "/Root/topic1", 0, 1_MB, 25);
-
-    Cerr << ">>>>> BEGIN REBOOT " << Endl;
-    ReloadPQTablet(setup, "/Root", "/Root/topic1", 0);
-
-    Sleep(TDuration::Seconds(2));
-
-    {
-        // check that message with offset 0 wasn`t removed by retention
-        CreateReaderActor(runtime, TReaderSettings{
-            .DatabasePath = "/Root",
-            .TopicName = "/Root/topic1",
-            .Consumer = "mlp-consumer",
-        });
-        auto response = GetReadResponse(runtime);
-        UNIT_ASSERT_VALUES_EQUAL_C(response->Status, Ydb::StatusIds::SUCCESS, response->ErrorDescription);
-        UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].MessageId.PartitionId, 0);
-        UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].MessageId.Offset, 0);
-    }
+Y_UNIT_TEST(HtmlApp_BadPartition) {
+    HtmlApp("mlp-consumer", 13, "Tablet info");
 }
 
 }

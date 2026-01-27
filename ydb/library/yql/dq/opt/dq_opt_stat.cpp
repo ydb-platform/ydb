@@ -103,62 +103,6 @@ namespace {
         return res;
     }
 
-    std::shared_ptr<TOptimizerStatistics> ApplyRowsHints(
-        std::shared_ptr<TOptimizerStatistics>& inputStats,
-        TVector<TString>& labels,
-        TCardinalityHints hints
-    ) {
-
-            if (labels.size() != 1) {
-                return inputStats;
-            }
-
-            for (auto h : hints.Hints) {
-                if (h.JoinLabels.size() == 1 && h.JoinLabels == labels) {
-                    auto outputStats = std::make_shared<TOptimizerStatistics>(
-                        inputStats->Type,
-                        h.ApplyHint(inputStats->Nrows),
-                        inputStats->Ncols,
-                        inputStats->ByteSize,
-                        inputStats->Cost,
-                        inputStats->KeyColumns,
-                        inputStats->ColumnStatistics,
-                        inputStats->StorageType);
-                    outputStats->Labels = inputStats->Labels;
-                    return outputStats;
-                }
-            }
-            return inputStats;
-    }
-
-    std::shared_ptr<TOptimizerStatistics> ApplyBytesHints(
-        std::shared_ptr<TOptimizerStatistics>& inputStats,
-        TVector<TString>& labels,
-        TCardinalityHints hints
-    ) {
-
-            if (labels.size() != 1) {
-                return inputStats;
-            }
-
-            for (auto h : hints.Hints) {
-                if (h.JoinLabels.size() == 1 && h.JoinLabels == labels) {
-                    auto outputStats = std::make_shared<TOptimizerStatistics>(
-                        inputStats->Type,
-                        inputStats->Nrows,
-                        inputStats->Ncols,
-                        h.ApplyHint(inputStats->ByteSize),
-                        inputStats->Cost,
-                        inputStats->KeyColumns,
-                        inputStats->ColumnStatistics,
-                        inputStats->StorageType);
-                    outputStats->Labels = inputStats->Labels;
-                    return outputStats;
-                }
-            }
-            return inputStats;
-    }
-
     TVector<TString> UnionLabels(TVector<TString>& leftLabels, TVector<TString>& rightLabels) {
         auto res = TVector<TString>();
         res.insert(res.begin(), leftLabels.begin(), leftLabels.end());
@@ -166,36 +110,92 @@ namespace {
         return res;
     }
 
-    TCardinalityHints::TCardinalityHint* FindCardHint(TVector<TString>& labels, TCardinalityHints& hints) {
-        THashSet<TString> labelsSet;
-        labelsSet.insert(labels.begin(), labels.end());
+}
 
-        for (auto & h: hints.Hints ) {
-            THashSet<TString> hintLabels;
-            hintLabels.insert(h.JoinLabels.begin(), h.JoinLabels.end());
-            if (labelsSet == hintLabels) {
-                return &h;
-            }
+std::shared_ptr<TOptimizerStatistics> ApplyRowsHints(
+    std::shared_ptr<TOptimizerStatistics>& inputStats,
+    TVector<TString>& labels,
+    TCardinalityHints hints
+) {
+
+        if (labels.size() != 1) {
+            return inputStats;
         }
 
-        return nullptr;
-    }
-
-    TCardinalityHints::TCardinalityHint* FindBytesHint(TVector<TString>& labels, TCardinalityHints& hints) {
-        THashSet<TString> labelsSet;
-        labelsSet.insert(labels.begin(), labels.end());
-
-        for (auto & h: hints.Hints ) {
-            THashSet<TString> hintLabels;
-            hintLabels.insert(h.JoinLabels.begin(), h.JoinLabels.end());
-            if (labelsSet == hintLabels) {
-                return &h;
+        for (auto h : hints.Hints) {
+            if (h.JoinLabels.size() == 1 && h.JoinLabels == labels) {
+                auto outputStats = std::make_shared<TOptimizerStatistics>(
+                    inputStats->Type,
+                    h.ApplyHint(inputStats->Nrows),
+                    inputStats->Ncols,
+                    inputStats->ByteSize,
+                    inputStats->Cost,
+                    inputStats->KeyColumns,
+                    inputStats->ColumnStatistics,
+                    inputStats->StorageType);
+                outputStats->Labels = inputStats->Labels;
+                return outputStats;
             }
         }
+        return inputStats;
+}
 
-        return nullptr;
+std::shared_ptr<TOptimizerStatistics> ApplyBytesHints(
+    std::shared_ptr<TOptimizerStatistics>& inputStats,
+    TVector<TString>& labels,
+    TCardinalityHints hints
+) {
+
+        if (labels.size() != 1) {
+            return inputStats;
+        }
+
+        for (auto h : hints.Hints) {
+            if (h.JoinLabels.size() == 1 && h.JoinLabels == labels) {
+                auto outputStats = std::make_shared<TOptimizerStatistics>(
+                    inputStats->Type,
+                    inputStats->Nrows,
+                    inputStats->Ncols,
+                    h.ApplyHint(inputStats->ByteSize),
+                    inputStats->Cost,
+                    inputStats->KeyColumns,
+                    inputStats->ColumnStatistics,
+                    inputStats->StorageType);
+                outputStats->Labels = inputStats->Labels;
+                return outputStats;
+            }
+        }
+        return inputStats;
+}
+
+TCardinalityHints::TCardinalityHint* FindCardHint(TVector<TString>& labels, TCardinalityHints& hints) {
+    THashSet<TString> labelsSet;
+    labelsSet.insert(labels.begin(), labels.end());
+
+    for (auto & h: hints.Hints ) {
+        THashSet<TString> hintLabels;
+        hintLabels.insert(h.JoinLabels.begin(), h.JoinLabels.end());
+        if (labelsSet == hintLabels) {
+            return &h;
+        }
     }
 
+    return nullptr;
+}
+
+TCardinalityHints::TCardinalityHint* FindBytesHint(TVector<TString>& labels, TCardinalityHints& hints) {
+    THashSet<TString> labelsSet;
+    labelsSet.insert(labels.begin(), labels.end());
+
+    for (auto & h: hints.Hints ) {
+        THashSet<TString> hintLabels;
+        hintLabels.insert(h.JoinLabels.begin(), h.JoinLabels.end());
+        if (labelsSet == hintLabels) {
+            return &h;
+        }
+    }
+
+    return nullptr;
 }
 
 bool NeedCalc(NNodes::TExprBase node) {

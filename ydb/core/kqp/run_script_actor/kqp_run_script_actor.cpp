@@ -15,6 +15,7 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/library/ydb_issue/proto/issue_id.pb.h>
+#include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 #include <library/cpp/protobuf/json/json2proto.h>
@@ -128,6 +129,8 @@ public:
         , CheckpointId(settings.CheckpointId)
         , PhysicalGraph(std::move(settings.PhysicalGraph))
         , StreamingQueryPath(settings.StreamingQueryPath)
+        , CustomerSuppliedId(std::move(settings.CustomerSuppliedId))
+        , StreamingDisposition(std::move(settings.StreamingDisposition))
         , Counters(settings.Counters)
     {}
 
@@ -140,14 +143,18 @@ public:
             Database,
             /* SessionId*/ "",
             ExecutionId,
-            /* CustomerSuppliedId */ traceId,
+            /* CustomerSuppliedId */ CustomerSuppliedId ? CustomerSuppliedId : traceId,
             SelfId()
         );
         UserRequestContext->IsStreamingQuery = SaveQueryPhysicalGraph;
         UserRequestContext->CheckpointId = CheckpointId;
         UserRequestContext->StreamingQueryPath = StreamingQueryPath;
+        UserRequestContext->StreamingDisposition = StreamingDisposition;
 
-        LOG_I("Bootstrap");
+        LOG_I("Bootstrap "
+            << "StreamingQueryPath: " << StreamingQueryPath
+            << ", CheckpointId: " << CheckpointId
+            << ", StreamingDisposition: " << (StreamingDisposition ? StreamingDisposition->DebugString() : "null"));
 
         Become(&TRunScriptActor::StateFunc);
     }
@@ -248,7 +255,7 @@ private:
         ev->SetDisableDefaultTimeout(DisableDefaultTimeout);
         ev->SetUserRequestContext(UserRequestContext);
         if (PhysicalGraph) {
-            ev->SetQueryPhysicalGraph(std::move(*PhysicalGraph));
+            ev->SetQueryPhysicalGraph(*PhysicalGraph);
         }
         if (ev->Record.GetRequest().GetCollectStats() >= Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL) {
             ev->SetProgressStatsPeriod(ProgressStatsPeriod ? ProgressStatsPeriod : TDuration::MilliSeconds(QueryServiceConfig.GetProgressStatsPeriodMs()));
@@ -325,7 +332,7 @@ private:
     void TerminateActorExecution(Ydb::StatusIds::StatusCode replyStatus, const NYql::TIssues& replyIssues) {
         LOG_I("Script execution finalized, cancel response status: " << replyStatus << ", issues: " << replyIssues.ToOneLineString());
         for (auto& req : CancelRequests) {
-            Send(req->Sender, new TEvKqp::TEvCancelScriptExecutionResponse(replyStatus, replyIssues));
+            Send(req->Sender, new TEvKqp::TEvCancelScriptExecutionResponse(replyStatus, replyIssues), 0, req->Cookie);
         }
         PassAway();
     }
@@ -574,7 +581,13 @@ private:
     }
 
     void Handle(TEvKqpExecuter::TEvExecuterProgress::TPtr& ev) {
-        LOG_T("Got script progress from " << ev->Sender);
+        const bool isExecuting = IsExecuting();
+        LOG_T("Got script progress from " << ev->Sender << ", isExecuting: " << isExecuting);
+
+        if (!isExecuting) {
+            return;
+        }
+
         const auto& record = ev->Get()->Record;
         QueryPlan = record.GetQueryPlan();
         QueryAst = record.GetQueryAst();
@@ -688,7 +701,7 @@ private:
         }
 
         if (record.GetYdbStatus() == Ydb::StatusIds::TIMEOUT) {
-            const TDuration timeout = GetQueryTimeout(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT, Request.GetRequest().GetTimeoutMs(), {}, QueryServiceConfig);
+            const TDuration timeout = GetQueryTimeout(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT, Request.GetRequest().GetTimeoutMs(), {}, QueryServiceConfig, DisableDefaultTimeout);
             NYql::TIssue timeoutIssue(TStringBuilder() << "Current request timeout is " << timeout.MilliSeconds() << "ms");
             timeoutIssue.SetCode(NYql::DEFAULT_ERROR, NYql::TSeverityIds::S_INFO);
             Issues.AddIssue(std::move(timeoutIssue));
@@ -726,13 +739,13 @@ private:
             CancelRequests.emplace_front(std::move(ev));
             break;
         case ERunState::Cancelled:
-            Send(ev->Sender, new TEvKqp::TEvCancelScriptExecutionResponse(Ydb::StatusIds::PRECONDITION_FAILED, "Already cancelled"));
+            Send(ev->Sender, new TEvKqp::TEvCancelScriptExecutionResponse(Ydb::StatusIds::PRECONDITION_FAILED, "Already cancelled"), 0, ev->Cookie);
             break;
         case ERunState::Finishing:
             CancelRequests.emplace_front(std::move(ev));
             break;
         case ERunState::Finished:
-            Send(ev->Sender, new TEvKqp::TEvCancelScriptExecutionResponse(Ydb::StatusIds::PRECONDITION_FAILED, "Already finished"));
+            Send(ev->Sender, new TEvKqp::TEvCancelScriptExecutionResponse(Ydb::StatusIds::PRECONDITION_FAILED, "Already finished"), 0, ev->Cookie);
             break;
         }
     }
@@ -976,6 +989,8 @@ private:
     const TString CheckpointId;
     std::optional<NKikimrKqp::TQueryPhysicalGraph> PhysicalGraph;
     const TString StreamingQueryPath;
+    const TString CustomerSuppliedId;
+    const std::shared_ptr<NYql::NPq::NProto::StreamingDisposition> StreamingDisposition;
     std::optional<TActorId> PhysicalGraphSender;
     TIntrusivePtr<TKqpCounters> Counters;
     TString SessionId;

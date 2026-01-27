@@ -1,10 +1,11 @@
 PY3TEST()
-INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 TEST_SRCS(
     hive_matchers.py
     test_create_tablets.py
     test_kill_tablets.py
     test_drain.py
+    test_http.py
 )
 
 IF (SANITIZER_TYPE)

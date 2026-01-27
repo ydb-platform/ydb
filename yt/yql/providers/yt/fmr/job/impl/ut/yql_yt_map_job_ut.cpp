@@ -43,7 +43,8 @@ Y_UNIT_TEST_SUITE(MapTests) {
             .Input = TTaskTableInputRef{.Inputs ={taskTableRef}},
             .Output = {fmrOutputRef}
         };
-        FillMapFmrJob(mapJob, mapTaskParams, {}, tableDataServiceHostsFile.Name(), MakeFileYtJobSerivce());
+        TFmrUserJobSettings settings{.ThreadPoolSize = 3, .QueueSizeLimit = 100};
+        FillMapFmrJob(mapJob, mapTaskParams, {}, tableDataServiceHostsFile.Name(), settings, MakeFileYtJobService());
 
         {
             auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
@@ -60,7 +61,7 @@ Y_UNIT_TEST_SUITE(MapTests) {
             });
 
             auto dataType = pgmBuilder.NewFlowType(structType);
-            TCallableBuilder inputCallableBuilder(env, "FmrInputJob", dataType);
+            TCallableBuilder inputCallableBuilder(env, "YtInputJob", dataType);
             auto inputNode = TRuntimeNode(inputCallableBuilder.Build(), false);
 
             const auto prefix = pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("prefix_");
@@ -72,7 +73,7 @@ Y_UNIT_TEST_SUITE(MapTests) {
                 return pgmBuilder.NewStruct(structType, {{"key", prefixKey}, {"subkey", subkey}, {"value", value}});
             });
 
-            TCallableBuilder outputCallableBuilder(env, "FmrOutputJob", dataType);
+            TCallableBuilder outputCallableBuilder(env, "YtOutputJob", dataType);
             outputCallableBuilder.Add(map);
             auto outputNode = TRuntimeNode(outputCallableBuilder.Build(), false);
             auto pgmReturn = pgmBuilder.Discard(outputNode);

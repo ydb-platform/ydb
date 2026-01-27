@@ -6,9 +6,12 @@
 
 #include <ydb/public/api/protos/ydb_import.pb.h>
 
+#include <ydb/core/backup/regexp/regexp.h>
 #include <ydb/core/tx/schemeshard/schemeshard_import.h>
 
 #include <ydb/library/actors/core/hfunc.h>
+
+#include <library/cpp/regex/pcre/regexp.h>
 
 #include <util/generic/ptr.h>
 #include <util/string/builder.h>
@@ -71,13 +74,20 @@ class TImportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
 public:
     using TRpcOperationRequestActor<TDerived, TEvRequest, true>::TRpcOperationRequestActor;
 
-    void Bootstrap(const TActorContext&) {
+    void Bootstrap() {
         const auto& request = *(this->GetProtoRequest());
         if (request.operation_params().has_forget_after() && request.operation_params().operation_mode() != Ydb::Operations::OperationParams::SYNC) {
             return this->Reply(StatusIds::UNSUPPORTED, TIssuesIds::DEFAULT_ERROR, "forget_after is not supported for this type of operation");
         }
 
         const auto& settings = request.settings();
+        try {
+            // Validate regexps
+            NBackup::CombineRegexps(settings.exclude_regexps());
+        } catch (const std::exception& ex) {
+            return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, TStringBuilder() << "Invalid regexp: " << ex.what());
+        }
+
         if constexpr (IsS3Import) {
             const bool encryptedExportFeatureFlag = AppData()->FeatureFlags.GetEnableEncryptedExport();
             const bool commonSourcePrefixSpecified = !settings.source_prefix().empty();
@@ -128,7 +138,7 @@ public:
 
         if constexpr (IsFsImport) {
             if (!settings.base_path().StartsWith("/")) {
-                return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, 
+                return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR,
                     "base_path must be an absolute path");
             }
             for (const auto& item : settings.items()) {

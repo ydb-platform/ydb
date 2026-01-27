@@ -42,7 +42,7 @@ TFuture<void> TAsyncBarrier::GetBarrierFuture()
     auto guard = Guard(Lock_);
 
     if (SlotOccupied_.empty()) {
-        return VoidFuture;
+        return OKFuture;
     }
 
     auto barrierCookie = FirstSlotCookie_ + std::ssize(SlotOccupied_);

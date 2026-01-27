@@ -5,6 +5,7 @@ SRCS(
     kqp_buffer_lookup_actor.cpp
     kqp_compute.cpp
     kqp_effects.cpp
+    kqp_full_text_source.cpp
     kqp_fulltext_analyze.cpp
     kqp_output_stream.cpp
     kqp_program_builder.cpp
@@ -39,6 +40,7 @@ SRCS(
 
 PEERDIR(
     contrib/libs/apache/arrow
+    library/cpp/regex/pire
     library/cpp/threading/hot_swap
     ydb/core/actorlib_impl
     ydb/core/base

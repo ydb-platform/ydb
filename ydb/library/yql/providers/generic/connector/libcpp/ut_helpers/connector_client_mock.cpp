@@ -51,14 +51,14 @@ namespace NYql::NConnector::NTest {
         auto session = tc.CreateSession().GetValueSync().GetSession();
         const TString query = fmt::format(
             R"(
-            CREATE OBJECT {data_source_name}_password (TYPE SECRET) WITH (value={password});
+            CREATE SECRET {data_source_name}_password WITH (value="{password}");
 
             CREATE EXTERNAL DATA SOURCE {data_source_name} WITH (
                 SOURCE_TYPE="{source_type}",
                 LOCATION="{host}:{port}",
                 AUTH_METHOD="BASIC",
                 LOGIN="{login}",
-                PASSWORD_SECRET_NAME="{data_source_name}_password",
+                PASSWORD_SECRET_PATH="{data_source_name}_password",
                 USE_TLS="{use_tls}",
                 PROTOCOL="{protocol}",
                 DATABASE_NAME="{database}",
@@ -95,17 +95,17 @@ namespace NYql::NConnector::NTest {
         auto session = tc.CreateSession().GetValueSync().GetSession();
         const TString query = fmt::format(
             R"(
-            CREATE OBJECT sa_signature (TYPE SECRET) WITH (value=sa_signature);
-            CREATE OBJECT {data_source_name}_password (TYPE SECRET) WITH (value={password});
+            CREATE SECRET sa_signature WITH (value="sa_signature");
+            CREATE SECRET {data_source_name}_password WITH (value="{password}");
 
             CREATE EXTERNAL DATA SOURCE {data_source_name} WITH (
                 SOURCE_TYPE="{source_type}",
                 MDB_CLUSTER_ID="{cluster_id}",
                 AUTH_METHOD="MDB_BASIC",
                 SERVICE_ACCOUNT_ID="{service_account_id}",
-                SERVICE_ACCOUNT_SECRET_NAME="{service_account_id_signature}",
+                SERVICE_ACCOUNT_SECRET_PATH="{service_account_id_signature}",
                 LOGIN="{login}",
-                PASSWORD_SECRET_NAME="{data_source_name}_password",
+                PASSWORD_SECRET_PATH="{data_source_name}_password",
                 USE_TLS="{use_tls}",
                 PROTOCOL="{protocol}",
                 DATABASE_NAME="{database}"
@@ -138,7 +138,7 @@ namespace NYql::NConnector::NTest {
         auto session = tc.CreateSession().GetValueSync().GetSession();
         const TString query = fmt::format(
             R"(
-            CREATE OBJECT {data_source_name}_password (TYPE SECRET) WITH (value={password});
+            CREATE SECRET {data_source_name}_password WITH (value="{password}");
 
             CREATE EXTERNAL DATA SOURCE {data_source_name} WITH (
                 SOURCE_TYPE="{source_type}",
@@ -146,7 +146,7 @@ namespace NYql::NConnector::NTest {
                 AUTH_METHOD="BASIC",
                 LOGIN="{login}",
                 DATABASE_NAME="{database}",
-                PASSWORD_SECRET_NAME="{data_source_name}_password",
+                PASSWORD_SECRET_PATH="{data_source_name}_password",
                 USE_TLS="{use_tls}"
             );
         )",

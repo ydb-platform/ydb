@@ -18,7 +18,7 @@ from _dart_fields import create_dart_record
 
 if TYPE_CHECKING:
     from lib.nots.erm_json_lite import ErmJsonLite
-    from lib.nots.package_manager import PackageManagerType, BasePackageManager
+    from lib.nots.package_manager import PackageManager
     from lib.nots.semver import Version
     from lib.nots.typescript import TsConfig
 
@@ -51,6 +51,7 @@ class TsTestType(StrEnum):
     ESLINT = auto()
     HERMIONE = auto()
     JEST = auto()
+    VITEST = auto()
     PLAYWRIGHT = auto()
     PLAYWRIGHT_LARGE = auto()
     TSC_TYPECHECK = auto()
@@ -119,6 +120,16 @@ class UnitType:
 
 
 class NotsUnitType(UnitType):
+    def on_ts_configure(self):
+        """
+        Run base configuration for TS module
+        """
+
+    def on_node_modules_configure(self):
+        """
+        Calculates inputs and outputs of node_modules, fills `_NODE_MODULES_INOUTS` variable
+        """
+
     def on_peerdir_ts_resource(self, *resources: str):
         """
         Ensure dependency installed on the project
@@ -146,9 +157,14 @@ class NotsUnitType(UnitType):
         Setup test recipe to extract peer's output before running tests
         """
 
+    def on_ts_proto_auto_configure(self) -> None:
+        """
+        Configure auto TS_PROTO
+        """
+
     def on_ts_proto_auto_prepare_deps_configure(self) -> None:
         """
-        Configure prepare deps for TS_PROTO_AUTO
+        Configure prepare deps for auto TS_PROTO
         """
 
 
@@ -187,6 +203,17 @@ TS_TEST_SPECIFIC_FIELDS = {
         df.TsTestForPath.value,
     ),
     TsTestType.JEST: (
+        df.Size.from_unit,
+        df.Tag.from_unit,
+        df.Requirements.from_unit,
+        df.ConfigPath.value,
+        df.TsTestDataDirs.value,
+        df.TsTestDataDirsRename.value,
+        df.TsResources.value,
+        df.TsTestForPath.value,
+        df.DockerImage.value,
+    ),
+    TsTestType.VITEST: (
         df.Size.from_unit,
         df.Tag.from_unit,
         df.Requirements.from_unit,
@@ -365,27 +392,16 @@ def _create_erm_json(unit: NotsUnitType):
     return ErmJsonLite.load(erm_packages_path)
 
 
-def _get_pm_type(unit: NotsUnitType) -> 'PackageManagerType':
-    resolved: PackageManagerType | None = unit.get("PM_TYPE")
-    if not resolved:
-        raise Exception("PM_TYPE is not set yet.")
-
-    return resolved
-
-
 def _get_source_path(unit: NotsUnitType) -> str:
     sources_path = unit.get("TS_TEST_FOR_DIR") if unit.get("TS_TEST_FOR") else unit.path()
     return sources_path
 
 
-def _create_pm(unit: NotsUnitType) -> 'BasePackageManager':
-    from lib.nots.package_manager import get_package_manager_type
+def _create_pm(unit: NotsUnitType) -> 'PackageManager':
+    from lib.nots.package_manager import PackageManager
 
     sources_path = _get_source_path(unit)
     module_path = unit.get("TS_TEST_FOR_PATH") if unit.get("TS_TEST_FOR") else unit.get("MODDIR")
-
-    # noinspection PyPep8Naming
-    PackageManager = get_package_manager_type(_get_pm_type(unit))
 
     return PackageManager(
         sources_path=unit.resolve(sources_path),
@@ -421,9 +437,9 @@ def _check_nodejs_version(unit: NotsUnitType, major: int) -> None:
 
 @_with_report_configure_error
 def on_peerdir_ts_resource(unit: NotsUnitType, *resources: str) -> None:
-    from lib.nots.package_manager import BasePackageManager
+    from lib.nots.package_manager import PackageManager
 
-    pj = BasePackageManager.load_package_json_from_dir(unit.resolve(_get_source_path(unit)), empty_if_missing=True)
+    pj = PackageManager.load_package_json_from_dir(unit.resolve(_get_source_path(unit)), empty_if_missing=True)
     erm_json = _create_erm_json(unit)
     dirs = []
 
@@ -460,8 +476,8 @@ def on_peerdir_ts_resource(unit: NotsUnitType, *resources: str) -> None:
 
 @_with_report_configure_error
 def on_ts_configure(unit: NotsUnitType) -> None:
-    from lib.nots.package_manager.base import PackageJson
-    from lib.nots.package_manager.base.utils import build_pj_path
+    from lib.nots.package_manager import PackageJson
+    from lib.nots.package_manager.utils import build_pj_path
     from lib.nots.typescript import TsConfig
 
     tsconfig_paths = unit.get("TS_CONFIG_PATH").split()
@@ -608,7 +624,6 @@ def _setup_eslint(unit: NotsUnitType) -> None:
     if not test_files:
         return
 
-    unit.on_peerdir_ts_resource("eslint")
     user_recipes = unit.get_subst("TEST_RECIPES_VALUE")
     pm = _create_pm(unit)
 
@@ -680,7 +695,6 @@ def _setup_tsc_typecheck(unit: NotsUnitType) -> None:
     if not abs_tsconfig_path:
         raise Exception(f"tsconfig for typecheck not found: {tsconfig_path}")
 
-    unit.on_peerdir_ts_resource("typescript")
     user_recipes = unit.get_subst("TEST_RECIPES_VALUE")
     pm = _create_pm(unit)
 
@@ -729,8 +743,6 @@ def _setup_stylelint(unit: NotsUnitType) -> None:
     if not test_files:
         return
 
-    unit.on_peerdir_ts_resource("stylelint")
-
     from lib.nots.package_manager import constants
 
     recipes_value = unit.get_subst("TEST_RECIPES_VALUE")
@@ -774,8 +786,6 @@ def _setup_biome(unit: NotsUnitType) -> None:
     test_files = df.TestFiles.ts_biome_srcs(unit, (), {})
     if not test_files:
         return
-
-    unit.on_peerdir_ts_resource("@biomejs/biome")
 
     from lib.nots.package_manager import constants
 
@@ -858,17 +868,95 @@ def _select_matching_version(
         )
 
 
+def _is_ts_proto_auto(unit: NotsUnitType) -> bool:
+    """TS_PROTO without package.json"""
+    from lib.nots.package_manager.utils import build_pj_path
+
+    is_ts_proto = unit.get("TS_PROTO") == "yes" or unit.get("TS_PROTO_PREPARE_DEPS") == "yes"
+    if not is_ts_proto:
+        return False
+
+    pj_path = unit.resolve(build_pj_path(unit.path()))
+    has_pj = _is_real_file(pj_path)
+    return not has_pj
+
+
+@_with_report_configure_error
+def on_ts_proto_configure(unit: NotsUnitType) -> None:
+    if _is_ts_proto_auto(unit):
+        unit.on_ts_proto_auto_configure()
+        return
+
+    in_pj = _build_directives(["hide", "input"], ["package.json"])
+    out_pj = _build_directives(["hide", "output"], ["package.json"])
+    __set_append(unit, "_TS_PROTO_IMPL_INOUTS", [in_pj, out_pj])
+
+    unit.set(["_TS_PROTO_AUTO_ARGS", ""])
+
+    unit.on_ts_configure()
+    unit.on_node_modules_configure()
+
+    if unit.get("_GRPC_ENABLED") == "yes":
+        from lib.nots.package_manager import PackageManager
+
+        output_services_opts = [s for s in unit.get("_TS_PROTO_OPT").split() if s.startswith("outputServices")]
+        if output_services_opts:
+            return
+
+        pj = PackageManager.load_package_json_from_dir(unit.resolve(_get_source_path(unit)))
+        version = pj.get_dep_specifier("@grpc/grpc-js")
+
+        if version:
+            __set_append(unit, "_TS_PROTO_OPT", "--ts-proto-opt outputServices=grpc-js")
+            return
+
+        ymake.report_configure_error(
+            "\n"
+            f"ya.make includes macro {COLORS.cyan}GRPC(){COLORS.reset} but {COLORS.red}package.json is missing @grpc/grpc-js{COLORS.reset} dependency.\n"
+            f"Call {COLORS.green}ya tool nots add @grpc/grpc-js{COLORS.reset} to fix the issue.\n"
+            f"Docs: https://docs.yandex-team.ru/frontend-in-arcadia/references/TS_PROTO#grpc_custom_package"
+        )
+
+
+@_with_report_configure_error
+def on_ts_proto_auto_configure(unit: NotsUnitType) -> None:
+    out_files = _build_directives(["hide", "output"], ["package.json", "pnpm-lock.yaml"])
+    __set_append(unit, "_TS_PROTO_IMPL_INOUTS", out_files)
+
+    deps_path = unit.get("_TS_PROTO_AUTO_DEPS")
+    unit.onpeerdir([deps_path])
+
+    if unit.get("_GRPC_ENABLED") == "yes":
+        SUPPORTED_OUTPUT_SERVICES_VALUES = ["grpc-js", "generic-definitions", "default", "false", "none"]
+        output_services_opts = set(
+            [s.split("=")[1] for s in unit.get("_TS_PROTO_OPT").split() if s.startswith("outputServices")]
+        )
+
+        if not len(output_services_opts):
+            __set_append(unit, "_TS_PROTO_OPT", "--ts-proto-opt outputServices=grpc-js")
+            return
+
+        wrong_values = output_services_opts.difference(SUPPORTED_OUTPUT_SERVICES_VALUES)
+        if not wrong_values:
+            return
+
+        ymake.report_configure_error(
+            "\n"
+            f"ya.make includes macro {COLORS.cyan}GRPC(){COLORS.reset} but {COLORS.cyan}TS_PROTO_OPT(){COLORS.reset} has "
+            f"outputServices option with unsupported value(s): {COLORS.red}{', '.join(wrong_values)}{COLORS.reset}.\n"
+            f"Remove outputServices from {COLORS.cyan}TS_PROTO_OPT(){COLORS.reset} to use default {COLORS.green}grpc-js{COLORS.reset}.\n"
+            f"Or set one of supported values: {COLORS.green}{', '.join(SUPPORTED_OUTPUT_SERVICES_VALUES)}{COLORS.reset}.\n"
+            f"Docs: https://docs.yandex-team.ru/frontend-in-arcadia/references/TS_PROTO#grpc"
+        )
+
+
 @_with_report_configure_error
 def on_prepare_deps_configure(unit: NotsUnitType) -> None:
-    from lib.nots.package_manager.base.utils import build_pj_path
-
-    pm = _create_pm(unit)
-
-    if not _is_real_file(build_pj_path(pm.sources_path)) and unit.get("TS_PROTO_PREPARE_DEPS") == "yes":
-        # if this is a PREPARE_DEPS for TS_PROTO and there is no package.json - this is TS_PROTO_AUTO
+    if _is_ts_proto_auto(unit):
         unit.on_ts_proto_auto_prepare_deps_configure()
         return
 
+    pm = _create_pm(unit)
     pj = pm.load_package_json_from_dir(pm.sources_path)
     has_deps = pj.has_dependencies()
     local_cli = unit.get("TS_LOCAL_CLI") == "yes"
@@ -989,7 +1077,7 @@ def on_ts_test_for_configure(
     user_recipes = unit.get_subst("TEST_RECIPES_VALUE").strip()
     unit.set(["TEST_RECIPES_VALUE", ""])
 
-    if test_runner in [TsTestType.JEST]:
+    if test_runner in [TsTestType.JEST, TsTestType.VITEST]:
         unit.on_setup_install_node_modules_recipe([for_mod_path])
     else:
         unit.on_setup_extract_node_modules_recipe([for_mod_path])
@@ -1150,10 +1238,10 @@ def on_run_javascript_after_build_process_inputs(unit: NotsUnitType, js_script: 
 
 @_with_report_configure_error
 def on_ts_next_experimental_build_mode(unit: NotsUnitType) -> None:
-    from lib.nots.package_manager import BasePackageManager
+    from lib.nots.package_manager import PackageManager
     from lib.nots.semver import Version
 
-    pj = BasePackageManager.load_package_json_from_dir(unit.resolve(_get_source_path(unit)))
+    pj = PackageManager.load_package_json_from_dir(unit.resolve(_get_source_path(unit)))
     erm_json = _create_erm_json(unit)
     version = _select_matching_version(erm_json, "next", pj.get_dep_specifier("next"))
 

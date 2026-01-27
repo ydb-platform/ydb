@@ -13,6 +13,7 @@ namespace NKikimr::NBlobDepot {
         TString BasePath;
         TString Bucket;
 
+        bool Enabled = false;
         bool SyncMode = false;
         bool AsyncMode = false;
 
@@ -37,6 +38,8 @@ namespace NKikimr::NBlobDepot {
 
         ui64 GetTotalS3TrashObjects() const { return TotalS3TrashObjects; }
         ui64 GetTotalS3TrashSize() const { return TotalS3TrashSize; }
+
+        void OnDataLoaded();
 
     private: ///////////////////////////////////////////////////////////////////////////////////////////////////////////
         class TTxPrepareWriteS3;
@@ -66,7 +69,8 @@ namespace NKikimr::NBlobDepot {
         static constexpr ui32 MaxDeletesInFlight = 3;
         static constexpr size_t MaxObjectsToDeleteAtOnce = 10;
 
-        std::deque<TS3Locator> DeleteQueue; // items we are definitely going to delete (must be present in TrashS3)
+        // items we are definitely going to delete (must be present in TrashS3)
+        std::deque<TS3Locator> DeleteQueue;
         THashSet<TActorId> ActiveDeleters;
         ui32 NumDeleteTxInFlight = 0;
         ui64 TotalS3TrashObjects = 0;

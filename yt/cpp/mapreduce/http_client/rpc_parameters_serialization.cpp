@@ -722,6 +722,11 @@ TNode SerializeParamsForReadTablePartition(const TString& cookie, const TTablePa
     TNode node;
     node["cookie"] = cookie;
     SerializeSuppressableAccessTrackingOptions(&node, options);
+    node["control_attributes"] = BuildYsonNodeFluently()
+        .BeginMap()
+            .Item("enable_row_index").Value(options.ControlAttributes_.EnableRowIndex_)
+            .Item("enable_range_index").Value(options.ControlAttributes_.EnableRangeIndex_)
+        .EndMap();
     return node;
 }
 
@@ -838,6 +843,50 @@ TNode SerializeParamsForAlterTable(
     if (options.UpstreamReplicaId_) {
         result["upstream_replica_id"] = GetGuidAsString(*options.UpstreamReplicaId_);
     }
+    return result;
+}
+
+void SetBasicDistributedStartParams(
+    TNode& result,
+    const TTransactionId& transactionId,
+    const TRichYPath& richPath,
+    i64 cookieCount)
+{
+    SetTransactionIdParam(&result, transactionId);
+
+    result["path"] = PathToNode(richPath);
+    result["cookie_count"] = cookieCount;
+}
+
+TNode SerializeParamsForStartDistributedFileSession(
+    const TTransactionId& transactionId,
+    const TRichYPath& richPath,
+    i64 cookieCount,
+    const TStartDistributedWriteFileOptions& options)
+{
+    TNode result;
+    SetBasicDistributedStartParams(result, transactionId, richPath, cookieCount);
+
+    if (options.Timeout_) {
+        result["timeout"] = static_cast<i64>(options.Timeout_->MilliSeconds());
+    }
+
+    return result;
+}
+
+TNode SerializeParamsForStartDistributedTableSession(
+    const TTransactionId& transactionId,
+    const TRichYPath& richPath,
+    i64 cookieCount,
+    const TStartDistributedWriteTableOptions& options)
+{
+    TNode result;
+    SetBasicDistributedStartParams(result, transactionId, richPath, cookieCount);
+
+    if (options.Timeout_) {
+        result["timeout"] = static_cast<i64>(options.Timeout_->MilliSeconds());
+    }
+
     return result;
 }
 

@@ -112,7 +112,7 @@ protected:
 };
 
 template <typename TClient, typename TOperation, typename TAsyncStatusType = TFunctionResult<TOperation>>
-class TRetryWithSession : public TRetryContext<TClient, TAsyncStatusType> {
+class TRetryWithSession : public TRetryContext<TClient, TAsyncStatusType>, public TRetryDeadlineHelper<TClient> {
     using TRetryContextAsync = TRetryContext<TClient, TAsyncStatusType>;
     using TStatusType = typename TRetryContextAsync::TStatusType;
     using TSession = typename TClient::TSession;
@@ -120,20 +120,25 @@ class TRetryWithSession : public TRetryContext<TClient, TAsyncStatusType> {
     using TAsyncCreateSessionResult = typename TClient::TAsyncCreateSessionResult;
 
 private:
-    TOperation Operation_;
+    const TOperation Operation_;
+    const TDeadline Deadline_;
     std::optional<TSession> Session_;
 
 public:
     explicit TRetryWithSession(
         const TClient& client, TOperation&& operation, const TRetryOperationSettings& settings)
         : TRetryContextAsync(client, settings)
-        , Operation_(operation)
+        , Operation_(std::move(operation))
+        , Deadline_(TDeadline::AfterDuration(this->Settings_.MaxTimeout_))
     {}
 
     void Retry() override {
         TIntrusivePtr<TRetryWithSession> self(this);
         if (!Session_) {
-            auto settings = TCreateSessionSettings().ClientTimeout(this->Settings_.GetSessionClientTimeout_);
+            auto settings = TCreateSessionSettings()
+                .ClientTimeout(this->Settings_.GetSessionClientTimeout_)
+                .Deadline(Deadline_);
+
             this->Client_.GetSession(settings).Subscribe(
                 [self](const TAsyncCreateSessionResult& resultFuture) {
                     try {
@@ -143,6 +148,7 @@ public:
                         }
 
                         self->Session_ = result.GetSession();
+                        TRetryDeadlineHelper<TClient>::SetDeadline(*self->Session_, self->Deadline_);
                         self->DoRunOperation(self);
                     } catch (...) {
                         return TRetryContextAsync::HandleExceptionAsync(self, std::current_exception());

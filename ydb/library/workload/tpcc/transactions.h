@@ -1,5 +1,6 @@
 #pragma once
 
+#include "runner.h"
 #include "task_queue.h"
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
@@ -38,6 +39,7 @@ struct TTransactionContext {
     std::shared_ptr<NQuery::TQueryClient> Client;
     const TString Path;
     std::shared_ptr<TLog> Log;
+    NQuery::TTxSettings TxMode;
 };
 
 struct TUserAbortedException : public yexception {

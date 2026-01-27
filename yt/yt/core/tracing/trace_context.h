@@ -151,6 +151,19 @@ public:
      */
     TDuration GetDuration() const;
 
+    //! Checks if the context is alive for too long.
+    /*!
+     *  The default threshold duration is configured via #SetTraceContextDefaultLeakDurationThreshold
+     *  by can be changed via #SetLeakDurationThreshold.
+     *
+     *  If the deadline is exceeded, then a debug message is logged and a profiling
+     *  counter is incremented (only once per trace context instance).
+     */
+    void CheckForLeak(NProfiling::TCpuInstant now);
+
+    //! Enables changing the per-context leak deadline.
+    void SetLeakDurationThreshold(TDuration threshold);
+
     using TTagList = TCompactVector<std::pair<std::string, std::string>, 4>;
     TTagList GetTags() const;
 
@@ -231,6 +244,7 @@ private:
     std::optional<std::string> TargetEndpoint_;
     std::string LoggingTag_;
     const NProfiling::TCpuInstant StartTime_;
+    std::atomic<NProfiling::TCpuInstant> LeakDeadline_;
 
     std::atomic<bool> Finished_ = false;
     std::atomic<bool> Submitted_ = false;
@@ -248,6 +262,8 @@ private:
     // Must NOT allocate memory while modifying AllocationTagList_ to avoid deadlock with allocator.
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, AllocationTagsLock_);
     TAtomicIntrusivePtr<TAllocationTagList> AllocationTagList_;
+
+    std::atomic<bool> LeakDetected_;
 
     TTraceContext(
         TSpanContext parentSpanContext,
@@ -283,6 +299,11 @@ TTraceContext* TryGetTraceContextFromPropagatingStorage(const NConcurrency::TPro
 //! Creates a new trace context. If the current trace context exists, it becomes the parent of the
 //! created trace context.
 TTraceContextPtr CreateTraceContextFromCurrent(const std::string& spanName);
+
+//! Configures the default maximum expected duration of a trace context.
+//! Trace contexts living longer than #threshold are considered leaked.
+//! Can be overridden via #TTraceContext::SetLeakDurationThreshold.
+void SetTraceContextDefaultLeakDurationThreshold(TDuration threshold);
 
 ////////////////////////////////////////////////////////////////////////////////
 

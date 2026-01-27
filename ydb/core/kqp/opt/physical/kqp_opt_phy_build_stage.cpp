@@ -100,6 +100,10 @@ bool IsLiteralNothing(TExprBase node) {
                 auto slot = type->Cast<TDataExprType>()->GetSlot();
                 auto typeId = NKikimr::NUdf::GetDataTypeInfo(slot).TypeId;
 
+                if (NKikimr::NScheme::NTypeIds::IsParametrizedType(typeId)) {
+                    return false;
+                }
+
                 return (
                     NKikimr::NScheme::NTypeIds::IsYqlType(typeId)
                     && NKikimr::IsAllowedKeyType(NKikimr::NScheme::TTypeInfo(typeId))
@@ -240,6 +244,35 @@ TExprBase KqpBuildReadTableStage(TExprBase node, TExprContext& ctx, const TKqpOp
         .Settings(TDqStageSettings::New()
             .SetPartitionMode(singleKey && UseSource(kqpCtx, tableDesc) ? TDqStageSettings::EPartitionMode::Single : TDqStageSettings::EPartitionMode::Default)
             .BuildNode(ctx, read.Pos()))
+        .Done();
+
+    return Build<TDqCnUnionAll>(ctx, read.Pos())
+        .Output()
+            .Stage(stage)
+            .Index().Build("0")
+            .Build()
+        .Done();
+}
+
+TExprBase KqpBuildReadTableFullTextIndexStage(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
+    Y_UNUSED(kqpCtx);
+
+    if (!node.Maybe<TKqlReadTableFullTextIndex>()) {
+        return node;
+    }
+
+    const TKqlReadTableFullTextIndex& read = node.Cast<TKqlReadTableFullTextIndex>();
+
+    auto phyRead = ctx.RenameNode(*node.Raw(), TKqpReadTableFullTextIndex::CallableName());
+
+    auto stage = Build<TDqStage>(ctx, read.Pos())
+        .Inputs()
+            .Build()
+        .Program()
+            .Args({})
+            .Body(phyRead)
+            .Build()
+        .Settings().Build()
         .Done();
 
     return Build<TDqCnUnionAll>(ctx, read.Pos())
@@ -508,7 +541,9 @@ NYql::NNodes::TExprBase KqpRewriteLookupTablePhy(NYql::NNodes::TExprBase node, N
         << KqpExprToPrettyString(lookupKeys, ctx));
 
     TKqpStreamLookupSettings settings;
-    settings.Strategy = EStreamLookupStrategyType::LookupRows;
+    settings.Strategy = lookupTable.IsUnique()
+        ? EStreamLookupStrategyType::LookupUniqueRows
+        : EStreamLookupStrategyType::LookupRows;
     TNodeOnNodeOwnedMap replaceMap;
     TVector<TExprBase> newInputs;
     TVector<TCoArgument> newArgs;

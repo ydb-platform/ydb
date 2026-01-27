@@ -294,6 +294,103 @@ TStatus AnnotateReadTable(const TExprNode::TPtr& node, TExprContext& ctx, const 
 
     return TStatus::Ok;
 }
+
+const TTypeAnnotationNode* GetReadTableRowTypeFullText(TExprContext& ctx, const TKikimrTablesData& tablesData,
+    const TString& cluster, const TString& table, TCoAtomList select, bool withSystemColumns)
+{
+    auto tableDesc = tablesData.EnsureTableExists(cluster, table, select.Pos(), ctx);
+    if (!tableDesc) {
+        return nullptr;
+    }
+
+    TVector<const TItemExprType*> resultItems;
+    for (auto item : select) {
+        if (item.Value() == NTableIndex::NFulltext::FullTextRelevanceColumn) {
+            auto itemType = ctx.MakeType<TItemExprType>(TString(item.Value()), ctx.MakeType<TDataExprType>(NUdf::EDataSlot::Double));
+            resultItems.push_back(itemType);
+            YQL_ENSURE(itemType->Validate(select.Pos(), ctx));
+            if (!itemType->Validate(select.Pos(), ctx)) {
+                return nullptr;
+            }
+            continue;
+        }
+
+        auto column = tableDesc->Metadata->Columns.FindPtr(item.Value());
+        TString columnName;
+        if (column) {
+            columnName = column->Name;
+        } else {
+            if (withSystemColumns && IsKikimrSystemColumn(item.Value())) {
+                columnName = TString(item.Value());
+            } else {
+                ctx.AddError(TIssue(ctx.GetPosition(select.Pos()), TStringBuilder()
+                    << "Column not found: " << item.Value()));
+                return nullptr;
+            }
+        }
+
+        auto type = tableDesc->GetColumnType(columnName);
+        YQL_ENSURE(type, "No such column: " << columnName);
+
+        auto itemType = ctx.MakeType<TItemExprType>(columnName, type);
+        if (!itemType->Validate(select.Pos(), ctx)) {
+            return nullptr;
+        }
+        resultItems.push_back(itemType);
+    }
+
+    auto resultType = ctx.MakeType<TStructExprType>(resultItems);
+    if (!resultType->Validate(select.Pos(), ctx)) {
+        return nullptr;
+    }
+
+    return resultType;
+}
+
+TStatus AnnotateReadTableFullTextIndexSourceSettings(const TExprNode::TPtr& node, TExprContext& ctx, const TString& cluster, const TKikimrTablesData& tablesData) {
+    if (!EnsureArgsCount(*node, 6, ctx)) {
+        return TStatus::Error;
+    }
+
+    auto table = ResolveTable(node->Child(TKqpReadTableFullTextIndexSourceSettings::idx_Table), ctx, cluster, tablesData);
+    if (!table.second) {
+        return TStatus::Error;
+    }
+
+    const auto& columns = node->ChildPtr(TKqpReadTableFullTextIndexSourceSettings::idx_Columns);
+    if (!EnsureTupleOfAtoms(*columns, ctx)) {
+        return TStatus::Error;
+    }
+
+    if (!EnsureAtom(*node->Child(TKqpReadTableFullTextIndexSourceSettings::idx_Index), ctx)) {
+        return TStatus::Error;
+    }
+
+    auto index = node->Child(TKqpReadTableFullTextIndexSourceSettings::idx_Index)->Content();
+    const auto& [indexMeta, indexState] = table.second->Metadata->GetIndexMetadata(index);
+
+    if (!indexMeta) {
+        ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Index not found"));
+        return TStatus::Error;
+    }
+
+    if (indexState != TIndexDescription::EIndexState::Ready) {
+        ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Index is not ready"));
+        return TStatus::Error;
+    }
+
+    const auto& queryColumns = node->Child(TKqpReadTableFullTextIndexSourceSettings::idx_QueryColumns);
+    if (!EnsureTupleOfAtoms(*queryColumns, ctx)) {
+        return TStatus::Error;
+    }
+
+    auto rowType = GetReadTableRowTypeFullText(
+        ctx, tablesData, cluster, table.first, TCoAtomList(columns), false);
+
+    node->SetTypeAnn(ctx.MakeType<TStreamExprType>(rowType));
+    return TStatus::Ok;
+}
+
 TStatus AnnotateKqpSourceSettings(const TExprNode::TPtr& node, TExprContext& ctx, const TString& cluster,
     const TKikimrTablesData& tablesData, bool withSystemColumns)
 {
@@ -451,6 +548,60 @@ TStatus AnnotateReadTableRanges(const TExprNode::TPtr& node, TExprContext& ctx, 
     return TStatus::Ok;
 }
 
+
+
+TStatus AnnotateReadTableFullTextIndex(const TExprNode::TPtr& node, TExprContext& ctx, const TString& cluster, const TKikimrTablesData& tablesData) {
+    if (!EnsureArgsCount(*node, 6, ctx)) {
+        ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Expected 3 arguments for FullTextContains"));
+        return TStatus::Error;
+    }
+
+    bool isPhysical = TKqpReadTableFullTextIndex::Match(node.Get());
+
+    auto table = ResolveTable(node->Child(TKqlReadTableFullTextIndex::idx_Table), ctx, cluster, tablesData);
+    if (!table.second) {
+        return TStatus::Error;
+    }
+
+    if (!EnsureAtom(*node->Child(TKqlReadTableFullTextIndex::idx_Index), ctx)) {
+        ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Expected index name"));
+        return TStatus::Error;
+    }
+
+    auto [indexMeta, indexState] = table.second->Metadata->GetIndexMetadata(node->Child(TKqlReadTableFullTextIndex::idx_Index)->Content());
+
+    if (!indexMeta) {
+        ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Index not found"));
+        return TStatus::Error;
+    }
+
+    if (indexState != TIndexDescription::EIndexState::Ready) {
+        ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Index is not ready"));
+        return TStatus::Error;
+    }
+
+    const auto& columns = node->ChildPtr(TKqlReadTableFullTextIndex::idx_Columns);
+    if (!EnsureTupleOfAtoms(*columns, ctx)) {
+        return TStatus::Error;
+    }
+
+    const auto& queryColumns = node->ChildPtr(TKqlReadTableFullTextIndex::idx_QueryColumns);
+    if (!EnsureTupleOfAtoms(*queryColumns, ctx)) {
+        return TStatus::Error;
+    }
+
+    auto rowType = GetReadTableRowTypeFullText(
+        ctx, tablesData, cluster, table.first, TCoAtomList(columns), false);
+
+    if (isPhysical) {
+        node->SetTypeAnn(ctx.MakeType<TFlowExprType>(rowType));
+    } else {
+        node->SetTypeAnn(ctx.MakeType<TListExprType>(rowType));
+    }
+
+    return TStatus::Ok;
+}
+
 TStatus AnnotateLookupTable(const TExprNode::TPtr& node, TExprContext& ctx, const TString& cluster,
     const TKikimrTablesData& tablesData, bool withSystemColumns)
 {
@@ -459,7 +610,7 @@ TStatus AnnotateLookupTable(const TExprNode::TPtr& node, TExprContext& ctx, cons
         return TStatus::Error;
     }
 
-    if (!isStreamLookup && !EnsureArgsCount(*node, 3, ctx)) {
+    if (!isStreamLookup && !EnsureMinMaxArgsCount(*node, 3, 4, ctx)) {
         return TStatus::Error;
     }
 
@@ -1648,12 +1799,12 @@ TStatus AnnotateSequencer(const TExprNode::TPtr& node, TExprContext& ctx, const 
     return TStatus::Ok;
 }
 
-TStatus AnnotateKqpOlapPredicateClosure(const TExprNode::TPtr& node, TExprContext& ctx) {
+TStatus AnnotateKqpPredicateClosure(const TExprNode::TPtr& node, TExprContext& ctx) {
     if (!EnsureArgsCount(*node, 2, ctx)) {
         return TStatus::Error;
     }
 
-    auto* argsType = node->Child(TKqpOlapPredicateClosure::idx_ArgsType);
+    auto* argsType = node->Child(TKqpPredicateClosure::idx_ArgsType);
 
     if (!EnsureType(*argsType, ctx)) {
         return TStatus::Error;
@@ -1675,7 +1826,7 @@ TStatus AnnotateKqpOlapPredicateClosure(const TExprNode::TPtr& node, TExprContex
         argTypes.push_back(argTypeRaw);
     }
 
-    auto& lambda = node->ChildRef(TKqpOlapPredicateClosure::idx_Lambda);
+    auto& lambda = node->ChildRef(TKqpPredicateClosure::idx_Lambda);
     if (!EnsureLambda(*lambda, ctx)) {
         return TStatus::Error;
     }
@@ -1823,11 +1974,15 @@ TStatus AnnotateFulltextAnalyze(const TExprNode::TPtr& node, TExprContext& ctx) 
         return TStatus::Error;
     }
 
-    // Return type: List<String or Utf8>
+    // Return type: List<Struct<__ydb_token:String or Utf8,__ydb_freq:Uint32>>
     auto stringType = ctx.MakeType<TDataExprType>(textDataType->GetSlot());
-    auto listType = ctx.MakeType<TListExprType>(stringType);
+    TVector<const TItemExprType*> rowItems;
+    rowItems.push_back(ctx.MakeType<TItemExprType>(NTableIndex::NFulltext::TokenColumn, stringType));
+    rowItems.push_back(ctx.MakeType<TItemExprType>(NTableIndex::NFulltext::FreqColumn, ctx.MakeType<TDataExprType>(EDataSlot::Uint32)));
+    auto rowType = ctx.MakeType<TStructExprType>(rowItems);
+    auto listType = ctx.MakeType<TListExprType>(rowType);
     node->SetTypeAnn(listType);
-    
+
     return TStatus::Ok;
 }
 
@@ -1919,7 +2074,9 @@ TStatus AnnotateStreamLookupConnection(const TExprNode::TPtr& node, TExprContext
 
     TCoNameValueTupleList settingsNode{node->ChildPtr(TKqpCnStreamLookup::idx_Settings)};
     auto settings = TKqpStreamLookupSettings::Parse(settingsNode);
-    if (settings.Strategy == EStreamLookupStrategyType::LookupRows) {
+    if (settings.Strategy == EStreamLookupStrategyType::LookupRows
+        || settings.Strategy == EStreamLookupStrategyType::LookupUniqueRows) {
+
         if (!EnsureStructType(node->Pos(), *inputItemType, ctx)) {
             return TStatus::Error;
         }
@@ -2244,21 +2401,52 @@ TStatus AnnotateKqpSinkEffect(const TExprNode::TPtr& node, TExprContext& ctx) {
 }
 
 TStatus AnnotateTableSinkSettings(const TExprNode::TPtr& input, TExprContext& ctx) {
-    if (!EnsureMinMaxArgsCount(*input, 7, 8, ctx)) {
+    if (!EnsureMinMaxArgsCount(*input, 8, 9, ctx)) {
         return TStatus::Error;
     }
     input->SetTypeAnn(ctx.MakeType<TVoidExprType>());
     return TStatus::Ok;
 }
 
-TStatus AnnotateExprSublink(const TExprNode::TPtr& node, TExprContext& ctx) {
-    auto expr = node->Child(TKqpExprSublink::idx_Expr);
-    auto itemType = expr->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
-    auto valueType = itemType->GetItems()[0]->GetItemType();
-    if (!valueType->IsOptionalOrNull()) {
-        valueType = ctx.MakeType<TOptionalExprType>(valueType);
+TStatus AnnotateSublinkBase(const TExprNode::TPtr& node, TExprContext& ctx) {
+    auto subquery = node->Child(TKqpSublinkBase::idx_Subquery);
+    auto itemType = subquery->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+    if (TKqpExprSublink::Match(node.Get())) {
+        auto valueType = itemType->GetItems()[0]->GetItemType();
+        if (!valueType->IsOptionalOrNull()) {
+            valueType = ctx.MakeType<TOptionalExprType>(valueType);
+        }
+        node->SetTypeAnn(valueType);
+    } else /* (TKqpExistsSublink::Match(node.Get()) || TKqpInSublink::Match(node.Get())) */ {
+        YQL_CLOG(TRACE, CoreDq) << "Checking boolean sublink";
+
+        auto pgSyntax = node->Child(TKqpBooleanSublink::idx_ReturnPgBool);
+        if (std::stoi(TString(pgSyntax->Content()))) {
+            node->SetTypeAnn(ctx.MakeType<TPgExprType>(NYql::NPg::LookupType("bool").TypeId));
+        } else {
+            node->SetTypeAnn(ctx.MakeType<TDataExprType>(EDataSlot::Bool));
+        }
     }
-    node->SetTypeAnn(valueType);
+    return TStatus::Ok;
+}
+
+TStatus AnnotateInfuseDependents(const TExprNode::TPtr& node, TExprContext& ctx) {
+    auto input = node->Child(TKqpInfuseDependents::idx_Input);
+    auto itemType = input->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+    TVector<const TItemExprType*> structItemTypes = itemType->GetItems();
+
+    auto columns = node->Child(TKqpInfuseDependents::idx_Columns);
+    auto types = node->Child(TKqpInfuseDependents::idx_Types);
+
+    for (size_t i=0; i<columns->ChildrenSize(); i++) {
+        auto columnType = types->Child(i)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+        auto correlatedType = ctx.MakeType<TItemExprType>(columns->Child(i)->Content(), columnType);
+        structItemTypes.push_back(correlatedType);
+    }
+
+    auto newStructType = ctx.MakeType<TStructExprType>(structItemTypes);
+    node->SetTypeAnn(ctx.MakeType<TListExprType>(newStructType));
+
     return TStatus::Ok;
 }
 
@@ -2289,10 +2477,10 @@ TStatus AnnotateOpRead(const TExprNode::TPtr& node, TExprContext& ctx, const TSt
 
     TVector<const TItemExprType*> structItemTypes = rowType->Cast<TStructExprType>()->GetItems();
     TVector<const TItemExprType*> newItemTypes;
-    for (auto t : structItemTypes ) {
+    for (const auto *t : structItemTypes) {
         TString aliasName = TString(alias->Content());
         TString columnName = TString(t->GetName());
-        TString fullName = aliasName != "" ? ( "_alias_" + aliasName + "." + columnName ) : columnName;
+        TString fullName = aliasName != "" ? aliasName + "." + columnName : columnName;
         newItemTypes.push_back(ctx.MakeType<TItemExprType>(fullName, t->GetItemType()));
     }
 
@@ -2315,9 +2503,9 @@ TStatus AnnotateOpEmptySource(const TExprNode::TPtr& input, TExprContext& ctx) {
 }
 
 TStatus AnnotateOpMapElementLambda(const TExprNode::TPtr& input, TExprContext& ctx) {
+    auto mapElementLambda = TKqpOpMapElementLambda(input);
     const TTypeAnnotationNode* inputType = input->ChildPtr(TKqpOpMapElementLambda::idx_Input)->GetTypeAnn();
     const TTypeAnnotationNode* itemType = inputType->Cast<TListExprType>()->GetItemType();
-
     auto& lambda = input->ChildRef(TKqpOpMapElementLambda::idx_Lambda);
     if (!UpdateLambdaAllArgumentsTypes(lambda, {itemType}, ctx)) {
         return IGraphTransformer::TStatus::Error;
@@ -2326,6 +2514,11 @@ TStatus AnnotateOpMapElementLambda(const TExprNode::TPtr& input, TExprContext& c
     auto lambdaType = lambda->GetTypeAnn();
     if (!lambdaType) {
         return IGraphTransformer::TStatus::Repeat;
+    }
+
+    if (auto maybeForceOptional = mapElementLambda.ForceOptional();
+        maybeForceOptional && maybeForceOptional.Cast().StringValue() == "True" && !lambdaType->IsOptionalOrNull()) {
+        lambdaType = ctx.MakeType<TOptionalExprType>(lambdaType);
     }
 
     auto variable = input->ChildRef(TKqpOpMapElementLambda::idx_Variable);
@@ -2445,6 +2638,10 @@ TStatus AnnotateOpFilter(const TExprNode::TPtr& input, TExprContext& ctx) {
     return TStatus::Ok;
 }
 
+bool IsSupportedJoinKind(const TString &joinKind) {
+    return joinKind == "Left" || joinKind == "Inner" || joinKind == "Cross";
+}
+
 TStatus AnnotateOpJoin(const TExprNode::TPtr& input, TExprContext& ctx) {
     auto leftInputType = input->ChildPtr(TKqpOpJoin::idx_LeftInput)->GetTypeAnn();
     auto rightInputType = input->ChildPtr(TKqpOpJoin::idx_RightInput)->GetTypeAnn();
@@ -2452,10 +2649,19 @@ TStatus AnnotateOpJoin(const TExprNode::TPtr& input, TExprContext& ctx) {
     auto leftItemType = leftInputType->Cast<TListExprType>()->GetItemType();
     auto rightItemType = rightInputType->Cast<TListExprType>()->GetItemType();
 
+    auto opJoin = TKqpOpJoin(input);
+    const TString joinKind = TString(opJoin.JoinKind().StringValue());
+    Y_ENSURE(IsSupportedJoinKind(joinKind), "Unsupported join kind");
+    const bool rightSideColumnsNeedsOptional = joinKind == "Left";
     TVector<const TItemExprType*> structItemTypes = leftItemType->Cast<TStructExprType>()->GetItems();
-
-    for (auto item : rightItemType->Cast<TStructExprType>()->GetItems()){
-        structItemTypes.push_back(item);
+    for (const auto *item : rightItemType->Cast<TStructExprType>()->GetItems()) {
+        if (item->GetItemType()->IsOptionalOrNull() || !rightSideColumnsNeedsOptional) {
+            structItemTypes.push_back(item);
+        } else {
+            auto colName = item->GetName();
+            const TTypeAnnotationNode* colType = item->GetItemType();
+            structItemTypes.push_back(ctx.MakeType<TItemExprType>(colName, ctx.MakeType<TOptionalExprType>(colType)));
+        }
     }
 
     auto resultStructType = ctx.MakeType<TStructExprType>(structItemTypes);
@@ -2481,14 +2687,26 @@ TStatus AnnotateOpLimit(const TExprNode::TPtr& input, TExprContext& ctx) {
 }
 
 TStatus AnnotateOpSortElement(const TExprNode::TPtr& input, TExprContext& ctx) {
-    Y_UNUSED(ctx);
-    input->SetTypeAnn(ctx.MakeType<TVoidExprType>());
+    const TTypeAnnotationNode* inputType = input->ChildPtr(TKqpOpSortElement::idx_Input)->GetTypeAnn();
+    const TTypeAnnotationNode* itemType = inputType->Cast<TListExprType>()->GetItemType();
+
+    auto& lambda = input->ChildRef(TKqpOpSortElement::idx_Lambda);
+    if (!UpdateLambdaAllArgumentsTypes(lambda, {itemType}, ctx)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    auto lambdaType = lambda->GetTypeAnn();
+    if (!lambdaType) {
+        return IGraphTransformer::TStatus::Repeat;
+    }
+
+    input->SetTypeAnn(lambdaType);
     return TStatus::Ok;
 }
 
 TStatus AnnotateOpSort(const TExprNode::TPtr& input, TExprContext& ctx) {
     Y_UNUSED(ctx);
-    const TTypeAnnotationNode* inputType = input->ChildPtr(TKqpOpRoot::idx_Input)->GetTypeAnn();
+    const TTypeAnnotationNode* inputType = input->ChildPtr(TKqpOpSort::idx_Input)->GetTypeAnn();
     input->SetTypeAnn(inputType);
     return TStatus::Ok;
 }
@@ -2498,42 +2716,39 @@ TStatus AnnotateOpAggregate(const TExprNode::TPtr& input, TExprContext& ctx) {
     const auto* structType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
     auto opAggregate = TKqpOpAggregate(input);
 
-    THashMap<TString, TString> aggTraitsMap;
+    TVector<const TItemExprType*> newItemTypes;
+    THashMap<TString, const TTypeAnnotationNode*> aggTraitsMap;
+    for (const auto* itemType : structType->GetItems()) {
+        const auto itemName = itemType->GetName();
+        aggTraitsMap.emplace(itemName, itemType->GetItemType());
+    }
+
+    for (const auto& keyColumn : opAggregate.KeyColumns()) {
+        auto it = aggTraitsMap.find(TString(keyColumn));
+        Y_ENSURE(it != aggTraitsMap.end());
+        newItemTypes.push_back(ctx.MakeType<TItemExprType>(it->first, it->second));
+    }
+
     for (const auto& traits : opAggregate.AggregationTraitsList()) {
         const auto originalColName = TString(traits.OriginalColName());
-        const auto aggFuncName = TString(traits.AggregationFunction());
-        aggTraitsMap[originalColName] = aggFuncName;
-    }
+        const auto aggFunction = TString(traits.AggregationFunction());
+        const auto resultColName = TString(traits.ResultColName());
+        auto it = aggTraitsMap.find(originalColName);
+        Y_ENSURE(it != aggTraitsMap.end());
+        const auto *aggFieldType = it->second;
+        TPositionHandle dummyPos;
 
-    THashSet<TString> keyColumns;
-    for (const auto& keyColumn : opAggregate.KeyColumns()) {
-        keyColumns.insert(TString(keyColumn));
-    }
-
-    TVector<const TItemExprType*> newItemTypes;
-    for (const auto* itemType : structType->GetItems()) {
-        // The type of the column could be changed after aggregation.
-        const auto itemName = itemType->GetName();
-        if (auto it = aggTraitsMap.find(itemName); it != aggTraitsMap.end()) {
-            const auto& colName = it->first;
-            const auto& aggFunction = it->second;
-            const TTypeAnnotationNode* aggFieldType = itemType->GetItemType();
-            TPositionHandle dummyPos;
-
-            if (aggFunction == "count") {
-                aggFieldType = ctx.MakeType<TDataExprType>(EDataSlot::Uint64);
-            } else if (aggFunction == "sum") {
-                Y_ENSURE(GetSumResultType(dummyPos, *itemType->GetItemType(), aggFieldType, ctx),
-                         "Unsupported type for sum aggregation function");
-            } else if (aggFunction == "avg") {
-                Y_ENSURE(GetAvgResultType(dummyPos, *itemType->GetItemType(), aggFieldType, ctx),
-                         "Unsupported type for avg aggregation function");
-            }
-
-            newItemTypes.push_back(ctx.MakeType<TItemExprType>(colName, aggFieldType));
-        } else if (keyColumns.contains(itemName)) {
-            newItemTypes.push_back(itemType);
+        if (aggFunction == "count") {
+            aggFieldType = ctx.MakeType<TDataExprType>(EDataSlot::Uint64);
+        } else if (aggFunction == "sum") {
+            Y_ENSURE(GetSumResultType(dummyPos, *it->second, aggFieldType, ctx),
+                        "Unsupported type for sum aggregation function");
+        } else if (aggFunction == "avg") {
+            Y_ENSURE(GetAvgResultType(dummyPos, *it->second, aggFieldType, ctx),
+                        "Unsupported type for avg aggregation function");
         }
+
+        newItemTypes.push_back(ctx.MakeType<TItemExprType>(resultColName, aggFieldType));
     }
 
     auto resultType = ctx.MakeType<TListExprType>(ctx.MakeType<TStructExprType>(newItemTypes));
@@ -2576,6 +2791,14 @@ TAutoPtr<IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cl
 
             if (TKqlReadTableRangesBase::Match(input.Get())) {
                 return AnnotateReadTableRanges(input, ctx, cluster, *tablesData, config->SystemColumnsEnabled());
+            }
+
+            if (TKqpReadTableFullTextIndex::Match(input.Get())) {
+                return AnnotateReadTableFullTextIndex(input, ctx, cluster, *tablesData);
+            }
+
+            if (TKqlReadTableFullTextIndex::Match(input.Get())) {
+                return AnnotateReadTableFullTextIndex(input, ctx, cluster, *tablesData);
             }
 
             if (TKqlLookupTableBase::Match(input.Get())) {
@@ -2626,8 +2849,8 @@ TAutoPtr<IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cl
                 return AnnotateOlapProjections(input, ctx);
             }
 
-            if (TKqpOlapPredicateClosure::Match(input.Get())) {
-                return AnnotateKqpOlapPredicateClosure(input, ctx);
+            if (TKqpPredicateClosure::Match(input.Get())) {
+                return AnnotateKqpPredicateClosure(input, ctx);
             }
 
             if (TKqpOlapFilter::Match(input.Get())) {
@@ -2687,7 +2910,7 @@ TAutoPtr<IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cl
             }
 
             if (TKqpPhysicalQuery::Match(input.Get())) {
-                return AnnotateKqpPhysicalQuery(input, ctx, config->EnableNewRBO);
+                return AnnotateKqpPhysicalQuery(input, ctx, config->GetEnableNewRBO());
             }
 
             if (TKqpEffects::Match(input.Get())) {
@@ -2714,6 +2937,10 @@ TAutoPtr<IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cl
                 return AnnotateFulltextAnalyze(input, ctx);
             }
 
+            if (TKqpReadTableFullTextIndexSourceSettings::Match(input.Get())) {
+                return AnnotateReadTableFullTextIndexSourceSettings(input, ctx, cluster, *tablesData);
+            }
+
             if (TKqpReadRangesSourceSettings::Match(input.Get())) {
                 return AnnotateKqpSourceSettings(input, ctx, cluster, *tablesData, config->SystemColumnsEnabled());
             }
@@ -2734,8 +2961,12 @@ TAutoPtr<IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cl
                 return AnnotateTableSinkSettings(input, ctx);
             }
 
-            if (TKqpExprSublink::Match(input.Get())) {
-                return AnnotateExprSublink(input, ctx);
+            if (TKqpSublinkBase::Match(input.Get())) {
+                return AnnotateSublinkBase(input, ctx);
+            }
+
+            if (TKqpInfuseDependents::Match(input.Get())) {
+                return AnnotateInfuseDependents(input, ctx);
             }
 
             if (TKqpOpRead::Match(input.Get())) {
@@ -2761,7 +2992,7 @@ TAutoPtr<IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cl
             if (TKqpOpProject::Match(input.Get())) {
                 return AnnotateOpProject(input, ctx);
             }
-            
+
             if (TKqpOpFilter::Match(input.Get())) {
                 return AnnotateOpFilter(input, ctx);
             }

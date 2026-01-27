@@ -21,6 +21,8 @@ struct TSchemeShard::TExport::TTxList: public TSchemeShard::TXxport::TTxList<
     static bool TryParseKind(const TString& str, TExportInfo::EKind& parsed) {
         if (str == "export/s3") {
             parsed = TExportInfo::EKind::S3;
+        } else if (str == "export/fs") {
+            parsed = TExportInfo::EKind::FS;
         } else { // fallback to yt
             parsed = TExportInfo::EKind::YT;
         }
@@ -29,7 +31,7 @@ struct TSchemeShard::TExport::TTxList: public TSchemeShard::TXxport::TTxList<
     }
 
     bool DoExecute(TTransactionContext& txc, const TActorContext& ctx) override {
-        return DoExecuteImpl(Self->Exports, txc, ctx);
+        return DoExecuteImpl(Self->Exports, Self->ExportsByTime, txc, ctx);
     }
 
 }; // TTxList

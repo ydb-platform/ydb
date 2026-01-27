@@ -2,7 +2,7 @@
 
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/path.h>
-#include <ydb/core/kqp/federated_query/kqp_federated_query_actors.h>
+#include <ydb/core/kqp/federated_query/actors/kqp_federated_query_actors.h>
 #include <ydb/core/kqp/gateway/utils/metadata_helpers.h>
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
@@ -47,6 +47,14 @@ TString GetOrEmpty(const NYql::TCreateObjectSettings& container, const TString& 
     return fValue ? *fValue : TString{};
 }
 
+TString GetSecretName(const NYql::TCreateObjectSettings& settings, const TString& secretKeyPrefix) {
+    if (const auto secret = GetOrEmpty(settings, secretKeyPrefix + "_name"); !secret.empty()) {
+        return secret;
+    }
+
+    return GetOrEmpty(settings, secretKeyPrefix + "_path");
+}
+
 [[nodiscard]] TYqlConclusionStatus FillCreateExternalDataSourceDesc(NKikimrSchemeOp::TExternalDataSourceDescription& externalDataSourceDesc, const TString& name, const NYql::TCreateObjectSettings& settings) {
     externalDataSourceDesc.SetName(name);
     externalDataSourceDesc.SetSourceType(GetOrEmpty(settings, "source_type"));
@@ -60,25 +68,25 @@ TString GetOrEmpty(const NYql::TCreateObjectSettings& container, const TString& 
     } else if (authMethod == "SERVICE_ACCOUNT") {
         auto& sa = *externalDataSourceDesc.MutableAuth()->MutableServiceAccount();
         sa.SetId(GetOrEmpty(settings, "service_account_id"));
-        sa.SetSecretName(GetOrEmpty(settings, "service_account_secret_name"));
+        sa.SetSecretName(GetSecretName(settings, "service_account_secret"));
     } else if (authMethod == "BASIC") {
         auto& basic = *externalDataSourceDesc.MutableAuth()->MutableBasic();
         basic.SetLogin(GetOrEmpty(settings, "login"));
-        basic.SetPasswordSecretName(GetOrEmpty(settings, "password_secret_name"));
+        basic.SetPasswordSecretName(GetSecretName(settings, "password_secret"));
     } else if (authMethod == "MDB_BASIC") {
         auto& mdbBasic = *externalDataSourceDesc.MutableAuth()->MutableMdbBasic();
         mdbBasic.SetServiceAccountId(GetOrEmpty(settings, "service_account_id"));
-        mdbBasic.SetServiceAccountSecretName(GetOrEmpty(settings, "service_account_secret_name"));
+        mdbBasic.SetServiceAccountSecretName(GetSecretName(settings, "service_account_secret"));
         mdbBasic.SetLogin(GetOrEmpty(settings, "login"));
-        mdbBasic.SetPasswordSecretName(GetOrEmpty(settings, "password_secret_name"));
+        mdbBasic.SetPasswordSecretName(GetSecretName(settings, "password_secret"));
     } else if (authMethod == "AWS") {
         auto& aws = *externalDataSourceDesc.MutableAuth()->MutableAws();
-        aws.SetAwsAccessKeyIdSecretName(GetOrEmpty(settings, "aws_access_key_id_secret_name"));
-        aws.SetAwsSecretAccessKeySecretName(GetOrEmpty(settings, "aws_secret_access_key_secret_name"));
+        aws.SetAwsAccessKeyIdSecretName(GetSecretName(settings, "aws_access_key_id_secret"));
+        aws.SetAwsSecretAccessKeySecretName(GetSecretName(settings, "aws_secret_access_key_secret"));
         aws.SetAwsRegion(GetOrEmpty(settings, "aws_region"));
     } else if (authMethod == "TOKEN") {
         auto& token = *externalDataSourceDesc.MutableAuth()->MutableToken();
-        token.SetTokenSecretName(GetOrEmpty(settings, "token_secret_name"));
+        token.SetTokenSecretName(GetSecretName(settings, "token_secret"));
     } else {
         return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, TStringBuilder() << "Internal error. Unknown auth method: " << authMethod);
     }

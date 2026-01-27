@@ -1,0 +1,32 @@
+Command {
+  DefineStoragePool {
+    BoxId: 1
+    StoragePoolId: 1
+    Name: "/Root:ssd"
+    ErasureSpecies: "none"
+    VDiskKind: "Default"
+    Kind: "ssd"
+    NumGroups: 1
+    PDiskFilter {
+      Property {
+        Type: SSD
+      }
+    }
+  }
+}
+Command {
+  DefineStoragePool {
+    BoxId: 1
+    StoragePoolId: 2
+    Name: "/Root:rot"
+    ErasureSpecies: "none"
+    VDiskKind: "Default"
+    Kind: "rot"
+    NumGroups: 1
+    PDiskFilter {
+      Property {
+        Type: ROT
+      }
+    }
+  }
+}

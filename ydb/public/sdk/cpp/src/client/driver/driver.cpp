@@ -97,6 +97,10 @@ TDriverConfig& TDriverConfig::SetEndpoint(const std::string& endpoint) {
     return *this;
 }
 
+const std::string& TDriverConfig::GetEndpoint() const {
+    return Impl_->Endpoint;
+}
+
 TDriverConfig& TDriverConfig::SetNetworkThreadsNum(size_t sz) {
     Impl_->NetworkThreadsNum = sz;
     return *this;

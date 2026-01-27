@@ -62,6 +62,7 @@ namespace NKikimr::NStorage {
         // process all other nodes, find bindable ones (from our current pile) and build list of all nodes
         AllNodeIds.clear();
         NodesFromSamePile.clear();
+        Hosts.clear();
 
         std::vector<ui32> nodeIdsForOutgoingBinding;
         std::vector<ui32> nodeIdsForIncomingBinding;
@@ -70,6 +71,7 @@ namespace NKikimr::NStorage {
         for (const auto& [item, location] : newNodeList) {
             const ui32 nodeId = item.NodeId();
             AllNodeIds.emplace(nodeId, item);
+            Hosts.emplace(std::get<0>(item), std::get<1>(item));
 
             // check if node is from the same pile (as this one)
             if (location.GetBridgePileName() == SelfNodeBridgePileName) {
@@ -304,11 +306,23 @@ namespace NKikimr::NStorage {
             AbortBinding("disconnection", false);
         }
 
-        // abort scatter tasks issued to newly added nodes
-        for (auto it = AddedNodesScatterTasks.lower_bound({nodeId, 0}); it != AddedNodesScatterTasks.end() &&
-                std::get<0>(*it) == nodeId; it = AddedNodesScatterTasks.erase(it)) {
+        // abort or restart scatter tasks issued to newly added nodes
+        const TMonotonic now = TActivationContext::Monotonic();
+        for (auto it = AddedNodesScatterTasks.lower_bound({nodeId, 0}); it != AddedNodesScatterTasks.end(); ) {
             const auto& [nodeId, cookie] = *it;
-            AbortScatterTask(cookie, nodeId);
+
+            // find matching scatter task
+            const auto jt = ScatterTasks.find(cookie);
+            Y_ABORT_UNLESS(jt != ScatterTasks.end());
+            TScatterTask& task = jt->second;
+
+            if (task.StartTimestamp + TDuration::Seconds(3) <= now) { // task has timed out -- abort it
+                AbortScatterTask(cookie, nodeId);
+                it = AddedNodesScatterTasks.erase(it);
+            } else { // restart scatter task for this node
+                IssueAddedNodeScatterTask(nodeId, cookie, task);
+                ++it;
+            }
         }
     }
 

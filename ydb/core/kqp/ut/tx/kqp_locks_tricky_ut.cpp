@@ -403,9 +403,10 @@ Y_UNIT_TEST_SUITE(KqpLocksTricky) {
         }
     }
 
-    Y_UNIT_TEST(TestSecondaryIndexWithoutSnapshot) {
+    Y_UNIT_TEST_TWIN(TestSecondaryIndexWithoutSnapshot, StreamIndex) {
         TKikimrSettings settings = TKikimrSettings().SetUseRealThreads(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(StreamIndex);
 
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();

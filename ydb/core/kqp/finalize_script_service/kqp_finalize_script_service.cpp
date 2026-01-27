@@ -21,9 +21,11 @@ public:
     TKqpFinalizeScriptService(const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
         IKqpFederatedQuerySetupFactory::TPtr federatedQuerySetupFactory,
         std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory,
-        bool enableBackgroundLeaseChecks)
+        bool enableBackgroundLeaseChecks,
+        TDuration leaseCheckStartupTimeout)
         : QueryServiceConfig(queryServiceConfig)
         , EnableBackgroundLeaseChecks(enableBackgroundLeaseChecks)
+        , LeaseCheckStartupTimeout(leaseCheckStartupTimeout)
         , FederatedQuerySetupFactory(federatedQuerySetupFactory)
         , S3ActorsFactory(std::move(s3ActorsFactory))
     {}
@@ -58,7 +60,7 @@ public:
             return;
         }
 
-        ScriptExecutionLeaseCheckActor = Register(CreateScriptExecutionLeaseCheckActor(QueryServiceConfig, Counters));
+        ScriptExecutionLeaseCheckActor = Register(CreateScriptExecutionLeaseCheckActor(QueryServiceConfig, LeaseCheckStartupTimeout, Counters));
     }
 
     STRICT_STFUNC(MainState,
@@ -187,6 +189,7 @@ private:
 private:
     const NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
     const bool EnableBackgroundLeaseChecks = true;
+    const TDuration LeaseCheckStartupTimeout;
 
     TIntrusivePtr<TKqpCounters> Counters;
     IKqpFederatedQuerySetupFactory::TPtr FederatedQuerySetupFactory;
@@ -206,8 +209,9 @@ private:
 IActor* CreateKqpFinalizeScriptService(const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
     IKqpFederatedQuerySetupFactory::TPtr federatedQuerySetupFactory,
     std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory,
-    bool enableBackgroundLeaseChecks) {
-    return new TKqpFinalizeScriptService(queryServiceConfig, std::move(federatedQuerySetupFactory), std::move(s3ActorsFactory), enableBackgroundLeaseChecks);
+    bool enableBackgroundLeaseChecks,
+    TDuration leaseCheckStartupTimeout) {
+    return new TKqpFinalizeScriptService(queryServiceConfig, std::move(federatedQuerySetupFactory), std::move(s3ActorsFactory), enableBackgroundLeaseChecks, leaseCheckStartupTimeout);
 }
 
 }  // namespace NKikimr::NKqp

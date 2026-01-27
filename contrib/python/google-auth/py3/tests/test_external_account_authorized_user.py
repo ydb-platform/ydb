@@ -16,8 +16,8 @@ import datetime
 import http.client as http_client
 import json
 import os
+from unittest import mock
 
-import mock
 import pytest  # type: ignore
 
 from google.auth import environment_vars
@@ -32,8 +32,10 @@ REVOKE_URL = "https://sts.googleapis.com/v1/revoke"
 QUOTA_PROJECT_ID = "654321"
 POOL_ID = "POOL_ID"
 PROVIDER_ID = "PROVIDER_ID"
-AUDIENCE = "//iam.googleapis.com/locations/global/workforcePools/{}/providers/{}".format(
-    POOL_ID, PROVIDER_ID
+AUDIENCE = (
+    "//iam.googleapis.com/locations/global/workforcePools/{}/providers/{}".format(
+        POOL_ID, PROVIDER_ID
+    )
 )
 REFRESH_TOKEN = "REFRESH_TOKEN"
 NEW_REFRESH_TOKEN = "NEW_REFRESH_TOKEN"
@@ -192,7 +194,7 @@ class TestCredentials(object):
         assert creds.valid
         assert not creds.requires_scopes
         assert creds.is_user
-        assert creds._refresh_token_val == REFRESH_TOKEN
+        assert creds._refresh_token == REFRESH_TOKEN
 
         request.assert_called_once_with(
             url=TOKEN_URL,
@@ -226,7 +228,7 @@ class TestCredentials(object):
         assert creds.valid
         assert not creds.requires_scopes
         assert creds.is_user
-        assert creds._refresh_token_val == NEW_REFRESH_TOKEN
+        assert creds._refresh_token == NEW_REFRESH_TOKEN
 
         request.assert_called_once_with(
             url=TOKEN_URL,
@@ -349,6 +351,50 @@ class TestCredentials(object):
 
         request.assert_not_called()
 
+    def test_revoke_auth_success(self):
+        request = self.make_mock_request(status=http_client.OK, data={})
+        creds = self.make_credentials(revoke_url=REVOKE_URL)
+
+        creds.revoke(request)
+
+        request.assert_called_once_with(
+            url=REVOKE_URL,
+            method="POST",
+            headers={
+                "Content-Type": "application/x-www-form-urlencoded",
+                "Authorization": "Basic " + BASIC_AUTH_ENCODING,
+            },
+            body=("token=" + REFRESH_TOKEN + "&token_type_hint=refresh_token").encode(
+                "utf-8"
+            ),
+        )
+        assert creds.token is None
+        assert creds._refresh_token is None
+
+    def test_revoke_without_revoke_url(self):
+        request = self.make_mock_request()
+        creds = self.make_credentials(token=ACCESS_TOKEN)
+
+        with pytest.raises(exceptions.OAuthError) as excinfo:
+            creds.revoke(request)
+
+        assert excinfo.match(
+            r"The credentials do not contain the necessary fields to revoke the refresh token. You must specify revoke_url and refresh_token."
+        )
+
+    def test_revoke_without_refresh_token(self):
+        request = self.make_mock_request()
+        creds = self.make_credentials(
+            refresh_token=None, token=ACCESS_TOKEN, revoke_url=REVOKE_URL
+        )
+
+        with pytest.raises(exceptions.OAuthError) as excinfo:
+            creds.revoke(request)
+
+        assert excinfo.match(
+            r"The credentials do not contain the necessary fields to revoke the refresh token. You must specify revoke_url and refresh_token."
+        )
+
     def test_info(self):
         creds = self.make_credentials()
         info = creds.info
@@ -464,7 +510,7 @@ class TestCredentials(object):
         )
         new_creds = creds.with_quota_project(QUOTA_PROJECT_ID)
         assert new_creds._audience == creds._audience
-        assert new_creds._refresh_token_val == creds.refresh_token
+        assert new_creds._refresh_token == creds.refresh_token
         assert new_creds._token_url == creds._token_url
         assert new_creds._token_info_url == creds._token_info_url
         assert new_creds._client_id == creds._client_id
@@ -483,7 +529,7 @@ class TestCredentials(object):
         )
         new_creds = creds.with_token_uri("https://google.com")
         assert new_creds._audience == creds._audience
-        assert new_creds._refresh_token_val == creds.refresh_token
+        assert new_creds._refresh_token == creds.refresh_token
         assert new_creds._token_url == "https://google.com"
         assert new_creds._token_info_url == creds._token_info_url
         assert new_creds._client_id == creds._client_id
@@ -502,7 +548,7 @@ class TestCredentials(object):
         )
         new_creds = creds.with_universe_domain(FAKE_UNIVERSE_DOMAIN)
         assert new_creds._audience == creds._audience
-        assert new_creds._refresh_token_val == creds.refresh_token
+        assert new_creds._refresh_token == creds.refresh_token
         assert new_creds._token_url == creds._token_url
         assert new_creds._token_info_url == creds._token_info_url
         assert new_creds._client_id == creds._client_id
@@ -522,7 +568,7 @@ class TestCredentials(object):
         )
         new_creds = creds.with_trust_boundary({"encodedLocations": "new_boundary"})
         assert new_creds._audience == creds._audience
-        assert new_creds._refresh_token_val == creds.refresh_token
+        assert new_creds._refresh_token == creds.refresh_token
         assert new_creds._token_url == creds._token_url
         assert new_creds._token_info_url == creds._token_info_url
         assert new_creds._client_id == creds._client_id

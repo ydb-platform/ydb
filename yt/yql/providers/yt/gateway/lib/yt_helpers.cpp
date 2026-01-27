@@ -939,4 +939,80 @@ TString GenerateInputQuery(const TExprNode::TPtr& qlFilterNode) {
     return result;
 }
 
+TString UploadBinarySnapshotToYt(
+    const TString& remotePath,
+    NYT::IClientPtr client,
+    NYT::ITransactionPtr snapshotTx,
+    const TString& localPath,
+    TDuration expirationInterval,
+    const TMaybe<NYT::TNode>& transactionSpec)
+{
+    NYT::ILockPtr fileLock;
+    NYT::ITransactionPtr lockTx;
+    NYT::ILockPtr waitLock;
+
+    for (bool uploaded = false; ;) {
+        try {
+            YQL_CLOG(INFO, ProviderYt) << "Taking snapshot of " << remotePath;
+            fileLock = snapshotTx->Lock(remotePath, NYT::ELockMode::LM_SNAPSHOT);
+            break;
+        } catch (const NYT::TErrorResponse& e) {
+            // Yt returns NoSuchTransaction as inner issue for ResolveError
+            if (!e.IsResolveError() || e.IsNoSuchTransaction()) {
+                throw;
+            }
+        }
+        YQL_ENSURE(!uploaded, "Fail to take snapshot");
+
+        NYT::TStartTransactionOptions transactionOptions;
+        if (transactionSpec.Defined()) {
+            transactionOptions.Attributes(*transactionSpec);
+        }
+
+        if (!lockTx) {
+            auto pos = remotePath.rfind("/");
+            auto dir = remotePath.substr(0, pos);
+            auto childKey = remotePath.substr(pos + 1) + ".lock";
+
+            lockTx = client->StartTransaction(transactionOptions);
+            YQL_CLOG(INFO, ProviderYt) << "Waiting for " << dir << '/' << childKey;
+            waitLock = lockTx->Lock(dir, NYT::ELockMode::LM_SHARED, NYT::TLockOptions().Waitable(true).ChildKey(childKey));
+            waitLock->GetAcquiredFuture().GetValueSync();
+            // Try to take snapshot again after waiting lock. Someone else may complete uploading the file at the moment
+            continue;
+        }
+        // Lock is already taken and file still doesn't exist
+        YQL_CLOG(INFO, ProviderYt) << "Start uploading " << localPath << " to " << remotePath;
+        Y_SCOPE_EXIT(localPath, remotePath) {
+            YQL_CLOG(INFO, ProviderYt) << "Complete uploading " << localPath << " to " << remotePath;
+        };
+        auto uploadTx = client->StartTransaction(transactionOptions);
+        try {
+            auto out = uploadTx->CreateFileWriter(NYT::TRichYPath(remotePath).Executable(true), NYT::TFileWriterOptions().CreateTransaction(false));
+            TIFStream in(localPath);
+            TransferData(&in, out.Get());
+            out->Finish();
+            uploadTx->Commit();
+        } catch (...) {
+            uploadTx->Abort();
+            throw;
+        }
+        // Continue with taking snapshot lock after uploading
+        uploaded = true;
+    }
+
+    if (expirationInterval) {
+        TString expirationTime = (Now() + expirationInterval).ToStringUpToSeconds();
+        try {
+            YQL_CLOG(INFO, ProviderYt) << "Prolonging expiration time for " << remotePath << " up to " << expirationTime;
+            client->Set(remotePath + "/@expiration_time", expirationTime);
+        } catch (...) {
+            // log and ignore the error
+            YQL_CLOG(ERROR, ProviderYt) << "Error setting expiration time for " << remotePath << ": " << CurrentExceptionMessage();
+        }
+    }
+
+    return GetGuidAsString(fileLock->GetLockedNodeId());
+}
+
 } // NYql

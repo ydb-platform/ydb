@@ -58,6 +58,7 @@ def post_install(self):
         "Lib/test/",
         "Lib/tkinter/",
         "Lib/turtledemo/",
+        "Modules/_blake2/impl/",
         "Modules/_decimal/libmpdec/examples/",
         "Modules/expat/",
         "Modules/_testcapi/",
@@ -95,7 +96,6 @@ def post_install(self):
     )
 
     modules_srcs = files(f"{self.dstdir}/Modules", rel=self.dstdir, test=is_c_src) + ["Modules/config.c"]
-    modules_srcs = filter(lambda x: not x.startswith("Modules/_blake2/impl/"), modules_srcs)
     modules_srcs = filter(lambda x: not x.startswith("Modules/_sha3/kcp/"), modules_srcs)
     modules_srcs = filter(lambda x: not x.startswith("Modules/_sqlite/"), modules_srcs)
     modules_srcs = filter(lambda x: x not in MODULES_WINDOWS, modules_srcs)
@@ -116,6 +116,7 @@ def post_install(self):
     self.yamakes["."] = self.module(
         Library,
         PEERDIR=[
+            "contrib/libs/blake2",
             "contrib/libs/expat",
             "contrib/libs/libbz2",
             # libc_compat is needed in order to make <sys/random.h> resolvable
@@ -127,6 +128,7 @@ def post_install(self):
             "library/cpp/sanitizer/include",
         ],
         ADDINCL=[
+            "contrib/libs/blake2/include",
             "contrib/libs/expat",
             "contrib/libs/libbz2",
             "contrib/restricted/libffi/include",
@@ -230,7 +232,6 @@ python3 = NixSourceProject(
     nixattr="python3",
     owners=["g:python-contrib"],
     keep_paths=[
-        "a.yaml",
         "lib2",
         "Lib/_sysconfigdata_arcadia.py",
         "Modules/config.c",
@@ -242,6 +243,11 @@ python3 = NixSourceProject(
         "pydtrace_probes.h",
         "crtassem.h",
         "blake2-kat.h",
+        "impl/blake2.h",
+        "impl/blake2b.c",
+        "impl/blake2b-ref.c",
+        "impl/blake2s.c",
+        "impl/blake2s-ref.c",
         "bluetooth/",
         "bluetooth.h",
         "displayIntermediateValues.h",

@@ -2,13 +2,14 @@
 #define CROARING_CBITSET_BITSET_H
 
 // For compatibility with MSVC with the use of `restrict`
-#if (__STDC_VERSION__ >= 199901L) || \
+#ifdef __cplusplus
+#define CROARING_CBITSET_RESTRICT
+#elif (__STDC_VERSION__ >= 199901L) || \
     (defined(__GNUC__) && defined(__STDC_VERSION__))
 #define CROARING_CBITSET_RESTRICT restrict
 #else
 #define CROARING_CBITSET_RESTRICT
-#endif  // (__STDC_VERSION__ >= 199901L) || (defined(__GNUC__) &&
-        // defined(__STDC_VERSION__ ))
+#endif
 
 #include <stdbool.h>
 #include <stdint.h>

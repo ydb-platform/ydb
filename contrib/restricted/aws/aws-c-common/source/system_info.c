@@ -78,3 +78,39 @@ AWS_COMMON_API
 size_t aws_system_environment_get_cpu_group_count(const struct aws_system_environment *env) {
     return env->cpu_group_count;
 }
+
+/*
+ * Platform OS string constants - these are the string representations for each supported platform. String choices
+ * follow common industry conventions:
+ * - "Windows" - Microsoft Windows family
+ * - "macOS" - Apple macOS
+ * - "iOS" - Apple iOS (or other unknown Apple platform)
+ * - "Android" - Google Android mobile OS
+ * - "Unix" - Unix-like systems (Linux, BSD, etc.)
+ * - "Unknown" - Fallback for unrecognized platforms
+ */
+AWS_STATIC_STRING_FROM_LITERAL(s_windows_str, "Windows");
+AWS_STATIC_STRING_FROM_LITERAL(s_macos_str, "macOS");
+AWS_STATIC_STRING_FROM_LITERAL(s_ios_str, "iOS");
+AWS_STATIC_STRING_FROM_LITERAL(s_android_str, "Android");
+AWS_STATIC_STRING_FROM_LITERAL(s_unix_str, "Unix");
+AWS_STATIC_STRING_FROM_LITERAL(s_unknown_str, "Unknown");
+
+struct aws_byte_cursor aws_get_platform_build_os_string(void) {
+    enum aws_platform_os os = aws_get_platform_build_os();
+    switch (os) {
+        case AWS_PLATFORM_OS_WINDOWS:
+            return aws_byte_cursor_from_string(s_windows_str);
+        case AWS_PLATFORM_OS_MAC:
+            return aws_byte_cursor_from_string(s_macos_str);
+        case AWS_PLATFORM_OS_IOS:
+            return aws_byte_cursor_from_string(s_ios_str);
+        case AWS_PLATFORM_OS_ANDROID:
+            return aws_byte_cursor_from_string(s_android_str);
+        case AWS_PLATFORM_OS_UNIX:
+            return aws_byte_cursor_from_string(s_unix_str);
+    }
+    /* Handle invalid enum values */
+    AWS_LOGF_WARN(AWS_LS_COMMON_GENERAL, "Unknown platform OS enum value: %d", (int)os);
+    return aws_byte_cursor_from_string(s_unknown_str);
+}

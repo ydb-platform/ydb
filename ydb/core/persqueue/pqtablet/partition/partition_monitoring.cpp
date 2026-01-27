@@ -16,6 +16,7 @@
 #include <ydb/library/protobuf_printer/security_printer.h>
 #include <ydb/public/lib/base/msgbus.h>
 #include <library/cpp/html/pcdata/pcdata.h>
+#include <library/cpp/html/escape/escape.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/time_provider/time_provider.h>
 #include <util/folder/path.h>
@@ -145,6 +146,32 @@ void TPartition::HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorCo
                     PROPERTIES("AvgWriteSize, bytes") {
                         for (auto& avg : AvgWriteBytes) {
                             PROPERTY(avg.GetDuration().ToString(), avg.GetValue());
+                        }
+                    }
+                }
+            }
+
+            if (!Partition.IsSupportivePartition()) {
+                LAYOUT_ROW() {
+                    LAYOUT_COLUMN() {
+                        TABLE_CLASS("table") {
+                            CAPTION() {out << "MLP consumers";}
+                            TABLEHEAD() {
+                                TABLER() {
+                                    TABLEH() {out << "Consumer";}
+                                }
+                            }
+                            TABLEBODY() {
+                                for (auto& [consumerName, _] : MLPConsumers) {
+                                    TABLER() {
+                                        TABLED() {
+                                            HREF(TStringBuilder() << "app?TabletID=" << TabletId << "&consumer=" << NHtml::EscapeAttributeValue(consumerName) << "&partitionId=" << Partition.OriginalPartitionId) {
+                                                out <<  EncodeHtmlPcdata(consumerName);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -321,6 +348,18 @@ void TPartition::HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorCo
     }
 
     ctx.Send(ev->Sender, new TEvPQ::TEvMonResponse(Partition, out.Str()));
+}
+
+void TPartition::Handle(TEvPQ::TEvMLPConsumerMonRequest::TPtr& ev) {
+    auto& consumerName = ev->Get()->Consumer;
+
+    auto it = MLPConsumers.find(consumerName);
+    if (it == MLPConsumers.end()) {
+        Send(ev->Get()->ReplyTo, new NMon::TEvRemoteHttpInfoRes(TStringBuilder() <<"MLP consumer '" << consumerName << "' not found"));
+        return;
+    }
+    auto& consumerInfo = it->second;
+    Forward(ev, consumerInfo.ActorId);
 }
 
 } // namespace NKikimr::NPQ

@@ -1,11 +1,10 @@
 #include "schemeshard_export_uploaders.h"
 
 #include "schemeshard.h"
+#include "schemeshard_xxport__helpers.h"
 
 #include <ydb/public/api/protos/ydb_export.pb.h>
 #include <ydb/public/lib/ydb_cli/dump/files/files.h>
-#include <ydb/public/lib/ydb_cli/dump/util/view_utils.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/control_plane.h>
 
 #include <ydb/core/backup/common/checksum.h>
 #include <ydb/core/backup/common/encryption.h>
@@ -14,11 +13,11 @@
 #include <ydb/core/tx/datashard/export_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard_export_helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
+#include <ydb/core/tx/schemeshard/schemeshard_scheme_builders.h>
 #include <ydb/core/wrappers/abstract.h>
 #include <ydb/core/wrappers/retry_policy.h>
 #include <ydb/core/wrappers/s3_storage_config.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
-#include <ydb/core/ydb_convert/topic_description.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -188,57 +187,26 @@ class TSchemeUploader: public TExportFilesUploader<TSchemeUploader> {
         Become(&TThis::StateDescribe);
     }
 
-    static TString BuildViewScheme(const TString& path, const NKikimrSchemeOp::TViewDescription& viewDescription, const TString& database, const TString& backupRoot, TString& error) {
-        NYql::TIssues issues;
-        auto scheme = NYdb::NDump::BuildCreateViewQuery(viewDescription.GetName(), path, viewDescription.GetQueryText(), database, backupRoot, issues);
-        if (!scheme) {
-            error = issues.ToString();
-        }
-        return scheme;
-    }
+    bool FillExportProperties(const NKikimrScheme::TEvDescribeSchemeResult& describeResult, TString& error) {
+        PathType = GetPathType(describeResult);
 
-    bool BuildTopicScheme(const NKikimrScheme::TEvDescribeSchemeResult& describeResult, TString& error) {
-        const auto& pathDesc = describeResult.GetPathDescription();
-        if (!pathDesc.HasPersQueueGroup()) {
-            error = "Path description does not contain a description of PersQueueGroup";
-            return false;
-        }
-        Ydb::Topic::DescribeTopicResult descTopicResult;
-        Ydb::StatusIds::StatusCode status;
-        if (!FillTopicDescription(descTopicResult, pathDesc.GetPersQueueGroup(), pathDesc.GetSelf(), Nothing(), status, error)) {
+        auto properties = PathTypeToXxportProperties(PathType);
+        if (!properties) {
+            error = TStringBuilder() << "unable to find file properties for " << PathType;
             return false;
         }
 
-        Ydb::Topic::CreateTopicRequest request;
-        NYdb::NTopic::TTopicDescription(std::move(descTopicResult)).SerializeTo(request);
-
-        request.clear_attributes();
-
-        return google::protobuf::TextFormat::PrintToString(request, &Scheme);
+        FileName = properties->FileName;
+        SchemeFileType = properties->FileType;
+        return true;
     }
 
     bool BuildSchemeToUpload(const NKikimrScheme::TEvDescribeSchemeResult& describeResult, TString& error) {
-        static THashMap<NKikimrSchemeOp::EPathType, TString> TypeToFileName = {
-            {NKikimrSchemeOp::EPathType::EPathTypeView, NYdb::NDump::NFiles::CreateView().FileName},
-            {NKikimrSchemeOp::EPathType::EPathTypePersQueueGroup, NYdb::NDump::NFiles::CreateTopic().FileName},
-        };
-
-        PathType = describeResult.GetPathDescription().GetSelf().GetPathType();
-        FileName = TypeToFileName[PathType];
-        switch (PathType) {
-            case NKikimrSchemeOp::EPathTypeView: {
-                SchemeFileType = NBackup::EBackupFileType::ViewCreate;
-                Scheme = BuildViewScheme(describeResult.GetPath(), describeResult.GetPathDescription().GetViewDescription(), DatabaseRoot, DatabaseRoot, error);
-                return !Scheme.empty();
-            }
-            case NKikimrSchemeOp::EPathTypePersQueueGroup: {
-                SchemeFileType = NBackup::EBackupFileType::TopicCreate;
-                return BuildTopicScheme(describeResult, error);
-            }
-            default:
-                error = TStringBuilder() << "unsupported path type: " << PathType;
-                return false;
+        if (!FillExportProperties(describeResult, error)) {
+            return false;
         }
+
+        return BuildScheme(describeResult, Scheme, DatabaseRoot, error);
     }
 
     void HandleSchemeDescription(TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
@@ -276,6 +244,12 @@ class TSchemeUploader: public TExportFilesUploader<TSchemeUploader> {
             return;
         }
 
+        if (EnableChecksums) {
+            if (!AddFile(NBackup::ChecksumKey(FileName), NBackup::ComputeChecksum(Scheme))) {
+                return;
+            }
+        }
+
         if (EnablePermissions) {
             if (!Permissions) {
                 return Finish(false, "cannot infer permissions");
@@ -283,6 +257,12 @@ class TSchemeUploader: public TExportFilesUploader<TSchemeUploader> {
 
             if (!AddFile("permissions.pb", Permissions, MakeIV(NBackup::EBackupFileType::Permissions))) {
                 return;
+            }
+
+            if (EnableChecksums) {
+                if (!AddFile(NBackup::ChecksumKey("permissions.pb"), NBackup::ComputeChecksum(Permissions))) {
+                    return;
+                }
             }
         }
 
@@ -292,6 +272,12 @@ class TSchemeUploader: public TExportFilesUploader<TSchemeUploader> {
 
         if (!AddFile("metadata.json", Metadata, IV)) {
             return;
+        }
+
+        if (EnableChecksums) {
+            if (!AddFile(NBackup::ChecksumKey("metadata.json"), NBackup::ComputeChecksum(Metadata))) {
+                return;
+            }
         }
 
         UploadFiles();
@@ -337,6 +323,7 @@ public:
         const TString& databaseRoot,
         const TString& metadata,
         bool enablePermissions,
+        bool enableChecksums,
         const TMaybe<NBackup::TEncryptionIV>& iv
     )
         : TExportFilesUploader<TSchemeUploader>(settings, GetDestinationPrefix(settings, itemIdx))
@@ -347,6 +334,7 @@ public:
         , IV(iv)
         , DatabaseRoot(databaseRoot)
         , EnablePermissions(enablePermissions)
+        , EnableChecksums(enableChecksums)
         , Metadata(metadata)
     {
     }
@@ -376,7 +364,8 @@ private:
 
     TString DatabaseRoot;
     TString Scheme;
-    bool EnablePermissions = false;
+    const bool EnablePermissions;
+    const bool EnableChecksums;
     TString Permissions;
     TString Metadata;
 }; // TSchemeUploader
@@ -495,10 +484,10 @@ private:
 
 IActor* CreateSchemeUploader(TActorId schemeShard, ui64 exportId, ui32 itemIdx, TPathId sourcePathId,
     const Ydb::Export::ExportToS3Settings& settings, const TString& databaseRoot, const TString& metadata,
-    bool enablePermissions, const TMaybe<NBackup::TEncryptionIV>& iv
+    bool enablePermissions, bool enableChecksums, const TMaybe<NBackup::TEncryptionIV>& iv
 ) {
     return new TSchemeUploader(schemeShard, exportId, itemIdx, sourcePathId, settings, databaseRoot,
-        metadata, enablePermissions, iv);
+        metadata, enablePermissions, enableChecksums, iv);
 }
 
 NActors::IActor* CreateExportMetadataUploader(NActors::TActorId schemeShard, ui64 exportId,

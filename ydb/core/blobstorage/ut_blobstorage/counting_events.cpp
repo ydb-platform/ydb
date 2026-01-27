@@ -98,7 +98,7 @@ Y_UNIT_TEST_SUITE(CountingEvents) {
 
         bool printEvents = false;
         ui32 eventCtr = 0;
-        
+
         env.Runtime->FilterFunction = [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) {
             if (printEvents) {
                 Ctest << "Counter# " << eventCtr++

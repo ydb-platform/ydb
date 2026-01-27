@@ -1,0 +1,57 @@
+name: Add run tests table to PR
+
+on:
+  pull_request_target:
+    types:
+      - opened
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'Pull Request number to add run tests table to'
+        required: true
+        type: number
+
+permissions:
+  contents: read
+  pull-requests: write
+
+env:
+  GH_TOKEN: ${{ secrets.YDBOT_TOKEN }}
+
+jobs:
+  add-run-tests-table:
+    name: Add run tests table to PR
+    runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]
+    if: >
+      (
+        github.event_name == 'workflow_dispatch'
+      ) ||
+      (
+        github.event_name == 'pull_request_target' &&
+        vars.SHOW_RUN_TESTS_IN_PR == 'TRUE'
+      )
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          sparse-checkout: |
+            .github
+
+      - name: Install dependencies
+        run: |
+          python3 -m pip install --upgrade pip
+          pip install PyGithub
+
+      - name: Add run tests table to PR
+        env:
+          GITHUB_TOKEN: ${{ env.GH_TOKEN }}
+          GITHUB_EVENT_PATH: ${{ github.event_path }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_WORKSPACE: ${{ github.workspace }}
+          APP_DOMAIN: ${{ vars.APP_DOMAIN }}
+          PR_NUMBER: ${{ github.event_name == 'workflow_dispatch' && inputs.pr_number || '' }}
+        run: |
+          python3 ./.github/scripts/add_run_tests_table.py
+

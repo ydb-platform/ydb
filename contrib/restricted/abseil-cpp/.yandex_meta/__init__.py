@@ -14,6 +14,16 @@ def post_install(self):
                 }
             ),
         )
+        absl.after(
+            "SRCS",
+            """
+            IF (OS_WINDOWS)
+                SRCS(
+                    absl/time/internal/cctz/src/time_zone_name_win.cc
+                )
+            ENDIF()
+            """,
+        )
 
 
 abseil_cpp = CMakeNinjaNixProject(
@@ -40,6 +50,7 @@ abseil_cpp = CMakeNinjaNixProject(
         "absl/strings/internal/stl_type_traits.h",
         "absl/time/internal/*.inc",
         "absl/**/*.h",
+        "absl/time/internal/cctz/src/time_zone_name_win.cc",
     ],
     copy_sources_except=[
         "absl/status/status_matchers.h",
@@ -55,6 +66,7 @@ abseil_cpp = CMakeNinjaNixProject(
     },
     put_with={
         "absl_base": [
+            "absl_borrowed_fixup_buffer",
             "absl_city",
             "absl_civil_time",
             "absl_cord",
@@ -86,6 +98,7 @@ abseil_cpp = CMakeNinjaNixProject(
             "absl_flags_reflection",
             "absl_flags_usage",
             "absl_flags_usage_internal",
+            "absl_generic_printer_internal",
             "absl_graphcycles_internal",
             "absl_hash",
             "absl_hashtable_profiler",
@@ -133,7 +146,6 @@ abseil_cpp = CMakeNinjaNixProject(
             "absl_statusor",
             "absl_str_format_internal",
             "absl_strerror",
-            "absl_string_view",
             "absl_strings",
             "absl_strings_internal",
             "absl_symbolize",

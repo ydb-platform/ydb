@@ -521,6 +521,10 @@ namespace NYql::NDqs {
             settings.SetIsMultiget(FromString<bool>(maybeMultiget.Cast().StringValue()));
         }
 
+        if (auto maybeIsMultiMatches = streamLookup.IsMultiMatches()) {
+            settings.SetIsMultiMatches(FromString<bool>(maybeIsMultiMatches.Cast().StringValue()));
+        }
+
         const auto inputRowType = GetSeqItemType(streamLookup.Output().Stage().Program().Ref().GetTypeAnn());
         const auto outputRowType = GetSeqItemType(stage.Program().Args().Arg(inputIndex).Ref().GetTypeAnn());
         TTransform streamLookupTransform {

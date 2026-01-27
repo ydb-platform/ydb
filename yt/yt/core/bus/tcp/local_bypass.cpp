@@ -77,13 +77,13 @@ public:
 
     TFuture<void> GetReadyFuture() const override
     {
-        return VoidFuture;
+        return OKFuture;
     }
 
     TFuture<void> Send(TSharedRefArray message, const NBus::TSendOptions& /*options*/) override
     {
         ClientHandler_->HandleMessage(std::move(message), /*replyBus*/ nullptr);
-        return VoidFuture;
+        return OKFuture;
     }
 
     void SetTosLevel(TTosLevel /*tosLevel*/) override

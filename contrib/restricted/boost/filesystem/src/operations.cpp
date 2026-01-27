@@ -4379,6 +4379,9 @@ void permissions(path const& p, perms prms, system::error_code* ec)
     if ((prms & add_perms) && (prms & remove_perms)) // precondition failed
         return;
 
+    if (ec)
+        ec->clear();
+
 #if defined(BOOST_FILESYSTEM_USE_WASI)
     emit_error(BOOST_ERROR_NOT_SUPPORTED, p, ec, "boost::filesystem::permissions");
 #elif defined(BOOST_POSIX_API)

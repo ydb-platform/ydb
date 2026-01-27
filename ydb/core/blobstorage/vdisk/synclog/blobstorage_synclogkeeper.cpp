@@ -38,6 +38,7 @@ namespace NKikimr {
                     std::make_shared<TActorSystemLoggerCtx>(ctx.ActorSystem()),
                     ctx.SelfID);
                 PerformActions(ctx);
+                UpdateCounters();
                 Become(&TThis::StateFunc);
             }
 
@@ -55,21 +56,11 @@ namespace NKikimr {
 
             // just trim log based by TrimTailLsn (which is confirmed lsn from peers)
             bool PerformTrimTailAction() {
-                const bool hasToCommit = KeepState.PerformTrimTailAction();
-
-                // we don't need to commit because we either remove mem pages or
-                // schedule to remove some chunks (but they may be used by snapshots,
-                // so wait until TEvSyncLogFreeChunk message)
-                Y_VERIFY_S(!hasToCommit, SlCtx->VCtx->VDiskLogPrefix);
-                return false;
+                return KeepState.PerformTrimTailAction();
             }
 
             bool PerformMemOverflowAction() {
                 return KeepState.PerformMemOverflowAction();
-            }
-
-            bool PerformDeleteChunkAction() {
-                return KeepState.PerformDeleteChunkAction();
             }
 
             bool PerformInitialCommit() {
@@ -81,6 +72,11 @@ namespace NKikimr {
             // PERFORM ACTIONS
             ////////////////////////////////////////////////////////////////////////
             void PerformActions(const TActorContext &ctx) {
+                if (auto v = KeepState.GetChunksToForget(); !v.empty()) {
+                    Send(SlCtx->PDiskCtx->PDiskId, new NPDisk::TEvChunkForget(SlCtx->PDiskCtx->Dsk->Owner,
+                        SlCtx->PDiskCtx->Dsk->OwnerRound, std::move(v)));
+                }
+
                 if (CommitterId || !KeepState.HasDelayedActions()) {
                     // be fast: already committing or has no actions? Return.
                     return;
@@ -90,8 +86,8 @@ namespace NKikimr {
                 generateCommit |= PerformTrimTailAction();
                 generateCommit |= PerformCutLogAction(ctx);
                 generateCommit |= PerformMemOverflowAction();
-                generateCommit |= PerformDeleteChunkAction();
                 generateCommit |= PerformInitialCommit();
+                generateCommit |= KeepState.GetDeleteChunkAndClear();
 
                 if (generateCommit) {
                     Y_VERIFY_S(!CommitterId, SlCtx->VCtx->VDiskLogPrefix);
@@ -253,8 +249,9 @@ namespace NKikimr {
                 ctx.Send(ev->Sender, response.release(), 0, ev->Cookie);
             }
 
-            void Handle(TEvPhantomFlagStorageAddFlagsFromSnapshot::TPtr ev) {
-                KeepState.AddFlagsToPhantomFlagStorage(std::move(ev->Get()->Flags));
+            void Handle(TEvPhantomFlagStorageFinishBuilder::TPtr ev) {
+                KeepState.FinishPhantomFlagStorageBuilder(std::move(ev->Get()->Flags),
+                        std::move(ev->Get()->Thresholds));
             }
 
             void Handle(const TEvPhantomFlagStorageGetSnapshot::TPtr& ev) {
@@ -271,6 +268,11 @@ namespace NKikimr {
                 KeepState.UpdateNeighbourSyncedLsn(ev->Get()->OrderNumber, ev->Get()->SyncedLsn);
             }
 
+            void UpdateCounters() {
+                KeepState.UpdateMetrics();
+                Schedule(TDuration::Seconds(15), new TEvents::TEvWakeup);
+            }
+
             STRICT_STFUNC(StateFunc,
                 HFunc(TEvSyncLogPut, Handle)
                 HFunc(TEvSyncLogPutSst, Handle)
@@ -283,10 +285,12 @@ namespace NKikimr {
                 HFunc(NPDisk::TEvCutLog, Handle)
                 HFunc(TEvents::TEvPoisonPill, Handle)
                 HFunc(TEvListChunks, Handle)
-                hFunc(TEvPhantomFlagStorageAddFlagsFromSnapshot, Handle)
+                hFunc(TEvPhantomFlagStorageFinishBuilder, Handle)
                 hFunc(TEvPhantomFlagStorageGetSnapshot, Handle)
                 hFunc(TEvLocalSyncData, Handle)
                 hFunc(TEvSyncLogUpdateNeighbourSyncedLsn, Handle)
+                cFunc(TEvents::TEvWakeup::EventType, UpdateCounters)
+                hFunc(NPDisk::TEvChunkForgetResult, [&](auto&) {});
             )
 
         public:

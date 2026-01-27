@@ -960,6 +960,30 @@ private:
     bool Standalone_;
 };
 
+template <typename Compare, typename Fun>
+void IterateTwoLists(NYT::TNode::TListType& listFirst, NYT::TNode::TListType& listSecond, Compare comp, Fun action)
+{
+    if (listFirst.size() != listSecond.size()) {
+        throw yexception() << "Iterate over two lists with different sizes";
+    }
+
+    TVector<NYT::TNode::TListType::iterator> itFirst;
+    for (auto it = listFirst.begin(); it != listFirst.end(); ++it) {
+        itFirst.push_back(it);
+    }
+    Sort(itFirst, comp);
+
+    TVector<NYT::TNode::TListType::iterator> itSecond;
+    for (auto it = listSecond.begin(); it != listSecond.end(); ++it) {
+        itSecond.push_back(it);
+    }
+    Sort(itSecond, comp);
+
+    for (size_t i = 0; i < itFirst.size(); ++i) {
+        action(*itFirst[i], *itSecond[i]);
+    }
+}
+
 } // namespace
 
 TString CalculateLineage(const TExprNode& root, const TTypeAnnotationContext& ctx, TExprContext& exprCtx, bool standalone) {
@@ -967,26 +991,87 @@ TString CalculateLineage(const TExprNode& root, const TTypeAnnotationContext& ct
     return scanner.Process();
 }
 
-TString NormalizeLineage(const TString& lineageStr) {
-    THashMap<i64, TString> idToPath;
-    auto lineageNode = NYT::NodeFromYsonString(lineageStr);
-    auto& readsSection = lineageNode.AsMap()["Reads"];
-    for (auto& readNode : readsSection.AsList()) {
-        auto& readMap = readNode.AsMap();
-        idToPath[readMap["Id"].AsInt64()] = readMap["Name"].AsString();
-        readMap["Id"] = readMap["Name"];
-    }
-    auto& writesSection = lineageNode.AsMap()["Writes"];
-    for (auto& writeNode : writesSection.AsList()) {
-        auto& writeMap = writeNode.AsMap();
-        writeMap["Id"] = writeMap["Name"];
-        for (auto& [fieldName, fieldLineage] : writeMap["Lineage"].AsMap()) {
-            for (auto& inputField : fieldLineage.AsList()) {
-                inputField["Input"] = idToPath[inputField["Input"].AsInt64()];
-            }
-        }
-    }
-    return NYT::NodeToCanonicalYsonString(lineageNode);
+void ValidateLineage(const TString& lineageStr) {
+    const auto& lineageNode = NYT::NodeFromYsonString(lineageStr);
+    const auto& writeSection = lineageNode.AsMap().at("Writes").AsList();
+    ForEach(writeSection.begin(),
+            writeSection.end(),
+            [](auto& it) { YQL_ENSURE(it["Lineage"].IsMap()); });
+}
+
+void CheckEquvalentLineages(const TString& lineageFirst, const TString& lineageSecond) {
+    auto lineageNode1 = NYT::NodeFromYsonString(lineageFirst);
+    auto lineageNode2 = NYT::NodeFromYsonString(lineageSecond);
+
+    THashMap<i64, NYT::TNode> idToPath1, idToPath2;
+    IterateTwoLists(lineageNode1["Reads"].AsList(),
+                    lineageNode2["Reads"].AsList(),
+                    // clang-format off
+                    [](NYT::TNode::TListType::iterator it1, NYT::TNode::TListType::iterator it2) {
+                        return it1->AsMap()["Name"].AsString() > it2->AsMap()["Name"].AsString();
+                    },
+                    // clang-format on
+                    [&idToPath1, &idToPath2](auto& it1, auto& it2) {
+                        idToPath1[it1["Id"].AsInt64()] = it1["Name"];
+                        idToPath2[it2["Id"].AsInt64()] = it2["Name"];
+                        it1["Id"] = it1["Name"], it2["Id"] = it2["Name"];
+                        if (NodeToCanonicalYsonString(it1) != NodeToCanonicalYsonString(it2)) {
+                            throw yexception() << "'Reads' sections are different";
+                        } });
+
+    IterateTwoLists(lineageNode1["Writes"].AsList(),
+                    lineageNode2["Writes"].AsList(),
+                    // clang-format off
+                    [](NYT::TNode::TListType::iterator it1, NYT::TNode::TListType::iterator it2) {
+                        return it1->AsMap()["Name"].AsString() > it2->AsMap()["Name"].AsString();
+                    },
+                    // clang-format on
+                    [&idToPath1, &idToPath2](auto& it1, auto& it2) {
+                        it1["Id"] = it1["Name"], it2["Id"] = it2["Name"];
+                        if (it1.AsMap().size() != it2.AsMap().size()) {
+                            throw yexception() << "Keys in 'Writes' section are different";
+                        }
+                        for (auto& [key, value] : it1.AsMap()) {
+                            if (key == "Lineage") {
+                                if (it1["Lineage"].AsMap().size() != it2["Lineage"].AsMap().size()) {
+                                    throw yexception() << "Numbers of output fields 'Lineage' section are different";
+                                }
+                                for (auto& [fieldName, fieldLineage] : it1["Lineage"].AsMap()) {
+                                    ForEach(fieldLineage.AsList().begin(),
+                                            fieldLineage.AsList().end(),
+                                            [&idToPath1](auto& it) {
+                                                it["Input"] = idToPath1[it["Input"].AsInt64()];
+                                            });
+                                    ForEach(it2["Lineage"][fieldName].AsList().begin(),
+                                            it2["Lineage"][fieldName].AsList().end(),
+                                            [&idToPath2](auto& it) {
+                                                it["Input"] = idToPath2[it["Input"].AsInt64()];
+                                            });
+                                    IterateTwoLists(fieldLineage.AsList(),
+                                                    it2["Lineage"].AsMap()[fieldName].AsList(),
+                                                    [](NYT::TNode::TListType::iterator it1, NYT::TNode::TListType::iterator it2) {
+                                                        if (it1->AsMap()["Field"].AsString() == it2->AsMap()["Field"].AsString()) {
+                                                            if (it1->AsMap()["Input"].AsString() == it2->AsMap()["Input"].AsString()) {
+                                                                const auto& transforms1 = it1->AsMap()["Transforms"].IsNull() ? "#" : it1->AsMap()["Transforms"].AsString();
+                                                                const auto& transforms2 = it2->AsMap()["Transforms"].IsNull() ? "#" : it2->AsMap()["Transforms"].AsString();
+                                                                return transforms1 > transforms2;
+                                                            } else {
+                                                                return it1->AsMap()["Input"].AsString() > it2->AsMap()["Input"].AsString();
+                                                            }
+                                                        }
+                                                        return it1->AsMap()["Field"].AsString() > it2->AsMap()["Field"].AsString();
+                                                    },
+                                                    [fieldName](auto& itt1, auto& itt2) {
+                                                        if (NodeToCanonicalYsonString(itt1) != NodeToCanonicalYsonString(itt2)) {
+                                                            throw yexception() << "Lineage for '" << fieldName << "' are different";
+                                                        } });
+                                }
+                            } else {
+                                if (NodeToCanonicalYsonString(it1[key]) != NodeToCanonicalYsonString(it2[key])) {
+                                    throw yexception() << "'Writes' sections are different for '" << key << "'";
+                                }
+                            }
+                        } });
 }
 
 } // namespace NYql

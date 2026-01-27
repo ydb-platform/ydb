@@ -1,5 +1,6 @@
 #include "yql_s3_settings.h"
 
+#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 #include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
 
 #include <util/generic/size_literals.h>
@@ -31,6 +32,7 @@ TS3Configuration::TS3Configuration() {
     REGISTER_SETTING(*this, AsyncDecoding);
     REGISTER_SETTING(*this, UsePredicatePushdown);
     REGISTER_SETTING(*this, AsyncDecompressing);
+    REGISTER_SETTING(*this, OutputKeyFlushTimeout);
 }
 
 TS3Settings::TConstPtr TS3Configuration::Snapshot() const {

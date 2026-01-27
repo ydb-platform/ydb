@@ -272,7 +272,7 @@ class Credentials(
     def _metric_header_for_usage(self):
         return metrics.CRED_TYPE_SA_IMPERSONATE
 
-    def _refresh_token(self, request):
+    def _perform_refresh_token(self, request):
         """Updates credentials with a new access_token representing
         the impersonated account.
 
@@ -286,7 +286,7 @@ class Credentials(
             self._source_credentials.token_state == credentials.TokenState.STALE
             or self._source_credentials.token_state == credentials.TokenState.INVALID
         ):
-            self._source_credentials._refresh_token(request)
+            self._source_credentials.refresh(request)
 
         body = {
             "delegates": self._delegates,
@@ -640,7 +640,14 @@ class IDTokenCredentials(credentials.CredentialsWithQuotaProject):
                 "Error getting ID token: {}".format(response.json())
             )
 
-        id_token = response.json()["token"]
+        try:
+            id_token = response.json()["token"]
+        except (KeyError, ValueError) as caught_exc:
+            new_exc = exceptions.RefreshError(
+                "No ID token in response.", response.json()
+            )
+            raise new_exc from caught_exc
+
         self.token = id_token
         self.expiry = datetime.utcfromtimestamp(
             jwt.decode(id_token, verify=False)["exp"]

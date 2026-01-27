@@ -743,16 +743,18 @@ bool ValidateSettings(const TExprNode& settingsNode, EYtSettingTypes accepted, T
             }
             break;
         }
-        case EYtSettingType::CompressionCodec:
+        case EYtSettingType::CompressionCodec: {
             if (!EnsureTupleSize(*setting, 2, ctx)) {
                 return false;
             }
-            if (!ValidateCompressionCodecValue(setting->Tail().Content())) {
+            const TString codecStr{setting->Tail().Content()};
+            if (!ValidateCompressionCodecValue(codecStr)) {
                 ctx.AddError(TIssue(ctx.GetPosition(setting->Tail().Pos()), TStringBuilder()
-                    << "Unsupported compression codec value " << TString{setting->Tail().Content()}.Quote()));
+                    << "Unsupported compression codec value " << codecStr.Quote()));
                 return false;
             }
             break;
+        }
         case EYtSettingType::Expiration: {
             if (!EnsureTupleSize(*setting, 2, ctx) || !EnsureAtom(setting->Tail(), ctx)) {
                 return false;
@@ -979,7 +981,8 @@ bool ValidateSettings(const TExprNode& settingsNode, EYtSettingTypes accepted, T
             }
             break;
         }
-        case EYtSettingType::Actions: {
+        case EYtSettingType::Actions:
+        case EYtSettingType::Features: {
             ctx.AddError(TIssue(ctx.GetPosition(nameNode->Pos()), TStringBuilder()
                 << "Feature '" << nameNode->Content() << "' isn't supported."));
             return false;

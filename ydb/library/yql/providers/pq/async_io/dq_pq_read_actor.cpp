@@ -4,6 +4,9 @@
 #include "dq_pq_read_actor_base.h"
 #include "probes.h"
 
+#include <ydb/core/base/appdata_fwd.h>
+#include <ydb/core/base/feature_flags.h>
+
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/event_local.h>
@@ -134,7 +137,8 @@ class TDqPqReadActor : public NActors::TActor<TDqPqReadActor>, public NYql::NDq:
             const TTxId& txId,
             ui64 taskId,
             const ::NMonitoring::TDynamicCounterPtr& counters,
-            const NPq::NProto::TDqPqTopicSource& sourceParams)
+            const NPq::NProto::TDqPqTopicSource& sourceParams,
+            bool enableStreamingQueriesCounters)
             : TxId(std::visit([](auto arg) { return ToString(arg); }, txId))
             , Counters(counters) {
             if (counters) {
@@ -143,17 +147,21 @@ class TDqPqReadActor : public NActors::TActor<TDqPqReadActor>, public NYql::NDq:
                 SubGroup = MakeIntrusive<::NMonitoring::TDynamicCounters>();
             }
 
-            for (const auto& sensor : sourceParams.GetTaskSensorLabel()) {
-                SubGroup = SubGroup->GetSubgroup(sensor.GetLabel(), sensor.GetValue());
+            Source = SubGroup;
+            auto task = SubGroup;
+            if (enableStreamingQueriesCounters) {
+                for (const auto& sensor : sourceParams.GetTaskSensorLabel()) {
+                    SubGroup = SubGroup->GetSubgroup(sensor.GetLabel(), sensor.GetValue());
+                }
+                Source = SubGroup->GetSubgroup("tx_id", TxId);
+                task = Source->GetSubgroup("task_id", ToString(taskId));
             }
-            auto source = SubGroup->GetSubgroup("tx_id", TxId);
-            auto task = source->GetSubgroup("task_id", ToString(taskId));
             InFlyAsyncInputData = task->GetCounter("InFlyAsyncInputData");
             InFlySubscribe = task->GetCounter("InFlySubscribe");
             AsyncInputDataRate = task->GetCounter("AsyncInputDataRate", true);
             ReconnectRate = task->GetCounter("ReconnectRate", true);
             DataRate = task->GetCounter("DataRate", true);
-            WaitEventTimeMs = source->GetHistogram("WaitEventTimeMs", NMonitoring::ExplicitHistogram({5, 20, 100, 500, 2000}));
+            WaitEventTimeMs = Source->GetHistogram("WaitEventTimeMs", NMonitoring::ExplicitHistogram({5, 20, 100, 500, 2000}));
         }
 
         ~TMetrics() {
@@ -165,6 +173,7 @@ class TDqPqReadActor : public NActors::TActor<TDqPqReadActor>, public NYql::NDq:
         TString TxId;
         ::NMonitoring::TDynamicCounterPtr Counters;
         ::NMonitoring::TDynamicCounterPtr SubGroup;
+        ::NMonitoring::TDynamicCounterPtr Source;
         ::NMonitoring::TDynamicCounters::TCounterPtr InFlyAsyncInputData;
         ::NMonitoring::TDynamicCounters::TCounterPtr InFlySubscribe;
         ::NMonitoring::TDynamicCounters::TCounterPtr AsyncInputDataRate;
@@ -199,6 +208,7 @@ public:
         const TTxId& txId,
         ui64 taskId,
         const THolderFactory& holderFactory,
+        std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
         NPq::NProto::TDqPqTopicSource&& sourceParams,
         TVector<NPq::NProto::TDqReadTaskParams>&& readParams,
         NYdb::TDriver driver,
@@ -207,12 +217,14 @@ public:
         const ::NMonitoring::TDynamicCounterPtr& counters,
         i64 bufferSize,
         const IPqGateway::TPtr& pqGateway,
-        ui32 topicPartitionsCount)
+        ui32 topicPartitionsCount,
+        bool enableStreamingQueriesCounters)
         : TActor<TDqPqReadActor>(&TDqPqReadActor::StateFunc)
         , TDqPqReadActorBase(inputIndex, taskId, this->SelfId(), txId, std::move(sourceParams), std::move(readParams), computeActorId)
-        , Metrics(txId, taskId, counters, SourceParams)
+        , Metrics(txId, taskId, counters, SourceParams, enableStreamingQueriesCounters)
         , BufferSize(bufferSize)
         , HolderFactory(holderFactory)
+        , Alloc(std::move(alloc))
         , Driver(std::move(driver))
         , CredentialsProviderFactory(std::move(credentialsProviderFactory))
         , PqGateway(pqGateway)
@@ -228,6 +240,13 @@ public:
 
         InitWatermarkTracker(); // non-virtual!
         IngressStats.Level = statsLevel;
+    }
+
+    ~TDqPqReadActor() {
+        if (Alloc) {
+            TGuard<NKikimr::NMiniKQL::TScopedAlloc> allocGuard(*Alloc);
+            ClearMkqlData();
+        }
     }
 
     NYdb::NFederatedTopic::TFederatedTopicClientSettings GetFederatedTopicClientSettings() const {
@@ -391,8 +410,7 @@ private:
 
     // IActor & IDqComputeActorAsyncInput
     void PassAway() override { // Is called from Compute Actor
-        std::queue<TReadyBatch> empty;
-        ReadyBuffer.swap(empty);
+        ClearMkqlData();
 
         for (auto& clusterState : Clusters) {
             if (clusterState.ReadSession) {
@@ -623,7 +641,7 @@ private:
             SourceParams.GetWatermarks().HasIdleTimeoutUs() ?
             SourceParams.GetWatermarks().GetIdleTimeoutUs() :
             lateArrivalDelayUs;
-        TDqPqReadActorBase::InitWatermarkTracker(TDuration::MicroSeconds(lateArrivalDelayUs), TDuration::MicroSeconds(idleTimeoutUs));
+        TDqPqReadActorBase::InitWatermarkTracker(TDuration::MicroSeconds(lateArrivalDelayUs), TDuration::MicroSeconds(idleTimeoutUs), Metrics.Counters ? Metrics.Source : nullptr);
     }
 
     void SchedulePartitionIdlenessCheck(TInstant at) override {
@@ -739,6 +757,12 @@ private:
         }
 
         ReadyBuffer.back().Watermark = watermark;
+    }
+
+    // must be called with bound allocator
+    void ClearMkqlData() {
+        std::queue<TReadyBatch> empty;
+        ReadyBuffer.swap(empty);
     }
 
     // must be called (visited) with bound allocator
@@ -875,6 +899,7 @@ private:
     TMetrics Metrics;
     const i64 BufferSize;
     const THolderFactory& HolderFactory;
+    const std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
     NYdb::TDriver Driver;
     std::shared_ptr<NYdb::ICredentialsProviderFactory> CredentialsProviderFactory;
     IFederatedTopicClient::TPtr FederatedTopicClient;
@@ -929,9 +954,11 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqReadActor(
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     const NActors::TActorId& computeActorId,
     const NKikimr::NMiniKQL::THolderFactory& holderFactory,
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     IPqGateway::TPtr pqGateway,
     ui32 topicPartitionsCount,
+    bool enableStreamingQueriesCounters,
     i64 bufferSize
     )
 {
@@ -945,6 +972,7 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqReadActor(
         txId,
         taskId,
         holderFactory,
+        std::move(alloc),
         std::move(settings),
         std::move(readTaskParamsMsg),
         std::move(driver),
@@ -953,15 +981,16 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqReadActor(
         counters,
         bufferSize,
         pqGateway,
-        topicPartitionsCount
+        topicPartitionsCount,
+        enableStreamingQueriesCounters
     );
 
     return {actor, actor};
 }
 
-void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driver, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, const IPqGateway::TPtr& pqGateway, const ::NMonitoring::TDynamicCounterPtr& counters, const TString& reconnectPeriod) {
+void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driver, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, const IPqGateway::TPtr& pqGateway, const ::NMonitoring::TDynamicCounterPtr& counters, const TString& reconnectPeriod, bool enableStreamingQueriesCounters) {
     factory.RegisterSource<NPq::NProto::TDqPqTopicSource>("PqSource",
-        [driver = std::move(driver), credentialsFactory = std::move(credentialsFactory), counters, pqGateway, reconnectPeriod](
+        [driver = std::move(driver), credentialsFactory = std::move(credentialsFactory), counters, pqGateway, reconnectPeriod, enableStreamingQueriesCounters](
             NPq::NProto::TDqPqTopicSource&& settings,
             IDqAsyncIoFactory::TSourceArguments&& args)
     {
@@ -974,12 +1003,17 @@ void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driv
         TVector<NPq::NProto::TDqReadTaskParams> readTaskParamsMsg;
         ui32 topicPartitionsCount = ExtractPartitionsFromParams(readTaskParamsMsg, args.TaskParams, args.ReadRanges);
 
+        auto txId = args.TxId;
+        auto taskParamsIt = args.TaskParams.find("query_path");
+        if (taskParamsIt != args.TaskParams.end()) {
+            txId = taskParamsIt->second;
+        }
         if (!settings.GetSharedReading()) {
             return CreateDqPqReadActor(
                 std::move(settings),
                 args.InputIndex,
                 args.StatsLevel,
-                args.TxId,
+                txId,
                 args.TaskId,
                 args.SecureParams,
                 std::move(readTaskParamsMsg),
@@ -987,9 +1021,11 @@ void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driv
                 credentialsFactory,
                 args.ComputeActorId,
                 args.HolderFactory,
+                std::move(args.Alloc),
                 counters ? counters : args.TaskCounters,
                 pqGateway,
                 topicPartitionsCount,
+                enableStreamingQueriesCounters,
                 PQReadDefaultFreeSpace);
         }
 
@@ -998,7 +1034,7 @@ void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driv
             std::move(settings),
             args.InputIndex,
             args.StatsLevel,
-            args.TxId,
+            txId,
             args.TaskId,
             args.SecureParams,
             std::move(readTaskParamsMsg),
@@ -1009,7 +1045,8 @@ void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driv
             args.HolderFactory,
             counters ? counters : args.TaskCounters,
             PQReadDefaultFreeSpace,
-            pqGateway);
+            pqGateway,
+            enableStreamingQueriesCounters);
     });
 
 }

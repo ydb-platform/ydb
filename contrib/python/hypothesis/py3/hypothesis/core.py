@@ -9,6 +9,7 @@
 # obtain one at https://mozilla.org/MPL/2.0/.
 
 """This module provides the core primitives of Hypothesis, such as given."""
+
 import base64
 import contextlib
 import dataclasses
@@ -164,6 +165,12 @@ class Example:
     # Plus two optional arguments for .xfail()
     raises: Any = field(default=None)
     reason: Any = field(default=None)
+
+
+@dataclass(slots=True, frozen=True)
+class ReportableError:
+    fragments: list[str]
+    exception: BaseException
 
 
 # TODO_DOCS link to not-yet-existent patch-dumping docs
@@ -664,7 +671,7 @@ def execute_explicit_examples(state, wrapped_test, arguments, kwargs, original_s
 
                 with contextlib.suppress(StopTest):
                     empty_data.conclude_test(Status.INVALID)
-                yield (fragments_reported, err)
+                yield ReportableError(fragments_reported, err)
                 if (
                     state.settings.report_multiple_bugs
                     and pytest_shows_exceptiongroups
@@ -909,7 +916,14 @@ def unwrap_markers_from_group() -> Generator[None, None, None]:
 
 class StateForActualGivenExecution:
     def __init__(
-        self, stuff, test, settings, random, wrapped_test, *, thread_overlap=None
+        self,
+        stuff: Stuff,
+        test: Callable[..., Any],
+        settings: Settings,
+        random: Random,
+        wrapped_test: Any,
+        *,
+        thread_overlap: dict[int, bool] | None = None,
     ):
         self.stuff = stuff
         self.test = test
@@ -926,15 +940,18 @@ class StateForActualGivenExecution:
         self.last_exception = None
         self.falsifying_examples = ()
         self.ever_executed = False
-        self.xfail_example_reprs = set()
-        self.files_to_propagate = set()
+        self.xfail_example_reprs: set[str] = set()
         self.failed_normally = False
         self.failed_due_to_deadline = False
 
-        self.explain_traces = defaultdict(set)
+        self.explain_traces: dict[None | InterestingOrigin, set[Trace]] = defaultdict(
+            set
+        )
         self._start_timestamp = time.time()
         self._string_repr = ""
-        self._timing_features = {}
+        self._timing_features: dict[str, float] = {}
+
+        self._runner: ConjectureRunner | None = None
 
     @property
     def test_identifier(self) -> str:
@@ -1165,6 +1182,7 @@ class StateForActualGivenExecution:
     def _flaky_replay_to_failure(
         self, err: FlakyReplay, context: BaseException
     ) -> FlakyFailure:
+        assert self._runner is not None
         # Note that in the mark_interesting case, _context_ itself
         # is part of err._interesting_examples - but it's not in
         # _runner.interesting_examples - this is fine, as the context
@@ -1186,7 +1204,7 @@ class StateForActualGivenExecution:
         This allows the engine to assume that any exception other than
         ``StopTest`` must be a fatal error, and should stop the entire engine.
         """
-        trace: Trace = set()
+        trace: Trace = frozenset()
         try:
             with Tracer(should_trace=self._should_trace()) as tracer:
                 try:
@@ -1196,7 +1214,7 @@ class StateForActualGivenExecution:
                     ):  # pragma: no cover
                         # This is in fact covered by our *non-coverage* tests, but due
                         # to the settrace() contention *not* by our coverage tests.
-                        self.explain_traces[None].add(frozenset(tracer.branches))
+                        self.explain_traces[None].add(tracer.branches)
                 finally:
                     trace = tracer.branches
             if result is not None:
@@ -1280,7 +1298,7 @@ class StateForActualGivenExecution:
                 interesting_origin = InterestingOrigin.from_exception(e)
                 if trace:  # pragma: no cover
                     # Trace collection is explicitly disabled under coverage.
-                    self.explain_traces[interesting_origin].add(frozenset(trace))
+                    self.explain_traces[interesting_origin].add(trace)
                 if interesting_origin.exc_type == DeadlineExceeded:
                     self.failed_due_to_deadline = True
                     self.explain_traces.clear()
@@ -1292,6 +1310,16 @@ class StateForActualGivenExecution:
         finally:
             # Conditional here so we can save some time constructing the payload; in
             # other cases (without coverage) it's cheap enough to do that regardless.
+            #
+            # Note that we have to unconditionally realize data.events, because
+            # the statistics reported by the pytest plugin use a different flow
+            # than observability, but still access symbolic events.
+
+            try:
+                data.events = data.provider.realize(data.events)
+            except BackendCannotProceed:
+                data.events = {}
+
             if observability_enabled():
                 if runner := getattr(self, "_runner", None):
                     phase = runner._current_phase
@@ -1315,11 +1343,6 @@ class StateForActualGivenExecution:
                     self._string_repr = data.provider.realize(self._string_repr)
                 except BackendCannotProceed:
                     self._string_repr = "<backend failed to realize symbolic arguments>"
-
-                try:
-                    data.events = data.provider.realize(data.events)
-                except BackendCannotProceed:
-                    data.events = {}
 
                 data.freeze()
                 tc = make_testcase(
@@ -1369,13 +1392,14 @@ class StateForActualGivenExecution:
             else:
                 database_key = None
 
-        runner = self._runner = ConjectureRunner(
+        runner = ConjectureRunner(
             self._execute_once_for_engine,
             settings=self.settings,
             random=self.random,
             database_key=database_key,
             thread_overlap=self.thread_overlap,
         )
+        self._runner = runner
         # Use the Conjecture engine to run the test function many times
         # on different inputs.
         runner.run()
@@ -1500,20 +1524,19 @@ class StateForActualGivenExecution:
                     # (note: e is a BaseException)
                     [falsifying_example.expected_exception or e],
                 )
-                errors_to_report.append((fragments, err))
+                errors_to_report.append(ReportableError(fragments, err))
             except UnsatisfiedAssumption as e:  # pragma: no cover  # ironically flaky
                 err = FlakyFailure(
                     "Unreliable assumption: An example which satisfied "
                     "assumptions on the first run now fails it.",
                     [e],
                 )
-                errors_to_report.append((fragments, err))
+                errors_to_report.append(ReportableError(fragments, err))
             except BaseException as e:
                 # If we have anything for explain-mode, this is the time to report.
                 fragments.extend(explanations[falsifying_example.interesting_origin])
-                errors_to_report.append(
-                    (fragments, e.with_traceback(get_trimmed_traceback()))
-                )
+                error_with_tb = e.with_traceback(get_trimmed_traceback())
+                errors_to_report.append(ReportableError(fragments, error_with_tb))
                 tb = format_exception(e, get_trimmed_traceback(e))
                 origin = InterestingOrigin.from_exception(e)
             else:
@@ -1555,11 +1578,45 @@ class StateForActualGivenExecution:
             # which is to be interpreted as "there are no more failures *other
             # than what we already reported*". Do not report this as unsound.
             unsound_backend=(
-                runner._verified_by
-                if runner._verified_by and not runner._backend_found_failure
+                runner._verified_by_backend
+                if runner._verified_by_backend and not runner._backend_found_failure
                 else None
             ),
         )
+
+
+def _simplify_explicit_errors(errors: list[ReportableError]) -> list[ReportableError]:
+    """
+    Group explicit example errors by their InterestingOrigin, keeping only the
+    simplest one, and adding a note of how many other examples failed with the same
+    error.
+    """
+    by_origin: dict[InterestingOrigin, list[ReportableError]] = defaultdict(list)
+    for error in errors:
+        origin = InterestingOrigin.from_exception(error.exception)
+        by_origin[origin].append(error)
+
+    result = []
+    for group in by_origin.values():
+        if len(group) == 1:
+            result.append(group[0])
+        else:
+            # Sort by shortlex of representation (first fragment)
+            def shortlex_key(error):
+                repr_str = error.fragments[0] if error.fragments else ""
+                return (len(repr_str), repr_str)
+
+            sorted_group = sorted(group, key=shortlex_key)
+            simplest = sorted_group[0]
+            other_count = len(group) - 1
+            add_note(
+                simplest.exception,
+                f"(note: {other_count} other explicit example{'s' * (other_count > 1)} "
+                "also failed with this error; use Verbosity.verbose to view)",
+            )
+            result.append(simplest)
+
+    return result
 
 
 def _raise_to_user(
@@ -1568,21 +1625,21 @@ def _raise_to_user(
     """Helper function for attaching notes and grouping multiple errors."""
     failing_prefix = "Falsifying example: "
     ls = []
-    for fragments, err in errors_to_report:
-        for note in fragments:
-            add_note(err, note)
+    for error in errors_to_report:
+        for note in error.fragments:
+            add_note(error.exception, note)
             if note.startswith(failing_prefix):
                 ls.append(note.removeprefix(failing_prefix))
     if current_pytest_item.value:
         current_pytest_item.value._hypothesis_failing_examples = ls
 
     if len(errors_to_report) == 1:
-        _, the_error_hypothesis_found = errors_to_report[0]
+        the_error_hypothesis_found = errors_to_report[0].exception
     else:
         assert errors_to_report
         the_error_hypothesis_found = BaseExceptionGroup(
             f"Hypothesis found {len(errors_to_report)} distinct failures{trailer}.",
-            [e for _, e in errors_to_report],
+            [error.exception for error in errors_to_report],
         )
 
     if settings.verbosity >= Verbosity.normal:
@@ -1591,7 +1648,7 @@ def _raise_to_user(
 
     if unsound_backend:
         add_note(
-            err,
+            the_error_hypothesis_found,
             f"backend={unsound_backend!r} claimed to verify this test passes - "
             "please send them a bug report!",
         )
@@ -2115,9 +2172,14 @@ def given(
                     # If an explicit example raised a 'skip' exception, ensure it's never
                     # wrapped up in an exception group.  Because we break out of the loop
                     # immediately on finding a skip, if present it's always the last error.
-                    if isinstance(errors[-1][1], skip_exceptions_to_reraise()):
+                    if isinstance(errors[-1].exception, skip_exceptions_to_reraise()):
                         # Covered by `test_issue_3453_regression`, just in a subprocess.
                         del errors[:-1]  # pragma: no cover
+
+                    if state.settings.verbosity < Verbosity.verbose:
+                        # keep only one error per interesting origin, unless
+                        # verbosity is high
+                        errors = _simplify_explicit_errors(errors)
 
                     _raise_to_user(errors, state.settings, [], " in explicit examples")
 

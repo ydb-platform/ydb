@@ -21,6 +21,8 @@ SRCS(
     blobstorage_base.proto
     blobstorage_base3.proto
     blobstorage_config.proto
+    blobstorage_ddisk.proto
+    blobstorage_ddisk_internal.proto
     blobstorage_disk.proto
     blobstorage_disk_color.proto
     blobstorage_distributed_config.proto
@@ -82,6 +84,7 @@ SRCS(
     flat_scheme_op.proto
     flat_tx_scheme.proto
     follower_group.proto
+    fs_settings.proto
     grpc.proto
     grpc_pq_old.proto
     grpc_status_proxy.proto
@@ -94,6 +97,7 @@ SRCS(
     kesus.proto
     key.proto
     kqp_compile_settings.proto
+    kqp_tablemetadata.proto
     kqp.proto
     kqp_physical.proto
     kqp_stats.proto
@@ -119,6 +123,7 @@ SRCS(
     pqconfig.proto
     profiler.proto
     query_stats.proto
+    recoveryshard_config.proto
     replication.proto
     resource_broker.proto
     s3_settings.proto

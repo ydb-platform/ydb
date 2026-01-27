@@ -1,6 +1,5 @@
 # Развёртывание {{ ydb-short-name }} кластера с помощью Ansible
 
-<!-- markdownlint-disable blanks-around-fences -->
 {% note warning %}
 
 Данная инструкция предназначена только для развёртывания кластеров с [конфигурацией V1](../../configuration-management/configuration-v1/index.md). Развёртывание кластеров с [конфигурацией V2](../../configuration-management/configuration-v2/index.md) с помощью Ansible в настоящий момент находится в разработке.
@@ -11,11 +10,22 @@
 
 ## Предварительные требования
 
+### Выберите топологию для установки {#topology-select}
+
+Перед установкой выберите подходящую топологию кластера {{ ydb-short-name }}, от этого будет зависеть какое количество серверов и дисков вам потребуется:
+
+**Если вы только начинаете работать с {{ ydb-short-name }}**, рекомендуем выбрать топологию `mirror-3dc-3-nodes`. Для этого потребуется всего 3 сервера и 9 дисков для пользовательских данных — это самый простой и быстрый способ создать пилотный кластер.
+
+**Для масштабных развёртываний** выберите одну из следующих опций:
+
+- `mirror-3-dc` — для кластеров, размещённых в нескольких дата-центрах. Потребуется не менее 9 серверов и 9 дисков для пользовательских данных.
+- `block-4-2` — для размещения кластера в одном дата-центре. Потребуется не менее 8 серверов и 8 дисков для пользовательских данных.
+
+В каждом сервере должен быть хотя бы один отдельный диск для пользовательских данных. Рекомендуется также добавить отдельный небольшой диск под операционную систему. Подробнее о различных вариантах топологии и избыточности читайте в [этой статье](../../../concepts/topology.md).
+
+В дальнейшем вы сможете при необходимости [расширять кластер](../../configuration-management/configuration-v1/cluster-expansion.md) без остановки его работы и без прерывания доступа пользователей к данным.
+
 ### Настройка серверов
-
-Для начала работы рекомендуется настроить 3 сервера с 3 дисками для пользовательских данных на каждом. Для обеспечения отказоустойчивости каждый сервер должен иметь как можно более независимую инфраструктуру: желательно располагать их в отдельных дата-центрах или зонах доступности, или хотя бы в разных серверных стойках.
-
-Для масштабных развёртываний рекомендуется использовать не менее 9 серверов для высокодоступных кластеров (`mirror-3-dc`) или 8 серверов для кластеров в одном дата-центре (`block-4-2`). В этих случаях серверам достаточно иметь один диск для пользовательских данных каждый, но желательно иметь дополнительный небольшой диск для операционной системы. Подробнее о доступных в {{ ydb-short-name }} моделях избыточности можно узнать из статьи [{#T}](../../../concepts/topology.md). Во время эксплуатации кластер может быть [расширен](../../configuration-management/configuration-v2/cluster-expansion.md) без приостановки доступа пользователей к данных.
 
 {% note info %}
 
@@ -40,7 +50,7 @@
 Для работы с проектом на локальной (промежуточной или установочной) машине потребуется:
 
 - Python 3 версии 3.10+
-- Поддерживаются версии Ansible core начиная с 2.15.2 и до 2.18
+- Поддерживаются версии Ansible core начиная с 2.11 и до 2.18
 - Рабочая директория на сервере с SSH-доступом ко всем серверам кластера
 
 {% note tip %}
@@ -59,12 +69,25 @@
 * Обновите пакеты командой `sudo apt-get upgrade`.
 * Установите пакет `software-properties-common` для управления источниками программного обеспечения вашего дистрибутива — `sudo apt install software-properties-common`.
 * Добавьте новый PPA в apt — `sudo add-apt-repository --yes --update ppa:ansible/ansible`.
-* Установите Ansible — `sudo apt-get install ansible-core=2.16.3-0ubuntu2` (обратите внимание, что установка просто `ansible` приведёт к неподходящей устаревшей версии).
-* Проверьте версию Ansible core — `ansible --version`
-
-Подробнее см. [руководство по установке Ansible](https://docs.ansible.com/ansible/latest/installation_guide/index.html) для получения дополнительной информации и других вариантов установки.
+* Установите Ansible — `sudo apt-get install ansible-core` (убедитесь, что устанавливаемая версия не выше 2.18 и не меньше 2.11; установка пакета просто `ansible` приведёт к устаревшей и неподходящей версии).
+* Проверьте версию Ansible core — `ansible --version`.
 
 {% endcut %}
+
+{% cut "Установка Ansible в виртуальное окружение Python" %}
+
+На примере Ubuntu 22.04 LTS:
+
+* Обновите список доступных deb пакетов — `sudo apt-get update`.
+* Установите пакет `python3-venv` для управления Python виртуальными окружениями — `sudo apt-get install venv`.
+* Создайте директорию, где будет создано виртуальное окружение. Например, `mkdir venv-ansible`.
+* Создайте виртуальное окружение Python — `python3 -m venv venv-ansible`, где `venv-ansible` - путь к директории созданной на предыдущем шаге.
+* Активируйте виртуальное окружение — `source venv-ansible/bin/activate`. Все дальнейшие действия с Ansible выполняются внутри виртуального окружения. Выйти из него можно командой `deactivate`.
+* Установите рекомендуемую версию Ansible с помощью команды `pip3 install "ansible-core>=2.11,<2.19"` (убедитесь, что устанавливаемая версия не выше 2.18 и не меньше 2.11). Проверьте установленную версию Ansible — `ansible --version`.
+
+{% endcut %}
+
+Подробнее см. [руководство по установке Ansible](https://docs.ansible.com/ansible/latest/installation_guide/index.html) для получения дополнительной информации и других вариантов установки.
 
 ## Настройка проекта Ansible {#ansible-project-setup}
 
@@ -75,20 +98,20 @@
 - Через requirements.yaml
 
   ```bash
-  $ cat <<EOF > requirements.yaml
+  cat <<EOF > requirements.yaml
   roles: []
   collections:
     - name: git+https://github.com/ydb-platform/ydb-ansible
       type: git
       version: latest
   EOF
-  $ ansible-galaxy install -r requirements.yaml
+  ansible-galaxy install -r requirements.yaml
   ```
 
 - Однократно
 
   ```bash
-  $ ansible-galaxy collection install git+https://github.com/ydb-platform/ydb-ansible.git,latest
+  ansible-galaxy collection install git+https://github.com/ydb-platform/ydb-ansible.git,latest
   ```
 
 {% endlist %}
@@ -138,60 +161,185 @@ ssh_args = -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o Contro
 
 ### Создание основного файла инвентаризации {#inventory-create}
 
-Создайте файл `inventory/50-inventory.yaml` со следующим содержимым:
+Создайте файл `inventory/50-inventory.yaml` и заполните его в зависимости от выбранной вами топологии (см. [выбор топологии](#topology-select)). Примеры для каждой поддерживаемой топологии приведены ниже во вкладках — выберите и используйте подходящий для вашего случая.
 
-```yaml
+{% list tabs %}
+
+- mirror-3-dc-3nodes
+
+  ```yaml
   all:
-  children:
-    ydb:
-    #Серверы
-      hosts:
-        static-node-1.ydb-cluster.com:
-        static-node-2.ydb-cluster.com:
-        static-node-3.ydb-cluster.com:
+    children:
+      ydb:
+        #Серверы
+        hosts:
+          static-node-1.ydb-cluster.com:
+          static-node-2.ydb-cluster.com:
+          static-node-3.ydb-cluster.com:
 
-      vars:
-        # Ansible
-        ansible_user: имя_пользователя
-        ansible_ssh_private_key_file: "/путь/к/вашему/id_rsa"
+        vars:
+          # Ansible
+          ansible_user: имя_пользователя
+          ansible_ssh_private_key_file: "/путь/к/вашему/id_rsa"
 
-        # Система
-        system_timezone: UTC
-        system_ntp_servers: [time.cloudflare.com, time.google.com, ntp.ripe.net, pool.ntp.org]
-        
-        # Узлы
-        ydb_config: "{{ ansible_config_file | dirname }}/files/config.yaml"
-        ydb_version: "25.1.4.7"
+          # Система
+          system_timezone: UTC
+          system_ntp_servers: [time.cloudflare.com, time.google.com, ntp.ripe.net, pool.ntp.org]
+          
+          # Узлы
+          ydb_config: "{{ ansible_config_file | dirname }}/files/config.yaml"
+          ydb_version: "версия_системы"
 
-        # Хранилище
-        ydb_cores_static: 8
-        ydb_disks:
-          - name: /dev/vdb
-            label: ydb_disk_1
-          - name: /dev/vdc
-            label: ydb_disk_2
-          - name: /dev/vdd
-            label: ydb_disk_3
-        ydb_allow_format_drives: true
-        ydb_skip_data_loss_confirmation_prompt: false
-        ydb_enforce_user_token_requirement: true
-        ydb_request_client_certificate: true
-        ydb_pool_kind: ssd
-        ydb_database_groups: 8
-        ydb_cores_dynamic: 8
-        ydb_dynnodes:
-          - { instance: 'a', offset: 0 }
-          - { instance: 'b', offset: 1 }
-        ydb_brokers:
-          - static-node-1.ydb-cluster.com
-          - static-node-2.ydb-cluster.com
-          - static-node-3.ydb-cluster.com
-        
-        # База данных
-        ydb_user: root
-        ydb_domain: Root
-        ydb_dbname: database
-  ```
+          # Хранилище
+          ydb_cores_static: 8
+          ydb_disks:
+            - name: /dev/vdb
+              label: ydb_disk_1
+            - name: /dev/vdc
+              label: ydb_disk_2
+            - name: /dev/vdd
+              label: ydb_disk_3
+          ydb_allow_format_drives: true
+          ydb_skip_data_loss_confirmation_prompt: false
+          ydb_pool_kind: ssd
+          ydb_database_groups: 8
+          ydb_cores_dynamic: 8
+          ydb_dynnodes:
+            - { instance: 'a', offset: 1 }
+            - { instance: 'b', offset: 2 }
+          ydb_brokers:
+            - static-node-1.ydb-cluster.com
+            - static-node-2.ydb-cluster.com
+            - static-node-3.ydb-cluster.com
+          
+          # База данных
+          ydb_user: root
+          ydb_domain: Root
+          ydb_dbname: database
+
+          #Настройки авторизации
+          ydb_enforce_user_token_requirement: true
+          ydb_request_client_certificate: true
+    ```
+
+- mirror-3-dc-9-nodes
+
+  ```yaml
+  all:
+    children:
+      ydb:
+        #Серверы
+        hosts:
+          static-node-1.ydb-cluster.com:
+          static-node-2.ydb-cluster.com:
+          static-node-3.ydb-cluster.com:
+          static-node-4.ydb-cluster.com:
+          static-node-5.ydb-cluster.com:
+          static-node-6.ydb-cluster.com:
+          static-node-7.ydb-cluster.com:
+          static-node-8.ydb-cluster.com:
+          static-node-9.ydb-cluster.com:
+
+        vars:
+          # Ansible
+          ansible_user: имя_пользователя
+          ansible_ssh_private_key_file: "/путь/к/вашему/id_rsa"
+
+          # Система
+          system_timezone: UTC
+          system_ntp_servers: [time.cloudflare.com, time.google.com, ntp.ripe.net, pool.ntp.org]
+          
+          # Узлы
+          ydb_config: "{{ ansible_config_file | dirname }}/files/config.yaml"
+          ydb_version: "версия_системы"
+
+          # Хранилище
+          ydb_cores_static: 8
+          ydb_disks:
+            - name: /dev/vdb
+              label: ydb_disk_1
+          ydb_allow_format_drives: true
+          ydb_skip_data_loss_confirmation_prompt: false
+          ydb_pool_kind: ssd
+          ydb_database_groups: 8
+          ydb_cores_dynamic: 8
+          ydb_dynnodes:
+            - { instance: 'a', offset: 1 }
+            - { instance: 'b', offset: 2 }
+          ydb_brokers:
+            - static-node-1.ydb-cluster.com
+            - static-node-2.ydb-cluster.com
+            - static-node-3.ydb-cluster.com
+          
+          # База данных
+          ydb_user: root
+          ydb_domain: Root
+          ydb_dbname: database
+
+          #Настройки авторизации
+          ydb_enforce_user_token_requirement: true
+          ydb_request_client_certificate: true
+    ```
+
+- block-4-2
+
+  ```yaml
+  all:
+    children:
+      ydb:
+        #Серверы
+        hosts:
+          static-node-1.ydb-cluster.com:
+          static-node-2.ydb-cluster.com:
+          static-node-3.ydb-cluster.com:
+          static-node-4.ydb-cluster.com:
+          static-node-5.ydb-cluster.com:
+          static-node-6.ydb-cluster.com:
+          static-node-7.ydb-cluster.com:
+          static-node-8.ydb-cluster.com:
+
+        vars:
+          # Ansible
+          ansible_user: имя_пользователя
+          ansible_ssh_private_key_file: "/путь/к/вашему/id_rsa"
+
+          # Система
+          system_timezone: UTC
+          system_ntp_servers: [time.cloudflare.com, time.google.com, ntp.ripe.net, pool.ntp.org]
+          
+          # Узлы
+          ydb_config: "{{ ansible_config_file | dirname }}/files/config.yaml"
+          ydb_version: "версия_системы"
+
+          # Хранилище
+          ydb_cores_static: 8
+          ydb_disks:
+            - name: /dev/vdb
+              label: ydb_disk_1
+          ydb_allow_format_drives: true
+          ydb_skip_data_loss_confirmation_prompt: false
+          ydb_pool_kind: ssd
+          ydb_database_groups: 7
+          ydb_cores_dynamic: 8
+          ydb_dynnodes:
+            - { instance: 'a', offset: 1 }
+            - { instance: 'b', offset: 2 }
+          ydb_brokers:
+            - static-node-1.ydb-cluster.com
+            - static-node-2.ydb-cluster.com
+            - static-node-3.ydb-cluster.com
+          
+          # База данных
+          ydb_user: root
+          ydb_domain: Root
+          ydb_dbname: database
+
+          #Настройки авторизации
+          ydb_enforce_user_token_requirement: true
+          ydb_request_client_certificate: true
+    ```
+
+{% endlist %}
 
 Обязательные настройки, которые нужно адаптировать под ваше окружение в выбранном шаблоне:
 
@@ -203,16 +351,14 @@ ssh_args = -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o Contro
 Рекомендуемые настройки для адаптации:
 
 * `ydb_domain`. Это будет первый компонент пути для всех [объектов схемы](../../../concepts/glossary.md#scheme-object) в кластере. Например, вы можете поместить туда название своей компании, регион кластера и т.д.
-* `ydb_database_name`. Это будет второй компонент пути для всех [объектов схемы](../../../concepts/glossary.md#scheme-object) в базе данных. Например, вы можете поместить туда название сценария использования или проекта.
+* `ydb_dbname`. Это будет второй компонент пути для всех [объектов схемы](../../../concepts/glossary.md#scheme-object) в базе данных. Например, вы можете поместить туда название сценария использования или проекта.
 
 {% cut "Дополнительные настройки" %}
 
 Существует несколько вариантов указания того, какие именно исполняемые файлы {{ ydb-short-name }} вы хотите использовать для кластера:
 
 * `ydb_version`: автоматически загрузить один из [официальных релизов {{ ydb-short-name }}](../../../downloads/index.md#ydb-server) по номеру версии. Например, `23.4.11`.
-* `ydb_git_version`: автоматически скомпилировать исполняемые файлы {{ ydb-short-name }} из исходного кода, загруженного из [официального репозитория GitHub](https://github.com/ydb-platform/ydb). Значение настройки — это имя ветки, тега или коммита. Например, `main`.
 * `ydb_archive`: локальный путь файловой системы к архиву дистрибутива {{ ydb-short-name }}, [загруженному](../../../downloads/index.md#ydb-server) или иным образом подготовленному заранее.
-* `ydbd_binary` и `ydb_cli_binary`: локальные пути файловой системы к исполняемым файлам сервера и клиента {{ ydb-short-name }}, [загруженным](../../../downloads/index.md#ydb-server) или иным образом подготовленным заранее.
 
 Для использования [федеративных запросов](../../../concepts/federated_query/index.md) может потребоваться установка [коннектора](../../../concepts/federated_query/architecture.md#connectors). Плейбук может развернуть [fq-connector-go](../manual/federated-queries/connector-deployment.md#fq-connector-go) на хостах с динамическими узлами. Используйте следующие настройки:
 
@@ -233,12 +379,12 @@ ssh_args = -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o Contro
       - static-node-3.ydb-cluster.com
   ```
 
-Оптимальное значение настройки `ydb_database_storage_groups` в разделе `vars` зависит от доступных дисков. Предполагая только одну базу данных в кластере, используйте следующую логику:
+Оптимальное значение настройки `ydb_database_groups` в разделе `vars` зависит от доступных дисков. Предполагая только одну базу данных в кластере, используйте следующую логику:
 
 * Для промышленных развёртываний используйте диски ёмкостью более 800 ГБ с высокой производительностью IOPS, затем выберите значение для этой настройки на основе топологии кластера:
-  * Для `block-4-2` установите `ydb_database_storage_groups` на 95% от общего количества дисков, округляя вниз.
-  * Для `mirror-3-dc` установите `ydb_database_storage_groups` на 84% от общего количества дисков, округляя вниз.
-* Для тестирования {{ ydb-short-name }} на небольших дисках установите `ydb_database_storage_groups` в 1 независимо от топологии кластера.
+  * Для `block-4-2` установите `ydb_database_groups` на 95% от общего количества дисков, округляя вниз.
+  * Для `mirror-3-dc` установите `ydb_database_groups` на 84% от общего количества дисков, округляя вниз.
+* Для тестирования {{ ydb-short-name }} на небольших дисках установите `ydb_database_groups` в 1 независимо от топологии кластера.
 
 Значения переменных `system_timezone` и `system_ntp_servers` зависят от свойств инфраструктуры, на которой развёртывается кластер {{ ydb-short-name }}. По умолчанию `system_ntp_servers` включает набор NTP-серверов без учёта географического расположения инфраструктуры, на которой будет развёрнут кластер {{ ydb-short-name }}. Мы настоятельно рекомендуем использовать локальный NTP-сервер для on-premise инфраструктуры и следующие NTP-серверы для облачных провайдеров:
 
@@ -270,7 +416,7 @@ ssh_args = -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o Contro
 
 Создайте файл `ansible_vault_password_file` с содержимым:
 
-```
+```bash
 password
 ```
 
@@ -290,9 +436,13 @@ all:
 
 ### Подготовка конфигурационного файла {{ ydb-short-name }} {#ydb-config-prepare}
 
-Создайте файл `files/config.yaml` со следующим содержимым:
+Создайте файл `files/config.yaml` и заполните его в зависимости от выбранной вами топологии (см. [выбор топологии](#topology-select)). Примеры для каждой поддерживаемой топологии приведены ниже во вкладках — выберите и используйте подходящий для вашего случая.
 
-```yaml
+{% list tabs %}
+
+- mirror-3-dc-3nodes
+
+  ```yaml
   storage_config_generation: 0
   static_erasure: mirror-3-dc
   host_configs:
@@ -442,8 +592,6 @@ all:
           subject_terms:
           - short_name: "O"
             values: ["YDB"]
-          - short_name: "CN"
-            values: ["YDB CA"]
   query_service_config:
     generic:
       connector:
@@ -460,6 +608,395 @@ all:
     enable_external_data_sources: true
     enable_script_execution_operations: true
   ```
+
+- mirror-3-dc-9-nodes
+
+  ```yaml
+  storage_config_generation: 0
+  static_erasure: mirror-3-dc
+  host_configs:
+  - drive:
+    - path: /dev/disk/by-partlabel/ydb_disk_1
+      type: SSD
+    host_config_id: 1
+  hosts:
+  - host: static-node-1.ydb-cluster.com
+    host_config_id: 1
+    walle_location:
+      body: 1
+      data_center: 'zone-a'
+      rack: '1'
+  - host: static-node-2.ydb-cluster.com
+    host_config_id: 1
+    walle_location:
+      body: 2
+      data_center: 'zone-a'
+      rack: '2'
+  - host: static-node-3.ydb-cluster.com
+    host_config_id: 1
+    walle_location:
+      body: 3
+      data_center: 'zone-a'
+      rack: '3'
+  - host: static-node-4.ydb-cluster.com
+    host_config_id: 1
+    walle_location:
+      body: 4
+      data_center: 'zone-b'
+      rack: '4'
+  - host: static-node-5.ydb-cluster.com
+    host_config_id: 1
+    walle_location:
+      body: 5
+      data_center: 'zone-b'
+      rack: '5'
+  - host: static-node-6.ydb-cluster.com
+    host_config_id: 1
+    walle_location:
+      body: 6
+      data_center: 'zone-b'
+      rack: '6'
+  - host: static-node-7.ydb-cluster.com
+    host_config_id: 1
+    walle_location:
+      body: 7
+      data_center: 'zone-d'
+      rack: '7'
+  - host: static-node-8.ydb-cluster.com
+    host_config_id: 1
+    walle_location:
+      body: 8
+      data_center: 'zone-d'
+      rack: '8'
+  - host: static-node-9.ydb-cluster.com
+    host_config_id: 1
+    walle_location:
+      body: 9
+      data_center: 'zone-d'
+      rack: '9'
+  domains_config:
+    domain:
+    - name: Root
+      storage_pool_types:
+      - kind: ssd
+        pool_config:
+          box_id: 1
+          erasure_species: mirror-3-dc
+          kind: ssd
+          pdisk_filter:
+          - property:
+            - type: SSD
+          vdisk_kind: Default
+    state_storage:
+    - ring:
+        node: [1, 2, 3, 4, 5, 6, 7, 8, 9]
+        nto_select: 9
+      ssid: 1
+    security_config:
+      enforce_user_token_requirement: true
+      monitoring_allowed_sids:
+      - "root"
+      - "ADMINS"
+      - "DATABASE-ADMINS"
+      administration_allowed_sids:
+      - "root"
+      - "ADMINS"
+      - "DATABASE-ADMINS"
+      viewer_allowed_sids:
+      - "root"
+      - "ADMINS"
+      - "DATABASE-ADMINS"
+      register_dynamic_node_allowed_sids:
+      - databaseNodes@cert
+      - root@builtin
+  blob_storage_config:
+    service_set:
+      groups:
+      - erasure_species: mirror-3-dc
+        rings:
+        - fail_domains:
+          - vdisk_locations:
+            - node_id: static-node-1.ydb-cluster.com
+              pdisk_category: SSD
+              path: /dev/disk/by-partlabel/ydb_disk_1
+          - vdisk_locations:
+            - node_id: static-node-2.ydb-cluster.com
+              pdisk_category: SSD
+              path: /dev/disk/by-partlabel/ydb_disk_1
+          - vdisk_locations:
+            - node_id: static-node-3.ydb-cluster.com
+              pdisk_category: SSD
+              path: /dev/disk/by-partlabel/ydb_disk_1
+        - fail_domains:
+          - vdisk_locations:
+            - node_id: static-node-4.ydb-cluster.com
+              pdisk_category: SSD
+              path: /dev/disk/by-partlabel/ydb_disk_1
+          - vdisk_locations:
+            - node_id: static-node-5.ydb-cluster.com
+              pdisk_category: SSD
+              path: /dev/disk/by-partlabel/ydb_disk_1
+          - vdisk_locations:
+            - node_id: static-node-6.ydb-cluster.com
+              pdisk_category: SSD
+              path: /dev/disk/by-partlabel/ydb_disk_1
+        - fail_domains:
+          - vdisk_locations:
+            - node_id: static-node-7.ydb-cluster.com
+              pdisk_category: SSD
+              path: /dev/disk/by-partlabel/ydb_disk_1
+          - vdisk_locations:
+            - node_id: static-node-8.ydb-cluster.com
+              pdisk_category: SSD
+              path: /dev/disk/by-partlabel/ydb_disk_1
+          - vdisk_locations:
+            - node_id: static-node-9.ydb-cluster.com
+              pdisk_category: SSD
+              path: /dev/disk/by-partlabel/ydb_disk_1
+  channel_profile_config:
+    profile:
+    - channel:
+      - erasure_species: mirror-3-dc
+        pdisk_category: 1   # 0=ROT, 1=SSD, 2=NVME
+        storage_pool_kind: ssd
+      - erasure_species: mirror-3-dc
+        pdisk_category: 1
+        storage_pool_kind: ssd
+      - erasure_species: mirror-3-dc
+        pdisk_category: 1
+        storage_pool_kind: ssd
+      profile_id: 0
+  interconnect_config:
+      start_tcp: true
+      encryption_mode: OPTIONAL
+      path_to_certificate_file: "/opt/ydb/certs/node.crt"
+      path_to_private_key_file: "/opt/ydb/certs/node.key"
+      path_to_ca_file: "/opt/ydb/certs/ca.crt"
+  grpc_config:
+      cert: "/opt/ydb/certs/node.crt"
+      key: "/opt/ydb/certs/node.key"
+      ca: "/opt/ydb/certs/ca.crt"
+      services_enabled:
+      - legacy
+  auth_config:
+    path_to_root_ca: /opt/ydb/certs/ca.crt    
+  client_certificate_authorization:
+    request_client_certificate: true
+    client_certificate_definitions:
+        - member_groups: ["databaseNodes@cert"]
+          subject_terms:
+          - short_name: "O"
+            values: ["YDB"]
+  query_service_config:
+    generic:
+      connector:
+        endpoint:
+          host: localhost
+          port: 19102
+        use_ssl: false
+      default_settings:
+        - name: DateTimeFormat
+          value: string
+        - name: UsePredicatePushdown
+          value: "true"
+  feature_flags:
+    enable_external_data_sources: true
+    enable_script_execution_operations: true
+    ```
+
+- block-4-2
+
+  ```yaml
+  storage_config_generation: 0
+  static_erasure: block-4-2
+  host_configs:
+  - drive:
+    - path: /dev/disk/by-partlabel/ydb_disk_1
+      type: SSD
+    host_config_id: 1
+  hosts:
+  - host: static-node-1.ydb-cluster.com
+    host_config_id: 1
+    walle_location:
+      body: 1
+      data_center: 'zone-a'
+      rack: '1'
+  - host: static-node-2.ydb-cluster.com
+    host_config_id: 1
+    walle_location:
+      body: 2
+      data_center: 'zone-a'
+      rack: '2'
+  - host: static-node-3.ydb-cluster.com
+    host_config_id: 1
+    walle_location:
+      body: 3
+      data_center: 'zone-a'
+      rack: '3'
+  - host: static-node-4.ydb-cluster.com
+    host_config_id: 1
+    walle_location:
+      body: 4
+      data_center: 'zone-a'
+      rack: '4'
+  - host: static-node-5.ydb-cluster.com
+    host_config_id: 1
+    walle_location:
+      body: 5
+      data_center: 'zone-a'
+      rack: '5'
+  - host: static-node-6.ydb-cluster.com
+    host_config_id: 1
+    walle_location:
+      body: 6
+      data_center: 'zone-a'
+      rack: '6'
+  - host: static-node-7.ydb-cluster.com
+    host_config_id: 1
+    walle_location:
+      body: 7
+      data_center: 'zone-a'
+      rack: '7'
+  - host: static-node-8.ydb-cluster.com
+    host_config_id: 1
+    walle_location:
+      body: 8
+      data_center: 'zone-a'
+      rack: '8'
+  domains_config:
+    domain:
+    - name: Root
+      storage_pool_types:
+      - kind: ssd
+        pool_config:
+          box_id: 1
+          erasure_species: block-4-2
+          kind: ssd
+          pdisk_filter:
+          - property:
+            - type: SSD
+          vdisk_kind: Default
+    state_storage:
+    - ring:
+        node:
+          - 1
+          - 2
+          - 3
+          - 4
+          - 5
+          - 6
+          - 7
+          - 8
+        nto_select: 8
+      ssid: 1
+    security_config:
+      enforce_user_token_requirement: true
+      monitoring_allowed_sids:
+      - "root"
+      - "ADMINS"
+      - "DATABASE-ADMINS"
+      administration_allowed_sids:
+      - "root"
+      - "ADMINS"
+      - "DATABASE-ADMINS"
+      viewer_allowed_sids:
+      - "root"
+      - "ADMINS"
+      - "DATABASE-ADMINS"
+      register_dynamic_node_allowed_sids:
+      - databaseNodes@cert
+      - root@builtin
+  blob_storage_config:
+    service_set:
+      groups:
+      - erasure_species: block-4-2
+        rings:
+        - fail_domains:
+          - vdisk_locations:
+            - node_id: static-node-1.ydb-cluster.com
+              pdisk_category: SSD
+              path: /dev/disk/by-partlabel/ydb_disk_1
+          - vdisk_locations:
+            - node_id: static-node-2.ydb-cluster.com
+              pdisk_category: SSD
+              path: /dev/disk/by-partlabel/ydb_disk_1
+          - vdisk_locations:
+            - node_id: static-node-3.ydb-cluster.com
+              pdisk_category: SSD
+              path: /dev/disk/by-partlabel/ydb_disk_1
+          - vdisk_locations:
+            - node_id: static-node-4.ydb-cluster.com
+              pdisk_category: SSD
+              path: /dev/disk/by-partlabel/ydb_disk_1
+          - vdisk_locations:
+            - node_id: static-node-5.ydb-cluster.com
+              pdisk_category: SSD
+              path: /dev/disk/by-partlabel/ydb_disk_1
+          - vdisk_locations:
+            - node_id: static-node-6.ydb-cluster.com
+              pdisk_category: SSD
+              path: /dev/disk/by-partlabel/ydb_disk_1
+          - vdisk_locations:
+            - node_id: static-node-7.ydb-cluster.com
+              pdisk_category: SSD
+              path: /dev/disk/by-partlabel/ydb_disk_1
+          - vdisk_locations:
+            - node_id: static-node-8.ydb-cluster.com
+              pdisk_category: SSD
+              path: /dev/disk/by-partlabel/ydb_disk_1
+  channel_profile_config:
+    profile:
+    - channel:
+      - erasure_species: block-4-2
+        pdisk_category: 1   # 0=ROT, 1=SSD, 2=NVME
+        storage_pool_kind: ssd
+      - erasure_species: block-4-2
+        pdisk_category: 1
+        storage_pool_kind: ssd
+      - erasure_species: block-4-2
+        pdisk_category: 1
+        storage_pool_kind: ssd
+      profile_id: 0
+  interconnect_config:
+      start_tcp: true
+      encryption_mode: OPTIONAL
+      path_to_certificate_file: "/opt/ydb/certs/node.crt"
+      path_to_private_key_file: "/opt/ydb/certs/node.key"
+      path_to_ca_file: "/opt/ydb/certs/ca.crt"
+  grpc_config:
+      cert: "/opt/ydb/certs/node.crt"
+      key: "/opt/ydb/certs/node.key"
+      ca: "/opt/ydb/certs/ca.crt"
+      services_enabled:
+      - legacy
+      - discovery
+  auth_config:
+    path_to_root_ca: /opt/ydb/certs/ca.crt
+  client_certificate_authorization:
+    request_client_certificate: true
+    client_certificate_definitions:
+        - member_groups: ["databaseNodes@cert"]
+          subject_terms:
+          - short_name: "O"
+            values: ["YDB"]
+  query_service_config:
+    generic:
+      connector:
+        endpoint:
+          host: localhost
+          port: 19102
+        use_ssl: false
+      default_settings:
+        - name: DateTimeFormat
+          value: string
+        - name: UsePredicatePushdown
+          value: "true"
+  feature_flags:
+    enable_external_data_sources: true
+    enable_script_execution_operations: true
+    ```
+
+{% endlist %}
 
 Для ускорения и упрощения первичного развёртывания {{ ydb-short-name }} конфигурационный файл уже содержит большинство настроек для установки кластера. Достаточно заменить стандартные хосты FQDN на актуальные в разделах `hosts` и `blob_storage_config`.
 
@@ -525,7 +1062,7 @@ static-node-3.ydb-cluster.com : ok=136  changed=69   unreachable=0    failed=0  
 
 {% endcut %}
 
-В результате выполнения плейбука `ydb_platform.ydb.initial_setup` будет создан кластер {{ ydb-short-name }}. Он будет содержать [домен](../../../concepts/glossary.md#domain) с именем из настройки `ydb_domain` (по умолчанию `Root`), [базу данных](../../../concepts/glossary.md#database) с именем из настройки `ydb_database_name` (по умолчанию `database`) и начального [пользователя](../../../concepts/glossary.md#access-user) с именем из настройки `ydb_user` (по умолчанию `root`).
+В результате выполнения плейбука `ydb_platform.ydb.initial_setup` будет создан кластер {{ ydb-short-name }}. Он будет содержать [домен](../../../concepts/glossary.md#domain) с именем из настройки `ydb_domain` (по умолчанию `Root`), [базу данных](../../../concepts/glossary.md#database) с именем из настройки `ydb_dbname` (по умолчанию `database`) и начального [пользователя](../../../concepts/glossary.md#access-user) с именем из настройки `ydb_user` (по умолчанию `root`).
 
 ## Дополнительные шаги
 

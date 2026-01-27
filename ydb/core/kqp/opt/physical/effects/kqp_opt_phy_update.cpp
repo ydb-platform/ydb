@@ -214,6 +214,7 @@ TExprBase KqpBuildUpdateStages(TExprBase node, TExprContext& ctx, const TKqpOpti
             .Columns(update.Columns())
             .ReturningColumns(update.ReturningColumns())
             .IsBatch(ctx.NewAtom(update.Pos(), "false"))
+            .DefaultColumns<TCoAtomList>().Build()
             .Settings()
                 .Add()
                     .Name().Build("IsUpdate")
@@ -227,6 +228,7 @@ TExprBase KqpBuildUpdateStages(TExprBase node, TExprContext& ctx, const TKqpOpti
             .Columns(update.Columns())
             .ReturningColumns(update.ReturningColumns())
             .IsBatch(ctx.NewAtom(update.Pos(), "false"))
+            .DefaultColumns<TCoAtomList>().Build()
             .Settings()
                 .Add()
                     .Name().Build("Mode")
@@ -274,6 +276,19 @@ TDqStageBase ReadInputToStage(const TExprBase& expr, TExprContext& ctx) {
         .Settings()
             .Build()
         .Done();
+}
+
+TDqPhyPrecompute ReadInputToPrecompute(const TExprBase& inputRows, const TPositionHandle& pos, TExprContext& ctx) {
+    return inputRows.Maybe<TDqPhyPrecompute>()
+        ? inputRows.Cast<TDqPhyPrecompute>()
+        : Build<TDqPhyPrecompute>(ctx, pos)
+            .Connection<TDqCnUnionAll>()
+                .Output()
+                    .Stage(ReadInputToStage(inputRows, ctx))
+                    .Index().Build("0")
+                    .Build()
+                .Build()
+            .Done();
 }
 
 } // namespace NKikimr::NKqp::NOpt

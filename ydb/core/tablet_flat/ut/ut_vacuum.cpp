@@ -43,8 +43,8 @@ public:
 
             auto alter = txc.DB.Alter()
                 .AddTable("test" + ToString(tableId), tableId)
-                .AddColumn(tableId, "key", KeyColumnId, NScheme::TInt64::TypeId, false)
-                .AddColumn(tableId, "value", ValueColumnId, NScheme::TString::TypeId, false)
+                .AddColumn(tableId, "key", KeyColumnId, NScheme::TInt64::TypeId, false, false)
+                .AddColumn(tableId, "value", ValueColumnId, NScheme::TString::TypeId, false, false)
                 .AddColumnToKey(tableId, KeyColumnId)
                 .SetCompactionPolicy(tableId, policy)
                 .SetExecutorAllowLogBatching(AllowLogBatching);
@@ -53,13 +53,13 @@ public:
                 txc.DB.Alter()
                     .SetRoom(tableId, RoomId2, FamilyId2Channel, {FamilyId2Channel}, FamilyId2Channel)
                     .AddFamily(tableId, FamilyId2, RoomId2)
-                    .AddColumn(tableId, "value_family_2", ValueFamily2ColumnId, NScheme::TString::TypeId, false)
+                    .AddColumn(tableId, "value_family_2", ValueFamily2ColumnId, NScheme::TString::TypeId, false, false)
                     .AddColumnToFamily(tableId, ValueFamily2ColumnId, FamilyId2);
 
                 txc.DB.Alter()
                     .SetRoom(tableId, RoomId3, FamilyId3Channel, {FamilyId3Channel}, FamilyId3Channel)
                     .AddFamily(tableId, FamilyId3, RoomId3)
-                    .AddColumn(tableId, "value_family_3", ValueFamily3ColumnId, NScheme::TString::TypeId, false)
+                    .AddColumn(tableId, "value_family_3", ValueFamily3ColumnId, NScheme::TString::TypeId, false, false)
                     .AddColumnToFamily(tableId, ValueFamily3ColumnId, FamilyId3);
             }
         }

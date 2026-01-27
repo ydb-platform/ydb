@@ -1,8 +1,10 @@
-# coding: utf-8
+
+from __future__ import annotations
 
 import sys
 
-from typing import Dict, Any, Text, Optional  # NOQA
+if False:  # MYPY
+    from typing import Dict, Any, Text, Optional  # NOQA
 from ruamel.yaml.tag import Tag
 
 
@@ -51,6 +53,8 @@ class Node:
         #     else:
         #         value = repr(value)
         value = repr(value)
+        if self.anchor is not None:
+            return f'{self.__class__.__name__!s}(tag={self.tag!r}, anchor={self.anchor!r}, value={value!s})'  # NOQA
         return f'{self.__class__.__name__!s}(tag={self.tag!r}, value={value!s})'
 
     def dump(self, indent: int = 0) -> None:

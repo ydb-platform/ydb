@@ -56,6 +56,7 @@ SRCS(
     concurrency/async_semaphore.cpp
     concurrency/async_stream_helpers.cpp
     concurrency/async_stream_pipe.cpp
+    concurrency/bounded_concurrency_invoker.cpp
     concurrency/config.cpp
     GLOBAL concurrency/configure_fiber_manager.cpp
     concurrency/coroutine.cpp
@@ -67,6 +68,7 @@ SRCS(
     concurrency/fair_share_queue_scheduler_thread.cpp
     concurrency/fair_share_thread_pool.cpp
     concurrency/fair_throttler.cpp
+    concurrency/fair_throttler_ipc.cpp
     concurrency/fiber_scheduler_thread.cpp
     concurrency/fiber.cpp
     concurrency/fiber_manager.cpp
@@ -79,12 +81,15 @@ SRCS(
     concurrency/periodic_executor.cpp
     concurrency/periodic_yielder.cpp
     concurrency/pollable_detail.cpp
+    concurrency/prioritized_invoker.cpp
     concurrency/profiling_helpers.cpp
     concurrency/propagating_storage.cpp
     concurrency/quantized_executor.cpp
     concurrency/scheduler_thread.cpp
+    concurrency/serialized_invoker.cpp
     concurrency/single_queue_scheduler_thread.cpp
     concurrency/suspendable_action_queue.cpp
+    concurrency/suspendable_invoker.cpp
     concurrency/system_invokers.cpp
     concurrency/thread_affinity.cpp
     concurrency/thread_pool_detail.cpp
@@ -92,6 +97,7 @@ SRCS(
     concurrency/thread_pool.cpp
     concurrency/throughput_throttler.cpp
     concurrency/two_level_fair_share_thread_pool.cpp
+    concurrency/watchdog_invoker.cpp
     concurrency/retrying_periodic_executor.cpp
     concurrency/scheduled_executor.cpp
 
@@ -136,10 +142,10 @@ SRCS(
     # REGISTER_INTERMEDIATE_PROTO_INTEROP_REPRESENTATION macros for TGuid.
     GLOBAL misc/guid.cpp
     misc/hazard_ptr.cpp
-    misc/hedging_manager.cpp
-    misc/new_hedging_manager.cpp
+    misc/adaptive_hedging_manager.cpp
     misc/histogram.cpp
     misc/adjusted_exponential_moving_average.cpp
+    misc/duration_moving_average.cpp
     misc/id_generator.cpp
     misc/inotify.cpp
     misc/fair_share_hierarchical_queue.cpp
@@ -213,6 +219,7 @@ SRCS(
     rpc/overload_controller.cpp
     rpc/overload_controlling_service_base.cpp
     rpc/peer_discovery.cpp
+    rpc/peer_priority_provider.cpp
     rpc/per_key_request_queue_provider.cpp
     rpc/protocol_version.cpp
     rpc/public.cpp
@@ -318,10 +325,6 @@ SRCS(
     json/helpers.cpp
     json/json_parser.cpp
     json/json_writer.cpp
-
-    ytalloc/bindings.cpp
-    ytalloc/config.cpp
-    ytalloc/statistics_producer.cpp
 )
 
 IF (OS_LINUX)
@@ -361,7 +364,6 @@ PEERDIR(
     library/cpp/yt/string
     library/cpp/yt/yson
     library/cpp/yt/yson_string
-    library/cpp/ytalloc/api
 
     yt/yt/build
 

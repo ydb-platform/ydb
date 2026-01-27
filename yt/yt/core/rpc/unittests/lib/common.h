@@ -85,11 +85,24 @@ class TRpcTestBase
     : public ::testing::Test
 {
 public:
+    TRpcTestBase()
+    { }
+
+    TRpcTestBase(bool useAuthenticator)
+        : UseAuthenticator_(useAuthenticator)
+    { }
+
+
     void SetUp() final
     {
         WorkerPool_ = NConcurrency::CreateThreadPool(4, "Worker");
         MemoryUsageTracker_ = New<TTestNodeMemoryTracker>(32_MB);
-        TestService_ = CreateTestService(WorkerPool_->GetInvoker(), TImpl::Secure, {}, MemoryUsageTracker_);
+        TestService_ = CreateTestService(
+            WorkerPool_->GetInvoker(),
+            TImpl::Secure,
+            {},
+            MemoryUsageTracker_,
+            UseAuthenticator_);
 
         auto serverConfig = ConvertTo<TServerConfigPtr>(NYson::TYsonString(TStringBuf(R"({
             services = {
@@ -185,6 +198,18 @@ private:
     TTestNodeMemoryTrackerPtr MemoryUsageTracker_;
     TTestServerHostPtr Host_;
     ITestServicePtr TestService_;
+    bool UseAuthenticator_ = false;
+};
+
+
+template <class TImpl>
+class TRpcAuthenticatedTestBase
+    : public TRpcTestBase<TImpl>
+{
+public:
+    TRpcAuthenticatedTestBase()
+        : TRpcTestBase<TImpl>(true)
+    { }
 };
 
 ////////////////////////////////////////////////////////////////////////////////

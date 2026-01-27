@@ -49,7 +49,7 @@ public:
         return ConvertToYsonString(data, NYson::EYsonFormat::Text);
     }
 
-    void Set(const TYPath& path, const TString& value)
+    void Set(const TYPath& path, const std::string& value)
     {
         SyncYPathSet(RootService, path, TYsonString(value));
     }
@@ -64,12 +64,12 @@ public:
         return TextifyYson(SyncYPathGet(RootService, path));
     }
 
-    std::vector<TString> List(const TYPath& path)
+    std::vector<std::string> List(const TYPath& path)
     {
         return SyncYPathList(RootService, path);
     }
 
-    void Check(const TYPath& path, const TString& expected)
+    void Check(const TYPath& path, const std::string& expected)
     {
         TYsonString output = Get(path);
         EXPECT_TRUE(
@@ -184,7 +184,7 @@ TEST_F(TYPathTest, Ls)
     auto result = List("");
     std::sort(result.begin(), result.end());
 
-    std::vector<TString> expected;
+    std::vector<std::string> expected;
     expected.push_back("a");
     expected.push_back("c");
     expected.push_back("d");
@@ -916,7 +916,7 @@ TEST_F(TYPathTest, RowIndexInRanges)
 
 class TRichYPathToStringTest
     : public ::testing::Test
-    , public ::testing::WithParamInterface<TString>
+    , public ::testing::WithParamInterface<std::string>
 { };
 
 TEST_P(TRichYPathToStringTest, TestRichYPathToString)
@@ -947,12 +947,12 @@ class TEmbeddedYPathOpsTest
     : public ::testing::Test
 {
 public:
-    static INodePtr ParseNode(const TString& data)
+    static INodePtr ParseNode(const std::string& data)
     {
         return ConvertToNode(TYsonString(data));
     }
 
-    static void ExpectEqual(INodePtr node, const TString& ysonString)
+    static void ExpectEqual(INodePtr node, const std::string& ysonString)
     {
         EXPECT_EQ(ConvertToYsonString(node, EYsonFormat::Text).AsStringBuf(), ysonString);
     }

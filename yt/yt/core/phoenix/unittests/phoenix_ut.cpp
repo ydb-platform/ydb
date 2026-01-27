@@ -614,7 +614,7 @@ TEST(TPhoenixTest, CompatFieldSerializer)
         Save<int>(context, 123);
     });
 
-    auto loadSchema = ConvertTo<TUniverseSchemaPtr>(TYsonString(TString(R"""(
+    auto loadSchema = ConvertTo<TUniverseSchemaPtr>(TYsonString(TStringBuf(R"""(
         {
             types = [
                 {
@@ -686,7 +686,7 @@ TEST(TPhoenixTest, AddFieldAfterDeletedField)
         Save<int>(context, 123);
     });
 
-    auto removeBSchema = ConvertTo<TUniverseSchemaPtr>(TYsonString(TString(R"""(
+    auto removeBSchema = ConvertTo<TUniverseSchemaPtr>(TYsonString(TStringBuf(R"""(
         {
             types = [
                 {
@@ -747,7 +747,7 @@ TEST(TPhoenixTest, YsonDumpableDerived)
 
 namespace NCompatPointLoadSchema {
 
-const auto Schema = ConvertTo<TUniverseSchemaPtr>(TYsonString(TString(R"""(
+const auto Schema = ConvertTo<TUniverseSchemaPtr>(TYsonString(TStringBuf(R"""(
     {
         types = [
             {
@@ -833,7 +833,7 @@ TEST(TPhoenixTest, NativeLoadDerivedStructNoSchema)
         Save<int>(context, 456);
     });
 
-    auto loadSchema = ConvertTo<TUniverseSchemaPtr>(TYsonString(TString(R"""(
+    auto loadSchema = ConvertTo<TUniverseSchemaPtr>(TYsonString(TStringBuf(R"""(
         {
             types = [];
         }

@@ -44,9 +44,13 @@ static int Base64EscapeInternal(unsigned char *dest,
                                 Base64EscapeChars &base64_enc_map,
                                 unsigned char padding_char)
 {
-  std::size_t i, n, nopadding;
-  int C1, C2, C3;
-  unsigned char *p;
+  std::size_t i{};
+  std::size_t n{};
+  std::size_t nopadding{};
+  int C1{};
+  int C2{};
+  int C3{};
+  unsigned char *p{nullptr};
 
   if (slen == 0)
   {
@@ -161,10 +165,13 @@ static int Base64UnescapeInternal(unsigned char *dst,
                                   Base64UnescapeChars &base64_dec_map,
                                   unsigned char padding_char)
 {
-  std::size_t i, n;
-  std::size_t j, x;
-  std::size_t valid_slen, line_len;
-  unsigned char *p;
+  std::size_t i{};
+  std::size_t n{};
+  std::size_t j{};
+  std::size_t x{};
+  std::size_t valid_slen{};
+  std::size_t line_len{};
+  unsigned char *p{nullptr};
 
   /* First pass: check for validity and get output length */
   for (i = n = j = valid_slen = line_len = 0; i < slen; i++)

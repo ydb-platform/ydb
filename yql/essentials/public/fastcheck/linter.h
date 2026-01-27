@@ -50,6 +50,7 @@ struct TChecksRequest {
     bool IsAnsiLexer = false;
     EMode Mode = EMode::Default;
     const TUdfFilter* UdfFilter = nullptr;
+    bool WithTypeCheck = false;
     TMaybe<TVector<TCheckFilter>> Filters;
 };
 

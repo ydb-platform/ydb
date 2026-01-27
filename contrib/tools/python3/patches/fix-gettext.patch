@@ -11,8 +11,8 @@ revision: 5552086
     
     REVIEW: 930161
 
---- contrib/tools/python3/Lib/gettext.py	(c7e3ec07a5a75dde4da2c0954eae709906150ee7)
-+++ contrib/tools/python3/Lib/gettext.py	(6df9d7282117d14575cba802978b635e0661ce0d)
+--- a/Lib/gettext.py	(c7e3ec07a5a75dde4da2c0954eae709906150ee7)
++++ b/Lib/gettext.py	(6df9d7282117d14575cba802978b635e0661ce0d)
 @@ -49,7 +49,12 @@ import locale
  import os
  import re

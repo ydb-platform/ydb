@@ -8,6 +8,7 @@
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 #include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
+#include <ydb/library/yql/dq/runtime/dq_channel_service.h>
 
 namespace NKikimr::NKqp {
     struct TKqpFederatedQuerySetup;
@@ -124,7 +125,6 @@ public:
         std::shared_ptr<TNodeState> State = nullptr;
         TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
         TString Database;
-        bool EnableWatermarks;
 
         NScheduler::NHdrf::NDynamic::TQueryPtr Query;
     };
@@ -138,6 +138,7 @@ public:
 std::shared_ptr<IKqpNodeComputeActorFactory> MakeKqpCaFactory(const NKikimrConfig::TTableServiceConfig::TResourceManager& config,
         std::shared_ptr<NRm::IKqpResourceManager> resourceManager,
         NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
-        const std::optional<TKqpFederatedQuerySetup> federatedQuerySetup);
+        const std::optional<TKqpFederatedQuerySetup> federatedQuerySetup,
+        std::shared_ptr<NYql::NDq::IDqChannelService> channelService);
 
 } // namespace NKikimr::NKqp::NComputeActor

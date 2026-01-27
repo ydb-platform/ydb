@@ -918,7 +918,10 @@ void Serialize(const TReadRange& readLimit, NYson::IYsonConsumer* consumer)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-REGISTER_INTERMEDIATE_PROTO_INTEROP_BYTES_FIELD_REPRESENTATION(NProto::TReadLimit, /*key*/ 4, TUnversionedOwningRow)
+REGISTER_INTERMEDIATE_PROTO_INTEROP_BYTES_FIELD_REPRESENTATION(
+    NProto::TReadLimit,
+    /*key*/ 4,
+    TUnversionedOwningRow);
 
 ////////////////////////////////////////////////////////////////////////////////
 

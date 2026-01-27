@@ -216,7 +216,7 @@ TVector<ISubOperation::TPtr> CreateBackupIncrementalBackupCollection(TOperationI
             createOp->CopyFrom(replicationInfo->Description);
             createOp->ClearState();
 
-            result.push_back(CreateNewReplication(NextPartId(opId, result), scheme));
+            result.push_back(CreateNewReplication(NextPartId(opId, result), scheme, true));
 
             continue;
         }

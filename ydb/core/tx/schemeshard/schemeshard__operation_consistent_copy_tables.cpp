@@ -164,7 +164,7 @@ bool CreateConsistentCopyTables(
             createOp->CopyFrom(replicationInfo->Description);
             createOp->ClearState(); 
 
-            result.push_back(CreateNewReplication(NextPartId(nextId, result), scheme));
+            result.push_back(CreateNewReplication(NextPartId(nextId, result), scheme, descr.GetIsBackup()));
             continue;
         }
 

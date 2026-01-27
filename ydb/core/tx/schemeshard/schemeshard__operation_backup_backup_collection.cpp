@@ -84,7 +84,7 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
         desc.SetDstPath(JoinPath({tx.GetWorkingDir(), tx.GetBackupBackupCollection().GetName(), tx.GetBackupBackupCollection().GetTargetDir(), relativeItemPath}));
         
         desc.SetOmitIndexes(omitIndexes);
-        
+        desc.SetIsBackup(true);
         desc.SetOmitFollowers(true);
         desc.SetAllowUnderSameOperation(true);
 

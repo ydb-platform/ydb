@@ -2,6 +2,7 @@
 /* postgres can not */
 $vt1 = ParseType('Variant<Int32,Int32?>');
 $vt2 = ParseType('Variant<Int64,Null>');
+
 $svt1 = ParseType('Variant<a:Int32,b:Int32?>');
 $svt2 = ParseType('Variant<a:Int64,b:Null>');
 

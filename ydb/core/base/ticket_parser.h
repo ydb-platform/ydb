@@ -197,6 +197,11 @@ namespace NKikimr {
                 , IsSuccess(false)
             {}
 
+            void SetError(const TError& error) {
+                Error = error;
+                IsSuccess = false;
+            }
+
             bool HasError() const {
                 return !IsSuccess;
             }

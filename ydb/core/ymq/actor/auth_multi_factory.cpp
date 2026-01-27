@@ -411,11 +411,15 @@ void TBaseCloudAuthRequestProxy::Authorize() {
     } else {
         TEvTicketParser::TEvAuthorizeTicketResult result("fake_token", nullptr);
         if (AccessKeySignature_ && AccessKeySignature_->AccessKeyId.empty()) {
-            result.Error.Message = "mocked_auth_error: empty access key";
-            result.Error.Retryable = false;
+            result.SetError({
+                .Message = "mocked_auth_error: empty access key",
+                .Retryable = false
+            });
         } else if (AccessKeySignature_ && AccessKeySignature_->AccessKeyId == "TEST_ID_FOR_RETRYIES") {
-            result.Error.Message = "mocked_auth_error: correct process retries";
-            result.Error.Retryable = true;
+            result.SetError({
+                .Message = "mocked_auth_error: correct process retries",
+                .Retryable = true
+            });
         } else {
             result.Token = MakeIntrusive<NACLib::TUserToken>("fake_user_sid@as", TVector<TString>());
         }

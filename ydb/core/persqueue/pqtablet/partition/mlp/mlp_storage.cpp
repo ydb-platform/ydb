@@ -550,12 +550,12 @@ const std::unordered_set<ui32>& TStorage::GetLockedMessageGroupsId() const {
 }
 
 bool TStorage::HasRetentionExpiredMessages() const {
-    auto retentionDeadlineDelta = GetRetentionDeadlineDelta();
-    if (!retentionDeadlineDelta.has_value()) {
+    if (Messages.empty()) {
         return false;
     }
 
-    if (Messages.empty()) {
+    auto retentionDeadlineDelta = GetRetentionDeadlineDelta();
+    if (!retentionDeadlineDelta.has_value()) {
         return false;
     }
 

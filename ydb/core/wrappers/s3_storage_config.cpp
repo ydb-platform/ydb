@@ -1,6 +1,9 @@
 #include "s3_storage.h"
 #include "s3_storage_config.h"
 
+#include <ydb/core/protos/config.pb.h>
+#include <ydb/core/protos/s3_settings.pb.h>
+
 #include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/include/aws/core/utils/threading/Executor.h>
 
 #ifndef KIKIMR_DISABLE_S3_OPS
@@ -44,6 +47,37 @@ public:
 
 namespace {
 
+Aws::Client::ClientConfiguration MakeDefaultConfig(const NKikimrConfig::TAwsClientConfig& defaultAwsClientSettings) {
+    Aws::Client::ClientConfiguration config;
+
+    config.verifySSL = defaultAwsClientSettings.GetVerifySSL();
+    config.caPath = defaultAwsClientSettings.GetCaPath();
+
+    if (defaultAwsClientSettings.HasCaFile()) {
+        config.caFile = defaultAwsClientSettings.GetCaFile();
+    }
+
+    config.connectTimeoutMs = defaultAwsClientSettings.GetConnectionTimeoutMs();
+
+    if (defaultAwsClientSettings.HasRequestTimeoutMs()) {
+        config.requestTimeoutMs = defaultAwsClientSettings.GetRequestTimeoutMs();
+    }
+
+    if (defaultAwsClientSettings.HasHttpRequestTimeoutMs()) {
+        config.httpRequestTimeoutMs = defaultAwsClientSettings.GetHttpRequestTimeoutMs();
+    }
+
+    config.enableTcpKeepAlive = defaultAwsClientSettings.GetEnableTcpKeepAlive();
+
+    if (defaultAwsClientSettings.HasTcpKeepAliveIntervalMs()) {
+        config.tcpKeepAliveIntervalMs = defaultAwsClientSettings.GetTcpKeepAliveIntervalMs();
+    }
+
+    config.maxConnections = defaultAwsClientSettings.GetMaxConnectionsCount();
+
+    return config;
+}
+
 namespace NPrivate {
 
 template <class TMessage, class TEnum>
@@ -74,18 +108,11 @@ Aws::Http::Scheme ParseScheme(Ydb::Export::ExportToS3Settings::Scheme scheme, bo
 }
 
 template <typename TSettings>
-Aws::Client::ClientConfiguration ConfigFromSettings(const TSettings& settings) {
-    Aws::Client::ClientConfiguration config;
-
-    // get default value from proto
-    auto threadsCount = NKikimrSchemeOp::TS3Settings::default_instance().GetExecutorThreadsCount();
+Aws::Client::ClientConfiguration ConfigFromSettings(const NKikimrConfig::TAwsClientConfig& defaultAwsClientSettings, const TSettings& settings) {
+    Aws::Client::ClientConfiguration config = MakeDefaultConfig(defaultAwsClientSettings);
 
     config.endpointOverride = settings.endpoint();
-    config.executor = TS3ThreadsPoolByEndpoint::GetPool(settings.endpoint(), threadsCount);
-    config.enableTcpKeepAlive = true;
-    config.verifySSL = false;
-    config.connectTimeoutMs = 10000;
-    config.maxConnections = threadsCount;
+    config.executor = TS3ThreadsPoolByEndpoint::GetPool(settings.endpoint(), defaultAwsClientSettings.GetExecutorThreadsCount());
 
     config.scheme = NPrivate::ParseScheme(settings.scheme());
 
@@ -101,8 +128,8 @@ Aws::Auth::AWSCredentials CredentialsFromSettings(const TSettings& settings) {
 
 } // anonymous
 
-Aws::Client::ClientConfiguration TS3ExternalStorageConfig::ConfigFromSettings(const NKikimrSchemeOp::TS3Settings& settings) {
-    Aws::Client::ClientConfiguration config;
+Aws::Client::ClientConfiguration TS3ExternalStorageConfig::ConfigFromSettings(const NKikimrConfig::TAwsClientConfig& defaultAwsClientSettings, const NKikimrSchemeOp::TS3Settings& settings) {
+    Aws::Client::ClientConfiguration config = MakeDefaultConfig(defaultAwsClientSettings);
 
     config.endpointOverride = settings.GetEndpoint();
     if (settings.HasConnectionTimeoutMs()) {
@@ -117,10 +144,11 @@ Aws::Client::ClientConfiguration TS3ExternalStorageConfig::ConfigFromSettings(co
         config.httpRequestTimeoutMs = settings.GetHttpRequestTimeoutMs();
     }
 
-    config.executor = TS3ThreadsPoolByEndpoint::GetPool(settings.GetEndpoint(), settings.GetExecutorThreadsCount());
-    config.enableTcpKeepAlive = true;
-    config.maxConnections = settings.HasMaxConnectionsCount() ? settings.GetMaxConnectionsCount() : settings.GetExecutorThreadsCount();
-    config.caPath = "/etc/ssl/certs";
+    config.executor = TS3ThreadsPoolByEndpoint::GetPool(settings.GetEndpoint(), settings.HasExecutorThreadsCount() ? settings.GetExecutorThreadsCount() : defaultAwsClientSettings.GetExecutorThreadsCount());
+
+    if (settings.HasMaxConnectionsCount()) {
+        config.maxConnections = settings.GetMaxConnectionsCount();
+    }
 
     config.scheme = NPrivate::ParseScheme(settings.GetScheme());
 
@@ -142,16 +170,16 @@ Aws::Client::ClientConfiguration TS3ExternalStorageConfig::ConfigFromSettings(co
     return config;
 }
 
-Aws::Client::ClientConfiguration TS3ExternalStorageConfig::ConfigFromSettings(const Ydb::Import::ImportFromS3Settings& settings) {
-    return NPrivate::ConfigFromSettings(settings);
+Aws::Client::ClientConfiguration TS3ExternalStorageConfig::ConfigFromSettings(const NKikimrConfig::TAwsClientConfig& defaultAwsClientSettings, const Ydb::Import::ImportFromS3Settings& settings) {
+    return NPrivate::ConfigFromSettings(defaultAwsClientSettings, settings);
 }
 
-Aws::Client::ClientConfiguration TS3ExternalStorageConfig::ConfigFromSettings(const Ydb::Import::ListObjectsInS3ExportSettings& settings) {
-    return NPrivate::ConfigFromSettings(settings);
+Aws::Client::ClientConfiguration TS3ExternalStorageConfig::ConfigFromSettings(const NKikimrConfig::TAwsClientConfig& defaultAwsClientSettings, const Ydb::Import::ListObjectsInS3ExportSettings& settings) {
+    return NPrivate::ConfigFromSettings(defaultAwsClientSettings, settings);
 }
 
-Aws::Client::ClientConfiguration TS3ExternalStorageConfig::ConfigFromSettings(const Ydb::Export::ExportToS3Settings& settings) {
-    return NPrivate::ConfigFromSettings(settings);
+Aws::Client::ClientConfiguration TS3ExternalStorageConfig::ConfigFromSettings(const NKikimrConfig::TAwsClientConfig& defaultAwsClientSettings, const Ydb::Export::ExportToS3Settings& settings) {
+    return NPrivate::ConfigFromSettings(defaultAwsClientSettings, settings);
 }
 
 Aws::Auth::AWSCredentials TS3ExternalStorageConfig::CredentialsFromSettings(const NKikimrSchemeOp::TS3Settings& settings) {
@@ -192,23 +220,23 @@ TS3ExternalStorageConfig::TS3ExternalStorageConfig(
 {
 }
 
-TS3ExternalStorageConfig::TS3ExternalStorageConfig(const Ydb::Import::ImportFromS3Settings& settings)
-    : TS3ExternalStorageConfig(CredentialsFromSettings(settings), ConfigFromSettings(settings), settings.bucket(), !settings.disable_virtual_addressing())
+TS3ExternalStorageConfig::TS3ExternalStorageConfig(const NKikimrConfig::TAwsClientConfig& defaultAwsClientSettings, const Ydb::Import::ImportFromS3Settings& settings)
+    : TS3ExternalStorageConfig(CredentialsFromSettings(settings), ConfigFromSettings(defaultAwsClientSettings, settings), settings.bucket(), !settings.disable_virtual_addressing())
 {
 }
 
-TS3ExternalStorageConfig::TS3ExternalStorageConfig(const Ydb::Import::ListObjectsInS3ExportSettings& settings)
-    : TS3ExternalStorageConfig(CredentialsFromSettings(settings), ConfigFromSettings(settings), settings.bucket(), !settings.disable_virtual_addressing())
+TS3ExternalStorageConfig::TS3ExternalStorageConfig(const NKikimrConfig::TAwsClientConfig& defaultAwsClientSettings, const Ydb::Import::ListObjectsInS3ExportSettings& settings)
+    : TS3ExternalStorageConfig(CredentialsFromSettings(settings), ConfigFromSettings(defaultAwsClientSettings, settings), settings.bucket(), !settings.disable_virtual_addressing())
 {
 }
 
-TS3ExternalStorageConfig::TS3ExternalStorageConfig(const Ydb::Export::ExportToS3Settings& settings)
-    : TS3ExternalStorageConfig(CredentialsFromSettings(settings), ConfigFromSettings(settings), settings.bucket(), !settings.disable_virtual_addressing())
+TS3ExternalStorageConfig::TS3ExternalStorageConfig(const NKikimrConfig::TAwsClientConfig& defaultAwsClientSettings, const Ydb::Export::ExportToS3Settings& settings)
+    : TS3ExternalStorageConfig(CredentialsFromSettings(settings), ConfigFromSettings(defaultAwsClientSettings, settings), settings.bucket(), !settings.disable_virtual_addressing())
 {
 }
 
-TS3ExternalStorageConfig::TS3ExternalStorageConfig(const NKikimrSchemeOp::TS3Settings& settings)
-    : TS3ExternalStorageConfig(CredentialsFromSettings(settings), ConfigFromSettings(settings), settings.GetBucket(), settings.GetUseVirtualAddressing(), ConvertStorageClass(settings.GetStorageClass()))
+TS3ExternalStorageConfig::TS3ExternalStorageConfig(const NKikimrConfig::TAwsClientConfig& defaultAwsClientSettings, const NKikimrSchemeOp::TS3Settings& settings)
+    : TS3ExternalStorageConfig(CredentialsFromSettings(settings), ConfigFromSettings(defaultAwsClientSettings, settings), settings.GetBucket(), settings.GetUseVirtualAddressing(), ConvertStorageClass(settings.GetStorageClass()))
 {
 }
 

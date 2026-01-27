@@ -8,6 +8,7 @@
 #include <ydb/core/backup/common/encryption.h>
 #include <ydb/core/backup/common/metadata.h>
 #include <ydb/core/backup/regexp/regexp.h>
+#include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/wrappers/retry_policy.h>
 #include <ydb/core/wrappers/s3_storage_config.h>
@@ -49,7 +50,9 @@ struct TGetterSettings {
     static TGetterSettings FromImportInfo(const TImportInfo::TPtr& importInfo, TMaybe<NBackup::TEncryptionIV> iv) {
         TGetterSettings settings;
         Y_ABORT_UNLESS(importInfo->Kind == TImportInfo::EKind::S3);
-        settings.ExternalStorageConfig.reset(new NWrappers::NExternalStorage::TS3ExternalStorageConfig(importInfo->GetS3Settings()));
+        settings.ExternalStorageConfig.reset(new NWrappers::NExternalStorage::TS3ExternalStorageConfig(
+            AppData()->AwsClientConfig,
+            importInfo->GetS3Settings()));
         settings.Retries = importInfo->GetS3Settings().number_of_retries();
         if (importInfo->GetS3Settings().has_encryption_settings()) {
             settings.Key = NBackup::TEncryptionKey(importInfo->GetS3Settings().encryption_settings().symmetric_key().key());
@@ -60,7 +63,9 @@ struct TGetterSettings {
 
     static TGetterSettings FromRequest(const TEvImport::TEvListObjectsInS3ExportRequest::TPtr& ev) {
         TGetterSettings settings;
-        settings.ExternalStorageConfig.reset(new NWrappers::NExternalStorage::TS3ExternalStorageConfig(ev->Get()->Record.settings()));
+        settings.ExternalStorageConfig.reset(new NWrappers::NExternalStorage::TS3ExternalStorageConfig(
+            AppData()->AwsClientConfig,
+            ev->Get()->Record.settings()));
         settings.Retries = ev->Get()->Record.settings().number_of_retries();
         if (ev->Get()->Record.settings().has_encryption_settings()) {
             settings.Key = NBackup::TEncryptionKey(ev->Get()->Record.settings().encryption_settings().symmetric_key().key());

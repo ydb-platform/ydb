@@ -738,8 +738,7 @@ void TKafkaProduceActor::RecreatePartitionWriterAndRetry(ui64 cookie, const TAct
             }
         }
         for (const ui64& c : cookiesToDelete) {
-            auto cookieIt = Cookies.find(c);
-            Cookies.erase(cookieIt);
+            Cookies.erase(c);
         }
     }
 }

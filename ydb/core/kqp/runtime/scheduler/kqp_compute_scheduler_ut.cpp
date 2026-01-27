@@ -106,7 +106,7 @@ namespace {
             .DelayParams = kDefaultDelayParams,
             .UpdateFairSharePeriod = kDefaultUpdateFairSharePeriod
         };
-        TComputeScheduler scheduler(options.Counters, options.DelayParams);
+        TComputeScheduler scheduler(options.Counters, options.DelayParams, AllowOverlimit);
         scheduler.SetTotalCpuLimit(kCpuLimit);
 
         const TString databaseId = "db1";
@@ -122,7 +122,7 @@ namespace {
             tasks.emplace_back(CreateDemandTasks(query, kQueryDemand));
         }
 
-        scheduler.UpdateFairShare(AllowOverlimit);
+        scheduler.UpdateFairShare();
 
         for (const auto& query : queries) {
             auto querySnapshot = query->GetSnapshot();

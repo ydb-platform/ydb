@@ -10,7 +10,7 @@ namespace NKikimr::NKqp::NScheduler {
 
 class TComputeScheduler : public std::enable_shared_from_this<TComputeScheduler> {
 public:
-    TComputeScheduler(TIntrusivePtr<TKqpCounters> counters, const TDelayParams& delayParams);
+    TComputeScheduler(TIntrusivePtr<TKqpCounters> counters, const TDelayParams& delayParams, bool allowFairShareOverlimit = true);
 
     void SetTotalCpuLimit(ui64 cpu);
     ui64 GetTotalCpuLimit() const;
@@ -22,9 +22,10 @@ public:
     NHdrf::NDynamic::TQueryPtr AddOrUpdateQuery(const NHdrf::TDatabaseId& databaseId, const NHdrf::TPoolId& poolId, const NHdrf::TQueryId& queryId, const NHdrf::TStaticAttributes& attrs);
     bool RemoveQuery(const NHdrf::TQueryId& queryId);
 
-    // We want to allow FairShare to be over Limit.
-    // If you need to change this behaviour change variable's default value
-    void UpdateFairShare(bool allowFairShareOverlimit = true);
+    void UpdateFairShare();
+    bool IsAllowedFairShareOverlimit() const {
+        return AllowFairShareOverlimit;
+    }
 
 private:
     TRWMutex Mutex;
@@ -32,6 +33,7 @@ private:
     THashMap<NHdrf::TQueryId, NHdrf::NDynamic::TQueryPtr> Queries; // protected by Mutex
 
     const TDelayParams DelayParams;
+    const bool AllowFairShareOverlimit;
     TIntrusivePtr<TKqpCounters> KqpCounters;
 
     struct {

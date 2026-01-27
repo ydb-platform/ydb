@@ -13,6 +13,19 @@ message TEvLookup {
     optional fixed64 ClusterStateGuid = 4;
 };
 
+/**
+ * A special wrapper around the follower ID value, which preserves
+ * the optional status for the value.
+ *
+ * @warning In some cases State Storage does not know the follower ID
+ *          for some followers. This can happen, if the given follower
+ *          is running on an older node, which does not support reporting
+ *          follower IDs.
+ */
+message TFollowerIdValue {
+    optional uint32 FollowerId = 1;
+}
+
 message TEvInfo {
     optional NKikimrProto.EReplyStatus Status = 1;
     optional fixed64 TabletID = 2;
@@ -30,6 +43,25 @@ message TEvInfo {
     optional fixed32 ConfigContentHash = 14;
     optional uint64 ClusterStateGeneration = 15;
     optional fixed64 ClusterStateGuid = 16;
+
+    /**
+     * The list of follower IDs for all followers present in the 'Follower'
+     * and 'FollowerTablet' fields.
+     *
+     * @note If this field is populated, the number of entries here is guaranted
+     *       to match the number of items in the 'Follower' and 'FollowerTablet' fields.
+     *       The order of entries is also guaranted to be the same.
+     *
+     *       Followers, which are included in the 'FollowerCandidates' field
+     *       are never present in this list.
+     *
+     * @warning Even though it is guaranteed that there is an entry in this list
+     *          for each follower from the 'Follower' and 'FollowerTablet' fields,
+     *          there is no guarantee that the entry will be populated with
+     *          some real follower ID. This may happen in some cases
+     *          (see TFollowerIdValue for more details).
+     */
+    repeated TFollowerIdValue OptionalFollowerId = 17;
 };
 
 message TEvReplicaShutdown {
@@ -75,6 +107,7 @@ message TEvRegisterFollower {
     optional bool Candidate = 4;
     optional uint64 ClusterStateGeneration = 5;
     optional fixed64 ClusterStateGuid = 6;
+    optional uint32 FollowerId = 7;
 }
 
 message TEvUnregisterFollower {
@@ -82,6 +115,7 @@ message TEvUnregisterFollower {
     optional NActorsProto.TActorId Follower = 2;
     optional uint64 ClusterStateGeneration = 3;
     optional fixed64 ClusterStateGuid = 4;
+    optional uint32 FollowerId = 5;
 }
 
 message TEvLock {

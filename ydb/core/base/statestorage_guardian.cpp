@@ -75,12 +75,14 @@ struct TGuardedInfo : public TAtomicRefCount<TGuardedInfo> {
 
 struct TFollowerInfo : public TAtomicRefCount<TGuardedInfo> {
     const ui64 TabletID;
+    const ui32 FollowerId;
     const TActorId Follower;
     const TActorId Tablet;
     const bool IsCandidate;
 
-    TFollowerInfo(ui64 tabletId, TActorId follower, TActorId tablet, bool isCandidate)
+    TFollowerInfo(ui64 tabletId, ui32 followerId, TActorId follower, TActorId tablet, bool isCandidate)
         : TabletID(tabletId)
+        , FollowerId(followerId)
         , Follower(follower)
         , Tablet(tablet)
         , IsCandidate(isCandidate)
@@ -181,7 +183,7 @@ protected:
         ui64 msgGuid = msg->Record.GetClusterStateGuid();
         if (ClusterStateGeneration < msgGeneration || (ClusterStateGeneration == msgGeneration && ClusterStateGuid != msgGuid)) {
             BLOG_D("Guardian TEvNodeWardenNotifyConfigMismatch: ClusterStateGeneration=" << ClusterStateGeneration << " msgGeneration=" << msgGeneration <<" ClusterStateGuid=" << ClusterStateGuid << " msgGuid=" << msgGuid);
-            this->Send(MakeBlobStorageNodeWardenID(selfId.NodeId()), 
+            this->Send(MakeBlobStorageNodeWardenID(selfId.NodeId()),
                 new NStorage::TEvNodeWardenNotifyConfigMismatch(sender.NodeId(), msgGeneration, msgGuid));
         }
     }
@@ -233,9 +235,9 @@ class TReplicaGuardian : public TBaseGuardian<TReplicaGuardian> {
             // Ignore outdated results
             return;
         }
-        
+
         CheckConfigVersion(SelfId(), ev->Sender, ev->Get());
-        
+
         const auto status = record.GetStatus();
         Signature = record.GetSignature();
         DowntimeFrom = TInstant::Max();
@@ -346,14 +348,14 @@ class TFollowerGuardian : public TBaseGuardian<TFollowerGuardian> {
         ui64 cookie = ++LastCookie;
         Send(
             Replica,
-            new TEvStateStorage::TEvReplicaRegFollower(Info->TabletID, Info->Follower, Info->Tablet, Info->IsCandidate, ClusterStateGeneration, ClusterStateGuid),
+            new TEvStateStorage::TEvReplicaRegFollower(Info->TabletID, Info->FollowerId, Info->Follower, Info->Tablet, Info->IsCandidate, ClusterStateGeneration, ClusterStateGuid),
             IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession,
             cookie);
         Become(&TThis::StateCalm);
     }
 
     void PassAway() override {
-        Send(Replica, new TEvStateStorage::TEvReplicaUnregFollower(Info->TabletID, Info->Follower, ClusterStateGeneration, ClusterStateGuid));
+        Send(Replica, new TEvStateStorage::TEvReplicaUnregFollower(Info->TabletID, Info->FollowerId, Info->Follower, ClusterStateGeneration, ClusterStateGuid));
         TBaseGuardian::PassAway();
     }
 
@@ -604,6 +606,7 @@ class TTabletGuardian : public TActorBootstrapped<TTabletGuardian> {
         if (hasChanges) {
             FollowerInfo = new TFollowerInfo(
                 tabletId,
+                FollowerInfo->FollowerId,
                 msg->FollowerActor,
                 msg->TabletActor,
                 msg->IsCandidate
@@ -676,8 +679,8 @@ IActor* CreateStateStorageTabletGuardian(ui64 tabletId, const TActorId &leader, 
     return new NStateStorageGuardian::TTabletGuardian(info.Get());
 }
 
-IActor* CreateStateStorageFollowerGuardian(ui64 tabletId, const TActorId &follower) {
-    TIntrusivePtr<NStateStorageGuardian::TFollowerInfo> followerInfo = new NStateStorageGuardian::TFollowerInfo(tabletId, follower, TActorId(), true);
+IActor* CreateStateStorageFollowerGuardian(ui64 tabletId, ui32 followerId, const TActorId &follower) {
+    TIntrusivePtr<NStateStorageGuardian::TFollowerInfo> followerInfo = new NStateStorageGuardian::TFollowerInfo(tabletId, followerId, follower, TActorId(), true);
     return new NStateStorageGuardian::TTabletGuardian(followerInfo.Get());
 }
 

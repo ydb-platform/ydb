@@ -37,6 +37,19 @@ struct TEvTabletResolver {
             EResolvePrio LocalDcPrio;
             EResolvePrio FollowerPrio;
 
+            /**
+             * The specific follower ID to connect to.
+             *
+             * @note Specifying followerId == 0 here implies connecting to the leader.
+             *       In this case SetAllowFollower(false) should also be called.
+             *       To connect to a specific follower, call the SetForceFollower(true)
+             *       and set this field to the follower ID to connect to.
+             *
+             * @warning If this field is specified and the follower with the given follower ID
+             *          does not exit, the request will fail with an error.
+             */
+            TMaybe<ui32> FollowerId;
+
             TResolveFlags()
                 : LocalNodePrio(EResolvePrio::ResPrioAllow)
                 , LocalDcPrio(EResolvePrio::ResPrioPrefer)
@@ -79,6 +92,28 @@ struct TEvTabletResolver {
                     FollowerPrio = EResolvePrio::ResPrioForce;
             }
 
+            /**
+             * Configure the Tablet Resolver to select a specific follower ID.
+             *
+             * @note If the followerId argument is set to 0, the Tablet Resolver
+             *       will be configured to select only the tablet leader,
+             *       which is equivalent to calling SetAllowFollower(false).
+             *
+             * @note If the followerId argument is set to a non-zero value,
+             *       the Tablet Resolver will be configured to select only
+             *       the specific tablet follower, which implies calling
+             *       SetForceFollower(true).
+             *
+             * @warning If a specific follower ID is requested and the given follower ID
+             *          does not exit, the request will fail with an error.
+             *
+             * @param followerId The follower ID to select
+             */
+            void SetFollowerId(ui32 followerId) {
+                FollowerId = followerId;
+                SetAllowFollower(followerId != 0);
+            }
+
             void SetPreferLocal(bool flag) {
                 if (flag && LocalNodePrio < EResolvePrio::ResPrioPrefer)
                     LocalNodePrio = EResolvePrio::ResPrioPrefer;
@@ -93,7 +128,8 @@ struct TEvTabletResolver {
                 TStringStream str;
                 str << (ui32) LocalNodePrio << ':'
                     << (ui32) LocalDcPrio << ':'
-                    << (ui32) FollowerPrio;
+                    << (ui32) FollowerPrio << ':'
+                    << FollowerId;
                 return str.Str();
             }
         };

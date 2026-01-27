@@ -98,7 +98,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
 
         TMonotonic LastResolved;
 
-        TVector<std::pair<TActorId, TActorId>> KnownFollowers;
+        TVector<TEvStateStorage::TEvInfo::TFollowerInfo> KnownFollowers;
 
         ui64 CacheEpoch = 0;
         ui64 LastCheckEpoch = 0;
@@ -399,10 +399,10 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
             return;
         }
 
-        for (auto& pr : entry.KnownFollowers) {
-            if (pr.first == actorId) {
-                if (!pr.second) {
-                    pr.second = userActorId;
+        for (auto& followerInfo : entry.KnownFollowers) {
+            if (followerInfo.Follower == actorId) {
+                if (!followerInfo.FollowerTablet) {
+                    followerInfo.FollowerTablet = userActorId;
                 }
                 break;
             }
@@ -440,10 +440,10 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
             return;
         }
 
-        for (auto it = entry.KnownFollowers.begin(), end = entry.KnownFollowers.end(); it != end; ++it) {
-            if (it->first == actorId || it->second == actorId) {
+        for (auto it = entry.KnownFollowers.begin(); it != entry.KnownFollowers.end(); ++it) {
+            if (it->Follower == actorId || it->FollowerTablet == actorId) {
                 BLOG_TRACE("OnTabletProblem tabletId: " << tabletId
-                    << " removing follower " << it->first);
+                    << " removing follower " << it->Follower);
                 entry.KnownFollowers.erase(it);
                 if (entry.State == TEntry::StNormal) {
                     entry.State = TEntry::StResolve;
@@ -620,7 +620,15 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
             }
         };
 
+        // Specifying an explicitly follower ID overrides other options,
+        // but followerId == 0 goes through the same leader selection code below
         bool countLeader = (entry.KnownLeader && !entry.CurrentLeaderProblem);
+
+        if (info.ResFlags.FollowerId.Defined() && (*info.ResFlags.FollowerId.Get() != 0)) {
+            // An explicit followerId > 0 is set, so do not even try the leader
+            countLeader = false;
+        }
+
         if (countLeader) {
             bool isLocal = (entry.KnownLeader.NodeId() == selfNode);
             bool isLocalDc = selfDc && leaderDc == selfDc;
@@ -633,17 +641,62 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
                 ++disallowed;
         }
 
-        if (info.ResFlags.AllowFollower()) {
-            for (const auto& x : entry.KnownFollowers) {
-                bool isLocal = (x.first.NodeId() == selfNode);
-                bool isLocalDc = selfDc && FindNodeDc(x.first.NodeId()) == selfDc;
-                info.Count(isLocal, isLocalDc);
+        // Go through the automatic follower selection only if the caller
+        // did not request an explicit follower ID
+        if (!info.ResFlags.FollowerId.Defined()) {
+            if (info.ResFlags.AllowFollower()) {
+                for (const auto& followerInfo : entry.KnownFollowers) {
+                    bool isLocal = (followerInfo.Follower.NodeId() == selfNode);
+                    bool isLocalDc = selfDc && FindNodeDc(followerInfo.Follower.NodeId()) == selfDc;
+                    info.Count(isLocal, isLocalDc);
 
-                ui32 prio = info.ResFlags.GetTabletPriority(isLocal, isLocalDc, true);
-                if (prio)
-                    addCandidate(prio, TCandidate{ x.first, x.second, isLocal, isLocalDc, false });
-                else
-                    ++disallowed;
+                    ui32 prio = info.ResFlags.GetTabletPriority(isLocal, isLocalDc, true);
+                    if (prio)
+                        addCandidate(
+                            prio,
+                            TCandidate{
+                                followerInfo.Follower,
+                                followerInfo.FollowerTablet,
+                                isLocal,
+                                isLocalDc,
+                                false
+                            }
+                        );
+                    else
+                        ++disallowed;
+                }
+            }
+        } else if (*info.ResFlags.FollowerId.Get() != 0) {
+            // The caller requested an explicit follower ID, but it is not a leader
+            //
+            // NOTE: Requesting the leader through an explicit followerId == 0
+            //       implicitly disables the automatic follower selection,
+            //       even if the leader was not found.
+            disallowed += entry.KnownFollowers.size();
+
+            for (const auto& followerInfo : entry.KnownFollowers) {
+                if (followerInfo.FollowerId.Defined()
+                    && (*followerInfo.FollowerId.Get() == *info.ResFlags.FollowerId.Get())) {
+                    // This is the follower ID requested, select it while ignoring all other candidates
+                    bool isLocal = (followerInfo.Follower.NodeId() == selfNode);
+                    bool isLocalDc = selfDc && FindNodeDc(followerInfo.Follower.NodeId()) == selfDc;
+
+                    info.Count(isLocal, isLocalDc);
+                    --disallowed; // All entries counted above, exclude this one!
+
+                    winners.clear();
+                    winners.push_back(
+                        TCandidate{
+                            .KnownLeader = followerInfo.Follower,
+                            .KnownLeaderTablet = followerInfo.FollowerTablet,
+                            .IsLocal = isLocal,
+                            .IsLocalDc = isLocalDc,
+                            .IsLeader = false,
+                        }
+                    );
+
+                    break;
+                }
             }
         }
 
@@ -844,10 +897,10 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
             auto itDst = entry.KnownFollowers.begin();
             auto itSrc = entry.KnownFollowers.begin();
             while (itSrc != entry.KnownFollowers.end()) {
-                auto* pMaxProblemEpoch = NodeProblems.FindPtr(itSrc->first.NodeId());
+                auto* pMaxProblemEpoch = NodeProblems.FindPtr(itSrc->Follower.NodeId());
                 if (pMaxProblemEpoch && entry.CacheEpoch <= *pMaxProblemEpoch) {
                     BLOG_DEBUG("Delayed invalidation of tabletId: " << tabletId
-                        << " follower: " << itSrc->first << " by nodeId");
+                        << " follower: " << itSrc->Follower << " by nodeId");
                     ++itSrc;
                     continue;
                 }

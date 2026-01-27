@@ -791,7 +791,7 @@
         "type": "prometheus",
         "uid": "${ds}"
       },
-      "description": "The maximum (across all partitions) difference between the current time and the recording time of the last recorded message",
+      "description": "The maximum (across all partitions) difference between the current time and the write time of the most recently written message",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -889,7 +889,7 @@
         "type": "prometheus",
         "uid": "${ds}"
       },
-      "description": "The maximum difference (across all partitions) of the last offset in the partition and the last subtracted offset",
+      "description": "The maximum difference (across all partitions) of the last offset in the partition and the last commited offset",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1085,7 +1085,7 @@
         "type": "prometheus",
         "uid": "${ds}"
       },
-      "description": "The maximum (across all partitions) difference between the last partition offset and the recorded partition offset",
+      "description": "The maximum (across all partitions) number of messages after last committed offset",
       "fieldConfig": {
         "defaults": {
           "color": {

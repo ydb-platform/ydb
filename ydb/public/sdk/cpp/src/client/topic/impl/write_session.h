@@ -375,7 +375,6 @@ private:
     std::mutex GlobalLock;
     std::atomic_bool Closed = false;
     TInstant CloseDeadline = TInstant::Max();
-    std::optional<TSessionClosedEvent> CloseEvent;
 
     std::unique_ptr<IPartitionChooser> PartitionChooser;
 

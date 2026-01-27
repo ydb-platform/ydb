@@ -563,8 +563,7 @@ private:
         return Descriptions.Upsert(path, pathId, TDescription(this, path, pathId, std::move(pathDescription)));
     }
 
-    void UpsertDescriptionWithRelinkSubscribers(const TString& path, const TPathId& pathId, TOpaquePathDescription&& pathDescription)
-    {
+    void UpsertDescriptionWithRelinkSubscribers(const TString& path, const TPathId& pathId, TOpaquePathDescription&& pathDescription) {
         const TDescription* oldDesc = Descriptions.FindPtr(path);
         auto subscribers = oldDesc->GetSubscribers(SUBSCRIPTION_BY_PATH);
 

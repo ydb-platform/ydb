@@ -115,6 +115,7 @@ SRCS(
     msgbus_health.proto
     msgbus_kv.proto
     msgbus_pq.proto
+    nbs2_load.proto
     netclassifier.proto
     node_broker.proto
     node_limits.proto

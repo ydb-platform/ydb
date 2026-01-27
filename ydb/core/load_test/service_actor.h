@@ -62,6 +62,10 @@ namespace NKikimr {
     NActors::IActor *CreateInterconnectLoadTest(const NKikimr::TEvLoadTestRequest::TInterconnectLoad& cmd,
             const NActors::TActorId& parent, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, ui64 tag);
 
+    NActors::IActor *CreateNBS2LoadActor(const NKikimr::TEvLoadTestRequest::TNBS2Load& cmd,
+            const NActors::TActorId& parent, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
+            ui64 index, ui64 tag);
+
 #define VERIFY_PARAM2(FIELD, NAME) \
     do { \
         if (!(FIELD).Has##NAME()) { \

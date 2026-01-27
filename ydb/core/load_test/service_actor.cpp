@@ -82,6 +82,8 @@ const google::protobuf::Message* GetCommandFromRequest(const TEvLoadTestRequest&
         return &request.GetYCSBLoad();
     case TEvLoadTestRequest::CommandCase::kInterconnectLoad:
         return &request.GetInterconnectLoad();
+    case TEvLoadTestRequest::CommandCase::kNBS2Load:
+        return &request.GetNBS2Load();
     default:
         return nullptr;
     }
@@ -111,6 +113,8 @@ ui64 ExtractTagFromCommand(const TEvLoadTestRequest& request) {
         return request.GetYCSBLoad().GetTag();
     case TEvLoadTestRequest::CommandCase::kInterconnectLoad:
         return request.GetInterconnectLoad().GetTag();
+    case TEvLoadTestRequest::CommandCase::kNBS2Load:
+        return request.GetNBS2Load().GetTag();
     default:
         return Max<ui64>();
     }
@@ -612,6 +616,18 @@ public:
                 LOG_D("Create new interconnect load actor with tag# " << tag);
                 LoadActors.emplace(tag, TlsActivationContext->Register(CreateInterconnectLoadTest(cmd, SelfId(),
                                 GetServiceCounters(Counters, "load_actor"), tag)));
+                break;
+            }
+
+            case NKikimr::TEvLoadTestRequest::CommandCase::kNBS2Load: {
+                const auto& cmd = record.GetNBS2Load();
+                if (LoadActors.count(tag) != 0) {
+                    ythrow TLoadActorException() << Sprintf("duplicate load actor with Tag# %" PRIu64, tag);
+                }
+
+                LOG_D("Create new NBS2 load actor with tag# " << tag);
+                LoadActors.emplace(tag, TlsActivationContext->Register(CreateNBS2LoadActor(
+                            cmd, SelfId(), GetServiceCounters(Counters, "load_actor"), 0, tag)));
                 break;
             }
 

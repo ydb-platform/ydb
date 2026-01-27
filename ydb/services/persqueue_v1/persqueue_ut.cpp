@@ -202,6 +202,9 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
     }
 
 
+    // NOTE: This test uses deprecated MigrationStreamingRead API because it tests
+    // GetReadSessionsInfo which is a PersQueue-specific feature with no Topic API equivalent.
+    // Consider deprecating/removing this test when removing MigrationStreamingRead API.
     Y_UNIT_TEST(SetupLockSession) {
         TPersQueueV1TestServer server;
         SET_LOCALS;
@@ -2934,10 +2937,10 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         TPQDataWriter writer("source1", server);
         Cerr << "===Writer started\n";
         std::shared_ptr<grpc::Channel> Channel_;
-        std::unique_ptr<Ydb::PersQueue::V1::PersQueueService::Stub> StubP_;
+        std::unique_ptr<Ydb::Topic::V1::TopicService::Stub> StubP_;
 
         Channel_ = grpc::CreateChannel("localhost:" + ToString(server.GrpcPort), grpc::InsecureChannelCredentials());
-        StubP_ = Ydb::PersQueue::V1::PersQueueService::NewStub(Channel_);
+        StubP_ = Ydb::Topic::V1::TopicService::NewStub(Channel_);
 
 
         //Write some data
@@ -2948,20 +2951,17 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         Cerr << "===Writer - writes done\n";
 
         grpc::ClientContext rcontext;
-        auto readStream = StubP_->MigrationStreamingRead(&rcontext);
+        auto readStream = StubP_->StreamRead(&rcontext);
         UNIT_ASSERT(readStream);
 
         // init read session
         {
-            MigrationStreamingReadClientMessage  req;
-            MigrationStreamingReadServerMessage resp;
+            Ydb::Topic::StreamReadMessage::FromClient req;
+            Ydb::Topic::StreamReadMessage::FromServer resp;
 
-            req.mutable_init_request()->add_topics_read_settings()->set_topic(SHORT_TOPIC_NAME);
+            req.mutable_init_request()->add_topics_read_settings()->set_path(SHORT_TOPIC_NAME);
 
             req.mutable_init_request()->set_consumer("user");
-            req.mutable_init_request()->set_read_only_original(true);
-
-            req.mutable_init_request()->mutable_read_params()->set_max_read_messages_count(1000);
 
             if (!readStream->Write(req)) {
                 ythrow yexception() << "write fail";
@@ -2970,13 +2970,13 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
 
             UNIT_ASSERT(readStream->Read(&resp));
             Cerr << "Read server response: " << resp.ShortDebugString() << Endl;
-            UNIT_ASSERT(resp.response_case() == MigrationStreamingReadServerMessage::kInitResponse);
+            UNIT_ASSERT(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kInitResponse);
 
             //send some reads
             Sleep(TDuration::Seconds(5));
             for (ui32 i = 0; i < 10; ++i) {
                 req.Clear();
-                req.mutable_read();
+                req.mutable_read_request()->set_bytes_size(256000);
 
                 if (!readStream->Write(req)) {
                     ythrow yexception() << "write fail";
@@ -2985,22 +2985,19 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         }
 
         //check read results
-        MigrationStreamingReadServerMessage resp;
         for (ui32 i = 0; i < 2;) {
-            MigrationStreamingReadServerMessage resp;
+            Ydb::Topic::StreamReadMessage::FromServer resp;
             UNIT_ASSERT(readStream->Read(&resp));
-            if (resp.response_case() == MigrationStreamingReadServerMessage::kAssigned) {
-                auto assignId = resp.assigned().assign_id();
-                MigrationStreamingReadClientMessage req;
-                req.mutable_start_read()->mutable_topic()->set_path(SHORT_TOPIC_NAME);
-                req.mutable_start_read()->set_cluster("dc1");
-                req.mutable_start_read()->set_assign_id(assignId);
+            if (resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kStartPartitionSessionRequest) {
+                auto assignId = resp.start_partition_session_request().partition_session().partition_session_id();
+                Ydb::Topic::StreamReadMessage::FromClient req;
+                req.mutable_start_partition_session_response()->set_partition_session_id(assignId);
                 UNIT_ASSERT(readStream->Write(req));
                 continue;
             }
 
-            UNIT_ASSERT_C(resp.response_case() == MigrationStreamingReadServerMessage::kDataBatch, resp);
-            i += resp.data_batch().partition_data_size();
+            UNIT_ASSERT_C(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kReadResponse, resp);
+            i += resp.read_response().partition_data_size();
         }
     }
 

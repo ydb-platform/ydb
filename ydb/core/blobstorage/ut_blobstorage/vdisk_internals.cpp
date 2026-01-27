@@ -188,10 +188,8 @@ struct TTestCtx : public TTestCtxBase {
         return static_cast<TSubsystem>(Random(1, 3));
     }
 
-    static constexpr ui32 MaxOwners = 10;
     std::unordered_map<TSubsystem, std::unordered_set<ui32>> Chunks;
     TActorId ChunkKeeperId;
-    ui32 ChosenNodeId;
 
     ui32 TotalAllocated = 0;
 

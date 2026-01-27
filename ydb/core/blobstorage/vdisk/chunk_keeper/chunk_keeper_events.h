@@ -17,13 +17,14 @@
 ///
 /// 3. TEvChunkKeeperDiscover(subsystem)
 /// - Returns list of committed chunks owned by given subsystem
-/// - May return chunks allocated TEvChunkKeeperAllocate before subsytem
+/// - May return chunks allocated TEvChunkKeeperAllocate before subsystem
 ///   receives TEvChunkKeeperAllocateResult
 /// - May not return chunks deallocated by TEvChunkKeeperFree before subsystem
 ///   receives TEvChunkKeeperFreeResult
 /// - Always succeeds
 ///
-/// Simultaneous Allocations and/or Deallocations are not allowed
+/// Simultaneous allocation and/or deallocation requests in the same subsystem
+/// are not allowed
 //////////////////////////////////////////////////////////////////////////////////////////
 
 namespace NKikimr {

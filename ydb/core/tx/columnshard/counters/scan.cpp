@@ -171,7 +171,7 @@ TString TConcreteScanCounters::StepsCountersDebugString() const {
         summ.RawBytesRead += v.RawBytesRead;
         bld << "[StepName: " << k << "; " << v.DebugString() << "],\n";
     }
-    if (!bld.empty()) {
+    if (!counters.empty()) {
         bld.pop_back();   // \n
         bld.pop_back();   // ,
     }

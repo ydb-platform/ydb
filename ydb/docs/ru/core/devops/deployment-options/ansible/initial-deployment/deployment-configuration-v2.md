@@ -94,7 +94,7 @@ ssh_args = -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o Contro
       - {"instance": "a", offset: 1}
     ydb_cores_static:  2
   
-  #Настройки авторизации
+  # Настройки авторизации
     ydb_enforce_user_token_requirement: true
 
   # Узлы
@@ -269,7 +269,6 @@ all:
 Создайте  файл `inventory/ydb_inventory.yaml` с содержимым:
 
 ```yaml
-  ---
 plugin: ydb_platform.ydb.ydb_inventory
 ydb_config: "files/config.yaml"
   ```

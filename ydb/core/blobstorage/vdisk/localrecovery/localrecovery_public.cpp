@@ -35,7 +35,7 @@ namespace NKikimr {
                                 NKikimrVDiskData::TScrubEntrypoint scrubEntrypoint,
                                 ui64 scrubEntrypointLsn,
                                 NKikimrVDiskData::TMetadataEntryPoint metadataEntryPoint,
-                                NKikimrVDiskData::TChunkKeeperEntryPoint chunkKeeperEntryPoint)
+                                std::unique_ptr<TChunkKeeperData>&& chunkKeeperData)
         : Status(status)
         , RecovInfo(recovInfo)
         , RepairedSyncLog(std::move(repairedSyncLog))
@@ -51,7 +51,7 @@ namespace NKikimr {
         , ScrubEntrypoint(std::move(scrubEntrypoint))
         , ScrubEntrypointLsn(scrubEntrypointLsn)
         , MetadataEntryPoint(std::move(metadataEntryPoint))
-        , ChunkKeeperEntryPoint(chunkKeeperEntryPoint)
+        , ChunkKeeperData(std::move(chunkKeeperData))
     {}
 
     TEvBlobStorage::TEvLocalRecoveryDone::~TEvLocalRecoveryDone() {
@@ -90,7 +90,6 @@ namespace NKikimr {
         ui64 ScrubEntrypointLsn = 0;
         bool IsTinyDisk = false;
         NKikimrVDiskData::TMetadataEntryPoint MetadataEntryPoint;
-        NKikimrVDiskData::TChunkKeeperEntryPoint ChunkKeeperEntryPoint;
 
         TActiveActors ActiveActors;
 
@@ -126,7 +125,7 @@ namespace NKikimr {
                                                 {},
                                                 0,
                                                 {},
-                                                {}));
+                                                nullptr));
             Die(ctx);
         }
 
@@ -161,7 +160,7 @@ namespace NKikimr {
                                                               std::move(ScrubEntrypoint),
                                                               ScrubEntrypointLsn,
                                                               std::move(MetadataEntryPoint),
-                                                              std::move(ChunkKeeperEntryPoint)));
+                                                              std::move(LocRecCtx->ChunkKeeperData)));
             Die(ctx);
         }
 
@@ -570,10 +569,14 @@ namespace NKikimr {
 
         bool InitChunkKeeper(const TStartingPoints& startingPoints, const TActorContext& ctx) {
             if (const auto it = startingPoints.find(TLogSignature::SignatureChunkKeeper); it != startingPoints.end()) {
-                if (!ChunkKeeperEntryPoint.ParseFromArray(it->second.Data.GetData(), it->second.Data.GetSize())) {
+                NKikimrVDiskData::TChunkKeeperEntryPoint entryPoint;
+                if (!entryPoint.ParseFromArray(it->second.Data.GetData(), it->second.Data.GetSize())) {
                     SignalErrorAndDie(ctx, NKikimrProto::ERROR, "Entry point for chunk keeper is incorrect");
                     return false;
                 }
+                LocRecCtx->ChunkKeeperData = std::make_unique<TChunkKeeperData>(entryPoint);
+            } else {
+                LocRecCtx->ChunkKeeperData = std::make_unique<TChunkKeeperData>(NKikimrVDiskData::TChunkKeeperEntryPoint{});
             }
             return true;
         }

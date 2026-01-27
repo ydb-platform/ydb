@@ -844,9 +844,11 @@ struct TEvBlobStorage {
         EvChunkKeeperAllocateResult,
         EvChunkKeeperDiscover,                                  /// 268 636 732
         EvChunkKeeperDiscoverResult,
-        EvChunkKeeperFree,
+        EvChunkKeeperFree,                                       /// 268 636 732
         EvChunkKeeperFreeResult,
         EvChunkKeeperGetOwnedChunks,
+        EvGetSkeletonState,         // for test purposes
+        EvGetSkeletonStateResult,   // for test purposes
 
         // internal proxy interface
         EvUnusedLocal1 = EvPut + 10 * 512, // Not used.    /// 268 637 184

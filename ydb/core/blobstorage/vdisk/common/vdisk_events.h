@@ -3251,4 +3251,24 @@ namespace NKikimr {
         TEvMinHugeBlobSizeUpdate(ui32 minHugeBlobInBytes) : MinHugeBlobInBytes(minHugeBlobInBytes) {
         };
     };
+
+    ////////////////////////////////////////////////////////////////////////////
+    // TEvGetSkeletonState
+    ////////////////////////////////////////////////////////////////////////////
+    // Accesses internal state of the Skeleton actor, for test purposes
+    ////////////////////////////////////////////////////////////////////////////
+
+    class TEvGetSkeletonState : public TEventLocal<TEvGetSkeletonState,
+            TEvBlobStorage::EvGetSkeletonState> {};
+
+    ////////////////////////////////////////////////////////////////////////////
+    // TEvGetSkeletonStateResult
+    ////////////////////////////////////////////////////////////////////////////
+    class TEvGetSkeletonStateResult : public TEventLocal<TEvGetSkeletonStateResult,
+            TEvBlobStorage::EvGetSkeletonStateResult> {
+    public:
+        TActorId ChunkKeeperActorId;
+
+        TEvGetSkeletonStateResult(TActorId chunkKeeperActorId);
+    };
 } // NKikimr

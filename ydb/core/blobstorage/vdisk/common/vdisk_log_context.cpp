@@ -2,7 +2,7 @@
 
 namespace NKikimr {
 
-TLogContext::TLogContext(TIntrusivePtr<TVDiskContext> vctx,
+TVDiskLogContext::TVDiskLogContext(TIntrusivePtr<TVDiskContext> vctx,
         TIntrusivePtr<TLsnMngr> lsnMngr,
         TPDiskCtxPtr pdiskCtx,
         const TActorId& loggerId,

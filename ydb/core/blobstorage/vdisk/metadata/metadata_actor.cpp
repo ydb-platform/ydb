@@ -6,7 +6,7 @@
 namespace NKikimr {
 
 class TMetadataActor : public TActor<TMetadataActor> {
-    TIntrusivePtr<TLogContext> LogCtx;
+    TIntrusivePtr<TVDiskLogContext> LogCtx;
     NKikimrVDiskData::TMetadataEntryPoint MetadataEntryPoint;
 
     ui64 CurEntryPointLsn = 0;
@@ -90,18 +90,18 @@ public:
         return NKikimrServices::TActivity::BS_VDISK_METADATA_ACTOR;
     }
 
-    TMetadataActor(TIntrusivePtr<TLogContext> logCtx,
+    TMetadataActor(const TIntrusivePtr<TVDiskLogContext>& logCtx,
             NKikimrVDiskData::TMetadataEntryPoint metadataEntryPoint)
         : TActor(&TThis::StateFunc)
-        , LogCtx(std::move(logCtx))
-        , MetadataEntryPoint(std::move(metadataEntryPoint))
+        , LogCtx(logCtx)
+        , MetadataEntryPoint(metadataEntryPoint)
     {}
 };
 
-IActor *CreateMetadataActor(TIntrusivePtr<TLogContext>& logCtx,
+IActor *CreateMetadataActor(const TIntrusivePtr<TVDiskLogContext>& logCtx,
         NKikimrVDiskData::TMetadataEntryPoint metadataEntryPoint)
 {
-    return new TMetadataActor(logCtx, std::move(metadataEntryPoint));
+    return new TMetadataActor(logCtx, metadataEntryPoint);
 }
 
 } // NKikimr

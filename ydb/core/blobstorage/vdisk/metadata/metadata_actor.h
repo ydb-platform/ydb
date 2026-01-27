@@ -8,7 +8,7 @@ namespace NKikimr {
 struct TEvCommitVDiskMetadata : public TEventLocal<TEvCommitVDiskMetadata, TEvBlobStorage::EvCommitVDiskMetadata> {};
 struct TEvCommitVDiskMetadataDone : public TEventLocal<TEvCommitVDiskMetadataDone, TEvBlobStorage::EvCommitVDiskMetadataDone> {};
 
-IActor *CreateMetadataActor(TIntrusivePtr<TLogContext>& logCtx,
+IActor *CreateMetadataActor(const TIntrusivePtr<TVDiskLogContext>& logCtx,
         NKikimrVDiskData::TMetadataEntryPoint metadataEntryPoint);
 
 } // NKikimr

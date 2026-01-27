@@ -287,7 +287,11 @@ message TMetadataEntryPoint {
 
 message TChunkKeeperEntryPoint {
     enum ESubsystem {
-        PhantomFlagStorage = 1;
+        // reserved for test purposes
+        Test1 = 1;
+        Test2 = 2;
+
+        PhantomFlagStorage = 10;
     };
 
     message TChunk {

@@ -877,10 +877,8 @@ public:
                             ReplyResolveError(*resolveEv->Get());
                             co_return;
                         }
-                        tasksGraph.GetMeta().ShardIdToNodeId = std::move(resolveEv->Get()->ShardNodes);
-                        for (const auto& [shardId, nodeId] : tasksGraph.GetMeta().ShardIdToNodeId) {
-                            tasksGraph.GetMeta().ShardsOnNode[nodeId].push_back(shardId);
-                        }
+
+                        tasksGraph.ResolveShards(std::move(resolveEv->Get()->ShardsToNodes));
                     }
                 }
 

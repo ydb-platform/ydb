@@ -200,8 +200,10 @@ struct TGraphMeta {
     bool StreamResult = false;
     Ydb::Table::QueryStatsCollection::Mode StatsMode = Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE;
 
+    // TODO: stuff about shards on nodes should be private or protected.
+    using TShardToNodeMap = TMap<ui64 /* shardId */, ui64 /* nodeId */>;
     bool ShardsResolved = false;
-    TMap<ui64 /* shardId */, ui64 /* nodeId */> ShardIdToNodeId;
+    TShardToNodeMap ShardIdToNodeId;
     TMap<ui64 /* nodeId */, TVector<ui64 /* shardId */>> ShardsOnNode;
 
     ui32 DqChannelVersion = 1u;
@@ -351,6 +353,8 @@ public:
         const TKqpRequestCounters::TPtr& counters,
         TActorId bufferActorId
     );
+
+    void ResolveShards(TGraphMeta::TShardToNodeMap&& shardsToNodes);
 
     size_t BuildAllTasks(std::optional<TLlvmSettings> llvmSettings, const TVector<NKikimrKqp::TKqpNodeResources>& resourcesSnapshot,
         TQueryExecutionStats* stats, THashSet<ui64>* ShardsWithEffects

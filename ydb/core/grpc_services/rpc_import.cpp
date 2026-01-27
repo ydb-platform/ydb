@@ -170,9 +170,8 @@ public:
                 }
 
                 if (!item.source_path().empty()) {
-                    if (!ValidateFsPath(item.source_path(),
-                                       TStringBuilder() << "source_path for item to \"" << item.destination_path() << "\"",
-                                       error)) {
+                    const auto pathDesc = TStringBuilder() << "source_path for item to \"" << item.destination_path() << "\"";
+                    if (!ValidateFsPath(item.source_path(), pathDesc, error)) {
                         return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, error);
                     }
                 }

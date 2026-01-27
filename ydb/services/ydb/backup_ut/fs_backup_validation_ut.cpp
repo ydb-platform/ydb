@@ -464,6 +464,7 @@ Y_UNIT_TEST_SUITE_F(FsBackupPathSecurityValidationTest, TFsBackupParamsValidatio
             res.Status().GetIssues().ToString());
     }
 
+#ifdef _unix_
     Y_UNIT_TEST(MixedStylePathSeparators) {
         NExport::TExportToFsSettings settings = MakeExportSettings(TString(TempDir().Path()));
         settings.AppendItem({"/Root/FsExportParamsValidation/dir1/Table1", "backup/data\\file"});
@@ -477,6 +478,21 @@ Y_UNIT_TEST_SUITE_F(FsBackupPathSecurityValidationTest, TFsBackupParamsValidatio
             "separator",
             res.Status().GetIssues().ToString());
     }
+
+    Y_UNIT_TEST(MixedPathSeparatorsInImport) {
+        NImport::TImportFromFsSettings settings = MakeImportSettings(TString(TempDir().Path()));
+        settings.AppendItem({"backup/2024\\01/data", "/Root/Restored/table1"});
+
+        auto res = YdbImportClient().ImportFromFs(settings).GetValueSync();
+        UNIT_ASSERT_C(!res.Status().IsSuccess(),
+            "Status: " << res.Status().GetStatus() << Endl << res.Status().GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(res.Status().GetStatus(), NYdb::EStatus::BAD_REQUEST,
+            res.Status().GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS_C(res.Status().GetIssues().ToString(),
+            "separator",
+            res.Status().GetIssues().ToString());
+    }
+#endif
 
     Y_UNIT_TEST(MultiplePathTraversalAttempts) {
         NExport::TExportToFsSettings settings = MakeExportSettings(TString(TempDir().Path()));
@@ -550,19 +566,5 @@ Y_UNIT_TEST_SUITE_F(FsBackupPathSecurityValidationTest, TFsBackupParamsValidatio
             res.Status().GetIssues().ToString().contains("path traversal") ||
             res.Status().GetIssues().ToString().contains("separator"),
             "Should reject malicious path: " << res.Status().GetIssues().ToString());
-    }
-
-    Y_UNIT_TEST(MixedPathSeparatorsInImport) {
-        NImport::TImportFromFsSettings settings = MakeImportSettings(TString(TempDir().Path()));
-        settings.AppendItem({"backup/2024\\01/data", "/Root/Restored/table1"});
-
-        auto res = YdbImportClient().ImportFromFs(settings).GetValueSync();
-        UNIT_ASSERT_C(!res.Status().IsSuccess(),
-            "Status: " << res.Status().GetStatus() << Endl << res.Status().GetIssues().ToString());
-        UNIT_ASSERT_VALUES_EQUAL_C(res.Status().GetStatus(), NYdb::EStatus::BAD_REQUEST,
-            res.Status().GetIssues().ToString());
-        UNIT_ASSERT_STRING_CONTAINS_C(res.Status().GetIssues().ToString(),
-            "separator",
-            res.Status().GetIssues().ToString());
     }
 }

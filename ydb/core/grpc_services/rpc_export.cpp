@@ -594,9 +594,8 @@ public:
 
             for (const auto& item : TTraits::GetItems(settings)) {
                 if (!TTraits::GetDestination(item).empty()) {
-                    if (!ValidateFsPath(TTraits::GetDestination(item),
-                                       TStringBuilder() << "destination_path for item \"" << item.source_path() << "\"",
-                                       error)) {
+                    const auto pathDesc = TStringBuilder() << "destination_path for item \"" << item.source_path() << "\"";
+                    if (!ValidateFsPath(TTraits::GetDestination(item), pathDesc, error)) {
                         return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, error);
                     }
                 }

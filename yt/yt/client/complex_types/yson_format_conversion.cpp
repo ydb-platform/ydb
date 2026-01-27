@@ -25,6 +25,9 @@
 #include <variant>
 
 namespace NYT::NComplexTypes {
+namespace {
+
+////////////////////////////////////////////////////////////////////////////////
 
 using namespace NTableClient;
 using namespace NYson;
@@ -33,14 +36,12 @@ using namespace NDecimal;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-namespace {
-
-////////////////////////////////////////////////////////////////////////////////
-
 DEFINE_ENUM(EConverterType,
     (ToServer)
     (ToClient)
 );
+
+////////////////////////////////////////////////////////////////////////////////
 
 struct TYsonConverterCreatorConfig
 {
@@ -515,9 +516,8 @@ struct TStructFieldInfo
 
 
 template <bool IsElementNullable>
-class TOptionalHandler
+struct TOptionalHandler
 {
-public:
     void OnEmptyOptional(IYsonConsumer* consumer) const
     {
         consumer->OnEntity();
@@ -536,9 +536,8 @@ public:
     }
 };
 
-class TListHandler
+struct TListHandler
 {
-public:
     Y_FORCE_INLINE void OnListBegin(IYsonConsumer* consumer) const
     {
         consumer->OnBeginList();
@@ -559,9 +558,8 @@ public:
     }
 };
 
-class TTupleApplier
+struct TTupleApplier
 {
-public:
     Y_FORCE_INLINE void OnTupleBegin(IYsonConsumer* consumer) const
     {
         consumer->OnBeginList();
@@ -581,9 +579,8 @@ public:
 };
 
 template <bool SkipNullValues>
-class TStructApplier
+struct TStructApplier
 {
-public:
     Y_FORCE_INLINE void OnStructBegin(IYsonConsumer* consumer) const
     {
         consumer->OnBeginMap();
@@ -610,9 +607,8 @@ public:
     }
 };
 
-class TVariantTupleApplier
+struct TVariantTupleApplier
 {
-public:
     Y_FORCE_INLINE void OnVariantAlternative(
         const std::pair<int, TYsonCursorConverter>& alternative,
         TYsonPullParserCursor* cursor,
@@ -630,9 +626,8 @@ public:
     }
 };
 
-class TVariantStructApplier
+struct TVariantStructApplier
 {
-public:
     Y_FORCE_INLINE void OnVariantAlternative(
         const std::pair<TString, TYsonCursorConverter>& alternative,
         TYsonPullParserCursor* cursor,
@@ -651,9 +646,8 @@ public:
 };
 
 template <EDictMode mode>
-class TDictApplier
+struct TDictApplier
 {
-public:
     Y_FORCE_INLINE void OnDictBegin(IYsonConsumer* consumer) const
     {
         if constexpr (mode == EDictMode::Positional) {
@@ -722,8 +716,7 @@ public:
     TNamedToPositionalDictConverter(TComplexTypeFieldDescriptor descriptor, TYsonCursorConverter valueConverter)
         : Descriptor_(std::move(descriptor))
         , ValueConverter_(std::move(valueConverter))
-    {
-    }
+    { }
 
     void operator()(TYsonPullParserCursor* cursor, IYsonConsumer* consumer)
     {
@@ -865,7 +858,8 @@ private:
         int Position = 0;
     };
 
-    struct TPositionTableEntry {
+    struct TPositionTableEntry
+    {
         size_t Offset = 0;
         size_t Size = 0;
         ui16 Generation = 0;
@@ -1230,8 +1224,6 @@ std::variant<TYsonServerToClientConverter, TYsonClientToServerConverter> CreateY
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace
-
-////////////////////////////////////////////////////////////////////////////////
 
 TYsonServerToClientConverter CreateYsonServerToClientConverter(
     const TComplexTypeFieldDescriptor& descriptor,

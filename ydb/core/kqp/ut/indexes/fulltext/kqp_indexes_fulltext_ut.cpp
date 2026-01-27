@@ -4659,6 +4659,65 @@ Y_UNIT_TEST(AddFullTextFlatIndexWithTruncate) {
     }
 }
 
+Y_UNIT_TEST(AddFullTextFlatIndexWithTruncate2) {
+    NKikimrConfig::TFeatureFlags featureFlags;
+    featureFlags.SetEnableFulltextIndex(true);
+    featureFlags.SetEnableTruncateTable(true);
+
+    auto kikimr = Kikimr(std::move(featureFlags));
+
+    kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPUTE, NActors::NLog::PRI_TRACE);
+    kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_TRACE);
+    kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_ACTOR, NActors::NLog::PRI_TRACE);
+    kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_TRACE);
+    kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+    kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+
+    auto db = kikimr.GetQueryClient();
+
+    CreateTexts(db);
+    AddIndex(db);
+
+    auto retryableSelect = [&](){
+        constexpr size_t retryNumber = 3;
+
+        for (size_t retry = 0; retry < retryNumber; ++retry) {
+            TString query = R"sql(
+                SELECT `Key`, `Text`
+                FROM `/Root/Texts` VIEW `fulltext_idx`
+                WHERE FulltextContains(`Text`, "404 not found")
+                ORDER BY `Key`;
+            )sql";
+            auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+
+            if (retry + 1 == retryNumber) {
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            }
+
+            if (result.GetStatus() == EStatus::SUCCESS) {
+                CompareYson(R"([])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+                break;
+            } else if (result.GetStatus() == EStatus::UNAVAILABLE) {
+                Sleep(TDuration::Seconds(1));
+                continue;
+            }
+        }
+    };
+
+    auto verifyIndexWorksCorrectly = [&](){
+        retryableSelect();
+        UpsertSomeTexts(db);
+        retryableSelect();
+    };
+
+    verifyIndexWorksCorrectly();
+
+    for (size_t tryIndex = 0; tryIndex < 5; ++tryIndex) {
+        TruncateTable(db);
+        verifyIndexWorksCorrectly();
+    }
+}
+
 Y_UNIT_TEST(AddFullTextRelevanceIndexWithTruncate) {
     NKikimrConfig::TFeatureFlags featureFlags;
     featureFlags.SetEnableFulltextIndex(true);

@@ -179,6 +179,15 @@ public:
         record.SetMaxRows(MaxRowsDefaultQuota);
         record.SetMaxBytes(MaxBytesDefaultQuota);
         record.SetResultFormat(UseArrowFormat ? NKikimrDataEvents::FORMAT_ARROW : NKikimrDataEvents::FORMAT_CELLVEC);
+
+        CA_LOG_E(TStringBuilder() << "Send EvRead (stream lookup) to shardId=" << shardId
+            << ", readId = " << record.GetReadId()
+            << ", snapshot=(txid=" << record.GetSnapshot().GetTxId() << ", step=" << record.GetSnapshot().GetStep() << ")"
+            << ", lockTxId=" << record.GetLockTxId()
+            << ", lockNodeId=" << record.GetLockNodeId()
+            << ", tableId=" << record.GetTableId().GetOwnerId() << ":" << record.GetTableId().GetTableId()
+            << ", schemaVersion =" << record.GetTableId().GetSchemaVersion());
+
         return request;
     }
 

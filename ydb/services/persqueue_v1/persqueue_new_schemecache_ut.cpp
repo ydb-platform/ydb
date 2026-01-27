@@ -23,6 +23,7 @@
 #include <grpcpp/client_context.h>
 
 #include <ydb/public/api/grpc/draft/ydb_persqueue_v1.grpc.pb.h>
+#include <ydb/public/api/grpc/ydb_topic_v1.grpc.pb.h>
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/data_plane_helpers.h>
 
 namespace {
@@ -835,28 +836,27 @@ namespace NKikimr::NPersQueueTests {
             }
 
 
-            auto stub = Ydb::PersQueue::V1::PersQueueService::NewStub(server.InsecureChannel);
+            auto stub = Ydb::Topic::V1::TopicService::NewStub(server.InsecureChannel);
             grpc::ClientContext grpcContext;
             grpcContext.AddMetadata("x-ydb-database", "/Root/acc");
-            auto readStream = stub->MigrationStreamingRead(&grpcContext);
+            auto readStream = stub->StreamRead(&grpcContext);
             UNIT_ASSERT(readStream);
 
             // init read session
             {
-                MigrationStreamingReadClientMessage req;
-                MigrationStreamingReadServerMessage resp;
+                Ydb::Topic::StreamReadMessage::FromClient req;
+                Ydb::Topic::StreamReadMessage::FromServer resp;
 
-                req.mutable_init_request()->add_topics_read_settings()->set_topic("topic1");
+                req.mutable_init_request()->add_topics_read_settings()->set_path("topic1");
 
                 req.mutable_init_request()->set_consumer("user");
-                req.mutable_init_request()->mutable_read_params()->set_max_read_messages_count(3);
 
                 if (!readStream->Write(req)) {
                     ythrow yexception() << "write fail";
                 }
 
                 UNIT_ASSERT(readStream->Read(&resp));
-                UNIT_ASSERT(resp.response_case() == MigrationStreamingReadServerMessage::kInitResponse);
+                UNIT_ASSERT(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kInitResponse);
             }
         }
 

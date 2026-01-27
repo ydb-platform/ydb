@@ -6,6 +6,7 @@
 #include <util/digest/murmur.h>
 
 #include <library/cpp/threading/future/wait/wait.h>
+#include <library/cpp/threading/future/subscription/wait_any.h>
 
 namespace NYdb::inline Dev::NTopic {
 
@@ -296,7 +297,7 @@ NThreading::TFuture<void> TKeyedWriteSession::TSplittedPartitionWorker::Wait() {
         return DescribeTopicFuture.IgnoreResult();
     }
 
-    return NThreading::WaitAny(GetMaxSeqNoFutures);
+    return NThreading::NWait::WaitAny(GetMaxSeqNoFutures);
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -549,7 +550,7 @@ std::vector<TWriteSessionEvent::TEvent> TKeyedWriteSession::TEventsWorker::GetEv
 }
 
 NThreading::TFuture<void> TKeyedWriteSession::TEventsWorker::Wait() {
-    return NThreading::WaitAny(Futures);
+    return NThreading::NWait::WaitAny(Futures);
 }
 
 NThreading::TFuture<void> TKeyedWriteSession::TEventsWorker::WaitEvent() {
@@ -1048,11 +1049,45 @@ void TKeyedWriteSession::Wait() {
 
     if (!Closed.load()) {
         futures.push_back(CloseFuture);
-        NThreading::WaitAny(futures).Wait();
+        NThreading::NWait::WaitAny(futures).Wait();
         return;
     }
 
-    NThreading::WaitAny(futures).Wait(GetCloseTimeout());
+    NThreading::NWait::WaitAny(futures).Wait(GetCloseTimeout());
+}
+
+void TKeyedWriteSession::RunUserHandlers() {
+    if (!Settings.EventHandlers_.AcksHandler_ && !Settings.EventHandlers_.ReadyToAcceptHandler_ && !Settings.EventHandlers_.SessionClosedHandler_) {
+        return;
+    }
+
+    while (true) {
+        auto event = GetEvent(false);
+        if (!event) {
+            break;
+        }
+
+        if (auto* acksEvent = std::get_if<TWriteSessionEvent::TAcksEvent>(&*event)) {
+            if (Settings.EventHandlers_.AcksHandler_) {
+                Settings.EventHandlers_.AcksHandler_(*acksEvent);
+            }
+            continue;
+        }
+
+        if (auto* readyToAcceptEvent = std::get_if<TWriteSessionEvent::TReadyToAcceptEvent>(&*event)) {
+            if (Settings.EventHandlers_.ReadyToAcceptHandler_) {
+                Settings.EventHandlers_.ReadyToAcceptHandler_(*readyToAcceptEvent);
+            }
+            continue;
+        }
+
+        if (auto* sessionClosedEvent = std::get_if<TSessionClosedEvent>(&*event)) {
+            if (Settings.EventHandlers_.SessionClosedHandler_) {
+                Settings.EventHandlers_.SessionClosedHandler_(*sessionClosedEvent);
+            }
+            continue;
+        }
+    }
 }
 
 void TKeyedWriteSession::RunMainWorker() {
@@ -1061,6 +1096,7 @@ void TKeyedWriteSession::RunMainWorker() {
         {
             std::unique_lock lock(GlobalLock);
             EventsWorker->DoWork();
+            RunUserHandlers();
             if (Closed.load() && (MessagesWorker->IsQueueEmpty() || CloseDeadline <= TInstant::Now())) {
                 break;
             }
@@ -1112,7 +1148,8 @@ TKeyedWriteSession::THashPartitionChooser::THashPartitionChooser(TKeyedWriteSess
 }
 
 ui32 TKeyedWriteSession::THashPartitionChooser::ChoosePartition(const std::string_view key) {
-    return std::hash<std::string_view>{}(key) % Session->Partitions.size();
+    ui64 hash = MurmurHash<ui64>(key.data(), key.size());
+    return hash % Session->Partitions.size();
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1248,7 +1285,7 @@ bool TSimpleBlockingKeyedWriteSession::Wait(const TDuration& timeout, F&& stopFu
         futures.push_back(CloseFuture);
         futures.push_back(Writer->WaitEvent());
         lock.unlock();
-        NThreading::WaitAny(futures).Wait(deadline);
+        NThreading::NWait::WaitAny(futures).Wait(deadline);
         lock.lock();
     }
 }

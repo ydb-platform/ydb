@@ -11,6 +11,8 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/request_settings.h>
 
 #include <util/generic/size_literals.h>
+#include <util/digest/murmur.h>
+#include <util/string/hex.h>
 
 namespace NYdb::inline Dev::NTopic {
 
@@ -167,7 +169,8 @@ struct TKeyedWriteSessionSettings : public TWriteSessionSettings {
 
     //! Hasher function.
     FLUENT_SETTING_DEFAULT(std::function<std::string(const std::string_view key)>, PartitioningKeyHasher, [](const std::string_view key) -> std::string {
-        return std::string{key};
+        ui64 hash = MurmurHash<ui64>(key.data(), key.size());
+        return HexEncode(&hash, sizeof(hash));
     });
 
     //! ProducerId prefix to use.

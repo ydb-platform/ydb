@@ -330,6 +330,8 @@ private:
 
     void Wait();
 
+    void RunUserHandlers();
+
 public:
     TKeyedWriteSession(const TKeyedWriteSessionSettings& settings,
             std::shared_ptr<TTopicClient::TImpl> client,

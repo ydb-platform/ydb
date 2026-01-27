@@ -993,7 +993,6 @@ std::shared_ptr<IOperator> TPushFilterIntoJoinRule::SimpleMatchAndApply(const st
     if (!join->IsSingleConsumer()) {
         YQL_CLOG(TRACE, CoreDq) << "Multiple consumers in push filter rule";
         return input;
-        
     }
 
     if (join->JoinKind != "Inner" && join->JoinKind != "Cross" && join->JoinKind != "Left") {
@@ -1046,6 +1045,10 @@ std::shared_ptr<IOperator> TPushFilterIntoJoinRule::SimpleMatchAndApply(const st
         return input;
     }
 
+    if (!joinConditions.empty()) {
+        join->JoinKind = "Inner";
+    }
+
     join->JoinKeys.insert(join->JoinKeys.end(), joinConditions.begin(), joinConditions.end());
     auto leftInput = join->GetLeftInput();
     auto rightInput = join->GetRightInput();
@@ -1076,10 +1079,6 @@ std::shared_ptr<IOperator> TPushFilterIntoJoinRule::SimpleMatchAndApply(const st
             auto rightLambda = BuildFilterLambdaFromConjuncts(rightInput->Pos, pushRight, {}, ctx.ExprCtx, props.PgSyntax);
             rightInput = std::make_shared<TOpFilter>(rightInput, input->Pos, rightLambda);
         }
-    }
-
-    if (join->JoinKind == "Cross" && joinConditions.size()) {
-        join->JoinKind = "Inner";
     }
 
     join->SetLeftInput(leftInput);

@@ -360,9 +360,22 @@ public:
 
     // Query client SDK
 
-    std::vector<TResultSet> ExecQuery(const TString& query, EStatus expectedStatus = EStatus::SUCCESS, const TString& expectedError = "") {
-        auto result = GetQueryClient()->ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+    std::vector<TResultSet> ExecQuery(const TString& query, EStatus expectedStatus = EStatus::SUCCESS, const TString& expectedError = "", std::function<void(const TString&)> astValidator = nullptr) {
+        auto settings = TExecuteQuerySettings();
+        if (astValidator) {
+            settings.StatsMode(EStatsMode::Full);
+        }
+
+        auto result = GetQueryClient()->ExecuteQuery(query, TTxControl::NoTx(), settings).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), expectedStatus, result.GetIssues().ToOneLineString());
+
+        if (astValidator) {
+            const auto& stats = result.GetStats();
+            UNIT_ASSERT(stats);
+            const auto& ast = stats->GetAst();
+            UNIT_ASSERT(ast);
+            astValidator(TString(*ast));
+        }
 
         if (expectedError) {
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), expectedError);
@@ -1790,6 +1803,199 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             "ydb_source"_a = ydbSourceName,
             "table"_a = ydbTable
         ), EStatus::SCHEME_ERROR, "Cannot find table '/Root/unknown-datasource.[unknown-topic]' because it does not exist or you do not have access permissions");
+    }
+
+    Y_UNIT_TEST_F(ReplicatedFederativeWriting, TStreamingTestFixture) {
+        constexpr char firstOutputTopic[] = "replicatedWritingOutputTopicName1";
+        constexpr char secondOutputTopic[] = "replicatedWritingOutputTopicName2";
+        constexpr char pqSource[] = "pqSourceName";
+        CreateTopic(firstOutputTopic);
+        CreateTopic(secondOutputTopic);
+        CreatePqSource(pqSource);
+
+        constexpr char solomonSink[] = "solomonSinkName";
+        ExecQuery(fmt::format(R"(
+            CREATE EXTERNAL DATA SOURCE `{solomon_source}` WITH (
+                SOURCE_TYPE = "Solomon",
+                LOCATION = "localhost:{solomon_port}",
+                AUTH_METHOD = "NONE",
+                USE_TLS = "false"
+            );)",
+            "solomon_source"_a = solomonSink,
+            "solomon_port"_a = getenv("SOLOMON_HTTP_PORT")
+        ));
+
+        constexpr char sourceTable[] = "source";
+        constexpr char rowSinkTable[] = "rowSink";
+        constexpr char columnSinkTable[] = "columnSink";
+        ExecQuery(fmt::format(R"(
+            CREATE TABLE `{source_table}` (
+                Data String NOT NULL,
+                PRIMARY KEY (Data)
+            );
+            CREATE TABLE `{row_table}` (
+                B Utf8 NOT NULL,
+                PRIMARY KEY (B)
+            );
+            CREATE TABLE `{column_table}` (
+                C String NOT NULL,
+                PRIMARY KEY (C)
+            ) WITH (
+                STORE = COLUMN
+            );)",
+            "source_table"_a = sourceTable,
+            "row_table"_a = rowSinkTable,
+            "column_table"_a = columnSinkTable
+        ));
+
+        ExecQuery(fmt::format(R"(
+            UPSERT INTO `{table}`
+                (Data)
+            VALUES
+                ("{{\"Val\": \"ABC\"}}");)",
+            "table"_a = sourceTable
+        ));
+
+        const auto astChecker = [](ui64 txCount, ui64 stagesCount) {
+            const auto stringCounter = [](const TString& str, const TString& subStr) {
+                ui64 count = 0;
+                for (size_t i = str.find(subStr); i != TString::npos; i = str.find(subStr, i + subStr.size())) {
+                    ++count;
+                }
+                return count;
+            };
+
+            return [txCount, stagesCount, stringCounter](const TString& ast) {
+                UNIT_ASSERT_VALUES_EQUAL(stringCounter(ast, "KqpPhysicalTx"), txCount);
+                UNIT_ASSERT_VALUES_EQUAL(stringCounter(ast, "DqPhyStage"), stagesCount);
+            };
+        };
+
+        TInstant disposition = TInstant::Now();
+
+        // Double PQ insert
+        {
+            ExecQuery(fmt::format(R"(
+                $rows = SELECT Data FROM `{source_table}`;
+                INSERT INTO `{pq_source}`.`{output_topic1}` SELECT Unwrap(CAST("[" || Data || "]" AS Json)) AS A FROM $rows;
+                INSERT INTO `{pq_source}`.`{output_topic2}` SELECT Unwrap(CAST(Data || "-B" AS String)) AS B FROM $rows;)",
+                "source_table"_a = sourceTable,
+                "pq_source"_a = pqSource,
+                "output_topic1"_a = firstOutputTopic,
+                "output_topic2"_a = secondOutputTopic
+            ), EStatus::SUCCESS, "", astChecker(1, 1));
+
+            ReadTopicMessage(firstOutputTopic, R"([{"Val": "ABC"}])", disposition);
+            ReadTopicMessage(secondOutputTopic, R"({"Val": "ABC"}-B)", disposition);
+            disposition = TInstant::Now();
+        }
+
+        // Double solomon insert
+        {
+            const TSolomonLocation firstSoLocation = {
+                .ProjectId = "cloudId1",
+                .FolderId = "folderId1",
+                .Service = "custom1",
+                .IsCloud = false,
+            };
+            const TSolomonLocation secondSoLocation = {
+                .ProjectId = "cloudId2",
+                .FolderId = "folderId2",
+                .Service = "custom2",
+                .IsCloud = false,
+            };
+
+            CleanupSolomon(firstSoLocation);
+            CleanupSolomon(secondSoLocation);
+
+            ExecQuery(fmt::format(R"(
+                $rows = SELECT Data FROM `{source_table}`;
+
+                INSERT INTO `{solomon_sink}`.`{first_solomon_project}/{first_solomon_folder}/{first_solomon_service}`
+                SELECT Unwrap(CAST("[" || Data || "]" AS Json)) AS sensor, 1 AS value, Timestamp("2025-03-12T14:40:39Z") AS ts FROM $rows;
+
+                INSERT INTO `{solomon_sink}`.`{second_solomon_project}/{second_solomon_folder}/{second_solomon_service}`
+                SELECT Unwrap(CAST(Data || "-B" AS String)) AS sensor, 2 AS value, Timestamp("2025-03-12T14:40:39Z") AS ts FROM $rows;)",
+                "source_table"_a = sourceTable,
+                "solomon_sink"_a = solomonSink,
+                "first_solomon_project"_a = firstSoLocation.ProjectId,
+                "first_solomon_folder"_a = firstSoLocation.FolderId,
+                "first_solomon_service"_a = firstSoLocation.Service,
+                "second_solomon_project"_a = secondSoLocation.ProjectId,
+                "second_solomon_folder"_a = secondSoLocation.FolderId,
+                "second_solomon_service"_a = secondSoLocation.Service
+            ), EStatus::SUCCESS, "", astChecker(1, 1));
+
+            TString expectedMetrics = R"([
+  {
+    "labels": [
+      [
+        "name",
+        "value"
+      ],
+      [
+        "sensor",
+        "[{\"Val\": \"ABC\"}]"
+      ]
+    ],
+    "ts": 1741790439,
+    "value": 1
+  }
+])";
+            UNIT_ASSERT_STRINGS_EQUAL(GetSolomonMetrics(firstSoLocation), expectedMetrics);
+
+            expectedMetrics = R"([
+  {
+    "labels": [
+      [
+        "name",
+        "value"
+      ],
+      [
+        "sensor",
+        "{\"Val\": \"ABC\"}-B"
+      ]
+    ],
+    "ts": 1741790439,
+    "value": 2
+  }
+])";
+            UNIT_ASSERT_STRINGS_EQUAL(GetSolomonMetrics(secondSoLocation), expectedMetrics);
+        }
+
+        // Mixed external and kqp writing
+        {
+            ExecQuery(fmt::format(R"(
+                $rows = SELECT Data FROM `{source_table}`;
+                UPSERT INTO `{column_table}` SELECT Unwrap(CAST(Data || "-C" AS String)) AS C FROM $rows;
+                INSERT INTO `{pq_source}`.`{output_topic}` SELECT Unwrap(CAST("[" || Data || "]" AS Json)) AS A FROM $rows;
+                UPSERT INTO `{row_table}` SELECT Unwrap(CAST(Data || "-B" AS Utf8)) AS B FROM $rows;)",
+                "source_table"_a = sourceTable,
+                "pq_source"_a = pqSource,
+                "output_topic"_a = firstOutputTopic,
+                "row_table"_a = rowSinkTable,
+                "column_table"_a = columnSinkTable
+            ), EStatus::SUCCESS, "", astChecker(2, 4));
+
+            ReadTopicMessage(firstOutputTopic, R"([{"Val": "ABC"}])", disposition);
+            disposition = TInstant::Now();
+
+            const auto& results = ExecQuery(fmt::format(R"(
+                SELECT * FROM `{row_table}`;
+                SELECT * FROM `{column_table}`;)",
+                "row_table"_a = rowSinkTable,
+                "column_table"_a = columnSinkTable
+            ));
+            UNIT_ASSERT_VALUES_EQUAL(results.size(), 2);
+
+            CheckScriptResult(results[0], 1, 1, [&](TResultSetParser& resultSet) {
+                UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser("B").GetUtf8(), R"({"Val": "ABC"}-B)");
+            });
+
+            CheckScriptResult(results[1], 1, 1, [&](TResultSetParser& resultSet) {
+                UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser("C").GetString(), R"({"Val": "ABC"}-C)");
+            });
+        }
     }
 }
 

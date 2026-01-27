@@ -447,7 +447,7 @@ TSlabAllocator::TSlabAllocator(
     LargeArena_.reset(new TLargeArena(memoryTracker, profiler));
 }
 
-void TSlabAllocator::TLargeArenaDeleter::operator() (TLargeArena* arena)
+void TSlabAllocator::TLargeArenaDeleter::operator()(TLargeArena* arena)
 {
     arena->Unref();
 }

@@ -118,7 +118,7 @@ TConcurrentCache<T>::TLookuper::TLookuper(
 
 template <class T>
 template <class TKey>
-typename TConcurrentCache<T>::TCachedItemRef TConcurrentCache<T>::TLookuper::operator() (const TKey& key)
+typename TConcurrentCache<T>::TCachedItemRef TConcurrentCache<T>::TLookuper::operator()(const TKey& key)
 {
     auto fingerprint = THash<T>()(key);
 

@@ -51,7 +51,7 @@ public:
             TIntrusivePtr<TLookupTable> secondary);
 
         template <class TKey>
-        TCachedItemRef operator() (const TKey& key);
+        TCachedItemRef operator()(const TKey& key);
 
         explicit operator bool ();
 

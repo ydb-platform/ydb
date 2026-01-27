@@ -126,7 +126,7 @@ struct TSingletonTraits<NYT::NLogging::TLogManager>
 template <>
 struct THash<NYT::NLogging::TLogWriterCacheKey>
 {
-    size_t operator () (const NYT::NLogging::TLogWriterCacheKey& obj) const
+    size_t operator()(const NYT::NLogging::TLogWriterCacheKey& obj) const
     {
         size_t hash = 0;
         NYT::HashCombine(hash, THash<TString>()(obj.Category));

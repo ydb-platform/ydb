@@ -616,15 +616,15 @@ constexpr bool operator >= (ESchemaCompatibility lhs, ESchemaCompatibility rhs);
 
 struct TTableSchemaHash
 {
-    size_t operator() (const TTableSchema& schema) const;
-    size_t operator() (const TTableSchemaPtr& schema) const;
+    size_t operator()(const TTableSchema& schema) const;
+    size_t operator()(const TTableSchemaPtr& schema) const;
 };
 
 struct TTableSchemaEquals
 {
-    bool operator() (const TTableSchema& lhs, const TTableSchema& rhs) const;
-    bool operator() (const TTableSchemaPtr& lhs, const TTableSchemaPtr& rhs) const;
-    bool operator() (const TTableSchemaPtr& lhs, const TTableSchema& rhs) const;
+    bool operator()(const TTableSchema& lhs, const TTableSchema& rhs) const;
+    bool operator()(const TTableSchemaPtr& lhs, const TTableSchemaPtr& rhs) const;
+    bool operator()(const TTableSchemaPtr& lhs, const TTableSchema& rhs) const;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

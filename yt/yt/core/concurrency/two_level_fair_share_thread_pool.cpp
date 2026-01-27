@@ -385,7 +385,7 @@ class TBucketMapping
 public:
     struct TExecutionPoolToListNode
     {
-        auto operator() (TExecutionPool* pool) const
+        auto operator()(TExecutionPool* pool) const
         {
             return &pool->LinkedListNode;
         }

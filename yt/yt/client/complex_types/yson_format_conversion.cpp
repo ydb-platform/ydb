@@ -192,7 +192,7 @@ public:
         , Scale_(scale)
     { }
 
-    void operator () (TUnversionedValue value, IYsonConsumer* consumer)
+    void operator()(TUnversionedValue value, IYsonConsumer* consumer)
     {
         CheckValueType(value.Type, EValueType::String);
         auto data = value.AsStringBuf();
@@ -216,7 +216,7 @@ public:
 
     // This operator should be called only after previous result is consumed.
     // So use-after-free won't occur.
-    TUnversionedValue operator () (TUnversionedValue value)
+    TUnversionedValue operator()(TUnversionedValue value)
     {
         CheckValueType(value.Type, EValueType::String);
         auto data = value.AsStringBuf();
@@ -239,7 +239,7 @@ public:
         , Scale_(scale)
     { }
 
-    void operator () (TYsonPullParserCursor* cursor, IYsonConsumer* consumer)
+    void operator()(TYsonPullParserCursor* cursor, IYsonConsumer* consumer)
     {
         CheckYsonItemType((*cursor)->GetType(), EYsonItemType::StringValue);
         auto data = (*cursor)->UncheckedAsString();
@@ -284,13 +284,13 @@ public:
         Converted_.reserve(TimestampLength);
     }
 
-    void operator () (TUnversionedValue value, IYsonConsumer* consumer)
+    void operator()(TUnversionedValue value, IYsonConsumer* consumer)
     {
         CheckValueType(value.Type, EValueType::Uint64);
         Convert(value.Data.Uint64, consumer);
     }
 
-    void operator () (TYsonPullParserCursor* cursor, IYsonConsumer* consumer)
+    void operator()(TYsonPullParserCursor* cursor, IYsonConsumer* consumer)
     {
         CheckYsonItemType((*cursor)->GetType(), EYsonItemType::Uint64Value);
         Convert((*cursor)->UncheckedAsUint64(), consumer);
@@ -333,14 +333,14 @@ public:
         : ValueType_(valueType)
     { }
 
-    TUnversionedValue operator () (TUnversionedValue value)
+    TUnversionedValue operator()(TUnversionedValue value)
     {
         CheckValueType(value.Type, EValueType::String);
         auto data = value.AsStringBuf();
         return MakeUnversionedUint64Value(BinaryTimeFromText(data, ValueType_));
     }
 
-    void operator () (TYsonPullParserCursor* cursor, IYsonConsumer* consumer)
+    void operator()(TYsonPullParserCursor* cursor, IYsonConsumer* consumer)
     {
         CheckYsonItemType((*cursor)->GetType(), EYsonItemType::StringValue);
         auto data = (*cursor)->UncheckedAsString();
@@ -410,13 +410,13 @@ public:
         : UuidMode_(uuidMode)
     { }
 
-    void operator () (TUnversionedValue value, IYsonConsumer* consumer)
+    void operator()(TUnversionedValue value, IYsonConsumer* consumer)
     {
         CheckValueType(value.Type, EValueType::String);
         Convert(value.AsStringBuf(), consumer);
     }
 
-    void operator () (TYsonPullParserCursor* cursor, IYsonConsumer* consumer)
+    void operator()(TYsonPullParserCursor* cursor, IYsonConsumer* consumer)
     {
         CheckYsonItemType((*cursor)->GetType(), EYsonItemType::StringValue);
         Convert((*cursor)->UncheckedAsString(), consumer);
@@ -453,14 +453,14 @@ public:
         : UuidMode_(uuidMode)
     { }
 
-    TUnversionedValue operator () (TUnversionedValue value)
+    TUnversionedValue operator()(TUnversionedValue value)
     {
         CheckValueType(value.Type, EValueType::String);
         auto data = value.AsStringBuf();
         return MakeUnversionedStringValue(Convert(data));
     }
 
-    void operator () (TYsonPullParserCursor* cursor, IYsonConsumer* consumer)
+    void operator()(TYsonPullParserCursor* cursor, IYsonConsumer* consumer)
     {
         CheckYsonItemType((*cursor)->GetType(), EYsonItemType::StringValue);
         auto data = (*cursor)->UncheckedAsString();
@@ -725,7 +725,7 @@ public:
     {
     }
 
-    void operator () (TYsonPullParserCursor* cursor, IYsonConsumer* consumer)
+    void operator()(TYsonPullParserCursor* cursor, IYsonConsumer* consumer)
     {
         EnsureYsonToken(Descriptor_, *cursor, EYsonItemType::BeginMap);
         cursor->Next();
@@ -790,7 +790,7 @@ public:
         , CurrentGeneration_(other.CurrentGeneration_)
     { }
 
-    void operator () (TYsonPullParserCursor* cursor, IYsonConsumer* consumer)
+    void operator()(TYsonPullParserCursor* cursor, IYsonConsumer* consumer)
     {
         IncrementGeneration();
 
@@ -897,7 +897,7 @@ public:
 
     // This operator should be called only after previous result is consumed.
     // So use-after-free won't occur.
-    TUnversionedValue operator () (TUnversionedValue value)
+    TUnversionedValue operator()(TUnversionedValue value)
     {
         TMemoryInput in(value.Data.String, value.Length);
         TYsonPullParser parser(&in, EYsonType::Node);

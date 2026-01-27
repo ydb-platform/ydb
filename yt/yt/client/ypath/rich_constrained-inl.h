@@ -39,7 +39,7 @@ TConstrainedRichYPath<TValidator...>::operator TRichYPath() &&
 ////////////////////////////////////////////////////////////////////////////////
 
 template <const char... AttributeKey[]>
-void TRequiredAttributesValidator<AttributeKey...>::operator() (const TRichYPath& path) const
+void TRequiredAttributesValidator<AttributeKey...>::operator()(const TRichYPath& path) const
 {
     auto validateOne = [&] (const char* attributeName) {
         THROW_ERROR_EXCEPTION_IF(!path.Attributes().Contains(attributeName), "YPath %Qv does not have attribute %Qv", path, attributeName);
@@ -50,7 +50,7 @@ void TRequiredAttributesValidator<AttributeKey...>::operator() (const TRichYPath
 ////////////////////////////////////////////////////////////////////////////////
 
 template <const char... AttributeKey[]>
-void TWhitelistAttributesValidator<AttributeKey...>::operator() (const TRichYPath& path) const
+void TWhitelistAttributesValidator<AttributeKey...>::operator()(const TRichYPath& path) const
 {
     for (const auto& key : path.Attributes().ListKeys()) {
         if (((key == AttributeKey) || ...)) {

@@ -85,6 +85,8 @@ private:
 
     void AddRow(const TConstArrayRef<TCell>& row) override;
 
+    TVector<NKqp::TPerStepStatistics> GetScanStats();
+
     TOwnedCellVec ConvertLastKey(const std::shared_ptr<arrow::RecordBatch>& lastReadKey);
 
     class TScanStatsOwner: public NKqp::TEvKqpCompute::IShardScanStats {
@@ -153,6 +155,7 @@ private:
     bool Finished = false;
     ui32 BuildResultCounter = 0;
     std::optional<TMonotonic> LastResultInstant;
+    THashMap<TString, ui64> PreviousPerStepBytesMeasurement;
 
     class TBlobStats {
     private:

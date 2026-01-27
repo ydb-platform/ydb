@@ -139,4 +139,60 @@ TConcreteScanCounters::TConcreteScanCounters(
     }
 }
 
+TString TConcreteScanCounters::TPerStepCounters::DebugString() const {
+    return TStringBuilder()
+                        << "ExecutionDuration:" << NKqp::FormatDurationAsMilliseconds(ExecutionDuration) << ";"
+                        << "WaitDuration:" << NKqp::FormatDurationAsMilliseconds(WaitDuration) << ";"
+                        << "RawBytesRead:" << RawBytesRead;
+
+}
+THashMap<TString, TConcreteScanCounters::TPerStepCounters> TConcreteScanCounters::ReadStepsCounters() const {
+    THashMap<TString,TPerStepCounters> counters;
+    auto lock = AtomicStepCounters.ReadGuard();
+    for (auto& [k,v]: lock.Value) {
+        TPerStepCounters thisCounters;
+        thisCounters.ExecutionDuration = TDuration::MicroSeconds(v.ExecutionDurationMicroSeconds->Val());
+        thisCounters.WaitDuration = TDuration::MicroSeconds(v.WaitDurationMicroSeconds->Val());
+        thisCounters.RawBytesRead = v.RawBytesRead->Val();
+        counters[k] = thisCounters;
+    }
+    return counters;
+}
+
+TString TConcreteScanCounters::StepsCountersDebugString() const {
+    auto counters = ReadStepsCounters();
+    TPerStepCounters summ;
+    TStringBuilder bld;
+    bld << "per_step_counters:(";
+    for(auto& [k,v]: counters) {
+        summ.ExecutionDuration += v.ExecutionDuration;
+        summ.WaitDuration += v.WaitDuration;
+        summ.RawBytesRead += v.RawBytesRead;
+        bld << "[StepName: " << k << "; " << v.DebugString() << "],\n";
+    }
+    if (!bld.empty()) {
+        bld.pop_back(); // \n
+        bld.pop_back(); // ,  
+    }
+    bld << ");";
+    bld << "counters_summ_across_all_steps:(";
+    bld << "[StepName: AllSteps; " << summ.DebugString() << "])\n";
+    return bld;
+}
+
+TConcreteScanCounters::TPerStepAtomicCounters TConcreteScanCounters::CountersForStep(TStringBuf stepName) const {
+    auto* counterIfExists = [&]{
+        auto lock = AtomicStepCounters.ReadGuard();
+        return lock.Value.FindPtr(stepName);
+    }();
+    if  (counterIfExists) [[likely]] {
+        return *counterIfExists;
+    }
+    auto lock = AtomicStepCounters.WriteGuard();
+    auto [it, ok] = lock.Value.emplace(stepName, TPerStepAtomicCounters{});
+    return it->second;
+}
+
+
+
 }   // namespace NKikimr::NColumnShard

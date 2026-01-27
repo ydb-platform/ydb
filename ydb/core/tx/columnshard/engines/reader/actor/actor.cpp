@@ -9,6 +9,30 @@
 
 namespace NKikimr::NOlap::NReader {
 
+TVector<NKqp::TPerStepStatistics> TColumnShardScan::GetScanStats() {
+    auto timesPerStep = [&]{
+        auto cnt  = ScanCountersPool.ReadStepsCounters();
+        TVector<NKqp::TPerStepStatistics> timesPerStep;
+        for (auto& [k,v] : cnt) {
+            NKqp::TPerStepStatistics stats;
+            stats.StepName = k;
+            stats.IntegralExecutionDuration = v.ExecutionDuration;
+            stats.IntegralWaitDuration = v.WaitDuration;
+            ui64& prevBytes = PreviousPerStepBytesMeasurement[k]; 
+            ui64 thisBytes =  v.RawBytesRead;
+            stats.DeltaRawBytesRead = thisBytes - prevBytes;
+            prevBytes = thisBytes;
+            timesPerStep.emplace_back(stats);
+        }
+        return timesPerStep;
+    }();
+    Sort(timesPerStep, [](const auto& l,const auto& r ){
+        return l.StepName < r.StepName;
+    });
+    return timesPerStep;
+}
+
+
 LWTRACE_USING(YDB_CS_READER);
 
 constexpr TDuration SCAN_HARD_TIMEOUT = TDuration::Minutes(60);
@@ -412,7 +436,7 @@ bool TColumnShardScan::SendResult(bool pageFault, bool lastBatch) {
     LastResultInstant = TMonotonic::Now();
 
     Result->CpuTime = ScanCountersPool.GetExecutionDuration();
-    Result->CurrentCounters = ScanCountersPool.GetCurrentScanCounters();
+    Result->CurrentStats = GetScanStats();
     Result->WaitTime = WaitTime;
     Result->RawBytes = ScanCountersPool.GetRawBytes();
 

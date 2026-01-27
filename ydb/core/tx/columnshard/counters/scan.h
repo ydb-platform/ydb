@@ -360,10 +360,17 @@ public:
 
 class TConcreteScanCounters: public TScanCounters {
 public:
-    struct TPerStepCounters{
+    struct TPerStepAtomicCounters {
         std::shared_ptr<TAtomicCounter> ExecutionDurationMicroSeconds = std::make_shared<TAtomicCounter>(); // time step was executing in conveyor
         std::shared_ptr<TAtomicCounter> WaitDurationMicroSeconds = std::make_shared<TAtomicCounter>(); // time spent not in same step before next step(for example in deduplication)
         std::shared_ptr<TAtomicCounter> RawBytesRead = std::make_shared<TAtomicCounter>(); // From BS, S3, previous step
+    };
+
+    struct TPerStepCounters {
+        TDuration ExecutionDuration;
+        TDuration WaitDuration;
+        ui64 RawBytesRead = 0;
+        TString DebugString() const;
     };
 private:
     using TBase = TScanCounters;
@@ -382,9 +389,9 @@ private:
     std::shared_ptr<TAtomicCounter> AccessorsForConstructionGuard = std::make_shared<TAtomicCounter>();
     THashMap<ui32, std::shared_ptr<TAtomicCounter>> SkipNodesCount;
     THashMap<ui32, std::shared_ptr<TAtomicCounter>> ExecuteNodesCount;
+    NColumnShard::TThreadSafeValue<THashMap<TString, TPerStepAtomicCounters>> AtomicStepCounters;
 public:
     using TStepName = TString;
-    NColumnShard::TThreadSafeValue<THashMap<TString, TPerStepCounters>> StepExecutionDurations;
     TScanAggregations Aggregations;
 
     void OnSkipGraphNode(const ui32 nodeId) const {
@@ -403,35 +410,11 @@ public:
         }
     }
 
-    TVector<NKqp::TPerStepCounters> GetCurrentScanCounters() const {
-        auto lock = StepExecutionDurations.ReadGuard();
-        TVector<NKqp::TPerStepCounters> timesPerStep;
-        for (auto& kv: lock.Value) {
-            NKqp::TPerStepCounters stats;
-            stats.StepName = kv.first;
-            stats.IntegralExecutionDuration = TDuration::MicroSeconds(kv.second.ExecutionDurationMicroSeconds->Val());
-            stats.IntegralWaitDuration = TDuration::MicroSeconds(kv.second.WaitDurationMicroSeconds->Val());
-            stats.IntegralRawBytesRead = kv.second.RawBytesRead->Val();
-            timesPerStep.emplace_back(stats);
-        }
-        Sort(timesPerStep, [](const auto& l,const auto& r ){
-            return l.StepName < r.StepName;
-        });
-        return timesPerStep;
-    }
+    THashMap<TString, TPerStepCounters> ReadStepsCounters() const;
 
-    TPerStepCounters CountersForStep(TStringBuf stepName) const {
-        auto* counterIfExists = [&]{
-            auto lock = StepExecutionDurations.ReadGuard();
-            return lock.Value.FindPtr(stepName);
-        }();
-        if  (counterIfExists) [[likely]] {
-            return *counterIfExists;
-        }
-        auto lock = StepExecutionDurations.WriteGuard();
-        auto [it, ok] = lock.Value.emplace(stepName, TPerStepCounters{});
-        return it->second;
-    }
+    TString StepsCountersDebugString() const;
+
+    TPerStepAtomicCounters CountersForStep(TStringBuf stepName) const;
 
     void AddExecutionDuration(const TDuration d) const {
         TotalExecutionDurationUs->Add(d.MicroSeconds());

@@ -236,7 +236,7 @@ NArrow::TSimpleRowViewV0 TPortionMeta::IndexKeyViewEnd() const {
     return NArrow::TSimpleRowViewV0(LastPKRow.GetData());
 }
 
-std::shared_ptr<arrow::Schema> TPortionMeta::GetPkSchema() const {
+const std::shared_ptr<arrow::Schema>& TPortionMeta::GetPkSchema() const {
     return PKSchema;
 }
 

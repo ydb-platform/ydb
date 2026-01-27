@@ -2474,7 +2474,7 @@ message TColumnShardConfig {
     optional uint64 CompactionStageMemoryLimit = 64 [default = 3221225472];
     optional uint64 TieringStageMemoryLimit = 65 [default = 1000000000];
     optional uint64 CleanupPortionsStageMemoryLimit = 66 [default = 1000000000];
-    optional bool EnableIntervalTreeForMetadataSelect = 67 [default = false];
+    optional bool EnableIntervalTreeForMetadataSelect = 67 [default = true];
 }
 
 message TSchemeShardConfig {

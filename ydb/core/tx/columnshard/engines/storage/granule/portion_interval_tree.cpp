@@ -55,7 +55,6 @@ std::partial_ordering TPositionView::Compare(const TPositionView& rhs) const {
     AFL_VERIFY(false)("error", "invalid type in TPositionView variant for Compare")("type", Position.index());
 }
 
-
 int TPositionViewBorderComparator::Compare(const TBorder& lhs, const TBorder& rhs) {
     if (lhs.GetMode() == NRangeTreap::EBorderMode::LeftInf || rhs.GetMode() == NRangeTreap::EBorderMode::RightInf) {
         return lhs.GetMode() == rhs.GetMode() ? 0 : -1;

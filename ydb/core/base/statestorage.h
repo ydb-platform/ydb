@@ -316,16 +316,6 @@ struct TEvStateStorage {
             TFollowerInfo(TFollowerInfo&&) = default;
             TFollowerInfo& operator=(const TFollowerInfo&) = default;
 
-            /*
-            TFollowerInfo& operator=(const TFollowerInfo& other) {
-                Follower = other.Follower;
-                FollowerTablet = other.FollowerTablet;
-                FollowerId = other.FollowerId;
-
-                return *this;
-            };
-            */
-
             TString ToString() const {
                 TStringStream str;
 

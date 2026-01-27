@@ -620,7 +620,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
             }
         };
 
-        // Specifying an explicitly follower ID overrides other options,
+        // Specifying an explicit follower ID overrides other options,
         // but followerId == 0 goes through the same leader selection code below
         bool countLeader = (entry.KnownLeader && !entry.CurrentLeaderProblem);
 

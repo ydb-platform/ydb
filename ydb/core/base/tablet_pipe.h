@@ -424,7 +424,7 @@ namespace NKikimr {
              *       as "connect to the follower with the given follower ID".
              *
              * @warning If this field is specified and the follower with the given follower ID
-             *          does not exit, the request will fail with an error.
+             *          does not exist, the request will fail with an error.
              */
             TMaybe<ui32> FollowerId;
         };

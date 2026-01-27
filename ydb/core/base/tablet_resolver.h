@@ -46,7 +46,7 @@ struct TEvTabletResolver {
              *       and set this field to the follower ID to connect to.
              *
              * @warning If this field is specified and the follower with the given follower ID
-             *          does not exit, the request will fail with an error.
+             *          does not exist, the request will fail with an error.
              */
             TMaybe<ui32> FollowerId;
 
@@ -105,7 +105,7 @@ struct TEvTabletResolver {
              *       SetForceFollower(true).
              *
              * @warning If a specific follower ID is requested and the given follower ID
-             *          does not exit, the request will fail with an error.
+             *          does not exist, the request will fail with an error.
              *
              * @param followerId The follower ID to select
              */

@@ -46,7 +46,7 @@ void TPartitionActor::HandleWriteBlocksRequest(
                 "Handle WriteBlocks request event: " << ev->ToString());
 
     auto response = std::make_unique<TEvService::TEvWriteBlocksResponse>();
-    response->Record.MutableError()->CopyFrom(MakeError(S_OK));
+    response->Record.MutableError()->CopyFrom(MakeError(STATUS_OK));
 
     ctx.Send(
         ev->Sender,
@@ -65,7 +65,7 @@ void TPartitionActor::HandleReadBlocksRequest(
                 "Handle ReadBlocks request event: " << ev->ToString());
 
     auto response = std::make_unique<TEvService::TEvReadBlocksResponse>();
-    response->Record.MutableError()->CopyFrom(MakeError(S_OK));
+    response->Record.MutableError()->CopyFrom(MakeError(STATUS_OK));
 
     ctx.Send(
         ev->Sender,

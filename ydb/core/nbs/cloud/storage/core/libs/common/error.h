@@ -29,22 +29,22 @@ namespace NProto {
 
 enum ESeverityCode
 {
-    SEVERITY_SUCCESS        = 0,
-    SEVERITY_ERROR          = 1,
+    NBS_SEVERITY_SUCCESS        = 0,
+    NBS_SEVERITY_ERROR          = 1,
 };
 
 enum EFacilityCode
 {
-    FACILITY_NULL           = 0,
-    FACILITY_SYSTEM         = 1,
-    FACILITY_GRPC           = 2,
-    FACILITY_KIKIMR         = 3,
-    FACILITY_SCHEMESHARD    = 4,
-    FACILITY_BLOCKSTORE     = 5,
-    FACILITY_TXPROXY        = 6,
-    FACILITY_FILESTORE      = 7,
-    FACILITY_RDMA           = 8,
-    FACILITY_MAX            // should be the last one
+    NBS_FACILITY_NULL           = 0,
+    NBS_FACILITY_SYSTEM         = 1,
+    NBS_FACILITY_GRPC           = 2,
+    NBS_FACILITY_KIKIMR         = 3,
+    NBS_FACILITY_SCHEMESHARD    = 4,
+    NBS_FACILITY_BLOCKSTORE     = 5,
+    NBS_FACILITY_TXPROXY        = 6,
+    NBS_FACILITY_FILESTORE      = 7,
+    NBS_FACILITY_RDMA           = 8,
+    NBS_FACILITY_MAX            // should be the last one
 };
 
 #define SUCCEEDED(code)              ((ui32(code) & 0x80000000u) == 0)
@@ -60,42 +60,42 @@ enum EFacilityCode
 // MAKE_RESULT_CODE
 
 #define MAKE_SUCCESS(status) \
-    MAKE_RESULT_CODE(SEVERITY_SUCCESS, FACILITY_NULL, status)
+    MAKE_RESULT_CODE(NBS_SEVERITY_SUCCESS, NBS_FACILITY_NULL, status)
 
 #define MAKE_ERROR(status) \
-    MAKE_RESULT_CODE(SEVERITY_ERROR, FACILITY_NULL, status)
+    MAKE_RESULT_CODE(NBS_SEVERITY_ERROR, NBS_FACILITY_NULL, status)
 
 #define MAKE_SYSTEM_ERROR(status) \
-    MAKE_RESULT_CODE(SEVERITY_ERROR, FACILITY_SYSTEM, status)
+    MAKE_RESULT_CODE(NBS_SEVERITY_ERROR, NBS_FACILITY_SYSTEM, status)
 
 #define MAKE_GRPC_ERROR(status) \
-    MAKE_RESULT_CODE(SEVERITY_ERROR, FACILITY_GRPC, status)
+    MAKE_RESULT_CODE(NBS_SEVERITY_ERROR, NBS_FACILITY_GRPC, status)
 
 #define MAKE_KIKIMR_ERROR(status) \
-    MAKE_RESULT_CODE(SEVERITY_ERROR, FACILITY_KIKIMR, status)
+    MAKE_RESULT_CODE(NBS_SEVERITY_ERROR, NBS_FACILITY_KIKIMR, status)
 
 #define MAKE_SCHEMESHARD_ERROR(status) \
-    MAKE_RESULT_CODE(SEVERITY_ERROR, FACILITY_SCHEMESHARD, status)
+    MAKE_RESULT_CODE(NBS_SEVERITY_ERROR, NBS_FACILITY_SCHEMESHARD, status)
 
 #define MAKE_TXPROXY_ERROR(status) \
-    MAKE_RESULT_CODE(SEVERITY_ERROR, FACILITY_TXPROXY, status)
+    MAKE_RESULT_CODE(NBS_SEVERITY_ERROR, NBS_FACILITY_TXPROXY, status)
 
 #define MAKE_BLOCKSTORE_ERROR(status) \
-    MAKE_RESULT_CODE(SEVERITY_ERROR, FACILITY_BLOCKSTORE, status)
+    MAKE_RESULT_CODE(NBS_SEVERITY_ERROR, NBS_FACILITY_BLOCKSTORE, status)
 
 #define MAKE_FILESTORE_ERROR(status) \
-    MAKE_RESULT_CODE(SEVERITY_ERROR, FACILITY_FILESTORE, status)
+    MAKE_RESULT_CODE(NBS_SEVERITY_ERROR, NBS_FACILITY_FILESTORE, status)
 
 #define MAKE_RDMA_ERROR(status) \
-    MAKE_RESULT_CODE(SEVERITY_ERROR, FACILITY_RDMA, status)
+    MAKE_RESULT_CODE(NBS_SEVERITY_ERROR, NBS_FACILITY_RDMA, status)
 
 ////////////////////////////////////////////////////////////////////////////////
 
 enum EWellKnownResultCodes: ui32
 {
-    S_OK                         = MAKE_SUCCESS(0),  // The request was completed successfully
-    S_FALSE                      = MAKE_SUCCESS(1),  // The request was not completed because there is nothing to operate on
-    S_ALREADY                    = MAKE_SUCCESS(2),
+    STATUS_OK                         = MAKE_SUCCESS(0),  // The request was completed successfully
+    STATUS_FALSE                      = MAKE_SUCCESS(1),  // The request was not completed because there is nothing to operate on
+    STATUS_ALREADY                    = MAKE_SUCCESS(2),
 
     E_FAIL                       = MAKE_ERROR(0),  // Critical failure occured
     E_ARGUMENT                   = MAKE_ERROR(1),  // Request arguments are ill-formed; no point in retrying
@@ -244,7 +244,7 @@ NProto::TError MakeError(ui32 code, TString message = {}, ui32 flags = 0);
 template <typename T>
 concept TAcceptsError = requires(T a)
 {
-    { *a.MutableError() = MakeError(S_OK) };
+    { *a.MutableError() = MakeError(STATUS_OK) };
 };
 
 template <typename T>

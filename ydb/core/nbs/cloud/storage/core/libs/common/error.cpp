@@ -17,7 +17,7 @@ void FormatResultCodeRaw(IOutputStream& out, ui32 code)
     out << static_cast<ESeverityCode>(SUCCEEDED(code) ? 0 : 1) << " | ";
 
     ui32 facility = FACILITY_FROM_CODE(code);
-    if (facility < FACILITY_MAX) {
+    if (facility < NBS_FACILITY_MAX) {
         out << static_cast<EFacilityCode>(facility);
     } else {
         out << "FACILITY_UNKNOWN";
@@ -65,7 +65,7 @@ EErrorKind GetErrorKind(const NProto::TError& e)
             return EErrorKind::ErrorAborted;
     }
 
-    if (FACILITY_FROM_CODE(code) == FACILITY_GRPC) {
+    if (FACILITY_FROM_CODE(code) == NBS_FACILITY_GRPC) {
         if (code == E_GRPC_UNIMPLEMENTED) {
             return EErrorKind::ErrorFatal;
         }
@@ -74,7 +74,7 @@ EErrorKind GetErrorKind(const NProto::TError& e)
 
     // FACILITY_SYSTEM error codes are obtained from "errno". The list of all
     // possible errors: contrib/libs/linux-headers/asm-generic/errno-base.h
-    if (FACILITY_FROM_CODE(code) == FACILITY_SYSTEM) {
+    if (FACILITY_FROM_CODE(code) == NBS_FACILITY_SYSTEM) {
         switch (STATUS_FROM_CODE(code)) {
             case EIO:
             case ENODATA:
@@ -85,7 +85,7 @@ EErrorKind GetErrorKind(const NProto::TError& e)
         }
     }
 
-    if (FACILITY_FROM_CODE(code) == FACILITY_KIKIMR) {
+    if (FACILITY_FROM_CODE(code) == NBS_FACILITY_KIKIMR) {
         switch (STATUS_FROM_CODE(code)) {
             case 1:  // NKikimrProto::ERROR
             case 3:  // NKikimrProto::TIMEOUT
@@ -98,7 +98,7 @@ EErrorKind GetErrorKind(const NProto::TError& e)
         }
     }
 
-    if (FACILITY_FROM_CODE(code) == FACILITY_SCHEMESHARD) {
+    if (FACILITY_FROM_CODE(code) == NBS_FACILITY_SCHEMESHARD) {
         switch (STATUS_FROM_CODE(code)) {
             case 13: // NKikimrScheme::StatusNotAvailable
             case 8:  // NKikimrScheme::StatusMultipleModifications
@@ -106,7 +106,7 @@ EErrorKind GetErrorKind(const NProto::TError& e)
         }
     }
 
-    if (FACILITY_FROM_CODE(code) == FACILITY_TXPROXY) {
+    if (FACILITY_FROM_CODE(code) == NBS_FACILITY_TXPROXY) {
         switch (STATUS_FROM_CODE(code)) {
             case 16: // NKikimr::NTxProxy::TResultStatus::ProxyNotReady
             case 20: // NKikimr::NTxProxy::TResultStatus::ProxyShardNotAvailable
@@ -165,7 +165,7 @@ EDiagnosticsErrorKind GetDiagnosticsErrorKind(const NProto::TError& e)
         return EDiagnosticsErrorKind::ErrorRetriable;
     }
 
-    if (FACILITY_FROM_CODE(code) == FACILITY_FILESTORE) {
+    if (FACILITY_FROM_CODE(code) == NBS_FACILITY_FILESTORE) {
         return EDiagnosticsErrorKind::ErrorSilent;
     }
 

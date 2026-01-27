@@ -43,7 +43,7 @@ private:
 };
 
 class TMockPqReadSession final : private TMockSessionBase, public IMockPqReadSession, public NYdb::NTopic::IReadSession {
-    struct TMockPartitionSession final : public NYdb::NTopic::TPartitionSession {
+    struct TMockPartitionSession final : public NYdb::NTopic::TPartitionSessionControl {
         explicit TMockPartitionSession(const TString& topicPath) {
             PartitionSessionId = 0;
             TopicPath = topicPath;
@@ -53,6 +53,18 @@ class TMockPqReadSession final : private TMockSessionBase, public IMockPqReadSes
 
         void RequestStatus() final {
             Y_ENSURE(false, "Not implemented");
+        }
+
+        void Commit(uint64_t /*startOffset*/, uint64_t /*endOffset*/) override final {
+        }
+
+        void ConfirmCreate(std::optional<uint64_t> /*readOffset*/, std::optional<uint64_t> /*commitOffset*/) override final {
+        }
+
+        void ConfirmDestroy() override final {
+        }
+
+        void ConfirmEnd(std::span<const uint32_t> /*childIds*/) override final {
         }
     };
 

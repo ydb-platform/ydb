@@ -144,8 +144,8 @@ void TOpRead::ComputeMetadata(TRBOContext & ctx, TPlanProps & planProps) {
     // Record lineage: source can rename its columns, so already we need to record that
     auto outputIUs = GetOutputIUs();
 
+    int duplicateId = Props.Metadata->ColumnLineage.AddAlias(Alias, path.StringValue());
     for (size_t i=0; i<outputIUs.size(); i++) {
-        int duplicateId = Props.Metadata->ColumnLineage.AddAlias(Alias, path.StringValue());
         Props.Metadata->ColumnLineage.AddMapping(outputIUs[i], TColumnLineageEntry(Alias, path.StringValue(), Columns[i], duplicateId));
     }
 
@@ -310,6 +310,15 @@ void TOpAggregate::ComputeMetadata(TRBOContext & ctx, TPlanProps & planProps) {
     Props.Metadata->Type = EStatisticsType::BaseTable;
     Props.Metadata->KeyColumns = KeyColumns;
     Props.Metadata->ColumnsCount = GetOutputIUs().size();
+
+    // Aggregate acts list a source in terms of lineage
+    // FIXME: We currently delete all lineage of columns before Aggregate, maybe this is suboptimal in some future cases?
+    Props.Metadata->ColumnLineage = {};
+    TString alias = "_aggregate";
+    int duplicateId = Props.Metadata->ColumnLineage.AddAlias(alias, alias);
+    for (const auto & iu : GetOutputIUs()) {
+        Props.Metadata->ColumnLineage.AddMapping(iu, TColumnLineageEntry(alias, alias, iu.GetColumnName(), duplicateId));
+    }
 }
 
 /**

@@ -108,7 +108,7 @@ private:
         { // validation
             auto it = Committed->Chunks.find(ev->Get()->ChunkIdx);
             if (it == Committed->Chunks.end()) {
-                TString errorReason = TStringBuilder() << "Chunk with idx# " << chunkIdx << "is not allocated";
+                TString errorReason = TStringBuilder() << "Chunk with idx# " << chunkIdx << " is not allocated";
                 STLOG(PRI_ERROR, BS_CHUNK_KEEPER, BSCK04, VDISKP(LogCtx->VCtx, "Bad deallocation request"),
                         (ErrorReason, errorReason));
                 Send(ev->Sender, new TEvChunkKeeperFreeResult(chunkIdx, NKikimrProto::ERROR, errorReason));
@@ -116,7 +116,7 @@ private:
             }
             if (it->second != subsystem) {
                 TString errorReason = TStringBuilder() << "Chunk with idx# " << chunkIdx <<
-                        "belongs to another subsystem Requested# " << subsystem << " Actual# " << it->second;
+                        " belongs to another subsystem Requested# " << subsystem << " Actual# " << it->second;
                 STLOG(PRI_ERROR, BS_CHUNK_KEEPER, BSCK05, VDISKP(LogCtx->VCtx, "Bad deallocation request"),
                         (ErrorReason, errorReason));
                 Send(ev->Sender, new TEvChunkKeeperFreeResult(chunkIdx, NKikimrProto::ERROR, errorReason));
@@ -209,27 +209,26 @@ private:
                 (Event, ev->Get()->ToString()));
         CHECK_PDISK_RESPONSE(LogCtx->VCtx, ev, TActivationContext::AsActorContext());
 
+        Y_VERIFY_S(ActiveRequest, VDISKP(LogCtx->VCtx, "No ActiveRequest"
+                "while processing allocation request"));
+        TRequestAllocate* request;
+        std::visit(TOverloaded{
+            [&](TRequestAllocate& req) -> void { request = &req; },
+            [&](const TRequestFree&) -> void { Y_ABORT_S(VDISKP(LogCtx->VCtx,
+                    "Unexpected ActiveRequest while processing allocation request")); },
+            [&](const TRequestCutLog&) -> void { Y_ABORT_S(VDISKP(LogCtx->VCtx,
+                    "Unexpected ActiveRequest while processing allocation request")); },
+            [&](const std::monostate&) -> void { Y_ABORT_S(VDISKP(LogCtx->VCtx,
+                    "Empty ActiveRequest while processing allocation request")); },
+        }, *ActiveRequest);
+
         switch (ev->Get()->Status) {
         case NKikimrProto::OK: {
             Y_VERIFY_S(ev->Get()->ChunkIds.size() == 1, LogCtx->VCtx->VDiskLogPrefix <<
                     "Allocated wrong number of chunks# " << ev->Get()->ToString());
             ui32 chunkIdx = ev->Get()->ChunkIds[0];
-            ui32 subsystem;
-
-            Y_VERIFY_S(ActiveRequest, VDISKP(LogCtx->VCtx, "No ActiveRequest"
-                    "while processing allocation request"));
-            std::visit(TOverloaded{
-                [&](TRequestAllocate& request) -> void {
-                    request.AllocatedChunk = chunkIdx;
-                    subsystem = request.Subsystem;
-                },
-                [&](const TRequestFree&) -> void { Y_ABORT_S(VDISKP(LogCtx->VCtx,
-                        "Unexpected ActiveRequest while processing allocation request")); },
-                [&](const TRequestCutLog&) -> void { Y_ABORT_S(VDISKP(LogCtx->VCtx,
-                        "Unexpected ActiveRequest while processing allocation request")); },
-                [&](const std::monostate&) -> void { Y_ABORT_S(VDISKP(LogCtx->VCtx,
-                        "Empty ActiveRequest while processing allocation request")); },
-            }, *ActiveRequest);
+            request->AllocatedChunk = chunkIdx;
+            ui32 subsystem = request->Subsystem;
 
             NPDisk::TCommitRecord commitRecord;
             commitRecord.CommitChunks.push_back(chunkIdx);
@@ -242,7 +241,7 @@ private:
         default:
             STLOG(PRI_WARN, BS_CHUNK_KEEPER, BSCK21, VDISKP(LogCtx->VCtx, "Unsuccessful ChunkReserve request"),
                     (ErrorReason, ev->Get()->ErrorReason));
-            Send(ev->Sender, new TEvChunkKeeperAllocateResult({}, NKikimrProto::ERROR, ev->Get()->ErrorReason));
+            Send(request->Sender, new TEvChunkKeeperAllocateResult({}, NKikimrProto::ERROR, ev->Get()->ErrorReason));
             ActiveRequest.reset();
             ProcessRequestQueue();
             return;
@@ -275,6 +274,12 @@ private:
                     "Empty ActiveRequest while processing allocation request")); },
         }, *std::exchange(ActiveRequest, std::nullopt));
 
+        {
+            bool erased = AllocationsInFlight.erase(chunkIdx);
+            Y_VERIFY_S(erased, LogCtx->VCtx->VDiskLogPrefix << "AllocationsInFlight is inconsistent,"
+                    " ChunkIdx# " << chunkIdx);
+        }
+
         switch (ev->Get()->Status) {
         case NKikimrProto::OK: {
             Y_VERIFY_S(ev->Get()->Results.size() == 1, LogCtx->VCtx->VDiskLogPrefix << "Bad TEvLogResult response# "
@@ -284,12 +289,6 @@ private:
             Y_VERIFY_S(inserted, LogCtx->VCtx->VDiskLogPrefix << "Bad chunk allocation, chunkIdx# " << chunkIdx <<
                     " subsystem# " << subsystem << " previous subsystem# " << Committed->Chunks[chunkIdx]);
             Committed->Chunks[chunkIdx] = subsystem;
-
-            {
-                bool erased = AllocationsInFlight.erase(chunkIdx);
-                Y_VERIFY_S(erased, LogCtx->VCtx->VDiskLogPrefix << "AllocationsInFlight is inconsistent,"
-                        " ChunkIdx# " << chunkIdx);
-            }
 
             CurEntryPointLsn = ev->Get()->Results[0].Lsn;
             SendCutLog();
@@ -313,7 +312,7 @@ private:
         if (it == Committed->Chunks.end() || it->second != request.Subsystem) {
             TString errorReason = TStringBuilder() << "Chunk doesn't belong to this subsystem, possible double-free, "
                     "ChunkIdx# " << request.ChunkIdx;
-            STLOG(PRI_ERROR, BS_CHUNK_KEEPER, BSCK12, VDISKP(LogCtx->VCtx, "Race occured"),
+            STLOG(PRI_ERROR, BS_CHUNK_KEEPER, BSCK12, VDISKP(LogCtx->VCtx, "Race occurred"),
                     (ErrorReason, errorReason));
             Send(request.Sender, new TEvChunkKeeperFreeResult(request.ChunkIdx, NKikimrProto::ERROR, errorReason));
             ActiveRequest.reset();
@@ -349,8 +348,14 @@ private:
             [&](const TRequestCutLog&) -> void { Y_ABORT_S(VDISKP(LogCtx->VCtx,
                     "Unexpected ActiveRequest while processing deallocation request")); },
             [&](const std::monostate&) -> void { Y_ABORT_S(VDISKP(LogCtx->VCtx,
-                    "Empty ActiveRequest while processing allocation request")); },
+                    "Empty ActiveRequest while processing deallocation request")); },
         }, *std::exchange(ActiveRequest, std::nullopt));
+
+        {
+            bool erased = DeletionsInFlight.erase(chunkIdx);
+            Y_VERIFY_S(erased, LogCtx->VCtx->VDiskLogPrefix << "DeletionsInFlight is inconsistent,"
+                    " ChunkIdx# " << chunkIdx);
+        }
 
         switch (ev->Get()->Status) {
         case NKikimrProto::OK: {
@@ -369,11 +374,6 @@ private:
                 Y_VERIFY_S(it != chunks.end(), LogCtx->VCtx->VDiskLogPrefix << "Internal structure corrupted, chunkIdx# " <<
                         chunkIdx << " subsystem# " << subsystem);
                 chunks.erase(it);
-            }
-            {
-                bool erased = DeletionsInFlight.erase(chunkIdx);
-                Y_VERIFY_S(erased, LogCtx->VCtx->VDiskLogPrefix << "DeletionsInFlight is inconsistent,"
-                        " ChunkIdx# " << chunkIdx);
             }
 
             CurEntryPointLsn = ev->Get()->Results[0].Lsn;
@@ -468,7 +468,7 @@ private:
         google::protobuf::TextFormat::PrintToString(proto, &str);
 
         STLOG(PRI_DEBUG, BS_CHUNK_KEEPER, BSCK25, VDISKP(LogCtx->VCtx, "Printing entrypoint"),
-                (CommitedChunks, Committed->Chunks.size()),
+                (CommittedChunks, Committed->Chunks.size()),
                 (AllocationsInFlight, AllocationsInFlight.size()),
                 (DeletionsInFlight, DeletionsInFlight.size()),
                 (ProtoSize, proto.ByteSizeLong()),
@@ -479,7 +479,6 @@ private:
 
 private:
     const TIntrusivePtr<TVDiskLogContext> LogCtx;
-    const TPDiskCtxPtr PDiskCtx;
 
     // in-flight unfinished commits
     std::unordered_map<ui32, ui32> AllocationsInFlight;

@@ -227,15 +227,13 @@ public:
     void Handle(TEvGetObjectRequest::TPtr& ev) {
         const auto& request = ev->Get()->GetRequest();
         const TString key = TString(request.GetKey().data(), request.GetKey().size());
-        const TString filePath = key;
 
         FS_LOG_D("GetObject"
-            << ": key# " << key
-            << ", filePath# " << filePath);
+            << ": key# " << key);
 
         try {
-            TFile file(filePath, RdOnly);
-            i64 fileSize = file.GetLength();
+            TFile file(key, RdOnly);
+            const i64 fileSize = file.GetLength();
 
             if (fileSize == 0) {
                 Aws::S3::Model::GetObjectResult awsResult;
@@ -266,7 +264,7 @@ public:
                 ReplyError<TEvGetObjectResponse>(ev->Sender, key, "Invalid range: start > end");
                 return;
             }
-            ui64 length = end - start + 1;
+            const ui64 length = end - start + 1;
 
             if ((i64)start >= fileSize) {
                 ReplyError<TEvGetObjectResponse>(ev->Sender, key, "Range out of bounds");
@@ -281,7 +279,7 @@ public:
 
             FS_LOG_I("GetObject read"
                 << ": bytes# " << bytesRead
-                << ", from# " << filePath);
+                << ", from# " << key);
 
             Aws::S3::Model::GetObjectResult awsResult;
             awsResult.SetContentLength(bytesRead);
@@ -302,19 +300,17 @@ public:
     void Handle(TEvHeadObjectRequest::TPtr& ev) {
         const auto& request = ev->Get()->GetRequest();
         const TString key = TString(request.GetKey().data(), request.GetKey().size());
-        const TString filePath = key;
 
         FS_LOG_D("HeadObject"
-            << ": key# " << key
-            << ", filePath# " << filePath);
+            << ": key# " << key);
 
         try {
-            TFile file(filePath, RdOnly | Seq);
-            i64 fileSize = file.GetLength();
+            TFile file(key, RdOnly | Seq);
+            const i64 fileSize = file.GetLength();
 
             FS_LOG_I("HeadObject"
                 << ": file size# " << fileSize
-                << " for# " << filePath);
+                << " for# " << key);
 
             Aws::S3::Model::HeadObjectResult awsResult;
             awsResult.SetContentLength(fileSize);

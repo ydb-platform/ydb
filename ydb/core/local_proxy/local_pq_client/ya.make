@@ -1,9 +1,12 @@
 LIBRARY()
 
 SRCS(
+    local_federated_topic_client.cpp
     local_topic_client_factory.cpp
+    local_topic_client_helpers.cpp
     local_topic_client.cpp
     local_topic_read_session.cpp
+    local_topic_write_session.cpp
 )
 
 PEERDIR(

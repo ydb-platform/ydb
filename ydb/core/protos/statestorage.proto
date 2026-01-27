@@ -48,9 +48,9 @@ message TEvInfo {
      * The list of follower IDs for all followers present in the 'Follower'
      * and 'FollowerTablet' fields.
      *
-     * @note If this field is populated, the number of entries here is guaranted
+     * @note If this field is populated, the number of entries here is guaranteed
      *       to match the number of items in the 'Follower' and 'FollowerTablet' fields.
-     *       The order of entries is also guaranted to be the same.
+     *       The order of entries is also guaranteed to be the same.
      *
      *       Followers, which are included in the 'FollowerCandidates' field
      *       are never present in this list.

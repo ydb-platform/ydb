@@ -1,7 +1,7 @@
 'use strict';
 
-var TabletId;
-var FollowerId;
+var TabletId = 0;
+var FollowerId = 0;
 
 function main() {
     // making main container wider

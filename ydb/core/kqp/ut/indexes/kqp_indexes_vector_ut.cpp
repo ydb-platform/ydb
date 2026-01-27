@@ -1157,7 +1157,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         }
     }
 
-    TVector<std::pair<TActorId, TActorId>> ResolveFollowers(TTestActorRuntime &runtime, ui64 tabletId, ui32 nodeIndex) {
+    TVector<TEvStateStorage::TEvInfo::TFollowerInfo> ResolveFollowers(TTestActorRuntime & runtime, ui64 tabletId, ui32 nodeIndex) {
         auto sender = runtime.AllocateEdgeActor(nodeIndex);
         runtime.Send(new IEventHandle(MakeStateStorageProxyID(), sender,
             new TEvStateStorage::TEvLookup(tabletId, 0)),
@@ -1208,8 +1208,8 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
                 actorTypes[actorId] = type;
                 if (Followers) {
                     auto followers = ResolveFollowers(*runtime, shardId, 0);
-                    for (auto& [_, followerId]: followers) {
-                        actorTypes[followerId] = type | followerTypeFlag;
+                    for (const auto& followerInfo: followers) {
+                        actorTypes[followerInfo.FollowerTablet] = type | followerTypeFlag;
                     }
                 }
             }

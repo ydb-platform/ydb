@@ -1481,8 +1481,6 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
         // Send TEvGetInfoRequest to the given leader/follower
         Cerr << "TEST: Sending TEvGetInfoRequest to followerId " << followerId << Endl;
 
-        auto request = MakeHolder<TEvDataShard::TEvGetInfoRequest>();
-
         auto pipeConfig = GetPipeConfigWithRetries();
         pipeConfig.ForceFollower = testFollower;
 

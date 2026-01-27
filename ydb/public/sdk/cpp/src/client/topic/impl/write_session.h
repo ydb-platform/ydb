@@ -93,7 +93,7 @@ private:
         TWriteMessage Message;
         ui32 Partition;
         TTransactionBase* Tx;
-        bool Resent = false;
+        bool MovedToNewPartition = false;
     };
 
     struct TIdleSession;

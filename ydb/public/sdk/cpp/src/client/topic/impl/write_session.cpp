@@ -783,8 +783,26 @@ bool TKeyedWriteSession::TMessagesWorker::HasInFlightMessages() const {
     return !InFlightMessages.empty();
 }
 
-void TKeyedWriteSession::TMessagesWorker::ResendMessages(ui64, ui64) {
-    // TODO: Implement
+void TKeyedWriteSession::TMessagesWorker::ResendMessages(ui64 partition, ui64 afterSeqNo) {
+    auto it = InFlightMessagesIndex.find(partition);
+    if (it == InFlightMessagesIndex.end()) {
+        return;
+    }
+
+    auto& list = it->second;
+    auto resendIt = list.begin();
+
+    while (resendIt != list.end()) {
+        Y_ABORT_UNLESS((*resendIt)->Message.SeqNo_.has_value(), "SeqNo is not set");
+        if ((*resendIt)->Message.SeqNo_.value() >= afterSeqNo) {
+            break;
+        }
+        ++resendIt;
+    }
+
+    if (resendIt != list.end()) {
+        MessagesToResend.try_emplace(partition, resendIt);
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1028,15 +1046,11 @@ ui32 TKeyedWriteSession::TBoundPartitionChooser::ChoosePartition(const std::stri
     auto hashedKey = Session->PartitioningKeyHasher(key);
 
     auto lowerBound = Session->PartitionsIndex.lower_bound(hashedKey);
-    if (lowerBound == Session->PartitionsIndex.end()) {
-        return Session->Partitions.size() - 1;
-    }
-
-    if (lowerBound->first == hashedKey) {
+    if (lowerBound != Session->PartitionsIndex.end() && lowerBound->first == hashedKey) {
         return lowerBound->second;
     }
-    Y_ABORT_IF(lowerBound == Session->PartitionsIndex.begin(), "Lower bound is the first element");
 
+    Y_ABORT_IF(lowerBound == Session->PartitionsIndex.begin(), "Lower bound is the first element");
     return std::prev(lowerBound)->second;
 }
 

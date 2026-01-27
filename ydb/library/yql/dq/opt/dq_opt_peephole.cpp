@@ -885,6 +885,9 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
     std::vector<TString> fullColNames;
     ui32 outputIndex = 0;
 
+    std::vector<std::pair<TString, const TTypeAnnotationNode*>> leftConvertedItems;
+    std::vector<std::pair<TString, const TTypeAnnotationNode*>> rightConvertedItems;
+    
     // Build renames and full column names for left side
     for (auto i = 0u; i < itemTypeLeft->GetSize(); i++) {
         TString name(itemTypeLeft->GetItems()[i]->GetName());
@@ -896,21 +899,12 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
         leftRenames.emplace_back(ctx.NewAtom(pos, ctx.GetIndexAsString(outputIndex++)));
     }
 
-    // Build renames and full column names for right side
     if (blockHashJoin.JoinType().Value() != "LeftOnly" && blockHashJoin.JoinType().Value() != "LeftSemi") {
         for (auto i = 0u; i < itemTypeRight->GetSize(); i++) {
-            TString name(itemTypeRight->GetItems()[i]->GetName());
-            if (rightTableLabel) {
-                name = rightTableLabel + "." + name;
-            }
-            fullColNames.push_back(name);
             rightRenames.emplace_back(ctx.NewAtom(pos, ctx.GetIndexAsString(i)));
             rightRenames.emplace_back(ctx.NewAtom(pos, ctx.GetIndexAsString(outputIndex++)));
         }
     }
-
-    std::vector<std::pair<TString, const TTypeAnnotationNode*>> leftConvertedItems;
-    std::vector<std::pair<TString, const TTypeAnnotationNode*>> rightConvertedItems;
 
     // Process key types and conversions (similar to GraceJoin logic)
     YQL_ENSURE(leftKeyColumnNodes.size() == rightKeyColumnNodes.size());
@@ -943,6 +937,32 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
         }
     }
 
+    for (const auto& converted : leftConvertedItems) {
+        TString name = converted.first;
+        if (leftTableLabel) {
+            name = leftTableLabel + "." + name;
+        }
+        fullColNames.push_back(name);
+    }
+    
+    if (blockHashJoin.JoinType().Value() != "LeftOnly" && blockHashJoin.JoinType().Value() != "LeftSemi") {
+        for (auto i = 0u; i < itemTypeRight->GetSize(); i++) {
+            TString name(itemTypeRight->GetItems()[i]->GetName());
+            if (rightTableLabel) {
+                name = rightTableLabel + "." + name;
+            }
+            fullColNames.push_back(name);
+        }
+        
+        for (const auto& converted : rightConvertedItems) {
+            TString name = converted.first;
+            if (rightTableLabel) {
+                name = rightTableLabel + "." + name;
+            }
+            fullColNames.push_back(name);
+        }
+    }
+    
     // Expand inputs to wide flows (using ExpandJoinInput like GraceJoin)
     auto leftWideFlow = ExpandJoinInput(*itemTypeLeft,
         ctx.NewCallable(blockHashJoin.LeftInput().Pos(), "ToFlow", {blockHashJoin.LeftInput().Ptr()}),

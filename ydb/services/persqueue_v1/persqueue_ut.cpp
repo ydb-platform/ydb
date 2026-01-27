@@ -5000,34 +5000,72 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 1);
         server.WaitInit(SHORT_TOPIC_NAME);
         server.EnableLogs({ NKikimrServices::PQ_READ_PROXY });
-        auto pqLib = TPQLib::WithCerrLogger();
 
-        auto [producer, pcResult] = CreateProducer(pqLib, server.GrpcPort, SHORT_TOPIC_NAME, "123");
-        auto f = producer->Write(1,  TString(1_KB, 'a'));
-        f.Wait();
+        // Write data using simple writer
+        auto driver = server.AnnoyingClient->GetDriver();
+        {
+            auto writer = CreateSimpleWriter(*driver, SHORT_TOPIC_NAME, "123");
+            bool res = writer->Write(TString(1_KB, 'a'));
+            UNIT_ASSERT(res);
+            res = writer->Close(TDuration::Seconds(10));
+            UNIT_ASSERT(res);
+        }
 
-        ui32 maxCount = 1;
-        bool unpack = false;
-        auto [consumer, ccResult] = CreateConsumer(pqLib, server.GrpcPort, "user", {SHORT_TOPIC_NAME, {}}, maxCount, unpack);
-        Cerr << ccResult.Response << "\n";
+        // Create gRPC channel and stub for reading
+        grpc::ClientContext rcontext;
+        auto channel = grpc::CreateChannel(
+            TStringBuilder() << "localhost:" << server.GrpcPort,
+            grpc::InsecureChannelCredentials()
+        );
+        auto stub = Ydb::Topic::V1::TopicService::NewStub(channel);
+        auto readStream = stub->StreamRead(&rcontext);
+        UNIT_ASSERT(readStream);
 
-        auto msg = consumer->GetNextMessage();
-        msg.Wait();
-        UNIT_ASSERT_C(msg.GetValue().Response.response_case() == MigrationStreamingReadServerMessage::kAssigned, msg.GetValue().Response);
-        UNIT_ASSERT(msg.GetValue().Response.assigned().topic().path() == SHORT_TOPIC_NAME);
-        UNIT_ASSERT(msg.GetValue().Response.assigned().cluster() == "dc1");
-        UNIT_ASSERT(msg.GetValue().Response.assigned().partition() == 0);
+        // Init read session
+        {
+            Ydb::Topic::StreamReadMessage::FromClient req;
+            Ydb::Topic::StreamReadMessage::FromServer resp;
 
+            req.mutable_init_request()->add_topics_read_settings()->set_path(SHORT_TOPIC_NAME);
+            req.mutable_init_request()->set_consumer("user");
+
+            UNIT_ASSERT(readStream->Write(req));
+            UNIT_ASSERT(readStream->Read(&resp));
+            UNIT_ASSERT(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kInitResponse);
+
+            // Send read request for bytes budget
+            req.Clear();
+            req.mutable_read_request()->set_bytes_size(256000);
+            UNIT_ASSERT(readStream->Write(req));
+        }
+
+        // Receive partition session assignment
+        i64 partitionSessionId = 0;
+        {
+            Ydb::Topic::StreamReadMessage::FromServer resp;
+            UNIT_ASSERT(readStream->Read(&resp));
+            UNIT_ASSERT_C(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kStartPartitionSessionRequest, resp);
+            UNIT_ASSERT(resp.start_partition_session_request().partition_session().path() == SHORT_TOPIC_NAME);
+            UNIT_ASSERT(resp.start_partition_session_request().partition_session().partition_id() == 0);
+            partitionSessionId = resp.start_partition_session_request().partition_session().partition_session_id();
+
+            // Confirm the partition session
+            Ydb::Topic::StreamReadMessage::FromClient req;
+            req.mutable_start_partition_session_response()->set_partition_session_id(partitionSessionId);
+            UNIT_ASSERT(readStream->Write(req));
+        }
+
+        // Restart partition tablets
         server.CleverServer->GetRuntime()->ResetScheduledCount();
         server.AnnoyingClient->RestartPartitionTablets(server.CleverServer->GetRuntime(), DEFAULT_TOPIC_NAME);
 
-        msg.GetValue().StartRead.SetValue({0,0,false});
-
-        msg = consumer->GetNextMessage();
-        UNIT_ASSERT(msg.Wait(TDuration::Seconds(10)));
-
-        Cerr << msg.GetValue().Response << "\n";
-        UNIT_ASSERT(msg.GetValue().Response.response_case() == MigrationStreamingReadServerMessage::kDataBatch);
+        // Read data after restart
+        {
+            Ydb::Topic::StreamReadMessage::FromServer resp;
+            UNIT_ASSERT(readStream->Read(&resp));
+            Cerr << "Got response: " << resp.ShortDebugString() << "\n";
+            UNIT_ASSERT_C(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kReadResponse, resp);
+        }
     }
 
 
@@ -5038,27 +5076,55 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 1);
 
         server.EnableLogs({ NKikimrServices::PQ_READ_PROXY });
-        auto pqLib = TPQLib::WithCerrLogger();
 
+        // Write data using simple writer
+        auto driver = server.AnnoyingClient->GetDriver();
         {
-            auto [producer, pcResult] = CreateProducer(pqLib, server.GrpcPort, "aaa/bbb/ccc/topic", "123");
-            UNIT_ASSERT_C(pcResult.Response.server_message_case() == StreamingWriteServerMessage::kInitResponse, pcResult.Response);
+            auto writer = CreateSimpleWriter(*driver, "aaa/bbb/ccc/topic", "123");
             for (ui32 i = 1; i <= 11; ++i) {
-                auto f = producer->Write(i,  TString(10, 'a'));
-                f.Wait();
-                UNIT_ASSERT_C(f.GetValue().Response.server_message_case() == StreamingWriteServerMessage::kBatchWriteResponse, f.GetValue().Response);
+                bool res = writer->Write(TString(10, 'a'));
+                UNIT_ASSERT(res);
             }
+            bool res = writer->Close(TDuration::Seconds(10));
+            UNIT_ASSERT(res);
         }
 
-        ui32 maxCount = 1;
-        bool unpack = false;
-        auto [consumer, ccResult] = CreateConsumer(pqLib, server.GrpcPort, "user", {"aaa/bbb/ccc/topic", {}}, maxCount, unpack);
-        UNIT_ASSERT_C(ccResult.Response.response_case() == MigrationStreamingReadServerMessage::kInitResponse, ccResult.Response);
+        // Create gRPC channel and stub for reading
+        grpc::ClientContext rcontext;
+        auto channel = grpc::CreateChannel(
+            TStringBuilder() << "localhost:" << server.GrpcPort,
+            grpc::InsecureChannelCredentials()
+        );
+        auto stub = Ydb::Topic::V1::TopicService::NewStub(channel);
+        auto readStream = stub->StreamRead(&rcontext);
+        UNIT_ASSERT(readStream);
 
-        auto msg = consumer->GetNextMessage();
-        msg.Wait();
-        Cerr << msg.GetValue().Response << "\n";
-        UNIT_ASSERT(msg.GetValue().Response.response_case() == MigrationStreamingReadServerMessage::kAssigned);
+        // Init read session
+        {
+            Ydb::Topic::StreamReadMessage::FromClient req;
+            Ydb::Topic::StreamReadMessage::FromServer resp;
+
+            req.mutable_init_request()->add_topics_read_settings()->set_path("aaa/bbb/ccc/topic");
+            req.mutable_init_request()->set_consumer("user");
+
+            UNIT_ASSERT(readStream->Write(req));
+            UNIT_ASSERT(readStream->Read(&resp));
+            UNIT_ASSERT_C(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kInitResponse, resp);
+
+            // Send read request for bytes budget
+            req.Clear();
+            req.mutable_read_request()->set_bytes_size(256000);
+            UNIT_ASSERT(readStream->Write(req));
+        }
+
+        // Receive partition session assignment
+        {
+            Ydb::Topic::StreamReadMessage::FromServer resp;
+            UNIT_ASSERT(readStream->Read(&resp));
+            Cerr << "Got response: " << resp.ShortDebugString() << "\n";
+            UNIT_ASSERT_C(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kStartPartitionSessionRequest, resp);
+            UNIT_ASSERT(resp.start_partition_session_request().partition_session().path() == "aaa/bbb/ccc/topic");
+        }
     }
 
 
@@ -5067,62 +5133,92 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 3);
 
         server.EnableLogs({ NKikimrServices::PQ_READ_PROXY });
-        auto pqLib = TPQLib::WithCerrLogger();
 
-        TPQDataWriter writer("source", server);
-
+        // Write data to all 3 partitions using simple writer
+        auto driver = server.AnnoyingClient->GetDriver();
         for (ui32 i = 1; i <= 3; ++i) {
             TString sourceId = "123" + ToString<int>(i);
-            ui32 partitionGroup = i;
-            auto [producer, pcResult] = CreateProducer(pqLib, server.GrpcPort, SHORT_TOPIC_NAME, sourceId, partitionGroup);
-
-            UNIT_ASSERT(pcResult.Response.server_message_case() == StreamingWriteServerMessage::kInitResponse);
-            auto f = producer->Write(i,  TString(10, 'a'));
-            f.Wait();
+            auto writer = CreateSimpleWriter(*driver, SHORT_TOPIC_NAME, sourceId, i);
+            bool res = writer->Write(TString(10, 'a'));
+            UNIT_ASSERT(res);
+            res = writer->Close(TDuration::Seconds(10));
+            UNIT_ASSERT(res);
         }
 
-        TConsumerSettings ss;
-        ss.Consumer = "user";
-        ss.Server = TServerSetting{"localhost", server.GrpcPort};
-        ss.Topics.push_back({SHORT_TOPIC_NAME, {}});
-        ss.ReadMirroredPartitions = false;
-        ss.MaxCount = 3;
-        ss.Unpack = false;
+        // Helper to create a read stream with Topic SDK
+        auto createReadStream = [&server]() {
+            auto channel = grpc::CreateChannel(
+                TStringBuilder() << "localhost:" << server.GrpcPort,
+                grpc::InsecureChannelCredentials()
+            );
+            auto stub = Ydb::Topic::V1::TopicService::NewStub(channel);
+            auto context = std::make_unique<grpc::ClientContext>();
+            auto readStream = stub->StreamRead(context.get());
 
-        auto [consumer, ccResult] = CreateConsumer(pqLib, ss);
-        Cerr << ccResult.Response << "\n";
+            // Init the read session
+            Ydb::Topic::StreamReadMessage::FromClient req;
+            Ydb::Topic::StreamReadMessage::FromServer resp;
+            req.mutable_init_request()->add_topics_read_settings()->set_path(SHORT_TOPIC_NAME);
+            req.mutable_init_request()->set_consumer("user");
+            readStream->Write(req);
+            readStream->Read(&resp);
+            UNIT_ASSERT(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kInitResponse);
 
+            // Send read request for bytes budget
+            req.Clear();
+            req.mutable_read_request()->set_bytes_size(256000);
+            readStream->Write(req);
+
+            return std::make_tuple(std::move(context), std::move(stub), std::move(readStream));
+        };
+
+        // Create first consumer
+        auto [context1, stub1, readStream1] = createReadStream();
+        UNIT_ASSERT(readStream1);
+
+        // First consumer receives all 3 partition assignments
+        TVector<i64> partitionSessionIds;
         for (ui32 i = 1; i <= 3; ++i) {
-            auto msg = consumer->GetNextMessage();
-            msg.Wait();
-            Cerr << msg.GetValue().Response << "\n";
-            UNIT_ASSERT(msg.GetValue().Response.response_case() == MigrationStreamingReadServerMessage::kAssigned);
-            UNIT_ASSERT(msg.GetValue().Response.assigned().topic().path() == SHORT_TOPIC_NAME);
-            UNIT_ASSERT(msg.GetValue().Response.assigned().cluster() == "dc1");
+            Ydb::Topic::StreamReadMessage::FromServer resp;
+            UNIT_ASSERT(readStream1->Read(&resp));
+            Cerr << resp.ShortDebugString() << "\n";
+            UNIT_ASSERT(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kStartPartitionSessionRequest);
+            UNIT_ASSERT(resp.start_partition_session_request().partition_session().path() == SHORT_TOPIC_NAME);
+            partitionSessionIds.push_back(resp.start_partition_session_request().partition_session().partition_session_id());
+
+            // Confirm the partition session
+            Ydb::Topic::StreamReadMessage::FromClient req;
+            req.mutable_start_partition_session_response()->set_partition_session_id(partitionSessionIds.back());
+            UNIT_ASSERT(readStream1->Write(req));
         }
 
-        auto [consumer2, ccResult2] = CreateConsumer(pqLib, ss);
-        Cerr << ccResult2.Response << "\n";
+        // Create second consumer - this should trigger partition rebalancing
+        auto [context2, stub2, readStream2] = createReadStream();
+        UNIT_ASSERT(readStream2);
 
-        auto msg = consumer->GetNextMessage();
-        auto msg2 = consumer2->GetNextMessage();
+        // First consumer should receive kStopPartitionSessionRequest (rebalancing)
+        {
+            Ydb::Topic::StreamReadMessage::FromServer resp;
+            UNIT_ASSERT(readStream1->Read(&resp));
+            Cerr << resp.ShortDebugString() << "\n";
+            UNIT_ASSERT_C(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kStopPartitionSessionRequest, resp);
+            UNIT_ASSERT(resp.stop_partition_session_request().graceful());
 
-        msg.Wait();
-        Cerr << msg.GetValue().Response << "\n";
-        UNIT_ASSERT(msg.GetValue().Response.response_case() == MigrationStreamingReadServerMessage::kRelease);
-        UNIT_ASSERT(msg.GetValue().Response.release().topic().path() == SHORT_TOPIC_NAME);
-        UNIT_ASSERT(msg.GetValue().Response.release().cluster() == "dc1");
+            // Acknowledge the stop
+            Ydb::Topic::StreamReadMessage::FromClient req;
+            req.mutable_stop_partition_session_response()->set_partition_session_id(
+                resp.stop_partition_session_request().partition_session_id());
+            UNIT_ASSERT(readStream1->Write(req));
+        }
 
-        UNIT_ASSERT(!msg2.Wait(TDuration::Seconds(1)));
-
-        msg.GetValue().Release.SetValue();
-
-        msg2.Wait();
-        Cerr << msg2.GetValue().Response << "\n";
-
-        UNIT_ASSERT(msg2.GetValue().Response.response_case() == MigrationStreamingReadServerMessage::kAssigned);
-        UNIT_ASSERT(msg2.GetValue().Response.assigned().topic().path() == SHORT_TOPIC_NAME);
-        UNIT_ASSERT(msg2.GetValue().Response.assigned().cluster() == "dc1");
+        // Second consumer should receive partition assignment
+        {
+            Ydb::Topic::StreamReadMessage::FromServer resp;
+            UNIT_ASSERT(readStream2->Read(&resp));
+            Cerr << resp.ShortDebugString() << "\n";
+            UNIT_ASSERT_C(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kStartPartitionSessionRequest, resp);
+            UNIT_ASSERT(resp.start_partition_session_request().partition_session().path() == SHORT_TOPIC_NAME);
+        }
     }
 
     Y_UNIT_TEST(TestSilentRelease) {

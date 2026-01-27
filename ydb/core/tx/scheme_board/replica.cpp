@@ -892,7 +892,7 @@ private:
             }
 
             if (curPathId < pathId) {
-                // If database changed (recreated)
+                // If recreated in same database (curPathId.OwnerId == pathId.OwnerId)
                 SoftDeleteDescription(desc->GetPathId());
                 UpsertDescriptionWithRelinkSubscribers(path, pathId, std::move(pathDescription));
             } else {

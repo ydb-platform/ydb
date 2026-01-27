@@ -386,7 +386,7 @@ bool TStorage::AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupId
 
     auto writeTimestampDelta = (writeTimestamp - BaseWriteTimestamp).Seconds();
     if (auto retentionDeadlineDelta = GetRetentionDeadlineDelta(); retentionDeadlineDelta.has_value()) {
-        auto removedByRetention = writeTimestampDelta + delay.Seconds() <= retentionDeadlineDelta.value();
+        auto removedByRetention = writeTimestampDelta <= retentionDeadlineDelta.value();
         // The message will be deleted by retention policy. Skip it.
         if (removedByRetention && Messages.empty()) {
             ++Metrics.TotalDeletedByRetentionMessageCount;
@@ -555,13 +555,12 @@ bool TStorage::HasRetentionExpiredMessages() const {
         return false;
     }
 
-    auto it = begin();
-    if (it == end()) {
+    if (Messages.empty()) {
         return false;
     }
 
-    auto msg = *it;
-    return msg.WriteTimestamp + TDuration::Seconds(retentionDeadlineDelta.value()) <= TimeProvider->Now();
+    auto& message = Messages.front();
+    return message.WriteTimestampDelta <= retentionDeadlineDelta.value();
 }
 
 std::pair<TStorage::TMessage*, bool> TStorage::GetMessageInt(ui64 offset, EMessageStatus expectedStatus) {

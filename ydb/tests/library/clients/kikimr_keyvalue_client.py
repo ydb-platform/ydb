@@ -59,7 +59,7 @@ class KeyValueClient(object):
             return getattr(self._stub_v2, method)
         return getattr(self._stub, method)
 
-    def invoke(self, request, method, version):
+    def invoke(self, request, method, version='v1'):
         retry = self.__retry_count
         while True:
             try:

@@ -305,6 +305,133 @@ SELECT Yson::ConvertToDoubleDict($yson, Yson::Options(false as Strict)); --- { "
 
 Если во всём запросе требуется применять одинаковые значения настроек библиотеки Yson, то удобнее воспользоваться [PRAGMA yson.AutoConvert;](../../syntax/pragma/yson.md#autoconvert) и/или [PRAGMA yson.Strict;](../../syntax/pragma/yson.md#strict). Также эти `PRAGMA` являются единственным способом повлиять на неявные вызовы библиотеки Yson, которые возникают при работе с типами данных Yson/Json.
 
+## Yson::Iterate... {#ysoniterate}
+
+```yql
+Yson::Iterate(Resource<'Yson2.Node'>{Flags:AutoMap}) -> List<Variant<
+    'BeginAttributes':Void,
+    'BeginList':Void,
+    'BeginMap':Void,
+    'EndAttributes':Void,
+    'EndList':Void,
+    'EndMap':Void,
+    'Item':Void,
+    'Key':String,
+    'PostValue':Resource<'Yson2.Node'>,
+    'PreValue':Resource<'Yson2.Node'>,
+    'Value':Resource<'Yson2.Node'>>>
+```
+
+Доступна начиная с версии [2025.05](../../changelog/2025.05.md#yson-module).
+Получение списка всех событий при обходе Yson-дерева.
+Листовые узлы (`Entity`, `Bool`, `Int64`, `Uint64`, `Double`, `String`) передаются в виде события `Value`.
+
+Для узла с типом `List` выдается такая последовательность:
+* `PreValue` с самим узлом
+* `BeginList`
+* `Item` - перед каждым элементом `List`
+* события для элемента `List`
+* `EndList`
+* `PostValue` с самим узлом
+
+Для узла с типом `Map` выдается такая последовательность:
+* `PreValue` с самим узлом
+* `BeginMap`
+* `Key` - перед каждым элементом `Map`
+* события для элемента `Map`
+* `EndMap`
+* `PostValue` с самим узлом
+Порядок выдачи ключей может быть произвольным.
+
+Для узла с непустыми атрибутами выдается такая последовательность:
+* `PreValue` с самим узлом
+* `BeginAttributes`
+* `Key` - перед каждым именем атрибута
+* события для атрибута
+* `EndAttributes`
+* события для узла без атрибутов
+* `PostValue` с самим узлом
+Порядок выдачи атрибутов может быть произвольным.
+
+#### Примеры
+
+```yql
+-- Просмотр всей выдачи функции Yson::Iterate
+$dump = ($x) -> (
+    (
+        Way($x),
+        $x.Key,
+        Yson::Serialize($x.PreValue),
+        Yson::Serialize($x.Value),
+        Yson::Serialize($x.PostValue)
+    )
+);
+
+SELECT ListMap(Yson::Iterate('{a=1;b=<c="foo">[2u;%true;#;-3.2]}'y), $dump);
+
+/*
+События:
+    PreValue [1]
+    BeginMap
+    Key a
+    Value 1
+    Key b
+    PreValue [2]
+    BeginAttributes
+    Key c
+    Value foo
+    EndAttributes
+    PreValue [3]
+    BeginList
+    Item
+    Value 2
+    Item
+    Value %true
+    Item
+    Value #
+    Item
+    Value -3.2
+    EndList
+    PostValue [3]
+    PostValue [2]
+    EndMap
+    PostValue [1]
+*/
+```
+
+```yql
+-- Получение всех листовых значений - раскрытие всех списков
+$yson = '[[1;2];[3;4]]'y;
+SELECT ListFlatMap(Yson::Iterate($yson), ($x)->(IF($x.Value IS NOT NULL, $x.Value))); -- [1;2;3;4]
+```
+
+```yql
+-- Поиск ключа с заданным именем на любом уровне
+$yson = '{a={b={c=1}};e={f=2}}'y;
+SELECT ListHasItems(ListFilter(Yson::Iterate($yson), ($x)->($x.Key == 'b'))); -- true
+```
+
+```yql
+-- Поиск строки в значениях любом уровне
+$yson = '{a={b={c="x"}};e={f="y"}}'y;
+SELECT ListHasItems(ListFilter(Yson::Iterate($yson), ($x)->(Yson::ConvertToString($x.Value) == 'y'))); -- true
+```
+
+```yql
+-- Получение атрибутов name для всех Map узлов без атрибута children
+$yson = @@{
+    name=foo;
+    children=[
+        {
+            name=bar
+        }
+    ]
+}@@y;
+
+SELECT ListFlatMap(Yson::Iterate($yson), ($x)->(
+    IF(Yson::IsDict($x.PreValue) and not Yson::Contains($x.PreValue,'children'), Yson::LookupString($x.PreValue, 'name')))); -- [bar]
+```
+
 ## Смотрите также
 
 * [{#T}](../../recipes/accessing-json.md)

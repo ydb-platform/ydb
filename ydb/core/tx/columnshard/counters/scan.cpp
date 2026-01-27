@@ -162,13 +162,13 @@ THashMap<TString, TConcreteScanCounters::TPerStepCounters> TConcreteScanCounters
 
 TString TConcreteScanCounters::StepsCountersDebugString() const {
     auto counters = ReadStepsCounters();
-    TPerStepCounters summ;
+    TPerStepCounters sum;
     TStringBuilder bld;
     bld << "per_step_counters:(";
     for (auto& [k, v] : counters) {
-        summ.ExecutionDuration += v.ExecutionDuration;
-        summ.WaitDuration += v.WaitDuration;
-        summ.RawBytesRead += v.RawBytesRead;
+        sum.ExecutionDuration += v.ExecutionDuration;
+        sum.WaitDuration += v.WaitDuration;
+        sum.RawBytesRead += v.RawBytesRead;
         bld << "[StepName: " << k << "; " << v.DebugString() << "],\n";
     }
     if (!counters.empty()) {
@@ -177,7 +177,7 @@ TString TConcreteScanCounters::StepsCountersDebugString() const {
     }
     bld << ");";
     bld << "counters_summ_across_all_steps:(";
-    bld << "[StepName: AllSteps; " << summ.DebugString() << "])\n";
+    bld << "[StepName: AllSteps; " << sum.DebugString() << "])\n";
     return bld;
 }
 

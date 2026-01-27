@@ -391,7 +391,6 @@ private:
     THashMap<ui32, std::shared_ptr<TAtomicCounter>> ExecuteNodesCount;
     NColumnShard::TThreadSafeValue<THashMap<TString, TPerStepAtomicCounters>> AtomicStepCounters;
 public:
-    using TStepName = TString;
     TScanAggregations Aggregations;
 
     void OnSkipGraphNode(const ui32 nodeId) const {

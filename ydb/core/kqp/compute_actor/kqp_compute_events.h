@@ -16,7 +16,6 @@ struct TLocksInfo {
     TVector<NKikimrDataEvents::TLock> BrokenLocks;
 };
 
-
 namespace NInternalImplementation {
 struct TEvRemoteScanData: public TEventPB<TEvRemoteScanData, NKikimrKqp::TEvRemoteScanData,
     TKqpComputeEvents::EvRemoteScanData> {

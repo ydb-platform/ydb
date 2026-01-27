@@ -216,7 +216,6 @@ void TKeyedWriteSession::TSplittedPartitionWorker::HandleDescribeResult() {
             continue;
         }
         
-        // std::copy(partition.GetChildPartitionIds().begin(), partition.GetChildPartitionIds().end(), std::back_inserter(newPartitions));
         for (const auto& childPartition : partition.GetChildPartitionIds()) {
             newPartitions.push_back(childPartition);
         }

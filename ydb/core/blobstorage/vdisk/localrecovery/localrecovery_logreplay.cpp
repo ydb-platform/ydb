@@ -900,6 +900,7 @@ namespace NKikimr {
             LocRecCtx->HullDbRecovery->GetOwnedChunks(chunks);
             LocRecCtx->RepairedHuge->GetOwnedChunks(chunks);
             LocRecCtx->SyncLogRecovery->GetOwnedChunks(chunks);
+            LocRecCtx->ChunkKeeperData->GetOwnedChunks(chunks, LocRecCtx->VCtx->VDiskLogPrefix);
 
             // calculate leaked and unowned chunks
             TVector<TChunkIdx> leaks, misowned;

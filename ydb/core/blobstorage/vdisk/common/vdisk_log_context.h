@@ -6,7 +6,7 @@
 
 namespace NKikimr {
 
-class TLogContext : public TThrRefBase {
+class TVDiskLogContext : public TThrRefBase {
 public:
     const TIntrusivePtr<TVDiskContext> VCtx;
     const TIntrusivePtr<TLsnMngr> LsnMngr;
@@ -14,7 +14,7 @@ public:
     const TActorId LoggerId;
     const TActorId LogCutterId;
 
-    TLogContext(TIntrusivePtr<TVDiskContext> vctx,
+    TVDiskLogContext(TIntrusivePtr<TVDiskContext> vctx,
             TIntrusivePtr<TLsnMngr> lsnMngr,
             TPDiskCtxPtr pdiskCtx,
             const TActorId& loggerId,

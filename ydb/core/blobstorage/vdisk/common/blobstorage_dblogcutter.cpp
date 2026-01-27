@@ -126,7 +126,7 @@ namespace NKikimr {
                 return;
 
             ui64 curLsn = Min(HullLsnToKeep, SyncLogLsnToKeep, SyncerLsnToKeep,
-                HugeKeeperLsnToKeep, ScrubLsnToKeep);
+                HugeKeeperLsnToKeep, ScrubLsnToKeep, ChunkKeeperLsnToKeep);
 
             if (AppData(ctx)->FeatureFlags.GetEnableTinyDisks()) {
                 curLsn = Min(curLsn, MetadataLsnToKeep);

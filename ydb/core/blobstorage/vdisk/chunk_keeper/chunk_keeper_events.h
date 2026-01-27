@@ -3,6 +3,29 @@
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/protos/blobstorage_vdisk_internal.pb.h>
 
+//////////////////////////////////////////////////////////////////////////////////////////
+/// Contract
+//////////////////////////////////////////////////////////////////////////////////////////
+/// 1. TEvChunkKeeperAllocate(subsystem)
+/// - Allocates chunk on PDisk and persistently commit it as owned by given subsystem
+/// - May return ERROR on PDisk failures
+///
+/// 2. TEvChunkKeeperFree(chunkIdx, subsystem)
+/// - Deallocates chunk with given chunkIdx if it is owned by given subsystem
+/// - Returns ERROR if chunk is not owned by subsystem
+/// - May return ERROR on PDisk failures
+///
+/// 3. TEvChunkKeeperDiscover(subsystem)
+/// - Returns list of committed chunks owned by given subsystem
+/// - May return chunks allocated TEvChunkKeeperAllocate before subsytem
+///   receives TEvChunkKeeperAllocateResult
+/// - May not return chunks deallocated by TEvChunkKeeperFree before subsystem
+///   receives TEvChunkKeeperFreeResult
+/// - Always succeeds
+///
+/// Simultaneous Allocations and/or Deallocations are not allowed
+//////////////////////////////////////////////////////////////////////////////////////////
+
 namespace NKikimr {
 
 struct TEvChunkKeeperAllocate : TEventLocal<TEvChunkKeeperAllocate, TEvBlobStorage::EvChunkKeeperAllocate> {

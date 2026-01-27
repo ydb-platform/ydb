@@ -1985,16 +1985,16 @@ namespace NKikimr {
             ActiveActors.Insert(Db->LogCutterID, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE); // keep forever
 
             // run metadata actor
-            auto logCtx = MakeIntrusive<TLogContext>(VCtx, Db->LsnMngr, PDiskCtx,
+            auto logCtx = MakeIntrusive<TVDiskLogContext>(VCtx, Db->LsnMngr, PDiskCtx,
                     (TActorId)(Db->LoggerID), (TActorId)(Db->LogCutterID));
             auto metadataActor = CreateMetadataActor(logCtx, std::move(ev->Get()->MetadataEntryPoint));
             MetadataActorId = ctx.Register(metadataActor);
             ActiveActors.Insert(MetadataActorId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE); // keep forever
 
             // run chunk keeper actor
-            IActor* chunkKeeperActor = CreateChunkKeeperActor(logCtx, std::move(ev->Get()->ChunkKeeperEntryPoint));
-            ChunkKeeperActorId = ctx.Register(chunkKeeperActor);
-            ActiveActors.Insert(ChunkKeeperActorId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE); // keep forever
+            IActor* chunkKeeperActor = CreateChunkKeeperActor(logCtx, std::move(ev->Get()->ChunkKeeperData));
+            Db->ChunkKeeperActorID.Set(ctx.Register(chunkKeeperActor));
+            ActiveActors.Insert(Db->ChunkKeeperActorID, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE); // keep forever
 
             LocalRecoveryDoneEvent = std::move(ev);
 
@@ -2439,6 +2439,10 @@ namespace NKikimr {
                 ctx.Send(MetadataActorId, msg->Clone());
                 ++counter;
             }
+            if (Db->ChunkKeeperActorID) {
+                ctx.Send(Db->ChunkKeeperActorID, msg->Clone());
+                ++counter;
+            }
 
             LOG_DEBUG_S(ctx, BS_LOGCUTTER, VCtx->VDiskLogPrefix
                     << "SpreadCutLog: Handle " << msg->ToString()
@@ -2832,6 +2836,10 @@ namespace NKikimr {
             TActivationContext::Send(IEventHandle::Forward(ev, ShredActorId));
         }
 
+        void Handle(const TEvGetSkeletonState::TPtr& ev) {
+            Send(ev->Sender, new TEvGetSkeletonStateResult(Db->ChunkKeeperActorID));
+        }
+
         // NOTES: we have 4 state functions, one of which is an error state (StateDatabaseError) and
         // others are good: StateLocalRecovery, StateSyncGuidRecovery, StateNormal
         // We switch between states in the following manner:
@@ -2896,6 +2904,7 @@ namespace NKikimr {
             hFunc(NPDisk::TEvShredVDisk, HandleShredEnqueue)
             hFunc(TEvNotifyChunksDeleted, Handle)
             HFunc(TEvCommitVDiskMetadataDone, HandleMetadata)
+            hFunc(TEvGetSkeletonState, Handle)
         )
 
         COUNTED_STRICT_STFUNC(StateSyncGuidRecovery,
@@ -2953,6 +2962,7 @@ namespace NKikimr {
             hFunc(NPDisk::TEvPreShredCompactVDisk, HandleShredEnqueue)
             hFunc(NPDisk::TEvShredVDisk, HandleShredEnqueue)
             hFunc(TEvNotifyChunksDeleted, Handle)
+            hFunc(TEvGetSkeletonState, Handle)
         )
 
         COUNTED_STRICT_STFUNC(StateNormal,
@@ -3027,6 +3037,7 @@ namespace NKikimr {
             hFunc(NPDisk::TEvPreShredCompactVDisk, HandleShred)
             hFunc(NPDisk::TEvShredVDisk, HandleShred)
             hFunc(TEvNotifyChunksDeleted, Handle)
+            hFunc(TEvGetSkeletonState, Handle)
         )
 
         COUNTED_STRICT_STFUNC(StateDatabaseError,
@@ -3058,6 +3069,7 @@ namespace NKikimr {
             hFunc(NPDisk::TEvPreShredCompactVDisk, HandleShredError)
             hFunc(NPDisk::TEvShredVDisk, HandleShredError)
             hFunc(TEvNotifyChunksDeleted, Handle)
+            hFunc(TEvGetSkeletonState, Handle)
         )
 
         PDISK_TERMINATE_STATE_FUNC_DEF;
@@ -3155,7 +3167,6 @@ namespace NKikimr {
         std::unique_ptr<TVDiskCompactionState> VDiskCompactionState;
         TMemorizableControlWrapper EnableVPatch;
         THashMap<TLogoBlobID, TActorId> VPatchActors;
-        TActorId ChunkKeeperActorId;
 
         std::unordered_map<TString, TSnapshotInfo> Snapshots;
         TSnapshotExpirationMap SnapshotExpirationMap;

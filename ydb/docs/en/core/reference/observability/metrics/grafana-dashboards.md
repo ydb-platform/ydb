@@ -160,11 +160,11 @@ Metrics for the topic and consumer selected in the dashboard filter.
 | Total incoming records (count) per second | Number of messages per second written using `Ydb::TopicService::StreamWrite` |
 | Total outgoing records (count) per second | Number of messages per second read from the topic by the consumer using `Ydb::TopicService::StreamRead` |
 | End-to-end latency | Distribution of the time from message creation to its being read from the topic by the consumer, by time intervals in milliseconds |
-| Read latency max | The maximum (across all partitions) difference between the current time and the recording time of the last recorded message |
-| Unread messages max | The maximum difference (across all partitions) of the last offset in the partition and the last subtracted offset |
+| Read latency max | The maximum (across all partitions) difference between the current time and the write time of the most recently written message |
+| Unread messages max | The maximum difference (across all partitions) of the last offset in the partition and the last commited offset |
 | Read idle time max | Maximum idle time (how long the topic partition was not read by the consumer) for all partitions |
-| Uncommitted messages max | The maximum (across all partitions) difference between the last partition offset and the recorded partition offset |
-| Committed read lag max | The maximum (across all partitions) difference between the current time and the recording time of the last recorded message |
+| Uncommitted messages max | The maximum (across all partitions) number of messages after last committed offset |
+| Committed read lag max | The maximum (across all partitions) difference between the current time and the write time of the last committed message |
 | Partition sessions started | Number of topic read sessions started by the consumer per second |
 
 Download the [topic-consumer.json](https://raw.githubusercontent.com/ydb-platform/ydb/refs/heads/main/ydb/deploy/helm/ydb-prometheus/dashboards/topic-consumer.json) file with the **Topic** dashboard.

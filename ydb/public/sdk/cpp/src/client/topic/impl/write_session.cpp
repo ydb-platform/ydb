@@ -350,7 +350,6 @@ void TKeyedWriteSession::TEventsWorker::RunEventLoop(WrappedWriteSessionPtr wrap
         }
 
         if (auto sessionClosedEvent = std::get_if<TSessionClosedEvent>(&*event); sessionClosedEvent) {
-            std::cerr << "Session closed event for partition " << partition << std::endl;
             HandleSessionClosedEvent(std::move(*sessionClosedEvent), partition);
             break;
         }
@@ -361,9 +360,6 @@ void TKeyedWriteSession::TEventsWorker::RunEventLoop(WrappedWriteSessionPtr wrap
         }
 
         if (auto acksEvent = std::get_if<TWriteSessionEvent::TAcksEvent>(&*event)) {
-            for (const auto& ack : acksEvent->Acks) {
-                std::cerr << "Ack for partition " << partition << " seqNo: " << ack.SeqNo << " state: " << static_cast<int>(ack.State) << std::endl;
-            }
             Get(SessionsWorker)->OnReadFromSession(wrappedSession);
             HandleAcksEvent(partition, std::move(*acksEvent));
             continue;
@@ -1084,7 +1080,6 @@ void TKeyedWriteSession::RunMainWorker() {
 }
 
 void TKeyedWriteSession::HandleAutoPartitioning(ui64 partition) {
-    std::cerr << "HandleAutoPartitioning for partition " << partition << std::endl;
     auto splittedPartitionWorker = std::make_shared<TSplittedPartitionWorker>(this, Partitions[partition].PartitionId_, partition, SessionsWorker, MessagesWorker);
     SplittedPartitionWorkers.try_emplace(partition, splittedPartitionWorker);
 }

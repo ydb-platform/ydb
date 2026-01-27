@@ -1528,7 +1528,6 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
                 }
                 if (auto* acks = std::get_if<TWriteSessionEvent::TAcksEvent>(&*event)) {
                     for (const auto& ack : acks->Acks) {
-                        std::cerr << "Got ack in test for seqNo: " << ack.SeqNo << std::endl;
                         UNIT_ASSERT_C(
                             ackedSeqNos.insert(ack.SeqNo).second,
                             "Duplicate ack for seqNo " << ack.SeqNo);
@@ -1558,7 +1557,6 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             if (key.empty()) {
                 key = "lalala";
             }
-            std::cerr << "Writing message with key: " << key << std::endl;
             s->Write(std::move(*token), key, createMessage(payload, seqNo));
         };
 

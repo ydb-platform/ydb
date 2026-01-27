@@ -76,7 +76,7 @@ bool BuildTopicScheme(
 
     auto* attributes = request.mutable_attributes();
     std::vector<std::string> keysToRemove;
-    for (const auto& [key, value] : *attributes) {
+    for (const auto& [key, _] : *attributes) {
         // Remove internal attributes (starting with __)
         if (key.size() >= 2 && key[0] == '_' && key[1] == '_') {
             keysToRemove.push_back(key);

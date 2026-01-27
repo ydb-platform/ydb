@@ -993,7 +993,6 @@ std::shared_ptr<IOperator> TPushFilterIntoJoinRule::SimpleMatchAndApply(const st
     if (!join->IsSingleConsumer()) {
         YQL_CLOG(TRACE, CoreDq) << "Multiple consumers in push filter rule";
         return input;
-        
     }
 
     if (join->JoinKind != "Inner" && join->JoinKind != "Cross" && join->JoinKind != "Left") {

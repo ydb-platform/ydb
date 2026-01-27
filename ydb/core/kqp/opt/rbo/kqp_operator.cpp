@@ -1191,16 +1191,18 @@ TOpRoot::TOpRoot(std::shared_ptr<IOperator> input, TPositionHandle pos, const TV
 
 TVector<TInfoUnit> TOpRoot::GetOutputIUs() { return GetInput()->GetOutputIUs(); }
 
-void ComputeParentsRec(std::shared_ptr<IOperator> op, std::shared_ptr<IOperator> parent) {
+void ComputeParentsRec(std::shared_ptr<IOperator> op, std::shared_ptr<IOperator> parent, int parentChildIndex) {
     if (parent) {
+        auto parentEntry = std::make_pair(std::weak_ptr<IOperator>(parent), parentChildIndex);
         auto f = std::find_if(op->Parents.begin(), op->Parents.end(),
-                              [&parent](const std::weak_ptr<IOperator> &p) { return p.lock() == parent; });
+                              [&parentEntry](const std::pair<std::weak_ptr<IOperator>,int> &p) 
+                              { return p.first.lock() == parentEntry.first.lock() && p.second == parentEntry.second; });
         if (f == op->Parents.end()) {
-            op->Parents.push_back(parent);
+            op->Parents.push_back(parentEntry);
         }
     }
-    for (auto &c : op->Children) {
-        ComputeParentsRec(c, op);
+    for (size_t i=0; i<op->Children.size(); i++) {
+        ComputeParentsRec(op->Children[i], op, i);
     }
 }
 
@@ -1209,10 +1211,10 @@ void TOpRoot::ComputeParents() {
         it.Current->Parents.clear();
     }
     std::shared_ptr<TOpRoot> noParent;
-    ComputeParentsRec(GetInput(), noParent);
+    ComputeParentsRec(GetInput(), noParent, 0);
 
     for (auto subplan : PlanProps.Subplans.Get()) {
-        ComputeParentsRec(subplan.Plan, noParent);
+        ComputeParentsRec(subplan.Plan, noParent, 0);
     }
 }
 

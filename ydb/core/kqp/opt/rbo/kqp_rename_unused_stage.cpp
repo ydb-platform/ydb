@@ -91,7 +91,7 @@ void Scopes::ComputeScopes(std::shared_ptr<IOperator> &op) {
     for (auto &[id, sc] : ScopeMap) {
         auto topOp = sc.Operators[0];
         for (auto &p : topOp->Parents) {
-            auto parentScopeId = RevScopeMap.at(p.lock());
+            auto parentScopeId = RevScopeMap.at(p.first.lock());
             sc.ParentScopes.push_back(parentScopeId);
         }
     }

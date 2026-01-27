@@ -375,7 +375,7 @@ class IOperator {
     TPositionHandle Pos;
     const TTypeAnnotationNode* Type = nullptr;
     TVector<std::shared_ptr<IOperator>> Children;
-    TVector<std::weak_ptr<IOperator>> Parents;
+    TVector<std::pair<std::weak_ptr<IOperator>, int>> Parents;
 };
 
 /***

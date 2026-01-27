@@ -1445,6 +1445,325 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
         UNIT_ASSERT(attempts < maxAttempts);
     }
+
+    Y_UNIT_TEST(AutoPartitioning_WriteSession) {
+        auto settings = TTopicSdkTestSetup::MakeServerSettings();
+        settings.PQConfig.SetUseSrcIdMetaMappingInFirstClass(true);
+        TTopicSdkTestSetup setup{TEST_CASE_NAME, settings, false};
+        TTopicClient client = setup.MakeClient();
+        auto producerId1 = "autopartitioning_write_session_1";
+        auto producerId2 = "autopartitioning_write_session_2";
+
+        std::queue<TContinuationToken> readyTokens;
+        std::optional<TSessionClosedEvent> sessionClosedEvent;
+        std::unordered_set<ui64> ackedSeqNos;
+        bool closed = false;
+
+        auto createMessage = [&](std::string_view payload, ui64 seqNo) -> TWriteMessage {
+            TWriteMessage msg(payload);
+            msg.SeqNo(seqNo);
+            return msg;
+        };
+        
+        auto eventLoop = [&](std::shared_ptr<IWriteSession> session) {
+            while (true) {
+                auto event = session->GetEvent(false);
+                if (!event) {
+                    break;
+                }
+
+                if (auto* ready = std::get_if<TWriteSessionEvent::TReadyToAcceptEvent>(&*event)) {
+                    readyTokens.push(std::move(ready->ContinuationToken));
+                    continue;
+                }
+
+                if (auto* closedEvent = std::get_if<TSessionClosedEvent>(&*event)) {
+                    sessionClosedEvent = std::move(*closedEvent);
+                    closed = true;
+                    break;
+                }
+
+                if (auto* acks = std::get_if<TWriteSessionEvent::TAcksEvent>(&*event)) {
+                    for (const auto& ack : acks->Acks) {
+                        ackedSeqNos.insert(ack.SeqNo);
+                    }
+                }
+            }
+        };
+
+        auto getReadyToken = [&](std::shared_ptr<IWriteSession> session) -> std::optional<TContinuationToken> {
+            while (readyTokens.empty() && !closed) {
+                eventLoop(session);
+            }
+            
+            if (readyTokens.empty()) {
+                return std::nullopt;
+            }
+
+            auto t = std::move(readyTokens.front());
+            readyTokens.pop();
+            return t;
+        };
+
+        auto writeMessage = [&](std::shared_ptr<IWriteSession> session, std::string_view payload, ui64 seqNo) {
+            auto token = getReadyToken(session);
+            UNIT_ASSERT(token);
+            session->Write(std::move(*token), createMessage(payload, seqNo));
+        };
+
+        TCreateTopicSettings createSettings;
+        createSettings
+            .BeginConfigurePartitioningSettings()
+            .MinActivePartitions(1)
+            .MaxActivePartitions(100)
+                .BeginConfigureAutoPartitioningSettings()
+                .UpUtilizationPercent(2)
+                .DownUtilizationPercent(1)
+                .StabilizationWindow(TDuration::Seconds(2))
+                .Strategy(EAutoPartitioningStrategy::ScaleUp)
+                .EndConfigureAutoPartitioningSettings()
+            .EndConfigurePartitioningSettings();
+        client.CreateTopic(TEST_TOPIC, createSettings).Wait();
+
+        auto describe = client.DescribeTopic(TEST_TOPIC).GetValueSync();
+        UNIT_ASSERT_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 1);
+        auto partitionId = describe.GetTopicDescription().GetPartitions()[0].GetPartitionId();
+
+        TWriteSessionSettings writeSettings;
+        writeSettings
+            .Path(setup.GetTopicPath(TEST_TOPIC))
+            .ProducerId(producerId1)
+            .PartitionId(partitionId)
+            .DirectWriteToPartition(true)
+            .MessageGroupId(producerId1)
+            .Codec(ECodec::RAW);
+
+        TWriteSessionSettings writeSettings2;
+        writeSettings2
+            .Path(setup.GetTopicPath(TEST_TOPIC))
+            .PartitionId(partitionId)
+            .DirectWriteToPartition(true)
+            .ProducerId(producerId2)
+            .MessageGroupId(producerId2)
+            .Codec(ECodec::RAW);
+
+        auto session1 = client.CreateWriteSession(writeSettings);
+        auto session2 = client.CreateWriteSession(writeSettings2);
+        auto msgData = TString(1_MB, 'a');
+
+        {
+            writeMessage(session1, msgData, 1);
+            writeMessage(session1, msgData, 2);
+            Sleep(TDuration::Seconds(5));
+            auto describe = client.DescribeTopic(TEST_TOPIC).GetValueSync();
+            UNIT_ASSERT_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 1);
+        }
+
+        {
+            writeMessage(session1, msgData, 3);
+            writeMessage(session1, msgData, 4);
+            writeMessage(session1, msgData, 5);
+            writeMessage(session2, msgData, 6);
+            Sleep(TDuration::Seconds(15));
+            eventLoop(session1);
+            eventLoop(session2);
+            UNIT_ASSERT_EQUAL(ackedSeqNos.size(), 6);
+        }
+
+        auto describeResult = client.DescribeTopic(TEST_TOPIC).GetValueSync();
+        auto partitionsCount = describeResult.GetTopicDescription().GetPartitions().size();
+        UNIT_ASSERT_VALUES_EQUAL_C(partitionsCount, 3, TStringBuilder() << "Partitions count: " << partitionsCount);
+
+        // auto firstParentPartitionId = describeResult.GetTopicDescription().GetPartitions()[0].GetParentPartitionIds()[0];
+        UNIT_ASSERT(describeResult.GetTopicDescription().GetPartitions()[1].GetParentPartitionIds().size() == 1);
+        UNIT_ASSERT(describeResult.GetTopicDescription().GetPartitions()[1].GetParentPartitionIds()[0] == partitionId);
+        // UNIT_ASSERT(describeResult.GetTopicDescription().GetPartitions()[1].GetParentPartitionIds()[0] == firstParentPartitionId);
+
+        TWriteSessionSettings writeSettings3;
+        writeSettings3
+            .Path(setup.GetTopicPath(TEST_TOPIC))
+            .ProducerId(producerId1)
+            .MessageGroupId(producerId1)
+            .Codec(ECodec::RAW);
+        auto sessionToSplittedPartition = client.CreateWriteSession(writeSettings3);
+        auto initSeqNoFuture = sessionToSplittedPartition->GetInitSeqNo();
+        auto initSeqNo = initSeqNoFuture.Wait(TDuration::Seconds(10000000000000000));
+        UNIT_ASSERT(initSeqNo);
+        UNIT_ASSERT_VALUES_EQUAL_C(initSeqNoFuture.GetValue(), 5, TStringBuilder() << "Init seq no: " << initSeqNoFuture.GetValue());
+    }
+
+    Y_UNIT_TEST(AutoPartitioning_KeyedWriteSession) {
+        auto settings = TTopicSdkTestSetup::MakeServerSettings();
+        settings.PQConfig.SetUseSrcIdMetaMappingInFirstClass(true);
+        TTopicSdkTestSetup setup{TEST_CASE_NAME, settings, false};
+        TTopicClient client = setup.MakeClient();
+
+        std::queue<TContinuationToken> readyTokens1;
+        std::queue<TContinuationToken> readyTokens2;
+        std::optional<TSessionClosedEvent> sessionClosedEvent;
+        std::unordered_set<ui64> ackedSeqNos;
+        bool closed = false;
+
+        auto createMessage = [](std::string_view payload, ui64 seqNo) -> TWriteMessage {
+            TWriteMessage msg(payload);
+            msg.SeqNo(seqNo);
+            return msg;
+        };
+
+        TCreateTopicSettings createSettings;
+        createSettings
+            .BeginConfigurePartitioningSettings()
+            .MinActivePartitions(2)
+            .MaxActivePartitions(100)
+                .BeginConfigureAutoPartitioningSettings()
+                .UpUtilizationPercent(2)
+                .DownUtilizationPercent(1)
+                .StabilizationWindow(TDuration::Seconds(2))
+                .Strategy(EAutoPartitioningStrategy::ScaleUp)
+                .EndConfigureAutoPartitioningSettings()
+            .EndConfigurePartitioningSettings();
+        client.CreateTopic(TEST_TOPIC, createSettings).Wait();
+
+        auto describe = client.DescribeTopic(TEST_TOPIC).GetValueSync();
+        UNIT_ASSERT_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 2);
+
+        TKeyedWriteSessionSettings writeSettings1;
+        writeSettings1
+            .Path(setup.GetTopicPath(TEST_TOPIC))
+            .Codec(ECodec::RAW);
+        writeSettings1.ProducerIdPrefix("autopartitioning_keyed_1");
+        writeSettings1.PartitionChooserStrategy(TKeyedWriteSessionSettings::EPartitionChooserStrategy::Bound);
+        writeSettings1.SubSessionIdleTimeout(TDuration::Seconds(30));
+
+        TKeyedWriteSessionSettings writeSettings2 = writeSettings1;
+        writeSettings2.ProducerIdPrefix("autopartitioning_keyed_2");
+
+        auto session1 = client.CreateKeyedWriteSession(writeSettings1);
+        auto session2 = client.CreateKeyedWriteSession(writeSettings2);
+        auto msgData = TString(1_MB, 'a');
+
+        std::vector<std::string> keys;
+        for (const auto& partition : describe.GetTopicDescription().GetPartitions()) {
+            keys.push_back(partition.GetFromBound().value_or(""));
+        }
+
+        auto getQueue = [&](const std::shared_ptr<IKeyedWriteSession>& s) -> std::queue<TContinuationToken>& {
+            if (s == session1) {
+                return readyTokens1;
+            }
+            if (s == session2) {
+                return readyTokens2;
+            }
+            Y_ABORT("Unknown session pointer in AutoPartitioning_KeyedWriteSession");
+        };
+
+        auto eventLoop = [&](std::shared_ptr<IKeyedWriteSession> s) {
+            while (true) {
+                auto event = s->GetEvent(false);
+                if (!event) {
+                    break;
+                }
+                if (auto* ready = std::get_if<TWriteSessionEvent::TReadyToAcceptEvent>(&*event)) {
+                    getQueue(s).push(std::move(ready->ContinuationToken));
+                    continue;
+                }
+                if (auto* closedEv = std::get_if<TSessionClosedEvent>(&*event)) {
+                    sessionClosedEvent = std::move(*closedEv);
+                    closed = true;
+                    break;
+                }
+                if (auto* acks = std::get_if<TWriteSessionEvent::TAcksEvent>(&*event)) {
+                    for (const auto& ack : acks->Acks) {
+                        std::cerr << "Got ack in test for seqNo: " << ack.SeqNo << std::endl;
+                        UNIT_ASSERT_C(
+                            ackedSeqNos.insert(ack.SeqNo).second,
+                            "Duplicate ack for seqNo " << ack.SeqNo);
+                    }
+                }
+            }
+        };
+
+        auto getReadyToken = [&](std::shared_ptr<IKeyedWriteSession> s) -> std::optional<TContinuationToken> {
+            auto& q = getQueue(s);
+            while (q.empty() && !closed) {
+                s->WaitEvent().Wait(TDuration::Seconds(5));
+                eventLoop(s);
+            }
+            if (q.empty()) {
+                return std::nullopt;
+            }
+            auto t = std::move(q.front());
+            q.pop();
+            return t;
+        };
+
+        auto writeMessage = [&](std::shared_ptr<IKeyedWriteSession> s, std::string_view payload, ui64 seqNo) {
+            auto token = getReadyToken(s);
+            UNIT_ASSERT(token);
+            auto key = keys[seqNo % keys.size()];
+            if (key.empty()) {
+                key = "lalala";
+            }
+            std::cerr << "Writing message with key: " << key << std::endl;
+            s->Write(std::move(*token), key, createMessage(payload, seqNo));
+        };
+
+        {
+            writeMessage(session1, msgData, 1);
+            writeMessage(session1, msgData, 2);
+            Sleep(TDuration::Seconds(5));
+            auto d = client.DescribeTopic(TEST_TOPIC).GetValueSync();
+            UNIT_ASSERT_EQUAL(d.GetTopicDescription().GetPartitions().size(), 2);
+        }
+
+        {
+            writeMessage(session1, msgData, 3);
+            writeMessage(session1, msgData, 4);
+            writeMessage(session1, msgData, 5);
+            writeMessage(session1, msgData, 6);
+            writeMessage(session1, msgData, 7);
+            writeMessage(session2, msgData, 8);
+            writeMessage(session1, msgData, 9);
+            writeMessage(session1, msgData, 10);
+            writeMessage(session2, msgData, 11);
+            writeMessage(session1, msgData, 12);
+            Sleep(TDuration::Seconds(30));
+            for (int i = 0; i < 50 && ackedSeqNos.size() < 12 && !closed; ++i) {
+                eventLoop(session1);
+                eventLoop(session2);
+                if (ackedSeqNos.size() < 12) {
+                    Sleep(TDuration::MilliSeconds(200));
+                }
+            }
+            UNIT_ASSERT_EQUAL_C(ackedSeqNos.size(), 12,
+                "Expected exactly 12 distinct acks, each seqNo exactly once; got " << ackedSeqNos.size());
+        }
+
+        auto describeResult = client.DescribeTopic(TEST_TOPIC).GetValueSync();
+        auto partitionsCount = describeResult.GetTopicDescription().GetPartitions().size();
+        UNIT_ASSERT_C(partitionsCount >= 4,
+            TStringBuilder() << "Partitions count: " << partitionsCount << ", expected at least 4");
+
+        writeMessage(session1, msgData, 13);
+        writeMessage(session1, msgData, 14);
+        Sleep(TDuration::Seconds(20));
+        for (int i = 0; i < 50 && ackedSeqNos.size() < 14 && !closed; ++i) {
+            eventLoop(session1);
+            eventLoop(session2);
+            if (ackedSeqNos.size() < 14) {
+                Sleep(TDuration::MilliSeconds(200));
+            }
+        }
+
+        UNIT_ASSERT_EQUAL_C(ackedSeqNos.size(), 14,
+            "Expected exactly 14 distinct acks, each seqNo exactly once; got " << ackedSeqNos.size());
+        auto sessionPartitions = dynamic_cast<TKeyedWriteSession*>(session1.get())->GetPartitions();
+        UNIT_ASSERT_EQUAL_C(sessionPartitions.size(), partitionsCount,
+            "Expected exactly" << partitionsCount << " partitions, actual: " << sessionPartitions.size());
+
+        UNIT_ASSERT(session1->Close(TDuration::Seconds(30)));
+        UNIT_ASSERT(session2->Close(TDuration::Seconds(30)));
+    }
     
 } // Y_UNIT_TEST_SUITE(BasicUsage)
 

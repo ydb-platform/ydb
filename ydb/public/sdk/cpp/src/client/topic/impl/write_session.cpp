@@ -174,11 +174,15 @@ void TKeyedWriteSession::TSplittedPartitionWorker::DoWork() {
                 HandleDescribeResult();
             });
             lock.lock();
-            MoveTo(EState::PendingDescribe);
+            if (State == EState::Init) {
+                MoveTo(EState::PendingDescribe);
+            }
             break;
         case EState::GotDescribe:
             LaunchGetMaxSeqNoFutures(lock);
-            MoveTo(EState::PendingMaxSeqNo);
+            if (State == EState::GotDescribe) {
+                MoveTo(EState::PendingMaxSeqNo);
+            }
             break;
         case EState::PendingDescribe:
         case EState::PendingMaxSeqNo:
@@ -205,14 +209,17 @@ bool TKeyedWriteSession::TSplittedPartitionWorker::IsDone() {
 }
 
 void TKeyedWriteSession::TSplittedPartitionWorker::HandleDescribeResult() {
-    std::vector<ui32> newPartitions;
+    std::vector<ui64> newPartitions;
     const auto& partitions = DescribeTopicFuture.GetValue().GetTopicDescription().GetPartitions();
     for (const auto& partition : partitions) {
         if (partition.GetPartitionId() != PartitionId) {
             continue;
         }
         
-        std::copy(partition.GetChildPartitionIds().begin(), partition.GetChildPartitionIds().end(), std::back_inserter(newPartitions));
+        // std::copy(partition.GetChildPartitionIds().begin(), partition.GetChildPartitionIds().end(), std::back_inserter(newPartitions));
+        for (const auto& childPartition : partition.GetChildPartitionIds()) {
+            newPartitions.push_back(childPartition);
+        }
         break;
     }
 
@@ -344,6 +351,7 @@ void TKeyedWriteSession::TEventsWorker::RunEventLoop(WrappedWriteSessionPtr wrap
         }
 
         if (auto sessionClosedEvent = std::get_if<TSessionClosedEvent>(&*event); sessionClosedEvent) {
+            std::cerr << "Session closed event for partition " << partition << std::endl;
             HandleSessionClosedEvent(std::move(*sessionClosedEvent), partition);
             break;
         }
@@ -354,6 +362,9 @@ void TKeyedWriteSession::TEventsWorker::RunEventLoop(WrappedWriteSessionPtr wrap
         }
 
         if (auto acksEvent = std::get_if<TWriteSessionEvent::TAcksEvent>(&*event)) {
+            for (const auto& ack : acksEvent->Acks) {
+                std::cerr << "Ack for partition " << partition << " seqNo: " << ack.SeqNo << " state: " << static_cast<int>(ack.State) << std::endl;
+            }
             Get(SessionsWorker)->OnReadFromSession(wrappedSession);
             HandleAcksEvent(partition, std::move(*acksEvent));
             continue;
@@ -379,16 +390,21 @@ void TKeyedWriteSession::TEventsWorker::DoWork() {
 }
 
 void TKeyedWriteSession::TEventsWorker::SubscribeToPartition(ui64 partition) {
+    if (auto it = Session->SplittedPartitionWorkers.find(partition); it != Session->SplittedPartitionWorkers.end()) {
+        Futures[partition] = NotReadyFuture;
+        return;
+    }
+
     auto wrappedSession = Get(SessionsWorker)->GetWriteSession(partition);
     auto newFuture = wrappedSession->Session->WaitEvent();
-    if (partition >= Futures.size()) {
-        Futures.resize(partition + 1, NotReadyFuture);
+    while (partition >= Futures.size()) {
+        Futures.push_back(NotReadyFuture);
     }
-    Futures[partition] = newFuture;
     newFuture.Subscribe([this, partition](const NThreading::TFuture<void>&) {
         std::lock_guard lock(Lock);
         this->ReadyFutures.insert(partition);
     });
+    Futures[partition] = newFuture;
 }
 
 void TKeyedWriteSession::TEventsWorker::HandleNewMessage() {
@@ -574,12 +590,12 @@ TKeyedWriteSession::TSessionsWorker::TSessionsWorker(TKeyedWriteSession* session
 TKeyedWriteSession::WrappedWriteSessionPtr TKeyedWriteSession::TSessionsWorker::GetWriteSession(ui64 partition, bool directToPartition) {
     auto sessionIter = SessionsIndex.find(partition);
     if (sessionIter == SessionsIndex.end()) {
-        return CreateWriteSession(partition);
+        return CreateWriteSession(partition, directToPartition);
     }
 
     if (!directToPartition) {
-        DestroyWriteSession(sessionIter, TDuration::Zero(), false);
-        return CreateWriteSession(partition);
+        SessionsIndex.erase(sessionIter);
+        return CreateWriteSession(partition, directToPartition);
     }
 
     return sessionIter->second;
@@ -597,7 +613,7 @@ TKeyedWriteSession::WrappedWriteSessionPtr TKeyedWriteSession::TSessionsWorker::
         .ProducerId(producerId)
         .MessageGroupId(producerId)
         .MaxMemoryUsage(std::numeric_limits<ui64>::max());
-
+    
     if (directToPartition) {    
         alteredSettings.DirectWriteToPartition(true);
         alteredSettings.PartitionId(partitionId);
@@ -675,32 +691,65 @@ TKeyedWriteSession::TMessagesWorker::TMessagesWorker(TKeyedWriteSession* session
 
 void TKeyedWriteSession::TMessagesWorker::DoWork() {
     auto sessionsWorker = Get(SessionsWorker);
+    bool wroteSomething = false;
     while (!PendingMessages.empty()) {
         auto& head = PendingMessages.front();
         Y_ENSURE(head.Message.SeqNo_.has_value(), "SeqNo is not set");
+        if (MessagesToResend.contains(head.Partition)) {
+            break;
+        }
+
         auto msgToSave = head;
         auto wrappedSession = sessionsWorker->GetWriteSession(msgToSave.Partition);
         if (!SendMessage(wrappedSession, std::move(head))) {
             break;
         }
 
+        wroteSomething = true;
         PendingMessages.pop_front();
         sessionsWorker->OnWriteToSession(wrappedSession);
         PushInFlightMessage(msgToSave.Partition, std::move(msgToSave));
     }
 
+    std::vector<ui64> partitionsConsumed;
     for (auto& [partition, iter] : MessagesToResend) {
-        auto msgToSend = **iter;
-        auto wrappedSession = sessionsWorker->GetWriteSession(msgToSend.Partition);
-        if (!SendMessage(wrappedSession, std::move(msgToSend))) {
-            break;
+        auto inFlightMessagesIndexChain = InFlightMessagesIndex.find(partition);
+        Y_ABORT_UNLESS(inFlightMessagesIndexChain != InFlightMessagesIndex.end(), "InFlightMessagesIndex not found");
+        
+        while (iter != inFlightMessagesIndexChain->second.end()) {
+            auto msgToSend = **iter;
+
+            if (!(*iter)->MovedToNewPartition) {
+                auto newPartition = Session->PartitionChooser->ChoosePartition(msgToSend.Key);
+                msgToSend.Partition = newPartition;
+                (*iter)->Partition = newPartition;
+
+                auto [listIt, _] = InFlightMessagesIndex.try_emplace(newPartition, std::list<std::list<TMessageInfo>::iterator>());
+                listIt->second.push_back(*iter);
+
+                (*iter)->MovedToNewPartition= true;
+            }
+
+            auto wrappedSession = sessionsWorker->GetWriteSession(msgToSend.Partition);
+            if (!SendMessage(wrappedSession, std::move(msgToSend))) {
+                break;
+            }
+
+            sessionsWorker->OnWriteToSession(wrappedSession);
+            wroteSomething = true;
+            ++iter;
         }
 
-        (*iter)->Resent = true;
-        ++iter;
+        if (iter == inFlightMessagesIndexChain->second.end()) {
+            partitionsConsumed.push_back(partition);
+        }
     }
 
-    if (PendingMessages.empty() && MessagesNotEmptyFuture.IsReady()) {
+    for (const auto& partition : partitionsConsumed) {
+        MessagesToResend.erase(partition);
+    }
+
+    if (PendingMessages.empty() && MessagesNotEmptyFuture.IsReady() && !wroteSomething) {
         MessagesNotEmptyPromise = NThreading::NewPromise();
         MessagesNotEmptyFuture = MessagesNotEmptyPromise.GetFuture();
     }
@@ -811,7 +860,7 @@ void TKeyedWriteSession::TMessagesWorker::ResendMessages(ui64 partition, ui64 af
 
     while (resendIt != list.end()) {
         Y_ABORT_UNLESS((*resendIt)->Message.SeqNo_.has_value(), "SeqNo is not set");
-        if ((*resendIt)->Message.SeqNo_.value() >= afterSeqNo) {
+        if ((*resendIt)->Message.SeqNo_.value() > afterSeqNo) {
             break;
         }
         ++resendIt;
@@ -1036,6 +1085,7 @@ void TKeyedWriteSession::RunMainWorker() {
 }
 
 void TKeyedWriteSession::HandleAutoPartitioning(ui64 partition) {
+    std::cerr << "HandleAutoPartitioning for partition " << partition << std::endl;
     auto splittedPartitionWorker = std::make_shared<TSplittedPartitionWorker>(this, Partitions[partition].PartitionId_, partition, SessionsWorker, MessagesWorker);
     SplittedPartitionWorkers.try_emplace(partition, splittedPartitionWorker);
 }

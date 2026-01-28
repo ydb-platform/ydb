@@ -1044,6 +1044,7 @@ TKeyedWriteSession::~TKeyedWriteSession() {
     if (MainWorker.Running()) {
         Close(TDuration::Zero());
     }
+    Settings.EventHandlers_.HandlersExecutor_->Stop();
 }
 
 NThreading::TFuture<void> TKeyedWriteSession::WaitEvent() {
@@ -1131,13 +1132,12 @@ void TKeyedWriteSession::RunUserHandlers() {
         }
 
         if (auto* acksEvent = std::get_if<TWriteSessionEvent::TAcksEvent>(&*event)) {
-            LOG_LAZY(DbDriverState->Log, TLOG_DEBUG, "TKeyedWriteSession: Running AcksHandler");
             if (Settings.EventHandlers_.AcksHandler_) {
                 handlersExecutor->Post(
                     [this, ev = std::move(*acksEvent)]() mutable {
                         Settings.EventHandlers_.AcksHandler_(ev);
                     });
-            } else if (Settings.EventHandlers_.CommonHandler_) {
+            } else {
                 handlersExecutor->Post(
                     [this, ev = std::move(*event)]() mutable {
                         Settings.EventHandlers_.CommonHandler_(ev);
@@ -1147,13 +1147,12 @@ void TKeyedWriteSession::RunUserHandlers() {
         }
 
         if (auto* readyToAcceptEvent = std::get_if<TWriteSessionEvent::TReadyToAcceptEvent>(&*event)) {
-            LOG_LAZY(DbDriverState->Log, TLOG_DEBUG, "TKeyedWriteSession: Running ReadyToAcceptHandler");
             if (Settings.EventHandlers_.ReadyToAcceptHandler_) {
                 handlersExecutor->Post(
                     [this, ev = std::move(*readyToAcceptEvent)]() mutable {
                         Settings.EventHandlers_.ReadyToAcceptHandler_(ev);
                     });
-            } else if (Settings.EventHandlers_.CommonHandler_) {
+            } else {
                 handlersExecutor->Post(
                     [this, ev = std::move(*event)]() mutable {
                         Settings.EventHandlers_.CommonHandler_(ev);
@@ -1163,7 +1162,6 @@ void TKeyedWriteSession::RunUserHandlers() {
         }
 
         if (auto* sessionClosedEvent = std::get_if<TSessionClosedEvent>(&*event)) {
-            LOG_LAZY(DbDriverState->Log, TLOG_DEBUG, "TKeyedWriteSession: Running SessionClosedHandler");
             if (Settings.EventHandlers_.SessionClosedHandler_) {
                 handlersExecutor->Post(
                     [this, ev = std::move(*sessionClosedEvent)]() mutable {
@@ -1200,10 +1198,6 @@ void TKeyedWriteSession::RunMainWorker() {
     // Close all sessions and add SessionClosedEvent when all messages are processed
     auto closeTimeout = GetCloseTimeout();
     SessionsWorker->Die(closeTimeout);
-
-    if (Settings.EventHandlers_.HandlersExecutor_) {
-        Settings.EventHandlers_.HandlersExecutor_->Stop();
-    }
 }
 
 void TKeyedWriteSession::HandleAutoPartitioning(ui64 partition) {

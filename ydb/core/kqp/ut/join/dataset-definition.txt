@@ -1,0 +1,134 @@
+// ==================================================================================
+// GROUP 1: TOPOLOGIES
+// Controls the shape of Connected Subgraphs (csg).
+// ==================================================================================
+(
+  // --- 1.1 Geometric Bounds (The Unit Tests) ---
+  (
+    // Paths: Easiest case (linear complexity). Large N to test overhead.
+    (label=+path; type=path; N=5..50) +
+
+    // Stars: Hardest standard case (exponential complexity).
+    (label=+star; type=star; N=5..30) +
+
+    // Cliques: Maximum density. Keep N small or DPhyp will timeout/OOM.
+    (label=+clique; type=clique; N=3..20)
+  )
+  +
+  (
+    // --- 1.2 Randomized Schemas (Scale-Free / Hubs) ---
+    (
+      // Real databases have Fact tables (hubs).
+      // Chun-Lu/Havel-Hakimi with High Sigma creates these hubs.
+
+      // mu=1.1 (~3 neighbors), sigma=0.8 (moderate variance)
+      (label=+schema-small; type=mcmc; N=5..30; mu=1.1; sigma=0.8) +
+
+      // mu=1.6 (~5 neighbors), sigma=1.2 (high variance = distinct hubs)
+      (label=+schema-erp; type=mcmc; N=5..30; mu=1.6; sigma=1.2) +
+
+      // The "Lollipop"
+      // High Sigma (2.0) forces a graph with a dense core/clique and a long tail.
+      // DPhyp often struggles to partition the dense part from the sparse part.
+      (label=+stress-lollipop; type=mcmc; N=5..30; mu=1.0; sigma=2.0)
+    )
+    +
+    // --- 1.3 Memory Stress Tests (Regular/Mesh Structures) ---
+    (
+      // These graphs maximize the size of the DP Table without being Cliques.
+      // Low Sigma ensures strictly regular shape (no hubs).
+
+      // "The Ring" (Degree 2 constant).
+      // Optimization relies on breaking the cycle correctly.
+      (label=+topo-cycle; type=havel-hakimi; N=5..30; mu=0.7; sigma=0.01) +
+
+      // "The Grid" (Degree 4 constant).
+      // mu=1.38 -> e^1.38 ~= 4.0.
+      // Generates a Mesh. Hardest non-clique case for memory.
+      (label=+topo-grid-dense; type=havel-hakimi; N=5..30; mu=1.38; sigma=0.05)
+    )
+  )
+  *
+  (
+    // Generate random graphs multiple times
+    repeat=0..5
+  )
+)
+*
+// ==================================================================================
+// GROUP 2: COLUMN CONNECTIVITY (Pitman-Yor Semantic Layer)
+// Controls Transitive Closure intensity and number of interesting
+// ordering for shuffle elimination
+// ==================================================================================
+(
+  // --- 2.1 The "Identity" Case (Zero Closure) ---
+  // Alpha=0, Theta=Very High.
+  // Almost every edge gets a unique bucket.
+  // Effectively disables transitive closure. The graph stays exactly defined.
+  (label=+column-identity; alpha=0.0; theta=100) +
+
+  // --- 2.2 The "TenantID" Case (Power Law Dominance) ---
+  // Alpha=0.8 is extremely high.
+  // Most generated edges will snap to Bucket #1.
+  // This turns almost any topology into a Clique (or near-Clique).
+  // Tests if the model detects "Hidden Cliques" inside sparse topologies.
+  (label=+column-power-law; alpha=0.8; theta=10) +
+
+  // --- 2.3 The "Correlated Subgroups" Case (Low Theta) ---
+  // Alpha=0 (uniform), but Theta=1 (Tiny).
+  // Forces edges into very few buckets uniformly.
+  // This creates "blocky" transitive closures (partitions merge completely).
+  (label=+column-dense-uniform; alpha=0.0; theta=1) +
+
+  // --- 2.4 The Standard Case ---
+  // Balanced parameters mimicking standard FK relationships.
+  (label=+column-standard; alpha=0.1; theta=5)
+)
+*
+// ==================================================================================
+// GROUP 3: JOIN CONSTRAINTS (Pruning Layer)
+// ==================================================================================
+(
+  // --- 3.1 Unconstrained (Slowest) ---
+  (label=+join-inner; inner-join=1.0; bushiness=0.0) +
+
+  (
+    // --- 3.2 "Data Warehouse" Pattern ---
+    // Fact tables (Hubs) usually Inner Join, Dimensions Left Join out.
+    (label=+join-dw; inner-join=0.6; left-join=0.4) +
+
+    // --- 3.3 "Generated SQL" Pattern (Maximum Noise) ---
+    // This creates complex Table Elimination Sets (TES) and should restrict number of CSGs.
+    (label=+join-noisy; inner-join=0.4; left-join=0.2; left-semi-join=0.2; outer-join=0.2) +
+
+    // --- 3.4 The "Chain-Link" Constraint ---
+    // Pure left joins enforce a strict ordering ((A left B) left C).
+    // The complexity should be effectively O(N^2) or O(N), regardless of topology.
+    (label=+join-strict-left; inner-join=0; left-only-join=1.0)
+  )
+  *
+  // Many constraint joins depend on join tree form (it creates different TES),
+  // this controls which random tree decomposition is choosen
+  (
+    (label=+hyper-left-deep; bushiness=0.0) +
+    (label=+hyper-mostly-left-deep; bushiness=0.2) +
+    (label=+hyper-balanced; bushiness=0.5) +
+    (label=+hyper-bushy-trees; bushiness=1.0)
+  )
+)
+*
+// ==================================================================================
+// GROUP 4: DEFAULTS
+// ==================================================================================
+(
+  inner-join=?1.0;
+  left-join=?0.0;
+  right-join=?0.0;
+  outer-join=?0.0;
+  left-only-join=?0.0;
+  right-only-join=?0.0;
+  left-semi-join=?0.0;
+  right-semi-join=?0.0;
+  cross-join=?0.0;
+  exclusion-join=?0.0
+)

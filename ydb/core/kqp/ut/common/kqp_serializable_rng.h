@@ -10,7 +10,7 @@ namespace NKikimr::NKqp {
 class TSerializableMT19937 {
 public: // compatibility with std::mt19937
     using result_type = std::mt19937::result_type;
-    static constexpr auto default_seed = std::mt19937::default_seed;
+    static constexpr auto default_seed = std::mt19937::default_seed; // TODO: naming?
 
 public:
     TSerializableMT19937()

@@ -331,9 +331,12 @@ public:
 };
 
 enum ESchemeObjectType {
-    ETypeMainTable,
-    ETypeIndex,
-    ETypeIndexImplTable
+    MainTable,
+    GlobalVectorIndex,           // there are special rules for processing global vector index
+    PrefixVectorIndex,           // there are special rules for processing prefix vector index
+    CommonIndex,                 // using for secondary, unique and fulltext indexes
+    IndexImplPrefixTable,        // there are special rules for processing index impl prefix table
+    CommonIndexImplTable         // using for other index impl tables
 };
 
 bool DfsOnTableChildrenTree(TOperationId opId, const TTxTransaction& tx, TOperationContext& context, const TPathId& currentPathId, TVector<ISubOperation::TPtr>& result, ESchemeObjectType objectType) {
@@ -369,7 +372,7 @@ bool DfsOnTableChildrenTree(TOperationId opId, const TTxTransaction& tx, TOperat
     // because in that case TRUNCATE could bring the database into an inconsistent state.
     // It is better to return an error to the user than to allow that to happen.
     switch (objectType) {
-        case ESchemeObjectType::ETypeMainTable: {
+        case ESchemeObjectType::MainTable: {
             for (const auto& [childName, childPathId] : currentPath.Base()->GetChildren()) {
                 Y_ABORT_UNLESS(context.SS->PathsById.contains(childPathId));
                 TPath srcChildPath = currentPath.Child(childName);
@@ -392,15 +395,26 @@ bool DfsOnTableChildrenTree(TOperationId opId, const TTxTransaction& tx, TOperat
                                 return false;
                             }
                             case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree: {
-                                // This condition should be removed in the near future
-                                result = {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed, "Cannot truncate table with vector indexes")};
-                                return false;
+                                size_t numberOfChildren = srcChildPath.Base()->GetChildren().size();
+                                Y_ABORT_UNLESS(numberOfChildren == 2 || numberOfChildren == 3);
+
+                                if (numberOfChildren == 2) { // GlobalVectorIndex contains two implTables
+                                    if (!DfsOnTableChildrenTree(opId, tx, context, childPathId, result, ESchemeObjectType::GlobalVectorIndex)) {
+                                        return false;
+                                    }
+                                } else if (numberOfChildren == 3) { // PrefixVectorIndex contains three implTables
+                                    if (!DfsOnTableChildrenTree(opId, tx, context, childPathId, result, ESchemeObjectType::PrefixVectorIndex)) {
+                                        return false;
+                                    }
+                                }
+
+                                break;
                             }
                             case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
                             case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
                             case NKikimrSchemeOp::EIndexTypeGlobal:
                             case NKikimrSchemeOp::EIndexTypeGlobalUnique: {
-                                if (!DfsOnTableChildrenTree(opId, tx, context, childPathId, result, ESchemeObjectType::ETypeIndex)) {
+                                if (!DfsOnTableChildrenTree(opId, tx, context, childPathId, result, ESchemeObjectType::CommonIndex)) {
                                     return false;
                                 }
 
@@ -430,7 +444,9 @@ bool DfsOnTableChildrenTree(TOperationId opId, const TTxTransaction& tx, TOperat
             break;
         }
 
-        case ESchemeObjectType::ETypeIndex: {
+        case ESchemeObjectType::GlobalVectorIndex:
+        case ESchemeObjectType::PrefixVectorIndex:
+        case ESchemeObjectType::CommonIndex: {
             for (const auto& [childName, childPathId] : currentPath.Base()->GetChildren()) {
                 Y_ABORT_UNLESS(context.SS->PathsById.contains(childPathId));
                 TPath srcChildPath = currentPath.Child(childName);
@@ -439,10 +455,22 @@ bool DfsOnTableChildrenTree(TOperationId opId, const TTxTransaction& tx, TOperat
                     continue;
                 }
 
+                constexpr TStringBuf tableExcludedFromTruncate = "indexImplLevelTable";
+                if (objectType == ESchemeObjectType::GlobalVectorIndex && srcChildPath.PathString().EndsWith(tableExcludedFromTruncate)) {
+                    continue;
+                }
+
                 switch (srcChildPath.Base()->PathType) {
-                    case NKikimrSchemeOp::EPathType::EPathTypeTable: { // indexImplTables
-                        if (!DfsOnTableChildrenTree(opId, tx, context, childPathId, result, ESchemeObjectType::ETypeIndexImplTable)) {
-                            return false;
+                    case NKikimrSchemeOp::EPathType::EPathTypeTable: {
+                        constexpr TStringBuf prefixTableName = "indexImplPrefixTable";
+                        if (objectType == ESchemeObjectType::PrefixVectorIndex && srcChildPath.PathString().EndsWith(prefixTableName)) {
+                            if (!DfsOnTableChildrenTree(opId, tx, context, childPathId, result, ESchemeObjectType::IndexImplPrefixTable)) {
+                                return false;
+                            }
+                        } else {
+                            if (!DfsOnTableChildrenTree(opId, tx, context, childPathId, result, ESchemeObjectType::CommonIndexImplTable)) {
+                                return false;
+                            }
                         }
 
                         break;
@@ -458,7 +486,18 @@ bool DfsOnTableChildrenTree(TOperationId opId, const TTxTransaction& tx, TOperat
             break;
         }
 
-        case ESchemeObjectType::ETypeIndexImplTable: {
+        case ESchemeObjectType::IndexImplPrefixTable: {
+            if (currentPath.Base()->GetChildren().size() != 1 ||
+                currentPath.Child(currentPath.Base()->GetChildren().begin()->first).Base()->PathType != NKikimrSchemeOp::EPathType::EPathTypeSequence
+            ) {
+                result = {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed, "Index impl prefix tables can contain only sequence")};
+                return false;
+            }
+
+            break;
+        }
+
+        case ESchemeObjectType::CommonIndexImplTable: {
             if (!currentPath.Base()->GetChildren().empty()) {
                 result = {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed, "Index impl tables cannot contain children")};
                 return false;
@@ -512,7 +551,7 @@ TVector<ISubOperation::TPtr> CreateConsistentTruncateTable(TOperationId opId, co
         return result;
     }
 
-    DfsOnTableChildrenTree(opId, tx, context, mainTablePath.Base()->PathId, result, ESchemeObjectType::ETypeMainTable);
+    DfsOnTableChildrenTree(opId, tx, context, mainTablePath.Base()->PathId, result, ESchemeObjectType::MainTable);
 
     return result;
 }

@@ -1045,10 +1045,18 @@ public:
     bool ShouldSplitBySize(ui64 dataSize, const TForceShardSplitSettings& params, TString& reason) const {
         // Don't split/merge backup tables
         if (IsBackup) {
+            reason = "table is a backup";
             return false;
         }
 
         if (!IsSplitBySizeEnabled(params)) {
+            if (IsExternalBlobsEnabled) {
+                reason = "external blobs are enabled";
+            } else if (params.DisableForceShardSplit && PartitionConfig().GetPartitioningPolicy().GetSizeToSplit() == 0) {
+                reason = "force shard split is disabled and SizeToSplit is not configured";
+            } else {
+                reason = "split by size is disabled";
+            }
             return false;
         }
         // When shard is over the maximum size we split even when over max partitions
@@ -1068,6 +1076,20 @@ public:
                 << "maxShardSize: " << GetShardSizeToSplit(params) << ")";
 
             return true;
+        }
+
+        if (Partitions.size() >= GetMaxPartitionsCount()) {
+            if (params.DisableForceShardSplit) {
+                reason = TStringBuilder() << "reached max partitions count (" << GetMaxPartitionsCount()
+                    << ") and force shard split is disabled";
+            } else {
+                reason = TStringBuilder() << "reached max partitions count (" << GetMaxPartitionsCount()
+                    << ") and shard size " << dataSize
+                    << " is below force split threshold " << params.ForceShardSplitDataSize;
+            }
+        } else {
+            reason = TStringBuilder() << "shard size " << dataSize
+                << " is below split threshold " << GetShardSizeToSplit(params);
         }
 
         return false;

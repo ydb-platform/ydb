@@ -22,6 +22,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/rate_limiter/rate_limiter.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
 
 #include <ydb/library/backup/backup.h>
@@ -41,6 +42,7 @@ using namespace NYdb::NRateLimiter;
 using namespace NYdb::NReplication;
 using namespace NYdb::NScheme;
 using namespace NYdb::NTable;
+// using namespace NYdb::NTopic;
 using namespace NYdb::NView;
 
 namespace Ydb::Table {
@@ -4429,6 +4431,20 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
         );
     }
 
+    void TestTopicBackupRestoreWithoutData() {
+        TS3TestEnv testEnv;
+        NTopic::TTopicClient topicClient(testEnv.GetDriver());
+        constexpr const char* topic = "/Root/topic";
+
+        TestTopicSettingsArePreserved(
+            topic,
+            testEnv.GetQuerySession(),
+            topicClient,
+            CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
+            CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "topic" })
+        );
+    }
+
     Y_UNIT_TEST_ALL_PROTO_ENUM_VALUES(TestAllSchemeObjectTypes, NKikimrSchemeOp::EPathType, IsOlap) {
         if (IsOlap) {
             return; // TODO: fix me issue@26498
@@ -4448,7 +4464,8 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             case EPathTypeDir:
                 break; // https://github.com/ydb-platform/ydb/issues/10430
             case EPathTypePersQueueGroup:
-                break; // https://github.com/ydb-platform/ydb/issues/10431
+                TestTopicBackupRestoreWithoutData();
+                break;
             case EPathTypeSubDomain:
             case EPathTypeExtSubDomain:
                 break; // https://github.com/ydb-platform/ydb/issues/10432

@@ -90,9 +90,19 @@ public:
     TWhoAmIResult(TStatus&& status, const Ydb::Discovery::WhoAmIResult& proto);
     const std::string& GetUserName() const;
     const std::vector<std::string>& GetGroups() const;
+    bool IsTokenRequired() const;
+    bool IsAdministrationAllowed() const;
+    bool IsMonitoringAllowed() const;
+    bool IsViewerAllowed() const;
+    bool IsDatabaseAllowed() const;
 private:
     std::string UserName_;
     std::vector<std::string> Groups_;
+    bool IsTokenRequired_ = false;
+    bool IsAdministrationAllowed_ = false;
+    bool IsMonitoringAllowed_ = false;
+    bool IsViewerAllowed_ = false;
+    bool IsDatabaseAllowed_ = false;
 };
 
 using TAsyncWhoAmIResult = NThreading::TFuture<TWhoAmIResult>;

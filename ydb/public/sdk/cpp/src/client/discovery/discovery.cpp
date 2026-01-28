@@ -60,6 +60,11 @@ TWhoAmIResult::TWhoAmIResult(TStatus&& status, const Ydb::Discovery::WhoAmIResul
     for (const auto& group : groups) {
         Groups_.emplace_back(group);
     }
+    IsTokenRequired_ = proto.is_token_required();
+    IsAdministrationAllowed_ = proto.is_administration_allowed();
+    IsMonitoringAllowed_ = proto.is_monitoring_allowed();
+    IsViewerAllowed_ = proto.is_viewer_allowed();
+    IsDatabaseAllowed_ = proto.is_database_allowed();
 }
 
 const std::string& TWhoAmIResult::GetUserName() const {
@@ -68,6 +73,26 @@ const std::string& TWhoAmIResult::GetUserName() const {
 
 const std::vector<std::string>& TWhoAmIResult::GetGroups() const {
     return Groups_;
+}
+
+bool TWhoAmIResult::IsTokenRequired() const {
+    return IsTokenRequired_;
+}
+
+bool TWhoAmIResult::IsAdministrationAllowed() const {
+    return IsAdministrationAllowed_;
+}
+
+bool TWhoAmIResult::IsMonitoringAllowed() const {
+    return IsMonitoringAllowed_;
+}
+
+bool TWhoAmIResult::IsViewerAllowed() const {
+    return IsViewerAllowed_;
+}
+
+bool TWhoAmIResult::IsDatabaseAllowed() const {
+    return IsDatabaseAllowed_;
 }
 
 TNodeLocation::TNodeLocation(const Ydb::Discovery::NodeLocation& location)

@@ -3,6 +3,8 @@
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/core/security/ticket_parser.h>
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/auth.h>
 #include <ydb/public/api/protos/ydb_discovery.pb.h>
 
 namespace NKikimr {
@@ -39,6 +41,18 @@ private:
             for (const auto& group : userToken.GetGroupSIDs()) {
                 response->add_groups(group);
             }
+
+            // Add permission information
+            const auto* appData = AppData();
+            response->set_is_token_required(appData->EnforceUserTokenRequirement);
+            bool isAdministrationAllowed = IsTokenAllowed(&userToken, appData->DomainsConfig.GetSecurityConfig().GetAdministrationAllowedSIDs());
+            bool isMonitoringAllowed = isAdministrationAllowed || IsTokenAllowed(&userToken, appData->DomainsConfig.GetSecurityConfig().GetMonitoringAllowedSIDs());
+            bool isViewerAllowed = isMonitoringAllowed || IsTokenAllowed(&userToken, appData->DomainsConfig.GetSecurityConfig().GetViewerAllowedSIDs());
+            bool isDatabaseAllowed = isViewerAllowed || IsTokenAllowed(&userToken, appData->DomainsConfig.GetSecurityConfig().GetDatabaseAllowedSIDs());
+            response->set_is_administration_allowed(isAdministrationAllowed);
+            response->set_is_monitoring_allowed(isMonitoringAllowed);
+            response->set_is_viewer_allowed(isViewerAllowed);
+            response->set_is_database_allowed(isDatabaseAllowed);
         }
 
         Request->SendResult(*response, Ydb::StatusIds::SUCCESS);

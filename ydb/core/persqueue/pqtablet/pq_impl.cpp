@@ -4899,7 +4899,7 @@ void TPersQueue::EndInitTransactions()
         PushTxInQueue(tx, tx.State);
 
         PQ_LOG_TX_D("TxsOrder: " <<
-                 txId << " " << NKikimrPQ::TTransaction_EState_Name(tx.State) << " " << tx.Pending);
+                    tx.Step << " " << txId << " " << NKikimrPQ::TTransaction_EState_Name(tx.State) << " " << tx.Pending);
     }
 }
 

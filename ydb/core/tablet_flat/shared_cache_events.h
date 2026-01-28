@@ -18,7 +18,7 @@ namespace NKikimr::NSharedCache {
     enum class EWakeupTag {
         DoGCScheduled = 1,
         DoGCManual = 2,
-        DoGCContinuation = 3,
+        DoLimitDecrease = 3,
     };
 
     enum EEv {

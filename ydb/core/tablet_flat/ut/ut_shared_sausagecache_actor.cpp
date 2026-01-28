@@ -623,8 +623,8 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
                 TFetch{8, sharedCache.Collection1, {1, 2, 3, 4, 5, 6, 7}}
             });
 
-            UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePages->Val(), 0);
-            UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PassivePages->Val(), 7);
+            UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePages->Val(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PassivePages->Val(), 5);
         }
     }
 
@@ -1005,8 +1005,8 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
         sharedCache.CheckResults({
             TFetch{3, sharedCache.Collection2, {2, 3, 4, 5, 6}}
         });
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePages->Val(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PassivePages->Val(), 5);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePages->Val(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PassivePages->Val(), 3);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollections->Val(), 1);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->Owners->Val(), 2);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollectionOwners->Val(), 1);
@@ -1221,8 +1221,8 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
         sharedCache.CheckResults({
             TFetch{3, sharedCache.Collection2, {2, 3, 4, 5, 6}}
         });
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePages->Val(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PassivePages->Val(), 5);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePages->Val(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PassivePages->Val(), 3);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollections->Val(), 1);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->Owners->Val(), 1);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollectionOwners->Val(), 1);
@@ -2240,14 +2240,14 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
         }
         sharedCache.Wakeup();
 
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePages->Val(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePages->Val(), 2);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PassivePages->Val(), 3);
 
         // unuse pages
         results.clear();
         sharedCache.Wakeup();
 
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePages->Val(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePages->Val(), 2);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PassivePages->Val(), 0);
     }
 
@@ -2342,14 +2342,14 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
         }
         sharedCache.Wakeup();
 
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePages->Val(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePages->Val(), 2);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PassivePages->Val(), 3);
 
         results[2].IncrementFrequency();
         results.clear();
         sharedCache.Wakeup();
 
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePages->Val(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePages->Val(), 3);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PassivePages->Val(), 0);
 
         // pages #2 should be still in cache:
@@ -2382,22 +2382,32 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->EvictedPages->Val(), 0);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->UnfinishedGCRuns->Val(), 0);
 
+        // We'll need 3 wakeups to reach the target limit and evict extra pages.
         sharedCache.SetLimit(PAGE_TOTAL_SIZE);
 
-        // First run is unfinished, evicts only 2 pages.
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActiveLimitBytes->Val(), 3 * PAGE_TOTAL_SIZE);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePages->Val(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->EvictedPages->Val(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->EvictedBytes->Val(), 1 * PAGE_TOTAL_SIZE);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->S3FIFOEvictOps->Val(), 1);
+
+        {
+            TWaitForFirstEvent<TKikimrEvents::TEvWakeup> waiter(sharedCache.Runtime);
+            waiter.Wait();
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActiveLimitBytes->Val(), 2 * PAGE_TOTAL_SIZE);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePages->Val(), 2);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->EvictedPages->Val(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->EvictedBytes->Val(), 2 * PAGE_TOTAL_SIZE);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->S3FIFOEvictOps->Val(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->UnfinishedGCRuns->Val(), 1);
 
-        TWaitForFirstEvent<TKikimrEvents::TEvWakeup> waiter(sharedCache.Runtime);
-        waiter.Wait();
+        {
+            TWaitForFirstEvent<TKikimrEvents::TEvWakeup> waiter(sharedCache.Runtime);
+            waiter.Wait();
+        }
 
-        // Second run evicts the last page over the limit.
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActiveLimitBytes->Val(), PAGE_TOTAL_SIZE);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePages->Val(), 1);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->EvictedPages->Val(), 3);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->UnfinishedGCRuns->Val(), 1);
     }
 }
 }

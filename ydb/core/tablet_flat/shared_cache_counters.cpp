@@ -35,7 +35,6 @@ TSharedPageCacheCounters::TSharedPageCacheCounters(const TIntrusivePtr<::NMonito
     , PendingRequests(counters->GetCounter("PendingRequests"))
     , SucceedRequests(counters->GetCounter("SucceedRequests", true))
     , FailedRequests(counters->GetCounter("FailedRequests", true))
-    , UnfinishedGCRuns(counters->GetCounter("UnfinishedGCRuns", true))
 { }
 
 } // namespace NKikimr::NSharedCache

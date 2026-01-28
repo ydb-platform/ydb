@@ -44,7 +44,6 @@ struct TSharedPageCacheCounters final : public TAtomicRefCount<TSharedPageCacheC
     const TCounterPtr PendingRequests;
     const TCounterPtr SucceedRequests;
     const TCounterPtr FailedRequests;
-    const TCounterPtr UnfinishedGCRuns;
 
     explicit TSharedPageCacheCounters(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters);
 };

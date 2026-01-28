@@ -217,35 +217,26 @@ private:
     static constexpr TDuration MaxDelay = TDuration::Minutes(10);
 };
 
-class TKesusResourcesUploader : public TExportFilesUploader<TKesusResourcesUploader> {
+template <class TDerived>
+class TSchemeWithPipeUploader : public TExportFilesUploader<TDerived> {
+    using TBase = TExportFilesUploader<TDerived>;
+protected:
     void CreatePipe() {
-        if (KesusPipeClient) {
+        if (PipeClient) {
             return; // Already open
         }
         NTabletPipe::TClientConfig cfg;
         cfg.RetryPolicy = {
             .RetryLimitCount = 3u
         };
-        KesusPipeClient = Register(NTabletPipe::CreateClient(this->SelfId(), KesusTabletId, cfg));
+        PipeClient = TBase::Register(NTabletPipe::CreateClient(this->SelfId(), PipeTabletId, cfg));
     }
 
     void ClosePipe() {
-        if (KesusPipeClient) {
-            NTabletPipe::CloseClient(this->SelfId(), KesusPipeClient);
-            KesusPipeClient = {};
+        if (PipeClient) {
+            NTabletPipe::CloseClient(this->SelfId(), PipeClient);
+            PipeClient = {};
         }
-    }
-
-    void GetAllResources() {
-        using namespace NKesus;
-        if (!KesusPipeClient) {
-            CreatePipe();
-        }
-        THolder<TEvKesus::TEvDescribeQuoterResources> req = MakeHolder<TEvKesus::TEvDescribeQuoterResources>();
-        req->Record.SetRecursive(true);
-
-        NTabletPipe::SendData(SelfId(), KesusPipeClient, req.Release());
-        Become(&TThis::StateDescribeResources);
     }
 
     void HandleConnected(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
@@ -256,6 +247,45 @@ class TKesusResourcesUploader : public TExportFilesUploader<TKesusResourcesUploa
 
     void HandleDestroyed(TEvTabletPipe::TEvClientDestroyed::TPtr&) {
         Finish(false, "connection to kesus was lost");
+    }
+
+    virtual void Finish(bool success = true, const TString& error = TString()) = 0;
+
+    void PassAway() override {
+        ClosePipe();
+        TExportFilesUploader<TDerived>::PassAway();
+    }
+
+public:
+    TSchemeWithPipeUploader(
+        ui64 pipeTabletId,
+        TActorId replyTo,
+        ui32 itemIdx,
+        const Ydb::Export::ExportToS3Settings& settings
+    )
+        : TExportFilesUploader<TDerived>(settings, GetDestinationPrefix(settings, itemIdx))
+        , PipeTabletId(pipeTabletId)
+        , ReplyTo(replyTo)
+    {
+    }
+
+protected:
+    ui64 PipeTabletId = 0;
+    TActorId PipeClient;
+    TActorId ReplyTo;
+}; // TSchemeWithPipeUploader
+
+class TKesusResourcesUploader : public TSchemeWithPipeUploader<TKesusResourcesUploader> {
+    void GetAllResources() {
+        using namespace NKesus;
+        if (!PipeClient) {
+            CreatePipe();
+        }
+        THolder<TEvKesus::TEvDescribeQuoterResources> req = MakeHolder<TEvKesus::TEvDescribeQuoterResources>();
+        req->Record.SetRecursive(true);
+
+        NTabletPipe::SendData(SelfId(), PipeClient, req.Release());
+        Become(&TThis::StateDescribeResources);
     }
 
     void HandleResourcesDescription(NKesus::TEvKesus::TEvDescribeQuoterResourcesResult::TPtr ev) {
@@ -318,7 +348,7 @@ class TKesusResourcesUploader : public TExportFilesUploader<TKesusResourcesUploa
         UploadBatch();
     }
 
-    void Finish(bool success = true, const TString& error = TString()) {
+    void Finish(bool success = true, const TString& error = TString()) override {
         LOG_I("Finish"
             << ", self: " << SelfId()
             << ", success: " << success
@@ -327,11 +357,6 @@ class TKesusResourcesUploader : public TExportFilesUploader<TKesusResourcesUploa
 
         Send(ReplyTo, new TEvPrivate::TEvExportUploadKesusResourcesResult(ExportId, ItemIdx, success, error, ResourcesKeys));
         PassAway();
-    }
-
-    void PassAway() override {
-        ClosePipe();
-        TExportFilesUploader<TKesusResourcesUploader>::PassAway();
     }
 
 public:
@@ -344,9 +369,7 @@ public:
         TMaybe<NBackup::TEncryptionIV> iv,
         const bool enableChecksums
     )
-        : TExportFilesUploader<TKesusResourcesUploader>(settings, GetDestinationPrefix(settings, itemIdx))
-        , KesusTabletId(kesusTabletId)
-        , ReplyTo(replyTo)
+        : TSchemeWithPipeUploader<TKesusResourcesUploader>(kesusTabletId, replyTo, itemIdx, settings)
         , ExportId(exportId)
         , ItemIdx(itemIdx)
         , IV(iv)
@@ -368,10 +391,6 @@ public:
     }
 
 private:
-    ui64 KesusTabletId = 0;
-    TActorId KesusPipeClient;
-    TActorId ReplyTo;
-
     ui64 ExportId;
     ui32 ItemIdx;
 

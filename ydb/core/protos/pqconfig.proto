@@ -398,6 +398,9 @@ message TPQTabletConfig {
         optional uint32 MaxProcessingAttempts = 15 [default = 1000]; // For MLP consumers
         optional uint32 DefaultProcessingTimeoutSeconds = 16 [default = 30]; // For MLP consumers
         optional string DeadLetterQueue = 17; // For MLP consumers
+        optional uint32 DefaultDelayMessageTimeMs = 18 [default = 0]; // For MLP consumers
+        optional uint32 DefaultReceiveMessageWaitTimeMs = 19 [default = 0]; // For MLP consumers
+        optional bool ContentBasedDeduplication = 20 [default = false]; // For MLP consumers
     }
 
     repeated TConsumer Consumers = 37;

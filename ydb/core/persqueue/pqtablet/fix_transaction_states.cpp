@@ -30,6 +30,7 @@ THashMap<ui64, NKikimrPQ::TTransaction> CollectTransactions(const TVector<NKikim
     TMaybe<ui64> txId;
     ui32 current = 0;
     ui32 expected = 0;
+    NKikimrPQ::TTransaction::EState state = NKikimrPQ::TTransaction::UNKNOWN;
 
     for (const auto& readRange : readRanges) {
         for (size_t i = 0; i < readRange.PairSize(); ++i) {
@@ -43,7 +44,8 @@ THashMap<ui64, NKikimrPQ::TTransaction> CollectTransactions(const TVector<NKikim
                 txId = tx.GetTxId();
                 current = 0;
                 expected = GetPartitionsCount(tx);
-                if (tx.GetState() == NKikimrPQ::TTransaction::CALCULATED) {
+                state = tx.GetState();
+                if (state == NKikimrPQ::TTransaction::CALCULATED) {
                     tx.SetState(NKikimrPQ::TTransaction::PLANNED);
                 }
             } else {
@@ -51,12 +53,24 @@ THashMap<ui64, NKikimrPQ::TTransaction> CollectTransactions(const TVector<NKikim
                 AFL_ENSURE(txId.Defined() && (*txId == tx.GetTxId()));
                 ++current;
                 AFL_ENSURE(current <= expected);
-                tx.SetState((current == expected) ? NKikimrPQ::TTransaction::EXECUTED : NKikimrPQ::TTransaction::PLANNED);
+                // если есть записи от всех субтранзакций, то партиции уже выполнили транзакцию (stable-26-1)
+                // если у основной транзакции статус EXECUTED, то таблетка уже выполнила транзакцию (stable-25-4)
+                // иначе нам надо вернуть транзакцию в состояние PLANNED
+                tx.SetState(((current == expected) || (state == NKikimrPQ::TTransaction::EXECUTED))
+                            ? NKikimrPQ::TTransaction::EXECUTED
+                            : NKikimrPQ::TTransaction::PLANNED);
             }
 
             txs.insert_or_assign(*txId, std::move(tx));
         }
     }
+
+    // последняя транзакция
+    // --------------------
+    // если есть записи от всех субтранзакций, то сработает уcловие выше (EXECUTED)
+    // если основная транзакция в состоянии EXECUTED, то сработает условие выше (EXECUTED)
+    // если есть хоть одна субтранзакция, то сработает условие выше (PLANNED)
+    // если нет ни одной субтранзакции, то либо останется в PREPARED, либо поменяется на PLANNED
 
     return txs;
 }

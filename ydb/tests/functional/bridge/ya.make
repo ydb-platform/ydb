@@ -7,16 +7,10 @@ TEST_SRCS(
 )
 
 SPLIT_FACTOR(10)
-
+TIMEOUT(1800)
 REQUIREMENTS(ram:32 cpu:32)
 SIZE(LARGE)
 TAG(ya:fat)
-
-IF (SANITIZER_TYPE == "thread")
-    TIMEOUT(1800)
-ELSE()
-    TIMEOUT(100)
-ENDIF()
 
 
 ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")

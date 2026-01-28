@@ -1836,6 +1836,62 @@ void TBalancer::ProcessPendingStats(const TActorContext& ctx) {
     PendingUpdates.clear();
 }
 
+<<<<<<< HEAD
+=======
+void TBalancer::Handle(TEvPersQueue::TEvBalancingSubscribe::TPtr& ev, const TActorContext& ctx) {
+    auto& record = ev->Get()->Record;
+    PQ_LOG_D("Handle TEvPersQueue::TEvBalancingSubscribe " << record.ShortDebugString());
+
+    auto sender = ActorIdFromProto(record.GetSourceActor());
+    auto status = Consumers.contains(record.GetConsumer()) ?
+        NKikimrPQ::TEvBalancingSubscribeNotify::BALANCING : NKikimrPQ::TEvBalancingSubscribeNotify::FREE;
+    Notify(sender, record.GetConsumer(), status, ctx);
+
+    Subscriptions[ev->Sender].emplace_back(std::move(sender), std::move(*record.MutableConsumer()));
+}
+
+void TBalancer::Handle(TEvPersQueue::TEvBalancingUnsubscribe::TPtr& ev, const TActorContext&) {
+    auto& record = ev->Get()->Record;
+    PQ_LOG_D("Handle TEvPersQueue::TEvBalancingUnsubscribe " << record.ShortDebugString());
+
+    auto sender = ActorIdFromProto(record.GetSourceActor());
+    auto& consumer = record.GetConsumer();
+
+    auto it = Subscriptions.find(ev->Sender);
+    if (it == Subscriptions.end()) {
+        return;
+    }
+
+    std::vector<TSubscription>& subscriptions = it->second;
+    std::vector<TSubscription> actualSubscriptions;
+    actualSubscriptions.resize(subscriptions.size());
+
+    for (auto& [existsSender, existsConsumer] : subscriptions) {
+        if (sender == existsSender && consumer == existsConsumer) {
+            continue;
+        }
+
+        actualSubscriptions.emplace_back(std::move(existsSender), std::move(existsConsumer));
+    }
+
+    subscriptions = std::move(actualSubscriptions);
+}
+
+void TBalancer::Notify(const TString& consumer, NKikimrPQ::TEvBalancingSubscribeNotify::EStatus status, const TActorContext& ctx) {
+    for (auto& [_, subscriptions] : Subscriptions) {
+        for (auto& subscription : subscriptions) {
+            if (subscription.Consumer == consumer) {
+                Notify(subscription.Sender, consumer, status, ctx);
+            }
+        }
+    }
+}
+
+void TBalancer::Notify(const TActorId subscriber, const TString& consumer, NKikimrPQ::TEvBalancingSubscribeNotify::EStatus status, const TActorContext& ctx) {
+    ctx.Send(subscriber, new TEvPersQueue::TEvBalancingSubscribeNotify(TabletGeneration(), ++NotifyCookie, TopicPath(), consumer, status));
+}
+
+>>>>>>> 45f5616be25 (EXT-1793 Fix when reading from the end of uncommitted partition (#30854))
 TString TBalancer::LogPrefix() const {
     return TStringBuilder() << "[" << TopicActor.TabletID() << "][" << Topic() << "] ";
 }

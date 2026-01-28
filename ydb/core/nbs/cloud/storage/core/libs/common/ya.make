@@ -9,6 +9,8 @@ SRCS(
     context.cpp
     error.cpp
     guarded_sglist.cpp
+    helpers.cpp
+    page_size.cpp
     sglist_iter.cpp
     sglist.cpp
     startable.cpp
@@ -21,6 +23,8 @@ PEERDIR(
     library/cpp/lwtrace
     library/cpp/json/writer
     library/cpp/threading/future
+
+    util
 )
 
 END()

@@ -44,7 +44,7 @@ public:
 private:
     THashMap<ui64, TOperation::TPtr> MigratedTxs;
     bool InMemoryStateActorStarted = false;
-    bool Restarted = false;
+    bool Rescheduled = false;
 };
 
 bool TDataShard::TTxInit::Execute(TTransactionContext& txc, const TActorContext& ctx) {
@@ -104,9 +104,13 @@ bool TDataShard::TTxInitRestored::Execute(TTransactionContext& txc, const TActor
 
     TDataShardLocksDb locksDb(*Self, txc);
     if (Self->SysLocks.RestorePersistentState(&locksDb)) {
-        LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "TDataShard::TTxInitRestored::Execute: persistent lock state updated, restarting");
+        // We may not be able to apply all persistent lock state updates in a
+        // single commit, e.g. removing locks with a large number of conflicts
+        // may result in large commits. Prefer starting a new transaction after
+        // every change, but without waiting for each commit to succeed.
+        LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "TDataShard::TTxInitRestored::Execute: persistent lock state updated, rescheduling transaction");
         Self->OnInMemoryStateRestored(std::move(MigratedTxs));
-        Restarted = true;
+        Rescheduled = true;
         return true;
     }
 
@@ -157,7 +161,7 @@ bool TDataShard::TTxInitRestored::Execute(TTransactionContext& txc, const TActor
 }
 
 void TDataShard::TTxInitRestored::Complete(const TActorContext& ctx) {
-    if (Restarted) {
+    if (Rescheduled) {
         return;
     }
 

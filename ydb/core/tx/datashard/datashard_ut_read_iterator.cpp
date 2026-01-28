@@ -5641,7 +5641,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorConsistency) {
         // Make sure everything settles down
         runtime.SimulateSleep(TDuration::Seconds(1));
 
-        // Block commits and try to break the first transaction by a blind upsert
+        // Block commits and try to simulate a lock timeout which starts a rollback
         TBlockEvents<TEvBlobStorage::TEvPut> blockedCommits(runtime, [&](auto& ev) {
             auto* msg = ev->Get();
             if (msg->Id.Channel() == 0 && msg->Id.TabletID() == shards.at(0)) {

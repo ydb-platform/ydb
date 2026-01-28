@@ -85,7 +85,7 @@ private:
 
     void AddRow(const TConstArrayRef<TCell>& row) override;
 
-    TVector<NKqp::TPerStepStatistics> GetScanStats();
+    NKqp::TScanStatistics GetScanStats();
 
     TOwnedCellVec ConvertLastKey(const std::shared_ptr<arrow::RecordBatch>& lastReadKey);
 

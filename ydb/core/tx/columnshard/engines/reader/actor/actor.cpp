@@ -4,17 +4,16 @@
 #include <ydb/core/tx/columnshard/blobs_reader/read_coordinator.h>
 #include <ydb/core/tx/columnshard/engines/reader/tracing/probes.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/actor.h>
-
 #include <yql/essentials/core/issue/yql_issue.h>
 
 namespace NKikimr::NOlap::NReader {
 
-TVector<NKqp::TPerStepStatistics> TColumnShardScan::GetScanStats() {
-    auto timesPerStep = [&] {
+NKqp::TScanStatistics TColumnShardScan::GetScanStats() {
+    TVector<NKqp::TPerStepScanStatistics> timesPerStep = [&] {
         auto cnt = ScanCountersPool.ReadStepsCounters();
-        TVector<NKqp::TPerStepStatistics> timesPerStep;
+        TVector<NKqp::TPerStepScanStatistics> timesPerStep;
         for (auto& [k,v ] : cnt) {
-            NKqp::TPerStepStatistics stats;
+            NKqp::TPerStepScanStatistics stats;
             stats.StepName = k;
             stats.IntegralExecutionDuration = v.ExecutionDuration;
             stats.IntegralWaitDuration = v.WaitDuration;
@@ -29,7 +28,13 @@ TVector<NKqp::TPerStepStatistics> TColumnShardScan::GetScanStats() {
     Sort(timesPerStep, [](const auto& l, const auto& r){
         return l.StepName < r.StepName;
     });
-    return timesPerStep;
+    NKqp::TScanStatistics stats;
+    int index = 0;
+    for(auto& v: timesPerStep) {
+        stats.emplace(index, std::move(v));
+        index++;
+    }
+    return stats;
 }
 
 LWTRACE_USING(YDB_CS_READER);

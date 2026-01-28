@@ -54,7 +54,7 @@ struct TEvScanData: public NActors::TEventLocal<TEvScanData, TKqpComputeEvents::
 
     TOwnedCellVec LastKey;
     NKikimrKqp::TEvKqpScanCursor LastCursorProto;
-    TVector<TPerStepStatistics> CurrentStats;
+    TScanStatistics CurrentStats;
     TDuration CpuTime;
     TDuration WaitTime;
     ui64 RawBytes = 0;

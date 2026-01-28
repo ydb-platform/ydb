@@ -14,7 +14,6 @@ ydb/core/blobstorage/ut_vdisk TBsVDiskManyPutGet.ManyPutRangeGetCompactionIndexO
 ydb/core/blobstorage/ut_vdisk unittest.[*/*] chunk
 ydb/core/client/ut TObjectStorageListingTest.TestSkipShards
 ydb/core/cms/ut_sentinel_unstable TSentinelUnstableTests.BSControllerCantChangeStatus
-ydb/core/fq/libs/row_dispatcher/ut TopicSessionTests.TwoSessionsWithDifferentSchemes
 ydb/core/fq/libs/row_dispatcher/ut TopicSessionTests.WrongJson
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.ReadHuge
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.ReadSmall
@@ -30,37 +29,35 @@ ydb/core/kqp/ut/query KqpStats.OneShardNonLocalExec-UseSink
 ydb/core/kqp/ut/scheme KqpOlapScheme.AddPgColumnWithStore
 ydb/core/persqueue/ut TPQTest.TestPartitionWriteQuota
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_offset+middle
+ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_offset+middle_WithRestart
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_6MB_Topic_offset+middle_WithRestart
 ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient
 ydb/core/statistics/aggregator/ut AnalyzeColumnshard.AnalyzeRebootColumnShard
+ydb/core/tx/schemeshard/ut_base_reboots TTablesWithReboots.AlterTableFollowersWithReboots
 ydb/core/tx/schemeshard/ut_base_reboots TTablesWithReboots.ChainedCopyTableAndDropWithReboots
 ydb/core/tx/schemeshard/ut_base_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_cdc_stream_reboots TCdcStreamWithRebootsTests.CreateStreamOnIndexTableWithInitialScan[TabletReboots]
+ydb/core/tx/schemeshard/ut_cdc_stream_reboots TCdcStreamWithRebootsTests.CreateStreamWithInitialScan[TabletReboots]
+ydb/core/tx/schemeshard/ut_cdc_stream_reboots TCdcStreamWithRebootsTests.CreateStreamWithSchemaChanges[TabletReboots]
+ydb/core/tx/schemeshard/ut_cdc_stream_reboots TCdcStreamWithRebootsTests.DropMultipleStreams[TabletReboots]
 ydb/core/tx/schemeshard/ut_cdc_stream_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_export_reboots_s3 unittest.[*/*] chunk
+ydb/core/tx/schemeshard/ut_index_build_reboots IndexBuildTestReboots.DropIndexWithDataColumns
 ydb/core/tx/schemeshard/ut_index_build_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_login_large TSchemeShardLoginLargeTest.RemoveLogin_Many
-ydb/core/tx/schemeshard/ut_move_reboots TSchemeShardMoveRebootsTest.AlterAfter
-ydb/core/tx/schemeshard/ut_move_reboots TSchemeShardMoveRebootsTest.Chain
 ydb/core/tx/schemeshard/ut_move_reboots TSchemeShardMoveRebootsTest.ColumnTable
-ydb/core/tx/schemeshard/ut_move_reboots TSchemeShardMoveRebootsTest.Replace
-ydb/core/tx/schemeshard/ut_move_reboots TSchemeShardMoveRebootsTest.WithData
-ydb/core/tx/schemeshard/ut_move_reboots TSchemeShardMoveRebootsTest.WithDataAndLocalDBBtreeIndex
-ydb/core/tx/schemeshard/ut_move_reboots TSchemeShardMoveRebootsTest.WithDataAndPersistentPartitionStats
-ydb/core/tx/schemeshard/ut_pq_reboots TPqGroupTestReboots.AlterWithProfileChange
-ydb/core/tx/schemeshard/ut_pq_reboots TPqGroupTestReboots.CreateDrop-PQConfigTransactionsAtSchemeShard-false
-ydb/core/tx/schemeshard/ut_pq_reboots TPqGroupTestReboots.CreateDrop-PQConfigTransactionsAtSchemeShard-true
-ydb/core/tx/schemeshard/ut_pq_reboots TPqGroupTestReboots.CreateDropAbort-PQConfigTransactionsAtSchemeShard-false
-ydb/core/tx/schemeshard/ut_pq_reboots TPqGroupTestReboots.CreateDropAbort-PQConfigTransactionsAtSchemeShard-true
 ydb/core/tx/schemeshard/ut_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_restore TImportTests.ShouldSucceedOnManyTables
+ydb/core/tx/schemeshard/ut_restore TImportWithRebootsTests.ShouldSucceedOnSingleChangefeed
+ydb/core/tx/schemeshard/ut_restore TRestoreWithRebootsTests.CancelShouldSucceed[Raw]
+ydb/core/tx/schemeshard/ut_restore TRestoreWithRebootsTests.ShouldFailOnOutboundKey[Raw]
+ydb/core/tx/schemeshard/ut_restore TRestoreWithRebootsTests.ShouldSucceedOnMultipleFrames
 ydb/core/tx/schemeshard/ut_restore unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_shred_reboots ShredReboots.SimpleShredTest
 ydb/core/tx/schemeshard/ut_shred_reboots unittest.[*/*] chunk
-ydb/core/tx/schemeshard/ut_split_merge_reboots TSchemeShardSplitTestReboots.ForceDropAndCopyInParallelAllPathsAreLocked
-ydb/core/tx/schemeshard/ut_split_merge_reboots TSchemeShardSplitTestReboots.MergeCopyParallelWithChannelsBindings
 ydb/core/tx/schemeshard/ut_split_merge_reboots TSchemeShardSplitTestReboots.SplitWithTxInFlightWithReboots
 ydb/core/tx/schemeshard/ut_system_names unittest.[*/*] chunk
+ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.BaseCase[PipeResets]
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.BaseCase[TabletReboots]
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.Overlap[PipeResetsBucket0]
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.Overlap[PipeResetsBucket1]
@@ -76,6 +73,7 @@ ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboot
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.Prefixed[TabletRebootsBucket0]
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.Prefixed[TabletRebootsBucket1]
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots unittest.[*/*] chunk
+ydb/core/tx/tx_proxy/ut_schemereq SchemeReqAccess.AlterLoginProtect-RootDB-Auth-BuiltinUser-CreateUser-17
 ydb/core/tx/tx_proxy/ut_schemereq SchemeReqAccess.AlterLoginProtect-RootDB-Auth-BuiltinUser-CreateUser-20
 ydb/core/tx/tx_proxy/ut_schemereq SchemeReqAccess.AlterLoginProtect-RootDB-Auth-BuiltinUser-CreateUser-21
 ydb/core/tx/tx_proxy/ut_schemereq SchemeReqAccess.AlterLoginProtect-RootDB-Auth-BuiltinUser-CreateUser-22
@@ -95,6 +93,7 @@ ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut TxUsage.Write_And_Rea
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut unittest.[*/*] chunk
 ydb/public/sdk/cpp/tests/integration/sessions_pool YdbSdkSessionsPool.StressTestSync/0
 ydb/public/sdk/cpp/tests/integration/sessions_pool YdbSdkSessionsPool.StressTestSync/1
+ydb/services/persqueue_v1/ut TPersQueueTest.Cache
 ydb/services/persqueue_v1/ut TPersQueueTest.CacheHead
 ydb/services/ydb/backup_ut BackupRestore.TestReplaceRestoreOptionOnNonExistingSchemeObjects
 ydb/services/ydb/ut YdbLogStore.AlterLogTable
@@ -143,8 +142,6 @@ ydb/tests/functional/tenants test_tenants.py.TestTenants.test_create_drop_create
 ydb/tests/olap py3test.[*/*] chunk
 ydb/tests/olap test_cs_many_updates.py.TestCSManyUpdates.test_many_updates[bulk_upsert_update_upsert]
 ydb/tests/olap test_log_scenario.py.TestLogScenario.test_log_deviation[180]
-ydb/tests/olap test_overloads.py.TestLogScenario.test_overloads_workload[1-10000]
-ydb/tests/olap test_overloads.py.TestLogScenario.test_overloads_workload[1000-1]
 ydb/tests/olap upgrade_to_internal_path_id.py.TestUpgradeToInternalPathId.test
 ydb/tests/olap/scenario test_alter_tiering.py.TestAlterTiering.test[many_tables]
 ydb/tests/olap/scenario test_insert.py.TestInsert.test_multi[read_data_during_bulk_upsert]

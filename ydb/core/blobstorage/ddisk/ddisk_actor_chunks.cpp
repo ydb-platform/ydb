@@ -50,7 +50,7 @@ namespace NKikimr::NDDisk {
             ChunkReserve.pop();
             Y_ABORT_UNLESS(PersistentBufferOwnedChunks.contains(chunkIdx));
             IssuePDiskLogRecord(TLogSignature::SignaturePersistentBufferChunkMap, chunkIdx
-                , CreatePersistentBufferChunkMapSnapshot(), nullptr, [this, chunkIdx] {
+                , CreatePersistentBufferChunkMapSnapshot(), &PersistentBufferChunkMapSnapshotLsn, [this, chunkIdx] {
                 PersistentBufferOwnedChunks.insert(chunkIdx);
                 // TODO: Send(SelfId(), new TEvPrivate::TEvHandlePersistentBufferEventForChunk(chunkIdx));
             });

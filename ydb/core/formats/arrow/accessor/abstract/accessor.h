@@ -287,6 +287,7 @@ protected:
         return DoGetLocalChunkedArray(chunkCurrent, position);
     }
     virtual std::shared_ptr<arrow::Scalar> DoGetMaxScalar() const = 0;
+    virtual std::shared_ptr<arrow::Scalar> DoGetMinScalar() const = 0;
 
     template <class TCurrentPosition, class TChunkAccessor>
     void SelectChunk(const std::optional<TCurrentPosition>& chunkCurrent, const ui64 position, const TChunkAccessor& accessor) const {
@@ -447,6 +448,10 @@ public:
     std::shared_ptr<arrow::Scalar> GetMaxScalar() const {
         AFL_VERIFY(GetRecordsCount());
         return DoGetMaxScalar();
+    }
+    std::shared_ptr<arrow::Scalar> GetMinScalar() const {
+        AFL_VERIFY(GetRecordsCount());
+        return DoGetMinScalar();
     }
 
     std::optional<ui64> GetRawSize() const {

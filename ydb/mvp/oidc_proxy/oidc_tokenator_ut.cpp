@@ -11,9 +11,9 @@ using namespace NMVP::NOIDC;
 using namespace NActors;
 
 namespace {
-class TFakeNebiusTokenExchangeServiceStrict : public nebius::iam::v1::TokenExchangeService::Service {
+class TTokenExchangeServiceMock : public nebius::iam::v1::TokenExchangeService::Service {
 public:
-    TFakeNebiusTokenExchangeServiceStrict(const TString& expectedSaId, const TString& expectedJwtToken, const TString& iamToken)
+    TTokenExchangeServiceMock(const TString& expectedSaId, const TString& expectedJwtToken, const TString& iamToken)
         : ExpectedSaId(expectedSaId)
         , ExpectedJwtToken(expectedJwtToken)
         , IamToken(iamToken)
@@ -72,9 +72,9 @@ void RunTokenatorIntegrationTest(TFederatedTestContext& ctx) {
     const TString fixedIamToken = "iam_from_tokenator";
 
     std::unique_ptr<grpc::Server> tokenExchangeServer;
-    std::unique_ptr<TFakeNebiusTokenExchangeServiceStrict> localMock;
+    std::unique_ptr<TTokenExchangeServiceMock> localMock;
     if (!ctx.ExpectedSaId.empty() && !ctx.ExpectedJwtToken.empty()) {
-        localMock = std::make_unique<TFakeNebiusTokenExchangeServiceStrict>(ctx.ExpectedSaId, ctx.ExpectedJwtToken, fixedIamToken);
+        localMock = std::make_unique<TTokenExchangeServiceMock>(ctx.ExpectedSaId, ctx.ExpectedJwtToken, fixedIamToken);
         TString endpoint = TStringBuilder() << "localhost:" << tokenExchangePort;
         tokensConfig.MutableJwtInfo(0)->SetEndpoint(endpoint);
         grpc::ServerBuilder teBuilder;

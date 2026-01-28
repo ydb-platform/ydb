@@ -12,10 +12,10 @@ generic:
 
   auth:
     token_file: path/to/tokenator_config # old way
-    jwt_token:
-      subject: "project0tydb_sa"
-      path: "path/to/federated_token"
+    federated_creds:
       token_service_endpoint: "grpcs://tokens.net:443"
+      k8s_token_path: "path/to/federated_token"
+      service_account_id: "project0tydb_sa"
 
 oidc:
   client_id: "client-id"

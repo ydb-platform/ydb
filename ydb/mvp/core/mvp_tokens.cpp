@@ -273,7 +273,7 @@ void TMvpTokenator::UpdateJwtToken(const NMvp::TJwtInfo* jwtInfo) {
                 auto encodedToken = jwt::create()
                     .set_key_id(keyId)
                     .set_issuer(serviceAccountId)
-                    .set_audience(audience)
+                    .set_subject(serviceAccountId)
                     .set_issued_at(now)
                     .set_expires_at(expiresAt)
                     .sign(algorithm);
@@ -295,6 +295,7 @@ void TMvpTokenator::UpdateJwtToken(const NMvp::TJwtInfo* jwtInfo) {
                                 nebius::iam::v1::ExchangeTokenRequest,
                                 nebius::iam::v1::CreateTokenResponse,
                                 TEvPrivate::TEvUpdateIamTokenNebius>(jwtInfo->name(), jwtInfo->endpoint(), request, &nebius::iam::v1::TokenExchangeService::Stub::AsyncExchange, serviceAccountId);
+
             break;
         }
     }

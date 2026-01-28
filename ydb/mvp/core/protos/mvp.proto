@@ -60,11 +60,3 @@ message TTokensConfig {
     optional TStaffApiUserTokenInfo StaffApiUserTokenInfo = 7; // OAuth token for staff api
     optional EAccessServiceType AccessServiceType = 8; // Access Service Type for algorithm selection
 }
-
-message TOpenIdClientConfig {
-  optional string SecretName = 1;
-  optional string SessionServiceEndpoint = 2;
-  optional string SessionServiceTokenName = 3;
-  optional string AuthorizationServerAddress = 4;
-  repeated string AllowedProxyHosts = 5;
-}

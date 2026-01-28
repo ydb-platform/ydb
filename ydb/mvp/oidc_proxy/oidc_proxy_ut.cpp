@@ -6,24 +6,18 @@
 #include "openid_connect.h"
 #include "context.h"
 #include <ydb/mvp/core/appdata.h>
-#include <ydb/mvp/core/mvp_tokens.h>
-#include <ydb/core/base/appdata.h>
 #include <ydb/core/testlib/actors/test_runtime.h>
 #include <ydb/library/testlib/service_mocks/session_service_mock.h>
 #include <ydb/library/testlib/service_mocks/profile_service_mock.h>
 #include <ydb/mvp/core/protos/mvp.pb.h>
 #include <ydb/mvp/core/mvp_test_runtime.h>
-#include <ydb/public/api/client/nc_private/iam/v1/token_exchange_service.grpc.pb.h>
 #include <library/cpp/json/json_reader.h>
+#include <library/cpp/string_utils/base64/base64.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/map.h>
 
 using namespace NMVP::NOIDC;
 using namespace NActors;
-
-namespace {
-
-}
 
 Y_UNIT_TEST_SUITE(Mvp) {
     void OpenIdConnectRequestWithIamTokenTest(NMvp::EAccessServiceType profile) {

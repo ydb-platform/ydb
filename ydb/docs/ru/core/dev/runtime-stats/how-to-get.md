@@ -33,7 +33,7 @@ SELECT count(*) FROM lineitem
 
 Если вы используете утилиту командной строки, то вам доступны следующие варианты:
 
-- Для стандартных тестов, например [TPC-H](../../reference/ydb-cli/workload-tpch.md), можно использовать [команду workload](../../reference/ydb-cli/commands/workload/_includes/index.md) с опцией ```--plan``` - ```ydb workload tpch run --plan filename```, в результате чего на локальном диске будут созданы файлы с названием ```filename``` в различных форматах, расширение ```.svg``` соответствует графическому формату
+- Для стандартных тестов, например [TPC-H](../../reference/ydb-cli/workload-tpch.md), можно использовать [команду workload](../../reference/ydb-cli/commands/workload/index.md) с опцией ```--plan``` - ```ydb workload tpch run --plan filename```, в результате чего на локальном диске будут созданы файлы с названием ```filename``` в различных форматах, расширение ```.svg``` соответствует графическому формату
 
 - Для своих собственных запросов можно использовать формат ```ydb workload query run --plan filename```
 

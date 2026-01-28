@@ -29,12 +29,10 @@ private:
         switch (mode) {
             case NRangeTreap::EBorderMode::LeftExclusive:
                 return EPrefixMode::PrefixModeLeftBorderNonInclusive;
-            case NRangeTreap::EBorderMode::LeftInf:
             case NRangeTreap::EBorderMode::LeftInclusive:
                 return EPrefixMode::PrefixModeLeftBorderInclusive;
             case NRangeTreap::EBorderMode::RightExclusive:
                 return EPrefixMode::PrefixModeRightBorderNonInclusive;
-            case NRangeTreap::EBorderMode::RightInf:
             case NRangeTreap::EBorderMode::RightInclusive:
                 return EPrefixMode::PrefixModeRightBorderInclusive;
         }

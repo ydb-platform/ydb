@@ -25,8 +25,6 @@ enum class EBorderMode: ui8 {
     LeftInclusive = 1,
     RightInclusive = 2,
     LeftExclusive = 3,
-    LeftInf = 4,
-    RightInf = 5
 };
 
 class TBorderModeTraits {
@@ -42,10 +40,6 @@ public:
     static int CompareEqualPoint(const EBorderMode lhs, const EBorderMode rhs) {
         return (int)lhs - (int)rhs;
     }
-
-private:
-    static const ui8 FlagInclusive = (1 << 0);
-    static const ui8 FlagRight = (1 << 1);
 };
 
 template <class TKeyView>
@@ -61,14 +55,6 @@ public:
 
     static TBorder MakeRight(TKeyView key, bool inclusive) noexcept {
         return { key, inclusive ? EBorderMode::RightInclusive : EBorderMode::RightExclusive };
-    }
-
-    static TBorder MakeLeftInf() noexcept {
-        return { EBorderMode::LeftInf };
-    }
-
-    static TBorder MakeRightInf() noexcept {
-        return { EBorderMode::RightInf };
     }
 
     const TKeyView& GetKey() const {

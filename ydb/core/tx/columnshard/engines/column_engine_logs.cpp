@@ -21,7 +21,6 @@
 #include <ydb/library/conclusion/status.h>
 
 #include <library/cpp/time_provider/time_provider.h>
-#include <ydb/core/tx/columnshard/tracing/probes.h>
 
 namespace NKikimr::NColumnShard {
 
@@ -33,7 +32,7 @@ namespace NKikimr::NOlap {
 
 namespace {
 
-using namespace NColumnShard::NLWTrace_YDB_CS;
+using namespace ::NKikimr::NColumnShard::LWTRACE_GET_NAMESPACE(YDB_CS);
 
 class TPortionsSelector {
     const std::shared_ptr<TGranuleMeta> GranuleMeta;
@@ -147,6 +146,9 @@ private:
     }
 
     void AppendCommittedPortionsFromIntervalTree() {
+        using TPositionView = PortionIntervalTree::TPositionView;
+        using TBorder = NRangeTreap::TBorder<TPositionView>;
+
         std::unordered_map<ui64, TColumnEngineForLogs::TSelectedPortionInfo> selectedPortionsMap;
 
         const auto collector = [&](const PortionIntervalTree::TPortionIntervalTree::TRange& /*interval*/,
@@ -181,12 +183,10 @@ private:
             const auto& from = filter.GetPredicateFrom();
             const auto& to = filter.GetPredicateTo();
 
-            const auto& leftBorder = from.IsAll() ? NRangeTreap::TBorder<PortionIntervalTree::TPositionView>::MakeLeftInf() :
-                                                    NRangeTreap::TBorder<PortionIntervalTree::TPositionView>::MakeLeft(
-                                                        PortionIntervalTree::TPositionView(&from.GetSortableBatchPosition()), from.IsInclude());
-            const auto& rightBorder = to.IsAll() ? NRangeTreap::TBorder<PortionIntervalTree::TPositionView>::MakeRightInf() :
-                                                    NRangeTreap::TBorder<PortionIntervalTree::TPositionView>::MakeRight(
-                                                    PortionIntervalTree::TPositionView(&to.GetSortableBatchPosition()), to.IsInclude());
+            const auto& leftBorder = from.IsAll() ? TBorder::MakeLeft(TPositionView::MakeLeftInf(), false)
+                                                  : TBorder::MakeLeft(TPositionView(&from.GetSortableBatchPosition()), from.IsInclude());
+            const auto& rightBorder = to.IsAll() ? TBorder::MakeRight(TPositionView::MakeRightInf(), false)
+                                                 : TBorder::MakeRight(TPositionView(&to.GetSortableBatchPosition()), to.IsInclude());
 
             intervals.EachIntersection(leftBorder, rightBorder, collector);
         }
@@ -638,7 +638,6 @@ std::vector<TColumnEngineForLogs::TSelectedPortionInfo> TColumnEngineForLogs::Se
     const TPKRangesFilter& pkRangesFilter, const bool withNonconflicting, const bool withConflicting,
     const std::optional<THashSet<TInsertWriteId>>& ownPortions) const {
     std::vector<TSelectedPortionInfo> out;
-    using namespace NColumnShard::NLWTrace_YDB_CS;
 
     auto granuleMeta = GranulesStorage->GetGranuleOptional(pathId);
     if (!granuleMeta) {

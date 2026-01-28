@@ -6,6 +6,11 @@ TPositionView::TPositionView(const NArrow::NMerger::TSortableBatchPosition* sort
     : Position(sortableBatchPosition) {
 }
 
+TPositionView::TPositionView(EInfinityType infType)
+    : Position(infType == EInfinityType::Left ? TPositionVariant(std::in_place_index<LeftInf>)
+                                              : TPositionVariant(std::in_place_index<RightInf>)) {
+}
+
 TPositionView::TPositionView(std::shared_ptr<TPortionInfo> portionInfo, EPortionInfoIndexPosition keyPosition)
     : Position(keyPosition == EPortionInfoIndexPosition::Start ? TPositionVariant(std::in_place_index<StartSimpleRow>, std::move(portionInfo))
                                                                : TPositionVariant(std::in_place_index<EndSimpleRow>, std::move(portionInfo))) {
@@ -17,6 +22,14 @@ TPositionView TPositionView::FromPortionInfoIndexStart(std::shared_ptr<TPortionI
 
 TPositionView TPositionView::FromPortionInfoIndexEnd(std::shared_ptr<TPortionInfo> portionInfo) {
     return TPositionView(std::move(portionInfo), EPortionInfoIndexPosition::End);
+}
+
+TPositionView TPositionView::MakeLeftInf() {
+    return TPositionView(EInfinityType::Left);
+}
+
+TPositionView TPositionView::MakeRightInf() {
+    return TPositionView(EInfinityType::Right);
 }
 
 NArrow::NMerger::TSortableBatchPosition TPositionView::GetSortableBatchPosition() const {
@@ -32,36 +45,33 @@ NArrow::NMerger::TSortableBatchPosition TPositionView::GetSortableBatchPosition(
 }
 
 std::partial_ordering TPositionView::Compare(const TPositionView& rhs) const {
-    AFL_VERIFY(Position.index() > Infinity && Position.index() <= SortableBatchPosition &&
-               rhs.Position.index() > Infinity && rhs.Position.index() <= SortableBatchPosition)
-              ("lhs.index", Position.index())("rhs.index", rhs.Position.index());
-
-    if (Position.index() == SortableBatchPosition || rhs.Position.index() == SortableBatchPosition) {
-        return GetSortableBatchPosition().ComparePartial(rhs.GetSortableBatchPosition());
-    } else if (auto val = std::get_if<StartSimpleRow>(&Position); val) {
-        const auto& lhsMeta = (*val)->GetMeta();
-        auto rhsIndexKeyView = rhs.Position.index() == StartSimpleRow ? std::get<StartSimpleRow>(rhs.Position)->GetMeta().IndexKeyViewStart()
-                                                                      : std::get<EndSimpleRow>(rhs.Position)->GetMeta().IndexKeyViewEnd();
-
-        return lhsMeta.IndexKeyViewStart().Compare(rhsIndexKeyView, lhsMeta.GetPkSchema()).GetResult();
-    } else if (auto val = std::get_if<EndSimpleRow>(&Position); val) {
-        const auto& lhsMeta = (*val)->GetMeta();
-        auto rhsIndexKeyView = rhs.Position.index() == StartSimpleRow ? std::get<StartSimpleRow>(rhs.Position)->GetMeta().IndexKeyViewStart()
-                                                                      : std::get<EndSimpleRow>(rhs.Position)->GetMeta().IndexKeyViewEnd();
-
-        return lhsMeta.IndexKeyViewEnd().Compare(rhsIndexKeyView, lhsMeta.GetPkSchema()).GetResult();
+    if (Position.index() == LeftInf || rhs.Position.index() == RightInf) {
+        return Position.index() == rhs.Position.index() ? std::partial_ordering::equivalent : std::partial_ordering::less;
+    } else if (Position.index() == RightInf || rhs.Position.index() == LeftInf) {
+        return std::partial_ordering::greater;
     }
 
-    AFL_VERIFY(false)("error", "invalid type in TPositionView variant for Compare")("type", Position.index());
+    if (Position.index() == SortableBatchPosition) {
+        return std::get<SortableBatchPosition>(Position)->ComparePartial(rhs.Position.index() == SortableBatchPosition ? *std::get<SortableBatchPosition>(rhs.Position)
+                                                                                                                       : rhs.GetSortableBatchPosition());
+    } else if (rhs.Position.index() == SortableBatchPosition) {
+        return GetSortableBatchPosition().ComparePartial(*std::get<SortableBatchPosition>(rhs.Position));
+    }
+
+    AFL_VERIFY(Position.index() == StartSimpleRow || Position.index() == EndSimpleRow)("Position.index()", Position.index());
+    AFL_VERIFY(rhs.Position.index() == StartSimpleRow || rhs.Position.index() == EndSimpleRow)("rhs.Position.index()", rhs.Position.index());
+
+    const auto& lhsMeta = Position.index() == StartSimpleRow ? std::get<StartSimpleRow>(Position)->GetMeta()
+                                                             : std::get<EndSimpleRow>(Position)->GetMeta();
+    auto lhsIndexKeyView = Position.index() == StartSimpleRow ? lhsMeta.IndexKeyViewStart()
+                                                              : lhsMeta.IndexKeyViewEnd();
+    auto rhsIndexKeyView = rhs.Position.index() == StartSimpleRow ? std::get<StartSimpleRow>(rhs.Position)->GetMeta().IndexKeyViewStart()
+                                                                  : std::get<EndSimpleRow>(rhs.Position)->GetMeta().IndexKeyViewEnd();
+
+    return lhsIndexKeyView.Compare(rhsIndexKeyView, lhsMeta.GetPkSchema()).GetResult();
 }
 
 int TPositionViewBorderComparator::Compare(const TBorder& lhs, const TBorder& rhs) {
-    if (lhs.GetMode() == NRangeTreap::EBorderMode::LeftInf || rhs.GetMode() == NRangeTreap::EBorderMode::RightInf) {
-        return lhs.GetMode() == rhs.GetMode() ? 0 : -1;
-    } else if (lhs.GetMode() == NRangeTreap::EBorderMode::RightInf || rhs.GetMode() == NRangeTreap::EBorderMode::LeftInf) {
-        return lhs.GetMode() == rhs.GetMode() ? 0 : 1;
-    }
-
     auto comp = lhs.GetKey().Compare(rhs.GetKey());
     if (comp == std::partial_ordering::less) {
         return -1;

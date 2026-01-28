@@ -29,9 +29,9 @@ struct TPortionIntervalTreeValueTraits: NRangeTreap::TDefaultValueTraits<std::sh
 
 
 class TPositionView {
-    enum EPositionType { Infinity = 0, StartSimpleRow = 1, EndSimpleRow = 2, SortableBatchPosition = 3 };
+    enum EPositionType { LeftInf = 0, RightInf = 1, StartSimpleRow = 2, EndSimpleRow = 3, SortableBatchPosition = 4 };
 
-    using TPositionVariant = std::variant<std::monostate, std::shared_ptr<TPortionInfo>, std::shared_ptr<TPortionInfo>, const NArrow::NMerger::TSortableBatchPosition*>;
+    using TPositionVariant = std::variant<std::monostate, std::monostate, std::shared_ptr<TPortionInfo>, std::shared_ptr<TPortionInfo>, const NArrow::NMerger::TSortableBatchPosition*>;
 
     TPositionVariant Position;
 
@@ -41,12 +41,20 @@ public:
         End
     };
 
+    enum class EInfinityType {
+        Left,
+        Right
+    };
+
     explicit TPositionView(const NArrow::NMerger::TSortableBatchPosition* sortableBatchPosition);
+    explicit TPositionView(EInfinityType infType);
     TPositionView(std::shared_ptr<TPortionInfo> portionInfo, EPortionInfoIndexPosition keyPosition);
-    TPositionView() = default;
 
     static TPositionView FromPortionInfoIndexStart(std::shared_ptr<TPortionInfo> portionInfo);
     static TPositionView FromPortionInfoIndexEnd(std::shared_ptr<TPortionInfo> portionInfo);
+
+    static TPositionView MakeLeftInf();
+    static TPositionView MakeRightInf();
 
     NArrow::NMerger::TSortableBatchPosition GetSortableBatchPosition() const;
     std::partial_ordering Compare(const TPositionView& rhs) const;

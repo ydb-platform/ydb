@@ -13,6 +13,7 @@
 #include <arrow/scalar.h>
 
 #include "dq_join_common.h"
+#include "dq_counters.h"
 
 namespace NKikimr::NMiniKQL {
 
@@ -257,11 +258,17 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
                                                               .Probe = Converters_.Probe->GetTupleLayout()})
             , Ctx_(&ctx)
             , Output_(meta, {.Build = Converters_.Build.get(), .Probe = Converters_.Probe.get()})
-        {}
+        {
+            if (ctx.CountersProvider) {
+                TString id = TString(Operator_BlockHashJoin) + "0";
+                CounterOutputRows_ = ctx.CountersProvider->GetCounter(id, Counter_OutputRows, false);
+            }
+        }
 
         NUdf::EFetchStatus FlushTo(NUdf::TUnboxedValue* output) {
             MKQL_ENSURE(Output_.SizeTuples() != 0, "make sure we are flushing something, not empty set of tuples");
             i64 rows = Output_.SizeTuples();
+            CounterOutputRows_.Add(rows);
             TVector<arrow::Datum> arrowOutput = Output_.FlushAndApplyRenames();
             for (int colIndex = 0; colIndex < Output_.Columns(); ++colIndex) {
                 output[colIndex] = Ctx_->HolderFactory.CreateArrowBlock(std::move(arrowOutput[colIndex]));
@@ -307,6 +314,8 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
         TRenamesPackedTupleOutput<Kind> Output_;
         const int Threshold_ = 10000;
         bool Finished_ = false;
+
+        NYql::NUdf::TCounter CounterOutputRows_;
     };
 
     void RegisterDependencies() const final {

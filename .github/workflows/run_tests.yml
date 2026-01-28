@@ -257,7 +257,7 @@ jobs:
     needs: prepare
     name: ${{ matrix.branch }}:${{ inputs.build_preset }}
     timeout-minutes: 1200
-    runs-on: [ self-hosted, auto-provisioned, "${{ format('build-preset-{0}', inputs.build_preset) }}" ]
+    runs-on: [ self-hosted, auto-provisioned, build-preset-fat-worker ]
     strategy:
       fail-fast: false
       matrix:

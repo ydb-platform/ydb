@@ -101,7 +101,7 @@ public:
     }
 
     ITopicClient::TPtr GetTopicClient(const TDriver& driver, const TTopicClientSettings& settings) final {
-        const bool hasEndpoint = HasEndpoint<TTopicClientSettings>(driver, settings);
+        const bool hasEndpoint = HasEndpoint(driver, settings);
         if (!hasEndpoint && LocalTopicClientFactory) {
             return LocalTopicClientFactory->CreateTopicClient(settings);
         }
@@ -111,7 +111,12 @@ public:
     }
 
     IFederatedTopicClient::TPtr GetFederatedTopicClient(const TDriver& driver, const TFederatedTopicClientSettings& settings) final {
-        Y_VALIDATE(HasEndpoint<TFederatedTopicClientSettings>(driver, settings), "Missing endpoint value for federated topic client");
+        const bool hasEndpoint = HasEndpoint(driver, settings);
+        if (!hasEndpoint && LocalTopicClientFactory) {
+            return LocalTopicClientFactory->CreateFederatedTopicClient(settings);
+        }
+
+        Y_VALIDATE(hasEndpoint, "Missing endpoint value for federated topic client and local topics are not allowed");
         return CreateExternalFederatedTopicClient(driver, settings);
     }
 
@@ -144,8 +149,7 @@ public:
     }
 
 private:
-    template <typename TSettings>
-    static bool HasEndpoint(const TDriver& driver, const TCommonClientSettingsBase<TSettings>& settings) {
+    static bool HasEndpoint(const TDriver& driver, const TCommonClientSettings& settings) {
         if (!driver.GetConfig().GetEndpoint().empty()) {
             return true;
         }

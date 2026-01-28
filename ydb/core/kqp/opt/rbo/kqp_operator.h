@@ -1,5 +1,6 @@
 #pragma once
 
+#include "kqp_info_unit.h"
 #include "kqp_rbo_context.h"
 #include "kqp_rbo_statistics.h"
 
@@ -25,51 +26,6 @@ enum EPrintPlanOptions: ui32 {
     PrintFullMetadata = 0x02,
     PrintBasicStatistics = 0x04,
     PrintFullStatistics = 0x08
-};
-
-/**
- * Info Unit is a reference to a column in the plan
- * Currently we only record the name and alias of the column, but we will extend it in the future
- */
-struct TInfoUnit {
-    TInfoUnit(const TString& alias, const TString& column, bool subplanContext = false)
-        : Alias(alias)
-        , ColumnName(column)
-        , SubplanContext(subplanContext) {
-    }
-
-    TInfoUnit(const TString& name, bool subplanContext = false);
-    TInfoUnit() = default;
-    ~TInfoUnit() = default;
-
-    TString GetFullName() const {
-        return (Alias != "" ? Alias + "." : "") + ColumnName;
-    }
-
-    TString GetAlias() const { return Alias; }
-    TString GetColumnName() const { return ColumnName; }
-    bool IsSubplanContext() const { return SubplanContext; }
-    void SetSubplanContext(bool subplanContext) { SubplanContext = subplanContext; }
-    void AddDependencies(TVector<TInfoUnit> deps) { 
-        SubplanDependencies.insert(SubplanDependencies.end(), deps.begin(), deps.end());
-    }
-    TVector<TInfoUnit> GetDependencies() const { return SubplanDependencies; }
-
-    bool operator==(const TInfoUnit& other) const {
-        return Alias == other.Alias && ColumnName == other.ColumnName;
-    }
-
-    struct THashFunction {
-        size_t operator()(const TInfoUnit& c) const {
-            return THash<TString>{}(c.Alias) ^ THash<TString>{}(c.ColumnName);
-        }
-    };
-
-private:
-    TString Alias;
-    TString ColumnName;
-    bool SubplanContext{false};
-    TVector<TInfoUnit> SubplanDependencies;
 };
 
 /**
@@ -419,7 +375,7 @@ class IOperator {
     TPositionHandle Pos;
     const TTypeAnnotationNode* Type = nullptr;
     TVector<std::shared_ptr<IOperator>> Children;
-    TVector<std::weak_ptr<IOperator>> Parents;
+    TVector<std::pair<std::weak_ptr<IOperator>, int>> Parents;
 };
 
 /***
@@ -783,6 +739,7 @@ class TOpRoot : public IUnaryOperator {
 };
 
 TVector<TInfoUnit> IUSetDiff(TVector<TInfoUnit> left, TVector<TInfoUnit> right);
+TVector<TInfoUnit> IUSetIntersect(TVector<TInfoUnit> left, TVector<TInfoUnit> right);
 
 TString PrintRBOExpression(TExprNode::TPtr expr, TExprContext & ctx);
 

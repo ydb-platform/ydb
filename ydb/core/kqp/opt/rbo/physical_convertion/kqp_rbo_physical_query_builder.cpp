@@ -1,5 +1,6 @@
 #include "kqp_rbo_physical_query_builder.h"
 #include <yql/essentials/core/yql_expr_optimize.h>
+#include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
 #include <ydb/library/yql/dq/opt/dq_opt_peephole.h>
 #include <ydb/core/kqp/opt/peephole/kqp_opt_peephole.h>
 
@@ -162,7 +163,7 @@ TExprNode::TPtr TPhysicalQueryBuilder::BuildDqPhyStage(const TVector<TExprNode::
             .Args(args)
             .Body(physicalStageBody)
         .Build()
-        .Settings().Build()
+        .Settings(NYql::NDq::TDqStageSettings::New().BuildNode(ctx, pos))
     .Done().Ptr();
     // clang-format on
 }

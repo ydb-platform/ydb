@@ -91,7 +91,7 @@ void Scopes::ComputeScopes(std::shared_ptr<IOperator> &op) {
     for (auto &[id, sc] : ScopeMap) {
         auto topOp = sc.Operators[0];
         for (auto &p : topOp->Parents) {
-            auto parentScopeId = RevScopeMap.at(p.lock());
+            auto parentScopeId = RevScopeMap.at(p.first.lock());
             sc.ParentScopes.push_back(parentScopeId);
         }
     }
@@ -142,7 +142,7 @@ void TRenameStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
         TVector<TInfoUnit> mapsTo;
         THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> mapsFrom;
         
-        if (iter.Current->Kind == EOperator::Map && CastOperator<TOpMap>(iter.Current)->Project) {
+        if (iter.Current->Kind == EOperator::Map) {
             auto map = CastOperator<TOpMap>(iter.Current);
             for (const auto& mapElement: map->MapElements) {
                 mapsTo.push_back(mapElement.GetElementName());
@@ -171,16 +171,8 @@ void TRenameStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
                 mapsTo.push_back(col);
             }
             for (const auto& trait : agg->AggregationTraitsList) {
-                // FIXME: We break the rename chain in aggregate right now, need to figure out whether this is
-                // the correct thing to do
                 mapsTo.push_back(trait.OriginalColName);
-
-                //auto from = trait.OriginalColName;
-                //auto to = trait.ResultColName;
-                //mapsTo.push_back(to);
-                //if (to != from) {
-                //    mapsFrom[to] = from;
-                //}
+                mapsTo.push_back(trait.ResultColName);
             }
         }
 

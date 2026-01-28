@@ -1,3 +1,3 @@
 RECURSE(
-    core
+    cloud
 )

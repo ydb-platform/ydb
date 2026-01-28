@@ -1,67 +1,37 @@
 #include "local_topic_read_session.h"
+#include "local_topic_client_helpers.h"
+#include "local_topic_io_session_common.h"
 
 #include <ydb/core/base/appdata_fwd.h>
-#include <ydb/core/grpc_services/local_rpc/local_rpc_bi_streaming.h>
 #include <ydb/core/grpc_services/rpc_calls.h>
-#include <ydb/core/kqp/common/kqp_script_executions.h>
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
-#include <ydb/public/sdk/cpp/adapters/issue/issue.h>
 #include <ydb/services/persqueue_v1/actors/read_session_actor.h>
-
-#include <yql/essentials/public/issue/yql_issue_message.h>
 
 #include <library/cpp/protobuf/interop/cast.h>
 
 #include <util/generic/guid.h>
 
-#include <queue>
-
 namespace NKikimr::NKqp {
 
 namespace {
 
-#define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::YDB_SDK, "[LocalTopicReadSession] " << LogPrefix() << stream)
-#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::YDB_SDK, "[LocalTopicReadSession] " << LogPrefix() << stream)
-#define LOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::YDB_SDK, "[LocalTopicReadSession] " << LogPrefix() << stream)
-#define LOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::YDB_SDK, "[LocalTopicReadSession] " << LogPrefix() << stream)
-#define LOG_W(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::YDB_SDK, "[LocalTopicReadSession] " << LogPrefix() << stream)
-#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::YDB_SDK, "[LocalTopicReadSession] " << LogPrefix() << stream)
-#define LOG_C(stream) LOG_CRIT_S(*TlsActivationContext, NKikimrServices::YDB_SDK, "[LocalTopicReadSession] " << LogPrefix() << stream)
-
-using namespace NActors;
 using namespace NGRpcService;
-using namespace NRpcService;
 using namespace NYdb;
 using namespace NYdb::NTopic;
 
-struct TLocalTopicReadyEvent {
-    TLocalTopicReadyEvent(TReadSessionEvent::TEvent&& event, i64 size)
-        : Event(std::move(event))
-        , Size(size)
-    {}
+class TLocalTopicReadSessionActor final
+    : public TLocalTopicIoSessionActor<TLocalTopicReadSessionActor, Ydb::Topic::StreamReadMessage::FromClient, Ydb::Topic::StreamReadMessage::FromServer, TReadSessionEvent::TEvent, TReaderCounters>
+{
+    using TBase = TLocalTopicIoSessionActor<TLocalTopicReadSessionActor, Ydb::Topic::StreamReadMessage::FromClient, Ydb::Topic::StreamReadMessage::FromServer, TReadSessionEvent::TEvent, TReaderCounters>;
 
-    TReadSessionEvent::TEvent Event;
-    i64 Size = 0;
-};
-
-class TLocalTopicReadSessionActor final : public TActorBootstrapped<TLocalTopicReadSessionActor>, public NActors::IActorExceptionHandler {
-    static constexpr TDuration COUNTERS_REFRESH_INTERVAL = TDuration::Seconds(1);
-
-    using TRpcIn = Ydb::Topic::StreamReadMessage::FromClient;
-    using TRpcOut = Ydb::Topic::StreamReadMessage::FromServer;
-    using TLocalRpcCtx = TLocalRpcBiStreamingCtx<TRpcIn, TRpcOut>;
-
-    struct TEvPrivate {
+    struct TEvPartition {
         enum EEv {
-            EvPartitionStatusRequest = TLocalRpcCtx::TRpcEvents::EvEnd,
-            EvPartitionOffsetsCommitRequest,
-            EvPartitionConfirmCreate,
-            EvPartitionConfirmDestroy,
-            EvExtractReadyEvents,
-            EvEventsConsumed,
-            EvSessionFinished,
+            EvStatusRequest = TBase::TEvPrivate::EvEnd,
+            EvOffsetsCommitRequest,
+            EvConfirmCreate,
+            EvConfirmDestroy,
             EvEnd,
         };
 
@@ -69,16 +39,16 @@ class TLocalTopicReadSessionActor final : public TActorBootstrapped<TLocalTopicR
 
         // Events from partition session callbacks
 
-        struct TEvPartitionStatusRequest : public TEventLocal<TEvPartitionStatusRequest, EvPartitionStatusRequest> {
-            explicit TEvPartitionStatusRequest(i64 partitionSessionId)
+        struct TEvStatusRequest : public TEventLocal<TEvStatusRequest, EvStatusRequest> {
+            explicit TEvStatusRequest(i64 partitionSessionId)
                 : PartitionSessionId(partitionSessionId)
             {}
 
             const i64 PartitionSessionId;
         };
 
-        struct TEvPartitionOffsetsCommitRequest : public TEventLocal<TEvPartitionOffsetsCommitRequest, EvPartitionOffsetsCommitRequest> {
-            TEvPartitionOffsetsCommitRequest(i64 partitionSessionId, ui64 startOffset, ui64 endOffset)
+        struct TEvOffsetsCommitRequest : public TEventLocal<TEvOffsetsCommitRequest, EvOffsetsCommitRequest> {
+            TEvOffsetsCommitRequest(i64 partitionSessionId, ui64 startOffset, ui64 endOffset)
                 : PartitionSessionId(partitionSessionId)
                 , StartOffset(startOffset)
                 , EndOffset(endOffset)
@@ -89,8 +59,8 @@ class TLocalTopicReadSessionActor final : public TActorBootstrapped<TLocalTopicR
             const ui64 EndOffset;
         };
 
-        struct TEvPartitionConfirmCreate : public TEventLocal<TEvPartitionConfirmCreate, EvPartitionConfirmCreate> {
-            TEvPartitionConfirmCreate(i64 partitionSessionId, std::optional<ui64> readOffset, std::optional<ui64> commitOffset)
+        struct TEvConfirmCreate : public TEventLocal<TEvConfirmCreate, EvConfirmCreate> {
+            TEvConfirmCreate(i64 partitionSessionId, std::optional<ui64> readOffset, std::optional<ui64> commitOffset)
                 : PartitionSessionId(partitionSessionId)
                 , ReadOffset(readOffset)
                 , CommitOffset(commitOffset)
@@ -101,8 +71,8 @@ class TLocalTopicReadSessionActor final : public TActorBootstrapped<TLocalTopicR
             const std::optional<ui64> CommitOffset;
         };
 
-        struct TEvPartitionConfirmDestroy : public TEventLocal<TEvPartitionConfirmDestroy, EvPartitionConfirmDestroy> {
-            explicit TEvPartitionConfirmDestroy(i64 partitionSessionId)
+        struct TEvConfirmDestroy : public TEventLocal<TEvConfirmDestroy, EvConfirmDestroy> {
+            explicit TEvConfirmDestroy(i64 partitionSessionId)
                 : PartitionSessionId(partitionSessionId)
             {}
 
@@ -137,19 +107,19 @@ class TLocalTopicReadSessionActor final : public TActorBootstrapped<TLocalTopicR
         }
 
         void RequestStatus() final {
-            ActorSystem->Send(SelfId, new TEvPrivate::TEvPartitionStatusRequest(PartitionSessionId));
+            ActorSystem->Send(SelfId, new TEvPartition::TEvStatusRequest(PartitionSessionId));
         }
 
         void Commit(uint64_t startOffset, uint64_t endOffset) final {
-            ActorSystem->Send(SelfId, new TEvPrivate::TEvPartitionOffsetsCommitRequest(PartitionSessionId, startOffset, endOffset));
+            ActorSystem->Send(SelfId, new TEvPartition::TEvOffsetsCommitRequest(PartitionSessionId, startOffset, endOffset));
         }
 
         void ConfirmCreate(std::optional<uint64_t> readOffset, std::optional<uint64_t> commitOffset) final {
-            ActorSystem->Send(SelfId, new TEvPrivate::TEvPartitionConfirmCreate(PartitionSessionId, readOffset, commitOffset));
+            ActorSystem->Send(SelfId, new TEvPartition::TEvConfirmCreate(PartitionSessionId, readOffset, commitOffset));
         }
 
         void ConfirmDestroy() final {
-            ActorSystem->Send(SelfId, new TEvPrivate::TEvPartitionConfirmDestroy(PartitionSessionId));
+            ActorSystem->Send(SelfId, new TEvPartition::TEvConfirmDestroy(PartitionSessionId));
         }
 
         void ConfirmEnd(std::span<const uint32_t> childIds) final {
@@ -163,196 +133,66 @@ class TLocalTopicReadSessionActor final : public TActorBootstrapped<TLocalTopicR
 
     struct TReadSettings {
         TString Consumer;
-        TString Topic;
         std::optional<TInstant> ReadFrom;
         std::optional<TDuration> MaxLag;
         std::vector<i64> PartitionIds;
     };
 
 public:
-    struct TSessionEvents : private TEvPrivate {
-        // Events from TLocalTopicReadSession
-
-        struct TEvExtractReadyEvents : public TEventLocal<TEvExtractReadyEvents, EvExtractReadyEvents> {
-            explicit TEvExtractReadyEvents(NThreading::TPromise<std::vector<TLocalTopicReadyEvent>> eventsPromise)
-                : EventsPromise(std::move(eventsPromise))
-            {}
-
-            NThreading::TPromise<std::vector<TLocalTopicReadyEvent>> EventsPromise;
-        };
-
-        struct TEvEventsConsumed : public TEventLocal<TEvEventsConsumed, EvEventsConsumed> {
-            TEvEventsConsumed(i64 size, ui64 eventsCount)
-                : Size(size)
-                , EventsCount(eventsCount)
-            {}
-
-            const i64 Size = 0; // Return this size to free memory
-            const ui64 EventsCount = 0;
-        };
-
-        struct TEvSessionFinished : public TEventLocal<TEvSessionFinished, EvSessionFinished> {
-            explicit TEvSessionFinished(bool force)
-                : Force(force)
-            {}
-
-            const bool Force = false;
-        };
-    };
-
-    struct TSettings {
-        TString Database;
-        std::shared_ptr<NYdb::ICredentialsProvider> CredentialsProvider;
-        TReaderCounters::TPtr Counters;
-    };
-
     TLocalTopicReadSessionActor(const TSettings& actorSettings, const TReadSessionSettings& sessionSettings)
-        : Settings(sessionSettings)
+        : TBase(__func__, actorSettings, GetTopicPath(sessionSettings), sessionSettings.MaxMemoryUsageBytes_)
+        , Settings(sessionSettings)
         , ReadSettings(GetReadSettings(sessionSettings))
-        , Database(actorSettings.Database)
-        , CredentialsProvider(actorSettings.CredentialsProvider)
-        , MaxMemoryUsage(sessionSettings.MaxMemoryUsageBytes_)
-        , Counters(actorSettings.Counters)
-    {
-        Y_VALIDATE(Database, "Missing database");
-        Y_VALIDATE(Counters, "Missing counters");
-        Y_VALIDATE(MaxMemoryUsage > 0, "MaxMemoryUsage must be positive");
-    }
-
-    void Bootstrap() {
-        Become(&TThis::StateFunc);
-
-        LOG_I("Start local topic read session, MaxMemoryUsage: " << MaxMemoryUsage);
-        StartSession();
-
-        Schedule(COUNTERS_REFRESH_INTERVAL, new TEvents::TEvWakeup());
-    }
+    {}
 
     STRICT_STFUNC(StateFunc,
-        hFunc(TSessionEvents::TEvExtractReadyEvents, Handle);
+        hFunc(TSessionEvents::TEvExtractReadyEvents, TBase::Handle);
         hFunc(TSessionEvents::TEvEventsConsumed, Handle);
-        hFunc(TSessionEvents::TEvSessionFinished, Handle);
-        hFunc(TLocalRpcCtx::TRpcEvents::TEvActorAttached, Handle);
-        hFunc(TLocalRpcCtx::TRpcEvents::TEvReadRequest, Handle);
-        hFunc(TLocalRpcCtx::TRpcEvents::TEvWriteRequest, Handle);
-        hFunc(TLocalRpcCtx::TRpcEvents::TEvFinishRequest, Handle);
-        hFunc(TEvPrivate::TEvPartitionStatusRequest, Handle);
-        hFunc(TEvPrivate::TEvPartitionOffsetsCommitRequest, Handle);
-        hFunc(TEvPrivate::TEvPartitionConfirmCreate, Handle);
-        hFunc(TEvPrivate::TEvPartitionConfirmDestroy, Handle);
-        hFunc(TEvents::TEvWakeup, Handle);
+        hFunc(TSessionEvents::TEvSessionFinished, TBase::Handle);
+        hFunc(TLocalRpcCtx::TRpcEvents::TEvActorAttached, TBase::Handle);
+        hFunc(TLocalRpcCtx::TRpcEvents::TEvReadRequest, TBase::Handle);
+        hFunc(TLocalRpcCtx::TRpcEvents::TEvWriteRequest, TBase::Handle);
+        hFunc(TLocalRpcCtx::TRpcEvents::TEvFinishRequest, TBase::Handle);
+        hFunc(TEvPartition::TEvStatusRequest, Handle);
+        hFunc(TEvPartition::TEvOffsetsCommitRequest, Handle);
+        hFunc(TEvPartition::TEvConfirmCreate, Handle);
+        hFunc(TEvPartition::TEvConfirmDestroy, Handle);
         hFunc(TEvents::TEvUndelivered, Handle);
+        sFunc(TEvents::TEvWakeup, HandleWakeup);
     );
 
-    bool OnUnhandledException(const std::exception& e) final {
-        LOG_E("Got unexpected exception: " << e.what());
-        CloseSession(EStatus::INTERNAL_ERROR, TStringBuilder() << "Got unexpected exception: " << e.what());
-        return true;
+protected:
+    void StartSession() final {
+        auto ev = CreateRpcBiStreamingEvent<TEvStreamTopicReadRequest>(Settings, "StreamRead", NJaegerTracing::ERequestType::TOPIC_STREAMREAD);
+        Send(NGRpcProxy::V1::GetPQReadServiceActorID(), ev.release(), IEventHandle::FlagTrackDelivery);
     }
 
-private:
-    static TReadSettings GetReadSettings(const TReadSessionSettings& sessionSettings) {
-        TReadSettings settings;
-        settings.Consumer = sessionSettings.ConsumerName_;
+    void SendInitMessage() final {
+        LOG_I("Sending init message"
+            << ", Consumer: " << ReadSettings.Consumer
+            << ", ReadFrom: " << (ReadSettings.ReadFrom ? ToString(*ReadSettings.ReadFrom) : "null")
+            << ", MaxLag: " << (ReadSettings.MaxLag ? ToString(*ReadSettings.MaxLag) : "null"));
 
-        Y_VALIDATE(sessionSettings.Topics_.size() == 1, "Only one topic is supported per read session");
-        const auto& topic = sessionSettings.Topics_[0];
-        settings.Topic = topic.Path_;
-        settings.ReadFrom = topic.ReadFromTimestamp_ ? topic.ReadFromTimestamp_ : sessionSettings.ReadFromTimestamp_;
-        settings.MaxLag = topic.MaxLag_ ? topic.MaxLag_ : sessionSettings.MaxLag_;
+        TRpcIn message;
 
-        settings.PartitionIds.reserve(topic.PartitionIds_.size());
-        for (auto partitionId : topic.PartitionIds_) {
-            Y_VALIDATE(partitionId <= std::numeric_limits<i64>::max(), "PartitionId is too large");
-            settings.PartitionIds.emplace_back(partitionId);
+        auto& initRequest = *message.mutable_init_request();
+        initRequest.set_consumer(ReadSettings.Consumer);
+
+        auto& topic = *initRequest.add_topics_read_settings();
+        topic.set_path(Topic);
+        topic.mutable_partition_ids()->Assign(ReadSettings.PartitionIds.begin(), ReadSettings.PartitionIds.end());
+        if (ReadSettings.ReadFrom) {
+            *topic.mutable_read_from() = NProtoInterop::CastToProto(*ReadSettings.ReadFrom);
+        }
+        if (ReadSettings.MaxLag) {
+            *topic.mutable_max_lag() = NProtoInterop::CastToProto(*ReadSettings.MaxLag);
         }
 
-        return settings;
+        AddSessionEvent(std::move(message));
     }
 
-    // Events from TLocalTopicReadSession
-
-    void Handle(TSessionEvents::TEvExtractReadyEvents::TPtr& ev) {
-        LOG_T("Got extract ready events request, OutgoingEvents #" << OutgoingEvents.size());
-
-        Y_VALIDATE(!EventsPromise, "Can not handle extract event in parallel");
-        EventsPromise = std::move(ev->Get()->EventsPromise);
-        SendOutgoingEvents();
-    }
-
-    void Handle(TSessionEvents::TEvEventsConsumed::TPtr& ev) {
-        const auto size = std::min(ev->Get()->Size, InflightMemory);
-        InflightMemory -= size;
-        Counters->BytesInflightTotal->Sub(size);
-
-        const auto eventsCount = ev->Get()->EventsCount;
-        Counters->MessagesInflight->Sub(eventsCount);
-
-        LOG_T("Handled #" << eventsCount << " events with amount size: " << size << ", new InflightMemory: " << InflightMemory << ", MaxMemoryUsage: " << MaxMemoryUsage);
-        ContinueReading();
-    }
-
-    void Handle(TSessionEvents::TEvSessionFinished::TPtr& ev) {
-        const bool force = ev->Get()->Force;
-        LOG_I("Local topic read session finished from client side, force: " << force);
-
-        CloseSession(EStatus::SUCCESS);
-
-        if (force) {
-            PassAway();
-        }
-    }
-
-    // Events from local RPC session
-
-    void Handle(TLocalRpcCtx::TRpcEvents::TEvActorAttached::TPtr& ev) {
-        Y_VALIDATE(!RpcActor, "RpcActor is already set");
-        RpcActor = ev->Get()->RpcActor;
-
-        LOG_I("RpcActor attached: " << RpcActor);
-        SendInitMessage();
-    }
-
-    void Handle(TLocalRpcCtx::TRpcEvents::TEvReadRequest::TPtr&) {
-        PendingRpcResponses++;
-
-        if (SessionClosed) {
-            LOG_D("Rpc read request skipped, session is closed");
-            SendSessionEventFail();
-            return;
-        }
-
-        LOG_T("Rpc read request");
-        SendSessionEvents();
-    }
-
-    void Handle(TLocalRpcCtx::TRpcEvents::TEvWriteRequest::TPtr& ev) {
-        Y_VALIDATE(RpcActor, "RpcActor is not set before write request");
-        auto response = std::make_unique<TLocalRpcCtx::TEvWriteFinished>();
-
-        if (SessionClosed) {
-            LOG_D("Rpc write request skipped, session is closed");
-            response->Success = false;
-            Send(RpcActor, response.release());
-            return;
-        }
-
-        response->Success = true;
-        Send(RpcActor, response.release());
-
-        auto& message = ev->Get()->Message;
-        const auto status = message.status();
-        if (status != Ydb::StatusIds::SUCCESS) {
-            NYql::TIssues issues;
-            IssuesFromMessage(message.issues(), issues);
-            LOG_E("Rpc write request, got error " << status << ", reason: " << issues.ToOneLineString());
-            return CloseSession(status, issues);
-        }
-
-        const auto messageCase = message.server_message_case();
-        LOG_T("Rpc write request: " << static_cast<i64>(messageCase));
-
-        switch (messageCase) {
+    void HandleRpcMessage(TRpcOut& message) final {
+        switch (message.server_message_case()) {
             case Ydb::Topic::StreamReadMessage::FromServer::kInitResponse:
                 ComputeSessionMessage(message.init_response());
                 break;
@@ -366,7 +206,7 @@ private:
                 ComputeSessionMessage(message.partition_session_status_response());
                 break;
             case Ydb::Topic::StreamReadMessage::FromServer::kUpdateTokenResponse:
-                ComputeSessionMessage(message.update_token_response());
+                TBase::ComputeSessionMessage(message.update_token_response());
                 break;
             case Ydb::Topic::StreamReadMessage::FromServer::kStartPartitionSessionRequest:
                 ComputeSessionMessage(message.start_partition_session_request());
@@ -386,20 +226,50 @@ private:
         }
     }
 
-    void Handle(TLocalRpcCtx::TRpcEvents::TEvFinishRequest::TPtr& ev) {
-        const auto& status = ev->Get()->Status;
-        if (!status.ok()) {
-            LOG_E("Rpc session finished with error status code: " << static_cast<ui64>(status.error_code()) << ", message: " << status.error_message());
-        } else {
-            LOG_I("Rpc session successfully finished");
+private:
+    static TString GetTopicPath(const TReadSessionSettings& sessionSettings) {
+        Y_VALIDATE(sessionSettings.Topics_.size() == 1, "Only one topic is supported per read session");
+        return TString(sessionSettings.Topics_[0].Path_);
+    }
+
+    static TReadSettings GetReadSettings(const TReadSessionSettings& sessionSettings) {
+        TReadSettings settings;
+        settings.Consumer = sessionSettings.ConsumerName_;
+
+        Y_VALIDATE(sessionSettings.Topics_.size() == 1, "Only one topic is supported per read session");
+        const auto& topic = sessionSettings.Topics_[0];
+        settings.ReadFrom = topic.ReadFromTimestamp_ ? topic.ReadFromTimestamp_ : sessionSettings.ReadFromTimestamp_;
+        settings.MaxLag = topic.MaxLag_ ? topic.MaxLag_ : sessionSettings.MaxLag_;
+
+        settings.PartitionIds.reserve(topic.PartitionIds_.size());
+        for (auto partitionId : topic.PartitionIds_) {
+            Y_VALIDATE(partitionId <= std::numeric_limits<i64>::max(), "PartitionId is too large");
+            settings.PartitionIds.emplace_back(partitionId);
         }
 
-        CloseSession(status, "Read session closed");
+        return settings;
+    }
+
+    TPartitionSession::TPtr GetPartitionSession(i64 partitionSessionId) const {
+        const auto it = PartitionSessions.find(partitionSessionId);
+        Y_VALIDATE(it != PartitionSessions.end(), "Unknown partition session: " << partitionSessionId);
+        return it->second;
+    }
+
+    // Events from TLocalTopicReadSession
+
+    void Handle(TSessionEvents::TEvEventsConsumed::TPtr& ev) {
+        const auto size = std::min(ev->Get()->Size, InflightMemory);
+        InflightMemory -= size;
+        Counters->BytesInflightTotal->Sub(size);
+
+        TBase::Handle(ev);
+        ContinueReading();
     }
 
     // Events from topic partition session callbacks
 
-    void Handle(TEvPrivate::TEvPartitionStatusRequest::TPtr& ev) {
+    void Handle(TEvPartition::TEvStatusRequest::TPtr& ev) {
         const auto partitionSessionId = ev->Get()->PartitionSessionId;
         LOG_D("Partition session #" << partitionSessionId << " status request");
 
@@ -409,7 +279,7 @@ private:
         AddSessionEvent(std::move(message));
     }
 
-    void Handle(TEvPrivate::TEvPartitionOffsetsCommitRequest::TPtr& ev) {
+    void Handle(TEvPartition::TEvOffsetsCommitRequest::TPtr& ev) {
         const auto partitionSessionId = ev->Get()->PartitionSessionId;
         const auto start = ev->Get()->StartOffset;
         const auto end = ev->Get()->EndOffset;
@@ -427,7 +297,7 @@ private:
         AddSessionEvent(std::move(message));
     }
 
-    void Handle(TEvPrivate::TEvPartitionConfirmCreate::TPtr& ev) {
+    void Handle(TEvPartition::TEvConfirmCreate::TPtr& ev) {
         const auto partitionSessionId = ev->Get()->PartitionSessionId;
         const auto readOffset = ev->Get()->ReadOffset;
         const auto commitOffset = ev->Get()->CommitOffset;
@@ -449,7 +319,7 @@ private:
         AddSessionEvent(std::move(message));
     }
 
-    void Handle(TEvPrivate::TEvPartitionConfirmDestroy::TPtr& ev) {
+    void Handle(TEvPartition::TEvConfirmDestroy::TPtr& ev) {
         const auto partitionSessionId = ev->Get()->PartitionSessionId;
         LOG_D("Partition session #" << partitionSessionId << " destroyed");
 
@@ -460,22 +330,7 @@ private:
         AddOutgoingSessionClosedEvent(partitionSessionId, TReadSessionEvent::TPartitionSessionClosedEvent::EReason::StopConfirmedByUser);
     }
 
-    void Handle(TEvents::TEvWakeup::TPtr&) {
-        const auto now = TInstant::Now();
-
-        if (SessionStartedAt) {
-            *Counters->CurrentSessionLifetimeMs = (now - SessionStartedAt).MilliSeconds();
-        }
-
-        if (LastCountersUpdateAt) {
-            const auto delta = (now - LastCountersUpdateAt).MilliSeconds();
-            const double percent = 100.0 / MaxMemoryUsage;
-            Counters->TotalBytesInflightUsageByTime->Collect(InflightMemory * percent, delta);
-        }
-
-        LastCountersUpdateAt = now;
-        Schedule(COUNTERS_REFRESH_INTERVAL, new TEvents::TEvWakeup());
-    }
+    // Events from local RPC session
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev) {
         const auto sourceType = ev->Get()->SourceType;
@@ -484,55 +339,6 @@ private:
 
         LOG_E("PQ read service is unavailable, reason: " << reason);
         CloseSession(EStatus::INTERNAL_ERROR, "PQ read service is unavailable, please contact internal support");
-    }
-
-    void StartSession() const {
-        const auto& token = CredentialsProvider ? std::optional<TString>(CredentialsProvider->GetAuthInfo()) : std::nullopt;
-        auto ctx = MakeIntrusive<TLocalRpcCtx>(ActorContext().ActorSystem(), SelfId(), TLocalRpcCtx::TSettings{
-            .Database = Database,
-            .Token = token,
-            .PeerName = "localhost/local_topic_rpc_read",
-            .RequestType = Settings.RequestType_.empty() ? std::nullopt : std::optional<TString>(Settings.RequestType_),
-            .ParentTraceId = TString(Settings.TraceParent_),
-            .TraceId = TString(Settings.TraceId_),
-            .RpcMethodName = "TopicService.StreamRead",
-        });
-
-        for (const auto& [key, value] : Settings.Header_) {
-            ctx->PutPeerMeta(TString(key), TString(value));
-        }
-
-        auto ev = std::make_unique<TEvStreamTopicReadRequest>(std::move(ctx), TRequestAuxSettings{.RequestType = NJaegerTracing::ERequestType::TOPIC_STREAMREAD});
-
-        if (token) {
-            ev->SetInternalToken(MakeIntrusive<NACLib::TUserToken>(*token));
-        }
-
-        Send(NGRpcProxy::V1::GetPQReadServiceActorID(), ev.release(), IEventHandle::FlagTrackDelivery);
-    }
-
-    void SendInitMessage() {
-        LOG_I("Sending init message"
-            << ", Consumer: " << ReadSettings.Consumer
-            << ", ReadFrom: " << (ReadSettings.ReadFrom ? ToString(*ReadSettings.ReadFrom) : "null")
-            << ", MaxLag: " << (ReadSettings.MaxLag ? ToString(*ReadSettings.MaxLag) : "null"));
-
-        TRpcIn message;
-
-        auto& initRequest = *message.mutable_init_request();
-        initRequest.set_consumer(ReadSettings.Consumer);
-
-        auto& topic = *initRequest.add_topics_read_settings();
-        topic.set_path(ReadSettings.Topic);
-        topic.mutable_partition_ids()->Assign(ReadSettings.PartitionIds.begin(), ReadSettings.PartitionIds.end());
-        if (ReadSettings.ReadFrom) {
-            *topic.mutable_read_from() = NProtoInterop::CastToProto(*ReadSettings.ReadFrom);
-        }
-        if (ReadSettings.MaxLag) {
-            *topic.mutable_max_lag() = NProtoInterop::CastToProto(*ReadSettings.MaxLag);
-        }
-
-        AddSessionEvent(std::move(message));
     }
 
     void ComputeSessionMessage(const Ydb::Topic::StreamReadMessage::InitResponse& message) {
@@ -646,10 +452,6 @@ private:
         ));
     }
 
-    void ComputeSessionMessage(const Ydb::Topic::UpdateTokenResponse&) {
-        Y_VALIDATE(false, "Unexpected message type: UpdateTokenResponse");
-    }
-
     void ComputeSessionMessage(const Ydb::Topic::StreamReadMessage::StartPartitionSessionRequest& message) {
         const auto& info = message.partition_session();
         const auto partitionId = info.partition_id();
@@ -709,11 +511,7 @@ private:
         ), sizeof(uint32_t) * (adjacentIds.size() + childIds.size()));
     }
 
-    TPartitionSession::TPtr GetPartitionSession(i64 partitionSessionId) const {
-        const auto it = PartitionSessions.find(partitionSessionId);
-        Y_VALIDATE(it != PartitionSessions.end(), "Unknown partition session: " << partitionSessionId);
-        return it->second;
-    }
+    // Events to PQ read service
 
     void ContinueReading() {
         if (!SessionId) {
@@ -741,49 +539,6 @@ private:
         AddSessionEvent(std::move(message));
     }
 
-    // Events to PQ read service
-
-    void AddSessionEvent(TRpcIn&& message) {
-        if (SessionClosed) {
-            LOG_D("Session already closed, skip session event");
-            return;
-        }
-
-        RpcResponses.push(std::move(message));
-        LOG_T("Added session event: " << static_cast<i64>(RpcResponses.back().client_message_case()));
-
-        if (RpcActor) {
-            SendSessionEvents();            
-        }
-    }
-
-    void SendSessionEvents() {
-        Y_VALIDATE(RpcActor, "RpcActor is not set before read request");
-        LOG_T("Going to send session events, PendingRpcResponses: " << PendingRpcResponses << ", RpcResponses #" << RpcResponses.size());
-
-        while (PendingRpcResponses > 0 && !RpcResponses.empty()) {
-            SendSessionEvent(std::move(RpcResponses.front()));
-            RpcResponses.pop();
-        }
-    }
-
-    void SendSessionEvent(TRpcIn&& message, bool success = true) {
-        LOG_T("Sending session event: " << static_cast<i64>(message.client_message_case()) << ", success: " << success);
-        Y_VALIDATE(PendingRpcResponses > 0, "Rpc read is not expected");
-        PendingRpcResponses--;
-
-        auto ev = std::make_unique<TLocalRpcCtx::TEvReadFinished>();
-        ev->Success = success;
-        ev->Record = std::move(message);
-
-        Y_VALIDATE(RpcActor, "RpcActor is not set before read request");
-        Send(RpcActor, ev.release());
-    }
-
-    void SendSessionEventFail() {
-        SendSessionEvent({}, /* success */ false);
-    }
-
     // Events to TLocalTopicReadSession
 
     void AddOutgoingSessionClosedEvent(i64 partitionSessionId, TReadSessionEvent::TPartitionSessionClosedEvent::EReason reason) {
@@ -795,171 +550,43 @@ private:
 
     template <typename TEvent>
     void AddOutgoingEvent(TEvent&& event, i64 internalSize = 0) {
-        OutgoingEvents.emplace(std::move(event), static_cast<i64>(sizeof(TEvent)) + internalSize);
-        Counters->MessagesInflight->Inc();
-
-        const auto size = OutgoingEvents.back().Size;
+        const auto size = static_cast<i64>(sizeof(TEvent)) + internalSize;
         InflightMemory += size;
+        LOG_T("Adding outgoing event with size: " << size << ", InflightMemory: " << InflightMemory);
+
         Counters->BytesInflightTotal->Add(size);
-        LOG_T("Added outgoing event: " << OutgoingEvents.back().Event.index() << ", size: " << size << ", InflightMemory: " << InflightMemory);
-
-        SendOutgoingEvents();
-    }
-
-    void SendOutgoingEvents() {
-        if (!EventsPromise || OutgoingEvents.empty()) {
-            return;
-        }
-
-        LOG_T("Going to send outgoing events, OutgoingEvents #" << OutgoingEvents.size());
-
-        bool closeEventSent = false;
-        std::vector<TLocalTopicReadyEvent> result;
-        result.reserve(OutgoingEvents.size());
-        while (!OutgoingEvents.empty()) {
-            result.push_back(std::move(OutgoingEvents.front()));
-            OutgoingEvents.pop();
-
-            if (std::holds_alternative<TSessionClosedEvent>(result.back().Event)) {
-                LOG_I("Sent close session event, finishing");
-                closeEventSent = true;
-            }
-        }
-
-        EventsPromise->SetValue(std::move(result));
-        EventsPromise.reset();
-
-        if (closeEventSent) {
-            PassAway();
-        }
-    }
-
-    void CloseSession(EStatus status, const NYql::TIssues& issues = {}) {
-        const bool success = status == EStatus::SUCCESS;
-        if (!success) {
-            Counters->Errors->Inc();
-            LOG_E("Closing session with status " << status << " and issues: " << issues.ToOneLineString());
-        } else {
-            LOG_I("Closing session with success status");
-        }
-
-        if (SessionClosed) {
-            LOG_W("Session already closed, but got status " << status << " and issues: " << issues.ToOneLineString());
-            return;
-        }
-        SessionClosed = true;
-
-        // Close session on client side
-        AddOutgoingEvent(TSessionClosedEvent(status, NAdapters::ToSdkIssues(issues)));
-
-        // Close session on server side
-        while (PendingRpcResponses) {
-            SendSessionEventFail();
-        }
-        if (RpcActor) {
-            Send(RpcActor, new TLocalRpcCtx::TEvNotifiedWhenDone(success));
-        }
-    }
-
-    void CloseSession(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues = {}) {
-        CloseSession(static_cast<EStatus>(status), issues);
-    }
-
-    void CloseSession(EStatus status, const TString& message) {
-        CloseSession(status, {NYql::TIssue(message)});
-    }
-
-    void CloseSession(const grpc::Status& status, const TString& message = "") {
-        NYql::TIssues issues;
-        if (const auto& errorMessage = status.error_message(); !errorMessage.empty()) {
-            issues.AddIssue(errorMessage);
-        }
-        if (message) {
-            issues = AddRootIssue(message, issues);
-        }
-
-        switch (status.error_code()) {
-            case grpc::OK:
-                return CloseSession(EStatus::SUCCESS, issues);
-            case grpc::CANCELLED:
-                return CloseSession(EStatus::CANCELLED, issues);
-            case grpc::UNKNOWN:
-                return CloseSession(EStatus::UNDETERMINED, issues);
-            case grpc::DEADLINE_EXCEEDED:
-                return CloseSession(EStatus::TIMEOUT, issues);
-            case grpc::NOT_FOUND:
-                return CloseSession(EStatus::NOT_FOUND, issues);
-            case grpc::ALREADY_EXISTS:
-                return CloseSession(EStatus::ALREADY_EXISTS, issues);
-            case grpc::RESOURCE_EXHAUSTED:
-                return CloseSession(EStatus::OVERLOADED, issues);
-            case grpc::ABORTED:
-                return CloseSession(EStatus::ABORTED, issues);
-            case grpc::OUT_OF_RANGE:
-                return CloseSession(EStatus::CLIENT_OUT_OF_RANGE, issues);
-            case grpc::UNIMPLEMENTED:
-                return CloseSession(EStatus::UNSUPPORTED, issues);
-            case grpc::UNAVAILABLE:
-                return CloseSession(EStatus::UNAVAILABLE, issues);
-            case grpc::INVALID_ARGUMENT:
-            case grpc::FAILED_PRECONDITION:
-                return CloseSession(EStatus::PRECONDITION_FAILED, issues);
-            case grpc::UNAUTHENTICATED:
-            case grpc::PERMISSION_DENIED:
-                return CloseSession(EStatus::UNAUTHORIZED, issues);
-            default:
-                return CloseSession(EStatus::INTERNAL_ERROR, issues);
-        }
-    }
-
-    TString LogPrefix() const {
-        return TStringBuilder() << "Database: " << Database << ", Topic: " << ReadSettings.Topic << ", SelfId: " << SelfId() << ". ";
+        TBase::AddOutgoingEvent(std::move(event), size);
     }
 
     const TRequestSettings<TReadSessionSettings> Settings;
     const TReadSettings ReadSettings;
-    const TString Database;
-    const std::shared_ptr<NYdb::ICredentialsProvider> CredentialsProvider;
-    const i64 MaxMemoryUsage = 0;
-    const TReaderCounters::TPtr Counters;
-    TInstant SessionStartedAt;
-    TInstant LastCountersUpdateAt;
 
-    TActorId RpcActor;
-    i64 InflightMemory = 0;
     i64 ServerMemoryDelta = 0;
     TString SessionId;
     std::unordered_map<i64, TPartitionSession::TPtr> PartitionSessions;
-    bool SessionClosed = false;
-
-    // Outgoing messages to PQ
-    ui64 PendingRpcResponses = 0;
-    std::queue<TRpcIn> RpcResponses;
-
-    // Outgoing messages to TLocalTopicReadSession
-    std::queue<TLocalTopicReadyEvent> OutgoingEvents;
-    std::optional<NThreading::TPromise<std::vector<TLocalTopicReadyEvent>>> EventsPromise;
 };
 
 // Supposed to be used from actor system, so all blocking methods are not supported.
 // Read session is not thread safe and MUST be used from single actor.
 // NOTICE: data is decompressed in one thread inside TLocalTopicReadSessionActor for simplicity.
-class TLocalTopicReadSession final : public IReadSession {
+class TLocalTopicReadSession final : public TLocalTopicSessionBase<TReadSessionEvent::TEvent>, public IReadSession {
+    using TBase = TLocalTopicSessionBase<TReadSessionEvent::TEvent>;
+    using TReadEvents = TLocalTopicReadSessionActor::TSessionEvents;
+
 public:
-    TLocalTopicReadSession(const TLocalTopicReadSettings& localSettings, const TReadSessionSettings& sessionSettings)
-        : ActorSystem(localSettings.ActorSystem)
+    TLocalTopicReadSession(const TLocalTopicSessionSettings& localSettings, const TReadSessionSettings& sessionSettings)
+        : TBase(localSettings)
         , Counters(SetupCounters(sessionSettings))
         , SessionId(CreateGuidAsString())
     {
-        Y_VALIDATE(ActorSystem, "Actor system is required for local topic read session");
         ValidateSettings(sessionSettings);
-        Start(localSettings.Database, localSettings.CredentialsProvider, sessionSettings);
+        Start(sessionSettings);
     }
 
     ~TLocalTopicReadSession() {
         try {
             if (!Close(TDuration::Zero()) && ActorSystem && ReadSessionActor) {
-                ActorSystem->Send(ReadSessionActor, new TLocalTopicReadSessionActor::TSessionEvents::TEvSessionFinished(/* force */ true));
+                ActorSystem->Send(ReadSessionActor, new TReadEvents::TEvSessionFinished(/* force */ true));
             }
         } catch (...) {
             // ¯\_(ツ)_/¯
@@ -967,19 +594,7 @@ public:
     }
 
     NThreading::TFuture<void> WaitEvent() final {
-        if (!Events.empty() || ExtractEvents()) {
-            return NThreading::MakeFuture();
-        }
-
-        if (!EventFuture) {
-            auto eventsPromise = NThreading::NewPromise<std::vector<TLocalTopicReadyEvent>>();
-            EventFuture = eventsPromise.GetFuture();
-
-            Y_VALIDATE(ReadSessionActor, "Read session actor unexpectedly finished");
-            ActorSystem->Send(ReadSessionActor, new TLocalTopicReadSessionActor::TSessionEvents::TEvExtractReadyEvents(std::move(eventsPromise)));
-        }
-
-        return EventFuture->IgnoreResult();
+        return TBase::WaitEvent();
     }
 
     std::vector<TReadSessionEvent::TEvent> GetEvents(bool block, std::optional<size_t> maxEventsCount, size_t maxByteSize) final {
@@ -1008,7 +623,7 @@ public:
         }
 
         if (ReadSessionActor && !result.empty()) {
-            ActorSystem->Send(ReadSessionActor, new TLocalTopicReadSessionActor::TSessionEvents::TEvEventsConsumed(totalSize, result.size()));
+            ActorSystem->Send(ReadSessionActor, new TReadEvents::TEvEventsConsumed(totalSize, result.size()));
         }
 
         WaitEvent(); // Request next event batch
@@ -1039,7 +654,7 @@ public:
         Y_VALIDATE(!timeout, "Timeout on close is not allowed for local topic read session");
 
         ExtractEvents(); // Refresh events and maybe accept TSessionClosedEvent
-        WaitEvent(); // Request next event batch if there is no TSessionClosedEvent 
+        WaitEvent(); // Request next event batch if there is no TSessionClosedEvent
 
         if (!ReadSessionActor) {
             // TSessionClosedEvent accepted
@@ -1047,7 +662,7 @@ public:
         }
 
         // Wait for TSessionClosedEvent
-        ActorSystem->Send(ReadSessionActor, new TLocalTopicReadSessionActor::TSessionEvents::TEvSessionFinished(/* force */ false));
+        ActorSystem->Send(ReadSessionActor, new TReadEvents::TEvSessionFinished(/* force */ false));
         return false;
     }
 
@@ -1059,11 +674,21 @@ public:
         return SessionId;
     }
 
+protected:
+    void RequestEvents(NThreading::TPromise<std::vector<TEvent>> promise) {
+        Y_VALIDATE(ReadSessionActor, "Read session actor unexpectedly finished");
+        ActorSystem->Send(ReadSessionActor, new TReadEvents::TEvExtractReadyEvents(std::move(promise)));
+    }
+
+    void OnCloseReceived() final {
+        ReadSessionActor = {};
+    }
+
 private:
     static void ValidateSettings(const TReadSessionSettings& settings) {
+        TBase::ValidateSettings(settings);
+
         Y_VALIDATE(!settings.AutoPartitioningSupport_, "AutoPartitioningSupport is not supported for local topic read session");
-        Y_VALIDATE(settings.ClientTimeout_ == TDuration::Max(), "Timeout is not allowed for local topic read session");
-        Y_VALIDATE(settings.Deadline_ == TDeadline::Max(), "Timeout is not allowed for local topic read session");
         Y_VALIDATE(settings.Decompress_, "Read session without decompression is not supported");
 
         const auto& eventHandlers = settings.EventHandlers_;
@@ -1087,48 +712,23 @@ private:
         return result;
     }
 
-    void Start(const TString& database, std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider, const TReadSessionSettings& sessionSettings) {
+    void Start(const TReadSessionSettings& sessionSettings) {
         Y_VALIDATE(!ReadSessionActor, "Read session is already started");
         ReadSessionActor = ActorSystem->Register(new TLocalTopicReadSessionActor({
-            .Database = database,
-            .CredentialsProvider = std::move(credentialsProvider),
+            .Database = Database,
+            .CredentialsProvider = CredentialsProvider,
             .Counters = Counters,
         }, sessionSettings), TMailboxType::HTSwap, ActorSystem->AppData<TAppData>()->UserPoolId);
     }
 
-    bool ExtractEvents() {
-        if (!EventFuture || !EventFuture->IsReady()) {
-            return false;
-        }
-
-        auto events = EventFuture->ExtractValue();
-        EventFuture.reset();
-
-        for (auto& event : events) {
-            Y_VALIDATE(event.Size >= 0, "Event size must be non negative");
-            Events.emplace(std::move(event));
-
-            if (std::holds_alternative<TSessionClosedEvent>(Events.back().Event)) {
-                // Session was finished, skip all other events
-                ReadSessionActor = {};
-                break;
-            }
-        }
-
-        return true;
-    }
-
-    TActorSystem* const ActorSystem = nullptr;
     const TReaderCounters::TPtr Counters;
     const TString SessionId;
     TActorId ReadSessionActor;
-    std::optional<NThreading::TFuture<std::vector<TLocalTopicReadyEvent>>> EventFuture;
-    std::queue<TLocalTopicReadyEvent> Events;
 };
 
 } // anonymous namespace
 
-std::shared_ptr<IReadSession> CreateLocalTopicReadSession(const TLocalTopicReadSettings& localSettings, const TReadSessionSettings& sessionSettings) {
+std::shared_ptr<IReadSession> CreateLocalTopicReadSession(const TLocalTopicSessionSettings& localSettings, const TReadSessionSettings& sessionSettings) {
     return std::make_shared<TLocalTopicReadSession>(localSettings, sessionSettings);
 }
 

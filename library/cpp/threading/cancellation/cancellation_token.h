@@ -75,7 +75,11 @@ public:
 
     //! The default cancellation token that cannot be cancelled
     static TCancellationToken const& Default() {
-        return *SingletonWithPriority<TCancellationToken, 0>(NewPromise());
+        struct TCache {
+            TPromise<void> Promise{NewPromise()};
+            TCancellationToken Token{Promise.GetFuture()};
+        };
+        return SingletonWithPriority<TCache, 0>()->Token;
     }
 
     void SetDeadline(TInstant deadline) {

@@ -885,7 +885,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
     Y_UNIT_TEST(TPCH_YQL) {
        //RunTPCHYqlBenchmark(/*columnstore*/ true, {}, /*new rbo*/ false);
-       RunTPCHYqlBenchmark(/*columnstore*/ true, {1, 3, 5, 6, 7, 8, 9, 10, 12, 13, 14, 16, 19}, /*new rbo*/ true);
+       RunTPCHYqlBenchmark(/*columnstore*/ true, {1, 2, 3, 5, 6, 7, 8, 9, 10, 12, 13, 14, 16, 19}, /*new rbo*/ true);
     }
 
     void InsertIntoSchema0(NYdb::NTable::TTableClient &db, std::string tableName, int numRows) {

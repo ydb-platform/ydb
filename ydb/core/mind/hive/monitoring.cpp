@@ -1750,7 +1750,7 @@ public:
                                    <label for='reassign_async'>Async</label>
                                  </div>
                                  <div class='col-md-3'>
-                                 <div in='store_state_group' class='input-group'>
+                                 <div id='store_state_group' class='input-group'>
                                     <span class='input-group-addon'>Store state in</span>
                                     <select id='store_state' class='form-control'>
                                         <option value='actor'>Actor</option>
@@ -2057,7 +2057,8 @@ function reassignGroups() {
         var tablet_type = $('#tablet_type').val();
         var channel_from = parseInt($('#tablet_from_channel').val());
         var channel_to = parseInt($('#tablet_to_channel').val());
-        var percent = $('#tablet_percent').val() + '&wait=0';
+        var percent = $('#tablet_percent').val();
+        var max_inflight = $('#tablet_reassign_inflight').val();
         var async = $('#reassign_async')[0].checked;
         var url = 'app?TabletID=' + hiveId + '&page=ReassignTablet' + '&tablet=all' + '&wait=0';
         if (storage_pool) {
@@ -2077,9 +2078,10 @@ function reassignGroups() {
             for (let i = channel_from; i <= channel_to; i++) {
                 channels.push(i);
             }
-            url = url + '&channels=' + channels.join(',');
+            url = url + '&channel=' + channels.join(',');
         }
-        url = url + (async ? '1' : '0');
+        url = url + '&inflight=' + max_inflight;
+        url = url + '&async=' + (async ? '1' : '0');
         $.ajax({
             type: 'POST',
             url: url,
@@ -3161,10 +3163,6 @@ public:
             return true;
         }
         if (!TabletFilter.IsValidFilter(Error)) {
-            return true;
-        }
-        if (TabletFilter.AllowsEverything() && GroupId == 0) {
-            Error = "cannot reassign all tablets";
             return true;
         }
         auto tablets = Self->Tablets

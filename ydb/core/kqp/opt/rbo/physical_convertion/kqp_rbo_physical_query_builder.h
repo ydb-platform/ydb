@@ -24,14 +24,18 @@ public:
     ~TPhysicalQueryBuilder() = default;
 
 private:
-    TVector<std::pair<TExprNode::TPtr, TPositionHandle>> BuildPhysicalStageGraph();
-    TVector<TExprNode::TPtr> PeepHoleOptimizePhysicalStages(TVector<std::pair<TExprNode::TPtr, TPositionHandle>>&& physicalStages);
+    TVector<TExprNode::TPtr> BuildPhysicalStageGraph();
+    TVector<TExprNode::TPtr> PeepHoleOptimizePhysicalStages(TVector<TExprNode::TPtr>&& physicalStages);
+    TVector<TExprNode::TPtr> EnableWideChannelsPhysicalStages(TVector<TExprNode::TPtr>&& physicalStages);
     TExprNode::TPtr BuildPhysicalQuery(TVector<TExprNode::TPtr>&& physicalStages);
-    TExprNode::TPtr PeepHoleOptimizeStageLambda(TExprNode::TPtr stageLambda);
-    void TypeAnnotate(TExprNode::TPtr input);
-    bool CanApplyPeepHole(TExprNode::TPtr input, const std::initializer_list<std::string_view>& callableNames);
+    TExprNode::TPtr PeepHoleOptimizeStageLambda(TExprNode::TPtr stageLambda) const;
+    void TypeAnnotate(TExprNode::TPtr& input);
+    bool CanApplyPeepHole(TExprNode::TPtr input, const std::initializer_list<std::string_view>& callableNames) const;
     TExprNode::TPtr BuildDqPhyStage(const TVector<TExprNode::TPtr>& inputs, const TVector<TExprNode::TPtr>& args, TExprNode::TPtr physicalStageBody,
-                                    TExprContext& ctx, TPositionHandle pos);
+                                    NNodes::TCoNameValueTupleList&& setings, TExprContext& ctx, TPositionHandle pos) const;
+    void TopologicalSort(TDqPhyStage& dqStage, TVector<TExprNode::TPtr>& result, THashSet<const TExprNode*>& visited) const;
+    void TopologicalSort(TDqPhyStage&& dqStage, TVector<TExprNode::TPtr>& result) const;
+
 
     TOpRoot& Root;
     TStageGraph Graph;

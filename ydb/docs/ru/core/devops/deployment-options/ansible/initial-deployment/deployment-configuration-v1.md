@@ -1,4 +1,4 @@
-# Развёртывание кластера с использованием конфигурации V1
+# Развёртывание кластера с использованием конфигурации V1 (OLTP)
 
 ## Подготовьте окружение {# deployment-preparation}
 
@@ -105,7 +105,7 @@ ssh_args = -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o Contro
           ydb_domain: Root
           ydb_dbname: database
 
-          #Настройки авторизации
+          # Настройки авторизации
           ydb_enforce_user_token_requirement: true
           ydb_request_client_certificate: true
     ```
@@ -164,7 +164,7 @@ ssh_args = -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o Contro
           ydb_domain: Root
           ydb_dbname: database
 
-          #Настройки авторизации
+          # Настройки авторизации
           ydb_enforce_user_token_requirement: true
           ydb_request_client_certificate: true
     ```
@@ -222,7 +222,7 @@ ssh_args = -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o Contro
           ydb_domain: Root
           ydb_dbname: database
 
-          #Настройки авторизации
+          # Настройки авторизации
           ydb_enforce_user_token_requirement: true
           ydb_request_client_certificate: true
     ```

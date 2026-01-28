@@ -1,10 +1,4 @@
-# Развёртывание кластера с использованием конфигурации V2 (OLTP)
-
-{% note alert  %}
-
-   Эта статья посвящена кластерам {{ ydb-short-name }}, в которых используется **конфигурация V2**. Данный способ конфигурирования пока является экспериментальным и доступен только для версий {{ ydb-short-name }} начиная с v25.1. Для использования в продакшене мы рекомендуем выбирать [конфигурацию V1](./deployment-configuration-v1.md) — она является основной и официально поддерживаемой для всех кластеров {{ ydb-short-name }}.
-
-{% endnote %}
+# Развёртывание кластера под аналитическую нагрузку (OLAP)
 
 ## Подготовьте окружение {# deployment-preparation}
 
@@ -15,7 +9,7 @@
 ```bash
 mkdir deployment
 cd deployment
-mkdir -p inventory/group_vars/ydb
+mkdir inventory
 mkdir files
 ```
 
@@ -58,56 +52,67 @@ ssh_args = -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o Contro
 
 ## Создайте основной файл инвентаризации {#inventory-create}
 
-Создайте файл `inventory/group_vars/ydb/all.yaml` и заполните его.
+Создайте файл `inventory/50-inventory.yaml` и заполните его.
 
-{% list tabs %}
+```yaml
+  all:
+  children:
+    ydb:
+      hosts:
+        static-node-1.ydb-cluster.com:
+        static-node-2.ydb-cluster.com:
+        static-node-3.ydb-cluster.com:
 
-- mirror-3-dc-3nodes
+      vars:
+        # Ansible
+        ansible_user: имя_пользователя
+        ansible_ssh_private_key_file: "/путь/к/вашему/id_rsa"
 
-  ```yaml
-  # Ansible
-    ansible_user: имя_пользователя
-    ansible_ssh_private_key_file: "/путь/к/вашему/id_rsa"
-  
-  # Система
-    system_timezone: UTC
-    system_ntp_servers: [time.cloudflare.com, time.google.com, ntp.ripe.net, pool.ntp.org]
-  
-  # База данных
-    ydb_user: root
-    ydb_dbname: db
+        # Система
+        system_timezone: UTC
+        system_ntp_servers: [time.cloudflare.com, time.google.com, ntp.ripe.net, pool.ntp.org]
 
-  # Хранилище
-    ydb_disks:
-      - name: /dev/vdb
-      label: ydb_disk_1
-      - name: /dev/vdc
-      label: ydb_disk_2
-      - name: /dev/vdd
-      label: ydb_disk_3
-    ydb_pool_kind: ssd
-    ydb_allow_format_drives: true
-    ydb_skip_data_loss_confirmation_prompt: false
-    ydbops_local: true
-    ydb_cores_dynamic: 2
-    ydb_dynnodes:
-      - {"instance": "a", offset: 1}
-    ydb_cores_static:  2
-  
-  # Настройки авторизации
-    ydb_enforce_user_token_requirement: true
+        # Узлы
+        ydb_config: "{{ ansible_config_file | dirname }}/files/config.yaml"
+        ydb_version: "24.4.4.2" # "24.1.18" # 24.2.7
 
-  # Узлы
-    ydb_version: "версия_системы"
-   ```
+        # База данных
+        ydb_user: root
+        ydb_domain: Root
+        ydb_dbname: database
 
-{% endlist %}
+        # Настройки авторизации
+        ydb_enforce_user_token_requirement: false
+        ydb_request_client_certificate: false  
 
-Обязательные настройки, которые нужно адаптировать под окружение в выбранном шаблоне:
+        # Хранилище
+        ydb_cores_static: 8 
+        ydb_disks:
+          - name: /dev/vdb
+            label: ydb_disk_1
+          - name: /dev/vdc
+            label: ydb_disk_2
+          - name: /dev/vdd
+            label: ydb_disk_3
+        ydb_allow_format_drives: true
+        ydb_skip_data_loss_confirmation_prompt: false
+        ydb_pool_kind: ssd
+        ydb_database_groups: 8
+        ydb_cores_dynamic: 8
+        ydb_dynnodes:
+          - { instance: 'a', offset: 0 }
+          - { instance: 'b', offset: 1 }
+        ydb_brokers:
+          - static-node-1.ydb-cluster.com
+          - static-node-2.ydb-cluster.com
+          - static-node-3.ydb-cluster.com
+          ydbops_local: true
+        
+        ydb_use_dynamic_config: true
+        ydb_custom_dynconfig:  "{{ ansible_config_file | dirname }}/files/dynamic-config.yaml"
+```
 
-1. **Настройка SSH доступа.** Укажите пользователя `ansible_user` и путь к приватному ключу `ansible_ssh_private_key_file`, которые Ansible будет использовать для подключения к вашим серверам.
-2. **Пути к блочным устройствам в файловой системе.** В секции `ydb_disks` шаблон предполагает, что `/dev/vda` предназначен для операционной системы, а следующие диски, такие как `/dev/vdb`, — для слоя хранения {{ ydb-short-name }}. Метки дисков создаются плейбуками автоматически, и их имена могут быть произвольными.
-3. **Версия системы.** В параметре `ydb_version` укажите номер версии {{ ydb-short-name }}, которую нужно установить. Список доступных версий вы найдёте на странице [загрузок](../../../../downloads/ydb-open-source-database.md).
+{% include notitle [_](./_includes/required-settings.md) %}
 
 {% include notitle [_](./_includes/recommended-settings.md) %}
 
@@ -139,80 +144,232 @@ all:
 
 Зашифруйте этот файл с помощью команды `ansible-vault encrypt inventory/group_vars/ydb/vault.yaml`.
 
-## Подготовьте конфигурационный файла {{ ydb-short-name }} {#ydb-config-prepare}
+## Подготовьте конфигурационные файлы {{ ydb-short-name }} {#ydb-config-prepare}
 
-Создайте файл `files/config.yaml` и заполните его.
+1. Создайте файл `files/config.yaml` и заполните его.
 
-{% list tabs %}
-
-- mirror-3-dc-3nodes
-
-  ```yaml
-  metadata:
-    kind: MainConfig
-    cluster: ""
-    version: 0
-  config:
-    yaml_config_enabled: true
-    erasure: mirror-3-dc
-    fail_domain_type: disk
-    self_management_config:
-      enabled: true
-    default_disk_type: SSD
-  host_configs:
-    - host_config_id: 1
-    drive:
-    - path: /dev/disk/by-partlabel/ydb_disk_ssd_01
-      type: SSD
-    - path: /dev/disk/by-partlabel/ydb_disk_ssd_02
-      type: SSD
-    - path: /dev/disk/by-partlabel/ydb_disk_ssd_03
-      type: SSD
-  hosts:
-    - host: ydb-node-zone-a.local
-      host_config_id: 1
-      location:
-        body: 1
-        data_center: 'zone-a'
-        rack: '1'
-    - host: ydb-node-zone-b.local
-      host_config_id: 1
-      location:
-        body: 2
-        data_center: 'zone-b'
-        rack: '1'
-    - host: ydb-node-zone-d.local
-      host_config_id: 1
-      location:
-        body: 3
-        data_center: 'zone-d'
-        rack: '1'
-  actor_system_config:
-    use_auto_config: true
-    cpu_count: 1
-  interconnect_config:
+```yaml
+  storage_config_generation: 0
+static_erasure: mirror-3-dc
+host_configs:
+- drive:
+  - path: /dev/disk/by-partlabel/ydb_disk_1
+    type: SSD
+  - path: /dev/disk/by-partlabel/ydb_disk_2
+    type: SSD
+  - path: /dev/disk/by-partlabel/ydb_disk_3
+    type: SSD
+  host_config_id: 1
+hosts:
+- host: static-node-1.ydb-cluster.com
+  node_id: 1
+  host_config_id: 1
+  walle_location:
+    body: 1
+    data_center: 'zone-a'
+    rack: '1'
+- host: static-node-2.ydb-cluster.com
+  node_id: 2
+  host_config_id: 1
+  walle_location:
+    body: 2
+    data_center: 'zone-b'
+    rack: '2'
+- host: static-node-3.ydb-cluster.com
+  node_id: 3
+  host_config_id: 1
+  walle_location:
+    body: 3
+    data_center: 'zone-d'
+    rack: '3'
+domains_config:
+  domain:
+  - name: Root
+    storage_pool_types:
+    - kind: ssd
+      pool_config:
+        box_id: 1
+        erasure_species: mirror-3-dc
+        kind: ssd
+        geometry:
+          realm_level_begin: 10
+          realm_level_end: 20
+          domain_level_begin: 10
+          domain_level_end: 256
+        pdisk_filter:
+        - property:
+          - type: SSD
+        vdisk_kind: Default
+  state_storage:
+  - ring:
+      node: [1, 2, 3]
+      nto_select: 3
+    ssid: 1
+  security_config:
+    enforce_user_token_requirement: false
+    monitoring_allowed_sids:
+    - "root"
+    - "ADMINS"
+    - "DATABASE-ADMINS"
+    administration_allowed_sids:
+    - "root"
+    - "ADMINS"
+    - "DATABASE-ADMINS"
+    viewer_allowed_sids:
+    - "root"
+    - "ADMINS"
+    - "DATABASE-ADMINS"
+    register_dynamic_node_allowed_sids:
+    - databaseNodes@cert
+    - root@builtin
+blob_storage_config:
+  service_set:
+    groups:
+    - erasure_species: mirror-3-dc
+      rings:
+      - fail_domains:
+        - vdisk_locations:
+          - node_id: static-node-1.ydb-cluster.com
+            pdisk_category: SSD
+            path: /dev/disk/by-partlabel/ydb_disk_1
+        - vdisk_locations:
+          - node_id: static-node-1.ydb-cluster.com
+            pdisk_category: SSD
+            path: /dev/disk/by-partlabel/ydb_disk_2
+        - vdisk_locations:
+          - node_id: static-node-1.ydb-cluster.com
+            pdisk_category: SSD
+            path: /dev/disk/by-partlabel/ydb_disk_3
+      - fail_domains:
+        - vdisk_locations:
+          - node_id: static-node-2.ydb-cluster.com
+            pdisk_category: SSD
+            path: /dev/disk/by-partlabel/ydb_disk_1
+        - vdisk_locations:
+          - node_id: static-node-2.ydb-cluster.com
+            pdisk_category: SSD
+            path: /dev/disk/by-partlabel/ydb_disk_2
+        - vdisk_locations:
+          - node_id: static-node-2.ydb-cluster.com
+            pdisk_category: SSD
+            path: /dev/disk/by-partlabel/ydb_disk_3
+      - fail_domains:
+        - vdisk_locations:
+          - node_id: static-node-3.ydb-cluster.com
+            pdisk_category: SSD
+            path: /dev/disk/by-partlabel/ydb_disk_1
+        - vdisk_locations:
+          - node_id: static-node-3.ydb-cluster.com
+            pdisk_category: SSD
+            path: /dev/disk/by-partlabel/ydb_disk_2
+        - vdisk_locations:
+          - node_id: static-node-3.ydb-cluster.com
+            pdisk_category: SSD
+            path: /dev/disk/by-partlabel/ydb_disk_3
+channel_profile_config:
+  profile:
+  - channel:
+    - erasure_species: mirror-3-dc
+      pdisk_category: 1   # 0=ROT, 1=SSD, 2=NVME
+      storage_pool_kind: ssd
+    - erasure_species: mirror-3-dc
+      pdisk_category: 1
+      storage_pool_kind: ssd
+    - erasure_species: mirror-3-dc
+      pdisk_category: 1
+      storage_pool_kind: ssd
+    profile_id: 0
+interconnect_config:
     start_tcp: true
     encryption_mode: OPTIONAL
     path_to_certificate_file: "/opt/ydb/certs/node.crt"
     path_to_private_key_file: "/opt/ydb/certs/node.key"
     path_to_ca_file: "/opt/ydb/certs/ca.crt"
-  grpc_config:
+grpc_config:
     cert: "/opt/ydb/certs/node.crt"
     key: "/opt/ydb/certs/node.key"
     ca: "/opt/ydb/certs/ca.crt"
     services_enabled:
     - legacy
-  security_config:
-    enforce_user_token_requirement: true
-  client_certificate_authorization:
-    request_client_certificate: true
-    client_certificate_definitions:
-    - member_groups: ["ADMINS"]
-      subject_terms:
-      - short_name: "O"
-        values: ["YDB"]
+    - discovery
+auth_config:
+  path_to_root_ca: /opt/ydb/certs/ca.crt    
+client_certificate_authorization:
+  request_client_certificate: true
+  client_certificate_definitions:
+      - member_groups: ["databaseNodes@cert"]
+        subject_terms:
+        - short_name: "O"
+          values: ["YDB"]  
+```
+
+Для ускорения и упрощения первичного развёртывания {{ ydb-short-name }} конфигурационный файл уже содержит большинство настроек для установки кластера. Достаточно заменить стандартные хосты FQDN на актуальные в разделах `hosts` и `blob_storage_config`.
+
+- Раздел `hosts`:
+
+  ```yaml
+  ...
+  hosts:
+    - host: static-node-1.ydb-cluster.com #FQDN ВМ
+      host_config_id: 1
+      walle_location:
+        body: 1
+        data_center: 'zone-a'
+        rack: '1'
+  ...
+  ```
+
+- Раздел `blob_storage_config`:
+
+  ```yaml
+  ...
+  - fail_domains:
+    - vdisk_locations:
+      - node_id: static-node-1.ydb-cluster.com #FQDN ВМ
+        pdisk_category: SSD
+        path: /dev/disk/by-partlabel/ydb_disk_1
+  ...
+  ```
+
+Остальные секции и настройки конфигурационного файла остаются без изменений.
+
+1. Создайте файл `files/dynamic-config.yaml` и заполните его.
+
+```yaml
+metadata:
+  cluster: ""
+  version: 0
+config:
+  yaml_config_enabled: true
+  actor_system_config:
+    use_auto_config: true
+    node_type: COMPUTE
+    cpu_count: 8
   domains_config:
+    domain:
+    - name: Root
+      storage_pool_types:
+      - kind: ssd
+        pool_config:
+          box_id: 1
+          erasure_species: mirror-3-dc
+          kind: ssd
+          geometry:
+            realm_level_begin: 10
+            realm_level_end: 20
+            domain_level_begin: 10
+            domain_level_end: 256
+          pdisk_filter:
+          - property:
+            - type: SSD
+          vdisk_kind: Default
+    state_storage:
+    - ring:
+        node: [1, 2, 3]
+        nto_select: 3
+      ssid: 1
     security_config:
+      enforce_user_token_requirement: false
       monitoring_allowed_sids:
       - "root"
       - "ADMINS"
@@ -221,57 +378,79 @@ all:
       - "root"
       - "ADMINS"
       - "DATABASE-ADMINS"
+      - "robot-ydb-cp@staff"
       viewer_allowed_sids:
       - "root"
       - "ADMINS"
       - "DATABASE-ADMINS"
-      register_dynamic_node_allowed_sids:
-      - databaseNodes@cert
-      - root@builtin  
-    ```
+  channel_profile_config:
+    profile:
+      - channel:
+        - erasure_species: mirror-3-dc
+          pdisk_category: 1   # 0=ROT, 1=SSD, 2=NVME
+          storage_pool_kind: ssd
+        - erasure_species: mirror-3-dc
+          pdisk_category: 1
+          storage_pool_kind: ssd
+        - erasure_species: mirror-3-dc
+          pdisk_category: 1
+          storage_pool_kind: ssd
+        profile_id: 0
+  interconnect_config:
+      start_tcp: true
+      encryption_mode: OPTIONAL
+      path_to_certificate_file: "/opt/ydb/certs/node.crt"
+      path_to_private_key_file: "/opt/ydb/certs/node.key"
+      path_to_ca_file: "/opt/ydb/certs/ca.crt"
+  grpc_config:
+      cert: "/opt/ydb/certs/node.crt"
+      key: "/opt/ydb/certs/node.key"
+      ca: "/opt/ydb/certs/ca.crt"
+      services_enabled:
+      - legacy
+      - discovery
+allowed_labels:
+  node_id:
+    type: string
+  host:
+    type: string
+  tenant:
+    type: string
+selector_config:
+  - description: config for OLAP
+    selector:
+      dynamic: true
+    config:
+      actor_system_config:
+        use_auto_config: true
+        node_type: COMPUTE
+        cpu_count: 8
+      memory_controller_config: !inherit
+        soft_limit_percent: 90
+        activities_limit_percent: 80
+        query_execution_limit_percent: 75
+        shared_cache_min_percent: 5
+        shared_cache_max_percent: 25
+        hard_limit_bytes: 128849018880
+      table_service_config:
+        sql_version: 1
+        enable_olap_sink: true
+        enable_spilling_nodes: "All"
+        enable_query_service_spilling: true
+        spilling_service_config:
+          local_file_config:
+            enable: true
+            max_total_size: 536870912000
+            max_file_size: 107374182400
+            root: "/путь/к/диску/для/спиллинга"
+```
 
-{% endlist %}
+Замените следующие значения на актуальные в разделе `selector_config`:
 
-Для ускорения и упрощения первичного развёртывания {{ ydb-short-name }} конфигурационный файл уже содержит большинство настроек для установки кластера. Достаточно заменить стандартные хосты FQDN в разделе `hosts` и пути к дискам на актуальные в разделе `hosts_configs`.
-
-- Раздел `hosts`:
-
-  ```yaml
-  ...
-  hosts:
-    - host: ydb-node-zone-a.local
-    host_config_id: 1
-    location:
-      body: 1
-      data_center: 'zone-a'
-      rack: '1'
-  ...
-  ```
-
-- Раздел `hosts_configs`:
-
-  ```yaml
-  ...
-  host_configs:
-  - host_config_id: 1
-    drive:
-    - path: /dev/disk/by-partlabel/ydb_disk_ssd_01
-      type: SSD
-    - path: /dev/disk/by-partlabel/ydb_disk_ssd_02
-      type: SSD
-    - path: /dev/disk/by-partlabel/ydb_disk_ssd_03
-      type: SSD
-  ...
-  ```
-
-Остальные секции и настройки конфигурационного файла остаются без изменений.
-
-Создайте  файл `inventory/ydb_inventory.yaml` с содержимым:
-
-```yaml
-plugin: ydb_platform.ydb.ydb_inventory
-ydb_config: "files/config.yaml"
-  ```
+- `cpu_count`;
+- `max_total_size`;
+- `max_file_size`;
+- `root`.
 
 ## Разверните кластер {{ ydb-short-name }} {# cluster-deployment}
 

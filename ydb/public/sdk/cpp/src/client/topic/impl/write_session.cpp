@@ -1127,7 +1127,6 @@ void TKeyedWriteSession::RunMainWorker() {
         {
             std::unique_lock lock(GlobalLock);
             EventsWorker->DoWork();
-            RunUserHandlers();
             if (Closed.load() && (MessagesWorker->IsQueueEmpty() || CloseDeadline <= TInstant::Now())) {
                 break;
             }
@@ -1135,6 +1134,7 @@ void TKeyedWriteSession::RunMainWorker() {
             SessionsWorker->DoWork();
             MessagesWorker->DoWork();
         }
+        RunUserHandlers();
         Wait();
     }
 

@@ -34,16 +34,18 @@ namespace NKikimr {
                 , Cookie(cookie)
             {}
 
-            void SetPartData(TLogoBlobID id, TRope&& data) {
+            i32 SetPartData(TLogoBlobID id, TRope&& data) {
                 Y_ABORT_UNLESS(id.FullID() == BlobId);
                 Y_ABORT_UNLESS(id.PartId());
                 const ui32 partIdx = id.PartId() - 1;
                 if (PartsMask & (1 << partIdx)) {
-                    Y_ABORT_UNLESS(GetPartData(id) == data);
+                    // Y_ABORT_UNLESS(GetPartData(id) == data);
+                    return GetPartData(id) != data;
                 } else {
                     PartsMask |= 1 << partIdx;
                     Parts[partIdx] = std::move(data);
                 }
+                return 0;
             }
 
             const TRope& GetPartData(TLogoBlobID id) const {

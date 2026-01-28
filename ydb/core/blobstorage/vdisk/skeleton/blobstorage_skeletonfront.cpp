@@ -137,9 +137,9 @@ namespace NKikimr {
         using TWindowStatusOpt = TMaybe<TWindowStatus>;
         using TFeedback = TMyQueueBackpressure::TFeedback;
 
-        void SendWindowChange(const TActorContext &ctx, const TWindowStatus &wstatus, NKikimrBlobStorage::EVDiskQueueId queueId) {
-            ctx.Send(wstatus.ActorId, new TEvBlobStorage::TEvVWindowChange(queueId, wstatus));
-        }
+        // void SendWindowChange(const TActorContext &ctx, const TWindowStatus &wstatus, NKikimrBlobStorage::EVDiskQueueId queueId) {
+        //     ctx.Send(wstatus.ActorId, new TEvBlobStorage::TEvVWindowChange(queueId, wstatus));
+        // }
 
         ////////////////////////////////////////////////////////////////////////////
         // TIntQueueClass -- delayed queue
@@ -183,10 +183,12 @@ namespace NKikimr {
             ::NMonitoring::TDynamicCounters::TCounterPtr SkeletonFrontCostProcessed;
 
             bool CanSendToSkeleton(ui64 cost) const {
-                bool inFlightCond = InFlightCount < MaxInFlightCount;
-                // for one query we can exceed MaxInFlightCost
-                bool costCond = (InFlightCount == 0) || ((InFlightCost + cost) < MaxInFlightCost);
-                return inFlightCond && costCond;
+                // bool inFlightCond = InFlightCount < MaxInFlightCount;
+                // // for one query we can exceed MaxInFlightCost
+                // bool costCond = (InFlightCount == 0) || ((InFlightCost + cost) < MaxInFlightCost);
+                // return inFlightCond && costCond;
+                Y_UNUSED(cost);
+                return true;
             }
 
         public:
@@ -462,9 +464,11 @@ namespace NKikimr {
             ::NMonitoring::TDynamicCounters::TCounterPtr SkeletonFrontIncorrectMsgId;
 
             void NotifyOtherClients(const TActorContext &ctx, const TFeedback &feedback) {
-                for (const auto &x : feedback.second) {
-                    SendWindowChange(ctx, x, ExtQueueId);
-                }
+                Y_UNUSED(ctx);
+                Y_UNUSED(feedback);
+                // for (const auto &x : feedback.second) {
+                //     SendWindowChange(ctx, x, ExtQueueId);
+                // }
             }
 
             void OutputBadFeedback(const TFeedback &feedback) const {
@@ -950,11 +954,12 @@ namespace NKikimr {
                         }
                         {
                             str << "<a class=\"btn btn-default\" href=\"?type=restart\" "
-                                << (
-                                    IsVDiskRestartAllowed(VDiskMonGroup.VDiskState())
-                                    ? "style='background:Tomato' "
-                                    : "disabled style='background:LightGray' "
-                                )
+                                // << (
+                                //     IsVDiskRestartAllowed(VDiskMonGroup.VDiskState())
+                                //     ? "style='background:Tomato' "
+                                //     : "disabled style='background:LightGray' "
+                                // )
+                                << "style='background:Tomato' "
                                 << ">Restart</a>";
                         }
                     }

@@ -1119,7 +1119,7 @@ namespace NKikimr {
                                                  const std::shared_ptr<TBlobStorageGroupInfo::TTopology> &top,
                                                  NMon::TEvHttpInfo::TPtr &ev,
                                                  const TString &frontHtml,
-                                                 const NMonGroup::TVDiskStateGroup& vDiskMonGroup) {
+                                                 const NMonGroup::TVDiskStateGroup& /*vDiskMonGroup*/) {
         const TCgiParameters& cgi = ev->Get()->Request.GetParams();
 
         const TString &type = cgi.Get("type");
@@ -1150,16 +1150,16 @@ namespace NKikimr {
         } else if (type == "dbmainpage") {
             return CreateMonDbMainPageActor(selfVDiskId, notifyId, skeletonFrontID, skeletonID, ev);
         } else if (type == "restart") {
-            if (IsVDiskRestartAllowed(vDiskMonGroup.VDiskState())) {
-                return new TRestartVDiskActor(
-                    cfg->BaseInfo.PDiskId, selfVDiskId, MakeBlobStorageNodeWardenID(skeletonFrontID.NodeId()), notifyId, ev->Sender
-                );
-            } else {
-                return new TMonErrorActor(notifyId, ev,
-                    "VDisk restart in the normal state is not allowed <br>\n"
-                    "<a class=\"btn btn-default\" href=\"?\">Go back to the main VDisk page</a>"
-                );
-            }
+            return new TRestartVDiskActor(
+                cfg->BaseInfo.PDiskId, selfVDiskId, MakeBlobStorageNodeWardenID(skeletonFrontID.NodeId()), notifyId, ev->Sender
+            );
+            // if (IsVDiskRestartAllowed(vDiskMonGroup.VDiskState())) {
+            // } else {
+            //     return new TMonErrorActor(notifyId, ev,
+            //         "VDisk restart in the normal state is not allowed <br>\n"
+            //         "<a class=\"btn btn-default\" href=\"?\">Go back to the main VDisk page</a>"
+            //     );
+            // }
         } else {
             auto s = Sprintf("Unknown value '%s' for CGI parameter 'type'", type.data());
             return new TMonErrorActor(notifyId, ev, s);

@@ -785,6 +785,84 @@ Y_UNIT_TEST_SUITE(ReadIteratorExternalBlobs) {
         ValidateReadResult(runtime, std::move(readFuture), 10);
     }
 
+    Y_UNIT_TEST(ExtBlobsWithErrorInjection) {
+        TNode node(true);
+
+        auto server = node.Server;
+        auto& runtime = *node.Runtime;
+        auto& sender = node.Sender;
+        auto shard1 = node.Shard;
+        auto tableId1 = node.TableId;
+
+        TString largeValue(1_MB, 'L');
+
+        for (int i = 0; i < 10; i++) {
+            TString chunkNum = ToString(i);
+            TString query = R"___(
+                UPSERT INTO `/Root/table-1` (blob_id, chunk_num, data0) VALUES
+                    (Uuid("65df1ec1-a97d-47b2-ae56-3c023da6ee8c"), )___" + chunkNum + ", \"" + largeValue + "\");";
+            
+            ExecSQL(server, sender, query);    
+        }
+
+        {
+            Cerr << "... waiting for stats after upsert" << Endl;
+            auto stats = WaitTableStats(runtime, shard1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetDatashardId(), shard1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRowCount(), 10);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetPartCount(), 0);
+        }
+
+        CompactTable(runtime, shard1, tableId1, false);
+
+        {
+            Cerr << "... waiting for stats after compaction" << Endl;
+            auto stats = WaitTableStats(runtime, shard1, 1, 0);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetDatashardId(), shard1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRowCount(), 10);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetPartCount(), 1);
+        }
+
+        auto captureEvents = [&](TAutoPtr<IEventHandle> &event) -> auto {
+            switch (event->GetTypeRewrite()) {
+                case TEvBlobStorage::EvGetResult: {
+                    auto* msg = event->Get<TEvBlobStorage::TEvGetResult>();
+                    // if size of blob is 1048584, then strip half of the data to simulate error
+                    for (ui32 i = 0; i < msg->ResponseSz; i++) {
+                        auto& res = msg->Responses[i];
+                        if (res.RequestedSize == 1048584) {
+                            // Buffer is TRope
+                            TString s = res.Buffer.ConvertToString();
+                            // first bytes of s is TLabel:
+                            // EPage Type; // 2 bytes
+                            // ui16 Format; // 2 bytes
+                            // TSize Size; // 4 bytes
+                            // we need to mangle the Size
+                            ui32 originalSize = *((ui32*)(s.data() + 4));
+                            ui32 newSize = originalSize / 2;
+                            *((ui32*)(s.data() + 4)) = newSize;
+                            res.Buffer = TRope(s);
+                        }
+                    }
+                    break;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+
+        auto prevObserverFunc = runtime.SetObserverFunc(captureEvents);
+
+        auto readFuture = KqpSimpleSend(runtime, R"(SELECT blob_id, chunk_num, data0
+                FROM `/Root/table-1`
+                WHERE
+                    blob_id = Uuid("65df1ec1-a97d-47b2-ae56-3c023da6ee8c") AND
+                    chunk_num >= 0
+                ORDER BY blob_id, chunk_num ASC
+                LIMIT 100;)");
+
+        ValidateReadResult(runtime, std::move(readFuture), 10);
+    }
+
 }
 
 } // namespace NKikimr

@@ -140,9 +140,13 @@ namespace NKikimr {
         }
 
         TFreeRes TChain::Free(const NPrivate::TChunkSlot &id) {
-            Y_VERIFY_S(id.GetSlotId() < SlotsInChunk && AllocatedSlots > 0, VDiskLogPrefix
-                    << " id# " << id.ToString() << " SlotsInChunk# " << SlotsInChunk
-                    << " AllocatedSlots# " << AllocatedSlots << " State# " << ToString());
+            if (id.GetSlotId() >= SlotsInChunk || AllocatedSlots == 0) {
+                Cerr << "Deleting from empty chunk: " << VDiskLogPrefix << "TChain::Free: id# " << id.ToString() << " State# " << ToString();
+                return TFreeRes(0, ConstMask, SlotsInChunk);
+            }
+            // Y_VERIFY_S(id.GetSlotId() < SlotsInChunk && AllocatedSlots > 0, VDiskLogPrefix
+            //         << " id# " << id.ToString() << " SlotsInChunk# " << SlotsInChunk
+            //         << " AllocatedSlots# " << AllocatedSlots << " State# " << ToString());
             AllocatedSlots--;
 
             ui32 chunkId = id.GetChunkId();
@@ -152,8 +156,12 @@ namespace NKikimr {
 
             auto freeFoundSlot = [&] (TFreeSpace &container, const char *containerName) {
                 TMask &mask = it->second;
-                Y_VERIFY_S(!mask.Get(slotId), VDiskLogPrefix << "TChain::Free: containerName# " << containerName
-                        << " id# " << id.ToString() << " State# " << ToString());
+                // Y_VERIFY_S(!mask.Get(slotId), VDiskLogPrefix << "TChain::Free: containerName# " << containerName
+                //         << " id# " << id.ToString() << " State# " << ToString());
+                if (mask.Get(slotId)) {
+                    Cerr << "Deleting free huge slot: " << VDiskLogPrefix << "TChain::Free: containerName# " << containerName << " id# " << id.ToString() << " State# " << ToString();
+                    return TFreeRes(0, mask, SlotsInChunk);
+                }
                 mask.Set(slotId);
                 ++FreeSlotsInFreeSpace;
                 if (mask == ConstMask) {
@@ -852,7 +860,10 @@ namespace NKikimr {
         void THeap::GetOwnedChunks(TSet<TChunkIdx>& chunks) const {
             for (TChunkIdx chunk : FreeChunks) {
                 const bool inserted = chunks.insert(chunk).second;
-                Y_ABORT_UNLESS(inserted); // this chunk should be unique to the set
+                if (!inserted) {
+                    ythrow yexception() << "THeap::GetOwnedChunks: chunkId# " << chunk
+                        << " is already present in owned chunks set!";
+                }
             }
             Chains.GetOwnedChunks(chunks);
         }

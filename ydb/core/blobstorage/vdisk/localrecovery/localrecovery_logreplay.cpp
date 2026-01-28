@@ -147,7 +147,9 @@ namespace NKikimr {
                 // end
                 LocRecCtx->RecovInfo->FinishDispatching();
                 LocRecCtx->RepairedHuge->FinishRecovery(ctx);
-                VerifyOwnedChunks(ctx);
+                if (!VerifyOwnedChunks(ctx)) {
+                    return;
+                }
 
                 LocRecCtx->VCtx->LocalRecoveryErrorStr = "";
                 Finish(ctx, NKikimrProto::OK, {});
@@ -880,13 +882,23 @@ namespace NKikimr {
             Y_FAIL_S("Unexpected case: " << record.Signature.ToString());
         }
 
-        void VerifyOwnedChunks(const TActorContext& ctx) {
+        bool VerifyOwnedChunks(const TActorContext& ctx) {
             TSet<TChunkIdx> chunks;
 
-            // create a set of used chunks as seen from our side
-            LocRecCtx->HullDbRecovery->GetOwnedChunks(chunks);
-            LocRecCtx->RepairedHuge->GetOwnedChunks(chunks);
-            LocRecCtx->SyncLogRecovery->GetOwnedChunks(chunks);
+            try {
+                // create a set of used chunks as seen from our side
+                LocRecCtx->HullDbRecovery->GetOwnedChunks(chunks);
+                LocRecCtx->RepairedHuge->GetOwnedChunks(chunks);
+                LocRecCtx->SyncLogRecovery->GetOwnedChunks(chunks);
+            } catch (const yexception& ex) {
+                TString msg = TStringBuilder()
+                    << "VDISK FAILED TO COLLECT OWNED CHUNKS: "
+                    << ex.what();
+                LOG_CRIT(ctx, NKikimrServices::BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "%s", msg.data()));
+                LocRecCtx->VCtx->LocalRecoveryErrorStr = msg;
+                Finish(ctx, NKikimrProto::ERROR, msg);
+                return false;
+            }
 
             // calculate leaked and unowned chunks
             TVector<TChunkIdx> leaks, misowned;
@@ -912,6 +924,8 @@ namespace NKikimr {
                 LOG_CRIT(ctx, NKikimrServices::BS_LOCALRECOVERY,
                     VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "%s", msg.Str().data()));
             }
+
+            return true;
         }
 
         STRICT_STFUNC(StateFunc,

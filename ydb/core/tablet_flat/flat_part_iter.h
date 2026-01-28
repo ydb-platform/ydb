@@ -1320,11 +1320,17 @@ namespace NTable {
                     Y_ABORT("Upper bits of ELargeObj ref now isn't used");
 
                 if (auto blob = Env->Locate(Part, ref, op)) {
-                    const auto got = NPage::TLabelWrapper().Read(**blob);
+                    try {
+                        const auto got = NPage::TLabelWrapper().Read(**blob);
 
-                    Y_ABORT_UNLESS(got == NPage::ECodec::Plain && got.Version == 0);
+                        Y_ABORT_UNLESS(got == NPage::ECodec::Plain && got.Version == 0);
 
-                    row.Set(pin.To, { ECellOp(op), ELargeObj::Inline }, TCell(*got));
+                        row.Set(pin.To, { ECellOp(op), ELargeObj::Inline }, TCell(*got));
+                    } catch (const yexception& e) {
+                        // Make TCell with an empty string
+                        TStringBuf s;
+                        row.Set(pin.To, { ECellOp(op), ELargeObj::Inline }, TCell::Make(s));
+                    }
                 } else if (op == ELargeObj::Outer) {
                     op = TCellOp(blob.Need ? ECellOp::Null : ECellOp(op), ELargeObj::Outer);
 

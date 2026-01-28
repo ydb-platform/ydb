@@ -3,6 +3,8 @@ items:
   href: actor_system_config.md
 - name: auth_config
   href: auth_config.md
+- name: aws_client_config
+  href: aws_client_config.md
 - name: blob_storage_config
   href: blob_storage_config.md
 - name: client_certificate_authorization

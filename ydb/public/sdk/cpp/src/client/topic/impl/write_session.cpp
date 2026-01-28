@@ -904,7 +904,7 @@ TKeyedWriteSession::TKeyedWriteSession(
     std::shared_ptr<TTopicClient::TImpl> client,
     std::shared_ptr<TGRpcConnectionsImpl> connections,
     TDbDriverStatePtr dbDriverState)
-    : MainWorker(TThread::TParams(RunMainWorkerThread, this).SetName("KeyedWriteSessionMainWorker")),
+    : MainWorker(TThread::TParams(RunMainWorkerThread, this).SetName("MainWorker")),
     Connections(connections),
     Client(client),
     DbDriverState(dbDriverState),

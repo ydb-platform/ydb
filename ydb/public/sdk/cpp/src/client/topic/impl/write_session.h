@@ -139,18 +139,9 @@ private:
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Workers
 
-    struct TWorker {
-        template<typename T>
-        static std::shared_ptr<T> Get(std::weak_ptr<T> weakPtr) {
-            auto sharedPtr = weakPtr.lock();
-            Y_ABORT_UNLESS(sharedPtr, "Object is not alive");
-            return sharedPtr;
-        }
-    };
-
     struct TEventsWorker;
 
-    struct TSessionsWorker : TWorker {
+    struct TSessionsWorker {
         TSessionsWorker(TKeyedWriteSession* session);
         WrappedWriteSessionPtr GetWriteSession(ui64 partition, bool directToPartition = true);
         void OnReadFromSession(WrappedWriteSessionPtr wrappedSession);
@@ -174,7 +165,7 @@ private:
         std::unordered_map<ui64, WrappedWriteSessionPtr> SessionsIndex;
     };
 
-    struct TMessagesWorker : TWorker {
+    struct TMessagesWorker {
         TMessagesWorker(TKeyedWriteSession* session);
         
         void DoWork();
@@ -211,7 +202,7 @@ private:
         ui64 MemoryUsage = 0;
     };
 
-    struct TSplittedPartitionWorker : TWorker {
+    struct TSplittedPartitionWorker {
     private:
         enum class EState {
             Init,
@@ -246,7 +237,7 @@ private:
         ui64 NotReadyFutures = 0;
     };
 
-    struct TEventsWorker : TWorker {
+    struct TEventsWorker {
         TEventsWorker(TKeyedWriteSession* session);
         
         void DoWork();

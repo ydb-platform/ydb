@@ -607,8 +607,9 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
                     << " but will not split: " << reason);
         } else {
             LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "Do not want to split tablet " << datashardId << " by load,"
-                    << " its table already has "<< table->GetPartitions().size() << " out of " << table->GetMaxPartitionsCount() << " partitions");
+                "Do not want to split tablet " << datashardId << " by load, "
+                    << "its table already has " << table->GetPartitions().size()
+                    << " out of " << table->GetMaxPartitionsCount() << " partitions");
         }
         return true;
     } else if (table->CheckSplitByLoad(Self->SplitSettings, shardIdx, newStats.GetCurrentRawCpuUsage(), mainTableForIndex, reason)) {
@@ -616,9 +617,9 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
             "Want to split tablet " << datashardId << " by load: " << reason);
         collectKeySample = true;
     } else {
-        // Shard is oversized but won't split due to configuration
         const ui64 sizeToSplit = table->GetShardSizeToSplit(forceShardSplitSettings);
         if (dataSize >= sizeToSplit) {
+            // Shard is oversized but won't split due to configuration
             LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 "Tablet " << datashardId << " size " << dataSize
                     << " exceeds split threshold " << sizeToSplit
@@ -698,7 +699,7 @@ bool TTxStoreTableStats::VerifySplitAndRequestStats(
             ctx,
             NKikimrServices::FLAT_TX_SCHEMESHARD,
             "Tablet " << datashardId << " size " << newPartitionStats.DataSize
-                << " will not split: has borrowed parts, enqueue compact them first"
+                << " cannot split yet: has borrowed parts, enqueue compaction first"
         );
 
         Self->EnqueueBorrowedCompaction(shardIdx);
@@ -712,7 +713,7 @@ bool TTxStoreTableStats::VerifySplitAndRequestStats(
             ctx,
             NKikimrServices::FLAT_TX_SCHEMESHARD,
             "Tablet " << datashardId << " size " << newPartitionStats.DataSize
-                << " will not split: path is locked by " << txId
+                << " cannot split yet: path is locked by " << txId
         );
 
         return false;

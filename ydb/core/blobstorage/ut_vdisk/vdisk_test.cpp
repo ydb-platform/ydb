@@ -404,11 +404,10 @@ Y_UNIT_TEST_SUITE(TBsVDiskDefrag) {
         TestRun<TDefragEmptyDB, TDefragVDiskSetup>(&test, TIMEOUT);
     }
 
-    // TODO: https://github.com/ydb-platform/ydb/issues/32548
-    // Y_UNIT_TEST(Defrag50PercentGarbage) {
-    //     TDefrag50PercentGarbage test;
-    //     TestRun<TDefrag50PercentGarbage, TDefragVDiskSetup>(&test, TIMEOUT);
-    // }
+    Y_UNIT_TEST(Defrag50PercentGarbage) {
+        TDefrag50PercentGarbage test;
+        TestRun<TDefrag50PercentGarbage, TDefragVDiskSetup>(&test, TIMEOUT);
+    }
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////

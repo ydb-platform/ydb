@@ -4810,9 +4810,10 @@ class TKqpForwardWriteActor : public TActorBootstrapped<TKqpForwardWriteActor>, 
     using TBase = TActorBootstrapped<TKqpForwardWriteActor>;
 
 public:
+    template<typename TArgs>
     TKqpForwardWriteActor(
         NKikimrKqp::TKqpTableSinkSettings&& settings,
-        NYql::NDq::TDqAsyncIoFactory::TSinkArguments&& args,
+        TArgs&& args,
         TIntrusivePtr<TKqpCounters> counters)
         : LogPrefix(TStringBuilder() << "TxId: " << args.TxId << ", task: " << args.TaskId << ". ")
         , Settings(std::move(settings))
@@ -5064,6 +5065,14 @@ void RegisterKqpWriteActor(NYql::NDq::TDqAsyncIoFactory& factory, TIntrusivePtr<
                 auto* actor = new TKqpForwardWriteActor(std::move(settings), std::move(args), counters);
                 return std::make_pair<NYql::NDq::IDqComputeActorAsyncOutput*, NActors::IActor*>(actor, actor);
             }
+        });
+
+    factory.RegisterOutputTransform<NKikimrKqp::TKqpTableSinkSettings>(
+        TString(NYql::KqpTableSinkName),
+        [counters] (NKikimrKqp::TKqpTableSinkSettings&& settings, NYql::NDq::TDqAsyncIoFactory::TOutputTransformArguments&& args) {
+            AFL_ENSURE(ActorIdFromProto(settings.GetBufferActorId()));
+            auto* actor = new TKqpForwardWriteActor(std::move(settings), std::move(args), counters);
+            return std::make_pair<NYql::NDq::IDqComputeActorAsyncOutput*, NActors::IActor*>(actor, actor);
         });
 }
 

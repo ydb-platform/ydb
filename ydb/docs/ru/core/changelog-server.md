@@ -19,8 +19,8 @@
 * Исправлен ряд проблем, связанных с инициализацией кластера:
   * [Исправлена](https://github.com/ydb-platform/ydb/pull/25678) [ошибка](https://github.com/ydb-platform/ydb/issues/25023), из-за которой инициализация кластера могла зависать при обязательной авторизации
   * [Исправлена](https://github.com/ydb-platform/ydb/pull/28886) [проблема](https://github.com/ydb-platform/ydb/issues/27228) из-за которой создание новых баз данных сразу после развёртывания кластера было невозможно в течение нескольких минут
-* [Исправлена](https://github.com/ydb-platform/ydb/pull/28655) [ошибка](https://github.com/ydb-platform/ydb/issues/28510), при которой мог возникать race condition и клиенты получали ошибку "Could not find correct token validator", если использовались недавно выданные токены до обновления состояния LoginProvider
-* [Исправлена](https://github.com/ydb-platform/ydb/pull/29940) [ошибка](https://github.com/ydb-platform/ydb/issues/29903), при которой именованное выражение, содержащее другое именованное выражение, приводило к некорректному бэкапу VIEW
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/28655) [ошибка](https://github.com/ydb-platform/ydb/issues/28510), при которой мог возникать race condition и клиенты получали ошибку `Could not find correct token validator`, если использовались недавно выданные токены до обновления состояния `LoginProvider`
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/29940) [ошибка](https://github.com/ydb-platform/ydb/issues/29903), при которой именованное выражение, содержащее другое именованное выражение, приводило к некорректному бэкапу `VIEW`
 
 ### Релиз кандидат 25.2.1.10 {#25-2-1-10-rc}
 

@@ -825,10 +825,10 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
     }
 
     for (const auto& [txId, tx] : Txs) {
-        PQ_LOG_D("TxId: " << txId <<
-                 ", Step: " << tx.Step <<
-                 ", State: " << NKikimrPQ::TTransaction_EState_Name(tx.State) <<
-                 ", Decision: " << NKikimrTx::TReadSetData_EDecision_Name(tx.ParticipantsDecision));
+        PQ_LOG_TX_D("TxId: " << txId <<
+                    ", Step: " << tx.Step <<
+                    ", State: " << NKikimrPQ::TTransaction_EState_Name(tx.State) <<
+                    ", Decision: " << NKikimrTx::TReadSetData_EDecision_Name(tx.ParticipantsDecision));
 
         if (tx.Step != Max<ui64>()) {
             PlannedTxs.emplace_back(tx.Step, txId);

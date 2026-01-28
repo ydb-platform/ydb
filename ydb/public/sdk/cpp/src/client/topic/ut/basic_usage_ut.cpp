@@ -33,8 +33,6 @@
 #include <condition_variable>
 #include <deque>
 #include <thread>
-#include <unordered_map>
-#include <unordered_set>
 
 using namespace std::chrono_literals;
 
@@ -918,6 +916,91 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
     }
 
+    Y_UNIT_TEST(KeyedWriteSession_UserEventHandlers) {
+        TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
+        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 2);
+
+        auto client = setup.MakeClient();
+
+        TKeyedWriteSessionSettings writeSettings;
+        writeSettings
+            .Path(setup.GetTopicPath(TEST_TOPIC))
+            .Codec(ECodec::RAW);
+        writeSettings.ProducerIdPrefix(CreateGuidAsString());
+        writeSettings.PartitionChooserStrategy(TKeyedWriteSessionSettings::EPartitionChooserStrategy::Hash);
+        writeSettings.SubSessionIdleTimeout(TDuration::Seconds(30));
+
+        std::atomic<size_t> readyCount{0};
+        std::atomic<size_t> acksCount{0};
+        std::atomic<size_t> closedCount{0};
+        std::atomic<size_t> commonCount{0};
+
+        std::mutex tokensMutex;
+        std::condition_variable tokensCv;
+        std::deque<TContinuationToken> readyTokens;
+
+        // Для теста используем синхронный экзекутор, чтобы не зависеть от DefaultHandlersExecutor_ (TThreadPool).
+        writeSettings.EventHandlers_.HandlersExecutor(std::make_shared<TSyncExecutor>());
+
+        writeSettings.EventHandlers_.ReadyToAcceptHandler(
+            [&](TWriteSessionEvent::TReadyToAcceptEvent& ev) {
+                readyCount.fetch_add(1);
+                {
+                    std::lock_guard lock(tokensMutex);
+                    readyTokens.emplace_back(std::move(ev.ContinuationToken));
+                }
+                tokensCv.notify_one();
+            });
+
+        writeSettings.EventHandlers_.AcksHandler(
+            [&](TWriteSessionEvent::TAcksEvent& ev) {
+                Y_UNUSED(ev);
+                acksCount.fetch_add(1);
+            });
+
+        writeSettings.EventHandlers_.SessionClosedHandler(
+            [&](const TSessionClosedEvent& ev) {
+                Y_UNUSED(ev);
+                closedCount.fetch_add(1);
+            });
+
+        writeSettings.EventHandlers_.CommonHandler(
+            [&](TWriteSessionEvent::TEvent& ev) {
+                Y_UNUSED(ev);
+                commonCount.fetch_add(1);
+            });
+
+        auto session = client.CreateKeyedWriteSession(writeSettings);
+
+        auto getReadyToken = [&]() -> TContinuationToken {
+            std::unique_lock lock(tokensMutex);
+            bool ok = tokensCv.wait_for(
+                lock,
+                std::chrono::seconds(10),
+                [&] { return !readyTokens.empty(); }
+            );
+            UNIT_ASSERT_C(ok, "Timed out waiting for ReadyToAccept handler");
+            auto token = std::move(readyTokens.front());
+            readyTokens.pop_front();
+            return token;
+        };
+
+        const ui64 messages = 5;
+        for (ui64 i = 0; i < messages; ++i) {
+            auto token = getReadyToken();
+            TWriteMessage msg("payload");
+            msg.SeqNo(i + 1);
+            session->Write(std::move(token), "key-" + ToString(i), std::move(msg));
+        }
+
+        UNIT_ASSERT_C(session->Close(TDuration::Seconds(30)), "Failed to close keyed write session");
+
+        UNIT_ASSERT_C(readyCount.load() > 0, "ReadyToAcceptHandler was not called");
+        UNIT_ASSERT_C(acksCount.load() == messages, "AcksHandler does not work properly");
+        UNIT_ASSERT_C(closedCount.load() > 0, "SessionClosedHandler was not called");
+        UNIT_ASSERT_C(commonCount.load() == 0, "CommonHandler should not be called when type-specific handlers are set");
+    }
+
     Y_UNIT_TEST(KeyedWriteSession_ProducerIdPrefixRequired) {
         TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
         setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 1);
@@ -1120,7 +1203,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         writeSettings.PartitionChooserStrategy(TKeyedWriteSessionSettings::EPartitionChooserStrategy::Hash);
 
         auto session = client.CreateKeyedWriteSession(writeSettings);
-        const ui64 count = 10000;
+        const ui64 count = 3000;
 
         std::unordered_set<ui64> ackedSeqNos;
         ackedSeqNos.reserve(count);

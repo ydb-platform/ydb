@@ -1044,6 +1044,7 @@ bool TKeyedWriteSession::Close(TDuration closeTimeout) {
 void TKeyedWriteSession::NonBlockingClose() {
     Closed.store(true);
     ClosePromise.TrySetValue();
+    RunUserEventLoop();
 }
 
 void TKeyedWriteSession::SetCloseDeadline(const TDuration& closeTimeout) {

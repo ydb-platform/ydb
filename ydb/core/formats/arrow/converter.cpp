@@ -324,7 +324,7 @@ bool TArrowToYdbConverter::Process(const arrow::RecordBatch& batch, TString& err
                 return false;
             }
 
-            if (NeedDataConversion(colType)) {
+            if (WithConversion_ && NeedDataConversion(colType)) {
                 for (i32 i = 0; i < unroll; ++i) {
                     if (!ConvertData(cells[i][col], colType, memPool, errorMessage, AllowInfDouble_)) {
                         return false;
@@ -371,7 +371,7 @@ bool TArrowToYdbConverter::Process(const arrow::RecordBatch& batch, TString& err
                 return false;
             }
 
-            if (!ConvertData(curCell, colType, memPool, errorMessage, AllowInfDouble_)) {
+            if (WithConversion_ && !ConvertData(curCell, colType, memPool, errorMessage, AllowInfDouble_)) {
                 return false;
             }
             ++col;

@@ -20,6 +20,16 @@ public:
             return true;
         }
         Result.reset(new TEvColumnShard::TEvNotifyTxCompletionResult(Self->TabletID(), txId));
+        auto& opResult = *Result->Record.MutableOpResult();
+        if (Self->LastCompletedBackupTransaction.GetTxId() == txId) {
+            opResult = Self->LastCompletedBackupTransaction.GetOpResult();
+            return true;
+        }
+
+        // We need to fill in op result in this case because 
+        // it can be an export or import tx and we need to propagate these fields anyway
+        opResult.SetSuccess(false);
+        opResult.SetExplain("Internal error. There weren't found information about transaction");
         return true;
     }
 

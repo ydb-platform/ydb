@@ -421,6 +421,7 @@ static Ydb::Type* AddColumn(Ydb::Table::ColumnMeta* newColumn, const TColumn& co
     } else if (column.HasTypeInfo() && column.GetTypeInfo().HasDecimalPrecision() && column.GetTypeInfo().HasDecimalScale()) {
         if (column.GetNotNull()) {
             columnType = newColumn->mutable_type();
+            newColumn->set_not_null(column.GetNotNull());
         } else {
             columnType = newColumn->mutable_type()->mutable_optional_type()->mutable_item();
         }
@@ -436,6 +437,7 @@ static Ydb::Type* AddColumn(Ydb::Table::ColumnMeta* newColumn, const TColumn& co
         }
         if (column.GetNotNull()) {
             columnType = newColumn->mutable_type();
+            newColumn->set_not_null(column.GetNotNull());
         } else {
             columnType = newColumn->mutable_type()->mutable_optional_type()->mutable_item();
         }
@@ -1810,6 +1812,34 @@ bool FillTableDescription(NKikimrSchemeOp::TModifyScheme& out,
 
     TList<TString> warnings;
     if (!FillCreateTableSettingsDesc(*tableDesc, in, status, error, warnings, false)) {
+        return false;
+    }
+
+    return true;
+}
+
+bool FillColumnTableDescription(NKikimrSchemeOp::TModifyScheme& out,
+        const Ydb::Table::CreateTableRequest& in, Ydb::StatusIds::StatusCode& status, TString& error)
+{
+    NKikimrSchemeOp::TColumnTableDescription& tableDesc = *out.MutableCreateColumnTable();
+
+    if (!FillColumnDescription(tableDesc, in.columns(), status, error)) {
+        return false;
+    }
+    
+    tableDesc.MutableSchema()->MutableKeyColumnNames()->CopyFrom(in.primary_key());
+    
+    // NOTICE: TTableProfiles aren't supported for column tables
+    // NOTICE: ColumnFamilies aren't supported for column tables
+
+    for (auto [key, value] : in.attributes()) {
+        auto& attr = *out.MutableAlterUserAttributes()->AddUserAttributes();
+        attr.SetKey(key);
+        attr.SetValue(value);
+    }
+
+    TList<TString> warnings;
+    if (!FillCreateTableSettingsDesc(tableDesc, in, status, error)) {
         return false;
     }
 

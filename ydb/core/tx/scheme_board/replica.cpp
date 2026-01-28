@@ -953,8 +953,9 @@ private:
                 SoftDeleteDescription(desc->GetPathId());
                 UpsertDescriptionWithRelinkSubscribers(path, pathId, std::move(pathDescription));
             }
-            else
+            else {
                 UpsertDescription(path, pathId, std::move(pathDescription));
+            }
 
             return AckUpdate(ev);
         } else if (curDomainId < domainId) { // database migration or recreation

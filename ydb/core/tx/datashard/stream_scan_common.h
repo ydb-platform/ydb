@@ -32,6 +32,8 @@ public:
             TSerializedCellVec(value)
         );
         ByteSize += k.GetBuffer().size() + v.GetBuffer().size();
+        // Track the last key for scan continuation
+        LastKey = k;
     }
 
     inline auto&& Flush() {
@@ -51,9 +53,18 @@ public:
         return !Data.empty();
     }
 
+    inline const TSerializedCellVec& GetLastKey() const {
+        return LastKey;
+    }
+
+    inline TSerializedCellVec ExtractLastKey() {
+        return std::move(LastKey);
+    }
+
 private:
     TVector<std::pair<TSerializedCellVec, TSerializedCellVec>> Data; // key & value (if any)
     ui64 ByteSize = 0;
+    TSerializedCellVec LastKey;
 };
 
 } // namespace NKikimr::NDataShard::NStreamScan

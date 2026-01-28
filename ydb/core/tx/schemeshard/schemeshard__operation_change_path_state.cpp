@@ -72,7 +72,7 @@ public:
         Y_VERIFY_S(!context.SS->FindTx(OperationId), 
             "TChangePathStateOp Propose: operation already exists"
             << ", opId: " << OperationId);
-        TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxChangePathState, path.GetPathIdForDomain());
+        TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxChangePathState, path.Base()->PathId);
         
         txState.TargetPathId = path.Base()->PathId;
         txState.TargetPathTargetState = static_cast<NKikimrSchemeOp::EPathState>(changePathState.GetTargetState());

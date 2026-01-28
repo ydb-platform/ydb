@@ -580,7 +580,8 @@ TVector<ISubOperation::TPtr> CreateDropBackupCollectionCascade(TOperationId next
     
     // Check for active incremental restore operations in IncrementalRestoreStates
     for (const auto& [opId, restoreState] : context.SS->IncrementalRestoreStates) {
-        if (restoreState.BackupCollectionPathId == pathId) {
+        if (restoreState.BackupCollectionPathId == pathId && 
+            restoreState.State != TIncrementalRestoreState::EState::Completed) {
             return {CreateReject(nextId, NKikimrScheme::StatusPreconditionFailed,
                 "Cannot drop backup collection while incremental restore operations are active. Please wait for them to complete.")};
         }

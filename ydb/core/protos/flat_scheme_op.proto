@@ -346,6 +346,9 @@ message TTableDescription {
     optional bool AllowUnderSameOperation = 44 [default = false];
     // Create only as-well. Used for CopyTable to create table in desired state instead of default
     optional EPathState PathState = 46;
+    // Skip automatic index/impl table copying - indexes will be handled separately
+    optional bool OmitIndexes = 47 [default = false];
+    optional TDropCdcStream DropSrcCdcStream = 48;
 }
 
 message TDictionaryEncodingSettings {
@@ -1275,6 +1278,13 @@ message TCopyTableConfig { //TTableDescription implemets copying a table in orig
     optional bool AllowUnderSameOperation = 7 [default = false];
 
     optional NKikimrSchemeOp.EPathState TargetPathTargetState = 8;
+    
+    // Map from index name to CDC stream config for incremental backups
+    // Key: index name (e.g., "age_index", "name_index")
+    // Value: CDC stream configuration to create on that index's impl table
+    map<string, TCreateCdcStream> IndexImplTableCdcStreams = 9;
+    // additionally dropes cdc stream on src table consistently with taking snapshot
+    optional TDropCdcStream DropSrcCdcStream = 10;
 }
 
 message TConsistentTableCopyingConfig {
@@ -2304,7 +2314,7 @@ message TBackupCollectionDescription {
     }
 
     message TIncrementalBackupConfig {
-
+        optional bool OmitIndexes = 1 [default = false];
     }
 
     oneof Entries {
@@ -2318,6 +2328,8 @@ message TBackupCollectionDescription {
     oneof Storage {
         google.protobuf.Empty Cluster = 7;
     }
+
+    optional bool OmitIndexes = 9 [default = false];
 }
 
 message TBackupBackupCollection {

@@ -13,12 +13,38 @@
 
 #include <util/string/printf.h>
 
+#include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/include/aws/core/Aws.h>
+#include <contrib/libs/curl/include/curl/curl.h>
+
+struct TAwsApiGuard {
+    Aws::SDKOptions Options;
+
+    TAwsApiGuard() {
+        InitAwsAPI();
+    }
+
+    ~TAwsApiGuard() {
+        ShutdownAwsAPI();
+    }
+
+    void InitAwsAPI() {
+        curl_global_init(CURL_GLOBAL_ALL);
+        Aws::InitAPI(Options);
+    }
+
+    void ShutdownAwsAPI() {
+        Aws::ShutdownAPI(Options);
+        curl_global_cleanup();
+    }
+};
+
 namespace NKikimr::NReplication::NService {
 
 Y_UNIT_TEST_SUITE(S3Writer) {
     using namespace NTestHelpers;
 
     Y_UNIT_TEST(WriteTableS3) {
+        TAwsApiGuard apiGuard;
         using namespace NWrappers::NTestHelpers;
         TPortManager portManager;
         const ui16 port = portManager.GetPort();

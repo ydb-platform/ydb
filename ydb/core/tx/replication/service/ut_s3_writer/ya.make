@@ -5,6 +5,7 @@ FORK_SUBTESTS()
 SIZE(MEDIUM)
 
 PEERDIR(
+    ydb/core/wrappers/ut_helpers
     ydb/core/tx/replication/ut_helpers
     ydb/core/tx/replication/ydb_proxy
     library/cpp/string_utils/base64

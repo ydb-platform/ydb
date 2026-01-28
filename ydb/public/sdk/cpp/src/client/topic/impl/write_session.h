@@ -74,7 +74,6 @@ private:
         using TSelf = TPartitionInfo;
 
         bool InRange(const std::string_view key) const;
-        bool operator<(const std::string_view key) const;
 
         FLUENT_SETTING(std::string, FromBound);
         FLUENT_SETTING(std::optional<std::string>, ToBound);

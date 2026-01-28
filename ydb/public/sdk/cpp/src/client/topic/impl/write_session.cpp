@@ -107,10 +107,6 @@ bool TKeyedWriteSession::TPartitionInfo::InRange(const std::string_view key) con
     return true;
 }
 
-bool TKeyedWriteSession::TPartitionInfo::operator<(const std::string_view key) const {
-    return FromBound_ < key;
-}
-
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TKeyedWriteSession::TWriteSessionWrapper
 

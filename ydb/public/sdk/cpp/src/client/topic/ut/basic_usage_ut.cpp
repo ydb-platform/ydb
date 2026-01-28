@@ -1429,6 +1429,33 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         UNIT_ASSERT(closeRes);
     }
 
+    Y_UNIT_TEST(SimpleBlockingKeyedWriteSession_NoSeqNo) {
+        TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
+        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 3);
+
+        auto client = setup.MakeClient();
+
+        TKeyedWriteSessionSettings writeSettings;
+        writeSettings
+            .Path(setup.GetTopicPath(TEST_TOPIC))
+            .Codec(ECodec::RAW);
+        writeSettings.ProducerIdPrefix(CreateGuidAsString());
+        writeSettings.SubSessionIdleTimeout(TDuration::Seconds(30));
+        writeSettings.PartitionChooserStrategy(TKeyedWriteSessionSettings::EPartitionChooserStrategy::Hash);
+
+        auto session = client.CreateSimpleBlockingKeyedWriteSession(writeSettings);
+
+        const ui64 messages = 10;
+        for (ui64 i = 0; i < messages; ++i) {
+            TWriteMessage msg("payload-" + ToString(i));
+            bool res = session->Write("key-" + ToString(i % 3), std::move(msg));
+            UNIT_ASSERT(res);
+        }
+
+        bool closeRes = session->Close(TDuration::Seconds(30));
+        UNIT_ASSERT(closeRes);
+    }
+
     Y_UNIT_TEST(SimpleBlockingKeyedWriteSession_ManyMessages) {
         TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
         setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 4);

@@ -135,6 +135,12 @@ private:
 
     using IdleSessionPtr = std::shared_ptr<TIdleSession>;
 
+    enum class ESeqNoStrategy {
+        NotInitialized,
+        WithoutSeqNo,
+        WithSeqNo,
+    };
+
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Workers
 
@@ -354,6 +360,7 @@ private:
     std::map<std::string, ui64> PartitionsIndex;
 
     TKeyedWriteSessionSettings Settings;
+    ESeqNoStrategy SeqNoStrategy = ESeqNoStrategy::NotInitialized;
 
     NThreading::TPromise<void> ClosePromise;
     NThreading::TFuture<void> CloseFuture;
@@ -415,7 +422,7 @@ private:
 
     void HandleAcksEvent(const TWriteSessionEvent::TAcksEvent& acksEvent);
 
-    bool WaitForAck(ui64 seqNo, TDuration timeout);
+    bool WaitForAck(std::optional<ui64> seqNo, TDuration timeout);
 
     template<typename F>
     bool Wait(const TDuration& timeout, F&& stopFunc);

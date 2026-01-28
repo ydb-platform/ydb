@@ -10,6 +10,7 @@ items:
 - { name: ALTER VIEW,                   href: alter-view.md }
 - { name: ALTER RESOURCE POOL,          href: alter-resource-pool.md }
 - { name: ALTER RESOURCE POOL CLASSIFIER,    href: alter-resource-pool-classifier.md }
+- { name: ALTER STREAMING QUERY,        href: alter-streaming-query.md,      when: feature_federated_queries}
 - { name: ALTER TOPIC,                  href: alter-topic.md,                when: feature_topic_control_plane }
 - { name: ALTER TRANSFER,               href: alter-transfer.md}
 - { name: ALTER USER,                   href: alter-user.md,                 when: feature_user_and_group }
@@ -19,6 +20,7 @@ items:
 - { name: CREATE ASYNC REPLICATION,     href: create-async-replication.md }
 - { name: CREATE GROUP,                 href: create-group.md,               when: feature_user_and_group }
 - { name: CREATE EXTERNAL DATA SOURCE,  href: create-external-data-source.md,when: feature_federated_queries}
+- { name: CREATE STREAMING QUERY,       href: create-streaming-query.md,     when: feature_federated_queries}
 - { name: CREATE EXTERNAL TABLE,        href: create-external-table.md,      when: feature_federated_queries}
 - { name: CREATE OBJECT TYPE SECRET,    href: create-object-type-secret.md,  when: feature_federated_queries}
 - { name: CREATE OBJECT TYPE SECRET_ACCESS,    href: create-object-type-secret-access.md,  when: feature_federated_queries}
@@ -39,6 +41,7 @@ items:
 - { name: DROP EXTERNAL TABLE,          href: drop-external-table.md,        when: feature_federated_queries}
 - { name: DROP OBJECT TYPE SECRET,    href: drop-object-type-secret.md,      when: feature_federated_queries}
 - { name: DROP OBJECT TYPE SECRET_ACCESS,    href: drop-object-type-secret-access.md,  when: feature_federated_queries}
+- { name: DROP STREAMING QUERY,         href: drop-streaming-query.md,       when: feature_federated_queries}
 - { name: DROP TABLE,                   href: drop_table.md }
 - { name: DROP TRANSFER,                href: drop-transfer.md}
 - { name: DROP VIEW,                    href: drop-view.md }

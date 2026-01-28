@@ -190,7 +190,7 @@ void TKeyedWriteSession::TSplittedPartitionWorker::DoWork() {
         case EState::Done:
             break;
         case EState::GotMaxSeqNo:
-            Session->MessagesWorker->ResendMessages(PartitionId, MaxSeqNo);
+            Session->MessagesWorker->ScheduleResendMessages(PartitionId, MaxSeqNo);
             for (const auto& child : Session->Partitions[PartitionIdx].Children_) {
                 Session->Partitions[child].Locked(false);
             }
@@ -512,6 +512,16 @@ void TKeyedWriteSession::TEventsWorker::TransferEventsToOutputQueue() {
     }
 }
 
+std::list<TWriteSessionEvent::TEvent>::iterator TKeyedWriteSession::TEventsWorker::AckQueueBegin(ui64 partition) {
+    auto [queueIt, _] = PartitionsEventQueues.try_emplace(partition, std::list<TWriteSessionEvent::TEvent>());
+    return queueIt->second.begin();
+}
+
+std::list<TWriteSessionEvent::TEvent>::iterator TKeyedWriteSession::TEventsWorker::AckQueueEnd(ui64 partition) {
+    auto [queueIt, _] = PartitionsEventQueues.try_emplace(partition, std::list<TWriteSessionEvent::TEvent>());
+    return queueIt->second.end();
+}
+
 std::optional<TWriteSessionEvent::TEvent> TKeyedWriteSession::TEventsWorker::GetEvent(bool block) {
     std::unique_lock lock(Lock);
     AddSessionClosedEvent();
@@ -830,7 +840,7 @@ bool TKeyedWriteSession::TMessagesWorker::HasInFlightMessages() const {
     return !InFlightMessages.empty();
 }
 
-void TKeyedWriteSession::TMessagesWorker::ResendMessages(ui64 partition, ui64 afterSeqNo) {
+void TKeyedWriteSession::TMessagesWorker::ScheduleResendMessages(ui64 partition, ui64 afterSeqNo) {
     auto it = InFlightMessagesIndex.find(partition);
     if (it == InFlightMessagesIndex.end()) {
         return;
@@ -838,19 +848,38 @@ void TKeyedWriteSession::TMessagesWorker::ResendMessages(ui64 partition, ui64 af
 
     auto& list = it->second;
     auto resendIt = list.begin();
-    
+    auto ackQueueIt = Session->EventsWorker->AckQueueBegin(partition);
+    size_t ackIdx = 0;
+    auto ackQueueEnd = Session->EventsWorker->AckQueueEnd(partition);
+    std::vector<TWriteSessionEvent::TWriteAck> acksToSend;
+
     while (resendIt != list.end()) {
         Y_ABORT_UNLESS((*resendIt)->Message.SeqNo_.has_value(), "SeqNo is not set");
         if ((*resendIt)->Message.SeqNo_.value() > afterSeqNo) {
             break;
         }
 
-        TWriteSessionEvent::TAcksEvent event;
-        TWriteSessionEvent::TWriteAck ack;
-        ack.SeqNo = (*resendIt)->Message.SeqNo_.value();
-        event.Acks.push_back(std::move(ack));
-        Session->EventsWorker->HandleAcksEvent(partition, std::move(event));
+        if (ackQueueIt == ackQueueEnd) {
+            // this case can happend if the message was sent, but session was closed before the ack was received
+            TWriteSessionEvent::TWriteAck ack;
+            ack.SeqNo = (*resendIt)->Message.SeqNo_.value();
+            acksToSend.push_back(std::move(ack));
+        } else {
+            auto acksEvent = std::get_if<TWriteSessionEvent::TAcksEvent>(&*ackQueueIt);
+            if (ackIdx == acksEvent->Acks.size()) {
+                ++ackQueueIt;
+                ackIdx = 0;
+            } else {
+                ++ackIdx;
+            }
+        }
         ++resendIt;     
+    }
+
+    if (!acksToSend.empty()) {
+        TWriteSessionEvent::TAcksEvent event;
+        event.Acks = std::move(acksToSend);
+        Session->EventsWorker->HandleAcksEvent(partition, std::move(event));
     }
 
     for (auto iter = resendIt; iter != list.end(); ++iter) {

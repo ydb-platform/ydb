@@ -171,7 +171,7 @@ private:
         void DoWork();
 
         void AddMessage(const std::string& key, TWriteMessage&& message, ui64 partition, TTransactionBase* tx);
-        void ResendMessages(ui64 partition, ui64 afterSeqNo);
+        void ScheduleResendMessages(ui64 partition, ui64 afterSeqNo);
         void HandleAck();
         void HandleContinuationToken(ui64 partition, TContinuationToken&& continuationToken);
         bool IsMemoryUsageOK() const;
@@ -249,6 +249,8 @@ private:
         void HandleAcksEvent(ui64 partition, TWriteSessionEvent::TAcksEvent&& event);
         std::optional<TWriteSessionEvent::TEvent> GetEvent(bool block);
         std::vector<TWriteSessionEvent::TEvent> GetEvents(bool block, std::optional<size_t> maxEventsCount = std::nullopt);
+        std::list<TWriteSessionEvent::TEvent>::iterator AckQueueBegin(ui64 partition);
+        std::list<TWriteSessionEvent::TEvent>::iterator AckQueueEnd(ui64 partition);
 
     private:
         void HandleSessionClosedEvent(TSessionClosedEvent&& event, ui64 partition);

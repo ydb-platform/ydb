@@ -191,6 +191,7 @@ public:
     bool IsSequence() const;
     bool IsReplication() const;
     bool IsTransfer() const;
+    bool IsSupportedInExports() const;
     ui32 Depth() const;
     ui64 Shards() const;
     const TString& LeafName() const;

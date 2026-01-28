@@ -5191,6 +5191,8 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
 
     SplitSettings.Register(appData->Icb);
 
+    BackupSettings.Register(appData->Icb);
+
     Executor()->RegisterExternalTabletCounters(TabletCountersPtr);
     Execute(CreateTxInitSchema(), ctx);
 

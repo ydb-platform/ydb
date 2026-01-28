@@ -3,13 +3,10 @@
 
 #include "blobstorage_pdisk_blockdevice.h"
 #include <ydb/library/pdisk_io/buffers.h>
-#include "blobstorage_pdisk_chunk_tracker.h"
-#include "blobstorage_pdisk_crypto.h"
-#include "blobstorage_pdisk_data.h"
+#include "blobstorage_pdisk_chunk_write_queue.h"
+#include "blobstorage_pdisk_encryption_threads.h"
 #include "blobstorage_pdisk_delayed_cost_loop.h"
 #include "blobstorage_pdisk_drivemodel.h"
-#include "blobstorage_pdisk_free_chunks.h"
-#include "blobstorage_pdisk_gate.h"
 #include "blobstorage_pdisk_keeper.h"
 #include "blobstorage_pdisk_req_creator.h"
 #include "blobstorage_pdisk_requestimpl.h"
@@ -82,13 +79,14 @@ public:
 
     TVector<TRequestBase*> JointLogReads;
     std::queue<TIntrusivePtr<TRequestBase>> JointChunkReads;
-    std::queue<TRequestBase*> JointChunkWrites;
+    TChunkWritePieceQueue JointChunkWrites;
     std::queue<TLogWrite*> JointLogWrites;
     TVector<TChunkTrim*> JointChunkTrims;
     TVector<std::unique_ptr<TChunkForget>> JointChunkForgets;
     TVector<std::unique_ptr<TRequestBase>> FastOperationsQueue;
     TDeque<TRequestBase*> PausedQueue;
     std::set<std::unique_ptr<TYardInit>> PendingYardInits;
+    TEncryptionThreads EncryptionThreads;
     ui64 LastFlushId = 0;
     bool IsQueuePaused = false;
     bool IsQueueStep = false;
@@ -110,7 +108,10 @@ public:
     TControlWrapper ForsetiOpPieceSizeRot;
     TControlWrapper UseNoopSchedulerSSD;
     TControlWrapper UseNoopSchedulerHDD;
+    TControlWrapper EncryptionThreadCountSSD;
+    TControlWrapper EncryptionThreadCountHDD;
     bool UseNoopSchedulerCached = false;
+    size_t EncryptionThreadCountCached;
 
     // SectorMap Controls
     TControlWrapper SectorMapFirstSectorReadRate;
@@ -313,9 +314,10 @@ public:
         bool parseCommitMessage);
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Chunk writing
-    bool ChunkWritePiece(TChunkWrite *evChunkWrite, ui32 pieceShift, ui32 pieceSize);
-    void ChunkWritePiecePlain(TChunkWrite *evChunkWrite);
-    bool ChunkWritePieceEncrypted(TChunkWrite *evChunkWrite, TChunkWriter &writer, ui32 bytesAvailable);
+    void PushChunkWrite(TChunkWritePiece *piece);
+    void ChunkWritePiece(TChunkWritePiece *piece);
+    void ChunkWritePiecePlain(TChunkWritePiece *piece);
+    void ChunkWritePieceEncrypted(TChunkWritePiece *piece, TChunkWriter &writer, ui32 bytesAvailable);
     void SendChunkWriteError(TChunkWrite &evChunkWrite, const TString &errorReason, NKikimrProto::EReplyStatus status);
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Chunk reading

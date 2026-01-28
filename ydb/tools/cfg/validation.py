@@ -155,6 +155,7 @@ DRIVE_SCHEMA = {
         "path": dict(type="string", minLength=1),
         "shared_with_os": dict(type="boolean"),
         "expected_slot_count": dict(type="integer"),
+        "encryption_thread_count": dict(type="integer"),
         "pdisk_config": {
             "type": "object",
             "additionalProperties": True,

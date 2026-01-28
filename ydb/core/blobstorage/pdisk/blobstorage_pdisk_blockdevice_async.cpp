@@ -889,7 +889,7 @@ protected:
         }
 
         Y_VERIFY_S(PCtx->ActorSystem->AppData<TAppData>(), PCtx->PDiskLogPrefix);
-        Y_VERIFY_S(PCtx->ActorSystem->AppData<TAppData>()->IoContextFactory, PCtx->PDiskLogPrefix); 
+        Y_VERIFY_S(PCtx->ActorSystem->AppData<TAppData>()->IoContextFactory, PCtx->PDiskLogPrefix);
         auto *factory = PCtx->ActorSystem->AppData<TAppData>()->IoContextFactory;
         IoContext = factory->CreateAsyncIoContext(Path, PCtx->PDiskId, Flags, SectorMap);
         if (Flags & TDeviceMode::UseSpdk) {

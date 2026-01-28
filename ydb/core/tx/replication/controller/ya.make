@@ -75,6 +75,7 @@ END()
 RECURSE_FOR_TESTS(
     ut_assign_tx_id
     ut_dst_creator
+    ut_replication
     ut_stream_creator
     ut_target_discoverer
 )

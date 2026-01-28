@@ -1449,7 +1449,7 @@ TAsyncSlruCacheBase<TKey, TValue, THash>::TInsertCookie::~TInsertCookie()
 
 template <class TKey, class TValue, class THash>
 typename TAsyncSlruCacheBase<TKey, TValue, THash>::TInsertCookie&
-TAsyncSlruCacheBase<TKey, TValue, THash>::TInsertCookie::operator = (TInsertCookie&& other)
+TAsyncSlruCacheBase<TKey, TValue, THash>::TInsertCookie::operator=(TInsertCookie&& other)
 {
     if (this != &other) {
         Abort();

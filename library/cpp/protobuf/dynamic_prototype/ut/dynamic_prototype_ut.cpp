@@ -4,6 +4,7 @@
 #include <library/cpp/protobuf/dynamic_prototype/generate_file_descriptor_set.h>
 #include <library/cpp/protobuf/dynamic_prototype/ut/my_message.pb.h>
 
+#include <util/generic/yexception.h>
 
 Y_UNIT_TEST_SUITE(TDynamicPrototype) {
     Y_UNIT_TEST(Create) {
@@ -23,5 +24,14 @@ Y_UNIT_TEST_SUITE(TDynamicPrototype) {
         Y_PROTOBUF_SUPPRESS_NODISCARD myMessage->ParseFromString(serialized);
 
         UNIT_ASSERT_STRINGS_EQUAL(reference.DebugString(), myMessage->DebugString());
+    }
+
+    Y_UNIT_TEST(WithYqlHackAndEmptyDescriptorSet) {
+        NProtoBuf::FileDescriptorSet emptyFds;
+
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            TDynamicPrototype::Create(emptyFds, "TMyMessage", /*yqlHack=*/true),
+            yexception,
+            "no descriptor for TMyMessage");
     }
 }

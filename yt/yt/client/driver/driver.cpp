@@ -343,6 +343,7 @@ public:
         REGISTER_ALL(TGetMasterConsistentStateCommand,     "get_master_consistent_state",     Null,       Structured, true,  false);
         REGISTER_ALL(TExitReadOnlyCommand,                 "exit_read_only",                  Null,       Structured, true,  false);
         REGISTER_ALL(TMasterExitReadOnlyCommand,           "master_exit_read_only",           Null,       Structured, true,  false);
+        REGISTER_ALL(TResetDynamicallyPropagatedMasterCellsCommand,          "reset_dynamically_propagated_master_cells",          Null,       Structured, true,  false);
         REGISTER_ALL(TDiscombobulateNonvotingPeersCommand, "discombobulate_nonvoting_peers",  Null,       Structured, true,  false);
         REGISTER_ALL(TSwitchLeaderCommand,                 "switch_leader",                   Null,       Structured, true,  false);
         REGISTER_ALL(TResetStateHashCommand,               "reset_state_hash",                Null,       Structured, true,  false);

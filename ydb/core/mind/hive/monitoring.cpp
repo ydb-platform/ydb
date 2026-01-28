@@ -4940,7 +4940,7 @@ public:
                     newPair.innerHTML = `
                         <input type="text" name="key[]" placeholder="key">
                         <input type="text" name="value[]" placeholder="value">
-                        <button type='button' class='glyphicon glyphicon-remove-sign' onclick='removeKeyValuePair(this)'></button>
+                        <button type='button' class='glyphicon glyphicon-remove-sign' style='border:none' onclick='removeKeyValuePair(this)'></button>
                     `;
                     container.appendChild(newPair);
                 }

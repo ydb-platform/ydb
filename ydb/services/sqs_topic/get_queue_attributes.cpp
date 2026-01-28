@@ -235,7 +235,7 @@ namespace NKikimr::NSqsTopic::V1 {
             if (const auto attrName = "DelaySeconds"sv; HasAttribute(attrName)) {
                 TDuration delay = TDuration::Seconds(NSQS::TLimits::DelaySeconds);
                 if (ConsumerConfig) {
-                    delay = TDuration::MilliSeconds(ConsumerConfig->GetDelayMessageTimeMs());
+                    delay = TDuration::MilliSeconds(ConsumerConfig->GetDefaultDelayMessageTimeMs());
                 }
                 AddAttribute(result, attrName, delay.Seconds());
             }
@@ -251,14 +251,14 @@ namespace NKikimr::NSqsTopic::V1 {
             if (const auto attrName = "ReceiveMessageWaitTimeSeconds"sv; HasAttribute(attrName)) {
                 TDuration waitTime = TDuration::Zero();
                 if (ConsumerConfig) {
-                    waitTime = TDuration::MilliSeconds(ConsumerConfig->GetReceiveMessageWaitTimeMs());
+                    waitTime = TDuration::MilliSeconds(ConsumerConfig->GetDefaultReceiveMessageWaitTimeMs());
                 }
                 AddAttribute(result, attrName, waitTime.Seconds());
             }
             if (const auto attrName = "VisibilityTimeout"sv; HasAttribute(attrName)) {
                 TDuration timeout = TDuration::Seconds(NSQS::TLimits::VisibilityTimeout);
                 if (ConsumerConfig) {
-                    timeout = TDuration::MilliSeconds(ConsumerConfig->GetVisibilityTimeoutMs());
+                    timeout = TDuration::Seconds(ConsumerConfig->GetDefaultProcessingTimeoutSeconds());
                 }
                 AddAttribute(result, attrName, timeout.Seconds());
             }

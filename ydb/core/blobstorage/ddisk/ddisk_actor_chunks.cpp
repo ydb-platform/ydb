@@ -54,6 +54,8 @@ namespace NKikimr::NDDisk {
 
                 const size_t numErased = ChunkMapIncrementsInFlight.erase({tabletId, vChunkIndex, chunkIdx});
                 Y_ABORT_UNLESS(numErased == 1);
+
+                ++*Counters.Chunks.ChunksOwned;
             });
 
             ChunkMapIncrementsInFlight.emplace(tabletId, vChunkIndex, chunkIdx);
@@ -66,35 +68,17 @@ namespace NKikimr::NDDisk {
         }
     }
 
-    void TDDiskActor::Handle(NPDisk::TEvLogResult::TPtr ev) {
-        auto& msg = *ev->Get();
-        STLOG(PRI_DEBUG, BS_DDISK, BSDD05, "TDDiskActor::Handle(TEvLogResult)", (DDiskId, DDiskId), (Msg, msg.ToString()));
-
-        if (msg.Status != NKikimrProto::OK) {
-            Y_ABORT();
-        }
-
-        for (const auto& result : msg.Results) {
-            const auto it = LogCallbacks.find(result.Lsn);
-            Y_ABORT_UNLESS(it != LogCallbacks.end());
-            if (it->second) {
-                it->second();
-            }
-            LogCallbacks.erase(it);
-        }
-    }
-
     void TDDiskActor::Handle(TEvPrivate::TEvHandleEventForChunk::TPtr ev) {
         auto& msg = *ev->Get();
         TChunkRef& chunkRef = ChunkRefs[msg.TabletId][msg.VChunkIndex];
 
         // temporarily remove queue to unblock execution of queries for this chunk
-        std::queue<std::unique_ptr<IEventHandle>> queue;
+        std::queue<TPendingEvent> queue;
         queue.swap(chunkRef.PendingEventsForChunk);
 
         // handle front event
         Y_ABORT_UNLESS(!queue.empty());
-        TAutoPtr<IEventHandle> temp(queue.front().release());
+        auto temp = queue.front().Release();
         queue.pop();
         Receive(temp);
 
@@ -115,6 +99,8 @@ namespace NKikimr::NDDisk {
         if (ChunkMapSnapshotLsn < msg.FreeUpToLsn) { // we have to rewrite snapshot
             IssuePDiskLogRecord(TLogSignature::SignatureDDiskChunkMap, 0, CreateChunkMapSnapshot(), &ChunkMapSnapshotLsn, {});
         }
+
+        ++*Counters.RecoveryLog.CutLogMessages;
     }
 
     NKikimrBlobStorage::NDDisk::NInternal::TChunkMapLogRecord TDDiskActor::CreateChunkMapSnapshot() {
@@ -141,6 +127,7 @@ namespace NKikimr::NDDisk {
             }
         }
 
+        ++*Counters.RecoveryLog.NumChunkMapSnapshots;
         return record;
     }
 
@@ -153,6 +140,7 @@ namespace NKikimr::NDDisk {
         increment->SetVChunkIndex(vChunkIndex);
         increment->SetChunkIdx(chunkIdx);
 
+        ++*Counters.RecoveryLog.NumChunkMapIncrements;
         return record;
     }
 

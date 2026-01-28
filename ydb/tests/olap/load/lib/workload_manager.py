@@ -431,7 +431,7 @@ class TestWorkloadManagerClickbenchComputeSchedulerP1T4(WorkloadManagerClickbenc
 
 class WorkloadManagerOltp(WorkloadManagerComputeScheduler):
     threads = 1
-    tpcc_process: yatest.common.process._Execution = None
+    tpcc_started: bool = False
     tpcc_warehouses: int = 4500
     tpcc_threads: int = 4
     __static_nodes: list[YdbCluster.Node] = []
@@ -467,19 +467,57 @@ class WorkloadManagerOltp(WorkloadManagerComputeScheduler):
     @classmethod
     def run_tpcc(cls, time: float, user: str):
         node = cls.__static_nodes[0]
-        cmd = [f'{cls.get_remote_tmpdir()}/ydb', '-e', f'grpc://{node.host}:{node.grpc_port}', '-d', f'/{YdbCluster.ydb_database}']
+        tmpdir = cls.get_remote_tmpdir()
+        cmd = ['start-stop-daemon', '--start', '--pidfile', f'{tmpdir}/ydb_pid', '--make-pid', '--background', '--no-close', '--exec']
+        cmd += [f'{tmpdir}/ydb', '--', '-e', f'grpc://{node.host}:{node.grpc_port}', '-d', f'/{YdbCluster.ydb_database}']
         if user:
             cmd += ['--user', user, '--no-password']
         cmd += ['workload', 'tpcc', '-p', YdbCluster.get_tables_path(cls.get_tpcc_path()), 'run', '--no-tui', '--warmup', '1s', '--format', 'Json']
         cmd += ['-t', f'{time}s', '-w', str(cls.tpcc_warehouses)]  # , '--threads', str(cls.tpcc_threads)]
-        cls.tpcc_process = cls.execute_ssh(node.host, ' '.join(cmd))
+        cmd += [f'>{tmpdir}/ydb_out', f'2>{tmpdir}/ydb_err']
+
+        script_path = yatest.common.work_path('run_tpcc.sh')
+        with open(script_path, 'w') as script_file:
+            script_file.write('#!/bin/bash\n')
+            script_file.write(' '.join(cmd))
+        res = re.deploy_binary(script_path, node.host, tmpdir)
+        assert res.get('success', False), f'slot: {node.slot}, bin: run_tpcc.sh, path: {res.get('path')}, error: {res.get('error')}'
+
+        cls.execute_ssh(node.host, f'{tmpdir}/run_tpcc.sh').wait()
+        cls.tpcc_started = True
+
+    @classmethod
+    def terminate_tpcc(cls):
+        node = cls.__static_nodes[0]
+        tmpdir = cls.get_remote_tmpdir()
+        cmd = ['start-stop-daemon', '--stop', '--pidfile', f'{tmpdir}/ydb_pid']
+        cls.execute_ssh(node.host, ' '.join(cmd)).wait(check_exit_code=False)
+
+    @classmethod
+    def tpcc_is_runing(cls) -> bool:
+        node = cls.__static_nodes[0]
+        tmpdir = cls.get_remote_tmpdir()
+        cmd = ['start-stop-daemon', '--status', '--pidfile', f'{tmpdir}/ydb_pid']
+        pr = cls.execute_ssh(node.host, ' '.join(cmd))
+        pr.wait(check_exit_code=False)
+        return pr.returncode == 0
+
+    @classmethod
+    def wait_tpcc(cls) -> str:
+        while cls.tpcc_is_runing():
+            time.sleep(1)
+        node = cls.__static_nodes[0]
+        tmpdir = cls.get_remote_tmpdir()
+        cmd = ['cat', f'{tmpdir}/ydb_out']
+        pr = cls.execute_ssh(node.host, ' '.join(cmd))
+        pr.wait()
+        return pr.stdout
 
     @classmethod
     def after_workload(cls, result: YdbCliHelper.WorkloadRunResult):
-        if cls.tpcc_process._process is not None:
-            cls.tpcc_process._process.terminate()
-            cls.tpcc_process.wait(check_exit_code=True)
-            stats = json.loads(cls.tpcc_process.stdout)
+        if cls.tpcc_started:
+            cls.terminate_tpcc()
+            stats = json.loads(cls.wait_tpcc())
             result.add_stat('test', 'tpcc_efficiency', stats.get('summary', {}).get('efficiency', 0.))
         super().after_workload(result)
 
@@ -509,8 +547,8 @@ class TestWorkloadManagerOltp100(WorkloadManagerOltp):
 
     @classmethod
     def after_workload(cls, result: YdbCliHelper.WorkloadRunResult):
-        if cls.tpcc_process._process is not None:
-            cls.tpcc_process.wait(check_exit_code=True)
+        if cls.tpcc_started:
+            cls.wait_tpcc()
         super().after_workload(result)
 
     @classmethod

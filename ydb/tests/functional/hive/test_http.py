@@ -1,4 +1,5 @@
 import requests
+import logging
 
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 
@@ -25,4 +26,6 @@ class TestHiveHttpInterface(object):
         assert get_request.status_code == 400
 
         post_request = requests.post(url, data=params)
+        logger = logging.getLogger(__name__)
+        logger.error(post_request.text)
         assert post_request.status_code == 200

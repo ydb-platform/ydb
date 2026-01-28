@@ -432,7 +432,6 @@ namespace NKikimr {
                 for (const auto &x : rec) {
                     Heap->RecoveryModeFree(x);
                 }
-                Y_UNUSED(allocated);
                 for (const auto& x : allocated) {
                     Heap->RecoveryModeAllocate(x);
                 }

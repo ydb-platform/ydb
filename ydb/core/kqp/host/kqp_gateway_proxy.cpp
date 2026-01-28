@@ -324,8 +324,8 @@ THashMap<TString, TString> GetDefaultFromSequences(NYql::TKikimrTableMetadataPtr
     return sequences;
 }
 
-void FillCreateTableColumnDesc(NKikimrSchemeOp::TTableDescription& tableDesc, const TString& name,
-    NYql::TKikimrTableMetadataPtr metadata)
+bool FillCreateTableColumnDesc(NKikimrSchemeOp::TTableDescription& tableDesc, const TString& name,
+    NYql::TKikimrTableMetadataPtr metadata, TString& error)
 {
     tableDesc.SetName(name);
 
@@ -357,21 +357,17 @@ void FillCreateTableColumnDesc(NKikimrSchemeOp::TTableDescription& tableDesc, co
             ProtoFromTypeInfo(columnIt->second.TypeInfo, columnIt->second.TypeMod, *columnDesc.MutableTypeInfo());
         }
 
-        const auto& maybeCompression = columnIt->second.Compression;
-        if (maybeCompression) {
-            auto& compression = *columnDesc.MutableCompression();
-            if (const auto maybeAlgorithm = maybeCompression->Algorithm) {
-                compression.SetAlgorithm(maybeAlgorithm->c_str());
-            }
-            if (const auto maybeLevel = maybeCompression->Level) {
-                compression.SetLevel(*maybeLevel);
-            }
+        if (columnIt->second.Compression) {
+            error = "Column Compression is not supported in row tables";
+            return false;
         }
     }
 
     for (const TString& keyColumn : metadata->KeyColumnNames) {
         tableDesc.AddKeyColumnNames(keyColumn);
     }
+
+    return true;
 }
 
 bool FillCreateTableDesc(NYql::TKikimrTableMetadataPtr metadata, NKikimrSchemeOp::TTableDescription& tableDesc,
@@ -893,6 +889,7 @@ public:
                 const auto sequences = GetDefaultFromSequences(metadata);
 
                 NKikimrSchemeOp::TTableDescription* tableDesc = nullptr;
+                TString columnError;
                 if (!metadata->Indexes.empty() || !sequences.empty()) {
                     schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateIndexedTable);
                     tableDesc = schemeTx.MutableCreateIndexedTable()->MutableTableDescription();
@@ -924,7 +921,10 @@ public:
                                 break;
                         }
                     }
-                    FillCreateTableColumnDesc(*tableDesc, pathPair.second, metadata);
+                    if (!FillCreateTableColumnDesc(*tableDesc, pathPair.second, metadata, columnError)) {
+                        tablePromise.SetValue(ResultFromError<TGenericResult>(columnError));
+                        return;
+                    }
                     for(const auto& [seq, seqType]: sequences) {
                         auto seqDesc = schemeTx.MutableCreateIndexedTable()->MutableSequenceDescription()->Add();
                         seqDesc->SetName(seq);
@@ -943,7 +943,10 @@ public:
                 } else {
                     schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateTable);
                     tableDesc = schemeTx.MutableCreateTable();
-                    FillCreateTableColumnDesc(*tableDesc, pathPair.second, metadata);
+                    if (!FillCreateTableColumnDesc(*tableDesc, pathPair.second, metadata, columnError)) {
+                        tablePromise.SetValue(ResultFromError<TGenericResult>(columnError));
+                        return;
+                    }
                 }
 
                 Ydb::StatusIds::StatusCode code;

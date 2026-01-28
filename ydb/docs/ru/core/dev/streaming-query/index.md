@@ -6,3 +6,8 @@
 - [Обогащение данных (S3)](S3-enrichment.md)
 - [Запись в таблицы](table-writing.md)
 - [Форматы данных потоковых запросов при чтении/записи топиков](streaming-query-formats.md)
+
+## См. также
+
+- [Рецепты работы с потоковыми запросами](../../recipes/streaming_queries/index.md)
+- [Описание потоковых запросов](../../concepts/streaming-query.md)

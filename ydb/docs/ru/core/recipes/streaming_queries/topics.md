@@ -69,6 +69,8 @@ CREATE EXTERNAL DATA SOURCE ydb_source WITH (
 CREATE STREAMING QUERY query_example AS
 DO BEGIN
 
+PRAGMA ydb.DqChannelVersion = "1";
+
 $number_errors = SELECT
     Host,
     COUNT(*) AS ErrorCount,

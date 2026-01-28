@@ -17,12 +17,6 @@
 - includes:
   - _cgo_export.h
 
-# Resolve Python.h from swig/Lib/python/pyruntime.swg when building non-python .swg
-# since they do not peerdir contrib/libs/python.
-- source_filter: "[.]swg([.](h|c(c|pp|xx)?))?$"
-  includes:
-  - Python.h:        contrib/libs/python/Include/Python.h
-
 # Another sysincl/addincl clash. Here we also have GLOBAL ADDINCL that will
 # produce sysincl/addincl mismatch configure errors when someone writes
 # #include <math.h> and enables USE_ARCADIA_LIBM. Now we have no instances of this.
@@ -283,12 +277,6 @@
 - source_filter: "^contrib/libs/gdal"
   includes:
     - io.h: contrib/libs/gdal/ogr/ogrsf_frmts/cad/libopencad/dwg/io.h
-
-# disable checks for Python 3.11-specific files
-# needed to allow to use Arcadia's Cython with non-Arcadia python in open source builds
-- source_filter: "^contrib/tools/cython/Cython/Utility"
-  includes:
-    - internal/pycore_frame.h: contrib/libs/python/Include/internal/pycore_frame.h
 
 - source_filter: "^contrib/libs/connectedhomeip"
   includes:

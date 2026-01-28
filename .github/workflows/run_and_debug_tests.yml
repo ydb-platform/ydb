@@ -1,4 +1,4 @@
-name: Run and debug tests
+name: Run_and_debug_tests
 
 on:
   workflow_dispatch:
@@ -94,7 +94,7 @@ jobs:
           fi
 
   main:
-    name: Run and debug tests
+    name: Run_and_debug_tests
     needs: prepare
     uses: ./.github/workflows/run_tests.yml
     secrets: inherit

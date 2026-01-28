@@ -103,6 +103,10 @@ class TReplication::TImpl: public TLagProvider {
         }
     }
 
+    void SetLocation(const NKikimrReplication::TReplicationLocationConfig& location) {
+        Config.MutableLocation()->CopyFrom(location);
+    }
+
 public:
     template <typename T, typename D>
     explicit TImpl(ui64 id, const TPathId& pathId, T&& config, D&& database)
@@ -473,6 +477,14 @@ void TReplication::UpdateLag(ui64 targetId, TDuration lag) {
 
 const TMaybe<TDuration> TReplication::GetLag() const {
     return Impl->GetLag();
+}
+
+void TReplication::SetLocation(const NKikimrReplication::TReplicationLocationConfig& location) {
+    Impl->SetLocation(location);
+}
+
+const NKikimrReplication::TReplicationLocationConfig& TReplication::GetLocation() const {
+    return Impl->Config.GetLocation();
 }
 
 }

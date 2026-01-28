@@ -1177,6 +1177,9 @@ class TestViewer(object):
 
             time.sleep(1)
 
+        if "stats" in describe_result:
+            describe_result["stats"] = {}
+
         return {
             'topic_result': topic_result,
             'table_result': table_result,

@@ -105,6 +105,7 @@ ELSE()
 ENDIF()
 
 GENERATE_ENUM_SERIALIZATION(yql_kikimr_provider.h)
+GENERATE_ENUM_SERIALIZATION(yql_kikimr_gateway.h)
 
 END()
 

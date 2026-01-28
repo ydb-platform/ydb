@@ -191,6 +191,18 @@ struct TBatchingSettings {
     std::uint64_t SizeBytes;
 };
 
+struct TTransferStats {
+    enum class EWorkOperation {
+        Unspecified = 0,
+        Read = 1,
+        Decompress = 2,
+        Process = 3,
+        Write = 4,
+    };
+    EWorkOperation Operation;
+    ui64 MinWorkerUptime;
+};
+
 class TTransferDescription {
 public:
     enum class EState {
@@ -239,6 +251,7 @@ class TDescribeTransferResult: public NScheme::TDescribePathResult {
 public:
     TDescribeTransferResult(TStatus&& status, Ydb::Replication::DescribeTransferResult&& desc);
     const TTransferDescription& GetTransferDescription() const;
+    const Ydb::Replication::DescribeTransferResult_Stats& GetStats() const;
 
 private:
     TTransferDescription TransferDescription_;
@@ -254,7 +267,7 @@ public:
     TAsyncDescribeReplicationResult DescribeReplication(const std::string& path,
         const TDescribeReplicationSettings& settings = TDescribeReplicationSettings());
 
-    TAsyncDescribeTransferResult DescribeTransfer(const std::string& path);
+    TAsyncDescribeTransferResult DescribeTransfer(const std::string& path, bool includeStats = false);
 
 private:
     std::shared_ptr<TImpl> Impl_;

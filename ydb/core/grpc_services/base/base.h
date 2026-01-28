@@ -358,7 +358,7 @@ enum class TRateLimiterMode : ui8 {
     ::NKikimr::NGRpcService::TRateLimiterMode::mode
 
 #define RLSWITCH(mode) \
-    IsRlAllowed() ? RLMODE(mode) : RLMODE(Off)
+    isRlAllowed ? RLMODE(mode) : RLMODE(Off)
 
 struct TAuditMode {
     using TLogClassConfig = NKikimrConfig::TAuditConfig::TLogClassConfig;

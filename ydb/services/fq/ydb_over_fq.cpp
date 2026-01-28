@@ -27,7 +27,7 @@ void TGRpcYdbOverFqService::InitService(grpc::ServerCompletionQueue *cq, NYdbGrp
     SETUP_RUNTIME_EVENT_METHOD(methodName,                          \
         inputType,                                                  \
         outputType,                                                 \
-        NYdbOverFq::Get##methodName##Executor(GRpcRequestProxyId_), \
+        NYdbOverFq::Get##methodName##Executor(proxyId),             \
         rlMode,                                                     \
         requestType,                                                \
         YDB_API_DEFAULT_COUNTER_BLOCK(ydb_over_fq, methodName),     \

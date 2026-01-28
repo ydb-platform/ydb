@@ -117,7 +117,7 @@ void TGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
 #error SETUP_SERVER_METHOD macro already defined
 #endif
 
-#define SETUP_SERVER_METHOD(methodName, inputType, outputType, methodCallback, rlMode, requestType, auditMode) \
+#define SETUP_SERVER_METHOD(methodName, inputType, outputType, methodCallback, rlMode, requestType, auditMode,...) \
     SETUP_RUNTIME_EVENT_METHOD(methodName,                 \
         inputType,                                         \
         outputType,                                        \
@@ -131,14 +131,14 @@ void TGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
         GRpcRequestProxyId_,                               \
         CQ_,                                               \
         nullptr,                                           \
-        nullptr)
+        nullptr,## __VA_ARGS__)
 
-    SETUP_SERVER_METHOD(SchemeOperation, TSchemeOperation, TResponse, DoSchemeOperation(MsgBusProxy_, ActorSystem_), RLMODE(Off), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
+    SETUP_SERVER_METHOD(SchemeOperation, TSchemeOperation, TResponse, callback, RLMODE(Off), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin), callback = DoSchemeOperation(MsgBusProxy_, ActorSystem_));
     SETUP_SERVER_METHOD(SchemeOperationStatus, TSchemeOperationStatus, TResponse, DoSchemeOperationStatus, RLMODE(Off), UNSPECIFIED, TAuditMode::NonModifying());
-    SETUP_SERVER_METHOD(SchemeDescribe, TSchemeDescribe, TResponse, DoSchemeDescribe(MsgBusProxy_, ActorSystem_), RLMODE(Off), UNSPECIFIED, TAuditMode::NonModifying());
+    SETUP_SERVER_METHOD(SchemeDescribe, TSchemeDescribe, TResponse, callback, RLMODE(Off), UNSPECIFIED, TAuditMode::NonModifying(), callback = DoSchemeDescribe(MsgBusProxy_, ActorSystem_));
     SETUP_SERVER_METHOD(ChooseProxy, TChooseProxyRequest, TResponse, DoChooseProxy, RLMODE(Off), UNSPECIFIED, TAuditMode::NonModifying());
-    SETUP_SERVER_METHOD(PersQueueRequest, TPersQueueRequest, TResponse, DoPersQueueRequest(MsgBusProxy_, ActorSystem_), RLMODE(Off), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml));
-    SETUP_SERVER_METHOD(SchemeInitRoot, TSchemeInitRoot, TResponse, DoSchemeInitRoot(MsgBusProxy_, ActorSystem_), RLMODE(Off), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
+    SETUP_SERVER_METHOD(PersQueueRequest, TPersQueueRequest, TResponse, callback, RLMODE(Off), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml), callback = DoPersQueueRequest(MsgBusProxy_, ActorSystem_));
+    SETUP_SERVER_METHOD(SchemeInitRoot, TSchemeInitRoot, TResponse, callback, RLMODE(Off), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin), callback = DoSchemeInitRoot(MsgBusProxy_, ActorSystem_));
     SETUP_SERVER_METHOD(ResolveNode, TResolveNodeRequest, TResponse, DoResolveNode, RLMODE(Off), UNSPECIFIED, TAuditMode::NonModifying());
     SETUP_SERVER_METHOD(FillNode, TFillNodeRequest, TResponse, DoFillNode, RLMODE(Off), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
     SETUP_SERVER_METHOD(DrainNode, TDrainNodeRequest, TResponse, DoDrainNode, RLMODE(Off), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));

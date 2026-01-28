@@ -386,6 +386,9 @@ THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup(int argc, char**
         TYdbLocation::UserToken = genericOpts.JwtToken;
     }
     TokensConfig = tokens;
+    if (!TokensConfig.HasAccessServiceType()) {
+        TokensConfig.SetAccessServiceType(OpenIdConnectSettings.AccessServiceType);
+    }
 
     if (TYdbLocation::UserToken) {
         TYdbLocation::UserToken = AddSchemeToUserToken(TYdbLocation::UserToken, "OAuth");

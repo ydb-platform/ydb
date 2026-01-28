@@ -201,8 +201,8 @@ void TReplicaTest::UpdateWithChangedPath() {
     Context->HandshakeReplica(Replica, populator, 1, 1);
 
     TString path("/path");
-    TPathId pathId(1,10);
-    TPathId domainId(100,200);
+    TPathId pathId(1, 10);
+    TPathId domainId(100, 200);
     auto version = 1;
     
     // Subscribe and (!) grab subscribe response
@@ -210,15 +210,13 @@ void TReplicaTest::UpdateWithChangedPath() {
     capabilities.SetAckNotifications(true);
     Context->SubscribeReplica(Replica, subscriber, path, true, domainId.OwnerId, capabilities);
 
-    auto check = [&](bool deleteNotify)
-    {
+    auto check = [&](bool deleteNotify) {
         // Send update and check notify
-        auto describe = GenerateDescribe(path, pathId, version , domainId);
-        Context->Send(Replica, populator, GenerateUpdate(describe,1,1) );
-        Context->Send(Replica, subscriber, new NInternalEvents::TEvNotifyAck(version) );
+        auto describe = GenerateDescribe(path, pathId, version, domainId);
+        Context->Send(Replica, populator, GenerateUpdate(describe, 1, 1));
+        Context->Send(Replica, subscriber, new NInternalEvents::TEvNotifyAck(version));
 
-        if (deleteNotify)
-        {
+        if (deleteNotify) {
             auto ev = Context->GrabEdgeEvent<NInternalEvents::TEvNotify>(subscriber);
             const NKikimrSchemeBoard::TEvNotify& record = ev->Get()->GetRecord();
             UNIT_ASSERT_VALUES_EQUAL(true, record.GetIsDeletion());
@@ -242,14 +240,14 @@ void TReplicaTest::UpdateWithChangedPath() {
     check(false);           // Simple update without delete notify
 
     pathId.LocalPathId++;
-    check(true);            // Update with changed path local id without delete notify
+    check(true);            // Recreate without delete notify
 
     pathId.LocalPathId++;
     pathId.OwnerId++;
     check(true);            // Update with changed path owner id and delete notify
     
     domainId.LocalPathId++;
-    check(false);           // Migrate to another database shard without delete notify
+    check(false);           // Recreate in another database without delete notify
     
     domainId.LocalPathId++;
     domainId.OwnerId++;
@@ -284,8 +282,7 @@ void TReplicaTest::UpdateWithChangedPath() {
 #endif
 }
 
-void TReplicaTest::RecreateDatabase()
-{
+void TReplicaTest::RecreateDatabase() {
     // Check issue 22062
     const TActorId populator = Context->AllocateEdgeActor();
     const TActorId databaseSubscriber = Context->AllocateEdgeActor();
@@ -303,35 +300,35 @@ void TReplicaTest::RecreateDatabase()
     Context->SubscribeReplica(Replica, tableSubscriber, tablePath, true, 1, capabilities);
 
     // Step #1 Create database
-    TPathId firstDatabasePathId(1,1); // owner_id=1 as main scheme shard
+    TPathId firstDatabasePathId(1, 1); // owner_id=1 as main scheme shard
     auto describeDatabaseFirst = GenerateDescribe(databasePath, firstDatabasePathId, 1, firstDatabasePathId);
     {
-        Context->Send(Replica, populator, GenerateUpdate(describeDatabaseFirst) );
+        Context->Send(Replica, populator, GenerateUpdate(describeDatabaseFirst));
         auto ev = Context->GrabEdgeEvent<NInternalEvents::TEvNotify>(databaseSubscriber);
         UNIT_ASSERT_VALUES_EQUAL(false, ev->Get()->GetRecord().GetIsDeletion());
-        Context->Send(Replica, databaseSubscriber, new NInternalEvents::TEvNotifyAck(1) );
+        Context->Send(Replica, databaseSubscriber, new NInternalEvents::TEvNotifyAck(1));
     }
 
     // Step #2 Create table
     {
         TPathId tablePathId(10, 2); // owner_id=1 as database scheme shard
         auto describe = GenerateDescribe(tablePath, tablePathId, 1, firstDatabasePathId);
-        Context->Send(Replica, populator, GenerateUpdate(describe, 1, 1) );
+        Context->Send(Replica, populator, GenerateUpdate(describe, 1, 1));
         auto ev = Context->GrabEdgeEvent<NInternalEvents::TEvNotify>(tableSubscriber);
         UNIT_ASSERT_VALUES_EQUAL(false, ev->Get()->GetRecord().GetIsDeletion());
-        Context->Send(Replica, tableSubscriber, new NInternalEvents::TEvNotifyAck(1) );
+        Context->Send(Replica, tableSubscriber, new NInternalEvents::TEvNotifyAck(1));
     }
 
     // Step #3 Delete database
     {
-        Context->Send(Replica, populator, GenerateUpdate(describeDatabaseFirst,1,1, true) );
+        Context->Send(Replica, populator, GenerateUpdate(describeDatabaseFirst, 1, 1, true));
         auto ev = Context->GrabEdgeEvent<NInternalEvents::TEvNotify>(databaseSubscriber);
         UNIT_ASSERT_VALUES_EQUAL(true, ev->Get()->GetRecord().GetIsDeletion());
     }
 
     // Step #4 Create database again (local id changed, but owerid is same)
     TPathId secondDatabasePathId(1,2); // owner_id=1 as main scheme shard
-    auto describeDatabaseSecond = GenerateDescribe(databasePath, secondDatabasePathId, 1 , secondDatabasePathId);
+    auto describeDatabaseSecond = GenerateDescribe(databasePath, secondDatabasePathId, 1, secondDatabasePathId);
     {
         Context->Send(Replica, populator, GenerateUpdate(describeDatabaseSecond) );
         auto ev = Context->GrabEdgeEvent<NInternalEvents::TEvNotify>(databaseSubscriber);

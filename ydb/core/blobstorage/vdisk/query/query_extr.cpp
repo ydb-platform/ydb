@@ -186,6 +186,7 @@ namespace NKikimr {
         TReadBatcher Batcher;
         TRecordMergerCallback Merger;
         TActiveActors ActiveActors;
+        ui32 Cookie = 0;
 
         void Bootstrap(const TActorContext &ctx) {
             Prepare();
@@ -277,6 +278,9 @@ namespace NKikimr {
                 return Finish2(ctx);
             }
 
+            Cookie = RandomNumber<ui32>();
+
+            LOG_WARN(ctx, NKikimrServices::BS_VDISK_GET, "TEvRestoreCorruptedBlob: neededParts.size() = %lu | %d", neededParts.size(), Cookie);
             std::vector<TEvRestoreCorruptedBlob::TItem> items;
             for (const auto& [id, needed] : neededParts) {
                 items.emplace_back(id, needed, GType, TDiskPart());
@@ -286,6 +290,7 @@ namespace NKikimr {
         }
 
         void Handle(TEvRestoreCorruptedBlobResult::TPtr ev, const TActorContext& ctx) {
+            LOG_WARN(ctx, NKikimrServices::BS_VDISK_GET, "TEvRestoreCorruptedBlobResult: Cookie = %d", Cookie);
             std::unordered_map<TLogoBlobID, TEvRestoreCorruptedBlobResult::TItem*, THash<TLogoBlobID>> map;
             for (auto& item : ev->Get()->Items) {
                 map.emplace(item.BlobId, &item);

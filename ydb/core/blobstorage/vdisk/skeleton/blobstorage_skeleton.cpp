@@ -2795,6 +2795,7 @@ namespace NKikimr {
             hFunc(NPDisk::TEvChunkForgetResult, Handle)
             FFunc(TEvPrivate::EvCheckSnapshotExpiration, CheckSnapshotExpiration)
             hFunc(TEvReplInvoke, HandleReplNotInProgress)
+            IgnoreFunc(NPDisk::TEvCutLog)
         )
 
         PDISK_TERMINATE_STATE_FUNC_DEF;

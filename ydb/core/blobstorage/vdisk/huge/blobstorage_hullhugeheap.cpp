@@ -852,7 +852,10 @@ namespace NKikimr {
         void THeap::GetOwnedChunks(TSet<TChunkIdx>& chunks) const {
             for (TChunkIdx chunk : FreeChunks) {
                 const bool inserted = chunks.insert(chunk).second;
-                Y_ABORT_UNLESS(inserted); // this chunk should be unique to the set
+                if (!inserted) {
+                    ythrow yexception() << "THeap::GetOwnedChunks: chunkId# " << chunk
+                        << " is already present in owned chunks set!";
+                }
             }
             Chains.GetOwnedChunks(chunks);
         }

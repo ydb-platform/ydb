@@ -8,7 +8,7 @@ namespace NKikimr {
 namespace NTable {
 namespace NPage {
 
-    TLabelWrapper::TResult TLabelWrapper::Read(TArrayRef<const char> raw, EPage type) const noexcept
+    TLabelWrapper::TResult TLabelWrapper::Read(TArrayRef<const char> raw, EPage type) const
     {
         Y_ABORT_UNLESS(raw.size() >= sizeof(TLabel), "Page blob is too small to hold label");
 
@@ -20,7 +20,9 @@ namespace NPage {
         if (Y_UNLIKELY(label.IsHuge())) {
             Y_ABORT_UNLESS(raw.size() >= Max<ui32>(), "Page label huge page marker doesn't match data size");
         } else {
-            Y_ABORT_UNLESS(label.Size == raw.size(), "Page label size doesn't match data size");
+            if (label.Size != raw.size()) {
+                ythrow yexception() << "Page label size doesn't match data size " << label.Size << " != " << raw.size();
+            }
         }
 
         const ui16 version = label.Format & 0x7fff;

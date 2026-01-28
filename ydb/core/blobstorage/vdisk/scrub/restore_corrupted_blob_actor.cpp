@@ -39,6 +39,7 @@ namespace NKikimr {
         std::vector<TReadCmd> ReadQ;
 
         struct TDataExtractorMerger {
+            const TString& LogPrefix;
             std::vector<TReadCmd>& ReadQ;
             const TBlobStorageGroupType GType;
             TEvRestoreCorruptedBlobResult::TItem *Item = nullptr;
@@ -82,7 +83,11 @@ namespace NKikimr {
                     TDiskBlob blob(data, local, GType, key.LogoBlobID());
                     for (auto it = blob.begin(); it != blob.end(); ++it) {
                         if (Item->Needed.Get(it.GetPartId() - 1)) {
-                            Item->SetPartData(TLogoBlobID(key.LogoBlobID(), it.GetPartId()), it.GetPart());
+                            i32 err = Item->SetPartData(TLogoBlobID(key.LogoBlobID(), it.GetPartId()), it.GetPart());
+                            if (err) {
+                                STLOG(PRI_ERROR, BS_VDISK_SCRUB, VDS27, VDISKP(LogPrefix, "data corruption detected, fresh segment"),
+                                    (BlobId, key.LogoBlobID()), (PartId, it.GetPartId()));
+                            }
                         }
                     }
                 } else {
@@ -131,7 +136,7 @@ namespace NKikimr {
             Snap->BarriersSnap.Destroy();
             using TLevelIndexSnapshot = NKikimr::TLevelIndexSnapshot<TKeyLogoBlob, TMemRecLogoBlob>;
             TLevelIndexSnapshot::TForwardIterator iter(Snap->HullCtx, &Snap->LogoBlobsSnap);
-            TDataExtractorMerger merger{ReadQ, Info->Type};
+            TDataExtractorMerger merger{LogPrefix, ReadQ, Info->Type};
             for (auto& item : Items) {
                 iter.Seek(item.BlobId);
                 if (iter.Valid() && iter.GetCurKey() == item.BlobId) { // item found, process through merger to extract data parts
@@ -176,7 +181,11 @@ namespace NKikimr {
                 TDiskBlob blob(&rope, cmd->Parts, Info->Type, item.BlobId);
                 for (auto it = blob.begin(); it != blob.end(); ++it) {
                     if (item.Needed.Get(it.GetPartId() - 1)) {
-                        item.SetPartData(TLogoBlobID(item.BlobId, it.GetPartId()), it.GetPart());
+                        i32 err = item.SetPartData(TLogoBlobID(item.BlobId, it.GetPartId()), it.GetPart());
+                        if (err) {
+                            STLOG(PRI_ERROR, BS_VDISK_SCRUB, VDS27, VDISKP(LogPrefix, "data corruption detected, chunk read"),
+                                (BlobId, item.BlobId), (PartId, it.GetPartId()));
+                        }
                     }
                 }
                 const NMatrix::TVectorType& avail = item.GetAvailableParts();

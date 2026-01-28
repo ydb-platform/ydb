@@ -931,28 +931,38 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
     }
 
 
-    void TestGetQueueAttributesImpl(TFixture& fixture, bool fifo, bool dlq, int sharedConsumers) {
+    struct TGetQueueAttributesParams {
+        bool Fifo = false;
+        bool Dlq = false;
+        int SharedConsumers = 1;
+        TDuration RetentionPeriod = TDuration::Zero();
+    };
+
+    void TestGetQueueAttributesImpl(TFixture& fixture, const TGetQueueAttributesParams& params) {
         const TString database = "/Root";
         const TString topicName = "ExampleQueueName";
-        const TString queueName = TString::Join(topicName, fifo ? ".fifo" : "");
+        const TString queueName = TString::Join(topicName, params.Fifo ? ".fifo" : "");
         auto driver = MakeDriver(fixture);
         auto consumerName = [](int i) { return std::format("ydb-sqs-consumer-{}", i); };
         auto queueUrlForConsumer = [&](int i) { return std::format("/v1/{}/{}/{}/{}/{}/{}", database.size(), database.c_str(), topicName.size(), topicName.c_str(), consumerName(i).size(), consumerName(i).c_str()); };
-
+        const TDuration retentionPeriod = TDuration::Hours(10);
         {
             NYdb::NTopic::TCreateTopicSettings settings;
+            settings.RetentionPeriod(retentionPeriod);
             settings.BeginAddConsumer("regular-consumer").EndAddConsumer();
-
-            for (int i = 0; i < sharedConsumers; ++i) {
+            for (int i = 0; i < params.SharedConsumers; ++i) {
                 auto& consumer = settings.BeginAddSharedConsumer(consumerName(i));
-                consumer.KeepMessagesOrder(fifo);
+                consumer.KeepMessagesOrder(params.Fifo);
                 consumer.DefaultProcessingTimeout(TDuration::Seconds(20));
-                if (dlq) {
+                if (params.Dlq) {
                     auto&& dlqSettings = consumer.BeginDeadLetterPolicy();
                     dlqSettings.Enable();
                     dlqSettings.BeginCondition().MaxProcessingAttempts(117).EndCondition();
                     dlqSettings.MoveAction("DeadLetterQueue");
                     dlqSettings.EndDeadLetterPolicy();
+                }
+                if (params.RetentionPeriod != TDuration::Zero()) {
+                    consumer.AvailabilityPeriod(params.RetentionPeriod);
                 }
                 consumer.EndAddConsumer();
 
@@ -961,13 +971,13 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         }
 
         {
-            const TString wrongConsumerQueueUrl = queueUrlForConsumer(sharedConsumers + 1);
+            const TString wrongConsumerQueueUrl = queueUrlForConsumer(params.SharedConsumers + 1);
             fixture.GetQueueAttributes({
                 {"QueueUrl", wrongConsumerQueueUrl},
                 {"AttributeNames", NJson::TJsonArray{"All"}},
             }, 400);
         }
-        if (sharedConsumers == 0) {
+        if (params.SharedConsumers == 0) {
             return;
         }
 
@@ -976,9 +986,9 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         fixture.GetQueueAttributes({{"wrong-field", "some-value"}}, 400);
         fixture.GetQueueAttributes({{"QueueUrl", "invalid-url"}}, 400);
 
-        auto checkDlq = [dlq](const NJson::TJsonValue& json, bool expectRedrivePolicyIfHasDlq = true, std::source_location loc = std::source_location::current()) {
+        auto checkDlq = [&params](const NJson::TJsonValue& json, bool expectRedrivePolicyIfHasDlq = true, std::source_location loc = std::source_location::current()) {
             const TString subcase = std::format("line={}", loc.line());
-            if (expectRedrivePolicyIfHasDlq && dlq) {
+            if (expectRedrivePolicyIfHasDlq && params.Dlq) {
                 UNIT_ASSERT_C(json["Attributes"].Has("RedrivePolicy"), subcase);
                 TString redrivePolicyJson = json["Attributes"]["RedrivePolicy"].GetString();
                 NJson::TJsonValue redrivePolicy;
@@ -992,12 +1002,12 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
                 UNIT_ASSERT_C(redrivePolicy.IsNull() || redrivePolicy.IsMap() && redrivePolicy.GetMap().empty(), subcase);
             }
         };
-        auto checkFifo = [fifo](const NJson::TJsonValue& json, bool expectFifoAttr = true, std::source_location loc = std::source_location::current()) {
+        auto checkFifo = [&params](const NJson::TJsonValue& json, bool expectFifoAttr = true, std::source_location loc = std::source_location::current()) {
             const TString subcase = std::format("line={}", loc.line());
             if (!expectFifoAttr) {
                 UNIT_ASSERT_C(!json["Attributes"]["FifoQueue"].IsDefined(), subcase);
                 return;
-            } else if (fifo) {
+            } else if (params.Fifo) {
                 UNIT_ASSERT_VALUES_EQUAL_C(json["Attributes"]["FifoQueue"].GetStringSafe(), "true", subcase);
             } else {
                 UNIT_ASSERT_VALUES_EQUAL_C(json["Attributes"]["FifoQueue"].GetStringSafe("false"), "false", subcase);
@@ -1026,6 +1036,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
             });
             UNIT_ASSERT_VALUES_EQUAL(json["Attributes"]["DelaySeconds"], "0");
             UNIT_ASSERT_VALUES_EQUAL(json["Attributes"]["VisibilityTimeout"], "30");
+            UNIT_ASSERT_VALUES_EQUAL(json["Attributes"]["MessageRetentionPeriod"], ToString(Max(retentionPeriod, params.RetentionPeriod).Seconds()));
             UNIT_ASSERT_GT(json["Attributes"].GetMapSafe().size(), 5);
             checkFifo(json);
             checkDlq(json);
@@ -1089,6 +1100,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
                 }}
             });
             UNIT_ASSERT_VALUES_EQUAL(json["Attributes"]["VisibilityTimeout"], "30");
+            UNIT_ASSERT_VALUES_EQUAL(json["Attributes"]["MessageRetentionPeriod"], ToString(Max(retentionPeriod, params.RetentionPeriod).Seconds()));
             UNIT_ASSERT_GT(json["Attributes"].GetMapSafe().size(), 5);
             checkFifo(json);
             checkDlq(json);
@@ -1096,40 +1108,52 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
     }
 
     Y_UNIT_TEST_F(TestGetQueueAttributesStd, TFixture) {
-        TestGetQueueAttributesImpl(*this, false, false, 1);
+        TestGetQueueAttributesImpl(*this, TGetQueueAttributesParams{.Fifo = false, .Dlq = false, .SharedConsumers = 1});
     }
     Y_UNIT_TEST_F(TestGetQueueAttributesFifo, TFixture) {
-        TestGetQueueAttributesImpl(*this, true, false, 1);
+        TestGetQueueAttributesImpl(*this, TGetQueueAttributesParams{.Fifo = true, .Dlq = false, .SharedConsumers = 1});
     }
     Y_UNIT_TEST_F(TestGetQueueAttributesStdDlq, TFixture) {
-        TestGetQueueAttributesImpl(*this, false, true, 1);
+        TestGetQueueAttributesImpl(*this, TGetQueueAttributesParams{.Fifo = false, .Dlq = true, .SharedConsumers = 1});
     }
     Y_UNIT_TEST_F(TestGetQueueAttributesFifoDlq, TFixture) {
-        TestGetQueueAttributesImpl(*this, true, true, 1);
+        TestGetQueueAttributesImpl(*this, TGetQueueAttributesParams{.Fifo = true, .Dlq = true, .SharedConsumers = 1});
     }
     Y_UNIT_TEST_F(TestGetQueueAttributesStd3Consumers, TFixture) {
-        TestGetQueueAttributesImpl(*this, false, false, 3);
+        TestGetQueueAttributesImpl(*this, TGetQueueAttributesParams{.Fifo = false, .Dlq = false, .SharedConsumers = 3});
     }
     Y_UNIT_TEST_F(TestGetQueueAttributesFifo3Consumers, TFixture) {
-        TestGetQueueAttributesImpl(*this, true, false, 3);
+        TestGetQueueAttributesImpl(*this, TGetQueueAttributesParams{.Fifo = true, .Dlq = false, .SharedConsumers = 3});
     }
     Y_UNIT_TEST_F(TestGetQueueAttributesStdDlq3Consumers, TFixture) {
-        TestGetQueueAttributesImpl(*this, false, true, 3);
+        TestGetQueueAttributesImpl(*this, TGetQueueAttributesParams{.Fifo = false, .Dlq = true, .SharedConsumers = 3});
     }
     Y_UNIT_TEST_F(TestGetQueueAttributesFifoDlq3Consumers, TFixture) {
-        TestGetQueueAttributesImpl(*this, true, true, 3);
+        TestGetQueueAttributesImpl(*this, TGetQueueAttributesParams{.Fifo = true, .Dlq = true, .SharedConsumers = 3});
     }
     Y_UNIT_TEST_F(TestGetQueueAttributesStd0Consumers, TFixture) {
-        TestGetQueueAttributesImpl(*this, false, false, 0);
+        TestGetQueueAttributesImpl(*this, TGetQueueAttributesParams{.Fifo = false, .Dlq = false, .SharedConsumers = 0});
     }
     Y_UNIT_TEST_F(TestGetQueueAttributesFifo0Consumers, TFixture) {
-        TestGetQueueAttributesImpl(*this, true, false, 0);
+        TestGetQueueAttributesImpl(*this, TGetQueueAttributesParams{.Fifo = true, .Dlq = false, .SharedConsumers = 0});
     }
     Y_UNIT_TEST_F(TestGetQueueAttributesStdDlq0Consumers, TFixture) {
-        TestGetQueueAttributesImpl(*this, false, true, 0);
+        TestGetQueueAttributesImpl(*this, TGetQueueAttributesParams{.Fifo = false, .Dlq = true, .SharedConsumers = 0});
     }
     Y_UNIT_TEST_F(TestGetQueueAttributesFifoDlq0Consumers, TFixture) {
-        TestGetQueueAttributesImpl(*this, true, true, 0);
+        TestGetQueueAttributesImpl(*this, TGetQueueAttributesParams{.Fifo = true, .Dlq = true, .SharedConsumers = 0});
+    }
+    Y_UNIT_TEST_F(TestGetQueueAttributesStdWithConsumersRetentionExtended, TFixture) {
+        TestGetQueueAttributesImpl(*this, TGetQueueAttributesParams{.Fifo = false, .SharedConsumers = 1, .RetentionPeriod = TDuration::Hours(50)});
+    }
+    Y_UNIT_TEST_F(TestGetQueueAttributesFifoWithConsumersRetentionExtended, TFixture) {
+        TestGetQueueAttributesImpl(*this, TGetQueueAttributesParams{.Fifo = true, .SharedConsumers = 1, .RetentionPeriod = TDuration::Hours(50)});
+    }
+    Y_UNIT_TEST_F(TestGetQueueAttributesStdWithConsumersRetentionShrinked, TFixture) {
+        TestGetQueueAttributesImpl(*this, TGetQueueAttributesParams{.Fifo = false, .SharedConsumers = 1, .RetentionPeriod = TDuration::Hours(1)});
+    }
+    Y_UNIT_TEST_F(TestGetQueueAttributesFifoWithConsumersRetentionShrinked, TFixture) {
+        TestGetQueueAttributesImpl(*this, TGetQueueAttributesParams{.Fifo = true, .SharedConsumers = 1, .RetentionPeriod = TDuration::Hours(1)});
     }
 
 } // Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy)

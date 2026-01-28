@@ -13,6 +13,16 @@ namespace NKikimr::NDDisk {
         }
     }
 
+    void TDDiskActor::IssuePersistentBufferChunkAllocation() {
+        PersistentBufferChunkAllocateQueue++;
+        if (!ChunkReserve.empty()) {
+            HandleChunkReserved();
+        } else if (!ReserveInFlight) {
+            Send(BaseInfo.PDiskActorID, new NPDisk::TEvChunkReserve(PDiskParams->Owner, PDiskParams->OwnerRound, 5));
+            ReserveInFlight = true;
+        }
+    }
+
     void TDDiskActor::Handle(NPDisk::TEvChunkReserveResult::TPtr ev) {
         auto& msg = *ev->Get();
         STLOG(PRI_DEBUG, BS_DDISK, BSDD04, "TDDiskActor::Handle(TEvChunkReserveResult)", (DDiskId, DDiskId), (Msg, msg.ToString()));
@@ -33,6 +43,18 @@ namespace NKikimr::NDDisk {
 
     void TDDiskActor::HandleChunkReserved() {
         Y_ABORT_UNLESS(!ReserveInFlight);
+
+        while (PersistentBufferChunkAllocateQueue && !ChunkReserve.empty()) {
+            PersistentBufferChunkAllocateQueue--;
+            const TChunkIdx chunkIdx = ChunkReserve.front();
+            ChunkReserve.pop();
+            Y_ABORT_UNLESS(PersistentBufferOwnedChunks.contains(chunkIdx));
+            IssuePDiskLogRecord(TLogSignature::SignaturePersistentBufferChunkMap, chunkIdx
+                , CreatePersistentBufferChunkMapSnapshot(), nullptr, [this, chunkIdx] {
+                PersistentBufferOwnedChunks.insert(chunkIdx);
+                // TODO: Send(SelfId(), new TEvPrivate::TEvHandlePersistentBufferEventForChunk(chunkIdx));
+            });
+        }
 
         while (!ChunkAllocateQueue.empty() && !ChunkReserve.empty()) {
             const auto [tabletId, vChunkIndex] = ChunkAllocateQueue.front();
@@ -101,6 +123,14 @@ namespace NKikimr::NDDisk {
         }
 
         ++*Counters.RecoveryLog.CutLogMessages;
+    }
+
+    NKikimrBlobStorage::NDDisk::NInternal::TPersistentBufferChunkMapLogRecord TDDiskActor::CreatePersistentBufferChunkMapSnapshot() {
+        NKikimrBlobStorage::NDDisk::NInternal::TPersistentBufferChunkMapLogRecord record;
+        for (const auto& chunkIdx : PersistentBufferOwnedChunks) {
+            record.AddChunkIdxs(chunkIdx);
+        }
+        return record;
     }
 
     NKikimrBlobStorage::NDDisk::NInternal::TChunkMapLogRecord TDDiskActor::CreateChunkMapSnapshot() {

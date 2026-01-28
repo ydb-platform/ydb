@@ -618,7 +618,22 @@ TKeyedWriteSession::WrappedWriteSessionPtr TKeyedWriteSession::TSessionsWorker::
     alteredSettings
         .ProducerId(producerId)
         .MessageGroupId(producerId)
-        .MaxMemoryUsage(std::numeric_limits<ui64>::max());
+        .MaxMemoryUsage(std::numeric_limits<ui64>::max())
+        .RetryPolicy(IRetryPolicy::GetExponentialBackoffPolicy(
+            TDuration::MilliSeconds(10),
+            TDuration::MilliSeconds(200),
+            TDuration::Seconds(30),
+            std::numeric_limits<size_t>::max(),
+            TDuration::Max(),
+            2.0,
+            [](EStatus status) -> ERetryErrorClass {
+                if (status == EStatus::OVERLOADED) {
+                    return ERetryErrorClass::NoRetry;
+                }
+
+                return GetRetryErrorClass(status);
+            }
+        ));
     
     if (directToPartition) {    
         alteredSettings.DirectWriteToPartition(true);

@@ -113,6 +113,13 @@ void TPartitionActor::HandlePersistentBufferWriteResult(
     DirectBlockGroup->HandlePersistentBufferWriteResult(ev, ctx);
 }
 
+void TPartitionActor::HandlePersistentBufferFlushResult(
+    const NDDisk::TEvFlushPersistentBufferResult::TPtr& ev,
+    const TActorContext& ctx)
+{
+    DirectBlockGroup->HandlePersistentBufferFlushResult(ev, ctx);
+}
+
 void TPartitionActor::HandleReadBlocksRequest(
     const TEvService::TEvReadBlocksRequest::TPtr& ev,
     const NActors::TActorContext& ctx)
@@ -120,11 +127,12 @@ void TPartitionActor::HandleReadBlocksRequest(
     DirectBlockGroup->HandleReadBlocksRequest(ev, ctx);
 }
 
-void TPartitionActor::HandlePersistentBufferReadResult(
-    const NDDisk::TEvReadPersistentBufferResult::TPtr& ev,
+template <typename TEvent>
+void TPartitionActor::HandleReadResult(
+    const typename TEvent::TPtr& ev,
     const TActorContext& ctx)
 {
-    DirectBlockGroup->HandlePersistentBufferReadResult(ev, ctx);
+    DirectBlockGroup->HandleReadResult<TEvent>(ev, ctx);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -145,9 +153,11 @@ STFUNC(TPartitionActor::StateWork)
 
         HFunc(TEvService::TEvWriteBlocksRequest, HandleWriteBlocksRequest);
         HFunc(NDDisk::TEvWritePersistentBufferResult, HandlePersistentBufferWriteResult);
+        HFunc(NDDisk::TEvFlushPersistentBufferResult, HandlePersistentBufferFlushResult);
 
         HFunc(TEvService::TEvReadBlocksRequest, HandleReadBlocksRequest);
-        HFunc(NDDisk::TEvReadPersistentBufferResult, HandlePersistentBufferReadResult);
+        HFunc(NDDisk::TEvReadPersistentBufferResult, HandleReadResult<NDDisk::TEvReadPersistentBufferResult>);
+        HFunc(NDDisk::TEvReadResult, HandleReadResult<NDDisk::TEvReadResult>);
 
         default:
             LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::NBS_PARTITION,

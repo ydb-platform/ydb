@@ -14,12 +14,9 @@ constexpr size_t BlockSize = 4096;
 
 class IRequest {
 public:
-    TActorId Sender;
     ui64 StartIndex;
 
-    IRequest(
-        TActorId sender,
-        ui64 startIndex);
+    IRequest(ui64 startIndex);
 
     virtual ~IRequest() = default;
 
@@ -49,6 +46,8 @@ public:;
 
     ~TWriteRequest() override = default;
 
+    [[nodiscard]] TActorId GetSender() const;
+
     [[nodiscard]] const TString& GetData() const;
 
     ui64 GetDataSize() const override;
@@ -60,6 +59,7 @@ public:;
     [[nodiscard]] TVector<TPersistentBufferWriteMeta> GetWritesMeta() const;
 
 private:
+    TActorId Sender;
     const TString Data;
     const ui8 RequiredAckCount = 3;
     ui8 AckCount = 0;
@@ -67,10 +67,34 @@ private:
     std::unordered_map<ui64, TPersistentBufferWriteMeta> WriteMetaByRequestId;
 };
 
-class TReadRequest : public IRequest {
+class TFlushRequest : public IRequest {
 public:
-    ui64 BlocksCount;
+    TFlushRequest(
+        ui64 startIndex,
+        bool isErase,
+        ui8 persistentBufferIndex,
+        ui64 lsn);
+
+    ~TFlushRequest() override = default;
+
+    ui64 GetDataSize() const override;
+
+    bool IsCompleted(ui64 requestId) override;
     
+    [[nodiscard]] bool GetIsErase() const;
+
+    [[nodiscard]] ui8 GetPersistentBufferIndex() const;
+
+    [[nodiscard]] ui64 GetLsn() const;
+
+private:
+    bool IsErase;
+    ui8 PersistentBufferIndex;
+    ui64 Lsn;
+};
+
+class TReadRequest : public IRequest {
+public:    
     TReadRequest(
         TActorId sender,
         ui64 startIndex,
@@ -78,9 +102,15 @@ public:
 
     ~TReadRequest() override = default;
     
+    [[nodiscard]] TActorId GetSender() const;
+
     ui64 GetDataSize() const override;
     
     bool IsCompleted(ui64 requestId) override;
+
+private:
+    TActorId Sender;
+    ui64 BlocksCount;
 };
 
 }   // namespace NYdb::NBS::NStorage::NPartitionDirect

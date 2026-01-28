@@ -436,9 +436,13 @@ void TKeyedWriteSession::TEventsWorker::TransferEventsToOutputQueue() {
     std::unordered_map<ui64, std::deque<TWriteSessionEvent::TWriteAck>> acks;
 
     auto messagesWorker = Session->MessagesWorker;
-    auto buildOutputAckEvent = [](std::deque<TWriteSessionEvent::TWriteAck>& acksQueue, ui64 expectedSeqNo) -> TWriteSessionEvent::TAcksEvent {
+    auto buildOutputAckEvent = [](std::deque<TWriteSessionEvent::TWriteAck>& acksQueue, std::optional<ui64> expectedSeqNo) -> TWriteSessionEvent::TAcksEvent {
         TWriteSessionEvent::TAcksEvent ackEvent;
-        Y_ENSURE(acksQueue.front().SeqNo == expectedSeqNo, TStringBuilder() << "Expected seqNo=" << expectedSeqNo << " but got " << acksQueue.front().SeqNo);
+
+        if (expectedSeqNo.has_value()) {
+            Y_ENSURE(acksQueue.front().SeqNo == expectedSeqNo.value(), TStringBuilder() << "Expected seqNo=" << expectedSeqNo.value() << " but got " << acksQueue.front().SeqNo);
+        }
+    
         auto ack = std::move(acksQueue.front());
         ackEvent.Acks.push_back(std::move(ack));
         acksQueue.pop_front();
@@ -454,11 +458,10 @@ void TKeyedWriteSession::TEventsWorker::TransferEventsToOutputQueue() {
 
     while (messagesWorker->HasInFlightMessages()) {
         const auto& head = messagesWorker->GetFrontInFlightMessage();
-        Y_ENSURE(head.Message.SeqNo_.has_value(), "SeqNo is not set");
 
         auto remainingAcks = acks.find(head.Partition);
         if (remainingAcks != acks.end() && remainingAcks->second.size() > 0) {
-            EventsOutputQueue.push_back(buildOutputAckEvent(remainingAcks->second, *head.Message.SeqNo_));
+            EventsOutputQueue.push_back(buildOutputAckEvent(remainingAcks->second, head.Message.SeqNo_));
             finishWithAck();
             continue;
         }
@@ -475,7 +478,7 @@ void TKeyedWriteSession::TEventsWorker::TransferEventsToOutputQueue() {
 
         std::deque<TWriteSessionEvent::TWriteAck> acksQueue;
         std::copy(acksEvent->Acks.begin(), acksEvent->Acks.end(), std::back_inserter(acksQueue));
-        EventsOutputQueue.push_back(buildOutputAckEvent(acksQueue, *head.Message.SeqNo_));
+        EventsOutputQueue.push_back(buildOutputAckEvent(acksQueue, head.Message.SeqNo_));
         acks[head.Partition] = std::move(acksQueue);
         eventsQueueIt->second.pop_front();
         eventsTransferred = true;
@@ -716,7 +719,6 @@ void TKeyedWriteSession::TMessagesWorker::DoWork() {
     auto sessionsWorker = Session->SessionsWorker;
     while (!PendingMessages.empty()) {
         auto& head = PendingMessages.front();
-        Y_ENSURE(head.Message.SeqNo_.has_value(), "SeqNo is not set");
         if (Session->Partitions[head.Partition].Locked_) {
             break;
         }
@@ -871,14 +873,14 @@ void TKeyedWriteSession::TMessagesWorker::ScheduleResendMessages(ui64 partition,
     std::vector<TWriteSessionEvent::TWriteAck> acksToSend;
 
     while (resendIt != list.end()) {
-        Y_ABORT_UNLESS((*resendIt)->Message.SeqNo_.has_value(), "SeqNo is not set");
-        if ((*resendIt)->Message.SeqNo_.value() > afterSeqNo) {
+        if (!(*resendIt)->Message.SeqNo_.has_value() || (*resendIt)->Message.SeqNo_.value() > afterSeqNo) {
             break;
         }
 
         if (ackQueueIt == ackQueueEnd) {
             // this case can happend if the message was sent, but session was closed before the ack was received
             TWriteSessionEvent::TWriteAck ack;
+            Y_ENSURE((*resendIt)->Message.SeqNo_.has_value(), "SeqNo is not set");
             ack.SeqNo = (*resendIt)->Message.SeqNo_.value();
             acksToSend.push_back(std::move(ack));
         } else {
@@ -1000,6 +1002,15 @@ void TKeyedWriteSession::Write(TContinuationToken&&, const std::string& key, TWr
     std::lock_guard lock(GlobalLock);
     if (Closed.load()) {
         return;
+    }
+
+    [[unlikely]] if ((message.SeqNo_.has_value() && SeqNoStrategy == ESeqNoStrategy::WithoutSeqNo)
+        || (!message.SeqNo_.has_value() && SeqNoStrategy == ESeqNoStrategy::WithSeqNo)) {
+        ythrow TContractViolation("Can not mix messages with and without seqNo");
+    }
+
+    if (SeqNoStrategy == ESeqNoStrategy::NotInitialized) {
+        SeqNoStrategy = message.SeqNo_.has_value() ? ESeqNoStrategy::WithSeqNo : ESeqNoStrategy::WithoutSeqNo;
     }
 
     auto partition = PartitionChooser->ChoosePartition(key);
@@ -1131,11 +1142,11 @@ void TKeyedWriteSession::RunUserHandlers() {
             break;
         }
 
-        if (auto* acksEvent = std::get_if<TWriteSessionEvent::TAcksEvent>(&*event)) {
-            if (Settings.EventHandlers_.AcksHandler_) {
+        if (auto* readyToAcceptEvent = std::get_if<TWriteSessionEvent::TReadyToAcceptEvent>(&*event)) {
+            if (Settings.EventHandlers_.ReadyToAcceptHandler_) {
                 handlersExecutor->Post(
-                    [this, ev = std::move(*acksEvent)]() mutable {
-                        Settings.EventHandlers_.AcksHandler_(ev);
+                    [this, ev = std::move(*readyToAcceptEvent)]() mutable {
+                        Settings.EventHandlers_.ReadyToAcceptHandler_(ev);
                     });
             } else {
                 handlersExecutor->Post(
@@ -1146,11 +1157,11 @@ void TKeyedWriteSession::RunUserHandlers() {
             continue;
         }
 
-        if (auto* readyToAcceptEvent = std::get_if<TWriteSessionEvent::TReadyToAcceptEvent>(&*event)) {
-            if (Settings.EventHandlers_.ReadyToAcceptHandler_) {
+        if (auto* acksEvent = std::get_if<TWriteSessionEvent::TAcksEvent>(&*event)) {
+            if (Settings.EventHandlers_.AcksHandler_) {
                 handlersExecutor->Post(
-                    [this, ev = std::move(*readyToAcceptEvent)]() mutable {
-                        Settings.EventHandlers_.ReadyToAcceptHandler_(ev);
+                    [this, ev = std::move(*acksEvent)]() mutable {
+                        Settings.EventHandlers_.AcksHandler_(ev);
                     });
             } else {
                 handlersExecutor->Post(
@@ -1393,10 +1404,19 @@ std::optional<TContinuationToken> TSimpleBlockingKeyedWriteSession::GetContinuat
     return token;
 }
 
-bool TSimpleBlockingKeyedWriteSession::WaitForAck(ui64 seqNo, TDuration timeout) {
+bool TSimpleBlockingKeyedWriteSession::WaitForAck(std::optional<ui64> seqNo, TDuration timeout) {
     return Wait(timeout, [&]() {
-        if (AckedSeqNos.contains(seqNo)) {
-            AckedSeqNos.erase(seqNo);
+        if (!seqNo.has_value()) {
+            if (AckedSeqNos.empty()) {
+                return false;
+            }
+
+            AckedSeqNos.erase(AckedSeqNos.begin());
+            return true;
+        }
+
+        if (AckedSeqNos.contains(*seqNo)) {
+            AckedSeqNos.erase(*seqNo);
             return true;
         }
         return false;
@@ -1409,7 +1429,7 @@ bool TSimpleBlockingKeyedWriteSession::Write(const std::string& key, TWriteMessa
         return false;
     }
 
-    ui64 seqNo = message.SeqNo_.value_or(0);
+    auto seqNo = message.SeqNo_;
     Writer->Write(std::move(*continuationToken), std::move(key), std::move(message), tx);
     return WaitForAck(seqNo, blockTimeout);
 }

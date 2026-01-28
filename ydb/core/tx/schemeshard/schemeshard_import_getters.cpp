@@ -1667,7 +1667,7 @@ class TSchemeGetterFS: public TActorBootstrapped<TSchemeGetterFS> {
         auto& item = ImportInfo->Items[ItemIdx];
 
         Ydb::Table::CreateTableRequest table;
-        if (table.ParseFromString(content)) {
+        if (google::protobuf::TextFormat::ParseFromString(content, &table)) {
             item.Table = table;
             return true;
         }
@@ -1679,7 +1679,7 @@ class TSchemeGetterFS: public TActorBootstrapped<TSchemeGetterFS> {
     void ProcessPermissions(const TString& content) {
         auto& item = ImportInfo->Items[ItemIdx];
         Ydb::Scheme::ModifyPermissionsRequest permissions;
-        if (permissions.ParseFromString(content)) {
+        if (google::protobuf::TextFormat::ParseFromString(content, &permissions)) {
             item.Permissions = permissions;
         }
     }

@@ -762,6 +762,19 @@ public:
 
     static TSettings GetSettings(const NKikimrSchemeOp::TBackupTask& task);
 
+    static TMaybe<THttpResolverConfig> GetHttpResolverConfigSafe(
+            const NWrappers::IExternalStorageConfig::TPtr& config)
+    {
+        if constexpr (!RequiresHttpResolver<TSettings>) {
+            return Nothing();
+        }
+        auto s3Config = std::dynamic_pointer_cast<TS3ExternalStorageConfig>(config);
+        if (!s3Config) {
+            return Nothing();
+        }
+        return GetHttpResolverConfig(*s3Config);
+    }
+
     explicit TS3Uploader(
             const TActorId& dataShard, ui64 txId,
             const NKikimrSchemeOp::TBackupTask& task,
@@ -774,7 +787,7 @@ public:
         , DataFormat(EDataFormat::Csv)
         , CompressionCodec(CodecFromTask(task))
         , ShardNum(task.GetShardNum())
-        , HttpResolverConfig(GetHttpResolverConfig(*GetS3StorageConfig()))
+        , HttpResolverConfig(GetHttpResolverConfigSafe(ExternalStorageConfig))
         , DataShard(dataShard)
         , TxId(txId)
         , Scheme(std::move(scheme))

@@ -57,6 +57,7 @@ namespace {
         }
 
         void Handle(TEvents::TEvUndelivered::TPtr& ev, const TActorContext& ctx) override {
+            Cerr << "Undelivered cookie " << ev->Cookie << " reason " << ev->Get()->Reason << Endl;
             auto record = std::find(InFly.begin(), InFly.end(), ev->Cookie);
             if (SendFlags & IEventHandle::FlagGenerateUnsureUndelivered) {
                 if (record != InFly.end()) {
@@ -126,15 +127,23 @@ namespace {
     };
 
     TString GetZcState(TTestICCluster& testCluster, ui32 me, ui32 peer) {
-        auto httpResp = testCluster.GetSessionDbg(me, peer);
-        const TString& resp = httpResp.GetValueSync();
-        const TString pattern = "<tr><td>ZeroCopy state</td><td>";
-        auto pos = resp.find(pattern);
-        UNIT_ASSERT_C(pos != std::string::npos, "zero copy field was not found in http info");
-        pos += pattern.size();
-        size_t end = resp.find('<', pos);
-        UNIT_ASSERT(end != std::string::npos);
-        return resp.substr(pos, end - pos);
+        for (int i = 0; i < 10; ++i) {
+            auto httpResp = testCluster.GetSessionDbg(me, peer);
+            const TString& resp = httpResp.GetValueSync();
+            const TString pattern = "<tr><td>ZeroCopy state</td><td>";
+            auto pos = resp.find(pattern);
+            if (pos != std::string::npos) {
+                pos += pattern.size();
+                size_t end = resp.find('<', pos);
+                UNIT_ASSERT(end != std::string::npos);
+                return resp.substr(pos, end - pos);
+            }
+            if (i == 9) {
+                UNIT_ASSERT_C(pos != std::string::npos, "zero copy field was not found in http info, resp: " << resp);
+            }
+            NanoSleep(1000 * 1000 * 1000);
+        }
+        Y_UNREACHABLE();
     }
 }
 

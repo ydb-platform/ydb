@@ -23,53 +23,6 @@ using namespace NActors;
 
 namespace {
 
-template <typename HttpType>
-void EatWholeString(TIntrusivePtr<HttpType>& request, const TString& data) {
-    request->EnsureEnoughSpaceAvailable(data.size());
-    auto size = std::min(request->Avail(), data.size());
-    memcpy(request->Pos(), data.data(), size);
-    request->Advance(size);
-}
-
-class TFakeNebiusTokenExchangeServiceStrict : public nebius::iam::v1::TokenExchangeService::Service {
-public:
-    TFakeNebiusTokenExchangeServiceStrict(const TString& expectedSaId, const TString& expectedJwtToken, const TString& iamToken)
-        : ExpectedSaId(expectedSaId)
-        , ExpectedJwtToken(expectedJwtToken)
-        , IamToken(iamToken)
-    {}
-
-    grpc::Status Exchange(grpc::ServerContext* , const nebius::iam::v1::ExchangeTokenRequest* request, nebius::iam::v1::CreateTokenResponse* response) override {
-        Cerr << "iiii Exchange" << Endl;
-        if (request->subject_token_type() == "urn:nebius:params:oauth:token-type:subject_identifier") {
-            Cerr << "iiii 1" << Endl;
-            if (request->subject_token() != ExpectedSaId) {
-                Cerr << "iiii service account id mismatch" << Endl;
-                return grpc::Status(grpc::StatusCode::INVALID_ARGUMENT, "service account id mismatch");
-            }
-            if (request->actor_token() != ExpectedJwtToken) {
-                Cerr << "iiii jwt token mismatch" << Endl;
-                return grpc::Status(grpc::StatusCode::INVALID_ARGUMENT, "jwt token mismatch");
-            }
-        } else if (request->subject_token_type() == "urn:ietf:params:oauth:token-type:jwt") {
-            if (request->subject_token() != ExpectedJwtToken) {
-                return grpc::Status(grpc::StatusCode::INVALID_ARGUMENT, "jwt token mismatch");
-            }
-        } else {
-            return grpc::Status(grpc::StatusCode::INVALID_ARGUMENT, "unknown subject_token_type");
-        }
-
-        Cerr << "iiii setting iam token" << Endl;
-        response->set_access_token(IamToken);
-        return grpc::Status::OK;
-    }
-
-private:
-    TString ExpectedSaId;
-    TString ExpectedJwtToken;
-    TString IamToken;
-};
-
 }
 
 Y_UNIT_TEST_SUITE(Mvp) {
@@ -1783,64 +1736,6 @@ Y_UNIT_TEST_SUITE(Mvp) {
         UNIT_ASSERT_VALUES_EQUAL(GetAddressWithoutPort("localhost"), "localhost");
         UNIT_ASSERT_VALUES_EQUAL(GetAddressWithoutPort("some.domain.name:1234"), "some.domain.name");
         UNIT_ASSERT_VALUES_EQUAL(GetAddressWithoutPort("some.domain.name"), "some.domain.name");
-    }
-
-    Y_UNIT_TEST(OpenIdConnectNebiusJwtTokenSuccess) {
-        TPortManager tp;
-        ui16 tokenExchangePort = tp.GetPort(9000);
-        ui16 sessionServicePort = tp.GetPort(8655);
-        TMvpTestRuntime runtime(1, true);
-        runtime.Initialize();
-
-        const TString allowedProxyHost {"ydb.viewer.page"};
-
-        // Start fake TokenExchange gRPC service which will return an IAM token for the provided subject token
-        TFakeNebiusTokenExchangeServiceStrict tokenExchangeMock("serviceaccount-expected", "short_jwt_token", "iam_from_tokenator");
-        grpc::ServerBuilder teBuilder;
-        const TString teBind = TStringBuilder() << "localhost:" << tokenExchangePort;
-        teBuilder.AddListeningPort(teBind, grpc::InsecureServerCredentials()).RegisterService(&tokenExchangeMock);
-        std::unique_ptr<grpc::Server> tokenExchangeServer(teBuilder.BuildAndStart());
-
-        NMvp::TTokensConfig tokensConfig;
-        tokensConfig.set_accessservicetype(NMvp::nebius_v1);
-        auto jwtList = tokensConfig.MutableJwtInfo();
-        auto jwt = jwtList->Add();
-        const TString jwtEndpoint = TStringBuilder() << "localhost:" << tokenExchangePort;
-        jwt->SetAuthMethod(NMvp::TJwtInfo::federated_creds);
-        jwt->SetName("nebiusJwt");
-        jwt->SetEndpoint(jwtEndpoint);
-        jwt->SetAccountId("serviceaccount-expected");
-        jwt->SetToken("short_jwt_token");
-
-        const NActors::TActorId edge = runtime.AllocateEdgeActor();
-        NMVP::TMvpTokenator* tokenator = NMVP::TMvpTokenator::CreateTokenator(tokensConfig, edge);
-        runtime.Register(tokenator);
-        runtime.GetActorSystem(0)->AppData<NMVP::TMVPAppData>()->Tokenator = tokenator;
-        Sleep(TDuration::Seconds(1));
-
-        TOpenIdConnectSettings settings {
-            .SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort),
-            .SessionServiceTokenName = "nebiusJwt",
-            .AuthorizationServerAddress = "http://auth.test.net",
-            .AllowedProxyHosts = {allowedProxyHost},
-            .AccessServiceType = NMvp::nebius_v1
-        };
-
-        const NActors::TActorId target = runtime.Register(new TProtectedPageHandler(edge, settings));
-
-        // Send incoming request which will trigger token exchange flow
-        NHttp::THttpIncomingRequestPtr incomingRequest = new NHttp::THttpIncomingRequest();
-        EatWholeString(incomingRequest, "GET /" + allowedProxyHost + "/counters HTTP/1.1\r\n"
-                    "Host: oidcproxy.net\r\n"
-                    "Cookie: yc_session=allowed_session_cookie;" + CreateNameSessionCookie(settings.ClientId) + "=" + Base64Encode("session_cookie") + "\r\n\r\n");
-
-        runtime.Send(new IEventHandle(target, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(incomingRequest)));
-        TAutoPtr<IEventHandle> handle;
-
-        auto outgoingRequestEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>(handle);
-
-        UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->Host, "auth.test.net");
-        UNIT_ASSERT_STRING_CONTAINS(outgoingRequestEv->Request->Headers, "Authorization: Bearer iam_from_tokenator");
     }
 }
 

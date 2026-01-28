@@ -267,10 +267,8 @@ void TMvpTokenator::UpdateJwtToken(const NMvp::TJwtInfo* jwtInfo) {
             break;
         }
         case NMvp::nebius_v1: {
-            Cerr << "iiii nebius_v1" << Endl;
             nebius::iam::v1::ExchangeTokenRequest request;
             if (jwtInfo->authmethod() == NMvp::TJwtInfo::static_creds) {
-                Cerr << "iiii static_creds" << Endl;
                 auto algorithm = jwt::algorithm::rs256(jwtInfo->publickey(), jwtInfo->privatekey());
                 auto encodedToken = jwt::create()
                     .set_key_id(keyId)
@@ -284,7 +282,6 @@ void TMvpTokenator::UpdateJwtToken(const NMvp::TJwtInfo* jwtInfo) {
                 request.set_subject_token_type("urn:ietf:params:oauth:token-type:jwt");
                 request.set_subject_token(TString(encodedToken));
             } else {
-                Cerr << "iiii federated_creds" << Endl;
                 auto encodedToken = jwtInfo->token();
                 request.set_grant_type("urn:ietf:params:oauth:grant-type:token-exchange");
                 request.set_requested_token_type("urn:ietf:params:oauth:token-type:access_token");
@@ -294,12 +291,10 @@ void TMvpTokenator::UpdateJwtToken(const NMvp::TJwtInfo* jwtInfo) {
                 request.set_actor_token(TString(encodedToken));
             }
 
-            Cerr << "iiii before RequestCreateToken" << Endl;
             RequestCreateToken<nebius::iam::v1::TokenExchangeService,
                                 nebius::iam::v1::ExchangeTokenRequest,
                                 nebius::iam::v1::CreateTokenResponse,
                                 TEvPrivate::TEvUpdateIamTokenNebius>(jwtInfo->name(), jwtInfo->endpoint(), request, &nebius::iam::v1::TokenExchangeService::Stub::AsyncExchange, serviceAccountId);
-            Cerr << "iiii after RequestCreateToken" << Endl;
             break;
         }
     }

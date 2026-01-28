@@ -1547,6 +1547,126 @@ private:
     const TFields Fields_;
 };
 
+template <ENodeType NodeType, bool IsStrict>
+TUnboxedValuePod AsScalar(TUnboxedValuePod value, TStringBuf name) {
+    if (IsNodeType<ENodeType::Attr>(value)) {
+        value = value.GetVariantItem().Release();
+    }
+
+    if (IsNodeType<NodeType>(value)) {
+        return value;
+    } else if constexpr (IsStrict) {
+        throw yexception() << "Expected " << name << ", but got: " << TDebugPrinter(value);
+    } else {
+        return {};
+    }
+}
+
+template <bool IsStrict>
+TUnboxedValuePod AsList(TUnboxedValuePod value, const IValueBuilder* valueBuilder) {
+    if (IsNodeType<ENodeType::Attr>(value)) {
+        value = value.GetVariantItem().Release();
+    }
+
+    if (IsNodeType<ENodeType::List>(value)) {
+        if (!value.IsBoxed()) {
+            return valueBuilder->NewEmptyList().Release();
+        }
+
+        return value;
+    } else if constexpr (IsStrict) {
+        throw yexception() << "Expected list, but got: " << TDebugPrinter(value);
+    } else {
+        return {};
+    }
+}
+
+template <bool IsStrict>
+TUnboxedValuePod AsDict(TUnboxedValuePod value, const IValueBuilder* valueBuilder) {
+    if (IsNodeType<ENodeType::Attr>(value)) {
+        value = value.GetVariantItem().Release();
+    }
+
+    if (IsNodeType<ENodeType::Dict>(value)) {
+        if (!value.IsBoxed()) {
+            // it implements empty dict protocol too
+            return valueBuilder->NewEmptyList().Release();
+        }
+
+        return value;
+    } else if constexpr (IsStrict) {
+        throw yexception() << "Expected dict, but got: " << TDebugPrinter(value);
+    } else {
+        return {};
+    }
+}
+
+SIMPLE_UDF_OPTIONS(TAsBool, bool(TAutoMap<TNodeResource>), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
+    Y_UNUSED(valueBuilder);
+    return AsScalar<ENodeType::Bool, true>(args[0], "boolean");
+}
+
+SIMPLE_STRICT_UDF_OPTIONS(TTryAsBool, TOptional<bool>(TAutoMap<TNodeResource>), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
+    Y_UNUSED(valueBuilder);
+    return AsScalar<ENodeType::Bool, false>(args[0], "boolean");
+}
+
+SIMPLE_UDF_OPTIONS(TAsInt64, i64(TAutoMap<TNodeResource>), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
+    Y_UNUSED(valueBuilder);
+    return AsScalar<ENodeType::Int64, true>(args[0], "int64");
+}
+
+SIMPLE_STRICT_UDF_OPTIONS(TTryAsInt64, TOptional<i64>(TAutoMap<TNodeResource>), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
+    Y_UNUSED(valueBuilder);
+    return AsScalar<ENodeType::Int64, false>(args[0], "int64");
+}
+
+SIMPLE_UDF_OPTIONS(TAsUint64, ui64(TAutoMap<TNodeResource>), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
+    Y_UNUSED(valueBuilder);
+    return AsScalar<ENodeType::Uint64, true>(args[0], "uint64");
+}
+
+SIMPLE_STRICT_UDF_OPTIONS(TTryAsUint64, TOptional<ui64>(TAutoMap<TNodeResource>), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
+    Y_UNUSED(valueBuilder);
+    return AsScalar<ENodeType::Uint64, false>(args[0], "uint64");
+}
+
+SIMPLE_UDF_OPTIONS(TAsDouble, double(TAutoMap<TNodeResource>), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
+    Y_UNUSED(valueBuilder);
+    return AsScalar<ENodeType::Double, true>(args[0], "double");
+}
+
+SIMPLE_STRICT_UDF_OPTIONS(TTryAsDouble, TOptional<double>(TAutoMap<TNodeResource>), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
+    Y_UNUSED(valueBuilder);
+    return AsScalar<ENodeType::Double, false>(args[0], "double");
+}
+
+SIMPLE_UDF_OPTIONS(TAsString, char*(TAutoMap<TNodeResource>), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
+    Y_UNUSED(valueBuilder);
+    return AsScalar<ENodeType::String, true>(args[0], "string");
+}
+
+SIMPLE_STRICT_UDF_OPTIONS(TTryAsString, TOptional<char*>(TAutoMap<TNodeResource>), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
+    Y_UNUSED(valueBuilder);
+    return AsScalar<ENodeType::String, false>(args[0], "string");
+}
+
+SIMPLE_UDF_OPTIONS(TAsList, TListType<TNodeResource>(TAutoMap<TNodeResource>), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
+    return AsList<true>(args[0], valueBuilder);
+}
+
+SIMPLE_STRICT_UDF_OPTIONS(TTryAsList, TOptional<TListType<TNodeResource>>(TAutoMap<TNodeResource>), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
+    return AsList<false>(args[0], valueBuilder);
+}
+
+SIMPLE_UDF_OPTIONS(TAsDict, TDictType(TAutoMap<TNodeResource>), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
+    return AsDict<true>(args[0], valueBuilder);
+}
+
+SIMPLE_STRICT_UDF_OPTIONS(TTryAsDict, TOptional<TDictType>(TAutoMap<TNodeResource>), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
+    return AsDict<false>(args[0], valueBuilder);
+}
+
 } // namespace
 
 // TODO: optimizer that marks UDFs as strict if Yson::Options(false as Strict) is given
@@ -1608,6 +1728,20 @@ SIMPLE_MODULE(TYson2Module,
               TGetLength,
               TEquals,
               TGetHash,
-              TIterate);
+              TIterate,
+              TAsBool,
+              TTryAsBool,
+              TAsInt64,
+              TTryAsInt64,
+              TAsUint64,
+              TTryAsUint64,
+              TAsDouble,
+              TTryAsDouble,
+              TAsString,
+              TTryAsString,
+              TAsList,
+              TTryAsList,
+              TAsDict,
+              TTryAsDict);
 
 REGISTER_MODULES(TYson2Module);

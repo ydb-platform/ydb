@@ -623,7 +623,7 @@ public:
 
             if (wrSettings.WatermarksEnableIdlePartitions.GetOrElse(true)) {
                 if (wrSettings.WatermarksEnableIdlePartitions.Defined() && !watermarksIdleTimeoutUs) {
-                    watermarksIdleTimeoutUs = TDuration::MilliSeconds(wrSettings.WatermarksIdleTimeoutMs.GetOrElse(TDqSettings::TDefault::WatermarksLateArrivalDelayMs)).MicroSeconds();
+                    watermarksIdleTimeoutUs = TDuration::MilliSeconds(wrSettings.WatermarksIdleTimeoutMs.GetOrElse(TDqSettings::TDefault::WatermarksIdleTimeoutMs)).MicroSeconds();
                 }
                 if (watermarksIdleTimeoutUs) {
                     Add(props, WatermarksIdlePartitionsSetting, ToString(true), pos, ctx);

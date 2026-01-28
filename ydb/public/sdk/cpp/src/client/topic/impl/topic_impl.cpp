@@ -65,9 +65,12 @@ std::shared_ptr<ISimpleBlockingKeyedWriteSession> TTopicClient::TImpl::CreateSim
     auto alteredSettings = settings;
     {
         std::lock_guard guard(Lock);
-        alteredSettings.EventHandlers_.HandlersExecutor(Settings.DefaultHandlersExecutor_);
         if (!settings.CompressionExecutor_) {
             alteredSettings.CompressionExecutor(Settings.DefaultCompressionExecutor_);
+        }
+
+        if (!settings.EventHandlers_.HandlersExecutor_) {
+            alteredSettings.EventHandlers_.HandlersExecutor(Settings.DefaultHandlersExecutor_);
         }
     }
 
@@ -81,9 +84,12 @@ std::shared_ptr<IKeyedWriteSession> TTopicClient::TImpl::CreateKeyedWriteSession
     auto alteredSettings = settings;
     {
         std::lock_guard guard(Lock);
-        alteredSettings.EventHandlers_.HandlersExecutor(Settings.DefaultHandlersExecutor_);
         if (!settings.CompressionExecutor_) {
             alteredSettings.CompressionExecutor(Settings.DefaultCompressionExecutor_);
+        }
+
+        if (!settings.EventHandlers_.HandlersExecutor_) {
+            alteredSettings.EventHandlers_.HandlersExecutor(Settings.DefaultHandlersExecutor_);
         }
     }
 

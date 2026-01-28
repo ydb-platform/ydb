@@ -954,7 +954,7 @@ TKeyedWriteSession::TKeyedWriteSession(
             }
             break;
         case TKeyedWriteSessionSettings::EPartitionChooserStrategy::Hash:
-            Y_ABORT_UNLESS(!Partitions.empty(), "KeyedWriteSession with Hash partition chooser requires at least one active partition");
+            ythrow TContractViolation("KeyedWriteSession with Hash partition chooser requires at least one active partition");
             PartitionChooser = std::make_unique<THashPartitionChooser>(this);
             break;
     }

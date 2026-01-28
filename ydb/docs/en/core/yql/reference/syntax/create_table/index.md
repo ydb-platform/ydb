@@ -86,7 +86,7 @@ Additional parameters for creating a table. For more information, see the [{#T}]
 
 {% if feature_olap_tables %}
 
-## Types of tables
+{ % note info % }
 
 {{ ydb-short-name }} supports two types of tables:
 
@@ -107,6 +107,8 @@ WITH (
 
 By default, if the `STORE` parameter is not specified, a row-oriented table is created.
 
+{% endnote %}
+
 {% endif %}
 
 {% note info %}
@@ -114,6 +116,10 @@ By default, if the `STORE` parameter is not specified, a row-oriented table is c
 When choosing a name for the table, consider the common [schema object naming rules](../../../../concepts/datamodel/cluster-namespace.md#object-naming-rules).
 
 {% endnote %}
+
+### AS SELECT
+
+Creating and filling a table with data from a `SELECT` query. For more information, see the [{#T}](as_select.md) section.
 
 ## Examples of table creation {#examples-tables-creation}
 
@@ -145,6 +151,17 @@ When choosing a name for the table, consider the common [schema object naming ru
     ```
 
   {% endif %}
+
+  Example of creating a table with a DEFAULT value:
+
+  ```yql
+  CREATE TABLE table_with_default (
+    id Uint64,
+    name String DEFAULT "unknown",
+    score Double NOT NULL DEFAULT 0.0,
+    PRIMARY KEY (id)
+  );
+  ```
 
   {% if feature_column_container_type == true %}
 

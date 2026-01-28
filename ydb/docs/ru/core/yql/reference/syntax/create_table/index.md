@@ -84,7 +84,7 @@ CREATE TABLE [IF NOT EXISTS] <table_name> (
 
 Дополнительные параметры создания таблицы. Подробнее в разделе [{#T}](with.md).
 
-## Типы таблиц
+{ % note info % }
 
 {{ ydb-short-name }} поддерживает два типа таблиц:
 
@@ -106,6 +106,8 @@ WITH (
 
 По умолчанию, если параметр `STORE` не указан, создается строковая таблица.
 
+{% endnote %}
+
 {% note info %}
 
 При выборе имени для таблицы учитывайте общие [правила именования схемных объектов](../../../../concepts/datamodel/cluster-namespace.md#object-naming-rules).
@@ -115,7 +117,6 @@ WITH (
 ### AS SELECT
 
 Создание и заполнение таблицы на основе результатов запроса `SELECT`. Подробнее в разделе [{#T}](as_select.md).
-
 
 ## Примеры создания таблиц
 
@@ -158,8 +159,6 @@ WITH (
     PRIMARY KEY (id)
   );
   ```
-
-
 
   {% if feature_column_container_type == true %}
 

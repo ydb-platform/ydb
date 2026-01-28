@@ -30,7 +30,6 @@ ERetryErrorClass GetRetryErrorClass(EStatus status) {
     case EStatus::CLIENT_DISCOVERY_FAILED:
         return ERetryErrorClass::LongRetry;
 
-    // case EStatus::OVERLOADED:
     case EStatus::SCHEME_ERROR:
     case EStatus::STATUS_UNDEFINED:
     case EStatus::BAD_REQUEST:

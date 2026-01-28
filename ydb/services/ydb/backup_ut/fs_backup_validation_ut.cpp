@@ -16,6 +16,18 @@
 
 using namespace NYdb;
 
+#ifdef _linux_
+#include <sys/vfs.h>
+#include <sys/statfs.h>
+#include <linux/magic.h>
+
+extern "C" int statfs(const char* path, struct statfs* buf) {
+    (void)path;
+    buf->f_type = NFS_SUPER_MAGIC;
+    return 0;
+}
+#endif
+
 class TFsBackupParamsValidationTestFixture : public NUnitTest::TBaseFixture {
 public:
     static constexpr TDuration DEFAULT_OPERATION_WAIT_TIME = NSan::PlainOrUnderSanitizer(

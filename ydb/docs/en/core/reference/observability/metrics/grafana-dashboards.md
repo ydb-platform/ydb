@@ -135,15 +135,15 @@ Download the [database-hive-detailed.json](https://raw.githubusercontent.com/ydb
 
 ## Topic {#topic}
 
-Metrics for the topic selected in the dashboard filter.
+Dasboard displays metrics for the topic selected in the corresponding dashboard filter.
 
 | Name | Description |
 |---|---|
 | Total incoming records (bytes) per second | Number of bytes per second written to the topic using `Ydb::TopicService::StreamWrite` |
 | Total incoming records (count) per second | Number of messages per second written using `Ydb::TopicService::StreamWrite` |
-| Write latency | Distribution of the time from message creation to its being written to the topic, by time intervals in milliseconds |
-| Partition throttling | Distribution of write throttling duration (waiting for quota), by time intervals in milliseconds |
-| Partition quota usage | Utilization of the topic partitions’ write quotas |
+| Write latency | Time from when a message is created until it is written to the topic. Percentage of messages whose write latency falls within thresholds: <100 ms, <200 ms, etc. |
+| Partition throttling | Time spent waiting for write quota to become available. Percentage of messages whose throttling time falls within thresholds: <1 ms, <5 ms, etc. |
+| Partition quota usage | Utilization of the topic partitions’ write quotas, % |
 | Write sessions active | Number of open write sessions to the topic |
 | Write sessions created | Number of write sessions to the topic created per second |
 
@@ -151,7 +151,7 @@ Download the [topic.json](https://raw.githubusercontent.com/ydb-platform/ydb/ref
 
 ## Topic — Consumer {#topic-consumer}
 
-Metrics for the topic and consumer selected in the dashboard filter.
+Dasboard displays metrics for the topic and consumer selected in the corresponding dashboard filters.
 
 | Name | Description |
 |---|---|
@@ -159,12 +159,12 @@ Metrics for the topic and consumer selected in the dashboard filter.
 | Total outgoing records (bytes) per second | Number of bytes per second read from the topic by the consumer using `Ydb::TopicService::StreamRead` |
 | Total incoming records (count) per second | Number of messages per second written using `Ydb::TopicService::StreamWrite` |
 | Total outgoing records (count) per second | Number of messages per second read from the topic by the consumer using `Ydb::TopicService::StreamRead` |
-| End-to-end latency | Distribution of the time from message creation to its being read from the topic by the consumer, by time intervals in milliseconds |
+| End-to-end latency |  Time from when a message is created to when it is read by the consumer. Percentage of messages whose end-to-end latency falls within thresholds: <100 ms, <200 ms, etc. |
 | Read latency max | The maximum (across all partitions) difference between the current time and the write time of the most recently written message |
 | Unread messages max | The maximum difference (across all partitions) of the last offset in the partition and the last commited offset |
-| Read idle time max | Maximum idle time (how long the topic partition was not read by the consumer) for all partitions |
+| Read idle time max | Maximum idle time (how long the topic partition was not read by the consumer) for all partitions, ms |
 | Uncommitted messages max | The maximum (across all partitions) number of messages after last committed offset |
-| Committed read lag max | The maximum (across all partitions) difference between the current time and the write time of the last committed message |
+| Committed read lag max | The maximum (across all partitions) difference between the current time and the write time of the last committed message, ms |
 | Partition sessions started | Number of topic read sessions started by the consumer per second |
 
 Download the [topic-consumer.json](https://raw.githubusercontent.com/ydb-platform/ydb/refs/heads/main/ydb/deploy/helm/ydb-prometheus/dashboards/topic-consumer.json) file with the **Topic** dashboard.

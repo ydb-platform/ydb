@@ -152,4 +152,79 @@ Y_UNIT_TEST_SUITE(VDiskTest) {
         }
     }
 
+    Y_UNIT_TEST(HugeBlobRecompaction) {
+        SetRandomSeed(FromString<int>(GetEnv("SEED", "1")));
+        std::optional<TTestEnv> env(std::in_place);
+
+        TString blobValue = TString::Uninitialized(400_KB);
+
+        auto changeMinHugeBlobSize = [&env](ui32 size) {
+            env->ChangeMinHugeBlobSize(size);
+            Cerr << "Change MinHugeBlobSize# " << size << Endl;
+        };
+
+        ui32 minHugeBlobSizeBefore = 500_KB;
+        ui32 minHugeBlobSizeAfter = 300_KB;
+
+        memset(blobValue.Detach(), 1, blobValue.size());
+
+        changeMinHugeBlobSize(minHugeBlobSizeBefore);
+
+        ui32 step = 1;
+
+        for (size_t i = 0; i < 100; i++) {
+            TLogoBlobID id(1, 1, step++, 0, blobValue.size(), 0, 1);
+
+            auto res = env->Put(id, blobValue);
+            UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), NKikimrProto::OK);
+        }
+
+        auto getCounters = [&env](ui8 level) {
+            auto vdiskCounters = env->GetCounters()->GetSubgroup("subsystem", "vdisk");
+            auto vdiskSub = vdiskCounters->GetSubgroup("counters", "vdisks")
+                ->GetSubgroup("storagePool", "static")
+                ->GetSubgroup("group", "000000000")
+                ->GetSubgroup("orderNumber", "00")
+                ->GetSubgroup("pdisk", "000000001")
+                ->GetSubgroup("media", "ssd");
+            auto levels = vdiskSub->GetSubgroup("subsystem", "levels");
+            auto levelSub = levels->GetSubgroup("level", ToString(level));
+            ui64 numItemsHuge = levelSub->FindCounter("NumItemsHuge")->GetAtomic();
+            ui64 numItemsInplaced = levelSub->FindCounter("NumItemsInplaced")->GetAtomic();
+            return std::make_tuple(numItemsHuge, numItemsInplaced);
+        };
+
+        env->Compact(true); // Fresh only
+
+        {
+            auto [numItemsHuge, numItemsInplaced] = getCounters(0);
+            UNIT_ASSERT_VALUES_EQUAL(numItemsHuge, 0);
+            UNIT_ASSERT_VALUES_EQUAL(numItemsInplaced, 100);
+        }
+
+        env->Compact();
+
+        {
+            auto [numItemsHuge, numItemsInplaced] = getCounters(17);
+            UNIT_ASSERT_VALUES_EQUAL(numItemsHuge, 0);
+            UNIT_ASSERT_VALUES_EQUAL(numItemsInplaced, 100);
+        }
+
+        changeMinHugeBlobSize(minHugeBlobSizeAfter);
+
+        {
+            auto [numItemsHuge, numItemsInplaced] = getCounters(17);
+            UNIT_ASSERT_VALUES_EQUAL(numItemsHuge, 0);
+            UNIT_ASSERT_VALUES_EQUAL(numItemsInplaced, 100);
+        }
+
+        env->Compact();
+
+        {
+            auto [numItemsHuge, numItemsInplaced] = getCounters(17);
+            UNIT_ASSERT_VALUES_EQUAL(numItemsHuge, 100);
+            UNIT_ASSERT_VALUES_EQUAL(numItemsInplaced, 0);
+        }
+    }
+
 }

@@ -12,6 +12,16 @@ void TConsumerActor::Handle(TEvPQ::TEvMLPConsumerMonRequest::TPtr& ev) {
 
     auto& metrics = Storage->GetMetrics();
 
+    absl::flat_hash_set<ui32> freeMessageGroups;
+    if (Storage->GetKeepMessageOrder()) {
+        for (auto it = Storage->begin(); it != Storage->end(); ++it) {
+            auto msg = *it;
+            if (msg.MessageGroupIdHash && !msg.MessageGroupIsLocked) {
+                freeMessageGroups.insert(msg.MessageGroupIdHash.value());
+            }
+        }
+    }
+
     TStringStream str;
     HTML_APP_PAGE(str, "MLP consumer '" << consumerName << "'") {
         NAVIGATION_BAR() {
@@ -21,6 +31,15 @@ void TConsumerActor::Handle(TEvPQ::TEvMLPConsumerMonRequest::TPtr& ev) {
             NAVIGATION_TAB_CONTENT("generic") {
                 LAYOUT_ROW() {
                     LAYOUT_COLUMN() {
+                        PROPERTIES("Generic") {
+                            PROPERTY("First offset", Storage->GetFirstOffset());
+                            PROPERTY("Last offset", Storage->GetFirstOffset());
+                            PROPERTY("Message counts", Storage->GetMessageCount());
+                            PROPERTY("Keep message order", Storage->GetKeepMessageOrder() ? "Yes" : "No");
+                            PROPERTY("Locked message groups", Storage->GetLockedMessageGroupsId().size());
+                            PROPERTY("Free message groups", freeMessageGroups.size());
+                        }
+
                         PROPERTIES("Total metrics") {
                             PROPERTY("Total committed messages", metrics.TotalCommittedMessageCount);
                             PROPERTY("Total moved to DLQ messages", metrics.TotalMovedToDLQMessageCount);
@@ -69,23 +88,29 @@ void TConsumerActor::Handle(TEvPQ::TEvMLPConsumerMonRequest::TPtr& ev) {
                             CAPTION() {str << "Messages";}
                             TABLEHEAD() {
                                 TABLER() {
+                                    TABLEH() {str << "";}
                                     TABLEH() {str << "Zone";}
                                     TABLEH() {str << "Offset";}
                                     TABLEH() {str << "Status";}
                                     TABLEH() {str << "Write Timestamp";}
+                                    TABLEH() {str << "Group ID";}
                                     TABLEH() {str << "Processing Count";}
                                     TABLEH() {str << "Processing Deadline";}
                                     TABLEH() {str << "Locking Timestamp";}
                                 }
                             }
                             TABLEBODY() {
+                                size_t i = 0;
                                 for (auto it = Storage->begin(); it != Storage->end(); ++it) {
                                     auto message = *it;
+                                    auto color = message.MessageGroupIsLocked ? "red" : "green";
                                     TABLER() {
+                                        TABLED() { str << ++i; }
                                         TABLED() { str << (message.SlowZone ? "S" : "F"); }
                                         TABLED() { str << message.Offset; }
                                         TABLED() { str << message.Status; }
                                         TABLED() { str << message.WriteTimestamp; }
+                                        TABLED() { str << "<span style=\"color: " << color << "\">" << message.MessageGroupIdHash << "</span>"; }
                                         TABLED() { str << message.ProcessingCount; }
                                         TABLED() { str << (TInstant::Zero() == message.ProcessingDeadline ? "" : message.ProcessingDeadline.ToString()); }
                                         TABLED() { str << (TInstant::Zero() == message.LockingTimestamp ? "" : message.LockingTimestamp.ToString()); }

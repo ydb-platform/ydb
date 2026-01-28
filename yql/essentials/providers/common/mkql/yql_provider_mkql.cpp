@@ -1981,10 +1981,26 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         };
 
         const auto watermarksMode = ctx.ProgramBuilder.NewDataLiteral(FromString<bool>(*node.Child(13), NUdf::EDataSlot::Bool));
-
+        TRuntimeNode sizeLimit;
+        if (NNodes::TCoMultiHoppingCore::idx_SizeLimit < node.ChildrenSize()) {
+            sizeLimit = MkqlBuildExpr(*node.Child(NNodes::TCoMultiHoppingCore::idx_SizeLimit), ctx);
+        }
+        TRuntimeNode timeLimit;
+        if (NNodes::TCoMultiHoppingCore::idx_TimeLimit < node.ChildrenSize()) {
+            timeLimit = MkqlBuildExpr(*node.Child(NNodes::TCoMultiHoppingCore::idx_TimeLimit), ctx);
+        }
+        TRuntimeNode earlyPolicy;
+        if (NNodes::TCoMultiHoppingCore::idx_EarlyPolicy < node.ChildrenSize()) {
+            earlyPolicy = MkqlBuildExpr(*node.Child(NNodes::TCoMultiHoppingCore::idx_EarlyPolicy), ctx);
+        }
+        TRuntimeNode latePolicy;
+        if (NNodes::TCoMultiHoppingCore::idx_LatePolicy < node.ChildrenSize()) {
+            latePolicy = MkqlBuildExpr(*node.Child(NNodes::TCoMultiHoppingCore::idx_LatePolicy), ctx);
+        }
         return ctx.ProgramBuilder.MultiHoppingCore(
             stream, keyExtractor, timeExtractor, init, update, save, load, merge, finish,
-            hop, interval, delay, dataWatermarks, watermarksMode);
+            hop, interval, delay, dataWatermarks, watermarksMode,
+            sizeLimit, timeLimit, earlyPolicy, latePolicy);
     });
 
     AddCallable("ToDict", [](const TExprNode& node, TMkqlBuildContext& ctx) {

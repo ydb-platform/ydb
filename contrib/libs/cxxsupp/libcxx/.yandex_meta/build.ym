@@ -33,9 +33,12 @@ SYSINCLS=${WORKDIR}/sysincls
 {% block prepare_env %}
 {{super()}}
 {% if local_llvm %}
-cp -R {{local_llvm.strip()}}/. ${RESOURCES}/
-cd ${RESOURCES}
-git checkout {{self.version().strip()}}
+(
+    cd {{local_llvm.strip()}}
+    git checkout {{self.version().strip()}}
+)
+mkdir ${RESOURCES}/libcxx
+cp -R {{local_llvm.strip()}}/libcxx/. ${RESOURCES}/libcxx/
 {% else %}
 tar xf ${RESOURCES}/{{self.current_url().strip() | basename}} --strip-components=1 --directory=${RESOURCES}
 {% endif %}

@@ -73,7 +73,7 @@ struct TGuardedInfo : public TAtomicRefCount<TGuardedInfo> {
     {}
 };
 
-struct TFollowerInfo : public TAtomicRefCount<TGuardedInfo> {
+struct TFollowerInfo : public TAtomicRefCount<TFollowerInfo> {
     const ui64 TabletID;
     const ui32 FollowerId;
     const TActorId Follower;

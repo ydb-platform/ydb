@@ -33,21 +33,40 @@ void EatWholeString(TIntrusivePtr<HttpType>& request, const TString& data) {
 
 class TFakeNebiusTokenExchangeServiceStrict : public nebius::iam::v1::TokenExchangeService::Service {
 public:
-    TFakeNebiusTokenExchangeServiceStrict(const TString& expectedSubject, const TString& iamToken)
-        : ExpectedSubject(expectedSubject)
+    TFakeNebiusTokenExchangeServiceStrict(const TString& expectedSaId, const TString& expectedJwtToken, const TString& iamToken)
+        : ExpectedSaId(expectedSaId)
+        , ExpectedJwtToken(expectedJwtToken)
         , IamToken(iamToken)
     {}
 
     grpc::Status Exchange(grpc::ServerContext* , const nebius::iam::v1::ExchangeTokenRequest* request, nebius::iam::v1::CreateTokenResponse* response) override {
-        if (request->subject_token() != ExpectedSubject) {
-            return grpc::Status(grpc::StatusCode::INVALID_ARGUMENT, "subject token mismatch");
+        Cerr << "iiii Exchange" << Endl;
+        if (request->subject_token_type() == "urn:nebius:params:oauth:token-type:subject_identifier") {
+            Cerr << "iiii 1" << Endl;
+            if (request->subject_token() != ExpectedSaId) {
+                Cerr << "iiii service account id mismatch" << Endl;
+                return grpc::Status(grpc::StatusCode::INVALID_ARGUMENT, "service account id mismatch");
+            }
+            if (request->actor_token() != ExpectedJwtToken) {
+                Cerr << "iiii jwt token mismatch" << Endl;
+                return grpc::Status(grpc::StatusCode::INVALID_ARGUMENT, "jwt token mismatch");
+            }
+        } else if (request->subject_token_type() == "urn:ietf:params:oauth:token-type:jwt") {
+            if (request->subject_token() != ExpectedJwtToken) {
+                return grpc::Status(grpc::StatusCode::INVALID_ARGUMENT, "jwt token mismatch");
+            }
+        } else {
+            return grpc::Status(grpc::StatusCode::INVALID_ARGUMENT, "unknown subject_token_type");
         }
+
+        Cerr << "iiii setting iam token" << Endl;
         response->set_access_token(IamToken);
         return grpc::Status::OK;
     }
 
 private:
-    TString ExpectedSubject;
+    TString ExpectedSaId;
+    TString ExpectedJwtToken;
     TString IamToken;
 };
 
@@ -1776,7 +1795,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         const TString allowedProxyHost {"ydb.viewer.page"};
 
         // Start fake TokenExchange gRPC service which will return an IAM token for the provided subject token
-        TFakeNebiusTokenExchangeServiceStrict tokenExchangeMock("short_jwt_token", "iam_from_tokenator");
+        TFakeNebiusTokenExchangeServiceStrict tokenExchangeMock("serviceaccount-expected", "short_jwt_token", "iam_from_tokenator");
         grpc::ServerBuilder teBuilder;
         const TString teBind = TStringBuilder() << "localhost:" << tokenExchangePort;
         teBuilder.AddListeningPort(teBind, grpc::InsecureServerCredentials()).RegisterService(&tokenExchangeMock);
@@ -1787,6 +1806,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         auto jwtList = tokensConfig.MutableJwtInfo();
         auto jwt = jwtList->Add();
         const TString jwtEndpoint = TStringBuilder() << "localhost:" << tokenExchangePort;
+        jwt->SetAuthMethod(NMvp::TJwtInfo::federated_creds);
         jwt->SetName("nebiusJwt");
         jwt->SetEndpoint(jwtEndpoint);
         jwt->SetAccountId("serviceaccount-expected");

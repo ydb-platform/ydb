@@ -3,6 +3,9 @@
 #include <ydb/core/tx/schemeshard/common/validation.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 #include <ydb/core/tx/tiering/tier/object.h>
+#include <ydb/core/kqp/federated_query/kqp_federated_query_actors.h>
+#include <ydb/library/aclib/aclib.h>
+#include <ydb/core/base/appdata.h>
 
 namespace NKikimr::NSchemeShard {
 
@@ -114,9 +117,30 @@ bool TTTLValidator::ValidateColumnTableTtl(const NKikimrSchemeOp::TColumnDataLif
             AFL_VERIFY(findExternalDataSource);
             NKikimrSchemeOp::TExternalDataSourceDescription proto;
             (*findExternalDataSource)->FillProto(proto, false);
-            if (auto status = NColumnShard::NTiers::TTierConfig().DeserializeFromProto(proto); status.IsFail()) {
+            NColumnShard::NTiers::TTierConfig tierConfig;
+            if (auto status = tierConfig.DeserializeFromProto(proto); status.IsFail()) {
                 errors.AddError("Cannot use external data source \"" + tierPathString + "\" for tiering: " + status.GetErrorMessage());
                 return false;
+            }
+
+            if (context.UserToken) {
+                const auto& aws = proto.GetAuth().GetAws();
+                const TString accessKeySecretName = aws.GetAwsAccessKeyIdSecretName();
+                const TString secretKeySecretName = aws.GetAwsSecretAccessKeySecretName();
+
+                const TString databaseName = tierPath.GetDomainPathString();
+                
+                TVector<TString> secretNames = {accessKeySecretName, secretKeySecretName};
+                auto userTokenPtr = MakeIntrusiveConst<NACLib::TUserToken>(*context.UserToken);
+
+                auto future = NKqp::DescribeSecret(secretNames, userTokenPtr, databaseName, context.Ctx.ActorSystem());
+                auto result = future.GetValue(TDuration::Seconds(10));
+                
+                if (result.Status != Ydb::StatusIds::SUCCESS) {
+                    errors.AddError(NKikimrScheme::StatusAccessDenied, 
+                        "Access denied to secrets in external data source \"" + tierPathString + "\": " + result.Issues.ToOneLineString());
+                    return false;
+                }
             }
         }
     }

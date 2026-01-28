@@ -2365,7 +2365,7 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
 
     Y_UNIT_TEST(IncrementalGC) {
         auto config = TSharedPageCacheMock::DefaultConfig();
-        config.SetMaxEvictedBytesInSingleGCRun(PAGE_TOTAL_SIZE);
+        config.SetMaxLimitDecreaseStepBytes(PAGE_TOTAL_SIZE);
         TSharedPageCacheMock sharedCache(config);
         ui64 fetchNo = 0;
 
@@ -2380,7 +2380,6 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
 
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePages->Val(), 4);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->EvictedPages->Val(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->UnfinishedGCRuns->Val(), 0);
 
         // We'll need 3 wakeups to reach the target limit and evict extra pages.
         sharedCache.SetLimit(PAGE_TOTAL_SIZE);

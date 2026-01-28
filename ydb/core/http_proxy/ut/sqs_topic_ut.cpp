@@ -953,7 +953,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
             for (int i = 0; i < params.SharedConsumers; ++i) {
                 auto& consumer = settings.BeginAddSharedConsumer(consumerName(i));
                 consumer.KeepMessagesOrder(params.Fifo);
-                consumer.DefaultProcessingTimeout(TDuration::Seconds(20));
+                consumer.DefaultProcessingTimeout(TDuration::Seconds(25));
                 if (params.Dlq) {
                     auto&& dlqSettings = consumer.BeginDeadLetterPolicy();
                     dlqSettings.Enable();
@@ -1036,7 +1036,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
                 {"AttributeNames", NJson::TJsonArray{"All"}}
             });
             UNIT_ASSERT_VALUES_EQUAL(json["Attributes"]["DelaySeconds"], "0");
-            UNIT_ASSERT_VALUES_EQUAL(json["Attributes"]["VisibilityTimeout"], "30");
+            UNIT_ASSERT_VALUES_EQUAL(json["Attributes"]["VisibilityTimeout"], "25");
             UNIT_ASSERT_VALUES_EQUAL(json["Attributes"]["MessageRetentionPeriod"], ToString(Max(retentionPeriod, params.RetentionPeriod).Seconds()));
             UNIT_ASSERT_GT(json["Attributes"].GetMapSafe().size(), 5);
             checkFifo(json);
@@ -1049,7 +1049,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
                 {"AttributeNames", NJson::TJsonArray{"All", "VisibilityTimeout"}}
             });
             UNIT_ASSERT_GT(json["Attributes"].GetMapSafe().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(json["Attributes"]["VisibilityTimeout"], "30");
+            UNIT_ASSERT_VALUES_EQUAL(json["Attributes"]["VisibilityTimeout"], "25");
             checkFifo(json);
             checkDlq(json);
         }
@@ -1060,7 +1060,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
                 {"AttributeNames", NJson::TJsonArray{"VisibilityTimeout"}}
             });
             UNIT_ASSERT_VALUES_EQUAL(json["Attributes"].GetMapSafe().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(json["Attributes"]["VisibilityTimeout"], "30");
+            UNIT_ASSERT_VALUES_EQUAL(json["Attributes"]["VisibilityTimeout"], "25");
             checkFifo(json, false);
             checkDlq(json, false);
         }
@@ -1100,7 +1100,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
                     "ContentBasedDeduplication",
                 }}
             });
-            UNIT_ASSERT_VALUES_EQUAL(json["Attributes"]["VisibilityTimeout"], "30");
+            UNIT_ASSERT_VALUES_EQUAL(json["Attributes"]["VisibilityTimeout"], "25");
             UNIT_ASSERT_VALUES_EQUAL(json["Attributes"]["MessageRetentionPeriod"], ToString(Max(retentionPeriod, params.RetentionPeriod).Seconds()));
             UNIT_ASSERT_GT(json["Attributes"].GetMapSafe().size(), 5);
             checkFifo(json);

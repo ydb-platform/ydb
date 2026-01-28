@@ -35,6 +35,8 @@ struct TEvKqpExecuter {
 
         ui64 ResultRowsCount = 0;
         ui64 ResultRowsBytes = 0;
+        ui64 LocksBrokenAsBreaker = 0;
+        ui64 LocksBrokenAsVictim = 0;
 
         THashSet<ui32> ParticipantNodes;
 

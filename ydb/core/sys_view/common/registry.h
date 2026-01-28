@@ -471,6 +471,8 @@ struct Schema : NIceDb::Schema {
         struct MinRequestUnits : Column<26, NScheme::NTypeIds::Uint64> {};
         struct MaxRequestUnits : Column<27, NScheme::NTypeIds::Uint64> {};
         struct SumRequestUnits : Column<28, NScheme::NTypeIds::Uint64> {};
+        struct LocksBrokenAsBreaker : Column<29, NScheme::NTypeIds::Uint64> {};
+        struct LocksBrokenAsVictim : Column<30, NScheme::NTypeIds::Uint64> {};
 
         using TKey = TableKey<IntervalEnd, Rank>;
         using TColumns = TableColumns<
@@ -485,7 +487,8 @@ struct Schema : NIceDb::Schema {
             SumUpdateRows, MinUpdateRows, MaxUpdateRows,
             SumUpdateBytes, MinUpdateBytes, MaxUpdateBytes,
             SumDeleteRows, MinDeleteRows, MaxDeleteRows,
-            SumRequestUnits, MinRequestUnits, MaxRequestUnits>;
+            SumRequestUnits, MinRequestUnits, MaxRequestUnits,
+            LocksBrokenAsBreaker, LocksBrokenAsVictim>;
     };
 
     struct PrimaryIndexStats : Table<10> {

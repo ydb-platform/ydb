@@ -1,5 +1,6 @@
 #include "json_extractors.h"
 
+#include <util/charset/utf8.h>
 #include <util/string/split.h>
 #include <util/string/vector.h>
 #include <yql/essentials/types/binary_json/format.h>
@@ -29,7 +30,12 @@ TConclusionStatus TKVExtractor::DoFill(TDataBuilder& dataBuilder, std::deque<std
         if (jsonKey.GetType() != NBinaryJson::EEntryType::String) {
             continue;
         }
+
         const TStringBuf key = dataBuilder.AddKey(GetPrefix(), jsonKey.GetString());
+        if (!IsUtf(key) || key.Contains('\0')) {
+            return TConclusionStatus::Fail("JSON key is not utf8");
+        }
+
         auto conclusion = AddDataToBuilder(dataBuilder, iterators, key, value);
         if (conclusion.IsFail()) {
             return conclusion;

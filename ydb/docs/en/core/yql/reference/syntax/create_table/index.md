@@ -1,7 +1,5 @@
 # CREATE TABLE
 
-## CREATE TABLE syntax
-
 {% if feature_bulk_tables %}
 
 The table is automatically created upon the first [INSERT INTO](../insert_into.md){% if feature_mapreduce %} in the database specified by the [USE](../use.md) operator{% endif %}. The schema is defined automatically in this process.
@@ -14,38 +12,81 @@ The invocation of `CREATE TABLE` creates {% if concept_table %}a [table]({{ conc
 
 {% endif %}
 
-    CREATE [TEMP | TEMPORARY] TABLE table_name (
-        column1 type1,
-{% if feature_not_null == true %}        column2 type2 NOT NULL,{% else %}        column2 type2,{% endif %}
-        ...
-        columnN typeN,
-{% if feature_secondary_index == true %}
-        INDEX `<index_name>`
-          [GLOBAL|LOCAL]
-          [UNIQUE]
-          [SYNC|ASYNC]
-          [USING <index_type>]
-          ON ( <index_columns> )
-          [COVER ( <cover_columns> )]
-          [WITH ( <parameter_name> = <parameter_value>[, ...])]
-        ...
-{% endif %}
-{% if feature_map_tables %}
-        PRIMARY KEY ( column, ... ),
-        FAMILY column_family ( family_options, ... )
-{% else %}
-        ...
-{% endif %}
-    )
-{% if feature_map_tables %}
-    WITH ( key = value, ... )
-    [AS SELECT ...]
-{% endif %}
+```yql
+CREATE TABLE [IF NOT EXISTS] <table_name> (
+  [<column_name> <column_data_type>] [FAMILY <family_name>] [NULL | NOT NULL] [DEFAULT <default_value>]
+  [, ...],
+    INDEX <index_name>
+      [GLOBAL]
+      [UNIQUE]
+      [SYNC|ASYNC]
+      [USING <index_type>]
+      ON ( <index_columns> )
+      [COVER ( <cover_columns> )]
+      [WITH ( <parameter_name> = <parameter_value>[, ...])]
+    [, ...]
+  PRIMARY KEY ( <column>[, ...]),
+  [FAMILY <column_family> ( family_options[, ...])]
+)
+[PARTITION BY HASH ( <column>[, ...])]
+[WITH (<setting_name> = <setting_value>[, ...])]
+
+[AS SELECT ...]
+```
 
 {% if oss == true and backend_name == "YDB" %}
 
+## Request parameters
+
+### table_name
+
+The path of the table to be created.
+
+When choosing a name for the table, consider the common [schema object naming rules](../../../../concepts/datamodel/cluster-namespace.md#object-naming-rules).
+
+### IF NOT EXISTS
+
+If the table with the specified name already exists, the execution of the operator is completely skipped — no checks or schema matching is performed, and no error occurs. Note that the existing table may differ in structure from the one you would like to create with this query — no comparison or equivalence check is performed.
+
+### column_name
+
+The name of the column to be created in the new table.
+
+When choosing a name for the column, consider the common [column naming rules](../../../../concepts/datamodel/table.md#column-naming-rules).
+
+### column_data_type
+
+The data type of the column. The complete list of data types supported by {{ ydb-short-name }} is available in the [{#T}](../../types/index.md) section.
+
+{% include [column_option_list.md](../_includes/column_option_list.md) %}
+
+### INDEX
+
+Definition of an index on the table. [Secondary indexes](secondary_index.md) and [vector indexes](vector_index.md) are supported.
+
+### PRIMARY KEY
+
+Definition of the primary key of the table. Specifies the columns that make up the primary key in the order of enumeration. For more information on selecting a primary key, see the [{#T}](../../../../dev/primary-key/index.md) article.
+
+### PARTITION BY HASH
+
+Definition of the columns on which partitioning will occur for **column-oriented** tables. Specifies the columns on which [partitioning](../../../../concepts/glossary.md#partition) will occur using the hash function. The columns must be part of the primary key. The columns do not necessarily have to be a prefix or suffix — the requirement is to be part of the primary key.
+
+If the parameter is not specified, the table will be partitioned on the same columns as those included in the primary key. For more information on selecting and working with partition keys in column-oriented tables, see the [{#T}](../../../../dev/primary-key/column-oriented.md) article.
+
+For more information on partitioning column-oriented tables, see the [{#T}](../../../../concepts/datamodel/table.md#olap-tables-partitioning) section.
+
+### FAMILY <column_family> (column group setting)
+
+Definition of a column group with specified parameters. For more information, see the [{#T}](family.md) section.
+
+### WITH
+
+Additional parameters for creating a table. For more information, see the [{#T}](with.md) section.
 
 {% if feature_olap_tables %}
+
+## Types of tables
 
 {{ ydb-short-name }} supports two types of tables:
 
@@ -172,7 +213,9 @@ When choosing a name for the table, consider the common [schema object naming ru
   );
   ```
 
-  Example of creating a column-oriented table with an option to specify the minimum physical number of partitions for storing data:
+  For column-oriented tables, you can explicitly specify the columns on which partitioning will occur using the `PARTITION BY HASH` construct. Usually, these are columns of the primary key with a large number of unique values, such as `Timestamp`. If `PARTITION BY HASH` is not specified, partitioning will occur automatically on all columns included in the primary key. For more information on selecting and working with partition keys in column-oriented tables, see the [{#T}](../../../../dev/primary-key/column-oriented.md) article.
+
+  It is important to specify the correct number of partitions when creating a column-oriented table with the `AUTO_PARTITIONING_MIN_PARTITIONS_COUNT` parameter:
 
   ```yql
   CREATE TABLE table_name (

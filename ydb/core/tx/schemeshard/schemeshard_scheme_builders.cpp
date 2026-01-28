@@ -74,18 +74,6 @@ bool BuildTopicScheme(
     Ydb::Topic::CreateTopicRequest request;
     NYdb::NTopic::TTopicDescription(std::move(descTopicResult)).SerializeTo(request);
 
-    auto* attributes = request.mutable_attributes();
-    std::vector<std::string> keysToRemove;
-    for (const auto& [key, _] : *attributes) {
-        // Remove internal attributes (starting with __)
-        if (key.size() >= 2 && key[0] == '_' && key[1] == '_') {
-            keysToRemove.push_back(key);
-        }
-    }
-    for (const auto& key : keysToRemove) {
-        attributes->erase(key);
-    }
-
     return google::protobuf::TextFormat::PrintToString(request, &scheme);
 }
 

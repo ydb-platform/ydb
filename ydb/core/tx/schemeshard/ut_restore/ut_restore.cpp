@@ -6343,25 +6343,27 @@ Y_UNIT_TEST_SUITE(TImportTests) {
                     WriteSpeedInBytesPerSecond: 1024
                     BurstSize: 2048
                 }
-                PartitionStrategy {
-                    MinPartitionCount: 3
-                    MaxPartitionCount: 10
-                    PartitionStrategyType: CAN_SPLIT
-                    ScaleThresholdSeconds: 300
-                    ScaleUpPartitionWriteSpeedThresholdPercent: 80
-                    ScaleDownPartitionWriteSpeedThresholdPercent: 20
-                }
                 Codecs {
                     Ids: 0
                     Ids: 1
+                    Ids: 2
                 }
                 MeteringMode: METERING_MODE_RESERVED_CAPACITY
+                PartitionStrategy {
+                    MinPartitionCount: 3
+                    MaxPartitionCount: 10
+                    ScaleThresholdSeconds: 400
+                    ScaleUpPartitionWriteSpeedThresholdPercent: 91
+                    ScaleDownPartitionWriteSpeedThresholdPercent: 31
+                    PartitionStrategyType: CAN_SPLIT
+                }
                 Consumers {
                     Name: "consumer_1"
                     Important: true
                     Codec {
                         Ids: 0
                         Ids: 1
+                        Ids: 2
                     }
                 }
                 Consumers {
@@ -6370,6 +6372,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
                     Codec {
                         Ids: 0
                         Ids: 1
+                        Ids: 2
                     }
                 }
             }
@@ -6429,9 +6432,10 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         // Check codecs
         UNIT_ASSERT(config.HasCodecs());
         const auto& codecs = config.GetCodecs();
-        UNIT_ASSERT_VALUES_EQUAL(codecs.IdsSize(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(codecs.IdsSize(), 3);
         UNIT_ASSERT_VALUES_EQUAL(codecs.GetIds(0), 0);
         UNIT_ASSERT_VALUES_EQUAL(codecs.GetIds(1), 1);
+        UNIT_ASSERT_VALUES_EQUAL(codecs.GetIds(2), 2);
 
         // Check metering mode
         UNIT_ASSERT_VALUES_EQUAL(
@@ -6448,9 +6452,9 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             static_cast<int>(partStrategy.GetPartitionStrategyType()),
             static_cast<int>(NKikimrPQ::TPQTabletConfig::CAN_SPLIT)
         );
-        UNIT_ASSERT_VALUES_EQUAL(partStrategy.GetScaleThresholdSeconds(), 300);
-        UNIT_ASSERT_VALUES_EQUAL(partStrategy.GetScaleUpPartitionWriteSpeedThresholdPercent(), 80);
-        UNIT_ASSERT_VALUES_EQUAL(partStrategy.GetScaleDownPartitionWriteSpeedThresholdPercent(), 20);
+        UNIT_ASSERT_VALUES_EQUAL(partStrategy.GetScaleThresholdSeconds(), 400);
+        UNIT_ASSERT_VALUES_EQUAL(partStrategy.GetScaleUpPartitionWriteSpeedThresholdPercent(), 91);
+        UNIT_ASSERT_VALUES_EQUAL(partStrategy.GetScaleDownPartitionWriteSpeedThresholdPercent(), 31);
 
         // Check consumers
         UNIT_ASSERT_VALUES_EQUAL(config.ConsumersSize(), 2);
@@ -6459,17 +6463,19 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         UNIT_ASSERT_VALUES_EQUAL(consumer1.GetName(), "consumer_1");
         UNIT_ASSERT_VALUES_EQUAL(consumer1.GetImportant(), true);
         UNIT_ASSERT(consumer1.HasCodec());
-        UNIT_ASSERT_VALUES_EQUAL(consumer1.GetCodec().IdsSize(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(consumer1.GetCodec().IdsSize(), 3);
         UNIT_ASSERT_VALUES_EQUAL(consumer1.GetCodec().GetIds(0), 0);
         UNIT_ASSERT_VALUES_EQUAL(consumer1.GetCodec().GetIds(1), 1);
+        UNIT_ASSERT_VALUES_EQUAL(consumer1.GetCodec().GetIds(2), 2);
 
         const auto& consumer2 = config.GetConsumers(1);
         UNIT_ASSERT_VALUES_EQUAL(consumer2.GetName(), "consumer_2");
         UNIT_ASSERT_VALUES_EQUAL(consumer2.GetImportant(), false);
         UNIT_ASSERT(consumer2.HasCodec());
-        UNIT_ASSERT_VALUES_EQUAL(consumer2.GetCodec().IdsSize(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(consumer2.GetCodec().IdsSize(), 3);
         UNIT_ASSERT_VALUES_EQUAL(consumer2.GetCodec().GetIds(0), 0);
         UNIT_ASSERT_VALUES_EQUAL(consumer2.GetCodec().GetIds(1), 1);
+        UNIT_ASSERT_VALUES_EQUAL(consumer2.GetCodec().GetIds(2), 2);
 
         // Check partition count
         UNIT_ASSERT_VALUES_EQUAL(pqGroup.GetTotalGroupCount(), 3);

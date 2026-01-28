@@ -5,12 +5,15 @@
 #include "oidc_settings.h"
 #include "openid_connect.h"
 #include "context.h"
+#include <ydb/mvp/core/appdata.h>
+#include <ydb/mvp/core/mvp_tokens.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/testlib/actors/test_runtime.h>
 #include <ydb/library/testlib/service_mocks/session_service_mock.h>
 #include <ydb/library/testlib/service_mocks/profile_service_mock.h>
 #include <ydb/mvp/core/protos/mvp.pb.h>
 #include <ydb/mvp/core/mvp_test_runtime.h>
+#include <ydb/public/api/client/nc_private/iam/v1/token_exchange_service.grpc.pb.h>
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/map.h>
@@ -27,6 +30,26 @@ void EatWholeString(TIntrusivePtr<HttpType>& request, const TString& data) {
     memcpy(request->Pos(), data.data(), size);
     request->Advance(size);
 }
+
+class TFakeNebiusTokenExchangeServiceStrict : public nebius::iam::v1::TokenExchangeService::Service {
+public:
+    TFakeNebiusTokenExchangeServiceStrict(const TString& expectedSubject, const TString& iamToken)
+        : ExpectedSubject(expectedSubject)
+        , IamToken(iamToken)
+    {}
+
+    grpc::Status Exchange(grpc::ServerContext* , const nebius::iam::v1::ExchangeTokenRequest* request, nebius::iam::v1::CreateTokenResponse* response) override {
+        if (request->subject_token() != ExpectedSubject) {
+            return grpc::Status(grpc::StatusCode::INVALID_ARGUMENT, "subject token mismatch");
+        }
+        response->set_access_token(IamToken);
+        return grpc::Status::OK;
+    }
+
+private:
+    TString ExpectedSubject;
+    TString IamToken;
+};
 
 }
 
@@ -1742,4 +1765,62 @@ Y_UNIT_TEST_SUITE(Mvp) {
         UNIT_ASSERT_VALUES_EQUAL(GetAddressWithoutPort("some.domain.name:1234"), "some.domain.name");
         UNIT_ASSERT_VALUES_EQUAL(GetAddressWithoutPort("some.domain.name"), "some.domain.name");
     }
+
+    Y_UNIT_TEST(OpenIdConnectNebiusJwtTokenSuccess) {
+        TPortManager tp;
+        ui16 tokenExchangePort = tp.GetPort(9000);
+        ui16 sessionServicePort = tp.GetPort(8655);
+        TMvpTestRuntime runtime(1, true);
+        runtime.Initialize();
+
+        const TString allowedProxyHost {"ydb.viewer.page"};
+
+        // Start fake TokenExchange gRPC service which will return an IAM token for the provided subject token
+        TFakeNebiusTokenExchangeServiceStrict tokenExchangeMock("short_jwt_token", "iam_from_tokenator");
+        grpc::ServerBuilder teBuilder;
+        const TString teBind = TStringBuilder() << "localhost:" << tokenExchangePort;
+        teBuilder.AddListeningPort(teBind, grpc::InsecureServerCredentials()).RegisterService(&tokenExchangeMock);
+        std::unique_ptr<grpc::Server> tokenExchangeServer(teBuilder.BuildAndStart());
+
+        NMvp::TTokensConfig tokensConfig;
+        tokensConfig.set_accessservicetype(NMvp::nebius_v1);
+        auto jwtList = tokensConfig.MutableJwtInfo();
+        auto jwt = jwtList->Add();
+        const TString jwtEndpoint = TStringBuilder() << "localhost:" << tokenExchangePort;
+        jwt->SetName("nebiusJwt");
+        jwt->SetEndpoint(jwtEndpoint);
+        jwt->SetAccountId("serviceaccount-expected");
+        jwt->SetToken("short_jwt_token");
+
+        const NActors::TActorId edge = runtime.AllocateEdgeActor();
+        NMVP::TMvpTokenator* tokenator = NMVP::TMvpTokenator::CreateTokenator(tokensConfig, edge);
+        runtime.Register(tokenator);
+        runtime.GetActorSystem(0)->AppData<NMVP::TMVPAppData>()->Tokenator = tokenator;
+        Sleep(TDuration::Seconds(1));
+
+        TOpenIdConnectSettings settings {
+            .SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort),
+            .SessionServiceTokenName = "nebiusJwt",
+            .AuthorizationServerAddress = "http://auth.test.net",
+            .AllowedProxyHosts = {allowedProxyHost},
+            .AccessServiceType = NMvp::nebius_v1
+        };
+
+        const NActors::TActorId target = runtime.Register(new TProtectedPageHandler(edge, settings));
+
+        // Send incoming request which will trigger token exchange flow
+        NHttp::THttpIncomingRequestPtr incomingRequest = new NHttp::THttpIncomingRequest();
+        EatWholeString(incomingRequest, "GET /" + allowedProxyHost + "/counters HTTP/1.1\r\n"
+                    "Host: oidcproxy.net\r\n"
+                    "Cookie: yc_session=allowed_session_cookie;" + CreateNameSessionCookie(settings.ClientId) + "=" + Base64Encode("session_cookie") + "\r\n\r\n");
+
+        runtime.Send(new IEventHandle(target, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(incomingRequest)));
+        TAutoPtr<IEventHandle> handle;
+
+        auto outgoingRequestEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>(handle);
+
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->Host, "auth.test.net");
+        UNIT_ASSERT_STRING_CONTAINS(outgoingRequestEv->Request->Headers, "Authorization: Bearer iam_from_tokenator");
+    }
 }
+

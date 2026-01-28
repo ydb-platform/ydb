@@ -932,7 +932,7 @@ private:
             if (abandonedSchemeShards.contains(curPathId.OwnerId)) { // GSS reverts TSS
                 log("Replace TSS by GSS description, TSS was implicitly reverted by GSS");
                 // unlink TSS desc by path
-                UpsertDescriptionByPathId(path, pathId, std::move(pathDescription));
+                UpsertDescriptionWithRelinkSubscribers(path, pathId, std::move(pathDescription));
                 return AckUpdate(ev);
             }
 

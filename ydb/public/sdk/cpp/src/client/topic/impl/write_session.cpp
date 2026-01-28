@@ -1027,7 +1027,7 @@ bool TKeyedWriteSession::Close(TDuration closeTimeout) {
 
     ClosePromise.TrySetValue();
     if (!MainWorker.Running()) {
-        RunUserHandlers();
+        RunUserEventLoop();
         return MessagesWorker->IsQueueEmpty();
     }
 
@@ -1037,7 +1037,7 @@ bool TKeyedWriteSession::Close(TDuration closeTimeout) {
         MainWorker.Join();
     }
 
-    RunUserHandlers();
+    RunUserEventLoop();
     return MessagesWorker->IsQueueEmpty();
 }
 
@@ -1124,7 +1124,7 @@ void TKeyedWriteSession::Wait() {
     NThreading::NWait::WaitAny(futures).Wait(GetCloseTimeout());
 }
 
-void TKeyedWriteSession::RunUserHandlers() {
+void TKeyedWriteSession::RunUserEventLoop() {
     if (!Settings.EventHandlers_.AcksHandler_ &&
         !Settings.EventHandlers_.ReadyToAcceptHandler_ &&
         !Settings.EventHandlers_.SessionClosedHandler_) {
@@ -1202,7 +1202,7 @@ void TKeyedWriteSession::RunMainWorker() {
             SessionsWorker->DoWork();
             MessagesWorker->DoWork();
         }
-        RunUserHandlers();
+        RunUserEventLoop();
         Wait();
     }
 

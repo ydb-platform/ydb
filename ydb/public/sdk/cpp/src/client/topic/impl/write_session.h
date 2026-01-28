@@ -323,7 +323,7 @@ private:
 
     void Wait();
 
-    void RunUserHandlers();
+    void RunUserEventLoop();
 
 public:
     TKeyedWriteSession(const TKeyedWriteSessionSettings& settings,

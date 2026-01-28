@@ -18,7 +18,6 @@
 #include <ydb/library/yql/providers/dq/common/yql_dq_common.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/providers/s3/statistics/yql_s3_statistics.h>
-#include <ydb/library/yql/providers/pq/watermark_settings/watermark_settings.h>
 
 #include <yql/essentials/core/dq_integration/yql_dq_integration.h>
 #include <yql/essentials/core/yql_opt_utils.h>
@@ -1512,13 +1511,6 @@ private:
             dqIntegration->FillSourceSettings(*source, settings, sourceType, maxTasksPerStage, ctx);
             YQL_ENSURE(!settings.type_url().empty(), "Data source provider \"" << dataSourceCategory << "\" didn't fill dq source settings for its dq source node");
             YQL_ENSURE(sourceType, "Data source provider \"" << dataSourceCategory << "\" didn't fill dq source settings type for its dq source node");
-            auto watermarksSettings = ::NPq::GetSourceWatermarkSettings(sourceType, settings);
-            if (watermarksSettings) {
-                auto& protoWatermarksSettings = *externalSource.MutableWatermarksSettings();
-                if (watermarksSettings->IdleTimeoutUs) {
-                    protoWatermarksSettings.SetIdleTimeoutUs(*watermarksSettings->IdleTimeoutUs);
-                }
-            }
         } else {
             // Source is embedded into stage as lambda
             externalSource.SetType(TString(dataSourceCategory));

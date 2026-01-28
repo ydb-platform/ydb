@@ -2375,13 +2375,6 @@ void TKqpTasksGraph::BuildReadTasksFromSource(TStageInfo& stageInfo, const TVect
             input.ConnectionInfo = NYql::NDq::TSourceInput{};
             input.SourceSettings = externalSource.GetSettings();
             input.SourceType = externalSource.GetType();
-            if (externalSource.HasWatermarksSettings()) {
-                const auto& watermarksSettings = externalSource.GetWatermarksSettings();
-                input.WatermarksMode = NYql::NDqProto::EWatermarksMode::WATERMARKS_MODE_DEFAULT;
-                if (watermarksSettings.HasIdleTimeoutUs()) {
-                    input.WatermarksIdleTimeoutUs = watermarksSettings.GetIdleTimeoutUs();
-                }
-            }
         }
 
         FillReadTaskFromSource(task, sourceName, structuredToken, resourceSnapshot, nodeOffset++);

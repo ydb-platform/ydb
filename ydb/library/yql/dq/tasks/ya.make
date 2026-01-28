@@ -5,6 +5,7 @@ PEERDIR(
     ydb/library/yql/dq/expr_nodes
     ydb/library/yql/dq/proto
     ydb/library/yql/dq/type_ann
+    ydb/library/yql/providers/pq/watermark_settings
     yql/essentials/ast
 )
 

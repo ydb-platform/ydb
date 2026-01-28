@@ -6,6 +6,7 @@
 #include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
 #include <yql/essentials/ast/yql_expr.h>
 #include <ydb/library/yql/dq/common/dq_common.h>
+#include <ydb/library/yql/providers/pq/watermark_settings/watermark_settings.h>
 
 #include <ydb/library/actors/core/actorid.h>
 
@@ -452,10 +453,11 @@ public:
             NDqProto::EWatermarksMode watermarksMode = NDqProto::WATERMARKS_MODE_DISABLED;
             if (enableWatermarks) {
                 for (auto& input : task.Inputs) {
-                    if (input.SourceType) {
-                        if (input.WatermarksMode == NDqProto::WATERMARKS_MODE_DEFAULT) {
-                            Y_DEBUG_ABORT_UNLESS(IsInfiniteSourceType(input.SourceType));
-                            watermarksMode = NDqProto::WATERMARKS_MODE_DEFAULT;
+                    if (input.SourceType && input.SourceSettings) {
+                        auto watermarksSettings = ::NPq::GetSourceWatermarkSettings(input.SourceType, input.SourceSettings);
+                        if (watermarksSettings) {
+                            input.WatermarksMode = watermarksMode = NDqProto::WATERMARKS_MODE_DEFAULT;
+                            input.WatermarksIdleTimeoutUs = watermarksSettings->WatermarksIdleTimeoutUs;
                         }
                     } else {
                         for (ui64 channelId : input.Channels) {

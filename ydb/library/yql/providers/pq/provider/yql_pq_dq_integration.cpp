@@ -246,8 +246,7 @@ public:
                     } else if (name == WatermarksLateArrivalDelayUsSetting) {
                         srcDesc.MutableWatermarks()->SetLateArrivalDelayUs(FromString<ui64>(Value(setting)));
                     } else if (name == WatermarksIdleTimeoutUsSetting) {
-                        auto idleTimeoutUs = FromString<ui64>(Value(setting));
-                        srcDesc.MutableWatermarks()->SetIdleTimeoutUs(idleTimeoutUs);
+                        srcDesc.MutableWatermarks()->SetIdleTimeoutUs(FromString<ui64>(Value(setting)));
                     } else if (name == WatermarksIdlePartitionsSetting) {
                         srcDesc.MutableWatermarks()->SetIdlePartitionsEnabled(true);
                     } else if (name == SkipJsonErrors) {

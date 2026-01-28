@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+#
+# Liveness probe for local-ydb container.
+# Goal: detect "dead/hung" YDB quickly with minimal CPU usage.
+#
+# This script is intended to be called by Docker HEALTHCHECK (directly or via a router script).
+#
+# Tunables (env):
+#   GRPC_PORT                 (default: 2136)
+#   YDB_ENDPOINT              (default: grpc://localhost:${GRPC_PORT})
+#   YDB_DATABASE              (default: /local)
+#   YDB_LIVENESS_TIMEOUT      (default: 2s)   # timeout(1) format
+#   DEBUG                     (true enables `set -x`)
+#
+set -euo pipefail
+
+if [ "${DEBUG:-false}" = "true" ]; then
+  set -x
+fi
+
+: "${GRPC_PORT:=2136}"
+: "${YDB_ENDPOINT:=grpc://localhost:${GRPC_PORT}}"
+: "${YDB_DATABASE:=/local}"
+: "${YDB_LIVENESS_TIMEOUT:=2s}"
+
+# `ydb` CLI is expected to be available inside the container as `/ydb`.
+# `--no-discovery` keeps the probe lightweight and predictable.
+ydb_cli() {
+  /ydb --endpoint "${YDB_ENDPOINT}" --database "${YDB_DATABASE}" --no-discovery "$@"
+}
+
+# Fast signal that the service is responding and cluster status is GOOD.
+# Use `timeout` so a stuck RPC doesn't stall Docker healthcheck runner.
+timeout "${YDB_LIVENESS_TIMEOUT}" \
+  ydb_cli monitoring healthcheck \
+  | grep -q "GOOD"

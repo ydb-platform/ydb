@@ -263,21 +263,29 @@ void TMVP::TryGetGenericOptionsFromConfig(
 
     if (generic["auth"]) {
         auto auth = generic["auth"];
-        bool hasJwtToken = auth["jwt_token"].IsDefined();
+        bool hasFederatedCreds = auth["federated_creds"].IsDefined();
         bool hasTokenFile = auth["token_file"].IsDefined();
-        if (hasJwtToken && hasTokenFile) {
-            ythrow yexception() << "Configuration error: Both 'jwt_token' and 'token_file' are set in 'auth'. Only one must be specified.";
+        if (hasFederatedCreds && hasTokenFile) {
+            ythrow yexception() << "Configuration error: Both 'federated_creds' and 'token_file' are set in 'auth'. Only one must be specified.";
         }
         opts.YdbTokenFile = auth["token_file"].as<std::string>("");
 
-        if (hasJwtToken) {
-            auto jwt = auth["jwt_token"];
-            opts.JwtTokenPath = jwt["path"] ? jwt["path"].as<std::string>("") : "";
+        if (hasFederatedCreds) {
+            auto jwt = auth["federated_creds"];
+            auto tokenPath = jwt["k8s_token_path"] ? jwt["k8s_token_path"].as<std::string>("") : "";
             opts.JwtTokenEndpoint = jwt["token_service_endpoint"] ? jwt["token_service_endpoint"].as<std::string>("") : "";
+            opts.JwtSaId = jwt["service_account_id"] ? jwt["service_account_id"].as<std::string>("") : "";
 
-            if (!opts.JwtTokenPath.empty()) {
-                opts.JwtToken = TUnbufferedFileInput(opts.JwtTokenPath).ReadAll();
+            if (tokenPath.empty()) {
+                ythrow yexception() << "Configuration error: 'k8s_token_path' must be specified in 'federated_creds'.";
             }
+            if (opts.JwtSaId.empty()) {
+                ythrow yexception() << "Configuration error: 'service_account_id' must be specified in 'federated_creds'.";
+            }
+            if (opts.JwtTokenEndpoint.empty()) {
+                ythrow yexception() << "Configuration error: 'token_service_endpoint' must be specified in 'federated_creds'.";
+            }
+            opts.JwtToken = TUnbufferedFileInput(tokenPath).ReadAll();
         }
     }
 
@@ -368,7 +376,7 @@ THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup(int argc, char**
     if (!genericOpts.JwtToken.empty()) {
         auto* jwtInfo = tokens.AddJwtInfo();
         jwtInfo->SetAuthMethod(NMvp::TJwtInfo::federated_creds);
-        jwtInfo->SetAccountId(genericOpts.JwtTokenSubject);
+        jwtInfo->SetAccountId(genericOpts.JwtSaId);
         jwtInfo->SetToken(genericOpts.JwtToken);
         jwtInfo->SetEndpoint(genericOpts.JwtTokenEndpoint);
         jwtInfo->SetName(OpenIdConnectSettings.SecretName); // the only name used

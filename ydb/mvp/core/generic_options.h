@@ -6,7 +6,7 @@ namespace NMVP {
 struct TGenericOptions {
     TString YdbTokenFile;
     TString JwtToken;
-    TString JwtTokenSubject;
+    TString JwtSaId;
     TString JwtTokenPath;
     TString JwtTokenEndpoint;
     TString CaCertificateFile;

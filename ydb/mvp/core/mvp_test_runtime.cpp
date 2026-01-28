@@ -1,10 +1,21 @@
 #include "mvp_test_runtime.h"
-
 #include "appdata.h"
 #include "mvp_log.h"
+#include <ydb/library/actors/http/http.h>
 
-#include <ydb/library/actors/core/mailbox.h>
-#include <ydb/library/actors/core/executor_thread.h>
+#include <algorithm>
+#include <cstring>
+
+template <typename HttpType>
+void EatWholeString(TIntrusivePtr<HttpType>& request, const TString& data) {
+    request->EnsureEnoughSpaceAvailable(data.size());
+    auto size = std::min(request->Avail(), data.size());
+    memcpy(request->Pos(), data.data(), size);
+    request->Advance(size);
+}
+
+template void EatWholeString<NHttp::THttpIncomingRequest>(TIntrusivePtr<NHttp::THttpIncomingRequest>& request, const TString& data);
+template void EatWholeString<NHttp::THttpIncomingResponse>(TIntrusivePtr<NHttp::THttpIncomingResponse>& request, const TString& data);
 
 const TString& GetEServiceName(NActors::NLog::EComponent component) {
     static const TString loggerName("LOGGER");

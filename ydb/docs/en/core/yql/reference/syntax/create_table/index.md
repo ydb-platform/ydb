@@ -84,8 +84,6 @@ Definition of a column group with specified parameters. For more information, se
 
 Additional parameters for creating a table. For more information, see the [{#T}](with.md) section.
 
-{% if feature_olap_tables %}
-
 { % note info % }
 
 {{ ydb-short-name }} supports two types of tables:
@@ -108,8 +106,6 @@ WITH (
 By default, if the `STORE` parameter is not specified, a row-oriented table is created.
 
 {% endnote %}
-
-{% endif %}
 
 {% note info %}
 

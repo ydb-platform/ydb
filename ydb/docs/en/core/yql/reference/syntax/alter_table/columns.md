@@ -2,7 +2,7 @@
 
 {{ backend_name }} supports adding columns to {% if backend_name == "YDB" %} [row](../../../../concepts/datamodel/table.md#row-oriented-tables) and [column](../../../../concepts/datamodel/table.md#column-oriented-tables) tables{% else %} [tables](../../../../concepts/datamodel/table.md) {% endif %}, as well as deleting non-key columns from tables.
 
-# ADD COLUMN
+## ADD COLUMN
 
 Builds a new column with the specified name, type, and options for the specified table.
 
@@ -41,7 +41,7 @@ ALTER TABLE episodes ADD COLUMN rate Double NOT NULL DEFAULT 5.0;
 ALTER TABLE episodes ADD COLUMN rate Double (DEFAULT 5.0, NOT NULL); -- alternative syntax
 ```
 
-# DROP COLUMN
+## DROP COLUMN
 
 Deletes a column with the specified name from the specified table.
 
@@ -49,17 +49,17 @@ Deletes a column with the specified name from the specified table.
 ALTER TABLE table_name DROP COLUMN column_name;
 ```
 
-## Request parameters
+### Request parameters
 
-### table_name
+#### table_name
 
 The path of the table to be modified.
 
-### column_name
+#### column_name
 
 The name of the column to be deleted.
 
-## Example
+### Example
 
 The code below will delete the column named `views` from the `episodes` table.
 

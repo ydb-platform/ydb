@@ -565,6 +565,22 @@ runs:
           echo "Build successful." |  GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py --color green
         fi
 
+        # Persist step summary from this step (contains full test tables)
+        python3 .github/scripts/tests/collect_combined_summary.py \
+          --save-summary \
+          --branch "${BRANCH_NAME}" \
+          --build-preset "${BUILD_PRESET}"
+        echo "SUMMARY_ARTIFACT_NAME=job-summary-${BRANCH_NAME}-${BUILD_PRESET}" >> $GITHUB_ENV
+
+    - name: Upload summary artifact
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ env.SUMMARY_ARTIFACT_NAME }}
+        path: summary_artifacts/summary-*.md
+        if-no-files-found: warn
+        retention-days: 1
+
     - name: comment-build-status
       if: github.event_name == 'pull_request' || github.event_name == 'pull_request_target'
       shell: bash

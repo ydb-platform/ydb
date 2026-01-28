@@ -122,7 +122,6 @@
 #include <ydb/services/local_discovery/grpc_service.h>
 #include <ydb/services/maintenance/grpc_service.h>
 #include <ydb/services/monitoring/grpc_service.h>
-#include <ydb/services/nbs/grpc_service.h>
 #include <ydb/services/persqueue_cluster_discovery/grpc_service.h>
 #include <ydb/services/deprecated/persqueue_v0/persqueue.h>
 #include <ydb/services/persqueue_v1/persqueue.h>
@@ -145,6 +144,11 @@
 #include <ydb/services/ydb/ydb_object_storage.h>
 #include <ydb/services/tablet/ydb_tablet.h>
 #include <ydb/services/view/grpc_service.h>
+
+#if defined(OS_LINUX)
+#include <ydb/services/nbs/grpc_service.h>
+#endif
+
 
 #include <ydb/core/fq/libs/init/init.h>
 
@@ -816,8 +820,10 @@ TGRpcServers TKikimrRunner::CreateGRpcServers(const TKikimrRunConfig& runConfig)
         names["bridge"] = &hasBridge;
         TServiceCfg hasTestShard = services.empty();
         names["test_shard"] = &hasTestShard;
+#if defined(OS_LINUX)
         TServiceCfg hasNbs = services.empty();
         names["nbs"] = &hasNbs;
+#endif
 
         std::unordered_set<TString> enabled;
         for (const auto& name : services) {
@@ -1124,11 +1130,11 @@ TGRpcServers TKikimrRunner::CreateGRpcServers(const TKikimrRunConfig& runConfig)
         if (hasTestShard) {
             server.AddService(new NGRpcService::TTestShardGRpcService(ActorSystem.Get(), Counters, grpcRequestProxies[0]));
         }
-
+#if defined(OS_LINUX)
         if (hasNbs) {
             server.AddService(new NGRpcService::TNbsGRpcService(ActorSystem.Get(), Counters, grpcRequestProxies[0]));
         }
-
+#endif
         if (ModuleFactories) {
             for (const auto& service : ModuleFactories->GrpcServiceFactory.Create(enabled, disabled, ActorSystem.Get(), Counters, grpcRequestProxies[0])) {
                 server.AddService(service);

@@ -407,6 +407,7 @@ void TKeyedWriteSession::TEventsWorker::SubscribeToPartition(ui64 partition) {
 }
 
 void TKeyedWriteSession::TEventsWorker::HandleNewMessage() {
+    std::lock_guard lock(Lock);
     if (Session->MessagesWorker->IsMemoryUsageOK()) {
         AddReadyToAcceptEvent();
     }

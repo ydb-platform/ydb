@@ -1804,7 +1804,7 @@ public:
                                    </div>
                                </div>
                            </div>
-                           <div class = 'row'>
+                           <div class='row'>
                                <h4 class='col-md-6' id='last_reassign'></h4>
                                <h4 class='col-md-6'>Reassigns currently running: <a id='current_reassigns' href='#'>0</a></h4>
                            </div>
@@ -3134,7 +3134,7 @@ public:
                     || std::find(
                         operation.TabletChannels.begin(),
                         operation.TabletChannels.end(),
-                        channel.Channel) != TabletChannels.end()) {
+                        channel.Channel) != operation.TabletChannels.end()) {
                 if (tablet->ChannelProfileNewGroup.test(channel.Channel)) {
                     return TInstant::Max();
                 }

@@ -249,14 +249,14 @@ void TMvpTokenator::UpdateJwtToken(const NMvp::TJwtInfo* jwtInfo) {
 
     switch (TokenConfigs.AccessServiceType) {
         case NMvp::yandex_v2: {
-                auto algorithm = jwt::algorithm::ps256(jwtInfo->publickey(), jwtInfo->privatekey());
-                auto encodedToken = jwt::create()
-                        .set_key_id(keyId)
-                        .set_issuer(serviceAccountId)
-                        .set_audience(audience)
-                        .set_issued_at(now)
-                        .set_expires_at(expiresAt)
-                        .sign(algorithm);
+            auto algorithm = jwt::algorithm::ps256(jwtInfo->publickey(), jwtInfo->privatekey());
+            auto encodedToken = jwt::create()
+                    .set_key_id(keyId)
+                    .set_issuer(serviceAccountId)
+                    .set_audience(audience)
+                    .set_issued_at(now)
+                    .set_expires_at(expiresAt)
+                    .sign(algorithm);
             yandex::cloud::priv::iam::v1::CreateIamTokenRequest request;
             request.set_jwt(TString(encodedToken));
             RequestCreateToken<yandex::cloud::priv::iam::v1::IamTokenService,
@@ -267,28 +267,39 @@ void TMvpTokenator::UpdateJwtToken(const NMvp::TJwtInfo* jwtInfo) {
             break;
         }
         case NMvp::nebius_v1: {
-            auto encodedToken = jwtInfo->token();
-            if (encodedToken.empty()) {
-                    auto algorithm = jwt::algorithm::rs256(jwtInfo->publickey(), jwtInfo->privatekey());
-                    encodedToken = jwt::create()
-                            .set_key_id(keyId)
-                            .set_issuer(serviceAccountId)
-                            .set_subject(serviceAccountId)
-                            .set_issued_at(now)
-                            .set_expires_at(expiresAt)
-                            .sign(algorithm);
-            }
+            Cerr << "iiii nebius_v1" << Endl;
             nebius::iam::v1::ExchangeTokenRequest request;
-            request.set_grant_type("urn:ietf:params:oauth:grant-type:token-exchange");
-            request.set_requested_token_type("urn:ietf:params:oauth:token-type:access_token");
-            request.set_subject_token_type("urn:ietf:params:oauth:token-type:jwt");
-            request.set_subject_token(TString(encodedToken));
+            if (jwtInfo->authmethod() == NMvp::TJwtInfo::static_creds) {
+                Cerr << "iiii static_creds" << Endl;
+                auto algorithm = jwt::algorithm::rs256(jwtInfo->publickey(), jwtInfo->privatekey());
+                auto encodedToken = jwt::create()
+                    .set_key_id(keyId)
+                    .set_issuer(serviceAccountId)
+                    .set_audience(audience)
+                    .set_issued_at(now)
+                    .set_expires_at(expiresAt)
+                    .sign(algorithm);
+                request.set_grant_type("urn:ietf:params:oauth:grant-type:token-exchange");
+                request.set_requested_token_type("urn:ietf:params:oauth:token-type:access_token");
+                request.set_subject_token_type("urn:ietf:params:oauth:token-type:jwt");
+                request.set_subject_token(TString(encodedToken));
+            } else {
+                Cerr << "iiii federated_creds" << Endl;
+                auto encodedToken = jwtInfo->token();
+                request.set_grant_type("urn:ietf:params:oauth:grant-type:token-exchange");
+                request.set_requested_token_type("urn:ietf:params:oauth:token-type:access_token");
+                request.set_subject_token_type("urn:nebius:params:oauth:token-type:subject_identifier");
+                request.set_subject_token(TString(serviceAccountId));
+                request.set_actor_token_type("urn:ietf:params:oauth:token-type:jwt");
+                request.set_actor_token(TString(encodedToken));
+            }
 
+            Cerr << "iiii before RequestCreateToken" << Endl;
             RequestCreateToken<nebius::iam::v1::TokenExchangeService,
                                 nebius::iam::v1::ExchangeTokenRequest,
                                 nebius::iam::v1::CreateTokenResponse,
                                 TEvPrivate::TEvUpdateIamTokenNebius>(jwtInfo->name(), jwtInfo->endpoint(), request, &nebius::iam::v1::TokenExchangeService::Stub::AsyncExchange, serviceAccountId);
-
+            Cerr << "iiii after RequestCreateToken" << Endl;
             break;
         }
     }

@@ -367,6 +367,7 @@ THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup(int argc, char**
     }
     if (!genericOpts.JwtToken.empty()) {
         auto* jwtInfo = tokens.AddJwtInfo();
+        jwtInfo->SetAuthMethod(NMvp::TJwtInfo::federated_creds);
         jwtInfo->SetAccountId(genericOpts.JwtTokenSubject);
         jwtInfo->SetToken(genericOpts.JwtToken);
         jwtInfo->SetEndpoint(genericOpts.JwtTokenEndpoint);

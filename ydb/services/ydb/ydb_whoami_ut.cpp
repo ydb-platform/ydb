@@ -72,6 +72,14 @@ Y_UNIT_TEST_SUITE(TWhoAmI) {
         auto result = WhoAmI(grpc, "user1@builtin", false);
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToOneLineString());
         UNIT_ASSERT_STRINGS_EQUAL(result.GetUserName(), "user1@builtin");
+        // Verify groups are not returned when not requested
+        UNIT_ASSERT_VALUES_EQUAL(result.GetGroups().size(), 0);
+        // Permissions are always returned
+        UNIT_ASSERT_VALUES_EQUAL(result.IsTokenRequired(), true);
+        UNIT_ASSERT_VALUES_EQUAL(result.IsAdministrationAllowed(), false);
+        UNIT_ASSERT_VALUES_EQUAL(result.IsMonitoringAllowed(), false);
+        UNIT_ASSERT_VALUES_EQUAL(result.IsViewerAllowed(), false);
+        UNIT_ASSERT_VALUES_EQUAL(result.IsDatabaseAllowed(), false);
     }
 
     Y_UNIT_TEST(WhoAmIWithGroups) {
@@ -83,9 +91,19 @@ Y_UNIT_TEST_SUITE(TWhoAmI) {
         auto result = WhoAmI(grpc, "user1@builtin", true);
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToOneLineString());
         UNIT_ASSERT_STRINGS_EQUAL(result.GetUserName(), "user1@builtin");
-        // Check that we got groups (even if empty, the call should succeed)
-        auto groups = result.GetGroups();
-        // User might have groups or not, depending on setup
+        // Check that we got groups with all-users@well-known
+        const auto& groups = result.GetGroups();
+        UNIT_ASSERT_C(groups.size() > 0, "Expected at least one group");
+        bool hasAllUsers = false;
+        for (const auto& group : groups) {
+            if (group == "all-users@well-known") {
+                hasAllUsers = true;
+                break;
+            }
+        }
+        UNIT_ASSERT_C(hasAllUsers, "Expected all-users@well-known group");
+        // Permissions are always returned
+        UNIT_ASSERT_VALUES_EQUAL(result.IsTokenRequired(), true);
     }
 
     Y_UNIT_TEST(WhoAmIWithPermissions_NoPermissions) {
@@ -190,8 +208,8 @@ Y_UNIT_TEST_SUITE(TWhoAmI) {
         UNIT_ASSERT_VALUES_EQUAL(result.IsTokenRequired(), false);
     }
 
-    Y_UNIT_TEST(WhoAmIWithoutGroups_NoPermissions) {
-        // When withGroups is false, permission fields should not be populated
+    Y_UNIT_TEST(WhoAmIWithoutGroups_PermissionsStillReturned) {
+        // Permissions are always returned, even without groups flag
         TBasicKikimrWithGrpcAndRootSchema<TKikimrTestWithAuth> server(GetWhoAmIAppConfig({
             .EnforceUserToken = true,
             .AdministrationAllowedSids = {"user1@builtin"}
@@ -201,12 +219,14 @@ Y_UNIT_TEST_SUITE(TWhoAmI) {
         auto result = WhoAmI(grpc, "user1@builtin", false);
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToOneLineString());
         UNIT_ASSERT_STRINGS_EQUAL(result.GetUserName(), "user1@builtin");
-        // Without groups flag, permissions should not be populated (all false)
-        UNIT_ASSERT_VALUES_EQUAL(result.IsTokenRequired(), false);
-        UNIT_ASSERT_VALUES_EQUAL(result.IsAdministrationAllowed(), false);
-        UNIT_ASSERT_VALUES_EQUAL(result.IsMonitoringAllowed(), false);
-        UNIT_ASSERT_VALUES_EQUAL(result.IsViewerAllowed(), false);
-        UNIT_ASSERT_VALUES_EQUAL(result.IsDatabaseAllowed(), false);
+        // Groups should be empty when not requested
+        UNIT_ASSERT_VALUES_EQUAL(result.GetGroups().size(), 0);
+        // Permissions are always returned regardless of groups flag
+        UNIT_ASSERT_VALUES_EQUAL(result.IsTokenRequired(), true);
+        UNIT_ASSERT_VALUES_EQUAL(result.IsAdministrationAllowed(), true);
+        UNIT_ASSERT_VALUES_EQUAL(result.IsMonitoringAllowed(), true);
+        UNIT_ASSERT_VALUES_EQUAL(result.IsViewerAllowed(), true);
+        UNIT_ASSERT_VALUES_EQUAL(result.IsDatabaseAllowed(), true);
     }
 
     Y_UNIT_TEST(WhoAmIWithPermissions_DifferentUser) {

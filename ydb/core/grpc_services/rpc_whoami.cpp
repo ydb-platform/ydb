@@ -41,19 +41,19 @@ private:
             for (const auto& group : userToken.GetGroupSIDs()) {
                 response->add_groups(group);
             }
-
-            // Add permission information
-            const auto* appData = AppData();
-            response->set_is_token_required(appData->EnforceUserTokenRequirement);
-            bool isAdministrationAllowed = IsTokenAllowed(&userToken, appData->DomainsConfig.GetSecurityConfig().GetAdministrationAllowedSIDs());
-            bool isMonitoringAllowed = isAdministrationAllowed || IsTokenAllowed(&userToken, appData->DomainsConfig.GetSecurityConfig().GetMonitoringAllowedSIDs());
-            bool isViewerAllowed = isMonitoringAllowed || IsTokenAllowed(&userToken, appData->DomainsConfig.GetSecurityConfig().GetViewerAllowedSIDs());
-            bool isDatabaseAllowed = isViewerAllowed || IsTokenAllowed(&userToken, appData->DomainsConfig.GetSecurityConfig().GetDatabaseAllowedSIDs());
-            response->set_is_administration_allowed(isAdministrationAllowed);
-            response->set_is_monitoring_allowed(isMonitoringAllowed);
-            response->set_is_viewer_allowed(isViewerAllowed);
-            response->set_is_database_allowed(isDatabaseAllowed);
         }
+
+        // Add permission information (always returned)
+        const auto* appData = AppData();
+        response->set_is_token_required(appData->EnforceUserTokenRequirement);
+        bool isAdministrationAllowed = IsTokenAllowed(&userToken, appData->DomainsConfig.GetSecurityConfig().GetAdministrationAllowedSIDs());
+        bool isMonitoringAllowed = isAdministrationAllowed || IsTokenAllowed(&userToken, appData->DomainsConfig.GetSecurityConfig().GetMonitoringAllowedSIDs());
+        bool isViewerAllowed = isMonitoringAllowed || IsTokenAllowed(&userToken, appData->DomainsConfig.GetSecurityConfig().GetViewerAllowedSIDs());
+        bool isDatabaseAllowed = isViewerAllowed || IsTokenAllowed(&userToken, appData->DomainsConfig.GetSecurityConfig().GetDatabaseAllowedSIDs());
+        response->set_is_administration_allowed(isAdministrationAllowed);
+        response->set_is_monitoring_allowed(isMonitoringAllowed);
+        response->set_is_viewer_allowed(isViewerAllowed);
+        response->set_is_database_allowed(isDatabaseAllowed);
 
         Request->SendResult(*response, Ydb::StatusIds::SUCCESS);
     }

@@ -5,7 +5,7 @@ SRCS(
 )
 
 PEERDIR(
-    util/datetime
+    util
 
     ydb/core/nbs/cloud/storage/core/libs/diagnostics
 )

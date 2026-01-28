@@ -1,5 +1,5 @@
 diff --git a/src/locale.cpp b/src/locale.cpp
-index 99a2d50..737664e 100644
+index a1e1040..a462867 100644
 --- a/src/locale.cpp
 +++ b/src/locale.cpp
 @@ -38,8 +38,8 @@

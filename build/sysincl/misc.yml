@@ -385,7 +385,7 @@
     - signal.h: contrib/libs/glibcasm/glibc/include/signal.h
     - stdint.h:
         - contrib/libs/glibcasm/glibc/include/stdint.h
-        - contrib/libs/cxxsupp/libcxx/include/stdint.h
+        - ""
     - stdlib.h: contrib/libs/glibcasm/glibc/include/stdlib.h
     - stackinfo.h:
         - contrib/libs/glibcasm/glibc/include/stackinfo.h
@@ -419,13 +419,13 @@
   includes:
     - stdint.h:
         - contrib/libs/glibcasm/glibc/include/stdint.h
-        - contrib/libs/cxxsupp/libcxx/include/stdint.h
+        - ""
 
 - source_filter: "^contrib/libs/cxxsupp/libcxx/include/inttypes.h"
   includes:
     - stdint.h:
         - contrib/libs/glibcasm/glibc/include/stdint.h
-        - contrib/libs/cxxsupp/libcxx/include/stdint.h
+        - ""
 
 - source_filter: "^contrib/tools/bison/data"
   includes:

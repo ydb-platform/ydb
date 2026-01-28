@@ -454,10 +454,10 @@ public:
             if (enableWatermarks) {
                 for (auto& input : task.Inputs) {
                     if (input.SourceType && input.SourceSettings) {
-                        auto watermarksSettings = ::NPq::GetSourceWatermarkSettings(input.SourceType, input.SourceSettings);
+                        auto watermarksSettings = ::NPq::GetSourceWatermarkSettings(input.SourceType, *input.SourceSettings);
                         if (watermarksSettings) {
                             input.WatermarksMode = watermarksMode = NDqProto::WATERMARKS_MODE_DEFAULT;
-                            input.WatermarksIdleTimeoutUs = watermarksSettings->WatermarksIdleTimeoutUs;
+                            input.WatermarksIdleTimeoutUs = watermarksSettings->IdleTimeoutUs;
                         }
                     } else {
                         for (ui64 channelId : input.Channels) {

@@ -2028,7 +2028,7 @@ public:
                 .SessionActorId = SelfId(),
                 .TxManager = txCtx->TxManager,
                 .TraceId = request.TraceId.GetTraceId(),
-                .QueryTraceId = QueryState->QueryTraceId,
+                .QueryTraceId = QueryState ? QueryState->QueryTraceId : 0,
                 .Counters = Counters,
                 .TxProxyMon = RequestCounters->TxProxyMon,
                 .Alloc = std::move(alloc),

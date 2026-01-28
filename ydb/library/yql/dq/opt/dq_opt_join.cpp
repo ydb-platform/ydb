@@ -773,7 +773,7 @@ TExprBase DqRewriteLeftPureJoin(const TExprBase node, TExprContext& ctx, const T
         .Done();
 }
 
-TExprBase DqBuildPhyJoin(const TDqJoin& join, bool pushLeftStage, TExprContext& ctx, IOptimizationContext& optCtx, bool useGraceCoreForMap, bool buildCollectStage) {
+TExprBase DqBuildPhyJoin(const TDqJoin& join, bool pushLeftStage, TExprContext& ctx, IOptimizationContext& optCtx, bool useGraceCoreForMap, bool buildCollectStage, bool useBlockHashJoin) {
     static const std::set<std::string_view> supportedTypes = {
         "Inner"sv,
         "Left"sv,
@@ -933,7 +933,40 @@ TExprBase DqBuildPhyJoin(const TDqJoin& join, bool pushLeftStage, TExprContext& 
 
     TMaybeNode<TExprBase> phyJoin;
     if (join.JoinType().Value() != "Cross"sv) {
-        phyJoin = DqMakePhyMapJoin(join, leftInputArg, joinRightInput, ctx, useGraceCoreForMap);
+        if (useBlockHashJoin) {
+            // Create TDqPhyBlockHashJoin directly when useBlockHashJoin is enabled
+            auto [leftJoinKeys, rightJoinKeys] = GetJoinKeys(join, ctx);
+            
+            TVector<TCoAtom> leftFilterKeys;
+            TVector<TCoAtom> rightFilterKeys;
+            
+            auto joinType = join.JoinType().Value();
+            if (joinType == "Inner"sv || joinType == "LeftSemi"sv) {
+                for (const auto& key : leftJoinKeys) {
+                    leftFilterKeys.push_back(key);
+                }
+            }
+            
+            for (const auto& key : rightJoinKeys) {
+                rightFilterKeys.push_back(key);
+            }
+            
+            auto leftFilteredInput = BuildSkipNullKeys(ctx, join.Pos(), leftInputArg, leftFilterKeys);
+            auto rightFilteredInput = BuildSkipNullKeys(ctx, join.Pos(), joinRightInput, rightFilterKeys);
+            
+            phyJoin = Build<TDqPhyBlockHashJoin>(ctx, join.Pos())
+                .LeftInput(leftFilteredInput)
+                .LeftLabel(join.LeftLabel())
+                .RightInput(rightFilteredInput)
+                .RightLabel(join.RightLabel())
+                .JoinType(join.JoinType())
+                .JoinKeys(join.JoinKeys())
+                .LeftJoinKeyNames(join.LeftJoinKeyNames())
+                .RightJoinKeyNames(join.RightJoinKeyNames())
+                .Done();
+        } else {
+            phyJoin = DqMakePhyMapJoin(join, leftInputArg, joinRightInput, ctx, useGraceCoreForMap);
+        }
     } else {
         YQL_ENSURE(join.JoinKeys().Empty());
 
@@ -1689,8 +1722,6 @@ TExprBase DqBuildHashJoin(
         case EHashJoinMode::GraceAndSelf:
         case EHashJoinMode::Grace:
             if (useBlockHashJoin) {
-                // Create TDqPhyBlockHashJoin node with structured inputs - peephole will handle conversion
-                // Pass the original structured inputs, not wide flows
                 hashJoin = Build<TDqPhyBlockHashJoin>(ctx, join.Pos())
                     .LeftInput(leftInputArg)
                     .RightInput(rightInputArg)

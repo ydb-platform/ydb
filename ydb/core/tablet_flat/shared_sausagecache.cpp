@@ -209,9 +209,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             // and schedule another decrease after we process the current event queue.
             newLimit = currentLimit - Config.GetMaxLimitDecreaseStepBytes();
             LimitDecreaseScheduled = true;
-            ActorContext().Send(
-                    SelfId(),
-                    new TKikimrEvents::TEvWakeup(static_cast<ui64>(EWakeupTag::DoLimitDecrease)));
+            Send(SelfId(), new TKikimrEvents::TEvWakeup(static_cast<ui64>(EWakeupTag::DoLimitDecrease)));
         }
 
         // limit of cache depends only on config and mem because passive pages may go in and out arbitrary

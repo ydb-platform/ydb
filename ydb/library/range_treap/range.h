@@ -66,11 +66,6 @@ public:
         , Mode(mode)
     {
     }
-
-    TBorder(const EBorderMode mode)
-        : Mode(mode)
-    {
-    }
 };
 
 template <class TKey, class TKeyView>

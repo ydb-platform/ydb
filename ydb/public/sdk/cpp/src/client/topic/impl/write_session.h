@@ -79,6 +79,8 @@ private:
         FLUENT_SETTING(std::string, FromBound);
         FLUENT_SETTING(std::optional<std::string>, ToBound);
         FLUENT_SETTING(ui32, PartitionId);
+        FLUENT_SETTING(std::vector<ui32>, Children);
+        FLUENT_SETTING_DEFAULT(bool, Locked, false);
     };
 
     struct TMessageInfo {
@@ -155,7 +157,6 @@ private:
         void OnWriteToSession(WrappedWriteSessionPtr wrappedSession);
         void DoWork();
         void Die(TDuration timeout = TDuration::Zero());
-        void SetEventsWorker(std::shared_ptr<TEventsWorker> eventsWorker);
     
     private:
         void AddIdleSession(WrappedWriteSessionPtr wrappedSession, TInstant emptySince, TDuration idleTimeout);
@@ -168,14 +169,13 @@ private:
         std::string GetProducerId(ui64 partitionId);
 
         TKeyedWriteSession* Session;
-        std::weak_ptr<TEventsWorker> EventsWorker;
         std::set<IdleSessionPtr, TIdleSession::Comparator> IdlerSessions;
         std::unordered_map<ui64, IdleSessionPtr> IdlerSessionsIndex;
         std::unordered_map<ui64, WrappedWriteSessionPtr> SessionsIndex;
     };
 
     struct TMessagesWorker : TWorker {
-        TMessagesWorker(TKeyedWriteSession* session, std::shared_ptr<TSessionsWorker> sessionsWorker);
+        TMessagesWorker(TKeyedWriteSession* session);
         
         void DoWork();
 
@@ -196,7 +196,6 @@ private:
         std::optional<TContinuationToken> GetContinuationToken(ui64 partition);
 
         TKeyedWriteSession* Session;
-        std::weak_ptr<TSessionsWorker> SessionsWorker;
 
         std::list<TMessageInfo> PendingMessages;
         std::list<TMessageInfo> InFlightMessages;
@@ -229,15 +228,13 @@ private:
         void HandleDescribeResult();
 
     public:
-        TSplittedPartitionWorker(TKeyedWriteSession* session, ui32 partitionId, ui64 partitionIdx, std::shared_ptr<TSessionsWorker> sessionsWorker, std::shared_ptr<TMessagesWorker> messagesWorker);
+        TSplittedPartitionWorker(TKeyedWriteSession* session, ui32 partitionId, ui64 partitionIdx);
         void DoWork();
         NThreading::TFuture<void> Wait();
         bool IsDone();
             
     private:
         TKeyedWriteSession* Session;
-        std::weak_ptr<TSessionsWorker> SessionsWorker;
-        std::weak_ptr<TMessagesWorker> MessagesWorker;
         NThreading::TFuture<TDescribeTopicResult> DescribeTopicFuture;
         EState State = EState::Init;
         ui32 PartitionId;
@@ -250,7 +247,7 @@ private:
     };
 
     struct TEventsWorker : TWorker {
-        TEventsWorker(TKeyedWriteSession* session, std::shared_ptr<TSessionsWorker> sessionsWorker, std::shared_ptr<TMessagesWorker> messagesWorker);
+        TEventsWorker(TKeyedWriteSession* session);
         
         void DoWork();
         NThreading::TFuture<void> Wait();
@@ -258,21 +255,19 @@ private:
         void UnsubscribeFromPartition(ui64 partition);
         void SubscribeToPartition(ui64 partition);
         void HandleNewMessage();
+        void HandleAcksEvent(ui64 partition, TWriteSessionEvent::TAcksEvent&& event);
         std::optional<TWriteSessionEvent::TEvent> GetEvent(bool block);
         std::vector<TWriteSessionEvent::TEvent> GetEvents(bool block, std::optional<size_t> maxEventsCount = std::nullopt);
 
     private:
         void HandleSessionClosedEvent(TSessionClosedEvent&& event, ui64 partition);
         void HandleReadyToAcceptEvent(ui64 partition, TWriteSessionEvent::TReadyToAcceptEvent&& event);
-        void HandleAcksEvent(ui64 partition, TWriteSessionEvent::TAcksEvent&& event);
         void RunEventLoop(WrappedWriteSessionPtr wrappedSession, ui64 partition);
         void TransferEventsToOutputQueue();
         void AddReadyToAcceptEvent();
         void AddSessionClosedEvent();
 
         TKeyedWriteSession* Session;
-        std::weak_ptr<TSessionsWorker> SessionsWorker;
-        std::weak_ptr<TMessagesWorker> MessagesWorker;
 
         std::vector<NThreading::TFuture<void>> Futures;
         std::unordered_set<size_t> ReadyFutures;

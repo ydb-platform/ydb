@@ -74,7 +74,7 @@ ssh_args = -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o Contro
 
         # Узлы
         ydb_config: "{{ ansible_config_file | dirname }}/files/config.yaml"
-        ydb_version: "24.4.4.2" # "24.1.18" # 24.2.7
+        ydb_version: "версия_системы"
 
         # База данных
         ydb_user: root
@@ -333,7 +333,7 @@ client_certificate_authorization:
 
 Остальные секции и настройки конфигурационного файла остаются без изменений.
 
-1. Создайте файл `files/dynamic-config.yaml` и заполните его.
+2. Создайте файл `files/dynamic-config.yaml` и заполните его.
 
 ```yaml
 metadata:

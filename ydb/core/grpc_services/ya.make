@@ -51,7 +51,7 @@ SRCS(
     rpc_explain_yql_script.cpp
     rpc_export.cpp
     rpc_forget_operation.cpp
-    rpc_fs_path_validation.cpp
+    fs_path_validation.cpp
     rpc_fq.cpp
     rpc_fq_internal.cpp
     rpc_get_operation.cpp

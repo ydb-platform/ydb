@@ -3,7 +3,7 @@
 #include "rpc_export_base.h"
 #include "rpc_calls.h"
 #include "rpc_operation_request_base.h"
-#include "rpc_fs_path_validation.h"
+#include "fs_path_validation.h"
 
 #include <ydb/public/api/protos/ydb_export.pb.h>
 #include <ydb/core/backup/common/encryption.h>

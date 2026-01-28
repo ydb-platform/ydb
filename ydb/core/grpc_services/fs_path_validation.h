@@ -2,8 +2,7 @@
 
 #include <util/generic/string.h>
 
-namespace NKikimr {
-namespace NGRpcService {
+namespace NKikimr::NGRpcService {
 
 /**
  * Validates filesystem path for security vulnerabilities using current platform conventions.
@@ -21,5 +20,4 @@ namespace NGRpcService {
  */
 bool ValidateFsPath(const TString& path, const TString& pathDescription, TString& error);
 
-} // namespace NGRpcService
-} // namespace NKikimr
+} // namespace NKikimr::NGRpcService

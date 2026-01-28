@@ -1,10 +1,9 @@
-#include "rpc_fs_path_validation.h"
+#include "fs_path_validation.h"
 
 #include <util/string/builder.h>
 #include <util/folder/pathsplit.h>
 
-namespace NKikimr {
-namespace NGRpcService {
+namespace NKikimr::NGRpcService {
 
 namespace {
 
@@ -78,5 +77,4 @@ bool ValidateFsPath(const TString& path, const TString& pathDescription, TString
 #endif
 }
 
-} // namespace NGRpcService
-} // namespace NKikimr
+} // namespace NKikimr::NGRpcService

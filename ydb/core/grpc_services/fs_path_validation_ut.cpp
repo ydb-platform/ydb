@@ -1,9 +1,8 @@
-#include "rpc_fs_path_validation.h"
+#include "fs_path_validation.h"
 
 #include <library/cpp/testing/unittest/registar.h>
 
-namespace NKikimr {
-namespace NGRpcService {
+namespace NKikimr::NGRpcService {
 
 Y_UNIT_TEST_SUITE(ValidateFsPathTests) {
     Y_UNIT_TEST(EmptyPath) {
@@ -235,5 +234,4 @@ Y_UNIT_TEST_SUITE(ValidateFsPathTests) {
 #endif
 }
 
-} // namespace NGRpcService
-} // namespace NKikimr
+} // namespace NKikimr::NGRpcService

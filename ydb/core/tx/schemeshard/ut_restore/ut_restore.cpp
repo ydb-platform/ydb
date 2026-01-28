@@ -6338,10 +6338,20 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             TotalGroupCount: 3
             PartitionPerTablet: 3
             PQTabletConfig {
+                RequireAuthRead: false
+                RequireAuthWrite: false
+                AbcId: 123
+                AbcSlug: "abc_slug"
+                FederationAccount: "federation_account"
+                EnableCompactification: false
+                TimestampType: "LogAppendTime"
                 PartitionConfig {
                     LifetimeSeconds: 12
                     WriteSpeedInBytesPerSecond: 1024
                     BurstSize: 2048
+                    MaxSizeInPartition: 10
+                    SourceIdLifetimeSeconds: 14
+                    SourceIdMaxCounts: 10000000
                 }
                 Codecs {
                     Ids: 0
@@ -6428,6 +6438,9 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         UNIT_ASSERT_VALUES_EQUAL(partConfig.GetLifetimeSeconds(), 12);
         UNIT_ASSERT_VALUES_EQUAL(partConfig.GetWriteSpeedInBytesPerSecond(), 1024);
         UNIT_ASSERT_VALUES_EQUAL(partConfig.GetBurstSize(), 2048);
+        UNIT_ASSERT_VALUES_EQUAL(partConfig.GetMaxSizeInPartition(), 10);
+        UNIT_ASSERT_VALUES_EQUAL(partConfig.GetSourceIdLifetimeSeconds(), 14);
+        UNIT_ASSERT_VALUES_EQUAL(partConfig.GetSourceIdMaxCounts(), 10000000);
 
         // Check codecs
         UNIT_ASSERT(config.HasCodecs());
@@ -6442,6 +6455,14 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             static_cast<int>(config.GetMeteringMode()),
             static_cast<int>(NKikimrPQ::TPQTabletConfig::METERING_MODE_RESERVED_CAPACITY)
         );
+
+        UNIT_ASSERT_VALUES_EQUAL(config.GetRequireAuthRead(), false);
+        UNIT_ASSERT_VALUES_EQUAL(config.GetRequireAuthWrite(), false);
+        UNIT_ASSERT_VALUES_EQUAL(config.GetAbcId(), 123);
+        UNIT_ASSERT_VALUES_EQUAL(config.GetAbcSlug(), "abc_slug");
+        UNIT_ASSERT_VALUES_EQUAL(config.GetFederationAccount(), "federation_account");
+        UNIT_ASSERT_VALUES_EQUAL(config.GetEnableCompactification(), false);
+        UNIT_ASSERT_VALUES_EQUAL(config.GetTimestampType(), "LogAppendTime");
 
         // Check partition strategy
         UNIT_ASSERT(config.HasPartitionStrategy());

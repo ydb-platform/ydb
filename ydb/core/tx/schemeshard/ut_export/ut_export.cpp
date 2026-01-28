@@ -3773,11 +3773,21 @@ WITH (
             TotalGroupCount: 3
             PartitionPerTablet: 3
             PQTabletConfig {
+                RequireAuthRead: false
+                RequireAuthWrite: false
+                AbcId: 123
+                AbcSlug: "abc_slug"
+                FederationAccount: "federation_account"
+                EnableCompactification: false
+                TimestampType: "LogAppendTime"
                 PartitionConfig {
                     LifetimeSeconds: 12
                     StorageLimitBytes: 104857600
                     WriteSpeedInBytesPerSecond: 1024
                     BurstSize: 2048
+                    MaxSizeInPartition: 10
+                    SourceIdLifetimeSeconds: 14
+                    SourceIdMaxCounts: 10000000
                 }
                 Codecs {
                     Ids: 0
@@ -3886,6 +3896,42 @@ WITH (
         UNIT_ASSERT_VALUES_EQUAL(consumer2.supported_codecs().codecs_size(), 2);
         UNIT_ASSERT_VALUES_EQUAL(consumer2.supported_codecs().codecs(0), 2);
         UNIT_ASSERT_VALUES_EQUAL(consumer2.supported_codecs().codecs(1), 3);
+
+        const auto& attrs = topicDescription.attributes();
+        UNIT_ASSERT(attrs.size() > 0);
+
+        // RequireAuthRead: false -> _allow_unauthenticated_read: true
+        UNIT_ASSERT(attrs.contains("_allow_unauthenticated_read"));
+        UNIT_ASSERT_VALUES_EQUAL(attrs.at("_allow_unauthenticated_read"), "true");
+
+        // RequireAuthWrite: false -> _allow_unauthenticated_write: true
+        UNIT_ASSERT(attrs.contains("_allow_unauthenticated_write"));
+        UNIT_ASSERT_VALUES_EQUAL(attrs.at("_allow_unauthenticated_write"), "true");
+
+        UNIT_ASSERT(attrs.contains("_abc_id"));
+        UNIT_ASSERT_VALUES_EQUAL(attrs.at("_abc_id"), "123");
+
+        UNIT_ASSERT(attrs.contains("_abc_slug"));
+        UNIT_ASSERT_VALUES_EQUAL(attrs.at("_abc_slug"), "abc_slug");
+
+        UNIT_ASSERT(attrs.contains("_federation_account"));
+        UNIT_ASSERT_VALUES_EQUAL(attrs.at("_federation_account"), "federation_account");
+
+        UNIT_ASSERT(attrs.contains("_timestamp_type"));
+        UNIT_ASSERT_VALUES_EQUAL(attrs.at("_timestamp_type"), "LogAppendTime");
+
+        UNIT_ASSERT(attrs.contains("_partitions_per_tablet"));
+        UNIT_ASSERT_VALUES_EQUAL(attrs.at("_partitions_per_tablet"), "3");
+
+        UNIT_ASSERT(attrs.contains("_max_partition_storage_size"));
+        UNIT_ASSERT_VALUES_EQUAL(attrs.at("_max_partition_storage_size"), "10");
+
+        // SourceIdLifetimeSeconds: 14 -> message_group_seqno_retention_period_ms: 14000
+        UNIT_ASSERT(attrs.contains("_message_group_seqno_retention_period_ms"));
+        UNIT_ASSERT_VALUES_EQUAL(attrs.at("_message_group_seqno_retention_period_ms"), "14000");
+
+        UNIT_ASSERT(attrs.contains("_max_partition_message_groups_seqno_stored"));
+        UNIT_ASSERT_VALUES_EQUAL(attrs.at("_max_partition_message_groups_seqno_stored"), "10000000");
 
         auto permissionsPath = "/topic_export/permissions.pb";
         UNIT_ASSERT_C(HasS3File(permissionsPath), "Permissions file should exist");

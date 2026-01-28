@@ -4,6 +4,8 @@
 
 ### Version 25.2.1.24 {#25-2-1-24}
 
+Release date: January 28, 2026.
+
 #### Bug Fixes
 
 * [Fixed](https://github.com/ydb-platform/ydb/pull/25112) an [issue](https://github.com/ydb-platform/ydb/issues/23858) where [tablet](./concepts/glossary.md#tablet) deletion might get stuck

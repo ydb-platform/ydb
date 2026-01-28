@@ -4,6 +4,8 @@
 
 ### Версия 25.2.1.24 {#25-2-1-24}
 
+Дата выхода: 28 января 2026.
+
 #### Исправления ошибок
 
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/25112) [проблема](https://github.com/ydb-platform/ydb/issues/23858), из-за которой удаление [таблетки](./concepts/glossary.md#tablet) могло зависать

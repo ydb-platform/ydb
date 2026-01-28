@@ -32,8 +32,11 @@ TConclusionStatus TKVExtractor::DoFill(TDataBuilder& dataBuilder, std::deque<std
         }
 
         const TStringBuf key = dataBuilder.AddKey(GetPrefix(), jsonKey.GetString());
-        if (!IsUtf(key) || key.Contains('\0')) {
+        if (!IsUtf(key)) {
             return TConclusionStatus::Fail("JSON key is not utf8");
+        }
+        if (key.Contains('\0')) {
+            return TConclusionStatus::Fail("JSON key contains null character");
         }
 
         auto conclusion = AddDataToBuilder(dataBuilder, iterators, key, value);

@@ -23,6 +23,8 @@
 #include <util/string/strip.h>
 
 #include <yql/essentials/minikql/jsonpath/parser/parser.h>
+#include <yql/essentials/types/binary_json/format.h>
+#include <yql/essentials/types/binary_json/write.h>
 
 
 namespace NKikimr::NKqp {
@@ -320,11 +322,26 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
         %s
     )";
     Y_UNIT_TEST_STRING_VARIATOR(ZeroInJsonKey, scriptUncommonUtf8JsonWriting) {
-        auto decoded = HexDecode(TStringBuf("010200002100000014000000E403000001000000E0030000686F0000000000000000000000F03F"));
+        std::string row("{\"ho1111\": 1}");
+        auto res = NBinaryJson::SerializeToBinaryJson(row, false);
+        if (std::holds_alternative<TString>(res)) {
+            UNIT_ASSERT_C(false, arrow::Status::SerializationError("Cannot serialize json (", std::get<TString>(res), "): ", row).message());
+        }
+
+        std::string Col2Val(std::get<NBinaryJson::TBinaryJson>(res).Data(), std::get<NBinaryJson::TBinaryJson>(res).Size());
+        // 0x00 is invalid JSON character;
+        // Change '1' in place where we have ho1111 sequence: 0x68 0x6F 0x31 0x31 0x31 0x31 -> 0x68 0x6F 0x00 0x00 0x00 0x00
+        auto pos = Col2Val.find("ho1111");
+        UNIT_ASSERT(pos != std::string::npos && pos < Col2Val.size() - 6);
+        pos += 2;
+        Col2Val[pos++] = 0x00;
+        Col2Val[pos++] = 0x00;
+        Col2Val[pos++] = 0x00;
+        Col2Val[pos++] = 0x00;
 
         NColumnShard::TTableUpdatesBuilder updates(NArrow::MakeArrowSchema(
             { { "Col1", NScheme::TTypeInfo(NScheme::NTypeIds::Uint64) }, { "Col2", NScheme::TTypeInfo(NScheme::NTypeIds::Utf8) } }));
-        updates.AddRow().Add<int64_t>(1).Add(std::string(decoded.data(), decoded.size()));
+        updates.AddRow().Add<int64_t>(1).Add(std::string(Col2Val.data(), Col2Val.size()));
         auto arrowString = Base64Encode(NArrow::NSerialization::TNativeSerializer().SerializeFull(updates.BuildArrow()));
         TString injection = Sprintf(R"(
             BULK_UPSERT:
@@ -337,11 +354,26 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
     }
 
     Y_UNIT_TEST_STRING_VARIATOR(BadUtf8SymbolInJsonKey, scriptUncommonUtf8JsonWriting) {
-        auto decoded = HexDecode(TStringBuf("010200002100000014000000E403000001000000E0030000686FF080808000000000000000F03F"));
+        std::string row("{\"ho1111\": 1}");
+        auto res = NBinaryJson::SerializeToBinaryJson(row, false);
+        if (std::holds_alternative<TString>(res)) {
+            UNIT_ASSERT_C(false, arrow::Status::SerializationError("Cannot serialize json (", std::get<TString>(res), "): ", row).message());
+        }
+
+        std::string Col2Val(std::get<NBinaryJson::TBinaryJson>(res).Data(), std::get<NBinaryJson::TBinaryJson>(res).Size());
+        // 0xF0 0x80 0x80 0x80 is invalid UTF8 sequence;
+        // Change '1' in place where we have ho1111 sequence: 0x68 0x6F 0x31 0x31 0x31 0x31 -> 0x68 0x6F 0xF0 0x80 0x80 0x80
+        auto pos = Col2Val.find("ho1111");
+        UNIT_ASSERT(pos != std::string::npos && pos < Col2Val.size() - 6);
+        pos += 2;
+        Col2Val[pos++] = 0xF0;
+        Col2Val[pos++] = 0x80;
+        Col2Val[pos++] = 0x80;
+        Col2Val[pos++] = 0x80;
 
         NColumnShard::TTableUpdatesBuilder updates(NArrow::MakeArrowSchema(
             { { "Col1", NScheme::TTypeInfo(NScheme::NTypeIds::Uint64) }, { "Col2", NScheme::TTypeInfo(NScheme::NTypeIds::Utf8) } }));
-        updates.AddRow().Add<int64_t>(1).Add(std::string(decoded.data(), decoded.size()));
+        updates.AddRow().Add<int64_t>(1).Add(std::string(Col2Val.data(), Col2Val.size()));
         auto arrowString = Base64Encode(NArrow::NSerialization::TNativeSerializer().SerializeFull(updates.BuildArrow()));
         TString injection = Sprintf(R"(
             BULK_UPSERT:

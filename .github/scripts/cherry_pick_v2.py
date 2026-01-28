@@ -131,6 +131,16 @@ def create_pr_source(pull: Any, allow_unmerged: bool, logger) -> Source:
     )
 
 
+def is_merge_commit(repo, commit_sha: str, logger) -> bool:
+    """Checks if a commit is a merge commit using GitHub API"""
+    try:
+        commit = repo.get_commit(commit_sha)
+        return commit.parents and len(commit.parents) > 1
+    except Exception as e:
+        logger.warning(f"Failed to check if commit {commit_sha[:7]} is merge commit via API: {e}")
+        return False
+
+
 def detect_conflicts(repo_path: str, logger) -> List[ConflictInfo]:
     """Detects conflicts from git status"""
     conflict_files = []
@@ -486,10 +496,18 @@ def process_branch(
     # Cherry-pick each commit
     for commit_sha in commit_shas:
         logger.info("Cherry-picking commit: %s", commit_sha[:7])
-        # Fetch commit to ensure it's available locally (needed for unmerged PRs)
+        # Check if commit is a merge commit via API
+        is_merge = is_merge_commit(repo, commit_sha, logger)
+        # Fetch commit to ensure it's available locally
         run_git(repo_path, ['fetch', 'origin', commit_sha], logger, check=False)
+        
         try:
-            result = run_git(repo_path, ['cherry-pick', '--allow-empty', commit_sha], logger, check=False)
+            cherry_pick_cmd = ['cherry-pick', '--allow-empty']
+            if is_merge:
+                cherry_pick_cmd.extend(['-m', '1'])
+                logger.info(f"Commit {commit_sha[:7]} is a merge commit, using -m 1 to get changes from feature branch")
+            
+            result = run_git(repo_path, cherry_pick_cmd + [commit_sha], logger, check=False)
             output = (result.stdout or '') + (('\n' + result.stderr) if result.stderr else '')
             
             if result.returncode != 0:

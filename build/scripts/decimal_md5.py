@@ -28,7 +28,7 @@ def ensure_paths_exist(paths):
 
 
 def _update_digest_with_file_contents(digest, path, block_size=65535):
-    with open(path) as f:
+    with open(path, 'rb') as f:
         while True:
             block = f.read(block_size)
             if not block:

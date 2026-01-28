@@ -1,9 +1,9 @@
 name: Create issues for muted tests
 
 on:
-  pull_request_review:
+  pull_request:
     types:
-      - submitted
+      - closed
     branches:
       - main
   workflow_dispatch:
@@ -16,13 +16,14 @@ on:
 env:
   GH_TOKEN: ${{ secrets.YDBOT_TOKEN }}
   MUTED_YA_FILE_PATH: .github/config/muted_ya.txt
+  BUILD_TYPE: relwithdebinfo
 
 jobs:
   create-issues-for-muted-tests:
     runs-on: ubuntu-latest
     if: |
-      ((github.event_name == 'pull_request_review' && 
-      github.event.review.state == 'approved' && 
+      ((github.event_name == 'pull_request' && 
+      github.event.pull_request.merged == true &&
       contains(github.event.pull_request.labels.*.name, 'mute-unmute') &&
       github.event.pull_request.base.ref == 'main') || 
       github.event_name == 'workflow_dispatch')
@@ -30,18 +31,18 @@ jobs:
     steps:
       - name: Set environment variables for branches
         run: |
-          echo "BRANCH_FOR_PR=${{ github.event.pull_request.head.ref || github.head_ref }}" >> $GITHUB_ENV
-          echo "BASE_BRANCH=${{ github.event.pull_request.base.ref || github.base_ref }}" >> $GITHUB_ENV
+          echo "BRANCH_FOR_PR=${{ github.event.pull_request.head.ref || github.head_ref || 'main' }}" >> $GITHUB_ENV
+          echo "BASE_BRANCH=${{ github.event.pull_request.base.ref || github.base_ref || 'main' }}" >> $GITHUB_ENV
 
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-            ref: ${{ github.event.pull_request.head.ref || github.head_ref }}
+            ref: main  # After merge, work with main branch
 
       - name: Install dependencies
         run: |
             python -m pip install --upgrade pip
-            pip install ydb[yc] PyGithub requests matplotlib numpy
+            pip install ydb[yc] PyGithub requests matplotlib numpy pandas
 
       - name: Setup ydb access
         uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
@@ -52,9 +53,10 @@ jobs:
         id: create_issues
         env:
           GITHUB_TOKEN: ${{ env.GH_TOKEN }}
-        run: .github/scripts/tests/create_new_muted_ya.py create_issues --file_path=${{ github.workspace }}/${{ env.MUTED_YA_FILE_PATH }} 
+        run: .github/scripts/tests/create_new_muted_ya.py create_issues --file_path=${{ github.workspace }}/${{ env.MUTED_YA_FILE_PATH }}
  
       - name: Add issues to PR
+        continue-on-error: true
         env:
           GITHUB_TOKEN: ${{ env.GH_TOKEN }}
         run: python .github/scripts/create_or_update_pr.py append_pr_body --pr_number=${{ github.event.pull_request.number || github.event.inputs.pr_number  }} --body=${{ steps.create_issues.outputs.created_issues_file }}
@@ -78,6 +80,33 @@ jobs:
               repo: context.repo.repo,
               body: completeBody
             });
+
+      # IMPORTANT: First update muted tests information in DB
+      - name: Update muted tests in DB
+        run: python3 .github/scripts/tests/get_muted_tests.py upload_muted_tests --branch=${{ env.BASE_BRANCH }} --build_type=${{ env.BUILD_TYPE }}
+
+      # Then update analytics that depends on muted tests
+      - name: Collect test history data
+        run: python3 .github/scripts/analytics/flaky_tests_history.py --branch=${{ env.BASE_BRANCH }} --build_type=${{ env.BUILD_TYPE }}
+      
+      - name: Update test monitor
+        run: python3 .github/scripts/analytics/tests_monitor.py --branch=${{ env.BASE_BRANCH }} --build_type=${{ env.BUILD_TYPE }}
+
+      - name: Export GitHub issues
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ env.GH_TOKEN }}
+        run: python3 .github/scripts/analytics/export_issues_to_ydb.py
+
+      - name: Upload GitHub issue mapping table
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ env.GH_TOKEN }}
+        run: python3 .github/scripts/analytics/github_issue_mapping.py
+
+      - name: Upload MUTED test monitor data mart with GitHub issue links
+        continue-on-error: true
+        run: python3 .github/scripts/analytics/data_mart_executor.py --query_path .github/scripts/analytics/data_mart_queries/test_muted_monitor_mart_with_issue.sql --table_path test_results/analytics/test_muted_monitor_mart --store_type column --partition_keys date_window branch build_type owner_team suite_folder --primary_keys date_window owner_team branch build_type suite_folder full_name --ttl_min 43200 --ttl_key date_window
 
       - name: Send team-specific messages to Telegram
         env:

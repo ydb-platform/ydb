@@ -10,5 +10,6 @@
   - bits/stat.h:     contrib/libs/musl/arch/x86_64/bits/stat.h
   - bits/stdint.h:   contrib/libs/musl/arch/x86_64/bits/stdint.h
   - sys/cdefs.h:     contrib/libs/musl/extra/sys/cdefs.h
+  - sys/queue.h:     contrib/libs/musl/extra/sys/queue.h
   - sys/sysctl.h:    contrib/libs/musl/extra/sys/sysctl.h
   - xlocale.h:       contrib/libs/musl/extra/xlocale.h

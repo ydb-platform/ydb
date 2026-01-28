@@ -5,23 +5,18 @@ import ydb
 import configparser
 import time
 import json
+import argparse
 from datetime import datetime, timezone, timedelta
 import requests
 from typing import List, Dict, Any, Optional
+from ydb_wrapper import YDBWrapper
 
 # Configuration
 ORG_NAME = 'ydb-platform'
 REPO_NAME = 'ydb'
 PROJECT_ID = None #'45'  # Optional: set to None to skip project data
 
-# Load YDB configuration
-dir = os.path.dirname(__file__)
-config = configparser.ConfigParser()
-config_file_path = f"{dir}/../../config/ydb_qa_db.ini"
-config.read(config_file_path)
-
-DATABASE_ENDPOINT = config["QA_DB"]["DATABASE_ENDPOINT"]
-DATABASE_PATH = config["QA_DB"]["DATABASE_PATH"]
+# YDB configuration is now handled by ydb_wrapper
 
 def run_query(query: str, variables: Optional[Dict] = None) -> Dict[str, Any]:
     """Execute GraphQL query against GitHub API"""
@@ -44,26 +39,110 @@ def run_query(query: str, variables: Optional[Dict] = None) -> Dict[str, Any]:
     else:
         raise Exception(f"Query failed with status {request.status_code}: {request.text}")
 
-def get_last_update_time(driver, table_path: str) -> Optional[datetime]:
+def get_last_update_time(ydb_wrapper: YDBWrapper, table_path: str) -> Optional[datetime]:
     """Get the latest updated_at timestamp from existing records"""
     try:
-        session = driver.table_client.session().create()
-        with session.transaction() as tx:
-            result = tx.execute(
-                f"SELECT MAX(updated_at) as max_updated_at FROM `{table_path}`",
-                commit_tx=True,
-                settings=ydb.BaseRequestSettings().with_timeout(30)
-            )
-            rows = result[0].rows
-            if rows and rows[0]['max_updated_at']:
-                return rows[0]['max_updated_at']
-            return None
+        query = f"SELECT MAX(updated_at) as max_updated_at FROM `{table_path}`"
+        results = ydb_wrapper.execute_scan_query(query)
+        
+        if results and results[0]['max_updated_at']:
+            # Convert timestamp to datetime
+            timestamp = results[0]['max_updated_at']
+            if isinstance(timestamp, int):
+                # YDB timestamp is in microseconds
+                return datetime.fromtimestamp(timestamp / 1000000, tz=timezone.utc)
+            elif isinstance(timestamp, datetime):
+                return timestamp
+        return None
 
     except Exception as e:
         print(f"Warning: Could not get last update time: {e}")
         return None
 
 
+
+def fetch_single_issue(org_name: str, repo_name: str, issue_number: int) -> Optional[Dict[str, Any]]:
+    """Fetch a single issue by number from GitHub repository"""
+    print(f"Debug mode: Fetching issue #{issue_number} from repository {org_name}/{repo_name}...")
+    start_time = time.time()
+    
+    issue_query = """
+    {
+      organization(login: "%s") {
+        repository(name: "%s") {
+          issue(number: %d) {
+            id
+            number
+            title
+            url
+            state
+            stateReason
+            body
+            bodyText
+            createdAt
+            updatedAt
+            closedAt
+            author {
+              login
+              url
+            }
+            assignees(first: 10) {
+              nodes {
+                login
+                url
+              }
+            }
+            labels(first: 20) {
+              nodes {
+                id
+                name
+                color
+                description
+              }
+            }
+            milestone {
+              id
+              title
+              url
+              state
+              dueOn
+            }
+            reactions {
+              totalCount
+            }
+            comments {
+              totalCount
+            }
+            repository {
+              id
+              name
+              url
+            }
+            participants(first: 10) {
+              totalCount
+            }
+          }
+        }
+      }
+    }
+    """
+    
+    query = issue_query % (org_name, repo_name, issue_number)
+    result = run_query(query)
+    
+    if result and 'data' in result:
+        repository = result['data']['organization']['repository']
+        issue = repository.get('issue')
+        
+        if issue is None:
+            print(f"Issue #{issue_number} not found")
+            return None
+        
+        elapsed = time.time() - start_time
+        print(f"Fetched issue #{issue_number} (took {elapsed:.2f}s)")
+        return issue
+    
+    return None
 
 def fetch_repository_issues(org_name: str = ORG_NAME, repo_name: str = REPO_NAME, since: Optional[datetime] = None) -> List[Dict[str, Any]]:
     """Fetch all issues from GitHub repository with comprehensive information"""
@@ -94,6 +173,7 @@ def fetch_repository_issues(org_name: str = ORG_NAME, repo_name: str = REPO_NAME
               title
               url
               state
+              stateReason
               body
               bodyText
               createdAt
@@ -412,6 +492,9 @@ def transform_issues_for_ydb(issues: List[Dict[str, Any]], project_fields: Optio
         # Issue type from project fields
         issue_type = issue_project_fields.get('type') or issue_project_fields.get('Type')
         
+        # Extract state reason (e.g., COMPLETED, DUPLICATE, NOT_PLANNED)
+        state_reason = issue.get('stateReason')
+        
         # Extract assignees
         assignees = []
         for assignee in issue.get('assignees', {}).get('nodes', []):
@@ -469,6 +552,7 @@ def transform_issues_for_ydb(issues: List[Dict[str, Any]], project_fields: Optio
             'title': issue.get('title', ''),
             'url': issue.get('url', ''),
             'state': issue.get('state', ''),
+            'state_reason': state_reason,
             'body': issue.get('body', '') or '',
             'body_text': issue.get('bodyText', ''),
             
@@ -517,254 +601,263 @@ def transform_issues_for_ydb(issues: List[Dict[str, Any]], project_fields: Optio
     print(f"Transformed {len(transformed_issues)} issues (took {elapsed:.2f}s)")
     return transformed_issues
 
-def check_table_exists(session, table_path: str) -> bool:
-    """Check if table exists in YDB"""
-    try:
-        session.describe_table(table_path)
-        return True
-    except ydb.SchemeError:
-        return False
-    except Exception as e:
-        print(f"Unexpected error while checking table: {e}")
-        return False
-
-def create_issues_table(session, table_path: str):
+def create_issues_table(ydb_wrapper: YDBWrapper, table_path: str):
     """Create issues table in YDB optimized for BI"""
     print(f"Creating BI-optimized table: {table_path}")
     start_time = time.time()
     
-    try:
-        session.execute_scheme(f"""
-            CREATE TABLE IF NOT EXISTS `{table_path}` (
-                -- Primary identifiers
-                `project_item_id` Utf8 NOT NULL,
-                `issue_id` Utf8 NOT NULL,
-                `issue_number` Uint64 NOT NULL,
-                
-                -- Core issue data
-                `title` Utf8,
-                `url` Utf8,
-                `state` Utf8,
-                `body` Utf8,
-                `body_text` Utf8,
-                
-                -- Time dimensions for BI (partitioning keys)
-                `created_at` Timestamp NOT NULL,
-                `updated_at` Timestamp,
-                `closed_at` Timestamp,
-                `created_date` Date NOT NULL,  -- Extracted date for better partitioning
-                `updated_date` Date NOT NULL,  -- Extracted date for better partitioning
-                
-                -- User dimensions
-                `author_login` Utf8,
-                `author_url` Utf8,
-                
-                
-                -- Repository dimensions
-                `repository_name` Utf8,
-                `repository_url` Utf8,
-                
-                -- Project dimensions (nullable for issues not in project)
-                `project_status` Utf8,
-                `project_owner` Utf8,
-                `project_priority` Utf8,
-                `is_in_project` Int NOT NULL,  -- Boolean flag for faster filtering
-                
-                -- Time-based metrics
-                `days_since_created` Uint64,  -- Days since creation
-                `days_since_updated` Uint64,  -- Days since last update
-                `time_to_close_hours` Uint64,  -- Time to close in hours (if closed)
-                
-                -- Complex data (keep as JSON for detailed analysis)
-                `assignees` Json,
-                `labels` Json,
-                `milestone` Json,
-                `project_fields` Json,
-                `info` Json,
-                `issue_type` Utf8,
-                
-                -- System fields
-                `exported_at` Timestamp NOT NULL,
-                
-                PRIMARY KEY (`created_date`, `issue_number`, `project_item_id`)
-            )
-            PARTITION BY HASH(`created_date`)
-            WITH (
-                STORE = COLUMN,
-                
-                AUTO_PARTITIONING_BY_SIZE = ENABLED,
-                AUTO_PARTITIONING_PARTITION_SIZE_MB = 2048,
-                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 4
-            )
-        """)
-        
-        elapsed = time.time() - start_time
-        print(f"BI-optimized table created successfully (took {elapsed:.2f}s)")
-        
-    except Exception as e:
-        elapsed = time.time() - start_time
-        print(f"Error creating BI-optimized table: {e} (took {elapsed:.2f}s)")
-        raise
-
-def bulk_upsert_issues(table_client, table_path: str, issues: List[Dict[str, Any]]):
-    """Bulk upsert issues into YDB table optimized for BI"""
-    print(f"Bulk upserting {len(issues)} issues to BI-optimized table {table_path}")
-    start_time = time.time()
+    create_sql = f"""
+        CREATE TABLE IF NOT EXISTS `{table_path}` (
+            -- Primary identifiers
+            `project_item_id` Utf8 NOT NULL,
+            `issue_id` Utf8 NOT NULL,
+            `issue_number` Uint64 NOT NULL,
+            
+            -- Core issue data
+            `title` Utf8,
+            `url` Utf8,
+            `state` Utf8,
+            `state_reason` Utf8,  -- Reason for closing (COMPLETED, DUPLICATE, NOT_PLANNED)
+            `body` Utf8,
+            `body_text` Utf8,
+            
+            -- Time dimensions for BI (partitioning keys)
+            `created_at` Timestamp NOT NULL,
+            `updated_at` Timestamp,
+            `closed_at` Timestamp,
+            `created_date` Date NOT NULL,  -- Extracted date for better partitioning
+            `updated_date` Date NOT NULL,  -- Extracted date for better partitioning
+            
+            -- User dimensions
+            `author_login` Utf8,
+            `author_url` Utf8,
+            
+            
+            -- Repository dimensions
+            `repository_name` Utf8,
+            `repository_url` Utf8,
+            
+            -- Project dimensions (nullable for issues not in project)
+            `project_status` Utf8,
+            `project_owner` Utf8,
+            `project_priority` Utf8,
+            `is_in_project` Int NOT NULL,  -- Boolean flag for faster filtering
+            
+            -- Time-based metrics
+            `days_since_created` Uint64,  -- Days since creation
+            `days_since_updated` Uint64,  -- Days since last update
+            `time_to_close_hours` Uint64,  -- Time to close in hours (if closed)
+            
+            -- Complex data (keep as JSON for detailed analysis)
+            `assignees` Json,
+            `labels` Json,
+            `milestone` Json,
+            `project_fields` Json,
+            `info` Json,
+            `issue_type` Utf8,
+            
+            -- System fields
+            `exported_at` Timestamp NOT NULL,
+            
+            PRIMARY KEY (`created_date`, `issue_number`, `project_item_id`)
+        )
+        PARTITION BY HASH(`created_date`)
+        WITH (
+            STORE = COLUMN,
+            
+            AUTO_PARTITIONING_BY_SIZE = ENABLED,
+            AUTO_PARTITIONING_PARTITION_SIZE_MB = 2048,
+            AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 4
+        )
+    """
     
-    column_types = (
-        ydb.BulkUpsertColumns()
-        # Primary identifiers
-        .add_column("project_item_id", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("issue_id", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("issue_number", ydb.OptionalType(ydb.PrimitiveType.Uint64))
-        
-        # Core issue data
-        .add_column("title", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("url", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("state", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("body", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("body_text", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        
-        # Time dimensions
-        .add_column("created_at", ydb.OptionalType(ydb.PrimitiveType.Timestamp))
-        .add_column("updated_at", ydb.OptionalType(ydb.PrimitiveType.Timestamp))
-        .add_column("closed_at", ydb.OptionalType(ydb.PrimitiveType.Timestamp))
-        .add_column("created_date", ydb.OptionalType(ydb.PrimitiveType.Date))
-        .add_column("updated_date", ydb.OptionalType(ydb.PrimitiveType.Date))
-        
-        # User dimensions
-        .add_column("author_login", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("author_url", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        
-        
-        # Repository dimensions
-        .add_column("repository_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("repository_url", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        
-        # Project dimensions
-        .add_column("project_status", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("project_owner", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("project_priority", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("is_in_project", ydb.OptionalType(ydb.PrimitiveType.Int32))
-        
-        # Time-based metrics
-        .add_column("days_since_created", ydb.OptionalType(ydb.PrimitiveType.Uint64))
-        .add_column("days_since_updated", ydb.OptionalType(ydb.PrimitiveType.Uint64))
-        .add_column("time_to_close_hours", ydb.OptionalType(ydb.PrimitiveType.Uint64))
-        
-        # Complex data
-        .add_column("assignees", ydb.OptionalType(ydb.PrimitiveType.Json))
-        .add_column("labels", ydb.OptionalType(ydb.PrimitiveType.Json))
-        .add_column("milestone", ydb.OptionalType(ydb.PrimitiveType.Json))
-        .add_column("project_fields", ydb.OptionalType(ydb.PrimitiveType.Json))
-        .add_column("info", ydb.OptionalType(ydb.PrimitiveType.Json))
-        .add_column("issue_type", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        
-        # System fields
-        .add_column("exported_at", ydb.OptionalType(ydb.PrimitiveType.Timestamp))
-    )
-    
-    table_client.bulk_upsert(table_path, issues, column_types)
+    ydb_wrapper.create_table(table_path, create_sql)
     
     elapsed = time.time() - start_time
-    print(f"BI-optimized bulk upsert completed (took {elapsed:.2f}s)")
+    print(f"BI-optimized table created successfully (took {elapsed:.2f}s)")
 
 def main():
     """Main function to export GitHub issues to YDB"""
+    parser = argparse.ArgumentParser(description='Export GitHub issues to YDB')
+    parser.add_argument('--full', action='store_true', 
+                        help='Perform full export of all issues (default: incremental update)')
+    parser.add_argument('--issue', type=int, metavar='NUMBER',
+                        help='Debug mode: fetch only specific issue by number (e.g., --issue 26344)')
+    args = parser.parse_args()
+    
     print("Starting GitHub issues export to YDB")
     script_start_time = time.time()
     
-    # Check environment variables
-    required_vars = ["GITHUB_TOKEN", "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"]
-    for var in required_vars:
-        if var not in os.environ:
-            print(f"Error: Environment variable {var} is missing")
+    with YDBWrapper() as ydb_wrapper:
+        
+        # Check credentials
+        if not ydb_wrapper.check_credentials():
+            print("Error: YDB credentials check failed")
             return 1
-    
-    # Set up YDB credentials
-    os.environ["YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"] = os.environ[
-        "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"
-    ]
-    
-    table_path = "github_data/issues"
-
-    full_table_path = f"{DATABASE_PATH}/{table_path}"
-    batch_size = 100
-    
-    try:
-        # Connect to YDB and process data
-        with ydb.Driver(
-            endpoint=DATABASE_ENDPOINT,
-            database=DATABASE_PATH,
-            credentials=ydb.credentials_from_env_variables()
-        ) as driver:
-            driver.wait(timeout=10, fail_fast=True)
+        
+        # Check GitHub token
+        if "GITHUB_TOKEN" not in os.environ:
+            print("Error: Environment variable GITHUB_TOKEN is missing")
+            return 1
+        
+        # Get table path from config
+        table_path = ydb_wrapper.get_table_path("issues")
+        batch_size = 100
+        
+        try:
+            # Create table if needed
+            create_issues_table(ydb_wrapper, table_path)
             
-            with ydb.SessionPool(driver) as pool:
-                # Check and create table if needed
-                def check_and_create_table(session):
-                    create_issues_table(session, table_path)
-                    return True
+            # Initialize issues variable
+            issues = None
+            
+            # Check if debug mode (single issue) is requested
+            if args.issue:
+                print(f"Debug mode: fetching only issue #{args.issue}")
+                single_issue = fetch_single_issue(ORG_NAME, REPO_NAME, args.issue)
                 
-                pool.retry_operation_sync(check_and_create_table)
+                if single_issue is None:
+                    print(f"Issue #{args.issue} not found")
+                    return 1
                 
+                issues = [single_issue]
+            else:
                 # Check if this is an incremental update
-                last_update_time = get_last_update_time(driver, table_path)
-                
-                if last_update_time:
-                    print(f"Incremental update: fetching issues updated since {last_update_time.isoformat()}")
-                    # Add a small buffer to avoid missing issues due to timing issues
-                    since_time = last_update_time - timedelta(minutes=5)
-                else:
-                    print("Full export: fetching all issues")
+                if args.full:
+                    print("Full export: fetching all issues (--full flag specified)")
                     since_time = None
+                else:
+                    last_update_time = get_last_update_time(ydb_wrapper, table_path)
+                    
+                    if last_update_time:
+                        print(f"Incremental update: fetching issues updated since {last_update_time.isoformat()}")
+                        # Add a small buffer to avoid missing issues due to timing issues
+                        since_time = last_update_time - timedelta(minutes=5)
+                    else:
+                        print("Full export: fetching all issues (no previous data found)")
+                        since_time = None
                 
                 # Fetch issues from GitHub
                 issues = fetch_repository_issues(ORG_NAME, REPO_NAME, since_time)
+            
+            # Validate that issues were fetched
+            if issues is None:
+                print("Error: Failed to fetch issues from GitHub")
+                return 1
+            
+            if not issues:
+                print("No issues fetched from GitHub")
+                return 0
+            
+            # Get project fields if PROJECT_ID is specified
+            project_fields = {}
+            if PROJECT_ID:
+                issue_numbers = []
+                for issue in issues:
+                    number = issue.get('number')
+                    if number is not None and isinstance(number, int):
+                        issue_numbers.append(number)
+                if issue_numbers:
+                    project_fields = get_project_fields_for_issues(ORG_NAME, PROJECT_ID, issue_numbers)
+            
+            # Transform issues for YDB
+            transformed_issues = transform_issues_for_ydb(issues, project_fields)
+            
+            # Upsert issues in batches using bulk_upsert_batches
+            print(f"Uploading {len(transformed_issues)} issues in batches of {batch_size}")
+            upload_start_time = time.time()
+            
+            # Debug: print issue data before bulk upsert 
+            debug_issue_number = args.issue
+            debug_issue = None
+            for issue in transformed_issues:
+                if issue.get('issue_number') == debug_issue_number:
+                    debug_issue = issue
+                    break
+            
+            if debug_issue:
+                print(f"\n=== DEBUG: Issue #{debug_issue_number} before bulk upsert ===")
+                print(f"Issue number: {debug_issue.get('issue_number')}")
+                print(f"Title: {debug_issue.get('title')}")
+                print(f"State: {debug_issue.get('state')}")
+                print(f"State reason: {debug_issue.get('state_reason')}")
+                print(f"URL: {debug_issue.get('url')}")
+                print(f"\nAll fields for issue #{debug_issue_number}:")
+                for key, value in sorted(debug_issue.items()):
+                    # Truncate long values for readability
+                    if isinstance(value, str) and len(value) > 100:
+                        display_value = value[:100] + "..."
+                    else:
+                        display_value = value
+                    print(f"  {key}: {display_value}")
+                print("=" * 60 + "\n")
+            elif args.issue:
+                print(f"\n=== DEBUG: Issue #{debug_issue_number} not found in transformed_issues ===\n")
+            
+            # Подготавливаем column_types один раз
+            column_types = (
+                ydb.BulkUpsertColumns()
+                # Primary identifiers
+                .add_column("project_item_id", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column("issue_id", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column("issue_number", ydb.OptionalType(ydb.PrimitiveType.Uint64))
                 
-                if not issues:
-                    print("No issues fetched from GitHub")
-                    return 0
+                # Core issue data
+                .add_column("title", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column("url", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column("state", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column("state_reason", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column("body", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column("body_text", ydb.OptionalType(ydb.PrimitiveType.Utf8))
                 
-                # Get project fields if PROJECT_ID is specified
-                project_fields = {}
-                if PROJECT_ID:
-                    issue_numbers = []
-                    for issue in issues:
-                        number = issue.get('number')
-                        if number is not None and isinstance(number, int):
-                            issue_numbers.append(number)
-                    if issue_numbers:
-                        project_fields = get_project_fields_for_issues(ORG_NAME, PROJECT_ID, issue_numbers)
+                # Time dimensions
+                .add_column("created_at", ydb.OptionalType(ydb.PrimitiveType.Timestamp))
+                .add_column("updated_at", ydb.OptionalType(ydb.PrimitiveType.Timestamp))
+                .add_column("closed_at", ydb.OptionalType(ydb.PrimitiveType.Timestamp))
+                .add_column("created_date", ydb.OptionalType(ydb.PrimitiveType.Date))
+                .add_column("updated_date", ydb.OptionalType(ydb.PrimitiveType.Date))
                 
-                # Transform issues for YDB
-                transformed_issues = transform_issues_for_ydb(issues, project_fields)
+                # User dimensions
+                .add_column("author_login", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column("author_url", ydb.OptionalType(ydb.PrimitiveType.Utf8))
                 
-                # Upsert issues in batches
-                print(f"Uploading {len(transformed_issues)} issues in batches of {batch_size}")
-                upload_start_time = time.time()
+                # Repository dimensions
+                .add_column("repository_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column("repository_url", ydb.OptionalType(ydb.PrimitiveType.Utf8))
                 
-                for start in range(0, len(transformed_issues), batch_size):
-                    batch_start_time = time.time()
-                    batch_issues = transformed_issues[start:start + batch_size]
-                    
-                    print(f"Uploading batch {start//batch_size + 1}: issues {start+1}-{start+len(batch_issues)}")
-                    bulk_upsert_issues(driver.table_client, full_table_path, batch_issues)
-                    
-                    batch_elapsed = time.time() - batch_start_time
-                    print(f"Batch completed (took {batch_elapsed:.2f}s)")
+                # Project dimensions
+                .add_column("project_status", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column("project_owner", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column("project_priority", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column("is_in_project", ydb.OptionalType(ydb.PrimitiveType.Int32))
                 
-                upload_elapsed = time.time() - upload_start_time
-                print(f"All issues uploaded (total upload time: {upload_elapsed:.2f}s)")
+                # Time-based metrics
+                .add_column("days_since_created", ydb.OptionalType(ydb.PrimitiveType.Uint64))
+                .add_column("days_since_updated", ydb.OptionalType(ydb.PrimitiveType.Uint64))
+                .add_column("time_to_close_hours", ydb.OptionalType(ydb.PrimitiveType.Uint64))
+                
+                # Complex data
+                .add_column("assignees", ydb.OptionalType(ydb.PrimitiveType.Json))
+                .add_column("labels", ydb.OptionalType(ydb.PrimitiveType.Json))
+                .add_column("milestone", ydb.OptionalType(ydb.PrimitiveType.Json))
+                .add_column("project_fields", ydb.OptionalType(ydb.PrimitiveType.Json))
+                .add_column("info", ydb.OptionalType(ydb.PrimitiveType.Json))
+                .add_column("issue_type", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                
+                # System fields
+                .add_column("exported_at", ydb.OptionalType(ydb.PrimitiveType.Timestamp))
+            )
+            
+            ydb_wrapper.bulk_upsert_batches(table_path, transformed_issues, column_types, batch_size)
+            
+            script_elapsed = time.time() - script_start_time
+            print(f"Script completed successfully (total time: {script_elapsed:.2f}s)")
+            
+        except Exception as e:
+            print(f"Error during execution: {e}")
+            return 1
         
-        script_elapsed = time.time() - script_start_time
-        print(f"Script completed successfully (total time: {script_elapsed:.2f}s)")
-        
-    except Exception as e:
-        print(f"Error during execution: {e}")
-        return 1
-    
-    return 0
+        return 0
 
 if __name__ == "__main__":
     exit(main()) 

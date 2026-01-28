@@ -939,7 +939,6 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         std::condition_variable tokensCv;
         std::deque<TContinuationToken> readyTokens;
 
-        // Для теста используем синхронный экзекутор, чтобы не зависеть от DefaultHandlersExecutor_ (TThreadPool).
         writeSettings.EventHandlers_.HandlersExecutor(std::make_shared<TSyncExecutor>());
 
         writeSettings.EventHandlers_.ReadyToAcceptHandler(

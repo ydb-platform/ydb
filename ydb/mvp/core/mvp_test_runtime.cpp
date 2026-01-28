@@ -3,9 +3,6 @@
 #include "mvp_log.h"
 #include <ydb/library/actors/http/http.h>
 
-#include <algorithm>
-#include <cstring>
-
 template <typename HttpType>
 void EatWholeString(TIntrusivePtr<HttpType>& request, const TString& data) {
     request->EnsureEnoughSpaceAvailable(data.size());

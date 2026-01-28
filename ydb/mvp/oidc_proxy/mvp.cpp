@@ -423,7 +423,11 @@ THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup(int argc, char**
     setup->Executors.Reset(new TAutoPtr<NActors::IExecutorPool>[3]);
     setup->ExecutorsCount = 3;
     setup->Executors[0] = new NActors::TBasicExecutorPool(0, 4, 10);
+    // For UI v2 Logbroker RPCs. We use separate thread pools for RPCs so CPU heavy
+    // and slow requests don't interfere with requests that communicate with
+    // Logbroker Configuration manager only and suppose to work fast
     setup->Executors[1] = new NActors::TBasicExecutorPool(1, 4, 10);
+    // For JSON Merger used by  UI v2 dynamic Logbroker RPCs
     setup->Executors[2] = new NActors::TBasicExecutorPool(2, 4, 10);
 
     setup->Scheduler = new NActors::TBasicSchedulerThread(NActors::TSchedulerConfig(512, 100));

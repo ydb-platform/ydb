@@ -94,7 +94,7 @@ bool TTopicKeyParser::Parse(const TExprNode& expr, TExprNode::TPtr readSettings,
                 Watermark = readSettings->Child(i)->ChildPtr(1);
                 continue;
             }
-            if (readSettings->Child(i)->Head().IsAtom("skip.json.errors")) {
+            if (readSettings->Child(i)->Head().IsAtom("skip.json.errors") || readSettings->Child(i)->Head().IsAtom("skipjsonerrors")) {
                 SkipJsonErrors = readSettings->Child(i);
                 continue;
             }

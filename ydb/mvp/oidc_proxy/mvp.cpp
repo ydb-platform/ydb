@@ -1,16 +1,11 @@
-#include <util/datetime/base.h>
-#include <util/generic/yexception.h>
-#include <library/cpp/deprecated/atomic/atomic.h>
-#include <util/stream/file.h>
-#include <util/system/hostname.h>
-#include <util/system/mlock.h>
-#include <library/cpp/getopt/last_getopt.h>
+#include "mvp.h"
+#include "oidc_client.h"
+
 #include <ydb/library/actors/core/executor_pool_basic.h>
 #include <ydb/library/actors/core/scheduler_basic.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/interconnect/poller/poller_actor.h>
 #include <ydb/library/actors/protos/services_common.pb.h>
-#include <google/protobuf/text_format.h>
 #include <ydb/library/actors/core/process_stats.h>
 #include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/library/actors/http/http_cache.h>
@@ -24,8 +19,16 @@
 #include <ydb/mvp/core/http_sensors.h>
 #include <ydb/mvp/core/cache_policy.h>
 
-#include "mvp.h"
-#include "oidc_client.h"
+#include <library/cpp/deprecated/atomic/atomic.h>
+#include <library/cpp/getopt/last_getopt.h>
+#include <google/protobuf/text_format.h>
+
+#include <util/datetime/base.h>
+#include <util/generic/yexception.h>
+#include <util/stream/file.h>
+#include <util/string/strip.h>
+#include <util/system/hostname.h>
+#include <util/system/mlock.h>
 
 NActors::IActor* CreateMemProfiler();
 
@@ -285,7 +288,7 @@ void TMVP::TryGetGenericOptionsFromConfig(
             if (opts.JwtTokenEndpoint.empty()) {
                 ythrow yexception() << "Configuration error: 'token_service_endpoint' must be specified in 'federated_creds'.";
             }
-            opts.JwtToken = TUnbufferedFileInput(tokenPath).ReadAll();
+            opts.JwtToken = Strip(TUnbufferedFileInput(tokenPath).ReadAll());
         }
     }
 

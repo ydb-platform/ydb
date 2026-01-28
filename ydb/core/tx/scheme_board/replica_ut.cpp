@@ -269,7 +269,7 @@ void TReplicaTest::UpdateWithChangedPath() {
     check(false);           // Emulate case!
     Context->UnsubscribeReplica(Replica, subscriber, path);
 
-    // don't test emulate Update from TSS, GSS->TSS case (curDomainId == pathId)
+    // don't test emulate Update from TSS, TSS->GSS case (curDomainId == pathId)
 #if 0    
     pathId.OwnerId++; 
     domainId.LocalPathId++;
@@ -281,7 +281,7 @@ void TReplicaTest::UpdateWithChangedPath() {
     pathId.LocalPathId = domainId.LocalPathId;  // Make valid condition (curDomainId == pathId)
     check(false);                               // Emulate case!
     Context->UnsubscribeReplica(Replica, subscriber, path);
-#endif    
+#endif
 }
 
 void TReplicaTest::RecreateDatabase()

@@ -630,8 +630,7 @@ private:
     }
 
     void RelinkSubscribers(TDescription* fromDesc, const TString& path) {
-        auto subscribers = fromDesc->GetSubscribers(SUBSCRIPTION_BY_PATH);
-        for (const auto& [subscriber, info] : subscribers) {
+        for (const auto& [subscriber, info] : fromDesc->GetSubscribers(SUBSCRIPTION_BY_PATH)) {
             fromDesc->Unsubscribe(subscriber);
             Subscribers.erase(subscriber);
             SubscribeBy(subscriber, path, info.GetDomainOwnerId(), info.GetCapabilities(), false);
@@ -646,15 +645,11 @@ private:
             return;
         }
 
-        std::vector<TPathId> deletePathIds;
         const auto endIt = pathIdIndex.upper_bound(end);
         while (it != endIt) {
-            deletePathIds.push_back(it->first);
+            SoftDeleteDescription(it->first);
             ++it;
         }
-
-        for(auto pathId: deletePathIds)
-            SoftDeleteDescription(pathId);
     }
 
     // call it _after_ Subscribe() & _before_ Unsubscribe()
@@ -917,7 +912,6 @@ private:
         };
 
         if (curPathId == domainId) { // Update from TSS, GSS->TSS
-
             // it is only because we need to manage undo of upgrade subdomain, finally remove it
             const auto& abandonedSchemeShards = desc->GetAbandonedSchemeShardIds();
             if (abandonedSchemeShards.contains(pathId.OwnerId)) { // TSS is ignored, present GSS reverted it
@@ -933,7 +927,6 @@ private:
         }
 
         if (curDomainId == pathId) { // Update from GSS, TSS->GSS
-
             // it is only because we need to manage undo of upgrade subdomain, finally remove it
             const auto& abandonedSchemeShards = pathDescription.PathAbandonedTenantsSchemeShards;
             if (abandonedSchemeShards.contains(curPathId.OwnerId)) { // GSS reverts TSS

@@ -244,6 +244,9 @@ namespace NYdb::NConsoleClient {
         EReadingStatus readingStatus = EReadingStatus::PartitionWithData;
         if (event->GetCommittedOffset() == event->GetEndOffset() || (readOffset.has_value() && readOffset.value() >= event->GetEndOffset())) {
             readingStatus = EReadingStatus::PartitionWithoutData;
+            if (PartitionsBeingRead_ == 0) {
+                AllPartitionsAreFullyReadTime = TInstant::Now();
+            }
         } else {
             ++PartitionsBeingRead_;
         }
@@ -281,9 +284,6 @@ namespace NYdb::NConsoleClient {
            (readOffset.has_value() && readOffset.value() >= event->GetEndOffset())) {
             if (currentPartitionStatus == EReadingStatus::PartitionWithData) {
                 --PartitionsBeingRead_;
-                if (PartitionsBeingRead_ == 0) {
-                    AllPartitionsAreFullyReadTime = TInstant::Now();
-                }
             }
             ActivePartitionSessions_[sessionId].ReadingStatus = EReadingStatus::PartitionWithoutData;
         } else {
@@ -291,6 +291,9 @@ namespace NYdb::NConsoleClient {
                 ++PartitionsBeingRead_;
             }
             ActivePartitionSessions_[sessionId].ReadingStatus = EReadingStatus::PartitionWithData;
+        }
+        if (PartitionsBeingRead_ == 0) {
+            AllPartitionsAreFullyReadTime = TInstant::Now();
         }
 
         return EXIT_SUCCESS;
@@ -306,12 +309,11 @@ namespace NYdb::NConsoleClient {
         auto f = ActivePartitionSessions_.find(event->GetPartitionSession()->GetPartitionSessionId());
         if (f->second.ReadingStatus == EReadingStatus::PartitionWithData) {
             --PartitionsBeingRead_;
-            if (PartitionsBeingRead_ == 0) {
-                AllPartitionsAreFullyReadTime = TInstant::Now();
-            }
         }
         ActivePartitionSessions_.erase(event->GetPartitionSession()->GetPartitionSessionId());
-
+        if (PartitionsBeingRead_ == 0) {
+            AllPartitionsAreFullyReadTime = TInstant::Now();
+        }
         return EXIT_SUCCESS;
     }
 
@@ -322,12 +324,11 @@ namespace NYdb::NConsoleClient {
 
         if (ActivePartitionSessions_[event->GetPartitionSession()->GetPartitionSessionId()].ReadingStatus == EReadingStatus::PartitionWithData) {
             --PartitionsBeingRead_;
-            if (PartitionsBeingRead_ == 0) {
-                AllPartitionsAreFullyReadTime = TInstant::Now();
-            }
         }
         ActivePartitionSessions_.erase(event->GetPartitionSession()->GetPartitionSessionId());
-
+        if (PartitionsBeingRead_ == 0) {
+            AllPartitionsAreFullyReadTime = TInstant::Now();
+        }
         return EXIT_SUCCESS;
     }
 
@@ -382,7 +383,7 @@ namespace NYdb::NConsoleClient {
                 Cerr << "There isn't any successfully initialized partition session after 30s.";
                 return EXIT_FAILURE;
             }
-            if (AllPartitionsAreFullyReadTime.has_value() && !PartitionsBeingRead_ && (TInstant::Now() - *AllPartitionsAreFullyReadTime > ReaderParams_.IdleTimeout())) {
+            if (!PartitionsBeingRead_ && AllPartitionsAreFullyReadTime.has_value() && (TInstant::Now() - *AllPartitionsAreFullyReadTime > ReaderParams_.IdleTimeout())) {
                 return EXIT_SUCCESS;
             }
 

@@ -33,9 +33,9 @@ namespace NKikimr::NOlap {
 namespace {
 
 // Windows build workaround
-#define YDB_CS_LWTRACE_NAMESPACE ::NKikimr::NColumnShard::LWTRACE_GET_NAMESPACE(YDB_CS);
-
-using namespace YDB_CS_LWTRACE_NAMESPACE;
+#ifndef LWTRACE_DISABLE
+using namespace NKikimr::NColumnShard::LWTRACE_GET_NAMESPACE(YDB_CS);
+#endif
 
 class TPortionsSelector {
     const std::shared_ptr<TGranuleMeta> GranuleMeta;

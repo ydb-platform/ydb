@@ -972,10 +972,11 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
 
         {
             const TString wrongConsumerQueueUrl = queueUrlForConsumer(params.SharedConsumers + 1);
-            fixture.GetQueueAttributes({
+            auto json = fixture.GetQueueAttributes({
                 {"QueueUrl", wrongConsumerQueueUrl},
                 {"AttributeNames", NJson::TJsonArray{"All"}},
             }, 400);
+            UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(json, "__type"), "AWS.SimpleQueueService.NonExistentQueue");
         }
         if (params.SharedConsumers == 0) {
             return;

@@ -947,7 +947,7 @@ TKeyedWriteSession::TKeyedWriteSession(
             PartitionChooser = std::make_unique<TBoundPartitionChooser>(this);
             for (size_t i = 0; i < Partitions.size(); ++i) {
                 if (i > 0 && Partitions[i].FromBound_.empty() && !Partitions[i].ToBound_.has_value()) {
-                    Y_ABORT("Unbounded partition is not supported for Bound partition chooser strategy");
+                    ythrow TContractViolation("Unbounded partition is not supported for Bound partition chooser strategy");
                 }
 
                 PartitionsIndex[Partitions[i].FromBound_] = i;

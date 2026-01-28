@@ -7,17 +7,15 @@
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
 #include <ydb/core/wrappers/s3_storage_config.h>
+#include <ydb/core/util/aws.h>
 
 #include <library/cpp/string_utils/base64/base64.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/string/printf.h>
 
-#include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/include/aws/core/Aws.h>
-#include <contrib/libs/curl/include/curl/curl.h>
-
 struct TAwsApiGuard {
-    Aws::SDKOptions Options;
+    NKikimr::TAwsClientConfig Config;
 
     TAwsApiGuard() {
         InitAwsAPI();
@@ -28,13 +26,11 @@ struct TAwsApiGuard {
     }
 
     void InitAwsAPI() {
-        curl_global_init(CURL_GLOBAL_ALL);
-        Aws::InitAPI(Options);
+        NKikimr::InitAwsAPI(Config);
     }
 
     void ShutdownAwsAPI() {
-        Aws::ShutdownAPI(Options);
-        curl_global_cleanup();
+        NKikimr::ShutdownAwsAPI(Config);
     }
 };
 

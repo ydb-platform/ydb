@@ -19,6 +19,7 @@ protected:
         auto clientSettings = TClientSettings().SessionPoolSettings(
             TSessionPoolSettings()
                 .MaxActiveSessions(maxActiveSessions)
+                .MinPoolSize(maxActiveSessions)
                 .KeepAliveIdleThreshold(TDuration::MilliSeconds(10))
                 .CloseIdleThreshold(TDuration::MilliSeconds(10)));
         Client = std::make_unique<NYdb::NTable::TTableClient>(*Driver, clientSettings);

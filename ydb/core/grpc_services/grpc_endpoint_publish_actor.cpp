@@ -9,33 +9,32 @@
 #include <ydb/core/base/domain.h>
 #include <ydb/core/base/location.h>
 #include <ydb/core/base/statestorage.h>
+#include <ydb/core/node_whiteboard/node_whiteboard.h>
 
 namespace NKikimr::NGRpcService {
 
 using namespace NActors;
 
 class TGRpcEndpointPublishActor : public TActorBootstrapped<TGRpcEndpointPublishActor> {
+    // Update period for load_factor polling from Node Whiteboard.
+    // Synchronized with Node Whiteboard's internal update period (15 seconds)
+    // to ensure we always get fresh data without unnecessary polling.
+    static constexpr TDuration LOAD_FACTOR_UPDATE_PERIOD_SECONDS = TDuration::Seconds(15);
+    
+    // Minimum relative change in load_factor to trigger an update (1%).
+    // This prevents excessive updates to State Storage Board when load fluctuates slightly.
+    static constexpr float LOAD_FACTOR_CHANGE_THRESHOLD = 0.01f;
+
     TIntrusivePtr<TGrpcEndpointDescription> Description;
     TString SelfDatacenter;
     std::optional<TString> BridgePileName;
     TActorId PublishActor;
+    float CurrentLoadFactor = 0.0f;
 
-    void CreatePublishActor() {
-        ui32 nodeId = SelfId().NodeId();
-        TString database = AppData()->TenantName;
-
-        auto *domains = AppData()->DomainsInfo.Get();
-        auto domainName = ExtractDomain(database);
-        auto *domainInfo = domains->GetDomainByName(domainName);
-        if (!domainInfo)
-            return;
-
-        auto assignedPath = MakeEndpointsBoardPath(database);
-        TString payload;
-        NKikimrStateStorage::TEndpointBoardEntry entry;
+    void BuildEndpointBoardEntry(NKikimrStateStorage::TEndpointBoardEntry& entry, ui32 nodeId) {
         entry.SetAddress(Description->Address);
         entry.SetPort(Description->Port);
-        entry.SetLoad(0.0f);
+        entry.SetLoad(CurrentLoadFactor);
         entry.SetSsl(Description->Ssl);
         entry.MutableServices()->Reserve(Description->ServedServices.size());
         entry.SetDataCenter(SelfDatacenter);
@@ -58,10 +57,36 @@ class TGRpcEndpointPublishActor : public TActorBootstrapped<TGRpcEndpointPublish
         if (BridgePileName) {
             entry.SetBridgePileName(*BridgePileName);
         }
+    }
+
+    void CreatePublishActor() {
+        ui32 nodeId = SelfId().NodeId();
+        TString database = AppData()->TenantName;
+
+        auto *domains = AppData()->DomainsInfo.Get();
+        auto domainName = ExtractDomain(database);
+        auto *domainInfo = domains->GetDomainByName(domainName);
+        if (!domainInfo)
+            return;
+
+        auto assignedPath = MakeEndpointsBoardPath(database);
+        TString payload;
+        NKikimrStateStorage::TEndpointBoardEntry entry;
+        BuildEndpointBoardEntry(entry, nodeId);
 
         Y_ABORT_UNLESS(entry.SerializeToString(&payload));
 
         PublishActor = Register(CreateBoardPublishActor(assignedPath, payload, SelfId(), 0, true));
+    }
+    
+    void UpdatePublishActor() {
+        TString payload;
+        NKikimrStateStorage::TEndpointBoardEntry entry;
+        BuildEndpointBoardEntry(entry, SelfId().NodeId());
+        
+        Y_ABORT_UNLESS(entry.SerializeToString(&payload));
+        
+        Send(PublishActor, new TEvStateStorage::TEvBoardPublishUpdate(payload));
     }
 
     void PassAway() override {
@@ -83,6 +108,49 @@ class TGRpcEndpointPublishActor : public TActorBootstrapped<TGRpcEndpointPublish
         }
         CreatePublishActor();
         Become(&TThis::StateWork);
+        
+        // Schedule periodic load factor updates
+        Schedule(LOAD_FACTOR_UPDATE_PERIOD_SECONDS, new TEvents::TEvWakeup());
+    }
+
+    void Handle(NNodeWhiteboard::TEvWhiteboard::TEvSystemStateResponse::TPtr& ev) {
+        const auto& record = ev->Get()->Record;
+
+        if (record.SystemStateInfoSize() == 0) {
+            return;
+        }
+
+        const auto& systemState = record.GetSystemStateInfo(0);
+        if (systemState.LoadAverageSize() == 0) {
+            return;
+        }
+
+        auto loadAvg = systemState.GetLoadAverage(0);
+        auto numCpus = systemState.GetNumberOfCpus();
+        if (numCpus == 0) {
+            return;
+        }
+    
+        auto newLoadFactor = loadAvg / numCpus;
+        if (std::abs(newLoadFactor - CurrentLoadFactor) >= LOAD_FACTOR_CHANGE_THRESHOLD) {
+            CurrentLoadFactor = newLoadFactor;
+
+            if (PublishActor) {
+                UpdatePublishActor();
+            } else {
+                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_SERVER,
+                    "Cannot update load_factor: PublishActor is not initialized. "
+                    "Database: " << AppData()->TenantName << ", "
+                    "load_factor: " << newLoadFactor);
+            }
+        }
+    }
+
+    void Wakeup() {
+        Send(NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId()),
+             new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateRequest());
+        
+        Schedule(LOAD_FACTOR_UPDATE_PERIOD_SECONDS, new TEvents::TEvWakeup());
     }
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -110,6 +178,8 @@ public:
 
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
+            hFunc(NNodeWhiteboard::TEvWhiteboard::TEvSystemStateResponse, Handle);
+            sFunc(TEvents::TEvWakeup, Wakeup);
             cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
         }
     }

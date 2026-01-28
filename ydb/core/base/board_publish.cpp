@@ -74,8 +74,15 @@ public:
         Become(&TThis::StatePublish);
     }
 
+    void Handle(TEvStateStorage::TEvBoardPublishUpdate::TPtr& ev) {
+        Payload = ev->Get()->NewPayload;
+
+        Send(Replica, new TEvStateStorage::TEvReplicaBoardPublish(Path, Payload, 0, true, PublishActor, ClusterStateGeneration, ClusterStateGuid), IEventHandle::FlagSubscribeOnSession, ++Round);
+    }
+
     STATEFN(StatePublish) {
         switch (ev->GetTypeRewrite()) {
+            hFunc(TEvStateStorage::TEvBoardPublishUpdate, Handle);
             cFunc(TEvents::TEvPoisonPill::EventType, Cleanup);
             cFunc(TEvInterconnect::TEvNodeDisconnected::EventType, NotAvailable); // no cleanup on node disconnect
             cFunc(TEvStateStorage::TEvReplicaShutdown::EventType, NotAvailableUnsubscribe);
@@ -99,7 +106,7 @@ class TBoardPublishActor : public TActorBootstrapped<TBoardPublishActor> {
     };
 
     const TString Path;
-    const TString Payload;
+    TString Payload;
     const TActorId Owner;
     const ui32 TtlMs;
     const bool Register;
@@ -285,8 +292,21 @@ public:
     STATEFN(StateResolve) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvStateStorage::TEvResolveReplicasList, Handle);
+            hFunc(TEvStateStorage::TEvBoardPublishUpdate, Handle);
             cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
             cFunc(TEvents::TEvUndelivered::EventType, HandleUndelivered);
+        }
+    }
+
+    void Handle(TEvStateStorage::TEvBoardPublishUpdate::TPtr& ev) {
+        Payload = ev->Get()->NewPayload;
+        
+        BLOG_D("Updating payload for path: " << Path);
+        
+        for (auto& [replicaId, state] : ReplicaPublishActors) {
+            if (state.PublishActor) {
+                Send(state.PublishActor, new TEvStateStorage::TEvBoardPublishUpdate(Payload));
+            }
         }
     }
 
@@ -295,6 +315,7 @@ public:
             hFunc(TEvStateStorage::TEvResolveReplicasList, Handle);
             hFunc(TEvStateStorage::TEvPublishActorGone, CalmGone);
             hFunc(TEvPrivate::TEvRetryPublishActor, Handle);
+            hFunc(TEvStateStorage::TEvBoardPublishUpdate, Handle);
             cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
         }
     }

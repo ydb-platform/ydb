@@ -166,11 +166,11 @@ public:
         auto MaxRowsDefaultQuota = defaultSettings.GetMaxRows();
         auto MaxBytesDefaultQuota = defaultSettings.GetMaxBytes();
 
-        record.SetMaxRows(MaxRowsDefaultQuota * 100);
+        record.SetMaxRows(MaxRowsDefaultQuota);
         record.SetMaxBytes(MaxBytesDefaultQuota);
         record.SetResultFormat(NKikimrDataEvents::FORMAT_CELLVEC);
 
-        CA_LOG_E(TStringBuilder() << "Send EvRead (stream lookup) to shardId=" << shardId
+        CA_LOG_E(TStringBuilder() << "Send EvRead (full text source) to shardId=" << shardId
             << ", readId = " << record.GetReadId()
             << ", snapshot=(txid=" << record.GetSnapshot().GetTxId() << ", step=" << record.GetSnapshot().GetStep() << ")"
             << ", lockTxId=" << record.GetLockTxId()
@@ -487,6 +487,7 @@ public:
     TString Word;
     bool PendingRead = false;
     std::deque<std::unique_ptr<TEvDataShard::TEvReadResult>> PendingReadResults;
+    size_t PendingRows = 0;
     // pending ranges
     TIntrusivePtr<TTableReader<TIndexTableImplReader>> Reader;
     std::deque<std::pair<ui64, TOwnedTableRange>> RangesToRead;
@@ -1262,7 +1263,11 @@ private:
     }
 
     void AckRead(ui64 readId, ui64 seqno) {
-        auto& readInfo = Reads[readId];
+        auto readIt = Reads.find(readId);
+        if (readIt == Reads.end()) {
+            return;
+        }
+        auto& readInfo = readIt->second;
         ui64 shardId = readInfo.ShardId;
         auto request = GetDefaultReadAckSettings();
         request->Record.SetReadId(readId);
@@ -1402,6 +1407,15 @@ public:
     void LoadState(const TSourceState&) override {}
 
     void PassAway() override {
+        {
+            for (auto& [id, state] : Reads) {
+                auto cancel = MakeHolder<TEvDataShard::TEvReadCancel>();
+                cancel->Record.SetReadId(id);
+                Send(PipeCacheId, new TEvPipeCache::TEvForward(cancel.Release(), state.ShardId, false));
+            }
+        }
+        Send(PipeCacheId, new TEvPipeCache::TEvUnlink(0));
+
         TBase::PassAway();
     }
 
@@ -1530,10 +1544,12 @@ public:
             }
 
             if (Limit > 0 && ProducedItemsCount + ResultQueue.size() >= static_cast<ui64>(Limit)) {
+                NotifyCA();
                 return;
             }
         }
 
+        // Notify about possibly empty result
         NotifyCA();
     }
 
@@ -1597,6 +1613,13 @@ public:
         YQL_ENSURE(wordIndex < Words.size());
         auto& incomingWordInfo = Words[wordIndex];
         if (msg->GetRowsCount() > 0) {
+            incomingWordInfo.PendingRows += msg->GetRowsCount();
+            // Try to always keep 2*limit rows in memory for maximum pipelining. In this way,
+            // while we process one batch, the data shard already prepares another one for us
+            if (incomingWordInfo.PendingRows < 2*GetDefaultReadSettings()->Record.GetMaxRows() &&
+                !msg->Record.GetFinished() && (Limit == 0 || ProducedItemsCount + ResultQueue.size() < static_cast<ui64>(Limit))) {
+                AckRead(msg->Record.GetReadId(), msg->Record.GetSeqNo());
+            }
             incomingWordInfo.PendingReadResults.emplace_back(std::move(msg));
             if (incomingWordInfo.PendingReadResults.size() == 1) {
                 MergeQueue.push(incomingWordInfo.GetNextDocumentIdPointer());
@@ -1651,7 +1674,12 @@ public:
             for (auto wordIndex : matchedWords) {
                 auto& wordInfo = Words[wordIndex];
                 wordInfo.UnprocessedDocumentPos++;
+                wordInfo.PendingRows--;
                 if (wordInfo.UnprocessedDocumentPos == wordInfo.PendingReadResults.front()->GetRowsCount()) {
+                    auto& record = wordInfo.PendingReadResults.front()->Record;
+                    if (!record.GetFinished() && (Limit == 0 || ProducedItemsCount + ResultQueue.size() < static_cast<ui64>(Limit))) {
+                        AckRead(record.GetReadId(), record.GetSeqNo());
+                    }
                     wordInfo.PendingReadResults.pop_front();
                     wordInfo.UnprocessedDocumentPos = 0;
                 }
@@ -1672,7 +1700,6 @@ public:
         }
 
         NotifyCA();
-
     }
 
     void HandleReadResult(TEvDataShard::TEvReadResult::TPtr& ev) {
@@ -1720,7 +1747,9 @@ public:
 
         if (record.GetFinished()) {
             Reads.erase(readId);
-        } else {
+        } else if (readKind != EReadKind_Word) {
+            // Postings are read in a streamed manner, so we only ack them
+            // when we are done with a batch
             AckRead(readId, record.GetSeqNo());
         }
 

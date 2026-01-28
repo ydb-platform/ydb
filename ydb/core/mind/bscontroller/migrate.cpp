@@ -240,10 +240,6 @@ public:
 
         Queue.emplace_back(new TTxUpdateCompatibilityInfo);
 
-        if (!hasInstanceId) {
-            Queue.emplace_back(new TTxUpdateEnableConfigV2);
-        }
-
         return true;
     }
 

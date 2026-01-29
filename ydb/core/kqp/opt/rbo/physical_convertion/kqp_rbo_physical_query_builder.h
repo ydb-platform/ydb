@@ -35,7 +35,7 @@ private:
                                     NNodes::TCoNameValueTupleList&& setings, TExprContext& ctx, TPositionHandle pos) const;
     void TopologicalSort(TDqPhyStage& dqStage, TVector<TExprNode::TPtr>& result, THashSet<const TExprNode*>& visited) const;
     void TopologicalSort(TDqPhyStage&& dqStage, TVector<TExprNode::TPtr>& result) const;
-
+    void KeepTypeAnnotationForStageAndFirstLevelChilds(TDqPhyStage& newStage, const TDqPhyStage& oldStage) const;
 
     TOpRoot& Root;
     TStageGraph Graph;

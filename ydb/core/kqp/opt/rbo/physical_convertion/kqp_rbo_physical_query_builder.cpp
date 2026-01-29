@@ -197,7 +197,21 @@ void TPhysicalQueryBuilder::TopologicalSort(TDqPhyStage&& dqStage, TVector<TExpr
     TopologicalSort(dqStage, result, visited);
 }
 
-// This function assumes that stages already sorted in topological orders.
+void TPhysicalQueryBuilder::KeepTypeAnnotationForStageAndFirstLevelChilds(TDqPhyStage& newStage, const TDqPhyStage& oldStage) const {
+    Y_ENSURE(oldStage.Ref().GetTypeAnn());
+    Y_ENSURE(oldStage.Inputs().Size() == newStage.Inputs().Size());
+
+    newStage.MutableRef().SetTypeAnn(oldStage.Ref().GetTypeAnn());
+    for (ui32 i = 0; i < newStage.Inputs().Size(); ++i) {
+        newStage.Inputs().Item(i).MutableRef().SetTypeAnn(oldStage.Inputs().Item(i).Ref().GetTypeAnn());
+        newStage.Program().Args().Arg(i).MutableRef().SetTypeAnn(oldStage.Program().Args().Arg(i).Ref().GetTypeAnn());
+        if (newStage.Inputs().Item(i).Maybe<TDqConnection>()) {
+            newStage.Inputs().Item(i).Cast<TDqConnection>().Output().Stage().MutableRef().SetTypeAnn(
+                oldStage.Inputs().Item(i).Cast<TDqConnection>().Output().Stage().Ref().GetTypeAnn());
+        }
+    }
+}
+
 TVector<TExprNode::TPtr> TPhysicalQueryBuilder::EnableWideChannelsPhysicalStages(TVector<TExprNode::TPtr>&& physicalStages) {
     Y_ENSURE(physicalStages.size());
     auto root = physicalStages.back();
@@ -216,16 +230,18 @@ TVector<TExprNode::TPtr> TPhysicalQueryBuilder::EnableWideChannelsPhysicalStages
             .Program(dqPhyStage.Program())
             .Settings(dqPhyStage.Settings())
             .Outputs(dqPhyStage.Outputs())
-        .Done().Ptr();
+        .Done();
         // clang-format on
 
-        // After replace we have to run type annotation.
-        TypeAnnotate(newStage);
+        // For this transformation we need only stage type and all types for inputs.
+        // So we can keep them, because they don't change during this optimization.
+        KeepTypeAnnotationForStageAndFirstLevelChilds(newStage, dqPhyStage);
 
-        rootStage = NYql::NDq::RebuildStageInputsAsWide(TDqPhyStage(newStage), ctx).Ptr();
+        rootStage = NYql::NDq::RebuildStageInputsAsWide(newStage, ctx).Ptr();
         replaces[dqPhyStage.Raw()] = rootStage;
     }
 
+    TypeAnnotate(rootStage);
     YQL_CLOG(TRACE, CoreDq) << "[NEW RBO Wide channels] " << KqpExprToPrettyString(TExprBase(rootStage), ctx);
 
     TVector<TExprNode::TPtr> stagesTopSorted;
@@ -300,5 +316,6 @@ void TPhysicalQueryBuilder::TypeAnnotate(TExprNode::TPtr& input) {
     do {
         status = RBOCtx.TypeAnnTransformer->Transform(input, output, RBOCtx.ExprCtx);
     } while (status == IGraphTransformer::TStatus::Repeat);
+    Y_ENSURE(status == IGraphTransformer::TStatus::Ok);
     input = output;
 }

@@ -16,6 +16,7 @@ PEERDIR(
     ydb/core/kqp/rm_service
     ydb/core/nbs/cloud/blockstore/libs/common
     ydb/core/nbs/cloud/blockstore/libs/service
+    ydb/core/nbs/cloud/blockstore/tools/testing/loadtest/lib
     ydb/core/nbs/cloud/storage/core/libs/common
     ydb/core/nbs/cloud/storage/core/libs/diagnostics
     ydb/core/tx/columnshard
@@ -48,14 +49,6 @@ SRCS(
     group_write.cpp
     vdisk_write.cpp
     yql_single_query.cpp
-
-    nbs2_lib/app_context.cpp
-    nbs2_lib/buffer_pool.cpp
-    nbs2_lib/helpers.cpp
-    nbs2_lib/range_allocator.cpp
-    nbs2_lib/range_map.cpp
-    nbs2_lib/request_generator.cpp
-    nbs2_lib/test_runner.cpp
 
     ycsb/actors.h
     ycsb/bulk_mkql_upsert.cpp

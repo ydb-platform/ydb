@@ -1,9 +1,9 @@
 #include "service_actor.h"
 
-#include "nbs2_lib/app_context.h"
-#include "nbs2_lib/helpers.h"
-#include "nbs2_lib/request_generator.h"
-#include "nbs2_lib/test_runner.h"
+#include <ydb/core/nbs/cloud/blockstore/tools/testing/loadtest/lib/app_context.h>
+#include <ydb/core/nbs/cloud/blockstore/tools/testing/loadtest/lib/helpers.h>
+#include <ydb/core/nbs/cloud/blockstore/tools/testing/loadtest/lib/request_generator.h>
+#include <ydb/core/nbs/cloud/blockstore/tools/testing/loadtest/lib/test_runner.h>
 
 #include <ydb/core/base/counters.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>

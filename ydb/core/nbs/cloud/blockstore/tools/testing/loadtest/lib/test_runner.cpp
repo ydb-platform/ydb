@@ -1,6 +1,5 @@
 #include "test_runner.h"
 
-#include "buffer_pool.h"
 #include "request_generator.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/block_range.h>
@@ -9,8 +8,6 @@
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/thread.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/diagnostics/logging.h>
-
-#include <library/cpp/threading/future/core/future.h>
 
 #include <util/datetime/base.h>
 #include <util/generic/deque.h>

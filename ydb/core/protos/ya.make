@@ -115,7 +115,6 @@ SRCS(
     msgbus_health.proto
     msgbus_kv.proto
     msgbus_pq.proto
-    nbs2_load.proto
     netclassifier.proto
     node_broker.proto
     node_limits.proto
@@ -176,6 +175,7 @@ GENERATE_ENUM_SERIALIZATION(shared_cache.pb.h)
 
 PEERDIR(
     ydb/core/config/protos
+    ydb/core/nbs/cloud/blockstore/tools/testing/loadtest/lib/protos
     ydb/core/fq/libs/config/protos
     ydb/core/protos/nbs
     ydb/core/protos/schemeshard

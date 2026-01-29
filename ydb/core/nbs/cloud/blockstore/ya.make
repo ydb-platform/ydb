@@ -1,4 +1,5 @@
 RECURSE(
     libs
     public
+    tools
 )

@@ -1,7 +1,7 @@
 import "ydb/core/protos/blobstorage_base.proto";
 import "ydb/core/protos/blobstorage_disk.proto";
 import "ydb/core/protos/datashard_load.proto";
-import "ydb/core/protos/nbs2_load.proto";
+import "ydb/core/nbs/cloud/blockstore/tools/testing/loadtest/lib/protos/nbs2_load.proto";
 
 package NKikimr;
 option java_package = "ru.yandex.kikimr.proto";

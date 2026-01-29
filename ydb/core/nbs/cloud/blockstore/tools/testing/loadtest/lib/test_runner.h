@@ -1,11 +1,10 @@
 #pragma once
 
 #include "public.h"
+#include <ydb/core/nbs/cloud/blockstore/tools/testing/loadtest/lib/protos/nbs2_load.pb.h>
 
 #include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/public.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/diagnostics/histogram.h>
-#include <ydb/core/protos/load_test.pb.h>
-#include <ydb/core/protos/nbs2_load.pb.h>
 
 #include <library/cpp/threading/future/future.h>
 

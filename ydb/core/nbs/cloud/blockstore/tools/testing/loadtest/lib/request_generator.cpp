@@ -9,8 +9,6 @@
 #include <util/generic/vector.h>
 #include <util/random/random.h>
 #include <util/string/builder.h>
-#include <util/system/thread.h>
-#include <util/thread/lfqueue.h>
 
 namespace NCloud::NBlockStore::NLoadTest {
 

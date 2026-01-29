@@ -16,9 +16,179 @@
 
 namespace NKikimr::NKqp {
 
+class TParamsMap {
+public:
+    TParamsMap(std::vector<std::pair<std::string, std::string>> data)
+        : Data_(std::move(data))
+    {
+    }
+
+    void Set(const std::string& key, const std::string& value) {
+        auto it = Find(key);
+        if (it != Data_.end()) {
+            it->second = value;
+        } else {
+            Data_.emplace_back(key, value);
+        }
+    }
+
+    bool Has(const std::string& key) const {
+        return Find(key) != Data_.end();
+    }
+
+    template <typename TValue>
+    TValue GetValue(const std::string& key, TValue defaultValue) const {
+        auto it = Find(key);
+        if (it == Data_.end()) {
+            return defaultValue;
+        }
+        try {
+            return Parse<TValue>(it->second);
+        } catch (...) {
+            return defaultValue;
+        }
+    }
+
+    template <typename TValue = std::string>
+    TValue GetValue(const std::string& key) const {
+        auto it = Find(key);
+        if (it == Data_.end()) {
+            throw std::out_of_range("Key not found: " + key);
+        }
+        return Parse<TValue>(it->second);
+    }
+
+    using TUnderlyingStorage = std::vector<std::pair<std::string, std::string>>;
+
+    TUnderlyingStorage& GetData() {
+        return Data_;
+    }
+
+    const TUnderlyingStorage& GetData() const {
+        return Data_;
+    }
+
+private:
+    TUnderlyingStorage Data_;
+
+    template<typename T> struct is_chrono_duration : std::false_type {};
+    template<typename Rep, typename Period>
+    struct is_chrono_duration<std::chrono::duration<Rep, Period>> : std::true_type {};
+
+    TUnderlyingStorage::const_iterator Find(const std::string& key) const {
+        return std::find_if(Data_.begin(), Data_.end(),
+            [&key](const auto& pair) { return pair.first == key; });
+    }
+
+    TUnderlyingStorage::iterator Find(const std::string& key) {
+        return std::find_if(Data_.begin(), Data_.end(),
+            [&key](const auto& pair) { return pair.first == key; });
+    }
+
+    template <typename TValue>
+    static TValue ParseDuration(const std::string& s) {
+        using namespace std::chrono;
+        duration<double, std::nano> totalNs(0);
+
+        const char* ptr = s.c_str();
+        char* endptr = nullptr;
+
+        while (*ptr) {
+            // 1. Skip whitespace
+            while (*ptr && std::isspace(static_cast<unsigned char>(*ptr))) {
+                ptr ++;
+            }
+
+            if (!*ptr) {
+                break;
+            }
+
+            // 2. Parse Number (handles 100, 1.5, .5)
+            double val = std::strtod(ptr, &endptr);
+
+            if (ptr == endptr) {
+                // We encountered text without a number (e.g., just "ms"?) or garbage
+                throw std::invalid_argument("Invalid duration format in: " + s);
+            }
+            ptr = endptr;
+
+            // 3. Skip whitespace between number and valid suffix (e.g. "1 h")
+            while (*ptr && std::isspace(static_cast<unsigned char>(*ptr))) {
+                ptr ++;
+            }
+
+            // 4. Parse suffix (ns, ms, s, etc...)
+            std::string suffix;
+            while (*ptr && std::isalpha(static_cast<unsigned char>(*ptr))) {
+                suffix += *ptr;
+                ptr ++;
+            }
+
+            duration<double, std::nano> segmentNs;
+            if (suffix == "ns") {
+                segmentNs = duration<double, std::nano>(val);
+            }
+            else if (suffix == "us") {
+                segmentNs = duration<double, std::micro>(val);
+            }
+            else if (suffix == "ms") {
+                segmentNs = duration<double, std::milli>(val);
+            }
+            else if (suffix == "s") {
+                segmentNs = duration<double>(val);
+            }
+            else if (suffix == "m") {
+                segmentNs = duration<double, std::ratio<60>>(val);
+            }
+            else if (suffix == "h") {
+                segmentNs = duration<double, std::ratio<3600>>(val);
+            }
+            else if (suffix == "d") {
+                segmentNs = duration<double, std::ratio<86400>>(val);
+            }
+            else if (suffix.empty()) {
+                segmentNs = duration<double>(val);
+            }
+            else {
+                throw std::invalid_argument("Unknown suffix: " + suffix);
+            }
+
+            totalNs += segmentNs;
+        }
+
+        return duration_cast<TValue>(totalNs);
+    }
+
+    template <typename TValue>
+    static TValue Parse(const std::string& value) {
+        if constexpr (std::is_same_v<TValue, std::string>) {
+            return value;
+        }
+        else if constexpr (std::is_same_v<TValue, bool>) {
+            return value == "true" || value == "1" || value == "on";
+        }
+        else if constexpr (std::is_integral_v<TValue>) {
+            if constexpr (std::is_unsigned_v<TValue>) {
+                return static_cast<TValue>(std::stoull(value));
+            }
+            else {
+                return static_cast<TValue>(std::stoll(value));
+            }
+        }
+        else if constexpr (std::is_floating_point_v<TValue>) {
+            return static_cast<TValue>(std::stod(value));
+        }
+        else if constexpr (is_chrono_duration<TValue>::value) {
+            return ParseDuration<TValue>(value);
+        }
+        else {
+            return TValue(value);
+        }
+    }
+};
+
 class TTupleParser {
 public:
-    using TParamsMap = std::vector<std::pair<std::string, std::string>>;
     using TTable = std::vector<TParamsMap>;
 
     TTupleParser(std::string input)
@@ -35,14 +205,14 @@ public:
         // Finalize: Strip leading '+' checks that were used for merge logic
         uint32_t idx = 0;
         for (auto& row : table) {
-            for (auto& [key, value] : row) {
+            for (auto& [key, value] : row.GetData()) {
                 if (!value.empty() && (value[0] == '+' || value[0] == '?')) {
                     value = value.substr(1);
                 }
             }
 
 
-            updated.push_back(MergeRows({{"idx", std::to_string(idx++)}}, row));
+            updated.push_back(MergeRows(TParamsMap::TUnderlyingStorage{{"idx", std::to_string(idx++)}}, row));
         }
 
         return updated;
@@ -92,9 +262,7 @@ private:
         result.reserve(values.size());
 
         for (const auto& value : values) {
-            TParamsMap row;
-            row.push_back({key, value});
-            result.push_back(row);
+            result.push_back(TParamsMap::TUnderlyingStorage{{key, value}});
         }
         return result;
     }
@@ -229,16 +397,16 @@ private:
     }
 
     static TParamsMap MergeRows(TParamsMap dest, const TParamsMap& src) {
-        for (const auto& [key, value] : src) {
+        for (const auto& [key, value] : src.GetData()) {
             auto it = std::find_if(
-                dest.begin(), dest.end(),
+                dest.GetData().begin(), dest.GetData().end(),
                 [&key](const auto& element) {
                     return element.first == key;
                 }
             );
 
-            if (it == dest.end()) {
-                dest.push_back({key, value});
+            if (it == dest.GetData().end()) {
+                dest.GetData().push_back({key, value});
                 continue;
             }
 
@@ -406,7 +574,7 @@ void PrintTable(const NKikimr::NKqp::TTupleParser::TTable& table) {
     std::set<std::string> seenHeaders;
 
     for (const auto& row : table) {
-        for (const auto& [key, value] : row) {
+        for (const auto& [key, value] : row.GetData()) {
             if (seenHeaders.insert(key).second) {
                 headers.push_back(key);
             }
@@ -420,7 +588,7 @@ void PrintTable(const NKikimr::NKqp::TTupleParser::TTable& table) {
     }
 
     for (const auto& row : table) {
-        for (const auto& [key, value] : row) {
+        for (const auto& [key, value] : row.GetData()) {
             columnWidths[key] = std::max(columnWidths[key], value.length());
         }
     }
@@ -448,7 +616,7 @@ void PrintTable(const NKikimr::NKqp::TTupleParser::TTable& table) {
         for (const auto& header : headers) {
             // Find value for this header
             std::string displayedValue;
-            for (const auto& [key, value] : row) {
+            for (const auto& [key, value] : row.GetData()) {
                 if (key == header) {
                     displayedValue = value;
                     break;

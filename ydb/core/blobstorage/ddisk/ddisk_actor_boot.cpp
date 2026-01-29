@@ -37,6 +37,17 @@ namespace NKikimr::NDDisk {
                 }
             }
         }
+        if (const auto it = msg.StartingPoints.find(TLogSignature::SignaturePersistentBufferChunkMap); it != msg.StartingPoints.end()) {
+            NPDisk::TLogRecord& record = it->second;
+            PersistentBufferChunkMapSnapshotLsn = record.Lsn;
+            NKikimrBlobStorage::NDDisk::NInternal::TPersistentBufferChunkMapLogRecord chunkMap;
+            const bool success = chunkMap.ParseFromArray(record.Data.data(), record.Data.size());
+            Y_ABORT_UNLESS(success);
+            for (auto idx : chunkMap.GetChunkIdxs()) {
+                PersistentBufferOwnedChunks.insert(idx);
+                ++*Counters.Chunks.ChunksOwned;
+            }
+        }
 
         Send(BaseInfo.PDiskActorID, new NPDisk::TEvReadLog(PDiskParams->Owner, PDiskParams->OwnerRound));
     }
@@ -65,7 +76,18 @@ namespace NKikimr::NDDisk {
                         ++*Counters.RecoveryLog.LogRecordsApplied;
                     }
                     break;
-
+                case TLogSignature::SignaturePersistentBufferChunkMap:
+                    if (PersistentBufferChunkMapSnapshotLsn + 1 <= record.Lsn) {
+                        NKikimrBlobStorage::NDDisk::NInternal::TPersistentBufferChunkMapLogRecord chunkMap;
+                        const bool success = chunkMap.ParseFromArray(record.Data.data(), record.Data.size());
+                        Y_ABORT_UNLESS(success);
+                        for (auto idx : chunkMap.GetChunkIdxs()) {
+                            PersistentBufferOwnedChunks.insert(idx);
+                            ++*Counters.Chunks.ChunksOwned;
+                        }
+                        ++*Counters.RecoveryLog.LogRecordsApplied;
+                    }
+                    break;
                 default:
                     Y_ABORT("unexpected log signature");
             }
@@ -97,7 +119,7 @@ namespace NKikimr::NDDisk {
     }
 
     ui64 TDDiskActor::GetFirstLsnToKeep() const {
-        return ChunkMapSnapshotLsn;
+        return std::min(ChunkMapSnapshotLsn, PersistentBufferChunkMapSnapshotLsn);
     }
 
     void TDDiskActor::IssuePDiskLogRecord(TLogSignature signature, TChunkIdx chunkIdxToCommit,

@@ -164,6 +164,8 @@ namespace {
         if (*newValue) {
             PutAuthMethod(profile, id, *newValue);
             Cout << "Saved " << fullName << " for profile \"" << profileName << "\"." << Endl;
+        } else {
+            Cout << "Empty value not saved." << Endl;
         }
     }
 
@@ -187,6 +189,8 @@ namespace {
             } else {
                 Cout << "Saved credentials for profile \"" << profileName << "\"." << Endl;
             }
+        } else {
+            Cout << "Empty username not saved." << Endl;
         }
     }
 

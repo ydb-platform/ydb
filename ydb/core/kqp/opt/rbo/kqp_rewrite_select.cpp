@@ -885,13 +885,15 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, co
             TVector<TExprNode::TPtr> columns;
             TVector<TExprNode::TPtr> types;
 
-            auto alias = correlatedCols->Child(1)->Child(0)->Child(0);
-            auto typeExpr = correlatedCols->Child(1)->Child(0)->Child(1);
-            auto structType = typeExpr->GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
-            for (auto item : structType->GetItems()) {
-                TString fullName = TString(alias->Content()) + "." + TString(item->GetName());
-                columns.push_back(ctx.NewAtom(node->Pos(), fullName));
-                types.push_back(ExpandType(node->Pos(), *item->GetItemType(), ctx));
+            for (auto aliasColumn : correlatedCols->Child(1)->Children()) {
+                auto alias = aliasColumn->Child(0);
+                auto typeExpr = aliasColumn->Child(1);
+                auto structType = typeExpr->GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
+                for (auto item : structType->GetItems()) {
+                    TString fullName = TString(alias->Content()) + "." + TString(item->GetName());
+                    columns.push_back(ctx.NewAtom(node->Pos(), fullName));
+                    types.push_back(ExpandType(node->Pos(), *item->GetItemType(), ctx));
+                }
             }
 
             if (!columns.empty()) {

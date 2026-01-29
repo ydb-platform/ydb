@@ -970,8 +970,14 @@ namespace {
             env.TestWaitNotification(Runtime(), txId);
         }
 
-        void CreateKesusResources(ui64 kesusTabletId, TVector<TString> resourcePaths) {
+        void CreateKesusResources(const TString& kesusPath, TVector<TString> resourcePaths) {
             using namespace NKesus;
+
+            auto desc = TestDescribe(Runtime(), kesusPath);
+            NKikimrScheme::TEvDescribeSchemeResult descResult;
+            UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(desc, &descResult));
+
+            ui64 kesusTabletId = descResult.GetPathDescription().GetKesus().GetKesusTabletId();
 
             TBlockEvents<TEvKesus::TEvAddQuoterResourceResult> blockResourceCreate(Runtime(), [](const TEvKesus::TEvAddQuoterResourceResult::TPtr& ev) {
                 const auto& record = ev->Get()->Record;
@@ -1009,11 +1015,6 @@ namespace {
             )");
             env.TestWaitNotification(Runtime(), txId);
 
-            auto desc = TestDescribe(Runtime(), "/MyRoot/Kesus");
-            NKikimrScheme::TEvDescribeSchemeResult descResult;
-            UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(desc, &descResult));
-
-            ui64 kesusTabletId = descResult.GetPathDescription().GetKesus().GetKesusTabletId();
             const TVector<TString> resources = {
                 "root",
                 "root/child1",
@@ -1021,7 +1022,7 @@ namespace {
                 "root/child2/child3"
             };
 
-            CreateKesusResources(kesusTabletId, resources);
+            CreateKesusResources("/MyRoot/Kesus", resources);
 
             TString request = Sprintf(R"(
                 ExportToS3Settings {
@@ -1096,17 +1097,12 @@ namespace {
             )");
             env.TestWaitNotification(Runtime(), txId);
 
-            auto desc = TestDescribe(Runtime(), "/MyRoot/Kesus");
-            NKikimrScheme::TEvDescribeSchemeResult descResult;
-            UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(desc, &descResult));
-
-            ui64 kesusTabletId = descResult.GetPathDescription().GetKesus().GetKesusTabletId();
             TVector<TString> resources;
             resources.reserve(numResources);
             for (ui32 i : xrange(numResources)) {
                 resources.push_back(Sprintf("root%u", i));
             }
-            CreateKesusResources(kesusTabletId, resources);
+            CreateKesusResources("/MyRoot/Kesus", resources);
 
             TString request = Sprintf(R"(
                 ExportToS3Settings {
@@ -1115,6 +1111,56 @@ namespace {
                     items {
                         source_path: "/MyRoot/Kesus"
                         destination_prefix: "Kesus"
+                    }
+                }
+            )", S3Port());
+
+            TestExport(Runtime(), ++txId, "/MyRoot", request);
+            env.TestWaitNotification(Runtime(), txId);
+
+            TestGetExport(Runtime(), txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+
+            CheckPathWithChecksum("/Kesus/create_coordination_node.pb");
+            for (auto resourcePath: resources) {
+                CheckPathWithChecksum(Sprintf("/Kesus/%s/create_rate_limiter.pb", resourcePath.c_str()));
+            }
+        }
+
+        void TestEncryptedKesus() {
+            TTestEnv env(Runtime());
+            ui64 txId = 100;
+
+            Runtime().GetAppData().FeatureFlags.SetEnableEncryptedExport(true);
+
+            TestCreateKesus(Runtime(), ++txId, "/MyRoot", R"(
+                Name: "Kesus"
+                Config: { self_check_period_millis: 1234 session_grace_period_millis: 5678 }
+            )");
+            env.TestWaitNotification(Runtime(), txId);
+
+            const TVector<TString> resources = {
+                "root",
+                "root/child1",
+                "root/child2",
+                "root/child2/child3"
+            };
+
+            CreateKesusResources("/MyRoot/Kesus", resources);
+
+            TString request = Sprintf(R"(
+                ExportToS3Settings {
+                    endpoint: "localhost:%d"
+                    scheme: HTTP
+                    destination_prefix: "Export"
+                    items {
+                        source_path: "/MyRoot/Kesus"
+                        destination_prefix: "Kesus"
+                    }
+                    encryption_settings {
+                        encryption_algorithm: "AES-128-GCM"
+                        symmetric_key {
+                            key: "0123456789012345"
+                        }
                     }
                 }
             )", S3Port());
@@ -1186,6 +1232,10 @@ namespace {
 } // anonymous
 
 Y_UNIT_TEST_SUITE_F(TExportToS3Tests, TExportFixture) {
+    Y_UNIT_TEST(KesusEnc) {
+        TestEncryptedKesus();
+    }
+
     Y_UNIT_TEST(ShouldSucceedOnSingleShardTable) {
         RunS3({
             R"(

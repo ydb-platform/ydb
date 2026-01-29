@@ -26,12 +26,12 @@ struct TSetupSysLocks
         SysLocksTable.SetupUpdate(this, db);
     }
 
-    TSetupSysLocks(ui64 lockTxId, ui32 lockNodeId, ui64 queryTraceId, TDataShard& self, ILocksDb* db)
+    TSetupSysLocks(ui64 lockTxId, ui32 lockNodeId, ui64 victimQueryTraceId, TDataShard& self, ILocksDb* db)
         : SysLocksTable(self.SysLocksTable())
     {
         LockTxId = lockTxId;
         LockNodeId = lockNodeId;
-        QueryTraceId = queryTraceId;
+        VictimQueryTraceId = victimQueryTraceId;
 
         SysLocksTable.SetupUpdate(this, db);
     }
@@ -43,7 +43,7 @@ struct TSetupSysLocks
     {
         LockTxId = op->LockTxId();
         LockNodeId = op->LockNodeId();
-        QueryTraceId = op->QueryTraceId();
+        VictimQueryTraceId = op->QueryTraceId();
 
         auto mvccVersion = self.GetMvccVersion(op.Get());
 

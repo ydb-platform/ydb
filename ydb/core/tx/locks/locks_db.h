@@ -40,7 +40,7 @@ public:
                 lock.Counter = rowset.template GetValue<typename Schema::Locks::Counter>();
                 lock.CreateTs = rowset.template GetValue<typename Schema::Locks::CreateTimestamp>();
                 lock.Flags = rowset.template GetValue<typename Schema::Locks::Flags>();
-                lock.QueryTraceId = rowset.template GetValueOrDefault<typename Schema::Locks::QueryTraceId>(0);
+                lock.VictimQueryTraceId = rowset.template GetValueOrDefault<typename Schema::Locks::VictimQueryTraceId>(0);
                 lockIndex[lock.LockId] = rows.size() - 1;
                 if (!rowset.Next()) {
                     return false;
@@ -114,7 +114,7 @@ public:
         return true;
     }
 
-    void PersistAddLock(ui64 lockId, ui32 lockNodeId, ui32 generation, ui64 counter, ui64 createTs, ui64 flags = 0, ui64 queryTraceId = 0) override {
+    void PersistAddLock(ui64 lockId, ui32 lockNodeId, ui32 generation, ui64 counter, ui64 createTs, ui64 flags = 0, ui64 victimQueryTraceId = 0) override {
         using Schema = TSchemaDescription;
         NIceDb::TNiceDb db(DB);
         db.Table<typename Schema::Locks>().Key(lockId).Update(
@@ -123,7 +123,7 @@ public:
             NIceDb::TUpdate<typename Schema::Locks::Counter>(counter),
             NIceDb::TUpdate<typename Schema::Locks::CreateTimestamp>(createTs),
             NIceDb::TUpdate<typename Schema::Locks::Flags>(flags),
-            NIceDb::TUpdate<typename Schema::Locks::QueryTraceId>(queryTraceId));
+            NIceDb::TUpdate<typename Schema::Locks::VictimQueryTraceId>(victimQueryTraceId));
         HasChanges_ = true;
     }
 

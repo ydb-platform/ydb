@@ -153,7 +153,7 @@ public:
             }
             auto [_, locksBrokenBySplit] = Self->SysLocksTable().ApplyLocks();
             if (!locksBrokenBySplit.empty()) {
-                auto victimQueryTraceIds = Self->SysLocksTable().ExtractQueryTraceIds(locksBrokenBySplit);
+                auto victimQueryTraceIds = Self->SysLocksTable().ExtractVictimQueryTraceIds(locksBrokenBySplit);
                 NDataIntegrity::LogLocksBroken(ctx, Self->TabletID(), "Tablet split operation invalidated locks", locksBrokenBySplit,
                                                Nothing(), victimQueryTraceIds);
             }

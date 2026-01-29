@@ -114,7 +114,7 @@ public:
         BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);
         auto [_, locksBrokenByErase] = DataShard.SysLocksTable().ApplyLocks();
         if (!locksBrokenByErase.empty()) {
-            auto victimQueryTraceIds = DataShard.SysLocksTable().ExtractQueryTraceIds(locksBrokenByErase);
+            auto victimQueryTraceIds = DataShard.SysLocksTable().ExtractVictimQueryTraceIds(locksBrokenByErase);
             NDataIntegrity::LogLocksBroken(ctx, DataShard.TabletID(), "Distributed erase transaction broke locks on erased rows", locksBrokenByErase,
                                            Nothing(), victimQueryTraceIds);
         }

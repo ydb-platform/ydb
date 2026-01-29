@@ -190,6 +190,7 @@ private:
         void PopInFlightMessage();
         bool SendMessage(WrappedWriteSessionPtr wrappedSession, TMessageInfo&& message);
         std::optional<TContinuationToken> GetContinuationToken(ui64 partition);
+        void RechoosePartitionIfNeeded(TMessageInfo& message);
 
         TKeyedWriteSession* Session;
 

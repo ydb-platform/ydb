@@ -16,6 +16,7 @@
 
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/ut/common/pq_ut_common.h>
+#include <ydb/core/persqueue/ut/common/autoscaling_ut_common.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 
@@ -1387,6 +1388,131 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
         UNIT_ASSERT_VALUES_EQUAL(ackedSeqNos.size(), total);
         UNIT_ASSERT(session->Close(TDuration::Seconds(10)));
+    }
+
+    Y_UNIT_TEST(KeyedWriteSession_BoundPartitionChooser_SplitPartition_MultiThreadedAcksOrder) {
+        NKikimr::NPQ::NTest::TTopicSdkTestSetup setup = NKikimr::NPQ::NTest::CreateSetup();
+        setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 1, 100);
+
+        auto client = setup.MakeClient();
+
+        TKeyedWriteSessionSettings writeSettings;
+        writeSettings
+            .Path(setup.GetTopicPath(TEST_TOPIC))
+            .Codec(ECodec::RAW);
+        writeSettings.ProducerIdPrefix(CreateGuidAsString());
+        writeSettings.SubSessionIdleTimeout(TDuration::Seconds(30));
+        writeSettings.PartitionChooserStrategy(TKeyedWriteSessionSettings::EPartitionChooserStrategy::Bound);
+        writeSettings.PartitioningKeyHasher([](const std::string_view key) -> std::string {
+            return std::string{key};
+        });
+
+        auto session = client.CreateKeyedWriteSession(writeSettings);
+
+        constexpr ui64 messages = 1000;
+
+        std::deque<TContinuationToken> readyTokens;
+        std::mutex tokensLock;
+        std::condition_variable tokensCv;
+
+        std::unordered_set<ui64> ackedSeqNos;
+        ackedSeqNos.reserve(messages);
+        std::vector<ui64> ackOrder;
+        ackOrder.reserve(messages);
+
+        std::mutex ackLock;
+        std::condition_variable ackCv;
+        std::atomic_bool stopEventLoop{false};
+
+        std::thread eventLoop([&]() {
+            while (!stopEventLoop.load()) {
+                auto event = session->GetEvent(true);
+                if (!event) {
+                    continue;
+                }
+
+                if (auto* ready = std::get_if<TWriteSessionEvent::TReadyToAcceptEvent>(&*event)) {
+                    {
+                        std::lock_guard g(tokensLock);
+                        readyTokens.push_back(std::move(ready->ContinuationToken));
+                    }
+                    tokensCv.notify_one();
+                } else if (auto* acks = std::get_if<TWriteSessionEvent::TAcksEvent>(&*event)) {
+                    {
+                        std::lock_guard g(ackLock);
+                        for (const auto& ack : acks->Acks) {
+                            if (ackedSeqNos.insert(ack.SeqNo).second) {
+                                ackOrder.push_back(ack.SeqNo);
+                            }
+                        }
+                    }
+                    ackCv.notify_all();
+                } else if (std::holds_alternative<TSessionClosedEvent>(*event)) {
+                    break;
+                }
+            }
+        });
+
+        auto popToken = [&]() -> TContinuationToken {
+            std::unique_lock lk(tokensLock);
+            bool ok = tokensCv.wait_for(
+                lk,
+                std::chrono::seconds(30),
+                [&]() { return !readyTokens.empty(); }
+            );
+            UNIT_ASSERT_C(ok, "Timed out waiting for ReadyToAcceptEvent");
+            auto t = std::move(readyTokens.front());
+            readyTokens.pop_front();
+            return t;
+        };
+
+        std::thread writer([&]() {
+            for (ui64 i = 1; i <= messages; ++i) {
+                auto token = popToken();
+                auto key = CreateGuidAsString();
+                auto msg = TWriteMessage("data");
+                msg.SeqNo(i);
+                session->Write(std::move(token), key, std::move(msg));
+            }
+        });
+
+        std::thread splitter([&]() {
+            Sleep(TDuration::Seconds(1));
+            ui64 txId = 1006;
+            NKikimr::NPQ::NTest::SplitPartition(setup, ++txId, 0, "a");
+        });
+
+        writer.join();
+        splitter.join();
+
+        {
+            std::unique_lock lk(ackLock);
+            bool ok = ackCv.wait_for(
+                lk,
+                std::chrono::seconds(10000),
+                [&]() { return ackedSeqNos.size() >= messages; }
+            );
+            UNIT_ASSERT_C(
+                ok,
+                TStringBuilder() << "Timed out waiting for acks: got " << ackedSeqNos.size()
+                                 << " expected " << messages
+            );
+        }
+
+        stopEventLoop.store(true);
+        UNIT_ASSERT(session->Close(TDuration::Seconds(30)));
+        eventLoop.join();
+
+        UNIT_ASSERT_VALUES_EQUAL(ackedSeqNos.size(), messages);
+        UNIT_ASSERT_VALUES_EQUAL(ackOrder.size(), messages);
+        for (ui64 i = 0; i < messages; ++i) {
+            UNIT_ASSERT_C(
+                ackOrder[i] == i + 1,
+                TStringBuilder() << "Unexpected ack order at index " << i
+                                 << ": got SeqNo=" << ackOrder[i]
+                                 << ", expected SeqNo=" << (i + 1)
+            );
+        }
     }
 
     Y_UNIT_TEST(SimpleBlockingKeyedWriteSession_BasicWrite) {

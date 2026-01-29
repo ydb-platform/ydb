@@ -372,7 +372,6 @@ void TKeyedWriteSession::TEventsWorker::DoWork() {
     std::unique_lock lock(Lock);
 
     while (!ReadyFutures.empty()) {
-        LOG_LAZY(Session->DbDriverState->Log, TLOG_DEBUG, "TKeyedWriteSession: Running event loop");
         auto idx = *ReadyFutures.begin();
         RunEventLoop(Session->SessionsWorker->GetWriteSession(idx), idx);
 
@@ -715,14 +714,28 @@ TKeyedWriteSession::TMessagesWorker::TMessagesWorker(TKeyedWriteSession* session
     MessagesNotEmptyFuture = MessagesNotEmptyPromise.GetFuture();
 }
 
+void TKeyedWriteSession::TMessagesWorker::RechoosePartitionIfNeeded(TMessageInfo& message) {
+    const auto& partitionInfo = Session->Partitions[message.Partition];
+    if (partitionInfo.Children_.empty()) {
+        return;
+    }
+
+    // this case means that partition was split, so we need to rechoose the partition for the message
+    auto newPartition = Session->PartitionChooser->ChoosePartition(message.Key);
+    if (newPartition != message.Partition) {
+        message.Partition = newPartition;
+    }
+}
+
 void TKeyedWriteSession::TMessagesWorker::DoWork() {
     auto sessionsWorker = Session->SessionsWorker;
-    while (!PendingMessages.empty()) {
+    while (!PendingMessages.empty() && MessagesToResend.empty()) {
         auto& head = PendingMessages.front();
         if (Session->Partitions[head.Partition].Locked_) {
             break;
         }
 
+        RechoosePartitionIfNeeded(head);
         auto msgToSave = head;
         auto wrappedSession = sessionsWorker->GetWriteSession(msgToSave.Partition);
         if (!SendMessage(wrappedSession, std::move(head))) {

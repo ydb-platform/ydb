@@ -329,8 +329,8 @@ void TReplicaTest::RecreateDatabase() {
     // Step #5 Create table again
     {
         TPathId tablePathId(20, 2);
-        auto describe = GenerateDescribe(tablePath, tablePathId, 1 , secondDatabasePathId);
-        Context->Send(Replica, populator, GenerateUpdate(describe,1,1) );
+        auto describe = GenerateDescribe(tablePath, tablePathId, 1, secondDatabasePathId);
+        Context->Send(Replica, populator, GenerateUpdate(describe, 1, 1));
 
         // catch create notify
         auto ev = Context->GrabEdgeEvent<NInternalEvents::TEvNotify>(tableSubscriber);

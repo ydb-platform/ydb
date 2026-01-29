@@ -4004,7 +4004,7 @@ Y_UNIT_TEST_QUAD(SelectWithFulltextContainsAndNgramWildcardUnicode, RELEVANCE, U
     }
 
     {
-        const TString query = std::format(R"sql(
+        const TString query = R"sql(
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
             WHERE FulltextContains(`Text`, "*bc0*")
             ORDER BY `Key`;
@@ -4040,7 +4040,7 @@ Y_UNIT_TEST_QUAD(SelectWithFulltextContainsAndNgramWildcardUnicode, RELEVANCE, U
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
             WHERE FulltextContains(`Text`, "👨\u200D👩*")  -- 👨‍👩‍👧‍👦 is combination of 👨, 👩, 👧 and 👦
             ORDER BY `Key`;
-        )sql");
+        )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 

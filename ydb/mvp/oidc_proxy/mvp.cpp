@@ -382,7 +382,7 @@ THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup(int argc, char**
         jwtInfo->SetAccountId(genericOpts.JwtSaId);
         jwtInfo->SetToken(genericOpts.JwtToken);
         jwtInfo->SetEndpoint(genericOpts.JwtTokenEndpoint);
-        jwtInfo->SetName(OpenIdConnectSettings.SecretName); // the only name used
+        jwtInfo->SetName(OpenIdConnectSettings.SessionServiceTokenName); // the only name used
         TYdbLocation::UserToken = genericOpts.JwtToken;
     }
     TokensConfig = tokens;

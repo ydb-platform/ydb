@@ -395,14 +395,15 @@ bool DfsOnTableChildrenTree(TOperationId opId, const TTxTransaction& tx, TOperat
                                 return false;
                             }
                             case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree: {
-                                size_t numberOfChildren = srcChildPath.Base()->GetChildren().size();
-                                Y_ABORT_UNLESS(numberOfChildren == 2 || numberOfChildren == 3);
+                                const auto& index = context.SS->Indexes.at(childPathId);
+                                bool isGlobalVectorIndex = index->IndexKeys.size() == 1;
+                                bool isPrefixVectorIndex = index->IndexKeys.size() > 1;
 
-                                if (numberOfChildren == 2) { // GlobalVectorIndex contains two implTables
+                                if (isGlobalVectorIndex) { // GlobalVectorIndex contains two implTables
                                     if (!DfsOnTableChildrenTree(opId, tx, context, childPathId, result, ESchemeObjectType::GlobalVectorIndex)) {
                                         return false;
                                     }
-                                } else if (numberOfChildren == 3) { // PrefixVectorIndex contains three implTables
+                                } else if (isPrefixVectorIndex) { // PrefixVectorIndex contains three implTables
                                     if (!DfsOnTableChildrenTree(opId, tx, context, childPathId, result, ESchemeObjectType::PrefixVectorIndex)) {
                                         return false;
                                     }

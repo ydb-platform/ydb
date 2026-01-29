@@ -100,6 +100,8 @@ TExprNode::TPtr TPhysicalQueryBuilder::BuildPhysicalQuery(TVector<TExprNode::TPt
                             .Name().Build("type")
                             .Value<TCoAtom>().Build("compute")
                         .Done().Ptr());
+
+    TypeAnnotate(dqResult);
     // Build PhysicalTx
     auto physTx = Build<TKqpPhysicalTx>(ctx, Root.Pos)
         .Stages()
@@ -114,8 +116,6 @@ TExprNode::TPtr TPhysicalQueryBuilder::BuildPhysicalQuery(TVector<TExprNode::TPt
         .Build()
     .Done().Ptr();
     // clang-format on
-
-    TypeAnnotate(dqResult);
 
     YQL_CLOG(TRACE, CoreDq) << "Inferred final type: " << *dqResult->GetTypeAnn();
     // clang-format off
@@ -198,6 +198,21 @@ void TPhysicalQueryBuilder::TopologicalSort(TDqPhyStage&& dqStage, TVector<TExpr
 }
 
 // This function assumes that stages already sorted in topological orders.
+void TPhysicalQueryBuilder::KeepTypeAnnotationForStageAndFirstLevelChilds(TDqPhyStage& newStage, const TDqPhyStage& oldStage) const {
+    Y_ENSURE(oldStage.Ref().GetTypeAnn());
+    Y_ENSURE(oldStage.Inputs().Size() == newStage.Inputs().Size());
+
+    newStage.MutableRef().SetTypeAnn(oldStage.Ref().GetTypeAnn());
+    for (ui32 i = 0, e = newStage.Inputs().Size(); i < e; ++i) {
+        newStage.Inputs().Item(i).MutableRef().SetTypeAnn(oldStage.Inputs().Item(i).Ref().GetTypeAnn());
+        newStage.Program().Args().Arg(i).MutableRef().SetTypeAnn(oldStage.Program().Args().Arg(i).Ref().GetTypeAnn());
+        if (newStage.Inputs().Item(i).Maybe<TDqConnection>()) {
+            newStage.Inputs().Item(i).Cast<TDqConnection>().Output().Stage().MutableRef().SetTypeAnn(
+                oldStage.Inputs().Item(i).Cast<TDqConnection>().Output().Stage().Ref().GetTypeAnn());
+        }
+    }
+}
+
 TVector<TExprNode::TPtr> TPhysicalQueryBuilder::EnableWideChannelsPhysicalStages(TVector<TExprNode::TPtr>&& physicalStages) {
     Y_ENSURE(physicalStages.size());
     auto root = physicalStages.back();
@@ -233,6 +248,7 @@ TVector<TExprNode::TPtr> TPhysicalQueryBuilder::EnableWideChannelsPhysicalStages
     return stagesTopSorted;
 }
 
+// The idea was taken from kqp_opt_peephole with some changes.
 // This function assumes that stages already sorted in topological orders.
 TVector<TExprNode::TPtr> TPhysicalQueryBuilder::PeepHoleOptimizePhysicalStages(TVector<TExprNode::TPtr>&& physicalStages) {
     Y_ENSURE(physicalStages.size());
@@ -243,50 +259,182 @@ TVector<TExprNode::TPtr> TPhysicalQueryBuilder::PeepHoleOptimizePhysicalStages(T
     }
     auto& ctx = RBOCtx.ExprCtx;
 
-    TNodeOnNodeOwnedMap replaces;
-    TVector<TExprNode::TPtr> newStages;
+    TNodeOnNodeOwnedMap programsMap;
     for (auto& stage : physicalStages) {
+        TNodeOnNodeOwnedMap argReplaces;
         auto dqPhyStage = TDqPhyStage(stage);
-        auto stageLambdaAfterPeephole = PeepHoleOptimizeStageLambda(dqPhyStage.Program().Ptr());
-        Y_ENSURE(stageLambdaAfterPeephole);
+        auto program = dqPhyStage.Program();
+
+        const bool isSuitableHashShuffleConnections = IsSuitableToPropagateWideBlocksThroughHashShuffleConnections(dqPhyStage);
+        TVector<TExprNode::TPtr> stageArgs;
+        for (ui32 i = 0, e = dqPhyStage.Inputs().Size(); i < e; ++i) {
+            auto stageArg = program.Args().Arg(i);
+            auto newStageArg = stageArg.Ptr();
+            auto input = dqPhyStage.Inputs().Item(i);
+
+            if (auto maybeConnection = input.Maybe<TDqConnection>();
+                isSuitableHashShuffleConnections && maybeConnection && IsSuitableToPropagateWideBlocksThroughConnection(maybeConnection.Cast().Output())) {
+                auto inputStage = maybeConnection.Cast().Output().Stage();
+                auto program = TCoLambda(programsMap.at(inputStage.Program().Raw()));
+                auto body = program.Body().Ptr();
+
+                // If the body of input stage is `FromBlocks` propagate it through connection.
+                if (body->IsCallable("WideFromBlocks")) {
+                    body = body->ChildPtr(0);
+
+                    // New arg for the current stage has a `Blocks` type, so we need to add `FromBlocks` here.
+                    // clang-format off
+                    auto fromBlocks = Build<TCoWideFromBlocks>(ctx, stageArg.Pos())
+                        .Input<TCoArgument>()
+                            .Name("new_stage_arg")
+                        .Build()
+                    .Done();
+                    // clang-format on
+
+                    // Update a stage arg.
+                    newStageArg = fromBlocks.Input().Ptr();
+                    // Replace an original arg with arg wrapped to `FromBlocks`.
+                    argReplaces[stageArg.Raw()] = fromBlocks.Ptr();
+
+                    // clang-format off
+                    auto newProgram = Build<TCoLambda>(ctx, program.Pos())
+                        .Args(program.Args())
+                        .Body(body)
+                    .Done().Ptr();
+                    // clang-format on
+
+                    // Update the type to `Blocks`, which should be easy since it only works on the lambda and not the entire graph.
+                    newProgram = TypeAnnotateProgram(newProgram, GetArgsType(program.Ptr()));
+                    Y_ENSURE(newProgram->GetTypeAnn());
+
+                    newStageArg->SetTypeAnn(newProgram->GetTypeAnn());
+                    // Update map, since stage body was updated.
+                    programsMap[inputStage.Program().Raw()] = newProgram;
+                }
+            }
+            stageArgs.push_back(newStageArg);
+        }
+
         // clang-format off
-        auto newStage = Build<TDqPhyStage>(ctx, stage->Pos())
-            .Inputs(ctx.ReplaceNodes(dqPhyStage.Inputs().Ptr(), replaces))
-            .Program(stageLambdaAfterPeephole)
-            .Settings(dqPhyStage.Settings())
-            .Outputs(dqPhyStage.Outputs())
+        auto newProgram = Build<TCoLambda>(ctx, stage->Pos())
+            .Args(stageArgs)
+            .Body(ctx.ReplaceNodes(program.Body().Ptr(), argReplaces))
         .Done().Ptr();
         // clang-format on
-        newStages.push_back(newStage);
-        replaces[dqPhyStage.Raw()] = newStage;
+
+        TVector<const TTypeAnnotationNode*> argsType;
+        for (const auto& arg : stageArgs) {
+            const auto* argTypeAnn = arg->GetTypeAnn();
+            Y_ENSURE(argTypeAnn);
+            argsType.push_back(argTypeAnn);
+        }
+
+        newProgram = PeepHoleOptimize(newProgram, argsType);
+        Y_ENSURE(newProgram);
+        // Collect program after peephole.
+        programsMap[program.Raw()] = newProgram;
     }
+
+    TVector<TExprNode::TPtr> newStages;
+    newStages.reserve(physicalStages.size());
+    for (ui32 i = 0, e = physicalStages.size(); i < e; ++i) {
+        newStages.push_back(ctx.ReplaceNodes(std::move(physicalStages[i]), programsMap));
+    }
+
+    YQL_CLOG(TRACE, CoreDq) << "[NEW RBO After peephole] " << KqpExprToPrettyString(TExprBase(newStages.back()), ctx);
     return newStages;
 }
 
-TExprNode::TPtr TPhysicalQueryBuilder::PeepHoleOptimizeStageLambda(TExprNode::TPtr stageLambda) const {
-    auto lambda = TCoLambda(stageLambda);
-    // Compute types of inputs to stage lambda
-    TVector<const TTypeAnnotationNode*> argTypes;
+bool TPhysicalQueryBuilder::IsSuitableToPropagateWideBlocksThroughHashShuffleConnections(const TDqPhyStage& stage) const {
+    // Workaround to mitigate https://github.com/ydb-platform/ydb/issues/20440
+    // do not mix scalar and block HashShuffle HashV1 connections,
+    // if we find any scalar connection then don't propagate blocks through other connections.
+    ui32 scalarHashShuffleCount = 0;
+    for (size_t i = 0; i < stage.Inputs().Size(); ++i) {
+        auto connection = stage.Inputs().Item(i).Maybe<TDqCnHashShuffle>();
+        if (connection) {
+            // Invalid invariant in dq_output_consumer.cpp: YQL_ENSURE(OutputWidth_ > KeyColumns_.size());
+            // We could have a type (a, b) -> hash_shuffle(a, a, b)
+            return false;
+            auto hashFuncType = RBOCtx.KqpCtx.Config->GetDqDefaultHashShuffleFuncType();
+            if (connection.Cast().HashFunc().IsValid()) {
+                hashFuncType = FromString<NDq::EHashShuffleFuncType>(connection.Cast().HashFunc().Cast().StringValue());
+            }
+            scalarHashShuffleCount += (hashFuncType == NDq::EHashShuffleFuncType::HashV1);
+        }
+    }
+    return scalarHashShuffleCount <= 1;
+}
+
+bool TPhysicalQueryBuilder::IsCompatibleWithBlocks(const TStructExprType& type, TPositionHandle pos) const {
+    TVector<const TTypeAnnotationNode*> types;
+    for (const auto& item : type.GetItems()) {
+        types.emplace_back(item->GetItemType());
+    }
+    auto& ctx = RBOCtx.ExprCtx;
+
+    const auto resolveStatus = RBOCtx.TypeCtx.ArrowResolver->AreTypesSupported(ctx.GetPosition(pos), types, ctx);
+    YQL_ENSURE(resolveStatus != IArrowResolver::ERROR);
+    return resolveStatus == IArrowResolver::OK;
+}
+
+bool TPhysicalQueryBuilder::IsSuitableToPropagateWideBlocksThroughConnection(const TDqOutput& output) const {
+    if (RBOCtx.KqpCtx.Config->GetBlockChannelsMode() != NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_AUTO) {
+        return false;
+    }
+
+    auto stageSettings = NYql::NDq::TDqStageSettings::Parse(output.Stage());
+    return stageSettings.WideChannels && stageSettings.OutputNarrowType &&
+           IsCompatibleWithBlocks(*stageSettings.OutputNarrowType, output.Stage().Program().Pos());
+}
+
+TVector<const TTypeAnnotationNode*> TPhysicalQueryBuilder::GetArgsType(TExprNode::TPtr input) const {
+    Y_ENSURE(input->IsLambda());
+    auto lambda = TCoLambda(input);
+
+    TVector<const TTypeAnnotationNode*> argsTypes;
     for (const auto& arg : lambda.Args()) {
         const auto* argTypeAnn = arg.Ptr()->GetTypeAnn();
         Y_ENSURE(argTypeAnn);
-        argTypes.push_back(argTypeAnn);
+        argsTypes.push_back(argTypeAnn);
     }
+
+    return argsTypes;
+}
+
+TExprNode::TPtr TPhysicalQueryBuilder::TypeAnnotateProgram(TExprNode::TPtr input, const TVector<const TTypeAnnotationNode*>& argsType) {
+    auto lambda = TCoLambda(input);
+    auto& ctx = RBOCtx.ExprCtx;
+    // clang-format off
+    auto program = Build<TKqpProgram>(ctx, input->Pos())
+        .Lambda(ctx.DeepCopyLambda(*input.Get()))
+        .ArgsType(ExpandType(input->Pos(), *ctx.MakeType<TTupleExprType>(argsType), ctx))
+    .Done().Ptr();
+    // clang-format on
+
+    TypeAnnotate(program);
+    return TKqpProgram(program).Lambda().Ptr();
+}
+
+TExprNode::TPtr TPhysicalQueryBuilder::PeepHoleOptimize(TExprNode::TPtr input, const TVector<const TTypeAnnotationNode*>& argsType) const {
+    auto lambda = TCoLambda(input);
+    auto& ctx = RBOCtx.ExprCtx;
 
     // Yql has a strange bug in final stage peephole for `WideCombiner` with empty keys.
     const bool withFinalStageRules = CanApplyPeepHole(lambda.Body().Ptr(), {"WideCombiner"});
     // clang-format off
-    auto program = Build<TKqpProgram>(RBOCtx.ExprCtx, stageLambda->Pos())
-        .Lambda(RBOCtx.ExprCtx.DeepCopyLambda(*stageLambda.Get()))
-        .ArgsType(ExpandType(stageLambda->Pos(), *RBOCtx.ExprCtx.MakeType<TTupleExprType>(argTypes), RBOCtx.ExprCtx))
+    auto program = Build<TKqpProgram>(ctx, input->Pos())
+        .Lambda(ctx.DeepCopyLambda(*input.Get()))
+        .ArgsType(ExpandType(input->Pos(), *ctx.MakeType<TTupleExprType>(argsType), ctx))
     .Done();
     // clang-format on
 
+    // auto &ctx = RBOCtx.ExprCtx;
     TExprNode::TPtr newProgram;
-    auto status = PeepHoleOptimize(program, newProgram, RBOCtx.ExprCtx, RBOCtx.PeepholeTypeAnnTransformer.GetRef(), RBOCtx.TypeCtx, RBOCtx.KqpCtx.Config, false,
-                                   withFinalStageRules, {});
+    auto status = ::PeepHoleOptimize(program, newProgram, ctx, RBOCtx.PeepholeTypeAnnTransformer.GetRef(), RBOCtx.TypeCtx, RBOCtx.KqpCtx.Config, false,
+                                     withFinalStageRules, {});
     if (status != IGraphTransformer::TStatus::Ok) {
-        RBOCtx.ExprCtx.AddError(TIssue(RBOCtx.ExprCtx.GetPosition(program.Pos()), "Peephole optimization failed for stage in NEW RBO"));
+        ctx.AddError(TIssue(ctx.GetPosition(program.Pos()), "Peephole optimization failed for stage in NEW RBO"));
         return nullptr;
     }
 

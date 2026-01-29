@@ -187,9 +187,9 @@ private:
             const auto& to = filter.GetPredicateTo();
 
             const auto& leftBorder = from.IsAll() ? TBorder::MakeLeft(TPositionView::MakeLeftInf(), false)
-                                                  : TBorder::MakeLeft(TPositionView(&from.GetSortableBatchPosition()), from.IsInclude());
+                                                  : TBorder::MakeLeft(TPositionView(NArrow::TSimpleRow(from.GetSortableBatchPosition().MakeRecordBatch(), 0)), from.IsInclude());
             const auto& rightBorder = to.IsAll() ? TBorder::MakeRight(TPositionView::MakeRightInf(), false)
-                                                 : TBorder::MakeRight(TPositionView(&to.GetSortableBatchPosition()), to.IsInclude());
+                                                 : TBorder::MakeRight(TPositionView(NArrow::TSimpleRow(to.GetSortableBatchPosition().MakeRecordBatch(), 0)), to.IsInclude());
 
             intervals.EachIntersection(leftBorder, rightBorder, collector);
         }

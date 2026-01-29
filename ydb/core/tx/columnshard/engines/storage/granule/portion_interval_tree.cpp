@@ -2,8 +2,8 @@
 
 namespace NKikimr::NOlap::PortionIntervalTree {
 
-TPositionView::TPositionView(const NArrow::NMerger::TSortableBatchPosition* sortableBatchPosition)
-    : Position(sortableBatchPosition) {
+TPositionView::TPositionView(NArrow::TSimpleRow&& simpleRow)
+    : Position(std::move(simpleRow)) {
 }
 
 TPositionView::TPositionView(EInfinityType infType)
@@ -12,8 +12,8 @@ TPositionView::TPositionView(EInfinityType infType)
 }
 
 TPositionView::TPositionView(std::shared_ptr<TPortionInfo> portionInfo, EPortionInfoIndexPosition keyPosition)
-    : Position(keyPosition == EPortionInfoIndexPosition::Start ? TPositionVariant(std::in_place_index<StartSimpleRow>, std::move(portionInfo))
-                                                               : TPositionVariant(std::in_place_index<EndSimpleRow>, std::move(portionInfo))) {
+    : Position(keyPosition == EPortionInfoIndexPosition::Start ? TPositionVariant(std::in_place_index<StartPortionInfo>, std::move(portionInfo))
+                                                               : TPositionVariant(std::in_place_index<EndPortionInfo>, std::move(portionInfo))) {
 }
 
 TPositionView TPositionView::FromPortionInfoIndexStart(std::shared_ptr<TPortionInfo> portionInfo) {
@@ -32,18 +32,6 @@ TPositionView TPositionView::MakeRightInf() {
     return TPositionView(EInfinityType::Right);
 }
 
-NArrow::NMerger::TSortableBatchPosition TPositionView::GetSortableBatchPosition() const {
-    if (auto val = std::get_if<StartSimpleRow>(&Position); val) {
-        return (*val)->IndexKeyStart().BuildSortablePosition();
-    } else if (auto val = std::get_if<EndSimpleRow>(&Position); val) {
-        return (*val)->IndexKeyEnd().BuildSortablePosition();
-    } else if (auto val = std::get_if<SortableBatchPosition>(&Position); val) {
-        return **val;
-    } else {
-        AFL_VERIFY(false)("error", "invalid type in TPositionView variant for GetSortableBatchPosition")("type", Position.index());
-    }
-}
-
 std::partial_ordering TPositionView::Compare(const TPositionView& rhs) const {
     if (Position.index() == LeftInf || rhs.Position.index() == RightInf) {
         return Position.index() == rhs.Position.index() ? std::partial_ordering::equivalent : std::partial_ordering::less;
@@ -51,24 +39,35 @@ std::partial_ordering TPositionView::Compare(const TPositionView& rhs) const {
         return std::partial_ordering::greater;
     }
 
-    if (Position.index() == SortableBatchPosition) {
-        return std::get<SortableBatchPosition>(Position)->ComparePartial(rhs.Position.index() == SortableBatchPosition ? *std::get<SortableBatchPosition>(rhs.Position)
-                                                                                                                       : rhs.GetSortableBatchPosition());
-    } else if (rhs.Position.index() == SortableBatchPosition) {
-        return GetSortableBatchPosition().ComparePartial(*std::get<SortableBatchPosition>(rhs.Position));
-    }
+    auto getKeyView = [](const TPositionVariant& pos) -> NArrow::TSimpleRowViewV0 {
+        switch (pos.index()) {
+            case StartPortionInfo:
+                return std::get<StartPortionInfo>(pos)->GetMeta().IndexKeyViewStart();
+            case EndPortionInfo:
+                return std::get<EndPortionInfo>(pos)->GetMeta().IndexKeyViewEnd();
+            case SimpleRow:
+                return NArrow::TSimpleRowViewV0(std::get<SimpleRow>(pos).GetData());
+            default:
+                AFL_VERIFY(false)("pos.index()", pos.index());
+                break;
+        }
+    };
 
-    AFL_VERIFY(Position.index() == StartSimpleRow || Position.index() == EndSimpleRow)("Position.index()", Position.index());
-    AFL_VERIFY(rhs.Position.index() == StartSimpleRow || rhs.Position.index() == EndSimpleRow)("rhs.Position.index()", rhs.Position.index());
+    auto getSchema = [&]() -> const std::shared_ptr<arrow::Schema> {
+        switch (Position.index()) {
+            case StartPortionInfo:
+                return std::get<StartPortionInfo>(Position)->GetMeta().GetPkSchema();
+            case EndPortionInfo:
+                return std::get<EndPortionInfo>(Position)->GetMeta().GetPkSchema();
+            case SimpleRow:
+                return std::get<SimpleRow>(Position).GetSchema();
+            default:
+                AFL_VERIFY(false)("Position.index()", Position.index());
+                break;
+        }
+    };
 
-    const auto& lhsMeta = Position.index() == StartSimpleRow ? std::get<StartSimpleRow>(Position)->GetMeta()
-                                                             : std::get<EndSimpleRow>(Position)->GetMeta();
-    auto lhsIndexKeyView = Position.index() == StartSimpleRow ? lhsMeta.IndexKeyViewStart()
-                                                              : lhsMeta.IndexKeyViewEnd();
-    auto rhsIndexKeyView = rhs.Position.index() == StartSimpleRow ? std::get<StartSimpleRow>(rhs.Position)->GetMeta().IndexKeyViewStart()
-                                                                  : std::get<EndSimpleRow>(rhs.Position)->GetMeta().IndexKeyViewEnd();
-
-    return lhsIndexKeyView.Compare(rhsIndexKeyView, lhsMeta.GetPkSchema()).GetResult();
+    return getKeyView(Position).Compare(getKeyView(rhs.Position), getSchema()).GetResult();
 }
 
 int TPositionViewBorderComparator::Compare(const TBorder& lhs, const TBorder& rhs) {

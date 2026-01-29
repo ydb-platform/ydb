@@ -4720,7 +4720,7 @@ void THive::CreateEvMonitoring(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorCo
         return Execute(new TTxMonEvent_NotReady(ev->Sender, this), ctx);
     }
     NMon::TEvRemoteHttpInfo* httpInfo = ev->Get();
-    TCgiParameters cgi(httpInfo->Cgi());
+    TCgiParameters cgi = GetParams(httpInfo);
     TString page = cgi.Has("page") ? cgi.Get("page") : "";
     if (page == "MemStateTablets")
         return Execute(new TTxMonEvent_MemStateTablets(ev->Sender, ev, this), ctx);

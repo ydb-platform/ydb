@@ -17,13 +17,13 @@ namespace NKikimr {
             TMask mask;
             mask.Set(0, 8);
             mask.Reset(1);
-            TFreeRes res = {15, mask, 8};
+            TFreeRes res = {15, mask, 8, false};
 
             STR << "TFreeRes# " << res.ToString() << "\n";
             UNIT_ASSERT_EQUAL(res.ToString(), "{ChunkIdx: 15 Mask# 10111111}");
 
             TMask constMask = TChain::BuildConstMask("", 8);
-            TFreeRes constRes = {0, constMask, 8};
+            TFreeRes constRes = {0, constMask, 8, false};
             STR << "constMask# " << constRes.ToString() << "\n";
             UNIT_ASSERT_EQUAL(constRes.ToString(), "{ChunkIdx: 0 Mask# 11111111}");
 

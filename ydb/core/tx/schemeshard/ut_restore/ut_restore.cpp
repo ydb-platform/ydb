@@ -5701,7 +5701,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             partition_write_speed_bytes_per_second: 1048576
             partition_write_burst_bytes: 1048576
             attributes {
-                key: "__max_partition_message_groups_seqno_stored"
+                key: "_max_partition_message_groups_seqno_stored"
                 value: "6000000"
             }
             attributes {
@@ -7832,7 +7832,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
             partition_write_speed_bytes_per_second: 1048576
             partition_write_burst_bytes: 1048576
             attributes {
-                key: "__max_partition_message_groups_seqno_stored"
+                key: "_max_partition_message_groups_seqno_stored"
                 value: "6000000"
             }
             attributes {

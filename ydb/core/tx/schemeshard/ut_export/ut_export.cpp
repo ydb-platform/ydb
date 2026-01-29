@@ -1,4 +1,5 @@
 #include <ydb/public/api/protos/ydb_export.pb.h>
+#include <ydb/public/api/protos/ydb_topic.pb.h>
 
 #include <ydb/core/backup/common/encryption.h>
 #include <ydb/core/base/table_index.h>
@@ -2802,49 +2803,48 @@ state: STATE_ENABLED
 
                 auto* topic = S3Mock.GetData().FindPtr(changefeedDir + "/topic_description.pb");
                 UNIT_ASSERT(topic);
-                UNIT_ASSERT_VALUES_EQUAL(*topic, Sprintf(R"(partitioning_settings {
-  min_active_partitions: 1
-  max_active_partitions: 1
-  auto_partitioning_settings {
-    strategy: AUTO_PARTITIONING_STRATEGY_DISABLED
-    partition_write_speed {
-      stabilization_window {
-        seconds: 300
-      }
-      up_utilization_percent: 80
-      down_utilization_percent: 20
-    }
-  }
-}
-partitions {
-  active: true
-}
-retention_period {
-  seconds: 86400
-}
-partition_write_speed_bytes_per_second: 1048576
-partition_write_burst_bytes: 1048576
-attributes {
-  key: "__max_partition_message_groups_seqno_stored"
-  value: "6000000"
-}
-attributes {
-  key: "_allow_unauthenticated_read"
-  value: "true"
-}
-attributes {
-  key: "_allow_unauthenticated_write"
-  value: "true"
-}
-attributes {
-  key: "_message_group_seqno_retention_period_ms"
-  value: "1382400000"
-}
-attributes {
-  key: "_timestamp_type"
-  value: "CreateTime"
-}
-)", i));
+
+                Ydb::Topic::DescribeTopicResult actualTopicProto;
+                UNIT_ASSERT_C(
+                    google::protobuf::TextFormat::ParseFromString(*topic, &actualTopicProto),
+                    *topic
+                );
+
+                Ydb::Topic::DescribeTopicResult expectedTopicProto;
+                TString expectedTopicStr = R"(
+                    partitioning_settings {
+                        min_active_partitions: 1
+                        max_active_partitions: 1
+                        auto_partitioning_settings {
+                            strategy: AUTO_PARTITIONING_STRATEGY_DISABLED
+                            partition_write_speed {
+                                stabilization_window {
+                                    seconds: 300
+                                }
+                                up_utilization_percent: 80
+                                down_utilization_percent: 20
+                            }
+                        }
+                    }
+                    partitions {
+                        active: true
+                    }
+                    retention_period {
+                        seconds: 86400
+                    }
+                    partition_write_speed_bytes_per_second: 1048576
+                    partition_write_burst_bytes: 1048576
+                )";
+                UNIT_ASSERT_C(
+                    google::protobuf::TextFormat::ParseFromString(expectedTopicStr, &expectedTopicProto),
+                    expectedTopicStr
+                );
+
+                actualTopicProto.clear_attributes();
+                UNIT_ASSERT_STRINGS_EQUAL(
+                    actualTopicProto.partitioning_settings().DebugString(),
+                    expectedTopicProto.partitioning_settings().DebugString()
+                );
 
                 const auto* changefeedChecksum = S3Mock.GetData().FindPtr(changefeedDir + "/changefeed_description.pb.sha256");
                 UNIT_ASSERT(changefeedChecksum);

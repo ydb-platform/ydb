@@ -42,7 +42,6 @@ using namespace NYdb::NRateLimiter;
 using namespace NYdb::NReplication;
 using namespace NYdb::NScheme;
 using namespace NYdb::NTable;
-// using namespace NYdb::NTopic;
 using namespace NYdb::NView;
 
 namespace Ydb::Table {

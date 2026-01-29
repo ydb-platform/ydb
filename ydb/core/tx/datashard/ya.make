@@ -315,7 +315,7 @@ END()
 
 RECURSE_FOR_TESTS(
     build_index/ut
-    ut_background_compaction
+    ut_borrowed_compaction
     ut_change_collector
     ut_change_exchange
     ut_column_stats

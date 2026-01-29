@@ -21,8 +21,9 @@ public:
         const auto cookie = record.GetCookie();
         if (!Self->IsStateActive()) {
             LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD,
-                "Background compaction tx at non-ready tablet " << Self->TabletID()
-                << " state " << Self->State
+                "Compaction tx at non-ready tablet " << Self->TabletID()
+                << " with cookie " << cookie
+                << ", state " << Self->State
                 << ", requested from " << Ev->Sender);
             auto response = MakeHolder<TEvDataShard::TEvCompactTableResult>(
                 Self->TabletID(),
@@ -38,7 +39,8 @@ public:
 
         if (Self->GetPathOwnerId() != pathId.OwnerId) {
             LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD,
-                "Background compaction " << Self->TabletID()
+                "Compaction " << Self->TabletID()
+                << " with cookie " << cookie
                 << " of not owned " << pathId
                 << ", self path owner id# " << Self->GetPathOwnerId());
             auto response = MakeHolder<TEvDataShard::TEvCompactTableResult>(
@@ -54,7 +56,8 @@ public:
         auto it = Self->TableInfos.find(tableId);
         if (it == Self->TableInfos.end()) {
             LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD,
-                "Background compaction " << Self->TabletID()
+                "Compaction " << Self->TabletID()
+                << " with cookie " << cookie
                 << " of unknown " << pathId
                 << ", requested from " << Ev->Sender);
             auto response = MakeHolder<TEvDataShard::TEvCompactTableResult>(
@@ -68,19 +71,20 @@ public:
         const TUserTable& tableInfo = *it->second;
         const auto localTid = tableInfo.LocalTid;
 
-        ++tableInfo.Stats.BackgroundCompactionRequests;
+        ++tableInfo.Stats.CompactionRequests;
 
         bool hasBorrowed = txc.DB.HasBorrowed(tableInfo.LocalTid, Self->TabletID());
         if (hasBorrowed && !record.GetCompactBorrowed()) {
             // normally we should not receive requests to compact in this case
             // but in some rare cases like schemeshard restart we can
             LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                "Background compaction of tablet# " << Self->TabletID()
+                "Compaction of tablet# " << Self->TabletID()
+                << " with cookie " << cookie
                 << " of path# " << pathId
                 << ", requested from# " << Ev->Sender
                 << " contains borrowed parts, failed");
 
-            Self->IncCounter(COUNTER_TX_BACKGROUND_COMPACTION_FAILED_BORROWED);
+            Self->IncCounter(COUNTER_TX_COMPACTION_FAILED_BORROWED);
 
             auto response = MakeHolder<TEvDataShard::TEvCompactTableResult>(
                 Self->TabletID(),
@@ -95,12 +99,13 @@ public:
             // normally we should not receive requests to compact in this case
             // but in some rare cases like schemeshard restart we can
             LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                "Background compaction of tablet# " << Self->TabletID()
+                "Compaction of tablet# " << Self->TabletID()
+                << " with cookie " << cookie
                 << " of path# " << pathId
                 << ", requested from# " << Ev->Sender
                 << " contains loaned parts, failed");
 
-            Self->IncCounter(COUNTER_TX_BACKGROUND_COMPACTION_FAILED_LOANED);
+            Self->IncCounter(COUNTER_TX_COMPACTION_FAILED_LOANED);
 
             auto response = MakeHolder<TEvDataShard::TEvCompactTableResult>(
                 Self->TabletID(),
@@ -118,12 +123,13 @@ public:
         if (isEmpty || isSingleParted && !hasBorrowed && !hasSchemaChanges && !record.GetCompactSinglePartedShards()) {
             // nothing to compact
             LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                "Background compaction of tablet# " << Self->TabletID()
+                "Compaction of tablet# " << Self->TabletID()
+                << " with cookie " << cookie
                 << " of path# " << pathId
                 << ", requested from# " << Ev->Sender
                 << " is not needed");
 
-            Self->IncCounter(COUNTER_TX_BACKGROUND_COMPACTION_NOT_NEEDED);
+            Self->IncCounter(COUNTER_TX_COMPACTION_NOT_NEEDED);
 
             auto response = MakeHolder<TEvDataShard::TEvCompactTableResult>(
                 Self->TabletID(),
@@ -137,7 +143,8 @@ public:
         auto compactionId = Self->Executor()->CompactTable(tableInfo.LocalTid);
         if (compactionId) {
             LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD,
-                "Started background compaction# " << compactionId
+                "Started compaction# " << compactionId
+                << " with cookie " << cookie
                 << " of " << Self->TabletID()
                 << " tableId# " << tableId
                 << " localTid# " << localTid
@@ -147,12 +154,12 @@ public:
                 << ", memtableWaste# " << stats.MemDataWaste
                 << ", memtableRows# " << stats.MemRowCount);
 
-            Self->IncCounter(COUNTER_TX_BACKGROUND_COMPACTION);
+            Self->IncCounter(COUNTER_TX_COMPACTION);
             Self->CompactionWaiters[tableInfo.LocalTid].emplace_back(compactionId, Ev->Sender, cookie);
-            ++tableInfo.Stats.BackgroundCompactionCount;
+            ++tableInfo.Stats.CompactionCount;
         } else {
             // compaction failed, for now we don't care
-            Self->IncCounter(COUNTER_TX_BACKGROUND_COMPACTION_FAILED_START);
+            Self->IncCounter(COUNTER_TX_COMPACTION_FAILED_START);
             auto response = MakeHolder<TEvDataShard::TEvCompactTableResult>(
                 Self->TabletID(),
                 pathId,
@@ -307,8 +314,8 @@ void TDataShard::Handle(TEvDataShard::TEvGetCompactTableStats::TPtr& ev, const T
     auto it = TableInfos.find(tableId);
     if (it != TableInfos.end()) {
         const TUserTable& tableInfo = *it->second;
-        response->Record.SetBackgroundCompactionRequests(tableInfo.Stats.BackgroundCompactionRequests);
-        response->Record.SetBackgroundCompactionCount(tableInfo.Stats.BackgroundCompactionCount);
+        response->Record.SetCompactionRequests(tableInfo.Stats.CompactionRequests);
+        response->Record.SetCompactionCount(tableInfo.Stats.CompactionCount);
         response->Record.SetCompactBorrowedCount(tableInfo.Stats.CompactBorrowedCount);
     }
 

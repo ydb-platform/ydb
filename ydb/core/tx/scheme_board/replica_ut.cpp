@@ -323,7 +323,7 @@ void TReplicaTest::RecreateDatabase() {
         Context->Send(Replica, populator, GenerateUpdate(describeDatabaseSecond));
         auto ev = Context->GrabEdgeEvent<NInternalEvents::TEvNotify>(databaseSubscriber);
         UNIT_ASSERT_VALUES_EQUAL(false, ev->Get()->GetRecord().GetIsDeletion());
-        Context->Send(Replica, databaseSubscriber, new NInternalEvents::TEvNotifyAck(1) );
+        Context->Send(Replica, databaseSubscriber, new NInternalEvents::TEvNotifyAck(1));
     }
 
     // Step #5 Create table again

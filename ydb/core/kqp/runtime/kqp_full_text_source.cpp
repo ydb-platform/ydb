@@ -532,7 +532,7 @@ public:
 
 
 class TIndexTableImplReader : public TTableReader<TIndexTableImplReader> {
-    ui32 FrequencyColumnIndex = 0;
+    i32 FrequencyColumnIndex = 0;
 
 public:
     TIndexTableImplReader(const TIntrusivePtr<TKqpCounters>& counters,
@@ -542,7 +542,7 @@ public:
         const TVector<NScheme::TTypeInfo>& keyColumnTypes,
         const TVector<NScheme::TTypeInfo>& resultColumnTypes,
         const TVector<i32>& resultColumnIds,
-        ui32 frequencyColumnIndex)
+        i32 frequencyColumnIndex)
         : TTableReader(counters, tableId, snapshot, logPrefix, keyColumnTypes, resultColumnTypes, resultColumnIds)
         , FrequencyColumnIndex(frequencyColumnIndex)
     {}
@@ -551,24 +551,14 @@ public:
         const TIntrusivePtr<TKqpCounters>& counters,
         const IKqpGateway::TKqpSnapshot& snapshot,
         const TString& logPrefix,
-        const NKikimrKqp::TKqpFullTextSourceSettings* settings)
+        const NKikimrKqp::TKqpFullTextSourceSettings* settings,
+        bool withRelevance)
     {
-        const auto& indexDescription = settings->GetIndexDescription();
         YQL_ENSURE(settings->GetIndexTables().size() >= 1);
         auto& info = settings->GetIndexTables(settings->GetIndexTables().size() - 1);
         YQL_ENSURE(info.GetTable().GetPath().EndsWith(NTableIndex::ImplTable));
         auto& columns = info.GetColumns();
         auto& keyColumns = info.GetKeyColumns();
-
-        i32 freqColumnIndex = -1;
-        NScheme::TTypeInfo freqColumnType;
-        for (const auto& column: columns) {
-            if (column.GetName() == FreqColumn) {
-                freqColumnIndex = column.GetId();
-                freqColumnType = NScheme::TypeInfoFromProto(
-                    column.GetTypeId(), column.GetTypeInfo());
-            }
-        }
 
         TVector<NScheme::TTypeInfo> keyColumnTypes;
         TVector<NScheme::TTypeInfo> resultColumnTypes;
@@ -587,25 +577,33 @@ public:
             resultColumnIds.push_back(keyColumn.GetId());
         }
 
-        ui32 frequencyColumnIndex = std::numeric_limits<ui32>::max();
-        if (indexDescription.GetSettings().layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE) {
-            YQL_ENSURE(freqColumnIndex != -1);
-            frequencyColumnIndex = resultColumnTypes.size();
-            resultColumnTypes.push_back(freqColumnType);
-            resultColumnIds.push_back(freqColumnIndex);
-        }
-
         bool useArrowFormat = false;
 
-        // arrow format is supported only key consist of the single column of type Uint64
+        // arrow format is only supported when key is a single Uint64 column
         // doc_id (Uint64), [freq (Uint32)]
-        if (resultColumnTypes.size() == 1 + (freqColumnIndex != -1) && (resultColumnTypes[0].GetTypeId() == NScheme::NTypeIds::Uint64)) {
+        if (resultColumnTypes.size() == 1 && resultColumnTypes[0].GetTypeId() == NScheme::NTypeIds::Uint64) {
             useArrowFormat = true;
+        }
+
+        i32 freqColumnIndex = -1;
+        if (withRelevance) {
+            NScheme::TTypeInfo freqColumnType;
+            for (const auto& column: columns) {
+                if (column.GetName() == FreqColumn) {
+                    freqColumnIndex = column.GetId();
+                    freqColumnType = NScheme::TypeInfoFromProto(
+                        column.GetTypeId(), column.GetTypeInfo());
+                }
+            }
+            YQL_ENSURE(freqColumnIndex != -1);
+            resultColumnTypes.push_back(freqColumnType);
+            resultColumnIds.push_back(freqColumnIndex);
+            freqColumnIndex = resultColumnTypes.size()-1;
         }
 
         TIntrusivePtr<TIndexTableImplReader> reader = MakeIntrusive<TIndexTableImplReader>(
             counters, FromProto(info.GetTable()), snapshot, logPrefix,
-            keyColumnTypes, resultColumnTypes, resultColumnIds, frequencyColumnIndex);
+            keyColumnTypes, resultColumnTypes, resultColumnIds, freqColumnIndex);
         reader->SetUseArrowFormat(useArrowFormat);
         return reader;
     }
@@ -1053,10 +1051,11 @@ public:
         const TIntrusivePtr<TKqpCounters>& counters,
         const IKqpGateway::TKqpSnapshot& snapshot,
         const TString& logPrefix,
-        const NKikimrKqp::TKqpFullTextSourceSettings* settings)
+        const NKikimrKqp::TKqpFullTextSourceSettings* settings,
+        bool withRelevance)
     {
         const auto& indexDescription = settings->GetIndexDescription();
-        if (indexDescription.GetSettings().layout() != Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE) {
+        if (!withRelevance) {
             return nullptr;
         }
 
@@ -1125,10 +1124,11 @@ public:
         const TIntrusivePtr<TKqpCounters>& counters,
         const IKqpGateway::TKqpSnapshot& snapshot,
         const TString& logPrefix,
-        const NKikimrKqp::TKqpFullTextSourceSettings* settings)
+        const NKikimrKqp::TKqpFullTextSourceSettings* settings,
+        bool withRelevance)
     {
         const auto& indexDescription = settings->GetIndexDescription();
-        if (indexDescription.GetSettings().layout() != Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE) {
+        if (!withRelevance) {
             return nullptr;
         }
 
@@ -1221,10 +1221,8 @@ public:
 };
 
 class TDictTableReader : public TTableReader<TDictTableReader> {
-    Ydb::Table::FulltextIndexSettings::Layout Layout;
 public:
-    TDictTableReader(const Ydb::Table::FulltextIndexSettings::Layout& layout,
-        const TIntrusivePtr<TKqpCounters>& counters,
+    TDictTableReader(const TIntrusivePtr<TKqpCounters>& counters,
         const TTableId& tableId,
         const IKqpGateway::TKqpSnapshot& snapshot,
         const TString& logPrefix,
@@ -1232,7 +1230,6 @@ public:
         const TVector<NScheme::TTypeInfo>& resultColumnTypes,
         const TVector<i32>& resultColumnIds)
         : TTableReader(counters, tableId, snapshot, logPrefix, keyColumnTypes, resultColumnTypes, resultColumnIds)
-        , Layout(layout)
     {}
 
     static TIntrusivePtr<TDictTableReader> FromSettings(
@@ -1277,18 +1274,12 @@ public:
         resultKeyColumnTypes.push_back(freqColumnType);
         resultKeyColumnIds.push_back(freqColumnIndex);
 
-        return MakeIntrusive<TDictTableReader>(
-            indexDescription.GetSettings().layout(), counters,
-            FromProto(info.GetTable()), snapshot, logPrefix, keyColumnTypes, resultKeyColumnTypes, resultKeyColumnIds);
+        return MakeIntrusive<TDictTableReader>(counters, FromProto(info.GetTable()), snapshot, logPrefix,
+            keyColumnTypes, resultKeyColumnTypes, resultKeyColumnIds);
     }
 
     ui64 GetWordFrequency(const TConstArrayRef<TCell>& row) const {
-        switch (Layout) {
-            case Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE:
-                return row[GetResultColumnTypes().size() - 1].AsValue<ui64>();
-            default:
-                return 0;
-        }
+        return row[GetResultColumnTypes().size() - 1].AsValue<ui64>();
     }
 };
 
@@ -1308,6 +1299,7 @@ struct TReadInfo {
 };
 
 class TMainTableReader : public TTableReader<TMainTableReader> {
+    bool WithRelevance;
 public:
     TVector<std::pair<i32, NScheme::TTypeInfo>> ResultCellIndices;
     bool MainTableCovered;
@@ -1323,8 +1315,10 @@ public:
         const TVector<i32>& resultColumnIds,
         const TVector<std::pair<i32, NScheme::TTypeInfo>>& resultCellIndices,
         bool mainTableCovered,
+        bool withRelevance,
         i32 searchColumnIdx)
         : TTableReader(counters, tableId, snapshot, logPrefix, keyColumnTypes, resultColumnTypes, resultColumnIds)
+        , WithRelevance(withRelevance)
         , ResultCellIndices(resultCellIndices)
         , MainTableCovered(mainTableCovered)
         , SearchColumnIdx(searchColumnIdx)
@@ -1340,6 +1334,7 @@ public:
         TVector<NScheme::TTypeInfo> resultColumnTypes;
         TVector<i32> resultColumnIds;
         i32 searchColumnIdx = -1;
+        bool withRelevance = false;
 
         YQL_ENSURE(settings->GetQuerySettings().ColumnsSize() == 1);
         const TStringBuf searchColumnName = settings->GetQuerySettings().GetColumns(0).GetName();
@@ -1364,6 +1359,7 @@ public:
             const auto& column = settings->GetColumns(i);
             if (column.GetName() == FullTextRelevanceColumn) {
                 resultCellIndices.emplace_back(RELEVANCE_COLUMN_MARKER, NScheme::TTypeInfo());
+                withRelevance = true;
                 continue;
             }
 
@@ -1407,8 +1403,15 @@ public:
             }
         }
 
+        withRelevance = withRelevance && settings->GetIndexDescription().GetSettings().layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE;
+
         return MakeIntrusive<TMainTableReader>(counters, FromProto(settings->GetTable()),
-            snapshot, logPrefix, keyColumnTypes, resultColumnTypes, resultColumnIds, resultCellIndices, mainTableCovered, searchColumnIdx);
+            snapshot, logPrefix, keyColumnTypes, resultColumnTypes, resultColumnIds, resultCellIndices,
+            mainTableCovered, withRelevance, searchColumnIdx);
+    }
+
+    bool GetWithRelevance() {
+        return WithRelevance;
     }
 };
 
@@ -1490,8 +1493,8 @@ private:
     ui64 DocCount = 0;
     ui64 SumDocLength = 0;
 
-    TIntrusivePtr<TIndexTableImplReader> IndexTableReader;
     TIntrusivePtr<TMainTableReader> MainTableReader;
+    TIntrusivePtr<TIndexTableImplReader> IndexTableReader;
     TIntrusivePtr<TDocsTableReader> DocsTableReader;
     TIntrusivePtr<TDictTableReader> DictTableReader;
     TIntrusivePtr<TStatsTableReader> StatsTableReader;
@@ -1641,14 +1644,14 @@ private:
             MergeAlgo = std::make_unique<TAndOptimizedMergeAlgorithm>(
                 std::move(streams),
                 minimumShouldMatch,
-                IndexDescription.GetSettings().layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE,
+                MainTableReader->GetWithRelevance(),
                 MainTableReader->GetKeyColumnTypes()
             );
         } else {
             MergeAlgo = std::make_unique<TDefaultMergeAlgorithm>(
                 std::move(streams),
                 minimumShouldMatch,
-                IndexDescription.GetSettings().layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE,
+                MainTableReader->GetWithRelevance(),
                 MainTableReader->GetKeyColumnTypes()
             );
         }
@@ -1681,8 +1684,12 @@ private:
         IndexTableReader->AddResolvePartitioningRequest(request);
         if (IndexDescription.GetSettings().layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE) {
             DictTableReader->AddResolvePartitioningRequest(request);
-            DocsTableReader->AddResolvePartitioningRequest(request);
-            StatsTableReader->AddResolvePartitioningRequest(request);
+            if (DocsTableReader) {
+                DocsTableReader->AddResolvePartitioningRequest(request);
+            }
+            if (StatsTableReader) {
+                StatsTableReader->AddResolvePartitioningRequest(request);
+            }
         }
 
         YQL_ENSURE(request->ResultSet.size() >= 1, "Expected at least one table to resolve partitioning");
@@ -1755,11 +1762,11 @@ public:
         , LogPrefix(TStringBuilder() << "TxId: " << txId << ", task: " << taskId << ", CA Id " << computeActorId << ". ")
         , SchemeCacheRequestTimeout(SCHEME_CACHE_REQUEST_TIMEOUT)
         , PipeCacheId(NKikimr::MakePipePerNodeCacheID(false))
-        , IndexTableReader(TIndexTableImplReader::FromSettings(Counters, Snapshot, LogPrefix, Settings))
         , MainTableReader(TMainTableReader::FromSettings(Counters, Snapshot, LogPrefix, Settings))
-        , DocsTableReader(TDocsTableReader::FromSettings(Counters, Snapshot, LogPrefix, Settings))
+        , IndexTableReader(TIndexTableImplReader::FromSettings(Counters, Snapshot, LogPrefix, Settings, MainTableReader->GetWithRelevance()))
+        , DocsTableReader(TDocsTableReader::FromSettings(Counters, Snapshot, LogPrefix, Settings, MainTableReader->GetWithRelevance()))
         , DictTableReader(TDictTableReader::FromSettings(Counters, Snapshot, LogPrefix, Settings))
-        , StatsTableReader(TStatsTableReader::FromSettings(Counters, Snapshot, LogPrefix, Settings))
+        , StatsTableReader(TStatsTableReader::FromSettings(Counters, Snapshot, LogPrefix, Settings, MainTableReader->GetWithRelevance()))
         , DocumentKeyCompare(MainTableReader->GetKeyColumnTypes())
         , DocumentIdPointerEquals(MainTableReader->GetKeyColumnTypes())
         , KeyGetter(MainTableReader->GetKeyColumnTypes())
@@ -1922,15 +1929,21 @@ public:
         MainTableReader->SetPartitionInfo(resultSet[0].KeyDescription);
         IndexTableReader->SetPartitionInfo(resultSet[1].KeyDescription);
         if (IndexDescription.GetSettings().layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE) {
-            YQL_ENSURE(resultSet.size() == 5, "Expected 5 tables for flat relevance index");
+            size_t count = 3 + (DocsTableReader ? 1 : 0) + (StatsTableReader ? 1 : 0);
+            YQL_ENSURE(resultSet.size() == count, "Expected " << count << " tables for flat relevance index");
             DictTableReader->SetPartitionInfo(resultSet[2].KeyDescription);
-            DocsTableReader->SetPartitionInfo(resultSet[3].KeyDescription);
-            StatsTableReader->SetPartitionInfo(resultSet[4].KeyDescription);
-            if (ExtractAndTokenizeExpression()) {
-                ReadTotalStats();
+            if (DocsTableReader) {
+                DocsTableReader->SetPartitionInfo(resultSet[3].KeyDescription);
             }
-        } else {
-            if (ExtractAndTokenizeExpression()) {
+            if (StatsTableReader) {
+                StatsTableReader->SetPartitionInfo(resultSet[3 + (DocsTableReader ? 1 : 0)].KeyDescription);
+            }
+        }
+
+        if (ExtractAndTokenizeExpression()) {
+            if (StatsTableReader) {
+                ReadTotalStats();
+            } else {
                 StartWordReads();
             }
         }

@@ -2,6 +2,8 @@ UNITTEST_FOR(ydb/public/sdk/cpp/src/client/topic)
 
 REQUIREMENTS(ram:32 cpu:4)
 
+TIMEOUT(100)
+
 IF (SANITIZER_TYPE OR WITH_VALGRIND)
     SIZE(LARGE)
     TAG(ya:fat)
@@ -19,6 +21,7 @@ YQL_LAST_ABI_VERSION()
 
 SRCS(
     basic_usage_ut.cpp
+    decompression_leak_ut.cpp
     describe_topic_ut.cpp
     local_partition_ut.cpp
     topic_to_table_ut.cpp

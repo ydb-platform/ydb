@@ -585,46 +585,6 @@ template<bool UseMigrationProtocol>
 void TSingleClusterReadSessionImpl<UseMigrationProtocol>::ContinueReadingDataImpl() {
     Y_ABORT_UNLESS(Lock.IsLocked());
 
-    // Log all conditions for debugging
-    if constexpr (!UseMigrationProtocol) {
-        bool canRead = true;
-        std::string blockers;
-        
-        if (Closing) {
-            blockers += "Closing ";
-            canRead = false;
-        }
-        if (Aborting) {
-            blockers += "Aborting ";
-            canRead = false;
-        }
-        if (WaitingReadResponse) {
-            blockers += "WaitingReadResponse ";
-            canRead = false;
-        }
-        if (DataReadingSuspended) {
-            blockers += "DataReadingSuspended ";
-            canRead = false;
-        }
-        if (!Processor) {
-            blockers += "NoProcessor ";
-            canRead = false;
-        }
-        if (CompressedDataSize >= GetCompressedDataSizeLimit()) {
-            blockers += "CompressedLimit(" + std::to_string(CompressedDataSize) + ">=" + std::to_string(GetCompressedDataSizeLimit()) + ") ";
-            canRead = false;
-        }
-        if (static_cast<size_t>(CompressedDataSize + DecompressedDataSize) >= Settings.MaxMemoryUsageBytes_) {
-            blockers += "MemoryLimit(" + std::to_string(CompressedDataSize + DecompressedDataSize) + ">=" + std::to_string(Settings.MaxMemoryUsageBytes_) + ") ";
-            canRead = false;
-        }
-        
-        if (!canRead) {
-            LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "ContinueReadingDataImpl blocked by: " << blockers);
-            return;
-        }
-    }
-
     if (!Closing
         && !Aborting
         && !WaitingReadResponse
@@ -642,8 +602,6 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::ContinueReadingDataImp
                                     << ", ReadSizeServerDelta = " << ReadSizeServerDelta);
 
             if (ReadSizeBudget <= 0 || ReadSizeServerDelta + ReadSizeBudget <= 0) {
-                LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "ContinueReadingDataImpl blocked by budget: ReadSizeBudget=" 
-                    << ReadSizeBudget << " ReadSizeServerDelta=" << ReadSizeServerDelta);
                 return;
             }
             req.mutable_read_request()->set_bytes_size(ReadSizeBudget);
@@ -1338,16 +1296,6 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
 
     UpdateMemoryUsageStatisticsImpl();
 
-    // First pass: calculate total data size to distribute serverBytesSize proportionally
-    i64 totalDataSize = 0;
-    for (const TPartitionData<false>& partitionData : msg.partition_data()) {
-        for (const auto& batch : partitionData.batches()) {
-            for (const auto& messageData : batch.message_data()) {
-                totalDataSize += static_cast<i64>(messageData.data().size());
-            }
-        }
-    }
-
     i64 remainingServerBytes = serverBytesSize;
 
     for (TPartitionData<false>& partitionData : *msg.mutable_partition_data()) {
@@ -1408,33 +1356,19 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
         }
         partitionStream->SetFirstNotReadOffset(desiredOffset);
 
-        // Distribute serverBytesSize proportionally based on partition's data size
-        i64 partitionServerBytes = 0;
-        if (totalDataSize > 0) {
-            partitionServerBytes = (serverBytesSize * partitionDataSize) / totalDataSize;
-            remainingServerBytes -= partitionServerBytes;
-        }
-        LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "Partition " << partitionData.partition_session_id()
-                                                  << " gets serverBytes = " << partitionServerBytes
-                                                  << " (dataSize=" << partitionDataSize
-                                                  << ", totalDataSize=" << totalDataSize << ")");
-
         auto decompressionInfo = std::make_shared<TDataDecompressionInfo<false>>(std::move(partitionData),
                                                                                  SelfContext,
                                                                                  Settings.Decompress_,
-                                                                                 partitionServerBytes);
+                                                                                 serverBytesSize);
+        // TODO (ildar-khisam@): share serverBytesSize between partitions data according to their actual sizes;
+        //                       for now whole serverBytesSize goes with first (and only) partition data.
+        serverBytesSize = 0;
         Y_ABORT_UNLESS(decompressionInfo);
 
         decompressionInfo->PlanDecompressionTasks(AverageCompressionRatio,
                                                   partitionStream);
         DecompressionQueue.emplace_back(decompressionInfo, partitionStream);
         StartDecompressionTasksImpl(deferred);
-    }
-
-    // Add any remaining bytes (due to integer division rounding) to ReadSizeBudget directly
-    if (remainingServerBytes > 0) {
-        ReadSizeBudget += remainingServerBytes;
-        LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "Returning rounding remainder serverBytesSize = " << remainingServerBytes << " to budget directly");
     }
 
     WaitingReadResponse = false;
@@ -1475,19 +1409,16 @@ inline void TSingleClusterReadSessionImpl<false>::StopPartitionSessionImpl(
         // Clean up DecompressionQueue entries for this partition to free memory.
         // These hold TDataDecompressionInfo objects that would otherwise never
         // be destroyed, causing memory counters to never decrement.
-        auto it = DecompressionQueue.begin();
-        while (it != DecompressionQueue.end()) {
-            if (it->PartitionStream && it->PartitionStream->GetAssignId() == partitionSessionId) {
-                // Break circular references before deferring destruction
-                if (it->BatchInfo) {
-                    it->BatchInfo->OnDestroyReadSession();
+        std::erase_if(DecompressionQueue, [&](auto& item) {
+            if (item.PartitionStream && item.PartitionStream->GetAssignId() == partitionSessionId) {
+                if (item.BatchInfo) {
+                    item.BatchInfo->OnDestroyReadSession();
+                    deferred.DeferDestroyDecompressionInfos({item.BatchInfo});
                 }
-                deferred.DeferDestroyDecompressionInfos({it->BatchInfo});
-                it = DecompressionQueue.erase(it);
-            } else {
-                ++it;
+                return true;
             }
-        }
+            return false;
+        });
 
         pushRes = EventsQueue->PushEvent(
             partitionStream,

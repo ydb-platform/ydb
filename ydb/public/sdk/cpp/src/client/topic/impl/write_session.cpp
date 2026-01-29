@@ -891,7 +891,7 @@ void TKeyedWriteSession::TMessagesWorker::ScheduleResendMessages(ui64 partition,
         }
 
         if (ackQueueIt == ackQueueEnd) {
-            // this case can happend if the message was sent, but session was closed before the ack was received
+            // this case can happen if the message was sent, but session was closed before the ack was received
             TWriteSessionEvent::TWriteAck ack;
             Y_ENSURE((*resendIt)->Message.SeqNo_.has_value(), "SeqNo is not set");
             ack.SeqNo = (*resendIt)->Message.SeqNo_.value();

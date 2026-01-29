@@ -150,7 +150,11 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             R"(
                 PRAGMA YqlSelect = 'force';
                 SELECT id, b FROM `/Root/foo` WHERE b in [1, 2] order by b;
-            )"
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT * FROM `/Root/foo` WHERE name = '3_name' order by id;
+            )",
         };
 
         std::vector<std::string> results = {
@@ -158,7 +162,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             R"([[3]])",
             R"([[3;["3_name"]]])",
             R"([[0;[0]];[3;[3]];[4;[4]];[5;[5]];[6;[6]];[7;[7]];[8;[8]];[9;[9]]])",
-            R"([[1;[1]];[2;[2]]])"
+            R"([[1;[1]];[2;[2]]])",
+            R"([[3;["3_name"];[3]]])",
         };
 
         auto tableClient = kikimr.GetTableClient();
@@ -885,7 +890,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
     Y_UNIT_TEST(TPCH_YQL) {
        //RunTPCHYqlBenchmark(/*columnstore*/ true, {}, /*new rbo*/ false);
-       RunTPCHYqlBenchmark(/*columnstore*/ true, {1, 2, 3, /*4,*/ 5, 6, 7, 8, 9, 10, /*11,*/ 12, 13, 14, /*15,*/ 16, 18, 19, 20, /*21, 22*/}, /*new rbo*/ true);
+       RunTPCHYqlBenchmark(/*columnstore*/ true, {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, /*11,*/ 12, 13, 14, /*15,*/ 16, 18, 19, 20, /*21,*/ 22}, /*new rbo*/ true);
     }
 
     void InsertIntoSchema0(NYdb::NTable::TTableClient &db, std::string tableName, int numRows) {

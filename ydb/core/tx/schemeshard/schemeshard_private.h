@@ -3,6 +3,7 @@
 
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
+#include <ydb/core/backup/common/metadata.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 
 #include <ydb/library/actors/core/event_local.h>
@@ -183,19 +184,19 @@ namespace TEvPrivate {
         const ui32 ItemIdx;
         const bool Success;
         const TString Error;
-        TVector<TString> ResourcesKeys;
+        TVector<NBackup::TRateLimiterResourceMetadata> ResourcesMatedata;
 
         TEvExportUploadKesusResourcesResult(
             ui64 id,
             ui32 itemIdx,
             bool success,
             const TString& error,
-            const TVector<TString> keys)
+            const TVector<NBackup::TRateLimiterResourceMetadata> resourcesMetadata)
             : ExportId(id)
             , ItemIdx(itemIdx)
             , Success(success)
             , Error(error)
-            , ResourcesKeys(keys)
+            , ResourcesMatedata(resourcesMetadata)
         {}
     };
 

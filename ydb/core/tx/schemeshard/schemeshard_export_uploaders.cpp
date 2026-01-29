@@ -299,7 +299,7 @@ class TKesusResourcesUploader : public TSchemeWithPipeUploader<TKesusResourcesUp
         }
 
         Resources = std::move(*record.MutableResources());
-        ResourcesKeys.reserve(Resources.size());
+        ResourcesMetadata.reserve(Resources.size());
 
         ClosePipe();
         UploadBatch();
@@ -327,11 +327,16 @@ class TKesusResourcesUploader : public TSchemeWithPipeUploader<TKesusResourcesUp
             TString scheme;
             BuildRateLimiterResourceScheme(resource, scheme);
 
-            TStringBuilder fileName;
-            fileName << resource.GetResourcePath() << '/' << NYdb::NDump::NFiles::CreateRateLimiter().FileName;
-            ResourcesKeys.push_back(resource.GetResourcePath());
+            std::stringstream prefix;
+            if (IV) {
+                prefix << std::setfill('0') << std::setw(3) << std::right << ++EncryptedIdx;
+            } else {
+                prefix << resource.GetResourcePath();
+            }
+            ResourcesMetadata.push_back({prefix.str(), resource.GetResourcePath()});
+            prefix << '/' << NYdb::NDump::NFiles::CreateRateLimiter().FileName;
 
-            if (!AddFiles(fileName, scheme)) {
+            if (!AddFiles(prefix.str(), scheme)) {
                 return;
             }
         }
@@ -355,7 +360,7 @@ class TKesusResourcesUploader : public TSchemeWithPipeUploader<TKesusResourcesUp
             << ", error: " << error
         );
 
-        Send(ReplyTo, new TEvPrivate::TEvExportUploadKesusResourcesResult(ExportId, ItemIdx, success, error, ResourcesKeys));
+        Send(ReplyTo, new TEvPrivate::TEvExportUploadKesusResourcesResult(ExportId, ItemIdx, success, error, ResourcesMetadata));
         PassAway();
     }
 
@@ -395,6 +400,7 @@ private:
     ui32 ItemIdx;
 
     TMaybe<NBackup::TEncryptionIV> IV;
+    ui32 EncryptedIdx = 0;
 
     const bool EnableChecksums;
 
@@ -402,7 +408,7 @@ private:
     i32 Offset = 0;
 
     google::protobuf::RepeatedPtrField<NKikimrKesus::TStreamingQuoterResource> Resources;
-    TVector<TString> ResourcesKeys;
+    TVector<NBackup::TRateLimiterResourceMetadata> ResourcesMetadata;
 }; // TKesusResourcesUploader
 
 IActor* CreateKesusResourcesUploader(
@@ -501,19 +507,9 @@ class TSchemeUploader: public TExportFilesUploader<TSchemeUploader> {
         }
 
         // Fill metadata with rate limiter resources
-        ui32 excryptedIdx = 0;
         auto metadata = NBackup::TMetadata::Deserialize(Metadata);
-        for (const auto& rateLimiter : record->ResourcesKeys) {
-            NBackup::TRateLimiterResourceMetadata resourceData;
-            resourceData.Name = rateLimiter;
-            if (IV) {
-                std::stringstream prefix;
-                prefix << std::setfill('0') << std::setw(3) << std::right << ++excryptedIdx;
-                resourceData.ExportPrefix = prefix.str();
-            } else {
-                resourceData.ExportPrefix = rateLimiter;
-            }
-            metadata.AddRateLimiterResource(resourceData);
+        for (auto& rateLimiterMetadata : record->ResourcesMatedata) {
+            metadata.AddRateLimiterResource(rateLimiterMetadata);
         }
 
         Metadata = metadata.Serialize();

@@ -55,7 +55,6 @@ SRCS(
     nbs2_lib/range_allocator.cpp
     nbs2_lib/range_map.cpp
     nbs2_lib/request_generator.cpp
-    nbs2_lib/suite_runner.cpp
     nbs2_lib/test_runner.cpp
 
     ycsb/actors.h

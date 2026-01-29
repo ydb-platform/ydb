@@ -36,7 +36,10 @@ struct ITestRunner
 {
     virtual ~ITestRunner() = default;
 
-    virtual NThreading::TFuture<TTestResultsPtr> Run() = 0;
+    virtual void Start() = 0;
+    virtual TInstant GetStartTime() const = 0;
+    virtual const TTestResults& GetResults() const = 0;
+    // TODO stop work through the NCloud::NBlockStore::NLoadTest::StopTest(TestContext)
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -46,6 +49,8 @@ ITestRunnerPtr CreateTestRunner(
     TString loggingTag,
     IRequestGeneratorPtr requestGenerator,
     ui32 maxIoDepth,
-    std::atomic<bool>& shouldStop);
+    std::atomic<bool>& shouldStop,
+    LoadTestSendRequestCallbacks RequestCallbacks,
+    const void *udata);
 
 }   // namespace NCloud::NBlockStore::NLoadTest

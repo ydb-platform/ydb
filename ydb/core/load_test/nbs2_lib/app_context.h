@@ -1,10 +1,5 @@
 #pragma once
 
-//#include <cloud/blockstore/tools/testing/loadtest/protos/loadtest.pb.h>
-
-//#include <cloud/blockstore/libs/client/public.h>
-//#include <cloud/blockstore/libs/service/public.h>
-
 #include <util/folder/tempdir.h>
 #include <util/stream/str.h>
 #include <util/system/condvar.h>
@@ -23,10 +18,6 @@ struct TTestContext
     std::atomic<bool> ShouldStop = false;
     std::atomic<bool> Finished = false;
     TStringStream Result;
-    //IBlockStorePtr Client;
-    //IBlockStorePtr DataClient;
-    //NClient::ISessionPtr Session;
-    //NProto::TVolume Volume;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

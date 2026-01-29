@@ -17,10 +17,6 @@
 #include <util/generic/vector.h>
 #include <util/random/random.h>
 #include <util/string/builder.h>
-#include <util/system/condvar.h>
-#include <util/system/event.h>
-#include <util/system/mutex.h>
-#include <util/system/thread.h>
 
 #include <atomic>
 
@@ -55,38 +51,8 @@ struct TCompletedRequest
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TRequestsCompletionQueue
-{
-private:
-    TDeque<std::unique_ptr<TCompletedRequest>> Items;
-    TMutex Lock;
-
-public:
-    void Enqueue(std::unique_ptr<TCompletedRequest> request)
-    {
-        with_lock (Lock) {
-            Items.emplace_back(std::move(request));
-        }
-    }
-
-    std::unique_ptr<TCompletedRequest> Dequeue()
-    {
-        with_lock (Lock) {
-            std::unique_ptr<TCompletedRequest> ptr;
-            if (Items) {
-                ptr = std::move(Items.front());
-                Items.pop_front();
-            }
-            return ptr;
-        }
-    }
-};
-
-////////////////////////////////////////////////////////////////////////////////
-
 class TTestRunner final
     : public ITestRunner
-    , public ISimpleThread
     , public std::enable_shared_from_this<TTestRunner>
 {
 private:
@@ -98,6 +64,7 @@ private:
     TInstant StartTs;
 
     std::atomic<bool>& ShouldStop;
+    LoadTestSendRequestCallbacks RequestCallbacks;
 
     ui64 RequestsSent = 0;
     ui64 RequestsCompleted = 0;
@@ -105,14 +72,9 @@ private:
 
     TInstant LastReportTs;
     ui64 LastRequestsCompleted = 0;
+    TTestResults TestResults;
 
-    TRequestsCompletionQueue CompletionQueue;
-    TAutoEvent Event;
-
-    TPromise<TTestResultsPtr> Response = NewPromise<TTestResultsPtr>();
-    TTestResultsPtr TestResults = std::make_unique<TTestResults>();
-
-    IAllocator* Allocator = BufferPool();  // TDefaultAllocator::Instance()
+    const void *Udata = nullptr;
 
 public:
     TTestRunner(
@@ -120,67 +82,71 @@ public:
             TString loggingTag,
             IRequestGeneratorPtr requests,
             ui32 maxIoDepth,
-            std::atomic<bool>& shouldStop)
+            std::atomic<bool>& shouldStop,
+            LoadTestSendRequestCallbacks requestCallbacks,
+            const void *udata)
         : Log(loggingService->CreateLog(requests->Describe()))
         , LoggingTag(std::move(loggingTag))
         , Requests(std::move(requests))
         , MaxIoDepth(maxIoDepth)
         , ShouldStop(shouldStop)
+        , RequestCallbacks(std::move(requestCallbacks))
     {
+        Udata = udata;
     }
 
-    TFuture<TTestResultsPtr> Run() override
-    {
-        Start();
-        return Response;
-    }
+    void Start() override;
 
-    void* ThreadProc() override;
+    TInstant GetStartTime() const override;
+    const TTestResults& GetResults() const override;
 
 private:
+    void SendAvailableRequests();
     bool SendNextRequest();
     void SendReadRequest(const TBlockRange64& range);
     void SendWriteRequest(const TBlockRange64& range);
     void SendZeroRequest(const TBlockRange64& range);
 
+    void HandleCompletedRequest(
+        EBlockStoreRequest requestType,
+        const TBlockRange64& range,
+        const NYdb::NBS::NProto::TError& error,
+        TDuration elapsed
+    );
     bool StopRequested() const;
     bool CheckSendRequestCondition() const;
     bool CheckExitCondition() const;
 
-    void SignalCompletion(
-        EBlockStoreRequest requestType,
-        const TBlockRange64& range,
-        const NYdb::NBS::NProto::TError& error,
-        TDuration elapsed);
-
-    void ProcessCompletedRequests();
+    void ProcessCompletedRequests(std::unique_ptr<TCompletedRequest> request);
 
     void ReportProgress();
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void* TTestRunner::ThreadProc()
+TInstant TTestRunner::GetStartTime() const
 {
-    SetCurrentThreadName("Test");
+    return StartTs;
+}
+
+const TTestResults& TTestRunner::GetResults() const
+{
+    return TestResults;
+}
+
+void TTestRunner::SendAvailableRequests()
+{
+    while (CheckSendRequestCondition() && SendNextRequest()) {
+        ++RequestsSent;
+    }
+}
+
+void TTestRunner::Start()
+{
     StartTs = Now();
     LastReportTs = Now();
 
-    while (!CheckExitCondition()) {
-        while (CheckSendRequestCondition() && SendNextRequest()) {
-            ++RequestsSent;
-        }
-
-        if (!CheckExitCondition()) {
-            Event.WaitD(Requests->Peek());
-            ProcessCompletedRequests();
-        }
-
-        ReportProgress();
-    }
-
-    Response.SetValue(std::move(TestResults));
-    return nullptr;
+    SendAvailableRequests();
 }
 
 bool TTestRunner::SendNextRequest()
@@ -212,78 +178,73 @@ bool TTestRunner::SendNextRequest()
         default:
             Y_ABORT_UNLESS(TStringBuilder()
                 << "unexpected request type: " << request.RequestType);
-                //<< GetBlockStoreRequestName(request.RequestType));
     }
 
     return true;
 }
-
-void doDummyWork(TPromise<NYdb::NBS::NProto::TError> response)
-{
-    Sleep(TDuration::MilliSeconds(50));
-    NYdb::NBS::NProto::TError result;
-    result.SetCode(NYdb::NBS::EWellKnownResultCodes::S_OK);
-    response.SetValue(result);
-}
-
-NThreading::TFuture<NYdb::NBS::NProto::TError> getFuture()
-{
-    auto response = NewPromise<NYdb::NBS::NProto::TError>();
-    doDummyWork(response);
-    return response;
-}
-
 void TTestRunner::SendReadRequest(const TBlockRange64& range)
 {
     STORAGE_DEBUG(LoggingTag
-        << "ReadBlocks request: ("
-        << range.Start << ", " << range.Size() << ")");
+        << "Sending ReadBlocks request: " << range);
 
     auto started = TInstant::Now();
-    auto future = getFuture();
-    future.Subscribe(
-    [started, range, future, this, p=shared_from_this()] (const auto& f) mutable {
-        STORAGE_INFO(LoggingTag
-                << "maks_ololo TTestRunner::SendReadRequest test future cb");
-        const auto& error = f.GetValue();
-        //const auto& error = response.GetError();
-        if (FAILED(error.GetCode())) {
+
+    auto cb = [started, range, this, p=shared_from_this()] (NYdb::NBS::NProto::TError result, const void* udata) mutable {
+        STORAGE_DEBUG(LoggingTag
+                << "TTestRunner::SendReadRequest cb for range: " << range
+                << ", result: " << NYdb::NBS::FormatError(result));
+        Udata = udata;
+        if (FAILED(result.GetCode())) {
             STORAGE_ERROR(LoggingTag
                 << "ReadBlocks request failed with error: "
-                << NYdb::NBS::FormatError(error));
+                << NYdb::NBS::FormatError(result));
         }
-
-        p->SignalCompletion(
+        p->HandleCompletedRequest(
             EBlockStoreRequest::ReadBlocks,
             range,
-            error,
+            result,
             TInstant::Now() - started);
-    });
+    };
+    RequestCallbacks.Read(range, cb, Udata);
+}
+
+void TTestRunner::HandleCompletedRequest(
+    EBlockStoreRequest requestType,
+    const TBlockRange64& range,
+    const NYdb::NBS::NProto::TError& error,
+    TDuration elapsed)
+{
+    ProcessCompletedRequests(
+std::make_unique<TCompletedRequest>(
+            requestType,
+            range,
+            error,
+            elapsed));
+
+    SendAvailableRequests();
 }
 
 void TTestRunner::SendWriteRequest(const TBlockRange64& range)
 {
-    STORAGE_DEBUG(LoggingTag
+    STORAGE_ERROR(LoggingTag
         << "WriteBlocks request: ("
         << range.Start << ", " << range.Size() << ")");
-
-    //Y_DEBUG_ABORT_UNLESS(Volume.GetBlockSize() >= sizeof(RequestsSent));
-    Y_ABORT("WriteBlocks is not supported");
+    Y_ABORT("WriteBlocks is not supported yet");
 
 }
 
 void TTestRunner::SendZeroRequest(const TBlockRange64& range)
 {
-    STORAGE_DEBUG(LoggingTag
+    STORAGE_ERROR(LoggingTag
         << "ZeroBlocks request: ("
         << range.Start << ", " << range.Size() << ")");
-    Y_ABORT("ZeroBlocks is not supported");
+    Y_ABORT("ZeroBlocks is not supported ");
 }
 
 bool TTestRunner::StopRequested() const
 {
     return ShouldStop.load(std::memory_order_acquire)
-        || TestResults->Status != NProto::TEST_STATUS_OK;
+        || TestResults.Status != NProto::TEST_STATUS_OK;
 }
 
 bool TTestRunner::CheckExitCondition() const
@@ -297,61 +258,46 @@ bool TTestRunner::CheckSendRequestCondition() const
     return !StopRequested() && Requests->HasMoreRequests();
 }
 
-void TTestRunner::SignalCompletion(
-    EBlockStoreRequest requestType,
-    const TBlockRange64& range,
-    const NYdb::NBS::NProto::TError& error,
-    TDuration elapsed)
+void TTestRunner::ProcessCompletedRequests(std::unique_ptr<TCompletedRequest> request)
 {
-    CompletionQueue.Enqueue(
-        std::make_unique<TCompletedRequest>(requestType, range, error, elapsed));
+    Requests->Complete(request->BlockRange);
 
-    Event.Signal();
-}
+    Y_ABORT_UNLESS(CurrentIoDepth > 0);
+    --CurrentIoDepth;
 
-void TTestRunner::ProcessCompletedRequests()
-{
-    while (auto request = CompletionQueue.Dequeue()) {
-        Requests->Complete(request->BlockRange);
-
-        Y_ABORT_UNLESS(CurrentIoDepth > 0);
-        --CurrentIoDepth;
-
-        if (FAILED(request->Error.GetCode())) {
-            if (TestResults->Status != NProto::TEST_STATUS_FAILURE) {
-                STORAGE_ERROR(LoggingTag
-                    << "Request failed with error: "
-                    << NYdb::NBS::FormatError(request->Error));
-            }
-
-            TestResults->Status = NProto::TEST_STATUS_FAILURE;
+    if (FAILED(request->Error.GetCode())) {
+        if (TestResults.Status != NProto::TEST_STATUS_FAILURE) {
+            STORAGE_ERROR(LoggingTag
+                << "Request failed with error: "
+                << NYdb::NBS::FormatError(request->Error));
         }
 
-        ++RequestsCompleted;
+        TestResults.Status = NProto::TEST_STATUS_FAILURE;
+    }
 
-        ++TestResults->RequestsCompleted;
+    ++RequestsCompleted;
 
-        switch (request->RequestType) {
-            case EBlockStoreRequest::ReadBlocks:
-                TestResults->BlocksRead += request->BlockRange.Size();
-                TestResults->ReadHist.RecordValue(request->Elapsed);
-                break;
+    ++TestResults.RequestsCompleted;
 
-            case EBlockStoreRequest::WriteBlocks:
-                TestResults->BlocksWritten += request->BlockRange.Size();
-                TestResults->WriteHist.RecordValue(request->Elapsed);
-                break;
+    switch (request->RequestType) {
+        case EBlockStoreRequest::ReadBlocks:
+            TestResults.BlocksRead += request->BlockRange.Size();
+            TestResults.ReadHist.RecordValue(request->Elapsed);
+            break;
 
-            case EBlockStoreRequest::ZeroBlocks:
-                TestResults->BlocksZeroed += request->BlockRange.Size();
-                TestResults->ZeroHist.RecordValue(request->Elapsed);
-                break;
+        case EBlockStoreRequest::WriteBlocks:
+            TestResults.BlocksWritten += request->BlockRange.Size();
+            TestResults.WriteHist.RecordValue(request->Elapsed);
+            break;
 
-            default:
-                Y_ABORT_UNLESS(TStringBuilder()
-                    << "unexpected request type: " << request->RequestType);
-                    //<< GetBlockStoreRequestName(request->RequestType));
-        }
+        case EBlockStoreRequest::ZeroBlocks:
+            TestResults.BlocksZeroed += request->BlockRange.Size();
+            TestResults.ZeroHist.RecordValue(request->Elapsed);
+            break;
+
+        default:
+            Y_ABORT_UNLESS(TStringBuilder()
+                << "unexpected request type: " << request->RequestType);
     }
 }
 
@@ -381,16 +327,18 @@ ITestRunnerPtr CreateTestRunner(
     TString loggingTag,
     IRequestGeneratorPtr requests,
     ui32 maxIoDepth,
-    std::atomic<bool>& shouldStop)
+    std::atomic<bool>& shouldStop,
+    LoadTestSendRequestCallbacks RequestCallbacks,
+    const void *udata)
 {
     return std::make_shared<TTestRunner>(
         std::move(loggingService),
-        //std::move(session),
-        //std::move(volume),
         std::move(loggingTag),
         std::move(requests),
         maxIoDepth,
-        shouldStop);
+        shouldStop,
+        std::move(RequestCallbacks),
+        udata);
 }
 
 }   // namespace NCloud::NBlockStore::NLoadTest

@@ -90,6 +90,7 @@ TVector<TConfigTemplate> BuildExamples() {
     RangeTest {
         Start: 0
         End: 786431
+        RequestsCount: 10
         ReadRate: 100
         LoadType: LOAD_TYPE_RANDOM
         IoDepth: 1

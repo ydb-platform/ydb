@@ -580,7 +580,10 @@ NThreading::TFuture<void> TKeyedWriteSession::TEventsWorker::WaitEvent() {
 
     AddSessionClosedEvent();
 
-    return EventsFuture;
+    std::vector<NThreading::TFuture<void>> futures{EventsFuture, Session->CloseFuture};
+    auto retFuture = NThreading::NWait::WaitAny(futures);
+
+    return retFuture;
 }
 
 void TKeyedWriteSession::TEventsWorker::UnsubscribeFromPartition(ui64 partition) {

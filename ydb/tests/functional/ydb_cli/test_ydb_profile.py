@@ -31,6 +31,11 @@ def ydb_bin():
 class ProfileTestBase:
     """Base class for profile tests with common utilities"""
 
+    # Delay required before sending input to ftxui Input fields.
+    # Without this delay, input sent immediately after expect() may be lost
+    # because the ftxui component hasn't finished rendering yet.
+    FTXUI_INPUT_DELAY = 0.3
+
     @pytest.fixture(autouse=True)
     def setup_profile_file(self, tmp_path):
         """Create isolated profile file for each test"""
@@ -672,7 +677,7 @@ class TestProfileInitInteractive(ProfileTestBase):
 
         # Wait for Input to be ready (shown by "Enter to confirm")
         child.expect("Enter to confirm", timeout=5)
-        time.sleep(0.2)
+        time.sleep(self.FTXUI_INPUT_DELAY)
         child.sendline("new_full_profile")
 
         # Endpoint menu - "Set a new endpoint value" is first option
@@ -681,7 +686,7 @@ class TestProfileInitInteractive(ProfileTestBase):
 
         # Enter endpoint value - wait for Input
         child.expect("Enter to confirm", timeout=5)
-        time.sleep(0.2)
+        time.sleep(self.FTXUI_INPUT_DELAY)
         child.sendline("grpc://newhost:2136")
 
         # Database menu - "Set a new database value" is first option
@@ -690,7 +695,7 @@ class TestProfileInitInteractive(ProfileTestBase):
 
         # Enter database value - wait for Input
         child.expect("Enter to confirm", timeout=5)
-        time.sleep(0.2)
+        time.sleep(self.FTXUI_INPUT_DELAY)
         child.sendline("/NewDatabase")
 
         # Auth menu - select anonymous (index 7)
@@ -721,17 +726,17 @@ class TestProfileInitInteractive(ProfileTestBase):
 
         # Wait for Input to be ready
         child.expect("Enter to confirm", timeout=5)
-        time.sleep(0.3)
+        time.sleep(self.FTXUI_INPUT_DELAY)
         child.sendline("endpoint_only_init")
 
         # Endpoint menu - "Set a new endpoint value"
         child.expect("endpoint", timeout=5)
-        time.sleep(0.1)
+        time.sleep(self.FTXUI_INPUT_DELAY)
         child.send('\n')
 
         # Enter endpoint value
         child.expect("Enter to confirm", timeout=5)
-        time.sleep(0.3)
+        time.sleep(self.FTXUI_INPUT_DELAY)
         child.sendline("grpc://endpoint-only:2136")
 
         # Database menu - "Don't save database" (index 1)
@@ -765,7 +770,7 @@ class TestProfileInitInteractive(ProfileTestBase):
 
         # Wait for Input to be ready
         child.expect("Enter to confirm", timeout=5)
-        time.sleep(0.2)
+        time.sleep(self.FTXUI_INPUT_DELAY)
         child.sendline("metadata_init_profile")
 
         # Endpoint menu - Set new endpoint
@@ -774,7 +779,7 @@ class TestProfileInitInteractive(ProfileTestBase):
 
         # Enter endpoint
         child.expect("Enter to confirm", timeout=5)
-        time.sleep(0.2)
+        time.sleep(self.FTXUI_INPUT_DELAY)
         child.sendline("grpc://metadata-test:2136")
 
         # Database - Set new database
@@ -783,7 +788,7 @@ class TestProfileInitInteractive(ProfileTestBase):
 
         # Enter database
         child.expect("Enter to confirm", timeout=5)
-        time.sleep(0.2)
+        time.sleep(self.FTXUI_INPUT_DELAY)
         child.sendline("/MetadataDb")
 
         # Auth menu - "Use metadata service" (index 4)
@@ -813,7 +818,7 @@ class TestProfileInitInteractive(ProfileTestBase):
 
         # Wait for Input to be ready
         child.expect("Enter to confirm", timeout=5)
-        time.sleep(0.2)
+        time.sleep(self.FTXUI_INPUT_DELAY)
         child.sendline("minimal_init_profile")
 
         # Endpoint menu - "Don't save endpoint" (index 1)
@@ -860,7 +865,7 @@ class TestProfileInitInteractive(ProfileTestBase):
 
         # Wait for Input to be ready
         child.expect("Enter to confirm", timeout=5)
-        time.sleep(0.2)
+        time.sleep(self.FTXUI_INPUT_DELAY)
         child.sendline("second_profile")
 
         # Endpoint menu - Set new endpoint
@@ -869,7 +874,7 @@ class TestProfileInitInteractive(ProfileTestBase):
 
         # Enter endpoint
         child.expect("Enter to confirm", timeout=5)
-        time.sleep(0.2)
+        time.sleep(self.FTXUI_INPUT_DELAY)
         child.sendline("grpc://second:2136")
 
         # Database - Don't save

@@ -182,7 +182,11 @@ namespace {
 
         if (*userName) {
             PutAuthStatic(profile, *userName, *userPassword, false);
-            Cout << "Saved credentials for profile \"" << profileName << "\"." << Endl;
+            if (userPassword->empty()) {
+                Cout << "Saved credentials with empty password for profile \"" << profileName << "\"." << Endl;
+            } else {
+                Cout << "Saved credentials for profile \"" << profileName << "\"." << Endl;
+            }
         }
     }
 

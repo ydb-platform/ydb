@@ -38,7 +38,7 @@ TRestoreTransactionOperator::TProposeResult TRestoreTransactionOperator::DoStart
 }
 
 void TRestoreTransactionOperator::DoStartProposeOnComplete(TColumnShard& /*owner*/, const TActorContext& ctx) {
-    if (TxAddTask) {
+    if (!TaskExists && TxAddTask) {
         TxAddTask->Complete(ctx);
         TxAddTask.reset();
     }

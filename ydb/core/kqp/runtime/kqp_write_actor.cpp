@@ -1530,6 +1530,19 @@ public:
         IKqpBufferTableLookup* Lookup = nullptr;
     };
 
+    class IKqpReturningConsumer {
+    public:
+        virtual ~IKqpReturningConsumer() = default;
+
+        virtual void Consume(IDataBatchPtr data) = 0;
+    };
+
+    struct TReturningInfo {
+        std::vector<ui32> ColumnsIndexes;
+
+        IKqpReturningConsumer* Consumer = nullptr;
+    };
+
 private:
     enum class EState {
         BLOCKED,
@@ -1550,6 +1563,7 @@ public:
             const NKikimrKqp::TKqpTableSinkSettings::EType operationType,
             std::vector<TPathWriteInfo> writes,
             std::vector<TPathLookupInfo> lookups,
+            std::optional<TReturningInfo> returning,
             TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> keyColumns,
             std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc)
         : Cookie(cookie)
@@ -1584,6 +1598,8 @@ public:
                 AFL_ENSURE(lookup.FullKeyIndexes.size() >= KeyColumnTypes.size());
             }
         }
+
+        ReturningInfo = returning;
     }
 
     void Write(IDataBatchPtr data) {
@@ -1646,6 +1662,10 @@ public:
 
     bool IsBlocked() const {
         return State == EState::BLOCKED;
+    }
+
+    bool HasReturning() const {
+        return ReturningInfo.has_value();
     }
 
     i64 GetPriority() const {
@@ -1832,8 +1852,9 @@ private:
 
                 rowsBatcher->AddRow();
                 existsMask.push_back(true);
-            } else if (OperationType == NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE) {
-                // Skip updates for non-existing rows.
+            } else if (OperationType == NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE
+                    || OperationType == NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE) {
+                // Skip updates and deletes for non-existing rows.
                 Memory -= EstimateSize(processCells);
             } else {
                 // For UPDATE WHERE all rows must exist.
@@ -2069,6 +2090,22 @@ private:
             }
         }
 
+        if (ReturningInfo) {
+            for (auto& write : Writes) {
+                const auto& batch = write.Batch;
+
+                auto projection = CreateDataBatchProjection(
+                    ReturningInfo->ColumnsIndexes,
+                    Alloc);
+                for (const auto& row : GetRows(batch)) {
+                    projection->AddRow(row);
+                }
+                auto returningBatch = projection->Flush();
+
+                ReturningInfo->Consumer->Consume(std::move(returningBatch));
+            }
+        }
+
         for (auto& write : Writes) {
             auto& batch = write.Batch;
             Memory -= batch->GetMemory();
@@ -2117,6 +2154,7 @@ private:
 
     THashMap<TPathId, TPathWriteInfo> PathWriteInfo;
     THashMap<TPathId, TPathLookupInfo> PathLookupInfo;
+    std::optional<TReturningInfo> ReturningInfo;
 
     bool Closed = false;
     i64 Memory = 0;
@@ -3242,6 +3280,7 @@ public:
                     settings.OperationType,
                     std::move(writes),
                     std::move(lookups),
+                    std::nullopt, // TODO:
                     settings.KeyColumns,
                     Alloc
                 });
@@ -3321,12 +3360,22 @@ public:
                     writeTask.Close();
                 }
 
-                // TODO: For stream write must send AckMessage only for working tasks.
-                AckQueue.push(TAckMessage{
-                    .ForwardActorId = message.From,
-                    .Token = message.Token,
-                    .DataSize = 0,
-                });
+                if (!writeTask.HasReturning()) {
+                    // TODO: For stream write must send AckMessage only for working tasks.
+                    AckQueue.push(TAckMessage{
+                        .ForwardActorId = message.From,
+                        .Token = message.Token,
+                        .InputDataSize = 0,
+                        .OutputData = {},
+                    });
+                } else {
+                    ReturningConsumers.at(message.Token.Cookie).PushDelayedAck(TAckMessage{
+                        .ForwardActorId = message.From,
+                        .Token = message.Token,
+                        .InputDataSize = 0,
+                        .OutputData = {},
+                    });
+                }
 
                 queue.pop();
             }
@@ -3352,8 +3401,26 @@ public:
                 }
             }
 
+            for (auto& [cookie, returningConsumer] : ReturningConsumers) {
+                if (!returningConsumer.IsEmpty()) {
+                    for (auto& ack : returningConsumer.FlushDelayedAcks()) {
+                        AckQueue.push(std::move(ack));
+                    }
+                }
+            }
+
             for (const auto& cookie : finishedCookies) {
                 WriteTasks.erase(cookie);
+                if (const auto iterReturningConsumers = ReturningConsumers.find(cookie);
+                        iterReturningConsumers != ReturningConsumers.end()) {
+                    AFL_ENSURE(iterReturningConsumers->second.IsEmpty());
+                    if (!iterReturningConsumers->second.IsDelayedAcksEmpty()) {
+                        for (auto& ack : iterReturningConsumers->second.FlushDelayedAcks()) {
+                            AckQueue.push(std::move(ack));
+                        }
+                    }
+                    ReturningConsumers.erase(iterReturningConsumers);
+                }
             }
         } while (TasksPlanner.StartUnblockedTasks());
 
@@ -3363,9 +3430,10 @@ public:
     void ProcessAckQueue() {
         while (!AckQueue.empty()) {
             const auto& item = AckQueue.front();
-            if (GetTotalFreeSpace() >= item.DataSize) {
+            if (GetTotalFreeSpace() >= item.InputDataSize) {
                 auto result = std::make_unique<TEvBufferWriteResult>();
                 result->Token = AckQueue.front().Token;
+                result->Data = nullptr;
                 Send(AckQueue.front().ForwardActorId, result.release());
                 AckQueue.pop();
             } else {
@@ -4755,6 +4823,15 @@ private:
     NKikimr::NMiniKQL::TMemoryUsageInfo MemInfo;
     std::shared_ptr<NMiniKQL::THolderFactory> HolderFactory;
 
+    struct TAckMessage {
+        TActorId ForwardActorId;
+        TWriteToken Token;
+        i64 InputDataSize;
+        std::vector<IDataBatchPtr> OutputData;
+    };
+
+    std::queue<TAckMessage> AckQueue;
+
     struct TWriteInfo {
         struct TActorInfo {
             TKqpTableWriteActor* WriteActor = nullptr;
@@ -4773,20 +4850,52 @@ private:
         THashMap<TPathId, TActorInfo> Actors;
     };
 
+    class TReturningConsumer : public TKqpWriteTask::IKqpReturningConsumer  {
+    public:
+        void Consume(IDataBatchPtr data) override {
+            Data.emplace_back(std::move(data));
+        }
+
+        void PushDelayedAck(TAckMessage message) {
+            Acks.push_back(std::move(message));
+        }
+
+        std::vector<TAckMessage> FlushDelayedAcks() {
+            AFL_ENSURE(!Acks.empty());
+            std::swap(Acks.back().OutputData, Data);
+            std::vector<TAckMessage> result;
+            std::swap(result, Acks);
+            AFL_ENSURE(IsEmpty());
+
+            for (auto& data : Acks.back().OutputData) {
+                if (data) {
+                    data->DetachAlloc();
+                }
+            }
+            return result;
+        }
+
+        bool IsEmpty() const {
+            return Data.empty();
+        }
+
+        bool IsDelayedAcksEmpty() const {
+            return Acks.empty();
+        }
+
+    private:
+        std::vector<IDataBatchPtr> Data;
+        std::vector<TAckMessage> Acks;
+    };
+
     THashMap<TPathId, TWriteInfo> WriteInfos;
     THashMap<TPathId, TLookupInfo> LookupInfos;
+    THashMap<ui64, TReturningConsumer> ReturningConsumers;
     THashMap<ui64, TKqpWriteTask> WriteTasks;
     TKqpTableWriteActor::TWriteToken CurrentWriteToken = 0;
 
     THashMap<TPathId, std::queue<TBufferWriteMessage>> RequestQueues;
     TWriteTasksPlanner TasksPlanner;
-
-    struct TAckMessage {
-        TActorId ForwardActorId;
-        TWriteToken Token;
-        i64 DataSize;
-    };
-    std::queue<TAckMessage> AckQueue;
 
     TIntrusivePtr<TKqpCounters> Counters;
     TIntrusivePtr<NTxProxy::TTxProxyMon> TxProxyMon;
@@ -4891,8 +5000,8 @@ private:
 
         WriteToken = result->Get()->Token;
 
-        if (TransformOutput) {
-            AFL_ENSURE(result->Get()->Data);
+        if (result->Get()->Data) {
+            AFL_ENSURE(TransformOutput);
             for (const auto& row : GetRows(result->Get()->Data)) {
                 AFL_ENSURE(row.size() == ReturningColumnsTypes.size());
                 NUdf::TUnboxedValue* outputRowItems = nullptr;
@@ -4902,10 +5011,10 @@ private:
                     outputRowItems[index] = NMiniKQL::GetCellValue(row[index], ReturningColumnsTypes[index]);
                 }
 
+                // TODO: stop writes
+                AFL_ENSURE(TransformOutput->GetFillLevel() == NYql::NDq::EDqFillLevel::NoLimit);
                 TransformOutput->Consume(std::move(outputRow));
             }
-        } else {
-            AFL_ENSURE(!result->Get()->Data);
         }
 
         OnFlushed();

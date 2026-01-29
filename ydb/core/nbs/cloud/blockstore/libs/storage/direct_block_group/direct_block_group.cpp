@@ -162,9 +162,18 @@ void TDirectBlockGroup::HandlePersistentBufferWriteResult(
                 "HandlePersistentBufferWriteResult record is: %s",
                 msg->Record.DebugString().data());
 
+    auto requestId = ev->Cookie;
+
+    // That means that request is already completed
+    if (!RequestById.contains(requestId)) {
+        LOG_ERROR(ctx, NKikimrServices::NBS_PARTITION,
+                  "HandlePersistentBufferWriteResult request id %d not found", requestId);
+
+        return;
+    }
+
+    auto& request = static_cast<TWriteRequest&>(*RequestById[requestId]);
     if (msg->Record.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK) {
-        auto requestId = ev->Cookie;
-        auto& request = static_cast<TWriteRequest&>(*RequestById[requestId]);
         if (request.IsCompleted(requestId)) {
             auto& blockMeta = BlocksMeta[request.StartIndex];
             const auto& writesMeta = request.GetWritesMeta();
@@ -186,9 +195,12 @@ void TDirectBlockGroup::HandlePersistentBufferWriteResult(
                 );
             }
 
-            auto response = std::make_unique<TEvService::TEvWriteBlocksResponse>();
-            response->Record.MutableError()->CopyFrom(MakeError(S_OK));
-            ctx.Send(request.GetSender(), std::move(response));
+            auto response = std::make_unique<TEvService::TEvWriteBlocksResponse>(MakeError(S_OK));
+            ctx.Send(
+                request.GetSender(),
+                std::move(response),
+                0, // flags
+                request.GetCookie());
 
             RequestById.erase(requestId);
         }
@@ -197,6 +209,17 @@ void TDirectBlockGroup::HandlePersistentBufferWriteResult(
                   "HandlePersistentBufferWriteResult finished with error: %d, reason: %s",
                   msg->Record.GetStatus(),
                   msg->Record.GetErrorReason().data());
+        
+        auto response =
+            std::make_unique<TEvService::TEvWriteBlocksResponse>(MakeError(E_FAIL));
+
+        ctx.Send(
+            request.GetSender(),
+            std::move(response),
+            0, // flags
+            request.GetCookie());
+        
+        RequestById.erase(requestId);
     }
 }
 
@@ -287,8 +310,7 @@ void TDirectBlockGroup::HandleReadBlocksRequest(
     // Block is not writed
     if (!BlocksMeta[startIndex].IsWrited())
     {
-        auto response = std::make_unique<TEvService::TEvReadBlocksResponse>();
-        response->Record.MutableError()->CopyFrom(MakeError(S_OK));
+        auto response = std::make_unique<TEvService::TEvReadBlocksResponse>(MakeError(S_OK));
         auto& blocks = *response->Record.MutableBlocks();
         blocks.AddBuffers(TString(4096, 0));
 
@@ -362,9 +384,18 @@ void TDirectBlockGroup::HandleReadResult(
                 "HandleReadResult record is: %s",
                 msg->Record.DebugString().data());
 
+    auto requestId = ev->Cookie;
+    
+    // That means that request is already completed
+    if (!RequestById.contains(requestId)) {
+        LOG_ERROR(ctx, NKikimrServices::NBS_PARTITION,
+                  "HandlePersistentBufferWriteResult request id %d not found", requestId);
+
+        return;
+    }
+
+    auto& request = static_cast<TReadRequest&>(*RequestById[requestId]);
     if (msg->Record.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK) {
-        auto requestId = ev->Cookie;
-        auto& request = static_cast<TReadRequest&>(*RequestById[requestId]);
         if (request.IsCompleted(requestId)) {
             Y_ABORT_UNLESS(msg->Record.HasReadResult());
             const auto& result = msg->Record.GetReadResult();
@@ -376,8 +407,7 @@ void TDirectBlockGroup::HandleReadResult(
                      rope.ConvertToString().data());
 
             auto response =
-                std::make_unique<TEvService::TEvReadBlocksResponse>();
-            response->Record.MutableError()->CopyFrom(MakeError(S_OK));
+                std::make_unique<TEvService::TEvReadBlocksResponse>(MakeError(S_OK));
             auto& blocks = *response->Record.MutableBlocks();
             blocks.AddBuffers(rope.ConvertToString());
 
@@ -391,9 +421,20 @@ void TDirectBlockGroup::HandleReadResult(
         }
     } else {
         LOG_ERROR(ctx, NKikimrServices::NBS_PARTITION,
-                  "HandlePersistentBufferReadResult finished with error: %d, reason: %s",
-                  msg->Record.GetStatus(),
-                  msg->Record.GetErrorReason().data());
+            "HandleReadResult finished with error: %d, reason: %s",
+            msg->Record.GetStatus(),
+            msg->Record.GetErrorReason().data());
+
+        auto response =
+            std::make_unique<TEvService::TEvReadBlocksResponse>(MakeError(E_FAIL));
+
+        ctx.Send(
+            request.GetSender(),
+            std::move(response),
+            0, // flags
+            request.GetCookie());
+        
+        RequestById.erase(requestId);
     }
 }
 

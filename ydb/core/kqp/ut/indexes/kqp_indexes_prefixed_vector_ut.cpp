@@ -184,6 +184,31 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
         DoPositiveQueriesPrefixedVectorIndexOrderBy(session, "CosineSimilarity", "DESC", flags, init, count);
     }
 
+    bool IsTableEmpty(TSession& session, const TString& tablePath) {
+        TString query = Sprintf(R"(
+            SELECT COUNT(*) FROM `%s`;
+        )"
+        , tablePath.c_str());
+
+        auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto resultSet = result.GetResultSet(0);
+        TResultSetParser parser(resultSet);
+        UNIT_ASSERT(parser.TryNextRow());
+        auto count = parser.ColumnParser(0).GetUint64();
+        return count == 0;
+    }
+
+    void DoTruncateTable(TSession& session) {
+        const TString truncateTable(Q_(R"(
+            TRUNCATE TABLE `/Root/TestTable`;
+        )"));
+
+        auto result = session.ExecuteSchemeQuery(truncateTable).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+
     TSession DoOnlyCreateTableForPrefixedVectorIndex(TTableClient& db, int flags = 0) {
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -979,7 +1004,55 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
         }
     }
 
-}
+    Y_UNIT_TEST_QUAD(PrefixedVectorIndexTruncateTable, Covered, Overlap) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableTruncateTable(true);
+        auto serverSettings = TKikimrSettings().SetFeatureFlags(featureFlags);
+        TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
 
+        const int flags = F_NULLABLE | (Covered ? F_COVERING : 0) | (Overlap ? F_OVERLAP : 0);
+        auto db = kikimr.GetTableClient();
+        auto session = DoCreateTableForPrefixedVectorIndex(db, flags);
+
+        {
+            const char* cover = "";
+            if (flags & F_COVERING) {
+                cover = " COVER (user, emb, data)";
+            }
+
+            const TString createIndex(Q_(Sprintf(R"(
+                ALTER TABLE `/Root/TestTable`
+                    ADD INDEX index
+                    GLOBAL USING vector_kmeans_tree
+                    ON (user, emb)%s
+                    WITH (distance=cosine, vector_type="uint8", vector_dimension=2, levels=1, clusters=2%s);
+                )", cover, "")));
+
+            auto result = session.ExecuteSchemeQuery(createIndex)
+                            .ExtractValueSync();
+
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        DoPositiveQueriesPrefixedVectorIndexOrderByCosine(session, flags);
+
+        UNIT_ASSERT(!IsTableEmpty(session, "/Root/TestTable"));
+        UNIT_ASSERT(!IsTableEmpty(session, "/Root/TestTable/index/indexImplPostingTable"));
+        UNIT_ASSERT(!IsTableEmpty(session, "/Root/TestTable/index/indexImplLevelTable"));
+        UNIT_ASSERT(!IsTableEmpty(session, "/Root/TestTable/index/indexImplPrefixTable"));
+
+        DoTruncateTable(session);
+
+        UNIT_ASSERT(IsTableEmpty(session, "/Root/TestTable"));
+        UNIT_ASSERT(IsTableEmpty(session, "/Root/TestTable/index/indexImplPostingTable"));
+        UNIT_ASSERT(IsTableEmpty(session, "/Root/TestTable/index/indexImplLevelTable"));
+        UNIT_ASSERT(IsTableEmpty(session, "/Root/TestTable/index/indexImplPrefixTable"));
+
+        InsertDataForPrefixedVectorIndex(session);
+        DoPositiveQueriesPrefixedVectorIndexOrderByCosine(session, flags);
+    }
+}
 }
 }

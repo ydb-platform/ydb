@@ -363,7 +363,6 @@ public:
         }
         WaitingScopes.erase(scope->GetExternalScopeId());
     }
-    
     TString DebugString() const;
 };
 

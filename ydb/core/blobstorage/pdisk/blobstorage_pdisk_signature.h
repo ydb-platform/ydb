@@ -90,6 +90,7 @@ public:
             case SignatureAddBulkSst:                   return "SignatureAddBulkSst";
             case SignatureScrub:                        return "SignatureScrub";
             case SignatureMetadata:                     return "SignatureMetadata";
+            case SignatureChunkKeeper:                  return "SignatureChunkKeeper";
             case Max:                                   return "Max";
         }
         return TStringBuilder() << "Unknown(" << static_cast<ui32>(Signature) << "(";

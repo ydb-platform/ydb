@@ -456,7 +456,7 @@ private:
         };
         serializeChunks(Committed->Chunks, true);
         serializeChunks(AllocationsInFlight, false);
-        
+
         TRcBuf data(TRcBuf::Uninitialized(proto.ByteSizeLong()));
         const bool success = proto.SerializeToArray(reinterpret_cast<uint8_t*>(
                 data.UnsafeGetDataMut()), data.GetSize());

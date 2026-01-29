@@ -712,10 +712,6 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvCommitDone::
     partition.EndOffset = msg->EndOffset;
     partition.ReadingFinished = msg->ReadingFinishedSent;
 
-    auto inFlightBytes = PartitionInFlightBytes.find(partition.Partition);
-    Y_VERIFY(inFlightBytes != PartitionInFlightBytes.end());
-    // inFlightBytes->second -= msg->;
-
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " replying for commits"
         << ": assignId# " << msg->AssignId
         << ", from# " << msg->StartCookie
@@ -817,7 +813,6 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(typename TEvReadInit::TPtr&
 
     if constexpr (UseMigrationProtocol) {
         RangesMode = init.ranges_mode();
-        PartitionMaxInFlightBytes = init.read_params().partition_max_in_flight_bytes();
         MaxReadMessagesCount = NormalizeMaxReadMessagesCount(init.read_params().max_read_messages_count());
         MaxReadSize = NormalizeMaxReadSize(init.read_params().max_read_size());
         MaxTimeLagMs = init.max_lag_duration_ms();
@@ -826,7 +821,6 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(typename TEvReadInit::TPtr&
     } else {
         RangesMode = true;
         MaxReadMessagesCount = NormalizeMaxReadMessagesCount(0);
-        PartitionMaxInFlightBytes = 0;
         MaxReadSize = NormalizeMaxReadSize(0);
         MaxTimeLagMs = 0; // max_lag per topic only
         ReadTimestampMs = 0; // read_from per topic only
@@ -1963,9 +1957,6 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(typename TEvReadResponse::T
         formedResponse->FromDisk = true;
     }
 
-    auto [partitionIt, _] = PartitionInFlightBytes.try_emplace(partitionInfo.Partition, 0);
-    partitionIt->second += response.ByteSize();
-
     formedResponse->WaitQuotaTime = Max(formedResponse->WaitQuotaTime, ev->Get()->WaitQuotaTime);
     --formedResponse->RequestsInfly;
 
@@ -2165,15 +2156,8 @@ void TReadSessionActor<UseMigrationProtocol>::ProcessAnswer(typename TFormedRead
     // If some partition was removed from partitions container, it is not bad because it will be checked during read processing.
     // If there are too many in flight bytes, add to overloaded partitions.
     for (const auto& partition : formedResponse->PartitionsBecameAvailable) {
-        auto [inFlightBytes, _] = PartitionInFlightBytes.try_emplace(partition, 0);
-        if (inFlightBytes->second > PartitionMaxInFlightBytes) {
-            OverloadedPartitions.insert(partition);
-        } else {
-            AvailablePartitions.insert(partition);
-        }
+        AvailablePartitions.insert(partition);
     }
-    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " Process answer. Aval parts: " << AvailablePartitions.size() << ", Overloaded parts: " << OverloadedPartitions.size());
-
 
     if constexpr (UseMigrationProtocol) {
         if (!formedResponse->HasMessages) {

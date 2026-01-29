@@ -14,11 +14,6 @@ PEERDIR(
     ydb/core/jaeger_tracing
     ydb/core/kqp/common
     ydb/core/kqp/rm_service
-    ydb/core/nbs/cloud/blockstore/libs/common
-    ydb/core/nbs/cloud/blockstore/libs/service
-    ydb/core/nbs/cloud/blockstore/tools/testing/loadtest/lib
-    ydb/core/nbs/cloud/storage/core/libs/common
-    ydb/core/nbs/cloud/storage/core/libs/diagnostics
     ydb/core/tx/columnshard
     ydb/core/tx/datashard
     ydb/library/workload/abstract
@@ -41,7 +36,6 @@ SRCS(
     keyvalue_write.cpp
     kqp.cpp
     memory.cpp
-    nbs2_load_actor.cpp
     pdisk_log.cpp
     pdisk_read.cpp
     pdisk_write.cpp
@@ -63,6 +57,20 @@ SRCS(
     ycsb/test_load_actor.h
     ycsb/test_load_read_iterator.cpp
 )
+
+IF (OS_LINUX)
+    SRCS(
+        nbs2_load_actor.cpp
+    )
+
+    PEERDIR(
+        ydb/core/nbs/cloud/blockstore/libs/common
+        ydb/core/nbs/cloud/blockstore/libs/service
+        ydb/core/nbs/cloud/blockstore/tools/testing/loadtest/lib
+        ydb/core/nbs/cloud/storage/core/libs/common
+        ydb/core/nbs/cloud/storage/core/libs/diagnostics
+    )
+ENDIF()
 
 GENERATE_ENUM_SERIALIZATION(percentile.h)
 

@@ -81,8 +81,9 @@ TVector<TConfigTemplate> BuildExamples() {
     SoftLoad: false
     UseProtobufWithPayload: false
 })_"
-        },
-        TConfigTemplate{
+        }
+#ifdef __linux__
+        ,TConfigTemplate{
             .LoadName = "NBS2Load",
             .Template = R"_(NBS2Load: {
     DurationSeconds: 20
@@ -98,6 +99,7 @@ TVector<TConfigTemplate> BuildExamples() {
     }
 })_"
         }
+#endif
     };
     return result;
 }

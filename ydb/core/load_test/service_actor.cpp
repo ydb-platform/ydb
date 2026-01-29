@@ -619,6 +619,7 @@ public:
                 break;
             }
 
+#ifdef __linux__
             case NKikimr::TEvLoadTestRequest::CommandCase::kNBS2Load: {
                 const auto& cmd = record.GetNBS2Load();
                 if (LoadActors.count(tag) != 0) {
@@ -630,6 +631,7 @@ public:
                             cmd, SelfId(), GetServiceCounters(Counters, "load_actor"), 0, tag)));
                 break;
             }
+#endif
 
             default: {
                 TString protoTxt;

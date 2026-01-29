@@ -1832,4 +1832,96 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         }
     }
 
+    Y_UNIT_TEST(GlobalLimit) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableProtoSourceIdInfo(true));
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key"       Type: "Uint32" }
+            Columns { Name: "embedding" Type: "String" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto describe = DescribePath(runtime, "/MyRoot/Table");
+        UNIT_ASSERT_VALUES_EQUAL_C(describe.GetStatus(), NKikimrScheme::StatusSuccess, "Unexpected status: " << describe.GetStatus());
+        auto curPaths = describe.GetPathDescription().GetDomainDescription().GetPathsInside();
+        auto curShards = describe.GetPathDescription().GetDomainDescription().GetShardsInside();
+
+        TSchemeLimits lowLimits;
+
+        lowLimits.MaxPaths = curPaths+2;
+        lowLimits.MaxShards = curShards+2;
+        SetSchemeshardSchemaLimits(runtime, lowLimits);
+        TestBuildVectorIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", "idx_global", {"embedding"}, Ydb::StatusIds::PRECONDITION_FAILED);
+        env.TestWaitNotification(runtime, txId);
+
+        lowLimits.MaxPaths = curPaths+3;
+        lowLimits.MaxShards = curShards+1;
+        SetSchemeshardSchemaLimits(runtime, lowLimits);
+        TestBuildVectorIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", "idx_global", {"embedding"}, Ydb::StatusIds::PRECONDITION_FAILED);
+        env.TestWaitNotification(runtime, txId);
+
+        Ydb::Table::GlobalIndexSettings shardingProto;
+        shardingProto.set_uniform_partitions(2);
+        auto sharding = NYdb::NTable::TGlobalIndexSettings::FromProto(shardingProto);
+        lowLimits.MaxPaths = curPaths+3;
+        lowLimits.MaxShards = curShards+4;
+        lowLimits.MaxShardsInPath = 1;
+        SetSchemeshardSchemaLimits(runtime, lowLimits);
+        TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", TBuildIndexConfig{
+            "idx_global", NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, {"embedding"}, {}, {sharding, sharding}
+        }, Ydb::StatusIds::PRECONDITION_FAILED);
+        env.TestWaitNotification(runtime, txId);
+
+        lowLimits.MaxShardsInPath = 2;
+        SetSchemeshardSchemaLimits(runtime, lowLimits);
+        TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", TBuildIndexConfig{
+            "idx_global", NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, {"embedding"}, {}, {sharding, sharding}
+        });
+        env.TestWaitNotification(runtime, txId);
+    }
+
+    Y_UNIT_TEST(PrefixedLimit) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableProtoSourceIdInfo(true));
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key"       Type: "Uint32" }
+            Columns { Name: "embedding" Type: "String" }
+            Columns { Name: "prefix"    Type: "Uint32" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto describe = DescribePath(runtime, "/MyRoot/Table");
+        UNIT_ASSERT_VALUES_EQUAL_C(describe.GetStatus(), NKikimrScheme::StatusSuccess, "Unexpected status: " << describe.GetStatus());
+        auto curPaths = describe.GetPathDescription().GetDomainDescription().GetPathsInside();
+        auto curShards = describe.GetPathDescription().GetDomainDescription().GetShardsInside();
+
+        TSchemeLimits lowLimits;
+
+        lowLimits.MaxPaths = curPaths+4;
+        lowLimits.MaxShards = curShards+4;
+        SetSchemeshardSchemaLimits(runtime, lowLimits);
+        TestBuildVectorIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", "idx_global", {"prefix", "embedding"}, Ydb::StatusIds::PRECONDITION_FAILED);
+        env.TestWaitNotification(runtime, txId);
+
+        lowLimits.MaxPaths = curPaths+5;
+        lowLimits.MaxShards = curShards+3;
+        SetSchemeshardSchemaLimits(runtime, lowLimits);
+        TestBuildVectorIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", "idx_global", {"prefix", "embedding"}, Ydb::StatusIds::PRECONDITION_FAILED);
+        env.TestWaitNotification(runtime, txId);
+
+        lowLimits.MaxPaths = curPaths+5;
+        lowLimits.MaxShards = curShards+4;
+        SetSchemeshardSchemaLimits(runtime, lowLimits);
+        TestBuildVectorIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", "idx_global", {"prefix", "embedding"});
+        env.TestWaitNotification(runtime, txId);
+    }
+
 }

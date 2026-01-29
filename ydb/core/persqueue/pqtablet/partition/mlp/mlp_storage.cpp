@@ -227,7 +227,7 @@ size_t TStorage::Compact() {
 
     // Remove messages by retention
     if (auto retentionDeadlineDelta = GetRetentionDeadlineDelta(); retentionDeadlineDelta.has_value()) {
-        auto dieProcessingDelta = retentionDeadlineDelta.value() + 60;
+        auto dieProcessingDelta = retentionDeadlineDelta.value() + 1;
 
         auto canRemove = [&](auto& message) {
             switch (message.GetStatus()) {
@@ -384,6 +384,16 @@ bool TStorage::AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupId
         Batch.MoveBaseTime(BaseDeadline, BaseWriteTimestamp);
     }
 
+    auto writeTimestampDelta = (writeTimestamp - BaseWriteTimestamp).Seconds();
+    if (auto retentionDeadlineDelta = GetRetentionDeadlineDelta(); retentionDeadlineDelta.has_value()) {
+        auto removedByRetention = writeTimestampDelta <= retentionDeadlineDelta.value();
+        // The message will be deleted by retention policy. Skip it.
+        if (removedByRetention && Messages.empty()) {
+            ++Metrics.TotalDeletedByRetentionMessageCount;
+            return true;
+        }
+    }
+
     ui32 deadlineDelta = delay == TDuration::Zero() ? 0 : NormalizeDeadline(writeTimestamp + delay);
 
     Messages.push_back({
@@ -392,7 +402,7 @@ bool TStorage::AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupId
         .DeadlineDelta = deadlineDelta,
         .HasMessageGroupId = hasMessagegroup,
         .MessageGroupIdHash = messageGroupIdHash,
-        .WriteTimestampDelta = static_cast<ui32>((writeTimestamp - BaseWriteTimestamp).Seconds())
+        .WriteTimestampDelta = ui32(writeTimestampDelta)
     });
 
     Batch.AddNewMessage(offset);
@@ -537,6 +547,20 @@ std::deque<TDLQMessage> TStorage::GetDLQMessages() {
 
 const std::unordered_set<ui32>& TStorage::GetLockedMessageGroupsId() const {
     return LockedMessageGroupsId;
+}
+
+bool TStorage::HasRetentionExpiredMessages() const {
+    if (Messages.empty()) {
+        return false;
+    }
+
+    auto retentionDeadlineDelta = GetRetentionDeadlineDelta();
+    if (!retentionDeadlineDelta.has_value()) {
+        return false;
+    }
+
+    auto& message = Messages.front();
+    return message.WriteTimestampDelta <= retentionDeadlineDelta.value();
 }
 
 std::pair<TStorage::TMessage*, bool> TStorage::GetMessageInt(ui64 offset, EMessageStatus expectedStatus) {

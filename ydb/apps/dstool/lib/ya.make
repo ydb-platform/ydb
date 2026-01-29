@@ -52,9 +52,6 @@ PY_SRCS(
     dstool_cmd_cluster_set.py
     dstool_cmd_cluster_workload_run.py
     dstool_cmd_cluster_list.py
-
-    dstool_cmd_nbs_partition_create.py
-    dstool_cmd_nbs_partition_delete.py
 )
 
 PEERDIR(
@@ -63,5 +60,16 @@ PEERDIR(
     ydb/public/api/grpc
     ydb/public/api/grpc/draft
 )
+
+IF (OS_LINUX)
+    PEERDIR(
+        ydb/core/nbs/cloud/blockstore/public/api/protos
+    )
+    PY_SRCS(
+        dstool_cmd_nbs_partition_create.py
+        dstool_cmd_nbs_partition_delete.py
+        dstool_cmd_nbs_partition_io.py
+    )
+ENDIF()
 
 END()

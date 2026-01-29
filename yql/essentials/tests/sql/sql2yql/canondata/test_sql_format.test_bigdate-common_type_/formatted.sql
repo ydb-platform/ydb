@@ -1,9 +1,12 @@
 $date_val = unwrap(CAST(1 AS date));
 $date32_val = unwrap(CAST(-1 AS date32));
+
 $datetime_val = unwrap(CAST(86400 AS datetime));
 $datetime64_val = unwrap(CAST(-86400 AS datetime64));
+
 $timestamp_val = unwrap(CAST(86400l * 1000000 AS timestamp));
 $timestamp64_val = unwrap(CAST(-86400l * 1000000 AS timestamp64));
+
 $interval_val = unwrap(CAST(1 AS interval));
 $interval64_val = unwrap(CAST(-1 AS interval64));
 

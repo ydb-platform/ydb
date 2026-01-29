@@ -31,7 +31,7 @@ GENERATE_ENUM_SERIALIZATION(worker.h)
 
 YQL_LAST_ABI_VERSION()
 
-IF (!OS_WINDOWS)
+IF (NOT OS_WINDOWS)
     SRCS(
         s3_writer.cpp
     )
@@ -46,7 +46,7 @@ RECURSE_FOR_TESTS(
     ut_worker
 )
 
-IF (!OS_WINDOWS)
+IF (NOT OS_WINDOWS)
     RECURSE_FOR_TESTS(
         ut_s3_writer
     )

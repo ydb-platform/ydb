@@ -12,6 +12,8 @@ class TContext;
 template <class TPtr>
 class TNullable final: public TPtr {
 public:
+    // Every pointer is nullable
+    // NOLINTNEXTLINE(google-explicit-constructor)
     TNullable(TPtr ptr)
         : TPtr(std::move(ptr))
     {

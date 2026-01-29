@@ -13,11 +13,18 @@ namespace NKikimr::NKqp {
 
 namespace {
 
-TKikimrSettings GetDefaultSettings() {
+TKikimrSettings GetTestSettings() {
     auto appConfig = NKikimrConfig::TAppConfig();
     appConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
     appConfig.MutableTableServiceConfig()->SetEnableBatchUpdates(true);
+
+    auto logConfig = TTestLogSettings()
+        .AddLogPriority(NKikimrServices::EServiceKikimr::KQP_EXECUTER, NLog::EPriority::PRI_TRACE)
+        .AddLogPriority(NKikimrServices::EServiceKikimr::KQP_COMPUTE, NLog::EPriority::PRI_INFO);
+    logConfig.DefaultLogPriority = NLog::EPriority::PRI_CRIT;
+
     return TKikimrSettings(std::move(appConfig))
+        .SetLogSettings(std::move(logConfig))
         .SetWithSampleTables(false)
         .SetUseRealThreads(false);
 }
@@ -68,7 +75,7 @@ void FillTable(TKikimrRunner& kikimr, TSession& session, const std::string_view&
 */
 Y_UNIT_TEST_SUITE(KqpBatchPEA) {
     Y_UNIT_TEST(PrepareState_PartitioningResolutionError) {
-        auto kikimr = TKikimrRunner(GetDefaultSettings());
+        auto kikimr = TKikimrRunner(GetTestSettings());
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
 
         auto db = kikimr.RunCall([&] { return kikimr.GetQueryClient(); });
@@ -138,17 +145,17 @@ Y_UNIT_TEST_SUITE(KqpBatchPEA) {
         )", tableName);
 
         // queryId = 0
-        executeAndTestError(batchQuery, {"could not resolve a partitioning of the table", "state = PrepareState"});
+        executeAndTestError(batchQuery, {"Could not resolve a partitioning of the table"});
         // queryId = 1
-        executeAndTestError(batchQuery, {"could not resolve a partitioning of the table, resultSet is empty", "state = PrepareState"});
+        executeAndTestError(batchQuery, {"Could not resolve a partitioning of the table, resultSet is empty"});
         // queryId = 2
-        executeAndTestError(batchQuery, {"could not resolve a partitioning of the table, partitioning is null", "state = PrepareState"});
+        executeAndTestError(batchQuery, {"Could not resolve a partitioning of the table, partitioning is null"});
         // queryId = 3
-        executeAndTestError(batchQuery, {"could not resolve a partitioning of the table, partitioning is empty", "state = PrepareState"});
+        executeAndTestError(batchQuery, {"Could not resolve a partitioning of the table, partitioning is empty"});
     }
 
     Y_UNIT_TEST(PrepareState_AbortExecution) {
-        auto kikimr = TKikimrRunner(GetDefaultSettings());
+        auto kikimr = TKikimrRunner(GetTestSettings());
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
 
         auto db = kikimr.RunCall([&] { return kikimr.GetQueryClient(); });
@@ -183,12 +190,10 @@ Y_UNIT_TEST_SUITE(KqpBatchPEA) {
 
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
         UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Test abort execution", result.GetIssues().ToString());
-        // Issues only contain forwarded messages from abort event
-        // UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "state = PrepareState", result.GetIssues().ToString());
     }
 
     Y_UNIT_TEST(PrepareState_UnknownEvent) {
-        auto kikimr = TKikimrRunner(GetDefaultSettings());
+        auto kikimr = TKikimrRunner(GetTestSettings());
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
 
         auto db = kikimr.RunCall([&] { return kikimr.GetQueryClient(); });
@@ -222,12 +227,11 @@ Y_UNIT_TEST_SUITE(KqpBatchPEA) {
         // An error is expected because the actor is in the PrepareState and does not know what to do with the unknown event
         // It is needed to check that new events are not ignored and the actor is aborted
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::INTERNAL_ERROR, result.GetIssues().ToString());
-        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "got an unknown message", result.GetIssues().ToString());
-        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "state = PrepareState", result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Got an unknown event", result.GetIssues().ToString());
     }
 
     Y_UNIT_TEST(ExecuteState_AbortBeforeAnyResponse) {
-        auto kikimr = TKikimrRunner(GetDefaultSettings());
+        auto kikimr = TKikimrRunner(GetTestSettings());
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
 
         auto db = kikimr.RunCall([&] { return kikimr.GetQueryClient(); });
@@ -290,7 +294,7 @@ Y_UNIT_TEST_SUITE(KqpBatchPEA) {
     }
 
     Y_UNIT_TEST(ExecuteState_AbortAfterPartialCompletion) {
-        auto kikimr = TKikimrRunner(GetDefaultSettings());
+        auto kikimr = TKikimrRunner(GetTestSettings());
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
 
         auto db = kikimr.RunCall([&] { return kikimr.GetQueryClient(); });
@@ -364,7 +368,7 @@ Y_UNIT_TEST_SUITE(KqpBatchPEA) {
     }
 
     Y_UNIT_TEST(ExecuteState_ChildExecuterAbort) {
-        auto kikimr = TKikimrRunner(GetDefaultSettings());
+        auto kikimr = TKikimrRunner(GetTestSettings());
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
 
         auto db = kikimr.RunCall([&] { return kikimr.GetQueryClient(); });
@@ -438,7 +442,7 @@ Y_UNIT_TEST_SUITE(KqpBatchPEA) {
     }
 
     Y_UNIT_TEST(ExecuteState_AbortBeforeDelayedResponses) {
-        auto kikimr = TKikimrRunner(GetDefaultSettings());
+        auto kikimr = TKikimrRunner(GetTestSettings());
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
 
         auto db = kikimr.RunCall([&] { return kikimr.GetQueryClient(); });
@@ -517,7 +521,7 @@ Y_UNIT_TEST_SUITE(KqpBatchPEA) {
     }
 
     Y_UNIT_TEST(ExecuteState_ChildExecuterRetryLimitExceeded) {
-        auto kikimr = TKikimrRunner(GetDefaultSettings());
+        auto kikimr = TKikimrRunner(GetTestSettings());
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
 
         auto db = kikimr.RunCall([&] { return kikimr.GetQueryClient(); });
@@ -598,7 +602,7 @@ Y_UNIT_TEST_SUITE(KqpBatchPEA) {
     }
 
     Y_UNIT_TEST(ExecuteState_AbortDuringRetry) {
-        auto kikimr = TKikimrRunner(GetDefaultSettings());
+        auto kikimr = TKikimrRunner(GetTestSettings());
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
 
         auto db = kikimr.RunCall([&] { return kikimr.GetQueryClient(); });
@@ -686,7 +690,7 @@ Y_UNIT_TEST_SUITE(KqpBatchPEA) {
     }
 
     Y_UNIT_TEST(ExecuteState_ChildExecuterInternalError) {
-        auto kikimr = TKikimrRunner(GetDefaultSettings());
+        auto kikimr = TKikimrRunner(GetTestSettings());
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
 
         auto db = kikimr.RunCall([&] { return kikimr.GetQueryClient(); });
@@ -765,7 +769,7 @@ Y_UNIT_TEST_SUITE(KqpBatchPEA) {
     }
 
     Y_UNIT_TEST(ExecuteState_MinKeyErrorIssues) {
-        auto kikimr = TKikimrRunner(GetDefaultSettings());
+        auto kikimr = TKikimrRunner(GetTestSettings());
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
 
         auto db = kikimr.RunCall([&] { return kikimr.GetQueryClient(); });
@@ -885,8 +889,7 @@ Y_UNIT_TEST_SUITE(KqpBatchPEA) {
 
             if (i + 1 < maxQueryId) {
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::INTERNAL_ERROR, result.GetIssues().ToString());
-                UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "got an unknown error", result.GetIssues().ToString());
-                UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "state = ExecuteState", result.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Got an unknown error", result.GetIssues().ToString());
 
                 partitionedId.reset();
                 targetExecuterId.reset();
@@ -895,7 +898,7 @@ Y_UNIT_TEST_SUITE(KqpBatchPEA) {
             } else {
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
                 UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
-                    "The next key from KqpReadActor does not belong to the partition", result.GetIssues().ToString());
+                    "The next key from ReadActor does not belong to the partition", result.GetIssues().ToString());
             }
         }
 
@@ -903,7 +906,7 @@ Y_UNIT_TEST_SUITE(KqpBatchPEA) {
     }
 
     Y_UNIT_TEST(ExecuteState_UnknownEvent) {
-        auto kikimr = TKikimrRunner(GetDefaultSettings());
+        auto kikimr = TKikimrRunner(GetTestSettings());
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
 
         auto db = kikimr.RunCall([&] { return kikimr.GetQueryClient(); });
@@ -964,12 +967,11 @@ Y_UNIT_TEST_SUITE(KqpBatchPEA) {
         // An error is expected because the actor is in the ExecuteState and does not know what to do with the unknown event
         // It is needed to check that new events are not ignored and the actor is aborted
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::INTERNAL_ERROR, result.GetIssues().ToString());
-        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "got an unknown message", result.GetIssues().ToString());
-        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "state = ExecuteState", result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Got an unknown event", result.GetIssues().ToString());
     }
 
     Y_UNIT_TEST(AbortState_DoubleAbort) {
-        auto kikimr = TKikimrRunner(GetDefaultSettings());
+        auto kikimr = TKikimrRunner(GetTestSettings());
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
 
         auto db = kikimr.RunCall([&] { return kikimr.GetQueryClient(); });
@@ -1067,7 +1069,7 @@ Y_UNIT_TEST_SUITE(KqpBatchPEA) {
     }
 
     Y_UNIT_TEST(AbortState_AbortFromExecuterActor) {
-        auto kikimr = TKikimrRunner(GetDefaultSettings());
+        auto kikimr = TKikimrRunner(GetTestSettings());
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
 
         auto db = kikimr.RunCall([&] { return kikimr.GetQueryClient(); });
@@ -1166,7 +1168,7 @@ Y_UNIT_TEST_SUITE(KqpBatchPEA) {
     }
 
     Y_UNIT_TEST(AbortState_UnknownEvent) {
-        auto kikimr = TKikimrRunner(GetDefaultSettings());
+        auto kikimr = TKikimrRunner(GetTestSettings());
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
 
         auto db = kikimr.RunCall([&] { return kikimr.GetQueryClient(); });

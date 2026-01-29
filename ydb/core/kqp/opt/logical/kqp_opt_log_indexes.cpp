@@ -267,7 +267,8 @@ struct TReadMatch {
             const auto& tableDesc = GetTableData(*kqpCtx.Tables, kqpCtx.Cluster, read.Cast().Table().Path());
             YQL_ENSURE(tableDesc.Metadata);
             auto [implTable, indexDesc] = tableDesc.Metadata->GetIndex(read.Cast().Index().Value());
-            if (indexDesc->Type == TIndexDescription::EType::GlobalFulltext) {
+            if (indexDesc->Type == TIndexDescription::EType::GlobalFulltextPlain
+                || indexDesc->Type == TIndexDescription::EType::GlobalFulltextRelevance) {
                 return {};
             }
 
@@ -282,7 +283,8 @@ struct TReadMatch {
             const auto& tableDesc = GetTableData(*kqpCtx.Tables, kqpCtx.Cluster, read.Cast().Table().Path());
             YQL_ENSURE(tableDesc.Metadata);
             auto [implTable, indexDesc] = tableDesc.Metadata->GetIndex(read.Cast().Index().Value());
-            if (indexDesc->Type == TIndexDescription::EType::GlobalFulltext) {
+            if (indexDesc->Type == TIndexDescription::EType::GlobalFulltextPlain
+                || indexDesc->Type == TIndexDescription::EType::GlobalFulltextRelevance) {
                 return {};
             }
 
@@ -320,7 +322,8 @@ struct TReadMatch {
         const auto& tableDesc = GetTableData(*kqpCtx.Tables, kqpCtx.Cluster, read.Table().Path());
         YQL_ENSURE(tableDesc.Metadata);
         auto [implTable, indexDesc] = tableDesc.Metadata->GetIndex(read.Index().Value());
-        if (indexDesc->Type != TIndexDescription::EType::GlobalFulltext) {
+        if (indexDesc->Type != TIndexDescription::EType::GlobalFulltextPlain
+            && indexDesc->Type != TIndexDescription::EType::GlobalFulltextRelevance) {
             return {};
         }
 
@@ -1447,7 +1450,7 @@ TExprBase KqpRewriteFlatMapOverFullTextRelevance(const NYql::NNodes::TExprBase& 
     }
 
     resultColumnsVector.push_back(Build<TCoAtom>(ctx, node.Pos())
-        .Value("_yql_full_text_relevance")
+        .Value(NTableIndex::NFulltext::FullTextRelevanceColumn)
         .Done());
 
     auto resultColumns = Build<TCoAtomList>(ctx, node.Pos())
@@ -1473,7 +1476,7 @@ TExprBase KqpRewriteFlatMapOverFullTextRelevance(const NYql::NNodes::TExprBase& 
 
     TNodeOnNodeOwnedMap replaces;
     auto newMember = Build<TCoMember>(ctx, searchColumn.Pos())
-        .Name().Build("_yql_full_text_relevance")
+        .Name().Build(NTableIndex::NFulltext::FullTextRelevanceColumn)
             .Struct(searchColumn.Struct())
         .Done();
 
@@ -1555,7 +1558,7 @@ TExprBase KqpRewriteFlatMapOverFullTextContains(const NYql::NNodes::TExprBase& n
 
     if (result.IsScoreApply) {
         resultColumnsVector.push_back(Build<TCoAtom>(ctx, node.Pos())
-            .Value("_yql_full_text_relevance")
+            .Value(NTableIndex::NFulltext::FullTextRelevanceColumn)
             .Done());
     }
 
@@ -1578,7 +1581,7 @@ TExprBase KqpRewriteFlatMapOverFullTextContains(const NYql::NNodes::TExprBase& n
 
     if (result.IsScoreApply) {
         auto newMember = Build<TCoMember>(ctx, searchColumn.Pos())
-        .Name().Build("_yql_full_text_relevance")
+        .Name().Build(NTableIndex::NFulltext::FullTextRelevanceColumn)
             .Struct(searchColumn.Struct())
         .Done();
         replaces.emplace(result.Apply.Get(), newMember.Ptr());

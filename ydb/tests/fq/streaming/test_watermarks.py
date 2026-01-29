@@ -12,25 +12,30 @@ class TestWatermarksInYdb(StreamingTestBase):
     @pytest.mark.parametrize("kikimr", [{"enable_watermarks": True}], indirect=["kikimr"])
     @pytest.mark.parametrize("shared_reading", [False], ids=["no_shared"])
     @pytest.mark.parametrize("tasks", [1])
-    def test_watermarks(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], shared_reading: bool, tasks: int) -> None:
+    @pytest.mark.parametrize("local_topics", [True, False])
+    def test_watermarks(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], shared_reading: bool, tasks: int, local_topics: bool) -> None:
+        if local_topics and shared_reading:
+            pytest.skip("Shared reading is not supported for local topics: YQ-5036")
+
+        endpoint = self.get_endpoint(kikimr, local_topics)
         source_name = entity_name("test_watermarks")
-        self.init_topics(source_name, partitions_count=tasks)
+        self.init_topics(source_name, partitions_count=tasks, endpoint=endpoint)
         self.create_source(kikimr, source_name, shared_reading)
 
         event_time = "ts" if shared_reading else "write_time"
+        cluster = f"{source_name}." if not local_topics else ""
 
         query_name = "test_watermarks"
         sql = f'''
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
-                USE {source_name};
                 PRAGMA ydb.MaxTasksPerStage="{tasks}";
 
                 $input = (
                     SELECT
                         {self.input_topic}.*,
                         SystemMetadata("write_time") as write_time
-                    FROM {self.input_topic}
+                    FROM {cluster}{self.input_topic}
                     WITH (
                         FORMAT=json_each_row,
                         SCHEMA (
@@ -64,7 +69,7 @@ class TestWatermarksInYdb(StreamingTestBase):
                     GROUP BY HoppingWindow(CAST(event_time AS Timestamp), "PT1S", "PT1S")
                 );
 
-                INSERT INTO {self.output_topic}
+                INSERT INTO {cluster}{self.output_topic}
                 SELECT ToBytes(Unwrap(Yson::SerializeJson(Yson::From(ts))))
                 FROM $output;
             END DO;
@@ -72,17 +77,17 @@ class TestWatermarksInYdb(StreamingTestBase):
         kikimr.ydb_client.query(sql)
         self.wait_completed_checkpoints(kikimr, f"/Root/{query_name}")
 
-        self.write_stream(['{"ts": "1970-01-01T00:00:40Z", "pass": 1}'])
+        self.write_stream(['{"ts": "1970-01-01T00:00:40Z", "pass": 1}'], endpoint=endpoint)
         time.sleep(10)
-        self.write_stream(['{"ts": "1970-01-01T00:00:50Z", "pass": 1}'])
+        self.write_stream(['{"ts": "1970-01-01T00:00:50Z", "pass": 1}'], endpoint=endpoint)
         time.sleep(10)
-        self.write_stream(['{"ts": "1970-01-01T00:01:00Z", "pass": 0}'])
+        self.write_stream(['{"ts": "1970-01-01T00:01:00Z", "pass": 0}'], endpoint=endpoint)
 
         expected = [
             '[["1970-01-01T00:00:40Z"]]',
             '[["1970-01-01T00:00:50Z"]]',
         ]
-        actual = self.read_stream(len(expected), topic_path=self.output_topic)
+        actual = self.read_stream(len(expected), topic_path=self.output_topic, endpoint=endpoint)
         assert actual == expected
 
         sql = f'''DROP STREAMING QUERY `{query_name}`;'''

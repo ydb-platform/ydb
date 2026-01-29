@@ -77,10 +77,17 @@ def tarball(
     try:
         req = urllib.request.urlopen(url)
         with tarfile.open(fileobj=req, mode='r|*') as tf:
-            tf.extractall(path=target_dir, filter=strip_first_component)
+            tf.extractall(path=target_dir, filter=_default_filter)
         yield target_dir
     finally:
         shutil.rmtree(target_dir)
+
+
+def _compose_tarfile_filters(*filters):
+    def compose_two(f1, f2):
+        return lambda member, path: f1(f2(member, path), path)
+
+    return functools.reduce(compose_two, filters, lambda member, path: member)
 
 
 def strip_first_component(
@@ -89,6 +96,9 @@ def strip_first_component(
 ) -> tarfile.TarInfo:
     _, member.name = member.name.split('/', 1)
     return member
+
+
+_default_filter = _compose_tarfile_filters(tarfile.data_filter, strip_first_component)
 
 
 def _compose(*cmgrs):

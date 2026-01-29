@@ -65,7 +65,7 @@ void TPartitionStreamImpl<UseMigrationProtocol>::Commit(uint64_t startOffset, ui
             Commits.EraseInterval(0, endOffset); // Drop only committed ranges;
         }
         for (auto range: toCommit) {
-            sessionShared->Commit(this, range.first, Min(range.second, endOffset));
+            sessionShared->Commit(this, range.first, Min(range.second, static_cast<ui64>(endOffset)));
         }
     }
 }

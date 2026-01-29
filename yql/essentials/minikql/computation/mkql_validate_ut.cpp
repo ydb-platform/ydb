@@ -69,7 +69,7 @@ private:
 
 template <class TContainer, ui32 TIndexDictBrokenHole = RAW_INDEX_NO_HOLE, bool TNoDictIndex = false>
 struct TListRef: public NUdf::TBoxedValue {
-    TListRef(const TContainer& listRef, ui32 holePos = RAW_INDEX_NO_HOLE)
+    explicit TListRef(const TContainer& listRef, ui32 holePos = RAW_INDEX_NO_HOLE)
         : ListRef_(listRef)
         , HolePos_(holePos)
     {
@@ -272,7 +272,7 @@ private:
 
 template <class TStructType>
 struct TBrokenStructBoxedValue: public NUdf::TBoxedValue {
-    TBrokenStructBoxedValue(const TStructType& data, ui32 holePos = RAW_INDEX_NO_HOLE)
+    explicit TBrokenStructBoxedValue(const TStructType& data, ui32 holePos = RAW_INDEX_NO_HOLE)
         : Struct_(data)
         , HolePos_(holePos)
     {
@@ -395,7 +395,7 @@ private:
 
 struct TThrowerValue: public NUdf::TBoxedValue {
     static long Count;
-    TThrowerValue(NUdf::IBoxedValuePtr&& owner = NUdf::IBoxedValuePtr())
+    explicit TThrowerValue(NUdf::IBoxedValuePtr&& owner = NUdf::IBoxedValuePtr())
         : Owner_(std::move(owner))
     {
         ++Count;
@@ -713,7 +713,7 @@ void ProcessSimpleUdfFunc(const char* udfFuncName, BuildArgsFunc argsFunc = Buil
         TStringBuf typeConfig;
         TStatus status = functionRegistry->FindFunctionTypeInfo(
             NYql::UnknownLangVersion, env, typeInfoHelper, nullptr, udfFuncName,
-            userType, typeConfig, flags, {}, nullptr, nullptr, &funcInfo);
+            userType, typeConfig, flags, NYql::NUdf::TSourcePosition(), nullptr, nullptr, &funcInfo);
         MKQL_ENSURE(status.IsOk(), status.GetError());
         auto type = funcInfo.FunctionType->GetReturnType();
         fullValidateFunc(value, builder, type);
@@ -767,7 +767,7 @@ std::vector<TRuntimeNode> MakeCallableInArgs(ui32 testVal, TProgramBuilder& pgmB
     NUdf::ITypeInfoHelper::TPtr typeInfoHelper(new TTypeInfoHelper);
     TStatus status = functionRegistry.FindFunctionTypeInfo(
         NYql::UnknownLangVersion, pgmBuilder.GetTypeEnvironment(), typeInfoHelper, nullptr,
-        udfFuncName, userType, typeConfig, flags, {}, nullptr, nullptr, &funcInfo);
+        udfFuncName, userType, typeConfig, flags, NYql::NUdf::TSourcePosition(), nullptr, nullptr, &funcInfo);
     MKQL_ENSURE(status.IsOk(), status.GetError());
     auto callable = pgmBuilder.Udf(udfFuncName);
     return std::vector<TRuntimeNode>{callable, pgmBuilder.NewDataLiteral(testVal)};

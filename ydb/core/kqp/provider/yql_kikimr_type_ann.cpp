@@ -1045,12 +1045,18 @@ private:
                 indexType = TIndexDescription::EType::GlobalSyncUnique;
             } else if (type == "globalVectorKmeansTree") {
                 indexType = TIndexDescription::EType::GlobalSyncVectorKMeansTree;
-            } else if (type == "globalFulltext") {
+            } else if (type == "globalFulltextPlain") {
                 if (!SessionCtx->Config().FeatureFlags.GetEnableFulltextIndex()) {
                     ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), "Fulltext index support is disabled"));
                     return TStatus::Error;
                 }
-                indexType = TIndexDescription::EType::GlobalFulltext;
+                indexType = TIndexDescription::EType::GlobalFulltextPlain;
+            } else if (type == "globalFulltextRelevance") {
+                if (!SessionCtx->Config().FeatureFlags.GetEnableFulltextIndex()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), "Fulltext index support is disabled"));
+                    return TStatus::Error;
+                }
+                indexType = TIndexDescription::EType::GlobalFulltextRelevance;
             } else {
                 YQL_ENSURE(false, "Unknown index type: " << type);
             }
@@ -1094,7 +1100,8 @@ private:
                             name.StringValue(), value.StringValue(), error);
                         break;
                     }
-                    case TIndexDescription::EType::GlobalFulltext: {
+                    case TIndexDescription::EType::GlobalFulltextPlain:
+                    case TIndexDescription::EType::GlobalFulltextRelevance: {
                         NKikimr::NFulltext::FillSetting(
                             *fulltextIndexDescription.MutableSettings(),
                             name.StringValue(), value.StringValue(), error);
@@ -1128,7 +1135,20 @@ private:
                     specializedIndexDescription = std::move(vectorIndexKmeansTreeDescription);
                     break;
                 }
-                case TIndexDescription::EType::GlobalFulltext: {
+                case TIndexDescription::EType::GlobalFulltextPlain: {
+                    // Set layout based on index type
+                    fulltextIndexDescription.mutable_settings()->set_layout(Ydb::Table::FulltextIndexSettings::FLAT);
+                    TString error;
+                    if (!NKikimr::NFulltext::ValidateSettings(fulltextIndexDescription.GetSettings(), error)) {
+                        ctx.AddError(TIssue(ctx.GetPosition(index.IndexSettings().Pos()), error));
+                        return IGraphTransformer::TStatus::Error;
+                    }
+                    specializedIndexDescription = std::move(fulltextIndexDescription);
+                    break;
+                }
+                case TIndexDescription::EType::GlobalFulltextRelevance: {
+                    // Set layout based on index type
+                    fulltextIndexDescription.mutable_settings()->set_layout(Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE);
                     TString error;
                     if (!NKikimr::NFulltext::ValidateSettings(fulltextIndexDescription.GetSettings(), error)) {
                         ctx.AddError(TIssue(ctx.GetPosition(index.IndexSettings().Pos()), error));

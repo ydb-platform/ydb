@@ -12,22 +12,22 @@ namespace NKikimr::NDDisk {
 
     struct TEv {
         enum {
-            EvDDiskConnect = EventSpaceBegin(TKikimrEvents::ES_DDISK),
-            EvDDiskConnectResult,
-            EvDDiskDisconnect,
-            EvDDiskDisconnectResult,
-            EvDDiskWrite,
-            EvDDiskWriteResult,
-            EvDDiskRead,
-            EvDDiskReadResult,
-            EvDDiskWritePersistentBuffer,
-            EvDDiskWritePersistentBufferResult,
-            EvDDiskReadPersistentBuffer,
-            EvDDiskReadPersistentBufferResult,
-            EvDDiskFlushPersistentBuffer,
-            EvDDiskFlushPersistentBufferResult,
-            EvDDiskListPersistentBuffer,
-            EvDDiskListPersistentBufferResult,
+            EvConnect = EventSpaceBegin(TKikimrEvents::ES_DDISK),
+            EvConnectResult,
+            EvDisconnect,
+            EvDisconnectResult,
+            EvWrite,
+            EvWriteResult,
+            EvRead,
+            EvReadResult,
+            EvWritePersistentBuffer,
+            EvWritePersistentBufferResult,
+            EvReadPersistentBuffer,
+            EvReadPersistentBufferResult,
+            EvFlushPersistentBuffer,
+            EvFlushPersistentBufferResult,
+            EvListPersistentBuffer,
+            EvListPersistentBufferResult,
         };
     };
 
@@ -35,20 +35,32 @@ namespace NKikimr::NDDisk {
         ui64 TabletId;
         ui32 Generation;
         std::optional<ui64> DDiskInstanceGuid;
+        bool FromPersistentBuffer = false;
 
         TQueryCredentials() = default;
 
-        TQueryCredentials(const NKikimrBlobStorage::TDDiskQueryCredentials& pb)
+        TQueryCredentials(ui64 tabletId, ui32 generation, std::optional<ui64> ddiskInstanceGuid, bool fromPersistentBuffer = false)
+            : TabletId(tabletId)
+            , Generation(generation)
+            , DDiskInstanceGuid(ddiskInstanceGuid)
+            , FromPersistentBuffer(fromPersistentBuffer)
+        {}
+
+        TQueryCredentials(const NKikimrBlobStorage::NDDisk::TQueryCredentials& pb)
             : TabletId(pb.GetTabletId())
             , Generation(pb.GetGeneration())
             , DDiskInstanceGuid(pb.HasDDiskInstanceGuid() ? std::make_optional(pb.GetDDiskInstanceGuid()) : std::nullopt)
+            , FromPersistentBuffer(pb.GetFromPersistentBuffer())
         {}
 
-        void Serialize(NKikimrBlobStorage::TDDiskQueryCredentials *pb) const {
+        void Serialize(NKikimrBlobStorage::NDDisk::TQueryCredentials *pb) const {
             pb->SetTabletId(TabletId);
             pb->SetGeneration(Generation);
             if (DDiskInstanceGuid) {
                 pb->SetDDiskInstanceGuid(*DDiskInstanceGuid);
+            }
+            if (FromPersistentBuffer) {
+                pb->SetFromPersistentBuffer(FromPersistentBuffer);
             }
         }
     };
@@ -66,13 +78,13 @@ namespace NKikimr::NDDisk {
             , Size(size)
         {}
 
-        TBlockSelector(const NKikimrBlobStorage::TDDiskBlockSelector& pb)
+        TBlockSelector(const NKikimrBlobStorage::NDDisk::TBlockSelector& pb)
             : VChunkIndex(pb.GetVChunkIndex())
             , OffsetInBytes(pb.GetOffsetInBytes())
             , Size(pb.GetSize())
         {}
 
-        void Serialize(NKikimrBlobStorage::TDDiskBlockSelector *pb) const {
+        void Serialize(NKikimrBlobStorage::NDDisk::TBlockSelector *pb) const {
             pb->SetVChunkIndex(VChunkIndex);
             pb->SetOffsetInBytes(OffsetInBytes);
             pb->SetSize(Size);
@@ -88,11 +100,11 @@ namespace NKikimr::NDDisk {
             : PayloadId(payloadId)
         {}
 
-        TWriteInstruction(const NKikimrBlobStorage::TDDiskWriteInstruction& pb)
+        TWriteInstruction(const NKikimrBlobStorage::NDDisk::TWriteInstruction& pb)
             : PayloadId(pb.HasPayloadId() ? std::make_optional(pb.GetPayloadId()) : std::nullopt)
         {}
 
-        void Serialize(NKikimrBlobStorage::TDDiskWriteInstruction *pb) const {
+        void Serialize(NKikimrBlobStorage::NDDisk::TWriteInstruction *pb) const {
             if (PayloadId) {
                 pb->SetPayloadId(*PayloadId);
             }
@@ -108,11 +120,11 @@ namespace NKikimr::NDDisk {
             : ReturnInRopePayload(returnInRopePayload)
         {}
 
-        TReadInstruction(const NKikimrBlobStorage::TDDiskReadInstruction& pb)
+        TReadInstruction(const NKikimrBlobStorage::NDDisk::TReadInstruction& pb)
             : ReturnInRopePayload(pb.GetReturnInRopePayload())
         {}
 
-        void Serialize(NKikimrBlobStorage::TDDiskReadInstruction *pb) const {
+        void Serialize(NKikimrBlobStorage::NDDisk::TReadInstruction *pb) const {
             if (ReturnInRopePayload) {
                 pb->SetReturnInRopePayload(ReturnInRopePayload);
             }
@@ -128,11 +140,11 @@ namespace NKikimr::NDDisk {
             : PayloadId(payloadId)
         {}
 
-        TReadResult(const NKikimrBlobStorage::TDDiskReadResult& pb)
+        TReadResult(const NKikimrBlobStorage::NDDisk::TReadResult& pb)
             : PayloadId(pb.HasPayloadId() ? std::make_optional(pb.GetPayloadId()) : std::nullopt)
         {}
 
-        void Serialize(NKikimrBlobStorage::TDDiskReadResult *pb) const {
+        void Serialize(NKikimrBlobStorage::NDDisk::TReadResult *pb) const {
             if (PayloadId) {
                 pb->SetPayloadId(*PayloadId);
             }
@@ -140,20 +152,39 @@ namespace NKikimr::NDDisk {
     };
 
 #define DECLARE_DDISK_EVENT(NAME) \
-    struct TEvDDisk##NAME : TEventPB<TEvDDisk##NAME, NKikimrBlobStorage::TEvDDisk##NAME, TEv::EvDDisk##NAME>
+    struct TEv##NAME : TEventPB<TEv##NAME, NKikimrBlobStorage::NDDisk::TEv##NAME, TEv::Ev##NAME>
+
+    struct TEvConnect;
+    struct TEvConnectResult;
+    struct TEvDisconnect;
+    struct TEvDisconnectResult;
+    struct TEvWrite;
+    struct TEvWriteResult;
+    struct TEvRead;
+    struct TEvReadResult;
+    struct TEvWritePersistentBuffer;
+    struct TEvWritePersistentBufferResult;
+    struct TEvReadPersistentBuffer;
+    struct TEvReadPersistentBufferResult;
+    struct TEvFlushPersistentBuffer;
+    struct TEvFlushPersistentBufferResult;
+    struct TEvListPersistentBuffer;
+    struct TEvListPersistentBufferResult;
 
     DECLARE_DDISK_EVENT(Connect) {
-        TEvDDiskConnect() = default;
+        using TResult = TEvConnectResult;
 
-        TEvDDiskConnect(const TQueryCredentials& creds) {
+        TEvConnect() = default;
+
+        TEvConnect(const TQueryCredentials& creds) {
             creds.Serialize(Record.MutableCredentials());
         }
     };
 
     DECLARE_DDISK_EVENT(ConnectResult) {
-        TEvDDiskConnectResult() = default;
+        TEvConnectResult() = default;
 
-        TEvDDiskConnectResult(NKikimrBlobStorage::TDDiskReplyStatus::E status,
+        TEvConnectResult(NKikimrBlobStorage::NDDisk::TReplyStatus::E status,
                 const std::optional<TString>& errorReason = std::nullopt,
                 std::optional<ui64> ddiskInstanceGuid = std::nullopt) {
             Record.SetStatus(status);
@@ -167,15 +198,27 @@ namespace NKikimr::NDDisk {
     };
 
     DECLARE_DDISK_EVENT(Disconnect) {
+        using TResult = TEvDisconnectResult;
     };
 
     DECLARE_DDISK_EVENT(DisconnectResult) {
+        TEvDisconnectResult() = default;
+
+        TEvDisconnectResult(NKikimrBlobStorage::NDDisk::TReplyStatus::E status,
+                const std::optional<TString>& errorReason = std::nullopt) {
+            Record.SetStatus(status);
+            if (errorReason) {
+                Record.SetErrorReason(*errorReason);
+            }
+        }
     };
 
     DECLARE_DDISK_EVENT(Write) {
-        TEvDDiskWrite() = default;
+        using TResult = TEvWriteResult;
 
-        TEvDDiskWrite(const TQueryCredentials& creds, const TBlockSelector& selector, const TWriteInstruction& instruction) {
+        TEvWrite() = default;
+
+        TEvWrite(const TQueryCredentials& creds, const TBlockSelector& selector, const TWriteInstruction& instruction) {
             creds.Serialize(Record.MutableCredentials());
             selector.Serialize(Record.MutableSelector());
             instruction.Serialize(Record.MutableInstruction());
@@ -183,9 +226,9 @@ namespace NKikimr::NDDisk {
     };
 
     DECLARE_DDISK_EVENT(WriteResult) {
-        TEvDDiskWriteResult() = default;
+        TEvWriteResult() = default;
 
-        TEvDDiskWriteResult(NKikimrBlobStorage::TDDiskReplyStatus::E status,
+        TEvWriteResult(NKikimrBlobStorage::NDDisk::TReplyStatus::E status,
                 const std::optional<TString>& errorReason = std::nullopt) {
             Record.SetStatus(status);
             if (errorReason) {
@@ -195,9 +238,11 @@ namespace NKikimr::NDDisk {
     };
 
     DECLARE_DDISK_EVENT(Read) {
-        TEvDDiskRead() = default;
+        using TResult = TEvReadResult;
 
-        TEvDDiskRead(const TQueryCredentials& creds, const TBlockSelector& selector, const TReadInstruction& instruction) {
+        TEvRead() = default;
+
+        TEvRead(const TQueryCredentials& creds, const TBlockSelector& selector, const TReadInstruction& instruction) {
             creds.Serialize(Record.MutableCredentials());
             selector.Serialize(Record.MutableSelector());
             instruction.Serialize(Record.MutableInstruction());
@@ -205,9 +250,9 @@ namespace NKikimr::NDDisk {
     };
 
     DECLARE_DDISK_EVENT(ReadResult) {
-        TEvDDiskReadResult() = default;
+        TEvReadResult() = default;
 
-        TEvDDiskReadResult(NKikimrBlobStorage::TDDiskReplyStatus::E status,
+        TEvReadResult(NKikimrBlobStorage::NDDisk::TReplyStatus::E status,
                 const std::optional<TString>& errorReason = std::nullopt,
                 TRope data = {}) {
             Record.SetStatus(status);
@@ -221,27 +266,116 @@ namespace NKikimr::NDDisk {
     };
 
     DECLARE_DDISK_EVENT(WritePersistentBuffer) {
+        using TResult = TEvWritePersistentBufferResult;
+
+        TEvWritePersistentBuffer() = default;
+
+        TEvWritePersistentBuffer(const TQueryCredentials& creds, const TBlockSelector& selector, ui64 lsn,
+                const TWriteInstruction& instruction) {
+            creds.Serialize(Record.MutableCredentials());
+            selector.Serialize(Record.MutableSelector());
+            Record.SetLsn(lsn);
+            instruction.Serialize(Record.MutableInstruction());
+        }
     };
 
     DECLARE_DDISK_EVENT(WritePersistentBufferResult) {
+        TEvWritePersistentBufferResult() = default;
+
+        TEvWritePersistentBufferResult(NKikimrBlobStorage::NDDisk::TReplyStatus::E status,
+                const std::optional<TString>& errorReason = std::nullopt) {
+            Record.SetStatus(status);
+            if (errorReason) {
+                Record.SetErrorReason(*errorReason);
+            }
+        }
     };
 
     DECLARE_DDISK_EVENT(ReadPersistentBuffer) {
+        using TResult = TEvReadPersistentBufferResult;
+
+        TEvReadPersistentBuffer() = default;
+
+        TEvReadPersistentBuffer(const TQueryCredentials& creds, const TBlockSelector& selector, ui64 lsn,
+                const TReadInstruction& instruction) {
+            creds.Serialize(Record.MutableCredentials());
+            selector.Serialize(Record.MutableSelector());
+            Record.SetLsn(lsn);
+            instruction.Serialize(Record.MutableInstruction());
+        }
     };
 
     DECLARE_DDISK_EVENT(ReadPersistentBufferResult) {
+        TEvReadPersistentBufferResult() = default;
+
+        TEvReadPersistentBufferResult(NKikimrBlobStorage::NDDisk::TReplyStatus::E status,
+                const std::optional<TString>& errorReason = std::nullopt,
+                TRope data = {}) {
+            Record.SetStatus(status);
+            if (errorReason) {
+                Record.SetErrorReason(*errorReason);
+            }
+            if (data) {
+                TReadResult(AddPayload(std::move(data))).Serialize(Record.MutableReadResult());
+            }
+        }
     };
 
     DECLARE_DDISK_EVENT(FlushPersistentBuffer) {
+        using TResult = TEvFlushPersistentBufferResult;
+
+        TEvFlushPersistentBuffer() = default;
+
+        TEvFlushPersistentBuffer(const TQueryCredentials& creds, const TBlockSelector& selector, ui64 lsn,
+                std::optional<std::tuple<ui32, ui32, ui32>> ddiskId, std::optional<ui64> ddiskInstanceGuid) {
+            creds.Serialize(Record.MutableCredentials());
+            selector.Serialize(Record.MutableSelector());
+            Record.SetLsn(lsn);
+            if (ddiskId) {
+                const auto& [nodeId, pdiskId, ddiskSlotId] = *ddiskId;
+                auto *m = Record.MutableDDiskId();
+                m->SetNodeId(nodeId);
+                m->SetPDiskId(pdiskId);
+                m->SetDDiskSlotId(ddiskSlotId);
+            }
+            if (ddiskInstanceGuid) {
+                Record.SetDDiskInstanceGuid(*ddiskInstanceGuid);
+            }
+        }
     };
 
     DECLARE_DDISK_EVENT(FlushPersistentBufferResult) {
+        TEvFlushPersistentBufferResult() = default;
+
+        TEvFlushPersistentBufferResult(NKikimrBlobStorage::NDDisk::TReplyStatus::E status,
+                const std::optional<TString>& errorReason = std::nullopt) {
+            Record.SetStatus(status);
+            if (errorReason) {
+                Record.SetErrorReason(*errorReason);
+            }
+        }
     };
 
     DECLARE_DDISK_EVENT(ListPersistentBuffer) {
+        using TResult = TEvListPersistentBufferResult;
+
+        TEvListPersistentBuffer() = default;
+
+        TEvListPersistentBuffer(const TQueryCredentials& creds) {
+            creds.Serialize(Record.MutableCredentials());
+        }
     };
 
     DECLARE_DDISK_EVENT(ListPersistentBufferResult) {
+        TEvListPersistentBufferResult() = default;
+
+        TEvListPersistentBufferResult(NKikimrBlobStorage::NDDisk::TReplyStatus::E status,
+                const std::optional<TString>& errorReason = std::nullopt) {
+            Record.SetStatus(status);
+            if (errorReason) {
+                Record.SetErrorReason(*errorReason);
+            }
+        }
     };
 
     IActor *CreateDDiskActor(TVDiskConfig::TBaseInfo&& baseInfo, TIntrusivePtr<TBlobStorageGroupInfo> info,

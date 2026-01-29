@@ -17,6 +17,7 @@
 #include <ydb/library/query_actor/query_actor.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/table_creator/table_creator.h>
+#include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
 #include <ydb/public/api/protos/ydb_operation.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/params/params.h>
@@ -24,6 +25,8 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/operation_id/operation_id.h>
 
 #include <yql/essentials/public/issue/yql_issue_message.h>
+
+#include <contrib/libs/fmt/include/fmt/format.h>
 
 #include <google/protobuf/util/time_util.h>
 
@@ -226,7 +229,8 @@ private:
                 Col("plan_compressed", NScheme::NTypeIds::String),
                 Col("plan_compression_method", NScheme::NTypeIds::Text),
                 Col("meta", NScheme::NTypeIds::JsonDocument),
-                Col("parameters", NScheme::NTypeIds::String), // TODO: store aparameters separately to support bigger storage.
+                Col("streaming_disposition", NScheme::NTypeIds::Json),
+                Col("parameters", NScheme::NTypeIds::String), // TODO: store parameters separately to support bigger storage.
                 Col("result_set_metas", NScheme::NTypeIds::JsonDocument),
                 Col("stats", NScheme::NTypeIds::JsonDocument),
                 Col("expire_at", NScheme::NTypeIds::Timestamp), // Will be deleted from database after this deadline.
@@ -348,7 +352,7 @@ public:
         const NKikimrKqp::TEvQueryRequest& req, const NKikimrKqp::TScriptExecutionOperationMeta& meta,
         TDuration maxRunTime, const NKikimrKqp::TScriptExecutionRetryState& retryState,
         const std::optional<NKikimrKqp::TQueryPhysicalGraph>& physicalGraph, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
-        i64 generation)
+        std::shared_ptr<NYql::NPq::NProto::StreamingDisposition> streamingDisposition, i64 generation)
         : TQueryBase(__func__, {.Database = req.GetRequest().GetDatabase(), .ExecutionId = executionId})
         , ExecutionId(executionId)
         , RunScriptActorId(runScriptActorId)
@@ -357,6 +361,7 @@ public:
         , MaxRunTime(Max(maxRunTime, TDuration::Days(1)))
         , RetryState(retryState)
         , PhysicalGraph(physicalGraph)
+        , StreamingDisposition(std::move(streamingDisposition))
         , Generation(generation)
         , Compressor(queryServiceConfig.GetQueryArtifactsCompressionMethod(), queryServiceConfig.GetQueryArtifactsCompressionMinSize())
     {}
@@ -372,6 +377,7 @@ public:
             DECLARE $query_text AS Text;
             DECLARE $syntax AS Int32;
             DECLARE $meta AS JsonDocument;
+            DECLARE $streaming_disposition AS Optional<Json>;
             DECLARE $lease_duration AS Interval;
             DECLARE $lease_state AS Int32;
             DECLARE $execution_meta_ttl AS Interval;
@@ -385,12 +391,12 @@ public:
 
             UPSERT INTO `.metadata/script_executions` (
                 database, execution_id, run_script_actor_id, execution_status, execution_mode, start_ts,
-                query_text, syntax, meta, expire_at, retry_state,
+                query_text, syntax, meta, streaming_disposition, expire_at, retry_state,
                 user_token, user_group_sids, parameters,
                 graph_compressed, graph_compression_method, lease_generation
             ) VALUES (
                 $database, $execution_id, $run_script_actor_id, $execution_status, $execution_mode, CurrentUtcTimestamp(),
-                $query_text, $syntax, $meta, CurrentUtcTimestamp() + $execution_meta_ttl, $retry_state,
+                $query_text, $syntax, $meta, $streaming_disposition, CurrentUtcTimestamp() + $execution_meta_ttl, $retry_state,
                 $user_sid, $user_group_sids, $parameters,
                 $graph_compressed, $graph_compression_method, $lease_generation
             );
@@ -443,6 +449,9 @@ public:
                 .Build()
             .AddParam("$meta")
                 .JsonDocument(SerializeBinaryProto(Meta))
+                .Build()
+            .AddParam("$streaming_disposition")
+                .OptionalJson(StreamingDisposition ? std::optional<std::string>(SerializeBinaryProto(*StreamingDisposition)) : std::nullopt)
                 .Build()
             .AddParam("$lease_duration")
                 .Interval(static_cast<i64>(GetDuration(Meta.GetLeaseDuration()).MicroSeconds()))
@@ -525,6 +534,7 @@ private:
     const TDuration MaxRunTime;
     const NKikimrKqp::TScriptExecutionRetryState RetryState;
     const std::optional<NKikimrKqp::TQueryPhysicalGraph> PhysicalGraph;
+    const std::shared_ptr<NYql::NPq::NProto::StreamingDisposition> StreamingDisposition;
     const i64 Generation = 0;
     const TCompressor Compressor;
 };
@@ -574,9 +584,15 @@ public:
             .CheckpointId = ev.CheckpointId,
             .StreamingQueryPath = ev.StreamingQueryPath,
             .CustomerSuppliedId = ev.CustomerSuppliedId,
+            .StreamingDisposition = ev.StreamingDisposition,
         }, QueryServiceConfig));
 
-        const auto& creatorId = Register(new TCreateScriptOperationQuery(ExecutionId, RunScriptActorId, ev.Record, meta, MaxRunTime, GetRetryState(), ev.QueryPhysicalGraph, QueryServiceConfig, ev.Generation));
+        auto disposition = ev.StreamingDisposition;
+        if (ev.QueryPhysicalGraph && ev.QueryPhysicalGraph->GetZeroCheckpointSaved()) {
+            disposition = nullptr; // Do not save disposition if state already saved
+        }
+
+        const auto& creatorId = Register(new TCreateScriptOperationQuery(ExecutionId, RunScriptActorId, ev.Record, meta, MaxRunTime, GetRetryState(), ev.QueryPhysicalGraph, QueryServiceConfig, std::move(disposition), ev.Generation));
         KQP_PROXY_LOG_D("Bootstrap. Start TCreateScriptOperationQuery " << creatorId << ", RunScriptActorId: " << RunScriptActorId);
     }
 
@@ -900,7 +916,8 @@ public:
                 user_token,
                 user_group_sids,
                 graph_compressed,
-                graph_compression_method
+                graph_compression_method,
+                streaming_disposition
             FROM `.metadata/script_executions`
             WHERE database = $database AND execution_id = $execution_id AND
                   (expire_at > CurrentUtcTimestamp() OR expire_at IS NULL);
@@ -975,6 +992,7 @@ public:
 
         NKikimrKqp::TScriptExecutionOperationMeta meta;
         std::optional<NKikimrKqp::TQueryPhysicalGraph> physicalGraph;
+        std::shared_ptr<NYql::NPq::NProto::StreamingDisposition> streamingDisposition;
 
         {   // Execution info
             NYdb::TResultSetParser result(ResultSets[0]);
@@ -995,11 +1013,11 @@ public:
                 return;
             }
 
-            if (const auto issuesSerialized = result.ColumnParser("issues").GetOptionalJsonDocument()) {
+            if (const auto& issuesSerialized = result.ColumnParser("issues").GetOptionalJsonDocument()) {
                 TransientIssues.AddIssues(DeserializeIssues(*issuesSerialized));
             }
 
-            if (const auto transientIssuesSerialized = result.ColumnParser("transient_issues").GetOptionalJsonDocument()) {
+            if (const auto& transientIssuesSerialized = result.ColumnParser("transient_issues").GetOptionalJsonDocument()) {
                 const auto previousIssues = DeserializeIssues(*transientIssuesSerialized);
 
                 TransientIssues.Reserve(TransientIssues.Size() + previousIssues.Size());
@@ -1013,7 +1031,7 @@ public:
             }
 
             TVector<NACLib::TSID> userGroupSids;
-            if (const auto serializedUserGroupSids = result.ColumnParser("user_group_sids").GetOptionalJsonDocument()) {
+            if (const auto& serializedUserGroupSids = result.ColumnParser("user_group_sids").GetOptionalJsonDocument()) {
                 if (!GetUserGroupSids(*serializedUserGroupSids, userGroupSids)) {
                     Finish(Ydb::StatusIds::INTERNAL_ERROR, "User group sids are corrupted");
                     return;
@@ -1024,7 +1042,7 @@ public:
                 queryRequest.SetUserToken(NACLib::TUserToken(*userSID, userGroupSids).SerializeAsString());
             }
 
-            if (const auto serializedParameters = result.ColumnParser("parameters").GetOptionalString()) {
+            if (const auto& serializedParameters = result.ColumnParser("parameters").GetOptionalString()) {
                 NJson::TJsonValue value;
                 if (!NJson::ReadJsonTree(*serializedParameters, &value) || value.GetType() != NJson::JSON_MAP) {
                     Finish(Ydb::StatusIds::INTERNAL_ERROR, "Parameters are corrupted");
@@ -1037,7 +1055,7 @@ public:
                 }
             }
 
-            if (const std::optional<TString> graphCompressed = result.ColumnParser("graph_compressed").GetOptionalString()) {
+            if (const std::optional<TString>& graphCompressed = result.ColumnParser("graph_compressed").GetOptionalString()) {
                 const std::optional<TString> compressionMethod = result.ColumnParser("graph_compression_method").GetOptionalUtf8();
                 if (!compressionMethod) {
                     Finish(Ydb::StatusIds::INTERNAL_ERROR, "Graph compression method is not found");
@@ -1053,7 +1071,18 @@ public:
                 }
             }
 
-            const std::optional<TString> queryText = result.ColumnParser("query_text").GetOptionalUtf8();
+            if (const auto& serializedStreamingDisposition = result.ColumnParser("streaming_disposition").GetOptionalJson()) {
+                NJson::TJsonValue serializedStreamingDispositionJson;
+                if (!NJson::ReadJsonTree(*serializedStreamingDisposition, &serializedStreamingDispositionJson)) {
+                    Finish(Ydb::StatusIds::INTERNAL_ERROR, "Streaming disposition is corrupted");
+                    return;
+                }
+
+                streamingDisposition = std::make_shared<NYql::NPq::NProto::StreamingDisposition>();
+                DeserializeBinaryProto(serializedStreamingDispositionJson, *streamingDisposition);
+            }
+
+            const std::optional<TString>& queryText = result.ColumnParser("query_text").GetOptionalUtf8();
             if (!queryText) {
                 Finish(Ydb::StatusIds::INTERNAL_ERROR, "Query text is not found");
                 return;
@@ -1107,6 +1136,7 @@ public:
             .CheckpointId = meta.GetCheckpointId(),
             .StreamingQueryPath = meta.GetStreamingQueryPath(),
             .CustomerSuppliedId = meta.GetCustomerSuppliedId(),
+            .StreamingDisposition = streamingDisposition,
         }, QueryServiceConfig));
 
         KQP_PROXY_LOG_D("Restart with RunScriptActorId: " << RunScriptActorId << ", has PhysicalGraph: " << hasPhysicalGraph);
@@ -4881,7 +4911,15 @@ public:
     {}
 
     void OnRunQuery() override {
-        TString sql = R"(
+        using namespace fmt::literals;
+
+        TString streamingDispositionUpdate;
+        if (PhysicalGraph.GetZeroCheckpointSaved()) {
+            // Reset streaming disposition after state save
+            streamingDispositionUpdate = "streaming_disposition = NULL,";
+        }
+
+        TString sql = fmt::format(R"(
             -- TSaveScriptExecutionPhysicalGraphActor::OnRunQuery
             DECLARE $execution_id AS Text;
             DECLARE $database AS Text;
@@ -4891,12 +4929,13 @@ public:
 
             UPDATE `.metadata/script_executions`
             SET
+                {streaming_disposition}
                 graph_compressed = $graph_compressed,
                 graph_compression_method = $graph_compression_method
             WHERE database = $database
               AND execution_id = $execution_id
               AND (lease_generation IS NULL OR lease_generation = $lease_generation);
-        )";
+        )", "streaming_disposition"_a = streamingDispositionUpdate);
 
         const auto [graphCompressionMethod, graphCompressed] = Compressor.Compress(PhysicalGraph.SerializeAsString());
 
@@ -5101,7 +5140,7 @@ IActor* CreateGetScriptExecutionPhysicalGraphActor(const TActorId& replyActorId,
 namespace NPrivate {
 
 IActor* CreateCreateScriptOperationQueryActor(const TString& executionId, const TActorId& runScriptActorId, const NKikimrKqp::TEvQueryRequest& record, const NKikimrKqp::TScriptExecutionOperationMeta& meta) {
-    return new TCreateScriptOperationQuery(executionId, runScriptActorId, record, meta, SCRIPT_TIMEOUT_LIMIT, {}, std::nullopt, {}, 1);
+    return new TCreateScriptOperationQuery(executionId, runScriptActorId, record, meta, SCRIPT_TIMEOUT_LIMIT, {}, std::nullopt, {}, nullptr, 1);
 }
 
 IActor* CreateCheckLeaseStatusActor(const TActorId& replyActorId, const TString& database, const TString& executionId, ui64 cookie) {

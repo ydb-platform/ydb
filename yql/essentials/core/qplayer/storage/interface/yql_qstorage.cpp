@@ -5,7 +5,7 @@
 namespace NYql {
 class TQWriterDecorator: public IQWriter {
 public:
-    TQWriterDecorator(IQWriterPtr&& underlying)
+    explicit TQWriterDecorator(IQWriterPtr&& underlying)
         : Underlying_(std::move(underlying))
     {
     }

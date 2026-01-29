@@ -465,7 +465,7 @@ protected:
     typedef TSet<ui32> TSetType;
 
 protected:
-    TTranslation(TContext& ctx);
+    explicit TTranslation(TContext& ctx);
 
 public:
     TContext& Context();

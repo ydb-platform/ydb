@@ -83,9 +83,7 @@ namespace NKikimr::NBsController {
             void ApplyPDiskDiff(const TPDiskId &pdiskId, const TPDiskInfo &prev, const TPDiskInfo &cur) {
                 if (prev.Mood != cur.Mood ||
                         prev.ExpectedSlotCount != cur.ExpectedSlotCount ||
-                        prev.SlotSizeInUnits != cur.SlotSizeInUnits ||
-                        prev.InferPDiskSlotCountFromUnitSize != cur.InferPDiskSlotCountFromUnitSize ||
-                        prev.InferPDiskSlotCountMax != cur.InferPDiskSlotCountMax) {
+                        prev.SlotSizeInUnits != cur.SlotSizeInUnits) {
                     CreatePDiskEntry(pdiskId, cur);
                 }
             }
@@ -118,8 +116,6 @@ namespace NKikimr::NBsController {
                 pdisk->SetPDiskCategory(pdiskInfo.Kind.GetRaw());
                 pdisk->SetExpectedSerial(pdiskInfo.ExpectedSerial);
                 pdisk->SetManagementStage(Self->SerialManagementStage);
-                pdisk->SetInferPDiskSlotCountFromUnitSize(pdiskInfo.InferPDiskSlotCountFromUnitSize);
-                pdisk->SetInferPDiskSlotCountMax(pdiskInfo.InferPDiskSlotCountMax);
                 if (pdiskInfo.PDiskConfig && !pdisk->MutablePDiskConfig()->ParseFromString(pdiskInfo.PDiskConfig)) {
                     // TODO(alexvru): report this somehow
                 }
@@ -983,8 +979,6 @@ namespace NKikimr::NBsController {
                 drive.SetSharedWithOs(value.SharedWithOs);
                 drive.SetReadCentric(value.ReadCentric);
                 drive.SetKind(value.Kind);
-                drive.SetInferPDiskSlotCountFromUnitSize(value.InferPDiskSlotCountFromUnitSize);
-                drive.SetInferPDiskSlotCountMax(value.InferPDiskSlotCountMax);
 
                 if (const auto& config = value.PDiskConfig) {
                     NKikimrBlobStorage::TPDiskConfig& pb = *drive.MutablePDiskConfig();
@@ -1123,12 +1117,6 @@ namespace NKikimr::NBsController {
             pb->SetLastSeenSerial(pdisk.LastSeenSerial);
             pb->SetReadOnly(pdisk.Mood == TPDiskMood::ReadOnly);
             pb->SetMaintenanceStatus(pdisk.MaintenanceStatus);
-            if (pdisk.InferPDiskSlotCountFromUnitSize) {
-                pb->SetInferPDiskSlotCountFromUnitSize(pdisk.InferPDiskSlotCountFromUnitSize);
-            }
-            if (pdisk.InferPDiskSlotCountMax) {
-                pb->SetInferPDiskSlotCountMax(pdisk.InferPDiskSlotCountMax);
-            }
         }
 
         void TBlobStorageController::Serialize(NKikimrBlobStorage::TVSlotId *pb, TVSlotId id) {

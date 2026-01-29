@@ -32,7 +32,7 @@ private:
     TVector<TString>* Buf_;
 
 public:
-    TStringMessageConsumerImpl(TVector<TString>* buf)
+    explicit TStringMessageConsumerImpl(TVector<TString>* buf)
         : Buf_(buf)
     {
     }

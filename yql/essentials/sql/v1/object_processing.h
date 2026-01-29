@@ -37,6 +37,8 @@ public:
     TString ServiceId;
     TDeferredAtom Cluster;
 
+    TObjectOperatorContext(const TObjectOperatorContext& baseItem) = default;
+
     explicit TObjectOperatorContext(TScopedStatePtr scoped);
 };
 

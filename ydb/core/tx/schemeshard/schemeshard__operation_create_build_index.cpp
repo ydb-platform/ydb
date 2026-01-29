@@ -71,7 +71,8 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
         case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree: {
             break;
         }
-        case NKikimrSchemeOp::EIndexTypeGlobalFulltext: {
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance: {
             if (!context.SS->EnableFulltextIndex) {
                 return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Fulltext index support is disabled")};
             }
@@ -81,15 +82,14 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
             return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, InvalidIndexType(indexDesc.GetType()))};
     }
 
-    ui32 indexTableCount = 0, sequenceCount = 0, indexTableShards = 0;
-    TTableInfo::GetIndexObjectCount(indexDesc, indexTableCount, sequenceCount, indexTableShards);
+    auto counts = GetIndexObjectCounts(indexDesc);
 
     const auto table = TPath::Resolve(op.GetTable(), context.SS);
     auto tableInfo = context.SS->Tables.at(table.Base()->PathId);
     auto domainInfo = table.DomainInfo();
 
-    if (sequenceCount > 0 && domainInfo->GetSequenceShards().empty()) {
-        ++indexTableShards;
+    if (counts.SequenceCount > 0 && domainInfo->GetSequenceShards().empty()) {
+        ++counts.IndexTableShards;
     }
 
     const auto index = table.Child(indexDesc.GetName());
@@ -111,12 +111,13 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
 
         checks
             .IsValidLeafName(context.UserToken.Get())
-            .PathsLimit(1 + indexTableCount + sequenceCount)
+            .PathsLimit(1 + counts.IndexTableCount + counts.SequenceCount)
             .DirChildrenLimit();
 
         if (!tx.GetInternal()) {
             checks
-                .ShardsLimit(indexTableShards);
+                .ShardsLimit(counts.IndexTableShards)
+                .PathShardsLimit(counts.ShardsPerPath);
         }
 
         if (!checks) {
@@ -216,29 +217,32 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
             }
             break;
         }
-        case NKikimrSchemeOp::EIndexTypeGlobalFulltext: {
-            bool withRelevance = indexDesc.GetFulltextIndexDescription().GetSettings()
-                .layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE;
-            NKikimrSchemeOp::TTableDescription indexTableDesc, docsTableDesc, dictTableDesc, statsTableDesc;
-            // TODO After IndexImplTableDescriptions are persisted, this should be replaced with Y_ABORT_UNLESS
-            if (indexDesc.IndexImplTableDescriptionsSize() == (withRelevance ? 4 : 1)) {
-                // Descriptions provided by user to override partition policy
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain: {
+            NKikimrSchemeOp::TTableDescription indexTableDesc;
+            if (indexDesc.IndexImplTableDescriptionsSize() == 1) {
                 indexTableDesc = indexDesc.GetIndexImplTableDescriptions(0);
-                if (withRelevance) {
-                    docsTableDesc = indexDesc.GetIndexImplTableDescriptions(1);
-                    dictTableDesc = indexDesc.GetIndexImplTableDescriptions(2);
-                    statsTableDesc = indexDesc.GetIndexImplTableDescriptions(3);
-                }
             }
             const THashSet<TString> indexDataColumns{indexDesc.GetDataColumnNames().begin(), indexDesc.GetDataColumnNames().end()};
-            auto implTableDesc = CalcFulltextImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns, indexTableDesc, indexDesc.GetFulltextIndexDescription(), withRelevance);
+            auto implTableDesc = CalcFulltextImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns, indexTableDesc, indexDesc.GetFulltextIndexDescription(), /*withRelevance=*/false);
             implTableDesc.MutablePartitionConfig()->MutableCompactionPolicy()->SetKeepEraseMarkers(true);
             result.push_back(createImplTable(std::move(implTableDesc)));
-            if (withRelevance) {
-                result.push_back(createImplTable(CalcFulltextDocsImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns, docsTableDesc)));
-                result.push_back(createImplTable(CalcFulltextDictImplTableDesc(tableInfo, tableInfo->PartitionConfig(), dictTableDesc, indexDesc.GetFulltextIndexDescription())));
-                result.push_back(createImplTable(CalcFulltextStatsImplTableDesc(tableInfo, tableInfo->PartitionConfig(), statsTableDesc)));
+            break;
+        }
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance: {
+            NKikimrSchemeOp::TTableDescription indexTableDesc, docsTableDesc, dictTableDesc, statsTableDesc;
+            if (indexDesc.IndexImplTableDescriptionsSize() == 4) {
+                indexTableDesc = indexDesc.GetIndexImplTableDescriptions(0);
+                docsTableDesc = indexDesc.GetIndexImplTableDescriptions(1);
+                dictTableDesc = indexDesc.GetIndexImplTableDescriptions(2);
+                statsTableDesc = indexDesc.GetIndexImplTableDescriptions(3);
             }
+            const THashSet<TString> indexDataColumns{indexDesc.GetDataColumnNames().begin(), indexDesc.GetDataColumnNames().end()};
+            auto implTableDesc = CalcFulltextImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns, indexTableDesc, indexDesc.GetFulltextIndexDescription(), /*withRelevance=*/true);
+            implTableDesc.MutablePartitionConfig()->MutableCompactionPolicy()->SetKeepEraseMarkers(true);
+            result.push_back(createImplTable(std::move(implTableDesc)));
+            result.push_back(createImplTable(CalcFulltextDocsImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns, docsTableDesc)));
+            result.push_back(createImplTable(CalcFulltextDictImplTableDesc(tableInfo, tableInfo->PartitionConfig(), dictTableDesc, indexDesc.GetFulltextIndexDescription())));
+            result.push_back(createImplTable(CalcFulltextStatsImplTableDesc(tableInfo, tableInfo->PartitionConfig(), statsTableDesc)));
             break;
         }
         default:

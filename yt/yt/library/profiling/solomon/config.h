@@ -44,13 +44,18 @@ struct TSolomonExporterConfig
     bool RenameConvertedCounters;
     bool ConvertCountersToDeltaGauge;
     bool EnableHistogramCompat;
+    bool SplitRateHistogramIntoGauges;
     bool ReportTimestampsForRateMetrics;
 
     bool ExportSummary;
+    bool ExportSummaryAsSum;
     bool ExportSummaryAsMax;
+    bool ExportSummaryAsMin;
     bool ExportSummaryAsAvg;
 
     bool MarkAggregates;
+    // Enable support of all available solomon aggregation methods.
+    bool EnableSolomonAggregates;
 
     bool StripSensorsNamePrefix;
 

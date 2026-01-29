@@ -29,9 +29,9 @@ TExprNode::TPtr PlanConverter::RemoveSubplans(TExprNode::TPtr node) {
             auto subplan = ExprNodeToOperator(TKqpSublinkBase(link).Subquery().Ptr());
             TSubplanEntry entry;
             if (TKqpExprSublink::Match(link.Get())) {
-                entry = TSubplanEntry(subplan, {}, ESubplanType::EXPR);
+                entry = TSubplanEntry(subplan, {}, ESubplanType::EXPR, sublinkVar);
             } else if (TKqpExistsSublink::Match(link.Get())) {
-                entry = TSubplanEntry(subplan, {}, ESubplanType::EXISTS);
+                entry = TSubplanEntry(subplan, {}, ESubplanType::EXISTS, sublinkVar);
             } else /* In sublink */ {
                 auto tupleType = link->Child(TKqpInSublink::idx_InTuple);
                 Y_ENSURE(tupleType->IsCallable("StructType"));
@@ -40,7 +40,7 @@ TExprNode::TPtr PlanConverter::RemoveSubplans(TExprNode::TPtr node) {
                 //FIXME: Currently only a single element tuple in IN clause is supported, so we hardcode this case
                 auto tupleElement = tupleType->Child(0)->Child(0)->Content();
                 auto tupleElementIU = TInfoUnit(TString(tupleElement));
-                entry = TSubplanEntry(subplan, {TInfoUnit(TString(tupleElement))}, ESubplanType::IN_SUBPLAN);
+                entry = TSubplanEntry(subplan, {TInfoUnit(TString(tupleElement))}, ESubplanType::IN_SUBPLAN, sublinkVar);
             }
             PlanProps.Subplans.Add(sublinkVar, entry);
         }
@@ -84,6 +84,8 @@ std::shared_ptr<IOperator> PlanConverter::ExprNodeToOperator(TExprNode::TPtr nod
         result = std::make_shared<TOpRead>(node);
     } else if (NYql::NNodes::TKqpOpMap::Match(node.Get())) {
         result = ConvertTKqpOpMap(node);
+    } else if (NYql::NNodes::TKqpInfuseDependents::Match(node.Get())) {
+        result = ConvertTKqpInfuseDependents(node);
     } else if (NYql::NNodes::TKqpOpFilter::Match(node.Get())) {
         result = ConvertTKqpOpFilter(node);
     } else if (NYql::NNodes::TKqpOpJoin::Match(node.Get())) {
@@ -170,6 +172,25 @@ std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpMap(TExprNode::TPtr node)
     }
     return std::make_shared<TOpMap>(input, node->Pos(), mapElements, project, ordered);
 }
+
+std::shared_ptr<IOperator> PlanConverter::ConvertTKqpInfuseDependents(TExprNode::TPtr node) {
+    auto opInfuseDeps = TKqpInfuseDependents(node);
+    auto input = ExprNodeToOperator(opInfuseDeps.Input().Ptr());
+    TVector<TInfoUnit> columns;
+    TVector<const TTypeAnnotationNode*> types;
+
+    for (auto c : opInfuseDeps.Columns()) {
+        columns.push_back(TInfoUnit(c.StringValue()));
+    }
+
+    for (auto typeExpr : opInfuseDeps.Types()) {
+        auto type = typeExpr.Ptr()->GetTypeAnn();
+        types.push_back(type->Cast<TTypeExprType>()->GetType());
+    }
+
+    return std::make_shared<TOpAddDependencies>(input, node->Pos(), columns, types);
+}
+
 
 std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpFilter(TExprNode::TPtr node) {
     auto opFilter = TKqpOpFilter(node);
@@ -258,7 +279,8 @@ std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpAggregate(TExprNode::TPtr
     for (const auto& traits : opAggregate.AggregationTraitsList()) {
         const auto originalColName = TInfoUnit(TString(traits.OriginalColName()));
         const auto aggFuncName = TString(traits.AggregationFunction());
-        TOpAggregationTraits opAggTraits(originalColName, aggFuncName);
+        const auto resultColName = TInfoUnit(TString(traits.ResultColName()));
+        TOpAggregationTraits opAggTraits(originalColName, aggFuncName, resultColName);
         opAggTraitsList.push_back(opAggTraits);
     }
 

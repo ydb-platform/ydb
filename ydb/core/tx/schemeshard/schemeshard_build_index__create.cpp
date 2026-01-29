@@ -122,13 +122,7 @@ public:
                     // Even an cluster admin or the system inself will not be able to force a reserved name for this index.
                     // If that will become an issue at some point, then a real userToken should be passed here.
                     .IsValidLeafName(/*userToken*/ nullptr)
-                    .PathsLimit(2) // index and impl-table
                     .DirChildrenLimit();
-
-                if (!request.GetInternal()) {
-                    checks
-                        .ShardsLimit(1); // impl-table
-                }
 
                 if (!checks) {
                     return Reply(checks.GetStatus(), checks.GetError());
@@ -170,6 +164,27 @@ public:
                                           domainInfo->GetSchemeLimits(),
                                           explain)) {
                 return Reply(Ydb::StatusIds::BAD_REQUEST, explain);
+            }
+
+            {
+                const auto checks = indexPath.Check();
+
+                // Tables are actually created in schemeshard__operation_create_build_index so limits are rechecked there too
+                auto counts = NTableIndex::GetIndexObjectCounts(indexDesc);
+                if (counts.SequenceCount > 0 && domainInfo->GetSequenceShards().empty()) {
+                    ++counts.IndexTableShards;
+                }
+
+                checks.PathsLimit(1 + counts.IndexTableCount + counts.SequenceCount);
+                if (!request.GetInternal()) {
+                    checks
+                        .ShardsLimit(counts.IndexTableShards)
+                        .PathShardsLimit(counts.ShardsPerPath);
+                }
+
+                if (!checks) {
+                    return Reply(checks.GetStatus(), checks.GetError());
+                }
             }
         } else if (settings.has_column_build_operation()) {
             if (!Self->EnableAddColumsWithDefaults) {
@@ -270,15 +285,30 @@ private:
             }
             break;
         }
-        case Ydb::Table::TableIndex::TypeCase::kGlobalFulltextIndex: {
+        case Ydb::Table::TableIndex::TypeCase::kGlobalFulltextPlainIndex: {
             if (!Self->EnableFulltextIndex) {
                 explain = "Fulltext index support is disabled";
                 return false;
             }
             buildInfo.BuildKind = TIndexBuildInfo::EBuildKind::BuildFulltext;
-            buildInfo.IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltext;
+            buildInfo.IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextPlain;
             NKikimrSchemeOp::TFulltextIndexDescription fulltextIndexDescription;
-            *fulltextIndexDescription.MutableSettings() = index.global_fulltext_index().fulltext_settings();
+            *fulltextIndexDescription.MutableSettings() = index.global_fulltext_plain_index().fulltext_settings();
+            if (!NKikimr::NFulltext::ValidateSettings(fulltextIndexDescription.GetSettings(), explain)) {
+                return false;
+            }
+            buildInfo.SpecializedIndexDescription = fulltextIndexDescription;
+            break;
+        }
+        case Ydb::Table::TableIndex::TypeCase::kGlobalFulltextRelevanceIndex: {
+            if (!Self->EnableFulltextIndex) {
+                explain = "Fulltext index support is disabled";
+                return false;
+            }
+            buildInfo.BuildKind = TIndexBuildInfo::EBuildKind::BuildFulltext;
+            buildInfo.IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextRelevance;
+            NKikimrSchemeOp::TFulltextIndexDescription fulltextIndexDescription;
+            *fulltextIndexDescription.MutableSettings() = index.global_fulltext_relevance_index().fulltext_settings();
             if (!NKikimr::NFulltext::ValidateSettings(fulltextIndexDescription.GetSettings(), explain)) {
                 return false;
             }

@@ -786,7 +786,7 @@ public:
         if (input->IsCallable({"MrTableConcat", "MrTableRange",
             "MrTableConcatStrict", "MrTableRangeStrict", "TempTable", "MrFolder",
             "MrTableEach", "MrTableEachStrict", "MrPartitions", "MrPartitionsStrict",
-            "MrPartitionList", "MrPartitionListStrict"})) {
+            "MrPartitionList", "MrPartitionListStrict", "MrWalkFolders"})) {
             input->SetTypeAnn(ctx.MakeType<TUnitExprType>());
             return IGraphTransformer::TStatus::Ok;
         }
@@ -810,7 +810,7 @@ public:
         }
 
         if (input->IsCallable({"FileContent","FilePath","FolderPath", "TableName",
-            "SecureParam"})) {
+            "SecureParam", "TablePath"})) {
             input->SetTypeAnn(ctx.MakeType<TDataExprType>(NUdf::EDataSlot::String));
             return IGraphTransformer::TStatus::Ok;
         }

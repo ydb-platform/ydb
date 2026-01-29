@@ -4,10 +4,10 @@
 
 namespace NKikimr::NDDisk {
 
-    void TDDiskActor::Handle(TEvDDiskConnect::TPtr ev) {
+    void TDDiskActor::Handle(TEvConnect::TPtr ev) {
         const auto& record = ev->Get()->Record;
 
-        STLOG(PRI_DEBUG, BS_DDISK, BSDD00, "TDDiskActor::Handle(TEvDDiskConnect)", (DDiskId, DDiskId),
+        STLOG(PRI_DEBUG, BS_DDISK, BSDD00, "TDDiskActor::Handle(TEvConnect)", (DDiskId, DDiskId),
             (Record, record));
 
         const TQueryCredentials creds(record.GetCredentials());
@@ -17,7 +17,7 @@ namespace NKikimr::NDDisk {
         if (!inserted) {
             if (creds.Generation < connection.Generation) {
                 // this is definitely obsolete tablet trying to reach us, reject
-                SendReply(*ev, std::make_unique<TEvDDiskConnectResult>(NKikimrBlobStorage::TDDiskReplyStatus::BLOCKED));
+                SendReply(*ev, std::make_unique<TEvConnectResult>(NKikimrBlobStorage::NDDisk::TReplyStatus::BLOCKED));
                 return;
             } else if (connection.Generation < creds.Generation) {
                 // drop connection with previous tablet
@@ -29,12 +29,23 @@ namespace NKikimr::NDDisk {
         connection.NodeId = ev->Sender.NodeId();
         connection.InterconnectSessionId = ev->InterconnectSession;
 
-        SendReply(*ev, std::make_unique<TEvDDiskConnectResult>(NKikimrBlobStorage::TDDiskReplyStatus::OK, std::nullopt,
+        SendReply(*ev, std::make_unique<TEvConnectResult>(NKikimrBlobStorage::NDDisk::TReplyStatus::OK, std::nullopt,
             DDiskInstanceGuid));
 
         if (ev->InterconnectSession) {
             // subscribe to session to check for disconnections (if not yet)
         }
+    }
+
+    void TDDiskActor::Handle(TEvDisconnect::TPtr ev) {
+        if (!CheckQuery(*ev, nullptr)) {
+            return;
+        }
+
+        const auto& record = ev->Get()->Record;
+        const TQueryCredentials creds(record.GetCredentials());
+        Connections.erase(creds.TabletId);
+        SendReply(*ev, std::make_unique<TEvDisconnectResult>(NKikimrBlobStorage::NDDisk::TReplyStatus::OK));
     }
 
     bool TDDiskActor::ValidateConnection(const IEventHandle& ev, const TQueryCredentials& creds) const {
@@ -45,12 +56,12 @@ namespace NKikimr::NDDisk {
         const TConnectionInfo& connection = it->second;
         return connection.TabletId == creds.TabletId &&
             connection.Generation == creds.Generation &&
+            creds.DDiskInstanceGuid == DDiskInstanceGuid && (creds.FromPersistentBuffer || (
             connection.NodeId == ev.Sender.NodeId() &&
-            connection.InterconnectSessionId == ev.InterconnectSession &&
-            creds.DDiskInstanceGuid == DDiskInstanceGuid;
+            connection.InterconnectSessionId == ev.InterconnectSession));
     }
 
-    void TDDiskActor::SendReply(const IEventHandle& queryEv, std::unique_ptr<IEventBase> replyEv) {
+    void TDDiskActor::SendReply(const IEventHandle& queryEv, std::unique_ptr<IEventBase> replyEv) const {
         auto h = std::make_unique<IEventHandle>(queryEv.Sender, SelfId(), replyEv.release(), 0, queryEv.Cookie);
         if (queryEv.InterconnectSession) {
             h->Rewrite(TEvInterconnect::EvForward, queryEv.InterconnectSession);

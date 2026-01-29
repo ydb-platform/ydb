@@ -267,7 +267,7 @@ void TKafkaCreateTopicsActor::Bootstrap(const NActors::TActorContext& ctx) {
             Context->UserToken,
             topic.Name.value(),
             Context->DatabasePath,
-            topic.NumPartitions,
+            topic.NumPartitions == -1 ? NKikimr::AppData(ctx)->KafkaProxyConfig.GetTopicCreationDefaultPartitions() : topic.NumPartitions,
             convertedRetentions.Ms,
             convertedRetentions.Bytes,
             cleanupPolicy,

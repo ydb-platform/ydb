@@ -7,6 +7,7 @@
 #include <yql/essentials/minikql/dom/convert.h>
 #include <yql/essentials/public/udf/udf_helpers.h>
 #include <yql/essentials/public/udf/udf_type_printer.h>
+#include <yql/essentials/public/langver/yql_langver.h>
 
 #include <library/cpp/yson_pull/exceptions.h>
 
@@ -1207,6 +1208,465 @@ const TStringRef& TParse<TJson, true>::Name() {
     return Name;
 }
 
+class TIterate: public TBoxedValue {
+    struct TFields {
+        ui32 BeginList;
+        ui32 Item;
+        ui32 EndList;
+        ui32 Value;
+        ui32 BeginMap;
+        ui32 EndMap;
+        ui32 BeginAttributes;
+        ui32 EndAttributes;
+        ui32 Key;
+        ui32 PreValue;
+        ui32 PostValue;
+    };
+
+    class TListIterator: public TManagedBoxedValue {
+        enum class EContainerState {
+            Unknown,
+            Pre,
+            Start,
+            End,
+            Post
+        };
+
+        struct TLevelState {
+            TUnboxedValue Node;
+            EContainerState ContainerState = EContainerState::Unknown;
+            bool IsIteratorFinished = false;
+            TUnboxedValue Value;
+            TUnboxedValue Iterator;
+            TUnboxedValue AttrValue;
+        };
+
+    public:
+        TListIterator(const TUnboxedValue& root, const TFields& fields, const IValueBuilder* valueBuilder)
+            : Fields_(fields)
+            , ValueBuilder_(valueBuilder)
+        {
+            Stack_.push_back(TLevelState{.Node = root});
+        }
+
+        bool Skip() final {
+            TUnboxedValue tmp;
+            return Next(tmp);
+        }
+
+        bool Next(TUnboxedValue& res) final {
+            while (!Stack_.empty()) {
+                auto& currState = Stack_.back();
+                switch (GetNodeType(currState.Node)) {
+                    case ENodeType::List: {
+                        if (currState.ContainerState == EContainerState::Unknown) {
+                            res = ValueBuilder_->NewVariant(Fields_.PreValue, TUnboxedValue(currState.Node));
+                            currState.ContainerState = EContainerState::Pre;
+                            return true;
+                        }
+
+                        if (currState.ContainerState == EContainerState::Pre) {
+                            res = ValueBuilder_->NewVariant(Fields_.BeginList, TUnboxedValuePod::Void());
+                            currState.ContainerState = EContainerState::Start;
+                            return true;
+                        }
+                        if (!currState.IsIteratorFinished && !currState.Iterator) {
+                            if (currState.Node.IsBoxed()) {
+                                // has boxed list
+                                currState.Iterator = currState.Node.GetListIterator();
+                            } else {
+                                currState.IsIteratorFinished = true;
+                            }
+                        }
+
+                        TUnboxedValue value;
+                        if (!currState.IsIteratorFinished && currState.Iterator.Next(value)) {
+                            res = ValueBuilder_->NewVariant(Fields_.Item, TUnboxedValuePod::Void());
+                            Stack_.push_back(TLevelState{.Node = value});
+                            return true;
+                        } else {
+                            currState.IsIteratorFinished = true;
+                        }
+
+                        if (currState.ContainerState == EContainerState::Start) {
+                            res = ValueBuilder_->NewVariant(Fields_.EndList, TUnboxedValuePod::Void());
+                            currState.ContainerState = EContainerState::End;
+                            return true;
+                        }
+
+                        if (currState.ContainerState == EContainerState::End) {
+                            res = ValueBuilder_->NewVariant(Fields_.PostValue, TUnboxedValue(currState.Node));
+                            currState.ContainerState = EContainerState::Post;
+                            return true;
+                        }
+
+                        Stack_.pop_back();
+                        continue;
+                    }
+                    case ENodeType::Dict: {
+                        if (currState.ContainerState == EContainerState::Unknown) {
+                            res = ValueBuilder_->NewVariant(Fields_.PreValue, TUnboxedValue(currState.Node));
+                            currState.ContainerState = EContainerState::Pre;
+                            return true;
+                        }
+
+                        if (currState.ContainerState == EContainerState::Pre) {
+                            res = ValueBuilder_->NewVariant(Fields_.BeginMap, TUnboxedValuePod::Void());
+                            currState.ContainerState = EContainerState::Start;
+                            return true;
+                        }
+                        if (!currState.IsIteratorFinished && !currState.Iterator) {
+                            if (currState.Node.IsBoxed()) {
+                                // has boxed dict
+                                currState.Iterator = currState.Node.GetDictIterator();
+                            } else {
+                                currState.IsIteratorFinished = true;
+                            }
+
+                            currState.Value = TUnboxedValuePod::Invalid();
+                        }
+
+                        if (!currState.Value.IsInvalid()) {
+                            auto value = currState.Value;
+                            currState.Value = TUnboxedValuePod::Invalid();
+                            Stack_.push_back(TLevelState{.Node = value});
+                            continue;
+                        }
+
+                        TUnboxedValue key, value;
+                        if (!currState.IsIteratorFinished && currState.Iterator.NextPair(key, value)) {
+                            currState.Value = value;
+                            res = ValueBuilder_->NewVariant(Fields_.Key, TUnboxedValue(key));
+                            return true;
+                        } else {
+                            currState.IsIteratorFinished = true;
+                        }
+
+                        if (currState.ContainerState == EContainerState::Start) {
+                            res = ValueBuilder_->NewVariant(Fields_.EndMap, TUnboxedValuePod::Void());
+                            currState.ContainerState = EContainerState::End;
+                            return true;
+                        }
+
+                        if (currState.ContainerState == EContainerState::End) {
+                            res = ValueBuilder_->NewVariant(Fields_.PostValue, TUnboxedValue(currState.Node));
+                            currState.ContainerState = EContainerState::Post;
+                            return true;
+                        }
+
+                        Stack_.pop_back();
+                        continue;
+                    }
+                    case ENodeType::Attr: {
+                        if (currState.ContainerState == EContainerState::Unknown) {
+                            res = ValueBuilder_->NewVariant(Fields_.PreValue, TUnboxedValue(currState.Node));
+                            currState.ContainerState = EContainerState::Pre;
+                            return true;
+                        }
+
+                        if (currState.ContainerState == EContainerState::Pre) {
+                            res = ValueBuilder_->NewVariant(Fields_.BeginAttributes, TUnboxedValuePod::Void());
+                            currState.ContainerState = EContainerState::Start;
+                            return true;
+                        }
+                        if (!currState.IsIteratorFinished && !currState.Iterator) {
+                            if (currState.Node.IsBoxed()) {
+                                // has boxed dict
+                                currState.Iterator = currState.Node.GetDictIterator();
+                            } else {
+                                currState.IsIteratorFinished = true;
+                            }
+
+                            currState.Value = TUnboxedValuePod::Invalid();
+                        }
+
+                        if (!currState.Value.IsInvalid()) {
+                            auto value = currState.Value;
+                            currState.Value = TUnboxedValuePod::Invalid();
+                            Stack_.push_back(TLevelState{.Node = value});
+                            continue;
+                        }
+
+                        TUnboxedValue key, value;
+                        if (!currState.IsIteratorFinished && currState.Iterator.NextPair(key, value)) {
+                            currState.Value = value;
+                            res = ValueBuilder_->NewVariant(Fields_.Key, TUnboxedValue(key));
+                            return true;
+                        } else {
+                            currState.IsIteratorFinished = true;
+                        }
+
+                        if (currState.ContainerState == EContainerState::Start) {
+                            res = ValueBuilder_->NewVariant(Fields_.EndAttributes, TUnboxedValuePod::Void());
+                            currState.ContainerState = EContainerState::End;
+                            currState.AttrValue = currState.Node.GetVariantItem();
+                            return true;
+                        }
+
+                        if (!currState.AttrValue.IsInvalid()) {
+                            auto value = currState.AttrValue;
+                            currState.AttrValue = TUnboxedValuePod::Invalid();
+                            Stack_.push_back(TLevelState{.Node = value});
+                            continue;
+                        }
+
+                        if (currState.ContainerState == EContainerState::End) {
+                            res = ValueBuilder_->NewVariant(Fields_.PostValue, TUnboxedValue(currState.Node));
+                            currState.ContainerState = EContainerState::Post;
+                            return true;
+                        }
+
+                        Stack_.pop_back();
+                        continue;
+                    }
+                    case ENodeType::Entity:
+                    case ENodeType::Bool:
+                    case ENodeType::Int64:
+                    case ENodeType::Uint64:
+                    case ENodeType::Double:
+                    case ENodeType::String: {
+                        res = ValueBuilder_->NewVariant(Fields_.Value, TUnboxedValue(currState.Node));
+                        Stack_.pop_back();
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
+    private:
+        const TFields Fields_;
+        const IValueBuilder* const ValueBuilder_;
+        TVector<TLevelState> Stack_;
+    };
+
+    class TListValue: public TManagedBoxedValue {
+    public:
+        TListValue(const TUnboxedValue& root, const TFields& fields, const IValueBuilder* valueBuilder)
+            : Root_(root)
+            , Fields_(fields)
+            , ValueBuilder_(valueBuilder)
+        {
+        }
+
+        bool HasFastListLength() const final {
+            return CacheLength_.Defined();
+        }
+
+        ui64 GetListLength() const final {
+            if (CacheLength_) {
+                return *CacheLength_;
+            }
+
+            CacheLength_ = 0;
+            auto iter = GetListIterator();
+            while (iter.Skip()) {
+                ++*CacheLength_;
+            }
+
+            return *CacheLength_;
+        }
+
+        bool HasListItems() const final {
+            // we have at least one element: 'Value'
+            return true;
+        }
+
+        ui64 GetEstimatedListLength() const final {
+            return GetListLength();
+        }
+
+        TUnboxedValue GetListIterator() const final {
+            return TUnboxedValuePod(new TListIterator(Root_, Fields_, ValueBuilder_));
+        }
+
+    private:
+        TUnboxedValue Root_;
+        const TFields Fields_;
+        const IValueBuilder* const ValueBuilder_;
+        mutable TMaybe<ui32> CacheLength_;
+    };
+
+    TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const override {
+        return TUnboxedValuePod(new TListValue(args[0], Fields_, valueBuilder));
+    }
+
+public:
+    explicit TIterate(const TFields& fields)
+        : Fields_(fields)
+    {
+    }
+
+    static const TStringRef& Name() {
+        static auto Name = TStringRef::Of("Iterate");
+        return Name;
+    }
+
+    static bool DeclareSignature(
+        const TStringRef& name,
+        TType* userType,
+        IFunctionTypeInfoBuilder& builder,
+        bool typesOnly) {
+        Y_UNUSED(userType);
+        if (Name() != name) {
+            return false;
+        }
+
+        auto argsBuilder = builder.Args(1U);
+        auto nodeResource = builder.Resource(NodeResourceName);
+        argsBuilder->Add(builder.Resource(NodeResourceName)).Flags(ICallablePayload::TArgumentFlags::AutoMap);
+        argsBuilder->Done();
+        auto eventStructTypeBuilder = builder.Struct();
+        TFields fields;
+        eventStructTypeBuilder->AddField("BeginList", builder.Void(), &fields.BeginList);
+        eventStructTypeBuilder->AddField("Item", builder.Void(), &fields.Item);
+        eventStructTypeBuilder->AddField("EndList", builder.Void(), &fields.EndList);
+        eventStructTypeBuilder->AddField("Value", nodeResource, &fields.Value);
+        eventStructTypeBuilder->AddField("BeginMap", builder.Void(), &fields.BeginMap);
+        eventStructTypeBuilder->AddField("EndMap", builder.Void(), &fields.EndMap);
+        eventStructTypeBuilder->AddField("BeginAttributes", builder.Void(), &fields.BeginAttributes);
+        eventStructTypeBuilder->AddField("EndAttributes", builder.Void(), &fields.EndAttributes);
+        eventStructTypeBuilder->AddField("Key", builder.SimpleType<char*>(), &fields.Key);
+        eventStructTypeBuilder->AddField("PreValue", nodeResource, &fields.PreValue);
+        eventStructTypeBuilder->AddField("PostValue", nodeResource, &fields.PostValue);
+        auto eventStructType = eventStructTypeBuilder->Build();
+        auto eventType = builder.Variant()->Over(eventStructType).Build();
+        auto retType = builder.List()->Item(eventType).Build();
+        builder.Returns(retType);
+        if (!typesOnly) {
+            builder.Implementation(new TIterate(fields));
+        }
+
+        builder.IsStrict();
+        builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));
+        return true;
+    }
+
+private:
+    const TFields Fields_;
+};
+
+template <ENodeType NodeType, bool IsStrict>
+TUnboxedValuePod AsScalar(TUnboxedValuePod value, TStringBuf name) {
+    if (IsNodeType<ENodeType::Attr>(value)) {
+        value = value.GetVariantItem().Release();
+    }
+
+    if (IsNodeType<NodeType>(value)) {
+        return value;
+    } else if constexpr (IsStrict) {
+        throw yexception() << "Expected " << name << ", but got: " << TDebugPrinter(value);
+    } else {
+        return {};
+    }
+}
+
+template <bool IsStrict>
+TUnboxedValuePod AsList(TUnboxedValuePod value, const IValueBuilder* valueBuilder) {
+    if (IsNodeType<ENodeType::Attr>(value)) {
+        value = value.GetVariantItem().Release();
+    }
+
+    if (IsNodeType<ENodeType::List>(value)) {
+        if (!value.IsBoxed()) {
+            return valueBuilder->NewEmptyList().Release();
+        }
+
+        return value;
+    } else if constexpr (IsStrict) {
+        throw yexception() << "Expected list, but got: " << TDebugPrinter(value);
+    } else {
+        return {};
+    }
+}
+
+template <bool IsStrict>
+TUnboxedValuePod AsDict(TUnboxedValuePod value, const IValueBuilder* valueBuilder) {
+    if (IsNodeType<ENodeType::Attr>(value)) {
+        value = value.GetVariantItem().Release();
+    }
+
+    if (IsNodeType<ENodeType::Dict>(value)) {
+        if (!value.IsBoxed()) {
+            // it implements empty dict protocol too
+            return valueBuilder->NewEmptyList().Release();
+        }
+
+        return value;
+    } else if constexpr (IsStrict) {
+        throw yexception() << "Expected dict, but got: " << TDebugPrinter(value);
+    } else {
+        return {};
+    }
+}
+
+SIMPLE_UDF_OPTIONS(TAsBool, bool(TAutoMap<TNodeResource>), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
+    Y_UNUSED(valueBuilder);
+    return AsScalar<ENodeType::Bool, true>(args[0], "boolean");
+}
+
+SIMPLE_STRICT_UDF_OPTIONS(TTryAsBool, TOptional<bool>(TAutoMap<TNodeResource>), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
+    Y_UNUSED(valueBuilder);
+    return AsScalar<ENodeType::Bool, false>(args[0], "boolean");
+}
+
+SIMPLE_UDF_OPTIONS(TAsInt64, i64(TAutoMap<TNodeResource>), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
+    Y_UNUSED(valueBuilder);
+    return AsScalar<ENodeType::Int64, true>(args[0], "int64");
+}
+
+SIMPLE_STRICT_UDF_OPTIONS(TTryAsInt64, TOptional<i64>(TAutoMap<TNodeResource>), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
+    Y_UNUSED(valueBuilder);
+    return AsScalar<ENodeType::Int64, false>(args[0], "int64");
+}
+
+SIMPLE_UDF_OPTIONS(TAsUint64, ui64(TAutoMap<TNodeResource>), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
+    Y_UNUSED(valueBuilder);
+    return AsScalar<ENodeType::Uint64, true>(args[0], "uint64");
+}
+
+SIMPLE_STRICT_UDF_OPTIONS(TTryAsUint64, TOptional<ui64>(TAutoMap<TNodeResource>), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
+    Y_UNUSED(valueBuilder);
+    return AsScalar<ENodeType::Uint64, false>(args[0], "uint64");
+}
+
+SIMPLE_UDF_OPTIONS(TAsDouble, double(TAutoMap<TNodeResource>), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
+    Y_UNUSED(valueBuilder);
+    return AsScalar<ENodeType::Double, true>(args[0], "double");
+}
+
+SIMPLE_STRICT_UDF_OPTIONS(TTryAsDouble, TOptional<double>(TAutoMap<TNodeResource>), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
+    Y_UNUSED(valueBuilder);
+    return AsScalar<ENodeType::Double, false>(args[0], "double");
+}
+
+SIMPLE_UDF_OPTIONS(TAsString, char*(TAutoMap<TNodeResource>), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
+    Y_UNUSED(valueBuilder);
+    return AsScalar<ENodeType::String, true>(args[0], "string");
+}
+
+SIMPLE_STRICT_UDF_OPTIONS(TTryAsString, TOptional<char*>(TAutoMap<TNodeResource>), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
+    Y_UNUSED(valueBuilder);
+    return AsScalar<ENodeType::String, false>(args[0], "string");
+}
+
+SIMPLE_UDF_OPTIONS(TAsList, TListType<TNodeResource>(TAutoMap<TNodeResource>), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
+    return AsList<true>(args[0], valueBuilder);
+}
+
+SIMPLE_STRICT_UDF_OPTIONS(TTryAsList, TOptional<TListType<TNodeResource>>(TAutoMap<TNodeResource>), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
+    return AsList<false>(args[0], valueBuilder);
+}
+
+SIMPLE_UDF_OPTIONS(TAsDict, TDictType(TAutoMap<TNodeResource>), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
+    return AsDict<true>(args[0], valueBuilder);
+}
+
+SIMPLE_STRICT_UDF_OPTIONS(TTryAsDict, TOptional<TDictType>(TAutoMap<TNodeResource>), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 5));) {
+    return AsDict<false>(args[0], valueBuilder);
+}
+
 } // namespace
 
 // TODO: optimizer that marks UDFs as strict if Yson::Options(false as Strict) is given
@@ -1267,6 +1727,21 @@ SIMPLE_MODULE(TYson2Module,
               TFrom,
               TGetLength,
               TEquals,
-              TGetHash);
+              TGetHash,
+              TIterate,
+              TAsBool,
+              TTryAsBool,
+              TAsInt64,
+              TTryAsInt64,
+              TAsUint64,
+              TTryAsUint64,
+              TAsDouble,
+              TTryAsDouble,
+              TAsString,
+              TTryAsString,
+              TAsList,
+              TTryAsList,
+              TAsDict,
+              TTryAsDict);
 
 REGISTER_MODULES(TYson2Module);

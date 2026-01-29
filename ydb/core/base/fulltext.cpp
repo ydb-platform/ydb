@@ -18,18 +18,6 @@ namespace {
         return false;
     };
 
-    Ydb::Table::FulltextIndexSettings::Layout ParseLayout(const TString& layout_, TString& error) {
-        const TString layout = to_lower(layout_);
-        if (layout == "flat") {
-            return Ydb::Table::FulltextIndexSettings::FLAT;
-        } else if (layout == "flat_relevance") {
-            return Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE;
-        } else {
-            error = TStringBuilder() << "Invalid layout: " << layout_;
-            return Ydb::Table::FulltextIndexSettings::LAYOUT_UNSPECIFIED;
-        }
-    };
-
     Ydb::Table::FulltextIndexSettings::Tokenizer ParseTokenizer(const TString& tokenizer_, TString& error) {
         const TString tokenizer = to_lower(tokenizer_);
         if (tokenizer == "whitespace")
@@ -398,16 +386,13 @@ bool ValidateColumnsMatches(const TVector<TString>& columns, const Ydb::Table::F
 }
 
 bool ValidateSettings(const Ydb::Table::FulltextIndexSettings& settings, TString& error) {
-    if (!settings.has_layout() || settings.layout() == Ydb::Table::FulltextIndexSettings::LAYOUT_UNSPECIFIED) {
-        error = "layout should be set";
-        return false;
-    }
+    // layout is set automatically based on index type (fulltext_plain vs fulltext_relevance)
 
     if (settings.columns().empty()) {
         error = "columns should be set";
         return false;
     }
-    
+
     // current implementation limitation:
     if (settings.columns().size() != 1) {
         error = "columns should have a single value";
@@ -442,9 +427,7 @@ bool FillSetting(Ydb::Table::FulltextIndexSettings& settings, const TString& nam
         : settings.mutable_columns()->rbegin()->mutable_analyzers();
 
     const TString nameLower = to_lower(name);
-    if (nameLower == "layout") {
-        settings.set_layout(ParseLayout(value, error));
-    } else if (nameLower == "tokenizer") {
+    if (nameLower == "tokenizer") {
         analyzers->set_tokenizer(ParseTokenizer(value, error));
     } else if (nameLower == "language") {
         analyzers->set_language(value);

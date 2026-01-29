@@ -47,12 +47,18 @@ NTable::EReady TDataShardUserDb::SelectRow(
 
     SetPerformedUserReads(true);
 
+    auto version = MvccVersion;
+    if (LockMode == ELockMode::OptimisticSnapshotIsolation && SnapshotVersion < version) {
+        // We want to keep using snapshot version at commit time in SnapshotRW isolation
+        version = SnapshotVersion;
+    }
+
     NTable::EReady ready = Db.Select(tid, key, tags, row, stats, /* readFlags */ 0,
-        MvccVersion,
+        version,
         GetReadTxMap(tableId),
         GetReadTxObserver(tableId));
 
-    if (stats.InvisibleRowSkips > 0) {
+    if (LockMode != ELockMode::OptimisticSnapshotIsolation && stats.InvisibleRowSkips > 0) {
         if (LockTxId) {
             Self.SysLocksTable().BreakSetLocks();
         }
@@ -219,7 +225,7 @@ void TDataShardUserDb::UpdateRow(
     Y_ENSURE(localTableId != 0, "Unexpected UpdateRow for an unknown table");
 
     if (!RowExists(tableId, key)) {
-        if (LockTxId) {
+        if (LockTxId && LockMode != ELockMode::OptimisticSnapshotIsolation) {
             // We don't perform an update, but this key may be modified later
             // by a different transaction. Make sure we set the read lock to
             // guard against that.
@@ -293,6 +299,15 @@ void TDataShardUserDb::EraseRow(
 {
     auto localTableId = Self.GetLocalTableId(tableId);
     Y_ENSURE(localTableId != 0, "Unexpected UpdateRow for an unknown table");
+
+    if (LockMode == ELockMode::OptimisticSnapshotIsolation) {
+        if (!RowExists(tableId, key)) {
+            // Don't perform write for keys which don't exist, SnapshotRW
+            // transaction may break otherwise even when not actually
+            // performing operations from the user's viewpoint
+            return;
+        }
+    }
 
     UpsertRowInt(NTable::ERowOp::Erase, tableId, localTableId, key, {});
 

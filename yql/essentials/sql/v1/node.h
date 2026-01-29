@@ -121,14 +121,20 @@ public:
         TString Name;
         TPtr Expr;
 
+        // Is so heavily used
+        // NOLINTNEXTLINE(google-explicit-constructor)
         TIdPart(const TString& name)
             : Name(name)
         {
         }
+
+        // Is so heavily used
+        // NOLINTNEXTLINE(google-explicit-constructor)
         TIdPart(TPtr expr)
             : Expr(expr)
         {
         }
+
         TIdPart Clone() const {
             TIdPart res(Name);
             res.Expr = Expr ? Expr->Clone() : nullptr;
@@ -137,7 +143,7 @@ public:
     };
 
 public:
-    INode(TPosition pos);
+    explicit INode(TPosition pos);
     virtual ~INode();
 
     TPosition GetPos() const;
@@ -437,7 +443,7 @@ public:
 
 class TAstDirectNode final: public INode {
 public:
-    TAstDirectNode(TAstNode* node);
+    explicit TAstDirectNode(TAstNode* node);
 
     TAstNode* Translate(TContext& ctx) const override;
 
@@ -451,13 +457,13 @@ protected:
 
 class TAstListNode: public INode {
 public:
-    TAstListNode(TPosition pos);
+    explicit TAstListNode(TPosition pos);
     ~TAstListNode() override;
 
     TAstNode* Translate(TContext& ctx) const override;
 
 protected:
-    explicit TAstListNode(const TAstListNode& node);
+    TAstListNode(const TAstListNode& node);
     explicit TAstListNode(TPosition pos, TVector<TNodePtr>&& nodes);
     TPtr ShallowCopy() const override;
     bool DoInit(TContext& ctx, ISource* src) override;
@@ -475,7 +481,7 @@ protected:
 
 class TAstListNodeImpl final: public TAstListNode {
 public:
-    TAstListNodeImpl(TPosition pos);
+    explicit TAstListNodeImpl(TPosition pos);
     TAstListNodeImpl(TPosition pos, TVector<TNodePtr> nodes);
     void CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode::TPtr>& exprs) override;
 
@@ -662,7 +668,7 @@ public:
         WRITE
     };
 
-    ITableKeys(TPosition pos);
+    explicit ITableKeys(TPosition pos);
     virtual const TString* GetTableName() const;
     virtual TNodePtr BuildKeys(TContext& ctx, EBuildKeysMode mode) = 0;
 
@@ -1120,7 +1126,7 @@ protected:
 
 class TAsteriskNode: public INode {
 public:
-    TAsteriskNode(TPosition pos);
+    explicit TAsteriskNode(TPosition pos);
     bool IsAsterisk() const override;
     TPtr DoClone() const override;
     TAstNode* Translate(TContext& ctx) const override;
@@ -1188,7 +1194,7 @@ struct TTtlSettings {
         TNodePtr EvictionDelay;
         std::optional<TIdentifier> StorageName;
 
-        TTierSettings(const TNodePtr& evictionDelay, const std::optional<TIdentifier>& storageName = std::nullopt);
+        explicit TTierSettings(const TNodePtr& evictionDelay, const std::optional<TIdentifier>& storageName = std::nullopt);
     };
 
     TIdentifier ColumnName;
@@ -1227,7 +1233,7 @@ struct TTableSettings {
 };
 
 struct TFamilyEntry {
-    TFamilyEntry(const TIdentifier& name)
+    explicit TFamilyEntry(const TIdentifier& name)
         : Name(name)
     {
     }
@@ -1245,7 +1251,8 @@ struct TIndexDescription {
         GlobalAsync,
         GlobalSyncUnique,
         GlobalVectorKmeansTree,
-        GlobalFulltext
+        GlobalFulltextPlain,
+        GlobalFulltextRelevance
     };
 
     struct TIndexSetting {
@@ -1255,7 +1262,7 @@ struct TIndexDescription {
         TPosition ValuePosition;
     };
 
-    TIndexDescription(const TIdentifier& name, EType type = EType::GlobalSync)
+    explicit TIndexDescription(const TIdentifier& name, EType type = EType::GlobalSync)
         : Name(name)
         , Type(type)
     {
@@ -1291,7 +1298,7 @@ struct TChangefeedSettings {
 };
 
 struct TChangefeedDescription {
-    TChangefeedDescription(const TIdentifier& name)
+    explicit TChangefeedDescription(const TIdentifier& name)
         : Name(name)
         , Disable(false)
     {
@@ -1404,7 +1411,7 @@ struct TTopicConsumerSettings {
 };
 
 struct TTopicConsumerDescription {
-    TTopicConsumerDescription(const TIdentifier& name)
+    explicit TTopicConsumerDescription(const TIdentifier& name)
         : Name(name)
     {
     }

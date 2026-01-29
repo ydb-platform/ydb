@@ -35,7 +35,7 @@ using namespace NNodes;
 
 class TConfigCallableExecutionTransformer: public TSyncTransformerBase {
 public:
-    TConfigCallableExecutionTransformer(const TTypeAnnotationContext& types)
+    explicit TConfigCallableExecutionTransformer(const TTypeAnnotationContext& types)
         : Types_(types)
     {
         Y_UNUSED(Types_);

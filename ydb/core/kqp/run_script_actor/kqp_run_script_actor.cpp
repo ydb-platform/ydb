@@ -15,6 +15,7 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/library/ydb_issue/proto/issue_id.pb.h>
+#include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 #include <library/cpp/protobuf/json/json2proto.h>
@@ -129,6 +130,7 @@ public:
         , PhysicalGraph(std::move(settings.PhysicalGraph))
         , StreamingQueryPath(settings.StreamingQueryPath)
         , CustomerSuppliedId(std::move(settings.CustomerSuppliedId))
+        , StreamingDisposition(std::move(settings.StreamingDisposition))
         , Counters(settings.Counters)
     {}
 
@@ -147,8 +149,12 @@ public:
         UserRequestContext->IsStreamingQuery = SaveQueryPhysicalGraph;
         UserRequestContext->CheckpointId = CheckpointId;
         UserRequestContext->StreamingQueryPath = StreamingQueryPath;
+        UserRequestContext->StreamingDisposition = StreamingDisposition;
 
-        LOG_I("Bootstrap");
+        LOG_I("Bootstrap "
+            << "StreamingQueryPath: " << StreamingQueryPath
+            << ", CheckpointId: " << CheckpointId
+            << ", StreamingDisposition: " << (StreamingDisposition ? StreamingDisposition->DebugString() : "null"));
 
         Become(&TRunScriptActor::StateFunc);
     }
@@ -984,6 +990,7 @@ private:
     std::optional<NKikimrKqp::TQueryPhysicalGraph> PhysicalGraph;
     const TString StreamingQueryPath;
     const TString CustomerSuppliedId;
+    const std::shared_ptr<NYql::NPq::NProto::StreamingDisposition> StreamingDisposition;
     std::optional<TActorId> PhysicalGraphSender;
     TIntrusivePtr<TKqpCounters> Counters;
     TString SessionId;

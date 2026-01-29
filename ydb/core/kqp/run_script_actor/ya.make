@@ -13,6 +13,7 @@ PEERDIR(
     ydb/core/kqp/proxy_service/proto
     ydb/core/protos
     ydb/library/actors/core
+    ydb/library/yql/providers/pq/proto
     ydb/public/api/protos
 )
 

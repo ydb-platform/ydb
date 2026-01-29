@@ -880,6 +880,20 @@ YARD_UNIT_TEST(TestStartingPointReboots) {
     }
 }
 
+YARD_UNIT_TEST(TestRawReadsAndWrites) {
+    TTestContext tc(true);
+    ui32 chunkSize = MIN_CHUNK_SIZE;
+    TString dataPath;
+    if (tc.TempDir) {
+        TString databaseDirectory = MakeDatabasePath((*tc.TempDir)().c_str());
+        dataPath = MakePDiskPath((*tc.TempDir)().c_str());
+        MakeDirIfNotExist(databaseDirectory.c_str());
+    }
+    SafeEntropyPoolRead(&tc.PDiskGuid, sizeof(tc.PDiskGuid));
+    FormatPDiskForTest(dataPath, tc.PDiskGuid, chunkSize, 1 << 30, false, tc.SectorMap);
+    Run<TTestRawReadsAndWrites>(&tc, 1, chunkSize);
+}
+
 YARD_UNIT_TEST(TestRestartAtNonceJump) {
     TTestContext tc(true);
     ui32 chunkSize = MIN_CHUNK_SIZE;

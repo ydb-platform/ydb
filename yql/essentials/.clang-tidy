@@ -40,12 +40,14 @@ Checks: >
   bugprone-swapped-arguments,
   bugprone-terminating-continue,
   bugprone-throw-keyword-missing,
+  bugprone-undefined-memory-manipulation,
   bugprone-undelegated-constructor,
   bugprone-unhandled-exception-at-new,
   bugprone-unused-raii,
   bugprone-unused-return-value,
   bugprone-use-after-move,
   bugprone-virtual-near-miss,
+  google-explicit-constructor,
   modernize-use-override
 CheckOptions:
   - key: readability-identifier-naming.StructPrefix

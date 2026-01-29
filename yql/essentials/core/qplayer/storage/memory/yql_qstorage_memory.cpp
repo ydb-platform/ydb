@@ -29,7 +29,7 @@ using TStatePtr = std::shared_ptr<TState>;
 
 class TReader: public IQReader {
 public:
-    TReader(const TOperationMap::TMapPtr& map)
+    explicit TReader(const TOperationMap::TMapPtr& map)
         : Map_(map)
     {
     }

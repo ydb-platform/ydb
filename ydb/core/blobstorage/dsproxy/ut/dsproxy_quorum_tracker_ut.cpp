@@ -40,7 +40,6 @@ Y_UNIT_TEST_SUITE(TDsProxyQuorumTracker) {
     }
 
     UNIT_TEST_FOR_ERASURE(ErasureNone)
-    UNIT_TEST_FOR_ERASURE(ErasureMirror3)
     UNIT_TEST_FOR_ERASURE(Erasure4Plus2Block)
     UNIT_TEST_FOR_ERASURE(ErasureMirror3dc)
 

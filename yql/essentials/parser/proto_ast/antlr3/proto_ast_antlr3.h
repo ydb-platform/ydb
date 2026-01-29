@@ -12,7 +12,7 @@ class TProtoASTBuilder3 {
     typedef ANTLR_UINT8 TChar;
 
 public:
-    TProtoASTBuilder3(TStringBuf data, const TString& queryName = "query", google::protobuf::Arena* arena = nullptr)
+    explicit TProtoASTBuilder3(TStringBuf data, const TString& queryName = "query", google::protobuf::Arena* arena = nullptr)
         : QueryName_(queryName)
         , InputStream_((const TChar*)data.data(), antlr3::ENC_8BIT, data.length(), (TChar*)QueryName_.begin()) // Why the hell antlr needs non-const ptr??
         , Lexer_(&InputStream_, static_cast<google::protobuf::Arena*>(nullptr))

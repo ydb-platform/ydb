@@ -86,7 +86,7 @@ class TestUpgradeToInternalPathId:
     def test(self):
         tables_path_mapping = []
         max_external_path_id = 0
-        for i in range(8):
+        for i in range(4):
             generate_internal_path_id = i % 2 == 1
             logger.info(f"Iteration {i}, with generate_internal_path_id={generate_internal_path_id}")
             self.restart_cluster(generate_internal_path_id=generate_internal_path_id)

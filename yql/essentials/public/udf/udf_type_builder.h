@@ -344,7 +344,7 @@ public:
     using TPtr = TUniquePtr<IFunctionArgTypesBuilder>;
 
 public:
-    IFunctionArgTypesBuilder(IFunctionTypeInfoBuilder& parent)
+    explicit IFunctionArgTypesBuilder(IFunctionTypeInfoBuilder& parent)
         : Parent_(parent)
     {
     }

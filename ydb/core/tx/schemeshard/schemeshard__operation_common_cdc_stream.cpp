@@ -188,18 +188,27 @@ bool TProposeAtTable::HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOpera
                     context.SS->PersistTableIndexAlterData(db, versionCtx.ParentPathId);
                 }
                 context.SS->PersistTableIndexAlterVersion(db, versionCtx.ParentPathId, index);
+            }
+
+            if (context.SS->PathsById.contains(versionCtx.ParentPathId)) {
+                auto indexPath = context.SS->PathsById.at(versionCtx.ParentPathId);
+
+                ++indexPath->DirAlterVersion;
+                context.SS->PersistPathDirAlterVersion(db, indexPath);
+
+                context.SS->ClearDescribePathCaches(indexPath);
+
                 indexesToPublish.push_back(versionCtx.ParentPathId);
 
-                if (context.SS->PathsById.contains(versionCtx.ParentPathId)) {
-                    auto indexPath = context.SS->PathsById.at(versionCtx.ParentPathId);
-                    context.SS->ClearDescribePathCaches(indexPath);
+                if (indexPath->ParentPathId && context.SS->PathsById.contains(indexPath->ParentPathId)) {
+                    auto mainTablePath = context.SS->PathsById.at(indexPath->ParentPathId);
+                    if (mainTablePath->IsTable()) {
+                        mainTableToPublish = indexPath->ParentPathId;
 
-                    if (indexPath->ParentPathId && context.SS->PathsById.contains(indexPath->ParentPathId)) {
-                        auto mainTablePath = context.SS->PathsById.at(indexPath->ParentPathId);
-                        if (mainTablePath->IsTable()) {
-                            mainTableToPublish = indexPath->ParentPathId;
-                            context.SS->ClearDescribePathCaches(mainTablePath);
-                        }
+                        ++mainTablePath->DirAlterVersion;
+                        context.SS->PersistPathDirAlterVersion(db, mainTablePath);
+
+                        context.SS->ClearDescribePathCaches(mainTablePath);
                     }
                 }
             }
@@ -234,7 +243,6 @@ bool TProposeAtTable::HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOpera
         mainTableToPublish = pathId;
     }
 
-    context.SS->PersistTableAlterVersion(db, pathId, table);
     context.SS->ClearDescribePathCaches(path);
 
     // Publish indexes first, then impl table, then main table
@@ -292,51 +300,3 @@ bool TProposeAtTableDropSnapshot::HandleReply(TEvPrivate::TEvOperationPlan::TPtr
 }
 
 }  // NKikimr::NSchemeShard::NCdcStreamState
-
-namespace NKikimr::NSchemeShard::NTableIndexVersion {
-
-TVector<TPathId> SyncChildIndexVersions(
-    TPathElement::TPtr path,
-    TTableInfo::TPtr table,
-    ui64 targetVersion,
-    TOperationId operationId,
-    TOperationContext& context,
-    NIceDb::TNiceDb& db,
-    bool skipPlannedToDrop)
-{
-    Y_UNUSED(table);
-    TVector<TPathId> publishedIndexes;
-
-    for (const auto& [childName, childPathId] : path->GetChildren()) {
-        if (!context.SS->PathsById.contains(childPathId)) {
-            continue;
-        }
-        auto childPath = context.SS->PathsById.at(childPathId);
-        if (!childPath->IsTableIndex() || childPath->Dropped()) {
-            continue;
-        }
-        if (skipPlannedToDrop && childPath->PlannedToDrop()) {
-            continue;
-        }
-        if (!context.SS->Indexes.contains(childPathId)) {
-            continue;
-        }
-        auto index = context.SS->Indexes.at(childPathId);
-        if (index->AlterVersion < targetVersion) {
-            index->AlterVersion = targetVersion;
-            // If there's ongoing alter operation, also update alterData version to converge
-            if (index->AlterData && index->AlterData->AlterVersion < targetVersion) {
-                index->AlterData->AlterVersion = targetVersion;
-                context.SS->PersistTableIndexAlterData(db, childPathId);
-            }
-            context.SS->PersistTableIndexAlterVersion(db, childPathId, index);
-            context.SS->ClearDescribePathCaches(childPath);
-            context.OnComplete.PublishToSchemeBoard(operationId, childPathId);
-            publishedIndexes.push_back(childPathId);
-        }
-    }
-
-    return publishedIndexes;
-}
-
-}  // NKikimr::NSchemeShard::NTableIndexVersion

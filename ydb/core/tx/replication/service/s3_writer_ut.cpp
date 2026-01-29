@@ -7,11 +7,32 @@
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
 #include <ydb/core/wrappers/s3_storage_config.h>
+#include <ydb/core/util/aws.h>
 
 #include <library/cpp/string_utils/base64/base64.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/string/printf.h>
+
+struct TAwsApiGuard {
+    NKikimr::TAwsClientConfig Config;
+
+    TAwsApiGuard() {
+        InitAwsAPI();
+    }
+
+    ~TAwsApiGuard() {
+        ShutdownAwsAPI();
+    }
+
+    void InitAwsAPI() {
+        NKikimr::InitAwsAPI(Config);
+    }
+
+    void ShutdownAwsAPI() {
+        NKikimr::ShutdownAwsAPI(Config);
+    }
+};
 
 namespace NKikimr::NReplication::NService {
 
@@ -19,6 +40,7 @@ Y_UNIT_TEST_SUITE(S3Writer) {
     using namespace NTestHelpers;
 
     Y_UNIT_TEST(WriteTableS3) {
+        TAwsApiGuard apiGuard;
         using namespace NWrappers::NTestHelpers;
         TPortManager portManager;
         const ui16 port = portManager.GetPort();

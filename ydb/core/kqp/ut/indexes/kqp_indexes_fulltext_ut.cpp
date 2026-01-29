@@ -9,6 +9,12 @@ using namespace NYdb::NTable;
 
 Y_UNIT_TEST_SUITE(KqpFulltextIndexes) {
 
+TKikimrRunner Kikimr(NKikimrConfig::TFeatureFlags&& featureFlags) {
+    auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+    settings.AppConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+    return TKikimrRunner(settings);
+}
+
 TKikimrRunner Kikimr() {
     NKikimrConfig::TFeatureFlags featureFlags;
     featureFlags.SetEnableFulltextIndex(true);
@@ -52,13 +58,13 @@ void UpsertTexts(NQuery::TQueryClient& db) {
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 }
 
-void AddIndex(NQuery::TQueryClient& db, const char* layout = "flat") {
+void AddIndex(NQuery::TQueryClient& db, const TString& indexName = "fulltext_plain") {
     TString query = Sprintf(R"sql(
         ALTER TABLE `/Root/Texts` ADD INDEX fulltext_idx
-            GLOBAL USING fulltext
+            GLOBAL USING %s
             ON (Text)
-            WITH (layout=%s, tokenizer=standard, use_filter_lowercase=true)
-    )sql", layout);
+            WITH (tokenizer=standard, use_filter_lowercase=true)
+    )sql", indexName.c_str());
     auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 }
@@ -105,10 +111,9 @@ void DoValidateRelevanceQuery(NQuery::TQueryClient& db, const TString& relevance
 void AddIndexNGram(NQuery::TQueryClient& db, const size_t nGramMinLength = 3, const size_t nGramMaxLength = 3, const bool edgeNGram = false, const bool covered = false) {
     const TString query = Sprintf(R"sql(
         ALTER TABLE `/Root/Texts` ADD INDEX fulltext_idx
-            GLOBAL USING fulltext
+            GLOBAL USING fulltext_plain
             ON (Text) %s
             WITH (
-                layout=flat,
                 tokenizer=standard,
                 use_filter_lowercase=true,
                 use_filter_ngram=%d,
@@ -121,13 +126,13 @@ void AddIndexNGram(NQuery::TQueryClient& db, const size_t nGramMinLength = 3, co
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 }
 
-void AddIndexCovered(NQuery::TQueryClient& db, const char* layout = "flat") {
+void AddIndexCovered(NQuery::TQueryClient& db, const TString& indexName = "fulltext_plain") {
     TString query = Sprintf(R"sql(
         ALTER TABLE `/Root/Texts` ADD INDEX fulltext_idx
-            GLOBAL USING fulltext
+            GLOBAL USING %s
             ON (Text) COVER (Data)
-            WITH (layout=%s, tokenizer=standard, use_filter_lowercase=true)
-    )sql", layout);
+            WITH (tokenizer=standard, use_filter_lowercase=true)
+    )sql", indexName.c_str());
     auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 }
@@ -135,10 +140,9 @@ void AddIndexCovered(NQuery::TQueryClient& db, const char* layout = "flat") {
 void AddIndexSnowball(NQuery::TQueryClient& db, const TString& language) {
     TString query = Sprintf(R"sql(
         ALTER TABLE `/Root/Texts` ADD INDEX fulltext_idx
-            GLOBAL USING fulltext
+            GLOBAL USING fulltext_plain
             ON (Text)
             WITH (
-                layout=flat,
                 tokenizer=standard,
                 use_filter_lowercase=true,
                 use_filter_snowball=true,
@@ -164,6 +168,14 @@ TResultSet ReadIndex(NQuery::TQueryClient& db, const char* table = "indexImplTab
     auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     return result.GetResultSet(0);
+}
+
+void TruncateTable(NQuery::TQueryClient& db) {
+    TString query = R"sql(
+        TRUNCATE TABLE `/Root/Texts`;
+    )sql";
+    auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 }
 
 Y_UNIT_TEST(AddIndex) {
@@ -338,9 +350,9 @@ Y_UNIT_TEST_TWIN(AddIndexWithRelevance, Covered) {
     CreateTexts(db);
     UpsertTexts(db);
     if (Covered)
-        AddIndexCovered(db, "flat_relevance");
+        AddIndexCovered(db, "fulltext_relevance");
     else
-        AddIndex(db, "flat_relevance");
+        AddIndex(db, "fulltext_relevance");
     auto index = ReadIndex(db);
     CompareYson(R"([
         [[100u];1u;"animals"];
@@ -612,9 +624,9 @@ Y_UNIT_TEST_QUAD(InsertRowsWithRelevance, Covered, UseUpsert) {
     CreateTexts(db);
     UpsertSomeTexts(db);
     if (Covered)
-        AddIndexCovered(db, "flat_relevance");
+        AddIndexCovered(db, "fulltext_relevance");
     else
-        AddIndex(db, "flat_relevance");
+        AddIndex(db, "fulltext_relevance");
     auto index = ReadIndex(db);
     CompareYson(R"([
         [[100u];2u;"cats"];
@@ -1081,9 +1093,9 @@ Y_UNIT_TEST_TWIN(UpsertWithRelevance, Covered) {
     CreateTexts(db);
     UpsertSomeTexts(db);
     if (Covered)
-        AddIndexCovered(db, "flat_relevance");
+        AddIndexCovered(db, "fulltext_relevance");
     else
-        AddIndex(db, "flat_relevance");
+        AddIndex(db, "fulltext_relevance");
     auto dict = ReadIndex(db, NTableIndex::NFulltext::DictTable);
     CompareYson(R"([
         [1u;"cats"];
@@ -1856,9 +1868,9 @@ Y_UNIT_TEST_TWIN(DeleteRowWithRelevance, Covered) {
     CreateTexts(db);
     UpsertTexts(db);
     if (Covered)
-        AddIndexCovered(db, "flat_relevance");
+        AddIndexCovered(db, "fulltext_relevance");
     else
-        AddIndex(db, "flat_relevance");
+        AddIndex(db, "fulltext_relevance");
     auto index = ReadIndex(db);
     CompareYson(R"([
         [[100u];1u;"animals"];
@@ -2507,9 +2519,9 @@ Y_UNIT_TEST(CreateTable) {
                 Data String,
                 PRIMARY KEY (Key),
                 INDEX fulltext_idx
-                    GLOBAL USING fulltext
+                    GLOBAL USING fulltext_plain
                     ON (Text)
-                    WITH (layout=flat, tokenizer=standard, use_filter_lowercase=true)
+                    WITH (tokenizer=standard, use_filter_lowercase=true)
             );
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
@@ -2546,9 +2558,9 @@ Y_UNIT_TEST(CreateTableCovered) {
                 Data String,
                 PRIMARY KEY (Key),
                 INDEX fulltext_idx
-                    GLOBAL USING fulltext
+                    GLOBAL USING fulltext_plain
                     ON (Text) COVER (Data)
-                    WITH (layout=flat, tokenizer=standard, use_filter_lowercase=true)
+                    WITH (tokenizer=standard, use_filter_lowercase=true)
             );
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
@@ -2687,9 +2699,9 @@ Y_UNIT_TEST_TWIN(SelectWithFulltextContains, UTF8) {
                 Text %s,
                 PRIMARY KEY (Key),
                 INDEX fulltext_idx
-                    GLOBAL USING fulltext
+                    GLOBAL USING fulltext_plain
                     ON (Text)
-                    WITH (layout=flat, tokenizer=standard, use_filter_lowercase=true)
+                    WITH (tokenizer=standard, use_filter_lowercase=true)
             );
         )sql", UTF8 ? "Utf8" : "String");
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
@@ -2878,9 +2890,9 @@ Y_UNIT_TEST(SelectWithFulltextRelevanceB1FactorAndK1Factor) {
     {
         TString query = Sprintf(R"sql(
             ALTER TABLE `/Root/Texts` ADD INDEX fulltext_idx
-                GLOBAL USING fulltext
+                GLOBAL USING fulltext_relevance
                 ON (Text)
-                WITH (layout=flat_relevance, tokenizer=standard, use_filter_lowercase=true)
+                WITH (tokenizer=standard, use_filter_lowercase=true)
         )sql");
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -2990,10 +3002,10 @@ Y_UNIT_TEST_TWIN(SelectWithFulltextRelevance, UTF8) {
     {
         TString query = Sprintf(R"sql(
             ALTER TABLE `/Root/Texts` ADD INDEX fulltext_idx
-                GLOBAL USING fulltext
+                GLOBAL USING %s
                 ON (%s)
-                WITH (layout=%s, tokenizer=standard, use_filter_lowercase=true)
-        )sql", UTF8 ? "text" : "Text", UTF8 ? "flat" : "flat_relevance");
+                WITH (tokenizer=standard, use_filter_lowercase=true)
+        )sql", UTF8 ? "fulltext_plain" : "fulltext_relevance", UTF8 ? "text" : "Text");
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
@@ -3112,12 +3124,12 @@ Y_UNIT_TEST(LuceneRelevanceComparison) {
     result = db.ExecuteQuery(insertQuery, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
-    // Add fulltext index with relevance layout
+    // Add fulltext index with relevance
     TString indexQuery = R"sql(
         ALTER TABLE `/Root/Texts` ADD INDEX fulltext_idx
-            GLOBAL USING fulltext
+            GLOBAL USING fulltext_relevance
             ON (Text)
-            WITH (layout=flat_relevance, tokenizer=standard, use_filter_lowercase=true)
+            WITH (tokenizer=standard, use_filter_lowercase=true)
     )sql";
     result = db.ExecuteQuery(indexQuery, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -3492,6 +3504,27 @@ Y_UNIT_TEST_QUAD(SelectWithFulltextContainsAndNgram, Edge, Covered) {
 
     {
         TString query = R"sql(
+            SELECT `Key`, FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextContains(`Text`, "renaissance")
+            ORDER BY `Key`;
+
+            SELECT `Key` FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextContains(`Text`, "Heisenberg Werner")
+            ORDER BY `Key`;
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        CompareYson(R"([
+            [[1u]]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+        CompareYson(R"([
+            [[2u]]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(1)));
+    }
+
+    {
+        TString query = R"sql(
             -- {are, ren, ena} can be found separately in "Area Renaissance" but it's not correct result
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
             WHERE FulltextContains(`Text`, "arena")
@@ -3633,10 +3666,9 @@ Y_UNIT_TEST(SelectWithFulltextContainsAndNgramWildcardSpecialCharacters) {
     {
         const TString query = R"sql(
             ALTER TABLE `/Root/Texts` ADD INDEX fulltext_idx
-                GLOBAL USING fulltext
+                GLOBAL USING fulltext_plain
                 ON (Text)
                 WITH (
-                    layout=flat,
                     tokenizer=whitespace,
                     use_filter_lowercase=true,
                     use_filter_ngram=true,
@@ -3799,10 +3831,9 @@ Y_UNIT_TEST(SelectWithFulltextContainsAndNgramWildcardUtf8) {
     {
         const TString query = R"sql(
             ALTER TABLE `/Root/Texts` ADD INDEX fulltext_idx
-                GLOBAL USING fulltext
+                GLOBAL USING fulltext_plain
                 ON (Text)
                 WITH (
-                    layout=flat,
                     tokenizer=whitespace,
                     use_filter_lowercase=true,
                     use_filter_ngram=true,
@@ -3857,10 +3888,9 @@ Y_UNIT_TEST(SelectWithFulltextContainsAndNgramWildcardUtf8) {
     {
         const TString query = R"sql(
             ALTER TABLE `/Root/Texts` ADD INDEX fulltext_idx
-                GLOBAL USING fulltext
+                GLOBAL USING fulltext_plain
                 ON (Text)
                 WITH (
-                    layout=flat,
                     tokenizer=whitespace,
                     use_filter_lowercase=true,
                     use_filter_ngram=true,
@@ -4197,17 +4227,17 @@ Y_UNIT_TEST_QUAD(SelectWithFulltextContainsShorterThanMinNgram, RELEVANCE, UTF8)
     {
         const TString query = std::format(R"sql(
             ALTER TABLE `/Root/Texts` ADD INDEX fulltext_idx
-                GLOBAL USING fulltext
+                GLOBAL USING {0}
                 ON (Text)
                 WITH (
-                    layout={0},
                     tokenizer=standard,
                     use_filter_lowercase=true,
                     use_filter_ngram=true,
                     filter_ngram_min_length=3,
                     filter_ngram_max_length=3
                 );
-        )sql", RELEVANCE ? "flat_relevance" : "flat");
+        )sql",
+        RELEVANCE ? "fulltext_relevance" : "fulltext_plain");
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
@@ -4288,7 +4318,7 @@ Y_UNIT_TEST(ExplainFulltextIndexRelevance) {
     auto db = kikimr.GetQueryClient();
     CreateTexts(db);
     UpsertSomeTexts(db);
-    AddIndex(db, "flat_relevance");
+    AddIndex(db, "fulltext_relevance");
 
     auto tableClient = kikimr.GetTableClient();
     auto session = tableClient.CreateSession().GetValueSync().GetSession();
@@ -4358,6 +4388,88 @@ Y_UNIT_TEST(ExplainFulltextIndexScanQuery) {
     UNIT_ASSERT_VALUES_EQUAL(opProps.at("Index").GetStringSafe(), "fulltext_idx");
 }
 
+Y_UNIT_TEST(AddFullTextFlatIndexWithTruncate) {
+    NKikimrConfig::TFeatureFlags featureFlags;
+    featureFlags.SetEnableFulltextIndex(true);
+    featureFlags.SetEnableTruncateTable(true);
+
+    auto kikimr = Kikimr(std::move(featureFlags));
+    kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+    kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+    auto db = kikimr.GetQueryClient();
+
+    CreateTexts(db);
+    AddIndex(db);
+
+    auto verifyIndexWorksCorrectly = [&](){
+        UpsertTexts(db);
+        auto index = ReadIndex(db);
+        CompareYson(R"([
+            [[100u];"animals"];
+            [[100u];"cats"];
+            [[200u];"cats"];
+            [[300u];"cats"];
+            [[100u];"chase"];
+            [[200u];"chase"];
+            [[200u];"dogs"];
+            [[400u];"dogs"];
+            [[400u];"foxes"];
+            [[300u];"love"];
+            [[400u];"love"];
+            [[100u];"small"];
+            [[200u];"small"]
+        ])", NYdb::FormatResultSetYson(index));
+    };
+
+    verifyIndexWorksCorrectly();
+
+    for (size_t tryIndex = 0; tryIndex < 5; ++tryIndex) {
+        TruncateTable(db);
+        verifyIndexWorksCorrectly();
+    }
+}
+
+Y_UNIT_TEST(AddFullTextRelevanceIndexWithTruncate) {
+    NKikimrConfig::TFeatureFlags featureFlags;
+    featureFlags.SetEnableFulltextIndex(true);
+    featureFlags.SetEnableTruncateTable(true);
+
+    auto kikimr = Kikimr(std::move(featureFlags));
+    kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+    kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+    auto db = kikimr.GetQueryClient();
+
+    CreateTexts(db);
+    AddIndex(db, "fulltext_relevance");
+
+    auto verifyIndexWorksCorrectly = [&](){
+        UpsertTexts(db);
+        auto index = ReadIndex(db);
+        CompareYson(R"([
+            [[100u];1u;"animals"];
+            [[100u];1u;"cats"];
+            [[200u];1u;"cats"];
+            [[300u];2u;"cats"];
+            [[100u];1u;"chase"];
+            [[200u];1u;"chase"];
+            [[200u];1u;"dogs"];
+            [[400u];1u;"dogs"];
+            [[400u];1u;"foxes"];
+            [[300u];1u;"love"];
+            [[400u];1u;"love"];
+            [[100u];1u;"small"];
+            [[200u];1u;"small"]
+        ])", NYdb::FormatResultSetYson(index));
+    };
+
+    verifyIndexWorksCorrectly();
+
+    for (size_t tryIndex = 0; tryIndex < 5; ++tryIndex) {
+        TruncateTable(db);
+        verifyIndexWorksCorrectly();
+    }
+
+}
 
 }
 

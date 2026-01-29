@@ -113,9 +113,9 @@ Y_UNIT_TEST(SimpleCounters) {
     assertMetric("topic.inflight.locked_messages", 18);
     assertMetric("topic.inflight.committed_messages", 1);
     assertMetric("topic.inflight.delayed_messages", 0);
-    assertMetric("topic.inflight.scheduled_to_dlq_messages", 0);
     assertMetric("topic.inflight.unlocked_messages", 101);
 
+    assertMetric("topic.scheduled_to_dlq_messages", 0);
     assertMetric("topic.committed_messages", 1);
     assertMetric("topic.purged_messages", 0);
 

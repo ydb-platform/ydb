@@ -6208,7 +6208,7 @@ public:
 
 class TSystemFunctionsHandler: public IPGParseEvents {
 public:
-    TSystemFunctionsHandler(TVector<NPg::TProcDesc>& procs)
+    explicit TSystemFunctionsHandler(TVector<NPg::TProcDesc>& procs)
         : Procs_(procs)
     {
     }

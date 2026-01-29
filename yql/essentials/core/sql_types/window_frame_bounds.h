@@ -144,7 +144,7 @@ public:
         const bool IsIncremental_;
     };
 
-    TCoreWinFrameCollectorBounds(bool dedup)
+    explicit TCoreWinFrameCollectorBounds(bool dedup)
         : Dedup_(dedup)
     {
     }

@@ -762,6 +762,19 @@ public:
 
     static TSettings GetSettings(const NKikimrSchemeOp::TBackupTask& task);
 
+    static TMaybe<THttpResolverConfig> GetHttpResolverConfigSafe(
+            const NWrappers::IExternalStorageConfig::TPtr& config)
+    {
+        if constexpr (!RequiresHttpResolver<TSettings>) {
+            return Nothing();
+        }
+        auto s3Config = std::dynamic_pointer_cast<TS3ExternalStorageConfig>(config);
+        if (!s3Config) {
+            return Nothing();
+        }
+        return GetHttpResolverConfig(*s3Config);
+    }
+
     explicit TS3Uploader(
             const TActorId& dataShard, ui64 txId,
             const NKikimrSchemeOp::TBackupTask& task,
@@ -774,7 +787,7 @@ public:
         , DataFormat(EDataFormat::Csv)
         , CompressionCodec(CodecFromTask(task))
         , ShardNum(task.GetShardNum())
-        , HttpResolverConfig(GetHttpResolverConfig(*GetS3StorageConfig()))
+        , HttpResolverConfig(GetHttpResolverConfigSafe(ExternalStorageConfig))
         , DataShard(dataShard)
         , TxId(txId)
         , Scheme(std::move(scheme))
@@ -1039,13 +1052,8 @@ IActor* TS3Export::CreateUploader(const TActorId& dataShard, ui64 txId) const {
         for (const auto& index : scheme->indexes()) {
             const auto indexType = NTableIndex::ConvertIndexType(index.type_case());
             const TVector<TString> indexColumns(index.index_columns().begin(), index.index_columns().end());
-            std::optional<Ydb::Table::FulltextIndexSettings::Layout> layout;
-            if (indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltext) {
-                const auto& settings = index.global_fulltext_index().fulltext_settings();
-                layout = settings.has_layout() ? settings.layout() : Ydb::Table::FulltextIndexSettings::LAYOUT_UNSPECIFIED;
-            }
 
-            for (const auto& implTable : NTableIndex::GetImplTables(indexType, indexColumns, layout)) {
+            for (const auto& implTable : NTableIndex::GetImplTables(indexType, indexColumns)) {
                 const TString implTablePrefix = TStringBuilder() << index.name() << "/" << implTable;
                 TString exportPrefix;
                 if (encrypted) {

@@ -29,6 +29,18 @@
 # FILE_INCLUDE - include all file data into licenses text file
 # =======================
 
+SKIP     LicenseRef-scancode-other-permissive 178cb1d703c6a17babee1fbdf97410f8
+BELONGS ya.make
+    License text:
+        \#endif // _LIBCPP___LOCALE_DIR_SUPPORT_BSD_LIKE_H
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-other-permissive
+        Score           : 11.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/other-permissive.LICENSE
+    Files with this license:
+        include/__locale_dir/support/bsd_like.h [212:212]
+
 KEEP     NCSA AND MIT         1f7e00acb6cda5de868d4d4c1ffe3c2b
 BELONGS ya.make
     Note: matched license text is too long. Read it in the source files.
@@ -100,6 +112,19 @@ FILE_IGNORE include/any found in files: LICENSE.TXT at line 295
         Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
     Files with this license:
         LICENSE.TXT [295:311]
+
+SKIP     LicenseRef-scancode-other-permissive 68dd3d3cbce69be72eb46be4ad40d0c7
+BELONGS ya.make
+    License text:
+        \#include <__locale_dir/support/bsd_like.h>
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-other-permissive
+        Score           : 11.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/other-permissive.LICENSE
+    Files with this license:
+        include/__locale_dir/support/apple.h [18:18]
+        include/__locale_dir/support/freebsd.h [18:18]
 
 KEEP     Apache-2.0 WITH LLVM-exception 705a75a25bce12b12334e8fc577d8a46
 BELONGS ya.make
@@ -369,6 +394,7 @@ BELONGS ya.make
         include/__bit/rotate.h [3:4]
         include/__bit_reference [4:5]
         include/__charconv/chars_format.h [4:5]
+        include/__charconv/from_chars_floating_point.h [4:5]
         include/__charconv/from_chars_integral.h [4:5]
         include/__charconv/from_chars_result.h [4:5]
         include/__charconv/tables.h [4:5]
@@ -492,6 +518,8 @@ BELONGS ya.make
         include/__filesystem/recursive_directory_iterator.h [4:5]
         include/__filesystem/space_info.h [4:5]
         include/__filesystem/u8path.h [4:5]
+        include/__flat_map/flat_map.h [4:5]
+        include/__flat_map/sorted_unique.h [4:5]
         include/__format/buffer.h [4:5]
         include/__format/concepts.h [4:5]
         include/__format/container_adaptor.h [4:5]
@@ -621,6 +649,7 @@ BELONGS ya.make
         include/__iterator/segmented_iterator.h [3:4]
         include/__iterator/size.h [4:5]
         include/__iterator/sortable.h [4:5]
+        include/__iterator/static_bounded_iter.h [4:5]
         include/__iterator/unreachable_sentinel.h [4:5]
         include/__iterator/wrap_iter.h [4:5]
         include/__locale [4:5]
@@ -630,11 +659,13 @@ BELONGS ya.make
         include/__locale_dir/locale_base_api/bsd_locale_fallbacks.h [4:5]
         include/__locale_dir/locale_base_api/fuchsia.h [4:5]
         include/__locale_dir/locale_base_api/ibm.h [4:5]
-        include/__locale_dir/locale_base_api/locale_guard.h [3:4]
         include/__locale_dir/locale_base_api/musl.h [4:5]
-        include/__locale_dir/locale_base_api/newlib.h [3:4]
         include/__locale_dir/locale_base_api/openbsd.h [4:5]
         include/__locale_dir/locale_base_api/win32.h [4:5]
+        include/__locale_dir/locale_guard.h [3:4]
+        include/__locale_dir/support/apple.h [3:4]
+        include/__locale_dir/support/bsd_like.h [3:4]
+        include/__locale_dir/support/freebsd.h [3:4]
         include/__math/abs.h [3:4]
         include/__math/copysign.h [3:4]
         include/__math/error_functions.h [3:4]
@@ -869,12 +900,10 @@ BELONGS ya.make
         include/__tuple/tuple_like_no_subrange.h [3:4]
         include/__tuple/tuple_size.h [3:4]
         include/__tuple/tuple_types.h [3:4]
-        include/__type_traits/add_const.h [3:4]
-        include/__type_traits/add_cv.h [3:4]
+        include/__type_traits/add_cv_quals.h [3:4]
         include/__type_traits/add_lvalue_reference.h [3:4]
         include/__type_traits/add_pointer.h [3:4]
         include/__type_traits/add_rvalue_reference.h [3:4]
-        include/__type_traits/add_volatile.h [3:4]
         include/__type_traits/aligned_storage.h [3:4]
         include/__type_traits/aligned_union.h [3:4]
         include/__type_traits/alignment_of.h [3:4]
@@ -1012,11 +1041,20 @@ BELONGS ya.make
         include/__utility/priority_tag.h [3:4]
         include/__utility/private_constructor_tag.h [4:5]
         include/__utility/rel_ops.h [3:4]
+        include/__utility/scope_guard.h [4:5]
         include/__utility/small_buffer.h [3:4]
         include/__utility/swap.h [3:4]
         include/__utility/to_underlying.h [4:5]
         include/__utility/unreachable.h [3:4]
         include/__variant/monostate.h [4:5]
+        include/__vector/comparison.h [3:4]
+        include/__vector/container_traits.h [3:4]
+        include/__vector/erase.h [3:4]
+        include/__vector/pmr.h [3:4]
+        include/__vector/swap.h [3:4]
+        include/__vector/vector.h [3:4]
+        include/__vector/vector_bool.h [3:4]
+        include/__vector/vector_bool_formatter.h [3:4]
         include/__verbose_abort [4:5]
         include/algorithm [4:5]
         include/any [4:5]
@@ -1047,6 +1085,7 @@ BELONGS ya.make
         include/coroutine [4:5]
         include/csetjmp [4:5]
         include/csignal [4:5]
+        include/cstdalign [4:5]
         include/cstdarg [4:5]
         include/cstdbool [4:5]
         include/cstddef [4:5]
@@ -1085,6 +1124,7 @@ BELONGS ya.make
         include/ext/hash_set [4:5]
         include/fenv.h [4:5]
         include/filesystem [4:5]
+        include/flat_map [4:5]
         include/float.h [4:5]
         include/format [4:5]
         include/forward_list [4:5]
@@ -1103,7 +1143,6 @@ BELONGS ya.make
         include/limits [4:5]
         include/list [4:5]
         include/locale [4:5]
-        include/locale.h [4:5]
         include/map [4:5]
         include/math.h [4:5]
         include/math_cuda.h [4:5]
@@ -1134,7 +1173,6 @@ BELONGS ya.make
         include/stdbool.h [4:5]
         include/stddef.h [4:5]
         include/stdexcept [4:5]
-        include/stdint.h [4:5]
         include/stdio.h [4:5]
         include/stdlib.h [4:5]
         include/stop_token [4:5]
@@ -1202,6 +1240,7 @@ BELONGS ya.make
         src/include/apple_availability.h [3:4]
         src/include/atomic_support.h [3:4]
         src/include/config_elast.h [3:4]
+        src/include/from_chars_floating_point.h [3:4]
         src/include/overridable_function.h [4:5]
         src/include/refstring.h [3:4]
         src/include/ryu/common.h [3:4]
@@ -1510,6 +1549,7 @@ BELONGS ya.make
         include/__bit/rotate.h [3:4]
         include/__bit_reference [4:5]
         include/__charconv/chars_format.h [4:5]
+        include/__charconv/from_chars_floating_point.h [4:5]
         include/__charconv/from_chars_integral.h [4:5]
         include/__charconv/from_chars_result.h [4:5]
         include/__charconv/tables.h [4:5]
@@ -1633,6 +1673,8 @@ BELONGS ya.make
         include/__filesystem/recursive_directory_iterator.h [4:5]
         include/__filesystem/space_info.h [4:5]
         include/__filesystem/u8path.h [4:5]
+        include/__flat_map/flat_map.h [4:5]
+        include/__flat_map/sorted_unique.h [4:5]
         include/__format/buffer.h [4:5]
         include/__format/concepts.h [4:5]
         include/__format/container_adaptor.h [4:5]
@@ -1762,6 +1804,7 @@ BELONGS ya.make
         include/__iterator/segmented_iterator.h [3:4]
         include/__iterator/size.h [4:5]
         include/__iterator/sortable.h [4:5]
+        include/__iterator/static_bounded_iter.h [4:5]
         include/__iterator/unreachable_sentinel.h [4:5]
         include/__iterator/wrap_iter.h [4:5]
         include/__locale [4:5]
@@ -1771,11 +1814,13 @@ BELONGS ya.make
         include/__locale_dir/locale_base_api/bsd_locale_fallbacks.h [4:5]
         include/__locale_dir/locale_base_api/fuchsia.h [4:5]
         include/__locale_dir/locale_base_api/ibm.h [4:5]
-        include/__locale_dir/locale_base_api/locale_guard.h [3:4]
         include/__locale_dir/locale_base_api/musl.h [4:5]
-        include/__locale_dir/locale_base_api/newlib.h [3:4]
         include/__locale_dir/locale_base_api/openbsd.h [4:5]
         include/__locale_dir/locale_base_api/win32.h [4:5]
+        include/__locale_dir/locale_guard.h [3:4]
+        include/__locale_dir/support/apple.h [3:4]
+        include/__locale_dir/support/bsd_like.h [3:4]
+        include/__locale_dir/support/freebsd.h [3:4]
         include/__math/abs.h [3:4]
         include/__math/copysign.h [3:4]
         include/__math/error_functions.h [3:4]
@@ -2010,12 +2055,10 @@ BELONGS ya.make
         include/__tuple/tuple_like_no_subrange.h [3:4]
         include/__tuple/tuple_size.h [3:4]
         include/__tuple/tuple_types.h [3:4]
-        include/__type_traits/add_const.h [3:4]
-        include/__type_traits/add_cv.h [3:4]
+        include/__type_traits/add_cv_quals.h [3:4]
         include/__type_traits/add_lvalue_reference.h [3:4]
         include/__type_traits/add_pointer.h [3:4]
         include/__type_traits/add_rvalue_reference.h [3:4]
-        include/__type_traits/add_volatile.h [3:4]
         include/__type_traits/aligned_storage.h [3:4]
         include/__type_traits/aligned_union.h [3:4]
         include/__type_traits/alignment_of.h [3:4]
@@ -2153,11 +2196,20 @@ BELONGS ya.make
         include/__utility/priority_tag.h [3:4]
         include/__utility/private_constructor_tag.h [4:5]
         include/__utility/rel_ops.h [3:4]
+        include/__utility/scope_guard.h [4:5]
         include/__utility/small_buffer.h [3:4]
         include/__utility/swap.h [3:4]
         include/__utility/to_underlying.h [4:5]
         include/__utility/unreachable.h [3:4]
         include/__variant/monostate.h [4:5]
+        include/__vector/comparison.h [3:4]
+        include/__vector/container_traits.h [3:4]
+        include/__vector/erase.h [3:4]
+        include/__vector/pmr.h [3:4]
+        include/__vector/swap.h [3:4]
+        include/__vector/vector.h [3:4]
+        include/__vector/vector_bool.h [3:4]
+        include/__vector/vector_bool_formatter.h [3:4]
         include/__verbose_abort [4:5]
         include/algorithm [4:5]
         include/any [4:5]
@@ -2188,6 +2240,7 @@ BELONGS ya.make
         include/coroutine [4:5]
         include/csetjmp [4:5]
         include/csignal [4:5]
+        include/cstdalign [4:5]
         include/cstdarg [4:5]
         include/cstdbool [4:5]
         include/cstddef [4:5]
@@ -2226,6 +2279,7 @@ BELONGS ya.make
         include/ext/hash_set [4:5]
         include/fenv.h [4:5]
         include/filesystem [4:5]
+        include/flat_map [4:5]
         include/float.h [4:5]
         include/format [4:5]
         include/forward_list [4:5]
@@ -2244,7 +2298,6 @@ BELONGS ya.make
         include/limits [4:5]
         include/list [4:5]
         include/locale [4:5]
-        include/locale.h [4:5]
         include/map [4:5]
         include/math.h [4:5]
         include/math_cuda.h [4:5]
@@ -2275,7 +2328,6 @@ BELONGS ya.make
         include/stdbool.h [4:5]
         include/stddef.h [4:5]
         include/stdexcept [4:5]
-        include/stdint.h [4:5]
         include/stdio.h [4:5]
         include/stdlib.h [4:5]
         include/stop_token [4:5]
@@ -2343,6 +2395,7 @@ BELONGS ya.make
         src/include/apple_availability.h [3:4]
         src/include/atomic_support.h [3:4]
         src/include/config_elast.h [3:4]
+        src/include/from_chars_floating_point.h [3:4]
         src/include/overridable_function.h [4:5]
         src/include/refstring.h [3:4]
         src/include/ryu/common.h [3:4]
@@ -2445,6 +2498,18 @@ BELONGS ya.make
         Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
     Files with this license:
         include/__algorithm/lower_bound.h [51:51]
+
+SKIP     LicenseRef-scancode-other-permissive 8be19f9e34ae8a5634b924f32a782e57
+BELONGS ya.make
+    License text:
+        \#define _LIBCPP___LOCALE_DIR_SUPPORT_BSD_LIKE_H
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-other-permissive
+        Score           : 11.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/other-permissive.LICENSE
+    Files with this license:
+        include/__locale_dir/support/bsd_like.h [10:10]
 
 KEEP     Apache-2.0           9ac77f65a898755c7eed97099caded94
 BELONGS ya.make
@@ -2722,6 +2787,7 @@ BELONGS ya.make
         include/__bit/rotate.h [5:5]
         include/__bit_reference [6:6]
         include/__charconv/chars_format.h [6:6]
+        include/__charconv/from_chars_floating_point.h [6:6]
         include/__charconv/from_chars_integral.h [6:6]
         include/__charconv/from_chars_result.h [6:6]
         include/__charconv/tables.h [6:6]
@@ -2845,6 +2911,8 @@ BELONGS ya.make
         include/__filesystem/recursive_directory_iterator.h [6:6]
         include/__filesystem/space_info.h [6:6]
         include/__filesystem/u8path.h [6:6]
+        include/__flat_map/flat_map.h [6:6]
+        include/__flat_map/sorted_unique.h [6:6]
         include/__format/buffer.h [6:6]
         include/__format/concepts.h [6:6]
         include/__format/container_adaptor.h [6:6]
@@ -2974,6 +3042,7 @@ BELONGS ya.make
         include/__iterator/segmented_iterator.h [5:5]
         include/__iterator/size.h [6:6]
         include/__iterator/sortable.h [6:6]
+        include/__iterator/static_bounded_iter.h [6:6]
         include/__iterator/unreachable_sentinel.h [6:6]
         include/__iterator/wrap_iter.h [6:6]
         include/__locale [6:6]
@@ -2983,11 +3052,13 @@ BELONGS ya.make
         include/__locale_dir/locale_base_api/bsd_locale_fallbacks.h [6:6]
         include/__locale_dir/locale_base_api/fuchsia.h [6:6]
         include/__locale_dir/locale_base_api/ibm.h [6:6]
-        include/__locale_dir/locale_base_api/locale_guard.h [5:5]
         include/__locale_dir/locale_base_api/musl.h [6:6]
-        include/__locale_dir/locale_base_api/newlib.h [5:5]
         include/__locale_dir/locale_base_api/openbsd.h [6:6]
         include/__locale_dir/locale_base_api/win32.h [6:6]
+        include/__locale_dir/locale_guard.h [5:5]
+        include/__locale_dir/support/apple.h [5:5]
+        include/__locale_dir/support/bsd_like.h [5:5]
+        include/__locale_dir/support/freebsd.h [5:5]
         include/__math/abs.h [5:5]
         include/__math/copysign.h [5:5]
         include/__math/error_functions.h [5:5]
@@ -3222,12 +3293,10 @@ BELONGS ya.make
         include/__tuple/tuple_like_no_subrange.h [5:5]
         include/__tuple/tuple_size.h [5:5]
         include/__tuple/tuple_types.h [5:5]
-        include/__type_traits/add_const.h [5:5]
-        include/__type_traits/add_cv.h [5:5]
+        include/__type_traits/add_cv_quals.h [5:5]
         include/__type_traits/add_lvalue_reference.h [5:5]
         include/__type_traits/add_pointer.h [5:5]
         include/__type_traits/add_rvalue_reference.h [5:5]
-        include/__type_traits/add_volatile.h [5:5]
         include/__type_traits/aligned_storage.h [5:5]
         include/__type_traits/aligned_union.h [5:5]
         include/__type_traits/alignment_of.h [5:5]
@@ -3365,11 +3434,20 @@ BELONGS ya.make
         include/__utility/priority_tag.h [5:5]
         include/__utility/private_constructor_tag.h [6:6]
         include/__utility/rel_ops.h [5:5]
+        include/__utility/scope_guard.h [6:6]
         include/__utility/small_buffer.h [5:5]
         include/__utility/swap.h [5:5]
         include/__utility/to_underlying.h [6:6]
         include/__utility/unreachable.h [5:5]
         include/__variant/monostate.h [6:6]
+        include/__vector/comparison.h [5:5]
+        include/__vector/container_traits.h [5:5]
+        include/__vector/erase.h [5:5]
+        include/__vector/pmr.h [5:5]
+        include/__vector/swap.h [5:5]
+        include/__vector/vector.h [5:5]
+        include/__vector/vector_bool.h [5:5]
+        include/__vector/vector_bool_formatter.h [5:5]
         include/__verbose_abort [6:6]
         include/algorithm [6:6]
         include/any [6:6]
@@ -3400,6 +3478,7 @@ BELONGS ya.make
         include/coroutine [6:6]
         include/csetjmp [6:6]
         include/csignal [6:6]
+        include/cstdalign [6:6]
         include/cstdarg [6:6]
         include/cstdbool [6:6]
         include/cstddef [6:6]
@@ -3438,6 +3517,7 @@ BELONGS ya.make
         include/ext/hash_set [6:6]
         include/fenv.h [6:6]
         include/filesystem [6:6]
+        include/flat_map [6:6]
         include/float.h [6:6]
         include/format [6:6]
         include/forward_list [6:6]
@@ -3456,7 +3536,6 @@ BELONGS ya.make
         include/limits [6:6]
         include/list [6:6]
         include/locale [6:6]
-        include/locale.h [6:6]
         include/map [6:6]
         include/math.h [6:6]
         include/math_cuda.h [6:6]
@@ -3487,7 +3566,6 @@ BELONGS ya.make
         include/stdbool.h [6:6]
         include/stddef.h [6:6]
         include/stdexcept [6:6]
-        include/stdint.h [6:6]
         include/stdio.h [6:6]
         include/stdlib.h [6:6]
         include/stop_token [6:6]
@@ -3521,7 +3599,7 @@ BELONGS ya.make
         src/bind.cpp [5:5]
         src/call_once.cpp [5:5]
         src/charconv.cpp [5:5]
-        src/charconv.cpp [32:32]
+        src/charconv.cpp [33:33]
         src/chrono.cpp [5:5]
         src/condition_variable.cpp [5:5]
         src/condition_variable_destructor.cpp [5:5]
@@ -3556,6 +3634,7 @@ BELONGS ya.make
         src/include/apple_availability.h [5:5]
         src/include/atomic_support.h [5:5]
         src/include/config_elast.h [5:5]
+        src/include/from_chars_floating_point.h [5:5]
         src/include/overridable_function.h [6:6]
         src/include/refstring.h [5:5]
         src/include/ryu/common.h [5:5]
@@ -3877,6 +3956,7 @@ BELONGS ya.make
         include/__bit/rotate.h [5:5]
         include/__bit_reference [6:6]
         include/__charconv/chars_format.h [6:6]
+        include/__charconv/from_chars_floating_point.h [6:6]
         include/__charconv/from_chars_integral.h [6:6]
         include/__charconv/from_chars_result.h [6:6]
         include/__charconv/tables.h [6:6]
@@ -4000,6 +4080,8 @@ BELONGS ya.make
         include/__filesystem/recursive_directory_iterator.h [6:6]
         include/__filesystem/space_info.h [6:6]
         include/__filesystem/u8path.h [6:6]
+        include/__flat_map/flat_map.h [6:6]
+        include/__flat_map/sorted_unique.h [6:6]
         include/__format/buffer.h [6:6]
         include/__format/concepts.h [6:6]
         include/__format/container_adaptor.h [6:6]
@@ -4129,6 +4211,7 @@ BELONGS ya.make
         include/__iterator/segmented_iterator.h [5:5]
         include/__iterator/size.h [6:6]
         include/__iterator/sortable.h [6:6]
+        include/__iterator/static_bounded_iter.h [6:6]
         include/__iterator/unreachable_sentinel.h [6:6]
         include/__iterator/wrap_iter.h [6:6]
         include/__locale [6:6]
@@ -4138,11 +4221,13 @@ BELONGS ya.make
         include/__locale_dir/locale_base_api/bsd_locale_fallbacks.h [6:6]
         include/__locale_dir/locale_base_api/fuchsia.h [6:6]
         include/__locale_dir/locale_base_api/ibm.h [6:6]
-        include/__locale_dir/locale_base_api/locale_guard.h [5:5]
         include/__locale_dir/locale_base_api/musl.h [6:6]
-        include/__locale_dir/locale_base_api/newlib.h [5:5]
         include/__locale_dir/locale_base_api/openbsd.h [6:6]
         include/__locale_dir/locale_base_api/win32.h [6:6]
+        include/__locale_dir/locale_guard.h [5:5]
+        include/__locale_dir/support/apple.h [5:5]
+        include/__locale_dir/support/bsd_like.h [5:5]
+        include/__locale_dir/support/freebsd.h [5:5]
         include/__math/abs.h [5:5]
         include/__math/copysign.h [5:5]
         include/__math/error_functions.h [5:5]
@@ -4377,12 +4462,10 @@ BELONGS ya.make
         include/__tuple/tuple_like_no_subrange.h [5:5]
         include/__tuple/tuple_size.h [5:5]
         include/__tuple/tuple_types.h [5:5]
-        include/__type_traits/add_const.h [5:5]
-        include/__type_traits/add_cv.h [5:5]
+        include/__type_traits/add_cv_quals.h [5:5]
         include/__type_traits/add_lvalue_reference.h [5:5]
         include/__type_traits/add_pointer.h [5:5]
         include/__type_traits/add_rvalue_reference.h [5:5]
-        include/__type_traits/add_volatile.h [5:5]
         include/__type_traits/aligned_storage.h [5:5]
         include/__type_traits/aligned_union.h [5:5]
         include/__type_traits/alignment_of.h [5:5]
@@ -4520,11 +4603,20 @@ BELONGS ya.make
         include/__utility/priority_tag.h [5:5]
         include/__utility/private_constructor_tag.h [6:6]
         include/__utility/rel_ops.h [5:5]
+        include/__utility/scope_guard.h [6:6]
         include/__utility/small_buffer.h [5:5]
         include/__utility/swap.h [5:5]
         include/__utility/to_underlying.h [6:6]
         include/__utility/unreachable.h [5:5]
         include/__variant/monostate.h [6:6]
+        include/__vector/comparison.h [5:5]
+        include/__vector/container_traits.h [5:5]
+        include/__vector/erase.h [5:5]
+        include/__vector/pmr.h [5:5]
+        include/__vector/swap.h [5:5]
+        include/__vector/vector.h [5:5]
+        include/__vector/vector_bool.h [5:5]
+        include/__vector/vector_bool_formatter.h [5:5]
         include/__verbose_abort [6:6]
         include/algorithm [6:6]
         include/any [6:6]
@@ -4555,6 +4647,7 @@ BELONGS ya.make
         include/coroutine [6:6]
         include/csetjmp [6:6]
         include/csignal [6:6]
+        include/cstdalign [6:6]
         include/cstdarg [6:6]
         include/cstdbool [6:6]
         include/cstddef [6:6]
@@ -4593,6 +4686,7 @@ BELONGS ya.make
         include/ext/hash_set [6:6]
         include/fenv.h [6:6]
         include/filesystem [6:6]
+        include/flat_map [6:6]
         include/float.h [6:6]
         include/format [6:6]
         include/forward_list [6:6]
@@ -4611,7 +4705,6 @@ BELONGS ya.make
         include/limits [6:6]
         include/list [6:6]
         include/locale [6:6]
-        include/locale.h [6:6]
         include/map [6:6]
         include/math.h [6:6]
         include/math_cuda.h [6:6]
@@ -4642,7 +4735,6 @@ BELONGS ya.make
         include/stdbool.h [6:6]
         include/stddef.h [6:6]
         include/stdexcept [6:6]
-        include/stdint.h [6:6]
         include/stdio.h [6:6]
         include/stdlib.h [6:6]
         include/stop_token [6:6]
@@ -4676,7 +4768,7 @@ BELONGS ya.make
         src/bind.cpp [5:5]
         src/call_once.cpp [5:5]
         src/charconv.cpp [5:5]
-        src/charconv.cpp [32:32]
+        src/charconv.cpp [33:33]
         src/chrono.cpp [5:5]
         src/condition_variable.cpp [5:5]
         src/condition_variable_destructor.cpp [5:5]
@@ -4711,6 +4803,7 @@ BELONGS ya.make
         src/include/apple_availability.h [5:5]
         src/include/atomic_support.h [5:5]
         src/include/config_elast.h [5:5]
+        src/include/from_chars_floating_point.h [5:5]
         src/include/overridable_function.h [6:6]
         src/include/refstring.h [5:5]
         src/include/ryu/common.h [5:5]
@@ -4856,6 +4949,18 @@ BELONGS ya.make
     Files with this license:
         LICENSE.TXT [2:2]
 
+SKIP     LicenseRef-scancode-other-permissive e97a9a98b270500f63e40d330b581c25
+BELONGS ya.make
+    License text:
+        \#ifndef _LIBCPP___LOCALE_DIR_SUPPORT_BSD_LIKE_H
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-other-permissive
+        Score           : 11.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/other-permissive.LICENSE
+    Files with this license:
+        include/__locale_dir/support/bsd_like.h [9:9]
+
 KEEP     BSL-1.0              f045c34c13cd14be1bd7b990f95c366c
 BELONGS ya.make
 FILE_INCLUDE include/any found in files: src/include/ryu/common.h at line 17, src/include/ryu/d2fixed.h at line 17, src/include/ryu/d2fixed_full_table.h at line 17, src/include/ryu/d2s.h at line 17, src/include/ryu/d2s_full_table.h at line 17, src/include/ryu/d2s_intrinsics.h at line 17, src/include/ryu/digit_table.h at line 17, src/include/ryu/f2s.h at line 17, src/include/ryu/ryu.h at line 18, src/ryu/d2fixed.cpp at line 17, src/ryu/d2s.cpp at line 17, src/ryu/f2s.cpp at line 17
@@ -4878,3 +4983,15 @@ FILE_INCLUDE include/any found in files: src/include/ryu/common.h at line 17, sr
         src/ryu/d2fixed.cpp [15:37]
         src/ryu/d2s.cpp [15:37]
         src/ryu/f2s.cpp [15:37]
+
+SKIP     LicenseRef-scancode-other-permissive f1fd5aeeb3fb49020c7c85aa9a4a4c3a
+BELONGS ya.make
+    License text:
+              textual header "__locale_dir/support/bsd_like.h"
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-other-permissive
+        Score           : 11.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/other-permissive.LICENSE
+    Files with this license:
+        include/module.modulemap [1472:1472]

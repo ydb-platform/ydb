@@ -295,6 +295,104 @@ Y_UNIT_TEST(PartitionLevelMetrics) {
     }
 }
 
+// Test that changing monitoring project ID updates counters for both consumers and write operations
+Y_UNIT_TEST(MonitoringProjectIdChange) {
+    for (bool firstClassCitizen : {false, true}) {
+        Cerr << "Run MonitoringProjectIdChange(FirstClassCitizen=" << firstClassCitizen << ")\n";
+
+        TTestContext tc;
+        TFinalizer finalizer(tc);
+        bool activeZone{false};
+        tc.Prepare("", [](TTestActorRuntime&) {}, activeZone, firstClassCitizen, true);
+        tc.Runtime->SetScheduledLimit(100);
+
+        tc.Runtime->GetAppData(0).FeatureFlags.SetEnableMetricsLevel(true);
+
+        const TString firstProjectId = "first-monitoring-project-id";
+        const TString secondProjectId = "second-monitoring-project-id";
+        const TString consumer = "test-consumer";
+
+        // Initial setup with first monitoring project ID and a consumer
+        TTabletPreparationParameters parameters{
+            .metricsLevel = METRICS_LEVEL_DETAILED,
+            .monitoringProjectId = firstProjectId,
+        };
+
+        PQTabletPrepare(parameters, {{consumer, false}}, tc);
+
+        // Write some data to populate write counters
+        CmdWrite({ .Partition = 0, .SourceId = "sourceid0", .Data = TestData(), .TestContext = tc, .Error = false, .IsFirst = true });
+        CmdWrite({ .Partition = 0, .SourceId = "sourceid1", .Data = TestData(), .TestContext = tc, .Error = false });
+
+        // Helper to read messages and populate consumer counters
+        auto doRead = [&tc, &consumer](const TString& sessionId, ui64 partitionSessionId) {
+            TPQCmdSettings sessionSettings{0, consumer, sessionId};
+            sessionSettings.PartitionSessionId = partitionSessionId;
+            TPQCmdReadSettings readSettings{
+                /*session=*/ sessionId,
+                /*partition=*/ 0,
+                /*offset=*/ 0,
+                /*count=*/ 2,
+                /*size=*/ 16_MB,
+                /*resCount=*/ 1,
+            };
+            readSettings.PartitionSessionId = partitionSessionId;
+            readSettings.User = consumer;
+            readSettings.Pipe = CmdCreateSession(sessionSettings, tc);
+            BeginCmdRead(readSettings, tc);
+            TAutoPtr<IEventHandle> handle;
+            auto* result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(handle);
+            UNIT_ASSERT_C(result->Record.GetPartitionResponse().HasCmdReadResult(), result->Record.GetPartitionResponse().DebugString());
+            CmdKillSession(0, consumer, sessionId, tc);
+        };
+
+        // Read messages to populate consumer counters
+        doRead("session", 1);
+
+        // Verify counters exist under first monitoring project ID
+        auto getCountersGroup = [&tc, firstClassCitizen](const TString& monitoringProjectId) -> ::NMonitoring::TDynamicCounterPtr {
+            auto counters = tc.Runtime->GetAppData(0).Counters;
+            auto group = counters->GetSubgroup("counters", "topics_per_partition");
+            group = group->GetSubgroup("host", firstClassCitizen ? "" : "cluster");
+            if (!monitoringProjectId.empty()) {
+                group = group->GetSubgroup("monitoring_project_id", monitoringProjectId);
+            }
+            return group;
+        };
+
+        {
+            auto group = getCountersGroup(firstProjectId);
+            TStringStream countersStr;
+            group->OutputHtml(countersStr);
+            Cerr << "Counters under first project ID:\n" << countersStr.Str() << "\n";
+            // Verify counters exist by checking the group is not empty
+            UNIT_ASSERT_C(!countersStr.Str().empty() && countersStr.Str() != "<pre></pre>",
+                "Expected counters under first monitoring project ID");
+        }
+
+        // Change monitoring project ID
+        parameters.monitoringProjectId = secondProjectId;
+        PQTabletPrepare(parameters, {{consumer, false}}, tc);
+
+        // Write more data to populate new counters under the new project ID
+        CmdWrite({ .Partition = 0, .SourceId = "sourceid2", .Data = TestData(), .TestContext = tc, .Error = false });
+        CmdWrite({ .Partition = 0, .SourceId = "sourceid3", .Data = TestData(), .TestContext = tc, .Error = false });
+
+        // Read again to populate consumer counters under new project ID
+        doRead("session", 2);
+
+        // Verify counters now exist under second monitoring project ID
+        {
+            auto group = getCountersGroup(secondProjectId);
+            TStringStream countersStr;
+            group->OutputHtml(countersStr);
+            Cerr << "Counters under second project ID:\n" << countersStr.Str() << "\n";
+            UNIT_ASSERT_C(!countersStr.Str().empty() && countersStr.Str() != "<pre></pre>",
+                "Expected counters under second monitoring project ID");
+        }
+    }
+}
+
 Y_UNIT_TEST(PartitionWriteQuota) {
     TTestContext tc;
 

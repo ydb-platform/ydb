@@ -278,7 +278,8 @@ namespace NTypeAnnImpl {
             }
 
             const TTypeAnnotationNode* itemType = list.GetTypeAnn()->Cast<TListExprType>()->GetItemType();
-            if (itemType->GetKind() == ETypeAnnotationKind::UniversalStruct) {
+            if (itemType->GetKind() == ETypeAnnotationKind::Universal ||
+                itemType->GetKind() == ETypeAnnotationKind::UniversalStruct) {
                 input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
                 return IGraphTransformer::TStatus::Ok;
             }

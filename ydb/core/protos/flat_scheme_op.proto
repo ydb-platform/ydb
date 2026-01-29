@@ -1179,7 +1179,8 @@ enum EIndexType {
     EIndexTypeGlobalAsync = 2;
     EIndexTypeGlobalUnique = 3;
     EIndexTypeGlobalVectorKmeansTree = 4;
-    EIndexTypeGlobalFulltext = 5;
+    EIndexTypeGlobalFulltextPlain = 5;
+    EIndexTypeGlobalFulltextRelevance = 6;
 }
 
 enum EIndexState {

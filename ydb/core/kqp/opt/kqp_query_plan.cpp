@@ -1,5 +1,6 @@
 #include "kqp_query_plan.h"
 
+#include <ydb/core/base/fulltext.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
 #include <ydb/library/formats/arrow/protos/ssa.pb.h>
@@ -245,7 +246,6 @@ public:
                 planNode.TypeName = "Effect";
                 Visit(TExprBase(stage), planNode);
             } else if (stageBase.Outputs()) { // Sink
-                AFL_ENSURE(stageBase.Outputs().Cast().Size() == 1);
                 auto& planNode = AddPlanNode(phaseNode);
                 Visit(TExprBase(stage), planNode);
             }
@@ -743,7 +743,7 @@ private:
         TVector<TString> readColumns;
         for(const auto& column: columns) {
             readColumns.push_back(TString(column.Value()));
-            if (readColumns.back() == "_yql_full_text_relevance") {
+            if (readColumns.back() == NTableIndex::NFulltext::FullTextRelevanceColumn) {
                 op.Properties["RelevanceQuery"] = "True";
             }
         }
@@ -755,6 +755,29 @@ private:
 
         const auto& query = GetExprStr(sourceSettings.Query(), true);
         op.Properties["Query"] = query;
+
+        TVector<TString> searchTerms;
+        if (sourceSettings.Query().Maybe<TCoDataCtor>()) {
+            auto literal = TString(sourceSettings.Query().Cast<TCoDataCtor>().Literal());
+            auto& tableData = SerializerCtx.TablesData->GetTable(SerializerCtx.Cluster, TString(tablePath));
+            auto [implTable, indexDesc] = tableData.Metadata->GetIndex(index);
+            YQL_ENSURE(indexDesc);
+            YQL_ENSURE(indexDesc->Type == TIndexDescription::EType::GlobalFulltextPlain
+                || indexDesc->Type == TIndexDescription::EType::GlobalFulltextRelevance);
+
+            auto& desc = std::get<NKikimrSchemeOp::TFulltextIndexDescription>(indexDesc->SpecializedIndexDescription);
+            for(const auto& column: readColumns) {
+                for(const auto& analyzer: desc.settings().columns()) {
+                    if (analyzer.column() == column) {
+                        for(const auto& term: NFulltext::BuildSearchTerms(literal, analyzer.analyzers())) {
+                            searchTerms.push_back(term);
+                        }
+                    }
+                }
+            }
+
+            op.Properties["SearchTerms"] = JoinSeq(", ", searchTerms);
+        }
 
         TVector<TString> queryColumns;
         for(const auto& column: sourceSettings.QueryColumns()) {
@@ -779,12 +802,23 @@ private:
             op.Properties["K1Factor"] = GetExprStr(TExprBase(settings.K1Factor), true);
         }
 
+        NTableIndex::NFulltext::EQueryMode queryMode = NTableIndex::NFulltext::EQueryMode::Invalid;
         if (settings.QueryMode) {
             op.Properties["QueryMode"] = GetExprStr(TExprBase(settings.QueryMode), true);
+            if (TExprBase(settings.QueryMode).Maybe<TCoDataCtor>()) {
+                TString error;
+                queryMode = NTableIndex::NFulltext::QueryModeFromString(TString(TExprBase(settings.QueryMode).Cast<TCoDataCtor>().Literal()), error);
+            }
         }
 
         if (settings.MinimumShouldMatch) {
             op.Properties["MinimumShouldMatch"] = GetExprStr(TExprBase(settings.MinimumShouldMatch), true);
+            TString minimumShouldMatchError;
+            if (searchTerms.size() > 0 && queryMode != NTableIndex::NFulltext::EQueryMode::Invalid && TExprBase(settings.MinimumShouldMatch).Maybe<TCoDataCtor>()) {
+                ui32 minimumShouldMatch = NTableIndex::NFulltext::MinimumShouldMatchFromString(
+                    searchTerms.size(), queryMode, TString(TExprBase(settings.MinimumShouldMatch).Cast<TCoDataCtor>().Literal()), minimumShouldMatchError);
+                op.Properties["MinimumShouldMatchExplained"] = std::to_string(minimumShouldMatch);
+            }
         }
 
         op.Properties["QueryColumns"] = JoinSeq(", ", queryColumns);
@@ -969,6 +1003,9 @@ private:
             } else if (settings.Mode().StringValue() == "fill_table") {
                 op.Properties["Name"] = "FillTable";
                 writeInfo.Type = EPlanTableWriteType::MultiReplace;
+            } else if (settings.Mode().StringValue() == "upsert_increment") {
+                op.Properties["Name"] = "UpsertIncrement";
+                writeInfo.Type = EPlanTableWriteType::MultiUpsertIncrement;
             } else {
                 YQL_ENSURE(false, "Unsupported sink mode");
             }
@@ -1093,7 +1130,6 @@ private:
             if (auto outputs = expr.Cast<TDqStageBase>().Outputs()) {
                 for (auto output : outputs.Cast()) {
                     if (auto sink = output.Maybe<TDqSink>()) {
-                        AFL_ENSURE(outputs.Cast().Size() == 1);
                         Visit(sink.Cast(), expr.Cast<TDqStageBase>(), planNode);
                     }
                 }

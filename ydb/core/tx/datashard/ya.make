@@ -348,6 +348,7 @@ RECURSE_FOR_TESTS(
     ut_snapshot_isolation
     ut_stats
     ut_trace
+    ut_truncate
     ut_upload_rows
     ut_vacuum
     ut_volatile

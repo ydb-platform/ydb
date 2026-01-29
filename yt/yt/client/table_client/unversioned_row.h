@@ -211,10 +211,10 @@ int CompareRowValues(const TUnversionedValue& lhs, const TUnversionedValue& rhs)
 
 //! Derived comparison operators.
 //! Note that these ignore flags.
-bool operator == (const TUnversionedValue& lhs, const TUnversionedValue& rhs);
-bool operator <= (const TUnversionedValue& lhs, const TUnversionedValue& rhs);
+bool operator==(const TUnversionedValue& lhs, const TUnversionedValue& rhs);
+bool operator<=(const TUnversionedValue& lhs, const TUnversionedValue& rhs);
 bool operator <  (const TUnversionedValue& lhs, const TUnversionedValue& rhs);
-bool operator >= (const TUnversionedValue& lhs, const TUnversionedValue& rhs);
+bool operator>=(const TUnversionedValue& lhs, const TUnversionedValue& rhs);
 bool operator >  (const TUnversionedValue& lhs, const TUnversionedValue& rhs);
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -235,10 +235,10 @@ int CompareRows(
 
 //! Derived comparison operators.
 //! Note that these ignore aggregate flags.
-bool operator == (TUnversionedRow lhs, TUnversionedRow rhs);
-bool operator <= (TUnversionedRow lhs, TUnversionedRow rhs);
+bool operator==(TUnversionedRow lhs, TUnversionedRow rhs);
+bool operator<=(TUnversionedRow lhs, TUnversionedRow rhs);
 bool operator <  (TUnversionedRow lhs, TUnversionedRow rhs);
-bool operator >= (TUnversionedRow lhs, TUnversionedRow rhs);
+bool operator>=(TUnversionedRow lhs, TUnversionedRow rhs);
 bool operator >  (TUnversionedRow lhs, TUnversionedRow rhs);
 
 //! Computes FarmHash forever-fixed fingerprint for a range of values.
@@ -317,7 +317,7 @@ public:
         return {Begin(), Begin() + count};
     }
 
-    const TUnversionedValue& operator[] (int index) const
+    const TUnversionedValue& operator[](int index) const
     {
         YT_ASSERT(index >= 0 && static_cast<ui32>(index) < GetCount());
         return Begin()[index];
@@ -640,7 +640,7 @@ public:
         Begin()[count] = value;
     }
 
-    TUnversionedValue& operator[] (ui32 index)
+    TUnversionedValue& operator[](ui32 index)
     {
         YT_ASSERT(index < GetHeader()->Count);
         return Begin()[index];
@@ -734,7 +734,7 @@ public:
         return {Begin(), Begin() + count};
     }
 
-    const TUnversionedValue& operator[] (int index) const
+    const TUnversionedValue& operator[](int index) const
     {
         YT_ASSERT(index >= 0 && index < GetCount());
         return Begin()[index];

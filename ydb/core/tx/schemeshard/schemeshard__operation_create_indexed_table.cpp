@@ -40,21 +40,24 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
     auto indexedTable = tx.GetCreateIndexedTable();
     const NKikimrSchemeOp::TTableDescription& baseTableDescription = indexedTable.GetTableDescription();
 
+    TIndexObjectCounts totalCounts;
     ui32 indexCount = indexedTable.IndexDescriptionSize();
-    ui32 totalIndexTables = 0;
-    ui32 totalSequences = indexedTable.SequenceDescriptionSize();
-    ui32 totalIndexShards = 0;
     for (const auto& indexDesc : indexedTable.GetIndexDescription()) {
-        ui32 indexTableCount = 0, indexSequenceCount = 0, indexTableShards = 0;
-        TTableInfo::GetIndexObjectCount(indexDesc, indexTableCount, indexSequenceCount, indexTableShards);
-        totalIndexTables += indexTableCount;
-        totalSequences += indexSequenceCount;
-        totalIndexShards += indexTableShards;
+        auto counts = GetIndexObjectCounts(indexDesc);
+        totalCounts.IndexTableCount += counts.IndexTableCount;
+        totalCounts.SequenceCount += counts.SequenceCount;
+        totalCounts.IndexTableShards += counts.IndexTableShards;
+        if (totalCounts.ShardsPerPath < counts.ShardsPerPath) {
+            totalCounts.ShardsPerPath = counts.ShardsPerPath;
+        }
     }
 
     ui32 baseShards = TTableInfo::ShardsToCreate(baseTableDescription);
-    ui32 shardsToCreate = baseShards + totalIndexShards;
-    ui32 pathToCreate = 1 + indexCount + totalIndexTables + totalSequences;
+    if (totalCounts.ShardsPerPath < baseShards) {
+        totalCounts.ShardsPerPath = baseShards;
+    }
+    ui32 shardsToCreate = baseShards + totalCounts.IndexTableShards;
+    ui32 pathToCreate = 1 + indexCount + totalCounts.IndexTableCount + totalCounts.SequenceCount;
 
     TPath workingDir = TPath::Resolve(tx.GetWorkingDir(), context.SS);
     if (workingDir.IsEmpty()) {
@@ -87,7 +90,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
 
     TSubDomainInfo::TPtr domainInfo = baseTablePath.DomainInfo();
 
-    if (totalSequences > 0 && domainInfo->GetSequenceShards().empty()) {
+    if (totalCounts.SequenceCount > 0 && domainInfo->GetSequenceShards().empty()) {
         ++shardsToCreate;
     }
 
@@ -97,6 +100,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                     << " domain path id: " << baseTablePath.GetPathIdForDomain()
                     << " domain path: " << TPath::Init(baseTablePath.GetPathIdForDomain(), context.SS).PathString()
                     << " shardsToCreate: " << shardsToCreate
+                    << " shardsPerPath: " << totalCounts.ShardsPerPath
                     << " GetShardsInside: " << domainInfo->GetShardsInside()
                     << " MaxShards: " << domainInfo->GetSchemeLimits().MaxShards);
 
@@ -114,7 +118,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
 
         if (!tx.GetInternal()) {
             checks
-                .PathShardsLimit(baseShards)
+                .PathShardsLimit(totalCounts.ShardsPerPath)
                 .ShardsLimit(shardsToCreate);
         }
 
@@ -146,7 +150,8 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                 }
                 break;
             }
-            case NKikimrSchemeOp::EIndexTypeGlobalFulltext: {
+            case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
+            case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance: {
                 if (!context.SS->EnableFulltextIndex) {
                     return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Fulltext index support is disabled")};
                 }
@@ -349,27 +354,28 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                 }
                 break;
             }
-            case NKikimrSchemeOp::EIndexTypeGlobalFulltext: {
-                bool withRelevance = indexDescription.GetFulltextIndexDescription().GetSettings()
-                    .layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE;
-                NKikimrSchemeOp::TTableDescription userIndexDesc, docsTableDesc, dictTableDesc, statsTableDesc;
-                // TODO After IndexImplTableDescriptions are persisted, this should be replaced with Y_ABORT_UNLESS
-                if (indexDescription.IndexImplTableDescriptionsSize() == (withRelevance ? 4 : 1)) {
-                    // Descriptions provided by user to override partition policy
+            case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain: {
+                NKikimrSchemeOp::TTableDescription userIndexDesc;
+                if (indexDescription.IndexImplTableDescriptionsSize() == 1) {
                     userIndexDesc = indexDescription.GetIndexImplTableDescriptions(0);
-                    if (withRelevance) {
-                        docsTableDesc = indexDescription.GetIndexImplTableDescriptions(1);
-                        dictTableDesc = indexDescription.GetIndexImplTableDescriptions(2);
-                        statsTableDesc = indexDescription.GetIndexImplTableDescriptions(3);
-                    }
                 }
                 const THashSet<TString> indexDataColumns{indexDescription.GetDataColumnNames().begin(), indexDescription.GetDataColumnNames().end()};
-                result.push_back(createIndexImplTable(CalcFulltextImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), indexDataColumns, userIndexDesc, indexDescription.GetFulltextIndexDescription(), withRelevance)));
-                if (withRelevance) {
-                    result.push_back(createIndexImplTable(CalcFulltextDocsImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), indexDataColumns, docsTableDesc)));
-                    result.push_back(createIndexImplTable(CalcFulltextDictImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), dictTableDesc, indexDescription.GetFulltextIndexDescription())));
-                    result.push_back(createIndexImplTable(CalcFulltextStatsImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), statsTableDesc)));
+                result.push_back(createIndexImplTable(CalcFulltextImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), indexDataColumns, userIndexDesc, indexDescription.GetFulltextIndexDescription(), /*withRelevance=*/false)));
+                break;
+            }
+            case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance: {
+                NKikimrSchemeOp::TTableDescription userIndexDesc, docsTableDesc, dictTableDesc, statsTableDesc;
+                if (indexDescription.IndexImplTableDescriptionsSize() == 4) {
+                    userIndexDesc = indexDescription.GetIndexImplTableDescriptions(0);
+                    docsTableDesc = indexDescription.GetIndexImplTableDescriptions(1);
+                    dictTableDesc = indexDescription.GetIndexImplTableDescriptions(2);
+                    statsTableDesc = indexDescription.GetIndexImplTableDescriptions(3);
                 }
+                const THashSet<TString> indexDataColumns{indexDescription.GetDataColumnNames().begin(), indexDescription.GetDataColumnNames().end()};
+                result.push_back(createIndexImplTable(CalcFulltextImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), indexDataColumns, userIndexDesc, indexDescription.GetFulltextIndexDescription(), /*withRelevance=*/true)));
+                result.push_back(createIndexImplTable(CalcFulltextDocsImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), indexDataColumns, docsTableDesc)));
+                result.push_back(createIndexImplTable(CalcFulltextDictImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), dictTableDesc, indexDescription.GetFulltextIndexDescription())));
+                result.push_back(createIndexImplTable(CalcFulltextStatsImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), statsTableDesc)));
                 break;
             }
             default:

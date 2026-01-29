@@ -134,7 +134,7 @@ public:
     }
 
 private:
-    TNumberAndDirectionWithSerialized(EDirection direction)
+    explicit TNumberAndDirectionWithSerialized(EDirection direction)
         : Value_(TNumberAndDirection<T>::Inf(direction))
         , String_(TNumberAndDirection<TString>::Inf(direction))
     {
@@ -161,7 +161,7 @@ public:
     }
 
 private:
-    TNumberAndDirectionWithSerialized(EDirection direction)
+    explicit TNumberAndDirectionWithSerialized(EDirection direction)
         : String_(TNumberAndDirection<TString>::Inf(direction))
     {
     }

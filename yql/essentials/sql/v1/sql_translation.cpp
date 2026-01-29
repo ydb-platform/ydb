@@ -700,7 +700,7 @@ bool TSqlTranslation::CreateTableIndex(const TRule_table_index& node, TVector<TI
 
     if (node.GetRule_table_index_type3().HasBlock2()) {
         const TString subType = to_upper(IdEx(node.GetRule_table_index_type3().GetBlock2().GetRule_index_subtype2().GetRule_an_id1(), *this).Name);
-        if (subType == "VECTOR_KMEANS_TREE" || subType == "FULLTEXT") {
+        if (subType == "VECTOR_KMEANS_TREE" || subType == "FULLTEXT_PLAIN" || subType == "FULLTEXT_RELEVANCE") {
             if (indexes.back().Type != TIndexDescription::EType::GlobalSync) {
                 Ctx_.Error() << subType << " index can only be GLOBAL [SYNC]";
                 return false;
@@ -708,8 +708,10 @@ bool TSqlTranslation::CreateTableIndex(const TRule_table_index& node, TVector<TI
 
             if (subType == "VECTOR_KMEANS_TREE") {
                 indexes.back().Type = TIndexDescription::EType::GlobalVectorKmeansTree;
-            } else if (subType == "FULLTEXT") {
-                indexes.back().Type = TIndexDescription::EType::GlobalFulltext;
+            } else if (subType == "FULLTEXT_PLAIN") {
+                indexes.back().Type = TIndexDescription::EType::GlobalFulltextPlain;
+            } else if (subType == "FULLTEXT_RELEVANCE") {
+                indexes.back().Type = TIndexDescription::EType::GlobalFulltextRelevance;
             } else {
                 Y_ABORT("Unreachable");
             }
@@ -723,7 +725,9 @@ bool TSqlTranslation::CreateTableIndex(const TRule_table_index& node, TVector<TI
     if (node.HasBlock10()) {
         // const auto& with = node.GetBlock4();
         auto& index = indexes.back();
-        if (index.Type == TIndexDescription::EType::GlobalVectorKmeansTree || index.Type == TIndexDescription::EType::GlobalFulltext) {
+        if (index.Type == TIndexDescription::EType::GlobalVectorKmeansTree ||
+            index.Type == TIndexDescription::EType::GlobalFulltextPlain ||
+            index.Type == TIndexDescription::EType::GlobalFulltextRelevance) {
             if (!FillIndexSettings(node.GetBlock10().GetRule_with_index_settings1(), index.IndexSettings)) {
                 return false;
             }
@@ -5680,7 +5684,7 @@ bool TSqlTranslation::ParseTransferLambda(
 
 class TReturningListColumns: public INode {
 public:
-    TReturningListColumns(TPosition pos)
+    explicit TReturningListColumns(TPosition pos)
         : INode(pos)
     {
     }

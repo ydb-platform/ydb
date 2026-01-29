@@ -72,7 +72,6 @@ SRCS(
     rpc_make_directory.cpp
     rpc_modify_permissions.cpp
     rpc_monitoring.cpp
-    rpc_nbs.cpp
     rpc_node_registration.cpp
     rpc_object_storage.cpp
     rpc_ping.cpp
@@ -136,7 +135,7 @@ PEERDIR(
     ydb/core/io_formats/ydb_dump
     ydb/core/kesus/tablet
     ydb/core/kqp/common
-    ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct
+    ydb/core/kqp/opt
     ydb/core/protos
     ydb/core/scheme
     ydb/core/sys_view
@@ -169,6 +168,19 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/resources
     ydb/services/ext_index/common
 )
+
+IF (OS_LINUX)
+    SRCS(
+        rpc_nbs.cpp
+        rpc_nbs_io.cpp
+    )
+    PEERDIR(
+        ydb/core/nbs/cloud/blockstore/libs/service
+        ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct
+        ydb/core/nbs/cloud/blockstore/public/api/protos
+        ydb/core/nbs/cloud/storage/core/libs/common
+    )
+ENDIF()
 
 YQL_LAST_ABI_VERSION()
 

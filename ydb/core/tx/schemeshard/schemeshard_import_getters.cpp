@@ -344,11 +344,16 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         return schemeKey.EndsWith(NYdb::NDump::NFiles::CreateExternalDataSource().FileName);
     }
 
+    static bool IsExternalTable(TStringBuf schemeKey) {
+        return schemeKey.EndsWith(NYdb::NDump::NFiles::CreateExternalTable().FileName);
+    }
+
     static bool IsCreatedByQuery(TStringBuf schemeKey) {
         return IsView(schemeKey)
             || IsReplication(schemeKey)
             || IsTransfer(schemeKey)
-            || IsExternalDataSource(schemeKey);
+            || IsExternalDataSource(schemeKey)
+            || IsExternalTable(schemeKey);
     }
 
     static bool NoObjectFound(Aws::S3::S3Errors errorType) {
@@ -369,14 +374,45 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         GetObject(MetadataKey, result.GetResult().GetContentLength());
     }
 
+    bool CheckAvailableInImport(NKikimrSchemeOp::EPathType pathType) {
+        switch (pathType) {
+            case NKikimrSchemeOp::EPathTypeView:
+                return AppData()->FeatureFlags.GetEnableViewExport();
+            case NKikimrSchemeOp::EPathTypeColumnTable:
+                return AppData()->FeatureFlags.GetEnableColumnTablesBackup();
+            case NKikimrSchemeOp::EPathTypeReplication:
+                return AppData()->Icb->BackupControls.S3Controls.EnableAsyncReplicationImport.AtomicLoad()->Get();
+            case NKikimrSchemeOp::EPathTypeTransfer:
+                return AppData()->Icb->BackupControls.S3Controls.EnableTransferImport.AtomicLoad()->Get();
+            case NKikimrSchemeOp::EPathTypeExternalDataSource:
+                return AppData()->Icb->BackupControls.S3Controls.EnableExternalDataSourceImport.AtomicLoad()->Get();
+            case NKikimrSchemeOp::EPathTypeExternalTable:
+                return AppData()->Icb->BackupControls.S3Controls.EnableExternalTableImport.AtomicLoad()->Get();
+            case NKikimrSchemeOp::EPathTypePersQueueGroup:
+            case NKikimrSchemeOp::EPathTypeTable:
+                return true;
+            default:
+                return false;
+        }
+    }
+
     void HeadNextScheme() {
-        if (++SchemePropertiesIdx >= GetXxportProperties().size()) {
-            return Reply(Ydb::StatusIds::BAD_REQUEST, "Unsupported scheme object type");
+        while (++SchemePropertiesIdx < GetXxportProperties().size()) {
+            const auto& properties = GetXxportProperties()[SchemePropertiesIdx];
+            LOG_D("HeadNextScheme"
+                << ": self# " << SelfId()
+                << ", file name# " << properties.FileName);
+            if (!CheckAvailableInImport(properties.PathType)) {
+                LOG_D(TStringBuilder() << properties.FileName << " not available in imports");
+                continue;
+            }
+
+            SchemeKey = SchemeKeyFromSettings(*ImportInfo, ItemIdx, properties.FileName);
+            SchemeFileType = properties.FileType;
+            return HeadObject(SchemeKey);
         }
 
-        SchemeKey = SchemeKeyFromSettings(*ImportInfo, ItemIdx, GetXxportProperties()[SchemePropertiesIdx].FileName);
-        SchemeFileType = GetXxportProperties()[SchemePropertiesIdx].FileType;
-        HeadObject(SchemeKey);
+        return Reply(Ydb::StatusIds::BAD_REQUEST, "Unsupported scheme object type");
     }
 
     void HandleScheme(TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {
@@ -858,13 +894,8 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
                         }
 
                         const TVector<TString> indexColumns(index.index_columns().begin(), index.index_columns().end());
-                        std::optional<Ydb::Table::FulltextIndexSettings::Layout> layout;
-                        if (*indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltext) {
-                            const auto& settings = index.global_fulltext_index().fulltext_settings();
-                            layout = settings.has_layout() ? settings.layout() : Ydb::Table::FulltextIndexSettings::LAYOUT_UNSPECIFIED;
-                        }
 
-                        for (const auto& implTable : NTableIndex::GetImplTables(*indexType, indexColumns, layout)) {
+                        for (const auto& implTable : NTableIndex::GetImplTables(*indexType, indexColumns)) {
                             const TString implTablePrefix = TStringBuilder() << index.name() << "/" << implTable;
                             IndexImplTablePrefixes.push_back({implTablePrefix, implTablePrefix});
                         }
@@ -1667,7 +1698,7 @@ class TSchemeGetterFS: public TActorBootstrapped<TSchemeGetterFS> {
         auto& item = ImportInfo->Items[ItemIdx];
 
         Ydb::Table::CreateTableRequest table;
-        if (table.ParseFromString(content)) {
+        if (google::protobuf::TextFormat::ParseFromString(content, &table)) {
             item.Table = table;
             return true;
         }
@@ -1679,7 +1710,7 @@ class TSchemeGetterFS: public TActorBootstrapped<TSchemeGetterFS> {
     void ProcessPermissions(const TString& content) {
         auto& item = ImportInfo->Items[ItemIdx];
         Ydb::Scheme::ModifyPermissionsRequest permissions;
-        if (permissions.ParseFromString(content)) {
+        if (google::protobuf::TextFormat::ParseFromString(content, &permissions)) {
             item.Permissions = permissions;
         }
     }

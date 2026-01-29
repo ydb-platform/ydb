@@ -51,7 +51,7 @@ void TBackupTransactionOperator::DoStartProposeOnComplete(TColumnShard& /*owner*
 bool TBackupTransactionOperator::ProgressOnExecute(
     TColumnShard& owner, const NOlap::TSnapshot& /*version*/, NTabletFlatExecutor::TTransactionContext& txc) {
     AFL_VERIFY(!TxRemove);
-    auto status = owner.GetBackgroundSessionsManager()->GetStatus(ExportTask->GetClassName(), ::ToString(ExportTask->GetBackupTask().GetPathId()));
+    auto status = owner.GetBackgroundSessionsManager()->GetStatus(ExportTask->GetClassName(), ::ToString(ExportTask->GetIdentifier().GetPathId()));
     owner.LastCompletedBackupTransaction.SetTxId(GetTxId());
     auto& opResult = *owner.LastCompletedBackupTransaction.MutableOpResult();
     opResult.SetSuccess(status.Success);
@@ -63,7 +63,7 @@ bool TBackupTransactionOperator::ProgressOnExecute(
 }
 
 bool TBackupTransactionOperator::ProgressOnComplete(TColumnShard& owner, const TActorContext& ctx) {
-    auto status = owner.GetBackgroundSessionsManager()->GetStatus(ExportTask->GetClassName(), ::ToString(ExportTask->GetBackupTask().GetPathId()));
+    auto status = owner.GetBackgroundSessionsManager()->GetStatus(ExportTask->GetClassName(), ::ToString(ExportTask->GetIdentifier().GetPathId()));
     for (TActorId subscriber : NotifySubscribers) {
         auto event = MakeHolder<TEvColumnShard::TEvNotifyTxCompletionResult>(owner.TabletID(), GetTxId());
         auto& opResult = *event->Record.MutableOpResult();

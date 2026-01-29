@@ -1838,7 +1838,6 @@ bool FillColumnTableDescription(NKikimrSchemeOp::TModifyScheme& out,
         attr.SetValue(value);
     }
 
-    TList<TString> warnings;
     if (!FillCreateTableSettingsDesc(tableDesc, in, status, error)) {
         return false;
     }

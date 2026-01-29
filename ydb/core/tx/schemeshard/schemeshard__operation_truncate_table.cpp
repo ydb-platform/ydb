@@ -331,15 +331,43 @@ public:
 };
 
 enum ESchemeObjectType {
+// First tree's level
     MainTable,
-    GlobalVectorIndex,           // there are special rules for processing global vector index
-    PrefixVectorIndex,           // there are special rules for processing prefix vector index
-    CommonIndex,                 // using for secondary, unique and fulltext indexes
-    IndexImplPrefixTable,        // there are special rules for processing index impl prefix table
-    CommonIndexImplTable         // using for other index impl tables
+
+// Second tree's level
+    GenericIndex,                // used for secondary, unique and fulltext indexes
+    GlobalVectorIndex,           // global vector index require special processing
+    PrefixVectorIndex,           // prefix vector index require special processing
+
+// Third tree's level
+    GenericIndexImplTable,       // used for other index impl tables
+    IndexImplPrefixTable,        // impl prefix table require special processing
 };
 
-bool DfsOnTableChildrenTree(TOperationId opId, const TTxTransaction& tx, TOperationContext& context, const TPathId& currentPathId, TVector<ISubOperation::TPtr>& result, ESchemeObjectType objectType) {
+// About DfsOnTableChildrenTree.
+//
+// Traverses the table’s child tree in DFS order (main table -> index objects -> index implementation tables)
+// and builds a list of TRUNCATE TABLE sub-operations, so all related tables are truncated as one consistent action.
+//
+// For each node that is a table, the function adds a TRUNCATE TABLE sub-operation to `result`.
+//
+// During the traversal it also checks that the tree structure matches what we expect for the supported index types:
+//  - the main table may have only certain kinds of children (table indexes / sequences);
+//  - for each supported index type, its subtree is checked (which implementation tables may exist, their types,
+//    and any special-case exceptions).
+// If the structure does not match, the traversal fails and the operation is rejected.
+//
+// These checks are intentionally strict. If the expected tree structure changes in the future, truncating only some of
+// the related tables could leave the database in an inconsistent state. In that case we return an error instead of
+// running an unsafe TRUNCATE.
+bool DfsOnTableChildrenTree(
+    TOperationId opId,
+    const TTxTransaction& tx,
+    TOperationContext& context,
+    const TPathId& currentPathId,
+    TVector<ISubOperation::TPtr>& result,
+    ESchemeObjectType objectType
+) {
     TPath currentPath = TPath::Init(currentPathId, context.SS);
 
     if (currentPath->IsTable()) {
@@ -352,7 +380,6 @@ bool DfsOnTableChildrenTree(TOperationId opId, const TTxTransaction& tx, TOperat
             .NotUnderOperation();
 
         if (!checks) {
-            // We cannot return empty vector of suboperations because of technical features of schemeshard's work
             result = {CreateReject(opId, checks.GetStatus(), checks.GetError())};
             return false;
         }
@@ -367,10 +394,6 @@ bool DfsOnTableChildrenTree(TOperationId opId, const TTxTransaction& tx, TOperat
         result.push_back(CreateTruncateTable(NextPartId(opId, result), modifycheme));
     }
 
-    // The code below checks that the table matches a very strictly defined structure.
-    // We must not allow this structure to be accidentally broken by future changes,
-    // because in that case TRUNCATE could bring the database into an inconsistent state.
-    // It is better to return an error to the user than to allow that to happen.
     switch (objectType) {
         case ESchemeObjectType::MainTable: {
             for (const auto& [childName, childPathId] : currentPath.Base()->GetChildren()) {
@@ -399,11 +422,11 @@ bool DfsOnTableChildrenTree(TOperationId opId, const TTxTransaction& tx, TOperat
                                 bool isGlobalVectorIndex = index->IndexKeys.size() == 1;
                                 bool isPrefixVectorIndex = index->IndexKeys.size() > 1;
 
-                                if (isGlobalVectorIndex) { // GlobalVectorIndex contains two implTables
+                                if (isGlobalVectorIndex) {
                                     if (!DfsOnTableChildrenTree(opId, tx, context, childPathId, result, ESchemeObjectType::GlobalVectorIndex)) {
                                         return false;
                                     }
-                                } else if (isPrefixVectorIndex) { // PrefixVectorIndex contains three implTables
+                                } else if (isPrefixVectorIndex) {
                                     if (!DfsOnTableChildrenTree(opId, tx, context, childPathId, result, ESchemeObjectType::PrefixVectorIndex)) {
                                         return false;
                                     }
@@ -415,7 +438,7 @@ bool DfsOnTableChildrenTree(TOperationId opId, const TTxTransaction& tx, TOperat
                             case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
                             case NKikimrSchemeOp::EIndexTypeGlobal:
                             case NKikimrSchemeOp::EIndexTypeGlobalUnique: {
-                                if (!DfsOnTableChildrenTree(opId, tx, context, childPathId, result, ESchemeObjectType::CommonIndex)) {
+                                if (!DfsOnTableChildrenTree(opId, tx, context, childPathId, result, ESchemeObjectType::GenericIndex)) {
                                     return false;
                                 }
 
@@ -447,7 +470,7 @@ bool DfsOnTableChildrenTree(TOperationId opId, const TTxTransaction& tx, TOperat
 
         case ESchemeObjectType::GlobalVectorIndex:
         case ESchemeObjectType::PrefixVectorIndex:
-        case ESchemeObjectType::CommonIndex: {
+        case ESchemeObjectType::GenericIndex: {
             for (const auto& [childName, childPathId] : currentPath.Base()->GetChildren()) {
                 Y_ABORT_UNLESS(context.SS->PathsById.contains(childPathId));
                 TPath srcChildPath = currentPath.Child(childName);
@@ -456,8 +479,8 @@ bool DfsOnTableChildrenTree(TOperationId opId, const TTxTransaction& tx, TOperat
                     continue;
                 }
 
-                constexpr TStringBuf tableExcludedFromTruncate = "indexImplLevelTable";
-                if (objectType == ESchemeObjectType::GlobalVectorIndex && srcChildPath.PathString().EndsWith(tableExcludedFromTruncate)) {
+                constexpr TStringBuf excludedFromTruncateTableName = "indexImplLevelTable";
+                if (objectType == ESchemeObjectType::GlobalVectorIndex && srcChildPath.PathString().EndsWith(excludedFromTruncateTableName)) {
                     continue;
                 }
 
@@ -469,7 +492,7 @@ bool DfsOnTableChildrenTree(TOperationId opId, const TTxTransaction& tx, TOperat
                                 return false;
                             }
                         } else {
-                            if (!DfsOnTableChildrenTree(opId, tx, context, childPathId, result, ESchemeObjectType::CommonIndexImplTable)) {
+                            if (!DfsOnTableChildrenTree(opId, tx, context, childPathId, result, ESchemeObjectType::GenericIndexImplTable)) {
                                 return false;
                             }
                         }
@@ -498,7 +521,7 @@ bool DfsOnTableChildrenTree(TOperationId opId, const TTxTransaction& tx, TOperat
             break;
         }
 
-        case ESchemeObjectType::CommonIndexImplTable: {
+        case ESchemeObjectType::GenericIndexImplTable: {
             if (!currentPath.Base()->GetChildren().empty()) {
                 result = {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed, "Index impl tables cannot contain children")};
                 return false;

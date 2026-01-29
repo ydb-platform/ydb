@@ -58,6 +58,25 @@ Y_UNIT_TEST(Add) {
     UNIT_ASSERT_VALUES_EQUAL(probe2, 1);
 }
 
+Y_UNIT_TEST(OverlappingCardinality) {
+    std::unique_ptr<TCountMinSketch> countMinA(TCountMinSketch::Create(256, 8));
+    std::unique_ptr<TCountMinSketch> countMinB(TCountMinSketch::Create(256, 8));
+
+    TString str1("foo");
+    countMinA->Count(str1.data(), str1.size());
+    countMinB->Count(str1.data(), str1.size());
+
+    TString str2("bar");
+    countMinA->Count(str2.data(), str2.size());
+    countMinA->Count(str2.data(), str2.size());
+    countMinB->Count(str2.data(), str2.size());
+    countMinB->Count(str2.data(), str2.size());
+    countMinB->Count(str2.data(), str2.size());
+
+    auto cardinality = countMinA->GetOverlappingCardinality(*countMinB);
+    UNIT_ASSERT_VALUES_EQUAL(*cardinality, 3);
+}
+
 } // Y_UNIT_TEST_SUITE(CountMinSketch)
 
 } // namespace NKikimr

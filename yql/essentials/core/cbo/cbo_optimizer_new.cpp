@@ -1,5 +1,7 @@
 #include "cbo_optimizer_new.h"
 
+#include <yql/essentials/utils/log/log.h>
+
 #include <array>
 
 #include <util/string/builder.h>
@@ -248,16 +250,37 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
     }
 
     if (isRightPKJoin) {
+        //selectivity = leftStats.Selectivity * rightStats.Selectivity;
+        //selectivity = rightStats.Selectivity;
+        selectivity = std::cbrt(leftStats.Selectivity * rightStats.Selectivity);
+
         switch (joinKind) {
             case EJoinKind::LeftJoin:
                 newCard = leftStats.Nrows;
                 break;
             default: {
-                newCard = leftStats.Nrows * rightStats.Selectivity;
+                //YQL_CLOG(TRACE, CoreDq) << "Commputing join card with histograms";
+
+                if (rightStats.Type == EStatisticsType::BaseTable && leftStats.ColumnStatistics && rightStats.ColumnStatistics && !leftJoinKeys.empty() && !rightJoinKeys.empty()) {
+                    //YQL_CLOG(TRACE, CoreDq) << "Histogram used";
+
+                    auto lhs = leftJoinKeys[0].AttributeName;
+                    auto leftHist = leftStats.ColumnStatistics->Data[lhs].EqWidthHistogramEstimator;
+                    auto rhs = rightJoinKeys[0].AttributeName;
+                    auto rightHist = rightStats.ColumnStatistics->Data[rhs].EqWidthHistogramEstimator;
+
+                    if (leftHist && rightHist) {
+                        auto overlapCard = rightHist->GetOverlappingCardinality(*leftHist);
+                        //YQL_CLOG(TRACE, CoreDq) << "Overlapping cardinality: " << overlapCard;
+                        auto selectivityCorrection = ((double)rightHist->GetNumElements() / (double)*overlapCard );
+                        //YQL_CLOG(TRACE, CoreDq) << "Cardinality correction: " << selectivityCorrection;
+                        selectivity *= selectivityCorrection;
+                    }
+                }
+                newCard = leftStats.Nrows * selectivity;
             }
         }
 
-        selectivity = leftStats.Selectivity * rightStats.Selectivity;
         leftKeyColumns = true;
         if (leftStats.Type == EStatisticsType::BaseTable) {
             outputType = EStatisticsType::FilteredFactTable;
@@ -265,16 +288,35 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
             outputType = leftStats.Type;
         }
     } else if (isLeftPKJoin) {
+        //selectivity = leftStats.Selectivity * rightStats.Selectivity;
+        //selectivity = leftStats.Selectivity;
+        selectivity = std::cbrt(leftStats.Selectivity * rightStats.Selectivity);
+
         switch (joinKind) {
             case EJoinKind::RightJoin:
                 newCard = rightStats.Nrows;
                 break;
             default: {
-                newCard = leftStats.Selectivity * rightStats.Nrows;
+                if (leftStats.Type == EStatisticsType::BaseTable && leftStats.ColumnStatistics && rightStats.ColumnStatistics && !leftJoinKeys.empty() && !rightJoinKeys.empty()) {
+                    //YQL_CLOG(TRACE, CoreDq) << "Histogram used";
+
+                    auto lhs = leftJoinKeys[0].AttributeName;
+                    auto leftHist = leftStats.ColumnStatistics->Data[lhs].EqWidthHistogramEstimator;
+                    auto rhs = rightJoinKeys[0].AttributeName;
+                    auto rightHist = rightStats.ColumnStatistics->Data[rhs].EqWidthHistogramEstimator;
+
+                    if (leftHist && rightHist) {
+                        auto overlapCard = leftHist->GetOverlappingCardinality(*rightHist);
+                        //YQL_CLOG(TRACE, CoreDq) << "Overlapping cardinality: " << overlapCard;
+                        auto selectivityCorrection = ((double)leftHist->GetNumElements() / (double)*overlapCard );
+                        //YQL_CLOG(TRACE, CoreDq) << "Cardinality correction: " << selectivityCorrection;
+                        selectivity *= selectivityCorrection;
+                    }
+                }
+                newCard = rightStats.Nrows * selectivity;
             }
         }
 
-        selectivity = leftStats.Selectivity * rightStats.Selectivity;
         rightKeyColumns = true;
         if (rightStats.Type == EStatisticsType::BaseTable) {
             outputType = EStatisticsType::FilteredFactTable;
@@ -294,8 +336,7 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
             auto lhs = leftJoinKeys[0].AttributeName;
             lhsUniqueVals = leftStats.ColumnStatistics->Data[lhs].NumUniqueVals;
             auto rhs = rightJoinKeys[0].AttributeName;
-            rightStats.ColumnStatistics->Data[rhs];
-            rhsUniqueVals = leftStats.ColumnStatistics->Data[lhs].NumUniqueVals;
+            rhsUniqueVals = rightStats.ColumnStatistics->Data[rhs].NumUniqueVals;
         }
 
         if (lhsUniqueVals.has_value() && rhsUniqueVals.has_value()) {

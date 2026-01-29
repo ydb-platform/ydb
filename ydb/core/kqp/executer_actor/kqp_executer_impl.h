@@ -522,6 +522,11 @@ protected:
             return;
 
         if (TasksGraph.GetMeta().DqChannelVersion >= 2u) {
+            if (ev->Get()->Record.GetEnough()) {
+                for (auto& [channelId, inputBuffer] : ResultInputBuffers) {
+                    inputBuffer->EarlyFinish();
+                }
+            }
             return;
         }
 

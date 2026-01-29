@@ -1278,6 +1278,10 @@ public:
             keyColumnTypes, resultKeyColumnTypes, resultKeyColumnIds);
     }
 
+    TStringBuf GetWord(const TConstArrayRef<TCell>& row) const {
+        return row[0].AsBuf();
+    }
+
     ui64 GetWordFrequency(const TConstArrayRef<TCell>& row) const {
         return row[GetResultColumnTypes().size() - 1].AsValue<ui64>();
     }
@@ -1608,9 +1612,11 @@ private:
         return false;
     }
 
-    void EnrichWordInfo(TWordReadState& word) {
-        DictTableReader->StageRangeToRead(word.GetWordKeyCells());
-        InvokeReads<TDictTableReader>(DictTableReader.Get(), EReadKind_WordStats, word.WordIndex);
+    void EnrichWordInfo() {
+        for (auto& word : Words) {
+            DictTableReader->StageRangeToRead(word.GetWordKeyCells());
+        }
+        InvokeReads<TDictTableReader>(DictTableReader.Get(), EReadKind_WordStats, 0);
     }
 
     void StartWordReads() {
@@ -1665,11 +1671,7 @@ private:
         }
 
         for (auto& word : Words) {
-            if (IndexDescription.GetSettings().layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE) {
-                EnrichWordInfo(word);
-            } else {
-                ContinueWordRead(word);
-            }
+            ContinueWordRead(word);
         }
     }
 
@@ -1943,6 +1945,8 @@ public:
         if (ExtractAndTokenizeExpression()) {
             if (StatsTableReader) {
                 ReadTotalStats();
+            } else if (DictTableReader) {
+                EnrichWordInfo();
             } else {
                 StartWordReads();
             }
@@ -2038,22 +2042,33 @@ public:
     }
 
     void HandleTotalStatsResult(TEvDataShard::TEvReadResult& msg) {
-        for(size_t i = 0; i < msg.GetRowsCount(); ++i) {
+        for (size_t i = 0; i < msg.GetRowsCount(); ++i) {
             const auto& row = msg.GetCells(i);
             DocCount = StatsTableReader->GetDocCount(row);
             SumDocLength = StatsTableReader->GetSumDocLength(row);
         }
-
-        StartWordReads();
+        if (DictTableReader) {
+            EnrichWordInfo();
+        } else {
+            StartWordReads();
+        }
     }
 
-    void WordStatsResult(NKikimr::TEvDataShard::TEvReadResult &msg, ui64 wordIndex) {
-        for(size_t i = 0; i < msg.GetRowsCount(); ++i) {
+    void WordStatsResult(NKikimr::TEvDataShard::TEvReadResult &msg) {
+        for (size_t i = 0; i < msg.GetRowsCount(); i++) {
             const auto& row = msg.GetCells(i);
-            auto& word = Words[wordIndex];
-            word.Frequency = DictTableReader->GetWordFrequency(row);
-            QueryCtx->AddIDFValue(wordIndex, word.Frequency);
-            ContinueWordRead(word);
+            const auto& wordBuf = DictTableReader->GetWord(row);
+            for (auto& word: Words) {
+                if (word.Word == wordBuf) {
+                    word.Frequency = DictTableReader->GetWordFrequency(row);
+                    QueryCtx->AddIDFValue(word.WordIndex, word.Frequency);
+                }
+            }
+        }
+        if (!Reads.size()) {
+            for (auto& word: Words) {
+                ContinueWordRead(word);
+            }
         }
     }
 
@@ -2150,7 +2165,7 @@ public:
                 DocumentStatsResult(msg);
                 break;
             case EReadKind_WordStats:
-                WordStatsResult(msg, cookie);
+                WordStatsResult(msg);
                 break;
             case EReadKind_Word:
                 WordResult(std::unique_ptr<NKikimr::TEvDataShard::TEvReadResult>(ev->Release().Release()), cookie, record.GetFinished());

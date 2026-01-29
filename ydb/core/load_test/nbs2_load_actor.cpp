@@ -186,7 +186,7 @@ public:
         using namespace NCloud::NBlockStore;
         auto sendReadRequest =
             [this]
-            (TBlockRange64 range, NCloud::NBlockStore::NLoadTest::LoadTestSendRequestFunctionCB cb, const void *udata) mutable {
+            (TBlockRange64 range, NCloud::NBlockStore::NLoadTest::LoadTestSendRequestFunctionCB cb, const void *udata) {
             auto request = std::make_unique<NYdb::NBS::TEvService::TEvReadBlocksRequest>();
             request->Record.SetDiskId("TempDiskID");
             request->Record.SetStartIndex(range.Start);
@@ -204,7 +204,7 @@ public:
                 size_t dataSize,
                 NCloud::NBlockStore::NLoadTest::LoadTestSendRequestFunctionCB cb,
                 const void *udata
-            ) mutable {
+            ) {
                 auto request = std::make_unique<NYdb::NBS::TEvService::TEvWriteBlocksRequest>();
                 request->Record.SetDiskId("TempDiskID");
                 request->Record.SetStartIndex(blockIndexWriteTo);
@@ -227,36 +227,36 @@ public:
         };
 
         NCloud::NBlockStore::NLoadTest::TLoadTestRequestCallbacks requestCallbacks;
-        requestCallbacks.Read = sendReadRequest;
-        requestCallbacks.NotifyCompleted = notifyTestCompleted;
-        requestCallbacks.Write = sendWriteRequest;
+        requestCallbacks.Read = std::move(sendReadRequest);
+        requestCallbacks.NotifyCompleted = std::move(notifyTestCompleted);
+        requestCallbacks.Write = std::move(sendWriteRequest);
 
-        return requestCallbacks;
+        return std::move(requestCallbacks);
     }
 
     void RunTest(const TActorContext& ctx) {
         using namespace NCloud::NBlockStore;
-        LOG_DEBUG_S(ctx, NKikimrServices::NBS2_LOAD_TEST, "Tag# " << Tag << " RunTest called");
+        LOG_WARN_S(ctx, NKikimrServices::NBS2_LOAD_TEST, "Tag# " << Tag << " RunTest called");
 
+        try {
+            NCloud::TLogSettings logSettings;
+            logSettings.FiltrationLevel = ELogPriority::TLOG_INFO;
+            auto logging = CreateLoggingService("console", logSettings);
 
-        //-------------
-
-        NCloud::TLogSettings logSettings;
-        logSettings.FiltrationLevel = ELogPriority::TLOG_INFO;
-        auto logging = CreateLoggingService("console", logSettings);
-
-        NCloud::NBlockStore::NLoadTest::TLoadTestRequestCallbacks
-            requestCallbacks = GetLoadTestCallbacks();
-
-        TestRunner = CreateTestRunner(
-            logging,
-            NCloud::NBlockStore::NLoadTest::MakeLoggingTag(Name),
-            NCloud::NBlockStore::NLoadTest::CreateArtificialRequestGenerator(logging, RangeTest),
-            RangeTest.GetIoDepth(),
-            TestContext.ShouldStop,
-            requestCallbacks,
-            reinterpret_cast<const void*>(&ctx));
-        TestRunner->Start();
+            TestRunner = CreateTestRunner(
+                logging,
+                NCloud::NBlockStore::NLoadTest::MakeLoggingTag(Name),
+                NCloud::NBlockStore::NLoadTest::CreateArtificialRequestGenerator(logging, RangeTest),
+                RangeTest.GetIoDepth(),
+                TestContext.ShouldStop,
+                std::move(GetLoadTestCallbacks()),
+                reinterpret_cast<const void*>(&ctx));
+            TestRunner->Start();
+        } catch (std::exception& e) {
+            LOG_ERROR_S(ctx, NKikimrServices::NBS2_LOAD_TEST,
+                "Tag# " << Tag << " RUN_TEST EXCEPTION: " << e.what());
+            TestRunner->Stop();
+        }
     }
 
     template <typename Record>
@@ -322,6 +322,7 @@ public:
         HFunc(NYdb::NBS::TEvService::TEvReadBlocksResponse, HandleReadBlocksResponse)
         HFunc(NYdb::NBS::TEvService::TEvWriteBlocksResponse, HandleWriteBlocksResponse)
         HFunc(NYdb::NBS::TEvService::TEvReadBlocksRequest, HandleUndelivery)
+        HFunc(NYdb::NBS::TEvService::TEvWriteBlocksRequest, HandleUndelivery)
     )
 
 

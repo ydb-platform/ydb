@@ -77,7 +77,7 @@ private:
 
 
     static constexpr ui64 BlockSize = 4_KB;
-    static constexpr ui32 BlocksNum = 256000;
+    static constexpr ui32 BlocksNum = 256;
     TVector<TVector<ui8>> DataForWriteRequests;
 public:
     TTestRunner(
@@ -96,7 +96,12 @@ public:
         , RequestCallbacks(std::move(requestCallbacks))
         , Udata(udata)
     {
-        if (requests->HasWriteRequests()) {
+        STORAGE_WARN(LoggingTag
+                << "TTestRunner initializing");
+
+        if (Requests->HasWriteRequests()) {
+            STORAGE_WARN(LoggingTag
+                << "Test has write requests. Generating data");
             GenerateWriteData();
         }
     }
@@ -280,7 +285,7 @@ void TTestRunner::SendWriteRequest(const TBlockRange64& range)
             TInstant::Now() - started);
     };
 
-    ui64 randomBlockIndex = RandomNumber<ui8>(DataForWriteRequests.size());
+    ui64 randomBlockIndex = RandomNumber<ui64>(DataForWriteRequests.size());
     auto& block = DataForWriteRequests[randomBlockIndex];
     RequestCallbacks.Write(range.Start, block.data(), block.size(), cb, Udata);
 }

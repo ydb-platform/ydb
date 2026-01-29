@@ -70,6 +70,7 @@
   - npp.h
   - nppdefs.h
   - nppi.h
+  - npps.h
   - nv/target
   - nvToolsExt.h
   - nvToolsExtCuda.h

@@ -174,6 +174,7 @@ public:
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, BuildSnapshot);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, ExitReadOnly);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, MasterExitReadOnly);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, ResetDynamicallyPropagatedMasterCells);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, DiscombobulateNonvotingPeers);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GCCollect);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, SuspendCoordinator);

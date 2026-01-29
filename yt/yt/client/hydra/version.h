@@ -16,8 +16,8 @@ struct TReachableState
     TReachableState() = default;
     TReachableState(int segmentId, i64 sequenceNumber) noexcept;
 
-    std::strong_ordering operator <=> (const TReachableState& other) const;
-    bool operator == (const TReachableState& other) const = default;
+    std::strong_ordering operator<=>(const TReachableState& other) const;
+    bool operator==(const TReachableState& other) const = default;
 };
 
 void FormatValue(TStringBuilderBase* builder, TReachableState state, TStringBuf /*spec*/);
@@ -42,8 +42,8 @@ struct TElectionPriority
         int lastMutationTerm,
         TReachableState reachableState) noexcept;
 
-    std::strong_ordering operator <=> (const TElectionPriority& other) const;
-    bool operator == (const TElectionPriority& other) const = default;
+    std::strong_ordering operator<=>(const TElectionPriority& other) const;
+    bool operator==(const TElectionPriority& other) const = default;
 };
 
 void FormatValue(TStringBuilderBase* builder, TElectionPriority state, TStringBuf /*spec*/);
@@ -58,8 +58,8 @@ struct TVersion
     TVersion() = default;
     TVersion(int segmentId, int recordId) noexcept;
 
-    std::strong_ordering operator <=> (const TVersion& other) const = default;
-    bool operator == (const TVersion& other) const = default;
+    std::strong_ordering operator<=>(const TVersion& other) const = default;
+    bool operator==(const TVersion& other) const = default;
 
     // COMPAT(h0pless): HydraLogicalRecordId. Move this method to TLogicalVersion.
     TRevision ToRevision() const;

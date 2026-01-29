@@ -1,5 +1,7 @@
 LIBRARY()
 
+GENERATE_ENUM_SERIALIZATION(request.h)
+
 SRCS(
     context.cpp
 )

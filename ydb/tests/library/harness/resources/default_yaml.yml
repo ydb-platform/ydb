@@ -132,6 +132,7 @@ log_config:
 grpc_config:
   host: "{ydb_grpc_host}"
   services:
+  - "nbs"
   - "legacy"
   - "tablet_service"
   - "yql"

@@ -919,6 +919,51 @@ namespace {
                 TStringBuilder() << "\nExpected:\n\n" << permissions_expected << "\n\nActual:\n\n" << permissions);
         }
 
+        void TestIcb() {
+            auto options = TTestEnvOptions()
+                .InitYdbDriver(true);
+            TTestEnv env(Runtime(), options);
+            ui64 txId = 100;
+
+            TestCreateReplication(Runtime(), ++txId, "/MyRoot", R"(
+                Name: "Replication"
+                Config {
+                    SrcConnectionParams {
+                        Endpoint: "localhost:2135"
+                        Database: "/MyRoot"
+                        StaticCredentials {
+                            User: "user"
+                            Password: "pwd"
+                            PasswordSecretName: "pwd-secret-name"
+                        }
+                    }
+                    Specific {
+                        Targets {
+                            SrcPath: "/MyRoot/Table1"
+                            DstPath: "/MyRoot/Table1Replica"
+                        }
+                    }
+                }
+            )");
+            env.TestWaitNotification(Runtime(), txId);
+
+            TString request = Sprintf(R"(
+                ExportToS3Settings {
+                    endpoint: "localhost:%d"
+                    scheme: HTTP
+                    items {
+                        source_path: "/MyRoot/Replication"
+                        destination_prefix: "Replication"
+                    }
+                }
+            )", S3Port());
+
+            TControlBoard::SetValue(0, Runtime().GetAppData().Icb->BackupControls.S3Controls.EnableAsyncReplicationExport);
+
+            TestExport(Runtime(), ++txId, "/MyRoot", request, "", "", Ydb::StatusIds::BAD_REQUEST);
+            env.TestWaitNotification(Runtime(), txId);
+        }
+
     protected:
         TS3Mock::TSettings& S3Settings() {
             if (!S3ServerSettings) {
@@ -3939,6 +3984,10 @@ CREATE EXTERNAL TABLE IF NOT EXISTS `ExternalTable` (
         };
 
         TestExternalTable(scheme, expectedStartsWith, expectedProperties);
+    }
+
+    Y_UNIT_TEST(DisableIcb) {
+        TestIcb();
     }
 
 }

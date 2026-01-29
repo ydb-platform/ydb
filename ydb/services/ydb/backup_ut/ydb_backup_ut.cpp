@@ -4551,9 +4551,15 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
 
     Y_UNIT_TEST(ExcludeNonSupportedObjectsInExport) {
         TS3TestEnv testEnv;
-
+        testEnv.GetServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
         // Disable views export
         testEnv.GetServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableViewExport(false);
+        // Disable external data source export
+        TControlBoard::SetValue(
+            0,
+            testEnv.GetServer().GetRuntime()->GetAppData().Icb->BackupControls.S3Controls.EnableExternalDataSourceExport
+        );
+
         // Enable destination prefix in rpc_export
         testEnv.GetServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableEncryptedExport(true);
 
@@ -4594,6 +4600,30 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
                     Key Uint32,
                     Value Utf8,
                     PRIMARY KEY (Key)
+                );
+            )",
+            true
+        );
+
+        ExecuteQuery(
+            querySession,
+            R"(
+                CREATE EXTERNAL DATA SOURCE `DataSource` WITH (
+                    SOURCE_TYPE="ObjectStorage",
+                    LOCATION="https://object_storage_domain/bucket/",
+                    AUTH_METHOD="NONE"
+                );
+            )",
+            true
+        );
+
+        ExecuteQuery(
+            querySession,
+            R"(
+                CREATE EXTERNAL DATA SOURCE `Dir/DataSource` WITH (
+                    SOURCE_TYPE="ObjectStorage",
+                    LOCATION="https://object_storage_domain/bucket/",
+                    AUTH_METHOD="NONE"
                 );
             )",
             true

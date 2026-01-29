@@ -215,6 +215,8 @@ public:
 
     TSplitSettings SplitSettings;
 
+    TBackupSettings BackupSettings;
+
     struct TTenantInitState {
         enum EInitState {
             InvalidState = 0,

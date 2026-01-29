@@ -1149,6 +1149,16 @@ message TRspMasterExitReadOnly
 
 ////////////////////////////////////////////////////////////////////////////////
 
+message TReqResetDynamicallyPropagatedMasterCells
+{
+}
+
+message TRspResetDynamicallyPropagatedMasterCells
+{
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 message TReqDiscombobulateNonvotingPeers
 {
     required NYT.NProto.TGuid cell_id = 1;

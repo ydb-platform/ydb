@@ -4,6 +4,7 @@
 #include "worker.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/tx/replication/ydb_proxy/topic_message.h>
 #include <ydb/core/wrappers/s3_storage_config.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
 #include <ydb/library/actors/core/actor.h>
@@ -166,7 +167,7 @@ class TS3Writer
             return;
         }
 
-        const TString key = GetPartKey(ev->Get()->Records[0].Offset, WriterName);
+        const TString key = GetPartKey(ev->Get()->Records[0].GetOffset(), WriterName);
 
         auto request = Aws::S3::Model::PutObjectRequest()
             .WithKey(key);
@@ -174,7 +175,7 @@ class TS3Writer
         TStringBuilder buffer;
 
         for (auto& rec : ev->Get()->Records) {
-            buffer << rec.Data << '\n';
+            buffer << rec.GetData() << '\n';
         }
 
         RequestInFlight = std::make_unique<TS3Request>(std::move(request), std::move(buffer));

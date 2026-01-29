@@ -520,7 +520,7 @@ public:
     TNode ToNode() const;
 
     /// @brief Comparison is default and checks both name and sort order.
-    bool operator == (const TSortColumn& rhs) const = default;
+    bool operator==(const TSortColumn& rhs) const = default;
 
     ///
     /// @{
@@ -530,14 +530,14 @@ public:
     /// This is backward compatibility methods.
     ///
     /// @ref TSortOrder_backward_compatibility
-    TSortColumn& operator = (TStringBuf name);
-    TSortColumn& operator = (const TString& name);
-    TSortColumn& operator = (const char* name);
+    TSortColumn& operator=(TStringBuf name);
+    TSortColumn& operator=(const TString& name);
+    TSortColumn& operator=(const char* name);
     /// @}
 
-    bool operator == (const TStringBuf rhsName) const;
-    bool operator == (const TString& rhsName) const;
-    bool operator == (const char* rhsName) const;
+    bool operator==(const TStringBuf rhsName) const;
+    bool operator==(const TString& rhsName) const;
+    bool operator==(const char* rhsName) const;
 
     // Intentionally implicit conversions.
     operator TString() const;

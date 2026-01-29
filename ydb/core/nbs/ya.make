@@ -1,3 +1,5 @@
-RECURSE(
-    cloud
-)
+IF (OS_LINUX)
+    RECURSE(
+        cloud
+    )
+ENDIF()

@@ -172,7 +172,6 @@ PEERDIR(
     ydb/services/metadata
     ydb/services/metadata/ds_table
     ydb/services/monitoring
-    ydb/services/nbs
     ydb/services/persqueue_cluster_discovery
     ydb/services/persqueue_v1
     ydb/services/rate_limiter
@@ -187,6 +186,12 @@ PEERDIR(
     yt/yql/providers/yt/comp_nodes/dq/llvm16
     yt/yql/providers/yt/comp_nodes/llvm16
 )
+
+IF (OS_LINUX)
+    PEERDIR(
+        ydb/services/nbs
+    )
+ENDIF()
 
 IF (NOT OS_WINDOWS)
     PEERDIR(

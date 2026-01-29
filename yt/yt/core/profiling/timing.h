@@ -119,7 +119,7 @@ public:
     explicit TTimerGuard(TTimer* timer);
 
     TTimerGuard(TTimerGuard&& other) noexcept;
-    TTimerGuard& operator = (TTimerGuard&& other) noexcept;
+    TTimerGuard& operator=(TTimerGuard&& other) noexcept;
 
     ~TTimerGuard();
 

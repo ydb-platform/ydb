@@ -49,6 +49,8 @@ public:
         TVector<TPathId> WriteTables;
     };
 
+    virtual bool HasChanges() const = 0;
+
     virtual bool Load(TVector<TLockRow>& rows) = 0;
 
     // Returns true when a new lock may be added with the given lockId
@@ -676,6 +678,8 @@ public:
         CleanupPending.clear();
         CleanupCandidates.clear();
         PendingSubscribeLocks.clear();
+        PendingRestoreRemoveQueue.Clear();
+        PendingRestoreBreakQueue.Clear();
     }
 
     const THashMap<ui64, TLockInfo::TPtr>& GetLocks() const {
@@ -705,6 +709,9 @@ private:
     TPriorityQueue<TVersionedLockId> CleanupCandidates;
     TList<TPendingSubscribeLock> PendingSubscribeLocks;
     ui64 Counter = 0;
+
+    TIntrusiveList<TLockInfo, TLockInfoExpireListTag> PendingRestoreRemoveQueue;
+    TIntrusiveList<TLockInfo, TLockInfoExpireListTag> PendingRestoreBreakQueue;
 
     TTableLocks::TPtr GetTableLocks(const TTableId& table) const {
         auto it = Tables.find(table.PathId);
@@ -965,7 +972,22 @@ public:
 
     bool Load(ILocksDb& db);
 
+    /**
+     * Restores in-memory lock state migrated from previous generations
+     *
+     * May also enqueue some persistent changes to be applied later.
+     */
     void RestoreInMemoryLocks(THashMap<ui64, ILocksDb::TLockRow>&& rows);
+
+    /**
+     * Restores persistent lock state migrated from previous generations
+     *
+     * Returns true after performing some enqueued persistent changes, or false
+     * when there are no changes and the queue is empty. Caller needs to call
+     * this method until it returns false, possibly spanning multiple tablet
+     * transactions.
+     */
+    bool RestorePersistentState(ILocksDb* db);
 
     const THashMap<ui64, TLockInfo::TPtr>& GetLocks() const {
         return Locker.GetLocks();

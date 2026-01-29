@@ -38,7 +38,7 @@ namespace NKikimr::NDDisk {
     }
 
     void TDDiskActor::Handle(TEvDisconnect::TPtr ev) {
-        if (!CheckQuery(*ev)) {
+        if (!CheckQuery(*ev, nullptr)) {
             return;
         }
 

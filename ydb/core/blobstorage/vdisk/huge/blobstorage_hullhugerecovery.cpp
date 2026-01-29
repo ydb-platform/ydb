@@ -76,7 +76,6 @@ namespace NKikimr {
             , Heap(new NHuge::THeap(VCtx->VDiskLogPrefix, chunkSize, appendBlockSize,
                                     minHugeBlobInBytes, oldMinHugeBlobInBytes, milestoneHugeBlobInBytes,
                                     maxBlobInBytes, overhead, freeChunksReservation, chunksSoftLocking))
-            , AllocatedSlots()
             , Guid(TAppData::RandomProvider->GenRand64())
         {
             logFunc(VDISKP(VCtx->VDiskLogPrefix,
@@ -102,7 +101,6 @@ namespace NKikimr {
             , Heap(new NHuge::THeap(VCtx->VDiskLogPrefix, chunkSize, appendBlockSize,
                                     minHugeBlobInBytes, oldMinHugeBlobInBytes, milestoneHugeBlobInBytes,
                                     maxBlobInBytes, overhead, freeChunksReservation, chunksSoftLocking))
-            , AllocatedSlots()
             , Guid(TAppData::RandomProvider->GenRand64())
             , PersistentLsn(entryPointLsn)
         {
@@ -131,7 +129,6 @@ namespace NKikimr {
             , Heap(new NHuge::THeap(VCtx->VDiskLogPrefix, chunkSize, appendBlockSize,
                                     minHugeBlobInBytes, oldMinHugeBlobInBytes, milestoneHugeBlobInBytes,
                                     maxBlobInBytes, overhead, freeChunksReservation, chunksSoftLocking))
-            , AllocatedSlots()
             , Guid(TAppData::RandomProvider->GenRand64())
             , PersistentLsn(entryPointLsn)
         {

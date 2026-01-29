@@ -101,6 +101,7 @@ struct TPartitionInfo {
     ui64 WTime;
     ui64 SizeLag;
     ui64 MsgLag;
+    ui64 InFlightBytes = 0;
 
     explicit TPartitionInfo(ui64 assignId, ui64 wTime, ui64 sizeLag, ui64 msgLag)
         : AssignId(assignId)
@@ -390,6 +391,7 @@ private:
     i64 MaxTimeLagMs;
     i64 ReadTimestampMs;
     i64 ReadSizeBudget;
+    ui64 PartitionMaxInFlightBytes;
 
     TString Auth;
 
@@ -413,6 +415,8 @@ private:
     TDuration CommitInterval;
 
     TSet<TPartitionInfo> AvailablePartitions;
+    TSet<TPartitionInfo> OverloadedPartitions;
+    THashMap<TPartitionId, ui64> PartitionInFlightBytes;
 
     // Partition actor -> TFormedReadResponse answer that has this partition.
     // PartitionsTookPartInRead in formed read response contain this actor id.

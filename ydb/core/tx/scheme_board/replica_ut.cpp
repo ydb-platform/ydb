@@ -317,7 +317,7 @@ void TReplicaTest::RecreateDatabase() {
     }
 
     // Step #4 Create database again (local id changed, but owerid is same)
-    TPathId secondDatabasePathId(1,2); // owner_id=1 as main scheme shard
+    TPathId secondDatabasePathId(1, 2); // owner_id=1 as main scheme shard
     auto describeDatabaseSecond = GenerateDescribe(databasePath, secondDatabasePathId, 1, secondDatabasePathId);
     {
         Context->Send(Replica, populator, GenerateUpdate(describeDatabaseSecond) );

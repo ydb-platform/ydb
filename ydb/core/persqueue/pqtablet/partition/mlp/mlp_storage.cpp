@@ -394,6 +394,7 @@ bool TStorage::AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupId
         // The message will be deleted by retention policy. Skip it.
         if (removedByRetention && Messages.empty()) {
             ++Metrics.TotalDeletedByRetentionMessageCount;
+            Batch.AddNewMessage(offset);
             return true;
         }
     }

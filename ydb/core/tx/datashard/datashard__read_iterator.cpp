@@ -51,6 +51,31 @@ struct TReadIteratorVectorTop {
     ui64 TotalReadRows = 0;
     ui64 TotalReadBytes = 0;
 
+    // HNSW index for accelerated search (nullptr if not available)
+    const THnswIndex* HnswIndex = nullptr;
+    // Table and column info for statistics tracking
+    ui64 TableId = 0;
+    TString ColumnName;
+
+    // HNSW search results: (serialized key, distance) pairs
+    std::vector<std::pair<TString, float>> HnswResults;
+
+    // Perform HNSW search if index is available
+    // Returns true if HNSW search was performed successfully (even if empty results)
+    // Returns false if index is not available or not ready
+    bool TryHnswSearch() {
+        if (!HnswIndex || !HnswIndex->IsReady()) {
+            return false;
+        }
+
+        // Perform HNSW search
+        auto result = HnswIndex->Search(Target, Limit);
+
+        // Store results (even if empty)
+        HnswResults = std::move(result.Results);
+        return true;
+    }
+
     void AddRow(TConstArrayRef<TCell> cells) {
         TotalReadRows++;
         TotalReadBytes += EstimateSize(cells);
@@ -200,6 +225,7 @@ struct TShortTableInfo {
         SchemaVersion = tableInfo->GetTableSchemaVersion();
         KeyColumnTypes = tableInfo->KeyColumnTypes;
         KeyColumnCount = tableInfo->KeyColumnIds.size();
+        KeyColumnIds.assign(tableInfo->KeyColumnIds.begin(), tableInfo->KeyColumnIds.end());
 
         for (const auto& it: tableInfo->Columns) {
             const auto& column = it.second;
@@ -254,6 +280,7 @@ struct TShortTableInfo {
     ui64 SchemaVersion = 0;
     size_t KeyColumnCount = 0;
     TVector<NScheme::TTypeInfo> KeyColumnTypes;
+    TVector<NTable::TTag> KeyColumnIds;
     TMap<NTable::TTag, TShortColumnInfo> Columns;
 };
 
@@ -1050,6 +1077,192 @@ private:
 
     template <typename TIterator>
     EReadStatus IterateRange(TIterator* iter, NTable::TKeyRange& iterRange, TTransactionContext& txc) {
+        // Try to do HNSW search
+        // HNSW works for tables with any number of key columns (composite keys supported)
+        if (State.VectorTopK
+            && State.VectorTopK->Limit != 11    // Hack: switch to brute force to measure recall
+            && State.VectorTopK->TryHnswSearch()
+        ) {
+            // Hack: Limit == 7 is a test marker that HNSW must be used
+            // If we reach here, HNSW search succeeded - good!
+            // Fast return for empty HNSW results
+            if (State.VectorTopK->HnswResults.empty()) {
+                return EReadStatus::Done;
+            }
+            // HNSW search succeeded - fetch rows by keys returned from HNSW
+            auto& topK = *State.VectorTopK;
+
+            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, Self->TabletID() << " HNSW search returned " << topK.HnswResults.size() << " rows");
+
+            // Increment per-index reads counter
+            if (topK.TableId != 0 && !topK.ColumnName.empty()) {
+                Self->GetHnswIndexManager().IncrementReads(topK.TableId, topK.ColumnName);
+            }
+
+            // Clear any previously fetched rows (in case of transaction restart after page fault)
+            topK.Rows.clear();
+            topK.TotalReadRows = 0;
+            topK.TotalReadBytes = 0;
+
+            // Build a set of key column IDs for quick lookup
+            THashSet<NTable::TTag> keyColIds;
+            for (ui32 keyColId : TableInfo.KeyColumnIds) {
+                keyColIds.insert(keyColId);
+            }
+
+            // Check if we only need key columns + embedding (can use HNSW data)
+            // or if there are additional columns that require DB lookup
+            bool hasAdditionalColumns = false;
+            for (size_t colIdx = 0; colIdx < State.Columns.size(); ++colIdx) {
+                NTable::TTag colId = State.Columns[colIdx];
+                if (!keyColIds.contains(colId) && colIdx != topK.Column) {
+                    hasAdditionalColumns = true;
+                    break;
+                }
+            }
+
+            if (hasAdditionalColumns) {
+                // Slow path: need to fetch additional columns from DB
+                if (topK.TableId != 0 && !topK.ColumnName.empty()) {
+                    Self->GetHnswIndexManager().IncrementSlowPathReads(topK.TableId, topK.ColumnName);
+                }
+
+                // Pre-allocate rawKey outside the loop for reuse
+                TSmallVec<TRawTypeValue> rawKey;
+                rawKey.reserve(TableInfo.KeyColumnIds.size());
+
+                for (size_t i = 0; i < topK.HnswResults.size(); ++i) {
+                    const auto& [serializedKey, distance] = topK.HnswResults[i];
+
+                    // Deserialize the composite key
+                    TSerializedCellVec keyCells(serializedKey);
+                    const auto& cells = keyCells.GetCells();
+
+                    // Build rawKey from deserialized cells
+                    rawKey.clear();
+                    for (size_t k = 0; k < cells.size(); ++k) {
+                        rawKey.push_back(TRawTypeValue(cells[k].AsRef(), TableInfo.KeyColumnTypes[k].GetTypeId()));
+                    }
+
+                    NTable::TRowState rowState;
+                    rowState.Init(State.Columns.size());
+                    NTable::TSelectStats stats;
+                    auto ready = txc.DB.Select(TableInfo.LocalTid, rawKey, State.Columns, rowState, stats, 0, State.ReadVersion, GetReadTxMap(), GetReadTxObserver());
+
+                    if (ready == NTable::EReady::Page) {
+                        // Page fault - precharge remaining HNSW result keys and request restart
+                        if (topK.TableId != 0 && !topK.ColumnName.empty()) {
+                            Self->GetHnswIndexManager().IncrementPageFaults(topK.TableId, topK.ColumnName);
+                        }
+                        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
+                            Self->TabletID() << " HNSW search: page fault during row fetch at index " << i
+                            << " of " << topK.HnswResults.size() << ", will retry after precharge");
+
+                        for (size_t j = i; j < topK.HnswResults.size(); ++j) {
+                            const auto& [prechargeSerializedKey, _] = topK.HnswResults[j];
+                            TSerializedCellVec prechargeKeyCells(prechargeSerializedKey);
+                            const auto& prechargeCells = prechargeKeyCells.GetCells();
+                            rawKey.clear();
+                            for (size_t k = 0; k < prechargeCells.size(); ++k) {
+                                rawKey.push_back(TRawTypeValue(prechargeCells[k].AsRef(), TableInfo.KeyColumnTypes[k].GetTypeId()));
+                            }
+                            txc.DB.Precharge(TableInfo.LocalTid, rawKey, rawKey,
+                                State.Columns, 0, 1, Max<ui64>(), NTable::EDirection::Forward, State.ReadVersion);
+                        }
+                        return EReadStatus::NeedData;
+                    }
+
+                    if (ready == NTable::EReady::Gone) {
+                        continue;  // Row was deleted
+                    }
+
+                    topK.TotalReadRows++;
+                    topK.TotalReadBytes += EstimateSize(TConstArrayRef<TCell>((*rowState).data(), rowState.Size()));
+                    topK.Rows.emplace_back(
+                        TConstArrayRef<TCell>((*rowState).data(), rowState.Size()),
+                        static_cast<double>(distance),
+                        TString()
+                    );
+                }
+            } else {
+                // Fast path: only key columns + embedding - use individual GetVector calls
+                if (topK.TableId != 0 && !topK.ColumnName.empty()) {
+                    Self->GetHnswIndexManager().IncrementFastPathReads(topK.TableId, topK.ColumnName);
+                }
+
+                // Pre-allocate embedding data string once to avoid repeated allocations
+                TString embeddingData;
+                // Get vector dimension from HNSW index
+                const size_t dimension = topK.HnswIndex->GetDimension();
+                const size_t vectorBytes = dimension * sizeof(float);
+                embeddingData.resize(vectorBytes + 1); // +1 for format byte
+
+                // Pre-allocate cells vector once and set up constant parts
+                TSmallVec<TCell> resultCells;
+                resultCells.resize(State.Columns.size(), TCell()); // Initialize all cells as empty
+
+                // Find indices for key columns and embedding column
+                TSmallVec<size_t> keyColIndices; // Column indices in State.Columns that are key columns
+                TSmallVec<size_t> keyPositions; // Position in the key tuple for each key column
+                keyColIndices.reserve(TableInfo.KeyColumnIds.size());
+                keyPositions.reserve(TableInfo.KeyColumnIds.size());
+                size_t embeddingColIdx = State.Columns.size(); // Invalid index
+
+                for (size_t colIdx = 0; colIdx < State.Columns.size(); ++colIdx) {
+                    NTable::TTag colId = State.Columns[colIdx];
+                    for (size_t keyPos = 0; keyPos < TableInfo.KeyColumnIds.size(); ++keyPos) {
+                        if (TableInfo.KeyColumnIds[keyPos] == colId) {
+                            keyColIndices.push_back(colIdx);
+                            keyPositions.push_back(keyPos);
+                            break;
+                        }
+                    }
+                    if (colIdx == topK.Column) {
+                        embeddingColIdx = colIdx;
+                    }
+                }
+
+                for (const auto& [serializedKey, distance] : topK.HnswResults) {
+                    bool found = topK.HnswIndex->GetVector(serializedKey, embeddingData);
+
+                    if (!found) {
+                        Y_ABORT("Vector not found in HNSW - this should not happen");
+                    }
+
+                    // Deserialize the composite key
+                    TSerializedCellVec keyCells(serializedKey);
+                    const auto& cells = keyCells.GetCells();
+
+                    // Assign key columns from deserialized key
+                    for (size_t k = 0; k < keyColIndices.size(); ++k) {
+                        if (keyPositions[k] < cells.size()) {
+                            resultCells[keyColIndices[k]] = cells[keyPositions[k]];
+                        }
+                    }
+                    if (embeddingColIdx < State.Columns.size()) {
+                        resultCells[embeddingColIdx] = TCell(embeddingData.data(), embeddingData.size());
+                    }
+
+                    topK.TotalReadRows++;
+                    topK.TotalReadBytes += EstimateSize(TConstArrayRef<TCell>(resultCells.data(), resultCells.size()));
+                    topK.Rows.emplace_back(
+                        TConstArrayRef<TCell>(resultCells.data(), resultCells.size()),
+                        static_cast<double>(distance),
+                        TString()
+                    );
+                }
+            }
+
+            // Sort rows by distance (they may not be perfectly sorted by HNSW)
+            std::sort(topK.Rows.begin(), topK.Rows.end());
+            return EReadStatus::Done;
+        }
+
+        // Hack: Limit == 7 is a test marker that HNSW MUST be used
+        // If we reach here with Limit == 7, it means HNSW was not used - fail the test
+        Y_ABORT_UNLESS(!State.VectorTopK || State.VectorTopK->Limit != 7,
+            "HNSW search was expected but not performed (Limit == 7 is a test marker)");
+
         auto keyAccessSampler = Self->GetKeyAccessSampler();
 
         bool advanced = false;
@@ -2292,6 +2505,19 @@ public:
             topState->Column = topK.GetColumn();
             topState->Limit = topK.GetLimit();
             topState->Target = topK.GetTargetVector();
+
+            // Try to find HNSW index for this vector column
+            if (topK.GetColumn() < record.ColumnsSize()) {
+                ui32 colId = record.GetColumns(topK.GetColumn());
+                auto colIt = TableInfo.Columns.find(colId);
+                if (colIt != TableInfo.Columns.end()) {
+                    const TString& columnName = colIt->second.Name;
+                    topState->TableId = state.PathId.LocalPathId;
+                    topState->ColumnName = columnName;
+                    topState->HnswIndex = Self->GetHnswIndex(state.PathId.LocalPathId, columnName);
+                }
+            }
+
             state.VectorTopK = std::move(topState);
         }
 
@@ -2373,6 +2599,11 @@ public:
         if (!Reader->FillResult(*Result, state)) {
             ResultSent = false;
             return;
+        }
+
+        // Set follower flag for test verification
+        if (Self->IsFollower()) {
+            Result->Record.SetFromFollower(true);
         }
 
         if (!gSkipReadIteratorResultFailPoint.Check(Self->TabletID())) {

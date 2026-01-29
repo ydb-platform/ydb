@@ -1,0 +1,4 @@
+module CSimSIMD {
+    header "simsimd/simsimd.h"
+    export *
+}

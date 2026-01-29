@@ -1,5 +1,6 @@
 #include "datashard_txs.h"
 #include "datashard_locks_db.h"
+#include "hnsw_index.h"
 #include "memory_state_migration.h"
 
 #include <ydb/core/base/feature_flags.h>
@@ -99,8 +100,191 @@ void TDataShard::OnInMemoryStateRestored(THashMap<ui64, TOperation::TPtr> migrat
     Execute(CreateTxInitRestored(std::move(migratedTxs)));
 }
 
+// Helper to build HNSW index for vector columns on restart or follower sync
+// First checks node cache for existing index (survives restarts on same node)
+// Returns true if completed (success or needs scheduled retry), false only for page faults
+// Sets needsRetry = true if build is in progress by another tablet (will schedule retry)
+static bool BuildHnswIndexesForTable(TDataShard* self, TTransactionContext& txc,
+                               ui64 tableId, const TUserTable& tableInfo,
+                               const TActorContext& ctx, bool& needsRetry) {
+    // Find vector columns (named "emb", "embedding", or "vector" with String type)
+    for (const auto& [colId, colInfo] : tableInfo.Columns) {
+        if (!THnswIndexManager::IsVectorColumn(colInfo.Name)) {
+            continue;
+        }
+
+        // Check if column type is String (embeddings are stored as serialized strings)
+        if (colInfo.Type.GetTypeId() != NScheme::NTypeIds::String) {
+            continue;
+        }
+
+        // IMPORTANT: Check cache and build status BEFORE scanning to avoid "postponed w/o demands"
+        // Try to get from node cache first (without size check - we don't know size yet)
+        if (self->GetHnswIndexManager().TryGetFromCache(tableId, colInfo.Name, 0)) {
+            continue;  // Reused from cache, no need to scan or build
+        }
+
+        // Check if another tablet is building - if so, complete transaction and schedule retry
+        // IMPORTANT: Don't return false here - that causes "postponed w/o demands" error
+        if (TNodeHnswIndexCache::Instance().IsBuildInProgress(self->TabletID(), tableId, colInfo.Name)) {
+            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
+                "HNSW: waiting for build in progress, tabletId=" << self->TabletID() << " tableId=" << tableId
+                << " column=" << colInfo.Name << " (NO SCAN, will schedule retry)");
+            needsRetry = true;
+            continue;  // Check other columns, maybe some are in cache
+        }
+
+        // Try to acquire build lock BEFORE scanning
+        bool shouldBuild = TNodeHnswIndexCache::Instance().TryStartBuild(self->TabletID(), tableId, colInfo.Name);
+        if (!shouldBuild) {
+            // Another tablet just started building (race) - schedule retry
+            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
+                "HNSW: failed to acquire build lock (race) for tabletId=" << self->TabletID()
+                << " tableId=" << tableId << " column=" << colInfo.Name << ", will schedule retry");
+            needsRetry = true;
+            continue;
+        }
+
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
+            "HNSW: acquired build lock, starting scan for tabletId=" << self->TabletID()
+            << " tableId=" << tableId << " column=" << colInfo.Name);
+
+        // We hold the build lock - now scan the table
+        // Get all columns including the vector column and primary key
+        std::vector<NTable::TTag> columns;
+        columns.push_back(colId);
+
+        // Add primary key columns
+        for (ui32 keyColId : tableInfo.KeyColumnIds) {
+            if (keyColId != colId) {
+                columns.push_back(keyColId);
+            }
+        }
+
+        // Prefetch the table to reduce page faults during iteration
+        auto prefetchResult = txc.DB.Precharge(
+            tableInfo.LocalTid, {}, {}, // minKey, maxKey
+            columns,
+            0, // readFlags
+            0, // itemsLimit
+            0, // bytesLimit
+            NTable::EDirection::Forward,
+            TRowVersion::Max()
+        );
+        if (!prefetchResult.Ready) {
+            // Prefetch failed - release lock and retry (legitimate page fault)
+            TNodeHnswIndexCache::Instance().FinishBuild(self->TabletID(), tableId, colInfo.Name);
+            return false;
+        }
+
+        // Collect all vectors from the table
+        std::vector<std::pair<TString, TString>> vectors;
+        vectors.reserve(prefetchResult.ItemsPrecharged);
+        size_t vectorSize = 0;
+
+        try {
+            // Scan the table
+            auto iter = txc.DB.IterateRange(tableInfo.LocalTid, {}, columns, TRowVersion::Max(), nullptr, nullptr);
+
+            while (true) {
+                auto ready = iter->Next(NTable::ENext::All);
+                if (ready == NTable::EReady::Page) {
+                    // Need to load more pages - release lock and retry (legitimate page fault)
+                    TNodeHnswIndexCache::Instance().FinishBuild(self->TabletID(), tableId, colInfo.Name);
+                    return false;
+                } else if (ready == NTable::EReady::Gone) {
+                    // No more data
+                    break;
+                }
+
+                // Process data when ready == NTable::EReady::Data
+                // Get the primary key (serialize all key columns for composite key support)
+                TDbTupleRef keyData = iter->GetKey();
+                if (keyData.Cells().size() == 0) {
+                    continue;
+                }
+                TString serializedKey = TSerializedCellVec::Serialize(keyData.Cells());
+
+                // Get the vector column value
+                TDbTupleRef rowData = iter->GetValues();
+                if (rowData.Cells().size() > 0 && !rowData.Cells()[0].IsNull()) {
+                    TString vectorData(rowData.Cells()[0].AsBuf());
+
+                    // The last byte is the format marker
+                    // For prototype: accept any vector format with at least 2 bytes (1 data + 1 format)
+                    if (vectorData.size() >= 2) {
+                        // Determine dimension from first vector (data bytes excluding format marker)
+                        if (vectorSize == 0) {
+                            vectorSize = vectorData.size() - 1;  // Exclude format byte
+                        }
+
+                        if (vectorData.size() == vectorSize + 1) {  // data + format byte
+                            vectors.emplace_back(serializedKey, vectorData);
+                        }
+                    }
+                }
+            }
+        } catch (const yexception& e) {
+            LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD,
+                "HNSW: vector reading exception tabletId=" << self->TabletID() << " tableId=" << tableId
+                << " column=" << colInfo.Name << ": " << e.what());
+            TNodeHnswIndexCache::Instance().FinishBuild(self->TabletID(), tableId, colInfo.Name);
+            needsRetry = true;
+            continue;  // Try other columns
+        } catch (...) {
+            LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD,
+                "HNSW: vector reading unknown exception tabletId=" << self->TabletID() << " tableId=" << tableId
+                << " column=" << colInfo.Name);
+            TNodeHnswIndexCache::Instance().FinishBuild(self->TabletID(), tableId, colInfo.Name);
+            needsRetry = true;
+            continue;
+        }
+
+        if (vectors.empty() || vectorSize == 0) {
+            TNodeHnswIndexCache::Instance().FinishBuild(self->TabletID(), tableId, colInfo.Name);
+            continue;
+        }
+
+        // Build the index
+        LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD,
+            "HNSW: building index tabletId=" << self->TabletID() << " tableId=" << tableId
+            << " column=" << colInfo.Name << " size=" << vectors.size());
+
+        bool buildSuccess = false;
+        try {
+            buildSuccess = self->GetHnswIndexManager().BuildIndex(tableId, colInfo.Name, vectors);
+        } catch (const yexception& e) {
+            LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD,
+                "HNSW: build exception tabletId=" << self->TabletID() << " tableId=" << tableId
+                << " column=" << colInfo.Name << ": " << e.what());
+            TNodeHnswIndexCache::Instance().FinishBuild(self->TabletID(), tableId, colInfo.Name);
+            needsRetry = true;
+            continue;  // Try other columns
+        } catch (...) {
+            LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD,
+                "HNSW: build unknown exception tabletId=" << self->TabletID() << " tableId=" << tableId
+                << " column=" << colInfo.Name);
+            TNodeHnswIndexCache::Instance().FinishBuild(self->TabletID(), tableId, colInfo.Name);
+            needsRetry = true;
+            continue;
+        }
+
+        // Release build lock (BuildIndex already registers the index if successful)
+        TNodeHnswIndexCache::Instance().FinishBuild(self->TabletID(), tableId, colInfo.Name);
+
+        if (!buildSuccess) {
+            LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD,
+                "HNSW: build failed tabletId=" << self->TabletID() << " tableId=" << tableId
+                << " column=" << colInfo.Name);
+        }
+    }
+
+    return true;  // All indexes built successfully
+}
+
 bool TDataShard::TTxInitRestored::Execute(TTransactionContext& txc, const TActorContext& ctx) {
-    LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "TDataShard::TTxInitRestored::Execute");
+    // HNSW indexes are now built in a separate transaction (TTxInitHnswIndexes)
+    // called after SignalTabletActive in SwitchToWork
 
     TDataShardLocksDb locksDb(*Self, txc);
     if (Self->SysLocks.RestorePersistentState(&locksDb)) {
@@ -932,6 +1116,8 @@ bool TDataShard::SyncSchemeOnFollower(TTransactionContext &txc, const TActorCont
         }
 
         FollowerState.LastSchemeUpdate = lastSchemeUpdate;
+        // Schema changed, HNSW indexes need to be rebuilt
+        HnswIndexesBuilt = false;
     }
 
     // N.B. follower with snapshots support may be loaded in datashard without a snapshots table
@@ -950,6 +1136,98 @@ bool TDataShard::SyncSchemeOnFollower(TTransactionContext &txc, const TActorCont
     }
 
     return true;
+}
+
+// Helper to get HNSW indexes from node cache or build them for follower
+// Transaction to build HNSW indexes after activation (for both leader and followers)
+// - Only one tablet per node builds; others wait and reuse from node cache
+// - If build is in progress by another tablet, schedules a retry after delay
+// - Retry interval: 100ms (to quickly pick up index when build completes)
+class TDataShard::TTxInitHnswIndexes
+    : public NTabletFlatExecutor::TTransactionBase<TDataShard>
+{
+    static constexpr TDuration RetryDelay = TDuration::Seconds(1);
+    bool NeedsRetry = false;
+
+public:
+    TTxInitHnswIndexes(TDataShard* self)
+        : TBase(self)
+    {}
+
+    TTxType GetTxType() const override { return TXTYPE_INIT; }
+
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
+        try {
+            const bool isFollower = Self->IsFollower();
+
+            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
+                "HNSW: TTxInitHnswIndexes::Execute at " << (isFollower ? "follower" : "leader")
+                << " " << Self->TabletID());
+
+            // For followers: sync scheme first to ensure we have table info
+            if (isFollower) {
+                NKikimrTxDataShard::TError::EKind status = NKikimrTxDataShard::TError::OK;
+                TString errMessage;
+                if (!Self->SyncSchemeOnFollower(txc, ctx, status, errMessage)) {
+                    // Need to retry - page fault during schema sync
+                    return false;
+                }
+
+                if (status != NKikimrTxDataShard::TError::OK) {
+                    // Schema not ready yet, schedule retry
+                    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
+                        "HNSW: schema not ready at follower " << Self->TabletID()
+                        << ", status: " << status << ", error: " << errMessage);
+                    NeedsRetry = true;
+                    return true;
+                }
+            }
+
+            // Try to get HNSW indexes from node cache, or build if not available
+            for (const auto& [tableId, tableInfo] : Self->TableInfos) {
+                if (!BuildHnswIndexesForTable(Self, txc, tableId, *tableInfo, ctx, NeedsRetry)) {
+                    // Page fault, need to retry (legitimate reason to return false)
+                    return false;
+                }
+            }
+
+            // Only mark as built if all indexes are ready
+            if (!NeedsRetry) {
+                Self->HnswIndexesBuilt = true;
+                LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD,
+                    "HNSW: indexes ready at " << (isFollower ? "follower" : "leader")
+                    << " " << Self->TabletID());
+            }
+
+            return true;
+        } catch (const yexception& e) {
+            // Catch any exceptions - complete transaction but schedule retry
+            // IMPORTANT: Don't return false here - that causes "postponed w/o demands" error
+            LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD,
+                "HNSW: TTxInitHnswIndexes exception at " << Self->TabletID()
+                << ": " << e.what() << ", will retry");
+            NeedsRetry = true;
+            return true;
+        } catch (...) {
+            LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD,
+                "HNSW: TTxInitHnswIndexes unknown exception at " << Self->TabletID()
+                << ", will retry");
+            NeedsRetry = true;
+            return true;
+        }
+    }
+
+    void Complete(const TActorContext& ctx) override {
+        // If we need to retry (build in progress by another tablet, or exception),
+        // schedule a retry after a short delay
+        if (NeedsRetry && !Self->HnswIndexesBuilt) {
+            ctx.Schedule(RetryDelay, new TEvPrivate::TEvRetryHnswIndexInit());
+        }
+    }
+};
+
+ITransaction* TDataShard::CreateTxInitHnswIndexes() {
+    return new TTxInitHnswIndexes(this);
 }
 
 }}

@@ -6,6 +6,7 @@
 #include <ydb/core/kqp/gateway/kqp_metadata_loader.h>
 #include <ydb/core/kqp/host/kqp_host_impl.h>
 #include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/kqp/runtime/kqp_vector_index_cache.h>
 
 #include <ydb/public/sdk/cpp/adapters/issue/issue.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
@@ -350,6 +351,9 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
     }
 
     void DoTestOrderByCosine(ui32 indexLevels, int flags) {
+        // Clear cache to prevent pollution from other tests
+        TVectorIndexLevelCache::Instance().Clear();
+
         NKikimrConfig::TFeatureFlags featureFlags;
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
@@ -445,6 +449,9 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
     }
 
     Y_UNIT_TEST_QUAD(OrderByCosineLevel1WithBitQuantization, Nullable, Overlap) {
+        // Clear cache to prevent pollution from other tests
+        TVectorIndexLevelCache::Instance().Clear();
+
         NKikimrConfig::TFeatureFlags featureFlags;
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
@@ -1168,6 +1175,9 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
     }
 
     Y_UNIT_TEST_QUAD(VectorSearchPushdown, Covered, Followers) {
+        // Clear cache to prevent pollution from other tests
+        TVectorIndexLevelCache::Instance().Clear();
+
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             // SetUseRealThreads(false) is required to capture events (!) but then you have to do kikimr.RunCall() for everything
@@ -1226,7 +1236,10 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
                 // Check that level & posting are read from followers
                 UNIT_ASSERT(isFollower == (Followers && (shardType == levelType || shardType == postingType)));
                 auto & read = ev->Get<TEvDataShard::TEvRead>()->Record;
-                if (shardType == (Covered ? mainType : postingType)) {
+                if (shardType == levelType) {
+                    // Level table reads do full scan for caching (VectorTopK cleared by cache layer)
+                    UNIT_ASSERT(!read.HasVectorTopK());
+                } else if (shardType == (Covered ? mainType : postingType)) {
                     // Non-covering index does topK on main table, covering does it on posting
                     UNIT_ASSERT(!read.HasVectorTopK());
                 } else {
@@ -1235,10 +1248,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
                     auto & topK = read.GetVectorTopK();
                     // Check that target and limit are pushed down
                     UNIT_ASSERT(topK.GetTargetVector() == "\x67\x71\x02");
-                    if (shardType == levelType) {
-                        // Equal to pragma
-                        UNIT_ASSERT(topK.GetLimit() == 2);
-                    } else if (shardType == (Covered ? postingType : mainType)) {
+                    if (shardType == (Covered ? postingType : mainType)) {
                         // Equal to LIMIT
                         UNIT_ASSERT(topK.GetLimit() == 3);
                     }
@@ -1263,6 +1273,422 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
                     .ExtractValueSync();
             });
             UNIT_ASSERT(result.IsSuccess());
+        }
+    }
+
+    // Helper to create Float format embedding (3D vector for better distance discrimination)
+    // Float format: 4 bytes per float + 0x01 format byte
+    static TString MakeFloatEmb(float v1, float v2, float v3) {
+        TString result;
+        result.resize(sizeof(float) * 3 + 1);
+        char* p = result.Detach();
+        memcpy(p, &v1, sizeof(float));
+        memcpy(p + sizeof(float), &v2, sizeof(float));
+        memcpy(p + 2 * sizeof(float), &v3, sizeof(float));
+        p[sizeof(float) * 3] = 0x01;  // FloatVector format byte
+        return result;
+    }
+
+    // Test that HNSW local index works for the posting table of a covered global vector index
+    // The posting table contains the `emb` column (covered), so HNSW should be built for it
+    // This test verifies that:
+    // 1. VectorTopK pushdown is used for the posting table (already covered by VectorSearchPushdown)
+    // 2. HNSW local index is actually used for the posting table (verified by LIMIT 7 marker)
+    Y_UNIT_TEST(HnswLocalIndexForCoveredVectorIndexPostingTable) {
+        // Clear caches to prevent pollution from other tests
+        TVectorIndexLevelCache::Instance().Clear();
+
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            // SetUseRealThreads(false) is required to capture events
+            .SetUseRealThreads(false)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        auto runtime = kikimr.GetTestServer().GetRuntime();
+        runtime->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
+
+        // Create table with Float embeddings (HNSW requires Float format)
+        auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); });
+        auto session = kikimr.RunCall([&] {
+            return db.CreateSession().GetValueSync().GetSession();
+        });
+
+        // Create the main table
+        {
+            auto tableBuilder = db.GetTableBuilder();
+            tableBuilder
+                .AddNonNullableColumn("pk", EPrimitiveType::Int64)
+                .AddNonNullableColumn("emb", EPrimitiveType::String)
+                .AddNonNullableColumn("data", EPrimitiveType::String)
+                .SetPrimaryKeyColumns({"pk"});
+
+            auto result = kikimr.RunCall([&] {
+                return session.CreateTable("/Root/TestTable", tableBuilder.Build()).ExtractValueSync();
+            });
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        // Insert Float embeddings
+        {
+            auto params = db.GetParamsBuilder()
+                .AddParam("$emb0").String(MakeFloatEmb(1.0f, 2.0f, 3.0f)).Build()
+                .AddParam("$emb1").String(MakeFloatEmb(4.0f, 5.0f, 6.0f)).Build()
+                .AddParam("$emb2").String(MakeFloatEmb(7.0f, 8.0f, 9.0f)).Build()
+                .AddParam("$emb3").String(MakeFloatEmb(10.0f, 11.0f, 12.0f)).Build()
+                .AddParam("$emb4").String(MakeFloatEmb(13.0f, 14.0f, 15.0f)).Build()
+                .AddParam("$emb5").String(MakeFloatEmb(100.0f, 110.0f, 120.0f)).Build()
+                .AddParam("$emb6").String(MakeFloatEmb(103.0f, 113.0f, 123.0f)).Build()
+                .AddParam("$emb7").String(MakeFloatEmb(106.0f, 116.0f, 126.0f)).Build()
+                .AddParam("$emb8").String(MakeFloatEmb(109.0f, 119.0f, 129.0f)).Build()
+                .AddParam("$emb9").String(MakeFloatEmb(112.0f, 122.0f, 132.0f)).Build()
+                .Build();
+
+            auto result = kikimr.RunCall([&] {
+                return session.ExecuteDataQuery(Q_(R"(
+                    DECLARE $emb0 AS String;
+                    DECLARE $emb1 AS String;
+                    DECLARE $emb2 AS String;
+                    DECLARE $emb3 AS String;
+                    DECLARE $emb4 AS String;
+                    DECLARE $emb5 AS String;
+                    DECLARE $emb6 AS String;
+                    DECLARE $emb7 AS String;
+                    DECLARE $emb8 AS String;
+                    DECLARE $emb9 AS String;
+                    UPSERT INTO `/Root/TestTable` (pk, emb, data) VALUES
+                    (0, $emb0, "0"),
+                    (1, $emb1, "1"),
+                    (2, $emb2, "2"),
+                    (3, $emb3, "3"),
+                    (4, $emb4, "4"),
+                    (5, $emb5, "5"),
+                    (6, $emb6, "6"),
+                    (7, $emb7, "7"),
+                    (8, $emb8, "8"),
+                    (9, $emb9, "9");
+                )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params)
+                    .ExtractValueSync();
+            });
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        // Create COVERED global vector index
+        // Note: Using distance=cosine and vector_type="float" for HNSW compatibility
+        {
+            auto result = kikimr.RunCall([&] {
+                return session.ExecuteSchemeQuery(Q_(R"(
+                    ALTER TABLE `/Root/TestTable`
+                        ADD INDEX index1
+                        GLOBAL USING vector_kmeans_tree
+                        ON (emb) COVER (data, emb)
+                        WITH (distance=cosine, vector_type="float", vector_dimension=3, levels=2, clusters=2);
+                )")).ExtractValueSync();
+            });
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        // Restart posting table shards to trigger HNSW index building
+        // HNSW indexes are built on tablet restart when the table has a vector column (emb)
+        {
+            auto shards = GetTableShards(&kikimr.GetTestServer(), runtime->AllocateEdgeActor(),
+                "/Root/TestTable/index1/indexImplPostingTable");
+            for (auto shardId : shards) {
+                RebootTablet(*runtime, shardId, runtime->AllocateEdgeActor());
+            }
+            runtime->SimulateSleep(TDuration::Seconds(1));
+        }
+
+        // Resolve posting table shards to verify VectorTopK pushdown and HNSW usage
+        THashMap<TActorId, bool> postingShardActors;
+        {
+            auto shards = GetTableShards(&kikimr.GetTestServer(), runtime->AllocateEdgeActor(),
+                "/Root/TestTable/index1/indexImplPostingTable");
+            for (auto shardId : shards) {
+                auto actorId = ResolveTablet(*runtime, shardId);
+                postingShardActors[actorId] = true;
+            }
+        }
+
+        // Track that VectorTopK with LIMIT 7 is pushed down to posting table
+        // LIMIT 7 is a magic marker that triggers Y_ABORT_UNLESS if HNSW is not used
+        bool vectorTopKSentToPosting = false;
+        auto observer = runtime->AddObserver<TEvDataShard::TEvRead>([&](auto& ev) {
+            if (postingShardActors.contains(ev->GetRecipientRewrite())) {
+                auto& read = ev->Get()->Record;
+                if (read.HasVectorTopK()) {
+                    vectorTopKSentToPosting = true;
+                    // LIMIT 7 is the HNSW must-be-used marker
+                    UNIT_ASSERT_VALUES_EQUAL_C(read.GetVectorTopK().GetLimit(), 7u,
+                        "VectorTopK limit should be 7 (HNSW must-be-used marker)");
+                }
+            }
+        });
+
+        // Target embedding close to embeddings 5-9
+        TString targetEmbedding = MakeFloatEmb(105.0f, 115.0f, 125.0f);
+
+        // Execute query with LIMIT 7 (magic marker that triggers Y_ABORT_UNLESS if HNSW is not used)
+        // This query uses the covered index, so it reads from posting table only (not main table)
+        // The fact that this doesn't crash proves HNSW was used for the posting table
+        {
+            auto params = db.GetParamsBuilder()
+                .AddParam("$TargetEmbedding").String(targetEmbedding).Build()
+                .Build();
+
+            auto result = kikimr.RunCall([&] {
+                return session.ExecuteDataQuery(Q_(R"(
+                    pragma ydb.KMeansTreeSearchTopSize = "2";
+                    DECLARE $TargetEmbedding AS String;
+                    SELECT pk, data FROM `/Root/TestTable`
+                    VIEW index1 ORDER BY Knn::CosineDistance(emb, $TargetEmbedding)
+                    LIMIT 7
+                )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params)
+                    .ExtractValueSync();
+            });
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            // Verify results - should get 7 results, closest to target (105, 115, 125)
+            auto parser = result.GetResultSetParser(0);
+            std::vector<i64> pks;
+            while (parser.TryNextRow()) {
+                pks.push_back(parser.ColumnParser("pk").GetInt64());
+            }
+            // We inserted 10 rows, asked for 7
+            UNIT_ASSERT_VALUES_EQUAL_C(pks.size(), 7u, "Expected 7 results");
+            // First 3 should be 6, 7, 5 (or similar order based on cosine distance)
+            // pk=6 has (103, 113, 123) - very close to target (105, 115, 125)
+            UNIT_ASSERT_C(std::find(pks.begin(), pks.begin() + 3, 6) != pks.begin() + 3,
+                "pk=6 should be in top 3 closest to target");
+        }
+
+        observer.Remove();
+
+        // Verify that VectorTopK was actually pushed down to posting table
+        UNIT_ASSERT_C(vectorTopKSentToPosting,
+            "VectorTopK should have been pushed down to posting table");
+    }
+
+    Y_UNIT_TEST(VectorIndexLevelTableCache) {
+        // Clear the cache before the test
+        TVectorIndexLevelCache::Instance().Clear();
+
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            // SetUseRealThreads(false) is required to capture events
+            .SetUseRealThreads(false)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        auto runtime = kikimr.GetTestServer().GetRuntime();
+
+        const int flags = F_NULLABLE;
+        auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); });
+        auto session = kikimr.RunCall([&] { return DoCreateTableAndVectorIndex(db, flags); });
+
+        // Resolve level table shards to track reads
+        constexpr ui32 levelType = 1, postingType = 2, mainType = 3;
+        THashMap<TActorId, ui32> actorTypes;
+        auto resolveActors = [&](const char* tableName, ui32 type) {
+            auto shards = GetTableShards(&kikimr.GetTestServer(), runtime->AllocateEdgeActor(), tableName);
+            for (auto shardId: shards) {
+                auto actorId = ResolveTablet(*runtime, shardId);
+                actorTypes[actorId] = type;
+            }
+        };
+        resolveActors("/Root/TestTable/index1/indexImplLevelTable", levelType);
+        resolveActors("/Root/TestTable/index1/indexImplPostingTable", postingType);
+        resolveActors("/Root/TestTable", mainType);
+
+        // Counter for level table reads
+        std::atomic<int> levelTableReadCount{0};
+        std::atomic<int> postingTableReadCount{0};
+
+        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvDataShard::TEvRead::EventType) {
+                ui32 shardType = actorTypes[ev->GetRecipientRewrite()];
+                if (shardType == levelType) {
+                    levelTableReadCount++;
+                } else if (shardType == postingType) {
+                    postingTableReadCount++;
+                }
+            }
+            return false;
+        };
+        runtime->SetEventFilter(captureEvents);
+
+        const TString query1(Q_(R"(
+            pragma ydb.KMeansTreeSearchTopSize = "2";
+            $TargetEmbedding = String::HexDecode("677102");
+            SELECT * FROM `/Root/TestTable`
+            VIEW index1 ORDER BY Knn::CosineDistance(emb, $TargetEmbedding)
+            LIMIT 3
+        )"));
+
+        // First query - should read from level table
+        {
+            levelTableReadCount = 0;
+            postingTableReadCount = 0;
+
+            auto result = kikimr.RunCall([&] {
+                return session.ExecuteDataQuery(query1, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                    .ExtractValueSync();
+            });
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            // First query should read from level table
+            UNIT_ASSERT_C(levelTableReadCount.load() > 0,
+                "First query should read from level table, but read count is " << levelTableReadCount.load());
+            Cerr << "First query: level table reads = " << levelTableReadCount.load()
+                 << ", posting table reads = " << postingTableReadCount.load() << Endl;
+        }
+
+        int firstLevelReads = levelTableReadCount.load();
+
+        // Second query with the same target - should NOT read from level table (cached)
+        {
+            levelTableReadCount = 0;
+            postingTableReadCount = 0;
+
+            auto result = kikimr.RunCall([&] {
+                return session.ExecuteDataQuery(query1, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                    .ExtractValueSync();
+            });
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            Cerr << "Second query: level table reads = " << levelTableReadCount.load()
+                 << ", posting table reads = " << postingTableReadCount.load() << Endl;
+
+            // Second query should NOT read from level table (cached)
+            UNIT_ASSERT_C(levelTableReadCount.load() == 0,
+                "Second query should use cached level table data, but level table read count is "
+                << levelTableReadCount.load() << " (first query had " << firstLevelReads << ")");
+        }
+
+        // Third query - should still use cache
+        {
+            levelTableReadCount = 0;
+            postingTableReadCount = 0;
+
+            auto result = kikimr.RunCall([&] {
+                return session.ExecuteDataQuery(query1, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                    .ExtractValueSync();
+            });
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            Cerr << "Third query: level table reads = " << levelTableReadCount.load()
+                 << ", posting table reads = " << postingTableReadCount.load() << Endl;
+
+            // Third query should NOT read from level table (still cached)
+            UNIT_ASSERT_C(levelTableReadCount.load() == 0,
+                "Third query should use cached level table data, but level table read count is "
+                << levelTableReadCount.load());
+        }
+    }
+
+    Y_UNIT_TEST(VectorIndexLevelTableCacheAcrossSnapshots) {
+        // Test that level table cache works across different snapshots
+        // Level tables are immutable after index creation, so cache should hit
+        // regardless of snapshot changes
+
+        // Clear the cache before the test
+        TVectorIndexLevelCache::Instance().Clear();
+
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetUseRealThreads(false)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        auto runtime = kikimr.GetTestServer().GetRuntime();
+
+        const int flags = F_NULLABLE;
+        auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); });
+        auto session = kikimr.RunCall([&] { return DoCreateTableAndVectorIndex(db, flags); });
+
+        // Resolve level table shards to track reads
+        constexpr ui32 levelType = 1;
+        THashMap<TActorId, ui32> actorTypes;
+        auto shards = GetTableShards(&kikimr.GetTestServer(), runtime->AllocateEdgeActor(),
+            "/Root/TestTable/index1/indexImplLevelTable");
+        for (auto shardId: shards) {
+            auto actorId = ResolveTablet(*runtime, shardId);
+            actorTypes[actorId] = levelType;
+        }
+
+        std::atomic<int> levelTableReadCount{0};
+        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvDataShard::TEvRead::EventType) {
+                if (actorTypes[ev->GetRecipientRewrite()] == levelType) {
+                    levelTableReadCount++;
+                }
+            }
+            return false;
+        };
+        runtime->SetEventFilter(captureEvents);
+
+        const TString query(Q_(R"(
+            pragma ydb.KMeansTreeSearchTopSize = "2";
+            $TargetEmbedding = String::HexDecode("677102");
+            SELECT * FROM `/Root/TestTable`
+            VIEW index1 ORDER BY Knn::CosineDistance(emb, $TargetEmbedding)
+            LIMIT 3
+        )"));
+
+        // First query - should read from level table (cache miss)
+        {
+            levelTableReadCount = 0;
+            auto result = kikimr.RunCall([&] {
+                return session.ExecuteDataQuery(query, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                    .ExtractValueSync();
+            });
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(levelTableReadCount.load() > 0,
+                "First query should read from level table, got " << levelTableReadCount.load());
+            Cerr << "Query 1 (first session tx): level reads = " << levelTableReadCount.load() << Endl;
+        }
+
+        // Second query in NEW TRANSACTION (different snapshot!) - should still hit cache
+        // because level tables are immutable
+        {
+            levelTableReadCount = 0;
+            auto result = kikimr.RunCall([&] {
+                return session.ExecuteDataQuery(query, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                    .ExtractValueSync();
+            });
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            Cerr << "Query 2 (new tx, different snapshot): level reads = " << levelTableReadCount.load() << Endl;
+            UNIT_ASSERT_C(levelTableReadCount.load() == 0,
+                "Second query should use cache despite different snapshot, got " << levelTableReadCount.load());
+        }
+
+        // Third query in yet another transaction - should still use cache
+        {
+            levelTableReadCount = 0;
+            auto result = kikimr.RunCall([&] {
+                return session.ExecuteDataQuery(query, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                    .ExtractValueSync();
+            });
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            Cerr << "Query 3 (another new tx): level reads = " << levelTableReadCount.load() << Endl;
+            UNIT_ASSERT_C(levelTableReadCount.load() == 0,
+                "Third query should use cache, got " << levelTableReadCount.load());
+        }
+
+        // Create a NEW session (completely different connection) - should still hit cache
+        auto session2 = kikimr.RunCall([&] {
+            return db.CreateSession().GetValueSync().GetSession();
+        });
+        {
+            levelTableReadCount = 0;
+            auto result = kikimr.RunCall([&] {
+                return session2.ExecuteDataQuery(query, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                    .ExtractValueSync();
+            });
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            Cerr << "Query 4 (new session): level reads = " << levelTableReadCount.load() << Endl;
+            UNIT_ASSERT_C(levelTableReadCount.load() == 0,
+                "Query from new session should use cache, got " << levelTableReadCount.load());
         }
     }
 

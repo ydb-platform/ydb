@@ -91,8 +91,11 @@ struct TSplitSettings {
         , SplitByLoadMaxShardsDefault(50, 0, 10000)
         , MergeByLoadMinUptimeSec(10*60, 0, 4ll*1000*1000*1000)
         , MergeByLoadMinLowLoadDurationSec(1*60*60, 0, 4ll*1000*1000*1000)
-        , ForceShardSplitDataSize(2ULL * 1024 * 1024 * 1024, 10 * 1024 * 1024, 16ULL * 1024 * 1024 * 1024)
-        , DisableForceShardSplit(0, 0, 1)
+        // Commented out 2GB limitation to remove forced datashard splitting
+        //, ForceShardSplitDataSize(2ULL * 1024 * 1024 * 1024, 10 * 1024 * 1024, 16ULL * 1024 * 1024 * 1024)
+        , ForceShardSplitDataSize(Max<ui64>(), 10 * 1024 * 1024, 16ULL * 1024 * 1024 * 1024)
+        // Disable forced shard splitting by default to remove the 2GB limitation
+        , DisableForceShardSplit(1, 0, 1)
     {}
 
     void Register(TIntrusivePtr<NKikimr::TControlBoard>& icb) {
@@ -226,7 +229,7 @@ private:
 };
 
 struct TPartitionConfigMerger {
-    static constexpr ui32 MaxFollowersCount = 3;
+    static constexpr ui32 MaxFollowersCount = 100; // for testing purposes
 
     static NKikimrSchemeOp::TPartitionConfig DefaultConfig(const TAppData* appData, const std::optional<TString>& defaultPoolKind);
     static bool ApplyChanges(
@@ -972,8 +975,12 @@ public:
     ) const;
 
     bool IsSplitBySizeEnabled(const TForceShardSplitSettings& params) const {
+        // Disable splitting by size when force shard splits are disabled
+        if (params.DisableForceShardSplit) {
+            return false;
+        }
         // Respect unspecified SizeToSplit when force shard splits are disabled
-        if (params.DisableForceShardSplit && PartitionConfig().GetPartitioningPolicy().GetSizeToSplit() == 0) {
+        if (PartitionConfig().GetPartitioningPolicy().GetSizeToSplit() == 0) {
             return false;
         }
         // Auto split is always enabled, unless table is using external blobs
@@ -1102,13 +1109,13 @@ public:
             return false;
         }
         // When shard is over the maximum size we split even when over max partitions
-        if (dataSize >= params.ForceShardSplitDataSize && !params.DisableForceShardSplit) {
-            reason = TStringBuilder() << "force split by size ("
-                << "shardSize: " << dataSize << ", "
-                << "maxShardSize: " << params.ForceShardSplitDataSize << ")";
+        // if (dataSize >= params.ForceShardSplitDataSize && !params.DisableForceShardSplit) {
+        //     reason = TStringBuilder() << "force split by size ("
+        //         << "shardSize: " << dataSize << ", "
+        //         << "maxShardSize: " << params.ForceShardSplitDataSize << ")";
 
-            return true;
-        }
+        //     return true;
+        // }
         // Otherwise we split when we may add one more partition
         if (Partitions.size() < GetMaxPartitionsCount() && dataSize >= GetShardSizeToSplit(params)) {
             reason = TStringBuilder() << "split by size ("

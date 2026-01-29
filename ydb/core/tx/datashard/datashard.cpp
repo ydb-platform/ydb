@@ -172,6 +172,9 @@ TDataShard::TDataShard(const TActorId &tablet, TTabletStorageInfo *info)
     >());
     TabletCounters = TabletCountersPtr.Get();
 
+    // Set TabletId for HNSW index node-level sharing
+    HnswIndexes.SetTabletId(info->TabletID);
+
     RegisterDataShardProbes();
 }
 
@@ -394,6 +397,8 @@ void TDataShard::OnActivateExecutor(const TActorContext& ctx) {
         Executor()->SetPreloadTablesData({Schema::Sys::TableId, Schema::UserTables::TableId, Schema::Snapshots::TableId});
         Become(&TThis::StateWorkAsFollower);
         SignalTabletActive(ctx);
+        // Build HNSW indexes for vector columns on follower after activation
+        Execute(CreateTxInitHnswIndexes(), ctx);
         if (AppData(ctx)->FeatureFlags.GetEnableFollowerStats()) {
             DoPeriodicTasks(ctx);
         }
@@ -434,6 +439,10 @@ void TDataShard::SwitchToWork(const TActorContext &ctx) {
     }
 
     SignalTabletActive(ctx);
+
+    // Build HNSW indexes for vector columns (same as followers)
+    Execute(CreateTxInitHnswIndexes(), ctx);
+
     DoPeriodicTasks(ctx);
 
     NotifySchemeshard(ctx);
@@ -2958,6 +2967,30 @@ void TDataShard::Handle(TEvDataShard::TEvGetShardState::TPtr &ev, const TActorCo
     Execute(new TTxGetShardState(this, ev), ctx);
 }
 
+void TDataShard::Handle(TEvDataShard::TEvGetHnswStats::TPtr &ev, const TActorContext &ctx) {
+    // Simple synchronous handler for debugging - return stats immediately
+    auto result = MakeHolder<TEvDataShard::TEvGetHnswStatsResult>();
+    result->Record.SetOrigin(TabletID());
+    // Use global node-level cache stats (survives tablet restarts)
+    result->Record.SetCacheHits(TNodeHnswIndexCache::Instance().GetCacheHits());
+    result->Record.SetCacheMisses(TNodeHnswIndexCache::Instance().GetCacheMisses());
+
+    // Add per-index info with statistics
+    for (const auto& info : HnswIndexes.GetAllIndexesInfo()) {
+        auto* indexStats = result->Record.AddIndexes();
+        indexStats->SetTableId(info.TableId);
+        indexStats->SetColumnName(info.ColumnName);
+        indexStats->SetIndexSize(info.IndexSize);
+        indexStats->SetIsReady(info.IsReady);
+        indexStats->SetReads(info.Reads);
+        indexStats->SetFastPathReads(info.FastPathReads);
+        indexStats->SetSlowPathReads(info.SlowPathReads);
+        indexStats->SetPageFaults(info.PageFaults);
+    }
+
+    ctx.Send(ev->Get()->GetSource(), result.Release());
+}
+
 void TDataShard::Handle(TEvDataShard::TEvSchemaChangedResult::TPtr& ev, const TActorContext& ctx) {
     LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
                 "Handle TEvSchemaChangedResult " << ev->Get()->Record.GetTxId()
@@ -3958,6 +3991,13 @@ void TDataShard::DoPeriodicTasks(TEvPrivate::TEvPeriodicWakeup::TPtr&, const TAc
     Y_ENSURE(PeriodicWakeupPending, "Unexpected TEvPeriodicWakeup message");
     PeriodicWakeupPending = false;
     DoPeriodicTasks(ctx);
+}
+
+void TDataShard::HandleRetryHnswIndexInit(TEvPrivate::TEvRetryHnswIndexInit::TPtr&, const TActorContext &ctx) {
+    // Retry HNSW index initialization
+    if (!HnswIndexesBuilt) {
+        Execute(CreateTxInitHnswIndexes(), ctx);
+    }
 }
 
 void TDataShard::UpdateLagCounters(const TActorContext &ctx) {

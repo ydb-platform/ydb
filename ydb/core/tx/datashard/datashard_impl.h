@@ -7,6 +7,7 @@
 #include "change_record.h"
 #include "change_record_cdc_serializer.h"
 #include "conflicts_cache.h"
+#include "hnsw_index.h"
 #include "datashard_outreadset.h"
 #include "datashard_pipeline.h"
 #include "datashard_repl_offsets.h"
@@ -218,6 +219,7 @@ class TDataShard
     class TTxCdcStreamScanProgress;
     class TTxCdcStreamEmitHeartbeats;
     class TTxUpdateFollowerReadEdge;
+    class TTxInitHnswIndexes;
     class TTxRemoveSchemaSnapshots;
     class TTxIncrementalRestore;
     class TTxCleanupUncommitted;
@@ -357,6 +359,7 @@ class TDataShard
             EvTableStatsError,
             EvRemoveSchemaSnapshots,
             EvBlockFailPointUnblock,
+            EvRetryHnswIndexInit,
             EvEnd
         };
 
@@ -380,6 +383,8 @@ class TDataShard
         struct TEvProgressOperationHistogramScan : public TEventLocal<TEvProgressOperationHistogramScan, EvProgressOperationHistogramScan> {};
 
         struct TEvPeriodicWakeup : public TEventLocal<TEvPeriodicWakeup, EvPeriodicWakeup> {};
+
+        struct TEvRetryHnswIndexInit : public TEventLocal<TEvRetryHnswIndexInit, EvRetryHnswIndexInit> {};
 
         struct TEvBuildTableStatsResult : public TEventLocal<TEvBuildTableStatsResult, EvAsyncTableStats> {
             ui64 TableId = -1;
@@ -1253,6 +1258,7 @@ class TDataShard
 
     void Handle(TEvents::TEvGone::TPtr &ev);
     void Handle(TEvDataShard::TEvGetShardState::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvDataShard::TEvGetHnswStats::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvDataShard::TEvSchemaChangedResult::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvDataShard::TEvStateChangedResult::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvDataShard::TEvProposeTransaction::TPtr &ev, const TActorContext &ctx);
@@ -1422,6 +1428,7 @@ class TDataShard
 
     void DoPeriodicTasks(const TActorContext &ctx);
     void DoPeriodicTasks(TEvPrivate::TEvPeriodicWakeup::TPtr&, const TActorContext &ctx);
+    void HandleRetryHnswIndexInit(TEvPrivate::TEvRetryHnswIndexInit::TPtr&, const TActorContext &ctx);
 
     TDuration GetDataTxCompleteLag()
     {
@@ -1486,6 +1493,7 @@ class TDataShard
     NTabletFlatExecutor::ITransaction* CreateTxInitRestored(THashMap<ui64, TOperation::TPtr> migratedTxs);
     NTabletFlatExecutor::ITransaction* CreateTxInitSchema();
     NTabletFlatExecutor::ITransaction* CreateTxInitSchemaDefaults();
+    NTabletFlatExecutor::ITransaction* CreateTxInitHnswIndexes();
     NTabletFlatExecutor::ITransaction* CreateTxSchemaChanged(TEvDataShard::TEvSchemaChangedResult::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxStartSplit();
     NTabletFlatExecutor::ITransaction* CreateTxSplitSnapshotComplete(TIntrusivePtr<TSplitSnapshotContext> snapContext);
@@ -1701,6 +1709,14 @@ public:
     }
 
     const THashMap<ui64, TUserTable::TCPtr> &GetUserTables() const { return TableInfos; }
+
+    // Get HNSW index for vector search (returns nullptr if not available)
+    const THnswIndex* GetHnswIndex(ui64 tableId, const TString& columnName) const {
+        return HnswIndexes.GetIndex(tableId, columnName);
+    }
+
+    // Get HNSW index manager for building indexes
+    THnswIndexManager& GetHnswIndexManager() { return HnswIndexes; }
 
     ui64 GetLocalTableId(const TTableId& tableId) const {
         Y_ENSURE(!TSysTables::IsSystemTable(tableId));
@@ -2539,6 +2555,9 @@ private:
         NTable::TDatabase::TChangeCounter LastSnapshotsUpdate;
     };
 
+    // HNSW index state (for both leader and followers)
+    bool HnswIndexesBuilt = false;
+
     //
 
     TTabletCountersBase* TabletCounters;
@@ -2746,6 +2765,9 @@ private:
     TConflictsCache ConflictsCache;
     TCdcStreamScanManager CdcStreamScanManager;
     TCdcStreamHeartbeatManager CdcStreamHeartbeatManager;
+
+    // HNSW index for vector search acceleration
+    THnswIndexManager HnswIndexes;
 
     TReplicationSourceOffsetsServerLink ReplicationSourceOffsetsServer;
 
@@ -3154,6 +3176,7 @@ protected:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvents::TEvGone, Handle);
             HFuncTraced(TEvDataShard::TEvGetShardState, Handle);
+            HFuncTraced(TEvDataShard::TEvGetHnswStats, Handle);
             HFuncTraced(TEvDataShard::TEvSchemaChangedResult, Handle);
             HFuncTraced(TEvDataShard::TEvStateChangedResult, Handle);
             HFuncTraced(TEvDataShard::TEvProposeTransaction, Handle);
@@ -3247,6 +3270,7 @@ protected:
             HFunc(TEvPrivate::TEvRestartOperation, Handle);
             HFunc(TEvPrivate::TEvBlockFailPointUnblock, Handle);
             HFunc(TEvPrivate::TEvPeriodicWakeup, DoPeriodicTasks);
+            HFunc(TEvPrivate::TEvRetryHnswIndexInit, HandleRetryHnswIndexInit);
             HFunc(TEvents::TEvUndelivered, Handle);
             IgnoreFunc(TEvInterconnect::TEvNodeConnected);
             HFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
@@ -3310,6 +3334,7 @@ protected:
             hFuncTraced(TEvDataShard::TEvReadScanFinished, Handle);
             HFunc(TEvDataShard::TEvGetTableStats, Handle);
             HFuncTraced(TEvPrivate::TEvPeriodicWakeup, DoPeriodicTasks);
+            HFunc(TEvPrivate::TEvRetryHnswIndexInit, HandleRetryHnswIndexInit);
             HFunc(TEvPrivate::TEvBuildTableStatsResult, Handle);
             HFunc(TEvPrivate::TEvBuildTableStatsError, Handle);
         default:

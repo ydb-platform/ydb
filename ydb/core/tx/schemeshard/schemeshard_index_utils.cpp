@@ -127,7 +127,8 @@ NKikimrSchemeOp::TPartitionConfig PartitionConfigForIndexes(
     if (indexTableDesc.GetPartitionConfig().HasPartitioningPolicy()) {
         result.MutablePartitioningPolicy()->CopyFrom(indexTableDesc.GetPartitionConfig().GetPartitioningPolicy());
     } else {
-        result.MutablePartitioningPolicy()->SetSizeToSplit(2_GB);
+        // Commented out 2GB limitation to remove forced datashard splitting
+        // result.MutablePartitioningPolicy()->SetSizeToSplit(2_GB);
         result.MutablePartitioningPolicy()->SetMinPartitionsCount(1);
     }
     if (baseTablePartitionConfig.HasPipelineConfig()) {

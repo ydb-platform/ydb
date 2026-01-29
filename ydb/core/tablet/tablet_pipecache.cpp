@@ -7,6 +7,8 @@
 #include <util/generic/hash_set.h>
 #include <ydb/library/actors/core/hfunc.h>
 
+#include <algorithm>
+
 namespace NKikimr {
 
 class TPipePerNodeCache : public TActor<TPipePerNodeCache> {
@@ -80,7 +82,9 @@ class TPipePerNodeCache : public TActor<TPipePerNodeCache> {
         THashMap<TActorId, TClientState> ByClient;
         THashMap<TActorId, TClientState*> ByPeer;
 
-        TActorId LastClient;
+        // Multiple active clients for round-robin distribution
+        TVector<TActorId> ActiveClients;
+        ui32 NextClientIndex = 0;
         TInstant LastCreated;
 
         TClientState* FindClient(const TActorId& clientId) {
@@ -91,22 +95,81 @@ class TPipePerNodeCache : public TActor<TPipePerNodeCache> {
             return &it->second;
         }
 
+        const TClientState* FindClient(const TActorId& clientId) const {
+            auto it = ByClient.find(clientId);
+            if (it == ByClient.end()) {
+                return nullptr;
+            }
+            return &it->second;
+        }
+
         TClientState* GetActive() {
-            return ByClient.FindPtr(LastClient);
+            if (ActiveClients.empty()) {
+                return nullptr;
+            }
+            return FindClient(ActiveClients[0]);
+        }
+
+        TClientState* GetNextActiveClient() {
+            if (ActiveClients.empty()) {
+                return nullptr;
+            }
+            // Round-robin selection among active clients
+            NextClientIndex = (NextClientIndex + 1) % ActiveClients.size();
+            return FindClient(ActiveClients[NextClientIndex]);
         }
 
         bool IsActive(const TActorId& client) const {
-            return client == LastClient;
+            return std::find(ActiveClients.begin(), ActiveClients.end(), client) != ActiveClients.end();
         }
 
         bool IsActive(TClientState* clientState) const {
-            return clientState->Client == LastClient;
+            return IsActive(clientState->Client);
+        }
+
+        void AddActiveClient(const TActorId& client) {
+            if (!IsActive(client)) {
+                ActiveClients.push_back(client);
+            }
+        }
+
+        void RemoveActiveClient(const TActorId& client) {
+            auto it = std::find(ActiveClients.begin(), ActiveClients.end(), client);
+            if (it != ActiveClients.end()) {
+                ActiveClients.erase(it);
+                if (NextClientIndex >= ActiveClients.size() && !ActiveClients.empty()) {
+                    NextClientIndex = 0;
+                }
+            }
         }
 
         void Deactivate(const TActorId& client) {
-            if (LastClient == client) {
-                LastClient = TActorId();
+            RemoveActiveClient(client);
+        }
+
+        // Count how many active clients are connected to a specific follower node
+        ui32 CountClientsOnNode(ui32 nodeId) const {
+            ui32 count = 0;
+            for (const auto& clientId : ActiveClients) {
+                auto it = ByClient.find(clientId);
+                if (it != ByClient.end() && it->second.NodeId == nodeId && it->second.Connected) {
+                    ++count;
+                }
             }
+            return count;
+        }
+
+        // Count connected clients among active ones
+        ui32 CountConnectedClients() const {
+            ui32 connectedCount = 0;
+            for (const auto& clientId : ActiveClients) {
+                if (const auto* cs = FindClient(clientId)) {
+                    if (cs->Connected) {
+                        connectedCount++;
+                    }
+                }
+            }
+            return connectedCount;
         }
     };
 
@@ -231,39 +294,104 @@ class TPipePerNodeCache : public TActor<TPipePerNodeCache> {
         }
     }
 
-    TClientState* EnsureClient(TTabletState *tabletState, ui64 tabletId) {
-        TClientState *clientState = nullptr;
-        if (!tabletState->LastClient || tabletState->ForceReconnect || Config->PipeRefreshTime && tabletState->ByClient.size() < 2 && Config->PipeRefreshTime < (TActivationContext::Now() - tabletState->LastCreated)) {
-            tabletState->ForceReconnect = false;
-            // Remove current client if it is idle
-            if (tabletState->LastClient) {
-                clientState = tabletState->FindClient(tabletState->LastClient);
-                Y_ABORT_UNLESS(clientState);
-                if (clientState->Peers.empty()) {
-                    if (Counters) {
-                        if (clientState->Connected) {
-                            Counters.PipesActive->Dec();
-                        } else {
-                            Counters.PipesConnecting->Dec();
-                        }
-                    }
-                    NTabletPipe::CloseClient(SelfId(), tabletState->LastClient);
-                    tabletState->ByClient.erase(tabletState->LastClient);
-                    tabletState->LastClient = TActorId();
+    bool TryRemoveIdleClient(TTabletState *tabletState, const TActorId& clientId) {
+        auto* cs = tabletState->FindClient(clientId);
+        if (!cs || !cs->Peers.empty()) {
+            return false;  // Client has peers, can't remove
+        }
+        if (Counters) {
+            if (cs->Connected) {
+                Counters.PipesActive->Dec();
+            } else {
+                Counters.PipesConnecting->Dec();
+            }
+        }
+        NTabletPipe::CloseClient(SelfId(), clientId);
+        tabletState->ByClient.erase(clientId);
+        tabletState->RemoveActiveClient(clientId);
+        return true;
+    }
+
+    void CleanupIdleClients(TTabletState *tabletState) {
+        // Remove idle active clients (those with no peers)
+        // Keep at least one client for immediate use
+        TVector<TActorId> toRemove;
+        for (const auto& clientId : tabletState->ActiveClients) {
+            if (tabletState->ActiveClients.size() - toRemove.size() <= 1) {
+                break;  // Keep at least one client
+            }
+            if (auto* cs = tabletState->FindClient(clientId)) {
+                if (cs->Peers.empty() && cs->Connected) {
+                    toRemove.push_back(clientId);
                 }
             }
+        }
+
+        for (const auto& clientId : toRemove) {
+            TryRemoveIdleClient(tabletState, clientId);
+        }
+    }
+
+    TClientState* EnsureClient(TTabletState *tabletState, ui64 tabletId) {
+        const bool refreshExpired = Config->PipeRefreshTime &&
+            Config->PipeRefreshTime < (TActivationContext::Now() - tabletState->LastCreated);
+
+        // Periodically cleanup idle clients when we have many
+        if (refreshExpired && tabletState->ActiveClients.size() > 1) {
+            CleanupIdleClients(tabletState);
+        }
+
+        // Count connected clients among active ones
+        const ui32 connectedCount = tabletState->CountConnectedClients();
+
+        // Determine if we need to create a new client
+        bool needNewClient = tabletState->ActiveClients.empty() ||
+            tabletState->ForceReconnect ||
+            (connectedCount < Config->MaxActiveClients &&
+             tabletState->ActiveClients.size() < Config->MaxActiveClients &&
+             refreshExpired);
+
+        // When at MaxActiveClients limit and need new client (refresh or force), try to remove an idle client
+        if (needNewClient && tabletState->ActiveClients.size() >= Config->MaxActiveClients) {
+            // Copy the list to avoid iterator invalidation when removing
+            TVector<TActorId> clientsCopy = tabletState->ActiveClients;
+            for (const auto& clientId : clientsCopy) {
+                if (TryRemoveIdleClient(tabletState, clientId)) {
+                    break;
+                }
+            }
+        }
+
+        // Also try to rotate when refresh expired even if we didn't initially need a new client
+        if (!needNewClient && refreshExpired &&
+            tabletState->ActiveClients.size() >= Config->MaxActiveClients) {
+            // Copy the list to avoid iterator invalidation when removing
+            TVector<TActorId> clientsCopy = tabletState->ActiveClients;
+            for (const auto& clientId : clientsCopy) {
+                if (TryRemoveIdleClient(tabletState, clientId)) {
+                    needNewClient = true;
+                    break;
+                }
+            }
+        }
+
+        if (needNewClient && tabletState->ActiveClients.size() < Config->MaxActiveClients) {
+            tabletState->ForceReconnect = false;
             if (Counters) {
                 Counters.PipesConnecting->Inc();
                 Counters.EventCreate->Inc();
             }
-            tabletState->LastClient = Register(NTabletPipe::CreateClient(SelfId(), tabletId, PipeConfig));
+            TActorId newClient = Register(NTabletPipe::CreateClient(SelfId(), tabletId, PipeConfig));
             tabletState->LastCreated = TActivationContext::Now();
-            clientState = &tabletState->ByClient[tabletState->LastClient];
-            clientState->Client = tabletState->LastClient;
-        } else {
-            clientState = tabletState->FindClient(tabletState->LastClient);
-            Y_ABORT_UNLESS(clientState, "Missing expected client state for active client");
+            auto& clientState = tabletState->ByClient[newClient];
+            clientState.Client = newClient;
+            tabletState->AddActiveClient(newClient);
+            return &clientState;
         }
+
+        // Round-robin among existing active clients
+        TClientState* clientState = tabletState->GetNextActiveClient();
+        Y_ABORT_UNLESS(clientState, "Missing expected client state for active client");
         return clientState;
     }
 
@@ -439,6 +567,29 @@ class TPipePerNodeCache : public TActor<TPipePerNodeCache> {
                 auto nodeRequests = std::move(clientState->NodeRequests);
                 for (auto &req : nodeRequests) {
                     Send(req.Sender, new TEvPipeCache::TEvGetTabletNodeResult(msg->TabletId, clientState->NodeId), 0, req.Cookie);
+                }
+
+                // Check for duplicate connections to the same follower node
+                // If this is a duplicate and we have many clients, close an idle duplicate
+                if (Config->MaxActiveClients > 1 && clientState->NodeId != 0) {
+                    ui32 duplicateCount = tabletState->CountClientsOnNode(clientState->NodeId);
+                    if (duplicateCount > 1) {
+                        // We have multiple connections to the same follower - try to close an idle one
+                        TVector<TActorId> clientsCopy = tabletState->ActiveClients;
+                        for (const auto& otherId : clientsCopy) {
+                            if (otherId == msg->ClientId) {
+                                continue;  // Don't close the one we just connected
+                            }
+                            auto* otherClient = tabletState->FindClient(otherId);
+                            if (otherClient && otherClient->NodeId == clientState->NodeId &&
+                                otherClient->Connected && otherClient->Peers.empty()) {
+                                // Found an idle duplicate - close it and force reconnect
+                                TryRemoveIdleClient(tabletState, otherId);
+                                tabletState->ForceReconnect = true;
+                                break;
+                            }
+                        }
+                    }
                 }
                 return;
             }

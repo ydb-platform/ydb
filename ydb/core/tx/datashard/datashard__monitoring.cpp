@@ -120,6 +120,22 @@ void TDataShard::Handle(TEvDataShard::TEvGetInfoRequest::TPtr& ev) {
     pcfg.SetDirtyImmediate(Pipeline.GetConfig().DirtyImmediate());
     pcfg.SetDataTxCacheSize(Pipeline.GetConfig().LimitDataTxCache);
 
+    // HNSW index statistics (uses global node-level cache stats)
+    auto& hnswStats = *response->Record.MutableHnswStats();
+    hnswStats.SetCacheHits(TNodeHnswIndexCache::Instance().GetCacheHits());
+    hnswStats.SetCacheMisses(TNodeHnswIndexCache::Instance().GetCacheMisses());
+    for (const auto& info : HnswIndexes.GetAllIndexesInfo()) {
+        auto* indexStats = hnswStats.AddIndexes();
+        indexStats->SetTableId(info.TableId);
+        indexStats->SetColumnName(info.ColumnName);
+        indexStats->SetIndexSize(info.IndexSize);
+        indexStats->SetIsReady(info.IsReady);
+        indexStats->SetReads(info.Reads);
+        indexStats->SetFastPathReads(info.FastPathReads);
+        indexStats->SetSlowPathReads(info.SlowPathReads);
+        indexStats->SetPageFaults(info.PageFaults);
+    }
+
     Send(ev->Sender, response);
 }
 

@@ -69,6 +69,12 @@ namespace NBoot {
                 if (head->LargeGlobId && index != TCookie::EIdx::RedoLz4) {
                     Apply(head->Stamp, *head, head->Body);
                 } else {
+                    size_t decompressedSize = Codec->DecompressedLength(head->Body);
+                    Y_ENSURE(decompressedSize <= MaxDecompressedBlobSize,
+                        "Commit " << head->Stamp << " " << NFmt::Do(head->LargeGlobId)
+                        << " has an unexpected decompressed size of " << decompressedSize << " bytes"
+                        << ", possible data corruption");
+
                     Apply(head->Stamp, *head, Codec->Decode(head->Body));
                 }
 

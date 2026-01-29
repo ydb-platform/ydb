@@ -38,7 +38,7 @@ public:
         ui64 Counter;
         ui64 CreateTs;
         ui64 Flags;
-        ui64 QueryTraceId = 0;
+        ui64 VictimQueryTraceId = 0;
 
         TVector<TLockRange> Ranges;
         TVector<ui64> Conflicts;
@@ -342,8 +342,8 @@ public:
 
     ui64 GetLockId() const { return LockId; }
     ui32 GetLockNodeId() const { return LockNodeId; }
-    ui64 GetQueryTraceId() const { return QueryTraceId; }
-    void SetQueryTraceId(ui64 queryTraceId) { QueryTraceId = queryTraceId; }
+    ui64 GetVictimQueryTraceId() const { return VictimQueryTraceId; }
+    void SetVictimQueryTraceId(ui64 victimQueryTraceId) { VictimQueryTraceId = victimQueryTraceId; }
 
     TInstant GetCreationTime() const { return CreationTime; }
 
@@ -434,7 +434,7 @@ private:
     ui64 Counter;
     TInstant CreationTime;
     ELockFlags Flags = ELockFlags::None;
-    ui64 QueryTraceId = 0;
+    ui64 VictimQueryTraceId = 0;
     THashSet<TPathId> ReadTables;
     THashSet<TPathId> WriteTables;
     TVector<TPointKey> Points;
@@ -737,7 +737,7 @@ private:
 struct TLocksUpdate {
     ui64 LockTxId = 0;
     ui32 LockNodeId = 0;
-    ui64 QueryTraceId = 0;
+    ui64 VictimQueryTraceId = 0;
     TLockInfo::TPtr Lock;
 
     TStackVec<TPointKey, 4> PointLocks;
@@ -912,8 +912,8 @@ public:
 
     std::pair<TVector<TLock>, TVector<ui64>> ApplyLocks();
     ui64 ExtractLockTxId(const TArrayRef<const TCell>& syslockKey) const;
-    TVector<ui64> ExtractQueryTraceIds(const TVector<ui64>& lockIds) const;
-    TMaybe<ui64> GetQueryTraceIdForLock(ui64 lockTxId) const;
+    TVector<ui64> ExtractVictimQueryTraceIds(const TVector<ui64>& lockIds) const;
+    TMaybe<ui64> GetVictimQueryTraceIdForLock(ui64 lockTxId) const;
     TLock GetLock(const TArrayRef<const TCell>& syslockKey) const;
     void EraseLock(ui64 lockId);
     void EraseLock(const TArrayRef<const TCell>& syslockKey);

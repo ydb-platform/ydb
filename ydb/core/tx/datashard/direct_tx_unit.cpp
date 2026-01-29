@@ -73,7 +73,7 @@ public:
 
         auto [_, locksBrokenByDirectTx] = DataShard.SysLocksTable().ApplyLocks();
         if (!locksBrokenByDirectTx.empty()) {
-            auto victimQueryTraceIds = DataShard.SysLocksTable().ExtractQueryTraceIds(locksBrokenByDirectTx);
+            auto victimQueryTraceIds = DataShard.SysLocksTable().ExtractVictimQueryTraceIds(locksBrokenByDirectTx);
             NDataIntegrity::LogLocksBroken(ctx, DataShard.TabletID(), "Direct transaction (upload/erase) broke locks", locksBrokenByDirectTx,
                                            Nothing(), victimQueryTraceIds);
         }

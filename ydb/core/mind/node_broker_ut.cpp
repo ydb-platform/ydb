@@ -160,6 +160,9 @@ void SetupServices(TTestActorRuntime &runtime,
             ui64 pDiskGuid = 1;
             static ui64 iteration = 0;
             ++iteration;
+            TFormatOptions options;
+            options.SectorMap = sectorMap;
+            options.EnableSmallDiskOptimization = false;
             FormatPDisk(pDiskPath,
                         pDiskSize,
                         4 << 10,
@@ -170,10 +173,7 @@ void SetupServices(TTestActorRuntime &runtime,
                         0x7890123456 + iteration,
                         NPDisk::YdbDefaultPDiskSequence,
                         TString(""),
-                        false,
-                        false,
-                        sectorMap,
-                        false);
+                        options);
         }
 
         NodeWardenConfigs[nodeIndex] = nodeWardenConfig;
@@ -293,7 +293,7 @@ void Setup(TTestActorRuntime& runtime,
 
     auto scheduledFilter = [](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event, TDuration delay, TInstant& deadline) {
         if (event->HasEvent()
-            && (event->Type == TDynamicNameserver::TEvPrivate::TEvUpdateEpoch::EventType 
+            && (event->Type == TDynamicNameserver::TEvPrivate::TEvUpdateEpoch::EventType
                 || event->Type == TEvents::TSystem::Wakeup))
             return false;
         return TTestActorRuntime::DefaultScheduledFilterFunc(runtime, event, delay, deadline);
@@ -485,7 +485,7 @@ void CheckRegistration(TTestActorRuntime &runtime,
 }
 
 THolder<TEvNodeBroker::TEvGracefulShutdownRequest>
-MakeEventGracefulShutdown (ui32 nodeId) 
+MakeEventGracefulShutdown (ui32 nodeId)
 {
     auto eventGracefulShutdown = MakeHolder<TEvNodeBroker::TEvGracefulShutdownRequest>();
     eventGracefulShutdown->Record.SetNodeId(nodeId);
@@ -952,7 +952,7 @@ THolder<TEvInterconnect::TEvNodesInfo> GetNameserverNodesListEv(TTestActorRuntim
     TAutoPtr<IEventHandle> handle;
     auto reply = runtime.GrabEdgeEventRethrow<TEvInterconnect::TEvNodesInfo>(handle);
     UNIT_ASSERT(reply);
-    
+
     return IEventHandle::Release<TEvInterconnect::TEvNodesInfo>(handle);
 }
 
@@ -1849,7 +1849,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         // Register node NODE1.
         CheckRegistration(runtime, sender, "host1", 1001, "host1.yandex.net", "1.2.3.4",
                           1, 2, 3, 4, TStatus::OK, NODE1, epoch.GetNextEnd());
-        
+
         // Update config and restart NodeBroker
         auto dnConfig = runtime.GetAppData().DynamicNameserviceConfig;
         dnConfig->MinDynamicNodeId += 2;
@@ -1877,17 +1877,17 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
 
         // There should be no dynamic nodes initially.
         auto epoch = GetEpoch(runtime, sender);
-    
+
         // Register node NODE1.
         CheckRegistration(runtime, sender, "host1", 1001, "host1.yandex.net", "1.2.3.4",
                           1, 2, 3, 4, TStatus::OK, NODE1, epoch.GetNextEnd());
-        
+
         // Update config and restart NodeBroker
         auto dnConfig = runtime.GetAppData().DynamicNameserviceConfig;
         dnConfig->MinDynamicNodeId += 2;
         dnConfig->MaxDynamicNodeId += 2;
         RestartNodeBroker(runtime);
-    
+
         // Wait until epoch expiration.
         WaitForEpochUpdate(runtime, sender);
         epoch = GetEpoch(runtime, sender);
@@ -1966,7 +1966,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
                 break;
             }
         } while (true);
-        
+
         // Check that dynamic node in serverless subdomain has shared scope id
         CheckRegistration(runtime, sender, "host2", 1001, "host2.yandex.net",
                           "1.2.3.5", 1, 2, 3, 5, TStatus::OK, NODE2,
@@ -2008,7 +2008,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         CheckRegistration(runtime, sender, "host4", 19001, "/dc-1/my-database",
                           TStatus::OK, NODE4, epoch.GetNextEnd(), "slot-3");
 
-        // After this epoch update NODE2 is removed and name is free 
+        // After this epoch update NODE2 is removed and name is free
         epoch = WaitForEpochUpdate(runtime, sender);
 
         // Register node using new host, it reuses name
@@ -4731,7 +4731,7 @@ Y_UNIT_TEST_SUITE(TDynamicNameserverTest) {
         TTestBasicRuntime runtime(1, false);
         SetupWithDeltaProtocol(runtime, EnableNodeBrokerDeltaProtocol);
         TActorId sender = runtime.AllocateEdgeActor();
-        
+
         // Add one dynamic node in addition to one static node
         CheckRegistration(runtime, sender, "host1", 1001, "host1.host1.host1", "1.2.3.4",
                     1, 2, 3, 4, TStatus::OK, NODE1);
@@ -5009,7 +5009,7 @@ Y_UNIT_TEST_SUITE(TSlotIndexesPoolTest) {
     Y_UNIT_TEST(Basic)
     {
         TSlotIndexesPool pool;
-        
+
         pool.Acquire(10);
         UNIT_ASSERT(pool.IsAcquired(10));
 
@@ -5097,7 +5097,7 @@ Y_UNIT_TEST_SUITE(GracefulShutdown) {
                           1, 2, 3, 4, TStatus::OK, NODE1, epoch.GetNextEnd(),
                           false, DOMAIN_NAME, {}, "slot-0");
 
-        CheckGracefulShutdown(runtime, sender, NODE1);    
+        CheckGracefulShutdown(runtime, sender, NODE1);
 
         CheckRegistration(runtime, sender, "host2", 1001, "host2.yandex.net", "1.2.3.5",
                           1, 2, 3, 5, TStatus::OK, NODE2, epoch.GetNextEnd(),

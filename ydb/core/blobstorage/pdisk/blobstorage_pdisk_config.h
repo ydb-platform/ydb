@@ -108,6 +108,12 @@ struct TPDiskConfig : public TThrRefBase {
     TIntrusivePtr<NPDisk::TSectorMap> SectorMap; // set only by warden
     bool EnableSectorEncryption = true;
 
+    // EnableSectorEncryption is not the same as the DISABLE_PDISK_ENCRYPTION macro:
+    // unlike the macro, it does not disable metadata encryption.
+    // Tests need a runtime way to emulate DISABLE_PDISK_ENCRYPTION.
+    // Until runtime on/off encryption is fully supported, keep this hacky flag.
+    bool EnableFormatEncryption = true;
+
     ui32 ChunkSize = 128 << 20;
     ui32 SectorSize = 4 << 10;
 
@@ -178,6 +184,9 @@ struct TPDiskConfig : public TThrRefBase {
     bool MetadataOnly = false;
 
     bool ReadOnly = false;
+
+    // used for tests only
+    std::optional<ui64> NonceRandNum;
 
     TPDiskConfig(ui64 pDiskGuid, ui32 pdiskId, ui64 pDiskCategory)
         : TPDiskConfig({}, pDiskGuid, pdiskId, pDiskCategory)

@@ -230,8 +230,10 @@ struct TPDiskTest : public TPerfTest {
         EntropyPool().Read(&sysLogKey, sizeof(NKikimr::NPDisk::TKey));
         ui64 diskSize = 0;
         bool isErasureEncode = false;
+        TFormatOptions options;
+        options.IsErasureEncodeUserLog = isErasureEncode;
         FormatPDisk(Cfg.Path, diskSize, 4 << 10, ChunkSize, PDiskGuid,
-            chunkKey, logKey, sysLogKey, NPDisk::YdbDefaultPDiskSequence, "Info", isErasureEncode);
+            chunkKey, logKey, sysLogKey, NPDisk::YdbDefaultPDiskSequence, "Info", options);
     }
 
     void Init() override {

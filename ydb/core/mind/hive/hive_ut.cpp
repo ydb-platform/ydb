@@ -212,6 +212,9 @@ namespace {
                 nodeWardenConfig->SectorMaps[pDiskPath] = sectorMap;
             }
             ui64 pDiskGuid = i + 1;
+            TFormatOptions options;
+            options.SectorMap = sectorMap;
+            options.EnableSmallDiskOptimization = false;
             FormatPDisk(
                         pDiskPath,
                         pDiskSize,
@@ -223,10 +226,7 @@ namespace {
                         0x7890123456 + iteration,
                         NPDisk::YdbDefaultPDiskSequence,
                         TString(""),
-                        false,
-                        false,
-                        sectorMap,
-                        false);
+                        options);
         }
     }
 
@@ -467,9 +467,11 @@ void FormatPDiskForTest(TString path, ui64 diskSize, ui32 chunkSize, ui64 guid,
     SafeEntropyPoolRead(&logKey, sizeof(NKikimr::NPDisk::TKey));
     SafeEntropyPoolRead(&sysLogKey, sizeof(NKikimr::NPDisk::TKey));
 
+    TFormatOptions options;
+    options.SectorMap = sectorMap;
+    options.EnableSmallDiskOptimization = false;
     NKikimr::FormatPDisk(path, diskSize, 4 << 10, chunkSize, guid,
-        chunkKey, logKey, sysLogKey, NPDisk::YdbDefaultPDiskSequence, "", false, false, sectorMap,
-        false);
+        chunkKey, logKey, sysLogKey, NPDisk::YdbDefaultPDiskSequence, "", options);
 }
 
 void InitSchemeRoot(TTestBasicRuntime& runtime, const TActorId& sender) {

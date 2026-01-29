@@ -848,7 +848,7 @@ void TLocalLeaderElection::ProcessDeleteSemaphoreResult(const TRpcOut& message) 
 
 void TLocalLeaderElection::UpdateLastKnownGoodTimestampLocked(TInstant timestamp) {
     SessionLastKnownGoodTimestamp = Max(SessionLastKnownGoodTimestamp, timestamp);
-    Cerr << "" << "UpdateLastKnownGoodTimestampLocked timestamp " << timestamp  << " new " << SessionLastKnownGoodTimestamp << Endl;
+    LOG_ROW_DISPATCHER_TRACE("UpdateLastKnownGoodTimestampLocked timestamp " << timestamp << " new " << SessionLastKnownGoodTimestamp);
 }
 
 TLocalLeaderElection::TOperation* TLocalLeaderElection::FindSentRequest(uint64_t reqId) const {

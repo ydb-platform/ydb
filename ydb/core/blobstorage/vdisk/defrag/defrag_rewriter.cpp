@@ -140,8 +140,16 @@ namespace NKikimr {
                 ui32 fullDataSize;
                 memcpy(&fullDataSize, header, sizeof(fullDataSize));
                 header += sizeof(fullDataSize);
-                Y_ABORT_UNLESS(fullDataSize == rec.LogoBlobId.BlobSize());
-                Y_ABORT_UNLESS(NMatrix::TVectorType::MakeOneHot(partId - 1, gtype.TotalPartCount()).Raw() == static_cast<ui8>(*header));
+                // Y_ABORT_UNLESS(fullDataSize == rec.LogoBlobId.BlobSize());
+                // Y_ABORT_UNLESS(NMatrix::TVectorType::MakeOneHot(partId - 1, gtype.TotalPartCount()).Raw() == static_cast<ui8>(*header));
+
+                if (fullDataSize != rec.LogoBlobId.BlobSize() || NMatrix::TVectorType::MakeOneHot(partId - 1, gtype.TotalPartCount()).Raw() != static_cast<ui8>(*header)) {
+                    LOG_CRIT_S(ctx, NKikimrServices::BS_VDISK_DEFRAG,
+                        "Defrag skipping corrupted blob #" << rec.LogoBlobId << " on " << rec.OldDiskPart.ToString());
+                    ++SkippedRecsCounter;
+                    SendNextRead(ctx);
+                    return;
+                }
                 trim += TDiskBlob::HeaderSize;
             }
 
@@ -177,6 +185,7 @@ namespace NKikimr {
             HFunc(TEvTakeHullSnapshotResult, Handle)
             HFunc(NPDisk::TEvChunkReadResult, Handle)
             HFunc(TEvBlobStorage::TEvVPutResult, Handle)
+            IgnoreFunc(TEvRestoreCorruptedBlobResult)
         )
 
         PDISK_TERMINATE_STATE_FUNC_DEF;

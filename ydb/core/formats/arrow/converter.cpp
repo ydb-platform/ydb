@@ -328,7 +328,7 @@ bool TArrowToYdbConverter::Process(const arrow::RecordBatch& batch, TString& err
                 return false;
             }
 
-            if (NeedDataConversion(colType)) {
+            if (NeedDataConversionWithSettings(colType)) {
                 for (i32 i = 0; i < unroll; ++i) {
                     if (!ConvertData(cells[i][col], colType, memPool, errorMessage, AllowInfDouble_)) {
                         return false;

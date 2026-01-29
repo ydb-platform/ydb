@@ -20,6 +20,7 @@ public:
 
     ui64 AlterVersion = 0;
     TPtr AlterData;
+    bool IsRestore = false;
 
     TPathId GetOlapStorePathIdVerified() const;
 
@@ -38,6 +39,8 @@ public:
     TMaybe<NKikimrSchemeOp::TAlterColumnTable> AlterBody;
     NKikimrSchemeOp::TBackupTask BackupSettings;
     TMap<TTxId, TTableInfo::TBackupRestoreResult> BackupHistory;
+    NKikimrSchemeOp::TRestoreTask RestoreSettings;
+    TMap<TTxId, TTableInfo::TBackupRestoreResult> RestoreHistory;
 
     TAggregatedStats Stats;
 

@@ -199,11 +199,11 @@ protected:
         UNIT_ASSERT_VALUES_EQUAL(keys, paths);
     }
 
-    void ValidateHasYdbTables(const std::vector<TString>& paths) {
+    void ValidateHasYdbTables(const std::vector<TString>& paths, bool isColumnTable = false) {
         for (const TString& path : paths) {
             auto res = YdbSchemeClient().DescribePath(path).GetValueSync();
             UNIT_ASSERT_C(res.IsSuccess(), "Describe path \"" << path << "\" failed: " << res.GetIssues().ToString());
-            UNIT_ASSERT_C(res.GetEntry().Type == NYdb::NScheme::ESchemeEntryType::Table, "Path " << path << " is not a table. Path type: " << static_cast<int>(res.GetEntry().Type));
+            UNIT_ASSERT_C(res.GetEntry().Type == (isColumnTable ? NYdb::NScheme::ESchemeEntryType::ColumnTable : NYdb::NScheme::ESchemeEntryType::Table), "Path " << path << " is not a table. Path type: " << static_cast<int>(res.GetEntry().Type));
         }
     }
 

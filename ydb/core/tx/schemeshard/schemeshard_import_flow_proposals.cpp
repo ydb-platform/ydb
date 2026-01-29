@@ -16,6 +16,56 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
+THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateColumnTablePropose(
+    TSchemeShard* ss,
+    TTxId txId,
+    const TImportInfo& importInfo,
+    ui32 itemIdx,
+    TString& error
+) {
+    Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
+    const auto& item = importInfo.Items.at(itemIdx);
+    Y_ABORT_UNLESS(item.Table);
+    Y_ABORT_UNLESS(item.Table->store_type() == Ydb::Table::STORE_TYPE_COLUMN);
+
+    auto propose = MakeModifySchemeTransaction(ss, txId, importInfo);
+    auto& record = propose->Record;
+
+    auto& modifyScheme = *record.AddTransaction();
+    modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateColumnTable);
+    modifyScheme.SetInternal(true);
+
+    const TPath domainPath = TPath::Init(importInfo.DomainPathId, ss);
+
+    std::pair<TString, TString> wdAndPath;
+    if (!TrySplitPathByDb(item.DstPathName, domainPath.PathString(), wdAndPath, error)) {
+        return nullptr;
+    }
+
+    modifyScheme.SetWorkingDir(wdAndPath.first);
+    
+    auto& tableDesc = *modifyScheme.MutableCreateColumnTable();;
+    tableDesc.SetName(wdAndPath.second);
+    tableDesc.SetIsRestore(true);
+
+    Y_ABORT_UNLESS(ss->TableProfilesLoaded);
+    Ydb::StatusIds::StatusCode status;
+    if (!FillColumnTableDescription(modifyScheme, *item.Table, status, error)) {
+        return nullptr;
+    }
+
+    if (importInfo.UserSID) {
+        record.SetOwner(*importInfo.UserSID);
+    }
+    FillOwner(record, item.Permissions);
+
+    if (!FillACL(modifyScheme, item.Permissions, error)) {
+        return nullptr;
+    }
+
+    return propose;
+}
+
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
     TSchemeShard* ss,
     TTxId txId,
@@ -96,6 +146,11 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
     ui32 itemIdx
 ) {
     TString unused;
+    Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
+    const auto& item = importInfo.Items.at(itemIdx);
+    if (item.Table->store_type() == Ydb::Table::STORE_TYPE_COLUMN) {
+       return CreateColumnTablePropose(ss, txId, importInfo, itemIdx, unused); 
+    }
     return CreateTablePropose(ss, txId, importInfo, itemIdx, unused);
 }
 
@@ -111,7 +166,27 @@ static NKikimrSchemeOp::TTableDescription GetTableDescription(TSchemeShard* ss, 
     auto record = desc->GetRecord();
 
     Y_ABORT_UNLESS(record.HasPathDescription());
-    Y_ABORT_UNLESS(record.GetPathDescription().HasTable());
+    Y_ABORT_UNLESS(record.GetPathDescription().HasTable() || record.GetPathDescription().HasColumnTableDescription());
+    
+    if (record.GetPathDescription().HasColumnTableDescription()) {
+        NKikimrSchemeOp::TTableDescription result;
+        auto columnTable = record.GetPathDescription().GetColumnTableDescription();
+        THashMap<TString, ui32> columnIds;
+        for (const auto& column : columnTable.GetSchema().GetColumns()) {
+            auto& dstColumn = *result.add_columns();
+            dstColumn.set_name(column.GetName());
+            dstColumn.set_type(column.GetType());
+            dstColumn.set_typeid_(column.GetTypeId());
+            dstColumn.set_id(column.GetId());
+            columnIds[column.GetName()] = column.GetId();
+        }
+        result.MutableKeyColumnNames()->CopyFrom(columnTable.GetSchema().GetKeyColumnNames());
+        for (const auto& keyColumnName: columnTable.GetSchema().GetKeyColumnNames()) {
+            result.AddKeyColumnIds(columnIds[keyColumnName]);
+        }
+        result.MutablePartitionConfig()->MutablePartitioningPolicy()->SetMinPartitionsCount(columnTable.GetColumnShardCount());
+        return result;
+    }
 
     return record.GetPathDescription().GetTable();
 }
@@ -122,6 +197,7 @@ static NKikimrSchemeOp::TTableDescription RebuildTableDescription(
 ) {
     NKikimrSchemeOp::TTableDescription tableDesc;
     tableDesc.MutableKeyColumnNames()->CopyFrom(src.GetKeyColumnNames());
+    tableDesc.MutableKeyColumnIds()->CopyFrom(src.GetKeyColumnIds());
 
     THashMap<TString, ui32> columnNameToIdx;
     for (ui32 i = 0; i < src.ColumnsSize(); ++i) {

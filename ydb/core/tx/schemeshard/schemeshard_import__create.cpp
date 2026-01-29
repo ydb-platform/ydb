@@ -990,11 +990,21 @@ private:
 
         SendNotificationsIfFinished(importInfo);
     }
+    
+    TMaybe<TString> GetIssues(const TImportInfo::TItem& item, TTxId restoreTxId) {
+        if (item.Table->store_type() == Ydb::Table::STORE_TYPE_COLUMN) {
+            Y_ABORT_UNLESS(Self->ColumnTables.contains(item.DstPathId));
+            TColumnTableInfo::TPtr table = Self->ColumnTables.at(item.DstPathId).GetPtr();
+            return GetIssues(table, restoreTxId);
+        } else {
+            Y_ABORT_UNLESS(Self->Tables.contains(item.DstPathId));
+            TTableInfo::TPtr table = Self->Tables.at(item.DstPathId);
+            return GetIssues(table, restoreTxId);
+        }
+     }
 
-    TMaybe<TString> GetIssues(const TPathId& dstPathId, TTxId restoreTxId) {
-        Y_ABORT_UNLESS(Self->Tables.contains(dstPathId));
-        TTableInfo::TPtr table = Self->Tables.at(dstPathId);
-
+    template <typename TTable>
+    TMaybe<TString> GetIssues(const TTable& table, TTxId restoreTxId) {
         Y_ABORT_UNLESS(table->RestoreHistory.contains(restoreTxId));
         const auto& result = table->RestoreHistory.at(restoreTxId);
 
@@ -1701,9 +1711,9 @@ private:
             break;
 
         case EState::Transferring:
-            if (const auto issue = GetIssues(item.DstPathId, txId)) {
+            if (const auto issue = GetIssues(item, txId)) {
                 item.Issue = *issue;
-                Cancel(*importInfo, itemIdx, "issues during restore");
+                Cancel(*importInfo, itemIdx, "issues during restore " + *issue);
                 Self->EraseEncryptionKey(db, *importInfo);
             } else {
                 const auto needToBuildIndexes = NeedToBuildIndexes(*importInfo, itemIdx);

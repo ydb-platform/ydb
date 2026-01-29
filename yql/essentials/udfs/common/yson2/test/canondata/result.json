@@ -9,6 +9,21 @@
             "uri": "file://test.test_Access_/results.txt"
         }
     ],
+    "test.test[AsFail]": [
+        {
+            "uri": "file://test.test_AsFail_/extracted"
+        }
+    ],
+    "test.test[As]": [
+        {
+            "uri": "file://test.test_As_/results.txt"
+        }
+    ],
+    "test.test[AttrAs]": [
+        {
+            "uri": "file://test.test_AttrAs_/results.txt"
+        }
+    ],
     "test.test[Attrs]": [
         {
             "uri": "file://test.test_Attrs_/results.txt"
@@ -197,6 +212,16 @@
     "test.test[StringStrictError]": [
         {
             "uri": "file://test.test_StringStrictError_/extracted"
+        }
+    ],
+    "test.test[TryAsFail]": [
+        {
+            "uri": "file://test.test_TryAsFail_/results.txt"
+        }
+    ],
+    "test.test[TryAs]": [
+        {
+            "uri": "file://test.test_TryAs_/results.txt"
         }
     ],
     "test.test[WeakYsonRest]": [

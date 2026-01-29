@@ -459,9 +459,10 @@ public:
         }
 
         const auto& entry = it->second;
-        TAuthenticationIdentity identity(
+        TClientAuthenticationIdentity identity(
             request.AuthenticatedUser,
-            request.UserTag.value_or(""));
+            request.UserTag.value_or(""),
+            request.ServiceTicket.value_or(""));
 
         YT_VERIFY(entry.Descriptor.InputType == EDataType::Null || request.InputStream);
         YT_VERIFY(entry.Descriptor.OutputType == EDataType::Null || request.OutputStream);

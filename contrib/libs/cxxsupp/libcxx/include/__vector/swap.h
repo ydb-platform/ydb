@@ -6,10 +6,11 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef _LIBCPP___TYPE_TRAITS_ADD_CONST_H
-#define _LIBCPP___TYPE_TRAITS_ADD_CONST_H
+#ifndef _LIBCPP___VECTOR_SWAP_H
+#define _LIBCPP___VECTOR_SWAP_H
 
 #include <__config>
+#include <__fwd/vector.h>
 
 #if !defined(_LIBCPP_HAS_NO_PRAGMA_SYSTEM_HEADER)
 #  pragma GCC system_header
@@ -17,16 +18,12 @@
 
 _LIBCPP_BEGIN_NAMESPACE_STD
 
-template <class _Tp>
-struct _LIBCPP_TEMPLATE_VIS add_const {
-  typedef _LIBCPP_NODEBUG const _Tp type;
-};
-
-#if _LIBCPP_STD_VER >= 14
-template <class _Tp>
-using add_const_t = typename add_const<_Tp>::type;
-#endif
+template <class _Tp, class _Allocator>
+_LIBCPP_CONSTEXPR_SINCE_CXX20 inline _LIBCPP_HIDE_FROM_ABI void
+swap(vector<_Tp, _Allocator>& __x, vector<_Tp, _Allocator>& __y) _NOEXCEPT_(_NOEXCEPT_(__x.swap(__y))) {
+  __x.swap(__y);
+}
 
 _LIBCPP_END_NAMESPACE_STD
 
-#endif // _LIBCPP___TYPE_TRAITS_ADD_CONST_H
+#endif // _LIBCPP___VECTOR_SWAP_H

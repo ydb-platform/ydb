@@ -11,7 +11,6 @@
 #include <ydb/core/backup/common/metadata.h>
 #include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/base/tablet_pipe.h>
-#include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/kesus/tablet/events.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/tx/datashard/export_common.h>
@@ -325,7 +324,9 @@ class TKesusResourcesUploader : public TSchemeWithPipeUploader<TKesusResourcesUp
         for (i32 resourceIdx = Offset; resourceIdx < batchEnd; ++resourceIdx) {
             auto& resource = Resources[resourceIdx];
             TString scheme;
-            BuildRateLimiterResourceScheme(resource, scheme);
+            if (!BuildRateLimiterResourceScheme(resource, scheme)) {
+                Finish(false, "failed to build rate limiter scheme");
+            }
 
             std::stringstream prefix;
             if (IV) {
@@ -522,7 +523,7 @@ class TSchemeUploader: public TExportFilesUploader<TSchemeUploader> {
         LOG_D("RetryResourcesUploadOrFail"
             << ", self: " << SelfId()
             << ", attempts " << KesusResourcesUploadAttempts + 1
-            << ", max attempts" << GetSettings().number_of_retries()
+            << ", max attempts" << MaxKesusResourcesUploadAttempts
             << ", error " << error);
 
         if (++KesusResourcesUploadAttempts >= MaxKesusResourcesUploadAttempts) {
@@ -600,7 +601,9 @@ class TSchemeUploader: public TExportFilesUploader<TSchemeUploader> {
     }
 
     void PassAway() override {
-        Send(KesusResourcesUploader, new TEvents::TEvPoisonPill());
+        if (KesusResourcesUploader) {
+            Send(KesusResourcesUploader, new TEvents::TEvPoisonPill());
+        }
         TExportFilesUploader<TSchemeUploader>::PassAway();
     }
 

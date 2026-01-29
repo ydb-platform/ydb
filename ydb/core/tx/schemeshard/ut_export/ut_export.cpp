@@ -1154,7 +1154,6 @@ namespace {
                     destination_prefix: "Export"
                     items {
                         source_path: "/MyRoot/Kesus"
-                        destination_prefix: "Kesus"
                     }
                     encryption_settings {
                         encryption_algorithm: "AES-128-GCM"
@@ -1170,9 +1169,9 @@ namespace {
 
             TestGetExport(Runtime(), txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
 
-            CheckPathWithChecksum("/Kesus/create_coordination_node.pb");
-            for (auto resourcePath: resources) {
-                CheckPathWithChecksum(Sprintf("/Kesus/%s/create_rate_limiter.pb", resourcePath.c_str()));
+            UNIT_ASSERT(HasS3File("/Export/001/create_coordination_node.pb.enc"));
+            for (ui32 i : xrange(resources.size())) {
+                UNIT_ASSERT(HasS3File(Sprintf("/Export/001/00%u/create_rate_limiter.pb.enc", i + 1)));
             }
         }
 
@@ -1232,10 +1231,6 @@ namespace {
 } // anonymous
 
 Y_UNIT_TEST_SUITE_F(TExportToS3Tests, TExportFixture) {
-    Y_UNIT_TEST(KesusEnc) {
-        TestEncryptedKesus();
-    }
-
     Y_UNIT_TEST(ShouldSucceedOnSingleShardTable) {
         RunS3({
             R"(
@@ -4386,4 +4381,7 @@ CREATE EXTERNAL TABLE IF NOT EXISTS `ExternalTable` (
         TestKesusManyResources();
     }
 
+    Y_UNIT_TEST(KesusEncryptedExport) {
+        TestEncryptedKesus();
+    }
 }

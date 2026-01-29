@@ -187,7 +187,15 @@ namespace NKikimr::NDDisk {
 
         std::queue<TChunkIdx> ChunkReserve;
         bool ReserveInFlight = false;
-        std::queue<std::tuple<ui64, ui64>> ChunkAllocateQueue;
+
+        struct TChunkForData {
+            ui64 TabletId;
+            ui64 VChunkIndex;
+        };
+
+        struct TChunkForPersistentBuffer {};
+
+        std::queue<std::variant<TChunkForData, TChunkForPersistentBuffer>> ChunkAllocateQueue;
         THashMap<ui64, std::function<void()>> LogCallbacks;
         ui64 NextCookie = 1;
         THashMap<ui64, std::tuple<NWilson::TSpan, std::function<void(NPDisk::TEvChunkWriteRawResult&, NWilson::TSpan&&)>>> WriteCallbacks;
@@ -311,7 +319,6 @@ namespace NKikimr::NDDisk {
         std::map<std::tuple<ui64, ui64>, TPersistentBuffer> PersistentBuffers;
 
         std::set<TChunkIdx> PersistentBufferOwnedChunks;
-        ui32 PersistentBufferChunkAllocateQueue = 0;
         ui64 PersistentBufferChunkMapSnapshotLsn = Max<ui64>();
 
         void IssuePersistentBufferChunkAllocation();

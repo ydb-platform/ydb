@@ -4,23 +4,13 @@
 namespace NKikimr::NDDisk {
 
     void TDDiskActor::IssueChunkAllocation(ui64 tabletId, ui64 vChunkIndex) {
-        ChunkAllocateQueue.emplace(tabletId, vChunkIndex);
-        if (!ChunkReserve.empty()) {
-            HandleChunkReserved();
-        } else if (!ReserveInFlight) {
-            Send(BaseInfo.PDiskActorID, new NPDisk::TEvChunkReserve(PDiskParams->Owner, PDiskParams->OwnerRound, 5));
-            ReserveInFlight = true;
-        }
+        ChunkAllocateQueue.emplace(TChunkForData{tabletId, vChunkIndex});
+        HandleChunkReserved();
     }
 
     void TDDiskActor::IssuePersistentBufferChunkAllocation() {
-        PersistentBufferChunkAllocateQueue++;
-        if (!ChunkReserve.empty()) {
-            HandleChunkReserved();
-        } else if (!ReserveInFlight) {
-            Send(BaseInfo.PDiskActorID, new NPDisk::TEvChunkReserve(PDiskParams->Owner, PDiskParams->OwnerRound, 5));
-            ReserveInFlight = true;
-        }
+        ChunkAllocateQueue.emplace(TChunkForPersistentBuffer{});
+        HandleChunkReserved();
     }
 
     void TDDiskActor::Handle(NPDisk::TEvChunkReserveResult::TPtr ev) {
@@ -42,47 +32,46 @@ namespace NKikimr::NDDisk {
     }
 
     void TDDiskActor::HandleChunkReserved() {
-        Y_ABORT_UNLESS(!ReserveInFlight);
-
-        while (PersistentBufferChunkAllocateQueue && !ChunkReserve.empty()) {
-            PersistentBufferChunkAllocateQueue--;
-            const TChunkIdx chunkIdx = ChunkReserve.front();
-            ChunkReserve.pop();
-            Y_ABORT_UNLESS(PersistentBufferOwnedChunks.contains(chunkIdx));
-            IssuePDiskLogRecord(TLogSignature::SignaturePersistentBufferChunkMap, chunkIdx
-                , CreatePersistentBufferChunkMapSnapshot(), &PersistentBufferChunkMapSnapshotLsn, [this, chunkIdx] {
-                PersistentBufferOwnedChunks.insert(chunkIdx);
-                // TODO: Send(SelfId(), new TEvPrivate::TEvHandlePersistentBufferEventForChunk(chunkIdx));
-            });
-        }
-
         while (!ChunkAllocateQueue.empty() && !ChunkReserve.empty()) {
-            const auto [tabletId, vChunkIndex] = ChunkAllocateQueue.front();
+            const auto chunkAllocate = ChunkAllocateQueue.front();
             ChunkAllocateQueue.pop();
-
             const TChunkIdx chunkIdx = ChunkReserve.front();
             ChunkReserve.pop();
+            switch (chunkAllocate.index()) {
+                case 0: {
+                    const auto tabletId = std::get<0>(chunkAllocate).TabletId;
+                    const auto vChunkIndex = std::get<0>(chunkAllocate).VChunkIndex;
+                    Y_ABORT_UNLESS(ChunkRefs.contains(tabletId) && ChunkRefs[tabletId].contains(vChunkIndex));
 
-            Y_ABORT_UNLESS(ChunkRefs.contains(tabletId) && ChunkRefs[tabletId].contains(vChunkIndex));
+                    IssuePDiskLogRecord(TLogSignature::SignatureDDiskChunkMap, chunkIdx, CreateChunkMapIncrement(
+                            tabletId, vChunkIndex, chunkIdx), nullptr, [this, tabletId, vChunkIndex, chunkIdx] {
+                        TChunkRef& chunkRef = ChunkRefs[tabletId][vChunkIndex];
+                        chunkRef.ChunkIdx = chunkIdx;
 
-            IssuePDiskLogRecord(TLogSignature::SignatureDDiskChunkMap, chunkIdx, CreateChunkMapIncrement(
-                    tabletId, vChunkIndex, chunkIdx), nullptr, [this, tabletId, vChunkIndex, chunkIdx] {
-                TChunkRef& chunkRef = ChunkRefs[tabletId][vChunkIndex];
-                chunkRef.ChunkIdx = chunkIdx;
+                        if (!chunkRef.PendingEventsForChunk.empty()) {
+                            Send(SelfId(), new TEvPrivate::TEvHandleEventForChunk(tabletId, vChunkIndex));
+                        }
 
-                if (!chunkRef.PendingEventsForChunk.empty()) {
-                    Send(SelfId(), new TEvPrivate::TEvHandleEventForChunk(tabletId, vChunkIndex));
+                        const size_t numErased = ChunkMapIncrementsInFlight.erase({tabletId, vChunkIndex, chunkIdx});
+                        Y_ABORT_UNLESS(numErased == 1);
+                        ++*Counters.Chunks.ChunksOwned;
+                    });
+
+                    ChunkMapIncrementsInFlight.emplace(tabletId, vChunkIndex, chunkIdx);
+                    break;
                 }
-
-                const size_t numErased = ChunkMapIncrementsInFlight.erase({tabletId, vChunkIndex, chunkIdx});
-                Y_ABORT_UNLESS(numErased == 1);
-
-                ++*Counters.Chunks.ChunksOwned;
-            });
-
-            ChunkMapIncrementsInFlight.emplace(tabletId, vChunkIndex, chunkIdx);
+                case 1: {
+                    Y_ABORT_UNLESS(PersistentBufferOwnedChunks.contains(chunkIdx));
+                    IssuePDiskLogRecord(TLogSignature::SignaturePersistentBufferChunkMap, chunkIdx
+                        , CreatePersistentBufferChunkMapSnapshot(), &PersistentBufferChunkMapSnapshotLsn, [this, chunkIdx] {
+                        PersistentBufferOwnedChunks.insert(chunkIdx);
+                        // TODO: Send(SelfId(), new TEvPrivate::TEvHandlePersistentBufferEventForChunk(chunkIdx));
+                        ++*Counters.Chunks.ChunksOwned;
+                    });
+                    break;
+                }
+            }
         }
-
         if (!ChunkAllocateQueue.empty()) { // ask for another reservation
             Y_ABORT_UNLESS(ChunkReserve.empty());
             Send(BaseInfo.PDiskActorID, new NPDisk::TEvChunkReserve(PDiskParams->Owner, PDiskParams->OwnerRound, 5));

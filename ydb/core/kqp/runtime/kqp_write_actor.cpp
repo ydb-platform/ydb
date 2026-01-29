@@ -2686,6 +2686,7 @@ struct TEvBufferWrite : public TEventLocal<TEvBufferWrite, TKqpEvents::EvBufferW
 
 struct TEvBufferWriteResult : public TEventLocal<TEvBufferWriteResult, TKqpEvents::EvBufferWriteResult> {
     TWriteToken Token;
+    IDataBatchPtr Data;
 };
 
 }
@@ -4819,6 +4820,7 @@ public:
         , Settings(std::move(settings))
         , MessageSettings(GetWriteActorSettings())
         , Alloc(args.Alloc)
+        , HolderFactory(args.HolderFactory)
         , OutputIndex(args.OutputIndex)
         , Callbacks(args.Callback)
         , Counters(counters)
@@ -4830,6 +4832,7 @@ public:
             Settings.GetTable().GetVersion())
         , ForwardWriteActorSpan(TWilsonKqp::ForwardWriteActor, NWilson::TTraceId(args.TraceId), "ForwardWriteActor",
                 NWilson::EFlags::AUTO_END)
+        , TransformOutput(ExtractTransformOutput(args))
     {
         EgressStats.Level = args.StatsLevel;
 
@@ -4844,6 +4847,17 @@ public:
             Batcher = CreateColumnDataBatcher(columnsMetadata, std::move(writeIndex), Alloc);
         } else {
             Batcher = CreateRowDataBatcher(columnsMetadata, std::move(writeIndex), Alloc);
+        }
+
+        if (TransformOutput) {
+            AFL_ENSURE(!Settings.GetReturningColumns().empty());
+            ReturningColumnsTypes.reserve(Settings.GetReturningColumns().size());
+            for (const auto& column : Settings.GetReturningColumns()) {
+                ReturningColumnsTypes.push_back(NScheme::TypeInfoFromProto(
+                    column.GetTypeId(), column.GetTypeInfo()));
+            }
+        } else {
+            AFL_ENSURE(Settings.GetReturningColumns().empty());
         }
 
         Counters->ForwardActorsCount->Inc();
@@ -4876,6 +4890,24 @@ private:
         CA_LOG_D("TKqpForwardWriteActor recieve EvBufferWriteResult from " << BufferActorId);
 
         WriteToken = result->Get()->Token;
+
+        if (TransformOutput) {
+            AFL_ENSURE(result->Get()->Data);
+            for (const auto& row : GetRows(result->Get()->Data)) {
+                AFL_ENSURE(row.size() == ReturningColumnsTypes.size());
+                NUdf::TUnboxedValue* outputRowItems = nullptr;
+                auto outputRow = HolderFactory.CreateDirectArrayHolder(ReturningColumnsTypes.size(), outputRowItems);
+
+                for (size_t index = 0; index < ReturningColumnsTypes.size(); ++index) {
+                    outputRowItems[index] = NMiniKQL::GetCellValue(row[index], ReturningColumnsTypes[index]);
+                }
+
+                TransformOutput->Consume(std::move(outputRow));
+            }
+        } else {
+            AFL_ENSURE(!result->Get()->Data);
+        }
+
         OnFlushed();
     }
 
@@ -5030,6 +5062,7 @@ private:
     const NKikimrKqp::TKqpTableSinkSettings Settings;
     TWriteActorSettings MessageSettings;
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
+    const NMiniKQL::THolderFactory& HolderFactory;
     const ui64 OutputIndex;
     NYql::NDq::TDqAsyncStats EgressStats;
     NYql::NDq::IDqComputeActorAsyncOutput::ICallbacks * Callbacks = nullptr;
@@ -5044,9 +5077,20 @@ private:
 
     const ui64 TxId;
     const TTableId TableId;
+    std::vector<NScheme::TTypeInfo> ReturningColumnsTypes;
 
     TWriteToken WriteToken;
     NWilson::TSpan ForwardWriteActorSpan;
+    NYql::NDq::IDqOutputConsumer::TPtr TransformOutput;
+
+private:
+    template<typename TArgs>
+    NYql::NDq::IDqOutputConsumer::TPtr ExtractTransformOutput(TArgs&& args) {
+        if constexpr (std::is_same_v<std::decay_t<TArgs>, NYql::NDq::IDqAsyncIoFactory::TOutputTransformArguments>) {
+            return args.TransformOutput;
+        }
+        return nullptr;
+    }
 };
 
 NActors::IActor* CreateKqpBufferWriterActor(TKqpBufferWriterSettings&& settings) {

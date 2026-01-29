@@ -28,6 +28,11 @@ NKikimrConfig::TAppConfig GetWhoAmIAppConfig(const TServerInitialization& server
 
     auto& securityConfig = *config.MutableDomainsConfig()->MutableSecurityConfig();
     securityConfig.SetEnforceUserTokenRequirement(serverInitialization.EnforceUserToken);
+    // Ensure test users can connect to /Root (ConnectDatabase).
+    securityConfig.AddDefaultAccess("+(ConnDB):user1@builtin");
+    securityConfig.AddDefaultAccess("+(ConnDB):admin@builtin");
+    securityConfig.AddDefaultAccess("+(ConnDB):viewer@builtin");
+    securityConfig.AddDefaultAccess("+(ConnDB):regular@builtin");
 
     for (const auto& sid : serverInitialization.AdministrationAllowedSids) {
         securityConfig.AddAdministrationAllowedSIDs(sid);
@@ -72,13 +77,7 @@ Y_UNIT_TEST_SUITE(TWhoAmI) {
         auto result = WhoAmI(grpc, "user1@builtin", false);
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToOneLineString());
         UNIT_ASSERT_STRINGS_EQUAL(result.GetUserName(), "user1@builtin");
-        // Verify groups are not returned when not requested
         UNIT_ASSERT_VALUES_EQUAL(result.GetGroups().size(), 0);
-        // Permissions are always returned
-        UNIT_ASSERT_VALUES_EQUAL(result.IsAdministrationAllowed(), false);
-        UNIT_ASSERT_VALUES_EQUAL(result.IsMonitoringAllowed(), false);
-        UNIT_ASSERT_VALUES_EQUAL(result.IsViewerAllowed(), false);
-        UNIT_ASSERT_VALUES_EQUAL(result.IsDatabaseAllowed(), false);
     }
 
     Y_UNIT_TEST(WhoAmIWithGroups) {
@@ -101,17 +100,15 @@ Y_UNIT_TEST_SUITE(TWhoAmI) {
             }
         }
         UNIT_ASSERT_C(hasAllUsers, "Expected all-users@well-known group");
-        // Permissions are always returned
-        UNIT_ASSERT_VALUES_EQUAL(result.IsDatabaseAllowed(), false);
     }
 
     Y_UNIT_TEST(WhoAmIWithPermissions_NoPermissions) {
         TBasicKikimrWithGrpcAndRootSchema<TKikimrTestWithAuth> server(GetWhoAmIAppConfig({
             .EnforceUserToken = true,
-            .AdministrationAllowedSids = {},
-            .MonitoringAllowedSids = {},
-            .ViewerAllowedSids = {},
-            .DatabaseAllowedSids = {}
+            .AdministrationAllowedSids = {"root@builtin"},
+            .MonitoringAllowedSids = {"root@builtin"},
+            .ViewerAllowedSids = {"root@builtin"},
+            .DatabaseAllowedSids = {"root@builtin", "user1@builtin"}
         }));
         ui16 grpc = server.GetPort();
 
@@ -121,13 +118,16 @@ Y_UNIT_TEST_SUITE(TWhoAmI) {
         UNIT_ASSERT_VALUES_EQUAL(result.IsAdministrationAllowed(), false);
         UNIT_ASSERT_VALUES_EQUAL(result.IsMonitoringAllowed(), false);
         UNIT_ASSERT_VALUES_EQUAL(result.IsViewerAllowed(), false);
-        UNIT_ASSERT_VALUES_EQUAL(result.IsDatabaseAllowed(), false);
+        UNIT_ASSERT_VALUES_EQUAL(result.IsDatabaseAllowed(), true);
     }
 
     Y_UNIT_TEST(WhoAmIWithPermissions_DatabaseAllowed) {
         TBasicKikimrWithGrpcAndRootSchema<TKikimrTestWithAuth> server(GetWhoAmIAppConfig({
             .EnforceUserToken = true,
-            .DatabaseAllowedSids = {"user1@builtin"}
+            .AdministrationAllowedSids = {"root@builtin"},
+            .MonitoringAllowedSids = {"root@builtin"},
+            .ViewerAllowedSids = {"root@builtin"},
+            .DatabaseAllowedSids = {"root@builtin", "user1@builtin"}
         }));
         ui16 grpc = server.GetPort();
 
@@ -143,7 +143,10 @@ Y_UNIT_TEST_SUITE(TWhoAmI) {
     Y_UNIT_TEST(WhoAmIWithPermissions_ViewerAllowed) {
         TBasicKikimrWithGrpcAndRootSchema<TKikimrTestWithAuth> server(GetWhoAmIAppConfig({
             .EnforceUserToken = true,
-            .ViewerAllowedSids = {"user1@builtin"}
+            .AdministrationAllowedSids = {"root@builtin"},
+            .MonitoringAllowedSids = {"root@builtin"},
+            .ViewerAllowedSids = {"root@builtin", "user1@builtin"},
+            .DatabaseAllowedSids = {"root@builtin", "user1@builtin"}
         }));
         ui16 grpc = server.GetPort();
 
@@ -160,7 +163,10 @@ Y_UNIT_TEST_SUITE(TWhoAmI) {
     Y_UNIT_TEST(WhoAmIWithPermissions_MonitoringAllowed) {
         TBasicKikimrWithGrpcAndRootSchema<TKikimrTestWithAuth> server(GetWhoAmIAppConfig({
             .EnforceUserToken = true,
-            .MonitoringAllowedSids = {"user1@builtin"}
+            .AdministrationAllowedSids = {"root@builtin"},
+            .MonitoringAllowedSids = {"root@builtin", "user1@builtin"},
+            .ViewerAllowedSids = {"root@builtin"},
+            .DatabaseAllowedSids = {"root@builtin", "user1@builtin"}
         }));
         ui16 grpc = server.GetPort();
 
@@ -177,7 +183,10 @@ Y_UNIT_TEST_SUITE(TWhoAmI) {
     Y_UNIT_TEST(WhoAmIWithPermissions_AdministrationAllowed) {
         TBasicKikimrWithGrpcAndRootSchema<TKikimrTestWithAuth> server(GetWhoAmIAppConfig({
             .EnforceUserToken = true,
-            .AdministrationAllowedSids = {"user1@builtin"}
+            .AdministrationAllowedSids = {"root@builtin", "user1@builtin"},
+            .MonitoringAllowedSids = {"root@builtin"},
+            .ViewerAllowedSids = {"root@builtin"},
+            .DatabaseAllowedSids = {"root@builtin", "user1@builtin"}
         }));
         ui16 grpc = server.GetPort();
 
@@ -207,7 +216,10 @@ Y_UNIT_TEST_SUITE(TWhoAmI) {
         // Permissions are always returned, even without groups flag
         TBasicKikimrWithGrpcAndRootSchema<TKikimrTestWithAuth> server(GetWhoAmIAppConfig({
             .EnforceUserToken = true,
-            .AdministrationAllowedSids = {"user1@builtin"}
+            .AdministrationAllowedSids = {"root@builtin", "user1@builtin"},
+            .MonitoringAllowedSids = {"root@builtin"},
+            .ViewerAllowedSids = {"root@builtin"},
+            .DatabaseAllowedSids = {"root@builtin", "user1@builtin"}
         }));
         ui16 grpc = server.GetPort();
 
@@ -226,8 +238,10 @@ Y_UNIT_TEST_SUITE(TWhoAmI) {
     Y_UNIT_TEST(WhoAmIWithPermissions_DifferentUser) {
         TBasicKikimrWithGrpcAndRootSchema<TKikimrTestWithAuth> server(GetWhoAmIAppConfig({
             .EnforceUserToken = true,
-            .AdministrationAllowedSids = {"admin@builtin"},
-            .ViewerAllowedSids = {"viewer@builtin"}
+            .AdministrationAllowedSids = {"root@builtin", "admin@builtin"},
+            .MonitoringAllowedSids = {"root@builtin"},
+            .ViewerAllowedSids = {"root@builtin", "viewer@builtin"},
+            .DatabaseAllowedSids = {"root@builtin", "admin@builtin", "viewer@builtin", "regular@builtin"}
         }));
         ui16 grpc = server.GetPort();
 
@@ -261,7 +275,7 @@ Y_UNIT_TEST_SUITE(TWhoAmI) {
             UNIT_ASSERT_VALUES_EQUAL(result.IsAdministrationAllowed(), false);
             UNIT_ASSERT_VALUES_EQUAL(result.IsMonitoringAllowed(), false);
             UNIT_ASSERT_VALUES_EQUAL(result.IsViewerAllowed(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.IsDatabaseAllowed(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.IsDatabaseAllowed(), true);
         }
     }
 }

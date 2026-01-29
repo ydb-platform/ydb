@@ -59,7 +59,9 @@ private:
     }
 
 public:
-    bool NeedDataConversion(const NScheme::TTypeInfo& colType);
+    static bool NeedDataConversion(const NScheme::TTypeInfo& colType);
+    
+    bool NeedDataConversionWithSettings(const NScheme::TTypeInfo& colType);
 
     static bool NeedInplaceConversion(const NScheme::TTypeInfo& typeInRequest, const NScheme::TTypeInfo& expectedType);
 

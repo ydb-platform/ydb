@@ -233,9 +233,6 @@ arrow::Result<std::shared_ptr<arrow::RecordBatch>> InplaceConvertColumns(const s
 }
 
 bool TArrowToYdbConverter::NeedDataConversion(const NScheme::TTypeInfo& colType) {
-    if (!WithConversion_) {
-        return false;
-    }
     switch (colType.GetTypeId()) {
         case NScheme::NTypeIds::DyNumber:
         case NScheme::NTypeIds::JsonDocument:
@@ -245,6 +242,10 @@ bool TArrowToYdbConverter::NeedDataConversion(const NScheme::TTypeInfo& colType)
             break;
     }
     return false;
+}
+
+bool TArrowToYdbConverter::NeedDataConversionWithSettings(const NScheme::TTypeInfo& colType) {
+    return WithConversion_ ? NeedDataConversion(colType) : false;
 }
 
 bool TArrowToYdbConverter::NeedInplaceConversion(const NScheme::TTypeInfo& typeInRequest, const NScheme::TTypeInfo& expectedType) {

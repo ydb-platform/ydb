@@ -320,7 +320,7 @@ void TReplicaTest::RecreateDatabase() {
     TPathId secondDatabasePathId(1, 2); // owner_id=1 as main scheme shard
     auto describeDatabaseSecond = GenerateDescribe(databasePath, secondDatabasePathId, 1, secondDatabasePathId);
     {
-        Context->Send(Replica, populator, GenerateUpdate(describeDatabaseSecond) );
+        Context->Send(Replica, populator, GenerateUpdate(describeDatabaseSecond));
         auto ev = Context->GrabEdgeEvent<NInternalEvents::TEvNotify>(databaseSubscriber);
         UNIT_ASSERT_VALUES_EQUAL(false, ev->Get()->GetRecord().GetIsDeletion());
         Context->Send(Replica, databaseSubscriber, new NInternalEvents::TEvNotifyAck(1) );

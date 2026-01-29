@@ -29,7 +29,7 @@ public:
         // We need to fill in op result in this case because 
         // it can be an export or import tx and we need to propagate these fields anyway
         opResult.SetSuccess(false);
-        opResult.SetExplain("Internal error. There weren't found information about transaction");
+        opResult.SetExplain("Internal error. No information was found about the transaction");
         return true;
     }
 

@@ -36,7 +36,6 @@ bool TBackupTransactionOperator::DoParse(TColumnShard& owner, const TString& dat
 
 TBackupTransactionOperator::TProposeResult TBackupTransactionOperator::DoStartProposeOnExecute(TColumnShard& /*owner*/, NTabletFlatExecutor::TTransactionContext& txc) {
     if (!TaskExists && TxAddTask) {
-        AFL_VERIFY(!!TxAddTask);
         AFL_VERIFY(TxAddTask->Execute(txc, NActors::TActivationContext::AsActorContext()));
     }
     return TProposeResult();
@@ -44,7 +43,6 @@ TBackupTransactionOperator::TProposeResult TBackupTransactionOperator::DoStartPr
 
 void TBackupTransactionOperator::DoStartProposeOnComplete(TColumnShard& /*owner*/, const TActorContext& ctx) {
     if (!TaskExists && TxAddTask) {
-        AFL_VERIFY(!!TxAddTask);
         TxAddTask->Complete(ctx);
         TxAddTask.reset();
     }
@@ -53,7 +51,7 @@ void TBackupTransactionOperator::DoStartProposeOnComplete(TColumnShard& /*owner*
 bool TBackupTransactionOperator::ProgressOnExecute(
     TColumnShard& owner, const NOlap::TSnapshot& /*version*/, NTabletFlatExecutor::TTransactionContext& txc) {
     AFL_VERIFY(!TxRemove);
-    auto status = owner.GetBackgroundSessionsManager()->GetStatus(ExportTask->GetClassName(), ::ToString(ExportTask->GetBackupTask().GetTableId()));
+    auto status = owner.GetBackgroundSessionsManager()->GetStatus(ExportTask->GetClassName(), ::ToString(ExportTask->GetBackupTask().GetPathId()));
     owner.LastCompletedBackupTransaction.SetTxId(GetTxId());
     auto& opResult = *owner.LastCompletedBackupTransaction.MutableOpResult();
     opResult.SetSuccess(status.Success);
@@ -65,7 +63,7 @@ bool TBackupTransactionOperator::ProgressOnExecute(
 }
 
 bool TBackupTransactionOperator::ProgressOnComplete(TColumnShard& owner, const TActorContext& ctx) {
-    auto status = owner.GetBackgroundSessionsManager()->GetStatus(ExportTask->GetClassName(), ::ToString(ExportTask->GetBackupTask().GetTableId()));
+    auto status = owner.GetBackgroundSessionsManager()->GetStatus(ExportTask->GetClassName(), ::ToString(ExportTask->GetBackupTask().GetPathId()));
     for (TActorId subscriber : NotifySubscribers) {
         auto event = MakeHolder<TEvColumnShard::TEvNotifyTxCompletionResult>(owner.TabletID(), GetTxId());
         auto& opResult = *event->Record.MutableOpResult();
@@ -86,7 +84,10 @@ bool TBackupTransactionOperator::ExecuteOnAbort(TColumnShard& owner, NTabletFlat
     return TxAbort->Execute(txc, NActors::TActivationContext::AsActorContext());
 }
 
-bool TBackupTransactionOperator::CompleteOnAbort(TColumnShard& /*owner*/, const TActorContext& /*ctx*/) {
+bool TBackupTransactionOperator::CompleteOnAbort(TColumnShard& /*owner*/, const TActorContext& ctx) {
+    if (TxAbort) { 
+        TxAbort->Complete(ctx); 
+    }
     return true;
 }
 

@@ -84,7 +84,10 @@ TString TRestoreTransactionOperator::DoDebugString() const {
     return "RESTORE";
 }
 
-bool TRestoreTransactionOperator::CompleteOnAbort(TColumnShard& /*owner*/, const TActorContext& /*ctx*/) {
+bool TRestoreTransactionOperator::CompleteOnAbort(TColumnShard& /*owner*/, const TActorContext& ctx) {
+    if (TxAbort) { 
+        TxAbort->Complete(ctx); 
+    }
     return true;
 }
 

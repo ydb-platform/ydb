@@ -92,7 +92,9 @@ bool TSessionsManager::HasTask(const TTask& task) const {
 }
 
 ISessionLogic::TStatus TSessionsManager::GetStatus(const TString& className, const TString& identifier) const {
-    return Storage->GetSession(className, identifier)->GetStatus();
+    auto session = Storage->GetSession(className, identifier);
+    AFL_VERIFY(session);
+    return session->GetStatus();
 }
 
 }

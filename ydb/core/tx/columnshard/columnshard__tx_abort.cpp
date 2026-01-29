@@ -10,7 +10,6 @@ public:
     {}
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        Y_UNUSED(txc);
         LOG_S_DEBUG("TTxTxAbort.Execute at tablet " << Self->TabletID());
 
         auto txOperator = Self->ProgressTxController->GetTxOperatorOptional(TxId);

@@ -391,7 +391,6 @@ private:
     i64 MaxTimeLagMs;
     i64 ReadTimestampMs;
     i64 ReadSizeBudget;
-    ui64 PartitionMaxInFlightBytes;
 
     TString Auth;
 
@@ -415,8 +414,6 @@ private:
     TDuration CommitInterval;
 
     TSet<TPartitionInfo> AvailablePartitions;
-    TSet<TPartitionInfo> OverloadedPartitions;
-    THashMap<TPartitionId, ui64> PartitionInFlightBytes;
 
     // Partition actor -> TFormedReadResponse answer that has this partition.
     // PartitionsTookPartInRead in formed read response contain this actor id.

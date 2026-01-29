@@ -251,6 +251,8 @@ private:
     std::set<ui64> UnpublishedDirectReads;
     std::set<ui64> DirectReadsToForget;
 
+    THashMap<TPartitionId, ui64> PartitionInFlightBytes;
+
     enum class EDirectReadRestoreStage {
         None,
         Session,

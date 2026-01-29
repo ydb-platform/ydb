@@ -209,4 +209,8 @@ int ParameterizedMain(int argc, char **argv, std::shared_ptr<NKikimr::TModuleFac
         Cerr << "Caught exception: " << e.what() << Endl;
         return 1;
     }
+    catch (const std::exception& se) {
+        Cerr << "Caught std exception: " << se.what() << Endl;
+        return 1;
+    }
 }

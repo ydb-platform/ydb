@@ -50,6 +50,7 @@ constexpr double K1_FACTOR_DEFAULT = 1.2;
 constexpr double B_FACTOR_DEFAULT = 0.75;
 constexpr double EPSILON = 1e-6;
 constexpr i32 RELEVANCE_COLUMN_MARKER = -1;
+constexpr double NGRAM_IMBALANCE_FACTOR = 10;
 
 class TDocId;
 
@@ -287,7 +288,7 @@ class TQueryCtx : public TAtomicRefCount<TQueryCtx> {
     double BFactor = B_FACTOR_DEFAULT;
     const TVector<std::pair<i32, NScheme::TTypeInfo>> ResultCellIndices;
     const EQueryMode QueryMode;
-    const ui32 MinimumShouldMatch;
+    ui32 MinimumShouldMatch;
 
 public:
     TQueryCtx(size_t wordCount, ui64 totalDocLength, ui64 docCount,
@@ -343,6 +344,12 @@ public:
 
     ui32 GetMinimumShouldMatch() const {
         return MinimumShouldMatch;
+    }
+
+    void ReduceMinimumShouldMatch(ui32 minShouldMatch) {
+        if (MinimumShouldMatch > minShouldMatch) {
+            MinimumShouldMatch = minShouldMatch;
+        }
     }
 
     double GetAvgDL() const {
@@ -1491,6 +1498,7 @@ private:
     TVector<std::function<bool(TStringBuf)>> PostfilterMatchers;
     ui64 ProducedItemsCount = 0;
     std::deque<TIntrusivePtr<TDocumentInfo>> ResultQueue;
+    bool IsNgram = false;
 
     TActorId PipeCacheId;
 
@@ -1516,6 +1524,7 @@ private:
         if (!analyzers.use_filter_ngram() && !analyzers.use_filter_edge_ngram()) {
             return;
         }
+        IsNgram = true;
 
         const auto analyzersForQuery = NFulltext::GetAnalyzersForQuery(analyzers);
 
@@ -1620,6 +1629,40 @@ private:
     }
 
     void StartWordReads() {
+        if (IsNgram) {
+            // Queries often contain 'imbalanced' ngrams. I.e. some ngrams
+            // are really frequent and others aren't, like one with 5.5 million
+            // documents and other with 400 documents. In such cases we can
+            // only leave the second one because we anyway postfilter documents.
+            // The only concern is to not make ourselves postfilter too many
+            // documents... So it's just a heuristic which we can control with
+            // the NGRAM_IMBALANCE_FACTOR parameter.
+            TVector<size_t> byFreq;
+            for (size_t i = 0; i < Words.size(); i++) {
+                byFreq.push_back(i);
+            }
+            std::sort(byFreq.begin(), byFreq.end(), [&](const size_t a, const size_t b) {
+                return Words[a].Frequency < Words[b].Frequency;
+            });
+            size_t ngramLimit = byFreq.size();
+            for (size_t i = 1; i < byFreq.size(); i++) {
+                if (Words[byFreq[i]].Frequency > NGRAM_IMBALANCE_FACTOR * Words[byFreq[0]].Frequency) {
+                    ngramLimit = i;
+                    break;
+                }
+            }
+            if (ngramLimit < Words.size()) {
+                CA_LOG_I("Selecting " << ngramLimit << " balanced ngrams out of " << Words.size()
+                    << " (imbalance: " << Words[byFreq[0]].Frequency << " vs " << Words[byFreq[ngramLimit]].Frequency << ")");
+                TVector<TWordReadState> newWords;
+                for (size_t i = 0; i < ngramLimit; i++) {
+                    newWords.emplace_back(std::move(Words[byFreq[i]]));
+                    newWords[i].WordIndex = i;
+                }
+                std::swap(Words, newWords);
+            }
+        }
+
         TString explain;
         EQueryMode queryMode = QueryModeFromString(Settings->GetQueryMode(), explain);
         if (!explain.empty()) {
@@ -1635,6 +1678,12 @@ private:
 
         QueryCtx = MakeIntrusive<TQueryCtx>(
             Words.size(), SumDocLength, DocCount, queryMode, minimumShouldMatch, ResultCellIndices);
+
+        if (DictTableReader) {
+            for (auto& word: Words) {
+                QueryCtx->AddIDFValue(word.WordIndex, word.Frequency);
+            }
+        }
 
         bool useArrowFormat = IndexTableReader->GetUseArrowFormat();
         std::vector<std::unique_ptr<ITokenStream>> streams;
@@ -1943,10 +1992,13 @@ public:
         }
 
         if (ExtractAndTokenizeExpression()) {
-            if (StatsTableReader) {
-                ReadTotalStats();
-            } else if (DictTableReader) {
-                EnrichWordInfo();
+            if (StatsTableReader || DictTableReader) {
+                if (StatsTableReader) {
+                    ReadTotalStats();
+                }
+                if (DictTableReader) {
+                    EnrichWordInfo();
+                }
             } else {
                 StartWordReads();
             }
@@ -2047,9 +2099,7 @@ public:
             DocCount = StatsTableReader->GetDocCount(row);
             SumDocLength = StatsTableReader->GetSumDocLength(row);
         }
-        if (DictTableReader) {
-            EnrichWordInfo();
-        } else {
+        if (Reads.empty()) {
             StartWordReads();
         }
     }
@@ -2061,14 +2111,11 @@ public:
             for (auto& word: Words) {
                 if (word.Word == wordBuf) {
                     word.Frequency = DictTableReader->GetWordFrequency(row);
-                    QueryCtx->AddIDFValue(word.WordIndex, word.Frequency);
                 }
             }
         }
-        if (!Reads.size()) {
-            for (auto& word: Words) {
-                ContinueWordRead(word);
-            }
+        if (Reads.empty()) {
+            StartWordReads();
         }
     }
 

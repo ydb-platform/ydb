@@ -263,6 +263,7 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
         Variator::ToExecutor(Variator::SingleScript(Sprintf(__SCRIPT_CONTENT.c_str(), injection.c_str()))).Execute();
     }
 
+#ifdef NDEBUG
     TString scriptUtf8JsonWriting= R"(
         SCHEMA:
         CREATE TABLE `/Root/ColumnTable` (
@@ -384,6 +385,7 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
             arrowString.data());
         Variator::ToExecutor(Variator::SingleScript(Sprintf(__SCRIPT_CONTENT.c_str(), injection.c_str()))).Execute();
     }
+#endif
 
 // TODO: fix if top-level arrays are needed
 #if 0

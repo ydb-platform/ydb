@@ -171,6 +171,7 @@ namespace NKikimr {
             TRlas ApplySlotsDeletion(const TActorContext &ctx,
                         ui64 lsn,
                         const TDiskPartVec &rec,
+                        const TDiskPartVec& allocated,
                         ESlotDelDbType type);
             TRlas Apply(const TActorContext &ctx,
                         ui64 lsn,

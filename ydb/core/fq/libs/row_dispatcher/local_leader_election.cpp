@@ -1,24 +1,19 @@
-#include "leader_election.h"
+
+#include "local_leader_election.h"
+#include <memory>
 
 #include <ydb/core/fq/libs/actors/logging/log.h>
-#include <ydb/core/fq/libs/events/events.h>
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
-#include <ydb/core/fq/libs/ydb/schema.h>
 #include <ydb/core/fq/libs/ydb/util.h>
-#include <ydb/core/fq/libs/ydb/ydb.h>
+
+#include <ydb/core/grpc_services/local_rpc/local_rpc_bi_streaming.h>
+#include <ydb/core/grpc_services/local_rpc/local_rpc_operation.h>
+#include <ydb/core/grpc_services/rpc_calls.h>
+#include <ydb/core/grpc_services/service_coordination.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/protos/actors.pb.h>
 #include <ydb/library/logger/actor.h>
-
-#include <ydb/core/base/path.h>
-
-#include <memory>
-
-#include <ydb/core/grpc_services/local_rpc/local_rpc_bi_streaming.h>
-#include <ydb/core/grpc_services/rpc_calls.h>
-#include <ydb/core/grpc_services/local_rpc/local_rpc_operation.h>
-#include <ydb/core/grpc_services/service_coordination.h>
 
 namespace NFq {
 
@@ -28,7 +23,7 @@ using namespace NThreading;
 namespace {
 
 constexpr TDuration RestartDuration = TDuration::Seconds(3); // Delay before next restart after fatal error
-//constexpr TDuration CoordinationSessionTimeout = TDuration::Seconds(30);
+
 constexpr char SemaphoreName[] = "RowDispatcher";
 constexpr char DefaultCoordinationNodePath[] = ".metadata/streaming/coordination_node";
 constexpr TDuration SessionTimeout = TDuration::Seconds(1);
@@ -53,7 +48,7 @@ struct TEvPrivate {
 
     // Events
 
-    struct  TEvCreateNodeResult :NActors::TEventLocal<TEvCreateNodeResult, EvCreateNodeResult> {
+    struct  TEvCreateNodeResult : NActors::TEventLocal<TEvCreateNodeResult, EvCreateNodeResult> {
         NYdb::TStatus Status;
         explicit TEvCreateNodeResult(NYdb::TStatus status)
             : Status(std::move(status)) {}
@@ -77,11 +72,8 @@ struct TLeaderElectionMetrics {
     ::NMonitoring::TDynamicCounters::TCounterPtr LeaderChanged;
 };
 
-struct TActorSystemPtrMixin {
-    NKikimr::TDeferredActorLogBackend::TSharedAtomicActorSystemPtr ActorSystemPtr = std::make_shared<NKikimr::TDeferredActorLogBackend::TAtomicActorSystemPtr>(nullptr);
-};
 
-class TLocalLeaderElection: public TActorBootstrapped<TLocalLeaderElection>, public TActorSystemPtrMixin {
+class TLocalLeaderElection: public TActorBootstrapped<TLocalLeaderElection> {
 
     enum class EState {
         Init,
@@ -139,7 +131,6 @@ public:
 
     [[maybe_unused]] static constexpr char ActorName[] = "YQ_LEADER_EL";
 
-    void Handle(NFq::TEvents::TEvSchemaCreated::TPtr& ev);
     void Handle(TEvPrivate::TEvCreateNodeResult::TPtr& ev);
     void Handle(TEvPrivate::TEvSelfPing::TPtr& ev);
     void Handle(TEvPrivate::TEvRestart::TPtr&);
@@ -152,7 +143,6 @@ public:
     void HandleException(const std::exception& e);
 
     STRICT_STFUNC_EXC(StateFunc,
-        hFunc(NFq::TEvents::TEvSchemaCreated, Handle);
         hFunc(TEvPrivate::TEvCreateNodeResult, Handle);
         hFunc(TEvPrivate::TEvSelfPing, Handle);
         hFunc(TEvPrivate::TEvRestart, Handle);
@@ -174,8 +164,6 @@ private:
     void ProcessState();
     void ResetState();
     void SetTimeout();
-    NYdb::TDriverConfig GetYdbDriverConfig() const;
-
     void SendStartSession();
     void AddSessionEvent(TRpcIn&& message);
     void SendSessionEvents();
@@ -233,8 +221,6 @@ TLocalLeaderElection::TLocalLeaderElection(
 
 void TLocalLeaderElection::Bootstrap() {
     Become(&TLocalLeaderElection::StateFunc);
-    Y_ABORT_UNLESS(!ActorSystemPtr->load(std::memory_order_relaxed), "Double ActorSystemPtr init");
-    ActorSystemPtr->store(TActivationContext::ActorSystem(), std::memory_order_relaxed);
 
     CoordinationNodePath = JoinPath(NKikimr::AppData()->TenantName, DefaultCoordinationNodePath);
 
@@ -351,18 +337,6 @@ void TLocalLeaderElection::StartSession() {
     Send(NKikimr::NGRpcService::CreateGRpcRequestProxyId(), ev.release(), IEventHandle::FlagTrackDelivery);
 }
 
-void TLocalLeaderElection::Handle(NFq::TEvents::TEvSchemaCreated::TPtr& ev) {
-    if (!IsTableCreated(ev->Get()->Result)) {
-        LOG_ROW_DISPATCHER_ERROR("Schema creation error " << ev->Get()->Result.GetIssues());
-        Metrics.Errors->Inc();
-        ResetState();
-        return;
-    }
-    LOG_ROW_DISPATCHER_DEBUG("Coordination node successfully created");
-    CoordinationNodeCreated = true;
-    ProcessState();
-}
-
 void TLocalLeaderElection::PassAway() {
     LOG_ROW_DISPATCHER_DEBUG("PassAway");
     TActorBootstrapped::PassAway();
@@ -432,13 +406,6 @@ void TLocalLeaderElection::HandleException(const std::exception& e) {
     LOG_ROW_DISPATCHER_ERROR("Internal error: exception:" << e.what());
     Metrics.Errors->Inc();
     ResetState();
-}
-
-NYdb::TDriverConfig TLocalLeaderElection::GetYdbDriverConfig() const {
-    NYdb::TDriverConfig cfg;
-    cfg.SetDiscoveryMode(NYdb::EDiscoveryMode::Async);
-    cfg.SetLog(std::make_unique<NKikimr::TDeferredActorLogBackend>(ActorSystemPtr, NKikimrServices::EServiceKikimr::YDB_SDK));
-    return cfg;
 }
 
 void TLocalLeaderElection::CreateNode(const std::string& path,  const NYdb::NCoordination::TCreateNodeSettings& settings) {

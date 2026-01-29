@@ -2,8 +2,9 @@ import hashlib
 import unicodedata
 from enum import IntEnum, unique
 from functools import wraps
+from hmac import compare_digest
 from operator import attrgetter
-from os import urandom
+from secrets import token_bytes, token_hex
 from stringprep import (
     in_table_a1,
     in_table_b1,
@@ -19,11 +20,10 @@ from stringprep import (
     in_table_d1,
     in_table_d2,
 )
-from uuid import uuid4
 
 from asn1crypto.x509 import Certificate
 
-from scramp.utils import b64dec, b64enc, h, hi, hmac, uenc, xor
+from scramp.utils import b64dec, b64enc, h, hmac, uenc, xor
 
 # https://tools.ietf.org/html/rfc5802
 # https://www.rfc-editor.org/rfc/rfc7677.txt
@@ -151,10 +151,6 @@ class ScramMechanism:
         )
         return salt, stored_key, server_key, iteration_count
 
-    def make_stored_server_keys(self, salted_password):
-        _, stored_key, server_key = _c_key_stored_key_s_key(self.hf, salted_password)
-        return stored_key, server_key
-
     def make_server(self, auth_fn, channel_binding=None, s_nonce=None):
         return ScramServer(
             self, auth_fn, channel_binding=channel_binding, s_nonce=s_nonce
@@ -163,7 +159,7 @@ class ScramMechanism:
 
 def _make_auth_info(hf, password, i, salt=None):
     if salt is None:
-        salt = urandom(16)
+        salt = token_bytes()
 
     salted_password = _make_salted_password(hf, password, salt, i)
     _, stored_key, server_key = _c_key_stored_key_s_key(hf, salted_password)
@@ -355,7 +351,7 @@ class ScramServer:
 
 
 def _make_nonce():
-    return str(uuid4()).replace("-", "")
+    return token_hex()
 
 
 def _make_auth_message(client_first_bare, server_first, client_final_without_proof):
@@ -364,7 +360,8 @@ def _make_auth_message(client_first_bare, server_first, client_final_without_pro
 
 
 def _make_salted_password(hf, password, salt, iterations):
-    return hi(hf, uenc(saslprep(password)), salt, iterations)
+    hash_name = hf.__name__.split("_")[-1]
+    return hashlib.pbkdf2_hmac(hash_name, uenc(saslprep(password)), salt, iterations)
 
 
 def _c_key_stored_key_s_key(hf, salted_password):
@@ -380,7 +377,7 @@ def _check_client_key(hf, stored_key, auth_msg, proof):
     client_key = xor(client_signature, b64dec(proof))
     key = h(hf, client_key)
 
-    if key != stored_key:
+    if not compare_digest(key, stored_key):
         raise ScramException("The client keys don't match.", SERVER_ERROR_INVALID_PROOF)
 
 
@@ -630,7 +627,7 @@ def _set_server_final(message, server_signature):
     if "e" in msg:
         raise ScramException(f"The server returned the error: {msg['e']}")
 
-    if server_signature != msg["v"]:
+    if not compare_digest(server_signature, msg["v"]):
         raise ScramException(
             "The server signature doesn't match.", SERVER_ERROR_OTHER_ERROR
         )

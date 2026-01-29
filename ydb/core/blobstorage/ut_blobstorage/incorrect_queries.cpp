@@ -7,7 +7,7 @@
 #include <ydb/core/protos/blobstorage.pb.h>
 
 Y_UNIT_TEST_SUITE(IncorrectQueries) {
-    const TVector<TString> erasureTypes = {"none", "block-4-2", "mirror-3", "mirror-3of4", "mirror-3-dc"};
+    const TVector<TString> erasureTypes = {"none", "block-4-2", "mirror-3of4", "mirror-3-dc"};
 
     void SendPut(TEnvironmentSetup& env, TTestInfo& test,
                 const TLogoBlobID& blobId, NKikimrProto::EReplyStatus status, ui32 blob_size, bool isEmptyObject = false, bool isEmptyMeta = false) {

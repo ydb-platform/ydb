@@ -187,6 +187,12 @@ PEERDIR(
     yt/yql/providers/yt/comp_nodes/llvm16
 )
 
+IF (OS_LINUX)
+    PEERDIR(
+        ydb/services/nbs
+    )
+ENDIF()
+
 IF (NOT OS_WINDOWS)
     PEERDIR(
         ydb/library/signal_backtrace

@@ -1679,13 +1679,15 @@ void TPromise<T>::Set(T&& value) const
 template <class T>
 void TPromise<T>::Set(const TError& error) const
 {
-    Set(TErrorOr<T>(error));
+    YT_ASSERT(this->Impl_);
+    this->Impl_->Set(error);
 }
 
 template <class T>
 void TPromise<T>::Set(TError&& error) const
 {
-    Set(TErrorOr<T>(std::move(error)));
+    YT_ASSERT(this->Impl_);
+    this->Impl_->Set(std::move(error));
 }
 
 template <class T>
@@ -1705,13 +1707,15 @@ bool TPromise<T>::TrySet(T&& value) const
 template <class T>
 bool TPromise<T>::TrySet(const TError& error) const
 {
-    return TrySet(TErrorOr<T>(error));
+    YT_ASSERT(this->Impl_);
+    return this->Impl_->TrySet(error);
 }
 
 template <class T>
 bool TPromise<T>::TrySet(TError&& error) const
 {
-    return TrySet(TErrorOr<T>(std::move(error)));
+    YT_ASSERT(this->Impl_);
+    return this->Impl_->TrySet(std::move(error));
 }
 
 template <class T>
@@ -2880,7 +2884,7 @@ TFuture<std::vector<TErrorOr<T>>> RunWithAllSucceededBoundedConcurrency(
 template <class T>
 struct THash<NYT::TFuture<T>>
 {
-    size_t operator () (const NYT::TFuture<T>& future) const
+    size_t operator()(const NYT::TFuture<T>& future) const
     {
         return THash<NYT::TIntrusivePtr<NYT::NDetail::TFutureState<T>>>()(future.Impl_);
     }
@@ -2890,7 +2894,7 @@ struct THash<NYT::TFuture<T>>
 template <class T>
 struct THash<NYT::TPromise<T>>
 {
-    size_t operator () (const NYT::TPromise<T>& promise) const
+    size_t operator()(const NYT::TPromise<T>& promise) const
     {
         return THash<NYT::TIntrusivePtr<NYT::NDetail::TPromiseState<T>>>()(promise.Impl_);
     }

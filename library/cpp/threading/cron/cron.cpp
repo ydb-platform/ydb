@@ -1,16 +1,17 @@
 #include "cron.h"
 
-#include <library/cpp/deprecated/atomic/atomic.h>
-
 #include <util/system/thread.h>
 #include <util/system/event.h>
+
+#include <atomic>
+#include <utility>
 
 using namespace NCron;
 
 namespace {
-    struct TPeriodicHandle: public IHandle {
-        inline TPeriodicHandle(TJob job, TDuration interval, const TString& threadName)
-            : Job(job)
+    struct TPeriodicHandle: IHandle {
+        TPeriodicHandle(TJob job, const TDuration interval, const TString& threadName)
+            : Job(std::move(job))
             , Interval(interval)
             , Done(false)
         {
@@ -22,26 +23,26 @@ namespace {
             Thread->Start();
         }
 
-        static inline void* DoRun(void* data) noexcept {
-            ((TPeriodicHandle*)data)->Run();
+        static void* DoRun(void* data) noexcept {
+            static_cast<TPeriodicHandle*>(data)->Run();
 
             return nullptr;
         }
 
-        inline void Run() noexcept {
+        void Run() noexcept {
             while (true) {
                 Job();
 
                 Event.WaitT(Interval);
 
-                if (AtomicGet(Done)) {
+                if (Done.load()) {
                     return;
                 }
             }
         }
 
         ~TPeriodicHandle() override {
-            AtomicSet(Done, true);
+            Done.store(true);
             Event.Signal();
             Thread->Join();
         }
@@ -49,21 +50,21 @@ namespace {
         TJob Job;
         TDuration Interval;
         TManualEvent Event;
-        TAtomic Done;
+        std::atomic<bool> Done;
         THolder<TThread> Thread;
     };
 }
 
 IHandlePtr NCron::StartPeriodicJob(TJob job) {
-    return NCron::StartPeriodicJob(job, TDuration::Seconds(0), "");
+    return NCron::StartPeriodicJob(std::move(job), TDuration::Seconds(0), TString());
 }
 
-IHandlePtr NCron::StartPeriodicJob(TJob job, TDuration interval) {
-    return NCron::StartPeriodicJob(job, interval, "");
+IHandlePtr NCron::StartPeriodicJob(TJob job, const TDuration interval) {
+    return NCron::StartPeriodicJob(std::move(job), interval, TString());
 }
 
 IHandlePtr NCron::StartPeriodicJob(TJob job, TDuration interval, const TString& threadName) {
-    return new TPeriodicHandle(job, interval, threadName);
+    return new TPeriodicHandle(std::move(job), interval, threadName);
 }
 
 IHandle::~IHandle() = default;

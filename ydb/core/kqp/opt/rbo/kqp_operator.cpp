@@ -191,19 +191,6 @@ void GetAllMembers(TExprNode::TPtr node, TVector<TInfoUnit> &IUs, TPlanProps& pr
     }
 }
 
-TInfoUnit::TInfoUnit(const TString& name, bool subplanContext) : SubplanContext(subplanContext) {
-    if (auto idx = name.find('.'); idx != TString::npos) {
-        Alias = name.substr(0, idx);
-        if (Alias.StartsWith("_alias_")) {
-            Alias = Alias.substr(7);
-        }
-        ColumnName = name.substr(idx + 1);
-    } else {
-        Alias = "";
-        ColumnName = name;
-    }
-}
-
 template <typename DqConnectionType>
 TExprNode::TPtr TConnection::BuildConnectionImpl(TExprNode::TPtr inputStage, TPositionHandle pos, TExprNode::TPtr& newStage, TExprContext& ctx) {
     if (FromSourceStageStorageType == NYql::EStorageType::RowStorage) {
@@ -383,6 +370,16 @@ const TTypeAnnotationNode* IOperator::GetIUType(const TInfoUnit& iu) {
     return structType->FindItemType(iu.GetFullName());
 }
 
+void IOperator::ReplaceChild(std::shared_ptr<IOperator> oldChild, std::shared_ptr<IOperator> newChild) {
+    for (size_t i=0; i<Children.size(); i++) {
+        if (Children[i] == oldChild) {
+            Children[i] = newChild;
+            return;
+        }
+    }
+    Y_ENSURE(false, "Did not find a child to replace");
+}
+
 /**
  * EmptySource operator methods
  */
@@ -475,7 +472,7 @@ TMapElement::TMapElement(const TInfoUnit& elementName, TExprNode::TPtr expr)
 
 TMapElement::TMapElement(const TInfoUnit& elementName, const TInfoUnit& rename)
     : ElementName(elementName)
-    ,ElementHolder(rename) {
+    , ElementHolder(rename) {
 }
 
 TMapElement::TMapElement(const TInfoUnit& elementName, const std::variant<TInfoUnit, TExprNode::TPtr>& elementHolder)
@@ -511,13 +508,38 @@ void TMapElement::SetExpression(TExprNode::TPtr expr) {
     ElementHolder = expr;
 }
 
+bool TMapElement::IsSingleCallable(THashSet<TString> allowedCallables) const {
+    if (IsExpression()) {
+        auto expr = GetExpression();
+        Y_ENSURE(expr->IsLambda());
+        auto body = expr->Child(1);
+        if (body->IsCallable(allowedCallables) && body->ChildrenSize() == 1 && body->Child(0)->IsCallable("Member")) {
+            return true;
+        }
+    }
+    return false;
+}
+
+TVector<TInfoUnit> TMapElement::InputIUs() const {
+    TVector<TInfoUnit> result;
+
+    if (IsRename()) {
+        result.push_back(GetRename());
+    } else {
+        auto expr = GetExpression();
+        GetAllMembers(expr, result);
+    }
+    return result;
+}
+
 /**
  * OpMap operator methods
  */
-TOpMap::TOpMap(std::shared_ptr<IOperator> input, TPositionHandle pos, const TVector<TMapElement>& mapElements, bool project)
+TOpMap::TOpMap(std::shared_ptr<IOperator> input, TPositionHandle pos, const TVector<TMapElement>& mapElements, bool project, bool ordered)
     : IUnaryOperator(EOperator::Map, pos, input)
     , MapElements(mapElements)
-    , Project(project) {
+    , Project(project)
+    , Ordered(ordered) {
 }
 
 TVector<TInfoUnit> TOpMap::GetOutputIUs() {
@@ -672,6 +694,33 @@ TString TOpMap::ToString(TExprContext& ctx) {
     if (Project) {
         res << " Project";
     }
+    return res;
+}
+
+/**
+ * OpAddDependencies methods
+ */
+TOpAddDependencies::TOpAddDependencies(std::shared_ptr<IOperator> input, TPositionHandle pos, const TVector<TInfoUnit>& columns, const TVector<const TTypeAnnotationNode*>& types) :
+    IUnaryOperator(EOperator::AddDependencies, pos, input), Dependencies(columns), Types(types) {}
+
+TVector<TInfoUnit> TOpAddDependencies::GetOutputIUs() {
+    auto ius = GetInput()->GetOutputIUs();
+    ius.insert(ius.end(), Dependencies.begin(), Dependencies.end());
+    return ius;
+}
+
+TString TOpAddDependencies::ToString(TExprContext& ctx) {
+    Y_UNUSED(ctx);
+    
+    auto res = TStringBuilder();
+    res << "Correlated [";
+    for (size_t i=0; i<Dependencies.size(); i++) {
+        res << Dependencies[i].GetFullName();
+        if (i!=Dependencies.size()-1) {
+            res << ",";
+        }
+    }
+    res << "]";
     return res;
 }
 
@@ -846,9 +895,19 @@ TOpJoin::TOpJoin(std::shared_ptr<IOperator> leftInput, std::shared_ptr<IOperator
     : IBinaryOperator(EOperator::Join, pos, leftInput, rightInput), JoinKind(joinKind), JoinKeys(joinKeys) {}
 
 TVector<TInfoUnit> TOpJoin::GetOutputIUs() {
-    auto res = GetLeftInput()->GetOutputIUs();
+    TVector<TInfoUnit> res;
+
+    auto leftInputIUs = GetLeftInput()->GetOutputIUs();
     auto rightInputIUs = GetRightInput()->GetOutputIUs();
 
+    if (JoinKind == "LeftOnly" || JoinKind == "LeftSemi") {
+        rightInputIUs = {};
+    }
+    if (JoinKind == "RightOnly" || JoinKind == "RightSemi") {
+        leftInputIUs = {};
+    }
+
+    res.insert(res.end(), leftInputIUs.begin(), leftInputIUs.end());
     res.insert(res.end(), rightInputIUs.begin(), rightInputIUs.end());
     return res;
 }
@@ -1015,14 +1074,18 @@ TVector<TInfoUnit> TOpAggregate::GetOutputIUs() {
     // We assume that aggregation returns column is order [keys, states]
     TVector<TInfoUnit> outputIU = KeyColumns;
     for (const auto& aggTraits : AggregationTraitsList) {
-        outputIU.push_back(aggTraits.OriginalColName);
+        outputIU.push_back(aggTraits.ResultColName);
     }
     return outputIU;
 }
 
 TVector<TInfoUnit> TOpAggregate::GetUsedIUs(TPlanProps& props) {
     Y_UNUSED(props);
-    return GetOutputIUs();
+    TVector<TInfoUnit> usedIUs = KeyColumns;
+    for (const auto& aggTraits : AggregationTraitsList) {
+        usedIUs.push_back(aggTraits.OriginalColName);
+    }
+    return usedIUs;
 }
 
 void TOpAggregate::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
@@ -1035,10 +1098,12 @@ void TOpAggregate::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THa
             column = renameMap.at(column);
         }
     }
-
     for (auto& trait : AggregationTraitsList) {
-        if (renameMap.contains(trait.OriginalColName)) {
+        if (renameMap.contains(trait.OriginalColName) && !stopList.contains(trait.OriginalColName)) {
             trait.OriginalColName = renameMap.at(trait.OriginalColName);
+        }
+        if (renameMap.contains(trait.ResultColName)) {
+            trait.ResultColName = renameMap.at(trait.ResultColName);
         }
     }
 }
@@ -1049,7 +1114,8 @@ TString TOpAggregate::ToString(TExprContext& ctx) {
     TStringBuilder strBuilder;
     strBuilder << "Aggregate [";
     for (ui32 i = 0; i < AggregationTraitsList.size(); ++i) {
-        strBuilder << AggregationTraitsList[i].AggFunction << "(" << AggregationTraitsList[i].OriginalColName.GetFullName() << ")";
+        strBuilder << AggregationTraitsList[i].AggFunction << "(" << AggregationTraitsList[i].OriginalColName.GetFullName() << ") as "
+                   << AggregationTraitsList[i].ResultColName.GetFullName();
         if (i + 1 != AggregationTraitsList.size()) {
             strBuilder << ", ";
         }
@@ -1062,7 +1128,7 @@ TString TOpAggregate::ToString(TExprContext& ctx) {
             strBuilder << ", ";
         }
     }
-    strBuilder << "]]";
+    strBuilder << "]] ";
     if (AggregationPhase == EAggregationPhase::Intermediate) {
         strBuilder << "Initial";
     } else {
@@ -1125,16 +1191,18 @@ TOpRoot::TOpRoot(std::shared_ptr<IOperator> input, TPositionHandle pos, const TV
 
 TVector<TInfoUnit> TOpRoot::GetOutputIUs() { return GetInput()->GetOutputIUs(); }
 
-void ComputeParentsRec(std::shared_ptr<IOperator> op, std::shared_ptr<IOperator> parent) {
+void ComputeParentsRec(std::shared_ptr<IOperator> op, std::shared_ptr<IOperator> parent, int parentChildIndex) {
     if (parent) {
+        auto parentEntry = std::make_pair(std::weak_ptr<IOperator>(parent), parentChildIndex);
         auto f = std::find_if(op->Parents.begin(), op->Parents.end(),
-                              [&parent](const std::weak_ptr<IOperator> &p) { return p.lock() == parent; });
+                              [&parentEntry](const std::pair<std::weak_ptr<IOperator>,int> &p) 
+                              { return p.first.lock() == parentEntry.first.lock() && p.second == parentEntry.second; });
         if (f == op->Parents.end()) {
-            op->Parents.push_back(parent);
+            op->Parents.push_back(parentEntry);
         }
     }
-    for (auto &c : op->Children) {
-        ComputeParentsRec(c, op);
+    for (size_t i=0; i<op->Children.size(); i++) {
+        ComputeParentsRec(op->Children[i], op, i);
     }
 }
 
@@ -1143,10 +1211,10 @@ void TOpRoot::ComputeParents() {
         it.Current->Parents.clear();
     }
     std::shared_ptr<TOpRoot> noParent;
-    ComputeParentsRec(GetInput(), noParent);
+    ComputeParentsRec(GetInput(), noParent, 0);
 
     for (auto subplan : PlanProps.Subplans.Get()) {
-        ComputeParentsRec(subplan.Plan, noParent);
+        ComputeParentsRec(subplan.Plan, noParent, 0);
     }
 }
 
@@ -1194,7 +1262,21 @@ TVector<TInfoUnit> IUSetDiff(TVector<TInfoUnit> left, TVector<TInfoUnit> right) 
     TVector<TInfoUnit> res;
     for (const auto& unit : left) {
         if (std::find(right.begin(), right.end(), unit) == right.end()) {
-            res.push_back(unit);
+            if (std::find(res.begin(), res.end(), unit) == res.end()) {
+                res.push_back(unit);
+            }
+        }
+    }
+    return res;
+}
+
+TVector<TInfoUnit> IUSetIntersect(TVector<TInfoUnit> left, TVector<TInfoUnit> right) {
+    TVector<TInfoUnit> res;
+    for (const auto& unit : left) {
+        if (std::find(right.begin(), right.end(), unit) != right.end()) {
+            if (std::find(res.begin(), res.end(), unit) == res.end()) {
+                res.push_back(unit);
+            }
         }
     }
     return res;

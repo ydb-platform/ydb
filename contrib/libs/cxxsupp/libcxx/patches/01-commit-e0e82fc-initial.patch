@@ -1,5 +1,5 @@
 diff --git a/include/__configuration/abi.h b/include/__configuration/abi.h
-index 62c129f..8e619ca 100644
+index c6ef6fd..f41bce7 100644
 --- a/include/__configuration/abi.h
 +++ b/include/__configuration/abi.h
 @@ -66,7 +66,12 @@
@@ -17,10 +17,10 @@ index 62c129f..8e619ca 100644
  #  define _LIBCPP_ABI_REGEX_CONSTANTS_NONZERO
  // Re-worked external template instantiations for std::string with a focus on
 diff --git a/include/typeinfo b/include/typeinfo
-index 252afe5..5319d6e 100644
+index 2871307..888faec 100644
 --- a/include/typeinfo
 +++ b/include/typeinfo
-@@ -97,7 +97,13 @@ public:
+@@ -98,7 +98,13 @@ public:
  
    size_t hash_code() const _NOEXCEPT;
  

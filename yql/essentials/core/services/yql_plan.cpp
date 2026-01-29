@@ -12,7 +12,7 @@ struct TPinAttrs {
     ui32 ProviderId = 0;
     ui32 PinId = 0;
 
-    TPinAttrs(const TPinInfo& info)
+    explicit TPinAttrs(const TPinInfo& info)
         : Info(info)
     {
     }
@@ -93,7 +93,7 @@ struct TLevelContext {
     {
     }
 
-    TLevelContext(TBasicNode* node)
+    explicit TLevelContext(TBasicNode* node)
         : Node(node)
     {
     }
@@ -186,7 +186,7 @@ ui32 FillLevels(THashMap<ui32, TLevelContext>& basicNodesMap, ui32 current, THas
 
 class TPlanBuilder: public IPlanBuilder {
 public:
-    TPlanBuilder(TTypeAnnotationContext& types)
+    explicit TPlanBuilder(TTypeAnnotationContext& types)
         : Types_(types)
     {
     }

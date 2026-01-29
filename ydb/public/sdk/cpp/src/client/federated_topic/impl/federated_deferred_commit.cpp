@@ -129,10 +129,10 @@ void TDeferredCommit::TImpl::Add(const TReadSessionEvent::TDataReceivedEvent& da
 void TDeferredCommit::TImpl::Commit() {
     for (auto&& [partitionStream, offsetRanges] : Offsets) {
         for (auto&& [startOffset, endOffset] : offsetRanges) {
-            static_cast<NTopic::TPartitionStreamImpl<false>*>(partitionStream.Get()->PartitionSession.Get())->Commit(startOffset, endOffset);
+            static_cast<NTopic::TPartitionSessionControl*>(partitionStream.Get()->PartitionSession.Get())->Commit(startOffset, endOffset);
         }
     }
     Offsets.clear();
 }
 
-}
+} // namespace NYdb::NFederatedTopic

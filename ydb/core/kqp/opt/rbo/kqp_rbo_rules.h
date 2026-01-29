@@ -11,7 +11,7 @@ namespace NKikimr {
 namespace NKqp {
 
 /**
- * Removed identity map
+ * Remove identity map
  */
 
  class TRemoveIdenityMapRule : public ISimplifiedRule {
@@ -32,6 +32,19 @@ class TExtractJoinExpressionsRule : public IRule {
 
     virtual bool MatchAndApply(std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
 };
+
+/**
+ * Filter pull-up rule for correlated subqueries. Currently handles only basic form of correlated subqueries
+ * Matches a filter on top of add dependencies operator. Extracts join conditions from this filter that are
+ * dependent on outer columns. Pushes the filter up the plan though map and aggregate operators.
+ */
+
+ class TPullUpCorrelatedFilterRule : public IRule {
+  public:
+    TPullUpCorrelatedFilterRule() : IRule("Pull up correlated filter", ERuleProperties::RequireParents) {}
+
+    virtual bool MatchAndApply(std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
+ };
 
 /**
  * Rewrites scalar subplans into cross join plans
@@ -72,12 +85,22 @@ class TPushLimitIntoSortRule : public ISimplifiedRule {
 };
 
 /**
+ * Push filter though non-projecting map
+ */
+class TPushFilterUnderMapRule : public ISimplifiedRule {
+  public:
+    TPushFilterUnderMapRule() : ISimplifiedRule("Push filter under map", ERuleProperties::RequireParents) {}
+
+    virtual std::shared_ptr<IOperator> SimpleMatchAndApply(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
+};
+
+/**
  * Push down filter through joins, adding join conditions to the join operator and potentially
  * converting left join into inner join
  */
-class TPushFilterRule : public ISimplifiedRule {
+class TPushFilterIntoJoinRule : public ISimplifiedRule {
   public:
-    TPushFilterRule() : ISimplifiedRule("Push filter", ERuleProperties::RequireParents) {}
+    TPushFilterIntoJoinRule() : ISimplifiedRule("Push filter into join", ERuleProperties::RequireParents) {}
 
     virtual std::shared_ptr<IOperator> SimpleMatchAndApply(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
 };

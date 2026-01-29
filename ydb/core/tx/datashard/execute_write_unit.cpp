@@ -23,12 +23,14 @@ public:
     }
 
     bool IsReadyToExecute(TOperation::TPtr op) const override {
-        if (op->HasWaitingForGlobalTxIdFlag()) {
-            return false;
+        TWriteOperation* writeOp = TWriteOperation::CastWriteOperation(op);
+
+        if (writeOp->GetWriteResult() || op->HasResultSentFlag() || op->IsImmediate() && WillRejectDataTx(op)) {
+            return true;
         }
 
-        if (op->Result() || op->HasResultSentFlag() || op->IsImmediate() && WillRejectDataTx(op)) {
-            return true;
+        if (op->HasWaitingForGlobalTxIdFlag()) {
+            return false;
         }
 
         if (DataShard.IsStopping()) {
@@ -224,7 +226,12 @@ public:
                 }
                 case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INCREMENT: {
                     FillOps(scheme, userTable, tableInfo, validatedOperation, rowIdx, ops);
-                    userDb.IncrementRow(fullTableId, key, ops);
+                    userDb.IncrementRow(fullTableId, key, ops, false /*insertMissing*/);
+                    break;
+                }
+                case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT_INCREMENT: {
+                    FillOps(scheme, userTable, tableInfo, validatedOperation, rowIdx, ops);
+                    userDb.IncrementRow(fullTableId, key, ops, true /*insertMissing*/);
                     break;
                 }
                 default:
@@ -240,6 +247,7 @@ public:
             case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE:
             case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT:
             case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE:
+            case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT_INCREMENT:
             case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INCREMENT: {
                 DataShard.IncCounter(COUNTER_WRITE_ROWS, matrix.GetRowCount());
                 DataShard.IncCounter(COUNTER_WRITE_BYTES, matrix.GetBuffer().size());
@@ -261,7 +269,7 @@ public:
 
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Executing write operation for " << *op << " at " << tabletId);
 
-        if (op->Result() || op->HasResultSentFlag() || op->IsImmediate() && CheckRejectDataTx(op, ctx)) {
+        if (writeOp->GetWriteResult() || op->HasResultSentFlag() || op->IsImmediate() && CheckRejectDataTx(op, ctx)) {
             return EExecutionStatus::Executed;
         }
 
@@ -575,20 +583,8 @@ public:
         } catch (const TLockedWriteLimitException&) {
             userDb.ResetCollectedChanges();
 
+            // Note: we don't return TxLocks in the reply since all changes are rolled back and lock is unaffected
             writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR, TStringBuilder() << "Shard " << tabletId << " cannot write more uncommitted changes");
-
-            for (auto& table : guardLocks.AffectedTables) {
-                Y_ENSURE(guardLocks.LockTxId);
-                op->Result()->AddTxLock(
-                    guardLocks.LockTxId,
-                    tabletId,
-                    DataShard.Generation(),
-                    Max<ui64>(),
-                    table.GetTableId().OwnerId,
-                    table.GetTableId().LocalPathId,
-                    false
-                );
-            }
 
             // Transaction may have made some changes before it hit the limit,
             // so we need to roll them back.

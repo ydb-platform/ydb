@@ -284,6 +284,19 @@ Y_UNIT_TEST(NamedNode) {
          "-- comment\r\n$a = 1;\n"},
         {"$a=1;-- comment\n$b=2;/* comment */ /* comment */\n$c = 3;/* comment */ -- comment",
          "$a = 1; -- comment\n$b = 2; /* comment */ /* comment */\n$c = 3; /* comment */ -- comment\n"},
+        {"$a=1;\n\n\n$b=2;", "$a = 1;\n\n$b = 2;\n"},
+        {"$a=1;\r\n\r\n\r\n$b=2;", "$a = 1;\n\n$b = 2;\n"},
+        {"$a=1;\n\n$b=2;", "$a = 1;\n\n$b = 2;\n"},
+        {"$a=1;\n\n\n-- comment\n$b=2;", "$a = 1;\n\n-- comment\n$b = 2;\n"},
+        {"-- a\n$a = 1;", "-- a\n$a = 1;\n"},
+        {"$a = 1; -- a", "$a = 1; -- a\n"},
+        {"$a = 1;\n-- a", "$a = 1;\n-- a\n"},
+        {"/* a */\n$a = 1;", "/* a */\n$a = 1;\n"},
+        {"/* \n  a \n*/\n$a = 1;", "/* \n  a \n*/\n$a = 1;\n"},
+        {"$a /* a */ = 1;", "$a /* a */ = 1;\n"},
+        {"/* a */ $a = 1;", "/* a */ $a = 1;\n"},
+        {"$a = 1; /*\na */", "$a = 1; /*\na */\n"},
+        {"$a = 1; \n/* a */", "$a = 1;\n/* a */\n"},
     };
 
     TSetup setup;
@@ -698,7 +711,12 @@ Y_UNIT_TEST(DefineActionOrSubquery) {
          "DEFINE SUBQUERY $s() AS\n\t"
          "$t = (\n\t\tSELECT\n\t\t\t*\n\t\tFROM\n\t\t\t$a\n\t);\n"
          "END DEFINE;\n"},
-    };
+        {"define action $x() as; $a = 10;\n\n\n$b = 20; end define",
+         "DEFINE ACTION $x() AS\n\t$a = 10;\n\n\t$b = 20;\nEND DEFINE;\n"},
+        {"define action $x() as; $a = 10;\n\n$b = 20; end define",
+         "DEFINE ACTION $x() AS\n\t$a = 10;\n\n\t$b = 20;\nEND DEFINE;\n"},
+        {"define action $a() as do $aaa(); do $bbb(); end define;",
+         "DEFINE ACTION $a() AS\n\tDO\n\t\t$aaa()\n\t;\n\tDO\n\t\t$bbb()\n\t;\nEND DEFINE;\n"}};
 
     TSetup setup;
     setup.Run(cases);
@@ -1037,6 +1055,16 @@ Y_UNIT_TEST(Lambda) {
          "SELECT\n\t$f(10, 4),\n\t$g(1, 2)\n;\n"},
         {"$f=($arg)->{;$a=10;;$b=20;;;RETURN $a+$b}",
          "$f = ($arg) -> {\n\t$a = 10;\n\t$b = 20;\n\tRETURN $a + $b;\n};\n"},
+        {"$f=($arg)->{;$a=10;;\n\n\n$b=20;;;RETURN $a+$b}",
+         "$f = ($arg) -> {\n\t$a = 10;\n\n\t$b = 20;\n\tRETURN $a + $b;\n};\n"},
+        {"$f=($arg)->{;$a=10;;\n\n$b=20;;;RETURN $a+$b}",
+         "$f = ($arg) -> {\n\t$a = 10;\n\n\t$b = 20;\n\tRETURN $a + $b;\n};\n"},
+        {"$f=($arg)->{;$a=10;;\n$b=20;;;RETURN $a+$b}",
+         "$f = ($arg) -> {\n\t$a = 10;\n\t$b = 20;\n\tRETURN $a + $b;\n};\n"},
+        {"$f=($arg)->{;$a=10;;\n\n\n-- comment\n$b=20;;;RETURN $a+$b}",
+         "$f = ($arg) -> {\n\t$a = 10;\n\n\t-- comment\n\t$b = 20;\n\tRETURN $a + $b;\n};\n"},
+        {"$f=($arg)->{;$a=10;;$b=select 20;;;RETURN $a+$b}",
+         "$f = ($arg) -> {\n\t$a = 10;\n\n\t$b = (\n\t\tSELECT\n\t\t\t20\n\t);\n\tRETURN $a + $b;\n};\n"},
     };
 
     TSetup setup;
@@ -1958,8 +1986,8 @@ Y_UNIT_TEST(CreateStreamingQuery) {
                      "CREATE STREAMING QUERY IF NOT EXISTS TheQuery AS DO BEGIN\nINSERT INTO TheTable\nSELECT\n\t1\n;\nEND DO;\n"},
                     {"creAte oR ReplAce sTReaMing qUErY TheQuery As dO BeGin ;;\n\nInSeRT iNTo TheTable SELect 1;; eNd Do",
                      "CREATE OR REPLACE STREAMING QUERY TheQuery AS DO BEGIN\nINSERT INTO TheTable\nSELECT\n\t1\n;\nEND DO;\n"},
-                    {"creAte sTReaMing qUErY TheQuery wiTh (option = tRuE) As dO BeGin ;;\n\nInSeRT iNTo TheTable SELect 1;; eNd Do",
-                     "CREATE STREAMING QUERY TheQuery WITH (\n\toption = TRUE\n) AS DO BEGIN\nINSERT INTO TheTable\nSELECT\n\t1\n;\nEND DO;\n"}};
+                    {"creAte sTReaMing qUErY TheQuery wiTh (option = tRuE,nested_setting= (x=TrUe), other =(a = b, c=TrUe)) As dO BeGin ;;\n\nInSeRT iNTo TheTable SELect 1;; eNd Do",
+                     "CREATE STREAMING QUERY TheQuery WITH (\n\toption = TRUE,\n\tnested_setting = (\n\t\tx = TRUE\n\t),\n\tother = (\n\t\ta = b,\n\t\tc = TRUE\n\t)\n) AS DO BEGIN\nINSERT INTO TheTable\nSELECT\n\t1\n;\nEND DO;\n"}};
 
     TSetup setup;
     setup.Run(cases);
@@ -1970,10 +1998,10 @@ Y_UNIT_TEST(AlterStreamingQuery) {
                      "ALTER STREAMING QUERY TheQuery AS DO BEGIN\nINSERT INTO TheTable\nSELECT\n\t1\n;\nEND DO;\n"},
                     {"aLTer sTReaMing qUErY If ExIsTs TheQuery As dO BeGin ;;\n\nInSeRT iNTo TheTable SELect 1;; eNd Do",
                      "ALTER STREAMING QUERY IF EXISTS TheQuery AS DO BEGIN\nINSERT INTO TheTable\nSELECT\n\t1\n;\nEND DO;\n"},
-                    {"aLTer sTReaMing qUErY TheQuery sEt (option = tRuE)",
-                     "ALTER STREAMING QUERY TheQuery SET (\n\toption = TRUE\n);\n"},
-                    {"aLTer sTReaMing qUErY TheQuery sEt (option = tRuE) As dO BeGin ;;\n\nInSeRT iNTo TheTable SELect 1;; eNd Do",
-                     "ALTER STREAMING QUERY TheQuery SET (\n\toption = TRUE\n) AS DO BEGIN\nINSERT INTO TheTable\nSELECT\n\t1\n;\nEND DO;\n"}};
+                    {"aLTer sTReaMing qUErY TheQuery sEt (option = tRuE,nested_setting= (x=TrUe), other =(a = b, c=TrUe))",
+                     "ALTER STREAMING QUERY TheQuery SET (\n\toption = TRUE,\n\tnested_setting = (\n\t\tx = TRUE\n\t),\n\tother = (\n\t\ta = b,\n\t\tc = TRUE\n\t)\n);\n"},
+                    {"aLTer sTReaMing qUErY TheQuery sEt (option = tRuE,nested_setting= (x=TrUe), other =(a = b, c=TrUe)) As dO BeGin ;;\n\nInSeRT iNTo TheTable SELect 1;; eNd Do",
+                     "ALTER STREAMING QUERY TheQuery SET (\n\toption = TRUE,\n\tnested_setting = (\n\t\tx = TRUE\n\t),\n\tother = (\n\t\ta = b,\n\t\tc = TRUE\n\t)\n) AS DO BEGIN\nINSERT INTO TheTable\nSELECT\n\t1\n;\nEND DO;\n"}};
 
     TSetup setup;
     setup.Run(cases);

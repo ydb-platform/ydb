@@ -2183,5 +2183,47 @@
             "size": 4954,
             "uri": "https://{canondata_backend}/1871102/08c95297ac754f0fe3fecfae40e6440beb75dd66/resource.tar.gz#test.test_window-udaf_with_def_value-default.txt-Results_/results.txt"
         }
+    ],
+    "test.test[window-win_range_date32--Debug]": [
+        {
+            "checksum": "1d6c5d4ff922b3e50052cc5b3d0096bd",
+            "size": 1492,
+            "uri": "https://{canondata_backend}/1937367/d5c6f47da27e7bb1b38500104c909a1b0c5047e0/resource.tar.gz#test.test_window-win_range_date32--Debug_/opt.yql"
+        }
+    ],
+    "test.test[window-win_range_date32--Results]": [
+        {
+            "checksum": "4ba8418e9e6a43f1c4208296d39eed41",
+            "size": 987,
+            "uri": "https://{canondata_backend}/1942173/6473d32519b28df787f5dcefdfa39d698f7ce5c8/resource.tar.gz#test.test_window-win_range_date32--Results_/results.txt"
+        }
+    ],
+    "test.test[window-win_range_interval--Debug]": [
+        {
+            "checksum": "7512fa519cf26c1700d442325ad3d90a",
+            "size": 1516,
+            "uri": "https://{canondata_backend}/1937367/d5c6f47da27e7bb1b38500104c909a1b0c5047e0/resource.tar.gz#test.test_window-win_range_interval--Debug_/opt.yql"
+        }
+    ],
+    "test.test[window-win_range_interval--Results]": [
+        {
+            "checksum": "d8b1c92636ad3bf40250f918d8988ed7",
+            "size": 987,
+            "uri": "https://{canondata_backend}/1942173/6473d32519b28df787f5dcefdfa39d698f7ce5c8/resource.tar.gz#test.test_window-win_range_interval--Results_/results.txt"
+        }
+    ],
+    "test.test[window-win_range_timestamp--Debug]": [
+        {
+            "checksum": "ccc84c02f6174531092668f6591c4eb3",
+            "size": 1525,
+            "uri": "https://{canondata_backend}/1937367/d5c6f47da27e7bb1b38500104c909a1b0c5047e0/resource.tar.gz#test.test_window-win_range_timestamp--Debug_/opt.yql"
+        }
+    ],
+    "test.test[window-win_range_timestamp--Results]": [
+        {
+            "checksum": "4ba8418e9e6a43f1c4208296d39eed41",
+            "size": 987,
+            "uri": "https://{canondata_backend}/1942173/6473d32519b28df787f5dcefdfa39d698f7ce5c8/resource.tar.gz#test.test_window-win_range_timestamp--Results_/results.txt"
+        }
     ]
 }

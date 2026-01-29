@@ -1786,6 +1786,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxChangePathState:
     case TTxState::TxAlterSecret:
     case TTxState::TxAlterStreamingQuery:
+    case TTxState::TxTruncateTable:
         return TPathElement::EPathState::EPathStateAlter;
     case TTxState::TxDropTable:
     case TTxState::TxDropPQGroup:
@@ -1905,7 +1906,8 @@ void TSchemeShard::PersistTableIndex(NIceDb::TNiceDb& db, const TPathId& pathId)
 
     TTableIndexInfo::TPtr alterData = index->AlterData;
     Y_ABORT_UNLESS(alterData);
-    Y_ABORT_UNLESS(index->AlterVersion < alterData->AlterVersion);
+    // Relaxed to <= to allow convergence when multiple operations use CoordinatedSchemaVersion
+    Y_ABORT_UNLESS(index->AlterVersion <= alterData->AlterVersion);
 
     db.Table<Schema::TableIndex>().Key(element->PathId.LocalPathId).Update(
                 NIceDb::TUpdate<Schema::TableIndex::AlterVersion>(alterData->AlterVersion),
@@ -2697,7 +2699,7 @@ void TSchemeShard::ChangeTxState(NIceDb::TNiceDb& db, const TOperationId opId, T
     const auto& ctx = TActivationContext::AsActorContext();
 
     LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Change state for txid " << opId << " "
-                 << (int)TxInFlight[opId].State << " -> " << (int)newState);
+                 << NKikimr::NSchemeShard::TxStateName(TxInFlight[opId].State) << " -> " << NKikimr::NSchemeShard::TxStateName(newState));
 
     FindTx(opId)->State = newState;
     db.Table<Schema::TxInFlightV2>().Key(opId.GetTxId(), opId.GetSubTxId()).Update(
@@ -2927,6 +2929,16 @@ void TSchemeShard::PersistTableAlterVersion(NIceDb::TNiceDb& db, const TPathId p
     } else {
         db.Table<Schema::MigratedTables>().Key(pathId.OwnerId, pathId.LocalPathId).Update(
             NIceDb::TUpdate<Schema::MigratedTables::AlterVersion>(tableInfo->AlterVersion));
+    }
+}
+
+void TSchemeShard::PersistClearAlterTableFull(NIceDb::TNiceDb& db, const TPathId& pathId) {
+    if (pathId.OwnerId == TabletID()) {
+        db.Table<Schema::Tables>().Key(pathId.LocalPathId).Update(
+            NIceDb::TUpdate<Schema::Tables::AlterTableFull>(TString()));
+    } else {
+        db.Table<Schema::MigratedTables>().Key(pathId.OwnerId, pathId.LocalPathId).Update(
+            NIceDb::TUpdate<Schema::MigratedTables::AlterTableFull>(TString()));
     }
 }
 
@@ -5130,7 +5142,6 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     EnableAddColumsWithDefaults = appData->FeatureFlags.GetEnableAddColumsWithDefaults();
     EnableReplaceIfExistsForExternalEntities = appData->FeatureFlags.GetEnableReplaceIfExistsForExternalEntities();
     EnableTempTables = appData->FeatureFlags.GetEnableTempTables();
-    EnableVectorIndex = appData->FeatureFlags.GetEnableVectorIndex();
     EnableInitialUniqueIndex = appData->FeatureFlags.GetEnableUniqConstraint();
     EnableAddUniqueIndex = appData->FeatureFlags.GetEnableAddUniqueIndex();
     EnableFulltextIndex = appData->FeatureFlags.GetEnableFulltextIndex();
@@ -5179,6 +5190,8 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     SysPartitionStatsCollector = Register(NSysView::CreatePartitionStatsCollector().Release());
 
     SplitSettings.Register(appData->Icb);
+
+    BackupSettings.Register(appData->Icb);
 
     Executor()->RegisterExternalTabletCounters(TabletCountersPtr);
     Execute(CreateTxInitSchema(), ctx);
@@ -7854,7 +7867,6 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TFeatureFlags& featu
     EnableTempTables = featureFlags.GetEnableTempTables();
     EnableReplaceIfExistsForExternalEntities = featureFlags.GetEnableReplaceIfExistsForExternalEntities();
     EnableResourcePoolsOnServerless = featureFlags.GetEnableResourcePoolsOnServerless();
-    EnableVectorIndex = featureFlags.GetEnableVectorIndex();
     EnableInitialUniqueIndex = featureFlags.GetEnableUniqConstraint();
     EnableAddUniqueIndex = featureFlags.GetEnableAddUniqueIndex();
     EnableFulltextIndex = featureFlags.GetEnableFulltextIndex();

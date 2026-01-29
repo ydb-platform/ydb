@@ -121,7 +121,7 @@ TFileDescriptorGuard::TFileDescriptorGuard(TFileDescriptorGuard&& other) noexcep
     other.FD_ = -1;
 }
 
-TFileDescriptorGuard& TFileDescriptorGuard::operator = (TFileDescriptorGuard&& other) noexcept
+TFileDescriptorGuard& TFileDescriptorGuard::operator=(TFileDescriptorGuard&& other) noexcept
 {
     if (this != &other) {
         Reset();

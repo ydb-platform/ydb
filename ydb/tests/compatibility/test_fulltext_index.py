@@ -53,13 +53,12 @@ class TestFulltextIndex(RollingUpgradeAndDowngradeFixture):
         with ydb.QuerySessionPool(self.driver) as session_pool:
             session_pool.execute_with_retries(sql_upsert)
 
-    def _create_index(self, table_name, index_name, layout='flat', tokenizer='standard'):
+    def _create_index(self, table_name, index_name, index_type, tokenizer='standard'):
         create_index_sql = f"""
             ALTER TABLE `{table_name}`
-            ADD INDEX `{index_name}` GLOBAL USING fulltext
+            ADD INDEX `{index_name}` GLOBAL USING {index_type}
             ON (text)
             WITH (
-                layout={layout},
                 tokenizer={tokenizer},
                 use_filter_lowercase=true,
                 use_filter_snowball=true,
@@ -84,14 +83,14 @@ class TestFulltextIndex(RollingUpgradeAndDowngradeFixture):
     def _get_queries(self):
         queries = []
         for text_type in ['string', 'utf8']:
-            for layout in ['flat', 'flat_relevance']:
+            for index_type in ['fulltext_plain', 'fulltext_relevance']:
                 for tokenizer in ['standard', 'whitespace']:
-                    queries.extend(self._get_queries_for(text_type, layout, tokenizer))
+                    queries.extend(self._get_queries_for(text_type, index_type, tokenizer))
         return queries
 
-    def _get_queries_for(self, text_type, layout, tokenizer):
+    def _get_queries_for(self, text_type, index_type, tokenizer):
         table_name = f"table_{text_type}"
-        index_name = f"idx_{layout}_{tokenizer}"
+        index_name = f"idx_{index_type}_{tokenizer}"
         queries = []
         utf8 = ''
         if text_type == 'utf8':
@@ -107,7 +106,7 @@ class TestFulltextIndex(RollingUpgradeAndDowngradeFixture):
                 LIMIT {self.limit};
                 """
             ])
-            if layout == 'flat_relevance':
+            if index_type == 'fulltext_relevance':
                 queries.append([
                     True, f"""
                     SELECT `pk`, `text`, FullText::Relevance{utf8}(`text`, "{query}") as `rel`
@@ -168,13 +167,13 @@ class TestFulltextIndex(RollingUpgradeAndDowngradeFixture):
             table_name = f"table_{text_type}"
             self.create_table(table_name)
             self._write_data(table_name)
-            for layout in ['flat', 'flat_relevance']:
+            for index_type in ['fulltext_plain', 'fulltext_relevance']:
                 for tokenizer in ['standard', 'whitespace']:
-                    index_name = f"idx_{layout}_{tokenizer}"
+                    index_name = f"idx_{index_type}_{tokenizer}"
                     self._create_index(
                         table_name=table_name,
                         index_name=index_name,
-                        layout=layout,
+                        index_type=index_type,
                         tokenizer=tokenizer,
                     )
         self.wait_index_ready()

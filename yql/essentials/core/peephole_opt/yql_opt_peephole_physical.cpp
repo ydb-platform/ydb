@@ -2423,7 +2423,7 @@ IGraphTransformer::TStatus PeepHoleBlockStage(const TExprNode::TPtr& input, TExp
 
 class TStrongTypeErrorProxy : public IGraphTransformer {
 public:
-    TStrongTypeErrorProxy(IGraphTransformer& inner)
+    explicit TStrongTypeErrorProxy(IGraphTransformer& inner)
         : Inner_(inner)
     {}
 
@@ -8766,6 +8766,24 @@ TExprNode::TPtr CompareTagged(const TExprNode& node, TExprContext& ctx) {
     return ctx.ChangeChildren(node, std::move(children));
 }
 
+template<bool IsScore>
+TExprNode::TPtr ExpandFulltextBuiltin(const TExprNode::TPtr& node, TExprContext& ctx) {
+    TString type = IsScore ? "Double" : "Bool";
+    TString error = TStringBuilder() << "Fulltext " << (IsScore ? "score" : "contains") << " is not implemented yet";
+    auto nullNode = ctx.NewCallable(node->Pos(), "Nothing", {
+        ctx.NewCallable(node->Pos(), "OptionalType", {
+            ctx.NewCallable(node->Pos(), "DataType", {ctx.NewAtom(node->Pos(), type, TNodeFlags::Default) }) }) });
+
+    auto message = ctx.Builder(node->Pos()).Callable("String").Atom(0, error).Seal().Build();
+
+    return ctx.Builder(node->Pos())
+        .Callable("Unwrap")
+            .Add(0, nullNode)
+            .Add(1, message)
+        .Seal()
+        .Build();
+}
+
 template <bool Equals, bool IsDistinct>
 TExprNode::TPtr ExpandSqlEqual(const TExprNode::TPtr& node, TExprContext& ctx) {
     const auto lType = node->Head().GetTypeAnn();
@@ -9269,6 +9287,8 @@ struct TPeepHoleRules {
         {"RangeFor", &ExpandRangeFor},
         {"RangeToPg", &ExpandRangeToPg},
         {"ToFlow", &DropToFlowDeps},
+        {"FulltextScore", &ExpandFulltextBuiltin<true>},
+        {"FulltextContains", &ExpandFulltextBuiltin<false>},
         {"CheckedAdd", &ExpandCheckedAdd},
         {"CheckedSub", &ExpandCheckedSub},
         {"CheckedMul", &ExpandCheckedMul},

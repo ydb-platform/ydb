@@ -233,7 +233,6 @@ protected:
         auto& reply = *ev->Get();
 
         KqpShardsResolverId = {};
-        TasksGraph.GetMeta().ShardsResolved = true;
 
         // TODO: count resolve time in CpuTime
 
@@ -254,18 +253,18 @@ protected:
         }
 
         KQP_STLOG_D(KQPEX, "Shards nodes resolved",
-            (SuccessNodes, reply.ShardNodes.size()),
+            (SuccessNodes, reply.ShardsToNodes.size()),
             (FailedNodes, reply.Unresolved),
             (trace_id, TraceId()));
 
-        TasksGraph.GetMeta().ShardIdToNodeId = std::move(reply.ShardNodes);
-        for (const auto& [shardId, nodeId] : TasksGraph.GetMeta().ShardIdToNodeId) {
-            TasksGraph.GetMeta().ShardsOnNode[nodeId].push_back(shardId);
+        for (const auto& [_, nodeId] : reply.ShardsToNodes) {
             ParticipantNodes.emplace(nodeId);
             if (TxManager) {
                 TxManager->AddParticipantNode(nodeId);
             }
         }
+
+        TasksGraph.ResolveShards(std::move(reply.ShardsToNodes));
 
         if (IsDebugLogEnabled()) {
             TStringBuilder sb;
@@ -1053,13 +1052,13 @@ protected:
     void HandleAbortExecution(TEvKqp::TEvAbortExecution::TPtr& ev) {
         auto& msg = ev->Get()->Record;
         NYql::TIssues issues = ev->Get()->GetIssues();
-        HandleAbortExecution(msg.GetStatusCode(), ev->Get()->GetIssues(), ev->Sender != Target);
+        HandleAbortExecution(msg.GetStatusCode(), ev->Get()->GetIssues(), ev->Sender == Target);
     }
 
     void HandleAbortExecution(
             NYql::NDqProto::StatusIds::StatusCode statusCode,
             const NYql::TIssues& issues,
-            const bool sessionSender) {
+            const bool isTargetSender) {
         KQP_STLOG_D(KQPEX, "Got EvAbortExecution",
             (Status, NYql::NDqProto::StatusIds_StatusCode_Name(statusCode)),
             (Issues, issues.ToOneLineString()),
@@ -1068,7 +1067,7 @@ protected:
         if (ydbStatusCode == Ydb::StatusIds::INTERNAL_ERROR) {
             InternalError(issues);
         } else if (ydbStatusCode == Ydb::StatusIds::TIMEOUT) {
-            TimeoutError(sessionSender, issues);
+            TimeoutError(isTargetSender, issues);
         } else {
             RuntimeError(NYql::NDq::DqStatusToYdbStatus(statusCode), issues);
         }
@@ -1277,7 +1276,7 @@ protected:
         ReplyErrorAndDie(status, &issues);
     }
 
-    void TimeoutError(bool sessionSender, NYql::TIssues issues) {
+    void TimeoutError(bool isTargetSender, NYql::TIssues issues) {
         if (AlreadyReplied) {
             KQP_STLOG_E(KQPEX, "Timeout when we already replied - not good",
                 (Backtrace, TBackTrace().PrintToString()),
@@ -1305,8 +1304,8 @@ protected:
         ResponseEv->Record.MutableResponse()->SetStatus(Ydb::StatusIds::TIMEOUT);
         NYql::IssuesToMessage(issues, ResponseEv->Record.MutableResponse()->MutableIssues());
 
-        // TEvAbortExecution can come from either ComputeActor or SessionActor (== Target).
-        if (!sessionSender) {
+        // TEvAbortExecution can come from ComputeActor or SessionActor/PartitionedExecuterActor (== Target).
+        if (!isTargetSender) {
             auto abortEv = MakeHolder<TEvKqp::TEvAbortExecution>(status, issues);
             this->Send(Target, abortEv.Release());
         }

@@ -50,7 +50,7 @@ struct TWorkloadDescriptor
         EWorkloadCategory category = EWorkloadCategory::Idle,
         int band = 0,
         TInstant instant = {},
-        std::vector<std::string> annotations = {},
+        std::vector<TString> annotations = {},
         std::optional<NConcurrency::TFairShareThreadPoolTag> compressionFairShareTag = {});
 
     //! The type of the workload defining its basic priority.
@@ -66,7 +66,7 @@ struct TWorkloadDescriptor
     TInstant Instant;
 
     //! Arbitrary client-supplied strings to be logged at server-side.
-    std::vector<std::string> Annotations;
+    std::vector<TString> Annotations;
 
     //! If present, invoker from fair share thread pool will be used for decompression.
     std::optional<NConcurrency::TFairShareThreadPoolTag> CompressionFairShareTag;

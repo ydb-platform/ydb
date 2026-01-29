@@ -118,7 +118,7 @@ public:
     TNodePtr BuildSortSpec(const TVector<TSortSpecificationPtr>& orderBy, const TString& label, bool traits, bool assume);
 
 protected:
-    ISource(TPosition pos);
+    explicit ISource(TPosition pos);
     TAstNode* Translate(TContext& ctx) const override;
 
     void FillSortParts(const TVector<TSortSpecificationPtr>& orderBy, TNodePtr& sortKeySelector, TNodePtr& sortDirection);
@@ -126,7 +126,7 @@ protected:
     TVector<TNodePtr>& Expressions(EExprSeat exprSeat);
     TNodePtr AliasOrColumn(const TNodePtr& node, bool withSource);
 
-    TNodePtr BuildWindowFrame(const TFrameSpecification& spec, bool isCompact);
+    TNodePtr BuildWindowFrame(TContext& ctx, const TFrameSpecification& spec, bool isCompact, TNodePtr sortSpec);
 
     THashSet<TString> ExprAliases_;
     THashSet<TString> FlattenByAliases_;
@@ -189,7 +189,7 @@ public:
     virtual TVector<TString> GetJoinLabels() const = 0;
 
 protected:
-    IJoin(TPosition pos);
+    explicit IJoin(TPosition pos);
 };
 
 class TSessionWindow final: public INode {

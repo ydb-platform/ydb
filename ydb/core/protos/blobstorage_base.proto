@@ -113,4 +113,5 @@ message TGroupInfo {
     optional uint32 GroupSizeInUnits = 18;
     optional uint32 BridgeProxyGroupId = 19; // proxy group when running in Bridge mode
     optional uint32 BridgePileId = 20;
+    optional bool DDisk = 21; // is this a Direct Block Group?
 }

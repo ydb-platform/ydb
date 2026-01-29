@@ -152,6 +152,57 @@ namespace NKikimr {
             friend bool operator < (const TVSlotId &x, const TVSlotId &y) { return x.GetKey() <  y.GetKey(); }
         };
 
+        struct TDDiskId {
+            Schema::VSlot::NodeID::Type NodeId = 0;
+            Schema::VSlot::PDiskID::Type PDiskId = 0;
+            Schema::VSlot::VSlotID::Type DDiskSlotId = 0;
+
+            TDDiskId(const Schema::VSlot::TKey::Type &key)
+                : NodeId(std::get<0>(key))
+                , PDiskId(std::get<1>(key))
+                , DDiskSlotId(std::get<2>(key))
+            {}
+
+            TDDiskId(Schema::VSlot::NodeID::Type nodeId, Schema::VSlot::PDiskID::Type pdiskId, Schema::VSlot::VSlotID::Type vslotId)
+                : NodeId(nodeId)
+                , PDiskId(pdiskId)
+                , DDiskSlotId(vslotId)
+            {}
+
+            TDDiskId() = default;
+            TDDiskId(const TDDiskId&) = default;
+
+            TDDiskId(TPDiskId pdiskId, Schema::VSlot::VSlotID::Type ddiskSlotId)
+                : NodeId(pdiskId.NodeId)
+                , PDiskId(pdiskId.PDiskId)
+                , DDiskSlotId(ddiskSlotId)
+            {}
+
+            TDDiskId(const NKikimrBlobStorage::NDDisk::TDDiskId& pb)
+                : NodeId(pb.GetNodeId())
+                , PDiskId(pb.GetPDiskId())
+                , DDiskSlotId(pb.GetDDiskSlotId())
+            {}
+
+            TDDiskId &operator=(const TDDiskId &other) = default;
+
+            TString ToString() const {
+                return TStringBuilder() << NodeId << ":" << PDiskId << ":" << DDiskSlotId;
+            }
+
+            Schema::VSlot::TKey::Type GetKey() const {
+                return std::tie(NodeId, PDiskId, DDiskSlotId);
+            }
+
+            void Serialize(NKikimrBlobStorage::NDDisk::TDDiskId *pb) const {
+                pb->SetNodeId(NodeId);
+                pb->SetPDiskId(PDiskId);
+                pb->SetDDiskSlotId(DDiskSlotId);
+            }
+
+            friend std::strong_ordering operator <=>(const TDDiskId &x, const TDDiskId &y) { return x.GetKey() <=> y.GetKey(); }
+        };
+
         template<typename TKey, typename TValue>
         class TOverlayMap {
             using TBaseMap = TMap<TKey, THolder<TValue>>;

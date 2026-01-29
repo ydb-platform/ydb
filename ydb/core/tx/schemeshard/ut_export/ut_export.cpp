@@ -3,6 +3,7 @@
 #include <ydb/core/backup/common/encryption.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/metering/metering.h>
+#include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tablet_flat/shared_cache_events.h>
 #include <ydb/core/testlib/actors/block_events.h>
@@ -891,7 +892,7 @@ namespace {
 
             TestGetExport(Runtime(), txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
 
-            UNIT_ASSERT(HasS3File("/ExternalTable/create_external_table.sql"));
+            CheckPathWithChecksum("/ExternalTable/create_external_table.sql");
             const auto content = GetS3FileContent("/ExternalTable/create_external_table.sql");
 
             UNIT_ASSERT_C(content.find(expectedStartsWith) != TString::npos,
@@ -911,12 +912,57 @@ namespace {
                 static_cast<long>(expectedProperties.size()),
                 TStringBuilder() << "Properties count mismatch: ");
 
-            UNIT_ASSERT(HasS3File("/ExternalTable/permissions.pb"));
+            CheckPathWithChecksum("/ExternalTable/permissions.pb");
             const auto permissions = GetS3FileContent("/ExternalTable/permissions.pb");
             const auto permissions_expected = "actions {\n  change_owner: \"root@builtin\"\n}\n";
             UNIT_ASSERT_EQUAL_C(
                 permissions, permissions_expected,
                 TStringBuilder() << "\nExpected:\n\n" << permissions_expected << "\n\nActual:\n\n" << permissions);
+        }
+
+        void TestIcb() {
+            auto options = TTestEnvOptions()
+                .InitYdbDriver(true);
+            TTestEnv env(Runtime(), options);
+            ui64 txId = 100;
+
+            TestCreateReplication(Runtime(), ++txId, "/MyRoot", R"(
+                Name: "Replication"
+                Config {
+                    SrcConnectionParams {
+                        Endpoint: "localhost:2135"
+                        Database: "/MyRoot"
+                        StaticCredentials {
+                            User: "user"
+                            Password: "pwd"
+                            PasswordSecretName: "pwd-secret-name"
+                        }
+                    }
+                    Specific {
+                        Targets {
+                            SrcPath: "/MyRoot/Table1"
+                            DstPath: "/MyRoot/Table1Replica"
+                        }
+                    }
+                }
+            )");
+            env.TestWaitNotification(Runtime(), txId);
+
+            TString request = Sprintf(R"(
+                ExportToS3Settings {
+                    endpoint: "localhost:%d"
+                    scheme: HTTP
+                    items {
+                        source_path: "/MyRoot/Replication"
+                        destination_prefix: "Replication"
+                    }
+                }
+            )", S3Port());
+
+            TControlBoard::SetValue(0, Runtime().GetAppData().Icb->BackupControls.S3Controls.EnableAsyncReplicationExport);
+
+            TestExport(Runtime(), ++txId, "/MyRoot", request, "", "", Ydb::StatusIds::BAD_REQUEST);
+            env.TestWaitNotification(Runtime(), txId);
         }
 
     protected:
@@ -3925,7 +3971,9 @@ WITH (
             Columns { Name: "value2" Type: "Utf8" NotNull: true }
         )";
 
-        TString expectedStartsWith = R"(CREATE EXTERNAL TABLE IF NOT EXISTS `ExternalTable` (
+        TString expectedStartsWith = R"(-- database: "/MyRoot"
+-- backup root: "/MyRoot"
+CREATE EXTERNAL TABLE IF NOT EXISTS `ExternalTable` (
       key Uint64 NOT NULL,
     value1 Uint64?,
     value2 Utf8 NOT NULL
@@ -3937,6 +3985,10 @@ WITH (
         };
 
         TestExternalTable(scheme, expectedStartsWith, expectedProperties);
+    }
+
+    Y_UNIT_TEST(DisableIcb) {
+        TestIcb();
     }
 
 }

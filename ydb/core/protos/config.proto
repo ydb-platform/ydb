@@ -369,7 +369,8 @@ message TBlobStorageConfig {
     optional NKikimrBlobStorage.TBscConfig BscSettings = 12;
 
     optional uint64 BridgeSyncRateBytesPerSecond = 13 [default = 500000000]; // default 500 MB/s per node
- }
+    optional NKikimrBlobStorage.TInferPDiskSlotCountSettings InferPDiskSlotCountSettings = 14;
+}
 
 message TSelfManagementConfig {
     // whether the self management is enabled (through distconf)? (mandatory field)
@@ -2096,6 +2097,60 @@ message TImmediateControlsConfig {
         }];
     }
 
+    message TBackupControls {
+        message TBackupToS3Controls {
+            optional uint64 EnableAsyncReplicationExport = 1 [(ControlOptions) = {
+                Description: "Enable Async Replication export",
+                MinValue: 0,
+                MaxValue: 1,
+                DefaultValue: 1 }];
+
+            optional uint64 EnableAsyncReplicationImport = 2 [(ControlOptions) = {
+                Description: "Enable Async Replication import",
+                MinValue: 0,
+                MaxValue: 1,
+                DefaultValue: 1 }];
+
+            optional uint64 EnableTransferExport = 3 [(ControlOptions) = {
+                Description: "Enable Transfer export",
+                MinValue: 0,
+                MaxValue: 1,
+                DefaultValue: 1 }];
+
+            optional uint64 EnableTransferImport = 4 [(ControlOptions) = {
+                Description: "Enable Transfer import",
+                MinValue: 0,
+                MaxValue: 1,
+                DefaultValue: 1 }];
+
+            optional uint64 EnableExternalDataSourceExport = 5 [(ControlOptions) = {
+                Description: "Enable External Data Source export",
+                MinValue: 0,
+                MaxValue: 1,
+                DefaultValue: 1 }];
+
+            optional uint64 EnableExternalDataSourceImport = 6 [(ControlOptions) = {
+                Description: "Enable External Data Source import",
+                MinValue: 0,
+                MaxValue: 1,
+                DefaultValue: 1 }];
+
+            optional uint64 EnableExternalTableExport = 7 [(ControlOptions) = {
+                Description: "Enable External Table export",
+                MinValue: 0,
+                MaxValue: 1,
+                DefaultValue: 1 }];
+
+            optional uint64 EnableExternalTableImport = 8 [(ControlOptions) = {
+                Description: "Enable External Table import",
+                MinValue: 0,
+                MaxValue: 1,
+                DefaultValue: 1 }];
+        }
+
+        optional TBackupToS3Controls S3Controls = 1;
+    }
+
     optional TDataShardControls DataShardControls = 1;
     optional TTxLimitControls TxLimitControls = 2;
     optional TCoordinatorControls CoordinatorControls = 3;
@@ -2114,6 +2169,7 @@ message TImmediateControlsConfig {
     optional TKQPSessionControls KQPSessionControls = 16;
     optional TColumnShardControls ColumnShardControls = 17;
     optional TGroupMapperControls GroupMapperControls = 18;
+    optional TBackupControls BackupControls = 19;
 };
 
 message TMeteringConfig {
@@ -2351,6 +2407,7 @@ message THiveConfig {
     optional uint64 BalanceCountersRefreshFrequency = 88 [default = 15000]; // milliseconds
     optional bool LockedTabletsSendMetrics = 89 [default = false]; // if true then hive will process metrics from locked tablets
     optional uint64 MaxDeleteTabletInProgress = 90 [default = 100];
+    optional uint64 DataCenterChangeReactionPeriod = 91 [default = 1]; // seconds
 }
 
 message THealthCheckConfig {
@@ -2829,6 +2886,18 @@ message TAwsClientConfig {
 
     // Logging options
     optional TLogConfig LogConfig = 1;
+
+    // Default connection settings
+    optional bool VerifySSL = 2 [default = true];
+    optional uint32 RequestTimeoutMs = 3;
+    optional uint32 HttpRequestTimeoutMs = 4;
+    optional uint32 ConnectionTimeoutMs = 5 [default = 10000];
+    optional bool EnableTcpKeepAlive = 6 [default = true];
+    optional uint32 TcpKeepAliveIntervalMs = 7;
+    optional uint32 MaxConnectionsCount = 8 [default = 32];
+    optional uint32 ExecutorThreadsCount = 9 [default = 32];
+    optional string CaPath = 10 [default = "/etc/ssl/certs"];
+    optional string CaFile = 11;
 }
 
 message TMetadataCacheConfig {

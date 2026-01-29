@@ -809,6 +809,8 @@ message TKqpTableSinkSettings {
         MODE_DELETE = 3;
         MODE_UPDATE = 4;
         MODE_FILL = 5;
+        MODE_UPDATE_CONDITIONAL = 6; // UPDATE WHERE
+        MODE_UPSERT_INCREMENT = 7;
     }
 
     optional NKqpProto.TKqpPhyTableId Table = 3;
@@ -831,6 +833,7 @@ message TKqpTableSinkSettings {
     repeated TKqpColumnMetadataProto LookupColumns = 20;
     optional bool IsIndexImplTable = 21;
     optional string Database = 22;
+    repeated uint32 DefaultColumnsIds = 23;
 }
 
 message TReadVectorTopK {

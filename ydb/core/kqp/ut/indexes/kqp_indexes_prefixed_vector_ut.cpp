@@ -327,7 +327,6 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
 
     void DoTestOrderByCosine(ui32 indexLevels, int flags) {
         NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableVectorIndex(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetFeatureFlags(featureFlags)
@@ -424,7 +423,6 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
 
     void DoTestPrefixedVectorIndexInsert(int flags) {
         NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableVectorIndex(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetFeatureFlags(featureFlags)
@@ -502,7 +500,6 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
 
     void DoTestPrefixedVectorIndexInsertNewPrefix(int flags) {
         NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableVectorIndex(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetFeatureFlags(featureFlags)
@@ -597,7 +594,6 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
 
     void DoTestPrefixedVectorEmptyIndexedTableInsert(int flags) {
         NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableVectorIndex(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetFeatureFlags(featureFlags)
@@ -642,7 +638,6 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
     // Same as PrefixedVectorEmptyIndexedTableInsert, but the index is created separately after creating the table
     void DoTestEmptyPrefixedVectorIndexInsert(int flags) {
         NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableVectorIndex(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetFeatureFlags(featureFlags)
@@ -686,7 +681,6 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
 
     void DoTestPrefixedVectorIndexDelete(const TString& deleteQuery, int flags) {
         NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableVectorIndex(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetFeatureFlags(featureFlags)
@@ -756,7 +750,6 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
 
     void DoTestPrefixedVectorIndexUpdateNoChange(int flags) {
         NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableVectorIndex(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetFeatureFlags(featureFlags)
@@ -796,7 +789,6 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
 
     void DoTestPrefixedVectorIndexUpdateNoClusterChange(int flags) {
         NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableVectorIndex(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetFeatureFlags(featureFlags)
@@ -839,7 +831,6 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
 
     void DoTestPrefixedVectorIndexUpdateClusterChange(const TString& updateQuery, int flags) {
         NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableVectorIndex(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetFeatureFlags(featureFlags)

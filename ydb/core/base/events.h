@@ -195,6 +195,7 @@ struct TKikimrEvents : TEvents {
         ES_COUNTERS_INFO = 4272,
         ES_SASL_AUTH = 4273,
         ES_DDISK = 4274,
+        ES_NBS_V2 = 4275,
     };
 };
 

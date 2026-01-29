@@ -58,8 +58,8 @@ public:
     TCpuProfilerTagGuard(TCpuProfilerTagGuard&& other);
     TCpuProfilerTagGuard(const TCpuProfilerTagGuard& other) = delete;
 
-    TCpuProfilerTagGuard& operator = (TCpuProfilerTagGuard&& other);
-    TCpuProfilerTagGuard& operator = (const TCpuProfilerTagGuard& other) = delete;
+    TCpuProfilerTagGuard& operator=(TCpuProfilerTagGuard&& other);
+    TCpuProfilerTagGuard& operator=(const TCpuProfilerTagGuard& other) = delete;
 
 private:
     int TagIndex_ = -1;

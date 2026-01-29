@@ -1245,7 +1245,7 @@ TMaybe<NUdf::TUnboxedValue> ParseYsonValue(const THolderFactory& holderFactory,
     try {
         class TReader: public IBlockReader {
         public:
-            TReader(const TStringBuf& yson)
+            explicit TReader(const TStringBuf& yson)
                 : Yson_(yson)
             {
             }

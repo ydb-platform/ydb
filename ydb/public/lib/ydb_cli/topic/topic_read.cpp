@@ -239,10 +239,14 @@ namespace NYdb::NConsoleClient {
     int TTopicReader::HandleStartPartitionSessionEvent(NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent* event) {
         const std::optional<uint64_t> readOffset = GetNextReadOffset(event->GetPartitionSession()->GetPartitionId());
         event->Confirm(readOffset);
+        FirstPartitionSessionCreated = true;
 
         EReadingStatus readingStatus = EReadingStatus::PartitionWithData;
         if (event->GetCommittedOffset() == event->GetEndOffset() || (readOffset.has_value() && readOffset.value() >= event->GetEndOffset())) {
             readingStatus = EReadingStatus::PartitionWithoutData;
+            if (PartitionsBeingRead_ == 0) {
+                AllPartitionsAreFullyReadTime = TInstant::Now();
+            }
         } else {
             ++PartitionsBeingRead_;
         }
@@ -288,6 +292,9 @@ namespace NYdb::NConsoleClient {
             }
             ActivePartitionSessions_[sessionId].ReadingStatus = EReadingStatus::PartitionWithData;
         }
+        if (PartitionsBeingRead_ == 0) {
+            AllPartitionsAreFullyReadTime = TInstant::Now();
+        }
 
         return EXIT_SUCCESS;
     }
@@ -304,7 +311,9 @@ namespace NYdb::NConsoleClient {
             --PartitionsBeingRead_;
         }
         ActivePartitionSessions_.erase(event->GetPartitionSession()->GetPartitionSessionId());
-
+        if (PartitionsBeingRead_ == 0) {
+            AllPartitionsAreFullyReadTime = TInstant::Now();
+        }
         return EXIT_SUCCESS;
     }
 
@@ -317,7 +326,9 @@ namespace NYdb::NConsoleClient {
             --PartitionsBeingRead_;
         }
         ActivePartitionSessions_.erase(event->GetPartitionSession()->GetPartitionSessionId());
-
+        if (PartitionsBeingRead_ == 0) {
+            AllPartitionsAreFullyReadTime = TInstant::Now();
+        }
         return EXIT_SUCCESS;
     }
 
@@ -362,13 +373,18 @@ namespace NYdb::NConsoleClient {
         }
 
         TInstant runStartTime = TInstant::Now();
+        TDuration waitForPartitionSessionStart = Max(TDuration::Seconds(30), ReaderParams_.IdleTimeout());
         while ((MessagesLeft_ > 0 || MessagesLeft_ == -1) && !IsInterrupted()) {
             TInstant messageReceiveDeadline = LastMessageReceivedTs_ + TDuration::MilliSeconds(100);
             NThreading::TFuture<void> future = ReadSession_->WaitEvent();
             future.Wait(messageReceiveDeadline);
 
-            if (!HasFirstMessage_ && (TInstant::Now() - runStartTime > ReaderParams_.IdleTimeout())) {
+            if (!FirstPartitionSessionCreated && (TInstant::Now() - runStartTime > waitForPartitionSessionStart)) {
+                Cerr << "There isn't any successfully initialized partition session after 30s.";
                 return EXIT_FAILURE;
+            }
+            if (!PartitionsBeingRead_ && AllPartitionsAreFullyReadTime.has_value() && (TInstant::Now() - *AllPartitionsAreFullyReadTime > ReaderParams_.IdleTimeout())) {
+                return EXIT_SUCCESS;
             }
 
             if (future.HasValue()) {
@@ -386,10 +402,6 @@ namespace NYdb::NConsoleClient {
             if (waitForever) {
                 LastMessageReceivedTs_ = TInstant::Now();
                 continue;
-            }
-
-            if (PartitionsBeingRead_ == 0) {
-                return EXIT_SUCCESS;
             }
         }
         return EXIT_SUCCESS;

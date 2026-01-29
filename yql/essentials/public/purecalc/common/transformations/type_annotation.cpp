@@ -18,7 +18,7 @@ class TTypeAnnotatorBase: public TSyncTransformerBase {
 public:
     using THandler = std::function<TStatus(const TExprNode::TPtr&, TExprNode::TPtr&, TExprContext&)>;
 
-    TTypeAnnotatorBase(TTypeAnnotationContextPtr typeAnnotationContext)
+    explicit TTypeAnnotatorBase(TTypeAnnotationContextPtr typeAnnotationContext)
     {
         OriginalTransformer_.reset(CreateExtCallableTypeAnnotationTransformer(*typeAnnotationContext).Release());
     }

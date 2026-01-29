@@ -49,7 +49,7 @@ public:
 template <>
 struct THash<NYT::NDetail::TConnectionCacheKey>
 {
-    size_t operator() (const NYT::NDetail::TConnectionCacheKey& key) const
+    size_t operator()(const NYT::NDetail::TConnectionCacheKey& key) const
     {
         using NYT::HashCombine;
         size_t result = 0;

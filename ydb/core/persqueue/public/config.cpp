@@ -1,5 +1,7 @@
 #include "config.h"
+#include "constants.h"
 
+#include <ydb/core/base/appdata.h>
 #include <util/generic/hash_set.h>
 #include <util/string/printf.h>
 #include <ydb/core/protos/pqconfig.pb.h>
@@ -57,6 +59,10 @@ namespace NPQ {
 bool IsQuotingEnabled(const NKikimrPQ::TPQConfig& pqConfig, bool isLocalDC) {
     const auto& quotingConfig = pqConfig.GetQuotingConfig();
     return isLocalDC && quotingConfig.GetEnableQuoting() && !pqConfig.GetTopicsAreFirstClassCitizen();
+}
+
+bool DetailedMetricsAreEnabled(const NKikimrPQ::TPQTabletConfig& config) {
+    return AppData()->FeatureFlags.GetEnableMetricsLevel() && config.HasMetricsLevel() && config.GetMetricsLevel() == METRICS_LEVEL_DETAILED;
 }
 
 }

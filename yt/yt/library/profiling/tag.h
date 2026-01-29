@@ -121,7 +121,7 @@ void RangeSubsets(
     TFn fn);
 
 TTagIdList  operator +  (const TTagIdList& a, const TTagIdList& b);
-TTagIdList& operator += (TTagIdList& a, const TTagIdList& b);
+TTagIdList& operator+=(TTagIdList& a, const TTagIdList& b);
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -112,6 +112,8 @@ namespace NYdb::NConsoleClient {
         TVector<TReceivedMessage> ReceivedMessages_;
 
         ui32 PartitionsBeingRead_ = 0;
+        bool FirstPartitionSessionCreated = false;
+        std::optional<TInstant> AllPartitionsAreFullyReadTime;
 
         friend class TTopicReaderTests;
 

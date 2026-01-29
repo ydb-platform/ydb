@@ -88,6 +88,10 @@ TAutoPtr<IGraphTransformer> CreateKqpCheckPhysicalQueryTransformer() {
                     const auto& stageConsumers = GetConsumers(stage, parentsMap);
                     bool stageWithResult = false;
 
+                    // Allowed stage consumers:
+                    // - Multiple DQ output channels
+                    // - Multiple sink effects
+
                     TDynBitMap usedOutputs;
                     for (auto consumer : stageConsumers) {
                         if (auto maybeOutput = TExprBase(consumer).Maybe<TDqOutput>()) {
@@ -102,26 +106,32 @@ TAutoPtr<IGraphTransformer> CreateKqpCheckPhysicalQueryTransformer() {
                             }
                             usedOutputs.Set(outputIndex);
                         } else {
-                            // There can be also an effect with stage that has dq sinks
+                            // There can be also an effect(s) with stage that has dq sinks
                             // Check the following structure:
                             // TKqlQuery (tuple with 2 elems) - results and effects
-                            auto stageParentsIt = parentsMap.find(stage.Raw());
-                            YQL_ENSURE(stageParentsIt != parentsMap.end());
-                            if (stageParentsIt->second.size() != 1) {
+                            auto effectParentIt = parentsMap.find(consumer);
+                            YQL_ENSURE(effectParentIt != parentsMap.end());
+                            if (effectParentIt->second.size() != 1) {
                                 hasMultipleConsumers = true;
                             } else {
-                                const TExprNode* effectNode = *stageParentsIt->second.begin();
-                                auto effectParentIt = parentsMap.find(effectNode);
-                                YQL_ENSURE(effectParentIt != parentsMap.end());
-                                if (effectParentIt->second.size() != 1) {
-                                    hasMultipleConsumers = true;
-                                } else {
-                                    const TExprNode* queryNode = *effectParentIt->second.begin();
-                                    YQL_ENSURE(queryNode->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Tuple,
-                                        "Stage #" << PrintKqpStageOnly(stage, ctx) << " has unexpected consumer: "
-                                            << consumer->Content());
-                                }
+                                const TExprNode* queryNode = *effectParentIt->second.begin();
+                                YQL_ENSURE(queryNode->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Tuple,
+                                    "Stage #" << PrintKqpStageOnly(stage, ctx) << " has unexpected consumer: "
+                                        << consumer->Content());
                             }
+                        }
+                    }
+
+                    if (const auto outputs = stage.Outputs()) {
+                        for (const auto& output : outputs.Cast()) {
+                            const auto outputIndex = FromString<ui32>(output.Index().Value());
+                            if (usedOutputs.Test(outputIndex)) {
+                                hasMultipleConsumers = true;
+                                YQL_CLOG(ERROR, ProviderKqp) << "Stage #" << node.Ref().UniqueId()
+                                    << ", output " << outputIndex << " has multiple consumers (output used by channel and sink)";
+                                return false;
+                            }
+                            usedOutputs.Set(outputIndex);
                         }
                     }
 

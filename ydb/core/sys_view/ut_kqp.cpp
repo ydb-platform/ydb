@@ -1339,7 +1339,7 @@ R"(CREATE TEMPORARY TABLE `test_show_create` (
                 Text String,
                 Data String,
                 PRIMARY KEY (Key),
-                INDEX fulltext_idx GLOBAL USING fulltext ON (Text) WITH (layout=flat, tokenizer=standard, use_filter_lowercase=true, use_filter_length=true, filter_length_min=3)
+                INDEX fulltext_idx GLOBAL USING fulltext_plain ON (Text) WITH (tokenizer=standard, use_filter_lowercase=true, use_filter_length=true, filter_length_min=3)
             );
             ALTER TABLE test_show_create ADD INDEX Index2 GLOBAL SYNC ON (Data);
         )", "test_show_create");
@@ -3072,7 +3072,6 @@ R"(CREATE TABLE `test_show_create` (
                     DecommitStatus,
                     ExpectedSlotCount,
                     Guid,
-                    InferPDiskSlotCountFromUnitSize,
                     Kind,
                     NodeId,
                     NumActiveSlots,
@@ -3102,14 +3101,13 @@ R"(CREATE TABLE `test_show_create` (
             }
         }
 
-        TYsonFieldChecker check(ysonString, 19);
+        TYsonFieldChecker check(ysonString, 18);
 
         check.Uint64(0u); // AvailableSize
         check.Uint64(999u); // BoxId
         check.String("DECOMMIT_NONE"); // DecommitStatus
         check.Uint64(16); // ExpectedSlotCount
         check.Uint64(123u); // Guid
-        check.Uint64(0); // InferPDiskSlotCountFromUnitSize
         check.Uint64(0u); // Kind
         check.Uint64(env.GetServer().GetRuntime()->GetNodeId(0)); // NodeId
         check.Uint64(2); // NumActiveSlots

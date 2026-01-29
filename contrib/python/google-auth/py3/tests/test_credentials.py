@@ -14,8 +14,9 @@
 
 import datetime
 import os
+from unittest import mock
 
-import mock
+
 import pytest  # type: ignore
 
 from google.auth import _helpers
@@ -26,7 +27,7 @@ from google.oauth2 import _client
 
 
 class CredentialsImpl(credentials.CredentialsWithTrustBoundary):
-    def _refresh_token(self, request):
+    def _perform_refresh_token(self, request):
         self.token = "refreshed-token"
         self.expiry = (
             datetime.datetime.utcnow()

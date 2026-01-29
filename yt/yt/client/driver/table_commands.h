@@ -67,6 +67,7 @@ class TReadTablePartitionCommand
 
 private:
     std::string Cookie;
+    NFormats::TControlAttributesConfigPtr ControlAttributes;
 
     void DoExecute(ICommandContextPtr context) override;
 };

@@ -14,7 +14,6 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/deprecated/atomic
     library/cpp/http/io
     library/cpp/string_utils/base64
     library/cpp/string_utils/quote

@@ -39,10 +39,7 @@ ui32 GetHandoff(TErasureType::EErasureSpecies species) {
     static const std::unordered_map<TErasureType::EErasureSpecies, TBlobStorageErasureParameters>
             blobStorageGroupErasureSpeciesParameters{{
         {TErasureType::EErasureSpecies::ErasureNone,          {0}}
-        ,{TErasureType::EErasureSpecies::ErasureMirror3,      {1}}
-        ,{TErasureType::EErasureSpecies::Erasure3Plus1Block,  {1}}
         ,{TErasureType::EErasureSpecies::Erasure4Plus2Block,  {2}}
-        ,{TErasureType::EErasureSpecies::Erasure3Plus2Block,  {2}}
         ,{TErasureType::EErasureSpecies::ErasureMirror3dc,    {6}}
         ,{TErasureType::EErasureSpecies::Erasure4Plus3Block,  {3}}
         ,{TErasureType::EErasureSpecies::Erasure3Plus3Block,  {3}}

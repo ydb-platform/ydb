@@ -52,7 +52,7 @@ std::shared_ptr<arrow::StructType> MakeTzDateArrowType() {
 
 class TArrowType: public NUdf::IArrowType {
 public:
-    TArrowType(const std::shared_ptr<arrow::DataType>& type)
+    explicit TArrowType(const std::shared_ptr<arrow::DataType>& type)
         : Type_(type)
     {
     }
@@ -280,7 +280,7 @@ ui64 CalcMaxBlockLength(T beginIt, T endIt, const NUdf::ITypeInfoHelper& helper)
 
 class TTypeBuilder: public TMoveOnly {
 public:
-    TTypeBuilder(const TTypeEnvironment& env)
+    explicit TTypeBuilder(const TTypeEnvironment& env)
         : Env_(env)
         , Env(env)
         , UseNullType(UseNullType_)

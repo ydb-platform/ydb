@@ -85,11 +85,11 @@ def parse_fontconfig_pattern(pattern):
     """
     parser = _make_fontconfig_parser()
     try:
-        parse = parser.parseString(pattern)
+        parse = parser.parse_string(pattern)
     except ParseException as err:
         # explain becomes a plain method on pyparsing 3 (err.explain(0)).
         raise ValueError("\n" + ParseException.explain(err, 0)) from None
-    parser.resetCache()
+    parser.reset_cache()
     props = {}
     if "families" in parse:
         props["family"] = [*map(_family_unescape, parse["families"])]

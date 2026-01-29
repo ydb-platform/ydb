@@ -73,6 +73,7 @@ IF (OPENSOURCE_PROJECT != "yt")
         network
         oom_helper
         signals
+        string
         sys
         test_http_server
         threading

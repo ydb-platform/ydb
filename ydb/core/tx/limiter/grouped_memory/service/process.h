@@ -164,6 +164,8 @@ public:
     bool HasWaitingAllocations() const {
         return !WaitAllocations.IsEmpty();
     }
+
+    TString DebugString() const;
 };
 
 class TProcessMemoryUsage {
@@ -361,6 +363,8 @@ public:
         }
         WaitingScopes.erase(scope->GetExternalScopeId());
     }
+    
+    TString DebugString() const;
 };
 
 }   // namespace NKikimr::NOlap::NGroupedMemoryManager

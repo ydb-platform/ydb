@@ -22,6 +22,8 @@
 #include <util/system/mutex.h>
 #include <yql/essentials/utils/yql_panic.h>
 
+#include <coroutine>
+
 namespace NKikimr {
 namespace NMiniKQL {
 
@@ -29,6 +31,92 @@ using NUdf::TUnboxedValue;
 using NUdf::TUnboxedValuePod;
 
 namespace {
+
+struct TCoroTask
+{
+    struct promise_type;
+    using handle_type = std::coroutine_handle<promise_type>;
+
+    struct promise_type
+    {
+        std::exception_ptr Exception;
+
+        TCoroTask get_return_object() {
+            return TCoroTask(handle_type::from_promise(*this));
+        }
+
+        std::suspend_never initial_suspend() {
+            return {};
+        }
+
+        std::suspend_always final_suspend() noexcept {
+            return {};
+        }
+
+        void return_void() {
+        }
+
+        void unhandled_exception() {
+            Exception = std::current_exception();
+        }
+
+        std::suspend_always yield_value([[maybe_unused]] std::suspend_always) {
+            // suspend_always is just a marker because we have to yield something from the coroutine
+            return {};
+        }
+    };
+
+    handle_type Handle;
+
+    TCoroTask(handle_type handle)
+        : Handle(handle)
+    {
+    }
+
+    TCoroTask(const TCoroTask&) = delete;
+    TCoroTask& operator=(const TCoroTask&) = delete;
+
+    TCoroTask(TCoroTask&& other) noexcept
+        : Handle(other.Handle)
+    {
+        other.Handle = nullptr;
+    }
+
+    TCoroTask& operator=(TCoroTask&& other) noexcept
+    {
+        if (this != &other) {
+            MKQL_ENSURE(Handle, "The previous async task is still active");
+            Handle = other.Handle;
+            other.Handle = nullptr;
+        }
+        return *this;
+    }
+
+    ~TCoroTask()
+    {
+        if (Handle) {
+            Handle.destroy();
+        }
+    }
+
+    bool Done() {
+        return !Handle || Handle.done();
+    }
+
+    bool operator()()
+    {
+        if (Done()) {
+            return false;
+        }
+        Handle();
+        if (Handle.promise().Exception) {
+            auto exc = Handle.promise().Exception;
+            Handle.promise().Exception = nullptr;
+            std::rethrow_exception(exc);
+        }
+        return !Handle.done();
+    }
+};
 
 bool HasMemoryForProcessing() {
     return !TlsAllocState->IsMemoryYellowZoneEnabled();
@@ -161,9 +249,10 @@ struct TSegmentedArena
         UsedMem -= AllocSize;
     }
 
+    // Iterate all entries ignoring tags
     TIterator Iterator() {
         return TIterator {
-            .Valid = (Pages.begin() != LastUsedPage),
+            .Valid = (Pages.begin() != LastUsedPage) && (Pages.begin()->Used > 0),
             .Page = Pages.begin(),
             .PageEnd = LastUsedPage,
             .Index = 0u,
@@ -532,7 +621,7 @@ protected:
 
     ISpiller::TPtr Spiller;
 
-    void InitiateSpilling()
+    TCoroTask InitiateSpillingAsync()
     {
         if (!Spiller) {
             Spiller = Ctx.SpillerFactory->CreateSpiller();
@@ -569,6 +658,9 @@ protected:
                     if (!pageFuture.has_value()) {
                         continue;
                     }
+                    while (!pageFuture->HasValue()) {
+                        co_yield {};
+                    }
                     spiller.AsyncWriteCompleted(pageFuture->ExtractValue());
                     ++totalFlushed;
                 }
@@ -577,6 +669,9 @@ protected:
             auto finishFuture = spiller.FinishWriting();
             if (finishFuture.has_value()) {
                 ++totalFlushed;
+                while (!finishFuture->HasValue()) {
+                    co_yield {};
+                }
                 spiller.AsyncWriteCompleted(finishFuture->ExtractValue());
             }
         }
@@ -585,12 +680,14 @@ protected:
         Store->Format(NumBuckets, sizeof(TUnboxedValuePod) * InputUnpackedWidth);
     }
 
-    void FlushSpillingInput()
+    [[nodiscard]] bool InitiateSpilling()
     {
-        if (SpillingStack.empty()) {
-            return;
-        }
+        CurrentAsyncTask = InitiateSpillingAsync();
+        return NeedYieldToAsyncTask();
+    }
 
+    TCoroTask FlushSpillingInputAsync()
+    {
         MKQL_ENSURE(!!Spiller, "Spiller must have been created");
 
         [[maybe_unused]] size_t totalWritten = 0;
@@ -613,6 +710,9 @@ protected:
                         continue;
                     }
                     ++totalFlushed;
+                    while (!pageFuture->HasValue()) {
+                        co_yield {};
+                    }
                     spiller.AsyncWriteCompleted(pageFuture->ExtractValue());
                 }
                 page = page->Prev;
@@ -620,6 +720,9 @@ protected:
             auto finishFuture = spiller.FinishWriting();
             if (finishFuture.has_value()) {
                 ++totalFlushed;
+                while (!finishFuture->HasValue()) {
+                    co_yield {};
+                }
                 spiller.AsyncWriteCompleted(finishFuture->ExtractValue());
             }
         }
@@ -627,7 +730,16 @@ protected:
         Store->Format(NumBuckets, sizeof(TUnboxedValuePod) * InputUnpackedWidth);
     }
 
-    bool HasPendindSpillingBuckets()
+    [[nodiscard]] bool FlushSpillingInput()
+    {
+        if (SpillingStack.empty()) {
+            return false;
+        }
+        CurrentAsyncTask = FlushSpillingInputAsync();
+        return NeedYieldToAsyncTask();
+    }
+
+    bool HasPendingSpillingBuckets()
     {
         if (SpillingStack.empty()) {
             return false;
@@ -635,7 +747,7 @@ protected:
         return SpillingStack.back().CurrentBucket < NumBuckets;
     }
 
-    void ReadBackNextSpillingBucket()
+    TCoroTask ReadBackNextSpillingBucketAsync()
     {
         // Run aggregation on a single bucket
 
@@ -666,6 +778,9 @@ protected:
 
                 auto readFuture = stateSpiller.ExtractWideItem(keyAndStateArr);
                 if (readFuture.has_value()) [[unlikely]] {
+                    while (!readFuture->HasValue()) {
+                        co_yield {};
+                    }
                     auto stuff = readFuture->ExtractValueSync();
                     MKQL_ENSURE(stuff.has_value(), "A spilled blob is missing while reading back the aggregation state");
                     stateSpiller.AsyncReadCompleted(std::move(stuff.value()), Ctx.HolderFactory);
@@ -696,7 +811,10 @@ protected:
             while (!inputSpiller.Empty()) {
                 auto readFuture = inputSpiller.ExtractWideItem(inputArr);
                 if (readFuture.has_value()) {
-                    auto stuff = readFuture->ExtractValueSync();
+                    while (!readFuture->HasValue()) {
+                        co_yield {};
+                    }
+                    auto stuff = readFuture->ExtractValue();
                     MKQL_ENSURE(stuff.has_value(), "A spilled blob is missing while reading back spilled input rows");
                     inputSpiller.AsyncReadCompleted(std::move(stuff.value()), Ctx.HolderFactory);
                     continue;
@@ -755,6 +873,22 @@ protected:
         }
 
         ++currentSpill.CurrentBucket;
+        DrainArenaIterator = Store->Iterator();
+    }
+
+    [[nodiscard]] bool ReadBackNextSpillingBucket()
+    {
+        CurrentAsyncTask = ReadBackNextSpillingBucketAsync();
+        return NeedYieldToAsyncTask();
+    }
+
+    bool NeedYieldToAsyncTask()
+    {
+        if (!CurrentAsyncTask->Done()) {
+            return true;
+        }
+        CurrentAsyncTask = {};
+        return false;
     }
 
     void CheckAutoGrowMap(const bool hasMemoryForProcessing)
@@ -814,7 +948,9 @@ protected:
             }
             // TODO: GetUsedItems actually. Maybe with an estimation of the actual memory size adjusted for non-embedded values.
             if (!HasMemoryForProcessing() && Store->GetUsedMem() > StorageArenaMinSize) {
-                FlushSpillingInput();
+                if (FlushSpillingInput()) {
+                    return EFillState::Yield;
+                }
             }
             return EFillState::ContinueFilling;
         }
@@ -878,10 +1014,14 @@ protected:
 
         if (!canFitMoreKeys()) {
             if (!IsAggregation) {
-                OpenDrain();
+                if (OpenDrain()) {
+                    return EFillState::Yield;
+                }
                 return EFillState::Drain;
             } else if (EnableSpilling) {
-                InitiateSpilling();
+                if (InitiateSpilling()) {
+                    return EFillState::Yield;
+                }
                 return EFillState::ContinueFilling;
             } else {
                 throw TMemoryLimitExceededException();
@@ -891,7 +1031,9 @@ protected:
         if (IsAggregation && EnableSpilling && SpillingTime()) {
             // The SpillingTime() limit is presumably lower than the yellow zone
             // so it can trigger separately, earlier than !HasMemoryForProcessing()
-            InitiateSpilling();
+            if (InitiateSpilling()) {
+                return EFillState::Yield;
+            }
         }
 
         return EFillState::ContinueFilling;
@@ -997,6 +1139,17 @@ public:
         return SourceEmpty;
     }
 
+    bool RunCurrentAsyncTask() {
+        if (!CurrentAsyncTask.has_value()) {
+            return false;
+        }
+        bool stillRunning = (*CurrentAsyncTask)();
+        if (!stillRunning) {
+            CurrentAsyncTask = {};
+        }
+        return stillRunning;
+    }
+
     virtual ~TBaseAggregationState() {
         if (ForLLVM) {
             // LLVM code doesn't ref inputs so we need to just forget the contents of the input buffer without unref-ing
@@ -1008,7 +1161,7 @@ public:
         CleanupCurrentContext();
     }
 
-    virtual bool TryDrain(TUnboxedValue* const* output) = 0;
+    virtual NUdf::EFetchStatus TryDrain(TUnboxedValue* const* output) = 0;
     virtual TUnboxedValue* const* GetInputBuffer() = 0;
     virtual TUnboxedValueVector& GetDenseInputBuffer() = 0;
     virtual EFillState ProcessInput(EFillState sourceState) = 0;
@@ -1113,30 +1266,34 @@ protected:
         Store->Format(EnableSpilling ? NumBuckets : 1, sizeof(TUnboxedValuePod) * KeysAndStatesWidth);
     }
 
-    void OpenDrain() {
+    [[nodiscard]] bool OpenDrain() {
+        // This can start an async task which gets completed after another call to ProcessInput()
+        // So we must yield if OpenDrain() returns true
         if (!SourceEmpty && IsEstimating && Map->GetSize() > 0) {
             UpdateRowLimitFromSample();
         }
-        FlushSpillingInput();
         Draining = true;
         if (!IsAggregation || SpillingStack.empty()) {
             DrainArenaIterator = Store->Iterator();
+        } else {
+            DrainArenaIterator = {};
         }
+        return FlushSpillingInput();
     }
 
-
-    bool CheckRefillFromPendingBuckets()
+    [[nodiscard]] bool CheckRefillFromPendingBuckets()
     {
-        if (DrainArenaIterator.Valid) {
-            return true;
-        } else if (SpillingStack.empty()) {
+        if (SpillingStack.empty()) {
             return false;
         }
 
-        while (HasPendindSpillingBuckets()) {
-            ReadBackNextSpillingBucket();
-            DrainArenaIterator = Store->Iterator();
-            return true;
+        while (HasPendingSpillingBuckets()) {
+            if (ReadBackNextSpillingBucket()) {
+                return true;
+            }
+            if (DrainArenaIterator.Valid) {
+                break;
+            }
         }
 
         return false;
@@ -1182,6 +1339,8 @@ protected:
 
     const TMemoryEstimationHelper& MemoryHelper;
 
+    TUnboxedValueVector EmptyUVs;
+
     size_t MemoryLimit;
     const bool ForLLVM;
     const bool IsAggregation;
@@ -1218,6 +1377,8 @@ protected:
     size_t StatesOffset;
     bool Draining;
     bool SourceEmpty;
+
+    std::optional<TCoroTask> CurrentAsyncTask;
 };
 
 class TWideAggregationState: public TBaseAggregationState
@@ -1289,32 +1450,35 @@ public:
             return sourceState;
         } else if (sourceState == EFillState::SourceEmpty) {
             SourceEmpty = true;
-            OpenDrain();
+            if (OpenDrain()) {
+                return EFillState::Yield;
+            }
             return EFillState::SourceEmpty;
+        } else if (sourceState == EFillState::SourceSkipped) {
+            MKQL_ENSURE(CurrentAsyncTask.has_value(), "Not waiting for an async task but no output buffer provided");
+            return EFillState::Yield;
         }
 
         ++InputRows;
         return ProcessFetchedRow(Ctx.WideFields.data() + WideFieldsIndex);
     }
 
-    bool TryDrain(NUdf::TUnboxedValue* const* outputPtrs) override {
+    NUdf::EFetchStatus TryDrain(NUdf::TUnboxedValue* const* outputPtrs) override {
         return TryDrainInternal(outputPtrs);
     }
 
     // Drain from the internal buffer
-    bool TryDrainDirect() {
+    NUdf::EFetchStatus TryDrainDirect() {
         return TryDrainInternal(OutputPtrs.data());
     }
 
-    bool TryDrainInternal(NUdf::TUnboxedValue* const* outputPtrs) {
+    NUdf::EFetchStatus TryDrainInternal(NUdf::TUnboxedValue* const* outputPtrs) {
         void* tuple = DrainArenaIterator.Next();
         if (!tuple) {
-            while (CheckRefillFromPendingBuckets()) {
-                tuple = DrainArenaIterator.Next();
-                if (tuple) {
-                    break;
-                }
+            if (CheckRefillFromPendingBuckets()) {
+                return NUdf::EFetchStatus::Yield;
             }
+            tuple = DrainArenaIterator.Next();
         }
 
         if (!tuple) {
@@ -1325,7 +1489,7 @@ public:
                 Store->Clear();
             }
             Draining = false;
-            return false;
+            return NUdf::EFetchStatus::Finish;
         }
 
         const auto key = static_cast<TUnboxedValuePod*>(tuple);
@@ -1356,7 +1520,7 @@ public:
             }
         }
 
-        return true;
+        return NUdf::EFetchStatus::Ok;
     }
 
 private:
@@ -1486,13 +1650,17 @@ public:
                 return fetchResult;
             } else if (fetchResult == EFillState::SourceEmpty) {
                 SourceEmpty = true;
-                OpenDrain();
+                if (OpenDrain()) {
+                    return EFillState::Yield;
+                }
                 return fetchResult;
             }
 
             if (!OpenBlock()) {
                 return EFillState::ContinueFilling;
             }
+        } else if (CurrentAsyncTask.has_value()) {
+            return EFillState::Yield;
         }
 
         MKQL_ENSURE(!Draining && !SourceEmpty, "Can't fill while draining or when the source is exhausted");
@@ -1518,15 +1686,15 @@ public:
         return ProcessFetchedRow(RowBufferPointers.data());
     }
 
-    bool TryDrain(NUdf::TUnboxedValue* const* output) override {
+    NUdf::EFetchStatus TryDrain(NUdf::TUnboxedValue* const* output) override {
         return TryDrainInternal(output);
     }
 
-    bool TryDrainDirect() {
+    NUdf::EFetchStatus TryDrainDirect() {
         return TryDrainInternal(DrainBufferPointers.data());
     }
 
-    bool TryDrainInternal(NUdf::TUnboxedValue* const* output) {
+    NUdf::EFetchStatus TryDrainInternal(NUdf::TUnboxedValue* const* output) {
         MKQL_ENSURE(IsDraining(), "Cannot call TryDrain() unless IsDraining()");
 
         TTypeInfoHelper helper;
@@ -1542,12 +1710,10 @@ public:
         while (currentBlockSize < MaxOutputBlockLen) {
             tuple = DrainArenaIterator.Next();
             if (!tuple) {
-                while (CheckRefillFromPendingBuckets()) {
-                    tuple = DrainArenaIterator.Next();
-                    if (tuple) {
-                        break;
-                    }
+                if (CheckRefillFromPendingBuckets()) {
+                    return NUdf::EFetchStatus::Yield;
                 }
+                tuple = DrainArenaIterator.Next();
             }
 
             if (!tuple) {
@@ -1607,16 +1773,14 @@ public:
                 Map.Reset();
                 Store->Clear();
             }
-            return currentBlockSize > 0;
+            return currentBlockSize > 0 ? NUdf::EFetchStatus::Ok : NUdf::EFetchStatus::Finish;
         }
 
-        return true;
+        return NUdf::EFetchStatus::Ok;
     }
 
 private:
     NYql::NUdf::TCounter OutputRowCounter;
-
-    TUnboxedValueVector EmptyUVs;
 
     std::vector<TType*> InputTypes;
     std::vector<TType*> OutputTypes;
@@ -1661,6 +1825,10 @@ public:
     NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* output, ui32 width) override {
         auto& state = UnboxedState;
 
+        if (state.RunCurrentAsyncTask()) {
+            return NUdf::EFetchStatus::Yield;
+        }
+
         for (;;) {
             if (!state.IsDraining()) {
                 if (state.IsSourceEmpty()) {
@@ -1691,10 +1859,11 @@ public:
                 });
             }
 
-            if (state.TryDrain(OutputPtrs.data())) {
-                return NUdf::EFetchStatus::Ok;
-            } else if (state.IsSourceEmpty()) {
+            auto drainResult = state.TryDrain(OutputPtrs.data());
+            if (drainResult == NUdf::EFetchStatus::Finish && state.IsSourceEmpty()) {
                 break;
+            } else if (drainResult == NUdf::EFetchStatus::Yield) {
+                return drainResult;
             }
         }
 
@@ -1762,6 +1931,10 @@ public:
 
         TBaseAggregationState& state = *static_cast<TBaseAggregationState*>(boxedState.AsBoxed().Get());
 
+        if (state.RunCurrentAsyncTask()) {
+            return EFetchResult::Yield;
+        }
+
         for (;;) {
             if (!state.IsDraining()) {
                 if (state.IsSourceEmpty()) {
@@ -1786,7 +1959,10 @@ public:
                 }
             }
 
-            if (state.TryDrain(output)) {
+            auto drainResult = state.TryDrain(output);
+            if (drainResult == NUdf::EFetchStatus::Yield) {
+                return EFetchResult::Yield;
+            } else if (drainResult == NUdf::EFetchStatus::Ok) {
                 return EFetchResult::One;
             } else if (state.IsSourceEmpty()) {
                 break;

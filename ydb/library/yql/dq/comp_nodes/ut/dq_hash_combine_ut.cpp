@@ -488,6 +488,13 @@ THolder<IComputationGraph> BuildZeroWidthWideGraph(TDqSetup<LLVM, Spilling>& set
     return setup.BuildGraph(rootNode, {streamCallable});
 }
 
+std::shared_ptr<ISpillerFactory> CreateSpillerFactory()
+{
+    return std::make_shared<NKikimr::NMiniKQL::TSlowSpillerFactory>(
+        std::make_shared<NKikimr::NMiniKQL::TPreallocatedSpillerFactory>(100_MB)
+    );
+}
+
 template<bool UseLLVM, typename StreamCreator>
 void RunDqCombineBlockTest(const bool useFlow, StreamCreator streamCreator)
 {
@@ -568,7 +575,7 @@ void RunDqAggregateEarlyStopTest(TDqSetup<UseLLVM, Spilling>& setup, const bool 
     auto graph = BuildWideGraph(setup, useFlow, true, 0, columnTypes, false);
 
     if (Spilling) {
-        graph->GetContext().SpillerFactory = std::make_shared<NKikimr::NMiniKQL::TPreallocatedSpillerFactory>(100_MB);
+        graph->GetContext().SpillerFactory = CreateSpillerFactory();
     }
 
     std::unordered_map<std::string, std::vector<ui64>> refResult;
@@ -601,7 +608,7 @@ void RunDqAggregateBlockTest(TDqSetup<UseLLVM, Spilling>& setup, const bool useF
     auto graph = BuildBlockGraph(setup, useFlow, true, 0, columnTypes);
 
     if (Spilling) {
-        graph->GetContext().SpillerFactory = std::make_shared<NKikimr::NMiniKQL::TPreallocatedSpillerFactory>(100_MB);
+        graph->GetContext().SpillerFactory = CreateSpillerFactory();
     }
 
     std::unordered_map<std::string, std::vector<ui64>> refResult;
@@ -639,7 +646,7 @@ void RunDqAggregateWideTest(TDqSetup<LLVM, Spilling>& setup, const bool useFlow,
     auto graph = BuildWideGraph(setup, useFlow, true, 0, columnTypes);
 
     if (Spilling) {
-        graph->GetContext().SpillerFactory = std::make_shared<NKikimr::NMiniKQL::TPreallocatedSpillerFactory>(100_MB);
+        graph->GetContext().SpillerFactory = CreateSpillerFactory();
     }
 
     std::unordered_map<std::string, std::vector<ui64>> refResult;
@@ -681,7 +688,7 @@ void RunDqAggregateZeroWidthTest(TDqSetup<UseLLVM, Spilling>& setup, const bool 
     auto graph = BuildZeroWidthWideGraph(setup, useFlow, true, 0, columnTypes);
 
     if (Spilling) {
-        graph->GetContext().SpillerFactory = std::make_shared<NKikimr::NMiniKQL::TPreallocatedSpillerFactory>(100_MB);
+        graph->GetContext().SpillerFactory = CreateSpillerFactory();
     }
 
     std::unordered_map<std::string, std::vector<ui64>> refResult;

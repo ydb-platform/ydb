@@ -40,7 +40,7 @@ public:
         bool alter = false;
 
         const auto& oldConfig = Replication->GetConfig();
-        const auto& newConfig = record.GetConfig();
+        auto newConfig = std::move(*record.MutableConfig());
 
         if (oldConfig.HasTransferSpecific()) {
             auto& oldSpecific = oldConfig.GetTransferSpecific();
@@ -87,12 +87,12 @@ public:
             }
         }
 
-        Replication->SetConfig(std::move(*record.MutableConfig()));
+        Replication->SetConfig(std::move(newConfig));
         Replication->ResetCredentials(ctx);
 
         NIceDb::TNiceDb db(txc.DB);
         db.Table<Schema::Replications>().Key(Replication->GetId()).Update(
-            NIceDb::TUpdate<Schema::Replications::Config>(record.GetConfig().SerializeAsString()),
+            NIceDb::TUpdate<Schema::Replications::Config>(Replication->GetConfig().SerializeAsString()),
             NIceDb::TUpdate<Schema::Replications::DesiredState>(desiredState),
             NIceDb::TUpdate<Schema::Replications::Issue>(issue)
         );

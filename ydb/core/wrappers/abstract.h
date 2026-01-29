@@ -10,6 +10,10 @@
 
 #include <memory>
 
+namespace NKikimrConfig {
+    class TAwsClientConfig;
+};
+
 namespace NKikimr::NWrappers {
 
 struct TEvExternalStorage {
@@ -153,7 +157,7 @@ public:
     using TPtr = std::shared_ptr<IExternalStorageConfig>;
     virtual ~IExternalStorageConfig() = default;
     IExternalStorageOperator::TPtr ConstructStorageOperator(bool verbose = true) const;
-    static IExternalStorageConfig::TPtr Construct(const NKikimrSchemeOp::TS3Settings& settings);
+    static IExternalStorageConfig::TPtr Construct(const NKikimrConfig::TAwsClientConfig& defaultAwsClientSettings, const NKikimrSchemeOp::TS3Settings& settings);
 };
 } // NExternalStorage
 

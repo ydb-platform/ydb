@@ -1,5 +1,6 @@
 #include <ydb/core/backup/common/encryption.h>
 #include <ydb/core/metering/metering.h>
+#include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tablet_flat/shared_cache_events.h>
 #include <ydb/core/testlib/actors/block_events.h>

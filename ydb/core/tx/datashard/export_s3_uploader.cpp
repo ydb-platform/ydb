@@ -290,9 +290,9 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
         PutDataWithChecksum(std::move(Buffer), Settings.GetMetadataKey(), MetadataChecksum, &TThis::StateUploadMetadata, Settings.EncryptionSettings.GetMetadataIV());
     }
 
-    void UploadChecksum(TString&& checksum, const TString& checksumKey, const TString& objectKeySuffix, 
+    void UploadChecksum(TString&& checksum, const TString& checksumKey, const TString& objectKeySuffix,
         std::function<void()> checksumUploadedCallback)
-    {   
+    {
         // make checksum verifiable using sha256sum CLI
         checksum += ' ' + objectKeySuffix;
         PutData(std::move(checksum), checksumKey, &TThis::StateUploadChecksum);
@@ -756,7 +756,7 @@ public:
             TVector<TChangefeedExportDescriptions> changefeeds,
             TMaybe<Ydb::Scheme::ModifyPermissionsRequest>&& permissions,
             TString&& metadata)
-        : ExternalStorageConfig(new TS3ExternalStorageConfig(task.GetS3Settings()))
+        : ExternalStorageConfig(new TS3ExternalStorageConfig(AppData()->AwsClientConfig, task.GetS3Settings()))
         , Settings(TS3Settings::FromBackupTask(task))
         , DataFormat(EDataFormat::Csv)
         , CompressionCodec(CodecFromTask(task))
@@ -959,7 +959,7 @@ IActor* TS3Export::CreateUploader(const TActorId& dataShard, ui64 txId) const {
             // Unnecessary fields
             topic.clear_self();
             topic.clear_topic_stats();
-            
+
             auto& descr = changefeeds.emplace_back(changefeed, topic);
             descr.Name = descr.ChangefeedDescription.name();
             if (encrypted) {

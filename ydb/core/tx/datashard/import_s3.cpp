@@ -1060,7 +1060,7 @@ public:
     }
 
     explicit TS3Downloader(const TActorId& dataShard, ui64 txId, const NKikimrSchemeOp::TRestoreTask& task, const TTableInfo& tableInfo)
-        : ExternalStorageConfig(new NExternalStorage::TS3ExternalStorageConfig(task.GetS3Settings()))
+        : ExternalStorageConfig(new NExternalStorage::TS3ExternalStorageConfig(AppData()->AwsClientConfig, task.GetS3Settings()))
         , DataShard(dataShard)
         , TxId(txId)
         , Settings(TS3Settings::FromRestoreTask(task))

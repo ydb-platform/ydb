@@ -600,279 +600,321 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
     }
 
 
-    void RunHypergraphBenches(TRNG rng, TBenchmarkConfig config, TUnbufferedFileOutput output, TTupleParser::TTable args) {
-        auto getArg = [&](const std::vector<std::pair<std::string, std::string>>& row, const std::string& key) {
-            auto it = std::find_if(row.begin(), row.end(),
-                [&key](const auto& pair) { return pair.first == key; });
+    class BenchRunner {
+    public:
+        // 1. Define Node type first
+        using THypergraphNodes = std::bitset<64>;
 
-            if (it == row.end()) {
-                return std::string{};
+        // 2. Define Hypergraph using the Node type
+        using TJoinHypergraph = NYql::NDq::TJoinHypergraph<THypergraphNodes>;
+
+        using TJoinTree = std::shared_ptr<NYql::IBaseOptimizerNode>;
+        using TOrderingsPtr = TSimpleSharedPtr<NYql::NDq::TOrderingsStateMachine>;
+
+        // Constructor: Takes Output by Reference to avoid copying
+        BenchRunner(TRNG& rng, const TBenchmarkConfig& config, TUnbufferedFileOutput& output, const TTupleParser::TTable& args)
+            : BaseRng_(rng)
+            , Config_(config)
+            , Output_(output)
+            , Args_(args)
+            , TotalTasks_(args.size())
+        {
+        }
+
+        void Launch() {
+            int maxCores = std::thread::hardware_concurrency();
+            if (maxCores == 0) maxCores = 4;
+
+            Cout << "Starting Benchmark with " << maxCores << " threads..." << Endl;
+
+            std::atomic<bool> stopMonitor{false};
+            std::thread monitor(&BenchRunner::MonitorDashboard, this, std::ref(stopMonitor));
+
+            std::vector<std::thread> workers;
+            workers.reserve(maxCores);
+            for (int i = 0; i < maxCores; ++i) {
+                workers.emplace_back(&BenchRunner::WorkerRoutine, this);
             }
 
-            return it->second;
-        };
-
-        auto getDouble = [&](const auto& row, const std::string& key) {
-            std::string arg = getArg(row, key);
-            if (arg.empty()) {
-                return 0.0;
+            for (auto& t : workers) {
+                if (t.joinable()) t.join();
             }
-            return std::stod(arg);
+
+            stopMonitor = true;
+            if (monitor.joinable()) monitor.join();
+        }
+
+    private:
+        // Internal struct to hold parsed row data (avoids passing raw TParamsMap everywhere)
+        struct TBenchParams {
+            ui64 N;
+            std::string Label;
+            std::string Type;
+            double Sigma;
+            double Mu;
+            double Bushiness;
+            double Alpha;
+            double Theta;
+            std::map<NYql::EJoinKind, double> JoinProbs;
+
+            std::pair<std::string, std::string> GetSignature() const {
+                return {Type, Label};
+            }
         };
 
-        auto extractParameters = [&](std::vector<std::pair<std::string, std::string>> row) {
-            std::vector<std::pair<std::string, std::string>> pairs;
-            for (const auto& pair : row) {
-                if (pair.first != "N" && pair.first != "idx") {
-                    pairs.emplace_back(pair);
+        void WorkerRoutine() {
+            while (true) {
+                ui64 idx = NextTaskIdx_.fetch_add(1);
+                if (idx >= TotalTasks_) return;
+
+                ProcessRow(idx);
+                CompletedTasks_.fetch_add(1);
+            }
+        }
+
+        void ProcessRow(ui64 idx) {
+            std::stringstream log;
+            try {
+                const auto& row = Args_[idx];
+                TRNG rng(BaseRng_.Serialize() + idx);
+                ui64 seed = rng.Serialize();
+
+                // Extract using the TParamsMap interface (GetValue)
+                TBenchParams params = ExtractParameters(row);
+
+                if (IsKnownTimeout(params)) return;
+
+                // --- Construct Graph & Tree ---
+                auto graph = GenerateRelationGraph(rng, params);
+                auto tree = GenerateJoinTree(rng, graph, params);
+
+                RandomizeJoinKeys(rng, graph, params);
+                // ApplyJoinTypes takes the map directly
+                ApplyJoinTypes(rng, tree, params.JoinProbs);
+
+                auto hypergraph = BuildHypergraph(tree);
+                auto orderings = BuildOrderingsFSM(hypergraph);
+
+                // --- Benchmark ---
+                // stats is std::optional<TStatistics>
+                auto stats = BenchOptimizer(tree, orderings);
+
+                if (!stats) {
+                    RegisterTimeout(params);
+                    log << "[TIMEOUT] " << params.Label << " N=" << params.N;
+                } else {
+                    // Return type of ComputeStatistics is deduced automatically to avoid TRes deduction errors
+                    auto computed = stats->ComputeStatistics();
+
+                    WriteJsonResult(idx, seed, params, computed, graph, tree, hypergraph);
+
+                    log << "[Done] " << params.Label << " N=" << params.N
+                        << " " << TimeFormatter::Format(computed.Median);
+
+                    if (computed.Median > Config_.SingleRunTimeout) {
+                        RegisterTimeout(params);
+                    }
                 }
-            }
-            return pairs;
-        };
-
-        std::string header = "idx," + TComputedStatistics::GetCSVHeader() + ",hypergraph";
-
-        std::map<std::string, ui32> labels;
-        auto appendLabel = [&](const auto& row, std::string label) {
-            std::string arg = getArg(row, label);
-
-            TStringStream ss;
-            ss << label << " = " << getArg(row, label) << "; ";
-
-            std::string result = ss.Str();
-            labels[label] = std::max<ui32>(result.size(), labels[label]);
-
-            while (result.size() < labels[label]) {
-                result.push_back(' ');
+            } catch (const std::exception& e) {
+                log << "[Error] Task " << idx << ": " << e.what();
             }
 
-            return result;
-        };
+            EnqueueLog(log.str());
+        }
 
-        std::mutex mtx_general;
-        std::condition_variable cv_slot_available;
-        int active_threads = 0;
-        int max_cores = std::thread::hardware_concurrency();
-        if (max_cores == 0) max_cores = 2;
+        // Helper to abstract TParamsMap access
+        TBenchParams ExtractParameters(const NKikimr::NKqp::TParamsMap& row) {
+            TBenchParams p;
+            p.N = row.GetValue<ui64>("N");
+            p.Label = row.GetValue("label");
+            p.Type = row.GetValue("type");
+            p.Sigma = row.GetValue<double>("sigma");
+            p.Mu = row.GetValue<double>("mu");
+            p.Bushiness = row.GetValue<double>("bushiness");
+            p.Alpha = row.GetValue<double>("alpha");
+            p.Theta = row.GetValue<double>("theta");
 
-        // Idx counts entries in tuple table, but not all of those are written
-        // (in case of a timeout). entryIdx counts lines in output ndjson
-        ui64 idx = 0, entryIdx = 0;
-        std::map<std::vector<std::pair<std::string, std::string>>, double> timeoutedNs;
-        for (const auto& row : args) {
-            auto lambda = [&]() {
-                std::stringstream ss;
-
-                try {
-                    ui64 serializedRNG = rng.Serialize();
-
-                    // Controls number of relations, used for every topology
-                    double n = getDouble(row, "N");
-                    std::string label = getArg(row, "label");
-
-                    ui32 currentIdx = idx ++;
-                    ss << "(" << currentIdx + 1 << "/" << args.size() << ") ";
-                    ss << appendLabel(row, "N");
-                    ss << appendLabel(row, "label");
-
-                    auto parameters = extractParameters(row);
-                    if (timeoutedNs.count(parameters) == 0) {
-                        timeoutedNs[parameters] = UINT32_MAX;
-                    }
-                    auto& maxN = timeoutedNs[parameters];
-                    if (n > maxN) {
-                        // Cout << "[SKIPPED]\n";
-                        return;
-                    }
-
-                    // Controls topology type (e.g. random-trees, clique, havel-hakimi, mcmc, etc)
-                    std::string type = getArg(row, "type");
-
-                    // Controls lognormal degree distribution for topologies chun-lu, havel-hakimi & mcmc
-                    double sigma = getDouble(row, "sigma");
-                    double mu = getDouble(row, "mu");
-
-                    // Controls how many edges go into the same column (i.e. clustering), Pitman-Yor
-                    // distribution is used to model it. Heavily impacts transitive closure and shuffle elimination:
-                    double alpha = getDouble(row, "alpha");
-                    double theta = getDouble(row, "theta");
-
-                    // Controls which random tree decomposition is prefered, only impacts hypegraph structure
-                    double bushiness = getDouble(row, "bushiness");
-
-                    // Probabilities of different join kinds:
-                    std::map<NYql::EJoinKind, double> probabilities = {
-                        { NYql::EJoinKind::InnerJoin, getDouble(row, "inner-join")      },
-                        { NYql::EJoinKind::LeftJoin,  getDouble(row, "left-join")       },
-                        { NYql::EJoinKind::RightJoin, getDouble(row, "right-join")      },
-                        { NYql::EJoinKind::OuterJoin, getDouble(row, "outer-join")      },
-                        { NYql::EJoinKind::LeftOnly,  getDouble(row, "left-only-join")  },
-                        { NYql::EJoinKind::RightOnly, getDouble(row, "right-only-join") },
-                        { NYql::EJoinKind::LeftSemi,  getDouble(row, "left-semi-join")  },
-                        { NYql::EJoinKind::RightSemi, getDouble(row, "right-semi-join") },
-                        { NYql::EJoinKind::Cross,     getDouble(row, "cross-join")      } ,
-                        { NYql::EJoinKind::Exclusion, getDouble(row, "exclusion-join")  }
-                    };
-
-
-                    // 1. Generate initial undirected regular graph
-                    auto generateTopology = GetTopology(type);
-                    auto graph = generateTopology(rng, n, mu, sigma);
-                    if (type == "mcmc") {
-                        MCMCRandomize(rng, graph);
-                    }
-
-                    // Fallback in case graph disconnects
-                    ForceReconnection(rng, graph);
-
-                    // 2. Update keys so that they match given distribution
-                    graph.SetupKeysPitmanYor(rng, TPitmanYorConfig{.Alpha = alpha, .Theta = theta});
-
-                    // 3. Convert to a random join tree
-                    auto tree = ToJoinTree(rng, graph, bushiness);
-
-                    // 4. Randomly select different join kinds with given probabilities
-                    RandomizeJoinTypes(rng, tree, probabilities);
-
-                    // 5. Make join hypegraph (this includes closure and cross join
-                    //    elimination/reconstructions)
-                    using THypergraphNodes = std::bitset<64>;
-                    auto hypergraph = NYql::NDq::MakeJoinHypergraph<THypergraphNodes>(tree);
-
-                    NYql::TCBOSettings settings{
-                        .MaxDPhypDPTableSize = UINT32_MAX
-                    };
-
-                    NYql::TBaseProviderContext ctx;
-                    NYql::TExprContext dummyCtx;
-
-                    NYql::NDq::TOrderingsStateMachineConstructor orderings(hypergraph);
-
-                    auto orderingsFSM = orderings.Construct();
-                    TSimpleSharedPtr<NYql::NDq::TOrderingsStateMachine> orderingsFSMPointer
-                        = new NYql::NDq::TOrderingsStateMachine(orderingsFSM);
-
-                    auto optimizer =
-                        std::unique_ptr<NYql::IOptimizerNew>(
-                            NYql::NDq::MakeNativeOptimizerNew(ctx, settings, dummyCtx, true, orderingsFSMPointer));
-
-                    // 6. Optimize and write down average optimization time
-                    std::optional<TStatistics> stats = Benchmark(config, [&]() -> bool {
-                        try {
-                            if (tree->Kind == NYql::EOptimizerNodeKind::JoinNodeType) {
-                                auto plan = optimizer->JoinSearch(std::static_pointer_cast<NYql::TJoinOptimizerNode>(tree));
-                                return !!plan;
-                            }
-                        } catch(...) {
-                            return false;
-                        }
-                        return true;
-                    });
-
-                    if (!stats) {
-                        ss << "[TIMEOUTED]";
-                        maxN = n;
-                    }
-
-                    if (stats) {
-                        auto computedStats = stats->ComputeStatistics();
-                        auto serializedHypegraph = TJoinHypergraphSerializer<THypergraphNodes>::Serialize(hypergraph);
-                        auto serializedRelationGraph = TRelationGraphSerializer::Serialize(graph);
-                        auto serializedQuery = TOptimizerNodeSerializer::Serialize(tree);
-
-                        NJsonWriter::TBuf writer(NJsonWriter::HEM_ESCAPE_HTML, &output);
-                        writer.SetIndentSpaces(0); // Do not align
-
-                        NJson::TJsonValue parameters(NJson::JSON_MAP);
-                        parameters.InsertValue("N", NJson::TJsonValue(n));
-                        parameters.InsertValue("type", NJson::TJsonValue(type));
-                        parameters.InsertValue("sigma", NJson::TJsonValue(sigma));
-                        parameters.InsertValue("mu", NJson::TJsonValue(mu));
-                        parameters.InsertValue("alpha", NJson::TJsonValue(alpha));
-                        parameters.InsertValue("theta", NJson::TJsonValue(theta));
-                        parameters.InsertValue("bushiness", NJson::TJsonValue(bushiness));
-
-                        NJson::TJsonValue joinProbabilities(NJson::JSON_MAP);
-                        joinProbabilities.InsertValue("inner-join",      NJson::TJsonValue(probabilities[NYql::EJoinKind::InnerJoin]));
-                        joinProbabilities.InsertValue("left-join",       NJson::TJsonValue(probabilities[NYql::EJoinKind::LeftJoin ]));
-                        joinProbabilities.InsertValue("right-join",      NJson::TJsonValue(probabilities[NYql::EJoinKind::RightJoin]));
-                        joinProbabilities.InsertValue("outer-join",      NJson::TJsonValue(probabilities[NYql::EJoinKind::OuterJoin]));
-                        joinProbabilities.InsertValue("left-only-join",  NJson::TJsonValue(probabilities[NYql::EJoinKind::LeftOnly ]));
-                        joinProbabilities.InsertValue("right-only-join", NJson::TJsonValue(probabilities[NYql::EJoinKind::RightOnly]));
-                        joinProbabilities.InsertValue("left-semi-join",  NJson::TJsonValue(probabilities[NYql::EJoinKind::LeftSemi ]));
-                        joinProbabilities.InsertValue("right-semi-join", NJson::TJsonValue(probabilities[NYql::EJoinKind::RightSemi]));
-                        joinProbabilities.InsertValue("cross-join",      NJson::TJsonValue(probabilities[NYql::EJoinKind::Cross    ]));
-                        joinProbabilities.InsertValue("exclusion-join",  NJson::TJsonValue(probabilities[NYql::EJoinKind::Exclusion]));
-                        parameters.InsertValue("join-probabilities", joinProbabilities);
-
-                        NJson::TJsonValue serializedLabel(NJson::JSON_ARRAY);
-                        for (const auto &part: StringSplitter(label).Split(',').SkipEmpty()) {
-                            serializedLabel.AppendValue(NJson::TJsonValue(part));
-                        }
-
-                        NJson::TJsonValue entry(NJson::JSON_MAP);
-                        entry.InsertValue("idx", NJson::TJsonValue(entryIdx ++));
-                        entry.InsertValue("table-id", NJson::TJsonValue(currentIdx));
-                        entry.InsertValue("label", serializedLabel);
-                        entry.InsertValue("time", computedStats.ToJson());
-                        entry.InsertValue("hypergraph", serializedHypegraph);
-                        entry.InsertValue("parameters", parameters);
-                        entry.InsertValue("seed", serializedRNG);
-                        entry.InsertValue("query", serializedQuery);
-                        entry.InsertValue("relation-graph", serializedRelationGraph);
-                        entry.InsertValue("count-cc", NJson::TJsonValue(optimizer->CountCC(std::static_pointer_cast<NYql::TJoinOptimizerNode>(tree))));
-
-                        writer.WriteJsonValue(&entry, /*sortKeys=*/false);
-                        output << "\n";
-
-                        ss << "TimeCBO = " << TimeFormatter::Format(computedStats.Median, computedStats.MAD);
-
-                        if (computedStats.Median > config.SingleRunTimeout) {
-                            maxN = n;
-                        }
-                    }
-                    ss << "\n";
-                } catch (const std::exception& exc) {
-                    ss << "\nBench #" << idx << " skipped because of uncaught exception: " << exc.what() << "\n";
-                }
-
-                Cout << ss.str();
-
-                {
-                    std::lock_guard<std::mutex> lock(mtx_general);
-                    active_threads--;
-                }
-
-                // Wake up 'main' to launch the next one
-                cv_slot_available.notify_one();
+            static const std::vector<std::pair<std::string, NYql::EJoinKind>> mapEntries = {
+                { "inner-join", NYql::EJoinKind::InnerJoin },
+                { "left-join",  NYql::EJoinKind::LeftJoin },
+                { "right-join", NYql::EJoinKind::RightJoin },
+                { "cross-join", NYql::EJoinKind::Cross },
+                { "full-join",  NYql::EJoinKind::OuterJoin },
+                { "left-semi-join", NYql::EJoinKind::LeftSemi },
+                // Add other join types as required by YQL
             };
 
-            std::unique_lock<std::mutex> lock(mtx_general);
-
-            // WAIT logic: If cores are full, pause here until notified
-            cv_slot_available.wait(lock, [&]{
-                return active_threads < max_cores;
-            });
-
-            // Occupy a slot
-            active_threads++;
-
-            // Launch and Detach
-            // We detach because 'main' holds the flow control via the counter
-            std::thread(lambda).detach();
+            for(const auto& entry : mapEntries) {
+                try {
+                    p.JoinProbs[entry.second] = row.GetValue<double>(entry.first);
+                } catch (...) {
+                    p.JoinProbs[entry.second] = 0.0;
+                }
+            }
+            return p;
         }
 
-        Cout << "All tasks launched. Waiting for final threads to drain...\n";
+        TRelationGraph GenerateRelationGraph(TRNG& rng, const TBenchParams& p) {
+            auto generateTopology = GetTopology(p.Type);
+            auto graph = generateTopology(rng, p.N, p.Mu, p.Sigma);
+            if (p.Type == "mcmc") MCMCRandomize(rng, graph);
+            ForceReconnection(rng, graph);
+            return graph;
+        }
+
+        void RandomizeJoinKeys(TRNG &rng, TRelationGraph& graph, const TBenchParams& p) {
+            TPitmanYorConfig distribution{.Alpha = p.Alpha, .Theta = p.Theta};
+            graph.SetupKeysPitmanYor(rng, distribution);
+        }
+
+        TJoinTree GenerateJoinTree(TRNG& rng, const TRelationGraph& graph, const TBenchParams& p) {
+            return ToJoinTree(rng, graph, p.Bushiness);
+        }
+
+        // Defined to accept the map based on usage
+        void ApplyJoinTypes(TRNG& rng, TJoinTree& tree, const std::map<NYql::EJoinKind, double>& probs) {
+            RandomizeJoinTypes(rng, tree, probs);
+        }
+
+        TJoinHypergraph BuildHypergraph(TJoinTree tree) {
+            return NYql::NDq::MakeJoinHypergraph<THypergraphNodes>(tree);
+        }
+
+        TOrderingsPtr BuildOrderingsFSM(TJoinHypergraph hypergraph) {
+            NYql::NDq::TOrderingsStateMachineConstructor<THypergraphNodes> orderings(hypergraph);
+            auto stateMachine = orderings.Construct();
+            return new NYql::NDq::TOrderingsStateMachine(stateMachine);
+        }
+
+        std::optional<TStatistics> BenchOptimizer(TJoinTree tree, TOrderingsPtr orderingsFSM) {
+            NYql::TCBOSettings settings{ .MaxDPhypDPTableSize = UINT32_MAX };
+            NYql::TBaseProviderContext ctx;
+            NYql::TExprContext ectx;
+
+            auto optimizer = std::unique_ptr<NYql::IOptimizerNew>(
+                NYql::NDq::MakeNativeOptimizerNew(ctx, settings, ectx, true, orderingsFSM)
+            );
+
+            return Benchmark(Config_, [&]() -> bool {
+                try {
+                    if (tree->Kind == NYql::EOptimizerNodeKind::JoinNodeType) {
+                        auto join = std::static_pointer_cast<NYql::TJoinOptimizerNode>(tree);
+                        auto plan = optimizer->JoinSearch(join);
+                        return !!plan;
+                    }
+                } catch (...) {
+                    return false;
+                }
+                return true;
+            });
+        }
+
+        // Templated stats to accept whatever ComputeStatistics returns (TStatistics or TRes)
+        template <typename TStats>
+        void WriteJsonResult(ui64 argIdx, ui64 seed, const TBenchParams& p,
+                            const TStats& timeStats,
+                            [[maybe_unused]] const TRelationGraph& graph,
+                            [[maybe_unused]] const TJoinTree& query,
+                            [[maybe_unused]] const TJoinHypergraph& hyper)
         {
-            std::unique_lock<std::mutex> lock(mtx_general);
-            cv_slot_available.wait(lock, [&]{
-                return active_threads == 0;
-            });
+            NJson::TJsonValue entry(NJson::JSON_MAP);
+            entry.InsertValue("idx", NJson::TJsonValue(EntryIdx_++));
+            entry.InsertValue("table-id", NJson::TJsonValue(argIdx));
+            entry.InsertValue("N", NJson::TJsonValue(p.N));
+            entry.InsertValue("label", NJson::TJsonValue(p.Label));
+            entry.InsertValue("time", timeStats.ToJson());
+            entry.InsertValue("seed", NJson::TJsonValue(seed));
+
+            // Uncomment serializers as needed
+            // entry.InsertValue("query", TOptimizerNodeSerializer::Serialize(query));
+            // entry.InsertValue("graph", TRelationGraphSerializer::Serialize(graph));
+            // entry.InsertValue("hypergraph", TJoinHypergraphSerializer<THypergraphNodes>::Serialize(hyper));
+
+            std::lock_guard<std::mutex> lock(MtxOutput_);
+            NJsonWriter::TBuf writer(NJsonWriter::HEM_ESCAPE_HTML, &Output_);
+            writer.SetIndentSpaces(0);
+            writer.WriteJsonValue(&entry, false);
+            Output_ << "\n"; // Implicit flush
         }
-    }
+
+        bool IsKnownTimeout(const TBenchParams& p) {
+            std::lock_guard<std::mutex> lock(MtxTimeouts_);
+            auto key = p.GetSignature();
+            if (TimeoutedNs_.count(key)) {
+                if (p.N > TimeoutedNs_[key]) return true;
+            }
+            return false;
+        }
+
+        void RegisterTimeout(const TBenchParams& p) {
+            std::lock_guard<std::mutex> lock(MtxTimeouts_);
+            auto key = p.GetSignature();
+            if (TimeoutedNs_.count(key) == 0 || p.N < TimeoutedNs_[key]) {
+                TimeoutedNs_[key] = p.N;
+            }
+        }
+
+        void EnqueueLog(const std::string& msg) {
+            if (!msg.empty()) {
+                std::lock_guard<std::mutex> lock(MtxConsole_);
+                MessageQueue_.push(msg);
+            }
+        }
+
+        void MonitorDashboard(std::atomic<bool>& stopSignal) {
+            while (!stopSignal || CompletedTasks_ < TotalTasks_) {
+                {
+                    std::lock_guard<std::mutex> lock(MtxConsole_);
+                    if (!MessageQueue_.empty()) {
+                        std::cout << "\33[2K\r";
+                        while (!MessageQueue_.empty()) {
+                            std::cout << MessageQueue_.front() << "\n";
+                            MessageQueue_.pop();
+                        }
+                    }
+                }
+
+                ui64 done = CompletedTasks_.load();
+                float ratio = (TotalTasks_ > 0) ? (float)done / TotalTasks_ : 0.0f;
+                int width = 40;
+
+                std::cout << "\33[2K\r[";
+                int pos = width * ratio;
+                for (int i = 0; i < width; ++i) {
+                    if (i < pos) std::cout << "=";
+                    else if (i == pos) std::cout << ">";
+                    else std::cout << " ";
+                }
+                std::cout << "] " << int(ratio * 100.0) << "% "
+                        << "(" << done << "/" << TotalTasks_ << ") "
+                        << std::flush;
+
+                if (done == TotalTasks_) break;
+                std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            }
+            std::cout << "\n";
+        }
+
+        TRNG& BaseRng_;
+        const TBenchmarkConfig& Config_;
+        TUnbufferedFileOutput& Output_; // Reference is crucial
+        const TTupleParser::TTable& Args_;
+        size_t TotalTasks_;
+
+        std::atomic<ui64> NextTaskIdx_{0};
+        std::atomic<ui64> CompletedTasks_{0};
+        std::atomic<ui64> EntryIdx_{0};
+
+        std::mutex MtxOutput_;
+        std::mutex MtxConsole_;
+        std::mutex MtxTimeouts_;
+
+        std::queue<std::string> MessageQueue_;
+        std::map<std::pair<std::string, std::string>, ui64> TimeoutedNs_;
+    };
+
 
     Y_UNIT_TEST(Dataset) {
-        // std::random_device randomDevice;
         TRNG rng(0);
 
         std::string benchArgs = GetTestParam("BENCHMARK");
@@ -883,45 +925,96 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
         if (args.empty()) {
             std::string datasetFile = GetTestParam("DATASET_FILE");
             if (datasetFile.empty()) {
-                // Don't launch in non-interactive mode
-                Cerr << "Filename with dataset description is required, please provide one: --test-param DATASET_FILE='<filename>'";
+                Cerr << "Filename required: --test-param DATASET_FILE='<filename>'" << Endl;
                 return;
             }
-
             args = TFileInput(datasetFile).ReadAll();
         }
 
         auto parameters = TTupleParser{args}.Parse();
 
-        auto findN = [](const auto& row) {
-            std::string n;
-            for (ui32 i = 0; i < row.size(); ++ i) {
-                if (row[i].first == "N") {
-                    n = row[i].second;
-                }
+        // Fix: Use GetValue instead of manual vector iteration/indexing
+        // NKikimr::NKqp::TParamsMap usually supports GetValue<T>(name)
+        auto findN = [](const auto& row) -> ui64 {
+            try {
+                return row.template GetValue<ui64>("N");
+            } catch (...) {
+                // Fallback if the map stores everything as strings
+                return std::stoull(row.GetValue("N"));
             }
-
-            size_t pos = 0;
-            ui32 intN = std::stoi(n, &pos);
-            Y_ENSURE(pos == n.size());
-
-            return intN;
         };
 
-        std::stable_sort(parameters.begin(), parameters.end(), [&](const auto& lhs, const auto rhs) {
+        std::stable_sort(parameters.begin(), parameters.end(), [&](const auto& lhs, const auto& rhs) {
             return findN(lhs) < findN(rhs);
         });
 
         Cout << "\n";
-        PrintTable(parameters);
+        // PrintTable(parameters); // Assuming this function exists in env
 
         std::string outputFile = GetTestParam("OUTPUT");
         if (outputFile.empty()) {
-            throw std::runtime_error("Filename for output file is required, please provide one: --test-param OUTPUT='<filename>'");
+            ythrow yexception() << "Output required: --test-param OUTPUT='<filename>'";
         }
 
-        RunHypergraphBenches(rng, config, TUnbufferedFileOutput(outputFile.c_str()), parameters);
+        // Initialize file stream here so it persists for the lifetime of runner
+        TUnbufferedFileOutput outFileStream(outputFile.c_str());
+
+        BenchRunner runner(rng, config, outFileStream, parameters);
+        runner.Launch();
     }
+
+
+    //     Y_UNIT_TEST(Dataset) {
+    //         // std::random_device randomDevice;
+    //         TRNG rng(0);
+    //
+    //         std::string benchArgs = GetTestParam("BENCHMARK");
+    //         auto config = GetBenchmarkConfig(TArgs{benchArgs});
+    //         DumpBenchmarkConfig(Cout, config);
+    //
+    //         std::string args = GetTestParam("DATASET");
+    //         if (args.empty()) {
+    //             std::string datasetFile = GetTestParam("DATASET_FILE");
+    //             if (datasetFile.empty()) {
+    //                 // Don't launch in non-interactive mode
+    //                 Cerr << "Filename with dataset description is required, please provide one: --test-param DATASET_FILE='<filename>'";
+    //                 return;
+    //             }
+    //
+    //             args = TFileInput(datasetFile).ReadAll();
+    //         }
+    //
+    //         auto parameters = TTupleParser{args}.Parse();
+    //
+    //         auto findN = [](const auto& row) {
+    //             std::string n;
+    //             for (ui32 i = 0; i < row.size(); ++ i) {
+    //                 if (row[i].first == "N") {
+    //                     n = row[i].second;
+    //                 }
+    //             }
+    //
+    //             size_t pos = 0;
+    //             ui32 intN = std::stoi(n, &pos);
+    //             Y_ENSURE(pos == n.size());
+    //
+    //             return intN;
+    //         };
+    //
+    //         std::stable_sort(parameters.begin(), parameters.end(), [&](const auto& lhs, const auto rhs) {
+    //             return findN(lhs) < findN(rhs);
+    //         });
+    //
+    //         Cout << "\n";
+    //         PrintTable(parameters);
+    //
+    //         std::string outputFile = GetTestParam("OUTPUT");
+    //         if (outputFile.empty()) {
+    //             throw std::runtime_error("Filename for output file is required, please provide one: --test-param OUTPUT='<filename>'");
+    //         }
+    //
+    //         RunHypergraphBenches(rng, config, TUnbufferedFileOutput(outputFile.c_str()), parameters);
+    //     }
 
 
     struct CustomQuery {

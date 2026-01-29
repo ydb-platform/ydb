@@ -17,7 +17,7 @@ namespace NKikimr::NOlap::NExport {
 NKikimr::TConclusion<std::shared_ptr<IBlobsStorageOperator>> TS3StorageInitializer::DoInitializeOperator(
     const std::shared_ptr<IStoragesManager>& storages) const {
 #ifndef KIKIMR_DISABLE_S3_OPS
-    auto extStorageConfig = NWrappers::NExternalStorage::IExternalStorageConfig::Construct(S3Settings);
+    auto extStorageConfig = NWrappers::NExternalStorage::IExternalStorageConfig::Construct(AppData()->AwsClientConfig, S3Settings);
     if (!extStorageConfig) {
         return TConclusionStatus::Fail("cannot build operator with this config: " + S3Settings.DebugString());
     }

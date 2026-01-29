@@ -44,7 +44,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateColumnTablePropose(
 
     modifyScheme.SetWorkingDir(wdAndPath.first);
     
-    auto& tableDesc = *modifyScheme.MutableCreateColumnTable();;
+    auto& tableDesc = *modifyScheme.MutableCreateColumnTable();
     tableDesc.SetName(wdAndPath.second);
     tableDesc.SetIsRestore(true);
 

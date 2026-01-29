@@ -1001,7 +1001,7 @@ private:
             TTableInfo::TPtr table = Self->Tables.at(item.DstPathId);
             return GetIssues(table, restoreTxId);
         }
-     }
+    }
 
     template <typename TTable>
     TMaybe<TString> GetIssues(const TTable& table, TTxId restoreTxId) {

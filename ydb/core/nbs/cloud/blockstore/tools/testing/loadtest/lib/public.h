@@ -9,12 +9,24 @@ namespace NCloud::NBlockStore::NLoadTest {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-using LoadTestSendReadRequestFunctionCB = std::function<void(NYdb::NBS::NProto::TError, const void *udata)>;
-using LoadTestSendReadRequestFunction = std::function<void(TBlockRange64, LoadTestSendReadRequestFunctionCB, const void *udata)>;
-using LoadTestNotifyCompletedFunction = std::function<void(const void *udata)>;
+using LoadTestSendRequestFunctionCB =
+    std::function<void(const NYdb::NBS::NProto::TError&, const void *udata)>;
+using LoadTestSendReadRequestFunction =
+    std::function<void(TBlockRange64, LoadTestSendRequestFunctionCB, const void *udata)>;
+using LoadTestSendWriteRequestFunction =
+    std::function<void(
+        ui64 blockIndexWriteTo,
+        const void* data,
+        size_t dataSize,
+        LoadTestSendRequestFunctionCB,
+        const void *udata
+    )>;
+using LoadTestNotifyCompletedFunction =
+    std::function<void(const void *udata)>;
 
-struct LoadTestSendRequestCallbacks {
+struct TLoadTestRequestCallbacks {
     LoadTestSendReadRequestFunction Read;
+    LoadTestSendWriteRequestFunction Write;
     LoadTestNotifyCompletedFunction NotifyCompleted;
 };
 

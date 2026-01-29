@@ -87,15 +87,15 @@ TVector<TConfigTemplate> BuildExamples() {
             .LoadName = "NBS2Load",
             .Template = R"_(NBS2Load: {
     DurationSeconds: 20
-    TestParam: "maks_ololo"
+    DirectPartitionId: ""
     RangeTest {
         Start: 0
-        End: 786431
-        RequestsCount: 10
+        End: 32767
+        RequestsCount: 1000
         ReadRate: 100
+        WriteRate: 0
         LoadType: LOAD_TYPE_RANDOM
         IoDepth: 1
-        MaxRequestSize: 256
     }
 })_"
         }

@@ -30,6 +30,7 @@ struct IRequestGenerator
     virtual void Complete(TBlockRange64 blockRange) = 0;
     virtual TString Describe() const = 0;
     virtual bool HasMoreRequests() const = 0;
+    virtual bool HasWriteRequests() const = 0;
 
     virtual TInstant Peek()
     {

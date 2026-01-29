@@ -50,7 +50,7 @@ ITestRunnerPtr CreateTestRunner(
     IRequestGeneratorPtr requestGenerator,
     ui32 maxIoDepth,
     std::atomic<bool>& shouldStop,
-    LoadTestSendRequestCallbacks RequestCallbacks,
+    TLoadTestRequestCallbacks requestCallbacks,
     const void *udata);
 
 }   // namespace NCloud::NBlockStore::NLoadTest

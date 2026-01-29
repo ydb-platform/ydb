@@ -12,9 +12,11 @@
 #include <util/datetime/base.h>
 #include <util/generic/deque.h>
 #include <util/generic/vector.h>
+#include <util/generic/size_literals.h>
 #include <util/random/random.h>
 #include <util/string/builder.h>
 
+#include <algorithm>
 #include <atomic>
 
 namespace NCloud::NBlockStore::NLoadTest {
@@ -61,7 +63,7 @@ private:
     TInstant StartTs;
 
     std::atomic<bool>& ShouldStop;
-    LoadTestSendRequestCallbacks RequestCallbacks;
+    TLoadTestRequestCallbacks RequestCallbacks;
 
     ui64 RequestsSent = 0;
     ui64 RequestsCompleted = 0;
@@ -73,6 +75,10 @@ private:
 
     const void *Udata = nullptr;
 
+
+    static constexpr ui64 BlockSize = 4_KB;
+    static constexpr ui32 BlocksNum = 256000;
+    TVector<TVector<ui8>> DataForWriteRequests;
 public:
     TTestRunner(
             ILoggingServicePtr loggingService,
@@ -80,7 +86,7 @@ public:
             IRequestGeneratorPtr requests,
             ui32 maxIoDepth,
             std::atomic<bool>& shouldStop,
-            LoadTestSendRequestCallbacks requestCallbacks,
+            TLoadTestRequestCallbacks requestCallbacks,
             const void *udata)
         : Log(loggingService->CreateLog(requests->Describe()))
         , LoggingTag(std::move(loggingTag))
@@ -88,8 +94,11 @@ public:
         , MaxIoDepth(maxIoDepth)
         , ShouldStop(shouldStop)
         , RequestCallbacks(std::move(requestCallbacks))
+        , Udata(udata)
     {
-        Udata = udata;
+        if (requests->HasWriteRequests()) {
+            GenerateWriteData();
+        }
     }
 
     void Start() override;
@@ -119,6 +128,7 @@ private:
     void ProcessCompletedRequests(std::unique_ptr<TCompletedRequest> request);
 
     void ReportProgress();
+    void GenerateWriteData();
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -199,7 +209,9 @@ void TTestRunner::SendReadRequest(const TBlockRange64& range)
 
     auto started = TInstant::Now();
 
-    auto cb = [started, range, this, p=shared_from_this()] (NYdb::NBS::NProto::TError result, const void* udata) mutable {
+    auto cb =
+    [started, range, this, p=shared_from_this()]
+    (const NYdb::NBS::NProto::TError& result, const void* udata) mutable {
         STORAGE_DEBUG(LoggingTag
                 << "TTestRunner::SendReadRequest cb for range: " << range
                 << ", result: " << NYdb::NBS::FormatError(result));
@@ -240,11 +252,37 @@ std::make_unique<TCompletedRequest>(
 
 void TTestRunner::SendWriteRequest(const TBlockRange64& range)
 {
-    STORAGE_ERROR(LoggingTag
-        << "WriteBlocks request: ("
-        << range.Start << ", " << range.Size() << "). Test has been stopped");
-    Stop();
+    if (range.Size() != 1) {
+        STORAGE_ERROR(LoggingTag
+            << "Trying to generate > 1 block write request which "
+            " is not supported. Test has been stopped");
+        Stop();
+    }
 
+    auto started = TInstant::Now();
+
+    auto cb =
+        [started, range, this, p=shared_from_this()]
+        (const NYdb::NBS::NProto::TError& result, const void* udata) mutable {
+        STORAGE_DEBUG(LoggingTag
+                << "TTestRunner::SendWriteRequest cb for range: " << range
+                << ", result: " << NYdb::NBS::FormatError(result));
+        Udata = udata;
+        if (FAILED(result.GetCode())) {
+            STORAGE_ERROR(LoggingTag
+                << "WriteBlocks request failed with error: "
+                << NYdb::NBS::FormatError(result));
+        }
+        p->HandleCompletedRequest(
+            EBlockStoreRequest::WriteBlocks,
+            range,
+            result,
+            TInstant::Now() - started);
+    };
+
+    ui64 randomBlockIndex = RandomNumber<ui8>(DataForWriteRequests.size());
+    auto& block = DataForWriteRequests[randomBlockIndex];
+    RequestCallbacks.Write(range.Start, block.data(), block.size(), cb, Udata);
 }
 
 void TTestRunner::SendZeroRequest(const TBlockRange64& range)
@@ -327,10 +365,22 @@ void TTestRunner::ReportProgress()
         const auto requestsCompleted = RequestsCompleted - LastRequestsCompleted;
 
         STORAGE_INFO(LoggingTag
-            << "Current IOPS: " << (requestsCompleted / timePassed.Seconds()));
+            << "Average IOPS: " << (requestsCompleted / timePassed.Seconds()));
 
         LastReportTs = now;
         LastRequestsCompleted = RequestsCompleted;
+    }
+}
+
+void TTestRunner::GenerateWriteData()
+{
+    DataForWriteRequests.resize(BlocksNum);
+    for (auto &block: DataForWriteRequests) {
+        block.resize(BlockSize);
+        auto random = []() -> ui8 {
+            return 1 + RandomNumber<ui8>(Max<ui8>());
+        };
+        std::ranges::generate(block, random);
     }
 }
 
@@ -341,19 +391,19 @@ void TTestRunner::ReportProgress()
 ITestRunnerPtr CreateTestRunner(
     ILoggingServicePtr loggingService,
     TString loggingTag,
-    IRequestGeneratorPtr requests,
+    IRequestGeneratorPtr requestGenerator,
     ui32 maxIoDepth,
     std::atomic<bool>& shouldStop,
-    LoadTestSendRequestCallbacks RequestCallbacks,
+    TLoadTestRequestCallbacks requestCallbacks,
     const void *udata)
 {
     return std::make_shared<TTestRunner>(
         std::move(loggingService),
         std::move(loggingTag),
-        std::move(requests),
+        std::move(requestGenerator),
         maxIoDepth,
         shouldStop,
-        std::move(RequestCallbacks),
+        std::move(requestCallbacks),
         udata);
 }
 

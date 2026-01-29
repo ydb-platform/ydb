@@ -82,8 +82,10 @@ const google::protobuf::Message* GetCommandFromRequest(const TEvLoadTestRequest&
         return &request.GetYCSBLoad();
     case TEvLoadTestRequest::CommandCase::kInterconnectLoad:
         return &request.GetInterconnectLoad();
+#ifdef __linux__
     case TEvLoadTestRequest::CommandCase::kNBS2Load:
         return &request.GetNBS2Load();
+#endif
     default:
         return nullptr;
     }
@@ -113,8 +115,10 @@ ui64 ExtractTagFromCommand(const TEvLoadTestRequest& request) {
         return request.GetYCSBLoad().GetTag();
     case TEvLoadTestRequest::CommandCase::kInterconnectLoad:
         return request.GetInterconnectLoad().GetTag();
+#ifdef __linux__
     case TEvLoadTestRequest::CommandCase::kNBS2Load:
         return request.GetNBS2Load().GetTag();
+#endif
     default:
         return Max<ui64>();
     }

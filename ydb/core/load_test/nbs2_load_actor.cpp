@@ -95,8 +95,23 @@ public:
         VERIFY_PARAM(DurationSeconds);
         VERIFY_PARAM(RangeTest);
 
-        DirectPartitionId.Parse(cmd.GetTestParam().data(), cmd.GetTestParam().size());
+        DirectPartitionId.Parse(cmd.GetDirectPartitionId().data(), cmd.GetDirectPartitionId().size());
         google::protobuf::TextFormat::PrintToString(cmd, &ConfigString);
+
+        if (RangeTest.GetStart() >= RangeTest.GetEnd() || RangeTest.GetEnd() > 32767) {
+            ythrow NKikimr::TLoadActorException() << "Range must be in [0, 32767]";
+        }
+        if (RangeTest.GetZeroRate() > 0) {
+            ythrow NKikimr::TLoadActorException() << "ZeroRate is unsupported";
+        }
+        if (RangeTest.GetReadRate() + RangeTest.GetWriteRate() != 100) {
+            ythrow NKikimr::TLoadActorException() << "Overall request rate must be 100";
+        }
+        if (RangeTest.GetMinRequestSize() || RangeTest.GetMaxRequestSize()) {
+            ythrow NKikimr::TLoadActorException() << "Request size is strictly 1 block for now";
+        }
+        RangeTest.SetMinRequestSize(1);
+        RangeTest.SetMaxRequestSize(1);
     }
 
     ~TNBS2LoadActor() {
@@ -105,11 +120,19 @@ public:
     void Bootstrap(const TActorContext& ctx) {
         LOG_WARN_S(ctx, NKikimrServices::NBS2_LOAD_TEST, "Tag# " << Tag << " TNBS2LoadActor Bootstrap called");
 
-        ctx.Schedule(TDuration::Seconds(DurationSeconds + 3), new TEvents::TEvPoisonPill);
+        Become(&TNBS2LoadActor::StateStart);
+        auto TestInitializeingStart = Now();
+        RunTest(ctx);
+        TestInitializingDuration = Now() - TestInitializeingStart;
+        LOG_WARN_S(
+            ctx,
+            NKikimrServices::NBS2_LOAD_TEST,
+            "Tag# " << Tag << " Test has been initialized in "
+                << TestInitializingDuration << " sec");
+
+        ctx.Schedule(TDuration::Seconds(DurationSeconds + 1), new TEvents::TEvPoisonPill);
         LOG_WARN_S(ctx, NKikimrServices::NBS2_LOAD_TEST, "Tag# " << Tag << " Schedule PoisonPill");
 
-        Become(&TNBS2LoadActor::StateStart);
-        RunTest(ctx);
     }
 
     void PrepareTestResult(const TActorContext& ctx)
@@ -147,10 +170,10 @@ public:
         TestContext.Result = NJson::WriteJson(result, false, false, false);
     }
 
-    void SendReadRequest(
+    void SendIORequest(
         const TActorContext& ctx,
-        std::unique_ptr<NYdb::NBS::TEvService::TEvReadBlocksRequest> request,
-        NCloud::NBlockStore::NLoadTest::LoadTestSendReadRequestFunctionCB cb
+        IEventBasePtr request,
+        NCloud::NBlockStore::NLoadTest::LoadTestSendRequestFunctionCB cb
     )
     {
         ui64 cookie = ++LastUsedCookie;
@@ -158,20 +181,38 @@ public:
         SendWithUndeliveryTracking(ctx, DirectPartitionId, std::move(request), cookie);
     }
 
-    void RunTest(const TActorContext& ctx) {
+    NCloud::NBlockStore::NLoadTest::TLoadTestRequestCallbacks GetLoadTestCallbacks()
+    {
         using namespace NCloud::NBlockStore;
-        LOG_DEBUG_S(ctx, NKikimrServices::NBS2_LOAD_TEST, "Tag# " << Tag << " RunTest called");
-
         auto sendReadRequest =
             [this]
-            (TBlockRange64 range, NCloud::NBlockStore::NLoadTest::LoadTestSendReadRequestFunctionCB cb, const void *udata) mutable {
+            (TBlockRange64 range, NCloud::NBlockStore::NLoadTest::LoadTestSendRequestFunctionCB cb, const void *udata) mutable {
             auto request = std::make_unique<NYdb::NBS::TEvService::TEvReadBlocksRequest>();
             request->Record.SetDiskId("TempDiskID");
             request->Record.SetStartIndex(range.Start);
             request->Record.SetBlocksCount(range.Size());
 
             const TActorContext *actorContext = reinterpret_cast<const TActorContext*>(udata);
-            SendReadRequest(*actorContext, std::move(request), cb);
+            SendIORequest(*actorContext, std::move(request), cb);
+        };
+
+        auto sendWriteRequest =
+            [this]
+            (
+                ui64 blockIndexWriteTo,
+                const void* data,
+                size_t dataSize,
+                NCloud::NBlockStore::NLoadTest::LoadTestSendRequestFunctionCB cb,
+                const void *udata
+            ) mutable {
+                auto request = std::make_unique<NYdb::NBS::TEvService::TEvWriteBlocksRequest>();
+                request->Record.SetDiskId("TempDiskID");
+                request->Record.SetStartIndex(blockIndexWriteTo);
+                auto* dstBlocks = request->Record.MutableBlocks();
+                dstBlocks->AddBuffers(data, dataSize);
+
+                const TActorContext *actorContext = reinterpret_cast<const TActorContext*>(udata);
+                SendIORequest(*actorContext, std::move(request), cb);
         };
 
         auto notifyTestCompleted = [this] (const void *udata) {
@@ -184,15 +225,28 @@ public:
                 SendTestResult(*actorContext);
             }
         };
+
+        NCloud::NBlockStore::NLoadTest::TLoadTestRequestCallbacks requestCallbacks;
+        requestCallbacks.Read = sendReadRequest;
+        requestCallbacks.NotifyCompleted = notifyTestCompleted;
+        requestCallbacks.Write = sendWriteRequest;
+
+        return requestCallbacks;
+    }
+
+    void RunTest(const TActorContext& ctx) {
+        using namespace NCloud::NBlockStore;
+        LOG_DEBUG_S(ctx, NKikimrServices::NBS2_LOAD_TEST, "Tag# " << Tag << " RunTest called");
+
+
         //-------------
 
         NCloud::TLogSettings logSettings;
         logSettings.FiltrationLevel = ELogPriority::TLOG_INFO;
         auto logging = CreateLoggingService("console", logSettings);
 
-        NCloud::NBlockStore::NLoadTest::LoadTestSendRequestCallbacks requestCallbacks;
-        requestCallbacks.Read = sendReadRequest;
-        requestCallbacks.NotifyCompleted = notifyTestCompleted;
+        NCloud::NBlockStore::NLoadTest::TLoadTestRequestCallbacks
+            requestCallbacks = GetLoadTestCallbacks();
 
         TestRunner = CreateTestRunner(
             logging,
@@ -205,20 +259,20 @@ public:
         TestRunner->Start();
     }
 
-    void HandleReadBlocksResponse(
-        const NYdb::NBS::TEvService::TEvReadBlocksResponse::TPtr& ev,
-        const TActorContext& ctx)
+    template <typename Record>
+    void HandleReadWriteResponse(
+        const TActorContext& ctx,
+        const Record& record,
+        ui64 cookie
+    )
     {
         using namespace NYdb::NBS;
-
-        LOG_DEBUG_S(ctx, NKikimrServices::NBS2_LOAD_TEST, "Tag# " << Tag << "HandleReadBlocksResponse " << ev->Cookie);
-        auto it = CookieToRequestCB.find(ev->Cookie);
+        auto it = CookieToRequestCB.find(cookie);
         if (it == CookieToRequestCB.end()) {
-            LOG_ERROR_S(ctx, NKikimrServices::NBS2_LOAD_TEST, "Tag# " << Tag << "Could not find delivered cookie request " << ev->Cookie);
+            LOG_ERROR_S(ctx, NKikimrServices::NBS2_LOAD_TEST, "Tag# " << Tag << "Could not find delivered cookie request " << cookie);
             return;
         }
 
-        auto &record = ev->Get()->Record;
         auto error = HasError(record)
             ? record.GetError()
             : MakeError(S_OK);
@@ -226,12 +280,31 @@ public:
         CookieToRequestCB.erase(it);
     }
 
-    void HandleReadUndelivery(
-        const NYdb::NBS::TEvService::TEvReadBlocksRequest::TPtr& ev,
+    void HandleReadBlocksResponse(
+        const NYdb::NBS::TEvService::TEvReadBlocksResponse::TPtr& ev,
+        const TActorContext& ctx)
+    {
+        LOG_DEBUG_S(ctx, NKikimrServices::NBS2_LOAD_TEST, "Tag# " << Tag << "HandleReadBlocksResponse " << ev->Cookie);
+        HandleReadWriteResponse(ctx, ev->Get()->Record, ev->Cookie);
+
+    }
+
+    void HandleWriteBlocksResponse(
+        const NYdb::NBS::TEvService::TEvWriteBlocksResponse::TPtr& ev,
+        const TActorContext& ctx)
+    {
+        LOG_DEBUG_S(ctx, NKikimrServices::NBS2_LOAD_TEST, "Tag# " << Tag << "HandleWriteBlocksResponse " << ev->Cookie);
+        HandleReadWriteResponse(ctx, ev->Get()->Record, ev->Cookie);
+    }
+
+    template <typename Ev>
+    void HandleUndelivery(
+        const Ev& ev,
         const TActorContext& ctx)
     {
         using namespace NYdb::NBS;
-        LOG_ERROR_S(ctx, NKikimrServices::NBS2_LOAD_TEST, "Tag# " << Tag << "Could not deliver read request " << ev->Cookie);
+        LOG_ERROR_S(ctx, NKikimrServices::NBS2_LOAD_TEST, "Tag# " << Tag << "Could not deliver request " << ev->Cookie);
+
         auto it = CookieToRequestCB.find(ev->Cookie);
         if (it == CookieToRequestCB.end()) {
             LOG_ERROR_S(ctx, NKikimrServices::NBS2_LOAD_TEST, "Tag# " << Tag << "Could not find undelivered cookie request " << ev->Cookie);
@@ -247,7 +320,8 @@ public:
         CFunc(TEvents::TSystem::PoisonPill, HandlePoisonPill)
         HFunc(NMon::TEvHttpInfo, HandleHTML)
         HFunc(NYdb::NBS::TEvService::TEvReadBlocksResponse, HandleReadBlocksResponse)
-        HFunc(NYdb::NBS::TEvService::TEvReadBlocksRequest, HandleReadUndelivery)
+        HFunc(NYdb::NBS::TEvService::TEvWriteBlocksResponse, HandleWriteBlocksResponse)
+        HFunc(NYdb::NBS::TEvService::TEvReadBlocksRequest, HandleUndelivery)
     )
 
 
@@ -303,6 +377,9 @@ private:
                             str << "Name";
                         }
                         TABLEH() {
+                            str << "TestInitializingDuration";
+                        }
+                        TABLEH() {
                             str << "TestResults";
                         }
                     }
@@ -317,6 +394,9 @@ private:
                         };
                         TABLED() {
                             str << Name;
+                        };
+                        TABLED() {
+                            str << TestInitializingDuration;
                         };
                         TABLED() {
                             str << TestContext.Result.Str();
@@ -346,12 +426,13 @@ private:
     NCloud::NBlockStore::NProto::TRangeTest RangeTest;
     NCloud::NBlockStore::NLoadTest::TTestContext TestContext; // TODO remove me
 
-    TMap<ui64, NCloud::NBlockStore::NLoadTest::LoadTestSendReadRequestFunctionCB> CookieToRequestCB;
+    TMap<ui64, NCloud::NBlockStore::NLoadTest::LoadTestSendRequestFunctionCB> CookieToRequestCB;
     std::atomic<uint64_t> LastUsedCookie = 0;
 
     NCloud::NBlockStore::NLoadTest::ITestRunnerPtr TestRunner;
     TString ReasonOfFinishing;
     bool ResultSent = false;
+    TDuration TestInitializingDuration;
     // ---
     TString ConfigString;
 };

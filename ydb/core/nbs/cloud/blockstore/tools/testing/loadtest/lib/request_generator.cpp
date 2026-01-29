@@ -44,6 +44,7 @@ public:
         SetupRequestWeights();
     }
 
+    bool HasWriteRequests() const override;
     bool Next(TRequest* request) override;
     void Complete(TBlockRange64 blockRange) override;
     TString Describe() const override;
@@ -68,6 +69,11 @@ bool TArtificialRequestGenerator::HasMoreRequests() const
 {
     return !RangeTest.GetRequestsCount()
         || RangeTest.GetRequestsCount() - SentRequestCount;
+}
+
+bool TArtificialRequestGenerator::HasWriteRequests() const
+{
+    return RangeTest.GetWriteRate() > 0;
 }
 
 bool TArtificialRequestGenerator::Next(TRequest* request)

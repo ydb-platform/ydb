@@ -93,6 +93,7 @@ public:
             case SignatureMetadata:                     return "SignatureMetadata";
             case SignatureDDiskChunkMap:                return "SignatureDDiskChunkMap";
             case SignaturePersistentBufferChunkMap:     return "SignaturePersistentBufferChunkMap";
+            case SignatureChunkKeeper:                  return "SignatureChunkKeeper";
             case Max:                                   return "Max";
         }
         return TStringBuilder() << "Unknown(" << static_cast<ui32>(Signature) << "(";

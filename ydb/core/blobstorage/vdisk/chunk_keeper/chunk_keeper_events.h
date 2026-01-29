@@ -5,6 +5,30 @@
 
 namespace NKikimr {
 
+//////////////////////////////////////////////////////////////////////////////////////////
+/// Contract
+//////////////////////////////////////////////////////////////////////////////////////////
+/// 1. TEvChunkKeeperAllocate(subsystem)
+/// - Allocates chunk on PDisk and persistently commit it as owned by given subsystem
+/// - May return ERROR on PDisk failures
+///
+/// 2. TEvChunkKeeperFree(chunkIdx, subsystem)
+/// - Deallocates chunk with given chunkIdx if it is owned by given subsystem
+/// - Returns ERROR if chunk is not owned by subsystem
+/// - May return ERROR on PDisk failures
+///
+/// 3. TEvChunkKeeperDiscover(subsystem)
+/// - Returns list of chunks committed as owned by given subsystem
+/// - May return chunks allocated by TEvChunkKeeperAllocate before subsystem receives
+///   TEvChunkKeeperAllocateResult wnen sent in-between these events
+/// - May not return chunks deallocated by TEvChunkKeeperFree before subsystem receives
+///   TEvChunkKeeperFreeResult wnen sent in-between these events
+/// - Always succeeds
+///
+/// Simultaneous allocation and/or deallocation requests in the same subsystem
+/// are not allowed
+//////////////////////////////////////////////////////////////////////////////////////////
+
 struct TEvChunkKeeperAllocate : TEventLocal<TEvChunkKeeperAllocate, TEvBlobStorage::EvChunkKeeperAllocate> {
     using TSubsystem = NKikimrVDiskData::TChunkKeeperEntryPoint::ESubsystem;
     TSubsystem Subsystem;

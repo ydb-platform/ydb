@@ -3,6 +3,7 @@ syntax = "proto3";
 option cc_enable_arenas = true;
 
 package NCloud.NBlockStore.NProto;
+option go_package = "github.com/ydb-platform/ydb/ydb/core/nbs/cloud/blockstore/tools/testing/loadtest/lib/protos";
 
 // Load type
 

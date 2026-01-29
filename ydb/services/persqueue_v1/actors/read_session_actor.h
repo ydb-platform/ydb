@@ -391,6 +391,7 @@ private:
     i64 MaxTimeLagMs;
     i64 ReadTimestampMs;
     i64 ReadSizeBudget;
+    ui64 PartitionMaxInFlightBytes;
 
     TString Auth;
 

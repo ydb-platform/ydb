@@ -55,6 +55,22 @@ struct TTopicCounters {
 };
 
 
+struct TPartitionInFlightMemoryLayout {
+    constexpr static ui64 MAX_LAYOUT_SIZE = 1000;
+
+    TPartitionInFlightMemoryLayout() = default;
+    TPartitionInFlightMemoryLayout(ui64 MaxAllowedSize);
+    
+    ui64 LayoutUnit;
+    std::deque<ui64> Layout;
+    ui64 TotalSize;
+
+    bool Add(ui64 Offset, ui64 Size);
+    bool Remove(ui64 Offset);
+    bool IsMemoryLimitReached() const;
+};
+
+
 class TPartitionActor : public NActors::TActorBootstrapped<TPartitionActor>
                       , public NActors::IActorExceptionHandler {
 private:
@@ -78,7 +94,7 @@ public:
                      const ui64 tabletID, const TTopicCounters& counters, const bool commitsDisabled,
                      const TString& clientDC, bool rangesMode, const NPersQueue::TTopicConverterPtr& topic, const TString& database, bool directRead,
                      bool useMigrationProtocol, ui32 maxTimeLagMs, ui64 readTimestampMs, const TTopicHolder::TPtr& topicHolder,
-                     const std::unordered_set<ui64>& notCommitedToFinishParents);
+                     const std::unordered_set<ui64>& notCommitedToFinishParents, ui64 partitionMaxInFlightBytes);
     ~TPartitionActor();
 
     void Bootstrap(const NActors::TActorContext& ctx);
@@ -251,7 +267,7 @@ private:
     std::set<ui64> UnpublishedDirectReads;
     std::set<ui64> DirectReadsToForget;
 
-    THashMap<TPartitionId, ui64> PartitionInFlightBytes;
+    TPartitionInFlightMemoryLayout PartitionInFlightMemoryLayout;
 
     enum class EDirectReadRestoreStage {
         None,

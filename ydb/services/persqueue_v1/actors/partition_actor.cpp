@@ -28,7 +28,7 @@ TPartitionActor::TPartitionActor(
         const ui64 tabletID, const TTopicCounters& counters, bool commitsDisabled,
         const TString& clientDC, bool rangesMode, const NPersQueue::TTopicConverterPtr& topic, const TString& database,
         bool directRead, bool useMigrationProtocol, ui32 maxTimeLagMs, ui64 readTimestampMs, const TTopicHolder::TPtr& topicHolder,
-        const std::unordered_set<ui64>& notCommitedToFinishParents
+        const std::unordered_set<ui64>& notCommitedToFinishParents, ui64 partitionMaxInFlightBytes
 )
     : ParentId(parentId)
     , ClientId(clientId)
@@ -73,6 +73,7 @@ TPartitionActor::TPartitionActor(
     , Topic(topic)
     , Database(database)
     , DirectRead(directRead)
+    , PartitionInFlightMemoryLayout(partitionMaxInFlightBytes)
     , UseMigrationProtocol(useMigrationProtocol)
     , FirstRead(true)
     , ReadingFinishedSent(false)
@@ -822,11 +823,12 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
 
         AFL_ENSURE(!WaitForData);
 
+        bool isInFlightMemoryOk = PartitionInFlightMemoryLayout.Add(ReadOffset, dr.GetBytesSizeEstimate());
         ReadOffset = dr.GetLastOffset() + 1;
 
         AFL_ENSURE(!RequestInfly);
 
-        if (EndOffset > ReadOffset) {
+        if (EndOffset > ReadOffset && isInFlightMemoryOk) {
             SendPartitionReady(ctx);
         } else {
             WaitForData = true;
@@ -872,7 +874,7 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
 
     AFL_ENSURE(!WaitForData);
 
-    if (EndOffset > ReadOffset) {
+    if (EndOffset > ReadOffset && PartitionInFlightMemoryLayout.Add(ReadOffset, res.ByteSize())) {
         SendPartitionReady(ctx);
     } else {
         WaitForData = true;
@@ -938,6 +940,13 @@ void TPartitionActor::CommitDone(ui64 cookie, const TActorContext& ctx) {
     }
 
     CommittedOffset = CommitsInfly.front().second.Offset;
+    
+    bool wasMemoryLimitReached = PartitionInFlightMemoryLayout.IsMemoryLimitReached();
+    bool isMemoryOkNow = PartitionInFlightMemoryLayout.Remove(CommittedOffset);
+    if (wasMemoryLimitReached && isMemoryOkNow) {
+        SendPartitionReady(ctx);
+    }
+
     ui64 startReadId = CommitsInfly.front().second.StartReadId;
     ctx.Send(ParentId, new TEvPQProxy::TEvCommitDone(Partition.AssignId, startReadId, readId, CommittedOffset, EndOffset, ReadingFinishedSent));
 
@@ -1068,7 +1077,7 @@ void TPartitionActor::InitStartReading(const TActorContext& ctx) {
         ClientCommitOffset = CommittedOffset;
     }
 
-    if (EndOffset > ReadOffset && !MaxTimeLagMs && !ReadTimestampMs) {
+    if (EndOffset > ReadOffset && !MaxTimeLagMs && !ReadTimestampMs && !PartitionInFlightMemoryLayout.IsMemoryLimitReached()) {
         SendPartitionReady(ctx);
     } else {
         WaitForData = true;
@@ -1505,6 +1514,49 @@ void TPartitionActor::DoWakeup(const TActorContext& ctx) {
     if (WaitForData && ReadOffset >= EndOffset && WaitDataInfly.size() <= 1 && PipeClient) { //send one more
         WaitDataInPartition(ctx);
     }
+}
+
+TPartitionInFlightMemoryLayout::TPartitionInFlightMemoryLayout(ui64 MaxAllowedSize)
+    : LayoutUnit(0)
+    , TotalSize(0)
+{
+    if (MaxAllowedSize > 0) {
+        LayoutUnit = MaxAllowedSize / MAX_LAYOUT_SIZE;
+    }
+}
+
+bool TPartitionInFlightMemoryLayout::Add(ui64 Offset, ui64 Size) {
+    if (LayoutUnit == 0) {
+        // means that there are no limits were set
+        return true;
+    }
+
+    auto unitsBefore = TotalSize / LayoutUnit;
+    TotalSize += Size;
+    auto unitsAfter = TotalSize / LayoutUnit;
+    if (unitsAfter > unitsBefore || TotalSize == 0) {
+        Layout.push_back(Offset);
+    }
+
+    return TotalSize < LayoutUnit * MAX_LAYOUT_SIZE;
+}
+
+bool TPartitionInFlightMemoryLayout::Remove(ui64 Offset) {
+    if (LayoutUnit == 0) {
+        // means that there are no limits were set
+        return true;
+    }
+
+    auto it = std::lower_bound(Layout.begin(), Layout.end(), Offset);
+    auto toRemove = it - Layout.begin();
+
+    TotalSize -= toRemove * LayoutUnit;
+    Layout.erase(Layout.begin(), it);
+    return TotalSize < LayoutUnit * MAX_LAYOUT_SIZE;
+}
+
+bool TPartitionInFlightMemoryLayout::IsMemoryLimitReached() const {
+    return TotalSize >= LayoutUnit * MAX_LAYOUT_SIZE;
 }
 
 }

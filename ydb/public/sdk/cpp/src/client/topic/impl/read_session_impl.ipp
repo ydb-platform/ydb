@@ -1296,8 +1296,6 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
 
     UpdateMemoryUsageStatisticsImpl();
 
-    i64 remainingServerBytes = serverBytesSize;
-
     for (TPartitionData<false>& partitionData : *msg.mutable_partition_data()) {
         auto partitionStreamIt = PartitionStreams.find(partitionData.partition_session_id());
         if (partitionStreamIt == PartitionStreams.end()) {
@@ -1322,7 +1320,6 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
         i64 firstOffset = std::numeric_limits<i64>::max();
         i64 currentOffset = std::numeric_limits<i64>::max();
         i64 desiredOffset = partitionStream->GetFirstNotReadOffset();
-        i64 partitionDataSize = 0;
         for (const auto& batch : partitionData.batches()) {
             // Validate messages.
             for (const auto& messageData : batch.message_data()) {

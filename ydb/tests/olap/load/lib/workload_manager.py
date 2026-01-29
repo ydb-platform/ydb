@@ -455,7 +455,7 @@ class WorkloadManagerOltp(WorkloadManagerComputeScheduler):
         )
         for host, host_results in results.items():
             for bin, res in host_results.items():
-                assert res.get('success', False), f'host: {host}, bin: {bin}, path: {res.get('path')}, error: {res.get('error')}'
+                assert res.get('success', False), f"host: {host}, bin: {bin}, path: {res.get('path')}, error: {res.get('error')}"
 
         super().do_setup_class()
 
@@ -481,7 +481,7 @@ class WorkloadManagerOltp(WorkloadManagerComputeScheduler):
             script_file.write('#!/bin/bash\n')
             script_file.write(' '.join(cmd))
         res = re.deploy_binary(script_path, node.host, tmpdir)
-        assert res.get('success', False), f'slot: {node.slot}, bin: run_tpcc.sh, path: {res.get('path')}, error: {res.get('error')}'
+        assert res.get('success', False), f"slot: {node.slot}, bin: run_tpcc.sh, path: {res.get('path')}, error: {res.get('error')}"
 
         cls.execute_ssh(node.host, f'{tmpdir}/run_tpcc.sh').wait()
         cls.tpcc_started = True
@@ -494,7 +494,7 @@ class WorkloadManagerOltp(WorkloadManagerComputeScheduler):
         cls.execute_ssh(node.host, ' '.join(cmd)).wait(check_exit_code=False)
 
     @classmethod
-    def tpcc_is_runing(cls) -> bool:
+    def tpcc_is_running(cls) -> bool:
         node = cls.__static_nodes[0]
         tmpdir = cls.get_remote_tmpdir()
         cmd = ['start-stop-daemon', '--status', '--pidfile', f'{tmpdir}/ydb_pid']
@@ -504,7 +504,7 @@ class WorkloadManagerOltp(WorkloadManagerComputeScheduler):
 
     @classmethod
     def wait_tpcc(cls) -> str:
-        while cls.tpcc_is_runing():
+        while cls.tpcc_is_running():
             time.sleep(1)
         node = cls.__static_nodes[0]
         tmpdir = cls.get_remote_tmpdir()

@@ -12,9 +12,59 @@ using namespace NKikimr::NBsController;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+// BlocksCount in one vChunk
+constexpr size_t BlocksCount = 128 * 1024 * 1024 / 4096;
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TDirectBlockGroup
-{
+{   
 private:
+    struct TBlockMeta {
+        TVector<ui64> LsnByPersistentBufferIndex;
+        TVector<bool> IsFlushedToDDiskByPersistentBufferIndex;
+
+        explicit TBlockMeta(size_t persistentBufferCount)
+            : LsnByPersistentBufferIndex(persistentBufferCount, 0)
+            , IsFlushedToDDiskByPersistentBufferIndex(persistentBufferCount, false)
+        {}
+
+        void OnWriteCompleted(const TWriteRequest::TPersistentBufferWriteMeta& writeMeta)
+        {
+            LsnByPersistentBufferIndex[writeMeta.Index] = writeMeta.Lsn;
+            IsFlushedToDDiskByPersistentBufferIndex[writeMeta.Index] = false;
+        }
+
+        [[nodiscard]] bool WriteMetaIsOutdated(const TVector<TWriteRequest::TPersistentBufferWriteMeta>& writesMeta) const
+        {
+            for (const auto& meta : writesMeta) {
+                if (LsnByPersistentBufferIndex[meta.Index] > meta.Lsn) {
+                    return true;
+                }
+            }
+            
+            return false;
+        }
+
+        void OnFlushCompleted(bool isErase, size_t persistentBufferIndex, ui64 lsn)
+        {
+            if (!isErase && LsnByPersistentBufferIndex[persistentBufferIndex] == lsn) {
+                LsnByPersistentBufferIndex[persistentBufferIndex] = 0;
+                IsFlushedToDDiskByPersistentBufferIndex[persistentBufferIndex] = true;
+            }
+        }
+
+        [[nodiscard]] bool IsWrited() const
+        {
+            return IsFlushedToDDisk() || LsnByPersistentBufferIndex[0] != 0;
+        }
+
+        [[nodiscard]] bool IsFlushedToDDisk() const
+        {
+            return IsFlushedToDDiskByPersistentBufferIndex[0];
+        }
+    };
+
     struct TDDiskConnection
     {
         TDDiskId DDiskId;
@@ -38,7 +88,7 @@ private:
 
     ui64 RequestId = 0;
     std::unordered_map<ui64, std::shared_ptr<IRequest>> RequestById;
-    TVector<std::unordered_map<ui64, ui64>> PersistentBufferBlocksLsn;
+    TVector<TBlockMeta> BlocksMeta;
 
 public:
     TDirectBlockGroup(ui64 tabletId, ui32 generation,
@@ -63,6 +113,15 @@ public:
         const NDDisk::TEvWritePersistentBufferResult::TPtr& ev,
         const TActorContext& ctx);
 
+    void RequestBlockFlush(
+        const TActorContext& ctx,
+        const TWriteRequest& request,
+        bool isErase);
+
+    void HandlePersistentBufferFlushResult(
+        const NDDisk::TEvFlushPersistentBufferResult::TPtr& ev,
+        const TActorContext& ctx);
+
     void HandleReadBlocksRequest(
         const TEvService::TEvReadBlocksRequest::TPtr& ev,
         const TActorContext& ctx);
@@ -71,8 +130,9 @@ public:
         const TActorContext& ctx,
         const std::shared_ptr<TReadRequest>& request);
 
-    void HandlePersistentBufferReadResult(
-        const NDDisk::TEvReadPersistentBufferResult::TPtr& ev,
+    template <typename TEvent>
+    void HandleReadResult(
+        const typename TEvent::TPtr& ev,
         const TActorContext& ctx);
 };
 

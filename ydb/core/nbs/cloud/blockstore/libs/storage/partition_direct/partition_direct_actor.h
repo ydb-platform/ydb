@@ -53,9 +53,14 @@ private:
     void HandlePersistentBufferWriteResult(
         const NDDisk::TEvWritePersistentBufferResult::TPtr& ev,
         const TActorContext& ctx);
+    
+    void HandlePersistentBufferFlushResult(
+        const NDDisk::TEvFlushPersistentBufferResult::TPtr& ev,
+        const TActorContext& ctx);
 
-    void HandlePersistentBufferReadResult(
-        const NDDisk::TEvReadPersistentBufferResult::TPtr& ev,
+    template <typename TEvent>
+    void HandleReadResult(
+        const typename TEvent::TPtr& ev,
         const TActorContext& ctx);
 };
 

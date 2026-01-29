@@ -36,7 +36,8 @@ public:
         SignatureScrub = 22,
         SignatureMetadata = 23,
         SignatureDDiskChunkMap = 24,
-        Max = 25
+        SignatureChunkKeeper = 25,
+        Max = 26,
     };
 
     TLogSignature(ui8 val = 0, bool hasCommit = false)
@@ -89,6 +90,7 @@ public:
             case SignatureAddBulkSst:                   return "SignatureAddBulkSst";
             case SignatureScrub:                        return "SignatureScrub";
             case SignatureMetadata:                     return "SignatureMetadata";
+            case SignatureChunkKeeper:                  return "SignatureChunkKeeper";
             case Max:                                   return "Max";
         }
         return TStringBuilder() << "Unknown(" << static_cast<ui32>(Signature) << "(";

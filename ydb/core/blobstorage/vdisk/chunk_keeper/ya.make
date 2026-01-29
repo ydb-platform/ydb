@@ -6,8 +6,9 @@ PEERDIR(
 )
 
 SRCS(
-    metadata_actor.cpp
-    metadata_actor.h
+    chunk_keeper_actor.cpp
+    chunk_keeper_data.cpp
+    chunk_keeper_events.cpp
 )
 
 END()

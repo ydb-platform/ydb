@@ -39,7 +39,8 @@ struct ITestRunner
     virtual void Start() = 0;
     virtual TInstant GetStartTime() const = 0;
     virtual const TTestResults& GetResults() const = 0;
-    // TODO stop work through the NCloud::NBlockStore::NLoadTest::StopTest(TestContext)
+    virtual void Stop() = 0;
+    virtual bool IsFinished() const = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

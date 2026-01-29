@@ -115,7 +115,7 @@ public:
     void PrepareTestResult(const TActorContext& ctx)
     {
         using namespace NCloud::NBlockStore;
-        LOG_WARN_S(ctx, NKikimrServices::NBS2_LOAD_TEST, " TNBS2LoadActor test has been completed " << Name);
+        LOG_WARN_S(ctx, NKikimrServices::NBS2_LOAD_TEST, " test has been completed " << Name);
 
         auto stopped = TInstant::Now();
         NJson::TJsonValue result;
@@ -173,6 +173,17 @@ public:
             const TActorContext *actorContext = reinterpret_cast<const TActorContext*>(udata);
             SendReadRequest(*actorContext, std::move(request), cb);
         };
+
+        auto notifyTestCompleted = [this] (const void *udata) {
+            const TActorContext *actorContext = reinterpret_cast<const TActorContext*>(udata);
+            TestContext.Finished = true;
+            ReasonOfFinishing = "Test completed";
+
+            if (!ResultSent) {
+                PrepareTestResult(*actorContext);
+                SendTestResult(*actorContext);
+            }
+        };
         //-------------
 
         NCloud::TLogSettings logSettings;
@@ -181,6 +192,7 @@ public:
 
         NCloud::NBlockStore::NLoadTest::LoadTestSendRequestCallbacks requestCallbacks;
         requestCallbacks.Read = sendReadRequest;
+        requestCallbacks.NotifyCompleted = notifyTestCompleted;
 
         TestRunner = CreateTestRunner(
             logging,
@@ -245,27 +257,29 @@ private:
     void HandlePoisonPill(const TActorContext& ctx) {
         LOG_WARN_S(ctx, NKikimrServices::NBS2_LOAD_TEST, "Tag# " << Tag << " HandlePoisonPill called");
 
-        // todo normal handler
-        NCloud::NBlockStore::NLoadTest::StopTest(TestContext);
-        PoisonPillRecieved = true;
+        // TODO add waiting of active requests
+        TestRunner->Stop();
+        if (ReasonOfFinishing.empty()) {
+            ReasonOfFinishing = TestRunner->IsFinished() ? "Test completed" : "HandlePoisonPill called";
+        }
 
-        // TODO сделать отправку результата по готовности без ожидания PoisonPill
-        PrepareTestResult(ctx);
-        SendTestResult(ctx);
+        if (!ResultSent) {
+            PrepareTestResult(ctx);
+            SendTestResult(ctx);
+        }
 
         LOG_DEBUG_S(ctx, NKikimrServices::NBS2_LOAD_TEST, "Tag# " << Tag << " loadActor has been finifshed");
         Die(ctx);
     }
 
     void SendTestResult(const TActorContext& ctx) {
-        TestResultSent = true;
-
+        LOG_WARN_S(ctx, NKikimrServices::NBS2_LOAD_TEST, "Tag# " << Tag << " sending result");
+        ResultSent = true;
         TIntrusivePtr<TEvLoad::TLoadReport> report = nullptr;
         report.Reset(new TEvLoad::TLoadReport());
         report->Duration = TDuration::Seconds(DurationSeconds);
 
-        // todo добавить и нормальный результат в reason
-        auto* finishEv = new TEvLoad::TEvLoadTestFinished(Tag, report, "Poison pill");
+        auto* finishEv = new TEvLoad::TEvLoadTestFinished(Tag, report, ReasonOfFinishing);
         finishEv->LastHtmlPage = RenderHTML();
         //finishEv->JsonResult = GetJsonResult();
         ctx.Send(Parent, finishEv);
@@ -335,10 +349,9 @@ private:
     TMap<ui64, NCloud::NBlockStore::NLoadTest::LoadTestSendReadRequestFunctionCB> CookieToRequestCB;
     std::atomic<uint64_t> LastUsedCookie = 0;
 
-    bool PoisonPillRecieved = false;
-    bool TestResultSent = false;
-
     NCloud::NBlockStore::NLoadTest::ITestRunnerPtr TestRunner;
+    TString ReasonOfFinishing;
+    bool ResultSent = false;
     // ---
     TString ConfigString;
 };

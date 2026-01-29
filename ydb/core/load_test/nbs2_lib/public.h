@@ -12,9 +12,11 @@ namespace NCloud::NBlockStore::NLoadTest {
 
 using LoadTestSendReadRequestFunctionCB = std::function<void(NYdb::NBS::NProto::TError, const void *udata)>;
 using LoadTestSendReadRequestFunction = std::function<void(TBlockRange64, LoadTestSendReadRequestFunctionCB, const void *udata)>;
+using LoadTestNotifyCompletedFunction = std::function<void(const void *udata)>;
 
 struct LoadTestSendRequestCallbacks {
     LoadTestSendReadRequestFunction Read;
+    LoadTestNotifyCompletedFunction NotifyCompleted;
 };
 
 class TBootstrap;

@@ -96,6 +96,8 @@ public:
     }
 
     void Start() override;
+    void Stop() override;
+    bool IsFinished()  const override;
 
     TInstant GetStartTime() const override;
     const TTestResults& GetResults() const override;
@@ -149,6 +151,15 @@ void TTestRunner::Start()
     SendAvailableRequests();
 }
 
+void TTestRunner::Stop()
+{
+    ShouldStop = true;
+}
+
+bool TTestRunner::IsFinished() const {
+    return CheckExitCondition();
+}
+
 bool TTestRunner::SendNextRequest()
 {
     if (MaxIoDepth && CurrentIoDepth >= MaxIoDepth) {
@@ -176,8 +187,10 @@ bool TTestRunner::SendNextRequest()
             break;
 
         default:
-            Y_ABORT_UNLESS(TStringBuilder()
-                << "unexpected request type: " << request.RequestType);
+            STORAGE_ERROR(LoggingTag
+                << "unexpected request type: "
+                << request.RequestType << ". Test has been stopped");
+            Stop();
     }
 
     return true;
@@ -222,14 +235,18 @@ std::make_unique<TCompletedRequest>(
             elapsed));
 
     SendAvailableRequests();
+
+    if (IsFinished()) {
+        RequestCallbacks.NotifyCompleted(Udata);
+    }
 }
 
 void TTestRunner::SendWriteRequest(const TBlockRange64& range)
 {
     STORAGE_ERROR(LoggingTag
         << "WriteBlocks request: ("
-        << range.Start << ", " << range.Size() << ")");
-    Y_ABORT("WriteBlocks is not supported yet");
+        << range.Start << ", " << range.Size() << "). Test has been stopped");
+    Stop();
 
 }
 
@@ -237,8 +254,8 @@ void TTestRunner::SendZeroRequest(const TBlockRange64& range)
 {
     STORAGE_ERROR(LoggingTag
         << "ZeroBlocks request: ("
-        << range.Start << ", " << range.Size() << ")");
-    Y_ABORT("ZeroBlocks is not supported ");
+        << range.Start << ", " << range.Size() << "). Test has been stopped");
+    Stop();
 }
 
 bool TTestRunner::StopRequested() const
@@ -296,8 +313,10 @@ void TTestRunner::ProcessCompletedRequests(std::unique_ptr<TCompletedRequest> re
             break;
 
         default:
-            Y_ABORT_UNLESS(TStringBuilder()
-                << "unexpected request type: " << request->RequestType);
+            STORAGE_ERROR(LoggingTag
+                << "unexpected request type: "
+                << request->RequestType << ". Test has been stopped");
+            Stop();
     }
 }
 

@@ -1052,7 +1052,7 @@ TStorage::TMessageWrapper TStorage::TMessageIterator::operator*() const {
         .WriteTimestamp = Storage.BaseWriteTimestamp + TDuration::Seconds(message->WriteTimestampDelta),
         .LockingTimestamp = Storage.GetMessageLockingTime(*message),
         .MessageGroupIdHash = message->HasMessageGroupId ? std::optional<ui32>(message->MessageGroupIdHash) : std::nullopt,
-        .MessageGroupIsLocked = Storage.KeepMessageOrder && Storage.LockedMessageGroupsId.contains(message->MessageGroupIdHash),
+        .MessageGroupIsLocked = Storage.KeepMessageOrder && message->HasMessageGroupId && Storage.LockedMessageGroupsId.contains(message->MessageGroupIdHash),
     };
 }
 

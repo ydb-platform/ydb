@@ -103,14 +103,18 @@ void TConsumerActor::Handle(TEvPQ::TEvMLPConsumerMonRequest::TPtr& ev) {
                                 size_t i = 0;
                                 for (auto it = Storage->begin(); it != Storage->end(); ++it) {
                                     auto message = *it;
-                                    auto color = message.MessageGroupIsLocked ? "red" : "green";
                                     TABLER() {
                                         TABLED() { str << ++i; }
                                         TABLED() { str << (message.SlowZone ? "S" : "F"); }
                                         TABLED() { str << message.Offset; }
                                         TABLED() { str << message.Status; }
                                         TABLED() { str << message.WriteTimestamp; }
-                                        TABLED() { str << "<span style=\"color: " << color << "\">" << message.MessageGroupIdHash << "</span>"; }
+                                        TABLED() {
+                                            if (message.MessageGroupIdHash) {
+                                                auto color = message.MessageGroupIsLocked ? "red" : "green";
+                                                str << "<span style=\"color: " << color << "\">" << message.MessageGroupIdHash.value() << "</span>";
+                                            }
+                                        }
                                         TABLED() { str << message.ProcessingCount; }
                                         TABLED() { str << (TInstant::Zero() == message.ProcessingDeadline ? "" : message.ProcessingDeadline.ToString()); }
                                         TABLED() { str << (TInstant::Zero() == message.LockingTimestamp ? "" : message.LockingTimestamp.ToString()); }

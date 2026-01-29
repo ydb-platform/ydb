@@ -2639,7 +2639,7 @@ private:
                 sysLocks.BreakSetLocks();
                 NDataIntegrity::LogVictimDetected(ctx, Self->TabletID(),
                     "Read transaction was a victim of broken locks",
-                    state.LockId ? sysLocks.GetQueryTraceIdForLock(state.LockId) : Nothing(),
+                    state.LockId ? sysLocks.GetVictimQueryTraceIdForLock(state.LockId) : Nothing(),
                     state.QueryTraceId ? TMaybe<ui64>(state.QueryTraceId) : Nothing());
             }
 
@@ -2650,7 +2650,7 @@ private:
                 sysLocks.BreakSetLocks();
                 NDataIntegrity::LogVictimDetected(ctx, Self->TabletID(),
                     "Read transaction was a victim of broken locks",
-                    state.LockId ? sysLocks.GetQueryTraceIdForLock(state.LockId) : Nothing(),
+                    state.LockId ? sysLocks.GetVictimQueryTraceIdForLock(state.LockId) : Nothing(),
                     state.QueryTraceId ? TMaybe<ui64>(state.QueryTraceId) : Nothing());
             }
 
@@ -2680,7 +2680,7 @@ private:
             // Add QueryTraceId for broken locks (needed for TLI logging)
             if (lock.IsError()) {
                 if (auto rawLock = sysLocks.GetRawLock(lock.LockId)) {
-                    ui64 queryTraceId = rawLock->GetQueryTraceId();
+                    ui64 queryTraceId = rawLock->GetVictimQueryTraceId();
                     if (queryTraceId != 0) {
                         addLock->SetQueryTraceId(queryTraceId);
                     }

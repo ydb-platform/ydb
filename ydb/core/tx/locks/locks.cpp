@@ -109,7 +109,7 @@ TLockInfo::TLockInfo(TLockLocker * locker, const ILocksDb::TLockRow& row)
     , Counter(row.Counter)
     , CreationTime(TInstant::MicroSeconds(row.CreateTs))
     , Flags(ELockFlags(row.Flags))
-    , QueryTraceId(row.QueryTraceId)
+    , VictimQueryTraceId(row.VictimQueryTraceId)
 {
     if (row.BreakVersion != TRowVersion::Max()) {
         BreakVersion.emplace(row.BreakVersion);
@@ -219,7 +219,7 @@ void TLockInfo::OnRemoved() {
 void TLockInfo::PersistLock(ILocksDb* db) {
     Y_ENSURE(!IsPersistent());
     Y_ENSURE(db, "Cannot persist lock without a db");
-    db->PersistAddLock(LockId, LockNodeId, Generation, Counter, CreationTime.MicroSeconds(), ui64(Flags & ELockFlags::PersistentMask), QueryTraceId);
+    db->PersistAddLock(LockId, LockNodeId, Generation, Counter, CreationTime.MicroSeconds(), ui64(Flags & ELockFlags::PersistentMask), VictimQueryTraceId);
     Flags |= ELockFlags::Persistent;
 
     PersistRanges(db);
@@ -1148,8 +1148,8 @@ std::pair<TVector<TSysLocks::TLock>, TVector<ui64>> TSysLocks::ApplyLocks() {
         } else {
             lock = Locker.GetOrAddLock(Update->LockTxId, Update->LockNodeId);
         }
-        if (lock && Update->QueryTraceId != 0) {
-            lock->SetQueryTraceId(Update->QueryTraceId);
+        if (lock && Update->VictimQueryTraceId != 0) {
+            lock->SetVictimQueryTraceId(Update->VictimQueryTraceId);
         }
         if (!lock) {
             counter = TLock::ErrorTooMuch;
@@ -1262,27 +1262,27 @@ ui64 TSysLocks::ExtractLockTxId(const TArrayRef<const TCell>& key) const {
     Y_ENSURE(ok && Self->TabletID() == tabletId);
     return lockTxId;
 }
-TVector<ui64> TSysLocks::ExtractQueryTraceIds(const TVector<ui64>& lockIds) const {
-    TVector<ui64> queryTraceIds;
-    queryTraceIds.reserve(lockIds.size());
+TVector<ui64> TSysLocks::ExtractVictimQueryTraceIds(const TVector<ui64>& lockIds) const {
+    TVector<ui64> victimQueryTraceIds;
+    victimQueryTraceIds.reserve(lockIds.size());
 
     for (ui64 lockId : lockIds) {
         if (auto* lock = Locker.FindLockPtr(lockId)) {
-            ui64 queryTraceId = lock->GetQueryTraceId();
-            if (queryTraceId != 0) {
-                queryTraceIds.push_back(queryTraceId);
+            ui64 victimQueryTraceId = lock->GetVictimQueryTraceId();
+            if (victimQueryTraceId != 0) {
+                victimQueryTraceIds.push_back(victimQueryTraceId);
             }
         }
     }
 
-    return queryTraceIds;
+    return victimQueryTraceIds;
 }
 
-TMaybe<ui64> TSysLocks::GetQueryTraceIdForLock(ui64 lockTxId) const {
+TMaybe<ui64> TSysLocks::GetVictimQueryTraceIdForLock(ui64 lockTxId) const {
     if (auto* lock = Locker.FindLockPtr(lockTxId)) {
-        ui64 queryTraceId = lock->GetQueryTraceId();
-        if (queryTraceId != 0) {
-            return queryTraceId;
+        ui64 victimQueryTraceId = lock->GetVictimQueryTraceId();
+        if (victimQueryTraceId != 0) {
+            return victimQueryTraceId;
         }
     }
     return Nothing();
@@ -1577,8 +1577,8 @@ EEnsureCurrentLock TSysLocks::EnsureCurrentLock(bool createMissing) {
     if (!Update->Lock) {
         return EEnsureCurrentLock::TooMany;
     }
-    if (Update->QueryTraceId != 0) {
-        Update->Lock->SetQueryTraceId(Update->QueryTraceId);
+    if (Update->VictimQueryTraceId != 0) {
+        Update->Lock->SetVictimQueryTraceId(Update->VictimQueryTraceId);
     }
 
     return EEnsureCurrentLock::Success;

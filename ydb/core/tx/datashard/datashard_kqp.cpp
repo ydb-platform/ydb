@@ -270,7 +270,7 @@ TVector<NKikimrDataEvents::TLock> ValidateLocks(const NKikimrDataEvents::TKqpLoc
             auto& brokenLock = brokenLocks.emplace_back(lockProto);
             // Try to get QueryTraceId from the actual lock in the system
             if (auto rawLock = sysLocks.GetRawLock(lockProto.GetLockId())) {
-                ui64 queryTraceId = rawLock->GetQueryTraceId();
+                ui64 queryTraceId = rawLock->GetVictimQueryTraceId();
                 if (queryTraceId != 0) {
                     brokenLock.SetQueryTraceId(queryTraceId);
                 }

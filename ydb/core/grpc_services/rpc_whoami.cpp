@@ -45,7 +45,6 @@ private:
 
         // Add permission information (always returned)
         const auto* appData = AppData();
-        response->set_is_token_required(appData->EnforceUserTokenRequirement);
         bool isAdministrationAllowed = IsTokenAllowed(&userToken, appData->DomainsConfig.GetSecurityConfig().GetAdministrationAllowedSIDs());
         bool isMonitoringAllowed = isAdministrationAllowed || IsTokenAllowed(&userToken, appData->DomainsConfig.GetSecurityConfig().GetMonitoringAllowedSIDs());
         bool isViewerAllowed = isMonitoringAllowed || IsTokenAllowed(&userToken, appData->DomainsConfig.GetSecurityConfig().GetViewerAllowedSIDs());

@@ -75,7 +75,6 @@ Y_UNIT_TEST_SUITE(TWhoAmI) {
         // Verify groups are not returned when not requested
         UNIT_ASSERT_VALUES_EQUAL(result.GetGroups().size(), 0);
         // Permissions are always returned
-        UNIT_ASSERT_VALUES_EQUAL(result.IsTokenRequired(), true);
         UNIT_ASSERT_VALUES_EQUAL(result.IsAdministrationAllowed(), false);
         UNIT_ASSERT_VALUES_EQUAL(result.IsMonitoringAllowed(), false);
         UNIT_ASSERT_VALUES_EQUAL(result.IsViewerAllowed(), false);
@@ -103,7 +102,7 @@ Y_UNIT_TEST_SUITE(TWhoAmI) {
         }
         UNIT_ASSERT_C(hasAllUsers, "Expected all-users@well-known group");
         // Permissions are always returned
-        UNIT_ASSERT_VALUES_EQUAL(result.IsTokenRequired(), true);
+        UNIT_ASSERT_VALUES_EQUAL(result.IsDatabaseAllowed(), false);
     }
 
     Y_UNIT_TEST(WhoAmIWithPermissions_NoPermissions) {
@@ -119,7 +118,6 @@ Y_UNIT_TEST_SUITE(TWhoAmI) {
         auto result = WhoAmI(grpc, "user1@builtin", true);
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToOneLineString());
         UNIT_ASSERT_STRINGS_EQUAL(result.GetUserName(), "user1@builtin");
-        UNIT_ASSERT_VALUES_EQUAL(result.IsTokenRequired(), true);
         UNIT_ASSERT_VALUES_EQUAL(result.IsAdministrationAllowed(), false);
         UNIT_ASSERT_VALUES_EQUAL(result.IsMonitoringAllowed(), false);
         UNIT_ASSERT_VALUES_EQUAL(result.IsViewerAllowed(), false);
@@ -136,7 +134,6 @@ Y_UNIT_TEST_SUITE(TWhoAmI) {
         auto result = WhoAmI(grpc, "user1@builtin", true);
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToOneLineString());
         UNIT_ASSERT_STRINGS_EQUAL(result.GetUserName(), "user1@builtin");
-        UNIT_ASSERT_VALUES_EQUAL(result.IsTokenRequired(), true);
         UNIT_ASSERT_VALUES_EQUAL(result.IsAdministrationAllowed(), false);
         UNIT_ASSERT_VALUES_EQUAL(result.IsMonitoringAllowed(), false);
         UNIT_ASSERT_VALUES_EQUAL(result.IsViewerAllowed(), false);
@@ -153,7 +150,6 @@ Y_UNIT_TEST_SUITE(TWhoAmI) {
         auto result = WhoAmI(grpc, "user1@builtin", true);
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToOneLineString());
         UNIT_ASSERT_STRINGS_EQUAL(result.GetUserName(), "user1@builtin");
-        UNIT_ASSERT_VALUES_EQUAL(result.IsTokenRequired(), true);
         UNIT_ASSERT_VALUES_EQUAL(result.IsAdministrationAllowed(), false);
         UNIT_ASSERT_VALUES_EQUAL(result.IsMonitoringAllowed(), false);
         UNIT_ASSERT_VALUES_EQUAL(result.IsViewerAllowed(), true);
@@ -171,7 +167,6 @@ Y_UNIT_TEST_SUITE(TWhoAmI) {
         auto result = WhoAmI(grpc, "user1@builtin", true);
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToOneLineString());
         UNIT_ASSERT_STRINGS_EQUAL(result.GetUserName(), "user1@builtin");
-        UNIT_ASSERT_VALUES_EQUAL(result.IsTokenRequired(), true);
         UNIT_ASSERT_VALUES_EQUAL(result.IsAdministrationAllowed(), false);
         UNIT_ASSERT_VALUES_EQUAL(result.IsMonitoringAllowed(), true);
         // Monitoring implies viewer and database access
@@ -189,7 +184,6 @@ Y_UNIT_TEST_SUITE(TWhoAmI) {
         auto result = WhoAmI(grpc, "user1@builtin", true);
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToOneLineString());
         UNIT_ASSERT_STRINGS_EQUAL(result.GetUserName(), "user1@builtin");
-        UNIT_ASSERT_VALUES_EQUAL(result.IsTokenRequired(), true);
         UNIT_ASSERT_VALUES_EQUAL(result.IsAdministrationAllowed(), true);
         // Administration implies all other permissions
         UNIT_ASSERT_VALUES_EQUAL(result.IsMonitoringAllowed(), true);
@@ -205,7 +199,8 @@ Y_UNIT_TEST_SUITE(TWhoAmI) {
 
         auto result = WhoAmI(grpc, "user1@builtin", true);
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToOneLineString());
-        UNIT_ASSERT_VALUES_EQUAL(result.IsTokenRequired(), false);
+        // With EnforceUserToken=false, user still gets database access (no token requirement)
+        UNIT_ASSERT_VALUES_EQUAL(result.IsDatabaseAllowed(), true);
     }
 
     Y_UNIT_TEST(WhoAmIWithoutGroups_PermissionsStillReturned) {
@@ -222,7 +217,6 @@ Y_UNIT_TEST_SUITE(TWhoAmI) {
         // Groups should be empty when not requested
         UNIT_ASSERT_VALUES_EQUAL(result.GetGroups().size(), 0);
         // Permissions are always returned regardless of groups flag
-        UNIT_ASSERT_VALUES_EQUAL(result.IsTokenRequired(), true);
         UNIT_ASSERT_VALUES_EQUAL(result.IsAdministrationAllowed(), true);
         UNIT_ASSERT_VALUES_EQUAL(result.IsMonitoringAllowed(), true);
         UNIT_ASSERT_VALUES_EQUAL(result.IsViewerAllowed(), true);

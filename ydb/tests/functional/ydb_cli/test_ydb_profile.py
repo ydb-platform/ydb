@@ -453,7 +453,7 @@ class TestProfileListNonInteractive(ProfileTestBase):
         assert result['exit_code'] == 0
         # active_one should be marked as active
         lines = result['stdout'].split('\n')
-        active_line = [l for l in lines if 'active_one' in l][0]
+        active_line = [line for line in lines if 'active_one' in line][0]
         assert '(active)' in active_line
 
     def test_list_with_content(self):
@@ -678,35 +678,35 @@ class TestProfileInitInteractive(ProfileTestBase):
         # Wait for Input to be ready (shown by "Enter to confirm")
         child.expect("Enter to confirm", timeout=5)
         time.sleep(self.FTXUI_INPUT_DELAY)
-        child.sendline("new_full_profile")
+        child.send("new_full_profile\r")
 
         # Endpoint menu - "Set a new endpoint value" is first option
         child.expect("endpoint", timeout=5)
-        child.send('\n')
+        child.send('\r')
 
         # Enter endpoint value - wait for Input
         child.expect("Enter to confirm", timeout=5)
         time.sleep(self.FTXUI_INPUT_DELAY)
-        child.sendline("grpc://newhost:2136")
+        child.send("grpc://newhost:2136\r")
 
         # Database menu - "Set a new database value" is first option
         child.expect("database", timeout=5)
-        child.send('\n')
+        child.send('\r')
 
         # Enter database value - wait for Input
         child.expect("Enter to confirm", timeout=5)
         time.sleep(self.FTXUI_INPUT_DELAY)
-        child.sendline("/NewDatabase")
+        child.send("/NewDatabase\r")
 
         # Auth menu - select anonymous (index 7)
         child.expect("authentication", timeout=5)
         for _ in range(7):
             child.send('\x1b[B')
-        child.send('\n')
+        child.send('\r')
 
         # Activate - Yes
         child.expect("Activate", timeout=5)
-        child.send('\n')
+        child.send('\r')
 
         child.expect("configured successfully", timeout=5)
         child.expect(pexpect.EOF, timeout=5)
@@ -727,33 +727,32 @@ class TestProfileInitInteractive(ProfileTestBase):
         # Wait for Input to be ready
         child.expect("Enter to confirm", timeout=5)
         time.sleep(self.FTXUI_INPUT_DELAY)
-        child.sendline("endpoint_only_init")
+        child.send("endpoint_only_init\r")
 
         # Endpoint menu - "Set a new endpoint value"
-        child.expect("endpoint", timeout=5)
-        time.sleep(self.FTXUI_INPUT_DELAY)
-        child.send('\n')
+        child.expect("Set a new endpoint", timeout=5)
+        child.send('\r')
 
         # Enter endpoint value
         child.expect("Enter to confirm", timeout=5)
         time.sleep(self.FTXUI_INPUT_DELAY)
-        child.sendline("grpc://endpoint-only:2136")
+        child.send("grpc://endpoint-only:2136\r")
 
         # Database menu - "Don't save database" (index 1)
-        child.expect("database", timeout=5)
+        child.expect("Set a new database", timeout=5)
         child.send('\x1b[B')
-        child.send('\n')
+        child.send('\r')
 
         # Auth menu - "Don't save authentication data" (index 8)
         child.expect("authentication", timeout=5)
         for _ in range(8):
             child.send('\x1b[B')
-        child.send('\n')
+        child.send('\r')
 
         # Activate - No
         child.expect("Activate", timeout=5)
         child.send('\x1b[B')
-        child.send('\n')
+        child.send('\r')
 
         child.expect("configured successfully", timeout=5)
         child.expect(pexpect.EOF, timeout=5)
@@ -771,35 +770,35 @@ class TestProfileInitInteractive(ProfileTestBase):
         # Wait for Input to be ready
         child.expect("Enter to confirm", timeout=5)
         time.sleep(self.FTXUI_INPUT_DELAY)
-        child.sendline("metadata_init_profile")
+        child.send("metadata_init_profile\r")
 
         # Endpoint menu - Set new endpoint
         child.expect("endpoint", timeout=5)
-        child.send('\n')
+        child.send('\r')
 
         # Enter endpoint
         child.expect("Enter to confirm", timeout=5)
         time.sleep(self.FTXUI_INPUT_DELAY)
-        child.sendline("grpc://metadata-test:2136")
+        child.send("grpc://metadata-test:2136\r")
 
         # Database - Set new database
         child.expect("database", timeout=5)
-        child.send('\n')
+        child.send('\r')
 
         # Enter database
         child.expect("Enter to confirm", timeout=5)
         time.sleep(self.FTXUI_INPUT_DELAY)
-        child.sendline("/MetadataDb")
+        child.send("/MetadataDb\r")
 
         # Auth menu - "Use metadata service" (index 4)
         child.expect("authentication", timeout=5)
         for _ in range(4):
             child.send('\x1b[B')
-        child.send('\n')
+        child.send('\r')
 
         # Activate - Yes
         child.expect("Activate", timeout=5)
-        child.send('\n')
+        child.send('\r')
 
         child.expect("configured successfully", timeout=5)
         child.expect(pexpect.EOF, timeout=5)
@@ -819,28 +818,28 @@ class TestProfileInitInteractive(ProfileTestBase):
         # Wait for Input to be ready
         child.expect("Enter to confirm", timeout=5)
         time.sleep(self.FTXUI_INPUT_DELAY)
-        child.sendline("minimal_init_profile")
+        child.send("minimal_init_profile\r")
 
         # Endpoint menu - "Don't save endpoint" (index 1)
         child.expect("endpoint", timeout=5)
         child.send('\x1b[B')
-        child.send('\n')
+        child.send('\r')
 
         # Database menu - "Don't save database" (index 1)
         child.expect("database", timeout=5)
         child.send('\x1b[B')
-        child.send('\n')
+        child.send('\r')
 
         # Auth menu - anonymous (index 7)
         child.expect("authentication", timeout=5)
         for _ in range(7):
             child.send('\x1b[B')
-        child.send('\n')
+        child.send('\r')
 
         # Activate - No
         child.expect("Activate", timeout=5)
         child.send('\x1b[B')
-        child.send('\n')
+        child.send('\r')
 
         child.expect("configured successfully", timeout=5)
         child.expect(pexpect.EOF, timeout=5)
@@ -861,36 +860,36 @@ class TestProfileInitInteractive(ProfileTestBase):
         child.expect("Please choose profile to configure", timeout=5)
 
         # "Create a new profile" is first option (index 0)
-        child.send('\n')
+        child.send('\r')
 
         # Wait for Input to be ready
         child.expect("Enter to confirm", timeout=5)
         time.sleep(self.FTXUI_INPUT_DELAY)
-        child.sendline("second_profile")
+        child.send("second_profile\r")
 
         # Endpoint menu - Set new endpoint
         child.expect("endpoint", timeout=5)
-        child.send('\n')
+        child.send('\r')
 
         # Enter endpoint
         child.expect("Enter to confirm", timeout=5)
         time.sleep(self.FTXUI_INPUT_DELAY)
-        child.sendline("grpc://second:2136")
+        child.send("grpc://second:2136\r")
 
         # Database - Don't save
         child.expect("database", timeout=5)
         child.send('\x1b[B')
-        child.send('\n')
+        child.send('\r')
 
         # Auth - anonymous
         child.expect("authentication", timeout=5)
         for _ in range(7):
             child.send('\x1b[B')
-        child.send('\n')
+        child.send('\r')
 
         # Activate - Yes
         child.expect("Activate", timeout=5)
-        child.send('\n')
+        child.send('\r')
 
         child.expect("configured successfully", timeout=5)
         child.expect(pexpect.EOF, timeout=5)
@@ -913,7 +912,7 @@ class TestProfileInitInteractive(ProfileTestBase):
 
         # Navigate down to existing_profile and select
         child.send('\x1b[B')  # Down arrow
-        child.send('\n')  # Select
+        child.send('\r')  # Select
 
         # Should now be in endpoint menu for existing profile
         child.expect("endpoint", timeout=5)
@@ -937,31 +936,31 @@ class TestProfileInitInteractive(ProfileTestBase):
 
         # Select existing profile (second option)
         child.send('\x1b[B')  # Down to profile
-        child.send('\n')
+        child.send('\r')
 
         # Endpoint menu - "Use current endpoint value" is third option (index 2)
         # Options: 0=Set new, 1=Don't save, 2=Use current
         child.expect("endpoint", timeout=5)
         child.send('\x1b[B')  # Down
         child.send('\x1b[B')  # Down to "Use current"
-        child.send('\n')
+        child.send('\r')
 
         # Database menu - "Use current database value" is third option
         child.expect("database", timeout=5)
         child.send('\x1b[B')  # Down
         child.send('\x1b[B')  # Down to "Use current"
-        child.send('\n')
+        child.send('\r')
 
         # Auth menu - "Don't save authentication data" is last option (index 8)
         child.expect("authentication", timeout=5)
         for _ in range(8):
             child.send('\x1b[B')
-        child.send('\n')
+        child.send('\r')
 
         # Activate - No (second option)
         child.expect("Activate", timeout=5)
         child.send('\x1b[B')
-        child.send('\n')
+        child.send('\r')
 
         child.expect("configured successfully", timeout=5)
         child.expect(pexpect.EOF, timeout=5)
@@ -982,18 +981,18 @@ class TestProfileInitInteractive(ProfileTestBase):
 
         # Select existing profile
         child.send('\x1b[B')
-        child.send('\n')
+        child.send('\r')
 
         # Endpoint - Use current
         child.expect("endpoint", timeout=5)
         child.send('\x1b[B')
         child.send('\x1b[B')
-        child.send('\n')
+        child.send('\r')
 
         # Database - Don't save (second option, index 1)
         child.expect("database", timeout=5)
         child.send('\x1b[B')
-        child.send('\n')
+        child.send('\r')
 
         # Auth menu - "Set anonymous authentication" is index 7
         # 0: static-credentials, 1: iam-token, 2: yc-token, 3: oauth2-key-file
@@ -1001,11 +1000,11 @@ class TestProfileInitInteractive(ProfileTestBase):
         child.expect("authentication", timeout=5)
         for _ in range(7):
             child.send('\x1b[B')
-        child.send('\n')
+        child.send('\r')
 
         # Activate - Yes (first option)
         child.expect("Activate", timeout=5)
-        child.send('\n')
+        child.send('\r')
 
         child.expect("configured successfully", timeout=5)
         child.expect(pexpect.EOF, timeout=5)
@@ -1025,29 +1024,29 @@ class TestProfileInitInteractive(ProfileTestBase):
 
         # Select existing profile
         child.send('\x1b[B')
-        child.send('\n')
+        child.send('\r')
 
         # Endpoint - Use current
         child.expect("endpoint", timeout=5)
         child.send('\x1b[B')
         child.send('\x1b[B')
-        child.send('\n')
+        child.send('\r')
 
         # Database - Don't save
         child.expect("database", timeout=5)
         child.send('\x1b[B')
-        child.send('\n')
+        child.send('\r')
 
         # Auth menu - "Use metadata service" is index 4
         child.expect("authentication", timeout=5)
         for _ in range(4):
             child.send('\x1b[B')
-        child.send('\n')
+        child.send('\r')
 
         # Activate - No
         child.expect("Activate", timeout=5)
         child.send('\x1b[B')
-        child.send('\n')
+        child.send('\r')
 
         child.expect("configured successfully", timeout=5)
         child.expect(pexpect.EOF, timeout=5)
@@ -1066,28 +1065,28 @@ class TestProfileInitInteractive(ProfileTestBase):
 
         # Select existing profile
         child.send('\x1b[B')
-        child.send('\n')
+        child.send('\r')
 
         # Endpoint - Don't save (index 1)
         child.expect("endpoint", timeout=5)
         child.send('\x1b[B')
-        child.send('\n')
+        child.send('\r')
 
         # Database - Don't save (index 1)
         child.expect("database", timeout=5)
         child.send('\x1b[B')
-        child.send('\n')
+        child.send('\r')
 
         # Auth - Don't save (index 8)
         child.expect("authentication", timeout=5)
         for _ in range(8):
             child.send('\x1b[B')
-        child.send('\n')
+        child.send('\r')
 
         # Activate - No
         child.expect("Activate", timeout=5)
         child.send('\x1b[B')
-        child.send('\n')
+        child.send('\r')
 
         child.expect("configured successfully", timeout=5)
         child.expect(pexpect.EOF, timeout=5)
@@ -1112,28 +1111,28 @@ class TestProfileInitInteractive(ProfileTestBase):
 
         # Select existing profile
         child.send('\x1b[B')
-        child.send('\n')
+        child.send('\r')
 
         # Endpoint - Use current
         child.expect("endpoint", timeout=5)
         child.send('\x1b[B')
         child.send('\x1b[B')
-        child.send('\n')
+        child.send('\r')
 
         # Database - Don't save
         child.expect("database", timeout=5)
         child.send('\x1b[B')
-        child.send('\n')
+        child.send('\r')
 
         # Auth - Don't save
         child.expect("authentication", timeout=5)
         for _ in range(8):
             child.send('\x1b[B')
-        child.send('\n')
+        child.send('\r')
 
         # Activate - Yes (first option)
         child.expect("Activate", timeout=5)
-        child.send('\n')
+        child.send('\r')
 
         child.expect("configured successfully", timeout=5)
         child.expect(pexpect.EOF, timeout=5)
@@ -1156,29 +1155,29 @@ class TestProfileInitInteractive(ProfileTestBase):
 
         # Select existing profile (second option - our test profile)
         child.send('\x1b[B')
-        child.send('\n')
+        child.send('\r')
 
         # Endpoint - Use current
         child.expect("endpoint", timeout=5)
         child.send('\x1b[B')
         child.send('\x1b[B')
-        child.send('\n')
+        child.send('\r')
 
         # Database - Don't save
         child.expect("database", timeout=5)
         child.send('\x1b[B')
-        child.send('\n')
+        child.send('\r')
 
         # Auth - Don't save
         child.expect("authentication", timeout=5)
         for _ in range(8):
             child.send('\x1b[B')
-        child.send('\n')
+        child.send('\r')
 
         # Activate - No (second option)
         child.expect("Activate", timeout=5)
         child.send('\x1b[B')
-        child.send('\n')
+        child.send('\r')
 
         child.expect("configured successfully", timeout=5)
         child.expect(pexpect.EOF, timeout=5)
@@ -1212,7 +1211,7 @@ class TestProfileInitInteractive(ProfileTestBase):
 
         # Select existing profile
         child.send('\x1b[B')
-        child.send('\n')
+        child.send('\r')
 
         # At endpoint menu - press Escape
         child.expect("endpoint", timeout=5)
@@ -1231,12 +1230,12 @@ class TestProfileInitInteractive(ProfileTestBase):
 
         # Select existing profile
         child.send('\x1b[B')
-        child.send('\n')
+        child.send('\r')
 
         # Endpoint - Don't save
         child.expect("endpoint", timeout=5)
         child.send('\x1b[B')
-        child.send('\n')
+        child.send('\r')
 
         # At database menu - press Escape
         child.expect("database", timeout=5)
@@ -1255,17 +1254,17 @@ class TestProfileInitInteractive(ProfileTestBase):
 
         # Select existing profile
         child.send('\x1b[B')
-        child.send('\n')
+        child.send('\r')
 
         # Endpoint - Don't save
         child.expect("endpoint", timeout=5)
         child.send('\x1b[B')
-        child.send('\n')
+        child.send('\r')
 
         # Database - Don't save
         child.expect("database", timeout=5)
         child.send('\x1b[B')
-        child.send('\n')
+        child.send('\r')
 
         # At auth menu - press Escape
         child.expect("authentication", timeout=5)
@@ -1286,7 +1285,7 @@ class TestProfileDeleteInteractive(ProfileTestBase):
         # Confirmation prompt - default is No (index 1), need to go up to Yes
         child.expect("will be permanently removed", timeout=5)
         child.send('\x1b[A')  # Up to Yes
-        child.send('\n')  # Confirm
+        child.send('\r')  # Confirm
 
         child.expect("deleted", timeout=5)
         child.expect(pexpect.EOF, timeout=5)
@@ -1302,7 +1301,7 @@ class TestProfileDeleteInteractive(ProfileTestBase):
 
         child.expect("will be permanently removed", timeout=5)
         # Default is No (index 1), just press Enter to decline
-        child.send('\n')
+        child.send('\r')
 
         child.expect("No changes made", timeout=5)
         child.expect(pexpect.EOF, timeout=5)
@@ -1323,12 +1322,12 @@ class TestProfileDeleteInteractive(ProfileTestBase):
         # First option is "Don't remove anything"
         # Select profile_a (second option)
         child.send('\x1b[B')  # Down
-        child.send('\n')
+        child.send('\r')
 
         # Confirm - default is No, need to go up to Yes
         child.expect("will be permanently removed", timeout=5)
         child.send('\x1b[A')  # Up to Yes
-        child.send('\n')
+        child.send('\r')
 
         child.expect("deleted", timeout=5)
         child.expect(pexpect.EOF, timeout=5)
@@ -1346,7 +1345,7 @@ class TestProfileDeleteInteractive(ProfileTestBase):
         child.expect("Please choose profile to remove", timeout=5)
 
         # Select "Don't remove anything" (first option)
-        child.send('\n')
+        child.send('\r')
 
         child.expect("No changes made", timeout=5)
         child.expect(pexpect.EOF, timeout=5)
@@ -1371,7 +1370,7 @@ class TestProfileActivateInteractive(ProfileTestBase):
         # Select profile_b (third option - after "Don't do anything")
         child.send('\x1b[B')  # Down
         child.send('\x1b[B')  # Down
-        child.send('\n')
+        child.send('\r')
 
         child.expect("is now active", timeout=5)
         child.expect(pexpect.EOF, timeout=5)
@@ -1393,7 +1392,7 @@ class TestProfileActivateInteractive(ProfileTestBase):
         # 1: Deactivate current
         # 2+: profiles
         child.send('\x1b[B')  # Down to "Deactivate"
-        child.send('\n')
+        child.send('\r')
 
         child.expect("deactivated", timeout=5)
         child.expect(pexpect.EOF, timeout=5)
@@ -1416,7 +1415,7 @@ class TestProfileGetInteractive(ProfileTestBase):
         child = self.spawn_ydb_cli(["config", "profile", "get"])
 
         child.expect("Please choose profile to list its values", timeout=5)
-        child.send('\n')  # Select first profile
+        child.send('\r')  # Select first profile
 
         child.expect("endpoint:", timeout=5)
         child.expect("grpc://localhost:2136", timeout=5)
@@ -1450,7 +1449,7 @@ class TestProfileReplaceInteractive(ProfileTestBase):
         # Confirmation - default is No, need to go up to Yes
         child.expect("will be replaced", timeout=5)
         child.send('\x1b[A')  # Up to Yes
-        child.send('\n')
+        child.send('\r')
 
         child.expect(pexpect.EOF, timeout=5)
 
@@ -1468,7 +1467,7 @@ class TestProfileReplaceInteractive(ProfileTestBase):
 
         # Confirmation - default is No, just press Enter to decline
         child.expect("will be replaced", timeout=5)
-        child.send('\n')
+        child.send('\r')
 
         child.expect(pexpect.EOF, timeout=5)
 
@@ -1587,7 +1586,7 @@ class TestProfileEdgeCases(ProfileTestBase):
         child.expect("Please enter configuration profile name", timeout=5)
 
         # Try to submit empty name
-        child.send('\n')  # Just press Enter without typing anything
+        child.send('\r')  # Just press Enter without typing anything
 
         # Should show error and not proceed
         child.expect("cannot be empty", timeout=5)
@@ -2015,12 +2014,12 @@ class TestProfileMenuNavigation(ProfileTestBase):
         child.expect("Please enter configuration profile name", timeout=5)
 
         # Try empty name
-        child.send('\n')  # Press Enter without typing
+        child.send('\r')  # Press Enter without typing
         child.expect("cannot be empty", timeout=5)
 
         # Now enter valid name
         child.send("valid_name")
-        child.send('\n')  # Confirm
+        child.send('\r')  # Confirm
 
         # Should proceed to endpoint menu
         child.expect("endpoint", timeout=5)
@@ -2044,7 +2043,7 @@ class TestProfileMenuNavigation(ProfileTestBase):
             child.send('\x1b[B')  # Down
 
         # Select current option
-        child.send('\n')
+        child.send('\r')
 
         # Should show profile content
         child.expect("endpoint:", timeout=5)
@@ -2065,30 +2064,30 @@ class TestProfileMenuNavigation(ProfileTestBase):
 
         # Select existing profile
         child.send('\x1b[B')  # Down to existing
-        child.send('\n')
+        child.send('\r')
 
         # Endpoint menu - select "Use current endpoint value"
         child.expect("endpoint", timeout=5)
         child.send('\x1b[B')  # Down
         child.send('\x1b[B')  # Down to "Use current"
-        child.send('\n')
+        child.send('\r')
 
         # Database menu - select "Use current database value"
         child.expect("database", timeout=5)
         child.send('\x1b[B')
         child.send('\x1b[B')
-        child.send('\n')
+        child.send('\r')
 
         # Auth menu - select "Don't save authentication data" (index 8)
         child.expect("authentication", timeout=5)
         for _ in range(8):
             child.send('\x1b[B')
-        child.send('\n')
+        child.send('\r')
 
         # Activate - No
         child.expect("Activate", timeout=5)
         child.send('\x1b[B')  # No
-        child.send('\n')
+        child.send('\r')
 
         child.expect("configured successfully", timeout=5)
         child.expect(pexpect.EOF, timeout=5)
@@ -2097,10 +2096,6 @@ class TestProfileMenuNavigation(ProfileTestBase):
         config = self.read_profile_file()
         assert config['profiles']['existing']['endpoint'] == 'grpc://original:2136'
         assert config['profiles']['existing']['database'] == '/OriginalDb'
-
-
-
-
 
 
 class TestProfileStdinInputAdditional(ProfileTestBase):
@@ -2491,7 +2486,7 @@ class TestProfileReplaceEdgeCases(ProfileTestBase):
         # Should ask for confirmation
         child.expect("replaced", timeout=5)
         child.send('\x1b[B')  # Down to No
-        child.send('\n')
+        child.send('\r')
 
         child.expect(pexpect.EOF, timeout=5)
 
@@ -2720,8 +2715,6 @@ class TestProfilePrintContent(ProfileTestBase):
         result = self.run_ydb_cli(["config", "profile", "get", "fullssl_test"])
         assert result.returncode == 0
         assert "client-cert-key-password-file" in result.stdout
-
-
 
 
 class TestProfileIamTokenFile(ProfileTestBase):

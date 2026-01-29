@@ -75,7 +75,6 @@ namespace NKikimr {
         NHuge::TAllocChunkRecoveryLogRec HugeBlobAllocChunkRecoveryLogRec;
         NHuge::TFreeChunkRecoveryLogRec HugeBlobFreeChunkRecoveryLogRec;
         NHuge::TPutRecoveryLogRec HugeBlobPutRecoveryLogRec;
-        TDiskPartVec HugeBlobs;
         NKikimrVDiskData::TPhantomLogoBlobs PhantomLogoBlobs;
 
         void Bootstrap(const TActorContext &ctx) {
@@ -697,9 +696,9 @@ namespace NKikimr {
             if (!good)
                 return EDispatchStatus::Error;
 
-            HugeBlobs = TDiskPartVec(pb.GetRemovedHugeBlobs());
             ui64 lsn = record.Lsn;
-            TRlas res = LocRecCtx->RepairedHuge->ApplySlotsDeletion(ctx, lsn, HugeBlobs, dbType);
+            TRlas res = LocRecCtx->RepairedHuge->ApplySlotsDeletion(ctx, lsn, TDiskPartVec(pb.GetRemovedHugeBlobs()),
+                TDiskPartVec(pb.GetAllocatedHugeBlobs()), dbType);
             if (!res.Ok)
                 return EDispatchStatus::Error;
 

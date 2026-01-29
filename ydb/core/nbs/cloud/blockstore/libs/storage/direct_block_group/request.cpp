@@ -15,15 +15,25 @@ ui64 IRequest::GetStartOffset() const
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TWriteRequest::TWriteRequest(TActorId sender, ui64 startIndex, TString data)
+TWriteRequest::TWriteRequest(
+    TActorId sender,
+    ui64 cookie,
+    ui64 startIndex,
+    TString data)
     : IRequest(startIndex)
     , Sender(sender)
+    , Cookie(cookie)
     , Data(std::move(data))
 {}
 
 TActorId TWriteRequest::GetSender() const
 {
     return Sender;
+}
+
+ui64 TWriteRequest::GetCookie() const
+{
+    return Cookie;
 }
 
 const TString& TWriteRequest::GetData() const
@@ -99,15 +109,21 @@ ui64 TFlushRequest::GetLsn() const
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TReadRequest::TReadRequest(TActorId sender, ui64 startIndex, ui64 blocksCount)
+TReadRequest::TReadRequest(TActorId sender, ui64 cookie, ui64 startIndex, ui64 blocksCount)
     : IRequest(startIndex)
     , Sender(sender)
+    , Cookie(cookie)
     , BlocksCount(blocksCount)
 {}
 
 TActorId TReadRequest::GetSender() const
 {
     return Sender;
+}
+
+ui64 TReadRequest::GetCookie() const
+{
+    return Cookie;
 }
 
 ui64 TReadRequest::GetDataSize() const

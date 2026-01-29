@@ -41,12 +41,15 @@ public:;
     
     TWriteRequest(
         TActorId sender,
+        ui64 cookie,
         ui64 startIndex,
         TString data);
 
     ~TWriteRequest() override = default;
 
     [[nodiscard]] TActorId GetSender() const;
+
+    [[nodiscard]] ui64 GetCookie() const;
 
     [[nodiscard]] const TString& GetData() const;
 
@@ -60,6 +63,7 @@ public:;
 
 private:
     TActorId Sender;
+    ui64 Cookie;
     const TString Data;
     const ui8 RequiredAckCount = 3;
     ui8 AckCount = 0;
@@ -97,6 +101,7 @@ class TReadRequest : public IRequest {
 public:    
     TReadRequest(
         TActorId sender,
+        ui64 cookie,
         ui64 startIndex,
         ui64 blocksCount);
 
@@ -104,12 +109,15 @@ public:
     
     [[nodiscard]] TActorId GetSender() const;
 
+    [[nodiscard]] ui64 GetCookie() const;
+
     ui64 GetDataSize() const override;
     
     bool IsCompleted(ui64 requestId) override;
 
 private:
     TActorId Sender;
+    ui64 Cookie;
     ui64 BlocksCount;
 };
 

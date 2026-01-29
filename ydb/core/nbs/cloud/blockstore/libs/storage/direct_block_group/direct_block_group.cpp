@@ -119,6 +119,7 @@ void TDirectBlockGroup::HandleWriteBlocksRequest(
 
     auto request = std::make_shared<TWriteRequest>(
         ev->Sender,
+        ev->Cookie,
         startIndex,
         std::move(data));
 
@@ -291,11 +292,15 @@ void TDirectBlockGroup::HandleReadBlocksRequest(
         auto& blocks = *response->Record.MutableBlocks();
         blocks.AddBuffers(TString(4096, 0));
 
-        ctx.Send(ev->Sender, std::move(response));
+        ctx.Send(
+            ev->Sender,
+            std::move(response),
+            0, // flags
+            ev->Cookie);
         return;
     }
 
-    auto request = std::make_shared<TReadRequest>(ev->Sender, startIndex, blocksCount);
+    auto request = std::make_shared<TReadRequest>(ev->Sender, ev->Cookie, startIndex, blocksCount);
     ++RequestId;
 
     if (!BlocksMeta[startIndex].IsFlushedToDDisk()) {
@@ -376,7 +381,11 @@ void TDirectBlockGroup::HandleReadResult(
             auto& blocks = *response->Record.MutableBlocks();
             blocks.AddBuffers(rope.ConvertToString());
 
-            ctx.Send(request.GetSender(), std::move(response));
+            ctx.Send(
+                request.GetSender(),
+                std::move(response),
+                0, // flags
+                request.GetCookie());
 
             RequestById.erase(requestId);
         }

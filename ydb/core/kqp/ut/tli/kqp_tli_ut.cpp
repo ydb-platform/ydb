@@ -368,8 +368,8 @@ namespace {
             "breaker SessionActor BreakerQueryTexts should contain breaker query");
         UNIT_ASSERT_C(data.VictimQueryTexts && data.VictimQueryTexts->Contains(victimQueryText),
             "victim SessionActor VictimQueryTexts should contain victim query");
-        UNIT_ASSERT_C(!data.BreakerQueryText || *data.BreakerQueryText == breakerQueryText || *data.BreakerQueryText == "Commit",
-            "breaker SessionActor QueryText should match breaker query or be Commit: " << *data.BreakerQueryText);
+        UNIT_ASSERT_VALUES_EQUAL_C(data.BreakerQueryText, breakerQueryText,
+            "breaker SessionActor QueryText should match breaker query");
         UNIT_ASSERT_VALUES_EQUAL_C(data.VictimQueryText, victimQueryText,
             "victim SessionActor QueryText should match victim query");
         if (victimExtraQueryText) {
@@ -590,7 +590,8 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         VerifyTliIssueAndLogs(issues, ss, LogEnabled, UseSink, breakerQueryText, victimQueryText, victimCommitText);
     }
 
-    Y_UNIT_TEST_QUAD(ManyTables, LogEnabled, UseSink) {
+    // Test: Many upserts in a single transaction, the breaker is the middle upsert
+    Y_UNIT_TEST_QUAD(ManyUpserts, LogEnabled, UseSink) {
         TStringStream ss;
         TTliTestContext ctx(LogEnabled, UseSink, ss);
         for (int i = 1; i <= 6; ++i) {
@@ -620,8 +621,46 @@ Y_UNIT_TEST_SUITE(KqpTli) {
             breakerTx = result.GetTransaction();
         }
         NKqp::AssertSuccessResult(ctx.Session.ExecuteDataQuery(breakerUpdateTable2, TTxControl::Tx(*breakerTx)).GetValueSync());
-        NKqp::AssertSuccessResult(ctx.Session.ExecuteDataQuery(breakerUpdateTable6, TTxControl::Tx(*breakerTx)).GetValueSync());
-        NKqp::AssertSuccessResult(breakerTx->Commit().ExtractValueSync());
+        NKqp::AssertSuccessResult(ctx.Session.ExecuteDataQuery(breakerUpdateTable6, TTxControl::Tx(*breakerTx).CommitTx()).GetValueSync());
+
+        auto [status, issues] = CommitTxWithIssues(victimTx);
+        UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
+
+        VerifyTliIssueAndLogs(issues, ss, LogEnabled, UseSink, breakerUpdateTable2, victimSelectTable2);
+    }
+
+    // Test: Many upserts in a single transaction, the breaker is the middle upsert, separate commit
+    Y_UNIT_TEST_QUAD(ManyUpsertsSeparateCommit, LogEnabled, UseSink) {
+        TStringStream ss;
+        TTliTestContext ctx(LogEnabled, UseSink, ss);
+        for (int i = 1; i <= 6; ++i) {
+            ctx.CreateTable(Sprintf("/Root/Tenant1/Table%d", i));
+            ctx.SeedTable(Sprintf("/Root/Tenant1/Table%d", i), {{1, Sprintf("Init%d", i)}});
+        }
+
+        const TString victimSelectTable1 = "SELECT * FROM `/Root/Tenant1/Table1` WHERE Key = 1u";
+        const TString victimSelectTable2 = "SELECT * FROM `/Root/Tenant1/Table2` WHERE Key = 1u";
+        const TString victimSelectTable3 = "SELECT * FROM `/Root/Tenant1/Table3` WHERE Key = 1u";
+        const TString victimUpdateTable4 = "UPDATE `/Root/Tenant1/Table4` SET Value = \"VictimUpdate\" WHERE Key = 1u";
+        const TString breakerUpdateTable2 = "UPDATE `/Root/Tenant1/Table2` SET Value = \"BreakerUpdate2\" WHERE Key = 1u";
+        const TString breakerUpdateTable5 = "UPDATE `/Root/Tenant1/Table5` SET Value = \"BreakerUpdate5\" WHERE Key = 1u";
+        const TString breakerUpdateTable6 = "UPDATE `/Root/Tenant1/Table6` SET Value = \"BreakerUpdate6\" WHERE Key = 1u";
+
+        // Victim: read tables 1,2,3, then update table 4 (without commit)
+        auto victimTx = BeginReadTx(ctx.VictimSession, victimSelectTable1);
+        NKqp::AssertSuccessResult(ctx.VictimSession.ExecuteDataQuery(victimSelectTable2, TTxControl::Tx(victimTx)).GetValueSync());
+        NKqp::AssertSuccessResult(ctx.VictimSession.ExecuteDataQuery(victimSelectTable3, TTxControl::Tx(victimTx)).GetValueSync());
+        NKqp::AssertSuccessResult(ctx.VictimSession.ExecuteDataQuery(victimUpdateTable4, TTxControl::Tx(victimTx)).GetValueSync());
+
+        // Breaker: update tables 5,2,6, then commit separately (breaks victim's lock on table 2)
+        std::optional<TTransaction> breakerTx;
+        {
+            auto result = ctx.Session.ExecuteDataQuery(breakerUpdateTable5, TTxControl::BeginTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == EStatus::SUCCESS, result.GetIssues().ToString());
+            breakerTx = result.GetTransaction();
+        }
+        NKqp::AssertSuccessResult(ctx.Session.ExecuteDataQuery(breakerUpdateTable2, TTxControl::Tx(*breakerTx)).GetValueSync());
+        NKqp::AssertSuccessResult(ctx.Session.ExecuteDataQuery(breakerUpdateTable6, TTxControl::Tx(*breakerTx).CommitTx()).GetValueSync());
 
         auto [status, issues] = CommitTxWithIssues(victimTx);
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);

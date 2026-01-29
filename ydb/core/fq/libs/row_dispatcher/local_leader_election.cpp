@@ -303,9 +303,7 @@ void TLocalLeaderElection::AcquireSemaphore() {
     NActorsProto::TActorId protoId;
     ActorIdToProto(CoordinatorId, &protoId);
     TString strActorId;
-    if (!protoId.SerializeToString(&strActorId)) {
-        Y_ABORT("SerializeToString");
-    }
+    Y_ABORT_UNLESS(protoId.SerializeToString(&strActorId));
     PendingAcquire = true;
 
     TRpcIn message;

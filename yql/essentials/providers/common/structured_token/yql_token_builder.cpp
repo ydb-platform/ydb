@@ -40,6 +40,11 @@ TStructuredTokenBuilder& TStructuredTokenBuilder::SetTokenAuthWithSecret(const T
     return *this;
 }
 
+TStructuredTokenBuilder& TStructuredTokenBuilder::SetTransientTokenAuth(const TString& transientToken) {
+    Data_.SetField("transient_token", TString(transientToken));
+    return *this;
+}
+
 TStructuredTokenBuilder& TStructuredTokenBuilder::SetIAMToken(const TString& token) {
     Data_.SetField("token", token);
     return *this;
@@ -73,6 +78,9 @@ TStructuredTokenBuilder& TStructuredTokenBuilder::RemoveSecrets() {
     Data_.ClearField("basic_password");
     Data_.ClearField("sa_id_signature");
     Data_.ClearField("token");
+    if (Data_.HasField("transient_token")) {
+        Data_.SetField("transient_token", "");
+    }
     return *this;
 }
 
@@ -123,8 +131,16 @@ bool TStructuredTokenParser::HasIAMToken() const {
     return Data_.HasField("token");
 }
 
+bool TStructuredTokenParser::HasTransientToken() const {
+    return Data_.HasField("transient_token");
+}
+
 TString TStructuredTokenParser::GetIAMToken() const {
     return Data_.GetField("token");
+}
+
+TString TStructuredTokenParser::GetTransientToken() const {
+    return Data_.GetField("transient_token");
 }
 
 bool TStructuredTokenParser::IsNoAuth() const {
@@ -210,6 +226,18 @@ TString ComposeStructuredTokenJsonForTokenAuthWithSecret(const TString& tokenSec
 
     if (tokenSecretName && token) {
         result.SetTokenAuthWithSecret(tokenSecretName, token);
+        return result.ToJson();
+    }
+
+    result.SetNoAuth();
+    return result.ToJson();
+}
+
+TString ComposeStructuredTokenJsonForTransientTokenAuth(const TString& transientToken) {
+    TStructuredTokenBuilder result;
+
+    if (transientToken) {
+        result.SetTransientTokenAuth(transientToken);
         return result.ToJson();
     }
 

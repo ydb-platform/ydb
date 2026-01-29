@@ -73,7 +73,7 @@ struct TLeaderElectionMetrics {
 };
 
 
-class TLocalLeaderElection: public TActorBootstrapped<TLocalLeaderElection> {
+class TLocalLeaderElection: public TActorBootstrapped<TLocalLeaderElection>, public IActorExceptionHandler {
 
     enum class EState {
         Init,
@@ -140,9 +140,9 @@ public:
     void Handle(TLocalRpcCtx::TRpcEvents::TEvFinishRequest::TPtr&);
     void Handle(NActors::TEvents::TEvUndelivered::TPtr& ev);
 
-    void HandleException(const std::exception& e);
+    bool OnUnhandledException(const std::exception& e) override;
 
-    STRICT_STFUNC_EXC(StateFunc,
+    STRICT_STFUNC(StateFunc,
         hFunc(TEvPrivate::TEvCreateNodeResult, Handle);
         hFunc(TEvPrivate::TEvSelfPing, Handle);
         hFunc(TEvPrivate::TEvRestart, Handle);
@@ -151,8 +151,7 @@ public:
         hFunc(TLocalRpcCtx::TRpcEvents::TEvReadRequest, Handle);
         hFunc(TLocalRpcCtx::TRpcEvents::TEvWriteRequest, Handle);
         hFunc(TLocalRpcCtx::TRpcEvents::TEvFinishRequest, Handle);
-        hFunc(NActors::TEvents::TEvUndelivered, Handle);,
-        ExceptionFunc(std::exception, HandleException)
+        hFunc(NActors::TEvents::TEvUndelivered, Handle);
     )
 
 private:
@@ -275,9 +274,12 @@ void TLocalLeaderElection::ResetState() {
     SetTimeout();
     SessionId = 0;
     while (!RpcResponses.empty()) {  
-        RpcResponses.pop();  
+        RpcResponses.pop();
     }
     PendingRpcResponses = 0;
+    PendingAcquire = false;
+    SentRequests.clear();
+    RpcActor = {};
 }
 
 void TLocalLeaderElection::CreateSemaphore() {
@@ -402,10 +404,11 @@ void TLocalLeaderElection::DescribeSemaphore() {
     SentRequests[reqId] = std::make_unique<TOperation>();
 }
 
-void TLocalLeaderElection::HandleException(const std::exception& e) {
+bool TLocalLeaderElection::OnUnhandledException(const std::exception& e) {
     LOG_ROW_DISPATCHER_ERROR("Internal error: exception:" << e.what());
     Metrics.Errors->Inc();
     ResetState();
+    return true;
 }
 
 void TLocalLeaderElection::CreateNode(const std::string& path,  const NYdb::NCoordination::TCreateNodeSettings& settings) {

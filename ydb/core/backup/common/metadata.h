@@ -97,10 +97,10 @@ private:
     // [...]: The export must have all materialized indexes listed here
     std::optional<std::vector<TIndexMetadata>> Indexes;
 
-    // Indexes:
-    // Undefined (previous versions): we don't know if we see the export with _materialized_ indexes or without them, so list suitable S3 files to find out all materialized indexes
-    // []: The export has no materialized indexes
-    // [...]: The export must have all materialized indexes listed here
+    // Rate limiters:
+    // Undefined (previous versions): we don't know if we see the export with rate limiters or without them, so list suitable S3 files to find out all rate limiters
+    // []: The export has no rate limiters
+    // [...]: The export must have all rate limiters listed here
     std::optional<std::vector<TRateLimiterResourceMetadata>> RateLimiterResources;
 
     // EnablePermissions:

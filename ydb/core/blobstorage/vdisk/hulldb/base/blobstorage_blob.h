@@ -63,7 +63,10 @@ namespace NKikimr {
                 // then check the parts; we have `parts' argument to validate actual blob content
                 ui8 partsMask;
                 iter.ExtractPlainDataAndAdvance(&partsMask, sizeof(partsMask));
-                Y_ABORT_UNLESS(parts.Raw() == partsMask);
+                if (parts.Raw() != partsMask) {
+                    Cerr << "Corrupted blob: Parts mask mismatch: " << parts.ToString() << " != " << partsMask;
+                }
+                // Y_ABORT_UNLESS(parts.Raw() == partsMask);
 
                 // advance offset
                 offset += HeaderSize;

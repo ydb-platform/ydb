@@ -3004,7 +3004,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
                     continue;
                 }
 
-                UNIT_ASSERT(!column.NotNull);
+                UNIT_ASSERT_VALUES_EQUAL(column.NotNull.value_or(false), NotNull && IsOlap);
 
                 THashMap<TString, TString> nameToType = {
                     {"CBool",           "Bool"},

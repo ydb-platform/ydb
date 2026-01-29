@@ -337,7 +337,7 @@ void TReplicaTest::RecreateDatabase() {
         UNIT_ASSERT_VALUES_EQUAL(tablePath, ev->Get()->GetRecord().GetPath());
         UNIT_ASSERT_VALUES_EQUAL(tablePathId.LocalPathId, ev->Get()->GetRecord().GetLocalPathId());
         UNIT_ASSERT_VALUES_EQUAL(false, ev->Get()->GetRecord().GetIsDeletion());
-        Context->Send(Replica, tableSubscriber, new NInternalEvents::TEvNotifyAck(1) );
+        Context->Send(Replica, tableSubscriber, new NInternalEvents::TEvNotifyAck(1));
     }
 
     Context->UnsubscribeReplica(Replica, databaseSubscriber, databasePath);

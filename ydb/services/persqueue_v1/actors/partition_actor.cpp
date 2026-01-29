@@ -1517,13 +1517,9 @@ void TPartitionActor::DoWakeup(const TActorContext& ctx) {
 }
 
 TPartitionInFlightMemoryLayout::TPartitionInFlightMemoryLayout(ui64 MaxAllowedSize)
-    : LayoutUnit(0)
+    : LayoutUnit(MaxAllowedSize / MAX_LAYOUT_SIZE)
     , TotalSize(0)
-{
-    if (MaxAllowedSize > 0) {
-        LayoutUnit = MaxAllowedSize / MAX_LAYOUT_SIZE;
-    }
-}
+{}
 
 bool TPartitionInFlightMemoryLayout::Add(ui64 Offset, ui64 Size) {
     if (LayoutUnit == 0) {
@@ -1556,6 +1552,11 @@ bool TPartitionInFlightMemoryLayout::Remove(ui64 Offset) {
 }
 
 bool TPartitionInFlightMemoryLayout::IsMemoryLimitReached() const {
+    if (LayoutUnit == 0) {
+        // means that there are no limits were set
+        return false;
+    }
+
     return TotalSize >= LayoutUnit * MAX_LAYOUT_SIZE;
 }
 

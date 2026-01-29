@@ -286,6 +286,9 @@ public:
     /// Tweaks
     TInternalProgramSettings InternalSettings;
 
+    /// Issue report target
+    TString IssueReportTarget;
+
 public:
     TProgramFactoryOptions();
 
@@ -407,6 +410,13 @@ public:
      * @return reference to self, to allow method chaining.
      */
     TProgramFactoryOptions& SetInternalSettings(const TInternalProgramSettings& settings);
+
+    /**
+     * Set issue report target.
+     *
+     * @return reference to self, to allow method chaining.
+     */
+    TProgramFactoryOptions& SetIssueReportTarget(const TString& reportTarget);
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////

@@ -52,6 +52,7 @@ struct TChecksRequest {
     const TUdfFilter* UdfFilter = nullptr;
     bool WithTypeCheck = false;
     TMaybe<TVector<TCheckFilter>> Filters;
+    TString IssueReportTarget;
 };
 
 struct TCheckResponse {

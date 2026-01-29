@@ -48,6 +48,7 @@ inline TIssue YqlIssue(const TPosition& position, EYqlIssueCode id) {
     return YqlIssue(position, id, IssueCodeToString(id));
 }
 
-void CheckFatalIssues(TIssues& issues);
+// reportTarget allows to describe a way to report bugs (e.g. a GitHub issue)
+void CheckFatalIssues(TIssues& issues, const TString& reportTarget);
 
 } // namespace NYql

@@ -1,4 +1,4 @@
-#include "fulltext.cpp"
+#include "fulltext.h"
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/xrange.h>

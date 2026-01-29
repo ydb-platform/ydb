@@ -101,11 +101,18 @@ void TCommandWhoAmI::PrintResponse(NDiscovery::TWhoAmIResult& result) {
                 Cout << Endl << "User has no groups" << Endl;
             }
 
-        Cout << Endl << "Access levels:" << Endl;
-        Cout << "Database: " << (result.IsDatabaseAllowed() ? "true" : "false") << Endl;
-        Cout << "Viewer: " << (result.IsViewerAllowed() ? "true" : "false") << Endl;
-        Cout << "Monitoring: " << (result.IsMonitoringAllowed() ? "true" : "false") << Endl;
-        Cout << "Administration: " << (result.IsAdministrationAllowed() ? "true" : "false") << Endl;
+        bool hasAnyAccess = result.IsDatabaseAllowed() || result.IsViewerAllowed() ||
+            result.IsMonitoringAllowed() || result.IsAdministrationAllowed() ||
+            result.IsRegisterNodeAllowed() || result.IsBootstrapAllowed();
+        if (hasAnyAccess) {
+            Cout << Endl << "Access levels:" << Endl;
+            if (result.IsDatabaseAllowed()) Cout << "Database" << Endl;
+            if (result.IsViewerAllowed()) Cout << "Viewer" << Endl;
+            if (result.IsMonitoringAllowed()) Cout << "Monitoring" << Endl;
+            if (result.IsAdministrationAllowed()) Cout << "Administration" << Endl;
+            if (result.IsRegisterNodeAllowed()) Cout << "Register node" << Endl;
+            if (result.IsBootstrapAllowed()) Cout << "Bootstrap" << Endl;
+        }
         }
     }
 }

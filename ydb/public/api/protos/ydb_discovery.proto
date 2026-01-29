@@ -71,6 +71,10 @@ message WhoAmIResult {
     bool is_viewer_allowed = 5;
     // Whether user is allowed to access database
     bool is_database_allowed = 6;
+    // Whether user is allowed to register dynamic node
+    bool is_register_node_allowed = 7;
+    // Whether user is allowed to bootstrap
+    bool is_bootstrap_allowed = 8;
 }
 
 message WhoAmIResponse {

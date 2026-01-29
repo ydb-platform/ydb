@@ -94,6 +94,8 @@ public:
     bool IsMonitoringAllowed() const;
     bool IsViewerAllowed() const;
     bool IsDatabaseAllowed() const;
+    bool IsRegisterNodeAllowed() const;
+    bool IsBootstrapAllowed() const;
 private:
     std::string UserName_;
     std::vector<std::string> Groups_;
@@ -101,6 +103,8 @@ private:
     bool IsMonitoringAllowed_ = false;
     bool IsViewerAllowed_ = false;
     bool IsDatabaseAllowed_ = false;
+    bool IsRegisterNodeAllowed_ = false;
+    bool IsBootstrapAllowed_ = false;
 };
 
 using TAsyncWhoAmIResult = NThreading::TFuture<TWhoAmIResult>;

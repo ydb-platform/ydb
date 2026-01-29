@@ -1336,7 +1336,6 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
                 desiredOffset = currentOffset + 1;
                 partitionStream->UpdateMaxReadOffset(currentOffset);
                 const i64 messageSize = static_cast<i64>(messageData.data().size());
-                partitionDataSize += messageSize;
                 CompressedDataSize += messageSize;
                 *Settings.Counters_->BytesInflightTotal += messageSize;
                 *Settings.Counters_->BytesInflightCompressed += messageSize;

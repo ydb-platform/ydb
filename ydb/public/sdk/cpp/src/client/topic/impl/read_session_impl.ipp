@@ -210,26 +210,17 @@ void TRawPartitionStreamEventQueue<UseMigrationProtocol>::DeleteNotReadyTail(TDe
 {
     std::vector<TDataDecompressionInfoPtr<UseMigrationProtocol>> infos;
 
-    // Collect data events from NotReady queue only
     for (auto& event : NotReady) {
         if (event.IsDataEvent()) {
-            infos.push_back(event.GetDataEvent().GetParent());
-        }
-    }
-
-    // Break circular references: TDataDecompressionInfo owns Tasks deque,
-    // and each task has a Parent shared_ptr back to the TDataDecompressionInfo.
-    // OnDestroyReadSession clears these Parent pointers so the info can be destroyed.
-    for (auto& info : infos) {
-        if (info) {
-            info->OnDestroyReadSession();
+            auto info = event.GetDataEvent().GetParent();
+            if (info) {
+                info->OnDestroyReadSession();
+                infos.push_back(std::move(info));
+            }
         }
     }
 
     deferred.DeferDestroyDecompressionInfos(std::move(infos));
-
-    // Clear only NotReady - these events were never signaled to the global queue.
-    // Ready events are kept so the user can retrieve them via GetEvent.
     NotReady.clear();
 }
 

@@ -276,7 +276,7 @@ public:
             }
             fakeComputeActorStats.SetDurationUs(elapsedMicros);
 
-            Stats->UpdateTaskStats(0, fakeComputeActorStats, nullptr, NYql::NDqProto::COMPUTE_STATE_FINISHED, TDuration::Max());
+            Stats->UpdateTaskStats(0, 0, fakeComputeActorStats, nullptr, NYql::NDqProto::COMPUTE_STATE_FINISHED, TDuration::Max());
             Stats->ExecuterCpuTime = executerCpuTime;
             Stats->FinishTs = Stats->StartTs + TDuration::MicroSeconds(elapsedMicros);
             Stats->ResultRows = ResponseEv->GetResultRowsCount();

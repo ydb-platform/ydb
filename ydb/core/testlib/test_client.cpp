@@ -698,6 +698,8 @@ namespace Tests {
 
     void TServer::EnableGRpc(const NYdbGrpc::TServerOptions& options, ui32 grpcServiceNodeId, const std::optional<TString>& tenant) {
         auto* grpcInfo = &TenantsGRpc[tenant ? *tenant : Settings->DomainName][grpcServiceNodeId];
+        grpcInfo->Shutdown();
+
         grpcInfo->GRpcServerRootCounters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
         auto& counters = grpcInfo->GRpcServerRootCounters;
 
@@ -1347,6 +1349,10 @@ namespace Tests {
             TActorId kqpRmServiceId = Runtime->Register(kqpRmService, nodeIdx, userPoolId);
             Runtime->RegisterService(NKqp::MakeKqpRmServiceID(Runtime->GetNodeId(nodeIdx)), kqpRmServiceId, nodeIdx);
 
+            if (Settings->KqpLoggerScope) {
+                KqpLoggerScope = Settings->KqpLoggerScope;
+            }
+
             if (!KqpLoggerScope) {
                 // We need to keep YqlLoggerScope alive longer than the actor system
                 KqpLoggerScope = std::make_shared<NYql::NLog::YqlLoggerScope>(
@@ -1392,8 +1398,9 @@ namespace Tests {
                 auto actorSystemPtr = std::make_shared<NKikimr::TDeferredActorLogBackend::TAtomicActorSystemPtr>(nullptr);
                 actorSystemPtr->store(Runtime->GetActorSystem(nodeIdx));
 
-                auto driver = NKqp::MakeYdbDriver(actorSystemPtr, queryServiceConfig.GetStreamingQueries().GetTopicSdkSettings());
-                auto pqGateway = NKqp::MakePqGateway(driver, NKqp::TLocalTopicClientSettings{.ActorSystem = Runtime->GetActorSystem(nodeIdx), .ChannelBufferSize = rmConfig.GetChannelBufferSize()});
+                auto uniqueDriver = NKqp::MakeYdbDriver(actorSystemPtr, queryServiceConfig.GetStreamingQueries().GetTopicSdkSettings());
+                auto driver = NKqp::MakeSharedYdbDriverWithStop(std::move(uniqueDriver));
+                auto pqGateway = NKqp::MakePqGateway(driver);
 
                 federatedQuerySetupFactory = std::make_shared<NKikimr::NKqp::TKqpFederatedQuerySetupFactoryMock>(
                     NKqp::MakeHttpGateway(queryServiceConfig.GetHttpGateway(), Runtime->GetAppData(nodeIdx).Counters),
@@ -1865,6 +1872,12 @@ namespace Tests {
         if (Bus) {
             Bus->Stop();
             Bus.Drop();
+        }
+
+        if (Driver) {
+            // Stop requests and wait for their completion
+            Driver->Stop(true);
+            Driver.Reset();
         }
     }
 

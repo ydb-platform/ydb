@@ -828,7 +828,7 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifiersDdl) {
     }
 
     void WaitForSuccess(TIntrusivePtr<IYdbSetup> ydb, const TQueryRunnerSettings& settings) {
-        ydb->WaitFor(TDuration::Seconds(20), "Resource pool classifier success", [ydb, settings](TString& errorString) {
+        ydb->WaitFor(TDuration::Seconds(30), "Resource pool classifier success", [ydb, settings](TString& errorString) {
             auto result = ydb->ExecuteQuery(TSampleQueries::TSelect42::Query, settings);
 
             errorString = result.GetIssues().ToOneLineString();

@@ -191,7 +191,9 @@ namespace Tests {
         std::function<IActor*(const TTokenManagerSettings&)> CreateTokenManager = NKikimr::CreateTokenManager;
         std::shared_ptr<TGrpcServiceFactory> GrpcServiceFactory;
         std::shared_ptr<NYql::NDq::IS3ActorsFactory> S3ActorsFactory = NYql::NDq::CreateDefaultS3ActorsFactory();
+        std::shared_ptr<void> KqpLoggerScope;
 
+        TServerSettings& SetKqpLoggerScope(std::shared_ptr<void> value) { KqpLoggerScope = value; return *this; }
         TServerSettings& SetGrpcPort(ui16 value) { GrpcPort = value; return *this; }
         TServerSettings& SetGrpcHost(TString value) { GrpcHost = value; return *this; }
         TServerSettings& SetGrpcMaxMessageSize(int value) { GrpcMaxMessageSize = value; return *this; }

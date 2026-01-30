@@ -1,3 +1,4 @@
+// NOLINTBEGIN(misc-definitions-in-headers)
 #pragma once
 
 Y_UNIT_TEST(Pragma) {
@@ -2099,3 +2100,4 @@ Y_UNIT_TEST(InlineSubquery) {
     TSetup setup;
     setup.Run(cases);
 }
+// NOLINTEND(misc-definitions-in-headers)

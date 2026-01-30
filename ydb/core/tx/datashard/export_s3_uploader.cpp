@@ -782,7 +782,7 @@ public:
             TVector<TChangefeedExportDescriptions> changefeeds,
             TMaybe<Ydb::Scheme::ModifyPermissionsRequest>&& permissions,
             TString&& metadata)
-        : ExternalStorageConfig(NWrappers::IExternalStorageConfig::Construct(GetSettings(task)))
+        : ExternalStorageConfig(NWrappers::IExternalStorageConfig::Construct(AppData()->AwsClientConfig, GetSettings(task)))
         , Settings(TStorageSettings::FromBackupTask<TSettings>(task))
         , DataFormat(EDataFormat::Csv)
         , CompressionCodec(CodecFromTask(task))

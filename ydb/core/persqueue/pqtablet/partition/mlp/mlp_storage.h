@@ -88,6 +88,8 @@ public:
         TInstant ProcessingDeadline;
         TInstant WriteTimestamp;
         TInstant LockingTimestamp;
+        std::optional<ui32> MessageGroupIdHash;
+        bool MessageGroupIsLocked;
     };
 
     struct TMessageIterator {
@@ -163,6 +165,7 @@ public:
     const std::unordered_set<ui32>& GetLockedMessageGroupsId() const;
     void InitMetrics();
     bool HasRetentionExpiredMessages() const;
+    bool GetKeepMessageOrder() const;
 
     struct TPosition {
         std::optional<std::map<ui64, TMessage>::iterator> SlowPosition;

@@ -4,9 +4,8 @@ namespace NYdb::NBS::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-IRequest::IRequest(TActorId sender, ui64 startIndex)
-    : Sender(sender)
-    , StartIndex(startIndex)
+IRequest::IRequest(ui64 startIndex)
+    : StartIndex(startIndex)
 {}
 
 ui64 IRequest::GetStartOffset() const
@@ -16,10 +15,26 @@ ui64 IRequest::GetStartOffset() const
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TWriteRequest::TWriteRequest(TActorId sender, ui64 startIndex, TString data)
-    : IRequest(sender, startIndex)
+TWriteRequest::TWriteRequest(
+    TActorId sender,
+    ui64 cookie,
+    ui64 startIndex,
+    TString data)
+    : IRequest(startIndex)
+    , Sender(sender)
+    , Cookie(cookie)
     , Data(std::move(data))
 {}
+
+TActorId TWriteRequest::GetSender() const
+{
+    return Sender;
+}
+
+ui64 TWriteRequest::GetCookie() const
+{
+    return Cookie;
+}
 
 const TString& TWriteRequest::GetData() const
 {
@@ -59,10 +74,57 @@ TVector<TWriteRequest::TPersistentBufferWriteMeta> TWriteRequest::GetWritesMeta(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TReadRequest::TReadRequest(TActorId sender, ui64 startIndex, ui64 blocksCount)
-    : IRequest(sender, startIndex)
+TFlushRequest::TFlushRequest(ui64 startIndex, bool isErase, ui8 persistentBufferIndex, ui64 lsn)
+    : IRequest(startIndex)
+    , IsErase(isErase)
+    , PersistentBufferIndex(persistentBufferIndex)
+    , Lsn(lsn)
+{}
+
+ui64 TFlushRequest::GetDataSize() const
+{
+    return BlockSize;
+}
+
+bool TFlushRequest::IsCompleted(ui64 requestId)
+{
+    Y_UNUSED(requestId);
+    return true;
+}
+
+bool TFlushRequest::GetIsErase() const
+{
+    return IsErase;
+}
+
+ui8 TFlushRequest::GetPersistentBufferIndex() const
+{
+    return PersistentBufferIndex;
+}
+
+ui64 TFlushRequest::GetLsn() const
+{
+    return Lsn;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TReadRequest::TReadRequest(TActorId sender, ui64 cookie, ui64 startIndex, ui64 blocksCount)
+    : IRequest(startIndex)
+    , Sender(sender)
+    , Cookie(cookie)
     , BlocksCount(blocksCount)
 {}
+
+TActorId TReadRequest::GetSender() const
+{
+    return Sender;
+}
+
+ui64 TReadRequest::GetCookie() const
+{
+    return Cookie;
+}
 
 ui64 TReadRequest::GetDataSize() const
 {

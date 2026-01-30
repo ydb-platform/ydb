@@ -144,7 +144,7 @@ TAutomatonVersion TAutomatonVersion::Advance() const
         std::move(GetLogicalVersion().Advance()));
 }
 
-void FormatValue(TStringBuilderBase* builder, TAutomatonVersion version, TStringBuf /* spec */)
+void FormatValue(TStringBuilderBase* builder, TAutomatonVersion version, TStringBuf /*spec*/)
 {
     auto logicalVersion = version.GetLogicalVersion();
     auto physicalVersion = version.GetPhysicalVersion();

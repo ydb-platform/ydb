@@ -6,32 +6,8 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
-
-#ifndef _LIBCPP_LOCALE_H
-#define _LIBCPP_LOCALE_H
-
-/*
-    locale.h synopsis
-
-Macros:
-
-    LC_ALL
-    LC_COLLATE
-    LC_CTYPE
-    LC_MONETARY
-    LC_NUMERIC
-    LC_TIME
-
-Types:
-
-    lconv
-
-Functions:
-
-   setlocale
-   localeconv
-
-*/
+#ifndef _LIBCPP___FLAT_MAP_SORTED_UNIQUE_H
+#define _LIBCPP___FLAT_MAP_SORTED_UNIQUE_H
 
 #include <__config>
 
@@ -39,8 +15,17 @@ Functions:
 #  pragma GCC system_header
 #endif
 
-#if __has_include_next(<locale.h>)
-#  include_next <locale.h>
-#endif
+#if _LIBCPP_STD_VER >= 23
 
-#endif // _LIBCPP_LOCALE_H
+_LIBCPP_BEGIN_NAMESPACE_STD
+
+struct sorted_unique_t {
+  explicit sorted_unique_t() = default;
+};
+inline constexpr sorted_unique_t sorted_unique{};
+
+_LIBCPP_END_NAMESPACE_STD
+
+#endif // _LIBCPP_STD_VER >= 23
+
+#endif // _LIBCPP___FLAT_MAP_SORTED_UNIQUE_H

@@ -1,18 +1,18 @@
 diff --git a/include/__ostream/basic_ostream.h b/include/__ostream/basic_ostream.h
-index 1b1c026..7367841 100644
+index c37566d..4a43bed 100644
 --- a/include/__ostream/basic_ostream.h
 +++ b/include/__ostream/basic_ostream.h
-@@ -800,7 +800,7 @@ operator<<(basic_ostream<_CharT, _Traits>& __os, const bitset<_Size>& __x) {
+@@ -799,7 +799,7 @@ operator<<(basic_ostream<_CharT, _Traits>& __os, const bitset<_Size>& __x) {
                                                           std::use_facet<ctype<_CharT> >(__os.getloc()).widen('1'));
  }
  
 -#  if _LIBCPP_STD_VER >= 20
 +#  if 0 && _LIBCPP_STD_VER >= 20
  
- #    ifndef _LIBCPP_HAS_NO_WIDE_CHARACTERS
+ #    if _LIBCPP_HAS_WIDE_CHARACTERS
  template <class _Traits>
 diff --git a/src/iostream.cpp b/src/iostream.cpp
-index c5ad77a..029de4a 100644
+index ee33f4b..a1c79f1 100644
 --- a/src/iostream.cpp
 +++ b/src/iostream.cpp
 @@ -21,80 +21,120 @@
@@ -33,7 +33,7 @@ index c5ad77a..029de4a 100644
  alignas(__stdinbuf<char>) static char __cin[sizeof(__stdinbuf<char>)];
  static mbstate_t mb_cin;
  
- #ifndef _LIBCPP_HAS_NO_WIDE_CHARACTERS
+ #if _LIBCPP_HAS_WIDE_CHARACTERS
 +#  if defined(_LIBCPP_ABI_MICROSOFT) && !defined(__clang__)
 +alignas(wistream) char _wcin[sizeof(wistream)];
 +_LIBCPP_EXPORTED_FROM_ABI wistream& wcin = *reinterpret_cast<wistream*>(_wcin);
@@ -47,7 +47,7 @@ index c5ad77a..029de4a 100644
 +#endif
  alignas(__stdinbuf<wchar_t>) static char __wcin[sizeof(__stdinbuf<wchar_t>)];
  static mbstate_t mb_wcin;
- #endif // _LIBCPP_HAS_NO_WIDE_CHARACTERS
+ #endif // _LIBCPP_HAS_WIDE_CHARACTERS
  
 +#if defined(_LIBCPP_ABI_MICROSOFT) && !defined(__clang__)
 +alignas(ostream) char _cout[sizeof(ostream)];
@@ -63,7 +63,7 @@ index c5ad77a..029de4a 100644
  alignas(__stdoutbuf<char>) static char __cout[sizeof(__stdoutbuf<char>)];
  static mbstate_t mb_cout;
  
- #ifndef _LIBCPP_HAS_NO_WIDE_CHARACTERS
+ #if _LIBCPP_HAS_WIDE_CHARACTERS
 +#  if defined(_LIBCPP_ABI_MICROSOFT) && !defined(__clang__)
 +alignas(wostream) char _wcout[sizeof(wostream)];
 +_LIBCPP_EXPORTED_FROM_ABI wostream& wcout = *reinterpret_cast<wostream*>(_wcout);
@@ -77,7 +77,7 @@ index c5ad77a..029de4a 100644
 +#endif
  alignas(__stdoutbuf<wchar_t>) static char __wcout[sizeof(__stdoutbuf<wchar_t>)];
  static mbstate_t mb_wcout;
- #endif // _LIBCPP_HAS_NO_WIDE_CHARACTERS
+ #endif // _LIBCPP_HAS_WIDE_CHARACTERS
  
 +#if defined(_LIBCPP_ABI_MICROSOFT) && !defined(__clang__)
 +alignas(ostream) char _cerr[sizeof(ostream)];
@@ -93,7 +93,7 @@ index c5ad77a..029de4a 100644
  alignas(__stdoutbuf<char>) static char __cerr[sizeof(__stdoutbuf<char>)];
  static mbstate_t mb_cerr;
  
- #ifndef _LIBCPP_HAS_NO_WIDE_CHARACTERS
+ #if _LIBCPP_HAS_WIDE_CHARACTERS
 +#  if defined(_LIBCPP_ABI_MICROSOFT) && !defined(__clang__)
 +alignas(wostream) char _wcerr[sizeof(wostream)];
 +_LIBCPP_EXPORTED_FROM_ABI wostream& wcerr = *reinterpret_cast<wostream*>(_wcerr);
@@ -107,7 +107,7 @@ index c5ad77a..029de4a 100644
 +#  endif
  alignas(__stdoutbuf<wchar_t>) static char __wcerr[sizeof(__stdoutbuf<wchar_t>)];
  static mbstate_t mb_wcerr;
- #endif // _LIBCPP_HAS_NO_WIDE_CHARACTERS
+ #endif // _LIBCPP_HAS_WIDE_CHARACTERS
  
 +#if defined(_LIBCPP_ABI_MICROSOFT) && !defined(__clang__)
 +alignas(ostream) char _clog[sizeof(ostream)];
@@ -121,7 +121,7 @@ index c5ad77a..029de4a 100644
          ;
 +#endif
  
- #ifndef _LIBCPP_HAS_NO_WIDE_CHARACTERS
+ #if _LIBCPP_HAS_WIDE_CHARACTERS
 +#  if defined(_LIBCPP_ABI_MICROSOFT) && !defined(__clang__)
 +alignas(wostream) char _wclog[sizeof(wostream)];
 +_LIBCPP_EXPORTED_FROM_ABI wostream& wclog = *reinterpret_cast<wostream*>(_wclog);
@@ -133,7 +133,7 @@ index c5ad77a..029de4a 100644
  #  endif
          ;
 +#endif
- #endif // _LIBCPP_HAS_NO_WIDE_CHARACTERS
+ #endif // _LIBCPP_HAS_WIDE_CHARACTERS
  
  // Pretend we're inside a system header so the compiler doesn't flag the use of the init_priority
 @@ -128,19 +168,19 @@ public:
@@ -152,7 +152,7 @@ index c5ad77a..029de4a 100644
    std::unitbuf(*cerr_ptr);
    cerr_ptr->tie(cout_ptr);
  
- #ifndef _LIBCPP_HAS_NO_WIDE_CHARACTERS
+ #if _LIBCPP_HAS_WIDE_CHARACTERS
 -  wistream* wcin_ptr  = ::new (wcin) wistream(::new (__wcin) __stdinbuf<wchar_t>(stdin, &mb_wcin));
 -  wostream* wcout_ptr = ::new (wcout) wostream(::new (__wcout) __stdoutbuf<wchar_t>(stdout, &mb_wcout));
 -  wostream* wcerr_ptr = ::new (wcerr) wostream(::new (__wcerr) __stdoutbuf<wchar_t>(stderr, &mb_wcerr));
@@ -175,7 +175,7 @@ index c5ad77a..029de4a 100644
 +  ostream* clog_ptr = reinterpret_cast<ostream*>(&clog);
    clog_ptr->flush();
  
- #ifndef _LIBCPP_HAS_NO_WIDE_CHARACTERS
+ #if _LIBCPP_HAS_WIDE_CHARACTERS
 -  wostream* wcout_ptr = reinterpret_cast<wostream*>(wcout);
 +  wostream* wcout_ptr = reinterpret_cast<wostream*>(&wcout);
    wcout_ptr->flush();

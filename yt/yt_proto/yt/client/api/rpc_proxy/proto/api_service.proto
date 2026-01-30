@@ -1553,6 +1553,12 @@ message TReplicaInfo
     required int32 mode = 4; // ETableReplicaMode
 }
 
+message TUnfoldedColumns
+{
+    required string table_column = 1;
+    required string index_column = 2;
+}
+
 message TIndexInfo
 {
     required NYT.NProto.TGuid index_table_id = 1;
@@ -1561,6 +1567,7 @@ message TIndexInfo
     optional string unfolded_column = 4;
     optional int32 index_correspondence = 6; // NTableClient::ESecondaryIndexState
     optional TTableSchema evaluated_columns_schema = 7;
+    optional TUnfoldedColumns unfolded_columns = 8;
 }
 
 message TReqGetTableMountInfo

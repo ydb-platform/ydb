@@ -1059,6 +1059,7 @@ NApi::TTableReaderOptions SerializeOptionsForReadTable(
     }
     result.EnableRowIndex = options.ControlAttributes_.EnableRowIndex_;
     result.EnableRangeIndex = options.ControlAttributes_.EnableRangeIndex_;
+    result.OmitInaccessibleRows = options.OmitInaccessibleRows_;
     return result;
 }
 

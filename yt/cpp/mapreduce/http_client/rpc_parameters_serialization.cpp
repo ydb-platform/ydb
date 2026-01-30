@@ -709,6 +709,7 @@ TNode SerializeParamsForReadTable(
     TNode result;
     SetTransactionIdParam(&result, transactionId);
     SerializeSuppressableAccessTrackingOptions(&result, options);
+    result["omit_inaccessible_rows"] = options.OmitInaccessibleRows_;
     result["control_attributes"] = BuildYsonNodeFluently()
         .BeginMap()
             .Item("enable_row_index").Value(options.ControlAttributes_.EnableRowIndex_)

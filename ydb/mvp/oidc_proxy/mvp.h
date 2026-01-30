@@ -6,6 +6,7 @@
 #include <ydb/mvp/core/mvp_log.h>
 #include <ydb/mvp/core/signals.h>
 #include <ydb/mvp/core/appdata.h>
+#include <ydb/mvp/core/generic_options.h>
 #include <ydb/mvp/core/mvp_tokens.h>
 #include <library/cpp/deprecated/atomic/atomic.h>
 #include <contrib/libs/yaml-cpp/include/yaml-cpp/yaml.h>
@@ -17,8 +18,6 @@ const TString& GetEServiceName(NActors::NLog::EComponent component);
 
 class TMVP {
 private:
-    TString SecretName;
-
     const static ui16 DefaultHttpPort;
     const static ui16 DefaultHttpsPort;
 
@@ -34,14 +33,7 @@ protected:
     TIntrusivePtr<NActors::NLog::TSettings> BuildLoggerSettings();
 
     void TryGetOidcOptionsFromConfig(const YAML::Node& config);
-    void TryGetGenericOptionsFromConfig(
-        const YAML::Node& config,
-        const NLastGetopt::TOptsParseResult& opts,
-        TString& ydbTokenFile,
-        TString& caCertificateFile,
-        TString& sslCertificateFile,
-        bool& useStderr,
-        bool& mlock);
+    void TryGetGenericOptionsFromConfig(const YAML::Node& config, const NLastGetopt::TOptsParseResult& parseRes, TGenericOptions& opts);
 
     TMVPAppData AppData;
     TIntrusivePtr<NActors::NLog::TSettings> LoggerSettings;

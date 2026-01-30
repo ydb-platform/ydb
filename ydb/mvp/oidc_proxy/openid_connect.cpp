@@ -7,6 +7,7 @@
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/string_utils/base64/base64.h>
 
+#include <util/random/entropy.h>
 #include <util/random/random.h>
 #include <util/string/builder.h>
 #include <util/string/hex.h>
@@ -93,14 +94,14 @@ NHttp::THttpOutgoingResponsePtr GetHttpOutgoingResponsePtr(const NHttp::THttpInc
     const TString redirectUrl = TStringBuilder() << settings.GetAuthEndpointURL()
                                                  << "?response_type=code"
                                                  << "&scope=openid"
-                                                 << "&state=" << context.GetState(settings.ClientSecret)
+                                                 << "&state=" << context.GetState(settings.StateSigningKey)
                                                  << "&client_id=" << settings.ClientId
                                                  << "&redirect_uri=" << (request->Endpoint->Secure ? "https://" : "http://")
                                                                      << request->Host
                                                                      << GetAuthCallbackUrl();
     NHttp::THeadersBuilder responseHeaders;
     SetCORS(request, &responseHeaders);
-    responseHeaders.Set("Set-Cookie", context.CreateYdbOidcCookie(settings.ClientSecret));
+    responseHeaders.Set("Set-Cookie", context.CreateYdbOidcCookie(settings.StateSigningKey));
     if (context.IsAjaxRequest()) {
         return CreateResponseForAjaxRequest(request, responseHeaders, redirectUrl);
     }
@@ -283,6 +284,12 @@ TString GetAddressWithoutPort(const TString& address) {
     }
 
     return address;
+}
+
+TString GenerateRandomBase64(size_t byteNumber) {
+    TString bytes = TString::Uninitialized(byteNumber);
+    EntropyPool().Read(bytes.Detach(), bytes.size());
+    return Base64EncodeUrlNoPadding(bytes);
 }
 
 // Append request address to X-Forwarded-For header

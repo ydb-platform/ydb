@@ -10,19 +10,7 @@
 #include <ydb/mvp/core/protos/mvp.pb.h>
 #include "mvp_test_runtime.h"
 
-namespace {
-
 using namespace NActors;
-
-template <typename HttpType>
-void EatWholeString(TIntrusivePtr<HttpType>& request, const TString& data) {
-    request->EnsureEnoughSpaceAvailable(data.size());
-    auto size = std::min(request->Avail(), data.size());
-    memcpy(request->Pos(), data.data(), size);
-    request->Advance(size);
-}
-
-}
 
 Y_UNIT_TEST_SUITE(Mvp) {
     Y_UNIT_TEST(TokenatorGetMetadataTokenGood) {

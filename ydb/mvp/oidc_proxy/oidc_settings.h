@@ -29,7 +29,9 @@ struct TOpenIdConnectSettings {
     TString SessionServiceEndpoint;
     TString SessionServiceTokenName;
     TString AuthorizationServerAddress;
+    TString SecretName;
     TString ClientSecret;
+    TString StateSigningKey;
     std::vector<TString> AllowedProxyHosts;
     TString WhoamiExtendedInfoEndpoint;
     TDuration DefaultRequestTimeout = DEFAULT_REQUEST_TIMEOUT;

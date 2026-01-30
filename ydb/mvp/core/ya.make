@@ -9,6 +9,7 @@ SRCS(
     appdata.h
     filter.cpp
     filter.h
+    generic_options.h
     grpc_log.h
     http_check.h
     http_sensors.h

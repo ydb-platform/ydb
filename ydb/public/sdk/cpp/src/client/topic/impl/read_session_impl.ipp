@@ -1361,8 +1361,6 @@ inline void TSingleClusterReadSessionImpl<false>::StopPartitionSessionImpl(
 ) {
     auto partitionSessionId = partitionStream->GetAssignId();
     
-    LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "StopPartitionSessionImpl partitionSessionId=" << partitionSessionId << " graceful=" << (graceful ? "true" : "false"));
-
     if (IsDirectRead()) {
         Y_ABORT_UNLESS(DirectReadSessionManager);
         DirectReadSessionManager->StopPartitionSession(partitionSessionId);
@@ -1403,7 +1401,6 @@ inline void TSingleClusterReadSessionImpl<false>::StopPartitionSessionImpl(
             partitionStream,
             TReadSessionEvent::TPartitionSessionClosedEvent(partitionStream, TReadSessionEvent::TPartitionSessionClosedEvent::EReason::Lost),
             deferred);
-        LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "Pushed TPartitionSessionClosedEvent (non-graceful stop) for partitionSessionId=" << partitionSessionId);
     }
 
     if (!pushRes) {
@@ -3246,11 +3243,7 @@ void TDeferredActions<UseMigrationProtocol>::DeferSignalWaiter(TWaiter&& waiter)
 template<bool UseMigrationProtocol>
 void TDeferredActions<UseMigrationProtocol>::DeferDestroyDecompressionInfos(std::vector<TDataDecompressionInfoPtr<UseMigrationProtocol>>&& infos)
 {
-    // Append to existing infos instead of replacing to handle multiple calls
-    // (e.g., from DecompressionQueue cleanup and DeleteNotReadyTail in the same deferred scope)
-    DecompressionInfos.insert(DecompressionInfos.end(),
-                              std::make_move_iterator(infos.begin()),
-                              std::make_move_iterator(infos.end()));
+    DecompressionInfos = std::move(infos);
 }
 
 template<bool UseMigrationProtocol>

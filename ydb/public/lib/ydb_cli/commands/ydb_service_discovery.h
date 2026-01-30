@@ -35,6 +35,7 @@ private:
     void PrintResponse(NDiscovery::TWhoAmIResult& result);
 
     bool WithGroups = false;
+    bool WithAccessLevels = false;
 };
 
 }

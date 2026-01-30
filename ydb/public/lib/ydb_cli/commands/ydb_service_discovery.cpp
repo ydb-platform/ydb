@@ -71,6 +71,7 @@ TCommandWhoAmI::TCommandWhoAmI()
 void TCommandWhoAmI::Config(TConfig& config) {
     TYdbSimpleCommand::Config(config);
     config.Opts->AddLongOption('g', "groups", "With groups").StoreTrue(&WithGroups);
+    config.Opts->AddLongOption('a', "access-levels", "With access levels").StoreTrue(&WithAccessLevels);
     config.SetFreeArgsNum(0);
 }
 
@@ -101,18 +102,20 @@ void TCommandWhoAmI::PrintResponse(NDiscovery::TWhoAmIResult& result) {
                 Cout << Endl << "User has no groups" << Endl;
             }
 
-        bool hasAnyAccess = result.IsDatabaseAllowed() || result.IsViewerAllowed() ||
-            result.IsMonitoringAllowed() || result.IsAdministrationAllowed() ||
-            result.IsRegisterNodeAllowed() || result.IsBootstrapAllowed();
-        if (hasAnyAccess) {
-            Cout << Endl << "Access levels:" << Endl;
-            if (result.IsDatabaseAllowed()) Cout << "Database" << Endl;
-            if (result.IsViewerAllowed()) Cout << "Viewer" << Endl;
-            if (result.IsMonitoringAllowed()) Cout << "Monitoring" << Endl;
-            if (result.IsAdministrationAllowed()) Cout << "Administration" << Endl;
-            if (result.IsRegisterNodeAllowed()) Cout << "Register node" << Endl;
-            if (result.IsBootstrapAllowed()) Cout << "Bootstrap" << Endl;
-        }
+            if (WithAccessLevels) {
+                bool hasAnyAccess = result.IsDatabaseAllowed() || result.IsViewerAllowed() ||
+                    result.IsMonitoringAllowed() || result.IsAdministrationAllowed() ||
+                    result.IsRegisterNodeAllowed() || result.IsBootstrapAllowed();
+                if (hasAnyAccess) {
+                    Cout << Endl << "Access levels:" << Endl;
+                    if (result.IsDatabaseAllowed()) Cout << "Database" << Endl;
+                    if (result.IsViewerAllowed()) Cout << "Viewer" << Endl;
+                    if (result.IsMonitoringAllowed()) Cout << "Monitoring" << Endl;
+                    if (result.IsAdministrationAllowed()) Cout << "Administration" << Endl;
+                    if (result.IsRegisterNodeAllowed()) Cout << "Register node" << Endl;
+                    if (result.IsBootstrapAllowed()) Cout << "Bootstrap" << Endl;
+                }
+            }
         }
     }
 }

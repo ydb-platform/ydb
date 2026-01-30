@@ -256,6 +256,11 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
                 "--mon-key=%s" % self.__configurator.monitoring_tls_key_path
             )
 
+        if self.__configurator.monitoring_tls_ca_path is not None:
+            command.append(
+                "--mon-ca=%s" % self.__configurator.monitoring_tls_ca_path
+            )
+
         if os.environ.get("YDB_ALLOCATE_PGWIRE_PORT", "") == "true":
             command.append("--pgwire-port=%d" % self.pgwire_port)
 

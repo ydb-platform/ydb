@@ -244,6 +244,7 @@ class KikimrConfigGenerator(object):
 
         self.monitoring_tls_cert_path = None
         self.monitoring_tls_key_path = None
+        self.monitoring_tls_ca_path = None
 
         self.__binary_paths = binary_paths
         rings_count = 3 if erasure == Erasure.MIRROR_3_DC else 1

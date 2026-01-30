@@ -58,7 +58,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
     bool ReplyLocked;
     ui64 ReplyLockedFor;
 
-    TMap<TActorId, TActorId> Followers;
+    TMap<TActorId, TEvStateStorage::TEvInfo::TFollowerInfo> Followers;
 
     const ui32 RingGroupIndex;
     bool NotifyRingGroupProxy;
@@ -267,8 +267,32 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
             Y_ABORT();
         }
 
-        for (ui32 i = 0, end = record.FollowerSize(); i < end; ++i) {
-            Followers[ActorIdFromProto(record.GetFollower(i))] = ActorIdFromProto(record.GetFollowerTablet(i));
+        // NOTE: "Follower" and "FollowerTablet" should have the same number of entries,
+        //       but "OptionalFollowerId" may not be present at all (if comes from older nodes).
+        //       If it is present and populated, then it should have the same size.
+        Y_ABORT_UNLESS(record.FollowerSize() == record.FollowerTabletSize());
+
+        Y_ABORT_UNLESS(
+            (record.OptionalFollowerIdSize() == 0) ||
+            (record.FollowerSize() == record.OptionalFollowerIdSize())
+        );
+
+        for (size_t i = 0; i < record.FollowerSize(); ++i) {
+            const TActorId follower = ActorIdFromProto(record.GetFollower(i));
+            const TActorId followerTablet = ActorIdFromProto(record.GetFollowerTablet(i));
+            const TMaybe<ui32> followerId =
+                ((record.OptionalFollowerIdSize() > 0) && record.GetOptionalFollowerId(i).HasFollowerId())
+                    ? TMaybe<ui32>(record.GetOptionalFollowerId(i).GetFollowerId())
+                    : TMaybe<ui32>();
+
+            Followers.insert_or_assign(
+                follower,
+                TEvStateStorage::TEvInfo::TFollowerInfo(
+                    follower,
+                    followerTablet,
+                    followerId
+                )
+            );
         }
     }
 
@@ -662,7 +686,7 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
     ui32 CurrentStep;
     bool Locked;
     ui64 LockedFor;
-    TMap<TActorId, TActorId> Followers;
+    TMap<TActorId, TEvStateStorage::TEvInfo::TFollowerInfo> Followers;
 
     bool Replied = false;
 
@@ -715,8 +739,8 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
             CurrentStep = msg->CurrentStep;
             Locked = msg->Locked;
             LockedFor = msg->LockedFor;
-            for (auto& [k,v] : msg->Followers) {
-                Followers[k] = v;
+            for (const auto& followerInfo : msg->Followers) {
+                Followers.insert_or_assign(followerInfo.Follower, followerInfo);
             }
         }
         Signature.Merge(msg->Signature);

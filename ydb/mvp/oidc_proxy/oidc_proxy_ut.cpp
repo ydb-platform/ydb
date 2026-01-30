@@ -19,34 +19,46 @@
 using namespace NMVP::NOIDC;
 using namespace NActors;
 
+const TString ALLOWED_PROXY_HOST {"ydb.viewer.page"};
+
+static TOpenIdConnectSettings BuildBaseSettings(NMvp::EAccessServiceType accessServiceType = NMvp::yandex_v2) {
+    TPortManager tp;
+    ui16 sessionServicePort = tp.GetPort(8655);
+    ui16 profilePort = tp.GetPort(8766);
+
+    TOpenIdConnectSettings s;
+    s.AccessServiceType = accessServiceType;
+    s.ClientId = "client_id";
+    s.AuthorizationServerAddress = "https://auth.test.net";
+    s.AllowedProxyHosts = {ALLOWED_PROXY_HOST};
+    s.SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort);
+    s.WhoamiExtendedInfoEndpoint = "localhost:" + ToString(profilePort);
+    s.ClientSecret = "0123456789abcdef";
+    s.StateSigningKey = "test_state_key";
+    return s;
+}
+
 Y_UNIT_TEST_SUITE(Mvp) {
     void OpenIdConnectRequestWithIamTokenTest(NMvp::EAccessServiceType profile) {
-        TPortManager tp;
-        ui16 sessionServicePort = tp.GetPort(8655);
+
         TMvpTestRuntime runtime;
         runtime.Initialize();
 
-        const TString allowedProxyHost {"ydb.viewer.page"};
-
-        TOpenIdConnectSettings settings {
-            .SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort),
-            .AllowedProxyHosts = {allowedProxyHost},
-            .AccessServiceType = profile
-        };
+        TOpenIdConnectSettings settings = BuildBaseSettings(profile);
 
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
         const NActors::TActorId target = runtime.Register(new TProtectedPageHandler(edge, settings));
 
         const TString iamToken {"protected_page_iam_token"};
         NHttp::THttpIncomingRequestPtr incomingRequest = new NHttp::THttpIncomingRequest();
-        EatWholeString(incomingRequest, "GET /" + allowedProxyHost + "/counters HTTP/1.1\r\n"
+        EatWholeString(incomingRequest, "GET /" + ALLOWED_PROXY_HOST + "/counters HTTP/1.1\r\n"
                                 "Host: oidcproxy.net\r\n"
                                 "Authorization: Bearer " + iamToken + "\r\n");
         runtime.Send(new IEventHandle(target, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(incomingRequest)));
         TAutoPtr<IEventHandle> handle;
 
         auto outgoingRequestEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>(handle);
-        UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->Host, allowedProxyHost);
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->Host, ALLOWED_PROXY_HOST);
         UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->URL, "/counters");
         UNIT_ASSERT_STRING_CONTAINS(outgoingRequestEv->Request->Headers, "Authorization: Bearer " + iamToken);
         NHttp::THttpIncomingResponsePtr incomingResponse = new NHttp::THttpIncomingResponse(outgoingRequestEv->Request);
@@ -67,24 +79,16 @@ Y_UNIT_TEST_SUITE(Mvp) {
     }
 
     void OpenIdConnectNonAuthorizeRequestWithOptionMethodTest(NMvp::EAccessServiceType profile) {
-        TPortManager tp;
-        ui16 sessionServicePort = tp.GetPort(8655);
         TMvpTestRuntime runtime;
         runtime.Initialize();
 
-        const TString allowedProxyHost {"ydb.viewer.page"};
-
-        TOpenIdConnectSettings settings {
-            .SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort),
-            .AllowedProxyHosts = {allowedProxyHost},
-            .AccessServiceType = profile
-        };
+        TOpenIdConnectSettings settings = BuildBaseSettings(profile);
 
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
         const NActors::TActorId target = runtime.Register(new TProtectedPageHandler(edge, settings));
 
         NHttp::THttpIncomingRequestPtr incomingRequest = new NHttp::THttpIncomingRequest();
-        EatWholeString(incomingRequest, "OPTIONS /" + allowedProxyHost + "/counters HTTP/1.1\r\n"
+        EatWholeString(incomingRequest, "OPTIONS /" + ALLOWED_PROXY_HOST + "/counters HTTP/1.1\r\n"
                                 "Host: oidcproxy.net\r\n");
         runtime.Send(new IEventHandle(target, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(incomingRequest)));
         TAutoPtr<IEventHandle> handle;
@@ -92,7 +96,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         auto outgoingRequestEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>(handle);
         NHttp::THttpOutgoingRequestPtr outgoingRequest = outgoingRequestEv->Request;
         UNIT_ASSERT_STRINGS_EQUAL(outgoingRequest->Method, "OPTIONS");
-        UNIT_ASSERT_STRINGS_EQUAL(outgoingRequest->Host, allowedProxyHost);
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingRequest->Host, ALLOWED_PROXY_HOST);
         UNIT_ASSERT_STRINGS_EQUAL(outgoingRequest->URL, "/counters");
         NHttp::THttpIncomingResponsePtr incomingResponse = new NHttp::THttpIncomingResponse(outgoingRequest);
         EatWholeString(incomingResponse, "HTTP/1.1 204 No Content\r\nConnection: close\r\n"
@@ -120,18 +124,10 @@ Y_UNIT_TEST_SUITE(Mvp) {
     }
 
     void OpenIdConnectSessionServiceCheckValidCookieTest(NMvp::EAccessServiceType profile) {
-        TPortManager tp;
-        ui16 sessionServicePort = tp.GetPort(8655);
         TMvpTestRuntime runtime;
         runtime.Initialize();
 
-        const TString allowedProxyHost {"ydb.viewer.page"};
-
-        TOpenIdConnectSettings settings {
-            .SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort),
-            .AllowedProxyHosts = {allowedProxyHost},
-            .AccessServiceType = profile
-        };
+        TOpenIdConnectSettings settings = BuildBaseSettings(profile);
 
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
         const NActors::TActorId target = runtime.Register(new TProtectedPageHandler(edge, settings));
@@ -143,14 +139,14 @@ Y_UNIT_TEST_SUITE(Mvp) {
         std::unique_ptr<grpc::Server> sessionServer(builder.BuildAndStart());
 
         NHttp::THttpIncomingRequestPtr incomingRequest = new NHttp::THttpIncomingRequest();
-        EatWholeString(incomingRequest, "GET /" + allowedProxyHost + "/counters HTTP/1.1\r\n"
+        EatWholeString(incomingRequest, "GET /" + ALLOWED_PROXY_HOST + "/counters HTTP/1.1\r\n"
                                 "Host: oidcproxy.net\r\n"
                                 "Cookie: yc_session=allowed_session_cookie\r\n\r\n");
         runtime.Send(new IEventHandle(target, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(incomingRequest)));
         TAutoPtr<IEventHandle> handle;
 
         auto outgoingRequestEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>(handle);
-        UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->Host, allowedProxyHost);
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->Host, ALLOWED_PROXY_HOST);
         UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->URL, "/counters");
         UNIT_ASSERT_STRING_CONTAINS(outgoingRequestEv->Request->Headers, "Authorization: Bearer protected_page_iam_token");
         NHttp::THttpIncomingResponsePtr incomingResponse = new NHttp::THttpIncomingResponse(outgoingRequestEv->Request);
@@ -171,18 +167,10 @@ Y_UNIT_TEST_SUITE(Mvp) {
     }
 
     Y_UNIT_TEST(OpenIdConnectProxyOnHttpsHost) {
-        TPortManager tp;
-        ui16 sessionServicePort = tp.GetPort(8655);
         TMvpTestRuntime runtime;
         runtime.Initialize();
 
-        const TString allowedProxyHost {"ydb.viewer.page"};
-
-        TOpenIdConnectSettings settings {
-            .SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort),
-            .AllowedProxyHosts = {allowedProxyHost},
-            .AccessServiceType = NMvp::yandex_v2
-        };
+        TOpenIdConnectSettings settings = BuildBaseSettings(NMvp::yandex_v2);
 
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
         const NActors::TActorId target = runtime.Register(new TProtectedPageHandler(edge, settings));
@@ -194,14 +182,14 @@ Y_UNIT_TEST_SUITE(Mvp) {
         std::unique_ptr<grpc::Server> sessionServer(builder.BuildAndStart());
 
         NHttp::THttpIncomingRequestPtr incomingRequest = new NHttp::THttpIncomingRequest();
-        EatWholeString(incomingRequest, "GET /" + allowedProxyHost + "/counters HTTP/1.1\r\n"
+        EatWholeString(incomingRequest, "GET /" + ALLOWED_PROXY_HOST + "/counters HTTP/1.1\r\n"
                                 "Host: oidcproxy.net\r\n"
                                 "Cookie: yc_session=allowed_session_cookie\r\n\r\n");
         runtime.Send(new IEventHandle(target, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(incomingRequest)));
         TAutoPtr<IEventHandle> handle;
 
         auto outgoingRequestEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>(handle);
-        UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->Host, allowedProxyHost);
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->Host, ALLOWED_PROXY_HOST);
         UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->URL, "/counters");
         UNIT_ASSERT_STRING_CONTAINS(outgoingRequestEv->Request->Headers, "Authorization: Bearer protected_page_iam_token");
         UNIT_ASSERT_EQUAL(outgoingRequestEv->Request->Secure, false);
@@ -214,7 +202,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         runtime.Send(new IEventHandle(handle->Sender, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingResponse(outgoingRequestEv->Request, incomingResponse)));
 
         outgoingRequestEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>(handle);
-        UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->Host, allowedProxyHost);
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->Host, ALLOWED_PROXY_HOST);
         UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->URL, "/counters");
         UNIT_ASSERT_STRING_CONTAINS(outgoingRequestEv->Request->Headers, "Authorization: Bearer protected_page_iam_token");
         UNIT_ASSERT_EQUAL(outgoingRequestEv->Request->Secure, true);
@@ -232,7 +220,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
 
         runtime.Send(new IEventHandle(target, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(incomingRequest)));
         outgoingRequestEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>(handle);
-        UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->Host, allowedProxyHost);
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->Host, ALLOWED_PROXY_HOST);
         UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->URL, "/counters");
         UNIT_ASSERT_STRING_CONTAINS(outgoingRequestEv->Request->Headers, "Authorization: Bearer protected_page_iam_token");
         UNIT_ASSERT_EQUAL(outgoingRequestEv->Request->Secure, false);
@@ -251,18 +239,10 @@ Y_UNIT_TEST_SUITE(Mvp) {
 
 
     Y_UNIT_TEST(OpenIdConnectFixLocationHeader) {
-        TPortManager tp;
-        ui16 sessionServicePort = tp.GetPort(8655);
         TMvpTestRuntime runtime;
         runtime.Initialize();
 
-        const TString allowedProxyHost {"ydb.viewer.page:1234"};
-
-        TOpenIdConnectSettings settings {
-            .SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort),
-            .AllowedProxyHosts = {allowedProxyHost},
-            .AccessServiceType = NMvp::yandex_v2
-        };
+        TOpenIdConnectSettings settings = BuildBaseSettings(NMvp::yandex_v2);
 
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
         const NActors::TActorId target = runtime.Register(new TProtectedPageHandler(edge, settings));
@@ -274,14 +254,14 @@ Y_UNIT_TEST_SUITE(Mvp) {
         std::unique_ptr<grpc::Server> sessionServer(builder.BuildAndStart());
 
         NHttp::THttpIncomingRequestPtr incomingRequest = new NHttp::THttpIncomingRequest();
-        EatWholeString(incomingRequest, "GET /http://" + allowedProxyHost + "/counters HTTP/1.1\r\n"
+        EatWholeString(incomingRequest, "GET /http://" + ALLOWED_PROXY_HOST + "/counters HTTP/1.1\r\n"
                                 "Host: oidcproxy.net\r\n"
                                 "Cookie: yc_session=allowed_session_cookie\r\n\r\n");
         runtime.Send(new IEventHandle(target, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(incomingRequest)));
         TAutoPtr<IEventHandle> handle;
 
         auto outgoingRequestEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>(handle);
-        UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->Host, allowedProxyHost);
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->Host, ALLOWED_PROXY_HOST);
         UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->URL, "/counters");
         UNIT_ASSERT_STRING_CONTAINS(outgoingRequestEv->Request->Headers, "Authorization: Bearer protected_page_iam_token");
         UNIT_ASSERT_EQUAL(outgoingRequestEv->Request->Secure, false);
@@ -296,7 +276,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
 
         auto outgoingResponseEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
         UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Status, "307");
-        UNIT_ASSERT_STRING_CONTAINS(outgoingResponseEv->Response->Headers, "Location: /http://" + allowedProxyHost + "/node/12345/counters");
+        UNIT_ASSERT_STRING_CONTAINS(outgoingResponseEv->Response->Headers, "Location: /http://" + ALLOWED_PROXY_HOST + "/node/12345/counters");
 
         // Location start with "//"
         runtime.Send(new IEventHandle(target, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(incomingRequest)));
@@ -361,19 +341,10 @@ Y_UNIT_TEST_SUITE(Mvp) {
 
 
     Y_UNIT_TEST(OpenIdConnectExchangeNebius) {
-        TPortManager tp;
-        ui16 sessionServicePort = tp.GetPort(8655);
         TMvpTestRuntime runtime;
         runtime.Initialize();
 
-        const TString allowedProxyHost {"ydb.viewer.page"};
-
-        TOpenIdConnectSettings settings {
-            .SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort),
-            .AuthorizationServerAddress = "https://auth.test.net",
-            .AllowedProxyHosts = {allowedProxyHost},
-            .AccessServiceType = NMvp::nebius_v1
-        };
+        TOpenIdConnectSettings settings = BuildBaseSettings(NMvp::nebius_v1);
 
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
         const NActors::TActorId target = runtime.Register(new TProtectedPageHandler(edge, settings));
@@ -385,7 +356,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         std::unique_ptr<grpc::Server> sessionServer(builder.BuildAndStart());
 
         NHttp::THttpIncomingRequestPtr incomingRequest = new NHttp::THttpIncomingRequest();
-        EatWholeString(incomingRequest, "GET /" + allowedProxyHost + "/counters HTTP/1.1\r\n"
+        EatWholeString(incomingRequest, "GET /" + ALLOWED_PROXY_HOST + "/counters HTTP/1.1\r\n"
                                 "Host: oidcproxy.net\r\n"
                                 "Cookie: yc_session=allowed_session_cookie;"
                                 + CreateNameSessionCookie(settings.ClientId) + "=" + Base64Encode("session_cookie") + "\r\n\r\n");
@@ -405,7 +376,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         runtime.Send(new IEventHandle(handle->Sender, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingResponse(outgoingRequestEv->Request, incomingResponse)));
 
         outgoingRequestEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>(handle);
-        UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->Host, allowedProxyHost);
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->Host, ALLOWED_PROXY_HOST);
         UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->URL, "/counters");
         UNIT_ASSERT_STRING_CONTAINS(outgoingRequestEv->Request->Headers, "Authorization: Bearer access_token");
         UNIT_ASSERT_EQUAL(outgoingRequestEv->Request->Secure, false);
@@ -423,17 +394,11 @@ Y_UNIT_TEST_SUITE(Mvp) {
     }
 
     Y_UNIT_TEST(OpenIdConnectSessionServiceCheckAuthorizationFail) {
-        TPortManager tp;
-        ui16 sessionServicePort = tp.GetPort(8655);
+
         TMvpTestRuntime runtime;
         runtime.Initialize();
 
-        const TString allowedProxyHost {"ydb.viewer.page"};
-
-        TOpenIdConnectSettings settings {
-            .SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort),
-            .AllowedProxyHosts = {allowedProxyHost}
-        };
+        TOpenIdConnectSettings settings = BuildBaseSettings();
 
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
         const NActors::TActorId target = runtime.Register(new TProtectedPageHandler(edge, settings));
@@ -446,7 +411,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         std::unique_ptr<grpc::Server> sessionServer(builder.BuildAndStart());
 
         NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest();
-        EatWholeString(request, "GET /" + allowedProxyHost + "/counters HTTP/1.1\r\n"
+        EatWholeString(request, "GET /" + ALLOWED_PROXY_HOST + "/counters HTTP/1.1\r\n"
                                 "Host: oidcproxy.net\r\n"
                                 "Cookie: yc_session=allowed_session_cookie\r\n\r\n");
         runtime.Send(new IEventHandle(target, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request)));
@@ -565,20 +530,10 @@ Y_UNIT_TEST_SUITE(Mvp) {
     };
 
     void OidcFullAuthorizationFlow(TRedirectStrategyBase& redirectStrategy) {
-        TPortManager tp;
-        ui16 sessionServicePort = tp.GetPort(8655);
         TMvpTestRuntime runtime;
         runtime.Initialize();
 
-        const TString allowedProxyHost {"ydb.viewer.page"};
-
-        TOpenIdConnectSettings settings {
-            .ClientId = "client_id",
-            .SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort),
-            .AuthorizationServerAddress = "https://auth.test.net",
-            .ClientSecret = "0123456789abcdef",
-            .AllowedProxyHosts = {allowedProxyHost}
-        };
+        TOpenIdConnectSettings settings = BuildBaseSettings();
 
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
         const NActors::TActorId target = runtime.Register(new TProtectedPageHandler(edge, settings));
@@ -594,7 +549,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         incomingRequest->Endpoint->Secure = true;
 
         const TString hostProxy = "oidcproxy.net";
-        const TString protectedPage = "/" + allowedProxyHost + "/counters";
+        const TString protectedPage = "/" + ALLOWED_PROXY_HOST + "/counters";
 
         EatWholeString(incomingRequest, redirectStrategy.CreateRequest("GET " + protectedPage + " HTTP/1.1\r\n"
                                                                                    "Host: " + hostProxy + "\r\n"
@@ -662,7 +617,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         runtime.Send(new IEventHandle(target, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(incomingRequest)));
 
         outgoingRequestEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>(handle);
-        UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->Host, allowedProxyHost);
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->Host, ALLOWED_PROXY_HOST);
         UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->URL, "/counters");
         UNIT_ASSERT_STRING_CONTAINS(outgoingRequestEv->Request->Headers, "Authorization: Bearer protected_page_iam_token");
         incomingResponse = new NHttp::THttpIncomingResponse(outgoingRequestEv->Request);
@@ -685,17 +640,10 @@ Y_UNIT_TEST_SUITE(Mvp) {
     }
 
     void OidcWrongStateAuthorizationFlow(TRedirectStrategyBase& redirectStrategy) {
-        TPortManager tp;
-        ui16 sessionServicePort = tp.GetPort(8655);
         TMvpTestRuntime runtime;
         runtime.Initialize();
 
-        TOpenIdConnectSettings settings {
-            .ClientId = "client_id",
-            .SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort),
-            .AuthorizationServerAddress = "https://auth.test.net",
-            .ClientSecret = "0123456789abcdef"
-        };
+        TOpenIdConnectSettings settings = BuildBaseSettings();
 
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
 
@@ -707,7 +655,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
 
         const NActors::TActorId sessionCreator = runtime.Register(new TSessionCreateHandler(edge, settings));
         TContext context({.State = "good_state", .RequestedAddress = "/requested/page", .AjaxRequest = redirectStrategy.IsAjaxRequest()});
-        TString wrongState = context.GetState(settings.ClientSecret);
+        TString wrongState = context.GetState(settings.StateSigningKey);
         if (wrongState[0] != 'a') {
             wrongState[0] = 'a';
         } else {
@@ -717,7 +665,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         TStringBuilder request;
         request << "GET /auth/callback?code=code_template#&state=" << wrongState << " HTTP/1.1\r\n";
         request << "Host: " + hostProxy + "\r\n";
-        TString cookie = context.CreateYdbOidcCookie(settings.ClientSecret);
+        TString cookie = context.CreateYdbOidcCookie(settings.StateSigningKey);
         TStringBuf cookieBuf(cookie);
         TStringBuf cookieValue, suffixCookie;
         cookieBuf.TrySplit(';', cookieValue, suffixCookie);
@@ -747,16 +695,10 @@ Y_UNIT_TEST_SUITE(Mvp) {
     }
 
     Y_UNIT_TEST(OpenIdConnectSessionServiceCreateAuthorizationFail) {
-        TPortManager tp;
-        ui16 sessionServicePort = tp.GetPort(8655);
         TMvpTestRuntime runtime;
         runtime.Initialize();
 
-        TOpenIdConnectSettings settings {
-            .SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort),
-            .AuthorizationServerAddress = "https://auth.test.net",
-            .ClientSecret = "123456789abcdef"
-        };
+        TOpenIdConnectSettings settings = BuildBaseSettings();
 
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
         const NActors::TActorId sessionCreator = runtime.Register(new TSessionCreateHandler(edge, settings));
@@ -769,9 +711,9 @@ Y_UNIT_TEST_SUITE(Mvp) {
 
         TContext context({.State = "test_state", .RequestedAddress = "/requested/page", .AjaxRequest = false});
         TStringBuilder request;
-        request << "GET /auth/callback?code=code_template#&state=" << context.GetState(settings.ClientSecret) << " HTTP/1.1\r\n";
+        request << "GET /auth/callback?code=code_template#&state=" << context.GetState(settings.StateSigningKey) << " HTTP/1.1\r\n";
         request << "Host: oidcproxy.net\r\n";
-        TString cookie = context.CreateYdbOidcCookie(settings.ClientSecret);
+        TString cookie = context.CreateYdbOidcCookie(settings.StateSigningKey);
         TStringBuf cookieBuf(cookie);
         TStringBuf cookieValue, suffixCookie;
         cookieBuf.TrySplit(';', cookieValue, suffixCookie);
@@ -800,17 +742,10 @@ Y_UNIT_TEST_SUITE(Mvp) {
     }
 
     void SessionServiceCreateAccessTokenInvalid(TRedirectStrategyBase& redirectStrategy) {
-        TPortManager tp;
-        ui16 sessionServicePort = tp.GetPort(8655);
         TMvpTestRuntime runtime;
         runtime.Initialize();
 
-        TOpenIdConnectSettings settings {
-            .ClientId = "client_id",
-            .SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort),
-            .AuthorizationServerAddress = "https://auth.test.net",
-            .ClientSecret = "123456789abcdef"
-        };
+        TOpenIdConnectSettings settings = BuildBaseSettings();
 
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
 
@@ -823,9 +758,9 @@ Y_UNIT_TEST_SUITE(Mvp) {
         const NActors::TActorId sessionCreator = runtime.Register(new TSessionCreateHandler(edge, settings));
         TContext context({.State = "test_state", .RequestedAddress = "/requested/page", .AjaxRequest = redirectStrategy.IsAjaxRequest()});
         TStringBuilder request;
-        request << "GET /auth/callback?code=code_template#&state=" << context.GetState(settings.ClientSecret) << " HTTP/1.1\r\n";
+        request << "GET /auth/callback?code=code_template#&state=" << context.GetState(settings.StateSigningKey) << " HTTP/1.1\r\n";
         request << "Host: oidcproxy.net\r\n";
-        TString cookie = context.CreateYdbOidcCookie(settings.ClientSecret);
+        TString cookie = context.CreateYdbOidcCookie(settings.StateSigningKey);
         TStringBuf cookieBuf(cookie);
         TStringBuf cookieValue, suffixCookie;
         cookieBuf.TrySplit(';', cookieValue, suffixCookie);
@@ -868,16 +803,10 @@ Y_UNIT_TEST_SUITE(Mvp) {
     }
 
     Y_UNIT_TEST(OpenIdConnectSessionServiceCreateOpenIdScopeMissed) {
-        TPortManager tp;
-        ui16 sessionServicePort = tp.GetPort(8655);
         TMvpTestRuntime runtime;
         runtime.Initialize();
 
-        TOpenIdConnectSettings settings {
-            .SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort),
-            .AuthorizationServerAddress = "https://auth.test.net",
-            .ClientSecret = "123456789abcdef"
-        };
+        TOpenIdConnectSettings settings = BuildBaseSettings();
 
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
         const NActors::TActorId sessionCreator = runtime.Register(new TSessionCreateHandler(edge, settings));
@@ -890,9 +819,9 @@ Y_UNIT_TEST_SUITE(Mvp) {
 
         TContext context({.State = "test_state", .RequestedAddress = "/requested/page", .AjaxRequest = false});
         TStringBuilder request;
-        request << "GET /callback?code=code_template#&state=" << context.GetState(settings.ClientSecret) << " HTTP/1.1\r\n";
+        request << "GET /callback?code=code_template#&state=" << context.GetState(settings.StateSigningKey) << " HTTP/1.1\r\n";
         request << "Host: oidcproxy.net\r\n";
-        TString cookie = context.CreateYdbOidcCookie(settings.ClientSecret);
+        TString cookie = context.CreateYdbOidcCookie(settings.StateSigningKey);
         TStringBuf cookieBuf(cookie);
         TStringBuf cookieValue, suffixCookie;
         cookieBuf.TrySplit(';', cookieValue, suffixCookie);
@@ -922,8 +851,6 @@ Y_UNIT_TEST_SUITE(Mvp) {
     }
 
     Y_UNIT_TEST(OpenIdConnectAllowedHostsList) {
-        TPortManager tp;
-        ui16 sessionServicePort = tp.GetPort(8655);
         TMvpTestRuntime runtime;
         runtime.Initialize();
 
@@ -938,14 +865,10 @@ Y_UNIT_TEST_SUITE(Mvp) {
             "second.ydb.viewer.forbidden.page"
         };
 
-        TOpenIdConnectSettings settings {
-            .SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort),
-            .AuthorizationServerAddress = "https://auth.test.net",
-            .ClientSecret = "0123456789abcdef",
-            .AllowedProxyHosts = {
-                "*.viewer.page",
-                "some.monitoring.page"
-            }
+        TOpenIdConnectSettings settings = BuildBaseSettings();
+        settings.AllowedProxyHosts = {
+            "*.viewer.page",
+            "some.monitoring.page"
         };
 
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
@@ -992,31 +915,25 @@ Y_UNIT_TEST_SUITE(Mvp) {
     }
 
     Y_UNIT_TEST(OpenIdConnectHandleNullResponseFromProtectedResource) {
-        TPortManager tp;
-        ui16 sessionServicePort = tp.GetPort(8655);
         TMvpTestRuntime runtime;
         runtime.Initialize();
 
-        const TString allowedProxyHost {"ydb.viewer.page"};
 
-        TOpenIdConnectSettings settings {
-            .SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort),
-            .AllowedProxyHosts = {allowedProxyHost},
-        };
+        TOpenIdConnectSettings settings = BuildBaseSettings();
 
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
         const NActors::TActorId target = runtime.Register(new TProtectedPageHandler(edge, settings));
 
         const TString iamToken {"protected_page_iam_token"};
         NHttp::THttpIncomingRequestPtr incomingRequest = new NHttp::THttpIncomingRequest();
-        EatWholeString(incomingRequest, "GET /" + allowedProxyHost + "/counters HTTP/1.1\r\n"
+        EatWholeString(incomingRequest, "GET /" + ALLOWED_PROXY_HOST + "/counters HTTP/1.1\r\n"
                                 "Host: oidcproxy.net\r\n"
                                 "Authorization: Bearer " + iamToken + "\r\n");
         runtime.Send(new IEventHandle(target, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(incomingRequest)));
         TAutoPtr<IEventHandle> handle;
 
         auto outgoingRequestEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>(handle);
-        UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->Host, allowedProxyHost);
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->Host, ALLOWED_PROXY_HOST);
         UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->URL, "/counters");
         UNIT_ASSERT_STRING_CONTAINS(outgoingRequestEv->Request->Headers, "Authorization: Bearer " + iamToken);
 
@@ -1029,17 +946,10 @@ Y_UNIT_TEST_SUITE(Mvp) {
     }
 
     Y_UNIT_TEST(OpenIdConnectSessionServiceCreateNotFoundCookie) {
-        TPortManager tp;
-        ui16 sessionServicePort = tp.GetPort(8655);
         TMvpTestRuntime runtime;
         runtime.Initialize();
 
-        TOpenIdConnectSettings settings {
-            .ClientId = "client_id",
-            .SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort),
-            .AuthorizationServerAddress = "https://auth.test.net",
-            .ClientSecret = "0123456789abcdef"
-        };
+        TOpenIdConnectSettings settings = BuildBaseSettings();
 
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
 
@@ -1053,7 +963,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         TContext context({.State = "good_state", .RequestedAddress = "/requested/page", .AjaxRequest = false});
         const TString hostProxy = "oidcproxy.net";
         TStringBuilder request;
-        request << "GET /auth/callback?code=code_template#&state=" << context.GetState(settings.ClientSecret) << " HTTP/1.1\r\n";
+        request << "GET /auth/callback?code=code_template#&state=" << context.GetState(settings.StateSigningKey) << " HTTP/1.1\r\n";
         request << "Host: " + hostProxy + "\r\n";
         NHttp::THttpIncomingRequestPtr incomingRequest = new NHttp::THttpIncomingRequest();
         EatWholeString(incomingRequest, request);
@@ -1067,17 +977,10 @@ Y_UNIT_TEST_SUITE(Mvp) {
     }
 
     Y_UNIT_TEST(OpenIdConnectSessionServiceCreateGetWrongStateAndWrongCookie) {
-        TPortManager tp;
-        ui16 sessionServicePort = tp.GetPort(8655);
         TMvpTestRuntime runtime;
         runtime.Initialize();
 
-        TOpenIdConnectSettings settings {
-            .ClientId = "client_id",
-            .SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort),
-            .AuthorizationServerAddress = "https://auth.test.net",
-            .ClientSecret = "0123456789abcdef"
-        };
+        TOpenIdConnectSettings settings = BuildBaseSettings();
 
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
 
@@ -1089,7 +992,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
 
         const NActors::TActorId sessionCreator = runtime.Register(new TSessionCreateHandler(edge, settings));
         TContext context({.State = "good_state", .RequestedAddress = "/requested/page", .AjaxRequest = false});
-        TString wrongState = context.GetState(settings.ClientSecret);
+        TString wrongState = context.GetState(settings.StateSigningKey);
         if (wrongState[0] != 'a') {
             wrongState[0] = 'a';
         } else {
@@ -1099,7 +1002,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         TStringBuilder request;
         request << "GET /auth/callback?code=code_template#&state=" << wrongState << " HTTP/1.1\r\n";
         request << "Host: " + hostProxy + "\r\n";
-        TString cookie = context.CreateYdbOidcCookie(settings.ClientSecret);
+        TString cookie = context.CreateYdbOidcCookie(settings.StateSigningKey);
         TStringBuf cookieBuf(cookie);
         TStringBuf cookieValue, suffixCookie;
         cookieBuf.TrySplit(';', cookieValue, suffixCookie);
@@ -1122,18 +1025,10 @@ Y_UNIT_TEST_SUITE(Mvp) {
     }
 
     Y_UNIT_TEST(OidcImpersonationStartFlow) {
-        TPortManager tp;
-        ui16 sessionServicePort = tp.GetPort(8655);
         TMvpTestRuntime runtime;
         runtime.Initialize();
 
-        TOpenIdConnectSettings settings {
-            .ClientId = "client_id",
-            .SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort),
-            .AuthorizationServerAddress = "https://auth.test.net",
-            .ClientSecret = "0123456789abcdef",
-            .AccessServiceType = NMvp::nebius_v1
-        };
+        TOpenIdConnectSettings settings = BuildBaseSettings(NMvp::nebius_v1);
 
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
 
@@ -1178,18 +1073,10 @@ Y_UNIT_TEST_SUITE(Mvp) {
     }
 
     Y_UNIT_TEST(OidcImpersonationStartNeedServiceAccountId) {
-        TPortManager tp;
-        ui16 sessionServicePort = tp.GetPort(8655);
         TMvpTestRuntime runtime;
         runtime.Initialize();
 
-        TOpenIdConnectSettings settings {
-            .ClientId = "client_id",
-            .SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort),
-            .AuthorizationServerAddress = "https://auth.test.net",
-            .ClientSecret = "0123456789abcdef",
-            .AccessServiceType = NMvp::nebius_v1
-        };
+        TOpenIdConnectSettings settings = BuildBaseSettings(NMvp::nebius_v1);
 
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
 
@@ -1219,18 +1106,10 @@ Y_UNIT_TEST_SUITE(Mvp) {
     }
 
     Y_UNIT_TEST(OidcImpersonationStopFlow) {
-        TPortManager tp;
-        ui16 sessionServicePort = tp.GetPort(8655);
         TMvpTestRuntime runtime;
         runtime.Initialize();
 
-        TOpenIdConnectSettings settings {
-            .ClientId = "client_id",
-            .SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort),
-            .AuthorizationServerAddress = "https://auth.test.net",
-            .ClientSecret = "0123456789abcdef",
-            .AccessServiceType = NMvp::nebius_v1
-        };
+        TOpenIdConnectSettings settings = BuildBaseSettings(NMvp::nebius_v1);
 
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
 
@@ -1263,20 +1142,10 @@ Y_UNIT_TEST_SUITE(Mvp) {
     }
 
     Y_UNIT_TEST(OidcImpersonatedAccessToProtectedResource) {
-        TPortManager tp;
-        ui16 sessionServicePort = tp.GetPort(8655);
         TMvpTestRuntime runtime;
         runtime.Initialize();
 
-        const TString allowedProxyHost {"ydb.viewer.page"};
-        TOpenIdConnectSettings settings {
-            .ClientId = "client_id",
-            .SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort),
-            .AuthorizationServerAddress = "https://auth.test.net",
-            .ClientSecret = "0123456789abcdef",
-            .AllowedProxyHosts = {allowedProxyHost},
-            .AccessServiceType = NMvp::nebius_v1
-        };
+        TOpenIdConnectSettings settings = BuildBaseSettings(NMvp::nebius_v1);
 
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
         TSessionServiceMock sessionServiceMock;
@@ -1287,7 +1156,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
 
         const NActors::TActorId impersonateStart = runtime.Register(new TProtectedPageHandler(edge, settings));
         const TString hostProxy = "oidcproxy.net";
-        const TString protectedPage = "/" + allowedProxyHost + "/counters";
+        const TString protectedPage = "/" + ALLOWED_PROXY_HOST + "/counters";
         TStringBuilder request;
         request << "GET " << protectedPage << " HTTP/1.1\r\n"
                 << "Host: " << hostProxy << "\r\n"
@@ -1314,7 +1183,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         runtime.Send(new IEventHandle(handle->Sender, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingResponse(outgoingRequestEv->Request, incomingResponse)));
 
         outgoingRequestEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>(handle);
-        UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->Host, allowedProxyHost);
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->Host, ALLOWED_PROXY_HOST);
         UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->URL, "/counters");
         UNIT_ASSERT_STRING_CONTAINS(outgoingRequestEv->Request->Headers, "Authorization: Bearer access_token");
         UNIT_ASSERT_EQUAL(outgoingRequestEv->Request->Secure, false);
@@ -1332,20 +1201,10 @@ Y_UNIT_TEST_SUITE(Mvp) {
     }
 
     Y_UNIT_TEST(OidcImpersonatedAccessNotAuthorized) {
-        TPortManager tp;
-        ui16 sessionServicePort = tp.GetPort(8655);
         TMvpTestRuntime runtime;
         runtime.Initialize();
 
-        const TString allowedProxyHost {"ydb.viewer.page"};
-        TOpenIdConnectSettings settings {
-            .ClientId = "client_id",
-            .SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort),
-            .AuthorizationServerAddress = "https://auth.test.net",
-            .ClientSecret = "0123456789abcdef",
-            .AllowedProxyHosts = {allowedProxyHost},
-            .AccessServiceType = NMvp::nebius_v1
-        };
+        TOpenIdConnectSettings settings = BuildBaseSettings(NMvp::nebius_v1);
 
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
         TSessionServiceMock sessionServiceMock;
@@ -1356,7 +1215,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
 
         const NActors::TActorId impersonateStart = runtime.Register(new TProtectedPageHandler(edge, settings));
         const TString hostProxy = "oidcproxy.net";
-        const TString protectedPage = "/" + allowedProxyHost + "/counters";
+        const TString protectedPage = "/" + ALLOWED_PROXY_HOST + "/counters";
         TStringBuilder request;
         request << "GET " << protectedPage << " HTTP/1.1\r\n"
                 << "Host: " << hostProxy << "\r\n"
@@ -1392,23 +1251,13 @@ Y_UNIT_TEST_SUITE(Mvp) {
 
     void OpenIdConnectStreamingRequestResponseTest(NMvp::EAccessServiceType profile) {
         // This test verifies the handling of HTTP streaming responses using chunked transfer encoding
-        TPortManager tp;
-        ui16 sessionServicePort = tp.GetPort(8655);
         TMvpTestRuntime runtime;
         runtime.Initialize();
         runtime.SetLogPriority(NActorsServices::HTTP, NActors::NLog::PRI_DEBUG);
 
-        const TString allowedProxyHost = "stream.test.net";
         const TString iamToken = "streaming_iam_token";
 
-        TOpenIdConnectSettings settings {
-            .ClientId = "client_id",
-            .SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort),
-            .AuthorizationServerAddress = "https://auth.test.net",
-            .ClientSecret = "0123456789abcdef",
-            .AllowedProxyHosts = {allowedProxyHost},
-            .AccessServiceType = profile
-        };
+        TOpenIdConnectSettings settings = BuildBaseSettings(profile);
 
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
         TSessionServiceMock sessionServiceMock;
@@ -1421,7 +1270,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         const NActors::TActorId target = runtime.Register(new TProtectedPageHandler(edge, settings));
 
         NHttp::THttpIncomingRequestPtr incomingRequest = new NHttp::THttpIncomingRequest();
-        EatWholeString(incomingRequest, "GET /" + allowedProxyHost + "/stream-data HTTP/1.1\r\n"
+        EatWholeString(incomingRequest, "GET /" + ALLOWED_PROXY_HOST + "/stream-data HTTP/1.1\r\n"
                                 "Host: oidcproxy.net\r\n"
                                 "Authorization: Bearer " + iamToken + "\r\n\r\n");
         runtime.Send(new IEventHandle(target, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(incomingRequest)));
@@ -1429,7 +1278,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
 
         // Verify request is forwarded correctly
         auto outgoingRequestEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>(handle);
-        UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->Host, allowedProxyHost);
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->Host, ALLOWED_PROXY_HOST);
         UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->URL, "/stream-data");
         UNIT_ASSERT_STRING_CONTAINS(outgoingRequestEv->Request->Headers, "Authorization: Bearer " + iamToken);
 
@@ -1559,32 +1408,22 @@ Y_UNIT_TEST_SUITE(Mvp) {
     };
 
     NJson::TJsonValue OidcWhoamiExtendedInfoTest(const TWhoamiContext& context) {
-        TPortManager tp;
-        ui16 profilePort = tp.GetPort(8766);
-
         TMvpTestRuntime runtime;
         runtime.Initialize();
 
-        const TString allowedProxyHost = "ydb.viewer.page";
-
-        TOpenIdConnectSettings settings {
-            .ClientId = "test-client",
-            .AllowedProxyHosts = {allowedProxyHost},
-            .WhoamiExtendedInfoEndpoint = "localhost:" + ToString(profilePort),
-            .AccessServiceType = context.AccessServiceType
-        };
+        TOpenIdConnectSettings settings = BuildBaseSettings(context.AccessServiceType);
 
         auto profileMock = std::make_unique<TProfileServiceMock>();
         auto grpcServer = CreateProfileServiceMock(profileMock.get(), settings.WhoamiExtendedInfoEndpoint);
 
         // oidc extends whoami
-        const TString url = "/" + allowedProxyHost + "/viewer/whoami";
+        const TString url = "/" + ALLOWED_PROXY_HOST + "/viewer/whoami";
 
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
         const NActors::TActorId target = runtime.Register(new TProtectedPageHandler(edge, settings));
 
         NHttp::THttpIncomingRequestPtr incomingRequest = new NHttp::THttpIncomingRequest();
-        EatWholeString(incomingRequest, "GET /" + allowedProxyHost + "/viewer/whoami HTTP/1.1\r\n"
+        EatWholeString(incomingRequest, "GET /" + ALLOWED_PROXY_HOST + "/viewer/whoami HTTP/1.1\r\n"
                                 "Host: oidcproxy.net\r\n"
                                 "Authorization: Bearer " + context.Token + "\r\n");
 
@@ -1595,7 +1434,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         auto outgoingRequestEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>(handle);
 
         UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->Method, "GET");
-        UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->Host, allowedProxyHost);
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->Host, ALLOWED_PROXY_HOST);
         UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->URL, "/viewer/whoami");
 
         // viewer returns response to oidc

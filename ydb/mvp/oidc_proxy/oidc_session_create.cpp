@@ -23,11 +23,11 @@ void THandlerSessionCreate::Bootstrap() {
     TString code = urlParameters["code"];
     TString state = urlParameters["state"];
 
-    TCheckStateResult checkStateResult = CheckState(state, Settings.ClientSecret);
+    TCheckStateResult checkStateResult = CheckState(state, Settings.StateSigningKey);
 
     NHttp::THeaders headers(Request->Headers);
     NHttp::TCookies cookies(headers.Get("cookie"));
-    TRestoreOidcContextResult restoreContextResult = RestoreOidcContext(cookies, Settings.ClientSecret);
+    TRestoreOidcContextResult restoreContextResult = RestoreOidcContext(cookies, Settings.StateSigningKey);
     Context = restoreContextResult.Context;
 
     if (checkStateResult.IsSuccess()) {

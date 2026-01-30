@@ -225,7 +225,7 @@ void TMVP::TryGetOidcOptionsFromConfig(const YAML::Node& config) {
     if (!oidc) {
         ythrow yexception() << "Check that `oidc` section exists and is on the same indentation as `generic` section";
     }
-    OpenIdConnectSettings.SecretName = oidc["secret_name"].as<std::string>(""); // вернуть в OpenIdConnectSettings
+    OpenIdConnectSettings.SecretName = oidc["secret_name"].as<std::string>("");
     OpenIdConnectSettings.ClientId = oidc["client_id"].as<std::string>(OpenIdConnectSettings.DEFAULT_CLIENT_ID);
     OpenIdConnectSettings.SessionServiceEndpoint = oidc["session_service_endpoint"].as<std::string>("");
     OpenIdConnectSettings.SessionServiceTokenName = oidc["session_service_token_name"].as<std::string>("");

@@ -174,7 +174,9 @@ public:
             << ", readId = " << record.GetReadId()
             << ", snapshot=(txid=" << record.GetSnapshot().GetTxId() << ", step=" << record.GetSnapshot().GetStep() << ")"
             << ", lockTxId=" << record.GetLockTxId()
-            << ", lockNodeId=" << record.GetLockNodeId());
+            << ", lockNodeId=" << record.GetLockNodeId()
+            << ", tableId=" << record.GetTableId().GetOwnerId() << ":" << record.GetTableId().GetTableId()
+            << ", schemaVersion =" << record.GetTableId().GetSchemaVersion());
 
         return request;
     }

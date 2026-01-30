@@ -4155,34 +4155,28 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         info.ShardStatuses[shardIdx] = TTxState::TShardStatus(success, error, bytes, rows);
                     }
                 }
-                
+
+                auto fillBackupInfo = [&](auto& tableInfo) {
+                    switch (kind) {
+                    case TTableInfo::TBackupRestoreResult::EKind::Backup:
+                        tableInfo->BackupHistory[txId] = std::move(info);
+                        break;
+                    case TTableInfo::TBackupRestoreResult::EKind::Restore:
+                        tableInfo->RestoreHistory[txId] = std::move(info);
+                        if (tableInfo->IsRestore) {
+                            RestoreTablesToUnmark.push_back(pathId);
+                        }
+                        break;
+                    }
+                };
+
                 auto it = Self->Tables.find(pathId);
                 if (it != Self->Tables.end()) {
                     TTableInfo::TPtr tableInfo = it->second;
-                    switch (kind) {
-                    case TTableInfo::TBackupRestoreResult::EKind::Backup:
-                        tableInfo->BackupHistory[txId] = std::move(info);
-                        break;
-                    case TTableInfo::TBackupRestoreResult::EKind::Restore:
-                        tableInfo->RestoreHistory[txId] = std::move(info);
-                        if (tableInfo->IsRestore) {
-                            RestoreTablesToUnmark.push_back(pathId);
-                        }
-                        break;
-                    }
+                    fillBackupInfo(tableInfo);
                 } else {
                     TColumnTableInfo::TPtr tableInfo = Self->ColumnTables.at(pathId).GetPtr();
-                    switch (kind) {
-                    case TTableInfo::TBackupRestoreResult::EKind::Backup:
-                        tableInfo->BackupHistory[txId] = std::move(info);
-                        break;
-                    case TTableInfo::TBackupRestoreResult::EKind::Restore:
-                        tableInfo->RestoreHistory[txId] = std::move(info);
-                        if (tableInfo->IsRestore) {
-                            RestoreTablesToUnmark.push_back(pathId);
-                        }
-                        break;
-                    }
+                    fillBackupInfo(tableInfo);
                 }
 
                 LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,

@@ -29,6 +29,8 @@ public:
     std::set<ui64> GetShardIdsSet() const;
 
     const google::protobuf::RepeatedField<arc_ui64>& GetColumnShards() const;
+    
+    const google::protobuf::RepeatedField<arc_ui64>& GetPartitions() const;
 
     void SetColumnShards(const std::vector<ui64>& columnShards);
 

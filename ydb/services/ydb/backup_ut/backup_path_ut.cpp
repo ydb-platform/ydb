@@ -101,10 +101,10 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
             WaitOpSuccess(res);
 
             ValidateHasYdbTables({
-                "/Root/RestorePrefix/RecursiveFolderProcessing/Table0",
-                "/Root/RestorePrefix/RecursiveFolderProcessing/dir1/Table1",
-                "/Root/RestorePrefix/RecursiveFolderProcessing/dir1/dir2/Table2",
-            }, IsOlap);
+                TEntryPath::TablePath("/Root/RestorePrefix/RecursiveFolderProcessing/Table0", IsOlap),
+                TEntryPath::TablePath("/Root/RestorePrefix/RecursiveFolderProcessing/dir1/Table1", IsOlap),
+                TEntryPath::TablePath("/Root/RestorePrefix/RecursiveFolderProcessing/dir1/dir2/Table2", IsOlap),
+            });
         }
     }
 
@@ -159,10 +159,10 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
             WaitOpSuccess(res);
 
             ValidateHasYdbTables({
-                "/Root/RestorePrefix/RecursiveFolderProcessing/Table0",
-                "/Root/RestorePrefix/RecursiveFolderProcessing/dir1/Table1",
-                "/Root/RestorePrefix/RecursiveFolderProcessing/dir1/dir2/Table2",
-            }, IsOlap);
+                TEntryPath::TablePath("/Root/RestorePrefix/RecursiveFolderProcessing/Table0", IsOlap),
+                TEntryPath::TablePath("/Root/RestorePrefix/RecursiveFolderProcessing/dir1/Table1", IsOlap),
+                TEntryPath::TablePath("/Root/RestorePrefix/RecursiveFolderProcessing/dir1/dir2/Table2", IsOlap),
+            });
         }
     }
 
@@ -206,9 +206,9 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
             WaitOpSuccess(res);
 
             ValidateHasYdbTables({
-                "/Root/RestorePrefix/Table1",
-                "/Root/RestorePrefix/dir2/Table2",
-            }, IsOlap);
+                TEntryPath::TablePath("/Root/RestorePrefix/Table1", IsOlap),
+                TEntryPath::TablePath("/Root/RestorePrefix/dir2/Table2", IsOlap),
+            });
         }
     }
 
@@ -272,9 +272,9 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
             WaitOpSuccess(res);
 
             ValidateHasYdbTables({
-                "/Root/RestorePrefix/Table0",
-                "/Root/RestorePrefix/dir1/dir2/Table2",
-            }, IsOlap);
+                TEntryPath::TablePath("/Root/RestorePrefix/Table0", IsOlap),
+                TEntryPath::TablePath("/Root/RestorePrefix/dir1/dir2/Table2", IsOlap),
+            });
         }
     }
 
@@ -345,9 +345,9 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
             WaitOpSuccess(res);
 
             ValidateHasYdbTables({
-                "/Root/RestorePrefix/Table0",
-                "/Root/RestorePrefix/dir1/dir2/Table2",
-            }, IsOlap);
+                TEntryPath::TablePath("/Root/RestorePrefix/Table0", IsOlap),
+                TEntryPath::TablePath("/Root/RestorePrefix/dir1/dir2/Table2", IsOlap),
+            });
         }
 
         {
@@ -359,8 +359,8 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
             WaitOpSuccess(res);
 
             ValidateHasYdbTables({
-                "/Root/RestorePrefix2/dir1/dir2/Table2",
-            }, IsOlap);
+                TEntryPath::TablePath("/Root/RestorePrefix2/dir1/dir2/Table2", IsOlap),
+            });
         }
     }
 
@@ -407,9 +407,9 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
             WaitOpSuccess(res);
 
             ValidateHasYdbTables({
-                "/Root/RestorePrefix/RecursiveFolderProcessing/dir1/Table1",
-                "/Root/RestorePrefix/RecursiveFolderProcessing/dir1/dir2/Table2",
-            }, IsOlap);
+                TEntryPath::TablePath("/Root/RestorePrefix/RecursiveFolderProcessing/dir1/Table1", IsOlap),
+                TEntryPath::TablePath("/Root/RestorePrefix/RecursiveFolderProcessing/dir1/dir2/Table2", IsOlap),
+            });
         }
     }
 
@@ -456,9 +456,9 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
             WaitOpSuccess(res);
 
             ValidateHasYdbTables({
-                "/Root/RestorePrefix/RecursiveFolderProcessing/Table0",
-                "/Root/RestorePrefix/RecursiveFolderProcessing/dir1/dir2/Table2",
-            }, IsOlap);
+                TEntryPath::TablePath("/Root/RestorePrefix/RecursiveFolderProcessing/Table0", IsOlap),
+                TEntryPath::TablePath("/Root/RestorePrefix/RecursiveFolderProcessing/dir1/dir2/Table2", IsOlap),
+            });
         }
     }
 
@@ -497,8 +497,8 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
             WaitOpSuccess(res);
 
             ValidateHasYdbTables({
-                "/Root/RestorePrefix/Table2",
-            }, IsOlap);
+                TEntryPath::TablePath("/Root/RestorePrefix/Table2", IsOlap),
+            });
         }
     }
 
@@ -545,9 +545,9 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
             WaitOpSuccess(res);
 
             ValidateHasYdbTables({
-                "/Root/RestorePrefix/Table1",
-                "/Root/RestorePrefix/dir2/yet/another/dir/Table2",
-            }, IsOlap);
+                TEntryPath::TablePath("/Root/RestorePrefix/Table1", IsOlap),
+                TEntryPath::TablePath("/Root/RestorePrefix/dir2/yet/another/dir/Table2", IsOlap),
+            });
         }
     }
 
@@ -595,9 +595,9 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
             WaitOpSuccess(res);
 
             ValidateHasYdbTables({
-                "/Root/RestorePrefix/Table1",
-                "/Root/RestorePrefix/dir2/Table2",
-            }, IsOlap);
+                TEntryPath::TablePath("/Root/RestorePrefix/Table1", IsOlap),
+                TEntryPath::TablePath("/Root/RestorePrefix/dir2/Table2", IsOlap),
+            });
         }
     }
 
@@ -655,10 +655,10 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
             WaitOpSuccess(res);
 
             ValidateHasYdbTables({
-                "/Root/RestorePrefix/Table0",
-                "/Root/RestorePrefix/dir1/Table1",
-                "/Root/RestorePrefix/dir1/dir2/Table2",
-            }, IsOlap);
+                TEntryPath::TablePath("/Root/RestorePrefix/Table0", IsOlap),
+                TEntryPath::TablePath("/Root/RestorePrefix/dir1/Table1", IsOlap),
+                TEntryPath::TablePath("/Root/RestorePrefix/dir1/dir2/Table2", IsOlap),
+            });
         }
     }
 
@@ -727,10 +727,10 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
             WaitOpSuccess(res);
 
             ValidateHasYdbTables({
-                "/Root/RestorePrefix/RecursiveFolderProcessing/Table0",
-                "/Root/RestorePrefix/RecursiveFolderProcessing/dir1/Table1",
-                "/Root/RestorePrefix/RecursiveFolderProcessing/dir1/dir2/Table2",
-            }, IsOlap);
+                TEntryPath::TablePath("/Root/RestorePrefix/RecursiveFolderProcessing/Table0", IsOlap),
+                TEntryPath::TablePath("/Root/RestorePrefix/RecursiveFolderProcessing/dir1/Table1", IsOlap),
+                TEntryPath::TablePath("/Root/RestorePrefix/RecursiveFolderProcessing/dir1/dir2/Table2", IsOlap),
+            });
         }
     }
 
@@ -784,8 +784,8 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
             WaitOpSuccess(res);
 
             ValidateHasYdbTables({
-                "/Root/RestorePrefix/Table0",
-            }, IsOlap);
+                TEntryPath::TablePath("/Root/RestorePrefix/Table0", IsOlap),
+            });
             ValidateDoesNotHaveYdbTables({
                 "/Root/RestorePrefix/dir1/Table1",
                 "/Root/RestorePrefix/dir1/dir2/Table2",
@@ -847,8 +847,8 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
             WaitOpSuccess(res);
 
             ValidateHasYdbTables({
-                "/Root/RestorePrefix/Table0",
-            }, IsOlap);
+                TEntryPath::TablePath("/Root/RestorePrefix/Table0", IsOlap),
+            });
             ValidateDoesNotHaveYdbTables({
                 "/Root/RestorePrefix/dir1/Table1",
                 "/Root/RestorePrefix/dir1/dir2/Table2",
@@ -911,9 +911,9 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
             WaitOpSuccess(res);
 
             ValidateHasYdbTables({
-                "/Root/RestorePrefix/Table123",
-                "/Root/RestorePrefix/Table321",
-            }, IsOlap);
+                TEntryPath::TablePath("/Root/RestorePrefix/Table123", IsOlap),
+                TEntryPath::TablePath("/Root/RestorePrefix/Table321", IsOlap),
+            });
             ValidateDoesNotHaveYdbTables({
                 "/Root/RestorePrefix/Table0",
                 "/Root/RestorePrefix/dir1/Table1",
@@ -930,9 +930,9 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
             WaitOpSuccess(res);
 
             ValidateHasYdbTables({
-                "/Root/RestorePrefix2/dir1/Table1",
-                "/Root/RestorePrefix2/dir1/dir2/Table2",
-            }, IsOlap);
+                TEntryPath::TablePath("/Root/RestorePrefix2/dir1/Table1", IsOlap),
+                TEntryPath::TablePath("/Root/RestorePrefix2/dir1/dir2/Table2", IsOlap),
+            });
             ValidateDoesNotHaveYdbTables({
                 "/Root/RestorePrefix2/Table0",
             });
@@ -1129,9 +1129,9 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
             WaitOpSuccess(res);
 
             ValidateHasYdbTables({
-                "/Root/RestorePrefix/Table11",
-                "/Root/RestorePrefix/Table12",
-            }, IsOlap);
+                TEntryPath::TablePath("/Root/RestorePrefix/Table11", IsOlap),
+                TEntryPath::TablePath("/Root/RestorePrefix/Table12", IsOlap),
+            });
         }
     }
 

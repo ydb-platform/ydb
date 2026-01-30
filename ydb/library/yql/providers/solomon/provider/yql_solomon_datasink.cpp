@@ -175,6 +175,14 @@ public:
         return State_->IsRtmrMode() ? nullptr : State_->DqIntegration.Get();
     }
 
+    IYtflowIntegration* GetYtflowIntegration() override {
+        return State_->YtflowIntegration.Get();
+    }
+
+    IYtflowOptimization* GetYtflowOptimization() override {
+        return State_->YtflowOptimization.Get();
+    }
+
 private:
     TSolomonState::TPtr State_;
 

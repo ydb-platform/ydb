@@ -175,7 +175,7 @@ def basic_kikimr_nemesis_list(
             logger.info("Skipping harmful nemesis (not first cluster node)")
 
         logger.info("Final nemesis list count: %d", len(nemesis_list))
-        return nemesis_list
+        return data_storage_nemesis
 
     logger.info("Adding all light nemesis")
     nemesis_list.extend(light_nemesis_list)
@@ -183,7 +183,7 @@ def basic_kikimr_nemesis_list(
     nemesis_list.extend(harmful_nemesis_list)
 
     logger.info("Final nemesis list count: %d", len(nemesis_list))
-    return nemesis_list
+    return data_storage_nemesis
 
 
 def nemesis_factory(kikimr_cluster, ssh_username, num_of_pq_nemesis=10, **kwargs):

@@ -12,6 +12,7 @@
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/backup/common/checksum.h>
 #include <ydb/core/backup/common/metadata.h>
+#include <ydb/core/backup/common/uploader_common.h>
 #include <ydb/core/wrappers/retry_policy.h>
 #include <ydb/core/wrappers/s3_storage_config.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
@@ -760,8 +761,6 @@ public:
         return "s3"sv;
     }
 
-    static TSettings GetSettings(const NKikimrSchemeOp::TBackupTask& task);
-
     static TMaybe<THttpResolverConfig> GetHttpResolverConfigSafe(
             const NWrappers::IExternalStorageConfig::TPtr& config)
     {
@@ -782,7 +781,7 @@ public:
             TVector<TChangefeedExportDescriptions> changefeeds,
             TMaybe<Ydb::Scheme::ModifyPermissionsRequest>&& permissions,
             TString&& metadata)
-        : ExternalStorageConfig(NWrappers::IExternalStorageConfig::Construct(AppData()->AwsClientConfig, GetSettings(task)))
+        : ExternalStorageConfig(NWrappers::IExternalStorageConfig::Construct(AppData()->AwsClientConfig, NBackup::NFieldsWrappers::GetSettings<TSettings>(task)))
         , Settings(TStorageSettings::FromBackupTask<TSettings>(task))
         , DataFormat(EDataFormat::Csv)
         , CompressionCodec(CodecFromTask(task))
@@ -956,20 +955,6 @@ private:
     std::function<void()> ChecksumUploadedCallback;
 
 }; // TS3Uploader
-
-template <>
-NKikimrSchemeOp::TS3Settings TS3Uploader<NKikimrSchemeOp::TS3Settings>::GetSettings(
-    const NKikimrSchemeOp::TBackupTask& task)
-{
-    return task.GetS3Settings();
-}
-
-template <>
-NKikimrSchemeOp::TFSSettings TS3Uploader<NKikimrSchemeOp::TFSSettings>::GetSettings(
-    const NKikimrSchemeOp::TBackupTask& task)
-{
-    return task.GetFSSettings();
-}
 
 IActor* CreateUploaderBySettingsType(
     const TActorId& dataShard,

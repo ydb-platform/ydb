@@ -220,6 +220,7 @@ public:
     bool ShouldGenerateOneRetryableError = false;
     bool isUserAuthenticated = true;
 
+    TString UnauthenticatedErrorMessage = "User is unauthenticated";
     THashSet<TString> AllowedServiceAuthTokens;
     THashSet<TString> UnavailableUserPermissions;
     THashSet<TString> AllowedResourceIds;
@@ -234,6 +235,7 @@ public:
     ::grpc::Status BulkAuthorize(::grpc::ServerContext* context,
                                  const ::yandex::cloud::priv::accessservice::v2::BulkAuthorizeRequest* request,
                                  ::yandex::cloud::priv::accessservice::v2::BulkAuthorizeResponse* response) {
+
         if (!IsServiceAuthenticated(AllowedServiceAuthTokens, context)) {
             return grpc::Status(grpc::StatusCode::UNAUTHENTICATED, "Unauthenticated service");
         }
@@ -253,7 +255,7 @@ public:
         } else {
             if (!isUserAuthenticated) {
                 auto error = response->mutable_unauthenticated_error();
-                error->set_message("User is unauthenticated");
+                error->set_message(UnauthenticatedErrorMessage);
                 return grpc::Status(grpc::StatusCode::OK, "OK");
             }
             TString token = request->has_iam_token() ? request->iam_token() : request->api_key();

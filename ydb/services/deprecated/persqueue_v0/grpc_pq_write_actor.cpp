@@ -453,7 +453,7 @@ void TWriteSessionActor::Handle(TEvTicketParser::TEvAuthorizeTicketResult::TPtr&
                             << ev->Get()->Error << " user: "
                             << (ev->Get()->Error.empty() ? ev->Get()->Token->GetUserSID() : ""));
 
-    if (!ev->Get()->Error.empty()) {
+    if (ev->Get()->HasError()) {
         CloseSession(TStringBuilder() << "Ticket parsing error: " << ev->Get()->Error, NPersQueue::NErrorCode::ACCESS_DENIED, ctx);
         return;
     }

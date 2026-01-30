@@ -44,7 +44,7 @@
 
 Скорость обработки данных и задержки можно контролировать по [метрикам читателя](../reference/observability/metrics/index.md#topics), который используется для чтения из топика.
 
-{% include [x](_includes/transfer_extra_diag.md) %}
+{% include [x](_includes/transfer_extra_diag_internal.md) %}
 
 
 ## Временная остановка трансфера {#pause-and-resume}

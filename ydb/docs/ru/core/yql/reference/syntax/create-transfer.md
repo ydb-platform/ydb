@@ -25,7 +25,7 @@ WITH (option = value[, ...])
 
   * {% include [x](../_includes/transfer_flush.md) %}
 
-  * {% include [x](../_includes/transfer_metrics_level.md) %}
+  * {% include [x](../_includes/transfer_metrics_level_internal.md) %}
 
 ## Разрешения
 

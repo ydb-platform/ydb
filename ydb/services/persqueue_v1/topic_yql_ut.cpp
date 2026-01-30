@@ -249,6 +249,39 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
         }
     }
 
+    Y_UNIT_TEST(CreateSharedConsumer) {
+        NKikimrConfig::TFeatureFlags ff;
+        ff.SetEnableTopicSplitMerge(true);
+        auto settings = NKikimr::NPersQueueTests::PQSettings();
+        settings.SetFeatureFlags(ff);
+
+        NPersQueue::TTestServer server(settings);
+
+        {
+            const char *query = R"(
+                CREATE TOPIC `/Root/PQ/rt3.dc1--topic_with_shared_consumer`
+                    (CONSUMER c1 WITH (
+                        type = 'shared',
+                        keep_messages_order = true,
+                        default_processing_timeout = Interval('PT1S'),
+                        max_processing_attempts = 10,
+                        dead_letter_policy = 'move',
+                        dead_letter_queue = 'dead_letter_queue'
+                    ))
+            )";
+
+            server.AnnoyingClient->RunYqlSchemeQuery(query);
+        }
+
+        {
+            auto pqGroup = server.AnnoyingClient->Ls("/Root/PQ/rt3.dc1--topic_with_shared_consumer")->Record.GetPathDescription().GetPersQueueGroup();
+            //const auto& describe = pqGroup.GetPQTabletConfig();
+
+            Cerr <<"=== PATH DESCRIPTION: \n" << pqGroup.DebugString();
+            //UNIT_ASSERT_VALUES_EQUAL(describe.GetPartitionConfig().GetWriteSpeedInBytesPerSecond(), 3);
+        }
+    }
+
     Y_UNIT_TEST(BadRequests) {
         NPersQueue::TTestServer server;
         {

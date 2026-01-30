@@ -16,54 +16,26 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateColumnTablePropose(
-    TSchemeShard* ss,
-    TTxId txId,
-    const TImportInfo& importInfo,
-    ui32 itemIdx,
-    TString& error
-) {
-    Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
-    const auto& item = importInfo.Items.at(itemIdx);
-    Y_ABORT_UNLESS(item.Table);
-    Y_ABORT_UNLESS(item.Table->store_type() == Ydb::Table::STORE_TYPE_COLUMN);
+static bool FillDefaultValues(const NKikimr::NSchemeShard::TImportInfo::TItem& item, TString& error, ::NKikimrSchemeOp::TIndexedTableCreationConfig& indexedTable) {
+    for(const auto& column: item.Table->columns()) {
+        switch (column.default_value_case()) {
+            case Ydb::Table::ColumnMeta::kFromSequence: {
+                const auto& fromSequence = column.from_sequence();
+                Ydb::StatusIds::StatusCode status;
+                auto* seqDesc = indexedTable.MutableSequenceDescription()->Add();
+                if (!FillSequenceDescription(*seqDesc, fromSequence, status, error)) {
+                    return false;
+                }
 
-    auto propose = MakeModifySchemeTransaction(ss, txId, importInfo);
-    auto& record = propose->Record;
-
-    auto& modifyScheme = *record.AddTransaction();
-    modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateColumnTable);
-    modifyScheme.SetInternal(true);
-
-    const TPath domainPath = TPath::Init(importInfo.DomainPathId, ss);
-
-    std::pair<TString, TString> wdAndPath;
-    if (!TrySplitPathByDb(item.DstPathName, domainPath.PathString(), wdAndPath, error)) {
-        return nullptr;
+                break;
+            }
+            case Ydb::Table::ColumnMeta::kFromLiteral: {
+                break;
+            }
+            default: break;
+        }
     }
-
-    modifyScheme.SetWorkingDir(wdAndPath.first);
-    
-    auto& tableDesc = *modifyScheme.MutableCreateColumnTable();
-    tableDesc.SetName(wdAndPath.second);
-    tableDesc.SetIsRestore(true);
-
-    Y_ABORT_UNLESS(ss->TableProfilesLoaded);
-    Ydb::StatusIds::StatusCode status;
-    if (!FillColumnTableDescription(modifyScheme, *item.Table, status, error)) {
-        return nullptr;
-    }
-
-    if (importInfo.UserSID) {
-        record.SetOwner(*importInfo.UserSID);
-    }
-    FillOwner(record, item.Permissions);
-
-    if (!FillACL(modifyScheme, item.Permissions, error)) {
-        return nullptr;
-    }
-
-    return propose;
+    return true;
 }
 
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
@@ -81,7 +53,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
     auto& record = propose->Record;
 
     auto& modifyScheme = *record.AddTransaction();
-    modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateIndexedTable);
+    const bool isColumnTable = item.Table->store_type() == Ydb::Table::STORE_TYPE_COLUMN;
+    modifyScheme.SetOperationType(isColumnTable ? NKikimrSchemeOp::ESchemeOpCreateColumnTable : NKikimrSchemeOp::ESchemeOpCreateIndexedTable);
     modifyScheme.SetInternal(true);
 
     const TPath domainPath = TPath::Init(importInfo.DomainPathId, ss);
@@ -93,37 +66,35 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
 
     modifyScheme.SetWorkingDir(wdAndPath.first);
 
-    auto* indexedTable = modifyScheme.MutableCreateIndexedTable();
-    auto& tableDesc = *(indexedTable->MutableTableDescription());
-    tableDesc.SetName(wdAndPath.second);
-    tableDesc.SetIsRestore(true);
+    if (isColumnTable) {
+        Y_ABORT_UNLESS(ss->TableProfilesLoaded);
+        auto& tableDesc = *modifyScheme.MutableCreateColumnTable();
+        tableDesc.SetName(wdAndPath.second);
+        tableDesc.SetIsRestore(true);
 
-    Y_ABORT_UNLESS(ss->TableProfilesLoaded);
-    Ydb::StatusIds::StatusCode status;
-    if (!FillTableDescription(modifyScheme, *item.Table, ss->TableProfiles, status, error, true)) {
-        return nullptr;
-    }
+        Y_ABORT_UNLESS(ss->TableProfilesLoaded);
+        Ydb::StatusIds::StatusCode status;
+        if (!FillColumnTableDescription(modifyScheme, *item.Table, status, error)) {
+            return nullptr;
+        }
+    } else {
+        auto& indexedTable = *modifyScheme.MutableCreateIndexedTable();
+        auto& tableDesc = *indexedTable.MutableTableDescription();
+        tableDesc.SetName(wdAndPath.second);
+        tableDesc.SetIsRestore(true);
 
-    if (!NeedToBuildIndexes(importInfo, itemIdx) && !FillIndexDescription(*indexedTable, *item.Table, status, error)) {
-        return nullptr;
-    }
+        Y_ABORT_UNLESS(ss->TableProfilesLoaded);
+        Ydb::StatusIds::StatusCode status;
+        if (!FillTableDescription(modifyScheme, *item.Table, ss->TableProfiles, status, error, true)) {
+            return nullptr;
+        }
 
-    for(const auto& column: item.Table->columns()) {
-        switch (column.default_value_case()) {
-            case Ydb::Table::ColumnMeta::kFromSequence: {
-                const auto& fromSequence = column.from_sequence();
-
-                auto* seqDesc = indexedTable->MutableSequenceDescription()->Add();
-                if (!FillSequenceDescription(*seqDesc, fromSequence, status, error)) {
-                    return nullptr;
-                }
-
-                break;
-            }
-            case Ydb::Table::ColumnMeta::kFromLiteral: {
-                break;
-            }
-            default: break;
+        if (!NeedToBuildIndexes(importInfo, itemIdx) && !FillIndexDescription(indexedTable, *item.Table, status, error)) {
+            return nullptr;
+        }
+        
+        if (!FillDefaultValues(item, error, indexedTable)) {
+            return nullptr;
         }
     }
 
@@ -146,11 +117,6 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
     ui32 itemIdx
 ) {
     TString unused;
-    Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
-    const auto& item = importInfo.Items.at(itemIdx);
-    if (item.Table->store_type() == Ydb::Table::STORE_TYPE_COLUMN) {
-       return CreateColumnTablePropose(ss, txId, importInfo, itemIdx, unused); 
-    }
     return CreateTablePropose(ss, txId, importInfo, itemIdx, unused);
 }
 

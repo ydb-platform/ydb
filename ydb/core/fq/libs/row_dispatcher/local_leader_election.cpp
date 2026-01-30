@@ -273,10 +273,10 @@ void TLocalLeaderElection::ResetState() {
     State = EState::Init;
     SetTimeout();
     SessionId = 0;
-    while (!RpcResponses.empty()) {  
-        RpcResponses.pop();
+    while (PendingRpcResponses) {  
+        SendSessionEventFail();
     }
-    PendingRpcResponses = 0;
+    RpcResponses.clear();
     PendingAcquire = false;
     SentRequests.clear();
     RpcActor = {};

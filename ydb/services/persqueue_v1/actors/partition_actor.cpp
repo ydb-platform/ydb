@@ -823,14 +823,14 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
 
         AFL_ENSURE(!WaitForData);
 
-        bool isInFlightMemoryOk = PartitionInFlightMemoryController.Add(ReadOffset, dr.GetBytesSizeEstimate());
+        bool isInFlightMemoryOk = PartitionInFlightMemoryController.Add(dr.GetReadOffset(), dr.GetBytesSizeEstimate());
         ReadOffset = dr.GetLastOffset() + 1;
 
         AFL_ENSURE(!RequestInfly);
 
         if (EndOffset > ReadOffset && isInFlightMemoryOk) {
             SendPartitionReady(ctx);
-        } else {
+        } else if (EndOffset == ReadOffset) {
             WaitForData = true;
             if (PipeClient) //pipe will be recreated soon
                 WaitDataInPartition(ctx);
@@ -874,9 +874,15 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
 
     AFL_ENSURE(!WaitForData);
 
-    if (EndOffset > ReadOffset && PartitionInFlightMemoryController.Add(ReadOffset, res.ByteSize())) {
+    for (ui32 i = 0; i < res.ResultSize(); ++i) {
+        const auto& r = res.GetResult(i);
+        PartitionInFlightMemoryController.Add(r.GetOffset(), r.GetTotalSize());
+    }
+
+    auto isMemoryLimitReached = PartitionInFlightMemoryController.IsMemoryLimitReached();
+    if (EndOffset > ReadOffset && !isMemoryLimitReached) {
         SendPartitionReady(ctx);
-    } else {
+    } else if (EndOffset == ReadOffset) {
         WaitForData = true;
         if (PipeClient) //pipe will be recreated soon
             WaitDataInPartition(ctx);
@@ -943,8 +949,12 @@ void TPartitionActor::CommitDone(ui64 cookie, const TActorContext& ctx) {
     
     bool wasMemoryLimitReached = PartitionInFlightMemoryController.IsMemoryLimitReached();
     bool isMemoryOkNow = PartitionInFlightMemoryController.Remove(CommittedOffset);
-    if (wasMemoryLimitReached && isMemoryOkNow) {
+    if (wasMemoryLimitReached && isMemoryOkNow && EndOffset > ReadOffset) {
         SendPartitionReady(ctx);
+    } else if (EndOffset == ReadOffset) {
+        WaitForData = true;
+        if (PipeClient) //pipe will be recreated soon
+            WaitDataInPartition(ctx);
     }
 
     ui64 startReadId = CommitsInfly.front().second.StartReadId;
@@ -1077,9 +1087,10 @@ void TPartitionActor::InitStartReading(const TActorContext& ctx) {
         ClientCommitOffset = CommittedOffset;
     }
 
-    if (EndOffset > ReadOffset && !MaxTimeLagMs && !ReadTimestampMs && !PartitionInFlightMemoryController.IsMemoryLimitReached()) {
+    auto isMemoryLimitReached = PartitionInFlightMemoryController.IsMemoryLimitReached();
+    if (EndOffset > ReadOffset && !MaxTimeLagMs && !ReadTimestampMs && !isMemoryLimitReached) {
         SendPartitionReady(ctx);
-    } else {
+    } else if (EndOffset == ReadOffset) {
         WaitForData = true;
         if (PipeClient) //pipe will be recreated soon
             WaitDataInPartition(ctx);
@@ -1314,7 +1325,9 @@ void TPartitionActor::Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr& ev, con
         if (ReadOffset < EndOffset) {
             WaitForData = false;
             WaitDataInfly.clear();
-            SendPartitionReady(ctx);
+            if (!PartitionInFlightMemoryController.IsMemoryLimitReached()) {
+                SendPartitionReady(ctx);
+            }
         } else if (PipeClient) {
             WaitDataInPartition(ctx);
         }
@@ -1514,50 +1527,6 @@ void TPartitionActor::DoWakeup(const TActorContext& ctx) {
     if (WaitForData && ReadOffset >= EndOffset && WaitDataInfly.size() <= 1 && PipeClient) { //send one more
         WaitDataInPartition(ctx);
     }
-}
-
-TPartitionInFlightMemoryController::TPartitionInFlightMemoryController(ui64 MaxAllowedSize)
-    : LayoutUnit(MaxAllowedSize / MAX_LAYOUT_SIZE)
-    , TotalSize(0)
-{}
-
-bool TPartitionInFlightMemoryController::Add(ui64 Offset, ui64 Size) {
-    if (LayoutUnit == 0) {
-        // means that there are no limits were set
-        return true;
-    }
-
-    auto unitsBefore = TotalSize / LayoutUnit;
-    TotalSize += Size;
-    auto unitsAfter = TotalSize / LayoutUnit;
-    if (unitsAfter > unitsBefore) {
-        Layout.push_back(Offset);
-    }
-
-    return TotalSize < LayoutUnit * MAX_LAYOUT_SIZE;
-}
-
-bool TPartitionInFlightMemoryController::Remove(ui64 Offset) {
-    if (LayoutUnit == 0) {
-        // means that there are no limits were set
-        return true;
-    }
-
-    auto it = std::lower_bound(Layout.begin(), Layout.end(), Offset);
-    auto toRemove = it - Layout.begin();
-
-    TotalSize -= toRemove * LayoutUnit;
-    Layout.erase(Layout.begin(), it);
-    return TotalSize < LayoutUnit * MAX_LAYOUT_SIZE;
-}
-
-bool TPartitionInFlightMemoryController::IsMemoryLimitReached() const {
-    if (LayoutUnit == 0) {
-        // means that there are no limits were set
-        return false;
-    }
-
-    return TotalSize >= LayoutUnit * MAX_LAYOUT_SIZE;
 }
 
 }

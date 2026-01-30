@@ -12,6 +12,7 @@
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/public/utils.h>
+#include <ydb/core/persqueue/public/inflite_limiter.h>
 #include <ydb/core/util/ulid.h>
 
 #include <ydb/library/services/services.pb.h>
@@ -52,22 +53,6 @@ struct TTopicCounters {
     NKikimr::NPQ::TPercentileCounter CommitLatency;
     NKikimr::NPQ::TMultiCounter SLIBigLatency;
     NKikimr::NPQ::TMultiCounter SLITotal;
-};
-
-
-struct TPartitionInFlightMemoryController {
-    constexpr static ui64 MAX_LAYOUT_SIZE = 1000;
-
-    TPartitionInFlightMemoryController() = default;
-    TPartitionInFlightMemoryController(ui64 MaxAllowedSize);
-    
-    ui64 LayoutUnit;
-    std::deque<ui64> Layout;
-    ui64 TotalSize;
-
-    bool Add(ui64 Offset, ui64 Size);
-    bool Remove(ui64 Offset);
-    bool IsMemoryLimitReached() const;
 };
 
 
@@ -267,7 +252,7 @@ private:
     std::set<ui64> UnpublishedDirectReads;
     std::set<ui64> DirectReadsToForget;
 
-    TPartitionInFlightMemoryController PartitionInFlightMemoryController;
+    NPQ::TInFlightMemoryController PartitionInFlightMemoryController;
 
     enum class EDirectReadRestoreStage {
         None,

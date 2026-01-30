@@ -814,6 +814,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(typename TEvReadInit::TPtr&
     if constexpr (UseMigrationProtocol) {
         RangesMode = init.ranges_mode();
         MaxReadMessagesCount = NormalizeMaxReadMessagesCount(init.read_params().max_read_messages_count());
+        PartitionMaxInFlightBytes = 0;
         MaxReadSize = NormalizeMaxReadSize(init.read_params().max_read_size());
         MaxTimeLagMs = init.max_lag_duration_ms();
         ReadTimestampMs = static_cast<ui64>(init.start_from_written_at_ms());
@@ -821,6 +822,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(typename TEvReadInit::TPtr&
     } else {
         RangesMode = true;
         MaxReadMessagesCount = NormalizeMaxReadMessagesCount(0);
+        PartitionMaxInFlightBytes = init.partition_max_in_flight_bytes();
         MaxReadSize = NormalizeMaxReadSize(0);
         MaxTimeLagMs = 0; // max_lag per topic only
         ReadTimestampMs = 0; // read_from per topic only
@@ -1324,7 +1326,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPersQueue::TEvLockPartit
         ctx.SelfID, ClientId, ClientPath, Cookie, Session, partitionId, record.GetGeneration(),
         record.GetStep(), record.GetTabletId(), it->second, CommitsDisabled, ClientDC, RangesMode,
         converterIter->second, database, DirectRead, UseMigrationProtocol, maxLag, readTimestampMs,
-        topic, notCommitedToFinishParents));
+        topic, notCommitedToFinishParents, PartitionMaxInFlightBytes));
 
     if (SessionsActive) {
         PartsPerSession.DecFor(Partitions.size(), 1);

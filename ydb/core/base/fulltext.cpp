@@ -5,6 +5,8 @@
 #include <util/charset/utf8.h>
 #include <util/generic/xrange.h>
 
+#include <algorithm>
+
 namespace NKikimr::NFulltext {
 
 namespace {
@@ -355,7 +357,7 @@ TVector<TString> BuildSearchTerms(const TString& query, const Ydb::Table::Fullte
                 continue;
             }
 
-            const size_t upper = MIN(analyzersForQuery.filter_ngram_max_length(), tokenLength);
+            const size_t upper = std::min(static_cast<i64>(analyzersForQuery.filter_ngram_max_length()), tokenLength);
             BuildNgrams(token, upper, upper, edge, searchTerms);
 
             if (edge) {

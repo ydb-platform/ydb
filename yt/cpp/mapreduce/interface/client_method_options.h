@@ -715,6 +715,11 @@ struct TTableReaderOptions
     /// @brief Allows to tune which attributes are added to rows while reading tables.
     ///
     FLUENT_FIELD_DEFAULT(TControlAttributes, ControlAttributes, TControlAttributes());
+
+    ///
+    /// @brief Allows to skip rows that the user does not have access to.
+    ///
+    FLUENT_FIELD_DEFAULT(bool, OmitInaccessibleRows, false);
 };
 
 /// Options for @ref NYT::IClient::CreatePartitionTableReader

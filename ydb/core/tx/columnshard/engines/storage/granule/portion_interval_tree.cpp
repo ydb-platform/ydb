@@ -53,21 +53,24 @@ std::partial_ordering TPositionView::Compare(const TPositionView& rhs) const {
         }
     };
 
-    auto getSchema = [&]() -> const std::shared_ptr<arrow::Schema> {
-        switch (Position.index()) {
+    auto getSchema = [](const TPositionVariant& pos) -> const std::shared_ptr<arrow::Schema>& {
+        switch (pos.index()) {
             case StartPortionInfo:
-                return std::get<StartPortionInfo>(Position)->GetMeta().GetPkSchema();
+                return std::get<StartPortionInfo>(pos)->GetMeta().GetPkSchema();
             case EndPortionInfo:
-                return std::get<EndPortionInfo>(Position)->GetMeta().GetPkSchema();
+                return std::get<EndPortionInfo>(pos)->GetMeta().GetPkSchema();
             case SimpleRow:
-                return std::get<SimpleRow>(Position).GetSchema();
+                return std::get<SimpleRow>(pos).GetSchema();
             default:
-                AFL_VERIFY(false)("Position.index()", Position.index());
+                AFL_VERIFY(false)("Position.index()", pos.index());
                 break;
         }
     };
 
-    return getKeyView(Position).Compare(getKeyView(rhs.Position), getSchema()).GetResult();
+    const auto& lhsSchema = getSchema(Position);
+    const auto& rhsSchema = getSchema(rhs.Position);
+
+    return getKeyView(Position).Compare(getKeyView(rhs.Position), lhsSchema->num_fields() <= rhsSchema->num_fields() ? lhsSchema : rhsSchema).GetResult();
 }
 
 int TPositionViewBorderComparator::Compare(const TBorder& lhs, const TBorder& rhs) {

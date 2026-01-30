@@ -8,6 +8,7 @@
 
 #include "device_test_tool.h"
 #include "device_test_tool_aio_test.h"
+#include "device_test_tool_ddisk_test.h"
 #include "device_test_tool_driveestimator.h"
 #include "device_test_tool_pdisk_test.h"
 #include "device_test_tool_trim_test.h"
@@ -22,6 +23,7 @@ constexpr i64 FileSize = 64ull << 30ull; // GiB
 constexpr ui32 TestChunkSize = 32 << 20; // 32 MiB
 
 using TPDiskTest32 = NKikimr::TPDiskTest<TestChunkSize>;
+using TDDiskTest32 = NKikimr::TDDiskTest<TestChunkSize>;
 
 struct TPrinterStub : NKikimr::IResultPrinter {
     TVector<std::pair<TString, TString>> Results;
@@ -224,6 +226,30 @@ Y_UNIT_TEST(PDiskTestWrite) {
     )___";
 
     ProbeTest<NDevicePerfTest::TPDiskTest, TPDiskTest32>(perfCfg.Str(), true);
+}
+
+Y_UNIT_TEST(DDiskTestWrite) {
+    TStringStream perfCfg;
+    perfCfg << R"___(
+        DDiskTestList: {
+            DDiskWriteLoad: {
+                Tag: 4
+                DDiskId: {
+                    NodeId: 1
+                    PDiskId: 1
+                    DDiskSlotId: 1
+                }
+                Areas: { AreaSize: 10485760 Sequential: false }
+                DurationSeconds: )___" << TestDurationSec << R"___(
+                InFlightWrites: 64
+                IntervalMsMin: 0
+                IntervalMsMax: 0
+                ExpectedChunkSize: 10485760
+            }
+        }
+    )___";
+
+    ProbeTest<NDevicePerfTest::TDDiskTest, TDDiskTest32>(perfCfg.Str(), true);
 }
 
 Y_UNIT_TEST(PDiskTestLogWrite) {

@@ -794,23 +794,6 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
 
     TxWrites.clear();
 
-    for (const auto& readRange : readRanges) {
-        for (size_t i = 0; i < readRange.PairSize(); ++i) {
-            const auto& pair = readRange.GetPair(i);
-
-            NKikimrPQ::TTransaction tx;
-            AFL_ENSURE(tx.ParseFromString(pair.GetValue()));
-            AFL_ENSURE(tx.GetKind() != NKikimrPQ::TTransaction::KIND_UNKNOWN);
-
-            PQ_LOG_TX_D("key: " << pair.GetKey() <<
-                        ", TxId: " << tx.GetTxId() <<
-                        ", Step: " << tx.GetStep() <<
-                        ", State: " << NKikimrPQ::TTransaction_EState_Name(tx.GetState()) <<
-                        ", Predicate: " << tx.GetPredicate() << " (" << (tx.HasPredicate() ? "+" : "-") << ")" <<
-                        ", Operations: " << tx.OperationsSize());
-        }
-    }
-
     const auto txs = CollectTransactions(readRanges);
     for (const auto& [txId, tx] : txs) {
         if (tx.HasStep()) {
@@ -842,16 +825,24 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
     }
 
     for (const auto& [txId, tx] : Txs) {
-        PQ_LOG_TX_D("TxId: " << txId <<
-                    ", Step: " << tx.Step <<
-                    ", State: " << NKikimrPQ::TTransaction_EState_Name(tx.State) <<
-                    ", Decision: " << NKikimrTx::TReadSetData_EDecision_Name(tx.ParticipantsDecision));
+        PQ_LOG_D("TxId: " << txId <<
+                 ", Step: " << tx.Step <<
+                 ", State: " << NKikimrPQ::TTransaction_EState_Name(tx.State) <<
+                 ", Decision: " << NKikimrTx::TReadSetData_EDecision_Name(tx.ParticipantsDecision));
 
         if (tx.Step != Max<ui64>()) {
             PlannedTxs.emplace_back(tx.Step, txId);
         }
     }
 
+    // у таблетки 5 партиций. все участвуют в транзакции
+    // в очереди 2 транзакции
+    // первая транзакция выполнялась на stable-25-4 и только 4 партиции успели выполнить коммит
+    // таблетка переехала на stable-26-1, для второй транзакции дошли все предикаты и уже обе транзакции пошли выполняться в партициях
+    // оставшаяся партиция из первой транзакции и 5 партиций из второй транзакции записали субтранзакции
+    // таблетка снова перезапустилась и пытается восстановить транзакций
+    // у первой транзакции в очереди состояние PLANNED, а у второй - EXECUTED
+    // надо подправить состояние транзакций. можно продвинуть вперёд PLANNED -> EXECUTED, а можно наоборот
     std::sort(PlannedTxs.begin(), PlannedTxs.end());
     for (size_t i = 1; i < PlannedTxs.size(); ++i) {
         auto& prevTx = Txs.at(PlannedTxs[i - 1].second);
@@ -4998,7 +4989,7 @@ void TPersQueue::EndInitTransactions()
 
         if (!TxsOrder.contains(tx.State)) {
             PQ_LOG_TX_D("TxsOrder: " <<
-                     txId << " " << NKikimrPQ::TTransaction_EState_Name(tx.State) << " skip");
+                        tx.Step << " " << txId << " " << NKikimrPQ::TTransaction_EState_Name(tx.State) << " skip");
             continue;
         }
 

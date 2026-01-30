@@ -2724,7 +2724,7 @@ struct TEvBufferWrite : public TEventLocal<TEvBufferWrite, TKqpEvents::EvBufferW
 
 struct TEvBufferWriteResult : public TEventLocal<TEvBufferWriteResult, TKqpEvents::EvBufferWriteResult> {
     TWriteToken Token;
-    IDataBatchPtr Data;
+    std::vector<IDataBatchPtr> Data;
 };
 
 }
@@ -3433,7 +3433,7 @@ public:
             if (GetTotalFreeSpace() >= item.InputDataSize) {
                 auto result = std::make_unique<TEvBufferWriteResult>();
                 result->Token = AckQueue.front().Token;
-                result->Data = nullptr;
+                result->Data = std::move(item.OutputData);
                 Send(AckQueue.front().ForwardActorId, result.release());
                 AckQueue.pop();
             } else {
@@ -5000,9 +5000,9 @@ private:
 
         WriteToken = result->Get()->Token;
 
-        if (result->Get()->Data) {
+        for (const auto& batch : result->Get()->Data) {
             AFL_ENSURE(TransformOutput);
-            for (const auto& row : GetRows(result->Get()->Data)) {
+            for (const auto& row : GetRows(batch)) {
                 AFL_ENSURE(row.size() == ReturningColumnsTypes.size());
                 NUdf::TUnboxedValue* outputRowItems = nullptr;
                 auto outputRow = HolderFactory.CreateDirectArrayHolder(ReturningColumnsTypes.size(), outputRowItems);
@@ -5032,6 +5032,9 @@ private:
         DataSize = 0;
 
         if (Closed) {
+            if (TransformOutput) {
+                TransformOutput->Finish();
+            }
             CA_LOG_D("Finished");
             Callbacks->OnAsyncOutputFinished(GetOutputIndex());
         } else {

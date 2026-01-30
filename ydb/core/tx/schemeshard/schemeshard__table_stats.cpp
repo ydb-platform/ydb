@@ -532,7 +532,16 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
     // and potential split will probably be rejected later.
     TString inflightLimitErrStr;
     if (!Self->CheckInFlightLimit(TTxState::ETxType::TxSplitTablePartition, inflightLimitErrStr)) {
-        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Do not consider split-merge: " << inflightLimitErrStr);
+        const auto forceShardSplitSettingsForLog = Self->SplitSettings.GetForceShardSplitSettings();
+        const ui64 sizeToSplit = table->GetShardSizeToSplit(forceShardSplitSettingsForLog);
+        if (dataSize >= sizeToSplit) {
+            LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "Tablet " << datashardId << " size " << dataSize
+                    << " exceeds split threshold " << sizeToSplit
+                    << " but will not split: " << inflightLimitErrStr);
+        } else {
+            LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Do not consider split-merge: " << inflightLimitErrStr);
+        }
         return true;
     }
 
@@ -571,6 +580,14 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
         return false;
     }
     if (rec.GetShardState() != NKikimrTxDataShard::Ready) {
+        const ui64 sizeToSplit = table->GetShardSizeToSplit(forceShardSplitSettings);
+        if (dataSize >= sizeToSplit) {
+            LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "Tablet " << datashardId << " size " << dataSize
+                    << " exceeds split threshold " << sizeToSplit
+                    << " but will not split: shard is not ready, current state is "
+                    << DatashardStateName(rec.GetShardState()));
+        }
         return true;
     }
 
@@ -582,17 +599,35 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
             "Want to split tablet " << datashardId << " by size: " << reason);
     } else if (table->GetPartitions().size() >= table->GetMaxPartitionsCount()) {
         // We cannot split as there are max partitions already
-        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "Do not want to split tablet " << datashardId << " by load,"
-            << " its table already has "<< table->GetPartitions().size() << " out of " << table->GetMaxPartitionsCount() << " partitions");
+        const ui64 sizeToSplit = table->GetShardSizeToSplit(forceShardSplitSettings);
+        if (dataSize >= sizeToSplit) {
+            LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "Tablet " << datashardId << " size " << dataSize
+                    << " exceeds split threshold " << sizeToSplit
+                    << " but will not split: " << reason);
+        } else {
+            LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "Do not want to split tablet " << datashardId << " by load, "
+                    << "its table already has " << table->GetPartitions().size()
+                    << " out of " << table->GetMaxPartitionsCount() << " partitions");
+        }
         return true;
     } else if (table->CheckSplitByLoad(Self->SplitSettings, shardIdx, newStats.GetCurrentRawCpuUsage(), mainTableForIndex, reason)) {
         LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
             "Want to split tablet " << datashardId << " by load: " << reason);
         collectKeySample = true;
     } else {
-        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "Do not want to split tablet " << datashardId << ": " << reason);
+        const ui64 sizeToSplit = table->GetShardSizeToSplit(forceShardSplitSettings);
+        if (dataSize >= sizeToSplit) {
+            // Shard is oversized but won't split due to configuration
+            LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "Tablet " << datashardId << " size " << dataSize
+                    << " exceeds split threshold " << sizeToSplit
+                    << " but will not split: " << reason);
+        } else {
+            LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "Do not want to split tablet " << datashardId << ": " << reason);
+        }
         return true;
     }
 
@@ -630,11 +665,11 @@ bool TTxStoreTableStats::VerifySplitAndRequestStats(
     {
         constexpr ui64 deltaShards = 2;
         if ((pathElement->GetShardsInside() + deltaShards) > subDomainInfo->GetSchemeLimits().MaxShardsInPath) {
-            LOG_NOTICE_S(
+            LOG_WARN_S(
                 ctx,
                 NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "Do not request full stats from datashard " << datashardId
-                    << ", reason: shards count limit exceeded (in path)"
+                "Tablet " << datashardId << " size " << newPartitionStats.DataSize
+                    << " will not split: shards count limit exceeded (in path)"
                     << ", limit: " << subDomainInfo->GetSchemeLimits().MaxShardsInPath
                     << ", current: " << pathElement->GetShardsInside()
                     << ", delta: " << deltaShards
@@ -645,12 +680,11 @@ bool TTxStoreTableStats::VerifySplitAndRequestStats(
 
         const auto currentShards = (subDomainInfo->GetShardsInside() - subDomainInfo->GetBackupShards());
         if ((currentShards + deltaShards) > subDomainInfo->GetSchemeLimits().MaxShards) {
-            LOG_NOTICE_S(
+            LOG_WARN_S(
                 ctx,
                 NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "Do not request full stats from datashard " << datashardId
-                    << ", datashard: " << datashardId
-                    << ", reason: shards count limit exceeded (in subdomain)"
+                "Tablet " << datashardId << " size " << newPartitionStats.DataSize
+                    << " will not split: shards count limit exceeded (in subdomain)"
                     << ", limit: " << subDomainInfo->GetSchemeLimits().MaxShards
                     << ", current: " << currentShards
                     << ", delta: " << deltaShards
@@ -661,11 +695,11 @@ bool TTxStoreTableStats::VerifySplitAndRequestStats(
     }
 
     if (newPartitionStats.HasBorrowedData) {
-        LOG_NOTICE_S(
+        LOG_WARN_S(
             ctx,
             NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "Postpone split tablet " << datashardId
-                << " because it has borrow parts, enqueue compact them first"
+            "Tablet " << datashardId << " size " << newPartitionStats.DataSize
+                << " cannot split yet: has borrowed parts, enqueue compaction first"
         );
 
         Self->EnqueueBorrowedCompaction(shardIdx);
@@ -675,11 +709,11 @@ bool TTxStoreTableStats::VerifySplitAndRequestStats(
     // path.IsLocked() and path.LockedBy() equivalent
     if (const auto& found = Self->LockedPaths.find(pathId); found != Self->LockedPaths.end()) {
         const auto txId = found->second;
-        LOG_NOTICE_S(
+        LOG_WARN_S(
             ctx,
             NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "Postpone split tablet " << datashardId
-                << " because it is locked by " << txId
+            "Tablet " << datashardId << " size " << newPartitionStats.DataSize
+                << " cannot split yet: path is locked by " << txId
         );
 
         return false;

@@ -2559,7 +2559,8 @@ TReadSessionEventsQueue<UseMigrationProtocol>::GetEvents(bool block, std::option
             }
 
             while (TParent::HasEventsImpl() && eventInfos.size() < maxCount && maxByteSize > 0) {
-                eventInfos.emplace_back(GetEventImpl(maxByteSize, accumulator));
+                TReadSessionEventInfo<UseMigrationProtocol> event = GetEventImpl(maxByteSize, accumulator);
+                eventInfos.emplace_back(std::move(event));
                 if (eventInfos.back().IsSessionClosedEvent()) {
                     break;
                 }

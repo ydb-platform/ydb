@@ -4,7 +4,7 @@
 
 ## Синтаксис
 
-```yql
+```sql
 DROP STREAMING QUERY [IF EXISTS] <query_name>
 ```
 
@@ -17,15 +17,15 @@ DROP STREAMING QUERY [IF EXISTS] <query_name>
 
 Требуется [разрешение](./grant.md#permissions-list) `REMOVE SCHEMA` на потоковый запрос, пример выдачи такого разрешения для запроса `my_streaming_query`:
 
-```yql
+```sql
 GRANT REMOVE SCHEMA ON my_streaming_query TO `user@domain`
 ```
 
 ## Примеры
 
-Следующая команда удалит потоковый запрос с именем `my_streaming_query`:
+Удаление запроса `my_streaming_query`:
 
-```yql
+```sql
 DROP STREAMING QUERY my_streaming_query
 ```
 

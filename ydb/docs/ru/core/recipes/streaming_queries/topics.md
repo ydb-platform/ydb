@@ -1,8 +1,17 @@
-# Чтение/запись локальных топиков
+# Быстрый старт: чтение и запись в топики
 
-Эта статья поможет быстро начать работу с [потоковыми запросами](../../concepts/streaming-query.md) в {{ ydb-short-name }} на простейшем модельном примере. Мы будем считать количество ошибок по каждому серверу в интервале 10m. Для этого будем читать из входного [топика](../../concepts/datamodel/topic.md) сообщения в формате JSON, фильтровать их, агрегировать и результат записывать в выходной [топик](../../concepts/datamodel/topic.md).
+В этом руководстве вы создадите свой первый [потоковый запрос](../../concepts/streaming-query.md).
 
-В статье рассматриваются следующие шаги работы:
+Запрос будет:
+
+- читать события из входного [топика](../../concepts/datamodel/topic.md);
+- отбирать только ошибки;
+- подсчитывать количество ошибок по каждому серверу за 10 минут;
+- записывать результат в выходной топик.
+
+События поступают в формате JSON с полями: время, уровень логирования и имя сервера.
+
+Вы выполните следующие шаги:
 
 * [создание топиков](#step1);
 * [создание внешнего источника данных](#step2);
@@ -14,58 +23,78 @@
 
 ## Предварительные условия {#requirements}
 
-* запущенная база {{ ydb-short-name }}, пример запуска [quick start](../../quickstart.md);
-* включены флаги `enable_external_data_sources` и `enable_streaming_queries`:
+Для выполнения примеров вам потребуется:
 
-  * если вы запускаете {{ ydb-short-name }} через docker, то передайте флаги в `docker run`:
+* запущенная база {{ ydb-short-name }} — см. [quick start](../../quickstart.md);
+* включённые флаги `enable_external_data_sources` и `enable_streaming_queries`.
 
-    ```bash
-    docker run -d --rm --name ydb-local -h localhost \
-      --platform linux/amd64 \
-      -p 2135:2135 -p 2136:2136 -p 8765:8765 -p 9092:9092 \
-      -v $(pwd)/ydb_certs:/ydb_certs \
-      -e GRPC_TLS_PORT=2135 -e GRPC_PORT=2136 -e MON_PORT=8765 \
-      -e YDB_FEATURE_FLAGS=enable_external_data_sources,enable_streaming_queries \
-      ydbplatform/local-ydb:trunk
-    ```
+{% list tabs %}
 
-  * если вы запускаете {{ ydb-short-name }} через `local_ydb`, то передайте флаги в `deploy`:
+- Docker
 
-    ```bash
-    ./local_ydb deploy --ydb-working-dir=/absolute/path/to/working/directory --ydb-binary-path=/path/to/kikimr/driver --enable-feature-flag=enable_external_data_sources --enable-feature-flag=enable_streaming_queries
-    ```
+  ```bash
+  docker run -d --rm --name ydb-local -h localhost \
+    --platform linux/amd64 \
+    -p 2135:2135 -p 2136:2136 -p 8765:8765 -p 9092:9092 \
+    -v $(pwd)/ydb_certs:/ydb_certs \
+    -e GRPC_TLS_PORT=2135 -e GRPC_PORT=2136 -e MON_PORT=8765 \
+    -e YDB_FEATURE_FLAGS=enable_external_data_sources,enable_streaming_queries \
+    ydbplatform/local-ydb:trunk
+  ```
+
+- local_ydb
+
+  ```bash
+  ./local_ydb deploy \
+    --ydb-working-dir=/absolute/path/to/working/directory \
+    --ydb-binary-path=/path/to/kikimr/driver \
+    --enable-feature-flag=enable_external_data_sources \
+    --enable-feature-flag=enable_streaming_queries
+  ```
+
+{% endlist %}
 
 {% include [ydb-cli-profile](../../_includes/ydb-cli-profile.md) %}
 
 ## Шаг 1. Создание топиков {#step1}
 
-Сначала нужно создать входной и выходной [топики](../../concepts/datamodel/topic.md) в {{ ydb-short-name }}. Из входного потоковый запрос будет читать данные; в выходной топик будет записывать данные. Это можно сделать с помощью [SQL-запроса](../../yql/reference/syntax/create-topic.md):
+Создайте входной и выходной [топики](../../concepts/datamodel/topic.md):
 
-```yql
+```sql
 CREATE TOPIC input_topic;
-CREATE TOPIC output_topic
+CREATE TOPIC output_topic;
+```
+
+Проверьте, что топики созданы:
+
+```bash
+./ydb --profile quickstart scheme ls
 ```
 
 ## Шаг 2. Создание внешнего источника данных {#step2}
 
-После создания топиков нужно создать [внешний источник данных](../../concepts/datamodel/external_data_source.md). Это можно сделать с помощью [SQL-запроса](../../yql/reference/syntax/create-external-data-source.md):
+Создайте [внешний источник данных](../../concepts/datamodel/external_data_source.md) с помощью [CREATE EXTERNAL DATA SOURCE](../../yql/reference/syntax/create-external-data-source.md):
 
-```yql
+```sql
 CREATE EXTERNAL DATA SOURCE ydb_source WITH (
     SOURCE_TYPE = "Ydb",
     LOCATION = "localhost:2136",
     DATABASE_NAME = "/local",
     AUTH_METHOD = "NONE"
-)
+);
 ```
 
-Нужно указать соответствующее вашей базе {{ ydb-short-name }} значения `LOCATION` и `DATABASE_NAME`.
+{% note info %}
+
+Укажите значения `LOCATION` и `DATABASE_NAME`, соответствующие вашей базе {{ ydb-short-name }}.
+
+{% endnote %}
 
 ## Шаг 3. Создание потокового запроса {#step3}
 
-Далее необходимо запустить [потоковый запрос](../../concepts/streaming-query.md). Это можно сделать с помощью [SQL-запроса](../../yql/reference/syntax/create-streaming-query.md):
+Создайте [потоковый запрос](../../concepts/streaming-query.md) с помощью [CREATE STREAMING QUERY](../../yql/reference/syntax/create-streaming-query.md):
 
-```yql
+```sql
 CREATE STREAMING QUERY query_example AS
 DO BEGIN
 
@@ -101,13 +130,16 @@ FROM
 END DO
 ```
 
-Подробнее про агрегацию `GROUP BY HOP` можно прочитать в статье [{#T}](../../../yql/reference/syntax/select/group-by#group-by-hop). Подробнее про запись данных в топик можно прочитать в статье [{#T}](../../dev/streaming-query/streaming-query-formats.md#write_formats).
+Подробнее:
+
+- Агрегация `GROUP BY HOP` — [{#T}](../../yql/reference/syntax/select/group-by.md#group-by-hop).
+- Запись данных в топик — [{#T}](../../dev/streaming-query/streaming-query-formats.md#write_formats).
 
 ## Шаг 4. Просмотр состояния запроса {#step4}
 
-Состояние запроса можно проверить через {{ ydb-short-name }} UI во вкладке диагностики по клику на потоковый запрос или альтернативно через системную таблицу [streaming_queries](../../dev/system-views.md#streaming_queries) с помощью SQL-запроса:
+Проверьте состояние запроса через системную таблицу [streaming_queries](../../dev/system-views.md#streaming_queries):
 
-```yql
+```sql
 SELECT
     Path,
     Status,
@@ -117,11 +149,14 @@ FROM
     `.sys/streaming_queries`
 ```
 
-Убедитесь что в поле `Status` значение `RUNNING`. В противном случае проверьте поле `Issues`.
+Убедитесь, что в поле `Status` значение `RUNNING`. В противном случае проверьте поле `Issues`.
+
+Если запрос находится в статусе `SUSPENDED` или в поле `Issues` есть ошибки, обратитесь к разделу [{#T}](../../dev/streaming-query/troubleshooting.md).
+
 
 ## Шаг 5. Заполнение входного топика данными {#step5}
 
-Записать в топик сообщения можно, например, с помощью [{{ ydb-short-name }} CLI](../../reference/ydb-cli/index.md).
+Запишите тестовые сообщения в топик с помощью [{{ ydb-short-name }} CLI](../../reference/ydb-cli/index.md):
 
 ```bash
 echo '{"Time": "2025-01-01T00:00:00.000000Z", "Level": "error", "Host": "host-1"}' | ./ydb --profile quickstart topic write input_topic
@@ -131,11 +166,11 @@ echo '{"Time": "2025-01-01T00:12:00.000000Z", "Level": "error", "Host": "host-2"
 echo '{"Time": "2025-01-01T00:12:00.000000Z", "Level": "error", "Host": "host-1"}' | ./ydb --profile quickstart topic write input_topic
 ```
 
+Результат появится в выходном топике после закрытия 10-минутного окна агрегации.
+
 ## Шаг 6. Проверка содержимого выходного топика {#step6}
 
-Данные в выходном топике можно просмотреть через {{ ydb-short-name }} UI (кликнув на иконку `Open Preview` на топике).
-
-Также прочитать данные из выходного топика можно через {{ ydb-short-name }} CLI (читаем партицию с номером 0 c нулевого смещения):
+Прочитайте данные из выходного топика:
 
 ```bash
 ./ydb --profile quickstart topic read output_topic --partition-ids 0 --start-offset 0 --limit 10 --format newline-delimited
@@ -150,13 +185,19 @@ echo '{"Time": "2025-01-01T00:12:00.000000Z", "Level": "error", "Host": "host-1"
 
 ## Шаг 7. Удаление запроса {#step7}
 
-Остановить и удалить запрос можно помощью [SQL запроса](../../yql/reference/syntax/drop-streaming-query.md):
+Удалите запрос с помощью [DROP STREAMING QUERY](../../yql/reference/syntax/drop-streaming-query.md):
 
-```yql
-DROP STREAMING QUERY query_example
+```sql
+DROP STREAMING QUERY query_example;
 ```
+
+## Что дальше {#next-steps}
+
+- Изучите [форматы данных](../../dev/streaming-query/streaming-query-formats.md), поддерживаемые в потоковых запросах;
+- узнайте, как [обогащать данные из S3](../../dev/streaming-query/S3-enrichment.md);
+- научитесь [записывать результаты в таблицы](../../dev/streaming-query/table-writing.md).
 
 ## См. также
 
-* [{#T}](../../concepts/streaming-query.md)
-* [{#T}](../../dev/streaming-query/streaming-query-formats.md)
+* [{#T}](../../concepts/streaming-query.md);
+* [{#T}](../../dev/streaming-query/streaming-query-formats.md).

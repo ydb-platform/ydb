@@ -1,10 +1,10 @@
 # CREATE STREAMING QUERY
 
-`CREATE STREAMING QUERY` создает [потоковый запрос](../../../concepts/streaming-query.md).
+`CREATE STREAMING QUERY` создаёт [потоковый запрос](../../../concepts/streaming-query.md).
 
 ## Синтаксис
 
-```yql
+```sql
 CREATE [OR REPLACE] STREAMING QUERY [IF NOT EXISTS] <query_name> [WITH (
     <key1> = <value1>,
     <key2> = <value2>,
@@ -38,19 +38,19 @@ END DO
 
 Требуется [разрешение](./grant.md#permissions-list) `CREATE TABLE` на директорию, где будет создаваться потоковый запрос, пример выдачи такого разрешения для директории `my_queries/`:
 
-```yql
+```sql
 GRANT CREATE TABLE ON my_queries TO `user@domain`
 ```
 
 ## Использование читателя {#consumer-usage}
 
-Чтобы использовать читателя необходимо предварительно его создать через [CLI](../reference/ydb-cli/topic-consumer-add) или при создании топика с помощью [CREATE TOPIC](create-topic.md). Далее указать его имя в тексте запроса через `PRAGMA pq.Consumer="my_consumer"`.
+Читатель создаётся через [CLI](../../../reference/ydb-cli/topic-consumer-add.md) или при создании топика с помощью [CREATE TOPIC](create-topic.md). Имя читателя указывается в тексте запроса: `PRAGMA pq.Consumer="my_consumer"`.
 
 ## Примеры {#examples}
 
-Следующая команда создаст и запустит запрос с именем `my_streaming_query`:
+Создание и запуск запроса `my_streaming_query`:
 
-```yql
+```sql
 CREATE STREAMING QUERY my_streaming_query AS
 DO BEGIN
 
@@ -64,9 +64,9 @@ FROM
 END DO
 ```
 
-Следующая команда создаст запрос с именем `my_streaming_query` в [пуле ресурсов](../../../concepts/glossary.md#resource-pool) `my_resource_pool`, при этом запрос не будет запущен:
+Создание запроса `my_streaming_query` в [пуле ресурсов](../../../concepts/glossary.md#resource-pool) `my_resource_pool` без запуска:
 
-```yql
+```sql
 CREATE STREAMING QUERY my_streaming_query WITH (
     RUN = FALSE,
     RESOURCE_POOL = my_resource_pool

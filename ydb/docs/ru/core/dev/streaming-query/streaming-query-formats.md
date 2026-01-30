@@ -20,29 +20,25 @@
 
 ## Форматы при записи данных {#write_formats}
 
-Для записи необходимо указывать одну колонку. Поддерживаемые типы: `String`, `Utf8`, `Json`, `Yson`. При этом колонка должна быть неопциональной. Например:
+При записи в топик `SELECT` должен возвращать одну колонку типа `String`, `Utf8`, `Json` или `Yson`. Колонка не может быть `Optional`.
 
-```yql
-INSERT INTO
-    ydb_source.output_topic
-SELECT
-    CAST(Data AS String) ?? "Unknown"
-FROM
-    ...
+Запись одной колонки:
+
+```sql
+INSERT INTO ydb_source.output_topic
+SELECT CAST(Data AS String) ?? "Unknown"
+FROM ...
 ```
 
-Чтобы записать значение нескольких колонок в формате `Json` одним полем можно воспользоваться выражением:
+Чтобы записать несколько колонок, сериализуйте их в JSON:
 
-```yql
-INSERT INTO
-    ydb_source.output_topic
-SELECT
-    ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow()))))
-FROM
-    ...
+```sql
+INSERT INTO ydb_source.output_topic
+SELECT ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow()))))
+FROM ...
 ```
 
-Описание функций можно найти в документации: [TableRow](../../yql/reference/builtins/basic#tablerow), [Yson::From](../../yql/reference/udf/list/yson#ysonfrom), [Yson::SerializeJson](../../yql/reference/udf/list/yson#ysonserializejson), [Unwrap](../../yql/reference/builtins/basic#unwrap), [ToBytes](../../yql/reference/builtins/basic#to-from-bytes).
+Подробнее о функциях: [TableRow](../../yql/reference/builtins/basic#tablerow), [Yson::From](../../yql/reference/udf/list/yson#ysonfrom), [Yson::SerializeJson](../../yql/reference/udf/list/yson#ysonserializejson), [Unwrap](../../yql/reference/builtins/basic#unwrap), [ToBytes](../../yql/reference/builtins/basic#to-from-bytes).
 
 ## Форматы при чтении данных {#read_formats}
 
@@ -60,7 +56,7 @@ Year,Manufacturer,Model,Price
 
 Пример запроса:
 
-```yql
+```sql
 SELECT
     *
 FROM
@@ -91,7 +87,7 @@ Year    Manufacturer    Model   Price
 
 Пример запроса:
 
-```yql
+```sql
 SELECT
     *
 FROM
@@ -130,7 +126,7 @@ LIMIT 1
 
 Пример запроса:
 
-```yql
+```sql
 SELECT
     *
 FROM
@@ -167,7 +163,7 @@ LIMIT 1
 
 Пример запроса:
 
-```yql
+```sql
 SELECT
     *
 FROM
@@ -206,7 +202,7 @@ LIMIT 1
 
 Пример запроса:
 
-```yql
+```sql
 SELECT
     *
 FROM
@@ -226,7 +222,7 @@ LIMIT 1
 
 Пример запроса:
 
-```yql
+```sql
 SELECT
     *
 FROM
@@ -249,7 +245,7 @@ LIMIT 1
 
 Пример запроса:
 
-```yql
+```sql
 SELECT
     *
 FROM
@@ -294,7 +290,7 @@ LIMIT 1
 
 Пример запроса:
 
-```yql
+```sql
 SELECT
     JSON_VALUE(Data, "$.key") AS Key,
     JSON_VALUE(Data, "$.value") AS Value
@@ -319,7 +315,7 @@ LIMIT 1
 
 Пример запроса:
 
-```yql
+```sql
 $input = SELECT 
     Yson::ConvertTo(
         Data, Struct<
@@ -358,7 +354,7 @@ name=Mikhail    uid=70609792906901286
 
 Пример запроса:
 
-```yql
+```sql
 $input = SELECT
     Dsv::Parse(Data, "\t") AS Data
 FROM

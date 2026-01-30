@@ -47,10 +47,11 @@
 | `CoordinatedTxCompleted` | Количество завершившихся [распределенных транзакций](../concepts/glossary.md#transactions). | `Uint64` | Кумулятивная |
 | `TxRejectedByOverload` | Количество транзакций, отменённых по причине [высокой нагрузки](../troubleshooting/performance/queries/overloaded-errors.md). | `Uint64` | Кумулятивная |
 | `TxRejectedByOutOfStorage` | Количество транзакций, отменённых из-за нехватки места в хранилище. | `Uint64` | Кумулятивная |
+| `TxCompleteLag` | Задержка выполнения транзакций (насколько транзакции отстают от запланированного времени). | `Interval` | Моментальная |
 | `LastTtlRunTime` | Последний момент запуска очистки партиции по TTL | `Timestamp` | Моментальная |
 | `LastTtlRowsProcessed` | Количество проверенных строк партиции при последней очистке по TTL | `Uint64` | Моментальная |
 | `LastTtlRowsErased` | Количество удалённых строк партиции при последней очистке по TTL | `Uint64` | Моментальная |
-| `LocksAcquired` | Количество установленных [блокировок](../contributor/datashard-locks-and-change-visibility.md). | `Uint64` | Кумулятивная |
+| `LocksAcquired` | Количество установленных [блокировок](../contributor/datashard-locks-and-change-visibility.md) . | `Uint64` | Кумулятивная |
 | `LocksWholeShard` | Количество установленных [блокировок "весь шард"](../contributor/datashard-locks-and-change-visibility.md#ограничения). | `Uint64` | Кумулятивная |
 | `LocksBroken` | Количество [сломанных блокировок](../contributor/datashard-locks-and-change-visibility.md#высокоуровневая-схема-работы). | `Uint64` | Кумулятивная |
 
@@ -227,6 +228,19 @@ WHERE Rank = 1
 | `SumDeleteRows` | Общее количество удалённых строк.<br/>Тип: `Uint64`. |
 | `MinDeleteRows` | Минимальное количество удалённых строк.<br/>Тип: `Uint64`. |
 | `MaxDeleteRows` | Максимальное количество удалённых строк.<br/>Тип: `Uint64`. |
+| `LocksBrokenAsBreaker` | Количество блокировок, которые сломал данный запрос.<br/>Тип: `Uint64`. |
+| `LocksBrokenAsVictim` | Количество блокировок данного запроса, которые были сломаны.<br/>Тип: `Uint64`. |
+
+{% note info %}
+
+В данную статистику не входят:
+
+- Блокировки, сломанные из-за изменений схемы, TTL, асинхронной репликации
+- Блокировки, сломанные из-за разделения или слияния партиций
+- Блокировки, сломанные при перезапуске таблеток
+- Блокировки, сломанные при коммите интерактивных транзакций (когда COMMIT выполняется отдельным запросом)
+
+{% endnote %}
 
 ### Примеры запросов {#query-metrics-examples}
 
@@ -553,7 +567,7 @@ WHERE Sid = "user3"
 
 Системное представление `streaming_queries` содержит информацию о всех созданных [потоковых запросах](../concepts/streaming-query.md).
 
-Пользователю в данном представлении отображаются только те [потоковые запросах](../concepts/streaming-query.md), на которые ему предоставлено право `ydb.granular.describe_schema`.
+Пользователю в данном представлении отображаются только те [потоковые запросы](../concepts/streaming-query.md), на которые ему предоставлено право `ydb.granular.describe_schema`.
 
 Структура таблицы:
 

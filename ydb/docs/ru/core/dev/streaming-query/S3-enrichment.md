@@ -1,14 +1,20 @@
 # Обогащение данных (S3)
 
-В [потоковых запросах](../../concepts/glossary.md#streaming-query) возможно присоединение к потоку данных из S3 с помощью конструкции `JOIN`. При этом поток обязательно должен находиться в левой части `JOIN`. Механизм имеет ограничения, т.к. правая часть `JOIN` полностью помещается в оперативную память процесса.
+Обогащение данных — добавление к событиям из потока дополнительной информации из справочника. Например, событие содержит только идентификатор, а справочник позволяет добавить к нему название или другие атрибуты.
 
-Обогащение данных (S3) возможно через [внешние источники данных](../../concepts/federated_query/s3/external_data_source.md).
+В [потоковых запросах](../../concepts/streaming-query.md) можно присоединить к потоку данные, хранимые в S3, с помощью конструкции `JOIN`. Поток должен быть слева, справочник из S3 — справа. Справочник полностью загружается в память.
 
-Подготовка источников данных:
+Справочник хранится в S3 и подключается через [внешний источник данных](../../concepts/federated_query/s3/external_data_source.md).
 
-```yql
+## Подготовка источников данных
+
+Создаём два внешних источника: один для YDB (топики), другой для S3 (справочник).
+
+```sql
+-- Секрет с токеном для подключения к YDB
 CREATE SECRET `secrets/ydb_token` WITH (value = "<ydb_token>");
 
+-- Источник данных YDB для чтения/записи топиков
 CREATE EXTERNAL DATA SOURCE ydb_source WITH (
     SOURCE_TYPE = "Ydb",
     LOCATION = "<location>",
@@ -17,6 +23,7 @@ CREATE EXTERNAL DATA SOURCE ydb_source WITH (
     TOKEN_SECRET_NAME = "secrets/ydb_token"
 );
 
+-- Источник данных S3 для чтения справочника
 CREATE EXTERNAL DATA SOURCE s3_source WITH (
     SOURCE_TYPE = "ObjectStorage",
     LOCATION = "https://storage.yandexcloud.net/my_public_bucket/",
@@ -24,12 +31,15 @@ CREATE EXTERNAL DATA SOURCE s3_source WITH (
 )
 ```
 
-Создание потокового запроса:
+## Создание потокового запроса
 
-```yql
+Запрос читает события из входного топика, присоединяет к каждому событию название сервиса из справочника по `ServiceId` и записывает результат в выходной топик.
+
+```sql
 CREATE STREAMING QUERY query_with_join AS
 DO BEGIN
 
+-- Чтение событий из входного топика
 $topic_data = SELECT
     *
 FROM
@@ -43,6 +53,7 @@ WITH (
     )
 );
 
+-- Чтение справочника сервисов из S3
 $s3_data = SELECT
     *
 FROM
@@ -55,6 +66,7 @@ WITH (
     )
 );
 
+-- Присоединение справочника к потоку по ServiceId
 $joined_data = SELECT
     s.Name AS Name,
     t.*
@@ -65,6 +77,7 @@ LEFT JOIN
 ON
     t.ServiceId = s.ServiceId;
 
+-- Запись результата в выходной топик в формате JSON
 INSERT INTO
     ydb_source.output_topic
 SELECT

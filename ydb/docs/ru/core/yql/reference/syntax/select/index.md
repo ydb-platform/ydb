@@ -134,7 +134,7 @@ query1 UNION query2 UNION ALL query3
 Пример:
 
 ```yql
-SELECT 
+SELECT
     Data
 FROM
     ydb_source.topic_name

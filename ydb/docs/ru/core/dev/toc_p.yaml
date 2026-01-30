@@ -5,7 +5,7 @@ items:
   href: streaming-query/index.md
   include:
     mode: link
-    path: streaming-query/toc_p.yaml  
+    path: streaming-query/toc_p.yaml
 - name: Примеры приложений
   href: example-app/index.md
   include:

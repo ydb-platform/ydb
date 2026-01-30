@@ -221,7 +221,6 @@ public:
             || !cfg.GetCloudId()
             || !cfg.GetFolderId()
             || !cfg.GetResourceId()
-            || !cfg.GetDatabase()
             || !(category = GetCategory(cfg))
         ) {
             Limit.Reset();

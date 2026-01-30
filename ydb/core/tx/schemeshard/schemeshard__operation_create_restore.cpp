@@ -90,7 +90,7 @@ struct TRestore {
         }
     }
 
-    template<typename TTableInfo>
+    template <typename TTableInfo>
     static void TableFinish(const TTableInfo& table, const TOperationId& opId, TTxState& txState, TOperationContext& context) {
         if (txState.TxType != TTxState::TxRestore) {
             return;

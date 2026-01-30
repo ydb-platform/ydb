@@ -9,6 +9,7 @@ SRCS(
     audit_log.cpp
     audit_logins.cpp
     db_metadata_cache.h
+    fs_path_validation.cpp
     grpc_endpoint_publish_actor.cpp
     grpc_helper.cpp
     grpc_mon.cpp

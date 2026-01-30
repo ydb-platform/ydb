@@ -825,6 +825,7 @@ public:
             auto dataChunk = CurrentResponse->CreateIncompleteDataChunk();
             auto dataChunkContent = ev->Get()->Record.GetDataChunk();
             dataChunk->Assign(dataChunkContent.data(), dataChunkContent.size());
+            dataChunk->DataSize = std::stoul(TString(TStringBuf(dataChunkContent).Before('\r')).c_str(), nullptr, 16);
             bool endOfData = false;
             if (ev->Get()->Record.GetEndOfData()) {
                 endOfData = true;

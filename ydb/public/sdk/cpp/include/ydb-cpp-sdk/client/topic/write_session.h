@@ -313,7 +313,7 @@ public:
     virtual ~IWriteSession() = default;
 };
 
-//! Keyed write session.
+//! Keyed write session. Experimental SDK. DO NOT USE IN PRODUCTION.
 class IKeyedWriteSession {
 public:
     //! Write single message.
@@ -338,6 +338,7 @@ public:
     virtual ~IKeyedWriteSession() = default;
 };
 
+//! Simple blocking keyed write session. Experimental SDK. DO NOT USE IN PRODUCTION.
 class ISimpleBlockingKeyedWriteSession {
 public:
     //! Write single message.

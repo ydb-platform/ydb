@@ -810,7 +810,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
     Y_UNIT_TEST(PartitionInFlightMemoryLayoutWithLimit) {
         TPersQueueV1TestServer server;
         SET_LOCALS;
-        MAKE_INSECURE_STUB(Ydb::PersQueue::V1::PersQueueService);
+        MAKE_INSECURE_STUB(Ydb::Topic::V1::TopicService);
         server.EnablePQLogs({NKikimrServices::PQ_READ_PROXY, NKikimrServices::PQ_METACACHE});
         server.EnablePQLogs({NKikimrServices::KQP_PROXY}, NLog::EPriority::PRI_EMERG);
 
@@ -818,44 +818,6 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         const ui32 numMessages = 60;
         const ui32 messageSize = 500;
         const ui64 partitionMaxInFlightBytes = 20'000;
-        const ui32 maxReadMessagesCount = 10;
-
-        auto readStream = StubP_->MigrationStreamingRead(&rcontext);
-        UNIT_ASSERT(readStream);
-
-        {
-            MigrationStreamingReadClientMessage req;
-            MigrationStreamingReadServerMessage resp;
-            req.mutable_init_request()->add_topics_read_settings()->set_topic(topicPath);
-            req.mutable_init_request()->set_consumer("user");
-            req.mutable_init_request()->set_read_only_original(true);
-            req.mutable_init_request()->mutable_read_params()->set_max_read_messages_count(maxReadMessagesCount);
-            req.mutable_init_request()->mutable_read_params()->set_partition_max_in_flight_bytes(partitionMaxInFlightBytes);
-            UNIT_ASSERT(readStream->Write(req));
-            UNIT_ASSERT(readStream->Read(&resp));
-            UNIT_ASSERT_C(resp.response_case() == MigrationStreamingReadServerMessage::kInitResponse, resp);
-
-            req.Clear();
-            req.mutable_read();
-            for (ui32 i = 0; i < 20; ++i) {
-                UNIT_ASSERT(readStream->Write(req));
-            }
-        }
-
-        MigrationStreamingReadServerMessage resp;
-        UNIT_ASSERT(readStream->Read(&resp));
-        UNIT_ASSERT_C(resp.response_case() == MigrationStreamingReadServerMessage::kAssigned, resp);
-        ui64 assignId = resp.assigned().assign_id();
-
-        {
-            MigrationStreamingReadClientMessage req;
-            req.mutable_start_read()->mutable_topic()->set_path(topicPath);
-            req.mutable_start_read()->set_cluster("dc1");
-            req.mutable_start_read()->set_partition(0);
-            req.mutable_start_read()->set_assign_id(assignId);
-            req.mutable_start_read()->set_read_offset(0);
-            UNIT_ASSERT(readStream->Write(req));
-        }
 
         auto driver = pqClient->GetDriver();
         {
@@ -867,41 +829,66 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             UNIT_ASSERT(writer->Close(TDuration::Seconds(10)));
         }
 
-        ui32 totalRead = 0;
-        TDuration deadline = TDuration::Seconds(30);
-        TInstant start = TInstant::Now();
-        while (totalRead < numMessages && TInstant::Now() - start < deadline) {
-            MigrationStreamingReadClientMessage req;
-            req.mutable_read();
-            if (!readStream->Write(req)) {
-                break;
+        auto readStream = StubP_->StreamRead(&rcontext);
+        UNIT_ASSERT(readStream);
+
+        {
+            Ydb::Topic::StreamReadMessage::FromClient req;
+            Ydb::Topic::StreamReadMessage::FromServer resp;
+            req.mutable_init_request()->add_topics_read_settings()->set_path(topicPath);
+            req.mutable_init_request()->set_consumer("user");
+            req.mutable_init_request()->set_partition_max_in_flight_bytes(partitionMaxInFlightBytes);
+            UNIT_ASSERT(readStream->Write(req));
+            UNIT_ASSERT(readStream->Read(&resp));
+            UNIT_ASSERT_C(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kInitResponse, resp);
+
+            req.Clear();
+            req.mutable_read_request()->set_bytes_size(256_KB);
+            for (ui32 i = 0; i < 20; ++i) {
+                UNIT_ASSERT(readStream->Write(req));
             }
-            if (!readStream->Read(&resp)) {
-                break;
-            }
-            if (resp.response_case() == MigrationStreamingReadServerMessage::kCommitted) {
-                continue;
-            }
-            if (resp.response_case() != MigrationStreamingReadServerMessage::kDataBatch) {
-                continue;
-            }
-            const auto& batch = resp.data_batch();
-            for (const auto& pd : batch.partition_data()) {
-                for (const auto& b : pd.batches()) {
-                    totalRead += b.message_data_size();
-                }
-                if (pd.has_cookie()) {
-                    req.Clear();
-                    auto* c = req.mutable_commit()->add_cookies();
-                    c->set_assign_id(pd.cookie().assign_id());
-                    c->set_partition_cookie(pd.cookie().partition_cookie());
-                    if (!readStream->Write(req)) {
-                        break;
-                    }
+        }
+
+        Ydb::Topic::StreamReadMessage::FromServer resp;
+        UNIT_ASSERT(readStream->Read(&resp));
+        UNIT_ASSERT_C(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kStartPartitionSessionRequest, resp);
+        i64 partitionSessionId = resp.start_partition_session_request().partition_session().partition_session_id();
+
+        {
+            Ydb::Topic::StreamReadMessage::FromClient req;
+            req.mutable_start_partition_session_response()->set_partition_session_id(partitionSessionId);
+            req.mutable_start_partition_session_response()->set_read_offset(0);
+            UNIT_ASSERT(readStream->Write(req));
+        }
+
+        ui32 readCount = 0;
+        while (readCount < numMessages) {
+            Ydb::Topic::StreamReadMessage::FromClient req;
+            req.mutable_read_request()->set_bytes_size(256_KB);
+            UNIT_ASSERT(readStream->Write(req));
+            UNIT_ASSERT(readStream->Read(&resp));
+            UNIT_ASSERT_C(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kReadResponse, resp);
+            for (const auto& pd : resp.read_response().partition_data()) {
+                for (const auto& batch : pd.batches()) {
+                    readCount += batch.message_data_size();
                 }
             }
         }
-        UNIT_ASSERT_VALUES_EQUAL(totalRead, numMessages);
+        UNIT_ASSERT_VALUES_EQUAL(readCount, numMessages);
+
+        {
+            Ydb::Topic::StreamReadMessage::FromClient req;
+            auto* co = req.mutable_commit_offset_request()->add_commit_offsets();
+            co->set_partition_session_id(partitionSessionId);
+            auto* r = co->add_offsets();
+            r->set_start(0);
+            r->set_end(numMessages);
+            UNIT_ASSERT(readStream->Write(req));
+            UNIT_ASSERT(readStream->Read(&resp));
+            UNIT_ASSERT_C(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kCommitOffsetResponse, resp);
+            UNIT_ASSERT(resp.commit_offset_response().partitions_committed_offsets_size() == 1);
+            UNIT_ASSERT(resp.commit_offset_response().partitions_committed_offsets(0).committed_offset() == numMessages);
+        }
     }
 
     void StreamReadFromTimestampImpl(const TInstant readFromTimestamp, bool hasData) {

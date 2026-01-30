@@ -220,8 +220,6 @@ message ReadParams {
     uint32 max_read_messages_count = 1;
     // Max size in bytes to give to client in one read request.
     uint32 max_read_size = 2;
-    // Max in flight bytes per partition
-    uint64 partition_max_in_flight_bytes = 3;
 }
 
 /**

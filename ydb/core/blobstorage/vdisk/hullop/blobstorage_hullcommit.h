@@ -103,8 +103,15 @@ namespace NKikimr {
         TStringStream DebugMessage;
         TString CallerInfo;
         const ui64 WId;
+        bool Failed = false;
 
         void Bootstrap(const TActorContext& ctx) {
+            if (Failed) {
+                ctx.Send(HullLogCtx->VCtx->VDiskActorId, new TEvPDiskErrorStateChange(TPDiskErrorState::EState::NoWrites));
+                TThis::Die(ctx);
+                return;
+            }
+
             TThis::Become(&TThis::StateFunc);
             LOG_INFO(ctx, NKikimrServices::BS_HULLCOMP,
                     VDISKP(HullLogCtx->VCtx->VDiskLogPrefix, "sending %s lsn# %" PRIu64 " %s",
@@ -201,7 +208,7 @@ namespace NKikimr {
             Y_ABORT_UNLESS(isect.empty());
         }
 
-        void VerifyRemovedHugeBlobs(TDiskPartVec& v) {
+        bool VerifyRemovedHugeBlobs(TDiskPartVec& v) {
             auto comp = [](const TDiskPart& x, const TDiskPart& y) {
                 return std::make_tuple(x.ChunkIdx, x.Offset, x.Size) < std::make_tuple(y.ChunkIdx, y.Offset, y.Size);
             };
@@ -212,10 +219,12 @@ namespace NKikimr {
             };
             auto it = std::adjacent_find(v.Vec.begin(), v.Vec.end(), pred);
             if (it != v.end()) {
-                auto second = std::next(it);
-                Y_ABORT("%s", VDISKP(HullLogCtx->VCtx->VDiskLogPrefix, "duplicate removed huge slots: x# %s y# %s",
-                    it->ToString().data(), second->ToString().data()).data());
+                return false;
+                // auto second = std::next(it);
+                // Y_ABORT("%s", VDISKP(HullLogCtx->VCtx->VDiskLogPrefix, "duplicate removed huge slots: x# %s y# %s",
+                //     it->ToString().data(), second->ToString().data()).data());
             }
+            return true;
         }
 
         TString GenerateEntryPointData() const {
@@ -235,7 +244,10 @@ namespace NKikimr {
 
             // validate its contents
             VerifyCommitRecord(CommitRecord);
-            VerifyRemovedHugeBlobs(Metadata.RemovedHugeBlobs);
+            if (!VerifyRemovedHugeBlobs(Metadata.RemovedHugeBlobs)) {
+                Failed = true;
+                return;
+            }
 
             // create commit message
             if (Metadata.ReplSst) {

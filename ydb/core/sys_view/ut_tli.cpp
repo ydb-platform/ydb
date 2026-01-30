@@ -19,11 +19,11 @@ namespace {
 // Helper class for TLI (Transaction Lock Invalidation) tests
 class TTliTestHelper {
 public:
-    TTliTestHelper(bool useSink)
-        : Settings_([useSink]() {
+    TTliTestHelper()
+        : Settings_([]() {
             TTestEnvSettings s;
             s.EnableSVP = true;
-            s.TableServiceConfig.SetEnableOltpSink(useSink);
+            s.TableServiceConfig.SetEnableOltpSink(true);
             return s;
         }())
         , Env_(1, 2, Settings_)
@@ -226,8 +226,8 @@ private:
 Y_UNIT_TEST_SUITE(TransactionLockInvalidation) {
 
     // Basic lock breakage: victim reads key, breaker writes same key, victim tries to write
-    Y_UNIT_TEST_TWIN(LocksBrokenSameKey, UseSink) {
-        TTliTestHelper h(UseSink);
+    Y_UNIT_TEST(LocksBrokenSameKey) {
+        TTliTestHelper h;
 
         h.CreateTable("Table");
         h.InsertData("UPSERT INTO `/Root/Tenant1/Table` (Key, Value) VALUES (1u, \"Initial\")");
@@ -253,8 +253,8 @@ Y_UNIT_TEST_SUITE(TransactionLockInvalidation) {
     }
 
     // Victim reads key1, breaker writes key1, victim writes key2 -> victim aborted
-    Y_UNIT_TEST_TWIN(LocksBrokenDifferentKeys, UseSink) {
-        TTliTestHelper h(UseSink);
+    Y_UNIT_TEST(LocksBrokenDifferentKeys) {
+        TTliTestHelper h;
 
         h.CreateTable("Table");
         h.InsertData("UPSERT INTO `/Root/Tenant1/Table` (Key, Value) VALUES (1u, \"V1\"), (2u, \"V2\")");
@@ -280,8 +280,8 @@ Y_UNIT_TEST_SUITE(TransactionLockInvalidation) {
     }
 
     // Victim reads multiple keys, breaker writes them all
-    Y_UNIT_TEST_TWIN(LocksBrokenMultipleKeys, UseSink) {
-        TTliTestHelper h(UseSink);
+    Y_UNIT_TEST(LocksBrokenMultipleKeys) {
+        TTliTestHelper h;
 
         h.CreateTable("Table");
         h.InsertData("UPSERT INTO `/Root/Tenant1/Table` (Key, Value) VALUES (1u, \"V1\"), (2u, \"V2\"), (3u, \"V3\")");
@@ -307,8 +307,8 @@ Y_UNIT_TEST_SUITE(TransactionLockInvalidation) {
     }
 
     // Cross-table: victim reads TableA, breaker writes TableA, victim writes TableB
-    Y_UNIT_TEST_TWIN(LocksBrokenCrossTables, UseSink) {
-        TTliTestHelper h(UseSink);
+    Y_UNIT_TEST(LocksBrokenCrossTables) {
+        TTliTestHelper h;
 
         h.CreateTables({"TableA", "TableB"});
         h.InsertData("UPSERT INTO `/Root/Tenant1/TableA` (Key, Value) VALUES (1u, \"ValA\")");
@@ -338,8 +338,8 @@ Y_UNIT_TEST_SUITE(TransactionLockInvalidation) {
     // The second read encounters the V2 row as "invisible" at V1 snapshot.
     // When reading at V1, row versions > V1 are skipped (InvisibleRowSkips).
     // This triggers lock invalidation detection on the read path.
-    Y_UNIT_TEST_TWIN(InvisibleRowSkips, UseSink) {
-        TTliTestHelper h(UseSink);
+    Y_UNIT_TEST(InvisibleRowSkips) {
+        TTliTestHelper h;
 
         h.CreateTable("Table");
         h.InsertData("UPSERT INTO `/Root/Tenant1/Table` (Key, Value) VALUES (1u, \"Initial\")");

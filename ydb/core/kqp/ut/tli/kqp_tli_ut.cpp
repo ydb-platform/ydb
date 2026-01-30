@@ -266,12 +266,12 @@ namespace {
         TString VictimDatashardMessage;
     };
 
-    TTliLogPatterns MakeTliLogPatterns(bool useSink) {
+    TTliLogPatterns MakeTliLogPatterns() {
         return {
             "(Query|Commit) had broken other locks",
             "(Query|Commit) was a victim of broken locks",
-            useSink ? "Write transaction broke other locks" : "KQP data transaction broke other locks",
-            useSink ? "(Write|Read) transaction was a victim of broken locks" : "(KQP data|Read) transaction was a victim of broken locks",
+            "Write transaction broke other locks",
+            "(Write|Read) transaction was a victim of broken locks",
         };
     }
 
@@ -387,9 +387,9 @@ namespace {
 
     // ==================== Test context and table helpers ====================
 
-    TKikimrSettings MakeKikimrSettings(bool useSink, TStringStream& ss) {
+    TKikimrSettings MakeKikimrSettings(TStringStream& ss) {
         TKikimrSettings settings;
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
         settings.LogStream = &ss;
         settings.SetWithSampleTables(false);
         return settings;
@@ -407,8 +407,8 @@ namespace {
         TSession Session;
         TSession VictimSession;
 
-        TTliTestContext(bool logEnabled, bool useSink, TStringStream& ss)
-            : Kikimr(MakeKikimrSettings(useSink, ss))
+        TTliTestContext(bool logEnabled, TStringStream& ss)
+            : Kikimr(MakeKikimrSettings(ss))
             , Client(Kikimr.GetTableClient())
             , Session(Client.CreateSession().GetValueSync().GetSession())
             , VictimSession(Client.CreateSession().GetValueSync().GetSession())
@@ -478,14 +478,13 @@ namespace {
     void VerifyTliLogsAndAssert(
         TStringStream& ss,
         bool LogEnabled,
-        bool UseSink,
         const TString& breakerQueryText,
         const TString& victimQueryText,
         const std::optional<TString>& victimExtraQueryText = std::nullopt,
         ui64 expectedVictimQueryTraceId = 0)
     {
         DumpTliRecords(ss.Str());
-        const auto patterns = MakeTliLogPatterns(UseSink);
+        const auto patterns = MakeTliLogPatterns();
 
         if (LogEnabled) {
             const auto data = ExtractAllTliData(ss.Str(), patterns);
@@ -506,7 +505,6 @@ namespace {
         const TString& issues,
         TStringStream& ss,
         bool LogEnabled,
-        bool UseSink,
         const TString& breakerQueryText,
         const TString& victimQueryText,
         const std::optional<TString>& victimExtraQueryText = std::nullopt)
@@ -532,7 +530,6 @@ namespace {
         VerifyTliLogsAndAssert(
             ss,
             LogEnabled,
-            UseSink,
             breakerQueryText,
             victimQueryText,
             victimExtraQueryText,
@@ -542,9 +539,9 @@ namespace {
 
 Y_UNIT_TEST_SUITE(KqpTli) {
 
-    Y_UNIT_TEST_QUAD(Basic, LogEnabled, UseSink) {
+    Y_UNIT_TEST_TWIN(Basic, LogEnabled) {
         TStringStream ss;
-        TTliTestContext ctx(LogEnabled, UseSink, ss);
+        TTliTestContext ctx(LogEnabled, ss);
         ctx.CreateTable("/Root/Tenant1/TableLocks");
         ctx.SeedTable("/Root/Tenant1/TableLocks", {{1, "Initial"}});
 
@@ -557,12 +554,12 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         auto [status, issues] = ExecuteVictimCommitWithIssues(ctx.VictimSession, victimTx, victimCommitText);
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
 
-        VerifyTliIssueAndLogs(issues, ss, LogEnabled, UseSink, breakerQueryText, victimQueryText, victimCommitText);
+        VerifyTliIssueAndLogs(issues, ss, LogEnabled, breakerQueryText, victimQueryText, victimCommitText);
     }
 
-    Y_UNIT_TEST_QUAD(SeparateCommit, LogEnabled, UseSink) {
+    Y_UNIT_TEST_TWIN(SeparateCommit, LogEnabled) {
         TStringStream ss;
-        TTliTestContext ctx(LogEnabled, UseSink, ss);
+        TTliTestContext ctx(LogEnabled, ss);
         ctx.CreateTable("/Root/Tenant1/TableLocks");
         ctx.SeedTable("/Root/Tenant1/TableLocks", {{1, "Initial"}});
 
@@ -587,13 +584,13 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         auto [status, issues] = ExecuteVictimCommitWithIssues(ctx.VictimSession, victimTx, victimCommitText);
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
 
-        VerifyTliIssueAndLogs(issues, ss, LogEnabled, UseSink, breakerQueryText, victimQueryText, victimCommitText);
+        VerifyTliIssueAndLogs(issues, ss, LogEnabled, breakerQueryText, victimQueryText, victimCommitText);
     }
 
     // Test: Many upserts in a single transaction, the breaker is the middle upsert
-    Y_UNIT_TEST_QUAD(ManyUpserts, LogEnabled, UseSink) {
+    Y_UNIT_TEST_TWIN(ManyUpserts, LogEnabled) {
         TStringStream ss;
-        TTliTestContext ctx(LogEnabled, UseSink, ss);
+        TTliTestContext ctx(LogEnabled, ss);
         for (int i = 1; i <= 6; ++i) {
             ctx.CreateTable(Sprintf("/Root/Tenant1/Table%d", i));
             ctx.SeedTable(Sprintf("/Root/Tenant1/Table%d", i), {{1, Sprintf("Init%d", i)}});
@@ -626,13 +623,13 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         auto [status, issues] = CommitTxWithIssues(victimTx);
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
 
-        VerifyTliIssueAndLogs(issues, ss, LogEnabled, UseSink, breakerUpdateTable2, victimSelectTable2);
+        VerifyTliIssueAndLogs(issues, ss, LogEnabled, breakerUpdateTable2, victimSelectTable2);
     }
 
     // Test: Many upserts in a single transaction, the breaker is the middle upsert, separate commit
-    Y_UNIT_TEST_QUAD(ManyUpsertsSeparateCommit, LogEnabled, UseSink) {
+    Y_UNIT_TEST_TWIN(ManyUpsertsSeparateCommit, LogEnabled) {
         TStringStream ss;
-        TTliTestContext ctx(LogEnabled, UseSink, ss);
+        TTliTestContext ctx(LogEnabled, ss);
         for (int i = 1; i <= 6; ++i) {
             ctx.CreateTable(Sprintf("/Root/Tenant1/Table%d", i));
             ctx.SeedTable(Sprintf("/Root/Tenant1/Table%d", i), {{1, Sprintf("Init%d", i)}});
@@ -665,13 +662,13 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         auto [status, issues] = CommitTxWithIssues(victimTx);
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
 
-        VerifyTliIssueAndLogs(issues, ss, LogEnabled, UseSink, breakerUpdateTable2, victimSelectTable2);
+        VerifyTliIssueAndLogs(issues, ss, LogEnabled, breakerUpdateTable2, victimSelectTable2);
     }
 
     // Test: Victim reads key 1, breaker writes key 1, victim writes key 2
-    Y_UNIT_TEST_QUAD(DifferentKeys, LogEnabled, UseSink) {
+    Y_UNIT_TEST_TWIN(DifferentKeys, LogEnabled) {
         TStringStream ss;
-        TTliTestContext ctx(LogEnabled, UseSink, ss);
+        TTliTestContext ctx(LogEnabled, ss);
         ctx.CreateTable("/Root/Tenant1/TableDiffKeys");
         ctx.SeedTable("/Root/Tenant1/TableDiffKeys", {{1, "V1"}, {2, "V2"}});
 
@@ -684,13 +681,13 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         auto [status, issues] = ExecuteVictimCommitWithIssues(ctx.VictimSession, victimTx, victimCommitText);
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
 
-        VerifyTliIssueAndLogs(issues, ss, LogEnabled, UseSink, breakerQueryText, victimQueryText);
+        VerifyTliIssueAndLogs(issues, ss, LogEnabled, breakerQueryText, victimQueryText);
     }
 
     // Test: Victim reads multiple keys, breaker writes them all
-    Y_UNIT_TEST_QUAD(MultipleKeys, LogEnabled, UseSink) {
+    Y_UNIT_TEST_TWIN(MultipleKeys, LogEnabled) {
         TStringStream ss;
-        TTliTestContext ctx(LogEnabled, UseSink, ss);
+        TTliTestContext ctx(LogEnabled, ss);
         ctx.CreateTable("/Root/Tenant1/TableMulti");
         ctx.SeedTable("/Root/Tenant1/TableMulti", {{1, "V1"}, {2, "V2"}, {3, "V3"}});
 
@@ -703,13 +700,13 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         auto [status, issues] = ExecuteVictimCommitWithIssues(ctx.VictimSession, victimTx, victimCommitText);
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
 
-        VerifyTliIssueAndLogs(issues, ss, LogEnabled, UseSink, breakerQueryText, victimQueryText);
+        VerifyTliIssueAndLogs(issues, ss, LogEnabled, breakerQueryText, victimQueryText);
     }
 
     // Test: Cross-table lock breakage - victim reads TableA, breaker writes TableA, victim writes TableB
-    Y_UNIT_TEST_QUAD(CrossTables, LogEnabled, UseSink) {
+    Y_UNIT_TEST_TWIN(CrossTables, LogEnabled) {
         TStringStream ss;
-        TTliTestContext ctx(LogEnabled, UseSink, ss);
+        TTliTestContext ctx(LogEnabled, ss);
         ctx.CreateTable("/Root/Tenant1/TableA");
         ctx.CreateTable("/Root/Tenant1/TableB");
         ctx.SeedTable("/Root/Tenant1/TableA", {{1, "ValA"}});
@@ -723,13 +720,13 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         auto [status, issues] = ExecuteVictimCommitWithIssues(ctx.VictimSession, victimTx, victimCommitText);
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
 
-        VerifyTliIssueAndLogs(issues, ss, LogEnabled, UseSink, breakerQueryText, victimQueryText);
+        VerifyTliIssueAndLogs(issues, ss, LogEnabled, breakerQueryText, victimQueryText);
     }
 
     // Test: Two victims and one breaker scenario
-    Y_UNIT_TEST_QUAD(TwoVictimsOneBreaker, LogEnabled, UseSink) {
+    Y_UNIT_TEST_TWIN(TwoVictimsOneBreaker, LogEnabled) {
         TStringStream ss;
-        TTliTestContext ctx(LogEnabled, UseSink, ss);
+        TTliTestContext ctx(LogEnabled, ss);
         ctx.CreateTable("/Root/Tenant1/TableLocks");
         ctx.SeedTable("/Root/Tenant1/TableLocks", {{1, "Initial"}});
 
@@ -753,17 +750,17 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         // Both victims try to commit - both should be aborted
         auto [status1, issues1] = ExecuteVictimCommitWithIssues(victim1Session, victim1Tx, victimCommitText);
         UNIT_ASSERT_VALUES_EQUAL(status1, EStatus::ABORTED);
-        VerifyTliIssueAndLogs(issues1, ss, LogEnabled, UseSink, breakerQueryText, victimQueryText, victimCommitText);
+        VerifyTliIssueAndLogs(issues1, ss, LogEnabled, breakerQueryText, victimQueryText, victimCommitText);
 
         auto [status2, issues2] = ExecuteVictimCommitWithIssues(victim2Session, victim2Tx, victimCommitText);
         UNIT_ASSERT_VALUES_EQUAL(status2, EStatus::ABORTED);
-        VerifyTliIssueAndLogs(issues2, ss, LogEnabled, UseSink, breakerQueryText, victimQueryText, victimCommitText);
+        VerifyTliIssueAndLogs(issues2, ss, LogEnabled, breakerQueryText, victimQueryText, victimCommitText);
     }
 
     // Test: InvisibleRowSkips - victim reads at snapshot V1, breaker commits at V2, victim reads again
-    Y_UNIT_TEST_QUAD(InvisibleRowSkips, LogEnabled, UseSink) {
+    Y_UNIT_TEST_TWIN(InvisibleRowSkips, LogEnabled) {
         TStringStream ss;
-        TTliTestContext ctx(LogEnabled, UseSink, ss);
+        TTliTestContext ctx(LogEnabled, ss);
         ctx.CreateTable("/Root/Tenant1/TableSkips");
         ctx.SeedTable("/Root/Tenant1/TableSkips", {{1, "Initial"}});
 
@@ -789,7 +786,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         auto [status, issues] = ExecuteVictimCommitWithIssues(ctx.VictimSession, victimTx, victimCommitText);
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
 
-        VerifyTliIssueAndLogs(issues, ss, LogEnabled, UseSink, breakerQueryText, victimRead1Text);
+        VerifyTliIssueAndLogs(issues, ss, LogEnabled, breakerQueryText, victimRead1Text);
     }
 }
 

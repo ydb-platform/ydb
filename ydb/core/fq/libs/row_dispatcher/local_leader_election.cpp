@@ -449,7 +449,6 @@ void TLocalLeaderElection::Handle(TLocalRpcCtx::TRpcEvents::TEvActorAttached::TP
     while (!RpcResponses.empty()) {  
         RpcResponses.pop();  
     }
-    PendingRpcResponses = 0;
     SendStartSession();
 }
 

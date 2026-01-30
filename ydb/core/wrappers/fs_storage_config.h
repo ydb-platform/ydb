@@ -4,6 +4,7 @@
 
 #include <ydb/core/protos/fs_settings.pb.h>
 #include <ydb/library/accessor/accessor.h>
+#include <ydb/public/api/protos/ydb_export.pb.h>
 
 namespace NKikimr::NWrappers::NExternalStorage {
 
@@ -17,6 +18,7 @@ protected:
 
 public:
     TFsExternalStorageConfig(const NKikimrSchemeOp::TFSSettings& settings);
+    TFsExternalStorageConfig(const Ydb::Export::ExportToFsSettings& settings);
 };
 
 } // NKikimr::NWrappers::NExternalStorage

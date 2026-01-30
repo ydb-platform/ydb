@@ -139,6 +139,18 @@ static NKikimrSchemeOp::TTableDescription RebuildTableDescription(
     return tableDesc;
 }
 
+template <typename TSettings>
+void FillRestoreEncryptionSettings(NKikimrSchemeOp::TRestoreTask& task, const TSettings& settings,
+                                    const TImportInfo::TItem& item) {
+    if (settings.has_encryption_settings()) {
+        auto& taskEncryptionSettings = *task.MutableEncryptionSettings();
+        *taskEncryptionSettings.MutableSymmetricKey() = settings.encryption_settings().symmetric_key();
+        if (item.ExportItemIV) {
+            taskEncryptionSettings.SetIV(item.ExportItemIV->GetBinaryString());
+        }
+    }
+}
+
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> RestoreTableDataPropose(
     TSchemeShard* ss,
     TTxId txId,
@@ -169,14 +181,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> RestoreTableDataPropose(
     case TImportInfo::EKind::S3:
         {
             auto settings = importInfo.GetS3Settings();
-            
-            if (settings.has_encryption_settings()) {
-                auto& taskEncryptionSettings = *task.MutableEncryptionSettings();
-                *taskEncryptionSettings.MutableSymmetricKey() = settings.encryption_settings().symmetric_key();
-                if (item.ExportItemIV) {
-                    taskEncryptionSettings.SetIV(item.ExportItemIV->GetBinaryString());
-                }
-            }
+
+            FillRestoreEncryptionSettings(task, settings, item);
 
             task.SetNumberOfRetries(settings.number_of_retries());
             auto& restoreSettings = *task.MutableS3Settings();
@@ -207,6 +213,9 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> RestoreTableDataPropose(
     case TImportInfo::EKind::FS:
         {
             auto settings = importInfo.GetFsSettings();
+
+            FillRestoreEncryptionSettings(task, settings, item);
+
             task.SetNumberOfRetries(settings.number_of_retries());
             auto& restoreSettings = *task.MutableFSSettings();
             restoreSettings.SetBasePath(settings.base_path());
@@ -323,9 +332,9 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateChangefeedPropose(
     Y_ABORT_UNLESS(!tableDesc.GetKeyColumnIds().empty());
     const auto& keyId = tableDesc.GetKeyColumnIds()[0];
     bool isPartitioningAvailable = false;
-    
+
     // Explicit specification of the number of partitions when creating CDC
-    // is possible only if the first component of the primary key 
+    // is possible only if the first component of the primary key
     // of the source table is Uint32 or Uint64
     for (const auto& column : tableDesc.GetColumns()) {
         if (column.GetId() == keyId) {

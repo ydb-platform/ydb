@@ -4,6 +4,7 @@ SRCS(
     checksum.cpp
     encryption.cpp
     metadata.cpp
+    uploader_common.cpp
 )
 
 PEERDIR(

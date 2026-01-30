@@ -185,6 +185,7 @@ namespace NKikimr::NDDisk {
 
         // Chunk management code
 
+        static constexpr ui32 MinChunksReserved = 2;
         std::queue<TChunkIdx> ChunkReserve;
         bool ReserveInFlight = false;
 

@@ -19,7 +19,6 @@ struct TStreamingExploreCtx {
     TExprContext& Ctx;
     std::unordered_set<const TExprNode*> Visited;
     ui64 StreamingReads = 0;
-    ui64 Writes = 0;
 };
 
 bool ExploreStreamingQueryNode(TExprNode::TPtr node, TStreamingExploreCtx& res) {
@@ -53,8 +52,6 @@ bool ExploreStreamingQueryNode(TExprNode::TPtr node, TStreamingExploreCtx& res) 
     }
 
     if (const auto maybeDataSink = TMaybeNode<TCoDataSink>(providerArg)) {
-        ++res.Writes;
-
         const auto dataSinkCategory = maybeDataSink.Cast().Category().Value();
         if (IsIn({NYql::PqProviderName, NYql::SolomonProviderName, NYql::S3ProviderName}, dataSinkCategory)) {
             return true;

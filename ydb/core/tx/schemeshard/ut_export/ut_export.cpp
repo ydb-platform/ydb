@@ -1,4 +1,5 @@
 #include <ydb/public/api/protos/ydb_export.pb.h>
+#include <ydb/public/api/protos/ydb_topic.pb.h>
 
 #include <ydb/core/backup/common/encryption.h>
 #include <ydb/core/metering/metering.h>
@@ -681,7 +682,13 @@ namespace {
                 const auto& topicExpected = expected.at(i);
                 const auto& topicPath = topicExpected.GetPath();
                 UNIT_ASSERT(HasS3File(topicPath));
+<<<<<<< HEAD
                 UNIT_ASSERT(topicExpected.CompareWithString(GetS3FileContent(topicPath)));
+=======
+                auto content = GetS3FileContent(topicPath);
+                UNIT_ASSERT_C(topicExpected.CompareWithStringIgnoringFields(content, {"attributes"}),
+                    TStringBuilder() << topicExpected.GetPublicProto().DebugString() << "\n\nVS\n\n" << content);
+>>>>>>> 7bfef2a6632 (Topic Export With All Fields Test (#31628))
 
                 if (enablePermissions) {
                     auto permissionsPath = topicExpected.GetPermissions().GetPath();
@@ -2574,6 +2581,7 @@ state: STATE_ENABLED
 
                 auto* topic = S3Mock.GetData().FindPtr(changefeedDir + "/topic_description.pb");
                 UNIT_ASSERT(topic);
+<<<<<<< HEAD
                 UNIT_ASSERT_VALUES_EQUAL(*topic, Sprintf(R"(partitioning_settings {
   min_active_partitions: 1
   max_active_partitions: 1
@@ -2613,6 +2621,50 @@ attributes {
   value: "1382400000"
 }
 )", i));
+=======
+
+                Ydb::Topic::DescribeTopicResult actualTopicProto;
+                UNIT_ASSERT_C(
+                    google::protobuf::TextFormat::ParseFromString(*topic, &actualTopicProto),
+                    *topic
+                );
+
+                Ydb::Topic::DescribeTopicResult expectedTopicProto;
+                TString expectedTopicStr = R"(
+                    partitioning_settings {
+                        min_active_partitions: 1
+                        max_active_partitions: 1
+                        auto_partitioning_settings {
+                            strategy: AUTO_PARTITIONING_STRATEGY_DISABLED
+                            partition_write_speed {
+                                stabilization_window {
+                                    seconds: 300
+                                }
+                                up_utilization_percent: 80
+                                down_utilization_percent: 20
+                            }
+                        }
+                    }
+                    partitions {
+                        active: true
+                    }
+                    retention_period {
+                        seconds: 86400
+                    }
+                    partition_write_speed_bytes_per_second: 1048576
+                    partition_write_burst_bytes: 1048576
+                )";
+                UNIT_ASSERT_C(
+                    google::protobuf::TextFormat::ParseFromString(expectedTopicStr, &expectedTopicProto),
+                    expectedTopicStr
+                );
+
+                actualTopicProto.clear_attributes();
+                UNIT_ASSERT_STRINGS_EQUAL(
+                    actualTopicProto.partitioning_settings().DebugString(),
+                    expectedTopicProto.partitioning_settings().DebugString()
+                );
+>>>>>>> 7bfef2a6632 (Topic Export With All Fields Test (#31628))
 
                 const auto* changefeedChecksum = S3Mock.GetData().FindPtr(changefeedDir + "/changefeed_description.pb.sha256");
                 UNIT_ASSERT(changefeedChecksum);
@@ -3089,4 +3141,804 @@ attributes {
 
         TestGetExport(Runtime(), txId, "/MyRoot", Ydb::StatusIds::CANCELLED);
     }
+<<<<<<< HEAD
+=======
+
+    void IndexMaterialization(TTestEnv& env, TTestBasicRuntime& runtime, TS3Mock& s3Mock, ui16 s3Port, bool enabled, const TString& indexDesc) {
+        ui64 txId = 100;
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            TableDescription {
+              Name: "Table"
+              Columns { Name: "key" Type: "Uint32" }
+              Columns { Name: "embedding" Type: "String" }
+              Columns { Name: "prefix" Type: "String" }
+              Columns { Name: "value" Type: "Utf8" }
+              KeyColumnNames: ["key"]
+            }
+            %s
+        )", indexDesc.c_str()));
+        env.TestWaitNotification(runtime, txId);
+
+        const auto expectedStatus = enabled ? Ydb::StatusIds::SUCCESS : Ydb::StatusIds::PRECONDITION_FAILED;
+        TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              include_index_data: true
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: ""
+              }
+            }
+        )", s3Port), "", "", expectedStatus);
+
+        if (!enabled) {
+            return;
+        }
+
+        env.TestWaitNotification(runtime, txId);
+
+        auto desc = DescribePrivatePath(runtime, "/MyRoot/Table/index");
+        const auto& tableIndex = desc.GetPathDescription().GetTableIndex();
+        const auto indexType = tableIndex.GetType();
+        const TVector<TString> indexColumns(tableIndex.GetKeyColumnNames().begin(), tableIndex.GetKeyColumnNames().end());
+
+        for (const auto implTable : NTableIndex::GetImplTables(indexType, indexColumns)) {
+            UNIT_ASSERT(s3Mock.GetData().FindPtr(TStringBuilder() << "/index/" << implTable << "/scheme.pb"));
+        }
+    }
+
+    Y_UNIT_TEST(IndexMaterializationDisabled) {
+        EnvOptions().EnableIndexMaterialization(false);
+        IndexMaterialization(Env(), Runtime(), S3Mock(), S3Port(), false, R"(
+            IndexDescription {
+              Name: "index"
+              KeyColumnNames: ["value"]
+            }
+        )");
+    }
+
+    Y_UNIT_TEST(IndexMaterialization) {
+        EnvOptions().EnableIndexMaterialization(true);
+        IndexMaterialization(Env(), Runtime(), S3Mock(), S3Port(), true, R"(
+            IndexDescription {
+              Name: "index"
+              KeyColumnNames: ["value"]
+            }
+        )");
+    }
+
+    Y_UNIT_TEST(IndexMaterializationGlobal) {
+        EnvOptions().EnableIndexMaterialization(true);
+        IndexMaterialization(Env(), Runtime(), S3Mock(), S3Port(), true, R"(
+            IndexDescription {
+              Name: "index"
+              KeyColumnNames: ["value"]
+              Type: EIndexTypeGlobal
+            }
+        )");
+    }
+
+    Y_UNIT_TEST(IndexMaterializationGlobalAsync) {
+        EnvOptions().EnableIndexMaterialization(true);
+        IndexMaterialization(Env(), Runtime(), S3Mock(), S3Port(), true, R"(
+            IndexDescription {
+              Name: "index"
+              KeyColumnNames: ["value"]
+              Type: EIndexTypeGlobalAsync
+            }
+        )");
+    }
+
+    Y_UNIT_TEST(IndexMaterializationGlobalVectorKmeansTree) {
+        EnvOptions().EnableIndexMaterialization(true);
+        IndexMaterialization(Env(), Runtime(), S3Mock(), S3Port(), true, R"(
+            IndexDescription {
+              Name: "index"
+              KeyColumnNames: ["embedding"]
+              Type: EIndexTypeGlobalVectorKmeansTree
+              VectorIndexKmeansTreeDescription {
+                Settings {
+                  settings {
+                    metric: DISTANCE_COSINE
+                    vector_type: VECTOR_TYPE_FLOAT
+                    vector_dimension: 1024
+                  }
+                  clusters: 4
+                  levels: 5
+                }
+              }
+            }
+        )");
+    }
+
+    Y_UNIT_TEST(IndexMaterializationGlobalVectorKmeansTreePrefix) {
+        EnvOptions().EnableIndexMaterialization(true);
+        IndexMaterialization(Env(), Runtime(), S3Mock(), S3Port(), true, R"(
+            IndexDescription {
+              Name: "index"
+              KeyColumnNames: ["prefix", "embedding"]
+              Type: EIndexTypeGlobalVectorKmeansTree
+              VectorIndexKmeansTreeDescription {
+                Settings {
+                  settings {
+                    metric: DISTANCE_COSINE
+                    vector_type: VECTOR_TYPE_FLOAT
+                    vector_dimension: 1024
+                  }
+                  clusters: 4
+                  levels: 5
+                }
+              }
+            }
+        )");
+    }
+
+    Y_UNIT_TEST(IndexMaterializationTwoTables) {
+        EnvOptions().EnableIndexMaterialization(true);
+        auto& env = Env();
+        auto& runtime = Runtime();
+        ui64 txId = 100;
+
+        for (const auto tableName : {"Table1", "Table2"}) {
+            TestCreateIndexedTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
+                TableDescription {
+                  Name: "%s"
+                  Columns { Name: "key" Type: "Uint32" }
+                  Columns { Name: "value" Type: "Utf8" }
+                  KeyColumnNames: ["key"]
+                }
+                IndexDescription {
+                  Name: "index"
+                  KeyColumnNames: ["value"]
+                }
+            )", tableName));
+            env.TestWaitNotification(runtime, txId);
+        }
+
+        TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              include_index_data: true
+              items {
+                source_path: "/MyRoot/Table1"
+                destination_prefix: "table1"
+              }
+              items {
+                source_path: "/MyRoot/Table2"
+                destination_prefix: "table2"
+              }
+            }
+        )", S3Port()));
+
+        env.TestWaitNotification(runtime, txId);
+    }
+
+    Y_UNIT_TEST(ReplicationExportWithStaticCredentials) {
+        TString scheme = R"(
+            Name: "Replication"
+            Config {
+                SrcConnectionParams {
+                    Endpoint: "localhost:2135"
+                    Database: "/MyRoot"
+                    StaticCredentials {
+                        User: "user"
+                        Password: "pwd"
+                        PasswordSecretName: "pwd-secret-name"
+                    }
+                }
+                Specific {
+                    Targets {
+                        SrcPath: "/MyRoot/Table1"
+                        DstPath: "/MyRoot/Table1Replica"
+                    }
+                }
+            }
+        )";
+        // As passwords are not backuped
+        TString expected = R"(-- database: "/MyRoot"
+-- backup root: "/MyRoot"
+CREATE ASYNC REPLICATION `Replication`
+FOR
+  `/MyRoot/Table1` AS `/MyRoot/Table1Replica`
+WITH (
+  CONNECTION_STRING = 'grpc://localhost:2135/?database=/MyRoot',
+  USER = 'user',
+  PASSWORD_SECRET_NAME = 'pwd-secret-name',
+  CONSISTENCY_LEVEL = 'Row'
+);)";
+        TestReplication(scheme, expected);
+    }
+
+    Y_UNIT_TEST(ReplicationExportWithOAuthCredentials) {
+        TString scheme = R"(
+            Name: "Replication"
+            Config {
+                SrcConnectionParams {
+                    Endpoint: "localhost:2135"
+                    Database: "/MyRoot"
+                    OAuthToken {
+                        Token: "super-secret-token"
+                        TokenSecretName: "token-secret-name"
+                    }
+                }
+                Specific {
+                    Targets {
+                        SrcPath: "/MyRoot/Table1"
+                        DstPath: "/MyRoot/Table1Replica"
+                    }
+                }
+            }
+        )";
+        // As OAuth tokens are not backuped
+        TString expected = R"(-- database: "/MyRoot"
+-- backup root: "/MyRoot"
+CREATE ASYNC REPLICATION `Replication`
+FOR
+  `/MyRoot/Table1` AS `/MyRoot/Table1Replica`
+WITH (
+  CONNECTION_STRING = 'grpc://localhost:2135/?database=/MyRoot',
+  TOKEN_SECRET_NAME = 'token-secret-name',
+  CONSISTENCY_LEVEL = 'Row'
+);)";
+        TestReplication(scheme, expected);
+    }
+
+    Y_UNIT_TEST(ReplicationExportMultipleItems) {
+        TString scheme = R"(
+            Name: "Replication"
+            Config {
+                SrcConnectionParams {
+                    Endpoint: "localhost:2135"
+                    Database: "/MyRoot"
+                }
+                Specific {
+                    Targets {
+                        SrcPath: "/MyRoot/Table1"
+                        DstPath: "/MyRoot/Table1Replica"
+                    }
+                    Targets {
+                        SrcPath: "/MyRoot/Table2"
+                        DstPath: "/MyRoot/Table2Replica"
+                    }
+                    Targets {
+                        SrcPath: "/MyRoot/Table3"
+                        DstPath: "/MyRoot/Table3Replica"
+                    }
+                }
+            }
+        )";
+        TString expected = R"(-- database: "/MyRoot"
+-- backup root: "/MyRoot"
+CREATE ASYNC REPLICATION `Replication`
+FOR
+  `/MyRoot/Table1` AS `/MyRoot/Table1Replica`,
+  `/MyRoot/Table2` AS `/MyRoot/Table2Replica`,
+  `/MyRoot/Table3` AS `/MyRoot/Table3Replica`
+WITH (
+  CONNECTION_STRING = 'grpc://localhost:2135/?database=/MyRoot',
+  CONSISTENCY_LEVEL = 'Row'
+);)";
+        TestReplication(scheme, expected);
+    }
+
+    Y_UNIT_TEST(ReplicationExportGlobalConsistency) {
+        TString scheme = R"(
+            Name: "Replication"
+            Config {
+                SrcConnectionParams {
+                    Endpoint: "localhost:2135"
+                    Database: "/MyRoot"
+                }
+                ConsistencySettings {
+                    Global {
+                        CommitIntervalMilliSeconds: 17000
+                    }
+                }
+                Specific {
+                    Targets {
+                        SrcPath: "/MyRoot/Table1"
+                        DstPath: "/MyRoot/Table1Replica"
+                    }
+                }
+            }
+        )";
+        TString expected = R"(-- database: "/MyRoot"
+-- backup root: "/MyRoot"
+CREATE ASYNC REPLICATION `Replication`
+FOR
+  `/MyRoot/Table1` AS `/MyRoot/Table1Replica`
+WITH (
+  CONNECTION_STRING = 'grpc://localhost:2135/?database=/MyRoot',
+  CONSISTENCY_LEVEL = 'Global',
+  COMMIT_INTERVAL = Interval('PT17S')
+);)";
+        TestReplication(scheme, expected);
+    }
+
+    Y_UNIT_TEST(ReplicatedTableExport) {
+        Env();
+        ui64 txId = 100;
+
+        TestCreateTable(Runtime(), ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+            ReplicationConfig {
+                Mode: REPLICATION_MODE_READ_ONLY
+            }
+        )");
+        Env().TestWaitNotification(Runtime(), txId);
+
+        TestDescribeResult(DescribePath(Runtime(), "/MyRoot/Table"), {
+            NLs::ReplicationMode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY),
+            NLs::UserAttrsEqual({{"__async_replica", "true"}}),
+        });
+
+        TString request = Sprintf(R"(
+            ExportToS3Settings {
+                endpoint: "localhost:%d"
+                scheme: HTTP
+                items {
+                    source_path: "/MyRoot/Table"
+                    destination_prefix: "Table"
+                }
+            }
+        )", S3Port());
+
+        TestExport(Runtime(), ++txId, "/MyRoot", request, "", "", Ydb::StatusIds::BAD_REQUEST);
+        TestGetExport(Runtime(), txId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+    }
+
+    Y_UNIT_TEST(TransferExportNoConnString) {
+        auto lambda = "PRAGMA OrderedColumns;$transformation_lambda = ($msg) -> { return [ <| partition: $msg._partition, offset: $msg._offset, message: CAST($msg._data AS Utf8) |> ]; };$__ydb_transfer_lambda = $transformation_lambda;";
+
+        TString scheme = Sprintf(R"(
+            Name: "Transfer"
+            Config {
+                TransferSpecific {
+                    Target {
+                        SrcPath: "/MyRoot/Topic_0"
+                        DstPath: "/MyRoot/Table"
+                        TransformLambda: "%s"
+                    }
+                }
+            }
+        )", lambda);
+        TString expected = R"(-- database: "/MyRoot"
+-- backup root: "/MyRoot"
+$transformation_lambda = ($msg) -> { return [ <| partition: $msg._partition, offset: $msg._offset, message: CAST($msg._data AS Utf8) |> ]; };
+
+CREATE TRANSFER `Transfer`
+FROM `/MyRoot/Topic_0` TO `/MyRoot/Table` USING $transformation_lambda
+WITH (
+  CONNECTION_STRING = 'grpc:///?database=',
+  BATCH_SIZE_BYTES = 8388608,
+  FLUSH_INTERVAL = Interval('PT60S')
+);)";
+        TestTransfer(scheme, expected);
+    }
+
+    Y_UNIT_TEST(TransferExportWithConnString) {
+        auto lambda = "PRAGMA OrderedColumns;$transformation_lambda = ($msg) -> { return [ <| partition: $msg._partition, offset: $msg._offset, message: CAST($msg._data AS Utf8) |> ]; };$__ydb_transfer_lambda = $transformation_lambda;";
+
+        TString scheme = Sprintf(R"(
+            Name: "Transfer"
+            Config {
+                SrcConnectionParams {
+                    Endpoint: "localhost:2135"
+                    Database: "/MyRoot"
+                }
+                TransferSpecific {
+                    Target {
+                        SrcPath: "/MyRoot/Topic_0"
+                        DstPath: "/MyRoot/Table"
+                        TransformLambda: "%s"
+                    }
+                }
+            }
+        )", lambda);
+        TString expected = R"(-- database: "/MyRoot"
+-- backup root: "/MyRoot"
+$transformation_lambda = ($msg) -> { return [ <| partition: $msg._partition, offset: $msg._offset, message: CAST($msg._data AS Utf8) |> ]; };
+
+CREATE TRANSFER `Transfer`
+FROM `/MyRoot/Topic_0` TO `/MyRoot/Table` USING $transformation_lambda
+WITH (
+  CONNECTION_STRING = 'grpc://localhost:2135/?database=/MyRoot',
+  BATCH_SIZE_BYTES = 8388608,
+  FLUSH_INTERVAL = Interval('PT60S')
+);)";
+        TestTransfer(scheme, expected);
+    }
+
+    Y_UNIT_TEST(TransferExportWithConsumer) {
+        auto lambda = "PRAGMA OrderedColumns;$transformation_lambda = ($msg) -> { return [ <| partition: $msg._partition, offset: $msg._offset, message: CAST($msg._data AS Utf8) |> ]; };$__ydb_transfer_lambda = $transformation_lambda;";
+
+        TString scheme = Sprintf(R"(
+            Name: "Transfer"
+            Config {
+                TransferSpecific {
+                    Target {
+                        SrcPath: "/MyRoot/Topic_0"
+                        DstPath: "/MyRoot/Table"
+                        TransformLambda: "%s"
+                        ConsumerName: "consumerName"
+                    }
+                }
+            }
+        )", lambda);
+        TString expected = R"(-- database: "/MyRoot"
+-- backup root: "/MyRoot"
+$transformation_lambda = ($msg) -> { return [ <| partition: $msg._partition, offset: $msg._offset, message: CAST($msg._data AS Utf8) |> ]; };
+
+CREATE TRANSFER `Transfer`
+FROM `/MyRoot/Topic_0` TO `/MyRoot/Table` USING $transformation_lambda
+WITH (
+  CONNECTION_STRING = 'grpc:///?database=',
+  CONSUMER = 'consumerName',
+  BATCH_SIZE_BYTES = 8388608,
+  FLUSH_INTERVAL = Interval('PT60S')
+);)";
+        TestTransfer(scheme, expected);
+    }
+
+    Y_UNIT_TEST(TopicExportWithAllFields) {
+        EnvOptions().EnablePermissionsExport(true).EnablePqBilling(true);
+        Env();
+        ui64 txId = 100;
+        TString topicProto = R"(
+            Name: "topic_full_test"
+            TotalGroupCount: 3
+            PartitionPerTablet: 3
+            PQTabletConfig {
+                RequireAuthRead: false
+                RequireAuthWrite: false
+                AbcId: 123
+                AbcSlug: "abc_slug"
+                FederationAccount: "federation_account"
+                EnableCompactification: false
+                TimestampType: "LogAppendTime"
+                PartitionConfig {
+                    LifetimeSeconds: 12
+                    StorageLimitBytes: 104857600
+                    WriteSpeedInBytesPerSecond: 1024
+                    BurstSize: 2048
+                    MaxSizeInPartition: 10
+                    SourceIdLifetimeSeconds: 14
+                    SourceIdMaxCounts: 10000000
+                }
+                Codecs {
+                    Ids: 0
+                    Ids: 1
+                    Ids: 2
+                }
+                MeteringMode: METERING_MODE_RESERVED_CAPACITY
+                PartitionStrategy {
+                    MinPartitionCount: 3
+                    MaxPartitionCount: 10
+                    ScaleThresholdSeconds: 400
+                    ScaleUpPartitionWriteSpeedThresholdPercent: 91
+                    ScaleDownPartitionWriteSpeedThresholdPercent: 31
+                    PartitionStrategyType: CAN_SPLIT
+                }
+                Consumers {
+                    Name: "consumer_1"
+                    Important: true
+                    Codec {
+                        Ids: 0
+                        Ids: 1
+                    }
+                }
+                Consumers {
+                    Name: "consumer_2"
+                    Important: false
+                    Codec {
+                        Ids: 1
+                        Ids: 2
+                    }
+                }
+            }
+        )";
+
+        TestCreatePQGroup(Runtime(), ++txId, "/MyRoot", topicProto);
+        Env().TestWaitNotification(Runtime(), txId);
+
+        auto schemeshardId = TTestTxConfig::SchemeShard;
+        TString exportRequest = Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/topic_full_test"
+                destination_prefix: "topic_export"
+              }
+            }
+        )", S3Port());
+
+        TestExport(Runtime(), schemeshardId, ++txId, "/MyRoot", exportRequest, "", "", Ydb::StatusIds::SUCCESS);
+        Env().TestWaitNotification(Runtime(), txId, schemeshardId);
+        TestGetExport(Runtime(), schemeshardId, txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+
+        auto topicPath = "/topic_export/create_topic.pb";
+        UNIT_ASSERT_C(HasS3File(topicPath), "Topic description file should exist");
+        auto content = GetS3FileContent(topicPath);
+
+        Ydb::Topic::CreateTopicRequest topicDescription;
+        UNIT_ASSERT_C(
+            google::protobuf::TextFormat::ParseFromString(content, &topicDescription),
+            "Failed to parse topic description from S3"
+        );
+
+        const auto& partSettings = topicDescription.partitioning_settings();
+        UNIT_ASSERT_VALUES_EQUAL(partSettings.min_active_partitions(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(partSettings.max_active_partitions(), 10);
+
+        const auto& autoPartSettings = partSettings.auto_partitioning_settings();
+        UNIT_ASSERT_VALUES_EQUAL(autoPartSettings.strategy(), Ydb::Topic::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_SCALE_UP);
+
+        const auto& writeSpeed = autoPartSettings.partition_write_speed();
+        UNIT_ASSERT_VALUES_EQUAL(writeSpeed.stabilization_window().seconds(), 400);
+        UNIT_ASSERT_VALUES_EQUAL(writeSpeed.up_utilization_percent(), 91);
+        UNIT_ASSERT_VALUES_EQUAL(writeSpeed.down_utilization_percent(), 31);
+
+        UNIT_ASSERT_VALUES_EQUAL(topicDescription.retention_period().seconds(), 12);
+
+        UNIT_ASSERT_VALUES_EQUAL(topicDescription.retention_storage_mb(), 100);
+
+        UNIT_ASSERT_VALUES_EQUAL(topicDescription.supported_codecs().codecs_size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(topicDescription.supported_codecs().codecs(0), 1); // CODEC_RAW
+        UNIT_ASSERT_VALUES_EQUAL(topicDescription.supported_codecs().codecs(1), 2); // CODEC_GZIP
+        UNIT_ASSERT_VALUES_EQUAL(topicDescription.supported_codecs().codecs(2), 3); // CODEC_LZOP
+
+        UNIT_ASSERT_VALUES_EQUAL(topicDescription.partition_write_speed_bytes_per_second(), 1024);
+
+        UNIT_ASSERT_VALUES_EQUAL(topicDescription.partition_write_burst_bytes(), 2048);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            static_cast<int>(topicDescription.metering_mode()),
+            static_cast<int>(Ydb::Topic::METERING_MODE_RESERVED_CAPACITY)
+        );
+
+        UNIT_ASSERT_VALUES_EQUAL(topicDescription.consumers_size(), 2);
+
+        const auto& consumer1 = topicDescription.consumers(0);
+        UNIT_ASSERT_VALUES_EQUAL(consumer1.name(), "consumer_1");
+        UNIT_ASSERT_VALUES_EQUAL(consumer1.important(), true);
+        UNIT_ASSERT_VALUES_EQUAL(consumer1.supported_codecs().codecs_size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(consumer1.supported_codecs().codecs(0), 1);
+        UNIT_ASSERT_VALUES_EQUAL(consumer1.supported_codecs().codecs(1), 2);
+
+        const auto& consumer2 = topicDescription.consumers(1);
+        UNIT_ASSERT_VALUES_EQUAL(consumer2.name(), "consumer_2");
+        UNIT_ASSERT_VALUES_EQUAL(consumer2.important(), false);
+        UNIT_ASSERT_VALUES_EQUAL(consumer2.supported_codecs().codecs_size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(consumer2.supported_codecs().codecs(0), 2);
+        UNIT_ASSERT_VALUES_EQUAL(consumer2.supported_codecs().codecs(1), 3);
+
+        const auto& attrs = topicDescription.attributes();
+        UNIT_ASSERT(attrs.size() > 0);
+
+        // RequireAuthRead: false -> _allow_unauthenticated_read: true
+        UNIT_ASSERT(attrs.contains("_allow_unauthenticated_read"));
+        UNIT_ASSERT_VALUES_EQUAL(attrs.at("_allow_unauthenticated_read"), "true");
+
+        // RequireAuthWrite: false -> _allow_unauthenticated_write: true
+        UNIT_ASSERT(attrs.contains("_allow_unauthenticated_write"));
+        UNIT_ASSERT_VALUES_EQUAL(attrs.at("_allow_unauthenticated_write"), "true");
+
+        UNIT_ASSERT(attrs.contains("_abc_id"));
+        UNIT_ASSERT_VALUES_EQUAL(attrs.at("_abc_id"), "123");
+
+        UNIT_ASSERT(attrs.contains("_abc_slug"));
+        UNIT_ASSERT_VALUES_EQUAL(attrs.at("_abc_slug"), "abc_slug");
+
+        UNIT_ASSERT(attrs.contains("_federation_account"));
+        UNIT_ASSERT_VALUES_EQUAL(attrs.at("_federation_account"), "federation_account");
+
+        UNIT_ASSERT(attrs.contains("_timestamp_type"));
+        UNIT_ASSERT_VALUES_EQUAL(attrs.at("_timestamp_type"), "LogAppendTime");
+
+        UNIT_ASSERT(attrs.contains("_partitions_per_tablet"));
+        UNIT_ASSERT_VALUES_EQUAL(attrs.at("_partitions_per_tablet"), "3");
+
+        UNIT_ASSERT(attrs.contains("_max_partition_storage_size"));
+        UNIT_ASSERT_VALUES_EQUAL(attrs.at("_max_partition_storage_size"), "10");
+
+        // SourceIdLifetimeSeconds: 14 -> message_group_seqno_retention_period_ms: 14000
+        UNIT_ASSERT(attrs.contains("_message_group_seqno_retention_period_ms"));
+        UNIT_ASSERT_VALUES_EQUAL(attrs.at("_message_group_seqno_retention_period_ms"), "14000");
+
+        UNIT_ASSERT(attrs.contains("_max_partition_message_groups_seqno_stored"));
+        UNIT_ASSERT_VALUES_EQUAL(attrs.at("_max_partition_message_groups_seqno_stored"), "10000000");
+
+        auto permissionsPath = "/topic_export/permissions.pb";
+        UNIT_ASSERT_C(HasS3File(permissionsPath), "Permissions file should exist");
+    }
+
+    Y_UNIT_TEST(ExternalDataSourceAuthNone) {
+        TString scheme = R"(
+            Name: "DataSource"
+            SourceType: "ObjectStorage"
+            Location: "https://s3.cloud.net/bucket"
+            Auth {
+                None {}
+            }
+        )";
+
+        TVector<TString> expectedProperties = {
+            "SOURCE_TYPE = 'ObjectStorage'",
+            "LOCATION = 'https://s3.cloud.net/bucket'",
+            "AUTH_METHOD = 'NONE'",
+        };
+
+        TestExternalDataSource(scheme, expectedProperties);
+    }
+
+    Y_UNIT_TEST(ExternalDataSourceAuthBasic) {
+        TString scheme = R"(
+            Name: "DataSource"
+            SourceType: "ClickHouse"
+            Location: "https://clickhousedb.net"
+            Auth {
+                Basic {
+                    Login: "my_login",
+                    PasswordSecretName: "password_secret"
+                }
+            }
+            Properties {
+                Properties {
+                    key: "database_name",
+                    value: "clickhouse"
+                }
+                Properties {
+                    key: "protocol",
+                    value: "NATIVE"
+                }
+                Properties {
+                    key: "use_tls",
+                    value: "TRUE"
+                }
+            }
+        )";
+
+        TVector<TString> expectedProperties = {
+            "SOURCE_TYPE = 'ClickHouse'",
+            "LOCATION = 'https://clickhousedb.net'",
+            "PASSWORD_SECRET_NAME = 'password_secret'",
+            "AUTH_METHOD = 'BASIC'",
+            "DATABASE_NAME = 'clickhouse'",
+            "LOGIN = 'my_login'",
+            "PROTOCOL = 'NATIVE'",
+            "USE_TLS = 'TRUE'",
+        };
+
+        TestExternalDataSource(scheme, expectedProperties);
+    }
+
+    Y_UNIT_TEST(ExternalDataSourceAuthAWS) {
+        TString scheme = R"(
+            Name: "DataSource"
+            SourceType: "ObjectStorage"
+            Location: "https://s3.cloud.net/bucket"
+            Auth {
+                Aws {
+                    AwsAccessKeyIdSecretName: "id_secret",
+                    AwsSecretAccessKeySecretName: "access_secret"
+                    AwsRegion: "ru-central-1"
+                }
+            }
+        )";
+
+        TVector<TString> expectedProperties = {
+            "SOURCE_TYPE = 'ObjectStorage'",
+            "LOCATION = 'https://s3.cloud.net/bucket'",
+            "AUTH_METHOD = 'AWS'",
+            "AWS_ACCESS_KEY_ID_SECRET_NAME = 'id_secret'",
+            "AWS_SECRET_ACCESS_KEY_SECRET_NAME = 'access_secret'",
+            "AWS_REGION = 'ru-central-1'",
+        };
+
+        TestExternalDataSource(scheme, expectedProperties);
+    }
+
+    Y_UNIT_TEST(ExternalDataSourceAuthServiceAccount) {
+        TString scheme = R"(
+            Name: "DataSource"
+            SourceType: "ObjectStorage"
+            Location: "https://s3.cloud.net/bucket"
+            Auth {
+                ServiceAccount {
+                    Id: "id",
+                    SecretName: "service_secret"
+                }
+            }
+        )";
+
+        TVector<TString> expectedProperties = {
+            "SOURCE_TYPE = 'ObjectStorage'",
+            "LOCATION = 'https://s3.cloud.net/bucket'",
+            "AUTH_METHOD = 'SERVICE_ACCOUNT'",
+            "SERVICE_ACCOUNT_ID = 'id'",
+            "SERVICE_ACCOUNT_SECRET_NAME = 'service_secret'",
+        };
+
+        TestExternalDataSource(scheme, expectedProperties);
+    }
+
+    Y_UNIT_TEST(ExternalDataSourceAuthMdbBasic) {
+        TString scheme = R"(
+            Name: "DataSource"
+            SourceType: "PostgreSQL"
+            Location: "https://postgresdb.net"
+            Auth {
+                MdbBasic {
+                    ServiceAccountId: "id",
+                    ServiceAccountSecretName: "service_secret",
+                    Login: "login",
+                    PasswordSecretName: "pwd_secret"
+                }
+            }
+            Properties {
+                Properties {
+                    key: "mdb_cluster_id",
+                    value: "id"
+                }
+                Properties {
+                    key: "database_name",
+                    value: "postgres"
+                }
+            }
+        )";
+
+        TVector<TString> expectedProperties = {
+            "SOURCE_TYPE = 'PostgreSQL'",
+            "LOCATION = 'https://postgresdb.net'",
+            "AUTH_METHOD = 'MDB_BASIC'",
+            "SERVICE_ACCOUNT_ID = 'id'",
+            "SERVICE_ACCOUNT_SECRET_NAME = 'service_secret'",
+            "LOGIN = 'login'",
+            "PASSWORD_SECRET_NAME = 'pwd_secret'",
+            "DATABASE_NAME = 'postgres'",
+            "MDB_CLUSTER_ID = 'id'",
+        };
+
+        TestExternalDataSource(scheme, expectedProperties);
+    }
+
+    Y_UNIT_TEST(ExternalTable) {
+        TString scheme = R"(
+            Name: "ExternalTable"
+            SourceType: "General"
+            DataSourcePath: "/MyRoot/DataSource"
+            Location: "bucket"
+            Columns { Name: "key" Type: "Uint64" NotNull: true }
+            Columns { Name: "value1" Type: "Uint64" }
+            Columns { Name: "value2" Type: "Utf8" NotNull: true }
+        )";
+
+        TString expectedStartsWith = R"(-- database: "/MyRoot"
+-- backup root: "/MyRoot"
+CREATE EXTERNAL TABLE IF NOT EXISTS `ExternalTable` (
+      key Uint64 NOT NULL,
+    value1 Uint64?,
+    value2 Utf8 NOT NULL
+) WITH ()";
+
+        TVector<TString> expectedProperties = {
+            "DATA_SOURCE = '/MyRoot/DataSource'",
+            "LOCATION = 'bucket'"
+        };
+
+        TestExternalTable(scheme, expectedStartsWith, expectedProperties);
+    }
+
+    Y_UNIT_TEST(DisableIcb) {
+        TestIcb();
+    }
+
+>>>>>>> 7bfef2a6632 (Topic Export With All Fields Test (#31628))
 }

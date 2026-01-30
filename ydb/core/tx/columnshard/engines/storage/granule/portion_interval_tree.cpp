@@ -62,7 +62,7 @@ std::partial_ordering TPositionView::Compare(const TPositionView& rhs) const {
             case SimpleRow:
                 return std::get<SimpleRow>(pos).GetSchema();
             default:
-                AFL_VERIFY(false)("Position.index()", pos.index());
+                AFL_VERIFY(false)("pos.index()", pos.index());
                 break;
         }
     };

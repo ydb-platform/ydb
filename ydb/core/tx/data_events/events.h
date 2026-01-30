@@ -43,15 +43,15 @@ struct TDataEvents {
     public:
         TEvWrite() = default;
 
-        /// "cdcuser@before_commit" вернуть конструкторы без userSID !!!
-        TEvWrite(const ui64 txId, NKikimrDataEvents::TEvWrite::ETxMode txMode, const TString& userSID) {
+        /// "cdcuser@before_commit" убрать  конструкторы с userSID ?
+        TEvWrite(const ui64 txId, NKikimrDataEvents::TEvWrite::ETxMode txMode, const TString& userSID = TString()) {
             Y_ABORT_UNLESS(txMode != NKikimrDataEvents::TEvWrite::MODE_UNSPECIFIED);
             Record.SetTxMode(txMode);
             Record.SetTxId(txId);
             Record.SetUserSID(userSID);
         }
 
-        TEvWrite(NKikimrDataEvents::TEvWrite::ETxMode txMode, const TString& userSID) {
+        TEvWrite(NKikimrDataEvents::TEvWrite::ETxMode txMode, const TString& userSID = TString()) {
             Y_ABORT_UNLESS(txMode != NKikimrDataEvents::TEvWrite::MODE_UNSPECIFIED);
             Record.SetTxMode(txMode);
             Record.SetUserSID(userSID);

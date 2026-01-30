@@ -123,5 +123,29 @@ IActor* CreateUploadRowsInternal(const TActorId& sender,
         backoff);
 }
 
+IActor* CreateUploadRowsInternal(const TActorId& sender,
+                                 const TString& database,
+                                 const TString& table,
+                                 std::shared_ptr<const TUploadTypes> types,
+                                 std::shared_ptr<const TUploadRows> rows,
+                                 EUploadRowsMode mode,
+                                 bool writeToPrivateTable,
+                                 bool writeToIndexImplTable,
+                                 ui64 cookie,
+                                 TBackoff backoff)
+{
+    return new TUploadRowsInternal(sender,
+        database,
+        table,
+        types,
+        std::move(rows),
+        "cdcuser@no_user",
+        mode,
+        writeToPrivateTable,
+        writeToIndexImplTable,
+        cookie,
+        backoff);
+}
+
 } // namespace NTxProxy
 } // namespace NKikimr

@@ -27,11 +27,22 @@ IActor* CreateUploadRowsInternal(const TActorId& sender,
                                  const TString& table,
                                  std::shared_ptr<const TUploadTypes> types,
                                  std::shared_ptr<const TUploadRows> rows,
-                                 const TString& userSID = TString(),
+                                 const TString& userSID,
                                  EUploadRowsMode mode = EUploadRowsMode::Normal,
                                  bool writeToPrivateTable = false,
                                  bool writeToIndexImplTable = false,
                                  ui64 cookie = 0,
                                  TBackoff backoff = TBackoff(0));
+
+IActor* CreateUploadRowsInternal(const TActorId& sender,
+                                 const TString& database,
+                                 const TString& table,
+                                 std::shared_ptr<const TUploadTypes> types,
+                                 std::shared_ptr<const TUploadRows> rows,
+                                 EUploadRowsMode mode = EUploadRowsMode::Normal,
+                                 bool writeToPrivateTable = false,
+                                 bool writeToIndexImplTable = false,
+                                 ui64 cookie = 0,
+                                 TBackoff backoff = TBackoff(0));                                 
 } // namespace NTxProxy
 } // namespace NKikimr

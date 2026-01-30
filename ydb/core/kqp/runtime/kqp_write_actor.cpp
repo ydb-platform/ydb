@@ -1605,6 +1605,8 @@ public:
     void Write(IDataBatchPtr data) {
         AFL_ENSURE(!Closed);
         AFL_ENSURE(!IsError());
+
+        AFL_ENSURE(BufferedBatches.empty()); // At current time fwd<->buffer inflight = 1
         if (!data->IsEmpty()) {
             Memory += data->GetMemory();
             BufferedBatches.push_back(std::move(data));
@@ -4857,6 +4859,7 @@ private:
         }
 
         void PushDelayedAck(TAckMessage message) {
+            AFL_ENSURE(Acks.empty()); // At current time fwd<->buffer inflight = 1
             Acks.push_back(std::move(message));
         }
 

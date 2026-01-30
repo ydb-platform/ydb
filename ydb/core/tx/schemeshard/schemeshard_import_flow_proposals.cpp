@@ -29,10 +29,10 @@ static bool FillDefaultValues(const NKikimr::NSchemeShard::TImportInfo::TItem& i
 
                 break;
             }
-            case Ydb::Table::ColumnMeta::kFromLiteral: {
+            case Ydb::Table::ColumnMeta::kFromLiteral:
                 break;
-            }
-            default: break;
+            default:
+                break;
         }
     }
     return true;

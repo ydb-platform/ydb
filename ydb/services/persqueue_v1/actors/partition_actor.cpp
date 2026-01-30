@@ -874,7 +874,10 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
 
     AFL_ENSURE(!WaitForData);
 
+    auto maxOffset = 0ull;
     for (ui32 i = 0; i < res.ResultSize(); ++i) {
+        AFL_ENSURE(res.GetResult(i).GetOffset() >= maxOffset);
+        maxOffset = Max<ui64>(maxOffset, res.GetResult(i).GetOffset());
         const auto& r = res.GetResult(i);
         PartitionInFlightMemoryController.Add(r.GetOffset(), r.GetTotalSize());
     }

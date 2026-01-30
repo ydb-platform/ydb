@@ -34,11 +34,8 @@ bool TInFlightMemoryController::Add(ui64 Offset, ui64 Size) {
 
 bool TInFlightMemoryController::Remove(ui64 Offset) {
     if (MaxAllowedSize == 0) {
-        // means that there are no limits were set
         return true;
     }
-
-    AFL_ENSURE(!Layout.empty() && Offset >= Layout.front());
 
     auto it = std::upper_bound(Layout.begin(), Layout.end(), Offset);
     auto toRemove = it - Layout.begin();

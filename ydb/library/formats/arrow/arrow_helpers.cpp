@@ -401,6 +401,36 @@ bool ScalarLess(const arrow::Scalar& x, const arrow::Scalar& y) {
     return ScalarCompare(x, y) < 0;
 }
 
+bool ScalarGreater(const std::shared_ptr<arrow::Scalar>& x, const std::shared_ptr<arrow::Scalar>& y) {
+    Y_ABORT_UNLESS(x);
+    Y_ABORT_UNLESS(y);
+    return ScalarGreater(*x, *y);
+}
+
+bool ScalarGreater(const arrow::Scalar& x, const arrow::Scalar& y) {
+    return ScalarCompare(x, y) > 0;
+}
+
+bool ScalarLessOrEqual(const std::shared_ptr<arrow::Scalar>& x, const std::shared_ptr<arrow::Scalar>& y) {
+    Y_ABORT_UNLESS(x);
+    Y_ABORT_UNLESS(y);
+    return ScalarLessOrEqual(*x, *y);
+}
+
+bool ScalarLessOrEqual(const arrow::Scalar& x, const arrow::Scalar& y) {
+    return ScalarCompare(x, y) <= 0;
+}
+
+bool ScalarGreaterOrEqual(const std::shared_ptr<arrow::Scalar>& x, const std::shared_ptr<arrow::Scalar>& y) {
+    Y_ABORT_UNLESS(x);
+    Y_ABORT_UNLESS(y);
+    return ScalarGreaterOrEqual(*x, *y);
+}
+
+bool ScalarGreaterOrEqual(const arrow::Scalar& x, const arrow::Scalar& y) {
+    return ScalarCompare(x, y) >= 0;
+}
+
 bool ColumnEqualsScalar(const std::shared_ptr<arrow::Array>& c, const ui32 position, const std::shared_ptr<arrow::Scalar>& s) {
     AFL_VERIFY(c);
     if (!s) {

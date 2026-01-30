@@ -97,6 +97,12 @@ int ScalarCompareNullable(const std::shared_ptr<arrow::Scalar>& x, const std::sh
 bool ColumnEqualsScalar(const std::shared_ptr<arrow::Array>& c, const ui32 position, const std::shared_ptr<arrow::Scalar>& s);
 bool ScalarLess(const std::shared_ptr<arrow::Scalar>& x, const std::shared_ptr<arrow::Scalar>& y);
 bool ScalarLess(const arrow::Scalar& x, const arrow::Scalar& y);
+bool ScalarGreater(const std::shared_ptr<arrow::Scalar>& x, const std::shared_ptr<arrow::Scalar>& y);
+bool ScalarGreater(const arrow::Scalar& x, const arrow::Scalar& y);
+bool ScalarLessOrEqual(const std::shared_ptr<arrow::Scalar>& x, const std::shared_ptr<arrow::Scalar>& y);
+bool ScalarLessOrEqual(const arrow::Scalar& x, const arrow::Scalar& y);
+bool ScalarGreaterOrEqual(const std::shared_ptr<arrow::Scalar>& x, const std::shared_ptr<arrow::Scalar>& y);
+bool ScalarGreaterOrEqual(const arrow::Scalar& x, const arrow::Scalar& y);
 
 bool HasNulls(const std::shared_ptr<arrow::Array>& column);
 

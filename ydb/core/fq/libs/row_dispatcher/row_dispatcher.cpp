@@ -223,23 +223,36 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
         }
     };
 
-     struct TNodesTracker{
-         class TRetryState {
-            public:
-                TDuration GetNextDelay() {
-                    constexpr TDuration MaxDelay = TDuration::Seconds(10);
-                    constexpr TDuration MinDelay = TDuration::MilliSeconds(100); // from second retry
-                    TDuration ret = Delay; // The first delay is zero
-                    Delay = ClampVal(Delay * 2, MinDelay, MaxDelay);
-                    return ret ? RandomizeDelay(ret) : ret;
-                }
-            private:
-                static TDuration RandomizeDelay(TDuration baseDelay) {
-                    const TDuration::TValue half = baseDelay.GetValue() / 2;
-                    return TDuration::FromValue(half + RandomNumber<TDuration::TValue>(half));
-                }
-            private:
-                TDuration Delay; // The first time retry will be done instantly.
+     struct TNodesTracker {
+        explicit TNodesTracker(TDuration timeout)
+            : Timeout(timeout)
+        {}
+
+        class TRetryState {
+        public:
+            explicit TRetryState(TDuration timeout)
+                : Timeout(timeout)
+            {}
+            TDuration GetNextDelay() {
+                constexpr TDuration MaxDelay = TDuration::Seconds(10);
+                constexpr TDuration MinDelay = TDuration::MilliSeconds(100); // from second retry
+                TDuration ret = Delay; // The first delay is zero
+                Delay = ClampVal(Delay * 2, MinDelay, MaxDelay);
+                return ret ? RandomizeDelay(ret) : ret;
+            }
+
+            bool IsTimeout() const {
+                return TInstant::Now() - DisconnectedTime > Timeout;
+            }
+        private:
+            static TDuration RandomizeDelay(TDuration baseDelay) {
+                const TDuration::TValue half = baseDelay.GetValue() / 2;
+                return TDuration::FromValue(half + RandomNumber<TDuration::TValue>(half));
+            }
+        private:
+            TDuration Delay; // The first time retry will be done instantly.
+            TInstant DisconnectedTime = TInstant::Now();
+            TDuration Timeout;
         };
 
         struct TCounters {
@@ -292,20 +305,26 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
             state.Counters.Connected++;
         }
 
-        void HandleNodeDisconnected(ui32 nodeId) {
+        bool HandleNodeDisconnected(ui32 nodeId) {
             auto& state = Nodes[nodeId];
             state.Connected = false;
             state.Counters.Disconnected++;
             if (state.RetryScheduled) {
-                return;
+                return false;
             }
             state.RetryScheduled = true;
             if (!state.RetryState) {
-                state.RetryState.ConstructInPlace();
+                state.RetryState.ConstructInPlace(Timeout);
             }
+
+            if (state.RetryState->IsTimeout()) {
+                return true;
+            }
+
             auto ev = MakeHolder<TEvPrivate::TEvTryConnect>(nodeId);
             auto delay = state.RetryState->GetNextDelay();
             NActors::TActivationContext::Schedule(delay, new NActors::IEventHandle(SelfId, SelfId, ev.Release()));
+            return false;
         }
 
         void PrintInternalState(TStringStream& stream) const {
@@ -320,6 +339,7 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
         TMap<ui32, TNodeState> Nodes;
         NActors::TActorId SelfId;
         TString LogPrefix = "RowDispatcher: ";
+        TDuration Timeout;
     };
 
     struct TAggregatedStats{
@@ -533,6 +553,7 @@ TRowDispatcher::TRowDispatcher(
     , PqGateway(pqGateway)
     , Driver(driver)
     , Monitoring(monitoring)
+    , NodesTracker(Config.GetCoordinator().GetRebalancingTimeout() ? Config.GetCoordinator().GetRebalancingTimeout() : TDuration::Seconds(DefaultRebalancingTimeoutSec))
     , NodesManagerId(nodesManagerId)
     , EnableStreamingQueriesCounters(enableStreamingQueriesCounters)
 {
@@ -596,9 +617,22 @@ void TRowDispatcher::HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::TP
     LWPROBE(NodeDisconnected, ev->Sender.ToString(), ev->Get()->NodeId);
     LOG_ROW_DISPATCHER_DEBUG("TEvNodeDisconnected, node id " << ev->Get()->NodeId);
     Metrics.NodesReconnect->Inc();
-    NodesTracker.HandleNodeDisconnected(ev->Get()->NodeId);
+    bool isTimeout = NodesTracker.HandleNodeDisconnected(ev->Get()->NodeId);
     for (auto& [actorId, consumer] : Consumers) {
         consumer->EventsQueue.HandleNodeDisconnected(ev->Get()->NodeId);
+    }
+    TVector<TActorId> toDelete;
+    if (isTimeout) {
+        LOG_ROW_DISPATCHER_DEBUG("Node disconnected, node id " << ev->Get()->NodeId << " is timeout");
+        for (auto& [actorId, consumer] : Consumers) {
+            if (actorId.NodeId() != ev->Get()->NodeId) {
+                continue;
+            }
+            toDelete.push_back(actorId);
+        }   
+    }
+    for (auto& actorId : toDelete) {
+        DeleteConsumer(actorId);
     }
 }
 

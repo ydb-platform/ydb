@@ -77,7 +77,9 @@ namespace NKikimr::NDDisk {
                     }
                     break;
                 case TLogSignature::SignaturePersistentBufferChunkMap:
-                    Y_ABORT("unexpected log signature SignaturePersistentBufferChunkMap")
+                    if (record.Lsn > PersistentBufferChunkMapSnapshotLsn) {
+                        Y_ABORT("unexpected log signature SignaturePersistentBufferChunkMap");
+                    }
                     break;
                 default:
                     Y_ABORT("unexpected log signature");

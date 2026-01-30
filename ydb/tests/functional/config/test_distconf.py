@@ -320,6 +320,32 @@ class TestKiKiMRDistConfBasic(DistConfKiKiMRTest):
         logger.debug(f"replace_config_response: {replace_config_response}")
         assert_that(replace_config_response.operation.status == StatusIds.INTERNAL_ERROR)
 
+<<<<<<< HEAD
+=======
+    def test_invalid_change_static_pdisk(self):
+        fetched_config = fetch_config(self.cluster.config_client)
+        dumped_fetched_config = yaml.safe_load(fetched_config)
+
+        # replace config with invalid static pdisk path
+        dumped_fetched_config["config"]["host_configs"][0]["drive"][0] = {
+            "path": "fake_pdisk.dat",
+            "type": "ROT"
+        }
+
+        dumped_fetched_config['metadata']['version'] = 1
+        replace_config_response = self.cluster.config_client.replace_config(yaml.dump(dumped_fetched_config))
+        logger.debug(f"replace_config_response: {replace_config_response}")
+        assert_that(replace_config_response.operation.status == StatusIds.INTERNAL_ERROR)
+        assert_that("failed to remove PDisk# 1:1 as it has active VSlots" in replace_config_response.operation.issues[0].message)
+
+    def test_v1_blocked_when_v2_is_enabled(self):
+        fetched_config = fetch_config(self.cluster.config_client)
+        replace_config_response = self.dynconfig_client.replace_config(fetched_config)
+        assert_that(replace_config_response.operation.status == StatusIds.BAD_REQUEST)
+        assert_that(replace_config_response.operation.issues[0].message == "Dynamic Config V1 is disabled. Use V2 API.")
+        logger.debug(replace_config_response.operation)
+
+>>>>>>> ad2c4aa3f7b (Fix rollback transaction to check properly (#32624))
 
 class TestDistConfBootstrapValidation:
 

@@ -37,7 +37,6 @@ public:
     TString CreateYdbOidcCookie(const TString& secret) const;
 
 private:
-    static TString GenerateState();
     static bool DetectAjaxRequest(const NHttp::THttpIncomingRequestPtr& request);
     static TStringBuf GetRequestedUrl(const NHttp::THttpIncomingRequestPtr& request, bool isAjaxRequest);
 

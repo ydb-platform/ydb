@@ -1,5 +1,6 @@
 #include "mvp.h"
 #include "oidc_client.h"
+#include "openid_connect.h"
 
 #include <ydb/library/actors/core/executor_pool_basic.h>
 #include <ydb/library/actors/core/scheduler_basic.h>
@@ -399,6 +400,8 @@ THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup(int argc, char**
             OpenIdConnectSettings.ClientSecret = secret.GetSecret();
         }
     }
+
+    OpenIdConnectSettings.StateSigningKey = GenerateRandomBase64();
 
     if (!genericOpts.CaCertificateFile.empty()) {
         TString caCertificate = TUnbufferedFileInput(genericOpts.CaCertificateFile).ReadAll();

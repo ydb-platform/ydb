@@ -11,7 +11,8 @@ generic:
     ssl_cert_file: path/to/ssl.crt
 
   auth:
-    token_file: path/to/tokenator_config # old way
+    # only one token_file or federated_creds should be provided
+    token_file: path/to/tokenator_config
     federated_creds:
       token_service_endpoint: "grpcs://tokens.net:443"
       k8s_token_path: "path/to/federated_token"

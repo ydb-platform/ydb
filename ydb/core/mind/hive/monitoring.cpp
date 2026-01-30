@@ -14,6 +14,9 @@
 namespace NKikimr {
 namespace NHive {
 
+static constexpr ui64 MAX_REASSIGNS_WITHOUT_CONFIRMATION = 1000;
+static constexpr i64 REASSIGN_CONFIRMATION_ERROR_MARGIN = 10;
+
 TLoggedMonTransaction::TLoggedMonTransaction(const NMon::TEvRemoteHttpInfo::TPtr& ev, THive* self) {
     Index = ++self->OperationsLogIndex;
 
@@ -1936,6 +1939,7 @@ public:
         }
         out << "];";
         out << "var lastReassign = '" << Self->LastReassignStatus << "';";
+        out << "var maxReassigns = " << MAX_REASSIGNS_WITHOUT_CONFIRMATION << ";";
         out << R"___(
 
 $('.container')
@@ -1996,7 +2000,7 @@ function queryTablets() {
             $('#tablets_found_group').parent().css({visibility: 'visible'});
             $('#tablets_found').text(num_tablets_found);
             $('#button_reassign').removeClass('disabled');
-            if (num_tablets_found > 1000) {
+            if (num_tablets_found > maxReassigns) {
                 $('#confirm_tablets_group').css({visibility: 'visible'});
             }
         },
@@ -3124,7 +3128,7 @@ public:
     bool Async = false;
     ui64 MaxInFlight = 1;
     ui32 TabletPercent = 100;
-    i64 NumTablets = 1000;
+    i64 NumTablets = MAX_REASSIGNS_WITHOUT_CONFIRMATION;
 
     TTxMonEvent_ReassignTablet(const TActorId& source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf* hive, const TCgiParameters& params)
         : TBase(hive)
@@ -3222,13 +3226,15 @@ public:
         }
 
         TStringBuilder description;
+        if (TabletPercent != 100) {
+            description << TabletPercent << " of ";
+        }
         TabletFilter.ToString(description);
         if (StoragePool) {
             description << StoragePool << ", ";
         }
         description << (GroupId ? ToString(GroupId) : "all groups");
         if (TabletPercent != 100) {
-            description << ", " << TabletPercent << "%";
             std::sort(operations.begin(), operations.end(), [this](const auto& lhs, const auto& rhs) -> bool {
                 return GetMaxTimestamp(lhs) < GetMaxTimestamp(rhs);
             });
@@ -3236,7 +3242,7 @@ public:
             operations.erase(it, operations.end());
         }
 
-        if (operations.size() > 1000 && std::abs(static_cast<i64>(operations.size()) - NumTablets) > 10) {
+        if (operations.size() > MAX_REASSIGNS_WITHOUT_CONFIRMATION && std::abs(static_cast<i64>(operations.size()) - NumTablets) > REASSIGN_CONFIRMATION_ERROR_MARGIN) {
             Error = "must confirm number of tablets";
             return true;
         }

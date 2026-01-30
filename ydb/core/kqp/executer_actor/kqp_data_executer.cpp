@@ -386,6 +386,8 @@ public:
                 hFunc(TEvDescribeSecretsResponse, HandleResolve);
                 hFunc(TEvKqp::TEvAbortExecution, HandleAbortExecution);
                 hFunc(TEvKqpBuffer::TEvError, Handle);
+
+                IgnoreFunc(TEvKqpExecuter::TEvStreamDataAck);  // stale ack from previous executer
                 default:
                     UnexpectedEvent("WaitResolveState", ev->GetTypeRewrite());
             }

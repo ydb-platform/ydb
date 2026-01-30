@@ -232,9 +232,6 @@ message TKqpTransaction {
 
     // When true datashard will exchange a generic TReadSetData with other shards
     optional bool UseGenericReadSets = 7 [default = false];
-
-    // Globally unique query trace ID for TLI log linkage
-    optional uint64 QueryTraceId = 8;
 }
 
 message TEvKqpInputActorResultInfo {

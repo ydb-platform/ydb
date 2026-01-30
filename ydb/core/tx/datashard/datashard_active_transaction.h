@@ -268,13 +268,6 @@ public:
         return Tx.GetKqpTransaction().GetRuntimeSettings().GetStatsMode();
     }
 
-    ui64 GetQueryTraceId() const {
-        if (IsKqpTx() && Tx.GetKqpTransaction().HasQueryTraceId()) {
-            return Tx.GetKqpTransaction().GetQueryTraceId();
-        }
-        return 0;
-    }
-
     NMiniKQL::TKqpDatashardComputeContext& GetKqpComputeCtx() { Y_ENSURE(IsKqpDataTx()); return EngineBay.GetKqpComputeCtx(); }
 
     bool HasStreamResponse() const { return Tx.GetStreamResponse(); }
@@ -585,13 +578,6 @@ public:
         if (DataTx)
             return DataTx->HasLockedWrites();
         return false;
-    }
-
-    ui64 QueryTraceId() const override
-    {
-        if (DataTx)
-            return DataTx->GetQueryTraceId();
-        return 0;
     }
 
     void FillState(NKikimrTxDataShard::TEvGetOperationResponse &resp) const;

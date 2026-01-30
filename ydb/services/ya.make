@@ -23,6 +23,7 @@ RECURSE(
     rate_limiter
     replication
     tablet
+    test_shard
     view
     ydb
     ymq

@@ -2598,6 +2598,7 @@ TReadSessionEventsQueue<UseMigrationProtocol>::GetEvent(bool block, size_t maxBy
             if (TParent::HasEventsImpl()) {
                 eventInfo = GetEventImpl(maxByteSize, accumulator);
             }
+
         } while (block && !eventInfo);
     }
 

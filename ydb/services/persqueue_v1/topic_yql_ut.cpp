@@ -293,6 +293,45 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
         }
     }
 
+    Y_UNIT_TEST(AlterSharedConsumer) {
+        NKikimrConfig::TFeatureFlags ff;
+        ff.SetEnableTopicSplitMerge(true);
+        ff.SetEnableTopicMessageLevelParallelism(true);
+        auto settings = NKikimr::NPersQueueTests::PQSettings();
+        settings.SetFeatureFlags(ff);
+
+        NPersQueue::TTestServer server(settings);
+
+        {
+            const char *query = R"(
+                CREATE TOPIC `/Root/PQ/rt3.dc1--topic_with_shared_consumer`
+                    (CONSUMER c1 WITH (
+                          type = 'shared'
+                    ))
+            )";
+
+            server.AnnoyingClient->RunYqlSchemeQuery(query);
+        }
+
+        {
+            auto pqGroup = server.AnnoyingClient->Ls("/Root/PQ/rt3.dc1--topic_with_shared_consumer")->Record.GetPathDescription().GetPersQueueGroup();
+            const auto& describe = pqGroup.GetPQTabletConfig();
+
+            Cerr <<"=== PATH DESCRIPTION: \n" << pqGroup.DebugString();
+            UNIT_ASSERT_VALUES_EQUAL(describe.GetConsumers().size(), 1);
+            auto c = describe.GetConsumers(0);
+            UNIT_ASSERT_VALUES_EQUAL(c.GetName(), "c1");
+            UNIT_ASSERT_VALUES_EQUAL(::NKikimrPQ::TPQTabletConfig::EConsumerType_Name(c.GetType()),
+                ::NKikimrPQ::TPQTabletConfig::EConsumerType_Name(::NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP));
+            UNIT_ASSERT_VALUES_EQUAL(c.GetKeepMessageOrder(), false);
+            UNIT_ASSERT_VALUES_EQUAL(c.GetDefaultProcessingTimeoutSeconds(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(c.GetMaxProcessingAttempts(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(::NKikimrPQ::TPQTabletConfig::EDeadLetterPolicy_Name(c.GetDeadLetterPolicy()),
+                ::NKikimrPQ::TPQTabletConfig::EDeadLetterPolicy_Name( ::NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE));
+            UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterQueue(), "dead_letter_queue_97");
+        }
+    }
+
     Y_UNIT_TEST(BadRequests) {
         NPersQueue::TTestServer server;
         {

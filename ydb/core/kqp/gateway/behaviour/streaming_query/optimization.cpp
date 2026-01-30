@@ -113,11 +113,6 @@ bool CheckStreamingQueryAst(TExprNode::TPtr ast, TExprContext& ctx) {
         return false;
     }
 
-    if (res.Writes > 1) {
-        ctx.AddError(NYql::TIssue(ctx.GetPosition(ast->Pos()), "Streaming query with more than one write is not supported now"));
-        return false;
-    }
-
     return true;
 }
 

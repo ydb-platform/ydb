@@ -4396,6 +4396,39 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         WriteTopicMessage(inputTopicName, TStringBuilder() << "data" << ++dataIdx);
         ReadTopicMessage(outputTopicName, TStringBuilder() << "data" << dataIdx, writeDisposition);
     }
+
+    Y_UNIT_TEST_F(StreamingQueryWithMultipleWrites, TStreamingWithSchemaSecretsTestFixture) {
+        constexpr char inputTopic[] = "createStreamingQueryWithMultipleWritesInputTopic";
+        constexpr char outputTopic1[] = "createStreamingQueryWithMultipleWritesOutputTopic1";
+        constexpr char outputTopic2[] = "createStreamingQueryWithMultipleWritesOutputTopic2";
+        CreateTopic(inputTopic);
+        CreateTopic(outputTopic1);
+        CreateTopic(outputTopic2);
+
+        constexpr char pqSource[] = "sourceName";
+        CreatePqSource(pqSource);
+
+        constexpr char queryName[] = "streamingQuery";
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                $rows = SELECT * FROM `{pq_source}`.`{input_topic}`;
+                INSERT INTO `{pq_source}`.`{output_topic1}` SELECT Data || "-A" FROM $rows;
+                INSERT INTO `{pq_source}`.`{output_topic2}` SELECT Data || "-B" FROM $rows;
+            END DO;)",
+            "query_name"_a = queryName,
+            "pq_source"_a = pqSource,
+            "input_topic"_a = inputTopic,
+            "output_topic1"_a = outputTopic1,
+            "output_topic2"_a = outputTopic2
+        ));
+        CheckScriptExecutionsCount(1, 1);
+
+        Sleep(TDuration::Seconds(1));
+        WriteTopicMessage(inputTopic, "test");
+        ReadTopicMessage(outputTopic1, "test-A");
+        ReadTopicMessage(outputTopic2, "test-B");
+    }
 }
 
 Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {

@@ -9,6 +9,7 @@ SRCS(
     audit_log.cpp
     audit_logins.cpp
     db_metadata_cache.h
+    fs_path_validation.cpp
     grpc_endpoint_publish_actor.cpp
     grpc_helper.cpp
     grpc_mon.cpp
@@ -51,7 +52,6 @@ SRCS(
     rpc_explain_yql_script.cpp
     rpc_export.cpp
     rpc_forget_operation.cpp
-    fs_path_validation.cpp
     rpc_fq.cpp
     rpc_fq_internal.cpp
     rpc_get_operation.cpp

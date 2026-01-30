@@ -199,6 +199,28 @@ protected:
         UNIT_ASSERT_VALUES_EQUAL(keys, paths);
     }
 
+    struct TEntryPath {
+        TString Path;
+        NYdb::NScheme::ESchemeEntryType Type;
+
+        TEntryPath(const TString& path, NYdb::NScheme::ESchemeEntryType type)
+            : Path(path)
+            , Type(type)
+        {}
+
+        static TEntryPath TablePath(const TString& path, bool isColumnTable) {
+            return TEntryPath(path, isColumnTable ? NYdb::NScheme::ESchemeEntryType::ColumnTable : NYdb::NScheme::ESchemeEntryType::Table);
+        }
+    };
+
+    void ValidateHasYdbPaths(const std::vector<TEntryPath>& paths) {
+        for (const auto& item : paths) {
+            auto res = YdbSchemeClient().DescribePath(item.Path).GetValueSync();
+            UNIT_ASSERT_C(res.IsSuccess(), "Describe path \"" << item.Path << "\" failed: " << res.GetIssues().ToString());
+            UNIT_ASSERT_C(res.GetEntry().Type == item.Type, "Path " << item.Path << " has wrong type. Expected: " << item.Type << ", actual: " << res.GetEntry().Type);
+        }
+    }
+    
     void ValidateHasYdbTables(const std::vector<TString>& paths) {
         for (const TString& path : paths) {
             auto res = YdbSchemeClient().DescribePath(path).GetValueSync();

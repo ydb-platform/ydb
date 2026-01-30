@@ -66,7 +66,7 @@ public:
             << " FROM `" << Database << "/.sys/compile_cache_queries` "
             << "WHERE IsTruncated = false "
             << "  AND AccessCount > 0 "
-            << "  AND CompilationDuration < " << MaxCompilationDurationMs << " "
+            << "  AND CompilationDuration < " << MaxCompilationDurationMs
             << "GROUP BY Query, UserSID "
             << "ORDER BY AccessCount DESC "
             << "LIMIT " << limit;

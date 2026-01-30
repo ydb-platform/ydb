@@ -53,7 +53,7 @@ namespace {
     }
 
     TDataQueryResult ExecuteQueryWithCache(TKikimrRunner& kikimr, const TString& userSid, 
-                                           const TString& query, const TParams& params = TParams()) {
+                                           const TString& query) {
         return kikimr.RunCall([&] {
             TDriverConfig driverConfig;
             driverConfig
@@ -72,11 +72,31 @@ namespace {
             TExecDataQuerySettings settings;
             settings.KeepInQueryCache(true);
             
-            if (params.Empty()) {
-                return session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
-            } else {
-                return session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), params, settings).ExtractValueSync();
-            }
+            return session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+        });
+    }
+
+    TDataQueryResult ExecuteQueryWithCache(TKikimrRunner& kikimr, const TString& userSid,
+                                           const TString& query, const TParams& params) {
+        return kikimr.RunCall([&] {
+            TDriverConfig driverConfig;
+            driverConfig
+                .SetEndpoint(kikimr.GetEndpoint())
+                .SetDatabase("/Root")
+                .SetAuthToken(userSid + "@builtin");
+
+            auto driver = NYdb::TDriver(driverConfig);
+            auto db = NYdb::NTable::TTableClient(driver);
+
+            auto sessionResult = db.CreateSession().GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(sessionResult.GetStatus(), NYdb::EStatus::SUCCESS,
+                "Failed to create session for user " << userSid << ": " << sessionResult.GetIssues().ToString());
+
+            auto session = sessionResult.GetSession();
+            TExecDataQuerySettings settings;
+            settings.KeepInQueryCache(true);
+
+            return session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), params, settings).ExtractValueSync();
         });
     }
 

@@ -77,6 +77,7 @@ struct TEvKqp {
     struct TEvListProxyNodesResponse : public TEventLocal<TEvListProxyNodesResponse, TKqpEvents::EvListProxyNodesResponse>
     {
         std::vector<ui32> ProxyNodes;
+        ui32 MaxNodesToQuery = 0;  // Optional: limit nodes for warmup optimization (0 = all nodes)
     };
 
     struct TEvCreateSessionResponse : public TEventPB<TEvCreateSessionResponse,

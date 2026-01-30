@@ -463,6 +463,42 @@ namespace {
         return settings;
     }
 
+    bool GetBoolValue(const TCoNameValueTuple& setting) {
+        return FromString<bool>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
+    }
+
+    auto GetStringValue(const TCoNameValueTuple& setting) {
+        return TString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
+    }
+
+    std::optional<ui64> GetTimestampValue(const TCoNameValueTuple& setting) {
+        if(setting.Value().Maybe<TCoDatetime>()) {
+            return FromString<ui64>(setting.Value().Cast<TCoDatetime>().Literal().Value());
+        } else if (setting.Value().Maybe<TCoTimestamp>()) {
+            return FromString<ui64>(setting.Value().Cast<TCoTimestamp>().Literal().Value()) / 1'000'000ull;
+        } else {
+            try {
+                return FromString<ui64>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
+            } catch (const yexception& e) {
+                return std::nullopt;
+            }
+        }
+    }
+
+    auto GetConsumerTimestampParseError(const auto& consumer, auto field) {
+        return TStringBuilder() <<  "Failed to parse " << field << " setting value for consumer"
+                                << consumer.Name().StringValue()
+                                << ". Datetime(), Timestamp or integer value is supported";
+    }
+
+    auto GetIntValue(const TCoNameValueTuple& setting) {
+        return FromString<ui64>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
+    }
+
+    auto GetIntervalValue(const TCoNameValueTuple& setting) {
+        return TDuration::MicroSeconds(FromString<ui64>(setting.Value().Cast<TCoInterval>().Literal().Value()));
+    }
+
     [[nodiscard]] TString AddConsumerToTopicRequest(
             Ydb::Topic::Consumer* protoConsumer, const TCoTopicConsumer& consumer
     ) {
@@ -471,53 +507,16 @@ namespace {
         for (const auto& setting : settings) {
             auto name = setting.Name().Value();
 
-            auto boolValue = [&setting]() {
-                return FromString<bool>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
-            };
-
-            auto stringValue = [&]() {
-                return TString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
-            };
-
-            auto timestampValue = [&setting]() -> std::optional<ui64> {
-                if(setting.Value().Maybe<TCoDatetime>()) {
-                    return FromString<ui64>(setting.Value().Cast<TCoDatetime>().Literal().Value());
-                } else if (setting.Value().Maybe<TCoTimestamp>()) {
-                    return FromString<ui64>(setting.Value().Cast<TCoTimestamp>().Literal().Value()) / 1'000'000ull;
-                } else {
-                    try {
-                        return FromString<ui64>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
-                    } catch (const yexception& e) {
-                        return std::nullopt;
-                    }
-                }
-            };
-
-            auto intValue = [&]() {
-                return FromString<ui64>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
-            };
-
-            auto intervalValue = [&]() {
-                return TDuration::MicroSeconds(FromString<ui64>(setting.Value().Cast<TCoInterval>().Literal().Value()));
-            };
-
-            auto timestampParseError = [&](auto name) {
-                return TStringBuilder() <<  "Failed to parse " << name << " setting value for consumer"
-                                        << consumer.Name().StringValue()
-                                        << ". Datetime(), Timestamp or integer value is supported";
-            };
-
-            Cerr << (TStringBuilder() << ">>>>> 0 " << name << Endl);
             if (name == "important") {
-                protoConsumer->set_important(boolValue());
+                protoConsumer->set_important(GetBoolValue(setting));
             } else if (name == "setAvailabilityPeriod"sv) {
-                auto period = intervalValue();
+                auto period = GetIntervalValue(setting);
                 protoConsumer->mutable_availability_period()->set_seconds(period.Seconds());
                 protoConsumer->mutable_availability_period()->set_nanos(period.NanoSecondsOfSecond());
             } else if (name == "setReadFromTs"sv) {
-                auto tsValue = timestampValue();
+                auto tsValue = GetTimestampValue(setting);
                 if (!tsValue) {
-                    return timestampParseError("read_from");
+                    return GetConsumerTimestampParseError(consumer, "read_from");
                 }
                 protoConsumer->mutable_read_from()->set_seconds(tsValue.value());
             } else if (name == "setSupportedCodecs"sv) {
@@ -530,7 +529,7 @@ namespace {
                     protoCodecs->add_codecs(codec);
                 }
             } else if (name == "type"sv) {
-                auto type = stringValue();
+                auto type = GetStringValue(setting);
                 if (type == "streaming") {
                     protoConsumer->mutable_streaming_consumer_type();
                 } else if (type == "shared") {
@@ -539,16 +538,16 @@ namespace {
                     return TStringBuilder() << "Unknown consumer type: " << type;
                 }
             } else if (name == "keep_messages_order"sv) {
-                protoConsumer->mutable_shared_consumer_type()->set_keep_messages_order(boolValue());
+                protoConsumer->mutable_shared_consumer_type()->set_keep_messages_order(GetBoolValue(setting));
             } else if (name == "default_processing_timeout"sv) {
-                auto period = intervalValue();
+                auto period = GetIntervalValue(setting);
                 auto* value = protoConsumer->mutable_shared_consumer_type()->mutable_default_processing_timeout();
                 value->set_seconds(period.Seconds());
                 value->set_nanos(period.NanoSecondsOfSecond());
             } else if (name == "max_processing_attempts"sv) {
-                protoConsumer->mutable_shared_consumer_type()->mutable_dead_letter_policy()->mutable_condition()->set_max_processing_attempts(intValue());
+                protoConsumer->mutable_shared_consumer_type()->mutable_dead_letter_policy()->mutable_condition()->set_max_processing_attempts(GetIntValue(setting));
             } else if (name == "dead_letter_policy"sv) {
-                auto policy = stringValue();
+                auto policy = GetStringValue(setting);
                 auto policyProto = protoConsumer->mutable_shared_consumer_type()->mutable_dead_letter_policy();
                 if (policy == "move") {
                     policyProto->set_enabled(true);
@@ -563,7 +562,7 @@ namespace {
                 }
             } else if (name == "dead_letter_queue"sv) {
                 auto policyProto = protoConsumer->mutable_shared_consumer_type()->mutable_dead_letter_policy();
-                policyProto->mutable_move_action()->set_dead_letter_queue(stringValue());
+                policyProto->mutable_move_action()->set_dead_letter_queue(GetStringValue(setting));
             }
         }
         return {};
@@ -574,38 +573,27 @@ namespace {
     ) {
         protoConsumer->set_name(consumer.Name().StringValue());
         auto settings = consumer.Settings().Cast<TCoNameValueTupleList>();
+
+        std::optional<TString> alterPolicy;
+        std::optional<TString> alterDLQ;
+
         for (const auto& setting : settings) {
             //ToDo[RESET]: Add reset when supported
             auto name = setting.Name().Value();
-            Cerr << (TStringBuilder() << ">>>>> 1 " << name << Endl);
             if (name == "important") {
-                protoConsumer->set_set_important(FromString<bool>(
-                        setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
-                ));
+                protoConsumer->set_set_important(GetBoolValue(setting));
             } else if (name == "setAvailabilityPeriod"sv) {
-                auto period = TDuration::MicroSeconds(FromString<ui64>(setting.Value().Cast<TCoInterval>().Literal().Value()));
+                auto period = GetIntervalValue(setting);
                 protoConsumer->mutable_set_availability_period()->set_seconds(period.Seconds());
                 protoConsumer->mutable_set_availability_period()->set_nanos(period.NanoSecondsOfSecond());
             } else if (name == "resetAvailabilityPeriod"sv) {
                 protoConsumer->mutable_reset_availability_period();
             } else if (name == "setReadFromTs") {
-                ui64 tsValue = 0;
-                if(setting.Value().Maybe<TCoDatetime>()) {
-                    tsValue = FromString<ui64>(setting.Value().Cast<TCoDatetime>().Literal().Value());
-                } else if (setting.Value().Maybe<TCoTimestamp>()) {
-                    tsValue = static_cast<ui64>(
-                            FromString<ui64>(setting.Value().Cast<TCoTimestamp>().Literal().Value()) / 1'000'000
-                    );
-                } else {
-                    try {
-                        tsValue = FromString<ui64>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
-                    } catch (const yexception& e) {
-                        return TStringBuilder() <<  "Failed to parse read_from setting value for consumer"
-                                                << consumer.Name().StringValue()
-                                                << ". Datetime(), Timestamp or integer value is supported";
-                    }
+                auto tsValue = GetTimestampValue(setting);
+                if (!tsValue) {
+                    return GetConsumerTimestampParseError(consumer, "read_from");
                 }
-                protoConsumer->mutable_set_read_from()->set_seconds(tsValue);
+                protoConsumer->mutable_set_read_from()->set_seconds(tsValue.value());
             } else if (name == "setSupportedCodecs") {
                 auto codecs = GetTopicCodecsFromString(
                         TString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value())
@@ -614,15 +602,51 @@ namespace {
                 for (auto codec : codecs) {
                     protoCodecs->add_codecs(codec);
                 }
+            } else if (name == "default_processing_timeout"sv) {
+                auto period = GetIntervalValue(setting);
+                auto* value = protoConsumer->mutable_alter_shared_consumer_type()->mutable_set_default_processing_timeout();
+                value->set_seconds(period.Seconds());
+                value->set_nanos(period.NanoSecondsOfSecond());
+            } else if (name == "max_processing_attempts"sv) {
+                protoConsumer->mutable_alter_shared_consumer_type()->mutable_alter_dead_letter_policy()->mutable_alter_condition()->set_set_max_processing_attempts(GetIntValue(setting));
+            } else if (name == "dead_letter_policy"sv) {
+                alterPolicy = GetStringValue(setting);
+                auto policyProto = protoConsumer->mutable_alter_shared_consumer_type()->mutable_alter_dead_letter_policy();
+                if (alterPolicy.value() == "move"sv) {
+                    policyProto->set_set_enabled(true);
+                    policyProto->mutable_set_move_action();
+                } else if (alterPolicy.value() == "delete"sv) {
+                    policyProto->set_set_enabled(true);
+                    policyProto->mutable_set_delete_action();
+                } else if (alterPolicy.value() == "none"sv) {
+                    policyProto->set_set_enabled(false);
+                } else {
+                    return TStringBuilder() << "Unknown dead letter policy: " << alterPolicy.value();
+                }
+            } else if (name == "dead_letter_queue"sv) {
+                alterDLQ = GetStringValue(setting);
             }
         }
+
+        if (alterDLQ) {
+            auto policyProto = protoConsumer->mutable_alter_shared_consumer_type()->mutable_alter_dead_letter_policy();
+            if (alterPolicy) {
+                if (alterPolicy.value() == "move"sv) {
+                    policyProto->mutable_set_move_action()->set_dead_letter_queue(alterDLQ.value());
+                } else {
+                    return TStringBuilder() << "Cann`t alter dead_letter_queue and set dead_letter_policy to " << alterPolicy.value();
+                }
+            } else {
+                policyProto->mutable_alter_move_action()->set_set_dead_letter_queue(alterDLQ.value());
+            }
+        }
+
         return {};
     }
 
     void AddTopicSettingsToRequest(Ydb::Topic::CreateTopicRequest* request, const TCoNameValueTupleList& topicSettings) {
         for (const auto& setting : topicSettings) {
             auto name = setting.Name().Value();
-            Cerr << (TStringBuilder() << ">>>>> 2 " << name << Endl);
             if (name == "setMinPartitions") {
                 request->mutable_partitioning_settings()->set_min_active_partitions(
                         FromString<ui32>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value())

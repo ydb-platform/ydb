@@ -67,7 +67,6 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
     modifyScheme.SetWorkingDir(wdAndPath.first);
 
     if (isColumnTable) {
-        Y_ABORT_UNLESS(ss->TableProfilesLoaded);
         auto& tableDesc = *modifyScheme.MutableCreateColumnTable();
         tableDesc.SetName(wdAndPath.second);
         tableDesc.SetIsRestore(true);

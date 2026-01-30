@@ -62,7 +62,7 @@ For more details, see the relevant reference sections:
 
 ### Loading data into the tables
 
-The `import` command is used to load data into the benchmark tables. This command is specific to each benchmark, and its behavior depends on the subcommands. However, there are also parameters common to all benchmarks. 
+The `import` command is used to load data into the benchmark tables. This command is specific to each benchmark, and its behavior depends on the subcommands. However, there are also parameters common to all benchmarks.
 
 For more details, see the relevant reference sections:
 

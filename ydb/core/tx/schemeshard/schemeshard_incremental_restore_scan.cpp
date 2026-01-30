@@ -1,4 +1,5 @@
 #include "schemeshard_impl.h"
+#include "schemeshard__backup_collection_common.h"
 
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
@@ -685,15 +686,32 @@ void TSchemeShard::DiscoverIndexesRecursive(
         LOG_I("Found table mapping: " << accumulatedRelativePath << " -> " << targetTablePath);
 
         for (const auto& [indexName, indexDirPathId] : currentPath.Base()->GetChildren()) {
-            CreateSingleIndexRestoreOperation(
-                operationId,
-                backupName,
-                bcPath,
-                accumulatedRelativePath,
-                indexName,
-                targetTablePath,
-                ctx
-            );
+            auto indexPathInBackup = TPath::Init(indexDirPathId, this);
+            if (indexPathInBackup.Base()->IsDirectory()) {
+                for (const auto& [implName, implPathId] : indexPathInBackup.Base()->GetChildren()) {
+                    CreateSingleIndexRestoreOperation(
+                        operationId,
+                        backupName,
+                        bcPath,
+                        accumulatedRelativePath,
+                        indexName,
+                        targetTablePath,
+                        ctx,
+                        implName
+                    );
+                }
+            } else {
+                CreateSingleIndexRestoreOperation(
+                    operationId,
+                    backupName,
+                    bcPath,
+                    accumulatedRelativePath,
+                    indexName,
+                    targetTablePath,
+                    ctx,
+                    ""
+                );
+            }
         }
     } else {
         // Not a table yet, descend into children to build up the path
@@ -766,11 +784,13 @@ void TSchemeShard::CreateSingleIndexRestoreOperation(
     const TString& relativeTablePath,
     const TString& indexName,
     const TString& targetTablePath,
-    const TActorContext& ctx) {
-
+    const TActorContext& ctx,
+    const TString& specificImplTableName)
+{
     LOG_I("CreateSingleIndexRestoreOperation: table=" << targetTablePath
           << " index=" << indexName
-          << " relativeTablePath=" << relativeTablePath);
+          << " relativeTablePath=" << relativeTablePath
+          << " specificImplTableName=" << specificImplTableName);
 
     // Validate target table exists
     const TPath targetTablePathObj = TPath::Resolve(targetTablePath, this);
@@ -790,51 +810,69 @@ void TSchemeShard::CreateSingleIndexRestoreOperation(
             if (childPath->PathType == NKikimrSchemeOp::EPathTypeTableIndex) {
                 indexPathId = childPathId;
 
-                // Get index info to verify it's a global index
                 auto indexInfoIt = Indexes.find(indexPathId);
                 if (indexInfoIt == Indexes.end()) {
                     LOG_W("Index info not found for pathId: " << indexPathId);
                     return;
                 }
-
                 auto indexInfo = indexInfoIt->second;
-                if (indexInfo->Type != NKikimrSchemeOp::EIndexTypeGlobal) {
-                    LOG_I("Skipping non-global index: " << indexName << " (type=" << indexInfo->Type << ")");
+
+                if (!isSupportedIndex(indexPathId, this)) {
+                    LOG_I("Skipping index with unsupported type: " << indexName << " (type=" << indexInfo->Type << ")");
                     return;
                 }
 
-                // Get index impl table (single child of index)
                 auto indexPath = TPath::Init(indexPathId, this);
-                if (indexPath.Base()->GetChildren().size() == 1) {
-                    auto [implTableName, implTablePathId] = *indexPath.Base()->GetChildren().begin();
-                    indexImplTablePathId = implTablePathId;
-                    indexFound = true;
-                    LOG_I("Found global index '" << indexName << "' with impl table: " << implTableName);
-                    break;
+
+                if (!specificImplTableName.empty()) {
+                    for (const auto& [implName, implPathId] : indexPath.Base()->GetChildren()) {
+                        if (implName == specificImplTableName) {
+                            indexImplTablePathId = implPathId;
+                            indexFound = true;
+                            LOG_I("Found vector index impl table: " << indexName << "/" << implName);
+                            break;
+                        }
+                    }
                 } else {
-                    LOG_W("Index '" << indexName << "' has unexpected number of children: "
-                          << indexPath.Base()->GetChildren().size());
-                    return;
+                    if (indexPath.Base()->GetChildren().size() == 1) {
+                        auto [implTableName, implTablePathId] = *indexPath.Base()->GetChildren().begin();
+                        indexImplTablePathId = implTablePathId;
+                        indexFound = true;
+                        LOG_I("Found global index '" << indexName << "' with impl table: " << implTableName);
+                    }
                 }
             }
+            if (indexFound) break;
         }
     }
 
     if (!indexFound) {
-        LOG_W("Index '" << indexName << "' not found on table " << targetTablePath
+        LOG_W("Index '" << indexName << "' (or specific table '" << specificImplTableName << "') not found on table " << targetTablePath
               << " - skipping (index may have been dropped)");
         return;
     }
 
-    // Source: {backup}/__ydb_backup_meta/indexes/{table}/{index}
-    TString srcIndexBackupPath = JoinPath({
-        bcPath.PathString(),
-        backupName + "_incremental",
-        "__ydb_backup_meta",
-        "indexes",
-        relativeTablePath,
-        indexName
-    });
+    TString srcIndexBackupPath;
+    if (!specificImplTableName.empty()) {
+        srcIndexBackupPath = JoinPath({
+            bcPath.PathString(),
+            backupName + "_incremental",
+            "__ydb_backup_meta",
+            "indexes",
+            relativeTablePath,
+            indexName,
+            specificImplTableName
+        });
+    } else {
+        srcIndexBackupPath = JoinPath({
+            bcPath.PathString(),
+            backupName + "_incremental",
+            "__ydb_backup_meta",
+            "indexes",
+            relativeTablePath,
+            indexName
+        });
+    }
 
     const TPath& srcBackupPath = TPath::Resolve(srcIndexBackupPath, this);
     if (!srcBackupPath.IsResolved()) {

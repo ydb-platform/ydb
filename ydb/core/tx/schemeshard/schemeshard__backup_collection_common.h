@@ -7,6 +7,11 @@
 
 #include <optional>
 
+namespace NKikimr::NSchemeShard {
+    bool isSupportedIndex(TPathId pathId, const TOperationContext& context);
+    bool isSupportedIndex(TPathId pathId, const TSchemeShard* ss);
+}
+
 namespace NKikimr::NSchemeShard::NBackup {
 
 struct TBackupCollectionPaths {

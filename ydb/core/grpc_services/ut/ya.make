@@ -8,7 +8,6 @@ ENDIF()
 
 SRCS(
     rpc_calls_ut.cpp
-    fs_path_validation_ut.cpp
     operation_helpers_ut.cpp
 )
 

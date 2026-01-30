@@ -9,46 +9,18 @@ namespace {
 
 template <typename TTraits>
 bool ValidatePathComponentsRaw(const TString& path, const TString& pathDescription, TString& error) {
-    if (path.empty()) {
-        return true;
-    }
 
-    size_t pos = 0;
-    while (pos < path.size()) {
-        // Skip separators
-        while (pos < path.size() && TTraits::IsPathSep(path[pos])) {
-            ++pos;
-        }
-
-        if (pos >= path.size()) {
-            break;
-        }
-
-        // Find component end
-        const size_t start = pos;
-        while (pos < path.size() && !TTraits::IsPathSep(path[pos])) {
-            ++pos;
-        }
-
-        const TStringBuf component(path.data() + start, pos - start);
-
-        if (component.empty()) {
-            continue;
-        }
-
+    for (const auto& component : TPathSplit(path)) {
         if (component == "..") {
-            error = TStringBuilder() << pathDescription
-                << " contains path traversal sequence (..)";
+            error = TStringBuilder() << pathDescription << " contains path traversal sequence (..)";
             return false;
         }
 
         if (component == ".") {
-            error = TStringBuilder() << pathDescription
-                << " contains current directory reference (.)";
+            error = TStringBuilder() << pathDescription << " contains current directory reference (.)";
             return false;
         }
     }
-
     return true;
 }
 

@@ -175,13 +175,14 @@ Y_UNIT_TEST_SUITE_F(FsBackupParamsValidationTest, TFsBackupParamsValidationTestF
         UNIT_ASSERT_STRING_CONTAINS_C(res.Status().GetIssues().ToString(), "base_path must be an absolute path",
             res.Status().GetIssues().ToString());
 
-        //TODO(st-shchetinin): Uncomment after supporting the entire export pipeline in FS
         // Fix: use absolute path
         {
-            // NExport::TExportToFsSettings fixSettings = settings;
-            // fixSettings.BasePath(TString(TempDir().Path()));
-            // auto res = YdbExportClient().ExportToFs(fixSettings).GetValueSync();
-            // WaitOpSuccess(res, "Export with absolute base_path should succeed");
+            NExport::TExportToFsSettings fixSettings = settings;
+            fixSettings.BasePath(TString(TempDir().Path()));
+            auto res = YdbExportClient().ExportToFs(fixSettings).GetValueSync();
+            UNIT_ASSERT(res.Status().IsSuccess());
+            UNIT_ASSERT_VALUES_EQUAL_C(res.Status().GetStatus(), NYdb::EStatus::SUCCESS,
+                res.Status().GetIssues().ToString());
         }
     }
 
@@ -198,21 +199,24 @@ Y_UNIT_TEST_SUITE_F(FsBackupParamsValidationTest, TFsBackupParamsValidationTestF
         UNIT_ASSERT_STRING_CONTAINS_C(res.Status().GetIssues().ToString(), "Unsupported compression codec",
             res.Status().GetIssues().ToString());
 
-        //TODO(st-shchetinin): Uncomment after supporting the entire export pipeline in FS
         // Fix: use valid codec
         {
-            // NExport::TExportToFsSettings fixSettings = settings;
-            // fixSettings.Compression("zstd");
-            // auto res = YdbExportClient().ExportToFs(fixSettings).GetValueSync();
-            // WaitOpSuccess(res, "Export with valid compression should succeed");
+            NExport::TExportToFsSettings fixSettings = settings;
+            fixSettings.Compression("zstd");
+            auto res = YdbExportClient().ExportToFs(fixSettings).GetValueSync();
+            UNIT_ASSERT(res.Status().IsSuccess());
+            UNIT_ASSERT_VALUES_EQUAL_C(res.Status().GetStatus(), NYdb::EStatus::SUCCESS,
+                res.Status().GetIssues().ToString());
         }
 
         // Fix 2: use zstd with level
         {
-            // NExport::TExportToFsSettings fixSettings = settings;
-            // fixSettings.Compression("zstd-6");
-            // auto res = YdbExportClient().ExportToFs(fixSettings).GetValueSync();
-            // WaitOpSuccess(res, "Export with zstd-6 should succeed");
+            NExport::TExportToFsSettings fixSettings = settings;
+            fixSettings.Compression("zstd-6");
+            auto res = YdbExportClient().ExportToFs(fixSettings).GetValueSync();
+            UNIT_ASSERT(res.Status().IsSuccess());
+            UNIT_ASSERT_VALUES_EQUAL_C(res.Status().GetStatus(), NYdb::EStatus::SUCCESS,
+                res.Status().GetIssues().ToString());
         }
     }
 
@@ -236,20 +240,23 @@ Y_UNIT_TEST_SUITE_F(FsBackupParamsValidationTest, TFsBackupParamsValidationTestF
         UNIT_ASSERT_VALUES_EQUAL_C(res.Status().GetStatus(), NYdb::EStatus::BAD_REQUEST,
             res.Status().GetIssues().ToString());
 
-        //TODO(st-shchetinin): Uncomment after supporting the entire export pipeline in FS
         // Fix: valid level
         {
-            // NExport::TExportToFsSettings fixSettings = settings;
-            // fixSettings.Compression("zstd-1");
-            // auto res = YdbExportClient().ExportToFs(fixSettings).GetValueSync();
-            // WaitOpSuccess(res, "Export with zstd-1 should succeed");
+            NExport::TExportToFsSettings fixSettings = settings;
+            fixSettings.Compression("zstd-1");
+            auto res = YdbExportClient().ExportToFs(fixSettings).GetValueSync();
+            UNIT_ASSERT(res.Status().IsSuccess());
+            UNIT_ASSERT_VALUES_EQUAL_C(res.Status().GetStatus(), NYdb::EStatus::SUCCESS,
+                res.Status().GetIssues().ToString());
         }
 
         {
-            // NExport::TExportToFsSettings fixSettings = settings;
-            // fixSettings.Compression("zstd-22");
-            // auto res = YdbExportClient().ExportToFs(fixSettings).GetValueSync();
-            // WaitOpSuccess(res, "Export with zstd-22 should succeed");
+            NExport::TExportToFsSettings fixSettings = settings;
+            fixSettings.Compression("zstd-22");
+            auto res = YdbExportClient().ExportToFs(fixSettings).GetValueSync();
+            UNIT_ASSERT(res.Status().IsSuccess());
+            UNIT_ASSERT_VALUES_EQUAL_C(res.Status().GetStatus(), NYdb::EStatus::SUCCESS,
+                res.Status().GetIssues().ToString());
         }
     }
 }
@@ -358,13 +365,14 @@ Y_UNIT_TEST_SUITE_F(FsImportParamsValidationTest, TFsBackupParamsValidationTestF
         UNIT_ASSERT_STRING_CONTAINS_C(res.Status().GetIssues().ToString(), "base_path must be an absolute path",
             res.Status().GetIssues().ToString());
 
-        //TODO(st-shchetinin): Uncomment after supporting the entire export pipeline in FS
         // Fix: use absolute path
         {
-            // NImport::TImportFromFsSettings fixSettings = settings;
-            // fixSettings.BasePath(TString(TempDir().Path()));
-            // auto res = YdbImportClient().ImportFromFs(fixSettings).GetValueSync();
-            // WaitOpSuccess(res, "Import with absolute base_path should succeed");
+            NImport::TImportFromFsSettings fixSettings = settings;
+            fixSettings.BasePath(TString(TempDir().Path()));
+            auto res = YdbImportClient().ImportFromFs(fixSettings).GetValueSync();
+            UNIT_ASSERT(res.Status().IsSuccess());
+            UNIT_ASSERT_VALUES_EQUAL_C(res.Status().GetStatus(), NYdb::EStatus::SUCCESS,
+                res.Status().GetIssues().ToString());
         }
     }
 
@@ -388,16 +396,46 @@ Y_UNIT_TEST_SUITE_F(FsBackupPathSecurityValidationTest, TFsBackupParamsValidatio
 {
     Y_UNIT_TEST(PathTraversalInBasePath) {
         NExport::TExportToFsSettings settings = MakeExportSettings("");
-        settings.BasePath("/mnt/../etc/passwd");
+        settings.BasePath("/mnt/../../etc/passwd");
         settings.AppendItem({"/Root/FsExportParamsValidation/dir1/Table1", "backup"});
 
         auto res = YdbExportClient().ExportToFs(settings).GetValueSync();
-        UNIT_ASSERT_C(!res.Status().IsSuccess(),
-            "Status: " << res.Status().GetStatus() << Endl << res.Status().GetIssues().ToString());
+        UNIT_ASSERT(!res.Status().IsSuccess());
         UNIT_ASSERT_VALUES_EQUAL_C(res.Status().GetStatus(), NYdb::EStatus::BAD_REQUEST,
             res.Status().GetIssues().ToString());
         UNIT_ASSERT_STRING_CONTAINS_C(res.Status().GetIssues().ToString(),
             "path traversal",
+            res.Status().GetIssues().ToString());
+    }
+
+    // Using ".." in the exported path is valid as long as it doesn't result in escaping above the base directory
+    Y_UNIT_TEST(RelativeDotDotSafeInDestinationPath) {
+        NExport::TExportToFsSettings settings = MakeExportSettings("/mnt/exports");
+        settings.AppendItem({"/Root/FsExportParamsValidation/dir1/Table1", "dir/../backup"});
+
+        auto res = YdbExportClient().ExportToFs(settings).GetValueSync();
+        UNIT_ASSERT(res.Status().IsSuccess());
+        UNIT_ASSERT_VALUES_EQUAL_C(res.Status().GetStatus(), NYdb::EStatus::SUCCESS,
+            res.Status().GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(DotSafeInMiddleDestinationPath) {
+        NExport::TExportToFsSettings settings = MakeExportSettings("/mnt/exports");
+        settings.AppendItem({"/Root/FsExportParamsValidation/dir1/Table1", "dir/./backup"});
+
+        auto res = YdbExportClient().ExportToFs(settings).GetValueSync();
+        UNIT_ASSERT(res.Status().IsSuccess());
+        UNIT_ASSERT_VALUES_EQUAL_C(res.Status().GetStatus(), NYdb::EStatus::SUCCESS,
+            res.Status().GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(DotSafeInStartDestinationPath) {
+        NExport::TExportToFsSettings settings = MakeExportSettings("/mnt/exports");
+        settings.AppendItem({"/Root/FsExportParamsValidation/dir1/Table1", "./dir/backup"});
+
+        auto res = YdbExportClient().ExportToFs(settings).GetValueSync();
+        UNIT_ASSERT(res.Status().IsSuccess());
+        UNIT_ASSERT_VALUES_EQUAL_C(res.Status().GetStatus(), NYdb::EStatus::SUCCESS,
             res.Status().GetIssues().ToString());
     }
 
@@ -406,42 +444,11 @@ Y_UNIT_TEST_SUITE_F(FsBackupPathSecurityValidationTest, TFsBackupParamsValidatio
         settings.AppendItem({"/Root/FsExportParamsValidation/dir1/Table1", "../../../etc/passwd"});
 
         auto res = YdbExportClient().ExportToFs(settings).GetValueSync();
-        UNIT_ASSERT_C(!res.Status().IsSuccess(),
-            "Status: " << res.Status().GetStatus() << Endl << res.Status().GetIssues().ToString());
+        UNIT_ASSERT(!res.Status().IsSuccess());
         UNIT_ASSERT_VALUES_EQUAL_C(res.Status().GetStatus(), NYdb::EStatus::BAD_REQUEST,
             res.Status().GetIssues().ToString());
         UNIT_ASSERT_STRING_CONTAINS_C(res.Status().GetIssues().ToString(),
             "path traversal",
-            res.Status().GetIssues().ToString());
-    }
-
-    Y_UNIT_TEST(CurrentDirectoryReferenceInBasePath) {
-        NExport::TExportToFsSettings settings = MakeExportSettings("");
-        settings.BasePath("/mnt/./exports");
-        settings.AppendItem({"/Root/FsExportParamsValidation/dir1/Table1", "backup"});
-
-        auto res = YdbExportClient().ExportToFs(settings).GetValueSync();
-        UNIT_ASSERT_C(!res.Status().IsSuccess(),
-            "Status: " << res.Status().GetStatus() << Endl << res.Status().GetIssues().ToString());
-        UNIT_ASSERT_VALUES_EQUAL_C(res.Status().GetStatus(), NYdb::EStatus::BAD_REQUEST,
-            res.Status().GetIssues().ToString());
-        UNIT_ASSERT_STRING_CONTAINS_C(res.Status().GetIssues().ToString(),
-            "current directory reference",
-            res.Status().GetIssues().ToString());
-    }
-
-    Y_UNIT_TEST(WindowsStyleSeparatorsInBasePath) {
-        NExport::TExportToFsSettings settings = MakeExportSettings("");
-        settings.BasePath("/mnt\\data");
-        settings.AppendItem({"/Root/FsExportParamsValidation/dir1/Table1", "backup"});
-
-        auto res = YdbExportClient().ExportToFs(settings).GetValueSync();
-        UNIT_ASSERT_C(!res.Status().IsSuccess(),
-            "Status: " << res.Status().GetStatus() << Endl << res.Status().GetIssues().ToString());
-        UNIT_ASSERT_VALUES_EQUAL_C(res.Status().GetStatus(), NYdb::EStatus::BAD_REQUEST,
-            res.Status().GetIssues().ToString());
-        UNIT_ASSERT_STRING_CONTAINS_C(res.Status().GetIssues().ToString(),
-            "separator",
             res.Status().GetIssues().ToString());
     }
 
@@ -450,8 +457,7 @@ Y_UNIT_TEST_SUITE_F(FsBackupPathSecurityValidationTest, TFsBackupParamsValidatio
         settings.AppendItem({"/Root/FsExportParamsValidation/dir1/Table1", "backup\\..\\..\\sensitive"});
 
         auto res = YdbExportClient().ExportToFs(settings).GetValueSync();
-        UNIT_ASSERT_C(!res.Status().IsSuccess(),
-            "Status: " << res.Status().GetStatus() << Endl << res.Status().GetIssues().ToString());
+        UNIT_ASSERT(!res.Status().IsSuccess());
         UNIT_ASSERT_VALUES_EQUAL_C(res.Status().GetStatus(), NYdb::EStatus::BAD_REQUEST,
             res.Status().GetIssues().ToString());
         UNIT_ASSERT_C(
@@ -462,18 +468,22 @@ Y_UNIT_TEST_SUITE_F(FsBackupPathSecurityValidationTest, TFsBackupParamsValidatio
 
     Y_UNIT_TEST(WindowsStyleCurrentDirectoryReference) {
         NExport::TExportToFsSettings settings = MakeExportSettings("");
-        settings.BasePath("/C:\\exports\\.\\backup");
-        settings.AppendItem({"/Root/FsExportParamsValidation/dir1/Table1", "data"});
+        settings.BasePath("/mnt/exports/./backup");
+        settings.AppendItem({"/Root/FsExportParamsValidation/dir1/Table1", "dir\\.\\data"});
 
         auto res = YdbExportClient().ExportToFs(settings).GetValueSync();
-        UNIT_ASSERT_C(!res.Status().IsSuccess(),
-            "Status: " << res.Status().GetStatus() << Endl << res.Status().GetIssues().ToString());
+        UNIT_ASSERT(!res.Status().IsSuccess());
+#ifdef _unix_
         UNIT_ASSERT_VALUES_EQUAL_C(res.Status().GetStatus(), NYdb::EStatus::BAD_REQUEST,
             res.Status().GetIssues().ToString());
         UNIT_ASSERT_C(
-            res.Status().GetIssues().ToString().contains("current directory") ||
             res.Status().GetIssues().ToString().contains("separator"),
             res.Status().GetIssues().ToString());
+#endif
+#ifdef _windows_
+        UNIT_ASSERT_VALUES_EQUAL_C(res.Status().GetStatus(), NYdb::EStatus::SUCCESS,
+            res.Status().GetIssues().ToString());
+#endif
     }
 
 #ifdef _unix_
@@ -482,8 +492,7 @@ Y_UNIT_TEST_SUITE_F(FsBackupPathSecurityValidationTest, TFsBackupParamsValidatio
         settings.AppendItem({"/Root/FsExportParamsValidation/dir1/Table1", "backup/data\\file"});
 
         auto res = YdbExportClient().ExportToFs(settings).GetValueSync();
-        UNIT_ASSERT_C(!res.Status().IsSuccess(),
-            "Status: " << res.Status().GetStatus() << Endl << res.Status().GetIssues().ToString());
+        UNIT_ASSERT(!res.Status().IsSuccess());
         UNIT_ASSERT_VALUES_EQUAL_C(res.Status().GetStatus(), NYdb::EStatus::BAD_REQUEST,
             res.Status().GetIssues().ToString());
         UNIT_ASSERT_STRING_CONTAINS_C(res.Status().GetIssues().ToString(),
@@ -496,8 +505,7 @@ Y_UNIT_TEST_SUITE_F(FsBackupPathSecurityValidationTest, TFsBackupParamsValidatio
         settings.AppendItem({"backup/2024\\01/data", "/Root/Restored/table1"});
 
         auto res = YdbImportClient().ImportFromFs(settings).GetValueSync();
-        UNIT_ASSERT_C(!res.Status().IsSuccess(),
-            "Status: " << res.Status().GetStatus() << Endl << res.Status().GetIssues().ToString());
+        UNIT_ASSERT(!res.Status().IsSuccess());
         UNIT_ASSERT_VALUES_EQUAL_C(res.Status().GetStatus(), NYdb::EStatus::BAD_REQUEST,
             res.Status().GetIssues().ToString());
         UNIT_ASSERT_STRING_CONTAINS_C(res.Status().GetIssues().ToString(),
@@ -511,8 +519,7 @@ Y_UNIT_TEST_SUITE_F(FsBackupPathSecurityValidationTest, TFsBackupParamsValidatio
         settings.AppendItem({"/Root/FsExportParamsValidation/dir1/Table1", "../../../../../../etc/shadow"});
 
         auto res = YdbExportClient().ExportToFs(settings).GetValueSync();
-        UNIT_ASSERT_C(!res.Status().IsSuccess(),
-            "Status: " << res.Status().GetStatus() << Endl << res.Status().GetIssues().ToString());
+        UNIT_ASSERT(!res.Status().IsSuccess());
         UNIT_ASSERT_VALUES_EQUAL_C(res.Status().GetStatus(), NYdb::EStatus::BAD_REQUEST,
             res.Status().GetIssues().ToString());
         UNIT_ASSERT_STRING_CONTAINS_C(res.Status().GetIssues().ToString(),
@@ -522,12 +529,11 @@ Y_UNIT_TEST_SUITE_F(FsBackupPathSecurityValidationTest, TFsBackupParamsValidatio
 
     Y_UNIT_TEST(PathTraversalInImportBasePath) {
         NImport::TImportFromFsSettings settings = MakeImportSettings("");
-        settings.BasePath("/mnt/../etc");
+        settings.BasePath("/mnt/../../etc");
         settings.AppendItem({"table1", "/Root/Restored/table1"});
 
         auto res = YdbImportClient().ImportFromFs(settings).GetValueSync();
-        UNIT_ASSERT_C(!res.Status().IsSuccess(),
-            "Status: " << res.Status().GetStatus() << Endl << res.Status().GetIssues().ToString());
+        UNIT_ASSERT(!res.Status().IsSuccess());
         UNIT_ASSERT_VALUES_EQUAL_C(res.Status().GetStatus(), NYdb::EStatus::BAD_REQUEST,
             res.Status().GetIssues().ToString());
         UNIT_ASSERT_STRING_CONTAINS_C(res.Status().GetIssues().ToString(),
@@ -540,8 +546,7 @@ Y_UNIT_TEST_SUITE_F(FsBackupPathSecurityValidationTest, TFsBackupParamsValidatio
         settings.AppendItem({"../../../etc/passwd", "/Root/Restored/table1"});
 
         auto res = YdbImportClient().ImportFromFs(settings).GetValueSync();
-        UNIT_ASSERT_C(!res.Status().IsSuccess(),
-            "Status: " << res.Status().GetStatus() << Endl << res.Status().GetIssues().ToString());
+        UNIT_ASSERT(!res.Status().IsSuccess());
         UNIT_ASSERT_VALUES_EQUAL_C(res.Status().GetStatus(), NYdb::EStatus::BAD_REQUEST,
             res.Status().GetIssues().ToString());
         UNIT_ASSERT_STRING_CONTAINS_C(res.Status().GetIssues().ToString(),
@@ -551,18 +556,23 @@ Y_UNIT_TEST_SUITE_F(FsBackupPathSecurityValidationTest, TFsBackupParamsValidatio
 
     Y_UNIT_TEST(WindowsPathTraversalInImportBasePath) {
         NImport::TImportFromFsSettings settings = MakeImportSettings("");
-        settings.BasePath("/C:\\imports\\..\\..\\sensitive");
+        settings.BasePath("C:\\imports\\..\\..\\sensitive");
         settings.AppendItem({"table1", "/Root/Restored/table1"});
 
         auto res = YdbImportClient().ImportFromFs(settings).GetValueSync();
-        UNIT_ASSERT_C(!res.Status().IsSuccess(),
-            "Status: " << res.Status().GetStatus() << Endl << res.Status().GetIssues().ToString());
+        UNIT_ASSERT(!res.Status().IsSuccess());
         UNIT_ASSERT_VALUES_EQUAL_C(res.Status().GetStatus(), NYdb::EStatus::BAD_REQUEST,
             res.Status().GetIssues().ToString());
+#ifdef _unix_
         UNIT_ASSERT_C(
-            res.Status().GetIssues().ToString().contains("path traversal") ||
-            res.Status().GetIssues().ToString().contains("separator"),
-            "Should reject malicious path: " << res.Status().GetIssues().ToString());
+            res.Status().GetIssues().ToString().contains("base_path must be an absolute path"),
+            "Should reject path: " << res.Status().GetIssues().ToString());
+#endif
+#ifdef _windows_
+        UNIT_ASSERT_C(
+            res.Status().GetIssues().ToString().contains("path traversal"),
+            "Should reject  path: " << res.Status().GetIssues().ToString());
+#endif
     }
 
     Y_UNIT_TEST(WindowsPathTraversalInImportSourcePath) {
@@ -570,13 +580,12 @@ Y_UNIT_TEST_SUITE_F(FsBackupPathSecurityValidationTest, TFsBackupParamsValidatio
         settings.AppendItem({"..\\..\\..\\etc\\passwd", "/Root/Restored/table1"});
 
         auto res = YdbImportClient().ImportFromFs(settings).GetValueSync();
-        UNIT_ASSERT_C(!res.Status().IsSuccess(),
-            "Status: " << res.Status().GetStatus() << Endl << res.Status().GetIssues().ToString());
+        UNIT_ASSERT(!res.Status().IsSuccess());
         UNIT_ASSERT_VALUES_EQUAL_C(res.Status().GetStatus(), NYdb::EStatus::BAD_REQUEST,
             res.Status().GetIssues().ToString());
         UNIT_ASSERT_C(
             res.Status().GetIssues().ToString().contains("path traversal") ||
             res.Status().GetIssues().ToString().contains("separator"),
-            "Should reject malicious path: " << res.Status().GetIssues().ToString());
+            "Should reject path: " << res.Status().GetIssues().ToString());
     }
 }

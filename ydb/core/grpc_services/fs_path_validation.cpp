@@ -38,13 +38,13 @@ bool ValidatePathComponentsRaw(const TString& path, const TString& pathDescripti
 
         if (component == "..") {
             error = TStringBuilder() << pathDescription
-                                     << " contains path traversal sequence (..)";
+                << " contains path traversal sequence (..)";
             return false;
         }
 
         if (component == ".") {
             error = TStringBuilder() << pathDescription
-                                     << " contains current directory reference (.)";
+                << " contains current directory reference (.)";
             return false;
         }
     }
@@ -70,7 +70,7 @@ bool ValidateFsPath(const TString& path, const TString& pathDescription, TString
 #else
     if (path.Contains('\\')) {
         error = TStringBuilder() << pathDescription
-                                 << " contains invalid path separator backslash (\\)";
+            << " contains invalid path separator backslash (\\)";
         return false;
     }
     return ValidatePathComponentsRaw<TPathSplitTraitsUnix>(path, pathDescription, error);

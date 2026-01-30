@@ -208,11 +208,6 @@ void TRawPartitionStreamEventQueue<UseMigrationProtocol>::SignalReadyEvents(TInt
 template<bool UseMigrationProtocol>
 void TRawPartitionStreamEventQueue<UseMigrationProtocol>::DeleteNotReadyTail(TDeferredActions<UseMigrationProtocol>& deferred)
 {
-    // For non-graceful partition stops, we only destroy data events from NotReady
-    // queue (events not yet signaled to the global queue). Ready events have already
-    // been signaled and can be delivered to the user - this preserves the WaitEvent/
-    // GetEvent contract where a signaled future guarantees an available event.
-
     std::vector<TDataDecompressionInfoPtr<UseMigrationProtocol>> infos;
 
     // Collect data events from NotReady queue only
@@ -2513,6 +2508,10 @@ TReadSessionEventsQueue<UseMigrationProtocol>::GetEventImpl(size_t& maxByteSize,
         TReadSessionEventInfo<UseMigrationProtocol>& front = TParent::Events.front();
         auto partitionStream = front.PartitionStream;
 
+        if (!partitionStream->HasEvents()) {
+            Y_ABORT("can't be here - got events in global queue, but nothing in partition queue");
+        }
+
         std::optional<typename TAReadSessionEvent<UseMigrationProtocol>::TEvent> event;
         auto frontCbContext = front.CbContext;
         if (partitionStream->TopEvent().IsDataEvent()) {
@@ -2535,11 +2534,12 @@ TReadSessionEventsQueue<UseMigrationProtocol>::GetEventImpl(size_t& maxByteSize,
 
         TParent::RenewWaiterImpl();
 
-        return TReadSessionEventInfo<UseMigrationProtocol>{partitionStream, std::move(frontCbContext), std::move(*event)};
+        return {partitionStream, std::move(frontCbContext), std::move(*event)};
     }
 
-    Y_ABORT_UNLESS(TParent::CloseEvent);
-    return TReadSessionEventInfo<UseMigrationProtocol>{*TParent::CloseEvent};
+    Y_ASSERT(TParent::CloseEvent);
+
+    return {*TParent::CloseEvent};
 }
 
 template <bool UseMigrationProtocol>

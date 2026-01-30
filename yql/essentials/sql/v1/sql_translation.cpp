@@ -2661,13 +2661,14 @@ static bool StoreConsumerSettingsEntry(
             return false;
         }
         if (reset) {
-            settings.Type.Reset();
+            ctx.Error() << to_upper(id.Name) << " reset is not supported";
+            return false;
         } else {
             if (!valueExprNode->IsLiteral() || (valueExprNode->GetLiteralType() != "String" && valueExprNode->GetLiteralType() != "Enum")) {
                 ctx.Error() << to_upper(id.Name) << " value should be a string literal. Possible values: 'streaming', 'shared'";
                 return false;
             }
-            settings.Type.Set(valueExprNode);
+            settings.Type = valueExprNode;
         }
     } else if (name == "keep_messages_order") {
         if (settings.KeepMessagesOrder) {
@@ -2675,13 +2676,14 @@ static bool StoreConsumerSettingsEntry(
             return false;
         }
         if (reset) {
-            settings.KeepMessagesOrder.Reset();
+            ctx.Error() << to_upper(id.Name) << " reset is not supported";
+            return false;
         } else {
             if (!valueExprNode->IsLiteral() || valueExprNode->GetLiteralType() != "Bool") {
                 ctx.Error() << to_upper(id.Name) << " value should be boolean";
                 return false;
             }
-            settings.KeepMessagesOrder.Set(valueExprNode);
+            settings.KeepMessagesOrder = valueExprNode;
         }
     } else if (name == "default_processing_timeout") {
         if (settings.DefaultProcessingTimeout) {
@@ -2689,10 +2691,11 @@ static bool StoreConsumerSettingsEntry(
             return false;
         }
         if (reset) {
-            settings.DefaultProcessingTimeout.Reset();
+            ctx.Error() << to_upper(id.Name) << " reset is not supported";
+            return false;
         } else {
             // ToDo: !! validate value
-            settings.DefaultProcessingTimeout.Set(valueExprNode);
+            settings.DefaultProcessingTimeout = valueExprNode;
         }
     } else if (name == "max_processing_attempts") {
         if (settings.MaxProcessingAttempts) {
@@ -2700,10 +2703,11 @@ static bool StoreConsumerSettingsEntry(
             return false;
         }
         if (reset) {
-            settings.MaxProcessingAttempts.Reset();
+            ctx.Error() << to_upper(id.Name) << " reset is not supported";
+            return false;
         } else {
             // ToDo: !! validate value
-            settings.DefaultProcessingTimeout.Set(valueExprNode);
+            settings.MaxProcessingAttempts = valueExprNode;
         }
     } else if (name == "dead_letter_policy") {
         if (settings.DeadLetterPolicy) {
@@ -2711,13 +2715,14 @@ static bool StoreConsumerSettingsEntry(
             return false;
         }
         if (reset) {
-            settings.DeadLetterPolicy.Reset();
+            ctx.Error() << to_upper(id.Name) << " reset is not supported";
+            return false;
         } else {
             if (!valueExprNode->IsLiteral() || (valueExprNode->GetLiteralType() != "String" && valueExprNode->GetLiteralType() != "Enum")) {
                 ctx.Error() << to_upper(id.Name) << " value should be a string literal. Possible values: 'move', 'delete', 'none'";
                 return false;
             }
-            settings.DeadLetterPolicy.Set(valueExprNode);
+            settings.DeadLetterPolicy = valueExprNode;
         }
     } else if (name == "dead_letter_queue") {
         if (settings.DeadLetterQueue) {
@@ -2725,13 +2730,14 @@ static bool StoreConsumerSettingsEntry(
             return false;
         }
         if (reset) {
-            settings.DeadLetterQueue.Reset();
+            ctx.Error() << to_upper(id.Name) << " reset is not supported";
+            return false;
         } else {
             if (!valueExprNode->IsLiteral() || valueExprNode->GetLiteralType() != "String") {
                 ctx.Error() << to_upper(id.Name) << " value should be a string literal";
                 return false;
             }
-            settings.DeadLetterQueue.Set(valueExprNode);
+            settings.DeadLetterQueue = valueExprNode;
         }
     } else {
         ctx.Error() << to_upper(id.Name) << ": unknown option for consumer";

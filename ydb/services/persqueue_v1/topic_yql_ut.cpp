@@ -252,6 +252,7 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
     Y_UNIT_TEST(CreateSharedConsumer) {
         NKikimrConfig::TFeatureFlags ff;
         ff.SetEnableTopicSplitMerge(true);
+        ff.SetEnableTopicMessageLevelParallelism(true);
         auto settings = NKikimr::NPersQueueTests::PQSettings();
         settings.SetFeatureFlags(ff);
 
@@ -262,11 +263,11 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
                 CREATE TOPIC `/Root/PQ/rt3.dc1--topic_with_shared_consumer`
                     (CONSUMER c1 WITH (
                         type = 'shared',
-                        keep_messages_order = true,
-                        default_processing_timeout = Interval('PT1S'),
-                        max_processing_attempts = 10,
-                        dead_letter_policy = 'move',
-                        dead_letter_queue = 'dead_letter_queue'
+                        keep_messages_order = true
+                        , default_processing_timeout = Interval('PT1S')
+                        , max_processing_attempts = 10
+                        , dead_letter_policy = 'move'
+                        ,dead_letter_queue = 'dead_letter_queue'
                     ))
             )";
 

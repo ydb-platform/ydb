@@ -1887,34 +1887,37 @@ TNodePtr BuildDropTable(TPosition pos, const TTableRef& tr, bool missingOk, ETab
 }
 
 static INode::TPtr CreateConsumerDesc(const TTopicConsumerDescription& desc, const INode& node, bool alter) {
+    auto setValue = [&](const INode::TPtr& settings, const TNodePtr& value, const auto& setter) {
+        if (value) {
+            return node.L(settings, node.Q(node.Y(node.Q(setter), value)));
+        }
+        return settings;
+    };
+
+    auto setValueWithReset = [&](const INode::TPtr& settings, const NYql::TResetableSetting<TNodePtr, void>& value, const auto& setter, const auto& resetter) {
+        if (!value) {
+            return settings;
+        }
+        if (value.IsSet()) {
+            return node.L(settings, node.Q(node.Y(setter, value.GetValueSet())));
+        } else {
+            YQL_ENSURE(alter, "Cannot reset on create");
+            return node.L(settings, node.Q(node.Y(resetter, node.Q(node.Y()))));
+        }
+    };
+
     auto settings = node.Y();
-    if (desc.Settings.Important) {
-        settings = node.L(settings, node.Q(node.Y(node.Q("important"), desc.Settings.Important)));
-    }
-    if (const auto& availabilityPeriod = desc.Settings.AvailabilityPeriod) {
-        if (availabilityPeriod.IsSet()) {
-            settings = node.L(settings, node.Q(node.Y(node.Q("setAvailabilityPeriod"), availabilityPeriod.GetValueSet())));
-        } else {
-            YQL_ENSURE(alter, "Cannot reset on create");
-            settings = node.L(settings, node.Q(node.Y(node.Q("resetAvailabilityPeriod"), node.Q(node.Y()))));
-        }
-    }
-    if (const auto& readFromTs = desc.Settings.ReadFromTs) {
-        if (readFromTs.IsSet()) {
-            settings = node.L(settings, node.Q(node.Y(node.Q("setReadFromTs"), readFromTs.GetValueSet())));
-        } else {
-            YQL_ENSURE(alter, "Cannot reset on create");
-            settings = node.L(settings, node.Q(node.Y(node.Q("resetReadFromTs"), node.Q(node.Y()))));
-        }
-    }
-    if (const auto& readFromTs = desc.Settings.SupportedCodecs) {
-        if (readFromTs.IsSet()) {
-            settings = node.L(settings, node.Q(node.Y(node.Q("setSupportedCodecs"), readFromTs.GetValueSet())));
-        } else {
-            YQL_ENSURE(alter, "Cannot reset on create");
-            settings = node.L(settings, node.Q(node.Y(node.Q("resetSupportedCodecs"), node.Q(node.Y()))));
-        }
-    }
+    settings = setValue(settings, desc.Settings.Important, "important");
+    settings = setValueWithReset(settings, desc.Settings.AvailabilityPeriod, "setAvailabilityPeriod", "resetAvailabilityPeriod");
+    settings = setValueWithReset(settings, desc.Settings.ReadFromTs, "setReadFromTs", "resetReadFromTs");
+    settings = setValueWithReset(settings, desc.Settings.SupportedCodecs, "setSupportedCodecs", "resetSupportedCodecs");
+    settings = setValue(settings, desc.Settings.Type, "type");
+    settings = setValue(settings, desc.Settings.KeepMessagesOrder, "keep_messages_order");
+    settings = setValue(settings, desc.Settings.DefaultProcessingTimeout, "default_processing_timeout");
+    settings = setValue(settings, desc.Settings.MaxProcessingAttempts, "max_processing_attempts");
+    settings = setValue(settings, desc.Settings.DeadLetterPolicy, "dead_letter_policy");
+    settings = setValue(settings, desc.Settings.DeadLetterQueue, "dead_letter_queue");
+
     return node.Y(
         node.Q(node.Y(node.Q("name"), BuildQuotedAtom(desc.Name.Pos, desc.Name.Name))),
         node.Q(node.Y(node.Q("settings"), node.Q(settings))));

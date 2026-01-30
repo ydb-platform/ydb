@@ -3227,7 +3227,7 @@ public:
 
         TStringBuilder description;
         if (TabletPercent != 100) {
-            description << TabletPercent << " of ";
+            description << TabletPercent << "% of ";
         }
         TabletFilter.ToString(description);
         if (StoragePool) {

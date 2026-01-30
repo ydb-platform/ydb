@@ -144,8 +144,8 @@ class WorkloadTestBase(LoadSuiteBase):
 
     @classmethod
     def event_report(cls, event_kind: str,
-                          verification_phase: str = None, check_type: str = None,
-                          cluster_issue: dict = None) -> None:
+                     verification_phase: str = None, check_type: str = None,
+                     cluster_issue: dict = None) -> None:
         """
         Универсальный метод для создания записей о событиях теста в базе данных.
 

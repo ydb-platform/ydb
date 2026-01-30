@@ -130,7 +130,7 @@ struct TRestore {
         }
     }
 
-    template<typename TTableInfo>
+    template <typename TTableInfo>
     static void PersistTableTask(const TTableInfo& table, const TPathId& pathId, const TTxTransaction& tx, TOperationContext& context) {        
         const auto& restore = tx.GetRestore();
         table->RestoreSettings = restore;

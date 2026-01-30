@@ -304,8 +304,40 @@ public:
         return LocksIssue.has_value() && !(HasSnapshot() && IsReadOnly());
     }
 
+    ui64 GetBrokenLocksCount() const override {
+        ui64 count = 0;
+        for (const auto& [shardId, shardInfo] : ShardsInfo) {
+            for (const auto& [key, lockInfo] : shardInfo.Locks) {
+                if (lockInfo.Invalidated || lockInfo.LocksAcquireFailure) {
+                    ++count;
+                }
+            }
+        }
+        return count;
+    }
+
     const std::optional<NYql::TIssue>& GetLockIssue() const override {
+        // If we have a BrokenLockQueryTraceId and the issue doesn't contain it, update the issue
+        if (LocksIssue && BrokenLockQueryTraceId_ && *BrokenLockQueryTraceId_ != 0) {
+            TString currentMessage = LocksIssue->GetMessage();
+            if (!currentMessage.Contains("VictimQueryTraceId:")) {
+                TStringBuilder message;
+                message << currentMessage;
+                message << " VictimQueryTraceId: " << *BrokenLockQueryTraceId_ << ".";
+                const_cast<std::optional<NYql::TIssue>&>(LocksIssue) = YqlIssue(NYql::TPosition(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message);
+            }
+        }
         return LocksIssue;
+    }
+
+    void SetBrokenLockQueryTraceId(ui64 queryTraceId) override {
+        if (!BrokenLockQueryTraceId_) {
+            BrokenLockQueryTraceId_ = queryTraceId;
+        }
+    }
+
+    std::optional<ui64> GetBrokenLockQueryTraceId() const override {
+        return BrokenLockQueryTraceId_;
     }
 
     const THashSet<ui64>& GetShards() const override {
@@ -543,6 +575,10 @@ private:
             }
             message << "`" << path << "`";
         }
+        message << ".";
+        if (BrokenLockQueryTraceId_ && *BrokenLockQueryTraceId_ != 0) {
+            message << " VictimQueryTraceId: " << *BrokenLockQueryTraceId_ << ".";
+        }
         LocksIssue = YqlIssue(NYql::TPosition(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message);
     }
 
@@ -560,6 +596,7 @@ private:
     bool ValidSnapshot = false;
     bool HasOlapTableShard = false;
     std::optional<NYql::TIssue> LocksIssue;
+    std::optional<ui64> BrokenLockQueryTraceId_;
 
     THashSet<ui64> SendingShards;
     THashSet<ui64> ReceivingShards;

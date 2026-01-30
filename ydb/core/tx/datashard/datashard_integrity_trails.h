@@ -4,6 +4,7 @@
 
 #include <library/cpp/string_utils/base64/base64.h>
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/data_integrity_trails/data_integrity_trails.h>
 #include <ydb/core/engine/mkql_engine_flat.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
@@ -105,7 +106,7 @@ inline void LogIntegrityTrailsKeys(const NActors::TActorContext& ctx, const ui64
                         case NKikimr::TKeyDesc::ERowOperation::Erase:
                             rowOp = "Erase";
                             break;
-                        default:                   
+                        default:
                             rowOp = "Invalid operation";
                             break;
                     }
@@ -149,7 +150,115 @@ inline void LogIntegrityTrailsLocks(const TActorContext& ctx, const ui64 tabletI
     };
 
     LOG_INFO_S(ctx, NKikimrServices::DATA_INTEGRITY, logFn());
+}
 
+// Unified function that logs lock breaking events to both integrity trails and TLI systems
+inline void LogLocksBroken(const NActors::TActorContext& ctx, const ui64 tabletId, TStringBuf message,
+                           const TVector<ui64>& brokenLocks, TMaybe<ui64> breakerQueryTraceId = Nothing(),
+                           const TVector<ui64>& victimQueryTraceIds = {}) {
+    // Check if logging is enabled before formatting (performance optimization)
+    const bool tliEnabled = IS_INFO_LOG_ENABLED(NKikimrServices::TLI);
+    const bool integrityEnabled = IS_INFO_LOG_ENABLED(NKikimrServices::DATA_INTEGRITY);
+    if (!tliEnabled && !integrityEnabled) {
+        return;
+    }
+
+    // Determine what we can actually log for each service
+    const bool canLogTli = tliEnabled && !victimQueryTraceIds.empty();
+    const bool canLogIntegrity = integrityEnabled && !brokenLocks.empty();
+
+    // Early return if neither service has anything to log
+    if (!canLogTli && !canLogIntegrity) {
+        return;
+    }
+
+    // Build message body once (everything except Component and Type)
+    TStringStream bodySs;
+    LogKeyValue("TabletId", ToString(tabletId), bodySs);
+    LogKeyValue("Message", message, bodySs, true);
+    TString messageBody = bodySs.Str();
+
+    // Log to TLI service (only if we have victim query trace IDs)
+    if (canLogTli) {
+        TStringStream ss;
+        LogKeyValue("Component", "DataShard", ss);
+        if (breakerQueryTraceId && *breakerQueryTraceId != 0) {
+            LogKeyValue("QueryTraceId", ToString(*breakerQueryTraceId), ss);
+            LogKeyValue("BreakerQueryTraceId", ToString(*breakerQueryTraceId), ss);
+        }
+        ss << "VictimQueryTraceIds: [";
+        for (size_t i = 0; i < victimQueryTraceIds.size(); ++i) {
+            ss << victimQueryTraceIds[i];
+            if (i + 1 < victimQueryTraceIds.size()) {
+                ss << " ";
+            }
+        }
+        ss << "], ";
+
+        ss << messageBody;
+        LOG_INFO_S(ctx, NKikimrServices::TLI, ss.Str());
+    }
+
+    // Log to DATA_INTEGRITY service (only if we have broken locks)
+    if (canLogIntegrity) {
+        TStringStream ss;
+        LogKeyValue("Component", "DataShard", ss);
+        LogKeyValue("Type", "Locks", ss);
+        ss << "BrokenLocks: [";
+        for (size_t i = 0; i < brokenLocks.size(); ++i) {
+            ss << brokenLocks[i];
+            if (i + 1 < brokenLocks.size()) {
+                ss << " ";
+            }
+        }
+        ss << "], ";
+        ss << messageBody;
+        LOG_INFO_S(ctx, NKikimrServices::DATA_INTEGRITY, ss.Str());
+    }
+
+}
+
+// Log victim detection in DataShard (when a transaction detects its locks were broken)
+inline void LogVictimDetected(const NActors::TActorContext& ctx, const ui64 tabletId, TStringBuf message,
+                              TMaybe<ui64> victimQueryTraceId = Nothing(),
+                              TMaybe<ui64> currentQueryTraceId = Nothing()) {
+    // Check if logging is enabled before formatting (performance optimization)
+    const bool tliEnabled = IS_INFO_LOG_ENABLED(NKikimrServices::TLI);
+    const bool integrityEnabled = IS_INFO_LOG_ENABLED(NKikimrServices::DATA_INTEGRITY);
+    if (!tliEnabled && !integrityEnabled) {
+        return;
+    }
+
+    // Build message body once (everything except Component and Type)
+    TStringStream bodySs;
+    LogKeyValue("TabletId", ToString(tabletId), bodySs);
+    if (victimQueryTraceId && *victimQueryTraceId != 0) {
+        // QueryTraceId = VictimQueryTraceId for victim logs
+        LogKeyValue("QueryTraceId", ToString(*victimQueryTraceId), bodySs);
+        LogKeyValue("VictimQueryTraceId", ToString(*victimQueryTraceId), bodySs);
+    }
+    if (currentQueryTraceId && *currentQueryTraceId != 0) {
+        LogKeyValue("CurrentQueryTraceId", ToString(*currentQueryTraceId), bodySs);
+    }
+    LogKeyValue("Message", message, bodySs, /*last*/ true);
+    TString messageBody = bodySs.Str();
+
+    // Log to TLI service
+    if (tliEnabled) {
+        TStringStream ss;
+        LogKeyValue("Component", "DataShard", ss);
+        ss << messageBody;
+        LOG_INFO_S(ctx, NKikimrServices::TLI, ss.Str());
+    }
+
+    // Log to DATA_INTEGRITY service
+    if (integrityEnabled) {
+        TStringStream ss;
+        LogKeyValue("Component", "DataShard", ss);
+        LogKeyValue("Type", "Locks", ss);
+        ss << messageBody;
+        LOG_INFO_S(ctx, NKikimrServices::DATA_INTEGRITY, ss.Str());
+    }
 }
 
 template <typename TxResult>
@@ -163,7 +272,7 @@ inline void LogIntegrityTrailsFinish(const NActors::TActorContext& ctx, const ui
         LogKeyValue("Type", "Finished", ss);
         LogKeyValue("TabletId", ToString(tabletId), ss);
         LogKeyValue("PhyTxId", ToString(txId), ss);
-        LogKeyValue("Status", statusString, ss);
+        LogKeyValue("Status", statusString, ss, true);
 
         return ss.Str();
     };

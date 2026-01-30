@@ -817,6 +817,7 @@ protected:
 
         TasksGraph.GetMeta().SetLockTxId(lockTxId);
         TasksGraph.GetMeta().SetLockNodeId(SelfId().NodeId());
+        TasksGraph.GetMeta().SetQueryTraceId(Request.QueryTraceId);
 
         switch (Request.IsolationLevel) {
             case NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW:

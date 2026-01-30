@@ -20,6 +20,7 @@
 #include "datashard_user_table.h"
 #include "datashard_write.h"
 #include "incr_restore_scan.h"
+#include "datashard_integrity_trails.h"
 #include "progress_queue.h"
 #include "read_iterator.h"
 #include "reject_reason.h"
@@ -929,9 +930,10 @@ class TDataShard
             struct Counter : Column<4, NScheme::NTypeIds::Uint64> {};
             struct CreateTimestamp : Column<5, NScheme::NTypeIds::Uint64> {};
             struct Flags : Column<6, NScheme::NTypeIds::Uint64> {};
+            struct VictimQueryTraceId : Column<7, NScheme::NTypeIds::Uint64> {};
 
             using TKey = TableKey<LockId>;
-            using TColumns = TableColumns<LockId, LockNodeId, Generation, Counter, CreateTimestamp, Flags>;
+            using TColumns = TableColumns<LockId, LockNodeId, Generation, Counter, CreateTimestamp, Flags, VictimQueryTraceId>;
         };
 
         struct LockRanges : Table<30> {
@@ -1680,7 +1682,19 @@ public:
         return nullptr;
     }
 
-    void RemoveUserTable(const TPathId& tableId, ILocksDb* locksDb) {
+    void RemoveUserTable(const TPathId& tableId, ILocksDb* locksDb, const TActorContext& ctx) {
+        // Collect lock IDs before removal for TLI logging
+        TVector<ui64> locksToInvalidate;
+        const auto& allLocks = SysLocks.GetLocks();
+        for (const auto& [lockId, lockInfo] : allLocks) {
+            if (lockInfo->GetReadTables().contains(tableId) || lockInfo->GetWriteTables().contains(tableId)) {
+                locksToInvalidate.push_back(lockId);
+            }
+        }
+        if (!locksToInvalidate.empty()) {
+            NKikimr::NDataIntegrity::LogLocksBroken(ctx, TabletID(), "Schema change: table removed invalidated locks", locksToInvalidate);
+        }
+
         SysLocks.RemoveSchema(tableId, locksDb);
         Pipeline.GetDepTracker().RemoveSchema(tableId);
         TableInfos.erase(tableId.LocalPathId);

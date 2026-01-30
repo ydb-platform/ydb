@@ -3,6 +3,7 @@
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/common/kqp_tx_manager.h>
+#include <ydb/core/kqp/common/kqp_data_integrity_trails.h>
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider.h>
 
@@ -220,9 +221,10 @@ public:
         LastAccessTime = TInstant::Now();
     }
 
-    void OnBeginQuery() {
+    void OnBeginQuery(ui64 queryTraceId, const TString& queryText) {
         ++QueriesCount;
         BeginQueryTime = TInstant::Now();
+        QueryTextCollector.AddQueryText(queryTraceId, queryText);
     }
 
     void OnEndQuery() {
@@ -242,6 +244,7 @@ public:
         HasTableWrite = false;
         HasTableRead = false;
         NeedUncommittedChangesFlush = false;
+        QueryTextCollector.Clear();
     }
 
     TKqpTransactionInfo GetInfo() const;
@@ -369,6 +372,8 @@ public:
     IKqpTransactionManagerPtr TxManager = nullptr;
 
     TShardIdToTableInfoPtr ShardIdToTableInfo = std::make_shared<TShardIdToTableInfo>();
+
+    NDataIntegrity::TQueryTextCollector QueryTextCollector;
 };
 
 struct TTxId {
@@ -516,8 +521,10 @@ public:
     }
 };
 
-NYql::TIssue GetLocksInvalidatedIssue(const TKqpTransactionContext& txCtx, const NYql::TKikimrPathId& pathId);
-NYql::TIssue GetLocksInvalidatedIssue(const TShardIdToTableInfo& shardIdToTableInfo, const ui64& shardId);
+NYql::TIssue GetLocksInvalidatedIssue(const TKqpTransactionContext& txCtx, const NYql::TKikimrPathId& pathId,
+    TMaybe<ui64> victimQueryTraceId = Nothing());
+NYql::TIssue GetLocksInvalidatedIssue(const TShardIdToTableInfo& shardIdToTableInfo, const ui64& shardId,
+    TMaybe<ui64> victimQueryTraceId = Nothing());
 std::pair<bool, std::vector<NYql::TIssue>> MergeLocks(const NKikimrMiniKQL::TType& type,
     const NKikimrMiniKQL::TValue& value, TKqpTransactionContext& txCtx);
 
@@ -531,3 +538,4 @@ bool HasOltpTableReadInTx(const NKqpProto::TKqpPhyQuery& physicalQuery);
 bool HasOltpTableWriteInTx(const NKqpProto::TKqpPhyQuery& physicalQuery);
 
 }  // namespace NKikimr::NKqp
+

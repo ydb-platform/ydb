@@ -367,7 +367,8 @@ public:
         const NKikimrDataEvents::ELockMode lockMode,
         const IKqpTransactionManagerPtr& txManager,
         const TActorId sessionActorId,
-        TIntrusivePtr<TKqpCounters> counters)
+        TIntrusivePtr<TKqpCounters> counters,
+        ui64 queryTraceId)
         : MessageSettings(GetWriteActorSettings())
         , Alloc(alloc)
         , MvccSnapshot(mvccSnapshot)
@@ -383,6 +384,7 @@ public:
         , Callbacks(callbacks)
         , TxManager(txManager ? txManager : CreateKqpTransactionManager(/* collectOnly= */ true))
         , Counters(counters)
+        , QueryTraceId(queryTraceId)
     {
         LogPrefix = TStringBuilder() << "Table: `" << TablePath << "` (" << TableId << "), " << "SessionActorId: " << sessionActorId;
         ShardedWriteController = CreateShardedWriteController(
@@ -960,12 +962,25 @@ public:
             TxManager->BreakLock(ev->Get()->Record.GetOrigin());
             YQL_ENSURE(TxManager->BrokenLocks());
             TxManager->SetError(ev->Get()->Record.GetOrigin());
-            RuntimeError(
-                NYql::NDqProto::StatusIds::ABORTED,
-                NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED,
-                TStringBuilder() << "Transaction locks invalidated. Table: `"
-                    << TablePath << "`.",
-                getIssues());
+
+            // Store the broken lock's QueryTraceId for TLI logging
+            if (!ev->Get()->Record.GetTxLocks().empty()) {
+                const auto& brokenLock = ev->Get()->Record.GetTxLocks(0);
+                if (brokenLock.HasQueryTraceId() && brokenLock.GetQueryTraceId() != 0) {
+                    TxManager->SetBrokenLockQueryTraceId(brokenLock.GetQueryTraceId());
+                }
+            }
+
+            {
+                NYql::TIssues lockIssues;
+                if (auto lockIssue = TxManager->GetLockIssue()) {
+                    lockIssues.AddIssue(*lockIssue);
+                }
+                for (const auto& issue : getIssues()) {
+                    lockIssues.AddIssue(issue);
+                }
+                RuntimeError(NYql::NDqProto::StatusIds::ABORTED, std::move(lockIssues));
+            }
             return;
         }
         case NKikimrDataEvents::TEvWriteResult::STATUS_CONSTRAINT_VIOLATION: {
@@ -1032,6 +1047,10 @@ public:
                 if (!TxManager->AddLock(ev->Get()->Record.GetOrigin(), lock)) {
                     UpdateStats(ev->Get()->Record.GetTxStats());
                     YQL_ENSURE(TxManager->BrokenLocks());
+                    // Store the broken lock's QueryTraceId for TLI logging
+                    if (lock.HasQueryTraceId() && lock.GetQueryTraceId() != 0) {
+                        TxManager->SetBrokenLockQueryTraceId(lock.GetQueryTraceId());
+                    }
                     NYql::TIssues issues;
                     issues.AddIssue(*TxManager->GetLockIssue());
                     RuntimeError(
@@ -1177,6 +1196,7 @@ public:
             evWrite->Record.SetLockMode(LockMode);
         }
 
+        evWrite->Record.SetQueryTraceId(QueryTraceId);
         evWrite->Record.SetOverloadSubscribe(metadata->NextOverloadSeqNo);
 
         const auto serializationResult = ShardedWriteController->SerializeMessageToPayload(shardId, *evWrite);
@@ -1509,6 +1529,7 @@ private:
 
     NWilson::TTraceId ParentTraceId;
     NWilson::TSpan TableWriteActorSpan;
+    const ui64 QueryTraceId;
 };
 
 
@@ -2345,7 +2366,8 @@ public:
                 Settings.GetLockMode(),
                 nullptr,
                 TActorId{},
-                Counters);
+                Counters,
+                Settings.GetQueryTraceId());
             WriteTableActor->SetParentTraceId(DirectWriteActorSpan.GetTraceId());
             WriteTableActorId = RegisterWithSameMailbox(WriteTableActor);
 
@@ -2748,6 +2770,7 @@ public:
         , Counters(settings.Counters)
         , TxProxyMon(settings.TxProxyMon)
         , BufferWriteActorSpan(TWilsonKqp::BufferWriteActor, NWilson::TTraceId(settings.TraceId), "BufferWriteActor", NWilson::EFlags::AUTO_END)
+        , QueryTraceId(settings.QueryTraceId)
     {
         Counters->BufferActorsCount->Inc();
         UpdateTracingState("Write", BufferWriteActorSpan.GetTraceId());
@@ -2945,7 +2968,8 @@ public:
                     settings.TransactionSettings.LockMode,
                     TxManager,
                     SessionActorId,
-                    Counters);
+                    Counters,
+                    QueryTraceId);
                 ptr->SetParentTraceId(BufferWriteActorStateSpan.GetTraceId());
                 TActorId id = RegisterWithSameMailbox(ptr);
                 CA_LOG_D("Create new TableWriteActor for table `" << tablePath << "` (" << tableId << "). lockId=" << LockTxId << ". ActorId=" << id);
@@ -2979,6 +3003,7 @@ public:
                     .LockTxId = LockTxId,
                     .LockNodeId = LockNodeId,
                     .LockMode = settings.TransactionSettings.LockMode,
+                    .QueryTraceId = QueryTraceId,
                     .MvccSnapshot = settings.TransactionSettings.MvccSnapshot,
 
                     .TxManager = TxManager,
@@ -3621,6 +3646,8 @@ public:
             FillEvWritePrepare(evWrite.get(), shardId, *TxId, TxManager);
             evWrite->Record.SetOverloadSubscribe(++ExternalShardIdToOverloadSeqNo[shardId]);
         }
+
+        evWrite->Record.SetQueryTraceId(QueryTraceId);
 
         NDataIntegrity::LogIntegrityTrails("EvWriteTx", evWrite->Record.GetTxId(), shardId, TlsActivationContext->AsActorContext(), "BufferActor");
 
@@ -4416,13 +4443,23 @@ public:
             TxManager->BreakLock(ev->Get()->Record.GetOrigin());
             YQL_ENSURE(TxManager->BrokenLocks());
             TxManager->SetError(ev->Get()->Record.GetOrigin());
-            ReplyError(
-                NYql::NDqProto::StatusIds::ABORTED,
-                NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED,
-                TStringBuilder()
-                    << "Transaction locks invalidated. "
-                    << GetPathes(ev->Get()->Record.GetOrigin()) << ".",
-                getIssues());
+
+            // Store the broken lock's QueryTraceId for TLI logging
+            if (!ev->Get()->Record.GetTxLocks().empty()) {
+                const auto& brokenLock = ev->Get()->Record.GetTxLocks(0);
+                if (brokenLock.HasQueryTraceId() && brokenLock.GetQueryTraceId() != 0) {
+                    TxManager->SetBrokenLockQueryTraceId(brokenLock.GetQueryTraceId());
+                }
+            }
+
+            NYql::TIssues lockIssues;
+            if (auto lockIssue = TxManager->GetLockIssue()) {
+                lockIssues.AddIssue(*lockIssue);
+            }
+            for (const auto& issue : getIssues()) {
+                lockIssues.AddIssue(issue);
+            }
+            ReplyError(NYql::NDqProto::StatusIds::ABORTED, std::move(lockIssues));
             return;
         }
         case NKikimrDataEvents::TEvWriteResult::STATUS_CONSTRAINT_VIOLATION: {
@@ -4845,6 +4882,7 @@ private:
 
     NWilson::TSpan BufferWriteActorSpan;
     NWilson::TSpan BufferWriteActorStateSpan;
+    ui64 QueryTraceId = 0;
 };
 
 class TKqpForwardWriteActor : public TActorBootstrapped<TKqpForwardWriteActor>, public NYql::NDq::IDqComputeActorAsyncOutput {

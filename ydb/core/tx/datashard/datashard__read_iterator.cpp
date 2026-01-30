@@ -1,5 +1,6 @@
 #include "datashard_failpoints.h"
 #include "datashard_impl.h"
+#include "datashard_integrity_trails.h"
 #include "datashard_read_operation.h"
 #include "setup_sys_locks.h"
 #include "datashard_locks_db.h"
@@ -1993,7 +1994,7 @@ public:
         }
 
         TDataShardLocksDb locksDb(*Self, txc);
-        TSetupSysLocks guardLocks(state.LockId, state.LockNodeId, *Self, &locksDb);
+        TSetupSysLocks guardLocks(state.LockId, state.LockNodeId, state.QueryTraceId, *Self, &locksDb);
 
         if (guardLocks.LockTxId) {
             bool createMissing = state.LockMode == NKikimrDataEvents::OPTIMISTIC;
@@ -2149,6 +2150,7 @@ public:
 
         state.LockId = request->Record.GetLockTxId();
         state.LockNodeId = request->Record.GetLockNodeId();
+        state.QueryTraceId = request->Record.GetQueryTraceId();
         state.LockMode = request->Record.GetLockMode();
         switch (state.LockMode) {
             case NKikimrDataEvents::OPTIMISTIC:
@@ -2635,6 +2637,10 @@ private:
 
             if (Reader->HadInvisibleRowSkips() || Reader->HadInconsistentResult()) {
                 sysLocks.BreakSetLocks();
+                NDataIntegrity::LogVictimDetected(ctx, Self->TabletID(),
+                    "Read transaction was a victim of broken locks",
+                    state.LockId ? sysLocks.GetVictimQueryTraceIdForLock(state.LockId) : Nothing(),
+                    state.QueryTraceId ? TMaybe<ui64>(state.QueryTraceId) : Nothing());
             }
 
             break;
@@ -2642,6 +2648,10 @@ private:
         case NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION:
             if (Reader->HadInconsistentResult()) {
                 sysLocks.BreakSetLocks();
+                NDataIntegrity::LogVictimDetected(ctx, Self->TabletID(),
+                    "Read transaction was a victim of broken locks",
+                    state.LockId ? sysLocks.GetVictimQueryTraceIdForLock(state.LockId) : Nothing(),
+                    state.QueryTraceId ? TMaybe<ui64>(state.QueryTraceId) : Nothing());
             }
 
             break;
@@ -2665,6 +2675,16 @@ private:
             addLock->SetPathId(lock.PathId);
             if (lock.HasWrites) {
                 addLock->SetHasWrites(true);
+            }
+
+            // Add QueryTraceId for broken locks (needed for TLI logging)
+            if (lock.IsError()) {
+                if (auto rawLock = sysLocks.GetRawLock(lock.LockId)) {
+                    ui64 queryTraceId = rawLock->GetVictimQueryTraceId();
+                    if (queryTraceId != 0) {
+                        addLock->SetQueryTraceId(queryTraceId);
+                    }
+                }
             }
 
             LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID()
@@ -3174,7 +3194,7 @@ public:
             << ", FirstUnprocessedQuery# " << state.FirstUnprocessedQuery);
 
         TDataShardLocksDb locksDb(*Self, txc);
-        TSetupSysLocks guardLocks(state.LockId, state.LockNodeId, *Self, &locksDb);
+        TSetupSysLocks guardLocks(state.LockId, state.LockNodeId, state.QueryTraceId, *Self, &locksDb);
 
         Reader.reset(new TReader(
             state,

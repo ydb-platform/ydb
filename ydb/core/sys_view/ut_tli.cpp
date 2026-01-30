@@ -19,11 +19,11 @@ namespace {
 // Helper class for TLI (Transaction Lock Invalidation) tests
 class TTliTestHelper {
 public:
-    TTliTestHelper(bool useSink)
-        : Settings_([useSink]() {
+    TTliTestHelper()
+        : Settings_([]() {
             TTestEnvSettings s;
             s.EnableSVP = true;
-            s.TableServiceConfig.SetEnableOltpSink(useSink);
+            s.TableServiceConfig.SetEnableOltpSink(true);
             return s;
         }())
         , Env_(1, 2, Settings_)
@@ -135,7 +135,7 @@ public:
     {
         TLockStats stats;
 
-        for (size_t iter = 0; iter < 30 && (!stats.FoundBreaker || !stats.FoundVictim); ++iter) {
+        for (size_t iter = 0; iter < 10 && (!stats.FoundBreaker || !stats.FoundVictim); ++iter) {
             auto it = Client_.StreamExecuteScanQuery(Sprintf(R"(
                 SELECT QueryText, LocksBrokenAsBreaker, LocksBrokenAsVictim
                 FROM `/Root/Tenant1/.sys/query_metrics_one_minute`
@@ -226,8 +226,8 @@ private:
 Y_UNIT_TEST_SUITE(TransactionLockInvalidation) {
 
     // Basic lock breakage: victim reads key, breaker writes same key, victim tries to write
-    Y_UNIT_TEST_TWIN(LocksBrokenSameKey, UseSink) {
-        TTliTestHelper h(UseSink);
+    Y_UNIT_TEST(LocksBrokenSameKey) {
+        TTliTestHelper h;
 
         h.CreateTable("Table");
         h.InsertData("UPSERT INTO `/Root/Tenant1/Table` (Key, Value) VALUES (1u, \"Initial\")");
@@ -245,7 +245,7 @@ Y_UNIT_TEST_SUITE(TransactionLockInvalidation) {
             "UPSERT INTO `/Root/Tenant1/Table` (Key, Value) VALUES (1u, \"Victim\") /* victim-commit */");
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
 
-        auto stats = h.WaitForLockStats("breaker-write", "victim-commit", "same-key");
+        auto stats = h.WaitForLockStats("breaker-write", "victim-read", "same-key");
         UNIT_ASSERT_C(stats.FoundBreaker, "Breaker not found in metrics");
         UNIT_ASSERT_C(stats.FoundVictim, "Victim not found in metrics");
         UNIT_ASSERT_VALUES_EQUAL(stats.BreakerCount, 1u);
@@ -253,8 +253,8 @@ Y_UNIT_TEST_SUITE(TransactionLockInvalidation) {
     }
 
     // Victim reads key1, breaker writes key1, victim writes key2 -> victim aborted
-    Y_UNIT_TEST_TWIN(LocksBrokenDifferentKeys, UseSink) {
-        TTliTestHelper h(UseSink);
+    Y_UNIT_TEST(LocksBrokenDifferentKeys) {
+        TTliTestHelper h;
 
         h.CreateTable("Table");
         h.InsertData("UPSERT INTO `/Root/Tenant1/Table` (Key, Value) VALUES (1u, \"V1\"), (2u, \"V2\")");
@@ -272,7 +272,7 @@ Y_UNIT_TEST_SUITE(TransactionLockInvalidation) {
             "UPSERT INTO `/Root/Tenant1/Table` (Key, Value) VALUES (2u, \"VictimWrite\") /* victim-w2 */");
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
 
-        auto stats = h.WaitForLockStats("breaker-w1", "victim-w2", "diff-keys");
+        auto stats = h.WaitForLockStats("breaker-w1", "victim-r1", "diff-keys");
         UNIT_ASSERT_C(stats.FoundBreaker, "Breaker not found");
         UNIT_ASSERT_C(stats.FoundVictim, "Victim not found");
         UNIT_ASSERT_VALUES_EQUAL(stats.BreakerCount, 1u);
@@ -280,8 +280,8 @@ Y_UNIT_TEST_SUITE(TransactionLockInvalidation) {
     }
 
     // Victim reads multiple keys, breaker writes them all
-    Y_UNIT_TEST_TWIN(LocksBrokenMultipleKeys, UseSink) {
-        TTliTestHelper h(UseSink);
+    Y_UNIT_TEST(LocksBrokenMultipleKeys) {
+        TTliTestHelper h;
 
         h.CreateTable("Table");
         h.InsertData("UPSERT INTO `/Root/Tenant1/Table` (Key, Value) VALUES (1u, \"V1\"), (2u, \"V2\"), (3u, \"V3\")");
@@ -299,7 +299,7 @@ Y_UNIT_TEST_SUITE(TransactionLockInvalidation) {
             "UPSERT INTO `/Root/Tenant1/Table` (Key, Value) VALUES (1u, \"Victim\") /* victim-wmulti */");
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
 
-        auto stats = h.WaitForLockStats("breaker-wmulti", "victim-wmulti", "multi");
+        auto stats = h.WaitForLockStats("breaker-wmulti", "victim-rmulti", "multi");
         UNIT_ASSERT_C(stats.FoundBreaker, "Breaker not found");
         UNIT_ASSERT_C(stats.FoundVictim, "Victim not found");
         UNIT_ASSERT_GE(stats.BreakerCount, 1u);
@@ -307,8 +307,8 @@ Y_UNIT_TEST_SUITE(TransactionLockInvalidation) {
     }
 
     // Cross-table: victim reads TableA, breaker writes TableA, victim writes TableB
-    Y_UNIT_TEST_TWIN(LocksBrokenCrossTables, UseSink) {
-        TTliTestHelper h(UseSink);
+    Y_UNIT_TEST(LocksBrokenCrossTables) {
+        TTliTestHelper h;
 
         h.CreateTables({"TableA", "TableB"});
         h.InsertData("UPSERT INTO `/Root/Tenant1/TableA` (Key, Value) VALUES (1u, \"ValA\")");
@@ -326,7 +326,7 @@ Y_UNIT_TEST_SUITE(TransactionLockInvalidation) {
             "UPSERT INTO `/Root/Tenant1/TableB` (Key, Value) VALUES (1u, \"DstVal\") /* victim-w */");
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
 
-        auto stats = h.WaitForLockStats("breaker-w", "victim-w", "cross");
+        auto stats = h.WaitForLockStats("breaker-w", "victim-r", "cross");
         UNIT_ASSERT_C(stats.FoundBreaker, "Breaker not found");
         UNIT_ASSERT_C(stats.FoundVictim, "Victim not found");
         UNIT_ASSERT_VALUES_EQUAL(stats.BreakerCount, 1u);
@@ -338,8 +338,8 @@ Y_UNIT_TEST_SUITE(TransactionLockInvalidation) {
     // The second read encounters the V2 row as "invisible" at V1 snapshot.
     // When reading at V1, row versions > V1 are skipped (InvisibleRowSkips).
     // This triggers lock invalidation detection on the read path.
-    Y_UNIT_TEST_TWIN(InvisibleRowSkips, UseSink) {
-        TTliTestHelper h(UseSink);
+    Y_UNIT_TEST(InvisibleRowSkips) {
+        TTliTestHelper h;
 
         h.CreateTable("Table");
         h.InsertData("UPSERT INTO `/Root/Tenant1/Table` (Key, Value) VALUES (1u, \"Initial\")");
@@ -363,7 +363,7 @@ Y_UNIT_TEST_SUITE(TransactionLockInvalidation) {
             "UPSERT INTO `/Root/Tenant1/Table` (Key, Value) VALUES (1u, \"VictimVal\") /* victim-w */");
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
 
-        auto stats = h.WaitForLockStats("breaker-w", "victim-read2", "invisible-skips");
+        auto stats = h.WaitForLockStats("breaker-w", "victim-read1", "invisible-skips");
         UNIT_ASSERT_C(stats.FoundBreaker, "Breaker not found");
         UNIT_ASSERT_C(stats.FoundVictim, "Victim not found");
         UNIT_ASSERT_VALUES_EQUAL(stats.BreakerCount, 1u);

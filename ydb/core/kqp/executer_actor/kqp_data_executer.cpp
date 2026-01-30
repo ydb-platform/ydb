@@ -612,9 +612,13 @@ private:
                 ResponseEv->BrokenLockShardId = shardId;
 
                 if (!res->Record.GetTxLocks().empty()) {
+                    const auto& brokenLock = res->Record.GetTxLocks(0);
                     ResponseEv->BrokenLockPathId = NYql::TKikimrPathId(
-                        res->Record.GetTxLocks(0).GetSchemeShard(),
-                        res->Record.GetTxLocks(0).GetPathId());
+                        brokenLock.GetSchemeShard(),
+                        brokenLock.GetPathId());
+                    if (brokenLock.HasQueryTraceId()) {
+                        ResponseEv->BrokenLockQueryTraceId = brokenLock.GetQueryTraceId();
+                    }
                 }
                 ReplyErrorAndDie(Ydb::StatusIds::ABORTED, {});
                 return;
@@ -1378,9 +1382,13 @@ private:
                 ResponseEv->BrokenLockShardId = shardId;
 
                 if (!res->Record.GetTxLocks().empty()) {
+                    const auto& brokenLock = res->Record.GetTxLocks(0);
                     ResponseEv->BrokenLockPathId = NYql::TKikimrPathId(
-                        res->Record.GetTxLocks(0).GetSchemeShard(),
-                        res->Record.GetTxLocks(0).GetPathId());
+                        brokenLock.GetSchemeShard(),
+                        brokenLock.GetPathId());
+                    if (brokenLock.HasQueryTraceId()) {
+                        ResponseEv->BrokenLockQueryTraceId = brokenLock.GetQueryTraceId();
+                    }
                     ReplyErrorAndDie(Ydb::StatusIds::ABORTED, {});
                     return;
                 }
@@ -1453,9 +1461,13 @@ private:
                 ResponseEv->BrokenLockShardId = shardId; // todo: without responseEv
 
                 if (!res->Record.GetTxLocks().empty()) {
+                    const auto& brokenLock = res->Record.GetTxLocks(0);
                     ResponseEv->BrokenLockPathId = NYql::TKikimrPathId(
-                        res->Record.GetTxLocks(0).GetSchemeShard(),
-                        res->Record.GetTxLocks(0).GetPathId());
+                        brokenLock.GetSchemeShard(),
+                        brokenLock.GetPathId());
+                    if (brokenLock.HasQueryTraceId()) {
+                        ResponseEv->BrokenLockQueryTraceId = brokenLock.GetQueryTraceId();
+                    }
                     return ReplyErrorAndDie(Ydb::StatusIds::ABORTED, {});
                 }
 
@@ -3077,7 +3089,12 @@ private:
                     if (TxManager) {
                         TxManager->AddShard(lock.GetDataShard(), stageInfo.Meta.TableKind == ETableKind::Olap, stageInfo.Meta.TablePath);
                         TxManager->AddAction(lock.GetDataShard(), IKqpTransactionManager::EAction::READ);
-                        TxManager->AddLock(lock.GetDataShard(), lock);
+                        if (!TxManager->AddLock(lock.GetDataShard(), lock)) {
+                            // Store the broken lock's QueryTraceId for TLI logging
+                            if (lock.HasQueryTraceId() && lock.GetQueryTraceId() != 0) {
+                                TxManager->SetBrokenLockQueryTraceId(lock.GetQueryTraceId());
+                            }
+                        }
                     }
                 }
 
@@ -3111,7 +3128,12 @@ private:
 
                         TxManager->AddShard(lock.GetDataShard(), stageInfo.Meta.TableKind == ETableKind::Olap, stageInfo.Meta.TablePath);
                         TxManager->AddAction(lock.GetDataShard(), flags);
-                        TxManager->AddLock(lock.GetDataShard(), lock);
+                        if (!TxManager->AddLock(lock.GetDataShard(), lock)) {
+                            // Store the broken lock's QueryTraceId for TLI logging
+                            if (lock.HasQueryTraceId() && lock.GetQueryTraceId() != 0) {
+                                TxManager->SetBrokenLockQueryTraceId(lock.GetQueryTraceId());
+                            }
+                        }
                     }
                 }
             }

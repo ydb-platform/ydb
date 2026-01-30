@@ -318,6 +318,9 @@ public:
         record.SetLockMode(!isUniqueCheck
             ? Settings.LockMode
             : NKikimrDataEvents::OPTIMISTIC);
+        if (Settings.QueryTraceId) {
+            record.SetQueryTraceId(Settings.QueryTraceId);
+        }
 
         AFL_ENSURE(!failOnUniqueCheck || isUniqueCheck);
 
@@ -415,25 +418,43 @@ public:
         if (!record.GetBrokenTxLocks().empty()) {
             BrokenLocksCount += record.GetBrokenTxLocks().size();
             Settings.TxManager->SetError(shardId);
-            RuntimeError(
-                NYql::NDqProto::StatusIds::ABORTED,
-                NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED,
-                TStringBuilder() << "Transaction locks invalidated. Table: `"
-                    << lookupState.Worker->GetTablePath() << "`.");
+            // Store the broken lock's QueryTraceId for TLI logging
+            for (const auto& brokenLock : record.GetBrokenTxLocks()) {
+                if (brokenLock.HasQueryTraceId() && brokenLock.GetQueryTraceId() != 0) {
+                    Settings.TxManager->SetBrokenLockQueryTraceId(brokenLock.GetQueryTraceId());
+                    break;
+                }
+            }
+            {
+                TString message;
+                if (auto lockIssue = Settings.TxManager->GetLockIssue()) {
+                    message = lockIssue->GetMessage();
+                } else {
+                    message = TStringBuilder() << "Transaction locks invalidated. Table: `"
+                        << lookupState.Worker->GetTablePath() << "`.";
+                }
+                RuntimeError(NYql::NDqProto::StatusIds::ABORTED,
+                    NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message);
+            }
             return;
         }
 
         for (const auto& lock : record.GetTxLocks()) {
             if (!Settings.TxManager->AddLock(shardId, lock)) {
                 YQL_ENSURE(Settings.TxManager->BrokenLocks());
-                NYql::TIssues issues;
-                issues.AddIssue(*Settings.TxManager->GetLockIssue());
-                RuntimeError(
-                    NYql::NDqProto::StatusIds::ABORTED,
-                    NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED,
-                    TStringBuilder() << "Transaction locks invalidated. Table: `"
-                        << lookupState.Worker->GetTablePath() << "`.",
-                    std::move(issues));
+                // Store the broken lock's QueryTraceId for TLI logging
+                if (lock.HasQueryTraceId() && lock.GetQueryTraceId() != 0) {
+                    Settings.TxManager->SetBrokenLockQueryTraceId(lock.GetQueryTraceId());
+                }
+                TString message;
+                if (auto lockIssue = Settings.TxManager->GetLockIssue()) {
+                    message = lockIssue->GetMessage();
+                } else {
+                    message = TStringBuilder() << "Transaction locks invalidated. Table: `"
+                        << lookupState.Worker->GetTablePath() << "`.";
+                }
+                RuntimeError(NYql::NDqProto::StatusIds::ABORTED,
+                    NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message);
                 return;
             }
         }

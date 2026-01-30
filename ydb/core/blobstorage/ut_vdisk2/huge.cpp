@@ -1,40 +1,44 @@
 #include "env.h"
+#include <ydb/core/util/lz4_data_generator.h>
+#include <contrib/libs/xxhash/xxhash.h>
 
 using namespace NKikimr;
+
+ui64 Hash(const TString& data) {
+    return XXH64(data.data(), data.size(), 1);
+}
 
 Y_UNIT_TEST_SUITE(VDiskTest) {
 
     Y_UNIT_TEST(HugeBlobWrite) {
         const TInstant started = TInstant::Now();
-        const TInstant end = started + TDuration::Seconds(FromString<int>(GetEnv("TIMEOUT", "590")));
+        const TInstant end = started + TDuration::Seconds(FromString<int>(GetEnv("TIMEOUT", "540")));
         const bool doValidate = FromString<int>(GetEnv("VALIDATE", "1"));
-        SetRandomSeed(FromString<int>(GetEnv("SEED", "1")));
+        const ui64 seed = FromString<ui64>(GetEnv("SEED", ToString(RandomNumber<ui64>())));
+        SetRandomSeed(seed);
+        Cerr << "RandomSeed# " << seed << Endl;
         std::optional<TTestEnv> env(std::in_place);
 
-        char value = 1;
-        std::vector<TString> blobValues;
-        std::vector<ui32> minHugeBlobValues = {8 * 1024, 12 * 1024, 60 * 1024, 64 * 1024, 512 * 1024};
+        std::vector<ui32> minHugeBlobValues = {4_KB, 8_KB, 12_KB, 16_KB, 32_KB, 64_KB, 96_KB, 128_KB, 192_KB, 256_KB,
+            384_KB, 512_KB};
 
-        for (const ui32 size : {10, 1024, 40 * 1024, 576 * 1024, 1024 * 1024, 1536 * 1024}) {
-            for (ui32 i = 0; i < 10; ++i) {
-                TString data = TString::Uninitialized(size);
-                memset(data.Detach(), value++, data.size());
-                blobValues.push_back(data);
-            }
-        }
+        std::set<TLogoBlobID> content;
 
-        std::map<TLogoBlobID, TString*> content;
+        auto validateBlob = [&](const TLogoBlobID& id) {
+            auto res = env->Get(id);
+            UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), NKikimrProto::OK);
+            UNIT_ASSERT_VALUES_EQUAL(res.ResultSize(), 1);
+            const auto& value = res.GetResult(0);
+            UNIT_ASSERT_VALUES_EQUAL(value.GetStatus(), NKikimrProto::OK);
+            const TString expected = FastGenDataForLZ4(id.BlobSize(), id.Hash());
+            UNIT_ASSERT_EQUAL_C(value.GetBufferData(), expected, "id# " << id
+                << " gotHash# " << Hash(value.GetBufferData())
+                << " expectedHash# " << Hash(expected));
+        };
 
         auto validate = [&] {
-            for (const auto& [id, datap] : content) {
-                auto res = env->Get(id);
-                UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), NKikimrProto::OK);
-                UNIT_ASSERT_VALUES_EQUAL(res.ResultSize(), 1);
-                const auto& value = res.GetResult(0);
-                UNIT_ASSERT_VALUES_EQUAL(value.GetStatus(), NKikimrProto::OK);
-                UNIT_ASSERT_EQUAL_C(value.GetBufferData(), *datap, "id# " << id
-                    << " got# " << (int)value.GetBufferData().front()
-                    << " expected# " << (int)datap->front());
+            for (const TLogoBlobID& id : content) {
+                validateBlob(id);
             }
         };
 
@@ -53,8 +57,8 @@ Y_UNIT_TEST_SUITE(VDiskTest) {
         };
         std::unordered_map<ui64, TTabletContext> tablets;
 
-        ui64 maxTotalSize = (ui64)32 << 30;
-        ui64 minTotalSize = (ui64)4 << 30;
+        ui64 maxTotalSize = 32_GB;
+        ui64 minTotalSize = 24_GB;
         ui64 totalSize = 0;
         ui8 channel = 0;
         ui32 lastMinHugeBlobValue = 0;
@@ -63,19 +67,22 @@ Y_UNIT_TEST_SUITE(VDiskTest) {
             const ui64 tabletId = tabletIds[RandomNumber(tabletIds.size())];
             TTabletContext& tablet = tablets[tabletId];
 
-            size_t blobValueIndex = RandomNumber(blobValues.size());
-            TString& data = blobValues[blobValueIndex];
-            TLogoBlobID id(tabletId, tablet.Gen, tablet.Step++, channel, data.size(), 0, 1);
+            const size_t blobSize = 1 + RandomNumber<size_t>(640_KB);
+            TLogoBlobID id(tabletId, tablet.Gen, tablet.Step++, channel, blobSize, 0, 1);
+            TString data = FastGenDataForLZ4(id.BlobSize(), id.Hash());
 
             auto res = env->Put(id, data);
             UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), NKikimrProto::OK);
-            Cerr << "Put id# " << id << " totalSize# " << totalSize << " blobValueIndex# " << blobValueIndex << Endl;
 
-            const auto [it, inserted] = content.emplace(id, &data);
+            const auto [it, inserted] = content.emplace(id);
             UNIT_ASSERT(inserted);
             totalSize += data.size();
 
-            if (RandomNumber(1000u) < 100) {
+            Cerr << "Put id# " << id << " totalSize# " << totalSize << " blobs# " << content.size()
+                << " hash# " << Hash(data)
+                << Endl;
+
+            if (RandomNumber(1000u) < 33) {
                 ui32 minHugeBlobValue;
                 do {
                     minHugeBlobValue = minHugeBlobValues[RandomNumber(minHugeBlobValues.size())];
@@ -85,10 +92,10 @@ Y_UNIT_TEST_SUITE(VDiskTest) {
                 Cerr << "Change MinHugeBlobSize# " << minHugeBlobValue << Endl;
             }
 
-            if (totalSize > maxTotalSize || (totalSize >= minTotalSize && RandomNumber(1000u) < 3)) {
+            if (totalSize > maxTotalSize || (totalSize >= minTotalSize && RandomNumber(1000u) < 1)) {
                 std::vector<TLogoBlobID> options;
                 options.reserve(content.size());
-                for (const auto& [id, datap] : content) {
+                for (const TLogoBlobID& id : content) {
                     options.push_back(id);
                 }
 
@@ -98,8 +105,10 @@ Y_UNIT_TEST_SUITE(VDiskTest) {
                     TLogoBlobID& id = options[index];
                     const auto& genstep = std::make_pair(id.Generation(), id.Step());
 
+                    validateBlob(id);
                     content.erase(id);
                     totalSize -= id.BlobSize();
+                    Cerr << "Erase id# " << id << " totalSize# " << totalSize << " blobs# " << content.size() << Endl;
 
                     TTabletContext& tablet = tablets[id.TabletID()];
                     tablet.Barrier = std::max(tablet.Barrier, genstep);
@@ -110,7 +119,7 @@ Y_UNIT_TEST_SUITE(VDiskTest) {
                     std::swap(id, options.back());
                     options.pop_back();
                 }
-                for (const auto& [id, datap] : content) {
+                for (const TLogoBlobID& id : content) {
                     const auto& genstep = std::make_pair(id.Generation(), id.Step());
                     TTabletContext& tablet = tablets[id.TabletID()];
                     if (tablet.IssuedBarrier < genstep && genstep <= tablet.Barrier) {
@@ -140,15 +149,27 @@ Y_UNIT_TEST_SUITE(VDiskTest) {
                 env->GetRuntime()->DestroyActor(edge);
             }
 
-            if (RandomNumber(1000u) < 50) {
+            if (RandomNumber(1000u) < 1) {
                 Cerr << "Restart" << Endl;
                 ui32 numEventsToSim = RandomNumber(50u);
                 env->GetRuntime()->Sim([&] { return numEventsToSim--; });
                 env.emplace(env->GetPDiskMockState());
-                if (doValidate) {
-                    validate();
-                }
             }
+
+            if (RandomNumber(1000u) < 10) {
+                Cerr << "Compact" << Endl;
+                env->Compact(RandomNumber(2u));
+            }
+
+            if (RandomNumber(10000u) < 1 && doValidate) {
+                Cerr << "Validate" << Endl;
+                validate();
+            }
+        }
+
+        if (doValidate) {
+            Cerr << "Validate before exit" << Endl;
+            validate();
         }
     }
 

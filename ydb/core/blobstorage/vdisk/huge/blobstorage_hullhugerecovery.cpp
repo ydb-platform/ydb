@@ -372,14 +372,15 @@ namespace NKikimr {
 
         bool THullHugeKeeperPersState::WouldNewEntryPointAdvanceLog(ui64 freeUpToLsn, ui64 minInFlightLsn,
                 ui32 itemsAfterCommit) const {
-            return freeUpToLsn <= minInFlightLsn && (!PersistentLsn || PersistentLsn < freeUpToLsn || itemsAfterCommit > 10000);
+            return freeUpToLsn <= Min(minInFlightLsn, LogPos.LogoBlobsDbSlotDelLsn) &&
+                (!PersistentLsn || PersistentLsn < freeUpToLsn || itemsAfterCommit > 10000);
         }
 
         // initiate commit
         void THullHugeKeeperPersState::InitiateNewEntryPointCommit(ui64 lsn, ui64 minInFlightLsn) {
             Y_VERIFY_S(lsn > LogPos.EntryPointLsn, VCtx->VDiskLogPrefix);
             LogPos.EntryPointLsn = lsn;
-            PersistentLsn = Min(lsn, minInFlightLsn);
+            PersistentLsn = Min(lsn, minInFlightLsn, LogPos.LogoBlobsDbSlotDelLsn);
 
             // these metabases never have huge blobs and we never care about them actually
             LogPos.BlocksDbSlotDelLsn = lsn;

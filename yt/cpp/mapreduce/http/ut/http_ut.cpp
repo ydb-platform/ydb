@@ -7,10 +7,12 @@
 #include <library/cpp/testing/common/network.h>
 
 #include <library/cpp/testing/gtest/gtest.h>
+#include <library/cpp/testing/gtest_extensions/assertions.h>
 
 #include <util/system/byteorder.h>
 
 using namespace NYT;
+using namespace testing;
 
 void WriteDataFrame(TStringBuf string, IOutputStream* stream)
 {
@@ -52,6 +54,71 @@ std::unique_ptr<TSimpleServer> CreateFramingEchoServer()
         });
 }
 
+struct TMisbehavingServerConfig
+{
+    bool DontStartServer = false;
+    TDuration AcceptDelay;
+    bool DontReadData = false;
+    TDuration FirstLineDelay;
+    bool SendInvalidFirstLine = false;
+    TDuration HeaderDelay;
+    bool SendInvalidHeader = false;
+    TDuration BodyDelay;
+};
+
+std::unique_ptr<TSimpleServer> CreateMisbehavingServer(TMisbehavingServerConfig config)
+{
+    auto port = NTesting::GetFreePort();
+    return std::make_unique<TSimpleServer>(
+        port,
+        [config] (IInputStream* input, IOutputStream* output) {
+            try {
+                if (config.DontReadData) {
+                    return;
+                }
+
+                THttpInput httpInput(input);
+                httpInput.ReadAll();
+
+                if (config.FirstLineDelay) {
+                    Sleep(config.FirstLineDelay);
+                }
+
+                if (config.SendInvalidFirstLine) {
+                    return;
+                }
+
+                // THttpOutput sends first line + headers in one chunk,
+                // so use raw stream instead
+                *output << "HTTP/1.1 200 OK\r\n";
+
+                if (config.HeaderDelay) {
+                    Sleep(config.HeaderDelay);
+                }
+
+                *output << "X-TestHeader";
+
+                if (config.SendInvalidHeader) {
+                    output->Flush();
+                    return;
+                }
+
+                *output << ": TestValue\r\n";
+
+                if (config.BodyDelay) {
+                    Sleep(config.BodyDelay);
+                }
+
+                *output << "\r\n";
+                *output << "42";
+                output->Flush();
+            } catch (const std::exception& exc) {
+            }
+        },
+        config.DontStartServer,
+        config.AcceptDelay);
+}
+
 TEST(THttpHeaderTest, AddParameter)
 {
     THttpHeader header("POST", "/foo");
@@ -89,4 +156,131 @@ TEST(TFramingTest, FramingLarge)
     request.FinishRequest();
     auto response = request.GetResponseStream()->ReadAll();
     EXPECT_EQ(response, data);
+}
+
+TEST(TWrapSystemErrorTest, ConnectTimeout)
+{
+    auto server = CreateMisbehavingServer({
+        .DontStartServer = true,
+    });
+
+    THttpRequest request("0-0-0-0", server->GetAddress(), THttpHeader("POST", "reply"), TDuration::Seconds(1));
+
+    EXPECT_THROW_MESSAGE_HAS_SUBSTR(
+        request.StartRequest(),
+        TTransportError,
+        "can not connect to");
+}
+
+TEST(TWrapSystemErrorTest, ConnectAcceptTimeout)
+{
+    auto server = CreateMisbehavingServer({
+        .AcceptDelay = TDuration::Seconds(3),
+    });
+
+    THttpRequest request("0-0-0-0", server->GetAddress(), THttpHeader("POST", "reply"), TDuration::Seconds(1));
+    request.StartRequest();
+    request.FinishRequest();
+
+    EXPECT_THROW_MESSAGE_HAS_SUBSTR(
+        request.GetResponseStream()->ReadAll(),
+        TTransportError,
+        "can not read from socket input stream");
+}
+
+TEST(TWrapSystemErrorTest, WriteTimeout)
+{
+    auto server = CreateMisbehavingServer({
+        .DontReadData = true,
+    });
+
+    THttpRequest request("0-0-0-0", server->GetAddress(), THttpHeader("POST", "reply"), TDuration::Seconds(1));
+    auto requestStream = request.StartRequest();
+
+    auto data = TString(100000, 'x');
+
+    EXPECT_THROW_MESSAGE_HAS_SUBSTR(
+        *requestStream << data,
+        TTransportError,
+        "can not writev to socket output stream");
+}
+
+TEST(TWrapSystemErrorTest, FirstLineTimeout)
+{
+    auto server = CreateMisbehavingServer({
+        .FirstLineDelay = TDuration::Seconds(3),
+    });
+
+    THttpRequest request("0-0-0-0", server->GetAddress(), THttpHeader("POST", "reply"), TDuration::Seconds(1));
+    request.StartRequest();
+    request.FinishRequest();
+
+    EXPECT_THROW_MESSAGE_HAS_SUBSTR(
+        request.GetResponseStream()->ReadAll(),
+        TTransportError,
+        "can not read from socket input stream");
+}
+
+TEST(TWrapSystemErrorTest, EmptyFirstLine)
+{
+    auto server = CreateMisbehavingServer({
+        .SendInvalidFirstLine = true,
+    });
+
+    THttpRequest request("0-0-0-0", server->GetAddress(), THttpHeader("POST", "reply"), TDuration::Zero());
+    request.StartRequest();
+    request.FinishRequest();
+
+    EXPECT_THROW_MESSAGE_HAS_SUBSTR(
+        request.GetResponseStream()->ReadAll(),
+        TTransportError,
+        "Failed to get first line");
+}
+
+TEST(TWrapSystemErrorTest, HeaderTimeout)
+{
+    auto server = CreateMisbehavingServer({
+        .HeaderDelay = TDuration::Seconds(3),
+    });
+
+    THttpRequest request("0-0-0-0", server->GetAddress(), THttpHeader("POST", "reply"), TDuration::Seconds(1));
+    request.StartRequest();
+    request.FinishRequest();
+
+    EXPECT_THROW_MESSAGE_HAS_SUBSTR(
+        request.GetResponseStream()->ReadAll(),
+        TTransportError,
+        "can not read from socket input stream");
+}
+
+TEST(TWrapSystemErrorTest, InvalidHeader)
+{
+    auto server = CreateMisbehavingServer({
+        .SendInvalidHeader = true,
+    });
+
+    THttpRequest request("0-0-0-0", server->GetAddress(), THttpHeader("POST", "reply"), TDuration::Zero());
+    request.StartRequest();
+    request.FinishRequest();
+
+    EXPECT_THROW_MESSAGE_HAS_SUBSTR(
+        request.GetResponseStream()->ReadAll(),
+        TTransportError,
+        "can not parse http header");
+}
+
+TEST(TWrapSystemErrorTest, BodyTimeout)
+{
+    auto server = CreateMisbehavingServer({
+        .BodyDelay = TDuration::Seconds(3),
+    });
+
+    THttpRequest request("0-0-0-0", server->GetAddress(), THttpHeader("POST", "reply"), TDuration::Seconds(1));
+    request.StartRequest();
+    request.FinishRequest();
+
+    EXPECT_THROW_MESSAGE_HAS_SUBSTR(
+        request.GetResponseStream()->ReadAll(),
+        TTransportError,
+        "can not read from socket input stream");
 }

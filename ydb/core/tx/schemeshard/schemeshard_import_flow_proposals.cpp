@@ -16,8 +16,12 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
-static bool FillDefaultValues(const NKikimr::NSchemeShard::TImportInfo::TItem& item, TString& error, ::NKikimrSchemeOp::TIndexedTableCreationConfig& indexedTable) {
-    for(const auto& column: item.Table->columns()) {
+static bool FillDefaultValues(
+    const NKikimr::NSchemeShard::TImportInfo::TItem& item,
+    ::NKikimrSchemeOp::TIndexedTableCreationConfig& indexedTable,
+    TString& error)
+{
+    for (const auto& column : item.Table->columns()) {
         switch (column.default_value_case()) {
             case Ydb::Table::ColumnMeta::kFromSequence: {
                 const auto& fromSequence = column.from_sequence();

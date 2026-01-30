@@ -2159,6 +2159,7 @@ void TReadSessionActor<UseMigrationProtocol>::ProcessAnswer(typename TFormedRead
     AvailablePartitions.insert(formedResponse->PartitionsBecameAvailable.begin(), formedResponse->PartitionsBecameAvailable.end());
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " Process answer. Aval parts: " << AvailablePartitions.size());
 
+
     if constexpr (UseMigrationProtocol) {
         if (!formedResponse->HasMessages) {
             // process new read

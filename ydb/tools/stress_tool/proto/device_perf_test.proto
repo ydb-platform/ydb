@@ -22,6 +22,10 @@ message TPDiskTest {
     optional bool EnableTrim = 3 [default = false];
 }
 
+message TDDiskTest {
+    repeated NKikimr.TEvLoadTestRequest DDiskTestList = 1;
+}
+
 message TDriveEstimatorTest {
 }
 
@@ -30,4 +34,5 @@ message TPerfTests {
     repeated TTrimTest TrimTestList = 2;
     repeated TPDiskTest PDiskTestList = 3;
     optional TDriveEstimatorTest DriveEstimatorTest = 4;
+    repeated TDDiskTest DDiskTestList = 5;
 }

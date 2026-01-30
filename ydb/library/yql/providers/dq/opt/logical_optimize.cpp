@@ -93,9 +93,9 @@ double TDqCBOProviderContext::ComputeJoinCost(
 
     switch(joinAlgo) {
         case EJoinAlgoType::MapJoin:
-            return 1.5 * (leftStats.Nrows + 1.8 * rightStats.Nrows + outputRows);
+            return 1.5 * (leftStats.ByteSize + 1.8 * rightStats.ByteSize + outputRows);
         case EJoinAlgoType::GraceJoin:
-            return 1.5 * (leftStats.Nrows + 2.0 * rightStats.Nrows + outputRows);
+            return 1.5 * (leftStats.ByteSize + 2.0 * rightStats.ByteSize + outputRows);
         default:
             Y_ENSURE(false, "Illegal join type encountered");
             return 0;

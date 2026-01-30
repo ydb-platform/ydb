@@ -244,7 +244,6 @@ ydb/tests/functional/tpc/medium/tpch py3test.[test_duplicates.py] chunk
 ydb/tests/functional/tpc/medium/tpch test_duplicates.py.TestTpchDuplicatesZeroLevel.test_tpch[21]
 ydb/tests/functional/tpc/medium/tpch test_duplicates.py.TestTpchDuplicatesZeroLevel.test_tpch[22]
 ydb/tests/olap py3test.[*/*] chunk
-ydb/tests/olap test_overloads.py.TestLogScenario.test_overloads_workload[1000-1]
 ydb/tests/olap/s3_import py3test.sole chunk
 ydb/tests/olap/s3_import test_simple_table.py.TestSimpleTable.test_unavailable_during_import
 ydb/tests/olap/scenario test_alter_tiering.py.TestAlterTiering.test[many_tables]

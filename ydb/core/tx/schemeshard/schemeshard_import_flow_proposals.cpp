@@ -96,7 +96,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
             return nullptr;
         }
         
-        if (!FillDefaultValues(item, error, indexedTable)) {
+        if (!FillDefaultValues(item, indexedTable, error)) {
             return nullptr;
         }
     }
@@ -153,7 +153,9 @@ static NKikimrSchemeOp::TTableDescription GetTableDescription(TSchemeShard* ss, 
 
         result.MutableKeyColumnNames()->CopyFrom(columnTable.GetSchema().GetKeyColumnNames());
         for (const auto& keyColumnName : columnTable.GetSchema().GetKeyColumnNames()) {
-            result.AddKeyColumnIds(columnIds[keyColumnName]);
+            auto it = columnIds.find(keyColumnName);
+            Y_ABORT_UNLESS(it != columnIds.end());
+            result.AddKeyColumnIds(it->second);
         }
 
         result.MutablePartitionConfig()->MutablePartitioningPolicy()->SetMinPartitionsCount(columnTable.GetColumnShardCount());

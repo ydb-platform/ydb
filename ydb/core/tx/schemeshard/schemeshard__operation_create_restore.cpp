@@ -24,13 +24,13 @@ struct TRestore {
     static void ProposeTx(const TOperationId& opId, TTxState& txState, TOperationContext& context) {
         const auto& pathId = txState.TargetPathId;
         const TPath sourcePath = TPath::Init(pathId, context.SS);
-        if (sourcePath->IsColumnTable()) {
-            Y_ABORT_UNLESS(context.SS->ColumnTables.contains(pathId));
-            TColumnTableInfo::TPtr table = context.SS->ColumnTables.at(pathId).GetPtr();
-            return ProposeTableTx(table->RestoreSettings, opId, txState, context);
-        } else {
+        if (sourcePath->IsTable()) {
             Y_ABORT_UNLESS(context.SS->Tables.contains(pathId));
             TTableInfo::TPtr table = context.SS->Tables.at(pathId);
+            return ProposeTableTx(table->RestoreSettings, opId, txState, context);
+        } else {
+            Y_ABORT_UNLESS(context.SS->ColumnTables.contains(pathId));
+            TColumnTableInfo::TPtr table = context.SS->ColumnTables.at(pathId).GetPtr();
             return ProposeTableTx(table->RestoreSettings, opId, txState, context);
         }
     }
@@ -55,18 +55,18 @@ struct TRestore {
                 restore.SetShardNum(i);
             };
 
-            if (sourcePath->IsColumnTable()) {
-                NKikimrTxColumnShard::TRestoreTxBody txBodyRestore;
-                auto& restore = *txBodyRestore.MutableRestoreTask();
-                fillRestoreTask(restore);
-                auto ev = context.SS->MakeColumnShardProposal(pathId, opId, seqNo, txBodyRestore.SerializeAsString(), context.Ctx, NKikimrTxColumnShard::TX_KIND_RESTORE);
-                context.OnComplete.BindMsgToPipe(opId, shardId, idx, ev.Release());
-            } else {
+            if (sourcePath->IsTable()) {
                 NKikimrTxDataShard::TFlatSchemeTransaction tx;
                 context.SS->FillSeqNo(tx, seqNo);
                 auto& restore = *tx.MutableRestore();
                 fillRestoreTask(restore);
                 auto ev = context.SS->MakeDataShardProposal(pathId, opId, tx.SerializeAsString(), context.Ctx);
+                context.OnComplete.BindMsgToPipe(opId, shardId, idx, ev.Release());
+            } else {
+                NKikimrTxColumnShard::TRestoreTxBody txBodyRestore;
+                auto& restore = *txBodyRestore.MutableRestoreTask();
+                fillRestoreTask(restore);
+                auto ev = context.SS->MakeColumnShardProposal(pathId, opId, seqNo, txBodyRestore.SerializeAsString(), context.Ctx, NKikimrTxColumnShard::TX_KIND_RESTORE);
                 context.OnComplete.BindMsgToPipe(opId, shardId, idx, ev.Release());
             }
         }
@@ -79,13 +79,13 @@ struct TRestore {
     static void Finish(const TOperationId& opId, TTxState& txState, TOperationContext& context) {
         const auto& pathId = txState.TargetPathId;
         const TPath sourcePath = TPath::Init(pathId, context.SS);
-        if (sourcePath->IsColumnTable()) {
-            Y_ABORT_UNLESS(context.SS->ColumnTables.contains(txState.TargetPathId));
-            TColumnTableInfo::TPtr table = context.SS->ColumnTables.at(txState.TargetPathId).GetPtr();
-            return TableFinish(table, opId, txState, context);
-        } else {
+        if (sourcePath->IsTable()) {
             Y_ABORT_UNLESS(context.SS->Tables.contains(txState.TargetPathId));
             TTableInfo::TPtr table = context.SS->Tables[txState.TargetPathId];
+            return TableFinish(table, opId, txState, context);
+        } else {
+            Y_ABORT_UNLESS(context.SS->ColumnTables.contains(txState.TargetPathId));
+            TColumnTableInfo::TPtr table = context.SS->ColumnTables.at(txState.TargetPathId).GetPtr();
             return TableFinish(table, opId, txState, context);
         }
     }
@@ -119,13 +119,13 @@ struct TRestore {
 
     static void PersistTask(const TPathId& pathId, const TTxTransaction& tx, TOperationContext& context) {
         const TPath sourcePath = TPath::Init(pathId, context.SS);
-        if (sourcePath->IsColumnTable()) {
-            Y_ABORT_UNLESS(context.SS->ColumnTables.contains(pathId));
-            TColumnTableInfo::TPtr table = context.SS->ColumnTables.at(pathId).GetPtr();
-            return PersistTableTask(table, pathId, tx, context);
-        } else {
+        if (sourcePath->IsTable()) {
             Y_ABORT_UNLESS(context.SS->Tables.contains(pathId));
             TTableInfo::TPtr table = context.SS->Tables.at(pathId);
+            return PersistTableTask(table, pathId, tx, context);
+        } else {
+            Y_ABORT_UNLESS(context.SS->ColumnTables.contains(pathId));
+            TColumnTableInfo::TPtr table = context.SS->ColumnTables.at(pathId).GetPtr();
             return PersistTableTask(table, pathId, tx, context);
         }
     }

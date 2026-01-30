@@ -11167,7 +11167,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                     ALTER CONSUMER cs SET (type='shared')
             )";
             const auto result = executeQuery(query);
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "type alter is not supported", result.GetIssues().ToString());
         }
     }
 

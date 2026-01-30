@@ -2660,7 +2660,10 @@ static bool StoreConsumerSettingsEntry(
             ctx.Error() << to_upper(id.Name) << " specified multiple times in " << statement << " statement for single consumer";
             return false;
         }
-        if (reset) {
+        if (alter) {
+            ctx.Error() << to_upper(id.Name) << " alter is not supported";
+            return false;
+        } else if (reset) {
             ctx.Error() << to_upper(id.Name) << " reset is not supported";
             return false;
         } else {
@@ -2675,7 +2678,10 @@ static bool StoreConsumerSettingsEntry(
             ctx.Error() << to_upper(id.Name) << " specified multiple times in " << statement << " statement for single consumer";
             return false;
         }
-        if (reset) {
+        if (alter) {
+            ctx.Error() << to_upper(id.Name) << " alter is not supported";
+            return false;
+        } else if (reset) {
             ctx.Error() << to_upper(id.Name) << " reset is not supported";
             return false;
         } else {

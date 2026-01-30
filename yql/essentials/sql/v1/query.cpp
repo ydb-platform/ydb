@@ -1886,7 +1886,7 @@ TNodePtr BuildDropTable(TPosition pos, const TTableRef& tr, bool missingOk, ETab
     return new TDropTableNode(pos, tr, missingOk, tableType, scoped);
 }
 
-static INode::TPtr CreateConsumerDesc(const TTopicConsumerDescription& desc, const INode& node, bool alter) {
+static std::optional<INode::TPtr> CreateConsumerDesc(TContext& ctx, const TTopicConsumerDescription& desc, const INode& node, bool alter) {
     auto setValue = [&](const INode::TPtr& settings, const TNodePtr& value, const auto& setter) {
         if (value) {
             return node.L(settings, node.Q(node.Y(node.Q(setter), value)));
@@ -1905,6 +1905,17 @@ static INode::TPtr CreateConsumerDesc(const TTopicConsumerDescription& desc, con
             return node.L(settings, node.Q(node.Y(resetter, node.Q(node.Y()))));
         }
     };
+
+    if (alter) {
+        if (desc.Settings.Type) {
+            ctx.Error() << "type alter is not supported";
+            return std::nullopt;
+        }
+        if (desc.Settings.KeepMessagesOrder) {
+            ctx.Error() << "keep_messages_order alter is not supported";
+            return std::nullopt;
+        }
+    }
 
     auto settings = node.Y();
     settings = setValue(settings, desc.Settings.Important, "important");
@@ -1956,8 +1967,11 @@ public:
         opts = L(opts, Q(Y(Q("mode"), Q(mode))));
 
         for (const auto& consumer : Params_.Consumers) {
-            const auto& desc = CreateConsumerDesc(consumer, *this, false);
-            opts = L(opts, Q(Y(Q("consumer"), Q(desc))));
+            const auto desc = CreateConsumerDesc(ctx, consumer, *this, false);
+            if (!desc) {
+                return false;
+            }
+            opts = L(opts, Q(Y(Q("consumer"), Q(desc.value()))));
         }
 
         if (Params_.TopicSettings.IsSet()) {
@@ -2067,13 +2081,19 @@ public:
         opts = L(opts, Q(Y(Q("mode"), Q(mode))));
 
         for (const auto& consumer : Params_.AddConsumers) {
-            const auto& desc = CreateConsumerDesc(consumer, *this, false);
-            opts = L(opts, Q(Y(Q("addConsumer"), Q(desc))));
+            const auto desc = CreateConsumerDesc(ctx, consumer, *this, false);
+            if (!desc) {
+                return false;
+            }
+            opts = L(opts, Q(Y(Q("addConsumer"), Q(desc.value()))));
         }
 
         for (const auto& [_, consumer] : Params_.AlterConsumers) {
-            const auto& desc = CreateConsumerDesc(consumer, *this, true);
-            opts = L(opts, Q(Y(Q("alterConsumer"), Q(desc))));
+            const auto desc = CreateConsumerDesc(ctx, consumer, *this, true);
+            if (!desc) {
+                return false;
+            }
+            opts = L(opts, Q(Y(Q("alterConsumer"), Q(desc.value()))));
         }
 
         for (const auto& consumer : Params_.DropConsumers) {

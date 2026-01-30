@@ -2,7 +2,6 @@
 #include "datashard_active_transaction.h"
 #include "datashard_distributed_erase.h"
 #include "datashard_impl.h"
-#include "datashard_integrity_trails.h"
 #include "datashard_pipeline.h"
 #include "datashard_user_db.h"
 #include "execution_unit_ctors.h"
@@ -112,12 +111,7 @@ public:
         }
 
         BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);
-        auto [_, locksBrokenByErase] = DataShard.SysLocksTable().ApplyLocks();
-        if (!locksBrokenByErase.empty()) {
-            auto victimQueryTraceIds = DataShard.SysLocksTable().ExtractVictimQueryTraceIds(locksBrokenByErase);
-            NDataIntegrity::LogLocksBroken(ctx, DataShard.TabletID(), "Distributed erase transaction broke locks on erased rows", locksBrokenByErase,
-                                           Nothing(), victimQueryTraceIds);
-        }
+        DataShard.SysLocksTable().ApplyLocks();
         DataShard.SubscribeNewLocks(ctx);
         Pipeline.AddCommittingOp(op);
 

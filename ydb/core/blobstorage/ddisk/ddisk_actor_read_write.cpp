@@ -17,7 +17,7 @@ namespace NKikimr::NDDisk {
         TChunkRef& chunkRef = ChunkRefs[creds.TabletId][selector.VChunkIndex];
         if (!chunkRef.PendingEventsForChunk.empty() || !chunkRef.ChunkIdx) {
             chunkRef.PendingEventsForChunk.emplace(ev, "WaitChunkAllocation");
-            if (!chunkRef.ChunkIdx) {
+            if (chunkRef.PendingEventsForChunk.empty() && !chunkRef.ChunkIdx) {
                 IssueChunkAllocation(creds.TabletId, selector.VChunkIndex);
             }
             return;

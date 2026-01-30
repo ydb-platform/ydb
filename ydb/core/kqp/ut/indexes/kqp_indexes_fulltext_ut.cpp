@@ -3794,7 +3794,7 @@ Y_UNIT_TEST(SelectWithFulltextContainsAndNgramWildcardBoundaries) {
     }
 }
 
-Y_UNIT_TEST(SelectWithFulltextContainsAndNgramWildcardUtf8) {
+Y_UNIT_TEST(SelectWithFulltextContainsAndNgramWildcardUtf8Size) {
     auto kikimr = Kikimr();
     auto db = kikimr.GetQueryClient();
 
@@ -3957,6 +3957,118 @@ Y_UNIT_TEST(SelectWithFulltextContainsAndNgramWildcardUtf8) {
         CompareYson(R"([
             [[6u];["﷽ that's one character"]]
         ])", NYdb::FormatResultSetYson(result.GetResultSet(6)));
+    }
+}
+
+Y_UNIT_TEST_QUAD(SelectWithFulltextContainsAndNgramWildcardUnicode, RELEVANCE, UTF8) {
+    auto kikimr = Kikimr();
+    auto db = kikimr.GetQueryClient();
+
+    NYdb::NQuery::TExecuteQuerySettings querySettings;
+    querySettings.ClientTimeout(TDuration::Minutes(1));
+
+    CreateTexts(db, UTF8);
+
+    {
+        TString query = R"sql(
+            UPSERT INTO `/Root/Texts` (`Key`, `Text`) VALUES
+                (0, "abc023"),
+                (1, "◌̧◌̇◌̣"),
+                (2, "﷽‎؈ۻ"),
+                (3, "异体字異體字"),
+                (4, "ä̸̱b̴̪͛"),
+                (5, "😢🐶🐕🐈"),
+                (6, "4️⃣🐕‍🦺🐈‍⬛"),
+                (7, "👨‍👩‍👧‍👦🇦🇨")
+
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    {
+        const TString query = std::format(R"sql(
+            ALTER TABLE `/Root/Texts` ADD INDEX fulltext_idx
+                GLOBAL USING {0}
+                ON (Text)
+                WITH (
+                    tokenizer=whitespace,
+                    use_filter_lowercase=true,
+                    use_filter_ngram=true,
+                    filter_ngram_min_length=2,
+                    filter_ngram_max_length=2
+                );
+        )sql", RELEVANCE ? "fulltext_relevance" : "fulltext_plain");
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    {
+        const TString query = R"sql(
+            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextContains(`Text`, "*bc0*")
+            ORDER BY `Key`;
+
+            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextContains(`Text`, "*◌̇*")
+            ORDER BY `Key`;
+
+            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextContains(`Text`, "*؈ۻ")
+            ORDER BY `Key`;
+
+            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextContains(`Text`, "*字異體*")
+            ORDER BY `Key`;
+
+            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextContains(`Text`, "ä̸̱*")
+            ORDER BY `Key`;
+
+            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextContains(`Text`, "*🐶🐕*")
+            ORDER BY `Key`;
+
+            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextContains(`Text`, "*🐶*")  -- should return empty response: query shorter than ngrams
+            ORDER BY `Key`;
+
+            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextContains(`Text`, "*🐕‍🦺*")  -- despite it looks like single character it is not: it's 🐕 with modifiers
+            ORDER BY `Key`;
+
+            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextContains(`Text`, "👨\u200D👩*")  -- 👨‍👩‍👧‍👦 is combination of 👨, 👩, 👧 and 👦
+            ORDER BY `Key`;
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        CompareYson(R"([
+            [[0u];["abc023"]]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+        CompareYson(R"([
+            [[1u];["◌̧◌̇◌̣"]]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(1)));
+        CompareYson(R"([
+            [[2u];["﷽‎؈ۻ"]]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(2)));
+        CompareYson(R"([
+            [[3u];["异体字異體字"]]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(3)));
+        CompareYson(R"([
+            [[4u];["ä̸̱b̴̪͛"]]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(4)));
+        CompareYson(R"([
+            [[5u];["😢🐶🐕🐈"]]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(5)));
+        CompareYson(R"([])", NYdb::FormatResultSetYson(result.GetResultSet(6)));
+        CompareYson(R"([
+            [[6u];["4️⃣🐕‍🦺🐈‍⬛"]]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(7)));
+        CompareYson(R"([
+            [[7u];["👨‍👩‍👧‍👦🇦🇨"]]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(8)));
     }
 }
 
@@ -4236,8 +4348,7 @@ Y_UNIT_TEST_QUAD(SelectWithFulltextContainsShorterThanMinNgram, RELEVANCE, UTF8)
                     filter_ngram_min_length=3,
                     filter_ngram_max_length=3
                 );
-        )sql",
-        RELEVANCE ? "fulltext_relevance" : "fulltext_plain");
+        )sql", RELEVANCE ? "fulltext_relevance" : "fulltext_plain");
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }

@@ -6,6 +6,7 @@
 
 namespace NKikimr::NFulltext {
 
+void BuildNgrams(const TString& token, size_t lengthMin, size_t lengthMax, bool edge, TVector<TString>& ngrams);
 Ydb::Table::FulltextIndexSettings::Analyzers GetAnalyzersForQuery(Ydb::Table::FulltextIndexSettings::Analyzers analyzers);
 
 TVector<TString> Analyze(const TString& text, const Ydb::Table::FulltextIndexSettings::Analyzers& settings, std::optional<wchar32> ignoredDelimiter = std::nullopt);

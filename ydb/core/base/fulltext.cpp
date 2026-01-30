@@ -136,37 +136,6 @@ namespace {
         return length;
     }
 
-    void BuildNgrams(const TString& token, size_t lengthMin, size_t lengthMax, bool edge, TVector<TString>& ngrams) {
-        const unsigned char* ngram_begin_ptr = (const unsigned char*)token.data();
-        const unsigned char* end = ngram_begin_ptr + token.size();
-        wchar32 symbol;
-        size_t symbolBytes;
-
-        while (ngram_begin_ptr < end) {
-            const unsigned char* ngram_end_ptr = ngram_begin_ptr;
-            size_t ngram_length = 0;
-            while (ngram_end_ptr < end) {
-                if (SafeReadUTF8Char(symbol, symbolBytes, ngram_end_ptr, end) != RECODE_OK) {
-                    Y_ASSERT(false); // should already be validated during tokenization
-                    return;
-                }
-                ngram_length++;
-                ngram_end_ptr += symbolBytes;
-                if (lengthMin <= ngram_length && ngram_length <= lengthMax) {
-                    ngrams.emplace_back((const char*)ngram_begin_ptr, ngram_end_ptr - ngram_begin_ptr);
-                }
-            }
-            if (edge) {
-                break; // only prefixes
-            }
-            if (SafeReadUTF8Char(symbol, symbolBytes, ngram_begin_ptr, end) != RECODE_OK) {
-                Y_ASSERT(false); // should already be validated during tokenization
-                return;
-            }
-            ngram_begin_ptr += symbolBytes;
-        }
-    }
-
     bool ValidateSettings(const Ydb::Table::FulltextIndexSettings::Analyzers& settings, TString& error) {
         if (!settings.has_tokenizer() || settings.tokenizer() == Ydb::Table::FulltextIndexSettings::TOKENIZER_UNSPECIFIED) {
             error = "tokenizer should be set";
@@ -268,6 +237,37 @@ namespace {
         }
 
         return true;
+    }
+}
+
+void BuildNgrams(const TString& token, size_t lengthMin, size_t lengthMax, bool edge, TVector<TString>& ngrams) {
+    const unsigned char* ngram_begin_ptr = (const unsigned char*)token.data();
+    const unsigned char* end = ngram_begin_ptr + token.size();
+    wchar32 symbol;
+    size_t symbolBytes;
+
+    while (ngram_begin_ptr < end) {
+        const unsigned char* ngram_end_ptr = ngram_begin_ptr;
+        size_t ngram_length = 0;
+        while (ngram_end_ptr < end) {
+            if (SafeReadUTF8Char(symbol, symbolBytes, ngram_end_ptr, end) != RECODE_OK) {
+                Y_ASSERT(false); // should already be validated during tokenization
+                return;
+            }
+            ngram_length++;
+            ngram_end_ptr += symbolBytes;
+            if (lengthMin <= ngram_length && ngram_length <= lengthMax) {
+                ngrams.emplace_back((const char*)ngram_begin_ptr, ngram_end_ptr - ngram_begin_ptr);
+            }
+        }
+        if (edge) {
+            break; // only prefixes
+        }
+        if (SafeReadUTF8Char(symbol, symbolBytes, ngram_begin_ptr, end) != RECODE_OK) {
+            Y_ASSERT(false); // should already be validated during tokenization
+            return;
+        }
+        ngram_begin_ptr += symbolBytes;
     }
 }
 

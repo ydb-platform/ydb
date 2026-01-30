@@ -1,0 +1,99 @@
+syntax = "proto3";
+
+package Ydb.TestShard;
+
+option java_package = "com.yandex.ydb.test_shard";
+
+import "ydb/public/api/protos/ydb_operation.proto";
+
+message CreateTestShardRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+
+    // Database path
+    string database = 2;
+
+    // Base index for tablet ID generation
+    // Same owner_idx = same tablets (idempotent duplicate detection)
+    uint64 owner_idx = 3;
+
+    // Storage pool names for tablet channels (optional)
+    // If not provided, uses first 3 storage pools from the database domain
+    repeated string channels = 4;
+
+    // Number of tablets to create
+    uint32 count = 5;
+
+    // TestShard initialization config in YAML format
+    //
+    // Structure:
+    //   workload - Load generation patterns (sizes, write rate, restarts, request types)
+    //   limits - Resource constraints (data volume, concurrency)
+    //   timing - Temporal behavior (startup delay, period resets, synchronization)
+    //   validation - External validation server (optional)
+    //   tracing - Request tracing for debugging (optional)
+    //
+    // ```yaml
+    // workload:
+    //   sizes:                      # Value size distribution (weighted random)
+    //     - {weight: 10, min: 100, max: 1000, inline: false}
+    //     - {weight: 1, min: 10000, max: 100000, inline: false}
+    //   write:                      # Write rate (Poisson), list format
+    //     - frequency: 100.0        # Writes per second (weight optional, default 1)
+    //       max_interval_ms: 100
+    //   restart:  # Automatic restarts (Poisson), list format
+    //     - frequency: 0.01         # Restarts per second (weight optional, default 1)
+    //       max_interval_ms: 120000
+    //   patch_fraction_ppm: 100000  # PATCH vs PUT ratio (parts per million)
+    //
+    // limits:
+    //   data:
+    //     min: 1000000            # Resume writing below this (bytes)
+    //     max: 10000000           # Stop writing above this (bytes)
+    //   concurrency:
+    //     writes: 50              # Max concurrent write requests
+    //     reads: 10               # Max concurrent read requests
+    //
+    // timing:
+    //   delay_start: 5            # Seconds before load starts
+    //   reset_on_full: true       # Reset write timer on max concurrency
+    //   stall_counter: 1000       # Barrier sync every N requests
+    //
+    // validation:                 # Optional external validation
+    //   server: "host:9999"       # Validation server address
+    //   after_bytes: 1000000      # Start validation after N bytes
+    //
+    // tracing:                    # Optional request tracing
+    //   put_fraction_ppm: 1000    # Trace fraction (parts per million)
+    //   verbosity: 15             # Trace detail level (0-15)
+    // ```
+    string config = 6;
+}
+
+message CreateTestShardResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message CreateTestShardResult {
+    // Created tablet IDs
+    repeated uint64 tablet_ids = 1;
+}
+
+message DeleteTestShardRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+
+    // Database path
+    string database = 2;
+
+    // Owner index identifying tablets to delete
+    uint64 owner_idx = 3;
+
+    // Number of consecutive tablets to delete starting from owner_idx
+    // If not specified, deletes all tablets with this owner_idx
+    uint32 count = 4;
+}
+
+message DeleteTestShardResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message DeleteTestShardResult {}

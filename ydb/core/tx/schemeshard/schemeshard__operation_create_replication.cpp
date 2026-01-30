@@ -340,12 +340,14 @@ public:
     explicit TCreateReplication(const TOperationId& id, TTxState::ETxState state, const IStrategy* strategy)
         : TSubOperation(id, state)
         , Strategy(strategy)
+        , IsBackup(false)
     {
     }
 
-    explicit TCreateReplication(const TOperationId& id, const TTxTransaction& tx, const IStrategy* strategy)
+    explicit TCreateReplication(const TOperationId& id, const TTxTransaction& tx, const IStrategy* strategy, bool isBackup)
         : TSubOperation(id, tx)
         , Strategy(strategy)
+        , IsBackup(isBackup)
     {
     }
 
@@ -469,6 +471,31 @@ public:
         context.SS->Replications[path->PathId] = replication;
         context.SS->TabletCounters->Simple()[COUNTER_REPLICATION_COUNT].Add(1);
 
+        NIceDb::TNiceDb db(context.GetDB());
+
+        if (IsBackup) {
+            if (!acl.empty()) {
+                path->ApplyACL(acl);
+            }
+            context.SS->PersistPath(db, path->PathId);
+            
+            context.SS->PersistReplication(db, path->PathId, *replication);
+            context.SS->PersistReplicationAlter(db, path->PathId, *replication->AlterData);
+
+            Y_ABORT_UNLESS(!context.SS->FindTx(OperationId));
+            auto& txState = context.SS->CreateTx(OperationId, TTxState::TxCreateReplication, path->PathId);
+            
+            txState.State = TTxState::Propose;
+
+            context.SS->PersistTxState(db, OperationId);
+            context.SS->PersistUpdateNextPathId(db);
+
+            context.OnComplete.ActivateTx(OperationId);
+
+            SetState(TTxState::Propose);
+            return result;
+        }
+
         replication->AlterData->ControllerShardIdx = context.SS->RegisterShardInfo(
             TShardInfo::ReplicationControllerInfo(OperationId.GetTxId(), path->PathId)
                 .WithBindedChannels(channelsBindings));
@@ -487,8 +514,6 @@ public:
             const auto parentTxId = parentPath->PlannedToCreate() ? parentPath->CreateTxId : parentPath->LastTxId;
             context.OnComplete.Dependence(parentTxId, OperationId.GetTxId());
         }
-
-        NIceDb::TNiceDb db(context.GetDB());
 
         if (!acl.empty()) {
             path->ApplyACL(acl);
@@ -542,6 +567,7 @@ public:
 
 private:
     const IStrategy* Strategy;
+    const bool IsBackup;
 
 }; // TCreateReplication
 
@@ -576,8 +602,8 @@ bool SetName<TTransferTag>(TTransferTag, TTxTransaction& tx, const TString& name
 
 } // namespace NOperation
 
-ISubOperation::TPtr CreateNewReplication(TOperationId id, const TTxTransaction& tx) {
-    return MakeSubOperation<TCreateReplication>(id, tx, &ReplicationStrategy);
+ISubOperation::TPtr CreateNewReplication(TOperationId id, const TTxTransaction& tx, bool isBackup) {
+    return MakeSubOperation<TCreateReplication>(id, tx, &ReplicationStrategy, isBackup);
 }
 
 ISubOperation::TPtr CreateNewReplication(TOperationId id, TTxState::ETxState state) {
@@ -585,7 +611,7 @@ ISubOperation::TPtr CreateNewReplication(TOperationId id, TTxState::ETxState sta
 }
 
 ISubOperation::TPtr CreateNewTransfer(TOperationId id, const TTxTransaction& tx) {
-    return MakeSubOperation<TCreateReplication>(id, tx, &TransferStrategy);
+    return MakeSubOperation<TCreateReplication>(id, tx, &TransferStrategy, false);
 }
 
 ISubOperation::TPtr CreateNewTransfer(TOperationId id, TTxState::ETxState state) {

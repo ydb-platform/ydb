@@ -145,8 +145,8 @@ std::optional<THashMap<TString, THashSet<TString>>> GetBackupRequiredPaths(
             
             // Skip if path is not resolved or not a table
             auto checks = tablePath.Check();
-            checks.IsResolved().IsTable();
-            if (!checks) {
+            checks.IsResolved();
+            if (!checks.IsTable() && !checks.IsReplication()) {
                 continue;
             }
 

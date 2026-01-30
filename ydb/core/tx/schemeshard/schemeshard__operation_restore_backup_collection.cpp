@@ -280,6 +280,17 @@ public:
 
         for (const auto& item : bc->Description.GetExplicitEntryList().GetEntries()) {
             if (item.GetType() == ::NKikimrSchemeOp::TBackupCollectionDescription_TBackupEntry_EType_ETypeTable) {
+                std::pair<TString, TString> paths;
+                TString err;
+                if (TrySplitPathByDb(item.GetPath(), bcPath.GetDomainPathString(), paths, err)) {
+                    TString relativePath = paths.second;
+                    TString fullBackupItemPathStr = JoinPath({bcPathStr, lastFullBackupName, relativePath});
+                    TPath fullBackupItemPath = TPath::Resolve(fullBackupItemPathStr, context.SS);
+                    
+                    if (fullBackupItemPath.IsResolved() && fullBackupItemPath.Base()->IsReplication()) {
+                        continue; 
+                    }
+                }
                 op.AddTablePathList(item.GetPath());
             }
         }
@@ -420,11 +431,41 @@ TVector<ISubOperation::TPtr> CreateRestoreBackupCollection(TOperationId opId, co
         }
         auto& relativeItemPath = paths.second;
 
+        TString srcPathStr = JoinPath({
+            tx.GetWorkingDir(), 
+            tx.GetRestoreBackupCollection().GetName(), 
+            lastFullBackupName, 
+            relativeItemPath
+        });
+
+        if (!incrBackupNames.empty()) {
+            const TString& lastIncrName = incrBackupNames.back();
+            
+            TString incrPathStr = JoinPath({
+                tx.GetWorkingDir(), 
+                tx.GetRestoreBackupCollection().GetName(), 
+                lastIncrName, 
+                relativeItemPath
+            });
+
+            const TPath incrPath = TPath::Resolve(incrPathStr, context.SS);
+            
+            if (incrPath.IsResolved() && incrPath.Base()->IsReplication()) {
+                srcPathStr = incrPathStr;
+                LOG_I("Restoring Replication from Incremental backup: " << srcPathStr);
+            }
+        }
+
         auto& desc = *copyTables.Add();
-        desc.SetSrcPath(JoinPath({tx.GetWorkingDir(), tx.GetRestoreBackupCollection().GetName(), lastFullBackupName, relativeItemPath}));
+        desc.SetSrcPath(srcPathStr);
+        
         desc.SetDstPath(item.GetPath());
         desc.SetAllowUnderSameOperation(true);
-        if (incrBackupNames) {
+        
+        TPath checkSrcPath = TPath::Resolve(srcPathStr, context.SS);
+        bool isReplication = checkSrcPath.IsResolved() && checkSrcPath.Base()->IsReplication();
+
+        if (incrBackupNames && !isReplication) { 
             desc.SetTargetPathTargetState(NKikimrSchemeOp::EPathStateIncomingIncrementalRestore);
         }
     }
@@ -486,6 +527,9 @@ bool CreateIncrementalBackupPathStateOps(
             
             // Only create path state change operation if the path exists
             if (incrBackupPath.IsResolved()) {
+                if (incrBackupPath.Base()->IsReplication()) {
+                    continue;
+                }
                 // Create transaction for path state change
                 TTxTransaction pathStateChangeTx;
                 pathStateChangeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpChangePathState);

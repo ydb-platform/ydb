@@ -657,7 +657,7 @@ ISubOperation::TPtr CreateAlterSequence(TOperationId id, TTxState::ETxState stat
 ISubOperation::TPtr CreateMoveSequence(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateMoveSequence(TOperationId id, TTxState::ETxState state);
 
-ISubOperation::TPtr CreateNewReplication(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateNewReplication(TOperationId id, const TTxTransaction& tx, bool isBackup = false);
 ISubOperation::TPtr CreateNewReplication(TOperationId id, TTxState::ETxState state);
 ISubOperation::TPtr CreateAlterReplication(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateAlterReplication(TOperationId id, TTxState::ETxState state);

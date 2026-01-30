@@ -158,6 +158,7 @@ DEFINE_ENUM(EAbortReason,
     ((JobCountChangedByUserRequest)    ( 59))
     ((NbdError)                        ( 60))
     ((NodePoolTreeChanged)             ( 61))
+    ((UserSlotDisabled)                ( 62))
     ((SchedulingFirst)                 (100))
     ((SchedulingTimeout)               (101))
     ((SchedulingResourceOvercommit)    (102))

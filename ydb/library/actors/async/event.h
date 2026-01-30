@@ -120,6 +120,29 @@ namespace NActors {
             return awaiter;
         }
 
+        template<class TCallback>
+        class [[nodiscard]] TAsyncEventAwaiterWithCallback
+            : public TAsyncEventAwaiter
+        {
+        public:
+            TAsyncEventAwaiterWithCallback(TAsyncEventAwaiterQueue& queue, TCallback&& callback) noexcept
+                : TAsyncEventAwaiter(queue)
+                , Callback(std::forward<TCallback>(callback))
+            {}
+
+            TAsyncEventAwaiterWithCallback& CoAwaitByValue() && noexcept {
+                return *this;
+            }
+
+            void await_suspend(std::coroutine_handle<> continuation) {
+                TAsyncEventAwaiter::await_suspend(continuation);
+                std::forward<TCallback>(Callback)();
+            }
+
+        private:
+            TCallback&& Callback;
+        };
+
     } // namespace NDetail
 
     class TAsyncEvent {
@@ -138,8 +161,22 @@ namespace NActors {
             }
         }
 
+        /**
+         * Resumes when the event is notified or destroyed
+         */
         NDetail::TAsyncEventAwaiter Wait() noexcept {
             return NDetail::TAsyncEventAwaiter(Queue);
+        }
+
+        /**
+         * Resumes when the event is notified or destroyed
+         *
+         * The callback is called immediately after registering an awaiter,
+         * which allows e.g. updating the number of awaiters in counters.
+         */
+        template<class TCallback>
+        NDetail::TAsyncEventAwaiterWithCallback<TCallback> Wait(TCallback&& callback) noexcept {
+            return NDetail::TAsyncEventAwaiterWithCallback<TCallback>(Queue, std::forward<TCallback>(callback));
         }
 
         bool HasAwaiters() const noexcept {

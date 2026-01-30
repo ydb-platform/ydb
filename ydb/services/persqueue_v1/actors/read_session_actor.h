@@ -101,7 +101,6 @@ struct TPartitionInfo {
     ui64 WTime;
     ui64 SizeLag;
     ui64 MsgLag;
-    ui64 InFlightBytes = 0;
 
     explicit TPartitionInfo(ui64 assignId, ui64 wTime, ui64 sizeLag, ui64 msgLag)
         : AssignId(assignId)

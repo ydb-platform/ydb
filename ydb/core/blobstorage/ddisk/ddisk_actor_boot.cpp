@@ -77,16 +77,7 @@ namespace NKikimr::NDDisk {
                     }
                     break;
                 case TLogSignature::SignaturePersistentBufferChunkMap:
-                    if (PersistentBufferChunkMapSnapshotLsn + 1 <= record.Lsn) {
-                        NKikimrBlobStorage::NDDisk::NInternal::TPersistentBufferChunkMapLogRecord chunkMap;
-                        const bool success = chunkMap.ParseFromArray(record.Data.data(), record.Data.size());
-                        Y_ABORT_UNLESS(success);
-                        for (auto idx : chunkMap.GetChunkIdxs()) {
-                            PersistentBufferOwnedChunks.insert(idx);
-                            ++*Counters.Chunks.ChunksOwned;
-                        }
-                        ++*Counters.RecoveryLog.LogRecordsApplied;
-                    }
+                    Y_ABORT("unexpected log signature SignaturePersistentBufferChunkMap")
                     break;
                 default:
                     Y_ABORT("unexpected log signature");

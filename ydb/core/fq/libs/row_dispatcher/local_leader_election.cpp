@@ -276,7 +276,10 @@ void TLocalLeaderElection::ResetState() {
     while (PendingRpcResponses) {  
         SendSessionEventFail();
     }
-    RpcResponses.clear();
+    PendingRpcResponses = 0;
+    while (!RpcResponses.empty()) {  
+        RpcResponses.pop();  
+    }
     PendingAcquire = false;
     SentRequests.clear();
     RpcActor = {};
@@ -611,6 +614,7 @@ void TLocalLeaderElection::CloseSession(NYdb::EStatus status, const NYql::TIssue
     while (PendingRpcResponses) {
         SendSessionEventFail();
     }
+    PendingRpcResponses = 0;
     Send(RpcActor, new TLocalRpcCtx::TEvNotifiedWhenDone(success));
     RpcActor = {};
 }
@@ -684,7 +688,9 @@ void TLocalLeaderElection::ProcessPong(const TRpcOut& message) {
     const auto& source = message.pong();
     const uint64_t reqId = source.opaque();
     auto* op = FindSentRequest(reqId);
-    UpdateLastKnownGoodTimestampLocked(op->SendTimestamp);
+    if (op) {
+        UpdateLastKnownGoodTimestampLocked(op->SendTimestamp);
+    }
     SentRequests.erase(reqId);
 }
 
@@ -721,6 +727,7 @@ void TLocalLeaderElection::ProcessCreateSemaphoreResult(const TRpcOut& message) 
     NYdb::NIssue::IssuesFromMessage(source.issues(), issues);
     
     auto status = NYdb::TStatus(static_cast<NYdb::EStatus>(source.status()), std::move(issues));
+    LOG_ROW_DISPATCHER_INFO("Semaphore creating status: " << status);
     if (!IsTableCreated(status)) {
         LOG_ROW_DISPATCHER_ERROR("Semaphore creating error " << issues.ToOneLineString());
         Metrics.Errors->Inc();
@@ -729,7 +736,9 @@ void TLocalLeaderElection::ProcessCreateSemaphoreResult(const TRpcOut& message) 
     }
     const uint64_t reqId = source.req_id();
     auto* op = FindSentRequest(reqId);
-    UpdateLastKnownGoodTimestampLocked(op->SendTimestamp);
+    if (op) {
+        UpdateLastKnownGoodTimestampLocked(op->SendTimestamp);
+    }
     SentRequests.erase(reqId);
     SemaphoreCreated = true;
     LOG_ROW_DISPATCHER_DEBUG("Semaphore successfully created");
@@ -753,7 +762,9 @@ void TLocalLeaderElection::ProcessAcquireSemaphoreResult(const TRpcOut& message)
     }
     uint64_t reqId = source.req_id();
     auto* op = FindSentRequest(reqId);
-    UpdateLastKnownGoodTimestampLocked(op->SendTimestamp);
+    if (op) {
+        UpdateLastKnownGoodTimestampLocked(op->SendTimestamp);
+    }
     SentRequests.erase(reqId);
     if (source.acquired()) {
         LOG_ROW_DISPATCHER_DEBUG("Semaphore successfully acquired");
@@ -778,7 +789,9 @@ void TLocalLeaderElection::ProcessDescribeSemaphoreResult(const TRpcOut& message
     }
     const uint64_t reqId = source.req_id();
     auto* op = FindSentRequest(reqId);
-    UpdateLastKnownGoodTimestampLocked(op->SendTimestamp);
+    if (op) {
+        UpdateLastKnownGoodTimestampLocked(op->SendTimestamp);
+    }
     if (!source.watch_added()) {
         SentRequests.erase(reqId);
     }
@@ -815,7 +828,9 @@ void TLocalLeaderElection::ProcessDescribeSemaphoreChanged(const TRpcOut& messag
     const auto& source = message.describe_semaphore_changed();
     const uint64_t reqId = source.req_id();
     auto* op = FindSentRequest(reqId);
-    UpdateLastKnownGoodTimestampLocked(op->SendTimestamp);
+    if (op) {
+        UpdateLastKnownGoodTimestampLocked(op->SendTimestamp);
+    }
     SentRequests.erase(reqId);
 }
 
@@ -833,7 +848,9 @@ void TLocalLeaderElection::ProcessUpdateSemaphoreResult(const TRpcOut& message) 
     const auto& source = message.update_semaphore_result();
     const uint64_t reqId = source.req_id();
     auto* op = FindSentRequest(reqId);
-    UpdateLastKnownGoodTimestampLocked(op->SendTimestamp);
+    if (op) {
+        UpdateLastKnownGoodTimestampLocked(op->SendTimestamp);
+    }
     SentRequests.erase(reqId);
 }
 
@@ -842,7 +859,9 @@ void TLocalLeaderElection::ProcessDeleteSemaphoreResult(const TRpcOut& message) 
     const auto& source = message.delete_semaphore_result();
     const uint64_t reqId = source.req_id();
     auto* op = FindSentRequest(reqId);
-    UpdateLastKnownGoodTimestampLocked(op->SendTimestamp);
+    if (op) {
+        UpdateLastKnownGoodTimestampLocked(op->SendTimestamp);
+    }
     SentRequests.erase(reqId);
 }
 

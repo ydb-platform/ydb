@@ -308,6 +308,22 @@ public:
         return result;
     }
 
+    size_t GetTotalSize() const override {
+        size_t result = 0;
+        for (const auto& consumer : Consumers) {
+            result += consumer->GetTotalSize();
+        }
+        return result;
+    }
+
+    size_t GetOverLimitSize() const override {
+        size_t result = 0;
+        for (const auto& consumer : Consumers) {
+            result += consumer->GetOverLimitSize();
+        }
+        return result;
+    }
+
     void WideConsume(TUnboxedValue* values, ui32 count) override {
         Y_UNUSED(values);
         Y_UNUSED(count);
@@ -382,6 +398,14 @@ public:
         return Output->UpdateFillLevel();
     }
 
+    size_t GetTotalSize() const override {
+        return Output->GetTotalSize();
+    }
+
+    size_t GetOverLimitSize() const override {
+        return Output->GetOverLimitSize();
+    }
+
     void Consume(TUnboxedValue&& value) override {
         Output->Push(std::move(value));
     }
@@ -448,6 +472,22 @@ public:
 
     EDqFillLevel GetFillLevel() const override {
         return Aggregator->GetFillLevel();
+    }
+
+    size_t GetTotalSize() const override {
+        size_t result = 0;
+        for (const auto& output : Outputs) {
+            result += output->GetTotalSize();
+        }
+        return result;
+    }
+
+    size_t GetOverLimitSize() const override {
+        size_t result = 0;
+        for (const auto& output : Outputs) {
+            result += output->GetOverLimitSize();
+        }
+        return result;
     }
 
     TString DebugString() override {
@@ -569,6 +609,22 @@ public:
 private:
     EDqFillLevel GetFillLevel() const override {
         return Aggregator->GetFillLevel();
+    }
+
+    size_t GetTotalSize() const override {
+        size_t result = 0;
+        for (const auto& output : Outputs_) {
+            result += output->GetTotalSize();
+        }
+        return result;
+    }
+
+    size_t GetOverLimitSize() const override {
+        size_t result = 0;
+        for (const auto& output : Outputs_) {
+            result += output->GetOverLimitSize();
+        }
+        return result;
     }
 
     TString DebugString() override {
@@ -700,6 +756,22 @@ public:
 private:
     EDqFillLevel GetFillLevel() const override {
         return Aggregator->GetFillLevel();
+    }
+
+    size_t GetTotalSize() const override {
+        size_t result = 0;
+        for (const auto& output : Outputs_) {
+            result += output->GetTotalSize();
+        }
+        return result;
+    }
+
+    size_t GetOverLimitSize() const override {
+        size_t result = 0;
+        for (const auto& output : Outputs_) {
+            result += output->GetOverLimitSize();
+        }
+        return result;
     }
 
     TString DebugString() override {
@@ -897,6 +969,22 @@ public:
 
     EDqFillLevel GetFillLevel() const override {
         return Aggregator->GetFillLevel();
+    }
+
+    size_t GetTotalSize() const override {
+        size_t result = 0;
+        for (const auto& output : Outputs) {
+            result += output->GetTotalSize();
+        }
+        return result;
+    }
+
+    size_t GetOverLimitSize() const override {
+        size_t result = 0;
+        for (const auto& output : Outputs) {
+            result += output->GetOverLimitSize();
+        }
+        return result;
     }
 
     TString DebugString() override {

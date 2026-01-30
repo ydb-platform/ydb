@@ -500,7 +500,9 @@ TIntrusivePtr<IDqTaskRunner> MakeDqTaskRunner(
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
     const TDqTaskRunnerContext& ctx,
     const TDqTaskRunnerSettings& settings,
-    const TLogFunc& logFunc
+    const TLogFunc& logFunc,
+    const NMonitoring::TDynamicCounters::TCounterPtr& totalSizeCounter,
+    const NMonitoring::TDynamicCounters::TCounterPtr& overLimitSizeCounter
 );
 
 } // namespace NYql::NDq

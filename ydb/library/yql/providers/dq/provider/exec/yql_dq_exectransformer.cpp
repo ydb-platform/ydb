@@ -150,7 +150,7 @@ public:
         settings.OptLLVM = "OFF"; // Don't use LLVM for local execution
         settings.SecureParams = secureParams;
         settings.StatsMode = NDqProto::DQ_STATS_MODE_BASIC;
-        auto runner = NDq::MakeDqTaskRunner(alloc, executionContext, settings, {});
+        auto runner = NDq::MakeDqTaskRunner(alloc, executionContext, settings, {}, {}, {});
         auto runnerSettings = NDq::TDqTaskSettings(&task);
 
         {
@@ -1686,7 +1686,7 @@ private:
     }
 
     IDqGateway::TDqProgressWriter MakeDqProgressWriter(const TPublicIds::TPtr& publicIds) const {
-        IDqGateway::TDqProgressWriter dqProgressWriter = [progressWriter = State->ProgressWriter, publicIds, current = std::make_shared<IDqGateway::TProgressWriterState>()](IDqGateway::TProgressWriterState state) 
+        IDqGateway::TDqProgressWriter dqProgressWriter = [progressWriter = State->ProgressWriter, publicIds, current = std::make_shared<IDqGateway::TProgressWriterState>()](IDqGateway::TProgressWriterState state)
         {
             if (*current != state) {
                 for (const auto& publicId : publicIds->AllPublicIds) {

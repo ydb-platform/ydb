@@ -757,6 +757,16 @@ public:
         return GetFillLevel();
     }
 
+    size_t GetTotalSize() const override {
+        // TODO: implement this
+        return 0;
+    }
+
+    size_t GetOverLimitSize() const override {
+        // TODO: implement this
+        return 0;
+    }
+
     void SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggregator) override {
         Aggregator = aggregator;
         Serializer->Buffer->SetFillAggregator(aggregator);

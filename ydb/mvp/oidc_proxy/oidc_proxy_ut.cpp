@@ -1571,3 +1571,13 @@ Y_UNIT_TEST_SUITE(Mvp) {
         UNIT_ASSERT_VALUES_EQUAL(GetAddressWithoutPort("some.domain.name"), "some.domain.name");
     }
 }
+
+Y_UNIT_TEST_SUITE(GenerateRandom) {
+    Y_UNIT_TEST(Uniqueness) {
+        THashSet<TString> seen;
+        for (int i=0; i < 100 ; i++) {
+            seen.insert(NMVP::NOIDC::GenerateRandomBase64(32));
+        }
+        UNIT_ASSERT(seen.size() > 95); // soft threshold
+    }
+}

@@ -1,6 +1,7 @@
 
 #include "pq_impl.h"
 #include "pq_impl_types.h"
+#include "fix_transaction_states.h"
 
 #include <ydb/core/persqueue/common/actor.h>
 #include <ydb/core/persqueue/pqtablet/common/logging.h>
@@ -790,49 +791,62 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
 
     TxWrites.clear();
 
-    for (const auto& readRange : readRanges) {
-        PQ_ENSURE(readRange.HasStatus());
-        if (readRange.GetStatus() != NKikimrProto::OK &&
-            readRange.GetStatus() != NKikimrProto::OVERRUN &&
-            readRange.GetStatus() != NKikimrProto::NODATA) {
-            PQ_LOG_ERROR_AND_DIE("Transactions read error: " << readRange.GetStatus());
-            return;
+    const auto txs = CollectTransactions(readRanges);
+    for (const auto& [txId, tx] : txs) {
+        if (tx.HasStep()) {
+            if (tx.GetStep() > PlanStep) {
+                PlanStep = tx.GetStep();
+                PlanTxId = tx.GetTxId();
+                PQ_LOG_TX_D("PlanStep " << PlanStep << ", PlanTxId " << PlanTxId);
+            } else if (tx.GetStep() == PlanStep) {
+                if (tx.GetTxId() > PlanTxId) {
+                    PlanTxId = tx.GetTxId();
+                    PQ_LOG_TX_D("PlanStep " << PlanStep << ", PlanTxId " << PlanTxId);
+                }
+            }
         }
 
-        for (size_t i = 0; i < readRange.PairSize(); ++i) {
-            const auto& pair = readRange.GetPair(i);
+        PQ_LOG_TX_I("Restore Tx. " <<
+                    "TxId: " << tx.GetTxId() <<
+                    ", Step: " << tx.GetStep() <<
+                    ", State: " << NKikimrPQ::TTransaction_EState_Name(tx.GetState()) <<
+                    ", Predicate: " << tx.GetPredicate() << " (" << (tx.HasPredicate() ? "+" : "-") << ")" <<
+                    ", WriteId: " << tx.GetWriteId().ShortDebugString());
 
-            PQ_LOG_D("ReadRange pair." <<
-                     " Key " << (pair.HasKey() ? pair.GetKey() : "unknown") <<
-                     ", Status " << pair.GetStatus());
+        Txs.emplace(tx.GetTxId(), tx);
 
-            NKikimrPQ::TTransaction tx;
-            PQ_ENSURE(tx.ParseFromString(pair.GetValue()));
+        if (tx.HasWriteId()) {
+            PQ_LOG_TX_I("Link TxId " << tx.GetTxId() << " with WriteId " << GetWriteId(tx));
+            TxWrites[GetWriteId(tx)].TxId = tx.GetTxId();
+        }
+    }
 
-            PQ_ENSURE(tx.GetKind() != NKikimrPQ::TTransaction::KIND_UNKNOWN)("Key", pair.GetKey());
+    for (const auto& [txId, tx] : Txs) {
+        PQ_LOG_D("TxId: " << txId <<
+                 ", Step: " << tx.Step <<
+                 ", State: " << NKikimrPQ::TTransaction_EState_Name(tx.State) <<
+                 ", Decision: " << NKikimrTx::TReadSetData_EDecision_Name(tx.ParticipantsDecision));
 
-            PQ_LOG_TX_I("Restore Tx. " <<
-                     "TxId: " << tx.GetTxId() <<
-                     ", Step: " << tx.GetStep() <<
-                     ", State: " << NKikimrPQ::TTransaction_EState_Name(tx.GetState()) <<
-                     ", WriteId: " << tx.GetWriteId().ShortDebugString());
+        if (tx.Step != Max<ui64>()) {
+            PlannedTxs.emplace_back(tx.Step, txId);
+        }
+    }
 
-            if (tx.GetState() == NKikimrPQ::TTransaction::CALCULATED) {
-                PQ_LOG_TX_D("Fix tx state");
-                tx.SetState(NKikimrPQ::TTransaction::PLANNED);
-            }
+    // у таблетки 5 партиций. все участвуют в транзакции
+    // в очереди 2 транзакции
+    // первая транзакция выполнялась на stable-25-4 и только 4 партиции успели выполнить коммит
+    // таблетка переехала на stable-26-1, для второй транзакции дошли все предикаты и уже обе транзакции пошли выполняться в партициях
+    // оставшаяся партиция из первой транзакции и 5 партиций из второй транзакции записали субтранзакции
+    // таблетка снова перезапустилась и пытается восстановить транзакций
+    // у первой транзакции в очереди состояние PLANNED, а у второй - EXECUTED
+    // надо подправить состояние транзакций. можно продвинуть вперёд PLANNED -> EXECUTED, а можно наоборот
+    std::sort(PlannedTxs.begin(), PlannedTxs.end());
+    for (size_t i = 1; i < PlannedTxs.size(); ++i) {
+        auto& prevTx = Txs.at(PlannedTxs[i - 1].second);
+        auto& currentTx = Txs.at(PlannedTxs[i].second);
 
-            Txs.emplace(tx.GetTxId(), tx);
-            SetTxInFlyCounter();
-
-            if (tx.HasStep()) {
-                PlannedTxs.emplace_back(tx.GetStep(), tx.GetTxId());
-            }
-
-            if (tx.HasWriteId()) {
-                PQ_LOG_TX_I("Link TxId " << tx.GetTxId() << " with WriteId " << GetWriteId(tx));
-                TxWrites[GetWriteId(tx)].TxId = tx.GetTxId();
-            }
+        if (prevTx.State < currentTx.State) {
+            currentTx.State = prevTx.State;
         }
     }
 
@@ -3810,12 +3824,11 @@ void TPersQueue::ProcessDeleteTxs(const TActorContext& ctx,
 void TPersQueue::AddCmdDeleteTx(NKikimrClient::TKeyValueRequest& request,
                                 ui64 txId)
 {
-    TString key = GetTxKey(txId);
     auto range = request.AddCmdDeleteRange()->MutableRange();
-    range->SetFrom(key);
+    range->SetFrom(GetTxKey(txId));
     range->SetIncludeFrom(true);
-    range->SetTo(key);
-    range->SetIncludeTo(true);
+    range->SetTo(GetTxKey(txId + 1));
+    range->SetIncludeTo(false);
 }
 
 void TPersQueue::ProcessConfigTx(const TActorContext& ctx,
@@ -4897,14 +4910,14 @@ void TPersQueue::EndInitTransactions()
 
         if (!TxsOrder.contains(tx.State)) {
             PQ_LOG_TX_D("TxsOrder: " <<
-                     txId << " " << NKikimrPQ::TTransaction_EState_Name(tx.State) << " skip");
+                        tx.Step << " " << txId << " " << NKikimrPQ::TTransaction_EState_Name(tx.State) << " skip");
             continue;
         }
 
         PushTxInQueue(tx, tx.State);
 
         PQ_LOG_TX_D("TxsOrder: " <<
-                 txId << " " << NKikimrPQ::TTransaction_EState_Name(tx.State) << " " << tx.Pending);
+                    tx.Step << " " << txId << " " << NKikimrPQ::TTransaction_EState_Name(tx.State) << " " << tx.Pending);
     }
 }
 

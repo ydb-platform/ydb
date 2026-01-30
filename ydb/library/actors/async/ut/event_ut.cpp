@@ -422,6 +422,60 @@ namespace NAsyncTest {
             UNIT_ASSERT_VALUES_EQUAL(event.AwaitersCount(), 0u);
         }
 
+        Y_UNIT_TEST(CallbackOnSuspend) {
+            TVector<TString> sequence;
+            TAsyncEvent event;
+            TAsyncTestActor::TState state;
+            TAsyncTestActorRuntime runtime;
+
+            auto actor = runtime.StartAsyncActor(state, [&](auto*) -> async<void> {
+                sequence.push_back("started");
+                Y_DEFER { sequence.push_back("finished"); };
+
+                bool resumed = co_await event.Wait([&]{
+                    sequence.push_back("suspended");
+                });
+                sequence.push_back(resumed ? "resumed" : "detached");
+            });
+
+            ASYNC_ASSERT_SEQUENCE(sequence,
+                "started",
+                "suspended");
+
+            UNIT_ASSERT(event.HasAwaiters());
+            UNIT_ASSERT_VALUES_EQUAL(event.AwaitersCount(), 1u);
+        }
+
+        Y_UNIT_TEST(ExceptionOnSuspend) {
+            TVector<TString> sequence;
+            TAsyncEvent event;
+            TAsyncTestActor::TState state;
+            TAsyncTestActorRuntime runtime;
+
+            auto actor = runtime.StartAsyncActor(state, [&](auto*) -> async<void> {
+                sequence.push_back("started");
+                Y_DEFER { sequence.push_back("finished"); };
+
+                auto callback = [&]{
+                    sequence.push_back(TStringBuilder() << "have " << event.AwaitersCount() << " awaiters");
+                    throw TTestException();
+                };
+
+                UNIT_ASSERT_EXCEPTION(co_await event.Wait(callback), TTestException);
+
+                sequence.push_back("returning");
+            });
+
+            ASYNC_ASSERT_SEQUENCE(sequence,
+                "started",
+                "have 1 awaiters",
+                "returning",
+                "finished");
+
+            UNIT_ASSERT(!event.HasAwaiters());
+            UNIT_ASSERT_VALUES_EQUAL(event.AwaitersCount(), 0u);
+        }
+
     } // Y_UNIT_TEST_SUITE(Event)
 
 } // namespace NAsyncTest

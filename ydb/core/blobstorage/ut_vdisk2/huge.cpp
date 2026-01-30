@@ -12,7 +12,7 @@ Y_UNIT_TEST_SUITE(VDiskTest) {
 
     Y_UNIT_TEST(HugeBlobWrite) {
         const TInstant started = TInstant::Now();
-        const TInstant end = started + TDuration::Seconds(FromString<int>(GetEnv("TIMEOUT", "590")));
+        const TInstant end = started + TDuration::Seconds(FromString<int>(GetEnv("TIMEOUT", "540")));
         const bool doValidate = FromString<int>(GetEnv("VALIDATE", "1"));
         const ui64 seed = FromString<ui64>(GetEnv("SEED", ToString(RandomNumber<ui64>())));
         SetRandomSeed(seed);

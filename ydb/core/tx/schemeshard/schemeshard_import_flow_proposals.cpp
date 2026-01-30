@@ -131,11 +131,12 @@ static NKikimrSchemeOp::TTableDescription GetTableDescription(TSchemeShard* ss, 
     auto record = desc->GetRecord();
 
     Y_ABORT_UNLESS(record.HasPathDescription());
-    Y_ABORT_UNLESS(record.GetPathDescription().HasTable() || record.GetPathDescription().HasColumnTableDescription());
+    const auto& pathDesc = record.GetPathDescription();
+    Y_ABORT_UNLESS(pathDesc.HasTable() || pathDesc.HasColumnTableDescription());
     
-    if (record.GetPathDescription().HasColumnTableDescription()) {
+    if (pathDesc.HasColumnTableDescription()) {
         NKikimrSchemeOp::TTableDescription result;
-        auto columnTable = record.GetPathDescription().GetColumnTableDescription();
+        const auto& columnTable = pathDesc.GetColumnTableDescription();
         THashMap<TString, ui32> columnIds;
         for (const auto& column : columnTable.GetSchema().GetColumns()) {
             auto& dstColumn = *result.add_columns();
@@ -145,10 +146,12 @@ static NKikimrSchemeOp::TTableDescription GetTableDescription(TSchemeShard* ss, 
             dstColumn.set_id(column.GetId());
             columnIds[column.GetName()] = column.GetId();
         }
+
         result.MutableKeyColumnNames()->CopyFrom(columnTable.GetSchema().GetKeyColumnNames());
-        for (const auto& keyColumnName: columnTable.GetSchema().GetKeyColumnNames()) {
+        for (const auto& keyColumnName : columnTable.GetSchema().GetKeyColumnNames()) {
             result.AddKeyColumnIds(columnIds[keyColumnName]);
         }
+
         result.MutablePartitionConfig()->MutablePartitioningPolicy()->SetMinPartitionsCount(columnTable.GetColumnShardCount());
         return result;
     }

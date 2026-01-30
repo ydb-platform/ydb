@@ -1860,9 +1860,8 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
             NTopic::TUserRetrievedEventsInfoAccumulator<true> accumulator; \
 \
             auto event = sessionQueue.GetEventImpl(maxByteSize, accumulator); \
-            UNIT_ASSERT(event); \
 \
-            UNIT_ASSERT(std::holds_alternative<TExpectedEvent>(event->GetEvent()));\
+            UNIT_ASSERT(std::holds_alternative<TExpectedEvent>(event.GetEvent()));\
         }
 
 #define UNIT_ASSERT_DATA_EVENT(count) \
@@ -1873,10 +1872,9 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
             NTopic::TUserRetrievedEventsInfoAccumulator<true> accumulator; \
 \
             auto event = sessionQueue.GetEventImpl(maxByteSize, accumulator); \
-            UNIT_ASSERT(event); \
 \
-            UNIT_ASSERT(std::holds_alternative<TExpectedEvent>(event->GetEvent())); \
-            UNIT_ASSERT_VALUES_EQUAL(std::get<TExpectedEvent>(event->GetEvent()).GetMessagesCount(), count); \
+            UNIT_ASSERT(std::holds_alternative<TExpectedEvent>(event.GetEvent())); \
+            UNIT_ASSERT_VALUES_EQUAL(std::get<TExpectedEvent>(event.GetEvent()).GetMessagesCount(), count); \
         }
 
         NTopic::TAReadSessionSettings<true> settings;

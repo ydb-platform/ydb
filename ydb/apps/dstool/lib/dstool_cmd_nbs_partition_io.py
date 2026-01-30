@@ -40,4 +40,6 @@ def do_read(args):
 
     common.print_nbs_request_result(args, request, response)
 
-    print(response)
+    result = nbs.ReadBlocksResult()
+    response.operation.result.Unpack(result)
+    print(result)

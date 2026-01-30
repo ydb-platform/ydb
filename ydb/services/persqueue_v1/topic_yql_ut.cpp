@@ -262,12 +262,12 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
             const char *query = R"(
                 CREATE TOPIC `/Root/PQ/rt3.dc1--topic_with_shared_consumer`
                     (CONSUMER c1 WITH (
-                        type = 'shared',
-                        keep_messages_order = true
-                        , default_processing_timeout = Interval('PT1S')
-                        , max_processing_attempts = 10
+                          type = 'shared'
+                        , keep_messages_order = true
+                        , default_processing_timeout = Interval('PT31S')
+                        , max_processing_attempts = 67
                         , dead_letter_policy = 'move'
-                        ,dead_letter_queue = 'dead_letter_queue'
+                        , dead_letter_queue = 'dead_letter_queue_97'
                     ))
             )";
 
@@ -276,10 +276,20 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
 
         {
             auto pqGroup = server.AnnoyingClient->Ls("/Root/PQ/rt3.dc1--topic_with_shared_consumer")->Record.GetPathDescription().GetPersQueueGroup();
-            //const auto& describe = pqGroup.GetPQTabletConfig();
+            const auto& describe = pqGroup.GetPQTabletConfig();
 
             Cerr <<"=== PATH DESCRIPTION: \n" << pqGroup.DebugString();
-            //UNIT_ASSERT_VALUES_EQUAL(describe.GetPartitionConfig().GetWriteSpeedInBytesPerSecond(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(describe.GetConsumers().size(), 1);
+            auto c = describe.GetConsumers(0);
+            UNIT_ASSERT_VALUES_EQUAL(c.GetName(), "c1");
+            UNIT_ASSERT_VALUES_EQUAL(::NKikimrPQ::TPQTabletConfig::EConsumerType_Name(c.GetType()),
+                ::NKikimrPQ::TPQTabletConfig::EConsumerType_Name(::NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP));
+            UNIT_ASSERT_VALUES_EQUAL(c.GetKeepMessageOrder(), true);
+            UNIT_ASSERT_VALUES_EQUAL(c.GetDefaultProcessingTimeoutSeconds(), 31);
+            UNIT_ASSERT_VALUES_EQUAL(c.GetMaxProcessingAttempts(), 67);
+            UNIT_ASSERT_VALUES_EQUAL(::NKikimrPQ::TPQTabletConfig::EDeadLetterPolicy_Name(c.GetDeadLetterPolicy()),
+                ::NKikimrPQ::TPQTabletConfig::EDeadLetterPolicy_Name( ::NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE));
+            UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterQueue(), "dead_letter_queue_97");
         }
     }
 

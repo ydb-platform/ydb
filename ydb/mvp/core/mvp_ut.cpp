@@ -10,10 +10,7 @@
 #include <ydb/mvp/core/protos/mvp.pb.h>
 #include "mvp_test_runtime.h"
 
-namespace {
 using namespace NActors;
-
-}
 
 Y_UNIT_TEST_SUITE(Mvp) {
     Y_UNIT_TEST(TokenatorGetMetadataTokenGood) {

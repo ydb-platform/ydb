@@ -791,6 +791,23 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
 
     TxWrites.clear();
 
+    for (const auto& readRange : readRanges) {
+        for (size_t i = 0; i < readRange.PairSize(); ++i) {
+            const auto& pair = readRange.GetPair(i);
+
+            NKikimrPQ::TTransaction tx;
+            AFL_ENSURE(tx.ParseFromString(pair.GetValue()));
+            AFL_ENSURE(tx.GetKind() != NKikimrPQ::TTransaction::KIND_UNKNOWN);
+
+            PQ_LOG_TX_D("key: " << pair.GetKey() <<
+                        ", TxId: " << tx.GetTxId() <<
+                        ", Step: " << tx.GetStep() <<
+                        ", State: " << NKikimrPQ::TTransaction_EState_Name(tx.GetState()) <<
+                        ", Predicate: " << tx.GetPredicate() << " (" << (tx.HasPredicate() ? "+" : "-") << ")" <<
+                        ", Operations: " << tx.OperationsSize());
+        }
+    }
+
     const auto txs = CollectTransactions(readRanges);
     for (const auto& [txId, tx] : txs) {
         if (tx.HasStep()) {
@@ -829,6 +846,16 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
 
         if (tx.Step != Max<ui64>()) {
             PlannedTxs.emplace_back(tx.Step, txId);
+        }
+    }
+
+    std::sort(PlannedTxs.begin(), PlannedTxs.end());
+    for (size_t i = 1; i < PlannedTxs.size(); ++i) {
+        auto& prevTx = Txs.at(PlannedTxs[i - 1].second);
+        auto& currentTx = Txs.at(PlannedTxs[i].second);
+
+        if (prevTx.State < currentTx.State) {
+            currentTx.State = prevTx.State;
         }
     }
 

@@ -66,6 +66,12 @@ void TPartition::HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorCo
                         PROPERTY("HeadOffset", BlobEncoder.Head.Offset << ", count: " << BlobEncoder.Head.GetCount());
                     }
 
+                    PROPERTIES("Transactions") {
+                        PROPERTY("Step", PlanStep);
+                        PROPERTY("TxId", TxId);
+                        PROPERTY("Inflight", TransactionsInflight.size());
+                    }
+
                     if (Compacter) {
                         auto step = [&]() {
                             switch(Compacter->Step) {

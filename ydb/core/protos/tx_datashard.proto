@@ -2057,6 +2057,7 @@ message TEvCompactTable {
     optional NKikimrProto.TPathID PathId = 1;
     optional bool CompactBorrowed = 2; // i.e. taken
     optional bool CompactSinglePartedShards = 3;
+    optional uint64 Cookie = 4;
 }
 
 message TEvCompactTableResult {
@@ -2071,6 +2072,7 @@ message TEvCompactTableResult {
     optional uint64 TabletId = 1;
     optional NKikimrProto.TPathID PathId = 2;
     optional EStatus Status = 3;
+    optional uint64 Cookie = 4;
 }
 
 message TEvCompactBorrowed {
@@ -2087,8 +2089,8 @@ message TEvGetCompactTableStats {
 }
 
 message TEvGetCompactTableStatsResult {
-    optional uint64 BackgroundCompactionRequests = 1;
-    optional uint64 BackgroundCompactionCount = 2;
+    optional uint64 CompactionRequests = 1;
+    optional uint64 CompactionCount = 2;
     optional uint64 CompactBorrowedCount = 3;
 }
 

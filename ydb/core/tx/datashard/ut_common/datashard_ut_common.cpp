@@ -1332,11 +1332,12 @@ ui64 AsyncCreateCopyTable(
 }
 
 NKikimrTxDataShard::TEvCompactTableResult CompactTable(
-    TTestActorRuntime& runtime, ui64 shardId, const TTableId& tableId, bool compactBorrowed)
+    TTestActorRuntime& runtime, ui64 shardId, const TTableId& tableId, bool compactBorrowed, ui64 cookie)
 {
     auto sender = runtime.AllocateEdgeActor();
     auto request = MakeHolder<TEvDataShard::TEvCompactTable>(tableId.PathId);
     request->Record.SetCompactBorrowed(compactBorrowed);
+    request->Record.SetCookie(cookie);
     runtime.SendToPipe(shardId, sender, request.Release(), 0, GetPipeConfigWithRetries());
 
     auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvCompactTableResult>(sender);

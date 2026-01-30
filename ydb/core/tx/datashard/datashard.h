@@ -1708,15 +1708,16 @@ namespace TEvDataShard {
                                                    TEvDataShard::EvCompactTableResult> {
         TEvCompactTableResult() = default;
 
-        TEvCompactTableResult(ui64 tabletId, const TPathId& pathId, NKikimrTxDataShard::TEvCompactTableResult::EStatus status)
-            : TEvCompactTableResult(tabletId, pathId.OwnerId, pathId.LocalPathId, status)
+        TEvCompactTableResult(ui64 tabletId, const TPathId& pathId, NKikimrTxDataShard::TEvCompactTableResult::EStatus status, ui64 cookie = 0)
+            : TEvCompactTableResult(tabletId, pathId.OwnerId, pathId.LocalPathId, status, cookie)
         { }
 
-        TEvCompactTableResult(ui64 tabletId, ui64 ownerId, ui64 localId, NKikimrTxDataShard::TEvCompactTableResult::EStatus status) {
+        TEvCompactTableResult(ui64 tabletId, ui64 ownerId, ui64 localId, NKikimrTxDataShard::TEvCompactTableResult::EStatus status, ui64 cookie = 0) {
             Record.SetTabletId(tabletId);
             Record.MutablePathId()->SetOwnerId(ownerId);
             Record.MutablePathId()->SetLocalId(localId);
             Record.SetStatus(status);
+            Record.SetCookie(cookie);
         }
     };
 

@@ -127,6 +127,31 @@ inline void LogIntegrityTrailsKeys(const NActors::TActorContext& ctx, const ui64
     }
 }
 
+inline void LogIntegrityTrailsLocks(const TActorContext& ctx, const ui64 tabletId, const ui64 txId, const TVector<ui64>& locks) {
+    if (locks.empty()) {
+        return;
+    }
+
+    auto logFn = [&]() {
+        TStringStream ss;
+
+        LogKeyValue("Component", "DataShard", ss);
+        LogKeyValue("Type", "Locks", ss);
+        LogKeyValue("TabletId", ToString(tabletId), ss);
+        LogKeyValue("PhyTxId", ToString(txId), ss);
+
+        ss << "BreakLocks: [";
+        for (const auto& lock : locks) {
+            ss << lock << " ";
+        }
+        ss << "]";
+
+        return ss.Str();
+    };
+
+    LOG_INFO_S(ctx, NKikimrServices::DATA_INTEGRITY, logFn());
+}
+
 // Unified function that logs lock breaking events to both integrity trails and TLI systems
 inline void LogLocksBroken(const NActors::TActorContext& ctx, const ui64 tabletId, TStringBuf message,
                            const TVector<ui64>& brokenLocks, TMaybe<ui64> breakerQueryTraceId = Nothing(),

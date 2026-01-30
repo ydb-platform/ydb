@@ -1,6 +1,5 @@
 #include "datashard_active_transaction.h"
 #include "datashard_impl.h"
-#include "datashard_integrity_trails.h"
 #include "datashard_pipeline.h"
 #include "execution_unit_ctors.h"
 #include "setup_sys_locks.h"
@@ -56,12 +55,7 @@ public:
         }
 
         BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);
-        auto [_, locksBrokenByCommit] = DataShard.SysLocksTable().ApplyLocks();
-        if (!locksBrokenByCommit.empty()) {
-            auto victimQueryTraceIds = DataShard.SysLocksTable().ExtractVictimQueryTraceIds(locksBrokenByCommit);
-            NDataIntegrity::LogLocksBroken(ctx, DataShard.TabletID(), "Commit writes transaction broke all table locks", locksBrokenByCommit,
-                                           Nothing(), victimQueryTraceIds);
-        }
+        DataShard.SysLocksTable().ApplyLocks();
         DataShard.SubscribeNewLocks(ctx);
         Pipeline.AddCommittingOp(op);
 

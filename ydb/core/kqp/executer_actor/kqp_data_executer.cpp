@@ -1730,10 +1730,6 @@ private:
 
         kqpTx.MutableRuntimeSettings()->SetUseSpilling(false);
 
-        if (Request.QueryTraceId) {
-            kqpTx.SetQueryTraceId(Request.QueryTraceId);
-        }
-
         NKikimrTxDataShard::TDataTransaction dataTransaction;
         dataTransaction.MutableKqpTransaction()->Swap(&kqpTx);
         dataTransaction.SetImmediate(ImmediateTx);

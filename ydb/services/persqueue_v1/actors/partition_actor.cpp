@@ -73,7 +73,7 @@ TPartitionActor::TPartitionActor(
     , Topic(topic)
     , Database(database)
     , DirectRead(directRead)
-    , PartitionInFlightMemoryLayout(partitionMaxInFlightBytes)
+    , PartitionInFlightMemoryController(partitionMaxInFlightBytes)
     , UseMigrationProtocol(useMigrationProtocol)
     , FirstRead(true)
     , ReadingFinishedSent(false)
@@ -823,7 +823,7 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
 
         AFL_ENSURE(!WaitForData);
 
-        bool isInFlightMemoryOk = PartitionInFlightMemoryLayout.Add(ReadOffset, dr.GetBytesSizeEstimate());
+        bool isInFlightMemoryOk = PartitionInFlightMemoryController.Add(ReadOffset, dr.GetBytesSizeEstimate());
         ReadOffset = dr.GetLastOffset() + 1;
 
         AFL_ENSURE(!RequestInfly);
@@ -874,7 +874,7 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
 
     AFL_ENSURE(!WaitForData);
 
-    if (EndOffset > ReadOffset && PartitionInFlightMemoryLayout.Add(ReadOffset, res.ByteSize())) {
+    if (EndOffset > ReadOffset && PartitionInFlightMemoryController.Add(ReadOffset, res.ByteSize())) {
         SendPartitionReady(ctx);
     } else {
         WaitForData = true;
@@ -941,8 +941,8 @@ void TPartitionActor::CommitDone(ui64 cookie, const TActorContext& ctx) {
 
     CommittedOffset = CommitsInfly.front().second.Offset;
     
-    bool wasMemoryLimitReached = PartitionInFlightMemoryLayout.IsMemoryLimitReached();
-    bool isMemoryOkNow = PartitionInFlightMemoryLayout.Remove(CommittedOffset);
+    bool wasMemoryLimitReached = PartitionInFlightMemoryController.IsMemoryLimitReached();
+    bool isMemoryOkNow = PartitionInFlightMemoryController.Remove(CommittedOffset);
     if (wasMemoryLimitReached && isMemoryOkNow) {
         SendPartitionReady(ctx);
     }
@@ -1077,7 +1077,7 @@ void TPartitionActor::InitStartReading(const TActorContext& ctx) {
         ClientCommitOffset = CommittedOffset;
     }
 
-    if (EndOffset > ReadOffset && !MaxTimeLagMs && !ReadTimestampMs && !PartitionInFlightMemoryLayout.IsMemoryLimitReached()) {
+    if (EndOffset > ReadOffset && !MaxTimeLagMs && !ReadTimestampMs && !PartitionInFlightMemoryController.IsMemoryLimitReached()) {
         SendPartitionReady(ctx);
     } else {
         WaitForData = true;
@@ -1516,12 +1516,12 @@ void TPartitionActor::DoWakeup(const TActorContext& ctx) {
     }
 }
 
-TPartitionInFlightMemoryLayout::TPartitionInFlightMemoryLayout(ui64 MaxAllowedSize)
+TPartitionInFlightMemoryController::TPartitionInFlightMemoryController(ui64 MaxAllowedSize)
     : LayoutUnit(MaxAllowedSize / MAX_LAYOUT_SIZE)
     , TotalSize(0)
 {}
 
-bool TPartitionInFlightMemoryLayout::Add(ui64 Offset, ui64 Size) {
+bool TPartitionInFlightMemoryController::Add(ui64 Offset, ui64 Size) {
     if (LayoutUnit == 0) {
         // means that there are no limits were set
         return true;
@@ -1530,14 +1530,14 @@ bool TPartitionInFlightMemoryLayout::Add(ui64 Offset, ui64 Size) {
     auto unitsBefore = TotalSize / LayoutUnit;
     TotalSize += Size;
     auto unitsAfter = TotalSize / LayoutUnit;
-    if (unitsAfter > unitsBefore || TotalSize == 0) {
+    if (unitsAfter > unitsBefore) {
         Layout.push_back(Offset);
     }
 
     return TotalSize < LayoutUnit * MAX_LAYOUT_SIZE;
 }
 
-bool TPartitionInFlightMemoryLayout::Remove(ui64 Offset) {
+bool TPartitionInFlightMemoryController::Remove(ui64 Offset) {
     if (LayoutUnit == 0) {
         // means that there are no limits were set
         return true;
@@ -1551,7 +1551,7 @@ bool TPartitionInFlightMemoryLayout::Remove(ui64 Offset) {
     return TotalSize < LayoutUnit * MAX_LAYOUT_SIZE;
 }
 
-bool TPartitionInFlightMemoryLayout::IsMemoryLimitReached() const {
+bool TPartitionInFlightMemoryController::IsMemoryLimitReached() const {
     if (LayoutUnit == 0) {
         // means that there are no limits were set
         return false;

@@ -55,11 +55,11 @@ struct TTopicCounters {
 };
 
 
-struct TPartitionInFlightMemoryLayout {
+struct TPartitionInFlightMemoryController {
     constexpr static ui64 MAX_LAYOUT_SIZE = 1000;
 
-    TPartitionInFlightMemoryLayout() = default;
-    TPartitionInFlightMemoryLayout(ui64 MaxAllowedSize);
+    TPartitionInFlightMemoryController() = default;
+    TPartitionInFlightMemoryController(ui64 MaxAllowedSize);
     
     ui64 LayoutUnit;
     std::deque<ui64> Layout;
@@ -267,7 +267,7 @@ private:
     std::set<ui64> UnpublishedDirectReads;
     std::set<ui64> DirectReadsToForget;
 
-    TPartitionInFlightMemoryLayout PartitionInFlightMemoryLayout;
+    TPartitionInFlightMemoryController PartitionInFlightMemoryController;
 
     enum class EDirectReadRestoreStage {
         None,

@@ -410,6 +410,16 @@ namespace NKikimr {
             }
         };
 
+        struct TConfigTxFlags {
+            bool SuppressFailModelChecking = false;
+            bool SuppressDegradedGroupsChecking = false;
+            bool SuppressDisintegratedGroupsChecking = false;
+
+            static TConfigTxFlags SuppressAll() {
+                return {true, true, true};
+            }
+        };
+
     } // NBsController
 } // NKikimr
 

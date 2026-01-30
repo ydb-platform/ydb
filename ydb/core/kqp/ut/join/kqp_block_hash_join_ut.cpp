@@ -640,6 +640,160 @@ Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
                 TStringBuilder() << "AST should contain BlockHashJoin! Actual AST: " << ast);
         }
     }
+    
+    Y_UNIT_TEST(BlockHashJoinWithTypeRemapping) {
+        // Test BlockHashJoin when join keys have different types (e.g., Int64 vs Int32)
+        // This triggers type remapping with synthetic columns (_yql_dq_key_right_*)
+        TKikimrSettings settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        TKikimrRunner kikimr(settings);
+
+        auto queryClient = kikimr.GetQueryClient();
+        
+        // Create tables with different key types
+        {
+            auto status = queryClient.ExecuteQuery(
+                R"(
+                    CREATE TABLE `/Root/table_int64` (
+                        id Int64 NOT NULL,
+                        value String NOT NULL,
+                        PRIMARY KEY (id)
+                    )
+                    WITH (STORE = COLUMN);
+
+                    CREATE TABLE `/Root/table_int32` (
+                        id Int32 NOT NULL,
+                        value String NOT NULL,
+                        PRIMARY KEY (id)
+                    )
+                    WITH (STORE = COLUMN);
+                )",  NYdb::NQuery::TTxControl::NoTx()
+            ).GetValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+        }
+
+        // Insert test data
+        {
+            auto status = queryClient.ExecuteQuery(
+                R"(
+                    INSERT INTO `/Root/table_int64` (id, value) VALUES
+                        (1, "one"),
+                        (2, "two"),
+                        (3, "three"),
+                        (4, "four");
+
+                    INSERT INTO `/Root/table_int32` (id, value) VALUES
+                        (1, "uno"),
+                        (2, "dos"),
+                        (3, "tres");
+                )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()
+            ).GetValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+        }
+
+        // Test INNER JOIN with type remapping
+        {
+            TString hints = R"(
+                PRAGMA TablePathPrefix='/Root';
+                PRAGMA ydb.OptimizerHints=
+                    '
+                        Bytes(L # 10e12)
+                        Bytes(R # 10e12)
+                    ';
+            )";
+            TString blocks = "PRAGMA ydb.UseBlockHashJoin = \"true\";\n\n";
+            TString select = R"(
+                SELECT L.id, L.value, R.value AS right_value
+                FROM `table_int64` AS L
+                INNER JOIN `table_int32` AS R
+                ON L.id = R.id;
+            )";
+
+            TString joinQuery = TStringBuilder() << hints << blocks << select;
+
+            auto status = queryClient.ExecuteQuery(joinQuery, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+
+            auto resultSet = status.GetResultSets()[0];
+            UNIT_ASSERT_VALUES_EQUAL_C(resultSet.RowsCount(), 3, 
+                TStringBuilder() << "Expected 3 rows, got " << resultSet.RowsCount());
+
+            // Verify the join results
+            TResultSetParser parser(resultSet);
+            std::set<int64_t> seenIds;
+            while (parser.TryNextRow()) {
+                // Try both with and without table prefix (different implementations may use different naming)
+                auto id = parser.ColumnParser(0).GetInt64();  // Use column index instead of name
+                seenIds.insert(id);
+                UNIT_ASSERT_C(id >= 1 && id <= 3, TStringBuilder() << "Unexpected id: " << id);
+            }
+            UNIT_ASSERT_VALUES_EQUAL(seenIds.size(), 3);
+
+            // Verify BlockHashJoin is used in the plan
+            auto explainResult = queryClient.ExecuteQuery(
+                joinQuery, 
+                NYdb::NQuery::TTxControl::NoTx(),
+                NYdb::NQuery::TExecuteQuerySettings().ExecMode(NYdb::NQuery::EExecMode::Explain)
+            ).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(explainResult.GetStatus(), EStatus::SUCCESS, explainResult.GetIssues().ToString());
+
+            auto astOpt = explainResult.GetStats()->GetAst();
+            UNIT_ASSERT(astOpt.has_value());
+            TString ast = TString(*astOpt);
+            Cout << "AST (TypeRemapping): " << ast << Endl;
+            UNIT_ASSERT_C(ast.Contains("BlockHashJoin") || ast.Contains("DqBlockHashJoin"),
+                TStringBuilder() << "AST should contain BlockHashJoin! Actual AST: " << ast);
+        }
+
+        // Test LEFT JOIN with type remapping
+        {
+            TString hints = R"(
+                PRAGMA TablePathPrefix='/Root';
+                PRAGMA ydb.OptimizerHints=
+                    '
+                        Bytes(L # 10e12)
+                        Bytes(R # 10e12)
+                    ';
+            )";
+            TString blocks = "PRAGMA ydb.UseBlockHashJoin = \"true\";\n\n";
+            TString select = R"(
+                SELECT L.id, L.value, R.value AS right_value
+                FROM `table_int64` AS L
+                LEFT JOIN `table_int32` AS R
+                ON L.id = R.id;
+            )";
+
+            TString joinQuery = TStringBuilder() << hints << blocks << select;
+
+            auto status = queryClient.ExecuteQuery(joinQuery, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+
+            auto resultSet = status.GetResultSets()[0];
+            UNIT_ASSERT_VALUES_EQUAL_C(resultSet.RowsCount(), 4, 
+                TStringBuilder() << "Expected 4 rows (all left rows), got " << resultSet.RowsCount());
+
+            // Verify the join results
+            TResultSetParser parser(resultSet);
+            ui32 matchedRows = 0;
+            ui32 unmatchedRows = 0;
+            while (parser.TryNextRow()) {
+                auto id = parser.ColumnParser(0).GetInt64();  // L.id
+                auto rightValue = parser.ColumnParser(2).GetOptionalString();  // right_value (R.value AS right_value)
+                
+                if (rightValue.has_value()) {
+                    matchedRows++;
+                    UNIT_ASSERT_C(id >= 1 && id <= 3, TStringBuilder() << "Matched row has unexpected id: " << id);
+                } else {
+                    unmatchedRows++;
+                    UNIT_ASSERT_VALUES_EQUAL_C(id, 4, "Unmatched row should have id=4");
+                }
+            }
+            UNIT_ASSERT_VALUES_EQUAL(matchedRows, 3);
+            UNIT_ASSERT_VALUES_EQUAL(unmatchedRows, 1);
+        }
+    }
 }
 
 } // namespace NKqp

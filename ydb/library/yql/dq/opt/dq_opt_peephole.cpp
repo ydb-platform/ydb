@@ -885,6 +885,9 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
     std::vector<TString> fullColNames;
     ui32 outputIndex = 0;
 
+    std::vector<std::pair<TString, const TTypeAnnotationNode*>> leftConvertedItems;
+    std::vector<std::pair<TString, const TTypeAnnotationNode*>> rightConvertedItems;
+    
     // Build renames and full column names for left side
     for (auto i = 0u; i < itemTypeLeft->GetSize(); i++) {
         TString name(itemTypeLeft->GetItems()[i]->GetName());
@@ -896,7 +899,6 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
         leftRenames.emplace_back(ctx.NewAtom(pos, ctx.GetIndexAsString(outputIndex++)));
     }
 
-    // Build renames and full column names for right side
     if (blockHashJoin.JoinType().Value() != "LeftOnly" && blockHashJoin.JoinType().Value() != "LeftSemi") {
         for (auto i = 0u; i < itemTypeRight->GetSize(); i++) {
             TString name(itemTypeRight->GetItems()[i]->GetName());
@@ -908,9 +910,6 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
             rightRenames.emplace_back(ctx.NewAtom(pos, ctx.GetIndexAsString(outputIndex++)));
         }
     }
-
-    std::vector<std::pair<TString, const TTypeAnnotationNode*>> leftConvertedItems;
-    std::vector<std::pair<TString, const TTypeAnnotationNode*>> rightConvertedItems;
 
     // Process key types and conversions (similar to GraceJoin logic)
     YQL_ENSURE(leftKeyColumnNodes.size() == rightKeyColumnNodes.size());
@@ -943,6 +942,51 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
         }
     }
 
+    // Note: We don't add converted items to fullColNames here, as they are only used
+    // internally for type conversion and should not appear in the final output.
+    // The ExpandJoinInput function handles the conversion internally.
+    
+    // Helper function to detect if type is Flow
+    auto detectIsFlow = [](const TTypeAnnotationNode* inputType) -> std::optional<bool> {
+        if (inputType->GetKind() == ETypeAnnotationKind::Stream) {
+            return false;
+        } else if (inputType->GetKind() == ETypeAnnotationKind::Flow) {
+            return true;
+        } else {
+            return {};
+        }
+    };
+
+    // Helper function to detect if input is already in blocks
+    // Similar to DqPeepholeRewriteWideCombiner logic
+    auto detectIsBlocks = [&detectIsFlow](TExprNode::TPtr input) -> bool {
+        bool inputIsBlocks = false;
+        while (input->IsCallable()) {
+            auto callableName = input->Content();
+            if (!(callableName == "ToFlow"sv || callableName == "FromFlow"sv
+                || callableName == "WideFromBlocks"sv || callableName == "WideToBlocks"sv))
+            {
+                break;
+            }
+            auto next = input->ChildPtr(0);
+            auto nextKind = detectIsFlow(next->GetTypeAnn());
+            if (!nextKind.has_value()) {
+                break;
+            }
+            if (callableName == "WideFromBlocks"sv) {
+                inputIsBlocks = true;
+            } else if (callableName == "WideToBlocks"sv) {
+                inputIsBlocks = false;
+            }
+            input = next;
+        }
+        return inputIsBlocks;
+    };
+
+    // Check if inputs are already in blocks
+    bool leftIsBlocks = detectIsBlocks(blockHashJoin.LeftInput().Ptr());
+    bool rightIsBlocks = detectIsBlocks(blockHashJoin.RightInput().Ptr());
+
     // Expand inputs to wide flows (using ExpandJoinInput like GraceJoin)
     auto leftWideFlow = ExpandJoinInput(*itemTypeLeft,
         ctx.NewCallable(blockHashJoin.LeftInput().Pos(), "ToFlow", {blockHashJoin.LeftInput().Ptr()}),
@@ -964,13 +1008,8 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
         .Seal()
         .Build();
 
-    // Check if we need to convert inputs to blocks
-    // For now, assume most inputs are scalar and need conversion to blocks
-    bool needsLeftToBlocks = true;  // TODO: check actual input types
-    bool needsRightToBlocks = true; // TODO: check actual input types
-    bool needsFromBlocks = true;    // TODO: check if output should be scalar
-
-    if (needsLeftToBlocks) {
+    // Convert to blocks if not already in blocks
+    if (!leftIsBlocks) {
         leftInput = ctx.Builder(pos)
             .Callable("WideToBlocks")
                 .Add(0, std::move(leftInput))
@@ -978,7 +1017,7 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
             .Build();
     }
 
-    if (needsRightToBlocks) {
+    if (!rightIsBlocks) {
         rightInput = ctx.Builder(pos)
             .Callable("WideToBlocks")
                 .Add(0, std::move(rightInput))
@@ -997,34 +1036,67 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
         .Seal()
         .Build();
 
-    // Convert blocks back to scalars if needed
-    auto wideResult = std::move(blockJoinCore);
-    if (needsFromBlocks) {
-        wideResult = ctx.Builder(pos)
-            .Callable("WideFromBlocks")
-                .Add(0, std::move(wideResult))
+    // BlockHashJoinCore always outputs Flow of blocks, so we need to convert from blocks to scalars
+    // Convert from Flow of blocks to Flow of scalars
+    auto wideResult = ctx.Builder(pos)
+        .Callable("ToFlow")
+            .Callable(0, "WideFromBlocks")
+                .Callable(0, "FromFlow")
+                    .Add(0, std::move(blockJoinCore))
+                .Seal()
             .Seal()
-            .Build();
-    }
+        .Seal()
+        .Build();
 
-    // Structure the result using NarrowMap (complete processing)
+    // Calculate total number of columns in wide flow (including converted items)
+    // BlockHashJoinCore returns: left columns (including converted) + right columns (including converted, if applicable)
+    ui32 totalLeftColumns = itemTypeLeft->GetSize() + leftConvertedItems.size();
+    ui32 totalRightColumns = 0;
+    if (blockHashJoin.JoinType().Value() != "LeftOnly" && blockHashJoin.JoinType().Value() != "LeftSemi") {
+        totalRightColumns = itemTypeRight->GetSize() + rightConvertedItems.size();
+    }
+    ui32 totalColumns = totalLeftColumns + totalRightColumns;
+
+    // Structure the result using NarrowMap
+    // We need to map from totalColumns (including converted) to fullColNames (without converted)
     auto result = ctx.Builder(pos)
         .Callable("NarrowMap")
             .Callable(0, "ToFlow")
                 .Add(0, std::move(wideResult))
             .Seal()
             .Lambda(1)
-                .Params("output", fullColNames.size())
+                .Params("output", totalColumns)
                 .Callable("AsStruct")
                     .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
-                        ui32 i = 0U;
-                        for (const auto& colName : fullColNames) {
-                            parent.List(i)
-                                .Atom(0, colName)
-                                .Arg(1, "output", i)
+                        ui32 outputIdx = 0U;
+                        ui32 colNameIdx = 0U;
+                        
+                        // Map left columns (skip converted items)
+                        for (ui32 i = 0U; i < itemTypeLeft->GetSize(); ++i) {
+                            parent.List(colNameIdx)
+                                .Atom(0, fullColNames[colNameIdx])
+                                .Arg(1, "output", outputIdx)
                             .Seal();
-                            i++;
+                            outputIdx++;
+                            colNameIdx++;
                         }
+                        // Skip converted left columns
+                        outputIdx += leftConvertedItems.size();
+                        
+                        // Map right columns (skip converted items)
+                        if (blockHashJoin.JoinType().Value() != "LeftOnly" && blockHashJoin.JoinType().Value() != "LeftSemi") {
+                            for (ui32 i = 0U; i < itemTypeRight->GetSize(); ++i) {
+                                parent.List(colNameIdx)
+                                    .Atom(0, fullColNames[colNameIdx])
+                                    .Arg(1, "output", outputIdx)
+                                .Seal();
+                                outputIdx++;
+                                colNameIdx++;
+                            }
+                            // Skip converted right columns
+                            outputIdx += rightConvertedItems.size();
+                        }
+                        
                         return parent;
                     })
                 .Seal()

@@ -50,6 +50,7 @@ Checks: >
   google-explicit-constructor,
   hicpp-exception-baseclass,
   hicpp-multiway-paths-covered,
+  misc-definitions-in-headers,
   modernize-use-override
 CheckOptions:
   - key: readability-identifier-naming.StructPrefix

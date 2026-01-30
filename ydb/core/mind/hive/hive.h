@@ -401,6 +401,26 @@ struct TMetrics {
     void ToProto(NKikimrTabletBase::TMetrics* proto) const;
 };
 
+struct TReassignOperation {
+    TTabletId TabletId;
+    TVector<ui32> TabletChannels;
+    TVector<ui32> ForcedGroups;
+    bool Async;
+
+    TReassignOperation(TTabletId tablet,
+                       const TVector<ui32>& channels = {},
+                       const TVector<ui32>& groups = {},
+                       bool async = false)
+        : TabletId(tablet)
+        , TabletChannels(channels)
+        , ForcedGroups(groups)
+        , Async(async)
+    {}
+
+    auto* ToEvent() const {
+        return new TEvHive::TEvReassignTablet(TabletId, TabletChannels, ForcedGroups, Async);
+    }
+};
 
 } // NHive
 } // NKikimr

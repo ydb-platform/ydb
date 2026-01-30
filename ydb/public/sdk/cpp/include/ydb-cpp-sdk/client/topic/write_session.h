@@ -233,7 +233,7 @@ public:
 };
 
 //! Simple write session. Does not need event handlers. Does not provide Events, ContinuationTokens, write Acks.
-class ISimpleBlockingWriteSession {
+class ISimpleBlockingWriteSession : public TThrRefBase {
 public:
     //! Write single message. Blocks for up to blockTimeout if inflight is full or memoryUsage is exceeded;
     //! return - true if write succeeded, false if message was not enqueued for write within blockTimeout.
@@ -339,7 +339,7 @@ public:
 };
 
 //! Simple blocking keyed write session. Experimental SDK. DO NOT USE IN PRODUCTION.
-class ISimpleBlockingKeyedWriteSession {
+class ISimpleBlockingKeyedWriteSession{
 public:
     //! Write single message.
     //! continuationToken - a token earlier provided to client with ReadyToAccept event.

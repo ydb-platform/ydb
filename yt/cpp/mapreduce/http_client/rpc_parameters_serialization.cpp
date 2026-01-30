@@ -867,8 +867,8 @@ TNode SerializeParamsForStartDistributedFileSession(
     TNode result;
     SetBasicDistributedStartParams(result, transactionId, richPath, cookieCount);
 
-    if (options.Timeout_) {
-        result["timeout"] = static_cast<i64>(options.Timeout_->MilliSeconds());
+    if (options.SessionTimeout_) {
+        result["session_timeout"] = static_cast<i64>(options.SessionTimeout_->MilliSeconds());
     }
 
     return result;
@@ -883,8 +883,8 @@ TNode SerializeParamsForStartDistributedTableSession(
     TNode result;
     SetBasicDistributedStartParams(result, transactionId, richPath, cookieCount);
 
-    if (options.Timeout_) {
-        result["timeout"] = static_cast<i64>(options.Timeout_->MilliSeconds());
+    if (options.SessionTimeout_) {
+        result["session_timeout"] = static_cast<i64>(options.SessionTimeout_->MilliSeconds());
     }
 
     return result;

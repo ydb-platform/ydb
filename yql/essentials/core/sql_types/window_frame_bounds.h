@@ -2,6 +2,7 @@
 
 #include "window_number_and_direction.h"
 
+#include <util/generic/overloaded.h>
 #include <util/generic/vector.h>
 #include <util/generic/hash.h>
 
@@ -44,20 +45,6 @@ public:
 private:
     T Min_;
     T Max_;
-};
-
-// Hash function for TNumberAndDirection.
-template <typename T>
-struct TNumberAndDirectionHash {
-    size_t operator()(const TNumberAndDirection<T>& value) const {
-        size_t hash = 0;
-        hash = CombineHashes(hash, THash<int>{}(static_cast<int>(value.GetDirection())));
-        hash = CombineHashes(hash, THash<bool>{}(value.IsInf()));
-        if (!value.IsInf()) {
-            hash = CombineHashes(hash, THash<T>{}(value.GetUnderlyingValue()));
-        }
-        return hash;
-    }
 };
 
 // Hash function for TWindowFrame.
@@ -126,15 +113,15 @@ public:
         {
         }
 
-        size_t Index() {
+        size_t Index() const {
             return Index_;
         }
 
-        bool IsRange() {
+        bool IsRange() const {
             return IsRange_;
         }
 
-        bool IsIncremental() {
+        bool IsIncremental() const {
             return IsIncremental_;
         }
 
@@ -144,53 +131,26 @@ public:
         const bool IsIncremental_;
     };
 
-    explicit TCoreWinFrameCollectorBounds(bool dedup)
-        : Dedup_(dedup)
-    {
-    }
+    TCoreWinFrameCollectorBounds() = default;
 
     THandle AddRange(const TInputRangeWindowFrame<TRangeElement>& range) {
-        auto it = RangeIntervalsCache_.find(range);
-        if (Dedup_ && it != RangeIntervalsCache_.end()) {
-            return it->second;
-        }
         RangeIntervals_.push_back(range);
-        THandle handle(RangeIntervals_.size() - 1, /*isRange=*/true, /*isIncremental=*/false);
-        RangeIntervalsCache_.emplace(range, handle);
-        return handle;
+        return THandle(RangeIntervals_.size() - 1, /*isRange=*/true, /*isIncremental=*/false);
     }
 
     THandle AddRow(const TInputRowWindowFrame& row) {
-        auto it = RowIntervalsCache_.find(row);
-        if (Dedup_ && it != RowIntervalsCache_.end()) {
-            return it->second;
-        }
         RowIntervals_.push_back(row);
-        THandle handle(RowIntervals_.size() - 1, /*isRange=*/false, /*isIncremental=*/false);
-        RowIntervalsCache_.emplace(row, handle);
-        return handle;
+        return THandle(RowIntervals_.size() - 1, /*isRange=*/false, /*isIncremental=*/false);
     }
 
     THandle AddRangeIncremental(const TInputRange<TRangeElement>& delta) {
-        auto it = RangeIncrementalsCache_.find(delta);
-        if (Dedup_ && it != RangeIncrementalsCache_.end()) {
-            return it->second;
-        }
         RangeIncrementals_.push_back(delta);
-        THandle handle(RangeIncrementals_.size() - 1, /*isRange=*/true, /*isIncremental=*/true);
-        RangeIncrementalsCache_.emplace(delta, handle);
-        return handle;
+        return THandle(RangeIncrementals_.size() - 1, /*isRange=*/true, /*isIncremental=*/true);
     }
 
     THandle AddRowIncremental(const TInputRow& delta) {
-        auto it = RowIncrementalsCache_.find(delta);
-        if (Dedup_ && it != RowIncrementalsCache_.end()) {
-            return it->second;
-        }
         RowIncrementals_.push_back(delta);
-        THandle handle(RowIncrementals_.size() - 1, /*isRange=*/false, /*isIncremental=*/true);
-        RowIncrementalsCache_.emplace(delta, handle);
-        return handle;
+        return THandle(RowIncrementals_.size() - 1, /*isRange=*/false, /*isIncremental=*/true);
     }
 
     const TVector<TInputRangeWindowFrame<TRangeElement>>& RangeIntervals() const {
@@ -218,13 +178,9 @@ private:
     TVector<TInputRowWindowFrame> RowIntervals_;
     TVector<TInputRange<TRangeElement>> RangeIncrementals_;
     TVector<TInputRow> RowIncrementals_;
-
-    // Caches for deduplication.
-    bool Dedup_;
-    THashMap<TInputRangeWindowFrame<TRangeElement>, THandle, TWindowFrameHash<TInputRange<TRangeElement>>> RangeIntervalsCache_;
-    THashMap<TInputRowWindowFrame, THandle, TWindowFrameHash<TInputRow>> RowIntervalsCache_;
-    THashMap<TInputRange<TRangeElement>, THandle, TNumberAndDirectionHash<TRangeElement>> RangeIncrementalsCache_;
-    THashMap<TInputRow, THandle, TNumberAndDirectionHash<TInputRow::TNumberType>> RowIncrementalsCache_;
 };
 
 } // namespace NYql::NWindow
+
+template <typename T>
+struct THash<NYql::NWindow::TWindowFrame<T>>: NYql::NWindow::TWindowFrameHash<T> {};

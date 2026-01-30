@@ -1,11 +1,8 @@
 #pragma once
 
 #include <yql/essentials/minikql/comp_nodes/mkql_safe_circular_buffer.h>
+#include <yql/essentials/minikql/mkql_window_defs.h>
 #include <yql/essentials/minikql/defs.h>
-#include <yql/essentials/minikql/mkql_saturated_math.h>
-#include <yql/essentials/core/sql_types/sort_order.h>
-#include <yql/essentials/core/sql_types/window_frame_bounds.h>
-#include <yql/essentials/core/sql_types/window_frames_collector_params.h>
 
 #include <util/generic/vector.h>
 #include <util/generic/maybe.h>
@@ -15,19 +12,9 @@
 
 #include <utility>
 #include <algorithm>
+#include <functional>
 
 namespace NKikimr::NMiniKQL {
-
-using NYql::ESortOrder;
-using NYql::NWindow::EDirection;
-using NYql::NWindow::TCoreWinFrameCollectorBounds;
-using NYql::NWindow::TCoreWinFramesCollectorParams;
-using NYql::NWindow::TInputRange;
-using NYql::NWindow::TInputRangeWindowFrame;
-using NYql::NWindow::TInputRow;
-using NYql::NWindow::TInputRowWindowFrame;
-using NYql::NWindow::TRow;
-using NYql::NWindow::TRowWindowFrame;
 
 enum class EConsumeStatus {
     Ok,
@@ -85,6 +72,17 @@ private:
     EConsumeStatus LastConsumeStatus_ = EConsumeStatus::Ok;
 };
 
+// Concept for TCoreWinFramesCollector template parameters.
+// TElementGetter returns TMaybe<TRangeElement>, and TComparator operates on TRangeElement values.
+template <typename TStreamElement, typename TElementGetter, typename TComparator>
+concept WinFramesCollector = requires(TComparator comparator, TElementGetter elementGetter, TStreamElement streamElement) {
+    { elementGetter(streamElement) };
+    typename std::invoke_result_t<TElementGetter, const TStreamElement&>::value_type;
+    { comparator(
+        *std::declval<typename std::invoke_result_t<TElementGetter, const TStreamElement&>>(),
+        *std::declval<typename std::invoke_result_t<TElementGetter, const TStreamElement&>>()) } -> std::convertible_to<bool>;
+};
+
 // Structure to hold current window states for all window types.
 class TFrameBoundsIndices {
 public:
@@ -110,7 +108,8 @@ public:
     }
 
 private:
-    template <typename, typename, ESortOrder>
+    template <typename TStreamElement, typename TElementGetter, typename TComparator, ESortOrder SortOrder>
+        requires WinFramesCollector<TStreamElement, TElementGetter, TComparator>
     friend class TCoreWinFramesCollector;
 
     TVector<TRowWindowFrame> RangeIntervals_;
@@ -162,7 +161,8 @@ private:
 // not positions inside the currently maintained queue. TCoreWinFramesCollector automatically removes
 // elements that are no longer needed by any window frame, causing indices to be rebased after each cleanup.
 // So actual indices that methods return will be relative to the current queue state.
-template <typename TStreamElement, typename TElementGetter, ESortOrder SortOrder>
+template <typename TStreamElement, typename TElementGetter, typename TRangeComparator, ESortOrder SortOrder>
+    requires WinFramesCollector<TStreamElement, TElementGetter, TRangeComparator>
 class TCoreWinFramesCollector {
 public:
     using TElementGetterResult = std::invoke_result_t<TElementGetter, const TStreamElement&>;
@@ -170,14 +170,15 @@ public:
     using TQueue = TSafeCircularBuffer<TStreamElement>;
     using TStream = std::function<EConsumeStatus(TStreamElement&)>;
 
-    static auto CreateFactory(TCoreWinFrameCollectorBounds<TRangeElement> inputBounds,
+    using TComparatorBound = TComparatorBound<TRangeElement>;
+    using TComparatorWindowFrame = TComparatorWindowFrame<TRangeElement>;
+    using TComparatorBounds = TComparatorBounds<TRangeElement>;
+
+    static auto CreateFactory(TComparatorBounds inputBounds,
                               TElementGetter elementGetter) {
-        // Validate intervals
-        for (const auto& interval : inputBounds.RangeIntervals()) {
-            ValidateInterval(interval, "Range");
-        }
+        // Validate row intervals
         for (const auto& interval : inputBounds.RowIntervals()) {
-            ValidateInterval(interval, "Row");
+            ValidateRowInterval(interval, "Row");
         }
 
         TPrecomputedBoundsData precomputed;
@@ -185,11 +186,6 @@ public:
         precomputed.RangeIncrementals = inputBounds.RangeIncrementals();
         precomputed.RowWindowFrames = ConvertRowIntervals(inputBounds.RowIntervals());
         precomputed.RowIncrementals = ConvertRowIntervals(inputBounds.RowIncrementals());
-
-        if (!precomputed.RangeIncrementals.empty()) {
-            auto maxIt = std::ranges::max_element(precomputed.RangeIncrementals);
-            precomputed.MaxIncrementalRangeIntervals = std::distance(precomputed.RangeIncrementals.begin(), maxIt);
-        }
 
         if (!precomputed.RowIncrementals.empty()) {
             auto maxIt = std::ranges::max_element(precomputed.RowIncrementals);
@@ -210,21 +206,7 @@ public:
             precomputed.MaxRowInterval = TRowWindowFrame(minBegin, maxEnd);
         }
 
-        if (!precomputed.RangeWindowFrames.empty()) {
-            auto minElement = std::ranges::min_element(precomputed.RangeWindowFrames,
-                                                       [](const auto& a, const auto& b) {
-                                                           return a.Min() < b.Min();
-                                                       });
-            auto maxElement = std::ranges::max_element(precomputed.RangeWindowFrames,
-                                                       [](const auto& a, const auto& b) {
-                                                           return a.Max() < b.Max();
-                                                       });
-            precomputed.MaxRangeInterval = TInputRangeWindowFrame<TRangeElement>{
-                minElement->Min(),
-                maxElement->Max()};
-        }
-
-        return [precomputed, elementGetter](TQueue& outputQueue, TStream stream, TFrameBoundsIndices& currentFrameBoundsIndices) {
+        return [precomputed = std::move(precomputed), elementGetter](TQueue& outputQueue, TStream stream, TFrameBoundsIndices& currentFrameBoundsIndices) {
             return TCoreWinFramesCollector(
                 outputQueue,
                 stream,
@@ -276,13 +258,11 @@ public:
 
 private:
     struct TPrecomputedBoundsData {
-        TVector<TInputRangeWindowFrame<TRangeElement>> RangeWindowFrames;
+        TVector<TComparatorWindowFrame> RangeWindowFrames;
         TVector<TRowWindowFrame> RowWindowFrames;
-        TVector<TInputRange<TRangeElement>> RangeIncrementals;
+        TVector<TComparatorBound> RangeIncrementals;
         TVector<TRow> RowIncrementals;
         TMaybe<TRowWindowFrame> MaxRowInterval;
-        TMaybe<TInputRangeWindowFrame<TRangeElement>> MaxRangeInterval;
-        TMaybe<TRow> MaxIncrementalRangeIntervals;
         TMaybe<TRow> MaxIncrementalRowIntervals;
     };
 
@@ -293,12 +273,10 @@ private:
                             const TPrecomputedBoundsData& precomputed)
         : OutputQueue_(outputQueue)
         , MaxRowInterval_(precomputed.MaxRowInterval)
-        , MaxRangeInterval_(precomputed.MaxRangeInterval)
         , RangeWindowFrames_(precomputed.RangeWindowFrames)
         , RowWindowFrames_(precomputed.RowWindowFrames)
         , RangeIncrementals_(precomputed.RangeIncrementals)
         , RowIncrementals_(precomputed.RowIncrementals)
-        , MaxIncrementalRangeIntervals_(precomputed.MaxIncrementalRangeIntervals)
         , MaxIncrementalRowIntervals_(precomputed.MaxIncrementalRowIntervals)
         , StreamConsumer_(std::move(stream))
         , ElementGetter_(std::move(elementGetter))
@@ -329,13 +307,6 @@ private:
 
     using TStreamConsumer = TStreamConsumer<TStream, TStreamElement>;
 
-    TMaybe<TInputRange<TRangeElement>> GetMaxRangeIncrementalElement() const {
-        if (MaxIncrementalRangeIntervals_.Defined()) {
-            return RangeIncrementals_[*MaxIncrementalRangeIntervals_];
-        }
-        return {};
-    }
-
     TMaybe<TRow> GetMaxRowIncrementalElement() const {
         if (MaxIncrementalRowIntervals_.Defined()) {
             return RowIncrementals_[*MaxIncrementalRowIntervals_];
@@ -343,8 +314,7 @@ private:
         return {};
     }
 
-    template <typename TInterval>
-    static void ValidateInterval(const TInterval& interval, const char* intervalType) {
+    static void ValidateRowInterval(const TInputRowWindowFrame& interval, const char* intervalType) {
         const auto& minBound = interval.Min();
         const auto& maxBound = interval.Max();
 
@@ -369,24 +339,6 @@ private:
         return ElementGetter_(OutputQueue_.Get(idx));
     }
 
-    consteval static EInfBoundary InfBoundaryAddElements() {
-        static_assert(IsRangeSupported());
-        if constexpr (SortOrder == ESortOrder::Asc) {
-            return EInfBoundary::Left;
-        } else {
-            return EInfBoundary::Right;
-        }
-    }
-
-    consteval static EInfBoundary InfBoundaryRemoveElements() {
-        static_assert(IsRangeSupported());
-        if constexpr (SortOrder == ESortOrder::Asc) {
-            return EInfBoundary::Right;
-        } else {
-            return EInfBoundary::Left;
-        }
-    }
-
     template <typename T>
     constexpr static bool IsNan(T value) {
         if constexpr (std::is_floating_point_v<T>) {
@@ -396,11 +348,11 @@ private:
         }
     }
 
-    bool ShouldAddElement(TInputRange<TRangeElement> range,
+    bool ShouldAddElement(const TComparatorBound& bound,
                           TRow fromIdx,
                           TRow elemToTestIdx) const {
         // Unbounded preceding or following case. Should be added no matter what.
-        if (range.IsInf()) {
+        if (bound.IsInf()) {
             return true;
         }
 
@@ -423,15 +375,14 @@ private:
             return true;
         }
 
-        // Just compare elements to match intervals.
-        return IsBelongToInterval<InfBoundaryAddElements()>(GetComparationDirection(range.GetDirection()), *from, range.GetUnderlyingValue(), *elemToTest);
+        return bound.GetUnderlyingValue()(*from, *elemToTest);
     }
 
-    bool ShouldRemoveElement(TInputRange<TRangeElement> range,
+    bool ShouldRemoveElement(const TComparatorBound& bound,
                              TRow fromIdx,
                              TRow elemToTestIdx) const {
-        // Unbounded preceding or following case. Should be added no matter what.
-        if (range.IsInf()) {
+        // Unbounded preceding or following case. Should never be removed.
+        if (bound.IsInf()) {
             return false;
         }
 
@@ -454,20 +405,11 @@ private:
             return false;
         }
 
-        // Just compare elements to match intervals.
-        return !IsBelongToInterval<InfBoundaryRemoveElements()>(GetComparationDirection(range.GetDirection()), *from, range.GetUnderlyingValue(), *elemToTest);
+        return !bound.GetUnderlyingValue()(*from, *elemToTest);
     }
 
     consteval static bool IsRangeSupported() {
         return SortOrder != ESortOrder::Unimportant;
-    }
-
-    static constexpr EDirection GetComparationDirection(EDirection dir) {
-        if constexpr (SortOrder == ESortOrder::Asc) {
-            return dir;
-        } else {
-            return InvertDirection(dir);
-        }
     }
 
     // Consumes elements from the stream until all window frame intervals can be satisfied.
@@ -509,19 +451,22 @@ private:
         }
 
         if constexpr (IsRangeSupported()) {
-            if (MaxRangeInterval_ && ShouldAddElement(MaxRangeInterval_->Max(),
-                                                      currentPositionInQueue,
-                                                      OutputQueue_.Size() - 1)) {
-                return true;
+            // Check all range window frames
+            for (const auto& interval : RangeWindowFrames_) {
+                if (ShouldAddElement(interval.Max(),
+                                     currentPositionInQueue,
+                                     OutputQueue_.Size() - 1)) {
+                    return true;
+                }
             }
 
-            auto maxIncrementalRange = GetMaxRangeIncrementalElement();
-
-            if (maxIncrementalRange && ShouldAddElement(
-                                           *maxIncrementalRange,
-                                           currentPositionInQueue,
-                                           OutputQueue_.Size() - 1)) {
-                return true;
+            // Check all range incrementals
+            for (const auto& incremental : RangeIncrementals_) {
+                if (ShouldAddElement(incremental,
+                                     currentPositionInQueue,
+                                     OutputQueue_.Size() - 1)) {
+                    return true;
+                }
             }
         }
 
@@ -690,15 +635,13 @@ private:
     TRow CurrentPositionInStream_ = -1;
 
     TMaybe<TRowWindowFrame> MaxRowInterval_;
-    TMaybe<TInputRangeWindowFrame<TRangeElement>> MaxRangeInterval_;
 
-    TVector<TInputRangeWindowFrame<TRangeElement>> RangeWindowFrames_;
+    TVector<TComparatorWindowFrame> RangeWindowFrames_;
     TVector<TRowWindowFrame> RowWindowFrames_;
 
-    TVector<TInputRange<TRangeElement>> RangeIncrementals_;
+    TVector<TComparatorBound> RangeIncrementals_;
     TVector<TRow> RowIncrementals_;
 
-    TMaybe<TRow> MaxIncrementalRangeIntervals_;
     TMaybe<TRow> MaxIncrementalRowIntervals_;
 
     TStreamConsumer StreamConsumer_;

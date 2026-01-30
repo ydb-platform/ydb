@@ -31,13 +31,19 @@ enum class EInfBoundary {
 
 // InfBoundary == Right -> [boundary, +inf)
 // InfBoundary == Left  -> (-inf,  boundary]
-template <EInfBoundary InfBoundary, class T>
-Y_FORCE_INLINE constexpr bool IsBelongToInterval(EDirection dir, T from, T delta, T x) {
+template <EInfBoundary InfBoundary, class T, class U>
+Y_FORCE_INLINE constexpr bool IsBelongToInterval(EDirection dir, T from, U delta, T x) {
+    Y_DEBUG_ABORT_UNLESS(delta >= 0);
     if constexpr (std::is_floating_point_v<T>) {
-        Y_DEBUG_ABORT_UNLESS(!std::isnan(delta));
         Y_DEBUG_ABORT_UNLESS(!std::isnan(from));
         Y_DEBUG_ABORT_UNLESS(!std::isnan(x));
-        const T b = (dir == EDirection::Following) ? (from + delta) : (from - delta);
+    }
+    if constexpr (std::is_floating_point_v<U>) {
+        Y_DEBUG_ABORT_UNLESS(!std::isnan(delta));
+    }
+    if constexpr (std::is_floating_point_v<T> || std::is_floating_point_v<U>) {
+        const auto b = (dir == EDirection::Following) ? (from + delta) : (from - delta);
+        Y_DEBUG_ABORT_UNLESS(!std::isnan(b));
         if constexpr (InfBoundary == EInfBoundary::Right) {
             return x >= b;
         } else {
@@ -46,15 +52,20 @@ Y_FORCE_INLINE constexpr bool IsBelongToInterval(EDirection dir, T from, T delta
     } else {
         static_assert(std::is_integral_v<T>, "T must be integral or floating");
         static_assert(!std::is_same_v<T, bool>, "bool is not supported");
+        static_assert(std::is_integral_v<U>, "U must be integral or floating");
+        static_assert(!std::is_same_v<U, bool>, "U is not supported");
         static_assert(sizeof(T) == sizeof(i8) || sizeof(T) == sizeof(i16) ||
                           sizeof(T) == sizeof(i32) || sizeof(T) == sizeof(i64),
                       "Only 8/16/32/64-bit integers are supported");
-
-        using W = TNextWiderSigned<T>;
-        const W wf = static_cast<W>(from);
-        const W wd = static_cast<W>(delta);
-        const W wx = static_cast<W>(x);
-        const W b = (dir == EDirection::Following) ? (wf + wd) : (wf - wd);
+        static_assert(sizeof(U) == sizeof(i8) || sizeof(U) == sizeof(i16) ||
+                          sizeof(U) == sizeof(i32) || sizeof(U) == sizeof(i64),
+                      "Only 8/16/32/64-bit integers are supported");
+        using TW = TNextWiderSigned<T>;
+        using UW = TNextWiderSigned<U>;
+        const auto wf = static_cast<TW>(from);
+        const auto wd = static_cast<UW>(delta);
+        const auto wx = static_cast<TW>(x);
+        const auto b = (dir == EDirection::Following) ? (wf + wd) : (wf - wd);
 
         if constexpr (InfBoundary == EInfBoundary::Right) {
             return wx >= b; // [b, +inf)

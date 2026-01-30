@@ -2225,5 +2225,19 @@
             "size": 987,
             "uri": "https://{canondata_backend}/1942173/6473d32519b28df787f5dcefdfa39d698f7ce5c8/resource.tar.gz#test.test_window-win_range_timestamp--Results_/results.txt"
         }
+    ],
+    "test.test[window-win_range_tzdate_interval64--Debug]": [
+        {
+            "checksum": "103092a7dea95772acec8838f9d47b35",
+            "size": 1435,
+            "uri": "https://{canondata_backend}/1946324/3470615f80e6c372e4b37f76a4ae54d30d53ca47/resource.tar.gz#test.test_window-win_range_tzdate_interval64--Debug_/opt.yql"
+        }
+    ],
+    "test.test[window-win_range_tzdate_interval64--Results]": [
+        {
+            "checksum": "752a69ca812b2f580261b0fdff9c2d3c",
+            "size": 987,
+            "uri": "https://{canondata_backend}/1946324/3470615f80e6c372e4b37f76a4ae54d30d53ca47/resource.tar.gz#test.test_window-win_range_tzdate_interval64--Results_/results.txt"
+        }
     ]
 }

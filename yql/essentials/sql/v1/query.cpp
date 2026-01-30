@@ -1899,10 +1899,10 @@ static std::optional<INode::TPtr> CreateConsumerDesc(TContext& ctx, const TTopic
             return settings;
         }
         if (value.IsSet()) {
-            return node.L(settings, node.Q(node.Y(setter, value.GetValueSet())));
+            return node.L(settings, node.Q(node.Y(node.Q(setter), value.GetValueSet())));
         } else {
             YQL_ENSURE(alter, "Cannot reset on create");
-            return node.L(settings, node.Q(node.Y(resetter, node.Q(node.Y()))));
+            return node.L(settings, node.Q(node.Y(node.Q(resetter), node.Q(node.Y()))));
         }
     };
 

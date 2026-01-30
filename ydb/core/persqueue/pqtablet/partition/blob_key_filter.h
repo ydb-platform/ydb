@@ -8,7 +8,7 @@
 
 namespace NKikimr::NPQ {
 
-THashSet<TString> FilterBlobsMetaData(const NKikimrClient::TKeyValueResponse::TReadRangeResult& range,
-                                                                            const TPartitionId& partitionId);
+THashSet<TString> FilterBlobsMetaData(const TVector<NKikimrClient::TKeyValueResponse::TReadRangeResult>& ranges,
+                                      const TPartitionId& partitionId);
 
 }

@@ -134,7 +134,7 @@ class TJsonResultCollector : public TTestResultCollector {
     }
 
     ~TJsonResultCollector() {
-        Cout << "Saved results at " << Path.string();
+        Cerr << "Saved results at " << Path.string() << Endl;
     }
 
     std::filesystem::path Path;
@@ -236,12 +236,17 @@ void DoSelectedTest(TRunParams params, ETestType testType, bool llvm, bool spill
         }
     } else if (testType == ETestType::DqHashCombinerVs) {
         if (spilling) {
-            ythrow yexception() << "LLVM/spilling are not supported for DqHashCombiner perf test";
-        }
-        if (llvm) {
-            NKikimr::NMiniKQL::RunTestDqHashCombineVsWideCombine<true>(params, printout);
+            if (llvm) {
+                NKikimr::NMiniKQL::RunTestDqHashCombineVsWideCombine<true, true>(params, printout);
+            } else {
+                NKikimr::NMiniKQL::RunTestDqHashCombineVsWideCombine<false, true>(params, printout);
+            }
         } else {
-            NKikimr::NMiniKQL::RunTestDqHashCombineVsWideCombine<false>(params, printout);
+            if (llvm) {
+                NKikimr::NMiniKQL::RunTestDqHashCombineVsWideCombine<true, false>(params, printout);
+            } else {
+                NKikimr::NMiniKQL::RunTestDqHashCombineVsWideCombine<false, false>(params, printout);
+            }
         }
     } else if (testType == ETestType::SimpleGraceJoin) {
         if (params.NumRuns != 1) {

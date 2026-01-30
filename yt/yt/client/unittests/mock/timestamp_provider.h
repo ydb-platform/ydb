@@ -1,5 +1,6 @@
 #pragma once
 
+#include <yt/yt/client/transaction_client/config.h>
 #include <yt/yt/client/transaction_client/timestamp_provider.h>
 
 namespace NYT::NTransactionClient {
@@ -14,6 +15,7 @@ class TMockTimestampProvider
 public:
     MOCK_METHOD(TFuture<TTimestamp>, GenerateTimestamps, (int, NObjectClient::TCellTag), (override));
     MOCK_METHOD(TTimestamp, GetLatestTimestamp, (NObjectClient::TCellTag), (override));
+    MOCK_METHOD(void, Reconfigure, (const TRemoteTimestampProviderConfigPtr&), (override));
 };
 
 DEFINE_REFCOUNTED_TYPE(TMockTimestampProvider)

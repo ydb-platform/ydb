@@ -37,6 +37,7 @@
 #include <ydb/library/yql/providers/generic/actors/yql_generic_provider_factories.h>
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_read_actor.h>
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_write_actor.h>
+#include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway_factory.h>
 #include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.h>
 #include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
 #include <ydb/library/yql/providers/s3/proto/retry_config.pb.h>
@@ -236,7 +237,8 @@ void Init(
             yqSharedResources->UserSpaceYdbDriver,
             appData->Mon,
             appData->Counters,
-            MakeNodesManagerId());
+            MakeNodesManagerId(),
+            true);
         actorRegistrator(NFq::RowDispatcherServiceActorId(), rowDispatcher.release());
     }
 
@@ -259,7 +261,7 @@ void Init(
         );
         auto pqGateway = pqGatewayFactory ? pqGatewayFactory->CreatePqGateway() : NYql::CreatePqNativeGateway(std::move(pqServices));
         RegisterDqPqReadActorFactory(*asyncIoFactory, yqSharedResources->UserSpaceYdbDriver, credentialsFactory, pqGateway, 
-            yqCounters->GetSubgroup("subsystem", "DqSourceTracker"), commonConfig.GetPqReconnectPeriod());
+            yqCounters->GetSubgroup("subsystem", "DqSourceTracker"), commonConfig.GetPqReconnectPeriod(), true);
 
         s3ActorsFactory->RegisterS3ReadActorFactory(*asyncIoFactory, credentialsFactory, httpGateway, s3HttpRetryPolicy, readActorFactoryCfg,
             yqCounters->GetSubgroup("subsystem", "S3ReadActor"), protoConfig.GetGateways().GetS3().GetAllowLocalFiles());
@@ -267,7 +269,7 @@ void Init(
             httpGateway, s3HttpRetryPolicy);
 
         RegisterGenericProviderFactories(*asyncIoFactory, credentialsFactory, connectorClient);
-        RegisterDqPqWriteActorFactory(*asyncIoFactory, yqSharedResources->UserSpaceYdbDriver, credentialsFactory, pqGateway, yqCounters->GetSubgroup("subsystem", "DqSinkTracker"));
+        RegisterDqPqWriteActorFactory(*asyncIoFactory, yqSharedResources->UserSpaceYdbDriver, credentialsFactory, pqGateway, yqCounters->GetSubgroup("subsystem", "DqSinkTracker"), true);
         RegisterDQSolomonWriteActorFactory(*asyncIoFactory, credentialsFactory);
         RegisterDQSolomonReadActorFactory(*asyncIoFactory, credentialsFactory);
     }

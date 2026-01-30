@@ -65,7 +65,7 @@ class TDataWriterActor : public TActorBootstrapped<TDataWriterActor> {
             TEvBlobStorage::TEvVBlock logCmd(tabletId, Generation, TestCtx->SelfVDiskId, TInstant::Max());
             TAllocChunkSerializer serializer;
             logCmd.SerializeToArcadiaStream(&serializer);
-            TIntrusivePtr<TEventSerializedData> buffers = serializer.Release(logCmd.CreateSerializationInfo());
+            TIntrusivePtr<TEventSerializedData> buffers = serializer.Release(logCmd.CreateSerializationInfo(false));
             ctx.Send(TestCtx->LoggerId,
                      new NPDisk::TEvLog(TestCtx->PDiskCtx->Dsk->Owner, TestCtx->PDiskCtx->Dsk->OwnerRound,
                                         TLogSignature::SignatureBlock, TRcBuf(buffers->GetString()), seg, nullptr));
@@ -222,12 +222,15 @@ class TSyncLogTestWriteActor : public TActorBootstrapped<TSyncLogTestWriteActor>
                 TestCtx->PDiskCtx,
                 TestCtx->LoggerId,
                 LogCutterId,
+                TActorId{},
                 VDiskConfig->SyncLogMaxDiskAmount,
                 VDiskConfig->SyncLogMaxEntryPointSize,
                 VDiskConfig->SyncLogMaxMemAmount,
                 VDiskConfig->MaxResponseSize,
                 Db->SyncLogFirstLsnToKeep,
-                false);
+                false,
+                TControlWrapper(0, 0, 1),
+                TControlWrapper(20'000'000, 1, 100'000'000'000));
         TestCtx->SyncLogId = ctx.Register(CreateSyncLogActor(slCtx, Conf->GroupInfo, TestCtx->SelfVDiskId, std::move(repaired)));
         // Send Db birth lsn
         ui64 dbBirthLsn = 0;

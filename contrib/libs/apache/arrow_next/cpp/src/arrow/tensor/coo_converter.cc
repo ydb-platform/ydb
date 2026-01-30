@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "arrow/tensor/converter_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/tensor/converter_internal.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -23,12 +23,12 @@
 #include <numeric>
 #include <vector>
 
-#include "arrow/buffer.h"
-#include "arrow/status.h"
-#include "arrow/type.h"
-#include "arrow/util/checked_cast.h"
-#include "arrow/util/macros.h"
-#include "arrow/visit_type_inline.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/buffer.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/status.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/checked_cast.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/macros.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/visit_type_inline.h"
 
 namespace arrow20 {
 

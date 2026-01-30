@@ -3,9 +3,12 @@
 Implements the Distutils 'install_lib' command
 (install all Python modules)."""
 
+from __future__ import annotations
+
 import importlib.util
 import os
 import sys
+from typing import Any, ClassVar
 
 from ..core import Command
 from ..errors import DistutilsOptionError
@@ -47,8 +50,8 @@ class install_lib(Command):
         ('skip-build', None, "skip the build steps"),
     ]
 
-    boolean_options = ['force', 'compile', 'skip-build']
-    negative_opt = {'no-compile': 'compile'}
+    boolean_options: ClassVar[list[str]] = ['force', 'compile', 'skip-build']
+    negative_opt: ClassVar[dict[str, str]] = {'no-compile': 'compile'}
 
     def initialize_options(self):
         # let the 'install' command dictate our installation directory
@@ -59,7 +62,7 @@ class install_lib(Command):
         self.optimize = None
         self.skip_build = None
 
-    def finalize_options(self):
+    def finalize_options(self) -> None:
         # Get all the information we need to install pure Python modules
         # from the umbrella 'install' command -- build (source) directory,
         # install (target) directory, and whether to compile .py files.
@@ -86,7 +89,7 @@ class install_lib(Command):
             if self.optimize not in (0, 1, 2):
                 raise DistutilsOptionError("optimize must be 0, 1, or 2")
 
-    def run(self):
+    def run(self) -> None:
         # Make sure we have built everything we need first
         self.build()
 
@@ -102,14 +105,15 @@ class install_lib(Command):
     # -- Top-level worker functions ------------------------------------
     # (called from 'run()')
 
-    def build(self):
+    def build(self) -> None:
         if not self.skip_build:
             if self.distribution.has_pure_modules():
                 self.run_command('build_py')
             if self.distribution.has_ext_modules():
                 self.run_command('build_ext')
 
-    def install(self):
+    # Any: https://typing.readthedocs.io/en/latest/guides/writing_stubs.html#the-any-trick
+    def install(self) -> list[str] | Any:
         if os.path.isdir(self.build_dir):
             outfiles = self.copy_tree(self.build_dir, self.install_dir)
         else:
@@ -119,7 +123,7 @@ class install_lib(Command):
             return
         return outfiles
 
-    def byte_compile(self, files):
+    def byte_compile(self, files) -> None:
         if sys.dont_write_bytecode:
             self.warn('byte-compiling is disabled, skipping.')
             return

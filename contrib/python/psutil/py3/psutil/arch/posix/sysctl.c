@@ -24,12 +24,12 @@ psutil_sysctl(int *mib, u_int miblen, void *buf, size_t buflen) {
         return psutil_badargs("psutil_sysctl");
 
     if (sysctl(mib, miblen, buf, &len, NULL, 0) == -1) {
-        psutil_PyErr_SetFromOSErrnoWithSyscall("sysctl()");
+        psutil_oserror_wsyscall("sysctl()");
         return -1;
     }
 
     if (len != buflen) {
-        PyErr_SetString(PyExc_RuntimeError, "sysctl() size mismatch");
+        psutil_runtime_error("sysctl() size mismatch");
         return -1;
     }
 
@@ -52,7 +52,7 @@ psutil_sysctl_malloc(int *mib, u_int miblen, char **buf, size_t *buflen) {
     // First query to determine required size
     ret = sysctl(mib, miblen, NULL, &needed, NULL, 0);
     if (ret == -1) {
-        psutil_PyErr_SetFromOSErrnoWithSyscall("sysctl() malloc 1/3");
+        psutil_oserror_wsyscall("sysctl() malloc 1/3");
         return -1;
     }
 
@@ -85,7 +85,7 @@ psutil_sysctl_malloc(int *mib, u_int miblen, char **buf, size_t *buflen) {
 
             // Re-query needed size for next attempt
             if (sysctl(mib, miblen, NULL, &needed, NULL, 0) == -1) {
-                psutil_PyErr_SetFromOSErrnoWithSyscall("sysctl() malloc 2/3");
+                psutil_oserror_wsyscall("sysctl() malloc 2/3");
                 return -1;
             }
 
@@ -95,13 +95,11 @@ psutil_sysctl_malloc(int *mib, u_int miblen, char **buf, size_t *buflen) {
 
         // Other errors: clean up and give up
         free(buffer);
-        psutil_PyErr_SetFromOSErrnoWithSyscall("sysctl() malloc 3/3");
+        psutil_oserror_wsyscall("sysctl() malloc 3/3");
         return -1;
     }
 
-    PyErr_SetString(
-        PyExc_RuntimeError, "sysctl() buffer allocation retry limit exceeded"
-    );
+    psutil_runtime_error("sysctl() buffer allocation retry limit exceeded");
     return -1;
 }
 
@@ -117,9 +115,7 @@ psutil_sysctl_argmax() {
     }
 
     if (argmax <= 0) {
-        PyErr_SetString(
-            PyExc_RuntimeError, "sysctl(KERN_ARGMAX) return <= 0"
-        );
+        psutil_runtime_error("sysctl(KERN_ARGMAX) return <= 0");
         return 0;
     }
 
@@ -138,13 +134,13 @@ psutil_sysctlbyname(const char *name, void *buf, size_t buflen) {
         return psutil_badargs("psutil_sysctlbyname");
 
     if (sysctlbyname(name, buf, &len, NULL, 0) == -1) {
-        snprintf(errbuf, sizeof(errbuf), "sysctlbyname('%s')", name);
-        psutil_PyErr_SetFromOSErrnoWithSyscall(errbuf);
+        str_format(errbuf, sizeof(errbuf), "sysctlbyname('%s')", name);
+        psutil_oserror_wsyscall(errbuf);
         return -1;
     }
 
     if (len != buflen) {
-        snprintf(
+        str_format(
             errbuf,
             sizeof(errbuf),
             "sysctlbyname('%s') size mismatch: returned %zu, expected %zu",
@@ -152,7 +148,7 @@ psutil_sysctlbyname(const char *name, void *buf, size_t buflen) {
             len,
             buflen
         );
-        PyErr_SetString(PyExc_RuntimeError, errbuf);
+        psutil_runtime_error(errbuf);
         return -1;
     }
 
@@ -177,8 +173,10 @@ psutil_sysctlbyname_malloc(const char *name, char **buf, size_t *buflen) {
     // First query to determine required size.
     ret = sysctlbyname(name, NULL, &needed, NULL, 0);
     if (ret == -1) {
-        snprintf(errbuf, sizeof(errbuf), "sysctlbyname('%s') malloc 1/3", name);
-        psutil_PyErr_SetFromOSErrnoWithSyscall(errbuf);
+        str_format(
+            errbuf, sizeof(errbuf), "sysctlbyname('%s') malloc 1/3", name
+        );
+        psutil_oserror_wsyscall(errbuf);
         return -1;
     }
 
@@ -209,13 +207,13 @@ psutil_sysctlbyname_malloc(const char *name, char **buf, size_t *buflen) {
             buffer = NULL;
 
             if (sysctlbyname(name, NULL, &needed, NULL, 0) == -1) {
-                snprintf(
+                str_format(
                     errbuf,
                     sizeof(errbuf),
                     "sysctlbyname('%s') malloc 2/3",
                     name
                 );
-                psutil_PyErr_SetFromOSErrnoWithSyscall(errbuf);
+                psutil_oserror_wsyscall(errbuf);
                 return -1;
             }
 
@@ -225,20 +223,20 @@ psutil_sysctlbyname_malloc(const char *name, char **buf, size_t *buflen) {
 
         // Other errors: clean up and give up.
         free(buffer);
-        snprintf(
+        str_format(
             errbuf, sizeof(errbuf), "sysctlbyname('%s') malloc 3/3", name
         );
-        psutil_PyErr_SetFromOSErrnoWithSyscall(errbuf);
+        psutil_oserror_wsyscall(errbuf);
         return -1;
     }
 
-    snprintf(
+    str_format(
         errbuf,
         sizeof(errbuf),
         "sysctlbyname('%s') buffer allocation retry limit exceeded",
         name
     );
-    PyErr_SetString(PyExc_RuntimeError, errbuf);
+    psutil_runtime_error(errbuf);
     return -1;
 }
 #endif  // PSUTIL_HAS_SYSCTLBYNAME

@@ -126,7 +126,7 @@ int TCommandConfigFetch::Run(TConfig& config) {
     auto driver = std::make_unique<NYdb::TDriver>(CreateDriver(config));
     auto client = NYdb::NConfig::TConfigClient(*driver);
 
-    NYdb::NConfig::TFetchConfigResult result(TStatus(EStatus::CLIENT_CALL_UNIMPLEMENTED, {}), {});
+    NYdb::NConfig::TFetchConfigResult result(TStatus(EStatus::CLIENT_CALL_UNIMPLEMENTED, {}), {}, {});
 
     if (!UseLegacyApi) {
         NYdb::NConfig::TFetchAllConfigsSettings settings;

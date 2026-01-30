@@ -195,7 +195,11 @@ public:
         Clients.emplace_back(client);
 
         if (!client->IsStarted()) {
-            const auto ev = Runtime.GrabEdgeEvent<NActors::TEvents::TEvPing>(CompileNotifier, TDuration::Seconds(5));
+            const auto timeout = TDuration::Seconds(5);
+
+            // wait for purecalc compile response to arrive before TEvPing
+            Sleep(timeout);
+            const auto ev = Runtime.GrabEdgeEvent<NActors::TEvents::TEvPing>(CompileNotifier, timeout);
             UNIT_ASSERT_C(ev, "Compilation is not performed for purecalc program");
         }
 
@@ -239,23 +243,20 @@ public:
 
     TCallback BatchCheck(TVector<TMessages> messages) const {
         return [this, expectedIndex = 0ull, expectedMessages = std::move(messages)](NActors::TActorId clientId, TQueue<TDataBatch>&& data) mutable {
-            UNIT_ASSERT_VALUES_EQUAL(data.size(), 1);
-            auto [actualMessages, actualOffsets, actualWatermark] = data.front();
-            data.pop();
+            while (!data.empty()) {
+                auto [actualMessages, actualOffsets, actualWatermark] = data.front();
+                data.pop();
 
-            UNIT_ASSERT_LT_C(expectedIndex, expectedMessages.size(), "Expected less messages");
-            auto [expectedOffsets, expectedWatermark, expectedBatch] = expectedMessages[expectedIndex++];
+                UNIT_ASSERT_LT_C(expectedIndex, expectedMessages.size(), "Expected less messages, clientId: " << clientId << ", got " << data.size() << " batches");
+                auto [expectedOffsets, expectedWatermark, expectedBatch] = expectedMessages[expectedIndex++];
 
-            UNIT_ASSERT_VALUES_EQUAL_C(expectedOffsets.size(), actualOffsets.size(), "clientId: " << clientId << ", expectedIndex: " << expectedIndex - 1);
-            size_t i = 0;
-            for (auto actualOffset : actualOffsets) {
-                UNIT_ASSERT_VALUES_EQUAL_C(expectedOffsets[i], actualOffset, "clientId: " << clientId << ", expectedIndex: " << expectedIndex - 1 << ", i: " << i);
-                ++i;
-            }
-            UNIT_ASSERT_VALUES_EQUAL_C(expectedWatermark, actualWatermark, "clientId: " << clientId << ", expectedIndex: " << expectedIndex - 1);
+                UNIT_ASSERT_VALUES_EQUAL_C(expectedOffsets, actualOffsets, "clientId: " << clientId << ", expectedIndex: " << expectedIndex - 1);
 
-            if (!expectedBatch.Rows.empty()) {
-                CheckMessageBatch(actualMessages, expectedBatch);
+                UNIT_ASSERT_VALUES_EQUAL_C(expectedWatermark, actualWatermark, "clientId: " << clientId << ", expectedIndex: " << expectedIndex - 1);
+
+                if (!expectedBatch.Rows.empty()) {
+                    CheckMessageBatch(actualMessages, expectedBatch);
+                }
             }
         };
     }

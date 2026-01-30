@@ -13,8 +13,7 @@ namespace numpy
 {
 
   template <class E>
-  types::numpy_texpr<types::broadcasted<E>>
-  transpose(types::broadcasted<E> const &arr)
+  types::numpy_texpr<types::broadcasted<E>> transpose(types::broadcasted<E> const &arr)
   {
     return {arr};
   }
@@ -26,36 +25,31 @@ namespace numpy
   }
 
   template <class E>
-  typename std::enable_if<E::value == 2, types::numpy_texpr<E>>::type
-  transpose(E const &arr)
+  std::enable_if_t<E::value == 2, types::numpy_texpr<E>> transpose(E const &arr)
   {
     return {arr};
   }
 
   template <class E>
-  typename std::enable_if<E::value == 1, E>::type transpose(E const &arr)
+  std::enable_if_t<E::value == 1, E> transpose(E const &arr)
   {
     return arr;
   }
 
   template <class T, class pS>
-  typename std::enable_if<
-      (std::tuple_size<pS>::value > 2),
-      types::ndarray<T, types::array_tuple<long, std::tuple_size<pS>::value>>>::
-      type
-      transpose(types::ndarray<T, pS> const &a);
+  std::enable_if_t<(std::tuple_size<pS>::value > 2),
+                   types::ndarray<T, types::array_tuple<long, std::tuple_size<pS>::value>>>
+  transpose(types::ndarray<T, pS> const &a);
 
   template <class T, class pS, size_t M>
   types::ndarray<T, types::array_tuple<long, std::tuple_size<pS>::value>>
-  transpose(types::ndarray<T, pS> const &a,
-            types::array_tuple<long, M> const &t);
+  transpose(types::ndarray<T, pS> const &a, types::array_tuple<long, M> const &t);
 
   template <class T, class pS, class... Args>
   types::ndarray<T, types::array_tuple<long, 1 + sizeof...(Args)>>
   transpose(types::ndarray<T, pS> const &a, long index, Args const &...indices)
   {
-    return transpose(a, types::array_tuple<long, 1 + sizeof...(Args)>{
-                            {index, (long)indices...}});
+    return transpose(a, types::array_tuple<long, 1 + sizeof...(Args)>{{index, (long)indices...}});
   }
 
   template <class T>
@@ -64,16 +58,15 @@ namespace numpy
   template <class Op, class... Args>
   auto transpose(types::numpy_expr<Op, Args...> const &expr)
       -> decltype(_transpose<types::numpy_expr<Op, Args...>>{}(
-          expr, utils::make_index_sequence<sizeof...(Args)>()))
+          expr, std::make_index_sequence<sizeof...(Args)>()))
   {
     return _transpose<types::numpy_expr<Op, Args...>>{}(
-        expr, utils::make_index_sequence<sizeof...(Args)>());
+        expr, std::make_index_sequence<sizeof...(Args)>());
   }
   template <class Op, class... Args>
   struct _transpose<types::numpy_expr<Op, Args...>> {
     template <size_t... Is>
-    auto operator()(types::numpy_expr<Op, Args...> const &expr,
-                    utils::index_sequence<Is...>)
+    auto operator()(types::numpy_expr<Op, Args...> const &expr, std::index_sequence<Is...>)
         -> decltype(Op{}(transpose(std::get<Is>(expr.args))...))
     {
       return Op{}(transpose(std::get<Is>(expr.args))...);
@@ -81,14 +74,11 @@ namespace numpy
   };
 
   template <class E>
-  auto transpose(E const &expr) ->
-      typename std::enable_if<
-          (E::value > 2),
-          decltype(transpose(types::ndarray<typename E::dtype,
-                                            typename E::shape_t>{expr}))>::type
+  auto transpose(E const &expr) -> std::enable_if_t<
+      (E::value > 2),
+      decltype(transpose(types::ndarray<typename E::dtype, typename E::shape_t>{expr}))>
   {
-    return transpose(
-        types::ndarray<typename E::dtype, typename E::shape_t>{expr});
+    return transpose(types::ndarray<typename E::dtype, typename E::shape_t>{expr});
   }
 
   DEFINE_FUNCTOR(pythonic::numpy, transpose);

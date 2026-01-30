@@ -11,6 +11,7 @@
 #include <yt/cpp/mapreduce/interface/logging/yt_log.h>
 
 #include <yt/yt/core/concurrency/thread_pool_poller.h>
+#include <yt/yt/core/concurrency/async_stream_helpers.h>
 
 #include <yt/yt/core/http/client.h>
 #include <yt/yt/core/http/config.h>

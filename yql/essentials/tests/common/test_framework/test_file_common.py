@@ -13,7 +13,15 @@ from yqlrun import YQLRun
 from test_utils import get_parameters_json, replace_vars, get_case_file
 
 
-def get_gateways_config(http_files, yql_http_file_server, force_blocks=False, is_hybrid=False, allow_llvm=True, postprocess_func=None):
+def get_gateways_config(
+    http_files,
+    yql_http_file_server,
+    force_blocks=False,
+    is_hybrid=False,
+    allow_llvm=True,
+    postprocess_func=None,
+    is_yql_select=False,
+):
     config = None
 
     if http_files or force_blocks or is_hybrid or not allow_llvm or postprocess_func is not None:
@@ -38,6 +46,8 @@ def get_gateways_config(http_files, yql_http_file_server, force_blocks=False, is
             flags.Name = 'LLVM_OFF'
         if postprocess_func is not None:
             postprocess_func(config_message)
+        if is_yql_select:
+            config_message.SqlCore.TranslationFlags.extend(['AutoYqlSelect'])
         config = text_format.MessageToString(config_message)
 
     return config
@@ -87,7 +97,8 @@ def get_sql_query(provider, suite, case, config, data_path=None, template=['.sql
 
 def run_file_no_cache(provider, suite, case, cfg, config, yql_http_file_server,
                       yqlrun_binary=None, extra_args=[], force_blocks=False, allow_llvm=True, data_path=None,
-                      run_sql=True, cfg_postprocess=None, langver=None, attr_postprocess=None):
+                      run_sql=True, cfg_postprocess=None, langver=None, attr_postprocess=None,
+                      is_yql_select=False):
     check_provider(provider, config)
 
     sql_query = get_sql_query(provider, suite, case, config, data_path, template=['.sql', '.yql'] if run_sql else '.yqls')
@@ -116,7 +127,8 @@ def run_file_no_cache(provider, suite, case, cfg, config, yql_http_file_server,
         keep_temp=not re.search(r"yt\.ReleaseTempData", sql_query),
         binary=yqlrun_binary,
         gateway_config=get_gateways_config(http_files, yql_http_file_server, force_blocks=force_blocks, is_hybrid=is_hybrid(provider), allow_llvm=allow_llvm,
-                                           postprocess_func=cfg_postprocess),
+                                           postprocess_func=cfg_postprocess,
+                                           is_yql_select=is_yql_select),
         extra_args=extra_args,
         udfs_dir=yql_binary_path('yql/essentials/tests/common/test_framework/udfs_deps'),
         langver=langver

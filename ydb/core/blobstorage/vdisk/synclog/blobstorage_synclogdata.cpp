@@ -210,6 +210,10 @@ namespace NKikimr {
             return *maxMaybe(startLsn, maxMaybe(memLsn, diskLsn));
         }
 
+        ui64 TSyncLog::GetFirstLsn() const {
+            return LogStartLsn;
+        }
+
         ui64 TSyncLog::FirstLsnToKeep() const {
             ui64 unwrittenLsn = 0;
             if (MemRecLog.Empty()) {

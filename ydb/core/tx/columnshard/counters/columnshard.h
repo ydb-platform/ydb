@@ -22,6 +22,11 @@ enum class EOverloadStatus {
     RejectProbability,
 };
 
+struct TOverloadStatus {
+    EOverloadStatus Status;
+    TString Reason;
+};
+
 enum class EWriteFailReason {
     Disabled /* "disabled" */ = 0,
     PutBlob /* "put_blob" */,
@@ -87,6 +92,7 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr SetupIndexationCount;
     NMonitoring::TDynamicCounters::TCounterPtr SetupTtlCount;
     NMonitoring::TDynamicCounters::TCounterPtr SetupCleanupCount;
+    NMonitoring::TDynamicCounters::TCounterPtr SetupCleanupSkippedByInProgressCount;
 
     NMonitoring::TDynamicCounters::TCounterPtr SkipIndexationInputDueToGranuleOverloadBytes;
     NMonitoring::TDynamicCounters::TCounterPtr SkipIndexationInputDueToGranuleOverloadCount;
@@ -274,6 +280,10 @@ public:
 
     void OnSetupCleanup() const {
         SetupCleanupCount->Add(1);
+    }
+
+    void OnSetupCleanupSkippedByInProgress() const {
+        SetupCleanupSkippedByInProgressCount->Add(1);
     }
 
     TCSCounters();

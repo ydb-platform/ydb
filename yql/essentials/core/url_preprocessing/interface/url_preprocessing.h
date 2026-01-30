@@ -7,7 +7,7 @@
 
 namespace NYql {
 
-struct IUrlPreprocessing: public TThrRefBase {
+class IUrlPreprocessing: public TThrRefBase {
 public:
     using TPtr = TIntrusivePtr<IUrlPreprocessing>;
     // Returns pair of <new url>, <url alias>

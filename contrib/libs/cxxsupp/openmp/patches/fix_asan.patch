@@ -14,7 +14,7 @@ index 21518c9..c966fa6 100644
 +#define __lsan_ignore_object(p)
 +#endif
 +
- #if KMP_USE_HWLOC
+ #if KMP_HWLOC_ENABLED
  #if HWLOC_API_VERSION > 0x00020300
  #define KMP_HWLOC_LOCATION_TYPE_CPUSET HWLOC_LOCATION_TYPE_CPUSET
 @@ -1862,6 +1862,9 @@ static void *___kmp_allocate_align(size_t size,

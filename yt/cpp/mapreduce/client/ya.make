@@ -10,6 +10,7 @@ SRCS(
     client.cpp
     file_reader.cpp
     file_writer.cpp
+    file_fragment_writer.cpp
     format_hints.cpp
     init.cpp
     lock.cpp
@@ -49,6 +50,7 @@ PEERDIR(
 PEERDIR(
     yt/yt/core
     yt/yt/core/http
+    yt/yt/core/https
 )
 
 IF (BUILD_TYPE == "PROFILE")

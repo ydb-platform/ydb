@@ -70,7 +70,7 @@ Y_UNIT_TEST_SUITE(BSCRestartPDisk) {
         auto config = env.FetchBaseConfig();
 
         auto& group = config.get_idx_group(0);
-        
+
         for (auto& vslot : config.GetVSlot()) {
             if (group.GetGroupId() == vslot.GetGroupId()) {
                 auto slotId = vslot.GetVSlotId();
@@ -129,7 +129,7 @@ Y_UNIT_TEST_SUITE(BSCRestartPDisk) {
         env.UpdateSettings(false, false);
         env.CreateBoxAndPool(1, 1);
         env.Sim(TDuration::Seconds(30));
-    
+
         // Making all but one vdisks bad, group is disintegrated
         const TActorId sender = env.Runtime->AllocateEdgeActor(env.Settings.ControllerNodeId, __FILE__, __LINE__);
         for (size_t i = 0; i < env.PDiskActors.size() - 1; i++) {
@@ -261,7 +261,7 @@ Y_UNIT_TEST_SUITE(BSCRestartPDisk) {
                     if (cfgRequest) {
                         const auto &commands = cfgRequest->Record.GetRequest().GetCommand();
                         UNIT_ASSERT_EQUAL(1, commands.size());
-                        
+
                         const auto &command = commands[0];
                         UNIT_ASSERT_EQUAL(NKikimrBlobStorage::TConfigRequest::TCommand::kRestartPDisk, command.GetCommandCase());
 
@@ -276,7 +276,7 @@ Y_UNIT_TEST_SUITE(BSCRestartPDisk) {
             // Break connection between node warden and BSC.
             TActorId nodeWardenActorId = env.Runtime->GetNode(nodeId)->ActorSystem->LookupLocalService(MakeBlobStorageNodeWardenID(nodeId));
             NStorage::TNodeWarden *warden = dynamic_cast<NStorage::TNodeWarden*>(env.Runtime->GetActor(nodeWardenActorId));
-            
+
             env.Runtime->WrapInActorContext(nodeWardenActorId, [&] {
                 warden->OnPipeError();
             });

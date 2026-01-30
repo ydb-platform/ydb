@@ -1,6 +1,6 @@
 #include "test_client.h"
 
-#include <ydb/core/kqp/federated_query/kqp_federated_query_actors.h>
+#include <ydb/core/kqp/federated_query/actors/kqp_federated_query_actors.h>
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/appdata.h>
@@ -665,7 +665,7 @@ namespace Tests {
         auto actorSystemConfig = Settings->AppConfig->GetActorSystemConfig();
         const bool useAutoConfig = actorSystemConfig.GetUseAutoConfig();
         if (useAutoConfig) {
-            NAutoConfigInitializer::ApplyAutoConfig(&actorSystemConfig, false);
+            NAutoConfigInitializer::ApplyAutoConfig(&actorSystemConfig, false, false);
         }
 
         TCpuManagerConfig cpuManager;
@@ -963,45 +963,23 @@ namespace Tests {
         TAutoPtr<IEventHandle> handleNodesInfo;
         auto nodesInfo = Runtime->GrabEdgeEventRethrow<TEvInterconnect::TEvNodesInfo>(handleNodesInfo);
 
-        auto bsConfigureRequest = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
-
-        NKikimrBlobStorage::TDefineBox boxConfig;
-        boxConfig.SetBoxId(Settings->BOX_ID);
-        boxConfig.SetItemConfigGeneration(Settings->StorageGeneration);
-
         ui32 nodeId = Runtime->GetNodeId(0);
         Y_ABORT_UNLESS(nodesInfo->Nodes[0].NodeId == nodeId);
         auto& nodeInfo = nodesInfo->Nodes[0];
 
-        NKikimrBlobStorage::TDefineHostConfig hostConfig;
-        hostConfig.SetHostConfigId(nodeId);
-        hostConfig.SetItemConfigGeneration(Settings->StorageGeneration);
-        TString path;
-        if (Settings->UseSectorMap) {
-            path ="SectorMap:test-client[:2000]";
-        } else {
-            TString diskPath = Settings->CustomDiskParams.DiskPath;
-            path = TStringBuilder() << (diskPath ? diskPath : Runtime->GetTempDir()) << "pdisk_1.dat";
-        }
-        hostConfig.AddDrive()->SetPath(path);
-        if (Settings->Verbose) {
-            Cerr << "test_client.cpp: SetPath # " << path << Endl;
-        }
-        bsConfigureRequest->Record.MutableRequest()->AddCommand()->MutableDefineHostConfig()->CopyFrom(hostConfig);
-
-        auto& host = *boxConfig.AddHost();
-        host.MutableKey()->SetFqdn(nodeInfo.Host);
-        host.MutableKey()->SetIcPort(nodeInfo.Port);
-        host.SetHostConfigId(hostConfig.GetHostConfigId());
-        bsConfigureRequest->Record.MutableRequest()->AddCommand()->MutableDefineBox()->CopyFrom(boxConfig);
-
+        ui64 boxConfigGeneration = Settings->StorageGeneration;
+        ui64 hostConfigGeneration = Settings->StorageGeneration;
         std::unordered_map<TString, ui64> poolsConfigGenerations;
-        if (Settings->FetchPoolsGeneration) {
+        if (Settings->FetchActualGeneration) {
             auto bsDescribeRequest = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
-            auto& describeCommand = *bsDescribeRequest->Record.MutableRequest()->AddCommand()->MutableReadStoragePool();
-            describeCommand.SetBoxId(Settings->BOX_ID);
+
+            auto& request = *bsDescribeRequest->Record.MutableRequest();
+            request.AddCommand()->MutableReadBox();
+            request.AddCommand()->MutableReadHostConfig();
+            auto& describePoolCommand = *request.AddCommand()->MutableReadStoragePool();
+            describePoolCommand.SetBoxId(Settings->BOX_ID);
             for (const auto& [_, storagePool] : Settings->StoragePoolTypes) {
-                describeCommand.AddName(storagePool.GetName());
+                describePoolCommand.AddName(storagePool.GetName());
             }
 
             Runtime->SendToPipe(MakeBSControllerID(), sender, bsDescribeRequest.Release(), 0, pipeConfig);
@@ -1013,14 +991,53 @@ namespace Tests {
                 Cerr << "\n\n descResponse is #" << descResponse->Record.DebugString() << "\n\n";
             }
             UNIT_ASSERT(descResponse->Record.GetResponse().GetSuccess());
-            UNIT_ASSERT_VALUES_EQUAL(response.StatusSize(), 1);
-            const auto& status = response.GetStatus(0);
+            UNIT_ASSERT_VALUES_EQUAL(response.StatusSize(), 3);
 
-            poolsConfigGenerations.reserve(status.StoragePoolSize());
-            for (const auto& storagePool : status.GetStoragePool()) {
+            for (const auto& boxInfo : response.GetStatus(0).GetBox()) {
+                if (boxInfo.GetBoxId() == Settings->BOX_ID) {
+                    boxConfigGeneration = boxInfo.GetItemConfigGeneration();
+                    break;
+                }
+            }
+
+            for (const auto& hostInfo : response.GetStatus(1).GetHostConfig()) {
+                if (hostInfo.GetHostConfigId() == nodeId) {
+                    hostConfigGeneration = hostInfo.GetItemConfigGeneration();
+                    break;
+                }
+            }
+
+            const auto& poolsInfo = response.GetStatus(2).GetStoragePool();
+            poolsConfigGenerations.reserve(poolsInfo.size());
+            for (const auto& storagePool : poolsInfo) {
                 UNIT_ASSERT(poolsConfigGenerations.emplace(storagePool.GetName(), storagePool.GetItemConfigGeneration()).second);
             }
         }
+
+        auto bsConfigureRequest = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
+
+        auto& hostConfig = *bsConfigureRequest->Record.MutableRequest()->AddCommand()->MutableDefineHostConfig();
+        hostConfig.SetHostConfigId(nodeId);
+        hostConfig.SetItemConfigGeneration(hostConfigGeneration);
+        TString path;
+        if (Settings->UseSectorMap) {
+            path ="SectorMap:test-client[:2000]";
+        } else {
+            TString diskPath = Settings->CustomDiskParams.DiskPath;
+            path = TStringBuilder() << (diskPath ? diskPath : Runtime->GetTempDir()) << "pdisk_1.dat";
+        }
+        hostConfig.AddDrive()->SetPath(path);
+        if (Settings->Verbose) {
+            Cerr << "test_client.cpp: SetPath for PDisk # " << path << Endl;
+        }
+
+        auto& boxConfig = *bsConfigureRequest->Record.MutableRequest()->AddCommand()->MutableDefineBox();
+        boxConfig.SetBoxId(Settings->BOX_ID);
+        boxConfig.SetItemConfigGeneration(boxConfigGeneration);
+        auto& host = *boxConfig.AddHost();
+        host.MutableKey()->SetFqdn(nodeInfo.Host);
+        host.MutableKey()->SetIcPort(nodeInfo.Port);
+        host.SetHostConfigId(hostConfig.GetHostConfigId());
 
         for (const auto& [poolKind, storagePool] : Settings->StoragePoolTypes) {
             if (storagePool.GetNumGroups() > 0) {
@@ -1325,8 +1342,8 @@ namespace Tests {
         {
             auto kqpProxySharedResources = std::make_shared<NKqp::TKqpProxySharedResources>();
 
-            IActor* kqpRmService = NKqp::CreateKqpResourceManagerActor(
-                Settings->AppConfig->GetTableServiceConfig().GetResourceManager(), nullptr, {}, kqpProxySharedResources, Runtime->GetNodeId(nodeIdx));
+            const auto& rmConfig = Settings->AppConfig->GetTableServiceConfig().GetResourceManager();
+            IActor* kqpRmService = NKqp::CreateKqpResourceManagerActor(rmConfig, nullptr, {}, kqpProxySharedResources, Runtime->GetNodeId(nodeIdx));
             TActorId kqpRmServiceId = Runtime->Register(kqpRmService, nodeIdx, userPoolId);
             Runtime->RegisterService(NKqp::MakeKqpRmServiceID(Runtime->GetNodeId(nodeIdx)), kqpRmServiceId, nodeIdx);
 
@@ -1376,7 +1393,7 @@ namespace Tests {
                 actorSystemPtr->store(Runtime->GetActorSystem(nodeIdx));
 
                 auto driver = NKqp::MakeYdbDriver(actorSystemPtr, queryServiceConfig.GetStreamingQueries().GetTopicSdkSettings());
-                auto pqGateway = NKqp::MakePqGateway(driver);
+                auto pqGateway = NKqp::MakePqGateway(driver, NKqp::TLocalTopicClientSettings{.ActorSystem = Runtime->GetActorSystem(nodeIdx), .ChannelBufferSize = rmConfig.GetChannelBufferSize()});
 
                 federatedQuerySetupFactory = std::make_shared<NKikimr::NKqp::TKqpFederatedQuerySetupFactoryMock>(
                     NKqp::MakeHttpGateway(queryServiceConfig.GetHttpGateway(), Runtime->GetAppData(nodeIdx).Counters),
@@ -1418,7 +1435,8 @@ namespace Tests {
                 Settings->AppConfig->GetQueryServiceConfig(),
                 federatedQuerySetupFactory,
                 Settings->S3ActorsFactory,
-                Settings->EnableScriptExecutionBackgroundChecks
+                Settings->EnableScriptExecutionBackgroundChecks,
+                TDuration::Zero()
             );
             TActorId scriptFinalizeServiceId = Runtime->Register(scriptFinalizeService, nodeIdx, userPoolId);
             Runtime->RegisterService(NKqp::MakeKqpFinalizeScriptServiceId(Runtime->GetNodeId(nodeIdx)), scriptFinalizeServiceId, nodeIdx);
@@ -1756,7 +1774,7 @@ namespace Tests {
     }
 
     void TServer::AddSysViewsRosterUpdateObserver() {
-        if (Runtime && !Runtime->IsRealThreads()) {
+        if (Runtime && !Runtime->IsRealThreads() && Settings->EnableStorage) {
             SysViewsRosterUpdateFinished = false;
             SysViewsRosterUpdateObserver = Runtime->AddObserver<NSysView::TEvSysView::TEvRosterUpdateFinished>([this](auto&) {
                 SysViewsRosterUpdateFinished = true;
@@ -1765,7 +1783,7 @@ namespace Tests {
     }
 
     void TServer::WaitForSysViewsRosterUpdate() {
-        if (Runtime && !Runtime->IsRealThreads()) {
+        if (Runtime && !Runtime->IsRealThreads() && Settings->EnableStorage) {
             Runtime->WaitFor("SysViewsRoster update finished", [this] {
                 return SysViewsRosterUpdateFinished;
             });
@@ -3100,13 +3118,24 @@ namespace Tests {
         return FlatQuery(runtime, mkql, opts, result);
     }
 
-    TString TClient::SendTabletMonQuery(TTestActorRuntime* runtime, ui64 tabletId, TString query) {
+    template <typename... TArgs>
+    TString TClient::SendTabletMonQuery(TTestActorRuntime* runtime, ui64 tabletId, TArgs&&... args) {
         TActorId sender = runtime->AllocateEdgeActor(0);
-        ForwardToTablet(*runtime, tabletId, sender, new NActors::NMon::TEvRemoteHttpInfo(query), 0);
+        ForwardToTablet(*runtime, tabletId, sender, new NActors::NMon::TEvRemoteHttpInfo(args...), 0);
         TAutoPtr<IEventHandle> handle;
         // Timeout for DEBUG purposes only
-        runtime->GrabEdgeEvent<NMon::TEvRemoteJsonInfoRes>(handle);
-        TString res = handle->Get<NMon::TEvRemoteJsonInfoRes>()->Json;
+        runtime->GrabEdgeEvents<NMon::TEvRemoteJsonInfoRes, NMon::TEvRemoteBinaryInfoRes>(handle);
+        TString res;
+        switch (handle->GetTypeRewrite()) {
+            case NMon::RemoteJsonInfoRes:
+                res = handle->Get<NMon::TEvRemoteJsonInfoRes>()->Json;
+                break;
+            case NMon::RemoteBinaryInfoRes:
+                res = handle->Get<NMon::TEvRemoteBinaryInfoRes>()->Blob;
+                break;
+            default:
+                Y_FAIL("unreachable");
+        }
         Cerr << res << Endl;
         return res;
     }
@@ -3116,7 +3145,7 @@ namespace Tests {
         ui64 hive = ChangeStateStorage(Tests::Hive, Domain);
         TInstant deadline = TInstant::Now() + TIMEOUT;
         while (TInstant::Now() <= deadline) {
-            TString res = SendTabletMonQuery(runtime, hive, TString("/app?page=SetDown&node=") + ToString(nodeId) + "&down=" + (up ? "0" : "1"));
+            TString res = SendTabletMonQuery(runtime, hive, TString("/app?page=SetDown&node=") + ToString(nodeId) + "&down=" + (up ? "0" : "1"), HTTP_METHOD_POST);
             if (!res.empty() && !res.Contains("Error"))
                 return res;
 
@@ -3128,7 +3157,7 @@ namespace Tests {
     TString TClient::KickNodeInHive(TTestActorRuntime* runtime, ui32 nodeIdx) {
         ui32 nodeId = runtime->GetNodeId(nodeIdx);
         ui64 hive = ChangeStateStorage(Tests::Hive, Domain);
-        return SendTabletMonQuery(runtime, hive, TString("/app?page=KickNode&node=") + ToString(nodeId));
+        return SendTabletMonQuery(runtime, hive, TString("/app?page=KickNode&node=") + ToString(nodeId), HTTP_METHOD_POST);
     }
 
     bool TClient::WaitForTabletAlive(TTestActorRuntime* runtime, ui64 tabletId, bool leader, TDuration timeout) {

@@ -1,9 +1,11 @@
-# coding: utf-8
+
+from __future__ import annotations
 
 import warnings
-import textwrap
+# import textwrap
 
-from typing import Any, Dict, Optional, List, Text  # NOQA
+if False:  # MYPY
+    from typing import Any, Dict, Optional, List, Text  # NOQA
 
 
 __all__ = [
@@ -116,7 +118,7 @@ class YAMLError(Exception):
 
 
 class MarkedYAMLError(YAMLError):
-    def __init__(
+    def __init__(  # NOQA
         self,
         context: Any = None,
         context_mark: Any = None,
@@ -133,7 +135,7 @@ class MarkedYAMLError(YAMLError):
         # warn is ignored
 
     def __str__(self) -> Any:
-        lines: List[str] = []
+        lines: list[str] = []
         if self.context is not None:
             lines.append(self.context)
         if self.context_mark is not None and (
@@ -148,10 +150,19 @@ class MarkedYAMLError(YAMLError):
             lines.append(self.problem)
         if self.problem_mark is not None:
             lines.append(str(self.problem_mark))
-        if self.note is not None and self.note:
-            note = textwrap.dedent(self.note)
-            lines.append(note)
+        # if self.note is not None and self.note:
+        #     note = textwrap.dedent(self.note)
+        #     lines.append(note)
+        self.check_append(lines, self.note)
         return '\n'.join(lines)
+
+    def check_append(self, lines: list[str], val: Optional[str]) -> None:
+        if val is None or not val:
+            return
+        import textwrap
+
+        note = textwrap.dedent(val)
+        lines.append(note)
 
 
 class YAMLStreamError(Exception):
@@ -163,7 +174,7 @@ class YAMLWarning(Warning):
 
 
 class MarkedYAMLWarning(YAMLWarning):
-    def __init__(
+    def __init__(  # NOQA
         self,
         context: Any = None,
         context_mark: Any = None,
@@ -195,13 +206,23 @@ class MarkedYAMLWarning(YAMLWarning):
             lines.append(self.problem)
         if self.problem_mark is not None:
             lines.append(str(self.problem_mark))
-        if self.note is not None and self.note:
-            note = textwrap.dedent(self.note)
-            lines.append(note)
-        if self.warn is not None and self.warn:
-            warn = textwrap.dedent(self.warn)
-            lines.append(warn)
+        # if self.note is not None and self.note:
+        #     note = textwrap.dedent(self.note)
+        #     lines.append(note)
+        self.check_append(lines, self.note)
+        # if self.warn is not None and self.warn:
+        #     warn = textwrap.dedent(self.warn)
+        #     lines.append(warn)
+        self.check_append(lines, self.warn)
         return '\n'.join(lines)
+
+    def check_append(self, lines: list[str], val: Optional[str]) -> None:
+        if val is None or not val:
+            return
+        import textwrap
+
+        note = textwrap.dedent(val)
+        lines.append(note)
 
 
 class ReusedAnchorWarning(YAMLWarning):
@@ -225,7 +246,7 @@ warnings.simplefilter('once', UnsafeLoaderWarning)
 
 
 class MantissaNoDotYAML1_1Warning(YAMLWarning):
-    def __init__(self, node: Any, flt_str: Any) -> None:
+    def __init__(self, node: Any, flt_str: Any) -> None:  # NOQA
         self.node = node
         self.flt = flt_str
 
@@ -255,7 +276,7 @@ class YAMLFutureWarning(Warning):
 
 
 class MarkedYAMLFutureWarning(YAMLFutureWarning):
-    def __init__(
+    def __init__(  # NOQA
         self,
         context: Any = None,
         context_mark: Any = None,
@@ -288,10 +309,20 @@ class MarkedYAMLFutureWarning(YAMLFutureWarning):
             lines.append(self.problem)
         if self.problem_mark is not None:
             lines.append(str(self.problem_mark))
-        if self.note is not None and self.note:
-            note = textwrap.dedent(self.note)
-            lines.append(note)
-        if self.warn is not None and self.warn:
-            warn = textwrap.dedent(self.warn)
-            lines.append(warn)
+        # if self.note is not None and self.note:
+        #     note = textwrap.dedent(self.note)
+        #     lines.append(note)
+        self.check_append(lines, self.note)
+        # if self.warn is not None and self.warn:
+        #     warn = textwrap.dedent(self.warn)
+        #     lines.append(warn)
+        self.check_append(lines, self.warn)
         return '\n'.join(lines)
+
+    def check_append(self, lines: list[str], val: Optional[str]) -> None:
+        if val is None or not val:
+            return
+        import textwrap
+
+        note = textwrap.dedent(val)
+        lines.append(note)

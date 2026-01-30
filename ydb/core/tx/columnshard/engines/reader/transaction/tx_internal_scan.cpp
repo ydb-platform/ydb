@@ -53,7 +53,15 @@ void TTxInternalScan::Complete(const TActorContext& ctx) {
                 read.TableMetadataAccessor = accConclusion.DetachResult();
             }
         }
-        read.LockId = request.GetLockId();
+        // the parent write has already subscribed to the lock, so no need to subscribe again
+        auto lockNodeId = std::nullopt;
+        read.SetLock(
+            request.GetLockId(),
+            lockNodeId,
+            NKikimrDataEvents::OPTIMISTIC,
+            request.GetLockId().has_value() ? Self->GetOperationsManager().GetLockOptional(request.GetLockId().value()) : nullptr,
+            request.GetReadOnlyConflicts()
+        );
         read.DeduplicationPolicy = EDeduplicationPolicy::PREVENT_DUPLICATES;
         std::unique_ptr<IScannerConstructor> scannerConstructor(new NSimple::TIndexScannerConstructor(context));
         read.ColumnIds = request.GetColumnIds();
@@ -71,10 +79,12 @@ void TTxInternalScan::Complete(const TActorContext& ctx) {
         }
 
         {
+            TInstant buildReadMetadataStart = TAppData::TimeProvider->Now();
             auto newRange = scannerConstructor->BuildReadMetadata(Self, read);
             if (!newRange) {
                 return SendError("cannot create read metadata", newRange.GetErrorMessage(), ctx);
             }
+            Self->Counters.GetScanCounters().OnReadMetadata((TAppData::TimeProvider->Now() - buildReadMetadataStart));
             readMetadataRange = TValidator::CheckNotNull(newRange.DetachResult());
         }
 

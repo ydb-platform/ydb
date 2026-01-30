@@ -93,6 +93,16 @@ void TService::Handle(TEvRefreshSubscriberData::TPtr& ev) {
     RegistrationData->SetInitializationSnapshot(ev->Get()->GetSnapshot());
 }
 
+void TService::Handle(TEvResetManagerRegistration::TPtr& ev) {
+    const auto manager = ev->Get()->GetManager();
+    const auto& typeId = manager->GetTypeId();
+    if (const auto it = RegistrationData->Registered.find(typeId); it != RegistrationData->Registered.end()) {
+        RegistrationData->Registered.erase(it);
+    } else if (const auto it = RegistrationData->InRegistration.find(typeId); it != RegistrationData->InRegistration.end()) {
+        PrepareManagers({manager}, ev->ReleaseBase(), ev->Sender);
+    }
+}
+
 void TService::Bootstrap(const NActors::TActorContext& /*ctx*/) {
     RegistrationData->EventsWaiting = std::make_shared<TEventsCollector>(SelfId());
     ALS_INFO(NKikimrServices::METADATA_PROVIDER) << "metadata service started" << Endl;
@@ -100,5 +110,4 @@ void TService::Bootstrap(const NActors::TActorContext& /*ctx*/) {
     Send(SelfId(), new TEvSubscribeExternal(RegistrationData->GetInitializationFetcher()));
 }
 
-
-}
+} // namespace NKikimr::NMetadata::NProvider

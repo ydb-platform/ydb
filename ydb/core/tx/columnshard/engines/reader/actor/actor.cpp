@@ -4,10 +4,38 @@
 #include <ydb/core/tx/columnshard/blobs_reader/read_coordinator.h>
 #include <ydb/core/tx/columnshard/engines/reader/tracing/probes.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/actor.h>
-
 #include <yql/essentials/core/issue/yql_issue.h>
 
 namespace NKikimr::NOlap::NReader {
+
+NKqp::TScanStatistics TColumnShardScan::GetScanStats() {
+    TVector<NKqp::TPerStepScanStatistics> timesPerStep = [&] {
+        auto cnt = ScanCountersPool.ReadStepsCounters();
+        TVector<NKqp::TPerStepScanStatistics> timesPerStep;
+        for (auto& [k,v ] : cnt) {
+            NKqp::TPerStepScanStatistics stats;
+            stats.StepName = k;
+            stats.IntegralExecutionDuration = v.ExecutionDuration;
+            stats.IntegralWaitDuration = v.WaitDuration;
+            ui64& prevBytes = PreviousPerStepBytesMeasurement[k];
+            ui64 thisBytes = v.RawBytesRead;
+            stats.DeltaRawBytesRead = thisBytes - prevBytes;
+            prevBytes = thisBytes;
+            timesPerStep.emplace_back(stats);
+        }
+        return timesPerStep;
+    }();
+    Sort(timesPerStep, [](const auto& l, const auto& r){
+        return l.StepName < r.StepName;
+    });
+    NKqp::TScanStatistics stats;
+    int index = 0;
+    for(auto& v: timesPerStep) {
+        stats.emplace(index, std::move(v));
+        index++;
+    }
+    return stats;
+}
 
 LWTRACE_USING(YDB_CS_READER);
 
@@ -412,6 +440,7 @@ bool TColumnShardScan::SendResult(bool pageFault, bool lastBatch) {
     LastResultInstant = TMonotonic::Now();
 
     Result->CpuTime = ScanCountersPool.GetExecutionDuration();
+    Result->CurrentStats = GetScanStats();
     Result->WaitTime = WaitTime;
     Result->RawBytes = ScanCountersPool.GetRawBytes();
 

@@ -434,7 +434,7 @@ namespace NKikimr {
             const ::NMonitoring::TDynamicCounters::TCounterPtr &counterPtr = ResultingCounterForEvent(vctx, ev);
             ui64 cookie = ev->Get()->Record.GetCookie();
             return std::make_unique<TEvBlobStorage::TEvVSyncFullResult>(status, vdiskID, cookie, now, counterPtr, nullptr,
-                ev->GetChannel());
+                ev->GetChannel(), ev->Get()->Record.GetProtocol());
         }
 
         static inline std::unique_ptr<IEventBase>

@@ -49,9 +49,8 @@ IGraphTransformer::TStatus MultiUsageFlatMapOverJoin(const TExprNode::TPtr& node
 
 bool IsFilterMultiusageEnabled(const TOptimizeContext& optCtx) {
     YQL_ENSURE(optCtx.Types);
-    static const TString multiUsageFlags = to_lower(TString("FilterPushdownEnableMultiusage"));
-    static const TString noMultiUsageFlags = to_lower(TString("FilterPushdownDisableMultiusage"));
-    return optCtx.Types->OptimizerFlags.contains(multiUsageFlags) && !optCtx.Types->OptimizerFlags.contains(noMultiUsageFlags);
+    static const char OptName[] = "FilterPushdownEnableMultiusage";
+    return IsOptimizerEnabled<OptName>(*optCtx.Types) && !IsOptimizerDisabled<OptName>(*optCtx.Types);
 }
 
 void FilterPushdownWithMultiusage(const TExprNode::TPtr& node, TNodeOnNodeOwnedMap& toOptimize, TExprContext& ctx, TOptimizeContext& optCtx) {
@@ -65,7 +64,7 @@ void FilterPushdownWithMultiusage(const TExprNode::TPtr& node, TNodeOnNodeOwnedM
         return;
     }
 
-    static const THashSet<TStringBuf> skipNodes = {"ExtractMembers", "Unordered", "AssumeColumnOrder"};
+    static const THashSet<TStringBuf> SkipNodes = {"ExtractMembers", "Unordered", "AssumeColumnOrder"};
 
     TVector<const TExprNode*> immediateParents;
     YQL_ENSURE(optCtx.ParentsMap);
@@ -92,7 +91,7 @@ void FilterPushdownWithMultiusage(const TExprNode::TPtr& node, TNodeOnNodeOwnedM
     const auto genColumnNames = GenNoClashColumns(*inputStructType, "_yql_filter_pushdown", immediateParents.size());
     for (size_t i = 0; i < immediateParents.size(); ++i) {
         const TExprNode* parent = immediateParents[i];
-        while (skipNodes.contains(parent->Content())) {
+        while (SkipNodes.contains(parent->Content())) {
             auto newParent = optCtx.GetParentIfSingle(*parent);
             if (newParent) {
                 parent = newParent;
@@ -265,7 +264,7 @@ void FilterPushdownWithMultiusage(const TExprNode::TPtr& node, TNodeOnNodeOwnedM
 }
 
 bool AllConsumersAreUnordered(const TExprNode::TPtr& node, const TParentsMap& parents, TNodeSet& unorderedConsumers) {
-    static const THashSet<TStringBuf> traverseCallables = {
+    static const THashSet<TStringBuf> TraverseCallables = {
         TCoExtractMembers::CallableName(),
         TCoAssumeDistinct::CallableName(),
         TCoAssumeUnique::CallableName(),
@@ -285,7 +284,7 @@ bool AllConsumersAreUnordered(const TExprNode::TPtr& node, const TParentsMap& pa
                     unorderedConsumers.insert(parent);
                     continue;
                 }
-                if (!parent->IsCallable(traverseCallables)) {
+                if (!parent->IsCallable(TraverseCallables)) {
                     return false;
                 }
                 YQL_ENSURE(&parent->Head() == curr);

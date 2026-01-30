@@ -36,7 +36,7 @@ struct TPatternCacheEntry {
         SizeForCache = Alloc.GetAllocated();
     }
 
-    TPatternCacheEntry(bool useAlloc = true)
+    explicit TPatternCacheEntry(bool useAlloc = true)
         : Alloc(__LOCATION__)
         , Env(Alloc)
         , UseAlloc(useAlloc)
@@ -59,14 +59,14 @@ using TPatternCacheEntryFuture = NThreading::TFuture<TPatternCacheEntryPtr>;
 
 class TComputationPatternLRUCache {
 public:
-    struct Config {
-        Config(size_t maxSizeBytes, size_t maxCompiledSizeBytes)
+    struct TConfig {
+        TConfig(size_t maxSizeBytes, size_t maxCompiledSizeBytes)
             : MaxSizeBytes(maxSizeBytes)
             , MaxCompiledSizeBytes(maxCompiledSizeBytes)
         {
         }
 
-        Config(size_t maxSizeBytes, size_t maxCompiledSizeBytes, size_t patternAccessTimesBeforeTryToCompile)
+        TConfig(size_t maxSizeBytes, size_t maxCompiledSizeBytes, size_t patternAccessTimesBeforeTryToCompile)
             : MaxSizeBytes(maxSizeBytes)
             , MaxCompiledSizeBytes(maxCompiledSizeBytes)
             , PatternAccessTimesBeforeTryToCompile(patternAccessTimesBeforeTryToCompile)
@@ -77,18 +77,21 @@ public:
         const size_t MaxCompiledSizeBytes;
         const std::optional<size_t> PatternAccessTimesBeforeTryToCompile;
 
-        bool operator==(const Config& rhs) {
+        bool operator==(const TConfig& rhs) {
             return std::tie(MaxSizeBytes, MaxCompiledSizeBytes, PatternAccessTimesBeforeTryToCompile) ==
                    std::tie(rhs.MaxSizeBytes, rhs.MaxCompiledSizeBytes, rhs.PatternAccessTimesBeforeTryToCompile);
         }
 
-        bool operator!=(const Config& rhs) {
+        bool operator!=(const TConfig& rhs) {
             return !(*this == rhs);
         }
     };
 
-    TComputationPatternLRUCache(const Config& configuration,
-                                NMonitoring::TDynamicCounterPtr counters = MakeIntrusive<NMonitoring::TDynamicCounters>());
+    // TODO(YQL-20086): Migrate YDB to TConfig
+    using Config = TConfig;
+
+    explicit TComputationPatternLRUCache(const TConfig& configuration,
+                                         NMonitoring::TDynamicCounterPtr counters = MakeIntrusive<NMonitoring::TDynamicCounters>());
     ~TComputationPatternLRUCache();
 
     static TPatternCacheEntryPtr CreateCacheEntry(bool useAlloc = true) {
@@ -107,7 +110,7 @@ public:
 
     void CleanCache();
 
-    Config GetConfiguration() const {
+    TConfig GetConfiguration() const {
         std::lock_guard lock(Mutex_);
         return Configuration_;
     }
@@ -147,7 +150,7 @@ private:
     std::unique_ptr<TLRUPatternCacheImpl> Cache_;                                    // protected by Mutex
     THashMap<TString, TPatternCacheEntryPtr> PatternsToCompile_;                     // protected by Mutex
 
-    const Config Configuration_;
+    const TConfig Configuration_;
 
     NMonitoring::TDynamicCounters::TCounterPtr Hits_;
     NMonitoring::TDynamicCounters::TCounterPtr HitsCompiled_;

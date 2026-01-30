@@ -10,6 +10,7 @@ class IFacilityProvider;
 
 void DoExportToYtRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f);
 void DoExportToS3Request(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f);
+void DoExportToFsRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f);
 
 }
 }

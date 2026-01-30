@@ -50,8 +50,7 @@ namespace utils
   };
 
   template <class T>
-  T const neutral<operator_::functor::imax, T>::value =
-      std::numeric_limits<T>::lowest();
+  T const neutral<operator_::functor::imax, T>::value = std::numeric_limits<T>::lowest();
 
   template <class T>
   struct neutral<operator_::functor::imin, T> {
@@ -59,8 +58,7 @@ namespace utils
   };
 
   template <class T>
-  T const neutral<operator_::functor::imin, T>::value =
-      std::numeric_limits<T>::max();
+  T const neutral<operator_::functor::imin, T>::value = std::numeric_limits<T>::max();
 
   template <class T>
   struct neutral<operator_::functor::ixor, T> {

@@ -71,6 +71,14 @@ inputs:
     type: string
     required: false
     description: "Telegram alert chat"
+  collect_coredumps:
+    type: boolean
+    default: false
+    description: "Collect coredumps via enabling ulimit -c unlimited"
+  pull_number:
+    type: string
+    required: false
+    description: "Pull request number (for workflow_call events)"
 
 outputs:
   success:
@@ -128,11 +136,11 @@ runs:
         echo "PUBLIC_DIR_URL=$PUBLIC_DIR_URL" >> $GITHUB_ENV
         mkdir -p $PUBLIC_DIR
 
-        echo "LAST_JUNIT_REPORT_XML=$PUBLIC_DIR/last_junit.xml" >> $GITHUB_ENV
+        echo "LAST_BUILD_RESULTS_REPORT=$PUBLIC_DIR/last_report.json" >> $GITHUB_ENV
         echo "SUMMARY_LINKS=$PUBLIC_DIR/summary_links.txt" >> $GITHUB_ENV
         echo "BUILD_PRESET=${{ inputs.build_preset }}" >> $GITHUB_ENV
 
-        python3 -m pip install ydb ydb[yc] codeowners humanize junitparser plotly
+        python3 -m pip install ydb ydb[yc] codeowners humanize plotly
 
     - name: Setup cache
       shell: bash
@@ -145,11 +153,26 @@ runs:
       id: build
       shell: bash
       env:
+        COLLECT_COREDUMPS: ${{ inputs.collect_coredumps }}
         TELEGRAM_BOT_TOKEN: ${{ inputs.telegram_ydbot_token }}
         GH_ALERTS_TG_LOGINS: ${{ inputs.telegram_alert_logins }}
         GH_ALERTS_TG_CHAT: ${{ inputs.telegram_alert_chat }}
+        PR_NUMBER: ${{ inputs.pull_number }}
+        GITHUB_REF_NAME: ${{ github.ref_name }}
+        GITHUB_BASE_REF: ${{ github.base_ref }}
+        GITHUB_EVENT_NAME: ${{ github.event_name }}
       run: |
         set -ex
+        
+        if [ "$COLLECT_COREDUMPS" = "true" ]; then
+          sudo mkdir -p /coredumps
+          sudo chmod 1777 /coredumps
+          echo "/coredumps/%p.%s" | sudo tee /proc/sys/kernel/core_pattern
+          ulimit -c unlimited
+        else
+          ulimit -c 0
+        fi
+
         echo "Artifacts will be uploaded [here](${PUBLIC_DIR_URL}/index.html)" | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
 
         # Save original HEAD before any git operations (checkout scripts, graph_compare, etc.)
@@ -167,6 +190,7 @@ runs:
           --stat
           --test-threads "${{ inputs.test_threads }}" --link-threads "${{ inputs.link_threads }}"
           -DUSE_EAT_MY_DATA
+          --add-peerdirs-tests all
         )
 
         TEST_RETRY_COUNT=${{ inputs.test_retry_count }}
@@ -233,10 +257,20 @@ runs:
         )
 
         echo "inputs.custom_branch_name = ${{ inputs.custom_branch_name }}"
-        echo "GITHUB_REF_NAME = $GITHUB_REF_NAME"
+        echo "GITHUB_REF_NAME = ${GITHUB_REF_NAME}"
+        echo "GITHUB_BASE_REF = ${GITHUB_BASE_REF}"
+        echo "GITHUB_EVENT_NAME = ${GITHUB_EVENT_NAME}"
 
         if [ -z "${{ inputs.custom_branch_name }}" ]; then
-          BRANCH_NAME="${GITHUB_REF_NAME}"
+          # For pull requests, use the target branch (base_ref) - this ensures that:
+          # - Test history is shown for the target branch (e.g., stable-25-3)
+          # - Test results are uploaded for the target branch
+          # For other events (push, workflow_dispatch), use ref_name (the branch that triggered the workflow)
+          if [ "${GITHUB_EVENT_NAME}" = "pull_request" ] || [ "${GITHUB_EVENT_NAME}" = "pull_request_target" ]; then
+            BRANCH_NAME="${GITHUB_BASE_REF}"
+          else
+            BRANCH_NAME="${GITHUB_REF_NAME}"
+          fi
         else
           BRANCH_NAME="${{ inputs.custom_branch_name }}"
         fi
@@ -254,13 +288,18 @@ runs:
         echo "::debug::get version"
         ./ya --version
 
-        export YA_MAKE_COMMAND="./ya make ${params[@]}"
+        if [ true = ${{ inputs.run_tests }} ]; then
+            params+=(-A)
+        fi
+        YA_MAKE_COMMAND="./ya make ${params[@]}"
+        GRAPH_PATH=$(realpath graph.json)
+        CONTEXT_PATH=$(realpath context.json)
         if [ "${{ inputs.increment }}" = "true" ]; then
           GRAPH_COMPARE_OUTPUT="$PUBLIC_DIR/graph_compare_log.txt"
           GRAPH_COMPARE_OUTPUT_URL="$PUBLIC_DIR_URL/graph_compare_log.txt"
 
           set +e
-          ./.github/scripts/graph_compare.py $ORIGINAL_HEAD~1 $ORIGINAL_HEAD |& tee $GRAPH_COMPARE_OUTPUT
+          ./.github/scripts/graph_compare.py --ya-make-command="$YA_MAKE_COMMAND" --result-graph-path=$GRAPH_PATH --result-context-path=$CONTEXT_PATH $ORIGINAL_HEAD~1 $ORIGINAL_HEAD |& tee $GRAPH_COMPARE_OUTPUT
           RC=${PIPESTATUS[0]}
           set -e
 
@@ -273,7 +312,7 @@ runs:
           fi
 
           git checkout $ORIGINAL_HEAD
-          YA_MAKE_TARGET=.
+          YA_MAKE_TARGET="ydb"
         else
           YA_MAKE_TARGET=""
           for TARGET in ${{ inputs.build_target }}; do
@@ -281,10 +320,17 @@ runs:
                 YA_MAKE_TARGET="$YA_MAKE_TARGET $TARGET"
              fi
           done
+          if [ true = ${{ inputs.run_tests }} ]; then
+            YA_MAKE_COMMAND+=" --retest"
+          fi
+          $YA_MAKE_COMMAND -k --cache-tests \
+            --save-graph-to $GRAPH_PATH --save-context-to $CONTEXT_PATH \
+            $YA_MAKE_TARGET
         fi
 
         # Scripts to checkout from main
         MAIN_SCRIPTS=(
+          ".github/scripts/config/ydb_qa_config.json"
           ".github/scripts/analytics/upload_tests_results.py"
           ".github/scripts/analytics/ydb_wrapper.py"
           ".github/scripts/send_build_stats.py"
@@ -292,6 +338,9 @@ runs:
           ".github/scripts/get_current_build_size.py"
           ".github/scripts/get_main_build_size.py"
           ".github/scripts/check_ydb_qa_config.py"
+          ".github/scripts/tests/generate-summary.py"
+          ".github/scripts/tests/fail-checker.py"
+          ".github/scripts/tests/transform_build_results.py"
         )
         
         # Ensure main is available (may be missing in shallow clone)
@@ -320,7 +369,7 @@ runs:
         if [ "${{ inputs.put_build_results_to_cache }}" = "true" ]; then
           params+=(--bazel-remote-username "${{ inputs.bazel_remote_username }}")
           params+=(--bazel-remote-password-file "$BAZEL_REMOTE_PASSWORD_FILE")
-          params+=(--bazel-remote-put --dist-cache-max-file-size=209715200)
+          params+=(--bazel-remote-put --dist-cache-max-file-size=209715200 --dist-cache-evict-test-runs)
         fi
 
         if [ true = ${{ inputs.run_tests }} ]; then
@@ -328,13 +377,14 @@ runs:
           params+=(--retest)
         fi
 
-        export YA_MAKE_COMMAND="./ya make ${params[@]}"
-
         YA_MAKE_OUT_DIR=$TMP_DIR/out
 
         YA_MAKE_OUTPUT="$PUBLIC_DIR/ya_make_output.txt"
         YA_MAKE_OUTPUT_URL="$PUBLIC_DIR_URL/ya_make_output.txt"
         echo "20 [Ya make output]($YA_MAKE_OUTPUT_URL)" >> $SUMMARY_LINKS
+
+        MUTED_YAML_PATH="$PUBLIC_DIR/muted_tests.yaml"
+        python3 .github/scripts/tests/mute_utils.py convert_muted_txt_to_yaml .github/config/muted_ya.txt > $MUTED_YAML_PATH
 
         BUILD_FAILED=0
 
@@ -360,16 +410,20 @@ runs:
             RERUN_FAILED_OPT=""
           else
             CURRENT_MESSAGE="$CURRENT_MESSAGE (failed tests rerun, try $RETRY)"
-            RERUN_FAILED_OPT="-X"
+            if [ -z "$GRAPH_PATH" ]; then
+              RERUN_FAILED_OPT="-X --build-only-test-deps --test-blacklist-path $MUTED_YAML_PATH"
+            else
+              RERUN_FAILED_OPT=""
+            fi
           fi
 
           echo $CURRENT_MESSAGE | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
 
-          CURRENT_JUNIT_XML_PATH=$CURRENT_PUBLIC_DIR/junit.xml
           CURRENT_REPORT=$CURRENT_PUBLIC_DIR/report.json
 
           monitor_memory() {
               set +x
+              rm -f ram_usage.txt
               while true; do
                   used_kb=$(grep -E 'MemTotal|MemAvailable' /proc/meminfo | 
                             awk 'NR==1{t=$2} NR==2{a=$2} END{print t - a}')
@@ -380,12 +434,17 @@ runs:
 
           monitor_memory &
           MONITOR_PID=$!
+          if [ -n "$GRAPH_PATH" ] && [ -n "$CONTEXT_PATH" ]; then
+            GRAPH_OPTS="--build-custom-json=$GRAPH_PATH --custom-context=$CONTEXT_PATH"
+          else
+            GRAPH_OPTS=""
+          fi
 
           set +e
-          ($YA_MAKE_COMMAND $YA_MAKE_TARGET \
+          (./ya make ${params[@]} $YA_MAKE_TARGET $GRAPH_OPTS \
             $RERUN_FAILED_OPT --log-file "$PUBLIC_DIR/ya_log.txt"  \
             --evlog-file "$CURRENT_PUBLIC_DIR/ya_evlog.jsonl" \
-            --junit "$CURRENT_JUNIT_XML_PATH" --build-results-report "$CURRENT_REPORT" --output "$YA_MAKE_OUT_DIR"; echo $? > exit_code) |& cat >> $YA_MAKE_OUTPUT
+            --build-results-report "$CURRENT_REPORT" --output "$YA_MAKE_OUT_DIR"; echo $? > exit_code) |& cat >> $YA_MAKE_OUTPUT
           set -e
           RC=`cat exit_code`
 
@@ -399,7 +458,7 @@ runs:
             --output-file-url $CURRENT_PUBLIC_DIR_URL/ram_report.html \
             --ram-usage-file ram_usage.txt \
             --chat-id "$GH_ALERTS_TG_CHAT" \
-            --memory-threshold 90 || true
+            --memory-threshold 97 || true
 
           # convert to chromium trace
           # seems analyze-make don't have simple "output" parameter, so change cwd
@@ -407,7 +466,7 @@ runs:
           (cd $CURRENT_PUBLIC_DIR && $ya_dir/ya analyze-make timeline --evlog ya_evlog.jsonl)
 
           # generate test_bloat
-          ./ydb/ci/build_bloat/test_bloat.py --junit $CURRENT_JUNIT_XML_PATH --output_dir $CURRENT_PUBLIC_DIR/test_bloat || true
+          ./ydb/ci/build_bloat/test_bloat.py --build-results-report $CURRENT_REPORT --output_dir $CURRENT_PUBLIC_DIR/test_bloat || true
           echo "30 [Test bloat](${CURRENT_PUBLIC_DIR_URL}/test_bloat/tree_map.html)" >> $SUMMARY_LINKS
 
           if [ $RC -ne 0 ]; then
@@ -424,29 +483,23 @@ runs:
             break
           fi
 
-          # fix junit files (add links, logs etc)
-          # archive unitest reports (orig)
-          gzip -c $CURRENT_JUNIT_XML_PATH > $CURRENT_PUBLIC_DIR/orig_junit.xml.gz
+          # archive build results report (orig)
+          gzip -c $CURRENT_REPORT > $CURRENT_PUBLIC_DIR/orig_report.json.gz
 
-          # postprocess junit user_attributesreport
-          .github/scripts/tests/apply_user_properties_to_junit.py \
-          --test_dir="$TEST_META_INFO" \
-          --in_file="$CURRENT_JUNIT_XML_PATH" \
-          --out_file="$CURRENT_JUNIT_XML_PATH" || true
-
-          # postprocess junit report
-          .github/scripts/tests/transform_ya_junit.py -i \
+          # postprocess build results report (add links, logs, mute tests etc)
+          .github/scripts/tests/transform_build_results.py \
+            --build-results-report "$CURRENT_REPORT" \
+            --test_dir="$TEST_META_INFO" \
             -m .github/config/muted_ya.txt \
             --ya_out "$YA_MAKE_OUT_DIR" \
             --public_dir "$PUBLIC_DIR" \
             --public_dir_url "$PUBLIC_DIR_URL" \
             --log_out_dir "$CURRENT_PUBLIC_DIR_RELATIVE/artifacts/logs/" \
-            --test_stuff_out "$CURRENT_PUBLIC_DIR_RELATIVE/test_artifacts/" \
-            "$CURRENT_JUNIT_XML_PATH"
-          cp $CURRENT_JUNIT_XML_PATH $LAST_JUNIT_REPORT_XML
+            --test_stuff_out "$CURRENT_PUBLIC_DIR_RELATIVE/test_artifacts/" || true
+          cp $CURRENT_REPORT $LAST_BUILD_RESULTS_REPORT
 
           TESTS_RESULT=0
-          .github/scripts/tests/fail-checker.py "$CURRENT_JUNIT_XML_PATH" --output_path $CURRENT_PUBLIC_DIR/failed_count.txt || TESTS_RESULT=$?
+          .github/scripts/tests/fail-checker.py "$CURRENT_REPORT" --output_path $CURRENT_PUBLIC_DIR/failed_count.txt || TESTS_RESULT=$?
           FAILED_TESTS_COUNT=$(cat $CURRENT_PUBLIC_DIR/failed_count.txt)
 
           IS_LAST_RETRY=0
@@ -485,7 +538,7 @@ runs:
               --comment_text_file summary_text.txt \
               $PR_ARG \
               --workflow_run_id "${{ github.run_id }}" \
-              "Tests" $CURRENT_PUBLIC_DIR/ya-test.html "$CURRENT_JUNIT_XML_PATH"
+              "Tests" $CURRENT_PUBLIC_DIR/ya-test.html "$CURRENT_REPORT"
           fi
 
           s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-mime-magic --guess-mime-type --no-check-md5 "$PUBLIC_DIR/" "$S3_BUCKET_PATH/"
@@ -519,10 +572,14 @@ runs:
               ;;
           esac
           run_name="${run_name}_attempt_${RETRY}"
-          result=`.github/scripts/analytics/upload_tests_results.py --test-results-file ${CURRENT_JUNIT_XML_PATH} --run-timestamp $(date +%s) --commit $ORIGINAL_HEAD --build-type ${BUILD_PRESET} --pull ${run_name} --job-name "${{ github.workflow }}" --job-id "${{ github.run_id }}" --branch "${BRANCH_NAME}"`
+          result=`.github/scripts/analytics/upload_tests_results.py --test-results-file ${CURRENT_REPORT} --run-timestamp $(date +%s) --commit $ORIGINAL_HEAD --build-type ${BUILD_PRESET} --pull ${run_name} --job-name "${{ github.workflow }}" --job-id "${{ github.run_id }}" --branch "${BRANCH_NAME}"`
 
           if [ $IS_LAST_RETRY = 1 ]; then
             break
+          fi
+          if [ -n "$GRAPH_PATH" ] && [ -n "$CONTEXT_PATH" ]; then
+              GRAPH_PATH=""
+              CONTEXT_PATH=""
           fi
         done;
 
@@ -576,7 +633,7 @@ runs:
       shell: bash
       run: |
         if [ $IS_TEST_RESULT_IGNORED == 0 ]; then
-          .github/scripts/tests/fail-checker.py "$LAST_JUNIT_REPORT_XML"
+          .github/scripts/tests/fail-checker.py "$LAST_BUILD_RESULTS_REPORT"
         fi
 
     - name: show diff mute_ya.txt

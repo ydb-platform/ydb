@@ -42,7 +42,7 @@ struct TPosOutput {
     ui32 Line;
     ui32 Column;
 
-    TPosOutput(IOutputStream& out)
+    explicit TPosOutput(IOutputStream& out)
         : Out(out)
         , Line(1)
         , Column(0)
@@ -142,7 +142,7 @@ bool TestComplete(const TString& query, NYql::TAstNode& root) {
 
 class TStoreMappingFunctor: public NLastGetopt::IOptHandler {
 public:
-    TStoreMappingFunctor(THashMap<TString, TString>* target, char delim = '@')
+    explicit TStoreMappingFunctor(THashMap<TString, TString>* target, char delim = '@')
         : Target_(target)
         , Delim_(delim)
     {
@@ -264,8 +264,8 @@ int BuildAST(int argc, char* argv[]) {
 
     IOutputStream& out = outFile ? *outFile.Get() : Cout;
 
-    if (gatewaysConfig && gatewaysConfig->HasSqlCore()) {
-        flags.insert(gatewaysConfig->GetSqlCore().GetTranslationFlags().begin(), gatewaysConfig->GetSqlCore().GetTranslationFlags().end());
+    if (gatewaysConfig) {
+        NYql::TGatewaySQLFlags::FromTesting(*gatewaysConfig).CollectAllTo(flags);
     }
 
     if (!res.Has("query") && queryFiles.empty()) {

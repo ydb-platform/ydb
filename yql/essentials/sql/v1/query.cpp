@@ -150,8 +150,10 @@ static INode::TPtr CreateIndexType(TIndexDescription::EType type, const INode& n
             return node.Q("syncGlobalUnique");
         case TIndexDescription::EType::GlobalVectorKmeansTree:
             return node.Q("globalVectorKmeansTree");
-        case TIndexDescription::EType::GlobalFulltext:
-            return node.Q("globalFulltext");
+        case TIndexDescription::EType::GlobalFulltextPlain:
+            return node.Q("globalFulltextPlain");
+        case TIndexDescription::EType::GlobalFulltextRelevance:
+            return node.Q("globalFulltextRelevance");
     }
 }
 
@@ -1261,6 +1263,14 @@ public:
 
                 columnDesc = L(columnDesc, Q(Y(Q("columnConstrains"), Q(columnConstraints))));
 
+                if (col.Compression) {
+                    auto columnCompression = Y();
+                    for (const auto& [key, value] : col.Compression->Entries) {
+                        columnCompression = L(columnCompression, Q(Y(Q(key), value)));
+                    }
+                    columnDesc = L(columnDesc, Q(Y(Q("columnCompression"), Q(columnCompression))));
+                }
+
                 auto familiesDesc = Y();
 
                 if (col.Families) {
@@ -1501,6 +1511,58 @@ TNodePtr BuildAlterDatabase(
         scoped);
 }
 
+class TTruncateTableNode final: public TAstListNode {
+public:
+    TTruncateTableNode(TPosition pos, const TTableRef& tr, const TTruncateTableParameters& params, TScopedStatePtr scoped)
+        : TAstListNode(pos)
+        , Params_(params)
+        , Table_(tr)
+        , Scoped_(scoped)
+    {
+        scoped->UseCluster(Table_.Service, Table_.Cluster);
+    }
+
+    bool DoInit(TContext& ctx, ISource* src) override {
+        Y_UNUSED(Params_);
+        auto keys = Table_.Keys->GetTableKeys()->BuildKeys(ctx, ITableKeys::EBuildKeysMode::CREATE);
+        if (!keys || !keys->Init(ctx, src)) {
+            return false;
+        }
+
+        TNodePtr cluster = Scoped_->WrapCluster(Table_.Cluster, ctx);
+
+        auto options = Y(Q(Y(Q("mode"), Q("truncateTable"))));
+
+        Add("block", Q(Y(Y("let", "sink", Y("DataSink", BuildQuotedAtom(Pos_, Table_.Service), cluster)),
+                         Y("let", "world", Y(TString(WriteName), "world", "sink", keys, Y("Void"), Q(options))),
+                         Y("return", ctx.PragmaAutoCommit ? Y(TString(CommitName), "world", "sink") : AstNode("world")))));
+
+        return TAstListNode::DoInit(ctx, src);
+    }
+
+    TPtr DoClone() const override {
+        return new TTruncateTableNode(GetPos(), Table_, Params_, Scoped_);
+    }
+
+private:
+    const TTruncateTableParameters Params_;
+    const TTableRef Table_;
+    TScopedStatePtr Scoped_;
+};
+
+TNodePtr BuildTruncateTable(
+    TPosition pos,
+    const TTableRef& tr,
+    const TTruncateTableParameters& params,
+    TScopedStatePtr scoped)
+{
+    return new TTruncateTableNode(
+        pos,
+        tr,
+        params,
+        scoped);
+}
+
 class TAlterTableNode final: public TAstListNode {
 public:
     TAlterTableNode(TPosition pos, const TTableRef& tr, const TAlterTableParameters& params, TScopedStatePtr scoped)
@@ -1598,6 +1660,23 @@ public:
                         }
 
                         columnDesc = L(columnDesc, Q(Y(Q("setFamily"), Q(familiesDesc))));
+                        columns = L(columns, Q(columnDesc));
+
+                        break;
+                    }
+                    case TColumnSchema::ETypeOfChange::SetCompression: {
+                        auto columnDesc = Y();
+                        columnDesc = L(columnDesc, BuildQuotedAtom(Pos_, col.Name));
+
+                        auto columnCompression = Y();
+
+                        if (col.Compression) {
+                            for (const auto& [key, value] : col.Compression->Entries) {
+                                columnCompression = L(columnCompression, Q(Y(Q(key), value)));
+                            }
+                        }
+
+                        columnDesc = L(columnDesc, Q(Y(Q("changeCompression"), Q(columnCompression))));
                         columns = L(columns, Q(columnDesc));
 
                         break;
@@ -2007,7 +2086,7 @@ public:
         if (NAME##Val.IsSet()) {                                                              \
             settings = L(settings, Q(Y(Q(Y_STRINGIZE(set##NAME)), NAME##Val.GetValueSet()))); \
         } else {                                                                              \
-            settings = L(settings, Q(Y(Q(Y_STRINGIZE(reset##NAME)), Y())));                   \
+            settings = L(settings, Q(Y(Q(Y_STRINGIZE(reset##NAME)), Q(Y()))));                \
         }                                                                                     \
     }
 
@@ -2548,23 +2627,23 @@ private:
 };
 
 TNodePtr BuildUpsertObjectOperation(TPosition pos, const TString& objectId, const TString& typeId,
-                                    std::map<TString, TDeferredAtom>&& features, const TObjectOperatorContext& context) {
-    return new TUpsertObject(pos, objectId, typeId, context, std::move(features));
+                                    TObjectFeatureNodePtr features, const TObjectOperatorContext& context) {
+    return new TUpsertObject(pos, objectId, typeId, context, TObjectFeatureNode::SkipEmpty(features));
 }
 
 TNodePtr BuildCreateObjectOperation(TPosition pos, const TString& objectId, const TString& typeId,
-                                    bool existingOk, bool replaceIfExists, std::map<TString, TDeferredAtom>&& features, const TObjectOperatorContext& context) {
-    return new TCreateObject(pos, objectId, typeId, context, std::move(features), existingOk, replaceIfExists);
+                                    bool existingOk, bool replaceIfExists, TObjectFeatureNodePtr features, const TObjectOperatorContext& context) {
+    return new TCreateObject(pos, objectId, typeId, context, TObjectFeatureNode::SkipEmpty(features), existingOk, replaceIfExists);
 }
 
 TNodePtr BuildAlterObjectOperation(TPosition pos, const TString& secretId, const TString& typeId,
-                                   bool missingOk, std::map<TString, TDeferredAtom>&& features, std::set<TString>&& featuresToReset, const TObjectOperatorContext& context) {
-    return new TAlterObject(pos, secretId, typeId, context, std::move(features), std::move(featuresToReset), missingOk);
+                                   bool missingOk, TObjectFeatureNodePtr features, std::set<TString>&& featuresToReset, const TObjectOperatorContext& context) {
+    return new TAlterObject(pos, secretId, typeId, context, TObjectFeatureNode::SkipEmpty(features), std::move(featuresToReset), missingOk);
 }
 
 TNodePtr BuildDropObjectOperation(TPosition pos, const TString& secretId, const TString& typeId,
-                                  bool missingOk, std::map<TString, TDeferredAtom>&& options, const TObjectOperatorContext& context) {
-    return new TDropObject(pos, secretId, typeId, context, std::move(options), missingOk);
+                                  bool missingOk, TObjectFeatureNodePtr features, const TObjectOperatorContext& context) {
+    return new TDropObject(pos, secretId, typeId, context, TObjectFeatureNode::SkipEmpty(features), missingOk);
 }
 
 TNodePtr BuildDropRoles(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TVector<TDeferredAtom>& toDrop, bool isUser, bool missingOk, TScopedStatePtr scoped) {
@@ -2978,7 +3057,8 @@ TNodePtr BuildAlterTransfer(TPosition pos, const TString& id, std::optional<TStr
 static const TMap<EWriteColumnMode, TString> columnModeToStrMapMR{
     {EWriteColumnMode::Default, ""},
     {EWriteColumnMode::Insert, "append"},
-    {EWriteColumnMode::Renew, "renew"}};
+    {EWriteColumnMode::Renew, "renew"}, // insert with truncat
+    {EWriteColumnMode::Replace, "replace"}};
 
 static const TMap<EWriteColumnMode, TString> columnModeToStrMapStat{
     {EWriteColumnMode::Upsert, "upsert"}};
@@ -3070,7 +3150,7 @@ TNodePtr BuildWriteTable(TPosition pos, const TString& label, const TTableRef& t
 
 class TClustersSinkOperationBase: public TAstListNode {
 protected:
-    TClustersSinkOperationBase(TPosition pos)
+    explicit TClustersSinkOperationBase(TPosition pos)
         : TAstListNode(pos)
     {
     }
@@ -3099,7 +3179,7 @@ protected:
 
 class TCommitClustersNode: public TClustersSinkOperationBase {
 public:
-    TCommitClustersNode(TPosition pos)
+    explicit TCommitClustersNode(TPosition pos)
         : TClustersSinkOperationBase(pos)
     {
     }
@@ -3115,7 +3195,7 @@ TNodePtr BuildCommitClusters(TPosition pos) {
 
 class TRollbackClustersNode: public TClustersSinkOperationBase {
 public:
-    TRollbackClustersNode(TPosition pos)
+    explicit TRollbackClustersNode(TPosition pos)
         : TClustersSinkOperationBase(pos)
     {
     }
@@ -3416,6 +3496,11 @@ public:
                 if (ctx.DebugPositions) {
                     Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource,
                                             BuildQuotedAtom(Pos_, "DebugPositions"))));
+                }
+
+                if (ctx.WindowNewPipeline) {
+                    Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource,
+                                            BuildQuotedAtom(Pos_, "WindowNewPipeline"))));
                 }
 
                 if (ctx.DirectRowDependsOn.Defined()) {
@@ -3960,7 +4045,7 @@ public:
     {
     }
 
-    virtual INode::TPtr FillOptions(TContext& ctx, INode::TPtr options) const final {
+    INode::TPtr FillOptions(TContext& ctx, INode::TPtr options) const final {
         options->Add(Q(Y(Q("mode"), Q("create"))));
 
         auto settings = Y();
@@ -4006,7 +4091,7 @@ public:
     {
     }
 
-    virtual INode::TPtr FillOptions(TContext& ctx, INode::TPtr options) const final {
+    INode::TPtr FillOptions(TContext& ctx, INode::TPtr options) const final {
         options->Add(Q(Y(Q("mode"), Q("alter"))));
 
         auto settings = Y();
@@ -4061,7 +4146,7 @@ public:
     {
     }
 
-    virtual INode::TPtr FillOptions(TContext&, INode::TPtr options) const final {
+    INode::TPtr FillOptions(TContext&, INode::TPtr options) const final {
         options->Add(Q(Y(Q("mode"), Q("drop"))));
 
         return options;

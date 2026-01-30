@@ -12,7 +12,7 @@ from collections import defaultdict
 # Add the parent directory to the path to import update_mute_issues
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from transform_ya_junit import YaMuteCheck
+from mute_check import YaMuteCheck
 from update_mute_issues import (
     create_and_add_issue_to_project,
     generate_github_issue_title_and_body,
@@ -146,10 +146,19 @@ def execute_query(branch='main', build_type='relwithdebinfo', days_window=1):
             logging.info("Successfully connected to YDB")
             
             logging.info("Starting to fetch results...")
-            results = ydb_wrapper.execute_scan_query(query_string)
+            results = ydb_wrapper.execute_scan_query(query_string, query_name=f"get_tests_monitor_data_{branch}")
             
-            logging.info(f"Query completed successfully. Total rows returned: {len(results)}")
-            return results
+            # Filter out suite-level entries (aggregates, not individual tests)
+            # Similar to generate-summary.py which skips results with suite=True
+            # Suite tests have test_name like "unittest", "py3test", "gtest"
+            suite_test_names = {'unittest', 'py3test', 'gtest'}
+            filtered_results = [
+                result for result in results
+                if result.get('test_name') and result.get('test_name') not in suite_test_names
+            ]
+            
+            logging.info(f"Query completed successfully. Total rows returned: {len(results)}, after filtering suite tests: {len(filtered_results)}")
+            return filtered_results
         
     except Exception as e:
         logging.error(f"Error executing query: {e}")
@@ -178,6 +187,8 @@ def aggregate_test_data(all_data, period_days):
     
     # Helper function to convert date to days if needed
     def to_days(date_value):
+        if date_value is None:
+            return -1
         if isinstance(date_value, datetime.date):
             return (date_value - base_date).days
         return date_value
@@ -190,7 +201,16 @@ def aggregate_test_data(all_data, period_days):
     processed_count = 0
     total_count = len(all_data)
     
-    for test in all_data:
+    # Сортируем записи по дате, чтобы история состояний формировалась в хронологическом порядке
+    sorted_data = sorted(
+        all_data,
+        key=lambda test: (
+            to_days(test.get('date_window')),
+            test.get('full_name') or ''
+        )
+    )
+    
+    for test in sorted_data:
         processed_count += 1
         # Показываем прогресс каждые 1000 записей или каждые 10%
         if processed_count % 10000 == 0 or processed_count % max(1, total_count // 10) == 0:
@@ -264,7 +284,7 @@ def aggregate_test_data(all_data, period_days):
                         date_obj = base_date + datetime.timedelta(days=date)
                     else:
                         date_obj = date
-                    date_str = date_obj.strftime('%m-%d')
+                    date_str = date_obj.strftime('%Y-%m-%d')
                     state_with_dates.append(f"{state}({date_str})")
                 else:
                     state_with_dates.append(state)

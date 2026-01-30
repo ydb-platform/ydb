@@ -126,6 +126,7 @@ class RichLog(ScrollView, can_focus=True):
         indicating we can proceed with rendering deferred writes."""
 
     def notify_style_update(self) -> None:
+        super().notify_style_update()
         self._line_cache.clear()
 
     def on_resize(self, event: Resize) -> None:
@@ -136,6 +137,12 @@ class RichLog(ScrollView, can_focus=True):
             while deferred_renders:
                 deferred_render = deferred_renders.popleft()
                 self.write(*deferred_render)
+
+    def get_content_width(self, container: Size, viewport: Size) -> int:
+        if self._size_known:
+            return self.virtual_size.width
+        else:
+            return container.width
 
     def _make_renderable(self, content: RenderableType | object) -> RenderableType:
         """Make content renderable.
@@ -272,11 +279,7 @@ class RichLog(ScrollView, can_focus=True):
         # the new line(s), and the height will definitely have changed.
         self.virtual_size = Size(self._widest_line_width, len(self.lines))
 
-        if (
-            auto_scroll
-            and not self.is_vertical_scrollbar_grabbed
-            and is_vertical_scroll_end
-        ):
+        if auto_scroll:
             self.scroll_end(animate=animate, immediate=False, x_axis=False)
 
         return self

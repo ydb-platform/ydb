@@ -1,0 +1,5 @@
+RECURSE(
+    libs
+    public
+    tools
+)

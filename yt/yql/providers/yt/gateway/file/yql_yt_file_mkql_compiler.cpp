@@ -296,8 +296,99 @@ TRuntimeNode ApplySampling(TRuntimeNode list, const TExprNode& input, NCommon::T
     return list;
 }
 
-TRuntimeNode ApplyPathRangesAndSampling(TRuntimeNode inputList, TType* itemType, const TExprNode& input, NCommon::TMkqlBuildContext& ctx) {
+
+bool HasPathQLFilter(const TExprNode& input) {
+    if (input.IsCallable(TYtOutTable::CallableName())) {
+        return false;
+    }
+    auto sectionList = TYtSectionList(&input);
+    return AnyOf(sectionList, [&](const TYtSection& section) {
+        return AnyOf(section.Paths(), [&](const TYtPath& path) {
+            return TYtPathInfo(path).QLFilter;
+        });
+    });
+}
+
+TRuntimeNode ApplyPathQLFilter(TRuntimeNode inputList, const TExprNode& input, NCommon::TMkqlBuildContext& ctx) {
+    if (!HasPathQLFilter(input)) {
+        return inputList;
+    }
+
+    ui32 tableIndex = 0;
+    auto makeSectionFilter = [&](TYtSection section, TRuntimeNode item) {
+        TRuntimeNode filter = ctx.ProgramBuilder.NewDataLiteral(true);
+
+        TRuntimeNode tableIndexCall = ctx.ProgramBuilder.Member(item, YqlSysColumnIndex);
+
+        TVector<std::pair<TRuntimeNode, TRuntimeNode>> tableIndexDictItems;
+
+        for (const auto& p: section.Paths()) {
+            TYtPathInfo pathInfo(p);
+            if (pathInfo.QLFilter) {
+                const TYtQLFilter qlFilter(pathInfo.QLFilter);
+                const auto arg = qlFilter.Predicate().Args().Arg(0).Raw();
+                const auto body = qlFilter.Predicate().Body().Raw();
+                const auto lambdaId = qlFilter.Predicate().Ref().UniqueId();
+
+                NCommon::TMkqlBuildContext innerCtx(ctx, {{arg, item}}, lambdaId);
+                TRuntimeNode condition = NCommon::MkqlBuildExpr(*body, innerCtx);
+
+                if (condition.GetStaticType()->IsOptional() != filter.GetStaticType()->IsOptional()) {
+                    if (condition.GetStaticType()->IsOptional()) {
+                        filter = ctx.ProgramBuilder.NewOptional(filter);
+                    } else {
+                        condition = ctx.ProgramBuilder.NewOptional(condition);
+                    }
+                }
+
+                filter = ctx.ProgramBuilder.If(
+                    ctx.ProgramBuilder.AggrEquals(tableIndexCall, ctx.ProgramBuilder.NewDataLiteral(tableIndex)),
+                    condition,
+                    filter);
+
+                tableIndexDictItems.emplace_back(ctx.ProgramBuilder.NewDataLiteral<ui32>(tableIndex), ctx.ProgramBuilder.NewVoid());
+            }
+            ++tableIndex;
+        }
+
+        if (!tableIndexDictItems.empty()) {
+            auto dictType = ctx.ProgramBuilder.NewDictType(
+                ctx.ProgramBuilder.NewDataType(NUdf::TDataType<ui32>::Id),
+                ctx.ProgramBuilder.GetTypeEnvironment().GetTypeOfVoidLazy(),
+                false
+            );
+            auto dict = ctx.ProgramBuilder.NewDict(dictType, tableIndexDictItems);
+            filter = ctx.ProgramBuilder.Or({filter, ctx.ProgramBuilder.Not(ctx.ProgramBuilder.Contains(dict, tableIndexCall))});
+        }
+
+        if (filter.GetStaticType()->IsOptional()) {
+            filter = ctx.ProgramBuilder.Coalesce(filter, ctx.ProgramBuilder.NewDataLiteral(false));
+        }
+
+        return filter;
+    };
+
+    auto sectionList = TYtSectionList(&input);
+    if (sectionList.Size() > 1) {
+        inputList = ctx.ProgramBuilder.OrderedFilter(inputList, [&](TRuntimeNode varItem) -> TRuntimeNode {
+            YQL_ENSURE(AS_TYPE(TVariantType, varItem)->GetAlternativesCount() == sectionList.Size());
+            return ctx.ProgramBuilder.VisitAll(varItem, [&](ui32 index, TRuntimeNode item) -> TRuntimeNode {
+                return makeSectionFilter(sectionList.Item(index), item);
+            });
+        });
+    } else {
+        inputList = ctx.ProgramBuilder.OrderedFilter(inputList, [&](TRuntimeNode item) -> TRuntimeNode {
+            return makeSectionFilter(sectionList.Item(0), item);
+        });
+    }
+
+    return inputList;
+}
+
+
+TRuntimeNode ApplyPathFilters(TRuntimeNode inputList, TType* itemType, const TExprNode& input, NCommon::TMkqlBuildContext& ctx) {
     inputList = ApplyPathRanges(inputList, input, ctx);
+    inputList = ApplyPathQLFilter(inputList, input, ctx);
     TType* actualItemType = inputList.GetStaticType();
     if (actualItemType->IsStream()) {
         actualItemType = AS_TYPE(TStreamType, actualItemType)->GetItemType();
@@ -355,29 +446,6 @@ TRuntimeNode ApplyPathRangesAndSampling(TRuntimeNode inputList, TType* itemType,
     }
     inputList = ApplySampling(inputList, input, ctx);
     return inputList;
-}
-
-TRuntimeNode ApplyQLFilter(TRuntimeNode inputList, const TYtTransientOpBase& ytOp, NCommon::TMkqlBuildContext& ctx) {
-    if (!ytOp.Maybe<TYtMap>() && !ytOp.Maybe<TYtMapReduce>() && !ytOp.Maybe<TYtMerge>()) {
-        return inputList;
-    }
-
-    const auto qlFilterSetting = NYql::GetSetting(ytOp.Settings().Ref(), EYtSettingType::QLFilter);
-    if (!qlFilterSetting) {
-        return inputList;
-    }
-
-    const auto qlFilterNode = qlFilterSetting->Child(1);
-    YQL_ENSURE(qlFilterNode && qlFilterNode->IsCallable("YtQLFilter"));
-    const TYtQLFilter qlFilter(qlFilterNode);
-    const auto arg = qlFilter.Predicate().Args().Arg(0).Raw();
-    const auto body = qlFilter.Predicate().Body().Raw();
-    const auto lambdaId = qlFilter.Predicate().Ref().UniqueId();
-
-    return ctx.ProgramBuilder.OrderedFilter(inputList, [&] (TRuntimeNode item) -> TRuntimeNode {
-        NCommon::TMkqlBuildContext innerCtx(ctx, {{arg, item}}, lambdaId);
-        return NCommon::MkqlBuildExpr(*body, innerCtx);
-    });
 }
 
 TRuntimeNode ToList(TRuntimeNode list, NCommon::TMkqlBuildContext& ctx) {
@@ -576,7 +644,7 @@ void RegisterYtFileMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler) {
 
                 const bool hasRangesOrSampling = AnyOf(read.Input(), [](const TYtSection& s) {
                     return NYql::HasSetting(s.Settings().Ref(), EYtSettingType::Sample)
-                        || AnyOf(s.Paths(), [](const TYtPath& p) { return !p.Ranges().Maybe<TCoVoid>(); });
+                        || AnyOf(s.Paths(), [](const TYtPath& p) { return !p.Ranges().Maybe<TCoVoid>() || !p.QLFilter().Maybe<TCoVoid>(); });
                 });
                 if (hasRangesOrSampling) {
                     itemsCount.Clear();
@@ -587,7 +655,7 @@ void RegisterYtFileMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler) {
                     TYtTableContent::CallableName(),
                     itemType,
                     read.Input().Ref(), itemsCount, ctx, true, THashSet<TString>{"num", "index"}, forceKeyColumns);
-                values = ApplyPathRangesAndSampling(values, itemType, read.Input().Ref(), ctx);
+                values = ApplyPathFilters(values, itemType, read.Input().Ref(), ctx);
             } else {
                 auto output = tableContent.Input().Cast<TYtOutput>();
                 values = BuildTableContentCall(
@@ -620,7 +688,7 @@ void RegisterYtFileMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler) {
 
                 const bool hasRangesOrSampling = AnyOf(read.Input(), [](const TYtSection& s) {
                     return NYql::HasSetting(s.Settings().Ref(), EYtSettingType::Sample)
-                        || AnyOf(s.Paths(), [](const TYtPath& p) { return !p.Ranges().Maybe<TCoVoid>(); });
+                        || AnyOf(s.Paths(), [](const TYtPath& p) { return !p.Ranges().Maybe<TCoVoid>() || !p.QLFilter().Maybe<TCoVoid>(); });
                 });
                 if (hasRangesOrSampling) {
                     itemsCount.Clear();
@@ -631,7 +699,7 @@ void RegisterYtFileMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler) {
                     TYtTableContent::CallableName(),
                     itemType,
                     read.Input().Ref(), itemsCount, ctx, true, THashSet<TString>{"num", "index"}, forceKeyColumns);
-                values = ApplyPathRangesAndSampling(values, itemType, read.Input().Ref(), ctx);
+                values = ApplyPathFilters(values, itemType, read.Input().Ref(), ctx);
             } else {
                 auto output = tableContent.Input().Cast<TYtOutput>();
                 values = BuildTableContentCall(
@@ -667,8 +735,7 @@ void RegisterYtFileMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler) {
             TRuntimeNode values = BuildTableInput(mkqlInputType,
                 ytOp.Input().Ref(), ctx, THashSet<TString>{"num", "index"}, forceKeyColumns);
 
-            values = ApplyPathRangesAndSampling(values, mkqlInputType, ytOp.Input().Ref(), ctx);
-            values = ApplyQLFilter(values, ytOp, ctx);
+            values = ApplyPathFilters(values, mkqlInputType, ytOp.Input().Ref(), ctx);
 
             if ((ytOp.Maybe<TYtMerge>() && outTableInfo.RowSpec->IsSorted() && ytOp.Input().Item(0).Paths().Size() > 1)
                 || ytOp.Maybe<TYtSort>())
@@ -697,8 +764,8 @@ void RegisterYtFileMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler) {
             const auto arg = ytMap.Mapper().Args().Arg(0).Raw();
             values = arg->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Flow ?
                 ctx.ProgramBuilder.ToFlow(values) : ctx.ProgramBuilder.Iterator(values, {});
-            values = ApplyPathRangesAndSampling(values, itemType, ytMap.Input().Ref(), ctx);
-            values = ApplyQLFilter(values, ytMap, ctx);
+
+            values = ApplyPathFilters(values, itemType, ytMap.Input().Ref(), ctx);
 
             auto& lambdaInputType = GetSeqItemType(*ytMap.Mapper().Args().Arg(0).Ref().GetTypeAnn());
             auto& lambdaOutputType = GetSeqItemType(*ytMap.Mapper().Body().Ref().GetTypeAnn());
@@ -742,7 +809,7 @@ void RegisterYtFileMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler) {
                 ytReduce.Input().Ref(), ctx,
                 THashSet<TString>{"num", "index"}, forceKeyColumns);
 
-            values = ApplyPathRangesAndSampling(values, itemType, ytReduce.Input().Ref(), ctx);
+            values = ApplyPathFilters(values, itemType, ytReduce.Input().Ref(), ctx);
 
             TVector<TString> reduceBy = NYql::GetSettingAsColumnList(ytReduce.Settings().Ref(), EYtSettingType::ReduceBy);
             TVector<std::pair<TString, bool>> sortBy = NYql::GetSettingAsColumnPairList(ytReduce.Settings().Ref(), EYtSettingType::SortBy);
@@ -899,8 +966,7 @@ void RegisterYtFileMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler) {
                 ytMapReduce.Input().Ref(), ctx,
                 THashSet<TString>{"num", "index"}, forceKeyColumns);
 
-            values = ApplyPathRangesAndSampling(values, itemType, ytMapReduce.Input().Ref(), ctx);
-            values = ApplyQLFilter(values, ytMapReduce, ctx);
+            values = ApplyPathFilters(values, itemType, ytMapReduce.Input().Ref(), ctx);
 
             const auto outputItemType = BuildOutputType(ytMapReduce.Output(), ctx);
             const size_t outputsCount = ytMapReduce.Output().Ref().ChildrenSize();
@@ -1127,7 +1193,7 @@ void RegisterYtFileMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler) {
                     read.Cast().Input().Ref(), ctx,
                     THashSet<TString>{"num", "index"}, forceKeyColumns);
 
-                values = ApplyPathRangesAndSampling(values, itemType, read.Cast().Input().Ref(), ctx);
+                values = ApplyPathFilters(values, itemType, read.Cast().Input().Ref(), ctx);
 
                 return values;
             }
@@ -1147,7 +1213,7 @@ void RegisterDqYtFileMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler)
                 const bool forceKeyColumns = HasRangesWithKeyColumns(ytRead.Input().Ref());
                 auto values = BuildTableContentCall("YtTableInputFile", outputType,
                     ytRead.Input().Ref(), Nothing(), ctx, false, THashSet<TString>{"num", "index"}, forceKeyColumns);
-                values = ApplyPathRangesAndSampling(values, outputType, ytRead.Input().Ref(), ctx);
+                values = ApplyPathFilters(values, outputType, ytRead.Input().Ref(), ctx);
 
                 return ExpandFlow(ctx.ProgramBuilder.ToFlow(values), ctx);
             }
@@ -1166,7 +1232,7 @@ void RegisterDqYtFileMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler)
                 const bool forceKeyColumns = HasRangesWithKeyColumns(ytRead.Input().Ref());
                 auto values = BuildTableContentCall("YtTableInputFile", outputType,
                     ytRead.Input().Ref(), Nothing(), ctx, false, THashSet<TString>{"num", "index"}, forceKeyColumns);
-                values = ApplyPathRangesAndSampling(values, outputType, ytRead.Input().Ref(), ctx);
+                values = ApplyPathFilters(values, outputType, ytRead.Input().Ref(), ctx);
 
                 return ctx.ProgramBuilder.WideToBlocks(ctx.ProgramBuilder.FromFlow(ExpandFlow(ctx.ProgramBuilder.ToFlow(values), ctx)));
             }

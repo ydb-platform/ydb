@@ -36,6 +36,7 @@ public:
     IYsonBuilder::TCheckpoint CreateCheckpoint() override;
     void RestoreCheckpoint(IYsonBuilder::TCheckpoint checkpoint) override;
 
+    NYson::TYsonString GetYsonString() const;
     NYson::TYsonString Flush();
     bool IsEmpty();
 
@@ -47,30 +48,38 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-DEFINE_ENUM(EYsonBuilderForwardingPolicy,
-    (Forward)
-    (Ignore)
-    (Crash)
-);
+template <class TType>
+concept CStatefulYsonConsumer = std::derived_from<TType, NYson::IYsonConsumer> && requires (TType value) {
+    { value.GetState() } -> std::same_as<typename TType::TState>;
+    value.SetState(value.GetState());
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 
+template <CStatefulYsonConsumer TYsonConsumer>
 class TYsonBuilder
     : public IYsonBuilder
 {
 public:
-    TYsonBuilder(EYsonBuilderForwardingPolicy policy, IYsonBuilder* underlying, IYsonConsumer* consumer);
+    template <class ...TArgs>
+    TYsonBuilder(IYsonBuilder& builder, TArgs... args);
 
     IYsonConsumer* GetConsumer() override;
     IYsonBuilder::TCheckpoint CreateCheckpoint() override;
     void RestoreCheckpoint(TCheckpoint checkpoint) override;
 
 private:
-    const EYsonBuilderForwardingPolicy Policy_;
-    IYsonBuilder* const Underlying_;
-    NYson::IYsonConsumer* const Consumer_;
+    using TConsumerState = typename TYsonConsumer::TState;
+
+    IYsonBuilder& Builder_;
+    TYsonConsumer Consumer_;
+    std::vector<std::pair<TCheckpoint, TConsumerState>> States_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NYson
+
+#define YSON_BUILDER_INL_H_
+#include "yson_builder-inl.h"
+#undef YSON_BUILDER_INL_H_

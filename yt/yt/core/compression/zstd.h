@@ -43,6 +43,10 @@ EZstdFrameType DetectZstdFrameType(TRef buffer);
 //! Returns the (file) offset of the first zstd sync tag in #buffer
 //! assuming the buffer starts at #bufferStartOffset (in file).
 //! Returns null if no sync tag is found.
+std::optional<i64> FindFirstZstdSyncTagOffset(TRef buffer, i64 bufferStartOffset);
+
+//! Similar to FindFirstZstdSyncTagOffset but searches for the last occurrence
+//! of the sync tag in #buffer.
 std::optional<i64> FindLastZstdSyncTagOffset(TRef buffer, i64 bufferStartOffset);
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -15,17 +15,17 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "arrow/util/compression.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/compression.h"
 
 #include <memory>
 #include <string>
 #include <utility>
 
-#include "arrow/result.h"
-#include "arrow/status.h"
-#include "arrow/util/compression_internal.h"
-#include "arrow/util/config.h"
-#include "arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/result.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/status.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/compression_internal.h"
+#include "contrib/libs/apache/arrow_next/src/arrow/util/config.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
 
 namespace arrow20 {
 namespace util {

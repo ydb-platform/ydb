@@ -254,6 +254,43 @@ Y_UNIT_TEST_LLVM(TopBySecondKeyDesc) {
     UNIT_ASSERT(!iterator.Next(item));
 }
 
+Y_UNIT_TEST_LLVM(TopWithLargeCount) {
+    TSetup<LLVM> setup;
+    setup.Alloc.SetLimit(1_MB);
+    TProgramBuilder& pb = *setup.PgmBuilder;
+
+    const auto dataType = pb.NewDataType(NUdf::TDataType<const char*>::Id);
+    const auto tupleType = pb.NewTupleType({dataType, dataType});
+
+    const auto keyOne = pb.NewDataLiteral<NUdf::EDataSlot::String>("key one");
+    const auto keyTwo = pb.NewDataLiteral<NUdf::EDataSlot::String>("key two");
+
+    const auto value1 = pb.NewDataLiteral<NUdf::EDataSlot::String>("value 1");
+    const auto value2 = pb.NewDataLiteral<NUdf::EDataSlot::String>("value 2");
+
+    const auto data1 = pb.NewTuple(tupleType, {keyOne, value1});
+    const auto data2 = pb.NewTuple(tupleType, {keyTwo, value2});
+
+    const auto list = pb.NewList(tupleType, {data1, data2});
+
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideTop(pb.ExpandMap(pb.ToFlow(list),
+                                                                           [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                              pb.NewDataLiteral<ui64>(4000000000ULL), {{0U, pb.NewDataLiteral<bool>(true)}}),
+                                                   [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(tupleType, items); }));
+
+    const auto graph = setup.BuildGraph(pgmReturn);
+    const auto iterator = graph->GetValue().GetListIterator();
+    NUdf::TUnboxedValue item;
+    UNIT_ASSERT(iterator.Next(item));
+    UNBOXED_VALUE_STR_EQUAL(item.GetElement(0), "key two");
+    UNBOXED_VALUE_STR_EQUAL(item.GetElement(1), "value 2");
+    UNIT_ASSERT(iterator.Next(item));
+    UNBOXED_VALUE_STR_EQUAL(item.GetElement(0), "key one");
+    UNBOXED_VALUE_STR_EQUAL(item.GetElement(1), "value 1");
+    UNIT_ASSERT(!iterator.Next(item));
+    UNIT_ASSERT(!iterator.Next(item));
+}
+
 Y_UNIT_TEST_LLVM(TopSortByFirstSecondAscDesc) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
@@ -551,6 +588,43 @@ Y_UNIT_TEST_LLVM(TopSortLargeList) {
     UNIT_ASSERT(!iterator.Next(item));
     UNIT_ASSERT(!iterator.Next(item));
 }
+
+Y_UNIT_TEST_LLVM(TopSortLargeCount) {
+    TSetup<LLVM> setup;
+    setup.Alloc.SetLimit(1_MB);
+    TProgramBuilder& pb = *setup.PgmBuilder;
+
+    const auto dataType = pb.NewDataType(NUdf::TDataType<const char*>::Id);
+    const auto tupleType = pb.NewTupleType({dataType, dataType});
+
+    const auto keyOne = pb.NewDataLiteral<NUdf::EDataSlot::String>("key one");
+    const auto keyTwo = pb.NewDataLiteral<NUdf::EDataSlot::String>("key two");
+
+    const auto value1 = pb.NewDataLiteral<NUdf::EDataSlot::String>("value 1");
+    const auto value2 = pb.NewDataLiteral<NUdf::EDataSlot::String>("value 2");
+
+    const auto data1 = pb.NewTuple(tupleType, {keyOne, value1});
+    const auto data2 = pb.NewTuple(tupleType, {keyTwo, value2});
+
+    const auto list = pb.NewList(tupleType, {data1, data2});
+
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideTopSort(pb.ExpandMap(pb.ToFlow(list),
+                                                                               [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                                  pb.NewDataLiteral<ui64>(4000000000ULL), {{0U, pb.NewDataLiteral<bool>(true)}, {1U, pb.NewDataLiteral<bool>(false)}}),
+                                                   [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(tupleType, items); }));
+
+    const auto graph = setup.BuildGraph(pgmReturn);
+    const auto iterator = graph->GetValue().GetListIterator();
+    NUdf::TUnboxedValue item;
+    UNIT_ASSERT(iterator.Next(item));
+    UNBOXED_VALUE_STR_EQUAL(item.GetElement(0), "key one");
+    UNBOXED_VALUE_STR_EQUAL(item.GetElement(1), "value 1");
+    UNIT_ASSERT(iterator.Next(item));
+    UNBOXED_VALUE_STR_EQUAL(item.GetElement(0), "key two");
+    UNBOXED_VALUE_STR_EQUAL(item.GetElement(1), "value 2");
+    UNIT_ASSERT(!iterator.Next(item));
+    UNIT_ASSERT(!iterator.Next(item));
+}
 } // Y_UNIT_TEST_SUITE(TMiniKQLWideTopTest)
 
 Y_UNIT_TEST_SUITE(TMiniKQLWideSortTest) {
@@ -627,6 +701,78 @@ Y_UNIT_TEST_LLVM(SortByFirstKeyAsc) {
     UNIT_ASSERT(iterator.Next(item));
     UNBOXED_VALUE_STR_EQUAL(item.GetElement(0), "very long key two");
     UNBOXED_VALUE_STR_EQUAL(item.GetElement(1), "very long value 5");
+    UNIT_ASSERT(!iterator.Next(item));
+    UNIT_ASSERT(!iterator.Next(item));
+}
+
+Y_UNIT_TEST_LLVM(SortByExtDateTypeAsc) {
+    TSetup<LLVM> setup;
+    TProgramBuilder& pb = *setup.PgmBuilder;
+
+    const auto extDateType = pb.NewDataType(NUdf::TDataType<NUdf::TDate32>::Id);
+    const auto stringType = pb.NewDataType(NUdf::TDataType<const char*>::Id);
+    const auto tupleType = pb.NewTupleType({extDateType, stringType});
+
+    i32 extDate1 = NUdf::MIN_DATE32;
+    i32 extDate2 = NUdf::MAX_DATE32;
+    i32 extDate3 = 1000;
+    i32 extDate4 = -1000;
+    i32 extDate5 = 0;
+
+    const auto extDate1Val = pb.NewDataLiteral<NUdf::EDataSlot::Date32>(
+        NUdf::TStringRef((const char*)&extDate1, sizeof(extDate1)));
+    const auto extDate2Val = pb.NewDataLiteral<NUdf::EDataSlot::Date32>(
+        NUdf::TStringRef((const char*)&extDate2, sizeof(extDate2)));
+    const auto extDate3Val = pb.NewDataLiteral<NUdf::EDataSlot::Date32>(
+        NUdf::TStringRef((const char*)&extDate3, sizeof(extDate3)));
+    const auto extDate4Val = pb.NewDataLiteral<NUdf::EDataSlot::Date32>(
+        NUdf::TStringRef((const char*)&extDate4, sizeof(extDate4)));
+    const auto extDate5Val = pb.NewDataLiteral<NUdf::EDataSlot::Date32>(
+        NUdf::TStringRef((const char*)&extDate5, sizeof(extDate5)));
+
+    const auto value1 = pb.NewDataLiteral<NUdf::EDataSlot::String>("value1");
+    const auto value2 = pb.NewDataLiteral<NUdf::EDataSlot::String>("value2");
+    const auto value3 = pb.NewDataLiteral<NUdf::EDataSlot::String>("value3");
+    const auto value4 = pb.NewDataLiteral<NUdf::EDataSlot::String>("value4");
+    const auto value5 = pb.NewDataLiteral<NUdf::EDataSlot::String>("value5");
+
+    const auto data1 = pb.NewTuple(tupleType, {extDate1Val, value1});
+    const auto data2 = pb.NewTuple(tupleType, {extDate2Val, value2});
+    const auto data3 = pb.NewTuple(tupleType, {extDate3Val, value3});
+    const auto data4 = pb.NewTuple(tupleType, {extDate4Val, value4});
+    const auto data5 = pb.NewTuple(tupleType, {extDate5Val, value5});
+
+    const auto list = pb.NewList(tupleType, {data1, data2, data3, data4, data5});
+
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideSort(pb.ExpandMap(pb.ToFlow(list),
+                                                                            [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                               {{0U, pb.NewDataLiteral<bool>(true)}}),
+                                                   [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(tupleType, items); }));
+
+    const auto graph = setup.BuildGraph(pgmReturn);
+    const auto iterator = graph->GetValue().GetListIterator();
+    NUdf::TUnboxedValue item;
+
+    UNIT_ASSERT(iterator.Next(item));
+    UNIT_ASSERT_EQUAL(item.GetElement(0).Get<i32>(), extDate1);
+    UNBOXED_VALUE_STR_EQUAL(item.GetElement(1), "value1");
+
+    UNIT_ASSERT(iterator.Next(item));
+    UNIT_ASSERT_EQUAL(item.GetElement(0).Get<i32>(), extDate4);
+    UNBOXED_VALUE_STR_EQUAL(item.GetElement(1), "value4");
+
+    UNIT_ASSERT(iterator.Next(item));
+    UNIT_ASSERT_EQUAL(item.GetElement(0).Get<i32>(), extDate5);
+    UNBOXED_VALUE_STR_EQUAL(item.GetElement(1), "value5");
+
+    UNIT_ASSERT(iterator.Next(item));
+    UNIT_ASSERT_EQUAL(item.GetElement(0).Get<i32>(), extDate3);
+    UNBOXED_VALUE_STR_EQUAL(item.GetElement(1), "value3");
+
+    UNIT_ASSERT(iterator.Next(item));
+    UNIT_ASSERT_EQUAL(item.GetElement(0).Get<i32>(), extDate2);
+    UNBOXED_VALUE_STR_EQUAL(item.GetElement(1), "value2");
+
     UNIT_ASSERT(!iterator.Next(item));
     UNIT_ASSERT(!iterator.Next(item));
 }

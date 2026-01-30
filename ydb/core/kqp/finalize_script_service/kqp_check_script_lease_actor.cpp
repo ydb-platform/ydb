@@ -20,23 +20,25 @@ class TScriptExecutionLeaseCheckActor : public TActorBootstrapped<TScriptExecuti
     };
 
 public:
-    TScriptExecutionLeaseCheckActor(const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, TIntrusivePtr<TKqpCounters> counters)
+    TScriptExecutionLeaseCheckActor(const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, TDuration startupTimeout, TIntrusivePtr<TKqpCounters> counters)
         : QueryServiceConfig(queryServiceConfig)
         , Counters(counters)
+        , StartupTimeout(startupTimeout)
     {}
 
     void Bootstrap() {
         LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, LogPrefix() << "Bootstrap");
         Become(&TScriptExecutionLeaseCheckActor::MainState);
 
-        RefreshNodesInfo();
-        ScheduleRefreshScriptExecutions();
+        const auto& creatorId = Register(CreateScriptExecutionsTablesCreator(AppData()->FeatureFlags.GetEnableSecureScriptExecutions()));
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, LogPrefix() << "Start script executions tables creator: " << creatorId);
     }
 
     STRICT_STFUNC(MainState,
         hFunc(TEvents::TEvWakeup, Handle);
         hFunc(TEvTenantNodeEnumerator::TEvLookupResult, Handle);
         hFunc(TEvRefreshScriptExecutionLeasesResponse, Handle);
+        hFunc(TEvScriptExecutionsTablesCreationFinished, Handle);
     )
 
     void Handle(TEvents::TEvWakeup::TPtr& ev) {
@@ -64,6 +66,7 @@ public:
 
         const auto nodesCount = ev->Get()->AssignedNodes.size();
         RefreshLeasePeriod = std::max(nodesCount, static_cast<size_t>(1)) * CHECK_PERIOD;
+        HasNodesInfo = true;
 
         LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, LogPrefix() << "Handle discover tenant nodes result, number of nodes #" << nodesCount << ", new RefreshLeasePeriod: " << RefreshLeasePeriod);
     }
@@ -75,6 +78,17 @@ public:
         } else {
             LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, LogPrefix() << "Refresh successfully completed");
         }
+    }
+
+    void Handle(TEvScriptExecutionsTablesCreationFinished::TPtr& ev) {
+        if (!ev->Get()->Success) {
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, LogPrefix() << "Script executions tables creation failed with issues: " << ev->Get()->Issues.ToOneLineString());
+            return PassAway();
+        }
+
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, LogPrefix() << "Script executions tables creation finished, start lease checks");
+        RefreshNodesInfo();
+        Schedule(StartupTimeout, new TEvents::TEvWakeup(static_cast<ui64>(EWakeup::ScheduleRefreshScriptExecutions)));
     }
 
 private:
@@ -91,6 +105,11 @@ private:
     void ScheduleRefreshScriptExecutions() {
         LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, LogPrefix() << "Do ScheduleRefreshScriptExecutions (WaitRefreshScriptExecutions: " << WaitRefreshScriptExecutions << "), next refresh after " << RefreshLeasePeriod);
         Schedule(RefreshLeasePeriod, new TEvents::TEvWakeup(static_cast<ui64>(EWakeup::ScheduleRefreshScriptExecutions)));
+
+        if (!HasNodesInfo) {
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, LogPrefix() << "Skip ScheduleRefreshScriptExecutions, node info is not arrived");
+            return;
+        }
 
         if (!WaitRefreshScriptExecutions) {
             WaitRefreshScriptExecutions = true;
@@ -110,17 +129,19 @@ private:
 private:
     const NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
     const TIntrusivePtr<TKqpCounters> Counters;
+    const TDuration StartupTimeout;
 
     TDuration RefreshLeasePeriod = CHECK_PERIOD;
 
     bool WaitRefreshNodes = false;
     bool WaitRefreshScriptExecutions = false;
+    bool HasNodesInfo = false;
 };
 
 }  // anonymous namespace
 
-IActor* CreateScriptExecutionLeaseCheckActor(const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, TIntrusivePtr<TKqpCounters> counters) {
-    return new TScriptExecutionLeaseCheckActor(queryServiceConfig, counters);
+IActor* CreateScriptExecutionLeaseCheckActor(const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, TDuration startupTimeout, TIntrusivePtr<TKqpCounters> counters) {
+    return new TScriptExecutionLeaseCheckActor(queryServiceConfig, startupTimeout, counters);
 }
 
 }  // namespace NKikimr::NKqp

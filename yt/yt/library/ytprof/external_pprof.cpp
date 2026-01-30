@@ -20,7 +20,7 @@ namespace NYT::NYTProf {
 
 void SymbolizeByExternalPProf(NProto::Profile* profile, const TSymbolizationOptions& options)
 {
-    TTempDir tmpDir = TTempDir::NewTempDir(options.TmpDir);
+    TTempDir tmpDir = TTempDir::NewTempDir(TString(options.TmpDir));
     if (options.KeepTmpDir) {
         tmpDir.DoNotRemove();
     }
@@ -53,7 +53,7 @@ void SymbolizeByExternalPProf(NProto::Profile* profile, const TSymbolizationOpti
     WriteCompressedProfile(&output, *profile);
     output.Finish();
 
-    std::vector<TString> arguments{
+    std::vector<std::string> arguments{
         pprofPath,
         "-proto",
         "-output=" + (tmpDir.Path() / "out.pb.gz").GetPath(),

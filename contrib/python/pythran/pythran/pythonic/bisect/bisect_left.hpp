@@ -21,8 +21,7 @@ namespace bisect
   template <class X, class A>
   long bisect_left(X const &x, A const &a, long lo, long hi)
   {
-    return bisect(x, a, lo, hi,
-                  std::lower_bound<typename X::const_iterator, A>);
+    return bisect(x, a, lo, hi, std::lower_bound<typename X::const_iterator, A>);
   }
 } // namespace bisect
 PYTHONIC_NS_END

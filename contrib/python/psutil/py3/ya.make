@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(7.1.2)
+VERSION(7.2.1)
 
 LICENSE(BSD-3-Clause)
 
@@ -27,12 +27,14 @@ NO_CHECK_IMPORTS(
 NO_UTIL()
 
 CFLAGS(
-    -DPSUTIL_VERSION=712
+    -DPSUTIL_VERSION=721
 )
 
 SRCS(
+    psutil/arch/all/errors.c
     psutil/arch/all/init.c
     psutil/arch/all/pids.c
+    psutil/arch/all/str.c
 )
 
 IF (OS_LINUX)
@@ -44,11 +46,13 @@ IF (OS_LINUX)
     SRCS(
         psutil/_psutil_linux.c
         psutil/arch/linux/disk.c
+        psutil/arch/linux/heap.c
         psutil/arch/linux/mem.c
         psutil/arch/linux/net.c
         psutil/arch/linux/proc.c
         psutil/arch/posix/init.c
         psutil/arch/posix/net.c
+        psutil/arch/posix/pids.c
         psutil/arch/posix/proc.c
         psutil/arch/posix/sysctl.c
         psutil/arch/posix/users.c
@@ -74,15 +78,18 @@ IF (OS_DARWIN)
         psutil/_psutil_osx.c
         psutil/arch/osx/cpu.c
         psutil/arch/osx/disk.c
+        psutil/arch/osx/heap.c
         psutil/arch/osx/init.c
         psutil/arch/osx/mem.c
         psutil/arch/osx/net.c
         psutil/arch/osx/pids.c
         psutil/arch/osx/proc.c
+        psutil/arch/osx/proc_utils.c
         psutil/arch/osx/sensors.c
         psutil/arch/osx/sys.c
         psutil/arch/posix/init.c
         psutil/arch/posix/net.c
+        psutil/arch/posix/pids.c
         psutil/arch/posix/proc.c
         psutil/arch/posix/sysctl.c
         psutil/arch/posix/users.c
@@ -111,6 +118,7 @@ IF (OS_WINDOWS)
         psutil/_psutil_windows.c
         psutil/arch/windows/cpu.c
         psutil/arch/windows/disk.c
+        psutil/arch/windows/heap.c
         psutil/arch/windows/init.c
         psutil/arch/windows/mem.c
         psutil/arch/windows/net.c
@@ -136,6 +144,7 @@ PY_SRCS(
     TOP_LEVEL
     psutil/__init__.py
     psutil/_common.py
+    psutil/_ntuples.py
     psutil/_psaix.py
     psutil/_psbsd.py
     psutil/_pslinux.py

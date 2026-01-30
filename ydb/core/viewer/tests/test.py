@@ -537,11 +537,16 @@ class TestViewer(object):
                                     'PathId',
                                     'PublicKeys',
                                     'OriginalUserToken',
+                                    'HashesInitParams',
                                     })
 
         # groups
         replace_with_values.update({'Available',
                                     'Limit',
+                                    'MaxPDiskUsage',
+                                    'MaxVDiskSlotUsage',
+                                    'MaxNormalizedOccupancy',
+                                    'MaxVDiskRawUsage',
                                     })
 
         # pdisks
@@ -552,6 +557,7 @@ class TestViewer(object):
                                     'SlotSize',
                                     'SlotCount',
                                     'EnforcedDynamicSlotSize',
+                                    'PDiskUsage',
                                     })
 
         result = cls.replace_values_by_key_and_value(result, {'Status'}, {'ACTIVE', 'INACTIVE'})
@@ -563,6 +569,11 @@ class TestViewer(object):
                                     'InstanceGuid',
                                     'WriteThroughput',
                                     'ReadThroughput',
+                                    'StorageSize',
+                                    'StorageCount',
+                                    'VDiskSlotUsage',
+                                    'NormalizedOccupancy',
+                                    'VDiskRawUsage',
                                     })
 
         # cluster
@@ -573,6 +584,11 @@ class TestViewer(object):
                                     'StorageTotal',
                                     'StorageUsed',
                                     'ROT',
+                                    })
+
+        # tablets
+        replace_with_values.update({'DataSize',
+                                    'IndexSize',
                                     })
 
         # replication
@@ -588,7 +604,7 @@ class TestViewer(object):
     @classmethod
     def normalize_result_healthcheck(cls, result):
         result = cls.replace_values_by_key_and_value(result, ['self_check_result'], ['GOOD', 'DEGRADED', 'MAINTENANCE_REQUIRED', 'EMERGENCY'])
-        cls.delete_keys_recursively(result, ['issue_log'])
+        cls.delete_keys_recursively(result, {'issue_log'})
         return result
 
     @classmethod
@@ -649,10 +665,46 @@ class TestViewer(object):
         return result
 
     @classmethod
+    def test_viewer_nodes_group(cls):
+        return [
+            cls.get_viewer_normalized("/viewer/nodes", {
+                'group': 'CapacityAlert'
+            }),
+            cls.get_viewer_normalized("/viewer/nodes", {
+                'filter_group_by': 'CapacityAlert',
+                'filter_group': 'GREEN'
+            })
+        ]
+
+    @classmethod
     def test_storage_groups(cls):
         return cls.normalize_result(cls.get_viewer("/viewer/groups", {
             'fields_required': 'all'
         }))
+
+    @classmethod
+    def test_viewer_groups_group_by_pool_name(cls):
+        return [
+            cls.get_viewer_normalized("/viewer/groups", {
+                'group': 'PoolName'
+            }),
+            cls.get_viewer_normalized("/viewer/groups", {
+                'filter_group_by': 'PoolName',
+                'filter_group': 'static'
+            })
+        ]
+
+    @classmethod
+    def test_viewer_groups_group_by_capacity_alert(cls):
+        return [
+            cls.get_viewer_normalized("/viewer/groups", {
+                'group': 'CapacityAlert'
+            }),
+            cls.get_viewer_normalized("/viewer/groups", {
+                'filter_group_by': 'CapacityAlert',
+                'filter_group': 'GREEN'
+            })
+        ]
 
     @classmethod
     def test_viewer_sysinfo(cls):
@@ -1025,11 +1077,17 @@ class TestViewer(object):
             'query': "alter table table_test_topic_data_cdc add changefeed updates_feed WITH (FORMAT = 'JSON', MODE = 'UPDATES', INITIAL_SCAN = TRUE)"
         })
 
-        insert_response = cls.call_viewer("/viewer/query", {
-            'database': cls.dedicated_db,
-            'query': 'insert into table_test_topic_data_cdc(id, name) values(11, "elleven")',
-            'schema': 'multi'
-        })
+        insert_response = None
+        for i in range(3):
+            insert_response = cls.call_viewer("/viewer/query", {
+                'database': cls.dedicated_db,
+                'query': 'insert into table_test_topic_data_cdc(id, name) values(11, "elleven")',
+                'schema': 'multi'
+            })
+            if 'error' in insert_response and insert_response['error']['issue_code'] == 2034:
+                continue
+            else:
+                break
 
         update_response = cls.call_viewer("/viewer/query", {
             'database': cls.dedicated_db,
@@ -1497,7 +1555,7 @@ class TestViewer(object):
             'Cookie': 'ydb_session_id=' + cls.database_session_id,
         })
 
-        result['down_node_root'] = cls.get_viewer("/tablets/app", params={
+        result['down_node_root'] = cls.post_viewer("/tablets/app", params={
             'TabletID': '72057594037968897',
             'page': 'SetDown',
             'node': '1',
@@ -1505,7 +1563,7 @@ class TestViewer(object):
         }, headers={
             'Cookie': 'ydb_session_id=' + cls.root_session_id,
         })
-        result['down_node_monitoring'] = cls.get_viewer("/tablets/app", params={
+        result['down_node_monitoring'] = cls.post_viewer("/tablets/app", params={
             'TabletID': '72057594037968897',
             'page': 'SetDown',
             'node': '1',
@@ -1513,7 +1571,7 @@ class TestViewer(object):
         }, headers={
             'Cookie': 'ydb_session_id=' + cls.monitoring_session_id,
         })
-        result['down_node_viewer'] = cls.get_viewer("/tablets/app", params={
+        result['down_node_viewer'] = cls.post_viewer("/tablets/app", params={
             'TabletID': '72057594037968897',
             'page': 'SetDown',
             'node': '1',
@@ -1521,7 +1579,7 @@ class TestViewer(object):
         }, headers={
             'Cookie': 'ydb_session_id=' + cls.viewer_session_id,
         })
-        result['down_node_database'] = cls.get_viewer("/tablets/app", params={
+        result['down_node_database'] = cls.post_viewer("/tablets/app", params={
             'TabletID': '72057594037968897',
             'page': 'SetDown',
             'node': '1',
@@ -1531,31 +1589,69 @@ class TestViewer(object):
         })
 
         result['restart_pdisk_root'] = cls.replace_values_by_key(cls.post_viewer("/pdisk/restart", body={
-            'node_id': '1',
-            'pdisk_id': '1',
+            'pdisk_id': '1-1',
+        }, headers={
+            'Cookie': 'ydb_session_id=' + cls.root_session_id,
+        }), ['debugMessage'])
+        result['restart_pdisk_monitoring'] = cls.replace_values_by_key(cls.post_viewer("/pdisk/restart", body={
+            'pdisk_id': '1-1',
+        }, headers={
+            'Cookie': 'ydb_session_id=' + cls.monitoring_session_id,
+        }), ['debugMessage'])
+        result['restart_pdisk_viewer'] = cls.replace_values_by_key(cls.post_viewer("/pdisk/restart", body={
+            'pdisk_id': '1-1',
+        }, headers={
+            'Cookie': 'ydb_session_id=' + cls.viewer_session_id,
+        }), ['debugMessage'])
+        result['restart_pdisk_database'] = cls.replace_values_by_key(cls.post_viewer("/pdisk/restart", body={
+            'pdisk_id': '1-1',
+        }, headers={
+            'Cookie': 'ydb_session_id=' + cls.database_session_id,
+        }), ['debugMessage'])
+
+        result['restart_pdisk_database_force'] = cls.replace_values_by_key(cls.post_viewer("/pdisk/restart", body={
+            'pdisk_id': '1-1',
+            'force': '1',
+        }, headers={
+            'Cookie': 'ydb_session_id=' + cls.database_session_id,
+        }), ['debugMessage'])
+        result['restart_pdisk_viewer_force'] = cls.replace_values_by_key(cls.post_viewer("/pdisk/restart", body={
+            'pdisk_id': '1-1',
+            'force': '1',
+        }, headers={
+            'Cookie': 'ydb_session_id=' + cls.viewer_session_id,
+        }), ['debugMessage'])
+        result['restart_pdisk_monitoring_force'] = cls.replace_values_by_key(cls.post_viewer("/pdisk/restart", body={
+            'pdisk_id': '1-1',
+            'force': '1',
+        }, headers={
+            'Cookie': 'ydb_session_id=' + cls.monitoring_session_id,
+        }), ['debugMessage'])
+        result['restart_pdisk_root_force'] = cls.replace_values_by_key(cls.post_viewer("/pdisk/restart", body={
+            'pdisk_id': '1-1',
             'force': '1',
         }, headers={
             'Cookie': 'ydb_session_id=' + cls.root_session_id,
         }), ['debugMessage'])
-        result['restart_pdisk_monitoring'] = cls.post_viewer("/pdisk/restart", body={
-            'node_id': '1',
-            'pdisk_id': '1',
-            'force': '1',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.monitoring_session_id,
-        })
-        result['restart_pdisk_viewer'] = cls.post_viewer("/pdisk/restart", body={
-            'node_id': '1',
-            'pdisk_id': '1',
-            'force': '1',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.viewer_session_id,
-        })
-        result['restart_pdisk_database'] = cls.post_viewer("/pdisk/restart", body={
-            'node_id': '1',
-            'pdisk_id': '1',
-            'force': '1',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.database_session_id,
-        })
+        return result
+
+    @classmethod
+    def test_storage_stats(cls):
+        result = {}
+        tries = 15
+        while tries > 0:
+            result = cls.get_viewer_normalized("/viewer/storage_stats", {
+                'database': cls.dedicated_db,
+                'path': '.,table1,topic1',
+            })
+            if result['Paths'][2]['Groups'] != 0:
+                break
+            tries -= 1
+            time.sleep(1)
+        return result
+
+    @classmethod
+    def test_viewer_peers(cls):
+        result = cls.get_viewer_normalized("/viewer/peers")
+        cls.delete_keys_recursively(result, {'ScopeId', 'PoolStats'})
         return result

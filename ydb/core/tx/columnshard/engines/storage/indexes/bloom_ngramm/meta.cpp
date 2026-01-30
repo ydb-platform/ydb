@@ -290,7 +290,7 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildInd
             recordsCountBase *= 2;
         }
     } else {
-        size *= ((recordsCount <= RecordsCount) ? 1.0 : (1.0 * recordsCount / RecordsCount));
+        size = std::bit_ceil(size * ((recordsCount + RecordsCount - 1)  / RecordsCount));
     }
     size = std::max<ui32>(16, size);
     const auto doFillFilter = [&](auto& inserter) {
@@ -302,9 +302,12 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildInd
                     [&](const std::shared_ptr<arrow::Array>& arr, const ui32 /*hashBase*/) {
                         builder.FillNGrammHashes(NGrammSize, arr, inserter);
                     },
-                    [&](const NJson::TJsonValue& data, const ui32 /*hashBase*/) {
-                        auto str = data.GetStringRobust();
-                        builder.BuildNGramms(str.data(), str.size(), {}, NGrammSize, inserter);
+                    [&](const NArrow::NAccessor::TBinaryJsonValueView& data, const ui32 /*hashBase*/) {
+                        auto view = data.GetScalarOptional();
+                        if (!view.has_value()) {
+                            return;
+                        }
+                        builder.BuildNGramms(view->data(), view->size(), {}, NGrammSize, inserter);
                     });
             }
             reader.ReadNext(reader.begin()->GetCurrentChunk()->GetRecordsCount());

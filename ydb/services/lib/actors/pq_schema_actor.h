@@ -263,8 +263,9 @@ namespace NKikimr::NGRpcProxy::V1 {
 
 
     template<class TDerived, class TRequest>
-    class TPQGrpcSchemaBase : public NKikimr::NGRpcService::TRpcSchemeRequestActor<TDerived, TRequest>,
-                              public TPQSchemaBase<TPQGrpcSchemaBase<TDerived, TRequest>> {
+    class TPQGrpcSchemaBase : public NKikimr::NGRpcService::TRpcSchemeRequestActor<TDerived, TRequest>
+                            , public TPQSchemaBase<TPQGrpcSchemaBase<TDerived, TRequest>>
+                            , public NActors::IActorExceptionHandler {
     protected:
         using TBase = NKikimr::NGRpcService::TRpcSchemeRequestActor<TDerived, TRequest>;
         using TActorBase = TPQSchemaBase<TPQGrpcSchemaBase<TDerived, TRequest>>;
@@ -301,6 +302,17 @@ namespace NKikimr::NGRpcProxy::V1 {
 
         void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
             return static_cast<TDerived*>(this)->HandleCacheNavigateResponse(ev);
+        }
+
+        bool OnUnhandledException(const std::exception& exc) override {
+            auto ctx = *NActors::TlsActivationContext;
+            LOG_CRIT_S(ctx, NKikimrServices::PERSQUEUE,
+                TStringBuilder() << " unhandled exception " << TypeName(exc) << ": " << exc.what() << Endl
+                    << TBackTrace::FromCurrentException().PrintToString());
+
+            ReplyWithError(Ydb::StatusIds::INTERNAL_ERROR, Ydb::PersQueue::ErrorCode::ERROR, "Internal error");
+
+            return true;
         }
 
 
@@ -571,6 +583,9 @@ namespace NKikimr::NGRpcProxy::V1 {
 
             auto& item = ev->Get()->Request->ResultSet[0];
             PQGroupInfo = item.PQGroupInfo;
+            for (const auto& partition : PQGroupInfo->Description.GetPartitions()) {
+                TopicPartitionsIds.insert(partition.GetPartitionId());
+            }
             Self = item.Self;
 
             return true;
@@ -633,6 +648,7 @@ namespace NKikimr::NGRpcProxy::V1 {
     protected:
         THolder<TEvResponse> Response;
         TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TPQGroupInfo> PQGroupInfo;
+        TSet<i64> TopicPartitionsIds;
         TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TDirEntryInfo> Self;
         TMaybe<TString> PrivateTopicName;
         TMaybe<TString> CdcStreamName;

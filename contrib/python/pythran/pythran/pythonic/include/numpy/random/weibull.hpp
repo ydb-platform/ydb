@@ -14,8 +14,7 @@ namespace numpy
     template <class pS>
     types::ndarray<double, pS> weibull(double a, pS const &shape);
 
-    auto weibull(double a, long size)
-        -> decltype(weibull(a, types::array_tuple<long, 1>{{size}}));
+    auto weibull(double a, long size) -> decltype(weibull(a, types::array_tuple<long, 1>{{size}}));
 
     double weibull(double a, types::none_type size = {});
 

@@ -47,7 +47,13 @@ int main(int argc, char* argv[])
         auto server = CreateBusServer(busServer);
 
         auto workerPool = CreateThreadPool(4, "Worker");
-        auto service = CreateTestService(workerPool->GetInvoker(), false, /*createChannel*/ {}, GetNullMemoryUsageTracker());
+        auto service = CreateTestService(
+            workerPool->GetInvoker(),
+            false,
+            /*createChannel*/ {},
+            GetNullMemoryUsageTracker(),
+            /*useAuthenticator*/ false);
+
         server->RegisterService(service);
         server->Start();
 

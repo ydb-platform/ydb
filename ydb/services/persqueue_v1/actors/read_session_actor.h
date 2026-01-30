@@ -162,6 +162,7 @@ template <bool UseMigrationProtocol> // Migration protocol is "pqv1"
 class TReadSessionActor
     : public TActorBootstrapped<TReadSessionActor<UseMigrationProtocol>>
     , private NPQ::TRlHelpers
+    , public NActors::IActorExceptionHandler
 {
     using TClientMessage = typename std::conditional_t<UseMigrationProtocol,
         PersQueue::V1::MigrationStreamingReadClientMessage,
@@ -222,6 +223,8 @@ public:
         return NKikimrServices::TActivity::FRONT_PQ_READ;
     }
 
+    bool OnUnhandledException(const std::exception& exc) override;
+
 private:
     STFUNC(StateFunc) {
         switch (ev->GetTypeRewrite()) {
@@ -276,7 +279,7 @@ private:
 
     [[nodiscard]] bool ReadFromStreamOrDie(const TActorContext& ctx);
     [[nodiscard]] bool WriteToStreamOrDie(const TActorContext& ctx, TServerMessage&& response, bool finish = false);
-    bool SendControlMessage(TPartitionId id, TServerMessage&& message, const TActorContext& ctx);
+    bool SendControlMessage(TPartitionId id, TServerMessage&& message, const TActorContext& ctx, bool buffer = true);
 
     // grpc events
     void Handle(typename IContext::TEvReadFinished::TPtr& ev, const TActorContext &ctx);
@@ -322,7 +325,7 @@ private:
     void Handle(TEvents::TEvWakeup::TPtr& ev, const TActorContext& ctx);
 
     TActorId CreatePipeClient(ui64 tabletId, const TActorContext& ctx);
-    void ProcessBalancerDead(ui64 tabletId, const TActorContext& ctx);
+    void ProcessBalancerDead(ui64 tabletId, const TActorId& pipe, const TActorContext& ctx);
 
     void RunAuthActor(const TActorContext& ctx);
     void RecheckACL(const TActorContext& ctx);

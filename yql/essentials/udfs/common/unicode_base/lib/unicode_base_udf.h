@@ -546,8 +546,8 @@ struct TSubstringGetter: public TOperationMixin<TSubstringGetter> {
     DISABLE_IMPICT_ARGUMENT_CAST;
 };
 
-#define DEFINE_UTF8_OPERATION_STRICT(udfName, Executor, signature, optArgs)                          \
-    BEGIN_SIMPLE_STRICT_ARROW_UDF_WITH_OPTIONAL_ARGS(T##udfName, signature, optArgs) {               \
+#define DEFINE_UTF8_OPERATION_STRICT(udfName, Executor, signature, optionalArgs)                     \
+    BEGIN_SIMPLE_STRICT_ARROW_UDF_WITH_OPTIONAL_ARGS(T##udfName, signature, optionalArgs) {          \
         return Executor::DoExecute(valueBuilder, args);                                              \
     }                                                                                                \
                                                                                                      \
@@ -562,8 +562,8 @@ struct TSubstringGetter: public TOperationMixin<TSubstringGetter> {
                                                                                                      \
     END_SIMPLE_ARROW_UDF(T##udfName, T##udfName##KernelExec::Do)
 
-#define DEFINE_UTF8_OPERATION_BIN_BASE(macro, udfName, Executor, signature, optArgs)                                  \
-    macro(T##udfName, signature, optArgs) {                                                                           \
+#define DEFINE_UTF8_OPERATION_BIN_BASE(macro, udfName, Executor, signature, optionalArgs)                             \
+    macro(T##udfName, signature, optionalArgs) {                                                                      \
         return Executor::DoExecute(valueBuilder, args);                                                               \
     }                                                                                                                 \
                                                                                                                       \
@@ -578,60 +578,60 @@ struct TSubstringGetter: public TOperationMixin<TSubstringGetter> {
                                                                                                                       \
     END_SIMPLE_ARROW_UDF(T##udfName, T##udfName##KernelExec::Do)
 
-#define DEFINE_UTF8_OPERATION_BIN_STRICT(udfName, Executor, signature, optArgs) \
-    DEFINE_UTF8_OPERATION_BIN_BASE(BEGIN_SIMPLE_STRICT_ARROW_UDF_WITH_OPTIONAL_ARGS, udfName, Executor, signature, optArgs)
+#define DEFINE_UTF8_OPERATION_BIN_STRICT(udfName, Executor, signature, optionalArgs) \
+    DEFINE_UTF8_OPERATION_BIN_BASE(BEGIN_SIMPLE_STRICT_ARROW_UDF_WITH_OPTIONAL_ARGS, udfName, Executor, signature, optionalArgs)
 
-#define DEFINE_UTF8_OPERATION_BIN_NOT_STRICT(udfName, Executor, signature, optArgs) \
-    DEFINE_UTF8_OPERATION_BIN_BASE(BEGIN_SIMPLE_ARROW_UDF_WITH_OPTIONAL_ARGS, udfName, Executor, signature, optArgs)
+#define DEFINE_UTF8_OPERATION_BIN_NOT_STRICT(udfName, Executor, signature, optionalArgs) \
+    DEFINE_UTF8_OPERATION_BIN_BASE(BEGIN_SIMPLE_ARROW_UDF_WITH_OPTIONAL_ARGS, udfName, Executor, signature, optionalArgs)
 
-#define DEFINE_UTF8_OPERATION_MANY_STRICT(udfName, Executor, signature, argsCount, optArgsCount)     \
-    BEGIN_SIMPLE_STRICT_ARROW_UDF_WITH_OPTIONAL_ARGS(T##udfName, signature, optArgsCount) {          \
-        return Executor::DoExecute(valueBuilder, args);                                              \
-    }                                                                                                \
-                                                                                                     \
-    struct T##udfName##KernelExec                                                                    \
-        : public TGenericKernelExec<T##udfName##KernelExec, argsCount> {                             \
-        template <typename TSink>                                                                    \
-        static void Process(const IValueBuilder* valueBuilder, TBlockItem args, const TSink& sink) { \
-            Y_UNUSED(valueBuilder);                                                                  \
-            Executor::BlockDoExecute(args, sink);                                                    \
-        }                                                                                            \
-    };                                                                                               \
-                                                                                                     \
+#define DEFINE_UTF8_OPERATION_MANY_STRICT(udfName, Executor, signature, argsCount, optionalArgsCount) \
+    BEGIN_SIMPLE_STRICT_ARROW_UDF_WITH_OPTIONAL_ARGS(T##udfName, signature, optionalArgsCount) {      \
+        return Executor::DoExecute(valueBuilder, args);                                               \
+    }                                                                                                 \
+                                                                                                      \
+    struct T##udfName##KernelExec                                                                     \
+        : public TGenericKernelExec<T##udfName##KernelExec, argsCount> {                              \
+        template <typename TSink>                                                                     \
+        static void Process(const IValueBuilder* valueBuilder, TBlockItem args, const TSink& sink) {  \
+            Y_UNUSED(valueBuilder);                                                                   \
+            Executor::BlockDoExecute(args, sink);                                                     \
+        }                                                                                             \
+    };                                                                                                \
+                                                                                                      \
     END_SIMPLE_ARROW_UDF(T##udfName, T##udfName##KernelExec::Do)
 
-DEFINE_UTF8_OPERATION_STRICT(IsUtf, TUtf8Checker, bool(TOptional<char*>), /*optArgs=*/1);
+DEFINE_UTF8_OPERATION_STRICT(IsUtf, TUtf8Checker, bool(TOptional<char*>), /*optionalArgs=*/1);
 
-DEFINE_UTF8_OPERATION_STRICT(Normalize, TNormalizeUTF8<NFC>, TUtf8(TAutoMap<TUtf8>), /*optArgs=*/0);
-DEFINE_UTF8_OPERATION_STRICT(NormalizeNFD, TNormalizeUTF8<NFD>, TUtf8(TAutoMap<TUtf8>), /*optArgs=*/0);
-DEFINE_UTF8_OPERATION_STRICT(NormalizeNFC, TNormalizeUTF8<NFC>, TUtf8(TAutoMap<TUtf8>), /*optArgs=*/0);
-DEFINE_UTF8_OPERATION_STRICT(NormalizeNFKD, TNormalizeUTF8<NFKD>, TUtf8(TAutoMap<TUtf8>), /*optArgs=*/0);
-DEFINE_UTF8_OPERATION_STRICT(NormalizeNFKC, TNormalizeUTF8<NFKC>, TUtf8(TAutoMap<TUtf8>), /*optArgs=*/0);
+DEFINE_UTF8_OPERATION_STRICT(Normalize, TNormalizeUTF8<NFC>, TUtf8(TAutoMap<TUtf8>), /*optionalArgs=*/0);
+DEFINE_UTF8_OPERATION_STRICT(NormalizeNFD, TNormalizeUTF8<NFD>, TUtf8(TAutoMap<TUtf8>), /*optionalArgs=*/0);
+DEFINE_UTF8_OPERATION_STRICT(NormalizeNFC, TNormalizeUTF8<NFC>, TUtf8(TAutoMap<TUtf8>), /*optionalArgs=*/0);
+DEFINE_UTF8_OPERATION_STRICT(NormalizeNFKD, TNormalizeUTF8<NFKD>, TUtf8(TAutoMap<TUtf8>), /*optionalArgs=*/0);
+DEFINE_UTF8_OPERATION_STRICT(NormalizeNFKC, TNormalizeUTF8<NFKC>, TUtf8(TAutoMap<TUtf8>), /*optionalArgs=*/0);
 
-DEFINE_UTF8_OPERATION_STRICT(IsAscii, TCheckAllChars<IsAscii>, bool(TAutoMap<TUtf8>), /*optArgs=*/0);
-DEFINE_UTF8_OPERATION_STRICT(IsSpace, TCheckAllChars<IsSpace>, bool(TAutoMap<TUtf8>), /*optArgs=*/0);
-DEFINE_UTF8_OPERATION_STRICT(IsUpper, TCheckAllChars<IsUpper>, bool(TAutoMap<TUtf8>), /*optArgs=*/0);
-DEFINE_UTF8_OPERATION_STRICT(IsLower, TCheckAllChars<IsLower>, bool(TAutoMap<TUtf8>), /*optArgs=*/0);
-DEFINE_UTF8_OPERATION_STRICT(IsDigit, TCheckAllChars<IsDigit>, bool(TAutoMap<TUtf8>), /*optArgs=*/0);
-DEFINE_UTF8_OPERATION_STRICT(IsAlpha, TCheckAllChars<IsAlpha>, bool(TAutoMap<TUtf8>), /*optArgs=*/0);
-DEFINE_UTF8_OPERATION_STRICT(IsAlnum, TCheckAllChars<IsAlnum>, bool(TAutoMap<TUtf8>), /*optArgs=*/0);
-DEFINE_UTF8_OPERATION_STRICT(IsHex, TCheckAllChars<IsHexdigit>, bool(TAutoMap<TUtf8>), /*optArgs=*/0);
+DEFINE_UTF8_OPERATION_STRICT(IsAscii, TCheckAllChars<IsAscii>, bool(TAutoMap<TUtf8>), /*optionalArgs=*/0);
+DEFINE_UTF8_OPERATION_STRICT(IsSpace, TCheckAllChars<IsSpace>, bool(TAutoMap<TUtf8>), /*optionalArgs=*/0);
+DEFINE_UTF8_OPERATION_STRICT(IsUpper, TCheckAllChars<IsUpper>, bool(TAutoMap<TUtf8>), /*optionalArgs=*/0);
+DEFINE_UTF8_OPERATION_STRICT(IsLower, TCheckAllChars<IsLower>, bool(TAutoMap<TUtf8>), /*optionalArgs=*/0);
+DEFINE_UTF8_OPERATION_STRICT(IsDigit, TCheckAllChars<IsDigit>, bool(TAutoMap<TUtf8>), /*optionalArgs=*/0);
+DEFINE_UTF8_OPERATION_STRICT(IsAlpha, TCheckAllChars<IsAlpha>, bool(TAutoMap<TUtf8>), /*optionalArgs=*/0);
+DEFINE_UTF8_OPERATION_STRICT(IsAlnum, TCheckAllChars<IsAlnum>, bool(TAutoMap<TUtf8>), /*optionalArgs=*/0);
+DEFINE_UTF8_OPERATION_STRICT(IsHex, TCheckAllChars<IsHexdigit>, bool(TAutoMap<TUtf8>), /*optionalArgs=*/0);
 
-DEFINE_UTF8_OPERATION_STRICT(ToTitle, TStringToStringMapper<ToTitle>, TUtf8(TAutoMap<TUtf8>), /*optArgs=*/0);
-DEFINE_UTF8_OPERATION_STRICT(ToUpper, TStringToStringMapper<ToUpper>, TUtf8(TAutoMap<TUtf8>), /*optArgs=*/0);
-DEFINE_UTF8_OPERATION_STRICT(ToLower, TStringToStringMapper<ToLower>, TUtf8(TAutoMap<TUtf8>), /*optArgs=*/0);
+DEFINE_UTF8_OPERATION_STRICT(ToTitle, TStringToStringMapper<ToTitle>, TUtf8(TAutoMap<TUtf8>), /*optionalArgs=*/0);
+DEFINE_UTF8_OPERATION_STRICT(ToUpper, TStringToStringMapper<ToUpper>, TUtf8(TAutoMap<TUtf8>), /*optionalArgs=*/0);
+DEFINE_UTF8_OPERATION_STRICT(ToLower, TStringToStringMapper<ToLower>, TUtf8(TAutoMap<TUtf8>), /*optionalArgs=*/0);
 
-DEFINE_UTF8_OPERATION_STRICT(GetLength, TLengthGetter, ui64(TAutoMap<TUtf8>), /*optArgs=*/0);
+DEFINE_UTF8_OPERATION_STRICT(GetLength, TLengthGetter, ui64(TAutoMap<TUtf8>), /*optionalArgs=*/0);
 
-DEFINE_UTF8_OPERATION_STRICT(Reverse, TReverser, TUtf8(TAutoMap<TUtf8>), /*optArgs=*/0);
-DEFINE_UTF8_OPERATION_STRICT(Strip, TStripper, TUtf8(TAutoMap<TUtf8>), /*optArgs=*/0);
-DEFINE_UTF8_OPERATION_MANY_STRICT(Substring, TSubstringGetter, TUtf8(TAutoMap<TUtf8>, TOptional<ui64>, TOptional<ui64>), /*argsCount=*/3, /*optArgs=*/1);
+DEFINE_UTF8_OPERATION_STRICT(Reverse, TReverser, TUtf8(TAutoMap<TUtf8>), /*optionalArgs=*/0);
+DEFINE_UTF8_OPERATION_STRICT(Strip, TStripper, TUtf8(TAutoMap<TUtf8>), /*optionalArgs=*/0);
+DEFINE_UTF8_OPERATION_MANY_STRICT(Substring, TSubstringGetter, TUtf8(TAutoMap<TUtf8>, TOptional<ui64>, TOptional<ui64>), /*argsCount=*/3, /*optionalArgs=*/1);
 
-DEFINE_UTF8_OPERATION_BIN_STRICT(RemoveAll, TAllRemover, TUtf8(TAutoMap<TUtf8>, TUtf8), /*optArgs=*/0);
-DEFINE_UTF8_OPERATION_BIN_STRICT(RemoveFirst, TFirstRemover, TUtf8(TAutoMap<TUtf8>, TUtf8), /*optArgs=*/0);
-DEFINE_UTF8_OPERATION_BIN_NOT_STRICT(IsUnicodeSet, TUnicodeSetMatcher, bool(TAutoMap<TUtf8>, TUtf8), /*optArgs=*/0);
-DEFINE_UTF8_OPERATION_BIN_STRICT(LevensteinDistance, TLevensteinDistanceFinder, ui64(TAutoMap<TUtf8>, TAutoMap<TUtf8>), /*optArgs=*/0);
-DEFINE_UTF8_OPERATION_BIN_STRICT(RemoveLast, TLastRemoval, TUtf8(TAutoMap<TUtf8>, TUtf8), /*optArgs=*/0);
+DEFINE_UTF8_OPERATION_BIN_STRICT(RemoveAll, TAllRemover, TUtf8(TAutoMap<TUtf8>, TUtf8), /*optionalArgs=*/0);
+DEFINE_UTF8_OPERATION_BIN_STRICT(RemoveFirst, TFirstRemover, TUtf8(TAutoMap<TUtf8>, TUtf8), /*optionalArgs=*/0);
+DEFINE_UTF8_OPERATION_BIN_NOT_STRICT(IsUnicodeSet, TUnicodeSetMatcher, bool(TAutoMap<TUtf8>, TUtf8), /*optionalArgs=*/0);
+DEFINE_UTF8_OPERATION_BIN_STRICT(LevensteinDistance, TLevensteinDistanceFinder, ui64(TAutoMap<TUtf8>, TAutoMap<TUtf8>), /*optionalArgs=*/0);
+DEFINE_UTF8_OPERATION_BIN_STRICT(RemoveLast, TLastRemoval, TUtf8(TAutoMap<TUtf8>, TUtf8), /*optionalArgs=*/0);
 
 DEFINE_UTF8_OPERATION_MANY_STRICT(ReplaceAll, TAllReplacer, TUtf8(TAutoMap<TUtf8>, TUtf8, TUtf8), /*argsCount=*/3, /*optionalArgs=*/0);
 DEFINE_UTF8_OPERATION_MANY_STRICT(ReplaceFirst, TFirstReplacer, TUtf8(TAutoMap<TUtf8>, TUtf8, TUtf8), /*argsCount=*/3, /*optionalArgs=*/0);

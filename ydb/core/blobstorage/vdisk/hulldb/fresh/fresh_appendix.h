@@ -5,6 +5,7 @@
 #include <ydb/core/blobstorage/vdisk/hulldb/base/hullbase_logoblob.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/base/hullbase_barrier.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/base/hullbase_block.h>
+#include <ydb/core/blobstorage/vdisk/hulldb/base/hullbase_rec.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/base/hullds_generic_it.h>
 // FIXME
 #include <ydb/core/blobstorage/vdisk/hulldb/generic/blobstorage_hullrecmerger.h>
@@ -20,39 +21,8 @@ namespace NKikimr {
     template <class TKey, class TMemRec>
     class TFreshAppendix {
     public:
-        struct TRecord {
-        private:
-            TKey Key;
-            TMemRec MemRec;
-
-        public:
-            TKey GetKey() const {
-                return ReadUnaligned<TKey>(&Key);
-            }
-
-            TMemRec GetMemRec() const {
-                return ReadUnaligned<TMemRec>(&MemRec);
-            }
-
-            bool operator <(const TKey &key) const {
-                return GetKey() < key;
-            }
-
-            bool operator <(const TRecord &rec) const {
-                return GetKey() < rec.GetKey();
-            }
-
-            bool operator ==(const TRecord &rec) const {
-                return GetKey() == rec.GetKey();
-            }
-
-            TRecord(const TKey &key, const TMemRec &memRec)
-                : Key(key)
-                , MemRec(memRec)
-            {}
-        };
-
-        using TVec = TVector<TRecord>;
+        using TRecord = TIndexRecord<TKey, TMemRec>;
+        using TVec = TRecord::TVec;
 
         TFreshAppendix(const TMemoryConsumer &memConsumer)
             : MemConsumed(memConsumer)
@@ -91,6 +61,10 @@ namespace NKikimr {
 
         ui64 SizeApproximation() const {
             return sizeof(TRecord) * SortedRecs.size();
+        }
+
+        TVec Extract() {
+            return std::move(SortedRecs);
         }
 
         ::NMonitoring::TDynamicCounters::TCounterPtr GetCounter() const {

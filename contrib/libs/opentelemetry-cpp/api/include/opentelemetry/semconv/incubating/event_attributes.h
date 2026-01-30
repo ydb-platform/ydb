@@ -23,7 +23,8 @@ namespace event
   Identifies the class / type of event.
 
   @deprecated
-  {"note": "Replaced by EventName top-level field on the LogRecord.\n", "reason": "uncategorized"}
+  {"note": "The value of this attribute MUST now be set as the value of the EventName field on the
+  LogRecord to indicate that the LogRecord represents an Event.\n", "reason": "uncategorized"}
  */
 OPENTELEMETRY_DEPRECATED static constexpr const char *kEventName = "event.name";
 

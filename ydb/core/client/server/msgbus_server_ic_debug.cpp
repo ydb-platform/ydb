@@ -67,6 +67,7 @@ public:
             params.SoftLoad = record.GetSoftLoad();
             params.Duration = TDuration::MicroSeconds(record.GetDuration());
             params.UseProtobufWithPayload = record.GetUseProtobufWithPayload();
+            params.RdmaMode = record.GetRdmaMode();
             Callback = [=](const TActorContext& ctx) {
                 ui32 poolId = 0;
                 if (record.HasServicePool()) {
@@ -75,7 +76,9 @@ public:
                         poolId = it->second;
                     }
                 }
-                ctx.Register(NInterconnect::CreateLoadActor(params), TMailboxType::HTSwap, poolId);
+                for (ui32 i = 0; i < record.GetNumLoadActors(); ++i) {
+                    ctx.Register(NInterconnect::CreateLoadActor(params), TMailboxType::HTSwap, poolId);
+                }
             };
         }
     }

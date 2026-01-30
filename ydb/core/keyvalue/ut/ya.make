@@ -15,6 +15,7 @@ PEERDIR(
     library/cpp/regex/pcre
     library/cpp/svnversion
     ydb/core/testlib/default
+    ydb/core/util/actorsys_test
 )
 
 YQL_LAST_ABI_VERSION()

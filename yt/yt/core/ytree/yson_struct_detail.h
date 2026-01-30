@@ -112,11 +112,12 @@ struct IYsonStructParameter
     TOption GetOptionOrThrow() const;
     virtual std::any FindOption(const std::type_info& typeInfo) const = 0;
     virtual void WriteMemberSchema(
-        const TYsonStructBase* self,
         NYson::IYsonConsumer* consumer,
         const std::function<NYTree::INodePtr()>& defaultValueGetter,
         const TYsonStructWriteSchemaOptions& options) const = 0;
-    virtual void WriteTypeSchema(const TYsonStructBase* self, NYson::IYsonConsumer* consumer, const TYsonStructWriteSchemaOptions& options) const = 0;
+    virtual void WriteTypeSchema(NYson::IYsonConsumer* consumer, const TYsonStructWriteSchemaOptions& options) const = 0;
+
+    virtual void TraverseParameter(const TYsonStructParameterVisitor& visitor, const NYPath::TYPath& path) const = 0;
 
     virtual bool CompareParameter(const TYsonStructBase* lhsSelf, const TYsonStructBase* rhsSelf) const = 0;
 
@@ -125,8 +126,7 @@ struct IYsonStructParameter
     virtual bool HoldsField(ITypeErasedYsonStructFieldPtr erasedField) const = 0;
 };
 
-DECLARE_REFCOUNTED_STRUCT(IYsonStructParameter)
-DEFINE_REFCOUNTED_TYPE(IYsonStructParameter)
+using IYsonStructParameterPtr = TIntrusivePtr<IYsonStructParameter>;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -161,11 +161,15 @@ struct IYsonStructMeta
     virtual void RegisterPostprocessor(std::function<void(TYsonStructBase*)> postprocessor) = 0;
     virtual void SetUnrecognizedStrategy(EUnrecognizedStrategy strategy) = 0;
 
-    virtual void WriteSchema(const TYsonStructBase* target, NYson::IYsonConsumer* consumer, const TYsonStructWriteSchemaOptions& options) const = 0;
+    virtual void WriteSchema(NYson::IYsonConsumer* consumer, const TYsonStructWriteSchemaOptions& options) const = 0;
+
+    virtual void Traverse(const TYsonStructParameterVisitor& visitor, const NYPath::TYPath& path = {}) const = 0;
 
     virtual bool CompareStructs(
         const TYsonStructBase* lhs,
         const TYsonStructBase* rhs) const = 0;
+
+    virtual const std::type_info& GetStructType() const = 0;
 
     virtual ~IYsonStructMeta() = default;
 };
@@ -210,13 +214,16 @@ public:
     void RegisterPostprocessor(std::function<void(TYsonStructBase*)> postprocessor) override;
     void SetUnrecognizedStrategy(EUnrecognizedStrategy strategy) override;
 
-    void WriteSchema(const TYsonStructBase* target, NYson::IYsonConsumer* consumer, const TYsonStructWriteSchemaOptions& options) const override;
+    void WriteSchema(NYson::IYsonConsumer* consumer, const TYsonStructWriteSchemaOptions& options) const override;
+    void Traverse(const TYsonStructParameterVisitor& visitor, const NYPath::TYPath& path = {}) const override;
 
     void FinishInitialization(const std::type_info& structType);
 
     bool CompareStructs(
         const TYsonStructBase* lhs,
         const TYsonStructBase* rhs) const override;
+
+    const std::type_info& GetStructType() const override;
 
 private:
     friend class TYsonStructRegistry;
@@ -330,13 +337,12 @@ public:
     std::any FindOption(const std::type_info& typeInfo) const override;
     // Write schema of parameter as part of including struct.
     void WriteMemberSchema(
-        const TYsonStructBase* self,
         NYson::IYsonConsumer* consumer,
         const std::function<NYTree::INodePtr()>& defaultValueGetter,
         const TYsonStructWriteSchemaOptions& options) const override;
     // Write schema of parameter type.
-    void WriteTypeSchema(const TYsonStructBase* self, NYson::IYsonConsumer* consumer, const TYsonStructWriteSchemaOptions& options) const override;
-
+    void WriteTypeSchema(NYson::IYsonConsumer* consumer, const TYsonStructWriteSchemaOptions& options) const override;
+    void TraverseParameter(const TYsonStructParameterVisitor& visitor, const NYPath::TYPath& path) const override;
     bool CompareParameter(const TYsonStructBase* lhsSelf, const TYsonStructBase* rhsSelf) const override;
 
     virtual int GetFieldIndex() const override;

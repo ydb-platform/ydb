@@ -3,6 +3,8 @@
 #include "ctx_impl.h"
 #include <mutex>
 
+#include <ydb/library/actors/interconnect/address/interconnect_address.h>
+
 #include <util/generic/scope.h>
 #include <util/generic/string.h>
 #include <util/stream/output.h>
@@ -15,16 +17,26 @@
 
 #include <util/network/address.h>
 
+#if defined(__APPLE__) || defined(_darwin_)
+/* OSX seems not to define these. */
+#ifndef s6_addr16
+#define s6_addr16 __u6_addr.__u6_addr16
+#endif
+#ifndef s6_addr32
+#define s6_addr32 __u6_addr.__u6_addr32
+#endif
+#endif
+
 template <>
 struct std::less<ibv_gid> {
-    std::size_t operator()(const ibv_gid& a, const ibv_gid& b) const {
+    bool operator()(const ibv_gid& a, const ibv_gid& b) const noexcept {
         return std::tie(a.global.subnet_prefix, a.global.interface_id) <
                std::tie(b.global.subnet_prefix, b.global.interface_id);
     }
 };
 template <>
 struct std::equal_to<ibv_gid> {
-    bool operator()(const ibv_gid& a, const ibv_gid& b) const {
+    bool operator()(const ibv_gid& a, const ibv_gid& b) const noexcept {
         return a.global.interface_id == b.global.interface_id
             && a.global.subnet_prefix == b.global.subnet_prefix;
     }
@@ -106,10 +118,19 @@ public:
                 continue;
             }
 
+            /*
+             * TODO: Add ibv_query_gid_table support into arcadia ibv wrapper (contrib/libs/ibdrv) 
+             * This extension allows to get type of GID index to skip unsupported RoCEv1 
+             */
+
             for (uint8_t portNum = 1; portNum <= devAttrs.phys_port_cnt; portNum++) {
                 ibv_port_attr portAttrs;
                 err = ibv_query_port(ctx, portNum, &portAttrs);
                 if (err == 0) {
+                    if (portAttrs.state != IBV_PORT_ACTIVE) {
+                        continue; //Skip non active ports
+                    }
+
                     for (int gidIndex = 0; gidIndex < portAttrs.gid_tbl_len; gidIndex++ ) {
                         auto ctx = TRdmaCtx::Create(deviceCtx, portNum, gidIndex);
                         if (!ctx) {
@@ -123,6 +144,10 @@ public:
         }
         std::sort(CtxMap.begin(), CtxMap.end(),
             [](const auto& a, const auto& b) {
+                if (std::equal_to<ibv_gid>()(a.first, b.first)) {
+                    // Hack: Most implementations have RoCEv2 after RoCEv1, but we prefer RoCEv2 gid index 
+                    return a.second->GetGidIndex() > b.second->GetGidIndex();
+                }
                 return std::less<ibv_gid>()(a.first, b.first);
             });
 
@@ -181,4 +206,40 @@ bool Init() {
     return true;
 }
 
+#if not defined(_win32_)
+in6_addr GetV6CompatAddr(const NInterconnect::TAddress& a) noexcept {
+    switch (a.GetFamily()) {
+        case AF_INET: {
+            TAddress::TV6Addr addr;
+            addr.s6_addr16[0] = 0;
+            addr.s6_addr16[1] = 0;
+            addr.s6_addr16[2] = 0;
+            addr.s6_addr16[3] = 0;
+            addr.s6_addr16[4] = 0;
+            addr.s6_addr16[5] = Max<ui16>();
+            addr.s6_addr16[6] = Max<ui16>();
+            addr.s6_addr32[3] = a.Addr.Ipv4.sin_addr.s_addr;
+            return addr;
+        }
+        case AF_INET6:
+            return a.Addr.Ipv6.sin6_addr;
+        default: {
+            TAddress::TV6Addr addr;
+            memset(&addr, 0, sizeof(addr));
+            return addr;
+        }
+        break;
+    }
+}
+#endif
+
+TRdmaCtx* GetCtx(const NInterconnect::TAddress& addr) {
+#if not defined(_win32_)
+    return GetCtx(GetV6CompatAddr(addr));
+#else
+    return nullptr;
+#endif
+
 } 
+
+}

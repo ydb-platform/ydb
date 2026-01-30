@@ -50,7 +50,6 @@ inline NYql::TAstParseResult SqlToYqlWithMode(const TString& query, NSQLTranslat
     settings.Mode = mode;
     settings.Arena = &arena;
     settings.AnsiLexer = ansiLexer;
-    settings.Antlr4Parser = true;
     settings.SyntaxVersion = 1;
 
     NSQLTranslationV1::TLexers lexers;
@@ -82,6 +81,13 @@ inline NYql::TAstParseResult SqlToYqlWithSettings(const TString& query, const NS
 
 inline void ExpectFailWithError(const TString& query, const TString& error) {
     NYql::TAstParseResult res = SqlToYql(query);
+
+    UNIT_ASSERT(!res.Root);
+    UNIT_ASSERT_NO_DIFF(Err2Str(res), error);
+}
+
+inline void ExpectFailWithError(const TString& query, const TString& error, const NSQLTranslation::TTranslationSettings& settings) {
+    NYql::TAstParseResult res = SqlToYqlWithSettings(query, settings);
 
     UNIT_ASSERT(!res.Root);
     UNIT_ASSERT_NO_DIFF(Err2Str(res), error);

@@ -66,6 +66,21 @@ void TPartition::Handle(TEvPQ::TEvGetMLPConsumerStateRequest::TPtr& ev) {
     ForwardToMLPConsumer(ev->Get()->Consumer, ev);
 }
 
+void TPartition::Handle(TEvPQ::TEvMLPConsumerState::TPtr& ev) {
+    auto& metrics = ev->Get()->Metrics;
+
+    LOG_D("Handle TEvPQ::TEvMLPConsumerState " << metrics.ShortDebugString());
+    auto it = MLPConsumers.find(metrics.GetConsumer());
+    if (it == MLPConsumers.end()) {
+        return;
+    }
+
+    TabletCounters.Cumulative()[COUNTER_PQ_TABLET_CPU_USAGE] += metrics.GetCPUUsage();
+
+    auto& consumerInfo = it->second;
+    consumerInfo.Metrics = std::move(metrics);
+}
+
 void TPartition::ProcessMLPPendingEvents() {
     LOG_D("Process MLP pending events. Count " << MLPPendingEvents.size());
 
@@ -83,6 +98,20 @@ void TPartition::ProcessMLPPendingEvents() {
 }
 
 void TPartition::InitializeMLPConsumers() {
+    auto retentionPeriod = [&](const auto& consumer) -> std::optional<TDuration> {
+        if (consumer.GetImportant()) {
+            return std::nullopt;
+        }
+        if (consumer.HasAvailabilityPeriodMs()) {
+            return TDuration::MilliSeconds(consumer.GetAvailabilityPeriodMs());
+        } else if (Config.GetPartitionConfig().GetStorageLimitBytes() > 0) {
+            // retention by storage is not supported yet
+            return std::nullopt;
+        } else {
+            return TDuration::Seconds(Config.GetPartitionConfig().GetLifetimeSeconds());
+        }
+    };
+
     std::unordered_map<TString, NKikimrPQ::TPQTabletConfig::TConsumer> consumers;
     for (auto& consumer : Config.GetConsumers()) {
         if (consumer.GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP) {
@@ -94,7 +123,12 @@ void TPartition::InitializeMLPConsumers() {
 
     for (auto it = MLPConsumers.begin(); it != MLPConsumers.end();) {
         auto &[name, consumerInfo] = *it;
-        if (consumers.contains(name)) {
+        if (auto cit = consumers.find(name); cit != consumers.end()) {
+            LOG_I("Updating MLP consumer '" << name << "' config");
+            auto& config = cit->second;
+            Send(consumerInfo.ActorId, new TEvPQ::TEvMLPConsumerUpdateConfig(Config, config,
+                retentionPeriod(config), GetPerPartitionCounterSubgroup()));
+
             ++it;
             continue;
         }
@@ -111,25 +145,44 @@ void TPartition::InitializeMLPConsumers() {
         }
 
         LOG_I("Creating MLP consumer '" << name << "'");
-
-        std::optional<TDuration> reteintion;
-        if (!consumer.GetImportant()) {
-            if (consumer.HasAvailabilityPeriodMs()) {
-                reteintion = TDuration::MilliSeconds(consumer.GetAvailabilityPeriodMs());
-            } else {
-                reteintion = TDuration::Seconds(Config.GetPartitionConfig().GetLifetimeSeconds());
-            }
-        }
-
         auto actorId = RegisterWithSameMailbox(NMLP::CreateConsumerActor(
+            DbPath,
             TabletId,
             TabletActorId,
             Partition.OriginalPartitionId,
             SelfId(),
+            Config,
             consumer,
-            reteintion
+            retentionPeriod(consumer),
+            GetEndOffset(),
+            GetPerPartitionCounterSubgroup()
         ));
         MLPConsumers.emplace(consumer.GetName(), actorId);
+    }
+}
+
+void TPartition::DropDataOfMLPConsumer(NKikimrClient::TKeyValueRequest& request, const TString& consumer) {
+    auto snapshotKey = NMLP::MakeSnapshotKey(Partition.OriginalPartitionId, consumer);
+    auto snapshot = request.AddCmdDeleteRange()->MutableRange();
+    snapshot->SetFrom(snapshotKey);
+    snapshot->SetIncludeFrom(true);
+    snapshot->SetTo(std::move(snapshotKey));
+    snapshot->SetIncludeTo(true);
+
+    auto wal = request.AddCmdDeleteRange()->MutableRange();
+    wal->SetFrom(NMLP::MinWALKey(Partition.OriginalPartitionId, consumer));
+    wal->SetIncludeFrom(true);
+    wal->SetTo(NMLP::MaxWALKey(Partition.OriginalPartitionId, consumer));
+    wal->SetIncludeTo(true);
+}
+
+void TPartition::NotifyEndOffsetChanged() {
+    if (LastNotifiedEndOffset == GetEndOffset()) {
+        return;
+    }
+    LastNotifiedEndOffset = GetEndOffset();
+    for (auto [_, info] : MLPConsumers) {
+        Send(info.ActorId, new TEvPQ::TEvEndOffsetChanged(GetEndOffset()));
     }
 }
 

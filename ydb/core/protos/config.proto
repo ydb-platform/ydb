@@ -28,6 +28,7 @@ import "ydb/core/protos/memory_controller_config.proto";
 import "ydb/core/protos/netclassifier.proto";
 import "ydb/core/protos/node_broker.proto";
 import "ydb/core/protos/pqconfig.proto";
+import "ydb/core/protos/recoveryshard_config.proto";
 import "ydb/core/protos/replication.proto";
 import "ydb/core/protos/resource_broker.proto";
 import "ydb/core/protos/shared_cache.proto";
@@ -41,6 +42,8 @@ import "ydb/core/protos/nbs/blockstore.proto";
 import "ydb/library/actors/protos/interconnect.proto";
 import "yql/essentials/core/file_storage/proto/file_storage.proto";
 import "yql/essentials/providers/common/proto/gateways_config.proto";
+import "ydb/core/protos/s3_settings.proto";
+import "ydb/public/api/protos/annotations/sensitive.proto";
 
 package NKikimrConfig;
 option java_package = "ru.yandex.kikimr.proto";
@@ -89,6 +92,7 @@ message TActorSystemConfig {
         optional int32 MaxAvgPingDeviation = 17;
 
         optional bool HasSharedThread = 18;
+        optional bool AllThreadsAreShared = 24;
         optional uint32 MaxLocalQueueSize = 20;
         optional uint32 MinLocalQueueSize = 21;
 
@@ -130,6 +134,7 @@ message TActorSystemConfig {
     optional ENodeType NodeType = 14 [default = COMPUTE];
     optional uint32 ForceIOPoolThreads = 17;
     optional bool UseSharedThreads = 18;
+    optional bool UseUnitedPool = 22;
     optional bool UseRingQueue = 19 [default = true];
 
     optional bool MonitorStuckActors = 15;
@@ -364,7 +369,8 @@ message TBlobStorageConfig {
     optional NKikimrBlobStorage.TBscConfig BscSettings = 12;
 
     optional uint64 BridgeSyncRateBytesPerSecond = 13 [default = 500000000]; // default 500 MB/s per node
- }
+    optional NKikimrBlobStorage.TInferPDiskSlotCountSettings InferPDiskSlotCountSettings = 14;
+}
 
 message TSelfManagementConfig {
     // whether the self management is enabled (through distconf)? (mandatory field)
@@ -408,7 +414,7 @@ message TBlobStorageFormatConfig {
 
 message TUAClientConfig {
     optional string Uri = 1;
-    optional string SharedSecretKey = 2;
+    optional string SharedSecretKey = 2 [(Ydb.sensitive) = true];
     optional uint64 MaxInflightBytes = 3 [default = 100000000];
     optional uint64 GrpcReconnectDelayMs = 4;
     optional uint64 GrpcSendDelayMs = 5;
@@ -469,6 +475,11 @@ message TInterconnectConfig {
         IC_SO_MSG_ZEROCOPY = 1;
     };
 
+    enum ERdmaCqMode {
+        CQ_POLLING = 0;
+        CQ_EVENT = 1;
+    };
+
     repeated TChannel Channel = 1;
     optional bool FirstTryBeforePoll = 2; // DEPRECATED
     optional bool StartTcp = 3 [default = false];
@@ -488,8 +499,8 @@ message TInterconnectConfig {
     optional bool TlsAuthOnly = 38; // do not encrypt traffic
     repeated string ForbiddenSignatureAlgorithms = 50;
     optional bool EnforceScopeValidation = 18;
-    optional bytes Certificate = 30; // in PEM format
-    optional bytes PrivateKey = 31; // in PEM format
+    optional bytes Certificate = 30 [(Ydb.sensitive) = true]; // in PEM format
+    optional bytes PrivateKey = 31 [(Ydb.sensitive) = true]; // in PEM format
     optional string PathToCertificateFile = 35;
     optional string PathToPrivateKeyFile = 36;
     optional string PathToCaFile = 37;
@@ -503,6 +514,11 @@ message TInterconnectConfig {
     optional bool ValidateIncomingPeerViaDirectLookup = 44;
     optional uint32 SocketBacklogSize = 45; // SOMAXCONN if not set or zero
     optional ESocketSendOptimization SocketSendOptimization = 51 [default = IC_SO_DISABLED];
+    optional bool UseRdma = 52;
+    optional uint32 RdmaMaxWr = 53 [default = 4096];
+    optional bool RdmaChecksum = 54 [default = true];
+    optional ERdmaCqMode RdmaCqMode = 55;
+    optional uint32 RdmaMemPoolSizeLimitMb = 56 [default = 4096];
 
     // ballast is added to IC handshake frames to ensure correctness of jumbo frames transmission over network
     optional uint32 HandshakeBallastSize = 14;
@@ -596,12 +612,14 @@ message TMonitoringConfig {
     optional string ProcessLocation = 11;
     optional string AllowOrigin = 12;
     optional string RedirectMainPageTo = 13 [default = "monitoring/"];
-    optional string MonitoringCertificate = 14;
+    optional string MonitoringCertificate = 14 [(Ydb.sensitive) = true];
     optional string MonitoringCertificateFile = 15;
+    optional string MonitoringPrivateKeyFile = 20;
     optional string MemAllocDumpPathPrefix = 16;
     optional uint32 MaxRequestsPerSecond = 17 [default = 0];
     optional string InactivityTimeout = 18 [default = "2m"];
     optional bool HideHttpEndpoint = 19 [default = false];
+    optional bool RequireCountersAuthentication = 21 [default = false];
 }
 
 message TRestartsCountConfig {
@@ -765,9 +783,9 @@ message TGRpcConfig {
     optional NKikimrStream.TStreamingConfig StreamingConfig = 8;
     // Ssl part
     optional uint32 SslPort = 9;
-    optional string CA = 10;
-    optional string Cert = 11;
-    optional string Key = 12;
+    optional string CA = 10 [(Ydb.sensitive) = true];
+    optional string Cert = 11 [(Ydb.sensitive) = true];
+    optional string Key = 12 [(Ydb.sensitive) = true];
     optional string PathToCertificateFile = 27;
     optional string PathToPrivateKeyFile = 28;
     optional string PathToCaFile = 29;
@@ -809,6 +827,7 @@ message TGRpcConfig {
     }
 
     optional YdbGrpcCompressionLevel DefaultCompressionLevel = 31 [default = YDB_GRPC_COMPRESS_LEVEL_NONE];
+    optional TXdsBootstrap XdsBootstrap = 32;
 
     // server socket options
     optional bool   KeepAliveEnable = 100 [default = true]; // SO_KEEPALIVE
@@ -824,6 +843,44 @@ message TGRpcConfig {
     optional string EndpointId = 108;
 
     repeated TGRpcConfig ExtEndpoints = 200; // run specific services on separate endpoints
+
+    // TXdsBootstrap is used to configure XDS (Envoy's discovery service) support for gRPC endpoints.
+    // This enables dynamic service discovery, load balancing, and configuration via an XDS server.
+    // Configure these fields when you want your gRPC endpoints to use XDS for advanced traffic management.
+    // For more details, see: https://www.envoyproxy.io/docs/envoy/latest/api-v3/config/bootstrap/v3/bootstrap.proto
+    // Format XDS bootstrap file: https://grpc.github.io/grpc/core/md_doc_grpc_xds_bootstrap_format.html
+    message TXdsBootstrap {
+        // TXdsServer describes an XDS server to connect to for configuration and service discovery.
+        message TXdsServer {
+            // TChannelCred specifies the credentials used to connect to the XDS server.
+            message TChannelCred {
+                optional string Type = 1; // Type of channel credentials (e.g., "insecure", "tls")
+                optional string Config = 2; // String in JSON format containing config for the type
+            }
+
+            optional string ServerUri = 1; // URI of the XDS server (e.g., "xds.example.com:443")
+            repeated TChannelCred ChannelCreds = 2; // Credentials for connecting to the XDS server
+            repeated string ServerFeatures = 3; // List of supported XDS server features (e.g., "xds_v3")
+        }
+
+        // TNode describes the node identity and locality information sent to the XDS server.
+        message TNode {
+            // TLocality specifies the region, zone, and subzone of the node.
+            message TLocality {
+                optional string Region = 1;
+                optional string Zone = 2;
+                optional string SubZone = 3;
+            }
+
+            optional string Id = 1; // Unique node identifier (e.g., "node-123")
+            optional string Cluster = 2; // Cluster name (e.g., "my-grpc-cluster")
+            optional TLocality Locality = 3; // Locality information for the node
+            optional string Meta = 4; // String in JSON format containing opaque metadata extending the node identifier. This field will be converted to 'metadata' in XDS bootstrap config
+        }
+
+        repeated TXdsServer XdsServers = 1; // List of XDS servers to connect to
+        optional TNode Node = 2; // Node identity and locality information
+    }
 }
 
 message TDynamicNodeConfig {
@@ -840,9 +897,9 @@ message THttpProxyConfig {
     optional bool Enabled = 1;
     optional uint32 Port = 2;
     optional bool Secure = 3;
-    optional string CA = 4;
-    optional string Cert = 5;
-    optional string Key = 6;
+    optional string CA = 4 [(Ydb.sensitive) = true];
+    optional string Cert = 5 [(Ydb.sensitive) = true];
+    optional string Key = 6 [(Ydb.sensitive) = true];
 
     repeated string YandexCloudServiceRegion = 7;
     optional string IamTokenServiceEndpoint = 8;
@@ -1181,8 +1238,10 @@ message TStreamingQueriesConfig {
         optional string DiscoveryCommonHostnamePrefixPatch = 1; // Added to discovered hostnames if original hostname starts with this prefix
     }
 
-    optional TExternalStorageConfig ExternalStorage = 1;
-    optional TExternalTopicsSettings TopicSdkSettings = 2;
+    reserved 1;
+    reserved 2;
+    optional TExternalStorageConfig ExternalStorage = 3;
+    optional TExternalTopicsSettings TopicSdkSettings = 4;
 }
 
 message TQueryServiceConfig {
@@ -1211,9 +1270,8 @@ message TQueryServiceConfig {
     repeated string AvailableExternalDataSources = 22;                  // Ignored if AllExternalDataSourcesAreAvailable is true
     optional bool AllExternalDataSourcesAreAvailable = 23 [default = true];
     reserved 24;
-    reserved 25;
+    optional TStreamingQueriesConfig StreamingQueries = 25;
     reserved 26;
-    optional TStreamingQueriesConfig StreamingQueries = 27;
 }
 
 // Config describes immediate controls and allows
@@ -1497,18 +1555,18 @@ message TImmediateControlsConfig {
         optional uint64 FastSplitSizeThreshold = 9 [(ControlOptions) = {
             Description: "FastSplitSize Threshold",
             MinValue: 100000,
-            MaxValue: 4000000000,
+            MaxValue: 411000000000,
             DefaultValue: 4000000 }];
         optional uint64 FastSplitRowCountThreshold = 10 [(ControlOptions) = {
             Description: "Disable publications of dropping",
             MinValue: 1000,
-            MaxValue: 1000000000,
+            MaxValue: 111000000000,
             DefaultValue: 100000 }];
         optional uint64 FastSplitCpuPercentageThreshold = 11 [(ControlOptions) = {
             Description: "Max Fast split cpu usage",
             MinValue: 1,
-            MaxValue: 50,
-            DefaultValue: 146 }];
+            MaxValue: 146,
+            DefaultValue: 50 }];
         optional uint64 SplitByLoadEnabled = 12 [(ControlOptions) = {
             Description: "Enables split by load",
             MinValue: 0,
@@ -1517,17 +1575,17 @@ message TImmediateControlsConfig {
         optional uint64 SplitByLoadMaxShardsDefault = 13 [(ControlOptions) = {
             Description: "Max shards that cant be split by load",
             MinValue: 0,
-            MaxValue: 50,
-            DefaultValue: 10000 }];
+            MaxValue: 10000,
+            DefaultValue: 50 }];
         optional uint64 MergeByLoadMinUptimeSec = 14 [(ControlOptions) = {
             Description: "Min uptime to merge by load in seconds",
             MinValue: 0,
-            MaxValue: 4000000000,
+            MaxValue: 411000000000,
             DefaultValue: 600 }];
         optional uint64 MergeByLoadMinLowLoadDurationSec = 15 [(ControlOptions) = {
             Description: "Min low load duration in sec to merge by load",
             MinValue: 0,
-            MaxValue: 4000000000,
+            MaxValue: 411000000000,
             DefaultValue: 3600 }];
     }
 
@@ -1747,6 +1805,20 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 10000000000, // 10 GB/s
             DefaultValue: 0 }];
+
+        optional uint64 EnablePhantomFlagStorage = 38 [(ControlOptions) = {
+            Description: "Enable new FullSync protocol which allows to send PhantomFlags",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0,
+        }];
+
+        optional uint64 PhantomFlagStorageLimitPerVDiskBytes = 39 [(ControlOptions) = {
+            Description: "Maximum size in bytes of in-memory structures of PhantomFlagStorage per VDisk",
+            MinValue: 0,
+            MaxValue: 100000000000, // 100 GB
+            DefaultValue: 10000000, // 10 MB
+        }];
     }
 
     message TTabletControls {
@@ -1837,6 +1909,12 @@ message TImmediateControlsConfig {
             DefaultValue: 2 }];
 
         optional TRequestReportingSettings RequestReportingSettings = 12;
+
+        optional uint64 MaxPutTimeoutSeconds = 13 [(ControlOptions) = {
+            Description: "Maximum amount of time TEvPut request can work until it is terminated with DEADLINE status by DSProxy",
+            MinValue: 1,
+            MaxValue: 1000000,
+            DefaultValue: 60 }]; // 1 minute
     }
 
     message TPDiskControls {
@@ -2019,6 +2097,60 @@ message TImmediateControlsConfig {
         }];
     }
 
+    message TBackupControls {
+        message TBackupToS3Controls {
+            optional uint64 EnableAsyncReplicationExport = 1 [(ControlOptions) = {
+                Description: "Enable Async Replication export",
+                MinValue: 0,
+                MaxValue: 1,
+                DefaultValue: 1 }];
+
+            optional uint64 EnableAsyncReplicationImport = 2 [(ControlOptions) = {
+                Description: "Enable Async Replication import",
+                MinValue: 0,
+                MaxValue: 1,
+                DefaultValue: 1 }];
+
+            optional uint64 EnableTransferExport = 3 [(ControlOptions) = {
+                Description: "Enable Transfer export",
+                MinValue: 0,
+                MaxValue: 1,
+                DefaultValue: 1 }];
+
+            optional uint64 EnableTransferImport = 4 [(ControlOptions) = {
+                Description: "Enable Transfer import",
+                MinValue: 0,
+                MaxValue: 1,
+                DefaultValue: 1 }];
+
+            optional uint64 EnableExternalDataSourceExport = 5 [(ControlOptions) = {
+                Description: "Enable External Data Source export",
+                MinValue: 0,
+                MaxValue: 1,
+                DefaultValue: 1 }];
+
+            optional uint64 EnableExternalDataSourceImport = 6 [(ControlOptions) = {
+                Description: "Enable External Data Source import",
+                MinValue: 0,
+                MaxValue: 1,
+                DefaultValue: 1 }];
+
+            optional uint64 EnableExternalTableExport = 7 [(ControlOptions) = {
+                Description: "Enable External Table export",
+                MinValue: 0,
+                MaxValue: 1,
+                DefaultValue: 1 }];
+
+            optional uint64 EnableExternalTableImport = 8 [(ControlOptions) = {
+                Description: "Enable External Table import",
+                MinValue: 0,
+                MaxValue: 1,
+                DefaultValue: 1 }];
+        }
+
+        optional TBackupToS3Controls S3Controls = 1;
+    }
+
     optional TDataShardControls DataShardControls = 1;
     optional TTxLimitControls TxLimitControls = 2;
     optional TCoordinatorControls CoordinatorControls = 3;
@@ -2037,6 +2169,7 @@ message TImmediateControlsConfig {
     optional TKQPSessionControls KQPSessionControls = 16;
     optional TColumnShardControls ColumnShardControls = 17;
     optional TGroupMapperControls GroupMapperControls = 18;
+    optional TBackupControls BackupControls = 19;
 };
 
 message TMeteringConfig {
@@ -2071,6 +2204,7 @@ message TAuditConfig {
         optional EFormat Format = 1 [default = JSON];
         optional string LogName = 2;
         optional string LogJsonEnvelope = 3; // Json template with text field containing %message% placeholder. For example {"my_enveloped_message": "%message%"}. %message% will be replaced with real audit log message
+        optional TUAClientConfig UAClientConfig = 4; // If not specified, the configuration is taken from common TLogConfig section
     }
 
     message TLogClassConfig {
@@ -2251,10 +2385,10 @@ message THiveConfig {
     reserved 66;
     optional double ObjectImbalanceToBalance = 67 [default = 0.02];
     optional EHiveChannelBalanceStrategy ChannelBalanceStrategy = 68 [default = HIVE_CHANNEL_BALANCE_STRATEGY_WEIGHTED_RANDOM];
-    optional uint64 MaxChannelHistorySize = 69 [default = 200];
+    optional uint64 MaxChannelHistorySize = 69 [default = 10];
     optional uint64 StorageInfoRefreshFrequency = 70 [default = 600000]; // send a query to BSC every x milliseconds
-    optional double MinStorageScatterToBalance = 71 [default = 999]; // storage balancer trigger is disabled by default
-    optional double MinGroupUsageToBalance = 72 [default = 0.1];
+    optional double MinStorageScatterToBalance = 71 [default = 0.5]; // storage balancer trigger threshold (enabled by default)
+    optional double MinGroupUsageToBalance = 72 [default = 0.05];
     optional uint64 StorageBalancerInflight = 73 [default = 1];
     optional bool EnableDestroyOperations = 74 [default = false];
     optional double NodeUsageRangeToKick = 75 [default = 0.2];
@@ -2273,6 +2407,7 @@ message THiveConfig {
     optional uint64 BalanceCountersRefreshFrequency = 88 [default = 15000]; // milliseconds
     optional bool LockedTabletsSendMetrics = 89 [default = false]; // if true then hive will process metrics from locked tablets
     optional uint64 MaxDeleteTabletInProgress = 90 [default = 100];
+    optional uint64 DataCenterChangeReactionPeriod = 91 [default = 1]; // seconds
 }
 
 message THealthCheckConfig {
@@ -2336,7 +2471,7 @@ message TColumnShardConfig {
     }
 
     optional uint32 MaxInFlightIntervalsOnRequest = 16;
-    optional uint32 MaxReadStaleness_ms = 18 [default = 1800000];
+    optional uint32 MaxReadStaleness_ms = 18 [default = 300000];
     optional uint32 GCIntervalMs = 19 [default = 30000];
     optional uint32 CompactionActualizationLagMs = 20 [default = 1000];
     optional uint32 ActualizationTasksLagMs = 21 [default = 1000];
@@ -2382,6 +2517,19 @@ message TColumnShardConfig {
     }
 
     optional TStatistics Statistics = 57;
+    optional NKikimrSchemeOp.TS3Settings S3Client = 58;
+    optional uint32 ProxyOverloadedDelayMs = 59 [default = 5000];
+    optional uint32 ProxyMaxRetriesPerShard = 60 [default = 10];
+
+    oneof DefaultCompaction {
+        string DefaultCompactionPreset = 61 [default = "tiling"];
+        NKikimrSchemeOp.TCompactionPlannerConstructorContainer DefaultCompactionConstructor = 62;
+    }
+
+    optional uint64 ScanMemoryLimit = 63 [default = 3221225472];
+    optional uint64 CompactionStageMemoryLimit = 64 [default = 3221225472];
+    optional uint64 TieringStageMemoryLimit = 65 [default = 1000000000];
+    optional uint64 CleanupPortionsStageMemoryLimit = 66 [default = 1000000000];
 }
 
 message TSchemeShardConfig {
@@ -2391,7 +2539,7 @@ message TSchemeShardConfig {
         // to disable set to 0
         optional uint32 InFlightLimit = 2 [default = 10000];
     }
-    // after this amount of time we forcely write full stats to local DB
+    // after this amount of time we forcibly write full stats to local DB
     // to disable set to 0
     optional uint32 StatsBatchTimeoutMs = 1 [default = 100];
 
@@ -2409,6 +2557,11 @@ message TSchemeShardConfig {
     // number of shards per table
     // 0 means default - NKikimrIndexBuilder.TIndexBuildSettings.max_shards_in_flight
     optional uint32 MaxRestoreBuildIndexShardsInFlight = 6 [default = 1000];
+
+    // number of shards per table
+    // database level default for TTL mechanics
+    // 0 means no limit
+    optional uint32 MaxTTLShardsInFlight = 7 [default = 0];
 }
 
 message TCompactionConfig {
@@ -2674,7 +2827,7 @@ message TClientCertificateAuthorization {
 
 message TLocalPgWireConfig {
     optional int32 ListeningPort = 1 [default = 5432];
-    optional string SslCertificate = 5;
+    optional string SslCertificate = 5 [(Ydb.sensitive) = true];
     optional string Address = 6 [default = "::"];
     optional bool TcpNotDelay = 7 [default = true];
 }
@@ -2686,9 +2839,9 @@ message TKafkaProxyConfig {
 
     // You can either specify the path to the certificate, which will contain both the certificate and the private key,
     // or specify them separately in parameters Cert and Key.
-    optional string SslCertificate = 3;
-    optional string Cert = 8;
-    optional string Key = 9;
+    optional string SslCertificate = 3 [(Ydb.sensitive) = true];
+    optional string Cert = 8 [(Ydb.sensitive) = true];
+    optional string Key = 9 [(Ydb.sensitive) = true];
 
     optional uint64 MaxMessageSize = 4 [default = 16777216];
     optional uint64 MaxInflightSize = 5 [default = 16777216];
@@ -2706,6 +2859,7 @@ message TKafkaProxyConfig {
     optional bool AutoCreateTopicsEnable = 13 [default = false];
     optional uint32 TopicCreationDefaultPartitions = 14 [default = 1];
     optional bool AutoCreateConsumersEnable = 15 [default = true];
+    optional string PublicHost = 16;
 }
 
 message TAwsCompatibilityConfig {
@@ -2732,6 +2886,18 @@ message TAwsClientConfig {
 
     // Logging options
     optional TLogConfig LogConfig = 1;
+
+    // Default connection settings
+    optional bool VerifySSL = 2 [default = true];
+    optional uint32 RequestTimeoutMs = 3;
+    optional uint32 HttpRequestTimeoutMs = 4;
+    optional uint32 ConnectionTimeoutMs = 5 [default = 10000];
+    optional bool EnableTcpKeepAlive = 6 [default = true];
+    optional uint32 TcpKeepAliveIntervalMs = 7;
+    optional uint32 MaxConnectionsCount = 8 [default = 32];
+    optional uint32 ExecutorThreadsCount = 9 [default = 32];
+    optional string CaPath = 10 [default = "/etc/ssl/certs"];
+    optional string CaFile = 11;
 }
 
 message TMetadataCacheConfig {
@@ -2773,6 +2939,8 @@ message TStatisticsConfig {
     // from many SchemeShards.
     optional uint32 BaseStatsPropagateIntervalSecondsDedicated = 3 [default = 5];
     optional uint32 BaseStatsPropagateIntervalSecondsServerless = 4 [default = 180];
+
+    optional bool EnableBackgroundColumnStatsCollection = 5 [default = false];
 };
 
 message TSystemTabletBackupConfig {
@@ -2783,6 +2951,13 @@ message TSystemTabletBackupConfig {
     oneof Backend {
         TFilesystemBackend Filesystem = 1;
     }
+    repeated fixed64 ExcludeTabletIds = 2;
+    optional uint64 NewBackupChangelogMinBytes = 3 [default = 524288000]; // 500 MB
+}
+
+message TClusterDiagnosticsConfig {
+    optional uint64 MaxCountersSize = 1 [default = 52428800]; // 50MB
+    optional uint64 CountersMaxInflight = 2 [default = 100];
 }
 
 message TAppConfig {
@@ -2895,6 +3070,10 @@ message TAppConfig {
 
     // Built-in AWS client options (used, for example, to interact with S3).
     optional TAwsClientConfig AwsClientConfig = 116;
+
+    optional TRecoveryShardConfig RecoveryShardConfig = 117;
+
+    optional TClusterDiagnosticsConfig ClusterDiagnosticsConfig = 118;
 }
 
 message TYdbVersion {

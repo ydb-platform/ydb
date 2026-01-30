@@ -7,6 +7,8 @@
 #include <ydb/core/blobstorage/dsproxy/group_sessions.h>
 #include <ydb/core/blobstorage/dsproxy/dsproxy_nodemon.h>
 #include <ydb/core/blobstorage/incrhuge/incrhuge.h>
+#include <ydb/core/cms/console/configs_dispatcher.h>
+#include <ydb/core/cms/console/console.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/protos/blobstorage_distributed_config.pb.h>
 #include <ydb/core/util/backoff.h>
@@ -91,6 +93,8 @@ namespace NKikimr::NStorage {
 
         ui32 RefCount = 0;
         bool Temporary = false;
+        ui32 ExpectedSlotCount = 0;
+        ui32 SlotSizeInUnits = 0;
 
         std::optional<ui64> ShredGenerationIssued;
         std::variant<std::monostate, ui64, TString> ShredState; // not issued, finished with generation, aborted
@@ -163,6 +167,7 @@ namespace NKikimr::NStorage {
 
         bool EnableProxyMock = false;
         NKikimrBlobStorage::TMockDevicesConfig MockDevicesConfig;
+        NKikimrBlobStorage::TInferPDiskSlotCountSettings InferPDiskSlotCountSettings;
 
         struct TEvPrivate {
             enum EEv {
@@ -233,6 +238,8 @@ namespace NKikimr::NStorage {
         TControlWrapper ThrottlingMaxLogChunkCount;
 
         TControlWrapper MaxInProgressSyncCount;
+        TControlWrapper EnablePhantomFlagStorage;
+        TControlWrapper PhantomFlagStorageLimitPerVDiskBytes;
 
         TControlWrapper MaxCommonLogChunksHDD;
         TControlWrapper MaxCommonLogChunksSSD;
@@ -261,6 +268,7 @@ namespace NKikimr::NStorage {
         TControlWrapper ReportingControllerBucketSize;
         TControlWrapper ReportingControllerLeakDurationMs;
         TControlWrapper ReportingControllerLeakRate;
+        TControlWrapper MaxPutTimeoutSeconds;
 
         TControlWrapper EnableDeepScrubbing;
 
@@ -429,6 +437,7 @@ namespace NKikimr::NStorage {
                 ui32 OrderNumber;
                 bool DonorMode;
                 bool ReadOnly;
+                bool DDisk;
             };
             std::optional<TRuntimeData> RuntimeData;
             bool ShutdownPending = false;
@@ -652,6 +661,10 @@ namespace NKikimr::NStorage {
 
         void Handle(NNodeWhiteboard::TEvWhiteboard::TEvBSGroupStateUpdate::TPtr ev);
 
+        void Handle(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr ev);
+        void Handle(NConsole::TEvConfigsDispatcher::TEvRemoveConfigSubscriptionResponse::TPtr ev);
+        void Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr ev);
+
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Bridge syncer operation
 
@@ -707,6 +720,7 @@ namespace NKikimr::NStorage {
         void ForwardToDistributedConfigKeeper(STATEFN_SIG);
 
         std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> StorageConfig;
+        std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> CommittedStorageConfig;
         bool SelfManagementEnabled = false;
         TBridgeInfo::TPtr BridgeInfo;
         THashSet<TActorId> StorageConfigSubscribers;
@@ -715,9 +729,8 @@ namespace NKikimr::NStorage {
         void Handle(TEvNodeWardenQueryStorageConfig::TPtr ev);
         void Handle(TEvNodeWardenStorageConfig::TPtr ev);
         void HandleUnsubscribe(STATEFN_SIG);
-        void ApplyStorageConfig(const NKikimrBlobStorage::TNodeWardenServiceSet& current,
-                const NKikimrBlobStorage::TNodeWardenServiceSet *proposed);
-        void ApplyStateStorageConfig(const NKikimrBlobStorage::TStorageConfig *proposed);
+        void ApplyStorageConfig(const NKikimrBlobStorage::TNodeWardenServiceSet& current);
+        void ApplyStateStorageConfig();
         void ApplyStaticServiceSet(const NKikimrBlobStorage::TNodeWardenServiceSet& ss);
 
         void Handle(TEventHandle<TEvNodeWardenQueryBaseConfig>::TPtr ev);

@@ -2,12 +2,11 @@
 
 PY3_LIBRARY()
 
-VERSION(2.41.1)
+VERSION(2.47.0)
 
 LICENSE(Apache-2.0)
 
 PEERDIR(
-    contrib/python/cachetools
     contrib/python/cryptography
     contrib/python/grpcio
     contrib/python/packaging
@@ -27,7 +26,10 @@ NO_CHECK_IMPORTS(
 PY_SRCS(
     TOP_LEVEL
     google/auth/__init__.py
+    google/auth/_agent_identity_utils.py
+    google/auth/_cache.py
     google/auth/_cloud_sdk.py
+    google/auth/_constants.py
     google/auth/_credentials_async.py
     google/auth/_credentials_base.py
     google/auth/_default.py
@@ -49,6 +51,7 @@ PY_SRCS(
     google/auth/aws.py
     google/auth/compute_engine/__init__.py
     google/auth/compute_engine/_metadata.py
+    google/auth/compute_engine/_mtls.py
     google/auth/compute_engine/credentials.py
     google/auth/credentials.py
     google/auth/crypt/__init__.py
@@ -56,6 +59,7 @@ PY_SRCS(
     google/auth/crypt/_helpers.py
     google/auth/crypt/_python_rsa.py
     google/auth/crypt/base.py
+    google/auth/crypt/es.py
     google/auth/crypt/es256.py
     google/auth/crypt/rsa.py
     google/auth/downscoped.py

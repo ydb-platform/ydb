@@ -16,19 +16,19 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "arrow/compute/expression.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/expression.h"
 
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
-#include "arrow/compute/api_scalar.h"
-#include "arrow/compute/cast.h"
-#include "arrow/compute/cast_internal.h"
-#include "arrow/compute/registry.h"
-#include "arrow/record_batch.h"
-#include "arrow/table.h"
-#include "arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/api_scalar.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/cast.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/cast_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/registry.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/record_batch.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/table.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
 
 namespace arrow20 {
 namespace compute {

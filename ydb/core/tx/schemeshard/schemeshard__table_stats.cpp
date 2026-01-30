@@ -102,8 +102,36 @@ public:
     bool PersistSingleStats(const TPathId& pathId, const TStatsQueue<TEvDataShard::TEvPeriodicTableStats>::TItem& item, TInstant now, TTransactionContext& txc, const TActorContext& ctx) override;
     void ScheduleNextBatch(const TActorContext& ctx) override;
 
+private:
     template <typename T>
     TPartitionStats PrepareStats(const T& rec, TInstant now, const NKikimr::TStoragePools& pools, const NKikimr::TChannelsBindings& bindings) const;
+
+    /**
+     * Verify that splitting the given partition is allowed (either by size or by load)
+     * and send the EvGetTableStats message to the given tablet to prepare
+     * the split operation.
+     *
+     * @param[in] ctx The actor execution context
+     * @param[in] statsEventSender The ID of the actor which sent EvPeriodicTableStats
+     * @param[in] datashardId The corresponding datashard ID
+     * @param[in] shardIdx The corresponding shard index
+     * @param[in] pathId The corresponding path ID
+     * @param[in] pathElement The corresponding path element
+     * @param[in] subDomainInfo The information about the corresponding subdomain
+     * @param[in] newPartitionStats The new partition statistics (from the event)
+     * @param[in] collectKeySample If true, request the key access sample to be collected
+     */
+    bool VerifySplitAndRequestStats(
+        const TActorContext& ctx,
+        const TActorId& statsEventSender,
+        TTabletId datashardId,
+        const TShardIdx& shardIdx,
+        const TPathId& pathId,
+        TPathElement::TPtr pathElement,
+        TSubDomainInfo::TPtr subDomainInfo,
+        const TPartitionStats& newPartitionStats,
+        bool collectKeySample
+    );
 };
 
 
@@ -134,6 +162,22 @@ THolder<TProposeRequest> MergeRequest(
     return std::move(request);
 }
 
+const TString* GetPoolKind(const NKikimr::TChannelBind& channelBind, const TStoragePools& pools) {
+    auto findPoolByName = [](const auto& pools, const auto& name) {
+        return std::find_if(pools.begin(), pools.end(), [&name](const auto& pool) {
+            return pool.GetName() == name;
+        });
+    };
+    // fast: use pool kind specified by the channel bind
+    // slower: find pool kind by name
+    if (const auto& poolKind = channelBind.GetStoragePoolKind(); !poolKind.empty()) {
+        return &poolKind;
+    } else if (const auto& found = findPoolByName(pools, channelBind.GetStoragePoolName()); found != pools.end()) {
+        return &found->GetKind();
+    }
+    return nullptr;
+};
+
 template <typename T>
 TPartitionStats TTxStoreTableStats::PrepareStats(const T& rec,
                                                  TInstant now,
@@ -153,14 +197,19 @@ TPartitionStats TTxStoreTableStats::PrepareStats(const T& rec,
     newStats.LastAccessTime = TInstant::MilliSeconds(tableStats.GetLastAccessTime());
     newStats.LastUpdateTime = TInstant::MilliSeconds(tableStats.GetLastUpdateTime());
 
-    Y_UNUSED(pools);
-
     for (const auto& channelStats : tableStats.GetChannels()) {
-        const auto& channelBind = bindings[channelStats.GetChannel()];
-        const auto& poolKind = channelBind.GetStoragePoolKind();
-        auto& [dataSize, indexSize] = newStats.StoragePoolsStats[poolKind];
-        dataSize += channelStats.GetDataSize();
-        indexSize += channelStats.GetIndexSize();
+        const ui32 channel = channelStats.GetChannel();
+        if (channel < bindings.size()) {
+            const auto& channelBind = bindings[channel];
+            if (auto* poolKindPtr = GetPoolKind(channelBind, pools); poolKindPtr != nullptr) {
+                auto& [dataSize, indexSize] = newStats.StoragePoolsStats[*poolKindPtr];
+                dataSize += channelStats.GetDataSize();
+                indexSize += channelStats.GetIndexSize();
+            }
+            // skip update for unknown pool kind
+        }
+        // skip update for unknown channel
+        //NOTE: intentionally not logging to avoid flooding the log
     }
 
     newStats.ImmediateTxCompleted = tableStats.GetImmediateTxCompleted();
@@ -303,6 +352,69 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
 
     // Skip statistics from follower
     if (followerId) {
+        if (!isDataShard) {
+            return true;
+        }
+
+        table = Self->Tables[pathId];
+        table->UpdateShardStatsForFollower(followerId, shardIdx, newStats);
+
+        // NOTE: For split-by-size and merge-by-load cases it is sufficient
+        //       to use EvPeriodicTableStats messages only from the leader
+        //       as the trigger point. Using EvPeriodicTableStats messages from
+        //       followers to start these operations would only introduce
+        //       unnecessary load because the operations started from the follower
+        //       messages and the leader message would compete with each other,
+        //       but only one of them would win. These messages from leaders
+        //       come frequently enough to trigger these operations within
+        //       a reasonable time frame. More importantly, merge-by-load considers
+        //       only the aggregated CPU usage across all followers (and the leader).
+        //       This operation does not consider the CPU load on each individual
+        //       follower (and the leader). And split-by-size does not even consider
+        //       the CPU usage level when deciding to split a partition.
+        //
+        //       Only the split-by-load operation must be considered (and started)
+        //       when the EvPeriodicTableStats message arrives from a follower
+        //       because this operation should consider the CPU load on each specific
+        //       follower (and the leader).
+        const TTableInfo* mainTableForIndex = (Self->Indexes.contains(pathElement->ParentPathId))
+            ? Self->GetMainTableForIndex(pathId)
+            : nullptr;
+
+        TString splitReason;
+
+        if (!(table->CheckSplitByLoad(Self->SplitSettings, shardIdx, newStats.GetCurrentRawCpuUsage(), mainTableForIndex, splitReason))) {
+            LOG_DEBUG_S(
+                ctx,
+                NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "Do not want to split tablet " << datashardId
+                    << " by the CPU load from the follower ID " << followerId
+                    << ", reason: " << splitReason
+            );
+
+            return true;
+        }
+
+        LOG_NOTICE_S(
+            ctx,
+            NKikimrServices::FLAT_TX_SCHEMESHARD,
+            "Want to split tablet " << datashardId
+                << " by the CPU load from the follower ID " << followerId
+                << ", reason: " << splitReason
+        );
+
+        VerifySplitAndRequestStats(
+            ctx,
+            item.Ev->Sender,
+            datashardId,
+            shardIdx,
+            pathId,
+            pathElement,
+            subDomainInfo,
+            newStats,
+            true /* collectKeySample */
+        );
+
         return true;
     }
 
@@ -347,7 +459,7 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
                 LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                             "add stats for exists table with pathId=" << tablePathId);
 
-                Self->ColumnTables.GetVerifiedPtr(tablePathId)->UpdateTableStats(&diskSpaceUsageDelta, shardIdx, tablePathId, newTableStats, now);
+                Self->ColumnTables.GetVerifiedPtr(tablePathId)->UpdateTableStats(shardIdx, tablePathId, newTableStats, now);
             } else {
                 LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                            "failed add stats for table with pathId=" << tablePathId);
@@ -416,12 +528,18 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
     const TTableIndexInfo* index = Self->Indexes.Value(pathElement->ParentPathId, nullptr).Get();
     const TTableInfo* mainTableForIndex = (index ? Self->GetMainTableForIndex(pathId) : nullptr);
 
-    TString errStr;
+    // Save CPU resources when potential merge will certainly be immediately rejected by Self->IgniteOperation()
+    // and potential split will probably be rejected later.
+    TString inflightLimitErrStr;
+    if (!Self->CheckInFlightLimit(TTxState::ETxType::TxSplitTablePartition, inflightLimitErrStr)) {
+        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Do not consider split-merge: " << inflightLimitErrStr);
+        return true;
+    }
+
     const auto forceShardSplitSettings = Self->SplitSettings.GetForceShardSplitSettings();
     TVector<TShardIdx> shardsToMerge;
     TString mergeReason;
     if ((!index || index->State == NKikimrSchemeOp::EIndexStateReady)
-        && Self->CheckInFlightLimit(TTxState::ETxType::TxSplitTablePartition, errStr)
         && table->CheckCanMergePartitions(Self->SplitSettings, forceShardSplitSettings, shardIdx, Self->ShardInfos[shardIdx].TabletID, shardsToMerge, mainTableForIndex, now, mergeReason)
     ) {
         TTxId txId = Self->GetCachedTxId(ctx);
@@ -465,10 +583,10 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
     } else if (table->GetPartitions().size() >= table->GetMaxPartitionsCount()) {
         // We cannot split as there are max partitions already
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "Do not want to split tablet " << datashardId << " by size,"
+            "Do not want to split tablet " << datashardId << " by load,"
             << " its table already has "<< table->GetPartitions().size() << " out of " << table->GetMaxPartitionsCount() << " partitions");
         return true;
-    } else if (table->CheckSplitByLoad(Self->SplitSettings, shardIdx, dataSize, rowCount, mainTableForIndex, reason)) {
+    } else if (table->CheckSplitByLoad(Self->SplitSettings, shardIdx, newStats.GetCurrentRawCpuUsage(), mainTableForIndex, reason)) {
         LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
             "Want to split tablet " << datashardId << " by load: " << reason);
         collectKeySample = true;
@@ -478,56 +596,107 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
         return true;
     }
 
-    //NOTE: intentionally avoid using TPath.Check().{PathShardsLimit,ShardsLimit}() here.
-    // PathShardsLimit() performs pedantic validation by recalculating shard count through
-    // iteration over entire ShardInfos, which is too slow for this hot spot. It also performs
-    // additional lookups we want to avoid.
+    // This partition needs to be split (by size or by load),
+    // perform the final verification steps and send the EvGetTableStats request
+    VerifySplitAndRequestStats(
+        ctx,
+        item.Ev->Sender,
+        datashardId,
+        shardIdx,
+        pathId,
+        pathElement,
+        subDomainInfo,
+        newStats,
+        collectKeySample
+    );
+
+    return true;
+}
+
+bool TTxStoreTableStats::VerifySplitAndRequestStats(
+    const TActorContext& ctx,
+    const TActorId& statsEventSender,
+    TTabletId datashardId,
+    const TShardIdx& shardIdx,
+    const TPathId& pathId,
+    TPathElement::TPtr pathElement,
+    TSubDomainInfo::TPtr subDomainInfo,
+    const TPartitionStats& newPartitionStats,
+    bool collectKeySample
+) {
+    // NOTE: intentionally avoid using TPath.Check().{PathShardsLimit,ShardsLimit}() here.
+    // PathShardsLimit() no longer performs full shard count validation by iterating all ShardInfos
+    // (too slow for this hot path), but still does additional lookups we want to avoid.
     {
         constexpr ui64 deltaShards = 2;
         if ((pathElement->GetShardsInside() + deltaShards) > subDomainInfo->GetSchemeLimits().MaxShardsInPath) {
-            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Do not request full stats from datashard " << datashardId
-                << ", reason: shards count limit exceeded (in path)"
-                << ", limit: " << subDomainInfo->GetSchemeLimits().MaxShardsInPath
-                << ", current: " << pathElement->GetShardsInside()
-                << ", delta: " << deltaShards
+            LOG_NOTICE_S(
+                ctx,
+                NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "Do not request full stats from datashard " << datashardId
+                    << ", reason: shards count limit exceeded (in path)"
+                    << ", limit: " << subDomainInfo->GetSchemeLimits().MaxShardsInPath
+                    << ", current: " << pathElement->GetShardsInside()
+                    << ", delta: " << deltaShards
             );
-            return true;
+
+            return false;
         }
+
         const auto currentShards = (subDomainInfo->GetShardsInside() - subDomainInfo->GetBackupShards());
         if ((currentShards + deltaShards) > subDomainInfo->GetSchemeLimits().MaxShards) {
-            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Do not request full stats from datashard " << datashardId
-                << ", datashard: " << datashardId
-                << ", reason: shards count limit exceeded (in subdomain)"
-                << ", limit: " << subDomainInfo->GetSchemeLimits().MaxShards
-                << ", current: " << currentShards
-                << ", delta: " << deltaShards
+            LOG_NOTICE_S(
+                ctx,
+                NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "Do not request full stats from datashard " << datashardId
+                    << ", datashard: " << datashardId
+                    << ", reason: shards count limit exceeded (in subdomain)"
+                    << ", limit: " << subDomainInfo->GetSchemeLimits().MaxShards
+                    << ", current: " << currentShards
+                    << ", delta: " << deltaShards
             );
-            return true;
+
+            return false;
         }
     }
 
-    if (newStats.HasBorrowedData) {
-        LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "Postpone split tablet " << datashardId << " because it has borrow parts, enqueue compact them first");
+    if (newPartitionStats.HasBorrowedData) {
+        LOG_NOTICE_S(
+            ctx,
+            NKikimrServices::FLAT_TX_SCHEMESHARD,
+            "Postpone split tablet " << datashardId
+                << " because it has borrow parts, enqueue compact them first"
+        );
+
         Self->EnqueueBorrowedCompaction(shardIdx);
-        return true;
+        return false;
     }
 
     // path.IsLocked() and path.LockedBy() equivalent
     if (const auto& found = Self->LockedPaths.find(pathId); found != Self->LockedPaths.end()) {
         const auto txId = found->second;
-        LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "Postpone split tablet " << datashardId << " because it is locked by " << txId);
-        return true;
+        LOG_NOTICE_S(
+            ctx,
+            NKikimrServices::FLAT_TX_SCHEMESHARD,
+            "Postpone split tablet " << datashardId
+                << " because it is locked by " << txId
+        );
+
+        return false;
     }
 
     // Request histograms from the datashard
-    LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-        "Requesting full tablet stats " << datashardId << " to split it");
+    LOG_NOTICE_S(
+        ctx,
+        NKikimrServices::FLAT_TX_SCHEMESHARD,
+        "Requesting full tablet stats " << datashardId
+            << " to split it"
+    );
+
     auto request = new TEvDataShard::TEvGetTableStats(pathId.LocalPathId);
     request->Record.SetCollectKeySample(collectKeySample);
-    PendingMessages.emplace_back(item.Ev->Sender, request);
 
+    PendingMessages.emplace_back(statsEventSender, request);
     return true;
 }
 

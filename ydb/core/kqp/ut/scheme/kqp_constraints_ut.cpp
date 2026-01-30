@@ -353,6 +353,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
     Y_UNIT_TEST(AddColumnWithDefaultForbidden) {
         TKikimrRunner kikimr(TKikimrSettings()
+            .SetEnableAddColumsWithDefaults(false)
             .SetWithSampleTables(false));
 
         auto db = kikimr.GetQueryClient();
@@ -378,8 +379,8 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
             )";
 
             auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Column addition with default value is not supported now");
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Adding columns with defaults is disabled");
         }
     }
 
@@ -582,9 +583,10 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         }
     }
 
-    Y_UNIT_TEST(IndexedTableAndNotNullColumn) {
-        TKikimrRunner kikimr(TKikimrSettings()
-            .SetWithSampleTables(false));
+    Y_UNIT_TEST_TWIN(IndexedTableAndNotNullColumn, StreamIndex) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(StreamIndex);
+        TKikimrRunner kikimr(TKikimrSettings(appConfig).SetWithSampleTables(false));
 
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
@@ -909,6 +911,8 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
                         .String("String")
                     .AddMember("Value2")
                         .String("String2")
+                    .AddMember("Value3")
+                        .Int32(10)
                     .EndStruct();
 
             }
@@ -917,7 +921,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
                 return tableClient.BulkUpsert("/Root/AddNonColumnDoesnotReturnInternalError", rowsBuilder.Build()).GetValueSync();
             });
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SCHEME_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Missing default columns: Value3");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Column Value3 is under build operation");
         }
 
         {
@@ -957,10 +961,64 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
             runtime.Send(ev);
         }
 
-        auto result = runtime.WaitFuture(alterFuture);
+        {
+            auto rowsBuilder = NYdb::TValueBuilder();
+            rowsBuilder.BeginList();
+            for (ui32 i = 10; i <= 12; ++i) {
+                rowsBuilder.AddListItem()
+                    .BeginStruct()
+                    .AddMember("Key")
+                        .Uint32(i)
+                    .AddMember("Value")
+                        .String("String")
+                    .AddMember("Value2")
+                        .String("String2")
+                    .EndStruct();
+
+            }
+            rowsBuilder.EndList();
+            auto result = kikimr.RunCall([&] {
+                return tableClient.BulkUpsert("/Root/AddNonColumnDoesnotReturnInternalError", rowsBuilder.Build()).GetValueSync();
+            });
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Missing default columns: Value3");
+        }
+
+        runtime.WaitFuture(alterFuture);
+
+        {
+            auto rowsBuilder = NYdb::TValueBuilder();
+            rowsBuilder.BeginList();
+            for (ui32 i = 10; i <= 15; ++i) {
+                rowsBuilder.AddListItem()
+                    .BeginStruct()
+                    .AddMember("Key")
+                        .Uint32(i)
+                    .AddMember("Value")
+                        .String("String")
+                    .AddMember("Value2")
+                        .String("String2")
+                    .AddMember("Value3")
+                        .Int32(10)
+                    .EndStruct();
+
+            }
+            rowsBuilder.EndList();
+            auto result = kikimr.RunCall([&] {
+                return tableClient.BulkUpsert("/Root/AddNonColumnDoesnotReturnInternalError", rowsBuilder.Build()).GetValueSync();
+            });
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
         fCompareTable(R"([
             [1u;"Changed";"Updated";[7]];
-            [2u;"New";"text";[7]]
+            [2u;"New";"text";[7]];
+            [10u;"String";"String2";[10]];
+            [11u;"String";"String2";[10]];
+            [12u;"String";"String2";[10]];
+            [13u;"String";"String2";[10]];
+            [14u;"String";"String2";[10]];
+            [15u;"String";"String2";[10]];
         ])");
     }
 

@@ -28,4 +28,23 @@ namespace numpy
 } // namespace numpy
 PYTHONIC_NS_END
 
+#ifdef ENABLE_PYTHON_MODULE
+
+#include "pythonic/python/core.hpp"
+
+PYTHONIC_NS_BEGIN
+
+template <>
+struct to_python<numpy::functor::float128> {
+  static PyObject *convert(numpy::functor::float128 const &c);
+};
+
+template <>
+struct from_python<numpy::functor::float128> {
+  static bool is_convertible(PyObject *obj);
+  static numpy::functor::float128 convert(PyObject *obj);
+};
+PYTHONIC_NS_END
+#endif
+
 #endif

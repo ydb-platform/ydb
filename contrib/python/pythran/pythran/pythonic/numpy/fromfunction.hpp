@@ -17,17 +17,11 @@ namespace numpy
 
   template <class F, class dtype, class purity_tag>
   template <class pS>
-  types::ndarray<typename std::remove_cv<typename std::remove_reference<
-                     typename std::result_of<F(dtype)>::type>::type>::type,
-                 pS>
-  fromfunction_helper<F, 1, dtype, purity_tag>::operator()(F &&f,
-                                                           pS const &shape,
-                                                           dtype d)
+  types::ndarray<std::remove_cv_t<std::remove_reference_t<std::result_of_t<F(dtype)>>>, pS>
+  fromfunction_helper<F, 1, dtype, purity_tag>::operator()(F &&f, pS const &shape, dtype d)
   {
-    types::ndarray<typename std::remove_cv<typename std::remove_reference<
-                       typename std::result_of<F(dtype)>::type>::type>::type,
-                   pS>
-        out(shape, builtins::None);
+    types::ndarray<std::remove_cv_t<std::remove_reference_t<std::result_of_t<F(dtype)>>>, pS> out(
+        shape, builtins::None);
     long n = out.template shape<0>();
     for (long i = 0; i < n; ++i)
       out[i] = f(i);
@@ -36,18 +30,10 @@ namespace numpy
 
   template <class F, class dtype, class purity_tag>
   template <class pS>
-  types::ndarray<
-      typename std::remove_cv<typename std::remove_reference<
-          typename std::result_of<F(dtype, dtype)>::type>::type>::type,
-      pS>
-  fromfunction_helper<F, 2, dtype, purity_tag>::operator()(F &&f,
-                                                           pS const &shape,
-                                                           dtype d)
+  types::ndarray<std::remove_cv_t<std::remove_reference_t<std::result_of_t<F(dtype, dtype)>>>, pS>
+  fromfunction_helper<F, 2, dtype, purity_tag>::operator()(F &&f, pS const &shape, dtype d)
   {
-    types::ndarray<
-        typename std::remove_cv<typename std::remove_reference<
-            typename std::result_of<F(dtype, dtype)>::type>::type>::type,
-        pS>
+    types::ndarray<std::remove_cv_t<std::remove_reference_t<std::result_of_t<F(dtype, dtype)>>>, pS>
         out(shape, builtins::None);
     long n = out.template shape<0>();
     long m = out.template shape<1>();
@@ -60,12 +46,11 @@ namespace numpy
   template <class F, class pS, class dtype>
   auto fromfunction(F &&f, pS const &shape, dtype d)
       -> decltype(fromfunction_helper<F, std::tuple_size<pS>::value, dtype,
-                                      typename pythonic::purity_of<F>::type>()(
-          std::forward<F>(f), shape))
+                                      typename pythonic::purity_of<F>::type>()(std::forward<F>(f),
+                                                                               shape))
   {
     return fromfunction_helper<F, std::tuple_size<pS>::value, dtype,
-                               typename pythonic::purity_of<F>::type>()(
-        std::forward<F>(f), shape);
+                               typename pythonic::purity_of<F>::type>()(std::forward<F>(f), shape);
   }
 
   /* TODO: must specialize for higher order */

@@ -4,6 +4,7 @@
 
 #include <util/charset/utf8.h>
 #include <util/generic/scope.h>
+#include <util/thread/singleton.h>
 
 #include <fcntl.h>
 #include <stdint.h>
@@ -250,9 +251,16 @@ TString GetCommandName(Node* node) {
 }
 
 extern "C" void setup_pg_thread_cleanup() {
-    struct TThreadCleanup {
+    class TThreadCleanup {
+    public:
+        TThreadCleanup() {
+            Registry_ = NYql::TExtensionsRegistry::InstanceShared();
+        }
         ~TThreadCleanup() {
-            NYql::TExtensionsRegistry::Instance().CleanupThread();
+            if (auto registryStrong = Registry_.lock()) {
+                registryStrong->CleanupThread();
+            }
+
             destroy_timezone_hashtable();
             destroy_typecache_hashtable();
             RE_cleanup_cache();
@@ -262,9 +270,11 @@ extern "C" void setup_pg_thread_cleanup() {
             MemoryContextDelete(TopMemoryContext);
             free(MyProc);
         }
+    private:
+        std::weak_ptr<NYql::TExtensionsRegistry> Registry_;
     };
 
-    static thread_local TThreadCleanup ThreadCleanup;
+    FastTlsSingleton<TThreadCleanup>();
     Log_error_verbosity = PGERROR_DEFAULT;
     SetDatabaseEncoding(PG_UTF8);
     SetClientEncoding(PG_UTF8);

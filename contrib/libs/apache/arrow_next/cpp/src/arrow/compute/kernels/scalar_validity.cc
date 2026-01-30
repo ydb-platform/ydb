@@ -17,11 +17,11 @@
 
 #include <cmath>
 
-#include "arrow/compute/api_scalar.h"
-#include "arrow/compute/kernels/common_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/api_scalar.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/kernels/common_internal.h"
 
-#include "arrow/util/bit_util.h"
-#include "arrow/util/bitmap_ops.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bit_util.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bitmap_ops.h"
 
 namespace arrow20 {
 

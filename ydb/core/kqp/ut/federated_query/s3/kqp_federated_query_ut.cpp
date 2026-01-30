@@ -2370,7 +2370,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         }
     }
 
-    Y_UNIT_TEST(TestSecretsExistingValidation) {
+    Y_UNIT_TEST_TWIN(TestSecretsExistingValidation, UseSchemaSecrets) {
         const TString bucket = "test_bucket14";
 
         CreateBucket(bucket);
@@ -2381,17 +2381,28 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
 
         auto tc = kikimr->GetTableClient();
         auto session = tc.CreateSession().GetValueSync().GetSession();
+        { // provide grants
+            const auto result = session.ExecuteSchemeQuery("GRANT ALL ON `/Root` TO `test@builtin`").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        { // create secret
+            const auto result = session.ExecuteSchemeQuery(
+                UseSchemaSecrets ?
+                    "CREATE SECRET TestSecret WITH (value = 'test_value')" :
+                    "CREATE OBJECT TestSecret (TYPE SECRET) WITH value = `test_value`"
+            ).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
         const TString query = fmt::format(R"(
-            GRANT ALL ON `/Root` TO `test@builtin`;
-            CREATE OBJECT TestSecret (TYPE SECRET) WITH value = `test_value`;
             CREATE EXTERNAL DATA SOURCE `/Root/external_data_source` WITH (
                 SOURCE_TYPE="ObjectStorage",
                 LOCATION="{location}",
                 AUTH_METHOD="SERVICE_ACCOUNT",
                 SERVICE_ACCOUNT_ID="TestSa",
-                SERVICE_ACCOUNT_SECRET_NAME="TestSecret"
+                {secret_param_name}="TestSecret"
             );)",
-            "location"_a = GetBucketLocation(bucket)
+            "location"_a = GetBucketLocation(bucket),
+            "secret_param_name"_a = UseSchemaSecrets ? "SERVICE_ACCOUNT_SECRET_PATH" : "SERVICE_ACCOUNT_SECRET_NAME"
         );
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -2409,7 +2420,12 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
 
         TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr->GetDriver());
         UNIT_ASSERT_EQUAL_C(readyOp.Metadata().ExecStatus, EExecStatus::Failed, readyOp.Status().GetIssues().ToString());
-        UNIT_ASSERT_STRING_CONTAINS(readyOp.Status().GetIssues().ToString(), "secret with name 'TestSecret' not found");
+        UNIT_ASSERT_STRING_CONTAINS(
+            readyOp.Status().GetIssues().ToString(),
+            UseSchemaSecrets ?
+                "secret `/Root/TestSecret` not found" :
+                "secret with name 'TestSecret' not found"
+        );
     }
 
     Y_UNIT_TEST(TestOlapToS3Insert) {
@@ -2771,19 +2787,38 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         }
 
         auto db = kikimr->GetQueryClient();
-        const TString query = R"(
-            INSERT INTO test_bucket.`/result/` WITH (
-                FORMAT = "csv_with_names",
-                PARTITIONED_BY = (data)
-            )
-                (data)
-            VALUES
-                ("some_string")
-        )";
-        const auto result = db.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-        const auto& issues = result.GetIssues().ToString();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, issues);
-        UNIT_ASSERT_STRING_CONTAINS(issues, "Write schema contains no columns except partitioning columns.");
+        {
+            const TString query = R"(
+                INSERT INTO test_bucket.`/result/` WITH (
+                    FORMAT = "csv_with_names",
+                    PARTITIONED_BY = (data)
+                )
+                    (data)
+                VALUES
+                    ("some_string")
+            )";
+            const auto result = db.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            const auto& issues = result.GetIssues().ToString();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, issues);
+            UNIT_ASSERT_STRING_CONTAINS(issues, "Write schema contains no columns except partitioning columns.");
+        }
+
+        {
+            const TString query = R"(
+                INSERT INTO test_bucket.`/result/` WITH (
+                    FORMAT = "csv_with_names",
+                    PARTITIONED_BY = (data)
+                )
+                    (data)
+                VALUES
+                    (CurrentUtcTimestamp() + Interval("PT2H"))
+            )";
+            const auto result = db.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            const auto& issues = result.GetIssues().ToString();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, issues);
+            UNIT_ASSERT_STRING_CONTAINS(issues, "At partition key: 'data'");
+            UNIT_ASSERT_STRING_CONTAINS(issues, "Expected data type, but got: Optional<Timestamp>");
+        }
     }
 
     Y_UNIT_TEST(TestVariantTypeValidation) {
@@ -2833,6 +2868,177 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         const auto& issues = result.GetIssues().ToString();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, issues);
         UNIT_ASSERT_STRING_CONTAINS(issues, "Field 'data' has incompatible with S3 json_list input format type: Variant");
+    }
+
+    Y_UNIT_TEST(TestReadingFromFileValidation) {
+        {
+            TFileOutput out("data.txt");
+            out << R"({"data": "test_data"})";
+        }
+
+        auto kikimr = NTestUtils::MakeKikimrRunner();
+        auto tc = kikimr->GetTableClient();
+        auto session = tc.CreateSession().ExtractValueSync().GetSession();
+        {
+            const TString query = R"(
+                CREATE EXTERNAL DATA SOURCE test_bucket WITH (
+                    SOURCE_TYPE = "ObjectStorage",
+                    LOCATION = "file://./",
+                    AUTH_METHOD = "NONE"
+                );)";
+            const auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        auto db = kikimr->GetQueryClient();
+        {
+            const TString query = R"(
+                SELECT * FROM test_bucket.`data.txt` WITH (
+                    FORMAT = raw,
+                    SCHEMA (
+                        data String
+                    )
+                );
+            )";
+            const auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            const auto& issues = result.GetIssues().ToString();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, issues);
+            UNIT_ASSERT_STRING_CONTAINS(issues, "Reading from files is not supported with format 'raw'");
+        }
+
+        {
+            const TString query = R"(
+                PRAGMA s3.AsyncDecompressing = "TRUE";
+
+                SELECT * FROM test_bucket.`data.txt` WITH (
+                    FORMAT = json_each_row,
+                    SCHEMA (
+                        data String
+                    )
+                );
+            )";
+            const auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            const auto& issues = result.GetIssues().ToString();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, issues);
+            UNIT_ASSERT_STRING_CONTAINS(issues, "Reading from files is not supported with enabled pragma s3.AsyncDecompressing, to read from files use: PRAGMA s3.AsyncDecompressing = \"FALSE\"");
+        }
+
+        {
+            const TString query = R"(
+                PRAGMA s3.UseRuntimeListing = "TRUE";
+
+                SELECT * FROM test_bucket.`/` WITH (
+                    FORMAT = json_each_row,
+                    SCHEMA (
+                        data String
+                    )
+                );
+            )";
+            const auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            const auto& issues = result.GetIssues().ToOneLineString();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, issues);
+            UNIT_ASSERT_STRING_CONTAINS(issues, "Subdirectory listing is not supported for local files (can not use delimiter: '/')");
+        }
+    }
+
+    Y_UNIT_TEST(TestAsyncDecompressionErrorHandle) {
+        const TString bucket = "test_async_decompressing_error_bucket";
+        CreateBucketWithObject(bucket, "test/data.json", R"({"data": "test_data"})");
+
+        auto kikimr = NTestUtils::MakeKikimrRunner();
+        auto tc = kikimr->GetTableClient();
+        auto session = tc.CreateSession().ExtractValueSync().GetSession();
+        {
+            const TString query = fmt::format(R"(
+                CREATE EXTERNAL DATA SOURCE test_bucket WITH (
+                    SOURCE_TYPE = "ObjectStorage",
+                    LOCATION = "{location}",
+                    AUTH_METHOD = "NONE"
+                );)",
+                "location"_a = GetBucketLocation(bucket)
+            );
+            const auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        auto db = kikimr->GetQueryClient();
+
+        const TString query = R"(
+            PRAGMA s3.AsyncDecompressing = "TRUE";
+
+            SELECT * FROM test_bucket.`test/data.json` WITH (
+                FORMAT = json_each_row,
+                COMPRESSION = zstd,
+                SCHEMA (
+                    data String
+                )
+            );
+        )";
+        const auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+        const auto& issues = result.GetIssues().ToString();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, issues);
+        UNIT_ASSERT_STRING_CONTAINS(issues, "Error while reading file test/data.json");
+        UNIT_ASSERT_STRING_CONTAINS(issues, "Decompress failed: Unknown frame descriptor");
+    }
+
+    Y_UNIT_TEST(TestAsyncDecompressionWithLargeFile) {
+        const TString bucket = "test_async_decompressing_with_large_file_bucket";
+        CreateBucket(bucket);
+
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableQueryServiceConfig()->MutableS3()->SetDataInflight(1_KB);
+
+        auto kikimr = NTestUtils::MakeKikimrRunner(appConfig);
+        auto tc = kikimr->GetTableClient();
+        auto session = tc.CreateSession().ExtractValueSync().GetSession();
+        {
+            const TString query = fmt::format(R"(
+                CREATE EXTERNAL DATA SOURCE test_bucket WITH (
+                    SOURCE_TYPE = "ObjectStorage",
+                    LOCATION = "{location}",
+                    AUTH_METHOD = "NONE"
+                );)",
+                "location"_a = GetBucketLocation(bucket)
+            );
+            const auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        auto db = kikimr->GetQueryClient();
+        {
+            const TString query = fmt::format(R"(
+                INSERT INTO test_bucket.`test/` WITH (
+                    FORMAT = csv_with_names,
+                    COMPRESSION = zstd
+                ) SELECT
+                    data,
+                    RandomNumber(TableRow()) AS guid
+                FROM AS_TABLE(ListReplicate(<|data: "{payload}"|>, 10000)))",
+                "payload"_a = TString(200, 'X')
+            );
+            const auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        const TString query = R"(
+            PRAGMA s3.AsyncDecompressing = "TRUE";
+
+            SELECT COUNT(*) FROM test_bucket.`test/` WITH (
+                FORMAT = csv_with_names,
+                COMPRESSION = zstd,
+                SCHEMA (
+                    data String NOT NULL,
+                    guid Uint64 NOT NULL,
+                )
+            );
+        )";
+        const auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
+
+        auto resultSet = result.GetResultSetParser(0);
+        UNIT_ASSERT(resultSet.TryNextRow());
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetUint64(), 10000);
     }
 
     Y_UNIT_TEST(TestRestartQueryAndCleanupWithGetOperation) {
@@ -3145,6 +3351,248 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
             const auto result = clientA.Forget(opId).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
         }
+    }
+
+    Y_UNIT_TEST(TestCacheInvalidationOnExternalDataSourceChange) {
+        constexpr char bucket[] = "testCacheInvalidationOnExternalDataSourceChange";
+        CreateBucket(bucket);
+
+        NKikimrConfig::TAppConfig config;
+        config.MutableFeatureFlags()->SetEnableReplaceIfExistsForExternalEntities(true);
+
+        auto kikimr = NTestUtils::MakeKikimrRunner(config);
+        auto db = kikimr->GetQueryClient();
+
+        constexpr char externalDataSourceName[] = "externalDataSource";
+        {
+            const auto result = db.ExecuteQuery(fmt::format(R"(
+                CREATE EXTERNAL DATA SOURCE `{external_source}` WITH (
+                    SOURCE_TYPE="ObjectStorage",
+                    LOCATION="{location}",
+                    AUTH_METHOD="NONE"
+                );)",
+                "external_source"_a = externalDataSourceName,
+                "location"_a = GetBucketLocation(bucket)
+            ), TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+        }
+
+        const auto query = fmt::format(R"(
+            INSERT INTO `{external_source}`.`path/` WITH (
+                FORMAT = json_each_row
+            ) (year, month) VALUES (2020, 1))",
+            "external_source"_a = externalDataSourceName
+        );
+
+        {
+            const auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_VALUES_EQUAL(GetAllObjects(bucket), "{\"month\":1,\"year\":2020}\n");
+        }
+
+        {
+            const auto result = db.ExecuteQuery(fmt::format(R"(
+                CREATE OR REPLACE EXTERNAL DATA SOURCE `{external_source}` WITH (
+                    SOURCE_TYPE="ObjectStorage",
+                    LOCATION="{location}",
+                    AUTH_METHOD="NONE"
+                );)",
+                "external_source"_a = externalDataSourceName,
+                "location"_a = TStringBuilder() << GetEnv("S3_ENDPOINT") << "/unknown_bucket/"
+            ), TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+        }
+
+        {
+            const auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "The specified bucket does not exist");
+            UNIT_ASSERT_VALUES_EQUAL(GetAllObjects(bucket), "{\"month\":1,\"year\":2020}\n");
+        }
+    }
+
+    Y_UNIT_TEST(TestCacheInvalidationOnExternalTableChange) {
+        constexpr char bucket[] = "testCacheInvalidationOnExternalTableChange";
+        CreateBucket(bucket);
+
+        NKikimrConfig::TAppConfig config;
+        config.MutableFeatureFlags()->SetEnableReplaceIfExistsForExternalEntities(true);
+
+        auto kikimr = NTestUtils::MakeKikimrRunner(config);
+        auto db = kikimr->GetQueryClient();
+
+        constexpr char externalDataSourceName[] = "externalDataSource";
+        constexpr char externalTableName[] = "externalTable";
+        {
+            const auto result = db.ExecuteQuery(fmt::format(R"(
+                CREATE EXTERNAL DATA SOURCE `{external_source}` WITH (
+                    SOURCE_TYPE="ObjectStorage",
+                    LOCATION="{location}",
+                    AUTH_METHOD="NONE"
+                );
+                CREATE EXTERNAL TABLE `{external_table}` (
+                    year Int32 NOT NULL,
+                    month Int32 NOT NULL
+                ) WITH (
+                    DATA_SOURCE="{external_source}",
+                    LOCATION="path/",
+                    FORMAT="json_each_row"
+                );)",
+                "external_source"_a = externalDataSourceName,
+                "external_table"_a = externalTableName,
+                "location"_a = GetBucketLocation(bucket)
+            ), TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+        }
+
+        const auto query = fmt::format(
+            "INSERT INTO `{external_table}` (year, month) VALUES (2020, 1)",
+            "external_table"_a = externalTableName
+        );
+
+        {
+            const auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_VALUES_EQUAL(GetAllObjects(bucket), "{\"month\":1,\"year\":2020}\n");
+        }
+
+        {
+            const auto result = db.ExecuteQuery(fmt::format(R"(
+                CREATE OR REPLACE EXTERNAL TABLE `{external_table}` (
+                    yearx String NOT NULL,
+                    monthx String NOT NULL
+                ) WITH (
+                    DATA_SOURCE="{external_source}",
+                    LOCATION="path/",
+                    FORMAT="json_each_row"
+                );)",
+                "external_source"_a = externalDataSourceName,
+                "external_table"_a = externalTableName
+            ), TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+        }
+
+        {
+            const auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Failed to convert input columns types to scheme types");
+            UNIT_ASSERT_VALUES_EQUAL(GetAllObjects(bucket), "{\"month\":1,\"year\":2020}\n");
+        }
+    }
+
+    Y_UNIT_TEST(TestCacheInvalidationOnUnderlyingExternalDataSourceChange) {
+        constexpr char bucket[] = "testCacheInvalidationOnUnderlyingExternalDataSourceChange";
+        CreateBucket(bucket);
+
+        NKikimrConfig::TAppConfig config;
+        config.MutableFeatureFlags()->SetEnableReplaceIfExistsForExternalEntities(true);
+
+        auto kikimr = NTestUtils::MakeKikimrRunner(config);
+        auto db = kikimr->GetQueryClient();
+
+        constexpr char externalDataSourceName[] = "externalDataSource";
+        constexpr char externalTableName[] = "externalTable";
+        {
+            const auto result = db.ExecuteQuery(fmt::format(R"(
+                CREATE EXTERNAL DATA SOURCE `{external_source}` WITH (
+                    SOURCE_TYPE="ObjectStorage",
+                    LOCATION="{location}",
+                    AUTH_METHOD="NONE"
+                );
+                CREATE EXTERNAL TABLE `{external_table}` (
+                    year Int32 NOT NULL,
+                    month Int32 NOT NULL
+                ) WITH (
+                    DATA_SOURCE="{external_source}",
+                    LOCATION="path/",
+                    FORMAT="json_each_row"
+                );)",
+                "external_source"_a = externalDataSourceName,
+                "external_table"_a = externalTableName,
+                "location"_a = GetBucketLocation(bucket)
+            ), TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+        }
+
+        const auto query = fmt::format(
+            "INSERT INTO `{external_table}` (year, month) VALUES (2020, 1)",
+            "external_table"_a = externalTableName
+        );
+
+        {
+            const auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_VALUES_EQUAL(GetAllObjects(bucket), "{\"month\":1,\"year\":2020}\n");
+        }
+
+        {
+            const auto result = db.ExecuteQuery(fmt::format(R"(
+                CREATE OR REPLACE EXTERNAL DATA SOURCE `{external_source}` WITH (
+                    SOURCE_TYPE="ObjectStorage",
+                    LOCATION="{location}",
+                    AUTH_METHOD="NONE"
+                );)",
+                "external_source"_a = externalDataSourceName,
+                "location"_a = TStringBuilder() << GetEnv("S3_ENDPOINT") << "/unknown_bucket/"
+            ), TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+        }
+
+        {
+            const auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "The specified bucket does not exist");
+            UNIT_ASSERT_VALUES_EQUAL(GetAllObjects(bucket), "{\"month\":1,\"year\":2020}\n");
+        }
+    }
+
+    Y_UNIT_TEST(ExecuteQueryWithReplicatedS3Write) {
+        const TString externalDataSourceName = "/Root/external_data_source";
+        const TString externalTableName = "/Root/test_binding_resolve";
+        const TString bucket = "test_bucket_s3_replicate";
+        const TString object = "object/test_object";
+
+        CreateBucketWithObject(bucket, object, "test-data");
+
+        auto kikimr = NTestUtils::MakeKikimrRunner();
+        auto db = kikimr->GetQueryClient();
+
+        {
+            const auto result = db.ExecuteQuery(fmt::format(R"(
+                CREATE EXTERNAL DATA SOURCE `{external_source}` WITH (
+                    SOURCE_TYPE = "ObjectStorage",
+                    LOCATION = "{location}",
+                    AUTH_METHOD = "NONE"
+                );
+                CREATE EXTERNAL TABLE `{external_table}` (
+                    Data String NOT NULL
+                ) WITH (
+                    DATA_SOURCE = "{external_source}",
+                    LOCATION = "{object}",
+                    FORMAT = "raw"
+                );)",
+                "external_source"_a = externalDataSourceName,
+                "external_table"_a = externalTableName,
+                "location"_a = GetBucketLocation(bucket),
+                "object"_a = EscapeC(object)
+            ), TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+        }
+
+        {
+            const auto result = db.ExecuteQuery(fmt::format(R"(
+                INSERT INTO `{external_source}`.`test-1/` WITH (FORMAT = "csv_with_names")
+                SELECT * FROM `{external_table}`;
+
+                INSERT INTO `{external_source}`.`test-2/` WITH (FORMAT = "csv_with_names")
+                SELECT * FROM `{external_table}`;)",
+                "external_source"_a = externalDataSourceName,
+                "external_table"_a = externalTableName
+            ), TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(GetAllObjects(bucket), "test-data\"Data\"\n\"test-data\"\n\"Data\"\n\"test-data\"\n");
     }
 }
 

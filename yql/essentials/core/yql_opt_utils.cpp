@@ -133,6 +133,10 @@ TExprNode::TPtr MakeOptionalBool(TPositionHandle position, bool value, TExprCont
     return ctx.NewCallable(position, "Just", { MakeBool(position, value, ctx)});
 }
 
+TExprNode::TPtr MakeString(TPositionHandle position, TStringBuf buf, TExprContext& ctx) {
+    return ctx.Builder(position).Callable("String").Atom(0, buf).Seal().Build();
+}
+
 TExprNode::TPtr MakePgBool(TPositionHandle position, bool value, TExprContext& ctx) {
     return ctx.NewCallable(position, "PgConst", {
         ctx.NewAtom(position, value ? "t" : "f", TNodeFlags::Default),
@@ -2150,12 +2154,12 @@ TExprNode::TPtr FindNonYieldTransparentNode(const TExprNode::TPtr& root, const T
         });
     }
 
-    static const THashSet<TStringBuf> WHITE_LIST = {"EmptyIterator"sv, TCoToStream::CallableName(), TCoIterator::CallableName(),
+    static const THashSet<TStringBuf> WhiteList = {"EmptyIterator"sv, TCoToStream::CallableName(), TCoIterator::CallableName(),
         TCoToFlow::CallableName(), TCoApply::CallableName(), TCoNth::CallableName(), TCoMux::CallableName()};
     // Find all other flow sources (readers)
     auto sources = FindNodes(from,
         [](const TExprNode::TPtr& node) {
-            return !node->IsCallable(WHITE_LIST)
+            return !node->IsCallable(WhiteList)
                 && node->IsCallable()
                 && IsFlowOrStream(*node)
                 && (node->ChildrenSize() == 0 || !IsFlowOrStream(node->Head()));
@@ -2814,8 +2818,12 @@ bool IsNormalizedDependsOn(const TExprNode& node) {
     return false;
 }
 
+bool IsForbidConstantDependsEnabled(const TTypeAnnotationContext& types) {
+    return !IsOptimizerDisabled<ForbidConstantDependsOnFuseOptName>(types);
+}
+
 bool CanFuseLambdas(const TExprNode& outer, const TExprNode& inner, const TTypeAnnotationContext& types) {
-    if (!IsOptimizerEnabled<ForbidConstantDependsOnFuseOptName>(types) || IsOptimizerDisabled<ForbidConstantDependsOnFuseOptName>(types)) {
+    if (!IsForbidConstantDependsEnabled(types)) {
         return true;
     }
 
@@ -2858,8 +2866,14 @@ bool CanFuseLambdas(const TExprNode& outer, const TExprNode& inner, const TTypeA
 
 bool CanApplyExtractMembersToPartitionsByKeys(const TTypeAnnotationContext* types) {
     YQL_ENSURE(types);
-    static const char optName[] = "ExtractMembersForPartitionsByKeys";
-    return IsOptimizerEnabled<optName>(*types) && !IsOptimizerDisabled<optName>(*types);
+    static const char OptName[] = "ExtractMembersForPartitionsByKeys";
+    return !IsOptimizerDisabled<OptName>(*types);
+}
+
+bool IsEmitPruneKeysEnabled(const TTypeAnnotationContext* types) {
+    YQL_ENSURE(types);
+    static const char OptName[] = "EmitPruneKeys";
+    return IsOptimizerEnabled<OptName>(*types) && !IsOptimizerDisabled<OptName>(*types);
 }
 
 }

@@ -44,6 +44,7 @@ class Client(ABC):
     database = None
     max_error_message = 0
     apply_server_timezone = False
+    utc_tz_aware = False
     show_clickhouse_errors = True
 
     def __init__(self,
@@ -53,12 +54,15 @@ class Client(ABC):
                  query_retries: int,
                  server_host_name: Optional[str],
                  apply_server_timezone: Optional[Union[str, bool]],
+                 utc_tz_aware: Optional[bool],
                  show_clickhouse_errors: Optional[bool]):
         """
         Shared initialization of ClickHouse Connect client
         :param database: database name
         :param query_limit: default LIMIT for queries
         :param uri: uri for error messages
+        :param utc_tz_aware: Default timezone behavior when the active timezone resolves to UTC.  If True,
+          timezone-aware UTC datetimes are returned; otherwise legacy naive datetimes are used.
         """
         self.query_limit = coerce_int(query_limit)
         self.query_retries = coerce_int(query_retries)
@@ -68,6 +72,7 @@ class Client(ABC):
             self.show_clickhouse_errors = coerce_bool(show_clickhouse_errors)
         self.server_host_name = server_host_name
         self.uri = uri
+        self.utc_tz_aware = bool(utc_tz_aware)
         self._init_common_settings(apply_server_timezone)
 
     def _init_common_settings(self, apply_server_timezone: Optional[Union[str, bool]]):
@@ -213,6 +218,7 @@ class Client(ABC):
               context: QueryContext = None,
               query_tz: Optional[Union[str, tzinfo]] = None,
               column_tzs: Optional[Dict[str, Union[str, tzinfo]]] = None,
+              utc_tz_aware: Optional[bool] = None,
               external_data: Optional[ExternalData] = None,
               transport_settings: Optional[Dict[str, str]] = None) -> QueryResult:
         """
@@ -248,6 +254,7 @@ class Client(ABC):
                                   context: QueryContext = None,
                                   query_tz: Optional[Union[str, tzinfo]] = None,
                                   column_tzs: Optional[Dict[str, Union[str, tzinfo]]] = None,
+                                  utc_tz_aware: Optional[bool] = None,
                                   external_data: Optional[ExternalData] = None,
                                   transport_settings: Optional[Dict[str, str]] = None) -> StreamContext:
         """
@@ -268,6 +275,7 @@ class Client(ABC):
                                context: QueryContext = None,
                                query_tz: Optional[Union[str, tzinfo]] = None,
                                column_tzs: Optional[Dict[str, Union[str, tzinfo]]] = None,
+                               utc_tz_aware: Optional[bool] = None,
                                external_data: Optional[ExternalData] = None,
                                transport_settings: Optional[Dict[str, str]] = None) -> StreamContext:
         """
@@ -288,6 +296,7 @@ class Client(ABC):
                           context: QueryContext = None,
                           query_tz: Optional[Union[str, tzinfo]] = None,
                           column_tzs: Optional[Dict[str, Union[str, tzinfo]]] = None,
+                          utc_tz_aware: Optional[bool] = None,
                           external_data: Optional[ExternalData] = None,
                           transport_settings: Optional[Dict[str, str]] = None) -> StreamContext:
         """
@@ -396,6 +405,7 @@ class Client(ABC):
                  use_na_values: Optional[bool] = None,
                  query_tz: Optional[str] = None,
                  column_tzs: Optional[Dict[str, Union[str, tzinfo]]] = None,
+                 utc_tz_aware: Optional[bool] = None,
                  context: QueryContext = None,
                  external_data: Optional[ExternalData] = None,
                  use_extended_dtypes: Optional[bool] = None,
@@ -422,6 +432,7 @@ class Client(ABC):
                         use_na_values: Optional[bool] = None,
                         query_tz: Optional[str] = None,
                         column_tzs: Optional[Dict[str, Union[str, tzinfo]]] = None,
+                        utc_tz_aware: Optional[bool] = None,
                         context: QueryContext = None,
                         external_data: Optional[ExternalData] = None,
                         use_extended_dtypes: Optional[bool] = None,
@@ -451,6 +462,7 @@ class Client(ABC):
                              context: Optional[QueryContext] = None,
                              query_tz: Optional[Union[str, tzinfo]] = None,
                              column_tzs: Optional[Dict[str, Union[str, tzinfo]]] = None,
+                             utc_tz_aware: Optional[bool] = None,
                              use_na_values: Optional[bool] = None,
                              streaming: bool = False,
                              as_pandas: bool = False,
@@ -479,6 +491,8 @@ class Client(ABC):
           objects with the selected timezone.
         :param column_tzs: A dictionary of column names to tzinfo objects (or strings that will be converted to
           tzinfo objects).  The timezone will be applied to datetime objects returned in the query
+        :param utc_tz_aware: Override the client default for handling UTC results.  True forces timezone-aware
+          UTC datetimes while False returns naive UTC datetimes.
         :param use_na_values: Deprecated alias for use_advanced_dtypes
         :param as_pandas Return the result columns as pandas.Series objects
         :param streaming Marker used to correctly configure streaming queries
@@ -489,6 +503,7 @@ class Client(ABC):
         :param transport_settings: Optional dictionary of transport level settings (HTTP headers, etc.)
         :return: Reusable QueryContext
         """
+        resolved_utc_tz_aware = self.utc_tz_aware if utc_tz_aware is None else utc_tz_aware
         if context:
             return context.updated_copy(query=query,
                                         parameters=parameters,
@@ -503,6 +518,7 @@ class Client(ABC):
                                         max_str_len=max_str_len,
                                         query_tz=query_tz,
                                         column_tzs=column_tzs,
+                                        utc_tz_aware=resolved_utc_tz_aware,
                                         as_pandas=as_pandas,
                                         use_extended_dtypes=use_extended_dtypes,
                                         streaming=streaming,
@@ -527,6 +543,7 @@ class Client(ABC):
                             max_str_len=max_str_len,
                             query_tz=query_tz,
                             column_tzs=column_tzs,
+                            utc_tz_aware=resolved_utc_tz_aware,
                             use_extended_dtypes=use_extended_dtypes,
                             as_pandas=as_pandas,
                             streaming=streaming,
@@ -944,7 +961,7 @@ class Client(ABC):
                 full_table = quote_identifier(table)
         column_defs = []
         if column_types is None and column_type_names is None:
-            describe_result = self.query(f'DESCRIBE TABLE {full_table}')
+            describe_result = self.query(f'DESCRIBE TABLE {full_table}', settings=settings)
             column_defs = [ColumnDef(**row) for row in describe_result.named_results()
                            if row['default_type'] not in ('ALIAS', 'MATERIALIZED')]
         if column_names is None or isinstance(column_names, str) and column_names == '*':

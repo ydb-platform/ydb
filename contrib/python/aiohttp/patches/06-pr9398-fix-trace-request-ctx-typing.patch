@@ -1,0 +1,32 @@
+#
+#    back-port pull-req #9398
+#
+--- contrib/python/aiohttp/aiohttp/client.py
++++ contrib/python/aiohttp/aiohttp/client.py
+@@ -178,7 +178,7 @@ class _RequestOptions(TypedDict, total=False):
+     ssl: Union[SSLContext, bool, Fingerprint]
+     server_hostname: Union[str, None]
+     proxy_headers: Union[LooseHeaders, None]
+-    trace_request_ctx: Union[Mapping[str, str], None]
++    trace_request_ctx: Union[Mapping[str, Any], None]
+     read_bufsize: Union[int, None]
+     auto_decompress: Union[bool, None]
+     max_line_size: Union[int, None]
+--- contrib/python/aiohttp/aiohttp/tracing.py
++++ contrib/python/aiohttp/aiohttp/tracing.py
+@@ -1,5 +1,5 @@
+ from types import SimpleNamespace
+-from typing import TYPE_CHECKING, Awaitable, Mapping, Optional, Protocol, Type, TypeVar
++from typing import TYPE_CHECKING, Any, Awaitable, Mapping, Optional, Protocol, Type, TypeVar
+ 
+ import attr
+ from aiosignal import Signal
+@@ -64,7 +64,7 @@ class TraceConfig:
+         self._trace_config_ctx_factory = trace_config_ctx_factory
+ 
+     def trace_config_ctx(
+-        self, trace_request_ctx: Optional[Mapping[str, str]] = None
++        self, trace_request_ctx: Optional[Mapping[str, Any]] = None
+     ) -> SimpleNamespace:
+         """Return a new trace_config_ctx instance"""
+         return self._trace_config_ctx_factory(trace_request_ctx=trace_request_ctx)

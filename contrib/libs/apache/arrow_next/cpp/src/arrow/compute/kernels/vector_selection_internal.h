@@ -22,12 +22,12 @@
 #include <string>
 #include <vector>
 
-#include "arrow/array/data.h"
-#include "arrow/compute/api_vector.h"
-#include "arrow/compute/exec.h"
-#include "arrow/compute/function.h"
-#include "arrow/compute/kernel.h"
-#include "arrow/compute/kernels/codegen_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/data.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/api_vector.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/exec.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/function.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/kernel.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/kernels/codegen_internal.h"
 
 namespace arrow20::compute::internal {
 

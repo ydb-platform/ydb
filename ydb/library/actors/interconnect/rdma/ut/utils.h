@@ -5,6 +5,7 @@
 #include <ydb/library/actors/interconnect/rdma/cq_actor/cq_actor.h>
 #include <ydb/library/actors/interconnect/rdma/mem_pool.h>
 #include <ydb/library/actors/interconnect/rdma/rdma.h>
+#include <ydb/library/actors/interconnect/rdma/ut/utils/utils.h>
 
 #include <ydb/library/actors/testlib/test_runtime.h>
 
@@ -13,9 +14,6 @@ namespace NInterconnect::NRdma {
 }
 
 namespace NRdmaTest {
-
-extern const char* RdmaTestEnvSwitchName;
-bool IsRdmaTestDisabled();
 
 inline void GTestSkip() {
     GTEST_SKIP() << "Skipping all rdma tests for suit, set \""
@@ -40,7 +38,7 @@ enum class EReadResult {
 
 std::tuple<THolder<NActors::TTestActorRuntimeBase>, NInterconnect::NRdma::TRdmaCtx*> PrepareTestRuntime(TString defIp);
 
-std::shared_ptr<TLocalRdmaStuff> InitLocalRdmaStuff(TString bindTo="::1");
+std::shared_ptr<TLocalRdmaStuff> InitLocalRdmaStuff(TString bindTo, NInterconnect::NRdma::ECqMode cqMode);
 
 EReadResult ReadOneMemRegion(std::shared_ptr<TLocalRdmaStuff> rdma, std::shared_ptr<NInterconnect::NRdma::TQueuePair> qp,
     void* dstAddr, ui32 dstRkey, int dstSize, NInterconnect::NRdma::TMemRegionPtr& src, std::function<void()> hook = {});

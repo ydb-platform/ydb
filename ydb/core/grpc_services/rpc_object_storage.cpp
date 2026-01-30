@@ -444,7 +444,7 @@ private:
 
     void ResolveShards(const NActors::TActorContext& ctx) {
         TAutoPtr<NSchemeCache::TSchemeCacheRequest> request(new NSchemeCache::TSchemeCacheRequest());
-
+        request->DatabaseName = GrpcRequest->GetDatabaseName().GetOrElse("");
         request->ResultSet.emplace_back(std::move(KeyRange));
 
         TAutoPtr<TEvTxProxySchemeCache::TEvResolveKeySet> resolveReq(new TEvTxProxySchemeCache::TEvResolveKeySet(request));

@@ -20,7 +20,7 @@
 #include <sstream>
 #include <unordered_map>
 
-#include "arrow/util/logger.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logger.h"
 
 namespace arrow20 {
 namespace util {

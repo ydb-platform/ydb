@@ -1,5 +1,6 @@
 #pragma once
 
+#include "api_service_proxy.h"
 #include "public.h"
 
 #include <yt/yt/library/re2/re2.h>
@@ -13,6 +14,10 @@
 #include <library/cpp/yt/memory/ref.h>
 
 namespace NYT::NApi::NRpcProxy {
+
+////////////////////////////////////////////////////////////////////////////////
+
+void PatchProxyForStallRequests(const TConnectionConfigPtr& config, TApiServiceProxy* proxy);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -123,6 +128,22 @@ void ToProto(
 void FromProto(
     NApi::TOperationEvent* result,
     const NProto::TOperationEvent& proto);
+
+void ToProto(
+    NProto::TJobTrace* proto,
+    const NApi::TJobTraceMeta& result);
+
+void FromProto(
+    NApi::TJobTraceMeta* result,
+    const NProto::TJobTrace& proto);
+
+void ToProto(
+    NProto::TCheckOperationPermissionResult* proto,
+    const NApi::TCheckOperationPermissionResult& result);
+
+void FromProto(
+    NApi::TCheckOperationPermissionResult* result,
+    const NProto::TCheckOperationPermissionResult& proto);
 
 void ToProto(NProto::TColumnSchema* protoSchema, const NTableClient::TColumnSchema& schema);
 void FromProto(NTableClient::TColumnSchema* schema, const NProto::TColumnSchema& protoSchema);
@@ -262,6 +283,10 @@ void FromProto(
     NApi::TQuery* query,
     const NProto::TQuery& protoQuery);
 
+void FromProto(
+    NApi::TSuppressableAccessTrackingOptions* options,
+    const NApi::NRpcProxy::NProto::TSuppressableAccessTrackingOptions& proto);
+
 NProto::EOperationType ConvertOperationTypeToProto(
     NScheduler::EOperationType operationType);
 
@@ -315,6 +340,56 @@ NApi::EJobStderrType ConvertJobStderrTypeFromProto(
 
 NProto::EJobStderrType ConvertJobStderrTypeToProto(
     NApi::EJobStderrType jobStderrType);
+
+NProto::EJobTraceProgress ConvertJobTraceProgressToProto(
+    NApi::EJobTraceProgress progress);
+
+NApi::EJobTraceProgress ConvertJobTraceProgressFromProto(
+    NProto::EJobTraceProgress proto);
+
+NProto::EJobTraceHealth ConvertJobTraceHealthToProto(
+    NApi::EJobTraceHealth health);
+
+NApi::EJobTraceHealth ConvertJobTraceHealthFromProto(
+    NProto::EJobTraceHealth proto);
+
+NProto::EJobTraceState ConvertJobTraceStateToProto(
+    NJobTrackerClient::EJobTraceState state);
+
+NJobTrackerClient::EJobTraceState ConvertJobTraceStateFromProto(
+    NProto::EJobTraceState proto);
+
+////////////////////////////////////////////////////////////////////////////////
+
+void FillRequest(
+    TReqReadTable* req,
+    const NYPath::TRichYPath& path,
+    const std::optional<NYson::TYsonString>& format,
+    const TTableReaderOptions& options);
+
+void ParseRequest(
+    NYPath::TRichYPath* mutablePath,
+    std::optional<NYson::TYsonStringBuf>* mutableFormat,
+    ERowsetFormat* mutableDesiredRowsetFormat,
+    ERowsetFormat* mutableArrowFallbackFormat,
+    TTableReaderOptions* mutableOptions,
+    const TReqReadTable& req);
+
+////////////////////////////////////////////////////////////////////////////////
+
+void FillRequest(
+    TReqReadTablePartition* req,
+    const TTablePartitionCookiePtr& cookie,
+    const std::optional<NYson::TYsonString>& format,
+    const TReadTablePartitionOptions& options);
+
+void ParseRequest(
+    TTablePartitionCookiePtr* mutableCookie,
+    std::optional<NYson::TYsonStringBuf>* mutableFormat,
+    ERowsetFormat* mutableDesiredRowsetFormat,
+    ERowsetFormat* mutableArrowFallbackFormat,
+    TReadTablePartitionOptions* mutableOptions,
+    const TReqReadTablePartition& req);
 
 ////////////////////////////////////////////////////////////////////////////////
 

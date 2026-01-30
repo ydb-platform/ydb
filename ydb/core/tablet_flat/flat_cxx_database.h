@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/core/tablet_flat/flat_backup.h>
 #include <ydb/core/tablet_flat/flat_database.h>
 #include <ydb/core/util/tuples.h>
 #include <ydb/core/base/blobstorage_common.h>
@@ -18,6 +19,7 @@ namespace NIceDb {
 using TToughDb = NTable::TDatabase;
 using NTable::TUpdateOp;
 using NTable::ELookup;
+using NTable::TBackupExclusion;
 
 class TTypeValue : public TRawTypeValue {
 public:
@@ -127,7 +129,7 @@ public:
     }
 
     operator i32() const {
-        Y_ENSURE((Type() == NScheme::NTypeIds::Int32 
+        Y_ENSURE((Type() == NScheme::NTypeIds::Int32
                   || Type() == NScheme::NTypeIds::Date32)
                  && Size() == sizeof(i32), "Data=" << (const void*)Data() << ", Type=" << (i64)Type() << ", Size=" << (i64)Size());
         i32 value = ReadUnaligned<i32>(reinterpret_cast<const i32*>(Data()));
@@ -693,17 +695,28 @@ struct Schema {
     struct NoAutoPrecharge {};
     struct AutoPrecharge {};
 
+    // Excludes table or column data from system tablet backup. Can't be applied to key columns.
+    // When applied to a column, an update to a row containing only the excluded columns will
+    // not be recorded in the backup's changelog, even if it involves inserting a new row.
+    // By default, all tables and columns are included in backup. When excluding data from a backup,
+    // remember to override the BackupExclusion method in the ITablet.
+    struct NoBackup;
+    struct InBackup;
+
     template <TTableId _TableId> struct Table {
         constexpr static TTableId TableId = _TableId;
 
         using Precharge = AutoPrecharge;
+        using BackupPolicy = InBackup;
 
-        template <TColumnId _ColumnId, NScheme::TTypeId _ColumnType, bool _IsNotNull = false>
+        template <TColumnId _ColumnId, NScheme::TTypeId _ColumnType, bool _IsNotNull = false, bool _IsSensitive = false>
         struct Column {
             constexpr static TColumnId ColumnId = _ColumnId;
             constexpr static NScheme::TTypeId ColumnType = _ColumnType;
             constexpr static bool IsNotNull = _IsNotNull;
+            constexpr static bool IsSensitive = _IsSensitive;
             using Type = typename NSchemeTypeMapper<_ColumnType>::Type;
+            using BackupPolicy = InBackup;
 
             static TString GetColumnName(const TString& typeName) {
                 return typeName.substr(typeName.rfind(':') + 1);
@@ -728,7 +741,7 @@ struct Schema {
             }
 
             static void Materialize(TToughDb& database) {
-                database.Alter().AddColumn(TableId, GetColumnName(), T::ColumnId, T::ColumnType, T::IsNotNull);
+                database.Alter().AddColumn(TableId, GetColumnName(), T::ColumnId, T::ColumnType, T::IsNotNull, T::IsSensitive);
             }
 
             static constexpr bool HaveColumn(ui32 columnId) {
@@ -738,6 +751,12 @@ struct Schema {
             template <typename OtherT>
             static constexpr bool HaveColumn() {
                 return std::is_same<T, OtherT>::value != 0;
+            }
+
+            static void FillBackupExclusion(TBackupExclusion& exclusion) {
+                if constexpr (std::is_same<typename T::BackupPolicy, NoBackup>::value) {
+                    exclusion.AddColumn(TableId, T::ColumnId);
+                }
             }
         };
 
@@ -754,6 +773,11 @@ struct Schema {
 
             static constexpr bool HaveColumn(ui32 columnId) {
                 return TableColumns<T>::HaveColumn(columnId) || TableColumns<Ts...>::HaveColumn(columnId);
+            }
+
+            static void FillBackupExclusion(TBackupExclusion& exclusion) {
+                TableColumns<T>::FillBackupExclusion(exclusion);
+                TableColumns<Ts...>::FillBackupExclusion(exclusion);
             }
         };
 
@@ -880,6 +904,8 @@ struct Schema {
 
             template <typename T>
             struct TableKeyMaterializer<T> {
+                static_assert(std::is_same_v<typename T::BackupPolicy, InBackup>, "Key column must be in backup");
+
                 static void Materialize(TToughDb& database) {
                     database.Alter().AddColumnToKey(TableId, T::ColumnId);
                 }
@@ -2096,6 +2122,11 @@ struct Schema {
         static bool HaveTable(ui32 tableId) {
             return SchemaTables<Type>::HaveTable(tableId) || SchemaTables<Types...>::HaveTable(tableId);
         }
+
+        static void FillBackupExclusion(TBackupExclusion& exclusion) {
+            SchemaTables<Type>::FillBackupExclusion(exclusion);
+            SchemaTables<Types...>::FillBackupExclusion(exclusion);
+        }
     };
 
     template <typename Type>
@@ -2143,6 +2174,14 @@ struct Schema {
         static bool HaveTable(ui32 tableId) {
             return Type::TableId == tableId;
         }
+
+        static void FillBackupExclusion(TBackupExclusion& exclusion) {
+            if constexpr (std::is_same_v<typename Type::BackupPolicy, NoBackup>) {
+                exclusion.AddTable(Type::TableId);
+            } else {
+                Type::TColumns::FillBackupExclusion(exclusion);
+            }
+        }
     };
 
     using TSettings = SchemaSettings<>;
@@ -2154,7 +2193,7 @@ inline bool Schema::Precharger<Schema::AutoPrecharge>::Precharge(
         NTable::TRawVals minKey, NTable::TRawVals maxKey,
         NTable::TTagsRef columns, NTable::EDirection direction, ui64 maxRowCount, ui64 maxBytes)
 {
-    return database.Precharge(table, minKey, maxKey, columns, 0, maxRowCount, maxBytes, direction);
+    return database.Precharge(table, minKey, maxKey, columns, 0, maxRowCount, maxBytes, direction).Ready;
 }
 
 template <>
@@ -2164,6 +2203,13 @@ inline bool Schema::Precharger<Schema::NoAutoPrecharge>::Precharge(
         NTable::TTagsRef, NTable::EDirection, ui64, ui64)
 {
     return true;
+}
+
+template <typename SchemaType>
+inline TIntrusivePtr<TBackupExclusion> GenerateBackupExclusion() {
+    auto exclusion = MakeIntrusive<TBackupExclusion>();
+    SchemaType::TTables::FillBackupExclusion(*exclusion);
+    return exclusion;
 }
 
 class TNiceDb {

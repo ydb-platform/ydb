@@ -5,7 +5,10 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/base
     ydb/core/protos
+    ydb/library/yql/providers/pq/proto
+    ydb/library/yverify_stream
     yql/essentials/sql/v1
 )
 

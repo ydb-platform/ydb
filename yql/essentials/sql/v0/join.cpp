@@ -37,7 +37,7 @@ struct TJoinDescr {
 
     TVector<std::pair<TFullColumn, TFullColumn>> Keys;
 
-    TJoinDescr(const TString& op)
+    explicit TJoinDescr(const TString& op)
         : Op(op)
     {}
 };
@@ -140,8 +140,8 @@ public:
     TNodePtr BuildJoinKeys(TContext& ctx, const TVector<TDeferredAtom>& names) override {
         const size_t n = JoinOps_.size();
         TString what(Sources_[n]->GetLabel());
-        static const TSet<TString> noRightSourceJoinOps = {"LeftOnly", "LeftSemi"};
-        for (size_t nn = n; nn > 0 && noRightSourceJoinOps.contains(JoinOps_[nn-1]); --nn) {
+        static const TSet<TString> NoRightSourceJoinOps = {"LeftOnly", "LeftSemi"};
+        for (size_t nn = n; nn > 0 && NoRightSourceJoinOps.contains(JoinOps_[nn-1]); --nn) {
             what = Sources_[nn-1]->GetLabel();
         }
         const TString with(Sources_[n + 1]->GetLabel());

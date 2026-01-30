@@ -15,11 +15,9 @@ namespace numpy
 {
   namespace UFUNC_NAME
   {
-    template <class T,
-              class dtype = numpy::result_dtype<numpy::functor::UFUNC_NAME, T>>
+    template <class T, class dtype = numpy::result_dtype<numpy::functor::UFUNC_NAME, T>>
     auto accumulate(T &&a, long axis = 0, dtype d = dtype())
-        -> decltype(partial_sum<numpy::functor::UFUNC_NAME>(std::forward<T>(a),
-                                                            axis, d));
+        -> decltype(partial_sum<numpy::functor::UFUNC_NAME>(std::forward<T>(a), axis, d));
     DEFINE_FUNCTOR(pythonic::numpy::UFUNC_NAME, accumulate);
   } // namespace UFUNC_NAME
 } // namespace numpy

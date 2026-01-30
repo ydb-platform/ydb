@@ -35,16 +35,23 @@ void TVectorWorkloadGenerator::Init() {
 
 std::string TVectorWorkloadGenerator::GetDDLQueries() const {
     return std::format(R"_(--!syntax_v1
-        CREATE TABLE `{0}/{1}`(
-            id Uint64,
-            embedding String,
-            PRIMARY KEY(id))
-        WITH (
-            AUTO_PARTITIONING_BY_SIZE = ENABLED,
-            AUTO_PARTITIONING_PARTITION_SIZE_MB = 500,
-            AUTO_PARTITIONING_BY_LOAD = ENABLED
-        )
-    )_", Params.DbPath.c_str(), Params.TableName.c_str());
+            CREATE TABLE `{0}/{1}`(
+                id Uint64,
+                embedding String,
+                PRIMARY KEY(id))
+            WITH (
+                AUTO_PARTITIONING_BY_SIZE = ENABLED,
+                AUTO_PARTITIONING_BY_LOAD = {2},
+                AUTO_PARTITIONING_PARTITION_SIZE_MB = {3},
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = {4}
+            )
+        )_",
+        Params.DbPath.c_str(),
+        Params.TableOpts.Name.c_str(),
+        Params.TablePartitioningOpts.AutoPartitioningByLoad ? "ENABLED" : "DISABLED",
+        Params.TablePartitioningOpts.PartitionSize,
+        Params.TablePartitioningOpts.MinPartitions
+    );
 }
 
 TQueryInfoList TVectorWorkloadGenerator::GetInitialData() {
@@ -52,7 +59,7 @@ TQueryInfoList TVectorWorkloadGenerator::GetInitialData() {
 }
 
 TVector<std::string> TVectorWorkloadGenerator::GetCleanPaths() const {
-    return {"vector"};
+    return {Params.TableOpts.Name};
 }
 
 TQueryInfoList TVectorWorkloadGenerator::GetWorkload(int type) {

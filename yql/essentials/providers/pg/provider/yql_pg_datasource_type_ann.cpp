@@ -12,7 +12,7 @@ using namespace NNodes;
 
 class TPgDataSourceTypeAnnotationTransformer: public TVisitorTransformerBase {
 public:
-    TPgDataSourceTypeAnnotationTransformer(TPgState::TPtr state)
+    explicit TPgDataSourceTypeAnnotationTransformer(TPgState::TPtr state)
         : TVisitorTransformerBase(true)
         , State_(state)
     {

@@ -59,7 +59,8 @@ private:
 
 // Providers may subclass this struct to associate specific statistics, useful to
 // derive stats for higher-level operators in the plan.
-struct IProviderStatistics {
+class IProviderStatistics {
+public:
     virtual ~IProviderStatistics() {}
 };
 
@@ -83,7 +84,7 @@ struct TColumnStatistics {
 struct TOptimizerStatistics {
     struct TKeyColumns : public TSimpleRefCount<TKeyColumns> {
         TVector<TString> Data;
-        TKeyColumns(TVector<TString> data) : Data(std::move(data)) {}
+        explicit TKeyColumns(TVector<TString> data) : Data(std::move(data)) {}
 
         TVector<NDq::TJoinColumn> ToJoinColumns(const TString& alias) {
             TVector<NDq::TJoinColumn> columns;
@@ -109,12 +110,12 @@ struct TOptimizerStatistics {
     struct TColumnStatMap : public TSimpleRefCount<TColumnStatMap> {
         THashMap<TString,TColumnStatistics> Data;
         TColumnStatMap() {}
-        TColumnStatMap(THashMap<TString,TColumnStatistics> data) : Data(std::move(data)) {}
+        explicit TColumnStatMap(THashMap<TString,TColumnStatistics> data) : Data(std::move(data)) {}
     };
 
     struct TShuffledByColumns : public TSimpleRefCount<TShuffledByColumns> {
         TVector<NDq::TJoinColumn> Data;
-        TShuffledByColumns(TVector<NDq::TJoinColumn> data) : Data(std::move(data)) {}
+        explicit TShuffledByColumns(TVector<NDq::TJoinColumn> data) : Data(std::move(data)) {}
         TString ToString() {
             TString result;
 
@@ -168,7 +169,7 @@ struct TOptimizerStatistics {
     TOptimizerStatistics& operator=(const TOptimizerStatistics&) = default;
     TOptimizerStatistics() = default;
 
-    TOptimizerStatistics(
+    explicit TOptimizerStatistics(
         EStatisticsType type,
         double nrows = 0.0,
         int ncols = 0,

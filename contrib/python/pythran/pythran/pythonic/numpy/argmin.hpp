@@ -37,8 +37,7 @@ namespace numpy
   }
 
   template <class E>
-  types::ndarray<long, types::array_tuple<long, E::value - 1>>
-  argmin(E const &expr, long axis)
+  types::ndarray<long, types::array_tuple<long, E::value - 1>> argmin(E const &expr, long axis)
   {
     return argminmax<argmin_op<E>>(expr, axis);
   }

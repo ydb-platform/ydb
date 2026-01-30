@@ -172,6 +172,7 @@ protected:
     NMonitoring::TPercentileTrackerLg<3, 4, 3> GetResponseTime; // Used by witheboard
 
     NMonitoring::TPercentileTrackerLg<3, 4, 3> BlockResponseTime;
+    NMonitoring::TPercentileTrackerLg<3, 4, 3> GetBlockResponseTime;
     NMonitoring::TPercentileTrackerLg<3, 4, 3> DiscoverResponseTime;
     NMonitoring::TPercentileTrackerLg<3, 4, 3> IndexRestoreGetResponseTime;
     NMonitoring::TPercentileTrackerLg<3, 4, 3> RangeResponseTime;
@@ -359,6 +360,11 @@ public:
     void CountBlockResponseTime(TDuration duration) {
         BlockResponseTime.Increment(duration.MilliSeconds());
         NodeMon->BlockResponseTime.Increment(duration.MilliSeconds());
+    }
+
+    void CountGetBlockResponseTime(NPDisk::EDeviceType type, TDuration duration) {
+        GetBlockResponseTime.Increment(duration.MilliSeconds());
+        NodeMon->CountGetBlockResponseTime(type, duration);
     }
 
     void CountDiscoverResponseTime(TDuration duration) {

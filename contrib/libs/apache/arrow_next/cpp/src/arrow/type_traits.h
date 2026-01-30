@@ -23,8 +23,8 @@
 #include <type_traits>
 #include <vector>
 
-#include "arrow/type.h"
-#include "arrow/util/bit_util.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bit_util.h"
 
 namespace arrow20 {
 

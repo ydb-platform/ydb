@@ -15,23 +15,23 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "arrow/json/converter.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/json/converter.h"
 
 #include <memory>
 #include <string_view>
 #include <utility>
 
-#include "arrow/array.h"
-#include "arrow/array/builder_binary.h"
-#include "arrow/array/builder_decimal.h"
-#include "arrow/array/builder_primitive.h"
-#include "arrow/array/builder_time.h"
-#include "arrow/json/parser.h"
-#include "arrow/type.h"
-#include "arrow/util/checked_cast.h"
-#include "arrow/util/decimal.h"
-#include "arrow/util/logging.h"
-#include "arrow/util/value_parsing.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/builder_binary.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/builder_decimal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/builder_primitive.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/builder_time.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/json/parser.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/checked_cast.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/decimal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/value_parsing.h"
 
 namespace arrow20 {
 

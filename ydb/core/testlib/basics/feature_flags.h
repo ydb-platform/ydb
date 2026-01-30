@@ -40,7 +40,6 @@ public:
     FEATURE_FLAG_SETTER(EnableDataShardVolatileTransactions)
     FEATURE_FLAG_SETTER(EnableTopicServiceTx)
     FEATURE_FLAG_SETTER(EnableTopicDiskSubDomainQuota)
-    FEATURE_FLAG_SETTER(EnablePQConfigTransactionsAtSchemeShard)
     FEATURE_FLAG_SETTER(EnableScriptExecutionOperations)
     FEATURE_FLAG_SETTER(EnableExternalDataSources)
     FEATURE_FLAG_SETTER(EnableForceImmediateEffectsExecution)
@@ -63,7 +62,6 @@ public:
     FEATURE_FLAG_SETTER(EnableBackupService)
     FEATURE_FLAG_SETTER(EnableGranularTimecast)
     FEATURE_FLAG_SETTER(EnablePgSyntax)
-    FEATURE_FLAG_SETTER(EnableAntlr4Parser)
     FEATURE_FLAG_SETTER(EnableTieringInColumnShard)
     FEATURE_FLAG_SETTER(EnableMetadataObjectsOnServerless)
     FEATURE_FLAG_SETTER(EnableOlapCompression)
@@ -71,6 +69,7 @@ public:
     FEATURE_FLAG_SETTER(EnableTopicAutopartitioningForCDC)
     FEATURE_FLAG_SETTER(EnableFollowerStats)
     FEATURE_FLAG_SETTER(EnableChecksumsExport)
+    FEATURE_FLAG_SETTER(EnableReplication)
     FEATURE_FLAG_SETTER(EnableTopicTransfer)
     FEATURE_FLAG_SETTER(EnableStrictUserManagement)
     FEATURE_FLAG_SETTER(EnableDatabaseAdmin)
@@ -84,6 +83,11 @@ public:
     FEATURE_FLAG_SETTER(EnableStreamingQueries)
     FEATURE_FLAG_SETTER(EnableSecureScriptExecutions)
     FEATURE_FLAG_SETTER(DisableMissingDefaultColumnsInBulkUpsert)
+    FEATURE_FLAG_SETTER(EnableTopicMessageLevelParallelism)
+    FEATURE_FLAG_SETTER(EnableTopicAutopartitioningForReplication)
+    FEATURE_FLAG_SETTER(EnableAccessToIndexImplTables)
+    FEATURE_FLAG_SETTER(EnableIndexMaterialization)
+    FEATURE_FLAG_SETTER(EnableTopicsSqlIoOperations)
 
     #undef FEATURE_FLAG_SETTER
 };

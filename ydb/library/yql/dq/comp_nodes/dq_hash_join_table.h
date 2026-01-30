@@ -84,36 +84,39 @@ class TStdJoinTable {
         BuiltTable;
 };
 
-class TNeumannJoinTable : NNonCopyable::TMoveOnly {
+class TNeumannJoinTable : public NNonCopyable::TMoveOnly {
   public:
-    struct Tuple {
-        const ui8* PackedData;
-        const ui8* OverflowBegin;
-    };
 
     TNeumannJoinTable(const NPackedTuple::TTupleLayout* layout)
         : Table_(layout)
-    {}
+    {
+        MKQL_ENSURE(Empty(), "table should be empty by default");
+    }
 
     void BuildWith(IBlockLayoutConverter::TPackResult data) {
         BuildData_ = std::move(data);
         Table_.Build(BuildData_.PackedTuples.data(), BuildData_.Overflow.data(), BuildData_.NTuples);
-        Built_ = true;
     }
 
-    bool Empty() {
+
+    bool Empty() const {
         return Table_.Empty();
     }
 
-    void Lookup(Tuple row, std::invocable<Tuple> auto consume) const {
-        MKQL_ENSURE(Built_, "table must be built before lookup");
+    i64 RequiredMemoryForBuild(i64 nTuples) const {
+        return Table_.RequiredMemoryForBuild(nTuples);
+    }
+
+    void Lookup(TSingleTuple row, std::invocable<TSingleTuple> auto consume) const {
+        if (Empty()){
+            return;
+        }
         Table_.Apply(row.PackedData, row.OverflowBegin, [consume, this](const ui8* tuplePackedData) {
-            consume(Tuple{tuplePackedData, BuildData_.Overflow.data()});
+            consume(TSingleTuple{tuplePackedData, BuildData_.Overflow.data()});
         });
     }
 
   private:
-    bool Built_ = false;
     IBlockLayoutConverter::TPackResult BuildData_;
     NKikimr::NMiniKQL::NPackedTuple::TNeumannHashTable<false, false> Table_;
 };

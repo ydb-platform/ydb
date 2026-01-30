@@ -632,6 +632,20 @@
             "uri": "https://{canondata_backend}/1031349/e775ea070d44786f7a487ac7371f162b2010f0b6/resource.tar.gz#test.test_Optimizers-FuseMultipliersFlatmaps-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[Optimizers-LMapTrivialLambda-default.txt-Debug]": [
+        {
+            "checksum": "0b5c286309ba9fb5e9217e0f63e785e6",
+            "size": 143,
+            "uri": "https://{canondata_backend}/1775319/9627e0f92529139b7b54894985a98637a44d1f16/resource.tar.gz#test.test_Optimizers-LMapTrivialLambda-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[Optimizers-LMapTrivialLambda-default.txt-Results]": [
+        {
+            "checksum": "69e47809f69b5758ba1f1dcb96a192d8",
+            "size": 357,
+            "uri": "https://{canondata_backend}/1775319/9627e0f92529139b7b54894985a98637a44d1f16/resource.tar.gz#test.test_Optimizers-LMapTrivialLambda-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[Optimizers-MoveExtractMembersOverTake-default.txt-Debug]": [
         {
             "checksum": "353c66ef94262c03e82609056a7435bf",

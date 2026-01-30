@@ -34,7 +34,7 @@ public:
     TStatus DoTransform(TExprNode::TPtr inputExpr, TExprNode::TPtr& outputExpr, TExprContext& ctx) final {
         outputExpr = inputExpr;
 
-        if (!KqpCtx->Config->EnableOltpSink) {
+        if (!KqpCtx->Config->GetEnableOltpSink()) {
             return TStatus::Ok;
         }
 
@@ -234,18 +234,18 @@ private:
                             return true;
                         });
                 } else if (input.Maybe<TKqpTxResultBinding>()) {
-                    // This transformer must be executed before building transactions 
+                    // This transformer must be executed before building transactions
                     YQL_ENSURE(false, "Unexpected TKqpTxResultBinding");
                 }
             }
 
-            if (stage.Outputs()) {
-                const auto outputs = stage.Outputs().Cast();
-                AFL_ENSURE(outputs.Size() == 1);
-                for (const auto& output : outputs) {
+            if (const auto outputs = stage.Outputs()) {
+                ui64 sinkOutputsCount = 0;
+                for (const auto& output : outputs.Cast()) {
                     if (auto maybeSink = output.Maybe<TDqSink>()) {
                         const auto sink = maybeSink.Cast();
                         if (const auto sinkSettings = sink.Settings().Maybe<TKqpTableSinkSettings>()) {
+                            sinkOutputsCount++;
                             const auto executedAsSingleEffect = sinkSettings.Cast().Mode() == "fill_table"
                                 || (kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, sinkSettings.Cast().Table().Path()).Metadata->Kind == EKikimrTableKind::Olap);
                             if (!executedAsSingleEffect) {
@@ -254,6 +254,8 @@ private:
                         }
                     }
                 }
+
+                AFL_ENSURE(sinkOutputsCount <= 1)("SinkOutputsCount", sinkOutputsCount);
             }
 
             return true;

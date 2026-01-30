@@ -211,7 +211,8 @@ class TAllocationAnalyzer {
     bool Prepared = false;
 
 private:
-#if defined(USE_DWARF_BACKTRACE)
+// Using DWARF to resolve backtraces is expensive - i.e. the cloud disk I/O may block process for minutes, while loading debug sections.
+#if defined(USE_DWARF_BACKTRACE) && defined(PROFILE_MEMORY_ALLOCATIONS)
     void PrintBackTrace(IOutputStream& out, void* const* stack, size_t size, const char* sep) {
         // TODO: ignore symbol cache for now - because of inlines.
         if (auto error = NDwarf::ResolveBacktrace(TArrayRef<const void* const>(stack, size), [&](const NDwarf::TLineInfo& info) {

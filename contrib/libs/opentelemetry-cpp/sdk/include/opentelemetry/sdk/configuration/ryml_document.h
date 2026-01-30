@@ -22,16 +22,23 @@ class RymlDocument : public Document
 public:
   static std::unique_ptr<Document> Parse(const std::string &source, const std::string &content);
 
-  RymlDocument(ryml::Tree tree) : tree_(std::move(tree)) {}
+  RymlDocument() {}
   RymlDocument(RymlDocument &&)                      = delete;
   RymlDocument(const RymlDocument &)                 = delete;
   RymlDocument &operator=(RymlDocument &&)           = delete;
   RymlDocument &operator=(const RymlDocument &other) = delete;
   ~RymlDocument() override                           = default;
 
+  int ParseDocument(const std::string &source, const std::string &content);
+
   std::unique_ptr<DocumentNode> GetRootNode() override;
 
+  DocumentNodeLocation Location(ryml::ConstNodeRef node) const;
+
 private:
+  ryml::ParserOptions opts_;
+  ryml::Parser::handler_type event_handler_;
+  std::unique_ptr<ryml::Parser> parser_;
   ryml::Tree tree_;
 };
 

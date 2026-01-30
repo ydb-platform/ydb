@@ -1,5 +1,6 @@
 #include "yql_facade_run.h"
 
+#include <yql/essentials/providers/common/gateways_utils/gateways_utils.h>
 #include <yql/essentials/providers/pg/provider/yql_pg_provider.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
@@ -158,11 +159,11 @@ TFacadeRunOptions::~TFacadeRunOptions() {
 
 void TFacadeRunOptions::InitLogger() {
     if (Verbosity != LOG_DEF_PRIORITY || ShowLog) {
-        NLog::ELevel level = NLog::ELevelHelpers::FromInt(Verbosity);
+        NLog::ELevel level = NLog::TLevelHelpers::FromInt(Verbosity);
         if (ShowLog) {
             level = Max(level, NLog::ELevel::DEBUG);
         }
-        NLog::EComponentHelpers::ForEach([level](NLog::EComponent c) {
+        NLog::TComponentHelpers::ForEach([level](NLog::EComponent c) {
             NYql::NLog::YqlLogger().SetComponentLevel(c, level);
         });
     }
@@ -428,9 +429,10 @@ void TFacadeRunOptions::Parse(int argc, const char* argv[]) {
         opts.AddLongOption("test-antlr4", "Check antlr4 parser").NoArgument().SetFlag(&TestAntlr4);
         opts.AddLongOption("test-format", "Compare formatted query's AST with the original query's AST (only syntaxVersion=1 is supported)").NoArgument().SetFlag(&TestSqlFormat);
         opts.AddLongOption("test-lexers", "Compare lexers").NoArgument().SetFlag(&TestLexers);
-        opts.AddLongOption("test-complete", "check completion engine").NoArgument().SetFlag(&TestComplete);
-        opts.AddLongOption("test-syntax-ambiguity", "check syntax ambiguities").NoArgument().SetFlag(&TestSyntaxAmbiguities);
+        opts.AddLongOption("test-complete", "Check completion engine").NoArgument().SetFlag(&TestComplete);
+        opts.AddLongOption("test-syntax-ambiguity", "Check syntax ambiguities").NoArgument().SetFlag(&TestSyntaxAmbiguities);
         opts.AddLongOption("validate-result-format", "Check that result-format can parse Result").NoArgument().SetFlag(&ValidateResultFormat);
+        opts.AddLongOption("test-partial-typecheck", "Check partial AST typecheck").NoArgument().SetFlag(&TestPartialTypecheck);
     }
 
     opts.AddLongOption("langver", "Set current language version").Optional().RequiredArgument("VER").Handler1T<TString>([this](const TString& str) {
@@ -498,10 +500,14 @@ void TFacadeRunOptions::Parse(int argc, const char* argv[]) {
         GatewaysConfig = ParseProtoFromResource<TGatewaysConfig>("gateways.conf");
     }
 
-    if (GatewaysConfig && GatewaysConfig->HasSqlCore()) {
-        SqlFlags.insert(GatewaysConfig->GetSqlCore().GetTranslationFlags().begin(), GatewaysConfig->GetSqlCore().GetTranslationFlags().end());
+    {
+        TGatewaySQLFlags flags;
+        if (GatewaysConfig) {
+            flags.ExtendWith(TGatewaySQLFlags::FromTesting(*GatewaysConfig));
+        }
+        flags.ExtendWith(SQLFlagsFromQContext(QPlayerContext));
+        flags.CollectAllTo(SqlFlags);
     }
-    UpdateSqlFlagsFromQContext(QPlayerContext, SqlFlags, GatewaysPatch);
 
     if (!FsConfig) {
         FsConfig = MakeHolder<TFileStorageConfig>();
@@ -694,7 +700,7 @@ int TFacadeRunner::DoMain(int argc, const char* argv[]) {
 
     TExprContext::TFreezeGuard freezeGuard(ctx);
 
-    if (RunOptions_.Mode >= ERunMode::Validate) {
+    if (RunOptions_.Mode >= ERunMode::Compile) {
         std::vector<NFS::IDownloaderPtr> downloaders;
         for (auto& factory : FsDownloadFactories_) {
             if (auto download = factory()) {
@@ -916,7 +922,8 @@ int TFacadeRunner::DoRun(TProgramFactory& factory) {
     }
 
     RunOptions_.PrintInfo("Compile program...");
-    if (!program->Compile(RunOptions_.User)) {
+    if (!program->Compile(RunOptions_.User,
+                          /*skipLibraries=*/ERunMode::Compile == RunOptions_.Mode && RunOptions_.TestPartialTypecheck)) {
         program->PrintErrorsTo(*RunOptions_.ErrStream);
         fail = true;
     }
@@ -933,6 +940,15 @@ int TFacadeRunner::DoRun(TProgramFactory& factory) {
             auto baseAst = ConvertToAst(*program->ExprRoot(), program->ExprCtx(), NYql::TExprAnnotationFlags::None, true);
             baseAst.Root->PrettyPrintTo(*RunOptions_.ExprStream, PRETTY_FLAGS);
         }
+
+        if (RunOptions_.TestPartialTypecheck) {
+            auto status = program->TestPartialTypecheck();
+            if (status == TProgram::TStatus::Error) {
+                program->PrintErrorsTo(*RunOptions_.ErrStream);
+                return -1;
+            }
+        }
+
         return 0;
     }
 
@@ -947,9 +963,14 @@ int TFacadeRunner::DoRun(TProgramFactory& factory) {
         ast.Root->PrettyPrintTo(*RunOptions_.ExprStream, prettyFlags);
     }
 
+    if (status == TProgram::TStatus::Ok && RunOptions_.TestPartialTypecheck) {
+        status = program->TestPartialTypecheck();
+    }
+
     if (RunOptions_.WithFinalIssues) {
         program->FinalizeIssues();
     }
+
     program->PrintErrorsTo(*RunOptions_.ErrStream);
     if (status == TProgram::TStatus::Error) {
         if (RunOptions_.TraceOptStream) {

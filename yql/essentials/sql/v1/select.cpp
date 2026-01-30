@@ -9,6 +9,8 @@
 
 #include <library/cpp/charset/ci_string.h>
 
+#include <util/generic/scope.h>
+
 using namespace NYql;
 
 namespace NSQLTranslationV1 {
@@ -91,6 +93,69 @@ protected:
 
 TNodePtr BuildSubquery(TSourcePtr source, const TString& alias, bool inSubquery, int ensureTupleSize, TScopedStatePtr scoped) {
     return new TSubqueryNode(std::move(source), alias, inSubquery, ensureTupleSize, scoped);
+}
+
+class TYqlSubqueryNode final: public INode {
+public:
+    TYqlSubqueryNode(TNodePtr source, TString alias)
+        : INode(source->GetPos())
+        , Source_(std::move(source))
+        , Alias_(std::move(alias))
+    {
+    }
+
+    bool DoInit(TContext& ctx, ISource* src) final {
+        TBlocks dependencies;
+        {
+            ctx.PushCurrentBlocks(&dependencies);
+            Y_DEFER {
+                ctx.PopCurrentBlocks();
+            };
+
+            if (!Source_->Init(ctx, src)) {
+                return false;
+            }
+        }
+
+        TNodePtr block = Y();
+        for (TNodePtr& dependency : dependencies) {
+            block->Add(std::move(dependency));
+        }
+        block->Add(Y("return", Q(Y("world", Source_))));
+
+        Node_ = Y("let", Alias_, Y("block", Q(std::move(block))));
+        IsUsed_ = true;
+        return true;
+    }
+
+    TAstNode* Translate(TContext& ctx) const final {
+        return Node_->Translate(ctx);
+    }
+
+    TNodePtr DoClone() const final {
+        return new TYqlSubqueryNode(Source_->Clone(), Alias_);
+    }
+
+    // Is used at the TYqlProgramNode
+    const TString* SubqueryAlias() const final {
+        return &Alias_;
+    }
+
+    // Is used at the TYqlProgramNode
+    bool UsedSubquery() const final {
+        return IsUsed_;
+    }
+
+private:
+    TNodePtr Source_;
+    TString Alias_;
+    bool IsUsed_;
+
+    TNodePtr Node_;
+};
+
+TNodePtr BuildYqlSubquery(TNodePtr source, TString alias) {
+    return new TYqlSubqueryNode(std::move(source), std::move(alias));
 }
 
 class TSourceNode: public INode {
@@ -404,7 +469,7 @@ protected:
 
 class IRealSource: public ISource {
 protected:
-    IRealSource(TPosition pos)
+    explicit IRealSource(TPosition pos)
         : ISource(pos)
     {
     }
@@ -671,9 +736,54 @@ bool IsSubqueryRef(const TSourcePtr& source) {
     return dynamic_cast<const TSubqueryRefNode*>(source.Get()) != nullptr;
 }
 
+class TYqlSubqueryRefNode final: public INode {
+public:
+    TYqlSubqueryRefNode(TNodePtr subquery, TString ref)
+        : INode(subquery->GetPos())
+        , Subquery_(std::move(subquery))
+        , Ref_(std::move(ref))
+    {
+    }
+
+    bool DoInit(TContext& ctx, ISource* src) final {
+        if (!Subquery_->Init(ctx, nullptr)) {
+            return false;
+        }
+
+        Node_ = BuildAtom(Pos_, Ref_, TNodeFlags::Default);
+        if (!Node_->Init(ctx, src)) {
+            return false;
+        }
+
+        return true;
+    }
+
+    TAstNode* Translate(TContext& ctx) const final {
+        return Node_->Translate(ctx);
+    }
+
+    TPtr DoClone() const final {
+        return new TYqlSubqueryRefNode(Subquery_, Ref_);
+    }
+
+private:
+    TNodePtr Subquery_;
+    TString Ref_;
+
+    TNodePtr Node_;
+};
+
+TNodePtr BuildYqlSubqueryRef(TNodePtr subquery, TString ref) {
+    return new TYqlSubqueryRefNode(std::move(subquery), ref);
+}
+
+bool IsYqlSubqueryRef(const TNodePtr& source) {
+    return dynamic_cast<const TYqlSubqueryRefNode*>(source.Get()) != nullptr;
+}
+
 class TInvalidSubqueryRefNode: public ISource {
 public:
-    TInvalidSubqueryRefNode(TPosition pos)
+    explicit TInvalidSubqueryRefNode(TPosition pos)
         : ISource(pos)
         , Pos_(pos)
     {
@@ -984,7 +1094,7 @@ static bool IsComparableExpression(TContext& ctx, const TNodePtr& expr, bool ass
 class TReduceSource: public IRealSource {
 public:
     TReduceSource(TPosition pos,
-                  ReduceMode mode,
+                  EReduceMode mode,
                   TSourcePtr source,
                   TVector<TSortSpecificationPtr>&& orderBy,
                   TVector<TNodePtr>&& keys,
@@ -1103,7 +1213,7 @@ public:
 
         TNodePtr processPartitions;
         if (ListCall_) {
-            if (Mode_ != ReduceMode::ByAll) {
+            if (Mode_ != EReduceMode::ByAll) {
                 ctx.Error(Pos_) << "TableRows() must be used only with USING ALL";
                 return nullptr;
             }
@@ -1112,7 +1222,7 @@ public:
             processPartitions = Y("SqlReduce", "partitionStream", BuildQuotedAtom(Pos_, "byAllList", TNodeFlags::Default), Udf_, expr);
         } else {
             switch (Mode_) {
-                case ReduceMode::ByAll: {
+                case EReduceMode::ByAll: {
                     auto columnPtr = Args_[0]->GetColumnName();
                     TNodePtr expr = BuildAtom(Pos_, "partitionStream");
                     if (!columnPtr || *columnPtr != "*") {
@@ -1123,7 +1233,7 @@ public:
                     processPartitions = Y("SqlReduce", "partitionStream", BuildQuotedAtom(Pos_, "byAll", TNodeFlags::Default), Udf_, expr);
                     break;
                 }
-                case ReduceMode::ByPartition: {
+                case EReduceMode::ByPartition: {
                     processPartitions = Y("SqlReduce", "partitionStream", extractKeyLambda, Udf_,
                                           BuildLambda(Pos_, Y("row"), Args_[0]));
                     break;
@@ -1138,7 +1248,7 @@ public:
             sortKeySelector = BuildLambda(Pos_, Y("row"), Y("SqlExtractKey", "row", sortKeySelector));
         }
 
-        auto partitionByKey = Y(!ListCall_ && Mode_ == ReduceMode::ByAll ? "PartitionByKey" : "PartitionsByKeys", "core", extractKeyLambda,
+        auto partitionByKey = Y(!ListCall_ && Mode_ == EReduceMode::ByAll ? "PartitionByKey" : "PartitionsByKeys", "core", extractKeyLambda,
                                 sortDirection, sortKeySelector, BuildLambda(Pos_, Y("partitionStream"), processPartitions));
 
         auto inputLabel = ListCall_ ? "inputRowsList" : "core";
@@ -1190,7 +1300,7 @@ public:
     }
 
 private:
-    ReduceMode Mode_;
+    EReduceMode Mode_;
     TSourcePtr Source_;
     TVector<TSortSpecificationPtr> OrderBy_;
     TVector<TNodePtr> Keys_;
@@ -1203,7 +1313,7 @@ private:
 };
 
 TSourcePtr BuildReduce(TPosition pos,
-                       ReduceMode mode,
+                       EReduceMode mode,
                        TSourcePtr source,
                        TVector<TSortSpecificationPtr>&& orderBy,
                        TVector<TNodePtr>&& keys,
@@ -3009,15 +3119,15 @@ public:
         if (skip) {
             select = Y("Skip", select, Y("Coalesce", skip, Y("Uint64", Q("0"))));
         }
-        static const TString uiMax = ::ToString(std::numeric_limits<ui64>::max());
-        Add("let", "select", Y("Take", select, Y("Coalesce", take, Y("Uint64", Q(uiMax)))));
+        static const TString Max = ::ToString(std::numeric_limits<ui64>::max());
+        Add("let", "select", Y("Take", select, Y("Coalesce", take, Y("Uint64", Q(Max)))));
     }
 
     TPtr DoClone() const final {
         return {};
     }
 
-    bool HasSkip() const {
+    bool HasSkip() const override {
         return IsSkipProvided_;
     }
 
@@ -3153,7 +3263,7 @@ TSourcePtr BuildSelect(TPosition pos, TSourcePtr source, TNodePtr skipTake) {
 
 class TAnyColumnSource final: public ISource {
 public:
-    TAnyColumnSource(TPosition pos)
+    explicit TAnyColumnSource(TPosition pos)
         : ISource(pos)
     {
     }

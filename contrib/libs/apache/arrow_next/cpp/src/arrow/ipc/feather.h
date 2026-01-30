@@ -26,10 +26,10 @@
 #include <string>
 #include <vector>
 
-#include "arrow/ipc/options.h"
-#include "arrow/type_fwd.h"
-#include "arrow/util/compression.h"
-#include "arrow/util/visibility.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/ipc/options.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type_fwd.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/compression.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/visibility.h"
 
 namespace arrow20 {
 

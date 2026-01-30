@@ -3,14 +3,39 @@
 #include <yt/cpp/mapreduce/common/node_visitor.h>
 
 #include <yt/cpp/mapreduce/interface/io.h>
+#include <yt/cpp/mapreduce/interface/raw_client.h>
 
 #include <yt/cpp/mapreduce/interface/logging/yt_log.h>
+
+#include <library/cpp/yson/node/node_io.h>
 
 #include <library/cpp/yson/writer.h>
 
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
+
+void WriteRow(::NYson::TYsonWriter* writer, const TNode& row)
+{
+    if (row.HasAttributes()) {
+        ythrow TIOException() << "Row cannot have attributes";
+    }
+
+    static const TNode emptyMap = TNode::CreateMap();
+    const TNode* outRow = &emptyMap;
+    if (row.GetType() != TNode::Undefined) {
+        if (!row.IsMap()) {
+            ythrow TIOException() << "Row should be a map node";
+        } else {
+            outRow = &row;
+        }
+    }
+
+    writer->OnListItem();
+
+    TNodeVisitor visitor(writer);
+    visitor.Visit(*outRow);
+}
 
 TNodeTableWriter::TNodeTableWriter(THolder<IProxyOutput> output, NYson::EYsonFormat format)
     : Output_(output.Release())
@@ -40,25 +65,9 @@ void TNodeTableWriter::FinishTable(size_t tableIndex) {
 
 void TNodeTableWriter::AddRow(const TNode& row, size_t tableIndex)
 {
-    if (row.HasAttributes()) {
-        ythrow TIOException() << "Row cannot have attributes";
-    }
-
-    static const TNode emptyMap = TNode::CreateMap();
-    const TNode* outRow = &emptyMap;
-    if (row.GetType() != TNode::Undefined) {
-        if (!row.IsMap()) {
-            ythrow TIOException() << "Row should be a map node";
-        } else {
-            outRow = &row;
-        }
-    }
-
     auto* writer = Writers_[tableIndex].get();
-    writer->OnListItem();
 
-    TNodeVisitor visitor(writer);
-    visitor.Visit(*outRow);
+    WriteRow(writer, row);
 
     Output_->OnRowFinished(tableIndex);
 }
@@ -70,6 +79,28 @@ void TNodeTableWriter::AddRow(TNode&& row, size_t tableIndex) {
 void TNodeTableWriter::Abort()
 {
     Output_->Abort();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TNodeTableFragmentWriter::TNodeTableFragmentWriter(std::unique_ptr<IOutputStreamWithResponse> output, ::NYson::EYsonFormat format)
+    : Output_(std::move(output))
+    , Writer_(std::make_unique<::NYson::TYsonWriter>(Output_.get(), format, NYT::NYson::EYsonType::ListFragment))
+{ }
+
+TWriteTableFragmentResult TNodeTableFragmentWriter::GetWriteFragmentResult() const
+{
+    return TWriteTableFragmentResult(NodeFromYsonString(Output_->GetResponse()));
+}
+
+void TNodeTableFragmentWriter::AddRow(const TNode& row)
+{
+    WriteRow(Writer_.get(), row);
+}
+
+void TNodeTableFragmentWriter::Finish()
+{
+    Output_->Finish();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

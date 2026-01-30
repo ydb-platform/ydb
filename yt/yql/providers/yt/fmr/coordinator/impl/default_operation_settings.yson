@@ -23,14 +23,22 @@
             "max_row_weight" = 16777216;
         };
     };
+    "job_process" = {
+        "num_threads" = 3;
+        "queue_size_limit" = 100;
+    };
     "partition" = {
         "yt_table" = {
             "max_data_weight_per_part" = 104857600;
             "max_parts" = 100;
+            "adjust_data_weight_per_partition" = %true;
         };
         "fmr_table" = {
             "max_data_weight_per_part" = 104857600;
             "max_parts" = 100;
+        };
+        "ordered" = {
+            "allow_to_repack" = %false;
         };
     };
     "generic" = {

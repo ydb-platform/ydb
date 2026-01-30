@@ -15,16 +15,16 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "arrow/array/array_base.h"
-#include "arrow/compute/api_scalar.h"
-#include "arrow/compute/cast.h"
-#include "arrow/compute/kernels/common_internal.h"
-#include "arrow/compute/kernels/util_internal.h"
-#include "arrow/type.h"
-#include "arrow/util/bit_util.h"
-#include "arrow/util/bitmap_writer.h"
-#include "arrow/util/hashing.h"
-#include "arrow/visit_data_inline.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/array_base.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/api_scalar.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/cast.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/kernels/common_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/kernels/util_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bit_util.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bitmap_writer.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/hashing.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/visit_data_inline.h"
 
 namespace arrow20 {
 

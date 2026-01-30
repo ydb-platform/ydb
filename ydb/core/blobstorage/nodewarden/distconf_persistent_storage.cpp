@@ -83,28 +83,28 @@ namespace NKikimr::NStorage {
         Register(new TReaderActor(std::move(paths), cookie));
     }
 
-    void TDistributedConfigKeeper::WriteConfig(std::vector<TString> drives, NKikimrBlobStorage::TPDiskMetadataRecord record) {
+    void TDistributedConfigKeeper::WriteConfig(THashMap<TString, NKikimrBlobStorage::TPDiskMetadataRecord> records) {
         class TWriterActor : public TActorBootstrapped<TWriterActor> {
-            const std::vector<TString> Drives;
-            const NKikimrBlobStorage::TPDiskMetadataRecord Record;
+            THashMap<TString, NKikimrBlobStorage::TPDiskMetadataRecord> Records;
+            std::vector<TString> Drives;
             ui32 RepliesPending = 0;
             std::unique_ptr<TEvPrivate::TEvStorageConfigStored> Response = std::make_unique<TEvPrivate::TEvStorageConfigStored>();
             TActorId ParentId;
 
         public:
-            TWriterActor(std::vector<TString> drives, NKikimrBlobStorage::TPDiskMetadataRecord record)
-                : Drives(std::move(drives))
-                , Record(std::move(record))
+            TWriterActor(THashMap<TString, NKikimrBlobStorage::TPDiskMetadataRecord> records)
+                : Records(std::move(records))
             {}
 
             void Bootstrap(TActorId parentId) {
                 ParentId = parentId;
 
-                STLOG(PRI_DEBUG, BS_NODE, NWDC51, "TWriterActor bootstrap", (Drives, Drives), (Record, Record));
+                STLOG(PRI_DEBUG, BS_NODE, NWDC51, "TWriterActor bootstrap", (Records, Records));
 
                 const TActorId nodeWardenId = MakeBlobStorageNodeWardenID(SelfId().NodeId());
-                for (size_t index = 0; index < Drives.size(); ++index) {
-                    Send(nodeWardenId, new TEvNodeWardenWriteMetadata(Drives[index], Record), 0, index);
+                for (auto& [path, record] : Records) {
+                    Send(nodeWardenId, new TEvNodeWardenWriteMetadata(path, std::move(record)), 0, Drives.size());
+                    Drives.push_back(path);
                     ++RepliesPending;
                 }
 
@@ -134,7 +134,7 @@ namespace NKikimr::NStorage {
                 hFunc(TEvNodeWardenWriteMetadataResult, Handle);
             )
         };
-        Register(new TWriterActor(std::move(drives), std::move(record)));
+        Register(new TWriterActor(std::move(records)));
     }
 
     TString TDistributedConfigKeeper::CalculateFingerprint(const NKikimrBlobStorage::TStorageConfig& config) {
@@ -159,35 +159,22 @@ namespace NKikimr::NStorage {
         return CalculateFingerprint(config) == config.GetFingerprint();
     }
 
-    void TDistributedConfigKeeper::PersistConfig(TPersistCallback callback) {
+    void TDistributedConfigKeeper::PersistConfig(TPersistCallback callback, const std::vector<TString>& drives) {
+        STLOG(PRI_DEBUG, BS_NODE, NWDC35, "PersistConfig", (MetadataByPath, MetadataByPath));
+
         TPersistQueueItem& item = PersistQ.emplace_back();
-
-        if (StorageConfig && StorageConfig->GetGeneration()) {
-            item.Record.MutableCommittedStorageConfig()->CopyFrom(*StorageConfig);
-        }
-
-        if (ProposedStorageConfig) {
-            item.Record.MutableProposedStorageConfig()->CopyFrom(*ProposedStorageConfig);
-        }
-
-        std::vector<TString> drives;
-        auto processDrive = [&](const auto& /*node*/, const auto& drive) { drives.push_back(drive.GetPath()); };
-        if (item.Record.HasCommittedStorageConfig()) {
-            EnumerateConfigDrives(item.Record.GetCommittedStorageConfig(), SelfId().NodeId(), processDrive);
-        }
-        if (item.Record.HasProposedStorageConfig()) {
-            EnumerateConfigDrives(item.Record.GetProposedStorageConfig(), SelfId().NodeId(), processDrive);
-        }
-        std::sort(drives.begin(), drives.end());
-        drives.erase(std::unique(drives.begin(), drives.end()), drives.end());
-
-        STLOG(PRI_DEBUG, BS_NODE, NWDC35, "PersistConfig", (Record, item.Record), (Drives, drives));
-
-        item.Drives = std::move(drives);
         item.Callback = std::move(callback);
+        for (const TString& path : drives) {
+            if (const auto it = MetadataByPath.find(path); it != MetadataByPath.end()) {
+                item.MetadataByPath.insert(*it);
+                PathsToRetry.erase(path);
+            } else {
+                Y_DEBUG_ABORT();
+            }
+        }
 
-        if (PersistQ.size() == 1) {
-            WriteConfig(item.Drives, item.Record);
+        if (PersistQ.size() == 1) { // this was the first item, we can start writing now
+            WriteConfig(std::move(item.MetadataByPath));
         }
     }
 
@@ -196,6 +183,9 @@ namespace NKikimr::NStorage {
         ui32 numError = 0;
         for (const auto& [path, status, guid] : ev->Get()->StatusPerPath) {
             ++(status ? numOk : numError);
+            if (!status) {
+                PathsToRetry.insert(path);
+            }
         }
 
         Y_ABORT_UNLESS(!PersistQ.empty());
@@ -211,8 +201,16 @@ namespace NKikimr::NStorage {
 
         if (!PersistQ.empty()) {
             auto& front = PersistQ.front();
-            WriteConfig(front.Drives, front.Record);
+            WriteConfig(std::move(front.MetadataByPath));
+        } else {
+            // no pending writes -- retry failed ones
+            TActivationContext::Schedule(TDuration::Seconds(1), new IEventHandle(TEvPrivate::EvRetryPersistConfig,
+                0, SelfId(), {}, nullptr, 0));
         }
+    }
+
+    void TDistributedConfigKeeper::HandleRetryPersistConfig() {
+        PersistConfig({}, {PathsToRetry.begin(), PathsToRetry.end()});
     }
 
     void TDistributedConfigKeeper::Handle(TEvPrivate::TEvStorageConfigLoaded::TPtr ev) {
@@ -271,56 +269,103 @@ namespace NKikimr::NStorage {
                 FinishAsyncOperation(it->first);
             }
         } else {
-            // just loaded the initial config, try to acquire newer configuration
-            bool changes = false;
+            std::vector<TString> drivesToRead = PrevDrivesToRead;
+            auto processDrive = [&](const auto& /*node*/, const auto& drive) {
+                drivesToRead.push_back(drive.GetPath());
+            };
 
             for (const auto& [path, m, guid] : msg.MetadataPerPath) {
+                MetadataByPath[path] = m;
+
                 if (m.HasCommittedStorageConfig()) {
                     const auto& config = m.GetCommittedStorageConfig();
-                    if (InitialConfig->GetGeneration() < config.GetGeneration()) {
-                        InitialConfig = std::make_shared<NKikimrBlobStorage::TStorageConfig>(config);
-                        changes = true;
-                    } else if (InitialConfig->GetGeneration() && InitialConfig->GetGeneration() == config.GetGeneration() &&
-                            InitialConfig->GetFingerprint() != config.GetFingerprint()) {
-                        // TODO: error
+                    if (!LocalCommittedStorageConfig || LocalCommittedStorageConfig->GetGeneration() < config.GetGeneration()) {
+                        LocalCommittedStorageConfig = std::make_shared<NKikimrBlobStorage::TStorageConfig>(config);
                     }
+                    EnumerateConfigDrives(config, SelfId().NodeId(), processDrive);
                 }
+
                 if (m.HasProposedStorageConfig()) {
                     const auto& proposed = m.GetProposedStorageConfig();
-                    // TODO: more checks
-                    if (InitialConfig->GetGeneration() < proposed.GetGeneration() && (
-                            !ProposedStorageConfig || ProposedStorageConfig->GetGeneration() < proposed.GetGeneration())) {
-                        ProposedStorageConfig.emplace(proposed);
-                        changes = true;
-                    }
+                    EnumerateConfigDrives(proposed, SelfId().NodeId(), processDrive);
                 }
             }
 
+            std::ranges::sort(drivesToRead);
+            const auto [begin, end] = std::ranges::unique(drivesToRead);
+            drivesToRead.erase(begin, end);
+
+            std::vector<TString> newDrivesToRead;
+            std::ranges::set_difference(drivesToRead, PrevDrivesToRead, std::back_inserter(newDrivesToRead));
+
             // read if got something new
-            if (changes) {
-                ReadConfig(GetDrivesToRead(true));
+            if (!newDrivesToRead.empty()) {
+                ReadConfig(newDrivesToRead);
+                PrevDrivesToRead = std::move(drivesToRead);
             } else {
-                ApplyStorageConfig(*InitialConfig);
+                // apply locally committed storage configuration if any, or else apply startup YAML config
+                ApplyStorageConfig(*(LocalCommittedStorageConfig ?: BaseConfig));
+
+                if (LocalCommittedStorageConfig) { // write back committed configuration to all drives that do not have it
+                    std::vector<TString> drivesToWrite = GetDrives(*LocalCommittedStorageConfig);
+
+                    // filter out excessive metadata records
+                    for (auto it = MetadataByPath.begin(); it != MetadataByPath.end(); ) {
+                        if (std::ranges::binary_search(drivesToWrite, it->first)) {
+                            ++it;
+                        } else {
+                            MetadataByPath.erase(it++);
+                        }
+                    }
+
+                    // remove drives that have the relevant configuration record
+                    const auto [begin, end] = std::ranges::remove_if(drivesToWrite, [&](const TString& path) {
+                        const auto it = MetadataByPath.find(path);
+                        if (it == MetadataByPath.end()) {
+                            return false; // this drive did not contain any metadata at all, we have to write it
+                        }
+                        const NKikimrBlobStorage::TPDiskMetadataRecord& m = it->second;
+                        if (!m.HasCommittedStorageConfig()) {
+                            return false; // we have to update this drive
+                        } else if (const auto& config = m.GetCommittedStorageConfig();
+                                config.GetGeneration() < LocalCommittedStorageConfig->GetGeneration()) {
+                            return false; // this too
+                        } else if (config.GetGeneration() == LocalCommittedStorageConfig->GetGeneration()) {
+                            Y_ABORT_UNLESS(config.GetFingerprint() == LocalCommittedStorageConfig->GetFingerprint());
+                            return true; // this drive contains relevant record
+                        }
+                        Y_ABORT(); // impossible case
+                    });
+                    drivesToWrite.erase(begin, end);
+
+                    for (const TString& path : drivesToWrite) {
+                        MetadataByPath[path].MutableCommittedStorageConfig()->CopyFrom(*LocalCommittedStorageConfig);
+                    }
+
+                    if (!drivesToWrite.empty()) {
+                        PersistConfig({}, drivesToWrite);
+                    }
+                } else {
+                    // no local commit -- drop all metadata records
+                    MetadataByPath.clear();
+                }
+
                 Y_ABORT_UNLESS(DirectBoundNodes.empty()); // ensure we don't have to spread this config
-                InitialConfig = std::make_shared<NKikimrBlobStorage::TStorageConfig>();
                 StorageConfigLoaded = true;
             }
         }
     }
 
-    std::vector<TString> TDistributedConfigKeeper::GetDrivesToRead(bool initial) const {
-        std::vector<TString> drivesToRead;
+    std::vector<TString> TDistributedConfigKeeper::GetDrives(const NKikimrBlobStorage::TStorageConfig& config) const {
+        std::vector<TString> drives;
         if (BaseConfig->GetSelfManagementConfig().GetEnabled()) {
-            auto callback = [&](const auto& /*node*/, const auto& drive) { drivesToRead.push_back(drive.GetPath()); };
-            EnumerateConfigDrives(*(initial ? InitialConfig : StorageConfig), SelfId().NodeId(), callback);
-            if (ProposedStorageConfig) {
-                EnumerateConfigDrives(*ProposedStorageConfig, SelfId().NodeId(), callback);
-            }
-            std::ranges::sort(drivesToRead);
-            const auto [begin, end] = std::ranges::unique(drivesToRead);
-            drivesToRead.erase(begin, end);
+            auto callback = [&](const auto& /*node*/, const auto& drive) { drives.push_back(drive.GetPath()); };
+            EnumerateConfigDrives(config, SelfId().NodeId(), callback);
+            std::ranges::sort(drives);
+            const auto [begin, end] = std::ranges::unique(drives);
+            drives.erase(begin, end);
         }
-        return drivesToRead;
+        return drives;
     }
 
 } // NKikimr::NStorage

@@ -182,7 +182,7 @@ void FillFieldMappingsImpl(
     bool listIsOptional,
     bool enableRecursiveRenaming,
     const THashMap<TString, TString>& inverseFieldRenames) {
-    static const THashMap<TString, TString> emptyInverseFieldRenames;
+    static const THashMap<TString, TString> EmptyInverseFieldRenames;
     mappings.resize(fromType->GetMembersCount());
     for (ui32 i = 0; i < fromType->GetMembersCount(); ++i) {
         TString fieldName(fromType->GetMemberName(i));
@@ -222,7 +222,7 @@ void FillFieldMappingsImpl(
                 Nothing(),
                 listIsOptional,
                 enableRecursiveRenaming,
-                enableRecursiveRenaming ? inverseFieldRenames : emptyInverseFieldRenames);
+                enableRecursiveRenaming ? inverseFieldRenames : EmptyInverseFieldRenames);
         }
     }
 }
@@ -482,7 +482,7 @@ void FillOutputMessage(
                                 reflection->AddEnumValue(destination, mapping.Field, item.Get<i32>());
                                 break;
                             case EEnumFormatType::String: {
-                                auto enumValueDescriptor = mapping.Field->enum_type()->FindValueByName(TString(item.AsStringRef()));
+                                auto enumValueDescriptor = mapping.Field->enum_type()->FindValueByName(item.AsStringRef());
                                 if (!enumValueDescriptor) {
                                     enumValueDescriptor = mapping.Field->default_value_enum();
                                 }
@@ -553,7 +553,7 @@ void FillOutputMessage(
                             reflection->SetEnumValue(destination, mapping.Field, cell.Get<i32>());
                             break;
                         case EEnumFormatType::String: {
-                            auto enumValueDescriptor = mapping.Field->enum_type()->FindValueByName(TString(cell.AsStringRef()));
+                            auto enumValueDescriptor = mapping.Field->enum_type()->FindValueByName(cell.AsStringRef());
                             if (!enumValueDescriptor) {
                                 enumValueDescriptor = mapping.Field->default_value_enum();
                             }
@@ -860,6 +860,7 @@ public:
             TUnboxedValue result;
             Converter_.DoConvert(message, result);
             WorkerHolder_->Push(std::move(result));
+            WorkerHolder_->CheckState(false);
         }
     }
 
@@ -868,6 +869,7 @@ public:
 
         with_lock (WorkerHolder_->GetScopedAlloc()) {
             WorkerHolder_->OnFinish();
+            WorkerHolder_->CheckState(true);
         }
     }
 };
@@ -900,6 +902,7 @@ public:
             YQL_ENSURE(status != EFetchStatus::Yield, "Yield is not supported in pull mode");
 
             if (status == EFetchStatus::Finish) {
+                WorkerHolder_->CheckState(true);
                 return TOutputSpecTraits<TOutputSpec>::StreamSentinel;
             }
 
@@ -932,6 +935,7 @@ public:
             TUnboxedValue value;
 
             if (!WorkerHolder_->GetOutputIterator().Next(value)) {
+                WorkerHolder_->CheckState(true);
                 return TOutputSpecTraits<TOutputSpec>::StreamSentinel;
             }
 

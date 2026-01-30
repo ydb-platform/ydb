@@ -4,12 +4,15 @@ $list0 = AsList('a', 'b');
 $list1 = AsList(Just('a'), 'b', Nothing(ParseType('String?')));
 $list2 = Just(AsList('a', 'b'));
 $list3 = Just(AsList(Just('a'), 'b', Nothing(ParseType('String?'))));
+
 $list_empty0 = ListCreate(ParseType('String'));
 $list_empty1 = ListCreate(ParseType('String?'));
 $list_empty2 = Just(ListCreate(ParseType('String')));
 $list_empty3 = Just(ListCreate(ParseType('String?')));
+
 $list_null0 = Just(AsList(Nothing(ParseType('String?'))));
 $list_null1 = Nothing(ParseType('List<String?>?'));
+
 $list_min = Just(AsList(Just(Just(Just('a'))), 'b'));
 
 SELECT

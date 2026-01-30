@@ -15,10 +15,10 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "arrow/compute/util_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/util_internal.h"
 
-#include "arrow/compute/util.h"
-#include "arrow/memory_pool.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/util.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/memory_pool.h"
 
 #ifdef ADDRESS_SANITIZER
 #  include <sanitizer/asan_interface.h>

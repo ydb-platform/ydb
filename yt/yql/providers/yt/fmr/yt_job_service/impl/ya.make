@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     yql_yt_job_service_impl.cpp
+    yql_yt_table_write_distributed_session.cpp
 )
 
 PEERDIR(

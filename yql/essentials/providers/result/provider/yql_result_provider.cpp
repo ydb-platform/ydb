@@ -27,7 +27,7 @@ using namespace NNodes;
 
 class TYsonResultWriter: public IResultWriter {
 public:
-    TYsonResultWriter(NYson::EYsonFormat format)
+    explicit TYsonResultWriter(NYson::EYsonFormat format)
         : Writer_(new NYson::TYsonWriter(&PartialStream_, format, ::NYson::EYsonType::Node, true))
     {
     }
@@ -228,7 +228,7 @@ IGraphTransformer::TStatus ValidateColumns(TExprNode::TPtr& columns, const TType
 
 class TResultCallableExecutionTransformer: public TGraphTransformerBase {
 public:
-    TResultCallableExecutionTransformer(const TIntrusivePtr<TResultProviderConfig>& config)
+    explicit TResultCallableExecutionTransformer(const TIntrusivePtr<TResultProviderConfig>& config)
         : Config_(config)
     {
         YQL_ENSURE(!Config_->Types.AvailablePureResultDataSources.empty());
@@ -340,7 +340,7 @@ private:
         if (input.Maybe<TResIf>()) {
             if (input.Ref().HasResult()) {
                 auto resultYsonString = input.Ref().GetResult().Content();
-                auto resultNode = NYT::NodeFromYsonString(TString(resultYsonString), ::NYson::EYsonType::Node);
+                auto resultNode = NYT::NodeFromYsonString(resultYsonString, ::NYson::EYsonType::Node);
                 YQL_ENSURE(resultNode.IsMap());
                 auto resultBoolNode = resultNode.AsMap()["Data"];
                 YQL_ENSURE(resultBoolNode.IsBool());
@@ -449,7 +449,7 @@ private:
             } else if (input.Ref().HasResult()) {
                 // parse list
                 auto resultYsonString = input.Ref().GetResult().Content();
-                auto resultNode = NYT::NodeFromYsonString(TString(resultYsonString), ::NYson::EYsonType::Node);
+                auto resultNode = NYT::NodeFromYsonString(resultYsonString, ::NYson::EYsonType::Node);
                 YQL_ENSURE(resultNode.IsMap());
                 auto resultDataNode = resultNode.AsMap()["Data"];
 
@@ -678,7 +678,7 @@ bool& TResultCallableExecutionTransformer::GetOverflowFlagAndCommitedSize<TPull>
 
 class TResultTrackableNodeProcessor: public TTrackableNodeProcessorBase {
 public:
-    TResultTrackableNodeProcessor(const TIntrusivePtr<TResultProviderConfig>& config)
+    explicit TResultTrackableNodeProcessor(const TIntrusivePtr<TResultProviderConfig>& config)
         : Config_(config)
     {
     }
@@ -698,7 +698,7 @@ private:
 
 class TPhysicalFinalizingTransformer final: public TSyncTransformerBase {
 public:
-    TPhysicalFinalizingTransformer(const TIntrusivePtr<TResultProviderConfig>& config)
+    explicit TPhysicalFinalizingTransformer(const TIntrusivePtr<TResultProviderConfig>& config)
         : Config_(config)
     {
     }
@@ -945,7 +945,7 @@ public:
         }
     };
 
-    TResultProvider(const TIntrusivePtr<TResultProviderConfig>& config)
+    explicit TResultProvider(const TIntrusivePtr<TResultProviderConfig>& config)
         : Config_(config)
         , TrackableNodeProcessor_(config)
     {

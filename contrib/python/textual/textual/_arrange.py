@@ -61,7 +61,7 @@ def arrange(
     layers = _build_layers(display_widgets)
 
     for widgets in layers.values():
-        # Partition widgets in to split widgets and non-split widgets
+        # Partition widgets into split widgets and non-split widgets
         non_split_widgets, split_widgets = partition(get_split, widgets)
         if split_widgets:
             _split_placements, dock_region = _arrange_split_widgets(
@@ -99,8 +99,13 @@ def arrange(
             # Perform any alignment of the widgets.
             if styles.align_horizontal != "left" or styles.align_vertical != "top":
                 bounding_region = WidgetPlacement.get_bounds(layout_placements)
+                container_width, container_height = dock_region.size
                 placement_offset += styles._align_size(
-                    bounding_region.size, dock_region.size
+                    bounding_region.size,
+                    Size(
+                        0 if styles.is_auto_width else container_width,
+                        0 if styles.is_auto_height else container_height,
+                    ),
                 ).clamped
 
             if placement_offset:

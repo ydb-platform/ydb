@@ -207,17 +207,6 @@ BELONGS ya.make
         src/core/tsi/ssl/key_logging/ssl_key_logging.h [1:1]
         src/cpp/common/tls_certificate_verifier.cc [2:2]
 
-KEEP     COPYRIGHT_SERVICE_LABEL 0cda88d047ce1cbd63afdf716f1ace43
-BELONGS third_party/upb/ya.make
-    License text:
-        Copyright (c) 2019 Yibo Cai
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        third_party/upb/third_party/utf8_range/LICENSE [3:3]
-
 KEEP     COPYRIGHT_SERVICE_LABEL 0e7dfde444a19e176393b344aaa268da
 BELONGS ya.make
     License text:

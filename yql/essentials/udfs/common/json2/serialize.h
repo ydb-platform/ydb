@@ -18,7 +18,7 @@ using namespace NBinaryJson;
 template <EDataSlot ResultType>
 class TSerialize: public TBoxedValue {
 public:
-    TSerialize(TSourcePosition pos)
+    explicit TSerialize(TSourcePosition pos)
         : Pos_(pos)
     {
     }
@@ -76,13 +76,14 @@ private:
 
 template <>
 const TStringRef& TSerialize<EDataSlot::Json>::Name() {
-    static auto name = TStringRef::Of("Serialize");
-    return name;
+    static auto Name = TStringRef::Of("Serialize");
+    return Name;
 }
 
 template <>
 const TStringRef& TSerialize<EDataSlot::JsonDocument>::Name() {
-    static auto name = TStringRef::Of("SerializeToJsonDocument");
-    return name;
+    static auto Name = TStringRef::Of("SerializeToJsonDocument");
+    return Name;
 }
+
 } // namespace NJson2Udf

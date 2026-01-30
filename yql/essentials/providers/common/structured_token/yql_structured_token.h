@@ -11,6 +11,8 @@ public:
     explicit TStructuredToken(TMap<TString, TString>&& data = {});
     TStructuredToken(TStructuredToken&&) = default;
     TStructuredToken(const TStructuredToken&) = default;
+    TStructuredToken& operator=(TStructuredToken&&) = default;
+    TStructuredToken& operator=(const TStructuredToken&) = default;
 
     TString GetField(const TString& name) const;
     TString GetFieldOrDefault(const TString& name, const TString& defaultValue) const;

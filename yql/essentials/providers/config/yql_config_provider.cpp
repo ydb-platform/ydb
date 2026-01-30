@@ -16,6 +16,7 @@
 #include <yql/essentials/utils/retry.h>
 
 #include <library/cpp/json/json_reader.h>
+#include <library/cpp/yson/node/node_io.h>
 
 #include <util/string/cast.h>
 #include <util/generic/hash.h>
@@ -26,12 +27,15 @@
 
 namespace NYql {
 
+const TString ActivationComponent = "Activation";
+const TString ActivationLabel = "YqlCore";
+
 namespace {
 using namespace NNodes;
 
 class TConfigCallableExecutionTransformer: public TSyncTransformerBase {
 public:
-    TConfigCallableExecutionTransformer(const TTypeAnnotationContext& types)
+    explicit TConfigCallableExecutionTransformer(const TTypeAnnotationContext& types)
         : Types_(types)
     {
         Y_UNUSED(Types_);
@@ -130,8 +134,10 @@ public:
         }
     };
 
-    TConfigProvider(TTypeAnnotationContext& types, const TGatewaysConfig* config, const TString& username, const TAllowSettingPolicy& policy)
+    TConfigProvider(TTypeAnnotationContext& types, const TGatewaysConfig* config, const TString& username,
+                    const TAllowSettingPolicy& policy, bool forPartialTypeCheck)
         : Types_(types)
+        , ForPartialTypeCheck_(forPartialTypeCheck)
         , CoreConfig_(config && config->HasYqlCore() ? &config->GetYqlCore() : nullptr)
         , Username_(username)
         , Policy_(policy)
@@ -144,14 +150,16 @@ public:
 
     bool Initialize(TExprContext& ctx) override {
         std::unordered_set<std::string_view> groups;
+        bool isRobot = false;
         if (Types_.Credentials != nullptr) {
             groups.insert(Types_.Credentials->GetGroups().begin(), Types_.Credentials->GetGroups().end());
+            isRobot = Types_.Credentials->IsRobot();
         }
-        auto filter = [this, groups = std::move(groups)](const TCoreAttr& attr) {
+        auto filter = [this, groups = std::move(groups), isRobot](const TCoreAttr& attr) {
             if (!attr.HasActivation() || !Username_) {
                 return true;
             }
-            if (NConfig::Allow(attr.GetActivation(), Username_, groups)) {
+            if (NConfig::Allow(attr.GetActivation(), Username_, isRobot, groups)) {
                 Statistics_.Entries.emplace_back(TStringBuilder() << "Activation:" << attr.GetName(), 0, 0, 0, 0, 1);
                 return true;
             }
@@ -159,17 +167,21 @@ public:
         };
         if (CoreConfig_) {
             TPosition pos;
-            for (auto& flag : CoreConfig_->GetFlags()) {
-                if (filter(flag)) {
-                    TVector<TStringBuf> args;
-                    for (auto& arg : flag.GetArgs()) {
-                        args.push_back(arg);
-                    }
-                    if (!ApplyFlag(pos, flag.GetName(), args, ctx)) {
-                        return false;
-                    }
+            TVector<TCoreAttr> flags;
+            if (auto loadedFlags = LoadFlags()) {
+                flags = std::move(*loadedFlags);
+            } else {
+                const auto& configFlags = CoreConfig_->GetFlags();
+                CopyIf(configFlags.begin(), configFlags.end(), std::back_inserter(flags), filter);
+            }
+            for (const auto& flag : flags) {
+                const auto& flagArgs = flag.GetArgs();
+                TVector<TStringBuf> args(flagArgs.begin(), flagArgs.end());
+                if (!ApplyFlag(pos, flag.GetName(), args, ctx)) {
+                    return false;
                 }
             }
+            SaveFlags(flags);
         }
         return true;
     }
@@ -558,10 +570,28 @@ private:
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Expected integer, but got: " << args[0]));
                 return false;
             }
+        } else if (name == "TransformCycleDetector") {
+            if (args.size() != 1) {
+                ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 1 argument, but got " << args.size()));
+                return false;
+            }
+            ui64 cnt;
+            if (!TryFromString(args[0], cnt)) {
+                ctx.AddError(TIssue(pos, TStringBuilder() << "Expected integer, but got: " << args[0]));
+                return false;
+            }
+
+            if (!ctx.CycleDetector) {
+                ctx.CycleDetector.ConstructInPlace(cnt);
+            }
         } else if (name == "PureDataSource") {
             if (args.size() != 1) {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 1 argument, but got " << args.size()));
                 return false;
+            }
+
+            if (ForPartialTypeCheck_) {
+                return true;
             }
 
             auto dataSource = args[0];
@@ -729,6 +759,12 @@ private:
                 return false;
             }
             Types_.DiscoveryMode = true;
+        } else if (name == "WindowNewPipeline" || name == "DisableWindowNewPipeline") {
+            if (args.size() != 0) {
+                ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
+                return false;
+            }
+            Types_.WindowNewPipeline = (name == "WindowNewPipeline");
         } else if (name == "EnableSystemColumns") {
             if (args.size() != 0) {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
@@ -746,6 +782,13 @@ private:
             }
 
             Types_.UdfIndex->SetCaseSentiveSearch(name == "UdfStrictCase");
+        } else if (name == "NamedArgsIgnoreCase" || name == "NamedArgsStrictCase") {
+            if (args.size() != 0) {
+                ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
+                return false;
+            }
+
+            Types_.CaseInsensitiveNamedArgs = (name == "NamedArgsIgnoreCase");
         } else if (name == "DqEngine") {
             if (args.size() != 1) {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Expected at most 1 argument, but got " << args.size()));
@@ -1074,11 +1117,11 @@ private:
 
             Types_.NormalizeDependsOn = res;
         } else if (name == "UseUrlListerForFolder" || name == "DisableUseUrlListerForFolder") {
+            // TODO: remove
             if (args.size() != 0) {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
                 return false;
             }
-            Types_.UseUrlListerForFolder = ("UseUrlListerForFolder" == name);
         } else if (name == "EarlyExpandSeq" || name == "DisableEarlyExpandSeq") {
             if (args.size() != 0) {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
@@ -1132,18 +1175,25 @@ private:
             return false;
         }
 
+        if (ForPartialTypeCheck_) {
+            return true;
+        }
+
         // file alias
         const auto& fileAlias = args[0];
         TString customUdfPrefix = args.size() > 1 ? TString(args[1]) : "";
         const auto key = TUserDataStorage::ComposeUserDataKey(fileAlias);
         TString errorMessage;
-        const TUserDataBlock* udfSource = nullptr;
+        TUserDataBlock* udfSource = nullptr;
         if (!Types_.QContext.CanRead()) {
             udfSource = Types_.UserDataStorage->FreezeUdfNoThrow(key, errorMessage, customUdfPrefix, Types_.RuntimeLogLevel, fileAlias);
             if (!udfSource) {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Unknown file: " << fileAlias << ", details: " << errorMessage));
                 return false;
             }
+        } else {
+            udfSource = &Types_.UserDataStorage->GetUserDataBlock(key);
+            udfSource->CustomUdfPrefix = customUdfPrefix;
         }
 
         IUdfResolver::TImport import;
@@ -1196,6 +1246,10 @@ private:
     }
 
     bool AddFileByUrl(const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
+        if (ForPartialTypeCheck_) {
+            return true;
+        }
+
         if (args.size() < 2 || args.size() > 3) {
             ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 2 or 3 arguments, but got " << args.size()));
             return false;
@@ -1226,6 +1280,10 @@ private:
     }
 
     bool SetFileOption(const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
+        if (ForPartialTypeCheck_) {
+            return true;
+        }
+
         if (args.size() != 3) {
             ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 3 arguments, but got " << args.size()));
             return false;
@@ -1234,6 +1292,10 @@ private:
     }
 
     bool SetPackageVersion(const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
+        if (ForPartialTypeCheck_) {
+            return true;
+        }
+
         if (args.size() != 2) {
             ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 2 arguments, but got " << args.size()));
             return false;
@@ -1310,6 +1372,10 @@ private:
     }
 
     bool AddFolderByUrl(const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
+        if (ForPartialTypeCheck_) {
+            return true;
+        }
+
         if (args.size() < 2 || args.size() > 3) {
             ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 2 or 3 arguments, but got " << args.size()));
             return false;
@@ -1319,91 +1385,33 @@ private:
         TStringBuf url = args[1];
         TStringBuf tokenName = args.size() == 3 ? args[2] : TStringBuf();
 
-        if (Types_.UseUrlListerForFolder) {
-            TStringBuf token;
-            if (tokenName) {
-                if (auto cred = Types_.Credentials->FindCredential(tokenName)) {
-                    token = cred->Content;
-                } else {
-                    ctx.AddError(TIssue(pos, TStringBuilder() << "Unknown token name '" << tokenName << "' for folder."));
-                    return false;
-                }
-            }
-
-            if (!Types_.UrlListerManager) {
-                ctx.AddError(TIssue(pos, TStringBuilder() << "UrlListerManager is not initialized, unable to add folder by url"));
-                return false;
-            }
-
-            TString separator = "/";
-            TVector<TUrlListEntry> entries;
-            try {
-                entries = Types_.UrlListerManager->ListUrlRecursive(TString(url), TString(tokenName), separator, Types_.FolderSubDirsLimit);
-            } catch (const std::exception& e) {
-                ctx.AddError(TIssue(pos, TStringBuilder() << "failed to list URL '" << url << "', details: " << e.what()));
-                return false;
-            }
-
-            for (const auto& entry : entries) {
-                if (!AddFileByUrlImpl(TStringBuilder() << prefix << entry.Name, entry.Url, token, pos, ctx)) {
-                    return false;
-                }
-            }
-        } else {
-            TStringBuf token;
-            if (tokenName) {
-                if (auto cred = Types_.Credentials->FindCredential(tokenName)) {
-                    token = cred->Content;
-                } else {
-                    ctx.AddError(TIssue(pos, TStringBuilder() << "Unknown token name '" << tokenName << "' for folder."));
-                    return false;
-                }
-            } else if (auto cred = Types_.Credentials->FindCredential("default_sandbox")) {
+        TStringBuf token;
+        if (tokenName) {
+            if (auto cred = Types_.Credentials->FindCredential(tokenName)) {
                 token = cred->Content;
+            } else {
+                ctx.AddError(TIssue(pos, TStringBuilder() << "Unknown token name '" << tokenName << "' for folder."));
+                return false;
             }
+        }
 
-            std::vector<std::pair<TString, TString>> queue;
-            queue.emplace_back(prefix, url);
+        if (!Types_.UrlListerManager) {
+            ctx.AddError(TIssue(pos, TStringBuilder() << "UrlListerManager is not initialized, unable to add folder by url"));
+            return false;
+        }
 
-            size_t count = 0;
-            while (!queue.empty()) {
-                auto [prefix, url] = queue.back();
-                queue.pop_back();
+        TString separator = "/";
+        TVector<TUrlListEntry> entries;
+        try {
+            entries = Types_.UrlListerManager->ListUrlRecursive(TString(url), TString(tokenName), separator, Types_.FolderSubDirsLimit);
+        } catch (const std::exception& e) {
+            ctx.AddError(TIssue(pos, TStringBuilder() << "failed to list URL '" << url << "', details: " << e.what()));
+            return false;
+        }
 
-                YQL_CLOG(DEBUG, ProviderConfig) << "Listing sandbox folder " << prefix << ": " << url;
-                NJson::TJsonValue content;
-                if (!ListSandboxFolder(url, token, pos, ctx, content)) {
-                    return false;
-                }
-
-                for (const auto& file : content.GetMap()) {
-                    const auto& fileAttrs = file.second.GetMap();
-                    auto fileUrl = fileAttrs.FindPtr("url");
-                    if (fileUrl) {
-                        TString type = "REGULAR";
-                        if (auto t = fileAttrs.FindPtr("type")) {
-                            type = t->GetString();
-                        }
-                        TStringBuilder alias;
-                        if (!prefix.empty()) {
-                            alias << prefix << "/";
-                        }
-                        alias << file.first;
-                        if (type == "REGULAR") {
-                            if (!AddFileByUrlImpl(alias, TStringBuf(MakeHttps(fileUrl->GetString())), token, pos, ctx)) {
-                                return false;
-                            }
-                        } else if (type == "DIRECTORY") {
-                            queue.emplace_back(alias, fileUrl->GetString());
-                            if (++count > Types_.FolderSubDirsLimit) {
-                                ctx.AddError(TIssue(pos, TStringBuilder() << "Sandbox resource has too many subfolders. Limit is " << Types_.FolderSubDirsLimit));
-                                return false;
-                            }
-                        } else {
-                            YQL_CLOG(WARN, ProviderConfig) << "Got unknown sandbox item type: " << type << ", name=" << alias;
-                        }
-                    }
-                }
+        for (const auto& entry : entries) {
+            if (!AddFileByUrlImpl(TStringBuilder() << prefix << entry.Name, entry.Url, token, pos, ctx)) {
+                return false;
             }
         }
 
@@ -1437,8 +1445,43 @@ private:
         return parseResult == TWarningRule::EParseResult::PARSE_OK;
     }
 
+    TMaybe<TVector<TCoreAttr>> LoadFlags() {
+        TMaybe<TVector<TCoreAttr>> loadedFlags;
+        if (!Types_.QContext.CanRead()) {
+            return loadedFlags;
+        }
+        if (auto loaded = Types_.QContext.GetReader()->Get({ActivationComponent, ActivationLabel}).GetValueSync()) {
+            auto flagsNode = NYT::NodeFromYsonString(loaded->Value);
+            TVector<TCoreAttr> flags;
+            for (const auto& [flagName, flagValue] : flagsNode.AsMap()) {
+                TCoreAttr flag;
+                YQL_ENSURE(flag.ParseFromString(flagValue.AsString()));
+                flags.emplace_back(std::move(flag));
+            }
+            loadedFlags = std::move(flags);
+            YQL_CLOG(INFO, ProviderConfig) << "YqlCore flags are loaded at replay mode";
+        }
+        return loadedFlags;
+    }
+
+    void SaveFlags(const TVector<TCoreAttr>& flags) {
+        if (!Types_.QContext.CanWrite()) {
+            return;
+        }
+        auto flagsNode = NYT::TNode::CreateMap();
+        for (const auto& flag : flags) {
+            TString data;
+            YQL_ENSURE(flag.SerializeToString(&data));
+            flagsNode[flag.GetName()] = std::move(data);
+        }
+        auto flagsYson = NYT::NodeToYsonString(flagsNode, NYT::NYson::EYsonFormat::Binary);
+        Types_.QContext.GetWriter()->Put({ActivationComponent, ActivationLabel}, flagsYson).GetValueSync();
+        YQL_CLOG(INFO, ProviderConfig) << "YqlCore flags are saved to QStorage";
+    }
+
 private:
     TTypeAnnotationContext& Types_;
+    const bool ForPartialTypeCheck_;
     TAutoPtr<IGraphTransformer> TypeAnnotationTransformer_;
     TAutoPtr<IGraphTransformer> ConfigurationTransformer_;
     TAutoPtr<IGraphTransformer> CallableExecutionTransformer_;
@@ -1450,9 +1493,9 @@ private:
 } // namespace
 
 TIntrusivePtr<IDataProvider> CreateConfigProvider(TTypeAnnotationContext& types, const TGatewaysConfig* config, const TString& username,
-                                                  const TAllowSettingPolicy& policy)
+                                                  const TAllowSettingPolicy& policy, bool forPartialTypeCheck)
 {
-    return new TConfigProvider(types, config, username, policy);
+    return new TConfigProvider(types, config, username, policy, forPartialTypeCheck);
 }
 
 const THashSet<TStringBuf>& ConfigProviderFunctions() {

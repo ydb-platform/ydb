@@ -5,6 +5,7 @@
 #include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/ast/yql_expr_types.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_data_provider.h>
 
 namespace NYql {
 
@@ -32,6 +33,12 @@ TExprNode::TPtr ParseAndAnnotate(
         const TStringBuf& str,
         TExprContext& exprCtx, bool instant, bool wholeProgram,
         TTypeAnnotationContext& typeAnnotationContext);
+
+TAutoPtr<IGraphTransformer> CreatePartialTypeAnnotationTransformer(
+    TAutoPtr<IGraphTransformer> callableTransformer, TTypeAnnotationContext& types);
+
+bool PartialAnnonateTypes(TAstNode* astRoot, TLangVersion langver, TIssues& issues,
+    std::function<TIntrusivePtr<IDataProvider>(TTypeAnnotationContext&)> configProviderFactory);
 
 void CheckFatalTypeError(IGraphTransformer::TStatus status);
 

@@ -592,11 +592,16 @@ TEST_F(TSslTest, MutualVerificationFailedWithWrongClientCertificate)
         auto message = CreateMessage(1);
         auto sendFuture = bus->Send(message, {.TrackingLevel = EDeliveryTrackingLevel::Full});
         auto error = sendFuture.Get();
-        EXPECT_EQ(error.GetCode(), EErrorCode::SslError);
-        EXPECT_THROW_MESSAGE_HAS_SUBSTR(
-            error.ThrowOnError(),
-            NYT::TErrorException,
-            "alert unknown ca");
+        if (ToString(error).Contains("Connection reset by peer")) {
+            // This can happen if SSL_shutdown failed with EWOULDBLOCK.
+            EXPECT_EQ(error.GetCode(), EErrorCode::TransportError);
+        } else {
+            EXPECT_EQ(error.GetCode(), EErrorCode::SslError);
+            EXPECT_THROW_MESSAGE_HAS_SUBSTR(
+                error.ThrowOnError(),
+                NYT::TErrorException,
+                "alert unknown ca");
+        }
     }
 
     server->Stop()
@@ -709,6 +714,71 @@ TEST_F(TSslTest, FullVerificationWithEllipticCurve)
             .Get()
             .ThrowOnError();
     }
+}
+
+TEST_F(TSslTest, ServerStop)
+{
+    auto serverConfig = TBusServerConfig::CreateTcp(Port);
+    serverConfig->EncryptionMode = EEncryptionMode::Required;
+    serverConfig->CertificateChain = CertificateChain;
+    serverConfig->PrivateKey = PrivateKey;
+    auto server = CreateBusServer(serverConfig);
+    server->Start(New<TEmptyBusHandler>());
+
+    auto clientConfig = TBusClientConfig::CreateTcp(AddressWithHostName);
+    clientConfig->EncryptionMode = EEncryptionMode::Required;
+    auto client = CreateBusClient(clientConfig);
+
+    auto bus = client->CreateBus(New<TEmptyBusHandler>());
+    EXPECT_TRUE(bus->GetReadyFuture().Get().IsOK());
+    EXPECT_TRUE(bus->IsEncrypted());
+
+    server->Stop()
+        .Get()
+        .ThrowOnError();
+
+    auto message = CreateMessage(1);
+    auto sendFuture = bus->Send(message, {.TrackingLevel = EDeliveryTrackingLevel::Full});
+    auto error = sendFuture.Get();
+    EXPECT_EQ(error.GetCode(), EErrorCode::TransportError);
+
+    auto errorMessage = ToString(error);
+    EXPECT_TRUE(errorMessage.Contains("Connection reset by peer") || errorMessage.Contains("Socket was closed"));
+}
+
+TEST_F(TSslTest, BlackHole)
+{
+    auto serverConfig = TBusServerConfig::CreateTcp(Port);
+    serverConfig->EncryptionMode = EEncryptionMode::Required;
+    serverConfig->CertificateChain = CertificateChain;
+    serverConfig->PrivateKey = PrivateKey;
+    auto server = CreateBusServer(serverConfig);
+    server->Start(New<TEmptyBusHandler>());
+
+    auto clientConfig = TBusClientConfig::CreateTcp(AddressWithHostName);
+    clientConfig->EncryptionMode = EEncryptionMode::Required;
+    clientConfig->ReadStallTimeout = TDuration::Seconds(1);
+    auto client = CreateBusClient(clientConfig);
+
+    auto bus = client->CreateBus(New<TEmptyBusHandler>());
+    EXPECT_TRUE(bus->GetReadyFuture().Get().IsOK());
+    EXPECT_TRUE(bus->IsEncrypted());
+
+    // Block all traffic from server.
+    bus->SetTosLevel(BlackHoleTosLevel);
+
+    auto message = CreateMessage(1);
+    auto sendFuture = bus->Send(message, {.TrackingLevel = EDeliveryTrackingLevel::Full});
+    auto error = sendFuture.Get();
+    EXPECT_EQ(error.GetCode(), EErrorCode::TransportError);
+    EXPECT_THROW_MESSAGE_HAS_SUBSTR(
+        error.ThrowOnError(),
+        NYT::TErrorException,
+        "Socket read stalled");
+
+    server->Stop()
+        .Get()
+        .ThrowOnError();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

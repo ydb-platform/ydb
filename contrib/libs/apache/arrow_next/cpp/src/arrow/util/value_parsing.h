@@ -29,15 +29,15 @@
 #include <string>
 #include <type_traits>
 
-#include "arrow/type.h"
-#include "arrow/type_traits.h"
-#include "arrow/util/checked_cast.h"
-#include "arrow/util/config.h"
-#include "arrow/util/macros.h"
-#include "arrow/util/time.h"
-#include "arrow/util/visibility.h"
-#include "arrow/vendored/datetime.h"
-#include "arrow/vendored/strptime.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type_traits.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/checked_cast.h"
+#include "contrib/libs/apache/arrow_next/src/arrow/util/config.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/macros.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/time.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/visibility.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/vendored/datetime.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/vendored/strptime.h"
 
 namespace arrow20 {
 

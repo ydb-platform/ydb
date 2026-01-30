@@ -16,20 +16,15 @@ namespace itertools
   {
     template <class T>
     struct combination_iterator
-        : std::iterator<std::forward_iterator_tag,
-                        types::dynamic_tuple<typename T::value_type>, ptrdiff_t,
-                        types::dynamic_tuple<typename T::value_type> *,
+        : std::iterator<std::forward_iterator_tag, types::dynamic_tuple<typename T::value_type>,
+                        ptrdiff_t, types::dynamic_tuple<typename T::value_type> *,
                         types::dynamic_tuple<typename T::value_type> /*no ref*/
                         > {
-      std::vector<typename T::value_type,
-                  utils::allocator<typename T::value_type>>
-          pool;
+      std::vector<typename T::value_type, utils::allocator<typename T::value_type>> pool;
       std::vector<long, utils::allocator<long>> indices;
       long r;
       bool stopped;
-      std::vector<typename T::value_type,
-                  utils::allocator<typename T::value_type>>
-          result;
+      std::vector<typename T::value_type, utils::allocator<typename T::value_type>> result;
 
       combination_iterator() = default;
       combination_iterator(bool);
@@ -62,9 +57,8 @@ namespace itertools
   } // namespace details
 
   template <typename T0>
-  details::combination<
-      typename std::remove_cv<typename std::remove_reference<T0>::type>::type>
-  combinations(T0 &&iter, long num_elts);
+  details::combination<std::remove_cv_t<std::remove_reference_t<T0>>> combinations(T0 &&iter,
+                                                                                   long num_elts);
 
   DEFINE_FUNCTOR(pythonic::itertools, combinations);
 } // namespace itertools
@@ -75,9 +69,8 @@ PYTHONIC_NS_END
 
 template <class E, class T>
 struct __combined<E, pythonic::itertools::details::combination<T>> {
-  using type =
-      typename __combined<E, container<typename pythonic::itertools::details::
-                                           combination<T>::value_type>>::type;
+  using type = typename __combined<
+      E, container<typename pythonic::itertools::details::combination<T>::value_type>>::type;
 };
 
 /* } */

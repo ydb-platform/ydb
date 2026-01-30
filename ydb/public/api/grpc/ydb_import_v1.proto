@@ -18,6 +18,9 @@ service ImportService {
     // List objects from existing export stored in S3 bucket
     rpc ListObjectsInS3Export(Import.ListObjectsInS3ExportRequest) returns (Import.ListObjectsInS3ExportResponse);
 
+    // List objects from existing export stored in FS
+    rpc ListObjectsInFsExport(Import.ListObjectsInFsExportRequest) returns (Import.ListObjectsInFsExportResponse);
+
     // Writes data to a table.
     // Method accepts serialized data in the selected format and writes it non-transactionally.
     rpc ImportData(Import.ImportDataRequest) returns (Import.ImportDataResponse);

@@ -6,7 +6,7 @@ Y_UNIT_TEST_SUITE(TMLPChangerTests) {
 
 Y_UNIT_TEST(TopicNotExists) {
     auto setup = CreateSetup();
-    
+
     auto& runtime = setup->GetRuntime();
     CreateCommitterActor(runtime, {
         .DatabasePath = "/Root",
@@ -25,7 +25,7 @@ Y_UNIT_TEST(ConsumerNotExists) {
     auto setup = CreateSetup();
 
     ExecuteDDL(*setup, "CREATE TOPIC topic1");
-    
+
     auto& runtime = setup->GetRuntime();
     CreateCommitterActor(runtime, {
         .DatabasePath = "/Root",
@@ -43,7 +43,7 @@ Y_UNIT_TEST(PartitionNotExists) {
     auto setup = CreateSetup();
 
     CreateTopic(setup, "/Root/topic1", "mlp-consumer");
-    
+
     auto& runtime = setup->GetRuntime();
     CreateCommitterActor(runtime, {
         .DatabasePath = "/Root",
@@ -69,7 +69,7 @@ Y_UNIT_TEST(CommitTest) {
     setup->Write("/Root/topic1", "msg-2", 0);
 
     Sleep(TDuration::Seconds(2));
-    
+
     auto& runtime = setup->GetRuntime();
     CreateCommitterActor(runtime, {
         .DatabasePath = "/Root",
@@ -138,12 +138,12 @@ Y_UNIT_TEST(ReadAndReleaseTest) {
     }
 
     {
-        CreateMessageDeadlineChangerActor(runtime, {
+        CreateMessageDeadlineChangerActor(runtime, TMessageDeadlineChangerSettings{
             .DatabasePath = "/Root",
             .TopicName = "/Root/topic1",
             .Consumer = "mlp-consumer",
             .Messages = { TMessageId(0, 0) },
-            .Deadline = TInstant::Now() - TDuration::Seconds(1)
+            .Deadlines = {TInstant::Now() - TDuration::Seconds(1), },
         });
 
         auto result = GetChangeResponse(runtime);
@@ -185,19 +185,18 @@ Y_UNIT_TEST(CapacityTest) {
 
     auto setup = CreateSetup();
 
-    CreateTopic(setup, "/Root/topic1", "mlp-consumer");
+    CreateTopic(setup, "/Root/topic1", "mlp-consumer", 1, true);
 
     Cerr << (TStringBuilder() << ">>>>> TOPIC WAS CREATED" << Endl);
-
-    WriteMany(setup, "/Root/topic1", 0, 10000, 50000);
-
-    Cerr << (TStringBuilder() << ">>>>> MESSAGES WAS WRITTEN" << Endl);
 
     struct State {
         size_t ReadSuccess = 0;
         size_t ReadFailed = 0;
         size_t CommitSuccess = 0;
         size_t CommitFailed = 0;
+        size_t WriteSuccess = 0;
+        size_t WriteAlreadyExists = 0;
+        size_t WriteFailed = 0;
     };
 
     State state;
@@ -209,12 +208,27 @@ Y_UNIT_TEST(CapacityTest) {
 
         void Bootstrap() {
             Become(&TestActor::StateWork);
-            Schedule(TDuration::Seconds(30), new TEvents::TEvWakeup());
+            Schedule(TDuration::Seconds(60), new TEvents::TEvWakeup());
             Next();
         }
 
         void Next() {
-            while (Infly < 200) {
+            while (InflightWrite < 250) {
+                Register(CreateWriter(SelfId(), TWriterSettings{
+                    .DatabasePath = "/Root",
+                    .TopicName = "/Root/topic1",
+                    .Messages = {{
+                        .Index = 0,
+                        .MessageBody = Body,
+                        .MessageGroupId = TStringBuilder() << "message-group-" << RandomNumber<ui64>(100000),
+                        .MessageDeduplicationId = TStringBuilder() << "deduplication-id-" << RandomNumber<ui64>(5000000)
+                    }}
+                }));
+
+                ++InflightWrite;
+            }
+
+            while (Inflight < 300) {
                 Register(CreateReader(SelfId(), TReaderSettings{
                     .DatabasePath = "/Root",
                     .TopicName = "/Root/topic1",
@@ -224,12 +238,27 @@ Y_UNIT_TEST(CapacityTest) {
                     .MaxNumberOfMessage = 1
                 }));
 
-                ++Infly;
+                ++Inflight;
             }
         }
 
+        void Handle(NMLP::TEvWriteResponse::TPtr& ev) {
+            --InflightWrite;
+
+            auto& messages = ev->Get()->Messages;
+            if (messages.size() != 1 || messages[0].Status == Ydb::StatusIds::INTERNAL_ERROR) {
+                State.WriteFailed++;
+            } else if (messages[0].Status == Ydb::StatusIds::ALREADY_EXISTS) {
+                State.WriteAlreadyExists++;
+            } else {
+                State.WriteSuccess++;
+            }
+
+            Next();
+        }
+
         void Handle(NMLP::TEvReadResponse::TPtr& ev) {
-            --Infly;
+            --Inflight;
 
             if (ev->Get()->Status == Ydb::StatusIds::SUCCESS) {
                 ++State.ReadSuccess;
@@ -242,7 +271,7 @@ Y_UNIT_TEST(CapacityTest) {
                         .Messages = { ev->Get()->Messages[0].MessageId }
                     }));
 
-                    ++Infly;
+                    ++Inflight;
                 }
             } else {
                 ++State.ReadFailed;
@@ -252,7 +281,7 @@ Y_UNIT_TEST(CapacityTest) {
         }
 
         void Handle(NMLP::TEvChangeResponse::TPtr& ev) {
-            --Infly;
+            --Inflight;
 
             if (ev->Get()->Status == Ydb::StatusIds::SUCCESS) {
                 ++State.CommitSuccess;
@@ -265,14 +294,18 @@ Y_UNIT_TEST(CapacityTest) {
 
         STFUNC(StateWork) {
             switch (ev->GetTypeRewrite()) {
+                hFunc(NMLP::TEvWriteResponse, Handle);
                 hFunc(NMLP::TEvReadResponse, Handle);
                 hFunc(NMLP::TEvChangeResponse, Handle);
                 sFunc(TEvents::TEvPoison, PassAway);
                 sFunc(TEvents::TEvWakeup, PassAway);
-            }            
+            }
         }
 
-        size_t Infly = 0;
+        size_t Inflight = 0;
+        size_t InflightWrite = 0;
+
+        TString Body = NUnitTest::RandomString(10_KB);
 
         State& State;
     };
@@ -281,12 +314,16 @@ Y_UNIT_TEST(CapacityTest) {
     runtime.Register(new TestActor(state));
 
 
-    Sleep(TDuration::Seconds(35));
+    Sleep(TDuration::Seconds(65));
 
     Cerr << "Total:\n  Read success: " << state.ReadSuccess
         << "\n  Read fail: " << state.ReadFailed
         << "\n  Commit success: " << state.CommitSuccess
         << "\n  Commit fail: " << state.CommitFailed
+        << "\n  Write success: " << state.WriteSuccess
+        << "\n  Write fail: " << state.WriteFailed
+        << "\n  Write deduplicated: " << state.WriteAlreadyExists
+        << "\n  RPS: " << (state.ReadSuccess + state.CommitSuccess + state.WriteSuccess + state.WriteAlreadyExists) / 60
         << Endl;
 }
 

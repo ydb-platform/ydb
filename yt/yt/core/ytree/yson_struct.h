@@ -63,6 +63,11 @@ public:
 
     TYsonStructBase();
 
+    TYsonStructBase(const TYsonStructBase& that) = default;
+    TYsonStructBase(TYsonStructBase&& that) = default;
+    TYsonStructBase& operator=(const TYsonStructBase& that);
+    TYsonStructBase& operator=(TYsonStructBase&& that);
+
     virtual ~TYsonStructBase() = default;
 
     void Load(
@@ -290,6 +295,9 @@ public:
     template <class TStruct>
     void InitializeStruct(TStruct* target, const NYT::TSourceLocation& sourceLocation = {});
 
+    template <CYsonStructDerived TStruct>
+    const IYsonStructMeta* GetMeta();
+
     void OnBaseCtorCalled();
 
     void OnFinalCtorCalled();
@@ -383,7 +391,7 @@ public:
 
     void UnrecognizedStrategy(EUnrecognizedStrategy strategy);
 
-    template<class TBase>
+    template <class TBase>
     operator TYsonStructRegistrar<TBase>();
 
 private:

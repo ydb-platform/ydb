@@ -28,6 +28,8 @@ protected:
     void SaveVoidType();
     void SaveNullType();
     void SaveUnitType();
+    void SaveUniversalType();
+    void SaveUniversalStructType();
     void SaveGenericType();
     void SaveEmptyListType();
     void SaveEmptyDictType();
@@ -216,6 +218,24 @@ protected:
         item.Save(variantType.GetUnderlyingType());
         Writer_.OnEndList();
     }
+
+    template <typename TBlockType>
+    void SaveBlockType(const TBlockType& blockType) {
+        SaveTypeHeader("BlockType");
+        Writer_.OnListItem();
+        TSelf item(Writer_, ExtendedForm_);
+        item.Save(blockType.GetItemType());
+        Writer_.OnEndList();
+    }
+
+    template <typename TScalarType>
+    void SaveScalarType(const TScalarType& scalarType) {
+        SaveTypeHeader("ScalarType");
+        Writer_.OnListItem();
+        TSelf item(Writer_, ExtendedForm_);
+        item.Save(scalarType.GetItemType());
+        Writer_.OnEndList();
+    }
 };
 
 template <typename TLoader>
@@ -231,6 +251,10 @@ TMaybe<typename TLoader::TType> DoLoadTypeFromYson(TLoader& loader, const NYT::T
         return loader.LoadNullType(level);
     } else if (typeName == "UnitType") {
         return loader.LoadUnitType(level);
+    } else if (typeName == "UniversalType") {
+        return loader.LoadUniversalType(level);
+    } else if (typeName == "UniversalStructType") {
+        return loader.LoadUniversalStructType(level);
     } else if (typeName == "GenericType") {
         return loader.LoadGenericType(level);
     } else if (typeName == "EmptyListType") {
@@ -455,6 +479,26 @@ TMaybe<typename TLoader::TType> DoLoadTypeFromYson(TLoader& loader, const NYT::T
             return Nothing();
         }
         return loader.LoadVariantType(*underlyingType, level);
+    } else if (typeName == "BlockType") {
+        if (node.Size() != 2) {
+            loader.Error("Invalid block type scheme");
+            return Nothing();
+        }
+        auto itemType = DoLoadTypeFromYson(loader, node[1], level + 1);
+        if (!itemType) {
+            return Nothing();
+        }
+        return loader.LoadBlockType(*itemType, level);
+    } else if (typeName == "ScalarType") {
+        if (node.Size() != 2) {
+            loader.Error("Invalid scalar type scheme");
+            return Nothing();
+        }
+        auto itemType = DoLoadTypeFromYson(loader, node[1], level + 1);
+        if (!itemType) {
+            return Nothing();
+        }
+        return loader.LoadScalarType(*itemType, level);
     }
     loader.Error("unsupported type: " + typeName);
     return Nothing();

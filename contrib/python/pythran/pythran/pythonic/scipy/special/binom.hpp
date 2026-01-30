@@ -21,12 +21,10 @@ namespace scipy
       template <class T0, class T1>
       double binom(T0 n, T1 k)
       {
-        static_assert(std::is_integral<T0>::value &&
-                          std::is_integral<T1>::value,
+        static_assert(std::is_integral<T0>::value && std::is_integral<T1>::value,
                       "only support integer case of scipy.special.binom");
         using namespace boost::math::policies;
-        return boost::math::binomial_coefficient<double>(
-            n, k, make_policy(promote_double<true>()));
+        return boost::math::binomial_coefficient<double>(n, k, make_policy(promote_double<true>()));
       }
     } // namespace details
 

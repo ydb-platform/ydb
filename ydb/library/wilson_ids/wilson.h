@@ -42,12 +42,18 @@ namespace NKikimr {
     struct TWilson {
         enum {
             BlobStorage = TComponentTracingLevels::TDistributedStorage::TopLevel,
-            DsProxyInternals = TComponentTracingLevels::TDistributedStorage::Detailed,
-            VDiskTopLevel = TComponentTracingLevels::TDistributedStorage::Basic,
-            VDiskInternals = TComponentTracingLevels::TDistributedStorage::Detailed,
-            PDiskTopLevel = TComponentTracingLevels::TDistributedStorage::Basic,
-            PDiskBasic = TComponentTracingLevels::TDistributedStorage::Detailed,
-            PDiskDetailed = TComponentTracingLevels::TDistributedStorage::Diagnostic,
+
+                    DsProxyInternals = TComponentTracingLevels::TDistributedStorage::Detailed,
+
+                VDiskTopLevel = TComponentTracingLevels::TDistributedStorage::Basic,
+                    VDiskInternals = TComponentTracingLevels::TDistributedStorage::Detailed,
+
+                DDiskTopLevel = TComponentTracingLevels::TDistributedStorage::Basic,
+                    DDiskInternals = TComponentTracingLevels::TDistributedStorage::Detailed,
+
+                PDiskTopLevel = TComponentTracingLevels::TDistributedStorage::Basic,
+                    PDiskBasic = TComponentTracingLevels::TDistributedStorage::Detailed,
+                        PDiskDetailed = TComponentTracingLevels::TDistributedStorage::Diagnostic,
         };
     };
 

@@ -1,6 +1,10 @@
 UNITTEST_FOR(ydb/core/graph)
 
-SIZE(SMALL)
+IF (SANITIZER_TYPE OR WITH_VALGRIND)
+    SIZE(MEDIUM)
+ELSE()
+    SIZE(SMALL)
+ENDIF()
 
 SRC(
     graph_ut.cpp

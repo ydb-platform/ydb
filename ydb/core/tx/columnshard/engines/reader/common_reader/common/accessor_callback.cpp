@@ -1,5 +1,6 @@
 #include "accessor_callback.h"
 
+#include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/fetching.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/source.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
 

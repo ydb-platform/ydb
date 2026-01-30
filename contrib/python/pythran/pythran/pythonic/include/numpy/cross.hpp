@@ -9,9 +9,8 @@ PYTHONIC_NS_BEGIN
 namespace numpy
 {
   template <class E, class F>
-  types::ndarray<
-      typename __combined<typename E::dtype, typename F::dtype>::type,
-      types::array_tuple<long, E::value>>
+  types::ndarray<typename __combined<typename E::dtype, typename F::dtype>::type,
+                 types::array_tuple<long, E::value>>
   cross(E const &e, F const &f);
 
   DEFINE_FUNCTOR(pythonic::numpy, cross);

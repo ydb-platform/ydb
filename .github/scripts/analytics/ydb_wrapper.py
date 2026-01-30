@@ -8,7 +8,7 @@ import sys
 import time
 import uuid
 import ydb
-from typing import List, Dict, Any, Optional, Callable
+from typing import List, Dict, Any, Optional, Callable, Tuple
 from contextlib import contextmanager
 
 class YDBWrapper:
@@ -103,6 +103,9 @@ class YDBWrapper:
         stats = dbs.get("statistics", {})
         variables = config_dict.get("variables", {})
         flags = config_dict.get("flags", {})
+        
+        # Store flags as attribute for access from other scripts
+        self._flags = flags
         
         # Automatic field mapping
         config_mapping = {
@@ -437,7 +440,7 @@ class YDBWrapper:
     def _execute_with_logging(self, operation_type: str, operation_func: Callable, 
                              query: str = None, table_path: str = None, query_name: str = None) -> Any:
         """Universal method for executing operations with logging"""
-        start_time = time.time()
+        start_time = None
         
         # Log operation start
         self._log("start", f"Executing {operation_type}")
@@ -456,6 +459,8 @@ class YDBWrapper:
         
         try:
             with self.get_driver() as driver:
+                start_time = time.time()
+
                 if operation_type == "scan_query":
                     tc_settings = ydb.TableClientSettings().with_native_date_in_result_sets(enabled=False)
                     table_client = ydb.TableClient(driver, tc_settings)
@@ -569,7 +574,7 @@ class YDBWrapper:
                 
         except Exception as e:
             end_time = time.time()
-            duration = end_time - start_time
+            duration = end_time - start_time if start_time is not None else 0
             status = "error"
             error = str(e)
             
@@ -597,7 +602,7 @@ class YDBWrapper:
         """Execute scan query with logging"""
         return self._execute_with_logging("scan_query", None, query, None, query_name)
     
-    def execute_scan_query_with_metadata(self, query: str) -> tuple[List[Dict[str, Any]], List[tuple[str, Any]]]:
+    def execute_scan_query_with_metadata(self, query: str, query_name: str = None) -> Tuple[List[Dict[str, Any]], List[Tuple[str, Any]]]:
         """Execute scan query with return of data and column metadata"""
         def operation(driver):
             tc_settings = ydb.TableClientSettings().with_native_date_in_result_sets(enabled=True)
@@ -625,7 +630,7 @@ class YDBWrapper:
             
             return results, column_types
         
-        return self._execute_with_logging("scan_query_with_metadata", operation, query, None)
+        return self._execute_with_logging("scan_query_with_metadata", operation, query, None, query_name)
     
     def create_table(self, table_path: str, create_sql: str):
         """Create table with logging
@@ -666,7 +671,7 @@ class YDBWrapper:
         return self._execute_with_logging("bulk_upsert", operation, f"BULK_UPSERT to {table_path}", table_path)
     
     def bulk_upsert_batches(self, table_path: str, all_rows: List[Dict[str, Any]], 
-                           column_types: ydb.BulkUpsertColumns, batch_size: int = 1000):
+                           column_types: ydb.BulkUpsertColumns, batch_size: int = 1000, query_name: str = None):
         """Execute bulk upsert with batching and aggregated statistics
         
         Args:
@@ -674,11 +679,12 @@ class YDBWrapper:
             all_rows: All data to insert
             column_types: Column types
             batch_size: Batch size (default 1000)
+            query_name: Optional name for the query (e.g., table name)
         """
         # Convert to full path for YDB
         full_path = self._make_full_path(table_path)
         
-        start_time = time.time()
+        start_time = None
         total_rows = len(all_rows)
         
         if total_rows == 0:
@@ -697,6 +703,8 @@ class YDBWrapper:
         
         try:
             with self.get_driver() as driver:
+                start_time = time.time()
+                
                 table_client = ydb.TableClient(driver)
                 
                 for batch_num, start_idx in enumerate(range(0, total_rows, batch_size), 1):
@@ -722,11 +730,12 @@ class YDBWrapper:
                 status=status,
                 rows_affected=total_rows,
                 cluster_version=cluster_version,
-                table_path=table_path
+                table_path=table_path,
+                query_name=query_name
             )
             
         except Exception as e:
-            duration = time.time() - start_time
+            duration = time.time() - start_time if start_time is not None else 0
             status = "error"
             error = str(e)
             
@@ -739,7 +748,8 @@ class YDBWrapper:
                 status=status,
                 error=error,
                 cluster_version=cluster_version,
-                table_path=table_path
+                table_path=table_path,
+                query_name=query_name
             )
             raise
     
@@ -829,6 +839,19 @@ class YDBWrapper:
             return self._stats_db_tables[table_name]
         else:
             raise ValueError(f"Unknown database: {database}. Use 'main' or 'statistics'")
+    
+    def get_flag(self, flag_name: str, default: Any = None) -> Any:
+        """Get flag value from configuration
+        
+        Args:
+            flag_name: Flag name (e.g., 'enable_backup_write')
+            default: Default value if flag is not found
+        
+        Returns:
+            Flag value or default if not found
+        """
+        flags = getattr(self, '_flags', {})
+        return flags.get(flag_name, default)
     
     def get_available_tables(self, database: str = "main") -> dict:
         """Get dictionary of all available tables

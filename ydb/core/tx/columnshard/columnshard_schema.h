@@ -86,6 +86,7 @@ struct Schema : NIceDb::Schema {
         SubDomainOutOfSpace = 19,
         InternalOwnerPathId = 20,
         MaxInternalPathId = 21,   //max internal path id ever known in this tablet
+        LastCompletedBackupTransaction = 22,
     };
 
     enum class EInsertTableIds : ui8 {
@@ -373,9 +374,10 @@ struct Schema : NIceDb::Schema {
     struct OperationTxIds : NIceDb::Schema::Table<OperationTxIdsId> {
         struct TxId : Column<1, NScheme::NTypeIds::Uint64> {};
         struct LockId : Column<2, NScheme::NTypeIds::Uint64> {};
+        struct Broken: Column<3, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<TxId, LockId>;
-        using TColumns = TableColumns<TxId, LockId>;
+        using TColumns = TableColumns<TxId, LockId, Broken>;
     };
 
     struct TierBlobsDraft: NIceDb::Schema::Table<(ui32)ETierTables::TierBlobsDraft> {

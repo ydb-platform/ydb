@@ -27,6 +27,7 @@
 
 #include <ydb/library/http_proxy/authorization/auth_helpers.h>
 #include <ydb/library/http_proxy/error/error.h>
+#include <ydb/services/sqs_topic/utils.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
 #include <ydb/library/ycloud/api/access_service.h>
 #include <ydb/library/ycloud/api/iam_token_service.h>
@@ -191,6 +192,36 @@ namespace NKikimr::NHttpProxy {
             return std::unexpected(std::move(parsedQueueUrl).error());
         }
         return parsedQueueUrl->Database;
+    }
+
+    static TString LogHttpRequestResponseCommonInfoString(const THttpRequestContext& httpContext, TInstant startTime, TStringBuf api, TStringBuf topicPath, TStringBuf method, TStringBuf userSid, int httpCode, TStringBuf httpResponseMessage) {
+        const TDuration duration = TInstant::Now() - startTime;
+        TStringBuilder logString;
+        logString << "Request done.";
+        if (!api.empty()) {
+            logString << " Api [" << api << "]";
+        }
+        if (!method.empty()) {
+            logString << " Action [" << method << "]";
+        }
+        if (!httpContext.UserName.empty()) {
+            logString << " User [" << httpContext.UserName << "]";
+        }
+        if (!httpContext.DatabasePath.empty()) {
+            logString << " Database [" << httpContext.DatabasePath << "]";
+        }
+        if (!topicPath.empty()) {
+            logString << " Queue [" << topicPath << "]";
+        }
+        logString << " IP [" << httpContext.SourceAddress << "] Duration [" << duration.MilliSeconds() << "ms]";
+        if (!userSid.empty()) {
+            logString << " Subject [" << userSid << "]";
+        }
+        logString << " Code [" << httpCode << "]";
+        if (httpCode != 200) {
+            logString << " Response [" << httpResponseMessage << "]";
+        }
+        return logString;
     }
 
     constexpr TStringBuf IAM_HEADER = "x-yacloud-subjecttoken";
@@ -369,6 +400,7 @@ namespace NKikimr::NHttpProxy {
                     const TString& ymqStatusCode,
                     const TString& errorText) {
                 HttpContext.ResponseData.IsYmq = true;
+                HttpContext.ResponseData.UseYmqStatusCode = true;
                 HttpContext.ResponseData.Status = NYdb::EStatus::STATUS_UNDEFINED;
                 HttpContext.ResponseData.YmqHttpCode = httpStatusCode;
                 HttpContext.ResponseData.YmqStatusCode = ymqStatusCode;
@@ -403,6 +435,7 @@ namespace NKikimr::NHttpProxy {
                         HttpContext.ContentType == MIME_CBOR
                     );
                     HttpContext.ResponseData.IsYmq = true;
+                    HttpContext.ResponseData.UseYmqStatusCode = true;
                     HttpContext.ResponseData.YmqHttpCode = 200;
                     if (ev->Get()->QueueTags) {
                         HttpContext.ResponseData.QueueTags = std::move(*ev->Get()->QueueTags);
@@ -827,12 +860,22 @@ namespace NKikimr::NHttpProxy {
 
             void ReplyToHttpContext(const TActorContext& ctx, std::optional<size_t> issueCode = std::nullopt) {
                 ReportLatencyCounters(ctx);
+                LogHttpRequestResponse(ctx, issueCode);
 
                 if (issueCode.has_value()) {
                     HttpContext.DoReply(ctx, issueCode.value());
                 } else {
                     HttpContext.DoReply(ctx);
                 }
+            }
+
+            void LogHttpRequestResponse(const TActorContext& ctx, const std::optional<size_t> issueCode) {
+                const int httpCode = issueCode ? MapToException(HttpContext.ResponseData.Status, Method, *issueCode).second : 200;
+                const bool isServerError = IsServerError(httpCode);
+                auto priority = isServerError ? NActors::NLog::PRI_WARN : NActors::NLog::PRI_INFO;
+                LOG_LOG_S_SAMPLED_BY(ctx, priority, NKikimrServices::HTTP_PROXY,
+                                     NSqsTopic::SampleIdFromRequestId(HttpContext.RequestId),
+                                     "Request [" << HttpContext.RequestId << "] " << LogHttpRequestResponseCommonInfoString(HttpContext, StartTime, "Kinesis", HttpContext.StreamName, Method, {}, httpCode, HttpContext.ResponseData.ErrorText));
             }
 
             void ReportInputCounters(const TActorContext& ctx) {
@@ -1098,14 +1141,13 @@ namespace NKikimr::NHttpProxy {
                 Y_UNUSED(ev);
             }
 
-            void TryUpdateDbInfo(const TDatabase& db, const TActorContext& ctx) {
+            void TryUpdateDbInfo(const TDatabase& db) {
                 if (db.Path) {
                     HttpContext.DatabasePath = db.Path;
                     HttpContext.DatabaseId = db.Id;
                     HttpContext.CloudId = db.CloudId;
                     HttpContext.FolderId = db.FolderId;
                 }
-                ReportInputCounters(ctx);
             }
 
             void HandleToken(TEvServerlessProxy::TEvToken::TPtr& ev, const TActorContext& ctx) {
@@ -1118,53 +1160,81 @@ namespace NKikimr::NHttpProxy {
                         return;
                     }
                 }
-                TryUpdateDbInfo(ev->Get()->Database, ctx);
+                TryUpdateDbInfo(ev->Get()->Database);
 
                 SendGrpcRequestNoDriver(ctx);
             }
 
             void HandleErrorWithIssue(TEvServerlessProxy::TEvErrorWithIssue::TPtr& ev, const TActorContext& ctx) {
-                TryUpdateDbInfo(ev->Get()->Database, ctx);
-                ReplyWithError(ctx, ev->Get()->Status, ev->Get()->Response, ev->Get()->IssueCode);
+                TryUpdateDbInfo(ev->Get()->Database);
+                ReplyWithYdbError(ctx, ev->Get()->Status, ev->Get()->Response, ev->Get()->IssueCode);
             }
 
-            TVector<std::pair<TString, TString>> AddCommonLabels(TVector<std::pair<TString, TString>> labels) const {
-                TVector<std::pair<TString, TString>> common{
-                    {"database", HttpContext.DatabasePath},
-                    {"method", Method},
-                    {"database_id", HttpContext.DatabaseId},
-                    {"topic", TopicPath},
-                    {"consumer", ConsumerName},
-                };
-                std::move(common.begin(), common.end(), std::back_inserter(labels));
-                return labels;
+            TVector<std::pair<TString, TString>> AddCommonLabels(TVector<std::pair<TString, TString>>&& labels) const {
+                return NSqsTopic::GetMetricsLabels(HttpContext.DatabasePath, TopicPath, ConsumerName, Method, std::move(labels));
             }
 
-            void ReplyWithError(const TActorContext& ctx, NYdb::EStatus status, const TString& errorText, size_t issueCode = ISSUE_CODE_GENERIC) {
+            void ReplyWithYdbError(const TActorContext& ctx, NYdb::EStatus status, const TString& errorText, size_t issueCode = ISSUE_CODE_GENERIC) {
+                HttpContext.ResponseData.Status = status;
+                HttpContext.ResponseData.ErrorText = errorText;
                 ctx.Send(MakeMetricsServiceID(),
                          new TEvServerlessProxy::TEvCounter{
                              1, true, true,
                              AddCommonLabels({
                                  {"code", TStringBuilder() << (int)MapToException(status, Method, issueCode).second},
-                                 {"name", "api.http.message_queue.response.count"},
+                                 {"name", "api.sqs.response.count"},
                              })});
-                HttpContext.ResponseData.Status = status;
-                HttpContext.ResponseData.ErrorText = errorText;
-                ReplyToHttpContext(ctx, issueCode);
+                ReplyToHttpContext(ctx, 0, issueCode);
 
                 ctx.Send(AuthActor, new TEvents::TEvPoisonPill());
 
                 TBase::Die(ctx);
             }
 
-            void ReplyToHttpContext(const TActorContext& ctx, std::optional<size_t> issueCode = std::nullopt) {
+            void ReplyWithMessageQueueError(
+                    const TActorContext& ctx,
+                    ui32 httpStatusCode,
+                    const TString& ymqStatusCode,
+                    const TString& errorText) {
+                HttpContext.ResponseData.IsYmq = false;
+                HttpContext.ResponseData.UseYmqStatusCode = true;
+                HttpContext.ResponseData.Status = NYdb::EStatus::STATUS_UNDEFINED;
+                HttpContext.ResponseData.YmqHttpCode = httpStatusCode;
+                HttpContext.ResponseData.YmqStatusCode = ymqStatusCode;
+                HttpContext.ResponseData.ErrorText = errorText;
+                ctx.Send(MakeMetricsServiceID(),
+                         new TEvServerlessProxy::TEvCounter{
+                             1, true, true,
+                             AddCommonLabels({
+                                 {"code", ToString(httpStatusCode)},
+                                 {"name", "api.sqs.response.count"},
+                             })});
+                ReplyToHttpContext(ctx, errorText.size(), std::nullopt);
+
+                ctx.Send(AuthActor, new TEvents::TEvPoisonPill());
+
+                TBase::Die(ctx);
+            }
+
+            void ReplyToHttpContext(const TActorContext& ctx, size_t messageSize, std::optional<size_t> issueCode) {
                 ReportLatencyCounters(ctx);
+                ReportResponseSizeCounters(TStringBuilder() << HttpContext.ResponseData.YmqHttpCode, messageSize, ctx);
+                LogHttpRequestResponse(ctx);
 
                 if (issueCode.has_value()) {
                     HttpContext.DoReply(ctx, issueCode.value());
                 } else {
                     HttpContext.DoReply(ctx);
                 }
+            }
+
+            void LogHttpRequestResponse(const TActorContext& ctx) {
+                const int httpCode = HttpContext.ResponseData.UseYmqStatusCode ? HttpContext.ResponseData.YmqHttpCode : 200;
+                const bool isServerError = IsServerError(httpCode);
+                auto priority = isServerError ? NActors::NLog::PRI_WARN : NActors::NLog::PRI_INFO;
+                LOG_LOG_S_SAMPLED_BY(ctx, priority, NKikimrServices::SQS,
+                                     NSqsTopic::SampleIdFromRequestId(HttpContext.RequestId),
+                                     "Request [" << HttpContext.RequestId << "] " << LogHttpRequestResponseCommonInfoString(HttpContext, StartTime, "SqsTopic", TopicPath, Method, UserSid_, httpCode, HttpContext.ResponseData.ErrorText));
             }
 
             void ReportInputCounters(const TActorContext& ctx) {
@@ -1174,7 +1244,7 @@ namespace NKikimr::NHttpProxy {
                 InputCountersReported = true;
                 ctx.Send(MakeMetricsServiceID(),
                          new TEvServerlessProxy::TEvCounter{1, true, true,
-                            AddCommonLabels({{"name", "api.http.message_queue.request.count"}})
+                            AddCommonLabels({{"name", "api.sqs.request.count"}})
                          });
             }
 
@@ -1182,7 +1252,17 @@ namespace NKikimr::NHttpProxy {
                 TDuration dur = ctx.Now() - StartTime;
                 ctx.Send(MakeMetricsServiceID(),
                          new TEvServerlessProxy::TEvHistCounter{static_cast<i64>(dur.MilliSeconds()), 1,
-                             BuildLabels(Method, HttpContext, "api.http.message_queue.response.duration_milliseconds")
+                            AddCommonLabels({{"name", "api.sqs.response.duration_milliseconds"}})
+                        });
+            }
+
+            void ReportResponseSizeCounters(const TString& code, size_t value, const TActorContext& ctx) {
+                ctx.Send(MakeMetricsServiceID(),
+                         new TEvServerlessProxy::TEvCounter{static_cast<i64>(value), true, true,
+                            AddCommonLabels({
+                                {"code", code},
+                                {"name", "api.sqs.response.bytes"}
+                            })
                         });
             }
 
@@ -1198,8 +1278,8 @@ namespace NKikimr::NHttpProxy {
                                  1, true, true,
                                  AddCommonLabels({
                                      {"code", "200"},
-                                     {"name", "api.http.message_queue.response.count"}})});
-                    ReplyToHttpContext(ctx);
+                                     {"name", "api.sqs.response.count"}})});
+                    ReplyToHttpContext(ctx, ev->Get()->Message->ByteSizeLong(), std::nullopt);
                 } else {
                     auto retryClass =
                         NYdb::NTopic::GetRetryErrorClass(ev->Get()->Status->GetStatus());
@@ -1221,10 +1301,24 @@ namespace NKikimr::NHttpProxy {
                         ev->Get()->Status->GetIssues().PrintTo(stringOutput);
                         RetryCounter.Void();
                         auto issues = ev->Get()->Status->GetIssues();
-                        size_t issueCode = (
-                            issues && issues.begin()->IssueCode != ISSUE_CODE_OK
-                            ) ? issues.begin()->IssueCode : ISSUE_CODE_GENERIC;
-                        return ReplyWithError(ctx, ev->Get()->Status->GetStatus(), errorText, issueCode);
+                        auto [error, errorCode] = issues.Empty()
+                            ? std::make_tuple(
+                                NSQS::NErrors::INTERNAL_FAILURE.ErrorCode,
+                                NSQS::NErrors::INTERNAL_FAILURE.HttpStatusCode)
+                            : NKikimr::NSQS::TErrorClass::GetErrorAndCode(issues.begin()->GetCode());
+
+                        LOG_SP_DEBUG_S(
+                            ctx,
+                            NKikimrServices::HTTP_PROXY,
+                            "Not retrying GRPC response."
+                                << " Code: " << errorCode
+                                << ", Error: " << error;);
+                        return ReplyWithMessageQueueError(
+                            ctx,
+                            errorCode,
+                            error,
+                            TString{!issues.Empty() ? issues.begin()->GetMessage() : NSQS::NErrors::INTERNAL_FAILURE.ErrorCode}
+                        );
                         }
                     }
                 }
@@ -1233,7 +1327,7 @@ namespace NKikimr::NHttpProxy {
 
             void HandleTimeout(TEvents::TEvWakeup::TPtr ev, const TActorContext& ctx) {
                 Y_UNUSED(ev);
-                return ReplyWithError(ctx, NYdb::EStatus::TIMEOUT, "Request hasn't been completed by deadline");
+                return ReplyWithYdbError(ctx, NYdb::EStatus::TIMEOUT, "Request hasn't been completed by deadline");
             }
 
             // Fill HttpContext.DatabasePath and reply with error is databases missmatch
@@ -1242,7 +1336,7 @@ namespace NKikimr::NHttpProxy {
                     HttpContext.DatabasePath = databasePath;
                 } else {
                     if (HttpContext.DatabasePath != databasePath) {
-                        ReplyWithError(ctx, NYdb::EStatus::BAD_REQUEST, "Queue url database  " + databasePath + " doesn't belong to " + HttpContext.DatabasePath, static_cast<size_t>(NYds::EErrorCodes::INVALID_ARGUMENT));
+                        ReplyWithYdbError(ctx, NYdb::EStatus::UNAUTHORIZED, "Queue url database  " + databasePath + " doesn't belong to " + HttpContext.DatabasePath, static_cast<size_t>(NYds::EErrorCodes::INVALID_ARGUMENT));
                         return false;
                     }
                 }
@@ -1260,18 +1354,18 @@ namespace NKikimr::NHttpProxy {
                         issueCode = NYds::EErrorCodes::MISSING_PARAMETER;
                     else if (e.ErrorClass.ErrorCode == "InvalidQueryParameter" || e.ErrorClass.ErrorCode == "MalformedQueryString")
                         issueCode = NYds::EErrorCodes::INVALID_ARGUMENT;
-                    return ReplyWithError(ctx, NYdb::EStatus::BAD_REQUEST, e.what(), static_cast<size_t>(issueCode));
+                    return ReplyWithYdbError(ctx, NYdb::EStatus::BAD_REQUEST, e.what(), static_cast<size_t>(issueCode));
                 } catch (const std::exception& e) {
                     LOG_SP_WARN_S(ctx, NKikimrServices::HTTP_PROXY,
                                   "got new request with incorrect json from [" << HttpContext.SourceAddress << "] " <<
                                   "database '" << HttpContext.DatabasePath << "'");
-                    return ReplyWithError(ctx, NYdb::EStatus::BAD_REQUEST, e.what(), static_cast<size_t>(NYds::EErrorCodes::INVALID_ARGUMENT));
+                    return ReplyWithYdbError(ctx, NYdb::EStatus::BAD_REQUEST, e.what(), static_cast<size_t>(NYds::EErrorCodes::INVALID_ARGUMENT));
                 }
 
                 if (auto queueUrl = MaybeGetQueueUrl(Request)) {
                     auto parsedQueueUrl = NKikimr::NSqsTopic::ParseQueueUrl(queueUrl);
                     if (!parsedQueueUrl.has_value()) {
-                        return ReplyWithError(ctx, NYdb::EStatus::BAD_REQUEST, "Invalid queue url: " + parsedQueueUrl.error(), static_cast<size_t>(NYds::EErrorCodes::INVALID_ARGUMENT));
+                        return ReplyWithYdbError(ctx, NYdb::EStatus::BAD_REQUEST, "Invalid queue url: " + parsedQueueUrl.error(), static_cast<size_t>(NYds::EErrorCodes::INVALID_ARGUMENT));
                     }
                     TopicPath = parsedQueueUrl->TopicPath;
                     ConsumerName = parsedQueueUrl->Consumer;
@@ -1281,7 +1375,7 @@ namespace NKikimr::NHttpProxy {
                         return;
                     }
                     if (TopicPath.empty()) {
-                        return ReplyWithError(ctx, NYdb::EStatus::BAD_REQUEST, "Missing topic path", static_cast<size_t>(NYds::EErrorCodes::INVALID_ARGUMENT));
+                        return ReplyWithYdbError(ctx, NYdb::EStatus::BAD_REQUEST, "Missing topic path", static_cast<size_t>(NYds::EErrorCodes::INVALID_ARGUMENT));
                     }
                 }
 
@@ -1290,6 +1384,7 @@ namespace NKikimr::NHttpProxy {
                               "database '" << HttpContext.DatabasePath << "' " <<
                               "stream '" << ExtractStreamName<TProtoRequest>(Request) << "'");
 
+                ReportInputCounters(ctx);
                 if (HttpContext.IamToken.empty() && Signature) {
                     AuthActor = ctx.Register(AppData(ctx)->DataStreamsAuthFactory->CreateAuthActor(
                         ctx.SelfID, HttpContext, std::move(Signature)));
@@ -1321,6 +1416,7 @@ namespace NKikimr::NHttpProxy {
 
             TActorId AuthActor;
             bool InputCountersReported = false;
+            TString UserSid_;
         };
     };
 
@@ -1403,16 +1499,25 @@ namespace NKikimr::NHttpProxy {
                                                             NKikimr::NGRpcService::TEvSqsTopic##name##Request>>(#name, &Ydb::SqsTopic::V1::SqsTopicService::Stub::AsyncSqsTopic##name)
 
         DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_UNKNOWN(GetQueueUrl);
+        DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_UNKNOWN(ListQueues);
 
 #undef DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_UNKNOWN
 
 #define DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN(name) Name2SqsTopicProcessor[#name] = MakeHolder<TSqsTopicHttpRequestProcessor< \
                                                           Ydb::SqsTopic::V1::SqsTopicService,                                   \
-                                                          Ydb::SqsTopic::V1::name##Request,                                     \
-                                                          Ydb::SqsTopic::V1::name##Response,                                    \
-                                                          Ydb::SqsTopic::V1::name##Result,                                      \
-                                                          decltype(&Ydb::SqsTopic::V1::YmqService::Stub::AsyncYmq##name),       \
-                                                          NKikimr::NGRpcService::TEvYmq##name##Request>>(#name, &Ydb::SqsTopic::V1::YmqService::Stub::AsyncYmq##name)
+                                                          Ydb::Ymq::V1::name##Request,                                     \
+                                                          Ydb::Ymq::V1::name##Response,                                    \
+                                                          Ydb::Ymq::V1::name##Result,                                      \
+                                                          decltype(&Ydb::SqsTopic::V1::SqsTopicService::Stub::AsyncSqsTopic##name),       \
+                                                          NKikimr::NGRpcService::TEvSqsTopic##name##Request>>(#name, &Ydb::SqsTopic::V1::SqsTopicService::Stub::AsyncSqsTopic##name)
+        DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN(GetQueueAttributes);
+        DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN(SendMessage);
+        DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN(SendMessageBatch);
+        DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN(ReceiveMessage);
+        DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN(DeleteMessage);
+        DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN(DeleteMessageBatch);
+        DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN(ChangeMessageVisibility);
+        DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN(ChangeMessageVisibilityBatch);
 #undef DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN
     }
 
@@ -1427,6 +1532,7 @@ namespace NKikimr::NHttpProxy {
         if (context.ApiVersion == "AmazonSQS") {
             if (!context.ServiceConfig.GetHttpConfig().GetYmqEnabled() && !context.ServiceConfig.GetHttpConfig().GetSqsTopicEnabled()) {
                 context.ResponseData.IsYmq = true;
+                context.ResponseData.UseYmqStatusCode = true;
                 context.ResponseData.YmqHttpCode = 400;
                 SetApiVersionDisabledErrorText(context);
             }
@@ -1562,7 +1668,7 @@ namespace NKikimr::NHttpProxy {
                           " message: " << ResponseData.ErrorText);
             ResponseData.Body.SetType(NJson::JSON_MAP);
             ResponseData.Body["message"] = ResponseData.ErrorText;
-            if (ResponseData.IsYmq) {
+            if (ResponseData.UseYmqStatusCode) {
                 ResponseData.Body["__type"] = ResponseData.YmqStatusCode;
             } else {
                 ResponseData.Body["__type"] = MapToException(ResponseData.Status, MethodName, issueCode).first;
@@ -1571,7 +1677,7 @@ namespace NKikimr::NHttpProxy {
 
         TString errorName;
         ui32 httpCode;
-        if (ResponseData.IsYmq) {
+        if (ResponseData.UseYmqStatusCode) {
             httpCode = ResponseData.YmqHttpCode;
             errorName = ResponseData.YmqStatusCode;
         } else {

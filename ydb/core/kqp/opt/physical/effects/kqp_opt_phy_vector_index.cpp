@@ -570,6 +570,7 @@ std::pair<TExprBase, TExprBase> BuildVectorIndexPrefixRowsWithNew(
         .Columns(fullPrefixColumnList)
         .ReturningColumns<TCoAtomList>().Build()
         .IsBatch(ctx.NewAtom(pos, "false"))
+        .DefaultColumns<TCoAtomList>().Build()
         .Done();
 
     return std::make_pair((TExprBase)mappedRows, (TExprBase)upsertPrefix);

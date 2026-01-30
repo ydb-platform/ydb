@@ -332,7 +332,7 @@ Y_UNIT_TEST_SUITE(TPDiskRaces) {
         while (timer.Passed() < timeLimit) {
             TStringStream ss;
 
-            TActorTestContext testCtx({ 
+            TActorTestContext testCtx({
                 .IsBad = false,
                 .UsePDiskMock = false,
                 .LogBackend = new TStreamLogBackend(&ss),
@@ -407,7 +407,7 @@ Y_UNIT_TEST_SUITE(TPDiskRaces) {
         while (timer.Passed() < timeLimit) {
             TStringStream ss;
 
-            TActorTestContext testCtx({ 
+            TActorTestContext testCtx({
                 .IsBad = false,
                 .UsePDiskMock = false,
                 .LogBackend = new TStreamLogBackend(&ss),
@@ -464,7 +464,7 @@ Y_UNIT_TEST_SUITE(TPDiskRaces) {
 
             testCtx.Recv<NPDisk::TEvHarakiriResult>();
             testCtx.Recv<NPDisk::TEvHarakiriResult>();
-            
+
             {
                 TVDiskMock mock(&testCtx);
                 mock.Init();

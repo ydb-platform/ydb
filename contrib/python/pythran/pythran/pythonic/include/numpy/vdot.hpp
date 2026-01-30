@@ -12,8 +12,7 @@ namespace numpy
 {
   template <class U, class V>
   auto vdot(U const &u, V const &v)
-      -> decltype(functor::dot{}(functor::asarray{}(u).flat(),
-                                 functor::asarray{}(v).flat()));
+      -> decltype(functor::dot{}(functor::asarray{}(u).flat(), functor::asarray{}(v).flat()));
 
   DEFINE_FUNCTOR(pythonic::numpy, vdot);
 } // namespace numpy

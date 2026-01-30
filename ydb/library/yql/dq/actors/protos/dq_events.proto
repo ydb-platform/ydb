@@ -137,11 +137,13 @@ message TComputeRuntimeSettings {
 
     reserved 3; //optional NKqpProto.EKqpStatsMode LegacyStatsMode = 3;
     optional EDqStatsMode StatsMode = 8;
-    optional bool UseLLVM_DeprecatedForCompatibility = 4[default = false];
+    optional bool UseLLVM_DeprecatedForCompatibility = 4 [default = false];
     optional bool UseSpilling = 6;
     optional uint32 TasksOnNodeCount = 5; // approx
     optional TRlPath RlPath = 7;
     optional bool WithProgressStats = 9 [default = false];
+    optional uint64 MinStatsSendIntervalMs = 10; // Min interval between stats messages
+    optional uint64 MaxStatsSendIntervalMs = 11; // Max interval to sent stats in case of no activity
 }
 
 message TEvNewCheckpointCoordinator {
@@ -219,3 +221,78 @@ message TMessageTransportMeta {
     optional uint64 SeqNo = 1; // SeqNo of message
     optional uint64 ConfirmedSeqNo = 2; // All input messages with SeqNo <= ConfirmedSeqNo are received.
 }
+
+message TEvChannelDiscoveryV2 {
+    optional uint64 GenMajor = 1;
+}
+
+message TEvChannelDataV2 {
+    // Service level + implicit Sender
+
+    optional uint64 GenMajor = 1;
+    optional uint64 GenMinor = 2;
+    optional uint64 SeqNo = 3;
+    optional uint64 ConfirmedSeqNo = 4;
+
+    // Application level
+
+    optional NActorsProto.TActorId SrcActorId = 5;
+    optional NActorsProto.TActorId DstActorId = 6;
+    optional uint64 ChannelId = 7;
+
+    optional uint32 PayloadId = 8;
+    optional EDataTransportVersion TransportVersion = 9;
+    optional EValuePackerVersion ValuePackerVersion = 10;
+    optional uint32 Rows = 11;
+    optional uint32 Bytes = 12;
+
+    optional bool Leading = 13;
+    optional bool Finished = 14;
+    optional uint64 ConfirmedPopBytes = 15;
+};
+
+message TEvChannelAckV2 {
+
+    enum EAckStatus {
+        OK     = 0;      // Confirmed
+        RESEND = 1;      // Ask to resend missed msgs
+        ERROR  = 2;      // Fail Channel
+    }
+
+    // Service level
+
+    optional uint64 GenMajor = 1;
+    optional uint64 GenMinor = 2;
+    optional EAckStatus Status = 3;
+    optional uint64 SeqNo = 4;
+
+    // Application level
+
+    optional NActorsProto.TActorId SrcActorId = 5;
+    optional NActorsProto.TActorId DstActorId = 6;
+    optional uint64 ChannelId = 7;
+
+    // Only if OK
+
+    optional bool EarlyFinished = 8;
+    optional uint64 PopBytes = 9;
+};
+
+message TEvChannelUpdateV2 {
+
+    // Service level
+
+    optional uint64 GenMajor = 1;
+    optional uint64 GenMinor = 2;
+    // optional EAckStatus Status = 3;
+    optional uint64 ConfirmedSeqNo = 4;
+
+    // Application level
+
+    optional NActorsProto.TActorId SrcActorId = 5;
+    optional NActorsProto.TActorId DstActorId = 6;
+    optional uint64 ChannelId = 7;
+
+    optional bool EarlyFinished = 8;
+    optional uint64 PopBytes = 9;
+};

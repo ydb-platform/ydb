@@ -10,7 +10,7 @@ namespace {
 using TQueueType = TPersistentQueue<int, 10>;
 using TSnapshot = TPersistentQueueSnapshot<int, 10>;
 
-TEST(TPersistentQueue, Empty)
+TEST(TPersistentQueueTest, Empty)
 {
     TQueueType queue;
     EXPECT_EQ(0u, queue.Size());
@@ -23,7 +23,7 @@ TEST(TPersistentQueue, Empty)
     EXPECT_EQ(snapshot.Begin(), snapshot.End());
 }
 
-TEST(TPersistentQueue, EnqueueDequeue)
+TEST(TPersistentQueueTest, EnqueueDequeue)
 {
     TQueueType queue;
 
@@ -40,7 +40,7 @@ TEST(TPersistentQueue, EnqueueDequeue)
     }
 }
 
-TEST(TPersistentQueue, Iterate)
+TEST(TPersistentQueueTest, Iterate)
 {
     TQueueType queue;
 
@@ -61,7 +61,7 @@ TEST(TPersistentQueue, Iterate)
     }
 }
 
-TEST(TPersistentQueue, Snapshot1)
+TEST(TPersistentQueueTest, Snapshot1)
 {
     TQueueType queue;
 
@@ -84,7 +84,7 @@ TEST(TPersistentQueue, Snapshot1)
     }
 }
 
-TEST(TPersistentQueue, Snapshot2)
+TEST(TPersistentQueueTest, Snapshot2)
 {
     TQueueType queue;
 
@@ -111,7 +111,7 @@ TEST(TPersistentQueue, Snapshot2)
     }
 }
 
-TEST(TPersistentQueue, Clear)
+TEST(TPersistentQueueTest, Clear)
 {
     TQueueType queue;
 

@@ -407,6 +407,13 @@ public:
         return MakeFuture(res);
     }
 
+    void ThrowNonConsumedLinear(IComputationGraph& graph) const {
+        graph.Invalidate();
+        if (auto pos = graph.GetNotConsumedLinear()) {
+            throw TErrorException(0) << pos << " Linear value is not consumed";
+        }
+    }
+
     TFuture<TTableRangeResult> GetTableRange(TTableRangeOptions&& options) final {
         auto pos = options.Pos();
         try {
@@ -471,14 +478,18 @@ public:
                         NUdf::EValidatePolicy::Exception, options.OptLLVM(), EGraphPerProcess::Multi, explorer, data);
                     compGraph->Prepare();
                     const TBindTerminator bind(compGraph->GetTerminator());
-                    const auto& value = compGraph->GetValue();
-                    const auto it = value.GetListIterator();
+                    auto value = compGraph->GetValue();
+                    auto it = value.GetListIterator();
                     for (NUdf::TUnboxedValue current; it.Next(current);) {
                         TString tableName = TString(current.AsStringRef());
                         tableName.prepend(fullPrefix);
                         tableName.append(fullSuffix);
                         res.Tables.push_back(TCanonizedPath{std::move(tableName), Nothing(), {}, Nothing()});
                     }
+
+                    value = {};
+                    it = {};
+                    ThrowNonConsumedLinear(*compGraph);
                 }
                 else {
                     std::transform(
@@ -789,6 +800,8 @@ public:
                 compGraph->Prepare();
                 auto value = compGraph->GetValue();
                 res.Data.push_back(NCommon::ValueToNode(value, data.GetStaticType()));
+                value = {};
+                ThrowNonConsumedLinear(*compGraph);
             }
             res.SetSuccess();
         } catch (const yexception& e) {
@@ -803,6 +816,7 @@ public:
             TSession* session = GetSession(options);
 
             auto publish = TYtPublish(node);
+            auto dstIsDynamic = TYtTableBaseInfo::GetMeta(publish.Publish())->IsDynamic;
 
             EYtWriteMode mode = EYtWriteMode::Renew;
             if (const auto modeSetting = NYql::GetSetting(publish.Settings().Ref(), EYtSettingType::Mode)) {
@@ -877,6 +891,7 @@ public:
                 compGraph->GetContext(),
                 compGraph->GetValue(),
                 outSpec);
+            ThrowNonConsumedLinear(*compGraph);
             YQL_ENSURE(1 == outTableContent.size());
 
             {
@@ -889,10 +904,15 @@ public:
 
             {
                 NYT::TNode attrs = NYT::TNode::CreateMap();
+                NYT::TNode destAttrs = NYT::TNode::CreateMap();
                 TString srcFilePath = Services_->GetTmpTablePath(GetOutTable(publish.Input().Item(0)).Cast<TYtOutTable>().Name().Value());
                 if (NFs::Exists(srcFilePath + ".attr")) {
                     TIFStream input(srcFilePath + ".attr");
                     attrs = NYT::NodeFromYsonStream(&input);
+                }
+                if (dstIsDynamic && NFs::Exists(destFilePath + ".attr")) {
+                    TIFStream input(destFilePath + ".attr");
+                    destAttrs = NYT::NodeFromYsonStream(&input);
                 }
 
                 const auto nativeYtTypeCompatibility = options.Config()->NativeYtTypeCompatibility.Get(cluster).GetOrElse(NTCF_LEGACY);
@@ -904,7 +924,14 @@ public:
                         columnGroupsSpec = NYT::NodeFromYsonString(setting->Tail().Content());
                     }
                 }
-                if (!append || !attrs.HasKey("schema") || !columnGroupsSpec.IsUndefined() || dstRowSpec->IsSorted()) {
+
+                if (dstIsDynamic) {
+                    attrs["schema"] = destAttrs["schema"];
+                    attrs["_yql_dynamic"] = true;
+                    if (destAttrs.HasKey("_yql_dynamic_native_read")) {
+                        attrs["_yql_dynamic_native_read"] = destAttrs["_yql_dynamic_native_read"];
+                    }
+                } else if (!append || !attrs.HasKey("schema") || !columnGroupsSpec.IsUndefined() || dstRowSpec->IsSorted()) {
                     attrs["schema"] = RowSpecToYTSchema(spec[YqlRowSpecAttribute], nativeYtTypeCompatibility, columnGroupsSpec).ToNode();
                 }
 
@@ -1294,6 +1321,7 @@ private:
             options.FillSettings().AllResultsBytesLimit, MakeMaybe(columns));
 
         resultData.WriteValue(compGraph->GetValue(), data.GetStaticType());
+        ThrowNonConsumedLinear(*compGraph);
         auto dataRes = resultData.Finish();
 
         writer.OnKeyedItem("Data");
@@ -1371,6 +1399,7 @@ private:
             compGraph->Prepare();
 
             WriteOutTables(builder, options.Config(), session, cluster, outTableInfos, compGraph.Get());
+            ThrowNonConsumedLinear(*compGraph);
             queryCacheItem.Store();
         }
 
@@ -1631,6 +1660,13 @@ private:
         return MakeFuture<IYtGateway::TLayersSnapshotResult>();
     }
 
+    NThreading::TFuture<IYtGateway::TDownloadTableResult> DownloadTable(TDownloadTableOptions&&) override {
+        return MakeFuture<IYtGateway::TDownloadTableResult>();
+    }
+
+    IYtTokenResolver::TPtr GetYtTokenResolver() const override {
+        return nullptr;
+    }
 
 private:
     TYtFileServices::TPtr Services_;

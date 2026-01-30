@@ -15,10 +15,11 @@ public:
 
     TComputeActorAsyncInputHelperSync CreateInputHelper(const TString& logPrefix,
         ui64 index,
-        NDqProto::EWatermarksMode watermarksMode
+        NDqProto::EWatermarksMode watermarksMode,
+        TDuration watermarksIdleTimeout
     )
     {
-        return TComputeActorAsyncInputHelperSync(logPrefix, index, watermarksMode);
+        return TComputeActorAsyncInputHelperSync(logPrefix, index, watermarksMode, watermarksIdleTimeout);
     }
 
     const IDqAsyncInputBuffer* GetInputTransform(ui64, const TComputeActorAsyncInputHelperSync& inputTransformInfo) const
@@ -66,6 +67,7 @@ protected:
         }
 
         TaskRunner.Reset();
+        TBase::DoTerminateImpl();
     }
 
     void InvalidateMeminfo() override {
@@ -75,7 +77,7 @@ protected:
         }
     }
 
-    bool DoHandleChannelsAfterFinishImpl() override final{
+    bool DoHandleChannelsAfterFinishImpl() override final {
         Y_ABORT_UNLESS(this->Checkpoints);
 
         if (this->Checkpoints->HasPendingCheckpoint() && !this->Checkpoints->ComputeActorStateSaved() && ReadyToCheckpoint()) {
@@ -85,6 +87,14 @@ protected:
         // Send checkpoints to output channels.
         TBase::ProcessOutputsImpl(ERunStatus::Finished);
         return true;  // returns true, when channels were handled synchronously
+    }
+
+    void TaskRunnerMonitoringInfo(TStringStream& str) override {
+        if (TaskRunner) {
+            str << Endl << "TaskRunner" << Endl
+                << "  LastFetchTime: " << TaskRunner->LastFetchTime << Endl
+                << "  LastFetchStatus: " << TaskRunner->LastFetchStatus << Endl;
+        }
     }
 
 protected: //TDqComputeActorChannels::ICalbacks
@@ -107,6 +117,13 @@ protected: //TDqComputeActorChannels::ICalbacks
             batch.Payload = std::move(channelData.Payload);
             auto guard = TBase::BindAllocator();
             channel->Push(std::move(batch));
+        }
+
+        if (channelData.Proto.HasWatermark()) {
+            Y_ABORT_UNLESS(inputChannel->WatermarksMode != NDqProto::WATERMARKS_MODE_DISABLED);
+            const auto& watermarkRequest = channelData.Proto.GetWatermark();
+            const auto watermark = TInstant::MicroSeconds(watermarkRequest.GetTimestampUs());
+            channel->Push(watermark);
         }
 
         if (channelData.Proto.HasCheckpoint()) {
@@ -257,7 +274,7 @@ protected:
             TaskRunner->SetSpillerFactory(std::make_shared<TDqSpillerFactory>(execCtx.GetTxId(), NActors::TActivationContext::ActorSystem(), execCtx.GetWakeupCallback(), execCtx.GetErrorCallback()));
         }
 
-        TaskRunner->Prepare(this->Task, limits, execCtx);
+        TaskRunner->Prepare(this->Task, limits, execCtx, &this->WatermarksTracker);
 
         for (auto& [channelId, channel] : this->InputChannelsMap) {
             channel.Channel = TaskRunner->GetInputChannel(channelId);
@@ -274,6 +291,9 @@ protected:
 
         for (auto& [channelId, channel] : this->OutputChannelsMap) {
             channel.Channel = TaskRunner->GetOutputChannel(channelId);
+            if (this->Task.GetDqChannelVersion() >= 2u && channel.HasPeer) {
+                channel.Channel->Bind(this->SelfId(), channel.PeerId);
+            }
         }
 
         for (auto& [outputIndex, transform] : this->OutputTransformsMap) {
@@ -304,6 +324,10 @@ protected:
 
     const IDqAsyncOutputBuffer* GetSink(ui64, const typename TBase::TAsyncOutputInfoBase& sinkInfo) const override final {
         return sinkInfo.Buffer.Get();
+    }
+
+    TDqComputeActorWatermarks *GetInputTransformWatermarksTracker(ui64 inputId) override {
+        return TaskRunner ? TaskRunner->GetInputTransformWatermarksTracker(inputId): nullptr;
     }
 
 protected:

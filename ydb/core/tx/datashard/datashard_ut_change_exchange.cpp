@@ -845,7 +845,6 @@ Y_UNIT_TEST_SUITE(Cdc) {
                 .SetEnableParameterizedDecimal(true)
                 .SetEnablePgSyntax(true)
                 .SetEnableTopicSplitMerge(true)
-                .SetEnablePQConfigTransactionsAtSchemeShard(true)
                 .SetEnableTopicAutopartitioningForCDC(true);
 
             Server = new TServer(settings);
@@ -1312,6 +1311,23 @@ Y_UNIT_TEST_SUITE(Cdc) {
         }
     };
 
+    struct TJsonString: public TString {
+        bool IsRaw = false;
+
+        template <typename T>
+        TJsonString(T&& str)
+            : TString(std::forward<T>(str))
+        {
+        }
+
+        template <typename T>
+        static TJsonString Raw(T&& str) {
+            auto result = TJsonString(std::forward<T>(str));
+            result.IsRaw = true;
+            return result;
+        }
+    };
+
     struct TopicRunner {
     private:
         using TMessageMeta = std::vector<std::pair<std::string, std::string>>;
@@ -1333,7 +1349,9 @@ Y_UNIT_TEST_SUITE(Cdc) {
         }
 
     public:
-        static void WaitForContent(NYdb::NTopic::IReadSession* reader, const TVector<std::pair<TString, TMessageMeta>>& records) {
+        static void WaitForContent(NYdb::NTopic::IReadSession* reader,
+                const TVector<std::pair<TJsonString, TMessageMeta>>& records)
+        {
             ui32 reads = 0;
             while (reads < records.size()) {
                 auto ev = reader->GetEvent(true);
@@ -1344,7 +1362,11 @@ Y_UNIT_TEST_SUITE(Cdc) {
                     pStream = data->GetPartitionSession();
                     for (const auto& item : data->GetMessages()) {
                         const auto& [body, meta] = records.at(reads++);
-                        AssertJsonsEqual(TString{item.GetData()}, body);
+                        if (body.IsRaw) {
+                            UNIT_ASSERT_EQUAL(item.GetData(), body);
+                        } else {
+                            AssertJsonsEqual(TString{item.GetData()}, body);
+                        }
                         AssertMessageMetaContains(item.GetMessageMeta()->Fields, meta);
                     }
                 } else if (auto* create = std::get_if<NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&*ev)) {
@@ -1364,7 +1386,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         }
 
         static void Read(const TShardedTableOptions& tableDesc, const TCdcStream& streamDesc,
-                const TVector<TString>& queries, const TVector<std::pair<TString, TMessageMeta>>& records)
+                const TVector<TString>& queries, const TVector<std::pair<TJsonString, TMessageMeta>>& records)
         {
             TTestTopicEnv env(tableDesc, streamDesc);
 
@@ -1399,11 +1421,11 @@ Y_UNIT_TEST_SUITE(Cdc) {
         }
 
         static void Read(const TShardedTableOptions& tableDesc, const TCdcStream& streamDesc,
-                const TVector<TString>& queries, const TVector<TString>& records, bool checkKey = true)
+                const TVector<TString>& queries, const TVector<TJsonString>& records, bool checkKey = true)
         {
             Y_UNUSED(checkKey);
 
-            TVector<std::pair<TString, TMessageMeta>> recordsWithMetadata(Reserve(records.size()));
+            TVector<std::pair<TJsonString, TMessageMeta>> recordsWithMetadata(Reserve(records.size()));
             for (const auto& record : records) {
                 recordsWithMetadata.emplace_back(record, TMessageMeta());
             }
@@ -2064,6 +2086,20 @@ Y_UNIT_TEST_SUITE(Cdc) {
             R"({"key":[30],"update":{"pgtext_value":"lorem \"ipsum\""}})",
             R"({"key":[31],"update":{"pgtimestamp_value":"2020-01-01 23:30:10"}})",
             R"({"key":[32],"update":{"pgdate_value":"2020-03-01"}})",
+        });
+    }
+
+    Y_UNIT_TEST(StringEscaping) {
+        const auto table = TShardedTableOptions()
+            .Columns({
+                {"key", "Uint32", true, false},
+                {"value", "Utf8", false, false},
+            });
+
+        TopicRunner::Read(table, Updates(NKikimrSchemeOp::ECdcStreamFormatJson), {
+            "UPSERT INTO `/Root/Table` (key, value) VALUES (1, '\n \r \t \b \f');",
+        }, {
+            TJsonString::Raw(R"({"update":{"value":"\n \r \t \b \f"},"key":[1]})"),
         });
     }
 
@@ -2873,13 +2909,12 @@ Y_UNIT_TEST_SUITE(Cdc) {
         }
     }
 
-    void InitialScanTest(bool withTopicSchemeTx, bool topicAutoPartitioning) {
+    void InitialScanTest(bool topicAutoPartitioning) {
         TPortManager portManager;
         TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
             .SetUseRealThreads(false)
             .SetDomainName("Root")
             .SetEnableChangefeedInitialScan(true)
-            .SetEnablePQConfigTransactionsAtSchemeShard(withTopicSchemeTx)
             .SetEnableTopicSplitMerge(topicAutoPartitioning)
             .SetEnableTopicAutopartitioningForCDC(true)
         );
@@ -2924,16 +2959,12 @@ Y_UNIT_TEST_SUITE(Cdc) {
         });
     }
 
-    Y_UNIT_TEST(InitialScan) {
-        InitialScanTest(false, false);
-    }
-
     Y_UNIT_TEST(InitialScan_WithTopicSchemeTx) {
-        InitialScanTest(true, false);
+        InitialScanTest(false);
     }
 
     Y_UNIT_TEST(InitialScan_TopicAutoPartitioning) {
-        InitialScanTest(true, true);
+        InitialScanTest(true);
     }
 
     Y_UNIT_TEST(InitialScanDebezium) {

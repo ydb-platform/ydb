@@ -49,6 +49,8 @@ public:
         TVector<TPathId> WriteTables;
     };
 
+    virtual bool HasChanges() const = 0;
+
     virtual bool Load(TVector<TLockRow>& rows) = 0;
 
     // Returns true when a new lock may be added with the given lockId
@@ -218,6 +220,7 @@ enum class ELockFlags : ui64 {
     Frozen = 1,
     WholeShard = 2,
     Persistent = 4,
+    Removed = 8,
     PersistentMask = Frozen,
 };
 
@@ -330,6 +333,7 @@ public:
     bool IsShardLock() const { return !!(Flags & ELockFlags::WholeShard); }
     bool IsWriteLock() const { return !WriteTables.empty(); }
     bool IsPersistent() const { return !!(Flags & ELockFlags::Persistent); }
+    bool IsRemoved() const { return !!(Flags & ELockFlags::Removed); }
     bool HasUnpersistedRanges() const { return UnpersistedRanges; }
     //ui64 MemorySize() const { return 1; } // TODO
 
@@ -359,7 +363,7 @@ public:
     bool PersistConflicts(ILocksDb* db);
     void CleanupConflicts();
 
-    void RestoreInMemoryState(const ILocksDb::TLockRow& lockRow);
+    bool RestoreInMemoryState(const ILocksDb::TLockRow& lockRow);
     bool RestoreInMemoryRange(const ILocksDb::TLockRange& rangeRow);
     void RestorePersistentRange(const ILocksDb::TLockRange& rangeRow);
     void RestoreInMemoryConflict(TLockInfo* otherLock);
@@ -674,15 +678,22 @@ public:
         CleanupPending.clear();
         CleanupCandidates.clear();
         PendingSubscribeLocks.clear();
+        PendingRestoreRemoveQueue.Clear();
+        PendingRestoreBreakQueue.Clear();
     }
 
     const THashMap<ui64, TLockInfo::TPtr>& GetLocks() const {
         return Locks;
     }
 
+    const THashMap<ui64, TLockInfo::TPtr>& GetRemovedLocks() const {
+        return RemovedLocks;
+    }
+
 private:
     const THolder<TLocksDataShard> Self;
     THashMap<ui64, TLockInfo::TPtr> Locks; // key is LockId
+    THashMap<ui64, TLockInfo::TPtr> RemovedLocks; // key is LockId
     THashMap<TPathId, TTableLocks::TPtr> Tables;
     THashSet<ui64> ShardLocks;
     // A list of locks that have ranges (from oldest to newest)
@@ -698,6 +709,9 @@ private:
     TPriorityQueue<TVersionedLockId> CleanupCandidates;
     TList<TPendingSubscribeLock> PendingSubscribeLocks;
     ui64 Counter = 0;
+
+    TIntrusiveList<TLockInfo, TLockInfoExpireListTag> PendingRestoreRemoveQueue;
+    TIntrusiveList<TLockInfo, TLockInfoExpireListTag> PendingRestoreBreakQueue;
 
     TTableLocks::TPtr GetTableLocks(const TTableId& table) const {
         auto it = Tables.find(table.PathId);
@@ -837,6 +851,8 @@ enum class EEnsureCurrentLock {
     // map, but not yet fully compacted. New reads and especially writes may
     // cause inconsistencies or data corruption and cannot be performed.
     Abort,
+    // Current lock does not exist
+    Missing,
 };
 
 /// /sys/locks table logic
@@ -922,7 +938,7 @@ public:
      * to memory or other constraints. Returns Abort when operation must abort
      * early, e.g. because the given LockId cannot be reused.
      */
-    EEnsureCurrentLock EnsureCurrentLock();
+    EEnsureCurrentLock EnsureCurrentLock(bool createMissing = true);
 
     ui64 LocksCount() const { return Locker.LocksCount(); }
     ui64 BrokenLocksCount() const { return Locker.BrokenLocksCount(); }
@@ -956,10 +972,29 @@ public:
 
     bool Load(ILocksDb& db);
 
+    /**
+     * Restores in-memory lock state migrated from previous generations
+     *
+     * May also enqueue some persistent changes to be applied later.
+     */
     void RestoreInMemoryLocks(THashMap<ui64, ILocksDb::TLockRow>&& rows);
+
+    /**
+     * Restores persistent lock state migrated from previous generations
+     *
+     * Returns true after performing some enqueued persistent changes, or false
+     * when there are no changes and the queue is empty. Caller needs to call
+     * this method until it returns false, possibly spanning multiple tablet
+     * transactions.
+     */
+    bool RestorePersistentState(ILocksDb* db);
 
     const THashMap<ui64, TLockInfo::TPtr>& GetLocks() const {
         return Locker.GetLocks();
+    }
+
+    const THashMap<ui64, TLockInfo::TPtr>& GetRemovedLocks() const {
+        return Locker.GetRemovedLocks();
     }
 
 private:

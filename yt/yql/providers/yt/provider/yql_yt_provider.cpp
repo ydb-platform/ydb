@@ -313,6 +313,9 @@ void TYtState::Reset() {
     WalkFoldersState.clear();
     NextEpochId = 1;
     FlowDependsOnId = 0;
+    if (FullCapture_) {
+        FullCapture_ = CreateYtFullCapture();
+    }
 }
 
 void TYtState::EnterEvaluation(ui64 id) {
@@ -360,14 +363,16 @@ std::pair<std::shared_ptr<TYtState>, TStatWriter> CreateYtNativeState(IYtGateway
 
     if (ytGatewayConfig) {
         std::unordered_set<std::string_view> groups;
+        bool isRobot = false;
         if (ytState->Types->Credentials != nullptr) {
             groups.insert(ytState->Types->Credentials->GetGroups().begin(), ytState->Types->Credentials->GetGroups().end());
+            isRobot = ytState->Types->Credentials->IsRobot();
         }
-        auto filter = [userName, ytState, groups = std::move(groups)](const NYql::TAttr& attr) -> bool {
+        auto filter = [userName, ytState, groups = std::move(groups), isRobot](const NYql::TAttr& attr) -> bool {
             if (!attr.HasActivation()) {
                 return true;
             }
-            if (NConfig::Allow(attr.GetActivation(), userName, groups)) {
+            if (NConfig::Allow(attr.GetActivation(), userName, isRobot, groups)) {
                 with_lock(ytState->StatisticsMutex) {
                     ytState->Statistics[Max<ui32>()].Entries.emplace_back(TStringBuilder() << "Activation:" << attr.GetName(), 0, 0, 0, 0, 1);
                 }
@@ -479,16 +484,10 @@ TDataProviderInitializer GetYtNativeDataProviderInitializer(IYtGateway::TPtr gat
                 return {};
             }
 
-            // todo: get token by cluster name from Auth when it will be implemented
-            if (auto token = ytState->Configuration->Auth.Get()) {
+            if (auto token = ytState->ResolveClusterToken(cluster)) {
                 return *token;
             }
 
-            if (cluster) {
-                if (auto p = ytState->Configuration->Tokens.FindPtr(cluster)) {
-                    return *p;
-                }
-            }
             return {};
         };
 
@@ -546,6 +545,8 @@ struct TYtDataSinkFunctions {
         Names.insert(TYtTouch::CallableName());
         Names.insert(TYtCreateTable::CallableName());
         Names.insert(TYtDropTable::CallableName());
+        Names.insert(TYtCreateView::CallableName());
+        Names.insert(TYtDropView::CallableName());
         Names.insert(TCoCommit::CallableName());
         Names.insert(TYtPublish::CallableName());
         Names.insert(TYtEquiJoin::CallableName());
@@ -575,6 +576,27 @@ bool TYtState::IsHybridEnabledForCluster(const std::string_view& cluster) const 
 bool TYtState::HybridTakesTooLong() const {
     return TimeSpentInHybrid + (HybridInFlightOprations.empty() ? TDuration::Zero() : NMonotonic::TMonotonic::Now() - HybridStartTime)
             > Configuration->HybridDqTimeSpentLimit.Get().GetOrElse(TDuration::Minutes(20));
+}
+
+TMaybe<TString> TYtState::ResolveClusterToken(const TString& cluster) {
+    // todo: get token by cluster name from Auth when it will be implemented
+    if (auto token = Configuration->Auth.Get()) {
+        return *token;
+    }
+
+    if (cluster) {
+        if (auto* token = Configuration->Tokens.FindPtr(cluster)) {
+            if (*token) {
+                return *token;
+            }
+        }
+
+        if (auto ytTokenResolver = Gateway->GetYtTokenResolver()) {
+            return ytTokenResolver->ResolveClusterToken(cluster);
+        }
+    }
+
+    return {};
 }
 
 }

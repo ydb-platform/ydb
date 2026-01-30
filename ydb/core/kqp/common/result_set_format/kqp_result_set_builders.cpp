@@ -4,7 +4,7 @@
 #include <arrow/ipc/dictionary.h>
 #include <arrow/util/compression.h>
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
-#include <ydb/core/kqp/common/result_set_format/kqp_result_set_arrow.h>
+#include <ydb/core/kqp/common/result_set_format/kqp_formats_arrow.h>
 #include <ydb/library/mkql_proto/mkql_proto.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 #include <yql/essentials/minikql/mkql_string_util.h>

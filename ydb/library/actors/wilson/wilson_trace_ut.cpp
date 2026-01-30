@@ -28,6 +28,19 @@ inline T HostToBig(T val) noexcept {
 }
 
 Y_UNIT_TEST_SUITE(TTraceId) {
+    Y_UNIT_TEST(GenerateTraceIdBench) {
+        ui64 x= 0;
+        auto now = TInstant::Now();
+        size_t count = 10000000;
+        for (size_t i = 0; i < count; i++) {
+            auto traceId = TTraceId::NewTraceId(10, 4095);
+            x += *(ui64*)traceId.GetTraceIdPtr();
+        }
+        ui64 spentUs = (TInstant::Now() - now).MicroSeconds();
+        Cerr << x << Endl;
+        Cerr << spentUs << " uS per test, " << (1000ul * spentUs / count) << " ns per one traceId generation ";
+    }
+
     Y_UNIT_TEST(OpenTelemetryHeaderParser) {
         const auto incorrectHeaders = std::array {
             "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-011", // Wrong length

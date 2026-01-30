@@ -84,7 +84,7 @@ void MakeTransitiveClosure(TMap<TString, TSet<TString>>& aliases) {
     }
 }
 
-struct GatherOptionalKeyColumnsOptions {
+struct TGatherOptionalKeyColumnsOptions {
     const TJoinLabels& Labels;
     ui32 InputIndex;
     bool WithInnerOptionals;
@@ -94,7 +94,7 @@ struct GatherOptionalKeyColumnsOptions {
 void GatherOptionalKeyColumnsFromEquality(
     TExprNode::TPtr columns,
     TSet<TString>& optionalKeyColumns,
-    const GatherOptionalKeyColumnsOptions& options
+    const TGatherOptionalKeyColumnsOptions& options
 ) {
     for (ui32 i = 0; i < columns->ChildrenSize(); i += 2) {
         const auto table = columns->Child(i)->Content();
@@ -112,7 +112,7 @@ void GatherOptionalKeyColumnsFromEquality(
 void GatherOptionalKeyColumns(
     TExprNode::TPtr joinTree,
     TSet<TString>& optionalKeyColumns,
-    const GatherOptionalKeyColumnsOptions& options
+    const TGatherOptionalKeyColumnsOptions& options
 ) {
     auto left = joinTree->Child(1);
     auto right = joinTree->Child(2);
@@ -240,14 +240,14 @@ TExprNode::TPtr ApplyJoinPredicate(const TExprNode::TPtr& predicate, const TExpr
 
 bool NeedEmitSkipNullMembers(const TTypeAnnotationContext* types) {
     YQL_ENSURE(types);
-    static const char flag[] = "EmitSkipNullOnPushdown";
-    return IsOptimizerEnabled<flag>(*types) || !IsOptimizerDisabled<flag>(*types);
+    static const char Flag[] = "EmitSkipNullOnPushdown";
+    return IsOptimizerEnabled<Flag>(*types) || !IsOptimizerDisabled<Flag>(*types);
 }
 
 bool IsPredicatePushdownOverEquiJoinBothSides(const TTypeAnnotationContext* types) {
     YQL_ENSURE(types);
-    static const char flag[] = "PredicatePushdownOverEquiJoinBothSides";
-    return IsOptimizerEnabled<flag>(*types) && !IsOptimizerDisabled<flag>(*types);
+    static const char Flag[] = "PredicatePushdownOverEquiJoinBothSides";
+    return IsOptimizerEnabled<Flag>(*types) && !IsOptimizerDisabled<Flag>(*types);
 }
 
 TExprNode::TPtr SingleInputPredicatePushdownOverEquiJoin(
@@ -608,8 +608,8 @@ TExprNode::TPtr CreateLabelList(const THashSet<TString>& labels, TExprContext& c
 
 bool FilterPushdownOverJoinOptionalSideIgnoreOnlyKeys(const TTypeAnnotationContext* types) {
     YQL_ENSURE(types);
-    static const char flag[] = "FilterPushdownOverJoinOptionalSideIgnoreOnlyKeys";
-    return IsOptimizerEnabled<flag>(*types) && !IsOptimizerDisabled<flag>(*types);
+    static const char Flag[] = "FilterPushdownOverJoinOptionalSideIgnoreOnlyKeys";
+    return IsOptimizerEnabled<Flag>(*types) && !IsOptimizerDisabled<Flag>(*types);
 }
 
 TExprNode::TPtr FilterPushdownOverJoinOptionalSide(
@@ -1240,20 +1240,20 @@ TExprNode::TPtr DecayCrossJoinIntoInner(TExprNode::TPtr equiJoin, const TExprNod
 
 bool IsEqualityFilterOverJoinEnabled(const TTypeAnnotationContext* types) {
     YQL_ENSURE(types);
-    static const char flag[] = "EqualityFilterOverJoin";
-    return IsOptimizerEnabled<flag>(*types) && !IsOptimizerDisabled<flag>(*types);
+    static const char Flag[] = "EqualityFilterOverJoin";
+    return IsOptimizerEnabled<Flag>(*types) && !IsOptimizerDisabled<Flag>(*types);
 }
 
 bool IsExtractOrPredicatesOverEquiJoinEnabled(const TTypeAnnotationContext* types) {
     YQL_ENSURE(types);
-    static const char flag[] = "ExtractOrPredicatesOverEquiJoin";
-    return IsOptimizerEnabled<flag>(*types) && !IsOptimizerDisabled<flag>(*types);
+    static const char Flag[] = "ExtractOrPredicatesOverEquiJoin";
+    return IsOptimizerEnabled<Flag>(*types) && !IsOptimizerDisabled<Flag>(*types);
 }
 
 bool IsNormalizeEqualityFilterOverJoinEnabled(const TTypeAnnotationContext* types) {
     YQL_ENSURE(types);
-    static const char flag[] = "NormalizeEqualityFilterOverJoin";
-    return IsOptimizerEnabled<flag>(*types) && !IsOptimizerDisabled<flag>(*types);
+    static const char Flag[] = "NormalizeEqualityFilterOverJoin";
+    return IsOptimizerEnabled<Flag>(*types) && !IsOptimizerDisabled<Flag>(*types);
 }
 
 struct TExtraInputPredicates {

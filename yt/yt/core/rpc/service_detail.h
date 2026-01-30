@@ -391,7 +391,7 @@ protected:
                 return;
             }
 
-            response.AttachmentsFuture.SubscribeUnique(
+            response.AttachmentsFuture.AsUnique().Subscribe(
                 BIND([this, this_ = MakeStrong(this), responseBody = std::move(response.Body)] (TErrorOr<std::vector<TSharedRef>>&& compressedAttachments) {
                     const auto& underlyingContext = this->GetUnderlyingContext();
                     if (compressedAttachments.IsOK()) {
@@ -754,6 +754,10 @@ protected:
         std::atomic<bool> Heavy = false;
         std::atomic<bool> Pooled = true;
 
+        // This value represents the combined queue sizes of all request
+        // queues associated with the method.
+        std::atomic<int> QueueSize = 0;
+
         std::atomic<int> QueueSizeLimit = 0;
         std::atomic<i64> QueueByteSizeLimit = 0;
 
@@ -1112,9 +1116,13 @@ public:
     bool IsQueueByteSizeLimitExceeded() const;
 
     int GetQueueSize() const;
+    std::optional<int> GetQueueSizeLimit() const;
+    // TODO(h0pless): support queue byte size limit for symmetry's sake.
     i64 GetQueueByteSize() const;
     int GetConcurrency() const;
     i64 GetConcurrencyByte() const;
+
+    void SetQueueSizeLimit(std::optional<int> limit);
 
     void OnRequestArrived(TServiceBase::TServiceContextPtr context);
     void OnRequestFinished(i64 requestTotalSize);
@@ -1150,6 +1158,8 @@ private:
     std::atomic<bool> Throttled_ = false;
 
     std::atomic<int> QueueSize_ = 0;
+    // Not std::optional to guarantee lock freeness; -1 means inf.
+    std::atomic<int> QueueSizeLimit_ = -1;
     std::atomic<i64> QueueByteSize_ = 0;
     moodycamel::ConcurrentQueue<TServiceBase::TServiceContextPtr> Queue_;
 

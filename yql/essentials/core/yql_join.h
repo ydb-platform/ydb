@@ -89,6 +89,7 @@ IGraphTransformer::TStatus EquiJoinConstraints(
 );
 
 THashMap<TStringBuf, THashSet<TStringBuf>> CollectEquiJoinKeyColumnsByLabel(const TExprNode& joinTree);
+THashMap<TStringBuf, TVector<TStringBuf>> CollectOrderedEquiJoinKeyColumnsByLabel(const TExprNode& joinTree);
 
 bool IsLeftJoinSideOptional(const TStringBuf& joinType);
 bool IsRightJoinSideOptional(const TStringBuf& joinType);

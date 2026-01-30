@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "arrow/util/cancel.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/cancel.h"
 
 #include <atomic>
 #include <mutex>
@@ -23,12 +23,12 @@
 #include <thread>
 #include <utility>
 
-#include "arrow/result.h"
-#include "arrow/util/atfork_internal.h"
-#include "arrow/util/io_util.h"
-#include "arrow/util/logging.h"
-#include "arrow/util/mutex.h"
-#include "arrow/util/visibility.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/result.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/atfork_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/io_util.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/mutex.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/visibility.h"
 
 namespace arrow20 {
 

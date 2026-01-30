@@ -82,7 +82,7 @@ struct TRange {
 
     TRange() = default;
 
-    TRange(TPosition position)
+    explicit TRange(TPosition position)
         : Position(position)
         , EndPosition(position)
     {
@@ -226,6 +226,8 @@ class TIssues {
 public:
     TIssues() = default;
 
+    // TODO(YQL-20095): there are YDB usages
+    // NOLINTNEXTLINE(google-explicit-constructor)
     inline TIssues(const TVector<TIssue>& issues)
         : Issues_(issues)
     {
@@ -277,11 +279,11 @@ public:
     }
 
     inline const TIssue* begin() const {
-        return Issues_.begin();
+        return Issues_.data();
     }
 
     inline const TIssue* end() const {
-        return Issues_.end();
+        return Issues_.data() + Issues_.size();
     }
 
     inline TIssue& back() {

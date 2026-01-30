@@ -16,7 +16,7 @@ struct TJoinSourceData {
 struct TJoinDescription {
     TJoinSourceData LeftSource;
     TJoinSourceData RightSource;
-    TDqSetup<false>* Setup;
+    TDqSetup<false, true>* Setup;
     std::optional<TDqUserRenames> CustomRenames;
 };
 

@@ -18,4 +18,4 @@
 #define NPY__CPU_TARGET_AVX512F
 #define NPY__CPU_TARGET_AVX512CD
 #define NPY__CPU_TARGET_AVX512_SKX
-#include "numpy/core/src/npysort/simd_qsort.dispatch.cpp"
+#include "contrib/python/numpy/py3/numpy/core/src/npysort/simd_qsort.dispatch.cpp"

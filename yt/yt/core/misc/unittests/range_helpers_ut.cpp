@@ -50,6 +50,33 @@ TEST(TRangeHelpersTest, RangeToString)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TEST(TRangeHelpersTest, MonadicRangeToVector)
+{
+    auto data = std::vector<std::string>{"A", "B", "C", "D"};
+    auto range = std::ranges::views::transform(data, [] (std::string x) {
+        return "_" + x;
+    });
+
+    std::initializer_list<std::string> expectedValues{"_A", "_B", "_C", "_D"};
+    EXPECT_EQ(std::vector<std::string>(expectedValues), range | RangeTo<std::vector<std::string>>());
+    using TSomeCompactVector = TCompactVector<std::string, 4>;
+    EXPECT_EQ(TSomeCompactVector(expectedValues), range  | RangeTo<TSomeCompactVector>());
+}
+
+TEST(TRangeHelpersTest, MonadicRangeToString)
+{
+    auto data = "_sample_"sv;
+    auto range = std::ranges::views::filter(data, [] (char x) {
+        return x != '_';
+    });
+    auto expectedData = "sample"sv;
+
+    EXPECT_EQ(std::string(expectedData), range | RangeTo<std::string>());
+    EXPECT_EQ(TString(expectedData), range | RangeTo<TString>());
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 TEST(TRangeHelpersTest, Fold)
 {
     EXPECT_EQ(0, FoldRange(std::vector<int>{}, std::plus{}));
@@ -58,6 +85,40 @@ TEST(TRangeHelpersTest, Fold)
         std::vector<std::vector<int>>{{1, 2}, {3, 4, 5}},
         std::plus{},
         std::ranges::ssize));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TEST(TRangeHelpersTest, StaticRangeToVector)
+{
+    EXPECT_EQ(StaticRangeTo<std::vector<int>>(1), std::vector<int>{1});
+    auto expected = std::vector<int>{1, 2, 10};
+    auto result = StaticRangeTo<std::vector<int>>(1, 2, 10);
+    EXPECT_EQ(result, expected);
+}
+
+TEST(TRangeHelpersTest, StaticRangeToVectorMoveOnly)
+{
+    auto result = StaticRangeTo<std::vector<std::unique_ptr<int>>>(std::make_unique<int>(1), std::make_unique<int>(2));
+    ASSERT_EQ(std::ssize(result), 2);
+    EXPECT_EQ(*result[0], 1);
+    EXPECT_EQ(*result[1], 2);
+}
+
+TEST(TRangeHelpersTest, TStaticRangeToVector)
+{
+    EXPECT_EQ(static_cast<std::vector<int>>(TStaticRange{1}), std::vector<int>{1});
+    auto expected = std::vector<int>{1, 2, 10};
+    std::vector<int> result = TStaticRange{1, 2, 10};
+    EXPECT_EQ(result, expected);
+}
+
+TEST(TRangeHelpersTest, TStaticRangeToVectorMoveOnly)
+{
+    std::vector<std::unique_ptr<int>> result = TStaticRange(std::make_unique<int>(1), std::make_unique<int>(2));
+    ASSERT_EQ(std::ssize(result), 2);
+    EXPECT_EQ(*result[0], 1);
+    EXPECT_EQ(*result[1], 2);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

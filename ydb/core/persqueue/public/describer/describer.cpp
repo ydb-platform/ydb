@@ -185,6 +185,21 @@ NActors::IActor* CreateDescriberActor(const NActors::TActorId& parent, const TSt
     return new TDescribeActor(parent, databasePath, std::move(topicPaths), settings);
 }
 
+
+Ydb::StatusIds::StatusCode Convert(const EStatus status) {
+    switch (status) {
+        case EStatus::SUCCESS:
+            return Ydb::StatusIds::SUCCESS;
+        case EStatus::NOT_FOUND:
+        case EStatus::NOT_TOPIC:
+            return Ydb::StatusIds::NOT_FOUND;
+        case EStatus::UNAUTHORIZED:
+            return Ydb::StatusIds::UNAUTHORIZED;
+        case EStatus::UNKNOWN_ERROR:
+            return Ydb::StatusIds::INTERNAL_ERROR;
+    }
+}
+
 TString Description(const TString& topicPath, const EStatus status) {
     switch (status) {
         case EStatus::SUCCESS:

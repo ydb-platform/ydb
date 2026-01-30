@@ -1,6 +1,6 @@
 #include "datetime.h"
 
-namespace NYql::DateTime {
+namespace NYql::NDateTime {
 
 TInstant DoAddMonths(TInstant current, i64 months, const NUdf::IDateBuilder& builder) {
     TTMStorage storage;
@@ -20,4 +20,9 @@ TInstant DoAddYears(TInstant current, i64 years, const NUdf::IDateBuilder& build
     return TInstant::FromValue(storage.ToTimestamp(builder));
 }
 
+} // namespace NYql::NDateTime
+
+// TODO(YQL-20086): Migrate YDB to NYql::NDateTime
+namespace NYql::DateTime { // NOLINT(readability-identifier-naming)
+using namespace NYql::NDateTime;
 } // namespace NYql::DateTime

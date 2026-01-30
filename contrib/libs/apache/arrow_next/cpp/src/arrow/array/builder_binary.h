@@ -29,17 +29,17 @@
 #include <string_view>
 #include <vector>
 
-#include "arrow/array/array_base.h"
-#include "arrow/array/array_binary.h"
-#include "arrow/array/builder_base.h"
-#include "arrow/array/data.h"
-#include "arrow/buffer.h"
-#include "arrow/buffer_builder.h"
-#include "arrow/status.h"
-#include "arrow/type.h"
-#include "arrow/util/binary_view_util.h"
-#include "arrow/util/macros.h"
-#include "arrow/util/visibility.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/array_base.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/array_binary.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/builder_base.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/data.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/buffer.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/buffer_builder.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/status.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/binary_view_util.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/macros.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/visibility.h"
 
 namespace arrow20 {
 

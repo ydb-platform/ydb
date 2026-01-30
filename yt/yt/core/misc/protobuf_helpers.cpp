@@ -476,7 +476,7 @@ void Deserialize(TExtensionSet& extensionSet, NYTree::INodePtr node)
     }
 }
 
-REGISTER_INTERMEDIATE_PROTO_INTEROP_REPRESENTATION_WITH_OPTIONS(NYT::NProto::TExtensionSet, TExtensionSet)
+REGISTER_INTERMEDIATE_PROTO_INTEROP_REPRESENTATION_WITH_OPTIONS(NYT::NProto::TExtensionSet, TExtensionSet);
 
 ////////////////////////////////////////////////////////////////////////////////
 

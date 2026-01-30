@@ -242,6 +242,39 @@ TMaybe<THoppingTraits> ExtractHopTraits(const TCoAggregate& aggregate, TExprCont
         addError("Too many hops in delay");
         return Nothing();
     }
+    TMaybe<NHoppingWindow::EPolicy> earlyPolicy;
+    TMaybe<NHoppingWindow::EPolicy> latePolicy;
+    auto validatePolicy = [&](ui32 idx, auto& policy, TStringBuf kind) {
+        if (idx < traitsNode->ChildrenSize()) {
+            auto* policyNode = traitsNode->Child(idx);
+            if (!policyNode->IsCallable("Void")) {
+                if (!policyNode->IsCallable("String")) {
+                    addError(TStringBuilder() << "HoppingWindow: " << kind << " must be string literal");
+                    return false;
+                }
+                if (!EnsureAtom(*policyNode->Child(0), ctx)) {
+                    return false;
+                }
+                policy.ConstructInPlace();
+                if (!TryFromString(policyNode->Child(0)->Content(), *policy)) {
+                    addError(TStringBuilder() << "HoppingWindow: " << kind
+                                              << ": expected one of " << GetEnumAllNames<NHoppingWindow::EPolicy>()
+                                              << ", but got " << policyNode->Child(0)->Content());
+                    return false;
+                }
+            }
+        }
+        return true;
+    };
+    if (!validatePolicy(TCoHoppingTraits::idx_EarlyPolicy, earlyPolicy, "EarlyPolicy") ||
+        !validatePolicy(TCoHoppingTraits::idx_LatePolicy,  latePolicy,  "LatePolicy")) {
+        return Nothing();
+    }
+    if (latePolicy.GetOrElse(NHoppingWindow::TSettings{}.LatePolicy) == NHoppingWindow::EPolicy::Close) {
+        addError("HoppingWindow LatePolicy close is not implemented");
+        return Nothing();
+    }
+    // TODO: EarlyPolicy adjust and SizeLimit != max is not implemented, but not obviously possible to evaluate here, error will be reported on runtime
 
     const auto newTraits = Build<TCoHoppingTraits>(ctx, aggregate.Pos())
         .InitFrom(traits)
@@ -256,6 +289,8 @@ TMaybe<THoppingTraits> ExtractHopTraits(const TCoAggregate& aggregate, TExprCont
         static_cast<ui64>(hopTime),
         static_cast<ui64>(intervalTime),
         static_cast<ui64>(delayTime),
+        earlyPolicy,
+        latePolicy,
     };
 }
 

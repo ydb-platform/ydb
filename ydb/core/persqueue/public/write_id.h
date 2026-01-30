@@ -38,12 +38,12 @@ struct TWriteId {
             : MultiHash(NodeId, KeyId);
     }
 
-    bool IsTopicApiTransaction() const 
+    bool IsTopicApiTransaction() const
     {
         return !KafkaApiTransaction;
     }
 
-    bool IsKafkaApiTransaction() const 
+    bool IsKafkaApiTransaction() const
     {
         return KafkaApiTransaction;
     }

@@ -10,12 +10,12 @@ std::vector<std::shared_ptr<TColumnEngineChanges>> IOptimizerPlanner::GetOptimiz
 }
 
 IOptimizerPlanner::TModificationGuard& IOptimizerPlanner::TModificationGuard::AddPortion(const std::shared_ptr<TPortionInfo>& portion) {
-    AFL_VERIFY(AddPortions.emplace(portion->GetPortionId(), portion).second);
+    AddPortions.emplace_back(portion);
     return*this;
 }
 
 IOptimizerPlanner::TModificationGuard& IOptimizerPlanner::TModificationGuard::RemovePortion(const std::shared_ptr<TPortionInfo>& portion) {
-    AFL_VERIFY(RemovePortions.emplace(portion->GetPortionId(), portion).second);
+    RemovePortions.emplace_back(portion);
     return*this;
 }
 

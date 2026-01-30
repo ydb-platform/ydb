@@ -227,6 +227,15 @@ struct TTestState {
         return result;
     }
 
+    std::unique_ptr<TEvBlobStorage::TEvVGetBlockResult> CreateEventResult(TEvBlobStorage::TEvVGetBlock *ev,
+            NKikimrProto::EReplyStatus status, ui64 tabletId)
+    {
+        TVDiskID vDiskId = VDiskIDFromVDiskID(ev->Record.GetVDiskID());
+        std::unique_ptr<TEvBlobStorage::TEvVGetBlockResult> result(new TEvBlobStorage::TEvVGetBlockResult(
+                status, tabletId, vDiskId, TAppData::TimeProvider->Now(), 0, nullptr, nullptr, nullptr, nullptr));
+        return result;
+    }
+
     ////////////////////////////////////////////////////////////////////////////
     // HANDLE WITH MOCK
     ////////////////////////////////////////////////////////////////////////////

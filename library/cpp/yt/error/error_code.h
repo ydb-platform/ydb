@@ -89,12 +89,13 @@ void FormatValue(
 
 //! NB: This macro should only by used in cpp files.
 #define YT_DEFINE_ERROR_CODE_RANGE(from, to, namespaceName, formatter) \
-    YT_STATIC_INITIALIZER( \
+    YT_STATIC_INITIALIZER({ \
         ::NYT::TErrorCodeRegistry::Get()->RegisterErrorCodeRange( \
             from, \
             to, \
             namespaceName, \
-            formatter));
+            formatter); \
+    })
 
 ////////////////////////////////////////////////////////////////////////////////
 

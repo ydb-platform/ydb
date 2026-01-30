@@ -25,7 +25,7 @@ public:
 
     static constexpr size_t MaxErrorsLimit = Max<size_t>();
 
-    virtual ~IGenericLexer() = default;
+    ~IGenericLexer() override = default;
     virtual bool Tokenize(
         TStringBuf text,
         const TTokenCallback& onNext,

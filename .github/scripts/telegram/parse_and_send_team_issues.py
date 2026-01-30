@@ -18,12 +18,14 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from send_telegram_message import send_telegram_message
 
+# Add analytics directory to path for ydb_wrapper import
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'analytics'))
 try:
-    import ydb
+    from ydb_wrapper import YDBWrapper
     YDB_AVAILABLE = True
-except ImportError:
+except ImportError as e:
     YDB_AVAILABLE = False
-    print("⚠️ YDB client not available. Install with: pip install ydb")
+    print(f"⚠️ YDBWrapper not available: {e}")
 
 try:
     import matplotlib.pyplot as plt
@@ -47,86 +49,31 @@ GITHUB_ORG_TEAMS_URL = "https://github.com/orgs/ydb-platform/teams"
 DATALENS_DASHBOARD_URL = "https://datalens.yandex/4un3zdm0zcnyr?owner_team={team_name}"
 
 
-def _setup_ydb_connection(database_endpoint=None, database_path=None, credentials_path=None):
+def _execute_ydb_query(query, description):
     """
-    Set up YDB connection parameters and credentials.
+    Execute a YDB query using YDBWrapper and return results.
     
     Args:
-        database_endpoint (str): YDB database endpoint
-        database_path (str): YDB database path
-        credentials_path (str): Path to service account credentials JSON file
-        
-    Returns:
-        tuple: (database_endpoint, database_path) or (None, None) if error
-    """
-    if not YDB_AVAILABLE:
-        print("❌ YDB client not available")
-        return None, None
-    
-    try:
-        # Set up credentials if provided
-        if credentials_path and os.path.exists(credentials_path):
-            os.environ["YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"] = credentials_path
-        elif "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS" in os.environ:
-            os.environ["YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"] = os.environ["CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"]
-        
-        # Try to load from config file if not provided
-        if not database_endpoint or not database_path:
-            try:
-                config = configparser.ConfigParser()
-                config_file_path = os.path.join(os.path.dirname(__file__), "../../config/ydb_qa_db.ini")
-                if os.path.exists(config_file_path):
-                    config.read(config_file_path)
-                    if not database_endpoint and "QA_DB" in config and "DATABASE_ENDPOINT" in config["QA_DB"]:
-                        database_endpoint = config["QA_DB"]["DATABASE_ENDPOINT"]
-                    if not database_path and "QA_DB" in config and "DATABASE_PATH" in config["QA_DB"]:
-                        database_path = config["QA_DB"]["DATABASE_PATH"]
-            except Exception as e:
-                print(f"⚠️ Could not load config file: {e}")
-        
-        # Use default values if still not provided
-        if not database_endpoint:
-            database_endpoint = os.getenv('YDB_ENDPOINT', 'grpcs://ydb.serverless.yandexcloud.net:2135')
-        if not database_path:
-            database_path = os.getenv('YDB_DATABASE', '/ru-central1/b1g8ejbrie0sfh5k0j2j/etn8l4e3hbti8k4n5g2e')
-        
-        return database_endpoint, database_path
-        
-    except Exception as e:
-        print(f"❌ Error setting up YDB connection: {e}")
-        return None, None
-
-
-def _execute_ydb_query(database_endpoint, database_path, query, description):
-    """
-    Execute a YDB query and return results.
-    
-    Args:
-        database_endpoint (str): YDB database endpoint
-        database_path (str): YDB database path
         query (str): SQL query to execute
         description (str): Description for logging
         
     Returns:
         list: Query results or None if error
     """
+    if not YDB_AVAILABLE:
+        print("❌ YDBWrapper not available")
+        return None
+    
     try:
         print(f"🔍 {description}")
         
-        with ydb.Driver(
-            endpoint=database_endpoint,
-            database=database_path,
-            credentials=ydb.credentials_from_env_variables(),
-        ) as driver:
-            driver.wait(timeout=10, fail_fast=True)
-            print("✅ Successfully connected to YDB")
+        with YDBWrapper() as ydb_wrapper:
+            if not ydb_wrapper.check_credentials():
+                print("❌ YDB credentials check failed")
+                return None
             
-            table_client = ydb.TableClient(driver, ydb.TableClientSettings())
-            query_obj = ydb.ScanQuery(query, {})
-            it = table_client.scan_query(query_obj)
-            results = []
-            for result in it:
-                results.extend(result.result_set.rows)
+            print("✅ Successfully connected to YDB")
+            results = ydb_wrapper.execute_scan_query(query, query_name=description)
             
             print(f"📊 Query returned {len(results)} rows")
             return results
@@ -139,31 +86,19 @@ def _execute_ydb_query(database_endpoint, database_path, query, description):
         return None
 
 
-def get_all_team_data(database_endpoint=None, database_path=None, credentials_path=None, use_yesterday=False):
+def get_all_team_data(use_yesterday=False):
     """
     Get all team data (stats + trends) from YDB in one optimized query.
     
     Args:
-        database_endpoint (str): YDB database endpoint
-        database_path (str): YDB database path
-        credentials_path (str): Path to service account credentials JSON file
         use_yesterday (bool): If True, use yesterday's data for development convenience
         
     Returns:
         dict: Dictionary with team names as keys and their data, or None if error
     """
-    # Set up connection
-    print(f"🔍 Setting up YDB connection:")
-    print(f"   database_endpoint: {database_endpoint}")
-    print(f"   database_path: {database_path}")
-    print(f"   credentials_path: {credentials_path}")
-    
-    endpoint, path = _setup_ydb_connection(database_endpoint, database_path, credentials_path)
-    if not endpoint or not path:
-        print("❌ Failed to set up YDB connection")
+    if not YDB_AVAILABLE:
+        print("❌ YDBWrapper not available")
         return None
-    
-    print(f"✅ YDB connection configured: {endpoint} / {path}")
     
     # Calculate target date
     if use_yesterday:
@@ -181,6 +116,10 @@ def get_all_team_data(database_endpoint=None, database_path=None, credentials_pa
     print(f"   start_date: {start_date}")
     print(f"   yesterday_date: {yesterday_date}")
     
+    # Get table path from config
+    with YDBWrapper() as ydb_wrapper:
+        test_muted_monitor_mart_table = ydb_wrapper.get_table_path("test_muted_monitor_mart")
+    
     # Single optimized query for all data
     all_data_query = f"""
     SELECT 
@@ -188,7 +127,7 @@ def get_all_team_data(database_endpoint=None, database_path=None, credentials_pa
         date_window,
         COUNT(*) as daily_count,
         SUM(CASE WHEN mute_state_change_date = Date('{target_date.strftime('%Y-%m-%d')}') THEN 1 ELSE 0 END) as today_count
-    FROM `test_results/analytics/test_muted_monitor_mart`
+    FROM `{test_muted_monitor_mart_table}`
     WHERE date_window >= Date('{start_date.strftime('%Y-%m-%d')}')
     AND date_window <= Date('{target_date.strftime('%Y-%m-%d')}')
     AND is_muted = 1
@@ -204,10 +143,8 @@ def get_all_team_data(database_endpoint=None, database_path=None, credentials_pa
     print(f"🔍 Query details:")
     print(f"   Start date: {start_date.strftime('%Y-%m-%d')}")
     print(f"   Target date: {target_date.strftime('%Y-%m-%d')}")
-    print(f"   Endpoint: {endpoint}")
-    print(f"   Path: {path}")
     
-    results = _execute_ydb_query(endpoint, path, all_data_query, f"Getting all team data from {start_date.strftime('%Y-%m-%d')} to {target_date.strftime('%Y-%m-%d')}")
+    results = _execute_ydb_query(all_data_query, f"Getting all team data from {start_date.strftime('%Y-%m-%d')} to {target_date.strftime('%Y-%m-%d')}")
     if results is None:
         return None
     
@@ -216,7 +153,7 @@ def get_all_team_data(database_endpoint=None, database_path=None, credentials_pa
     base_date = datetime(1970, 1, 1)
     
     for row in results:
-        owner = row.owner
+        owner = row.get('owner') if isinstance(row, dict) else row.owner
         if not owner:
             continue
             
@@ -236,16 +173,19 @@ def get_all_team_data(database_endpoint=None, database_path=None, credentials_pa
             }
         
         # Convert days since epoch to date
-        date_obj = base_date + timedelta(days=row.date_window)
+        date_window = row.get('date_window') if isinstance(row, dict) else row.date_window
+        date_obj = base_date + timedelta(days=date_window)
         date_str = date_obj.strftime('%Y-%m-%d')
         
         # Add to trend data
-        team_data[team_name]['trend'][date_str] = row.daily_count
+        daily_count = row.get('daily_count') if isinstance(row, dict) else row.daily_count
+        team_data[team_name]['trend'][date_str] = daily_count
         
         # Update stats for target date
         if date_str == target_date.strftime('%Y-%m-%d'):
-            team_data[team_name]['stats']['total'] = row.daily_count
-            team_data[team_name]['stats']['today'] = row.today_count
+            team_data[team_name]['stats']['total'] = daily_count
+            today_count = row.get('today_count') if isinstance(row, dict) else row.today_count
+            team_data[team_name]['stats']['today'] = today_count
     
     # Calculate "minus today" for each team and fix total if needed
     for team_name, data in team_data.items():
@@ -270,14 +210,11 @@ def get_all_team_data(database_endpoint=None, database_path=None, credentials_pa
     return team_data
 
 
-def get_muted_tests_stats(database_endpoint=None, database_path=None, credentials_path=None, use_yesterday=False):
+def get_muted_tests_stats(use_yesterday=False):
     """
     Get statistics about muted tests from YDB by team.
     
     Args:
-        database_endpoint (str): YDB database endpoint
-        database_path (str): YDB database path
-        credentials_path (str): Path to service account credentials JSON file
         use_yesterday (bool): If True, use yesterday's data for development convenience
         
     Returns:
@@ -285,7 +222,7 @@ def get_muted_tests_stats(database_endpoint=None, database_path=None, credential
     """
     
     # Use the optimized function to get all data
-    all_data = get_all_team_data(database_endpoint, database_path, credentials_path, use_yesterday)
+    all_data = get_all_team_data(use_yesterday)
     if all_data is None:
         return None
     
@@ -298,14 +235,11 @@ def get_muted_tests_stats(database_endpoint=None, database_path=None, credential
     return team_stats
 
 
-def get_monthly_trend_data(database_endpoint=None, database_path=None, credentials_path=None, team_name=None, use_yesterday=False):
+def get_monthly_trend_data(team_name=None, use_yesterday=False):
     """
     Get monthly trend data for a specific team.
     
     Args:
-        database_endpoint (str): YDB database endpoint
-        database_path (str): YDB database path
-        credentials_path (str): Path to service account credentials JSON file
         team_name (str): Team name to get data for
         use_yesterday (bool): If True, use yesterday as end date for development convenience
         
@@ -313,7 +247,7 @@ def get_monthly_trend_data(database_endpoint=None, database_path=None, credentia
         dict: Dictionary with dates as keys and counts as values, or None if error
     """
     # Use the optimized function to get all data
-    all_data = get_all_team_data(database_endpoint, database_path, credentials_path, use_yesterday)
+    all_data = get_all_team_data(use_yesterday)
     if all_data is None:
         return None
     
@@ -780,9 +714,6 @@ def send_team_messages(teams, bot_token, delay=2, max_retries=5, retry_delay=10,
                 elif ydb_config:
                     print(f"📊 Getting trend data for team: {team_name}")
                     trend_data = get_monthly_trend_data(
-                        database_endpoint=ydb_config.get('endpoint'),
-                        database_path=ydb_config.get('path'),
-                        credentials_path=ydb_config.get('credentials'),
                         team_name=team_name,
                         use_yesterday=ydb_config.get('use_yesterday', False)
                     )
@@ -983,9 +914,6 @@ def send_period_updates(period, bot_token, team_channels, ydb_config, delay=2, m
     
     # Get all team data for trends
     all_team_data = get_all_team_data(
-        database_endpoint=ydb_config.get('endpoint'),
-        database_path=ydb_config.get('path'),
-        credentials_path=ydb_config.get('credentials'),
         use_yesterday=ydb_config.get('use_yesterday', False)
     )
     
@@ -1220,9 +1148,6 @@ def main():
     mode_group.add_argument('--period-update', choices=['week', 'month'], help='Send periodic trend updates (week or month)')
     
     # YDB arguments for muted tests statistics
-    parser.add_argument('--ydb-endpoint', help='YDB database endpoint (or use YDB_ENDPOINT env var)')
-    parser.add_argument('--ydb-database', help='YDB database path (or use YDB_DATABASE env var)')
-    parser.add_argument('--ydb-credentials', help='Path to YDB service account credentials JSON file (or use YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS env var)')
     parser.add_argument('--no-stats', action='store_true', help='Skip fetching muted tests statistics from YDB')
     parser.add_argument('--use-yesterday', action='store_true', help='Use yesterday\'s data for development convenience')
     parser.add_argument('--include-plots', action='store_true', help='Include trend plots in messages (requires matplotlib)')
@@ -1254,9 +1179,6 @@ def main():
     if args.period_update:
         # Prepare YDB config for period updates
         ydb_config = {
-            'endpoint': args.ydb_endpoint,
-            'path': args.ydb_database,
-            'credentials': args.ydb_credentials,
             'use_yesterday': args.use_yesterday
         }
         
@@ -1292,9 +1214,6 @@ def main():
     if not args.no_stats:
         print("📊 Fetching muted tests statistics from YDB...")
         muted_stats = get_muted_tests_stats(
-            database_endpoint=args.ydb_endpoint,
-            database_path=args.ydb_database,
-            credentials_path=args.ydb_credentials,
             use_yesterday=args.use_yesterday
         )
         if muted_stats:
@@ -1384,18 +1303,12 @@ def main():
     
     if args.include_plots and not args.no_stats:
         ydb_config = {
-            'endpoint': args.ydb_endpoint,
-            'path': args.ydb_database,
-            'credentials': args.ydb_credentials,
             'use_yesterday': args.use_yesterday
         }
         
         # Get all team data in one optimized query
         print("📊 Fetching all team data in one optimized query...")
         all_team_data = get_all_team_data(
-            database_endpoint=args.ydb_endpoint,
-            database_path=args.ydb_database,
-            credentials_path=args.ydb_credentials,
             use_yesterday=args.use_yesterday
         )
         

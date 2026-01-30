@@ -1,6 +1,5 @@
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/keyvalue/keyvalue_events.h>
-#include <ydb/core/keyvalue/keyvalue_events.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/common/key.h>
 #include <ydb/core/persqueue/pqtablet/partition/partition.h>
@@ -660,7 +659,7 @@ void CmdWrite(TTestActorRuntime* runtime, ui64 tabletId, const TActorId& sender,
                 break;
             } else {
                 Cerr << result->Record.GetErrorReason();
-                UNIT_ASSERT_VALUES_EQUAL((ui32)result->Record.GetErrorCode(), (ui32)NPersQueue::NErrorCode::OK);
+                UNIT_ASSERT_VALUES_EQUAL_C((ui32)result->Record.GetErrorCode(), (ui32)NPersQueue::NErrorCode::OK, result->Record.DebugString());
             }
             UNIT_ASSERT_VALUES_EQUAL(result->Record.GetPartitionResponse().CmdWriteResultSize(), data.size());
 
@@ -1264,6 +1263,37 @@ void CmdRunCompaction(const ui32 partition,
                       TTestContext& tc)
 {
     CmdRunCompaction(*tc.Runtime, tc.TabletId, tc.Edge, partition);
+}
+
+void CmdRenameKey(TTestActorRuntime& runtime,
+                  ui64 tabletId,
+                  const TActorId& sender,
+                  const TString& oldKey,
+                  const TString& newKey)
+{
+    auto request = MakeHolder<TEvKeyValue::TEvRequest>();
+    auto* rename = request->Record.AddCmdRename();
+    rename->SetOldKey(oldKey);
+    rename->SetNewKey(newKey);
+
+    runtime.SendToPipe(tabletId, sender, request.Release(), 0, GetPipeConfigWithRetries());
+
+    auto response = runtime.GrabEdgeEvent<TEvKeyValue::TEvResponse>(TDuration::Seconds(2));
+    UNIT_ASSERT(response);
+
+    UNIT_ASSERT(response->Record.HasStatus());
+    UNIT_ASSERT_EQUAL(response->Record.GetStatus(), NMsgBusProxy::MSTATUS_OK);
+    UNIT_ASSERT(response->Record.RenameResultSize() >= 1);
+    UNIT_ASSERT(response->Record.GetRenameResult(0).HasStatus());
+    UNIT_ASSERT_EQUAL(response->Record.GetRenameResult(0).GetStatus(), 0); // NKikimrProto::EReplyStatus::OK
+}
+
+void CmdRenameKey(const TString& oldKey,
+                  const TString& newKey,
+                  TTestContext& tc)
+{
+    CmdRenameKey(*tc.Runtime, tc.TabletId, tc.Edge,
+                 oldKey, newKey);
 }
 
 } // namespace NKikimr::NPQ

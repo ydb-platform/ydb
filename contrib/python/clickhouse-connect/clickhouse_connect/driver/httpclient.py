@@ -76,6 +76,7 @@ class HttpClient(Client):
                  https_proxy: Optional[str] = None,
                  server_host_name: Optional[str] = None,
                  apply_server_timezone: Optional[Union[str, bool]] = None,
+                 utc_tz_aware: Optional[bool] = None,
                  show_clickhouse_errors: Optional[bool] = None,
                  autogenerate_session_id: Optional[bool] = None,
                  tls_mode: Optional[str] = None,
@@ -177,6 +178,7 @@ class HttpClient(Client):
                          query_retries=query_retries,
                          server_host_name=server_host_name,
                          apply_server_timezone=apply_server_timezone,
+                         utc_tz_aware=utc_tz_aware,
                          show_clickhouse_errors=show_clickhouse_errors)
         self.params = dict_copy(self.params, self._validate_settings(ch_settings))
         comp_setting = self._setting_status('enable_http_compression')

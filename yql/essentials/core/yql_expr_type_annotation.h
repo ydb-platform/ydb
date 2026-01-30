@@ -67,9 +67,11 @@ bool EnsureMinMaxArgsCount(const TExprNode& node, ui32 minArgs, ui32 maxArgs, TE
 bool EnsureCallableMinArgsCount(const TPositionHandle& pos, ui32 args, ui32 expectedArgs, TExprContext& ctx);
 bool EnsureCallableMaxArgsCount(const TPositionHandle& pos, ui32 args, ui32 expectedArgs, TExprContext& ctx);
 bool EnsureAtom(const TExprNode& node, TExprContext& ctx);
+bool EnsureAtomOrUniversal(const TExprNode& node, TExprContext& ctx, bool& isUniversal);
 bool EnsureCallable(const TExprNode& node, TExprContext& ctx);
 bool EnsureTuple(TExprNode& node, TExprContext& ctx);
 bool EnsureTupleOfAtoms(TExprNode& node, TExprContext& ctx);
+bool EnsureTupleOfAtomsOrUniversal(TExprNode& node, TExprContext& ctx, bool& isUniversal);
 
 using TSettingNodeValidator = std::function<bool (TStringBuf name, TExprNode& setting, TExprContext& ctx)>;
 bool EnsureValidSettings(TExprNode& node,
@@ -151,7 +153,7 @@ bool EnsureDryType(TPositionHandle position, const TTypeAnnotationNode& type, TE
 bool EnsureDryType(const TExprNode& node, TExprContext& ctx);
 bool EnsureDictType(const TExprNode& node, TExprContext& ctx);
 bool EnsureDictType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
-bool EnsureValidJsonPath(const TExprNode& node, TExprContext& ctx);
+bool EnsureValidJsonPath(const TExprNode& node, TExprContext& ctx, bool& isUniversal);
 
 bool IsVoidType(const TExprNode& node, TExprContext& ctx);
 bool EnsureVoidType(const TExprNode& node, TExprContext& ctx);
@@ -165,6 +167,8 @@ bool EnsureTaggedType(TPositionHandle position, const TTypeAnnotationNode& type,
 bool EnsureComposableType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
 bool EnsureOneOrTupleOfDataOrOptionalOfData(const TExprNode& node, TExprContext& ctx);
 bool EnsureOneOrTupleOfDataOrOptionalOfData(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
+bool EnsureOneOrTupleOfDataOrOptionalOfData(const TExprNode& node, TExprContext& ctx, bool& isUniversal);
+bool EnsureOneOrTupleOfDataOrOptionalOfData(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx, bool& isUniversal);
 bool EnsureComparableType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
 bool EnsureComparableKey(TPositionHandle position, const TTypeAnnotationNode* keyType, TExprContext& ctx);
 bool EnsureEquatableType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
@@ -172,6 +176,8 @@ bool EnsureEquatableKey(TPositionHandle position, const TTypeAnnotationNode* key
 bool EnsureHashableKey(TPositionHandle position, const TTypeAnnotationNode* keyType, TExprContext& ctx);
 bool EnsureDataOrOptionalOfData(const TExprNode& node, bool& isOptional, const TDataExprType*& dataType, TExprContext& ctx);
 bool EnsureDataOrOptionalOfData(TPositionHandle position, const TTypeAnnotationNode* type, bool& isOptional, const TDataExprType*& dataType, TExprContext& ctx);
+bool EnsureDataOrOptionalOfData(const TExprNode& node, bool& isOptional, const TDataExprType*& dataType, TExprContext& ctx, bool& isUniversal);
+bool EnsureDataOrOptionalOfData(TPositionHandle position, const TTypeAnnotationNode* type, bool& isOptional, const TDataExprType*& dataType, TExprContext& ctx, bool& isUniversal);
 bool EnsureLinearType(const TExprNode& node, TExprContext& ctx);
 bool EnsureDynamicLinearType(const TExprNode& node, TExprContext& ctx);
 bool EnsurePersistable(const TExprNode& node, TExprContext& ctx);
@@ -184,6 +190,8 @@ bool EnsureListOrOptionalType(const TExprNode& node, TExprContext& ctx);
 bool EnsureListOrOptionalListType(const TExprNode& node, TExprContext& ctx);
 bool EnsureStructOrOptionalStructType(const TExprNode& node, bool& isOptional, const TStructExprType*& structType, TExprContext& ctx);
 bool EnsureStructOrOptionalStructType(TPositionHandle position, const TTypeAnnotationNode& type, bool& isOptional, const TStructExprType*& structType, TExprContext& ctx);
+bool EnsureStructOrOptionalStructType(const TExprNode& node, bool& isOptional, const TStructExprType*& structType, TExprContext& ctx, bool& isUniversal);
+bool EnsureStructOrOptionalStructType(TPositionHandle position, const TTypeAnnotationNode& type, bool& isOptional, const TStructExprType*& structType, TExprContext& ctx, bool& isUniversal);
 bool EnsureSeqType(const TExprNode& node, TExprContext& ctx, bool* isStream = nullptr);
 bool EnsureSeqType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx, bool* isStream = nullptr);
 bool EnsureSeqOrOptionalType(const TExprNode& node, TExprContext& ctx);
@@ -351,7 +359,8 @@ TExprNode::TPtr ExpandType(TPositionHandle position, const TTypeAnnotationNode& 
 bool IsSystemMember(const TStringBuf& memberName);
 
 template<bool Deduplicte = true, ui8 OrListsOfAtomsDepth = 0U>
-IGraphTransformer::TStatus NormalizeTupleOfAtoms(const TExprNode::TPtr& input, ui32 index, TExprNode::TPtr& output, TExprContext& ctx);
+IGraphTransformer::TStatus NormalizeTupleOfAtoms(const TExprNode::TPtr& input, ui32 index, TExprNode::TPtr& output, TExprContext& ctx,
+    bool& isUniversal);
 
 IGraphTransformer::TStatus NormalizeKeyValueTuples(const TExprNode::TPtr& input, ui32 startIndex, TExprNode::TPtr& output,
     TExprContext& ctx, bool deduplicate = false);
@@ -362,6 +371,8 @@ std::optional<ui32> GetFieldPosition(const TStructExprType& structType, const TS
 std::optional<ui32> GetWideBlockFieldPosition(const TMultiExprType& tupleType, const TStringBuf& field);
 
 bool ExtractPgType(const TTypeAnnotationNode* type, ui32& pgType, bool& convertToPg, TPositionHandle pos, TExprContext& ctx);
+bool ExtractPgType(const TTypeAnnotationNode* type, ui32& pgType, bool& convertToPg, TPositionHandle pos, TExprContext& ctx,
+    bool& isUniversal);
 bool HasContextFuncs(const TExprNode& input);
 IGraphTransformer::TStatus TryConvertToPgOp(TStringBuf op, const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx);
 
@@ -380,7 +391,7 @@ bool GetAvgResultTypeOverState(const TPositionHandle& pos, const TTypeAnnotation
 bool GetMinMaxResultType(const TPositionHandle& pos, const TTypeAnnotationNode& inputType, const TTypeAnnotationNode*& retType, TExprContext& ctx);
 
 IGraphTransformer::TStatus ExtractPgTypesFromMultiLambda(TExprNode::TPtr& lambda, TVector<ui32>& argTypes,
-    bool& needRetype, TExprContext& ctx);
+    bool& needRetype, TExprContext& ctx, bool& isUniversal);
 
 void AdjustReturnType(ui32& returnType, const TVector<ui32>& procArgTypes, ui32 procVariadicType, const TVector<ui32>& argTypes);
 TExprNode::TPtr ExpandPgAggregationTraits(TPositionHandle pos, const NPg::TAggregateDesc& aggDesc, bool onWindow,

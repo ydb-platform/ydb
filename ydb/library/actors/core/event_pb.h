@@ -4,12 +4,14 @@
 #include "event_load.h"
 
 #include <google/protobuf/io/zero_copy_stream.h>
+#include <google/protobuf/io/coded_stream.h>
 #include <google/protobuf/arena.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <util/generic/deque.h>
 #include <util/system/context.h>
 #include <util/system/filemap.h>
 #include <util/string/builder.h>
+#include <util/string/hex.h>
 #include <util/thread/lfstack.h>
 #include <array>
 #include <span>
@@ -49,6 +51,7 @@ namespace NActors {
 
         virtual bool WriteRope(const TRope *rope) = 0;
         virtual bool WriteString(const TString *s) = 0;
+        virtual NProtoBuf::io::CodedOutputStream *GetCodedOutputStream() = 0;
     };
 
     class TAllocChunkSerializer final : public TChunkSerializer {
@@ -63,6 +66,10 @@ namespace NActors {
         // WARNING: these methods require owner to retain ownership and immutability of passed objects
         bool WriteRope(const TRope *rope) override;
         bool WriteString(const TString *s) override;
+
+        NProtoBuf::io::CodedOutputStream *GetCodedOutputStream() override {
+            return nullptr;
+        }
 
         inline TIntrusivePtr<TEventSerializedData> Release(TEventSerializationInfo&& serializationInfo) {
             Buffers->SetSerializationInfo(std::move(serializationInfo));
@@ -82,6 +89,7 @@ namespace NActors {
         ~TCoroutineChunkSerializer();
 
         void SetSerializingEvent(const IEventBase *event);
+        void DiscardEvent() { Event = nullptr; };
         void Abort();
         std::span<TChunk> FeedBuf(void* data, size_t size);
         bool IsComplete() const {
@@ -105,6 +113,13 @@ namespace NActors {
         bool WriteRope(const TRope *rope) override;
         bool WriteString(const TString *s) override;
 
+        NProtoBuf::io::CodedOutputStream *GetCodedOutputStream() override {
+            if (!CodedOutputStream) {
+                CodedOutputStream.reset(new NProtoBuf::io::CodedOutputStream(this));
+            }
+            return CodedOutputStream.get();
+        }
+
     protected:
         void DoRun() override;
         void Resume();
@@ -123,6 +138,7 @@ namespace NActors {
         bool AbortFlag;
         bool SerializationSuccess;
         bool Finished = false;
+        std::unique_ptr<NProtoBuf::io::CodedOutputStream> CodedOutputStream;
     };
 
     struct TProtoArenaHolder : public TAtomicRefCount<TProtoArenaHolder> {
@@ -150,6 +166,8 @@ namespace NActors {
 
     void ParseExtendedFormatPayload(TRope::TConstIterator &iter, size_t &size, TVector<TRope> &payload, size_t &totalPayloadSize);
     bool SerializeToArcadiaStreamImpl(TChunkSerializer* chunker, const TVector<TRope> &payload);
+    ui32 CalculateSerializedHeaderSizeImpl(const TVector<TRope> &payload);
+    std::optional<TRope> SerializeToRopeImpl(const google::protobuf::MessageLite& msg, const TVector<TRope>& payload, NInterconnect::NRdma::IMemPool* pool);
     ui32 CalculateSerializedSizeImpl(const TVector<TRope> &payload, ssize_t recordSize);
     TEventSerializationInfo CreateSerializationInfoImpl(size_t preserializedSize, bool allowExternalDataChannel, const TVector<TRope> &payload, ssize_t recordSize);
 
@@ -195,11 +213,21 @@ namespace NActors {
             if (!SerializeToArcadiaStreamImpl(chunker, Payload)) {
                 return false;
             }
-            return Record.SerializeToZeroCopyStream(chunker);
+            if (auto *stream = chunker->GetCodedOutputStream()) {
+                Record.SerializeWithCachedSizes(stream);
+                stream->Trim();
+                return !stream->HadError();
+            } else {
+                return Record.SerializeToZeroCopyStream(chunker);
+            }
         }
 
         ui32 CalculateSerializedSize() const override {
             return CalculateSerializedSizeImpl(Payload, Record.ByteSize());
+        }
+
+        std::optional<TRope> SerializeToRope(NInterconnect::NRdma::IMemPool* pool) const override {
+            return NActors::SerializeToRopeImpl(Record, Payload, pool);
         }
 
         static TEv* Load(const TEventSerializedData *input) {
@@ -219,7 +247,8 @@ namespace NActors {
                 // parse the protobuf
                 TRopeStream stream(iter, size);
                 if (!ev->Record.ParseFromZeroCopyStream(&stream)) {
-                    Y_ENSURE(false, "Failed to parse protobuf event type " << TEventType << " class " << TypeName(ev->Record));
+                    Y_ENSURE(false, "Failed to parse protobuf event type " << TEventType << " class " << TypeName(ev->Record) <<
+                            " size# " << size << " hexDump# " << HexEncode(input->GetString()));
                 }
             }
             ev->CachedByteSize = input->GetSize();
@@ -241,8 +270,10 @@ namespace NActors {
             CachedByteSize = 0;
         }
 
-        TEventSerializationInfo CreateSerializationInfo() const override {
-            return CreateSerializationInfoImpl(0, static_cast<const TEv&>(*this).AllowExternalDataChannel(), GetPayload(), Record.ByteSize());
+        TEventSerializationInfo CreateSerializationInfo(bool allowExternalDataChannel) const override {
+            allowExternalDataChannel = allowExternalDataChannel && static_cast<const TEv&>(*this).AllowExternalDataChannel();
+            return CreateSerializationInfoImpl(0, allowExternalDataChannel, GetPayload(),
+                allowExternalDataChannel ? Record.ByteSize() : 0);
         }
 
         bool AllowExternalDataChannel() const {
@@ -414,8 +445,13 @@ namespace NActors {
                 return false;
             }
 
-            return Record.SerializeToZeroCopyStream(chunker);
-            
+            if (auto *stream = chunker->GetCodedOutputStream()) {
+                Record.SerializeWithCachedSizes(stream);
+                stream->Trim();
+                return !stream->HadError();
+            } else {
+                return Record.SerializeToZeroCopyStream(chunker);
+            }
         }
 
         ui32 CalculateSerializedSize() const override {
@@ -430,8 +466,10 @@ namespace NActors {
             return GetCachedByteSize();
         }
 
-        TEventSerializationInfo CreateSerializationInfo() const override {
-            return CreateSerializationInfoImpl(PreSerializedData.size(), static_cast<const TEv&>(*this).AllowExternalDataChannel(), TBase::GetPayload(), Record.ByteSize());
+        TEventSerializationInfo CreateSerializationInfo(bool allowExternalDataChannel) const override {
+            allowExternalDataChannel = allowExternalDataChannel && static_cast<const TEv&>(*this).AllowExternalDataChannel();
+            return CreateSerializationInfoImpl(PreSerializedData.size(), allowExternalDataChannel, TBase::GetPayload(),
+                allowExternalDataChannel ? Record.ByteSize() : 0);
         }
     };
 

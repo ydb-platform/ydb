@@ -8,7 +8,7 @@
 #include <util/datetime/base.h>
 #include <util/string/printf.h>
 
-namespace NYql::DateTime {
+namespace NYql::NDateTime {
 
 constexpr size_t MAX_TIMEZONE_NAME_LEN = 64;
 
@@ -119,10 +119,24 @@ struct TTMStorage {
         return ToDatetime(builder) * 1000000ull + Microsecond;
     }
 
-    inline bool Validate(const NUdf::IDateBuilder& builder) {
+    inline bool Validate(const NUdf::IDateBuilder& builder, TMaybe<i16> timezoneOffset = Nothing()) {
         ui32 datetime;
-        if (!builder.MakeDatetime(Year, Month, Day, Hour, Minute, Second, datetime, TimezoneId)) {
-            return false;
+        if (timezoneOffset.Defined()) {
+            Y_ENSURE(TimezoneId == 0);
+            if (!builder.MakeDatetime(Year, Month, Day, Hour, Minute, Second, datetime)) {
+                return false;
+            }
+            const auto tzOffset = *timezoneOffset.Get() * 60;
+            if (tzOffset >= 0 && datetime < static_cast<ui32>(tzOffset) ||
+                tzOffset < 0 && datetime >= tzOffset + NUdf::MAX_DATETIME)
+            {
+                return false;
+            }
+            datetime -= tzOffset;
+        } else {
+            if (!builder.MakeDatetime(Year, Month, Day, Hour, Minute, Second, datetime, TimezoneId)) {
+                return false;
+            }
         }
 
         ui32 year, month, day, hour, minute, second, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek;
@@ -130,6 +144,12 @@ struct TTMStorage {
             ythrow yexception() << "Error in FullSplitDatetime.";
         }
 
+        Year = year;
+        Month = month;
+        Day = day;
+        Hour = hour;
+        Minute = minute;
+        Second = second;
         DayOfYear = dayOfYear;
         WeekOfYear = weekOfYear;
         WeekOfYearIso8601 = weekOfYearIso8601;
@@ -207,4 +227,9 @@ TInstant DoAddMonths(TInstant current, i64 months, const NUdf::IDateBuilder& bui
 
 TInstant DoAddYears(TInstant current, i64 years, const NUdf::IDateBuilder& builder);
 
+} // namespace NYql::NDateTime
+
+// TODO(YQL-20086): Migrate YDB to NYql::NDateTime
+namespace NYql::DateTime { // NOLINT(readability-identifier-naming)
+using namespace NYql::NDateTime;
 } // namespace NYql::DateTime

@@ -372,7 +372,7 @@ Y_UNIT_TEST_SUITE(TMaintenanceApiTest) {
         UNIT_ASSERT(actionState.action().has_cordon_action());
     }
 
-    Y_UNIT_TEST(DisableCMS){
+    Y_UNIT_TEST(DisableMaintenance) {
         TCmsTestEnv env(16);
 
         auto r1 = env.CheckMaintenanceTaskCreate("task-1", Ydb::StatusIds::SUCCESS,
@@ -396,9 +396,9 @@ Y_UNIT_TEST_SUITE(TMaintenanceApiTest) {
         const auto &a2 = r2.action_group_states(0).action_states(0);
         UNIT_ASSERT_VALUES_EQUAL(a2.status(), ActionState::ACTION_STATUS_PENDING);
 
-        // Disable CMS
+        // Disable maintenance
         NKikimrCms::TCmsConfig config;
-        config.SetEnable(false);
+        config.SetDisableMaintenance(true);
         env.SetCmsConfig(config);
 
         env.CheckCompleteAction(a1.action_uid(), Ydb::StatusIds::SUCCESS);
@@ -411,8 +411,8 @@ Y_UNIT_TEST_SUITE(TMaintenanceApiTest) {
         );
         env.CheckMaintenanceTaskRefresh("task-2", Ydb::StatusIds::UNAVAILABLE);
 
-        // Enable CMS back
-        config.SetEnable(true);
+        // Enable maintenance back
+        config.SetDisableMaintenance(false);
         env.SetCmsConfig(config);
 
         // Requests should be ok

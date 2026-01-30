@@ -1,0 +1,94 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 128e48e3192c0aa322b4563c29a8d370
+BELONGS ya.make
+    License text:
+        Copyright (c) 2001, Dr Martin Porter
+        Copyright (c) 2004,2005, Richard Boulton
+        Copyright (c) 2013, Yoshiki Shibukawa
+        Copyright (c) 2006,2007,2009,2010,2011,2014-2019, Olly Betts
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [1:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9796c11b0b84b7230b425bae82ce2598
+BELONGS ya.make
+    License text:
+        Copyright (c) 2001, Dr Martin Porter
+        Copyright (c) 2004,2005, Richard Boulton
+        Copyright (c) 2013, Yoshiki Shibukawa
+        Copyright (c) 2006,2007,2009,2010,2011,2014-2019, Olly Betts
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [1:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a5e0b6d41c2465e61caf121c73575c76
+BELONGS ya.make
+    License text:
+        Copyright (c) 2001, Dr Martin Porter
+        Copyright (c) 2004,2005, Richard Boulton
+        Copyright (c) 2013, Yoshiki Shibukawa
+        Copyright (c) 2006,2007,2009,2010,2011,2014-2019, Olly Betts
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [1:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL fb0434126c41307ef008634e902e058e
+BELONGS ya.make
+    License text:
+        Copyright (c) 2001, Dr Martin Porter
+        Copyright (c) 2004,2005, Richard Boulton
+        Copyright (c) 2013, Yoshiki Shibukawa
+        Copyright (c) 2006,2007,2009,2010,2011,2014-2019, Olly Betts
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [1:5]

@@ -1,6 +1,7 @@
 #pragma once
 
-#include <ydb/core/kqp/common/kqp_resolve.h>
+#include "shard_key_ranges.h"
+
 #include <ydb/core/kqp/common/kqp_tx_manager.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
@@ -13,10 +14,8 @@
 #include <ydb/library/yql/dq/tasks/dq_connection_builder.h>
 #include <ydb/library/yql/dq/tasks/dq_tasks_graph.h>
 
-namespace NKikimrTxDataShard {
-    class TKqpTransaction_TDataTaskMeta_TKeyRange;
-    class TKqpTransaction_TScanTaskMeta_TReadOpMeta;
-    class TKqpReadRangesSourceSettings;
+namespace NKikimrKqp {
+    class TKqpFullTextSourceSettings;
 }
 
 namespace NKikimr::NKqp {
@@ -72,36 +71,6 @@ struct TColumnShardHashV1Params {
 
         return "[" + JoinSeq(",", stringNames) + "]";
     }
-};
-
-struct TShardKeyRanges {
-    // ordered ranges and points
-    TVector<TSerializedPointOrRange> Ranges;
-    std::optional<TSerializedTableRange> FullRange;
-
-    void AddPoint(TSerializedCellVec&& point);
-    void AddRange(TSerializedTableRange&& range);
-    void Add(TSerializedPointOrRange&& pointOrRange);
-
-    void CopyFrom(const TVector<TSerializedPointOrRange>& ranges);
-
-    void MakeFullRange(TSerializedTableRange&& range);
-    void MakeFullPoint(TSerializedCellVec&& range);
-    void MakeFull(TSerializedPointOrRange&& pointOrRange);
-
-    bool HasRanges() const;
-
-    bool IsFullRange() const { return FullRange.has_value(); }
-    TVector<TSerializedPointOrRange>& GetRanges() { return Ranges; }
-
-    void MergeWritePoints(TShardKeyRanges&& other, const TVector<NScheme::TTypeInfo>& keyTypes);
-
-    TString ToString(const TVector<NScheme::TTypeInfo>& keyTypes, const NScheme::TTypeRegistry& typeRegistry) const;
-    void SerializeTo(NKikimrTxDataShard::TKqpTransaction_TDataTaskMeta_TKeyRange* proto) const;
-    void SerializeTo(NKikimrTxDataShard::TKqpTransaction_TScanTaskMeta_TReadOpMeta* proto) const;
-    void SerializeTo(NKikimrTxDataShard::TKqpReadRangesSourceSettings* proto, bool allowPoints = true) const;
-
-    std::pair<const TSerializedCellVec*, bool> GetRightBorder() const;
 };
 
 struct TStageInfoMeta {
@@ -208,7 +177,7 @@ struct TGraphMeta {
     TMaybe<ui64> LockTxId;
     ui64 TxId = 0;
     ui32 LockNodeId = 0;
-    NKikimrKqp::EIsolationLevel RequestIsolationLevel;
+    NKqpProto::EIsolationLevel RequestIsolationLevel;
     TMaybe<NKikimrDataEvents::ELockMode> LockMode;
     std::unordered_map<ui64, TActorId> ResultChannelProxies;
     TActorId ExecuterId;
@@ -231,9 +200,13 @@ struct TGraphMeta {
     bool StreamResult = false;
     Ydb::Table::QueryStatsCollection::Mode StatsMode = Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE;
 
+    // TODO: stuff about shards on nodes should be private or protected.
+    using TShardToNodeMap = TMap<ui64 /* shardId */, ui64 /* nodeId */>;
     bool ShardsResolved = false;
-    TMap<ui64 /* shardId */, ui64 /* nodeId */> ShardIdToNodeId;
+    TShardToNodeMap ShardIdToNodeId;
     TMap<ui64 /* nodeId */, TVector<ui64 /* shardId */>> ShardsOnNode;
+
+    ui32 DqChannelVersion = 1u;
 
     const TIntrusivePtr<TProtoArenaHolder>& GetArenaIntrusivePtr() const {
         return Arena;
@@ -264,6 +237,7 @@ struct TGraphMeta {
 struct TTaskInputMeta {
     // these message are allocated using the protobuf arena.
     NKikimrTxDataShard::TKqpReadRangesSourceSettings* SourceSettings = nullptr;
+    NKikimrKqp::TKqpFullTextSourceSettings* FullTextSourceSettings = nullptr;
     NKikimrKqp::TKqpStreamLookupSettings* StreamLookupSettings = nullptr;
     NKikimrKqp::TKqpSequencerSettings* SequencerSettings = nullptr;
     NKikimrTxDataShard::TKqpVectorResolveSettings* VectorResolveSettings = nullptr;
@@ -380,6 +354,8 @@ public:
         TActorId bufferActorId
     );
 
+    void ResolveShards(TGraphMeta::TShardToNodeMap&& shardsToNodes);
+
     size_t BuildAllTasks(std::optional<TLlvmSettings> llvmSettings, const TVector<NKikimrKqp::TKqpNodeResources>& resourcesSnapshot,
         TQueryExecutionStats* stats, THashSet<ui64>* ShardsWithEffects
     );
@@ -401,7 +377,6 @@ public:
     TString DumpToString() const;
 
 public:
-    static constexpr ui64 PriorityTxShift = 32;
     THolder<TPartitionPruner> PartitionPruner; // TODO: temporary public - used by Data Executer
 
 private:
@@ -411,7 +386,9 @@ private:
     bool BuildComputeTasks(TStageInfo& stageInfo, const ui32 nodesCount); // returns true if affected shards count is unknown
     void BuildDatashardTasks(TStageInfo& stageInfo, THashSet<ui64>* shardsWithEffects); // returns shards with effects
     void BuildScanTasksFromShards(TStageInfo& stageInfo, bool enableShuffleElimination, TQueryExecutionStats* stats);
+    void BuildFullTextScanTasksFromSource(TStageInfo& stageInfo, TQueryExecutionStats* stats);
     void BuildReadTasksFromSource(TStageInfo& stageInfo, const TVector<NKikimrKqp::TKqpNodeResources>& resourceSnapshot, ui32 scheduledTaskCount);
+    void FillScanTaskLockTxId(NKikimrTxDataShard::TKqpReadRangesSourceSettings& settings);
     TMaybe<size_t> BuildScanTasksFromSource(TStageInfo& stageInfo, bool limitTasksPerNode, TQueryExecutionStats* stats);
 
     void BuildKqpStageChannels(TStageInfo& stageInfo, ui64 txId, bool enableSpilling, bool enableShuffleElimination);
@@ -449,8 +426,10 @@ private:
     void FillSecureParamsFromStage(THashMap<TString, TString>& secureParams, const NKqpProto::TKqpPhyStage& stage) const;
 
     void BuildExternalSinks(const NKqpProto::TKqpSink& sink, TKqpTasksGraph::TTaskType& task) const;
-    void BuildInternalSinks(const NKqpProto::TKqpSink& sink, const TStageInfo& stageInfo, TKqpTasksGraph::TTaskType& task) const;
-    void BuildSinks(const NKqpProto::TKqpPhyStage& stage, const TStageInfo& stageInfo, TKqpTasksGraph::TTaskType& task) const;
+    void BuildInternalSinks(const NKqpProto::TKqpSink& sink, const TStageInfo& stageInfo, const std::vector<std::pair<ui64, i64>>& internalSinksOrder, TKqpTasksGraph::TTaskType& task) const;
+    void BuildSinks(const NKqpProto::TKqpPhyStage& stage, const TStageInfo& stageInfo, const std::vector<std::pair<ui64, i64>>& internalSinksOrder, TKqpTasksGraph::TTaskType& task) const;
+
+    std::vector<std::pair<ui64, i64>> BuildInternalSinksPriorityOrder();
 
 private:
     const TVector<IKqpGateway::TPhysicalTxData>& Transactions;
@@ -494,7 +473,5 @@ struct TKqpTaskOutputType {
         ShardRangePartition = TTaskOutputType::COMMON_TASK_OUTPUT_TYPE_END
     };
 };
-
-void LogStage(const NActors::TActorContext& ctx, const TStageInfo& stageInfo);
 
 } // namespace NKikimr::NKqp

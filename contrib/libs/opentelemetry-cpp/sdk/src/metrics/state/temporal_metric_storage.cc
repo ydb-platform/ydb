@@ -67,7 +67,7 @@ bool TemporalMetricStorage::buildMetrics(CollectorHandle *collector,
     metric_data.end_ts                  = collection_ts;
 
     // Direct conversion of delta metrics to point data
-    delta_metrics->GetAllEnteries(
+    delta_metrics->GetAllEntries(
         [&metric_data](const MetricAttributes &attributes, Aggregation &aggregation) {
           PointDataAttributes point_data_attr;
           point_data_attr.point_data = aggregation.ToPoint();
@@ -102,7 +102,7 @@ bool TemporalMetricStorage::buildMetrics(CollectorHandle *collector,
                                                 : kAggregationCardinalityLimit));
   for (auto &agg_hashmap : unreported_list)
   {
-    agg_hashmap->GetAllEnteries(
+    agg_hashmap->GetAllEntries(
         [&merged_metrics, this](const MetricAttributes &attributes, Aggregation &aggregation) {
           auto agg = merged_metrics->Get(attributes);
           if (agg)
@@ -135,7 +135,7 @@ bool TemporalMetricStorage::buildMetrics(CollectorHandle *collector,
     if (aggregation_temporarily == AggregationTemporality::kCumulative)
     {
       // merge current delta to previous cumulative
-      last_aggr_hashmap->GetAllEnteries(
+      last_aggr_hashmap->GetAllEntries(
           [&merged_metrics, this](const MetricAttributes &attributes, Aggregation &aggregation) {
             auto agg = merged_metrics->Get(attributes);
             if (agg)
@@ -172,7 +172,7 @@ bool TemporalMetricStorage::buildMetrics(CollectorHandle *collector,
   metric_data.aggregation_temporality = aggregation_temporarily;
   metric_data.start_ts                = last_collection_ts;
   metric_data.end_ts                  = collection_ts;
-  result_to_export->GetAllEnteries(
+  result_to_export->GetAllEntries(
       [&metric_data](const MetricAttributes &attributes, Aggregation &aggregation) {
         PointDataAttributes point_data_attr;
         point_data_attr.point_data = aggregation.ToPoint();

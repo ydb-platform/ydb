@@ -6,9 +6,12 @@
 
 #include <ydb/public/api/protos/ydb_import.pb.h>
 
+#include <ydb/core/backup/regexp/regexp.h>
 #include <ydb/core/tx/schemeshard/schemeshard_import.h>
 
 #include <ydb/library/actors/core/hfunc.h>
+
+#include <library/cpp/regex/pcre/regexp.h>
 
 #include <util/generic/ptr.h>
 #include <util/string/builder.h>
@@ -23,10 +26,13 @@ using namespace Ydb;
 
 using TEvImportFromS3Request = TGrpcRequestOperationCall<Ydb::Import::ImportFromS3Request,
     Ydb::Import::ImportFromS3Response>;
+using TEvImportFromFsRequest = TGrpcRequestOperationCall<Ydb::Import::ImportFromFsRequest,
+    Ydb::Import::ImportFromFsResponse>;
 
 template <typename TDerived, typename TEvRequest>
 class TImportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, public TImportConv {
     static constexpr bool IsS3Import = std::is_same_v<TEvRequest, TEvImportFromS3Request>;
+    static constexpr bool IsFsImport = std::is_same_v<TEvRequest, TEvImportFromFsRequest>;
 
     TStringBuf GetLogPrefix() const override {
         return "[CreateImport]";
@@ -49,6 +55,9 @@ class TImportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
         if constexpr (IsS3Import) {
             createImport.MutableImportFromS3Settings()->CopyFrom(request.settings());
         }
+        if constexpr (IsFsImport) {
+            createImport.MutableImportFromFsSettings()->CopyFrom(request.settings());
+        }
 
         return ev.Release();
     }
@@ -65,13 +74,20 @@ class TImportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
 public:
     using TRpcOperationRequestActor<TDerived, TEvRequest, true>::TRpcOperationRequestActor;
 
-    void Bootstrap(const TActorContext&) {
+    void Bootstrap() {
         const auto& request = *(this->GetProtoRequest());
         if (request.operation_params().has_forget_after() && request.operation_params().operation_mode() != Ydb::Operations::OperationParams::SYNC) {
             return this->Reply(StatusIds::UNSUPPORTED, TIssuesIds::DEFAULT_ERROR, "forget_after is not supported for this type of operation");
         }
 
         const auto& settings = request.settings();
+        try {
+            // Validate regexps
+            NBackup::CombineRegexps(settings.exclude_regexps());
+        } catch (const std::exception& ex) {
+            return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, TStringBuilder() << "Invalid regexp: " << ex.what());
+        }
+
         if constexpr (IsS3Import) {
             const bool encryptedExportFeatureFlag = AppData()->FeatureFlags.GetEnableEncryptedExport();
             const bool commonSourcePrefixSpecified = !settings.source_prefix().empty();
@@ -120,6 +136,18 @@ public:
             }
         }
 
+        if constexpr (IsFsImport) {
+            if (!settings.base_path().StartsWith("/")) {
+                return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR,
+                    "base_path must be an absolute path");
+            }
+            for (const auto& item : settings.items()) {
+                if (item.destination_path().empty() && item.source_path().empty()) {
+                    return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Empty item is not allowed");
+                }
+            }
+        }
+
         this->AllocateTxId();
         this->Become(&TDerived::StateWait);
     }
@@ -139,9 +167,17 @@ public:
     using TImportRPC::TImportRPC;
 };
 
+class TImportFromFsRPC: public TImportRPC<TImportFromFsRPC, TEvImportFromFsRequest> {
+public:
+    using TImportRPC::TImportRPC;
+};
+
 void DoImportFromS3Request(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
     f.RegisterActor(new TImportFromS3RPC(p.release()));
 }
 
+void DoImportFromFsRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
+    f.RegisterActor(new TImportFromFsRPC(p.release()));
+}
 } // namespace NGRpcService
 } // namespace NKikimr

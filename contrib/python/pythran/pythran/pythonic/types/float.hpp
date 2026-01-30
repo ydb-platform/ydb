@@ -35,7 +35,13 @@ inline bool from_python<long double>::is_convertible(PyObject *obj)
 
 inline long double from_python<long double>::convert(PyObject *obj)
 {
+#ifdef Py_LIMITED_API
+  npy_longdouble val;
+  PyArray_ScalarAsCtype(obj, &val);
+  return val;
+#else
   return PyArrayScalar_VAL(obj, LongDouble);
+#endif
 }
 
 inline bool from_python<double>::is_convertible(PyObject *obj)
@@ -53,7 +59,13 @@ inline bool from_python<float>::is_convertible(PyObject *obj)
 }
 inline float from_python<float>::convert(PyObject *obj)
 {
+#ifdef Py_LIMITED_API
+  npy_float val;
+  PyArray_ScalarAsCtype(obj, &val);
+  return val;
+#else
   return PyArrayScalar_VAL(obj, Float);
+#endif
 }
 PYTHONIC_NS_END
 

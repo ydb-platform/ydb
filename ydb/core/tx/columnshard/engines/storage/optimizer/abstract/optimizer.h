@@ -112,7 +112,7 @@ private:
 
 protected:
     virtual void DoModifyPortions(
-        const THashMap<ui64, std::shared_ptr<TPortionInfo>>& add, const THashMap<ui64, std::shared_ptr<TPortionInfo>>& remove) = 0;
+        const std::vector<std::shared_ptr<TPortionInfo>>& add, const std::vector<std::shared_ptr<TPortionInfo>>& remove) = 0;
     virtual std::vector<std::shared_ptr<TColumnEngineChanges>> DoGetOptimizationTasks(
         std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const = 0;
     virtual TOptimizationPriority DoGetUsefulMetric() const = 0;
@@ -150,6 +150,7 @@ public:
         : PathId(pathId)
         , NodePortionsCountLimit(nodePortionsCountLimit) {
         Counters->NodePortionsCountLimit->Set(NodePortionsCountLimit ? *NodePortionsCountLimit : DynamicPortionsCountLimit.load());
+        Counters->BadPortionsCountLimit->Set(GetBadPortionsLimit());
     }
 
     bool IsOverloaded(const NMonitoring::TDynamicCounters::TCounterPtr& badPortions) const {
@@ -208,8 +209,8 @@ public:
     class TModificationGuard: TNonCopyable {
     private:
         IOptimizerPlanner& Owner;
-        THashMap<ui64, std::shared_ptr<TPortionInfo>> AddPortions;
-        THashMap<ui64, std::shared_ptr<TPortionInfo>> RemovePortions;
+        std::vector<std::shared_ptr<TPortionInfo>> AddPortions;
+        std::vector<std::shared_ptr<TPortionInfo>> RemovePortions;
 
     public:
         TModificationGuard& AddPortion(const std::shared_ptr<TPortionInfo>& portion);
@@ -241,7 +242,7 @@ public:
         return DoSerializeToJsonVisual();
     }
 
-    void ModifyPortions(const THashMap<ui64, std::shared_ptr<TPortionInfo>>& add, const THashMap<ui64, std::shared_ptr<TPortionInfo>>& remove) {
+    void ModifyPortions(const std::vector<std::shared_ptr<TPortionInfo>>& add, const std::vector<std::shared_ptr<TPortionInfo>>& remove) {
         NActors::TLogContextGuard g(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("path_id", PathId));
         LocalPortionsCount.Add(add.size());
         LocalPortionsCount.Sub(remove.size());
@@ -307,7 +308,11 @@ public:
     }
 
     static std::shared_ptr<IOptimizerPlannerConstructor> BuildDefault() {
-        auto result = TFactory::MakeHolder("tiling");
+        return BuildDefault(NKikimrConfig::TColumnShardConfig::default_instance().GetDefaultCompactionPreset());
+    }
+
+    static std::shared_ptr<IOptimizerPlannerConstructor> BuildDefault(const TString& defaultCompactionName) {
+        auto result = TFactory::MakeHolder(defaultCompactionName);
         AFL_VERIFY(!!result);
         return std::shared_ptr<IOptimizerPlannerConstructor>(result.Release());
     }

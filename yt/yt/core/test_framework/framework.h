@@ -18,7 +18,7 @@ TString GenerateRandomFileName(const char* prefix);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// NB. EXPECT_THROW_* are macros not functions so when failure occurres
+// NB. EXPECT_THROW_* are macros not functions so when failure occurs
 // gtest framework points to source code of test not the source code
 // of EXPECT_THROW_* function.
 #define EXPECT_THROW_THAT(expr, matcher) \
@@ -217,7 +217,7 @@ class GTEST_TEST_CLASS_NAME_(test_case_name, test_name) : public parent_class {\
 public:\
   GTEST_TEST_CLASS_NAME_(test_case_name, test_name)() {}\
   GTEST_TEST_CLASS_NAME_(test_case_name, test_name)(const GTEST_TEST_CLASS_NAME_(test_case_name, test_name)&) = delete;\
-  GTEST_TEST_CLASS_NAME_(test_case_name, test_name)& operator= (const GTEST_TEST_CLASS_NAME_(test_case_name, test_name)&) = delete;\
+  GTEST_TEST_CLASS_NAME_(test_case_name, test_name)& operator=(const GTEST_TEST_CLASS_NAME_(test_case_name, test_name)&) = delete;\
 private:\
   virtual void TestBody();\
   void TestInnerBody();\

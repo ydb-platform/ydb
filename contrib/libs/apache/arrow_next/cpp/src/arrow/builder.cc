@@ -15,18 +15,18 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "arrow/builder.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/builder.h"
 
 #include <memory>
 #include <string>
 #include <utility>
 #include <vector>
 
-#include "arrow/status.h"
-#include "arrow/type.h"
-#include "arrow/util/checked_cast.h"
-#include "arrow/util/hashing.h"
-#include "arrow/visit_type_inline.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/status.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/checked_cast.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/hashing.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/visit_type_inline.h"
 
 namespace arrow20 {
 

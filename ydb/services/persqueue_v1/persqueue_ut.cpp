@@ -3266,9 +3266,9 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         Cerr << ">>>>> 2" << Endl << Flush;
         auto info16 = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, 16, 16, "user"}, 16);
 
-        UNIT_ASSERT_VALUES_EQUAL(info0.BlobsFromCache, 2);
-        UNIT_ASSERT_VALUES_EQUAL(info16.BlobsFromCache, 2);
-        UNIT_ASSERT_VALUES_EQUAL(info0.BlobsFromDisk + info16.BlobsFromDisk, 1);
+        UNIT_ASSERT_VALUES_EQUAL(info0.BlobsFromCache, 1);
+        UNIT_ASSERT_VALUES_EQUAL(info16.BlobsFromCache, 1);
+        UNIT_ASSERT_VALUES_EQUAL(info0.BlobsFromDisk + info16.BlobsFromDisk, 3);
 
         for (ui32 i = 0; i < 8; ++i)
             server.AnnoyingClient->WriteToPQ({DEFAULT_TOPIC_NAME, 0, "source1", 32+i}, value);
@@ -3341,7 +3341,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
 
             UNIT_ASSERT(info_half1.BlobsFromCache > 0);
             UNIT_ASSERT(info_half2.BlobsFromCache > 0);
-            UNIT_ASSERT_VALUES_EQUAL(info_half1.BlobsFromDisk, 0);
+            UNIT_ASSERT_VALUES_EQUAL(info_half1.BlobsFromDisk, 1); //Because of async compaction
             UNIT_ASSERT_VALUES_EQUAL(info_half2.BlobsFromDisk, 0);
         }
     }
@@ -6443,7 +6443,14 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             std::shared_ptr<grpc::Channel> channel = grpc::CreateChannel("localhost:" + ToString(server.GrpcPort), grpc::InsecureChannelCredentials());
             pqStub = Ydb::PersQueue::V1::PersQueueService::NewStub(channel);
         }
-        auto checkDescribe = [&](const TVector<std::pair<TString, TString>>& readRules) {
+        struct TReadRuleParameters {
+            TString ConsumerName;
+            TString ServiceType;
+             // "nothing" means "do not check"
+            TMaybe<bool> Important = Nothing();
+            TMaybe<TDuration> AvailabilityPeriod = Nothing();
+        };
+        auto checkDescribe = [&](const TConstArrayRef<TReadRuleParameters> readRules, std::source_location source = std::source_location::current()) {
             DescribeTopicRequest request;
             DescribeTopicResponse response;
             request.set_path("/Root/PQ/rt3.dc1--acc--some-topic");
@@ -6459,8 +6466,15 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             UNIT_ASSERT_VALUES_EQUAL(res.settings().read_rules().size(), readRules.size());
             for (ui64 i = 0; i < readRules.size(); ++i) {
                 const auto& rr = res.settings().read_rules(i);
-                UNIT_ASSERT_EQUAL(rr.consumer_name(), readRules[i].first);
-                UNIT_ASSERT_EQUAL(rr.service_type(), readRules[i].second);
+                const auto& expected = readRules[i];
+                UNIT_ASSERT_VALUES_EQUAL_C(rr.consumer_name(), expected.ConsumerName, LabeledOutput(i, expected.ConsumerName, source.file_name(), source.line()));
+                UNIT_ASSERT_VALUES_EQUAL_C(rr.service_type(), expected.ServiceType, LabeledOutput(i, expected.ConsumerName, source.file_name(), source.line()));
+                if (expected.AvailabilityPeriod.Defined()) {
+                    UNIT_ASSERT_VALUES_EQUAL_C(rr.availability_period().seconds(), expected.AvailabilityPeriod->Seconds(), LabeledOutput(i, expected.ConsumerName, source.file_name(), source.line()));
+                }
+                if (expected.Important.Defined()) {
+                    UNIT_ASSERT_VALUES_EQUAL_C(rr.important(), *expected.Important, LabeledOutput(i, expected.ConsumerName, source.file_name(), source.line()));
+                }
             }
         };
         {
@@ -6481,6 +6495,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
                 rr->set_supported_format(Ydb::PersQueue::V1::TopicSettings::Format(1));
                 rr->set_consumer_name("acc/consumer2");
                 rr->set_service_type("MyGreatType");
+                rr->mutable_availability_period()->set_seconds(TDuration::Days(1).Seconds());
             }
 
             grpc::ClientContext rcontext;
@@ -6492,8 +6507,8 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
         }
         checkDescribe({
-            {"acc/consumer1", "data-streams"},
-            {"acc/consumer2", "MyGreatType"}
+            {.ConsumerName = "acc/consumer1", .ServiceType = "data-streams", .Important = false, .AvailabilityPeriod = TDuration::Zero()},
+            {.ConsumerName = "acc/consumer2", .ServiceType = "MyGreatType", .Important = false, .AvailabilityPeriod = TDuration::Days(1)},
         });
         {
             AlterTopicRequest request;
@@ -6507,6 +6522,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
                 auto rr = props->add_read_rules();
                 rr->set_supported_format(Ydb::PersQueue::V1::TopicSettings::Format(1));
                 rr->set_consumer_name("acc/consumer1");
+                rr->set_important(true);
             }
             {
                 auto rr = props->add_read_rules();
@@ -6519,6 +6535,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
                 rr->set_supported_format(Ydb::PersQueue::V1::TopicSettings::Format(1));
                 rr->set_consumer_name("acc/consumer3");
                 rr->set_service_type("SecondType");
+                rr->mutable_availability_period()->set_seconds(TDuration::Days(2).Seconds());
             }
 
             grpc::ClientContext rcontext;
@@ -6531,9 +6548,9 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
         }
         checkDescribe({
-            {"acc/consumer1", "data-streams"},
-            {"acc/consumer2", "AnotherType"},
-            {"acc/consumer3", "SecondType"}
+            {.ConsumerName = "acc/consumer1", .ServiceType = "data-streams", .Important = true, .AvailabilityPeriod = TDuration::Zero()},
+            {.ConsumerName = "acc/consumer2", .ServiceType = "AnotherType", .Important = false, .AvailabilityPeriod = TDuration::Zero()},
+            {.ConsumerName = "acc/consumer3", .ServiceType = "SecondType", .Important = false, .AvailabilityPeriod = TDuration::Days(2)}
         });
 
         {
@@ -6561,9 +6578,9 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::BAD_REQUEST);
         }
         checkDescribe({
-            {"acc/consumer1", "data-streams"},
-            {"acc/consumer2", "AnotherType"},
-            {"acc/consumer3", "SecondType"}
+            {.ConsumerName = "acc/consumer1", .ServiceType = "data-streams"},
+            {.ConsumerName = "acc/consumer2", .ServiceType = "AnotherType"},
+            {.ConsumerName = "acc/consumer3", .ServiceType = "SecondType"}
         });
     }
 
@@ -7212,6 +7229,76 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
     Y_UNIT_TEST(TestReadRuleServiceTypePassword) {
         TestReadRuleServiceTypePasswordImpl(false);
         TestReadRuleServiceTypePasswordImpl(true);
+    }
+
+    Y_UNIT_TEST(MetricsLevel) {
+        TServerSettings settings = PQSettings(0);
+        {
+            settings.PQConfig.AddClientServiceType()->SetName("MyGreatType");
+            settings.PQConfig.AddClientServiceType()->SetName("AnotherType");
+            settings.PQConfig.AddClientServiceType()->SetName("SecondType");
+        }
+        NPersQueue::TTestServer server(settings);
+        server.EnableLogs({ NKikimrServices::PQ_READ_PROXY, NKikimrServices::BLACKBOX_VALIDATOR });
+        std::unique_ptr<Ydb::PersQueue::V1::PersQueueService::Stub> pqStub;
+        {
+            std::shared_ptr<grpc::Channel> channel = grpc::CreateChannel("localhost:" + ToString(server.GrpcPort), grpc::InsecureChannelCredentials());
+            pqStub = Ydb::PersQueue::V1::PersQueueService::NewStub(channel);
+        }
+        auto checkDescribe = [&](const ui32 metricsLevel, std::source_location source = std::source_location::current()) {
+            DescribeTopicRequest request;
+            DescribeTopicResponse response;
+            request.set_path("/Root/PQ/rt3.dc1--acc--some-topic");
+            grpc::ClientContext rcontext;
+
+            auto status = pqStub->DescribeTopic(&rcontext, request, &response);
+            UNIT_ASSERT(status.ok());
+            DescribeTopicResult res;
+            response.operation().result().UnpackTo(&res);
+            Cerr << response << "\n" << res << "\n";
+            UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
+
+            UNIT_ASSERT_VALUES_EQUAL_C(res.settings().metrics_level(), metricsLevel, LabeledOutput(metricsLevel, source.file_name(), source.line()));
+        };
+        {
+            CreateTopicRequest request;
+            CreateTopicResponse response;
+            request.set_path("/Root/PQ/rt3.dc1--acc--some-topic");
+            auto props = request.mutable_settings();
+            props->set_partitions_count(1);
+            props->set_supported_format(Ydb::PersQueue::V1::TopicSettings::FORMAT_BASE);
+            props->set_retention_period_ms(TDuration::Days(1).MilliSeconds());
+            props->set_metrics_level(4);
+
+            grpc::ClientContext rcontext;
+            auto status = pqStub->CreateTopic(&rcontext, request, &response);
+            UNIT_ASSERT(status.ok());
+            CreateTopicResult res;
+            response.operation().result().UnpackTo(&res);
+            Cerr << response << "\n" << res << "\n";
+            UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
+        }
+        checkDescribe(4);
+        {
+            AlterTopicRequest request;
+            AlterTopicResponse response;
+            request.set_path("/Root/PQ/rt3.dc1--acc--some-topic");
+            auto props = request.mutable_settings();
+            props->set_partitions_count(1);
+            props->set_supported_format(Ydb::PersQueue::V1::TopicSettings::FORMAT_BASE);
+            props->set_retention_period_ms(TDuration::Days(1).MilliSeconds());
+            props->set_metrics_level(3);
+
+            grpc::ClientContext rcontext;
+            auto status = pqStub->AlterTopic(&rcontext, request, &response);
+
+            UNIT_ASSERT(status.ok());
+            AlterTopicResult res;
+            response.operation().result().UnpackTo(&res);
+            Cerr << response << "\n" << res << "\n";
+            UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
+        }
+        checkDescribe(3);
     }
 
     void CreateTopicWithMeteringMode(bool meteringEnabled) {

@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "arrow/util/string_builder.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/string_builder.h"
 
 #include <memory>
 #include <sstream>

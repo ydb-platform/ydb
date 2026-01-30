@@ -1,7 +1,6 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
-#include "schemeshard_utils.h"  // for TransactionTemplate
 
 #include <ydb/core/base/auth.h>
 #include <ydb/core/base/hive.h>
@@ -117,7 +116,7 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
     for (auto& col : *copyAlter.MutableColumns()) {
         bool hasDefault = col.HasDefaultFromLiteral();
         if (hasDefault && !context.SS->EnableAddColumsWithDefaults) {
-            errStr = Sprintf("Column addition with default value is not supported now.");
+            errStr = Sprintf("Adding columns with defaults is disabled");
             status = NKikimrScheme::StatusInvalidParameter;
             return nullptr;
         }
@@ -149,7 +148,7 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
     const bool isServerless = context.SS->IsServerlessDomain(TPath::Init(context.SS->RootPathId(), context.SS));
 
     NKikimrSchemeOp::TPartitionConfig compilationPartitionConfig;
-    if (!TPartitionConfigMerger::ApplyChanges(compilationPartitionConfig, table->PartitionConfig(), copyAlter.GetPartitionConfig(), appData, isServerless, errStr)
+    if (!TPartitionConfigMerger::ApplyChanges(compilationPartitionConfig, table->PartitionConfig(), copyAlter.GetPartitionConfig(), copyAlter.GetColumns(), appData, isServerless, errStr)
         || !TPartitionConfigMerger::VerifyAlterParams(table->PartitionConfig(), compilationPartitionConfig, appData, shadowDataAllowed, errStr)) {
         status = NKikimrScheme::StatusInvalidParameter;
         return nullptr;
@@ -602,6 +601,12 @@ public:
 
         Y_ABORT_UNLESS(context.SS->Tables.contains(path.Base()->PathId));
         TTableInfo::TPtr table = context.SS->Tables.at(path.Base()->PathId);
+
+        if (context.SS->IsTableInBackupCollection(path.Base()->PathId)) {
+            result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                "Alter schema forbidden: table is part of a backup collection. Remove it from collection first.");
+            return result;
+        }
 
         if (table->AlterVersion == 0) {
             result->SetError(NKikimrScheme::StatusMultipleModifications, "Table is not created yet");

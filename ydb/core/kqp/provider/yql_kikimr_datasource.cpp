@@ -116,9 +116,9 @@ private:
         TExprBase currentNode(node);
         if (auto maybeReadTable = currentNode.Maybe<TKiReadTable>()) {
             auto readTable = maybeReadTable.Cast();
-            for (auto setting : readTable.Settings()) {
-                auto name = setting.Name().Value();
-                if (name == "sysViewRewritten") {
+            for (auto setting : readTable.Settings().Ref().ChildrenList()) {
+                auto maybeTuple = TMaybeNode<TCoNameValueTuple>(setting);
+                if (maybeTuple && maybeTuple.Cast().Name().Value() == "sysViewRewritten"sv) {
                     sysViewRewritten = true;
                 }
             }
@@ -279,6 +279,7 @@ public:
                             .WithExternalSourceFactory(ExternalSourceFactory)
                             .WithReadAttributes(readAttrs ? std::move(*readAttrs) : THashMap<TString, TString>{})
                             .WithSysViewRewritten(table.GetSysViewRewritten())
+                            .WithTopicsIo(SessionCtx->Config().FeatureFlags.GetEnableTopicsSqlIoOperations())
             );
 
             futures.push_back(future.Apply([result, queryType]
@@ -819,11 +820,6 @@ public:
                     return ctx.ChangeChildren(*node, std::move(retChildren));
                 }
             } else if (tableDesc.Metadata->Kind == EKikimrTableKind::View && !IsShowCreate(*read)) {
-                if (!SessionCtx->Config().FeatureFlags.GetEnableViews()) {
-                    ctx.AddError(TIssue(node->Pos(ctx),
-                                        "Views are disabled. Please contact your system administrator to enable the feature"));
-                    return nullptr;
-                }
 
                 ctx.Step
                     .Repeat(TExprStep::ExpandApplyForLambdas)
@@ -838,10 +834,9 @@ public:
 
                 NKqp::TKqpTranslationSettingsBuilder settingsBuilder(
                     SessionCtx->Query().Type,
-                    SessionCtx->Config()._KqpYqlSyntaxVersion.Get().GetRef(),
                     cluster,
                     viewData.QueryText,
-                    SessionCtx->Config().BindingsMode,
+                    SessionCtx->Config().GetYqlBindingsMode(),
                     GUCSettings
                 );
                 settingsBuilder.SetFromConfig(SessionCtx->Config());
@@ -909,6 +904,7 @@ public:
                     .Build()
                 .Columns(result.Columns())
                 .RowsLimit().Build(ToString(rowsLimit))
+                .Discard(result.Discard())
                 .Done();
 
             auto newResults = ctx.ChangeChild(results.Ref(), index - startBlockIndex, newResult.Ptr());

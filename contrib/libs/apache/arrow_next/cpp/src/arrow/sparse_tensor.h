@@ -25,15 +25,15 @@
 #include <utility>
 #include <vector>
 
-#include "arrow/buffer.h"
-#include "arrow/compare.h"
-#include "arrow/result.h"
-#include "arrow/status.h"
-#include "arrow/tensor.h"  // IWYU pragma: export
-#include "arrow/type.h"
-#include "arrow/util/checked_cast.h"
-#include "arrow/util/macros.h"
-#include "arrow/util/visibility.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/buffer.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compare.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/result.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/status.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/tensor.h"  // IWYU pragma: export
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/checked_cast.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/macros.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/visibility.h"
 
 namespace arrow20 {
 

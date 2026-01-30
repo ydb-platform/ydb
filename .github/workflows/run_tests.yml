@@ -40,6 +40,10 @@ on:
 
   workflow_dispatch:
     inputs:
+      pull_number:
+        description: 'Pull request number, ex: 12345'
+        required: false
+        default: ''
       test_targets:
         description: 'Paths to tests for run ,example : ydb/ ydb/tests/func/suite'
         required: true
@@ -55,7 +59,7 @@ on:
         default: small,medium,large
         options:
           - small
-          - medium,
+          - medium
           - large
           - small,medium
           - small,medium,large
@@ -73,45 +77,181 @@ on:
           - release-msan
           - release-tsan
         default: relwithdebinfo
+      collect_coredumps:
+        type: boolean
+        default: false
+        description: "Collect coredumps via ulimit -c unlimited"
 
 jobs:
   prepare:
     runs-on: ubuntu-latest
     outputs:
       branch_array: ${{ steps.set-branches.outputs.branch_array }}
+      branch_name_map: ${{ steps.set-branches.outputs.branch_name_map }}
+      pr_number_map: ${{ steps.set-branches.outputs.pr_number_map }}
     steps:
       - name: Checkout ${{ matrix.branch }}
         uses: actions/checkout@v4
         with:
           sparse-checkout: |
             .github/config/stable_branches.json
+            .github/scripts/tests/comment-pr.py
 
       - name: Set branches
         id: set-branches
         env:
           CALLED_BRANCHES: '${{ inputs.branches }}'
           BRANCHES_CONFIG_PATH: '${{ inputs.branches_config_path }}'
+          PULL_REQUEST_NUMBER: '${{ inputs.pull_number }}'
+          GITHUB_TOKEN: '${{ github.token }}'
         run: |
-          # Проверяем, был ли передан параметр branches из вызывающего workflow
+          # Check if branches parameter was passed from calling workflow
           if [[ -n "$CALLED_BRANCHES" ]]; then
             echo "Branches parameter provided from calling workflow: $CALLED_BRANCHES"
             
-            # Проверяем, является ли вход уже JSON-массивом
+            # Check if input is already a JSON array
             if [[ $CALLED_BRANCHES == \[* ]]; then
-              echo "branch_array=$CALLED_BRANCHES" >> $GITHUB_OUTPUT
+              # This is a JSON array - parse it
+              branches=($(echo "$CALLED_BRANCHES" | jq -r '.[]'))
             else
-              # Если это одна ветка, создаем JSON-массив с одним элементом
-              echo "branch_array=[\"$CALLED_BRANCHES\"]" >> $GITHUB_OUTPUT
+              # If it's a single branch, create array with one element
+              branches=("$CALLED_BRANCHES")
             fi
+
+            processed_branches=()
+            branch_name_map="{}"
+            pr_number_map="{}"
+            for branch in "${branches[@]}"; do
+              # Check if branch starts with pull/ and contains numbers
+              if [[ $branch =~ ^pull/([0-9]+)$ ]]; then
+                PULL_REQUEST_NUMBER=${BASH_REMATCH[1]}
+                echo "Processing pull request: $PULL_REQUEST_NUMBER"
+                
+                # Get PR data from GitHub API
+                PR_DATA=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+                  "https://api.github.com/repos/ydb-platform/ydb/pulls/$PULL_REQUEST_NUMBER")
+                MERGE_SHA=$(echo "$PR_DATA" | jq -r '.merge_commit_sha')
+                BASE_BRANCH=$(echo "$PR_DATA" | jq -r '.base.ref')
+                
+                if [ -n "$MERGE_SHA" ] && [ "$MERGE_SHA" != "null" ]; then
+                  echo "Replaced pull/$PULL_REQUEST_NUMBER with merge commit: $MERGE_SHA (base: $BASE_BRANCH)"
+                  processed_branches+=("\"$MERGE_SHA\"")
+                  # Add to mapping: checkout_branch (SHA) -> test_history_branch (base branch for PR, or same for regular branches)
+                  branch_name_map=$(echo "$branch_name_map" | jq -c --arg sha "$MERGE_SHA" --arg base "$BASE_BRANCH" '. + {($sha): $base}')
+                  # Add to mapping: checkout_branch (SHA) -> PR number
+                  pr_number_map=$(echo "$pr_number_map" | jq -c --arg sha "$MERGE_SHA" --arg pr "$PULL_REQUEST_NUMBER" '. + {($sha): $pr}')
+                  # Save merge commit SHA, base branch, and PR number for comment step (use first PR)
+                  if [ -z "$COMMIT_SHA" ]; then
+                    echo "COMMIT_SHA=$MERGE_SHA" >> $GITHUB_ENV
+                    echo "PR_BASE_BRANCH=$BASE_BRANCH" >> $GITHUB_ENV
+                    echo "PR_NUMBER=$PULL_REQUEST_NUMBER" >> $GITHUB_ENV
+                  fi
+                else
+                  echo "Failed to get merge commit for PR $PULL_REQUEST_NUMBER, discarding"
+                fi
+              else
+                # Just add the branch as-is
+                processed_branches+=("\"$branch\"")
+              fi
+            done
+
+            # Reassemble into JSON array
+            branch_array=$(IFS=, ; echo "[${processed_branches[*]}]")
+            echo "branch_array=$branch_array" >> $GITHUB_OUTPUT
+            # Output mapping of checkout_branch -> test_history_branch (for PR: SHA -> base_branch, for regular branches: empty {})
+            # Use compact JSON format (no newlines) for GitHub Actions output
+            branch_name_map_compact=$(echo "$branch_name_map" | jq -c .)
+            echo "branch_name_map=$branch_name_map_compact" >> $GITHUB_OUTPUT
+            echo "Created branch_name_map: $branch_name_map_compact"
+            # Output mapping of checkout_branch -> PR number (for PR: SHA -> PR number, for regular branches: empty {})
+            pr_number_map_compact=$(echo "$pr_number_map" | jq -c .)
+            echo "pr_number_map=$pr_number_map_compact" >> $GITHUB_OUTPUT
+            echo "Created pr_number_map: $pr_number_map_compact"
           elif [[ -n "$BRANCHES_CONFIG_PATH" ]]; then
             echo "branch_array=$(jq -c "." "$BRANCHES_CONFIG_PATH")" >> $GITHUB_OUTPUT
+            # No mapping for branches from config file - use branches as-is for test history
+            echo "branch_name_map={}" >> $GITHUB_OUTPUT
+            echo "pr_number_map={}" >> $GITHUB_OUTPUT
+          elif [[ -n "$PULL_REQUEST_NUMBER" ]] && [[ $PULL_REQUEST_NUMBER =~ ^[0-9]+$ ]]; then
+            PR_DATA=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+                  "https://api.github.com/repos/ydb-platform/ydb/pulls/$PULL_REQUEST_NUMBER")
+            MERGE_SHA=$(echo "$PR_DATA" | jq -r '.merge_commit_sha')
+            BASE_BRANCH=$(echo "$PR_DATA" | jq -r '.base.ref')
+            if [ -n "$MERGE_SHA" ] && [ "$MERGE_SHA" != "null" ]; then
+              # Use merge commit SHA for checkout, but base branch for test history and results
+              echo "branch_array=[\"$MERGE_SHA\"]" >> $GITHUB_OUTPUT
+              # Save merge commit SHA, base branch, and PR number for comment step
+              echo "COMMIT_SHA=$MERGE_SHA" >> $GITHUB_ENV
+              echo "PR_BASE_BRANCH=$BASE_BRANCH" >> $GITHUB_ENV
+              echo "PR_NUMBER=$PULL_REQUEST_NUMBER" >> $GITHUB_ENV
+              # Output mapping of checkout_branch -> test_history_branch (SHA -> base_branch for PR)
+              # Use compact JSON format (no newlines) for GitHub Actions output
+              branch_name_map=$(jq -c -n --arg sha "$MERGE_SHA" --arg base "$BASE_BRANCH" '{($sha): $base}')
+              echo "branch_name_map=$branch_name_map" >> $GITHUB_OUTPUT
+              # Output mapping of checkout_branch -> PR number (SHA -> PR number for PR)
+              pr_number_map=$(jq -c -n --arg sha "$MERGE_SHA" --arg pr "$PULL_REQUEST_NUMBER" '{($sha): $pr}')
+              echo "pr_number_map=$pr_number_map" >> $GITHUB_OUTPUT
+            else
+              echo "Failed to get merge commit for PR $PULL_REQUEST_NUMBER"
+              exit 1
+            fi
           else
-            # Если ветки не переданы, значит это прямой запуск workflow_dispatch
+            # If no branches specified, this is a direct workflow_dispatch run
             echo "No branches specified, using current branch: ${{ github.ref_name }}"
             echo "branch_array=[\"${{ github.ref_name }}\"]" >> $GITHUB_OUTPUT
+            # No mapping for direct workflow_dispatch - use branch as-is for test history
+            echo "branch_name_map={}" >> $GITHUB_OUTPUT
+            echo "pr_number_map={}" >> $GITHUB_OUTPUT
           fi
           
           echo "Final branches to use: $(cat $GITHUB_OUTPUT | grep branch_array | cut -d= -f2)"
+
+      - name: Install dependencies
+        if: always()
+        run: |
+          # Check if COMMIT_SHA is set (means we have a PR to comment on)
+          if [ -n "$COMMIT_SHA" ]; then
+            pip install PyGithub
+          else
+            echo "No PR detected, skipping dependency installation"
+          fi
+
+      - name: Post run tests start comment
+        if: always()
+        shell: bash
+        env:
+          BUILD_PRESET: ${{ inputs.build_preset }}
+          GITHUB_TOKEN: ${{ github.token }}
+          TEST_SIZE: ${{ inputs.test_size }}
+          BUILD_TARGET: ${{ inputs.test_targets }}
+          COLLECT_COREDUMPS: ${{ inputs.collect_coredumps }}
+        run: |
+          # Check if COMMIT_SHA is set (means we have a PR to comment on)
+          if [ -z "$COMMIT_SHA" ]; then
+            echo "No PR detected (COMMIT_SHA is not set), skipping comment"
+            exit 0
+          fi
+          commit_sha="$COMMIT_SHA"
+          
+          commit_short=$(echo "$commit_sha" | cut -c1-7)
+          commit_url="https://github.com/${GITHUB_REPOSITORY}/commit/${commit_sha}"
+          check_url="https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          
+          workflow_name="${{ github.workflow }}"
+          
+          {
+            echo "### $workflow_name started"
+            echo ""
+            echo "- **Build Preset:** \`$BUILD_PRESET\`"
+            echo "- **Test Size:** \`$TEST_SIZE\`"
+            echo "- **Test Targets:** \`$BUILD_TARGET\`"
+            if [ "$COLLECT_COREDUMPS" = "true" ]; then
+              echo "- **Collect Coredumps:** \`true\`"
+            fi
+            echo "- **Commit:** [${commit_short}](${commit_url})"
+            echo "- **Workflow run:** [link](${check_url})"
+            echo ""
+          } | .github/scripts/tests/comment-pr.py --rewrite --no-timestamp
 
   run_tests:
     needs: prepare
@@ -153,7 +293,50 @@ jobs:
         with:
           ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
 
+      - name: Determine branch name and PR number for test history
+        id: determine-branch
+        run: |
+          # Get the mapping of checkout_branch -> test_history_branch
+          # For PR: checkout_branch is merge commit SHA, test_history_branch is base branch (e.g., stable-25-3)
+          # For regular branches: mapping is empty {}, so use checkout_branch as-is for test history
+          branch_name_map='${{ needs.prepare.outputs.branch_name_map }}'
+          pr_number_map='${{ needs.prepare.outputs.pr_number_map }}'
+          current_branch="${{ matrix.branch }}"
+          
+          # Check if current branch is in the mapping
+          # If mapping is empty {} or branch not found, use branch as-is (regular branch, not a PR)
+          if [ "$branch_name_map" != "{}" ] && [ -n "$branch_name_map" ]; then
+            test_history_branch=$(echo "$branch_name_map" | jq -r --arg branch "$current_branch" '.[$branch] // empty')
+            if [ -n "$test_history_branch" ] && [ "$test_history_branch" != "null" ]; then
+              echo "branch_name=$test_history_branch" >> $GITHUB_OUTPUT
+              echo "Using test history branch from mapping: $test_history_branch (checkout branch: $current_branch)"
+            else
+              echo "branch_name=$current_branch" >> $GITHUB_OUTPUT
+              echo "Branch not in mapping, using as-is: $current_branch"
+            fi
+          else
+            # No mapping (empty {} or not set) - this is a regular branch, use checkout branch for test history
+            echo "branch_name=$current_branch" >> $GITHUB_OUTPUT
+            echo "No mapping (regular branch), using checkout branch for test history: $current_branch"
+          fi
+          
+          # Get PR number from mapping if available
+          if [ "$pr_number_map" != "{}" ] && [ -n "$pr_number_map" ]; then
+            pr_number=$(echo "$pr_number_map" | jq -r --arg branch "$current_branch" '.[$branch] // empty')
+            if [ -n "$pr_number" ] && [ "$pr_number" != "null" ]; then
+              echo "pr_number=$pr_number" >> $GITHUB_OUTPUT
+              echo "Using PR number from mapping: $pr_number (checkout branch: $current_branch)"
+            else
+              echo "pr_number=" >> $GITHUB_OUTPUT
+              echo "Branch not in PR mapping"
+            fi
+          else
+            echo "pr_number=" >> $GITHUB_OUTPUT
+            echo "No PR mapping (regular branch)"
+          fi
+
       - name: Run YDB Tests
+        id: run_tests
         timeout-minutes: ${{ fromJson(env.timeout) }}
         uses: ./.github/actions/build_and_test_ya
         with:
@@ -166,10 +349,13 @@ jobs:
           test_size: ${{ inputs.test_size }}
           test_type: ${{ inputs.test_type }}
           test_threads: ${{ fromJson(env.threads_count) }}
-          custom_branch_name: ${{ matrix.branch }}
+          custom_branch_name: ${{ steps.determine-branch.outputs.branch_name }}
           put_build_results_to_cache: true
+          collect_coredumps: ${{ inputs.collect_coredumps }}
           additional_ya_make_args: -DDEBUGINFO_LINES_ONLY ${{ inputs.additional_ya_make_args }}
+          pull_number: ${{ steps.determine-branch.outputs.pr_number || inputs.pull_number || '' }}
           secs: ${{ format('{{"AWS_KEY_ID":"{0}","AWS_KEY_VALUE":"{1}","REMOTE_CACHE_USERNAME":"{2}","REMOTE_CACHE_PASSWORD":"{3}","TELEGRAM_YDBOT_TOKEN":"{4}"}}',
             secrets.AWS_KEY_ID, secrets.AWS_KEY_VALUE, secrets.REMOTE_CACHE_USERNAME, secrets.REMOTE_CACHE_PASSWORD, secrets.TELEGRAM_YDBOT_TOKEN ) }}
           vars: ${{ format('{{"AWS_BUCKET":"{0}","AWS_ENDPOINT":"{1}","REMOTE_CACHE_URL":"{2}","GH_ALERTS_TG_LOGINS":"{3}","GH_ALERTS_TG_CHAT":"{4}"}}',
             vars.AWS_BUCKET, vars.AWS_ENDPOINT, vars.REMOTE_CACHE_URL_YA, vars.GH_ALERTS_TG_LOGINS, vars.GH_ALERTS_TG_CHAT ) }}
+

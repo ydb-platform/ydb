@@ -5,6 +5,7 @@
 
 #include <yql/essentials/public/udf/sanitizer_utils.h>
 #include <yql/essentials/utils/hash.h>
+#include <yql/essentials/utils/is_pod.h>
 
 #include <util/generic/vector.h>
 #include <util/generic/ptr.h>
@@ -79,7 +80,7 @@ public:
         ui32 Size;
         TPageListItem ListItem;
 
-        TLargeListHeader(ui32 capacity)
+        explicit TLargeListHeader(ui32 capacity)
             : Mark(LARGE_MARK)
             , Capacity(capacity)
             , Size(0u)
@@ -122,7 +123,7 @@ public:
         TListIterator() {
         }
 
-        TListIterator(T* list) {
+        explicit TListIterator(T* list) {
             if (LARGE_MARK == GetMark(list)) {
                 CurrentPage_ = EndPage_ = GetLargeListHeader(list)->Next();
                 Current_ = CurrentPage_->template GetList<T>();
@@ -274,7 +275,7 @@ protected:
     };
 
 public:
-    TListPoolBase(TAlignedPagePool& pagePool)
+    explicit TListPoolBase(TAlignedPagePool& pagePool)
         : PagePool_(pagePool)
     {
     }
@@ -378,13 +379,15 @@ private:
     static constexpr size_t PoolCount = 1 + !std::is_same<TPrimary, TSecondary>::value;
 
 public:
-    TListPool(TAlignedPagePool& pagePool)
+    explicit TListPool(TAlignedPagePool& pagePool)
         : TListPoolBase(pagePool)
     {
     }
     TListPool(const TListPool&) = delete;
     TListPool(TListPool&& other)
         : TListPoolBase(std::move(other))
+        // TListPoolBase does not moves Pools_ out
+        // NOLINTNEXTLINE(bugprone-use-after-move)
         , Pools_(std::move(other.Pools_))
     {
     }
@@ -815,7 +818,7 @@ struct TKeyValuePair {
     TKeyValuePair(const TKeyValuePair&) = default;
     TKeyValuePair(TKeyValuePair&&) = default;
 
-    TKeyValuePair(const std::pair<TKey, TValue>& p)
+    explicit TKeyValuePair(const std::pair<TKey, TValue>& p)
         : first(p.first)
         , second(p.second)
     {
@@ -863,6 +866,7 @@ class TCompactHashBase {
 protected:
     using TItemNode = TNode<TItemType>;
     static_assert(sizeof(TItemNode) == 1 + Max<size_t>(sizeof(TItemType), sizeof(void*)), "Unexpected size");
+    static_assert(sizeof(TKeyType) <= sizeof(void*) * 2, "Key must be small enough for passing by value inside unaligned api.");
 
 public:
     template <typename T>
@@ -871,7 +875,7 @@ public:
         using TBucketIter = TListPoolBase::TListIterator<const T, const TListPoolBase::TLargeListHeader>;
 
         // Full scan iterator
-        TIteratorImpl(const TCompactHashBase* hash)
+        explicit TIteratorImpl(const TCompactHashBase* hash)
             : Hash_(hash)
             , Bucket_(0)
             , EndBucket_(Hash_->BucketsCount_)
@@ -956,7 +960,7 @@ public:
         using TValueIter = TListPoolBase::TListIterator<const T, const TListPoolBase::TLargeListHeader>;
 
         // Full scan iterator
-        TIteratorImpl(const TCompactHashBase* hash)
+        explicit TIteratorImpl(const TCompactHashBase* hash)
             : Hash_(hash)
             , Bucket_(0)
             , EndBucket_(Hash_->BucketsCount_)
@@ -1056,8 +1060,8 @@ public:
     using TBucketIterator = TListPoolBase::TListIterator<TItemType, TListPoolBase::TLargeListHeader>;
     using TConstBucketIterator = TListPoolBase::TListIterator<const TItemType, const TListPoolBase::TLargeListHeader>;
 
-    TCompactHashBase(TAlignedPagePool& pagePool, size_t size = 0, const TKeyExtractor& keyExtractor = TKeyExtractor(),
-                     const TKeyHash& keyHash = TKeyHash(), const TKeyEqual& keyEqual = TKeyEqual())
+    explicit TCompactHashBase(TAlignedPagePool& pagePool, size_t size = 0, const TKeyExtractor& keyExtractor = TKeyExtractor(),
+                              const TKeyHash& keyHash = TKeyHash(), const TKeyEqual& keyEqual = TKeyEqual())
         : ListPool_(pagePool)
         , KeyExtractor_(keyExtractor)
         , KeyHash_(keyHash)
@@ -1477,14 +1481,14 @@ template <typename TKey,
           typename TKeyEqual = TEqualTo<TKey>>
 class TCompactHash: public TCompactHashBase<TKeyValuePair<TKey, TValue>, TKey, TSelect1stUnaligned, TKeyHash, TKeyEqual> {
 private:
-    static_assert(std::is_trivially_destructible<TKey>::value && std::is_trivially_copy_assignable<TKey>::value && std::is_trivially_move_assignable<TKey>::value && std::is_trivially_copy_constructible<TKey>::value && std::is_trivially_move_constructible<TKey>::value, "Expected POD key type");
-    static_assert(std::is_trivially_destructible<TValue>::value && std::is_trivially_copy_assignable<TValue>::value && std::is_trivially_move_assignable<TValue>::value && std::is_trivially_copy_constructible<TValue>::value && std::is_trivially_move_constructible<TValue>::value, "Expected POD value type");
+    static_assert(NYql::IsPod<TKey>, "Expected POD key type");
+    static_assert(NYql::IsPod<TValue>, "Expected POD value type");
 
     using TItem = TKeyValuePair<TKey, TValue>;
     using TBase = TCompactHashBase<TItem, TKey, TSelect1stUnaligned, TKeyHash, TKeyEqual>;
 
 public:
-    TCompactHash(TAlignedPagePool& pagePool, size_t size = 0, const TKeyHash& keyHash = TKeyHash(), const TKeyEqual& keyEqual = TKeyEqual())
+    explicit TCompactHash(TAlignedPagePool& pagePool, size_t size = 0, const TKeyHash& keyHash = TKeyHash(), const TKeyEqual& keyEqual = TKeyEqual())
         : TBase(pagePool, size, TSelect1stUnaligned(), keyHash, keyEqual)
     {
     }
@@ -1543,8 +1547,8 @@ template <typename TKey,
           typename TKeyEqual = TEqualTo<TKey>>
 class TCompactMultiHash: public TCompactHashBase<TKeyNodePair<TKey, TValue>, TKey, TSelect1stUnaligned, TKeyHash, TKeyEqual, TValue> {
 private:
-    static_assert(std::is_trivially_destructible<TKey>::value && std::is_trivially_copy_assignable<TKey>::value && std::is_trivially_move_assignable<TKey>::value && std::is_trivially_copy_constructible<TKey>::value && std::is_trivially_move_constructible<TKey>::value, "Expected POD key type");
-    static_assert(std::is_trivially_destructible<TValue>::value && std::is_trivially_copy_assignable<TValue>::value && std::is_trivially_move_assignable<TValue>::value && std::is_trivially_copy_constructible<TValue>::value && std::is_trivially_move_constructible<TValue>::value, "Expected POD value type");
+    static_assert(NYql::IsPod<TKey>, "Expected POD key type");
+    static_assert(NYql::IsPod<TValue>, "Expected POD value type");
 
     using TUserItem = std::pair<TKey, TValue>;
     using TStoreItem = TKeyNodePair<TKey, TValue>;
@@ -1553,7 +1557,7 @@ private:
     static_assert(sizeof(TStoreItem) == sizeof(TKey) + sizeof(TNode<TValue>), "Unexpected size");
 
 public:
-    TCompactMultiHash(TAlignedPagePool& pagePool, size_t size = 0, const TKeyHash& keyHash = TKeyHash(), const TKeyEqual& keyEqual = TKeyEqual())
+    explicit TCompactMultiHash(TAlignedPagePool& pagePool, size_t size = 0, const TKeyHash& keyHash = TKeyHash(), const TKeyEqual& keyEqual = TKeyEqual())
         : TBase(pagePool, size, TSelect1stUnaligned(), keyHash, keyEqual)
     {
     }
@@ -1604,12 +1608,12 @@ template <typename TKey,
           typename TKeyEqual = TEqualTo<TKey>>
 class TCompactHashSet: public TCompactHashBase<TKey, TKey, TIdentity, TKeyHash, TKeyEqual> {
 private:
-    static_assert(std::is_trivially_destructible<TKey>::value && std::is_trivially_copy_assignable<TKey>::value && std::is_trivially_move_assignable<TKey>::value && std::is_trivially_copy_constructible<TKey>::value && std::is_trivially_move_constructible<TKey>::value, "Expected POD key type");
+    static_assert(NYql::IsPod<TKey>, "Expected POD key type");
 
     using TBase = TCompactHashBase<TKey, TKey, TIdentity, TKeyHash, TKeyEqual>;
 
 public:
-    TCompactHashSet(TAlignedPagePool& pagePool, size_t size = 0, const TKeyHash& keyHash = TKeyHash(), const TKeyEqual& keyEqual = TKeyEqual())
+    explicit TCompactHashSet(TAlignedPagePool& pagePool, size_t size = 0, const TKeyHash& keyHash = TKeyHash(), const TKeyEqual& keyEqual = TKeyEqual())
         : TBase(pagePool, size, TIdentity(), keyHash, keyEqual)
     {
     }

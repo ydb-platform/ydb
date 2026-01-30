@@ -13,6 +13,7 @@
 #include <util/generic/maybe.h>
 #include <util/generic/ptr.h>
 #include <util/generic/vector.h>
+#include <util/random/fast.h>
 #include <util/system/mutex.h>
 
 namespace NKikimr::NJaegerTracing {

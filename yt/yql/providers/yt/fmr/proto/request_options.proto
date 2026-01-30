@@ -26,6 +26,7 @@ enum ETaskType {
     TASK_TYPE_UPLOAD = 2;
     TASK_TYPE_MERGE = 3;
     TASK_TYPE_MAP = 4;
+    TASK_TYPE_DISTRIBUTED_UPLOAD = 5;
 }
 
 enum EFmrComponent {
@@ -95,9 +96,16 @@ message TTableStats {
     uint64 DataWeight = 3;
 }
 
+message TSortedChunkStats {
+    bool IsSorted = 1;
+    string FirstRowKeys = 2;
+    string LastRowKeys = 3;
+}
+
 message TChunkStats {
     uint64 Rows = 1;
     uint64 DataWeight = 2;
+    TSortedChunkStats SortedChunkStats = 3;
 }
 
 message TTableChunkStats {
@@ -112,6 +120,7 @@ message TStatisticsObject {
 
 message TStatistics {
     repeated TStatisticsObject OutputTables = 1;
+    optional TTaskResult TaskResult = 2;
 }
 
 message TOperationTableRef {
@@ -135,6 +144,24 @@ message TTaskTableInputRef {
 message TUploadOperationParams {
     TFmrTableRef Input = 1;
     TYtTableRef Output = 2;
+}
+
+message TSortedUploadOperationParams {
+    TFmrTableRef Input = 1;
+    TYtTableRef Output = 2;
+    string SessionId = 3;
+    repeated string Cookies = 4;
+    uint32 SessionType = 5;
+    string PartitionId = 6;
+    bool IsOrdered = 7;
+}
+
+message TSortedUploadTaskParams {
+    TFmrTableInputRef Input = 1;
+    TYtTableRef Output = 2;
+    string CookieYson = 3;
+    uint32 SessionType = 4;
+    uint64 Order = 5;
 }
 
 message TUploadTaskParams {
@@ -166,12 +193,14 @@ message TMapOperationParams {
     repeated TOperationTableRef Input = 1;
     repeated TFmrTableRef Output = 2;
     bytes SerializedMapJobState = 3;
+    bool IsOrdered = 4;
 }
 
 message TMapTaskParams {
     TTaskTableInputRef Input = 1;
     repeated TFmrTableOutputRef Output = 2;
     bytes SerializedMapJobState = 3;
+    bool IsOrdered = 4;
 }
 
 message TOperationParams {
@@ -180,6 +209,7 @@ message TOperationParams {
         TDownloadOperationParams DownloadOperationParams = 2;
         TMergeOperationParams MergeOperationParams = 3;
         TMapOperationParams MapOperationParams = 4;
+        TSortedUploadOperationParams SortedUploadOperationParams = 5;
     }
 }
 
@@ -189,6 +219,7 @@ message TTaskParams {
         TDownloadTaskParams DownloadTaskParams = 2;
         TMergeTaskParams MergeTaskParams = 3;
         TMapTaskParams MapTaskParams = 4;
+        TSortedUploadTaskParams SortedUploadTaskParams = 5;
     }
 }
 
@@ -196,6 +227,30 @@ message TClusterConnection {
     string TransactionId = 1;
     string YtServerName = 2;
     optional string Token = 3;
+}
+
+message TFileInfo {
+    string LocalPath = 1;
+    string Md5Key = 2;
+    string Alias = 3;
+}
+
+message TYtResourceInfo {
+    string RichPath = 1;
+    string YtServerName = 2;
+    string Token = 3;
+    string LocalPath = 4;
+}
+
+message TFmrResourceOperationInfo {
+    TFmrTableRef FmrTable = 1;
+    string Alias = 2;
+}
+
+message TFmrResourceTaskInfo {
+    repeated TFmrTableInputRef FmrResourceTasks = 1;
+    string LocalPath = 2;
+    string Alias = 3;
 }
 
 message TTask {
@@ -206,6 +261,37 @@ message TTask {
     optional uint32 NumRetries = 5;
     map<string, TClusterConnection> ClusterConnections = 6;
     optional string JobSettings = 7;
+    repeated TFileInfo Files = 8;
+    repeated TYtResourceInfo YtResources = 9;
+    repeated TFmrResourceTaskInfo FmrResources = 10;
+    optional string JobEnvironmentDir = 11;
+}
+
+message TTaskUploadResult {
+}
+
+message TTaskDownloadResult {
+}
+
+message TTaskMergeResult {
+}
+
+message TTaskMapResult {
+}
+
+message TTaskSortedUploadResult {
+    string FragmentResult = 1;
+    uint64 FragmentOrder = 2;
+}
+
+message TTaskResult {
+    oneof TTaskResult {
+        TTaskUploadResult TaskUploadResult = 1;
+        TTaskDownloadResult TaskDownloadResult = 2;
+        TTaskMergeResult TaskMergeResult = 3;
+        TTaskMapResult TaskMapResult = 4;
+        TTaskSortedUploadResult TaskSortedUploadResult = 5;
+    }
 }
 
 message TTaskState {

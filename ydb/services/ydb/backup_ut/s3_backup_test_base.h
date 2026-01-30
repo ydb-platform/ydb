@@ -1,4 +1,7 @@
 #pragma once
+
+#include "backup_test_base.h"
+
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/coordination/coordination.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
@@ -46,18 +49,6 @@ protected:
         return *Driver;
     }
 
-#define YDB_SDK_CLIENT(type, funcName)                               \
-    protected:                                                       \
-    TMaybe<type> Y_CAT(funcName, Instance);                          \
-    public:                                                          \
-    type& funcName() {                                               \
-        if (!Y_CAT(funcName, Instance)) {                            \
-            Y_CAT(funcName, Instance).ConstructInPlace(YdbDriver()); \
-        }                                                            \
-        return *Y_CAT(funcName, Instance);                           \
-    }                                                                \
-    /**/
-
     YDB_SDK_CLIENT(NYdb::NTable::TTableClient, YdbTableClient);
     YDB_SDK_CLIENT(NYdb::NExport::TExportClient, YdbExportClient);
     YDB_SDK_CLIENT(NYdb::NImport::TImportClient, YdbImportClient);
@@ -67,8 +58,6 @@ protected:
     YDB_SDK_CLIENT(NYdb::NTopic::TTopicClient, YdbTopicClient);
     YDB_SDK_CLIENT(NYdb::NCoordination::TClient, YdbCoordinationClient);
     YDB_SDK_CLIENT(NYdb::NRateLimiter::TRateLimiterClient, YdbRateLimiterClient);
-
-#undef YDB_SDK_CLIENT
 
     NKikimr::NWrappers::NTestHelpers::TS3Mock& S3Mock() {
         if (!S3Mock_) {
@@ -97,7 +86,6 @@ protected:
             runtime.SetLogPriority(NKikimrServices::EXPORT, NLog::EPriority::PRI_TRACE);
             runtime.SetLogPriority(NKikimrServices::IMPORT, NLog::EPriority::PRI_TRACE);
             runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::EPriority::PRI_TRACE);
-            runtime.GetAppData().FeatureFlags.SetEnableViews(true);
             runtime.GetAppData().FeatureFlags.SetEnableViewExport(true);
             runtime.GetAppData().FeatureFlags.SetEnableEncryptedExport(true);
             runtime.GetAppData().DataShardExportFactory = &DataShardExportFactory;
@@ -319,6 +307,48 @@ protected:
         for (const TString& checksumFile : checksumFiles) {
             ModifyChecksumAndCheckThatImportFails(checksumFile, copySettings());
         }
+    }
+
+    void TestSchemeObjectEncryptedExportImport(
+        const TString& query,
+        const TString& objectName,
+        const TSet<TString> s3FileList)
+    {
+        using namespace NYdb;
+
+        Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableChecksumsExport(true);
+        Server().GetRuntime()->GetAppData().FeatureFlags.SetEnablePermissionsExport(true);
+
+        // Enable all
+        Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableViewExport(true);
+        Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
+        Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableReplication(true);
+
+        auto res = YdbQueryClient().ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+
+        {
+            NExport::TExportToS3Settings settings = MakeExportSettings("/Root/EncryptedExportAndImport/dir1/dir2/dir3", "Prefix");
+            settings
+                .SymmetricEncryption(NExport::TExportToS3Settings::TEncryptionAlgorithm::AES_128_GCM, "Cool random key!");
+
+            auto res = YdbExportClient().ExportToS3(settings).GetValueSync();
+            WaitOpSuccess(res);
+
+            ValidateS3FileList(s3FileList);
+        }
+
+        {
+            NImport::TImportFromS3Settings importSettings = MakeImportSettings("Prefix", "/Root/Restored");
+            importSettings
+                .SymmetricKey("Cool random key!");
+
+            auto res = YdbImportClient().ImportFromS3(importSettings).GetValueSync();
+            WaitOpSuccess(res);
+        }
+
+        auto desc = YdbSchemeClient().DescribePath(Sprintf("/Root/Restored/%s", objectName.c_str())).GetValueSync();
+        UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
     }
 
 private:

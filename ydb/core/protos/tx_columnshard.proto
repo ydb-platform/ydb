@@ -147,6 +147,7 @@ enum ETransactionKind {
     TX_KIND_SHARING = 7;
     TX_KIND_COMMIT_WRITE_PRIMARY = 8;
     TX_KIND_COMMIT_WRITE_SECONDARY = 9;
+    TX_KIND_RESTORE = 10;
 }
 
 enum ETransactionFlag {
@@ -188,9 +189,18 @@ message TEvNotifyTxCompletion {
     optional uint64 TxId = 1;
 }
 
+message TShardOpResult {
+    optional bool Success = 1;
+    optional string Explain = 2;
+    optional uint64 BytesProcessed = 3;
+    optional uint64 RowsProcessed = 4;
+}
+
 message TEvNotifyTxCompletionResult {
     optional uint64 Origin = 1;
     optional uint64 TxId = 2;
+    
+    optional TShardOpResult OpResult = 3;
 }
 
 message TCommitTxBody {
@@ -200,6 +210,10 @@ message TCommitTxBody {
 
 message TBackupTxBody {
     optional NKikimrSchemeOp.TBackupTask BackupTask = 1;
+}
+
+message TRestoreTxBody {
+    optional NKikimrSchemeOp.TRestoreTask RestoreTask = 1;
 }
 
 message TCommitWriteTxBody {
@@ -365,4 +379,9 @@ message TEvOverloadReady {
 // Sent by overload subscribers to unsubscribe and free memory
 message TEvOverloadUnsubscribe {
     optional uint64 SeqNo = 1;
+}
+
+message TCompletedBackupTransaction {
+    optional uint64 TxId = 1;
+    optional TShardOpResult OpResult = 2;
 }

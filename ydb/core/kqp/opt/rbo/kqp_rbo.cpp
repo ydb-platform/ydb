@@ -6,9 +6,9 @@
 namespace NKikimr {
 namespace NKqp {
 
-bool TSimplifiedRule::TestAndApply(std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
+bool ISimplifiedRule::MatchAndApply(std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
 
-    auto output = SimpleTestAndApply(input, ctx, props);
+    auto output = SimpleMatchAndApply(input, ctx, props);
     if (input != output) {
         input = output;
         return true;
@@ -16,6 +16,32 @@ bool TSimplifiedRule::TestAndApply(std::shared_ptr<IOperator> &input, TRBOContex
         return false;
     }
 }
+
+TRuleBasedStage::TRuleBasedStage(TString&& stageName, TVector<std::shared_ptr<IRule>>&& rules)
+    : IRBOStage(std::move(stageName))
+    , Rules(std::move(rules)) {
+    for (const auto& r : Rules) {
+        Props |= r->Props;
+    }
+}
+
+void ComputeRequiredProps(TOpRoot& root, ui32 props, TRBOContext& ctx) {
+    if (props & ERuleProperties::RequireParents) {
+        root.ComputeParents();
+    }
+    if (props & (ERuleProperties::RequireTypes | ERuleProperties::RequireStatistics)) {
+        if (root.ComputeTypes(ctx) != IGraphTransformer::TStatus::Ok) {
+            Y_ENSURE(false, "RBO type annotation failed");
+        }
+    }
+    if (props & (ERuleProperties::RequireMetadata | ERuleProperties::RequireStatistics)) {
+        root.ComputePlanMetadata(ctx);
+    }
+    if (props & ERuleProperties::RequireStatistics) {
+        root.ComputePlanStatistics(ctx);
+    }
+}
+
 /**
  * Run a rule-based stage
  *
@@ -29,41 +55,36 @@ bool TSimplifiedRule::TestAndApply(std::shared_ptr<IOperator> &input, TRBOContex
  */
 void TRuleBasedStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
     bool fired = true;
-    int nMatches = 0;
+    ui32 numMatches = 0;
+    const ui32 maxNumOfMatches = 1000;
+    bool needToLog = NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE);
 
-    if (root.ComputeTypes(ctx) != IGraphTransformer::TStatus::Ok) {
-        Y_ENSURE(false, "RBO type annotation failed");
-    }
-
-    while (fired && nMatches < 1000) {
+    while (fired && numMatches < maxNumOfMatches) {
         fired = false;
 
         for (auto iter : root) {
-            for (auto rule : Rules) {
+            for (const auto& rule : Rules) {
                 auto op = iter.Current;
 
-                if (rule->TestAndApply(op, ctx, root.PlanProps)) {
+                if (rule->MatchAndApply(op, ctx, root.PlanProps)) {
                     fired = true;
 
                     YQL_CLOG(TRACE, CoreDq) << "Applied rule:" << rule->RuleName;
 
                     if (iter.Parent) {
                         iter.Parent->Children[iter.ChildIndex] = op;
+                    } else if (!iter.SubplanIU) {
+                        root.SetInput(op);
                     } else {
-                        root.Children[0] = op;
+                        root.PlanProps.Subplans.Replace(*iter.SubplanIU, op);
                     }
 
-                    if (rule->RequiresParentRecompute) {
-                        root.ComputeParents();
+                    if (needToLog && rule->LogRule) {
+                        YQL_CLOG(TRACE, CoreDq) << "Plan after applying rule:\n" << root.PlanToString(ctx.ExprCtx);
                     }
 
-                    YQL_CLOG(TRACE, CoreDq) << "After rule:\n" << root.PlanToString(ctx.ExprCtx);
-
-                    if (root.ComputeTypes(ctx) != IGraphTransformer::TStatus::Ok) {
-                        Y_ENSURE(false, "RBO type annotation failed");
-                    }
-
-                    nMatches++;
+                    ComputeRequiredProps(root, Props, ctx);
+                    ++numMatches;
                     break;
                 }
             }
@@ -74,27 +95,40 @@ void TRuleBasedStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
         }
     }
 
-    Y_ENSURE(nMatches < 100);
+    Y_ENSURE(numMatches < maxNumOfMatches);
 }
 
 TExprNode::TPtr TRuleBasedOptimizer::Optimize(TOpRoot &root, TExprContext &ctx) {
-    YQL_CLOG(TRACE, CoreDq) << "Original plan:\n" << root.PlanToString(ctx);
+    bool needToLog = NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE);
 
-    auto context = TRBOContext(KqpCtx,ctx,TypeCtx, RBOTypeAnnTransformer);
+    if (needToLog) {
+        YQL_CLOG(TRACE, CoreDq) << "Original plan:\n" << root.PlanToString(ctx);
+    }
+
+    auto context = TRBOContext(KqpCtx, ctx, TypeCtx, std::move(RBOTypeAnnTransformer), std::move(PeepholeTypeAnnTransformer), FuncRegistry);
 
     for (size_t idx = 0; idx < Stages.size(); idx++) {
-        YQL_CLOG(TRACE, CoreDq) << "Running stage: " << idx;
         auto stage = Stages[idx];
+        YQL_CLOG(TRACE, CoreDq) << "Running stage: " << stage->StageName;
+        ComputeRequiredProps(root, stage->Props, context);
+        if (needToLog) {
+            YQL_CLOG(TRACE, CoreDq) << "Before stage:\n" << root.PlanToString(ctx, EPrintPlanOptions::PrintFullMetadata | EPrintPlanOptions::PrintBasicStatistics);
+        }
         stage->RunStage(root, context);
-        YQL_CLOG(TRACE, CoreDq) << "After stage:\n" << root.PlanToString(ctx);
-        if (root.ComputeTypes(context) != IGraphTransformer::TStatus::Ok) {
-            Y_ENSURE(false, "RBO type annotation failed");
+        if (needToLog) {
+            YQL_CLOG(TRACE, CoreDq) << "After stage:\n" << root.PlanToString(ctx, EPrintPlanOptions::PrintFullMetadata | EPrintPlanOptions::PrintBasicStatistics);
         }
     }
 
     YQL_CLOG(TRACE, CoreDq) << "New RBO finished, generating physical plan";
 
-    return ConvertToPhysical(root, context, TypeAnnTransformer, PeepholeTransformer);
+    auto convertProps = ERuleProperties::RequireParents | ERuleProperties::RequireTypes | ERuleProperties::RequireStatistics;
+    ComputeRequiredProps(root, convertProps, context);
+    if (needToLog) {
+        YQL_CLOG(TRACE, CoreDq) << "Final plan before generation:\n" << root.PlanToString(ctx, EPrintPlanOptions::PrintFullMetadata | EPrintPlanOptions::PrintBasicStatistics);
+    }
+
+    return ConvertToPhysical(root, context);
 }
 } // namespace NKqp
 } // namespace NKikimr

@@ -5,8 +5,25 @@
 
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/formats/arrow/switch/switch_type.h>
+#include <type_traits>
 
 namespace NKikimr::NOlap {
+
+std::vector<std::string> TPKRangesFilter::GetSortingColumnNames() const {
+    for (auto&& range : SortedRanges) {
+        auto fromCols = range.GetPredicateFrom().GetColumnNames();
+        if (!fromCols.empty()) {
+            return fromCols;
+        }
+
+        auto toCols = range.GetPredicateTo().GetColumnNames();
+        if (!toCols.empty()) {
+            return toCols;
+        }
+    }
+
+    return {};
+}
 
 NKikimr::NArrow::TColumnFilter TPKRangesFilter::BuildFilter(const std::shared_ptr<NArrow::TGeneralContainer>& data) const {
     if (IsEmpty()) {
@@ -14,7 +31,10 @@ NKikimr::NArrow::TColumnFilter TPKRangesFilter::BuildFilter(const std::shared_pt
     }
 
     auto result = NArrow::TColumnFilter::BuildDenyFilter();
-    NArrow::NMerger::TRWSortableBatchPosition iterator(data, 0, false);
+    const auto sortingColumns = GetSortingColumnNames();
+    NArrow::NMerger::TRWSortableBatchPosition iterator = sortingColumns.empty()
+        ? NArrow::NMerger::TRWSortableBatchPosition(data, 0, false)
+        : NArrow::NMerger::TRWSortableBatchPosition(data, 0, sortingColumns, {}, false);
     bool reachedEnd = false;
     for (const auto& range : SortedRanges) {
         const ui64 initialIdx = iterator.GetPosition();
@@ -281,8 +301,14 @@ TConclusion<TPKRangesFilter> TRangesBuilder::Finish() {
 namespace {
 template <typename T>
 TCell MakeDefaultCellByPrimitiveType() {
-    return TCell::Make<T>(T());
+    if constexpr (sizeof(T) <= TCell::MaxInlineSize()) {
+        return TCell::Make<T>(T());
+    } else {
+        alignas(T) static const T kDefault{};
+        return TCell(reinterpret_cast<const char*>(&kDefault), sizeof(T));
+    }
 }
+
 }   // namespace
 
 TConclusion<TCell> TRangesBuilder::MakeDefaultCell(const NScheme::TTypeInfo typeInfo) {

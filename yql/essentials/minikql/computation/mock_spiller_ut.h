@@ -77,7 +77,7 @@ public:
     }
 
     ui64 GetTotalSpilled() const {
-        return std::accumulate(PutSizes_.begin(), PutSizes_.end(), 0);
+        return std::accumulate(PutSizes_.begin(), PutSizes_.end(), 0ULL);
     }
 
 private:

@@ -17,9 +17,9 @@
 
 #include <vector>
 
-#include "arrow/util/logging.h"
-#include "arrow/util/memory.h"
-#include "arrow/util/thread_pool.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/memory.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/thread_pool.h"
 
 namespace arrow20 {
 namespace internal {

@@ -782,8 +782,8 @@ bool HttpClient::doAbortSessions()
 
 bool HttpClient::doRemoveSessions()
 {
-  bool has_data = false;
-  bool should_continue;
+  bool has_data{false};
+  bool should_continue{false};
   do
   {
     std::unordered_map<uint64_t, HttpCurlEasyResource> pending_to_remove_session_handles;

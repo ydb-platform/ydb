@@ -1,6 +1,7 @@
 #include "yql_co.h"
 #include "yql_co_sqlin.h"
 #include "yql_co_pgselect.h"
+#include "yql_co_yqlselect.h"
 
 #include <yql/essentials/core/sql_types/yql_atom_enums.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
@@ -704,9 +705,9 @@ TExprNode::TPtr PropagateCoalesceWithConstIntoLogicalOps(const TExprNode::TPtr& 
 }
 
 bool IsPullJustFromLogicalOpsEnabled(const TOptimizeContext& optCtx) {
-    static const char optName[] = "PullJustFromLogicalOps";
+    static const char OptName[] = "PullJustFromLogicalOps";
     YQL_ENSURE(optCtx.Types);
-    return IsOptimizerEnabled<optName>(*optCtx.Types) && !IsOptimizerDisabled<optName>(*optCtx.Types);
+    return !IsOptimizerDisabled<OptName>(*optCtx.Types);
 }
 
 TExprNode::TPtr PullJustFromLogicalOps(const TExprNode::TPtr& node, TExprContext& ctx, const TOptimizeContext& optCtx) {
@@ -1667,7 +1668,7 @@ TPredicateChainNode ParsePredicateChainNode(const TExprNode::TPtr& predicate, co
     if (isMemberOf(leftArg, topLambdaArg)) {
         // left side of IN is column reference
         result.LeftArgColumns.emplace_back(leftArg->Child(1)->Content());
-    } else if (leftArg->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Tuple) {
+    } else if (leftArg->IsList()) {
         // if leftArg is tuple of members then replace tuple with its members
         for (const auto& tupleItem : leftArg->Children()) {
             if (isMemberOf(tupleItem, topLambdaArg)) {
@@ -1713,12 +1714,13 @@ TPredicateChainNode ParsePredicateChainNode(const TExprNode::TPtr& predicate, co
                     .Done()
                     .Ptr();
 
-            if (!result.LeftArgColumns.empty()) {
+            const auto tupleSize = itemType->GetItemType()->Cast<TTupleExprType>()->GetItems().size();
+            if (leftArg->IsList() && result.LeftArgColumns.size() == tupleSize) {
                 auto rowArg = Build<TCoArgument>(ctx, sqlIn.Pos())
                         .Name("row")
                         .Done();
                 auto asStructBuilder = Build<TCoAsStruct>(ctx, sqlIn.Pos());
-                for (size_t i = 0; i < itemType->GetItemType()->Cast<TTupleExprType>()->GetItems().size(); ++i) {
+                for (size_t i = 0; i < tupleSize; ++i) {
                     const TString columnName = TStringBuilder() << "_yql_sqlin_tuple_" << i;
                     asStructBuilder.Add<TCoNameValueTuple>()
                             .Name().Build(columnName)
@@ -1905,8 +1907,8 @@ TExprNode::TPtr BuildEquiJoinForSqlInChain(const TExprNode::TPtr& flatMapNode, c
     auto inputRowType = input->GetTypeAnn()->Cast<TListExprType>()->GetItemType();
     YQL_ENSURE(inputRowType->GetKind() == ETypeAnnotationKind::Struct);
 
-    static const TStringBuf inputTable = "_yql_injoin_input";
-    auto inputTableAtom = ctx.NewAtom(input->Pos(), inputTable, TNodeFlags::Default);
+    static const TStringBuf InputTable = "_yql_injoin_input";
+    auto inputTableAtom = ctx.NewAtom(input->Pos(), InputTable, TNodeFlags::Default);
 
     size_t startColumnIndex = 0;
     for (;;) {
@@ -1969,7 +1971,7 @@ TExprNode::TPtr BuildEquiJoinForSqlInChain(const TExprNode::TPtr& flatMapNode, c
             auto rename = ctx.Builder(pos)
                 .List()
                     .Atom(0, "rename", TNodeFlags::Default)
-                    .Atom(1, FullColumnName(inputTable, columnName))
+                    .Atom(1, FullColumnName(InputTable, columnName))
                     .Atom(2, "")
                 .Seal()
                 .Build();
@@ -1989,7 +1991,7 @@ TExprNode::TPtr BuildEquiJoinForSqlInChain(const TExprNode::TPtr& flatMapNode, c
         auto rename = ctx.Builder(input->Pos())
             .List()
                 .Atom(0, "rename", TNodeFlags::Default)
-                .Atom(1, FullColumnName(inputTable, i->GetName()))
+                .Atom(1, FullColumnName(InputTable, i->GetName()))
                 .Atom(2, i->GetName())
             .Seal()
             .Build();
@@ -3100,8 +3102,6 @@ TExprNode::TPtr DoNormalizeFrames(const TExprNode::TPtr& frames, TExprContext& c
 
         TWindowFrameSettings frameSettings = TWindowFrameSettings::Parse(*winOn, ctx);
         if (frameSettings.GetFrameType() == EFrameType::FrameByRange) {
-            YQL_ENSURE(IsUnbounded(frameSettings.GetFirst()));
-            YQL_ENSURE(IsCurrentRow(frameSettings.GetLast()));
             continue;
         }
 
@@ -3470,7 +3470,32 @@ TExprNode::TPtr RewriteAsHoppingWindowFullOutput(const TCoAggregate& aggregate, 
         .LoadHandler(loadLambda)
         .WatermarkMode<TCoAtom>().Build(ToString(false))
         .HoppingColumn<TCoAtom>().Build(hopTraits.Column);
-
+    if (TCoHoppingTraits::idx_SizeLimit < hopTraits.Traits.Raw()->ChildrenSize()) {
+        if (hopTraits.Traits.SizeLimit()) {
+            multiHoppingCoreBuilder.SizeLimit(hopTraits.Traits.SizeLimit());
+        } else {
+            multiHoppingCoreBuilder.SizeLimit<TCoVoid>().Build();
+        }
+        if (hopTraits.Traits.TimeLimit()) {
+            multiHoppingCoreBuilder.TimeLimit(hopTraits.Traits.TimeLimit());
+        } else {
+            multiHoppingCoreBuilder.TimeLimit<TCoVoid>().Build();
+        }
+        if (hopTraits.EarlyPolicy) {
+            multiHoppingCoreBuilder.EarlyPolicy<TCoUint32>()
+                .Literal().Build(ToString((ui32)*hopTraits.EarlyPolicy))
+            .Build();
+        } else {
+            multiHoppingCoreBuilder.EarlyPolicy<TCoVoid>().Build();
+        }
+        if (hopTraits.LatePolicy) {
+            multiHoppingCoreBuilder.LatePolicy<TCoUint32>()
+                .Literal().Build(ToString((ui32)*hopTraits.LatePolicy))
+            .Build();
+        } else {
+            multiHoppingCoreBuilder.LatePolicy<TCoVoid>().Build();
+        }
+    }
     return Build<TCoPartitionsByKeys>(ctx, pos)
         .Input(aggregate.Input())
         .KeySelectorLambda(keyLambda)
@@ -3547,8 +3572,8 @@ TExprNode::TPtr PullAssumeColumnOrderOverEquiJoin(const TExprNode::TPtr& node, T
 
 bool IsDropAnyOverEquiJoinInputsEnabled(const TTypeAnnotationContext* types) {
     YQL_ENSURE(types);
-    static const char flag[] = "DropAnyOverEquiJoinInputs";
-    return IsOptimizerEnabled<flag>(*types) && !IsOptimizerDisabled<flag>(*types);
+    static const char Flag[] = "DropAnyOverEquiJoinInputs";
+    return IsOptimizerEnabled<Flag>(*types) && !IsOptimizerDisabled<Flag>(*types);
 }
 
 TExprNode::TPtr DropAnyOverEquiJoinInputs(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
@@ -3638,18 +3663,18 @@ TExprNode::TPtr FoldParseAfterSerialize(const TExprNode::TPtr& node, const TStri
 }
 
 TExprNode::TPtr FoldYsonParseAfterSerialize(const TExprNode::TPtr& node) {
-    static const THashSet<TStringBuf> serializeUdfNames = {"Yson.Serialize", "Yson.SerializeText", "Yson.SerializePretty"};
-    return FoldParseAfterSerialize(node, "Yson.Parse", serializeUdfNames);
+    static const THashSet<TStringBuf> SerializeUdfNames = {"Yson.Serialize", "Yson.SerializeText", "Yson.SerializePretty"};
+    return FoldParseAfterSerialize(node, "Yson.Parse", SerializeUdfNames);
 }
 
 TExprNode::TPtr FoldYson2ParseAfterSerialize(const TExprNode::TPtr& node) {
-    static const THashSet<TStringBuf> serializeUdfNames = {"Yson2.Serialize", "Yson2.SerializeText", "Yson2.SerializePretty"};
-    return FoldParseAfterSerialize(node, "Yson2.Parse", serializeUdfNames);
+    static const THashSet<TStringBuf> SerializeUdfNames = {"Yson2.Serialize", "Yson2.SerializeText", "Yson2.SerializePretty"};
+    return FoldParseAfterSerialize(node, "Yson2.Parse", SerializeUdfNames);
 }
 
 TExprNode::TPtr FoldJsonParseAfterSerialize(const TExprNode::TPtr& node) {
-    static const THashSet<TStringBuf> serializeUdfNames = {"Json2.Serialize"};
-    return FoldParseAfterSerialize(node, "Json2.Parse", serializeUdfNames);
+    static const THashSet<TStringBuf> SerializeUdfNames = {"Json2.Serialize"};
+    return FoldParseAfterSerialize(node, "Json2.Parse", SerializeUdfNames);
 }
 
 TExprNode::TPtr FoldSeralizeAfterParse(const TExprNode::TPtr& node, const TStringBuf parseUdfName, const TStringBuf serializeUdfName) {
@@ -3746,13 +3771,13 @@ TExprNode::TPtr ExpandSelectMembers(const TExprNode::TPtr& node, TExprContext& c
         else
             return prefixes.contains(memberName);
     };
+
     TExprNode::TListType members;
     UpdateStructMembers(ctx, node->HeadPtr(), ByPrefix ? "SelectMembers" : "FilterMembers", members, filterByPrefixFunc);
+
     auto res = ctx.NewCallable(node->Pos(), "AsStruct", std::move(members));
     res = KeepWorld(res, *node, ctx, *optCtx.Types);
-    if (members.empty()) {
-        res = KeepSideEffects(res, node->HeadPtr(), ctx);
-    }
+    res = KeepSideEffects(res, node->HeadPtr(), ctx);
 
     return res;
 }
@@ -3845,8 +3870,8 @@ TExprNode::TPtr OptimizeMerge(const TExprNode::TPtr& node, TExprContext& ctx, TO
 
 bool IsEarlyExpandOfSkipNullAllowed(const TOptimizeContext& optCtx) {
     YQL_ENSURE(optCtx.Types);
-    static const TString skipNullFlags = to_lower(TString("EarlyExpandSkipNull"));
-    return optCtx.Types->OptimizerFlags.contains(skipNullFlags);
+    static const char OptName[] = "EarlyExpandSkipNull";
+    return IsOptimizerEnabled<OptName>(*optCtx.Types) && !IsOptimizerDisabled<OptName>(*optCtx.Types);
 }
 
 TExprNode::TPtr ReplaceFuncWithImpl(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
@@ -3950,6 +3975,12 @@ TExprNode::TPtr MemberOverFilterSkipNullMembers(const TExprNode::TPtr& node, TEx
     }
 
     return node;
+}
+
+bool IsSqlWithNothingOrNullOpsEnabled(const TOptimizeContext& optCtx) {
+    static const char OptName[] = "SqlInWithNothingOrNull";
+    YQL_ENSURE(optCtx.Types);
+    return IsOptimizerEnabled<OptName>(*optCtx.Types) && !IsOptimizerDisabled<OptName>(*optCtx.Types);
 }
 
 } // namespace
@@ -4099,6 +4130,11 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
                 res = KeepWorld(res, *node, ctx, *optCtx.Types);
                 return res;
             }
+        }
+
+        if (IsIdentityLambda(*node->Child(1))) {
+            YQL_CLOG(DEBUG, Core) << "Trivial lambda: " << node->Content();
+            return node->HeadPtr();
         }
 
         return node;
@@ -4474,7 +4510,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
             .Build();
     };
 
-    map["SqlIn"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext&) {
+    map["SqlIn"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& opCtx) {
         auto collection = node->HeadPtr();
         auto lookup = node->ChildPtr(1);
         auto options = node->ChildPtr(2);
@@ -4593,10 +4629,12 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
             }
         }
 
-        if (isAnsi) {
-            auto lookupTypeNoOpt = RemoveAllOptionals(lookup->GetTypeAnn());
-            if (lookupTypeNoOpt->GetKind() == ETypeAnnotationKind::Null) {
-                YQL_CLOG(DEBUG, Core) << "NULL IN";
+        auto lookupTypeNoOpt = RemoveAllOptionals(lookup->GetTypeAnn());
+        if ((lookupTypeNoOpt->GetKind() == ETypeAnnotationKind::Null) ||
+            (lookup->IsCallable("Nothing") && IsSqlWithNothingOrNullOpsEnabled(opCtx))) {
+            const auto logString = lookupTypeNoOpt->GetKind() == ETypeAnnotationKind::Null ? "NULL IN" : "Nothing IN";
+            if (isAnsi) {
+                YQL_CLOG(DEBUG, Core) << logString;
                 return ctx.Builder(node->Pos())
                     .Callable("If")
                         .Add(0, BuildSqlInCollectionEmptyPred(TCoSqlIn(node), ctx))
@@ -4605,6 +4643,9 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
                         .Seal()
                     .Seal()
                     .Build();
+            } else if (IsSqlWithNothingOrNullOpsEnabled(opCtx)) {
+                YQL_CLOG(DEBUG, Core) << logString;
+                return MakeBoolNothing(node->Pos(), ctx);
             }
         }
 
@@ -7098,6 +7139,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
 
     map["YqlSelect"] = &ExpandPgSelect;
     map["YqlIterate"] = &ExpandPgIterate;
+    map["YqlIterateAll"] = &ExpandPgIterate;
 
     map["PgLike"] = &ExpandPgLike;
     map["PgILike"] = &ExpandPgLike;
@@ -7266,6 +7308,24 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
                     .Seal()
                 .Seal()
                 .Build();
+        }
+
+        if (failureKind == "opt_cycle" || failureKind == "opt_inf") {
+            auto children = node->ChildrenList();
+            Y_ENSURE(children.size() >= 1 && children.size() <= 2);
+            if (children.size() < 2) {
+                children.push_back(ctx.NewAtom(node->Pos(),"0"));
+            } else {
+                ui64 cnt = FromString<ui64>(node->Tail().Content());
+                ++cnt;
+                if (failureKind == "opt_cycle") {
+                    cnt = cnt % 5;
+                }
+
+                children[1] = ctx.NewAtom(node->Pos(),cnt);
+            }
+
+            return ctx.ChangeChildren(*node, std::move(children));
         }
 
         throw yexception() << "Unknown failure kind: " << failureKind;

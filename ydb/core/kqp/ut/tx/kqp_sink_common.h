@@ -18,17 +18,22 @@ protected:
     YDB_ACCESSOR(bool, IsOlap, false);
     YDB_ACCESSOR(bool, FastSnapshotExpiration, false);
     YDB_ACCESSOR(bool, DisableSinks, false);
+    YDB_ACCESSOR(bool, UseRealThreads, true);
+    YDB_ACCESSOR(bool, FillTables, true);
 
+    virtual void Setup(TKikimrSettings&) {}
     virtual void DoExecute() = 0;
 public:
     void Execute() {
-        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetUseRealThreads(UseRealThreads);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(!DisableSinks);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(!DisableSinks);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableSnapshotIsolationRW(true);
         if (FastSnapshotExpiration) {
             settings.SetKeepSnapshotTimeout(TDuration::Seconds(1));
         }
+
+        Setup(settings);
 
         Kikimr = std::make_unique<TKikimrRunner>(settings);
         Tests::NCommon::TLoggerInit(*Kikimr).Initialize();
@@ -39,6 +44,18 @@ public:
         csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
         csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
 
+        if (UseRealThreads) {
+            PrepareTables(client);
+        } else {
+            Kikimr->RunCall([&]{
+                PrepareTables(client);
+            });
+        }
+
+        DoExecute();
+    }
+    
+    void PrepareTables(NYdb::NQuery::TQueryClient& client) {
         {
             auto type = IsOlap ? "COLUMN" : "ROW";
             auto result = client.ExecuteQuery(Sprintf(R"(
@@ -80,7 +97,7 @@ public:
             UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
-        {
+        if (FillTables) {
             auto result = client.ExecuteQuery(R"(
                 REPLACE INTO `Test` (Group, Name, Amount, Comment) VALUES
                     (1u, "Anna", 3500ul, "None"),
@@ -96,10 +113,7 @@ public:
                 )", TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
         }
-
-        DoExecute();
     }
-
 };
 
 }

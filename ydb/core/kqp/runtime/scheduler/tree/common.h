@@ -7,6 +7,7 @@
 #include <util/generic/hash.h>
 
 #include <optional>
+#include <set>
 
 template <typename Base, typename Derived>
 concept CStaticallyDowncastable = requires(Base* b) {
@@ -76,21 +77,14 @@ namespace NKikimr::NKqp::NScheduler::NHdrf {
 
         void AddChild(const TPtr& element) {
             Y_ENSURE(Y_LIKELY(element));
-            Children.push_back(element);
+            Y_ENSURE(Children.insert(element).second);
             element->Parent = this;
         }
 
         void RemoveChild(const TPtr& element) {
             Y_ENSURE(Y_LIKELY(element));
-            for (auto it = Children.begin(); it != Children.end(); ++it) {
-                if (*it == element) {
-                    element->Parent = nullptr;
-                    Children.erase(it);
-                    return;
-                }
-            }
-
-            // TODO: throw exception that child not found.
+            Y_ENSURE(Children.erase(element));
+            // Do not reset child's parent since child may concurrently still refer to parents' attributes.
         }
 
         inline size_t ChildrenSize() const {
@@ -136,11 +130,22 @@ namespace NKikimr::NKqp::NScheduler::NHdrf {
 
     protected:
         const TId Id;
-        TTreeElementBase* Parent = nullptr;
+        TTreeElementBase* Parent = nullptr; // TODO: init parent in ctor and make it const.
 
     private:
-        std::vector<TPtr> Children;
+        struct TCompareChildren {
+            bool operator() (const TPtr& left, const TPtr& right) const;
+        };
+
+        std::set<TPtr, TCompareChildren> Children;
     };
+
+    template <ETreeType T>
+    bool TTreeElementBase<T>::TCompareChildren::operator() (
+        const TTreeElementBase<T>::TPtr& left, const TTreeElementBase<T>::TPtr& right
+    ) const {
+        return left->GetId() < right->GetId();
+    }
 
     template <ETreeType T>
     struct TQuery : public virtual TTreeElementBase<T> {
@@ -171,6 +176,7 @@ namespace NKikimr::NKqp::NScheduler::NHdrf {
         NMonitoring::TDynamicCounters::TCounterPtr FairShare;
         NMonitoring::TDynamicCounters::TCounterPtr InFlight;
         NMonitoring::TDynamicCounters::TCounterPtr Waiting;
+        NMonitoring::TDynamicCounters::TCounterPtr Queries;
         NMonitoring::TDynamicCounters::TCounterPtr Satisfaction;
         NMonitoring::TDynamicCounters::TCounterPtr AdjustedSatisfaction;
         NMonitoring::TDynamicCounters::TCounterPtr InFlightExtra;

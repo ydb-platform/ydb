@@ -1,7 +1,7 @@
 #pragma once
 
 #include "defs.h"
-#include "blobstorage_synclog_public_events.h"
+#include "blobstorage_synclog_context.h"
 #include "blobstorage_synclogdata.h"
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 

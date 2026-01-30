@@ -620,7 +620,24 @@ namespace NDnsResolver {
 
         void WorkerThreadLoop() noexcept {
             TThread::SetCurrentThreadName("DnsResolver");
+
+            std::array<struct pollfd, 1> fds;
             while (!Stopped) {
+                {
+                    auto& entry = fds[0];
+                    entry.fd = WaitSock();
+                    entry.events = POLLRDNORM | POLLIN;
+                    entry.revents = 0;
+                }
+
+                int ret = poll(fds.data(), fds.size(), 1000);
+                if (ret == -1) {
+                    if (errno == EINTR) {
+                        continue;
+                    }
+                }
+                // Actualy should be something like "if (ret > 0 && fds[0].revents & (POLLRDNORM | POLLIN))"
+                // but we have only one socket and use poll just to wait
                 RunCallbacks();
             }
         }

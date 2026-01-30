@@ -38,19 +38,6 @@ TTopicRef::TTopicRef(const TString& refName, const TDeferredAtom& cluster, TNode
 {
 }
 
-TColumnSchema::TColumnSchema(TPosition pos, const TString& name, const TNodePtr& type, bool nullable,
-                             TVector<TIdentifier> families, bool serial, TNodePtr defaultExpr, ETypeOfChange typeOfChange)
-    : Pos(pos)
-    , Name(name)
-    , Type(type)
-    , Nullable(nullable)
-    , Families(families)
-    , Serial(serial)
-    , DefaultExpr(defaultExpr)
-    , TypeOfChange(typeOfChange)
-{
-}
-
 INode::INode(TPosition pos)
     : Pos_(pos)
 {
@@ -434,6 +421,31 @@ void INode::DoVisitChildren(const TVisitFunc& func, TVisitNodeSet& visited) cons
 void INode::DoAdd(TNodePtr node) {
     Y_UNUSED(node);
     Y_DEBUG_ABORT_UNLESS(false, "Node is not expandable");
+}
+
+bool Init(TContext& ctx, ISource* src, const TVector<TNodePtr>& nodes) {
+    for (const TNodePtr& node : nodes) {
+        if (!node->Init(ctx, src)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+TNodeResult Wrap(TNodePtr node) {
+    if (!node) {
+        return std::unexpected(ESQLError::Basic);
+    }
+
+    return TNonNull(std::move(node));
+}
+
+TNodePtr Unwrap(TNodeResult result) {
+    EnsureUnwrappable(result);
+
+    return result
+               ? TNodePtr(std::move(*result))
+               : nullptr;
 }
 
 bool IProxyNode::IsNull() const {
@@ -1595,7 +1607,11 @@ bool TColumnNode::DoInit(TContext& ctx, ISource* src) {
                            : BuildQuotedAtom(Pos_, *GetColumnName());
 
         if (IsYqlRef_) {
-            Node_ = Y("YqlColumnRef", ref);
+            if (!Source_.empty()) {
+                Node_ = Y("YqlColumnRef", Q(Source_), ref);
+            } else {
+                Node_ = Y("YqlColumnRef", ref);
+            }
         } else {
             Node_ = Y(callable, "row", ref);
         }
@@ -1810,6 +1826,10 @@ TNodePtr IAggregation::WrapIfOverState(const TNodePtr& input, bool overState, bo
     return Y(ToString("AggOverState"), extractor, BuildLambda(Pos_, Y(), input));
 }
 
+TNodePtr IAggregation::GetExtractor(bool many, TContext& ctx) const {
+    return BuildLambda(Pos_, Y("row"), GetExtractorBody(many, ctx));
+}
+
 void IAggregation::AddFactoryArguments(TNodePtr& apply) const {
     Y_UNUSED(apply);
 }
@@ -1941,7 +1961,7 @@ StringContentInternal(TContext& ctx, TPosition pos, const TString& input, EStrin
             result.Content = UnescapeAnsiQuoted(str);
         } else {
             TString error;
-            if (!UnescapeQuoted(str, pos, str[0], result.Content, error, ctx.Settings.Antlr4Parser)) {
+            if (!UnescapeQuoted(str, pos, str[0], result.Content, error, /*utf8Aware=*/true)) {
                 ctx.Error(pos) << "Failed to parse string literal: " << error;
                 return {};
             }
@@ -2015,7 +2035,7 @@ TString IdContent(TContext& ctx, const TString& s) {
 
     auto unescapeResult = UnescapeArbitraryAtom(atom, endSym, &sout, &readBytes);
     if (unescapeResult != EUnescapeResult::OK) {
-        TTextWalker walker(pos, ctx.Settings.Antlr4Parser);
+        TTextWalker walker(pos, /*utf8Aware=*/true);
         walker.Advance(atom.Trunc(readBytes));
         ctx.Error(pos) << "Cannot parse broken identifier: " << UnescapeResultToString(unescapeResult);
         return {};
@@ -2045,7 +2065,7 @@ TString IdContentFromString(TContext& ctx, const TString& str) {
 namespace {
 class TInvalidLiteralNode final: public INode {
 public:
-    TInvalidLiteralNode(TPosition pos)
+    explicit TInvalidLiteralNode(TPosition pos)
         : INode(pos)
     {
     }
@@ -2662,7 +2682,7 @@ public:
     }
 
     TAstNode* Translate(TContext& ctx) const override {
-        Y_DEBUG_ABORT_UNLESS(Node_);
+        Y_DEBUG_ABORT_UNLESS(Node_, "Oh, no Node! Maybe you forgot to call Init");
         return Node_->Translate(ctx);
     }
 
@@ -3235,7 +3255,9 @@ const TUdfNode* TUdfNode::GetUdfNode() const {
 }
 
 TAstNode* TUdfNode::Translate(TContext& ctx) const {
-    ctx.Error(Pos_) << "Abstract Udf Node can't be used as a part of expression.";
+    ctx.Error(Pos_)
+        << "Abstract Udf Node can't be used as a part of expression. "
+        << "It should be applied immediately to its arguments";
     return nullptr;
 }
 
@@ -3263,10 +3285,10 @@ TNodePtr BuildBinaryOp(TContext& ctx, TPosition pos, const TString& opName, TNod
         return nullptr;
     }
 
-    static const THashSet<TStringBuf> nullSafeOps = {
+    static const THashSet<TStringBuf> NullSafeOps = {
         "IsDistinctFrom", "IsNotDistinctFrom",
         "EqualsIgnoreCase", "StartsWithIgnoreCase", "EndsWithIgnoreCase", "StringContainsIgnoreCase"};
-    if (!nullSafeOps.contains(opName)) {
+    if (!NullSafeOps.contains(opName)) {
         const bool bothArgNull = a->IsNull() && b->IsNull();
         const bool oneArgNull = a->IsNull() || b->IsNull();
 
@@ -3610,7 +3632,7 @@ TNodePtr BuildNamedExprReference(TNodePtr parent, const TString& name, TMaybe<si
 
 class TNamedExprNode: public IProxyNode {
 public:
-    TNamedExprNode(TNodePtr parent)
+    explicit TNamedExprNode(TNodePtr parent)
         : IProxyNode(parent->GetPos(), parent)
         , FakeSource_(BuildFakeSource(parent->GetPos()))
         , Referenced_(false)
@@ -3654,12 +3676,12 @@ TNodePtr BuildNamedExpr(TNodePtr parent) {
     return new TNamedExprNode(parent);
 }
 
-bool TSecretParameters::ValidateParameters(TContext& ctx, const TPosition stmBeginPos, const TSecretParameters::TOperationMode mode) {
+bool TSecretParameters::ValidateParameters(TContext& ctx, const TPosition stmBeginPos, const TSecretParameters::EOperationMode mode) {
     if (!Value) {
         ctx.Error(stmBeginPos) << "parameter VALUE must be set";
         return false;
     }
-    if (mode == TOperationMode::Alter) {
+    if (mode == EOperationMode::Alter) {
         if (InheritPermissions) {
             ctx.Error(stmBeginPos) << "parameter INHERIT_PERMISSIONS is not supported for alter operation";
             return false;

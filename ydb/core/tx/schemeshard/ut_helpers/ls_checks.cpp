@@ -488,6 +488,14 @@ void IsDirectory(const NKikimrScheme::TEvDescribeSchemeResult& record) {
     CheckPathType(record, NKikimrSchemeOp::EPathTypeDir);
 }
 
+void IsReplication(const NKikimrScheme::TEvDescribeSchemeResult& record) {
+    CheckPathType(record, NKikimrSchemeOp::EPathTypeReplication);
+}
+
+void IsTransfer(const NKikimrScheme::TEvDescribeSchemeResult& record) {
+    CheckPathType(record, NKikimrSchemeOp::EPathTypeTransfer);
+}
+
 void CheckPathType(const NKikimrScheme::TEvDescribeSchemeResult& record, NKikimrSchemeOp::EPathType pathType) {
     UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrScheme::StatusSuccess);
     const auto& pathDescr = record.GetPathDescription();
@@ -810,10 +818,15 @@ TCheckFunc SchemeLimits(const NKikimrSubDomains::TSchemeLimits& expected) {
         const auto& domain = record.GetPathDescription().GetDomainDescription();
         const auto& actual = domain.GetSchemeLimits();
 
-        UNIT_ASSERT_C(google::protobuf::util::MessageDifferencer::Equals(actual, expected),
-            "scheme limits mismatch, domain with id " << domain.GetDomainKey().GetPathId()
-                << " has limits: " << actual.ShortDebugString().Quote()
-                << ", but expected limits are: " << expected.ShortDebugString().Quote()
+        TString diff;
+        google::protobuf::util::MessageDifferencer differencer;
+        differencer.ReportDifferencesToString(&diff);
+        //NOTE: because SetSchemeshardSchemaLimits mangles ExtraPathSymbolsAllowed's default value
+        differencer.IgnoreField(NKikimrSubDomains::TSchemeLimits::descriptor()->FindFieldByName("ExtraPathSymbolsAllowed"));
+        UNIT_ASSERT_C(differencer.Compare(actual, expected),
+            "scheme limits mismatch, subdomain PathId " << domain.GetDomainKey().GetPathId() << " limits"
+            << " differ from the expected ones: "
+            << diff
         );
     };
 }

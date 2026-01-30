@@ -10,7 +10,11 @@
 #include <util/generic/size_literals.h>
 
 
-namespace NYql::NDq {
+namespace NYql {
+
+class TS3GatewayConfig;
+
+namespace NDq {
 
     struct TS3ReadActorFactoryConfig {
         ui64 RowsInBatch = 1000;
@@ -55,4 +59,6 @@ namespace NYql::NDq {
     std::shared_ptr<IS3ActorsFactory> CreateDefaultS3ActorsFactory();
 
     TS3ReadActorFactoryConfig CreateReadActorFactoryConfig(const ::NYql::TS3GatewayConfig& s3Config);
-}
+} // namespace NDq
+
+} // namespace NYql

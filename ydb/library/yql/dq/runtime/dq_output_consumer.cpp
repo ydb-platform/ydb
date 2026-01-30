@@ -21,6 +21,15 @@
 
 namespace NYql::NDq {
 
+TString FillLevelToString(EDqFillLevel level) {
+    switch(level) {
+        case NoLimit : return "No";
+        case SoftLimit : return "Soft";
+        case HardLimit : return "Hard";
+        default: return "-";
+    }
+}
+
 namespace {
 
 using namespace NKikimr;
@@ -323,11 +332,42 @@ public:
         }
     }
 
+    void Consume(NDqProto::TWatermark&& watermark) override {
+        for (auto& consumer : Consumers) {
+            consumer->Consume(NDqProto::TWatermark(watermark));
+        }
+    }
+
     void Finish() override {
         for (auto& consumer : Consumers) {
             consumer->Finish();
         }
     }
+
+    void Flush() override {
+        for (auto& consumer : Consumers) {
+            consumer->Flush();
+        }
+    }
+
+    bool IsFinished() const override {
+        for (auto consumer : Consumers) {
+            if (!consumer->IsFinished()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    bool IsEarlyFinished() const override {
+        for (auto consumer : Consumers) {
+            if (!consumer->IsEarlyFinished()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
 
 private:
     TVector<IDqOutputConsumer::TPtr> Consumers;
@@ -354,8 +394,24 @@ public:
         Output->Push(std::move(checkpoint));
     }
 
+    void Consume(NDqProto::TWatermark&& watermark) override {
+        Output->Push(std::move(watermark));
+    }
+
     void Finish() override {
         Output->Finish();
+    }
+
+    void Flush() override {
+        Output->Flush();
+    }
+
+    bool IsFinished() const override {
+        return Output->IsFinished();
+    }
+
+    bool IsEarlyFinished() const override {
+        return Output->IsEarlyFinished();
     }
 
 private:
@@ -427,10 +483,30 @@ public:
         }
     }
 
+    void Consume(NDqProto::TWatermark&& watermark) override {
+        for (auto& output : Outputs) {
+            output->Push(NDqProto::TWatermark(watermark));
+        }
+    }
+
     void Finish() final {
         for (auto& output : Outputs) {
             output->Finish();
         }
+    }
+
+    void Flush() final {
+        for (auto& output : Outputs) {
+            output->Flush();
+        }
+    }
+
+    bool IsFinished() const override {
+        return Aggregator->IsFinished();
+    }
+
+    bool IsEarlyFinished() const override {
+        return Aggregator->IsEarlyFinished();
     }
 
 private:
@@ -530,10 +606,30 @@ private:
         }
     }
 
+    void Consume(NDqProto::TWatermark&& watermark) override {
+        for (auto& output : Outputs_) {
+            output->Push(NDqProto::TWatermark(watermark));
+        }
+    }
+
     void Finish() final {
         for (auto& output : Outputs_) {
             output->Finish();
         }
+    }
+
+    void Flush() final {
+        for (auto& output : Outputs_) {
+            output->Flush();
+        }
+    }
+
+    bool IsFinished() const override {
+        return Aggregator->IsFinished();
+    }
+
+    bool IsEarlyFinished() const override {
+        return Aggregator->IsEarlyFinished();
     }
 
     size_t GetHashPartitionIndex(const TUnboxedValue* values) {
@@ -707,10 +803,30 @@ private:
         }
     }
 
+    void Consume(NDqProto::TWatermark&& watermark) override {
+        for (auto& output : Outputs_) {
+            output->Push(NDqProto::TWatermark(watermark));
+        }
+    }
+
     void Finish() final {
         for (auto& output : Outputs_) {
             output->Finish();
         }
+    }
+
+    void Flush() final {
+        for (auto& output : Outputs_) {
+            output->Flush();
+        }
+    }
+
+    bool IsFinished() const override {
+        return Aggregator->IsFinished();
+    }
+
+    bool IsEarlyFinished() const override {
+        return Aggregator->IsEarlyFinished();
     }
 
     size_t GetHashPartitionIndex(const arrow::Datum* values[], ui64 blockIndex) {
@@ -820,10 +936,30 @@ public:
         }
     }
 
+    void Consume(NDqProto::TWatermark&& watermark) override {
+        for (auto& output : Outputs) {
+            output->Push(NDqProto::TWatermark(watermark));
+        }
+    }
+
     void Finish() override {
         for (auto& output : Outputs) {
             output->Finish();
         }
+    }
+
+    void Flush() override {
+        for (auto& output : Outputs) {
+            output->Flush();
+        }
+    }
+
+    bool IsFinished() const override {
+        return Aggregator->IsFinished();
+    }
+
+    bool IsEarlyFinished() const override {
+        return Aggregator->IsEarlyFinished();
     }
 
 private:

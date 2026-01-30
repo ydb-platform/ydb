@@ -27,6 +27,7 @@
 #include "viewer_nodes.h"
 #include "viewer_plan2svg.h"
 #include "viewer_pqconsumerinfo.h"
+#include "viewer_put_record.h"
 #include "viewer_query.h"
 #include "viewer_render.h"
 #include "viewer_storage.h"
@@ -40,6 +41,9 @@
 #include "viewer_multipart_counter.h"
 #include "viewer_groups.h"
 #include "viewer_sse_counter.h"
+#include "viewer_storage_stats.h"
+#include "viewer_peers.h"
+#include "viewer_database_stats.h"
 
 namespace NKikimr::NViewer {
 
@@ -220,6 +224,10 @@ void InitViewerPQConsumerInfoJsonHandler(TJsonHandlers& handlers) {
     handlers.AddHandler("/viewer/pqconsumerinfo", new TJsonHandler<TJsonPQConsumerInfo>(TJsonPQConsumerInfo::GetSwagger()));
 }
 
+void InitViewerPutRecordsJsonHandler(TJsonHandlers& jsonHandlers) {
+    jsonHandlers.AddHandler("/viewer/put_record", new TJsonHandler<TPutRecord>(TPutRecord::GetSwagger()));
+}
+
 void InitViewerTabletCountersJsonHandler(TJsonHandlers& handlers) {
     handlers.AddHandler("/viewer/tabletcounters", new TJsonHandler<TJsonTabletCounters>(TJsonTabletCounters::GetSwagger()));
 }
@@ -273,12 +281,12 @@ void InitViewerHealthCheckJsonHandler(TJsonHandlers& handlers) {
 }
 
 void InitViewerNodesJsonHandler(TJsonHandlers& handlers) {
-    handlers.AddHandler("/viewer/nodes", new TJsonHandler<TJsonNodes>(TJsonNodes::GetSwagger()), 18);
+    handlers.AddHandler("/viewer/nodes", new TJsonHandler<TJsonNodes>(TJsonNodes::GetSwagger()), 20);
 }
 
 void InitViewerGroupsJsonHandler(TJsonHandlers& jsonHandlers) {
-    jsonHandlers.AddHandler("/viewer/groups", new TJsonHandler<TStorageGroups>(TStorageGroups::GetSwagger()), 9);
-    jsonHandlers.AddHandler("/storage/groups", new TJsonHandler<TStorageGroups>(TStorageGroups::GetSwagger()), 9);
+    jsonHandlers.AddHandler("/viewer/groups", new TJsonHandler<TStorageGroups>(TStorageGroups::GetSwagger()), 10);
+    jsonHandlers.AddHandler("/storage/groups", new TJsonHandler<TStorageGroups>(TStorageGroups::GetSwagger()), 10);
 }
 
 void InitViewerACLJsonHandler(TJsonHandlers &jsonHandlers) {
@@ -344,6 +352,7 @@ void InitViewerJsonHandlers(TJsonHandlers& jsonHandlers) {
     InitViewerTopicInfoJsonHandler(jsonHandlers);
     InitViewerTopicDataJsonHandler(jsonHandlers);
     InitViewerPQConsumerInfoJsonHandler(jsonHandlers);
+    InitViewerPutRecordsJsonHandler(jsonHandlers);
     InitViewerTabletCountersJsonHandler(jsonHandlers);
     InitViewerStorageJsonHandler(jsonHandlers);
     InitViewerStorageUsageJsonHandler(jsonHandlers);
@@ -369,6 +378,9 @@ void InitViewerJsonHandlers(TJsonHandlers& jsonHandlers) {
     InitViewerMultipartCounterHandler(jsonHandlers);
     InitViewerTextStreamCounterHandler(jsonHandlers);
     InitViewerGroupsJsonHandler(jsonHandlers);
+    jsonHandlers.AddHandler("/viewer/storage_stats", new TJsonHandler<TJsonStorageStats>(TJsonStorageStats::GetSwagger()));
+    jsonHandlers.AddHandler("/viewer/peers", new TJsonHandler<TJsonPeers>(TJsonPeers::GetSwagger()));
+    jsonHandlers.AddHandler("/viewer/database_stats", new THttpHandler<TJsonDatabaseStats>());
 }
 
 }

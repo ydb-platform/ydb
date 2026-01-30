@@ -46,7 +46,7 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
                 { NKikimrServices::TX_PROXY_SCHEME_CACHE, NKikimrServices::PQ_DESCRIBER },
                 NActors::NLog::PRI_DEBUG
         );
-        
+
         ExecuteDDL(*setup, "CREATE TOPIC topic1");
 
         auto& runtime = setup->GetRuntime();
@@ -65,7 +65,7 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
                 { NKikimrServices::TX_PROXY_SCHEME_CACHE, NKikimrServices::PQ_DESCRIBER },
                 NActors::NLog::PRI_DEBUG
         );
-        
+
         auto& runtime = setup->GetRuntime();
         CreateActor(runtime, {"/Root/topic_not_exists"});
         auto topics = WaitResult(runtime);
@@ -81,7 +81,7 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
                 { NKikimrServices::TX_PROXY_SCHEME_CACHE, NKikimrServices::PQ_DESCRIBER },
                 NActors::NLog::PRI_DEBUG
         );
-        
+
         ExecuteDDL(*setup, "CREATE TABLE table1 (id Uint64, PRIMARY KEY (id))");
 
         auto& runtime = setup->GetRuntime();
@@ -99,7 +99,7 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
                 { NKikimrServices::TX_PROXY_SCHEME_CACHE, NKikimrServices::PQ_DESCRIBER },
                 NActors::NLog::PRI_DEBUG
         );
-        
+
         ExecuteDDL(*setup, "CREATE TABLE table1 (id Uint64, PRIMARY KEY (id))");
         ExecuteDDL(*setup, "ALTER TABLE table1 ADD CHANGEFEED feed WITH (FORMAT = 'JSON', MODE = 'UPDATES')");
 

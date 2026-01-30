@@ -95,6 +95,7 @@ public:
     bool TestLexers = false;
     bool TestComplete = false;
     bool TestSyntaxAmbiguities = false;
+    bool TestPartialTypecheck = false;
     THashMap<TString, NSQLTranslation::TTableBindingSettings> Bindings;
 
     bool PrintAst = false;
@@ -184,7 +185,7 @@ private:
 
 class TFacadeRunner {
 public:
-    TFacadeRunner(TString name);
+    explicit TFacadeRunner(TString name);
     ~TFacadeRunner();
 
     int Main(int argc, const char* argv[]);

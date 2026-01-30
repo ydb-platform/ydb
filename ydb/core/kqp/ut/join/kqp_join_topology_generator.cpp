@@ -1,0 +1,743 @@
+#include "kqp_join_topology_generator.h"
+
+#include <cstdint>
+#include <vector>
+#include <sstream>
+#include <random>
+#include <set>
+
+namespace NKikimr::NKqp {
+
+static std::string getTableName(unsigned tableID) {
+    return TLexicographicalNameGenerator::getName(tableID, /*lowerCase=*/false);
+}
+
+static std::string getColumnName(unsigned tableID, unsigned columnID) {
+    return TLexicographicalNameGenerator::getName(tableID, /*lowerCase=*/true) + "_" +
+           TLexicographicalNameGenerator::getName(columnID, /*lowerCase=*/true);
+}
+
+static std::string getRelationName(unsigned tableID, unsigned columnID) {
+    return getTableName(tableID) + "." + getColumnName(tableID, columnID);
+}
+
+static std::string getTablePath(unsigned tableID) {
+    return "/Root/" + getTableName(tableID);
+}
+
+static double getRandomNormalizedDouble(TRNG& rng) {
+    std::uniform_real_distribution<> distribution(0.0, 1.0);
+    return distribution(rng);
+}
+
+static std::vector<ui32> GetPitmanYor(TRNG& rng, ui32 sum, TPitmanYorConfig config) {
+    std::vector<ui32> keyCounts{/*initial key=*/1};
+
+    for (ui32 column = 1; column < sum; ++ column) {
+        double random = getRandomNormalizedDouble(rng);
+
+        double cumulative = 0.0;
+        int chosenTableIndex = -1;
+
+        for (ui32 i = 0; i < keyCounts.size(); ++ i) {
+            cumulative += (keyCounts[i] - config.Alpha) / (column + config.Theta);
+            if (random < cumulative) {
+                chosenTableIndex = i;
+                break;
+            }
+        }
+
+        if (chosenTableIndex == -1) {
+            keyCounts.push_back(1);
+        } else {
+            ++ keyCounts[chosenTableIndex];
+        }
+    }
+
+    std::sort(keyCounts.begin(), keyCounts.end(), std::greater<int>{});
+    return keyCounts;
+}
+
+void TRelationGraph::SetupKeysPitmanYor(TRNG& rng, TPitmanYorConfig config) {
+    std::vector<std::pair<std::vector<ui32>, /*last index*/ ui32>> distributions(GetN());
+    for (ui32 i = 0; i < GetN(); ++ i) {
+        auto distribution = GetPitmanYor(rng, AdjacencyList_[i].size(), config);
+        Schema_[i] = TTable{static_cast<ui32>(distribution.size())};
+        distributions[i] = {std::move(distribution), /*initial index=*/0};
+    }
+
+    auto GetKey = [&](ui32 node) {
+        auto& [nodeDistribution, lastIndex] = distributions[node];
+        ui32 key = lastIndex;
+
+        Y_ASSERT(lastIndex < nodeDistribution.size());
+        Y_ASSERT(nodeDistribution[lastIndex] != 0);
+        if (-- nodeDistribution[lastIndex] == 0) {
+            ++ lastIndex;
+        }
+
+        return key;
+    };
+
+    std::set<std::pair<uint32_t, uint32_t>> visited;
+
+    for (ui32 u = 0; u < GetN(); ++ u) {
+        for (ui32 i = 0; i < AdjacencyList_[u].size(); ++ i) {
+            TEdge* forwardEdge = &AdjacencyList_[u][i];
+            ui32 v = forwardEdge->Target;
+
+            if (visited.contains({v, u}) || visited.contains({u, v})) {
+                continue;
+            }
+
+            visited.insert({u, v});
+
+            // find backward edge
+            TEdge* backwardEdge = nullptr;
+            std::vector<TEdge>& targetAdjacency = AdjacencyList_[forwardEdge->Target];
+            for (ui32 k = 0; k < targetAdjacency.size(); ++ k) {
+                if (targetAdjacency[k].Target == u) {
+                    backwardEdge = &targetAdjacency[k];
+                }
+            }
+
+            ui32 ColumnLHS = GetKey(u);
+            ui32 ColumnRHS = GetKey(v);
+
+            forwardEdge->ColumnLHS = ColumnLHS;
+            forwardEdge->ColumnRHS = ColumnRHS;
+            backwardEdge->ColumnLHS = ColumnRHS;
+            backwardEdge->ColumnRHS = ColumnLHS;
+        }
+    }
+}
+
+TSchema TSchema::MakeWithEnoughColumns(unsigned numNodes) {
+    return TSchema{std::vector(numNodes, TTable{numNodes})};
+}
+
+std::string TSchema::MakeCreateQuery() const {
+    std::string prerequisites;
+    for (unsigned i = 0; i < Tables_.size(); ++ i) {
+        prerequisites += "CREATE TABLE `" + getTablePath(i) + "` (\n";
+
+        for (unsigned j = 0; j < Tables_[i].GetNumColumns(); ++ j) {
+            prerequisites += "    " + getColumnName(i, j) + " Int32 NOT NULL,\n";
+        }
+        prerequisites += "    PRIMARY KEY (" + getColumnName(i, 0) + ")\n";
+
+        prerequisites += ") WITH (STORE = COLUMN);\n";
+    }
+
+    return prerequisites;
+}
+
+std::string TSchema::MakeDropQuery() const {
+    std::string query;
+    for (unsigned i = 0; i < Tables_.size(); ++ i) {
+        query += "DROP TABLE `" + getTablePath(i) + "`;\n";
+    }
+
+    return query;
+}
+
+void TSchema::Rename(std::vector<int> oldToNew) {
+    std::vector<TTable> newTables(Tables_.size());
+
+    for (unsigned i = 0; i < oldToNew.size(); ++i) {
+        newTables[oldToNew[i]] = Tables_[i];
+    }
+
+    Tables_ = newTables;
+}
+
+void TRelationGraph::Connect(unsigned lhs, unsigned rhs) {
+    AdjacencyList_[lhs].push_back({/*Target=*/rhs, 0, 0});
+    AdjacencyList_[rhs].push_back({/*Target=*/lhs, 0, 0});
+}
+
+void TRelationGraph::Disconnect(unsigned u, unsigned v) {
+    auto& adjacencyU = AdjacencyList_[u];
+    auto& adjacencyV = AdjacencyList_[v];
+    adjacencyU.erase(std::remove_if(adjacencyU.begin(), adjacencyU.end(), [v](TEdge edge) { return edge.Target == v; }), adjacencyU.end());
+    adjacencyV.erase(std::remove_if(adjacencyV.begin(), adjacencyV.end(), [u](TEdge edge) { return edge.Target == u; }), adjacencyV.end());
+}
+
+bool TRelationGraph::HasEdge(unsigned u, unsigned v) const {
+    for (ui32 i = 0; i < AdjacencyList_[u].size(); ++i) {
+        if (AdjacencyList_[u][i].Target == v) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+std::vector<int> TRelationGraph::FindComponents() const {
+    std::vector<int> component(GetN(), -1);
+    int numComponents = 0;
+
+    for (unsigned start = 0; start < GetN(); ++ start) {
+        if (component[start] != -1) {
+            continue;
+        }
+
+        std::queue<int> queue;
+        queue.push(start);
+        component[start] = numComponents;
+
+        while (!queue.empty()) {
+            unsigned u = queue.front();
+            queue.pop();
+            for (TEdge edge : AdjacencyList_[u]) {
+                unsigned v = edge.Target;
+                if (component[v] == -1) {
+                    component[v] = numComponents;
+                    queue.push(v);
+                }
+            }
+        }
+
+        ++ numComponents;
+    }
+
+    return component;
+}
+
+std::string TRelationGraph::MakeQuery() const {
+    std::string fromClause;
+    std::string joinClause;
+    for (unsigned i = 0; i < AdjacencyList_.size(); ++ i) {
+        std::string currentJoin =
+            "JOIN " + getTableName(i) + " ON";
+
+        bool hasJoin = false;
+        auto addJoinCodition = [&](int j) {
+            if (hasJoin) {
+                currentJoin += " AND";
+            }
+
+            hasJoin = true;
+
+            currentJoin += " " +
+                           getRelationName(i, AdjacencyList_[i][j].ColumnLHS) + " = " +
+                           getRelationName(AdjacencyList_[i][j].Target, AdjacencyList_[i][j].ColumnRHS);
+        };
+
+        for (unsigned j = 0; j < AdjacencyList_[i].size(); ++ j) {
+            if (i < AdjacencyList_[i][j].Target) {
+                continue;
+            }
+
+            addJoinCodition(j);
+        }
+        currentJoin += "\n";
+
+        if (hasJoin) {
+            joinClause += currentJoin;
+        } else if (fromClause.empty()) {
+            fromClause = "SELECT *\nFROM " + getTableName(i) + "\n";
+        } else {
+            joinClause += "CROSS JOIN " + getTableName(i) + "\n";
+        }
+    }
+
+    // remove extra '\n' from last join
+    if (!joinClause.empty()) {
+        Y_ASSERT(joinClause.back() == '\n');
+        joinClause.pop_back();
+    }
+
+    return std::move(fromClause) + std::move(joinClause) + ";\n";
+}
+
+void TRelationGraph::DumpGraph(IOutputStream& os) const {
+    os << "graph {\n";
+    for (unsigned i = 0; i < AdjacencyList_.size(); ++ i) {
+        for (unsigned j = 0; j < AdjacencyList_[i].size(); ++ j) {
+            const TEdge& edge = AdjacencyList_[i][j];
+            if (i <= edge.Target) {
+                os << "    " << getTableName(i) << " -- " << getTableName(edge.Target)
+                   << " [label = \""
+                   << getRelationName(i, edge.ColumnLHS) << " = "
+                   << getRelationName(edge.Target, edge.ColumnRHS)
+                   << "\"];\n";
+            }
+        }
+    }
+
+    os << "}\n";
+}
+
+std::vector<int> TRelationGraph::GetDegrees() const {
+    std::vector<int> degrees(AdjacencyList_.size());
+    for (unsigned i = 0; i < AdjacencyList_.size(); ++i) {
+        degrees[i] = AdjacencyList_[i].size();
+    }
+
+    std::sort(degrees.begin(), degrees.end());
+    return degrees;
+}
+
+void TRelationGraph::ReorderDFS() {
+    std::vector<bool> visited(GetN(), false);
+    std::vector<int> newOrder;
+    newOrder.reserve(GetN());
+
+    auto searchDepthFirst = [&](auto&& self, unsigned node) {
+        if (visited[node]) {
+            return;
+        }
+
+        visited[node] = true;
+        newOrder.push_back(node);
+
+        for (TEdge edge : AdjacencyList_[node]) {
+            self(self, edge.Target);
+        }
+    };
+
+    for (unsigned i = 0; i < GetN(); i++) {
+        searchDepthFirst(searchDepthFirst, i);
+    }
+
+    std::vector<int> oldToNew(GetN());
+    for (unsigned i = 0; i < GetN(); i++) {
+        oldToNew[newOrder[i]] = i;
+    }
+
+    Rename(oldToNew);
+    Schema_.Rename(oldToNew);
+}
+
+void TRelationGraph::Rename(const std::vector<int>& oldToNew) {
+    TAdjacencyList newGraph(GetN());
+    for (unsigned u = 0; u < GetN(); ++u) {
+        for (TEdge edge : AdjacencyList_[u]) {
+            unsigned v = edge.Target;
+
+            edge.Target = oldToNew[v];
+            newGraph[oldToNew[u]].push_back(edge);
+        }
+    }
+
+    AdjacencyList_ = newGraph;
+}
+
+ui32 TRelationGraph::GetNumEdges() const {
+    ui32 numEdges = 0;
+    for (auto edges : AdjacencyList_) {
+        numEdges += edges.size();
+    }
+
+    return numEdges;
+}
+
+int TRelationGraph::GetNumComponents() const {
+    auto comp = FindComponents();
+    return comp.empty() ? 0 : *std::max_element(comp.begin(), comp.end()) + 1;
+}
+
+TSchemaStats TSchemaStats::MakeRandom(TRNG& rng, const TSchema& schema, unsigned a, unsigned b) {
+    std::uniform_int_distribution<> distribution(a, b);
+    std::vector<TTableStats> stats(schema.GetSize());
+
+    for (unsigned i = 0; i < schema.GetSize(); ++i) {
+        unsigned RowSize = std::pow(10, distribution(rng));
+        unsigned ByteSize = RowSize * 64;
+        stats[i] = {ByteSize, RowSize};
+    }
+
+    return TSchemaStats{stats};
+}
+
+std::string TSchemaStats::ToJSON() const {
+    std::stringstream ss;
+
+    ss << "{";
+    for (unsigned i = 0; i < Stats_.size(); ++i) {
+        if (i != 0) {
+            ss << ",";
+        }
+
+        ss << "\"" << getTablePath(i) << "\": ";
+        ss << "{";
+        ss << "\"" << "n_rows" << "\": " << Stats_[i].RowSize << ", ";
+        ss << "\"" << "byte_size" << "\": " << Stats_[i].ByteSize;
+        ss << "}";
+    }
+    ss << "}";
+
+    return ss.str();
+}
+
+TRelationGraph GeneratePath(unsigned numNodes) {
+    TRelationGraph graph(numNodes);
+
+    unsigned lastVertex = 0;
+    bool first = true;
+    for (unsigned i = 0; i < numNodes; ++i) {
+        if (!first) {
+            graph.Connect(lastVertex, i);
+        }
+
+        first = false;
+        lastVertex = i;
+    }
+
+    return graph;
+}
+
+TRelationGraph GenerateStar(unsigned numNodes) {
+    TRelationGraph graph(numNodes);
+
+    unsigned root = 0;
+    for (unsigned i = 1; i < numNodes; ++i) {
+        graph.Connect(root, i);
+    }
+
+    return graph;
+}
+
+TRelationGraph GenerateClique(unsigned numNodes) {
+    TRelationGraph graph(numNodes);
+
+    for (unsigned i = 0; i < numNodes; ++i) {
+        for (unsigned j = i + 1; j < numNodes; ++j) {
+            graph.Connect(i, j);
+        }
+    }
+
+    return graph;
+}
+
+TRelationGraph GenerateTreeFromPruferSequence(const std::vector<unsigned>& prufer) {
+    unsigned n = prufer.size() + 2;
+
+    std::vector<int> degree(n, 1);
+    for (unsigned i : prufer) {
+        ++ degree[i];
+    }
+
+    TRelationGraph graph(n);
+
+    for (unsigned u : prufer) {
+        for (unsigned v = 0; v < n; ++ v) {
+            if (degree[v] == 1) {
+                graph.Connect(u, v);
+
+                -- degree[v];
+                -- degree[u];
+                break;
+            }
+        }
+    }
+
+    int u = -1;
+    unsigned v = 0;
+    for (; v < n; ++ v) {
+        if (degree[v] == 1) {
+            if (u != -1) {
+                graph.Connect(u, v);
+                break;
+            }
+
+            u = v;
+        }
+    }
+
+    return graph;
+}
+
+
+static std::vector<unsigned> GenerateRandomPruferSequence(TRNG& rng, unsigned numNodes) {
+    Y_ASSERT(numNodes >= 2);
+    std::uniform_int_distribution<> distribution(0, numNodes - 1);
+
+    std::vector<unsigned> prufer(numNodes - 2);
+    for (unsigned i = 0; i < numNodes - 2; ++i) {
+        prufer[i] = distribution(rng);
+    }
+
+    return prufer;
+}
+
+TRelationGraph GenerateRandomTree(TRNG& rng, unsigned numNodes) {
+    auto prufer = GenerateRandomPruferSequence(rng, numNodes);
+    return GenerateTreeFromPruferSequence(prufer);
+}
+
+static void NormalizeProbabilities(std::vector<double>& probabilities) {
+    double sum = std::accumulate(probabilities.begin(), probabilities.end(), 0.0);
+    if (sum > 0.0) {
+        for (double& probability : probabilities) {
+            probability /= sum;
+        }
+    }
+}
+
+std::vector<int> SampleFromPMF(TRNG& rng, const std::vector<double>& probabilities, int numVertices, int minDegree) {
+    std::discrete_distribution<int> distribution(probabilities.begin(), probabilities.end());
+
+    std::vector<int> degrees(numVertices);
+    for (int i = 0; i < numVertices; i++) {
+        degrees[i] = distribution(rng) + minDegree;
+    }
+    return degrees;
+}
+
+std::vector<int> GenerateLogNormalDegrees(TRNG& rng, int numVertices, double mu, double sigma, int minDegree, int maxDegree) {
+    if (maxDegree == -1) {
+        maxDegree = numVertices - 1;
+    }
+
+    std::vector<double> probabilities(maxDegree - minDegree + 1);
+    for (int k = minDegree; k <= maxDegree; k++) {
+        if (k <= 0) {
+            probabilities[k - minDegree] = 0.0;
+            continue;
+        }
+
+        double x = (double)k;
+        double logX = std::log(x);
+        double z = (logX - mu) / sigma;
+
+        // PDF: (1/(x*σ*√(2π))) * exp(-(ln(x)-μ)²/(2σ²))
+        probabilities[k - minDegree] = (1.0 / (x * sigma * std::sqrt(2.0 * M_PI))) * std::exp(-0.5 * z * z);
+    }
+
+    // Not strictly necessary, but makes it easier to inspect probabilities
+    NormalizeProbabilities(probabilities);
+    return SampleFromPMF(rng, probabilities, numVertices, minDegree);
+}
+
+TRelationGraph GenerateRandomChungLuGraph(TRNG& rng, const std::vector<int>& degrees) {
+    TRelationGraph graph(degrees.size());
+
+    double sum = std::accumulate(degrees.begin(), degrees.end(), 0.0);
+    if (sum == 0) {
+        return graph;
+    }
+
+    std::uniform_real_distribution<> distribution(0, 1);
+    for (ui32 i = 0; i < degrees.size(); ++i) {
+        for (ui32 j = i + 1; j < degrees.size(); ++j) {
+            if (distribution(rng) < std::min(1.0, degrees[i] * degrees[j] / sum)) {
+                graph.Connect(i, j);
+            }
+        }
+    }
+
+    return graph;
+}
+
+static void MakeEvenSum(std::vector<int>& degrees) {
+    int sum = std::accumulate(degrees.begin(), degrees.end(), 0);
+    if (sum % 2 == 1) {
+        auto minIt = std::min_element(degrees.begin(), degrees.end());
+        ++*minIt;
+    }
+}
+
+static bool CheckSatisfiesErdosGallai(std::vector<int> degrees) {
+    int sum = std::accumulate(degrees.begin(), degrees.end(), 0);
+
+    if (sum % 2 != 0) {
+        return false;
+    }
+
+    for (int degree : degrees) {
+        if (degree < 0 || degree >= static_cast<int>(degrees.size())) {
+            return false;
+        }
+    }
+
+    std::sort(degrees.rbegin(), degrees.rend());
+
+    uint64_t sumLeft = 0;
+    for (uint64_t k = 0; k < degrees.size(); ++k) {
+        sumLeft += degrees[k];
+
+        uint64_t sumRight = k * (k + 1);
+        for (uint64_t i = k + 1; i < degrees.size(); ++i) {
+            sumRight += std::min<uint64_t>(k + 1, degrees[i]);
+        }
+
+        if (sumLeft > sumRight) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool CanBeConnected(const std::vector<int>& degrees) {
+    int n = degrees.size();
+    if (n <= 1) {
+        return true;
+    }
+
+    int sum = std::accumulate(degrees.begin(), degrees.end(), 0);
+    if (sum < 2 * (n - 1)) {
+        return false;
+    }
+
+    for (int degree : degrees) {
+        if (degree == 0) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+std::vector<int> MakeGraphicConnected(std::vector<int> degrees) {
+    const i32 MAX_ITERATIONS = 1000;
+
+    for (int& degree : degrees) {
+        if (degree == 0) {
+            degree = 1;
+        }
+    }
+
+    // Cap degrees at n-1
+    for (int& degree : degrees) {
+        degree = std::min<int>(degree, degrees.size() - 1);
+    }
+
+    MakeEvenSum(degrees);
+
+    int iterations = 0;
+    while ((!CheckSatisfiesErdosGallai(degrees) || !CanBeConnected(degrees)) && iterations++ < MAX_ITERATIONS) {
+        std::sort(degrees.begin(), degrees.end(), std::greater<int>());
+
+        if (!CheckSatisfiesErdosGallai(degrees)) {
+            // Reduce max, increase min (redistribute)
+            if (degrees[0] > degrees[degrees.size() - 1] + 1) {
+                --degrees[0];
+                ++degrees[degrees.size() - 1];
+            } else {
+                --degrees[0];
+            }
+        } else if (!CanBeConnected(degrees)) {
+            // Increase minimum degrees to help connectivity
+            for (int& degree : degrees) {
+                ui32 edges = std::accumulate(degrees.begin(), degrees.end(), 0) / 2;
+                if (degree < 2 && edges + 2 <= degrees.size() * (degrees.size() - 1) / 2) {
+                    ++degree;
+                }
+            }
+        }
+
+        MakeEvenSum(degrees);
+    }
+
+    return degrees;
+}
+
+TRelationGraph ConstructGraphHavelHakimi(std::vector<int> degrees) {
+    TRelationGraph graph(degrees.size());
+
+    std::vector<std::pair</*degree*/ int, /*node*/ int>> nodes;
+    for (uint32_t i = 0; i < degrees.size(); ++i) {
+        nodes.push_back({degrees[i], i});
+    }
+
+    while (true) {
+        std::sort(nodes.begin(), nodes.end(), std::greater<std::pair<int, int>>{});
+
+        while (!nodes.empty() && nodes.back().first == 0) {
+            nodes.pop_back();
+        }
+
+        if (nodes.empty()) {
+            break;
+        }
+
+        auto [degree, u] = nodes[0];
+        nodes.erase(nodes.begin());
+
+        if (degree > static_cast<int>(nodes.size())) {
+            break;
+        }
+
+        for (uint32_t i = 0; i < static_cast<uint32_t>(degree); ++i) {
+            uint32_t v = nodes[i].second;
+            graph.Connect(u, v);
+            --nodes[i].first;
+        }
+    }
+
+    return graph;
+}
+
+void MCMCRandomize(TRNG& rng, TRelationGraph& graph) {
+    std::uniform_int_distribution<> nodeDist(0, graph.GetN() - 1);
+    std::uniform_real_distribution<> distribution(0.0, 1.0);
+
+    ui32 numEdges = graph.GetNumEdges();
+    ui32 numSwaps = numEdges * log(numEdges);
+
+    auto& adjacency = graph.GetAdjacencyList();
+
+    const double TEMP_START = 5.0;
+    const double TEMP_END = 0.1;
+    const double CONNECTIVITY_PENALTY = 20.0;
+    const int MAX_ATTEMPTS = numSwaps * 10;
+
+    ui32 successfulSwaps = 0;
+    int attempt = 0;
+
+    while (attempt < MAX_ATTEMPTS && (successfulSwaps < numSwaps || !graph.IsConnected())) {
+        double progress = std::min(1.0, static_cast<double>(attempt) / MAX_ATTEMPTS);
+        double temperature = TEMP_START * std::pow(TEMP_END / TEMP_START, progress);
+
+        ++attempt;
+
+        int a = nodeDist(rng);
+        if (adjacency[a].empty()) {
+            continue;
+        }
+
+        int bIdx = std::uniform_int_distribution<>(0, adjacency[a].size() - 1)(rng);
+        int b = adjacency[a][bIdx].Target;
+
+        int c = nodeDist(rng);
+        if (c == a || c == b || adjacency[c].empty()) {
+            continue;
+        }
+
+        int dIdx = std::uniform_int_distribution<>(0, adjacency[c].size() - 1)(rng);
+        int d = adjacency[c][dIdx].Target;
+
+        if (d == a || d == b || d == c) {
+            continue;
+        }
+        if (graph.HasEdge(a, c) || graph.HasEdge(b, d)) {
+            continue;
+        }
+
+        int oldComponents = graph.GetNumComponents();
+
+        graph.Disconnect(a, b);
+        graph.Disconnect(c, d);
+        graph.Connect(a, c);
+        graph.Connect(b, d);
+
+        int newComponents = graph.GetNumComponents();
+        double deltaEnergy = CONNECTIVITY_PENALTY * (newComponents - oldComponents);
+
+        bool accept = distribution(rng) < std::exp(-deltaEnergy / temperature);
+
+        if (accept) {
+            ++ successfulSwaps;
+        } else {
+            graph.Disconnect(a, c);
+            graph.Disconnect(b, d);
+            graph.Connect(a, b);
+            graph.Connect(c, d);
+        }
+    }
+}
+
+} // namespace NKikimr::NKqp

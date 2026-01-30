@@ -103,6 +103,7 @@ public:
     UNIMPLEMENTED_CONST_METHOD(NApi::TClusterTag, GetClusterTag, ());
     UNIMPLEMENTED_CONST_METHOD(const std::string&, GetClusterId, ());
     UNIMPLEMENTED_CONST_METHOD(const std::optional<std::string>&, GetClusterName, ());
+    UNIMPLEMENTED_CONST_METHOD(const std::optional<NAuth::TTvmId>&, GetTvmId, ());
     UNIMPLEMENTED_CONST_METHOD(bool, IsSameCluster, (const NApi::IConnectionPtr&));
     UNIMPLEMENTED_METHOD(
         NHiveClient::ITransactionParticipantPtr,
@@ -126,7 +127,7 @@ NApi::IConnectionPtr CreateConnection(std::vector<NApi::IConnectionPtr> connecti
     return New<TConnection>(std::move(connections), nullptr, std::move(config));
 }
 
-NApi::IConnectionPtr CreateConnection(TConnectionConfigPtr config, NApi::NRpcProxy::TConnectionOptions options)
+NApi::IConnectionPtr CreateConnection(TConnectionConfigPtr config, NApi::TConnectionOptions options)
 {
     NConcurrency::TActionQueuePtr actionQueue;
     if (!options.ConnectionInvoker) {

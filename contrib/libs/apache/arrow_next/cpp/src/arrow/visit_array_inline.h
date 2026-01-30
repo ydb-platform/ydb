@@ -18,9 +18,9 @@
 
 #pragma once
 
-#include "arrow/array.h"
-#include "arrow/extension_type.h"
-#include "arrow/visitor_generate.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/extension_type.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/visitor_generate.h"
 
 namespace arrow20 {
 

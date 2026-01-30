@@ -30,10 +30,12 @@ SELECT
         ELSE 'MUTED: in sla'
     END as resolution,
     String::ReplaceAll(tm.owner, 'TEAM:@ydb-platform/', '') as owner_team,
-    CASE 
-        WHEN tm.is_muted = 1 OR (tm.state = 'Skipped' AND tm.days_in_state > 14) THEN TRUE
-        ELSE FALSE
-    END as is_muted_or_skipped,
+    CAST(
+        CASE 
+            WHEN tm.is_muted = 1 OR (tm.state = 'Skipped' AND tm.days_in_state > 14) THEN TRUE
+            ELSE FALSE
+        END AS Uint8
+    ) as is_muted_or_skipped,
     gim.github_issue_url as github_issue_url,
     gim.github_issue_number as github_issue_number,
     gim.github_issue_state as github_issue_state,
@@ -42,10 +44,6 @@ FROM `test_results/analytics/tests_monitor` AS tm
 LEFT JOIN `test_results/analytics/github_issue_mapping` AS gim
     ON tm.full_name = gim.full_name
     AND tm.branch = gim.branch
-WHERE tm.date_window >= CurrentUtcDate() - 30 * Interval("P1D")
-and ( tm.branch = 'main' or tm.branch like 'stable-%' or tm.branch like 'stream-nb-25%')
-and tm.is_test_chunk = 0
-and (CASE 
-        WHEN tm.is_muted = 1 OR (tm.state = 'Skipped' AND tm.days_in_state > 14) THEN TRUE
-        ELSE FALSE
-    END ) = TRUE
+WHERE tm.date_window >= CurrentUtcDate() - 2 * Interval("P1D")
+    AND (tm.branch = 'main' OR tm.branch LIKE 'stable-%' OR tm.branch LIKE 'stream-nb-25%')
+    AND tm.is_test_chunk = 0

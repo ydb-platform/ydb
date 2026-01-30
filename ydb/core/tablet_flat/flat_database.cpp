@@ -274,17 +274,17 @@ void TDatabase::CalculateReadSize(TSizeEnv& env, ui32 table, TRawVals minKey, TR
     Require(table)->Precharge(minKey, maxKey, tags, &env, flg, items, bytes, direction, snapshot, stats);
 }
 
-bool TDatabase::Precharge(ui32 table, TRawVals minKey, TRawVals maxKey,
+TPrechargeResult TDatabase::Precharge(ui32 table, TRawVals minKey, TRawVals maxKey,
                     TTagsRef tags, ui64 flg, ui64 items, ui64 bytes,
                     EDirection direction, TRowVersion snapshot)
 {
     CheckPrechargeAllowed(table, minKey, maxKey);
 
     TSelectStats stats;
-    auto ready = Require(table)->Precharge(minKey, maxKey, tags, Env, flg, items, bytes, direction, snapshot, stats);
+    auto result = Require(table)->Precharge(minKey, maxKey, tags, Env, flg, items, bytes, direction, snapshot, stats);
     Change->Stats.ChargeSieved += stats.Sieved;
     Change->Stats.ChargeWeeded += stats.Weeded;
-    return ready == EReady::Data;
+    return result;
 }
 
 void TDatabase::Update(ui32 table, ERowOp rop, TRawVals key, TArrayRef<const TUpdateOp> ops, TRowVersion rowVersion)

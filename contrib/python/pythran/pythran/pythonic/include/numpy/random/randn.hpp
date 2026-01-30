@@ -11,8 +11,7 @@ namespace numpy
   namespace random
   {
     template <class... T>
-    types::ndarray<double, types::array_tuple<long, sizeof...(T)>>
-    randn(T... shape);
+    types::ndarray<double, types::array_tuple<long, sizeof...(T)>> randn(T... shape);
 
     double randn();
 

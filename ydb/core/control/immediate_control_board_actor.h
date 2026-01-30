@@ -6,7 +6,6 @@
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <ydb/library/actors/core/actor.h>
-#include <ydb/library/actors/core/actor_bootstrapped.h>
 
 namespace NKikimr {
 

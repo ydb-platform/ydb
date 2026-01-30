@@ -21,9 +21,9 @@ namespace NExport {
 using namespace NThreading;
 using namespace Ydb::Export;
 
-const std::string TExportToS3Settings::TEncryptionAlgorithm::AES_128_GCM = "AES-128-GCM";
-const std::string TExportToS3Settings::TEncryptionAlgorithm::AES_256_GCM = "AES-256-GCM";
-const std::string TExportToS3Settings::TEncryptionAlgorithm::CHACHA_20_POLY_1305 = "ChaCha20-Poly1305";
+const std::string TEncryptionAlgorithm::AES_128_GCM = "AES-128-GCM";
+const std::string TEncryptionAlgorithm::AES_256_GCM = "AES-256-GCM";
+const std::string TEncryptionAlgorithm::CHACHA_20_POLY_1305 = "ChaCha20-Poly1305";
 
 /// Common
 namespace {
@@ -95,6 +95,7 @@ TExportToS3Response::TExportToS3Response(TStatus&& status, Ydb::Operations::Oper
 
     Metadata_.Settings.Description(metadata.settings().description());
     Metadata_.Settings.NumberOfRetries(metadata.settings().number_of_retries());
+    Metadata_.Settings.IncludeIndexData(metadata.settings().include_index_data());
 
     if (!metadata.settings().compression().empty()) {
         Metadata_.Settings.Compression(metadata.settings().compression());
@@ -106,6 +107,36 @@ TExportToS3Response::TExportToS3Response(TStatus&& status, Ydb::Operations::Oper
 }
 
 const TExportToS3Response::TMetadata& TExportToS3Response::Metadata() const {
+    return Metadata_;
+}
+
+/// FS
+TExportToFsResponse::TExportToFsResponse(TStatus&& status, Ydb::Operations::Operation&& operation)
+    : TOperation(std::move(status), std::move(operation))
+{
+    ExportToFsMetadata metadata;
+    GetProto().metadata().UnpackTo(&metadata);
+
+    // settings
+    Metadata_.Settings.BasePath(metadata.settings().base_path());
+
+    for (const auto& item : metadata.settings().items()) {
+        Metadata_.Settings.AppendItem({item.source_path(), item.destination_path()});
+    }
+
+    Metadata_.Settings.Description(metadata.settings().description());
+    Metadata_.Settings.NumberOfRetries(metadata.settings().number_of_retries());
+
+    if (!metadata.settings().compression().empty()) {
+        Metadata_.Settings.Compression(metadata.settings().compression());
+    }
+
+    // progress
+    Metadata_.Progress = TProtoAccessor::FromProto(metadata.progress());
+    Metadata_.ItemsProgress = ItemsProgressFromProto(metadata.items_progress());
+}
+
+const TExportToFsResponse::TMetadata& TExportToFsResponse::Metadata() const {
     return Metadata_;
 }
 
@@ -133,6 +164,15 @@ public:
         return RunOperation<V1::ExportService, ExportToS3Request, ExportToS3Response, TExportToS3Response>(
             std::move(request),
             &V1::ExportService::Stub::AsyncExportToS3,
+            TRpcRequestSettings::Make(settings));
+    }
+
+    TFuture<TExportToFsResponse> ExportToFs(ExportToFsRequest&& request,
+        const TExportToFsSettings& settings)
+    {
+        return RunOperation<V1::ExportService, ExportToFsRequest, ExportToFsResponse, TExportToFsResponse>(
+            std::move(request),
+            &V1::ExportService::Stub::AsyncExportToFs,
             TRpcRequestSettings::Make(settings));
     }
 
@@ -167,6 +207,10 @@ TFuture<TExportToYtResponse> TExportClient::ExportToYt(const TExportToYtSettings
     }
 
     request.mutable_settings()->set_use_type_v3(settings.UseTypeV3_);
+
+    for (const std::string& excludeRegexp : settings.ExcludeRegexp_) {
+        request.mutable_settings()->add_exclude_regexps(excludeRegexp);
+    }
 
     return Impl_->ExportToYt(std::move(request), settings);
 }
@@ -208,6 +252,7 @@ TFuture<TExportToS3Response> TExportClient::ExportToS3(const TExportToS3Settings
     }
 
     request.mutable_settings()->set_disable_virtual_addressing(!settings.UseVirtualAddressing_);
+    request.mutable_settings()->set_include_index_data(settings.IncludeIndexData_);
 
     if (settings.EncryptionAlgorithm_.empty() != settings.SymmetricKey_.empty()) {
         throw TContractViolation("Encryption algorithm and symmetric key must be set together");
@@ -218,7 +263,54 @@ TFuture<TExportToS3Response> TExportClient::ExportToS3(const TExportToS3Settings
         request.mutable_settings()->mutable_encryption_settings()->mutable_symmetric_key()->set_key(settings.SymmetricKey_);
     }
 
+    for (const std::string& excludeRegexp : settings.ExcludeRegexp_) {
+        request.mutable_settings()->add_exclude_regexps(excludeRegexp);
+    }
+
     return Impl_->ExportToS3(std::move(request), settings);
+}
+
+TFuture<TExportToFsResponse> TExportClient::ExportToFs(const TExportToFsSettings& settings) {
+    auto request = MakeOperationRequest<ExportToFsRequest>(settings);
+
+    request.mutable_settings()->set_base_path(TStringType{settings.BasePath_});
+
+    for (const auto& item : settings.Item_) {
+        auto& protoItem = *request.mutable_settings()->mutable_items()->Add();
+        protoItem.set_source_path(TStringType{item.Src});
+        protoItem.set_destination_path(TStringType{item.Dst});
+    }
+
+    if (settings.Description_) {
+        request.mutable_settings()->set_description(TStringType{settings.Description_.value()});
+    }
+
+    if (settings.NumberOfRetries_) {
+        request.mutable_settings()->set_number_of_retries(settings.NumberOfRetries_.value());
+    }
+
+    if (settings.Compression_) {
+        request.mutable_settings()->set_compression(TStringType{settings.Compression_.value()});
+    }
+
+    if (settings.SourcePath_) {
+        request.mutable_settings()->set_source_path(settings.SourcePath_.value());
+    }
+
+    if (settings.EncryptionAlgorithm_.empty() != settings.SymmetricKey_.empty()) {
+        throw TContractViolation("Encryption algorithm and symmetric key must be set together");
+    }
+
+    if (!settings.EncryptionAlgorithm_.empty() && !settings.SymmetricKey_.empty()) {
+        request.mutable_settings()->mutable_encryption_settings()->set_encryption_algorithm(settings.EncryptionAlgorithm_);
+        request.mutable_settings()->mutable_encryption_settings()->mutable_symmetric_key()->set_key(settings.SymmetricKey_);
+    }
+
+    for (const std::string& excludeRegexp : settings.ExcludeRegexp_) {
+        request.mutable_settings()->add_exclude_regexps(excludeRegexp);
+    }
+
+    return Impl_->ExportToFs(std::move(request), settings);
 }
 
 } // namespace NExport

@@ -2,15 +2,16 @@ PY3TEST()
 
 PEERDIR(
     contrib/python/Jinja2
+    contrib/python/trio
+)
+
+DATA(
+    arcadia/contrib/python/Jinja2/py3/tests
 )
 
 PY_SRCS(
     TOP_LEVEL
     res/__init__.py
-)
-
-DATA(
-    arcadia/contrib/python/Jinja2/py3/tests/res
 )
 
 RESOURCE_FILES(
@@ -23,31 +24,7 @@ RESOURCE_FILES(
     res/templates2/foo
 )
 
-TEST_SRCS(
-    conftest.py
-    test_api.py
-    test_async.py
-    test_async_filters.py
-    test_bytecode_cache.py
-    test_compile.py
-    test_core_tags.py
-    test_debug.py
-    test_ext.py
-    test_filters.py
-    test_idtracking.py
-    test_imports.py
-    test_inheritance.py
-    test_lexnparse.py
-    test_loader.py
-    test_nativetypes.py
-    test_nodes.py
-    test_pickle.py
-    test_regression.py
-    test_runtime.py
-    test_security.py
-    test_tests.py
-    test_utils.py
-)
+ALL_PYTEST_SRCS()
 
 NO_LINT()
 

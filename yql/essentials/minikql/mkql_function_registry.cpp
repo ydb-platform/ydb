@@ -109,20 +109,21 @@ class TMutableFunctionRegistry: public IMutableFunctionRegistry {
     };
 
 public:
-    TMutableFunctionRegistry(IBuiltinFunctionRegistry::TPtr builtins)
+    explicit TMutableFunctionRegistry(IBuiltinFunctionRegistry::TPtr builtins)
         : Builtins_(std::move(builtins))
     {
     }
 
     TMutableFunctionRegistry(const TMutableFunctionRegistry& rhs)
-        : Builtins_(rhs.Builtins_)
+        : IMutableFunctionRegistry(rhs)
+        , Builtins_(rhs.Builtins_)
         , LoadedLibraries_(rhs.LoadedLibraries_)
         , UdfModules_(rhs.UdfModules_)
         , SupportsSizedAllocators_(rhs.SupportsSizedAllocators_)
     {
     }
 
-    ~TMutableFunctionRegistry() {
+    ~TMutableFunctionRegistry() override {
     }
 
     void AllowUdfPatch() override {
@@ -332,7 +333,7 @@ public:
             TFunctionsMap Functions;
             class TFuncDescriptor: public NUdf::IFunctionDescriptor {
             public:
-                TFuncDescriptor(TFunctionProperties& properties)
+                explicit TFuncDescriptor(TFunctionProperties& properties)
                     : Properties_(properties)
                 {
                 }
@@ -397,7 +398,7 @@ private:
 //////////////////////////////////////////////////////////////////////////////
 class TBuiltinsWrapper: public IFunctionRegistry {
 public:
-    TBuiltinsWrapper(IBuiltinFunctionRegistry::TPtr&& builtins)
+    explicit TBuiltinsWrapper(IBuiltinFunctionRegistry::TPtr&& builtins)
         : Builtins_(std::move(builtins))
     {
     }
@@ -480,8 +481,8 @@ namespace NMiniKQL {
 
 void FindUdfsInDir(const TString& dirPath, TVector<TString>* paths)
 {
-    static const TStringBuf libPrefix = TStringBuf(MKQL_UDF_LIB_PREFIX);
-    static const TStringBuf libSuffix = TStringBuf(MKQL_UDF_LIB_SUFFIX);
+    static const TStringBuf LibPrefix = TStringBuf(MKQL_UDF_LIB_PREFIX);
+    static const TStringBuf LibSuffix = TStringBuf(MKQL_UDF_LIB_SUFFIX);
 
     if (!dirPath.empty()) {
         std::vector<TString> dirs;
@@ -501,14 +502,14 @@ void FindUdfsInDir(const TString& dirPath, TVector<TString>* paths)
                 TString fileName = GetBaseName(path);
 
                 // skip non shared libraries
-                if (!fileName.StartsWith(libPrefix) ||
-                    !fileName.EndsWith(libSuffix))
+                if (!fileName.StartsWith(LibPrefix) ||
+                    !fileName.EndsWith(LibSuffix))
                 {
                     continue;
                 }
 
                 // skip test udfs when scanning dir
-                auto udfName = TStringBuf(fileName).Skip(libPrefix.length());
+                auto udfName = TStringBuf(fileName).Skip(LibPrefix.length());
                 if (udfName.StartsWith(TStringBuf("test_"))) {
                     continue;
                 }

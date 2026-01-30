@@ -122,6 +122,18 @@ void TAdaptiveHedgingManagerConfig::Register(TRegistrar registrar)
     registrar.Parameter("max_hedging_delay", &TThis::MaxHedgingDelay)
         .Default(TDuration::Seconds(10));
 
+    registrar.Parameter("max_token_count", &TThis::MaxTokenCount)
+        .GreaterThanOrEqual(1)
+        .LessThan(10000)
+        .Default(10)
+        .DontSerializeDefault();
+
+    registrar.Parameter("secondary_request_ratio", &TThis::SecondaryRequestRatio)
+        .GreaterThan(0.)
+        .LessThanOrEqual(1.)
+        .Optional()
+        .DontSerializeDefault();
+
     registrar.Postprocessor([] (TAdaptiveHedgingManagerConfig* config) {
         if (config->MinHedgingDelay > config->MaxHedgingDelay) {
             THROW_ERROR_EXCEPTION("\"min_hedging_delay\" cannot be greater than \"max_hedging_delay\"")

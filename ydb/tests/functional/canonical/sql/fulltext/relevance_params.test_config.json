@@ -1,0 +1,7 @@
+{
+  "relevance_params.sql": {
+    "parameters": {
+      "$query": "cats"
+    }
+  }
+}

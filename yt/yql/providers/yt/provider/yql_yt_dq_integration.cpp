@@ -478,6 +478,9 @@ public:
                         } else if (pathInfo.Ranges && !canUseYtPartitioningApi) {
                             AddMessage(ctx, "table with ranges", skipIssues, ytState->PassiveExecution);
                             return false;
+                        } else if (pathInfo.QLFilter && !canUseYtPartitioningApi) {
+                            AddMessage(ctx, "table with QLFilter", skipIssues, ytState->PassiveExecution);
+                            return false;
                         } else if (tableInfo->Meta->IsDynamic && !canUseYtPartitioningApi) {
                             AddMessage(ctx, "dynamic table", skipIssues, ytState->PassiveExecution);
                             return false;
@@ -624,6 +627,9 @@ public:
                         if (pathInfo->Ranges && !canUseYtPartitioningApi) {
                             AddErrorWrap(ctx, node_->Pos(), "table with ranges");
                             return Nothing();
+                        } else if (pathInfo->QLFilter && !canUseYtPartitioningApi) {
+                            AddErrorWrap(ctx, node_->Pos(), "table with QLFilter");
+                            return Nothing();
                         } else if (tableInfo->Meta->IsDynamic && !canUseYtPartitioningApi) {
                             AddErrorWrap(ctx, node_->Pos(), "dynamic table");
                             return Nothing();
@@ -687,8 +693,8 @@ public:
 
         if (auto maybeYtReadTable = TMaybeNode<TYtReadTable>(read)) {
             TMaybeNode<TCoSecureParam> secParams;
-            const auto cluster = maybeYtReadTable.Cast().DataSource().Cluster();
-            if (ytState->Configuration->Auth.Get().GetOrElse(TString()) || ytState->Configuration->Tokens.Value(cluster, "")) {
+            const auto cluster = maybeYtReadTable.Cast().DataSource().Cluster().StringValue();
+            if (ytState->ResolveClusterToken(cluster)) {
                 secParams = Build<TCoSecureParam>(ctx, read->Pos()).Name().Build(TString("cluster:default_").append(cluster)).Done();
             }
             return Build<TDqReadWrap>(ctx, read->Pos())
@@ -934,10 +940,10 @@ public:
             param("external_tx", GetGuidAsString(externalTx));
         }
         TString tokenName;
-        if (auto auth = ytState->Configuration->Auth.Get().GetOrElse(TString())) {
+        if (auto token = ytState->ResolveClusterToken(cluster)) {
             tokenName = TString("cluster:default_").append(cluster);
             if (!secureParams.contains(tokenName)) {
-                secureParams[tokenName] = auth;
+                secureParams[tokenName] = *token;
             }
         }
         param("token", tokenName);

@@ -65,10 +65,6 @@ private:
     const EBlockTrackingMode BlockTrackingMode;
 
 public:
-    ~TKqpScanComputeActor() override {
-        DoTerminateImpl();
-    }
-
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::KQP_SCAN_COMPUTE_ACTOR;
     }
@@ -77,6 +73,8 @@ public:
         NYql::NDqProto::TDqTask* task, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
         const NYql::NDq::TComputeRuntimeSettings& settings, const NYql::NDq::TComputeMemoryLimits& memoryLimits, NWilson::TTraceId traceId,
         TIntrusivePtr<NActors::TProtoArenaHolder> arena, EBlockTrackingMode mode);
+
+    ~TKqpScanComputeActor();
 
     STFUNC(StateFunc) {
         try {

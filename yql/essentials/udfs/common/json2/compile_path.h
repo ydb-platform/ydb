@@ -12,14 +12,14 @@ using namespace NYql;
 
 class TCompilePath: public TBoxedValue {
 public:
-    TCompilePath(TSourcePosition pos)
+    explicit TCompilePath(TSourcePosition pos)
         : Pos_(pos)
     {
     }
 
     static const TStringRef& Name() {
-        static auto name = TStringRef::Of("CompilePath");
-        return name;
+        static auto Name = TStringRef::Of("CompilePath");
+        return Name;
     }
 
     static bool DeclareSignature(

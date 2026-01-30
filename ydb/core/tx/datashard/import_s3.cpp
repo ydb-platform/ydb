@@ -60,7 +60,9 @@ using namespace NWrappers;
 using namespace Aws::S3;
 using namespace Aws;
 
-class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
+template <typename TSettings>
+class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
+    using TThis = TS3Downloader<TSettings>;
     // IReadController
     //
     // Work cycle:
@@ -109,7 +111,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
             Y_ENSURE(contentLength > 0);
             Y_ENSURE(processedBytes < contentLength);
 
-            const ui64 start = processedBytes + PendingBytes();
+            const ui64 start = processedBytes + this->PendingBytes();
             const ui64 end = Min(SumWithSaturation(start, RangeSize), contentLength) - 1;
             return std::make_pair(start, end);
         }
@@ -150,34 +152,34 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
         using TReadController::TReadController;
 
         void Feed(TString&& portion, bool /* last */) override {
-            Buffer.Append(portion.data(), portion.size());
+            this->Buffer.Append(portion.data(), portion.size());
         }
 
-        EDataStatus TryGetData(TStringBuf& data, TString& error) override {
+        IReadController::EDataStatus TryGetData(TStringBuf& data, TString& error) override {
             Y_ENSURE(Pos == 0);
 
-            const ui64 pos = AsStringBuf(Buffer.Size()).rfind('\n');
+            const ui64 pos = this->AsStringBuf(this->Buffer.Size()).rfind('\n');
             if (TString::npos == pos) {
-                if (!CanRequestNextRange(Buffer.Size(), error)) {
-                    return ERROR;
+                if (!this->CanRequestNextRange(this->Buffer.Size(), error)) {
+                    return IReadController::ERROR;
                 } else {
-                    return NOT_ENOUGH_DATA;
+                    return IReadController::NOT_ENOUGH_DATA;
                 }
             }
 
             Pos = pos + 1 /* \n */;
-            data = AsStringBuf(Pos);
+            data = this->AsStringBuf(Pos);
 
-            return READY_DATA;
+            return IReadController::READY_DATA;
         }
 
         void Confirm(NKikimrBackup::TS3DownloadState&) override {
-            Buffer.ChopHead(Pos);
+            this->Buffer.ChopHead(Pos);
             Pos = 0;
         }
 
         ui64 PendingBytes() const override {
-            return Buffer.Size();
+            return this->Buffer.Size();
         }
 
         ui64 ReadyBytes() const override {
@@ -202,7 +204,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
             Reset();
             // able to contain at least one block
             // take effect if RangeSize < BlockSize
-            Buffer.Reserve(AppData()->ZstdBlockSizeForTest.GetOrElse(ZSTD_BLOCKSIZE_MAX));
+            this->Buffer.Reserve(AppData()->ZstdBlockSizeForTest.GetOrElse(ZSTD_BLOCKSIZE_MAX));
         }
 
         void Feed(TString&& portion, bool /* last */) override {
@@ -210,7 +212,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
             Portion.Assign(portion.data(), portion.size());
         }
 
-        EDataStatus TryGetData(TStringBuf& data, TString& error) override {
+        IReadController::EDataStatus TryGetData(TStringBuf& data, TString& error) override {
             Y_ENSURE(ReadyInputBytes == 0 && ReadyOutputPos == 0);
 
             auto input = ZSTD_inBuffer{Portion.Data(), Portion.Size(), 0};
@@ -218,30 +220,30 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
             while (!ReadyOutputPos) {
                 PendingInputBytes -= input.pos; // dec before decompress
 
-                auto output = ZSTD_outBuffer{Buffer.Data(), Buffer.Capacity(), Buffer.Size()};
+                auto output = ZSTD_outBuffer{this->Buffer.Data(), this->Buffer.Capacity(), this->Buffer.Size()};
                 decompressionResult = ZSTD_decompressStream(Context.Get(), &output, &input);
 
                 if (ZSTD_isError(decompressionResult)) {
                     error = ZSTD_getErrorName(decompressionResult);
-                    return ERROR;
+                    return IReadController::ERROR;
                 }
 
                 PendingInputBytes += input.pos; // inc after decompress
-                Buffer.Proceed(output.pos);
+                this->Buffer.Proceed(output.pos);
 
                 if (decompressionResult == 0) {
                     // end of frame
-                    if (Buffer.Size() > 0 && AsStringBuf(Buffer.Size()).back() != '\n') { // Handle also a special case: theoretically it is possible to have nonempty zstd block with empty output data (we created a new block and have not added any data yet)
+                    if (this->Buffer.Size() > 0 && this->AsStringBuf(this->Buffer.Size()).back() != '\n') { // Handle also a special case: theoretically it is possible to have nonempty zstd block with empty output data (we created a new block and have not added any data yet)
                         error = "cannot find new line symbol";
-                        return ERROR;
+                        return IReadController::ERROR;
                     }
 
                     ReadyInputBytes = PendingInputBytes;
-                    ReadyOutputPos = Buffer.Size();
+                    ReadyOutputPos = this->Buffer.Size();
                     Reset();
                 } else {
                     // try to find complete row
-                    const ui64 pos = AsStringBuf(Buffer.Size()).rfind('\n');
+                    const ui64 pos = this->AsStringBuf(this->Buffer.Size()).rfind('\n');
                     if (TString::npos != pos) {
                         ReadyOutputPos = pos + 1 /* \n */;
                     }
@@ -254,10 +256,10 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
 
                 if (!ReadyOutputPos && output.pos == output.size) {
                     const auto blockSize = AppData()->ZstdBlockSizeForTest.GetOrElse(ZSTD_BLOCKSIZE_MAX);
-                    if (CanIncreaseBuffer(Buffer.Size(), blockSize, error)) {
-                        Buffer.Reserve(Buffer.Size() + blockSize);
+                    if (this->CanIncreaseBuffer(this->Buffer.Size(), blockSize, error)) {
+                        this->Buffer.Reserve(this->Buffer.Size() + blockSize);
                     } else {
-                        return ERROR;
+                        return IReadController::ERROR;
                     }
                 }
             }
@@ -265,23 +267,23 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
             Portion.ChopHead(input.pos);
 
             if (!ReadyOutputPos && decompressionResult != 0) {
-                if (!CanRequestNextRange(Buffer.Size(), error)) {
-                    return ERROR;
+                if (!this->CanRequestNextRange(this->Buffer.Size(), error)) {
+                    return IReadController::ERROR;
                 } else {
-                    return NOT_ENOUGH_DATA;
+                    return IReadController::NOT_ENOUGH_DATA;
                 }
             }
 
             if (ReadyOutputPos) {
-                data = AsStringBuf(ReadyOutputPos);
+                data = this->AsStringBuf(ReadyOutputPos);
             } else {
                 data = TStringBuf();
             }
-            return READY_DATA;
+            return IReadController::READY_DATA;
         }
 
         void Confirm(NKikimrBackup::TS3DownloadState&) override {
-            Buffer.ChopHead(ReadyOutputPos);
+            this->Buffer.ChopHead(ReadyOutputPos);
             ReadyOutputPos = 0;
 
             PendingInputBytes -= ReadyInputBytes;
@@ -326,10 +328,10 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
             Deserializer.AddData(TBuffer(portion.data(), portion.size()), last);
         }
 
-        EDataStatus TryGetData(TStringBuf& data, TString& error) override {
+        IReadController::EDataStatus TryGetData(TStringBuf& data, TString& error) override {
             if (BytesFedToChild) {
-                EDataStatus status = TryGetDataFromChildController(data, error);
-                if (status != NOT_ENOUGH_DATA || !NewData) {
+                auto status = TryGetDataFromChildController(data, error);
+                if (status != IReadController::NOT_ENOUGH_DATA || !NewData) {
                     return status;
                 }
             }
@@ -355,7 +357,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
                     }
                 } catch (const std::exception& ex) {
                     error = ex.what();
-                    return ERROR;
+                    return IReadController::ERROR;
                 }
             }
 
@@ -364,14 +366,14 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
             }
             if (lastEmptyBlock) {
                 data.Clear();
-                return READY_DATA;
+                return IReadController::READY_DATA;
             }
-            return NOT_ENOUGH_DATA;
+            return IReadController::NOT_ENOUGH_DATA;
         }
 
-        EDataStatus TryGetDataFromChildController(TStringBuf& data, TString& error) {
-            const EDataStatus status = DataController->TryGetData(data, error);
-            if (status == READY_DATA) {
+        IReadController::EDataStatus TryGetDataFromChildController(TStringBuf& data, TString& error) {
+            const auto status = DataController->TryGetData(data, error);
+            if (status == IReadController::READY_DATA) {
                 if (ui64 ready = DataController->ReadyBytes()) {
                     BytesFedToChild -= ready;
                     Y_ENSURE(BytesFedToChild >= 0);
@@ -401,7 +403,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
             Y_ENSURE(contentLength > 0);
             Y_ENSURE(processedBytes < contentLength);
 
-            const ui64 start = processedBytes + PendingBytes();
+            const ui64 start = processedBytes + this->PendingBytes();
             const ui64 end = Min(SumWithSaturation(start, ReadBatchSize), contentLength) - 1;
             return std::make_pair(start, end);
         }
@@ -527,7 +529,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
         IMPORT_LOG_D("AllocateResource");
 
         const auto* appData = AppData();
-        Send(MakeResourceBrokerID(), new TEvResourceBroker::TEvSubmitTask(
+        this->Send(MakeResourceBrokerID(), new TEvResourceBroker::TEvSubmitTask(
             TStringBuilder() << "Restore { " << TxId << ":" << DataShard << " }",
             {{ 1, 0 }},
             appData->DataShardConfig.GetRestoreTaskName(),
@@ -535,7 +537,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
             nullptr
         ));
 
-        Become(&TThis::StateAllocateResource);
+        this->Become(&TThis::StateAllocateResource);
     }
 
     void Handle(TEvResourceBroker::TEvResourceAllocated::TPtr& ev) {
@@ -552,13 +554,13 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
             << ": attempt# " << Attempt);
 
         if (const TActorId client = std::exchange(Client, TActorId())) {
-            Send(client, new TEvents::TEvPoisonPill());
+            this->Send(client, new TEvents::TEvPoisonPill());
         }
 
-        Client = RegisterWithSameMailbox(CreateS3Wrapper(ExternalStorageConfig->ConstructStorageOperator()));
+        Client = this->RegisterWithSameMailbox(CreateS3Wrapper(ExternalStorageConfig->ConstructStorageOperator()));
 
         HeadObject(Settings.GetDataKey(DataFormat, CompressionCodec));
-        Become(&TThis::StateDownloadData);
+        this->Become(&TThis::StateDownloadData);
     }
 
     void HeadObject(const TString& key) {
@@ -568,7 +570,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
         auto request = Model::HeadObjectRequest()
             .WithKey(key);
 
-        Send(Client, new TEvExternalStorage::TEvHeadObjectRequest(request));
+        this->Send(Client, new TEvExternalStorage::TEvHeadObjectRequest(request));
     }
 
     void GetObject(const TString& key, const std::pair<ui64, ui64>& range) {
@@ -580,7 +582,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
             .WithKey(key)
             .WithRange(TStringBuilder() << "bytes=" << range.first << "-" << range.second);
 
-        Send(Client, new TEvExternalStorage::TEvGetObjectRequest(request));
+        this->Send(Client, new TEvExternalStorage::TEvGetObjectRequest(request));
     }
 
     void Handle(TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {
@@ -648,9 +650,9 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
 
         if (Checksum) {
             HeadObject(ChecksumKey(Settings.GetDataKey(DataFormat, ECompressionCodec::None)));
-            Become(&TThis::StateDownloadChecksum);
+            this->Become(&TThis::StateDownloadChecksum);
         } else {
-            Send(DataShard, new TEvDataShard::TEvGetS3DownloadInfo(TxId));
+            this->Send(DataShard, new TEvDataShard::TEvGetS3DownloadInfo(TxId));
         }
     }
 
@@ -659,7 +661,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
 
         const auto& info = ev->Get()->Info;
         if (!info.DataETag) {
-            Send(DataShard, new TEvDataShard::TEvStoreS3DownloadInfo(TxId, {
+            this->Send(DataShard, new TEvDataShard::TEvStoreS3DownloadInfo(TxId, {
                 ETag, ProcessedBytes, WrittenBytes, WrittenRows, ProcessedChecksumState, DownloadState
             }));
             return;
@@ -759,8 +761,8 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
 
         ExpectedChecksum = msg.Body.substr(0, msg.Body.find(' '));
 
-        Send(DataShard, new TEvDataShard::TEvGetS3DownloadInfo(TxId));
-        Become(&TThis::StateDownloadData);
+        this->Send(DataShard, new TEvDataShard::TEvGetS3DownloadInfo(TxId));
+        this->Become(&TThis::StateDownloadData);
     }
 
     void Process() {
@@ -871,7 +873,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
         Counters.LatencyProcess.Finish(Now());
         Counters.LatencyWrite.Start(Now());
 
-        Send(DataShard, new TEvDataShard::TEvS3UploadRowsRequest(TxId, record, {
+        this->Send(DataShard, new TEvDataShard::TEvS3UploadRowsRequest(TxId, record, {
             ETag, ProcessedBytes, WrittenBytes, WrittenRows, ProcessedChecksumState, DownloadState
         }));
     }
@@ -1004,7 +1006,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
     void Retry() {
         Delay = Min(Delay * ++Attempt, MaxDelay);
         const TDuration random = TDuration::FromValue(TAppData::RandomProvider->GenRand64() % Delay.MicroSeconds());
-        Schedule(Delay + random, new TEvents::TEvWakeup());
+        this->Schedule(Delay + random, new TEvents::TEvWakeup());
     }
 
     template <typename T>
@@ -1028,25 +1030,25 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
             << ", writtenRows# " << WrittenRows);
 
         TAutoPtr<IDestructable> prod = new TImportJobProduct(success, error, WrittenBytes, WrittenRows);
-        Send(DataShard, new TDataShard::TEvPrivate::TEvAsyncJobComplete(prod), 0, TxId);
+        this->Send(DataShard, new TEvDataShard::TEvAsyncJobComplete(prod), 0, TxId);
 
         Y_ENSURE(TaskId);
-        Send(MakeResourceBrokerID(), new TEvResourceBroker::TEvFinishTask(TaskId));
+        this->Send(MakeResourceBrokerID(), new TEvResourceBroker::TEvFinishTask(TaskId));
 
         PassAway();
     }
 
     void NotifyDied() {
-        Send(MakeResourceBrokerID(), new TEvResourceBroker::TEvNotifyActorDied());
+        this->Send(MakeResourceBrokerID(), new TEvResourceBroker::TEvNotifyActorDied());
         PassAway();
     }
 
     void PassAway() override {
         if (Client) {
-            Send(Client, new TEvents::TEvPoisonPill());
+            this->Send(Client, new TEvents::TEvPoisonPill());
         }
 
-        TActor::PassAway();
+        TActorBootstrapped<TS3Downloader<TSettings>>::PassAway();
     }
 
 public:
@@ -1058,18 +1060,28 @@ public:
         return LogPrefix_;
     }
 
+    static TSettings GetSettings(const NKikimrSchemeOp::TRestoreTask& task);
+
+    static ui64 GetReadBatchSize(const NKikimrSchemeOp::TRestoreTask& task) {
+        if constexpr (std::is_same_v<TSettings, NKikimrSchemeOp::TS3Settings>) {
+            return GetSettings(task).GetLimits().GetReadBatchSize();
+        } else {
+            return 8388608; // Default 8MB for FS
+        }
+    }
+
     explicit TS3Downloader(const TActorId& dataShard, ui64 txId, const NKikimrSchemeOp::TRestoreTask& task, const TTableInfo& tableInfo)
-        : ExternalStorageConfig(new NExternalStorage::TS3ExternalStorageConfig(task.GetS3Settings()))
+        : ExternalStorageConfig(NWrappers::IExternalStorageConfig::Construct(AppData()->AwsClientConfig, GetSettings(task)))
         , DataShard(dataShard)
         , TxId(txId)
-        , Settings(TS3Settings::FromRestoreTask(task))
+        , Settings(TStorageSettings::FromRestoreTask<TSettings>(task))
         , DataFormat(NBackupRestoreTraits::EDataFormat::Csv)
         , CompressionCodec(NBackupRestoreTraits::ECompressionCodec::None)
         , TableInfo(tableInfo)
         , Scheme(task.GetTableDescription())
         , LogPrefix_(TStringBuilder() << "s3:" << TxId)
         , Retries(task.GetNumberOfRetries())
-        , ReadBatchSize(task.GetS3Settings().GetLimits().GetReadBatchSize())
+        , ReadBatchSize(GetReadBatchSize(task))
         , ReadBufferSizeLimit(AppData()->DataShardConfig.GetRestoreReadBufferSizeLimit())
         , Checksum(task.GetValidateChecksums() ? CreateChecksum() : nullptr)
         , ProcessedChecksumState(Checksum ? Checksum->GetState() : NKikimrBackup::TChecksumState())
@@ -1122,7 +1134,7 @@ private:
     NWrappers::IExternalStorageConfig::TPtr ExternalStorageConfig;
     const TActorId DataShard;
     const ui64 TxId;
-    const NDataShard::TS3Settings Settings;
+    const TStorageSettings Settings;
     const NBackupRestoreTraits::EDataFormat DataFormat;
     NBackupRestoreTraits::ECompressionCodec CompressionCodec;
     const TTableInfo TableInfo;
@@ -1161,8 +1173,39 @@ private:
 
 }; // TS3Downloader
 
+template <>
+NKikimrSchemeOp::TS3Settings TS3Downloader<NKikimrSchemeOp::TS3Settings>::GetSettings(
+    const NKikimrSchemeOp::TRestoreTask& task)
+{
+    return task.GetS3Settings();
+}
+
+template <>
+NKikimrSchemeOp::TFSSettings TS3Downloader<NKikimrSchemeOp::TFSSettings>::GetSettings(
+    const NKikimrSchemeOp::TRestoreTask& task)
+{
+    return task.GetFSSettings();
+}
+
+IActor* CreateDownloaderBySettingsType(
+    const TActorId& dataShard,
+    ui64 txId,
+    const NKikimrSchemeOp::TRestoreTask& task,
+    const TTableInfo& tableInfo)
+{
+    if (task.HasS3Settings()) {
+        return new TS3Downloader<NKikimrSchemeOp::TS3Settings>(
+            dataShard, txId, task, tableInfo);
+    } else if (task.HasFSSettings()) {
+        return new TS3Downloader<NKikimrSchemeOp::TFSSettings>(
+            dataShard, txId, task, tableInfo);
+    }
+
+    Y_ABORT("Unsupported storage type in restore task");
+}
+
 IActor* CreateS3Downloader(const TActorId& dataShard, ui64 txId, const NKikimrSchemeOp::TRestoreTask& task, const TTableInfo& info) {
-    return new TS3Downloader(dataShard, txId, task, info);
+    return CreateDownloaderBySettingsType(dataShard, txId, task, info);
 }
 
 } // NDataShard

@@ -44,6 +44,11 @@ message ExportToYtSettings {
     string description = 5 [(length).le = 128];
     uint32 number_of_retries = 6;
     bool use_type_v3 = 7;
+
+    // Patterns (PCRE) for paths excluded from export operation.
+    // - Patterns are matched against the object path relative to database root path.
+    // - Object is excluded from export operation if it matches any of the specified exclude regexps.
+    repeated string exclude_regexps = 8;
 }
 
 message ExportToYtResult {
@@ -126,7 +131,7 @@ message ExportToS3Settings {
     // it is especially useful for custom s3 implementations
     bool disable_virtual_addressing = 12;
 
-    // Database root if not provided.
+    // Defaults to database root if not provided.
     // All object names are calculated and written relative to this path.
     string source_path = 13;
 
@@ -139,6 +144,17 @@ message ExportToS3Settings {
     // If encryption_settings field is not specified,
     // the resulting data will not be encrypted.
     EncryptionSettings encryption_settings = 15;
+
+    // Include index data or not.
+    // By default, only index metadata is uploaded and indexes are built during import — it saves space
+    // and reduces export time, but it can potentially increase the import time.
+    // Index data can be uploaded and downloaded back during import.
+    bool include_index_data = 16;
+
+    // Patterns (PCRE) for paths excluded from export operation.
+    // - Patterns are matched against the object path relative to the export's source_path.
+    // - Object is excluded from export operation if it matches any of the specified exclude regexps.
+    repeated string exclude_regexps = 17;
 }
 
 message ExportToS3Result {
@@ -185,32 +201,52 @@ message EncryptionSettings {
 /// File system (FS)
 message ExportToFsSettings {
     message Item {
-        // Database path to a table to be exported
+        // Database path to a table/directory to be exported
         string source_path = 1 [(required) = true];
 
-        /* The tables are exported to one or more files in FS.
-        The files are saved to the destination_path directory. */
-        string destination_path = 2 [(required) = true];
+        /* Tables are exported to one or more files in FS.
+           The path begins with 'destination_path'.
+           If not specified, actual FS path is the default `base_path` concatenated with:
+            * The object path relative to the global `source_path` for a non-encrypted export
+            * The anonymized path for an encrypted export
+        */
+        string destination_path = 2;
     }
 
-    // Base path on FS where to write export
-    // Path to the mounted directory in the case of NFS
+    // Base path on FS where to write all export items
+    // In the case of NFS, one of the directories in the path must be mounted
+    // Must be an absolute path
     // Example: /mnt/exports
+    // SchemaMapping file with the list of objects is written to this path
     string base_path = 1 [(required) = true];
-    
+
     // List of items to export
     repeated Item items = 2;
-    
+
     // Optional description
     string description = 3 [(length).le = 128];
-    
+
     // Number of retries for failed operations
     uint32 number_of_retries = 4;
-    
+
     // Codec used to compress data. Codecs are available:
     // - zstd.
     // - zstd-N, where N is compression level, e.g. zstd-3.
     string compression = 5;
+
+    // Settings for data encryption.
+    // If encryption_settings field is not specified,
+    // the resulting data will not be encrypted.
+    EncryptionSettings encryption_settings = 6;
+
+    // Defaults to database root if not provided.
+    // All object names are calculated and written relative to this path.
+    string source_path = 7;
+
+    // Patterns (PCRE) for paths excluded from export operation.
+    // - Patterns are matched against the object path relative to the export's source_path.
+    // - Object is excluded from export operation if it matches any of the specified exclude regexps.
+    repeated string exclude_regexps = 8;
 }
 
 message ExportToFsResult {

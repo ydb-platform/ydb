@@ -26,9 +26,9 @@
 #include <utility>
 #include <vector>
 
-#include "parquet/encryption/type_fwd.h"
-#include "parquet/platform.h"
-#include "parquet/properties.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/encryption/type_fwd.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/platform.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/properties.h"
 
 namespace parquet20 {
 

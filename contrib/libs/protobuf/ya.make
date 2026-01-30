@@ -41,15 +41,15 @@ ELSE()
 ENDIF()
 
 PEERDIR(
-    contrib/libs/protobuf/third_party/utf8_range
     contrib/libs/zlib
     contrib/restricted/abseil-cpp-tstring
+    contrib/restricted/google/utf8_range
     library/cpp/sanitizer/include
 )
 
 ADDINCL(
     contrib/libs/protobuf/src
-    contrib/libs/protobuf/third_party/utf8_range
+    contrib/restricted/google/utf8_range
 )
 
 NO_COMPILER_WARNINGS()
@@ -162,5 +162,4 @@ END()
 
 RECURSE(
     builtin_proto
-    third_party/utf8_range
 )

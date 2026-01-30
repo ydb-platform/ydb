@@ -89,9 +89,9 @@ protected:
         AsDerived()->LwProbe(success);
 
         for (const auto& issue : event->Issues) {
-            NYql::WalkThroughIssues(issue, true, [this](const NYql::TIssue& err, ui16 level) {
+            NYql::WalkThroughIssues(issue, true, [issuesCounters=RequestCounters.Common->Issues](const NYql::TIssue& err, ui16 level) {
                 Y_UNUSED(level);
-                RequestCounters.Common->Issues->GetCounter(ToString(err.GetCode()), true)->Inc();
+                issuesCounters->GetCounter(ToString(err.GetCode()), true)->Inc();
             });
         }
 
@@ -124,7 +124,7 @@ protected:
                 issues.AddIssues(NYdb::NAdapters::ToYqlIssues(status.GetIssues()));
                 internalIssues.AddIssues(NYdb::NAdapters::ToYqlIssues(status.GetIssues()));
             }
-        } catch (const NYql::TCodeLineException& exception) {
+        } catch (const NKikimr::TCodeLineException& exception) {
             NYql::TIssue issue = MakeErrorIssue(exception.Code, exception.GetRawMessage());
             issues.AddIssue(issue);
             NYql::TIssue internalIssue = MakeErrorIssue(exception.Code, CurrentExceptionMessage());

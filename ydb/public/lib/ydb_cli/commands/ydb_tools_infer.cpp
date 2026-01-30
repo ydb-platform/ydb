@@ -58,6 +58,8 @@ void TCommandToolsInferCsv::Config(TConfig& config) {
     config.Opts->MutuallyExclusiveOpt(columnsOption, genColumnsOption);
     config.Opts->MutuallyExclusiveOpt(columnsOption, headerOption);
     config.Opts->MutuallyExclusiveOpt(genColumnsOption, headerOption);
+
+    config.NeedToConnect = false;
 }
 
 void TCommandToolsInferCsv::Parse(TConfig& config) {

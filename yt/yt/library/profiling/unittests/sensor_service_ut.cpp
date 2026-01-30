@@ -19,7 +19,7 @@ using namespace NYson;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(TSensorService, GetSensor)
+TEST(TSensorServiceTest, GetSensor)
 {
     auto registry = New<TSolomonRegistry>();
     auto config = New<TSolomonExporterConfig>();

@@ -159,11 +159,12 @@ namespace NSQLTranslationV0 {
         TVector<TString> AllResults;
         TSet<TString> UsedClusters;
 
-        struct ShortcutStore {
+        struct TShortcutStore {
             THashMap<INode*, TString> BaseMap;
             TVector<std::pair<TString, TNodePtr>> Goal;
         };
-        THashMap<ui32, ShortcutStore> Shortcuts;
+
+        THashMap<ui32, TShortcutStore> Shortcuts;
         ui32 ShortcutCurrentLevel = 0;
 
     };
@@ -173,7 +174,7 @@ namespace NSQLTranslationV0 {
         typedef TSet<ui32> TSetType;
 
     protected:
-        TTranslation(TContext& ctx);
+        explicit TTranslation(TContext& ctx);
 
     public:
         TContext& Context();

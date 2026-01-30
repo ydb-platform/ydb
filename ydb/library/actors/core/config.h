@@ -32,6 +32,7 @@ namespace NActors {
         EASProfile ActorSystemProfile = EASProfile::Default;
         bool HasSharedThread = false;
         bool UseRingQueue = true;
+        bool AllThreadsAreShared = false;
         ui16 MinLocalQueueSize = 0;
         ui16 MaxLocalQueueSize = 0;
 
@@ -47,6 +48,7 @@ namespace NActors {
         TDuration TimePerMailbox = TBasicExecutorPoolConfig::DEFAULT_TIME_PER_MAILBOX;
         ui32 EventsPerMailbox = TBasicExecutorPoolConfig::DEFAULT_EVENTS_PER_MAILBOX;
         i16 SoftProcessingDurationTs = Us2Ts(10'000);
+        bool United = false;
     };
 
     struct TIOExecutorPoolConfig {

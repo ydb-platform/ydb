@@ -107,5 +107,8 @@ path.bash.inc
 # Claude Code
 .claude/
 
+.cursor/
+.cursorignore
+
 # Harness local cluster working directory
 .ydbd_working_dir/

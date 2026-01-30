@@ -2,27 +2,27 @@
 
 namespace NKikimr::NColumnShard {
 
-TColumnShard::EOverloadStatus TColumnShard::ResourcesStatusToOverloadStatus(const NOverload::EResourcesStatus status) const {
+TColumnShard::TOverloadStatus TColumnShard::ResourcesStatusToOverloadStatus(const NOverload::EResourcesStatus status) const {
     switch (status) {
         case NOverload::EResourcesStatus::Ok:
-            return EOverloadStatus::None;
+            return TOverloadStatus{EOverloadStatus::None, {}};
         case NOverload::EResourcesStatus::WritesInFlyLimitReached:
-            return EOverloadStatus::ShardWritesInFly;
+            return TOverloadStatus{EOverloadStatus::ShardWritesInFly, "The limit on the number of in-flight write requests to a shard has been exceeded. Please add more resources or reduce the database load."};
         case NOverload::EResourcesStatus::WritesSizeInFlyLimitReached:
-            return EOverloadStatus::ShardWritesSizeInFly;
+            return TOverloadStatus{EOverloadStatus::ShardWritesSizeInFly, "The limit on the total size of in-flight write requests to the shard has been exceeded. Please add more resources or reduce the database load."};
     }
 }
 
-TColumnShard::EOverloadStatus TColumnShard::CheckOverloadedImmediate(const TInternalPathId /* pathId */) const {
+TColumnShard::TOverloadStatus TColumnShard::CheckOverloadedImmediate(const TInternalPathId /* pathId */) const {
     if (IsAnyChannelYellowStop()) {
-        return EOverloadStatus::Disk;
+        return TOverloadStatus{EOverloadStatus::Disk, "Channels are overloaded (yellow), please rebalance groups or add new ones"};
     }
     const ui64 txLimit = Settings.OverloadTxInFlight;
 
     if (txLimit && Executor()->GetStats().TxInFly > txLimit) {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "shard_overload")("reason", "tx_in_fly")("sum", Executor()->GetStats().TxInFly)(
             "limit", txLimit);
-        return EOverloadStatus::ShardTxInFly;
+        return TOverloadStatus{EOverloadStatus::ShardTxInFly, TStringBuilder{} << "The local transaction limit has been exceeded " << Executor()->GetStats().TxInFly << " of " << txLimit << ". Please add more resources or reduce the database load."};
     }
 
     if (AppData()->FeatureFlags.GetEnableOlapRejectProbability()) {
@@ -31,12 +31,12 @@ TColumnShard::EOverloadStatus TColumnShard::CheckOverloadedImmediate(const TInte
             const float rnd = TAppData::RandomProvider->GenRandReal2();
             if (rnd < rejectProbabilty) {
                 AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "shard_overload")("reason", "reject_probality")("RP", rejectProbabilty);
-                return EOverloadStatus::RejectProbability;
+                return TOverloadStatus{EOverloadStatus::RejectProbability, "The local database is overloaded. Please add more resources or reduce the database load."};
             }
         }
     }
 
-    return EOverloadStatus::None;
+    return TOverloadStatus{EOverloadStatus::None, {}};
 }
 
 void TColumnShard::Handle(TEvColumnShard::TEvOverloadUnsubscribe::TPtr& ev, const TActorContext&) {

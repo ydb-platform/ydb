@@ -27,6 +27,7 @@ void TimeExample(const std::string& endpoint, const std::string& database) {
             auto ts2 = parser.ColumnParser("ts2").GetTimestamp64();
             auto interval = parser.ColumnParser("interval").GetInterval64();
 
+            // Standard output and std::format can overflow for large timestamps
             std::cout << "ts1: " << ts1 << std::endl;
             std::cout << "ts2: " << ts2 << std::endl;
             std::cout << "interval: " << std::chrono::duration_cast<std::chrono::milliseconds>(interval) << std::endl;

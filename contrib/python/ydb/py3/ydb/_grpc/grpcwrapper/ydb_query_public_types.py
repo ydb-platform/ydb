@@ -1,12 +1,13 @@
 import abc
+import enum
 import typing
 
-from .common_utils import IToProto
+from .common_utils import IFromProto, IToProto
 
 try:
-    from ydb.public.api.protos import ydb_query_pb2
+    from ydb.public.api.protos import ydb_query_pb2, ydb_formats_pb2
 except ImportError:
-    from contrib.ydb.public.api.protos import ydb_query_pb2
+    from contrib.ydb.public.api.protos import ydb_query_pb2, ydb_formats_pb2
 
 
 class BaseQueryTxMode(IToProto):
@@ -33,6 +34,18 @@ class QuerySnapshotReadOnly(BaseQueryTxMode):
 
     def to_proto(self) -> ydb_query_pb2.SnapshotModeSettings:
         return ydb_query_pb2.SnapshotModeSettings()
+
+
+class QuerySnapshotReadWrite(BaseQueryTxMode):
+    def __init__(self):
+        self._name = "snapshot_read_write"
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    def to_proto(self) -> ydb_query_pb2.SnapshotRWModeSettings:
+        return ydb_query_pb2.SnapshotRWModeSettings()
 
 
 class QuerySerializableReadWrite(BaseQueryTxMode):
@@ -92,3 +105,51 @@ class QueryStaleReadOnly(BaseQueryTxMode):
 
     def to_proto(self) -> ydb_query_pb2.StaleModeSettings:
         return ydb_query_pb2.StaleModeSettings()
+
+
+class ArrowCompressionCodecType(enum.IntEnum):
+    UNSPECIFIED = 0
+    NONE = 1
+    ZSTD = 2
+    LZ4_FRAME = 3
+
+
+class ArrowCompressionCodec(IToProto):
+    """Compression codec for Arrow format result sets."""
+
+    def __init__(
+        self, codec_type: typing.Optional[ArrowCompressionCodecType] = None, level: typing.Optional[int] = None
+    ):
+        self.type = codec_type if codec_type is not None else ArrowCompressionCodecType.UNSPECIFIED
+        self.level = level
+
+    def to_proto(self):
+        return ydb_formats_pb2.ArrowFormatSettings.CompressionCodec(type=self.type, level=self.level)
+
+
+class ArrowFormatSettings(IToProto):
+    """Settings for Arrow format result sets."""
+
+    def __init__(self, compression_codec: typing.Optional[ArrowCompressionCodec] = None):
+        self.compression_codec = compression_codec
+
+    def to_proto(self):
+        settings = ydb_formats_pb2.ArrowFormatSettings()
+        if self.compression_codec is not None:
+            codec_proto = self.compression_codec.to_proto()
+            settings.compression_codec.CopyFrom(codec_proto)
+        return settings
+
+
+class ArrowFormatMeta(IFromProto):
+    """Metadata for Arrow format result sets containing the schema."""
+
+    def __init__(self, schema: bytes):
+        self.schema = schema
+
+    @classmethod
+    def from_proto(cls, proto_message):
+        return cls(schema=proto_message.schema)
+
+    def __repr__(self):
+        return f"ArrowFormatMeta(schema_size={len(self.schema)} bytes)"

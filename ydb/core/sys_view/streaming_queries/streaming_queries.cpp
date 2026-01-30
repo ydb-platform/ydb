@@ -26,8 +26,6 @@ namespace {
 
 using namespace fmt::literals;
 
-constexpr char STREAMING_QUERIES_TABLE[] = ".metadata/streaming/queries";
-
 struct TEvPrivate {
     // Event ids
     enum EEv : ui32 {
@@ -176,7 +174,7 @@ private:
                 ORDER BY database_id, query_path {order}
                 LIMIT $limit;
             )",
-            "table"_a = STREAMING_QUERIES_TABLE,
+            "table"_a = NKqp::TStreamingQueryMeta::GetTablesPath(),
             "params_decl"_a = paramsDecl,
             "range_filter"_a = rangeFilter,
             "order"_a = Settings.Reverse ? "DESC" : "ASC"
@@ -287,7 +285,10 @@ public:
 
         auto request = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
         request->DatabaseName = Database;
-        request->UserToken = UserToken;
+
+        if (UserToken && UserToken->GetSanitizedToken()) {
+            request->UserToken = UserToken;
+        }
 
         request->ResultSet.reserve(Paths.size());
         for (const auto& path : Paths) {
@@ -447,7 +448,7 @@ class TStreamingQueriesTablesCheckerActor final : public TSchemeDescribeActorBas
 
 public:
     TStreamingQueriesTablesCheckerActor(const TString& database)
-        : TBase(__func__, database, {JoinPath({database, STREAMING_QUERIES_TABLE})}, MakeIntrusive<NACLib::TUserToken>(BUILTIN_ACL_METADATA, TVector<NACLib::TSID>{}))
+        : TBase(__func__, database, {JoinPath({database, NKqp::TStreamingQueryMeta::GetTablesPath()})}, MakeIntrusive<NACLib::TUserToken>(BUILTIN_ACL_METADATA, TVector<NACLib::TSID>{}))
     {}
 
 protected:

@@ -126,6 +126,7 @@ void TDSAccessorBase::StartSnapshotsFetchingImpl() {
     Y_ABORT_UNLESS(managers.size());
     CurrentExistence = ExistenceChecks;
     TStringBuilder sb;
+    sb << "/*UI-QUERY-EXCLUDE*/" << Endl;
     for (auto&& i : managers) {
         auto it = CurrentExistence.find(i->GetStorageTablePath());
         Y_ABORT_UNLESS(it != CurrentExistence.end());

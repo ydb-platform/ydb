@@ -10,6 +10,8 @@
 #include <sys/mnttab.h>
 #include <kstat.h>
 
+#include "../../arch/all/init.h"
+
 
 PyObject *
 psutil_disk_io_counters(PyObject *self, PyObject *args) {
@@ -23,7 +25,7 @@ psutil_disk_io_counters(PyObject *self, PyObject *args) {
         return NULL;
     kc = kstat_open();
     if (kc == NULL) {
-        PyErr_SetFromErrno(PyExc_OSError);;
+        psutil_oserror();
         goto error;
     }
     ksp = kc->kc_chain;
@@ -32,7 +34,8 @@ psutil_disk_io_counters(PyObject *self, PyObject *args) {
             if (strcmp(ksp->ks_class, "disk") == 0) {
                 if (kstat_read(kc, ksp, &kio) == -1) {
                     kstat_close(kc);
-                    return PyErr_SetFromErrno(PyExc_OSError);;
+                    return psutil_oserror();
+                    ;
                 }
                 py_disk_info = Py_BuildValue(
                     "(IIKKLL)",
@@ -41,12 +44,13 @@ psutil_disk_io_counters(PyObject *self, PyObject *args) {
                     kio.nread,
                     kio.nwritten,
                     kio.rtime / 1000 / 1000,  // from nano to milli secs
-                    kio.wtime / 1000 / 1000   // from nano to milli secs
+                    kio.wtime / 1000 / 1000  // from nano to milli secs
                 );
                 if (!py_disk_info)
                     goto error;
-                if (PyDict_SetItemString(py_retdict, ksp->ks_name,
-                                         py_disk_info))
+                if (PyDict_SetItemString(
+                        py_retdict, ksp->ks_name, py_disk_info
+                    ))
                     goto error;
                 Py_CLEAR(py_disk_info);
             }
@@ -80,23 +84,24 @@ psutil_disk_partitions(PyObject *self, PyObject *args) {
 
     file = fopen(MNTTAB, "rb");
     if (file == NULL) {
-        PyErr_SetFromErrno(PyExc_OSError);
+        psutil_oserror();
         goto error;
     }
 
     while (getmntent(file, &mt) == 0) {
         py_dev = PyUnicode_DecodeFSDefault(mt.mnt_special);
-        if (! py_dev)
+        if (!py_dev)
             goto error;
         py_mountp = PyUnicode_DecodeFSDefault(mt.mnt_mountp);
-        if (! py_mountp)
+        if (!py_mountp)
             goto error;
         py_tuple = Py_BuildValue(
             "(OOss)",
-            py_dev,           // device
-            py_mountp,        // mount point
-            mt.mnt_fstype,    // fs type
-            mt.mnt_mntopts);  // options
+            py_dev,  // device
+            py_mountp,  // mount point
+            mt.mnt_fstype,  // fs type
+            mt.mnt_mntopts  // options
+        );
         if (py_tuple == NULL)
             goto error;
         if (PyList_Append(py_retlist, py_tuple))

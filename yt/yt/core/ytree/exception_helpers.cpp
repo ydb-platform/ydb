@@ -111,6 +111,15 @@ void ThrowMethodNotSupported(TStringBuf method, const std::optional<TString>& re
     THROW_ERROR(error);
 }
 
+
+void ThrowMethodNotSupportedForAttributes(TStringBuf method)
+{
+    THROW_ERROR_EXCEPTION(
+        NRpc::EErrorCode::NoSuchMethod,
+        "%Qv method is not supported for attributes",
+        method);
+}
+
 void ThrowCannotHaveChildren(const IConstNodePtr& node)
 {
     THROW_ERROR_EXCEPTION("%v cannot have children",

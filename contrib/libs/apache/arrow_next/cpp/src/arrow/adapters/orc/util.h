@@ -21,10 +21,10 @@
 #include <cstdint>
 #include <memory>
 
-#include "arrow/array/builder_base.h"
-#include "arrow/result.h"
-#include "arrow/status.h"
-#include "arrow/type_fwd.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/builder_base.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/result.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/status.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type_fwd.h"
 #include "orc/OrcFile.hh"
 
 namespace liborc = orc;

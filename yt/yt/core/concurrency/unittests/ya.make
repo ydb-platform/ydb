@@ -5,7 +5,6 @@ INCLUDE(${ARCADIA_ROOT}/yt/ya_cpp.make.inc)
 PROTO_NAMESPACE(yt)
 
 SRCS(
-    arcadia_interop_ut.cpp
     async_barrier_ut.cpp
     async_looper_ut.cpp
     async_rw_lock_ut.cpp
@@ -21,6 +20,7 @@ SRCS(
     fair_share_invoker_pool_ut.cpp
     fair_share_thread_pool_ut.cpp
     fair_throttler_ut.cpp
+    fair_throttler_ipc_ut.cpp
     fls_ut.cpp
     invoker_alarm_ut.cpp
     invoker_pool_ut.cpp
@@ -35,6 +35,7 @@ SRCS(
     scheduled_executor_ut.cpp
     scheduler_ut.cpp
     suspendable_action_queue_ut.cpp
+    suspendable_invoker_ut.cpp
     thread_affinity_ut.cpp
     thread_pool_poller_ut.cpp
     thread_pool_ut.cpp

@@ -165,6 +165,8 @@ namespace NKikimr {
             ////////////////////////////////////////////////////////////////////////
             // Just lsn of the last record in index or (LogStartLsn - 1)
             ui64 GetLastLsn() const;
+            // Get lsn of the oldest record in synclog
+            ui64 GetFirstLsn() const;
             // First lsn to keep in Recovery Log (it doesn't care about entry point lsn,
             // because SyncLog knows nothing about its entry point; ask SyncLogKeeper
             // about it)

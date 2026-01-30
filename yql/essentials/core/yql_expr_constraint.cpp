@@ -1160,11 +1160,11 @@ private:
         }
         else if (inputMulti && lambdaVarIndex) { // Many to one
             const auto range = lambdaVarIndex->GetIndexMapping().equal_range(0);
-            static const TConstraintSet defConstr;
+            static const TConstraintSet DefConstr;
             std::vector<const TConstraintSet*> nonEmpty;
             for (auto i = range.first; i != range.second; ++i) {
                 if (i->second == Max<ui32>()) {
-                    nonEmpty.push_back(&defConstr);
+                    nonEmpty.push_back(&DefConstr);
                 } else if (auto origConstr = inputMulti->GetItem(i->second)) {
                     nonEmpty.push_back(origConstr);
                 }
@@ -3306,7 +3306,7 @@ public:
     {
     }
 
-    ~TConstraintTransformer() = default;
+    ~TConstraintTransformer() override = default;
 
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
         YQL_PROFILE_SCOPE(DEBUG, "ConstraintTransformer::DoTransform");

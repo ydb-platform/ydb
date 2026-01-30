@@ -794,6 +794,12 @@ Y_FORCE_INLINE NUdf::TUnboxedValue HandleKindDataImport(const TType* type, const
         case NUdf::TDataType<double>::Id:
             MKQL_ENSURE_S(oneOfCase == NKikimrMiniKQL::TValue::ValueValueCase::kDouble);
             return NUdf::TUnboxedValuePod(value.GetDouble());
+        case NUdf::TDataType<char*>::Id:
+            if (oneOfCase == NKikimrMiniKQL::TValue::ValueValueCase::kText)
+                return MakeString(value.GetText());
+            else if (oneOfCase == NKikimrMiniKQL::TValue::ValueValueCase::kBytes)
+                return MakeString(value.GetBytes());
+            MKQL_ENSURE_S(false);
         case NUdf::TDataType<NUdf::TJson>::Id:
         case NUdf::TDataType<NUdf::TUtf8>::Id:
             MKQL_ENSURE_S(oneOfCase == NKikimrMiniKQL::TValue::ValueValueCase::kText);

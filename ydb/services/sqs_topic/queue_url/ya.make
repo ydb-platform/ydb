@@ -1,6 +1,8 @@
 LIBRARY()
 
 SRCS(
+    arn.cpp
+    consumer.cpp
     utils.cpp
 )
 
@@ -11,3 +13,4 @@ PEERDIR(
 END()
 
 RECURSE_FOR_TESTS(ut)
+RECURSE(holder)

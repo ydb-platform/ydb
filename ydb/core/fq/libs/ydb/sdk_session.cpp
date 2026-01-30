@@ -47,7 +47,7 @@ struct TSdkSession : public ISession {
         return future;
     }
 
-    NYdb::TAsyncStatus CreateTable(const TString& /*db*/, const TString& path, NYdb::NTable::TTableDescription&& tableDesc) override {
+    NYdb::TAsyncStatus CreateTable(const TString& /*db*/, const TString& path, NYdb::NTable::TTableDescription&& tableDesc, const NACLib::TDiffACL& /*acl*/) override {
         return Session.CreateTable(path, std::move(tableDesc));
     }
 

@@ -15,9 +15,8 @@ namespace numpy
   repeat(types::ndarray<T, pS> const &expr, long repeats, long axis);
 
   template <class T, class pS>
-  types::ndarray<T, types::pshape<long>>
-  repeat(types::ndarray<T, pS> const &expr, long repeats,
-         types::none_type axis = types::none_type{});
+  types::ndarray<T, types::pshape<long>> repeat(types::ndarray<T, pS> const &expr, long repeats,
+                                                types::none_type axis = types::none_type{});
 
   NUMPY_EXPR_TO_NDARRAY0_DECL(repeat);
   DEFINE_FUNCTOR(pythonic::numpy, repeat);

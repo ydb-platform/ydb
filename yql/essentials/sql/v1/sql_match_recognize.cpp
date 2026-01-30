@@ -142,7 +142,7 @@ TMaybe<TVector<TSortSpecificationPtr>> TSqlMatchRecognizeClause::ParseOrderBy(co
 
 TNamedFunction TSqlMatchRecognizeClause::ParseOneMeasure(const TRule_row_pattern_measure_definition& node) {
     TColumnRefScope scope(Ctx_, EColumnRefState::MatchRecognizeMeasures);
-    auto callable = TSqlExpression(Ctx_, Mode_).Build(node.GetRule_expr1());
+    auto callable = Unwrap(TSqlExpression(Ctx_, Mode_).Build(node.GetRule_expr1()));
     auto measureName = Id(node.GetRule_an_id3(), *this);
     // Each measure must be a lambda, that accepts 2 args:
     // - List<InputTableColumns + _yql_Classifier, _yql_MatchNumber>
@@ -439,7 +439,7 @@ TNamedFunction TSqlMatchRecognizeClause::ParseOneDefinition(const TRule_row_patt
     auto defineName = Id(identifier, *this);
     TColumnRefScope scope(Ctx_, EColumnRefState::MatchRecognizeDefine, true, defineName);
     const auto& searchCondition = node.GetRule_row_pattern_definition_search_condition3().GetRule_search_condition1().GetRule_expr1();
-    auto callable = TSqlExpression(Ctx_, Mode_).Build(searchCondition);
+    auto callable = Unwrap(TSqlExpression(Ctx_, Mode_).Build(searchCondition));
     // Each define must be a predicate lambda, that accepts 3 args:
     // - List<input table rows>
     // - A struct that maps row pattern variables to ranges in the queue

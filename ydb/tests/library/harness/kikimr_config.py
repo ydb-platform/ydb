@@ -14,7 +14,7 @@ from importlib_resources import read_binary
 import yatest
 
 from ydb.core.protos import config_pb2
-from ydb.tests.library.common.types import Erasure
+from ydb.tests.library.common.types import Erasure, FailDomainType
 
 from . import tls_tools
 from .kikimr_port_allocator import KikimrPortManagerPortAllocator
@@ -26,7 +26,11 @@ import logging
 logger = logging.getLogger(__name__)
 
 PDISK_SIZE_STR = os.getenv("YDB_PDISK_SIZE", str(64 * 1024 * 1024 * 1024))
-if PDISK_SIZE_STR.endswith("GB"):
+if PDISK_SIZE_STR.endswith("KB"):
+    PDISK_SIZE = int(PDISK_SIZE_STR[:-2]) * 1024
+elif PDISK_SIZE_STR.endswith("MB"):
+    PDISK_SIZE = int(PDISK_SIZE_STR[:-2]) * 1024 * 1024
+elif PDISK_SIZE_STR.endswith("GB"):
     PDISK_SIZE = int(PDISK_SIZE_STR[:-2]) * 1024 * 1024 * 1024
 else:
     PDISK_SIZE = int(PDISK_SIZE_STR)
@@ -127,15 +131,17 @@ class KikimrConfigGenerator(object):
             domain_name='Root',
             suppress_version_check=True,
             static_pdisk_size=PDISK_SIZE,
+            static_pdisk_config=None,
             dynamic_pdisk_size=PDISK_SIZE,
             dynamic_pdisks=[],
+            dynamic_pdisks_config=None,
             dynamic_storage_pools=[dict(name="dynamic_storage_pool:1", kind="hdd", pdisk_user_kind=0)],
             state_storage_rings=None,
             n_to_select=None,
             use_log_files=True,
             grpc_ssl_enable=False,
             use_in_memory_pdisks=True,
-            enable_pqcd=True,
+            enable_pqcd=False,
             enable_metering=False,
             enable_audit_log=False,
             audit_log_config=None,
@@ -187,7 +193,11 @@ class KikimrConfigGenerator(object):
             enable_static_auth=False,
             cms_config=None,
             explicit_statestorage_config=None,
-            protected_mode=False
+            system_tablets=None,
+            protected_mode=False,  # Authentication
+            enable_pool_encryption=False,
+            tiny_mode=False,
+            module=None,
     ):
         if extra_feature_flags is None:
             extra_feature_flags = []
@@ -211,10 +221,14 @@ class KikimrConfigGenerator(object):
             self.explicit_hosts_and_host_configs = True
         self._pdisk_store_path = pdisk_store_path
         self.static_pdisk_size = static_pdisk_size
+        self.static_pdisk_config = static_pdisk_config
         self.app_config = config_pb2.TAppConfig()
         self.port_allocator = KikimrPortManagerPortAllocator() if port_allocator is None else port_allocator
         erasure = Erasure.NONE if erasure is None else erasure
+        self.system_tablets = system_tablets
         self.protected_mode = protected_mode
+        self.enable_pool_encryption = enable_pool_encryption
+        self.module = module
         self.__grpc_ssl_enable = grpc_ssl_enable or protected_mode
         self.__grpc_tls_data_path = None
         self.__grpc_tls_ca = None
@@ -240,7 +254,11 @@ class KikimrConfigGenerator(object):
         self.__pdisks_directory = os.getenv('YDB_PDISKS_DIRECTORY')
         self.static_erasure = erasure
         self.domain_name = domain_name
-        self.__number_of_pdisks_per_node = 1 + len(dynamic_pdisks)
+        self.__num_static_pdisks = 1
+        if erasure == Erasure.MIRROR_3_DC and nodes == 3:
+            self.__num_static_pdisks = 3
+
+        self.__number_of_pdisks_per_node = self.__num_static_pdisks + len(dynamic_pdisks)
         self.__udfs_path = udfs_path
         self._dcs = [1]
         if erasure == Erasure.MIRROR_3_DC:
@@ -256,6 +274,7 @@ class KikimrConfigGenerator(object):
 
         self.dynamic_pdisk_size = dynamic_pdisk_size
         self.dynamic_storage_pools = dynamic_storage_pools
+        self.dynamic_pdisks_config = dynamic_pdisks_config
 
         self.__dynamic_pdisks = dynamic_pdisks
 
@@ -272,6 +291,8 @@ class KikimrConfigGenerator(object):
         self.node_kind = node_kind
         self.yq_tenant = yq_tenant
         self.dc_mapping = dc_mapping
+
+        self.tiny_mode = tiny_mode
 
         self.__bs_cache_file_path = bs_cache_file_path
 
@@ -607,6 +628,9 @@ class KikimrConfigGenerator(object):
             self.yaml_config["domains_config"]["explicit_state_storage_board_config"] = self.explicit_statestorage_config["explicit_state_storage_board_config"]
             self.yaml_config["domains_config"]["explicit_scheme_board_config"] = self.explicit_statestorage_config["explicit_scheme_board_config"]
 
+        if self.system_tablets:
+            self.yaml_config["system_tablets"] = self.system_tablets
+
         if metadata_section:
             self.full_config["metadata"] = metadata_section
             self.full_config["config"] = self.yaml_config
@@ -670,6 +694,7 @@ class KikimrConfigGenerator(object):
     @property
     def domains_txt(self):
         app_config = config_pb2.TAppConfig()
+        assert not self.enable_pool_encryption, "pool encryption is not addressed in domains.txt"
         Parse(read_binary(__name__, "resources/default_domains.txt"), app_config.DomainsConfig)
         return app_config.DomainsConfig
 
@@ -797,7 +822,10 @@ class KikimrConfigGenerator(object):
             return
         if self.n_to_select is None:
             if self.static_erasure == Erasure.MIRROR_3_DC:
-                self.n_to_select = 9
+                if len(self.__node_ids) >= 9:
+                    self.n_to_select = 9
+                else:
+                    self.n_to_select = len(self.__node_ids)
             else:
                 self.n_to_select = min(5, len(self.__node_ids))
         if self.state_storage_rings is None:
@@ -807,12 +835,19 @@ class KikimrConfigGenerator(object):
         for ring in self.state_storage_rings:
             self.yaml_config["domains_config"]["state_storage"][0]["ring"]["ring"].append({"node" : ring if isinstance(ring, list) else [ring], "use_ring_specific_node_selection" : True})
 
-    def _add_pdisk_to_static_group(self, pdisk_id, path, node_id, pdisk_category, ring):
+    def _add_pdisk_to_static_group(self, pdisk_id, path, node_id, pdisk_category, ring, pdisk_config=None):
         domain_id = len(
             self.yaml_config['blob_storage_config']["service_set"]["groups"][0]["rings"][ring]["fail_domains"])
-        self.yaml_config['blob_storage_config']["service_set"]["pdisks"].append(
-            {"node_id": node_id, "pdisk_id": pdisk_id, "path": path, "pdisk_guid": pdisk_id,
-             "pdisk_category": pdisk_category})
+        pdisk_entry = {
+            "node_id": node_id,
+            "pdisk_id": pdisk_id,
+            "path": path,
+            "pdisk_guid": pdisk_id,
+            "pdisk_category": pdisk_category
+        }
+        if pdisk_config:
+            pdisk_entry["pdisk_config"] = pdisk_config
+        self.yaml_config['blob_storage_config']["service_set"]["pdisks"].append(pdisk_entry)
         self.yaml_config['blob_storage_config']["service_set"]["vdisks"].append(
             {
                 "vdisk_id": {"group_id": 0, "group_generation": 1, "ring": ring, "domain": domain_id, "vdisk": 0},
@@ -831,9 +866,16 @@ class KikimrConfigGenerator(object):
             datacenter_id = next(datacenter_id_generator)
 
             for pdisk_id in range(1, self.__number_of_pdisks_per_node + 1):
-                disk_size = self.static_pdisk_size if pdisk_id <= 1 else self.__dynamic_pdisks[pdisk_id - 2].get(
-                    'disk_size', self.dynamic_pdisk_size)
-                pdisk_user_kind = 0 if pdisk_id <= 1 else self.__dynamic_pdisks[pdisk_id - 2].get('user_kind', 0)
+                is_static_pdisk = pdisk_id <= self.__num_static_pdisks
+                if is_static_pdisk:
+                    disk_size = self.static_pdisk_size
+                    pdisk_user_kind = 0
+                    pdisk_config = self.static_pdisk_config
+                else:
+                    dynamic_pdisk_idx = pdisk_id - 1 - self.__num_static_pdisks
+                    disk_size = self.__dynamic_pdisks[dynamic_pdisk_idx].get('disk_size', self.dynamic_pdisk_size)
+                    pdisk_user_kind = self.__dynamic_pdisks[dynamic_pdisk_idx].get('user_kind', 0)
+                    pdisk_config = self.dynamic_pdisks_config
 
                 if self.__use_in_memory_pdisks:
                     pdisk_size_gb = disk_size / (1024 * 1024 * 1024)
@@ -845,15 +887,25 @@ class KikimrConfigGenerator(object):
                                                            dir=self._pdisk_store_path)
                     pdisk_path = tmp_file.name
 
-                self._pdisks_info.append({'pdisk_path': pdisk_path, 'node_id': node_id, 'disk_size': disk_size,
-                                          'pdisk_user_kind': pdisk_user_kind})
-                if not self.use_self_management and pdisk_id == 1 and node_id <= self.static_erasure.min_fail_domains * self._rings_count:
+                pdisk_info = {
+                    'pdisk_path': pdisk_path,
+                    'node_id': node_id,
+                    'disk_size': disk_size,
+                    'pdisk_user_kind': pdisk_user_kind,
+                    'pdisk_id': pdisk_id
+                }
+                if pdisk_config:
+                    pdisk_info['pdisk_config'] = pdisk_config
+
+                self._pdisks_info.append(pdisk_info)
+                if not self.use_self_management and is_static_pdisk and node_id <= self.static_erasure.min_fail_domains * self._rings_count:
                     self._add_pdisk_to_static_group(
                         pdisk_id,
                         pdisk_path,
                         node_id,
                         pdisk_user_kind,
                         datacenter_id - 1,
+                        pdisk_config=pdisk_config,
                     )
 
     def _add_host_config_and_hosts(self):
@@ -913,3 +965,18 @@ class KikimrConfigGenerator(object):
         self._add_state_storage_config()
         if not self.use_self_management and not self.explicit_hosts_and_host_configs:
             self._initialize_pdisks_info()
+
+        if self.enable_pool_encryption:
+            for domain in self.yaml_config['domains_config']['domain']:
+                for pool_type in domain['storage_pool_types']:
+                    pool_type['pool_config']['encryption_mode'] = 1
+
+        if self.static_erasure == Erasure.MIRROR_3_DC and len(self.__node_ids) == 3:
+            for domain in self.yaml_config['domains_config']['domain']:
+                for pool_type in domain['storage_pool_types']:
+                    pool_type['pool_config']['geometry'] = {
+                        "realm_level_begin": int(FailDomainType.DC),
+                        "realm_level_end": int(FailDomainType.Room),
+                        "domain_level_begin": int(FailDomainType.DC),
+                        "domain_level_end": int(FailDomainType.Disk) + 1
+                    }

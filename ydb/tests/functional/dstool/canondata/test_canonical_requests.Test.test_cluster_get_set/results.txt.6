@@ -1,0 +1,15 @@
+dstool -e <endpoint> --mon-port <mon_port> cluster set --pdisk-space-margin-promille 1000
+Exit Status: 0
+===== stderr =====
+success
+
+===== grpc_calls =====
+=== Invoke BlobStorageConfig ===
+Domain: 1
+Request {
+  Command {
+    UpdateSettings {
+      PDiskSpaceMarginPromille: 1000
+    }
+  }
+}

@@ -703,7 +703,7 @@ public:
     void OnCommit(ui64) override {
         TString error = Result->GetError();
         if (error) {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
+            LOG_INFO_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
                     "Complete [" << Step << " : " << TxId << "] from " << Self->TabletID()
                     << " at tablet " << Self->TabletID() << ", error: " << error);
         } else {
@@ -755,12 +755,12 @@ public:
 
     void OnCommit(ui64) override {
         if (WriteResult->IsError()) {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, 
-                "Complete volatile write [" << Step << " : " << TxId << "] from " << Self->TabletID() 
+            LOG_INFO_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
+                "Complete volatile write [" << Step << " : " << TxId << "] from " << Self->TabletID()
                 << " at tablet " << Self->TabletID() << ", error:  " << WriteResult->GetError());
         } else {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, 
-                "Complete volatile write [" << Step << " : " << TxId << "] from " << Self->TabletID() 
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
+                "Complete volatile write [" << Step << " : " << TxId << "] from " << Self->TabletID()
                 << " at tablet " << Self->TabletID() << " send result to client " << Target);
         }
 
@@ -2928,13 +2928,13 @@ Ydb::StatusIds::StatusCode ConvertToYdbStatusCode(NKikimrTxDataShard::TError::EK
         case NKikimrTxDataShard::TError::LEAF_REQUIRED:
         case NKikimrTxDataShard::TError::WRONG_SHARD_STATE:
         case NKikimrTxDataShard::TError::PROGRAM_ERROR:
-        case NKikimrTxDataShard::TError::OUT_OF_SPACE:
+        case NKikimrTxDataShard::TError::DISK_GROUP_OUT_OF_SPACE:
         case NKikimrTxDataShard::TError::READ_SIZE_EXECEEDED:
         case NKikimrTxDataShard::TError::SHARD_IS_BLOCKED:
         case NKikimrTxDataShard::TError::UNKNOWN:
         case NKikimrTxDataShard::TError::REPLY_SIZE_EXCEEDED:
         case NKikimrTxDataShard::TError::EXECUTION_CANCELLED:
-        case NKikimrTxDataShard::TError::DISK_SPACE_EXHAUSTED:
+        case NKikimrTxDataShard::TError::DATABASE_DISK_SPACE_QUOTA_EXCEEDED:
             return Ydb::StatusIds::INTERNAL_ERROR;
         case NKikimrTxDataShard::TError::BAD_ARGUMENT:
         case NKikimrTxDataShard::TError::READONLY:
@@ -3432,7 +3432,7 @@ void TDataShard::Handle(TEvPrivate::TEvDelayedProposeTransaction::TPtr &ev, cons
                     if (datashardTransactionSpan) {
                         datashardTransactionSpan.Attribute("Shard", std::to_string(TabletID()));
                     }
-                    
+
                     Execute(new TTxProposeTransactionBase(this, std::move(event), item.ReceivedAt, item.TieBreakerIndex, /* delayed */ true, std::move(datashardTransactionSpan)), ctx);
                     return;
                 }
@@ -3474,7 +3474,7 @@ void TDataShard::Handle(TEvPrivate::TEvDelayedProposeTransaction::TPtr &ev, cons
                 Y_ENSURE(false, "Unexpected event type " << item.Event->GetTypeRewrite());
         }
 
-        
+
     }
 
     // N.B. Ack directly since we didn't start any delayed transactions
@@ -4414,7 +4414,7 @@ void TDataShard::Handle(TEvInterconnect::TEvNodeDisconnected::TPtr &ev,
 {
     const ui32 nodeId = ev->Get()->NodeId;
 
-    LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD,
+    LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD,
                  "Shard " << TabletID() << " disconnected from node " << nodeId);
 
     Pipeline.ProcessDisconnected(nodeId);
@@ -4519,7 +4519,7 @@ void TDataShard::ScanComplete(NTable::EStatus,
     PlanQueue.Progress(ctx);
 }
 
-void TDataShard::Handle(TEvPrivate::TEvAsyncJobComplete::TPtr &ev, const TActorContext &ctx) {
+void TDataShard::Handle(TEvDataShard::TEvAsyncJobComplete::TPtr &ev, const TActorContext &ctx) {
     LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "AsyncJob complete"
         << " at " << TabletID());
 

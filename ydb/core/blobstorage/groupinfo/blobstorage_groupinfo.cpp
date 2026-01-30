@@ -492,22 +492,9 @@ IBlobToDiskMapper *TBlobStorageGroupInfo::TTopology::CreateMapper(TBlobStorageGr
 {
     switch (gtype.GetErasure()) {
         case TBlobStorageGroupType::ErasureNone:
-        case TBlobStorageGroupType::ErasureMirror3:
-        case TBlobStorageGroupType::Erasure3Plus1Block:
-        case TBlobStorageGroupType::Erasure3Plus1Stripe:
         case TBlobStorageGroupType::Erasure4Plus2Block:
-        case TBlobStorageGroupType::Erasure3Plus2Block:
-        case TBlobStorageGroupType::Erasure4Plus2Stripe:
-        case TBlobStorageGroupType::Erasure3Plus2Stripe:
-        case TBlobStorageGroupType::ErasureMirror3Plus2:
         case TBlobStorageGroupType::Erasure4Plus3Block:
-        case TBlobStorageGroupType::Erasure4Plus3Stripe:
         case TBlobStorageGroupType::Erasure3Plus3Block:
-        case TBlobStorageGroupType::Erasure3Plus3Stripe:
-        case TBlobStorageGroupType::Erasure2Plus3Block:
-        case TBlobStorageGroupType::Erasure2Plus3Stripe:
-        case TBlobStorageGroupType::Erasure2Plus2Block:
-        case TBlobStorageGroupType::Erasure2Plus2Stripe:
         case TBlobStorageGroupType::ErasureMirror3of4:
             return IBlobToDiskMapper::CreateBasicMapper(topology);
 
@@ -524,22 +511,9 @@ IBlobToDiskMapper *TBlobStorageGroupInfo::TTopology::CreateMapper(TBlobStorageGr
 TBlobStorageGroupInfo::IQuorumChecker *TBlobStorageGroupInfo::TTopology::CreateQuorumChecker(const TTopology *topology) {
     switch (topology->GType.GetErasure()) {
         case TBlobStorageGroupType::ErasureNone:
-        case TBlobStorageGroupType::ErasureMirror3:
-        case TBlobStorageGroupType::Erasure3Plus1Block:
-        case TBlobStorageGroupType::Erasure3Plus1Stripe:
         case TBlobStorageGroupType::Erasure4Plus2Block:
-        case TBlobStorageGroupType::Erasure3Plus2Block:
-        case TBlobStorageGroupType::Erasure4Plus2Stripe:
-        case TBlobStorageGroupType::Erasure3Plus2Stripe:
-        case TBlobStorageGroupType::ErasureMirror3Plus2:
         case TBlobStorageGroupType::Erasure4Plus3Block:
-        case TBlobStorageGroupType::Erasure4Plus3Stripe:
         case TBlobStorageGroupType::Erasure3Plus3Block:
-        case TBlobStorageGroupType::Erasure3Plus3Stripe:
-        case TBlobStorageGroupType::Erasure2Plus3Block:
-        case TBlobStorageGroupType::Erasure2Plus3Stripe:
-        case TBlobStorageGroupType::Erasure2Plus2Block:
-        case TBlobStorageGroupType::Erasure2Plus2Stripe:
             return new TQuorumCheckerOrdinary(topology);
 
         case TBlobStorageGroupType::ErasureMirror3dc:
@@ -560,21 +534,8 @@ TBlobStorageGroupInfo::IDataIntegrityChecker*
 TBlobStorageGroupInfo::TTopology::CreateDataIntegrityChecker(const TTopology* topology) {
     switch (topology->GType.GetErasure()) {
         case TBlobStorageGroupType::ErasureNone:
-        case TBlobStorageGroupType::ErasureMirror3:
-        case TBlobStorageGroupType::Erasure3Plus1Block:
-        case TBlobStorageGroupType::Erasure3Plus1Stripe:
-        case TBlobStorageGroupType::Erasure3Plus2Block:
-        case TBlobStorageGroupType::Erasure4Plus2Stripe:
-        case TBlobStorageGroupType::Erasure3Plus2Stripe:
-        case TBlobStorageGroupType::ErasureMirror3Plus2:
         case TBlobStorageGroupType::Erasure4Plus3Block:
-        case TBlobStorageGroupType::Erasure4Plus3Stripe:
         case TBlobStorageGroupType::Erasure3Plus3Block:
-        case TBlobStorageGroupType::Erasure3Plus3Stripe:
-        case TBlobStorageGroupType::Erasure2Plus3Block:
-        case TBlobStorageGroupType::Erasure2Plus3Stripe:
-        case TBlobStorageGroupType::Erasure2Plus2Block:
-        case TBlobStorageGroupType::Erasure2Plus2Stripe:
             return new TDataIntegrityCheckerTrivial(topology);
 
         case TBlobStorageGroupType::Erasure4Plus2Block:
@@ -725,7 +686,9 @@ TIntrusivePtr<TBlobStorageGroupInfo> TBlobStorageGroupInfo::Parse(const NKikimrB
             bsDomain.VDisks.resize(domain.VDiskLocationsSize());
             for (ui32 vdiskIdx = 0; vdiskIdx < domain.VDiskLocationsSize(); ++vdiskIdx) {
                 const auto& id = domain.GetVDiskLocations(vdiskIdx);
-                TActorId vdiskActorId = MakeBlobStorageVDiskID(id.GetNodeID(), id.GetPDiskID(), id.GetVDiskSlotID());
+                TActorId vdiskActorId = group.GetDDisk()
+                    ? MakeBlobStorageDDiskId(id.GetNodeID(), id.GetPDiskID(), id.GetVDiskSlotID())
+                    : MakeBlobStorageVDiskID(id.GetNodeID(), id.GetPDiskID(), id.GetVDiskSlotID());
                 dyn.PushBackActorId(vdiskActorId);
             }
         }
@@ -977,6 +940,9 @@ TString TBlobStorageGroupInfo::ToString() const {
     str << " GroupGeneration# " << GroupGeneration;
     str << " Type# " << Type.ToString();
     str << " SizeInUnits# " << GroupSizeInUnits;
+    str << " EncryptionMode# " << PrintEncryptionMode(EncryptionMode) << Endl;
+    str << " LifeCyclePhase# " << PrintLifeCyclePhase(LifeCyclePhase) << Endl;
+    str << " GroupKeyNonce# " << GroupKeyNonce << Endl;
     str << " FailRealms# {";
     for (ui32 realmIdx = 0; realmIdx < Topology->FailRealms.size(); ++realmIdx) {
         const TFailRealm& realm = Topology->FailRealms[realmIdx];

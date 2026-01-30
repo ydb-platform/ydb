@@ -487,7 +487,9 @@ void TSideEffects::DoUpdateTenant(TSchemeShard* ss, NTabletFlatExecutor::TTransa
             if (subDomain->GetDatabaseQuotas()) {
                 message->Record.MutableDatabaseQuotas()->CopyFrom(*subDomain->GetDatabaseQuotas());
             }
-            message->Record.MutableSchemeLimits()->CopyFrom(subDomain->GetSchemeLimits().AsProto());
+            if (AppData()->FeatureFlags.GetEnableAlterDatabase()) {
+                message->Record.MutableSchemeLimits()->CopyFrom(subDomain->GetSchemeLimits().AsProto());
+            }
             if (const auto& auditSettings = subDomain->GetAuditSettings()) {
                 message->Record.MutableAuditSettings()->CopyFrom(*auditSettings);
             }
@@ -682,7 +684,7 @@ void TSideEffects::DoBindMsg(TSchemeShard *ss, const TActorContext &ctx) {
         TAllocChunkSerializer serializer;
         const bool success = message->SerializeToArcadiaStream(&serializer);
         Y_ABORT_UNLESS(success);
-        TIntrusivePtr<TEventSerializedData> data = serializer.Release(message->CreateSerializationInfo());
+        TIntrusivePtr<TEventSerializedData> data = serializer.Release(message->CreateSerializationInfo(false));
         operation->PipeBindedMessages[tablet][cookie] = TOperation::TPreSerializedMessage(msgType, data, opId);
 
         ss->PipeClientCache->Send(ctx, ui64(tablet), msgType,  data, cookie.second);

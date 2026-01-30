@@ -8,8 +8,7 @@ PYTHONIC_NS_BEGIN
 namespace numpy
 {
   template <class F, class T>
-  auto take(T &&expr, F &&indices)
-      -> decltype(std::forward<T>(expr)[std::forward<T>(indices)])
+  auto take(T &&expr, F &&indices) -> decltype(std::forward<T>(expr)[std::forward<T>(indices)])
   {
     return expr[indices];
   }

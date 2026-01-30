@@ -73,7 +73,7 @@ public:
 #endif // NDEBUG
 
     explicit TMemoryUsageInfo(const TStringBuf& title);
-    ~TMemoryUsageInfo();
+    ~TMemoryUsageInfo() override;
 
     void AllowMissing();
     void CheckOnExit(bool check);

@@ -68,7 +68,10 @@ struct TPqIoTestFixture : public NUnitTest::TBaseFixture {
     }
 
     void LoadSource(const TSourceState& state) const {
-        return CaSetup->LoadSource(state);
+        CaSetup->LoadSource(state);
+
+        // Wait for reader to reconnect and resume from checkpoint
+        Sleep(TDuration::Seconds(10));
     }
 
 

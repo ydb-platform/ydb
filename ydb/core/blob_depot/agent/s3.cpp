@@ -1,5 +1,7 @@
 #include "agent_impl.h"
 
+#include <ydb/core/base/appdata_fwd.h>
+#include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/wrappers/abstract.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
 
@@ -8,7 +10,7 @@ namespace NKikimr::NBlobDepot {
     void TBlobDepotAgent::InitS3(const TString& name) {
         if (S3BackendSettings) {
             auto& settings = S3BackendSettings->GetSettings();
-            auto externalStorageConfig = NWrappers::IExternalStorageConfig::Construct(settings);
+            auto externalStorageConfig = NWrappers::IExternalStorageConfig::Construct(AppData()->AwsClientConfig, settings);
             S3WrapperId = Register(NWrappers::CreateS3Wrapper(externalStorageConfig->ConstructStorageOperator()));
             S3BasePath = TStringBuilder() << settings.GetObjectKeyPattern() << '/' << name;
         }
@@ -89,16 +91,20 @@ namespace NKikimr::NBlobDepot {
         TActivationContext::Send(new IEventHandle(Agent.S3WrapperId, actorId, request.release(), IEventHandle::FlagTrackDelivery));
     }
 
-    TActorId TBlobDepotAgent::TQuery::IssueWriteS3(TString&& key, TRope&& buffer, TLogoBlobID id) {
+    TActorId TBlobDepotAgent::TQuery::IssueWriteS3(TString&& key, TRope&& buffer, TLogoBlobID id, TS3Locator locator) {
         class TWriteActor : public TActor<TWriteActor> {
             std::weak_ptr<TLifetimeToken> LifetimeToken;
             TQuery* const Query;
+            TLogoBlobID Id;
+            TS3Locator Locator;
 
         public:
-            TWriteActor(std::weak_ptr<TLifetimeToken> lifetimeToken, TQuery *query)
+            TWriteActor(std::weak_ptr<TLifetimeToken> lifetimeToken, TQuery *query, TLogoBlobID id, TS3Locator locator)
                 : TActor(&TThis::StateFunc)
                 , LifetimeToken(std::move(lifetimeToken))
                 , Query(query)
+                , Id(id)
+                , Locator(locator)
             {}
 
             void Handle(NWrappers::TEvExternalStorage::TEvPutObjectResponse::TPtr ev) {
@@ -115,6 +121,9 @@ namespace NKikimr::NBlobDepot {
             void Finish(std::optional<TString>&& error) {
                 if (!LifetimeToken.expired()) {
                     InvokeOtherActor(Query->Agent, &TBlobDepotAgent::Invoke, [&] {
+                        auto& Agent = Query->Agent;
+                        const auto& QueryId = Query->QueryId;
+                        BDEV_QUERY(BDEV37, "written_to_S3", (BlobId, Id), (Locator, Locator));
                         Query->OnPutS3ObjectResponse(std::move(error));
                     });
                 }
@@ -132,7 +141,9 @@ namespace NKikimr::NBlobDepot {
             LifetimeToken = std::make_shared<TLifetimeToken>();
         }
 
-        const TActorId writerActorId = Agent.RegisterWithSameMailbox(new TWriteActor(LifetimeToken, this));
+        const TActorId writerActorId = Agent.RegisterWithSameMailbox(new TWriteActor(LifetimeToken, this, id, locator));
+
+        BDEV_QUERY(BDEV38, "issue_S3_write", (BlobId, id), (Locator, locator));
 
         TActivationContext::Send(new IEventHandle(Agent.S3WrapperId, writerActorId,
             new NWrappers::TEvExternalStorage::TEvPutObjectRequest(

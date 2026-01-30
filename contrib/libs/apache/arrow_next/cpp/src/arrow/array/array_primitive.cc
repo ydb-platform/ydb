@@ -15,16 +15,16 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "arrow/array/array_primitive.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/array_primitive.h"
 
 #include <cstdint>
 #include <memory>
 
-#include "arrow/array/array_base.h"
-#include "arrow/type.h"
-#include "arrow/util/bit_block_counter.h"
-#include "arrow/util/bitmap_ops.h"
-#include "arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/array_base.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bit_block_counter.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bitmap_ops.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
 
 namespace arrow20 {
 

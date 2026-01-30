@@ -8,8 +8,17 @@
 
 #include <ydb/library/yql/dq/comp_nodes/hash_join_utils/simd/simd.h>
 
+#include <string>
+
 namespace NKikimr {
 namespace NMiniKQL {
+
+struct TSingleTuple {
+    const ui8* PackedData;
+    const ui8* OverflowBegin;
+};
+
+struct TPackResult;
 
 using TTupleData = std::vector<ui8, TMKQLAllocator<ui8>>;
 
@@ -159,6 +168,7 @@ struct TTupleLayout {
     ui32 PayloadOffset; // Offset of payload values. = BitmaskEnd.
     ui32 PayloadEnd;    // First byte after payload
     ui32 TotalRowSize;  // Total size of bytes for packed row
+    std::optional<std::vector<ui8, TMKQLAllocator<ui8>>> NullsTuple; // std::nullopt *this contains non-nullable column
 
     // Creates new tuple layout based on provided columns description.
     static THolder<TTupleLayout>
@@ -206,11 +216,17 @@ struct TTupleLayout {
         std::vector<ui8, TMKQLAllocator<ui8>>& dstOverflow,
         ui32 dstCount,
         const ui8 *src, const ui8 *srcOverflow, ui32 srcCount, ui32 srcOverflowSize) const;
+        
+    TPackResult Flatten(TArrayRef<TPackResult> chunks) const;
 
     ui32 GetTupleVarSize(const ui8* inTuple) const;
 
     bool KeysEqual(const ui8 *lhsRow, const ui8 *lhsOverflow, const ui8 *rhsRow, const ui8 *rhsOverflow) const;
     bool KeysLess(const ui8 *lhsRow, const ui8 *lhsOverflow, const ui8 *rhsRow, const ui8 *rhsOverflow) const;
+
+    // Pretty prints a single packed tuple for debugging purposes.
+    // Fixed-size fields are printed as integers, variable-length fields as strings.
+    std::string Stringify(TSingleTuple tuple) const;
 };
 
 struct TTupleLayoutFallback : public TTupleLayout {
@@ -291,6 +307,12 @@ template <typename TTraits> struct TTupleLayoutSIMD : public TTupleLayoutFallbac
 bool TupleKeysEqual(const TTupleLayout *layout,
     const ui8 *lhsRow, const ui8 *lhsOverflow,
     const ui8 *rhsRow, const ui8 *rhsOverflow);
+
+Y_FORCE_INLINE
+ui32 Hash(const ui8* row) {
+    return ReadUnaligned<ui32>(row);
+}
+
 
 Y_FORCE_INLINE
 bool TTupleLayout::KeysEqual(const ui8 *lhsRow, const ui8 *lhsOverflow,

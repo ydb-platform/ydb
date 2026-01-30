@@ -16,4 +16,5 @@ message TSharedCacheConfig {
     optional TReplacementPolicy ReplacementPolicy = 6 [default = S3FIFO]; // deprecated, always S3FIFO
     reserved 7;
     optional uint64 InMemoryInFlyLimit = 8 [default = 536870912];
+    optional uint64 MaxLimitDecreaseStepBytes = 9 [default = 10485760];
 }

@@ -419,8 +419,6 @@ struct TChunkWriterOptions
     bool SingleColumnGroupByDefault = false;
     bool EnableColumnarValueStatistics;
     bool EnableRowCountInColumnarStatistics;
-    bool EnableSegmentMetaInBlocks;
-    bool EnableColumnMetaInChunkMeta;
     bool ConsiderMinRowRangeDataWeight;
 
     NYTree::INodePtr CastAnyToCompositeNode;

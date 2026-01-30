@@ -4,11 +4,13 @@
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/test_helper/controllers.h>
 
+#include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/include/aws/core/Aws.h>
+#include <library/cpp/testing/hook/hook.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/columnshard/operations/write_data.h>
 #include <ydb/core/tx/tx_processing.h>
 #include <ydb/core/wrappers/fake_storage.h>
-
+#include <ydb/library/testlib/s3_recipe_helper/s3_recipe_helper.h>
 
 namespace NKikimr {
 
@@ -58,6 +60,9 @@ Y_UNIT_TEST_SUITE(Backup) {
     }
 
     Y_UNIT_TEST(ProposeBackup) {
+        Aws::S3::S3Client s3Client = NTestUtils::MakeS3Client();
+        NTestUtils::CreateBucket("test", s3Client);
+
         TTestBasicRuntime runtime;
         TTester::Setup(runtime);
 
@@ -93,18 +98,37 @@ Y_UNIT_TEST_SUITE(Backup) {
 
         NKikimrTxColumnShard::TBackupTxBody txBody;
         NOlap::TSnapshot backupSnapshot(planStep.Val(), txId);
-        txBody.MutableBackupTask()->SetTableName("abcde");
-        txBody.MutableBackupTask()->SetTableId(tableId);
-        txBody.MutableBackupTask()->SetSnapshotStep(backupSnapshot.GetPlanStep());
-        txBody.MutableBackupTask()->SetSnapshotTxId(backupSnapshot.GetTxId());
-        txBody.MutableBackupTask()->MutableS3Settings()->SetEndpoint("fake.fake");
-        txBody.MutableBackupTask()->MutableS3Settings()->SetSecretKey("fakeSecret");
+        auto& backupTask = *txBody.MutableBackupTask();
+        backupTask.SetTableName("abcde");
+        backupTask.SetTableId(tableId);
+        backupTask.SetSnapshotStep(backupSnapshot.GetPlanStep());
+        backupTask.SetSnapshotTxId(backupSnapshot.GetTxId());
+        backupTask.MutableS3Settings()->SetEndpoint(GetEnv("S3_ENDPOINT"));
+        backupTask.MutableS3Settings()->SetBucket("test");
+
+        auto& table = *backupTask.MutableTable();
+        auto& tableDescription = *table.MutableColumnTableDescription();
+        tableDescription.SetColumnShardCount(4);
+        auto& schemaBackup = *tableDescription.MutableSchema();
+
+        auto& col1 = *schemaBackup.MutableColumns()->Add();
+        col1.SetName("key1");
+        col1.SetType("Uint64");
+
+        auto& col2 = *schemaBackup.MutableColumns()->Add();
+        col2.SetName("key2");
+        col2.SetType("Uint64");
+
+        auto& col3 = *schemaBackup.MutableColumns()->Add();
+        col3.SetName("field");
+        col3.SetType("Utf8");
+        table.MutableSelf();
         AFL_VERIFY(csControllerGuard->GetFinishedExportsCount() == 0);
         planStep = ProposeTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP, txBody.SerializeAsString(), ++txId);
         AFL_VERIFY(csControllerGuard->GetFinishedExportsCount() == 1);
         PlanTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP, NOlap::TSnapshot(planStep, txId), false);
         TestWaitCondition(runtime, "export",
-            []() {return Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetSize(); });
+            [&]() { return NTestUtils::GetObjectKeys("test", s3Client).size() == 3; });
     }
 }
 

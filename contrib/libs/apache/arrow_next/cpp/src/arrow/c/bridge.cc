@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "arrow/c/bridge.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/c/bridge.h"
 
 #include <algorithm>
 #include <cerrno>
@@ -29,29 +29,29 @@
 #include <utility>
 #include <vector>
 
-#include "arrow/array.h"
-#include "arrow/buffer.h"
-#include "arrow/c/helpers.h"
-#include "arrow/c/util_internal.h"
-#include "arrow/extension_type.h"
-#include "arrow/memory_pool.h"
-#include "arrow/memory_pool_internal.h"  // for kZeroSizeArea
-#include "arrow/record_batch.h"
-#include "arrow/result.h"
-#include "arrow/stl_allocator.h"
-#include "arrow/type_traits.h"
-#include "arrow/util/async_generator.h"
-#include "arrow/util/bit_util.h"
-#include "arrow/util/checked_cast.h"
-#include "arrow/util/future.h"
-#include "arrow/util/key_value_metadata.h"
-#include "arrow/util/logging.h"
-#include "arrow/util/macros.h"
-#include "arrow/util/range.h"
-#include "arrow/util/small_vector.h"
-#include "arrow/util/string.h"
-#include "arrow/util/value_parsing.h"
-#include "arrow/visit_type_inline.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/buffer.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/c/helpers.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/c/util_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/extension_type.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/memory_pool.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/memory_pool_internal.h"  // for kZeroSizeArea
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/record_batch.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/result.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/stl_allocator.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type_traits.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/async_generator.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bit_util.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/checked_cast.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/future.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/key_value_metadata.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/macros.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/range.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/small_vector.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/string.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/value_parsing.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/visit_type_inline.h"
 
 namespace arrow20 {
 

@@ -16,16 +16,22 @@
 
 Implements application default credentials and project ID detection.
 """
+from __future__ import annotations
 
 import io
 import json
 import logging
 import os
+from typing import Optional, Sequence, TYPE_CHECKING
 import warnings
 
 from google.auth import environment_vars
 from google.auth import exceptions
 import google.auth.transport._http_client
+
+if TYPE_CHECKING:  # pragma: NO COVER
+    from google.auth.credentials import Credentials  # noqa: F401
+    from google.auth.transport import Request  # noqa: F401
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -538,8 +544,10 @@ def _get_impersonated_service_account_credentials(filename, info, scopes):
     from google.auth import impersonated_credentials
 
     try:
-        credentials = impersonated_credentials.Credentials.from_impersonated_service_account_info(
-            info, scopes=scopes
+        credentials = (
+            impersonated_credentials.Credentials.from_impersonated_service_account_info(
+                info, scopes=scopes
+            )
         )
     except ValueError as caught_exc:
         msg = "Failed to load impersonated service account credentials from {}".format(
@@ -554,8 +562,8 @@ def _get_gdch_service_account_credentials(filename, info):
     from google.oauth2 import gdch_credentials
 
     try:
-        credentials = gdch_credentials.ServiceAccountCredentials.from_service_account_info(
-            info
+        credentials = (
+            gdch_credentials.ServiceAccountCredentials.from_service_account_info(info)
         )
     except ValueError as caught_exc:
         msg = "Failed to load GDCH service account credentials from {}".format(filename)
@@ -586,7 +594,12 @@ def _apply_quota_project_id(credentials, quota_project_id):
     return credentials
 
 
-def default(scopes=None, request=None, quota_project_id=None, default_scopes=None):
+def default(
+    scopes: Optional[Sequence[str]] = None,
+    request: Optional["google.auth.transport.Request"] = None,
+    quota_project_id: Optional[str] = None,
+    default_scopes: Optional[Sequence[str]] = None,
+) -> tuple["google.auth.credentials.Credentials", Optional[str]]:
     """Gets the default credentials for the current environment.
 
     `Application Default Credentials`_ provides an easy way to obtain

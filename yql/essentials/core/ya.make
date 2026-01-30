@@ -30,6 +30,7 @@ SRCS(
     yql_holding_file_storage.h
     yql_join.cpp
     yql_join.h
+    yql_module_helpers.cpp
     yql_library_compiler.cpp
     yql_linear_checker.cpp
     yql_layers_helpers.cpp
@@ -63,6 +64,10 @@ SRCS(
     yql_user_data.h
     yql_user_data_storage.cpp
     yql_user_data_storage.h
+    yql_window_features.cpp
+    yql_window_features.h
+    yql_window_frames_collector_params_serializer.cpp
+    yql_window_frames_collector_params_serializer.h
 )
 
 PEERDIR(

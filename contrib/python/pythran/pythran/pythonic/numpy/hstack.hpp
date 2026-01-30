@@ -10,12 +10,10 @@ namespace numpy
 {
 
   template <class ArraySequence>
-  auto hstack(ArraySequence &&seq)
-      -> decltype(concatenate(std::forward<ArraySequence>(seq), 1))
+  auto hstack(ArraySequence &&seq) -> decltype(concatenate(std::forward<ArraySequence>(seq), 1))
   {
     auto constexpr concatenate_axis =
-        (decltype(concatenate(std::forward<ArraySequence>(seq), 1))::value !=
-         1);
+        (decltype(concatenate(std::forward<ArraySequence>(seq), 1))::value != 1);
     return concatenate(std::forward<ArraySequence>(seq), concatenate_axis);
   }
 } // namespace numpy

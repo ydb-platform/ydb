@@ -47,22 +47,6 @@ Y_UNIT_TEST_TWIN(AnalyzeTable, ColumnStore) {
     auto result = session.ExecuteSchemeQuery(createTable).GetValueSync();
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
-    if (ColumnStore) {
-        result = session.ExecuteSchemeQuery(
-            Sprintf(R"(
-                    ALTER OBJECT `%s` (TYPE TABLE) 
-                    SET (
-                        ACTION=UPSERT_INDEX, 
-                        NAME=cms_value, 
-                        TYPE=COUNT_MIN_SKETCH,
-                        FEATURES=`{"column_names" : ['Value']}`
-                    );
-                )", "Root/Database/Table"
-            )
-        ).GetValueSync();
-        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-    }
-
     TValueBuilder rows;
     rows.BeginList();
     for (size_t i = 0; i < 1500; ++i) {
@@ -83,15 +67,7 @@ Y_UNIT_TEST_TWIN(AnalyzeTable, ColumnStore) {
     result = session.ExecuteSchemeQuery(
         Sprintf(R"(ANALYZE `Root/%s/%s`)", "Database", "Table")
     ).GetValueSync();
-
-    if (ColumnStore) {
-        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-    } else {
-        UNIT_ASSERT(!result.IsSuccess());
-        auto issues = result.GetIssues().ToString();
-        UNIT_ASSERT_C(issues.find("analyze is not supported for oltp tables.") != TString::npos, issues);
-        return;
-    }
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
     auto& runtime = *env.GetServer().GetRuntime();
     ui64 saTabletId;

@@ -1310,3 +1310,79 @@ Pear,15,33'''
         describe_string = "{}".format(client.describe_query(query_id).result)
         assert "Runtime listing is not allowed for federated queries, pragma value was ignored" in describe_string, describe_string
         assert len(client.get_result_data(query_id).result.result_set.rows) == 3
+
+    @yq_v1
+    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
+    def test_precompute_with_different_result_types(self, kikimr, s3, client, unique_prefix):
+        resource = boto3.resource(
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
+        )
+
+        bucket = resource.Bucket("fbucket")
+        bucket.create(ACL='public-read')
+        bucket.objects.all().delete()
+
+        s3_client = boto3.client(
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
+        )
+
+        fruits = '''f1,f2,f3
+Banana,3,100'''
+        s3_client.put_object(Body=fruits, Bucket='fbucket', Key='file1.csv', ContentType='text/plain')
+        fruits = '''f3,f4
+Banana,3'''
+        s3_client.put_object(Body=fruits, Bucket='fbucket', Key='file2.csv', ContentType='text/plain')
+
+        kikimr.control_plane.wait_bootstrap(1)
+        storage_connection_name = unique_prefix + "fruitbucket"
+        client.create_storage_connection(storage_connection_name, "fbucket")
+
+        sql = f'''
+            $input1 =
+                SELECT AGGREGATE_LIST( AsStruct(f1 AS dns_mining_pool))
+                FROM `{storage_connection_name}`.`file1.csv`
+                WITH (format=csv_with_names, SCHEMA (
+                    f1 String NOT NULL,
+                    f2 Int NOT NULL,
+                    f3 Int NOT NULL
+                ));
+
+            $input2 =
+                SELECT AGGREGATE_LIST( AsStruct(f3 AS dns_f_query, f4 AS dns_query1wewqwer) )
+                FROM `{storage_connection_name}`.`file2.csv`
+                WITH (format=csv_with_names, SCHEMA (
+                    f3 String NOT NULL,
+                    f4 Int NOT NULL
+                ));
+
+            $f1 = () -> {{
+                RETURN ListHead(ListMap(
+                    $input1,
+                    ($r) -> (
+                        AsStruct("1" AS dns_mining_pool)
+                    )
+                ))
+            }};
+
+            $f2 = () -> {{
+                RETURN ListHead(ListMap(
+                    $input2,
+                    ($r) -> (
+                        AsStruct("2" AS dns_f_query)
+                    )
+                ))
+            }};
+
+            $parsed = SELECT $f1() AS f1,  $f2() AS f2;
+
+            $parsed =
+                SELECT
+                    p.f1.dns_mining_pool AS f1, p.f2.dns_f_query AS f2
+                FROM $parsed AS p;
+
+            SELECT SOME("MinersPoolsViaDNS") AS event_class FROM $parsed
+            WHERE (f1 == f2 )
+            '''
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)

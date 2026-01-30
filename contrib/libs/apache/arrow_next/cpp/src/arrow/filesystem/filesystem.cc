@@ -21,10 +21,10 @@
 #include <unordered_map>
 #include <utility>
 
-#include "arrow/type_fwd.h"
-#include "arrow/util/config.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type_fwd.h"
+#include "contrib/libs/apache/arrow_next/src/arrow/util/config.h"
 
-#include "arrow/filesystem/filesystem.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/filesystem/filesystem.h"
 #ifdef ARROW_AZURE
 #  error #include "arrow/filesystem/azurefs.h"
 #endif
@@ -37,24 +37,24 @@
 #ifdef ARROW_S3
 #  error #include "arrow/filesystem/s3fs.h"
 #endif
-#include "arrow/filesystem/localfs.h"
-#include "arrow/filesystem/mockfs.h"
-#include "arrow/filesystem/path_util.h"
-#include "arrow/filesystem/util_internal.h"
-#include "arrow/io/slow.h"
-#include "arrow/io/util_internal.h"
-#include "arrow/result.h"
-#include "arrow/status.h"
-#include "arrow/util/async_generator.h"
-#include "arrow/util/checked_cast.h"
-#include "arrow/util/logging.h"
-#include "arrow/util/macros.h"
-#include "arrow/util/parallel.h"
-#include "arrow/util/string.h"
-#include "arrow/util/uri.h"
-#include "arrow/util/vector.h"
-#include "arrow/util/visibility.h"
-#include "arrow/util/windows_fixup.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/filesystem/localfs.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/filesystem/mockfs.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/filesystem/path_util.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/filesystem/util_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/io/slow.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/io/util_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/result.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/status.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/async_generator.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/checked_cast.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/macros.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/parallel.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/string.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/uri.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/vector.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/visibility.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/windows_fixup.h"
 
 namespace arrow20::fs {
 

@@ -15,12 +15,12 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "parquet/encryption/internal_file_decryptor.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/encryption/internal_file_decryptor.h"
 
-#include "arrow/util/logging.h"
-#include "parquet/encryption/encryption.h"
-#include "parquet/encryption/encryption_internal.h"
-#include "parquet/metadata.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/encryption/encryption.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/encryption/encryption_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/metadata.h"
 
 namespace parquet20 {
 

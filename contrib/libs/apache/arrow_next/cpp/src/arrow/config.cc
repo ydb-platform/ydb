@@ -15,14 +15,14 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "arrow/config.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/config.h"
 
 #include <cstdint>
 
-#include "arrow/util/config.h"
-#include "arrow/util/config_internal.h"
-#include "arrow/util/cpu_info.h"
-#include "arrow/vendored/datetime.h"
+#include "contrib/libs/apache/arrow_next/src/arrow/util/config.h"
+#include "contrib/libs/apache/arrow_next/src/arrow/util/config_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/cpu_info.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/vendored/datetime.h"
 
 namespace arrow20 {
 

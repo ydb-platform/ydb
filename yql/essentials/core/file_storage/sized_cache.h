@@ -19,7 +19,8 @@ namespace NYql {
 */
 class TSizedCache {
 public:
-    struct ICacheObj: public TThrRefBase {
+    class ICacheObj: public TThrRefBase {
+    public:
         // Unique object identifier
         virtual TString GetName() = 0;
         // Object size

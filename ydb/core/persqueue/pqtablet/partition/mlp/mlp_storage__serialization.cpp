@@ -14,7 +14,7 @@ struct TSnapshotMessage {
             struct {
                 ui64 Status: 3;
                 ui64 Reserve: 3;
-                ui64 ReceiveCount: 10;
+                ui64 ProcessingCount: 10;
                 ui64 DeadlineDelta: 16;
                 ui64 HasMessageGroupId: 1;
                 ui64 MessageGroupIdHash: 31;
@@ -24,7 +24,7 @@ struct TSnapshotMessage {
             static_assert(sizeof(Value) == sizeof(Fields));
         } Common;
         ui32 WriteTimestampDelta;
-
+        i64 LockingTimestampMilliSecondsDelta;
 };
 
 struct TAddedMessage {
@@ -40,34 +40,49 @@ struct TAddedMessage {
     ui32 WriteTimestampDelta;
 };
 
+static_assert(sizeof(TAddedMessage) == sizeof(ui32) + sizeof(ui32));
 
 struct TMessageChange {
     union {
         struct {
             ui32 Status: 3;
             ui32 Reserve: 3;
-            ui32 ReceiveCount: 10;
+            ui32 ProcessingCount: 10;
             ui32 DeadlineDelta: 16;
         } Fields;
         ui32 Value;
 
         static_assert(sizeof(Value) == sizeof(Fields));
     } Common;
+    i64 LockingTimestampMilliSecondsDelta;
 };
 
-static_assert(sizeof(TMessageChange) == sizeof(ui32));
+static_assert(sizeof(TMessageChange::Common) == sizeof(ui32));
 
-void VarintSerialize(TString& buffer, ui64 value) {
-    const auto outValue = static_cast<i64>(value);
+struct TDLQMessageV1 {
+    ui64 Offset;
+    ui64 SeqNo;
+};
+
+
+void VarintSerialize(TString& buffer, i64 outValue) {
     char varIntOut[sizeof(outValue) + 1];
     auto bytes = out_long(outValue, varIntOut);
 
     buffer.append(varIntOut, bytes);
 }
 
+void VarintSerialize(TString& buffer, ui64 value) {
+    VarintSerialize(buffer, static_cast<i64>(value));
+}
+
+void VarintDeserialize(const char*& data, i64& value) {
+    data += in_long(value, data);
+}
+
 void VarintDeserialize(const char*& data, ui64& value) {
     i64 tmp;
-    data += in_long(tmp, data);
+    VarintDeserialize(data, tmp);
     value = tmp;
 }
 
@@ -97,9 +112,12 @@ struct TItemSerializer<TSnapshotMessage> {
     ui64 LastWriteTimestampDelta = 0;
 
     void Serialize(TString& buffer, const TSnapshotMessage& msg) {
-        buffer.append(reinterpret_cast<const char*>(&msg.Common.Value), sizeof(msg.Common.Value));
+        buffer.append(reinterpret_cast<const char*>(&msg.Common.Value), sizeof(TSnapshotMessage::Common.Value));
         VarintSerialize(buffer, static_cast<ui64>(msg.WriteTimestampDelta - LastWriteTimestampDelta));
         LastWriteTimestampDelta = msg.WriteTimestampDelta;
+        if (msg.Common.Fields.Status == static_cast<ui32>(TStorage::EMessageStatus::Locked)) {
+            VarintSerialize(buffer, msg.LockingTimestampMilliSecondsDelta);
+        }
     }
 };
 
@@ -108,17 +126,22 @@ struct TItemDeserializer<TSnapshotMessage> {
     ui64 LastWriteTimestampDelta = 0;
 
     bool Deserialize(const char*& data, const char* end, TSnapshotMessage& msg) {
-        if (data + sizeof(msg.Common.Value) + 1 > end) {
+        if (data == end) {
             return false;
         }
+        AFL_ENSURE(data < end)("d", std::distance(end, data));
 
-        memcpy(&msg.Common.Value, data, sizeof(msg.Common.Value));  // TODO BIGENDIAN/LOWENDIAN
-        data += sizeof(msg.Common.Value);
+        memcpy(&msg.Common.Value, data, sizeof(TSnapshotMessage::Common.Value));  // TODO BIGENDIAN/LOWENDIAN
+        data += sizeof(TSnapshotMessage::Common.Value);
 
         ui64 delta;
         VarintDeserialize(data, delta);
         LastWriteTimestampDelta += delta;
         msg.WriteTimestampDelta = LastWriteTimestampDelta;
+
+        if (msg.Common.Fields.Status == static_cast<ui32>(TStorage::EMessageStatus::Locked)) {
+            VarintDeserialize(data, msg.LockingTimestampMilliSecondsDelta);
+        }
 
         return true;
     }
@@ -156,6 +179,65 @@ struct TItemDeserializer<TAddedMessage> {
     }
 };
 
+template<>
+struct TItemSerializer<TMessageChange> {
+    void Serialize(TString& buffer, const TMessageChange& msg) {
+        buffer.append(reinterpret_cast<const char*>(&msg.Common.Value), sizeof(TMessageChange::Common.Value));
+        if (msg.Common.Fields.Status == static_cast<ui32>(TStorage::EMessageStatus::Locked)) {
+            VarintSerialize(buffer, msg.LockingTimestampMilliSecondsDelta);
+        }
+    }
+};
+
+template<>
+struct TItemDeserializer<TMessageChange> {
+    bool Deserialize(const char*& data, const char* end, TMessageChange& msg) {
+        if (data == end) {
+            return false;
+        }
+        AFL_ENSURE(data < end)("d", std::distance(end, data));
+
+        memcpy(&msg.Common.Value, data, sizeof(TMessageChange::Common.Value));  // TODO BIGENDIAN/LOWENDIAN
+        data += sizeof(TMessageChange::Common.Value);
+        if (msg.Common.Fields.Status == static_cast<ui32>(TStorage::EMessageStatus::Locked)) {
+            VarintDeserialize(data, msg.LockingTimestampMilliSecondsDelta);
+        }
+
+        return true;
+    }
+};
+
+
+template<>
+struct TItemSerializer<TDLQMessageV1> {
+    ui64 LastSeqNo = 0;
+
+    void Serialize(TString& buffer, const TDLQMessageV1& msg) {
+        VarintSerialize(buffer, msg.Offset);
+        VarintSerialize(buffer, static_cast<ui64>(msg.SeqNo - LastSeqNo));
+        LastSeqNo = msg.SeqNo;
+    }
+};
+
+template<>
+struct TItemDeserializer<TDLQMessageV1> {
+    ui64 LastSeqNo = 0;
+
+    bool Deserialize(const char*& data, const char* end, TDLQMessageV1& msg) {
+        if (data + 2 > end) {
+            return false;
+        }
+
+        VarintDeserialize(data, msg.Offset);
+
+        ui64 delta;
+        VarintDeserialize(data, delta);
+        LastSeqNo += delta;
+        msg.SeqNo = LastSeqNo;
+
+        return true;
+    }
+};
 
 template<typename TMsg>
 struct TSerializer {
@@ -232,12 +314,30 @@ struct TDeserializerWithOffset {
     }
 };
 
+void SerializeMetrics(const TMetrics& metrics, NKikimrPQ::TMLPMetrics& storedMetrics) {
+    storedMetrics.SetTotalCommittedMessageCount(metrics.TotalCommittedMessageCount);
+    storedMetrics.SetTotalMovedToDLQMessageCount(metrics.TotalMovedToDLQMessageCount);
+    storedMetrics.SetTotalScheduledToDLQMessageCount(metrics.TotalScheduledToDLQMessageCount);
+    storedMetrics.SetTotalPurgedMessageCount(metrics.TotalPurgedMessageCount);
+    storedMetrics.SetTotalDeletedByDeadlinePolicyMessageCount(metrics.TotalDeletedByDeadlinePolicyMessageCount);
+    storedMetrics.SetTotalDeletedByRetentionMessageCount(metrics.TotalDeletedByRetentionMessageCount);
+}
+
+void DeserializeMetrics(TMetrics& metrics, const NKikimrPQ::TMLPMetrics& storedMetrics) {
+    metrics.TotalCommittedMessageCount = storedMetrics.GetTotalCommittedMessageCount();
+    metrics.TotalMovedToDLQMessageCount = storedMetrics.GetTotalMovedToDLQMessageCount();
+    metrics.TotalScheduledToDLQMessageCount = storedMetrics.GetTotalScheduledToDLQMessageCount();
+    metrics.TotalPurgedMessageCount = storedMetrics.GetTotalPurgedMessageCount();
+    metrics.TotalDeletedByDeadlinePolicyMessageCount = storedMetrics.GetTotalDeletedByDeadlinePolicyMessageCount();
+    metrics.TotalDeletedByRetentionMessageCount = storedMetrics.GetTotalDeletedByRetentionMessageCount();
+}
+
 }
 
 bool TStorage::Initialize(const NKikimrPQ::TMLPStorageSnapshot& snapshot) {
     AFL_ENSURE(snapshot.GetFormatVersion() == 1)("v", snapshot.GetFormatVersion());
 
-    Messages.resize(snapshot.GetMessages().length() / sizeof(TMessage));
+    Messages.resize(snapshot.GetMessages().length() / (sizeof(TSnapshotMessage::Common) + 1));
 
     auto& meta = snapshot.GetMeta();
     FirstOffset = meta.GetFirstOffset();
@@ -246,41 +346,55 @@ bool TStorage::Initialize(const NKikimrPQ::TMLPStorageSnapshot& snapshot) {
     BaseDeadline = TInstant::Seconds(meta.GetBaseDeadlineSeconds());
     BaseWriteTimestamp = TInstant::Seconds(meta.GetBaseWriteTimestampSeconds());
 
-    bool moveUnlockedOffset = true;
-    bool moveUncommittedOffset = true;
+    DeserializeMetrics(Metrics, snapshot.GetMetrics());
+
+    auto fromSnapshot = [](const TSnapshotMessage& message) -> TMessage {
+        TMessage result = {
+            .Status = message.Common.Fields.Status,
+            .Reserve = message.Common.Fields.Reserve,
+            .ProcessingCount = message.Common.Fields.ProcessingCount,
+            .DeadlineDelta = message.Common.Fields.DeadlineDelta,
+            .HasMessageGroupId = message.Common.Fields.HasMessageGroupId,
+            .MessageGroupIdHash = message.Common.Fields.MessageGroupIdHash,
+            .WriteTimestampDelta = message.WriteTimestampDelta,
+            .LockingTimestampMilliSecondsDelta = 0,
+            .LockingTimestampSign = 0,
+        };
+
+        if (message.Common.Fields.Status == static_cast<ui32>(TStorage::EMessageStatus::Locked)) {
+            result.LockingTimestampMilliSecondsDelta = std::abs(message.LockingTimestampMilliSecondsDelta);
+            result.LockingTimestampSign = message.LockingTimestampMilliSecondsDelta < 0;
+        }
+
+        return result;
+    };
 
     {
-        TDeserializer<TMessage> deserializer(snapshot.GetMessages());
-        TMessage message;
-        size_t i = 0;
-        while (deserializer.Next(message)) {
-            Messages[i++] = message;
+        bool moveUnlockedOffset = true;
+        bool moveUncommittedOffset = true;
 
-            switch(message.Status) {
-                case EMessageStatus::Locked:
-                    ++Metrics.LockedMessageCount;
-                    if (KeepMessageOrder && message.HasMessageGroupId) {
-                        LockedMessageGroupsId.insert(message.MessageGroupIdHash);
-                        ++Metrics.LockedMessageGroupCount;
-                    }
-                    moveUncommittedOffset = false;
-                    break;
-                case EMessageStatus::Committed:
-                    ++Metrics.CommittedMessageCount;
-                    break;
-                case EMessageStatus::Unprocessed:
-                    ++Metrics.UnprocessedMessageCount;
-                    moveUnlockedOffset = false;
-                    moveUncommittedOffset = false;
-                    break;
-                case EMessageStatus::DLQ:
-                    moveUncommittedOffset = false;
-                    break;
+        TDeserializer<TSnapshotMessage> deserializer(snapshot.GetMessages());
+        TSnapshotMessage snapshot;
+        for (size_t i = 0; deserializer.Next(snapshot); ++i) {
+            auto message = fromSnapshot(snapshot);
+            if (i < Messages.size()) {
+                Messages[i] = message;
+            } else {
+                Messages.push_back(message);
             }
+
+            const auto& messageStatus = message.GetStatus();
+            if (messageStatus == EMessageStatus::Locked && KeepMessageOrder && message.HasMessageGroupId) {
+                LockedMessageGroupsId.insert(message.MessageGroupIdHash);
+            }
+
+            moveUnlockedOffset = moveUnlockedOffset && messageStatus != EMessageStatus::Delayed && messageStatus != EMessageStatus::Unprocessed;
+            moveUncommittedOffset = moveUncommittedOffset && messageStatus != EMessageStatus::Unprocessed && messageStatus != EMessageStatus::DLQ && messageStatus != EMessageStatus::Locked;
 
             if (moveUnlockedOffset) {
                 ++FirstUnlockedOffset;
             }
+
             if (moveUncommittedOffset) {
                 ++FirstUncommittedOffset;
             }
@@ -288,43 +402,37 @@ bool TStorage::Initialize(const NKikimrPQ::TMLPStorageSnapshot& snapshot) {
     }
 
     {
-        TDeserializerWithOffset<TMessage> deserializer(snapshot.GetSlowMessages());
+        TDeserializerWithOffset<TSnapshotMessage> deserializer(snapshot.GetSlowMessages());
         ui64 offset;
-        TMessage message;
-        while(deserializer.Next(offset, message)) {
+        TSnapshotMessage snapshot;
+        while (deserializer.Next(offset, snapshot)) {
+            auto message = fromSnapshot(snapshot);
             SlowMessages[offset] = message;
-
-            switch(message.Status) {
-                case EMessageStatus::Locked:
-                    ++Metrics.LockedMessageCount;
-                    if (KeepMessageOrder && message.HasMessageGroupId) {
-                        LockedMessageGroupsId.insert(message.MessageGroupIdHash);
-                        ++Metrics.LockedMessageGroupCount;
-                    }
-                    break;
-                case EMessageStatus::Committed:
-                    ++Metrics.CommittedMessageCount;
-                    break;
-                case EMessageStatus::Unprocessed:
-                    ++Metrics.UnprocessedMessageCount;
-                    break;
-                case EMessageStatus::DLQ:
-                    break;
+            if (message.GetStatus() == EMessageStatus::Locked && KeepMessageOrder && message.HasMessageGroupId) {
+                LockedMessageGroupsId.insert(message.MessageGroupIdHash);
             }
         }
     }
 
-    Metrics.InflyMessageCount = Messages.size();
-
-    for (auto offset : snapshot.GetDLQ()) {
-        DLQQueue.push_back(offset);
+    {
+        TDeserializer<TDLQMessageV1> deserializer(snapshot.GetDLQMessages());
+        TDLQMessageV1 message;
+        while(deserializer.Next(message)) {
+            DLQMessages[message.Offset] = message.SeqNo;
+            DLQQueue.push_back({
+                .Offset = message.Offset,
+                .SeqNo = message.SeqNo
+            });
+        }
     }
 
     return true;
 }
 
-bool TStorage::ApplyWAL(NKikimrPQ::TMLPStorageWAL& wal) {
+bool TStorage::ApplyWAL(const NKikimrPQ::TMLPStorageWAL& wal) {
     AFL_ENSURE(wal.GetFormatVersion() == 1)("v", wal.GetFormatVersion());
+
+    DeserializeMetrics(Metrics, wal.GetMetrics());
 
     if (wal.HasBaseDeadlineSeconds() || wal.HasBaseWriteTimestampSeconds()) {
         auto newBaseDeadline = wal.HasBaseDeadlineSeconds() ? TInstant::Seconds(wal.GetBaseDeadlineSeconds()) : BaseDeadline;
@@ -332,32 +440,61 @@ bool TStorage::ApplyWAL(NKikimrPQ::TMLPStorageWAL& wal) {
         MoveBaseDeadline(newBaseDeadline, newBaseWriteTimestamp);
     }
 
-    for (auto offset : wal.GetMovedToSlowZone()) {
-        auto [message, _] = GetMessageInt(offset);
-        if (!message) {
-            continue;
+    auto removeMessage = [this](const TMessage& message) {
+        const auto& messageStatus = message.GetStatus();
+        if (messageStatus == EMessageStatus::Locked && KeepMessageOrder && message.HasMessageGroupId) {
+            LockedMessageGroupsId.erase(message.MessageGroupIdHash);
         }
 
-        SlowMessages[offset] = *message;
-    }
-
-    for (auto offset : wal.GetDeletedFromSlowZone()) {
-        SlowMessages.erase(offset);
-    }
-
-    auto firstSlowOffset = wal.HasSlowFirstOffset() ? wal.GetSlowFirstOffset() : Max<ui64>();
-    for (auto it = SlowMessages.begin(); it != SlowMessages.end(); ) {
-        if (it->first >= firstSlowOffset) {
-            break;
+        if (messageStatus == EMessageStatus::DLQ) {
+            DLQMessages.erase(FirstOffset);
         }
+    };
 
-        RemoveMessage(it->second);
-        it = SlowMessages.erase(it);
+    std::unordered_map<ui64, TAddedMessage> newMessages;
+    if (wal.HasAddedMessages()) {
+        TDeserializerWithOffset<TAddedMessage> deserializer(wal.GetAddedMessages());
+
+        ui64 offset;
+        TAddedMessage msg;
+        while (deserializer.Next(offset, msg)) {
+            newMessages[offset] = msg;
+        }
+    }
+
+    {
+        ui64 offset = 0;
+        for (auto diff : wal.GetMovedToSlowZone()) {
+            offset += diff;
+
+            auto [message, slowZone] = GetMessageInt(offset);
+            if (message) {
+                AFL_ENSURE(!slowZone)("o", offset);
+                SlowMessages[offset] = *message;
+                continue;
+            }
+
+            auto it = newMessages.find(offset);
+            AFL_ENSURE(it != newMessages.end())("o", offset);
+            auto& msg = it->second;
+            SlowMessages[offset] = TMessage{
+                .Status = static_cast<ui32>(EMessageStatus::Unprocessed),
+                .ProcessingCount = 0,
+                .DeadlineDelta = 0,
+                .HasMessageGroupId = msg.MessageGroup.Fields.HasMessageGroupId,
+                .MessageGroupIdHash = msg.MessageGroup.Fields.MessageGroupIdHash,
+                .WriteTimestampDelta = msg.WriteTimestampDelta,
+                .LockingTimestampMilliSecondsDelta = 0,
+                .LockingTimestampSign = 0,
+            };
+        }
     }
 
     while (!Messages.empty() && FirstOffset < wal.GetFirstOffset()) {
         auto& message = Messages.front();
-        RemoveMessage(message);
+        if (!SlowMessages.contains(FirstOffset)) {
+            removeMessage(message);
+        }
         Messages.pop_front();
         ++FirstOffset;
     }
@@ -369,13 +506,19 @@ bool TStorage::ApplyWAL(NKikimrPQ::TMLPStorageWAL& wal) {
 
         ui64 offset;
         TAddedMessage msg;
-        while(deserializer.Next(offset, msg)) {
-            AddMessage(
-                offset,
-                msg.MessageGroup.Fields.HasMessageGroupId,
-                msg.MessageGroup.Fields.MessageGroupIdHash,
-                BaseWriteTimestamp + TDuration::Seconds(msg.WriteTimestampDelta)
-            );
+        while (deserializer.Next(offset, msg)) {
+            if (offset >= GetLastOffset()) {
+                Messages.push_back({
+                    .Status = static_cast<ui32>(EMessageStatus::Unprocessed),
+                    .ProcessingCount = 0,
+                    .DeadlineDelta = 0,
+                    .HasMessageGroupId = msg.MessageGroup.Fields.HasMessageGroupId,
+                    .MessageGroupIdHash = msg.MessageGroup.Fields.MessageGroupIdHash,
+                    .WriteTimestampDelta = msg.WriteTimestampDelta,
+                    .LockingTimestampMilliSecondsDelta = 0,
+                    .LockingTimestampSign = 0,
+                });
+            }
         }
     }
 
@@ -384,7 +527,7 @@ bool TStorage::ApplyWAL(NKikimrPQ::TMLPStorageWAL& wal) {
 
         ui64 offset;
         TMessageChange msg;
-        while(deserializer.Next(offset, msg)) {
+        while (deserializer.Next(offset, msg)) {
             auto [message, _] = GetMessageInt(offset);
             if (!message) {
                 continue;
@@ -392,45 +535,73 @@ bool TStorage::ApplyWAL(NKikimrPQ::TMLPStorageWAL& wal) {
 
             auto statusChanged = message->Status != msg.Common.Fields.Status;
             if (statusChanged) {
-                RemoveMessage(*message);
-                ++Metrics.InflyMessageCount;
+                removeMessage(*message);
             }
 
             message->Status = msg.Common.Fields.Status;
             message->DeadlineDelta = msg.Common.Fields.DeadlineDelta;
-            message->ReceiveCount = msg.Common.Fields.ReceiveCount;
+            message->ProcessingCount = msg.Common.Fields.ProcessingCount;
 
-            if (statusChanged) {
-                switch(message->Status) {
-                    case EMessageStatus::Locked:
-                        ++Metrics.LockedMessageCount;
-                        if (KeepMessageOrder && message->HasMessageGroupId) {
-                            LockedMessageGroupsId.insert(message->MessageGroupIdHash);
-                            ++Metrics.LockedMessageGroupCount;
-                        }
-                        break;
-                    case EMessageStatus::Committed:
-                        ++Metrics.CommittedMessageCount;
-                        break;
-                    case EMessageStatus::Unprocessed:
-                        ++Metrics.UnprocessedMessageCount;
-                        break;
-                    case EMessageStatus::DLQ:
-                        ++Metrics.DLQMessageCount;
-                        break;
+            if (statusChanged && message->GetStatus() == EMessageStatus::Locked) {
+                if (KeepMessageOrder && message->HasMessageGroupId) {
+                    LockedMessageGroupsId.insert(message->MessageGroupIdHash);
                 }
+
+                message->LockingTimestampMilliSecondsDelta = std::abs(msg.LockingTimestampMilliSecondsDelta);
+                message->LockingTimestampSign = msg.LockingTimestampMilliSecondsDelta < 0;
             }
         }
     }
 
-    for (auto offset : wal.GetDLQ()) {
-        DLQQueue.push_back(offset);
+    {
+        ui64 offset = 0;
+        for (auto diff : wal.GetDeletedFromSlowZone()) {
+            offset += diff;
+            auto it = SlowMessages.find(offset);
+            AFL_ENSURE(it != SlowMessages.end())("o", offset);
+            removeMessage(it->second);
+            SlowMessages.erase(it);
+        }
     }
+
+    auto firstSlowOffset = wal.HasSlowFirstOffset() ? wal.GetSlowFirstOffset() : Max<ui64>();
+    for (auto it = SlowMessages.begin(); it != SlowMessages.end(); ) {
+        if (it->first >= firstSlowOffset) {
+            break;
+        }
+
+        removeMessage(it->second);
+        it = SlowMessages.erase(it);
+    }
+
+    {
+        if (wal.HasFirstDLQSeqNo()) {
+            auto firstSeqNo = wal.GetFirstDLQSeqNo();
+            while(!DLQQueue.empty() && DLQQueue.front().SeqNo < firstSeqNo) {
+                DLQQueue.pop_front();
+            }
+        } else {
+            DLQQueue.clear();
+        }
+
+        TDeserializer<TDLQMessageV1> deserializer(wal.GetAddedToDLQMessages());
+        TDLQMessageV1 message;
+        while(deserializer.Next(message)) {
+            DLQMessages[message.Offset] = message.SeqNo;
+            DLQQueue.push_back({
+                .Offset = message.Offset,
+                .SeqNo = message.SeqNo
+            });
+        }
+    }
+
+    FirstUncommittedOffset = std::max(FirstUncommittedOffset, FirstOffset);
+    FirstUnlockedOffset = std::max(FirstUnlockedOffset, FirstOffset);
 
     // Reset changes
     Batch = { this };
 
-    return wal.HasAddedMessages() || wal.HasChangedMessages();
+    return true;
 }
 
 bool TStorage::SerializeTo(NKikimrPQ::TMLPStorageSnapshot& snapshot) {
@@ -442,23 +613,60 @@ bool TStorage::SerializeTo(NKikimrPQ::TMLPStorageSnapshot& snapshot) {
 
     snapshot.SetFormatVersion(1);
 
-    TSerializer<TMessage> serializer;
-    serializer.Reserve(Messages.size());
-    for (auto& message : Messages) {
-        serializer.Add(message);
-    }
-    snapshot.SetMessages(std::move(serializer.Buffer));
+    SerializeMetrics(Metrics, *snapshot.MutableMetrics());
 
-    for (auto offset : DLQQueue) {
-        snapshot.AddDLQ(offset);
-    }
+    auto ToSnapshot = [](const TMessage& message) -> TSnapshotMessage {
+        return {
+            .Common = {
+                .Fields = {
+                    .Status = message.Status,
+                    .Reserve = message.Reserve,
+                    .ProcessingCount = message.ProcessingCount,
+                    .DeadlineDelta = message.DeadlineDelta,
+                    .HasMessageGroupId = message.HasMessageGroupId,
+                    .MessageGroupIdHash = message.MessageGroupIdHash,
+                },
+            },
+            .WriteTimestampDelta = message.WriteTimestampDelta,
+            .LockingTimestampMilliSecondsDelta = message.LockingTimestampSign ? -message.LockingTimestampMilliSecondsDelta : message.LockingTimestampMilliSecondsDelta
+        };
+    };
 
-    TSerializerWithOffset<TMessage> slowSerializer;
-    slowSerializer.Reserve(SlowMessages.size());
-    for (auto& message : SlowMessages) {
-        slowSerializer.Add(message.first, message.second);
+    {
+        TSerializer<TSnapshotMessage> serializer;
+        serializer.Reserve(Messages.size());
+        for (auto& message : Messages) {
+            serializer.Add(ToSnapshot(message));
+        }
+        snapshot.SetMessages(std::move(serializer.Buffer));
     }
-    snapshot.SetSlowMessages(std::move(slowSerializer.Buffer));
+    {
+        TSerializerWithOffset<TSnapshotMessage> serializer;
+        serializer.Reserve(SlowMessages.size());
+        for (auto& message : SlowMessages) {
+            serializer.Add(message.first, ToSnapshot(message.second));
+        }
+        snapshot.SetSlowMessages(std::move(serializer.Buffer));
+    }
+    {
+        // offset -> seqNo
+        std::vector<std::pair<ui64, ui64>> messages;
+        messages.insert(messages.end(), DLQMessages.begin(), DLQMessages.end());
+        // sorting by seqNo
+        std::sort(messages.begin(), messages.end(), [](const auto& a, const auto& b) {
+            return a.second < b.second;
+        });
+
+        TSerializer<TDLQMessageV1> serializer;
+        serializer.Reserve(messages.size());
+        for (auto [offset, seqNo] : messages) {
+            serializer.Add({
+                .Offset = offset,
+                .SeqNo = seqNo
+            });
+        }
+        snapshot.SetDLQMessages(std::move(serializer.Buffer));
+    }
 
     return true;
 }
@@ -476,6 +684,8 @@ bool TStorage::TBatch::SerializeTo(NKikimrPQ::TMLPStorageWAL& wal) {
     if (BaseWriteTimestamp) {
         wal.SetBaseWriteTimestampSeconds(BaseWriteTimestamp->Seconds());
     }
+
+    SerializeMetrics(Storage->Metrics, *wal.MutableMetrics());
 
     if (FirstNewMessage) {
         auto lastOffset = Storage->GetLastOffset();
@@ -500,13 +710,20 @@ bool TStorage::TBatch::SerializeTo(NKikimrPQ::TMLPStorageWAL& wal) {
     if (!ChangedMessages.empty()) {
         TSerializerWithOffset<TMessageChange> serializer;
         serializer.Reserve(ChangedMessages.size());
+        std::sort(ChangedMessages.begin(), ChangedMessages.end());
+        ui64 lastOffset = Max<ui64>();
         for (auto offset : ChangedMessages) {
             auto [message, _] = Storage->GetMessage(offset);
+            if (lastOffset == offset) {
+                continue;
+            }
+            lastOffset = offset;
             if (message) {
                 TMessageChange msg;
                 msg.Common.Fields.Status = message->Status;
-                msg.Common.Fields.ReceiveCount = message->ReceiveCount;
+                msg.Common.Fields.ProcessingCount = message->ProcessingCount;
                 msg.Common.Fields.DeadlineDelta = message->DeadlineDelta;
+                msg.LockingTimestampMilliSecondsDelta = message->LockingTimestampSign ? -message->LockingTimestampMilliSecondsDelta : message->LockingTimestampMilliSecondsDelta;
                 serializer.Add(offset, msg);
             }
         }
@@ -514,20 +731,43 @@ bool TStorage::TBatch::SerializeTo(NKikimrPQ::TMLPStorageWAL& wal) {
         wal.SetChangedMessages(std::move(serializer.Buffer));
     }
 
-    for (auto offset : DLQ) {
-        if (offset >= Storage->FirstOffset) {
-            wal.AddDLQ(offset);
+    if (!Storage->DLQQueue.empty()) {
+        auto firstSeqNo = Storage->DLQQueue.begin()->SeqNo;
+        wal.SetFirstDLQSeqNo(firstSeqNo);
+
+        TSerializer<TDLQMessageV1> serializer;
+        for (auto [offset, seqNo] : AddedToDLQ) {
+            if (seqNo < firstSeqNo) {
+                continue;
+            }
+            auto it = Storage->DLQMessages.find(offset);
+            if (it == Storage->DLQMessages.end() || it->second != seqNo) {
+                continue;
+            }
+            serializer.Add({
+                .Offset = offset,
+                .SeqNo = seqNo
+            });
+        }
+        wal.SetAddedToDLQMessages(std::move(serializer.Buffer));
+    }
+    {
+        ui64 lastOffset = 0;
+        for (auto offset : MovedToSlowZone) {
+            wal.AddMovedToSlowZone(offset - lastOffset);
+            lastOffset = offset;
         }
     }
 
-    for (auto offset : MovedToSlowZone) {
-        if (Storage->SlowMessages.contains(offset)) {
-            wal.AddMovedToSlowZone(offset);
+    if (!Storage->SlowMessages.empty()) {
+        ui64 lastOffset = 0;
+        std::sort(DeletedFromSlowZone.begin(), DeletedFromSlowZone.end());
+        for (auto offset : DeletedFromSlowZone) {
+            if (offset >= Storage->SlowMessages.begin()->first) {
+                wal.AddDeletedFromSlowZone(offset - lastOffset);
+                lastOffset = offset;
+            }
         }
-    }
-
-    for (auto offset :DeletedFromSlowZone) {
-        wal.AddDeletedFromSlowZone(offset);
     }
 
     return true;

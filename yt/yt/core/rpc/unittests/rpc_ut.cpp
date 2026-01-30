@@ -1,5 +1,7 @@
 #include <yt/yt/core/rpc/unittests/lib/common.h>
 
+#include <yt/yt/core/concurrency/async_stream_helpers.h>
+
 #include <random>
 
 namespace NYT::NRpc {
@@ -47,6 +49,8 @@ std::string StringFromRef(TRef ref)
 template <class TImpl>
 using TRpcTest = TRpcTestBase<TImpl>;
 template <class TImpl>
+using TRpcAuthenticatedTest = TRpcAuthenticatedTestBase<TImpl>;
+template <class TImpl>
 using TAttachmentsTest = TRpcTestBase<TImpl>;
 template <class TImpl>
 using TNotUdsTest = TRpcTestBase<TImpl>;
@@ -59,6 +63,7 @@ TYPED_TEST_SUITE(TAttachmentsTest, TWithAttachments);
 TYPED_TEST_SUITE(TNotUdsTest, TWithoutUds);
 TYPED_TEST_SUITE(TNotGrpcTest, TWithoutGrpc);
 TYPED_TEST_SUITE(TGrpcTest, TGrpcOnly);
+TYPED_TEST_SUITE(TRpcAuthenticatedTest, TAllTransports);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -432,7 +437,7 @@ TYPED_TEST(TNotGrpcTest, LaggyStreamingRequest)
 
     WaitFor(req->GetRequestAttachmentsStream()->Close())
         .ThrowOnError();
-    WaitFor(ExpectEndOfStream(req->GetResponseAttachmentsStream()))
+    WaitFor(CheckEndOfStream(req->GetResponseAttachmentsStream()))
         .ThrowOnError();
     WaitFor(invokeResult)
         .ThrowOnError();
@@ -673,7 +678,7 @@ TYPED_TEST(TNotGrpcTest, RequestBytesThrottling)
                 methods = {
                     RequestBytesThrottledCall = {
                         request_bytes_throttler = {
-                            limit = 100000;
+                            limit = 150000;
                         }
                     }
                 }
@@ -682,6 +687,8 @@ TYPED_TEST(TNotGrpcTest, RequestBytesThrottling)
     })");
     auto config = ConvertTo<TServerConfigPtr>(TYsonString(configText));
     this->GetServer()->Configure(config);
+
+    Sleep(TDuration::MilliSeconds(100));
 
     TTestProxy proxy(this->CreateChannel());
 
@@ -734,6 +741,14 @@ TYPED_TEST(TRpcTest, NoService)
 }
 
 TYPED_TEST(TRpcTest, NoMethod)
+{
+    TTestProxy proxy(this->CreateChannel());
+    auto req = proxy.NotRegistered();
+    auto rspOrError = req->Invoke().Get();
+    EXPECT_EQ(NRpc::EErrorCode::NoSuchMethod, rspOrError.GetCode());
+}
+
+TYPED_TEST(TRpcAuthenticatedTest, NoMethod)
 {
     TTestProxy proxy(this->CreateChannel());
     auto req = proxy.NotRegistered();
@@ -920,7 +935,7 @@ TYPED_TEST(TNotGrpcTest, MemoryTrackingMultipleConcurrent)
         futures.push_back(req->Invoke().AsVoid());
     }
 
-    Sleep(TDuration::MilliSeconds(100));
+    Sleep(TDuration::MilliSeconds(500));
 
     if (TypeParam::MemoryUsageTrackingEnabled) {
         auto rpcUsage = memoryUsageTracker->GetUsed();

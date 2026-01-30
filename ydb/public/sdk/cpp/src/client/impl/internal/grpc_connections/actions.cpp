@@ -10,11 +10,8 @@ namespace NYdb::inline Dev {
 
 constexpr TDeadline::Duration MAX_DEFERRED_CALL_DELAY = 10s; // The max delay between GetOperation calls for one operation
 
-TSimpleCbResult::TSimpleCbResult(
-        TSimpleCb&& cb,
-        TGRpcConnectionsImpl* connections,
-        std::shared_ptr<IQueueClientContext> context)
-    : TGenericCbHolder<TSimpleCb>(std::move(cb), connections, std::move(context))
+TSimpleCbResult::TSimpleCbResult(TSimpleCb&& cb)
+    : UserResponseCb_(std::move(cb))
 { }
 
 void TSimpleCbResult::Process(void*) {
@@ -109,6 +106,24 @@ void TPeriodicAction::OnError() {
     NYdb::NIssue::TIssues issues;
     issues.AddIssue(NYdb::NIssue::TIssue("Deferred timer interrupted"));
     UserResponseCb_(std::move(issues), EStatus::CLIENT_INTERNAL_ERROR);
+}
+
+TDelayedAction::TDelayedAction(
+    TDelayedCb&& userCb,
+    TGRpcConnectionsImpl* connection,
+    std::shared_ptr<IQueueClientContext> context,
+    TDeadline deadline)
+    : TAlarmActionBase(std::move(userCb), connection, std::move(context))
+{
+    Deadline_ = deadline;
+}
+
+void TDelayedAction::OnAlarm() {
+    UserResponseCb_(true);
+}
+
+void TDelayedAction::OnError() {
+    UserResponseCb_(false);
 }
 
 } // namespace NYdb

@@ -17,7 +17,7 @@ from pythran.tables import operator_to_lambda, MODULES
 from pythran.typing import List, Dict, Set, Tuple, NDArray, Union
 from pythran.types.conversion import pytype_to_ctype, PYTYPE_TO_CTYPE_TABLE
 from pythran.types.reorder import Reorder
-from pythran.utils import attr_to_path, cxxid, isnum, isextslice
+from pythran.utils import attr_to_path, isnum, isextslice
 
 from collections import defaultdict
 from functools import reduce
@@ -76,7 +76,7 @@ def alias_key(a):
     if isinstance(a, ast.Call):
         return ('call:',) + alias_key(a.func)
     if isinstance(a, ContainerOf):
-        return sum((alias_key(c) for c in sorted(a.containees, key=alias_key)), ())
+        return sum((alias_key(c) for c in sorted(a.containees, key=alias_key)), (str(a.index),))
     if isinstance(a, ast.Constant):
         return ('cst:', str(a.value))
     # FIXME: how could we order those?
@@ -353,9 +353,9 @@ class Types(ModuleAnalysis[Reorder, StrictAliases, LazynessAnalysis,
                     # integral index make it possible to correctly
                     # update tuple type
                     if isinstance(index, int):
-                        kty = self.builder.NamedType(
-                                'std::integral_constant<long,{}>'
-                                .format(index))
+                        kty = self.builder.IntegralConstant(
+                                self.builder.NamedType("long"),
+                                index)
                         return self.builder.IndexableContainerType(kty,
                                                                    ty)
                     elif isinstance(index, float):
@@ -368,20 +368,24 @@ class Types(ModuleAnalysis[Reorder, StrictAliases, LazynessAnalysis,
 
                 for node_alias in self.sorted_strict_aliases(name,
                                                              extra=[name]):
-                    def traverse_alias(alias, l):
+                    def traverse_alias(alias, depth, l):
+                        # not interested in aliases too deep
+                        if len(depth) <= l:
+                            return
                         if isinstance(alias, ContainerOf):
-                            for containee in sorted(alias.containees,
-                                                    key=alias_key):
-                                traverse_alias(containee, l + 1)
+                            d = depth[l]
+                            if d is None or np.isnan(alias.index) or d == alias.index:
+                                for containee in sorted(alias.containees, key=alias_key):
+                                    traverse_alias(containee, depth, l + 1)
                         else:
                             def local_op(*args):
-                                return reduce(merge_container_type,
-                                              depth[:-l] if l else depth,
+                                t = reduce(merge_container_type,
+                                              depth[l:],
                                               former_op(*args))
-                            if len(depth) > l:
-                                self.combine_(alias, local_op, othernode)
+                                return t
+                            self.combine_(alias, local_op, othernode)
 
-                    traverse_alias(node_alias, 0)
+                    traverse_alias(node_alias, depth, 0)
                 return
         except UnboundableRValue:
             pass
@@ -394,6 +398,12 @@ class Types(ModuleAnalysis[Reorder, StrictAliases, LazynessAnalysis,
                 if isinstance(container_type, (self.builder.ListType,
                                                self.builder.SetType)):
                     return container_type.of
+                if isinstance(container_type, self.builder.IndexableContainerType):
+                    if np.isnan(node.index):
+                        return container_type.of_val
+                    elif isinstance(container_type.of_key, self.builder.IntegralConstant):
+                        if container_type.of_key.index != node.index:
+                            raise NotImplementedError
                 return self.builder.ElementType(
                         0 if np.isnan(node.index) else node.index,
                         container_type)
@@ -710,11 +720,16 @@ class Types(ModuleAnalysis[Reorder, StrictAliases, LazynessAnalysis,
             sty = pytype_to_ctype(ty)
         if node in self.immediates:
             if sty == 'pythonic::types::chr':
-                sty = "std::integral_constant<char, '%s'>" % (node.value)
+                sty = self.builder.IntegralConstant(
+                        self.builder.NamedType("char"),
+                        f"'{node.value}'")
             else:
-                sty = "std::integral_constant<%s, %s>" % (sty,
-                                                          str(node.value).lower())
-        self.result[node] = self.builder.NamedType(sty)
+                sty = self.builder.IntegralConstant(
+                        self.builder.NamedType(sty),
+                        node.value)
+        else:
+            sty = self.builder.NamedType(sty)
+        self.result[node] = sty
 
     def visit_Attribute(self, node):
         """ Compute typing for an attribute node. """
@@ -724,8 +739,7 @@ class Types(ModuleAnalysis[Reorder, StrictAliases, LazynessAnalysis,
             typename = pytype_to_ctype(obj.signature)
             self.result[node] = self.builder.NamedType(typename)
         else:
-            path = '::'.join(map(cxxid, path)) + '{}'
-            self.result[node] = self.builder.DeclType(path)
+            self.result[node] = self.builder.FunctionType(*path)
 
     def visit_Slice(self, node):
         """

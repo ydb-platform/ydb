@@ -198,6 +198,18 @@ public:                                                                         
                 COUNTER_INIT(HugeUsedChunks, false);
                 COUNTER_INIT_IF_EXTENDED(HugeCanBeFreedChunks, false);
                 COUNTER_INIT_IF_EXTENDED(HugeLockedChunks, false);
+                COUNTER_INIT(NormalizedOccupancyPerMille, false);
+                COUNTER_INIT(VDiskSlotUsagePerMille, false);
+                COUNTER_INIT(VDiskRawUsagePerMille, false);
+                COUNTER_INIT(CapacityAlertGreen, false);
+                COUNTER_INIT(CapacityAlertCyan, false);
+                COUNTER_INIT(CapacityAlertLightYellow, false);
+                COUNTER_INIT(CapacityAlertYellow, false);
+                COUNTER_INIT(CapacityAlertLightOrange, false);
+                COUNTER_INIT(CapacityAlertPreOrange, false);
+                COUNTER_INIT(CapacityAlertOrange, false);
+                COUNTER_INIT(CapacityAlertRed, false);
+                COUNTER_INIT(CapacityAlertBlack, false);
             }
 
             COUNTER_DEF(DskOutOfSpace);
@@ -208,6 +220,18 @@ public:                                                                         
             COUNTER_DEF(HugeUsedChunks);       // chunks used by huge heap
             COUNTER_DEF(HugeCanBeFreedChunks); // number of chunks that can be freed after defragmentation
             COUNTER_DEF(HugeLockedChunks);
+            COUNTER_DEF(NormalizedOccupancyPerMille);
+            COUNTER_DEF(VDiskSlotUsagePerMille);
+            COUNTER_DEF(VDiskRawUsagePerMille);
+            COUNTER_DEF(CapacityAlertGreen);
+            COUNTER_DEF(CapacityAlertCyan);
+            COUNTER_DEF(CapacityAlertLightYellow);
+            COUNTER_DEF(CapacityAlertYellow);
+            COUNTER_DEF(CapacityAlertLightOrange);
+            COUNTER_DEF(CapacityAlertPreOrange);
+            COUNTER_DEF(CapacityAlertOrange);
+            COUNTER_DEF(CapacityAlertRed);
+            COUNTER_DEF(CapacityAlertBlack);
         };
 
         ///////////////////////////////////////////////////////////////////////////////////
@@ -456,7 +480,7 @@ public:                                                                         
         public:
             GROUP_CONSTRUCTOR(TLsmLevelGroup)
             {
-                COUNTER_INIT_PRIVATE(SstNum, false);
+                COUNTER_INIT(SstNum, false);
                 COUNTER_INIT(NumItems, false);
                 COUNTER_INIT(NumItemsInplaced, false);
                 COUNTER_INIT(NumItemsHuge, false);
@@ -477,7 +501,7 @@ public:                                                                         
         ///////////////////////////////////////////////////////////////////////////////////
         class TLsmAllLevelsStat {
         public:
-            static constexpr ui32 MaxCounterLevels = 20;
+            static constexpr ui32 MaxCounterLevels = 24;
 
             TIntrusivePtr<::NMonitoring::TDynamicCounters> Group;
             // per-level information
@@ -541,7 +565,7 @@ public:                                                                         
                 COUNTER_INIT_IF_EXTENDED(PutTotalBytes, true);
                 COUNTER_INIT_IF_EXTENDED(GetTotalBytes, true);
             }
-                
+
             void MinHugeBlobInBytes(ui32 size) {
                 auto getCounter = [&](ui32 size) {
                     return GroupCounters->GetSubgroup("MinHugeBlobInBytes", ToString(size))->GetCounter("count", 1);
@@ -720,7 +744,7 @@ public:                                                                         
             COUNTER_DEF(PutTabletLog);
             COUNTER_DEF(PutUserData);
             COUNTER_DEF(PutAsyncBlob);
-            
+
             ::NMonitoring::TDeprecatedCounter &GetCounter(const std::optional<NKikimrBlobStorage::EGetHandleClass>& handleClass) {
                 if (!handleClass) {
                     return Undefined();
@@ -1000,6 +1024,34 @@ public:                                                                         
         };
 
         ///////////////////////////////////////////////////////////////////////////////////
+        // TPhantomFlagStorageGroup
+        ///////////////////////////////////////////////////////////////////////////////////
+        class TPhantomFlagStorageGroup : public TBase {
+        public:
+            GROUP_CONSTRUCTOR(TPhantomFlagStorageGroup)
+            {
+                COUNTER_INIT(BuilderReadsFromDisk, true);
+                COUNTER_INIT(BuilderReadsFromDiskBytes, true);
+
+                COUNTER_INIT(IsPhantomFlagStorageActive, false);
+                COUNTER_INIT(IsPhantomFlagStorageBuilding, false);
+                COUNTER_INIT(StoredFlagsCount, false);
+                COUNTER_INIT(StoredFlagsMemoryConsumption, false);
+                COUNTER_INIT(ThresholdsMemoryConsumption, false);
+                COUNTER_INIT(SyncedMask, false);
+            }
+            COUNTER_DEF(BuilderReadsFromDisk);
+            COUNTER_DEF(BuilderReadsFromDiskBytes);
+
+            COUNTER_DEF(IsPhantomFlagStorageActive);
+            COUNTER_DEF(IsPhantomFlagStorageBuilding);
+            COUNTER_DEF(StoredFlagsCount);
+            COUNTER_DEF(StoredFlagsMemoryConsumption);
+            COUNTER_DEF(ThresholdsMemoryConsumption);
+            COUNTER_DEF(SyncedMask);
+        };
+
+        ///////////////////////////////////////////////////////////////////////////////////
         // TFullSyncGroup
         ///////////////////////////////////////////////////////////////////////////////////
         class TFullSyncGroup : public TBase {
@@ -1013,6 +1065,5 @@ public:                                                                         
             COUNTER_DEF(UnorderedDataProtocolActorsCreated);
             COUNTER_DEF(UnorderedDataProtocolActorsTerminated);
         };
-
     } // NMonGroup
 } // NKikimr

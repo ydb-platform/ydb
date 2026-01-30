@@ -48,7 +48,7 @@ TRawTableReaderPtr CreateTablePartitionReader(
     const IRawClientPtr& rawClient,
     const IRequestRetryPolicyPtr& retryPolicy,
     const TString& cookie,
-    const TMaybe<TFormat>& format,
+    const TFormat& format,
     const TTablePartitionReaderOptions& options)
 {
 

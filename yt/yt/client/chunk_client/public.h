@@ -1,13 +1,13 @@
 #pragma once
 
-#include <yt/yt/core/misc/public.h>
-
 #include <yt/yt/client/object_client/public.h>
 
-#include <yt/yt/library/constrained/nonempty.h>
+#include <yt/yt/core/misc/public.h>
 
-#include <library/cpp/yt/compact_containers/compact_vector.h>
+#include <library/cpp/yt/containers/non_empty.h>
+
 #include <library/cpp/yt/compact_containers/compact_flat_map.h>
+#include <library/cpp/yt/compact_containers/compact_vector.h>
 
 namespace NYT::NChunkClient {
 

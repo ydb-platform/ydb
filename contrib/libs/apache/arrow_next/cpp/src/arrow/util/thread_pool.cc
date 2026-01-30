@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "arrow/util/thread_pool.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/thread_pool.h"
 
 #include <algorithm>
 #include <condition_variable>
@@ -26,13 +26,13 @@
 #include <thread>
 #include <vector>
 
-#include "arrow/util/atfork_internal.h"
-#include "arrow/util/config.h"
-#include "arrow/util/io_util.h"
-#include "arrow/util/logging.h"
-#include "arrow/util/mutex.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/atfork_internal.h"
+#include "contrib/libs/apache/arrow_next/src/arrow/util/config.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/io_util.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/mutex.h"
 
-#include "arrow/util/tracing_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/tracing_internal.h"
 
 namespace arrow20 {
 namespace internal {

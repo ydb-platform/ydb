@@ -5,7 +5,8 @@
 
 namespace NKikimr::NMiniKQL {
 
-struct ISpiller {
+class ISpiller {
+public:
     using TPtr = std::shared_ptr<ISpiller>;
     using TMemoryReportCallback = std::function<void(ui64)>;
     using TKey = ui64;

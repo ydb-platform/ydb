@@ -6,22 +6,61 @@ using namespace NYql;
 
 namespace NSQLTranslationV1 {
 
-namespace {
+TObjectFeatureNode::TObjectFeatureNode(TPosition pos, const std::map<TString, TDeferredAtom>& features)
+    : TBase(std::move(pos))
+{
+    Add("quote");
 
-bool InitFeatures(TContext& ctx, ISource* src, const std::map<TString, TDeferredAtom>& features) {
-    for (const auto& [key, value] : features) {
-        if (value.HasNode() && !value.Build()->Init(ctx, src)) {
-            return false;
+    for (const auto& [name, value] : features) {
+        Features_.emplace(name, TFeature{.Pos = Pos_, .Node = value.Build()});
+    }
+}
+
+TNodePtr TObjectFeatureNode::SkipEmpty(TObjectFeatureNodePtr features) {
+    if (!features || features->Features_.empty()) {
+        return nullptr;
+    }
+    return features;
+}
+
+std::pair<TNodePtr&, bool> TObjectFeatureNode::AddFeature(TStringBuf feature, TPosition pos) {
+    const auto [it, inserted] = Features_.emplace(feature, TFeature{.Pos = std::move(pos)});
+    return {it->second.Node, inserted};
+}
+
+bool TObjectFeatureNode::DoInit(TContext& ctx, ISource* src) {
+    auto featuresList = Y();
+    for (const auto& [name, value] : Features_) {
+        const auto& pos = value.Pos;
+
+        if (const auto& node = value.Node) {
+            if (!node->Init(ctx, src)) {
+                return false;
+            }
+
+            featuresList->Add(Q(Y(BuildQuotedAtom(pos, name), node)));
+        } else {
+            featuresList->Add(Q(Y(BuildQuotedAtom(pos, name))));
         }
     }
 
-    return true;
+    Add(std::move(featuresList));
+
+    return TBase::DoInit(ctx, src);
 }
 
-} // anonymous namespace
+TNodePtr TObjectFeatureNode::DoClone() const {
+    TObjectFeatureNodePtr result = new TObjectFeatureNode(Pos_);
+
+    for (const auto& [name, value] : Features_) {
+        result->AddFeature(name, value.Pos).first = SafeClone(value.Node);
+    }
+
+    return result;
+}
 
 TObjectOperatorContext::TObjectOperatorContext(TScopedStatePtr scoped)
-    : Scoped_(scoped)
+    : Scoped_(std::move(scoped))
     , ServiceId(Scoped_->CurrService)
     , Cluster(Scoped_->CurrCluster)
 {
@@ -54,35 +93,23 @@ bool TObjectProcessorImpl::DoInit(TContext& ctx, ISource* src) {
     return TAstListNode::DoInit(ctx, src);
 }
 
-TObjectProcessorImpl::TPtr TObjectProcessorImpl::DoClone() const {
-    return {};
-}
-
 TObjectProcessorWithFeatures::TObjectProcessorWithFeatures(TPosition pos, const TString& objectId, const TString& typeId, const TObjectOperatorContext& context,
-                                                           TFeatureMap&& features)
+                                                           TNodePtr features)
     : TBase(pos, objectId, typeId, context)
     , Features_(std::move(features))
 {
 }
 
 INode::TPtr TObjectProcessorWithFeatures::FillFeatures(INode::TPtr options) const {
-    if (!Features_.empty()) {
-        auto features = Y();
-        for (auto&& i : Features_) {
-            if (i.second.HasNode()) {
-                features->Add(Q(Y(BuildQuotedAtom(Pos_, i.first), i.second.Build())));
-            } else {
-                features->Add(Q(Y(BuildQuotedAtom(Pos_, i.first))));
-            }
-        }
-        options->Add(Q(Y(Q("features"), Q(features))));
+    if (Features_) {
+        options->Add(Q(Y(Q("features"), Features_)));
     }
 
     return options;
 }
 
 bool TObjectProcessorWithFeatures::DoInit(TContext& ctx, ISource* src) {
-    if (!InitFeatures(ctx, src, Features_)) {
+    if (Features_ && !Features_->Init(ctx, src)) {
         return false;
     }
 
@@ -104,19 +131,27 @@ INode::TPtr TCreateObject::BuildOptions() const {
 }
 
 TCreateObject::TCreateObject(TPosition pos, const TString& objectId, const TString& typeId, const TObjectOperatorContext& context,
-                             TFeatureMap&& features, bool existingOk, bool replaceIfExists)
+                             TNodePtr features, bool existingOk, bool replaceIfExists)
     : TBase(pos, objectId, typeId, context, std::move(features))
     , ExistingOk_(existingOk)
     , ReplaceIfExists_(replaceIfExists)
 {
 }
 
+TNodePtr TCreateObject::DoClone() const {
+    return new TCreateObject(Pos_, ObjectId_, TypeId_, TObjectOperatorContext(Scoped_), SafeClone(Features_), ExistingOk_, ReplaceIfExists_);
+}
+
 INode::TPtr TUpsertObject::BuildOptions() const {
     return Y(Q(Y(Q("mode"), Q("upsertObject"))));
 }
 
+TNodePtr TUpsertObject::DoClone() const {
+    return new TUpsertObject(Pos_, ObjectId_, TypeId_, TObjectOperatorContext(Scoped_), SafeClone(Features_));
+}
+
 TAlterObject::TAlterObject(TPosition pos, const TString& objectId, const TString& typeId, const TObjectOperatorContext& context,
-                           TFeatureMap&& features, std::set<TString>&& featuresToReset, bool missingOk)
+                           TNodePtr features, std::set<TString>&& featuresToReset, bool missingOk)
     : TBase(pos, objectId, typeId, context, std::move(features))
     , FeaturesToReset_(std::move(featuresToReset))
     , MissingOk_(missingOk)
@@ -133,6 +168,7 @@ INode::TPtr TAlterObject::FillFeatures(INode::TPtr options) const {
         }
         options->Add(Q(Y(Q("resetFeatures"), Q(reset))));
     }
+
     return options;
 }
 
@@ -140,8 +176,12 @@ INode::TPtr TAlterObject::BuildOptions() const {
     return Y(Q(Y(Q("mode"), Q(MissingOk_ ? "alterObjectIfExists" : "alterObject"))));
 }
 
+TNodePtr TAlterObject::DoClone() const {
+    return new TAlterObject(Pos_, ObjectId_, TypeId_, TObjectOperatorContext(Scoped_), SafeClone(Features_), std::set(FeaturesToReset_), MissingOk_);
+}
+
 TDropObject::TDropObject(TPosition pos, const TString& objectId, const TString& typeId, const TObjectOperatorContext& context,
-                         TFeatureMap&& features, bool missingOk)
+                         TNodePtr features, bool missingOk)
     : TBase(pos, objectId, typeId, context, std::move(features))
     , MissingOk_(missingOk)
 {
@@ -149,6 +189,10 @@ TDropObject::TDropObject(TPosition pos, const TString& objectId, const TString& 
 
 INode::TPtr TDropObject::BuildOptions() const {
     return Y(Q(Y(Q("mode"), Q(MissingOk_ ? "dropObjectIfExists" : "dropObject"))));
+}
+
+TNodePtr TDropObject::DoClone() const {
+    return new TDropObject(Pos_, ObjectId_, TypeId_, TObjectOperatorContext(Scoped_), SafeClone(Features_), MissingOk_);
 }
 
 } // namespace NSQLTranslationV1

@@ -15,7 +15,8 @@ TConstructor::TConstructor(const NOlap::IPathIdTranslator& pathIdTranslator, con
             continue;
         }
         constructors.emplace_back(pathIdTranslator.ResolveSchemeShardLocalPathIdVerified(i.first), TabletId, i.second);
-        if (!pkFilter->IsUsed(constructors.back().GetStart().BuildSortablePosition(), constructors.back().GetFinish().BuildSortablePosition())) {
+        if (!pkFilter->IsUsed(constructors.back().GetStart().GetValue().BuildSortablePosition(),
+                constructors.back().GetFinish().GetValue().BuildSortablePosition())) {
             constructors.pop_back();
         }
     }

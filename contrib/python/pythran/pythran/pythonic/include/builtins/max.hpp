@@ -12,8 +12,7 @@ namespace builtins
 
   template <class... Types>
   auto max(Types &&...values)
-      -> decltype(details::minmax(operator_::functor::lt{},
-                                  std::forward<Types>(values)...));
+      -> decltype(details::minmax(operator_::functor::lt{}, std::forward<Types>(values)...));
 
   DEFINE_FUNCTOR(pythonic::builtins, max);
 } // namespace builtins

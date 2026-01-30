@@ -1,5 +1,6 @@
 #include "mlp_reader.h"
 
+#include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/codecs.h>
@@ -119,7 +120,7 @@ void TReaderActor::Handle(TEvPQ::TEvMLPReadResponse::TPtr& ev) {
 
         TString data;
         Ydb::Topic::Codec codec;
-        if (Settings.UncompressMessages &&proto.has_codec() && proto.codec() != Ydb::Topic::CODEC_RAW - 1) {
+        if (Settings.UncompressMessages && proto.has_codec() && proto.codec() != Ydb::Topic::CODEC_RAW - 1) {
             const NYdb::NTopic::ICodec* codecImpl = NYdb::NTopic::TCodecMap::GetTheCodecMap().GetOrThrow(static_cast<ui32>(proto.codec() + 1));
             data = codecImpl->Decompress(proto.GetData());
             codec = static_cast<Ydb::Topic::Codec>(proto.codec() + 1);
@@ -128,10 +129,23 @@ void TReaderActor::Handle(TEvPQ::TEvMLPReadResponse::TPtr& ev) {
             codec = Ydb::Topic::CODEC_RAW;
         }
 
+        THashMap<TString, TString> messageMetaAttr(proto.messagemeta_size());
+        for (const auto& meta : proto.messagemeta()) {
+            messageMetaAttr.try_emplace(meta.key(), meta.value());
+        }
+
+        TString messageGroupId;
+        auto it = messageMetaAttr.find(MESSAGE_ATTRIBUTE_KEY);
+        if (it != messageMetaAttr.end()) {
+            messageGroupId = std::move(it->second);
+        }
         response->Messages.push_back(TEvReadResponse::TMessage{
             .MessageId = {PartitionId, message.GetId().GetOffset()},
             .Codec = codec,
-            .Data = std::move(data)
+            .Data = std::move(data),
+            .MessageMetaAttributes = std::move(messageMetaAttr),
+            .SentTimestamp = TInstant::MilliSeconds(message.messagemeta().senttimestampmilliseconds()),
+            .MessageGroupId = messageGroupId,
         });
     }
 
@@ -143,7 +157,6 @@ void TReaderActor::Handle(TEvPQ::TEvMLPErrorResponse::TPtr& ev) {
     // TODO MLP Retry
     LOG_D("Handle TEvPQ::TEvMLPErrorResponse " << ev->Get()->Record.ShortDebugString());
     ReplyErrorAndDie(ev->Get()->GetStatus(), std::move(ev->Get()->GetErrorMessage()));
-    PassAway();
 }
 
 void TReaderActor::HandleOnRead(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
@@ -184,6 +197,7 @@ void TReaderActor::PassAway() {
         Send(ChildActorId, new TEvents::TEvPoison());
     }
     Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvUnlink(0));
+    TBaseActor::PassAway();
 }
 
 bool TReaderActor::OnUnhandledException(const std::exception& exc) {

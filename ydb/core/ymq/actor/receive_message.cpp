@@ -1,11 +1,11 @@
 #include "action.h"
-#include "attributes_md5.h"
 #include <ydb/core/ymq/actor/cfg/cfg.h>
 #include "error.h"
 #include "executor.h"
 #include "log.h"
 #include "params.h"
 
+#include <ydb/core/ymq/attributes/attributes_md5.h>
 #include <ydb/core/ymq/base/limits.h>
 #include <ydb/core/ymq/base/helpers.h>
 #include <ydb/core/ymq/proto/records.pb.h>

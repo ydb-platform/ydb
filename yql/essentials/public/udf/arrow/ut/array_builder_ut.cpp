@@ -294,10 +294,10 @@ Y_UNIT_TEST(TestSingularTypeValueBuilderReader) {
         TInputBuffer inputBuffer("Just arbitrary string");
         arrayBuilder->Add(inputBuffer);
         UNIT_ASSERT_VALUES_EQUAL_C(inputBuffer.PopChar(), 'J', "The input buffer must not be consumed.");
-        arrayBuilder->AddMany(*arrayData, /*popCount=*/3u, /*sparseBitmat=*/nullptr, /*bitmapSize=*/arrayData->length);
+        arrayBuilder->AddMany(*arrayData, /*popCount=*/3u, /*sparseBitmap=*/nullptr, /*bitmapSize=*/arrayData->length);
         arrayBuilder->AddMany(&arrayDataItem, /*arrayCount=*/1, /*beginIndex=*/1, /*count=*/3u);
         std::vector<ui64> indexes = {1, 5, 7, 10};
-        arrayBuilder->AddMany(&arrayDataItem, /*arrayCount=*/1, /*beginIndex=*/indexes.data(), /*count=*/4u);
+        arrayBuilder->AddMany(&arrayDataItem, /*arrayCount=*/1, /*indexes=*/indexes.data(), /*count=*/4u);
         UNIT_ASSERT_VALUES_EQUAL(arrayBuilder->Build(true).array()->length, 1 + 1 + 4 + 1 + 3 + 3 + 4);
     }
 

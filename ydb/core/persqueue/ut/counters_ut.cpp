@@ -7,6 +7,7 @@
 #include <ydb/core/persqueue/public/counters/percentile_counter.h>
 #include <ydb/core/persqueue/pqtablet/common/constants.h>
 #include <ydb/core/persqueue/pqtablet/partition/partition.h>
+#include <ydb/core/quoter/public/quoter.h>
 #include <ydb/core/sys_view/service/sysview_service.h>
 #include <ydb/core/testlib/fake_scheme_shard.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
@@ -106,6 +107,17 @@ Y_UNIT_TEST(Partition) {
         dbGroup->OutputHtml(countersStr);
         TString referenceCounters = NResource::Find(TStringBuf("counters_pqproxy.html"));
 
+        // FILE* ofs = fopen("~/counters_pqproxy.html.actual", "w");
+        // if (ofs) {
+        //     fwrite(countersStr.Str().data(), 1, countersStr.Str().size(), ofs);
+        //     fputs("\n", ofs);
+        //     fclose(ofs);
+        // } else {
+        //     Cerr << "Failed to open output file for writing: counters_pqproxy.html.actual" << Endl;
+        // }
+
+        Cerr << "ACTUAL:" << Endl << countersStr.Str() << Endl << "END" << Endl;
+
         UNIT_ASSERT_VALUES_EQUAL(countersStr.Str() + "\n", referenceCounters);
     }
 
@@ -118,17 +130,35 @@ Y_UNIT_TEST(Partition) {
     }
 }
 
+struct TPartitionLevelMetricsTestParameters {
+    bool EnableMetricsLevel;
+    bool FirstClassCitizen;
+    std::optional<TString> MonitoringProjectId;
+};
 
-void PartitionLevelCounters(bool featureFlagEnabled, bool firstClassCitizen, TString referenceDir) {
+
+void PartitionLevelMetrics(TPartitionLevelMetricsTestParameters p) {
+    Cerr << (TStringBuilder() << "Run PartitionLevelMetrics(EnableMetricsLevel=" << p.EnableMetricsLevel << ", "
+                                                           "FirstClassCitizen=" << p.FirstClassCitizen << ", "
+                                                           "MonitoringProjectId=" << p.MonitoringProjectId << ")\n");
+    TString referenceDir = p.FirstClassCitizen ? "first_class_citizen" : "federation";
+    if (p.MonitoringProjectId.has_value() && !p.MonitoringProjectId->empty()) {
+        referenceDir += "_with_monitoring_project_id";
+    }
     TTestContext tc;
     TFinalizer finalizer(tc);
     bool activeZone{false};
-    tc.Prepare("", [](TTestActorRuntime&) {}, activeZone, firstClassCitizen, true);
+    tc.Prepare("", [](TTestActorRuntime&) {}, activeZone, p.FirstClassCitizen, true);
     tc.Runtime->SetScheduledLimit(100);
 
-    tc.Runtime->GetAppData(0).FeatureFlags.SetEnableMetricsLevel(featureFlagEnabled);
+    tc.Runtime->GetAppData(0).FeatureFlags.SetEnableMetricsLevel(p.EnableMetricsLevel);
 
-    PQTabletPrepare({ .metricsLevel = METRICS_LEVEL_OBJECT }, {}, tc);
+    TTabletPreparationParameters parameters{
+        .metricsLevel = METRICS_LEVEL_OBJECT,
+        .monitoringProjectId = p.MonitoringProjectId,
+    };
+
+    PQTabletPrepare(parameters, {}, tc);
     CmdWrite(0, "sourceid0", TestData(), tc, false, {}, true);
     CmdWrite(0, "sourceid1", TestData(), tc, false);
     CmdWrite(0, "sourceid2", TestData(), tc, false);
@@ -168,7 +198,8 @@ void PartitionLevelCounters(bool featureFlagEnabled, bool firstClassCitizen, TSt
     {
         // Turn on per partition counters, check counters.
 
-        PQTabletPrepare({ .metricsLevel = METRICS_LEVEL_DETAILED }, {}, tc);
+        parameters.metricsLevel = METRICS_LEVEL_DETAILED;
+        PQTabletPrepare(parameters, {}, tc);
 
         // partition, sourceId, data, text
         CmdWrite({ .Partition = 0, .SourceId = "sourceid3", .Data = TestData(), .TestContext = tc, .Error = false });
@@ -183,8 +214,9 @@ void PartitionLevelCounters(bool featureFlagEnabled, bool firstClassCitizen, TSt
         Cerr << "after write: " << counters << "\n";
         Cerr << "after write zeroed: " << zeroUnreliableValues(counters) << "\n";
         TString referenceCounters = NResource::Find(TStringBuilder() << referenceDir << "_after_write.html");
-        counters = zeroUnreliableValues(counters) + (featureFlagEnabled ? "\n" : "");
-        UNIT_ASSERT_VALUES_EQUAL(counters, featureFlagEnabled ? referenceCounters : EMPTY_COUNTERS);
+        Cerr << "referenceCounters: " << referenceCounters << "\n";
+        counters = zeroUnreliableValues(counters) + (p.EnableMetricsLevel ? "\n" : "");
+        UNIT_ASSERT_VALUES_EQUAL(counters, p.EnableMetricsLevel ? referenceCounters : EMPTY_COUNTERS);
     }
 
     {
@@ -229,33 +261,136 @@ void PartitionLevelCounters(bool featureFlagEnabled, bool firstClassCitizen, TSt
             UNIT_ASSERT_C(result->Record.GetPartitionResponse().HasCmdReadResult(), result->Record.GetPartitionResponse().DebugString());
         }
 
-        TString counters = getCountersHtml("topics_per_partition");
+        TString counters = getCountersHtml();
         TString referenceCounters = NResource::Find(TStringBuilder() << referenceDir << "_after_read.html");
-        counters = zeroUnreliableValues(counters) + (featureFlagEnabled ? "\n" : "");
+        counters = zeroUnreliableValues(counters) + (p.EnableMetricsLevel ? "\n" : "");
         Cerr << "XXXXX after read: " << counters << "\n";
-        UNIT_ASSERT_VALUES_EQUAL(counters, featureFlagEnabled ? referenceCounters : EMPTY_COUNTERS);
+        UNIT_ASSERT_VALUES_EQUAL(counters, p.EnableMetricsLevel ? referenceCounters : EMPTY_COUNTERS);
     }
 
     {
         // Disable per partition counters, the counters should be empty.
 
-        PQTabletPrepare({ .metricsLevel = METRICS_LEVEL_OBJECT }, {}, tc);
+        parameters.metricsLevel = METRICS_LEVEL_OBJECT;
+        PQTabletPrepare(parameters, {}, tc);
         TString counters = getCountersHtml();
         TString referenceCounters = NResource::Find(TStringBuilder() << referenceDir << "_turned_off.html");
-        counters = zeroUnreliableValues(counters) + (featureFlagEnabled ? "\n" : "");
+        counters = zeroUnreliableValues(counters) + (p.EnableMetricsLevel ? "\n" : "");
         Cerr << "XXXXX after read counters disabled: " << counters << "\n";
-        UNIT_ASSERT_VALUES_EQUAL(counters, featureFlagEnabled ? referenceCounters : EMPTY_COUNTERS);
+        UNIT_ASSERT_VALUES_EQUAL(counters, p.EnableMetricsLevel ? referenceCounters : EMPTY_COUNTERS);
     }
 }
 
-Y_UNIT_TEST(PartitionLevelCounters_Federation) {
-    PartitionLevelCounters(false, false, "federation");
-    PartitionLevelCounters(true, false, "federation");
+Y_UNIT_TEST(PartitionLevelMetrics) {
+    for (bool enableMetricsLevel : {false, true}) {
+        for (bool firstClassCitizen : {false, true}) {
+            for (std::optional<TString> monitoringProjectId : TVector<std::optional<TString>>{std::nullopt, "", "first-monitoring-project-id"}) {
+                PartitionLevelMetrics({
+                    .EnableMetricsLevel = enableMetricsLevel,
+                    .FirstClassCitizen = firstClassCitizen,
+                    .MonitoringProjectId = monitoringProjectId,
+                });
+            }
+        }
+    }
 }
 
-Y_UNIT_TEST(PartitionLevelCounters_FirstClassCitizen) {
-    PartitionLevelCounters(false, true, "first_class_citizen");
-    PartitionLevelCounters(true, true, "first_class_citizen");
+// Test that changing monitoring project ID updates counters for both consumers and write operations
+Y_UNIT_TEST(MonitoringProjectIdChange) {
+    for (bool firstClassCitizen : {false, true}) {
+        Cerr << "Run MonitoringProjectIdChange(FirstClassCitizen=" << firstClassCitizen << ")\n";
+
+        TTestContext tc;
+        TFinalizer finalizer(tc);
+        bool activeZone{false};
+        tc.Prepare("", [](TTestActorRuntime&) {}, activeZone, firstClassCitizen, true);
+        tc.Runtime->SetScheduledLimit(100);
+
+        tc.Runtime->GetAppData(0).FeatureFlags.SetEnableMetricsLevel(true);
+
+        const TString firstProjectId = "first-monitoring-project-id";
+        const TString secondProjectId = "second-monitoring-project-id";
+        const TString consumer = "test-consumer";
+
+        // Initial setup with first monitoring project ID and a consumer
+        TTabletPreparationParameters parameters{
+            .metricsLevel = METRICS_LEVEL_DETAILED,
+            .monitoringProjectId = firstProjectId,
+        };
+
+        PQTabletPrepare(parameters, {{consumer, false}}, tc);
+
+        // Write some data to populate write counters
+        CmdWrite({ .Partition = 0, .SourceId = "sourceid0", .Data = TestData(), .TestContext = tc, .Error = false, .IsFirst = true });
+        CmdWrite({ .Partition = 0, .SourceId = "sourceid1", .Data = TestData(), .TestContext = tc, .Error = false });
+
+        // Helper to read messages and populate consumer counters
+        auto doRead = [&tc, &consumer](const TString& sessionId, ui64 partitionSessionId) {
+            TPQCmdSettings sessionSettings{0, consumer, sessionId};
+            sessionSettings.PartitionSessionId = partitionSessionId;
+            TPQCmdReadSettings readSettings{
+                /*session=*/ sessionId,
+                /*partition=*/ 0,
+                /*offset=*/ 0,
+                /*count=*/ 2,
+                /*size=*/ 16_MB,
+                /*resCount=*/ 1,
+            };
+            readSettings.PartitionSessionId = partitionSessionId;
+            readSettings.User = consumer;
+            readSettings.Pipe = CmdCreateSession(sessionSettings, tc);
+            BeginCmdRead(readSettings, tc);
+            TAutoPtr<IEventHandle> handle;
+            auto* result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(handle);
+            UNIT_ASSERT_C(result->Record.GetPartitionResponse().HasCmdReadResult(), result->Record.GetPartitionResponse().DebugString());
+            CmdKillSession(0, consumer, sessionId, tc);
+        };
+
+        // Read messages to populate consumer counters
+        doRead("session", 1);
+
+        // Verify counters exist under first monitoring project ID
+        auto getCountersGroup = [&tc, firstClassCitizen](const TString& monitoringProjectId) -> ::NMonitoring::TDynamicCounterPtr {
+            auto counters = tc.Runtime->GetAppData(0).Counters;
+            auto group = counters->GetSubgroup("counters", "topics_per_partition");
+            group = group->GetSubgroup("host", firstClassCitizen ? "" : "cluster");
+            if (!monitoringProjectId.empty()) {
+                group = group->GetSubgroup("monitoring_project_id", monitoringProjectId);
+            }
+            return group;
+        };
+
+        {
+            auto group = getCountersGroup(firstProjectId);
+            TStringStream countersStr;
+            group->OutputHtml(countersStr);
+            Cerr << "Counters under first project ID:\n" << countersStr.Str() << "\n";
+            // Verify counters exist by checking the group is not empty
+            UNIT_ASSERT_C(!countersStr.Str().empty() && countersStr.Str() != "<pre></pre>",
+                "Expected counters under first monitoring project ID");
+        }
+
+        // Change monitoring project ID
+        parameters.monitoringProjectId = secondProjectId;
+        PQTabletPrepare(parameters, {{consumer, false}}, tc);
+
+        // Write more data to populate new counters under the new project ID
+        CmdWrite({ .Partition = 0, .SourceId = "sourceid2", .Data = TestData(), .TestContext = tc, .Error = false });
+        CmdWrite({ .Partition = 0, .SourceId = "sourceid3", .Data = TestData(), .TestContext = tc, .Error = false });
+
+        // Read again to populate consumer counters under new project ID
+        doRead("session", 2);
+
+        // Verify counters now exist under second monitoring project ID
+        {
+            auto group = getCountersGroup(secondProjectId);
+            TStringStream countersStr;
+            group->OutputHtml(countersStr);
+            Cerr << "Counters under second project ID:\n" << countersStr.Str() << "\n";
+            UNIT_ASSERT_C(!countersStr.Str().empty() && countersStr.Str() != "<pre></pre>",
+                "Expected counters under second monitoring project ID");
+        }
+    }
 }
 
 Y_UNIT_TEST(PartitionWriteQuota) {
@@ -334,7 +469,9 @@ Y_UNIT_TEST(PartitionFirstClass) {
         dbGroup->OutputHtml(countersStr);
         TString referenceCounters = NResource::Find(TStringBuf("counters_pqproxy_firstclass.html"));
 
-        UNIT_ASSERT_EQUAL(countersStr.Str() + "\n", referenceCounters);
+        Cerr << "COUNTERS: " << countersStr.Str() << Endl;
+
+        UNIT_ASSERT_VALUES_EQUAL(countersStr.Str() + "\n", referenceCounters);
     }
 
     {
@@ -343,6 +480,7 @@ Y_UNIT_TEST(PartitionFirstClass) {
 
         TStringStream countersStr;
         dbGroup->OutputHtml(countersStr);
+
         const TString referenceCounters = NResource::Find(TStringBuf("counters_datastreams.html"));
         UNIT_ASSERT_VALUES_EQUAL(countersStr.Str() + "\n", referenceCounters);
     }
@@ -815,11 +953,13 @@ Y_UNIT_TEST(PartitionKeyCompaction) {
             group->GetNamedCounter("name", "topic.partition.write.lag_milliseconds_max", false)->Set(600);
             group->GetNamedCounter("name", "topic.partition.uptime_milliseconds_min", false)->Set(30000);
             group->GetNamedCounter("name", "topic.partition.write.lag_milliseconds_max", false)->Set(600);
+            group->GetNamedCounter("name", "topic.partition.read.throttled_microseconds_max", false)->Set(2000);
             group = group->GetSubgroup("consumer", "__ydb_compaction_consumer");
             group->GetNamedCounter("name", "topic.partition.write.lag_milliseconds_max", false)->Set(200);
             group->GetNamedCounter("name", "topic.partition.end_to_end_lag_milliseconds_max", false)->Set(30000);
             group->GetNamedCounter("name", "topic.partition.read.throttled_microseconds_max", false)->Set(2000);
             group->GetNamedCounter("name", "topic.partition.read.idle_milliseconds_max", false)->Set(300);
+            group->GetNamedCounter("name", "topic.partition.read.lag_milliseconds_max", false)->Set(300);
 
             TStringStream countersStr;
             dbGroup->OutputHtml(countersStr);

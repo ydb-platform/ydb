@@ -14,6 +14,7 @@ from ydb.tests.library.common.types import Erasure
 from ydb.tests.library.clients.kikimr_http_client import SwaggerClient
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
+from ydb.tests.library.harness.util import LogLevels
 import yatest.common as yc
 
 
@@ -39,11 +40,11 @@ class TestPDiskMetadata(object):
     def check_all_nodes(self, check_func):
         for node_id, n in self.cluster.nodes.items():
             url = "http://%s:%d/actors/nodewarden" % (n.host, n.mon_port)
-            r = requests.get(url, params={"page": "distconf"}, timeout=10)
+            r = requests.get(url, params={"page": "distconf", "json": ""}, timeout=10)
             body = r.text
             ok = check_func(body)
             if not ok:
-                logging.debug("node %s distconf html: %s", node_id, (body[:500] if body else None))
+                logging.debug("node %s distconf json: %s", node_id, body)
             assert_that(ok)
 
     @classmethod
@@ -55,6 +56,9 @@ class TestPDiskMetadata(object):
             metadata_section=cls.metadata_section,
             use_self_management=True,
             simple_config=True,
+            additional_log_configs={
+                'BS_NODE': LogLevels.DEBUG,
+            },
         )
         cls.cluster = KiKiMR(configurator=cfg)
         cls.cluster.start()
@@ -85,7 +89,8 @@ class TestPDiskMetadata(object):
             rec = json.loads(res.stdout)
 
             committed = rec.get("CommittedStorageConfig", {})
-            committed["Generation"] = int(committed.get("Generation", 0)) + 1
+            expected_generation = int(committed.get("Generation", 0)) + 1
+            committed["Generation"] = expected_generation
             committed["SelfAssemblyUUID"] = "new-cluster-uuid"
             rec["CommittedStorageConfig"] = committed
             with open(json_path, 'w') as f:
@@ -95,34 +100,29 @@ class TestPDiskMetadata(object):
                 y = yaml.safe_load(f)
             if not isinstance(y, dict):
                 y = {}
-            meta = y.get('metadata') or {}
-            version_before = int(meta.get('version') or 0)
+            meta = y.setdefault('metadata', {})
+            version_before = int(meta.get('version', 0))
             meta['version'] = version_before + 1
             meta['cluster'] = 'new-cluster'
-            y['metadata'] = meta
             with open(yaml_path_mod, 'w') as f:
                 yaml.safe_dump(y, f)
 
-            run_cli(["admin", "blobstorage", "disk", "metadata", "write", pdisk_path_n1,
-                     "--from-json", json_path,
-                     "--committed-yaml", yaml_path_mod,
-                     "--clear-proposed",
-                     "--validate-config"])
+            num_written = 0
+            for pdisk_path in self.node_to_pdisk_path.values():
+                run_cli(["admin", "blobstorage", "disk", "metadata", "write", pdisk_path,
+                         "--from-json", json_path,
+                         "--committed-yaml", yaml_path_mod,
+                         "--clear-proposed",
+                         "--validate-config"])
+                num_written += 1
+                if num_written == 6:
+                    break
 
             for n in self.cluster.nodes.values():
                 n.start()
             time.sleep(10)
 
-            expected_ver = "version: %d" % (version_before + 1)
-            expected_cluster = "cluster: new-cluster"
-            expected_uuid = "new-cluster-uuid"
-            self.check_all_nodes(lambda body: (
-                "config.yaml" in body
-                and "metadata:" in body
-                and (expected_ver in body)
-                and (expected_cluster in body)
-                and (expected_uuid in body)
-            ))
+            self.check_all_nodes(lambda body: json.loads(body).get("configs", {}).get("effective", {}).get("generation") == expected_generation)
 
     def test_validate_fails_on_invalid_committed(self):
         for n in self.cluster.nodes.values():

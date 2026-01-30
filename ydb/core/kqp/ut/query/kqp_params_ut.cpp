@@ -1450,6 +1450,82 @@ Y_UNIT_TEST_SUITE(KqpParams) {
         }
     }
 
+    Y_UNIT_TEST(EmptyListForListParameterExecuteDataQuery) {
+        // Test that EmptyList can be passed for List<?> parameters in ExecuteDataQuery
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        // Test with prepared query
+        {
+            auto prepareResult = session.PrepareDataQuery(Q1_(R"(
+                DECLARE $x AS List<Uint32>;
+                DECLARE $y AS List<Uint32>;
+
+                SELECT * FROM `/Root/Test` WHERE Group IN $x
+                UNION ALL
+                SELECT * FROM `/Root/Test` WHERE Group IN $y;
+            )")).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(prepareResult.GetStatus(), EStatus::SUCCESS, prepareResult.GetIssues().ToString());
+
+            auto query = prepareResult.GetQuery();
+            Ydb::Type type;
+            type.set_empty_list_type(google::protobuf::NULL_VALUE);
+            std::map<std::string, TType> typeInfo = {{"$x", TType(type)}, {"$y", TType(type)}};
+            auto params = NYdb::TParamsBuilder(typeInfo).Build();
+
+            auto result = query.Execute(
+                TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
+                std::move(params)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "type mismatch, expected: Type (List) { List item type: { Type (Data), schemeType: Uint32, schemeTypeId: 2 } } , actual: Type (EmptyList)");
+        }
+
+        // Test with ExecuteDataQuery directly
+        {
+            Ydb::Type type;
+            type.set_empty_list_type(google::protobuf::NULL_VALUE);
+            std::map<std::string, TType> typeInfo = {{"$x", TType(type)}, {"$y", TType(type)}};
+            auto params = NYdb::TParamsBuilder(typeInfo).Build();
+
+            auto result = session.ExecuteDataQuery(Q1_(R"(
+                DECLARE $x AS List<Uint32>;
+                DECLARE $y AS List<Uint32>;
+
+                SELECT * FROM `/Root/Test` WHERE Group IN $x
+                UNION ALL
+                SELECT * FROM `/Root/Test` WHERE Group IN $y;
+            )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "type mismatch, expected: Type (List) { List item type: { Type (Data), schemeType: Uint32, schemeTypeId: 2 } } , actual: Type (EmptyList)");
+        }
+    }
+
+    Y_UNIT_TEST(EmptyListForListParameterExecuteQuery) {
+        // Test that EmptyList can be passed for List<?> parameters in ExecuteQuery
+        TKikimrRunner kikimr;
+        auto queryClient = kikimr.GetQueryClient();
+
+        // Test with ExecuteQuery
+        {
+            Ydb::Type type;
+            type.set_empty_list_type(google::protobuf::NULL_VALUE);
+            std::map<std::string, TType> typeInfo = {{"$x", TType(type)}, {"$y", TType(type)}};
+            auto params = NYdb::TParamsBuilder(typeInfo).Build();
+
+            auto result = queryClient.ExecuteQuery(Q1_(R"(
+                DECLARE $x AS List<Uint32>;
+                DECLARE $y AS List<Uint32>;
+
+                SELECT * FROM `/Root/Test` WHERE Group IN $x
+                UNION ALL
+                SELECT * FROM `/Root/Test` WHERE Group IN $y;
+            )"), NYdb::NQuery::TTxControl::BeginTx().CommitTx(), params).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "type mismatch, expected: Type (List) { List item type: { Type (Data), schemeType: Uint32, schemeTypeId: 2 } } , actual: Type (EmptyList)");
+        }
+    }
+
 }
 
 } // namespace NKqp

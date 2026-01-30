@@ -753,7 +753,7 @@ std::unique_ptr<IOutputStream> THttpRawClient::WriteTable(
 std::unique_ptr<IInputStream> THttpRawClient::ReadTable(
     const TTransactionId& transactionId,
     const TRichYPath& path,
-    const TMaybe<TFormat>& format,
+    const TFormat& format,
     const TTableReaderOptions& options)
 {
     TMutationId mutationId;
@@ -779,7 +779,7 @@ std::unique_ptr<IOutputStream> THttpRawClient::WriteFile(
 
 std::unique_ptr<IInputStream> THttpRawClient::ReadTablePartition(
     const TString& cookie,
-    const TMaybe<TFormat>& format,
+    const TFormat& format,
     const TTablePartitionReaderOptions& options)
 {
     TMutationId mutationId;
@@ -870,6 +870,220 @@ void THttpRawClient::UnfreezeTable(
     THttpHeader header("POST", "unfreeze_table");
     header.MergeParameters(NRawClient::SerializeParamsForUnfreezeTable(Context_.Config->Prefix, path, options));
     RequestWithoutRetry(Context_, mutationId, header)->GetResponse();
+}
+
+class THttpRequestStreamWithResponse
+    : public IOutputStreamWithResponse
+{
+public:
+    explicit THttpRequestStreamWithResponse(NHttpClient::IHttpRequestPtr request)
+        : Request_(std::move(request))
+        , Underlying_(Request_->GetStream())
+    { }
+
+    TString GetResponse() const override
+    {
+        if (!Finished_) {
+            ythrow TApiUsageError() << "Stream must be finished before response can be received.";
+        }
+        return Response_;
+    }
+
+private:
+    NHttpClient::IHttpRequestPtr Request_;
+    IOutputStream* Underlying_;
+    TString Response_;
+    bool Finished_ = false;
+
+    void DoWrite(const void* buf, size_t len) override
+    {
+        Underlying_->Write(buf, len);
+    }
+
+    void DoFinish() override
+    {
+        Underlying_->Finish();
+        Response_ = Request_->Finish()->GetResponse();
+        Finished_ = true;
+    }
+};
+
+template <typename T>
+T DeserializeStartWriteSessionResponse(TNode node)
+{
+    using TSession = decltype(T::Session_);
+    using TCookie = decltype(T::Cookies_)::value_type;
+
+    const auto& cookiesNode = node["cookies"].AsList();
+
+    TVector<TCookie> cookies;
+    cookies.reserve(cookiesNode.size());
+
+    for (const auto& cookieNode : cookiesNode) {
+        cookies.push_back(TCookie(cookieNode));
+    }
+
+    T result;
+    result.Session(TSession(node["session"]));
+    result.Cookies(std::move(cookies));
+    return result;
+}
+
+TDistributedWriteTableSessionWithCookies THttpRawClient::StartDistributedWriteTableSession(
+    TMutationId& mutationId,
+    const TTransactionId& transactionId,
+    const TRichYPath& richPath,
+    i64 cookieCount,
+    const TStartDistributedWriteTableOptions& options)
+{
+    // NB(achains): C++ client by default uses v3 api while v4 is not fully supported.
+    // Explicit command path is needed until v4 is not default version.
+    THttpHeader header("GET", "api/v4/start_distributed_write_session", /*isApi*/ false);
+    header.AddMutationId();
+
+    header.MergeParameters(NRawClient::SerializeParamsForStartDistributedTableSession(transactionId, richPath, cookieCount, options));
+
+    auto responseInfo = RequestWithoutRetry(Context_, mutationId, header);
+
+    return DeserializeStartWriteSessionResponse<TDistributedWriteTableSessionWithCookies>(NodeFromYsonString(responseInfo->GetResponse()));
+}
+
+void THttpRawClient::PingDistributedWriteTableSession(
+    const TDistributedWriteTableSession& session,
+    const TPingDistributedWriteTableOptions& /*options*/)
+{
+    TMutationId mutationId;
+    // NB(achains): C++ client by default uses v3 api while v4 is not fully supported.
+    // Explicit command path is needed until v4 is not default version.
+    THttpHeader header("GET", "api/v4/ping_distributed_write_session", /*isApi*/ false);
+
+    header.AddParameter("session", session.Underlying());
+
+    RequestWithoutRetry(Context_, mutationId, header)->GetResponse();
+}
+
+void THttpRawClient::FinishDistributedWriteTableSession(
+    TMutationId& mutationId,
+    const TDistributedWriteTableSession& session,
+    const TVector<TWriteTableFragmentResult>& results,
+    const TFinishDistributedWriteTableOptions& /*options*/)
+{
+    // NB(achains): C++ client by default uses v3 api while v4 is not fully supported.
+    // Explicit command path is needed until v4 is not default version.
+    THttpHeader header("GET", "api/v4/finish_distributed_write_session", /*isApi*/ false);
+    header.AddMutationId();
+
+    TNode::TListType resultNode;
+    resultNode.reserve(results.size());
+
+    for (const auto& result : results) {
+        resultNode.push_back(result.Underlying());
+    }
+
+    TNode parameters;
+    parameters["session"] = session.Underlying();
+    parameters["results"] = TNode::CreateList(std::move(resultNode));
+
+    header.MergeParameters(parameters);
+
+    RequestWithoutRetry(Context_, mutationId, header)->GetResponse();
+}
+
+std::unique_ptr<IOutputStreamWithResponse> THttpRawClient::WriteTableFragment(
+    const TDistributedWriteTableCookie& cookie,
+    const TMaybe<TFormat>& format,
+    const TTableFragmentWriterOptions& /*options*/)
+{
+    // NB(achains): C++ client by default uses v3 api while v4 is not fully supported.
+    // Explicit command path is needed until v4 is not default version.
+    THttpHeader header("PUT", "api/v4/write_table_fragment", /*isApi=*/ false);
+    header.SetInputFormat(format);
+    header.SetRequestCompression(ToString(Context_.Config->ContentEncoding));
+    header.AddParameter("cookie", cookie.Underlying());
+
+    TRequestConfig config;
+    config.IsHeavy = true;
+
+    auto request = StartRequestWithoutRetry(Context_, header, config);
+
+    return std::make_unique<THttpRequestStreamWithResponse>(std::move(request));
+}
+
+TDistributedWriteFileSessionWithCookies THttpRawClient::StartDistributedWriteFileSession(
+    TMutationId& mutationId,
+    const TTransactionId& transactionId,
+    const TRichYPath& richPath,
+    i64 cookieCount,
+    const TStartDistributedWriteFileOptions& options)
+{
+    // NB(achains): C++ client by default uses v3 api while v4 is not fully supported.
+    // Explicit command path is needed until v4 is not default version.
+    THttpHeader header("GET", "api/v4/start_distributed_write_file_session", /*isApi*/ false);
+    header.AddMutationId();
+
+    header.MergeParameters(NRawClient::SerializeParamsForStartDistributedFileSession(transactionId, richPath, cookieCount, options));
+
+    auto responseInfo = RequestWithoutRetry(Context_, mutationId, header);
+
+    return DeserializeStartWriteSessionResponse<TDistributedWriteFileSessionWithCookies>(NodeFromYsonString(responseInfo->GetResponse()));
+}
+
+void THttpRawClient::PingDistributedWriteFileSession(
+    const TDistributedWriteFileSession& session,
+    const TPingDistributedWriteFileOptions& /*options*/)
+{
+    TMutationId mutationId;
+    // NB(achains): C++ client by default uses v3 api while v4 is not fully supported.
+    // Explicit command path is needed until v4 is not default version.
+    THttpHeader header("GET", "api/v4/ping_distributed_write_file_session", /*isApi*/ false);
+
+    header.AddParameter("session", session.Underlying());
+
+    RequestWithoutRetry(Context_, mutationId, header)->GetResponse();
+}
+
+void THttpRawClient::FinishDistributedWriteFileSession(
+    TMutationId& mutationId,
+    const TDistributedWriteFileSession& session,
+    const TVector<TWriteFileFragmentResult>& results,
+    const TFinishDistributedWriteFileOptions& /*options*/)
+{
+    // NB(achains): C++ client by default uses v3 api while v4 is not fully supported.
+    // Explicit command path is needed until v4 is not default version.
+    THttpHeader header("GET", "api/v4/finish_distributed_write_file_session", /*isApi*/ false);
+    header.AddMutationId();
+
+    TNode::TListType resultNode;
+    resultNode.reserve(results.size());
+
+    for (const auto& result : results) {
+        resultNode.push_back(result.Underlying());
+    }
+
+    TNode parameters;
+    parameters["session"] = session.Underlying();
+    parameters["results"] = TNode::CreateList(std::move(resultNode));
+
+    header.MergeParameters(parameters);
+
+    RequestWithoutRetry(Context_, mutationId, header)->GetResponse();
+}
+
+std::unique_ptr<IOutputStreamWithResponse> THttpRawClient::WriteFileFragment(
+    const TDistributedWriteFileCookie& cookie,
+    const TFileFragmentWriterOptions& /*options*/)
+{
+    THttpHeader header("PUT", "api/v4/write_file_fragment", /*isApi*/ false);
+
+    header.SetRequestCompression(ToString(Context_.Config->ContentEncoding));
+    header.AddParameter("cookie", cookie.Underlying());
+
+    TRequestConfig config;
+    config.IsHeavy = true;
+
+    auto request = StartRequestWithoutRetry(Context_, header, config);
+
+    return std::make_unique<THttpRequestStreamWithResponse>(std::move(request));
 }
 
 TCheckPermissionResponse THttpRawClient::CheckPermission(

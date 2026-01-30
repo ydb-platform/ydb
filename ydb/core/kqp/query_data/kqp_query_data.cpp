@@ -255,9 +255,13 @@ void TQueryData::ValidateParameter(const TString& name, const NKikimrMiniKQL::TT
     }
 
     auto pType = ImportTypeFromProto(type, txTypeEnv);
-    if (pType == nullptr || !parameterType->IsSameType(*pType)) {
+    if (pType == nullptr) {
+        ythrow yexception() << "Parameter " << name << " type is empty";
+    }
+
+    if (!parameterType->IsSameType(*pType)) {
         ythrow yexception() << "Parameter " << name
-            << " type mismatch, expected: " << type << ", actual: " << *parameterType;
+            << " type mismatch, expected: " << *pType << ", actual: " << *parameterType;
     }
 }
 

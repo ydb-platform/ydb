@@ -23,7 +23,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "arrow/c/abi.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/c/abi.h"
 
 #define ARROW_C_ASSERT(condition, msg)                          \
   do {                                                          \

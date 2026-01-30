@@ -83,6 +83,8 @@ DECLARE_REFCOUNTED_CLASS(TCongestionController)
 DECLARE_REFCOUNTED_CLASS(TAttachmentsInputStream)
 DECLARE_REFCOUNTED_CLASS(TAttachmentsOutputStream)
 
+DECLARE_REFCOUNTED_STRUCT(IPeerPriorityProvider)
+DECLARE_REFCOUNTED_STRUCT(IMapPeerPriorityProvider)
 DECLARE_REFCOUNTED_STRUCT(IViablePeerRegistry)
 DECLARE_REFCOUNTED_STRUCT(IDiscoverRequestHook)
 DECLARE_REFCOUNTED_STRUCT(IPeerDiscovery)
@@ -129,7 +131,7 @@ DECLARE_REFCOUNTED_STRUCT(TThrottlingChannelDynamicConfig)
 DECLARE_REFCOUNTED_STRUCT(TResponseKeeperConfig)
 DECLARE_REFCOUNTED_STRUCT(TDispatcherConfig)
 DECLARE_REFCOUNTED_STRUCT(TDispatcherDynamicConfig)
-DECLARE_REFCOUNTED_STRUCT(TServiceMethodConfig)
+DECLARE_REFCOUNTED_STRUCT(TOverloadTrackedServiceMethodConfig)
 DECLARE_REFCOUNTED_STRUCT(TOverloadTrackerMeanWaitTimeConfig)
 DECLARE_REFCOUNTED_STRUCT(TOverloadTrackerBacklogQueueFillFractionConfig)
 DECLARE_REFCOUNTED_STRUCT(TOverloadControllerConfig)
@@ -173,6 +175,7 @@ using TFeatureIdFormatter = const std::function<std::optional<TStringBuf>(int fe
 
 extern const std::string RequestIdAnnotation;
 extern const std::string EndpointAnnotation;
+extern const std::string EndpointAddressAnnotation;
 extern const std::string RequestInfoAnnotation;
 extern const std::string RequestUser;
 extern const std::string ResponseInfoAnnotation;

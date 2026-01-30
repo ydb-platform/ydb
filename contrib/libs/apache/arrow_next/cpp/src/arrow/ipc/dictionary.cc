@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "arrow/ipc/dictionary.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/ipc/dictionary.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -25,15 +25,15 @@
 #include <utility>
 #include <vector>
 
-#include "arrow/array.h"
-#include "arrow/array/concatenate.h"
-#include "arrow/array/validate.h"
-#include "arrow/extension_type.h"
-#include "arrow/record_batch.h"
-#include "arrow/status.h"
-#include "arrow/type.h"
-#include "arrow/util/checked_cast.h"
-#include "arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/concatenate.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/validate.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/extension_type.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/record_batch.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/status.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/checked_cast.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
 
 namespace arrow20 {
 

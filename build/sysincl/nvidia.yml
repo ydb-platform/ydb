@@ -1,4 +1,4 @@
-# build/platform/cuda (include/ and extras/CUPTI/include/)
+# build/internal/platform/cuda (include/ and extras/CUPTI/include/)
 - includes:
   - cooperative_groups.h
   - cooperative_groups/reduce.h
@@ -29,6 +29,7 @@
   - cuda/std/limits
   - cuda/std/tuple
   - cuda/std/type_traits
+  - cuda/std/__tuple_dir/structured_bindings.h
   - cuda/std/utility
   - cudaEGL.h
   - cudaProfiler.h
@@ -42,7 +43,7 @@
   - cuda_gl_interop.h
   - cuda_occupancy.h
   - cuda_profiler_api.h
-  - cuda_runtime.h
+  - cuda_runtime.h:           build/internal/platform/cuda/cuda_runtime_include.h
   - cuda_runtime_api.h
   - cufft.h
   - cufftXt.h
@@ -69,6 +70,7 @@
   - npp.h
   - nppdefs.h
   - nppi.h
+  - npps.h
   - nv/target
   - nvToolsExt.h
   - nvToolsExtCuda.h

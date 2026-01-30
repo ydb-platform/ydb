@@ -25,5 +25,23 @@ namespace numpy
 #include "pythonic/include/types/numpy_nary_expr.hpp"
 } // namespace numpy
 PYTHONIC_NS_END
+#ifdef ENABLE_PYTHON_MODULE
+
+#include "pythonic/python/core.hpp"
+
+PYTHONIC_NS_BEGIN
+
+template <>
+struct to_python<numpy::functor::uintc> {
+  static PyObject *convert(numpy::functor::uintc const &c);
+};
+
+template <>
+struct from_python<numpy::functor::uintc> {
+  static bool is_convertible(PyObject *obj);
+  static numpy::functor::uintc convert(PyObject *obj);
+};
+PYTHONIC_NS_END
+#endif
 
 #endif

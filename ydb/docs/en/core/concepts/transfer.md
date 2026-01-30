@@ -1,6 +1,6 @@
 # Data transfer
 
-Transfer in {{ ydb-short-name }} is an asynchronous mechanism for moving data from a [topic](glossary.md#topic) to a table. Creating a transfer instance, modifying it, and deleting it is done using YQL. The transfer runs inside the database and works in the background. Transfer is used to solve the task of delivering data from a topic to a table.
+Transfer in {{ ydb-short-name }} is an asynchronous mechanism for moving data from a [topic](glossary.md#topic) to a table. [Creating](../yql/reference/syntax/create-transfer.md) a transfer instance, [modifying](../yql/reference/syntax/alter-transfer.md) it, and [deleting](../yql/reference/syntax/drop-transfer.md) it is done using YQL. The transfer runs inside the database and works in the background. Transfer is used to solve the task of delivering data from a topic to a table.
 
 In practice, it's often more convenient to write data not directly to a table, but to a topic, and then asynchronously rewrite it from the topic to the table. This approach allows for even load distribution and handling spikes, since writing to a message queue is a lighter operation. Depending on the number of messages written to the topic, the delay in data availability for reading from the table after adding to the topic can range from several seconds to several minutes.
 
@@ -48,7 +48,7 @@ Data processing speed and delays can be monitored using [consumer metrics](../re
 
 Transfer operation can be temporarily paused and then resumed. After resuming transfer operation, messages following the last processed message in the topic will start being processed.
 
-To pause the transfer, you should change the transfer status to `PAUSED`. To resume the transfer, change the status to `ACTIVE`.
+To pause the transfer, you should [change](../yql/reference/syntax/alter-transfer.md#examples) the transfer status to `PAUSED`. To resume the transfer, change the status to `ACTIVE`.
 
 {% note warning %}
 
@@ -65,4 +65,11 @@ Different types of errors can occur during the transfer process:
 * **Temporary failures**. Transport errors, system overload, and other temporary problems. Requests will be retried until successful execution.
 * **Critical errors**. Errors related to access rights, data schema, and other critical aspects. When such errors occur, the transfer will be stopped, and the error text will be displayed on the transfer page in the [Embedded UI](../reference/embedded-ui/index.md) user interface. The error text can also be obtained from the [description](../reference/ydb-cli/commands/scheme-describe.md) of the transfer instance.
 
-To resume a transfer operation, eliminate the cause of the error and execute the `ALTER TRANSFER` command. For example, if the error was in the lambda function, change the lambda function. If the error is not related to the transfer configuration, for example, missing read permissions, then after eliminating the cause of the error, the transfer must be restarted by [temporarily stopping](#pause-and-resume) and then [resuming](#pause-and-resume) its operation.
+To resume a transfer operation, eliminate the cause of the error and execute the [`ALTER TRANSFER`](../yql/reference/syntax/alter-transfer.md) command. For example, if the error was in the lambda function, change the lambda function. If the error is not related to the transfer configuration, for example, missing read permissions, then after eliminating the cause of the error, the transfer must be restarted by [temporarily stopping](#pause-and-resume) and then [resuming](#pause-and-resume) its operation.
+
+## See Also
+
+* [CREATE TRANSFER](../yql/reference/syntax/create-transfer.md)
+* [ALTER TRANSFER](../yql/reference/syntax/alter-transfer.md)
+* [DROP TRANSFER](../yql/reference/syntax/drop-transfer.md)
+* [{#T}](../recipes/transfer/index.md)

@@ -20,7 +20,7 @@ void OnReach(std::atomic<bool>& called) {
 void SetUpLogger() {
     TString logType = "cout";
     NLog::InitLogger(logType, false);
-    NLog::EComponentHelpers::ForEach([](NLog::EComponent component) {
+    NLog::TComponentHelpers::ForEach([](NLog::EComponent component) {
         NLog::YqlLogger().SetComponentLevel(component, ELevel::DEBUG);
     });
 }

@@ -443,5 +443,71 @@ public:
     }
 };
 
+class TCompletionChunkReadRaw : public TCompletionAction {
+    TRcBuf Buffer;
+    TActorId Sender;
+    ui64 Cookie;
+    NWilson::TSpan Span;
+
+public:
+    TCompletionChunkReadRaw(size_t bytesToRead, TActorId sender, ui64 cookie, NWilson::TSpan span)
+        : Buffer(TRcBuf::UninitializedPageAligned(bytesToRead))
+        , Sender(sender)
+        , Cookie(cookie)
+        , Span(std::move(span))
+    {}
+
+    void *GetBuffer() {
+        return Buffer.GetDataMut();
+    }
+
+    bool CanHandleResult() const override {
+        return true;
+    }
+
+    void Exec(TActorSystem *actorSystem) override {
+        auto ev = Result != EIoResult::Ok
+            ? std::make_unique<TEvChunkReadRawResult>(NKikimrProto::ERROR, "I/O error")
+            : std::make_unique<TEvChunkReadRawResult>(std::move(Buffer));
+        actorSystem->Send(new IEventHandle(Sender, {}, ev.release(), 0, Cookie));
+        Release(actorSystem);
+    }
+
+    void Release(TActorSystem* /*actorSystem*/) override {
+        delete this;
+    }
+};
+
+class TCompletionChunkWriteRaw : public TCompletionAction {
+    TRcBuf Buffer; // just to retain ownership while data is being written
+    TActorId Sender;
+    ui64 Cookie;
+    NWilson::TSpan Span;
+
+public:
+    TCompletionChunkWriteRaw(TRcBuf&& buffer, TActorId sender, ui64 cookie, NWilson::TSpan span)
+        : Buffer(std::move(buffer))
+        , Sender(sender)
+        , Cookie(cookie)
+        , Span(std::move(span))
+    {}
+
+    bool CanHandleResult() const override {
+        return true;
+    }
+
+    void Exec(TActorSystem *actorSystem) override {
+        auto ev = Result != EIoResult::Ok
+            ? std::make_unique<TEvChunkWriteRawResult>(NKikimrProto::ERROR, "I/O error")
+            : std::make_unique<TEvChunkWriteRawResult>(NKikimrProto::OK, TString());
+        actorSystem->Send(new IEventHandle(Sender, {}, ev.release(), 0, Cookie));
+        Release(actorSystem);
+    }
+
+    void Release(TActorSystem* /*actorSystem*/) override {
+        delete this;
+    }
+};
+
 } // NPDisk
 } // NKikimr

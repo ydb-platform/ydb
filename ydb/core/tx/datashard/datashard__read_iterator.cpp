@@ -8,6 +8,8 @@
 #include <ydb/core/base/kmeans_clusters.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
+#include <ydb/core/protos/kqp.pb.h>
+#include <ydb/core/protos/query_stats.pb.h>
 
 #include <ydb/library/actors/core/monotonic_provider.h>
 
@@ -24,10 +26,12 @@ using namespace NTabletFlatExecutor;
 struct TReadIteratorVectorTopItem {
     TOwnedCellVec Row;
     double Distance = 0;
+    TString UniqueKey;
 
-    TReadIteratorVectorTopItem(TArrayRef<const TCell> cells, double distance):
+    TReadIteratorVectorTopItem(TArrayRef<const TCell> cells, double distance, TString&& uniqueKey):
         Row(TOwnedCellVec(cells)),
-        Distance(distance) {
+        Distance(distance),
+        UniqueKey(std::move(uniqueKey)) {
     }
 
     bool operator<(const TReadIteratorVectorTopItem& rhs) const {
@@ -40,23 +44,48 @@ struct TReadIteratorVectorTop {
     ui32 Limit = 0;
     TString Target;
     std::unique_ptr<NKMeans::IClusters> KMeans;
+    std::vector<ui32> DistinctColumns;
+
+    std::unordered_set<TString> UniqueKeys;
     std::vector<TReadIteratorVectorTopItem> Rows;
-    ui64 ByteSize = 0;
+    ui64 TotalReadRows = 0;
+    ui64 TotalReadBytes = 0;
 
     void AddRow(TConstArrayRef<TCell> cells) {
-        size_t bytes = EstimateSize(cells);
-        double distance = KMeans->CalcDistance(cells.at(Column).AsBuf(), Target);
+        TotalReadRows++;
+        TotalReadBytes += EstimateSize(cells);
+        TString serializedKey;
+        if (DistinctColumns.size()) {
+            TVector<TCell> key;
+            for (auto colIdx: DistinctColumns) {
+                key.push_back(cells.at(colIdx));
+            }
+            serializedKey = TSerializedCellVec::Serialize(key);
+            if (UniqueKeys.contains(serializedKey)) {
+                return;
+            }
+        }
+        const auto embedding = cells.at(Column).AsBuf();
+        if (!KMeans->IsExpectedFormat(embedding)) {
+            return;
+        }
+        double distance = KMeans->CalcDistance(embedding, Target);
         if (Rows.size() < Limit) {
-            ByteSize += bytes;
-            Rows.emplace_back(cells, distance);
+            if (DistinctColumns.size()) {
+                UniqueKeys.insert(serializedKey);
+            }
+            Rows.emplace_back(cells, distance, std::move(serializedKey));
             std::push_heap(Rows.begin(), Rows.end());
         } else if (distance < Rows.front().Distance) {
-            ByteSize += bytes;
-            Rows.emplace_back(cells, distance);
+            if (DistinctColumns.size()) {
+                UniqueKeys.insert(serializedKey);
+            }
+            Rows.emplace_back(cells, distance, std::move(serializedKey));
             std::push_heap(Rows.begin(), Rows.end());
             std::pop_heap(Rows.begin(), Rows.end());
-            auto& item = Rows.back();
-            ByteSize -= EstimateSize(item.Row);
+            if (DistinctColumns.size()) {
+                UniqueKeys.erase(Rows.back().UniqueKey);
+            }
             Rows.pop_back();
         }
     }
@@ -71,6 +100,8 @@ struct TReadIteratorVectorTop {
             blockBuilder.AddRow(TDbTupleRef(), TDbTupleRef(columnTypes, item.Row.data(), item.Row.size()));
         }
         Rows.clear();
+        TotalReadRows = 0;
+        TotalReadBytes = 0;
         return n;
     }
 };
@@ -311,7 +342,7 @@ ui64 ResetRowSkips(NTable::TIteratorStats& stats)
         std::exchange(stats.InvisibleRowSkips, 0UL);
 }
 
-// nota that reader captures state reference and must be used only
+// note that reader captures state reference and must be used only
 // after checking that state is still alive, i.e. read can be aborted
 // between Execute() and Complete()
 class TReader {
@@ -325,7 +356,7 @@ class TReader {
 
     std::vector<NScheme::TTypeInfo> ColumnTypes;
 
-    ui32 FirstUnprocessedQuery; // must be unsigned
+    ui64 FirstUnprocessedQuery; // must be unsigned
     TString LastProcessedKey;
     bool LastProcessedKeyErased = false;
 
@@ -451,7 +482,7 @@ public:
     EReadStatus ReadKey(
         TTransactionContext& txc,
         const TSerializedCellVec& keyCells,
-        size_t keyIndex)
+        ui64 keyIndex)
     {
         if (keyCells.GetCells().size() != TableInfo.KeyColumnCount) {
             // key prefix, treat it as range [prefix, null, null] - [prefix, +inf, +inf]
@@ -518,19 +549,19 @@ public:
             // key prefix, treat it as range [prefix, null, null] - [prefix, +inf, +inf]
             auto minKey = ToRawTypeValue(keyCells.GetCells(), TableInfo, true);
             auto maxKey = ToRawTypeValue(keyCells.GetCells(), TableInfo, false);
-            return Precharge(txc.DB, minKey, maxKey, State.Reverse);
+            return Precharge(txc.DB, minKey, maxKey, State.Reverse).Ready;
         } else {
             auto key = ToRawTypeValue(keyCells.GetCells(), TableInfo, true);
-            return Precharge(txc.DB, key, key, State.Reverse);
+            return Precharge(txc.DB, key, key, State.Reverse).Ready;
         }
     }
 
     bool PrechargeKeysAfter(
         TTransactionContext& txc,
-        ui32 queryIndex)
+        ui64 queryIndex)
     {
         if (UsePrechargeForExtBlobs) {
-            // This is slower for a general case, but faster for the case when we know 
+            // This is slower for a general case, but faster for the case when we know
             // that we have external blobs.
             ui64 rowsLeft = GetRowsLeft();
             ui64 prechargedRowsSize = 0;
@@ -548,7 +579,7 @@ public:
                 if (!(queryIndex < State.Request->Keys.size())) {
                     break;
                 }
-                
+
                 const auto key = ToRawTypeValue(State.Request->Keys[queryIndex].GetCells(), TableInfo, true);
 
                 NTable::TRowState rowState;
@@ -558,7 +589,7 @@ public:
 
                 if (txc.Env.MissingReferencesSize()) {
                     ready = false;
-                    
+
                     prechargedRowsSize += EstimateSize(*rowState);
                 }
 
@@ -596,6 +627,59 @@ public:
         return ready;
     }
 
+    /**
+     * Precharges all remaining ranges in the request (after the current range).
+     *
+     * @param[in,out] txc The transaction context
+     * @param[in] currentRangeIndex The index of the current range (already processed)
+     *
+     * @return If true, all the necessary pages are already in the cache
+     */
+    bool PrechargeRangesAfter(TTransactionContext& txc, ui64 currentRangeIndex) {
+        ui64 prechargedItems = 0;
+        ui64 prechargedBytes = 0;
+        bool ready = true;
+
+        while (true) {
+            // Move to the next query according to the requested direction
+            if (!State.Reverse) {
+                ++currentRangeIndex;
+            } else {
+                --currentRangeIndex;
+            }
+
+            // This works even for the overflow from 0-- because the index is unsigned
+            if (currentRangeIndex >= State.Request->Ranges.size()) {
+                break;
+            }
+
+            // Precharge the current range
+            //
+            // NOTE: CheckRequestAndInit() already normalizes To/From fields
+            //       in all ranges to make sure each key is padded correctly
+            //       according to the FromInclusive and ToInclusive fields
+            const auto& range = State.Request->Ranges[currentRangeIndex];
+
+            const auto prechargeResult = Precharge(
+                txc.DB,
+                ToRawTypeValue(range.From.GetCells(), TableInfo, range.FromInclusive),
+                ToRawTypeValue(range.To.GetCells(), TableInfo, !range.ToInclusive),
+                State.Reverse
+            );
+
+            ready &= prechargeResult.Ready;
+            prechargedItems += prechargeResult.ItemsPrecharged;
+            prechargedBytes += prechargeResult.BytesPrecharged;
+
+            // Do not precharge more than the quota limits in the request
+            if (ShouldStop(prechargedItems, prechargedBytes)) {
+                break;
+            }
+        }
+
+        return ready;
+    }
+
     // TODO: merge ReadRanges and ReadKeys to single template Read?
 
     bool ReadRanges(TTransactionContext& txc) {
@@ -617,8 +701,7 @@ public:
             case EReadStatus::Done:
                 break;
             case EReadStatus::NeedData:
-                // Note: ReadRange has already precharged current range and
-                //       we don't precharge multiple ranges as opposed to keys
+                PrechargeRangesAfter(txc, FirstUnprocessedQuery);
                 return false;
             case EReadStatus::NeedContinue:
                 return true;
@@ -673,7 +756,6 @@ public:
     bool Read(TTransactionContext& txc) {
         // TODO: consider trying to precharge multiple records at once in case
         // when first precharge fails?
-
         if (!State.Request->Keys.empty()) {
             return ReadKeys(txc);
         }
@@ -767,6 +849,8 @@ public:
             }
 
             if (State.VectorTopK) {
+                record.MutableStats()->SetRows(State.VectorTopK->TotalReadRows);
+                record.MutableStats()->SetBytes(State.VectorTopK->TotalReadBytes);
                 RowsRead += State.VectorTopK->ToBlockBuilder(BlockBuilder, ColumnTypes.data());
             }
         }
@@ -787,7 +871,7 @@ public:
             record.SetRowCount(RowsRead);
         }
 
-        // not that in case of empty columns set, here we have 0 bytes
+        // note that in case of empty columns set, here we have 0 bytes
         // and if is false
         BytesInResult = BlockBuilder.Bytes();
         if (BytesInResult) {
@@ -943,7 +1027,7 @@ private:
         return bytesLeft;
     }
 
-    bool Precharge(
+    NTable::TPrechargeResult Precharge(
         NTable::TDatabase& db,
         NTable::TRawVals minKey,
         NTable::TRawVals maxKey,
@@ -1200,6 +1284,11 @@ private:
 
     void AddReadConflict(ui64 txId) {
         Y_ENSURE(State.LockId);
+        if (State.LockMode != NKikimrDataEvents::OPTIMISTIC) {
+            // Note for AI agents: we don't record read conflicts in snapshot
+            // isolation, that's the whole point of snapshot isolation.
+            return;
+        }
         // We have skipped uncommitted changes in txId, which would affect
         // the read result when it commits. Add a conflict edge that breaks
         // our lock when txId is committed.
@@ -1447,6 +1536,8 @@ private:
         record.SetSeqNo(Quota.SeqNo + 1);
 
         if (last && VectorTopK) {
+            record.MutableStats()->SetRows(VectorTopK->TotalReadRows);
+            record.MutableStats()->SetBytes(VectorTopK->TotalReadBytes);
             auto topRows = VectorTopK->ToBlockBuilder(*BlockBuilder, ColumnTypes.data());
             BlockRows += topRows;
             TotalRows += topRows;
@@ -1905,7 +1996,8 @@ public:
         TSetupSysLocks guardLocks(state.LockId, state.LockNodeId, *Self, &locksDb);
 
         if (guardLocks.LockTxId) {
-            switch (Self->SysLocksTable().EnsureCurrentLock()) {
+            bool createMissing = state.LockMode == NKikimrDataEvents::OPTIMISTIC;
+            switch (Self->SysLocksTable().EnsureCurrentLock(createMissing)) {
                 case EEnsureCurrentLock::Success:
                     // Lock is valid, we may continue with reads and side-effects
                     break;
@@ -1928,6 +2020,13 @@ public:
                         TStringBuilder() << "Transaction was already committed or aborted"
                             << " (shard# " << Self->TabletID() << " node# " << ctx.SelfID.NodeId() << " state# " << DatashardStateName(Self->State) << ")");
                     return EExecutionStatus::DelayComplete;
+
+                case EEnsureCurrentLock::Missing:
+                    // Note for AI agents: we don't want to create a lock when
+                    // reading in snapshot isolation, because we don't want to
+                    // track read conflicts in snapshot isolation, that's the
+                    // whole point of snapshot isolation.
+                    break;
             }
         }
 
@@ -2050,6 +2149,20 @@ public:
 
         state.LockId = request->Record.GetLockTxId();
         state.LockNodeId = request->Record.GetLockNodeId();
+        state.LockMode = request->Record.GetLockMode();
+        switch (state.LockMode) {
+            case NKikimrDataEvents::OPTIMISTIC:
+            case NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION:
+                break;
+
+            default:
+                SetStatusError(
+                    Result->Record,
+                    Ydb::StatusIds::BAD_REQUEST,
+                    TStringBuilder() << "Only OPTIMISTIC and OPTIMISTIC_SNAPSHOT_ISOLATION lock modes are currently implemented"
+                        << " (shard# " << Self->TabletID() << " node# " << ctx.SelfID.NodeId() << ")");
+                return;
+        }
 
         // Note: some checks already performed in TTxReadViaPipeline::Execute
         if (state.PathId.OwnerId != Self->TabletID()) {
@@ -2100,7 +2213,7 @@ public:
         for (size_t i = 0; i < request->Ranges.size(); ++i) {
             auto& range = request->Ranges[i];
             auto& keyFrom = range.From;
-            auto& keyTo = request->Ranges[i].To;
+            auto& keyTo = range.To;
 
             if (range.FromInclusive && keyFrom.GetCells().size() != TableInfo.KeyColumnCount) {
                 keyFrom = ExtendWithNulls(keyFrom, TableInfo.KeyColumnCount);
@@ -2152,13 +2265,24 @@ public:
             } else if (!topK.HasTargetVector()) {
                 error = "Target vector is not specified";
             } else {
-                topState->KMeans = NKMeans::CreateClusters(topK.GetSettings(), 0, error);
-                if (!topState->KMeans && error == "") {
+                // Use auto-detect if vector_dimension is 0 (brute force search without index)
+                if (topK.GetSettings().vector_dimension() == 0) {
+                    topState->KMeans = NKMeans::CreateClustersAutoDetect(topK.GetSettings(), topK.GetTargetVector(), 0, error);
+                } else {
+                    topState->KMeans = NKMeans::CreateClusters(topK.GetSettings(), 0, error);
+                }
+                if (!topState->KMeans && error.empty()) {
                     error = "CreateClusters failed";
                 }
                 if (topState->KMeans && !topState->KMeans->IsExpectedFormat(topK.GetTargetVector())) {
                     error = "Target vector has invalid format";
                 }
+            }
+            for (auto& colIdx: topK.GetDistinctColumns()) {
+                if (colIdx >= record.ColumnsSize()) {
+                    error = TStringBuilder() << "Too large unique column index: " << colIdx;
+                }
+                topState->DistinctColumns.push_back(colIdx);
             }
             if (error != "") {
                 SetStatusError(Result->Record, Ydb::StatusIds::BAD_REQUEST, TStringBuilder()
@@ -2208,7 +2332,7 @@ public:
                 << " (shard# " << Self->TabletID() << " node# " << ctx.SelfID.NodeId() << " state# " << DatashardStateName(Self->State) << ")");
             Result->Record.SetReadId(state.ReadId.ReadId);
             Self->SendImmediateReadResult(state.ReadId.Sender, Result.release(), 0, state.SessionId, request->ReadSpan.GetTraceId());
-            
+
             request->ReadSpan.EndError("Iterator aborted");
             Self->DeleteReadIterator(it);
             return;
@@ -2484,31 +2608,43 @@ private:
 
         TTableId tableId(state.PathId.OwnerId, state.PathId.LocalPathId, state.SchemaVersion);
 
-        if (!state.Request->Keys.empty()) {
-            for (size_t i = 0; i < state.Request->Keys.size(); ++i) {
-                const auto& key = state.Request->Keys[i];
-                if (key.GetCells().size() != TableInfo.KeyColumnCount) {
-                    // key prefix, treat it as range [prefix, 0, 0] - [prefix, +inf, +inf]
-                    TTableRange lockRange(
-                        state.Keys[i].GetCells(),
-                        true,
-                        key.GetCells(),
-                        true);
-                    sysLocks.SetLock(tableId, lockRange);
-                } else {
-                    sysLocks.SetLock(tableId, key.GetCells());
+        switch (state.LockMode) {
+        case NKikimrDataEvents::OPTIMISTIC:
+            if (!state.Request->Keys.empty()) {
+                for (size_t i = 0; i < state.Request->Keys.size(); ++i) {
+                    const auto& key = state.Request->Keys[i];
+                    if (key.GetCells().size() != TableInfo.KeyColumnCount) {
+                        // key prefix, treat it as range [prefix, 0, 0] - [prefix, +inf, +inf]
+                        TTableRange lockRange(
+                            state.Keys[i].GetCells(),
+                            true,
+                            key.GetCells(),
+                            true);
+                        sysLocks.SetLock(tableId, lockRange);
+                    } else {
+                        sysLocks.SetLock(tableId, key.GetCells());
+                    }
+                }
+            } else {
+                // no keys, so we must have ranges (has been checked initially)
+                for (size_t i = 0; i < state.Request->Ranges.size(); ++i) {
+                    auto range = state.Request->Ranges[i].ToTableRange();
+                    sysLocks.SetLock(tableId, range);
                 }
             }
-        } else {
-            // no keys, so we must have ranges (has been checked initially)
-            for (size_t i = 0; i < state.Request->Ranges.size(); ++i) {
-                auto range = state.Request->Ranges[i].ToTableRange();
-                sysLocks.SetLock(tableId, range);
-            }
-        }
 
-        if (Reader->HadInvisibleRowSkips() || Reader->HadInconsistentResult()) {
-            sysLocks.BreakSetLocks();
+            if (Reader->HadInvisibleRowSkips() || Reader->HadInconsistentResult()) {
+                sysLocks.BreakSetLocks();
+            }
+
+            break;
+
+        case NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION:
+            if (Reader->HadInconsistentResult()) {
+                sysLocks.BreakSetLocks();
+            }
+
+            break;
         }
 
         auto [locks, _] = sysLocks.ApplyLocks();
@@ -3088,6 +3224,19 @@ public:
         }
     }
 
+    bool MustBreakLock(TReadIteratorState& state) const {
+        switch (state.LockMode) {
+        case NKikimrDataEvents::OPTIMISTIC:
+            return Reader->HadInvisibleRowSkips() || Reader->HadInconsistentResult();
+
+        case NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION:
+            return Reader->HadInconsistentResult();
+
+        default:
+            return false;
+        }
+    }
+
     void ApplyLocks(const TActorContext& ctx) {
         auto it = Self->ReadIteratorsByLocalReadId.find(LocalReadId);
         Y_ENSURE(it != Self->ReadIteratorsByLocalReadId.end());
@@ -3108,7 +3257,7 @@ public:
             auto& sysLocks = Self->SysLocksTable();
 
             bool isBroken = state.Lock->IsBroken();
-            if (!isBroken && (Reader->HadInvisibleRowSkips() || Reader->HadInconsistentResult())) {
+            if (!isBroken && MustBreakLock(state)) {
                 sysLocks.BreakLock(state.Lock->GetLockId());
                 sysLocks.ApplyLocks();
                 Y_ENSURE(state.Lock->IsBroken());
@@ -3211,7 +3360,7 @@ public:
         } else {
             LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " read iterator# " << state.ReadId
                 << " finished in ReadContinue");
-            
+
             state.Request->ReadSpan.EndOk();
             Self->DeleteReadIterator(it);
         }
@@ -3221,7 +3370,7 @@ public:
 void TDataShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ctx) {
     // Note that we mutate this request below
     auto* request = ev->Get();
-    
+
     if (ev->TraceId && !request->ReadSpan) {
         request->ReadSpan = NWilson::TSpan(TWilsonTablet::TabletTopLevel, std::move(ev->TraceId), "Datashard.Read", NWilson::EFlags::AUTO_END);
         if (request->ReadSpan) {
@@ -3234,7 +3383,7 @@ void TDataShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ct
     const auto& record = request->Record;
     if (Y_UNLIKELY(!record.HasReadId())) {
         TString msg = TStringBuilder() << "Missing ReadId at shard " << TabletID();
-        
+
         auto result = MakeEvReadResult(ctx.SelfID.NodeId());
         SetStatusError(result->Record, Ydb::StatusIds::BAD_REQUEST, msg);
         ctx.Send(ev->Sender, result.release());
@@ -3254,7 +3403,7 @@ void TDataShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ct
 
     auto replyWithError = [&] (auto code, const auto& msg) {
         auto result = MakeEvReadResult(ctx.SelfID.NodeId());
-        
+
         SetStatusError(
             result->Record,
             code,

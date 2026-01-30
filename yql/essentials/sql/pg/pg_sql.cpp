@@ -413,7 +413,7 @@ public:
         }
     }
 
-    void OnResult(const List* raw) {
+    void OnResult(const List* raw) override {
         if (!PerStatementResult_) {
             AstParseResults_[StatementId_].Pool = std::make_unique<TMemoryPool>(4096);
             AstParseResults_[StatementId_].Root = ParseResult(raw);
@@ -432,20 +432,20 @@ public:
         }
     }
 
-    void OnError(const TIssue& issue) {
+    void OnError(const TIssue& issue) override {
         AstParseResults_[StatementId_].Issues.AddIssue(issue);
     }
 
     void PrepareStatements() {
-        auto configSource = L(A("DataSource"), QA(TString(NYql::ConfigProviderName)));
-        State_.Statements.push_back(L(A("let"), A("world"), L(A(TString(NYql::ConfigureName)), A("world"), configSource,
+        auto configSource = L(A("DataSource"), QA(NYql::ConfigProviderName));
+        State_.Statements.push_back(L(A("let"), A("world"), L(A(NYql::ConfigureName), A("world"), configSource,
                                                               QA("OrderedColumns"))));
     }
 
     TAstNode* ParseResult(const List* raw, const TMaybe<ui32> statementId = Nothing()) {
         PrepareStatements();
 
-        auto configSource = L(A("DataSource"), QA(TString(NYql::ConfigProviderName)));
+        auto configSource = L(A("DataSource"), QA(NYql::ConfigProviderName));
         ui32 blockEnginePgmPos = State_.Statements.size();
         State_.Statements.push_back(configSource);
         ui32 costBasedOptimizerPos = State_.Statements.size();
@@ -482,21 +482,21 @@ public:
         }
 
         if (DqEngineEnabled_) {
-            State_.Statements[dqEnginePgmPos] = L(A("let"), A("world"), L(A(TString(NYql::ConfigureName)), A("world"), configSource,
+            State_.Statements[dqEnginePgmPos] = L(A("let"), A("world"), L(A(NYql::ConfigureName), A("world"), configSource,
                                                                           QA("DqEngine"), QA(DqEngineForce_ ? "force" : "auto")));
         } else {
             State_.Statements.erase(State_.Statements.begin() + dqEnginePgmPos);
         }
 
         if (State_.CostBasedOptimizer) {
-            State_.Statements[costBasedOptimizerPos] = L(A("let"), A("world"), L(A(TString(NYql::ConfigureName)), A("world"), configSource,
+            State_.Statements[costBasedOptimizerPos] = L(A("let"), A("world"), L(A(NYql::ConfigureName), A("world"), configSource,
                                                                                  QA("CostBasedOptimizer"), QA(State_.CostBasedOptimizer)));
         } else {
             State_.Statements.erase(State_.Statements.begin() + costBasedOptimizerPos);
         }
 
         if (BlockEngineEnabled_) {
-            State_.Statements[blockEnginePgmPos] = L(A("let"), A("world"), L(A(TString(NYql::ConfigureName)), A("world"), configSource,
+            State_.Statements[blockEnginePgmPos] = L(A("let"), A("world"), L(A(NYql::ConfigureName), A("world"), configSource,
                                                                              QA("BlockEngine"), QA(BlockEngineForce_ ? "force" : "auto")));
         } else {
             State_.Statements.erase(State_.Statements.begin() + blockEnginePgmPos);
@@ -1410,7 +1410,7 @@ public:
 
         auto resOptions = BuildResultOptions(!sort);
         State_.Statements.push_back(L(A("let"), A("output"), output));
-        State_.Statements.push_back(L(A("let"), A("result_sink"), L(A("DataSink"), QA(TString(NYql::ResultProviderName)))));
+        State_.Statements.push_back(L(A("let"), A("result_sink"), L(A("DataSink"), QA(NYql::ResultProviderName))));
         State_.Statements.push_back(L(A("let"), A("world"), L(A("Write!"),
                                                               A("world"), A("result_sink"), L(A("Key")), A("output"), resOptions)));
         State_.Statements.push_back(L(A("let"), A("world"), L(A("Commit!"),
@@ -1879,7 +1879,7 @@ private:
     }
 
     const TString& FindColumnTypeAlias(const TString& colType, bool& isTypeSerial) {
-        const static std::unordered_map<TString, TString> aliasMap{
+        const static std::unordered_map<TString, TString> AliasMap{
             {"smallserial", "int2"},
             {"serial2", "int2"},
             {"serial", "int4"},
@@ -1887,8 +1887,8 @@ private:
             {"bigserial", "int8"},
             {"serial8", "int8"},
         };
-        const auto aliasIt = aliasMap.find(to_lower(colType));
-        if (aliasIt == aliasMap.end()) {
+        const auto aliasIt = AliasMap.find(to_lower(colType));
+        if (aliasIt == AliasMap.end()) {
             isTypeSerial = false;
             return colType;
         }
@@ -2388,8 +2388,8 @@ public:
                 if (name == "unorderedresult") {
                     UnorderedResult_ = (rawStr == "true");
                 } else {
-                    auto configSource = L(A("DataSource"), QA(TString(NYql::ConfigProviderName)));
-                    State_.Statements.push_back(L(A("let"), A("world"), L(A(TString(NYql::ConfigureName)), A("world"), configSource,
+                    auto configSource = L(A("DataSource"), QA(NYql::ConfigProviderName));
+                    State_.Statements.push_back(L(A("let"), A("world"), L(A(NYql::ConfigureName), A("world"), configSource,
                                                                           QA(TString(rawStr == "true" ? "" : "Disable") + TString((name == "useblocks") ? "UseBlocks" : "PgEmitAggApply")))));
                 }
             } else {
@@ -2453,7 +2453,7 @@ public:
 
                 auto rawStr = StrVal(CAST_NODE(A_Const, arg)->val);
 
-                State_.Statements.push_back(L(A("let"), A("world"), L(A(TString(NYql::ConfigureName)), A("world"), providerSource,
+                State_.Statements.push_back(L(A("let"), A("world"), L(A(NYql::ConfigureName), A("world"), providerSource,
                                                                       QA("Attr"), QAX(name.substr(dotPos + 1)), QAX(rawStr))));
             } else {
                 AddError(TStringBuilder() << "VariableSetStmt, expected string literal for " << value->name << " option");
@@ -2670,7 +2670,7 @@ public:
 
         const auto output = L(A("PgSelect"), selectOptions);
         State_.Statements.push_back(L(A("let"), A("output"), output));
-        State_.Statements.push_back(L(A("let"), A("result_sink"), L(A("DataSink"), QA(TString(NYql::ResultProviderName)))));
+        State_.Statements.push_back(L(A("let"), A("result_sink"), L(A("DataSink"), QA(NYql::ResultProviderName))));
 
         const auto resOptions = BuildResultOptions(true);
         State_.Statements.push_back(L(A("let"), A("world"), L(A("Write!"),
@@ -6208,7 +6208,7 @@ public:
 
 class TSystemFunctionsHandler: public IPGParseEvents {
 public:
-    TSystemFunctionsHandler(TVector<NPg::TProcDesc>& procs)
+    explicit TSystemFunctionsHandler(TVector<NPg::TProcDesc>& procs)
         : Procs_(procs)
     {
     }

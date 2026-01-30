@@ -7,7 +7,7 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(TSyncMap, SingleInsert)
+TEST(TSyncMapTest, SingleInsert)
 {
     TSyncMap<int, int> map;
 
@@ -24,7 +24,7 @@ TEST(TSyncMap, SingleInsert)
     }
 }
 
-TEST(TSyncMap, SingleEmplace)
+TEST(TSyncMapTest, SingleEmplace)
 {
     struct TTestValue
         : public TNonCopyable
@@ -50,7 +50,7 @@ TEST(TSyncMap, SingleEmplace)
     }
 }
 
-TEST(TSyncMap, TestInsertLoop)
+TEST(TSyncMapTest, TestInsertLoop)
 {
     TSyncMap<int, int> map;
 
@@ -66,7 +66,7 @@ TEST(TSyncMap, TestInsertLoop)
     }
 }
 
-TEST(TSyncMap, TestFlush)
+TEST(TSyncMapTest, TestFlush)
 {
     TSyncMap<int, int> map;
 

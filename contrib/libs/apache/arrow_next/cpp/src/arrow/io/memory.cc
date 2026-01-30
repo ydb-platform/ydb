@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "arrow/io/memory.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/io/memory.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -23,15 +23,15 @@
 #include <mutex>
 #include <utility>
 
-#include "arrow/buffer.h"
-#include "arrow/io/util_internal.h"
-#include "arrow/memory_pool.h"
-#include "arrow/status.h"
-#include "arrow/util/future.h"
-#include "arrow/util/io_util.h"
-#include "arrow/util/logging.h"
-#include "arrow/util/macros.h"
-#include "arrow/util/memory.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/buffer.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/io/util_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/memory_pool.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/status.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/future.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/io_util.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/macros.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/memory.h"
 
 namespace arrow20 {
 namespace io {

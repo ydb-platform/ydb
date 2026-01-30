@@ -6,7 +6,6 @@
 #include <util/string/builder.h>
 #include <util/string/split.h>
 
-
 #include <expected>
 
 namespace NKikimr::NSqsTopic {
@@ -97,10 +96,13 @@ namespace NKikimr::NSqsTopic {
                 return std::unexpected{"Invalid QueueUrl: " + std::move(r.error())};
             }
         }
+        if (path.empty()) {
+            return std::unexpected{"Invalid QueueUrl: empty path"};
+        }
         return std::unexpected{"Invalid QueueUrl: unsupported version"};
     }
 
-    static void WriteLengthDelimitedString(IOutputStream& os, TStringBuf value) {
+    void WriteLengthDelimitedString(IOutputStream& os, TStringBuf value) {
         os << '/' << value.size() << '/' << value;
     }
 
@@ -115,4 +117,4 @@ namespace NKikimr::NSqsTopic {
         }
         return result;
     }
-}
+} // namespace NKikimr::NSqsTopic

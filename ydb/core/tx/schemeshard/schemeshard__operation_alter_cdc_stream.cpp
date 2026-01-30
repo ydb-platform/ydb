@@ -2,7 +2,6 @@
 
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
-#include "schemeshard_utils.h"  // for TransactionTemplate
 
 #define LOG_D(stream) LOG_DEBUG_S (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
 #define LOG_I(stream) LOG_INFO_S  (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
@@ -246,7 +245,12 @@ protected:
 
         auto& notice = *tx.MutableAlterCdcStreamNotice();
         pathId.ToProto(notice.MutablePathId());
-        notice.SetTableSchemaVersion(table->AlterVersion + 1);
+
+        table->InitAlterData(OperationId);
+        notice.SetTableSchemaVersion(*table->AlterData->CoordinatedSchemaVersion);
+
+        NIceDb::TNiceDb db(context.GetDB());
+        context.SS->PersistAddAlterTable(db, pathId, table->AlterData);
 
         bool found = false;
         for (const auto& [childName, childPathId] : path->GetChildren()) {
@@ -444,7 +448,6 @@ public:
         auto table = context.SS->Tables.at(tablePath.Base()->PathId);
 
         Y_ABORT_UNLESS(table->AlterVersion != 0);
-        Y_ABORT_UNLESS(!table->AlterData);
 
         Y_ABORT_UNLESS(context.SS->CdcStreams.contains(streamPath.Base()->PathId));
         auto stream = context.SS->CdcStreams.at(streamPath.Base()->PathId);
@@ -459,6 +462,7 @@ public:
         Y_ABORT_UNLESS(!context.SS->FindTx(OperationId));
         auto& txState = context.SS->CreateTx(OperationId, txType, tablePath.Base()->PathId);
         txState.State = TTxState::ConfigureParts;
+        txState.CdcPathId = streamPath.Base()->PathId;  // Store CDC stream PathId for later use
 
         tablePath.Base()->PathState = NKikimrSchemeOp::EPathStateAlter;
         tablePath.Base()->LastTxId = OperationId.GetTxId();
@@ -635,7 +639,7 @@ TVector<ISubOperation::TPtr> CreateAlterCdcStream(TOperationId opId, const TTxTr
         result.push_back(DropLock(NextPartId(opId, result), outTx));
     }
 
-    if (workingDirPath.IsTableIndex()) {
+    if (workingDirPath.IsTableIndex() && !streamName.EndsWith("_continuousBackupImpl")) {
         auto outTx = TransactionTemplate(workingDirPath.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterTableIndex);
         outTx.MutableAlterTableIndex()->SetName(workingDirPath.LeafName());
         outTx.MutableAlterTableIndex()->SetState(NKikimrSchemeOp::EIndexState::EIndexStateReady);

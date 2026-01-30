@@ -3,7 +3,7 @@
 #include "ydb_command.h"
 
 #include <ydb/public/lib/ydb_cli/common/format.h>
-#include <ydb/public/lib/ydb_cli/common/interruptible.h>
+#include <ydb/public/lib/ydb_cli/common/interruptable.h>
 
 namespace NYdb {
 
@@ -22,7 +22,7 @@ namespace NDebug {
 namespace NConsoleClient {
 
 class TCommandPing : public TYdbCommand, public TCommandWithFormat,
-    public TInterruptibleCommand
+    public TInterruptableCommand
 {
 public:
     enum class EPingKind {

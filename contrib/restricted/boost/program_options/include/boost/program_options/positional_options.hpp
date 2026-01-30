@@ -37,7 +37,7 @@ namespace boost { namespace program_options {
     public:
         positional_options_description();
 
-        /** Species that up to 'max_count' next positional options
+        /** Specifies that up to 'max_count' next positional options
             should be given the 'name'. The value of '-1' means 'unlimited'. 
             No calls to 'add' can be made after call with 'max_value' equal to 
             '-1'.            

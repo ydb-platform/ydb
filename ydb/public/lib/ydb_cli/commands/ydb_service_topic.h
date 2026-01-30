@@ -3,7 +3,7 @@
 #include "ydb_command.h"
 #include "ydb_common.h"
 
-#include <ydb/public/lib/ydb_cli/common/interruptible.h>
+#include <ydb/public/lib/ydb_cli/common/interruptable.h>
 #include <ydb/public/lib/ydb_cli/topic/topic_read.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
@@ -44,7 +44,7 @@ namespace NYdb::NConsoleClient {
         TMaybe<NTopic::EMetricsLevel> GetMetricsLevel() const;
 
     private:
-        NTopic::EMetricsLevel MetricsLevel_;
+        TMaybe<NTopic::EMetricsLevel> MetricsLevel_;
     };
 
     class TCommandWithAutoPartitioning {
@@ -109,10 +109,12 @@ namespace NYdb::NConsoleClient {
         TMaybe<ui64> RetentionStorageMb_;
         TMaybe<ui32> MinActivePartitions_;
         TMaybe<ui32> MaxActivePartitions_;
-
-
         TMaybe<ui32> PartitionWriteSpeedKbps_;
-        TMaybe<NTopic::EMetricsLevel> MetricsLevel_;
+        TMaybe<bool> KeepMessagesOrder_;
+        TMaybe<TDuration> DefaultProcessingTimeout_;
+        TMaybe<ui32> DlqMaxProcessingAttempts_;
+        TMaybe<bool> DlqEnabled_;
+        TMaybe<TString> DlqQueueName_;
 
         NYdb::NTopic::TAlterTopicSettings PrepareAlterSettings(NYdb::NTopic::TDescribeTopicResult& describeResult);
     };
@@ -143,10 +145,17 @@ namespace NYdb::NConsoleClient {
         int Run(TConfig& config) override;
 
     private:
+        void ValidateConsumerOptions(const TMaybe<NTopic::EConsumerType>& consumerType);
+
         TString ConsumerName_;
         bool IsImportant_;
         TMaybe<TDuration> AvailabilityPeriod_;
         TMaybe<TInstant> StartingMessageTimestamp_;
+        TString ConsumerType_;
+        TMaybe<bool> KeepMessagesOrder_;
+        TMaybe<TDuration> DefaultProcessingTimeout_;
+        TMaybe<ui32> MaxProcessingAttempts_;
+        TMaybe<TString> DlqQueueName_;
     };
 
     class TCommandTopicConsumerDrop: public TYdbCommand, public TCommandWithTopicName {
@@ -202,7 +211,7 @@ namespace NYdb::NConsoleClient {
 
     class TCommandTopicRead: public TYdbCommand,
                              public TCommandWithMessagingFormat,
-                             public TInterruptibleCommand,
+                             public TInterruptableCommand,
                              public TCommandWithTopicName,
                              public TCommandWithTransformBody {
     public:
@@ -260,7 +269,7 @@ namespace NYdb::NConsoleClient {
 
     class TCommandTopicWrite: public TYdbCommand,
                               public TCommandWithMessagingFormat,
-                              public TInterruptibleCommand,
+                              public TInterruptableCommand,
                               public TCommandWithTopicName,
                               public TCommandWithCodec,
                               public TCommandWithTransformBody {
@@ -280,6 +289,7 @@ namespace NYdb::NConsoleClient {
         TMaybe<ui64> BatchSize_;
         TMaybe<ui64> BatchMessagesCount_;
         TMaybe<TString> MessageGroupId_;
+        TMaybe<ui32> PartitionId_;
         TMaybe<TDuration> MessagesWaitTimeout_;
 
         ui64 MessageSizeLimit_ = 0;

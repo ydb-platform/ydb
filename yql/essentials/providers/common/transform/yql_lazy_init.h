@@ -13,7 +13,7 @@ class TLazyInitHolder
 public:
     using TFactory = std::function<THolder<T>()>;
 
-    TLazyInitHolder(TFactory&& factory)
+    explicit TLazyInitHolder(TFactory&& factory)
         : Factory_(std::move(factory))
     {
     }

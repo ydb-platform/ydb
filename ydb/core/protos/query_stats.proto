@@ -44,6 +44,8 @@ message TTxStats {
     optional uint64 DurationUs = 2;
     optional uint64 ComputeCpuTimeUsec = 3;
     repeated TPerShardStats PerShardStats = 4;
+    optional uint64 LocksBrokenAsBreaker = 5; // locks broken by this transaction
+    optional uint64 LocksBrokenAsVictim = 6;  // this transaction's locks were broken by others
 
     // TODO:
     // optional uint64 CommitLatencyUsec = 3;

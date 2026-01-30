@@ -54,7 +54,7 @@ class QuerySessionPool:
     async def _create_new_session(self):
         session = QuerySession(self._driver, settings=self._query_client_settings)
         await session.create()
-        logger.debug(f"New session was created for pool. Session id: {session._state.session_id}")
+        logger.debug(f"New session was created for pool. Session id: {session.session_id}")
         return session
 
     async def acquire(self) -> QuerySession:
@@ -76,7 +76,14 @@ class QuerySessionPool:
         if session is None and self._current_size == self._size:
             queue_get = asyncio.ensure_future(self._queue.get())
             task_stop = asyncio.ensure_future(asyncio.ensure_future(self._should_stop.wait()))
-            done, _ = await asyncio.wait((queue_get, task_stop), return_when=asyncio.FIRST_COMPLETED)
+            try:
+                done, _ = await asyncio.wait((queue_get, task_stop), return_when=asyncio.FIRST_COMPLETED)
+            except asyncio.CancelledError:
+                task_stop.cancel()
+                cancelled = queue_get.cancel()
+                if not cancelled and not queue_get.exception():
+                    await self.release(queue_get.result())
+                raise
             if task_stop in done:
                 queue_get.cancel()
                 raise RuntimeError("An attempt to take session from closed session pool.")
@@ -85,12 +92,12 @@ class QuerySessionPool:
             session = queue_get.result()
 
         if session is not None:
-            if session._state.attached:
-                logger.debug(f"Acquired active session from queue: {session._state.session_id}")
+            if session.is_active:
+                logger.debug(f"Acquired active session from queue: {session.session_id}")
                 return session
             else:
                 self._current_size -= 1
-                logger.debug(f"Acquired dead session from queue: {session._state.session_id}")
+                logger.debug(f"Acquired dead session from queue: {session.session_id}")
 
         logger.debug(f"Session pool is not large enough: {self._current_size} < {self._size}, will create new one.")
 
@@ -108,7 +115,7 @@ class QuerySessionPool:
         """Release a session back to Session Pool."""
 
         self._queue.put_nowait(session)
-        logger.debug("Session returned to queue: %s", session._state.session_id)
+        logger.debug("Session returned to queue: %s", session.session_id)
 
     def checkout(self) -> "SimpleQuerySessionCheckoutAsync":
         """Return a Session context manager, that acquires session on enter and releases session on exit."""
@@ -149,7 +156,8 @@ class QuerySessionPool:
           1) QuerySerializableReadWrite() which is default mode;
           2) QueryOnlineReadOnly(allow_inconsistent_reads=False);
           3) QuerySnapshotReadOnly();
-          4) QueryStaleReadOnly().
+          4) QuerySnapshotReadWrite();
+          5) QueryStaleReadOnly().
         :param retry_settings: RetrySettings object.
 
         :return: Result sets or exception in case of execution errors.

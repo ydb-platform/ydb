@@ -40,7 +40,7 @@ private:
 
     private:
         void Register() {
-            ActiveFormatHandlers = Desc.CountersRoot->GetCounter("ActiveFormatHandlers", false);
+            ActiveFormatHandlers = Desc.ReadGroupSubgroup->GetCounter("ActiveFormatHandlers", false);
 
             ActiveClients = Desc.CountersSubgroup->GetCounter("ActiveClients", false);
         }
@@ -677,10 +677,10 @@ ITopicFormatHandler::TPtr CreateTopicFormatHandler(const NActors::TActorContext&
     return ITopicFormatHandler::TPtr(handler);
 }
 
-TFormatHandlerConfig CreateFormatHandlerConfig(const TRowDispatcherSettings& rowDispatcherConfig, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, NActors::TActorId compileServiceId) {
+TFormatHandlerConfig CreateFormatHandlerConfig(const TRowDispatcherSettings& rowDispatcherConfig, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, NActors::TActorId compileServiceId, bool skipJsonErrors) {
     return {
         .FunctionRegistry = functionRegistry,
-        .JsonParserConfig = CreateJsonParserConfig(rowDispatcherConfig.GetJsonParser(), functionRegistry),
+        .JsonParserConfig = CreateJsonParserConfig(rowDispatcherConfig.GetJsonParser(), functionRegistry, skipJsonErrors),
         .FiltersConfig = {
             .CompileServiceId = compileServiceId
         }

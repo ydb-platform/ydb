@@ -59,7 +59,7 @@ private:
 
         THROW_ERROR_EXCEPTION_UNLESS(
             clusters.size() == seenClusters.size(),
-            "Numbers of desired (%Qv) and configured (%Qv) clusters do not match",
+            "Numbers of desired and configured clusters do not match (Desired: %v, Configured: %v)",
             clusters,
             seenClusters);
 
@@ -71,7 +71,7 @@ private:
 
         if (!FederatedConnection_) {
             // TODO(ashishkin): use proper invoker here?
-            NApi::NRpcProxy::TConnectionOptions options;
+            NApi::TConnectionOptions options;
             FederatedConnection_ = CreateConnection(FederationConfig_, std::move(options));
         }
         return FederatedConnection_->CreateClient(Options_);
@@ -82,6 +82,7 @@ private:
     const NApi::TClientOptions Options_;
     const NFederated::TConnectionConfigPtr FederationConfig_;
     const TString ClusterSeparator_;
+
     NApi::IConnectionPtr FederatedConnection_;
 };
 

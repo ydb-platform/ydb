@@ -1,4 +1,5 @@
 #include "schemeshard__operation_common.h"
+#include "schemeshard_cdc_stream_common.h"
 #include "schemeshard_private.h"
 
 #include <ydb/core/base/hive.h>
@@ -24,11 +25,43 @@ bool IsExpectedTxType(TTxState::ETxType txType) {
     }
 }
 
+struct TTableVersionContext {
+    TPathId PathId;
+    TPathId ParentPathId;
+    TPathId GrandParentPathId;
+    bool IsIndexImplTable = false;
+};
+
+bool DetectIndexImplTable(TPathElement::TPtr path, TOperationContext& context, TPathId& outGrandParentPathId) {
+    const TPathId& parentPathId = path->ParentPathId;
+    if (!parentPathId || !context.SS->PathsById.contains(parentPathId)) {
+        return false;
+    }
+
+    auto parentPath = context.SS->PathsById.at(parentPathId);
+    if (parentPath->IsTableIndex()) {
+        outGrandParentPathId = parentPath->ParentPathId;
+        return true;
+    }
+
+    return false;
+}
+
+TTableVersionContext BuildTableVersionContext(
+    const TTxState& txState,
+    TPathElement::TPtr path,
+    TOperationContext& context)
+{
+    TTableVersionContext ctx;
+    ctx.PathId = txState.TargetPathId;
+    ctx.ParentPathId = path->ParentPathId;
+    ctx.IsIndexImplTable = DetectIndexImplTable(path, context, ctx.GrandParentPathId);
+    return ctx;
+}
+
 }  // namespace anonymous
 
 
-// NCdcStreamState::TConfigurePartsAtTable
-//
 TConfigurePartsAtTable::TConfigurePartsAtTable(TOperationId id)
     : OperationId(id)
 {
@@ -80,8 +113,6 @@ bool TConfigurePartsAtTable::HandleReply(TEvDataShard::TEvProposeTransactionResu
 }
 
 
-// NCdcStreamState::TProposeAtTable
-//
 TProposeAtTable::TProposeAtTable(TOperationId id)
     : OperationId(id)
 {
@@ -124,13 +155,106 @@ bool TProposeAtTable::HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOpera
     Y_ABORT_UNLESS(context.SS->Tables.contains(pathId));
     auto table = context.SS->Tables.at(pathId);
 
-    table->AlterVersion += 1;
-
     NIceDb::TNiceDb db(context.GetDB());
+
+    // Don't call InitAlterData() here - it was already called in ConfigureParts,
+    // and calling it again after another subop's Done() updated AlterVersion
+    // would incorrectly create a new version.
+    Y_ABORT_UNLESS(table->AlterData && table->AlterData->CoordinatedSchemaVersion,
+        "AlterData with CoordinatedSchemaVersion must be set in ConfigureParts before Done phase");
+    table->AlterVersion = Max(table->AlterVersion, *table->AlterData->CoordinatedSchemaVersion);
+
+    // Persist updated AlterVersion so it survives restart
     context.SS->PersistTableAlterVersion(db, pathId, table);
 
+    // After successful completion, clear AlterTableFull if this was the last user
+    if (table->ReleaseAlterData(OperationId)) {
+        context.SS->PersistClearAlterTableFull(db, pathId);
+    }
+
+    // Sync index versions before publishing (indexes must be published before parent table)
+    auto versionCtx = BuildTableVersionContext(*txState, path, context);
+    TVector<TPathId> indexesToPublish;
+    TPathId mainTableToPublish;
+
+    if (versionCtx.IsIndexImplTable) {
+        if (context.SS->Indexes.contains(versionCtx.ParentPathId)) {
+            auto index = context.SS->Indexes.at(versionCtx.ParentPathId);
+            ui64 targetVersion = table->AlterVersion;
+            if (index->AlterVersion < targetVersion) {
+                index->AlterVersion = targetVersion;
+                if (index->AlterData && index->AlterData->AlterVersion < targetVersion) {
+                    index->AlterData->AlterVersion = targetVersion;
+                    context.SS->PersistTableIndexAlterData(db, versionCtx.ParentPathId);
+                }
+                context.SS->PersistTableIndexAlterVersion(db, versionCtx.ParentPathId, index);
+            }
+
+            if (context.SS->PathsById.contains(versionCtx.ParentPathId)) {
+                auto indexPath = context.SS->PathsById.at(versionCtx.ParentPathId);
+
+                ++indexPath->DirAlterVersion;
+                context.SS->PersistPathDirAlterVersion(db, indexPath);
+
+                context.SS->ClearDescribePathCaches(indexPath);
+
+                indexesToPublish.push_back(versionCtx.ParentPathId);
+
+                if (indexPath->ParentPathId && context.SS->PathsById.contains(indexPath->ParentPathId)) {
+                    auto mainTablePath = context.SS->PathsById.at(indexPath->ParentPathId);
+                    if (mainTablePath->IsTable()) {
+                        mainTableToPublish = indexPath->ParentPathId;
+
+                        ++mainTablePath->DirAlterVersion;
+                        context.SS->PersistPathDirAlterVersion(db, mainTablePath);
+
+                        context.SS->ClearDescribePathCaches(mainTablePath);
+                    }
+                }
+            }
+        }
+    } else {
+        // For main tables, sync all child indexes
+        // Note: We collect indexes to publish but don't publish here since we control ordering
+        ui64 targetVersion = table->AlterVersion;
+        for (const auto& [childName, childPathId] : path->GetChildren()) {
+            if (!context.SS->PathsById.contains(childPathId)) {
+                continue;
+            }
+            auto childPath = context.SS->PathsById.at(childPathId);
+            if (!childPath->IsTableIndex() || childPath->Dropped()) {
+                continue;
+            }
+            if (!context.SS->Indexes.contains(childPathId)) {
+                continue;
+            }
+            auto index = context.SS->Indexes.at(childPathId);
+            if (index->AlterVersion < targetVersion) {
+                index->AlterVersion = targetVersion;
+                if (index->AlterData && index->AlterData->AlterVersion < targetVersion) {
+                    index->AlterData->AlterVersion = targetVersion;
+                    context.SS->PersistTableIndexAlterData(db, childPathId);
+                }
+                context.SS->PersistTableIndexAlterVersion(db, childPathId, index);
+                context.SS->ClearDescribePathCaches(childPath);
+                indexesToPublish.push_back(childPathId);
+            }
+        }
+        mainTableToPublish = pathId;
+    }
+
     context.SS->ClearDescribePathCaches(path);
-    context.OnComplete.PublishToSchemeBoard(OperationId, pathId);
+
+    // Publish indexes first, then impl table, then main table
+    for (const auto& indexPathId : indexesToPublish) {
+        context.OnComplete.PublishToSchemeBoard(OperationId, indexPathId);
+    }
+    if (versionCtx.IsIndexImplTable) {
+        context.OnComplete.PublishToSchemeBoard(OperationId, pathId);
+    }
+    if (mainTableToPublish) {
+        context.OnComplete.PublishToSchemeBoard(OperationId, mainTableToPublish);
+    }
 
     context.SS->ChangeTxState(db, OperationId, TTxState::ProposedWaitParts);
     return true;
@@ -147,8 +271,6 @@ bool TProposeAtTable::HandleReply(TEvDataShard::TEvSchemaChanged::TPtr& ev, TOpe
 }
 
 
-// NCdcStreamState::TProposeAtTableDropSnapshot
-//
 bool TProposeAtTableDropSnapshot::HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) {
     TProposeAtTable::HandleReply(ev, context);
 

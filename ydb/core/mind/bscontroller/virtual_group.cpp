@@ -65,12 +65,15 @@ namespace NKikimr::NBsController {
         }
 
         auto& pool = pools.at(storagePoolId);
+        if (pool.DDisk) {
+            throw TExError() << "can't invoke AllocateVirtualGroup against DDisk pool";
+        }
 
         // create entry in group table
         auto *group = Groups.ConstructInplaceNewEntry(TGroupId::FromValue(groupId.GetRaw()), TGroupId::FromValue(groupId.GetRaw()), 0u, 0u,
             TBlobStorageGroupType::ErasureNone, 0u, NKikimrBlobStorage::TVDiskKind::Default,
             pool.EncryptionMode.GetOrElse(TBlobStorageGroupInfo::EEM_NONE), TBlobStorageGroupInfo::ELCP_INITIAL,
-            TString(), TString(), 0u, 0u, false, false, 0u, TBridgePileId(), storagePoolId, 0u, 0u, 0u);
+            TString(), TString(), 0u, 0u, false, false, 0u, TBridgePileId(), storagePoolId, 0u, 0u, 0u, false);
 
         // bind group to storage pool
         ++pool.NumGroups;
@@ -209,6 +212,127 @@ namespace NKikimr::NBsController {
         }
     }
 
+    void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TReconfigureVirtualGroup& cmd,
+            TStatus& /*status*/) {
+        if (!cmd.GetName()) {
+            throw TExError() << "TReconfigureVirtualGroup.Name must be set and be nonempty";
+        }
+
+        std::optional<TGroupId> groupId;
+        Groups.ForEach([&](TGroupId key, const TGroupInfo& value) {
+            if (value.VirtualGroupName == cmd.GetName()) {
+                if (groupId) {
+                    throw TExError() << "Duplicate virtual group name";
+                }
+                groupId.emplace(key);
+            }
+        });
+        if (!groupId) {
+            throw TExError() << "Virtual group not found by designated name";
+        }
+
+        TGroupInfo *group = Groups.FindForUpdate(*groupId);
+        if (!group->BlobDepotConfig) {
+            Y_DEBUG_ABORT(); // this should never happen
+            throw TExError() << "Virtual group does not contain BlobDepotConfig";
+        }
+
+        // parse current config
+        NKikimrBlobDepot::TBlobDepotConfig config;
+        bool success = config.ParseFromString(*group->BlobDepotConfig);
+        if (!success) {
+            Y_DEBUG_ABORT();
+            throw TExError() << "Failed to parse BlobDepotConfig";
+        }
+
+        // update fields in current config
+        if (cmd.HasS3BackendSettings()) {
+            config.MutableS3BackendSettings()->CopyFrom(cmd.GetS3BackendSettings());
+        }
+
+        // overwrite the config
+        success = config.SerializeToString(&group->BlobDepotConfig.ConstructInPlace());
+        Y_ABORT_UNLESS(success);
+
+        // start altering machinery
+        group->NeedAlter = true;
+    }
+
+    void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TRecommissionGroups& cmd, TStatus& /*status*/) {
+        for (const ui32 groupId : cmd.GetGroupIds()) {
+            TGroupInfo *group = Groups.FindForUpdate(TGroupId::FromValue(groupId));
+            if (!group) {
+                throw TExGroupNotFound(groupId);
+            }
+
+            if (TGroupID(groupId).ConfigurationType() != EGroupConfigurationType::Dynamic) {
+                // group can't be recommissioned, it could never have physical slots
+                throw TExError() << "group is not dynamic one" << TErrorParams::GroupId(groupId);
+            }
+
+            if (!group->VirtualGroupState) {
+                continue; // recommissioning is not required -- group has no virtual part in it
+            }
+
+            if (group->DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::RECOMMISSIONING) {
+                continue; // recommissioning is already underway
+            }
+
+            if (group->DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::NONE &&
+                    group->VirtualGroupState == NKikimrBlobStorage::EVirtualGroupState::DELETING) {
+                continue; // tablet is already being deleted
+            }
+
+            if (group->DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::PENDING &&
+                    (group->VirtualGroupState == NKikimrBlobStorage::EVirtualGroupState::NEW ||
+                     group->VirtualGroupState == NKikimrBlobStorage::EVirtualGroupState::CREATE_FAILED)) {
+                // the new tablet is in the process of creation, just cancel it
+                group->DecommitStatus = NKikimrBlobStorage::TGroupDecommitStatus::NONE;
+                group->VirtualGroupState = NKikimrBlobStorage::EVirtualGroupState::DELETING;
+            } else {
+                Y_DEBUG_ABORT_UNLESS(group->VirtualGroupState == NKikimrBlobStorage::EVirtualGroupState::WORKING);
+                if (group->VirtualGroupState != NKikimrBlobStorage::EVirtualGroupState::WORKING) {
+                    throw TExError() << "virtual group is not in WORKING state" << TErrorParams::GroupId(groupId);
+                }
+
+                switch (group->DecommitStatus) {
+                    case NKikimrBlobStorage::TGroupDecommitStatus::IN_PROGRESS:
+                        Y_DEBUG_ABORT_UNLESS(!group->VDisksInGroup.empty());
+                        if (!group->VDisksInGroup) {
+                            throw TExError() << "group contains no VDisks despite IN_PROGRESS decommission state"
+                                << TErrorParams::GroupId(groupId);
+                        }
+                        break;
+
+                    case NKikimrBlobStorage::TGroupDecommitStatus::DONE:
+                        Y_DEBUG_ABORT_UNLESS(group->VDisksInGroup.empty());
+                        if (group->VDisksInGroup) {
+                            throw TExError() << "group contains VDisks despite DONE decommission state"
+                                << TErrorParams::GroupId(groupId);
+                        }
+                        // kindly ask futher logic to allocate a group here
+                        Fit.PoolsAndGroups.emplace(group->StoragePoolId, group->ID);
+                        Fit.GroupsToAllocate.insert(group->ID);
+                        break;
+
+                    default:
+                        Y_DEBUG_ABORT("group is not in IN_PROGRESS/DONE decommission state");
+                        throw TExError() << "group is not in IN_PROGRESS/DONE decommission state"
+                            << TErrorParams::GroupId(groupId);
+                }
+
+                // switch group to recommissioning state, start machinery accordingly
+                group->DecommitStatus = NKikimrBlobStorage::TGroupDecommitStatus::RECOMMISSIONING;
+            }
+
+            // update state with the agents
+            group->NeedAlter = true;
+
+            // spin generation to deliver decommissioning state change to proxies
+            GroupContentChanged.insert(group->ID);
+        }
+    }
+
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     class TBlobStorageController::TVirtualGroupSetupMachine : public TActorBootstrapped<TVirtualGroupSetupMachine> {
@@ -264,11 +388,8 @@ namespace NKikimr::NBsController {
                     Y_DEBUG_ABORT();
                     return TGroupGeometryInfo();
                 });
-                TString error;
-                if (State->Changed() && !Self->CommitConfigUpdates(*State, true, true, true, txc, &error)) {
-                    STLOG(PRI_ERROR, BS_CONTROLLER, BSCVG08, "failed to commit update", (VirtualGroupId, GroupId), (Error, error));
-                    State->Rollback();
-                    State.reset();
+                if (auto error = Self->ValidateAndCommitConfigUpdate(State, TConfigTxFlags::SuppressAll(), txc)) {
+                    STLOG(PRI_ERROR, BS_CONTROLLER, BSCVG08, "failed to commit update", (VirtualGroupId, GroupId), (Error, *error));
                 }
                 return true;
             }
@@ -306,11 +427,8 @@ namespace NKikimr::NBsController {
                 State.emplace(*Self, Self->HostRecords, TActivationContext::Now(), TActivationContext::Monotonic());
                 const size_t n = State->BlobDepotDeleteQueue.Unshare().erase(GroupId);
                 Y_ABORT_UNLESS(n == 1);
-                TString error;
-                if (State->Changed() && !Self->CommitConfigUpdates(*State, true, true, true, txc, &error)) {
-                    STLOG(PRI_ERROR, BS_CONTROLLER, BSCVG17, "failed to commit update", (VirtualGroupId, GroupId), (Error, error));
-                    State->Rollback();
-                    State.reset();
+                if (auto error = Self->ValidateAndCommitConfigUpdate(State, TConfigTxFlags::SuppressAll(), txc)) {
+                    STLOG(PRI_ERROR, BS_CONTROLLER, BSCVG17, "failed to commit update", (VirtualGroupId, GroupId), (Error, *error));
                 }
                 return true;
             }
@@ -782,8 +900,8 @@ namespace NKikimr::NBsController {
                 TNodeInfo& node = Self->GetNode(nodeId);
                 node.WaitingForGroups.erase(group->ID);
                 auto ev = std::make_unique<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>(NKikimrProto::OK, nodeId);
-                TSet<ui32> groups;
-                groups.insert(group->ID.GetRawId());
+                TSet<TGroupId> groups;
+                groups.insert(group->ID);
                 Self->ReadGroups(groups, false, ev.get(), nodeId);
                 Send(MakeBlobStorageNodeWardenID(nodeId), ev.release());
             }
@@ -917,11 +1035,8 @@ namespace NKikimr::NBsController {
             bool Execute(TTransactionContext& txc, const TActorContext&) override {
                 State.emplace(*Self, Self->HostRecords, TActivationContext::Now(), TActivationContext::Monotonic());
                 Action(*State);
-                TString error;
-                if (State->Changed() && !Self->CommitConfigUpdates(*State, true, true, true, txc, &error)) {
-                    STLOG(PRI_INFO, BS_CONTROLLER, BSCVG09, "failed to commit update", (Error, error));
-                    State->Rollback();
-                    State.reset();
+                if (auto error = Self->ValidateAndCommitConfigUpdate(State, TConfigTxFlags::SuppressAll(), txc)) {
+                    STLOG(PRI_INFO, BS_CONTROLLER, BSCVG09, "failed to commit update", (Error, *error));
                 }
                 return true;
             }

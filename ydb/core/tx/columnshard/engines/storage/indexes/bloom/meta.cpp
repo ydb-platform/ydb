@@ -50,9 +50,13 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TBloomIndexMeta::DoBui
                     }
                 }
             },
-            [&](const NJson::TJsonValue& data, const ui64 hashBase) {
+            [&](const NArrow::NAccessor::TBinaryJsonValueView& data, const ui64 hashBase) {
+                auto view = data.GetScalarOptional();
+                if (!view.has_value()) {
+                    return;
+                }
                 for (ui64 i = 0; i < HashesCount; ++i) {
-                    const ui64 hash = NArrow::NHash::TXX64::CalcSimple(data.GetStringRobust(), i);
+                    const ui64 hash = NArrow::NHash::TXX64::CalcSimple(view.value(), i);
                     if (hashBase) {
                         filterBits[CombineHashes(hashBase, hash) % bitsCount] = true;
                     } else {

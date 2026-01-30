@@ -47,7 +47,7 @@ public:
     {
     }
 
-    std::any visitCluster_expr(SQLv1::Cluster_exprContext* ctx) {
+    std::any visitCluster_expr(SQLv1::Cluster_exprContext* ctx) override {
         std::string provider;
         std::string cluster;
 

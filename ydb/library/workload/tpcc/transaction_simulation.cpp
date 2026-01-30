@@ -40,7 +40,7 @@ NYdb::NQuery::TAsyncExecuteQueryResult Select1(
         .AddParam("$count").Int32(1).Build()
         .Build();
 
-    auto txControl = tx ? TTxControl::Tx(*tx) : TTxControl::BeginTx(TTxSettings::SerializableRW());
+    auto txControl = tx ? TTxControl::Tx(*tx) : TTxControl::BeginTx(context.TxMode);
     auto result = session.ExecuteQuery(
         query,
         txControl,

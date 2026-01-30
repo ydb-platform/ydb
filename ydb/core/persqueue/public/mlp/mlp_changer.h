@@ -37,6 +37,7 @@ public:
             TBase::Send(ChildActorId, new TEvents::TEvPoison());
         }
         TBase::Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvUnlink(0));
+        TBase::PassAway();
     }
 
 private:

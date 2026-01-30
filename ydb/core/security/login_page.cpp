@@ -99,7 +99,7 @@ public:
     }
 
     void Bootstrap() {
-        ALOG_WARN(NActorsServices::HTTP, Request->Address << " " << Request->Method << " " << Request->URL);
+        ALOG_WARN(NActorsServices::HTTP, Request->Address << " " << Request->Method << " " << Request->GetURI());
 
         if (Request->Method == "OPTIONS") {
             return ReplyOptionsAndPassAway();
@@ -245,7 +245,7 @@ public:
     }
 
     void Bootstrap() {
-        ALOG_WARN(NActorsServices::HTTP, Request->Address << " " << Request->Method << " " << Request->URL);
+        ALOG_WARN(NActorsServices::HTTP, Request->Address << " " << Request->Method << " " << Request->GetURI());
 
         if (Request->Method == "OPTIONS") {
             return ReplyOptionsAndPassAway();
@@ -287,7 +287,7 @@ public:
     }
 
     void HandleTimeout() {
-        ALOG_ERROR(NActorsServices::HTTP, Request->Address << " " << Request->Method << " " << Request->URL << " timeout");
+        ALOG_ERROR(NActorsServices::HTTP, Request->Address << " " << Request->Method << " " << Request->GetURI() << " timeout");
         ReplyErrorAndPassAway("504", "Gateway Timeout", "Timeout");
     }
 
@@ -361,9 +361,9 @@ public:
     }
 
     void HandleRequest(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev) {
-        if (ev->Get()->Request->URL == "/login") {
+        if (ev->Get()->Request->GetURI() == "/login") {
             Register(new TLoginRequest(ev));
-        } else if (ev->Get()->Request->URL == "/logout") {
+        } else if (ev->Get()->Request->GetURI() == "/logout") {
             Register(new TLogoutRequest(ev));
         } else {
             Send(ev->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(ev->Get()->Request->CreateResponseNotFound()));

@@ -1,0 +1,1505 @@
+#include "kqp_rbo_transformer.h"
+#include "kqp_operator.h"
+#include "kqp_plan_conversion_utils.h"
+
+#include <yql/essentials/utils/log/log.h>
+
+
+using namespace NYql;
+using namespace NYql::NNodes;
+using namespace NKikimr::NKqp;
+using namespace NYql::NDq;
+
+namespace {
+
+struct TJoinTableAliases {
+    THashSet<TString> LeftSideAliases;
+    THashSet<TString> RightSideAliases;
+};
+
+struct TAggregationTraits {
+    TVector<TExprNode::TPtr> AggTraitsList;
+    TVector<TInfoUnit> KeyColumns;
+};
+
+const THashSet<TString> SupportedAggregationFunctions{"sum", "min", "max", "count", "avg"};
+
+TString GetColumnNameFromGroupRef(TExprNode::TPtr groupRef,
+                                  const TVector<std::pair<TInfoUnit, TExprNode::TPtr>>& groupByKeysExpressionsMap) {
+    TString colName;
+    if (groupRef->ChildrenSize() == 4) {
+        colName = TString(groupRef->ChildPtr(3)->Content());
+    } else if (groupRef->ChildrenSize() == 3) {
+        // In this case we can get a column name from group expr map
+        const auto groupByKeyExprId = FromString<uint32_t>(TString(groupRef->ChildPtr(2)->Content()));
+        Y_ENSURE(groupByKeysExpressionsMap.size() > groupByKeyExprId, "GroupRef is out of range");
+        colName = groupByKeysExpressionsMap[groupByKeyExprId].first.GetFullName();
+    } else {
+        Y_ENSURE(false, "Invalid children size for `pgGroupRef`");
+    }
+    return colName;
+}
+
+bool IsExpression(TExprNode::TPtr node) {
+    return !(node->IsCallable("Member") || (node->IsCallable("ToPg") && node->ChildPtr(0)->IsCallable("Member")));
+}
+
+TExprNode::TPtr GetCallable(TExprNode::TPtr input, const TString& callableName) {
+    auto isCallable = [&](const TExprNode::TPtr& node) -> bool {
+        if (node->IsCallable(callableName)) {
+            return true;
+        }
+        return false;
+    };
+
+    return FindNode(input, isCallable);
+}
+
+bool IsAggregation(TExprNode::TPtr node) { return node->IsCallable("PgAgg") || node->IsCallable("YqlAgg"); }
+
+TString GetAggregationFunction(TExprNode::TPtr node) {
+    if (node->IsCallable("YqlAggFactory")) {
+        return TString(node->ChildPtr(0)->Content());
+    }
+    return TString(node->Content());
+}
+
+void CollectAggregationsImpl(TExprNode::TPtr node, TVector<TExprNode::TPtr>& aggregations) {
+    if (IsAggregation(node)) {
+        if (node->ChildrenSize() == 2) {
+            Y_ENSURE(node->ChildPtr(0)->Content() == "count", "Unsupported aggregation function for *");
+        } else if (node->ChildrenSize() == 3) {
+            Y_ENSURE(!IsAggregation(node->ChildPtr(2)), "Nested aggregation is not supported, aka f(g(a))");
+        } else if (node->ChildrenSize() == 4) {
+            Y_ENSURE(!IsAggregation(node->ChildPtr(3)), "Nested aggregation is not supported, aka f(g(a))");
+        }
+
+        if (!!GetSetting(*node->Child(1), "distinct")) {
+            const ui32 index = node->ChildrenSize() == 3 ? 2 : 3;
+            Y_ENSURE(!IsExpression(node->ChildPtr(index)), "Nested distinct on expression is not supported, aka f(distinct a x b)");
+        }
+
+        const TString aggFunction = GetAggregationFunction(node->ChildPtr(0));
+        Y_ENSURE(SupportedAggregationFunctions.count(aggFunction),
+                 "Aggregation function " + aggFunction + " is not supported ");
+
+        aggregations.push_back(node);
+        return;
+    }
+
+    for (ui32 i = 0; i < node->ChildrenSize(); ++i) {
+        CollectAggregationsImpl(node->ChildPtr(i), aggregations);
+    }
+}
+
+TVector<TExprNode::TPtr> CollectAggregations(TExprNode::TPtr node) {
+    TVector<TExprNode::TPtr> aggregations;
+    CollectAggregationsImpl(node, aggregations);
+    return aggregations;
+}
+
+TJoinTableAliases GatherJoinAliasesLeftSideMultiInputs(const TVector<TInfoUnit> &joinKeys, const THashSet<TString> &processedInputs) {
+    TJoinTableAliases joinAliases;
+    for (const auto &joinKey : joinKeys) {
+        if (processedInputs.count(joinKey.GetAlias())) {
+            joinAliases.LeftSideAliases.insert(joinKey.GetAlias());
+        } else {
+            joinAliases.RightSideAliases.insert(joinKey.GetAlias());
+        }
+    }
+    Y_ENSURE(joinAliases.LeftSideAliases.size(), "Left side of the join inputs are empty");
+    Y_ENSURE(joinAliases.RightSideAliases.size() == 1, "Right side of the join should have only one input");
+    return joinAliases;
+}
+
+TJoinTableAliases GatherJoinAliasesTwoInputs(const TVector<TInfoUnit> &joinKeys) {
+    TJoinTableAliases joinAliases;
+    for (ui32 i = 0; i < joinKeys.size(); i += 2) {
+        joinAliases.LeftSideAliases.insert(joinKeys[i].GetAlias());
+        joinAliases.RightSideAliases.insert(joinKeys[i + 1].GetAlias());
+    }
+
+    Y_ENSURE(joinAliases.LeftSideAliases.size() == 1, "Left side of the join should have only one input");
+    Y_ENSURE(joinAliases.RightSideAliases.size() == 1, "Right side of the join should have only one input");
+    return joinAliases;
+}
+
+TExprNode::TPtr BuildJoinKeys(const TVector<TInfoUnit> &joinKeys, const TJoinTableAliases &joinAliases, THashSet<TString> &processedInputs,
+                              TExprContext &ctx, TPositionHandle pos) {
+    Y_ENSURE(joinKeys.size() >= 2 && !(joinKeys.size() & 1), "Invalid join key size");
+    TVector<TDqJoinKeyTuple> keys;
+    for (ui32 i = 0; i < joinKeys.size(); i += 2) {
+        auto leftSideKey = joinKeys[i];
+        auto rightSideKey = joinKeys[i + 1];
+        if (joinAliases.LeftSideAliases.count(rightSideKey.GetAlias())) {
+            std::swap(leftSideKey, rightSideKey);
+        }
+        // clang-format off
+        keys.push_back(Build<TDqJoinKeyTuple>(ctx, pos)
+                           .LeftLabel()
+                               .Value(leftSideKey.GetAlias())
+                           .Build()
+                           .LeftColumn()
+                               .Value(leftSideKey.GetColumnName())
+                           .Build()
+                           .RightLabel()
+                               .Value(rightSideKey.GetAlias())
+                           .Build()
+                           .RightColumn()
+                               .Value(rightSideKey.GetColumnName())
+                           .Build()
+                      .Done());
+        // clang-format on
+        processedInputs.insert(leftSideKey.GetAlias());
+        processedInputs.insert(rightSideKey.GetAlias());
+    }
+    return Build<TDqJoinKeyTupleList>(ctx, pos).Add(keys).Done().Ptr();
+}
+
+TExprNode::TPtr BuildAggregationTraits(const TString& originalColName, const TString& aggFunction, const TString& resultColName, TExprContext& ctx,
+                                       TPositionHandle pos) {
+    // clang-format off
+    return Build<TKqpOpAggregationTraits>(ctx, pos)
+        .OriginalColName<TCoAtom>()
+            .Value(originalColName)
+        .Build()
+        .AggregationFunction<TCoAtom>()
+            .Value(aggFunction)
+        .Build()
+        .ResultColName<TCoAtom>()
+            .Value(resultColName)
+        .Build()
+    .Done().Ptr();
+    // clang-format on
+}
+
+TExprNode::TPtr BuildAggregate(TExprNode::TPtr resultExpr, const TVector<TExprNode::TPtr>& aggTraitsList, const TVector<TInfoUnit> &keys,
+                               bool distinctAll,
+                               TExprContext& ctx, TPositionHandle pos) {
+    TVector<TCoAtom> keyColumns;
+    for (const auto& column : keys) {
+        // clang-format off
+        auto keyColumn = Build<TCoAtom>(ctx, pos)
+            .Value(column.GetFullName())
+        .Done();
+        // clang-format on
+        keyColumns.push_back(keyColumn);
+    }
+
+    // clang-format off
+    return Build<TKqpOpAggregate>(ctx, pos)
+        .Input(resultExpr)
+        .AggregationTraitsList<TKqpOpAggregationTraitsList>()
+            .Add(aggTraitsList)
+        .Build()
+        .KeyColumns<TCoAtomList>()
+            .Add(keyColumns)
+        .Build()
+        .DistinctAll<TCoAtom>()
+            .Value(distinctAll ? "True" : "False")
+        .Build()
+    .Done().Ptr();
+    // clang-format on
+}
+
+TVector<std::pair<TInfoUnit, TExprNode::TPtr>> BuildExpressionsFromColumns(const TVector<TInfoUnit>& colNames, TExprContext& ctx,
+                                                                           TPositionHandle pos) {
+    TVector<std::pair<TInfoUnit, TExprNode::TPtr>> renameExprMap;
+    for (const auto& colName : colNames) {
+        // clang-format off
+        auto lambda = Build<TCoLambda>(ctx, pos)
+            .Args({"arg"})
+            .Body<TCoMember>()
+                .Struct("arg")
+                .Name<TCoAtom>()
+                    .Value(colName.GetFullName())
+                .Build()
+            .Build()
+        .Done().Ptr();
+        // clang-format on
+        renameExprMap.push_back({colName, lambda});
+    }
+
+    return renameExprMap;
+}
+
+TExprNode::TPtr BuildAggregateExpressionMap(TExprNode::TPtr resultExpr,
+                                            const TVector<std::tuple<TInfoUnit, TExprNode::TPtr, bool>>& aggFieldsExpressionsMap,
+                                            const TVector<std::pair<TInfoUnit, TExprNode::TPtr>>& groupByKeysExpressionsMap,
+                                            TExprContext& ctx, TPositionHandle pos) {
+    // Add expressions
+    TVector<TExprNode::TPtr> mapElements;
+    for (const auto& [colName, expr, forceOptional] : aggFieldsExpressionsMap) {
+        // clang-format off
+        mapElements.push_back(Build<TKqpOpMapElementLambda>(ctx, pos)
+            .Input(resultExpr)
+            .Variable()
+                .Value(colName.GetFullName())
+            .Build()
+            .ForceOptional()
+                .Value(forceOptional ? "True" : "False")
+            .Build()
+            .Lambda(expr)
+        .Done().Ptr());
+        // clang-format on
+    }
+
+    // Add expressions for group by keys.
+    for (const auto& [colName, expr] : groupByKeysExpressionsMap) {
+        // clang-format off
+        mapElements.push_back(Build<TKqpOpMapElementLambda>(ctx, pos)
+            .Input(resultExpr)
+            .Variable()
+                .Value(colName.GetFullName())
+            .Build()
+            .Lambda(expr)
+        .Done().Ptr());
+        // clang-format on
+    }
+
+    // clang-format off
+    return Build<TKqpOpMap>(ctx, pos)
+        .Input(resultExpr)
+        .MapElements()
+            .Add(mapElements)
+        .Build()
+        .Project()
+            .Value("true")
+        .Build()
+    .Done().Ptr();
+    // clang-format on
+}
+
+TString GenerateUniqueColumnName(ui64& uniqueId, const TString& prefix, const TString& colName) {
+    TStringBuilder strBuilder;
+    strBuilder << "__kqp_";
+    strBuilder << prefix;
+    strBuilder << "_";
+    strBuilder << colName;
+    strBuilder << "_";
+    strBuilder << ToString(uniqueId++);
+    return strBuilder;
+}
+
+void ToCamelCase(std::string& s) {
+    char previous = ' ';
+    auto f = [&](char current) {
+        char result = (std::isblank(previous) && std::isalpha(current)) ? std::toupper(current) : std::tolower(current);
+        previous = current;
+        return result;
+    };
+    std::transform(s.begin(), s.end(), s.begin(), f);
+}
+
+// FIXME: This function has a bug.
+TExprNode::TPtr ReplacePgOps(TExprNode::TPtr input, TExprContext &ctx) {
+    if (input->IsLambda()) {
+        auto lambda = TCoLambda(input);
+
+        // clang-format off
+            return Build<TCoLambda>(ctx, input->Pos())
+                .Args(lambda.Args())
+                .Body(ReplacePgOps(lambda.Body().Ptr(), ctx))
+            .Done().Ptr();
+        // clang-format on
+    } else if (input->IsCallable("PgAnd")) {
+        // clang-format off
+            return ctx.Builder(input->Pos())
+                .Callable("ToPg")
+                    .Callable(0, "And")
+                        .Callable(0, "FromPg")
+                            .Add(0, ReplacePgOps(input->ChildPtr(0), ctx))
+                        .Seal()
+                        .Callable(1, "FromPg")
+                            .Add(0, ReplacePgOps(input->ChildPtr(1), ctx))
+                        .Seal()
+                    .Seal()
+                .Seal()
+            .Build();
+        // clang-format on
+
+    } else if (input->IsCallable("PgOr")) {
+        // clang-format off
+            return ctx.Builder(input->Pos())
+                .Callable("ToPg")
+                    .Callable(0, "Or")
+                        .Callable(0, "FromPg")
+                            .Add(0, ReplacePgOps(input->ChildPtr(0), ctx))
+                        .Seal()
+                        .Callable(1, "FromPg")
+                            .Add(0, ReplacePgOps(input->ChildPtr(1), ctx))
+                        .Seal()
+                    .Seal()
+                .Seal()
+            .Build();
+            // clnag-format on
+    } else if (input->IsCallable("PgNot")) {
+        // clang-format off
+            return ctx.Builder(input->Pos())
+                .Callable("ToPg")
+                    .Callable(0, "Not")
+                        .Callable(0, "FromPg")
+                            .Add(0, ReplacePgOps(input->ChildPtr(0), ctx))
+                        .Seal()
+                    .Seal()
+                .Seal()
+            .Build();
+            // clnag-format on
+    }
+    else if (input->IsCallable()){
+        TVector<TExprNode::TPtr> newChildren;
+        for (auto c : input->Children()) {
+            newChildren.push_back(ReplacePgOps(c, ctx));
+        }
+        // clang-format off
+        return ctx.Builder(input->Pos())
+            .Callable(input->Content())
+                .Add(std::move(newChildren))
+            .Seal()
+        .Build();
+        // clang-format on
+    } else if (input->IsList()) {
+        TVector<TExprNode::TPtr> newChildren;
+        for (auto c : input->Children()) {
+            newChildren.push_back(ReplacePgOps(c, ctx));
+        }
+        // clang-format off
+            return ctx.Builder(input->Pos())
+                .List()
+                    .Add(std::move(newChildren))
+                .Seal()
+            .Build();
+        // clang-format on
+    } else {
+        return input;
+    }
+}
+
+TVector<TInfoUnit> GetSortDependencies(TExprNode::TPtr sort,
+                                       const TVector<std::pair<TInfoUnit, TExprNode::TPtr>>& groupByKeysExpressionsMap, bool pgSyntax) {
+    TVector<TInfoUnit> result;
+    for (const auto& sortItem : sort->Child(1)->Children()) {
+        auto sortLambda = TCoLambda(sortItem->ChildPtr(1));
+        TVector<TInfoUnit> lambdaMembers;
+        auto groupRef = GetCallable(sortLambda.Body().Ptr(), pgSyntax ? "PgGroupRef" : "YqlGroupRef");
+        if (groupRef) {
+            lambdaMembers.emplace_back(GetColumnNameFromGroupRef(groupRef, groupByKeysExpressionsMap));
+        } else {
+            GetAllMembers(sortLambda.Ptr(), lambdaMembers);
+        }
+
+        for (const auto& member : lambdaMembers) {
+            if (std::find(result.begin(), result.end(), member) == result.end()) {
+                result.push_back(member);
+            }
+        }
+    }
+    return result;
+}
+
+TExprNode::TPtr BuildSort(TExprNode::TPtr input, TExprNode::TPtr sort,
+                          const TVector<std::pair<TInfoUnit, TExprNode::TPtr>>& groupByKeysExpressionsMap, TExprContext& ctx, bool pgSyntax) {
+    TVector<TExprNode::TPtr> sortElements;
+
+    for (auto sortItem : sort->Child(1)->Children()) {
+        Y_ENSURE(sortItem->ChildPtr(1)->IsLambda());
+        auto sortLambda = TCoLambda(sortItem->ChildPtr(1));
+        auto direction = sortItem->Child(2);
+        auto nullsFirst = sortItem->Child(3);
+
+        auto groupRef = GetCallable(sortLambda.Body().Ptr(), pgSyntax ? "PgGroupRef" : "YqlGroupRef");
+        if (groupRef) {
+            const TString aggColName = GetColumnNameFromGroupRef(groupRef, groupByKeysExpressionsMap);
+            // clang-format off
+            sortLambda = Build<TCoLambda>(ctx, input->Pos())
+                .Args({"arg"})
+                .Body<TCoMember>()
+                    .Struct("arg")
+                    .Name<TCoAtom>()
+                        .Value(aggColName)
+                    .Build()
+                .Build()
+            .Done();
+            // clang-format on
+        }
+
+        // clang-format off
+        sortElements.push_back(Build<TKqpOpSortElement>(ctx, input->Pos())
+            .Input(input)
+            .Direction(direction)
+            .NullsFirst(nullsFirst)
+            .Lambda(sortLambda)
+            .Done().Ptr());
+        // clang-format on
+    }
+
+    // clang-format off
+    return Build<TKqpOpSort>(ctx, input->Pos())
+        .Input(input)
+        .SortExpressions().Add(sortElements).Build()
+        .Done().Ptr();
+    // clang-format on
+}
+
+TExprNode::TPtr GetTableSourceType(const NYql::TKikimrTableDescription& desc, TExprContext& ctx, TPositionHandle pos) {
+    TString source;
+    switch (desc.Metadata->Kind) {
+        case NYql::EKikimrTableKind::Datashard:
+        case NYql::EKikimrTableKind::SysView:
+            source = "Row";
+            break;
+        case NYql::EKikimrTableKind::Olap:
+            source = "Column";
+            break;
+        default:
+            Y_ENSURE(false, "Unexpected table kind: " << (ui32)desc.Metadata->Kind);
+            break;
+    }
+
+    // clang-format off
+    return Build<TCoAtom>(ctx, pos)
+        .Value(source)
+    .Done().Ptr();
+    // clang-format on
+}
+
+TExprNode::TPtr GetMember(TExprNode::TPtr node) {
+    TExprNode::TPtr member = node;
+    if (member->IsCallable("ToPg")) {
+        member = member->ChildPtr(0);
+    }
+    return member->IsCallable("Member") ? member : nullptr;
+}
+
+void FlattenNestedConjunctionsRec(TExprNode::TPtr node, TVector<TExprNode::TPtr> & conjuncts) {
+    if (node->IsCallable("FromPg") && node->ChildPtr(0)->IsCallable("ToPg")) {
+        node = node->ChildPtr(0)->ChildPtr(0);
+    }
+
+    if (TCoAnd::Match(node.Get())) {
+        for (auto c : node->Children()) {
+            FlattenNestedConjunctionsRec(c, conjuncts);
+        }
+    } else {
+        conjuncts.push_back(node);
+    }
+}
+
+TExprNode::TPtr FlattenNestedConjunctions(TExprNode::TPtr node, TExprContext &ctx) {
+    auto lambda = TCoLambda(node);
+    auto body = lambda.Body().Ptr();
+
+    bool addToPg = false;
+    if (body->IsCallable("ToPg")) {
+        body = body->ChildPtr(0);
+        addToPg = true;
+    }
+
+    if (TCoAnd::Match(body.Get())) {
+        TVector<TExprNode::TPtr> conjuncts;
+        FlattenNestedConjunctionsRec(body, conjuncts);
+        if (conjuncts.size() <= 2) {
+            return node;
+        }
+        auto newLambdaBody = Build<TCoAnd>(ctx, node->Pos()).Add(conjuncts).Done().Ptr();
+        if (addToPg){
+            newLambdaBody = ctx.NewCallable(node->Pos(), "ToPg", {newLambdaBody});
+        }
+
+        // clang-format off
+        return Build<TCoLambda>(ctx, node->Pos())
+            .Args(lambda.Args())
+            .Body(newLambdaBody)
+            .Done().Ptr();
+        // clang-format on
+    }
+
+    return node;
+}
+
+TExprNode::TPtr NormalizeMemberNames(TExprNode::TPtr node, TExprContext& ctx, TPositionHandle pos) {
+    auto isMember = [&](const TExprNode::TPtr& node) -> bool {
+        if (node->IsCallable("Member")) {
+            return true;
+        }
+        return false;
+    };
+
+    TNodeOnNodeOwnedMap replaces;
+    const auto members = FindNodes(node, isMember);
+    for (const auto& member : members) {
+        const TString colName(TCoMember(member).Name().StringValue());
+        if (colName.StartsWith("_alias_")) {
+            auto it = colName.find(".");
+            Y_ENSURE(it != TString::npos, "Invalid _alias_ prefix");
+            const auto newMemberName = colName.substr(7);
+            // clang-format off
+            auto newMember = Build<TCoMember>(ctx, pos)
+                .Struct(member->ChildPtr(0))
+                .Name<TCoAtom>()
+                    .Value(newMemberName)
+                .Build()
+            .Done().Ptr();
+            // clang-format on
+            replaces[member.Get()] = newMember;
+        }
+    }
+
+    return replaces.empty() ? node : ctx.ReplaceNodes(std::move(node), replaces);
+}
+
+void SplitByAnd(TExprNode::TPtr node, TVector<TExprNode::TPtr>& predicates) {
+    // TODO: Here we need to build a predicate tree to handle OR.
+    Y_ENSURE(!TCoOr::Match(node.Get()), "OR in join predicate is not supported");
+
+    if (!TCoAnd::Match(node.Get())) {
+        predicates.push_back(node);
+        return;
+    }
+
+    for (ui32 i = 0; i < node->ChildrenSize(); ++i) {
+        SplitByAnd(node->ChildPtr(i), predicates);
+    }
+}
+
+bool IsJoinKeys(TExprNode::TPtr node, TExprNode::TPtr lambdaArg) {
+    if (!TCoCmpEqual::Match(node.Get())) {
+        return false;
+    }
+
+    auto equalOp = TCoCmpEqual(node);
+    auto left = equalOp.Left().Ptr();
+    auto right = equalOp.Right().Ptr();
+    if (!left->IsCallable("Member") || !right->IsCallable("Member")) {
+        return false;
+    }
+
+    return left->ChildPtr(0) == lambdaArg.Get() && right->ChildPtr(0) == lambdaArg.Get();
+}
+
+void ExtractJoinKeysAndPredicates(TExprNode::TPtr node, TVector<TInfoUnit>& joinKeys, TVector<TExprNode::TPtr>& joinPredicates) {
+    Y_ENSURE(node->IsLambda());
+    auto lambda = TCoLambda(node);
+    TVector<TExprNode::TPtr> predicates;
+    SplitByAnd(lambda.Body().Ptr(), predicates);
+
+    for (const auto& predicate : predicates) {
+        if (IsJoinKeys(predicate, lambda.Args().Arg(0).Ptr())) {
+            TVector<TInfoUnit> currentJoinKeys;
+            GetAllMembers(predicate, currentJoinKeys);
+            joinKeys.insert(joinKeys.end(), currentJoinKeys.begin(), currentJoinKeys.end());
+        } else {
+            joinPredicates.push_back(predicate);
+        }
+    }
+}
+
+void SplitJoinPredicatesByAliases(const TVector<TExprNode::TPtr>& joinPredicates, const TString& leftSideAlias, const TString& rightSideAlias,
+                                  TVector<TExprNode::TPtr>& leftSidePredicates, TVector<TExprNode::TPtr>& rightSidePredicates) {
+    for (const auto& predicate : joinPredicates) {
+        TVector<TInfoUnit> members;
+        GetAllMembers(predicate, members);
+        bool isLeftSidePredicate = false;
+        bool isRightSidePredicate = false;
+        for (const auto& member : members) {
+            const auto alias = member.GetAlias();
+            if (alias == leftSideAlias) {
+                isLeftSidePredicate = true;
+            } else if (alias == rightSideAlias) {
+                isRightSidePredicate = true;
+            } else {
+                Y_ENSURE(false, "Invalid alias in join predicate" + member.GetAlias());
+            }
+        }
+        Y_ENSURE((isLeftSidePredicate && !isRightSidePredicate) || (isRightSidePredicate && !isLeftSidePredicate));
+        if (isLeftSidePredicate) {
+            leftSidePredicates.push_back(predicate);
+        } else {
+            rightSidePredicates.push_back(predicate);
+        }
+    }
+}
+
+TExprNode::TPtr CombineByAnd(TVector<TExprNode::TPtr> &predicates, TExprContext &ctx, TPositionHandle pos) {
+    Y_ENSURE(predicates.size());
+    if (predicates.size() == 1) {
+        return predicates.front();
+    }
+
+    // clang-format off
+    return Build<TCoAnd>(ctx, pos)
+        .Add(predicates)
+    .Done().Ptr();
+    // clang-format on
+}
+
+TExprNode::TPtr BuildFilter(TExprNode::TPtr input, TExprNode::TPtr lambdaArg, TVector<TExprNode::TPtr> &predicates, TExprContext &ctx, TPositionHandle pos) {
+    auto predicate = CombineByAnd(predicates, ctx, pos);
+    // clang-format off
+    return Build<TKqpOpFilter>(ctx, pos)
+        .Input(input)
+        .Lambda<TCoLambda>()
+            .Args({"_filter_arg_"})
+            .Body<TExprApplier>()
+                .Apply(TExprBase(predicate))
+                .With(TExprBase(lambdaArg), "_filter_arg_")
+            .Build()
+        .Build()
+    .Done().Ptr();
+    // clang-format on
+}
+
+bool IsForceOptionalNeeded(TExprNode::TPtr typeNode, const TString& aggFunc) {
+    return typeNode && TMaybeNode<TCoOptionalType>(typeNode.Get()) && (aggFunc == "min" || aggFunc == "max" || aggFunc == "sum" || aggFunc == "avg");
+}
+
+} // namespace
+
+namespace NKikimr {
+namespace NKqp {
+
+TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, const TTypeAnnotationContext &typeCtx, const TKqpOptimizeContext& kqpCtx, ui64& uniqueSourceIdCounter, bool pgSyntax) {
+    Y_UNUSED(typeCtx);
+    Y_UNUSED(pgSyntax);
+    TVector<TString> finalColumnOrder;
+    // Start from beggining for each proccesed select;
+    ui64 uniqueAggColumnId = 0;
+
+    auto setItems = GetSetting(node->Head(), "set_items")->TailPtr();
+    TVector<TExprNode::TPtr> setItemsResults;
+    for (ui32 i = 0; i < setItems->ChildrenSize(); ++i) {
+        auto setItem = setItems->ChildPtr(i);
+
+        TVector<TExprNode::TPtr> resultElements;
+        // In pg syntax duplicate attributes are allowed in the results, but we need to rename them
+        // We use the counters for this purpose
+        THashMap<TString, int> resultElementCounters;
+
+        TExprNode::TPtr joinExpr;
+        TExprNode::TPtr filterExpr;
+        TExprNode::TPtr lastAlias;
+
+        // Extract correlations from outer scopes
+        auto correlatedCols = GetSetting(setItem->Tail(), "final_ext_types");
+
+        auto from = GetSetting(setItem->Tail(), "from");
+        THashMap<TString, TExprNode::TPtr> aliasToInputMap;
+        TVector<TExprNode::TPtr> inputsInOrder;
+
+        if (from) {
+            for (auto fromItem : from->Child(1)->Children()) {
+                // From item can be a table read with an alias or a subquery with an alias
+                // In case of a subquery, we have already translated PgSelect of the nested subquery
+                // so we just need to remove TKqpOpRoot and plug in the translated subquery
+
+                auto childExpr = fromItem->ChildPtr(0);
+                auto alias = fromItem->Child(1);
+                TExprNode::TPtr fromExpr;
+
+                if (TKqpOpRoot::Match(childExpr.Get())) {
+                    auto opRoot = TKqpOpRoot(childExpr);
+
+                    TVector<TExprNode::TPtr> subqueryElements;
+
+                    // We need to rename all the IUs in the subquery to reflect the new alias
+                    auto subqueryType = childExpr->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+                    for (const auto* item : subqueryType->GetItems()) {
+                        auto orig = TString(item->GetName());
+                        auto unit = TInfoUnit(orig);
+                        auto renamedUnit = TInfoUnit(TString(alias->Content()), unit.GetColumnName());
+
+                        // clang-format off
+                        subqueryElements.push_back(Build<TKqpOpMapElementRename>(ctx, node->Pos())
+                            .Input(opRoot.Input())
+                            .Variable().Value(renamedUnit.GetFullName()).Build()
+                            .From().Value(unit.GetFullName()).Build()
+                        .Done().Ptr());
+                        // clang-format on
+                    }
+
+                    // clang-format off
+                    fromExpr = Build<TKqpOpMap>(ctx, node->Pos())
+                        .Input(opRoot.Input())
+                        .MapElements().Add(subqueryElements).Build()
+                        .Project().Value("true").Build()
+                    .Done().Ptr();
+                    // clang-format on
+                }
+                else {
+                    auto readExpr = TKqlReadTableRanges(childExpr);
+                    const auto& tableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, readExpr.Table().Path());
+
+                    // clang-format off
+                    fromExpr = Build<TKqpOpRead>(ctx, node->Pos())
+                        .Table(readExpr.Table())
+                        .Alias(alias)
+                        .Columns(readExpr.Columns())
+                        .SourceType(GetTableSourceType(tableDesc, ctx, node->Pos()))
+                        .UniqueId().Value(std::to_string(uniqueSourceIdCounter++)).Build()
+                    .Done().Ptr();
+                    // clang-format on
+                }
+
+                aliasToInputMap.insert({TString(alias->Content()), fromExpr});
+                inputsInOrder.push_back(fromExpr);
+                lastAlias = alias;
+            }
+        }
+
+        // FIXME: Correlated subqueries may contain a correlation column in join conditions
+        // We currently don't handle it
+
+        THashSet<TString> processedInputs;
+        auto joinOps = GetSetting(setItem->Tail(), "join_ops");
+        ui32 ansiCrossJoinCount = 0;
+        if (joinOps) {
+            for (ui32 i = 0; i < joinOps->Tail().ChildrenSize(); ++i) {
+                ui32 tableInputsCount = 0;
+                auto tuple = joinOps->Tail().Child(i);
+                for (ui32 j = 0; j < tuple->ChildrenSize(); ++j) {
+                    auto join = tuple->Child(j);
+                    auto joinType = join->Child(0)->Content();
+                    if (joinType == "push") {
+                        ++tableInputsCount;
+                        continue;
+                    }
+
+                    TVector<TInfoUnit> joinKeys;
+                    TVector<TExprNode::TPtr> joinPredicates;
+                    TExprNode::TPtr joinLambda;
+                    Y_ENSURE(join->ChildrenSize() > 1 && join->Child(1)->ChildrenSize() > 1);
+                    if (pgSyntax) {
+                        auto pgResolvedOps = FindNodes(join->Child(1)->Child(1)->TailPtr(), [](const TExprNode::TPtr& node) {
+                            if (node->IsCallable("PgResolvedOp")) {
+                                return true;
+                            } else {
+                                return false;
+                            }
+                        });
+                        for (const auto& pgResolvedOp : pgResolvedOps) {
+                            TVector<TInfoUnit> keys;
+                            GetAllMembers(pgResolvedOp, keys);
+                            joinKeys.insert(joinKeys.end(), keys.begin(), keys.end());
+                        }
+                    } else {
+                        auto yqlWhere = join->ChildPtr(1);
+                        Y_ENSURE(yqlWhere->IsCallable("YqlWhere"), yqlWhere->Content());
+                        Y_ENSURE(yqlWhere->ChildPtr(1)->IsLambda(), "YqlWhere invalid child type.");
+                        joinLambda = TCoLambda(ctx.DeepCopyLambda(*(yqlWhere->Child(1)))).Ptr();
+                        ExtractJoinKeysAndPredicates(joinLambda, joinKeys, joinPredicates);
+                    }
+
+                    TJoinTableAliases joinAliases;
+                    TExprNode::TPtr leftInput;
+                    TExprNode::TPtr rightInput;
+                    TVector<TExprNode::TPtr> leftSidePredicates;
+                    TVector<TExprNode::TPtr> rightSidePredicates;
+                    TString leftSideAlias;
+                    TString rightSideAlias;
+
+                    if (joinKeys.empty()) {
+                        // Ansi cross join.
+                        ++ansiCrossJoinCount;
+                        continue;
+                    }
+
+                    Y_ENSURE(joinKeys.size() && !ansiCrossJoinCount, "Ansi cross joins mixed with other joins");
+                    if (tableInputsCount == 2) {
+                        joinAliases = GatherJoinAliasesTwoInputs(joinKeys);
+                        leftSideAlias = *joinAliases.LeftSideAliases.begin();
+                        rightSideAlias = *joinAliases.RightSideAliases.begin();
+                        Y_ENSURE(aliasToInputMap.count(leftSideAlias), "Left side alias is not present in input tables");
+                        Y_ENSURE(aliasToInputMap.count(rightSideAlias), "Right sided alias is not present input tables");
+                        leftInput = aliasToInputMap[leftSideAlias];
+                        rightInput = aliasToInputMap[rightSideAlias];
+
+                   } else if (tableInputsCount == 1) {
+                        joinAliases = GatherJoinAliasesLeftSideMultiInputs(joinKeys, processedInputs);
+                        // TODO: Add support to build a join filter with multi input side.
+                        leftSideAlias = *joinAliases.LeftSideAliases.begin();
+                        rightSideAlias = *joinAliases.RightSideAliases.begin();
+                        Y_ENSURE(aliasToInputMap.contains(rightSideAlias), "Right side alias is not present in input tables");
+                        leftInput = joinExpr;
+                        rightInput = aliasToInputMap[rightSideAlias];
+                    }
+
+                    auto joinKind = TString(joinType);
+                    ToCamelCase(joinKind.MutRef());
+
+                    if (joinLambda && (joinKind == "Left" || joinKind == "Inner")) {
+                        auto lambdaArg = TCoLambda(joinLambda).Args().Arg(0).Ptr();
+                        SplitJoinPredicatesByAliases(joinPredicates, leftSideAlias, rightSideAlias, leftSidePredicates, rightSidePredicates);
+                        if (leftSidePredicates.size()) {
+                            leftInput = BuildFilter(leftInput, lambdaArg, leftSidePredicates, ctx, node->Pos());
+                        }
+                        if (rightSidePredicates.size()) {
+                            rightInput = BuildFilter(rightInput, lambdaArg, rightSidePredicates, ctx, node->Pos());
+                        }
+                    }
+
+                    // clang-format off
+                    joinExpr = Build<TKqpOpJoin>(ctx, node->Pos())
+                        .LeftInput(leftInput)
+                        .RightInput(rightInput)
+                        .JoinKind()
+                            .Value(joinKind)
+                        .Build()
+                        .JoinKeys(BuildJoinKeys(joinKeys, joinAliases, processedInputs, ctx, node->Pos()))
+                    .Done().Ptr();
+                    // clang-format on
+                    tableInputsCount = 0;
+                }
+            }
+
+            // Ansi cross joins, processing inputs in the given order.
+            if (!joinExpr) {
+                ui32 inputIndex = 0;
+                if (inputsInOrder.size() > 1) {
+                    Y_ENSURE(pgSyntax || (!pgSyntax && inputsInOrder.size() == ansiCrossJoinCount + 1), "Invalid input count for ansi cross joins.");
+                    while (inputIndex < inputsInOrder.size()) {
+                        auto leftTableInput = inputIndex == 0 ? inputsInOrder[inputIndex] : joinExpr;
+                        auto rightTableInput = inputIndex == 0 ? inputsInOrder[inputIndex + 1] : inputsInOrder[inputIndex];
+                        auto joinKeys = Build<TDqJoinKeyTupleList>(ctx, node->Pos()).Done();
+                        // clang-format off
+                        joinExpr = Build<TKqpOpJoin>(ctx, node->Pos())
+                            .LeftInput(leftTableInput)
+                            .RightInput(rightTableInput)
+                            .JoinKind()
+                                .Value("Cross")
+                            .Build()
+                            .JoinKeys(joinKeys)
+                        .Done().Ptr();
+                        // clang-format on
+                        inputIndex += (inputIndex == 0 ? 2 : 1);
+                    }
+                } else {
+                    joinExpr = inputsInOrder.front();
+                }
+            }
+        }
+
+        filterExpr = joinExpr;
+
+        // Infuse correlation columns into the subplan if any
+        if (correlatedCols) {
+            TVector<TExprNode::TPtr> columns;
+            TVector<TExprNode::TPtr> types;
+
+            for (auto aliasColumn : correlatedCols->Child(1)->Children()) {
+                auto alias = aliasColumn->Child(0);
+                auto typeExpr = aliasColumn->Child(1);
+                auto structType = typeExpr->GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
+                for (auto item : structType->GetItems()) {
+                    TString fullName = TString(alias->Content()) + "." + TString(item->GetName());
+                    columns.push_back(ctx.NewAtom(node->Pos(), fullName));
+                    types.push_back(ExpandType(node->Pos(), *item->GetItemType(), ctx));
+                }
+            }
+
+            if (!columns.empty()) {
+                // clang-format off
+                filterExpr = Build<TKqpInfuseDependents>(ctx, node->Pos())
+                    .Input(filterExpr)
+                    .Columns()
+                        .Add(columns)
+                    .Build()
+                    .Types()
+                        .Add(types)
+                    .Build()
+                    .Done().Ptr();
+                // clang-format on
+            }
+        }
+
+        auto where = GetSetting(setItem->Tail(), "where");
+
+        if (where) {
+            TExprNode::TPtr lambdaPtr = ctx.DeepCopyLambda(*(where->Child(1)->Child(1)));
+            if (pgSyntax) {
+                lambdaPtr = ReplacePgOps(lambdaPtr, ctx);
+            }
+            auto lambda = TCoLambda(FlattenNestedConjunctions(lambdaPtr, ctx));
+            // clang-format off
+            filterExpr = Build<TKqpOpFilter>(ctx, node->Pos())
+                .Input(filterExpr)
+                .Lambda<TCoLambda>()
+                    .Args({"_filter_arg_"})
+                    .Body<TExprApplier>()
+                        .Apply(lambda.Body())
+                        .With(lambda.Args().Arg(0), "_filter_arg_")
+                    .Build()
+                .Build()
+            .Done().Ptr();
+            // clang-format on
+        }
+
+        if (!filterExpr) {
+            filterExpr = Build<TKqpOpEmptySource>(ctx, node->Pos()).Done().Ptr();
+        }
+
+        // Group by fields for renames or expressions.
+        TVector<std::pair<TInfoUnit, TExprNode::TPtr>> groupByKeysExpressionsMap;
+        // Aggregate.
+        TAggregationTraits aggTraits;
+        // Pre/Post distinct aggregations.
+        TAggregationTraits distinctAggregationTraitsPreAggregate;
+        TAggregationTraits distinctAggregationTraitsPostAggregate;
+        auto groupOps = GetSetting(setItem->Tail(), "group_exprs");
+        THashSet<TString> aggregationUniqueColNames;
+        if (groupOps) {
+            const auto groupByList = groupOps->TailPtr();
+            for (ui32 i = 0; i < groupByList->ChildrenSize(); ++i) {
+                auto pgGroup = groupByList->ChildPtr(i);
+                auto lambda = TCoLambda(ctx.DeepCopyLambda(*(pgGroup->Child(1))));
+                auto body = lambda.Body().Ptr();
+                TInfoUnit groupByKeyName;
+                TExprNode::TPtr newBody;
+
+                // Expression for group by keys.
+                if (IsExpression(body)) {
+                    // For exression we use map.
+                    // For example: f(a) group by b + c => map(a -> a, b + c -> d) -> f(a) group by d
+                    newBody = pgSyntax ? ctx.NewCallable(node->Pos(), "FromPg", {body}) : body;
+                    groupByKeyName = TInfoUnit(GenerateUniqueColumnName(uniqueAggColumnId, "agg_input", "group_expr"));
+                } else {
+                    Y_ENSURE(body->IsCallable("Member"), "Invalid callable for PgGroup: " + TString(body->Content()));
+                    auto member = TCoMember(body);
+                    groupByKeyName = TInfoUnit(member.Name().StringValue());
+                    Y_ENSURE(!aggregationUniqueColNames.contains(groupByKeyName.GetFullName()), "Not unique key name for group by kyes is not supported.");
+                    aggregationUniqueColNames.insert(groupByKeyName.GetFullName());
+                    newBody = member.Ptr();
+                }
+
+                // clang-format off
+                auto groupExprLambda = Build<TCoLambda>(ctx, node->Pos())
+                    .Args({"_group_arg_"})
+                    .Body<TExprApplier>()
+                        .Apply(TExprBase(newBody))
+                        .With(lambda.Args().Arg(0), "_group_arg_")
+                    .Build()
+                .Done().Ptr();
+                // clang-format on
+
+                groupByKeysExpressionsMap.push_back(std::make_pair(groupByKeyName, groupExprLambda));
+                aggTraits.KeyColumns.push_back(groupByKeyName);
+            }
+        }
+
+        const bool distinctAll = !!GetSetting(setItem->Tail(), "distinct_all");
+        auto result = GetSetting(setItem->Tail(), "result");
+        Y_ENSURE(result);
+        auto finalType = node->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+        const bool isEmptyGroupByKeys = groupByKeysExpressionsMap.empty();
+
+        // Aggregations.
+        TVector<std::tuple<TInfoUnit, TExprNode::TPtr, bool>> expressionsMapPreAgg;
+        TVector<std::tuple<TInfoUnit, TExprNode::TPtr, bool>> expressionsMapPostAgg;
+        bool distinctPreAggregate = false;
+        for (ui32 i = 0; i < result->Child(1)->ChildrenSize(); ++i) {
+            const auto resultItem = result->Child(1)->ChildPtr(i);
+            auto lambda = TCoLambda(ctx.DeepCopyLambda(*(resultItem->Child(2))));
+            const auto resultColName = TString(resultItem->Child(0)->Content());
+            THashMap<TExprNode::TPtr, TString> aggregationsForReplacement;
+            // There are could be a tree of aggregatation and expressions.
+            //     expr0
+            //   /     \
+            //  agg    agg
+            //  |       |
+            // expr1   expr2
+            //
+            // map (expr1 -> a, expr2 -> b) - > agg(a, b) -> map(expr(a, b) -> c)
+            //
+            if (auto aggregations = CollectAggregations(lambda.Body().Ptr()); !aggregations.empty()) {
+                for (const auto& aggregation : aggregations) {
+                    const TString aggFuncName = GetAggregationFunction(aggregation->ChildPtr(0));
+                    TInfoUnit aggColName;
+                    TExprNode::TPtr exprBody;
+                    const ui32 aggInputIndex = aggregation->ChildrenSize() == 3 ? 2 : 3;
+                    const bool aggHasInput = aggregation->ChildrenSize() > 2;
+                    const bool aggHasType = aggHasInput;
+                    const bool isExpression = aggHasInput && IsExpression(aggregation->ChildPtr(aggInputIndex));
+
+                    // Aggregation with column specified.
+                    if (aggHasInput) {
+                        auto aggInput = aggregation->ChildPtr(aggInputIndex);
+                        if (isExpression) {
+                            // Aggregation on expression f(a x b).
+                            // We pull expression outside a given aggregation and rename result of a given expression with unique name
+                            // to later process result with aggregate function.
+                            // For example: f(a x b) => map((a x b) -> c) -> f(c)
+                            exprBody = pgSyntax ? ctx.NewCallable(aggInput->Pos(), "FromPg", {aggInput}) : aggInput;
+                            aggColName = TInfoUnit(GenerateUniqueColumnName(uniqueAggColumnId, "agg_input", "agg_expr"));
+                        } else {
+                            // Pure aggregation f(a).
+                            // Here we want to get just a column name for aggregation.
+                            // For example: f(a) -> map(a -> a) -> f(a).
+                            // This is needed to simplify logic for translation from PgSelect to KqpOp.
+                            exprBody = GetMember(aggInput);
+                            Y_ENSURE(exprBody, "Aggregation input is not a member");
+                            auto member = TCoMember(exprBody);
+                            aggColName = TInfoUnit(member.Name().StringValue());
+                        }
+                    } else {
+                        // count(*)
+                        Y_ENSURE(aggFuncName == "count", "Invalid agg function for *");
+                        aggColName = TInfoUnit(GenerateUniqueColumnName(uniqueAggColumnId, "agg_input", "agg_asterisks"));
+                        // Input of aggregate is empty - count(*).
+                        // Here we create a new column with non optional type,
+                        // because aggregation for optional and non optional is different.
+                        // count(*) counts nulls, count(a) does not.
+                        // clang-format off
+                        exprBody = Build<TCoUint64>(ctx, node->Pos())
+                            .Literal().Build("1")
+                        .Done().Ptr();
+                        // clang-format on
+                    }
+
+                    // clang-format off
+                    auto exprLambda = Build<TCoLambda>(ctx, node->Pos())
+                        .Args({"_pre_lambda_arg_"})
+                        .Body<TExprApplier>()
+                            .Apply(TExprBase(exprBody))
+                            .With(lambda.Args().Arg(0), "_pre_lambda_arg_")
+                        .Build()
+                    .Done().Ptr();
+                    // clang-format on
+
+                    // This is a special case to force optional type for non optional column. f(a) => map(b : Just(a)) -> f(b)
+                    const bool forceOptional = aggHasType ? (isEmptyGroupByKeys && IsForceOptionalNeeded(aggregation->ChildPtr(2), aggFuncName)) : false;
+                    if (forceOptional) {
+                        aggColName = TInfoUnit(GenerateUniqueColumnName(uniqueAggColumnId, "agg_input", "agg_col"));
+                    }
+
+                    // Adds a column into pre aggregation map in following cases:
+                    // 1) It's an expression: f(a + 1) => map(b : a + 1) -> f(b);
+                    // 2) We need to force optional for column: f(a) => map(b: Just(a)) -> f(b);
+                    // 3) It's a unique column name: (f(a), g(a)) => map(a) -> (f(a), g(a));
+                    if (isExpression || forceOptional || !aggregationUniqueColNames.contains(aggColName.GetFullName())) {
+                        expressionsMapPreAgg.push_back({aggColName, exprLambda, forceOptional});
+                    }
+                    aggregationUniqueColNames.insert(aggColName.GetFullName());
+
+                    // Distinct for column or expression f(distinct a) => (distinct a) as b -> f(b).
+                    if (!!GetSetting(*aggregation->Child(1), "distinct")) {
+                        const auto colName = aggColName.GetFullName();
+                        auto distinctAggTraits = BuildAggregationTraits(colName, "distinct", colName, ctx, node->Pos());
+                        distinctAggregationTraitsPreAggregate.AggTraitsList.push_back(distinctAggTraits);
+                        distinctAggregationTraitsPreAggregate.KeyColumns.push_back(aggColName);
+                        distinctPreAggregate = true;
+                    }
+
+                    // Rename for aggregation result.
+                    const auto aggResultColName = TInfoUnit(GenerateUniqueColumnName(uniqueAggColumnId, "agg_result", "agg_col"));
+                    // Build an aggregation traits.
+                    auto aggregationTraits = BuildAggregationTraits(aggColName.GetFullName(), aggFuncName, aggResultColName.GetFullName(), ctx, node->Pos());
+                    aggTraits.AggTraitsList.push_back(aggregationTraits);
+                    aggregationsForReplacement[aggregation] = aggResultColName.GetFullName();
+                }
+
+                TNodeOnNodeOwnedMap nodeReplacementMap;
+                auto exprLambdaArg = ctx.NewArgument(node->Pos(), "_post_lambda_arg_");
+                for (const auto& [aggregation, colName] : aggregationsForReplacement) {
+                    // clang-format off
+                    auto member = Build<TCoMember>(ctx, node->Pos())
+                        .Struct(exprLambdaArg)
+                        .Name<TCoAtom>()
+                            .Value(colName)
+                        .Build()
+                    .Done().Ptr();
+                    // clang-format on
+
+                    // Do not need convertion to pg, because input of projection map is aggregation.
+                    if (pgSyntax && !distinctAll) {
+                        const auto* aggFuncResultType = finalType->FindItemType(resultColName);
+                        Y_ENSURE(aggFuncResultType, "Cannot find type for aggregation result.");
+
+                        auto toPg = ctx.NewCallable(node->Pos(), "ToPg", {member});
+                        auto pgType = ctx.NewCallable(
+                            node->Pos(), "PgType",
+                            {ctx.NewAtom(node->Pos(), ::NPg::LookupType(aggFuncResultType->Cast<TPgExprType>()->GetId()).Name)});
+                        member = ctx.NewCallable(node->Pos(), "PgCast", {toPg, pgType});
+                    }
+
+                    nodeReplacementMap[aggregation.Get()] = member;
+                }
+
+                auto newBody = ctx.ReplaceNodes(lambda.Body().Ptr(), nodeReplacementMap);
+                // clang-format off
+                auto exprLambda = Build<TCoLambda>(ctx, node->Pos())
+                    .Args({exprLambdaArg})
+                    .Body(newBody)
+                .Done().Ptr();
+                // clang-format on
+
+                auto colName = TInfoUnit(resultColName);
+                expressionsMapPostAgg.push_back({colName, exprLambda, false});
+
+                // Case for distinct after aggregation.
+                if (distinctAll) {
+                    auto distinctAggTraits = BuildAggregationTraits(resultColName, "distinct", resultColName, ctx, node->Pos());
+                    distinctAggregationTraitsPostAggregate.AggTraitsList.push_back(distinctAggTraits);
+                    distinctAggregationTraitsPostAggregate.KeyColumns.push_back(TInfoUnit(resultColName));
+                }
+            } else if (distinctAll) {
+                // This case covers distinct all on just columns without aggregation functions.
+                auto groupRef = GetCallable(lambda.Body().Ptr(), pgSyntax ? "PgGroupRef" : "YqlGroupRef");
+                TInfoUnit colName;
+                if (groupRef) {
+                    colName = TInfoUnit(GetColumnNameFromGroupRef(groupRef, groupByKeysExpressionsMap));
+                } else {
+                    auto body = lambda.Body().Ptr();
+                    Y_ENSURE(body->IsCallable("Member"), "Distinct on expression is not supported");
+                    auto member = TCoMember(body);
+                    colName = TInfoUnit(member.Name().StringValue());
+                }
+
+                const auto distinctAggTraits = BuildAggregationTraits(colName.GetFullName(), "distinct", colName.GetFullName(), ctx, node->Pos());
+                distinctAggregationTraitsPostAggregate.AggTraitsList.push_back(distinctAggTraits);
+                distinctAggregationTraitsPostAggregate.KeyColumns.push_back(colName);
+            }
+        }
+
+        // Distinct pre aggregate fro group by keys.
+        if (distinctPreAggregate) {
+            Y_ENSURE(distinctAggregationTraitsPreAggregate.AggTraitsList.size() == 1 && aggTraits.AggTraitsList.size() == 1,
+                     "Multiple distinct is not supported");
+            for (const auto& key : aggTraits.KeyColumns) {
+                const auto colName = key.GetFullName();
+                const auto distinctAggTraits = BuildAggregationTraits(colName, "distinct", colName, ctx, node->Pos());
+                distinctAggregationTraitsPreAggregate.AggTraitsList.push_back(distinctAggTraits);
+                distinctAggregationTraitsPreAggregate.KeyColumns.push_back(colName);
+            }
+        }
+
+        // Distinct post aggregate for group by keys.
+        if (distinctAll) {
+            for (const auto& key : aggTraits.KeyColumns) {
+                const auto colName = key.GetFullName();
+                const auto distinctAggTraits = BuildAggregationTraits(colName, "distinct", colName, ctx, node->Pos());
+                distinctAggregationTraitsPostAggregate.AggTraitsList.push_back(distinctAggTraits);
+                distinctAggregationTraitsPostAggregate.KeyColumns.push_back(colName);
+            }
+        }
+
+        TExprNode::TPtr resultExpr = filterExpr;
+        // In case we have an expression for aggregation - f(a + b ...) or group by.
+        if (!expressionsMapPreAgg.empty() || !groupByKeysExpressionsMap.empty()) {
+            resultExpr = BuildAggregateExpressionMap(resultExpr, expressionsMapPreAgg, groupByKeysExpressionsMap, ctx, node->Pos());
+        }
+        // Build distinct aggregate pre aggregate.
+        if (!distinctAggregationTraitsPreAggregate.AggTraitsList.empty()) {
+            resultExpr = BuildAggregate(resultExpr, distinctAggregationTraitsPreAggregate.AggTraitsList,
+                                        distinctAggregationTraitsPreAggregate.KeyColumns, /*distinct=*/ true, ctx, node->Pos());
+        }
+        // Build Aggreegate.
+        if (!aggTraits.AggTraitsList.empty()) {
+            resultExpr = BuildAggregate(resultExpr, aggTraits.AggTraitsList, aggTraits.KeyColumns, /*distinct=*/ false, ctx, node->Pos());
+        }
+        // In case we have an expression on aggregation - f(...) x b.
+        if (!expressionsMapPostAgg.empty()) {
+            resultExpr = BuildAggregateExpressionMap(resultExpr, expressionsMapPostAgg,
+                                                     BuildExpressionsFromColumns(aggTraits.KeyColumns, ctx, node->Pos()), ctx, node->Pos());
+        }
+        // Build distinct aggregate post aggregate.
+        if (!distinctAggregationTraitsPostAggregate.AggTraitsList.empty()) {
+            resultExpr = BuildAggregate(resultExpr, distinctAggregationTraitsPostAggregate.AggTraitsList,
+                                        distinctAggregationTraitsPostAggregate.KeyColumns, /*distinct=*/ true, ctx, node->Pos());
+        }
+
+        finalColumnOrder.clear();
+        THashMap<TString, TExprNode::TPtr> aggProjectionMap;
+        TVector<TString> finalProjection;
+
+        auto processResultColumn = [&] (TExprNode::TPtr column, const TTypeAnnotationNode* actualColumnType, TExprNode::TPtr itemLambda) {
+            TString columnName = TString(column->Content());
+
+            const auto expectedTypeNode = finalType->FindItemType(columnName);
+            if (!expectedTypeNode) {
+                YQL_CLOG(TRACE, CoreDq) << "didn't find " << columnName << " in: " << *(TTypeAnnotationNode*)finalType;
+            }
+            Y_ENSURE(expectedTypeNode);
+
+            auto lambda = TCoLambda(ctx.DeepCopyLambda(*(itemLambda)));
+
+            YQL_CLOG(TRACE, CoreDq) << "Actual type for column: " << columnName << " is: " << *actualColumnType;
+            YQL_CLOG(TRACE, CoreDq) << "Expected type for column: " << columnName << " is: " << *expectedTypeNode;
+
+            bool needPgCast = false;
+            bool convertToPg = false;
+            const TPgExprType* expectedPgType = pgSyntax ? expectedTypeNode->Cast<TPgExprType>() : nullptr;
+            ui32 actualPgTypeId = 0;
+            bool needPgCastForAgg = pgSyntax && distinctAll;
+
+            if (pgSyntax) {
+                Y_ENSURE(ExtractPgType(actualColumnType, actualPgTypeId, convertToPg, node->Pos(), ctx));
+                needPgCast = (expectedPgType->GetId() != actualPgTypeId);
+            }
+
+            auto aggregation = GetCallable(lambda.Body().Ptr(), pgSyntax ? "PgAgg" : "YqlAgg");
+            auto groupRef = GetCallable(lambda.Body().Ptr(), pgSyntax ? "PgGroupRef" : "YqlGroupRef");
+            // Eliminate aggregation or reference to a group by expression from result lambda.
+            auto aggColName = columnName;
+            if (aggregation || groupRef) {
+                if (groupRef) {
+                    aggColName = GetColumnNameFromGroupRef(groupRef, groupByKeysExpressionsMap);
+                }
+
+                // clang-format off
+                lambda = Build<TCoLambda>(ctx, node->Pos())
+                    .Args({"arg"})
+                    .Body<TCoMember>()
+                        .Struct("arg")
+                        .Name<TCoAtom>()
+                            .Value(aggColName)
+                        .Build()
+                    .Build()
+                .Done();
+                // clang-format on
+
+                needPgCastForAgg = pgSyntax;
+            }
+
+            if (convertToPg && !needPgCastForAgg) {
+                Y_ENSURE(!needPgCast,
+                         TStringBuilder() << "Conversion to PG type is different at typization (" << expectedPgType->GetId()
+                                          << ") and optimization (" << actualPgTypeId << ") stages.");
+
+                TExprNode::TPtr lambdaBody = lambda.Body().Ptr();
+                lambdaBody = ReplacePgOps(lambdaBody, ctx);
+                auto toPg = ctx.NewCallable(node->Pos(), "ToPg", {lambdaBody});
+
+                // clang-format off
+                lambda = Build<TCoLambda>(ctx, node->Pos())
+                    .Args(lambda.Args())
+                    .Body(toPg)
+                .Done();
+                // clang-format on
+            } else if (needPgCast || needPgCastForAgg) {
+
+                auto pgType =
+                    ctx.NewCallable(node->Pos(), "PgType", {ctx.NewAtom(node->Pos(), ::NPg::LookupType(expectedPgType->GetId()).Name)});
+                TExprNode::TPtr lambdaBody = lambda.Body().Ptr();
+                lambdaBody = ReplacePgOps(lambdaBody, ctx);
+                auto pgCast = ctx.NewCallable(node->Pos(), "PgCast", {lambdaBody, pgType});
+
+                // clang-format off
+                lambda = Build<TCoLambda>(ctx, node->Pos())
+                    .Args(lambda.Args())
+                    .Body(pgCast)
+                .Done();
+                // clang-format on
+            }
+
+            if (resultElementCounters.contains(columnName)) {
+                resultElementCounters[columnName] += 1;
+                columnName = columnName + "_generated_" + std::to_string(resultElementCounters.at(columnName));
+            } else {
+                resultElementCounters[columnName] = 1;
+            }
+
+            finalColumnOrder.push_back(columnName);
+            auto variable = Build<TCoAtom>(ctx, node->Pos()).Value(columnName).Done();
+
+            // clang-format off
+            resultElements.push_back(Build<TKqpOpMapElementLambda>(ctx, node->Pos())
+                .Input(resultExpr)
+                .Variable(variable)
+                .Lambda<TCoLambda>()
+                    .Args({"_map_arg_"})
+                    .Body<TExprApplier>()
+                        .Apply(TCoLambda(lambda))
+                        .With(TCoLambda(lambda).Args().Arg(0), "_map_arg_")
+                    .Build()
+                .Build()
+            .Done().Ptr());
+            // clang-format on
+            
+            finalProjection.push_back(columnName);
+        };
+
+        // Process result items
+        for (auto resultItem : result->Child(1)->Children()) {
+            auto maybeColumn = resultItem->Child(0);
+            auto itemType = resultItem->GetTypeAnn();
+
+            // We can have a single column or mutlitple columns in the item
+            if (maybeColumn->IsAtom()) {
+                processResultColumn(maybeColumn, itemType, resultItem->Child(2));
+            }
+            // In case of a list of columns, we have different cases:
+            // - Each column can be a list of input/output column names
+            // - Each column is an atom, and the input column can be found in the struct
+            // - Each column is an atom, and there is no input column (lambda return arg)
+
+            else if (maybeColumn->IsList()) {
+                for (size_t i=0; i<maybeColumn->ChildrenSize(); i++) {
+                    auto columnSpec = maybeColumn->Child(i);
+                    TExprNode::TPtr outputColumn;
+                    TExprNode::TPtr inputColumn;
+                    const TTypeAnnotationNode* columnType;
+
+                    // Output column is given as the second element of the list
+                    if (columnSpec->IsList()) {
+                        outputColumn = columnSpec->Child(0);
+                        inputColumn = columnSpec->Child(1);
+                        columnType = itemType->Cast<TStructExprType>()->FindItemType(inputColumn->Content());
+                    }
+                    else {
+                        outputColumn = columnSpec;
+                        auto starLambda = resultItem->Child(2);
+                        Y_ENSURE(starLambda->IsLambda());
+                        // Output column can be found in the struct inside lambda
+                        if (starLambda->Child(1)->IsCallable("AsStruct")) {
+                            auto member = starLambda->Child(1)->Child(i);
+                            inputColumn = member->Child(1)->Child(1);
+                        } 
+                        // Input is the same as output
+                        else {
+                            inputColumn = outputColumn;
+                        }
+                        columnType = itemType->Cast<TStructExprType>()->FindItemType(outputColumn->Content());
+                    }
+
+                    auto mapLambda = Build<TCoLambda>(ctx, node->Pos())
+                        .Args({"arg"})
+                        .Body<TCoMember>()
+                            .Struct("arg")
+                            .Name(inputColumn)
+                        .Build()
+                        .Done().Ptr();
+
+                    if (!columnType) {
+                        YQL_CLOG(TRACE, CoreDq) << "didn't find " << inputColumn->Content() << " in: " << *(TTypeAnnotationNode*)itemType;
+                    }
+                    Y_ENSURE(columnType);
+
+                    processResultColumn(outputColumn, columnType, mapLambda);
+                }
+            } else {
+                Y_ENSURE(false, "Uknown entity in result items");
+            }
+        }
+
+        // Sort clause may contain extra columns that we need to keep in the projection in order for sort to work
+        auto sort = GetSetting(setItem->Tail(), "sort");
+        if (sort) {
+            auto sortDependencies = GetSortDependencies(sort, groupByKeysExpressionsMap, pgSyntax);
+            for (const auto& iu : sortDependencies) {
+                if (std::find(finalProjection.begin(), finalProjection.end(), iu.GetFullName()) == finalProjection.end()) {
+                    // clang-format off
+                    resultElements.push_back(Build<TKqpOpMapElementRename>(ctx, node->Pos())
+                        .Input(resultExpr)
+                        .Variable().Value(iu.GetFullName()).Build()
+                        .From().Value(iu.GetFullName()).Build()
+                    .Done().Ptr());
+                    // clang-format on
+                }
+            }
+        }
+
+        // clang-format off
+        auto setItemPtr = Build<TKqpOpMap>(ctx, node->Pos())
+            .Input(resultExpr)
+            .MapElements()
+                .Add(resultElements)
+            .Build()
+            .Project()
+                .Value("true")
+            .Build()
+        .Done().Ptr();
+        // clang-format on
+
+        if (sort) {
+            setItemPtr = BuildSort(setItemPtr, sort, groupByKeysExpressionsMap, ctx, pgSyntax);
+
+            TVector<TExprNode::TPtr> projectElements;
+
+            for (const auto& column : finalProjection) {
+                // clang-format off
+                projectElements.push_back(Build<TKqpOpMapElementRename>(ctx, node->Pos())
+                    .Input(setItemPtr)
+                    .Variable().Value(column).Build()
+                    .From().Value(column).Build()
+                .Done().Ptr());
+                // clang-format on
+            }
+
+            // clang-format off
+            setItemPtr = Build<TKqpOpMap>(ctx, node->Pos())
+                .Input(setItemPtr)
+                .MapElements()
+                    .Add(projectElements)
+                .Build()
+                .Project()
+                    .Value("true")
+                .Build()
+                .Ordered()
+                    .Value("True")
+                .Build()
+            .Done().Ptr();
+            // clang-format on
+        }
+
+        setItemsResults.push_back(setItemPtr);
+    }
+
+    auto setOps = GetSetting(node->Head(), "set_ops");
+    Y_ENSURE(setOps && setItemsResults.size());
+
+    auto setOpsList = setOps->TailPtr();
+    TExprNode::TPtr opResult = setItemsResults.front();
+    for (ui32 i = 0, end = setOpsList->ChildrenSize(), setItemsIndex = 0, opsInputCount = 0; i < end; ++i) {
+        if (setOpsList->ChildPtr(i)->Content() == "push") {
+            ++opsInputCount;
+            continue;
+        }
+        Y_ENSURE(setOpsList->ChildPtr(i)->Content() == "union_all");
+        Y_ENSURE(opsInputCount <= 2);
+
+        TExprNode::TPtr leftInput;
+        TExprNode::TPtr rightInput;
+        if (opsInputCount == 2) {
+            Y_ENSURE(setItemsIndex + 1 < end);
+            leftInput = setItemsResults[setItemsIndex++];
+            rightInput = setItemsResults[setItemsIndex++];
+        } else {
+            Y_ENSURE(setItemsIndex < end);
+            leftInput = opResult;
+            rightInput = setItemsResults[setItemsIndex++];
+        }
+
+        // clang-format off
+        opResult = Build<TKqpOpUnionAll>(ctx, node->Pos())
+            .LeftInput(leftInput)
+            .RightInput(rightInput)
+        .Done().Ptr();
+        // clang-format on
+
+        // Count again.
+        opsInputCount = 0;
+    }
+
+    auto sort = GetSetting(node->Head(), "sort");
+    if (sort) {
+        opResult = BuildSort(opResult, sort, {}, ctx, pgSyntax);
+    }
+
+    TVector<TCoAtom> columnAtomList;
+    for (const auto& column : finalColumnOrder) {
+        columnAtomList.push_back(Build<TCoAtom>(ctx, node->Pos()).Value(column).Done());
+    }
+    auto columnOrder = Build<TCoAtomList>(ctx, node->Pos()).Add(columnAtomList).Done().Ptr();
+
+    // clang-format off
+    auto opRoot = Build<TKqpOpRoot>(ctx, node->Pos())
+        .Input(opResult)
+        .ColumnOrder(columnOrder)
+        .PgSyntax().Value(pgSyntax).Build()
+    .Done().Ptr();
+    // clang-format on
+
+    return NormalizeMemberNames(opRoot, ctx, node->Pos());
+}
+
+}
+}

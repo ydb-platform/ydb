@@ -16,14 +16,14 @@ using namespace NDom;
 
 class TParse: public TBoxedValue {
 public:
-    TParse(TSourcePosition pos)
+    explicit TParse(TSourcePosition pos)
         : Pos_(pos)
     {
     }
 
     static const TStringRef& Name() {
-        static auto name = TStringRef::Of("Parse");
-        return name;
+        static auto Name = TStringRef::Of("Parse");
+        return Name;
     }
 
     static bool DeclareSignature(

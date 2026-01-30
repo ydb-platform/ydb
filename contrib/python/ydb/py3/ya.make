@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(3.21.12)
+VERSION(3.24.1)
 
 LICENSE(Apache-2.0)
 
@@ -30,6 +30,8 @@ PY_SRCS(
     ydb/_grpc/common/__init__.py
     ydb/_grpc/grpcwrapper/__init__.py
     ydb/_grpc/grpcwrapper/common_utils.py
+    ydb/_grpc/grpcwrapper/ydb_coordination.py
+    ydb/_grpc/grpcwrapper/ydb_coordination_public_types.py
     ydb/_grpc/grpcwrapper/ydb_query.py
     ydb/_grpc/grpcwrapper/ydb_query_public_types.py
     ydb/_grpc/grpcwrapper/ydb_scheme.py
@@ -54,6 +56,12 @@ PY_SRCS(
     ydb/aio/__init__.py
     ydb/aio/_utilities.py
     ydb/aio/connection.py
+    ydb/aio/coordination/__init__.py
+    ydb/aio/coordination/client.py
+    ydb/aio/coordination/reconnector.py
+    ydb/aio/coordination/semaphore.py
+    ydb/aio/coordination/session.py
+    ydb/aio/coordination/stream.py
     ydb/aio/credentials.py
     ydb/aio/driver.py
     ydb/aio/iam.py
@@ -70,6 +78,11 @@ PY_SRCS(
     ydb/auth_helpers.py
     ydb/connection.py
     ydb/convert.py
+    ydb/coordination/__init__.py
+    ydb/coordination/base.py
+    ydb/coordination/client.py
+    ydb/coordination/semaphore.py
+    ydb/coordination/session.py
     ydb/credentials.py
     ydb/dbapi/__init__.py
     ydb/dbapi/connection.py

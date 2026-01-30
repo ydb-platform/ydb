@@ -5,7 +5,9 @@
 #include <yt/yql/providers/yt/lib/yson_helpers/yson_helpers.h>
 #include <yt/yql/providers/yt/common/yql_names.h>
 #include <yt/yql/providers/yt/codec/yt_codec.h>
+#include <yt/yql/providers/yt/expr_nodes/yql_yt_expr_nodes.h>
 #include <yql/essentials/providers/common/gateway/yql_provider_gateway.h>
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/core/issue/yql_issue.h>
 #include <yql/essentials/core/yql_type_annotation.h>
 #include <yql/essentials/minikql/aligned_page_pool.h>
@@ -21,6 +23,7 @@
 #include <library/cpp/threading/future/future.h>
 
 #include <util/string/split.h>
+#include <util/string/type.h>
 #include <util/system/env.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/hash.h>
@@ -32,6 +35,8 @@
 #include <util/generic/algorithm.h>
 
 namespace NYql {
+
+using namespace NNodes;
 
 namespace {
 EYqlIssueCode IssueCodeForYtError(const NYT::TYtError& error) {
@@ -655,6 +660,238 @@ void FillResultFromErrorResponse(NCommon::TOperationResult& result, const NYT::T
     result.AddIssue(rootIssue);
 }
 
+void GetIntegerConstraints(const TExprNode::TPtr& column, bool& isSigned, ui64& minValueAbs, ui64& maxValueAbs, bool& isOptional) {
+    const TDataExprType* dataType = nullptr;
+    const bool columnHasDataType = IsDataOrOptionalOfData(column->GetTypeAnn(), isOptional, dataType);
+    YQL_ENSURE(columnHasDataType, "YtQLFilter: unsupported type of column " << column->Dump());
+    YQL_ENSURE(dataType);
+    const EDataSlot dataSlot = dataType->Cast<TDataExprType>()->GetSlot();
+
+    // looks like AllowIntegralConversion (may consider some refactoring)
+    if (dataSlot == EDataSlot::Uint8) {
+        isSigned = false;
+        minValueAbs = 0;
+        maxValueAbs = Max<ui8>();
+    }
+    else if (dataSlot == EDataSlot::Uint16) {
+        isSigned = false;
+        minValueAbs = 0;
+        maxValueAbs = Max<ui16>();
+    }
+    else if (dataSlot == EDataSlot::Uint32) {
+        isSigned = false;
+        minValueAbs = 0;
+        maxValueAbs = Max<ui32>();
+    }
+    else if (dataSlot == EDataSlot::Uint64) {
+        isSigned = false;
+        minValueAbs = 0;
+        maxValueAbs = Max<ui64>();
+    }
+    else if (dataSlot == EDataSlot::Int8) {
+        isSigned = true;
+        minValueAbs = (ui64)Max<i8>() + 1;
+        maxValueAbs = (ui64)Max<i8>();
+    }
+    else if (dataSlot == EDataSlot::Int16) {
+        isSigned = true;
+        minValueAbs = (ui64)Max<i16>() + 1;
+        maxValueAbs = (ui64)Max<i16>();
+    }
+    else if (dataSlot == EDataSlot::Int32) {
+        isSigned = true;
+        minValueAbs = (ui64)Max<i32>() + 1;
+        maxValueAbs = (ui64)Max<i32>();
+    }
+    else if (dataSlot == EDataSlot::Int64) {
+        isSigned = true;
+        minValueAbs = (ui64)Max<i64>() + 1;
+        maxValueAbs = (ui64)Max<i64>();
+    } else {
+        YQL_ENSURE(false, "unexpected integer node type");
+    }
+}
+void QuoteColumnForQL(const TStringBuf& columnName, TStringBuilder& result) {
+    result << '`';
+    if (!columnName.Contains('`')) {
+        result << columnName;
+    } else {
+        for (const auto c : columnName) {
+            if (c == '`') {
+                result << "\\`";
+            } else {
+                result << c;
+            }
+        }
+    }
+    result << '`';
+}
+
+void ConvertComparisonForQL(const TStringBuf& opName, TStringBuilder& result) {
+    if (opName == "==") {
+        result << '=';
+    } else {
+        result << opName;
+    }
+}
+
+void GenerateInputQueryIntegerComparison(const TStringBuf& opName, const TExprNode::TPtr& intColumn, const TExprNode::TPtr& intValue, const std::optional<bool>& nullValue, TStringBuilder& result) {
+    if (TMaybeNode<TCoNull>(intValue) || TMaybeNode<TCoNothing>(intValue)) {
+        YQL_ENSURE(nullValue.has_value(), "YtQLFilter: optional type without coalesce is not supported");
+        if (nullValue.value()) {
+            result << "TRUE";
+        } else {
+            result << "FALSE";
+        }
+        return;
+    }
+
+    TMaybeNode<TCoIntegralCtor> maybeIntValue;
+    if (auto maybeJustValue = TMaybeNode<TCoJust>(intValue)) {
+        maybeIntValue = TMaybeNode<TCoIntegralCtor>(maybeJustValue.Cast().Input().Ptr());
+    } else {
+        maybeIntValue = TMaybeNode<TCoIntegralCtor>(intValue);
+    }
+    YQL_ENSURE(maybeIntValue);
+
+    bool columnsIsSigned;
+    ui64 minValueAbs;
+    ui64 maxValueAbs;
+    bool columnIsOptional;
+    GetIntegerConstraints(intColumn, columnsIsSigned, minValueAbs, maxValueAbs, columnIsOptional);
+    YQL_ENSURE(!columnIsOptional || columnIsOptional && nullValue.has_value(), "YtQLFilter: optional type without coalesce is not supported");
+
+    bool hasSign;
+    bool isSigned;
+    ui64 valueAbs;
+    ExtractIntegralValue(maybeIntValue.Ref(), false, hasSign, isSigned, valueAbs);
+
+    std::optional<bool> constantFilter;
+    if (!hasSign && valueAbs > maxValueAbs) {
+        // Value is greater than maximum.
+        if (opName == ">" || opName == ">=" || opName == "==") {
+            constantFilter = false;
+        } else {
+            constantFilter = true;
+        }
+    } else if (hasSign && valueAbs > minValueAbs) {
+        // Value is less than minimum.
+        if (opName == "<" || opName == "<=" || opName == "==") {
+            constantFilter = false;
+        } else {
+            constantFilter = true;
+        }
+    }
+
+    const auto columnName = intColumn->ChildPtr(1)->Content();
+    if (!constantFilter.has_value()) {
+        // Value is in the range, comparison is not constant.
+        if (columnIsOptional) {
+            const bool isLess = opName == "<" || opName == "<=";
+            if (isLess && !nullValue.value()) {
+                // QL will handle 'x [operation] NULL' as TRUE here, but we need FALSE.
+                QuoteColumnForQL(columnName, result);
+                result << " != NULL AND ";
+            } else if (!isLess && nullValue.value()) {
+                // QL will handle 'x [operation] NULL' as FALSE here, but we need TRUE.
+                QuoteColumnForQL(columnName, result);
+                result << " = NULL OR ";
+            }
+        }
+        QuoteColumnForQL(columnName, result);
+        result << " ";
+        ConvertComparisonForQL(opName, result);
+        const auto valueStr = maybeIntValue.Cast().Literal().Value();
+        result << " " << valueStr;
+    } else if (constantFilter.value()) {
+        // Value is out of the range, comparison is always TRUE.
+        if (columnIsOptional && !nullValue.value()) {
+            // Handle comparison with NULL as FALSE.
+            QuoteColumnForQL(columnName, result);
+            result << " IS NOT NULL";
+        } else {
+            result << "TRUE";
+        }
+    } else {
+        // Value is out of the range, comparison is always FALSE.
+        if (columnIsOptional && nullValue.value()) {
+            // Handle comparison with NULL as TRUE.
+            QuoteColumnForQL(columnName, result);
+            result << " IS NULL";
+        } else {
+            result << "FALSE";
+        }
+    }
+}
+
+void GenerateInputQueryComparison(const TCoCompare& op, const std::optional<bool>& nullValue, TStringBuilder& result) {
+    YQL_ENSURE(op.Ref().IsCallable({"<", "<=", ">", ">=", "==", "!="}));
+    const auto left = op.Left().Ptr();
+    const auto right = op.Right().Ptr();
+    if (left->IsCallable("Member")) {
+        GenerateInputQueryIntegerComparison(op.CallableName(), left, right, nullValue, result);
+    } else {
+        YQL_ENSURE(right->IsCallable("Member"));
+        auto invertedOp = op.CallableName();
+        if (invertedOp == "<") {
+            invertedOp = ">";
+        } else if (invertedOp == "<=") {
+            invertedOp = ">=";
+        } else if (invertedOp == ">") {
+            invertedOp = "<";
+        } else if (invertedOp == ">=") {
+            invertedOp = "<=";
+        }
+        GenerateInputQueryIntegerComparison(invertedOp, right, left, nullValue, result);
+    }
+}
+
+void GenerateInputQueryWhereExpression(const TExprNode::TPtr& node, TStringBuilder& result) {
+    if (const auto maybeCompare = TMaybeNode<TCoCompare>(node)) {
+        GenerateInputQueryComparison(maybeCompare.Cast(), {}, result);
+    } else if (node->IsCallable("Not")) {
+        const auto child = node->ChildPtr(0);
+        if (child->IsCallable("Exists")) {
+            // Do not generate NOT (x IS NOT NULL).
+            result << "(";
+            GenerateInputQueryWhereExpression(child->ChildPtr(0), result);
+            result << ") IS NULL";
+        } else {
+            result << "NOT (";
+            GenerateInputQueryWhereExpression(child, result);
+            result << ")";
+        }
+    } else if (node->IsCallable("Exists")) {
+        result << "(";
+        GenerateInputQueryWhereExpression(node->ChildPtr(0), result);
+        result << ") IS NOT NULL";
+    } else if (node->IsCallable({"And", "Or"})) {
+        const TStringBuf op = node->IsCallable("And") ? "AND" : "OR";
+        result << "(";
+        GenerateInputQueryWhereExpression(node->Child(0), result);
+        result << ")";
+        const auto size = node->ChildrenSize();
+        for (TExprNode::TListType::size_type i = 1U; i < size; ++i) {
+            result << " " << op << " (";
+            GenerateInputQueryWhereExpression(node->Child(i), result);
+            result << ")";
+        };
+    } else if (node->IsCallable("Coalesce")) {
+        YQL_ENSURE(node->ChildrenSize() == 2);
+        const auto op = TMaybeNode<TCoCompare>(node->Child(0)).Cast();
+        const auto nullValueStr = TMaybeNode<TCoBool>(node->Child(1)).Cast().Literal().Value();
+        const std::optional<bool> nullValue(IsTrue(nullValueStr));
+        GenerateInputQueryComparison(op, nullValue, result);
+    } else if (const auto maybeBool = TMaybeNode<TCoBool>(node)) {
+        result << maybeBool.Cast().Literal().Value();
+    } else if (node->IsCallable("Member")) {
+        const auto columnName = node->ChildPtr(1)->Content();
+        QuoteColumnForQL(columnName, result);
+    } else {
+        YQL_ENSURE(false, "unexpected node type");
+    }
+}
+
 } // unnamed
 
 void FillResultFromCurrentException(NCommon::TOperationResult& result, TPosition pos, bool shortErrors) {
@@ -690,6 +927,92 @@ void EnsureSpecDoesntUseNativeYtTypes(const NYT::TNode& spec, TStringBuf tableNa
             throw yexception() << "Cannot " << (read ? "read" : "modify") << " table \"" << tableName << "\" with type_v3 schema using yson codec";
         }
     }
+}
+
+TString GenerateInputQuery(const TExprNode::TPtr& qlFilterNode) {
+    YQL_ENSURE(qlFilterNode && qlFilterNode->IsCallable("YtQLFilter"));
+    TStringBuilder result;
+    result << "* WHERE ";
+    const TYtQLFilter qlFilter(qlFilterNode);
+    GenerateInputQueryWhereExpression(qlFilter.Predicate().Body().Ptr(), result);
+    YQL_CLOG(INFO, ProviderYt)  << __FUNCTION__ << ": " << result;
+    return result;
+}
+
+TString UploadBinarySnapshotToYt(
+    const TString& remotePath,
+    NYT::IClientPtr client,
+    NYT::ITransactionPtr snapshotTx,
+    const TString& localPath,
+    TDuration expirationInterval,
+    const TMaybe<NYT::TNode>& transactionSpec)
+{
+    NYT::ILockPtr fileLock;
+    NYT::ITransactionPtr lockTx;
+    NYT::ILockPtr waitLock;
+
+    for (bool uploaded = false; ;) {
+        try {
+            YQL_CLOG(INFO, ProviderYt) << "Taking snapshot of " << remotePath;
+            fileLock = snapshotTx->Lock(remotePath, NYT::ELockMode::LM_SNAPSHOT);
+            break;
+        } catch (const NYT::TErrorResponse& e) {
+            // Yt returns NoSuchTransaction as inner issue for ResolveError
+            if (!e.IsResolveError() || e.IsNoSuchTransaction()) {
+                throw;
+            }
+        }
+        YQL_ENSURE(!uploaded, "Fail to take snapshot");
+
+        NYT::TStartTransactionOptions transactionOptions;
+        if (transactionSpec.Defined()) {
+            transactionOptions.Attributes(*transactionSpec);
+        }
+
+        if (!lockTx) {
+            auto pos = remotePath.rfind("/");
+            auto dir = remotePath.substr(0, pos);
+            auto childKey = remotePath.substr(pos + 1) + ".lock";
+
+            lockTx = client->StartTransaction(transactionOptions);
+            YQL_CLOG(INFO, ProviderYt) << "Waiting for " << dir << '/' << childKey;
+            waitLock = lockTx->Lock(dir, NYT::ELockMode::LM_SHARED, NYT::TLockOptions().Waitable(true).ChildKey(childKey));
+            waitLock->GetAcquiredFuture().GetValueSync();
+            // Try to take snapshot again after waiting lock. Someone else may complete uploading the file at the moment
+            continue;
+        }
+        // Lock is already taken and file still doesn't exist
+        YQL_CLOG(INFO, ProviderYt) << "Start uploading " << localPath << " to " << remotePath;
+        Y_SCOPE_EXIT(localPath, remotePath) {
+            YQL_CLOG(INFO, ProviderYt) << "Complete uploading " << localPath << " to " << remotePath;
+        };
+        auto uploadTx = client->StartTransaction(transactionOptions);
+        try {
+            auto out = uploadTx->CreateFileWriter(NYT::TRichYPath(remotePath).Executable(true), NYT::TFileWriterOptions().CreateTransaction(false));
+            TIFStream in(localPath);
+            TransferData(&in, out.Get());
+            out->Finish();
+            uploadTx->Commit();
+        } catch (...) {
+            uploadTx->Abort();
+            throw;
+        }
+        // Continue with taking snapshot lock after uploading
+        uploaded = true;
+    }
+
+    if (expirationInterval) {
+        TString expirationTime = (Now() + expirationInterval).ToStringUpToSeconds();
+        try {
+            YQL_CLOG(INFO, ProviderYt) << "Prolonging expiration time for " << remotePath << " up to " << expirationTime;
+            client->Set(remotePath + "/@expiration_time", expirationTime);
+        } catch (...) {
+            // log and ignore the error
+            YQL_CLOG(ERROR, ProviderYt) << "Error setting expiration time for " << remotePath << ": " << CurrentExceptionMessage();
+        }
+    }
+
+    return GetGuidAsString(fileLock->GetLockedNodeId());
 }
 
 } // NYql

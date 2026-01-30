@@ -15,30 +15,24 @@ namespace types
   };
 
   template <class T>
-  auto fast_begin(T const &e) ->
-      typename std::enable_if<has_fast_iterator<T>::value,
-                              decltype(e.begin(fast{}))>::type
+  auto fast_begin(T const &e)
+      -> std::enable_if_t<has_fast_iterator<T>::value, decltype(e.begin(fast{}))>
   {
     return e.begin(fast{});
   }
   template <class T>
-  auto fast_begin(T const &e) ->
-      typename std::enable_if<!has_fast_iterator<T>::value,
-                              decltype(e.begin())>::type
+  auto fast_begin(T const &e) -> std::enable_if_t<!has_fast_iterator<T>::value, decltype(e.begin())>
   {
     return e.begin();
   }
   template <class T>
-  auto fast_end(T const &e) ->
-      typename std::enable_if<has_fast_iterator<T>::value,
-                              decltype(e.end(fast{}))>::type
+  auto fast_end(T const &e)
+      -> std::enable_if_t<has_fast_iterator<T>::value, decltype(e.end(fast{}))>
   {
     return e.end(fast{});
   }
   template <class T>
-  auto fast_end(T const &e) ->
-      typename std::enable_if<!has_fast_iterator<T>::value,
-                              decltype(e.end())>::type
+  auto fast_end(T const &e) -> std::enable_if_t<!has_fast_iterator<T>::value, decltype(e.end())>
   {
     return e.end();
   }
@@ -48,8 +42,7 @@ namespace types
   template <class E>
   struct nditerator
       : public std::iterator<std::random_access_iterator_tag,
-                             typename std::remove_reference<
-                                 decltype(std::declval<E &>().fast(0))>::type> {
+                             std::remove_reference_t<decltype(std::declval<E &>().fast(0))>> {
     E &data;
     long index;
     nditerator(E &data, long index);
@@ -66,6 +59,9 @@ namespace types
     bool operator!=(nditerator<E> const &other) const;
     bool operator==(nditerator<E> const &other) const;
     bool operator<(nditerator<E> const &other) const;
+    bool operator>(nditerator<E> const &other) const;
+    bool operator<=(nditerator<E> const &other) const;
+    bool operator>=(nditerator<E> const &other) const;
     nditerator &operator=(nditerator const &other);
   };
 
@@ -75,8 +71,7 @@ namespace types
   template <class E>
   struct const_nditerator
       : public std::iterator<std::random_access_iterator_tag,
-                             typename std::remove_reference<
-                                 decltype(std::declval<E &>().fast(0))>::type> {
+                             std::remove_reference_t<decltype(std::declval<E &>().fast(0))>> {
     E const &data;
     long index;
     const_nditerator(E const &data, long index);
@@ -92,13 +87,15 @@ namespace types
     bool operator!=(const_nditerator<E> const &other) const;
     bool operator==(const_nditerator<E> const &other) const;
     bool operator<(const_nditerator<E> const &other) const;
+    bool operator>(const_nditerator<E> const &other) const;
+    bool operator<=(const_nditerator<E> const &other) const;
+    bool operator>=(const_nditerator<E> const &other) const;
     const_nditerator &operator=(const_nditerator const &other);
   };
 #ifdef USE_XSIMD
   template <class E>
   struct const_simd_nditerator
-      : public std::iterator<std::random_access_iterator_tag,
-                             xsimd::batch<typename E::dtype>> {
+      : public std::iterator<std::random_access_iterator_tag, xsimd::batch<typename E::dtype>> {
 
     using vector_type = typename xsimd::batch<typename E::dtype>;
     typename E::dtype const *data;
@@ -115,6 +112,9 @@ namespace types
     bool operator!=(const_simd_nditerator const &other) const;
     bool operator==(const_simd_nditerator const &other) const;
     bool operator<(const_simd_nditerator const &other) const;
+    bool operator>(const_simd_nditerator const &other) const;
+    bool operator<=(const_simd_nditerator const &other) const;
+    bool operator>=(const_simd_nditerator const &other) const;
     const_simd_nditerator &operator=(const_simd_nditerator const &other);
     void store(xsimd::batch<typename E::dtype> const &);
   };
@@ -132,8 +132,7 @@ namespace types
     {
       return *this;
     }
-    const_simd_nditerator_nostep &
-    operator=(const_simd_nditerator_nostep const &other) = default;
+    const_simd_nditerator_nostep &operator=(const_simd_nditerator_nostep const &other) = default;
   };
 #endif
 
@@ -153,8 +152,7 @@ namespace types
   template <bool is_strided>
   struct make_const_nditerator {
     template <class T>
-    auto operator()(T const &self,
-                    long i) -> decltype(const_nditerator<T>(self, i)) const;
+    auto operator()(T const &self, long i) -> decltype(const_nditerator<T>(self, i)) const;
   };
 
   template <>

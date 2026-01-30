@@ -6,12 +6,24 @@ option java_package = "ru.yandex.kikimr.proto";
 
 import "google/protobuf/any.proto";
 import "ydb/core/protos/flat_scheme_op.proto";
+
+import "ydb/core/protos/kqp_tablemetadata.proto";
 import "ydb/library/mkql_proto/protos/minikql.proto";
 import "ydb/library/yql/dq/proto/dq_tasks.proto";
 import "ydb/public/api/protos/ydb_table.proto";
 import "ydb/public/api/protos/ydb_value.proto";
 import "ydb/core/protos/index_builder.proto";
 import "ydb/core/protos/sys_view_types.proto";
+
+enum EIsolationLevel {
+    ISOLATION_LEVEL_UNDEFINED = 0;
+    ISOLATION_LEVEL_SERIALIZABLE = 1;
+    ISOLATION_LEVEL_READ_COMMITTED = 2;
+    ISOLATION_LEVEL_READ_UNCOMMITTED = 3;
+    ISOLATION_LEVEL_READ_STALE = 4;
+    ISOLATION_LEVEL_SNAPSHOT_RO = 5;
+    ISOLATION_LEVEL_SNAPSHOT_RW = 6;
+};
 
 message TKqpPhyExternalBinding {
 }
@@ -123,32 +135,11 @@ message TKqpPhyParamElementValue {
     uint32 ElementIndex = 2;
 }
 
-message TKqpPhyLiteralValue {
-    NKikimrMiniKQL.TType Type = 1;
-    NKikimrMiniKQL.TValue Value = 2;
-}
-
-message TKqpPhyRowsList {
-    message TValue {
-        oneof Kind {
-            TKqpPhyParamValue ParamValue = 1;
-            TKqpPhyLiteralValue LiteralValue = 2;
-        }
-    }
-
-    message TRow {
-        map<string, TValue> Columns = 1;
-    }
-
-    repeated TRow Rows = 1;
-}
-
 message TKqpPhyValue {
     oneof Kind {
         TKqpPhyParamValue ParamValue = 1;               // any type here (value, list of structs, ...)
         TKqpPhyParamElementValue ParamElementValue = 2; // any type here (value, list of structs, ...)
-        TKqpPhyRowsList RowsList = 3;                   // list of structs
-        TKqpPhyLiteralValue LiteralValue = 4;          // value
+        Ydb.TypedValue LiteralValue = 4;          // value
     }
 }
 
@@ -224,6 +215,8 @@ message TKqpPhyOpReadRanges {
     TKqpPhyValue ItemsLimit = 2;
     // Reverse sign, i.e. if user ask ORDER BY ... DESC we need to read table in reverse direction
     bool Reverse = 3;
+    // Vector top-K pushdown settings for brute force vector search
+    TKqpPhyVectorTopK VectorTopK = 4;
 }
 
 message TKqpPhyTableOperation {
@@ -299,7 +292,18 @@ enum EStreamLookupStrategy {
     LOOKUP = 1;
     JOIN = 2;
     SEMI_JOIN = 3;
+    UNIQUE = 4;
 };
+
+message TKqpPhyVectorTopK {
+    // Top-K pushdown by vector distance between Column and TargetVector
+    // Where TargetVector and Limit may be runtime expressions
+    uint32 Column = 1;
+    Ydb.Table.VectorIndexSettings Settings = 2;
+    TKqpPhyValue TargetVector = 3;
+    TKqpPhyValue Limit = 4;
+    repeated uint32 DistinctColumns = 5;
+}
 
 message TKqpPhyCnStreamLookup {
     TKqpPhyTableId Table = 1;
@@ -312,6 +316,7 @@ message TKqpPhyCnStreamLookup {
     bool AllowNullKeys = 8;
     uint32 AllowNullKeysPrefixSize = 9;
     bool IsTableImmutable = 10;
+    TKqpPhyVectorTopK VectorTopK = 11;
 }
 
 message TKqpPhyCnVectorResolve {
@@ -325,11 +330,13 @@ message TKqpPhyCnVectorResolve {
     bytes OutputType = 8;
     uint32 ClusterColumnOutPos = 9;
     optional uint32 RootClusterColumnIndex = 10;
+    optional uint32 OverlapClusters = 11;
+    optional double OverlapRatio = 12;
 }
 
 message TKqpPhyCnSequencer {
     TKqpPhyTableId Table = 1;
-    repeated string Columns = 2;
+    repeated NKikimrKqp.TKqpColumnMetadataProto Columns = 2;
     repeated string AutoIncrementColumns = 3;
     bytes InputType = 4;
     bytes OutputType = 5;
@@ -361,6 +368,7 @@ message TKqpPhyCnDqSourceStreamLookup {
     uint64 CacheTtlSeconds = 13;
     uint64 MaxDelayedRows = 14;
     bool IsMultiGet = 15;
+    bool IsMultiMatches = 16;
 }
 
 message TKqpPhyConnection {
@@ -386,6 +394,38 @@ message TKqpPhyConnection {
     };
 }
 
+message TKqpFullTextSource {
+    message TKqpQuerySettings {
+        repeated NKikimrKqp.TKqpColumnMetadataProto Columns = 1;
+        TKqpPhyValue QueryValue = 2;
+    }
+
+    message TIndexTable {
+        optional NKqpProto.TKqpPhyTableId Table = 1;
+        repeated NKikimrKqp.TKqpColumnMetadataProto KeyColumns = 2;
+        repeated NKikimrKqp.TKqpColumnMetadataProto Columns = 3;
+    }
+
+    optional NKqpProto.TKqpPhyTableId Table = 1;
+    optional string Index = 2;
+    optional NKikimrSchemeOp.TFulltextIndexDescription IndexDescription = 3;
+
+    repeated NKikimrKqp.TKqpColumnMetadataProto KeyColumns = 4;
+    repeated NKikimrKqp.TKqpColumnMetadataProto Columns = 5;
+
+    repeated TIndexTable IndexTables = 6;
+
+    optional TKqpQuerySettings QuerySettings = 7;
+
+    TKqpPhyValue SkipLimit = 8;
+    TKqpPhyValue TakeLimit = 9;
+
+    TKqpPhyValue K1Factor = 10;
+    TKqpPhyValue BFactor = 11;
+    TKqpPhyValue QueryMode = 12;
+    TKqpPhyValue MinimumShouldMatch = 13;
+}
+
 message TKqpReadRangesSource {
     TKqpPhyTableId Table = 1;
     repeated TKqpPhyColumnId Columns = 2;
@@ -401,6 +441,8 @@ message TKqpReadRangesSource {
     repeated string SkipNullKeys = 8;
     uint64 SequentialInFlightShards = 9;
     bool IsTableImmutable = 10;
+    // Vector top-K pushdown for brute force vector search
+    TKqpPhyVectorTopK VectorTopK = 11;
 }
 
 message TKqpExternalSource {
@@ -422,6 +464,7 @@ message TKqpSource {
     oneof Type {
         TKqpReadRangesSource ReadRangesSource = 3;
         TKqpExternalSource ExternalSource = 4;
+        TKqpFullTextSource FullTextSource = 5;
     }
 }
 
@@ -472,6 +515,7 @@ message TKqpPhyResult {
     bool IsStream = 3;
     repeated string ColumnHints = 4;
     optional uint32 QueryResultIndex = 5;
+    optional bool CanSkipChannel = 6;
 }
 
 message TKqpAnalyzeOperation {
@@ -564,6 +608,7 @@ message TKqpSchemeOperation {
         NKikimrSchemeOp.TModifyScheme CreateSecret = 59;
         NKikimrSchemeOp.TModifyScheme AlterSecret = 60;
         NKikimrSchemeOp.TModifyScheme DropSecret = 61;
+        NKikimrSchemeOp.TModifyScheme TruncateTable = 62;
     }
 }
 
@@ -587,6 +632,7 @@ message TKqpPhyTx {
     TKqpSchemeOperation SchemeOperation = 8;
     repeated string SecretNames = 9;
     bool EnableShuffleElimination = 10;
+    uint32 DqChannelVersion = 11;
 }
 
 message TKqpTableInfo {
@@ -642,4 +688,7 @@ message TKqpPhyQuery {
     optional bool EnableHtapTx = 14;
     optional bool ForceImmediateEffectsExecution = 15;
     uint32 LangVer = 16;
+    optional bool DisableCheckpoints = 17;
+    optional bool EnableWatermarks = 18;
+    optional EIsolationLevel DefaultTxMode = 19;
 }

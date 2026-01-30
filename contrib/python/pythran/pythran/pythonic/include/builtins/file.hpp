@@ -12,8 +12,7 @@ namespace builtins
 
   namespace anonymous
   {
-    types::file file(types::str const &filename,
-                     types::str const &strmode = "r");
+    types::file file(types::str const &filename, types::str const &strmode = "r");
   }
 
   DEFINE_FUNCTOR(pythonic::builtins::anonymous, file);

@@ -15,8 +15,8 @@
 import json
 import os
 import subprocess
+from unittest import mock
 
-import mock
 import pytest  # type: ignore
 
 from google.auth import exceptions
@@ -32,8 +32,10 @@ SERVICE_ACCOUNT_EMAIL = "service-1234@service-name.iam.gserviceaccount.com"
 SERVICE_ACCOUNT_IMPERSONATION_URL_BASE = (
     "https://us-east1-iamcredentials.googleapis.com"
 )
-SERVICE_ACCOUNT_IMPERSONATION_URL_ROUTE = "/v1/projects/-/serviceAccounts/{}:generateAccessToken".format(
-    SERVICE_ACCOUNT_EMAIL
+SERVICE_ACCOUNT_IMPERSONATION_URL_ROUTE = (
+    "/v1/projects/-/serviceAccounts/{}:generateAccessToken".format(
+        SERVICE_ACCOUNT_EMAIL
+    )
 )
 SERVICE_ACCOUNT_IMPERSONATION_URL = (
     SERVICE_ACCOUNT_IMPERSONATION_URL_BASE + SERVICE_ACCOUNT_IMPERSONATION_URL_ROUTE
@@ -272,6 +274,7 @@ class TestCredentials(object):
             quota_project_id=QUOTA_PROJECT_ID,
             workforce_pool_user_project=None,
             universe_domain=DEFAULT_UNIVERSE_DOMAIN,
+            trust_boundary=None,
         )
 
     @mock.patch.object(pluggable.Credentials, "__init__", return_value=None)
@@ -300,6 +303,7 @@ class TestCredentials(object):
             quota_project_id=None,
             workforce_pool_user_project=None,
             universe_domain=DEFAULT_UNIVERSE_DOMAIN,
+            trust_boundary=None,
         )
 
     @mock.patch.object(pluggable.Credentials, "__init__", return_value=None)
@@ -335,6 +339,7 @@ class TestCredentials(object):
             quota_project_id=QUOTA_PROJECT_ID,
             workforce_pool_user_project=None,
             universe_domain=DEFAULT_UNIVERSE_DOMAIN,
+            trust_boundary=None,
         )
 
     @mock.patch.object(pluggable.Credentials, "__init__", return_value=None)
@@ -364,6 +369,7 @@ class TestCredentials(object):
             quota_project_id=None,
             workforce_pool_user_project=None,
             universe_domain=DEFAULT_UNIVERSE_DOMAIN,
+            trust_boundary=None,
         )
 
     def test_constructor_invalid_options(self):
@@ -539,7 +545,6 @@ class TestCredentials(object):
 
     @mock.patch.dict(os.environ, {"GOOGLE_EXTERNAL_ACCOUNT_ALLOW_EXECUTABLES": "1"})
     def test_retrieve_subject_token_saml_interactive_mode(self, tmpdir):
-
         ACTUAL_CREDENTIAL_SOURCE_EXECUTABLE_OUTPUT_FILE = tmpdir.join(
             "actual_output_file"
         )
@@ -1104,7 +1109,7 @@ class TestCredentials(object):
 
     @mock.patch.dict(os.environ, {"GOOGLE_EXTERNAL_ACCOUNT_ALLOW_EXECUTABLES": "1"})
     def test_retrieve_subject_token_fail_on_validation_missing_interactive_timeout(
-        self
+        self,
     ):
         CREDENTIAL_SOURCE_EXECUTABLE = {
             "command": self.CREDENTIAL_SOURCE_EXECUTABLE_COMMAND,
@@ -1226,25 +1231,31 @@ class TestCredentials(object):
             _ = credentials.revoke(None)
 
     @mock.patch.dict(os.environ, {"GOOGLE_EXTERNAL_ACCOUNT_ALLOW_EXECUTABLES": "1"})
-    def test_retrieve_subject_token_python_2(self):
-        with mock.patch("sys.version_info", (2, 7)):
-            credentials = self.make_pluggable(credential_source=self.CREDENTIAL_SOURCE)
+    def test_retrieve_subject_token_with_quoted_command(self):
+        command_with_spaces = '"/path/with spaces/to/executable" "arg with spaces"'
+        credential_source = {
+            "executable": {"command": command_with_spaces, "timeout_millis": 30000}
+        }
 
-            with pytest.raises(exceptions.RefreshError) as excinfo:
-                _ = credentials.retrieve_subject_token(None)
+        with mock.patch(
+            "subprocess.run",
+            return_value=subprocess.CompletedProcess(
+                args=[],
+                stdout=json.dumps(
+                    self.EXECUTABLE_SUCCESSFUL_OIDC_RESPONSE_ID_TOKEN
+                ).encode("UTF-8"),
+                returncode=0,
+            ),
+        ) as mock_run:
+            credentials = self.make_pluggable(credential_source=credential_source)
+            subject_token = credentials.retrieve_subject_token(None)
 
-            assert excinfo.match(r"Pluggable auth is only supported for python 3.7+")
-
-    @mock.patch.dict(os.environ, {"GOOGLE_EXTERNAL_ACCOUNT_ALLOW_EXECUTABLES": "1"})
-    def test_revoke_subject_token_python_2(self):
-        with mock.patch("sys.version_info", (2, 7)):
-            credentials = self.make_pluggable(
-                audience=WORKFORCE_AUDIENCE,
-                credential_source=self.CREDENTIAL_SOURCE,
-                interactive=True,
+            assert subject_token == self.EXECUTABLE_OIDC_TOKEN
+            mock_run.assert_called_once_with(
+                ["/path/with spaces/to/executable", "arg with spaces"],
+                timeout=30.0,
+                stdin=None,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                env=mock.ANY,
             )
-
-            with pytest.raises(exceptions.RefreshError) as excinfo:
-                _ = credentials.revoke(None)
-
-            assert excinfo.match(r"Pluggable auth is only supported for python 3.7+")

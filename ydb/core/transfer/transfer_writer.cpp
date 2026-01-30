@@ -150,7 +150,9 @@ private:
     void CompileTransferLambda() {
         LOG_D("CompileTransferLambda: worker# " << Worker);
 
-        NFq::TPurecalcCompileSettings settings = {};
+        NFq::TPurecalcCompileSettings settings = {
+            .EnabledLLVM = true,
+        };
         auto programHolder = CreateProgramHolder(TableState->GetScheme(), GenerateSql());
         auto result = std::make_unique<NFq::TEvRowDispatcher::TEvPurecalcCompileRequest>(std::move(programHolder), settings);
 

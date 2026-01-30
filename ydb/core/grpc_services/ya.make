@@ -87,6 +87,7 @@ SRCS(
     rpc_scheme_base.cpp
     rpc_stream_execute_scan_query.cpp
     rpc_stream_execute_yql_script.cpp
+    rpc_test_shard.cpp
     rpc_view.cpp
     rpc_whoami.cpp
     table_settings.cpp
@@ -117,6 +118,7 @@ PEERDIR(
     ydb/core/actorlib_impl
     ydb/core/audit
     ydb/core/backup/common
+    ydb/core/backup/regexp
     ydb/core/base
     ydb/core/control/lib
     ydb/core/counters_info
@@ -133,7 +135,7 @@ PEERDIR(
     ydb/core/io_formats/ydb_dump
     ydb/core/kesus/tablet
     ydb/core/kqp/common
-    ydb/core/kqp/session_actor
+    ydb/core/kqp/opt
     ydb/core/protos
     ydb/core/scheme
     ydb/core/sys_view
@@ -146,6 +148,7 @@ PEERDIR(
     ydb/core/ydb_convert
     ydb/core/security
     ydb/core/security/ldap_auth_provider
+    ydb/core/security/sasl
     ydb/library/aclib
     yql/essentials/types/binary_json
     yql/essentials/types/dynumber
@@ -165,6 +168,19 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/resources
     ydb/services/ext_index/common
 )
+
+IF (OS_LINUX)
+    SRCS(
+        rpc_nbs.cpp
+        rpc_nbs_io.cpp
+    )
+    PEERDIR(
+        ydb/core/nbs/cloud/blockstore/libs/service
+        ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct
+        ydb/core/nbs/cloud/blockstore/public/api/protos
+        ydb/core/nbs/cloud/storage/core/libs/common
+    )
+ENDIF()
 
 YQL_LAST_ABI_VERSION()
 

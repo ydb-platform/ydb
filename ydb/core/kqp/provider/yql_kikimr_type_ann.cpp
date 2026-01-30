@@ -25,6 +25,21 @@ namespace {
 using namespace NCommon;
 using namespace NNodes;
 
+static const TSet<TString> REPLICATION_AND_TRANSFER_SECRETS_SETTINGS = [] {
+    static const TSet<TString> settings = {
+        "token_secret",
+        "password_secret",
+        "initial_token_secret",
+    };
+
+    TSet<TString> result;
+    for (const auto& setting : settings) {
+        result.insert(setting + "_name");
+        result.insert(setting + "_path");
+    }
+    return result;
+}();
+
 const TTypeAnnotationNode* GetExpectedRowType(const TKikimrTableDescription& tableDesc,
     const TVector<TString>& columns, const TPosition& pos, TExprContext& ctx)
 {
@@ -900,7 +915,7 @@ private:
         return TStatus::Ok;
     }
 
-virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) override {
+    virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) override {
         TString cluster = TString(create.DataSink().Cluster());
         TString table = TString(create.Table());
         TString tableType = TString(create.TableType());
@@ -980,9 +995,32 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
             }
 
             if (columnTuple.Size() > 3) {
-                auto families = columnTuple.Item(3).Cast<TCoAtomList>();
-                for (auto family : families) {
-                    columnMeta.Families.push_back(TString(family.Value()));
+                auto columnItem = columnTuple.Item(3);
+                if (columnItem.Maybe<TExprList>()) {
+                    const auto exprs = columnItem.Cast<TExprList>();
+                    if (exprs.Size() > 1 && exprs.Item(0).Cast<TCoAtom>().Value() == "columnCompression") {
+                        columnMeta.Compression = TColumnCompression();
+                        const auto settings = exprs.Item(1).Cast<TExprList>();
+                        for (const auto setting : settings) {
+                            const auto sKV = setting.Cast<TExprList>();
+                            const auto key = sKV.Item(0).Cast<TCoAtom>().Value();
+                            const auto& settingVal = sKV.Item(1).Ref();
+                            if (key == "algorithm" && settingVal.IsCallable("String")) {
+                                columnMeta.Compression->Algorithm = settingVal.Child(0)->Content();
+                            } else if (key == "level" && (settingVal.IsCallable("Uint64") || settingVal.IsCallable("Int64"))) {
+                                columnMeta.Compression->Level = FromString<i64>(settingVal.Child(0)->Content());
+                            } else {
+                                columnTypeError(columnItem.Pos(), columnName, "Only algorithm and level settings supported for column COMPRESSION");
+                                return TStatus::Error;
+                            }
+                        }
+                    } else {
+                        // TODO: fix
+                        const auto families = columnItem.Cast<TCoAtomList>();
+                        for (const auto family : families) {
+                            columnMeta.Families.push_back(TString(family.Value()));
+                        }
+                    }
                 }
             }
 
@@ -1006,17 +1044,19 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
             } else if (type == "syncGlobalUnique") {
                 indexType = TIndexDescription::EType::GlobalSyncUnique;
             } else if (type == "globalVectorKmeansTree") {
-                if (!SessionCtx->Config().FeatureFlags.GetEnableVectorIndex()) {
-                    ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), "Vector index support is disabled"));
-                    return TStatus::Error;
-                }
                 indexType = TIndexDescription::EType::GlobalSyncVectorKMeansTree;
-            } else if (type == "globalFulltext") {
+            } else if (type == "globalFulltextPlain") {
                 if (!SessionCtx->Config().FeatureFlags.GetEnableFulltextIndex()) {
                     ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), "Fulltext index support is disabled"));
                     return TStatus::Error;
                 }
-                indexType = TIndexDescription::EType::GlobalFulltext;
+                indexType = TIndexDescription::EType::GlobalFulltextPlain;
+            } else if (type == "globalFulltextRelevance") {
+                if (!SessionCtx->Config().FeatureFlags.GetEnableFulltextIndex()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), "Fulltext index support is disabled"));
+                    return TStatus::Error;
+                }
+                indexType = TIndexDescription::EType::GlobalFulltextRelevance;
             } else {
                 YQL_ENSURE(false, "Unknown index type: " << type);
             }
@@ -1043,7 +1083,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
             }
 
             NKikimrKqp::TVectorIndexKmeansTreeDescription vectorIndexKmeansTreeDescription;
-            NKikimrKqp::TFulltextIndexDescription fulltextIndexDescription;
+            NKikimrSchemeOp::TFulltextIndexDescription fulltextIndexDescription;
             // fulltext index has per-column analyzers settings, single value for now
             fulltextIndexDescription.mutable_settings()->add_columns()->set_column(
                 indexColums.empty() ? "<none>" : indexColums.back()
@@ -1060,7 +1100,8 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                             name.StringValue(), value.StringValue(), error);
                         break;
                     }
-                    case TIndexDescription::EType::GlobalFulltext: {
+                    case TIndexDescription::EType::GlobalFulltextPlain:
+                    case TIndexDescription::EType::GlobalFulltextRelevance: {
                         NKikimr::NFulltext::FillSetting(
                             *fulltextIndexDescription.MutableSettings(),
                             name.StringValue(), value.StringValue(), error);
@@ -1094,7 +1135,20 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                     specializedIndexDescription = std::move(vectorIndexKmeansTreeDescription);
                     break;
                 }
-                case TIndexDescription::EType::GlobalFulltext: {
+                case TIndexDescription::EType::GlobalFulltextPlain: {
+                    // Set layout based on index type
+                    fulltextIndexDescription.mutable_settings()->set_layout(Ydb::Table::FulltextIndexSettings::FLAT);
+                    TString error;
+                    if (!NKikimr::NFulltext::ValidateSettings(fulltextIndexDescription.GetSettings(), error)) {
+                        ctx.AddError(TIssue(ctx.GetPosition(index.IndexSettings().Pos()), error));
+                        return IGraphTransformer::TStatus::Error;
+                    }
+                    specializedIndexDescription = std::move(fulltextIndexDescription);
+                    break;
+                }
+                case TIndexDescription::EType::GlobalFulltextRelevance: {
+                    // Set layout based on index type
+                    fulltextIndexDescription.mutable_settings()->set_layout(Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE);
                     TString error;
                     if (!NKikimr::NFulltext::ValidateSettings(fulltextIndexDescription.GetSettings(), error)) {
                         ctx.AddError(TIssue(ctx.GetPosition(index.IndexSettings().Pos()), error));
@@ -1594,9 +1648,25 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                                 << "changeColumnConstraints can get exactly one token \\in {\"set_not_null\", \"drop_not_null\"}"));
                             return TStatus::Error;
                         }
+                    } else if (alterColumnAction == "changeCompression") {
+                        const auto settings = alterColumnList.Item(1).Cast<TExprList>();
+                        for (const auto setting : settings) {
+                            const auto sKV = setting.Cast<TExprList>();
+                            const auto key = sKV.Item(0).Cast<TCoAtom>().Value();
+                            const auto& settingVal = sKV.Item(1).Ref();
+                            if (!((key == "algorithm" && settingVal.IsCallable("String")) ||
+                                (key == "level" && (settingVal.IsCallable("Uint64") || settingVal.IsCallable("Int64"))))) {
+                                ctx.AddError(TIssue(ctx.GetPosition(sKV.Pos()), TStringBuilder()
+                                    << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
+                                    << " Column: \"" << name
+                                    << "\". Setting: \"" << key
+                                    << "\". Only algorithm and level settings supported for column COMPRESSION"));
+                                return TStatus::Error;
+                            }
+                        }
                     } else {
                         ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()),
-                                TStringBuilder() << "Unsupported action to alter column"));
+                                TStringBuilder() << "Unsupported action to alter column: " << alterColumnAction));
                         return TStatus::Error;
                     }
                 }
@@ -1871,23 +1941,24 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
     }
 
     virtual TStatus HandleCreateReplication(TKiCreateReplication node, TExprContext& ctx) override {
-        const THashSet<TString> supportedSettings = {
-            "connection_string",
-            "endpoint",
-            "database",
-            "token",
-            "token_secret_name",
-            "user",
-            "password",
-            "password_secret_name",
-            "service_account_id",
-            "initial_token",
-            "initial_token_secret_name",
-            "resource_id",
-            "ca_cert",
-            "consistency_level",
-            "commit_interval",
-        };
+        static const THashSet<TString> supportedSettings = [] {
+            THashSet<TString> settings = {
+               "connection_string",
+                "endpoint",
+                "database",
+                "token",
+                "user",
+                "password",
+                "service_account_id",
+                "initial_token",
+                "resource_id",
+                "ca_cert",
+                "consistency_level",
+                "commit_interval",
+            };
+            settings.insert(begin(REPLICATION_AND_TRANSFER_SECRETS_SETTINGS), end(REPLICATION_AND_TRANSFER_SECRETS_SETTINGS));
+            return settings;
+        }();
 
         if (!CheckReplicationSettings(node.ReplicationSettings(), supportedSettings, ctx)) {
             return TStatus::Error;
@@ -1903,23 +1974,24 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
     }
 
     virtual TStatus HandleAlterReplication(TKiAlterReplication node, TExprContext& ctx) override {
-        const THashSet<TString> supportedSettings = {
-            "connection_string",
-            "endpoint",
-            "database",
-            "token",
-            "token_secret_name",
-            "user",
-            "password",
-            "password_secret_name",
-            "service_account_id",
-            "initial_token",
-            "initial_token_secret_name",
-            "resource_id",
-            "ca_cert",
-            "state",
-            "failover_mode",
-        };
+        static const THashSet<TString> supportedSettings = [] {
+            THashSet<TString> settings = {
+                "connection_string",
+                "endpoint",
+                "database",
+                "token",
+                "user",
+                "password",
+                "service_account_id",
+                "initial_token",
+                "resource_id",
+                "ca_cert",
+                "state",
+                "failover_mode",
+            };
+            settings.insert(begin(REPLICATION_AND_TRANSFER_SECRETS_SETTINGS), end(REPLICATION_AND_TRANSFER_SECRETS_SETTINGS));
+            return settings;
+        }();
 
         if (!CheckReplicationSettings(node.ReplicationSettings(), supportedSettings, ctx)) {
             return TStatus::Error;
@@ -1940,26 +2012,27 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
     }
 
     virtual TStatus HandleCreateTransfer(TKiCreateTransfer node, TExprContext& ctx) override {
-        const THashSet<TString> supportedSettings = {
-            "connection_string",
-            "endpoint",
-            "database",
-            "token",
-            "token_secret_name",
-            "user",
-            "password",
-            "password_secret_name",
-            "service_account_id",
-            "initial_token",
-            "initial_token_secret_name",
-            "resource_id",
-            "ca_cert",
-            "commit_interval",
-            "flush_interval",
-            "batch_size_bytes",
-            "consumer",
-            "directory",
-        };
+        static const THashSet<TString> supportedSettings = [] {
+            THashSet<TString> settings = {
+                "connection_string",
+                "endpoint",
+                "database",
+                "token",
+                "user",
+                "password",
+                "service_account_id",
+                "initial_token",
+                "resource_id",
+                "ca_cert",
+                "commit_interval",
+                "flush_interval",
+                "batch_size_bytes",
+                "consumer",
+                "directory",
+            };
+            settings.insert(begin(REPLICATION_AND_TRANSFER_SECRETS_SETTINGS), end(REPLICATION_AND_TRANSFER_SECRETS_SETTINGS));
+            return settings;
+        }();
 
         if (!CheckReplicationSettings(node.TransferSettings(), supportedSettings, ctx)) {
             return TStatus::Error;
@@ -1975,26 +2048,27 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
     }
 
     virtual TStatus HandleAlterTransfer(TKiAlterTransfer node, TExprContext& ctx) override {
-        const THashSet<TString> supportedSettings = {
-            "connection_string",
-            "endpoint",
-            "database",
-            "token",
-            "token_secret_name",
-            "user",
-            "password",
-            "password_secret_name",
-            "service_account_id",
-            "initial_token",
-            "initial_token_secret_name",
-            "resource_id",
-            "ca_cert",
-            "state",
-            "failover_mode",
-            "flush_interval",
-            "batch_size_bytes",
-            "directory"
-        };
+        static const THashSet<TString> supportedSettings = [] {
+            THashSet<TString> settings = {
+                "connection_string",
+                "endpoint",
+                "database",
+                "token",
+                "user",
+                "password",
+                "service_account_id",
+                "initial_token",
+                "resource_id",
+                "ca_cert",
+                "state",
+                "failover_mode",
+                "flush_interval",
+                "batch_size_bytes",
+                "directory"
+            };
+            settings.insert(begin(REPLICATION_AND_TRANSFER_SECRETS_SETTINGS), end(REPLICATION_AND_TRANSFER_SECRETS_SETTINGS));
+            return settings;
+        }();
 
         if (!CheckReplicationSettings(node.TransferSettings(), supportedSettings, ctx)) {
             return TStatus::Error;
@@ -2019,6 +2093,18 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
         return TStatus::Ok;
     }
 
+    virtual TStatus HandleTruncateTable(NNodes::TKiTruncateTable node, TExprContext& ctx) override {
+        // there is will be checking on feature flag
+        node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
+
+        if (!node.TablePath().Value()) {
+            ctx.AddError(TIssue(ctx.GetPosition(node.TablePath().Pos()), "TablePath can't be empty."));
+            return TStatus::Error;
+        }
+
+        return TStatus::Ok;
+    }
+
     virtual TStatus HandleAlterDatabase(NNodes::TKiAlterDatabase node, TExprContext& ctx) override {
         if (!SessionCtx->Config().FeatureFlags.GetEnableAlterDatabase()) {
             ctx.AddError(TIssue(ctx.GetPosition(node.Pos()),
@@ -2027,11 +2113,11 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
         }
 
         if (!node.DatabasePath().Value()) {
-                ctx.AddError(TIssue(ctx.GetPosition(node.DatabasePath().Pos()), "DatabasePath can't be empty."));
+            ctx.AddError(TIssue(ctx.GetPosition(node.DatabasePath().Pos()), "DatabasePath can't be empty."));
             return TStatus::Error;
         }
 
-        const THashSet<TString> supportedSettings = {
+        static const THashSet<TString> supportedSettings = {
             "owner", "MAX_SHARDS", "MAX_SHARDS_IN_PATH", "MAX_PATHS", "MAX_CHILDREN_IN_DIR"
         };
 
@@ -2075,7 +2161,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
     }
 
     virtual TStatus HandleCreateUser(TKiCreateUser node, TExprContext& ctx) override {
-        const THashSet<TString> supportedSettings = {
+        static const THashSet<TString> supportedSettings = {
             "password",
             "hash",
             "passwordEncrypted",
@@ -2115,7 +2201,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
     }
 
     virtual TStatus HandleAlterUser(TKiAlterUser node, TExprContext& ctx) override {
-        const THashSet<TString> supportedSettings = {
+        static const THashSet<TString> supportedSettings = {
             "password",
             "hash",
             "passwordEncrypted",
@@ -2445,9 +2531,10 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
     }
 
     TStatus HandleCreateBackupCollection(TKiCreateBackupCollection node, TExprContext& ctx) override {
-        const THashSet<TString> supportedSettings = {
+        static const THashSet<TString> supportedSettings = {
             "incremental_backup_enabled",
             "storage",
+            "omit_indexes",
         };
 
         if (!CheckBackupCollectionSettings(node.BackupCollectionSettings(), supportedSettings, ctx)) {
@@ -2464,7 +2551,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
     }
 
     TStatus HandleAlterBackupCollection(TKiAlterBackupCollection node, TExprContext& ctx) override {
-        const THashSet<TString> supportedSettings = {};
+        static const THashSet<TString> supportedSettings = {};
 
         if (!CheckBackupCollectionSettings(node.BackupCollectionSettings(), supportedSettings, ctx)) {
             return TStatus::Error;

@@ -284,7 +284,7 @@ public:
                         break;
                     }
                     for (auto path: TYtSection(std::get<1>(item)).Paths()) {
-                        if (!path.Ranges().Maybe<TCoVoid>()) {
+                        if (!path.Ranges().Maybe<TCoVoid>() || !path.QLFilter().Maybe<TCoVoid>()) {
                             canHaveLimit = false;
                             break;
                         }
@@ -763,6 +763,14 @@ private:
                     YQL_ENSURE(usedKeyPrefix <= rowSpec.SortedBy.size());
                     for (size_t i = 0; i < usedKeyPrefix; ++i) {
                         usedColumns.insert(rowSpec.SortedBy[i]);
+                    }
+                }
+
+                if (const auto qlFilter = path.QLFilter().Maybe<TYtQLFilter>()) {
+                    // add columns which are implicitly used by path.QLFilter(), but not included in path.Columns();
+                    const TStructExprType* qlFilterType = qlFilter.Cast().Ref().Head().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
+                    for (const auto& item : qlFilterType->GetItems()) {
+                        usedColumns.emplace(item->GetName());
                     }
                 }
 
@@ -1642,14 +1650,14 @@ private:
                         continue;
                     }
 
-                    if (NYql::HasAnySetting(section.Settings().Ref(), EYtSettingType::Take | EYtSettingType::Skip | EYtSettingType::Sample)) {
+                    if (NYql::HasAnySetting(section.Settings().Ref(), EYtSettingType::Take | EYtSettingType::Skip | EYtSettingType::Sample | EYtSettingType::QLFilter)) {
                         continue;
                     }
                     if (NYql::HasNonEmptyKeyFilter(section)) {
                         continue;
                     }
 
-                    if (AnyOf(section.Paths(), [](const TYtPath& path) { return !path.Ranges().Maybe<TCoVoid>() || TYtTableBaseInfo::GetMeta(path.Table())->IsDynamic; })) {
+                    if (AnyOf(section.Paths(), [](const TYtPath& path) { return !path.Ranges().Maybe<TCoVoid>() || !path.QLFilter().Maybe<TCoVoid>() || TYtTableBaseInfo::GetMeta(path.Table())->IsDynamic; })) {
                         continue;
                     }
                     // Dependency on more than 1 operation
@@ -2236,7 +2244,7 @@ private:
                     const auto outIndex = FromString<size_t>(out.OutIndex().Value());
                     YQL_ENSURE(outIndex < outTypes.size());
                     const auto path = std::get<3>(reader);
-                    if (path && !TCoVoid::Match(path->Child(TYtPath::idx_Ranges))) {
+                    if (path && (!TCoVoid::Match(path->Child(TYtPath::idx_Ranges)) || !TCoVoid::Match(path->Child(TYtPath::idx_QLFilter)))) {
                         exclusiveOuts.insert(outIndex);
                     }
                     auto section = std::get<1>(reader); // section
@@ -2245,7 +2253,7 @@ private:
                         // Used in unknown callables. Don't process
                         exclusiveOuts.insert(outIndex);
                     }
-                    if (section && (NYql::HasAnySetting(*section->Child(TYtSection::idx_Settings), EYtSettingType::Take | EYtSettingType::Skip)
+                    if (section && (NYql::HasAnySetting(*section->Child(TYtSection::idx_Settings), EYtSettingType::Take | EYtSettingType::Skip | EYtSettingType::QLFilter)
                         || HasNonEmptyKeyFilter(TYtSection(section))))
                     {
                         exclusiveOuts.insert(outIndex);
@@ -2598,7 +2606,7 @@ private:
                             const auto outerSection = outerMap.Input().Item(0);
                             if (outerSection.Paths().Size() == 1 && outerSection.Settings().Size() == 0) {
                                 const auto outerPath = outerSection.Paths().Item(0);
-                                if (outerPath.Ranges().Maybe<TCoVoid>()) {
+                                if (outerPath.Ranges().Maybe<TCoVoid>() && outerPath.QLFilter().Maybe<TCoVoid>()) {
                                     matched = reader;
                                 }
                             }

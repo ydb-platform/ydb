@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "arrow/csv/column_decoder.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/csv/column_decoder.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -24,17 +24,17 @@
 #include <string>
 #include <utility>
 
-#include "arrow/array.h"
-#include "arrow/array/builder_base.h"
-#include "arrow/csv/converter.h"
-#include "arrow/csv/inference_internal.h"
-#include "arrow/csv/options.h"
-#include "arrow/csv/parser.h"
-#include "arrow/status.h"
-#include "arrow/type.h"
-#include "arrow/type_fwd.h"
-#include "arrow/util/future.h"
-#include "arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/builder_base.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/csv/converter.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/csv/inference_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/csv/options.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/csv/parser.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/status.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type_fwd.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/future.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
 
 namespace arrow20 {
 namespace csv {

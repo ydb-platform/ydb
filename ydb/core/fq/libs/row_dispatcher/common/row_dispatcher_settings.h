@@ -33,7 +33,6 @@ public:
         YDB_ACCESSOR(ui64, BatchSizeBytes, 1_MB);
         YDB_ACCESSOR(TDuration, BatchCreationTimeout, TDuration::Seconds(1));
         YDB_ACCESSOR(ui64, BufferCellCount, 1000'000);
-        YDB_ACCESSOR(bool, SkipErrors, false);
     };
 
     class TCompileServiceSettings {
@@ -55,6 +54,7 @@ public:
         YDB_ACCESSOR(bool, LocalMode, false);
         YDB_ACCESSOR_MUTABLE(TExternalStorageSettings, Database, {});
         YDB_ACCESSOR_DEF(TString, CoordinationNodePath);
+        YDB_ACCESSOR(TDuration, RebalancingTimeout, TDuration::Seconds(120));
     };
 
     enum class EConsumerMode {

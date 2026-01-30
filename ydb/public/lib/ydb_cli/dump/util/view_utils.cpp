@@ -26,29 +26,37 @@ bool ValidateViewQuery(const TString& query, NYql::TIssues& issues) {
     if (!SqlToProtoAst(query, queryProto, issues)) {
         return false;
     }
+
     return ValidateTableRefs(queryProto, issues);
 }
 
 void ValidateViewQuery(const TString& query, const TString& dbPath, NYql::TIssues& issues) {
     NYql::TIssues subIssues;
     if (!ValidateViewQuery(query, subIssues)) {
-        NYql::TIssue restorabilityIssue(
-            TStringBuilder() << "Restorability of the view: " << dbPath.Quote()
-            << " storing the following query:\n"
-            << query
-            << "\ncannot be guaranteed. For more information, please refer to the 'ydb tools dump' documentation."
+        NYql::TIssue restorabilityIssue(TStringBuilder()
+            << "Restorability of the view " << dbPath.Quote() << " cannot be guaranteed. "
+            << "For more information, please refer to the 'ydb tools dump' documentation. "
+            << "Query stored in the view:\n" << query
         );
+
         restorabilityIssue.Severity = NYql::TSeverityIds::S_WARNING;
         for (const auto& subIssue : subIssues) {
             restorabilityIssue.AddSubIssue(MakeIntrusive<NYql::TIssue>(subIssue));
         }
+
         issues.AddIssue(std::move(restorabilityIssue));
     }
 }
 
-bool RewriteTablePathPrefix(TString& query, TStringBuf backupRoot, TStringBuf restoreRoot,
-    bool restoreRootIsDatabase, TString& backupPathPrefix, TString& restorePathPrefix, NYql::TIssues& issues
-) {
+bool RewriteTablePathPrefix(
+        TString& query,
+        TStringBuf backupRoot,
+        TStringBuf restoreRoot,
+        bool restoreRootIsDatabase,
+        TString& backupPathPrefix,
+        TString& restorePathPrefix,
+        NYql::TIssues& issues)
+{
     restorePathPrefix = restoreRoot;
 
     re2::RE2::Options options;
@@ -67,6 +75,7 @@ bool RewriteTablePathPrefix(TString& query, TStringBuf backupRoot, TStringBuf re
                 issues.AddIssue(TStringBuilder() << "no create view statement in the query: " << query);
                 return false;
             }
+
             query.insert(contextRecreationEnd, TString(
                 std::format("PRAGMA TablePathPrefix = '{}';\n", restoreRoot.data())
             ));
@@ -75,15 +84,13 @@ bool RewriteTablePathPrefix(TString& query, TStringBuf backupRoot, TStringBuf re
     }
 
     restorePathPrefix = RewriteAbsolutePath(backupPathPrefix, backupRoot, restoreRoot);
-
     if (backupRoot == restoreRoot) {
         return true;
     }
 
-    if (!re2::RE2::Replace(&query, pattern,
-        std::format(R"(PRAGMA TablePathPrefix = '{}';)", restorePathPrefix.c_str())
-    )) {
-        issues.AddIssue(TStringBuilder() << "query: " << query.Quote()
+    const auto rewrite = std::format(R"(PRAGMA TablePathPrefix = '{}';)", restorePathPrefix.c_str());
+    if (!re2::RE2::Replace(&query, pattern, rewrite)) {
+        issues.AddIssue(TStringBuilder() << "Query: " << query.Quote()
             << " does not contain the pattern: \"" << pattern.pattern() << "\""
         );
         return false;
@@ -111,21 +118,31 @@ TViewQuerySplit::TViewQuerySplit(const TVector<TString>& statements) {
     for (int i = 0; i < std::ssize(statements) - 1; ++i) {
         context << statements[i] << '\n';
     }
+
     ContextRecreation = context;
+
     Y_ENSURE(!statements.empty());
     Select = statements.back();
 }
 
-bool SplitViewQuery(const TString& query, const TLexers& lexers, const TTranslationSettings& translationSettings, TViewQuerySplit& split, NYql::TIssues& issues) {
+bool SplitViewQuery(
+        const TString& query,
+        const TLexers& lexers,
+        const TTranslationSettings& translationSettings,
+        TViewQuerySplit& split,
+        NYql::TIssues& issues)
+{
     TVector<TString> statements;
-    auto lexer = NSQLTranslationV1::MakeLexer(lexers, translationSettings.AnsiLexer, translationSettings.Antlr4Parser);
+    auto lexer = MakeLexer(lexers, translationSettings.AnsiLexer);
     if (!SplitQueryToStatements(query, lexer, statements, issues)) {
         return false;
     }
+
     if (statements.empty()) {
         issues.AddIssue(TStringBuilder() << "No select statement in the view query: " << query.Quote());
         return false;
     }
+
     split = TViewQuerySplit(statements);
     return true;
 }
@@ -136,14 +153,18 @@ bool SplitViewQuery(const TString& query, TViewQuerySplit& split, NYql::TIssues&
     if (!BuildTranslationSettings(query, arena, translationSettings, issues)) {
         return false;
     }
-    auto lexers = BuildLexers();
-    return SplitViewQuery(query, lexers, translationSettings, split, issues);
+
+    return SplitViewQuery(query, BuildLexers(), translationSettings, split, issues);
 }
 
 TString BuildCreateViewQuery(
-    const TString& name, const TString& dbPath, const TString& viewQuery, const TString& database, const TString& backupRoot,
-    NYql::TIssues& issues
-) {
+        const TString& name,
+        const TString& dbPath,
+        const TString& viewQuery,
+        const TString& database,
+        const TString& backupRoot,
+        NYql::TIssues& issues)
+{
     TViewQuerySplit split;
     if (!SplitViewQuery(viewQuery, split, issues)) {
         return "";
@@ -168,12 +189,17 @@ TString BuildCreateViewQuery(
     if (!Format(creationQuery, formattedQuery, issues)) {
         return "";
     }
+
     return formattedQuery;
 }
 
-bool RewriteCreateViewQuery(TString& query, const TString& restoreRoot, bool restoreRootIsDatabase,
-    const TString& dbPath, NYql::TIssues& issues
-) {
+bool RewriteCreateViewQuery(
+        TString& query,
+        const TString& restoreRoot,
+        bool restoreRootIsDatabase,
+        const TString& dbPath,
+        NYql::TIssues& issues)
+{
     const auto backupRoot = GetBackupRoot(query);
 
     TString backupPathPrefix = GetDatabase(query);

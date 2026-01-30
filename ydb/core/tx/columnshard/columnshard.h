@@ -105,6 +105,7 @@ namespace TEvColumnShard {
         YDB_READONLY_DEF(NColumnShard::TUnifiedPathId, PathId);
         YDB_READONLY(NOlap::TSnapshot, Snapshot, NOlap::TSnapshot::Zero());
         YDB_READONLY_DEF(std::optional<ui64>, LockId);
+        YDB_READONLY_DEF(bool, ReadOnlyConflicts);
         YDB_ACCESSOR(bool, Reverse, false);
         YDB_ACCESSOR(ui32, ItemsLimit, 0);
         YDB_READONLY_DEF(std::vector<ui32>, ColumnIds);
@@ -118,10 +119,11 @@ namespace TEvColumnShard {
             ColumnIds.emplace_back(id);
         }
 
-        TEvInternalScan(const NColumnShard::TUnifiedPathId pathId, const NOlap::TSnapshot& snapshot, const std::optional<ui64> lockId)
+        TEvInternalScan(const NColumnShard::TUnifiedPathId pathId, const NOlap::TSnapshot& snapshot, const std::optional<ui64> lockId, const bool readOnlyConflicts)
             : PathId(pathId)
             , Snapshot(snapshot)
             , LockId(lockId)
+            , ReadOnlyConflicts(readOnlyConflicts)
         {
             AFL_VERIFY(Snapshot.Valid());
         }

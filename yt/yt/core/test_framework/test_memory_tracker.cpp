@@ -76,6 +76,12 @@ void TTestNodeMemoryTracker::Release(i64 size)
     DoRelease(size);
 }
 
+void TTestNodeMemoryTracker::AdjustLimit(i64 adjustedLimit)
+{
+    auto guard = Guard(Lock_);
+    AdjustedLimit_ = adjustedLimit;
+}
+
 void TTestNodeMemoryTracker::SetLimit(i64 size)
 {
     auto guard = Guard(Lock_);

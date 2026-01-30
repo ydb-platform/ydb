@@ -23,7 +23,7 @@ Core concepts for organizing, scaling, and managing data.
 ### Streaming Ingestion
 
   - [Topics (Kafka API)](../datamodel/topic.md): Native streaming using the Kafka protocol.
-  - [Коннектор Fluent Bit](../../integrations/ingestion/fluent-bit.md): Direct log ingestion.
+  - [Connector Fluent Bit](../../integrations/ingestion/fluent-bit.md): Direct log ingestion.
 
 ### Batch Ingestion
 

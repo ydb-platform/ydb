@@ -148,15 +148,17 @@ TSparsedArrayChunk::TSparsedArrayChunk(
     ui32 startIndexExt = 0;
     ui32 startIndexInt = 0;
     for (ui32 idx = 0; idx < UI32ColIndex->length(); ++idx) {
-        if (nextIndex != UI32ColIndex->Value(idx)) {
+        const ui32 columnIndex = UI32ColIndex->Value(idx);
+        if (nextIndex != columnIndex) {
             if (idx - startIndexInt) {
                 RemapExternalToInternal.emplace_back(startIndexExt, startIndexInt, idx - startIndexInt, false);
             }
-            RemapExternalToInternal.emplace_back(nextIndex, 0, UI32ColIndex->Value(idx) - nextIndex, true);
-            startIndexExt = UI32ColIndex->Value(idx);
+            AFL_VERIFY(columnIndex > nextIndex)("next", nextIndex)("idx", idx)("val", columnIndex);
+            RemapExternalToInternal.emplace_back(nextIndex, 0, columnIndex - nextIndex, true);
+            startIndexExt = columnIndex;
             startIndexInt = idx;
         }
-        nextIndex = UI32ColIndex->Value(idx) + 1;
+        nextIndex = columnIndex + 1;
     }
     if (UI32ColIndex->length() > startIndexInt) {
         RemapExternalToInternal.emplace_back(startIndexExt, startIndexInt, UI32ColIndex->length() - startIndexInt, false);

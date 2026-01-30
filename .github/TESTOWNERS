@@ -91,6 +91,7 @@
 /ydb/tests/functional/config @ydb-platform/blobstorage
 /ydb/services/keyvalue/ut @ydb-platform/blobstorage
 /ydb/tests/functional/bridge @ydb-platform/blobstorage
+/ydb/tests/functional/dstool @ydb-platform/blobstorage
 
 #Core Functionality Team @CyberROFL TEAM:@ydb-platform/core
 /ydb/core/config/ut @ydb-platform/core
@@ -99,6 +100,7 @@
 /ydb/core/quoter @ydb-platform/core
 /ydb/library/yaml_config/ut_transform @ydb-platform/core
 /ydb/services/ydb/backup_ut @ydb-platform/core
+/ydb/core/tx/datashard/ut_incremental_backup @ydb-platform/core
 
 #Data Delivery Systems Team / LogBroker @alexnick88 TEAM:@ydb-platform/topics
 /ydb/tests/functional/sqs @ydb-platform/Topics

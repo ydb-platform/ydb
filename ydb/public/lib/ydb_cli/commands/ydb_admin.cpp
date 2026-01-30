@@ -6,6 +6,8 @@
 #include "ydb_cluster.h"
 
 #include <ydb/public/lib/ydb_cli/common/command_utils.h>
+#include <ydb/public/lib/ydb_cli/common/colors.h>
+#include <ydb/public/lib/ydb_cli/common/log.h>
 #include <ydb/public/lib/ydb_cli/dump/dump.h>
 
 #define INCLUDE_YDB_INTERNAL_H
@@ -57,7 +59,7 @@ void TCommandDatabaseDump::Parse(TConfig& config) {
 }
 
 int TCommandDatabaseDump::Run(TConfig& config) {
-    auto log = std::make_shared<TLog>(CreateLogBackend("cerr", TConfig::VerbosityLevelToELogPriorityChatty(config.VerbosityLevel)));
+    auto log = std::make_shared<TLog>(CreateLogBackend("cerr", VerbosityLevelToELogPriorityChatty(config.VerbosityLevel)));
     log->SetFormatter(GetPrefixLogFormatter(""));
 
     NDump::TClient client(CreateDriver(config), std::move(log));
@@ -89,7 +91,7 @@ void TCommandDatabaseRestore::Parse(TConfig& config) {
 }
 
 int TCommandDatabaseRestore::Run(TConfig& config) {
-    auto log = std::make_shared<TLog>(CreateLogBackend("cerr", TConfig::VerbosityLevelToELogPriorityChatty(config.VerbosityLevel)));
+    auto log = std::make_shared<TLog>(CreateLogBackend("cerr", VerbosityLevelToELogPriorityChatty(config.VerbosityLevel)));
     log->SetFormatter(GetPrefixLogFormatter(""));
 
     auto settings = NDump::TRestoreDatabaseSettings()
@@ -125,7 +127,7 @@ void TCommandAdmin::Config(TConfig& config) {
     TString commands;
     SetFreeArgTitle(0, "<subcommand>", commands);
     TStringStream stream;
-    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+    NColorizer::TColors colors = NConsoleClient::AutoColors(Cout);
     stream << Endl << Endl
            << colors.BoldColor()
            << "Commands in this subtree may damage your cluster if used wrong" << Endl

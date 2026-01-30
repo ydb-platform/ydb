@@ -45,7 +45,7 @@ public:
         , Alloc_(__LOCATION__)
         , Env_(Alloc_)
         , TypeInfoHelper_(new TTypeInfoHelper)
-        , FunctionInfoBuilder_(NYql::UnknownLangVersion, Env_, TypeInfoHelper_, "", nullptr, {})
+        , FunctionInfoBuilder_(NYql::UnknownLangVersion, Env_, TypeInfoHelper_, "", nullptr, NYql::NUdf::TSourcePosition())
     {
         HolderFactory_ = MakeHolder<THolderFactory>(
             Alloc_.Ref(),
@@ -83,7 +83,7 @@ public:
     template <typename TExpectedType, typename TChecker>
     void ToMiniKQL(const TStringBuf& script, TChecker&& checker) {
         auto type = GetTypeBuilder().SimpleType<TExpectedType>();
-        ToMiniKQL<TChecker>(type, script, std::move(checker));
+        ToMiniKQL<TChecker>(type, script, std::forward<TChecker>(checker));
     }
 
     template <typename TChecker>
@@ -110,7 +110,7 @@ public:
         const TStringBuf& script, TChecker&& checker)
     {
         auto type = GetTypeBuilder().SimpleType<TExpectedType>();
-        ToMiniKQLWithArg<TChecker>(type, argValue, script, std::move(checker));
+        ToMiniKQLWithArg<TChecker>(type, argValue, script, std::forward<TChecker>(checker));
     }
 
     template <typename FunctionType,
@@ -172,7 +172,7 @@ public:
     template <typename TExpectedType, typename TMiniKQLValueBuilder>
     TPyObjectPtr ToPython(TMiniKQLValueBuilder&& builder, const TStringBuf& script) {
         auto type = GetTypeBuilder().SimpleType<TExpectedType>();
-        return ToPython<TMiniKQLValueBuilder>(type, std::move(builder), script);
+        return ToPython<TMiniKQLValueBuilder>(type, std::forward<TMiniKQLValueBuilder>(builder), script);
     }
 
     NUdf::TUnboxedValue FromPython(NUdf::TType* udfType, const TStringBuf& script) {
@@ -195,7 +195,7 @@ public:
     template <typename TArgumentType, typename TReturnType = TArgumentType, typename TMiniKQLValueBuilder>
     NUdf::TUnboxedValue ToPythonAndBack(TMiniKQLValueBuilder&& builder, const TStringBuf& script) {
         const auto aType = GetTypeBuilder().SimpleType<TArgumentType>();
-        const auto result = ToPython<TMiniKQLValueBuilder>(aType, std::move(builder), script);
+        const auto result = ToPython<TMiniKQLValueBuilder>(aType, std::forward<TMiniKQLValueBuilder>(builder), script);
 
         if (!result || PyErr_Occurred()) {
             PyErr_Print();
@@ -208,7 +208,7 @@ public:
 
     template <typename TArgumentType, typename TReturnType = TArgumentType, typename TMiniKQLValueBuilder, typename TChecker>
     void ToPythonAndBack(TMiniKQLValueBuilder&& builder, const TStringBuf& script, TChecker&& checker) {
-        const auto result = ToPythonAndBack<TArgumentType, TReturnType, TMiniKQLValueBuilder>(std::move(builder), script);
+        const auto result = ToPythonAndBack<TArgumentType, TReturnType, TMiniKQLValueBuilder>(std::forward<TMiniKQLValueBuilder>(builder), script);
         checker(result);
     }
 

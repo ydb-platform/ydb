@@ -51,7 +51,7 @@ struct TCacheKey
         , RequestBodyHash(GetChecksum(RequestBody))
     { }
 
-    bool operator == (const TCacheKey& other) const
+    bool operator==(const TCacheKey& other) const
     {
         return
             Path == other.Path &&

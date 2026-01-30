@@ -1,5 +1,8 @@
 # Миграция на конфигурацию V2
 
+{% include [_](../_includes/experimental_v2.md) %}
+
+
 Данный документ содержит инструкцию по миграции с [конфигурации V1](../../configuration-management/configuration-v1/config-overview.md) на [конфигурацию V2](../../configuration-management/configuration-v2/config-overview.md).
 
 В конфигурации V1 существует два различных механизма применения конфигурационных файлов:

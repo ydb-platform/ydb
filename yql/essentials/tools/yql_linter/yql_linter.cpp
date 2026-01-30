@@ -1,4 +1,5 @@
 #include <yql/essentials/public/fastcheck/linter.h>
+#include <yql/essentials/public/fastcheck/utils.h>
 #include <yql/essentials/utils/tty.h>
 
 #include <library/cpp/getopt/last_getopt.h>
@@ -21,6 +22,7 @@ int Run(int argc, char* argv[]) {
     TString clusterModeStr = "Many";
     TString clusterSystem;
     NYql::TLangVersion langver = NYql::GetMaxReleasedLangVersion();
+    TString customUdfFilter;
 
     opts.AddLongOption('i', "input", "input file").RequiredArgument("input").StoreResult(&inFileName);
     opts.AddLongOption('v', "verbose", "show lint issues").NoArgument();
@@ -37,7 +39,9 @@ int Run(int argc, char* argv[]) {
     opts.AddLongOption('s', "syntax", "query syntax, allowed values: " + GetEnumAllNames<NYql::NFastCheck::ESyntax>()).StoreResult(&syntaxStr);
     opts.AddLongOption("cluster-mode", "cluster mode, allowed values: " + GetEnumAllNames<NYql::NFastCheck::EClusterMode>()).StoreResult(&clusterModeStr);
     opts.AddLongOption("cluster-system", "cluster system").StoreResult(&clusterSystem);
+    opts.AddLongOption("custom-udf-filter", "JSON file with allowed UDFs").StoreResult(&customUdfFilter);
     opts.AddLongOption("ansi-lexer", "use ansi lexer").NoArgument();
+    opts.AddLongOption("type-check", "do partial type checking").NoArgument();
     opts.AddLongOption("no-colors", "disable colors for output").NoArgument();
     opts.AddLongOption("langver", "Set current language version").Optional().RequiredArgument("VER").Handler1T<TString>([&](const TString& str) {
         if (!NYql::ParseLangVersion(str, langver)) {
@@ -92,6 +96,15 @@ int Run(int argc, char* argv[]) {
     checkReq.Syntax = FromString<NYql::NFastCheck::ESyntax>(syntaxStr);
     checkReq.ClusterMode = FromString<NYql::NFastCheck::EClusterMode>(clusterModeStr);
     checkReq.ClusterSystem = clusterSystem;
+    checkReq.WithTypeCheck = res.Has("type-check");
+    TMaybe<NYql::NFastCheck::TUdfFilter> udfFilter;
+    if (customUdfFilter) {
+        TFileInput filterFile(customUdfFilter);
+        auto content = filterFile.ReadAll();
+        udfFilter.ConstructInPlace(NYql::NFastCheck::ParseUdfFilter(NJson::ReadJsonFastTree(content)));
+        checkReq.UdfFilter = udfFilter.Get();
+    }
+
     auto checkResp = NYql::NFastCheck::RunChecks(checkReq);
     for (const auto& c : checkResp.Checks) {
         if (!c.Success) {

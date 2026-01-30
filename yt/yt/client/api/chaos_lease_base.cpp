@@ -53,7 +53,7 @@ TFuture<void> TChaosLeaseBase::Ping(const TPrerequisitePingOptions& options)
         BIND([=, this, this_ = MakeStrong(this)] (const TErrorOr<void>& resultOrError) {
             if (resultOrError.IsOK()) {
                 YT_LOG_DEBUG("Chaos lease pinged");
-            } else if (resultOrError.FindMatching(NChaosClient::EErrorCode::ChaosLeaseNotKnown)) {
+            } else if (resultOrError.FindMatching(NYTree::EErrorCode::ResolveError)) {
                 // Hard error.
                 YT_LOG_DEBUG("Chaos lease has expired or was aborted");
 

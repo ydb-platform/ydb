@@ -98,6 +98,8 @@ from ._grpc.grpcwrapper.ydb_topic_public_types import (  # noqa: F401
     PublicAlterAutoPartitioningSettings as TopicAlterAutoPartitioningSettings,
 )
 
+from .retries import ydb_retry
+
 logger = logging.getLogger(__name__)
 
 
@@ -348,6 +350,7 @@ class TopicClientAsyncIO:
 
         return TopicTxWriterAsyncIO(tx=tx, driver=self._driver, settings=settings, _client=self)
 
+    @ydb_retry(retry_cancelled=True, idempotent=True)
     async def commit_offset(
         self, path: str, consumer: str, partition_id: int, offset: int, read_session_id: Optional[str] = None
     ) -> None:
@@ -645,6 +648,7 @@ class TopicClient:
 
         return TopicTxWriter(tx, self._driver, settings, _parent=self)
 
+    @ydb_retry(retry_cancelled=True, idempotent=True)
     def commit_offset(
         self, path: str, consumer: str, partition_id: int, offset: int, read_session_id: Optional[str] = None
     ) -> None:

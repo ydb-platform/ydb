@@ -12,11 +12,11 @@ using namespace NNodes;
 
 class TOptimizeTransformerBase::TIgnoreOptimizationContext: public IOptimizationContext {
 public:
-    TIgnoreOptimizationContext(TOptimizeTransformerBase::TGetParents getParents)
+    explicit TIgnoreOptimizationContext(TOptimizeTransformerBase::TGetParents getParents)
         : GetParents_(std::move(getParents))
     {
     }
-    virtual ~TIgnoreOptimizationContext() = default;
+    ~TIgnoreOptimizationContext() override = default;
     void RemapNode(const TExprNode& src, const TExprNode::TPtr&) final {
         const TParentsMap* parentsMap = GetParents_();
         auto parentsIt = parentsMap->find(&src);
@@ -30,11 +30,11 @@ private:
 
 class TOptimizeTransformerBase::TRemapOptimizationContext: public IOptimizationContext {
 public:
-    TRemapOptimizationContext(TNodeOnNodeOwnedMap& remaps)
+    explicit TRemapOptimizationContext(TNodeOnNodeOwnedMap& remaps)
         : Remaps_(remaps)
     {
     }
-    virtual ~TRemapOptimizationContext() = default;
+    ~TRemapOptimizationContext() override = default;
     void RemapNode(const TExprNode& fromNode, const TExprNode::TPtr& toNode) final {
         YQL_ENSURE(Remaps_.emplace(&fromNode, toNode).second, "Duplicate remap of the same node");
     }

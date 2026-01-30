@@ -1,7 +1,10 @@
 LIBRARY()
 
 SRCS(
+    defs.cpp
     defs.h
+    flat_backup.cpp
+    flat_backup.h
     flat_boot_lease.cpp
     flat_boot_misc.cpp
     flat_comp.cpp
@@ -32,6 +35,8 @@ SRCS(
     flat_executor_gclogic.cpp
     flat_executor_gclogic.h
     flat_bio_actor.cpp
+    flat_executor_recovery.cpp
+    flat_executor_recovery.h
     flat_executor_snapshot.cpp
     flat_executor_tx_env.cpp
     flat_executor_tx_env.h
@@ -87,6 +92,7 @@ SRCS(
 
 GENERATE_ENUM_SERIALIZATION(flat_comp_gen.h)
 GENERATE_ENUM_SERIALIZATION(flat_executor_compaction_logic.h)
+GENERATE_ENUM_SERIALIZATION(flat_executor_recovery.h)
 GENERATE_ENUM_SERIALIZATION(flat_page_iface.h)
 GENERATE_ENUM_SERIALIZATION(flat_part_loader.h)
 GENERATE_ENUM_SERIALIZATION(flat_row_eggs.h)

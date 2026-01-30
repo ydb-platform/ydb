@@ -2177,11 +2177,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
     }
 
     Y_UNIT_TEST(YqlTableSample) {
-        auto setting = NKikimrKqp::TKqpSetting();
-        setting.SetName("_KqpYqlSyntaxVersion");
-        setting.SetValue("1");
-
-        auto kikimr = DefaultKikimrRunner({setting});
+        auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetTableClient();
 
         const TString query(R"(SELECT * FROM `/Root/Test` TABLESAMPLE SYSTEM(1.0);)");
@@ -2580,7 +2576,8 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         appConfig.MutableTableServiceConfig()->MutableIteratorReadsRetrySettings()->SetUnsertaintyRatio(0.5);
         appConfig.MutableTableServiceConfig()->MutableIteratorReadsRetrySettings()->SetMultiplier(2.0);
         appConfig.MutableTableServiceConfig()->MutableIteratorReadsRetrySettings()->SetMaxTotalRetries(100);
-
+        appConfig.MutableTableServiceConfig()->MutableIteratorReadsRetrySettings()->SetMaxRowsProcessingStreamLookup(500);
+        appConfig.MutableTableServiceConfig()->MutableIteratorReadsRetrySettings()->SetMaxTotalBytesQuotaStreamLookup(100);
 
         TPortManager tp;
         ui16 mbusport = tp.GetPort(2134);

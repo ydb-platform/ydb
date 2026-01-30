@@ -9,7 +9,6 @@ namespace NFq {
 
 TRowDispatcherSettings::TJsonParserSettings::TJsonParserSettings(const NConfig::TJsonParserConfig& config)
     : BatchCreationTimeout(TDuration::MilliSeconds(config.GetBatchCreationTimeoutMs()))
-    , SkipErrors(config.GetSkipErrors())
 {
     if (config.GetBatchSizeBytes()) {
         BatchSizeBytes = config.GetBatchSizeBytes();
@@ -29,6 +28,7 @@ TRowDispatcherSettings::TCoordinatorSettings::TCoordinatorSettings(const NConfig
     : LocalMode(config.GetLocalMode())
     , Database(config.GetDatabase())
     , CoordinationNodePath(config.GetCoordinationNodePath())
+    , RebalancingTimeout(TDuration::Seconds(config.GetRebalancingTimeoutSec()))
 {}
 
 TRowDispatcherSettings::TCoordinatorSettings::TCoordinatorSettings(const NKikimrConfig::TStreamingQueriesConfig::TExternalStorageConfig& config)

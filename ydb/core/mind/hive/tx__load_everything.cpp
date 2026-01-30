@@ -96,7 +96,7 @@ public:
                 return false;
             }
             while (!stateRowset.EndOfSet()) {
-                if (stateRowset.HaveValue<Schema::State::Value>()) {
+                if (stateRowset.HaveValue<Schema::State::Value>() || stateRowset.HaveValue<Schema::State::StringValue>()) {
                     switch (stateRowset.GetKey()) {
                     case TSchemeIds::State::DatabaseVersion:
                         break;
@@ -177,6 +177,9 @@ public:
                         break;
                     case TSchemeIds::State::TabletOwnersSynced:
                         Self->TabletOwnersSynced = (bool)stateRowset.GetValue<Schema::State::Value>();
+                        break;
+                    case TSchemeIds::State::LastReassignStatus:
+                        Self->LastReassignStatus = stateRowset.GetValue<Schema::State::StringValue>();
                         break;
                     }
                 }
@@ -340,8 +343,8 @@ public:
                 TNodeId nodeId = nodeRowset.GetValue<Schema::Node::ID>();
                 TNodeInfo& node = Self->Nodes.emplace(std::piecewise_construct, std::tuple<TNodeId>(nodeId), std::tuple<TNodeId, THive&>(nodeId, *Self)).first->second;
                 node.Local = nodeRowset.GetValue<Schema::Node::Local>();
-                node.Down = nodeRowset.GetValue<Schema::Node::Down>();
-                node.Freeze = nodeRowset.GetValue<Schema::Node::Freeze>();
+                node.SetDown(nodeRowset.GetValue<Schema::Node::Down>());
+                node.SetFreeze(nodeRowset.GetValue<Schema::Node::Freeze>());
                 node.Drain = nodeRowset.GetValueOrDefault<Schema::Node::Drain>();
                 node.DrainInitiators = nodeRowset.GetValueOrDefault<Schema::Node::DrainInitiators>();
                 node.ServicedDomains = nodeRowset.GetValueOrDefault<Schema::Node::ServicedDomains>();

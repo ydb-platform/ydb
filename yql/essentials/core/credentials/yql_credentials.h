@@ -33,7 +33,7 @@ public:
     using TPtr = TIntrusivePtr<TCredentials>;
 
     TCredentials() = default;
-    ~TCredentials() = default;
+    ~TCredentials() override = default;
 
     void AddCredential(const TString& alias, const TCredential& cred);
     void SetUserCredentials(const TUserCredentials& userCredentials) {
@@ -48,6 +48,14 @@ public:
         return Groups_;
     }
 
+    void SetIsRobot(bool isRobot) {
+        IsRobot_ = isRobot;
+    }
+
+    bool IsRobot() const {
+        return IsRobot_;
+    }
+
     const TCredential* FindCredential(const TStringBuf& name) const;
     TString FindCredentialContent(const TStringBuf& name1, const TStringBuf& name2, const TString& defaultContent) const;
 
@@ -60,6 +68,7 @@ private:
     THashMap<TString, TCredential> CredentialTable_;
     TUserCredentials UserCredentials_;
     std::unordered_set<TString> Groups_;
+    bool IsRobot_ = false;
 };
 
 } // namespace NYql

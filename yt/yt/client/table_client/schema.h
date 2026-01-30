@@ -50,7 +50,7 @@ public:
     TLegacyLockBitmap GetBitmap() const;
 
     TLegacyLockMask(const TLegacyLockMask& other) = default;
-    TLegacyLockMask& operator= (const TLegacyLockMask& other) = default;
+    TLegacyLockMask& operator=(const TLegacyLockMask& other) = default;
 
     static constexpr int BitsPerType = 2;
     static constexpr TLegacyLockBitmap TypeMask = (1 << BitsPerType) - 1;
@@ -104,7 +104,7 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-bool operator == (const TLockMask& lhs, const TLockMask& rhs);
+bool operator==(const TLockMask& lhs, const TLockMask& rhs);
 
 TLockMask MaxMask(TLockMask lhs, TLockMask rhs);
 
@@ -122,7 +122,7 @@ public:
     DEFINE_BYREF_RO_PROPERTY(TLogicalTypePtr, LogicalType);
     DEFINE_BYREF_RO_PROPERTY(std::optional<ESortOrder>, SortOrder);
     DEFINE_BYREF_RO_PROPERTY(std::optional<std::string>, Lock);
-    DEFINE_BYREF_RO_PROPERTY(std::optional<TString>, Expression);
+    DEFINE_BYREF_RO_PROPERTY(std::optional<std::string>, Expression);
     DEFINE_BYREF_RO_PROPERTY(std::optional<bool>, Materialized);
     DEFINE_BYREF_RO_PROPERTY(std::optional<std::string>, Aggregate);
     DEFINE_BYREF_RO_PROPERTY(std::optional<std::string>, Group);
@@ -191,6 +191,7 @@ private:
 void FormatValue(TStringBuilderBase* builder, const TColumnSchema& schema, TStringBuf spec);
 
 void Serialize(const TColumnSchema& schema, NYson::IYsonConsumer* consumer);
+void Serialize(const TColumnSchema& schema, std::optional<std::string> constraint, NYson::IYsonConsumer* consumer);
 
 void ToProto(NProto::TColumnSchema* protoSchema, const TColumnSchema& schema);
 void FromProto(TColumnSchema* schema, const NProto::TColumnSchema& protoSchema);
@@ -210,6 +211,8 @@ public:
 };
 
 ////////////////////////////////////////////////////////////////////////////////
+
+void Serialize(const TDeletedColumn& schema, NYson::IYsonConsumer* consumer);
 
 void ToProto(NProto::TDeletedColumn* protoSchema, const TDeletedColumn& schema);
 void FromProto(TDeletedColumn* schema, const NProto::TDeletedColumn& protoSchema);
@@ -300,7 +303,10 @@ public:
     bool IsSorted() const;
     bool HasRenamedColumns() const;
     bool IsEmpty() const;
-    bool IsCGComparatorApplicable() const;
+
+    //! Checks if the first `keyColumnCount` columns
+    //! (or all if not specified) are suitable for codegen comparison.
+    bool IsCGComparatorApplicable(std::optional<int> keyColumnCount = std::nullopt) const;
 
     std::optional<int> GetTtlColumnIndex() const;
 
@@ -497,11 +503,11 @@ TFormatterWrapper<TTableSchemaTruncatedFormatter> MakeTableSchemaTruncatedFormat
 
 ////////////////////////////////////////////////////////////////////////////////
 
-bool operator == (const TColumnSchema& lhs, const TColumnSchema& rhs);
+bool operator==(const TColumnSchema& lhs, const TColumnSchema& rhs);
 
-bool operator == (const TDeletedColumn& lhs, const TDeletedColumn& rhs);
+bool operator==(const TDeletedColumn& lhs, const TDeletedColumn& rhs);
 
-bool operator == (const TTableSchema& lhs, const TTableSchema& rhs);
+bool operator==(const TTableSchema& lhs, const TTableSchema& rhs);
 
 // Compat function for https://st.yandex-team.ru/YT-10668 workaround.
 bool IsEqualIgnoringRequiredness(const TTableSchema& lhs, const TTableSchema& rhs);
@@ -601,24 +607,24 @@ void FromProto(NTableClient::TColumnFilter* columnFilter, const TColumnFilter& p
 ////////////////////////////////////////////////////////////////////////////////
 
 // Incompatible < RequireValidation < FullyCompatible
-constexpr bool operator < (ESchemaCompatibility lhs, ESchemaCompatibility rhs);
-constexpr bool operator <= (ESchemaCompatibility lhs, ESchemaCompatibility rhs);
-constexpr bool operator > (ESchemaCompatibility lhs, ESchemaCompatibility rhs);
-constexpr bool operator >= (ESchemaCompatibility lhs, ESchemaCompatibility rhs);
+constexpr bool operator<(ESchemaCompatibility lhs, ESchemaCompatibility rhs);
+constexpr bool operator<=(ESchemaCompatibility lhs, ESchemaCompatibility rhs);
+constexpr bool operator>(ESchemaCompatibility lhs, ESchemaCompatibility rhs);
+constexpr bool operator>=(ESchemaCompatibility lhs, ESchemaCompatibility rhs);
 
 ////////////////////////////////////////////////////////////////////////////////
 
 struct TTableSchemaHash
 {
-    size_t operator() (const TTableSchema& schema) const;
-    size_t operator() (const TTableSchemaPtr& schema) const;
+    size_t operator()(const TTableSchema& schema) const;
+    size_t operator()(const TTableSchemaPtr& schema) const;
 };
 
 struct TTableSchemaEquals
 {
-    bool operator() (const TTableSchema& lhs, const TTableSchema& rhs) const;
-    bool operator() (const TTableSchemaPtr& lhs, const TTableSchemaPtr& rhs) const;
-    bool operator() (const TTableSchemaPtr& lhs, const TTableSchema& rhs) const;
+    bool operator()(const TTableSchema& lhs, const TTableSchema& rhs) const;
+    bool operator()(const TTableSchemaPtr& lhs, const TTableSchemaPtr& rhs) const;
+    bool operator()(const TTableSchemaPtr& lhs, const TTableSchema& rhs) const;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -15,8 +15,8 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "parquet/encryption/encryption_internal.h"
-#include "parquet/exception.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/encryption/encryption_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/exception.h"
 
 namespace parquet20::encryption {
 

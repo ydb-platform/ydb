@@ -10,6 +10,7 @@ try:
         ydb_operation_v1_pb2_grpc,
         ydb_topic_v1_pb2_grpc,
         ydb_query_v1_pb2_grpc,
+        ydb_coordination_v1_pb2_grpc,
     )
 
     from ydb.public.api.protos import (
@@ -21,6 +22,7 @@ try:
         ydb_operation_pb2,
         ydb_common_pb2,
         ydb_query_pb2,
+        ydb_coordination_pb2,
     )
 
 except ImportError:
@@ -32,6 +34,7 @@ except ImportError:
         ydb_operation_v1_pb2_grpc,
         ydb_topic_v1_pb2_grpc,
         ydb_query_v1_pb2_grpc,
+        ydb_coordination_v1_pb2_grpc,
     )
 
     from contrib.ydb.public.api.protos import (
@@ -43,6 +46,7 @@ except ImportError:
         ydb_operation_pb2,
         ydb_common_pb2,
         ydb_query_pb2,
+        ydb_coordination_pb2,
     )
 
 
@@ -55,6 +59,7 @@ ydb_table = ydb_table_pb2
 ydb_discovery = ydb_discovery_pb2
 ydb_operation = ydb_operation_pb2
 ydb_query = ydb_query_pb2
+ydb_coordination = ydb_coordination_pb2
 
 
 class CmsService(object):
@@ -133,3 +138,13 @@ class QueryService(object):
     ExecuteQuery = "ExecuteQuery"
     ExecuteScript = "ExecuteScript"
     FetchScriptResults = "FetchScriptResults"
+
+
+class CoordinationService(object):
+    Stub = ydb_coordination_v1_pb2_grpc.CoordinationServiceStub
+    CreateNode = "CreateNode"
+    AlterNode = "AlterNode"
+    DropNode = "DropNode"
+    DescribeNode = "DescribeNode"
+    SessionRequest = "SessionRequest"
+    Session = "Session"

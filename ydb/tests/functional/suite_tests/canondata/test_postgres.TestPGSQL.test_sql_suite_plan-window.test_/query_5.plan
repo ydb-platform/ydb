@@ -35,11 +35,17 @@
                                                 "Inputs": [
                                                     {
                                                         "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
                                                     }
                                                 ],
                                                 "Limit": "1001",
                                                 "Name": "TopSort",
-                                                "TopSortBy": "argument._yql_RowNumber0"
+                                                "TopSortBy": "row.row_number"
                                             },
                                             {
                                                 "Inputs": [
@@ -166,7 +172,7 @@
                                     }
                                 ],
                                 "SortColumns": [
-                                    "_yql_RowNumber0 (Desc)"
+                                    "row_number (Desc)"
                                 ]
                             }
                         ]

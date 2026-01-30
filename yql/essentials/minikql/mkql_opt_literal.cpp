@@ -30,12 +30,12 @@ TNode* LiteralAddMember(
     MKQL_ENSURE(positionValue <= oldStruct.GetType()->GetMembersCount(), "Bad member index");
 
     for (ui32 i = 0; i < positionValue; ++i) {
-        resultBuilder.Add(TString(oldStruct.GetType()->GetMemberName(i)), oldStruct.GetValue(i));
+        resultBuilder.Add(oldStruct.GetType()->GetMemberName(i), oldStruct.GetValue(i));
     }
 
-    resultBuilder.Add(TString(newStructType.GetMemberName(positionValue)), newMember);
+    resultBuilder.Add(newStructType.GetMemberName(positionValue), newMember);
     for (ui32 i = positionValue; i < oldStruct.GetValuesCount(); ++i) {
-        resultBuilder.Add(TString(oldStruct.GetType()->GetMemberName(i)), oldStruct.GetValue(i));
+        resultBuilder.Add(oldStruct.GetType()->GetMemberName(i), oldStruct.GetValue(i));
     }
 
     return resultBuilder.Build();
@@ -53,11 +53,11 @@ TNode* LiteralRemoveMember(
     MKQL_ENSURE(positionValue < oldStruct.GetType()->GetMembersCount(), "Bad member index");
 
     for (ui32 i = 0; i < positionValue; ++i) {
-        resultBuilder.Add(TString(oldStruct.GetType()->GetMemberName(i)), oldStruct.GetValue(i));
+        resultBuilder.Add(oldStruct.GetType()->GetMemberName(i), oldStruct.GetValue(i));
     }
 
     for (ui32 i = positionValue + 1; i < oldStruct.GetValuesCount(); ++i) {
-        resultBuilder.Add(TString(oldStruct.GetType()->GetMemberName(i)), oldStruct.GetValue(i));
+        resultBuilder.Add(oldStruct.GetType()->GetMemberName(i), oldStruct.GetValue(i));
     }
 
     return resultBuilder.Build();

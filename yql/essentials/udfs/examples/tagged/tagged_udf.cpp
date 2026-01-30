@@ -28,11 +28,11 @@ public:
     }
 
     static const TStringRef& Name() {
-        static auto name = TStringRef::Of("GenericTag");
-        return name;
+        static auto Name = TStringRef::Of("GenericTag");
+        return Name;
     }
 
-    TGenericTag(TStringRef tag)
+    explicit TGenericTag(TStringRef tag)
         : Tag_(tag)
     {
     }

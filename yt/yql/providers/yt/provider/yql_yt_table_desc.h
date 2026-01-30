@@ -22,12 +22,13 @@ class TQContext;
 
 enum class TYtTableIntent: ui32 {
     Read        = 1 << 0,
-    View        = 1 << 1, // Read via view
+    View        = 1 << 1,
     Override    = 1 << 2,
     Append      = 1 << 3,
     Create      = 1 << 4,
     Drop        = 1 << 5,
     Flush       = 1 << 6, // Untransactional write
+    Replace     = 1 << 7,
 };
 
 Y_DECLARE_FLAGS(TYtTableIntents, TYtTableIntent);
@@ -38,11 +39,11 @@ inline bool HasReadIntents(TYtTableIntents intents) {
 }
 
 inline bool HasModifyIntents(TYtTableIntents intents) {
-    return intents & (TYtTableIntent::Override | TYtTableIntent::Append | TYtTableIntent::Drop | TYtTableIntent::Flush | TYtTableIntent::Create);
+    return intents & (TYtTableIntent::Override | TYtTableIntent::Append | TYtTableIntent::Drop | TYtTableIntent::Flush | TYtTableIntent::Create | TYtTableIntent::Replace);
 }
 
 inline bool HasExclusiveModifyIntents(TYtTableIntents intents) {
-    return intents & (TYtTableIntent::Override | TYtTableIntent::Drop | TYtTableIntent::Flush | TYtTableIntent::Create);
+    return intents & (TYtTableIntent::Override | TYtTableIntent::Drop | TYtTableIntent::Flush | TYtTableIntent::Create | TYtTableIntent::Replace);
 }
 
 struct TYtViewDescription {

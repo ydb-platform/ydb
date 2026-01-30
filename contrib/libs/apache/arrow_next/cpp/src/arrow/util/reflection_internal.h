@@ -23,7 +23,7 @@
 #include <tuple>
 #include <utility>
 
-#include "arrow/type_traits.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type_traits.h"
 
 namespace arrow20 {
 namespace internal {

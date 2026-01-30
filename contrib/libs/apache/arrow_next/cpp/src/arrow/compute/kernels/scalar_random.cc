@@ -19,11 +19,11 @@
 #include <mutex>
 #include <random>
 
-#include "arrow/compute/api_scalar.h"
-#include "arrow/compute/kernel.h"
-#include "arrow/compute/kernels/common_internal.h"
-#include "arrow/compute/registry.h"
-#include "arrow/util/pcg_random.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/api_scalar.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/kernel.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/kernels/common_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/registry.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/pcg_random.h"
 
 namespace arrow20 {
 namespace compute {

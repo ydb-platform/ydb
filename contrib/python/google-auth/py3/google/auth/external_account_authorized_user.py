@@ -36,7 +36,9 @@ Example credential:
 import datetime
 import io
 import json
+import re
 
+from google.auth import _constants
 from google.auth import _helpers
 from google.auth import credentials
 from google.auth import exceptions
@@ -50,6 +52,7 @@ class Credentials(
     credentials.CredentialsWithQuotaProject,
     credentials.ReadOnlyScoped,
     credentials.CredentialsWithTokenUri,
+    credentials.CredentialsWithTrustBoundary,
 ):
     """Credentials for External Account Authorized Users.
 
@@ -67,7 +70,8 @@ class Credentials(
     is used.
     When the credential configuration is accepted from an
     untrusted source, you should validate it before using.
-    Refer https://cloud.google.com/docs/authentication/external/externally-sourced-credentials for more details."""
+    Refer https://cloud.google.com/docs/authentication/external/externally-sourced-credentials for more details.
+    """
 
     def __init__(
         self,
@@ -83,6 +87,7 @@ class Credentials(
         scopes=None,
         quota_project_id=None,
         universe_domain=credentials.DEFAULT_UNIVERSE_DOMAIN,
+        trust_boundary=None,
     ):
         """Instantiates a external account authorized user credentials object.
 
@@ -108,6 +113,7 @@ class Credentials(
             create the credentials.
         universe_domain (Optional[str]): The universe domain. The default value
             is googleapis.com.
+        trust_boundary (Mapping[str,str]): A credential trust boundary.
 
         Returns:
             google.auth.external_account_authorized_user.Credentials: The
@@ -128,6 +134,7 @@ class Credentials(
         self._scopes = scopes
         self._universe_domain = universe_domain or credentials.DEFAULT_UNIVERSE_DOMAIN
         self._cred_file_path = None
+        self._trust_boundary = trust_boundary
 
         if not self.valid and not self.can_refresh:
             raise exceptions.InvalidOperation(
@@ -175,6 +182,7 @@ class Credentials(
             "scopes": self._scopes,
             "quota_project_id": self._quota_project_id,
             "universe_domain": self._universe_domain,
+            "trust_boundary": self._trust_boundary,
         }
 
     @property
@@ -184,7 +192,7 @@ class Credentials(
 
     @property
     def requires_scopes(self):
-        """ False: OAuth 2.0 credentials have their scopes set when
+        """False: OAuth 2.0 credentials have their scopes set when
         the initial token is requested and can not be changed."""
         return False
 
@@ -201,7 +209,7 @@ class Credentials(
     @property
     def audience(self):
         """Optional[str]: The STS audience which contains the resource name for the
-            workforce pool and the provider identifier in that pool."""
+        workforce pool and the provider identifier in that pool."""
         return self._audience
 
     @property
@@ -226,13 +234,18 @@ class Credentials(
 
     @property
     def is_user(self):
-        """ True: This credential always represents a user."""
+        """True: This credential always represents a user."""
         return True
 
     @property
     def can_refresh(self):
         return all(
-            (self._refresh_token, self._token_url, self._client_id, self._client_secret)
+            (
+                self._refresh_token,
+                self._token_url,
+                self._client_id,
+                self._client_secret,
+            )
         )
 
     def get_project_id(self, request=None):
@@ -266,7 +279,7 @@ class Credentials(
         strip = strip if strip else []
         return json.dumps({k: v for (k, v) in self.info.items() if k not in strip})
 
-    def refresh(self, request):
+    def _perform_refresh_token(self, request):
         """Refreshes the access token.
 
         Args:
@@ -285,7 +298,7 @@ class Credentials(
             )
 
         now = _helpers.utcnow()
-        response_data = self._make_sts_request(request)
+        response_data = self._sts_client.refresh_token(request, self._refresh_token)
 
         self.token = response_data.get("access_token")
 
@@ -295,8 +308,43 @@ class Credentials(
         if "refresh_token" in response_data:
             self._refresh_token = response_data["refresh_token"]
 
-    def _make_sts_request(self, request):
-        return self._sts_client.refresh_token(request, self._refresh_token)
+    def _build_trust_boundary_lookup_url(self):
+        """Builds and returns the URL for the trust boundary lookup API."""
+        # Audience format: //iam.googleapis.com/locations/global/workforcePools/POOL_ID/providers/PROVIDER_ID
+        match = re.search(r"locations/[^/]+/workforcePools/([^/]+)", self._audience)
+
+        if not match:
+            raise exceptions.InvalidValue("Invalid workforce pool audience format.")
+
+        pool_id = match.groups()[0]
+
+        return _constants._WORKFORCE_POOL_TRUST_BOUNDARY_LOOKUP_ENDPOINT.format(
+            universe_domain=self._universe_domain, pool_id=pool_id
+        )
+
+    def revoke(self, request):
+        """Revokes the refresh token.
+
+        Args:
+            request (google.auth.transport.Request): The object used to make
+                HTTP requests.
+
+        Raises:
+            google.auth.exceptions.OAuthError: If the token could not be
+                revoked.
+        """
+        if not self._revoke_url or not self._refresh_token:
+            raise exceptions.OAuthError(
+                "The credentials do not contain the necessary fields to "
+                "revoke the refresh token. You must specify revoke_url and "
+                "refresh_token."
+            )
+
+        self._sts_client.revoke_token(
+            request, self._refresh_token, "refresh_token", self._revoke_url
+        )
+        self.token = None
+        self._refresh_token = None
 
     @_helpers.copy_docstring(credentials.Credentials)
     def get_cred_info(self):
@@ -329,6 +377,12 @@ class Credentials(
     def with_universe_domain(self, universe_domain):
         cred = self._make_copy()
         cred._universe_domain = universe_domain
+        return cred
+
+    @_helpers.copy_docstring(credentials.CredentialsWithTrustBoundary)
+    def with_trust_boundary(self, trust_boundary):
+        cred = self._make_copy()
+        cred._trust_boundary = trust_boundary
         return cred
 
     @classmethod
@@ -375,6 +429,7 @@ class Credentials(
             universe_domain=info.get(
                 "universe_domain", credentials.DEFAULT_UNIVERSE_DOMAIN
             ),
+            trust_boundary=info.get("trust_boundary"),
             **kwargs
         )
 

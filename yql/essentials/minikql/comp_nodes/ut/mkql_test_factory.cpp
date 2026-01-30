@@ -101,7 +101,7 @@ public:
         ui64 Index_ = 0;
     };
 
-    TTestYieldStreamWrapper(TComputationMutables& mutables)
+    explicit TTestYieldStreamWrapper(TComputationMutables& mutables)
         : TBaseComputation(mutables)
     {
     }

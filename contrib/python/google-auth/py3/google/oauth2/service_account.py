@@ -73,6 +73,7 @@ specific subject using :meth:`~Credentials.with_subject`.
 import copy
 import datetime
 
+from google.auth import _constants
 from google.auth import _helpers
 from google.auth import _service_account_info
 from google.auth import credentials
@@ -84,9 +85,6 @@ from google.oauth2 import _client
 
 _DEFAULT_TOKEN_LIFETIME_SECS = 3600  # 1 hour in seconds
 _GOOGLE_OAUTH2_TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token"
-_TRUST_BOUNDARY_LOOKUP_ENDPOINT = (
-    "https://iamcredentials.{}/v1/projects/-/serviceAccounts/{}/allowedLocations"
-)
 
 
 class Credentials(
@@ -436,7 +434,7 @@ class Credentials(
         return metrics.CRED_TYPE_SA_ASSERTION
 
     @_helpers.copy_docstring(credentials.CredentialsWithTrustBoundary)
-    def _refresh_token(self, request):
+    def _perform_refresh_token(self, request):
         if self._always_use_jwt_access and not self._jwt_credentials:
             # If self signed jwt should be used but jwt credential is not
             # created, try to create one with scopes
@@ -484,7 +482,6 @@ class Credentials(
                     self._jwt_credentials is None
                     or self._jwt_credentials._audience != audience
                 ):
-
                     self._jwt_credentials = jwt.Credentials.from_signing_credentials(
                         self, audience
                     )
@@ -520,8 +517,9 @@ class Credentials(
             raise ValueError(
                 "Service account email is required to build the trust boundary lookup URL."
             )
-        return _TRUST_BOUNDARY_LOOKUP_ENDPOINT.format(
-            self._universe_domain, self._service_account_email
+        return _constants._SERVICE_ACCOUNT_TRUST_BOUNDARY_LOOKUP_ENDPOINT.format(
+            universe_domain=self._universe_domain,
+            service_account_email=self._service_account_email,
         )
 
     @_helpers.copy_docstring(credentials.Signing)

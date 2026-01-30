@@ -21,8 +21,7 @@ namespace types
   }
 
   template <class T>
-  raw_array<T>::raw_array(size_t n)
-      : data(utils::allocate<T>(n)), external(false)
+  raw_array<T>::raw_array(size_t n) : data(utils::allocate<T>(n)), external(false)
   {
     if (!data) {
       std::ostringstream oss;
@@ -32,8 +31,7 @@ namespace types
   }
 
   template <class T>
-  raw_array<T>::raw_array(T *d, ownership o)
-      : data(d), external(o == ownership::external)
+  raw_array<T>::raw_array(T *d, ownership o) : data(d), external(o == ownership::external)
   {
   }
 

@@ -25,7 +25,7 @@ public:
                         name.Description = docs->Lookup(qualified.Identifier);
                     }
 
-                    return std::move(name);
+                    return std::forward<decltype(name)>(name);
                 }, std::move(name));
             }
             return response;

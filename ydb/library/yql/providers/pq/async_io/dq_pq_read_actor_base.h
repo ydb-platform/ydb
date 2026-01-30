@@ -44,16 +44,12 @@ public:
     virtual void SchedulePartitionIdlenessCheck(TInstant) = 0;
 
     virtual void InitWatermarkTracker() = 0;
-    void InitWatermarkTracker(TDuration, TDuration);
+    void InitWatermarkTracker(TDuration, TDuration, const ::NMonitoring::TDynamicCounterPtr& counters = {});
     void MaybeSchedulePartitionIdlenessCheck(TInstant systemTime);
-    bool RemoveExpiredPartitionIdlenessCheck(TInstant notifyTime); // return true if any watermark check was expired
 
     virtual TString GetSessionId() const {
         return TString{"empty"};
     }
-private:
-    bool HasEarlierPartitionIdlenessChecks(TInstant time);
-    std::deque<TInstant> InflyIdlenessChecks; // strictly increasing queue of scheduled idle partitions checks; normally contains at most one check; only used when idle watermarks enabled
 };
 
 } // namespace NYql::NDq

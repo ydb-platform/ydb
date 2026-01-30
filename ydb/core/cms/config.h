@@ -78,6 +78,8 @@ struct TCmsSentinelConfig {
 
     TStateStorageSelfHealConfig StateStorageSelfHealConfig;
 
+    TDuration InitialDeploymentGracePeriod;
+
     void Serialize(NKikimrCms::TCmsConfig::TSentinelConfig &config) const {
         config.SetEnable(Enable);
         config.SetDryRun(DryRun);
@@ -100,6 +102,8 @@ struct TCmsSentinelConfig {
 
         SaveStateLimits(config);
         SaveEvictVDisksStatus(config);
+
+        config.SetInitialDeploymentGracePeriod(InitialDeploymentGracePeriod.GetValue());
     }
 
     void Deserialize(const NKikimrCms::TCmsConfig::TSentinelConfig &config) {
@@ -125,6 +129,8 @@ struct TCmsSentinelConfig {
         StateLimits.swap(newStateLimits);
 
         EvictVDisksStatus = LoadEvictVDisksStatus(config);
+
+        InitialDeploymentGracePeriod = TDuration::MicroSeconds(config.GetInitialDeploymentGracePeriod());
     }
 
     void SaveStateLimits(NKikimrCms::TCmsConfig::TSentinelConfig &config) const {
@@ -257,7 +263,7 @@ struct TCmsLogConfig {
 };
 
 struct TCmsConfig {
-    bool Enable = true;
+    bool DisableMaintenance = false;
     TDuration DefaultRetryTime;
     TDuration DefaultPermissionDuration;
     TDuration DefaultWalleCleanupPeriod = TDuration::Minutes(1);
@@ -276,7 +282,7 @@ struct TCmsConfig {
     }
 
     void Serialize(NKikimrCms::TCmsConfig &config) const {
-        config.SetEnable(Enable);
+        config.SetDisableMaintenance(DisableMaintenance);
         config.SetDefaultRetryTime(DefaultRetryTime.GetValue());
         config.SetDefaultPermissionDuration(DefaultPermissionDuration.GetValue());
         config.SetInfoCollectionTimeout(InfoCollectionTimeout.GetValue());
@@ -287,7 +293,7 @@ struct TCmsConfig {
     }
 
     void Deserialize(const NKikimrCms::TCmsConfig &config) {
-        Enable = config.GetEnable();
+        DisableMaintenance = config.GetDisableMaintenance();
         DefaultRetryTime = TDuration::MicroSeconds(config.GetDefaultRetryTime());
         DefaultPermissionDuration = TDuration::MicroSeconds(config.GetDefaultPermissionDuration());
         InfoCollectionTimeout = TDuration::MicroSeconds(config.GetInfoCollectionTimeout());

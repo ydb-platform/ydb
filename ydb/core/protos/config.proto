@@ -2050,6 +2050,7 @@ message THiveConfig {
     optional uint64 BalanceCountersRefreshFrequency = 88 [default = 15000]; // milliseconds
     optional bool LockedTabletsSendMetrics = 89 [default = false]; // if true then hive will process metrics from locked tablets
     optional uint64 MaxDeleteTabletInProgress = 90 [default = 100];
+    optional uint64 DataCenterChangeReactionPeriod = 91 [default = 1]; // seconds
 }
 
 message THealthCheckConfig {

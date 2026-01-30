@@ -2875,7 +2875,7 @@ void THive::AddRegisteredDataCentersNode(TDataCenterId dataCenterId, TNodeId nod
         dataCenter.RegisteredNodes.insert(nodeId);
         if (!wasRegistered && !dataCenter.UpdateScheduled) {
             dataCenter.UpdateScheduled = true;
-            Schedule(TDuration::Seconds(1), new TEvPrivate::TEvUpdateDataCenterFollowers(dataCenterId));
+            Schedule(GetDataCenterChangeReactionPeriod(), new TEvPrivate::TEvUpdateDataCenterFollowers(dataCenterId));
         }
     }
 }
@@ -2888,7 +2888,7 @@ void THive::RemoveRegisteredDataCentersNode(TDataCenterId dataCenterId, TNodeId 
         dataCenter.RegisteredNodes.erase(nodeId);
         if (wasRegistered && !dataCenter.IsRegistered() && !dataCenter.UpdateScheduled) {
             dataCenter.UpdateScheduled = true;
-            Schedule(TDuration::Seconds(1), new TEvPrivate::TEvUpdateDataCenterFollowers(dataCenterId));
+            Schedule(GetDataCenterChangeReactionPeriod(), new TEvPrivate::TEvUpdateDataCenterFollowers(dataCenterId));
         }
     }
 }

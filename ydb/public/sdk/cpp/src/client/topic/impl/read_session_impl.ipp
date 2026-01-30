@@ -208,11 +208,18 @@ void TRawPartitionStreamEventQueue<UseMigrationProtocol>::SignalReadyEvents(TInt
 template<bool UseMigrationProtocol>
 void TRawPartitionStreamEventQueue<UseMigrationProtocol>::DeleteNotReadyTail(TDeferredActions<UseMigrationProtocol>& deferred)
 {
+    std::deque<TRawPartitionStreamEvent<UseMigrationProtocol>> ready;
+
+    auto i = NotReady.begin();
+    for (; (i != NotReady.end()) && i->IsReady(); ++i) {
+        ready.push_back(std::move(*i));
+    }
+
     std::vector<TDataDecompressionInfoPtr<UseMigrationProtocol>> infos;
 
-    for (auto& event : NotReady) {
-        if (event.IsDataEvent()) {
-            auto info = event.GetDataEvent().GetParent();
+    for (; i != NotReady.end(); ++i) {
+        if (i->IsDataEvent()) {
+            auto info = i->GetDataEvent().GetParent();
             if (info) {
                 info->OnDestroyReadSession();
                 infos.push_back(std::move(info));
@@ -221,7 +228,8 @@ void TRawPartitionStreamEventQueue<UseMigrationProtocol>::DeleteNotReadyTail(TDe
     }
 
     deferred.DeferDestroyDecompressionInfos(std::move(infos));
-    NotReady.clear();
+
+    swap(ready, NotReady);
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

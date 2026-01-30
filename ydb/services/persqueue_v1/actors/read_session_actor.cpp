@@ -2156,10 +2156,8 @@ void TReadSessionActor<UseMigrationProtocol>::ProcessAnswer(typename TFormedRead
 
     // Bring back available partitions.
     // If some partition was removed from partitions container, it is not bad because it will be checked during read processing.
-    // If there are too many in flight bytes, add to overloaded partitions.
-    for (const auto& partition : formedResponse->PartitionsBecameAvailable) {
-        AvailablePartitions.insert(partition);
-    }
+    AvailablePartitions.insert(formedResponse->PartitionsBecameAvailable.begin(), formedResponse->PartitionsBecameAvailable.end());
+    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " Process answer. Aval parts: " << AvailablePartitions.size());
 
     if constexpr (UseMigrationProtocol) {
         if (!formedResponse->HasMessages) {

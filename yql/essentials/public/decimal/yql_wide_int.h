@@ -5,6 +5,7 @@
 #include <type_traits>
 #include <tuple>
 #include <cmath>
+#include <compare>
 
 namespace NYql {
 
@@ -28,9 +29,13 @@ private:
     TPart Lo_;
     THalf Hi_;
 
-    static constexpr auto FullBitSize = sizeof(TPart) << 4U;
+    static constexpr auto FullByteSize = sizeof(TPart) * 2;
+    static constexpr auto FullBitSize = FullByteSize * 8;
     static constexpr auto PartBitSize = sizeof(TPart) << 3U;
     static constexpr auto QuarterBitSize = sizeof(TPart) << 2U;
+
+    template <typename T>
+    static constexpr bool IsArithmeticSuitable = (std::is_integral_v<T> && sizeof(T) <= FullByteSize) || std::is_floating_point_v<T>;
 
     static constexpr TPart GetUpperQuarter(TPart h) {
         return h >> QuarterBitSize;
@@ -301,12 +306,7 @@ public:
     constexpr TWide operator^(const TWide& rhs) const {
         return TWide(*this) ^= rhs;
     }
-    constexpr TWide operator+(const TWide& rhs) const {
-        return TWide(*this) += rhs;
-    }
-    constexpr TWide operator-(const TWide& rhs) const {
-        return TWide(*this) -= rhs;
-    }
+
     constexpr TWide operator*(const TWide& rhs) const {
         return Mul(*this, rhs);
     }
@@ -328,23 +328,98 @@ public:
         return T(*this) & rhs;
     }
 
-    constexpr bool operator==(const TWide& rhs) const {
-        return std::tie(Hi_, Lo_) == std::tie(rhs.Hi_, rhs.Lo_);
+    friend constexpr TWide operator+(const TWide& lhs, const TWide& rhs) {
+        return TWide(lhs) += rhs;
     }
-    constexpr bool operator!=(const TWide& rhs) const {
-        return std::tie(Hi_, Lo_) != std::tie(rhs.Hi_, rhs.Lo_);
+
+    friend constexpr TWide operator-(const TWide& lhs, const TWide& rhs) {
+        return TWide(lhs) -= rhs;
     }
-    constexpr bool operator>=(const TWide& rhs) const {
-        return std::tie(Hi_, Lo_) >= std::tie(rhs.Hi_, rhs.Lo_);
+
+    template <typename U>
+        requires IsArithmeticSuitable<U>
+    friend constexpr auto operator+(const TWide& lhs, const U& rhs) {
+        if constexpr (std::is_floating_point_v<U>) {
+            return static_cast<U>(lhs) + rhs;
+        } else {
+            return TWide(lhs) += TWide(rhs);
+        }
     }
-    constexpr bool operator<=(const TWide& rhs) const {
-        return std::tie(Hi_, Lo_) <= std::tie(rhs.Hi_, rhs.Lo_);
+
+    template <typename U>
+        requires IsArithmeticSuitable<U>
+    friend constexpr auto operator+(const U& lhs, const TWide& rhs) {
+        if constexpr (std::is_floating_point_v<U>) {
+            return lhs + static_cast<U>(rhs);
+        } else {
+            return TWide(lhs) += rhs;
+        }
     }
-    constexpr bool operator>(const TWide& rhs) const {
-        return std::tie(Hi_, Lo_) > std::tie(rhs.Hi_, rhs.Lo_);
+
+    template <typename U>
+        requires IsArithmeticSuitable<U>
+    friend constexpr auto operator-(const TWide& lhs, const U& rhs) {
+        if constexpr (std::is_floating_point_v<U>) {
+            return static_cast<U>(lhs) - rhs;
+        } else {
+            return TWide(lhs) -= TWide(rhs);
+        }
     }
-    constexpr bool operator<(const TWide& rhs) const {
-        return std::tie(Hi_, Lo_) < std::tie(rhs.Hi_, rhs.Lo_);
+
+    template <typename U>
+        requires IsArithmeticSuitable<U>
+    friend constexpr auto operator-(const U& lhs, const TWide& rhs) {
+        if constexpr (std::is_floating_point_v<U>) {
+            return lhs - static_cast<U>(rhs);
+        } else {
+            return TWide(lhs) -= rhs;
+        }
+    }
+
+    friend constexpr bool operator==(const TWide& lhs, const TWide& rhs) = default;
+
+    friend constexpr auto operator<=>(const TWide& lhs, const TWide& rhs) {
+        return std::tie(lhs.Hi_, lhs.Lo_) <=> std::tie(rhs.Hi_, rhs.Lo_);
+    }
+
+    template <typename U>
+        requires IsArithmeticSuitable<U>
+    friend constexpr bool operator==(const TWide& lhs, const U& rhs) {
+        if constexpr (std::is_floating_point_v<U>) {
+            return static_cast<U>(lhs) == rhs;
+        } else {
+            return lhs == TWide(rhs);
+        }
+    }
+
+    template <typename U>
+        requires IsArithmeticSuitable<U>
+    friend constexpr bool operator==(const U& lhs, const TWide& rhs) {
+        if constexpr (std::is_floating_point_v<U>) {
+            return lhs == static_cast<U>(rhs);
+        } else {
+            return TWide(lhs) == rhs;
+        }
+    }
+
+    template <typename U>
+        requires IsArithmeticSuitable<U>
+    friend constexpr auto operator<=>(const TWide& lhs, const U& rhs) {
+        if constexpr (std::is_floating_point_v<U>) {
+            return static_cast<U>(lhs) <=> rhs;
+        } else {
+            return lhs <=> TWide(rhs);
+        }
+    }
+
+    template <typename U>
+        requires IsArithmeticSuitable<U>
+    friend constexpr auto operator<=>(const U& lhs, const TWide& rhs) {
+        if constexpr (std::is_floating_point_v<U>) {
+            return lhs <=> static_cast<U>(rhs);
+        } else {
+            return TWide(lhs) <=> rhs;
+        }
     }
 
 private:

@@ -378,11 +378,9 @@ namespace {
         }
     }
 
-    void AssertNoTliLogsWhenDisabled(const TString& logs, bool logEnabled) {
-        if (!logEnabled) {
-            UNIT_ASSERT_C(logs.find("TLI INFO") == TString::npos,
-                "no TLI INFO logs expected when LogEnabled=false");
-        }
+    void AssertNoTliLogsWhenDisabled(const TString& logs) {
+        UNIT_ASSERT_C(logs.find("TLI INFO") == TString::npos,
+            "no TLI INFO logs expected when LogEnabled=false");
     }
 
     // ==================== Test context and table helpers ====================
@@ -395,7 +393,7 @@ namespace {
         return settings;
     }
 
-    void ConfigureKikimrForTli(TKikimrRunner& kikimr, bool logEnabled) {
+    void ConfigureKikimrForTli(TKikimrRunner& kikimr, bool logEnabled = true) {
         if (logEnabled) {
             kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::TLI, NLog::PRI_INFO);
         }
@@ -407,7 +405,7 @@ namespace {
         TSession Session;
         TSession VictimSession;
 
-        TTliTestContext(bool logEnabled, TStringStream& ss)
+        TTliTestContext(TStringStream& ss, bool logEnabled = true)
             : Kikimr(MakeKikimrSettings(ss))
             , Client(Kikimr.GetTableClient())
             , Session(Client.CreateSession().GetValueSync().GetSession())
@@ -477,34 +475,29 @@ namespace {
 
     void VerifyTliLogsAndAssert(
         TStringStream& ss,
-        bool LogEnabled,
         const TString& breakerQueryText,
         const TString& victimQueryText,
         const std::optional<TString>& victimExtraQueryText = std::nullopt,
         ui64 expectedVictimQueryTraceId = 0)
     {
         DumpTliRecords(ss.Str());
-        const auto patterns = MakeTliLogPatterns();
 
-        if (LogEnabled) {
-            const auto data = ExtractAllTliData(ss.Str(), patterns);
-            AssertCommonTliAsserts(data, breakerQueryText, victimQueryText, victimExtraQueryText);
-            UNIT_ASSERT_C(expectedVictimQueryTraceId != 0,
-                "expectedVictimQueryTraceId should not be 0 when TLI logs are enabled");
-            UNIT_ASSERT_C(data.VictimSessionVictimQueryTraceIdOccurrences.has_value(),
-                "victim SessionActor VictimQueryTraceId should be present");
-            const auto& occurrences = *data.VictimSessionVictimQueryTraceIdOccurrences;
-            UNIT_ASSERT_C(std::find(occurrences.begin(), occurrences.end(), expectedVictimQueryTraceId) != occurrences.end(),
-                "VictimQueryTraceId should match between issue and victim SessionActor log");
-        } else {
-            AssertNoTliLogsWhenDisabled(ss.Str(), LogEnabled);
-        }
+        // Common case: LogEnabled is true
+        const auto patterns = MakeTliLogPatterns();
+        const auto data = ExtractAllTliData(ss.Str(), patterns);
+        AssertCommonTliAsserts(data, breakerQueryText, victimQueryText, victimExtraQueryText);
+        UNIT_ASSERT_C(expectedVictimQueryTraceId != 0,
+            "expectedVictimQueryTraceId should not be 0 when TLI logs are enabled");
+        UNIT_ASSERT_C(data.VictimSessionVictimQueryTraceIdOccurrences.has_value(),
+            "victim SessionActor VictimQueryTraceId should be present");
+        const auto& occurrences = *data.VictimSessionVictimQueryTraceIdOccurrences;
+        UNIT_ASSERT_C(std::find(occurrences.begin(), occurrences.end(), expectedVictimQueryTraceId) != occurrences.end(),
+            "VictimQueryTraceId should match between issue and victim SessionActor log");
     }
 
-    void VerifyTliIssueAndLogs(
+    void VerifyTliIssueAndLogsWithEnabled(
         const TString& issues,
         TStringStream& ss,
-        bool LogEnabled,
         const TString& breakerQueryText,
         const TString& victimQueryText,
         const std::optional<TString>& victimExtraQueryText = std::nullopt)
@@ -512,36 +505,52 @@ namespace {
         UNIT_ASSERT_C(issues.Contains("Transaction locks invalidated"),
             "Issue should contain 'Transaction locks invalidated': " << issues);
 
-        auto victimQueryTraceId = ExtractVictimQueryTraceIdFromIssue(issues);
-        if (LogEnabled) {
-            UNIT_ASSERT_C(victimQueryTraceId.has_value(),
-                "Issue should contain 'VictimQueryTraceId:': " << issues);
-            UNIT_ASSERT_C(*victimQueryTraceId != 0,
-                "VictimQueryTraceId should not be 0: " << issues);
-        } else {
-            UNIT_ASSERT_C(!victimQueryTraceId.has_value(),
-                "Issue should not contain 'VictimQueryTraceId:' when TLI logs are disabled: " << issues);
-        }
-
         // BreakerQueryTraceId should NOT be present in the issue
         UNIT_ASSERT_C(!issues.Contains("BreakerQueryTraceId:"),
             "Issue should NOT contain 'BreakerQueryTraceId:': " << issues);
 
+        auto victimQueryTraceId = ExtractVictimQueryTraceIdFromIssue(issues);
+
+        // Common case: LogEnabled is true
+        UNIT_ASSERT_C(victimQueryTraceId.has_value(),
+            "Issue should contain 'VictimQueryTraceId:': " << issues);
+        UNIT_ASSERT_C(*victimQueryTraceId != 0,
+            "VictimQueryTraceId should not be 0: " << issues);
+
         VerifyTliLogsAndAssert(
             ss,
-            LogEnabled,
             breakerQueryText,
             victimQueryText,
             victimExtraQueryText,
             victimQueryTraceId.value_or(0));
     }
+
+    void VerifyTliIssueAndLogsWithDisabled(
+        const TString& issues,
+        TStringStream& ss)
+    {
+        UNIT_ASSERT_C(issues.Contains("Transaction locks invalidated"),
+            "Issue should contain 'Transaction locks invalidated': " << issues);
+
+        // BreakerQueryTraceId should NOT be present in the issue
+        UNIT_ASSERT_C(!issues.Contains("BreakerQueryTraceId:"),
+            "Issue should NOT contain 'BreakerQueryTraceId:': " << issues);
+
+        auto victimQueryTraceId = ExtractVictimQueryTraceIdFromIssue(issues);
+
+        UNIT_ASSERT_C(!victimQueryTraceId.has_value(),
+            "Issue should not contain 'VictimQueryTraceId:' when TLI logs are disabled: " << issues);
+
+        AssertNoTliLogsWhenDisabled(ss.Str());
+    }
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(KqpTli) {
 
     Y_UNIT_TEST_TWIN(Basic, LogEnabled) {
         TStringStream ss;
-        TTliTestContext ctx(LogEnabled, ss);
+        TTliTestContext ctx(ss, LogEnabled);
         ctx.CreateTable("/Root/Tenant1/TableLocks");
         ctx.SeedTable("/Root/Tenant1/TableLocks", {{1, "Initial"}});
 
@@ -554,12 +563,16 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         auto [status, issues] = ExecuteVictimCommitWithIssues(ctx.VictimSession, victimTx, victimCommitText);
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
 
-        VerifyTliIssueAndLogs(issues, ss, LogEnabled, breakerQueryText, victimQueryText, victimCommitText);
+        if (LogEnabled) {
+            VerifyTliIssueAndLogsWithEnabled(issues, ss, breakerQueryText, victimQueryText, victimCommitText);
+        } else {
+            VerifyTliIssueAndLogsWithDisabled(issues, ss);
+        }
     }
 
-    Y_UNIT_TEST_TWIN(SeparateCommit, LogEnabled) {
+    Y_UNIT_TEST(SeparateCommit) {
         TStringStream ss;
-        TTliTestContext ctx(LogEnabled, ss);
+        TTliTestContext ctx(ss);
         ctx.CreateTable("/Root/Tenant1/TableLocks");
         ctx.SeedTable("/Root/Tenant1/TableLocks", {{1, "Initial"}});
 
@@ -584,13 +597,13 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         auto [status, issues] = ExecuteVictimCommitWithIssues(ctx.VictimSession, victimTx, victimCommitText);
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
 
-        VerifyTliIssueAndLogs(issues, ss, LogEnabled, breakerQueryText, victimQueryText, victimCommitText);
+        VerifyTliIssueAndLogsWithEnabled(issues, ss, breakerQueryText, victimQueryText, victimCommitText);
     }
 
     // Test: Many upserts in a single transaction, the breaker is the middle upsert
-    Y_UNIT_TEST_TWIN(ManyUpserts, LogEnabled) {
+    Y_UNIT_TEST(ManyUpserts) {
         TStringStream ss;
-        TTliTestContext ctx(LogEnabled, ss);
+        TTliTestContext ctx(ss);
         for (int i = 1; i <= 6; ++i) {
             ctx.CreateTable(Sprintf("/Root/Tenant1/Table%d", i));
             ctx.SeedTable(Sprintf("/Root/Tenant1/Table%d", i), {{1, Sprintf("Init%d", i)}});
@@ -623,13 +636,13 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         auto [status, issues] = CommitTxWithIssues(victimTx);
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
 
-        VerifyTliIssueAndLogs(issues, ss, LogEnabled, breakerUpdateTable2, victimSelectTable2);
+        VerifyTliIssueAndLogsWithEnabled(issues, ss, breakerUpdateTable2, victimSelectTable2);
     }
 
     // Test: Many upserts in a single transaction, the breaker is the middle upsert, separate commit
-    Y_UNIT_TEST_TWIN(ManyUpsertsSeparateCommit, LogEnabled) {
+    Y_UNIT_TEST(ManyUpsertsSeparateCommit) {
         TStringStream ss;
-        TTliTestContext ctx(LogEnabled, ss);
+        TTliTestContext ctx(ss);
         for (int i = 1; i <= 6; ++i) {
             ctx.CreateTable(Sprintf("/Root/Tenant1/Table%d", i));
             ctx.SeedTable(Sprintf("/Root/Tenant1/Table%d", i), {{1, Sprintf("Init%d", i)}});
@@ -662,13 +675,13 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         auto [status, issues] = CommitTxWithIssues(victimTx);
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
 
-        VerifyTliIssueAndLogs(issues, ss, LogEnabled, breakerUpdateTable2, victimSelectTable2);
+        VerifyTliIssueAndLogsWithEnabled(issues, ss, breakerUpdateTable2, victimSelectTable2);
     }
 
     // Test: Victim reads key 1, breaker writes key 1, victim writes key 2
-    Y_UNIT_TEST_TWIN(DifferentKeys, LogEnabled) {
+    Y_UNIT_TEST(DifferentKeys) {
         TStringStream ss;
-        TTliTestContext ctx(LogEnabled, ss);
+        TTliTestContext ctx(ss);
         ctx.CreateTable("/Root/Tenant1/TableDiffKeys");
         ctx.SeedTable("/Root/Tenant1/TableDiffKeys", {{1, "V1"}, {2, "V2"}});
 
@@ -681,13 +694,13 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         auto [status, issues] = ExecuteVictimCommitWithIssues(ctx.VictimSession, victimTx, victimCommitText);
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
 
-        VerifyTliIssueAndLogs(issues, ss, LogEnabled, breakerQueryText, victimQueryText);
+        VerifyTliIssueAndLogsWithEnabled(issues, ss, breakerQueryText, victimQueryText);
     }
 
     // Test: Victim reads multiple keys, breaker writes them all
-    Y_UNIT_TEST_TWIN(MultipleKeys, LogEnabled) {
+    Y_UNIT_TEST(MultipleKeys) {
         TStringStream ss;
-        TTliTestContext ctx(LogEnabled, ss);
+        TTliTestContext ctx(ss);
         ctx.CreateTable("/Root/Tenant1/TableMulti");
         ctx.SeedTable("/Root/Tenant1/TableMulti", {{1, "V1"}, {2, "V2"}, {3, "V3"}});
 
@@ -700,13 +713,13 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         auto [status, issues] = ExecuteVictimCommitWithIssues(ctx.VictimSession, victimTx, victimCommitText);
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
 
-        VerifyTliIssueAndLogs(issues, ss, LogEnabled, breakerQueryText, victimQueryText);
+        VerifyTliIssueAndLogsWithEnabled(issues, ss, breakerQueryText, victimQueryText);
     }
 
     // Test: Cross-table lock breakage - victim reads TableA, breaker writes TableA, victim writes TableB
-    Y_UNIT_TEST_TWIN(CrossTables, LogEnabled) {
+    Y_UNIT_TEST(CrossTables) {
         TStringStream ss;
-        TTliTestContext ctx(LogEnabled, ss);
+        TTliTestContext ctx(ss);
         ctx.CreateTable("/Root/Tenant1/TableA");
         ctx.CreateTable("/Root/Tenant1/TableB");
         ctx.SeedTable("/Root/Tenant1/TableA", {{1, "ValA"}});
@@ -720,13 +733,13 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         auto [status, issues] = ExecuteVictimCommitWithIssues(ctx.VictimSession, victimTx, victimCommitText);
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
 
-        VerifyTliIssueAndLogs(issues, ss, LogEnabled, breakerQueryText, victimQueryText);
+        VerifyTliIssueAndLogsWithEnabled(issues, ss, breakerQueryText, victimQueryText);
     }
 
     // Test: Two victims and one breaker scenario
-    Y_UNIT_TEST_TWIN(TwoVictimsOneBreaker, LogEnabled) {
+    Y_UNIT_TEST(TwoVictimsOneBreaker) {
         TStringStream ss;
-        TTliTestContext ctx(LogEnabled, ss);
+        TTliTestContext ctx(ss);
         ctx.CreateTable("/Root/Tenant1/TableLocks");
         ctx.SeedTable("/Root/Tenant1/TableLocks", {{1, "Initial"}});
 
@@ -750,17 +763,17 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         // Both victims try to commit - both should be aborted
         auto [status1, issues1] = ExecuteVictimCommitWithIssues(victim1Session, victim1Tx, victimCommitText);
         UNIT_ASSERT_VALUES_EQUAL(status1, EStatus::ABORTED);
-        VerifyTliIssueAndLogs(issues1, ss, LogEnabled, breakerQueryText, victimQueryText, victimCommitText);
+        VerifyTliIssueAndLogsWithEnabled(issues1, ss, breakerQueryText, victimQueryText, victimCommitText);
 
         auto [status2, issues2] = ExecuteVictimCommitWithIssues(victim2Session, victim2Tx, victimCommitText);
         UNIT_ASSERT_VALUES_EQUAL(status2, EStatus::ABORTED);
-        VerifyTliIssueAndLogs(issues2, ss, LogEnabled, breakerQueryText, victimQueryText, victimCommitText);
+        VerifyTliIssueAndLogsWithEnabled(issues2, ss, breakerQueryText, victimQueryText, victimCommitText);
     }
 
     // Test: InvisibleRowSkips - victim reads at snapshot V1, breaker commits at V2, victim reads again
-    Y_UNIT_TEST_TWIN(InvisibleRowSkips, LogEnabled) {
+    Y_UNIT_TEST(InvisibleRowSkips) {
         TStringStream ss;
-        TTliTestContext ctx(LogEnabled, ss);
+        TTliTestContext ctx(ss);
         ctx.CreateTable("/Root/Tenant1/TableSkips");
         ctx.SeedTable("/Root/Tenant1/TableSkips", {{1, "Initial"}});
 
@@ -786,7 +799,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         auto [status, issues] = ExecuteVictimCommitWithIssues(ctx.VictimSession, victimTx, victimCommitText);
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
 
-        VerifyTliIssueAndLogs(issues, ss, LogEnabled, breakerQueryText, victimRead1Text);
+        VerifyTliIssueAndLogsWithEnabled(issues, ss, breakerQueryText, victimRead1Text);
     }
 }
 

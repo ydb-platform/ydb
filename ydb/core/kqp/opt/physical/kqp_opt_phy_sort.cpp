@@ -82,6 +82,13 @@ TExprBase KqpRemoveRedundantSortByPk(TExprBase node, TExprContext& ctx, const TK
     }
 
     if (direction == ESortDirection::Reverse) {
+        // For sys views, we need to set reverse flag even if UseSource returns false
+        // because sys view actors can handle reverse direction
+        bool isSysView = tableDesc.Metadata->Kind == EKikimrTableKind::SysView;
+        if (isSysView) {
+            return node;
+        }
+
         if (!UseSource(kqpCtx, tableDesc) && kqpCtx.IsScanQuery()) {
             return node;
         }

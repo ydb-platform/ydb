@@ -4170,13 +4170,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     }
                 };
 
-                auto it = Self->Tables.find(pathId);
-                if (it != Self->Tables.end()) {
-                    TTableInfo::TPtr tableInfo = it->second;
-                    fillBackupInfo(tableInfo);
-                } else {
-                    TColumnTableInfo::TPtr tableInfo = Self->ColumnTables.at(pathId).GetPtr();
-                    fillBackupInfo(tableInfo);
+                if (auto it = Self->Tables.find(pathId); it != Self->Tables.end()) {
+                    fillBackupInfo(it->second);
+                } else if (auto it = Self->ColumnTables.at(pathId); it != Self->ColumnTables.end()) {
+                    fillBackupInfo(it->second.GetPtr());
                 }
 
                 LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,

@@ -349,6 +349,7 @@ inline void* MKQLAllocFastDeprecated(size_t sz, TAllocState* state, const EMemor
     if (Y_UNLIKELY(TAllocState::IsDefaultAllocatorUsed())) {
         auto ret = (TAllocState::TListEntry*)malloc(sizeof(TAllocState::TListEntry) + sz);
         if (!ret) {
+            // NOLINTNEXTLINE(hicpp-exception-baseclass)
             throw TMemoryLimitExceededException();
         }
 
@@ -389,6 +390,7 @@ inline void* MKQLAllocFastWithSizeImpl(size_t sz, TAllocState* state, const EMem
         state->OffloadAlloc(sizeof(TAllocState::TListEntry) + sz);
         auto ret = (TAllocState::TListEntry*)malloc(sizeof(TAllocState::TListEntry) + sz);
         if (!ret) {
+            // NOLINTNEXTLINE(hicpp-exception-baseclass)
             throw TMemoryLimitExceededException();
         }
 

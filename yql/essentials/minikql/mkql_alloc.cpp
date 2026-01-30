@@ -343,6 +343,7 @@ void* MKQLArrowAllocateImpl(ui64 size) {
         Y_ENSURE(pool);
         uint8_t* res;
         if (!pool->Allocate(fullSize, &res).ok()) {
+            // NOLINTNEXTLINE(hicpp-exception-baseclass)
             throw TMemoryLimitExceededException();
         }
         Y_ENSURE(res);

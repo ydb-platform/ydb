@@ -389,7 +389,7 @@ void TAlignedPagePoolImpl<T>::ReleaseFreePages() {
 template <typename T>
 void TAlignedPagePoolImpl<T>::OffloadAlloc(ui64 size) {
     if (Limit_ && TotalAllocated_ + size > Limit_ && !TryIncreaseLimit(TotalAllocated_ + size)) {
-        throw TMemoryLimitExceededException();
+        throw TMemoryLimitExceededException(); // NOLINT(hicpp-exception-baseclass)
     }
 
     if (AllocNotifyCallback_) {
@@ -437,7 +437,7 @@ void* TAlignedPagePoolImpl<T>::GetPageImpl() {
     }
 
     if (Limit_ && TotalAllocated_ + POOL_PAGE_SIZE > Limit_ && !TryIncreaseLimit(TotalAllocated_ + POOL_PAGE_SIZE)) {
-        throw TMemoryLimitExceededException();
+        throw TMemoryLimitExceededException(); // NOLINT(hicpp-exception-baseclass)
     }
 
     if (Y_LIKELY(!IsDefaultAllocatorUsed())) {
@@ -498,6 +498,7 @@ void* TAlignedPagePoolImpl<T>::GetBlock(size_t size) {
         OffloadAlloc(size);
         auto ret = malloc(size);
         if (!ret) {
+            // NOLINTNEXTLINE(hicpp-exception-baseclass)
             throw TMemoryLimitExceededException();
         }
 
@@ -534,7 +535,7 @@ void* TAlignedPagePoolImpl<T>::Alloc(size_t size) {
     size = AlignUp(size, SYS_PAGE_SIZE);
 
     if (Limit_ && TotalAllocated_ + size > Limit_ && !TryIncreaseLimit(TotalAllocated_ + size)) {
-        throw TMemoryLimitExceededException();
+        throw TMemoryLimitExceededException(); // NOLINT(hicpp-exception-baseclass)
     }
 
     if (AllocNotifyCallback_) {

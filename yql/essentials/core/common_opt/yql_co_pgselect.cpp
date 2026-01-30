@@ -486,6 +486,8 @@ std::pair<TExprNode::TPtr, TExprNode::TPtr> RewriteSubLinksPartial(
 
                         name = "and_traits_factory";
                         break;
+                    default:
+                        ythrow yexception() << "unexpected factory index " << factoryIndex;
                     }
 
                     const auto ex = exports.find(name);
@@ -526,6 +528,8 @@ std::pair<TExprNode::TPtr, TExprNode::TPtr> RewriteSubLinksPartial(
                         root = ctx.NewCallable(node->Pos(), "FromPg", { filterExpr });
                         break;
                     }
+                    default:
+                        ythrow yexception() << "unexpected factory index " << factoryIndex;
                     }
 
                     auto extractor = ctx.NewLambda(node->Pos(), std::move(arguments), std::move(root));
@@ -552,6 +556,8 @@ std::pair<TExprNode::TPtr, TExprNode::TPtr> RewriteSubLinksPartial(
                     case 3:
                         andTraits = traits;
                         break;
+                    default:
+                        ythrow yexception() << "unexpected factory index " << factoryIndex;
                     }
                 }
 

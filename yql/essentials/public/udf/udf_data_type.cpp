@@ -6,20 +6,24 @@
 namespace NYql {
 namespace NUdf {
 namespace {
-ui8 GetDecimalWidth(EDataTypeFeatures features, size_t size) {
-    if (features & NUdf::IntegralType) {
-        switch (size) {
-            case 1U:
-                return 3U;
-            case 2U:
-                return 5U;
-            case 4U:
-                return 10U;
-            case 8U:
-                return 20U;
-        }
+
+template <size_t Size>
+ui8 GetDecimalWidth(EDataTypeFeatures features) {
+    if ((features & NUdf::IntegralType) == 0U) {
+        return 0U;
     }
-    return 0U;
+
+    if constexpr (Size == 1) {
+        return 3U;
+    } else if constexpr (Size == 2) {
+        return 5U;
+    } else if constexpr (Size == 4) {
+        return 10U;
+    } else if constexpr (Size == 8) {
+        return 20U;
+    } else {
+        static_assert(false, "Unexpected size");
+    }
 }
 
 #define OK {ECastOptions::Complete}
@@ -98,22 +102,22 @@ TMaybe<TCastResultOptions> GetCastResult(EDataSlot source, EDataSlot target) {
 
 #define UDF_TYPE_INFO(xName, xId, xType, xFeatures, xLayoutType, xParamsCount) \
     {TStringBuf(#xName), xId, static_cast<EDataTypeFeatures>(xFeatures),       \
-     TPlainDataType<xType>::Result || TTzDataType<xType>::Result ? sizeof(xLayoutType) : 0, xParamsCount, GetDecimalWidth(static_cast<EDataTypeFeatures>(xFeatures), sizeof(xLayoutType))},
+     TPlainDataType<xType>::Result || TTzDataType<xType>::Result ? sizeof(xLayoutType) : 0, xParamsCount, GetDecimalWidth<sizeof(xLayoutType)>(static_cast<EDataTypeFeatures>(xFeatures))},
 
 TMaybe<EDataSlot> FindDataSlot(TDataTypeId id) {
     switch (id) {
         UDF_TYPE_ID_MAP(UDF_TYPE_ID_CHECK);
+        default:
+            return {};
     }
-
-    return {};
 }
 
 EDataSlot GetDataSlot(TDataTypeId id) {
     switch (id) {
         UDF_TYPE_ID_MAP(UDF_TYPE_ID_CHECK);
+        default:
+            ythrow yexception() << "Invalid data type id: " << id;
     }
-
-    ythrow yexception() << "Invalid data type id: " << id;
 }
 
 TMaybe<EDataSlot> FindDataSlot(TStringBuf str) {

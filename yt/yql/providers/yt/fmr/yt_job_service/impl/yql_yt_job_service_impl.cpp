@@ -67,7 +67,7 @@ public:
         auto client = CreateClient(clusterConnection);
 
         NYT::TStartDistributedWriteTableOptions startOptions;
-        startOptions.Timeout(options.Timeout);
+        startOptions.SessionTimeout(options.Timeout);
 
         auto transaction = client->AttachTransaction(GetGuid(clusterConnection.TransactionId));
         auto sessionWithCookies = transaction->StartDistributedWriteTableSession(

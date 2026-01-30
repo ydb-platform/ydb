@@ -791,6 +791,11 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
     CompiledComputationPatterns = KqpGroup->GetCounter("ComputationPatternCompilation/CompiledComputationPatterns");
     CompileComputationPatternsQueueSize = KqpGroup->GetCounter("ComputationPatternCompilation/CompileComputationPatternsQueueSize");
 
+    /* Warmup */
+    WarmupQueriesFetched = KqpGroup->GetCounter("Warmup/QueriesFetched", true);
+    WarmupQueriesCompiled = KqpGroup->GetCounter("Warmup/QueriesCompiled", true);
+    WarmupFinished = KqpGroup->GetCounter("Warmup/Finished", true);
+
     /* Resource Manager */
     RmComputeActors = KqpGroup->GetCounter("RM/ComputeActors", false);
     RmMemory = KqpGroup->GetCounter("RM/Memory", false);

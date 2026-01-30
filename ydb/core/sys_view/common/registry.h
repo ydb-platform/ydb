@@ -878,6 +878,7 @@ struct Schema : NIceDb::Schema {
         struct CompilationDuration : Column<8, NScheme::NTypeIds::Uint64> {};
         struct Warnings            : Column<9, NScheme::NTypeIds::Utf8> {};
         struct Metadata            : Column<10, NScheme::NTypeIds::Utf8> {};
+        struct IsTruncated         : Column<11, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<NodeId, QueryId>;
         using TColumns = TableColumns<
@@ -890,7 +891,8 @@ struct Schema : NIceDb::Schema {
             LastAccessedAt,
             CompilationDuration,
             Warnings,
-            Metadata>;
+            Metadata,
+            IsTruncated>;
     };
 
     struct StreamingQueries : Table<26> {

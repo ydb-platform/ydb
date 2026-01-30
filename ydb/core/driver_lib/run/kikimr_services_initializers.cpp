@@ -49,8 +49,9 @@
 #include <ydb/core/cms/http.h>
 
 #include <ydb/core/control/immediate_control_board_actor.h>
-
+#include <ydb/core/driver_lib/run/grpc_servers_manager.h>
 #include <ydb/core/driver_lib/version/version.h>
+
 #include <ydb/core/discovery/discovery.h>
 
 #include <ydb/core/grpc_services/grpc_mon.h>
@@ -85,6 +86,7 @@
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/core/kqp/finalize_script_service/kqp_finalize_script_service.h>
 #include <ydb/core/kqp/federated_query/actors/kqp_federated_query_actors.h>
+#include <ydb/core/kqp/compile_service/kqp_warmup_compile_actor.h>
 
 #include <ydb/core/load_test/service_actor.h>
 
@@ -2288,6 +2290,20 @@ void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setu
         setup->LocalServices.push_back(std::make_pair(
             NKqp::MakeKqpDescribeSchemaSecretServiceId(NodeId),
             TActorSetupCmd(describeSchemaSecretsService, TMailboxType::HTSwap, appData->UserPoolId)));
+
+        if (Config.GetTableServiceConfig().HasCompileCacheWarmupConfig() && 
+            Config.GetTableServiceConfig().GetCompileCacheWarmupConfig().GetEnabled()) {
+            auto warmupConfig = NKqp::ImportWarmupConfigFromProto(Config.GetTableServiceConfig().GetCompileCacheWarmupConfig());
+
+            TString database = appData->TenantName;
+            TString cluster = appData->DomainsInfo->Domain ? appData->DomainsInfo->Domain->Name : TString();
+
+            auto grpcManagerId = MakeGRpcServersManagerId(NodeId);
+            auto warmupActor = NKqp::CreateKqpWarmupActor(warmupConfig, database, cluster, grpcManagerId);
+            setup->LocalServices.push_back(std::make_pair(
+                NKqp::MakeKqpWarmupActorId(NodeId),
+                TActorSetupCmd(warmupActor, TMailboxType::HTSwap, appData->UserPoolId)));
+        }
     }
 }
 

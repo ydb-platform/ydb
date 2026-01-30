@@ -74,6 +74,10 @@ public:
             insert({TSchema::Metadata::ColumnId, [] (const TCompileCacheQuery& info, ui32) {  // 10
                 return TCell(info.GetMetaInfo());
             }});
+
+            insert({TSchema::IsTruncated::ColumnId, [] (const TCompileCacheQuery& info, ui32) {  // 11
+                return TCell::Make<bool>(info.GetIsTruncated());
+            }});
         }
     };
 
@@ -190,7 +194,7 @@ private:
             req->Record.SetFreeSpace(FreeSpace);
 
             LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
-                "Send request to node, node_id="  << nodeId << ", request: " << req->Record.ShortDebugString());
+                "Send request to node_id=" << nodeId << ", request: " << req->Record.ShortDebugString());
 
             Send(kqpProxyId, req.release(), 0, nodeId);
             PendingRequest = true;
@@ -202,7 +206,14 @@ private:
         if (AppData()->FeatureFlags.GetEnableCompileCacheView()) {
             auto& proxies = ev->Get()->ProxyNodes;
             std::sort(proxies.begin(), proxies.end());
-            PendingNodes = std::deque<ui32>(proxies.begin(), proxies.end());
+            // limit nodes for fast warmup response
+            ui32 maxNodesToQuery = ev->Get()->MaxNodesToQuery;
+
+            if (maxNodesToQuery > 0 && proxies.size() > maxNodesToQuery) {
+                PendingNodes = std::deque<ui32>(proxies.begin(), proxies.begin() + maxNodesToQuery);
+            } else {
+                PendingNodes = std::deque<ui32>(proxies.begin(), proxies.end());
+            }
             PendingNodesInitialized = true;
         }
         StartScan();
@@ -223,7 +234,9 @@ private:
         if (ev->Get()->SourceType == NKqp::TKqpEvents::EvListCompileCacheQueriesRequest) {
             ui32 nodeId = ev->Cookie;
             LOG_INFO_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
-                "Received undelivered response for node_id: " << nodeId);
+                "Undelivered response for node_id=" << nodeId);
+            PendingRequest = false;
+            PendingNodes.pop_front();
             StartScan();
         }
     }
@@ -233,13 +246,13 @@ private:
 
     void Disconnected(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
         ui32 nodeId = ev->Get()->NodeId;
-        Y_UNUSED(nodeId);
         ProcessRows();
     }
 
     void ProcessRows() {
         auto batch = MakeHolder<NKqp::TEvKqpCompute::TEvScanData>(ScanId);
         auto nodeId = LastResponse.GetNodeId();
+
         for(int idx = 0; idx < LastResponse.GetCacheCacheQueries().size(); ++idx) {
             TVector<TCell> cells;
             for (auto extractor : ColumnsExtractors) {
@@ -257,7 +270,6 @@ private:
             if (PendingNodes.empty()) {
                 batch->Finished = true;
             }
-
         } else {
             ContinuationToken = LastResponse.GetContinuationToken();
         }

@@ -1221,7 +1221,7 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
         auto resultSet = result.GetResultSet(0);
-        UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnsCount(), 10);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnsCount(), 11);
         UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 1);
 
         NYdb::TResultSetParser parser(resultSet);

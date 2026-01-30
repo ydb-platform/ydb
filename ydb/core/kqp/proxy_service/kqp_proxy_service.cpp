@@ -18,6 +18,7 @@
 #include <ydb/core/kqp/common/kqp_lwtrace_probes.h>
 #include <ydb/core/kqp/common/kqp_timeouts.h>
 #include <ydb/core/kqp/compile_service/kqp_compile_service.h>
+#include <ydb/core/kqp/compile_service/kqp_warmup_compile_actor.h>
 #include <ydb/core/kqp/compute_actor/kqp_compute_actor.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
@@ -946,9 +947,16 @@ public:
 
     void Handle(TEvPrivate::TEvCollectPeerProxyData::TPtr&) {
         if (!ShutdownRequested) {
-            const auto& sbs = TableServiceConfig.GetSessionBalancerSettings();
-            ui64 millis = sbs.GetBoardLookupIntervalMs();
-            TDuration d = TDuration::MilliSeconds(millis + (RandomProvider->GenRand() % millis));
+            TDuration d;
+            if (!WarmupStarted && TableServiceConfig.HasCompileCacheWarmupConfig() && 
+                TableServiceConfig.GetCompileCacheWarmupConfig().GetEnabled()) {
+                // Short polling interval until warmup starts
+                d = TDuration::Seconds(2);
+            } else {
+                const auto& sbs = TableServiceConfig.GetSessionBalancerSettings();
+                ui64 millis = sbs.GetBoardLookupIntervalMs();
+                d = TDuration::MilliSeconds(millis + (RandomProvider->GenRand() % millis));
+            }
             Schedule(d, new TEvPrivate::TEvCollectPeerProxyData());
         }
 
@@ -992,6 +1000,24 @@ public:
 
         PeerStats = CalcPeerStats(PeerProxyNodeResources, *SelfDataCenterId);
         TryKickSession();
+        TryStartWarmup();
+    }
+
+    void TryStartWarmup() {
+        if (WarmupStarted) {
+            return;
+        }
+
+        if (!TableServiceConfig.HasCompileCacheWarmupConfig() || !TableServiceConfig.GetCompileCacheWarmupConfig().GetEnabled()) {
+            return;
+        }
+
+        if (PeerProxyNodeResources.size() > 1) {
+            WarmupStarted = true;
+            KQP_PROXY_LOG_I("Discovered " << PeerProxyNodeResources.size() 
+                << " proxy nodes, starting warmup");
+            Send(MakeKqpWarmupActorId(SelfId().NodeId()), new TEvStartWarmup(PeerProxyNodeResources.size()));
+        }
     }
 
     bool ShouldStartBalancing(const TSimpleResourceStats& stats, const double minResourceThreshold, const double currentResourceUsage) const {
@@ -1797,6 +1823,16 @@ private:
             result->ProxyNodes.push_back(SelfId().NodeId());
         }
 
+        // Pass MaxNodesToQuery only if request comes from warmup actor
+        // Check if sender is warmup actor by comparing with warmup actor ID pattern
+        bool isWarmupRequest = (ev->Sender == NKqp::MakeKqpWarmupActorId(SelfId().NodeId()));
+
+        if (isWarmupRequest &&
+            TableServiceConfig.HasCompileCacheWarmupConfig() &&
+            TableServiceConfig.GetCompileCacheWarmupConfig().GetMaxNodesToQuery() > 0) {
+            result->MaxNodesToQuery = TableServiceConfig.GetCompileCacheWarmupConfig().GetMaxNodesToQuery();
+        }
+
         Send(ev->Sender, result.release(), 0, ev->Cookie);
     }
 
@@ -1896,6 +1932,7 @@ private:
     TKqpQueryCachePtr QueryCache;
 
     bool ServerWorkerBalancerComplete = false;
+    bool WarmupStarted = false;
     std::optional<TString> SelfDataCenterId;
     TIntrusivePtr<IRandomProvider> RandomProvider;
     std::vector<ui64> LocalDatacenterProxies;

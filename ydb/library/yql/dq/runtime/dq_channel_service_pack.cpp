@@ -51,7 +51,7 @@ public:
     }
 
     void Flush(bool finished) override {
-        if (Packer.PackedSizeEstimate() > 0) {
+        if (Packer.PackedSizeEstimate() > 0 && (finished || Buffer->IsEmpty())) {
             Buffer->Push(TDataChunk(Packer.Finish(), Rows, TransportVersion, PackerVersion, Buffer->GetLeading(), finished));
         } else if (finished) {
             Buffer->SendFinish();
@@ -90,7 +90,7 @@ public:
     }
 
     void Flush(bool finished) override {
-        if (Packer.PackedSizeEstimate() > 0) {
+        if (Packer.PackedSizeEstimate() > 0 && (finished || Buffer->IsEmpty())) {
             Buffer->Push(TDataChunk(Packer.Finish(), Rows, TransportVersion, PackerVersion, Buffer->GetLeading(), finished));
         } else if (finished) {
             Buffer->SendFinish();

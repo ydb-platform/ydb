@@ -22,12 +22,19 @@ namespace NKikimr {
             return Capacity;
         }
 
-        TMutableContiguousSpan GetDataMut() override {
+        TMutableContiguousSpan UnsafeGetDataMut() override {
             return {Data, Capacity};
         }
 
         static TIntrusivePtr<IContiguousChunk> Allocate() {
             return MakeIntrusive<TRopeArenaBackend>();
+        }
+
+        IContiguousChunk::TPtr Clone() override {
+            IContiguousChunk::TPtr buf = Allocate();
+            TContiguousSpan src = GetData();
+            ::memcpy(buf->UnsafeGetDataMut().GetData(), src.Data(), src.GetSize());
+            return buf;
         }
     };
 

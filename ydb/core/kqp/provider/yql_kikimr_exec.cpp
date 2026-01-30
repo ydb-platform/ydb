@@ -634,7 +634,7 @@ namespace {
                 if (alterPolicy.value() == "move"sv) {
                     policyProto->mutable_set_move_action()->set_dead_letter_queue(alterDLQ.value());
                 } else {
-                    return TStringBuilder() << "Cann`t alter dead_letter_queue and set dead_letter_policy to " << alterPolicy.value();
+                    return TStringBuilder() << "The dead_letter_queue option can only be used with dead_letter_policy 'move'";
                 }
             } else {
                 policyProto->mutable_alter_move_action()->set_set_dead_letter_queue(alterDLQ.value());

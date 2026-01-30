@@ -148,23 +148,9 @@ def convert_muted_txt_to_yaml(muted_txt_path: str):
             continue
         path, filter = _split(test_line, ' ')
         if filter.endswith('chunk'):
-            suite_type, filter = _split(filter, '.')
-            if filter.endswith('sole chunk'):
-                filter = ''
-            else:
-                begin = filter.find('[')
-                end = filter.find(']')
-                filter, temp = _split(filter[begin + 1 : end], ' ')
-                if not temp:
-                    if filter.find('/') >= 0:
-                        filter = ''
-                    else:
-                        filter = f'{filter}::*'
-                else:
-                    filter = f'{filter}::*'
-        else:
-            suite_type = ''
-            filter = filter.replace('.', '::').replace('::py::', '.py::')
+            continue
+        suite_type = ''
+        filter = filter.replace('.', '::').replace('::py::', '.py::')
 
         filter_by_suite.setdefault((path, suite_type), [])
         filter_by_suite[(path, suite_type)].append(filter)

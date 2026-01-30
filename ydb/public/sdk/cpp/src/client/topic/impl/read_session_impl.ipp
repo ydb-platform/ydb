@@ -208,24 +208,15 @@ void TRawPartitionStreamEventQueue<UseMigrationProtocol>::SignalReadyEvents(TInt
 template<bool UseMigrationProtocol>
 void TRawPartitionStreamEventQueue<UseMigrationProtocol>::DeleteNotReadyTail(TDeferredActions<UseMigrationProtocol>& deferred)
 {
-    // For non-graceful partition stops, we need to destroy ALL data events
-    // from BOTH queues (NotReady and Ready). Even though Ready events have been
-    // signaled to the global queue, they cannot be delivered because the partition
-    // is being forcibly closed. If we keep them, their TDataDecompressionInfo
-    // objects will never be destroyed, causing memory counters (CompressedDataSize,
-    // DecompressedDataSize) to never decrement, which blocks all reading.
+    // For non-graceful partition stops, we only destroy data events from NotReady
+    // queue (events not yet signaled to the global queue). Ready events have already
+    // been signaled and can be delivered to the user - this preserves the WaitEvent/
+    // GetEvent contract where a signaled future guarantees an available event.
 
     std::vector<TDataDecompressionInfoPtr<UseMigrationProtocol>> infos;
 
-    // Collect data events from NotReady queue
+    // Collect data events from NotReady queue only
     for (auto& event : NotReady) {
-        if (event.IsDataEvent()) {
-            infos.push_back(event.GetDataEvent().GetParent());
-        }
-    }
-
-    // Also collect data events from Ready queue (already signaled but undeliverable)
-    for (auto& event : Ready) {
         if (event.IsDataEvent()) {
             infos.push_back(event.GetDataEvent().GetParent());
         }
@@ -242,9 +233,9 @@ void TRawPartitionStreamEventQueue<UseMigrationProtocol>::DeleteNotReadyTail(TDe
 
     deferred.DeferDestroyDecompressionInfos(std::move(infos));
 
-    // Clear all events - they cannot be delivered for a non-graceful close
+    // Clear only NotReady - these events were never signaled to the global queue.
+    // Ready events are kept so the user can retrieve them via GetEvent.
     NotReady.clear();
-    Ready.clear();
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -2512,22 +2503,15 @@ TReadSessionEventsQueue<UseMigrationProtocol>::GetDataEventImpl(TIntrusivePtr<TP
 }
 
 template <bool UseMigrationProtocol>
-std::optional<TReadSessionEventInfo<UseMigrationProtocol>>
+TReadSessionEventInfo<UseMigrationProtocol>
 TReadSessionEventsQueue<UseMigrationProtocol>::GetEventImpl(size_t& maxByteSize,
                                                             TUserRetrievedEventsInfoAccumulator<UseMigrationProtocol>& accumulator) // Assumes that we're under lock.
 {
     Y_ASSERT(TParent::HasEventsImpl());
 
-    while (!TParent::Events.empty()) {
+    if (!TParent::Events.empty()) {
         TReadSessionEventInfo<UseMigrationProtocol>& front = TParent::Events.front();
         auto partitionStream = front.PartitionStream;
-
-        // Partition may have been closed non-gracefully, which clears its event queues.
-        // In that case, skip this stale entry in the global queue.
-        if (!partitionStream->HasEvents()) {
-            TParent::Events.pop();
-            continue;
-        }
 
         std::optional<typename TAReadSessionEvent<UseMigrationProtocol>::TEvent> event;
         auto frontCbContext = front.CbContext;
@@ -2553,14 +2537,9 @@ TReadSessionEventsQueue<UseMigrationProtocol>::GetEventImpl(size_t& maxByteSize,
 
         return TReadSessionEventInfo<UseMigrationProtocol>{partitionStream, std::move(frontCbContext), std::move(*event)};
     }
-    // All entries in global queue were stale (from closed partitions), or we have a close event
-    if (TParent::CloseEvent) {
-        return TReadSessionEventInfo<UseMigrationProtocol>{*TParent::CloseEvent};
-    }
 
-    // No valid events and no close event - this can happen if all entries were stale
-    // The caller should handle this case (GetEvents will loop back to wait)
-    return {};
+    Y_ABORT_UNLESS(TParent::CloseEvent);
+    return TReadSessionEventInfo<UseMigrationProtocol>{*TParent::CloseEvent};
 }
 
 template <bool UseMigrationProtocol>
@@ -2583,13 +2562,7 @@ TReadSessionEventsQueue<UseMigrationProtocol>::GetEvents(bool block, std::option
             }
 
             while (TParent::HasEventsImpl() && eventInfos.size() < maxCount && maxByteSize > 0) {
-                auto eventOpt = GetEventImpl(maxByteSize, accumulator);
-                if (!eventOpt) {
-                    // All entries were stale, HasEventsImpl may still return true
-                    // but we've exhausted valid events - break out and wait
-                    break;
-                }
-                eventInfos.emplace_back(std::move(*eventOpt));
+                eventInfos.emplace_back(GetEventImpl(maxByteSize, accumulator));
                 if (eventInfos.back().IsSessionClosedEvent()) {
                     break;
                 }
@@ -2616,20 +2589,17 @@ TReadSessionEventsQueue<UseMigrationProtocol>::GetEvent(bool block, size_t maxBy
         ThrowFatalError("the maxByteSize value must be greater than 0");
     }
 
-    std::optional<TReadSessionEventInfo<UseMigrationProtocol>> eventInfo;
     TUserRetrievedEventsInfoAccumulator<UseMigrationProtocol> accumulator;
+    std::optional<TReadSessionEventInfo<UseMigrationProtocol>> eventInfo;
     {
         std::lock_guard<std::mutex> guard(TParent::Mutex);
-        do {
-            if (block) {
-                TParent::WaitEventsImpl();
-            }
+        if (block) {
+            TParent::WaitEventsImpl();
+        }
 
-            if (TParent::HasEventsImpl()) {
-                eventInfo = GetEventImpl(maxByteSize, accumulator);
-            }
-
-        } while (block && !eventInfo);
+        if (TParent::HasEventsImpl()) {
+            eventInfo = GetEventImpl(maxByteSize, accumulator);
+        }
     }
 
     accumulator.OnUserRetrievedEvent();

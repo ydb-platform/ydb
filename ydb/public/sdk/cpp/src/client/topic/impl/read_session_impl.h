@@ -850,7 +850,7 @@ public:
     TReadSessionEventsQueue(const TAReadSessionSettings<UseMigrationProtocol>& settings);
 
     // Assumes we are under lock.
-    std::optional<TReadSessionEventInfo<UseMigrationProtocol>>
+    TReadSessionEventInfo<UseMigrationProtocol>
     GetEventImpl(size_t& maxByteSize,
                  TUserRetrievedEventsInfoAccumulator<UseMigrationProtocol>& accumulator);
 

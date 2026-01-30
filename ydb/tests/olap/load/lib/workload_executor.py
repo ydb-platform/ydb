@@ -106,7 +106,7 @@ class WorkloadTestBase(LoadSuiteBase):
                 result.start_time = verification_start_time - 600
 
             # Записываем результат проверки кластера через универсальный метод
-            cls.test_event_report(
+            cls.event_report(
                 event_kind='ClusterCheck',
                 verification_phase="pre_test_verification",
                 check_type="cluster_availability",
@@ -143,7 +143,7 @@ class WorkloadTestBase(LoadSuiteBase):
             return cls._create_cluster_issue("cluster_check_exception", f"Exception during cluster check: {e}")
 
     @classmethod
-    def test_event_report(cls, event_kind: str,
+    def event_report(cls, event_kind: str,
                           verification_phase: str = None, check_type: str = None,
                           cluster_issue: dict = None) -> None:
         """
@@ -367,7 +367,7 @@ class WorkloadTestBase(LoadSuiteBase):
                     0
                 )
 
-                cls.test_event_report(
+                cls.event_report(
                     event_kind='ClusterCheck',
                     verification_phase="nemesis_management",
                     check_type="nemesis_cluster_check",
@@ -734,7 +734,7 @@ class WorkloadTestBase(LoadSuiteBase):
                         success_count
                     )
 
-                    cls.test_event_report(
+                    cls.event_report(
                         event_kind='ClusterCheck',
                         verification_phase="nemesis_management",
                         check_type="nemesis_partial_failure",
@@ -765,7 +765,7 @@ class WorkloadTestBase(LoadSuiteBase):
                 0
             )
 
-            cls.test_event_report(
+            cls.event_report(
                 event_kind='ClusterCheck',
                 verification_phase="nemesis_management",
                 check_type=f"nemesis_{action_name.lower()}_exception",
@@ -1134,7 +1134,7 @@ class WorkloadTestBase(LoadSuiteBase):
 
         # СНАЧАЛА создаем TestInit запись
         with allure.step(f"Initialize test for {workload_name}"):
-            self.__class__.test_event_report('TestInit')
+            self.__class__.event_report('TestInit')
 
         # ЗАТЕМ выполняем проверку кластера с правильным workload_name
         with allure.step(f"Pre-workload cluster verification for {workload_name}"):
@@ -1688,7 +1688,7 @@ class WorkloadTestBase(LoadSuiteBase):
                         0
                     )
 
-                    self.__class__.test_event_report(
+                    self.__class__.event_report(
                         event_kind='ClusterCheck',
                         verification_phase="workload_deployment",
                         check_type="deployment_cluster_check",
@@ -1819,7 +1819,7 @@ class WorkloadTestBase(LoadSuiteBase):
                         0
                     )
 
-                    self.__class__.test_event_report(
+                    self.__class__.event_report(
                         event_kind='ClusterCheck',
                         verification_phase="workload_deployment",
                         check_type="deployment_failure",
@@ -2494,7 +2494,7 @@ class WorkloadTestBase(LoadSuiteBase):
                     0
                 )
 
-                self.__class__.test_event_report(
+                self.__class__.event_report(
                     event_kind='ClusterCheck',
                     verification_phase="post_workload_verification",
                     check_type="nemesis_status_check",
@@ -2510,7 +2510,7 @@ class WorkloadTestBase(LoadSuiteBase):
                     1
                 )
 
-                self.__class__.test_event_report(
+                self.__class__.event_report(
                     event_kind='ClusterCheck',
                     verification_phase="post_workload_verification",
                     check_type="nemesis_status_check",

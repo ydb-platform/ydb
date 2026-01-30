@@ -1280,7 +1280,6 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
                             << ReadSizeBudget << ", ReadSizeServerDelta = " << ReadSizeServerDelta);
 
     UpdateMemoryUsageStatisticsImpl();
-
     for (TPartitionData<false>& partitionData : *msg.mutable_partition_data()) {
         auto partitionStreamIt = PartitionStreams.find(partitionData.partition_session_id());
         if (partitionStreamIt == PartitionStreams.end()) {
@@ -1355,7 +1354,6 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
     WaitingReadResponse = false;
     ContinueReadingDataImpl();
 }
-
 
 template <>
 inline void TSingleClusterReadSessionImpl<false>::StopPartitionSessionImpl(
@@ -2588,17 +2586,19 @@ TReadSessionEventsQueue<UseMigrationProtocol>::GetEvent(bool block, size_t maxBy
         ThrowFatalError("the maxByteSize value must be greater than 0");
     }
 
-    TUserRetrievedEventsInfoAccumulator<UseMigrationProtocol> accumulator;
     std::optional<TReadSessionEventInfo<UseMigrationProtocol>> eventInfo;
+    TUserRetrievedEventsInfoAccumulator<UseMigrationProtocol> accumulator;
     {
         std::lock_guard<std::mutex> guard(TParent::Mutex);
-        if (block) {
-            TParent::WaitEventsImpl();
-        }
+        do {
+            if (block) {
+                TParent::WaitEventsImpl();
+            }
 
-        if (TParent::HasEventsImpl()) {
-            eventInfo = GetEventImpl(maxByteSize, accumulator);
-        }
+            if (TParent::HasEventsImpl()) {
+                eventInfo = GetEventImpl(maxByteSize, accumulator);
+            }
+        } while (block && !eventInfo);
     }
 
     accumulator.OnUserRetrievedEvent();

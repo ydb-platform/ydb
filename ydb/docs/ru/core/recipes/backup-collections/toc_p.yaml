@@ -1,0 +1,15 @@
+items:
+- name: Начало работы
+  href: getting-started.md
+- name: Настройка для разных сред
+  href: multi-environment-setup.md
+- name: Стратегия для микросервисов
+  href: microservices-backup-strategy.md
+- name: Экспорт во внешнее хранилище
+  href: exporting-to-external-storage.md
+- name: Импорт и восстановление
+  href: importing-and-restoring.md
+- name: Обслуживание и очистка
+  href: maintenance-and-cleanup.md
+- name: Проверка и тестирование
+  href: validation-and-testing.md

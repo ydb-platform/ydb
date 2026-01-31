@@ -135,6 +135,7 @@ public:
                 .CheckpointPeriod = CheckpointPeriod,
                 .LogSettings = LogSettings,
                 .UseLocalCheckpointsInStreamingQueries = true,
+                .InternalInitFederatedQuerySetupFactory = InternalInitFederatedQuerySetupFactory,
             });
 
             Kikimr->GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableSchemaSecrets(true);
@@ -204,14 +205,18 @@ public:
         return ExternalDriver;
     }
 
-    std::shared_ptr<NTopic::TTopicClient> GetTopicClient() {
+    std::shared_ptr<NTopic::TTopicClient> GetTopicClient(bool local = false) {
+        if (local && !LocalTopicClient) {
+            LocalTopicClient = std::make_shared<NTopic::TTopicClient>(*GetInternalDriver(), TopicClientSettings);
+        }
+
         if (!TopicClient) {
             TopicClient = std::make_shared<NTopic::TTopicClient>(*GetExternalDriver(), NTopic::TTopicClientSettings()
                 .DiscoveryEndpoint(YDB_ENDPOINT)
                 .Database(YDB_DATABASE));
         }
 
-        return TopicClient;
+        return local ? LocalTopicClient : TopicClient;
     }
 
     std::shared_ptr<TQueryClient> GetExternalQueryClient() {
@@ -232,18 +237,18 @@ public:
 
     // Topic client SDK (external YDB recipe)
 
-    void CreateTopic(const TString& topicName, std::optional<NTopic::TCreateTopicSettings> settings = std::nullopt) {
+    void CreateTopic(const TString& topicName, std::optional<NTopic::TCreateTopicSettings> settings = std::nullopt, bool local = false) {
         if (!settings) {
             settings.emplace()
                 .PartitioningSettings(1, 1);
         }
 
-        const auto result = GetTopicClient()->CreateTopic(topicName, *settings).ExtractValueSync();
+        const auto result = GetTopicClient(local)->CreateTopic(topicName, *settings).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
     }
 
-    void WriteTopicMessage(const TString& topicName, const TString& message, ui64 partition = 0) {
-        auto writeSession = GetTopicClient()->CreateSimpleBlockingWriteSession(NTopic::TWriteSessionSettings()
+    void WriteTopicMessage(const TString& topicName, const TString& message, ui64 partition = 0, bool local = false) {
+        auto writeSession = GetTopicClient(local)->CreateSimpleBlockingWriteSession(NTopic::TWriteSessionSettings()
             .Path(topicName)
             .PartitionId(partition));
 
@@ -257,11 +262,11 @@ public:
         }
     }
 
-    void ReadTopicMessage(const TString& topicName, const TString& expectedMessage, TInstant disposition = TInstant::Now() - TDuration::Seconds(100)) {
-        ReadTopicMessages(topicName, {expectedMessage}, disposition);
+    void ReadTopicMessage(const TString& topicName, const TString& expectedMessage, TInstant disposition = TInstant::Now() - TDuration::Seconds(100), bool local = false) {
+        ReadTopicMessages(topicName, {expectedMessage}, disposition, /* sort */ false, local);
     }
 
-    void ReadTopicMessages(const TString& topicName, TVector<TString> expectedMessages, TInstant disposition = TInstant::Now() - TDuration::Seconds(100), bool sort = false) {
+    void ReadTopicMessages(const TString& topicName, TVector<TString> expectedMessages, TInstant disposition = TInstant::Now() - TDuration::Seconds(100), bool sort = false, bool local = false) {
         NTopic::TReadSessionSettings readSettings;
         readSettings
             .WithoutConsumer()
@@ -276,7 +281,7 @@ public:
             }
         );
 
-        auto readSession = GetTopicClient()->CreateReadSession(readSettings);
+        auto readSession = GetTopicClient(local)->CreateReadSession(readSettings);
         std::vector<std::string> received;
         WaitFor(TEST_OPERATION_TIMEOUT, "topic output messages", [&](TString& error) {
             if (!readSession->WaitEvent().HasValue()) {
@@ -789,7 +794,9 @@ private:
 protected:
     TDuration CheckpointPeriod = TDuration::MilliSeconds(200);
     TTestLogSettings LogSettings;
+    bool InternalInitFederatedQuerySetupFactory = false;
     TClientSettings QueryClientSettings = TClientSettings().AuthToken(BUILTIN_ACL_ROOT);
+    NTopic::TTopicClientSettings TopicClientSettings = NTopic::TTopicClientSettings().AuthToken(BUILTIN_ACL_ROOT);
 
 private:
     std::optional<NKikimrConfig::TAppConfig> AppConfig;
@@ -802,6 +809,7 @@ private:
     std::shared_ptr<TQueryClient> QueryClient;
     std::shared_ptr<NYdb::NTable::TTableClient> TableClient;
     std::shared_ptr<NYdb::NTable::TSession> TableClientSession;
+    std::shared_ptr<NTopic::TTopicClient> LocalTopicClient;
 
     // Attached to database from recipe (YDB_ENDPOINT / YDB_DATABASE)
     std::shared_ptr<TDriver> ExternalDriver;
@@ -1996,6 +2004,36 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                 UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser("C").GetString(), R"({"Val": "ABC"}-C)");
             });
         }
+    }
+
+    Y_UNIT_TEST_F(ReadFromLocalTopicsWithAuth, TStreamingTestFixture) {
+        InternalInitFederatedQuerySetupFactory = true;
+
+        auto& config =SetupAppConfig();
+        config.MutableFeatureFlags()->SetEnableTopicsSqlIoOperations(true);
+        config.MutablePQConfig()->SetRequireCredentialsInNewProtocol(true);
+
+        constexpr char inputTopic[] = "inputTopicName";
+        constexpr char outputTopic[] = "outputTopicName";
+        CreateTopic(inputTopic, std::nullopt, /* local */ true);
+        CreateTopic(outputTopic, std::nullopt, /* local */ true);
+
+        auto asyncResult = GetQueryClient()->ExecuteQuery(fmt::format(R"(
+                INSERT INTO `{output_topic}`
+                SELECT * FROM `{input_topic}` WITH (
+                    STREAMING = "TRUE"
+                ) LIMIT 1
+            )",
+            "input_topic"_a = inputTopic,
+            "output_topic"_a = outputTopic
+        ), TTxControl::NoTx());
+
+        Sleep(TDuration::Seconds(1));
+        WriteTopicMessage(inputTopic, "data", 0, /* local */ true);
+        ReadTopicMessage(outputTopic, "data", TInstant::Now() - TDuration::Seconds(100), /* local */ true);
+
+        const auto result = asyncResult.ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
     }
 }
 

@@ -768,7 +768,7 @@ void TKqpTasksGraph::BuildDqSourceStreamLookupChannels(const TStageInfo& stageIn
     TString structuredToken;
     const auto& sourceName = compiledSource.GetSourceName();
     if (sourceName) {
-        structuredToken = NYql::CreateStructuredTokenParser(compiledSource.GetAuthInfo()).ToBuilder().ReplaceReferences(GetMeta().SecureParams).ToJson();
+        structuredToken = ReplaceStructuredTokenReferences(compiledSource.GetAuthInfo());
     }
 
     TTransform dqSourceStreamLookupTransform = {
@@ -1777,7 +1777,7 @@ void TKqpTasksGraph::RestoreTasksGraphInfo(const TVector<NKikimrKqp::TKqpNodeRes
             if (const auto& compiledSource = input.GetDqSourceStreamLookup().GetLookupSource(); const auto& sourceName = compiledSource.GetSourceName()) {
                 newTask.Meta.SecureParams.emplace(
                     sourceName,
-                    NYql::CreateStructuredTokenParser(compiledSource.GetAuthInfo()).ToBuilder().ReplaceReferences(GetMeta().SecureParams).ToJson()
+                    ReplaceStructuredTokenReferences(compiledSource.GetAuthInfo())
                 );
             }
         }
@@ -2345,7 +2345,7 @@ void TKqpTasksGraph::BuildReadTasksFromSource(TStageInfo& stageInfo, const TVect
     auto sourceName = externalSource.GetSourceName();
     TString structuredToken;
     if (sourceName) {
-        structuredToken = NYql::CreateStructuredTokenParser(externalSource.GetAuthInfo()).ToBuilder().ReplaceReferences(GetMeta().SecureParams).ToJson();
+        structuredToken = ReplaceStructuredTokenReferences(externalSource.GetAuthInfo());
     }
 
     ui64 nodeOffset = 0;
@@ -2783,7 +2783,7 @@ void TKqpTasksGraph::BuildExternalSinks(const NKqpProto::TKqpSink& sink, TKqpTas
     const auto& extSink = sink.GetExternalSink();
     auto sinkName = extSink.GetSinkName();
     if (sinkName) {
-        auto structuredToken = NYql::CreateStructuredTokenParser(extSink.GetAuthInfo()).ToBuilder().ReplaceReferences(GetMeta().SecureParams).ToJson();
+        auto structuredToken = ReplaceStructuredTokenReferences(extSink.GetAuthInfo());
         task.Meta.SecureParams.emplace(sinkName, structuredToken);
         if (GetMeta().UserRequestContext->TraceId) {
             task.Meta.TaskParams.emplace("fq.job_id", GetMeta().UserRequestContext->CustomerSuppliedId);
@@ -3013,13 +3013,15 @@ TKqpTasksGraph::TKqpTasksGraph(
     const TPartitionPrunerConfig& partitionPrunerConfig,
     const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregationSettings,
     const TKqpRequestCounters::TPtr& counters,
-    TActorId bufferActorId)
+    TActorId bufferActorId,
+    TIntrusiveConstPtr<NACLib::TUserToken> userToken)
     : PartitionPruner(MakeHolder<TPartitionPruner>(txAlloc->HolderFactory, txAlloc->TypeEnv, std::move(partitionPrunerConfig)))
     , Transactions(transactions)
     , TxAlloc(txAlloc)
     , AggregationSettings(aggregationSettings)
     , Counters(counters)
     , BufferActorId(bufferActorId)
+    , UserToken(std::move(userToken))
 {
     GetMeta().Arena = MakeIntrusive<NActors::TProtoArenaHolder>();
     GetMeta().Database = database;
@@ -3103,6 +3105,17 @@ std::vector<std::pair<ui64, i64>> TKqpTasksGraph::BuildInternalSinksPriorityOrde
     std::sort(order.begin(), order.end());
 
     return order;
+}
+
+TString TKqpTasksGraph::ReplaceStructuredTokenReferences(const TString& token) const {
+    const auto parser = NYql::CreateStructuredTokenParser(token);
+    auto builder = parser.ToBuilder();
+    if (!parser.HasTransientToken()) {
+        builder.ReplaceReferences(GetMeta().SecureParams);
+    } else if (UserToken && UserToken->GetSerializedToken()) {
+        builder.SetTransientTokenAuth(UserToken->GetSerializedToken());
+    }
+    return builder.ToJson();
 }
 
 TVector<TString> TKqpTasksGraph::GetStageIntrospection(const TStageId& stageId) const {

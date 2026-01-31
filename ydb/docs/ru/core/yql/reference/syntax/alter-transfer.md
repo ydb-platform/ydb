@@ -23,6 +23,8 @@ ALTER TRANSFER <name> [SET USING lambda | SET (option = value [, ...])]
 
 * {% include [x](../_includes/transfer_flush.md) %}
 
+* {% include [x](../_includes/transfer_metrics_level.md) %}
+
 ## Разрешения
 
 Для изменения трансфера требуется [право](grant.md#permissions-list) изменять схемные объекты (`ALTER SCHEMA`).

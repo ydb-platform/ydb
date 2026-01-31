@@ -153,7 +153,8 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
             .SetEnableStorageProxy(true)
             .SetCheckpointPeriod(options.CheckpointPeriod)
             .SetUseLocalCheckpointsInStreamingQueries(options.UseLocalCheckpointsInStreamingQueries)
-            .SetLogSettings(std::move(logSettings));
+            .SetLogSettings(std::move(logSettings))
+            .SetInitFederatedQuerySetupFactory(options.InternalInitFederatedQuerySetupFactory);
 
         settings.EnableScriptExecutionBackgroundChecks = options.EnableScriptExecutionBackgroundChecks;
 

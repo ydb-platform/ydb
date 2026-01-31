@@ -22,6 +22,11 @@ public:
         , Counters_(counters)
     {}
 
+    TDqWatermarkTrackerImpl(const TDqWatermarkTrackerImpl& parent, bool)
+        : LogPrefix_(parent.LogPrefix_)
+        , Counters_(parent.Counters_)
+    {}
+
     ~TDqWatermarkTrackerImpl() {
         if (IdleInputs_) {
             size_t idleableCount = 0;
@@ -118,6 +123,25 @@ public:
             Y_DEBUG_ABORT_UNLESS(inserted);
         }
         return true;
+    }
+
+    void TransferInput(TDqWatermarkTrackerImpl& otherTracker, const TInputKey& inputKey) {
+        auto it = otherTracker.Data_.find(inputKey);
+        Y_ENSURE(it != otherTracker.Data_.end());
+        auto& data = it->second;
+        auto watermarkRec = otherTracker.WatermarksQueue_.extract(TWatermarksQueueItem { data.Watermark, it });
+        auto expiresRec = otherTracker.ExpiresQueue_.extract(TExpiresQueueItem { data.ExpiresAt, it });
+        auto [newIt, inserted] = Data_.insert(*it);
+        Y_ENSURE(inserted);
+        otherTracker.Data_.erase(it); // XXX there are no THashMap.extract
+        if (!watermarkRec.empty()) {
+            watermarkRec.value().Iterator = newIt;
+            WatermarksQueue_.insert(std::move(watermarkRec));
+        }
+        if (!expiresRec.empty()) {
+            expiresRec.value().Iterator = newIt;
+            ExpiresQueue_.insert(std::move(expiresRec));
+        }
     }
 
     bool UnregisterInput(const TInputKey& inputKey) {
@@ -223,6 +247,15 @@ public:
         if (!InflyIdlenessChecks_.empty()) {
             str << "InflyIdlenessChecks: [ " << JoinSeq(", ", InflyIdlenessChecks_) << " ];\n";
         }
+    }
+
+    TDuration GetMaxIdleTimeout() const { // O(n)
+        if (Data_.empty()) {
+            return TDuration::Max();
+        }
+        return MaxElementBy(Data_, [](const auto& entry) {
+            return entry.second.IdleTimeout;
+        })->second.IdleTimeout;
     }
 
 private:

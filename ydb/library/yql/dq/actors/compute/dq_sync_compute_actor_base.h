@@ -274,6 +274,10 @@ protected:
             TaskRunner->SetSpillerFactory(std::make_shared<TDqSpillerFactory>(execCtx.GetTxId(), NActors::TActivationContext::ActorSystem(), execCtx.GetWakeupCallback(), execCtx.GetErrorCallback()));
         }
 
+        this->WatermarksTracker.SetNotifyHandler([this]() {
+            this->ScheduleIdlenessCheck();
+        });
+
         TaskRunner->Prepare(this->Task, limits, execCtx, &this->WatermarksTracker);
 
         for (auto& [channelId, channel] : this->InputChannelsMap) {

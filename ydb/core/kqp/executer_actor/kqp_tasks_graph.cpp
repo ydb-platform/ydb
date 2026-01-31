@@ -1005,6 +1005,9 @@ void TKqpTasksGraph::FillChannelDesc(NDqProto::TChannel& channelDesc, const TCha
     channelDesc.SetEnableSpilling(enableSpilling);
     channelDesc.SetCheckpointingMode(channel.CheckpointingMode);
     channelDesc.SetWatermarksMode(channel.WatermarksMode);
+    if (channel.WatermarksIdleTimeoutUs) {
+        channelDesc.SetWatermarksIdleTimeoutUs(*channel.WatermarksIdleTimeoutUs);
+    }
 
     const auto& resultChannelProxies = GetMeta().ResultChannelProxies;
 
@@ -1303,6 +1306,9 @@ void TKqpTasksGraph::FillInputDesc(NYql::NDqProto::TTaskInput& inputDesc, const 
         case NYql::NDq::TTaskInputType::Source:
             inputDesc.MutableSource()->SetType(input.SourceType);
             inputDesc.MutableSource()->SetWatermarksMode(input.WatermarksMode);
+            if (input.WatermarksIdleTimeoutUs) {
+                inputDesc.MutableSource()->SetWatermarksIdleTimeoutUs(*input.WatermarksIdleTimeoutUs);
+            }
             if (Y_LIKELY(input.Meta.SourceSettings)) {
                 enableMetering = true;
                 YQL_ENSURE(input.Meta.SourceSettings->HasTable());
@@ -1558,6 +1564,9 @@ void TKqpTasksGraph::RestoreTasksGraphInfo(const TVector<NKikimrKqp::TKqpNodeRes
             channel.InMemory = protoInfo.GetInMemory();
             channel.CheckpointingMode = protoInfo.GetCheckpointingMode();
             channel.WatermarksMode = protoInfo.GetWatermarksMode();
+            if (protoInfo.HasWatermarksIdleTimeoutUs()) {
+                channel.WatermarksIdleTimeoutUs = protoInfo.GetWatermarksIdleTimeoutUs();
+            }
         }
 
         return channel;
@@ -1659,6 +1668,9 @@ void TKqpTasksGraph::RestoreTasksGraphInfo(const TVector<NKikimrKqp::TKqpNodeRes
                     const auto& sourceInfo = inputInfo.GetSource();
                     newInput.SourceType = sourceInfo.GetType();
                     newInput.WatermarksMode = sourceInfo.GetWatermarksMode();
+                    if (sourceInfo.HasWatermarksIdleTimeoutUs()) {
+                        newInput.WatermarksIdleTimeoutUs = sourceInfo.GetWatermarksIdleTimeoutUs();
+                    }
                     if (sourceInfo.HasSettings()) {
                         const auto& settings = sourceInfo.GetSettings();
                         if (settings.Is<NKikimrTxDataShard::TKqpReadRangesSourceSettings>()) {

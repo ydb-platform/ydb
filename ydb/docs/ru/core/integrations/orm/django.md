@@ -170,7 +170,7 @@ DATABASES = {
 
 Перед началом работы убедитесь, что:
 
-1. Развернут кластер {{ ydb-short-name }} [локально](../../quickstart.md) или [используя Ansible](../../devops/deployment-options/ansible/initial-deployment.md)
+1. Развернут кластер {{ ydb-short-name }} [локально](../../quickstart.md) или [используя Ansible](../../devops/deployment-options/ansible/initial-deployment/index.md)
 2. Установлены Python-пакеты: `Django`, `django-ydb-backend`, `djangorestframework`
 3. Склонирован репозиторий с [примером](https://github.com/ydb-platform/django-ydb-backend/tree/main/examples/bookstore)
 

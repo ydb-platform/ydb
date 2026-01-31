@@ -114,7 +114,7 @@ TString TMetadata::Serialize() const {
     if (RateLimiterResources) {
         for (const auto& rateLimiter : *RateLimiterResources) {
             NJson::TJsonMap rateLimiterMap;
-            rateLimiterMap["prefix"] = rateLimiter.ExportPrefix;
+            rateLimiterMap["export_prefix"] = rateLimiter.ExportPrefix;
             rateLimiterMap["name"] = rateLimiter.Name;
             rateLimiters.AppendValue(std::move(rateLimiterMap));
         }
@@ -167,7 +167,7 @@ TMetadata TMetadata::Deserialize(const TString& metadata) {
         const NJson::TJsonValue& rateLimiters = json["rate_limiter_resources"];
         for (const NJson::TJsonValue& rateLimiter : rateLimiters.GetArray()) {
             result.AddRateLimiterResource({
-                .ExportPrefix = rateLimiter["prefix"].GetString(),
+                .ExportPrefix = rateLimiter["export_prefix"].GetString(),
                 .Name = rateLimiter["name"].GetString(),
             });
         }

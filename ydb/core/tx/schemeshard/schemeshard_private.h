@@ -184,19 +184,20 @@ namespace TEvPrivate {
         const ui32 ItemIdx;
         const bool Success;
         const TString Error;
-        TVector<NBackup::TRateLimiterResourceMetadata> ResourcesMatedata;
+        TVector<NBackup::TRateLimiterResourceMetadata> ResourcesMetadata;
 
         TEvExportUploadKesusResourcesResult(
             ui64 id,
             ui32 itemIdx,
             bool success,
             const TString& error,
-            const TVector<NBackup::TRateLimiterResourceMetadata> resourcesMetadata)
+            const TVector<NBackup::TRateLimiterResourceMetadata>& resourcesMetadata
+        )
             : ExportId(id)
             , ItemIdx(itemIdx)
             , Success(success)
             , Error(error)
-            , ResourcesMatedata(resourcesMetadata)
+            , ResourcesMetadata(resourcesMetadata)
         {}
     };
 

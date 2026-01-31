@@ -509,7 +509,7 @@ class TSchemeUploader: public TExportFilesUploader<TSchemeUploader> {
 
         // Fill metadata with rate limiter resources
         auto metadata = NBackup::TMetadata::Deserialize(Metadata);
-        for (auto& rateLimiterMetadata : record->ResourcesMatedata) {
+        for (auto& rateLimiterMetadata : record->ResourcesMetadata) {
             metadata.AddRateLimiterResource(rateLimiterMetadata);
         }
 

@@ -354,6 +354,9 @@ namespace NSchemeShardUT_Private {
     void TestCancelTxTable(TTestActorRuntime& runtime, ui64 txId, ui64 targetTxId,
                                const TVector<TExpectedResult>& expectedResults = {NKikimrScheme::StatusAccepted});
 
+    // rate limiters
+    void TestCreateRateLimiter(TTestActorRuntime& runtime, const TString& kesusPath, const TString& scheme);
+
     // modify acl
     TEvTx* CreateModifyACLRequest(ui64 txId, TString parentPath, TString name, const TString& diffAcl, const TString& newOwner, const TApplyIf& applyIf = {});
     void AsyncModifyACL(TTestActorRuntime& runtime, ui64 txId, TString parentPath, TString name, const TString& diffAcl, const TString& newOwner, const TApplyIf& applyIf = {});

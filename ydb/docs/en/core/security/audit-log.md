@@ -1,132 +1,157 @@
 # Audit log
 
-_An audit log_ is a stream that includes data about all the operations that tried to change the {{ ydb-short-name }} objects, successfully or unsuccessfully:
+_An audit_ log is a stream of records that document security-relevant operations performed within the {{ ydb-short-name }} cluster. Unlike technical logs, which help detect failures and troubleshoot issues, the audit log provides data relevant to security. It serves as a source of information that answers the questions: who did what, when, and from where.
 
-* Database: Creating, editing, and deleting databases.
-* Directory: Creating and deleting.
-* Table: Creating or editing table schema, changing the number of partitions, backup and recovery, copying and renaming, and deleting tables.
-* Topic: Creating, editing, and deleting.
-* ACL: Editing.
+Each record in the audit log is called an [audit event](../concepts/glossary.md#audit-events). An audit event captures a single security-relevant action.
 
-The data of the audit log stream can be delivered to:
+Examples of typical audit log events:
 
-* File on each {{ ydb-short-name }} cluster node.
-* Agent for delivering [Unified Agent](https://yandex.cloud/docs/monitoring/concepts/data-collection/unified-agent/) metrics.
-* Standard error stream, `stderr`.
+* Data access through DML requests.
+* Schema or configuration management operations.
+* Changes to permissions or access-control settings.
+* Administrative user actions.
 
-You can use any of the listed destinations or their combinations.
+Every event includes a set of attributes that describe different aspects of the event. The specific set of attributes present in a given event depends on its event source: all audit events include the [common attributes](../reference/security/audit-log-attributes.md#common-attributes), and some sources add additional, source-specific attributes (see [Audit event sources overview](#audit-event-sources-overview)).
 
-If you forward the stream to a file, access to the audit log is set by file-system rights. Saving the audit log to a file is recommended for production installations.
+Audit logging in {{ ydb-short-name }} offers fine-grained control over what types of operations are tracked and at which points in their lifecycle. Audit events are grouped using [log classes](#log-classes), which define broad categories of operations.
 
-Forwarding the audit log to the standard error stream (`stderr`) is recommended for test installations. Further stream processing is determined by the {{ ydb-short-name }} cluster [logging](../devops/observability/logging.md) settings.
+Additionally, for greater flexibility, certain audit event sources support [log phases](#log-phases), allowing you to select whether events are logged when a request is first received, after it completes, or at both stages.
 
-## Audit log events {#events}
+## Configuration
 
-The information about each operation is saved to the audit log as a separate event. Each event includes a set of attributes. Some attributes are common across events, while other attributes are determined by the specific {{ ydb-short-name }} component that generated the event.
+To configure audit logging, use the `audit_config` section in the [cluster configuration](../reference/configuration/index.md). This section allows you to specify which audit logs are captured, how events are serialized, and where audit data is sent. For more details on available configuration options, see [audit log configuration](../reference/configuration/audit_config.md#audit-log-configuration).
+
+## Audit event sources overview {#audit-event-sources-overview}
+
+The table below summarizes the built-in audit event sources. Use it to identify which source emits the events you need and how to enable those events.
 
 #|
-|| Attribute | Description ||
-|| **Common attributes** | > ||
-|| `subject` | Event source SID (`<login>@<subsystem>` format). Unless mandatory authentication is enabled, the attribute will be set to `{none}`.<br/>Required. ||
-|| `operation` | Names of operations or actions are similar to the YQL syntax (for example, `ALTER DATABASE`, `CREATE TABLE`).<br/>Required. ||
-|| `status` | Operation completion status.<br/>Acceptable values:<ul><li>`SUCCESS`: The operation completed successfully.</li><li>`ERROR`: The operation failed.</li><li>`IN-PROCESS`: The operation is in progress.</li></ul>Required. ||
-|| `reason` | Error message.<br/>Optional. ||
-|| `component` | Name of the {{ ydb-short-name }} component that generated the event (for example, `schemeshard`).<br/>Optional. ||
-|| `request_id` | Unique ID of the request that invoked the operation. You can use the `request_id` to differentiate events related to different operations and link the events together to build a single audit-related operation context.<br/>Optional. ||
-|| `remote_address` | The IP of the client that delivered the request.<br/>Optional. ||
-|| `detailed_status` | The status delivered by a {{ ydb-short-name }} component (for example, `StatusAccepted`, `StatusInvalidParameter`, `StatusNameConflict`).<br/>Optional. ||
-|| **Ownership and permission attributes** | > ||
-|| `new_owner` | The SID of the new owner of the object when ownership is transferred. <br/>Optional. ||
-|| `acl_add` | List of added permissions in [short notation](./short-access-control-notation.md) (for example, `[+R:someuser]`).<br/>Optional. ||
-|| `acl_remove` | List of revoked permissions in [short notation](./short-access-control-notation.md) (for example, `[-R:someuser]`).<br/>Optional. ||
-|| **Custom attributes** | > ||
-|| `user_attrs_add` | List of custom attributes added when creating objects or updating attributes (for example, `[attr_name1: A, attr_name2: B]`).<br/>Optional. ||
-|| `user_attrs_remove` | List of custom attributes removed when creating objects or updating attributes (for example, `[attr_name1, attr_name2]`).<br/>Optional. ||
-|| **Attributes of the SchemeShard component** | > ||
-|| `tx_id` | Unique transaction ID. Similarly to `request_id`, this ID can be used to differentiate events related to different operations.<br/>Required. ||
-|| `database` | Database path (for example, `/my_dir/db`).<br/>Required. ||
-|| `paths` | List of paths in the database that are changed by the operation (for example, `[/my_dir/db/table-a, /my_dir/db/table-b]`).<br/>Required. ||
+|| **Source / UID**                                     | **What it records** | **Source attributes** | **Configuration requirements** ||
+|| [Schemeshard](../concepts/glossary.md#scheme-shard) </br>`schemeshard`       | Schema operations, ACL modifications, and user management actions. | [Attributes](../reference/security/audit-log-attributes.md#schemeshard) | Included in the [basic audit configuration](../reference/configuration/audit_config.md#enabling-audit-log). ||
+|| [gRPC services](../concepts/glossary.md#grpc-proxy) </br>`grpc-proxy`       | Non-internal requests handled by {{ ydb-short-name }} gRPC endpoints. | [Attributes](../reference/security/audit-log-attributes.md#grpc-proxy) | Enable the relevant [log classes](../reference/configuration/audit_config.md#log-class-config) and optional [log phases](#log-phases). ||
+|| [gRPC connection](../concepts/glossary.md#grpc-proxy) </br>`grpc-conn` | Client connection and disconnection events. | [Attributes](../reference/security/audit-log-attributes.md#grpc-connection) | Enable the [`enable_grpc_audit`](../reference/configuration/feature_flags.md) feature flag. ||
+|| [gRPC authentication](../concepts/glossary.md#grpc-proxy) </br>`grpc-login` | gRPC authentication attempts. | [Attributes](../reference/security/audit-log-attributes.md#grpc-authentication) | Enable the `Login` class in [`log_class_config`](../reference/configuration/audit_config.md#log-class-config). ||
+|| Monitoring service </br>`monitoring`  | HTTP requests handled by the [monitoring endpoint](../reference/configuration/tls.md#http). | [Attributes](../reference/security/audit-log-attributes.md#monitoring) | Enable the `ClusterAdmin` class in [`log_class_config`](../reference/configuration/audit_config.md#log-class-config). ||
+|| Heartbeat </br>`audit`                 | Synthetic heartbeat events proving that audit logging is alive. | [Attributes](../reference/security/audit-log-attributes.md#heartbeat) | Enable the `AuditHeartbeat` class in [`log_class_config`](../reference/configuration/audit_config.md#log-class-config) and optionally adjust [heartbeat settings](../reference/configuration/audit_config.md#heartbeat-settings). ||
+|| [BlobStorage Controller](../concepts/glossary.md#distributed-storage) </br>`bsc`            | Console-driven BlobStorage Controller configuration changes. | [Attributes](../reference/security/audit-log-attributes.md#bsc) | Included in the [basic audit configuration](../reference/configuration/audit_config.md#enabling-audit-log). ||
+|| [Distconf](../concepts/glossary.md#distributed-configuration) </br>`distconf`                | Distributed configuration updates. | [Attributes](../reference/security/audit-log-attributes.md#distconf) | Included in the [basic audit configuration](../reference/configuration/audit_config.md#enabling-audit-log). ||
+|| Web login </br>`web-login`             | Interactions with the web console authentication widget. | [Attributes](../reference/security/audit-log-attributes.md#web-login) | Included in the [basic audit configuration](../reference/configuration/audit_config.md#enabling-audit-log). ||
+|| Console </br>`console`                   | Database lifecycle operations and dynamic configuration changes. | [Attributes](../reference/security/audit-log-attributes.md#console) | Included in the [basic audit configuration](../reference/configuration/audit_config.md#enabling-audit-log). ||
 |#
 
-## Enabling audit log {#enabling-audit-log}
+## Log classes {#log-classes}
 
-Delivering events to the audit log stream is enabled for the entire {{ ydb-short-name }} cluster. To enable it, add, to the [cluster configuration](../reference/configuration/index.md), the `audit_config` section, and specify in it one of the stream destinations (`file_backend`, `unified_agent_backend`, `stderr_backend`) or their combination:
+Audit events are grouped into **log classes** that represent broad categories of operations. You can enable or disable logging for each class in [configuration](../reference/configuration/audit_config.md#log-class-config) and, if necessary, tailor the configuration per class. The available log classes are:
 
-```yaml
-audit_config:
-  file_backend:
-    format: audit_log_format
-    file_path: "path_to_log_file"
-  unified_agent_backend:
-    format: audit_log_format
-    log_name: session_meta_log_name
-  stderr_backend:
-    format: audit_log_format
-```
+#|
+|| **Log class**      | **Description** ||
+|| `ClusterAdmin`     | Cluster administration requests. ||
+|| `DatabaseAdmin`    | Database administration requests. ||
+|| `Login`            | Login requests. ||
+|| `NodeRegistration` | Node registration. ||
+|| `Ddl`              | [DDL requests](https://en.wikipedia.org/wiki/Data_definition_language). ||
+|| `Dml`              | [DML requests](https://en.wikipedia.org/wiki/Data_manipulation_language). ||
+|| `Operations`       | Asynchronous remote procedure call (RPC) operations that require polling to track the result. ||
+|| `ExportImport`     | Export and import data operations. ||
+|| `Acl`              | Access Control List (ACL) operations. ||
+|| `AuditHeartbeat`   | Synthetic heartbeat messages that confirm audit logging remains operational. ||
+|| `Default`          | Default settings for any component that doesn't have a configuration entry. ||
+|#
 
-| Key | Description |
-| --- | --- |
-| `file_backend` | Write the audit log to a file at each cluster node.</ul>Optional. |
-| `format` | Audit log format. The default value is `JSON`.<br/>Acceptable values:<ul><li>`JSON`: Serialized [JSON](https://en.wikipedia.org/wiki/JSON).</li><li>`TXT`: Text format.</ul>Optional. |
-| `file_path` | Path to the file that the audit log will be streamed to. If the path and the file are missing, they will be created on each node at cluster startup. If the file exists, the data will be appended to it.<br/>This parameter is required if you use `file_backend`. |
-| `unified_agent_backend` | Stream the audit log to the Unified Agent. In addition, you need to define the `uaclient_config` section in the [cluster configuration](../reference/configuration/index.md).</ul>Optional. |
-| `log_name` | The session metadata delivered with the message. Using the metadata, you can redirect the log stream to one or more child channels based on the condition: `_log_name: "session_meta_log_name"`.<br/>Optional. |
-| `stderr_backend` | Forward the audit log to the standard error stream (`stderr`).</ul>Optional. |
+At the moment, not all audit event sources categorize events into log classes. For most of them, the [basic configuration](../reference/configuration/audit_config.md#enabling-audit-log) is sufficient to capture their events. See the [Audit event sources overview](#audit-event-sources-overview) section for details.
 
-Sample configuration that saves the audit log text to `/var/log/ydb-audit.log`:
+## Log phases {#log-phases}
 
-```yaml
-audit_config:
-  file_backend:
-    format: TXT
-    file_path: "/var/log/ydb-audit.log"
-```
+Some audit event sources divide the request processing into stages. **Logging phase** indicates the processing stages at which audit logging records events. Specifying logging phases is useful when you need fine-grained visibility into request execution and want to capture events before and after critical processing steps. The available log phases are:
 
-Sample configuration that saves the audit log text to Yandex Unified Agent with the `audit` label and outputs it to `stderr` in JSON format:
+#|
+|| **Log phase**    | **Description** ||
+|| `Received`       | A request is received and the initial checks and authentication are made. The `status` attribute is set to `IN-PROCESS`. </br>This phase is disabled by default; you must include `Received` in `log_class_config.log_phase` to enable it. ||
+|| `Completed`      | A request is completely finished. The `status` attribute is set to `SUCCESS` or `ERROR`. This phase is enabled by default when `log_class_config.log_phase` is not set. ||
+|#
 
-```yaml
-audit_config:
-  unified_agent_backend:
-    format: TXT
-    log_name: audit
-  stderr_backend:
-    format: JSON
-```
+## Audit log destinations {#stream-destinations}
+
+**Audit log destination** is a target where the audit log stream can be delivered.
+
+You can currently configure the following destinations for the audit log:
+
+* A file on each {{ ydb-short-name }} cluster node.
+* The standard error stream, `stderr`.
+* An agent for delivering [Unified Agent](https://yandex.cloud/en/docs/monitoring/concepts/data-collection/unified-agent/) metrics.
+
+You can use any of the listed destinations or their combinations. See the [audit log configuration](../reference/configuration/audit_config.md#audit-log-configuration) for details.
+
+If you forward the stream to a file, file-system permissions control access to the audit log. Saving the audit log to a file is recommended for production installations.
+
+For test installations, forward the audit log to the standard error stream (`stderr`). Further stream processing depends on the {{ ydb-short-name }} cluster [logging](../devops/observability/logging.md) settings.
 
 ## Examples {#examples}
 
- Fragment of audit log file in `JSON` format.
+The following tabs show the same audit log event written using different [backend settings](../reference/configuration/audit_config.md#backend-settings).
 
-```json
-2023-03-13T20:05:19.776132Z: {"paths":"[/my_dir/db1/some_dir]","tx_id":"562949953476313","database":"/my_dir/db1","remote_address":"ipv6:[xxxx:xxx:xxx:xxx:x:xxxx:xxx:xxxx]:xxxxx","status":"SUCCESS","subject":"{none}","detailed_status":"StatusAccepted","operation":"CREATE DIRECTORY","component":"schemeshard"}
-2023-03-13T20:07:30.927210Z: {"reason":"Check failed: path: '/my_dir/db1/some_dir', error: path exist, request accepts it (id: [OwnerId: 72075186224037889, LocalPathId: 3], type: EPathTypeDir, state: EPathStateNoChanges)","paths":"[/my_dir/db1/some_dir]","tx_id":"844424930216970","database":"/my_dir/db1","remote_address":"ipv6:[xxxx:xxx:xxx:xxx:x:xxxx:xxx:xxxx]:xxxxx","status":"SUCCESS","subject":"{none}","detailed_status":"StatusAlreadyExists","operation":"CREATE DIRECTORY","component":"schemeshard"}
-2023-03-13T19:59:27.614731Z: {"paths":"[/my_dir/db1/some_table]","tx_id":"562949953426315","database":"/my_dir/db1","remote_address":"{none}","status":"SUCCESS","subject":"{none}","detailed_status":"StatusAccepted","operation":"CREATE TABLE","component":"schemeshard"}
-2023-03-13T20:10:44.345767Z: {"paths":"[/my_dir/db1/some_table, /my_dir/db1/another_table]","tx_id":"562949953506313","database":"{none}","remote_address":"ipv6:[xxxx:xxx:xxx:xxx:x:xxxx:xxx:xxxx]:xxxxx","status":"SUCCESS","subject":"{none}","detailed_status":"StatusAccepted","operation":"ALTER TABLE RENAME","component":"schemeshard"}
-2023-03-14T10:41:36.485788Z: {"paths":"[/my_dir/db1/some_dir]","tx_id":"281474976775658","database":"/my_dir/db1","remote_address":"ipv6:[xxxx:xxx:xxx:xxx:x:xxxx:xxx:xxxx]:xxxxx","status":"SUCCESS","subject":"{none}","detailed_status":"StatusAccepted","operation":"MODIFY ACL","component":"schemeshard","acl_add":"[+(ConnDB):subject:-]"}
-```
+{% list tabs %}
 
-Event that occurred at `2023-03-13T20:05:19.776132Z` in JSON-pretty:
+- JSON
 
-```json
-{
-  "paths": "[/my_dir/db1/some_dir]",
-  "tx_id": "562949953476313",
-  "database": "/my_dir/db1",
-  "remote_address": "ipv6:[xxxx:xxx:xxx:xxx:x:xxxx:xxx:xxxx]:xxxxx",
-  "status": "SUCCESS",
-  "subject": "{none}",
-  "detailed_status": "StatusAccepted",
-  "operation": "CREATE DIRECTORY",
-  "component": "schemeshard"
-}
-```
+    The `JSON` format produces entries like:
 
-The same events in `TXT` format will look as follows:
+    ```json
+    2023-03-14T10:41:36.485788Z: {"paths":"[/my_dir/db1/some_dir]","tx_id":"281474976775658","database":"/my_dir/db1","remote_address":"xxxx:xxx:xxx:xxx:x:xxxx:xxx:xxxx","status":"SUCCESS","subject":"{none}","sanitized_token":"{none}", "detailed_status":"StatusAccepted","operation":"MODIFY ACL","component":"schemeshard","acl_add":"[+(ConnDB):subject:-]"}
+    2023-03-13T20:07:30.927210Z: {"reason":"Check failed: path: '/my_dir/db1/some_dir', error: path exist, request accepts it (id: [OwnerId: 72075186224037889, LocalPathId: 3], type: EPathTypeDir, state: EPathStateNoChanges)","paths":"[/my_dir/db1/some_dir]","tx_id":"844424930216970","database":"/my_dir/db1","remote_address":"xxxx:xxx:xxx:xxx:x:xxxx:xxx:xxxx","status":"SUCCESS","subject":"{none}","sanitized_token":"{none}","detailed_status":"StatusAlreadyExists","operation":"CREATE DIRECTORY","component":"schemeshard"}
+    2025-11-03T17:41:44.203214Z: {"component":"monitoring","remote_address":"xxxx:xxx:xxx:xxx:x:xxxx:xxx:xxxx","operation":"HTTP REQUEST","method":"POST","url":"/viewer/query","params":"base64=false&schema=multipart","body":"{\"query\":\"SELECT * FROM `my_row_table`;\",\"database\":\"/local\",\"action\":\"execute-query\",\"syntax\":\"yql_v1\"}","status":"IN-PROCESS","reason":"Execute"}
+    ```
 
-```txt
-2023-03-13T20:05:19.776132Z: component=schemeshard, tx_id=844424930186969, remote_address=ipv6:[xxxx:xxx:xxx:xxx:x:xxxx:xxx:xxxx]:xxxxx, subject={none}, database=/my_dir/db1, operation=CREATE DIRECTORY, paths=[/my_dir/db1/some_dir], status=SUCCESS, detailed_status=StatusAccepted
-2023-03-13T20:07:30.927210Z: component=schemeshard, tx_id=281474976775657, remote_address=ipv6:[xxxx:xxx:xxx:xxx:x:xxxx:xxx:xxxx]:xxxxx, subject={none}, database=/my_dir/db1, operation=CREATE DIRECTORY, paths=[/my_dir/db1/some_dir], status=SUCCESS, detailed_status=StatusAlreadyExists, reason=Check failed: path: '/my_dir/db1/some_dir', error: path exist, request accepts it (id: [OwnerId: 72075186224037889, LocalPathId: 3], type: EPathTypeDir, state: EPathStateNoChanges)
-2023-03-13T19:59:27.614731Z: component=schemeshard, tx_id=562949953426315, remote_address={none}, subject={none}, database=/my_dir/db1, operation=CREATE TABLE, paths=[/my_dir/db1/some_table], status=SUCCESS, detailed_status=StatusAccepted
-2023-03-13T20:10:44.345767Z: component=schemeshard, tx_id=562949953506313, remote_address=ipv6:[xxxx:xxx:xxx:xxx:x:xxxx:xxx:xxxx]:xxxxx, subject={none}, database={none}, operation=ALTER TABLE RENAME, paths=[/my_dir/db1/some_table, /my_dir/db1/another_table], status=SUCCESS, detailed_status=StatusAccepted
-2023-03-14T10:41:36.485788Z: component=schemeshard, tx_id=281474976775658, remote_address=ipv6:[xxxx:xxx:xxx:xxx:x:xxxx:xxx:xxxx]:xxxxx, subject={none}, database=/my_dir/db1, operation=MODIFY ACL, paths=[/my_dir/db1/some_dir], status=SUCCESS, detailed_status=StatusSuccess, acl_add=[+(ConnDB):subject:-]
-```
+- TXT
+
+    The `TXT` format produces entries like:
+
+    ```txt
+    2023-03-14T10:41:36.485788Z: component=schemeshard, tx_id=281474976775658, remote_address=xxxx:xxx:xxx:xxx:x:xxxx:xxx:xxxx, subject={none}, database=/my_dir/db1, operation=MODIFY ACL, paths=[/my_dir/db1/some_dir], status=SUCCESS, detailed_status=StatusSuccess, acl_add=[+(ConnDB):subject:-]
+    2023-03-13T20:07:30.927210Z: component=schemeshard, tx_id=281474976775657, remote_address=xxxx:xxx:xxx:xxx:x:xxxx:xxx:xxxx, subject={none}, database=/my_dir/db1, operation=CREATE DIRECTORY, paths=[/my_dir/db1/some_dir], status=SUCCESS, detailed_status=StatusAlreadyExists, reason=Check failed: path: '/my_dir/db1/some_dir', error: path exist, request accepts it (id: [OwnerId: 72075186224037889, LocalPathId: 3], type: EPathTypeDir, state: EPathStateNoChanges)
+    2025-11-03T18:07:39.056211Z: component=grpc-proxy, tx_id=281474976775656, remote_address=xxxx:xxx:xxx:xxx:x:xxxx:xxx:xxxx, subject=serviceaccount@as, database=/my_dir/db1, operation=ExecuteQueryRequest, query_text=SELECT * FROM `my_row_table`; status=SUCCESS, detailed_status=StatusSuccess, begin_tx=1, commit_tx=1, end_time=2025-11-03T18:07:39.056204Z, grpc_method=Ydb.Query.V1.QueryService/ExecuteQuery, sanitized_token=xxxxxxxx.**, start_time=2025-11-03T18:07:39.054863Z
+    2025-11-03T17:41:44.203214Z: component=monitoring, remote_address=xxxx:xxx:xxx:xxx:x:xxxx:xxx:xxxx, operation=HTTP REQUEST, method=POST, url=/viewer/query, params=base64=false&schema=multipart, body={"query":"SELECT * FROM `my_row_table`;","database":"/local","action":"execute-query","syntax":"yql_v1"}, status=IN-PROCESS, reason=Execute
+    ```
+
+- JSON_LOG_COMPATIBLE
+
+    The `JSON_LOG_COMPATIBLE` format produces entries like:
+
+    ```json
+    {"@timestamp":"2023-03-14T10:41:36.485788Z","@log_type":"audit","paths":"[/my_dir/db1/some_dir]","tx_id":"281474976775658","database":"/my_dir/db1","remote_address":"xxxx:xxx:xxx:xxx:x:xxxx:xxx:xxxx","status":"SUCCESS","subject":"{none}","detailed_status":"StatusAccepted","operation":"MODIFY ACL","component":"schemeshard","acl_add":"[+(ConnDB):subject:-]"}
+    {"@timestamp":"2023-03-13T20:07:30.927210Z","@log_type":"audit","reason":"Check failed: path: '/my_dir/db1/some_dir', error: path exist, request accepts it (id: [OwnerId: 72075186224037889, LocalPathId: 3], type: EPathTypeDir, state: EPathStateNoChanges)","paths":"[/my_dir/db1/some_dir]","tx_id":"844424930216970","database":"/my_dir/db1","remote_address":"xxxx:xxx:xxx:xxx:x:xxxx:xxx:xxxx","status":"SUCCESS","subject":"{none}","detailed_status":"StatusAlreadyExists","operation":"CREATE DIRECTORY","component":"schemeshard"}
+    {"@timestamp":"2025-11-03T18:07:39.056211Z","@log_type":"audit","begin_tx":1,"commit_tx":1,"component":"grpc-proxy","database":"/my_dir/db1","detailed_status":"SUCCESS","end_time":"2025-11-03T18:07:39.056204Z","grpc_method":"Ydb.Query.V1.QueryService/ExecuteQuery","operation":"ExecuteQueryRequest","query_text":"SELECT * FROM `my_row_table`;","remote_address":"xxxx:xxx:xxx:xxx:x:xxxx:xxx:xxxx","start_time":"2025-11-03T18:07:39.054863Z","status":"SUCCESS","subject":"serviceaccount@as","sanitized_token":"xxxxxxxx.**"}
+    {"@timestamp":"2025-11-03T17:41:44.203214Z","@log_type":"audit","component":"monitoring","remote_address":"xxxx:xxx:xxx:xxx:x:xxxx:xxx:xxxx","operation":"HTTP REQUEST","method":"POST","url":"/viewer/query","params":"base64=false&schema=multipart","body":"{\"query\":\"SELECT * FROM `my_row_table`;\",\"database\":\"/local\",\"action\":\"execute-query\",\"syntax\":\"yql_v1\"}","status":"IN-PROCESS","reason":"Execute"}
+    ```
+
+- Envelope JSON
+
+    The JSON envelope template `{"message": %message%, "source": "ydb-audit-log"}` produces entries like:
+
+    ```json
+    {"message":"2023-03-14T10:41:36.485788Z: {\"paths\":\"[/my_dir/db1/some_dir]\",\"tx_id\":\"281474976775658\",\"database\":\"/my_dir/db1\",\"remote_address\":\"xxxx:xxx:xxx:xxx:x:xxxx:xxx:xxxx\",\"status\":\"SUCCESS\",\"subject\":\"{none}\",\"detailed_status\":\"StatusAccepted\",\"operation\":\"MODIFY ACL\",\"component\":\"schemeshard\",\"acl_add\":\"[+(ConnDB):subject:-]\"}\n","source":"ydb-audit-log"}
+    {"message":"2023-03-13T20:07:30.927210Z: {\"reason\":\"Check failed: path: '/my_dir/db1/some_dir', error: path exist, request accepts it (id: [OwnerId: 72075186224037889, LocalPathId: 3], type: EPathTypeDir, state: EPathStateNoChanges)\",\"paths\":\"[/my_dir/db1/some_dir]\",\"tx_id\":\"844424930216970\",\"database\":\"/my_dir/db1\",\"remote_address\":\"xxxx:xxx:xxx:xxx:x:xxxx:xxx:xxxx\",\"status\":\"SUCCESS\",\"subject\":\"{none}\",\"detailed_status\":\"StatusAlreadyExists\",\"operation\":\"CREATE DIRECTORY\",\"component\":\"schemeshard\"}\n","source":"ydb-audit-log"}
+    {"message":"2025-11-03T18:07:39.056211Z: {\"@log_type\":\"audit\",\"begin_tx\":1,\"commit_tx\":1,\"component\":\"grpc-proxy\",\"database\":\"/my_dir/db1\",\"detailed_status\":\"SUCCESS\",\"end_time\":\"2025-11-03T18:07:39.056204Z\",\"grpc_method\":\"Ydb.Query.V1.QueryService/ExecuteQuery\",\"operation\":\"ExecuteQueryRequest\",\"query_text\":\"SELECT * FROM `my_row_table`;\",\"remote_address\":\"xxxx:xxx:xxx:xxx:x:xxxx:xxx:xxxx\",\"sanitized_token\":\"xxxxxxxx.**\",\"start_time\":\"2025-11-03T18:07:39.054863Z\",\"status\":\"SUCCESS\",\"subject\":\"serviceaccount@as\"}\n","source":"ydb-audit-log"}
+    {"message":"2025-11-03T17:41:44.203214Z: {\"component\":\"monitoring\",\"remote_address\":\"xxxx:xxx:xxx:xxx:x:xxxx:xxx:xxxx\",\"operation\":\"HTTP REQUEST\",\"method\":\"POST\",\"url\":\"/viewer/query\",\"params\":\"base64=false&schema=multipart\",\"body\":\"{\\\"query\\\":\\\"SELECT * FROM `my_row_table`;\\\",\\\"database\\\":\\\"/local\\\",\\\"action\\\":\\\"execute-query\\\",\\\"syntax\\\":\\\"yql_v1\\\"}\",\"status\":\"IN-PROCESS\",\"reason\":\"Execute\"}\n","source":"ydb-audit-log"}
+    ```
+
+- Pretty-JSON
+
+    The pretty-JSON formatting shown below is for illustration purposes only; the audit log does not support pretty or indented JSON output.
+
+    ```json
+    {
+      "paths": "[/my_dir/db1/some_dir]",
+      "tx_id": "281474976775658",
+      "database": "/my_dir/db1",
+      "remote_address": "xxxx:xxx:xxx:xxx:x:xxxx:xxx:xxxx",
+      "status": "SUCCESS",
+      "subject": "{none}",
+      "detailed_status": "StatusAccepted",
+      "operation": "MODIFY ACL",
+      "component": "schemeshard",
+      "acl_add": "[+(ConnDB):subject:-]"
+    }
+    ```
+
+{% endlist %}

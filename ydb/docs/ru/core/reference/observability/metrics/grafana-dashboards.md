@@ -131,3 +131,39 @@
 | Hive node | Узел, на котором запущен Hive. |
 
 Скачать шаблон дашборда **Database Hive**: [database-hive-detailed.json](https://raw.githubusercontent.com/ydb-platform/ydb/refs/heads/main/ydb/deploy/helm/ydb-prometheus/dashboards/database-hive-detailed.json).
+
+## Topic {#topic}
+
+На дашборде отображаются графики по метрикам топика, название которого выбрано в фильтре `topic`. 
+
+| Имя | Описание |
+|---|---|
+| Total incoming records (bytes) per second | Количество байт в секунду, записанных в топик методом `Ydb::TopicService::StreamWrite` |
+| Total incoming records (count) per second | Количество сообщений в секунду, записанных методом `Ydb::TopicService::StreamWrite` |
+| Write latency | Длительность записи - время от создания сообщения до его записи в топик. Процент сообщений, длительность записи которых уложилась в интервалы <100 мс, <200 мс и т.д.  |
+| Partition throttling | Длительность троттлинга записи - ожидания доступной квоты на запись. Процент сообщений, длительность троттлинга записи которых уложилась в интервалы <1 мс, <5 мс и т.д. |
+| Partition quota usage | Утилизация квот партиций топика на запись, % |
+| Write sessions active | Количество открытых сессий записи в топик |
+| Write sessions created | Количество создаваемых в секунду сессий записи в топик |
+
+Скачать шаблон дашборда **Topic**: [topic.json](https://raw.githubusercontent.com/ydb-platform/ydb/refs/heads/main/ydb/deploy/helm/ydb-prometheus/dashboards/topic.json).
+
+## Topic — Consumer {#topic-consumer}
+
+На дашборде отображаются графики по метрикам топика, название которого выбрано в фильтре `topic`, и его читателя, название которого выбрано в фильтре `consumer`.
+
+| Имя | Описание |
+|---|---|
+| Total incoming records (bytes) per second | Количество байт в секунду, записанных в топик методом `Ydb::TopicService::StreamWrite` |
+| Total outgoing records (bytes) per second | Количество байт в секунду, прочитанных из топика читателем методом `Ydb::TopicService::StreamRead` |
+| Total incoming records (count) per second | Количество сообщений в секунду, записанных в топик методом `Ydb::TopicService::StreamWrite` |
+| Total outgoing records (count) per second | Количество сообщений в секунду, прочитанных из топика читателем методом `Ydb::TopicService::StreamRead` |
+| End-to-end latency | End-to-end длительность: время от момента создания сообщения до момента его чтения. Процент сообщений, end-to-end длительность для которых уложилась в интервалы <100 мс, <200 мс и т.д. |
+| Read latency max | Максимальная (по всем партициям) разница между текущим временем и временем записи последнего сообщения в топик |
+| Unread messages max | Максимальная разница (по всем партициям) последнего оффсета в партиции и последнего вычитанного оффсета |
+| Read idle time max | Максимальное время простоя (сколько времени консьюмер не читал из партиции) по всем партициям топика, мс |
+| Uncommitted messages max | Максимальная (по всем партициям) разница между последним оффсетом партиции и закомиченным оффсетом партиции топика |
+| Committed read lag max | 	Максимальная (по всем партициям) разница между текущим временем и временем записи последнего закомиченного сообщения в топик, мс |
+| Partition sessions started | Количество сессий чтения топика читателем, запущенных в секунду |
+
+Скачать шаблон дашборда **Topic — Consumer**: [topic-consumer.json](https://raw.githubusercontent.com/ydb-platform/ydb/refs/heads/main/ydb/deploy/helm/ydb-prometheus/dashboards/topic-consumer.json).

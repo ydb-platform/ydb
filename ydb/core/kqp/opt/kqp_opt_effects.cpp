@@ -209,7 +209,7 @@ bool BuildUpsertRowsEffect(const TKqlUpsertRows& node, TExprContext& ctx, const 
     const bool isIndexImplTable = table.Metadata->IsIndexImplTable;
 
     const bool isOlap = (table.Metadata->Kind == EKikimrTableKind::Olap);
-    const i64 priority = isOlap ? 0 : order;
+    const i64 priority = (isOlap || settings.AllowInconsistentWrites) ? 0 : order;
 
     if (isOlap && !(kqpCtx.IsGenericQuery() || (kqpCtx.IsDataQuery() && kqpCtx.Config->GetAllowOlapDataQuery()))) {
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()),

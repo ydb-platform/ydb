@@ -19,7 +19,6 @@ struct TStreamingExploreCtx {
     TExprContext& Ctx;
     std::unordered_set<const TExprNode*> Visited;
     ui64 StreamingReads = 0;
-    ui64 Writes = 0;
 };
 
 bool ExploreStreamingQueryNode(TExprNode::TPtr node, TStreamingExploreCtx& res) {
@@ -53,8 +52,6 @@ bool ExploreStreamingQueryNode(TExprNode::TPtr node, TStreamingExploreCtx& res) 
     }
 
     if (const auto maybeDataSink = TMaybeNode<TCoDataSink>(providerArg)) {
-        ++res.Writes;
-
         const auto dataSinkCategory = maybeDataSink.Cast().Category().Value();
         if (IsIn({NYql::PqProviderName, NYql::SolomonProviderName, NYql::S3ProviderName}, dataSinkCategory)) {
             return true;
@@ -110,11 +107,6 @@ bool CheckStreamingQueryAst(TExprNode::TPtr ast, TExprContext& ctx) {
 
     if (res.StreamingReads == 0) {
         ctx.AddError(NYql::TIssue(ctx.GetPosition(ast->Pos()), "Streaming query must have at least one streaming read from topic"));
-        return false;
-    }
-
-    if (res.Writes > 1) {
-        ctx.AddError(NYql::TIssue(ctx.GetPosition(ast->Pos()), "Streaming query with more than one write is not supported now"));
         return false;
     }
 

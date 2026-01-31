@@ -3,7 +3,6 @@
 This documentation section contains reference information about various aspects of {{ ydb-short-name }}, including:
 
 * [{#T}](../yql/reference/index.md)
-* [{#T}](../postgresql/intro.md)
 * [{#T}](./embedded-ui/index.md)
 * [{#T}](../integrations/index.md)
 * [{#T}](./ydb-cli/index.md)

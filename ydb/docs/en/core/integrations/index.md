@@ -44,5 +44,4 @@ In addition to its own native protocol, {{ ydb-name }} has a compatibility layer
 ## See also
 
 * [{#T}](../reference/ydb-sdk/index.md)
-* [{#T}](../postgresql/intro.md)
 * [{#T}](../reference/kafka-api/index.md)

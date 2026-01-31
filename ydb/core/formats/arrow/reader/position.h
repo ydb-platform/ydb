@@ -242,6 +242,8 @@ public:
         }
         return result;
     }
+
+    std::shared_ptr<arrow::RecordBatch> MakeRecordBatch(const i64 position) const;
 };
 
 class TRWSortableBatchPosition;
@@ -512,6 +514,10 @@ public:
     std::shared_ptr<arrow::Scalar> GetScalar(const ui32 colIdx) const {
         AFL_VERIFY(colIdx < Sorting->GetColumns().size())("req", colIdx)("size", Sorting->GetColumns().size());
         return Sorting->GetColumns()[colIdx]->GetScalar(Sorting->GetPositionInChunk(colIdx, Position));
+    }
+
+    std::shared_ptr<arrow::RecordBatch> MakeRecordBatch() const {
+        return Sorting->MakeRecordBatch(Position);
     }
 };
 

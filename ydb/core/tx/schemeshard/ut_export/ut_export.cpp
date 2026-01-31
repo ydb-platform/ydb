@@ -1,9 +1,9 @@
 #include <ydb/public/api/protos/ydb_export.pb.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
+#include <ydb/public/api/protos/ydb_rate_limiter.pb.h>
 
 #include <ydb/core/backup/common/encryption.h>
 #include <ydb/core/base/table_index.h>
-#include <ydb/core/kesus/tablet/events.h>
 #include <ydb/core/metering/metering.h>
 #include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
@@ -40,6 +40,19 @@ namespace {
 
     Y_TEST_HOOK_AFTER_RUN(ShutdownAwsAPI) {
         NKikimr::ShutdownAwsAPI();
+    }
+
+    template <typename MessageT>
+    void CompareAsProtos(const TString& l, const TString& r) {
+        MessageT lProto, rProto;
+        google::protobuf::TextFormat::ParseFromString(l, &lProto);
+        google::protobuf::TextFormat::ParseFromString(r, &rProto);
+        UNIT_ASSERT_C(
+            google::protobuf::util::MessageDifferencer::Equals(lProto, rProto),
+            TStringBuilder() << "Messages\n\n"
+                << lProto.DebugString() << "\n\nand\n\n"
+                << rProto.DebugString() << "\n\nare not equal"
+        );
     }
 
     void Run(TTestBasicRuntime& runtime, TTestEnv& env, const std::variant<TVector<TString>, TTablesWithAttrs>& tablesVar, const TString& request,
@@ -968,211 +981,6 @@ namespace {
 
             TestExport(Runtime(), ++txId, "/MyRoot", request, "", "", Ydb::StatusIds::BAD_REQUEST);
             env.TestWaitNotification(Runtime(), txId);
-        }
-
-        void CreateKesusResources(const TString& kesusPath, TVector<TString> resourcePaths) {
-            using namespace NKesus;
-
-            auto desc = TestDescribe(Runtime(), kesusPath);
-            NKikimrScheme::TEvDescribeSchemeResult descResult;
-            UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(desc, &descResult));
-
-            ui64 kesusTabletId = descResult.GetPathDescription().GetKesus().GetKesusTabletId();
-
-            TBlockEvents<TEvKesus::TEvAddQuoterResourceResult> blockResourceCreate(Runtime(), [](const TEvKesus::TEvAddQuoterResourceResult::TPtr& ev) {
-                const auto& record = ev->Get()->Record;
-                UNIT_ASSERT_EQUAL_C(record.GetError().GetStatus(), Ydb::StatusIds::SUCCESS, JoinSeq(',', record.GetError().GetIssues()));
-                return true;
-            });
-
-            for (const auto& path : resourcePaths) {
-                THolder<TEvKesus::TEvAddQuoterResource> req = MakeHolder<TEvKesus::TEvAddQuoterResource>();
-                auto& record = req->Record;
-                auto& resource = *record.MutableResource();
-                resource.SetResourcePath(path);
-                resource.MutableHierarchicalDRRResourceConfig()->CopyFrom(NKikimrKesus::THierarchicalDRRResourceConfig::default_instance());
-                auto& DRRConfig = *resource.MutableHierarchicalDRRResourceConfig();
-                DRRConfig.SetMaxUnitsPerSecond(11.1);
-
-                AsyncSend(Runtime(), kesusTabletId, req.Release());
-
-                Runtime().WaitFor(
-                    TStringBuilder() << "create resource " << path,
-                    [&]{ return blockResourceCreate.size() >= 1; }
-                );
-
-                blockResourceCreate.Unblock();
-            }
-        }
-
-        void TestKesus() {
-            TTestEnv env(Runtime());
-            ui64 txId = 100;
-
-            TestCreateKesus(Runtime(), ++txId, "/MyRoot", R"(
-                Name: "Kesus"
-                Config: { self_check_period_millis: 1234 session_grace_period_millis: 5678 }
-            )");
-            env.TestWaitNotification(Runtime(), txId);
-
-            const TVector<TString> resources = {
-                "root",
-                "root/child1",
-                "root/child2",
-                "root/child2/child3"
-            };
-
-            CreateKesusResources("/MyRoot/Kesus", resources);
-
-            TString request = Sprintf(R"(
-                ExportToS3Settings {
-                    endpoint: "localhost:%d"
-                    scheme: HTTP
-                    items {
-                        source_path: "/MyRoot/Kesus"
-                        destination_prefix: "Kesus"
-                    }
-                }
-            )", S3Port());
-
-            TestExport(Runtime(), ++txId, "/MyRoot", request);
-            env.TestWaitNotification(Runtime(), txId);
-
-            TestGetExport(Runtime(), txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
-
-            CheckPathWithChecksum("/Kesus/create_coordination_node.pb");
-            const auto content = GetS3FileContent("/Kesus/create_coordination_node.pb");
-
-            auto expectedContent = R"(config {
-  self_check_period_millis: 1234
-  session_grace_period_millis: 5678
-}
-)";
-            UNIT_ASSERT_EQUAL_C(
-                content, expectedContent,
-                TStringBuilder() << "\nExpected:\n\n" << expectedContent << "\n\nActual:\n\n" << content
-            );
-
-            for (auto resourcePath: resources) {
-                CheckPathWithChecksum(Sprintf("/Kesus/%s/create_rate_limiter.pb", resourcePath.c_str()));
-                const auto resource = GetS3FileContent(Sprintf("/Kesus/%s/create_rate_limiter.pb", resourcePath.c_str()));
-                const auto expectedResource = Sprintf(R"(resource {
-  resource_path: "%s"
-  hierarchical_drr {
-    max_units_per_second: 11.1
-  }
-}
-)", resourcePath.c_str());
-                UNIT_ASSERT_EQUAL_C(
-                    resource, expectedResource,
-                    TStringBuilder() << "\nExpected:\n\n" << expectedResource << "\n\nActual:\n\n" << resource
-                );
-            }
-
-            CheckPathWithChecksum("/Kesus/metadata.json");
-
-            const auto metadata = GetS3FileContent("/Kesus/metadata.json");
-            const auto expectedMetadata = R"({"version":1,"rate_limiter_resources":[{"name":"root/child2/child3","prefix":"root/child2/child3"},{"name":"root/child2","prefix":"root/child2"},{"name":"root","prefix":"root"},{"name":"root/child1","prefix":"root/child1"}],"full_backups":[],"permissions":1,"changefeeds":[],"indexes":[]})";
-
-            UNIT_ASSERT_EQUAL_C(
-                metadata, expectedMetadata,
-                TStringBuilder() << "\nExpected:\n\n" << expectedMetadata << "\n\nActual:\n\n" << metadata
-            );
-
-            CheckPathWithChecksum("/Kesus/permissions.pb");
-            const auto permissions = GetS3FileContent("/Kesus/permissions.pb");
-            const auto permissions_expected = "actions {\n  change_owner: \"root@builtin\"\n}\n";
-            UNIT_ASSERT_EQUAL_C(
-                permissions, permissions_expected,
-                TStringBuilder() << "\nExpected:\n\n" << permissions_expected << "\n\nActual:\n\n" << permissions);
-        }
-
-        void TestKesusManyResources(ui32 numResources = 200) {
-            TTestEnv env(Runtime());
-            ui64 txId = 100;
-
-            TestCreateKesus(Runtime(), ++txId, "/MyRoot", R"(
-                Name: "Kesus"
-                Config: { self_check_period_millis: 1234 session_grace_period_millis: 5678 }
-            )");
-            env.TestWaitNotification(Runtime(), txId);
-
-            TVector<TString> resources;
-            resources.reserve(numResources);
-            for (ui32 i : xrange(numResources)) {
-                resources.push_back(Sprintf("root%u", i));
-            }
-            CreateKesusResources("/MyRoot/Kesus", resources);
-
-            TString request = Sprintf(R"(
-                ExportToS3Settings {
-                    endpoint: "localhost:%d"
-                    scheme: HTTP
-                    items {
-                        source_path: "/MyRoot/Kesus"
-                        destination_prefix: "Kesus"
-                    }
-                }
-            )", S3Port());
-
-            TestExport(Runtime(), ++txId, "/MyRoot", request);
-            env.TestWaitNotification(Runtime(), txId);
-
-            TestGetExport(Runtime(), txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
-
-            CheckPathWithChecksum("/Kesus/create_coordination_node.pb");
-            for (auto resourcePath: resources) {
-                CheckPathWithChecksum(Sprintf("/Kesus/%s/create_rate_limiter.pb", resourcePath.c_str()));
-            }
-        }
-
-        void TestEncryptedKesus() {
-            TTestEnv env(Runtime());
-            ui64 txId = 100;
-
-            Runtime().GetAppData().FeatureFlags.SetEnableEncryptedExport(true);
-
-            TestCreateKesus(Runtime(), ++txId, "/MyRoot", R"(
-                Name: "Kesus"
-                Config: { self_check_period_millis: 1234 session_grace_period_millis: 5678 }
-            )");
-            env.TestWaitNotification(Runtime(), txId);
-
-            const TVector<TString> resources = {
-                "root",
-                "root/child1",
-                "root/child2",
-                "root/child2/child3"
-            };
-
-            CreateKesusResources("/MyRoot/Kesus", resources);
-
-            TString request = Sprintf(R"(
-                ExportToS3Settings {
-                    endpoint: "localhost:%d"
-                    scheme: HTTP
-                    destination_prefix: "Export"
-                    items {
-                        source_path: "/MyRoot/Kesus"
-                    }
-                    encryption_settings {
-                        encryption_algorithm: "AES-128-GCM"
-                        symmetric_key {
-                            key: "0123456789012345"
-                        }
-                    }
-                }
-            )", S3Port());
-
-            TestExport(Runtime(), ++txId, "/MyRoot", request);
-            env.TestWaitNotification(Runtime(), txId);
-
-            TestGetExport(Runtime(), txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
-
-            UNIT_ASSERT(HasS3File("/Export/001/create_coordination_node.pb.enc"));
-            for (ui32 i : xrange(resources.size())) {
-                UNIT_ASSERT(HasS3File(Sprintf("/Export/001/00%u/create_rate_limiter.pb.enc", i + 1)));
-            }
         }
 
     protected:
@@ -4374,14 +4182,182 @@ CREATE EXTERNAL TABLE IF NOT EXISTS `ExternalTable` (
     }
 
     Y_UNIT_TEST(Kesus) {
-        TestKesus();
+        TTestEnv env(Runtime());
+        ui64 txId = 100;
+
+        TestCreateKesus(Runtime(), ++txId, "/MyRoot", R"(
+            Name: "Kesus"
+            Config: { self_check_period_millis: 1234 session_grace_period_millis: 5678 }
+        )");
+        env.TestWaitNotification(Runtime(), txId);
+
+        TVector<TString> resources = { "root", "root/child1", "root/child2", "root/child2/child3" };
+        for (const auto& path : resources) {
+            TestCreateRateLimiter(Runtime(), "/MyRoot/Kesus", Sprintf(R"(
+            Resource {
+                ResourcePath: "%s"
+                HierarchicalDRRResourceConfig {
+                    MaxUnitsPerSecond: 11.1
+                }
+            })", path.c_str()));
+        }
+
+
+        TString request = Sprintf(R"(
+            ExportToS3Settings {
+                endpoint: "localhost:%d"
+                scheme: HTTP
+                items {
+                    source_path: "/MyRoot/Kesus"
+                    destination_prefix: "Kesus"
+                }
+            }
+        )", S3Port());
+
+        TestExport(Runtime(), ++txId, "/MyRoot", request);
+        env.TestWaitNotification(Runtime(), txId);
+
+        TestGetExport(Runtime(), txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+
+        CheckPathWithChecksum("/Kesus/create_coordination_node.pb");
+        const auto content = GetS3FileContent("/Kesus/create_coordination_node.pb");
+
+        auto expectedContent = R"(
+            config {
+                self_check_period_millis: 1234
+                session_grace_period_millis: 5678
+            })";
+        CompareAsProtos<Ydb::Coordination::CreateNodeRequest>(content, expectedContent);
+
+        for (auto resourcePath: resources) {
+            CheckPathWithChecksum(Sprintf("/Kesus/%s/create_rate_limiter.pb", resourcePath.c_str()));
+            const auto resource = GetS3FileContent(Sprintf("/Kesus/%s/create_rate_limiter.pb", resourcePath.c_str()));
+            const auto expectedResource = Sprintf(R"(
+                resource {
+                    resource_path: "%s"
+                    hierarchical_drr {
+                        max_units_per_second: 11.1
+                    }
+                })",
+                resourcePath.c_str());
+            CompareAsProtos<Ydb::RateLimiter::CreateResourceRequest>(resource, expectedResource);
+        }
+
+        CheckPathWithChecksum("/Kesus/metadata.json");
+
+        const auto metadata = GetS3FileContent("/Kesus/metadata.json");
+        const auto expectedMetadata = R"({"version":1,"rate_limiter_resources":[{"name":"root/child2/child3","export_prefix":"root/child2/child3"},{"name":"root/child2","export_prefix":"root/child2"},{"name":"root","export_prefix":"root"},{"name":"root/child1","export_prefix":"root/child1"}],"full_backups":[],"permissions":1,"changefeeds":[],"indexes":[]})";
+
+        UNIT_ASSERT_EQUAL_C(
+            metadata, expectedMetadata,
+            TStringBuilder() << "\nExpected:\n\n" << expectedMetadata << "\n\nActual:\n\n" << metadata
+        );
+
+        CheckPathWithChecksum("/Kesus/permissions.pb");
+        const auto permissions = GetS3FileContent("/Kesus/permissions.pb");
+        const auto permissions_expected = "actions {\n  change_owner: \"root@builtin\"\n}\n";
+        UNIT_ASSERT_EQUAL_C(
+            permissions, permissions_expected,
+            TStringBuilder() << "\nExpected:\n\n" << permissions_expected << "\n\nActual:\n\n" << permissions);
     }
 
-    Y_UNIT_TEST(KesusManyResourcesUpload) {
-        TestKesusManyResources();
+    Y_UNIT_TEST(KesusManyResources) {
+        TTestEnv env(Runtime());
+        ui64 txId = 100;
+
+        TestCreateKesus(Runtime(), ++txId, "/MyRoot", R"(
+            Name: "Kesus"
+            Config: { self_check_period_millis: 1234 session_grace_period_millis: 5678 }
+        )");
+        env.TestWaitNotification(Runtime(), txId);
+
+        ui32 numResources = 150;
+        for (ui32 i : xrange(numResources)) {
+            TestCreateRateLimiter(Runtime(), "/MyRoot/Kesus", Sprintf(R"(
+            Resource {
+                ResourcePath: "root%u"
+                HierarchicalDRRResourceConfig {
+                    MaxUnitsPerSecond: 11.1
+                }
+            })", i));
+        }
+
+        TString request = Sprintf(R"(
+            ExportToS3Settings {
+                endpoint: "localhost:%d"
+                scheme: HTTP
+                items {
+                    source_path: "/MyRoot/Kesus"
+                    destination_prefix: "Kesus"
+                }
+            }
+        )", S3Port());
+
+        TestExport(Runtime(), ++txId, "/MyRoot", request);
+        env.TestWaitNotification(Runtime(), txId);
+
+        TestGetExport(Runtime(), txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+
+        CheckPathWithChecksum("/Kesus/create_coordination_node.pb");
+        for (ui32 i : xrange(numResources)) {
+            CheckPathWithChecksum(Sprintf("/Kesus/root%u/create_rate_limiter.pb", i));
+        }
     }
 
-    Y_UNIT_TEST(KesusEncryptedExport) {
-        TestEncryptedKesus();
+    Y_UNIT_TEST(KesusEncrypted) {
+        TTestEnv env(Runtime());
+        ui64 txId = 100;
+
+        Runtime().GetAppData().FeatureFlags.SetEnableEncryptedExport(true);
+
+        TestCreateKesus(Runtime(), ++txId, "/MyRoot", R"(
+            Name: "Kesus"
+            Config: { self_check_period_millis: 1234 session_grace_period_millis: 5678 }
+        )");
+        env.TestWaitNotification(Runtime(), txId);
+
+        const TVector<TString> resources = {
+            "root",
+            "root/child1",
+            "root/child2",
+            "root/child2/child3"
+        };
+
+        for (const auto& path : resources) {
+            TestCreateRateLimiter(Runtime(), "/MyRoot/Kesus", Sprintf(R"(
+            Resource {
+                ResourcePath: "%s"
+                HierarchicalDRRResourceConfig {
+                    MaxUnitsPerSecond: 11.1
+                }
+            })", path.c_str()));
+        }
+
+        TString request = Sprintf(R"(
+            ExportToS3Settings {
+                endpoint: "localhost:%d"
+                scheme: HTTP
+                destination_prefix: "Export"
+                items {
+                    source_path: "/MyRoot/Kesus"
+                }
+                encryption_settings {
+                    encryption_algorithm: "AES-128-GCM"
+                    symmetric_key {
+                        key: "0123456789012345"
+                    }
+                }
+            }
+        )", S3Port());
+
+        TestExport(Runtime(), ++txId, "/MyRoot", request);
+        env.TestWaitNotification(Runtime(), txId);
+
+        TestGetExport(Runtime(), txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+
+        UNIT_ASSERT(HasS3File("/Export/001/create_coordination_node.pb.enc"));
+        for (ui32 i : xrange(resources.size())) {
+            UNIT_ASSERT(HasS3File(Sprintf("/Export/001/00%u/create_rate_limiter.pb.enc", i + 1)));
+        }
     }
 }

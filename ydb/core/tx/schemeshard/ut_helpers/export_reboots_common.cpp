@@ -38,11 +38,29 @@ void TestCreate(TTestActorRuntime& runtime, ui64 txId, const TString& scheme, NK
 
 void CreateSchemeObjects(TTestWithReboots& t, TTestActorRuntime& runtime, const TVector<TTypedScheme>& schemeObjects) {
     TSet<ui64> toWait;
+    TVector<TString> kesuses;
     for (const auto& [type, scheme, _] : schemeObjects) {
+        if (type == NKikimrSchemeOp::EPathTypeKesus) {
+            NKikimrSchemeOp::TKesusDescription kesusDesc;
+            google::protobuf::TextFormat::ParseFromString(scheme, &kesusDesc);
+            kesuses.push_back("/MyRoot/" + kesusDesc.GetName());
+        }
         TestCreate(runtime, ++t.TxId, scheme, type);
         toWait.insert(t.TxId);
     }
     t.TestEnv->TestWaitNotification(runtime, toWait);
+
+    for (const auto& kesus : kesuses) {
+        for (ui32 i : xrange(110)) {
+            TestCreateRateLimiter(runtime, kesus, Sprintf(R"(
+            Resource {
+                ResourcePath: "root%u"
+                HierarchicalDRRResourceConfig {
+                    MaxUnitsPerSecond: 11.1
+                }
+            })", i));
+        }
+    }
 }
 
 void Run(const TVector<TTypedScheme>& schemeObjects, const TString& request, TTestWithReboots& t) {

@@ -15,6 +15,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/s3_settings.h>
 
 #include <functional>
+#include <util/generic/vector.h>
 
 namespace NKikimr::NColumnShard {
 namespace NTiers {
@@ -43,6 +44,8 @@ public:
     TManager& Restart(const TTierConfig& config, std::shared_ptr<NMetadata::NSecret::TSnapshot> secrets);
     bool Stop();
     bool Start(const TTierConfig& config, std::shared_ptr<NMetadata::NSecret::TSnapshot> secrets);
+    bool StartWithSettings(NKikimrSchemeOp::TS3Settings settings);
+    bool RestartWithSettings(NKikimrSchemeOp::TS3Settings settings);
 };
 }
 
@@ -110,12 +113,20 @@ private:
     class TActor;
     friend class TActor;
     using TManagers = std::map<NTiers::TExternalStorageId, NTiers::TManager>;
+    struct TSchemaSecretRequest {
+        NTiers::TExternalStorageId TierId;
+        NTiers::TTierConfig Config;
+        TVector<TString> SecretNames;
+    };
 
     ui64 TabletId = 0;
     const TActorId TabletActorId;
     std::function<void(const TActorContext& ctx)> ShardCallback;
     IActor* Actor = nullptr;
     TManagers Managers;
+    THashMap<ui64, TSchemaSecretRequest> SchemaSecretRequests;
+    THashMap<NTiers::TExternalStorageId, ui64> SchemaSecretRequestsByTier;
+    ui64 NextSchemaSecretRequestId = 1;
 
     using TTierById = THashMap<NTiers::TExternalStorageId, TTierGuard>;
     YDB_READONLY_DEF(TTierById, Tiers);
@@ -123,6 +134,7 @@ private:
 
 private:
     void OnConfigsUpdated(bool notifyShard = true);
+    bool TryRequestSchemaSecrets(const NTiers::TExternalStorageId& tierId, const NTiers::TTierConfig& config);
     void RegisterTierManager(const NTiers::TExternalStorageId& name, std::optional<NTiers::TTierConfig> config);
     void UnregisterTierManager(const NTiers::TExternalStorageId& name);
 

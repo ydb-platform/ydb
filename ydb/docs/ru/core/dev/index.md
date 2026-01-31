@@ -18,8 +18,9 @@
 - [{#T}](cdc.md)
 - [{#T}](custom-attributes.md)
 {% if feature_resource_pool == true and feature_resource_pool_classifier == true %}- [{#T}](resource-consumption-management.md){% endif %}
-- Справка:
+- [{#T}](runtime-stats/index.md)
 
+- Справка:
   - [{#T}](../yql/reference/index.md)
   - [{#T}](../reference/ydb-sdk/index.md)
   - [{#T}](../reference/ydb-cli/index.md)

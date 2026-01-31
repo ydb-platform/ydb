@@ -1,3 +1,5 @@
+#include "defs.h"
+#include "datashard_distributed_erase.h"
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 #include "datashard_ut_common_kqp.h"
 
@@ -1616,6 +1618,17 @@ Y_UNIT_TEST_SUITE(Cdc) {
         }, true, "user@test");
     }
 
+    void CreateTableTtl(TServer::TPtr server, const TActorId& sender, const TString& root, const TString& name) 
+    {
+        auto opts = TShardedTableOptions()
+            .EnableOutOfOrder(false)
+            .Columns({
+                {"key", "Uint32", true, false},
+                {"value", "Timestamp", false, false}
+            });
+        CreateShardedTable(server, sender, root, name, opts);
+    }
+    
     Y_UNIT_TEST(NewAndOldImagesLogDebezium) {
         TopicRunner::Read(SimpleTable(), NewAndOldImages(NKikimrSchemeOp::ECdcStreamFormatDebeziumJson), {R"(
             UPSERT INTO `/Root/Table` (key, value) VALUES
@@ -1849,9 +1862,39 @@ Y_UNIT_TEST_SUITE(Cdc) {
                 {"eventID", "***"},
                 {"eventName", "REMOVE"},
                 {"eventSource", "ydb:document-table"},
-                {"eventVersion", "1.0"},
+                {"eventVersion", "1.0"}
             }), false),
         }, false /* do not check key */);
+    }
+
+    Y_UNIT_TEST_TRIPLET(DocApiUser, PqRunner, YdsRunner, TopicRunner) {
+        const TString userSID{"user@test"};
+        TRunner::Read(DocApiTable(), KeysOnly(NKikimrSchemeOp::ECdcStreamFormatDynamoDBStreamsJson), {R"(
+            UPSERT INTO `/Root/Table` (__Hash, id_shard, id_sort, __RowData) VALUES (
+                1, "10", "100", JsonDocument('{"M":{"color":{"S":"pink"},"weight":{"N":"4.5"}}}')
+            );
+        )"}, {
+            WriteJson(NJson::TJsonMap({
+                {"awsRegion", ""},
+                {"dynamodb", NJson::TJsonMap({
+                    {"ApproximateCreationDateTime", "***"},
+                    {"Keys", NJson::TJsonMap({
+                        {"id_shard", NJson::TJsonMap({{"S", "10"}})},
+                        {"id_sort", NJson::TJsonMap({{"S", "100"}})},
+                    })},
+                    {"SequenceNumber", "000000000000000000001"},
+                    {"StreamViewType", "KEYS_ONLY"},
+                })},
+                {"eventID", "***"},
+                {"eventName", "MODIFY"},
+                {"eventSource", "ydb:document-table"},
+                {"eventVersion", "1.0"},
+                {"userIdentity", NJson::TJsonMap({
+                    {"type", "User"},
+                    {"principalId", userSID}})
+                },
+            }), false),
+        }, false /* do not check key */, userSID);
     }
 
     Y_UNIT_TEST_TRIPLET(NaN, PqRunner, YdsRunner, TopicRunner) {

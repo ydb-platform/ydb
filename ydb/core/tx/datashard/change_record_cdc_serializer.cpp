@@ -536,8 +536,13 @@ protected:
 
         if (!record.GetUser().empty()) {
             auto& userIdentityJson = json["userIdentity"];
-            userIdentityJson["type"] = "service";
-            userIdentityJson["principalId"] = record.GetUser();
+            if (record.GetUser()=="ttl@system") {       /// cdcuser@test какое название пользователя?
+                userIdentityJson["type"] = "Service";   
+                userIdentityJson["principalId"] = "dynamodb.amazonaws.com";
+            } else {
+                userIdentityJson["type"] = "User";      /// cdcuser@test какое название сервиса ?
+                userIdentityJson["principalId"] = record.GetUser();
+            }
         }
     }
 

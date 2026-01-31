@@ -1886,35 +1886,49 @@ TNodePtr BuildDropTable(TPosition pos, const TTableRef& tr, bool missingOk, ETab
     return new TDropTableNode(pos, tr, missingOk, tableType, scoped);
 }
 
-static INode::TPtr CreateConsumerDesc(const TTopicConsumerDescription& desc, const INode& node, bool alter) {
+static std::optional<INode::TPtr> CreateConsumerDesc(TContext& ctx, const TTopicConsumerDescription& desc, const INode& node, bool alter) {
+    auto setValue = [&](const INode::TPtr& settings, const TNodePtr& value, const auto& setter) {
+        if (value) {
+            return node.L(settings, node.Q(node.Y(node.Q(setter), value)));
+        }
+        return settings;
+    };
+
+    auto setValueWithReset = [&](const INode::TPtr& settings, const NYql::TResetableSetting<TNodePtr, void>& value, const auto& setter, const auto& resetter) {
+        if (!value) {
+            return settings;
+        }
+        if (value.IsSet()) {
+            return node.L(settings, node.Q(node.Y(node.Q(setter), value.GetValueSet())));
+        } else {
+            YQL_ENSURE(alter, "Cannot reset on create");
+            return node.L(settings, node.Q(node.Y(node.Q(resetter), node.Q(node.Y()))));
+        }
+    };
+
+    if (alter) {
+        if (desc.Settings.Type) {
+            ctx.Error() << "type alter is not supported";
+            return std::nullopt;
+        }
+        if (desc.Settings.KeepMessagesOrder) {
+            ctx.Error() << "keep_messages_order alter is not supported";
+            return std::nullopt;
+        }
+    }
+
     auto settings = node.Y();
-    if (desc.Settings.Important) {
-        settings = node.L(settings, node.Q(node.Y(node.Q("important"), desc.Settings.Important)));
-    }
-    if (const auto& availabilityPeriod = desc.Settings.AvailabilityPeriod) {
-        if (availabilityPeriod.IsSet()) {
-            settings = node.L(settings, node.Q(node.Y(node.Q("setAvailabilityPeriod"), availabilityPeriod.GetValueSet())));
-        } else {
-            YQL_ENSURE(alter, "Cannot reset on create");
-            settings = node.L(settings, node.Q(node.Y(node.Q("resetAvailabilityPeriod"), node.Q(node.Y()))));
-        }
-    }
-    if (const auto& readFromTs = desc.Settings.ReadFromTs) {
-        if (readFromTs.IsSet()) {
-            settings = node.L(settings, node.Q(node.Y(node.Q("setReadFromTs"), readFromTs.GetValueSet())));
-        } else {
-            YQL_ENSURE(alter, "Cannot reset on create");
-            settings = node.L(settings, node.Q(node.Y(node.Q("resetReadFromTs"), node.Q(node.Y()))));
-        }
-    }
-    if (const auto& readFromTs = desc.Settings.SupportedCodecs) {
-        if (readFromTs.IsSet()) {
-            settings = node.L(settings, node.Q(node.Y(node.Q("setSupportedCodecs"), readFromTs.GetValueSet())));
-        } else {
-            YQL_ENSURE(alter, "Cannot reset on create");
-            settings = node.L(settings, node.Q(node.Y(node.Q("resetSupportedCodecs"), node.Q(node.Y()))));
-        }
-    }
+    settings = setValue(settings, desc.Settings.Important, "important");
+    settings = setValueWithReset(settings, desc.Settings.AvailabilityPeriod, "setAvailabilityPeriod", "resetAvailabilityPeriod");
+    settings = setValueWithReset(settings, desc.Settings.ReadFromTs, "setReadFromTs", "resetReadFromTs");
+    settings = setValueWithReset(settings, desc.Settings.SupportedCodecs, "setSupportedCodecs", "resetSupportedCodecs");
+    settings = setValue(settings, desc.Settings.Type, "type");
+    settings = setValue(settings, desc.Settings.KeepMessagesOrder, "keep_messages_order");
+    settings = setValue(settings, desc.Settings.DefaultProcessingTimeout, "default_processing_timeout");
+    settings = setValue(settings, desc.Settings.MaxProcessingAttempts, "max_processing_attempts");
+    settings = setValue(settings, desc.Settings.DeadLetterPolicy, "dead_letter_policy");
+    settings = setValue(settings, desc.Settings.DeadLetterQueue, "dead_letter_queue");
+
     return node.Y(
         node.Q(node.Y(node.Q("name"), BuildQuotedAtom(desc.Name.Pos, desc.Name.Name))),
         node.Q(node.Y(node.Q("settings"), node.Q(settings))));
@@ -1953,8 +1967,11 @@ public:
         opts = L(opts, Q(Y(Q("mode"), Q(mode))));
 
         for (const auto& consumer : Params_.Consumers) {
-            const auto& desc = CreateConsumerDesc(consumer, *this, false);
-            opts = L(opts, Q(Y(Q("consumer"), Q(desc))));
+            const auto desc = CreateConsumerDesc(ctx, consumer, *this, false);
+            if (!desc) {
+                return false;
+            }
+            opts = L(opts, Q(Y(Q("consumer"), Q(desc.value()))));
         }
 
         if (Params_.TopicSettings.IsSet()) {
@@ -2064,13 +2081,19 @@ public:
         opts = L(opts, Q(Y(Q("mode"), Q(mode))));
 
         for (const auto& consumer : Params_.AddConsumers) {
-            const auto& desc = CreateConsumerDesc(consumer, *this, false);
-            opts = L(opts, Q(Y(Q("addConsumer"), Q(desc))));
+            const auto desc = CreateConsumerDesc(ctx, consumer, *this, false);
+            if (!desc) {
+                return false;
+            }
+            opts = L(opts, Q(Y(Q("addConsumer"), Q(desc.value()))));
         }
 
         for (const auto& [_, consumer] : Params_.AlterConsumers) {
-            const auto& desc = CreateConsumerDesc(consumer, *this, true);
-            opts = L(opts, Q(Y(Q("alterConsumer"), Q(desc))));
+            const auto desc = CreateConsumerDesc(ctx, consumer, *this, true);
+            if (!desc) {
+                return false;
+            }
+            opts = L(opts, Q(Y(Q("alterConsumer"), Q(desc.value()))));
         }
 
         for (const auto& consumer : Params_.DropConsumers) {

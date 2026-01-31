@@ -24,15 +24,7 @@ def kikimr(request):
             },
             query_service_config={
                 "available_external_data_sources": ["ObjectStorage", "Ydb", "YdbTopics"],
-                "enable_match_recognize": True,
-                "streaming_queries": {
-                    "external_storage": {
-                        "database_connection": {
-                            "endpoint": os.getenv("YDB_ENDPOINT"),
-                            "database": os.getenv("YDB_DATABASE"),
-                        },
-                    },
-                },
+                "enable_match_recognize": True
             },
             table_service_config={
                 "enable_watermarks": enable_watermarks,

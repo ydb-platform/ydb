@@ -3,6 +3,7 @@
 
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
+#include <ydb/core/backup/common/metadata.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 
 #include <ydb/library/actors/core/event_local.h>
@@ -27,6 +28,7 @@ namespace TEvPrivate {
         EvImportSchemeQueryResult,
         EvExportSchemeUploadResult,
         EvExportUploadMetadataResult,
+        EvExportUploadKesusResourcesResult,
         EvServerlessStorageBilling,
         EvCleanDroppedPaths,
         EvCleanDroppedSubDomains,
@@ -174,6 +176,28 @@ namespace TEvPrivate {
             : ExportId(id)
             , Success(success)
             , Error(error)
+        {}
+    };
+
+    struct TEvExportUploadKesusResourcesResult: public TEventLocal<TEvExportUploadKesusResourcesResult, EvExportUploadKesusResourcesResult> {
+        const ui64 ExportId;
+        const ui32 ItemIdx;
+        const bool Success;
+        const TString Error;
+        TVector<NBackup::TRateLimiterResourceMetadata> ResourcesMetadata;
+
+        TEvExportUploadKesusResourcesResult(
+            ui64 id,
+            ui32 itemIdx,
+            bool success,
+            const TString& error,
+            const TVector<NBackup::TRateLimiterResourceMetadata>& resourcesMetadata
+        )
+            : ExportId(id)
+            , ItemIdx(itemIdx)
+            , Success(success)
+            , Error(error)
+            , ResourcesMetadata(resourcesMetadata)
         {}
     };
 

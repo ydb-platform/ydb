@@ -460,6 +460,19 @@ public:
         ));
     }
 
+    void CreateSolomonSource(const TString& solomonSourceName) {
+        ExecQuery(fmt::format(R"(
+            CREATE EXTERNAL DATA SOURCE `{solomon_source}` WITH (
+                SOURCE_TYPE = "Solomon",
+                LOCATION = "localhost:{solomon_port}",
+                AUTH_METHOD = "NONE",
+                USE_TLS = "false"
+            );)",
+            "solomon_source"_a = solomonSourceName,
+            "solomon_port"_a = getenv("SOLOMON_HTTP_PORT")
+        ));
+    }
+
     // Script executions (using query client SDK)
 
     TOperation::TOperationId ExecScript(const TString& query, std::optional<TExecuteScriptSettings> settings = std::nullopt, bool waitRunning = true) {
@@ -1814,16 +1827,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         CreatePqSource(pqSource);
 
         constexpr char solomonSink[] = "solomonSinkName";
-        ExecQuery(fmt::format(R"(
-            CREATE EXTERNAL DATA SOURCE `{solomon_source}` WITH (
-                SOURCE_TYPE = "Solomon",
-                LOCATION = "localhost:{solomon_port}",
-                AUTH_METHOD = "NONE",
-                USE_TLS = "false"
-            );)",
-            "solomon_source"_a = solomonSink,
-            "solomon_port"_a = getenv("SOLOMON_HTTP_PORT")
-        ));
+        CreateSolomonSource(solomonSink);
 
         constexpr char sourceTable[] = "source";
         constexpr char rowSinkTable[] = "rowSink";
@@ -2456,16 +2460,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         CreatePqSource(pqSourceName);
 
         constexpr char solomonSinkName[] = "sinkName";
-        ExecQuery(fmt::format(R"(
-            CREATE EXTERNAL DATA SOURCE `{solomon_source}` WITH (
-                SOURCE_TYPE = "Solomon",
-                LOCATION = "localhost:{solomon_port}",
-                AUTH_METHOD = "NONE",
-                USE_TLS = "false"
-            );)",
-            "solomon_source"_a = solomonSinkName,
-            "solomon_port"_a = getenv("SOLOMON_HTTP_PORT")
-        ));
+        CreateSolomonSource(solomonSinkName);
 
         constexpr char queryName[] = "streamingQuery";
         const TSolomonLocation soLocation = {
@@ -2824,7 +2819,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             SetupMockConnectorTableData(connectorClient, {
                 .TableName = ydbTable,
                 .Columns = columns,
-                .NumberReadSplits = 2,
+                .NumberReadSplits = 4, // Read from ydb source is not deduplicated because spilling is disabled for streaming queries
                 .ResultFactory = [&]() {
                     return MakeRecordBatch(MakeArray<arrow::BinaryBuilder>("fqdn", fqdnColumn, arrow::binary()));
                 }
@@ -4401,33 +4396,124 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         constexpr char inputTopic[] = "createStreamingQueryWithMultipleWritesInputTopic";
         constexpr char outputTopic1[] = "createStreamingQueryWithMultipleWritesOutputTopic1";
         constexpr char outputTopic2[] = "createStreamingQueryWithMultipleWritesOutputTopic2";
+        constexpr char pqSource[] = "sourceName";
         CreateTopic(inputTopic);
         CreateTopic(outputTopic1);
         CreateTopic(outputTopic2);
-
-        constexpr char pqSource[] = "sourceName";
         CreatePqSource(pqSource);
 
+        constexpr char sinkBucket[] = "test_bucket_streaming_query_multi_insert";
+        constexpr char s3SinkName[] = "s3SinkName";
+        CreateBucket(sinkBucket);
+        CreateS3Source(sinkBucket, s3SinkName);
+
+        constexpr char solomonSink[] = "solomonSinkName";
+        CreateSolomonSource(solomonSink);
+
+        constexpr char rowSinkTable[] = "rowSink";
+        constexpr char columnSinkTable[] = "columnSink";
+        ExecQuery(fmt::format(R"(
+            CREATE TABLE `{row_table}` (
+                B Utf8 NOT NULL,
+                PRIMARY KEY (B)
+            );
+            CREATE TABLE `{column_table}` (
+                C String NOT NULL,
+                PRIMARY KEY (C)
+            ) WITH (
+                STORE = COLUMN
+            );)",
+            "row_table"_a = rowSinkTable,
+            "column_table"_a = columnSinkTable
+        ));
+
         constexpr char queryName[] = "streamingQuery";
+        const TSolomonLocation soLocation = {
+            .ProjectId = "cloudId1",
+            .FolderId = "folderId1",
+            .Service = "custom",
+            .IsCloud = false,
+        };
         ExecQuery(fmt::format(R"(
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
                 $rows = SELECT * FROM `{pq_source}`.`{input_topic}`;
-                INSERT INTO `{pq_source}`.`{output_topic1}` SELECT Data || "-A" FROM $rows;
-                INSERT INTO `{pq_source}`.`{output_topic2}` SELECT Data || "-B" FROM $rows;
+
+                INSERT INTO `{pq_source}`.`{output_topic1}` SELECT Data || "-A" AS X FROM $rows;
+
+                INSERT INTO `{pq_source}`.`{output_topic2}` SELECT Data || "-B" AS Y FROM $rows;
+
+                UPSERT INTO `{row_table}` SELECT Unwrap(CAST(Data || "-C" AS Utf8)) AS B FROM $rows;
+
+                UPSERT INTO `{column_table}` SELECT Data || "-D" AS C FROM $rows;
+
+                INSERT INTO `{s3_sink}`.`test/` WITH (
+                    FORMAT = raw
+                ) SELECT Data || "-E" AS D FROM $rows;
+
+                INSERT INTO `{solomon_sink}`.`{solomon_project}/{solomon_folder}/{solomon_service}`
+                SELECT
+                    42 AS value,
+                    Data || "-F" AS sensor,
+                    Timestamp("2025-03-12T14:40:39Z") AS ts
+                FROM $rows;
             END DO;)",
             "query_name"_a = queryName,
             "pq_source"_a = pqSource,
             "input_topic"_a = inputTopic,
             "output_topic1"_a = outputTopic1,
-            "output_topic2"_a = outputTopic2
+            "output_topic2"_a = outputTopic2,
+            "row_table"_a = rowSinkTable,
+            "column_table"_a = columnSinkTable,
+            "s3_sink"_a = s3SinkName,
+            "solomon_sink"_a = solomonSink,
+            "solomon_project"_a = soLocation.ProjectId,
+            "solomon_folder"_a = soLocation.FolderId,
+            "solomon_service"_a = soLocation.Service
         ));
         CheckScriptExecutionsCount(1, 1);
 
+        CleanupSolomon(soLocation);
         Sleep(TDuration::Seconds(1));
         WriteTopicMessage(inputTopic, "test");
         ReadTopicMessage(outputTopic1, "test-A");
         ReadTopicMessage(outputTopic2, "test-B");
+
+        const auto& results = ExecQuery(fmt::format(R"(
+            SELECT * FROM `{row_table}`;
+            SELECT * FROM `{column_table}`;)",
+            "row_table"_a = rowSinkTable,
+            "column_table"_a = columnSinkTable
+        ));
+        UNIT_ASSERT_VALUES_EQUAL(results.size(), 2);
+
+        CheckScriptResult(results[0], 1, 1, [&](TResultSetParser& resultSet) {
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser("B").GetUtf8(), "test-C");
+        });
+
+        CheckScriptResult(results[1], 1, 1, [&](TResultSetParser& resultSet) {
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser("C").GetString(), "test-D");
+        });
+
+        UNIT_ASSERT_VALUES_EQUAL(GetAllObjects(sinkBucket), "test-E");
+
+        const TString expectedMetrics = R"([
+  {
+    "labels": [
+      [
+        "name",
+        "value"
+      ],
+      [
+        "sensor",
+        "test-F"
+      ]
+    ],
+    "ts": 1741790439,
+    "value": 42
+  }
+])";
+        UNIT_ASSERT_STRINGS_EQUAL(GetSolomonMetrics(soLocation), expectedMetrics);
     }
 }
 

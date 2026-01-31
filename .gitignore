@@ -102,6 +102,11 @@ path.bash.inc
 /.editorconfig
 
 # Cursor ignore
+.cursorignore
+
+# Claude Code
+.claude/
+
 .cursor/
 .cursorignore
 

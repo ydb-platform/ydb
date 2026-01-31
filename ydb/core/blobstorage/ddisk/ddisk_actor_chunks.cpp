@@ -1,4 +1,6 @@
 #include "ddisk_actor.h"
+
+#include <util/generic/overloaded.h>
 #include <ydb/core/protos/blobstorage_ddisk_internal.pb.h>
 
 namespace NKikimr::NDDisk {
@@ -37,10 +39,10 @@ namespace NKikimr::NDDisk {
             ChunkAllocateQueue.pop();
             const TChunkIdx chunkIdx = ChunkReserve.front();
             ChunkReserve.pop();
-            switch (chunkAllocate.index()) {
-                case 0: {
-                    const auto tabletId = std::get<0>(chunkAllocate).TabletId;
-                    const auto vChunkIndex = std::get<0>(chunkAllocate).VChunkIndex;
+            std::visit(TOverloaded{
+                [this, chunkIdx](const TChunkForData& data) {
+                    const auto tabletId = data.TabletId;
+                    const auto vChunkIndex = data.VChunkIndex;
                     Y_ABORT_UNLESS(ChunkRefs.contains(tabletId) && ChunkRefs[tabletId].contains(vChunkIndex));
 
                     IssuePDiskLogRecord(TLogSignature::SignatureDDiskChunkMap, chunkIdx, CreateChunkMapIncrement(
@@ -58,19 +60,17 @@ namespace NKikimr::NDDisk {
                     });
 
                     ChunkMapIncrementsInFlight.emplace(tabletId, vChunkIndex, chunkIdx);
-                    break;
-                }
-                case 1: {
-                    Y_ABORT_UNLESS(PersistentBufferOwnedChunks.contains(chunkIdx));
+                },
+                [this, chunkIdx](const TChunkForPersistentBuffer&) {
+                    Y_ABORT_UNLESS(!PersistentBufferOwnedChunks.contains(chunkIdx));
                     IssuePDiskLogRecord(TLogSignature::SignaturePersistentBufferChunkMap, chunkIdx
                         , CreatePersistentBufferChunkMapSnapshot(), &PersistentBufferChunkMapSnapshotLsn, [this, chunkIdx] {
                         PersistentBufferOwnedChunks.insert(chunkIdx);
                         // TODO: Send(SelfId(), new TEvPrivate::TEvHandlePersistentBufferEventForChunk(chunkIdx));
                         ++*Counters.Chunks.ChunksOwned;
                     });
-                    break;
                 }
-            }
+            }, chunkAllocate);
         }
         if (!ChunkAllocateQueue.empty()) { // ask for another reservation
             Y_ABORT_UNLESS(ChunkReserve.empty());
@@ -110,7 +110,9 @@ namespace NKikimr::NDDisk {
         if (ChunkMapSnapshotLsn < msg.FreeUpToLsn) { // we have to rewrite snapshot
             IssuePDiskLogRecord(TLogSignature::SignatureDDiskChunkMap, 0, CreateChunkMapSnapshot(), &ChunkMapSnapshotLsn, {});
         }
-
+        if (PersistentBufferChunkMapSnapshotLsn < msg.FreeUpToLsn) { // we have to rewrite snapshot
+            IssuePDiskLogRecord(TLogSignature::SignaturePersistentBufferChunkMap, 0, CreatePersistentBufferChunkMapSnapshot(), &PersistentBufferChunkMapSnapshotLsn, {});
+        }
         ++*Counters.RecoveryLog.CutLogMessages;
     }
 

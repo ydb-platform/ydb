@@ -1,6 +1,7 @@
 import "ydb/core/protos/blobstorage_base.proto";
 import "ydb/core/protos/blobstorage_disk.proto";
 import "ydb/core/protos/datashard_load.proto";
+import "ydb/core/nbs/cloud/blockstore/tools/testing/loadtest/lib/protos/nbs2_load.proto";
 
 package NKikimr;
 option java_package = "ru.yandex.kikimr.proto";
@@ -267,6 +268,13 @@ message TEvLoadTestRequest {
             TKvWorkload Kv = 10;
         }
     }
+    message TNBS2Load {
+        optional uint64 Tag = 1;
+        optional string Name = 2;
+        optional uint32 DurationSeconds = 3;
+        optional string DirectPartitionId = 4;
+        optional NCloud.NBlockStore.NProto.TRangeTest RangeTest = 5;
+    }
 
     message TMemoryLoad {
         optional uint64 Tag = 1;
@@ -304,6 +312,7 @@ message TEvLoadTestRequest {
         TMemoryLoad MemoryLoad = 10;
         NKikimrDataShardLoad.TEvYCSBTestLoadRequest YCSBLoad = 11;
         TInterconnectLoad InterconnectLoad = 15;
+        TNBS2Load NBS2Load = 16;
     }
     optional uint64 Tag = 12;
     optional string Uuid = 13;

@@ -23,20 +23,24 @@ std::optional<size_t> RunFtxuiMenu(const TString& title, const std::vector<TStri
 
 bool RunFtxuiMenuWithActions(const TString& title, const std::vector<TMenuEntry>& options, size_t maxPageSize = 20);
 
-std::optional<TString> RunFtxuiInput(const TString& title, const TString& initial, const std::function<bool(const TString&, TString&)>& validator);
+std::optional<TString> RunFtxuiInput(
+    const TString& title,
+    const TString& initial = "",
+    const std::function<bool(const TString&, TString&)>& validator = {});
 
 std::optional<TString> RunFtxuiInputWithSuffix(
     const TString& title,
     const TString& initial,
     const TString& suffix,
-    const std::function<bool(const TString&, TString&)>& validator);
+    const std::function<bool(const TString&, TString&)>& validator = {});
 
 bool AskYesNoFtxui(const TString& question, bool defaultAnswer = false);
+
+// Password input with masking (shows asterisks)
+std::optional<TString> RunFtxuiPasswordInput(const TString& title);
 
 void PrintFtxuiMessage(std::optional<ftxui::Element> message, const TString& title = "", ftxui::Color color = ftxui::Color::Cyan);
 
 void PrintFtxuiMessage(const TString& body, const TString& title = "", ftxui::Color color = ftxui::Color::Cyan);
 
 } // namespace NYdb::NConsoleClient
-
-

@@ -72,7 +72,7 @@
 
 #### Функциональность
 
-* [Реализован](https://github.com/ydb-platform/ydb/pull/19504) [векторный индекс](./dev/vector-indexes.md?version=v25.1) для приближённого векторного поиска. Для векторного поиска опубликованы рецепты для [YDB CLI и YQL](./recipes/vector-search?version=v25.1), а также примеры работы [на С++ и Python](./recipes/ydb-sdk/vector-search?version=v25.1). Включается установкой флага `enable_vector_index` в [конфигурации кластера](./reference/configuration/?version=v25.1#feature_flags). Внимание! После включения флага откат на предыдущие версии {{ ydb-short-name }} невозможен.
+* [Реализован](https://github.com/ydb-platform/ydb/pull/19504) [векторный индекс](./dev/vector-indexes.md?version=v25.1) для приближённого векторного поиска. Для векторного поиска опубликованы рецепты для [YDB CLI и YQL](./recipes/vector-search?version=v25.1), а также примеры работы [на С++ и Python](./recipes/ydb-sdk/vector-search?version=v25.1).
 * [Добавлена](https://github.com/ydb-platform/ydb/issues/11454) поддержка [консистентной асинхронной репликации](./concepts/async-replication.md?version=v25.1).
 * Поддержаны запросы [BATCH UPDATE](./yql/reference/syntax/batch-update?version=v25.1) и [BATCH DELETE](./yql/reference/syntax/batch-delete?version=v25.1), позволяющие изменять большие строковые таблицы вне транзакционных ограничений. Включается установкой флага `enable_batch_updates` в конфигурации кластера.
 * Добавлен [механизм конфигурации V2](./devops/configuration-management/configuration-v2/config-overview?version=v25.1), упрощающий развёртывание новых кластеров {{ ydb-short-name }} и дальнейшую работу с ними. [Сравнение](./devops/configuration-management/compare-configs?version=v25.1) механизмов конфигурации V1 и V2.

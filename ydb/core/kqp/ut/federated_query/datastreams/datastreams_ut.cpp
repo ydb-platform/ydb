@@ -2009,7 +2009,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
     Y_UNIT_TEST_F(ReadFromLocalTopicsWithAuth, TStreamingTestFixture) {
         InternalInitFederatedQuerySetupFactory = true;
 
-        auto& config =SetupAppConfig();
+        auto& config = SetupAppConfig();
         config.MutableFeatureFlags()->SetEnableTopicsSqlIoOperations(true);
         config.MutablePQConfig()->SetRequireCredentialsInNewProtocol(true);
 

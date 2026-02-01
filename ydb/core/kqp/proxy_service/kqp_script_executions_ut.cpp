@@ -759,7 +759,7 @@ Y_UNIT_TEST_SUITE(TestScriptExecutionsUtils) {
 
         const auto checkStatus = [&](Ydb::StatusIds::StatusCode status, bool expectedPolicy) {
             const auto policy = TRetryPolicyItem::FromProto(status, retryState);
-            UNIT_ASSERT_VALUES_EQUAL_C(expectedPolicy, policy->PolicyInitialized, status);
+            UNIT_ASSERT_VALUES_EQUAL_C(expectedPolicy, policy && policy->PolicyInitialized, status);
         };
 
         checkStatus(Ydb::StatusIds::SCHEME_ERROR, true);

@@ -38,7 +38,6 @@ public:
 
     TConclusion<NKikimrSchemeOp::TS3Settings> GetPatchedConfig(const std::shared_ptr<NMetadata::NSecret::ISecretAccessor>& secrets) const;
 
-    /// Returns schema secret paths (TSecretName) that need to be resolved via DescribePath with ReturnSecretValue
     TVector<TString> GetSchemaSecretPaths() const;
 
     bool IsSame(const TTierConfig& item) const;

@@ -447,7 +447,6 @@ Y_UNIT_TEST_SUITE(S3AwsCredentials) {
             UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
-        // Use moderate data volume so tiering to real MinIO completes within WaitActualization timeout.
         for (ui64 i = 0; i < 30; ++i) {
             WriteTestData(*kikimr, tablePath, 0, 3600000000 + i * 10000, 1000);
             WriteTestData(*kikimr, tablePath, 0, 3600000000 + i * 10000, 1000);
@@ -458,9 +457,6 @@ Y_UNIT_TEST_SUITE(S3AwsCredentials) {
 
         csController->WaitCompactions(TDuration::Seconds(5));
         csController->WaitActualization(TDuration::Seconds(5));
-        // WaitActualization waits for schema actualization, not for eviction. Eviction to real MinIO
-        // runs separately and is slower than to fake storage. Wait for eviction to complete by polling
-        // the stats until all data is in the tier (single row with tierPath).
         csController->WaitActualization(TDuration::Seconds(120));
 
         NYdb::NTable::TTableClient tableClient = kikimr->GetTableClient();

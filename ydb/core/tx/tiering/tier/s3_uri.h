@@ -177,8 +177,6 @@ public:
         if (Scheme) {
             settings.SetScheme(*Scheme);
         }
-        // Path-style URIs (e.g. http://localhost:9000/datalake/) require UseVirtualAddressing = false
-        // so the SDK builds URLs as endpoint/bucket/key; otherwise MinIO may return MalformedXML.
         settings.SetUseVirtualAddressing(UriStyle_ == VIRTUAL_HOSTED_STYLE);
     }
 };

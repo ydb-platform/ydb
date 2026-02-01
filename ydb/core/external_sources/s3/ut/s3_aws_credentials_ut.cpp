@@ -398,7 +398,7 @@ Y_UNIT_TEST_SUITE(S3AwsCredentials) {
         auto session = tc.CreateSession().GetValueSync().GetSession();
 
         TLocalHelper olapHelper(*kikimr);
-        olapHelper.CreateTestOlapTable("olapTable", "olapStore", 4, 3);
+        olapHelper.CreateTestOlapTable("olapTable", "olapStore", 4, 4);
 
         {
             const TString query = fmt::format(R"(
@@ -447,18 +447,21 @@ Y_UNIT_TEST_SUITE(S3AwsCredentials) {
             UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
-        for (ui64 i = 0; i < 400; ++i) {
+        // Use moderate data volume so tiering to real MinIO completes within WaitActualization timeout.
+        for (ui64 i = 0; i < 30; ++i) {
             WriteTestData(*kikimr, tablePath, 0, 3600000000 + i * 10000, 1000);
             WriteTestData(*kikimr, tablePath, 0, 3600000000 + i * 10000, 1000);
         }
 
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
         csController->SetSkipSpecialCheckForEvict(true);
-        
+
         csController->WaitCompactions(TDuration::Seconds(5));
         csController->WaitActualization(TDuration::Seconds(5));
-        
-        csController->WaitActualization(TDuration::Seconds(10));
+        // WaitActualization waits for schema actualization, not for eviction. Eviction to real MinIO
+        // runs separately and is slower than to fake storage. Wait for eviction to complete by polling
+        // the stats until all data is in the tier (single row with tierPath).
+        csController->WaitActualization(TDuration::Seconds(120));
 
         NYdb::NTable::TTableClient tableClient = kikimr->GetTableClient();
         TString selectQuery = fmt::format(R"(
@@ -470,11 +473,20 @@ Y_UNIT_TEST_SUITE(S3AwsCredentials) {
         )",
             "table_path"_a = tablePath
         );
-        
+
+        const TDuration evictionWaitTimeout = TDuration::Seconds(600);
+        const TDuration evictionPollInterval = TDuration::Seconds(10);
+        TInstant evictionDeadline = TInstant::Now() + evictionWaitTimeout;
         auto rows = ExecuteScanQuery(tableClient, selectQuery);
-        UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
+        while (rows.size() != 1 || GetUtf8(rows[0].at("TierName")) != tierPath) {
+            UNIT_ASSERT_C(TInstant::Now() < evictionDeadline,
+                fmt::format("Eviction did not complete within {}s: got {} tier(s), expected all data in {}",
+                    evictionWaitTimeout.Seconds(), rows.size(), tierPath));
+            Sleep(evictionPollInterval);
+            rows = ExecuteScanQuery(tableClient, selectQuery);
+        }
+
         TString tierName = GetUtf8(rows[0].at("TierName"));
-        
         UNIT_ASSERT_VALUES_EQUAL(tierName, tierPath);
     }
 }

@@ -104,6 +104,8 @@ public:
         }
         AddHandler(0, &TS3Insert::Match, HNDL(S3Insert));
 #undef HNDL
+
+        SetGlobal(0); // Stage 0 of this optimizer is global => we can remap nodes.
     }
 
     TMaybeNode<TExprBase> TrimReadWorld(TExprBase node, TExprContext& ctx) const {
@@ -117,7 +119,9 @@ public:
         return TExprBase(maybeRead.Cast().World().Ptr());
     }
 
-    TMaybe<TDqStage> BuildSinkStage(TPositionHandle writePos, TS3DataSink dataSink, TS3Target target, TExprBase input, TExprContext& ctx, const TGetParents& getParents) const {
+    TExprNode::TPtr BuildSinkStage(TPositionHandle writePos, TS3DataSink dataSink, TS3Target target, TExprBase input,
+        TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents, bool wrapWithNth) const
+    {
         const auto& cluster = dataSink.Cluster().StringValue();
         const auto token = "cluster:default_" + cluster;
         const auto& settings = target.Settings().Ref();
@@ -280,7 +284,7 @@ public:
                     .Program(stageProgram)
                     .Outputs(stageOutputs)
                     .Settings().Build()
-                    .Done()
+                    .Done().Ptr()
                 : Build<TDqStage>(ctx, writePos)
                     .Inputs()
                         .Add<TDqCnHashShuffle>()
@@ -303,87 +307,118 @@ public:
                     .Program(stageProgram)
                     .Outputs(stageOutputs)
                     .Settings().Build()
-                    .Done();
+                    .Done().Ptr();
         }
 
         if (!TDqCnUnionAll::Match(input.Raw())) {
-            return Nothing();
+            return {};
         }
 
         const TParentsMap* parentsMap = getParents();
         const auto dqUnion = input.Cast<TDqCnUnionAll>();
         if (!NDq::IsSingleConsumerConnection(dqUnion, *parentsMap)) {
-            return Nothing();
+            return {};
         }
 
-        YQL_CLOG(INFO, ProviderS3) << "Rewrite S3WriteObject `" << cluster << "`.`" << target.Path().StringValue() << "` as sink.";
+        if (keys.empty()) {
+            YQL_CLOG(INFO, ProviderS3) << "Rewrite S3WriteObject `" << cluster << "`.`" << target.Path().StringValue() << "` and push sink into existing stage.";
 
-        const auto stageOutputs = Build<TDqStageOutputsList>(ctx, target.Pos())
-            .Add<TDqSink>()
+            const auto dqUnionOutput = dqUnion.Output();
+            const auto dqSink = Build<TDqSink>(ctx, writePos)
                 .DataSink(dataSink)
-                .Index()
-                    .Value("0", TNodeFlags::Default)
-                    .Build()
+                .Index(dqUnionOutput.Index())
                 .Settings(sinkSettings)
-                .Build()
-            .Done();
-
-        return keys.empty()
-            ? Build<TDqStage>(ctx, writePos)
-                .Inputs()
-                    .Add<TDqCnMap>()
-                        .Output(dqUnion.Output())
-                        .Build()
-                    .Build()
-                .Program(stageProgram)
-                .Settings().Build()
-                .Outputs(stageOutputs)
-                .Done()
-            : Build<TDqStage>(ctx, writePos)
-                .Inputs()
-                    .Add<TDqCnHashShuffle>()
-                        .Output(dqUnion.Output())
-                        .KeyColumns().Add(keys).Build()
-                        .Build()
-                    .Build()
-                .Program(stageProgram)
-                .Settings().Build()
-                .Outputs(stageOutputs)
                 .Done();
+
+            const auto inputStage = dqUnionOutput.Stage().Cast<TDqStage>();
+
+            auto outputsBuilder = Build<TDqStageOutputsList>(ctx, writePos);
+            if (const auto outputs = inputStage.Outputs()) {
+                outputsBuilder.InitFrom(outputs.Cast());
+                YQL_ENSURE(inputStage.Program().Body().Maybe<TDqReplicate>(), "Can not push multiple async outputs into stage without TDqReplicate");
+            }
+            outputsBuilder.Add(dqSink);
+
+            const auto dqStageWithSink = Build<TDqStage>(ctx, inputStage.Pos())
+                .InitFrom(inputStage)
+                .Outputs(outputsBuilder.Done())
+                .Done();
+
+            optCtx.RemapNode(inputStage.Ref(), dqStageWithSink.Ptr());
+
+            if (!wrapWithNth) {
+                return dqStageWithSink.Ptr();
+            }
+
+            const auto dqResult = Build<TCoNth>(ctx, dqStageWithSink.Pos())
+                .Tuple(dqStageWithSink)
+                .Index(dqUnionOutput.Index())
+                .Done();
+
+            return ctx.NewList(dqStageWithSink.Pos(), {dqResult.Ptr()});
+        }
+
+        YQL_CLOG(INFO, ProviderS3) << "Rewrite S3WriteObject `" << cluster << "`.`" << target.Path().StringValue() << "` as sink in external stage.";
+        YQL_ENSURE(!keys.empty());
+
+        return Build<TDqStage>(ctx, writePos)
+            .Inputs()
+                .Add<TDqCnHashShuffle>()
+                    .Output(dqUnion.Output())
+                    .KeyColumns().Add(keys).Build()
+                    .Build()
+                .Build()
+            .Program(stageProgram)
+            .Settings().Build()
+            .Outputs()
+                .Add<TDqSink>()
+                    .DataSink(dataSink)
+                    .Index()
+                        .Build(0)
+                    .Settings(sinkSettings)
+                    .Build()
+                .Build()
+            .Done().Ptr();
     }
 
-    TMaybeNode<TExprBase> S3Insert(TExprBase node, TExprContext& ctx, const TGetParents& getParents) const {
+    TMaybeNode<TExprBase> S3Insert(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) const {
         auto insert = node.Cast<TS3Insert>();
-        TMaybe<TDqStage> stage
-            = BuildSinkStage(node.Pos(),
-                insert.DataSink(),
-                insert.Target(),
-                insert.Input(),
-                ctx,
-                getParents);
+        const auto resultPtr = BuildSinkStage(node.Pos(),
+            insert.DataSink(),
+            insert.Target(),
+            insert.Input(),
+            ctx,
+            optCtx,
+            getParents,
+            /* wrapWithNth */ true
+        );
 
-        if (stage) {
-            return *stage;
+        if (resultPtr) {
+            return resultPtr;
         } else {
             return node;
         }
     }
 
-    TMaybeNode<TExprBase> S3WriteObject(TExprBase node, TExprContext& ctx, const TGetParents& getParents) const {
+    TMaybeNode<TExprBase> S3WriteObject(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) const {
         auto write = node.Cast<TS3WriteObject>();
-        TMaybe<TDqStage> stage
-            = BuildSinkStage(node.Pos(),
-                write.DataSink(),
-                write.Target(),
-                write.Input(),
-                ctx,
-                getParents);
+        const auto resultPtr = BuildSinkStage(node.Pos(),
+            write.DataSink(),
+            write.Target(),
+            write.Input(),
+            ctx,
+            optCtx,
+            getParents,
+            /* wrapWithNth */ false
+        );
 
-        if (stage) {
+        if (resultPtr) {
+            const auto maybeStage = TMaybeNode<TDqStage>(resultPtr);
+            YQL_ENSURE(maybeStage);
             return Build<TDqQuery>(ctx, write.Pos())
                 .World(write.World())
                 .SinkStages()
-                    .Add(*stage)
+                    .Add(maybeStage.Cast())
                     .Build()
                 .Done();
         } else {

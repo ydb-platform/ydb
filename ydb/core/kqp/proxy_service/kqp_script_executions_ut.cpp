@@ -14,7 +14,9 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/services/ydb/ydb_common_ut.h>
 
-#include <fmt/format.h>
+#include <contrib/libs/fmt/include/fmt/format.h>
+
+#include <library/cpp/protobuf/interop/cast.h>
 
 namespace NKikimr::NKqp {
 
@@ -546,10 +548,10 @@ Y_UNIT_TEST_SUITE(ScriptExecutionsTest) {
     TString ExecuteQueryToRetry(TScriptExecutionsYdbSetup& ydb, TDuration backoffDuration) {
         NKikimrKqp::TScriptExecutionRetryState::TMapping retryMapping;
         retryMapping.AddStatusCode(Ydb::StatusIds::SCHEME_ERROR);
-        auto& policy = *retryMapping.MutableBackoffPolicy();
-        policy.SetRetryPeriodMs(backoffDuration.MilliSeconds());
-        policy.SetBackoffPeriodMs(backoffDuration.MilliSeconds());
-        policy.SetRetryRateLimit(1);
+        auto& policy = *retryMapping.MutableExponentialDelayPolicy();
+        policy.SetBackoffMultiplier(1.5);
+        *policy.MutableInitialBackoff() = NProtoInterop::CastToProto(backoffDuration);
+        *policy.MutableMaxBackoff() = NProtoInterop::CastToProto(backoffDuration);
 
         constexpr char TABLE_NAME[] = "test_table";
         const auto executionId = ydb.CheckRunQueryInDb(
@@ -749,25 +751,24 @@ Y_UNIT_TEST_SUITE(TestScriptExecutionsUtils) {
             auto& mapping = *retryState.AddRetryPolicyMapping();
             mapping.AddStatusCode(Ydb::StatusIds::UNAVAILABLE);
             mapping.AddStatusCode(Ydb::StatusIds::INTERNAL_ERROR);
-            mapping.MutableBackoffPolicy()->SetRetryRateLimit(84);
+
+            auto& policy = *mapping.MutableExponentialDelayPolicy();
+            policy.SetBackoffMultiplier(1.5);
+            *policy.MutableInitialBackoff() = NProtoInterop::CastToProto(TDuration::Seconds(1));
         }
 
-        const auto checkStatus = [&](Ydb::StatusIds::StatusCode status, std::optional<ui64> expectedRateLimit) {
+        const auto checkStatus = [&](Ydb::StatusIds::StatusCode status, bool expectedPolicy) {
             const auto policy = TRetryPolicyItem::FromProto(status, retryState);
-            if (expectedRateLimit) {
-                UNIT_ASSERT_VALUES_EQUAL(policy->RetryCount, *expectedRateLimit);
-            } else {
-                UNIT_ASSERT(!policy);
-            }
+            UNIT_ASSERT_VALUES_EQUAL_C(expectedPolicy, policy->PolicyInitialized, status);
         };
 
-        checkStatus(Ydb::StatusIds::SCHEME_ERROR, 42);
-        checkStatus(Ydb::StatusIds::UNAVAILABLE, 84);
-        checkStatus(Ydb::StatusIds::INTERNAL_ERROR, 84);
-        checkStatus(Ydb::StatusIds::BAD_REQUEST, std::nullopt);
+        checkStatus(Ydb::StatusIds::SCHEME_ERROR, true);
+        checkStatus(Ydb::StatusIds::UNAVAILABLE, true);
+        checkStatus(Ydb::StatusIds::INTERNAL_ERROR, true);
+        checkStatus(Ydb::StatusIds::BAD_REQUEST, false);
     }
 
-    Y_UNIT_TEST(TestRetryLimiter) {
+    Y_UNIT_TEST(TestRetryLimiterWithLinearBackoff) {
         constexpr ui64 RETRY_COUNT = 10;
         TInstant now = TInstant::Now();
 
@@ -807,6 +808,55 @@ Y_UNIT_TEST_SUITE(TestScriptExecutionsUtils) {
                 }
             }
         }
+    }
+
+    Y_UNIT_TEST(TestRetryLimiterWithExponentialBackoff) {
+        TInstant now = TInstant::Now();
+        TRetryLimiter limiter;
+        NKikimrKqp::TScriptExecutionRetryState retryState;
+
+        {
+            auto& mapping = *retryState.AddRetryPolicyMapping();
+            mapping.AddStatusCode(Ydb::StatusIds::UNAVAILABLE);
+
+            auto& policy = *mapping.MutableExponentialDelayPolicy();
+            policy.SetBackoffMultiplier(2);
+            *policy.MutableInitialBackoff() = NProtoInterop::CastToProto(TDuration::Seconds(1));
+            *policy.MutableMaxBackoff() = NProtoInterop::CastToProto(TDuration::Minutes(1));
+            *policy.MutableQueryUptimeThreshold() = NProtoInterop::CastToProto(TDuration::Minutes(1));
+            *policy.MutableResetBackoffThreshold() = NProtoInterop::CastToProto(TDuration::Hours(1));
+        }
+
+        const auto& policy = TRetryPolicyItem::FromProto(Ydb::StatusIds::UNAVAILABLE, retryState);
+        UNIT_ASSERT(policy);
+
+        // Immediate retry for uptime > 1m
+        UNIT_ASSERT(limiter.UpdateOnRetry(now - TDuration::Minutes(2), now, *policy, now + TDuration::Seconds(1)));
+        UNIT_ASSERT_VALUES_EQUAL(limiter.Backoff, TDuration::Zero());
+        UNIT_ASSERT_VALUES_EQUAL(limiter.RetryCount, 1);
+        UNIT_ASSERT_VALUES_EQUAL(limiter.RetryCounterUpdatedAt, now += TDuration::Seconds(1));
+
+        // Reset backoff for uptime > 1h
+        UNIT_ASSERT(limiter.UpdateOnRetry(now, now, *policy, now));
+        UNIT_ASSERT_VALUES_EQUAL(limiter.RetryCount, 2);
+        UNIT_ASSERT(limiter.UpdateOnRetry(now, now, *policy, now));
+        UNIT_ASSERT_VALUES_EQUAL(limiter.RetryCount, 3);
+        UNIT_ASSERT(limiter.UpdateOnRetry(now - TDuration::Hours(2), now, *policy, now));
+        UNIT_ASSERT_VALUES_EQUAL(limiter.RetryCount, 1);
+        UNIT_ASSERT_VALUES_EQUAL(limiter.Backoff, TDuration::Zero());
+
+        // Check retry backoff
+        TDuration backoff = TDuration::Seconds(1);
+        limiter.Assign(0, now, 0.0);
+        for (ui64 i = 0; i < 10; ++i, backoff *= 2) {
+            UNIT_ASSERT(limiter.UpdateOnRetry(now, now, *policy, now));
+            UNIT_ASSERT_VALUES_EQUAL(limiter.RetryCount, i + 1);
+            UNIT_ASSERT_VALUES_EQUAL(limiter.Backoff, std::min(backoff, TDuration::Minutes(1)));
+        }
+
+        limiter.SaveToProto(retryState);
+        UNIT_ASSERT_VALUES_EQUAL(retryState.GetRetryCounter(), 10);
+        UNIT_ASSERT_VALUES_EQUAL(NProtoInterop::CastFromProto(retryState.GetRetryCounterUpdatedAt()), now);
     }
 }
 

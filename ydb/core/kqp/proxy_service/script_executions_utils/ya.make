@@ -7,8 +7,10 @@ SRCS(
 
 PEERDIR(
     library/cpp/blockcodecs
+    library/cpp/protobuf/interop
     ydb/core/protos
     ydb/core/tx/datashard
+    ydb/library/yverify_stream
     ydb/public/api/protos
     yql/essentials/public/issue
 )

@@ -17,7 +17,9 @@
 #include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_scripting.h>
 
-#include <fmt/format.h>
+#include <contrib/libs/fmt/include/fmt/format.h>
+
+#include <library/cpp/protobuf/interop/cast.h>
 
 namespace NKikimr::NKqp {
 
@@ -606,10 +608,10 @@ public:
             retryMapping.AddStatusCode(status);
         }
 
-        auto& policy = *retryMapping.MutableBackoffPolicy();
-        policy.SetRetryPeriodMs(backoffDuration.MilliSeconds());
-        policy.SetBackoffPeriodMs(backoffDuration.MilliSeconds());
-        policy.SetRetryRateLimit(1);
+        auto& policy = *retryMapping.MutableExponentialDelayPolicy();
+        policy.SetBackoffMultiplier(1.5);
+        *policy.MutableInitialBackoff() = NProtoInterop::CastToProto(backoffDuration);
+        *policy.MutableMaxBackoff() = NProtoInterop::CastToProto(backoffDuration);
 
         return retryMapping;
     }

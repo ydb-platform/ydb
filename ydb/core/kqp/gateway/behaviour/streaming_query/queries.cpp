@@ -1826,7 +1826,7 @@ private:
         policy.SetJitterFactor(0.1);
         *policy.MutableInitialBackoff() = NProtoInterop::CastToProto(TDuration::Seconds(1));
         *policy.MutableMaxBackoff() = NProtoInterop::CastToProto(TDuration::Minutes(1));
-        *policy.MutableResetBackoffThreshold() = NProtoInterop::CastToProto(TDuration::Hours(1)); // Query retry count set to 0 if uptime > 1h
+        *policy.MutableResetBackoffThreshold() = NProtoInterop::CastToProto(TDuration::Hours(1)); // Backoff state reset if uptime > 1h (next retry treated as first after reset)
         *policy.MutableQueryUptimeThreshold() = NProtoInterop::CastToProto(TDuration::Minutes(1)); // Query retried immediately if uptime > 1m
 
         return {std::move(mapping)};

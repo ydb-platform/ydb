@@ -2381,6 +2381,13 @@ class Cuda(object):
             # Set paths explicitly
             "--dont-use-profile",
             "--libdevice-directory=$CUDA_ROOT/nvvm/libdevice",
+
+            # --keep is necessary to prevent nvcc from embedding nvcc pid in generated
+            # symbols.  It makes nvcc use the original file name as the prefix in the
+            # generated files (otherwise it also prepends tmpxft_{pid}_00000000-5), and
+            # cicc derives the module name from its {input}.cpp1.ii file name.
+            "--keep",
+            "--keep-dir=${BINDIR}",
         ]
 
         if not self.have_cuda.value:
@@ -2444,6 +2451,9 @@ class Cuda(object):
             emit('NVCC_STD_VER', '17')
         else:
             emit('NVCC_STD_VER', '20')
+
+        emit('CUDAFE', '"{}"'.format(self.build.host.exe('$CUDA_ROOT', 'bin', 'cudafe++')))
+        emit('FATBINARY', '"{}"'.format(self.build.host.exe('$CUDA_ROOT', 'bin', 'fatbinary')))
 
     def print_macros(self):
         mtime = ' '

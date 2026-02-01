@@ -365,7 +365,7 @@ void TTablesManager::RegisterTable(TTableInfo&& table, NIceDb::TNiceDb& db) {
     Schema::SaveTableInfo(db, table.GetPathId().InternalPathId);
     const auto pathId = table.GetPathId().InternalPathId;
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("method", "RegisterTable")("path_id", pathId);
-    AFL_VERIFY(Tables.emplace(pathId, std::move(table)).second)("path_id", pathId)("size", Tables.size());
+    AFL_VERIFY(Tables.emplace(pathId, table).second)("path_id", pathId)("size", Tables.size());
     AFL_VERIFY(SchemeShardLocalToInternal.emplace(table.GetPathId().SchemeShardLocalPathId, table.GetPathId().InternalPathId).second);
     Schema::SaveTableSchemeShardLocalPathId(db, table.GetPathId().InternalPathId, table.GetPathId().SchemeShardLocalPathId);
     if (GenerateInternalPathId) {

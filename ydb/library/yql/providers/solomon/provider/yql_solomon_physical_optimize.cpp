@@ -83,7 +83,7 @@ public:
         return TExprBase(maybeRead.Cast().World().Ptr());
     }
 
-    TMaybe<TDqStage> BuildSinkStage(TPositionHandle writePos, TSoDataSink dataSink, TCoAtom writeShard, TExprBase input, TExprContext& ctx, const TGetParents& getParents, bool alowPureStage) const {
+    TMaybe<TDqStage> BuildSinkStage(TPositionHandle writePos, TSoDataSink dataSink, TCoAtom writeShard, TExprBase input, TExprContext& ctx, const TGetParents& getParents, bool allowPureStage) const {
         const auto* typeAnn = input.Ref().GetTypeAnn();
         const TTypeAnnotationNode* inputItemType = nullptr;
         if (!EnsureNewSeqType<false, true, false>(input.Pos(), *typeAnn, ctx, &inputItemType)) {
@@ -96,7 +96,7 @@ public:
             .DataSink(dataSink)
             .Settings(BuildSolomonShard(writeShard, rowTypeNode, ctx, solomonCluster));
 
-        if (alowPureStage && IsDqPureExpr(input)) {
+        if (allowPureStage && IsDqPureExpr(input)) {
             YQL_CLOG(INFO, ProviderSolomon) << "Optimize insert into solomon (SoWriteToShard / SoInsert), build pure stage with sink";
 
             const auto dqSink = dqSinkBuilder
@@ -155,7 +155,7 @@ public:
         }
 
         const auto write = node.Cast<TSoWriteToShard>();
-        const auto stage = BuildSinkStage(write.Pos(), write.DataSink(), write.Shard(), write.Input(), ctx, getParents, /* alowPureStage */ false);
+        const auto stage = BuildSinkStage(write.Pos(), write.DataSink(), write.Shard(), write.Input(), ctx, getParents, /* allowPureStage */ false);
         if (!stage) {
             return node;
         }
@@ -171,7 +171,7 @@ public:
     TMaybeNode<TExprBase> SoInsert(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) const {
         const auto insert = node.Cast<TSoInsert>();
         const auto input = insert.Input();
-        const auto maybeStage = BuildSinkStage(insert.Pos(), insert.DataSink(), insert.Shard(), input, ctx, getParents, /* alowPureStage */ true);
+        const auto maybeStage = BuildSinkStage(insert.Pos(), insert.DataSink(), insert.Shard(), input, ctx, getParents, /* allowPureStage */ true);
         if (!maybeStage) {
             return node;
         }

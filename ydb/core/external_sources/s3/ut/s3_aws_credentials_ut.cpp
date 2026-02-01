@@ -470,7 +470,7 @@ Y_UNIT_TEST_SUITE(S3AwsCredentials) {
             "table_path"_a = tablePath
         );
 
-        const TDuration evictionWaitTimeout = TDuration::Seconds(600);
+        const TDuration evictionWaitTimeout = TDuration::Seconds(120);
         const TDuration evictionPollInterval = TDuration::Seconds(10);
         TInstant evictionDeadline = TInstant::Now() + evictionWaitTimeout;
         auto rows = ExecuteScanQuery(tableClient, selectQuery);

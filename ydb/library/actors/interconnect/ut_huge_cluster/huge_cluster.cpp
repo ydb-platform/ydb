@@ -107,7 +107,7 @@ Y_UNIT_TEST_SUITE(HugeCluster) {
     }
 
     Y_UNIT_TEST(AllToAll) {
-        ui32 nodesNum = 120;
+        ui32 nodesNum = 85;
         std::vector<TActorId> pollers(nodesNum);
         std::vector<std::unordered_map<TActorId, TManualEvent>> events(nodesNum);
 

@@ -122,7 +122,7 @@ private:
 
     using TTierById = THashMap<NTiers::TExternalStorageId, TTierGuard>;
     YDB_READONLY_DEF(TTierById, Tiers);
-    YDB_READONLY_DEF(std::shared_ptr<NMetadata::NSecret::ISecretAccessor>, Secrets);
+    YDB_READONLY_DEF(std::shared_ptr<NMetadata::NSecret::TSnapshot>, Secrets);
 
 private:
     void OnConfigsUpdated(bool notifyShard = true);
@@ -139,8 +139,7 @@ public:
     TActorId GetActorId() const;
     void ActivateTiers(const THashSet<NTiers::TExternalStorageId>& usedTiers, const bool resubscribeToConfig);
 
-    void UpdateSecretsSnapshot(std::shared_ptr<NMetadata::NSecret::ISecretAccessor> secrets);
-    void OnTierSecretsResolved(const NTiers::TExternalStorageId& tierId, const NTiers::TTierConfig& config, std::shared_ptr<NMetadata::NSecret::ISecretAccessor> accessor);
+    void UpdateSecretsSnapshot(std::shared_ptr<NMetadata::NSecret::TSnapshot> secrets);
     void UpdateTierConfig(std::optional<NTiers::TTierConfig> config, const NTiers::TExternalStorageId& tierId, const bool notifyShard = true);
     ui64 GetAwaitedConfigsCount() const;
     TVector<TString> GetRequestedTierConfigPaths() const;

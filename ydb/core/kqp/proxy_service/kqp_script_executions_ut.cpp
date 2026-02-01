@@ -14,7 +14,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/services/ydb/ydb_common_ut.h>
 
-#include <contrib/libs/fmt/include/fmt/format.h>
+#include <fmt/format.h>
 
 #include <library/cpp/protobuf/interop/cast.h>
 

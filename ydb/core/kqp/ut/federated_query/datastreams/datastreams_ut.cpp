@@ -17,7 +17,7 @@
 #include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_scripting.h>
 
-#include <contrib/libs/fmt/include/fmt/format.h>
+#include <fmt/format.h>
 
 #include <library/cpp/protobuf/interop/cast.h>
 

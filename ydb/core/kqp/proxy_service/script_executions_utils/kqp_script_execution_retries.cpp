@@ -2,7 +2,7 @@
 
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
-#include <contrib/libs/protobuf/src/google/protobuf/timestamp.pb.h>
+#include <google/protobuf/timestamp.pb.h>
 
 #include <library/cpp/protobuf/interop/cast.h>
 

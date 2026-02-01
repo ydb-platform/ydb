@@ -18,7 +18,7 @@ def oncuda_srcs(unit, *args):
     CUDA_ARCHITECTURES variable is used to determine the list of architectures to compile device code for.
     """
     architecture_names = (unit.get("CUDA_ARCHITECTURES") or DEFAULT_CUDA_ARCHITECTURES).split(":")
-    architectures = set(name.split('_')[1] for name in architecture_names)
+    architectures = set(int(name.split('_')[1]) for name in architecture_names)
     max_arch = max(architectures)
     arch_list = "${__COMMA__}".join([str(arch * 10) for arch in architectures])
 

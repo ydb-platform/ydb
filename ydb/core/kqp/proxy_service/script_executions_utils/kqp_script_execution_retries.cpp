@@ -115,7 +115,7 @@ public:
 
         double backoff = InitialBackoff.GetValue();
         const double maxBackoff = MaxBackoff ? MaxBackoff.GetValue() : MaxFloor<TDuration::TValue>();
-        for (ui64 i = 0; i < state.RetryCount && backoff < maxBackoff; ++i) {
+        for (ui64 i = 0; i + 1 < state.RetryCount && backoff < maxBackoff; ++i) {
             backoff *= BackoffMultiplier;
         }
         backoff = std::min(backoff, maxBackoff);

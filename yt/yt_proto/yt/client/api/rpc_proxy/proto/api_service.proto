@@ -3812,7 +3812,7 @@ message TReqStartDistributedWriteSession
 {
     required bytes path = 1; // RichYPath
     required int32 cookie_count = 2;
-    optional int64 timeout = 3;
+    optional int64 session_timeout = 3;
 
     optional TTransactionalOptions transactional_options = 100;
 }
@@ -3867,7 +3867,7 @@ message TReqStartDistributedWriteFileSession
 {
     required bytes path = 1; // RichYPath
     required int32 cookie_count = 2;
-    optional int64 timeout = 3;
+    optional int64 session_timeout = 3;
 
     optional TTransactionalOptions transactional_options = 100;
 }

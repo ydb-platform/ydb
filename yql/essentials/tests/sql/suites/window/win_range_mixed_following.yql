@@ -1,0 +1,65 @@
+PRAGMA WindowNewPipeline;
+PRAGMA config.flags('OptimizerFlags', 'ForbidConstantDependsOnFuse');
+
+$data = [
+    <|a: 1, expected_count_w1: 2, expected_sum_w1: 3, expected_count_w3: 2, expected_sum_w3: 3|>,
+    <|a: 2, expected_count_w1: 2, expected_sum_w1: 5, expected_count_w3: 2, expected_sum_w3: 5|>,
+    <|a: 3, expected_count_w1: 2, expected_sum_w1: 7, expected_count_w3: 2, expected_sum_w3: 7|>,
+    <|a: 4, expected_count_w1: 2, expected_sum_w1: 9, expected_count_w3: 2, expected_sum_w3: 9|>,
+    <|a: 5, expected_count_w1: 1, expected_sum_w1: 5, expected_count_w3: 1, expected_sum_w3: 5|>,
+];
+
+$win_result = (
+    SELECT
+        a,
+        COUNT(*) OVER w1 AS count_w1,
+        SUM(a) OVER w1 AS sum_w1,
+        COUNT(*) OVER w2 AS count_w2,
+        SUM(a) OVER w2 AS sum_w2,
+        COUNT(*) OVER w3 AS count_w3,
+        SUM(a) OVER w3 AS sum_w3,
+        expected_count_w1,
+        expected_sum_w1,
+        expected_count_w3,
+        expected_sum_w3,
+    FROM
+        AS_TABLE($data)
+    WINDOW
+        w1 AS (
+            ORDER BY a ASC
+            RANGE BETWEEN CURRENT ROW AND Float("1.0") FOLLOWING
+        ),
+        w2 AS (
+            ORDER BY a ASC
+            RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING
+        ),
+        w3 AS (
+            ORDER BY a ASC
+            RANGE BETWEEN CURRENT ROW AND Float("1.0") FOLLOWING
+        )
+);
+
+$str = ($x) -> {
+    return CAST($x as String) ?? "null";
+};
+
+SELECT
+    Ensure(count_w1, count_w1 IS NOT DISTINCT FROM count_w2, "count_w1 != count_w2: " || $str(count_w1) || " vs " || $str(count_w2)),
+    Ensure(sum_w1, sum_w1 IS NOT DISTINCT FROM sum_w2, "sum_w1 != sum_w2: " || $str(sum_w1) || " vs " || $str(sum_w2)),
+FROM
+    $win_result
+;
+
+SELECT
+    Ensure(expected_count_w1, count_w1 IS NOT DISTINCT FROM expected_count_w1, "count_w1: " || $str(count_w1) || " expected: " || $str(expected_count_w1)),
+    Ensure(expected_sum_w1, sum_w1 IS NOT DISTINCT FROM expected_sum_w1, "sum_w1: " || $str(sum_w1) || " expected: " || $str(expected_sum_w1)),
+FROM
+    $win_result
+;
+
+SELECT
+    Ensure(expected_count_w3, count_w3 IS NOT DISTINCT FROM expected_count_w3, "count_w3: " || $str(count_w3) || " expected: " || $str(expected_count_w3)),
+    Ensure(expected_sum_w3, sum_w3 IS NOT DISTINCT FROM expected_sum_w3, "sum_w3: " || $str(sum_w3) || " expected: " || $str(expected_sum_w3)),
+FROM
+    $win_result
+;

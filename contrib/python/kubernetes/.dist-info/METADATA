@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: kubernetes
-Version: 34.1.0
+Version: 35.0.0
 Summary: Kubernetes python client
 Home-page: https://github.com/kubernetes-client/python
 Author: Kubernetes
@@ -15,26 +15,26 @@ Classifier: License :: OSI Approved :: Apache Software License
 Classifier: Operating System :: OS Independent
 Classifier: Programming Language :: Python
 Classifier: Programming Language :: Python :: 3
-Classifier: Programming Language :: Python :: 3.6
-Classifier: Programming Language :: Python :: 3.7
 Classifier: Programming Language :: Python :: 3.8
 Classifier: Programming Language :: Python :: 3.9
 Classifier: Programming Language :: Python :: 3.10
 Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
 Requires-Python: >=3.6
 License-File: LICENSE
 Requires-Dist: certifi>=14.05.14
 Requires-Dist: six>=1.9.0
 Requires-Dist: python-dateutil>=2.5.3
 Requires-Dist: pyyaml>=5.4.1
-Requires-Dist: google-auth>=1.0.1
 Requires-Dist: websocket-client!=0.40.0,!=0.41.*,!=0.42.*,>=0.32.0
 Requires-Dist: requests
 Requires-Dist: requests-oauthlib
-Requires-Dist: urllib3<2.4.0,>=1.24.2
+Requires-Dist: urllib3!=2.6.0,>=1.24.2
 Requires-Dist: durationpy>=0.7
 Provides-Extra: adal
 Requires-Dist: adal>=1.0.2; extra == "adal"
+Provides-Extra: google-auth
+Requires-Dist: google-auth>=1.0.1; extra == "google-auth"
 Dynamic: author
 Dynamic: classifier
 Dynamic: description

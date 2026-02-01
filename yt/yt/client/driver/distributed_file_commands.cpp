@@ -32,6 +32,12 @@ void TStartDistributedWriteFileSessionCommand::Register(TRegistrar registrar)
             return command->Options.CookieCount;
         })
         .Default();
+    registrar.ParameterWithUniversalAccessor<std::optional<TDuration>>(
+        "session_timeout",
+        [] (TThis* command) -> auto& {
+            return command->Options.SessionTimeout;
+        })
+        .Default();
 }
 
 void TStartDistributedWriteFileSessionCommand::DoExecute(ICommandContextPtr context)

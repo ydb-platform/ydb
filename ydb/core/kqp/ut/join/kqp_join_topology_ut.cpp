@@ -615,7 +615,7 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
             , Output_(output)
             , Args_(args)
             , TotalTasks_(args.size())
-            , Aligner_(4, "&") // Initialize aligner with & delimiter
+            , Aligner_(1, "&") // Initialize aligner with & delimiter
         {
         }
 
@@ -710,17 +710,53 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
             EnqueueLog(Aligner_.Align(ss.str()));
         }
 
-        TRelationGraph GenerateRelationGraph(TRNG& rng, const TParamsMap& params) {
-            std::string type = params.GetValue("type");
+        TRelationGraph GenTopo(TRNG &rng, const TParamsMap& params) {
             ui64 n = params.GetValue<ui64>("N");
-            double mu = params.GetValue<double>("mu");
-            double sigma = params.GetValue<double>("sigma");
+            std::string topologyName = params.GetValue("type");
 
-            auto generateTopology = GetTopology(type);
-            auto graph = generateTopology(rng, n, mu, sigma);
-            if (type == "mcmc") { // TODO: ?? Breaks incapsulation of topology generator?
-                MCMCRandomize(rng, graph);
+            if (topologyName == "star") {
+                return GenerateStar(n);
             }
+
+            if (topologyName == "path") {
+                return GeneratePath(n);
+            }
+
+            if (topologyName == "clique") {
+                return GenerateClique(n);
+            }
+
+            if (topologyName == "random-tree") {
+                return GenerateRandomTree(rng, n);
+            }
+
+            if (topologyName == "mcmc" || topologyName == "havel-hakimi") {
+                // TODO: ensure log-normal distribution works properly
+                double mu = params.GetValue<double>("mu");
+                double sigma = params.GetValue<double>("sigma");
+                auto sampledDegrees = GenerateLogNormalDegrees(rng, n, mu, sigma);
+                auto graphicDegrees = MakeGraphicConnected(sampledDegrees);
+                auto initialGraph = ConstructGraphHavelHakimi(graphicDegrees);
+                auto graph = initialGraph;
+                if (topologyName == "mcmc") {
+                    MCMCRandomize(rng, graph);
+                }
+                return graph;
+            }
+
+            if (topologyName == "chung-lu") {
+                double mu = params.GetValue<double>("mu");
+                double sigma = params.GetValue<double>("sigma");
+                auto sampledDegrees = GenerateLogNormalDegrees(rng, n, mu, sigma);
+                auto initialGraph = GenerateRandomChungLuGraph(rng, sampledDegrees);
+                return initialGraph;
+            }
+
+            throw std::runtime_error("Unknown topology: '" + topologyName + "'");
+        }
+
+        TRelationGraph GenerateRelationGraph(TRNG& rng, const TParamsMap& params) {
+            auto graph = GenTopo(rng, params);
             ForceReconnection(rng, graph);
             return graph;
         }
@@ -775,7 +811,7 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
             NYql::TExprContext ectx;
 
             auto optimizer = std::unique_ptr<NYql::IOptimizerNew>(
-                NYql::NDq::MakeNativeOptimizerNew(ctx, settings, ectx, true, orderingsFSM)
+                NYql::NDq::MakeNativeOptimizerNew(ctx, settings, ectx, /*enableShuffleElimination=*/true, orderingsFSM)
             );
 
             return Benchmark(Config_, [&]() -> bool {

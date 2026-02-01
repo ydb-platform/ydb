@@ -145,13 +145,13 @@ private:
             if (!requestedPaths.empty()) {
                 Send(TiersFetcher, new NTiers::TEvWatchSchemeObject(std::move(requestedPaths)));
             }
+        } else {
+            AFL_VERIFY(false);
         }
     }
 
     void Handle(NActors::TEvents::TEvPoison::TPtr& /*ev*/) {
-        if (NMetadata::NProvider::TServiceOperator::IsEnabled()) {
-            Send(GetExternalDataActorId(), new NMetadata::NProvider::TEvUnsubscribeExternal(SecretsFetcher));
-        }
+        Send(GetExternalDataActorId(), new NMetadata::NProvider::TEvUnsubscribeExternal(SecretsFetcher));
         PassAway();
     }
 
@@ -275,9 +275,7 @@ public:
     void Bootstrap() {
         AFL_INFO(NKikimrServices::TX_TIERING)("event", "start_subscribing_metadata");
         TiersFetcher = Register(new TSchemeObjectWatcher(SelfId()));
-        if (NMetadata::NProvider::TServiceOperator::IsEnabled()) {
-            Send(GetExternalDataActorId(), new NMetadata::NProvider::TEvSubscribeExternal(SecretsFetcher));
-        }
+        Send(GetExternalDataActorId(), new NMetadata::NProvider::TEvSubscribeExternal(SecretsFetcher));
         Become(&TThis::StateMain);
     }
 
@@ -484,7 +482,7 @@ ui64 TTiersManager::GetAwaitedConfigsCount() const {
 
 TVector<TString> TTiersManager::GetRequestedTierConfigPaths() const {
     TVector<TString> paths;
-    for (const auto& [id, tier] : Tiers) {
+    for (auto&& [id, tier] : Tiers) {
         if (tier.GetState() == ETierState::REQUESTED) {
             paths.push_back(id.GetConfigPath());
         }
@@ -509,7 +507,14 @@ TString TTiersManager::DebugString() {
         sb << "has_config=" << tier.HasConfig();
         sb << "}";
     }
-    sb << ";SECRETS=" << (Secrets ? "set" : "null");
+    sb << ";SECRETS=";
+    if (Secrets) {
+        sb << "{";
+        for (const auto& [name, config] : Secrets->GetSecrets()) {
+            sb << name.SerializeToString() << ";";
+        }
+        sb << "}";
+    }
     return sb;
 }
 }

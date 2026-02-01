@@ -134,7 +134,7 @@ public:
         : TabletId(tabletId)
         , TabletActorId(tabletActorId)
         , ShardCallback(shardCallback)
-        , Secrets(nullptr) {
+        , Secrets(std::make_shared<NMetadata::NSecret::TSnapshot>(TInstant::Zero())) {
     }
     TActorId GetActorId() const;
     void ActivateTiers(const THashSet<NTiers::TExternalStorageId>& usedTiers, const bool resubscribeToConfig);

@@ -111,7 +111,7 @@ TChecksResponse RunChecks(const TChecksRequest& request) {
                 r.CheckName = c;
                 r.Success = false;
                 r.Issues.AddIssue(ExceptionToIssue(e));
-                CheckFatalIssues(r.Issues);
+                CheckFatalIssues(r.Issues, request.IssueReportTarget);
                 res.Checks.push_back(std::move(r));
             }
         }

@@ -28,14 +28,19 @@ private:
     TVector<TExprNode::TPtr> PeepHoleOptimizePhysicalStages(TVector<TExprNode::TPtr>&& physicalStages);
     TVector<TExprNode::TPtr> EnableWideChannelsPhysicalStages(TVector<TExprNode::TPtr>&& physicalStages);
     TExprNode::TPtr BuildPhysicalQuery(TVector<TExprNode::TPtr>&& physicalStages);
-    TExprNode::TPtr PeepHoleOptimizeStageLambda(TExprNode::TPtr stageLambda) const;
-    void TypeAnnotate(TExprNode::TPtr& input);
+    TExprNode::TPtr PeepHoleOptimize(TExprNode::TPtr input, const TVector<const TTypeAnnotationNode*>& argsType) const;
     bool CanApplyPeepHole(TExprNode::TPtr input, const std::initializer_list<std::string_view>& callableNames) const;
     TExprNode::TPtr BuildDqPhyStage(const TVector<TExprNode::TPtr>& inputs, const TVector<TExprNode::TPtr>& args, TExprNode::TPtr physicalStageBody,
                                     NNodes::TCoNameValueTupleList&& setings, TExprContext& ctx, TPositionHandle pos) const;
     void TopologicalSort(TDqPhyStage& dqStage, TVector<TExprNode::TPtr>& result, THashSet<const TExprNode*>& visited) const;
     void TopologicalSort(TDqPhyStage&& dqStage, TVector<TExprNode::TPtr>& result) const;
     void KeepTypeAnnotationForStageAndFirstLevelChilds(TDqPhyStage& newStage, const TDqPhyStage& oldStage) const;
+    TVector<const TTypeAnnotationNode*> GetArgsType(TExprNode::TPtr input) const;
+    bool IsCompatibleWithBlocks(const TStructExprType& type, TPositionHandle pos) const;
+    bool IsSuitableToPropagateWideBlocksThroughConnection(const TDqOutput& output) const;
+    bool IsSuitableToPropagateWideBlocksThroughHashShuffleConnections(const TDqPhyStage& stage) const;
+    TExprNode::TPtr TypeAnnotateProgram(TExprNode::TPtr input, const TVector<const TTypeAnnotationNode*>& argsType);
+    void TypeAnnotate(TExprNode::TPtr& input);
 
     TOpRoot& Root;
     TStageGraph Graph;

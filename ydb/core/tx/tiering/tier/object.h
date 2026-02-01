@@ -7,6 +7,8 @@
 
 #include <library/cpp/json/writer/json_value.h>
 
+#include <util/generic/vector.h>
+
 namespace NKikimr::NMetadata::NSecret {
 class TSnapshot;
 }
@@ -35,6 +37,9 @@ public:
     NJson::TJsonValue SerializeConfigToJson() const;
 
     TConclusion<NKikimrSchemeOp::TS3Settings> GetPatchedConfig(const std::shared_ptr<NMetadata::NSecret::ISecretAccessor>& secrets) const;
+
+    /// Returns schema secret paths (TSecretName) that need to be resolved via DescribePath with ReturnSecretValue
+    TVector<TString> GetSchemaSecretPaths() const;
 
     bool IsSame(const TTierConfig& item) const;
     NJson::TJsonValue GetDebugJson() const;

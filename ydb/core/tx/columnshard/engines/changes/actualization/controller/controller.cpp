@@ -8,7 +8,9 @@ ui32 TController::GetLimitForAddress(const NActualizer::TRWAddress& address) con
     } else if (address.ReadIs(IStoragesManager::DefaultStorageId) && address.WriteIs(IStoragesManager::DefaultStorageId)) {
         return 16;
     } else {
-        return 1;
+        // Eviction to external tier (e.g. S3): allow several concurrent tasks per (read, write) address
+        // so that tiering can make progress while earlier eviction tasks are still in flight.
+        return 8;
     }
 }
 

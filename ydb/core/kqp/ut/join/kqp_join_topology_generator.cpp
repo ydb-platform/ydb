@@ -58,6 +58,7 @@ static std::vector<ui32> GetPitmanYor(TRNG& rng, ui32 sum, TPitmanYorConfig conf
     return keyCounts;
 }
 
+// TODO: assortativity
 void TRelationGraph::SetupKeysPitmanYor(TRNG& rng, TPitmanYorConfig config) {
     std::vector<std::pair<std::vector<ui32>, /*last index*/ ui32>> distributions(GetN());
     for (ui32 i = 0; i < GetN(); ++ i) {
@@ -476,39 +477,69 @@ static void NormalizeProbabilities(std::vector<double>& probabilities) {
     }
 }
 
-std::vector<int> SampleFromPMF(TRNG& rng, const std::vector<double>& probabilities, int numVertices, int minDegree) {
-    std::discrete_distribution<int> distribution(probabilities.begin(), probabilities.end());
-
-    std::vector<int> degrees(numVertices);
-    for (int i = 0; i < numVertices; i++) {
-        degrees[i] = distribution(rng) + minDegree;
-    }
-    return degrees;
-}
-
-std::vector<int> GenerateLogNormalDegrees(TRNG& rng, int numVertices, double mu, double sigma, int minDegree, int maxDegree) {
+std::vector<int> GenerateLogNormalDegrees(TRNG& rng, int numVertices, double targetMedian, double sigma, int minDegree, int maxDegree) {
     if (maxDegree == -1) {
         maxDegree = numVertices - 1;
     }
 
-    std::vector<double> probabilities(maxDegree - minDegree + 1);
-    for (int k = minDegree; k <= maxDegree; k++) {
-        if (k <= 0) {
-            probabilities[k - minDegree] = 0.0;
-            continue;
-        }
+    // --- 1. ADJUSTMENT CALCULATION ---
+    // We want the final result (X + minDegree) to have a median of targetMedian.
+    // Therefore, the underlying LogNormal X must have a median of (targetMedian - minDegree).
 
-        double x = (double)k;
-        double logX = std::log(x);
-        double z = (logX - mu) / sigma;
+    double adjustedMedian = targetMedian - minDegree;
 
-        // PDF: (1/(x*σ*√(2π))) * exp(-(ln(x)-μ)²/(2σ²))
-        probabilities[k - minDegree] = (1.0 / (x * sigma * std::sqrt(2.0 * M_PI))) * std::exp(-0.5 * z * z);
+    // EDGE CASE SAFTY:
+    // LogNormal values must be > 0. Therefore, Target Median MUST be > Min Degree.
+    // If you ask for Median 2 and Min 2, that implies the "LogNormal" part averages to 0,
+    // which is mathematically impossible (ln(0) = -inf).
+    if (adjustedMedian <= 0.001) {
+        std::cerr << "Warning: targetMedian (" << targetMedian << ") must be strictly greater than minDegree ("
+                  << minDegree << ") for a Shifted LogNormal.\n"
+                  << "Clamping adjusted median to small epsilon.\n";
+        adjustedMedian = 0.1; // Fallback: creates a distribution heavily skewed toward minDegree
     }
 
-    // Not strictly necessary, but makes it easier to inspect probabilities
-    NormalizeProbabilities(probabilities);
-    return SampleFromPMF(rng, probabilities, numVertices, minDegree);
+    // Calculate mu based on the shifted expectation
+    double mu = std::log(adjustedMedian);
+
+    std::lognormal_distribution<double> distribution(mu, sigma);
+
+    std::vector<int> degrees;
+    degrees.reserve(numVertices);
+
+    int count = 0;
+
+    // Safety break for MaxDegree enforcement
+    int attempts = 0;
+    const int MAX_ATTEMPTS = numVertices * 100;
+
+    while (count < numVertices) {
+        attempts++;
+
+        // 2. Sample
+        double val = distribution(rng);
+
+        // 3. Shift (The "+ minDegree" logic)
+        // We calculate the integer part first, then add the minimum.
+        int rawShift = std::round(val);
+        int degree = rawShift + minDegree;
+
+        // 4. Max Bound Check
+        // We theoretically don't need to check minDegree anymore (it's guaranteed),
+        // but we might hit the MaxDegree roof.
+        if (degree <= maxDegree) {
+            degrees.push_back(degree);
+            count++;
+        }
+
+        // Infinite loop guard (extremely rare nicely configured params)
+        if (attempts > MAX_ATTEMPTS) {
+            // Fill rest to exit safely
+            while(count < numVertices) { degrees.push_back(minDegree); count++; }
+        }
+    }
+
+    return degrees;
 }
 
 TRelationGraph GenerateRandomChungLuGraph(TRNG& rng, const std::vector<int>& degrees) {
@@ -680,6 +711,7 @@ void MCMCRandomize(TRNG& rng, TRelationGraph& graph) {
 
     auto& adjacency = graph.GetAdjacencyList();
 
+    // TODO: is this all arbitrary?
     const double TEMP_START = 5.0;
     const double TEMP_END = 0.1;
     const double CONNECTIVITY_PENALTY = 20.0;
@@ -692,7 +724,7 @@ void MCMCRandomize(TRNG& rng, TRelationGraph& graph) {
         double progress = std::min(1.0, static_cast<double>(attempt) / MAX_ATTEMPTS);
         double temperature = TEMP_START * std::pow(TEMP_END / TEMP_START, progress);
 
-        ++attempt;
+        ++ attempt;
 
         int a = nodeDist(rng);
         if (adjacency[a].empty()) {

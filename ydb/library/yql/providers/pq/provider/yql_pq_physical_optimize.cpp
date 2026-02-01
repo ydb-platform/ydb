@@ -127,16 +127,6 @@ public:
 
     TMaybeNode<TExprBase> PqInsert(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) const {
         const auto insert = node.Cast<TPqInsert>();
-        const auto input = insert.Input();
-        if (!TDqCnUnionAll::Match(input.Raw())) {
-            return node;
-        }
-
-        const auto dqUnion = input.Cast<TDqCnUnionAll>();
-        if (!NDq::IsSingleConsumerConnection(dqUnion, *getParents())) {
-            return node;
-        }
-
         const auto& topicNode = insert.Topic();
         const TString cluster(topicNode.Cluster().Value());
         if (!State_->FindTopicMeta(topicNode)) {
@@ -144,10 +134,7 @@ public:
             return nullptr;
         }
 
-        YQL_CLOG(INFO, ProviderPq) << "Optimize PqInsert `" << cluster << "`.`" << topicNode.Path().StringValue() << "`";
-
-        const auto dqUnionOutput = dqUnion.Output();
-        const auto dqSink = Build<TDqSink>(ctx, insert.Pos())
+        auto dqSinkBuilder = Build<TDqSink>(ctx, insert.Pos())
             .DataSink(insert.DataSink())
             .Settings<TDqPqTopicSink>()
                 .Topic(topicNode)
@@ -157,7 +144,44 @@ public:
                         .Value(TStringBuilder() << "cluster:default_" << cluster)
                         .Build()
                     .Build()
-                .Build()
+                .Build();
+
+        const auto input = insert.Input();
+        if (IsDqPureExpr(input)) {
+            YQL_CLOG(INFO, ProviderPq) << "Optimize PqInsert `" << cluster << "`.`" << topicNode.Path().StringValue() << "`, build pure stage with sink";
+
+            const auto dqSink = dqSinkBuilder
+                .Index().Build(0)
+                .Done();
+
+            return Build<TDqStage>(ctx, insert.Pos())
+                .Inputs().Build()
+                .Program<TCoLambda>()
+                    .Args({})
+                    .Body<TCoToFlow>()
+                        .Input(input)
+                        .Build()
+                    .Build()
+                .Outputs()
+                    .Add(dqSink)
+                    .Build()
+                .Settings().Build()
+                .Done();
+        }
+
+        if (!TDqCnUnionAll::Match(input.Raw())) {
+            return node;
+        }
+
+        const auto dqUnion = input.Cast<TDqCnUnionAll>();
+        if (!NDq::IsSingleConsumerConnection(dqUnion, *getParents())) {
+            return node;
+        }
+
+        YQL_CLOG(INFO, ProviderPq) << "Optimize PqInsert `" << cluster << "`.`" << topicNode.Path().StringValue() << "`, push into existing stage";
+
+        const auto dqUnionOutput = dqUnion.Output();
+        const auto dqSink = dqSinkBuilder
             .Index(dqUnionOutput.Index())
             .Done();
 

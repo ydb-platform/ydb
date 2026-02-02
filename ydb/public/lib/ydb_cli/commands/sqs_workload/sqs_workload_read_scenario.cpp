@@ -26,7 +26,6 @@ namespace NYdb::NConsoleClient {
         TSqsWorkloadReaderParams params{
             .TotalSec = TotalSec,
             .QueueUrl = QueueUrl,
-            .EndpointOverride = EndpointOverride,
             .Account = Account,
             .Token = Token,
             .Log = Log,

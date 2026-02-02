@@ -11,7 +11,6 @@ namespace NYdb::NConsoleClient {
     struct TSqsWorkloadReaderParams {
         TDuration TotalSec;
         TString QueueUrl;
-        TMaybe<TString> EndpointOverride;
         TMaybe<TString> Account;
         TMaybe<TString> Token;
         std::shared_ptr<TLog> Log;

@@ -1046,14 +1046,27 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         const ui64 count0 = 7;
         const ui64 count1 = 11;
 
+        std::queue<TContinuationToken> readyTokens;
+
         auto getReadyToken = [&](TDuration timeout) -> TContinuationToken {
+            if (!readyTokens.empty()) {
+                auto token = std::move(readyTokens.front());
+                readyTokens.pop();
+                return token;
+            }
+
             const TInstant deadline = TInstant::Now() + timeout;
             while (TInstant::Now() < deadline) {
                 session->WaitEvent().Wait(TDuration::Seconds(5));
                 for (auto& ev : session->GetEvents(false)) {
                     if (auto* ready = std::get_if<TWriteSessionEvent::TReadyToAcceptEvent>(&ev)) {
-                        return std::move(ready->ContinuationToken);
+                        readyTokens.push(std::move(ready->ContinuationToken));
                     }
+                }
+                if (!readyTokens.empty()) {
+                    auto token = std::move(readyTokens.front());
+                    readyTokens.pop();
+                    return token;
                 }
             }
             UNIT_FAIL("Timed out waiting for ReadyToAcceptEvent");
@@ -1210,13 +1223,16 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         std::vector<ui64> ackOrder;
         ackOrder.reserve(count);
 
+        std::queue<TContinuationToken> readyTokens;
+
         auto getReadyToken = [&](TDuration timeout) -> TContinuationToken {
             const TInstant deadline = TInstant::Now() + timeout;
-            while (TInstant::Now() < deadline) {
+            while (TInstant::Now() < deadline && readyTokens.empty()) {
                 session->WaitEvent().Wait(TDuration::Seconds(5));
                 for (auto& ev : session->GetEvents(false)) {
                     if (auto* ready = std::get_if<TWriteSessionEvent::TReadyToAcceptEvent>(&ev)) {
-                        return std::move(ready->ContinuationToken);
+                        readyTokens.push(std::move(ready->ContinuationToken));
+                        continue;
                     }
 
                     if (auto* acks = std::get_if<TWriteSessionEvent::TAcksEvent>(&ev)) {
@@ -1228,6 +1244,13 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
                     }
                 }
             }
+
+            if (!readyTokens.empty()) {
+                auto token = std::move(readyTokens.front());
+                readyTokens.pop();
+                return token;
+            }
+
             UNIT_FAIL("Timed out waiting for ReadyToAcceptEvent");
             Y_ABORT("Unreachable");
         };

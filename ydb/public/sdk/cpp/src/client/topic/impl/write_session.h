@@ -1,5 +1,6 @@
 #pragma once
 
+#include <util/system/mutex.h>
 #include <util/system/thread.h>
 #include <ydb/public/sdk/cpp/src/client/topic/common/callback_context.h>
 #include <ydb/public/sdk/cpp/src/client/topic/impl/write_session_impl.h>
@@ -166,7 +167,8 @@ private:
 
         TKeyedWriteSession* Session;
         std::set<IdleSessionPtr, TIdleSession::Comparator> IdlerSessions;
-        std::unordered_map<ui64, IdleSessionPtr> IdlerSessionsIndex;
+        using IdlerSessionsIterator = std::set<IdleSessionPtr, TIdleSession::Comparator>::iterator;
+        std::unordered_map<ui64, IdlerSessionsIterator> IdlerSessionsIndex;
         std::unordered_map<ui64, WrappedWriteSessionPtr> SessionsIndex;
     };
 
@@ -202,8 +204,8 @@ private:
         std::unordered_map<ui64, InFlightMessagesIndexIter> MessagesToResend;
         std::unordered_map<ui64, std::deque<TContinuationToken>> ContinuationTokens;
 
-        NThreading::TPromise<void> MessagesNotEmptyPromise;
-        NThreading::TFuture<void> MessagesNotEmptyFuture;
+        // NThreading::TPromise<void> MessagesNotEmptyPromise;
+        // NThreading::TFuture<void> MessagesNotEmptyFuture;
         
         ui64 MemoryUsage = 0;
     };
@@ -308,8 +310,6 @@ private:
 
     void RunMainWorker();
 
-    static void* RunMainWorkerThread(void* arg);
-
     void NonBlockingClose();
 
     void SetCloseDeadline(const TDuration& closeTimeout);
@@ -322,9 +322,11 @@ private:
 
     void RunSplittedPartitionWorkers();
 
-    void Wait();
+    NThreading::TFuture<void> Next(bool isClosed);
 
     void RunUserEventLoop();
+
+    TInstant GetCloseDeadline();
 
 public:
     TKeyedWriteSession(const TKeyedWriteSessionSettings& settings,
@@ -350,8 +352,6 @@ public:
     ~TKeyedWriteSession();
 
 private:
-    TThread MainWorker;
-
     std::shared_ptr<TGRpcConnectionsImpl> Connections;
     std::shared_ptr<TTopicClient::TImpl> Client;
     TDbDriverStatePtr DbDriverState;
@@ -365,10 +365,16 @@ private:
 
     NThreading::TPromise<void> ClosePromise;
     NThreading::TFuture<void> CloseFuture;
+    NThreading::TFuture<void> NextFuture;
+    NThreading::TPromise<void> ShutdownPromise;
+    NThreading::TFuture<void> ShutdownFuture;
+    NThreading::TPromise<void> MessagesNotEmptyPromise;
+    NThreading::TFuture<void> MessagesNotEmptyFuture;
 
     std::mutex GlobalLock;
+    TMutex QueueLock;
     std::atomic_bool Closed = false;
-    TInstant CloseDeadline = TInstant::Max();
+    TInstant CloseDeadline = TInstant::Max();  
 
     std::unique_ptr<IPartitionChooser> PartitionChooser;
 

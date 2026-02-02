@@ -164,7 +164,7 @@ struct TAnalyzedTable {
 
 std::unique_ptr<TEvStatistics::TEvAnalyze> MakeAnalyzeRequest(const std::vector<TAnalyzedTable>& tables, const TString operationId = "operationId", TString databaseName = {});
 
-void Analyze(
+NKikimrStat::TEvAnalyzeResponse Analyze(
     TTestActorRuntime& runtime, ui64 saTabletId, const std::vector<TAnalyzedTable>& table,
     const TString operationId = "operationId", TString databaseName = {},
     NKikimrStat::TEvAnalyzeResponse::EStatus expectedStatus = NKikimrStat::TEvAnalyzeResponse::STATUS_SUCCESS);

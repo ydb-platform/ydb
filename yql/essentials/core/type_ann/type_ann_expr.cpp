@@ -901,6 +901,8 @@ public:
 
 bool PartialAnnonateTypes(TAstNode* astRoot, TLangVersion langver, TIssues& issues,
     std::function<TIntrusivePtr<IDataProvider>(TTypeAnnotationContext&)> configProviderFactory) {
+    YQL_ENSURE(astRoot, "AST root is null");
+
     TExprContext ctx;
     TExprNode::TPtr exprRoot;
     if (!CompileExpr(*astRoot, exprRoot, ctx, /* resolver= */ nullptr, /* urlListerManager */ nullptr,

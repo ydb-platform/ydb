@@ -78,7 +78,6 @@ NYql::TAstParseResult SqlASTToYql(const TLexers& lexers, const TParsers& parsers
                                   const NSQLTranslation::TSQLHints& hints,
                                   const NSQLTranslation::TTranslationSettings& settings)
 {
-    YQL_ENSURE(IsQueryMode(settings.Mode));
     TAstParseResult res;
     TContext ctx(lexers, parsers, settings, hints, res.Issues, query);
     SqlASTToYqlImpl(res, protoAst, ctx);

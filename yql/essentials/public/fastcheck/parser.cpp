@@ -1,12 +1,7 @@
 #include "check_runner.h"
+#include "check_state.h"
+
 #include <yql/essentials/ast/yql_ast.h>
-#include <yql/essentials/sql/v1/lexer/lexer.h>
-#include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
-#include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
-#include <yql/essentials/sql/v1/proto_parser/proto_parser.h>
-#include <yql/essentials/sql/v1/proto_parser/antlr4/proto_parser.h>
-#include <yql/essentials/sql/v1/proto_parser/antlr4_ansi/proto_parser.h>
-#include <yql/essentials/sql/settings/translation_settings.h>
 #include <yql/essentials/parser/pg_wrapper/interface/raw_parser.h>
 
 namespace NYql {
@@ -20,24 +15,26 @@ public:
         return "parser";
     }
 
-    TCheckResponse DoRun(const TChecksRequest& request) final {
-        switch (request.Syntax) {
+    TCheckResponse DoRun(const TChecksRequest& request, TCheckState& state) final {
+        switch (state.GetEffectiveSyntax()) {
             case ESyntax::SExpr:
-                return RunSExpr(request);
+                return RunSExpr(request, state);
             case ESyntax::PG:
-                return RunPg(request);
+                return RunPg(request, state);
             case ESyntax::YQL:
-                return RunYql(request);
+                return RunYql(request, state);
         }
     }
 
 private:
-    TCheckResponse RunSExpr(const TChecksRequest& request) {
-        TAstParseResult res = ParseAst(request.Program);
-        return TCheckResponse{
-            .CheckName = GetCheckName(),
-            .Success = res.IsOk(),
-            .Issues = res.Issues};
+    TCheckResponse RunSExpr(const TChecksRequest& request, TCheckState& state) {
+        Y_UNUSED(request);
+        TCheckResponse res{.CheckName = GetCheckName()};
+
+        const auto* astResult = state.ParseSExpr(res.Issues);
+        res.Success = astResult && astResult->IsOk();
+
+        return res;
     }
 
     class TPGParseEventsHandler: public IPGParseEvents {
@@ -60,42 +57,26 @@ private:
         TCheckResponse& Res_;
     };
 
-    TCheckResponse RunPg(const TChecksRequest& request) {
+    TCheckResponse RunPg(const TChecksRequest& request, TCheckState& state) {
+        Y_UNUSED(request);
         TCheckResponse res{.CheckName = GetCheckName()};
-        TPGParseEventsHandler handler(res);
-        PGParse(request.Program, handler);
+
+        const auto* pgResult = state.ParsePg(res.Issues);
+        if (pgResult) {
+            TPGParseEventsHandler handler(res);
+            pgResult->Visit(handler);
+        }
+
         return res;
     }
 
-    TCheckResponse RunYql(const TChecksRequest& request) {
+    TCheckResponse RunYql(const TChecksRequest& request, TCheckState& state) {
+        Y_UNUSED(request);
         TCheckResponse res{.CheckName = GetCheckName()};
-        NSQLTranslation::TTranslationSettings settings;
-        settings.SyntaxVersion = request.SyntaxVersion;
-        settings.AnsiLexer = request.IsAnsiLexer;
-        settings.Antlr4Parser = true;
-        settings.File = request.File;
-        if (!ParseTranslationSettings(request.Program, settings, res.Issues)) {
-            return res;
-        }
 
-        NSQLTranslationV1::TLexers lexers;
-        lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
-        lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
-        auto lexer = NSQLTranslationV1::MakeLexer(lexers, settings.AnsiLexer, true);
-        auto onNextToken = [&](NSQLTranslation::TParsedToken&& token) {
-            Y_UNUSED(token);
-        };
-
-        if (lexer->Tokenize(request.Program, request.File, onNextToken, res.Issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS)) {
-            google::protobuf::Arena arena;
-            NSQLTranslationV1::TParsers parsers;
-            parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory();
-            parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
-            auto msg = NSQLTranslationV1::SqlAST(parsers, request.Program, request.File, res.Issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS,
-                                                 settings.AnsiLexer, true, &arena);
-            if (msg) {
-                res.Success = true;
-            }
+        auto* msg = state.ParseSql(res.Issues);
+        if (msg) {
+            res.Success = true;
         }
 
         return res;

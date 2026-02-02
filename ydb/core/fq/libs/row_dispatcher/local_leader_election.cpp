@@ -1,4 +1,3 @@
-
 #include "local_leader_election.h"
 #include <memory>
 

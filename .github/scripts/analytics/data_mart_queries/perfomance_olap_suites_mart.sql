@@ -1,4 +1,4 @@
-$run_id_limit = CAST(CurrentUtcTimestamp() AS Uint64) - 30UL * 86400UL * 1000000UL;
+$run_id_limit = CAST(CurrentUtcTimestamp() AS Uint64) - 180UL * 86400UL * 1000000UL;
 
 $fail_tests = SELECT
     Db,

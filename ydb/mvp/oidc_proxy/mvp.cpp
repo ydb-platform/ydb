@@ -268,7 +268,6 @@ void TMVP::TryGetGenericOptionsFromConfig(
     if (generic["auth"]) {
         auto auth = generic["auth"];
         bool hasFederatedCreds = auth["federated_creds"].IsDefined();
-        bool hasTokenFile = auth["token_file"].IsDefined();
         opts.YdbTokenFile = auth["token_file"].as<std::string>("");
 
         if (hasFederatedCreds) {

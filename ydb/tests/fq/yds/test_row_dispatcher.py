@@ -1225,7 +1225,6 @@ class TestPqRowDispatcher(TestYdsBase):
             '{"time": 102, "data": 7777}',
             '{"time": 103, "data": "hello2"}',
             '{"time": 104, "data": "hello3", "null_field": null}',
-            
         ]
 
         self.write_stream(data, partition_key="key")

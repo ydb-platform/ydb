@@ -248,7 +248,7 @@ private:
                 std::string_view rawJson;
                 CHECK_JSON_ERROR(jsonValue.raw_json().get(rawJson)) {
                     GetParsingError(error, jsonValue, "extract json value", status);
-                    return false;;
+                    return false;
                 }
                 status = TStatus::Fail(EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Found unexpected nested value (raw: '" << TruncateString(rawJson) << "'), expected data type " <<DataTypeName << ", please use Json type for nested values");
                 return false;

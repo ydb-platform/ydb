@@ -2668,7 +2668,7 @@ static bool StoreConsumerSettingsEntry(
             return false;
         } else {
             if (!valueExprNode->IsLiteral() || (valueExprNode->GetLiteralType() != "String" && valueExprNode->GetLiteralType() != "Enum")) {
-                ctx.Error() << to_upper(id.Name) << " value should be a string literal. Possible values: 'streaming', 'shared'";
+                ctx.Error() << to_upper(id.Name) << " value should be a string literal";
                 return false;
             }
             TString value = to_upper(valueExprNode->GetLiteralValue());
@@ -2705,6 +2705,10 @@ static bool StoreConsumerSettingsEntry(
             ctx.Error() << to_upper(id.Name) << " reset is not supported";
             return false;
         } else {
+            if (valueExprNode->GetOpName() != "Interval") {
+                ctx.Error() << "Literal of Interval type is expected for " << to_upper(id.Name) << " setting";
+                return false;
+            }
             settings.DefaultProcessingTimeout = valueExprNode;
         }
     } else if (name == "max_processing_attempts") {
@@ -2716,6 +2720,10 @@ static bool StoreConsumerSettingsEntry(
             ctx.Error() << to_upper(id.Name) << " reset is not supported";
             return false;
         } else {
+            if (!valueExprNode->IsIntegerLiteral()) {
+                ctx.Error() << to_upper(id.Name) << " value should be a integer";
+                return false;
+            }
             settings.MaxProcessingAttempts = valueExprNode;
         }
     } else if (name == "dead_letter_policy") {

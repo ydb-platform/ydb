@@ -70,6 +70,12 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, bool useRealThreads,
 
 TTestEnv::~TTestEnv() {
     Driver->Stop(true);
+
+    if (ThreadPoolStarted) {
+        ThreadPool.Stop();
+    }
+
+    Server->ShutdownGRpc();
 }
 
 TString CreateDatabase(TTestEnv& env, const TString& databaseName,

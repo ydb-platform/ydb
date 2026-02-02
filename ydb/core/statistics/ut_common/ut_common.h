@@ -1,5 +1,6 @@
 #pragma once
 
+#include <library/cpp/threading/future/async.h>
 #include <ydb/core/statistics/events.h>
 
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
@@ -50,6 +51,17 @@ public:
         return CSController;
     }
 
+    template<typename TFunc>
+    auto RunInThreadPool(TFunc&& func) {
+        if (!ThreadPoolStarted) {
+            ThreadPool.Start();
+            ThreadPoolStarted = true;
+        }
+
+        auto future = NThreading::Async(std::forward<TFunc>(func), ThreadPool);
+        return Server->GetRuntime()->WaitFuture(std::move(future));
+    }
+
 private:
     TPortManager PortManager;
 
@@ -57,6 +69,8 @@ private:
     Tests::TServer::TPtr Server;
     THolder<Tests::TClient> Client;
     THolder<Tests::TTenants> Tenants;
+    TAdaptiveThreadPool ThreadPool;
+    bool ThreadPoolStarted = false;
 
     TString Endpoint;
     NYdb::TDriverConfig DriverConfig;

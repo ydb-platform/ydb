@@ -637,21 +637,7 @@ TKeyedWriteSession::WrappedWriteSessionPtr TKeyedWriteSession::TSessionsWorker::
         .ProducerId(producerId)
         .MessageGroupId(producerId)
         .MaxMemoryUsage(std::numeric_limits<ui64>::max())
-        .RetryPolicy(IRetryPolicy::GetExponentialBackoffPolicy(
-            TDuration::MilliSeconds(10),
-            TDuration::MilliSeconds(200),
-            TDuration::Seconds(30),
-            std::numeric_limits<size_t>::max(),
-            TDuration::Max(),
-            2.0,
-            [](EStatus status) -> ERetryErrorClass {
-                if (status == EStatus::OVERLOADED) {
-                    return ERetryErrorClass::NoRetry;
-                }
-
-                return GetRetryErrorClass(status);
-            }
-        ))
+        .RetryPolicy(Session->RetryPolicy)
         .EventHandlers(TWriteSessionSettings::TEventHandlers()
                         .ReadyToAcceptHandler({})
                         .AcksHandler({})
@@ -959,6 +945,40 @@ void TKeyedWriteSession::TMessagesWorker::ScheduleResendMessages(ui64 partition,
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// TKeyedWriteSession::TKeyedWriteSessionRetryPolicy
+
+TKeyedWriteSession::TKeyedWriteSessionRetryPolicy::TKeyedWriteSessionRetryPolicy(TKeyedWriteSession* session)
+    : Session(session)
+{}
+
+typename TKeyedWriteSession::TKeyedWriteSessionRetryPolicy::IRetryState::TPtr TKeyedWriteSession::TKeyedWriteSessionRetryPolicy::CreateRetryState() const {
+    struct TRetryState : public IRetryState {
+        TRetryState(TKeyedWriteSession* session)
+            : Session(session)
+        {}
+        ~TRetryState() = default;
+        TMaybe<TDuration> GetNextRetryDelay(EStatus status) override {
+            if (status == EStatus::OVERLOADED) {
+                return Nothing();
+            }
+
+            if (!UserRetryState) {
+                auto policy = Session->Settings.RetryPolicy_ ? Session->Settings.RetryPolicy_ : NYdb::NTopic::IRetryPolicy::GetDefaultPolicy();
+                UserRetryState = policy->CreateRetryState();
+            }
+
+            return UserRetryState->GetNextRetryDelay(status);
+        }
+
+    private:
+        TKeyedWriteSession* Session;
+        IRetryState::TPtr UserRetryState;
+    };
+    
+    return std::make_unique<TRetryState>(Session);
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TKeyedWriteSession
 
 TKeyedWriteSession::TKeyedWriteSession(
@@ -1039,6 +1059,7 @@ TKeyedWriteSession::TKeyedWriteSession(
     SessionsWorker = std::make_shared<TSessionsWorker>(this);
     MessagesWorker = std::make_shared<TMessagesWorker>(this);
     EventsWorker = std::make_shared<TEventsWorker>(this);
+    RetryPolicy = std::make_shared<TKeyedWriteSessionRetryPolicy>(this);
 
     // Start handlers executor for user callbacks (Acks/ReadyToAccept/SessionClosed/Common).
     Settings.EventHandlers_.HandlersExecutor_->Start();

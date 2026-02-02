@@ -143,6 +143,21 @@ private:
     };
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Custom retry policy
+
+    struct TKeyedWriteSessionRetryPolicy : public ::IRetryPolicy<EStatus> {
+        using TSelf = TKeyedWriteSessionRetryPolicy;
+        using TPtr = std::shared_ptr<TSelf>;
+
+        TKeyedWriteSessionRetryPolicy(TKeyedWriteSession* session);
+        ~TKeyedWriteSessionRetryPolicy() = default;
+        typename IRetryState::TPtr CreateRetryState() const override;
+
+    private:
+        TKeyedWriteSession* Session;
+    };
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Workers
 
     struct TEventsWorker;
@@ -385,6 +400,7 @@ private:
     std::shared_ptr<TSessionsWorker> SessionsWorker;
     std::unordered_map<ui64, std::shared_ptr<TSplittedPartitionWorker>> SplittedPartitionWorkers;
     std::shared_ptr<TMessagesWorker> MessagesWorker;
+    std::shared_ptr<TKeyedWriteSessionRetryPolicy> RetryPolicy;
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

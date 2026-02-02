@@ -10,7 +10,8 @@ items:
 - { name: ALTER RESOURCE POOL,          href: alter-resource-pool.md,        when: feature_resource_pool }
 - { name: ALTER RESOURCE POOL CLASSIFIER,    href: alter-resource-pool-classifier.md,   when: feature_resource_pool_classifier }
 - { name: ALTER TOPIC,                  href: alter-topic.md,                when: feature_topic_control_plane }
-- { name: ALTER TRANSFER,               href: alter-transfer.md,             when: feature_transfer }
+- { name: ALTER TRANSFER,               href: alter-transfer.md}
+- { name: ALTER SECRET,                 href: alter-secret.md}
 - { name: ALTER USER,                   href: alter-user.md,                 when: feature_user_and_group }
 - { name: ANALYZE,                      href: analyze.md, when: backend_name == "YDB" }
 - { name: BATCH DELETE,                 href: batch-delete.md,               when: feature_batch_operations }
@@ -21,6 +22,7 @@ items:
 - { name: CREATE EXTERNAL TABLE,        href: create-external-table.md,      when: feature_federated_queries}
 - { name: CREATE OBJECT TYPE SECRET,    href: create-object-type-secret.md,  when: feature_federated_queries}
 - { name: CREATE OBJECT TYPE SECRET_ACCESS,    href: create-object-type-secret-access.md,  when: feature_federated_queries}
+- { name: CREATE SECRET,                 href: create-secret.md}
 - { name: CREATE TABLE,                 include: { mode: link, path: create_table/toc_p.yaml } }
 - { name: CREATE TRANSFER,              href: create-transfer.md,            when: feature_transfer }
 - { name: CREATE VIEW,                  href: create-view.md,                when: feature_view }
@@ -38,6 +40,7 @@ items:
 - { name: DROP EXTERNAL TABLE,          href: drop-external-table.md,        when: feature_federated_queries}
 - { name: DROP OBJECT TYPE SECRET,    href: drop-object-type-secret.md,      when: feature_federated_queries}
 - { name: DROP OBJECT TYPE SECRET_ACCESS,    href: drop-object-type-secret-access.md,  when: feature_federated_queries}
+- { name: DROP SECRET,                 href: drop-secret.md}
 - { name: DROP TABLE,                   href: drop_table.md }
 - { name: DROP TRANSFER,                href: drop-transfer.md,              when: feature_transfer }
 - { name: DROP VIEW,                    href: drop-view.md,                  when: feature_view }

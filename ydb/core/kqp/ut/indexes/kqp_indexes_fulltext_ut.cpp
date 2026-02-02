@@ -2,6 +2,9 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <library/cpp/json/json_reader.h>
 
+#include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/core/tx/datashard/datashard.h>
+
 namespace NKikimr::NKqp {
 
 using namespace NYdb;
@@ -5183,6 +5186,115 @@ Y_UNIT_TEST(FulltextRelevanceIndexWithCompositeKey) {
         UNIT_ASSERT_VALUES_EQUAL(*category, "docs");
         UNIT_ASSERT_VALUES_EQUAL(*id, 1);
     }
+}
+
+// Test that fulltext queries handle delivery problems gracefully
+// This uses the observer pattern to inject delivery problems
+Y_UNIT_TEST(FullTextDeliveryProblem) {
+    // Test that fulltext query succeeds even if delivery problem happens
+    NKikimrConfig::TFeatureFlags featureFlags;
+    featureFlags.SetEnableFulltextIndex(true);
+
+    auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+    settings.SetDomainRoot(KikimrDefaultUtDomainRoot);
+    settings.SetUseRealThreads(false);
+    settings.AppConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+
+    TKikimrRunner kikimr(settings);
+    auto& runtime = *kikimr.GetTestServer().GetRuntime();
+    auto db = kikimr.GetQueryClient();
+
+    // Create table with fulltext index using RunCall to properly handle fake threads
+    kikimr.RunCall([&]() { CreateTexts(db); return true; });
+    kikimr.RunCall([&]() { UpsertTexts(db); return true; });
+    kikimr.RunCall([&]() { AddIndex(db, "fulltext_relevance"); return true; });
+
+    auto sender = runtime.AllocateEdgeActor();
+
+    using namespace NTableIndex;
+    using namespace NTableIndex::NFulltext;
+
+    // Get shards for the index posting table
+    auto docsShards = GetTableShards(&kikimr.GetTestServer(), sender, JoinSeq('/', TVector<TString>{"/Root/Texts/fulltext_idx", DocsTable}));
+    auto implShards = GetTableShards(&kikimr.GetTestServer(), sender, JoinSeq('/', TVector<TString>{"/Root/Texts/fulltext_idx", ImplTable}));
+    auto dictShards = GetTableShards(&kikimr.GetTestServer(), sender, JoinSeq('/', TVector<TString>{"/Root/Texts/fulltext_idx", DictTable}));
+    auto statsShards = GetTableShards(&kikimr.GetTestServer(), sender, JoinSeq('/', TVector<TString>{"/Root/Texts/fulltext_idx", StatsTable}));
+    auto mainShards = GetTableShards(&kikimr.GetTestServer(), sender, "/Root/Texts");
+
+
+    THashMap<ui64, int> shardSet;
+    UNIT_ASSERT(!docsShards.empty());
+    UNIT_ASSERT(!implShards.empty());
+    UNIT_ASSERT(!dictShards.empty());
+    UNIT_ASSERT(!statsShards.empty());
+    UNIT_ASSERT(!mainShards.empty());
+
+    for (auto shard : implShards) {
+        shardSet[shard] = 0;
+    }
+    for (auto shard : dictShards) {
+        shardSet[shard] = 0;
+    }
+    for (auto shard : statsShards) {
+        shardSet[shard] = 0;
+    }
+    for (auto shard : mainShards) {
+        shardSet[shard] = 0;
+    }
+
+    for (auto shard : docsShards) {
+        shardSet[shard] = 0;
+    }
+
+    int readCount = 0;
+    int deliveryProblemSent = 0;
+
+    // Set up observer to inject delivery problem on first TEvForward with TEvRead to our shards
+    auto observer = [&](TAutoPtr<NActors::IEventHandle>& ev) -> TTestActorRuntimeBase::EEventAction {
+        if (ev->GetTypeRewrite() == NKikimr::TEvPipeCache::TEvForward::EventType) {
+            auto* forward = ev->Get<NKikimr::TEvPipeCache::TEvForward>();
+            // Check if this is a TEvRead going to one of our shards
+            if (forward->Ev->Type() == NKikimr::TEvDataShard::TEvRead::EventType &&
+                shardSet.contains(forward->TabletId)) {
+                int& cnt = shardSet[forward->TabletId];
+
+                Cerr << "Observed TEvRead #" << readCount << " to shard " << forward->TabletId
+                     << ", sender: " << ev->Sender << Endl;
+
+                readCount++;
+                if ((cnt & 1) == 0) {
+                    Cerr << "Injecting delivery problem for shard " << forward->TabletId
+                         << " to actor " << ev->Sender << Endl;
+                    auto undelivery = MakeHolder<NKikimr::TEvPipeCache::TEvDeliveryProblem>(forward->TabletId, true);
+                    runtime.Send(new NActors::IEventHandle(ev->Sender, sender, undelivery.Release()));
+                    deliveryProblemSent++;
+                }
+                cnt++;
+            }
+        }
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    };
+    runtime.SetObserverFunc(observer);
+
+    // Execute fulltext query using RunCall pattern
+    auto result = kikimr.RunCall([&]() {
+        TString query = R"sql(
+            SELECT Key, Text FROM `/Root/Texts` VIEW `fulltext_idx`
+            ORDER BY FulltextScore(Text, "cats") DESC
+            LIMIT 10
+        )sql";
+        return db.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+    });
+
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+    // Verify we got results
+    auto resultSet = result.GetResultSet(0);
+    UNIT_ASSERT(resultSet.RowsCount() == 3);
+
+    // Verify the delivery problem was actually sent
+    UNIT_ASSERT(deliveryProblemSent > 0);
+    Cerr << "Test completed successfully, total reads observed: " << readCount << Endl;
 }
 
 }

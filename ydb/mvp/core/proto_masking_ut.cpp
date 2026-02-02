@@ -9,8 +9,18 @@
 
 Y_UNIT_TEST_SUITE(Masking) {
     Y_UNIT_TEST(Format) {
-        mvp::masking::TestMask req;
+        std::vector<std::string> repeatedNames;
+        std::vector<std::string> maskedRCreds;
+        std::vector<std::string> maskedRSens;
 
+        repeatedNames.push_back("r1");
+        repeatedNames.push_back("r2");
+        maskedRCreds.push_back("RCRED1");
+        maskedRCreds.push_back("RCRED2");
+        maskedRSens.push_back("RSENS1");
+        maskedRSens.push_back("RSENS2");
+
+        mvp::masking::TestMask req;
         req.set_name("value");
         // req.no_value field doesn't set
         req.set_cred("SECRET_CRED_123456");
@@ -18,11 +28,15 @@ Y_UNIT_TEST_SUITE(Masking) {
         req.set_int_value(42);
         req.set_int_cred(98765);
         req.set_int_sens(55555);
-        req.add_repeated_name("r1");
-        req.add_repeated_name("r2");
-        req.add_repeated_cred("RCRED1");
-        req.add_repeated_cred("RCRED2");
-        req.add_repeated_sens("RSENS1");
+        for (const auto& name : repeatedNames) {
+            req.add_repeated_name(name);
+        }
+        for (const auto& s : maskedRCreds) {
+            req.add_repeated_cred(s);
+        }
+        for (const auto& s : maskedRSens) {
+            req.add_repeated_sens(s);
+        }
         auto* nested = req.mutable_nested();
         nested->set_nested_name("nested_value");
         nested->set_nested_cred("NSECRET");
@@ -30,33 +44,31 @@ Y_UNIT_TEST_SUITE(Masking) {
 
         std::string actual = NMVP::MaskedShortDebugString(req);
 
-        std::string maskedCred = NKikimr::MaskTicket(req.cred());
-        std::string maskedSens = NKikimr::MaskTicket(req.sens());
-        std::string maskedRCred1 = NKikimr::MaskTicket(req.repeated_cred(0));
-        std::string maskedRCred2 = NKikimr::MaskTicket(req.repeated_cred(1));
-        std::string maskedRSens1 = NKikimr::MaskTicket(req.repeated_sens(0));
-        std::string maskedNestedCred = NKikimr::MaskTicket(nested->nested_cred());
-        std::string maskedNestedSens = NKikimr::MaskTicket(nested->nested_sens());
-
         // Build expected string with TStringBuilder for readability
         TStringBuilder b;
         b << "name: \"value\""
-          << " cred: \"" << maskedCred << "\""
-          << " sens: \"" << maskedSens << "\""
-          << " int_value: " << 42
-          << " repeated_name: \"r1\""
-          << " repeated_name: \"r2\""
-          << " repeated_cred: \"" << maskedRCred1 << "\""
-          << " repeated_cred: \"" << maskedRCred2 << "\""
-          << " repeated_sens: \"" << maskedRSens1 << "\""
-          << " nested { "
-            "nested_name: \"nested_value\""
-            " nested_cred: \"" << maskedNestedCred << "\""
-            " nested_sens: \"" << maskedNestedSens << "\""
+          << " cred: \"" << NKikimr::MaskTicket(req.cred()) << "\""
+          << " sens: \"" << NKikimr::MaskTicket(req.sens()) << "\""
+          << " int_value: " << 42;
+        for (const auto& name : repeatedNames) {
+            b << " repeated_name: \"" << name << "\"";
+        }
+        for (const auto& s : maskedRCreds) {
+            b << " repeated_cred: \"" << NKikimr::MaskTicket(s) << "\"";
+        }
+        for (const auto& s : maskedRSens) {
+            b << " repeated_sens: \"" << NKikimr::MaskTicket(s) << "\"";
+        }
+        b << " nested { "
+          << "nested_name: \"nested_value\""
+          << " nested_cred: \"" << NKikimr::MaskTicket(nested->nested_cred()) << "\""
+          << " nested_sens: \"" << NKikimr::MaskTicket(nested->nested_sens()) << "\""
           << " }";
         TString expectedT = b;
         std::string expected(expectedT.data(), expectedT.size());
 
+        UNIT_ASSERT(actual.find("int_cred:") == std::string::npos);
+        UNIT_ASSERT(actual.find("int_sens:") == std::string::npos);
         UNIT_ASSERT_VALUES_EQUAL(actual, expected);
     }
 

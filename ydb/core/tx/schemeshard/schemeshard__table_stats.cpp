@@ -298,6 +298,17 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
         return true;
     }
 
+    if (isDataShard && !Self->Tables.contains(pathId)) {
+        LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Row table not found: " << pathId);
+        return true;
+    } else if (isOlapStore && !Self->OlapStores.contains(pathId)) {
+        LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Olap store not found: " << pathId);
+        return true;
+    } else if (isColumnTable && !Self->ColumnTables.contains(pathId)) {
+        LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Column table not found: " << pathId);
+        return true;
+    }
+
     TShardIdx shardIdx = [this, &datashardId]() {
         auto found = Self->TabletIdToShardIdx.find(datashardId);
         return (found != Self->TabletIdToShardIdx.end()) ? found->second : InvalidShardIdx;

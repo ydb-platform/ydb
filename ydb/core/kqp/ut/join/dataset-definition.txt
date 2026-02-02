@@ -6,13 +6,15 @@
   // --- 1.1 Geometric Bounds (The Unit Tests) ---
   (
     // Paths: Easiest case (linear complexity). Large N to test overhead.
-    (label=+path; type=path; N=5..50) +
+    (label=+path; type=path; N=5..70) +
 
     // Stars: Hardest standard case (exponential complexity).
-    (label=+star; type=star; N=5..30) +
+    (label=+star; type=star; N=5..35) +
 
     // Cliques: Maximum density. Keep N small or DPhyp will timeout/OOM.
-    (label=+clique; type=clique; N=3..20)
+    (label=+clique; type=clique; N=3..20) +
+
+    (label=+random-tree; type=random-tree; N=3..30)
   )
   +
   (
@@ -95,7 +97,7 @@
   (
     // --- 3.2 "Data Warehouse" Pattern ---
     // Fact tables (Hubs) usually Inner Join, Dimensions Left Join out.
-    (label=+join-dw; inner-join=0.6; left-join=0.4) +
+    (label=+join-inner-left; inner-join=0.6; left-join=0.4) +
 
     // --- 3.3 "Generated SQL" Pattern (Maximum Noise) ---
     // This creates complex Table Elimination Sets (TES) and should restrict number of CSGs.
@@ -104,7 +106,8 @@
     // --- 3.4 The "Chain-Link" Constraint ---
     // Pure left joins enforce a strict ordering ((A left B) left C).
     // The complexity should be effectively O(N^2) or O(N), regardless of topology.
-    (label=+join-strict-left; inner-join=0; left-only-join=1.0)
+    (label=+join-fully-restricted; inner-join=0; cross-join=1.0) +
+    (label=+join-highly-restricted; inner-join=0.3; cross-join=0.7)
   )
   *
   // Many constraint joins depend on join tree form (it creates different TES),
@@ -130,5 +133,7 @@
   left-semi-join=?0.0;
   right-semi-join=?0.0;
   cross-join=?0.0;
-  exclusion-join=?0.0
+  exclusion-join=?0.0;
+  mcmc-degree=5;
+  mcmc-edge=5
 )

@@ -16,7 +16,9 @@ items:
 - { name: ANALYZE,                      href: analyze.md, when: backend_name == "YDB" }
 - { name: BATCH DELETE,                 href: batch-delete.md }
 - { name: BATCH UPDATE,                 href: batch-update.md }
+- { name: BACKUP,                       href: backup.md,                     when: feature_backup_collections }
 - { name: CREATE ASYNC REPLICATION,     href: create-async-replication.md }
+- { name: CREATE BACKUP COLLECTION,     href: create-backup-collection.md,   when: feature_backup_collections }
 - { name: CREATE GROUP,                 href: create-group.md,               when: feature_user_and_group }
 - { name: CREATE EXTERNAL DATA SOURCE,  href: create-external-data-source.md,when: feature_federated_queries}
 - { name: CREATE EXTERNAL TABLE,        href: create-external-table.md,      when: feature_federated_queries}
@@ -34,6 +36,7 @@ items:
 - { name: DELETE,                       href: delete.md,                     when: feature_map_tables }
 - { name: DISCARD,                      href: discard.md,                    when: backend_name != "YDB" }
 - { name: DROP ASYNC REPLICATION,       href: drop-async-replication.md }
+- { name: DROP BACKUP COLLECTION,       href: drop-backup-collection.md,     when: feature_backup_collections }
 - { name: DROP GROUP,                   href: drop-group.md,                 when: feature_user_and_group }
 - { name: DROP EXTERNAL DATA SOURCE,    href: drop-external-data-source.md,  when: feature_federated_queries}
 - { name: DROP EXTERNAL TABLE,          href: drop-external-table.md,        when: feature_federated_queries}
@@ -56,6 +59,7 @@ items:
 - { name: REDUCE,                       href: reduce.md,                     when: feature_mapreduce and reduce_command == "REDUCE" }
 - { name: REPLACE,                      href: replace_into.md,               when: feature_replace }
 - { name: REVOKE,                       href: revoke.md,                     when: feature_user_and_group }
+- { name: RESTORE,                      href: restore-backup-collection.md,  when: feature_backup_collections }
 - { name: SELECT,                       include: { mode: link, path: select/toc_p.yaml } }
 - { name: SELECT STREAM,                href: select_stream.md,              when: feature_mapreduce and process_command == "PROCESS STREAM" }
 - { name: SHOW CREATE,                  href: show_create.md }

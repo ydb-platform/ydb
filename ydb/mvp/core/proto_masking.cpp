@@ -10,7 +10,7 @@ using namespace google::protobuf;
 
 namespace NMVP {
 
-void static MaskMessageRecursively(Message* msg) {
+static void MaskMessageRecursively(Message* msg) {
     const Descriptor* desc = msg->GetDescriptor();
     const Reflection* refl = msg->GetReflection();
 

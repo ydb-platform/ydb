@@ -30,6 +30,8 @@ namespace NYT::NConcurrency {
 
 using namespace NProfiling;
 
+const TFairShareThreadPoolTag DefaultExecutionTag = "default";
+
 ////////////////////////////////////////////////////////////////////////////////
 
 namespace {
@@ -609,9 +611,14 @@ public:
         , CumulativeSchedulingTimeCounter_(Profiler_
             .WithTags(GetThreadTags(ThreadNamePrefix_))
             .TimeCounter("/time/scheduling_cumulative"))
-        , PoolWeightProvider_(options.PoolWeightProvider)
         , VerboseLogging_(options.VerboseLogging)
+        , PoolWeightProvider_(options.PoolWeightProvider)
     { }
+
+    void SetWeightProvider(IPoolWeightProviderPtr weightProvider)
+    {
+        PoolWeightProvider_ = std::move(weightProvider);
+    }
 
     ~TTwoLevelFairShareQueue()
     {
@@ -821,9 +828,9 @@ private:
     const std::string ThreadNamePrefix_;
     const TProfiler Profiler_;
     const NProfiling::TTimeCounter CumulativeSchedulingTimeCounter_;
-    const IPoolWeightProviderPtr PoolWeightProvider_;
     const bool VerboseLogging_;
 
+    IPoolWeightProviderPtr PoolWeightProvider_;
     std::atomic<bool> Stopped_ = false;
     TMpscStack<TAction> InvokeQueue_;
     char Padding0_[CacheLineSize - sizeof(TMpscStack<TAction>)];
@@ -1355,6 +1362,11 @@ public:
     {
         EnsureStarted();
         return Queue_->GetInvoker(poolName, bucketName);
+    }
+
+    void SetWeightProvider(IPoolWeightProviderPtr weightProvider) override
+    {
+        Queue_->SetWeightProvider(std::move(weightProvider));
     }
 
     void Shutdown() override

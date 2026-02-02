@@ -73,9 +73,7 @@ TMaybeNode<TExprBase> RewriteAsHoppingWindowFullOutput(
     const TDqConnection& input,
     bool analyticsMode,
     TDuration lateArrivalDelay,
-    bool defaultWatermarksMode,
-    bool syncActor) {
-    Y_UNUSED(syncActor);
+    bool defaultWatermarksMode) {
     const auto aggregate = node.Cast<TCoAggregate>();
     const auto pos = aggregate.Pos();
 
@@ -236,10 +234,9 @@ TMaybeNode<TExprBase> RewriteAsHoppingWindow(
     const TDqConnection& input,
     bool analyticsMode,
     TDuration lateArrivalDelay,
-    bool defaultWatermarksMode,
-    bool syncActor)
+    bool defaultWatermarksMode)
 {
-    auto result = RewriteAsHoppingWindowFullOutput(node, ctx, input, analyticsMode, lateArrivalDelay, defaultWatermarksMode, syncActor);
+    auto result = RewriteAsHoppingWindowFullOutput(node, ctx, input, analyticsMode, lateArrivalDelay, defaultWatermarksMode);
     if (!result) {
         return result;
     }

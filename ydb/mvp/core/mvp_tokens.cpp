@@ -311,4 +311,42 @@ void TMvpTokenator::UpdateOAuthToken(const NMvp::TOAuthInfo* oauthInfo) {
                        TEvPrivate::TEvUpdateIamTokenYandex>(oauthInfo->name(), oauthInfo->endpoint(), request, &yandex::cloud::priv::iam::v1::IamTokenService::Stub::AsyncCreate);
 }
 
+<<<<<<< HEAD
+=======
+template<>
+TString SecureShortDebugString(const yandex::cloud::priv::iam::v1::CreateIamTokenRequest& request) {
+    yandex::cloud::priv::iam::v1::CreateIamTokenRequest copy = request;
+    switch (copy.identity_case()) {
+    case yandex::cloud::priv::iam::v1::CreateIamTokenRequest::kYandexPassportOauthToken:
+        copy.set_yandex_passport_oauth_token(NKikimr::MaskTicket(copy.yandex_passport_oauth_token()));
+        break;
+    case yandex::cloud::priv::iam::v1::CreateIamTokenRequest::kJwt:
+        copy.set_jwt(NKikimr::MaskTicket(copy.jwt()));
+        break;
+    case yandex::cloud::priv::iam::v1::CreateIamTokenRequest::kIamCookie:
+    case yandex::cloud::priv::iam::v1::CreateIamTokenRequest::kYandexPassportCookies:
+    case yandex::cloud::priv::iam::v1::CreateIamTokenRequest::IDENTITY_NOT_SET:
+        break;
+    }
+    return copy.ShortDebugString();
+}
+
+template<>
+TString SecureShortDebugString(const yandex::cloud::priv::iam::v1::CreateIamTokenResponse& request) {
+    yandex::cloud::priv::iam::v1::CreateIamTokenResponse copy = request;
+    copy.set_iam_token(NKikimr::MaskTicket(copy.iam_token()));
+    return copy.ShortDebugString();
+}
+
+template<>
+TString SecureShortDebugString(const nebius::iam::v1::ExchangeTokenRequest& request) {
+    return MaskedShortDebugString(request);
+}
+
+template<>
+TString SecureShortDebugString(const nebius::iam::v1::CreateTokenResponse& request) {
+    return MaskedShortDebugString(request);
+}
+
+>>>>>>> 6c533603003 (remove recurse declaration)
 }

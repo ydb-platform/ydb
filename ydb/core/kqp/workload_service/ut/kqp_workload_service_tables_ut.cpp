@@ -7,14 +7,12 @@
 #include <ydb/core/kqp/workload_service/tables/table_queries.h>
 #include <ydb/core/kqp/workload_service/ut/common/kqp_workload_service_ut_common.h>
 
-
 namespace NKikimr::NKqp {
 
 namespace {
 
 using namespace NActors;
 using namespace NWorkload;
-
 
 void CheckPoolDescription(TIntrusivePtr<IYdbSetup> ydb, ui64 expectedQueueSize, ui64 expectedInFlight, TDuration leaseDuration = FUTURE_WAIT_TIMEOUT) {
     const auto& description = ydb->GetPoolDescription(leaseDuration);
@@ -48,7 +46,7 @@ void StartRequest(TIntrusivePtr<IYdbSetup> ydb, const TString& sessionId, TDurat
 }  // anonymous namespace
 
 Y_UNIT_TEST_SUITE(KqpWorkloadServiceTables) {
-    Y_UNIT_TEST(TestCreateWorkloadSerivceTables) {
+    Y_UNIT_TEST(TestCreateWorkloadServiceTables) {
         constexpr ui32 nodesCount = 5;
         auto ydb = TYdbSetupSettings()
             .NodeCount(nodesCount)

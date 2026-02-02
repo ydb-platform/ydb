@@ -65,17 +65,16 @@ std::string getTablePath(unsigned tableID);
 
 
 struct TPitmanYorConfig {
-    double Alpha;
-    double Theta;
-    // TODO: verify 0 <= discount < 1
-    // TODO: verify concentration > - discount
+    double Alpha = 0.0;
+    double Theta = 0.0;
+    double Assortativity = 0.0;
 
     void DumpParamsHeader(IOutputStream& os) {
-        os << "alpha,theta";
+        os << "alpha,theta,assortativity";
     }
 
     void DumpParams(IOutputStream& os) {
-        os << Alpha << "," << Theta;
+        os << Alpha << "," << Theta << "," << Assortativity;
     }
 };
 
@@ -129,16 +128,30 @@ private:
     std::vector<TTable> Tables_;
 };
 
+struct TPitmanYorNodeState {
+    std::vector<ui32> Counts;      // How many edges use Key[i]
+    std::vector<ui32> FreeKeys;    // Recycled keys to keep vector small
+    ui32 TotalEdges = 0;           // Total active edges ("customers")
+    ui32 ActiveTables = 0;         // How many keys have Count > 0
+
+    ui32 GenerateKey(TRNG& rng, TPitmanYorConfig config, double forceQuantile = -1.0);
+    void ReleaseKey(ui32 key);
+};
+
+
 class TRelationGraph {
 public:
     TRelationGraph(unsigned numNodes)
         : AdjacencyList_(numNodes)
         , Schema_(numNodes)
+        , NodeStates_(numNodes)
     {
     }
 
-    void Connect(unsigned lhs, unsigned rhs);
+    void Connect(TRNG& rng, unsigned u, unsigned v, TPitmanYorConfig config);
     void Disconnect(unsigned u, unsigned v);
+    void Rewire(TRNG& rng, unsigned u, unsigned oldV, unsigned newV, TPitmanYorConfig config);
+
     bool HasEdge(unsigned u, unsigned v) const;
 
     std::string MakeQuery() const;
@@ -170,11 +183,6 @@ public:
     // used to reorder graph in connected subgraphs-first order.
     void Rename(const std::vector<int>& oldToNew);
 
-    // Update keys for the whole graph accroding to Pitman-Yor distribution,
-    // where degree is distributed into clusters and each cluster means
-    // that that number of edges joins this particular node with the same key
-    void SetupKeysPitmanYor(TRNG& rng, TPitmanYorConfig config);
-
     // Dump graph in undirected graphviz dot format. Neato is recommended
     // for layouting such graphs.
     void DumpGraph(IOutputStream& os) const;
@@ -195,6 +203,11 @@ public:
 private:
     TAdjacencyList AdjacencyList_;
     TSchema Schema_;
+
+    // Stores live distribution state for every node
+    std::vector<TPitmanYorNodeState> NodeStates_;
+
+    void RemoveEdgeFromList(unsigned owner, unsigned target);
 };
 
 class TSchemaStats {
@@ -306,25 +319,20 @@ private:
 };
 
 // Basic topologies, this all have fixed node layouts (not random)
-TRelationGraph GeneratePath(unsigned numNodes);
-TRelationGraph GenerateStar(unsigned numNodes);
-TRelationGraph GenerateClique(unsigned numNodes);
+// TODO: unsigned?
+TRelationGraph GeneratePath(TRNG& rng, unsigned numNodes, TPitmanYorConfig config);
+TRelationGraph GenerateStar(TRNG& rng, unsigned numNodes, TPitmanYorConfig config);
+TRelationGraph GenerateClique(TRNG& rng, unsigned numNodes, TPitmanYorConfig config);
 
 // Generate a tree from Prufer sequence (each labeled tree has a
 // corresponding unique sequence)
-TRelationGraph GenerateTreeFromPruferSequence(const std::vector<unsigned>& prufer);
+TRelationGraph GenerateTreeFromPruferSequence(TRNG& rng, const std::vector<unsigned>& prufer, TPitmanYorConfig config);
 
 // Uniformly random trees based on random Prufer sequence
-TRelationGraph GenerateRandomTree(TRNG& rng, unsigned numNodes);
+TRelationGraph GenerateRandomTree(TRNG& rng, unsigned numNodes, TPitmanYorConfig config);
 
 // Random graph using Chung Lu model that approximates graph with given degrees
-TRelationGraph GenerateRandomChungLuGraph(TRNG& rng, const std::vector<int>& degrees);
-
-// Sample a degree sequence from a given probability distribution
-std::vector<int> SampleFromPMF(
-    TRNG& rng,
-    const std::vector<double>& probabilities,
-    int numVertices, int minDegree);
+TRelationGraph GenerateRandomChungLuGraph(TRNG& rng, const std::vector<int>& degrees, TPitmanYorConfig config);
 
 std::vector<double> GenerateLogNormalProbabilities(TRNG& rng, double mu, double sigma);
 
@@ -342,16 +350,18 @@ std::vector<int> GenerateLogNormalDegrees(
 std::vector<int> MakeGraphicConnected(std::vector<int> degrees);
 
 // Deterministically constructs graph for a given degree sequence
-TRelationGraph ConstructGraphHavelHakimi(std::vector<int> degrees);
-
-// Randomize graph using ~E*log(E) l-switches (preserve degrees of all
-// verticies) Uses Metropolis-Hastings based acceptance with annealing (to make
-// switching edges ergodic and still produce connected graphs)
-void MCMCRandomize(TRNG& rng, TRelationGraph& graph);
+TRelationGraph ConstructGraphHavelHakimi(TRNG &rng, std::vector<int> degrees, TPitmanYorConfig config);
 
 // Sometimes, even though we tried, we couldn't get graph to be connected.
 // This connects components randomly until it becomes connected as a last resort,
 // if anything else fails (like simulated annealing in MCMC)
-void ForceReconnection(TRNG& rng, TRelationGraph& graph);
+void ForceReconnection(TRNG& rng, TRelationGraph& graph, TPitmanYorConfig config);
+
+// =================== Markov chain Monte Carlo ===================
+
+// Randomize graph using ~E*log(E) l-switches (preserve degrees of all
+// verticies) Uses Metropolis-Hastings based acceptance with annealing (to make
+// switching edges ergodic and still produce connected graphs)
+void MCMCRandomize(TRNG& rng, TRelationGraph& graph, TPitmanYorConfig config);
 
 } // namespace NKikimr::NKqp

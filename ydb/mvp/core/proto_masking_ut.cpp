@@ -1,6 +1,6 @@
 #include "proto_masking.h"
 
-#include <ydb/mvp/core/protos/masking_test.pb.h>
+#include <ydb/mvp/core/ut/protos/masking_test.pb.h>
 #include <ydb/library/security/util.h>
 
 #include <library/cpp/testing/unittest/registar.h>

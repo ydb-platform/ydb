@@ -35,13 +35,21 @@ public:
         return NKikimrServices::TActivity::TABLET_FORWARDING_ACTOR;
     }
 
-    TForwardingActor(const TTabletMonitoringProxyConfig& config, ui64 targetTablet, TMaybe<ui32> followerId, const TActorId& sender, const NMonitoring::IMonHttpRequest& request, const TString& userToken)
+    TForwardingActor(
+        const TTabletMonitoringProxyConfig& config,
+        ui64 targetTablet,
+        const std::optional<ui32>& followerId,
+        const TActorId& sender,
+        const NMonitoring::IMonHttpRequest& request,
+        const TString& userToken
+    )
         : Config(config)
         , TargetTablet(targetTablet)
         , FollowerId(followerId)
         , Sender(sender)
         , Request(ConvertRequestToProtobuf(request, userToken))
-    {}
+    {
+    }
 
     static NActorsProto::TRemoteHttpInfo ConvertRequestToProtobuf(const NMonitoring::IMonHttpRequest& request, const TString& userToken) {
         NActorsProto::TRemoteHttpInfo pb;
@@ -77,7 +85,7 @@ public:
     void Bootstrap(const TActorContext& ctx) {
         NTabletPipe::TClientConfig config;
 
-        config.AllowFollower = (FollowerId.Defined() && (*FollowerId.Get() != 0));
+        config.AllowFollower = (FollowerId && (*FollowerId != 0));
         config.FollowerId = FollowerId;
         config.PreferLocal = Config.PreferLocal;
         config.RetryPolicy = Config.RetryPolicy;
@@ -106,7 +114,7 @@ public:
                                  ") is not connected with status: %s"
                                  " (<a href=\"?SsId=%" PRIu64 "\">see State Storage</a>)",
                                  ev->Get()->TabletId,
-                                 (FollowerId.Defined()) ? *FollowerId.Get() : 0,
+                                 FollowerId.value_or(0),
                                  NKikimrProto::EReplyStatus_Name(ev->Get()->Status).c_str(),
                                  ev->Get()->TabletId);
             Notify(ctx, reply);
@@ -177,7 +185,7 @@ public:
 private:
     const TTabletMonitoringProxyConfig Config;
     const ui64 TargetTablet;
-    const TMaybe<ui32> FollowerId;
+    const std::optional<ui32> FollowerId;
     const TActorId Sender;
     NActorsProto::TRemoteHttpInfo Request;
     TActorId PipeClient;

@@ -27,6 +27,29 @@ namespace NKikimr {
 // make configurable, here is no sense in too low ttl
 const static ui64 StateStorageRequestTimeout = 30 * 1000 * 1000;
 
+
+/**
+ * Convert a map of TFollowerInfo objects (keyed by the ActorId)
+ * to a flat vector of TFollowerInfo objects.
+ *
+ * @param[in] followerInfoMap The map to convert
+ *
+ * @return The corresponding vector with TFollowerInfo objects.
+ */
+TVector<TEvStateStorage::TEvInfo::TFollowerInfo> GetFollowersAsVector(
+    const TMap<TActorId, TEvStateStorage::TEvInfo::TFollowerInfo>& followerInfoMap
+) {
+    TVector<TEvStateStorage::TEvInfo::TFollowerInfo> result;
+    result.reserve(followerInfoMap.size());
+
+    for (const auto& [key, followerInfo] : followerInfoMap) {
+        result.emplace_back(followerInfo);
+    }
+
+    return result;
+}
+
+
 class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
     TIntrusivePtr<TStateStorageInfo> Info;
 
@@ -97,7 +120,24 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
     }
 
     void Reply(NKikimrProto::EReplyStatus status) {
-        Send(Source, new TEvStateStorage::TEvInfo(status, TabletID, Cookie, ReplyLeader, ReplyLeaderTablet, ReplyGeneration, ReplyStep, ReplyLocked, ReplyLockedFor, Signature, Followers), 0, SourceCookie);
+        Send(
+            Source,
+            new TEvStateStorage::TEvInfo(
+                status,
+                TabletID,
+                Cookie,
+                ReplyLeader,
+                ReplyLeaderTablet,
+                ReplyGeneration,
+                ReplyStep,
+                ReplyLocked,
+                ReplyLockedFor,
+                Signature,
+                GetFollowersAsVector(Followers)
+            ),
+            0,
+            SourceCookie
+        );
     }
 
     void ReplyAndDie(NKikimrProto::EReplyStatus status) {
@@ -267,32 +307,52 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
             Y_ABORT();
         }
 
-        // NOTE: "Follower" and "FollowerTablet" should have the same number of entries,
-        //       but "OptionalFollowerId" may not be present at all (if comes from older nodes).
-        //       If it is present and populated, then it should have the same size.
-        Y_ABORT_UNLESS(record.FollowerSize() == record.FollowerTabletSize());
+        // NOTE: The "FollowerInfo" field is preferred: if it is populated,
+        //       it should be used. However, it may not be populated, if the message
+        //       comes from an older node. In this case, the code should fall back
+        //       to using the deprecated "Follower" and "FollowerTablet" fields.
+        if (record.FollowerInfoSize() > 0) {
+            for (const auto& followerInfo : record.GetFollowerInfo()) {
+                const TActorId follower = ActorIdFromProto(followerInfo.GetFollower());
 
-        Y_ABORT_UNLESS(
-            (record.OptionalFollowerIdSize() == 0) ||
-            (record.FollowerSize() == record.OptionalFollowerIdSize())
-        );
+                // If FollowerId is populated, it must not be zero
+                Y_ABORT_UNLESS(!followerInfo.HasFollowerId() || (followerInfo.GetFollowerId() != 0));
 
-        for (size_t i = 0; i < record.FollowerSize(); ++i) {
-            const TActorId follower = ActorIdFromProto(record.GetFollower(i));
-            const TActorId followerTablet = ActorIdFromProto(record.GetFollowerTablet(i));
-            const TMaybe<ui32> followerId =
-                ((record.OptionalFollowerIdSize() > 0) && record.GetOptionalFollowerId(i).HasFollowerId())
-                    ? TMaybe<ui32>(record.GetOptionalFollowerId(i).GetFollowerId())
-                    : TMaybe<ui32>();
-
-            Followers.insert_or_assign(
-                follower,
-                TEvStateStorage::TEvInfo::TFollowerInfo(
+                Followers.insert_or_assign(
                     follower,
-                    followerTablet,
-                    followerId
-                )
-            );
+                    TEvStateStorage::TEvInfo::TFollowerInfo(
+                        follower,
+                        ActorIdFromProto(followerInfo.GetFollowerTablet()),
+                        TEvStateStorage::TEvInfo::TFollowerIdHolder(
+                            (followerInfo.HasFollowerId())
+                                ? followerInfo.GetFollowerId()
+                                : 0 // Zero here means "followerId is not known"!
+                        )
+                    )
+                );
+            }
+        } else {
+            // NOTE: "Follower" and "FollowerTablet" should have the same number of entries,
+            //       but "OptionalFollowerId" may not be present at all (if comes from older nodes).
+            //       If it is present and populated, then it should have the same size.
+            Y_ABORT_UNLESS(record.FollowerSize() == record.FollowerTabletSize());
+
+            // TODO: Remove this code once Follower and FollowerTablet fields
+            //       become fully deprecated and are removed from the API.
+            //       For now this code should be here to be able to handle messages
+            //       from older nodes, which do not know about the FollowerInfo field.
+            for (size_t i = 0; i < record.FollowerSize(); ++i) {
+                const TActorId follower = ActorIdFromProto(record.GetFollower(i));
+
+                Followers.insert_or_assign(
+                    follower,
+                    TEvStateStorage::TEvInfo::TFollowerInfo(
+                        follower,
+                        ActorIdFromProto(record.GetFollowerTablet(i)),
+                        TEvStateStorage::TEvInfo::TFollowerIdHolder() // No follower ID!
+                    )
+                );
+            }
         }
     }
 
@@ -757,7 +817,20 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
     }
 
     void Reply(NKikimrProto::EReplyStatus status) {
-        auto* msg = new TEvStateStorage::TEvInfo(status, TabletID, Cookie, CurrentLeader, CurrentLeaderTablet, CurrentGeneration, CurrentStep, Locked, LockedFor, Signature, Followers);
+        auto* msg = new TEvStateStorage::TEvInfo(
+            status,
+            TabletID,
+            Cookie,
+            CurrentLeader,
+            CurrentLeaderTablet,
+            CurrentGeneration,
+            CurrentStep,
+            Locked,
+            LockedFor,
+            Signature,
+            GetFollowersAsVector(Followers)
+        );
+
         BLOG_D("RingGroupProxyRequest::Reply TEvInfo ev: " << msg->ToString());
         Send(Source, msg, 0, SourceCookie);
         Replied = true;

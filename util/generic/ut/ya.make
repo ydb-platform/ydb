@@ -30,6 +30,7 @@ SRCS(
     generic/mapfindptr_ut.cpp
     generic/maybe_ut.cpp
     generic/mem_copy_ut.cpp
+    generic/numerical_maybe_ut.cpp
     generic/objects_counter_ut.cpp
     generic/overloaded_ut.cpp
     generic/ptr_ut.cpp

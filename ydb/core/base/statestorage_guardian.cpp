@@ -75,16 +75,16 @@ struct TGuardedInfo : public TAtomicRefCount<TGuardedInfo> {
 
 struct TFollowerInfo : public TAtomicRefCount<TFollowerInfo> {
     const ui64 TabletID;
-    const ui32 FollowerId;
     const TActorId Follower;
     const TActorId Tablet;
+    const ui32 FollowerId;
     const bool IsCandidate;
 
     TFollowerInfo(ui64 tabletId, ui32 followerId, TActorId follower, TActorId tablet, bool isCandidate)
         : TabletID(tabletId)
-        , FollowerId(followerId)
         , Follower(follower)
         , Tablet(tablet)
+        , FollowerId(followerId)
         , IsCandidate(isCandidate)
     {}
 };
@@ -568,13 +568,27 @@ class TTabletGuardian : public TActorBootstrapped<TTabletGuardian> {
                 continue;
 
             TVector<TActorId> reported;
-            reported.reserve(record.FollowerSize() + record.FollowerCandidatesSize());
-            for (const auto &x : record.GetFollower()) {
-                reported.emplace_back(ActorIdFromProto(x));
-            }
 
-            for (const auto &x : record.GetFollowerCandidates()) {
-                reported.emplace_back(ActorIdFromProto(x));
+            // NOTE: The Follower, FollowerTablet and FollowerCandidate fields
+            //       are deprecated and will be removed from the API. The new code
+            //       should use the FollowerInfo field. For compatibility with older nodes,
+            //       the code here tries to use the both the new field and the old fields.
+            if (record.FollowerInfoSize() > 0) {
+                reported.reserve(record.FollowerInfoSize());
+
+                for (const auto& followerInfo : record.GetFollowerInfo()) {
+                    reported.emplace_back(ActorIdFromProto(followerInfo.GetFollower()));
+                }
+            } else {
+                // TODO: Remove the code, which handles the old fields
+                reported.reserve(record.FollowerSize() + record.FollowerCandidatesSize());
+                for (const auto &x : record.GetFollower()) {
+                    reported.emplace_back(ActorIdFromProto(x));
+                }
+
+                for (const auto &x : record.GetFollowerCandidates()) {
+                    reported.emplace_back(ActorIdFromProto(x));
+                }
             }
 
             Sort(reported);

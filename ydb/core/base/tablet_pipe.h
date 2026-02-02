@@ -426,7 +426,7 @@ namespace NKikimr {
              * @warning If this field is specified and the follower with the given follower ID
              *          does not exist, the request will fail with an error.
              */
-            TMaybe<ui32> FollowerId;
+            std::optional<ui32> FollowerId;
         };
 
         // Allow implicit conversion from retry policy to client config

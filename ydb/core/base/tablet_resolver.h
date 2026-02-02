@@ -48,7 +48,7 @@ struct TEvTabletResolver {
              * @warning If this field is specified and the follower with the given follower ID
              *          does not exist, the request will fail with an error.
              */
-            TMaybe<ui32> FollowerId;
+            std::optional<ui32> FollowerId;
 
             TResolveFlags()
                 : LocalNodePrio(EResolvePrio::ResPrioAllow)
@@ -129,7 +129,7 @@ struct TEvTabletResolver {
                 str << (ui32) LocalNodePrio << ':'
                     << (ui32) LocalDcPrio << ':'
                     << (ui32) FollowerPrio << ':'
-                    << FollowerId;
+                    << ((FollowerId) ? ::ToString(*FollowerId) : TString("(undefined)"));
                 return str.Str();
             }
         };

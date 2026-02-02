@@ -44,14 +44,19 @@ class TStateStorageReplica : public TActorBootstrapped<TStateStorageReplica> {
          *          For example, this may happen, if the given follower is running
          *          on an older node, which does not support reporting follower IDs.
          */
-        TMaybe<ui32> FollowerId;
+        TEvStateStorage::TEvInfo::TFollowerIdHolder FollowerId;
 
         TActorId FollowerSys;
         TActorId FollowerTablet;
         bool Candidate = false;
 
         TFollowerEntryInfo() = default;
-        TFollowerEntryInfo(const TMaybe<ui32>& followerId, TActorId sys, TActorId tablet, bool candidate)
+        TFollowerEntryInfo(
+            TEvStateStorage::TEvInfo::TFollowerIdHolder followerId,
+            const TActorId& sys,
+            const TActorId& tablet,
+            bool candidate
+        )
             : FollowerId(followerId)
             , FollowerSys(sys)
             , FollowerTablet(tablet)
@@ -100,24 +105,53 @@ class TStateStorageReplica : public TActorBootstrapped<TStateStorageReplica> {
             auto now = TActivationContext::Now();
 
             const ui64 lockedFor = (locked && (now.MicroSeconds() > entry->LockedFrom)) ? (now.MicroSeconds() - entry->LockedFrom) : 0;
-            msg.Reset(new TEvStateStorage::TEvReplicaInfo(tabletId, entry->CurrentLeader, entry->CurrentLeaderTablet, entry->CurrentGeneration
-                , entry->CurrentStep, locked, lockedFor, Info ? Info->ClusterStateGeneration : 0, Info ? Info->ClusterStateGuid : 0));
+            msg.Reset(
+                new TEvStateStorage::TEvReplicaInfo(
+                    tabletId,
+                    entry->CurrentLeader,
+                    entry->CurrentLeaderTablet,
+                    entry->CurrentGeneration,
+                    entry->CurrentStep,
+                    locked,
+                    lockedFor,
+                    Info ? Info->ClusterStateGeneration : 0,
+                    Info ? Info->ClusterStateGuid : 0
+                )
+            );
+
             if (entry->Followers.size()) {
+                // NOTE: The Follower, FollowerTablet and FollowerCandidate fields
+                //       are deprecated and will be removed from the API at some point.
+                //       The new code should use the FollowerInfo field instead.
+                //       For now, both the new field and the old fields are populated
+                //       to allow old nodes to handle messages from the new code.
+                //
+                msg->Record.MutableFollowerInfo()->Reserve(entry->Followers.size());
+
+                // TODO: Remove the code, which populated the old deprecated fields
                 msg->Record.MutableFollowerTablet()->Reserve(entry->Followers.size());
                 msg->Record.MutableFollower()->Reserve(entry->Followers.size());
-                for (const auto &xpair : entry->Followers) {
-                    const TFollowerEntryInfo &followerInfo = xpair.second;
+
+                for (const auto& [key, followerInfo] : entry->Followers) {
+                    auto followerInfoRecord = msg->Record.AddFollowerInfo();
+
+                    ActorIdToProto(followerInfo.FollowerSys, followerInfoRecord->MutableFollower());
+                    followerInfoRecord->SetIsCandidate(followerInfo.Candidate);
+
+                    if (!followerInfo.Candidate) {
+                        ActorIdToProto(followerInfo.FollowerTablet, followerInfoRecord->MutableFollowerTablet());
+                    }
+
+                    if (followerInfo.FollowerId.Defined()) {
+                        followerInfoRecord->SetFollowerId(followerInfo.FollowerId.Get());
+                    }
+
+                    // TODO: Remove the code, which populated the old deprecated fields
                     if (followerInfo.Candidate) {
                         ActorIdToProto(followerInfo.FollowerSys, msg->Record.AddFollowerCandidates());
                     } else {
                         ActorIdToProto(followerInfo.FollowerSys, msg->Record.AddFollower());
                         ActorIdToProto(followerInfo.FollowerTablet, msg->Record.AddFollowerTablet());
-
-                        auto optionalFollowerId = msg->Record.AddOptionalFollowerId();
-
-                        if (followerInfo.FollowerId.Defined()) {
-                            optionalFollowerId->SetFollowerId(*followerInfo.FollowerId.Get());
-                        }
                     }
                 }
             }
@@ -376,7 +410,11 @@ class TStateStorageReplica : public TActorBootstrapped<TStateStorageReplica> {
         const ui64 tabletId = record.GetTabletID();
         TEntry &x = Tablets[tabletId]; // could lead to creation of zombie entries when follower exist w/o leader so we must filter on info
 
-        const TMaybe<ui32> followerId = (record.HasFollowerId()) ? TMaybe<ui32>(record.GetFollowerId()) : TMaybe<ui32>();
+        const TEvStateStorage::TEvInfo::TFollowerIdHolder followerId =
+            (record.HasFollowerId())
+                ? TEvStateStorage::TEvInfo::TFollowerIdHolder(record.GetFollowerId())
+                : TEvStateStorage::TEvInfo::TFollowerIdHolder();
+
         const TActorId follower = ActorIdFromProto(record.GetFollower());
         const TActorId tablet = ActorIdFromProto(record.GetFollowerTablet());
         const bool isCandidate = record.HasCandidate() && record.GetCandidate();

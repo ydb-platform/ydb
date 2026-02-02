@@ -622,81 +622,74 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
 
         // Specifying an explicit follower ID overrides other options,
         // but followerId == 0 goes through the same leader selection code below
-        bool countLeader = (entry.KnownLeader && !entry.CurrentLeaderProblem);
+        bool allowLeader = (entry.KnownLeader && !entry.CurrentLeaderProblem);
 
-        if (info.ResFlags.FollowerId.Defined() && (*info.ResFlags.FollowerId.Get() != 0)) {
+        if (info.ResFlags.FollowerId && (*info.ResFlags.FollowerId != 0)) {
             // An explicit followerId > 0 is set, so do not even try the leader
-            countLeader = false;
+            allowLeader = false;
         }
 
-        if (countLeader) {
+        if (allowLeader) {
             bool isLocal = (entry.KnownLeader.NodeId() == selfNode);
             bool isLocalDc = selfDc && leaderDc == selfDc;
             info.Count(isLocal, isLocalDc);
 
             ui32 prio = info.ResFlags.GetTabletPriority(isLocal, isLocalDc, false);
-            if (prio)
+            if (prio) {
                 addCandidate(prio, TCandidate{ entry.KnownLeader, entry.KnownLeaderTablet, isLocal, isLocalDc, true });
-            else
+            } else {
                 ++disallowed;
+            }
         }
 
-        // Go through the automatic follower selection only if the caller
-        // did not request an explicit follower ID
-        if (!info.ResFlags.FollowerId.Defined()) {
-            if (info.ResFlags.AllowFollower()) {
-                for (const auto& followerInfo : entry.KnownFollowers) {
-                    bool isLocal = (followerInfo.Follower.NodeId() == selfNode);
-                    bool isLocalDc = selfDc && FindNodeDc(followerInfo.Follower.NodeId()) == selfDc;
-                    info.Count(isLocal, isLocalDc);
+        // Select followers either automatically or through an explicit follower ID,
+        // but only if the requested follower ID is not zero (zero == select leader)
+        bool allowFollowers = info.ResFlags.AllowFollower();
 
-                    ui32 prio = info.ResFlags.GetTabletPriority(isLocal, isLocalDc, true);
-                    if (prio)
-                        addCandidate(
-                            prio,
-                            TCandidate{
-                                followerInfo.Follower,
-                                followerInfo.FollowerTablet,
-                                isLocal,
-                                isLocalDc,
-                                false
-                            }
-                        );
-                    else
-                        ++disallowed;
-                }
-            }
-        } else if (*info.ResFlags.FollowerId.Get() != 0) {
-            // The caller requested an explicit follower ID, but it is not a leader
-            //
-            // NOTE: Requesting the leader through an explicit followerId == 0
-            //       implicitly disables the automatic follower selection,
-            //       even if the leader was not found.
-            disallowed += entry.KnownFollowers.size();
+        if (info.ResFlags.FollowerId && (*info.ResFlags.FollowerId == 0)) {
+            allowFollowers = false;
+        }
 
+        if (allowFollowers) {
             for (const auto& followerInfo : entry.KnownFollowers) {
-                if (followerInfo.FollowerId.Defined()
-                    && (*followerInfo.FollowerId.Get() == *info.ResFlags.FollowerId.Get())) {
-                    // This is the follower ID requested, select it while ignoring all other candidates
-                    bool isLocal = (followerInfo.Follower.NodeId() == selfNode);
-                    bool isLocalDc = selfDc && FindNodeDc(followerInfo.Follower.NodeId()) == selfDc;
-
-                    info.Count(isLocal, isLocalDc);
-                    --disallowed; // All entries counted above, exclude this one!
-
-                    winners.clear();
-                    winners.push_back(
-                        TCandidate{
-                            .KnownLeader = followerInfo.Follower,
-                            .KnownLeaderTablet = followerInfo.FollowerTablet,
-                            .IsLocal = isLocal,
-                            .IsLocalDc = isLocalDc,
-                            .IsLeader = false,
-                        }
-                    );
-
-                    break;
+                // If the caller requested an explicit follower ID, disregard all followers,
+                // which have different follower IDs
+                //
+                // NOTE: There may still be multiple followers with the same follower ID,
+                //       thus the code here goes through all followers and, if multiple
+                //       followers are found, goes through the same random selection path below
+                if (info.ResFlags.FollowerId) {
+                    if (!followerInfo.FollowerId.Defined()
+                        || (followerInfo.FollowerId.Get() != *info.ResFlags.FollowerId)) {
+                        // If the follower ID for the given follower is not known,
+                        // it should be skipped for the explicit follower ID case!
+                        continue;
+                    }
                 }
+
+                bool isLocal = (followerInfo.Follower.NodeId() == selfNode);
+                bool isLocalDc = selfDc && FindNodeDc(followerInfo.Follower.NodeId()) == selfDc;
+                info.Count(isLocal, isLocalDc);
+
+                ui32 prio = info.ResFlags.GetTabletPriority(isLocal, isLocalDc, true);
+
+                // If this follower is selected by the follower ID, do not skip it,
+                // even if it should be disregarded by the selection priority rules
+                if (!info.ResFlags.FollowerId && !prio) {
+                    ++disallowed;
+                    continue;
+                }
+
+                addCandidate(
+                    prio,
+                    TCandidate{
+                        .KnownLeader = followerInfo.Follower,
+                        .KnownLeaderTablet = followerInfo.FollowerTablet,
+                        .IsLocal = isLocal,
+                        .IsLocalDc = isLocalDc,
+                        .IsLeader = false,
+                    }
+                );
             }
         }
 
@@ -707,16 +700,18 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
             const TCandidate& winner = winners[winnerIndex];
 
             BLOG_DEBUG("SelectForward"
-                << " node " << selfNode
-                << " selfDC " << dcName(selfDc)
-                << " leaderDC " << dcName(leaderDc)
-                << " " << info.ResFlags.ToString()
-                << " local " << info.NumLocal << " localDc " << info.NumLocalDc << " other " << info.NumOtherDc
-                << " disallowed " << disallowed
+                << " node: " << selfNode
+                << " selfDC: " << dcName(selfDc)
+                << " leaderDC: " << dcName(leaderDc)
+                << " resolveFlags: " << info.ResFlags.ToString()
+                << " local: " << info.NumLocal
+                << " localDc: " << info.NumLocalDc
+                << " other: " << info.NumOtherDc
+                << " disallowed: " << disallowed
                 << " tabletId: " << tabletId
                 << " followers: " << entry.KnownFollowers.size()
-                << " countLeader " << countLeader
-                << " allowFollowers " << info.ResFlags.AllowFollower()
+                << " allowLeader: " << allowLeader
+                << " allowFollowers: " << allowFollowers
                 << " winner: " << winner.KnownLeader);
 
             if (winner.IsLeader) {
@@ -739,14 +734,18 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
         }
 
         BLOG_INFO("No candidates for SelectForward,"
-            << " node " << selfNode
-            << " selfDC " << dcName(selfDc)
-            << " leaderDC " << dcName(leaderDc)
-            << " " << info.ResFlags.ToString()
-            << " local " << info.NumLocal
-            << " localDc " << info.NumLocalDc
-            << " other " << info.NumOtherDc
-            << " disallowed " << disallowed);
+            << " node: " << selfNode
+            << " selfDC: " << dcName(selfDc)
+            << " leaderDC: " << dcName(leaderDc)
+            << " resolveFlags: " << info.ResFlags.ToString()
+            << " local: " << info.NumLocal
+            << " localDc: " << info.NumLocalDc
+            << " other: " << info.NumOtherDc
+            << " disallowed: " << disallowed
+            << " tabletId: " << tabletId
+            << " followers: " << entry.KnownFollowers.size()
+            << " allowLeader: " << allowLeader
+            << " allowFollowers: " << allowFollowers);
 
         SelectedNone->Inc();
 

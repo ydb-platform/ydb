@@ -681,7 +681,7 @@ Y_UNIT_TEST_SUITE(TStateStorageFollowerIDsTest) {
             const auto& followerInfo = tabletInfo->Followers[i];
 
             UNIT_ASSERT(followerInfo.FollowerId.Defined());
-            followerIds.insert(*followerInfo.FollowerId.Get());
+            followerIds.insert(followerInfo.FollowerId.Get());
         }
 
         UNIT_ASSERT_EQUAL_C(followerIds, expectedFollowerIds, "All follower IDs must be unique");
@@ -709,7 +709,7 @@ Y_UNIT_TEST_SUITE(TStateStorageFollowerIDsTest) {
 
         for (const auto& followerInfo : tabletInfo->Followers) {
             UNIT_ASSERT(followerInfo.FollowerId.Defined());
-            followerActors[*followerInfo.FollowerId.Get()] = followerInfo.FollowerTablet;
+            followerActors[followerInfo.FollowerId.Get()] = followerInfo.FollowerTablet;
         }
 
         UNIT_ASSERT_EQUAL(followerActors.size(), TEST_NODE_COUNT);
@@ -785,7 +785,7 @@ Y_UNIT_TEST_SUITE(TStateStorageFollowerIDsTest) {
             }
 
             UNIT_ASSERT(followerInfo.FollowerId.Defined());
-            followerIds.insert(*followerInfo.FollowerId.Get());
+            followerIds.insert(followerInfo.FollowerId.Get());
         }
 
         expectedFollowerIds.erase(1); // This followerId patched by the observer
@@ -846,7 +846,7 @@ Y_UNIT_TEST_SUITE(TStateStorageFollowerIDsTest) {
             }
 
             UNIT_ASSERT(followerInfo.FollowerId.Defined());
-            followerActors[*followerInfo.FollowerId.Get()] = followerInfo.FollowerTablet;
+            followerActors[followerInfo.FollowerId.Get()] = followerInfo.FollowerTablet;
         }
 
         UNIT_ASSERT_EQUAL(followerActors.size(), TEST_NODE_COUNT - 1);
@@ -891,13 +891,13 @@ Y_UNIT_TEST_SUITE(TStateStorageFollowerIDsTest) {
                 const auto msg = ev->Get();
 
                 if (msg->Record.FollowerSize() != 0) {
-                    UNIT_ASSERT(msg->Record.OptionalFollowerIdSize() == msg->Record.FollowerSize());
+                    UNIT_ASSERT(msg->Record.FollowerInfoSize() == msg->Record.FollowerSize());
 
                     Cerr << "---- TEST ---- Received TEvInfo\n"
                         << msg->Record.DebugString()
                         << "\n";
 
-                    msg->Record.ClearOptionalFollowerId();
+                    msg->Record.ClearFollowerInfo();
 
                     Cerr << "---- TEST ---- Patched TEvInfo\n"
                         << msg->Record.DebugString()
@@ -936,13 +936,13 @@ Y_UNIT_TEST_SUITE(TStateStorageFollowerIDsTest) {
                 const auto msg = ev->Get();
 
                 if (msg->Record.FollowerSize() != 0) {
-                    UNIT_ASSERT(msg->Record.OptionalFollowerIdSize() == msg->Record.FollowerSize());
+                    UNIT_ASSERT(msg->Record.FollowerInfoSize() == msg->Record.FollowerSize());
 
                     Cerr << "---- TEST ---- Received TEvInfo\n"
                         << msg->Record.DebugString()
                         << "\n";
 
-                    msg->Record.ClearOptionalFollowerId();
+                    msg->Record.ClearFollowerInfo();
 
                     Cerr << "---- TEST ---- Patched TEvInfo\n"
                         << msg->Record.DebugString()
@@ -1020,7 +1020,7 @@ Y_UNIT_TEST_SUITE(TStateStorageFollowerIDsTest) {
             const auto& followerInfo = tabletInfo->Followers[i];
 
             UNIT_ASSERT(followerInfo.FollowerId.Defined());
-            followerIds.insert(*followerInfo.FollowerId.Get());
+            followerIds.insert(followerInfo.FollowerId.Get());
         }
 
         UNIT_ASSERT_EQUAL_C(followerIds, expectedFollowerIds, "All follower IDs must be unique");
@@ -1064,7 +1064,7 @@ Y_UNIT_TEST_SUITE(TStateStorageFollowerIDsTest) {
 
         for (const auto& followerInfo : tabletInfo->Followers) {
             UNIT_ASSERT(followerInfo.FollowerId.Defined());
-            followerActors[*followerInfo.FollowerId.Get()] = followerInfo.FollowerTablet;
+            followerActors[followerInfo.FollowerId.Get()] = followerInfo.FollowerTablet;
         }
 
         UNIT_ASSERT_EQUAL(followerActors.size(), TEST_NODE_COUNT);
@@ -1125,7 +1125,7 @@ Y_UNIT_TEST_SUITE(TStateStorageFollowerIDsTest) {
             const auto& followerInfo = tabletInfo->Followers[i];
 
             UNIT_ASSERT(followerInfo.FollowerId.Defined());
-            followerIds.insert(*followerInfo.FollowerId.Get());
+            followerIds.insert(followerInfo.FollowerId.Get());
         }
 
         UNIT_ASSERT_EQUAL_C(followerIds, expectedFollowerIds, "All follower IDs must be unique");
@@ -1171,7 +1171,7 @@ Y_UNIT_TEST_SUITE(TStateStorageFollowerIDsTest) {
 
         for (const auto& followerInfo : tabletInfo->Followers) {
             UNIT_ASSERT(followerInfo.FollowerId.Defined());
-            followerActors[*followerInfo.FollowerId.Get()] = followerInfo.FollowerTablet;
+            followerActors[followerInfo.FollowerId.Get()] = followerInfo.FollowerTablet;
         }
 
         UNIT_ASSERT_EQUAL(followerActors.size(), TEST_NODE_COUNT);

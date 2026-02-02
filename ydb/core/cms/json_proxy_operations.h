@@ -25,7 +25,7 @@ public:
         return tabletId;
     }
 
-    TMaybe<ui32> GetFollowerId(const TActorContext&) const override {
+    std::optional<ui32> GetFollowerId(const TActorContext&) const override {
         const TCgiParameters& cgi = this->RequestEvent->Get()->Request.GetParams();
 
         // NOTE: This forces the leader, if the followerId parameter is not specified

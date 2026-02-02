@@ -8,6 +8,7 @@
 #include <util/stream/str.h>
 #include <util/generic/list.h>
 #include <util/generic/map.h>
+#include <util/generic/numerical_maybe.h>
 
 namespace NKikimr {
 
@@ -283,6 +284,17 @@ struct TEvStateStorage {
 
     struct TEvInfo : public TEventLocal<TEvInfo, EvInfo> {
         /**
+         * The special holder for follower IDs.
+         *
+         * @warning This type relies on the fact that Hive does not use 0 as a follower ID.
+         *          The value of 0 is designed for the leader only. Thus, using 0 to indicate
+         *          the absence of the follower ID allows saving some memory space,
+         *          which would be required for the bool flag, if TMaybe were to be used
+         *          instead of TNumericalMaybe.
+         */
+        using TFollowerIdHolder = TNumericalMaybe<ui32, 0>;
+
+        /**
          * The information about a follower for the given tablet.
          */
         struct TFollowerInfo {
@@ -303,9 +315,9 @@ struct TEvStateStorage {
              *          For example, this may happen, if the given follower is running
              *          on an older node, which does not support reporting follower IDs.
              */
-            TMaybe<ui32> FollowerId;
+            TFollowerIdHolder FollowerId;
 
-            TFollowerInfo(const TActorId& follower, const TActorId& followerTablet, const TMaybe<ui32>& followerId)
+            TFollowerInfo(const TActorId& follower, const TActorId& followerTablet, const TFollowerIdHolder& followerId)
                 : Follower(follower)
                 , FollowerTablet(followerTablet)
                 , FollowerId(followerId)
@@ -338,9 +350,9 @@ struct TEvStateStorage {
         const bool Locked;
         const ui64 LockedFor;
         const TSignature Signature;
-        const TVector<TFollowerInfo> Followers;
+        TVector<TFollowerInfo> Followers;
 
-        TEvInfo(NKikimrProto::EReplyStatus status, ui64 tabletId, ui64 cookie, const TActorId &leader, const TActorId &leaderTablet, ui32 gen, ui32 step, bool locked, ui64 lockedFor, const TSignature &sig, const TMap<TActorId, TFollowerInfo> &followers)
+        TEvInfo(NKikimrProto::EReplyStatus status, ui64 tabletId, ui64 cookie, const TActorId &leader, const TActorId &leaderTablet, ui32 gen, ui32 step, bool locked, ui64 lockedFor, const TSignature &sig, TVector<TFollowerInfo>&& followers)
             : Status(status)
             , TabletID(tabletId)
             , Cookie(cookie)
@@ -351,7 +363,7 @@ struct TEvStateStorage {
             , Locked(locked)
             , LockedFor(lockedFor)
             , Signature(sig)
-            , Followers(std::views::values(followers).begin(), std::views::values(followers).end())
+            , Followers(followers)
         {}
 
         TString ToString() const {

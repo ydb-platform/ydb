@@ -542,8 +542,8 @@ namespace NTabletPipe {
             BLOG_D("lookup");
             TEvTabletResolver::TEvForward::TResolveFlags resolveFlags;
 
-            if (Config.FollowerId.Defined()) {
-                resolveFlags.SetFollowerId(*Config.FollowerId.Get());
+            if (Config.FollowerId) {
+                resolveFlags.SetFollowerId(*Config.FollowerId);
             } else {
                 resolveFlags.SetAllowFollower(Config.AllowFollower);
                 resolveFlags.SetForceFollower(Config.ForceFollower);

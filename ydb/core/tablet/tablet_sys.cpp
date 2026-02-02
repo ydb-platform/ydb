@@ -2267,6 +2267,10 @@ TTablet::TTablet(const TActorId &launcher, TTabletStorageInfo *info, TTabletSetu
 {
     Y_ABORT_UNLESS(!info->Channels.empty() && !info->Channels[0].History.empty());
     Y_ABORT_UNLESS(TTabletTypes::TypeInvalid != info->TabletType);
+
+    // Follower ID == 0 is reserved for leaders only,
+    // so leaders must have ID == 0  and followers must have ID != 0
+    Y_ABORT_UNLESS((leader && (followerId == 0)) || (!leader && (followerId != 0)));
 }
 
 TAutoPtr<IEventHandle> TTablet::AfterRegister(const TActorId &self, const TActorId& parentId) {

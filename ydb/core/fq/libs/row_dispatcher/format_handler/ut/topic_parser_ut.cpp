@@ -486,7 +486,7 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
         CheckBatchError(R"({)", EStatusId::INTERNAL_ERROR, TStringBuilder() << "Failed to parse json messages, expected 1 json rows from offset " << FIRST_OFFSET + 3 << " but got 0 (expected one json row for each offset from topic API in json each row format, maybe initial data was corrupted or messages is not in json format), current data batch: {");
     }
 
-    Y_UNIT_TEST_F(SkipErrors_Simple1, TJsonParserFixtureSkipErrors) {
+    Y_UNIT_TEST_F(SkipErrorsNotOptional, TJsonParserFixtureSkipErrors) {
         TVector<TSchemaColumn> columns = {
             {"a1", "[DataType; String]"},
             {"a2", "[DataType; Uint64]"},
@@ -504,13 +504,13 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
             UNIT_ASSERT_VALUES_EQUAL(102, result[2][0].Get<i64>());
             UNIT_ASSERT_VALUES_EQUAL(-2, result[3][0].Get<i8>());
             UNIT_ASSERT_VALUES_EQUAL(true, result[4][0].Get<bool>());
-            UNIT_ASSERT_VALUES_EQUAL(146.4, result[5][0].Get<double>());
+            UNIT_ASSERT_VALUES_EQUAL("146.4", ToString(result[5][0].Get<double>()));
             UNIT_ASSERT_VALUES_EQUAL("hi", TString(result[6][0].AsStringRef()));
         }));
         PushToParser(FIRST_OFFSET, R"({"a1": "hello1", "a2": 101, "a3": 102, "a4": -2, "a5": true, "a6": 146.4, "a7": "hi",  "event": "event1"})");
     }
 
-    Y_UNIT_TEST_F(SkipErrors_SimpleOptional, TJsonParserFixtureSkipErrors) {
+    Y_UNIT_TEST_F(SkipErrorsOptional, TJsonParserFixtureSkipErrors) {
         TVector<TSchemaColumn> columns = {
             {"a1", "[OptionalType; [DataType; String]]"},
             {"a2", "[OptionalType; [DataType; Uint64]]"},
@@ -528,13 +528,13 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
             UNIT_ASSERT_VALUES_EQUAL(102, result[2][0].Get<i64>());
             UNIT_ASSERT_VALUES_EQUAL(-2, result[3][0].Get<i8>());
             UNIT_ASSERT_VALUES_EQUAL(true, result[4][0].Get<bool>());
-            UNIT_ASSERT_VALUES_EQUAL(146.4, result[5][0].Get<double>());
+            UNIT_ASSERT_VALUES_EQUAL("146.4", ToString(result[5][0].Get<double>()));
             UNIT_ASSERT_VALUES_EQUAL("hi", TString(result[6][0].AsStringRef()));
         }));
         PushToParser(FIRST_OFFSET, R"({"a1": "hello1", "a2": 101, "a3": 102, "a4": -2, "a5": true, "a6": 146.4, "a7": "hi",  "event": "event1"})");
     }
 
-    Y_UNIT_TEST_F(SkipErrors_SimpleOptionalNull, TJsonParserFixtureSkipErrors) {
+    Y_UNIT_TEST_F(SkipErrorsOptionalNull, TJsonParserFixtureSkipErrors) {
         TVector<TSchemaColumn> columns = {
             {"a1", "[OptionalType; [DataType; String]]"},
             {"a2", "[OptionalType; [DataType; Uint64]]"},

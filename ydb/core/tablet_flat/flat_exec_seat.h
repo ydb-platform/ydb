@@ -26,7 +26,7 @@ namespace NTabletFlatExecutor {
     struct TSeat : public TIntrusiveListItem<TSeat> {
         TSeat(const TSeat&) = delete;
 
-        TSeat(ui32 uniqId, TAutoPtr<ITransaction> self)
+        TSeat(ui64 uniqId, TAutoPtr<ITransaction> self)
             : UniqID(uniqId)
             , Self(self)
             , TxType(Self->GetTxType())
@@ -87,7 +87,7 @@ namespace NTabletFlatExecutor {
         ui32 NotEnoughMemoryCount = 0;
         ui64 TaskId = 0;
 
-        ESeatState State = ESeatState::Done;
+        ESeatState State = ESeatState::None;
         bool LowPriority = false;
         bool Cancelled = false;
 

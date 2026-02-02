@@ -269,9 +269,6 @@ void TMVP::TryGetGenericOptionsFromConfig(
         auto auth = generic["auth"];
         bool hasFederatedCreds = auth["federated_creds"].IsDefined();
         bool hasTokenFile = auth["token_file"].IsDefined();
-        if (hasFederatedCreds && hasTokenFile) {
-            ythrow yexception() << "Configuration error: Both 'federated_creds' and 'token_file' are set in 'auth'. Only one must be specified.";
-        }
         opts.YdbTokenFile = auth["token_file"].as<std::string>("");
 
         if (hasFederatedCreds) {

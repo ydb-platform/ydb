@@ -63,6 +63,7 @@ items:
 - { name: SELECT STREAM,                href: select_stream.md,              when: feature_mapreduce and process_command == "PROCESS STREAM" }
 - { name: SHOW CREATE,                  href: show_create.md }
 - { name: SUBQUERY,                     href: subquery.md,                   when: feature_subquery }
+- { name: TRUNCATE TABLE,               href: truncate-table.md, }
 - { name: UPDATE,                       href: update.md,                     when: feature_map_tables }
 - { name: UPSERT,                       href: upsert_into.md,                when: feature_upsert }
 - { name: UPSERT OBJECT TYPE SECRET,    href: upsert-object-type-secret.md,  when: feature_federated_queries}

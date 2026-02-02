@@ -144,11 +144,6 @@ namespace NKikimr::NDDisk {
         Y_ABORT_UNLESS(pr.OffsetInBytes == selector.OffsetInBytes);
         Y_ABORT_UNLESS(pr.Size == selector.Size);
 
-        buffer.Records.erase(jt);
-        if (buffer.Records.empty()) {
-            PersistentBuffers.erase(it);
-        }
-
         if (record.HasDDiskId()) {
             Y_DEBUG_ABORT_UNLESS(record.HasDDiskInstanceGuid());
 
@@ -163,6 +158,10 @@ namespace NKikimr::NDDisk {
             WritesInFlight.emplace(cookie, TWriteInFlight{ev->Sender, ev->Cookie, ev->InterconnectSession,
                 std::move(span), selector.Size});
         } else {
+            buffer.Records.erase(jt);
+            if (buffer.Records.empty()) {
+                PersistentBuffers.erase(it);
+            }
             Counters.Interface.FlushPersistentBuffer.Reply(true);
             span.End();
             SendReply(*ev, std::make_unique<TEvFlushPersistentBufferResult>(NKikimrBlobStorage::NDDisk::TReplyStatus::OK));

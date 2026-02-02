@@ -461,6 +461,10 @@ def preset(key, default=None):
     return opts().presets.get(key, default)
 
 
+def remove_preset(key):
+    opts().presets.pop(key, None)
+
+
 def is_positive(key):
     return is_positive_str(preset(key, ''))
 
@@ -2337,6 +2341,7 @@ class Setting(object):
     def emit(self):
         if not self.from_user or self.rewrite:
             emit(self.key, self.value)
+            remove_preset(self.key)
 
     no_value = object()
 

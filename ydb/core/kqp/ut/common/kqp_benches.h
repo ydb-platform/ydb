@@ -237,7 +237,7 @@ private:
 
 class TimeFormatter {
 public:
-    static std::string Format(ui64 valueNs, ui64 uncertaintyNs);
+    static std::string Format(ui64 valueNs, ui64 uncertaintyNs, const char* uncertaintySymbol = "±");
     static std::string Format(ui64 valueNs);
 };
 

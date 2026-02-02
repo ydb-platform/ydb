@@ -282,7 +282,7 @@ static int GetDecimalPlacesForValue(double scaledValue) {
     }
 }
 
-std::string TimeFormatter::Format(ui64 valueNs, ui64 uncertaintyNs) {
+std::string TimeFormatter::Format(ui64 valueNs, ui64 uncertaintyNs, const char* uncertaintySymbol) {
     auto [unit, scale] = SelectUnit(valueNs);
 
     double scaledValue = valueNs / scale;
@@ -292,7 +292,7 @@ std::string TimeFormatter::Format(ui64 valueNs, ui64 uncertaintyNs) {
 
     std::ostringstream oss;
     oss << std::fixed << std::setprecision(decimalPlaces);
-    oss << scaledValue << " " << unit << " ± " << scaledUncertainty << " " << unit;
+    oss << scaledValue << " " << unit << " " << uncertaintySymbol << " " << scaledUncertainty << " " << unit;
 
     return oss.str();
 }

@@ -43,6 +43,7 @@ public:
         TDuration InactivityTimeout = TDuration::Minutes(2);
         TString AllowOrigin;
         bool RequireCountersAuthentication = false;
+        bool RequireHealthcheckAuthentication = false;
     };
 
     TMon(TConfig config);
@@ -63,6 +64,7 @@ public:
         bool PreTag = false;
         TActorId ActorId;
         bool UseAuth = true;
+        bool GetOnlyAuthInfo = false;  // If true, extract token but don't enforce authorization
         TVector<TString> AllowedSIDs;
         bool SortPages = true;
         TString MonServiceName = "utils";
@@ -78,6 +80,7 @@ public:
         TString Path;
         TActorId Handler;
         bool UseAuth = true;
+        bool GetOnlyAuthInfo = false;  // If true, extract token but don't enforce authorization
         TVector<TString> AllowedSIDs;
     };
 

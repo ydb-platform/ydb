@@ -89,7 +89,18 @@ public:
         if (Database.empty()) {
             Database = Params.Get("tenant");
         }
-        if (!IsDatabaseRequest() && Format != HealthCheckResponseFormat::PROMETHEUS && !Viewer->CheckAccessMonitoring(GetRequest())) {
+        // Check access for non-database requests
+        // For prometheus format, check access only if both enforce_user_token_requirement
+        // and require_healthcheck_authentication are enabled
+        bool shouldCheckAccess = !IsDatabaseRequest();
+        if (shouldCheckAccess && Format == HealthCheckResponseFormat::PROMETHEUS) {
+            const auto& config = Viewer->GetKikimrRunConfig();
+            bool enforceUserToken = config.AppConfig.GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenRequirement();
+            bool requireHealthcheckAuth = config.AppConfig.GetMonitoringConfig().GetRequireHealthcheckAuthentication();
+            // Only check access for prometheus if both flags are enabled
+            shouldCheckAccess = enforceUserToken && requireHealthcheckAuth;
+        }
+        if (shouldCheckAccess && !Viewer->CheckAccessMonitoring(GetRequest())) {
             return TBase::ReplyAndPassAway(GetHTTPFORBIDDEN("text/plain", "Access denied"));
         }
         Cache = FromStringWithDefault<bool>(Params.Get("cache"), Cache);

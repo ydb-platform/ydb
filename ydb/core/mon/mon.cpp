@@ -519,6 +519,11 @@ public:
             AuditCtx.SetSubjectType(result.UserToken->GetSubjectType());
             Event->Get()->UserToken = result.UserToken->GetSerializedToken();
         }
+        if (ActorMonPage->GetOnlyAuthInfo) {
+            // Extract token but don't enforce authorization - let the handler decide
+            SendRequest(&result);
+            return;
+        }
         if (result.Status != Ydb::StatusIds::SUCCESS) {
             return ReplyErrorAndPassAway(result);
         }
@@ -994,7 +999,7 @@ public:
     void Bootstrap() {
         AuditCtx.InitAudit(Event);
         Send(Event->Sender, new NHttp::TEvHttpProxy::TEvSubscribeForCancel(), IEventHandle::FlagTrackDelivery);
-        if (Fields.UseAuth && Authorizer) {
+        if ((Fields.UseAuth || Fields.GetOnlyAuthInfo) && Authorizer) {
             NActors::IEventHandle* handle = Authorizer(SelfId(), Event->Get()->Request.Get());
             if (handle) {
                 Send(handle);
@@ -1141,6 +1146,11 @@ public:
             AuditCtx.SetSubjectType(result.UserToken->GetSubjectType());
             Event->Get()->UserToken = result.UserToken->GetSerializedToken();
         }
+        if (Fields.GetOnlyAuthInfo) {
+            // Extract token but don't enforce authorization - let the handler decide
+            SendRequest(&result);
+            return;
+        }
         if (result.Status != Ydb::StatusIds::SUCCESS) {
             return ReplyErrorAndPassAway(result);
         }
@@ -1193,12 +1203,15 @@ public:
     NMonitoring::NAudit::TAuditCtx AuditCtx;
     bool NeedAudit;
 
-    THttpMonAuthorizedPageRequest(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event, NMonitoring::IMonPage* page, TVector<TString> allowedSIDs, TMon::TRequestAuthorizer authorizer, bool needAudit = true)
+    bool GetOnlyAuthInfo;
+
+    THttpMonAuthorizedPageRequest(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event, NMonitoring::IMonPage* page, TVector<TString> allowedSIDs, TMon::TRequestAuthorizer authorizer, bool needAudit = true, bool getOnlyAuthInfo = false)
         : Event(std::move(event))
         , Container(Event->Get()->Request, page)
         , AllowedSIDs(std::move(allowedSIDs))
         , Authorizer(std::move(authorizer))
         , NeedAudit(needAudit)
+        , GetOnlyAuthInfo(getOnlyAuthInfo)
     {}
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -1324,6 +1337,11 @@ public:
             AuditCtx.SetSubjectType(result.UserToken->GetSubjectType());
             Event->Get()->UserToken = result.UserToken->GetSerializedToken();
         }
+        if (GetOnlyAuthInfo) {
+            // Extract token but don't enforce authorization - let the handler decide
+            ProcessRequest();
+            return;
+        }
         if (result.Status != Ydb::StatusIds::SUCCESS) {
             return ReplyErrorAndPassAway(result);
         }
@@ -1348,14 +1366,16 @@ class THttpMonPageService : public TActor<THttpMonPageService> {
     TIntrusivePtr<NMonitoring::IMonPage> Page;
     TMon::TRequestAuthorizer Authorizer;
     TVector<TString> AllowedSIDs;
+    bool GetOnlyAuthInfo;
 
 public:
-    THttpMonPageService(const TActorId& httpProxyActorId, TIntrusivePtr<NMonitoring::IMonPage> page, TMon::TRequestAuthorizer authorizer = {}, TVector<TString> allowedSIDs = {})
+    THttpMonPageService(const TActorId& httpProxyActorId, TIntrusivePtr<NMonitoring::IMonPage> page, TMon::TRequestAuthorizer authorizer = {}, TVector<TString> allowedSIDs = {}, bool getOnlyAuthInfo = false)
         : TActor(&THttpMonPageService::StateWork)
         , HttpProxyActorId(httpProxyActorId)
         , Page(std::move(page))
         , Authorizer(std::move(authorizer))
         , AllowedSIDs(std::move(allowedSIDs))
+        , GetOnlyAuthInfo(getOnlyAuthInfo)
     {
     }
 
@@ -1390,7 +1410,7 @@ public:
         if (ev->Get()->Request->Method == "OPTIONS") {
             return ReplyWithOptions(ev);
         }
-        Register(new THttpMonAuthorizedPageRequest(std::move(ev), Page.Get(), AllowedSIDs, Authorizer));
+        Register(new THttpMonAuthorizedPageRequest(std::move(ev), Page.Get(), AllowedSIDs, Authorizer, true, GetOnlyAuthInfo));
     }
 
     STATEFN(StateWork) {
@@ -1635,11 +1655,24 @@ std::future<void> TMon::Start(TActorSystem* actorSystem) {
     ActorSystem->RegisterLocalService(NodeProxyServiceActorId, nodeProxyActorId);
     IActor* countersMonPageServiceActor;
     if (Config.RequireCountersAuthentication) {
+        // Add DatabaseAllowedSIDs and ViewerAllowedSIDs to AllowedSIDs for /counters
+        // to allow access with database@builtin and viewer@builtin tokens
+        TVector<TString> countersAllowedSIDs = Config.AllowedSIDs;
+        NKikimr::TAppData* appData = ActorSystem->AppData<NKikimr::TAppData>();
+        if (appData) {
+            const auto& securityConfig = appData->DomainsConfig.GetSecurityConfig();
+            if (securityConfig.DatabaseAllowedSIDsSize() > 0) {
+                countersAllowedSIDs.insert(countersAllowedSIDs.end(), securityConfig.GetDatabaseAllowedSIDs().begin(), securityConfig.GetDatabaseAllowedSIDs().end());
+            }
+            if (securityConfig.ViewerAllowedSIDsSize() > 0) {
+                countersAllowedSIDs.insert(countersAllowedSIDs.end(), securityConfig.GetViewerAllowedSIDs().begin(), securityConfig.GetViewerAllowedSIDs().end());
+            }
+        }
         countersMonPageServiceActor = new THttpMonPageService(
             HttpProxyActorId,
             CountersMonPage,
             Config.Authorizer,
-            Config.AllowedSIDs);
+            countersAllowedSIDs);
     } else {
         countersMonPageServiceActor = new THttpMonPageService(
             HttpProxyActorId,
@@ -1741,7 +1774,8 @@ NMonitoring::IMonPage* TMon::RegisterActorPage(TRegisterActorPageFields fields) 
         fields.ActorSystem,
         fields.ActorId,
         fields.AllowedSIDs ? fields.AllowedSIDs : Config.AllowedSIDs,
-        fields.UseAuth ? Config.Authorizer : TRequestAuthorizer(),
+        (fields.UseAuth || fields.GetOnlyAuthInfo) ? Config.Authorizer : TRequestAuthorizer(),
+        fields.GetOnlyAuthInfo,
         fields.MonServiceName);
     if (fields.Index) {
         fields.Index->Register(page);

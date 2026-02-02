@@ -125,17 +125,24 @@ public:
                 .ActorId = ctx.SelfID,
                 .UseAuth = false,
             });
+            const bool requireCountersAuth = KikimrRunConfig.AppConfig.GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenRequirement() &&
+                KikimrRunConfig.AppConfig.GetMonitoringConfig().GetRequireCountersAuthentication();
             mon->RegisterActorPage({
                 .RelPath = "counters/hosts",
                 .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
-                .UseAuth = false,
+                .UseAuth = requireCountersAuth,
+                .AllowedSIDs = requireCountersAuth ? databaseAllowedSIDs : TVector<TString>(),
             });
+            const bool requireHealthcheckAuth = KikimrRunConfig.AppConfig.GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenRequirement() &&
+                KikimrRunConfig.AppConfig.GetMonitoringConfig().GetRequireHealthcheckAuthentication();
             mon->RegisterActorPage({
                 .RelPath = "healthcheck",
                 .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
-                .UseAuth = false, // auth is checked inside handler
+                .UseAuth = requireHealthcheckAuth,
+                .GetOnlyAuthInfo = true, // Extract token but let handler check access
+                .AllowedSIDs = requireHealthcheckAuth ? databaseAllowedSIDs : TVector<TString>(),
             });
             mon->RegisterActorPage({
                 .RelPath = "vdisk",

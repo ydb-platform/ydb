@@ -21,7 +21,7 @@ def normalize_app_domain(app_domain: str) -> str:
 
 
 def generate_run_tests_table(pr_number: int, app_domain: str) -> str:
-    """Generate run tests button with default parameters (relwithdebinfo, all test sizes)."""
+    """Generate run tests table with buttons for all build presets and test sizes."""
     domain = normalize_app_domain(app_domain)
     base_url = f"https://{domain}/workflow/trigger"
     repo_env = os.environ.get("GITHUB_REPOSITORY")
@@ -31,29 +31,38 @@ def generate_run_tests_table(pr_number: int, app_domain: str) -> str:
     workflow_id = "run_tests.yml"
     return_url = f"https://github.com/{owner}/{repo}/pull/{pr_number}"
     
-    # Default parameters: relwithdebinfo preset, all test sizes
-    params = {
-        "owner": owner,
-        "repo": repo,
-        "workflow_id": workflow_id,
-        "ref": "main",
-        "pull_number": str(pr_number),
-        "test_targets": "ydb/",
-        "test_type": "unittest,py3test,py2test,pytest",
-        "test_size": "small,medium,large",  # All test sizes
-        "additional_ya_make_args": "",
-        "build_preset": "relwithdebinfo",  # Default preset
-        "collect_coredumps": "false",
-        "return_url": return_url
-    }
-    query_string = "&".join([f"{k}={urllib.parse.quote(str(v), safe='')}" for k, v in params.items()])
-    url_ui = f"{base_url}?{query_string}&ui=true"
+    # Build presets to show in rows
+    build_presets = ["relwithdebinfo", "release-asan", "release-msan", "release-tsan"]
+    # Test sizes: first column is small&medium, second column is large
+    test_size_columns = [
+        ("small,medium", "small&medium"),
+        ("large", "large")
+    ]
     
-    # Badge with only message (no label) - format: badge/message-color
-    # Encode only spaces, keep emoji as is - use two spaces like in backport
-    badge_text = "▶  Run tests".replace(" ", "%20")
-    button = f"[![▶  Run tests](https://img.shields.io/badge/{badge_text}-4caf50)]({url_ui})"
+    def create_button(build_preset: str, test_size: str, label: str) -> str:
+        """Create a button for specific build preset and test size."""
+        params = {
+            "owner": owner,
+            "repo": repo,
+            "workflow_id": workflow_id,
+            "ref": "main",
+            "pull_number": str(pr_number),
+            "test_targets": "ydb/",
+            "test_type": "unittest,py3test,py2test,pytest",
+            "test_size": test_size,
+            "additional_ya_make_args": "",
+            "build_preset": build_preset,
+            "collect_coredumps": "false",
+            "return_url": return_url
+        }
+        query_string = "&".join([f"{k}={urllib.parse.quote(str(v), safe='')}" for k, v in params.items()])
+        url_ui = f"{base_url}?{query_string}&ui=true"
+        # Badge with play icon and label - format: badge/message-color
+        # Encode only spaces, keep emoji as is - use two spaces like in backport
+        badge_text = f"▶  {label}".replace(" ", "%20")
+        return f"[![▶  {label}](https://img.shields.io/badge/{badge_text}-4caf50)]({url_ui})"
     
+    # Generate table
     comment = "<!-- run-tests-table -->\n"
     comment += "<h3>Run Extra Tests</h3>\n\n"
     comment += "Run additional tests for this PR. You can customize:\n"
@@ -62,7 +71,19 @@ def generate_run_tests_table(pr_number: int, app_domain: str) -> str:
     comment += "- **Sanitizers**: ASAN, MSAN, TSAN\n"
     comment += "- **Coredumps**: enable for debugging (default: off)\n"
     comment += "- **Additional args**: custom ya make arguments\n\n"
-    comment += button
+    comment += "| Build Preset | small&medium | large |\n"
+    comment += "|--------------|--------------|------|\n"
+    
+    for build_preset in build_presets:
+        row = f"| {build_preset} | "
+        # First column: small&medium
+        row += create_button(build_preset, test_size_columns[0][0], test_size_columns[0][1])
+        row += " | "
+        # Second column: large
+        row += create_button(build_preset, test_size_columns[1][0], test_size_columns[1][1])
+        row += " |\n"
+        comment += row
+    
     return comment
 
 

@@ -8,7 +8,6 @@ namespace NKikimr::NGRpcService {
 namespace {
 
 bool ValidatePathComponents(const TString& path, const TString& pathDescription, TString& error) {
-
     for (const auto& component : TPathSplit(path)) {
         if (component == "..") {
             error = TStringBuilder() << pathDescription << " contains path traversal sequence (..)";
@@ -45,7 +44,6 @@ bool ValidateFsPath(const TString& path, const TString& pathDescription, TString
 #endif
 
     return ValidatePathComponents(path, pathDescription, error);
-
 }
 
 } // namespace NKikimr::NGRpcService

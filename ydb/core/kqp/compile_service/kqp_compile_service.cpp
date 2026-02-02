@@ -1055,7 +1055,6 @@ bool TKqpQueryCache::Insert(
     TGuard<TAdaptiveLock> guard(Lock);
 
     auto ts = TInstant::Now();
-
     if (!isPerStatementExecution) {
         InsertQuery(compileResult);
     }
@@ -1253,7 +1252,6 @@ TKqpCompileResult::TConstPtr TKqpQueryCache::Find(
 
     if (compileResult) {
         counters->ReportQueryCacheHit(dbCounters, true);
-
         LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Served query from cache from query text"
             << ", sender: " << sender
             << ", queryUid: " << compileResult->Uid);
@@ -1343,7 +1341,7 @@ TKqpQueryId TKqpQueryCache::GetQueryIdWithAst(const TKqpQueryId& query, const NY
             }
         }
     }
-    return TKqpQueryId(query.Cluster, query.Database, query.DatabaseId, query.UserSid, ast.Root->ToString(), query.Settings, astPgParams, query.GUCSettings);
+    return TKqpQueryId{query.Cluster, query.Database, query.DatabaseId, query.UserSid, ast.Root->ToString(), query.Settings, astPgParams, query.GUCSettings};
 }
 
 //

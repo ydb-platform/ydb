@@ -2671,6 +2671,11 @@ static bool StoreConsumerSettingsEntry(
                 ctx.Error() << to_upper(id.Name) << " value should be a string literal. Possible values: 'streaming', 'shared'";
                 return false;
             }
+            TString value = to_upper(valueExprNode->GetLiteralValue());
+            if (value != "STREAMING" && value != "SHARED") {
+                ctx.Error() << to_upper(id.Name) << " value should be 'STREAMING' or 'SHARED', got: " << value;
+                return false;
+            }
             settings.Type = valueExprNode;
         }
     } else if (name == "keep_messages_order") {
@@ -2723,7 +2728,12 @@ static bool StoreConsumerSettingsEntry(
             return false;
         } else {
             if (!valueExprNode->IsLiteral() || (valueExprNode->GetLiteralType() != "String" && valueExprNode->GetLiteralType() != "Enum")) {
-                ctx.Error() << to_upper(id.Name) << " value should be a string literal. Possible values: 'move', 'delete', 'none'";
+                ctx.Error() << to_upper(id.Name) << " value should be a string literal.";
+                return false;
+            }
+            TString value = to_upper(valueExprNode->GetLiteralValue());
+            if (value != "MOVE" && value != "DELETE" && value != "NONE") {
+                ctx.Error() << to_upper(id.Name) << " value should be 'MOVE', 'DELETE' or 'NONE', got: " << value;
                 return false;
             }
             settings.DeadLetterPolicy = valueExprNode;

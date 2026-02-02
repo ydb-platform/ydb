@@ -793,7 +793,7 @@ void TKeyedWriteSession::TMessagesWorker::DoWork() {
         MessagesToResend.erase(partition);
     }
 
-    if (PendingMessages.empty() && Session->MessagesNotEmptyFuture.IsReady()) {
+    if (Session->MessagesNotEmptyFuture.IsReady()) {
         Session->MessagesNotEmptyPromise = NThreading::NewPromise();
         Session->MessagesNotEmptyFuture = Session->MessagesNotEmptyPromise.GetFuture();
     }
@@ -863,8 +863,7 @@ std::optional<TContinuationToken> TKeyedWriteSession::TMessagesWorker::GetContin
         return token;
     }
 
-    // return std::nullopt;
-    return Session->IssueContinuationToken();
+    return std::nullopt;
 }
 
 void TKeyedWriteSession::TMessagesWorker::HandleContinuationToken(ui64 partition, TContinuationToken&& continuationToken) {

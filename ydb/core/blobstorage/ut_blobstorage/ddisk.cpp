@@ -258,6 +258,15 @@ Y_UNIT_TEST_SUITE(DDisk) {
                                 auto res = env.WaitForEdgeActorEvent<NDDisk::TEvFlushPersistentBufferResult>(edge, false);
                                 UNIT_ASSERT(res->Get()->Record.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
 
+                                Cerr << "erase persistent buffer offset# " << offsetInBytes << " size# " << size
+                                    << " lsn# " << lsn << " doCommit# " << doCommit << "\n";
+
+                                runtime->Send(new IEventHandle(pbServiceId, edge, new NDDisk::TEvFlushPersistentBuffer(
+                                    pbCreds, {vChunkIndex, offsetInBytes, size}, lsn, 0, 0)),
+                                    edge.NodeId());
+                                auto res = env.WaitForEdgeActorEvent<NDDisk::TEvFlushPersistentBufferResult>(edge, false);
+                                UNIT_ASSERT(res->Get()->Record.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
+
                                 persistentBuffers.erase(lsn);
 
                                 break;

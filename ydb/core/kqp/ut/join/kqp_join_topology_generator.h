@@ -3,6 +3,7 @@
 #include <util/stream/output.h>
 #include <util/string/builder.h>
 #include <ydb/core/kqp/ut/common/kqp_serializable_rng.h>
+#include <ydb/core/kqp/ut/common/kqp_mcmc_rng.h>
 #include <library/cpp/json/writer/json.h>
 #include <library/cpp/json/writer/json_value.h>
 
@@ -13,7 +14,7 @@
 
 namespace NKikimr::NKqp {
 
-using TRNG = TSerializableMT19937;
+using TRNG = TMCMCMT19937;
 
 class TLexicographicalNameGenerator {
 public:
@@ -141,6 +142,14 @@ struct TPitmanYorNodeState {
 
 class TRelationGraph {
 public:
+    struct TEdge {
+        unsigned Target;
+        unsigned ColumnLHS, ColumnRHS;
+    };
+
+    using TAdjacencyList = std::vector<std::vector<TEdge>>;
+
+public:
     TRelationGraph(unsigned numNodes)
         : AdjacencyList_(numNodes)
         , Schema_(numNodes)
@@ -149,10 +158,16 @@ public:
     }
 
     void Connect(TRNG& rng, unsigned u, unsigned v, TPitmanYorConfig config);
+    void ConnectWithKeys(unsigned u, unsigned v, unsigned keyU, unsigned keyV);
+
     void Disconnect(unsigned u, unsigned v);
     void Rewire(TRNG& rng, unsigned u, unsigned oldV, unsigned newV, TPitmanYorConfig config);
 
     bool HasEdge(unsigned u, unsigned v) const;
+    std::optional<TEdge> GetEdge(unsigned u, unsigned v) const;
+
+    bool SelectRandomEdge(TRNG& rng, unsigned& outU, unsigned& outV) const;
+    unsigned SelectRandomNode(TRNG& rng) const;
 
     std::string MakeQuery() const;
 
@@ -186,14 +201,6 @@ public:
     // Dump graph in undirected graphviz dot format. Neato is recommended
     // for layouting such graphs.
     void DumpGraph(IOutputStream& os) const;
-
-public:
-    struct TEdge {
-        unsigned Target;
-        unsigned ColumnLHS, ColumnRHS;
-    };
-
-    using TAdjacencyList = std::vector<std::vector<TEdge>>;
 
 public:
     const TAdjacencyList& GetAdjacencyList() const {
@@ -359,9 +366,79 @@ void ForceReconnection(TRNG& rng, TRelationGraph& graph, TPitmanYorConfig config
 
 // =================== Markov chain Monte Carlo ===================
 
-// Randomize graph using ~E*log(E) l-switches (preserve degrees of all
+struct TMCMCConfig {
+    ui32 NumIterations = 0;           // 0 = auto-calculate
+    ui32 MaxAttempts = 0;             // 0 = auto-calculate
+    bool EnsureConnectivity = true;
+
+    // Annealing (only for degree-preserving)
+    double InitialTemperature = 5.0;
+    double FinalTemperature = 0.1;
+    double ConnectivityPenalty = 20.0;
+
+    double IterationMultiplier = 1.0;
+    double MaxAttemptsMultiplier = 10.0;
+
+    static TMCMCConfig Default() { return {}; }
+
+    static TMCMCConfig Fast() {
+        return TMCMCConfig{
+            .IterationMultiplier = 0.5,
+            .MaxAttemptsMultiplier = 5.0
+        };
+    }
+
+    static TMCMCConfig Thorough() {
+        return TMCMCConfig{
+            .InitialTemperature = 10.0,
+            .FinalTemperature = 0.01,
+            .IterationMultiplier = 3.0,
+            .MaxAttemptsMultiplier = 20.0
+        };
+    }
+
+    static TMCMCConfig Perturbation(double strength = 0.1) {
+        return TMCMCConfig{
+            .IterationMultiplier = strength,
+            .MaxAttemptsMultiplier = 5.0
+        };
+    }
+
+    static TMCMCConfig FixedSwaps(ui32 numSwaps) {
+        return TMCMCConfig{
+            .NumIterations = numSwaps,
+            .MaxAttempts = numSwaps * 10
+        };
+    }
+};
+
+struct TMCMCResult {
+    ui32 TotalAttempts = 0;
+    ui32 SuccessfulSwaps = 0;
+    ui32 RejectedByGeometry = 0;
+    ui32 RejectedByMetropolis = 0;
+    bool ForcedReconnection = false;
+    int FinalComponents = 1;
+
+    double AcceptanceRate() const {
+        return TotalAttempts > 0 ? static_cast<double>(SuccessfulSwaps) / TotalAttempts : 0.0;
+    }
+};
+
+// Randomize graph using ~E*log(E) degree preserving switches (preserve degrees of all
 // verticies) Uses Metropolis-Hastings based acceptance with annealing (to make
 // switching edges ergodic and still produce connected graphs)
-void MCMCRandomize(TRNG& rng, TRelationGraph& graph, TPitmanYorConfig config);
+
+TMCMCResult MCMCRandomizeDegreePreserving(
+    TRNG& rng,
+    TRelationGraph& graph,
+    TPitmanYorConfig pyConfig,
+    TMCMCConfig mcmcConfig = TMCMCConfig::Default());
+
+TMCMCResult MCMCRandomizeEdgePreserving(
+    TRNG& rng,
+    TRelationGraph& graph,
+    TPitmanYorConfig pyConfig,
+    TMCMCConfig mcmcConfig = TMCMCConfig::Default());
 
 } // namespace NKikimr::NKqp

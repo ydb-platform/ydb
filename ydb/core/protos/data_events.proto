@@ -41,6 +41,12 @@ message TKqpLocks {
     optional uint64 ArbiterShard = 5;
 
     optional uint64 ArbiterColumnShard = 6;
+
+    // For distributed transactions with separate commit, this field carries the QueryTraceId
+    // of the first query in the transaction. This is used for accurate lock-breaking attribution,
+    // since the TEvWrite during commit has the commit operation's QueryTraceId, not the original
+    // breaking query's QueryTraceId.
+    optional uint64 FirstQueryTraceId = 7;
 }
 
 message TTableId {

@@ -2860,6 +2860,12 @@ void TKqpTasksGraph::BuildInternalSinks(const NKqpProto::TKqpSink& sink, const T
         if (!settings.GetInconsistentTx() && GetMeta().LockMode) {
             settings.SetLockMode(*GetMeta().LockMode);
         }
+        // Use per-transaction QueryTraceId if available (for deferred effects),
+        // otherwise fall back to global QueryTraceId
+        ui64 queryTraceId = GetMeta().GetTxQueryTraceId(task.StageId.TxId);
+        if (queryTraceId) {
+            settings.SetQueryTraceId(queryTraceId);
+        }
 
         auto sinkPosition = std::lower_bound(
             internalSinksOrder.begin(),
@@ -3061,6 +3067,13 @@ TKqpTasksGraph::TKqpTasksGraph(
 
     if (Transactions.empty()) {
         return;
+    }
+
+    // Store per-transaction QueryTraceIds for deferred effects
+    for (ui32 txIdx = 0; txIdx < Transactions.size(); ++txIdx) {
+        if (Transactions[txIdx].QueryTraceId != 0) {
+            GetMeta().SetTxQueryTraceId(txIdx, Transactions[txIdx].QueryTraceId);
+        }
     }
 
     TMaybe<NKqpProto::TKqpPhyTx::EType> txsType;

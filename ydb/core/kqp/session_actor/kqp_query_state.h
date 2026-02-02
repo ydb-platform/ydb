@@ -482,7 +482,7 @@ public:
             // Olap sinks require separate tnx with commit.
             while (tx && tx->GetHasEffects() && !TxCtx->HasOlapTable) {
                 QueryData->PrepareParameters(tx, PreparedQuery, txTypeEnv);
-                bool success = TxCtx->AddDeferredEffect(tx, QueryData);
+                bool success = TxCtx->AddDeferredEffect(tx, QueryData, QueryTraceId);
                 YQL_ENSURE(success);
                 if (CurrentTx + 1 < phyQuery.TransactionsSize()) {
                     ++CurrentTx;

@@ -237,7 +237,24 @@ struct TGraphMeta {
         QueryTraceId = queryTraceId;
     }
 
+    // Set per-transaction QueryTraceId (used for deferred effects)
+    void SetTxQueryTraceId(ui32 txIndex, ui64 queryTraceId) {
+        if (queryTraceId != 0) {
+            TxQueryTraceIds[txIndex] = queryTraceId;
+        }
+    }
+
+    // Get QueryTraceId for a specific transaction index
+    ui64 GetTxQueryTraceId(ui32 txIndex) const {
+        auto it = TxQueryTraceIds.find(txIndex);
+        if (it != TxQueryTraceIds.end()) {
+            return it->second;
+        }
+        return QueryTraceId;  // Fall back to global QueryTraceId
+    }
+
     ui64 QueryTraceId = 0;
+    THashMap<ui32, ui64> TxQueryTraceIds;  // Per-transaction QueryTraceIds (for deferred effects)
 };
 
 struct TTaskInputMeta {

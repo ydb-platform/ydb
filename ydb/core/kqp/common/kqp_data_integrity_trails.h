@@ -107,6 +107,11 @@ public:
         QueryTexts.clear();
     }
 
+    // Get all queries for direct access
+    const std::deque<std::pair<ui64, TString>>& GetAllQueries() const {
+        return QueryTexts;
+    }
+
 private:
     std::deque<std::pair<ui64, TString>> QueryTexts;
 };

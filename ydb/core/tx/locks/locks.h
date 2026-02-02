@@ -251,6 +251,18 @@ inline ELockConflictFlags& operator&=(ELockConflictFlags& a, ELockConflictFlags 
 inline ELockConflictFlags operator~(ELockConflictFlags c) { return ELockConflictFlags(~ELockConflictFlagsRaw(c)); }
 inline bool operator!(ELockConflictFlags c) { return ELockConflictFlagsRaw(c) == 0; }
 
+// Struct to hold conflict lock info including both flags and the BreakerQueryTraceId
+struct TConflictLockInfo {
+    ELockConflictFlags Flags = ELockConflictFlags::None;
+    ui64 BreakerQueryTraceId = 0;
+
+    TConflictLockInfo() = default;
+    TConflictLockInfo(ELockConflictFlags flags, ui64 breakerQueryTraceId = 0)
+        : Flags(flags)
+        , BreakerQueryTraceId(breakerQueryTraceId)
+    {}
+};
+
 // ELockRangeFlags type safe enum
 
 enum class ELockRangeFlags : ui8 {
@@ -361,7 +373,7 @@ public:
 
     bool PersistRanges(ILocksDb* db);
 
-    bool AddConflict(TLockInfo* otherLock, ILocksDb* db);
+    bool AddConflict(TLockInfo* otherLock, ILocksDb* db, ui64 breakerQueryTraceId = 0);
     bool AddVolatileDependency(ui64 txId, ILocksDb* db);
     bool PersistConflicts(ILocksDb* db);
     void CleanupConflicts();
@@ -384,10 +396,19 @@ public:
     template<class TCallback>
     void ForAllConflicts(TCallback&& callback, ELockConflictFlags mask) const {
         for (auto& pr : ConflictLocks) {
-            if (!!(pr.second & mask)) {
+            if (!!(pr.second.Flags & mask)) {
                 callback(pr.first);
             }
         }
+    }
+
+    // Get the BreakerQueryTraceId for a conflict with the given lock
+    ui64 GetConflictBreakerQueryTraceId(TLockInfo* otherLock) const {
+        auto it = ConflictLocks.find(otherLock);
+        if (it != ConflictLocks.end()) {
+            return it->second.BreakerQueryTraceId;
+        }
+        return 0;
     }
 
     template<class TCallback>
@@ -444,8 +465,8 @@ private:
 
     std::optional<TRowVersion> BreakVersion;
 
-    // A set of locks we must break on commit
-    THashMap<TLockInfo*, ELockConflictFlags> ConflictLocks;
+    // A set of locks we must break on commit (maps lock -> conflict info with flags and BreakerQueryTraceId)
+    THashMap<TLockInfo*, TConflictLockInfo> ConflictLocks;
     absl::flat_hash_set<ui64> VolatileDependencies;
     TVector<TPersistentRange> PersistentRanges;
 
@@ -738,6 +759,8 @@ struct TLocksUpdate {
     ui64 LockTxId = 0;
     ui32 LockNodeId = 0;
     ui64 VictimQueryTraceId = 0;
+    ui64 BreakerQueryTraceId = 0;  // QueryTraceId of the query that creates conflicts (used when adding conflicts)
+    bool BreakerQueryTraceIdExplicitlySet = false;  // Flag to indicate explicit override (e.g., from TKqpLocks.FirstQueryTraceId)
     TLockInfo::TPtr Lock;
 
     TStackVec<TPointKey, 4> PointLocks;
@@ -1002,6 +1025,24 @@ public:
 
     const THashMap<ui64, TLockInfo::TPtr>& GetRemovedLocks() const {
         return Locker.GetRemovedLocks();
+    }
+
+    // Get the BreakerQueryTraceId from the current Update (if set)
+    // This returns the QueryTraceId of the query that created the conflicts being broken
+    TMaybe<ui64> GetCurrentBreakerQueryTraceId() const {
+        if (Update && Update->BreakerQueryTraceId != 0) {
+            return Update->BreakerQueryTraceId;
+        }
+        return Nothing();
+    }
+
+    // Set the BreakerQueryTraceId in the current Update
+    // This is used to override the default (commit operation's) trace ID with the actual query trace ID
+    void SetBreakerQueryTraceId(ui64 queryTraceId) {
+        if (Update && queryTraceId != 0) {
+            Update->BreakerQueryTraceId = queryTraceId;
+            Update->BreakerQueryTraceIdExplicitlySet = true;
+        }
     }
 
 private:

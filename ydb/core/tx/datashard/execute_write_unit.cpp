@@ -48,16 +48,23 @@ public:
         writeResult.Record.MutableTxStats()->SetLocksBrokenAsBreaker(locksBrokenByTx.size());
         if (!locksBrokenByTx.empty()) {
             auto victimQueryTraceIds = DataShard.SysLocksTable().ExtractVictimQueryTraceIds(locksBrokenByTx);
+            // Use BreakerQueryTraceId from the conflict if available, otherwise use the current operation's QueryTraceId
+            auto breakerQueryTraceId = DataShard.SysLocksTable().GetCurrentBreakerQueryTraceId();
+            ui64 effectiveBreakerQueryTraceId = breakerQueryTraceId ? *breakerQueryTraceId : writeOp->QueryTraceId();
+            // Set the BreakerQueryTraceId in TxStats so SessionActor can use the same value
+            writeResult.Record.MutableTxStats()->SetBreakerQueryTraceId(effectiveBreakerQueryTraceId);
             NDataIntegrity::LogLocksBroken(ctx, DataShard.TabletID(), "Write transaction broke other locks", locksBrokenByTx,
-                writeOp->QueryTraceId(), victimQueryTraceIds);
+                effectiveBreakerQueryTraceId, victimQueryTraceIds);
         }
         LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "add locks to result: " << locks.size());
+        // Get the query trace ID to include in the returned locks
+        ui64 queryTraceId = writeOp->QueryTraceId();
         for (const auto& lock : locks) {
             if (lock.IsError()) {
                 LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, "Lock is not set for " << *writeOp << " at " << DataShard.TabletID() << " lock " << lock);
             }
 
-            writeResult.AddTxLock(lock.LockId, lock.DataShard, lock.Generation, lock.Counter, lock.SchemeShard, lock.PathId, lock.HasWrites);
+            writeResult.AddTxLock(lock.LockId, lock.DataShard, lock.Generation, lock.Counter, lock.SchemeShard, lock.PathId, lock.HasWrites, queryTraceId);
 
             LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "add lock to result: " << writeResult.Record.GetTxLocks().rbegin()->ShortDebugString());
         }
@@ -466,8 +473,14 @@ public:
                 auto [_, locksBrokenByTx] = sysLocks.ApplyLocks();
                 writeOp->GetWriteResult()->Record.MutableTxStats()->SetLocksBrokenAsBreaker(locksBrokenByTx.size());
                 auto victimQueryTraceIds = sysLocks.ExtractVictimQueryTraceIds(locksBrokenByTx);
+                // Use BreakerQueryTraceId from the conflict if available
+                auto breakerQueryTraceIdCleanup = sysLocks.GetCurrentBreakerQueryTraceId();
+                ui64 effectiveBreakerQueryTraceId = breakerQueryTraceIdCleanup ? *breakerQueryTraceIdCleanup : writeOp->QueryTraceId();
+                if (!locksBrokenByTx.empty()) {
+                    writeOp->GetWriteResult()->Record.MutableTxStats()->SetBreakerQueryTraceId(effectiveBreakerQueryTraceId);
+                }
                 NDataIntegrity::LogLocksBroken(ctx, tabletId, "Write transaction aborted, broke other transaction locks during cleanup", locksBrokenByTx,
-                                               writeOp->QueryTraceId(), victimQueryTraceIds);
+                                               effectiveBreakerQueryTraceId, victimQueryTraceIds);
                 DataShard.SubscribeNewLocks(ctx);
 
                 if (auto status = ensureAbortOutReadSets()) {

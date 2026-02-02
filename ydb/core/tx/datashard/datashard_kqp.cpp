@@ -832,7 +832,20 @@ void KqpCommitLocks(ui64 origin, const NKikimrDataEvents::TKqpLocks* kqpLocks, T
     }
 
     if (NeedCommitLocks(kqpLocks->GetOp())) {
-        // We assume locks have been validated earlier
+        // Set FirstQueryTraceId as the default BreakerQueryTraceId.
+        // This is the shard-specific QueryTraceId from TxManager, which represents
+        // the actual query that wrote to this shard.
+        //
+        // Note: CommitLock may override this with a more specific BreakerQueryTraceId
+        // if a stored conflict has one (for cases where conflicts were stored during
+        // the write phase). But for OLTP sink where writes break locks immediately,
+        // the stored conflict won't have a BreakerQueryTraceId, so we rely on this
+        // shard-specific value from FirstQueryTraceId.
+        ui64 firstQueryTraceId = kqpLocks->GetFirstQueryTraceId();
+        if (firstQueryTraceId != 0) {
+            sysLocks.SetBreakerQueryTraceId(firstQueryTraceId);
+        }
+
         for (const auto& lockProto : kqpLocks->GetLocks()) {
             if (lockProto.GetDataShard() != origin) {
                 continue;

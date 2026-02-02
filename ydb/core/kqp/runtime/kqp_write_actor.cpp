@@ -65,7 +65,9 @@ namespace {
         }
     }
 
-    void FillEvWritePrepare(NKikimr::NEvents::TDataEvents::TEvWrite* evWrite, ui64 shardId, ui64 txId, const NKikimr::NKqp::IKqpTransactionManagerPtr& txManager) {
+    // actorQueryTraceId is the QueryTraceId of the actor that wrote to this shard.
+    // It's passed directly to ensure accurate lock-breaking attribution in OLTP sink scenarios.
+    void FillEvWritePrepare(NKikimr::NEvents::TDataEvents::TEvWrite* evWrite, ui64 shardId, ui64 txId, const NKikimr::NKqp::IKqpTransactionManagerPtr& txManager, ui64 actorQueryTraceId = 0) {
         evWrite->Record.SetTxId(txId);
         auto* protoLocks = evWrite->Record.MutableLocks();
         protoLocks->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
@@ -113,6 +115,18 @@ namespace {
         const auto locks = txManager->GetLocks(shardId);
         for (const auto& lock : locks) {
             *protoLocks->AddLocks() = lock;
+        }
+
+        // Set FirstQueryTraceId for accurate lock-breaking attribution in separate commit scenarios
+        // Use actor's QueryTraceId if provided (most accurate when available)
+        // Fall back to TxManager's tracking or FirstQueryTraceId
+        ui64 firstQueryTraceId = actorQueryTraceId;
+        if (firstQueryTraceId == 0) {
+            auto shardBreakerQueryTraceId = txManager->GetShardBreakerQueryTraceId(shardId);
+            firstQueryTraceId = shardBreakerQueryTraceId.value_or(txManager->GetFirstQueryTraceId());
+        }
+        if (firstQueryTraceId != 0) {
+            protoLocks->SetFirstQueryTraceId(firstQueryTraceId);
         }
     }
 
@@ -237,6 +251,7 @@ struct TKqpTableWriterStatistics {
     ui64 EraseBytes = 0;
     ui64 LocksBrokenAsBreaker = 0;
     ui64 LocksBrokenAsVictim = 0;
+    ui64 BreakerQueryTraceId = 0;
 
     THashSet<ui64> AffectedPartitions;
 
@@ -260,9 +275,13 @@ struct TKqpTableWriterStatistics {
 
         LocksBrokenAsBreaker += txStats.GetLocksBrokenAsBreaker();
         LocksBrokenAsVictim += txStats.GetLocksBrokenAsVictim();
+        // Capture BreakerQueryTraceId - only update if we don't have one yet
+        if (BreakerQueryTraceId == 0 && txStats.HasBreakerQueryTraceId()) {
+            BreakerQueryTraceId = txStats.GetBreakerQueryTraceId();
+        }
     }
 
-    static void AddLockStats(NYql::NDqProto::TDqTaskStats* stats, ui64 brokenAsBreaker, ui64 brokenAsVictim) {
+    static void AddLockStats(NYql::NDqProto::TDqTaskStats* stats, ui64 brokenAsBreaker, ui64 brokenAsVictim, ui64 breakerQueryTraceId = 0) {
         NKqpProto::TKqpTaskExtraStats extraStats;
         if (stats->HasExtra()) {
             stats->GetExtra().UnpackTo(&extraStats);
@@ -271,13 +290,18 @@ struct TKqpTableWriterStatistics {
             extraStats.GetLockStats().GetBrokenAsBreaker() + brokenAsBreaker);
         extraStats.MutableLockStats()->SetBrokenAsVictim(
             extraStats.GetLockStats().GetBrokenAsVictim() + brokenAsVictim);
+        // Set BreakerQueryTraceId if we have a non-zero value and it's not already set
+        if (breakerQueryTraceId != 0 && extraStats.GetLockStats().GetBreakerQueryTraceId() == 0) {
+            extraStats.MutableLockStats()->SetBreakerQueryTraceId(breakerQueryTraceId);
+        }
         stats->MutableExtra()->PackFrom(extraStats);
     }
 
     void FillStats(NYql::NDqProto::TDqTaskStats* stats, const TString& tablePath) {
-        AddLockStats(stats, LocksBrokenAsBreaker, LocksBrokenAsVictim);
+        AddLockStats(stats, LocksBrokenAsBreaker, LocksBrokenAsVictim, BreakerQueryTraceId);
         LocksBrokenAsBreaker = 0;
         LocksBrokenAsVictim = 0;
+        BreakerQueryTraceId = 0;
 
         if (ReadRows + WriteRows + EraseRows == 0) {
             // Avoid empty table_access stats
@@ -1042,7 +1066,10 @@ public:
                 return builder;
             }());
 
-        if (Mode == EMode::WRITE) {
+        // Store locks from DataShard response in TxManager
+        // We need to do this for WRITE mode and IMMEDIATE_COMMIT mode
+        // For IMMEDIATE_COMMIT, locks are created and returned during the same operation
+        if (Mode == EMode::WRITE || Mode == EMode::IMMEDIATE_COMMIT) {
             for (const auto& lock : ev->Get()->Record.GetTxLocks()) {
                 if (!TxManager->AddLock(ev->Get()->Record.GetOrigin(), lock)) {
                     UpdateStats(ev->Get()->Record.GetTxStats());
@@ -1120,7 +1147,7 @@ public:
             if (shardInfo.HasRead) {
                 flags |= IKqpTransactionManager::EAction::READ;
             }
-            TxManager->AddAction(shardInfo.ShardId, flags);
+            TxManager->AddAction(shardInfo.ShardId, flags, QueryTraceId);
         }
     }
 
@@ -1159,6 +1186,11 @@ public:
             return false;
         }
 
+        // Note: We do NOT set ShardBreakerQueryTraceId here because SendDataToShard may be called
+        // during commit with the commit query's QueryTraceId, not the original write's QueryTraceId.
+        // The correct BreakerQueryTraceId is already set in AddAction (called from UpdateShards)
+        // during the write phase when the data is actually buffered.
+
         const bool isPrepare = metadata->IsFinal && Mode == EMode::PREPARE;
         const bool isImmediateCommit = metadata->IsFinal && Mode == EMode::IMMEDIATE_COMMIT;
 
@@ -1180,10 +1212,20 @@ public:
                 for (const auto& lock : locks) {
                     *protoLocks->AddLocks() = lock;
                 }
+                // Set FirstQueryTraceId for accurate lock-breaking attribution
+                // Use actor's QueryTraceId directly (most accurate)
+                ui64 firstQueryTraceId = QueryTraceId;
+                if (firstQueryTraceId == 0) {
+                    auto shardBreakerQueryTraceId = TxManager->GetShardBreakerQueryTraceId(shardId);
+                    firstQueryTraceId = shardBreakerQueryTraceId.value_or(TxManager->GetFirstQueryTraceId());
+                }
+                if (firstQueryTraceId != 0) {
+                    protoLocks->SetFirstQueryTraceId(firstQueryTraceId);
+                }
             }
         } else if (isPrepare) {
             YQL_ENSURE(TxId);
-            FillEvWritePrepare(evWrite.get(), shardId, *TxId, TxManager);
+            FillEvWritePrepare(evWrite.get(), shardId, *TxId, TxManager, QueryTraceId);
         } else if (!InconsistentTx) {
             evWrite->SetLockId(LockTxId, LockNodeId);
 
@@ -2714,6 +2756,7 @@ struct TWriteSettings {
     std::vector<TIndex> Indexes;
 
     bool EnableStreamWrite;
+    ui64 QueryTraceId = 0;
 };
 
 struct TBufferWriteMessage {
@@ -2969,10 +3012,10 @@ public:
                     TxManager,
                     SessionActorId,
                     Counters,
-                    QueryTraceId);
+                    settings.QueryTraceId);
                 ptr->SetParentTraceId(BufferWriteActorStateSpan.GetTraceId());
                 TActorId id = RegisterWithSameMailbox(ptr);
-                CA_LOG_D("Create new TableWriteActor for table `" << tablePath << "` (" << tableId << "). lockId=" << LockTxId << ". ActorId=" << id);
+                CA_LOG_D("Create new TableWriteActor for table `" << tablePath << "` (" << tableId << "). lockId=" << LockTxId << ". ActorId=" << id << ". QueryTraceId=" << settings.QueryTraceId);
 
                 return {ptr, id};
             };
@@ -3643,6 +3686,8 @@ public:
             FillEvWriteRollback(evWrite.get(), shardId, TxManager);
         } else {
             YQL_ENSURE(TxId);
+            // Don't pass this actor's QueryTraceId - it's the commit query's ID, not the original write's ID.
+            // Rely on TxManager->GetShardBreakerQueryTraceId which was set by the per-table TKqpTableWriteActor.
             FillEvWritePrepare(evWrite.get(), shardId, *TxId, TxManager);
             evWrite->Record.SetOverloadSubscribe(++ExternalShardIdToOverloadSeqNo[shardId]);
         }
@@ -5036,6 +5081,7 @@ private:
                 .DefaultColumns = std::move(defaultColumns),
 
                 .EnableStreamWrite = Settings.GetEnableStreamWrite(),
+                .QueryTraceId = Settings.GetQueryTraceId(),
             };
 
             for (const auto& indexSettings : Settings.GetIndexes()) {

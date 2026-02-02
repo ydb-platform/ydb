@@ -951,10 +951,6 @@ void TPartitionActor::CommitDone(ui64 cookie, const TActorContext& ctx) {
     bool isMemoryOkNow = PartitionInFlightMemoryController.Remove(CommittedOffset);
     if (wasMemoryLimitReached && isMemoryOkNow && EndOffset > ReadOffset) {
         SendPartitionReady(ctx);
-    } else if (EndOffset == ReadOffset) {
-        WaitForData = true;
-        if (PipeClient) //pipe will be recreated soon
-            WaitDataInPartition(ctx);
     }
 
     ui64 startReadId = CommitsInfly.front().second.StartReadId;
@@ -1087,10 +1083,9 @@ void TPartitionActor::InitStartReading(const TActorContext& ctx) {
         ClientCommitOffset = CommittedOffset;
     }
 
-    auto isMemoryLimitReached = PartitionInFlightMemoryController.IsMemoryLimitReached();
-    if (EndOffset > ReadOffset && !MaxTimeLagMs && !ReadTimestampMs && !isMemoryLimitReached) {
+    if (EndOffset > ReadOffset && !MaxTimeLagMs && !ReadTimestampMs) {
         SendPartitionReady(ctx);
-    } else if (EndOffset == ReadOffset) {
+    } else {
         WaitForData = true;
         if (PipeClient) //pipe will be recreated soon
             WaitDataInPartition(ctx);

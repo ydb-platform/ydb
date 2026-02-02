@@ -1354,12 +1354,8 @@ namespace Tests {
                 auto actorSystemPtr = std::make_shared<NKikimr::TDeferredActorLogBackend::TAtomicActorSystemPtr>(nullptr);
                 actorSystemPtr->store(Runtime->GetActorSystem(nodeIdx));
 
-<<<<<<< HEAD
-                auto driver = NKqp::MakeYdbDriver(actorSystemPtr, queryServiceConfig.GetStreamingQueries().GetTopicSdkSettings());
-=======
                 auto uniqueDriver = NKqp::MakeYdbDriver(actorSystemPtr, queryServiceConfig.GetStreamingQueries().GetTopicSdkSettings());
                 auto driver = NKqp::MakeSharedYdbDriverWithStop(std::move(uniqueDriver));
->>>>>>> 2df4ffda890 (Fix c-ares race condition in Workload Manager tests (#31876) (#33057))
                 auto pqGateway = NKqp::MakePqGateway(driver);
 
                 federatedQuerySetupFactory = std::make_shared<NKikimr::NKqp::TKqpFederatedQuerySetupFactoryMock>(

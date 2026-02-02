@@ -396,7 +396,7 @@ public:
         other.Context_ = nullptr;
     }
 
-    TDictionaryCompressionContextGuard& operator = (TDictionaryCompressionContextGuard&& other) = delete;
+    TDictionaryCompressionContextGuard& operator=(TDictionaryCompressionContextGuard&& other) = delete;
 
     ~TDictionaryCompressionContextGuard()
     {
@@ -430,7 +430,7 @@ public:
         other.Context_ = nullptr;
     }
 
-    TDictionaryDecompressionContextGuard& operator = (TDictionaryDecompressionContextGuard&& other) = delete;
+    TDictionaryDecompressionContextGuard& operator=(TDictionaryDecompressionContextGuard&& other) = delete;
 
     ~TDictionaryDecompressionContextGuard()
     {

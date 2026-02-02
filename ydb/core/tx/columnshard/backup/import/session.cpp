@@ -29,9 +29,10 @@ bool TSession::IsStarted() const {
     return Status == EStatus::Started; 
 }
 
-void TSession::Abort() {
+void TSession::Abort(const TString& errorMessage) {
     AFL_VERIFY(Status != EStatus::Finished && Status != EStatus::Aborted);
     Status = EStatus::Aborted;
+    ErrorMessage = errorMessage;
 }
 
 void TSession::Confirm() {
@@ -62,6 +63,10 @@ TString TSession::GetClassName() const {
 
 bool TSession::IsReadyForRemoveOnFinished() const {
   return Status == EStatus::Aborted;
+}
+
+TSession::TStatus TSession::GetStatus() const { 
+    return TStatus{Status == EStatus::Finished, ErrorMessage};
 }
 
 bool TSession::IsFinished() const { 

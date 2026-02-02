@@ -1,3 +1,4 @@
+// NOLINTBEGIN(misc-definitions-in-headers)
 #pragma once
 
 Y_UNIT_TEST(Pragma) {
@@ -284,6 +285,19 @@ Y_UNIT_TEST(NamedNode) {
          "-- comment\r\n$a = 1;\n"},
         {"$a=1;-- comment\n$b=2;/* comment */ /* comment */\n$c = 3;/* comment */ -- comment",
          "$a = 1; -- comment\n$b = 2; /* comment */ /* comment */\n$c = 3; /* comment */ -- comment\n"},
+        {"$a=1;\n\n\n$b=2;", "$a = 1;\n\n$b = 2;\n"},
+        {"$a=1;\r\n\r\n\r\n$b=2;", "$a = 1;\n\n$b = 2;\n"},
+        {"$a=1;\n\n$b=2;", "$a = 1;\n\n$b = 2;\n"},
+        {"$a=1;\n\n\n-- comment\n$b=2;", "$a = 1;\n\n-- comment\n$b = 2;\n"},
+        {"-- a\n$a = 1;", "-- a\n$a = 1;\n"},
+        {"$a = 1; -- a", "$a = 1; -- a\n"},
+        {"$a = 1;\n-- a", "$a = 1;\n-- a\n"},
+        {"/* a */\n$a = 1;", "/* a */\n$a = 1;\n"},
+        {"/* \n  a \n*/\n$a = 1;", "/* \n  a \n*/\n$a = 1;\n"},
+        {"$a /* a */ = 1;", "$a /* a */ = 1;\n"},
+        {"/* a */ $a = 1;", "/* a */ $a = 1;\n"},
+        {"$a = 1; /*\na */", "$a = 1; /*\na */\n"},
+        {"$a = 1; \n/* a */", "$a = 1;\n/* a */\n"},
     };
 
     TSetup setup;
@@ -698,7 +712,12 @@ Y_UNIT_TEST(DefineActionOrSubquery) {
          "DEFINE SUBQUERY $s() AS\n\t"
          "$t = (\n\t\tSELECT\n\t\t\t*\n\t\tFROM\n\t\t\t$a\n\t);\n"
          "END DEFINE;\n"},
-    };
+        {"define action $x() as; $a = 10;\n\n\n$b = 20; end define",
+         "DEFINE ACTION $x() AS\n\t$a = 10;\n\n\t$b = 20;\nEND DEFINE;\n"},
+        {"define action $x() as; $a = 10;\n\n$b = 20; end define",
+         "DEFINE ACTION $x() AS\n\t$a = 10;\n\n\t$b = 20;\nEND DEFINE;\n"},
+        {"define action $a() as do $aaa(); do $bbb(); end define;",
+         "DEFINE ACTION $a() AS\n\tDO\n\t\t$aaa()\n\t;\n\tDO\n\t\t$bbb()\n\t;\nEND DEFINE;\n"}};
 
     TSetup setup;
     setup.Run(cases);
@@ -1037,6 +1056,16 @@ Y_UNIT_TEST(Lambda) {
          "SELECT\n\t$f(10, 4),\n\t$g(1, 2)\n;\n"},
         {"$f=($arg)->{;$a=10;;$b=20;;;RETURN $a+$b}",
          "$f = ($arg) -> {\n\t$a = 10;\n\t$b = 20;\n\tRETURN $a + $b;\n};\n"},
+        {"$f=($arg)->{;$a=10;;\n\n\n$b=20;;;RETURN $a+$b}",
+         "$f = ($arg) -> {\n\t$a = 10;\n\n\t$b = 20;\n\tRETURN $a + $b;\n};\n"},
+        {"$f=($arg)->{;$a=10;;\n\n$b=20;;;RETURN $a+$b}",
+         "$f = ($arg) -> {\n\t$a = 10;\n\n\t$b = 20;\n\tRETURN $a + $b;\n};\n"},
+        {"$f=($arg)->{;$a=10;;\n$b=20;;;RETURN $a+$b}",
+         "$f = ($arg) -> {\n\t$a = 10;\n\t$b = 20;\n\tRETURN $a + $b;\n};\n"},
+        {"$f=($arg)->{;$a=10;;\n\n\n-- comment\n$b=20;;;RETURN $a+$b}",
+         "$f = ($arg) -> {\n\t$a = 10;\n\n\t-- comment\n\t$b = 20;\n\tRETURN $a + $b;\n};\n"},
+        {"$f=($arg)->{;$a=10;;$b=select 20;;;RETURN $a+$b}",
+         "$f = ($arg) -> {\n\t$a = 10;\n\n\t$b = (\n\t\tSELECT\n\t\t\t20\n\t);\n\tRETURN $a + $b;\n};\n"},
     };
 
     TSetup setup;
@@ -1990,34 +2019,32 @@ Y_UNIT_TEST(DropStreamingQuery) {
 }
 
 Y_UNIT_TEST(NamedNodeNewLine) {
-    TString input = R"sql(
-DEFINE SUBQUERY $x() AS
-    $a = SELECT 1;
-    $b = SELECT $a;
-    SELECT $b;
-END DEFINE;
-)sql";
+    TString input = TrimIndent(R"sql(
+        DEFINE SUBQUERY $x() AS
+            $a = SELECT 1;
+            $b = SELECT $a;
+            SELECT $b;
+        END DEFINE;
+    )sql");
 
-    TString expected = R"sql(
-DEFINE SUBQUERY $x() AS
-    $a = (
-        SELECT
-            1
-    );
+    TString expected = TrimIndent(R"sql(
+        DEFINE SUBQUERY $x() AS
+            $a = (
+                SELECT
+                    1
+            );
 
-    $b = (
-        SELECT
-            $a
-    );
+            $b = (
+                SELECT
+                    $a
+            );
 
-    SELECT
-        $b
-    ;
-END DEFINE;
-)sql";
+            SELECT
+                $b
+            ;
+        END DEFINE;
 
-    input.erase(0, 1);
-    expected.erase(0, 1);
+    )sql");
 
     TCases cases = {
         {input, expected},
@@ -2028,45 +2055,43 @@ END DEFINE;
 }
 
 Y_UNIT_TEST(InlineSubquery) {
-    TString input = R"sql(
-SELECT (SELECT 1);
-SELECT (SELECT * FROM t WHERE p);
-SELECT * FROM t WHERE x > (SELECT 1);
-)sql";
+    TString input = TrimIndent(R"sql(
+        SELECT (SELECT 1);
+        SELECT (SELECT * FROM t WHERE p);
+        SELECT * FROM t WHERE x > (SELECT 1);
+    )sql");
 
-    TString expected = R"sql(
-SELECT
-    (
+    TString expected = TrimIndent(R"sql(
         SELECT
-            1
-    )
-;
+            (
+                SELECT
+                    1
+            )
+        ;
 
-SELECT
-    (
+        SELECT
+            (
+                SELECT
+                    *
+                FROM
+                    t
+                WHERE
+                    p
+            )
+        ;
+
         SELECT
             *
         FROM
             t
         WHERE
-            p
-    )
-;
+            x > (
+                SELECT
+                    1
+            )
+        ;
 
-SELECT
-    *
-FROM
-    t
-WHERE
-    x > (
-        SELECT
-            1
-    )
-;
-)sql";
-
-    input.erase(0, 1);
-    expected.erase(0, 1);
+    )sql");
 
     TCases cases = {
         {input, expected},
@@ -2075,3 +2100,4 @@ WHERE
     TSetup setup;
     setup.Run(cases);
 }
+// NOLINTEND(misc-definitions-in-headers)

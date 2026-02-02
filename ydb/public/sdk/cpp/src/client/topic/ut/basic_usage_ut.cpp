@@ -794,10 +794,6 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
     }
 
     Y_UNIT_TEST(ReadWithoutConsumerWithRestarts) {
-        if (EnableDirectRead) {
-            // TODO(qyryq) Enable the test when LOGBROKER-9364 is done.
-            return;
-        }
         TTopicSdkTestSetup setup(TEST_CASE_NAME);
         auto compressor = std::make_shared<TSyncExecutor>();
         auto decompressor = CreateThreadPoolManagedExecutor(1);
@@ -810,7 +806,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             .MaxMemoryUsageBytes(1_MB)
             .DecompressionExecutor(decompressor)
             .AppendTopics(topic)
-            // .DirectRead(EnableDirectRead)
+            .DirectRead(EnableDirectRead)
             ;
 
         TWriteSessionSettings writeSettings;

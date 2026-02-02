@@ -570,10 +570,13 @@ TPyObjectPtr ToPyData(const TPyCastContext::TPtr& ctx,
             auto tzName = ctx->GetTimezoneName(tzId);
             return PyTuple_Pack(2, pyValue.Get(), tzName.Get());
         }
+        default: {
+            TStringStream message;
+            message << "Unsupported type ";
+            NYql::NUdf::TTypePrinter(*ctx->PyCtx->TypeInfoHelper, type).Out(message);
+            throw yexception() << std::move(message).Str();
+        }
     }
-
-    throw yexception()
-        << "Unsupported type " << typeId;
 }
 
 NUdf::TUnboxedValue FromPyData(
@@ -748,10 +751,13 @@ NUdf::TUnboxedValue FromPyData(
             return FromPyTzExt<i64>(value, NUdf::MIN_DATETIME64, NUdf::MAX_DATETIME64, TStringBuf("TzDatetime64"), ctx);
         case NUdf::TDataType<NUdf::TTzTimestamp64>::Id:
             return FromPyTzExt<i64>(value, NUdf::MIN_TIMESTAMP64, NUdf::MAX_TIMESTAMP64, TStringBuf("TzTimestamp64"), ctx);
+        default: {
+            TStringStream message;
+            message << "Unsupported type ";
+            NYql::NUdf::TTypePrinter(*ctx->PyCtx->TypeInfoHelper, type).Out(message);
+            throw yexception() << std::move(message).Str();
+        }
     }
-
-    throw yexception()
-        << "Unsupported type " << typeId;
 }
 
 TPyObjectPtr ToPyTagged(

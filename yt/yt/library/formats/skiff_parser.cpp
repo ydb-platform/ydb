@@ -50,7 +50,7 @@ public:
         , Function_(function)
     { }
 
-    void operator() (TCheckedInDebugSkiffParser* parser, IValueConsumer* valueConsumer)
+    void operator()(TCheckedInDebugSkiffParser* parser, IValueConsumer* valueConsumer)
     {
         if constexpr (IsNullable) {
             ui8 tag = parser->ParseVariant8Tag();
@@ -386,7 +386,7 @@ public:
         , ColumnId_(columnId)
     { }
 
-    void operator() (TCheckedInDebugSkiffParser* parser, IValueConsumer* valueConsumer)
+    void operator()(TCheckedInDebugSkiffParser* parser, IValueConsumer* valueConsumer)
     {
         Buffer_.Clear();
         {

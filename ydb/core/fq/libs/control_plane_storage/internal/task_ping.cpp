@@ -391,7 +391,7 @@ void TControlPlaneStorageBase::UpdateTaskInfo(
             backoff = TDuration::Zero();
             TStringBuilder builder;
             builder << "Query failed with code " << NYql::NDqProto::StatusIds_StatusCode_Name(request.status_code());
-            if (policy.RetryCount) {
+            if (policy.PolicyInitialized) {
                 builder << " (" << retryLimiter.LastError << ")";
             }
             builder << " at " << now;

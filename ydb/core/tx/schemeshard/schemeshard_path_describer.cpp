@@ -608,6 +608,8 @@ void TPathDescriber::DescribeColumnTable(TPathId pathId, TPathElement::TPtr path
             FillTableStats(*pathDescription, TPartitionStats());
         }
     }
+
+    description->SetIsRestore(tableInfo->IsRestore);
 }
 
 void TPathDescriber::DescribePersQueueGroup(TPathId pathId, TPathElement::TPtr pathEl) {

@@ -21,7 +21,7 @@ struct TOperationIdOrAlias
 
     std::variant<TOperationId, TString> Payload;
 
-    bool operator ==(const TOperationIdOrAlias& other) const;
+    bool operator==(const TOperationIdOrAlias& other) const;
 
     operator size_t() const;
 };

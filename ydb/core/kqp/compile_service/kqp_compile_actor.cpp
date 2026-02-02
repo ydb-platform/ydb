@@ -125,6 +125,10 @@ public:
             }
         }
 
+        if (UserRequestContext && UserRequestContext->IsStreamingQuery) {
+            config->_KqpEnableSpilling = false;
+        }
+
         config->FreezeDefaults();
 
         return config;

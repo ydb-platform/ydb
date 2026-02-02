@@ -1,0 +1,35 @@
+PRAGMA WindowNewPipeline;
+PRAGMA config.flags('OptimizerFlags', 'ForbidConstantDependsOnFuse');
+
+/* custom error: Inf is not allowed for RANGE frame bounds */
+$data = [
+    <|a: 1, count: 5|>,
+    <|a: 2, count: 5|>,
+    <|a: 3, count: 5|>,
+    <|a: 5, count: 5|>,
+    <|a: 6, count: 5|>,
+];
+
+$win_result = (
+    SELECT
+        COUNT(*) OVER w1 AS actual_count,
+        count,
+    FROM
+        AS_TABLE($data)
+    WINDOW
+        w1 AS (
+            ORDER BY
+                a ASC
+            RANGE BETWEEN Float('inf') PRECEDING AND Double('inf') FOLLOWING
+        )
+);
+
+$str = ($x) -> {
+    RETURN CAST($x AS String) ?? 'null';
+};
+
+SELECT
+    Ensure(count, count IS NOT DISTINCT FROM actual_count, $str(actual_count))
+FROM
+    $win_result
+;

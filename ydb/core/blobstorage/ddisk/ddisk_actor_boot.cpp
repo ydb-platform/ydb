@@ -33,7 +33,19 @@ namespace NKikimr::NDDisk {
                 auto& tabletChunkMap = ChunkRefs[tabletRecord.GetTabletId()];
                 for (const auto& chunkRef : tabletRecord.GetChunkRefs()) {
                     tabletChunkMap[chunkRef.GetVChunkIndex()].ChunkIdx = chunkRef.GetChunkIdx();
+                    ++*Counters.Chunks.ChunksOwned;
                 }
+            }
+        }
+        if (const auto it = msg.StartingPoints.find(TLogSignature::SignaturePersistentBufferChunkMap); it != msg.StartingPoints.end()) {
+            NPDisk::TLogRecord& record = it->second;
+            PersistentBufferChunkMapSnapshotLsn = record.Lsn;
+            NKikimrBlobStorage::NDDisk::NInternal::TPersistentBufferChunkMapLogRecord chunkMap;
+            const bool success = chunkMap.ParseFromArray(record.Data.data(), record.Data.size());
+            Y_ABORT_UNLESS(success);
+            for (auto idx : chunkMap.GetChunkIdxs()) {
+                PersistentBufferOwnedChunks.insert(idx);
+                ++*Counters.Chunks.ChunksOwned;
             }
         }
 
@@ -48,6 +60,8 @@ namespace NKikimr::NDDisk {
             Y_ABORT();
         }
 
+        ++*Counters.RecoveryLog.ReadLogChunks;
+
         for (const NPDisk::TLogRecord& record : msg.Results) {
             switch (record.Signature.GetUnmasked()) {
                 case TLogSignature::SignatureDDiskChunkMap:
@@ -58,13 +72,20 @@ namespace NKikimr::NDDisk {
                         Y_ABORT_UNLESS(chunkMap.HasIncrement());
                         const auto& increment = chunkMap.GetIncrement();
                         ChunkRefs[increment.GetTabletId()][increment.GetVChunkIndex()].ChunkIdx = increment.GetChunkIdx();
+                        ++*Counters.Chunks.ChunksOwned;
+                        ++*Counters.RecoveryLog.LogRecordsApplied;
                     }
                     break;
-
+                case TLogSignature::SignaturePersistentBufferChunkMap:
+                    if (record.Lsn > PersistentBufferChunkMapSnapshotLsn) {
+                        Y_ABORT("unexpected log signature SignaturePersistentBufferChunkMap");
+                    }
+                    break;
                 default:
                     Y_ABORT("unexpected log signature");
             }
             NextLsn = record.Lsn + 1;
+            ++*Counters.RecoveryLog.LogRecordsProcessed;
         }
 
         if (msg.IsEndOfLog) {
@@ -82,7 +103,7 @@ namespace NKikimr::NDDisk {
     void TDDiskActor::HandleSingleQuery() {
         HandlingQueries = true;
         if (!PendingQueries.empty()) {
-            TAutoPtr<IEventHandle> temp(PendingQueries.front().release());
+            auto temp = PendingQueries.front().Release();
             PendingQueries.pop();
             Receive(temp);
             HandlingQueries = false; // to prevent reordering of incoming queries
@@ -91,7 +112,7 @@ namespace NKikimr::NDDisk {
     }
 
     ui64 TDDiskActor::GetFirstLsnToKeep() const {
-        return ChunkMapSnapshotLsn;
+        return std::min(ChunkMapSnapshotLsn, PersistentBufferChunkMapSnapshotLsn);
     }
 
     void TDDiskActor::IssuePDiskLogRecord(TLogSignature signature, TChunkIdx chunkIdxToCommit,
@@ -116,6 +137,25 @@ namespace NKikimr::NDDisk {
             TRcBuf(std::move(buffer)), {lsn, lsn}, nullptr));
 
         LogCallbacks.emplace(lsn, std::move(callback));
+    }
+
+    void TDDiskActor::Handle(NPDisk::TEvLogResult::TPtr ev) {
+        auto& msg = *ev->Get();
+        STLOG(PRI_DEBUG, BS_DDISK, BSDD05, "TDDiskActor::Handle(TEvLogResult)", (DDiskId, DDiskId), (Msg, msg.ToString()));
+
+        if (msg.Status != NKikimrProto::OK) {
+            Y_ABORT();
+        }
+
+        for (const auto& result : msg.Results) {
+            const auto it = LogCallbacks.find(result.Lsn);
+            Y_ABORT_UNLESS(it != LogCallbacks.end());
+            if (it->second) {
+                it->second();
+            }
+            LogCallbacks.erase(it);
+            ++*Counters.RecoveryLog.LogRecordsWritten;
+        }
     }
 
 } // NKikimr::NDDisk

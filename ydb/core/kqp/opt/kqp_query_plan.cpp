@@ -246,7 +246,6 @@ public:
                 planNode.TypeName = "Effect";
                 Visit(TExprBase(stage), planNode);
             } else if (stageBase.Outputs()) { // Sink
-                AFL_ENSURE(stageBase.Outputs().Cast().Size() == 1);
                 auto& planNode = AddPlanNode(phaseNode);
                 Visit(TExprBase(stage), planNode);
             }
@@ -1131,7 +1130,6 @@ private:
             if (auto outputs = expr.Cast<TDqStageBase>().Outputs()) {
                 for (auto output : outputs.Cast()) {
                     if (auto sink = output.Maybe<TDqSink>()) {
-                        AFL_ENSURE(outputs.Cast().Size() == 1);
                         Visit(sink.Cast(), expr.Cast<TDqStageBase>(), planNode);
                     }
                 }
@@ -3292,6 +3290,9 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
                         if (input.second.HasPop()) {
                             FillAsyncAggrStat(inputInfo.InsertValue("Pop", NJson::JSON_MAP), input.second.GetPop());
                         }
+                        if (auto localBytes = input.second.GetLocalBytes()) {
+                            inputInfo["LocalBytes"] = localBytes;
+                        }
                     }
                 }
                 if (!(*stat)->GetOutput().empty()) {
@@ -3311,6 +3312,9 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
                         }
                         if (output.second.HasPop()) {
                             FillAsyncAggrStat(outputInfo.InsertValue("Pop", NJson::JSON_MAP), output.second.GetPop());
+                        }
+                        if (auto localBytes = output.second.GetLocalBytes()) {
+                            outputInfo["LocalBytes"] = localBytes;
                         }
                     }
                 }

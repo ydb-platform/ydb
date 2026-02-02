@@ -75,7 +75,7 @@ struct TStartDistributedWriteTableOptions
     ///
     /// If server doesn't receive any pings for session transaction for this time
     /// session will be aborted. By default timeout is 15 seconds.
-    FLUENT_FIELD_OPTION(TDuration, Timeout);
+    FLUENT_FIELD_OPTION(TDuration, SessionTimeout);
 };
 
 struct TPingDistributedWriteTableOptions
@@ -110,7 +110,7 @@ struct TStartDistributedWriteFileOptions
     ///
     /// If server doesn't receive any pings for session transaction for this time
     /// session will be aborted. By default timeout is 15 seconds.
-    FLUENT_FIELD_OPTION(TDuration, Timeout);
+    FLUENT_FIELD_OPTION(TDuration, SessionTimeout);
 };
 
 struct TPingDistributedWriteFileOptions

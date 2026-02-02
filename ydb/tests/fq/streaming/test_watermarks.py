@@ -69,7 +69,7 @@ class TestWatermarksInYdb(StreamingTestBase):
                     GROUP BY HoppingWindow(CAST(event_time AS Timestamp), "PT1S", "PT1S")
                 );
 
-                INSERT INTO {source_name}.{self.output_topic}
+                INSERT INTO {cluster}{self.output_topic}
                 SELECT ToBytes(Unwrap(Yson::SerializeJson(Yson::From(ts))))
                 FROM $output;
             END DO;
@@ -87,7 +87,7 @@ class TestWatermarksInYdb(StreamingTestBase):
             '[["1970-01-01T00:00:40Z"]]',
             '[["1970-01-01T00:00:50Z"]]',
         ]
-        actual = self.read_stream(len(expected), topic_path=self.output_topic)
+        actual = self.read_stream(len(expected), topic_path=self.output_topic, endpoint=endpoint)
         assert actual == expected
 
         sql = f'''DROP STREAMING QUERY `{query_name}`;'''

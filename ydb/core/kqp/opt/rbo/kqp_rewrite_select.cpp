@@ -735,7 +735,7 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, co
                         .Alias(alias)
                         .Columns(readExpr.Columns())
                         .SourceType(GetTableSourceType(tableDesc, ctx, node->Pos()))
-                        .UniqueId().Value(std::to_string(uniqueSourceIdCounter)).Build()
+                        .UniqueId().Value(std::to_string(uniqueSourceIdCounter++)).Build()
                     .Done().Ptr();
                     // clang-format on
                 }
@@ -885,13 +885,15 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, co
             TVector<TExprNode::TPtr> columns;
             TVector<TExprNode::TPtr> types;
 
-            auto alias = correlatedCols->Child(1)->Child(0)->Child(0);
-            auto typeExpr = correlatedCols->Child(1)->Child(0)->Child(1);
-            auto structType = typeExpr->GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
-            for (auto item : structType->GetItems()) {
-                TString fullName = TString(alias->Content()) + "." + TString(item->GetName());
-                columns.push_back(ctx.NewAtom(node->Pos(), fullName));
-                types.push_back(ExpandType(node->Pos(), *item->GetItemType(), ctx));
+            for (auto aliasColumn : correlatedCols->Child(1)->Children()) {
+                auto alias = aliasColumn->Child(0);
+                auto typeExpr = aliasColumn->Child(1);
+                auto structType = typeExpr->GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
+                for (auto item : structType->GetItems()) {
+                    TString fullName = TString(alias->Content()) + "." + TString(item->GetName());
+                    columns.push_back(ctx.NewAtom(node->Pos(), fullName));
+                    types.push_back(ExpandType(node->Pos(), *item->GetItemType(), ctx));
+                }
             }
 
             if (!columns.empty()) {
@@ -1315,18 +1317,28 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, co
             finalProjection.push_back(columnName);
         };
 
+        // Process result items
         for (auto resultItem : result->Child(1)->Children()) {
             auto maybeColumn = resultItem->Child(0);
             auto itemType = resultItem->GetTypeAnn();
+
+            // We can have a single column or mutlitple columns in the item
             if (maybeColumn->IsAtom()) {
                 processResultColumn(maybeColumn, itemType, resultItem->Child(2));
-            } else if (maybeColumn->IsList()) {
+            }
+            // In case of a list of columns, we have different cases:
+            // - Each column can be a list of input/output column names
+            // - Each column is an atom, and the input column can be found in the struct
+            // - Each column is an atom, and there is no input column (lambda return arg)
+
+            else if (maybeColumn->IsList()) {
                 for (size_t i=0; i<maybeColumn->ChildrenSize(); i++) {
                     auto columnSpec = maybeColumn->Child(i);
                     TExprNode::TPtr outputColumn;
                     TExprNode::TPtr inputColumn;
                     const TTypeAnnotationNode* columnType;
 
+                    // Output column is given as the second element of the list
                     if (columnSpec->IsList()) {
                         outputColumn = columnSpec->Child(0);
                         inputColumn = columnSpec->Child(1);
@@ -1336,9 +1348,15 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, co
                         outputColumn = columnSpec;
                         auto starLambda = resultItem->Child(2);
                         Y_ENSURE(starLambda->IsLambda());
-                        Y_ENSURE(starLambda->Child(1)->IsCallable("AsStruct"));
-                        auto member = starLambda->Child(1)->Child(i);
-                        inputColumn = member->Child(1)->Child(1);
+                        // Output column can be found in the struct inside lambda
+                        if (starLambda->Child(1)->IsCallable("AsStruct")) {
+                            auto member = starLambda->Child(1)->Child(i);
+                            inputColumn = member->Child(1)->Child(1);
+                        } 
+                        // Input is the same as output
+                        else {
+                            inputColumn = outputColumn;
+                        }
                         columnType = itemType->Cast<TStructExprType>()->FindItemType(outputColumn->Content());
                     }
 

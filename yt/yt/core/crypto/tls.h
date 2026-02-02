@@ -20,11 +20,11 @@ TError GetLastSslError(TString message);
 
 struct TSslDeleter
 {
-    void operator() (BIO*) const noexcept;
-    void operator() (X509*) const noexcept;
-    void operator() (EVP_PKEY*) const noexcept;
-    void operator() (SSL_CTX*) const noexcept;
-    void operator() (SSL*) const noexcept;
+    void operator()(BIO*) const noexcept;
+    void operator()(X509*) const noexcept;
+    void operator()(EVP_PKEY*) const noexcept;
+    void operator()(SSL_CTX*) const noexcept;
+    void operator()(SSL*) const noexcept;
 };
 
 using TBioPtr = std::unique_ptr<BIO, TSslDeleter>;

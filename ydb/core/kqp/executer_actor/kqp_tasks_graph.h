@@ -1,6 +1,7 @@
 #pragma once
 
-#include <ydb/core/kqp/common/kqp_resolve.h>
+#include "shard_key_ranges.h"
+
 #include <ydb/core/kqp/common/kqp_tx_manager.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
@@ -12,12 +13,6 @@
 
 #include <ydb/library/yql/dq/tasks/dq_connection_builder.h>
 #include <ydb/library/yql/dq/tasks/dq_tasks_graph.h>
-
-namespace NKikimrTxDataShard {
-    class TKqpTransaction_TDataTaskMeta_TKeyRange;
-    class TKqpTransaction_TScanTaskMeta_TReadOpMeta;
-    class TKqpReadRangesSourceSettings;
-}
 
 namespace NKikimrKqp {
     class TKqpFullTextSourceSettings;
@@ -76,37 +71,6 @@ struct TColumnShardHashV1Params {
 
         return "[" + JoinSeq(",", stringNames) + "]";
     }
-};
-
-struct TShardKeyRanges {
-    // ordered ranges and points
-    TVector<TSerializedPointOrRange> Ranges;
-    std::optional<TSerializedTableRange> FullRange;
-
-    void AddPoint(TSerializedCellVec&& point);
-    void AddRange(TSerializedTableRange&& range);
-    void Add(TSerializedPointOrRange&& pointOrRange);
-
-    void CopyFrom(const TVector<TSerializedPointOrRange>& ranges);
-
-    void MakeFullRange(TSerializedTableRange&& range);
-    void MakeFullPoint(TSerializedCellVec&& range);
-    void MakeFull(TSerializedPointOrRange&& pointOrRange);
-
-    bool HasRanges() const;
-
-    bool IsFullRange() const { return FullRange.has_value(); }
-    TVector<TSerializedPointOrRange>& GetRanges() { return Ranges; }
-
-    void MergeWritePoints(TShardKeyRanges&& other, const TVector<NScheme::TTypeInfo>& keyTypes);
-
-    TString ToString(const TVector<NScheme::TTypeInfo>& keyTypes, const NScheme::TTypeRegistry& typeRegistry) const;
-    void SerializeTo(NKikimrTxDataShard::TKqpTransaction_TDataTaskMeta_TKeyRange* proto) const;
-    void SerializeTo(NKikimrTxDataShard::TKqpTransaction_TScanTaskMeta_TReadOpMeta* proto) const;
-    void SerializeTo(NKikimrTxDataShard::TKqpReadRangesSourceSettings* proto, bool allowPoints = true) const;
-    void ParseFrom(const NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta::TReadOpMeta& proto);
-
-    std::pair<const TSerializedCellVec*, bool> GetRightBorder() const;
 };
 
 struct TStageInfoMeta {
@@ -236,8 +200,10 @@ struct TGraphMeta {
     bool StreamResult = false;
     Ydb::Table::QueryStatsCollection::Mode StatsMode = Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE;
 
+    // TODO: stuff about shards on nodes should be private or protected.
+    using TShardToNodeMap = TMap<ui64 /* shardId */, ui64 /* nodeId */>;
     bool ShardsResolved = false;
-    TMap<ui64 /* shardId */, ui64 /* nodeId */> ShardIdToNodeId;
+    TShardToNodeMap ShardIdToNodeId;
     TMap<ui64 /* nodeId */, TVector<ui64 /* shardId */>> ShardsOnNode;
 
     ui32 DqChannelVersion = 1u;
@@ -388,6 +354,8 @@ public:
         TActorId bufferActorId
     );
 
+    void ResolveShards(TGraphMeta::TShardToNodeMap&& shardsToNodes);
+
     size_t BuildAllTasks(std::optional<TLlvmSettings> llvmSettings, const TVector<NKikimrKqp::TKqpNodeResources>& resourcesSnapshot,
         TQueryExecutionStats* stats, THashSet<ui64>* ShardsWithEffects
     );
@@ -505,7 +473,5 @@ struct TKqpTaskOutputType {
         ShardRangePartition = TTaskOutputType::COMMON_TASK_OUTPUT_TYPE_END
     };
 };
-
-void LogStage(const NActors::TActorContext& ctx, const TStageInfo& stageInfo);
 
 } // namespace NKikimr::NKqp

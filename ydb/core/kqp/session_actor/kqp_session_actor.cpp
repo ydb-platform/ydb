@@ -595,6 +595,14 @@ public:
                     return false;
                 }
             }
+
+            for (const auto& offsetInRequest : operations.GetOffsetsInTxn()) {
+                auto path = CanonizePath(NPersQueue::GetFullTopicPath(QueryState->GetDatabase(), offsetInRequest.GetTopicPath()));
+
+                if (!QueryState->TxCtx->TopicOperations.HasThisPartitionAlreadyBeenAdded(path, offsetInRequest.GetPartitionId())) {
+                    return false;
+                }
+            }
         }
 
         return true;
@@ -879,10 +887,8 @@ public:
                             ReplyResolveError(*resolveEv->Get());
                             co_return;
                         }
-                        tasksGraph.GetMeta().ShardIdToNodeId = std::move(resolveEv->Get()->ShardNodes);
-                        for (const auto& [shardId, nodeId] : tasksGraph.GetMeta().ShardIdToNodeId) {
-                            tasksGraph.GetMeta().ShardsOnNode[nodeId].push_back(shardId);
-                        }
+
+                        tasksGraph.ResolveShards(std::move(resolveEv->Get()->ShardsToNodes));
                     }
                 }
 

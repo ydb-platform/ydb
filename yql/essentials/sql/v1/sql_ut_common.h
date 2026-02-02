@@ -1,3 +1,4 @@
+// NOLINTBEGIN(misc-definitions-in-headers)
 #pragma once
 
 #include "sql_select_yql.h"
@@ -28,7 +29,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
 /// This function is used in BACKWARD COMPATIBILITY tests below that LIMIT the sets of token that CAN NOT be used
 /// as identifiers in different contexts in a SQL request
 ///\return list of tokens that failed this check
-TVector<TString> ValidateTokens(const THashSet<TString>& forbidden, const std::function<TString(const TString&)>& makeRequest) {
+inline TVector<TString> ValidateTokens(const THashSet<TString>& forbidden, const std::function<TString(const TString&)>& makeRequest) {
     THashMap<TString, bool> allTokens;
     for (const auto& t : NSQLFormat::GetKeywords()) {
         allTokens[t] = !forbidden.contains((t));
@@ -6937,7 +6938,7 @@ Y_UNIT_TEST(ScalarContextUsage4) {
 }
 } // Y_UNIT_TEST_SUITE(SqlToYQLErrors)
 
-void CheckUnused(const TString& req, const TString& symbol, unsigned row, unsigned col) {
+inline void CheckUnused(const TString& req, const TString& symbol, unsigned row, unsigned col) {
     auto res = SqlToYql(req);
 
     UNIT_ASSERT(res.Root);
@@ -8957,7 +8958,7 @@ Y_UNIT_TEST(DropExternalTableIfExists) {
 } // Y_UNIT_TEST_SUITE(ExternalTable)
 
 Y_UNIT_TEST_SUITE(TopicsDDL) {
-void TestQuery(const TString& query, bool expectOk = true, const TVector<TString> issueSubstrings = {}) {
+inline void TestQuery(const TString& query, bool expectOk = true, const TVector<TString> issueSubstrings = {}) {
     TStringBuilder finalQuery;
 
     finalQuery << "use plato;" << Endl << query;
@@ -12543,3 +12544,4 @@ Y_UNIT_TEST(CreateViewIfNotExists) {
 }
 
 } // Y_UNIT_TEST_SUITE(CreateViewNewSyntax)
+// NOLINTEND(misc-definitions-in-headers)

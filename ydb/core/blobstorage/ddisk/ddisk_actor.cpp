@@ -1,5 +1,7 @@
 #include "ddisk_actor.h"
 
+#include <ydb/core/base/counters.h>
+#include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/util/stlog.h>
 
 namespace NKikimr::NDDisk {
@@ -8,8 +10,57 @@ namespace NKikimr::NDDisk {
             TIntrusivePtr<NMonitoring::TDynamicCounters> counters)
         : BaseInfo(std::move(baseInfo))
         , Info(std::move(info))
-        , Counters(std::move(counters))
+        , CountersBase(GetServiceCounters(counters, "ddisks"))
     {
+        CountersChain.emplace_back("ddiskPool", BaseInfo.StoragePoolName);
+        CountersChain.emplace_back("group", Sprintf("%09" PRIu32, Info->GroupID));
+        CountersChain.emplace_back("orderNumber", Sprintf("%02" PRIu32, Info->GetOrderNumber(BaseInfo.VDiskIdShort)));
+        CountersChain.emplace_back("pdisk", Sprintf("%09" PRIu32, BaseInfo.PDiskId));
+        CountersChain.emplace_back("media", to_lower(NPDisk::DeviceTypeStr(BaseInfo.DeviceType, true)));
+
+        counters = CountersBase;
+        for (const auto& [name, value] : CountersChain) {
+            counters = counters->GetSubgroup(name, value);
+        }
+
+        auto cInterface = counters->GetSubgroup("subsystem", "interface");
+
+#define XX(NAME) auto cInterface##NAME = cInterface->GetSubgroup("operation", #NAME);
+        LIST_COUNTERS_INTERFACE_OPS(XX)
+#undef XX
+
+        auto cRecoveryLog = counters->GetSubgroup("subsystem", "recovery_log");
+
+        auto cChunks = counters->GetSubgroup("subsystem", "chunks");
+
+#define COUNTER(GROUP, NAME, DERIV) .NAME = c##GROUP->GetCounter(#NAME, DERIV),
+
+        Counters = {
+            .Interface = {
+#define XX(OP) \
+                .OP = { \
+                    COUNTER(Interface##OP, Requests, true) \
+                    COUNTER(Interface##OP, ReplyOk, true) \
+                    COUNTER(Interface##OP, ReplyErr, true) \
+                    COUNTER(Interface##OP, Bytes, true) \
+                },
+                LIST_COUNTERS_INTERFACE_OPS(XX)
+#undef XX
+            },
+            .RecoveryLog = {
+                COUNTER(RecoveryLog, ReadLogChunks, false)
+                COUNTER(RecoveryLog, LogRecordsProcessed, false)
+                COUNTER(RecoveryLog, LogRecordsApplied, false)
+                COUNTER(RecoveryLog, LogRecordsWritten, false)
+                COUNTER(RecoveryLog, NumChunkMapSnapshots, false)
+                COUNTER(RecoveryLog, NumChunkMapIncrements, false)
+                COUNTER(RecoveryLog, CutLogMessages, false)
+            },
+            .Chunks = {
+                COUNTER(Chunks, ChunksOwned, false)
+            },
+        };
+
         DDiskId = TStringBuilder() << '[' << BaseInfo.PDiskActorID.NodeId() << ':' << BaseInfo.PDiskId
             << ':' << BaseInfo.VDiskSlotId << ']';
     }
@@ -47,14 +98,17 @@ namespace NKikimr::NDDisk {
             hFunc(NPDisk::TEvLogResult, Handle)
             hFunc(TEvPrivate::TEvHandleEventForChunk, Handle)
             hFunc(NPDisk::TEvCutLog, Handle)
-            hFunc(NPDisk::TEvChunkWriteResult, Handle)
-            hFunc(NPDisk::TEvChunkReadResult, Handle)
+            hFunc(NPDisk::TEvChunkWriteRawResult, Handle)
+            hFunc(NPDisk::TEvChunkReadRawResult, Handle)
+
+            IgnoreFunc(NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate)
 
             cFunc(TEvents::TSystem::Poison, PassAway)
         )
     }
 
     void TDDiskActor::PassAway() {
+        CountersBase->RemoveSubgroupChain(CountersChain);
         TActorBootstrapped::PassAway();
     }
 

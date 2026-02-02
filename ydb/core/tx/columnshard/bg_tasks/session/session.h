@@ -54,6 +54,10 @@ public:
     bool IsRunning() const {
         return !!ActorId;
     }
+    
+    ISessionLogic::TStatus GetStatus() const {
+        return LogicContainer->GetStatus();
+    }
 
     const NActors::TActorId& GetActorIdVerified() const {
         AFL_VERIFY(!!ActorId);

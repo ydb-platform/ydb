@@ -1414,7 +1414,9 @@ bool TPartitionsLocationActor::ApplyResponse(
         partLocation.PartitionId = part.GetPartitionId();
         partLocation.Generation = part.GetGeneration();
         partLocation.NodeId = nodeId;
-        Response->Partitions.emplace_back(std::move(partLocation));
+        if (TopicPartitionsIds.contains(partLocation.PartitionId)) {
+            Response->Partitions.emplace_back(std::move(partLocation));
+        }
     }
     Finalize();
     return true;

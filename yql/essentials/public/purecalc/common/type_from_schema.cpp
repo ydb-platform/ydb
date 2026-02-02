@@ -203,12 +203,12 @@ bool CheckSchema(const TTypeAnnotationNode* got, const TTypeAnnotationNode* expe
 } // namespace
 
 namespace NYql::NPureCalc {
-const TTypeAnnotationNode* MakeTypeFromSchema(const NYT::TNode& yson, TExprContext& ctx) {
+const TTypeAnnotationNode* MakeTypeFromSchema(const NYT::TNode& yson, TExprContext& ctx, const TString& issueReportTarget) {
     const auto* type = NCommon::ParseTypeFromYson(yson, ctx);
 
     if (!type) {
         auto issues = ctx.IssueManager.GetIssues();
-        CheckFatalIssues(issues);
+        CheckFatalIssues(issues, issueReportTarget);
         ythrow TCompileError("", issues.ToString())
             << "Incorrect schema: " << NYT::NodeToYsonString(yson, NYson::EYsonFormat::Text);
     }
@@ -217,7 +217,7 @@ const TTypeAnnotationNode* MakeTypeFromSchema(const NYT::TNode& yson, TExprConte
 }
 
 const TStructExprType* ExtendStructType(
-    const TStructExprType* type, const THashMap<TString, NYT::TNode>& extraColumns, TExprContext& ctx)
+    const TStructExprType* type, const THashMap<TString, NYT::TNode>& extraColumns, TExprContext& ctx, const TString& issueReportTarget)
 {
     if (extraColumns.empty()) {
         return type;
@@ -225,14 +225,14 @@ const TStructExprType* ExtendStructType(
 
     auto items = type->GetItems();
     for (const auto& pair : extraColumns) {
-        items.push_back(ctx.MakeType<TItemExprType>(pair.first, MakeTypeFromSchema(pair.second, ctx)));
+        items.push_back(ctx.MakeType<TItemExprType>(pair.first, MakeTypeFromSchema(pair.second, ctx, issueReportTarget)));
     }
 
     auto result = ctx.MakeType<TStructExprType>(items);
 
     if (!result->Validate(TPosition(), ctx)) {
         auto issues = ctx.IssueManager.GetIssues();
-        CheckFatalIssues(issues);
+        CheckFatalIssues(issues, issueReportTarget);
         ythrow TCompileError("", issues.ToString()) << "Incorrect extended struct type";
     }
 

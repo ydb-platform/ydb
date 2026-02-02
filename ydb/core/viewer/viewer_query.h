@@ -990,8 +990,14 @@ private:
     }
 
     void HandleReply(NKqp::TEvKqpExecuter::TEvStreamData::TPtr& ev) {
-        QueryResponse.Event("StreamData");
         NKikimrKqp::TEvExecuterStreamData& data(ev->Get()->Record);
+        if (QueryResponse.Span) {
+            QueryResponse.Span.Event("StreamData", {
+                {"result_idx", static_cast<i64>(data.GetQueryResultIndex())},
+                {"seq", static_cast<i64>(data.GetSeqNo())},
+                {"rows", static_cast<i64>(data.GetResultSet().rows_size())},
+            });
+        }
 
         if (TotalRows < LimitRows) {
             int rowsAvailable = LimitRows - TotalRows;
@@ -1012,11 +1018,17 @@ private:
 
         THolder<NKqp::TEvKqpExecuter::TEvStreamDataAck> ack = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(ev->Get()->Record.GetSeqNo(), ev->Get()->Record.GetChannelId());
         if (TotalRows >= LimitRows) {
+            if (QueryResponse.Span) {
+                QueryResponse.Span.Event("LimitReached", {
+                    {"limit_rows", static_cast<i64>(LimitRows)},
+                    {"total_rows", static_cast<i64>(TotalRows)},
+                });
+            }
             ack->Record.SetEnough(true);
         }
         Send(ev->Sender, ack.Release());
-
     }
+
     void HandleReply(NKqp::TEvGetScriptExecutionOperationResponse::TPtr& ev) {
         GetOperationResponse->Set(std::move(ev));
 

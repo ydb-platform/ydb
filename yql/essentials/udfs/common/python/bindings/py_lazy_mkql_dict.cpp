@@ -729,8 +729,9 @@ NUdf::TUnboxedValue FromPySequence(
         return NUdf::TUnboxedValuePod(new TLazySequenceAsDict<type>(castCtx, itemType, std::move(fast), size));
                 INTEGRAL_VALUE_TYPES(MAKE_PRIMITIVE_TYPE_SIZE)
 #undef MAKE_PRIMITIVE_TYPE_SIZE
+                default:
+                    ythrow yexception() << "Invalid key type " << keyType;
             }
-            Y_ABORT("Invalid key type.");
         }
     }
     UdfTerminate((TStringBuilder() << castCtx->PyCtx->Pos << GetLastErrorAsString()).c_str());

@@ -118,6 +118,56 @@ struct TSplitSettings {
     }
 };
 
+struct TBackupToS3Settings {
+    // Async Replication
+    TControlWrapper EnableAsyncReplicationExport;
+    TControlWrapper EnableAsyncReplicationImport;
+    // Transfer
+    TControlWrapper EnableTransferExport;
+    TControlWrapper EnableTransferImport;
+    // External Data Source
+    TControlWrapper EnableExternalDataSourceExport;
+    TControlWrapper EnableExternalDataSourceImport;
+    // External Table
+    TControlWrapper EnableExternalTableExport;
+    TControlWrapper EnableExternalTableImport;
+
+    TBackupToS3Settings()
+        : EnableAsyncReplicationExport(1, 0, 1)
+        , EnableAsyncReplicationImport(1, 0, 1)
+        , EnableTransferExport(1, 0, 1)
+        , EnableTransferImport(1, 0, 1)
+        , EnableExternalDataSourceExport(1, 0, 1)
+        , EnableExternalDataSourceImport(1, 0, 1)
+        , EnableExternalTableExport(1, 0, 1)
+        , EnableExternalTableImport(1, 0, 1)
+    {}
+
+    void Register(TIntrusivePtr<NKikimr::TControlBoard>& icb) {
+        TControlBoard::RegisterSharedControl(EnableAsyncReplicationExport, icb->BackupControls.S3Controls.EnableAsyncReplicationExport);
+        TControlBoard::RegisterSharedControl(EnableAsyncReplicationImport, icb->BackupControls.S3Controls.EnableAsyncReplicationImport);
+
+        TControlBoard::RegisterSharedControl(EnableTransferExport, icb->BackupControls.S3Controls.EnableTransferExport);
+        TControlBoard::RegisterSharedControl(EnableTransferImport, icb->BackupControls.S3Controls.EnableTransferImport);
+
+        TControlBoard::RegisterSharedControl(EnableExternalDataSourceExport, icb->BackupControls.S3Controls.EnableExternalDataSourceExport);
+        TControlBoard::RegisterSharedControl(EnableExternalDataSourceImport, icb->BackupControls.S3Controls.EnableExternalDataSourceImport);
+
+        TControlBoard::RegisterSharedControl(EnableExternalTableExport, icb->BackupControls.S3Controls.EnableExternalTableExport);
+        TControlBoard::RegisterSharedControl(EnableExternalTableImport, icb->BackupControls.S3Controls.EnableExternalTableImport);
+    }
+};
+
+struct TBackupSettings {
+    TBackupToS3Settings S3Settings;
+
+    TBackupSettings() = default;
+
+    void Register(TIntrusivePtr<NKikimr::TControlBoard>& icb) {
+        S3Settings.Register(icb);
+    }
+};
+
 
 struct TBindingsRoomsChange {
     TChannelsBindings ChannelsBindings;

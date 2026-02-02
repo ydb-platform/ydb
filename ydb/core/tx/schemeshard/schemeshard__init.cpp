@@ -4143,7 +4143,6 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     continue;
                 }
 
-                TTableInfo::TPtr tableInfo = Self->Tables.at(pathId);
 
                 if (statusesByTxId.contains(txId)) {
                     for (auto& recByTxId: statusesByTxId.at(txId)) {
@@ -4157,16 +4156,25 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     }
                 }
 
-                switch (kind) {
-                case TTableInfo::TBackupRestoreResult::EKind::Backup:
-                    tableInfo->BackupHistory[txId] = std::move(info);
-                    break;
-                case TTableInfo::TBackupRestoreResult::EKind::Restore:
-                    tableInfo->RestoreHistory[txId] = std::move(info);
-                    if (tableInfo->IsRestore) {
-                        RestoreTablesToUnmark.push_back(pathId);
+                auto fillBackupInfo = [&](auto& tableInfo) {
+                    switch (kind) {
+                    case TTableInfo::TBackupRestoreResult::EKind::Backup:
+                        tableInfo->BackupHistory[txId] = std::move(info);
+                        break;
+                    case TTableInfo::TBackupRestoreResult::EKind::Restore:
+                        tableInfo->RestoreHistory[txId] = std::move(info);
+                        if (tableInfo->IsRestore) {
+                            RestoreTablesToUnmark.push_back(pathId);
+                        }
+                        break;
                     }
-                    break;
+                };
+
+                if (auto it = Self->Tables.find(pathId); it != Self->Tables.end()) {
+                    fillBackupInfo(it->second);
+                } else if (Self->ColumnTables.contains(pathId)) {
+                    auto tableInfo = Self->ColumnTables.at(pathId).GetPtr();
+                    fillBackupInfo(tableInfo);
                 }
 
                 LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -5107,6 +5115,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                             itStore->second->ColumnTablesUnderOperation.insert(pathId);
                         }
                     }
+                }
+                
+                if (rowset.HaveValue<Schema::ColumnTables::IsRestore>()) {
+                    tableInfo->IsRestore = rowset.GetValue<Schema::ColumnTables::IsRestore>();
                 }
 
                 if (!rowset.Next()) {

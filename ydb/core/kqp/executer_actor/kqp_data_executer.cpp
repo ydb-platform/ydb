@@ -2882,6 +2882,7 @@ private:
         YQL_ENSURE(Planner);
 
         for (const auto& task : TasksGraph.GetTasks()) {
+            // TODO: is Meta.NodeId assigned real NodeId where task is executed?
             if (task.Meta.NodeId == nodeId && !task.Meta.Completed) {
                 if (task.ComputeActorId) {
                     Planner->CompletedCA(task.Id, task.ComputeActorId);

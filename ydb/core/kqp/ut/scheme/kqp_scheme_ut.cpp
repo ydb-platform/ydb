@@ -11149,7 +11149,6 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             return ExecuteGeneric<UseQueryService>(queryClient, session, query);
         };
 
-        // ok
         {
             const auto query = R"(
                 --!syntax_v1
@@ -11207,6 +11206,16 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             )";
             const auto result = executeQuery(query);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            const auto query = R"(
+                --!syntax_v1
+                CREATE TOPIC `/Root/topic1` (
+                    CONSUMER cs WITH (type='streaming', keep_messages_order=true)
+                )
+            )";
+            const auto result = executeQuery(query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
         }
     }
 

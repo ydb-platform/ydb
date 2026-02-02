@@ -2700,7 +2700,6 @@ static bool StoreConsumerSettingsEntry(
             ctx.Error() << to_upper(id.Name) << " reset is not supported";
             return false;
         } else {
-            // ToDo: !! validate value
             settings.DefaultProcessingTimeout = valueExprNode;
         }
     } else if (name == "max_processing_attempts") {
@@ -2712,7 +2711,6 @@ static bool StoreConsumerSettingsEntry(
             ctx.Error() << to_upper(id.Name) << " reset is not supported";
             return false;
         } else {
-            // ToDo: !! validate value
             settings.MaxProcessingAttempts = valueExprNode;
         }
     } else if (name == "dead_letter_policy") {

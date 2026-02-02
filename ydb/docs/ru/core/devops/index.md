@@ -7,7 +7,7 @@
 Основные подразделы:
 
 * [{#T}](concepts/index.md) — дополнения к общему разделу [концепций](../concepts/index.md), актуальные для DevOps-инженеров.
-* [{#T}](cluster-maintenance/add-new-hard-drive/index.md) — раздел содержит инструкции по обслуживанию кластеров {{ ydb-short-name }}.
+* [{#T}](cluster-maintenance/index.md) — раздел содержит инструкции по обслуживанию кластеров {{ ydb-short-name }}.
 * [{#T}](configuration-management/index.md) — управление конфигурацией кластеров {{ ydb-short-name }}.
 * [{#T}](deployment-options/index.md) — способы развёртывания кластеров {{ ydb-short-name }}.
   * **[Ansible](deployment-options/ansible/index.md)**: для развертываний на физическом оборудовании и виртуальных машинах.

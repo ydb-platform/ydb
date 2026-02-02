@@ -673,36 +673,30 @@ public:
         YQL_ENSURE(!PendingReadResults.empty());
         if (UseArrowFormat) {
             YQL_ENSURE(!PendingDocumentIds.empty());
-            if (UnprocessedDocumentPos == PendingDocumentIds.front()->length()) {
-                DocumentCount -= PendingDocumentIds.front()->length();
-                PendingDocumentIds.pop_front();
-                UnprocessedDocumentPos = 0;
-                if (!PendingDocumentFrequencies.empty()) {
-                    PendingDocumentFrequencies.pop_front();
-                }
-                bool finished = PendingReadResults.front()->Record.GetFinished();
-                auto ackInfo = std::make_pair(PendingReadResults.front()->Record.GetReadId(), PendingReadResults.front()->Record.GetSeqNo());
-                PendingReadResults.pop_front();
-                if (finished) {
-                    return std::nullopt;
-                }
-                return ackInfo;
+            if (UnprocessedDocumentPos < PendingDocumentIds.front()->length()) {
+                return std::nullopt;
+            }
+            DocumentCount -= PendingDocumentIds.front()->length();
+            PendingDocumentIds.pop_front();
+            UnprocessedDocumentPos = 0;
+            if (!PendingDocumentFrequencies.empty()) {
+                PendingDocumentFrequencies.pop_front();
             }
         } else {
             auto& result = PendingReadResults.front();
-            if (UnprocessedDocumentPos == result->GetRowsCount()) {
-                DocumentCount -= result->GetRowsCount();
-                UnprocessedDocumentPos = 0;
-                bool finished = PendingReadResults.front()->Record.GetFinished();
-                auto ackInfo = std::make_pair(result->Record.GetReadId(), result->Record.GetSeqNo());
-                PendingReadResults.pop_front();
-                if (finished) {
-                    return std::nullopt;
-                }
-                return ackInfo;
+            if (UnprocessedDocumentPos < result->GetRowsCount()) {
+                return std::nullopt;
             }
+            DocumentCount -= result->GetRowsCount();
+            UnprocessedDocumentPos = 0;
         }
-        return std::nullopt;
+        bool finished = PendingReadResults.front()->Record.GetFinished();
+        auto ackInfo = std::make_pair(PendingReadResults.front()->Record.GetReadId(), PendingReadResults.front()->Record.GetSeqNo());
+        PendingReadResults.pop_front();
+        if (finished) {
+            return std::nullopt;
+        }
+        return ackInfo;
     }
 
     ui32 GetCurrentFrequency() const {
@@ -1506,7 +1500,6 @@ public:
             ReadRows++;
 
             if (Limit > 0 && ProducedItemsCount >= static_cast<ui64>(Limit)) {
-                finished = true;
                 break;
             }
 
@@ -1519,7 +1512,7 @@ public:
             NotifyCA();
         }
 
-        finished = Reads.empty() && !ResolveInProgress && ResultQueue.empty();
+        finished = IsFinished();
         return computeBytes;
     }
 
@@ -1546,9 +1539,13 @@ public:
         Send(ComputeActorId, new TEvAsyncInputError(InputIndex, std::move(issues), statusCode));
     }
 
+    bool IsFinished() {
+        return Reads.empty() && !ResolveInProgress && ResultQueue.empty() ||
+            ProducedItemsCount >= static_cast<ui64>(Limit);
+    }
+
     void NotifyCA() {
-        bool finished = Reads.empty() && !ResolveInProgress && ResultQueue.empty();
-        if (!PendingNotify && (finished || !ResultQueue.empty())) {
+        if (!PendingNotify && (!ResultQueue.empty() || IsFinished())) {
             Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
             PendingNotify = true;
         }
@@ -1730,10 +1727,11 @@ public:
         }
     }
 
-    void WordResult(std::unique_ptr<NKikimr::TEvDataShard::TEvReadResult> msg, ui64 wordIndex, bool finished) {
+    void WordResult(std::unique_ptr<NKikimr::TEvDataShard::TEvReadResult> msg, ui64 wordIndex) {
         YQL_ENSURE(wordIndex < Words.size());
         auto& incomingWordInfo = Words[wordIndex];
 
+        const bool finished = msg->Record.GetFinished();
         if (msg->GetRowsCount() > 0) {
             // Try to always keep 2*limit rows in memory for maximum pipelining. In this way,
             // while we process one batch, the data shard already prepares another one for us
@@ -1750,7 +1748,7 @@ public:
 
         if (finished) {
             ContinueWordRead(incomingWordInfo);
-            // if no pending reads and everithing is already merged and
+            // if no pending reads and everything is already merged and
             // processed then word is finished.
             if (incomingWordInfo.FinishedRead()) {
                 FinishedWords++;
@@ -1759,8 +1757,8 @@ public:
 
         TStackVec<ui32, 64> matchedWords;
         const size_t minShouldMatch = QueryCtx->GetMinimumShouldMatch();
-        while(!MergeQueue.empty() && MergeQueue.size() + FinishedWords == Words.size()) {
-            if (MergeQueue.size() < minShouldMatch) {
+        while (!MergeQueue.empty() && MergeQueue.size() + FinishedWords == Words.size()) {
+            if (MergeQueue.size() + FinishedWords < minShouldMatch) {
                 break;
             }
 
@@ -1889,7 +1887,7 @@ public:
                 WordStatsResult(msg, cookie);
                 break;
             case EReadKind_Word:
-                WordResult(std::unique_ptr<NKikimr::TEvDataShard::TEvReadResult>(ev->Release().Release()), cookie, record.GetFinished());
+                WordResult(std::unique_ptr<NKikimr::TEvDataShard::TEvReadResult>(ev->Release().Release()), cookie);
                 break;
             case EReadKind_TotalStats:
                 HandleTotalStatsResult(msg);

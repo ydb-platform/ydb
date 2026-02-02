@@ -2641,7 +2641,7 @@ public:
     using TBase::LogPrefix;
 
     TDropStreamingQueryActor(const NKikimrSchemeOp::TModifyScheme& schemeTx, const TExternalContext& context, IStreamingQueryOperationController::TPtr controller)
-        : TBase(__func__, schemeTx, schemeTx.GetDrop().GetName(), context, std::move(controller), NACLib::DescribeSchema | NACLib::RemoveSchema)
+        : TBase(__func__, schemeTx, schemeTx.GetDrop().GetName(), context, std::move(controller), NACLib::RemoveSchema | NACLib::CreateTable | NACLib::DescribeSchema)
         , SuccessOnNotExist(schemeTx.GetSuccessOnNotExist())
     {}
 

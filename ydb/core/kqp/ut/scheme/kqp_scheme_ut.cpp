@@ -13127,7 +13127,7 @@ END DO)",
             const auto result = db.ExecuteQuery(fmt::format(R"(
                 GRANT ALL ON `/Root/MySource` TO `{create_user}`, `{remove_user}`, `{describe_user}`, `{alter_user}`, `{empty_user}`;
                 GRANT CREATE TABLE ON `/Root` TO `{create_user}`;
-                GRANT REMOVE SCHEMA, DESCRIBE SCHEMA ON `/Root` TO `{remove_user}`;
+                GRANT REMOVE SCHEMA, DESCRIBE SCHEMA, CREATE TABLE ON `/Root` TO `{remove_user}`;
                 GRANT DESCRIBE SCHEMA ON `/Root` TO `{describe_user}`;
                 GRANT ALTER SCHEMA, DESCRIBE SCHEMA ON `/Root` TO `{alter_user}`;)",
                 "create_user"_a = createUser,
@@ -13166,9 +13166,15 @@ END DO)",
                 ) AS DO BEGIN INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic END DO)";
 
             checkAccessDenied(sql, emptyUser, "Access denied");
-            checkAccessDenied(sql, removeUser, "Access denied");
             checkAccessDenied(sql, describeUser, "Access denied");
             checkAccessDenied(sql, alterUser, "Access denied");
+            checkSuccess(sql, removeUser);
+            const auto result = db.ExecuteQuery(
+                R"(DROP STREAMING QUERY MyStreamingQuery;)",
+                NQuery::TTxControl::NoTx()
+            ).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+
             checkSuccess(sql, createUser);
         }
 

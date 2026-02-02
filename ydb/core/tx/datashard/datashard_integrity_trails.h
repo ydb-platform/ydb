@@ -126,7 +126,7 @@ inline void LogIntegrityTrailsKeys(const NActors::TActorContext& ctx, const ui64
     }
 }
 
-inline void LogIntegrityTrailsLocks(const TActorContext& ctx, const ui64 tabletId, const ui64 txId, const TVector<ui64>& locks) {
+inline void LogIntegrityTrailsLocks(const NActors::TActorContext& ctx, const ui64 tabletId, const ui64 txId, const TVector<ui64>& locks) {
     if (locks.empty()) {
         return;
     }

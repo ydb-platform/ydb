@@ -72,7 +72,6 @@ std::vector<TLdapRequestProcessor::TProtocolOpData> CreateSearchEntryResponses(c
 
 } // namespace
 
-// TLdapRequestProcessor::TLdapRequestProcessor(TAtomicSharedPtr<TLdapSocketWrapper> socket)
 TLdapRequestProcessor::TLdapRequestProcessor(std::shared_ptr<TSocket> socket)
     : Socket(socket)
 {}
@@ -132,7 +131,6 @@ int TLdapRequestProcessor::ExtractMessageId() {
     return res;
 }
 
-// std::vector<TLdapRequestProcessor::TProtocolOpData> TLdapRequestProcessor::Process(const TLdapMockResponses& responses) {
 std::vector<TLdapRequestProcessor::TProtocolOpData> TLdapRequestProcessor::Process(std::shared_ptr<const TLdapMockResponses> responses) {
     unsigned char protocolOp = GetByte();
     switch (protocolOp) {

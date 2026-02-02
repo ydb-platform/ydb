@@ -2381,6 +2381,13 @@ class Cuda(object):
             # Set paths explicitly
             "--dont-use-profile",
             "--libdevice-directory=$CUDA_ROOT/nvvm/libdevice",
+
+            # --keep is necessary to prevent nvcc from embedding nvcc pid in generated
+            # symbols.  It makes nvcc use the original file name as the prefix in the
+            # generated files (otherwise it also prepends tmpxft_{pid}_00000000-5), and
+            # cicc derives the module name from its {input}.cpp1.ii file name.
+            "--keep",
+            "--keep-dir=${BINDIR}",
         ]
 
         if not self.have_cuda.value:
@@ -2444,6 +2451,9 @@ class Cuda(object):
             emit('NVCC_STD_VER', '17')
         else:
             emit('NVCC_STD_VER', '20')
+
+        emit('CUDAFE', '"{}"'.format(self.build.host.exe('$CUDA_ROOT', 'bin', 'cudafe++')))
+        emit('FATBINARY', '"{}"'.format(self.build.host.exe('$CUDA_ROOT', 'bin', 'fatbinary')))
 
     def print_macros(self):
         mtime = ' '
@@ -2511,31 +2521,26 @@ class Cuda(object):
             return value
 
     def auto_cuda_architectures(self):
-        # empty list does not mean "no architectures"
-        # it means "no restriction -- any available architecture"
+        architectures = []
 
-        host, target = self.build.host_target
-        if not target.is_linux_x86_64:
-            # do not impose any restrictions, when build not for "linux 64-bit"
-            return ''
+        version = tuple(map(int, self.cuda_version.value.split('.')))
 
-        # Equality to CUDA 11.4 is rather strict comparison
-        # TODO: find out how we can relax check (e.g. to include more version of CUDA toolkit)
-        if self.cuda_version.value == '11.4':
-            # * use output of CUDA 11.4 `nvcc --help`
-            # * drop support for '53', '62', '72' and '87'
-            #   (these devices run only on arm64)
-            # * drop support for '37'
-            #   the single place it's used in Arcadia is https://a.yandex-team.ru/arcadia/sdg/sdc/third_party/cub/common.mk?rev=r13268523#L69
-            return ':'.join(
-                ['sm_35',
-                 'sm_50', 'sm_52',
-                 'sm_60', 'sm_61',
-                 'sm_70', 'sm_75',
-                 'sm_80', 'sm_86',
-                 'compute_86'])
-        else:
-            return ''
+        if version < (12, 0):
+            architectures.append('sm_35')
+
+        if version < (13, 0):
+            architectures.extend(['sm_50', 'sm_52', 'sm_60', 'sm_61', 'sm_70'])
+
+        if version >= (11, 0):
+            architectures.append('sm_80')
+
+        if version >= (11, 1):
+            architectures.append('sm_86')
+
+        if version >= (11, 8):
+            architectures.extend(['sm_89', 'sm_90'])
+
+        return ':'.join(architectures)
 
     def auto_use_arcadia_cuda(self):
         return not self.cuda_root.from_user

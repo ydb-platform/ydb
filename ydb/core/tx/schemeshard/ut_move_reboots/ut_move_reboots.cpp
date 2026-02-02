@@ -486,7 +486,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveRebootsTest) {
 
                 pathVersion = TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                                    {NLs::PathExist,
-                                    NLs::ChildrenCount(2)});
+                                    NLs::ChildrenCount(3)});
             }
 
             t.TestEnv->ReliablePropose(runtime, MoveTableRequest(++t.TxId, "/MyRoot/ColumnTable", "/MyRoot/ColumnTableMove", TTestTxConfig::SchemeShard, {pathVersion}),
@@ -497,7 +497,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveRebootsTest) {
             {
                 TInactiveZone inactive(activeZone);
                 TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                                   {NLs::ChildrenCount(2)});
+                                   {NLs::ChildrenCount(3)});
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/ColumnTableMove"),
                                    {NLs::PathVersionEqual(4),
                                     NLs::PathExist});

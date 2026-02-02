@@ -115,6 +115,7 @@ namespace NKikimr::NDDisk {
             enum {
                 EvHandleSingleQuery = EventSpaceBegin(TEvents::ES_PRIVATE),
                 EvHandleEventForChunk,
+                EvHandlePersistentBufferEventForChunk,
             };
 
             struct TEvHandleEventForChunk : TEventLocal<TEvHandleEventForChunk, EvHandleEventForChunk> {
@@ -124,6 +125,14 @@ namespace NKikimr::NDDisk {
                 TEvHandleEventForChunk(ui64 tabletId, ui64 vChunkIndex)
                     : TabletId(tabletId)
                     , VChunkIndex(vChunkIndex)
+                {}
+            };
+
+            struct TEvHandlePersistentBufferEventForChunk : TEventLocal<TEvHandlePersistentBufferEventForChunk, EvHandlePersistentBufferEventForChunk> {
+                ui64 ChunkIndex;
+
+                TEvHandlePersistentBufferEventForChunk(ui64 chunkIndex)
+                    : ChunkIndex(chunkIndex)
                 {}
             };
         };
@@ -208,6 +217,7 @@ namespace NKikimr::NDDisk {
         void HandleChunkReserved();
         void Handle(NPDisk::TEvLogResult::TPtr ev);
         void Handle(TEvPrivate::TEvHandleEventForChunk::TPtr ev);
+        void Handle(TEvPrivate::TEvHandlePersistentBufferEventForChunk::TPtr ev);
 
         void Handle(NPDisk::TEvCutLog::TPtr ev);
 
@@ -320,10 +330,34 @@ namespace NKikimr::NDDisk {
 
         std::map<std::tuple<ui64, ui64>, TPersistentBuffer> PersistentBuffers;
 
-        std::set<TChunkIdx> PersistentBufferOwnedChunks;
+        static constexpr ui32 SectorSize = 4096;
+        static constexpr ui32 ChunkSize = SectorSize * 32768;
+
+
+        struct TPersistentBufferHeader {
+            static constexpr ui32 MaxSectorsPerBuffer = 128;
+            static constexpr ui64 PersistentBufferHeaderSignature[2] = {17823859641143956470ull, 2161636001838356059ull};
+
+            ui64 Signature[2];
+            ui64 TabletId;
+            ui64 VChunkIndex;
+            ui64 OffsetInBytes;
+            ui64 Size;
+            ui64 Lsn;
+            ui32 SectorFlags[MaxSectorsPerBuffer];
+            ui64 SectorChecksum[MaxSectorsPerBuffer];
+            ui64 HeaderChecksum;
+        };
+        static_assert(sizeof(TPersistentBufferHeader) <= ChunkSize);
+
+        std::vector<TChunkIdx> PersistentBufferOwnedChunks;
+        ui32 PersistentBufferEmptyChunkOffset = 0;
+
         ui64 PersistentBufferChunkMapSnapshotLsn = Max<ui64>();
+        std::queue<TPendingEvent> PendingPersistentBufferEvents;
 
         void IssuePersistentBufferChunkAllocation();
+        void ProcessPersistentBufferQueue();
 
         struct TWriteInFlight {
             TActorId Sender;

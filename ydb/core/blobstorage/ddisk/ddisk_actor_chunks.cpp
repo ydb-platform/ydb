@@ -67,11 +67,11 @@ namespace NKikimr::NDDisk {
                     ChunkMapIncrementsInFlight.emplace(tabletId, vChunkIndex, chunkIdx);
                 },
                 [this, chunkIdx](const TChunkForPersistentBuffer&) {
-                    Y_ABORT_UNLESS(!PersistentBufferOwnedChunks.contains(chunkIdx));
                     IssuePDiskLogRecord(TLogSignature::SignaturePersistentBufferChunkMap, chunkIdx
                         , CreatePersistentBufferChunkMapSnapshot(), &PersistentBufferChunkMapSnapshotLsn, [this, chunkIdx] {
-                        PersistentBufferOwnedChunks.insert(chunkIdx);
-                        // TODO: Send(SelfId(), new TEvPrivate::TEvHandlePersistentBufferEventForChunk(chunkIdx));
+                        PersistentBufferOwnedChunks.emplace_back(chunkIdx);
+                        PersistentBufferEmptyChunkOffset = 0;
+                        Send(SelfId(), new TEvPrivate::TEvHandlePersistentBufferEventForChunk(chunkIdx));
                         ++*Counters.Chunks.ChunksOwned;
                     });
                 }

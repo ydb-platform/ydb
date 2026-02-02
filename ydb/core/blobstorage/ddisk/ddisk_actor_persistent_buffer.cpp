@@ -6,50 +6,92 @@
 
 namespace NKikimr::NDDisk {
 
+    void TDDiskActor::Handle(TEvPrivate::TEvHandlePersistentBufferEventForChunk::TPtr ev) {
+        auto chunkIdx = ev->Get()->ChunkIndex;
+        Y_ABORT_UNLESS(chunkIdx);
+        ProcessPersistentBufferQueue();
+    }
+
+    void TDDiskActor::ProcessPersistentBufferQueue() {
+        Y_ABORT_UNLESS(!PendingPersistentBufferEvents.empty());
+        auto& temp = PendingPersistentBufferEvents.front().Ev;
+        const auto& record = temp->Get<TEvWritePersistentBuffer>()->Record;
+        const TQueryCredentials creds(record.GetCredentials());
+        const TBlockSelector selector(record.GetSelector());
+        const ui64 lsn = record.GetLsn();
+        if (PersistentBufferOwnedChunks.empty()
+            || PersistentBufferEmptyChunkOffset + SectorSize + selector.Size >= ChunkSize) {
+            IssuePersistentBufferChunkAllocation();
+            return;
+        }
+        TChunkIdx chunkIdx = PersistentBufferOwnedChunks.back();
+
+        TRope data;
+        TString buffer;
+        buffer.resize(SectorSize);
+        TPersistentBufferHeader *header = (TPersistentBufferHeader*)buffer.data();
+        header->Signature[0] = TPersistentBufferHeader::PersistentBufferHeaderSignature[0];
+        header->Signature[1] = TPersistentBufferHeader::PersistentBufferHeaderSignature[1];
+        header->TabletId = creds.TabletId;
+        header->VChunkIndex = selector.VChunkIndex;
+        header->OffsetInBytes = selector.OffsetInBytes;
+        header->Size = selector.Size;
+        header->Lsn = lsn;
+        data.Insert(data.End(), TRope(buffer));
+        const TWriteInstruction instr(record.GetInstruction());
+        if (instr.PayloadId) {
+            data.Insert(data.End(), TRope(temp->Get<TEvWritePersistentBuffer>()->GetPayload(*instr.PayloadId)));
+        }
+
+        auto span = std::move(NWilson::TSpan(TWilson::DDiskTopLevel, std::move(temp->TraceId), "DDisk.WritePersistentBuffer",
+                NWilson::EFlags::NONE, TActivationContext::ActorSystem())
+            .Attribute("chunk_idx", chunkIdx)
+            .Attribute("offset_in_bytes", PersistentBufferEmptyChunkOffset));
+
+        Counters.Interface.WritePersistentBuffer.Request(selector.Size);
+        const ui64 cookie = NextCookie++;
+        Send(BaseInfo.PDiskActorID, new NPDisk::TEvChunkWriteRaw(
+            PDiskParams->Owner,
+            PDiskParams->OwnerRound,
+            chunkIdx,
+            PersistentBufferEmptyChunkOffset,
+            std::move(data)), 0, cookie);
+
+        WriteCallbacks.try_emplace(cookie, std::move(span), [this, sender = temp->Sender, cookie = temp->Cookie,
+                tabletId = creds.TabletId, vchunkIndex = selector.VChunkIndex, offsetInBytes = selector.OffsetInBytes,
+                size = selector.Size, data = std::move(temp->Get<TEvWritePersistentBuffer>()->GetPayload(*instr.PayloadId)), lsn = lsn,
+                session = temp->InterconnectSession, temp = temp.release()](NPDisk::TEvChunkWriteRawResult& /*ev*/, NWilson::TSpan&& span) {
+            Counters.Interface.WritePersistentBuffer.Reply(true);
+            span.End();
+            PersistentBufferEmptyChunkOffset += data.size() + SectorSize;
+            auto& buffer = PersistentBuffers[{tabletId, vchunkIndex}];
+            auto [it, inserted] = buffer.Records.try_emplace(lsn);
+            TPersistentBuffer::TRecord& pr = it->second;
+            if (inserted) {
+                pr = {
+                    .OffsetInBytes = offsetInBytes,
+                    .Size = size,
+                    .Data = std::move(data),
+                };
+            } else {
+                Y_ABORT_UNLESS(pr.OffsetInBytes == offsetInBytes);
+                Y_ABORT_UNLESS(pr.Size == size);
+                Y_ABORT_UNLESS(pr.Data == data);
+            }
+            SendReply(*temp, std::make_unique<TEvWritePersistentBufferResult>(NKikimrBlobStorage::NDDisk::TReplyStatus::OK));
+        });
+        PendingPersistentBufferEvents.pop();
+        if (!PendingPersistentBufferEvents.empty()) {
+            ProcessPersistentBufferQueue();
+        }
+    }
+
     void TDDiskActor::Handle(TEvWritePersistentBuffer::TPtr ev) {
         if (!CheckQuery(*ev, &Counters.Interface.WritePersistentBuffer)) {
             return;
         }
-
-        const auto& record = ev->Get()->Record;
-        const TQueryCredentials creds(record.GetCredentials());
-        const TBlockSelector selector(record.GetSelector());
-        const ui64 lsn = record.GetLsn();
-
-        Counters.Interface.WritePersistentBuffer.Request(selector.Size);
-
-        auto span = std::move(NWilson::TSpan(TWilson::DDiskTopLevel, std::move(ev->TraceId), "DDisk.WritePersistentBuffer",
-                NWilson::EFlags::NONE, TActivationContext::ActorSystem())
-            .Attribute("tablet_id", static_cast<long>(creds.TabletId))
-            .Attribute("vchunk_index", static_cast<long>(selector.VChunkIndex))
-            .Attribute("offset_in_bytes", selector.OffsetInBytes)
-            .Attribute("size", selector.Size)
-            .Attribute("lsn", static_cast<long>(lsn)));
-
-        const TWriteInstruction instr(record.GetInstruction());
-        TRope data;
-        if (instr.PayloadId) {
-            data = ev->Get()->GetPayload(*instr.PayloadId);
-        }
-
-        auto& buffer = PersistentBuffers[{creds.TabletId, selector.VChunkIndex}];
-        auto [it, inserted] = buffer.Records.try_emplace(lsn);
-        TPersistentBuffer::TRecord& pr = it->second;
-        if (inserted) {
-            pr = {
-                .OffsetInBytes = selector.OffsetInBytes,
-                .Size = selector.Size,
-                .Data = std::move(data),
-            };
-        } else {
-            Y_ABORT_UNLESS(pr.OffsetInBytes == selector.OffsetInBytes);
-            Y_ABORT_UNLESS(pr.Size == selector.Size);
-            Y_ABORT_UNLESS(pr.Data == data);
-        }
-
-        Counters.Interface.WritePersistentBuffer.Reply(true);
-        span.End();
-        SendReply(*ev, std::make_unique<TEvWritePersistentBufferResult>(NKikimrBlobStorage::NDDisk::TReplyStatus::OK));
+        PendingPersistentBufferEvents.emplace(ev, "WaitingPersistentBufferWrite");
+        ProcessPersistentBufferQueue();
     }
 
     void TDDiskActor::Handle(TEvReadPersistentBuffer::TPtr ev) {

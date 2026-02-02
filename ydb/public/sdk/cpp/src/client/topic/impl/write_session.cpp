@@ -909,11 +909,11 @@ void TKeyedWriteSession::TMessagesWorker::ScheduleResendMessages(ui64 partition,
             break;
         }
 
+        auto seqNo = (*resendIt)->Message.SeqNo_.value();
         if (ackQueueIt == ackQueueEnd) {
             // this case can happen if the message was sent, but session was closed before the ack was received
             TWriteSessionEvent::TWriteAck ack;
-            Y_ENSURE((*resendIt)->Message.SeqNo_.has_value(), "SeqNo is not set");
-            ack.SeqNo = (*resendIt)->Message.SeqNo_.value();
+            ack.SeqNo = seqNo;
             acksToSend.push_back(std::move(ack));
         } else {
             auto acksEvent = std::get_if<TWriteSessionEvent::TAcksEvent>(&*ackQueueIt);
@@ -923,12 +923,19 @@ void TKeyedWriteSession::TMessagesWorker::ScheduleResendMessages(ui64 partition,
                 continue;
             }
 
+            if (acksEvent->Acks[ackIdx].SeqNo > seqNo) {
+                // this case can happen if the message was sent, but session was closed before the ack was received
+                TWriteSessionEvent::TWriteAck ack;
+                ack.SeqNo = seqNo;
+                acksEvent->Acks.insert(acksEvent->Acks.begin() + ackIdx, std::move(ack));
+            }
             ++ackIdx;
         }
         ++resendIt;     
     }
 
     if (!acksToSend.empty()) {
+        LOG_LAZY(Session->DbDriverState->Log, TLOG_INFO, TStringBuilder() << "Sending acks to partition " << partition << ": " << acksToSend.size());
         TWriteSessionEvent::TAcksEvent event;
         event.Acks = std::move(acksToSend);
         Session->EventsWorker->HandleAcksEvent(partition, std::move(event));

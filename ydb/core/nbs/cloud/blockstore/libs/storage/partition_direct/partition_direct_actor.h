@@ -3,6 +3,7 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/log.h>
 
+#include <ydb/core/nbs/cloud/blockstore/config/storage.pb.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/direct_block_group/direct_block_group.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
@@ -10,6 +11,7 @@
 namespace NYdb::NBS::NStorage::NPartitionDirect {
 
 using namespace NActors;
+using namespace NYdb::NBS::NProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -17,18 +19,18 @@ class TPartitionActor
     : public TActorBootstrapped<TPartitionActor>
 {
 private:
+    TStorageConfig StorageConfig;
+
     TActorId BSControllerPipeClient;
 
     std::unique_ptr<TDirectBlockGroup> DirectBlockGroup;
 
     std::atomic<NActors::TMonotonic> LastTraceTs{NActors::TMonotonic::Zero()};
     // Throttle trace ID creation to avoid overwhelming the tracing system
-    // One trace per 100ms should be sufficient for observability
-    // TODO: get from config
-    TDuration TraceSamplePeriod = TDuration::MilliSeconds(100);
+    TDuration TraceSamplePeriod;
 
 public:
-    TPartitionActor() = default;
+    TPartitionActor(TStorageConfig storageConfig);
 
     void Bootstrap(const TActorContext& ctx);
 

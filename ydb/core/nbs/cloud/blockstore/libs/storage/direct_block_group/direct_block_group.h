@@ -2,6 +2,7 @@
 
 #include <ydb/core/blobstorage/ddisk/ddisk.h>
 #include <ydb/core/mind/bscontroller/types.h>
+
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/direct_block_group/request.h>
 
@@ -54,7 +55,7 @@ private:
             }
         }
 
-        [[nodiscard]] bool IsWrited() const
+        [[nodiscard]] bool IsWritten() const
         {
             return IsFlushedToDDisk() || LsnByPersistentBufferIndex[0] != 0;
         }

@@ -449,6 +449,10 @@ public:
         }
     }
 
+    bool IsLocal() const override {
+        return IsLocalChannel;
+    }
+
 private:
     NKikimr::NMiniKQL::TType* OutputType;
     NKikimr::NMiniKQL::TValuePackerTransport<FastPack> Packer;

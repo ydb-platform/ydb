@@ -854,10 +854,15 @@ public:
 
     void Bind(NActors::TActorId outputActorId, NActors::TActorId inputActorId) override;
 
+    bool IsLocal() const override {
+        return IsLocalChannel;
+    }
+
     std::weak_ptr<TDqChannelService> Service;
     std::unique_ptr<TOutputSerializer> Serializer;
     std::shared_ptr<TDqFillAggregator> Aggregator;
     IDqChannelStorage::TPtr Storage;
+    bool IsLocalChannel = false;
 };
 
 class TFastDqInputChannel : public IDqInputChannel {
@@ -954,9 +959,14 @@ public:
 
     void Bind(NActors::TActorId outputActorId, NActors::TActorId inputActorId) override;
 
+    bool IsLocal() const override {
+        return IsLocalChannel;
+    }
+
     std::weak_ptr<TDqChannelService> Service;
     std::shared_ptr<IChannelBuffer> Buffer;
     std::unique_ptr<TInputDeserializer> Deserializer;
+    bool IsLocalChannel = false;
 };
 
 class TChannelServiceActor : public NActors::TActorBootstrapped<TChannelServiceActor> {

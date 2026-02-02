@@ -1888,10 +1888,11 @@ bool TFastDqInputChannel::Pop(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, TMay
 }
 
 void TFastDqOutputChannel::Bind(NActors::TActorId outputActorId, NActors::TActorId inputActorId) {
+    IsLocalChannel = outputActorId.NodeId() == inputActorId.NodeId();
     auto service = Service.lock();
     Y_ENSURE(service, "Channel has been binded or service is not available");
 
-    if (inputActorId.NodeId() == service->NodeId) {
+    if (IsLocalChannel) {
         Serializer = ConvertToLocalSerializer(std::move(Serializer));
     }
     Serializer->Buffer->Info.OutputActorId = outputActorId;
@@ -1907,6 +1908,7 @@ void TFastDqOutputChannel::Bind(NActors::TActorId outputActorId, NActors::TActor
 }
 
 void TFastDqInputChannel::Bind(NActors::TActorId outputActorId, NActors::TActorId inputActorId) {
+    IsLocalChannel = outputActorId.NodeId() == inputActorId.NodeId();
     auto service = Service.lock();
     Y_ENSURE(service, "Channel has been binded or service is not available");
 

@@ -1127,10 +1127,9 @@ protected:
                     inputChannel->Channel->Bind(peer, this->SelfId());
                 } else {
                     Channels->SetInputChannelPeer(channelUpdate.GetId(), peer);
-                    // bind is noop here
-                    // if (inputChannel->Channel) {
-                    //     inputChannel->Channel->Bind(this->SelfId(), peer);
-                    // }
+                    if (inputChannel->Channel) {
+                        inputChannel->Channel->Bind(this->SelfId(), peer);
+                    }
                 }
 
                 continue;

@@ -392,6 +392,11 @@ TSingleMetric::TSingleMetric(std::shared_ptr<TSummaryMetric> summary)
     Summary->Add(Details.Sum);
 }
 
+TScalarMetric::TScalarMetric(std::shared_ptr<TSummaryMetric> summary, ui64 value)
+    : Summary(summary), Value(value) {
+    Summary->Add(Value);
+}
+
 TString ParseColumns(const NJson::TJsonValue* node) {
     TStringBuilder builder;
     builder << '(';
@@ -533,6 +538,18 @@ void TPlan::ResolveCteRefs() {
                                 } else {
                                     cteRef.second->InputRows = std::make_shared<TSingleMetric>(InputRows);
                                 }
+                                if (auto* chunksNode = pushNode->GetValueByPath("Chunks")) {
+                                    if (auto* sumNode = chunksNode->GetValueByPath("Sum")) {
+                                        cteRef.second->InputChunks = sumNode->GetIntegerSafe();
+                                        if (cteRef.second->InputChunks) {
+                                            cteRef.second->InputChunkSize = std::make_shared<TScalarMetric>(InputChunkSize,
+                                                cteRef.second->InputBytes->Details.Sum / cteRef.second->InputChunks);
+                                        }
+                                    }
+                                }
+                            }
+                            if (auto* localBytesNode = subNode.GetValueByPath("LocalBytes")) {
+                                cteRef.second->InputLocalBytes = localBytesNode->GetIntegerSafe();
                             }
                         }
                     }
@@ -560,9 +577,22 @@ void TPlan::ResolveCteRefs() {
                                 }
                                 if (auto* rowsNode = popNode->GetValueByPath("Rows")) {
                                     cteRef.second->CteOutputRows = std::make_shared<TSingleMetric>(OutputRows, *rowsNode);
+                                    cteRef.second->CteOperatorOutputRows = std::make_shared<TSingleMetric>(OperatorOutputRows, *rowsNode);
                                 } else {
                                     cteRef.second->CteOutputRows = std::make_shared<TSingleMetric>(OutputRows);
                                 }
+                                if (auto* chunksNode = popNode->GetValueByPath("Chunks")) {
+                                    if (auto* sumNode = chunksNode->GetValueByPath("Sum")) {
+                                        cteRef.second->CteOutputChunks = sumNode->GetIntegerSafe();
+                                        if (cteRef.second->CteOutputChunks) {
+                                            cteRef.second->CteOutputChunkSize = std::make_shared<TScalarMetric>(OutputChunkSize,
+                                                cteRef.second->CteOutputBytes->Details.Sum / cteRef.second->CteOutputChunks);
+                                        }
+                                    }
+                                }
+                            }
+                            if (auto* localBytesNode = subNode.GetValueByPath("LocalBytes")) {
+                                cteRef.second->CteOutputLocalBytes = localBytesNode->GetIntegerSafe();
                             }
                         }
                     }
@@ -1117,6 +1147,18 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                                     stage->Operators.front().OutputRows = std::make_shared<TSingleMetric>(OperatorOutputRows);
                                 }
                             }
+                            if (auto* chunksNode = popNode->GetValueByPath("Chunks")) {
+                                if (auto* sumNode = chunksNode->GetValueByPath("Sum")) {
+                                    stage->OutputChunks = sumNode->GetIntegerSafe();
+                                    if (stage->OutputChunks) {
+                                        stage->OutputChunkSize = std::make_shared<TScalarMetric>(OutputChunkSize,
+                                            stage->OutputBytes->Details.Sum / stage->OutputChunks);
+                                    }
+                                }
+                            }
+                        }
+                        if (auto* localBytesNode = subNode.GetValueByPath("LocalBytes")) {
+                            stage->OutputLocalBytes = localBytesNode->GetIntegerSafe();
                         }
                     }
                 }
@@ -1225,6 +1267,18 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                                                 } else {
                                                     connection->InputRows = std::make_shared<TSingleMetric>(InputRows);
                                                 }
+                                                if (auto* chunksNode = pushNode->GetValueByPath("Chunks")) {
+                                                    if (auto* sumNode = chunksNode->GetValueByPath("Sum")) {
+                                                        connection->InputChunks = sumNode->GetIntegerSafe();
+                                                        if (connection->InputChunks) {
+                                                            connection->InputChunkSize = std::make_shared<TScalarMetric>(InputChunkSize,
+                                                                connection->InputBytes->Details.Sum / connection->InputChunks);
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            if (auto* localBytesNode = subNode.GetValueByPath("LocalBytes")) {
+                                                connection->InputLocalBytes = localBytesNode->GetIntegerSafe();
                                             }
                                         }
                                     }
@@ -1596,7 +1650,7 @@ void TPlan::PrintValues(TStringBuilder& canvas, TMetricHistory& history, ui32 x,
     }
 }
 
-void TPlan::PrintStageSummary(TStringBuilder& background, ui32 viewLeft, ui32 viewWidth, ui32 y0, ui32 h, std::shared_ptr<TSingleMetric> metric, const TString& mediumColor, const TString& lightColor, const TString& textSum, const TString& tooltip, ui32 taskCount, const TString& iconRef, const TString& iconColor, const TString& iconScale, bool backgroundRect, const TString& peerId) {
+void TPlan::PrintStageSummary(TStringBuilder& background, ui32 viewLeft, ui32 viewWidth, ui32 y0, ui32 h, std::shared_ptr<TSingleMetric>& metric, const TString& mediumColor, const TString& lightColor, const TString& textSum, const TString& tooltip, ui32 taskCount, const TString& iconRef, const TString& iconColor, const TString& iconScale, bool backgroundRect, const TString& peerId, ui64 split, const std::shared_ptr<TScalarMetric>& scalar) {
 
     ui32 x0 = viewLeft + INTERNAL_GAP_X;
     ui32 width = viewWidth - INTERNAL_GAP_X * 2;
@@ -1647,6 +1701,22 @@ void TPlan::PrintStageSummary(TStringBuilder& background, ui32 viewLeft, ui32 vi
         << "  <rect x='" << x0 << "' y='" << y0
         << "' width='" << width << "' height='" << h
         << "' stroke-width='0' fill='" << mediumColor << "'/>" << Endl;
+    }
+    if (split && split < metric->Details.Sum) {
+        auto xs = x0 + width - split * width / metric->Details.Sum;
+        background
+        << "  <line x1='" << xs << "' y1='" << y0 << "' x2='" << xs << "' y2='" << y0 + h
+        << "' stroke-width='2' stroke='" << lightColor << "'/>" << Endl;
+    }
+    if (scalar) {
+        ui32 width = viewWidth - INTERNAL_GAP_X * 2;
+        if (iconRef) {
+            width -= INTERNAL_WIDTH;
+        }
+        auto x2 = x0 + width - scalar->Value * width / scalar->Summary->Max;
+        background
+        << "  <line x1='" << x0 << "' y1='" << y0 + h - 3 << "' x2='" << x2 << "' y2='" << y0 + h - 3
+        << "' stroke-width='3' stroke='" << lightColor << "' stroke-dasharray='1,1'/>" << Endl;
     }
     if (textSum) {
         background
@@ -1938,10 +2008,22 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
 
             TStringBuilder tooltip;
             auto textSum = FormatTooltip(tooltip, "Output", s->OutputBytes.get(), FormatBytes);
+            if (s->OutputLocalBytes && s->OutputBytes->Details.Sum) {
+                tooltip << ", Local " << s->OutputLocalBytes * 100 / s->OutputBytes->Details.Sum << "%, \u2211" << FormatBytes(s->OutputLocalBytes);
+            }
             if (s->OutputRows) {
                 FormatTooltip(tooltip, ", Rows", s->OutputRows.get(), FormatInteger);
+                if (s->OutputRows->Details.Sum) {
+                    tooltip << ", Width " << FormatBytes(s->OutputBytes->Details.Sum / s->OutputRows->Details.Sum);
+                }
             }
-            PrintStageSummary(builder, Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT, s->OutputBytes, Config.Palette.OutputMedium, Config.Palette.OutputLight, textSum, tooltip, s->Tasks, "#icon_output", Config.Palette.OutputLight, "0.0325 0.0325", true, s->OutputPhysicalStageId ? ToString(s->OutputPhysicalStageId) : "");
+            if (s->OutputChunks) {
+                tooltip << ", Chunks \u2211" << FormatInteger(s->OutputChunks);
+                if (s->OutputChunkSize) {
+                    tooltip << " ~ " << FormatBytes(s->OutputChunkSize->Value);
+                }
+            }
+            PrintStageSummary(builder, Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT, s->OutputBytes, Config.Palette.OutputMedium, Config.Palette.OutputLight, textSum, tooltip, s->Tasks, "#icon_output", Config.Palette.OutputLight, "0.0325 0.0325", true, s->OutputPhysicalStageId ? ToString(s->OutputPhysicalStageId) : "", s->OutputLocalBytes, s->OutputChunkSize);
 
             if (s->SpillingChannelBytes && s->SpillingChannelBytes->Details.Sum) {
                 builder
@@ -2221,7 +2303,15 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
                     << SvgRect(Config.TaskLeft, y, Config.TaskWidth, INTERNAL_HEIGHT + INTERNAL_GAP_Y * 2, "clone")
                     << SvgRect(Config.HeaderLeft + x, y, Config.HeaderWidth - x, INTERNAL_HEIGHT + INTERNAL_GAP_Y * 2, "clone")
                     << SvgRect(Config.SummaryLeft, y, Config.SummaryWidth, INTERNAL_HEIGHT + INTERNAL_GAP_Y * 2, "clone")
-                    << SvgRect(Config.OperatorLeft, y, Config.OperatorWidth, INTERNAL_HEIGHT + INTERNAL_GAP_Y * 2, "clone")
+                    << SvgRect(Config.OperatorLeft, y, Config.OperatorWidth, INTERNAL_HEIGHT + INTERNAL_GAP_Y * 2, "clone");
+
+                if (c->CteOperatorOutputRows) {
+                    TStringBuilder tooltip;
+                    auto textSum = FormatTooltip(tooltip, "Output Rows", c->CteOperatorOutputRows.get(), FormatInteger);
+                    PrintStageSummary(c->_CteBuilder, Config.OperatorLeft, Config.OperatorWidth, y, INTERNAL_HEIGHT, c->CteOperatorOutputRows, Config.Palette.OutputMedium, Config.Palette.OutputLight, textSum, tooltip, 0, "", "", "");
+                }
+
+                c->_CteBuilder
                     << SvgRect(Config.TimelineLeft, y, Config.TimelineWidth, INTERNAL_HEIGHT + INTERNAL_GAP_Y * 2, "clone")
                     << SvgStageId(Config.HeaderLeft + x + INTERNAL_GAP_X + INTERNAL_WIDTH * 3 / 2, y + INTERNAL_GAP_Y + INTERNAL_HEIGHT / 2, ToString(c->FromStage->PhysicalStageId))
                     << SvgText(Config.HeaderLeft + x + INTERNAL_GAP_X + INTERNAL_WIDTH * 2 + 2, y + INTERNAL_GAP_Y + INTERNAL_TEXT_HEIGHT + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2, "texts clipped", c->FromStage->Operators[0].Name + ": " + c->FromStage->Operators[0].Info)
@@ -2232,13 +2322,22 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
 
                     TStringBuilder tooltip;
                     auto textSum = FormatTooltip(tooltip, "Output", c->CteOutputBytes.get(), FormatBytes);
+                    if (c->CteOutputLocalBytes && c->CteOutputBytes->Details.Sum) {
+                        tooltip << ", Local " << c->CteOutputLocalBytes * 100 / c->CteOutputBytes->Details.Sum << "%, \u2211" << FormatBytes(c->CteOutputLocalBytes);
+                    }
                     if (c->CteOutputRows) {
                         FormatTooltip(tooltip, ", Rows", c->CteOutputRows.get(), FormatInteger);
                         if (c->CteOutputRows->Details.Sum) {
-                            tooltip << ", Width " << FormatBytes(c->CteOutputRows->Details.Sum / c->CteOutputRows->Details.Sum);
+                            tooltip << ", Width " << FormatBytes(c->CteOutputBytes->Details.Sum / c->CteOutputRows->Details.Sum);
                         }
                     }
-                    PrintStageSummary(c->_CteBuilder, Config.SummaryLeft, Config.SummaryWidth, y + INTERNAL_GAP_Y, INTERNAL_HEIGHT, c->CteOutputBytes, Config.Palette.OutputMedium, Config.Palette.OutputLight, textSum, tooltip, 0, "#icon_output", Config.Palette.OutputLight, "0.0325 0.0325", true, ToString(s->PhysicalStageId));
+                    if (c->CteOutputChunks) {
+                        tooltip << ", Chunks \u2211" << FormatInteger(c->CteOutputChunks);
+                        if (c->CteOutputChunkSize) {
+                            tooltip << " ~ " << FormatBytes(c->CteOutputChunkSize->Value);
+                        }
+                    }
+                    PrintStageSummary(c->_CteBuilder, Config.SummaryLeft, Config.SummaryWidth, y + INTERNAL_GAP_Y, INTERNAL_HEIGHT, c->CteOutputBytes, Config.Palette.OutputMedium, Config.Palette.OutputLight, textSum, tooltip, 0, "#icon_output", Config.Palette.OutputLight, "0.0325 0.0325", true, ToString(s->PhysicalStageId), c->CteOutputLocalBytes, c->CteOutputChunkSize);
 
                     auto d = c->CteOutputBytes->MaxTime - c->CteOutputBytes->MinTime;
                     TStringBuilder title;
@@ -2302,13 +2401,22 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
 
                 TStringBuilder tooltip;
                 auto textSum = FormatTooltip(tooltip, "Input", c->InputBytes.get(), FormatBytes);
+                if (c->InputLocalBytes && c->InputBytes->Details.Sum) {
+                    tooltip << ", Local " << c->InputLocalBytes * 100 / c->InputBytes->Details.Sum << "%, \u2211" << FormatBytes(c->InputLocalBytes);
+                }
                 if (c->InputRows) {
                     FormatTooltip(tooltip, ", Rows", c->InputRows.get(), FormatInteger);
                     if (c->InputRows->Details.Sum) {
                         tooltip << ", Width " << FormatBytes(c->InputBytes->Details.Sum / c->InputRows->Details.Sum);
                     }
                 }
-                PrintStageSummary(s->_Builder, Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT, c->InputBytes, Config.Palette.InputMedium, Config.Palette.InputLight, textSum, tooltip, s->Tasks, "#icon_input", Config.Palette.InputLight, "0.0325 0.0325", true, ToString(c->FromStage->PhysicalStageId));
+                if (c->InputChunks) {
+                    tooltip << ", Chunks \u2211" << FormatInteger(c->InputChunks);
+                    if (c->InputChunkSize) {
+                        tooltip << " ~ " << FormatBytes(c->InputChunkSize->Value);
+                    }
+                }
+                PrintStageSummary(s->_Builder, Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT, c->InputBytes, Config.Palette.InputMedium, Config.Palette.InputLight, textSum, tooltip, s->Tasks, "#icon_input", Config.Palette.InputLight, "0.0325 0.0325", true, ToString(c->FromStage->PhysicalStageId), c->InputLocalBytes, c->InputChunkSize);
 
                 auto d = c->InputBytes->MaxTime - c->InputBytes->MinTime;
                 TStringBuilder title;

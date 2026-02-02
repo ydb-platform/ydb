@@ -84,6 +84,14 @@ public:
     TAggregation LastMessage;
 };
 
+class TScalarMetric {
+public:
+    TScalarMetric(std::shared_ptr<TSummaryMetric> summary, ui64 value);
+
+    std::shared_ptr<TSummaryMetric> Summary;
+    ui64 Value = 0;
+};
+
 class TConnection {
 
 public:
@@ -96,6 +104,9 @@ public:
     std::shared_ptr<TStage> FromStage;
     std::shared_ptr<TSingleMetric> InputBytes;
     std::shared_ptr<TSingleMetric> InputRows;
+    ui64 InputChunks = 0;
+    ui64 InputLocalBytes = 0;
+    std::shared_ptr<TScalarMetric> InputChunkSize;
     std::vector<std::string> KeyColumns;
     std::vector<std::string> SortColumns;
     TString HashFunc;
@@ -105,6 +116,10 @@ public:
     ui32 CteOffsetY = 0;
     std::shared_ptr<TSingleMetric> CteOutputBytes;
     std::shared_ptr<TSingleMetric> CteOutputRows;
+    std::shared_ptr<TSingleMetric> CteOperatorOutputRows;
+    ui64 CteOutputChunks = 0;
+    ui64 CteOutputLocalBytes = 0;
+    std::shared_ptr<TScalarMetric> CteOutputChunkSize;
     const NJson::TJsonValue* StatsNode = nullptr;
     const ui32 PlanNodeId;
     TStringBuilder _Builder;
@@ -167,6 +182,9 @@ public:
     std::shared_ptr<TSingleMetric> MaxMemoryUsage;
     std::shared_ptr<TSingleMetric> OutputBytes;
     std::shared_ptr<TSingleMetric> OutputRows;
+    ui64 OutputChunks = 0;
+    ui64 OutputLocalBytes = 0;
+    std::shared_ptr<TScalarMetric> OutputChunkSize;
     std::shared_ptr<TSingleMetric> SpillingComputeTime;
     std::shared_ptr<TSingleMetric> SpillingComputeBytes;
     std::shared_ptr<TSingleMetric> SpillingChannelTime;
@@ -267,10 +285,12 @@ public:
         EgressRows = std::make_shared<TSummaryMetric>();
         OutputBytes = std::make_shared<TSummaryMetric>();
         OutputRows = std::make_shared<TSummaryMetric>();
+        OutputChunkSize = std::make_shared<TSummaryMetric>();
         InputBytes = std::make_shared<TSummaryMetric>();
         InputRows = std::make_shared<TSummaryMetric>();
         IngressBytes = std::make_shared<TSummaryMetric>();
         IngressRows = std::make_shared<TSummaryMetric>();
+        InputChunkSize = std::make_shared<TSummaryMetric>();
         ExternalBytes = std::make_shared<TSummaryMetric>();
         ExternalRows = std::make_shared<TSummaryMetric>();
         SpillingComputeTime = std::make_shared<TSummaryMetric>();
@@ -297,7 +317,7 @@ public:
     void PrintWaitTime(TStringBuilder& canvas, std::shared_ptr<TSingleMetric> metric, ui32 x, ui32 y, ui32 w, ui32 h, const TString& fillColor);
     void PrintDeriv(TStringBuilder& canvas, TMetricHistory& history, ui32 x, ui32 y, ui32 w, ui32 h, const TString& title, const TString& lineColor, const TString& fillColor = "");
     void PrintValues(TStringBuilder& canvas, TMetricHistory& history, ui32 x, ui32 y, ui32 w, ui32 h, const TString& title, const TString& lineColor, const TString& fillColor = "");
-    void PrintStageSummary(TStringBuilder& background, ui32 viewLeft, ui32 viewWidth, ui32 y0, ui32 h, std::shared_ptr<TSingleMetric> metric, const TString& mediumColor, const TString& lightColor, const TString& textSum, const TString& tooltip, ui32 taskCount, const TString& iconRef, const TString& iconColor, const TString& iconScale, bool backgroundRect = false, const TString& peerId = "");
+    void PrintStageSummary(TStringBuilder& background, ui32 viewLeft, ui32 viewWidth, ui32 y0, ui32 h, std::shared_ptr<TSingleMetric>& metric, const TString& mediumColor, const TString& lightColor, const TString& textSum, const TString& tooltip, ui32 taskCount, const TString& iconRef, const TString& iconColor, const TString& iconScale, bool backgroundRect = false, const TString& peerId = "", ui64 split = 0, const std::shared_ptr<TScalarMetric>& scalar = nullptr);
     void PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY);
     void PrintSvg(TStringBuilder& builder);
     void PrintStage(TStringBuilder& builder, std::shared_ptr<TStage>& stage, TConnection* c);
@@ -313,8 +333,10 @@ public:
     std::shared_ptr<TSummaryMetric> EgressRows;
     std::shared_ptr<TSummaryMetric> OutputBytes;
     std::shared_ptr<TSummaryMetric> OutputRows;
+    std::shared_ptr<TSummaryMetric> OutputChunkSize;
     std::shared_ptr<TSummaryMetric> InputBytes;
     std::shared_ptr<TSummaryMetric> InputRows;
+    std::shared_ptr<TSummaryMetric> InputChunkSize;
     std::shared_ptr<TSummaryMetric> IngressBytes;
     std::shared_ptr<TSummaryMetric> IngressRows;
     std::shared_ptr<TSummaryMetric> ExternalBytes;

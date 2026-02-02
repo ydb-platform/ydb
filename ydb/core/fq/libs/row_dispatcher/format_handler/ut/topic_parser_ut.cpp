@@ -487,13 +487,75 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
     }
 
     Y_UNIT_TEST_F(SkipErrors_Simple1, TJsonParserFixtureSkipErrors) {
-        CheckSuccess(MakeParser({{"a1", "[DataType; String]"}, {"a2", "[OptionalType; [DataType; Uint64]]"}}, [](ui64 numberRows, TVector<std::span<NYql::NUdf::TUnboxedValue>> result) {
+        TVector<TSchemaColumn> columns = {
+            {"a1", "[DataType; String]"},
+            {"a2", "[DataType; Uint64]"},
+            {"a3", "[DataType; Int64]"},
+            {"a4", "[DataType; Int8]"},
+            {"a5", "[DataType; Bool]"},
+            {"a6", "[DataType; Double]"},
+            {"a7", "[DataType; Utf8]"}};
+
+        CheckSuccess(MakeParser(columns, [](ui64 numberRows, TVector<std::span<NYql::NUdf::TUnboxedValue>> result) {
             UNIT_ASSERT_VALUES_EQUAL(1, numberRows);
-            UNIT_ASSERT_VALUES_EQUAL(2, result.size());
+            UNIT_ASSERT_VALUES_EQUAL(7, result.size());
             UNIT_ASSERT_VALUES_EQUAL("hello1", TString(result[0][0].AsStringRef()));
-            UNIT_ASSERT_VALUES_EQUAL(101, result[1][0].GetOptionalValue().Get<ui64>());
+            UNIT_ASSERT_VALUES_EQUAL(101, result[1][0].Get<ui64>());
+            UNIT_ASSERT_VALUES_EQUAL(102, result[2][0].Get<i64>());
+            UNIT_ASSERT_VALUES_EQUAL(-2, result[3][0].Get<i8>());
+            UNIT_ASSERT_VALUES_EQUAL(true, result[4][0].Get<bool>());
+            UNIT_ASSERT_VALUES_EQUAL(146.4, result[5][0].Get<double>());
+            UNIT_ASSERT_VALUES_EQUAL("hi", TString(result[6][0].AsStringRef()));
         }));
-        PushToParser(FIRST_OFFSET, R"({"a1": "hello1", "a2": 101, "event": "event1"})");
+        PushToParser(FIRST_OFFSET, R"({"a1": "hello1", "a2": 101, "a3": 102, "a4": -2, "a5": true, "a6": 146.4, "a7": "hi",  "event": "event1"})");
+    }
+
+    Y_UNIT_TEST_F(SkipErrors_SimpleOptional, TJsonParserFixtureSkipErrors) {
+        TVector<TSchemaColumn> columns = {
+            {"a1", "[OptionalType; [DataType; String]]"},
+            {"a2", "[OptionalType; [DataType; Uint64]]"},
+            {"a3", "[OptionalType; [DataType; Int64]]"},
+            {"a4", "[OptionalType; [DataType; Int8]]"},
+            {"a5", "[OptionalType; [DataType; Bool]]"},
+            {"a6", "[OptionalType; [DataType; Double]]"},
+            {"a7", "[OptionalType; [DataType; Utf8]]"}};
+
+        CheckSuccess(MakeParser(columns, [](ui64 numberRows, TVector<std::span<NYql::NUdf::TUnboxedValue>> result) {
+            UNIT_ASSERT_VALUES_EQUAL(1, numberRows);
+            UNIT_ASSERT_VALUES_EQUAL(7, result.size());
+            UNIT_ASSERT_VALUES_EQUAL("hello1", TString(result[0][0].AsStringRef()));
+            UNIT_ASSERT_VALUES_EQUAL(101, result[1][0].Get<ui64>());
+            UNIT_ASSERT_VALUES_EQUAL(102, result[2][0].Get<i64>());
+            UNIT_ASSERT_VALUES_EQUAL(-2, result[3][0].Get<i8>());
+            UNIT_ASSERT_VALUES_EQUAL(true, result[4][0].Get<bool>());
+            UNIT_ASSERT_VALUES_EQUAL(146.4, result[5][0].Get<double>());
+            UNIT_ASSERT_VALUES_EQUAL("hi", TString(result[6][0].AsStringRef()));
+        }));
+        PushToParser(FIRST_OFFSET, R"({"a1": "hello1", "a2": 101, "a3": 102, "a4": -2, "a5": true, "a6": 146.4, "a7": "hi",  "event": "event1"})");
+    }
+
+    Y_UNIT_TEST_F(SkipErrors_SimpleOptionalNull, TJsonParserFixtureSkipErrors) {
+        TVector<TSchemaColumn> columns = {
+            {"a1", "[OptionalType; [DataType; String]]"},
+            {"a2", "[OptionalType; [DataType; Uint64]]"},
+            {"a3", "[OptionalType; [DataType; Int64]]"},
+            {"a4", "[OptionalType; [DataType; Int8]]"},
+            {"a5", "[OptionalType; [DataType; Bool]]"},
+            {"a6", "[OptionalType; [DataType; Double]]"},
+            {"a7", "[OptionalType; [DataType; Utf8]]"}};
+
+        CheckSuccess(MakeParser(columns, [](ui64 numberRows, TVector<std::span<NYql::NUdf::TUnboxedValue>> result) {
+            UNIT_ASSERT_VALUES_EQUAL(1, numberRows);
+            UNIT_ASSERT_VALUES_EQUAL(7, result.size());
+            UNIT_ASSERT(!result[0][0]);
+            UNIT_ASSERT(!result[1][0]);
+            UNIT_ASSERT(!result[2][0]);
+            UNIT_ASSERT(!result[3][0]);
+            UNIT_ASSERT(!result[4][0]);
+            UNIT_ASSERT(!result[5][0]);
+            UNIT_ASSERT(!result[6][0]);
+        }));
+        PushToParser(FIRST_OFFSET, R"({"a1": null, "a2": null, "a3": null, "a4": null, "a5": null, "a6": null, "a7": null,  "event": "event1"})");
     }
 
     Y_UNIT_TEST_F(SkipErrors_StringValidation, TJsonParserFixtureSkipErrors) {

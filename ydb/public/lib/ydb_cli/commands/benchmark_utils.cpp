@@ -150,9 +150,36 @@ private:
     YDB_ACCESSOR_DEF(TString, DeadlineName);
     YDB_ACCESSOR_DEF(TString, ExecStats);
     TQueryBenchmarkResult::TRawResults RawResults;
+    // Streaming mode support
+    bool StoreFullResults = true;
+    MD5 ResultHasher;
+    IOutputStream* OutputStream = nullptr;
+    THolder<TResultSetPrinter> ResultPrinter;
 public:
+    void SetStoreFullResults(bool store) {
+        StoreFullResults = store;
+    }
+
+    void SetOutputStream(IOutputStream* stream) {
+        OutputStream = stream;
+        if (OutputStream) {
+            ResultPrinter = MakeHolder<TResultSetPrinter>(TResultSetPrinter::TSettings()
+                .SetOutput(OutputStream)
+                .SetFormat(EDataFormat::Pretty)
+                .SetMaxWidth(GetBenchmarkTableWidth())
+                .SetMaxRowsCount(100)  // Match PrintResult behavior
+            );
+        }
+    }
+
     TQueryBenchmarkResult::TRawResults&& ExtractRawResults() {
         return std::move(RawResults);
+    }
+
+    TString GetResultHash() const {
+        char buf[25];
+        MD5 hasherCopy = ResultHasher;
+        return hasherCopy.End_b64(buf);
     }
     void OnError(const NYdb::EStatus status, const TString& info) {
         switch (status) {
@@ -232,7 +259,18 @@ public:
             }
 
             if (streamPart.HasResultSet()) {
-                RawResults[rsIndex].emplace_back(streamPart.ExtractResultSet());
+                auto resultSet = streamPart.ExtractResultSet();
+                // Always compute hash incrementally for all data
+                ResultHasher.Update(FormatResultSetYson(resultSet, NYson::EYsonFormat::Binary));
+
+                if (StoreFullResults) {
+                    // Store all results (original behavior, needed for CompareWithExpected)
+                    RawResults[rsIndex].emplace_back(std::move(resultSet));
+                } else if (ResultPrinter) {
+                    // Stream results directly to output file (no memory accumulation)
+                    ResultPrinter->Print(resultSet);
+                    ResultPrinter->Reset();  // Reset between result sets, like PrintResult does
+                }
             }
         }
         if (execStats) {
@@ -242,6 +280,13 @@ public:
             ExecStats = execStats->ToString();
             const auto& protoStats = TProtoAccessor::GetProto(execStats.GetRef());
             Timing.Compilation += TDuration::MicroSeconds(protoStats.Getcompilation().Getduration_us());
+        }
+        // Flush streaming output if used
+        if (ResultPrinter) {
+            ResultPrinter.Reset();
+        }
+        if (OutputStream) {
+            OutputStream->Flush();
         }
         return TStatus(EStatus::SUCCESS, NIssue::TIssues());
     }
@@ -256,7 +301,8 @@ TQueryBenchmarkResult  ConstructResultByStatus(const TStatus& status, const THol
             scaner->GetQueryPlan(),
             scaner->GetPlanAst(),
             scaner->GetExecStats(),
-            expected
+            expected,
+            scaner->GetResultHash()
         );
     }
     TStringBuilder errorInfo;
@@ -311,6 +357,8 @@ TQueryBenchmarkResult ExecuteImpl(const TString& query, TStringBuf expected, NQu
         }
         composite = MakeHolder<TQueryResultScanner>();
         composite->SetDeadlineName(benchmarkSettings.Deadline.Name);
+        composite->SetStoreFullResults(benchmarkSettings.StoreFullResults);
+        composite->SetOutputStream(benchmarkSettings.OutputStream);
         return composite->Scan(it, benchmarkSettings.PlanFileName);
     }, benchmarkSettings.RetrySettings);
     return ConstructResultByStatus(resStatus, composite, expected, benchmarkSettings);
@@ -559,6 +607,11 @@ bool CompareValue(IOutputStream& errStream, const NYdb::TValue& v, TStringBuf vE
 }
 
 TString TQueryBenchmarkResult::CalcHash() const {
+    // Return pre-computed hash if available (computed during streaming scan)
+    if (!ResultHash.empty()) {
+        return ResultHash;
+    }
+    // Fallback: compute from stored results (when StoreFullResults was true)
     MD5 hasher;
     for (const auto& [i, results]: RawResults) {
         for (const auto& result: results) {

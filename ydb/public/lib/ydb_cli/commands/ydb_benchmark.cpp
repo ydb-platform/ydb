@@ -326,6 +326,11 @@ public:
         , Owner(owner)
     {}
 
+    // Returns true if results were streamed directly to file (no need to call PrintResult later)
+    bool WasResultsStreamed() const {
+        return ResultsStreamed;
+    }
+
     void Process(void*) override {
         bool execute = Iteration >= 0; // explain in other case
         if (Owner.Threads == 0) {
@@ -345,6 +350,19 @@ public:
                     if (Owner.PlanFileName) {
                         settings.PlanFileName = TStringBuilder() << Owner.PlanFileName << "." << QueryName << "." << ToString(Iteration) << ".in_progress";
                     }
+                    // Store full results only when needed for CompareWithExpected
+                    settings.StoreFullResults = !Expected.empty();
+
+                    // For first iteration with empty expected, stream results directly to file
+                    if (Iteration == 0 && Expected.empty() && Owner.Threads == 0) {
+                        OutputFileHolder = Owner.OpenOutputFile(QueryName);
+                        if (OutputFileHolder) {
+                            *OutputFileHolder << QueryName << ": " << Endl;
+                            settings.OutputStream = OutputFileHolder.Get();
+                            ResultsStreamed = true;
+                        }
+                    }
+
                     Result = Execute(Query, Expected, *Owner.QueryClient, settings);
                 } else {
                     Result = Explain(Query, *Owner.QueryClient, settings);
@@ -403,6 +421,9 @@ public:
 
 private:
     const TWorkloadCommandBenchmark& Owner;
+    // For streaming output (when expected is empty)
+    THolder<IOutputStream> OutputFileHolder;
+    bool ResultsStreamed = false;
 };
 
 
@@ -472,6 +493,14 @@ int TWorkloadCommandBenchmark::RunBench(NYdbWorkload::IWorkloadQueryGenerator& w
         ui32 failsCount = 0;
         ui32 diffsCount = 0;
         std::optional<TString> prevResult;
+        // Check if first execute iteration already streamed results to file
+        bool firstIterationStreamed = false;
+        for (const auto& iter : queryExec) {
+            if (iter->GetIteration() == 0 && iter->WasResultsStreamed()) {
+                firstIterationStreamed = true;
+                break;
+            }
+        }
         THolder<IOutputStream> outFStreamHolder;
         IOutputStream& outFStream = [&]() -> IOutputStream& {
             if (TSet<TString>{"cout", "stdout", "console"}.contains(OutFilePath)) {
@@ -481,6 +510,10 @@ int TWorkloadCommandBenchmark::RunBench(NYdbWorkload::IWorkloadQueryGenerator& w
                 return Cerr;
             }
             if (TSet<TString>{"", "/dev/null", "null"}.contains(OutFilePath)) {
+                outFStreamHolder = MakeHolder<TNullOutput>();
+            } else if (firstIterationStreamed) {
+                // File already has streamed results, use null output to avoid overwriting
+                // (DIFF errors won't be written to file in this case, but that's acceptable)
                 outFStreamHolder = MakeHolder<TNullOutput>();
             } else {
                 outFStreamHolder = MakeHolder<TOFStream>(TStringBuilder() << OutFilePath << "." << queryName << ".out");
@@ -498,7 +531,7 @@ int TWorkloadCommandBenchmark::RunBench(NYdbWorkload::IWorkloadQueryGenerator& w
             if (iterExec->GetResult()) {
                 timings.emplace_back(iterExec->GetResult().GetTiming());
                 ++successIteration;
-                if (successIteration == 1) {
+                if (successIteration == 1 && !iterExec->WasResultsStreamed()) {
                     outFStream << iterExec->GetQueryName() << ": " << Endl;
                     PrintResult(iterExec->GetResult(), outFStream, iterExec->GetExpected());
                 }
@@ -642,6 +675,13 @@ BenchmarkUtils::TQueryBenchmarkSettings TWorkloadCommandBenchmark::GetBenchmarkS
         result.Deadline.Name = "Request";
     }
     return result;
+}
+
+THolder<IOutputStream> TWorkloadCommandBenchmark::OpenOutputFile(const TString& queryName) const {
+    if (TSet<TString>{"cout", "stdout", "console", "cerr", "stderr", "", "/dev/null", "null"}.contains(OutFilePath)) {
+        return nullptr;  // Don't stream to console/null outputs
+    }
+    return MakeHolder<TOFStream>(TStringBuilder() << OutFilePath << "." << queryName << ".out");
 }
 
 int TWorkloadCommandBenchmark::DoRun(NYdbWorkload::IWorkloadQueryGenerator& workloadGen, TConfig& /*config*/) {

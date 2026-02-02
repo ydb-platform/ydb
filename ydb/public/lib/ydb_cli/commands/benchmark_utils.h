@@ -51,10 +51,13 @@ private:
     YDB_READONLY_DEF(TString, ExecStats);
     YDB_READONLY_DEF(TString, DiffErrors);
     YDB_READONLY_DEF(TString, DiffWarrnings);
+    // Pre-computed hash (for streaming mode when full results are not stored)
+    YDB_READONLY_DEF(TString, ResultHash);
     TQueryBenchmarkResult() = default;
 public:
     static TQueryBenchmarkResult Result(TRawResults&& rawResults,
-        const TTiming& timing, const TString& queryPlan, const TString& planAst, const TString& execStats, TStringBuf expected)
+        const TTiming& timing, const TString& queryPlan, const TString& planAst,
+        const TString& execStats, TStringBuf expected, const TString& resultHash = "")
     {
         TQueryBenchmarkResult result;
         result.RawResults = std::move(rawResults);
@@ -62,6 +65,7 @@ public:
         result.QueryPlan = queryPlan;
         result.PlanAst = planAst;
         result.ExecStats = execStats;
+        result.ResultHash = resultHash;
         result.CompareWithExpected(expected);
         return result;
     }
@@ -96,6 +100,11 @@ struct TQueryBenchmarkSettings {
     std::optional<TString> PlanFileName;
     bool WithProgress = false;
     NYdb::NRetry::TRetryOperationSettings RetrySettings;
+    // If true, store all results in memory (needed for CompareWithExpected).
+    // If false, stream results to OutputStream and don't store in memory.
+    bool StoreFullResults = true;
+    // Output stream for streaming results when StoreFullResults is false.
+    IOutputStream* OutputStream = nullptr;
 };
 
 TString FullTablePath(const TString& database, const TString& table);

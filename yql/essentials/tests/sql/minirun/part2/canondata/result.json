@@ -1799,6 +1799,20 @@
             "uri": "https://{canondata_backend}/1777230/0109601db9d14d0697bcd3bd39c4b6bd3fc9ce55/resource.tar.gz#test.test_window-win_func_cume_dist_ansi-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[window-win_partition_functions-default.txt-Debug]": [
+        {
+            "checksum": "3d2e94fbcc0ac6e8cb382929d73d4650",
+            "size": 2018,
+            "uri": "https://{canondata_backend}/1942173/8cfd392f51e9f95aa90a68e2712fc7551a81d7ed/resource.tar.gz#test.test_window-win_partition_functions-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[window-win_partition_functions-default.txt-Results]": [
+        {
+            "checksum": "f340518868405ac50165f35f06dedf8d",
+            "size": 4040,
+            "uri": "https://{canondata_backend}/1916746/48115fba8124d038f37e2f768636425008545fb9/resource.tar.gz#test.test_window-win_partition_functions-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[window-win_range_always_empty--Debug]": [
         {
             "checksum": "eda332ac0b1051f885e72c75e8b9cc8f",

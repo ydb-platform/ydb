@@ -1861,6 +1861,20 @@
             "uri": "https://{canondata_backend}/1817427/83903caba057ddc7f2c6584714c26b7c6a60a3ab/resource.tar.gz#test.test_window-rank_nulls_legacy-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[window-win_partition_functions_ansi_current-default.txt-Debug]": [
+        {
+            "checksum": "56a4c3f8237efd094ef0bd8c94654b43",
+            "size": 2107,
+            "uri": "https://{canondata_backend}/1130705/8864a58464ac74b03c66e73fb9d83b3e91bf6c02/resource.tar.gz#test.test_window-win_partition_functions_ansi_current-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[window-win_partition_functions_ansi_current-default.txt-Results]": [
+        {
+            "checksum": "991775366469a167efcb38c51df501b8",
+            "size": 4038,
+            "uri": "https://{canondata_backend}/1920236/0e892e9b91285d55ecbdbca4cf0ed88a590f5afc/resource.tar.gz#test.test_window-win_partition_functions_ansi_current-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[window-win_range_datetime64--Debug]": [
         {
             "checksum": "632c988ab8ebca9cba710c831e302b4a",

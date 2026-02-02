@@ -53,6 +53,7 @@ Checks: >
   misc-definitions-in-headers,
   misc-misleading-bidirectional,
   misc-misleading-identifier,
+  misc-redundant-expression,
   misc-throw-by-value-catch-by-reference,
   misc-unconventional-assign-operator,
   modernize-use-override

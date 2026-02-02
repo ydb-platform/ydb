@@ -297,39 +297,11 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
         };
     }
 
-    struct TBenchState {
-        ui32 Seed;
-        ui32 TopologyCounter;
-        ui32 MCMCCounter;
-        ui32 KeyCounter;
-
-        std::string toHex() const {
-            std::stringstream ss;
-            ss << std::hex << std::setfill('0');
-            ss << std::setw(8) << Seed
-               << std::setw(8) << TopologyCounter
-               << std::setw(8) << MCMCCounter
-               << std::setw(8) << KeyCounter;
-            return ss.str();
-        }
-
-        static TBenchState fromHex(const std::string& hex) {
-            TBenchState state;
-            ui32* parts[] = {&state.Seed, &state.TopologyCounter, &state.MCMCCounter, &state.KeyCounter};
-            for (ui32 i = 0; i < Y_ARRAY_SIZE(parts); ++ i) {
-                *parts[i] = std::stoul(hex.substr(i * 8, 8), nullptr, 16);
-            }
-
-            return state;
-        }
-    };
-
     struct TTestContext {
         std::unique_ptr<TKikimrRunner> Runner;
         NYdb::NQuery::TQueryClient QueryClient;
         NYdb::NQuery::TSession Session;
 
-        std::optional<TBenchState> State;
         TRNG RNG;
 
         std::string OutputDir;
@@ -340,12 +312,6 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
         std::random_device randomDevice;
         TRNG rng(randomDevice() % UINT32_MAX);
 
-        std::optional<TBenchState> state;
-        if (args.HasArg("state")) {
-            state = TBenchState::fromHex(args.GetString("state"));
-            rng.seed(state->Seed);
-        }
-
         auto numTablesRanged = args.GetArg<ui64>("N");
 
         TSchema fullSchema = TSchema::MakeWithEnoughColumns(numTablesRanged.GetLast());
@@ -355,7 +321,7 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
         auto db = kikimr->GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
 
-        return {std::move(kikimr), std::move(db), std::move(session), state, std::move(rng), outputDir};
+        return {std::move(kikimr), std::move(db), std::move(session), std::move(rng), outputDir};
     }
 
     std::string WriteGraph(TTestContext& ctx, ui32 graphID, const TRelationGraph& graph) {
@@ -499,32 +465,30 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
                             for (ui64 i = 0; i < topologyGenerationRepeats; ++ i) {
                                 Cout << "\n\n\n";
 
-                                if (ctx.State) {
-                                    ctx.RNG.Forward(ctx.State->TopologyCounter);
-                                }
+                                // TODO: only worked with previous RNG .Forward
+                                // if (ctx.State) {
+                                //     ctx.RNG.Forward(ctx.State->TopologyCounter);
+                                // }
 
-                                ui32 counterTopology = ctx.RNG.GetCounter();
                                 auto initialGraph = generateTopology(ctx.RNG, n, mu, sigma, configPitmanYor);
 
                                 for (ui64 j = 0; j < mcmcRepeats; ++ j) {
                                     TRelationGraph graph = initialGraph;
 
-                                    if (ctx.State) {
-                                        ctx.RNG.Forward(ctx.State->MCMCCounter);
-                                    }
+                                    // TODO: only worked with previous RNG .Forward
+                                    // if (ctx.State) {
+                                    //     ctx.RNG.Forward(ctx.State->MCMCCounter);
+                                    // }
 
-                                    ui32 counterMCMC = ctx.RNG.GetCounter();
                                     if (topologyName == "mcmc") {
-                                        MCMCRandomize(ctx.RNG, graph, configPitmanYor);
+                                        MCMCRandomizeDegreePreserving(ctx.RNG, graph, configPitmanYor);
                                     }
 
                                     for (ui64 k = 0; k < equiJoinKeysGenerationRepeats; ++ k) {
-                                        if (ctx.State) {
-                                            ctx.RNG.Forward(ctx.State->KeyCounter);
-                                        }
-
-                                        ui32 counterKeys = ctx.RNG.GetCounter();
-                                        std::string state = TBenchState(ctx.RNG.GetSeed(), counterTopology, counterMCMC, counterKeys).toHex();
+                                        // TODO: only worked with previous RNG .Forward
+                                        // if (ctx.State) {
+                                        //     ctx.RNG.Forward(ctx.State->KeyCounter);
+                                        // }
 
                                         Cout << "\n\n";
                                         Cout << "Test #" << idx << "\n";
@@ -543,7 +507,7 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
                                             Cout << "reorder=" << reorder << "; ";
                                         }
 
-                                        Cout << "state=" << state << "'\n";
+                                        // Cout << "state=" << state << "'\n";
 
                                         try {
                                             if (reorder) {
@@ -561,17 +525,17 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
                                             std::string graphName = WriteGraph(ctx, idx, graph);
 
                                             std::stringstream params;
-                                            params << idx ++ << "," << state << "," << graphName << "," << commonParams.str();
+                                            params << idx ++ << "," << graphName << "," << commonParams.str();
                                             WriteAllStats(ctx, "", header, params.str(), *result);
                                         } catch (std::exception &exc) {
                                             Cout << "Skipped run: " << exc.what() << "\n";
                                             continue;
                                         }
 
-                                        if (ctx.State) {
-                                            // We are running in reproducibility mode, stop immediately after case is reproduced
-                                            return;
-                                        }
+                                        // if (ctx.State) {
+                                        //     // We are running in reproducibility mode, stop immediately after case is reproduced
+                                        //     return;
+                                        // }
                                     }
                                 }
                             }
@@ -608,9 +572,8 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
         using TJoinTree = std::shared_ptr<NYql::IBaseOptimizerNode>;
         using TOrderingsPtr = TSimpleSharedPtr<NYql::NDq::TOrderingsStateMachine>;
 
-        BenchRunner(TRNG& rng, const TBenchmarkConfig& config, TUnbufferedFileOutput& output, const TTupleParser::TTable& args)
-            : BaseRng_(rng)
-            , Config_(config)
+        BenchRunner(const TBenchmarkConfig& config, TUnbufferedFileOutput& output, const TTupleParser::TTable& args)
+            : Config_(config)
             , Output_(output)
             , Args_(args)
             , TotalTasks_(args.size())
@@ -647,7 +610,6 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
                 ui64 idx = NextTaskIdx_.fetch_add(1);
                 if (idx >= TotalTasks_) return;
 
-                // Track Active Jobs Here
                 ActiveThreads_.fetch_add(1);
                 ProcessRow(idx);
                 ActiveThreads_.fetch_sub(1);
@@ -657,53 +619,112 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
         }
 
         void ProcessRow(ui64 idx) {
-            // TODO: take param instead?
             TParamsMap params = Args_[idx];
 
             std::string label = params.GetValue("label");
             ui64 n = params.GetValue<ui64>("N");
 
-            std::stringstream ss;
-            ss << "(" << (idx + 1) << "/" << TotalTasks_ << ")"
-               << "&N = " << n
-               << "&Label = " << label << " &";
-
             if (IsKnownTimeout(label, n)) {
                 return;
             }
 
+            std::string savedSeed = params.GetValue<std::string>("seed", "");
+
+            TRNG rng(0);
+            if (!savedSeed.empty()) {
+                rng.RestoreFromHex(savedSeed);
+            } else {
+                // If no seed is provided, just create a random one
+                std::random_device randomDevice;
+                rng = TRNG(randomDevice() % UINT32_MAX);
+            }
+
             try {
-                TRNG rng(BaseRng_.Serialize() + idx);
-                ui64 seed = rng.Serialize();
+                auto pyConfig = GetPitmanYor(params);
+                auto baseGraph = GenTopo(rng, params);
 
-                auto graph = GenTopo(rng, params);
-                auto tree = GenerateJoinTree(rng, graph, params);
-                RandomizeJoinTypes(rng, tree, params);
+                ui32 degreePreservingVariants = params.GetValue<ui32>("mcmc-degree", 0);
+                ui32 edgePreservingVariants = params.GetValue<ui32>("mcmc-edge", 0);
 
-                auto hypergraph = BuildHypergraph(tree);
-                auto orderings = BuildOrderingsFSM(hypergraph);
+                rng.Mark(0);
 
-                auto stats = BenchOptimizer(tree, orderings);
-                if (stats) {
-                    auto computed = stats->ComputeStatistics();
+                ProcessSingleGraph(rng, idx, params, baseGraph, 0);
 
-                    WriteJsonResult(seed, params, computed, graph, tree, hypergraph);
-                    ss << "Time = " << TimeFormatter::Format(computed.Median);
+                TRelationGraph graphDP = baseGraph;
+                for (ui32 i = 1; i <= degreePreservingVariants; ++i) {
+                    if (IsKnownTimeout(label, n)) break;
 
-                    if (computed.Median > Config_.SingleRunTimeout) {
-                        RegisterTimeout(label, n);
-                    }
-                } else {
-                    ss << "[TIMEOUT]";
-                    RegisterTimeout(label, n);
+                    rng.Rewind(0);
+                    MCMCRandomizeDegreePreserving(rng, graphDP, pyConfig, TMCMCConfig::Perturbation());
+                    ProcessSingleGraph(rng, idx, params, graphDP, i);
+                }
+
+                TRelationGraph graphEP = baseGraph;
+                for (ui32 i = 1; i <= edgePreservingVariants; ++i) {
+                    if (IsKnownTimeout(label, n)) break;
+
+                    rng.Rewind(0);
+                    MCMCRandomizeEdgePreserving(rng, graphEP, pyConfig, TMCMCConfig::Perturbation());
+                    ProcessSingleGraph(rng, idx, params, graphEP, degreePreservingVariants + i);
                 }
 
             } catch (const std::exception& e) {
-                ss << "[ERROR] " << e.what();
+                LogMessage(idx, n, label, "[ERROR] " + std::string(e.what()));
+            }
+        }
+
+        void LogMessage(ui64 taskIdx, ui64 n, const std::string& label, const std::string& msg) {
+            std::stringstream ss;
+            ss << "(" << (taskIdx + 1) << "/" << TotalTasks_ << ")"
+               << "&N = " << n
+               << "&Label = " << label << " &"
+               << msg;
+
+            EnqueueLog(Aligner_.Align(ss.str()));
+        }
+
+        void ProcessSingleGraph(
+            TRNG& rng,
+            ui64 taskIdx,
+            const TParamsMap& params,
+            const TRelationGraph& graph,
+            ui32 variantIdx)
+        {
+            std::string label = params.GetValue("label");
+            ui64 n = params.GetValue<ui64>("N");
+
+            rng.Mark(1);
+            std::string seed = rng.SerializeToHex();
+
+            std::stringstream ss;
+            ss << "(" << (taskIdx + 1) << "/" << TotalTasks_ << ")";
+            if (variantIdx > 0) {
+                ss << "[v" << variantIdx << "]";
+            }
+            ss << "&N = " << n
+            << "&Label = " << label << " &";
+
+            auto tree = GenerateJoinTree(rng, graph, params);
+            RandomizeJoinTypes(rng, tree, params);
+
+            auto hypergraph = BuildHypergraph(tree);
+            auto orderings = BuildOrderingsFSM(hypergraph);
+
+            auto stats = BenchOptimizer(tree, orderings);
+            if (stats) {
+                auto computed = stats->ComputeStatistics();
+
+                WriteJsonResult(seed, params, computed, graph, tree, hypergraph, variantIdx);
+                ss << "Time = " << TimeFormatter::Format(computed.Median);
+
+                if (computed.Median > Config_.SingleRunTimeout) {
+                    RegisterTimeout(label, n);
+                }
+            } else {
+                ss << "[TIMEOUT]";
+                RegisterTimeout(label, n);
             }
 
-            // 5. Align and Log
-            // Note: Using .Process() as defined in the StreamAligner class provided earlier
             EnqueueLog(Aligner_.Align(ss.str()));
         }
 
@@ -742,7 +763,7 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
                 auto initialGraph = ConstructGraphHavelHakimi(rng, graphicDegrees, config);
                 auto graph = initialGraph;
                 if (topologyName == "mcmc") {
-                    MCMCRandomize(rng, graph, config);
+                    MCMCRandomizeDegreePreserving(rng, graph, config);
                 }
                 ForceReconnection(rng, graph, config);
                 return graph;
@@ -823,12 +844,10 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
 
         // Templated stats to accept whatever ComputeStatistics returns (TStatistics or TRes)
         template <typename TStats>
-        void WriteJsonResult(ui64 seed, const TParamsMap& params,
-                            const TStats& timeStats,
-                            const TRelationGraph& graph,
-                            const TJoinTree& query,
-                            TJoinHypergraph& hyper)
-        {
+        void WriteJsonResult(const std::string& seed, const TParamsMap& params, 
+                             const TStats& timeStats, const TRelationGraph& graph,
+                             const TJoinTree& query, TJoinHypergraph& hyper, ui32 variantIdx) {
+
             ui64 tableIdx = params.GetValue<ui64>("idx");
 
             ui64 n = params.GetValue<ui64>("N");
@@ -839,6 +858,7 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
             entry.InsertValue("table-id", NJson::TJsonValue(tableIdx));
             entry.InsertValue("N", NJson::TJsonValue(n));
             entry.InsertValue("label", NJson::TJsonValue(label));
+            entry.InsertValue("variant", NJson::TJsonValue(variantIdx));
             entry.InsertValue("time", timeStats.ToJson());
             entry.InsertValue("seed", NJson::TJsonValue(seed));
 
@@ -915,7 +935,6 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
         }
 
 
-        TRNG& BaseRng_;
         const TBenchmarkConfig& Config_;
         TUnbufferedFileOutput& Output_; // Reference is crucial
         const TTupleParser::TTable& Args_;
@@ -938,8 +957,6 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
 
 
     Y_UNIT_TEST(Dataset) {
-        TRNG rng(0);
-
         std::string benchArgs = GetTestParam("BENCHMARK");
         auto config = GetBenchmarkConfig(TArgs{benchArgs});
         DumpBenchmarkConfig(Cout, config);
@@ -982,7 +999,7 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
         // Initialize file stream here so it persists for the lifetime of runner
         TUnbufferedFileOutput outFileStream(outputFile.c_str());
 
-        BenchRunner runner(rng, config, outFileStream, parameters);
+        BenchRunner runner(config, outFileStream, parameters);
         runner.Launch();
     }
 

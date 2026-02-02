@@ -1,0 +1,6 @@
+items:
+- name: Добавление нового диска
+  href: add-new-hard-drive/index.md
+  include:
+    mode: link
+    path: add-new-hard-drive/toc_p.yaml

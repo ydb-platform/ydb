@@ -152,32 +152,32 @@ private:
 };
 
 template <>
-TStringRef TSqlQuery<EDataSlot::Json, EJsonQueryWrap::NoWrap>::Name() {
+inline TStringRef TSqlQuery<EDataSlot::Json, EJsonQueryWrap::NoWrap>::Name() {
     return "SqlQuery";
 }
 
 template <>
-TStringRef TSqlQuery<EDataSlot::Json, EJsonQueryWrap::Wrap>::Name() {
+inline TStringRef TSqlQuery<EDataSlot::Json, EJsonQueryWrap::Wrap>::Name() {
     return "SqlQueryWrap";
 }
 
 template <>
-TStringRef TSqlQuery<EDataSlot::Json, EJsonQueryWrap::ConditionalWrap>::Name() {
+inline TStringRef TSqlQuery<EDataSlot::Json, EJsonQueryWrap::ConditionalWrap>::Name() {
     return "SqlQueryConditionalWrap";
 }
 
 template <>
-TStringRef TSqlQuery<EDataSlot::JsonDocument, EJsonQueryWrap::NoWrap>::Name() {
+inline TStringRef TSqlQuery<EDataSlot::JsonDocument, EJsonQueryWrap::NoWrap>::Name() {
     return "JsonDocumentSqlQuery";
 }
 
 template <>
-TStringRef TSqlQuery<EDataSlot::JsonDocument, EJsonQueryWrap::Wrap>::Name() {
+inline TStringRef TSqlQuery<EDataSlot::JsonDocument, EJsonQueryWrap::Wrap>::Name() {
     return "JsonDocumentSqlQueryWrap";
 }
 
 template <>
-TStringRef TSqlQuery<EDataSlot::JsonDocument, EJsonQueryWrap::ConditionalWrap>::Name() {
+inline TStringRef TSqlQuery<EDataSlot::JsonDocument, EJsonQueryWrap::ConditionalWrap>::Name() {
     return "JsonDocumentSqlQueryConditionalWrap";
 }
 } // namespace NJson2Udf

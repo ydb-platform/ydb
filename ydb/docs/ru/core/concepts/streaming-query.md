@@ -10,7 +10,7 @@
 - обогащения событий — добавление данных из справочников;
 - поиска паттернов — обнаружение последовательностей событий.
 
-Запросы пишутся на YQL и поддерживают привычные конструкции: `SELECT`, `WHERE`, `GROUP BY`, `JOIN`. Для работы с временными окнами используется [GROUP BY HOP](../yql/reference/syntax/select/group-by.md#group-by-hop), для поиска паттернов — [MATCH_RECOGNIZE](../yql/reference/syntax/select/match_recognize.md).
+Запросы пишутся на [YQL](../yql/reference/index.md) и поддерживают привычные конструкции: [SELECT](../yql/reference/syntax/select/index.md), [WHERE](../yql/reference/syntax/select/where.md), [GROUP BY](../yql/reference/syntax/select/group-by.md), [JOIN](../yql/reference/syntax/select/join.md). Для работы с временными окнами используется [GROUP BY HOP](../yql/reference/syntax/select/group-by.md#group-by-hop), для поиска паттернов — [MATCH_RECOGNIZE](../yql/reference/syntax/select/match_recognize.md).
 
 Обычные запросы работают с данными, которые уже сохранены в таблицах. Запрос выполняется, возвращает результат и завершается.
 
@@ -27,7 +27,7 @@
 | Данные | Конечный набор в таблицах | Бесконечный поток событий |
 | Время жизни | Завершается после обработки | Работает непрерывно |
 | Результат | Доступен после завершения | Обновляется по мере поступления данных |
-| Восстановление при сбоях | Перезапуск вручную | Автоматическое восстановление из чекпоинта |
+| Восстановление при сбоях | Перезапуск вручную | Автоматическое восстановление из [чекпоинта](../dev/streaming-query/checkpoints.md) |
 
 ## Источники и приёмники данных {#data-flow}
 

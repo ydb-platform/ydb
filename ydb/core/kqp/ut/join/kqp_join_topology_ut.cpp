@@ -416,11 +416,11 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
         }
     }
 
-    using TTopologyFunction = TRelationGraph (*)(TRNG& rng, ui32 n, double mu, double sigma);
+    using TTopologyFunction = TRelationGraph (*)(TRNG& rng, ui32 n, double mu, double sigma, TPitmanYorConfig config);
     template <auto TTrivialTopologyGenerator>
     TTopologyFunction GetTrivialTopology() {
-        return []([[maybe_unused]] TRNG& rng, ui32 n, [[maybe_unused]] double mu, [[maybe_unused]] double sigma) {
-            return TTrivialTopologyGenerator(n);
+        return []([[maybe_unused]] TRNG& rng, ui32 n, [[maybe_unused]] double mu, [[maybe_unused]] double sigma, TPitmanYorConfig config) {
+            return TTrivialTopologyGenerator(rng, n, config);
         };
     }
 
@@ -438,26 +438,25 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
         }
 
         if (topologyName == "random-tree") {
-            return []([[maybe_unused]] TRNG& rng, ui32 n, [[maybe_unused]] double mu, [[maybe_unused]] double sigma) {
-                return GenerateRandomTree(rng, n);
+            return []([[maybe_unused]] TRNG& rng, ui32 n, [[maybe_unused]] double mu, [[maybe_unused]] double sigma, TPitmanYorConfig config) {
+                return GenerateRandomTree(rng, n, config);
             };
         }
 
         if (topologyName == "mcmc" || topologyName == "havel-hakimi") {
-            // TODO: ensure log-normal distribution works properly
-            return []([[maybe_unused]] TRNG& rng, ui32 n, [[maybe_unused]] double mu, [[maybe_unused]] double sigma) {
+            return []([[maybe_unused]] TRNG& rng, ui32 n, [[maybe_unused]] double mu, [[maybe_unused]] double sigma, TPitmanYorConfig config) {
                 auto sampledDegrees = GenerateLogNormalDegrees(rng, n, mu, sigma);
                 auto graphicDegrees = MakeGraphicConnected(sampledDegrees);
-                auto initialGraph = ConstructGraphHavelHakimi(graphicDegrees);
+                auto initialGraph = ConstructGraphHavelHakimi(rng, graphicDegrees, config);
 
                 return initialGraph;
             };
         }
 
         if (topologyName == "chung-lu") {
-            return []([[maybe_unused]] TRNG& rng, ui32 n, [[maybe_unused]] double mu, [[maybe_unused]] double sigma) {
+            return []([[maybe_unused]] TRNG& rng, ui32 n, [[maybe_unused]] double mu, [[maybe_unused]] double sigma, TPitmanYorConfig config) {
                 auto initialDegrees = GenerateLogNormalDegrees(rng, n, mu, sigma);
-                auto initialGraph = GenerateRandomChungLuGraph(rng, initialDegrees);
+                auto initialGraph = GenerateRandomChungLuGraph(rng, initialDegrees, config);
 
                 return initialGraph;
             };
@@ -483,6 +482,8 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
         ui32 idx = 0;
         ui32 aggregateIdx = 0;
 
+        auto configPitmanYor = GetPitmanYorConfig(args);
+
         for (double alpha : args.GetArgOrDefault<double>("alpha", "0.5")) {
             for (double theta : args.GetArgOrDefault<double>("theta", "1.0")) {
                 for (double sigma : args.GetArgOrDefault<double>("sigma", "0.5")) {
@@ -503,7 +504,7 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
                                 }
 
                                 ui32 counterTopology = ctx.RNG.GetCounter();
-                                auto initialGraph = generateTopology(ctx.RNG, n, mu, sigma);
+                                auto initialGraph = generateTopology(ctx.RNG, n, mu, sigma, configPitmanYor);
 
                                 for (ui64 j = 0; j < mcmcRepeats; ++ j) {
                                     TRelationGraph graph = initialGraph;
@@ -514,7 +515,7 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
 
                                     ui32 counterMCMC = ctx.RNG.GetCounter();
                                     if (topologyName == "mcmc") {
-                                        MCMCRandomize(ctx.RNG, graph);
+                                        MCMCRandomize(ctx.RNG, graph, configPitmanYor);
                                     }
 
                                     for (ui64 k = 0; k < equiJoinKeysGenerationRepeats; ++ k) {
@@ -523,8 +524,6 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
                                         }
 
                                         ui32 counterKeys = ctx.RNG.GetCounter();
-                                        graph.SetupKeysPitmanYor(ctx.RNG, TPitmanYorConfig{.Alpha = alpha, .Theta = theta});
-
                                         std::string state = TBenchState(ctx.RNG.GetSeed(), counterTopology, counterMCMC, counterKeys).toHex();
 
                                         Cout << "\n\n";
@@ -677,9 +676,7 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
                 TRNG rng(BaseRng_.Serialize() + idx);
                 ui64 seed = rng.Serialize();
 
-                auto graph = GenerateRelationGraph(rng, params);
-                RandomizeJoinKeys(rng, graph, params);
-
+                auto graph = GenTopo(rng, params);
                 auto tree = GenerateJoinTree(rng, graph, params);
                 RandomizeJoinTypes(rng, tree, params);
 
@@ -710,37 +707,44 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
             EnqueueLog(Aligner_.Align(ss.str()));
         }
 
+        TPitmanYorConfig GetPitmanYor(const TParamsMap& params) {
+            double alpha = params.GetValue<double>("alpha");
+            double theta = params.GetValue<double>("theta");
+            return TPitmanYorConfig{.Alpha = alpha, .Theta = theta};
+        }
+
         TRelationGraph GenTopo(TRNG &rng, const TParamsMap& params) {
             ui64 n = params.GetValue<ui64>("N");
             std::string topologyName = params.GetValue("type");
+            auto config = GetPitmanYor(params);
 
             if (topologyName == "star") {
-                return GenerateStar(n);
+                return GenerateStar(rng, n, config);
             }
 
             if (topologyName == "path") {
-                return GeneratePath(n);
+                return GeneratePath(rng, n, config);
             }
 
             if (topologyName == "clique") {
-                return GenerateClique(n);
+                return GenerateClique(rng, n, config);
             }
 
             if (topologyName == "random-tree") {
-                return GenerateRandomTree(rng, n);
+                return GenerateRandomTree(rng, n, config);
             }
 
             if (topologyName == "mcmc" || topologyName == "havel-hakimi") {
-                // TODO: ensure log-normal distribution works properly
                 double mu = params.GetValue<double>("mu");
                 double sigma = params.GetValue<double>("sigma");
                 auto sampledDegrees = GenerateLogNormalDegrees(rng, n, mu, sigma);
                 auto graphicDegrees = MakeGraphicConnected(sampledDegrees);
-                auto initialGraph = ConstructGraphHavelHakimi(graphicDegrees);
+                auto initialGraph = ConstructGraphHavelHakimi(rng, graphicDegrees, config);
                 auto graph = initialGraph;
                 if (topologyName == "mcmc") {
-                    MCMCRandomize(rng, graph);
+                    MCMCRandomize(rng, graph, config);
                 }
+                ForceReconnection(rng, graph, config);
                 return graph;
             }
 
@@ -748,24 +752,13 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
                 double mu = params.GetValue<double>("mu");
                 double sigma = params.GetValue<double>("sigma");
                 auto sampledDegrees = GenerateLogNormalDegrees(rng, n, mu, sigma);
-                auto initialGraph = GenerateRandomChungLuGraph(rng, sampledDegrees);
-                return initialGraph;
+                auto initialGraph = GenerateRandomChungLuGraph(rng, sampledDegrees, config);
+                auto graph = initialGraph;
+                ForceReconnection(rng, graph, config);
+                return graph;
             }
 
             throw std::runtime_error("Unknown topology: '" + topologyName + "'");
-        }
-
-        TRelationGraph GenerateRelationGraph(TRNG& rng, const TParamsMap& params) {
-            auto graph = GenTopo(rng, params);
-            ForceReconnection(rng, graph);
-            return graph;
-        }
-
-        void RandomizeJoinKeys(TRNG &rng, TRelationGraph& graph, const TParamsMap& params) {
-            double alpha = params.GetValue<double>("alpha");
-            double theta = params.GetValue<double>("theta");
-            TPitmanYorConfig distribution{.Alpha = alpha, .Theta = theta};
-            graph.SetupKeysPitmanYor(rng, distribution);
         }
 
         void RandomizeJoinTypes(TRNG &rng, TJoinTree& tree, const TParamsMap& params) {
@@ -992,60 +985,6 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
         BenchRunner runner(rng, config, outFileStream, parameters);
         runner.Launch();
     }
-
-
-    //     Y_UNIT_TEST(Dataset) {
-    //         // std::random_device randomDevice;
-    //         TRNG rng(0);
-    //
-    //         std::string benchArgs = GetTestParam("BENCHMARK");
-    //         auto config = GetBenchmarkConfig(TArgs{benchArgs});
-    //         DumpBenchmarkConfig(Cout, config);
-    //
-    //         std::string args = GetTestParam("DATASET");
-    //         if (args.empty()) {
-    //             std::string datasetFile = GetTestParam("DATASET_FILE");
-    //             if (datasetFile.empty()) {
-    //                 // Don't launch in non-interactive mode
-    //                 Cerr << "Filename with dataset description is required, please provide one: --test-param DATASET_FILE='<filename>'";
-    //                 return;
-    //             }
-    //
-    //             args = TFileInput(datasetFile).ReadAll();
-    //         }
-    //
-    //         auto parameters = TTupleParser{args}.Parse();
-    //
-    //         auto findN = [](const auto& row) {
-    //             std::string n;
-    //             for (ui32 i = 0; i < row.size(); ++ i) {
-    //                 if (row[i].first == "N") {
-    //                     n = row[i].second;
-    //                 }
-    //             }
-    //
-    //             size_t pos = 0;
-    //             ui32 intN = std::stoi(n, &pos);
-    //             Y_ENSURE(pos == n.size());
-    //
-    //             return intN;
-    //         };
-    //
-    //         std::stable_sort(parameters.begin(), parameters.end(), [&](const auto& lhs, const auto rhs) {
-    //             return findN(lhs) < findN(rhs);
-    //         });
-    //
-    //         Cout << "\n";
-    //         PrintTable(parameters);
-    //
-    //         std::string outputFile = GetTestParam("OUTPUT");
-    //         if (outputFile.empty()) {
-    //             throw std::runtime_error("Filename for output file is required, please provide one: --test-param OUTPUT='<filename>'");
-    //         }
-    //
-    //         RunHypergraphBenches(rng, config, TUnbufferedFileOutput(outputFile.c_str()), parameters);
-    //     }
-
 
     struct CustomQuery {
         std::string Query;

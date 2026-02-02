@@ -2120,7 +2120,6 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
   }
 ])";
         UNIT_ASSERT_VALUES_EQUAL(GetSolomonMetrics(soLocation), expectedMetrics);
->>>>>>> b1f82a22e3e (Supported scalar writing into PQ and solomon)
     }
 }
 

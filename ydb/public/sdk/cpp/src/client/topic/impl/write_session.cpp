@@ -1,6 +1,7 @@
 #include "write_session.h"
 
 #include <ydb/public/sdk/cpp/src/client/topic/common/log_lazy.h>
+#include <ydb/public/sdk/cpp/src/client/topic/common/simple_blocking_helpers.h>
 
 namespace NYdb::inline Dev::NTopic {
 
@@ -135,34 +136,7 @@ bool TSimpleBlockingWriteSession::Write(
 }
 
 std::optional<TContinuationToken> TSimpleBlockingWriteSession::WaitForToken(const TDuration& timeout) {
-    TInstant startTime = TInstant::Now();
-    TDuration remainingTime = timeout;
-
-    std::optional<TContinuationToken> token = std::nullopt;
-
-    while (IsAlive() && remainingTime > TDuration::Zero()) {
-        Writer->WaitEvent().Wait(remainingTime);
-
-        for (auto event : Writer->GetEvents()) {
-            if (auto* readyEvent = std::get_if<TWriteSessionEvent::TReadyToAcceptEvent>(&event)) {
-                Y_ABORT_UNLESS(!token.has_value());
-                token = std::move(readyEvent->ContinuationToken);
-            } else if (std::get_if<TWriteSessionEvent::TAcksEvent>(&event)) {
-                // discard
-            } else if (std::get_if<TSessionClosedEvent>(&event)) {
-                Closed.store(true);
-                return std::nullopt;
-            }
-        }
-
-        if (token.has_value()) {
-            return token;
-        }
-
-        remainingTime = timeout - (TInstant::Now() - startTime);
-    }
-
-    return std::nullopt;
+    return NDetail::WaitForToken(*Writer, Closed, timeout);
 }
 
 TWriterCounters::TPtr TSimpleBlockingWriteSession::GetCounters() {

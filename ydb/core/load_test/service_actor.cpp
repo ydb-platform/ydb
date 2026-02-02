@@ -82,6 +82,10 @@ const google::protobuf::Message* GetCommandFromRequest(const TEvLoadTestRequest&
         return &request.GetYCSBLoad();
     case TEvLoadTestRequest::CommandCase::kInterconnectLoad:
         return &request.GetInterconnectLoad();
+#ifdef __linux__
+    case TEvLoadTestRequest::CommandCase::kNBS2Load:
+        return &request.GetNBS2Load();
+#endif
     default:
         return nullptr;
     }
@@ -111,6 +115,10 @@ ui64 ExtractTagFromCommand(const TEvLoadTestRequest& request) {
         return request.GetYCSBLoad().GetTag();
     case TEvLoadTestRequest::CommandCase::kInterconnectLoad:
         return request.GetInterconnectLoad().GetTag();
+#ifdef __linux__
+    case TEvLoadTestRequest::CommandCase::kNBS2Load:
+        return request.GetNBS2Load().GetTag();
+#endif
     default:
         return Max<ui64>();
     }
@@ -614,6 +622,20 @@ public:
                                 GetServiceCounters(Counters, "load_actor"), tag)));
                 break;
             }
+
+#ifdef __linux__
+            case NKikimr::TEvLoadTestRequest::CommandCase::kNBS2Load: {
+                const auto& cmd = record.GetNBS2Load();
+                if (LoadActors.count(tag) != 0) {
+                    ythrow TLoadActorException() << Sprintf("duplicate load actor with Tag# %" PRIu64, tag);
+                }
+
+                LOG_D("Create new NBS2 load actor with tag# " << tag);
+                LoadActors.emplace(tag, TlsActivationContext->Register(CreateNBS2LoadActor(
+                            cmd, SelfId(), GetServiceCounters(Counters, "load_actor"), 0, tag)));
+                break;
+            }
+#endif
 
             default: {
                 TString protoTxt;

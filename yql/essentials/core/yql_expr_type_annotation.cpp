@@ -4861,6 +4861,53 @@ EDataSlot MakeUnsigned(EDataSlot dataSlot) {
     }
 }
 
+std::expected<std::pair<const TDataExprType*, bool>, TString> IsAddAllowedYqlTypes(const TTypeAnnotationNode* left, const TTypeAnnotationNode* right, TExprContext& ctx) {
+    const TDataExprType* leftUnpacked = nullptr;
+    auto isLeftOptional = false;
+    const TDataExprType* rightUnpacked = nullptr;
+    auto isRightOptional = false;
+
+    if (!IsDataOrOptionalOfData(left, isLeftOptional, leftUnpacked)) {
+        return std::unexpected(TStringBuilder() << "Expected data or optional, but got " << *static_cast<const TTypeAnnotationNode*>(left));
+    }
+
+    if (!IsDataOrOptionalOfData(right, isRightOptional, rightUnpacked)) {
+        return std::unexpected(TStringBuilder() << "Expected data or optional, but got " << *static_cast<const TTypeAnnotationNode*>(right));
+    }
+
+    const bool isLeftNumeric = IsDataTypeNumeric(leftUnpacked->GetSlot());
+    const bool isRightNumeric = IsDataTypeNumeric(rightUnpacked->GetSlot());
+
+    bool haveOptional = isLeftOptional || isRightOptional;
+    const TDataExprType* commonType = nullptr;
+    if (isLeftNumeric && isRightNumeric) {
+        auto commonTypeSlot = GetNumericDataTypeByLevel(Max(GetNumericDataTypeLevel(leftUnpacked->GetSlot()),
+                                                            GetNumericDataTypeLevel(rightUnpacked->GetSlot())));
+        commonType = ctx.MakeType<TDataExprType>(commonTypeSlot);
+    } else if ((IsDataTypeDate(leftUnpacked->GetSlot()) || IsDataTypeTzDate(leftUnpacked->GetSlot())) && IsDataTypeInterval(rightUnpacked->GetSlot())) {
+        commonType = leftUnpacked;
+        haveOptional = true;
+    } else if (IsDataTypeInterval(leftUnpacked->GetSlot()) && (IsDataTypeDate(rightUnpacked->GetSlot()) || IsDataTypeTzDate(rightUnpacked->GetSlot()))) {
+        commonType = rightUnpacked;
+        haveOptional = true;
+    } else if (IsDataTypeInterval(leftUnpacked->GetSlot()) && IsDataTypeInterval(rightUnpacked->GetSlot())) {
+        commonType = IsDataTypeBigDate(leftUnpacked->GetSlot()) ? leftUnpacked : rightUnpacked;
+        haveOptional = true;
+    } else if (IsDataTypeDecimal(leftUnpacked->GetSlot()) && IsDataTypeDecimal(rightUnpacked->GetSlot())) {
+        const auto dataTypeOne = static_cast<const TDataExprParamsType*>(leftUnpacked);
+        const auto dataTypeTwo = static_cast<const TDataExprParamsType*>(rightUnpacked);
+
+        if (!(*dataTypeOne == *dataTypeTwo)) {
+            return std::unexpected(TString("Cannot add different decimals."));
+        }
+
+        commonType = leftUnpacked;
+    } else {
+        return std::unexpected(TStringBuilder() << "Cannot add type " << *left << " and " << *right);
+    }
+    return std::make_pair(commonType, haveOptional);
+}
+
 bool IsDataTypeDecimal(EDataSlot dataSlot) {
     return dataSlot == EDataSlot::Decimal;
 }

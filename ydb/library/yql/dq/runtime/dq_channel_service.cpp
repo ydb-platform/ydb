@@ -162,6 +162,10 @@ bool TLocalBuffer::IsFinished() {
     return result;
 }
 
+bool TLocalBuffer::IsEarlyFinished() {
+    return EarlyFinished.load();
+}
+
 bool TLocalBuffer::IsEmpty() {
     std::lock_guard lock(Mutex);
     auto result = Queue.empty();
@@ -249,6 +253,14 @@ void TLocalBuffer::EarlyFinish() {
                 NotifyInput(true);
                 NotifyOutput(true);
                 FinishTime = TInstant::Now();
+
+                std::lock_guard lock(Mutex);
+                if (FillLevel != EDqFillLevel::NoLimit) {
+                    if (Aggregator) {
+                        Aggregator->UpdateCount(FillLevel, EDqFillLevel::NoLimit);
+                    }
+                    FillLevel = EDqFillLevel::NoLimit;
+                }
             }
         }
     }
@@ -481,6 +493,10 @@ bool TOutputDescriptor::IsFinished() {
     return result;
 }
 
+bool TOutputDescriptor::IsEarlyFinished() {
+    return EarlyFinished.load();
+}
+
 void TOutputDescriptor::Terminate() {
     Terminated.store(true);
 }
@@ -589,6 +605,10 @@ bool TOutputBuffer::IsFinished() {
     return Descriptor->IsFinished();
 }
 
+bool TOutputBuffer::IsEarlyFinished() {
+    return Descriptor->IsEarlyFinished();
+}
+
 bool TOutputBuffer::IsEmpty() {
     return false;
 }
@@ -653,6 +673,10 @@ bool TInputDescriptor::IsFinished() {
     return Finished.load();
 }
 
+bool TInputDescriptor::IsEarlyFinished() {
+    return EarlyFinished.load();
+}
+
 bool TInputDescriptor::PopDataChunk(TDataChunk& data) {
     std::lock_guard lock(QueueMutex);
     if (Queue.empty()) {
@@ -711,6 +735,10 @@ void TInputBuffer::Push(TDataChunk&&) {
 
 bool TInputBuffer::IsFinished() {
     return Descriptor->IsFinished();
+}
+
+bool TInputBuffer::IsEarlyFinished() {
+    return Descriptor->IsEarlyFinished();
 }
 
 bool TInputBuffer::Pop(TDataChunk& data) {

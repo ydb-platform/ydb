@@ -3,7 +3,7 @@ Loads functions that are mixed in to the standard library. E.g. builtins are
 written in C (binaries), but my autocompletion only understands Python code. By
 mixing in Python code, the autocompletion should work much better for builtins.
 """
-import sys
+
 import os
 from itertools import chain
 
@@ -24,8 +24,7 @@ def _get_path_dict():
                 dct[file_name[:-4]] = os.path.join(base_path, file_name)
     else:
         for file_name in __res.resfs_files():
-            if sys.version_info[0] == 3:
-                file_name = str(file_name, 'ascii')
+            file_name = str(file_name, 'ascii')
             if file_name.startswith(base_path) and file_name.endswith('.pym'):
                 dct[file_name[len(base_path) + 1:-4]] = file_name
     return dct
@@ -58,8 +57,7 @@ def _load_faked_module(evaluator, module_name):
         with open(path) as f:
             source = f.read()
     else:
-        if sys.version_info[0] == 3:
-            path = bytes(path, 'ascii')
+        path = bytes(path, 'ascii')
         source = __res.resfs_read(path)
 
     fake_modules[module_name] = m = evaluator.latest_grammar.parse(unicode(source))

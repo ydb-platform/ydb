@@ -258,6 +258,33 @@ bool TSortableScanData::InitPosition(const ui64 position) {
     return true;
 }
 
+std::shared_ptr<arrow::RecordBatch> TSortableScanData::MakeRecordBatch(const i64 position) const {
+    AFL_VERIFY(Fields.size() == Columns.size());
+    if (Columns.empty()) {
+        return {};
+    }
+
+    std::vector<std::shared_ptr<arrow::Array>> arrays;
+
+    for (size_t i = 0; i < Columns.size(); ++i) {
+        auto scalar = Columns[i]->GetScalar(GetPositionInChunk(i, position));
+        AFL_VERIFY(scalar && Fields[i]->type()->Equals(scalar->type));
+
+        auto scalarArr = arrow::MakeArrayFromScalar(*scalar, 1);
+        if (!scalarArr.ok()) {
+            return {};
+        }
+        arrays.push_back(scalarArr.ValueOrDie());
+    }
+
+    auto schema = arrow::schema(Fields);
+    auto batch = arrow::RecordBatch::Make(schema, 1, arrays);
+
+    AFL_VERIFY_DEBUG(batch && batch->ValidateFull().ok());
+
+    return batch;
+}
+
 std::partial_ordering TCursor::Compare(const TSortableScanData& item, const ui64 itemPosition) const {
     AFL_VERIFY(PositionAddress.size() == item.GetPositionAddress().size());
     for (ui32 idx = 0; idx < PositionAddress.size(); ++idx) {

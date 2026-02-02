@@ -851,7 +851,7 @@ sudo chmod 700 /opt/ydb/certs
   sudo su - ydb
   cd /opt/ydb
   export LD_LIBRARY_PATH=/opt/ydb/lib
-  /opt/ydb/bin/ydbd server --log-level 3 --syslog --tcp --config-dir /opt/ydb/cfg \
+  /opt/ydb/bin/ydbd server --log-level 3 --syslog --tcp --yaml-config  /opt/ydb/cfg/config.yaml \
       --grpcs-port 2135 --ic-port 19001 --mon-port 8765 --mon-cert /opt/ydb/certs/web.pem --node static &
   ```
 
@@ -879,7 +879,7 @@ sudo chmod 700 /opt/ydb/certs
   SyslogLevel=err
   Environment=LD_LIBRARY_PATH=/opt/ydb/lib
   ExecStart=/opt/ydb/bin/ydbd server --log-level 3 --syslog --tcp \
-      --config-dir /opt/ydb/cfg \
+      --yaml-config  /opt/ydb/cfg/config.yaml \
       --grpcs-port 2135 --ic-port 19001 --mon-port 8765 \
       --mon-cert /opt/ydb/certs/web.pem --node static
   LimitNOFILE=65536
@@ -971,7 +971,7 @@ echo $?
   /opt/ydb/bin/ydbd server --grpcs-port 2136 --grpc-ca /opt/ydb/certs/ca.crt \
       --ic-port 19002 --ca /opt/ydb/certs/ca.crt \
       --mon-port 8766 --mon-cert /opt/ydb/certs/web.pem \
-      --config-dir /opt/ydb/cfg \
+      --yaml-config  /opt/ydb/cfg/config.yaml \
       --tenant /Root/testdb \
       --grpc-cert /opt/ydb/certs/node.crt \
       --grpc-key /opt/ydb/certs/node.key \
@@ -1009,7 +1009,7 @@ echo $?
       --grpcs-port 2136 --grpc-ca /opt/ydb/certs/ca.crt \
       --ic-port 19002 --ca /opt/ydb/certs/ca.crt \
       --mon-port 8766 --mon-cert /opt/ydb/certs/web.pem \
-      --config-dir /opt/ydb/cfg \
+      --yaml-config  /opt/ydb/cfg/config.yaml \
       --tenant /Root/testdb \
       --grpc-cert /opt/ydb/certs/node.crt \
       --grpc-key /opt/ydb/certs/node.key \

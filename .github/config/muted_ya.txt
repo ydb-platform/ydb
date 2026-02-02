@@ -13,8 +13,6 @@ ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestEnabling
 ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestLoweringMemoryLimit
 ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs unittest.[*/*] chunk
 ydb/core/blobstorage/ut_vdisk TBsVDiskGC.GCPutKeepBarrierSync
-ydb/core/blobstorage/ut_vdisk TBsVDiskManyPutGet.ManyPutRangeGetCompactionIndexOnly
-ydb/core/blobstorage/ut_vdisk unittest.[*/*] chunk
 ydb/core/client/ut TObjectStorageListingTest.TestSkipShards
 ydb/core/cms/ut_sentinel_unstable TSentinelUnstableTests.BSControllerCantChangeStatus
 ydb/core/cms/ut_sentinel_unstable unittest.sole chunk
@@ -44,7 +42,6 @@ ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_offset
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_offset+middle_WithRestart
 ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient
 ydb/core/sys_view/ut SystemView.ShowCreateTableChangefeeds
-ydb/core/tx/datashard/ut_incremental_backup IncrementalBackup.CdcVersionSync
 ydb/core/tx/datashard/ut_incremental_backup IncrementalBackup.MultipleTablesWithIndexesIncrementalRestore
 ydb/core/tx/schemeshard/ut_base_reboots TTablesWithReboots.CopyIndexedTableWithReboots
 ydb/core/tx/schemeshard/ut_base_reboots TTablesWithReboots.CopyTableAndDropWithReboots2
@@ -73,6 +70,8 @@ ydb/core/tx/schemeshard/ut_login_large TSchemeShardLoginLargeTest.RemoveLogin_Ma
 ydb/core/tx/schemeshard/ut_move_reboots TSchemeShardMoveRebootsTest.ColumnTable
 ydb/core/tx/schemeshard/ut_olap_reboots TOlapReboots.CreateTable
 ydb/core/tx/schemeshard/ut_olap_reboots unittest.[*/*] chunk
+ydb/core/tx/schemeshard/ut_replication_reboots TReplicationWithRebootsTests.CreateInParallelWithInitialController
+ydb/core/tx/schemeshard/ut_replication_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_restore TImportTests.ShouldSucceedOnManyTables
 ydb/core/tx/schemeshard/ut_restore TImportWithRebootsTests.ShouldSucceedOnBigCompressedTable
 ydb/core/tx/schemeshard/ut_restore TImportWithRebootsTests.ShouldSucceedOnSingleReplication
@@ -166,12 +165,12 @@ ydb/tests/compatibility test_infer_pdisk_expected_slot_count.py.TestUpgradeThenR
 ydb/tests/compatibility test_infer_pdisk_expected_slot_count.py.TestUpgradeThenRollback.test_setup_in_blob_storage_config[restart_stable-25-4-1_to_prestable-26-1]
 ydb/tests/compatibility test_rolling.py.TestRolling.test_kv[rolling_stable-25-4-1_to_current-column]
 ydb/tests/compatibility test_simple_reader.py.TestSimpleReaderMixedCluster.test_simple_reader_mixed_cluster[mixed_current_and_stable-25-4-1]
-ydb/tests/compatibility test_simple_reader.py.TestSimpleReaderTabletTransfer.test_simple_reader_tablet_transfer[rolling_stable-25-3-1_to_stable-25-4-1]
 ydb/tests/compatibility test_simple_reader.py.TestSimpleReaderTabletTransfer.test_simple_reader_tablet_transfer[rolling_stable-25-4-1_to_current]
 ydb/tests/compatibility test_statistics.py.TestBaseStatisticsRollingUpdate.test[rolling_stable-25-3-1_to_stable-25-4-1]
 ydb/tests/compatibility test_statistics.py.TestStatisticsTLI.test_statistics_tli[restart_prestable-26-1_to_prestable-26-1]
 ydb/tests/compatibility test_statistics.py.TestStatisticsTLI.test_statistics_tli[restart_prestable-26-1_to_stable-25-4-1]
 ydb/tests/compatibility test_statistics.py.TestStatisticsTLI.test_statistics_tli[restart_stable-25-3-1_to_stable-25-4-1]
+ydb/tests/compatibility test_statistics.py.TestStatisticsTLI.test_statistics_tli[restart_stable-25-4-1_to_stable-25-3-1]
 ydb/tests/compatibility test_stress.py.TestStress.test_kv[mixed_current_and_stable-25-4-1-column]
 ydb/tests/compatibility test_stress.py.TestStress.test_log[mixed_current_and_stable-25-4-1-column]
 ydb/tests/compatibility test_stress.py.TestStress.test_log[mixed_current_and_stable-25-4-1-row]
@@ -192,7 +191,6 @@ ydb/tests/compatibility test_workload_manager.py.TestWorkloadManagerTabletTransf
 ydb/tests/compatibility udf.test_digest_regression.py.TestDigest.test_digest_regression[mixed_current_and_stable-25-4-1]
 ydb/tests/compatibility/federated_queries test_external_data_source.py.TestExternalDataTableMixedCluster.test_external_data_source[mixed_current_and_stable-25-4-1]
 ydb/tests/compatibility/federated_queries test_external_data_source.py.TestExternalDataTableRollingUpgradeAndDowngrade.test_external_data_source[rolling_stable-25-4-1_to_current]
-ydb/tests/compatibility/olap test_rename_table.py.TestRenameTableRollingUpdate.test_rename_table[rolling_stable-25-4-1_to_current]
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_column_alias[restart_current_to_current-COLUMN]
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_limit_ordered_columns[restart_current_to_current-COLUMN]
 ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_column_alias[restart_current_to_current-COLUMN]
@@ -207,7 +205,6 @@ ydb/tests/fq/pq_async_io/ut TDqPqReadActorTest.LoadCorruptedState
 ydb/tests/fq/pq_async_io/ut TDqPqReadActorTest.TestSaveLoadPqRead
 ydb/tests/fq/pq_async_io/ut unittest.sole chunk
 ydb/tests/fq/s3 test_bindings_0.py.TestBindings.test_modify_connection_with_a_lot_of_bindings[v2-kikimr_settings0-client0]
-ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_read_topic_shared_reading_restart_nodes
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_read_topic_shared_reading_restart_nodes[False]
 ydb/tests/fq/streaming test_watermarks.py.TestWatermarksInYdb.test_watermarks[False-1-no_shared-kikimr0]
 ydb/tests/fq/yds test_2_selects_limit.py.TestSelectLimit.test_select_same[v1]
@@ -236,6 +233,7 @@ ydb/tests/functional/serverless test_serverless.py.test_database_with_disk_quota
 ydb/tests/functional/serverless test_serverless.py.test_turn_on_serverless_storage_billing[enable_alter_database_create_hive_first--true-enable_pool_encryption--false]
 ydb/tests/functional/serverless test_serverless.py.test_turn_on_serverless_storage_billing[enable_alter_database_create_hive_first--true-enable_pool_encryption--true]
 ydb/tests/functional/sqs/cloud test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_dlq_mechanics_in_cloud[tables_format_v0-tables_format_v1-std]
+ydb/tests/functional/sqs/cloud test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_dlq_mechanics_in_cloud[tables_format_v1-tables_format_v1-fifo]
 ydb/tests/functional/sqs/cloud test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_yc_events_processor[tables_format_v0]
 ydb/tests/functional/statistics test_restarts.py.test_basic
 ydb/tests/functional/tenants py3test.[*/*] chunk
@@ -246,8 +244,6 @@ ydb/tests/functional/tpc/medium/tpch py3test.[test_duplicates.py] chunk
 ydb/tests/functional/tpc/medium/tpch test_duplicates.py.TestTpchDuplicatesZeroLevel.test_tpch[21]
 ydb/tests/functional/tpc/medium/tpch test_duplicates.py.TestTpchDuplicatesZeroLevel.test_tpch[22]
 ydb/tests/olap py3test.[*/*] chunk
-ydb/tests/olap test_overloads.py.TestLogScenario.test_overloads_workload[1000-1]
-ydb/tests/olap/large test_log_scenario.py.TestLogScenario.test_log_uniform
 ydb/tests/olap/s3_import py3test.sole chunk
 ydb/tests/olap/s3_import test_simple_table.py.TestSimpleTable.test_unavailable_during_import
 ydb/tests/olap/scenario test_alter_tiering.py.TestAlterTiering.test[many_tables]

@@ -596,21 +596,13 @@ IComputationNode* DispatchWinStreamCollectorBasedOnSortedColumn(const TRuntimeNo
                                                                 IComputationNode* resource,
                                                                 ui32 memberIndex,
                                                                 StreamScale streamScale,
-                                                                RangeBoundScale boundScale) {
+                                                                [[maybe_unused]] RangeBoundScale boundScale) {
     using TStream = NUdf::TDataType<TStreamType>::TLayout;
-    using TBound = NUdf::TDataType<TBoundType>::TLayout;
-
-    static_assert(std::is_same_v<TBound, decltype(boundScale(TBound{}))>, "Scaled bound type must match original bound type");
-
-    // Verify that the range type from params matches the expected TBoundType.
-    auto rangeDataType = ExtractRangeDataTypeFromWindowAggregatorParams(paramsNode);
-    MKQL_ENSURE(rangeDataType != nullptr, "Range type must be present for sorted window frames.");
-    MKQL_ENSURE(rangeDataType->GetSchemeType() == NUdf::TDataType<TBoundType>::Id,
-                "Range type from params must match the expected bound type.");
-
-    auto bounds = DeserializeBounds<TBound>(paramsNode);
-
     using TScaledStream = decltype(streamScale(TStream{}));
+    using TComparator = TRangeComparator<TScaledStream>;
+
+    auto bounds = DeserializeBounds<TScaledStream>(paramsNode, SortOrder);
+
     auto streamElementGetter = [memberIndex, streamScale](const TUnboxedValuePod& pod) -> TMaybe<TScaledStream> {
         auto structElement = pod.GetElement(memberIndex);
         if (!structElement) {
@@ -619,7 +611,7 @@ IComputationNode* DispatchWinStreamCollectorBasedOnSortedColumn(const TRuntimeNo
         return std::invoke(streamScale, structElement.Get<TStream>());
     };
 
-    auto factory = TCoreWinFramesCollector<TUnboxedValue, decltype(streamElementGetter), SortOrder>::CreateFactory(
+    auto factory = TCoreWinFramesCollector<TUnboxedValue, decltype(streamElementGetter), TComparator, SortOrder>::CreateFactory(
         bounds, std::move(streamElementGetter));
 
     return new WinFramesCollector<decltype(factory), SortOrder>(ctx.Mutables,
@@ -710,8 +702,8 @@ IComputationNode* DispatchWinStreamCollectorBasedOnOrderedColumn(const TRuntimeN
     auto sortOrder = DeserializeSortOrder(paramsNode);
     auto sortColumnName = DeserializeSortColumnName(paramsNode);
 
-    if (!ExtractRangeDataTypeFromWindowAggregatorParams(paramsNode)) {
-        auto bounds = DeserializeBounds<ui64>(paramsNode);
+    if (!AnyRangeProvided(paramsNode)) {
+        auto bounds = DeserializeBounds<ui64>(paramsNode, ESortOrder::Unimportant);
         MKQL_ENSURE(bounds.RangeIntervals().empty() && bounds.RangeIncrementals().empty(), "Unexpected bounds.");
         // TODO(atarasov5): Remove the fake getter in favor of explicitly specifying an void template.
         auto elementGetter = [](const TUnboxedValue&) -> TMaybe<ui64> {
@@ -719,7 +711,8 @@ IComputationNode* DispatchWinStreamCollectorBasedOnOrderedColumn(const TRuntimeN
             return ui64(0);
         };
 
-        auto factory = TCoreWinFramesCollector<TUnboxedValue, decltype(elementGetter), ESortOrder::Unimportant>::CreateFactory(
+        using TComparator = TRangeComparator<ui64>;
+        auto factory = TCoreWinFramesCollector<TUnboxedValue, decltype(elementGetter), TComparator, ESortOrder::Unimportant>::CreateFactory(
             bounds, std::move(elementGetter));
         return new WinFramesCollector<decltype(factory), ESortOrder::Unimportant>(ctx.Mutables,
                                                                                   stream,

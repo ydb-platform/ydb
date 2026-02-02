@@ -27,7 +27,7 @@ $win_result = (
                 b
             ORDER BY
                 a ASC
-            RANGE BETWEEN int32('50000') PRECEDING AND CURRENT ROW
+            RANGE BETWEEN int32('50000') PRECEDING AND 0 PRECEDING
         ),
         w2 AS (
             PARTITION COMPACT BY

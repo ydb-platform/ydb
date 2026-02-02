@@ -168,7 +168,7 @@ TCounters InitializeCounters(
             nameBuf.SkipPrefix("PQ/");
             name = nameBuf;
         }
-        bool derivative = name == "topic.committed_messages" || name == "topic.purged_messages" || name == "topic.scheduled_to_dlq_messages";
+        bool derivative = name == "topic.committed_messages" || name == "topic.purged_messages";
         result.push_back(name.empty() ? nullptr : group->GetExpiringNamedCounter("name", name, derivative));
     }
 

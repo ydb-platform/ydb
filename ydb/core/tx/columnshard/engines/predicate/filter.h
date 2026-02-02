@@ -109,6 +109,8 @@ public:
         return result;
     }
 
+    std::vector<std::string> GetSortingColumnNames() const;
+
     TString DebugString() const;
 
     std::set<ui32> GetColumnIds(const TIndexInfo& indexInfo) const;

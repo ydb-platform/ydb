@@ -376,7 +376,7 @@ void TDirectBlockGroup::HandleReadBlocksRequest(
     span.Attribute("blocksCount", static_cast<i64>(blocksCount));
 
     // Block is not writed
-    if (!BlocksMeta[startIndex].IsWrited())
+    if (!BlocksMeta[startIndex].IsWritten())
     {
         auto response = std::make_unique<TEvService::TEvReadBlocksResponse>(MakeError(S_OK));
         auto& blocks = *response->Record.MutableBlocks();
@@ -450,14 +450,6 @@ void TDirectBlockGroup::HandleReadBlocksRequest(
         request->OnReadRequested(RequestId, std::move(childSpan));
 }
 
-template void TDirectBlockGroup::HandleReadResult<NDDisk::TEvReadPersistentBufferResult>(
-    const NDDisk::TEvReadPersistentBufferResult::TPtr& ev,
-    const TActorContext& ctx);
-
-template void TDirectBlockGroup::HandleReadResult<NDDisk::TEvReadResult>(
-    const NDDisk::TEvReadResult::TPtr& ev,
-    const TActorContext& ctx);
-
 template <typename TEvent>
 void TDirectBlockGroup::HandleReadResult(
     const typename TEvent::TPtr& ev,
@@ -530,5 +522,15 @@ void TDirectBlockGroup::HandleReadResult(
         RequestById.erase(requestId);
     }
 }
+
+////////////////////////////////////////////////////////////////////////////////
+
+template void TDirectBlockGroup::HandleReadResult<NDDisk::TEvReadPersistentBufferResult>(
+    const NDDisk::TEvReadPersistentBufferResult::TPtr& ev,
+    const TActorContext& ctx);
+
+template void TDirectBlockGroup::HandleReadResult<NDDisk::TEvReadResult>(
+    const NDDisk::TEvReadResult::TPtr& ev,
+    const TActorContext& ctx);
 
 }   // namespace NYdb::NBS::NStorage::NPartitionDirect

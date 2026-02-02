@@ -230,11 +230,11 @@ message TFeatureFlags {
     optional bool EnableSchemaSecrets = 203 [default = true];
     optional bool EnableTableCacheModes = 204 [default = true];
     optional bool EnableSkipMessagesWithObsoleteTimestamp = 205 [default = false];
-    optional bool EnableStreamingQueries = 206 [default = false];
+    optional bool EnableStreamingQueries = 206 [default = true];
     optional bool EnableTinyDisks = 207 [default = false];
     optional bool EnableMetricsLevel = 208 [default = true];
     optional bool EnableCompileCacheView = 209 [default = false];
-    optional bool EnableSecureScriptExecutions = 210 [default = false];
+    optional bool EnableSecureScriptExecutions = 210 [default = true];
     optional bool EnableColumnshardBool = 211 [default = false];
     optional bool EnableTopicMessageLevelParallelism = 212 [default = false];
     optional bool EnableOlapRejectProbability = 213 [default = true];

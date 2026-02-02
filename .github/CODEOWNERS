@@ -103,3 +103,5 @@
 /ydb/core/sys_view/ut_registry.cpp @ydb-platform/Security
 /ydb/tests/compatibility/test_system_views.py @ydb-platform/Security
 /ydb/tests/functional/tenants/test_system_views.py @ydb-platform/Security
+
+/ydb/tests/library @ydb-platform/Engineering

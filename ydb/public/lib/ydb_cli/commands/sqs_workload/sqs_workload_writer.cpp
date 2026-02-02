@@ -79,9 +79,9 @@ namespace NYdb::NConsoleClient {
             sendMessageBatchRequest.SetAdditionalCustomHeaderValue(
                 AMZ_TARGET_HEADER, SQS_TARGET_SEND_MESSAGE_BATCH);
 
-            if (params.SetSubjectToken) {
+            if (params.SetSubjectToken && params.Token.Defined()) {
                 sendMessageBatchRequest.SetAdditionalCustomHeaderValue(
-                    YACLOUD_SUBJECT_TOKEN_HEADER, params.Token.c_str());
+                    YACLOUD_SUBJECT_TOKEN_HEADER, params.Token->c_str());
             }
 
             {

@@ -75,9 +75,9 @@ namespace NYdb::NConsoleClient {
             deleteMessageBatchRequest.SetAdditionalCustomHeaderValue(
                 AMZ_TARGET_HEADER, SQS_TARGET_DELETE_MESSAGE_BATCH);
 
-            if (params.SetSubjectToken) {
+            if (params.SetSubjectToken && params.Token.Defined()) {
                 deleteMessageBatchRequest.SetAdditionalCustomHeaderValue(
-                    YACLOUD_SUBJECT_TOKEN_HEADER, params.Token.c_str());
+                    YACLOUD_SUBJECT_TOKEN_HEADER, params.Token->c_str());
             }
 
             auto deleteMessageBatchOutcome =
@@ -156,9 +156,9 @@ namespace NYdb::NConsoleClient {
             receiveMessageRequest.SetAdditionalCustomHeaderValue(
                 AMZ_TARGET_HEADER, SQS_TARGET_RECEIVE_MESSAGE);
 
-            if (params.SetSubjectToken) {
+            if (params.SetSubjectToken && params.Token.Defined()) {
                 receiveMessageRequest.SetAdditionalCustomHeaderValue(
-                    YACLOUD_SUBJECT_TOKEN_HEADER, params.Token.c_str());
+                    YACLOUD_SUBJECT_TOKEN_HEADER, params.Token->c_str());
             }
 
             {

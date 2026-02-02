@@ -12,8 +12,8 @@ namespace NYdb::NConsoleClient {
     struct TSqsWorkloadWriterParams {
         TDuration TotalSec;
         TString QueueUrl;
-        TString Account;
-        TString Token;
+        TMaybe<TString> Account;
+        TMaybe<TString> Token;
         std::shared_ptr<TLog> Log;
         std::shared_ptr<std::mutex> Mutex;
         std::shared_ptr<std::condition_variable> FinishedCond;

@@ -12,8 +12,8 @@ namespace NYdb::NConsoleClient {
         TDuration TotalSec;
         TString QueueUrl;
         TMaybe<TString> EndpointOverride;
-        TString Account;
-        TString Token;
+        TMaybe<TString> Account;
+        TMaybe<TString> Token;
         std::shared_ptr<TLog> Log;
         std::shared_ptr<std::atomic_bool> ErrorFlag;
         std::shared_ptr<Aws::SQS::SQSClient> SqsClient;

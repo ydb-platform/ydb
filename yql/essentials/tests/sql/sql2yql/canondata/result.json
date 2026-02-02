@@ -9764,6 +9764,20 @@
             "uri": "https://{canondata_backend}/1937150/ec0019724df75083b0e89cab22f57e10ef36744e/resource.tar.gz#test_sql2yql.test_window-win_over_joined_/sql.yql"
         }
     ],
+    "test_sql2yql.test[window-win_partition_functions]": [
+        {
+            "checksum": "1c1d62ffcc7c89a1cfa806b8b35b2407",
+            "size": 4044,
+            "uri": "https://{canondata_backend}/1916746/9ccf3bf29b66cde8fda3bc785e064f8ec28fdc68/resource.tar.gz#test_sql2yql.test_window-win_partition_functions_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[window-win_partition_functions_ansi_current]": [
+        {
+            "checksum": "58fe2202bd9d6080818069cba6a3b030",
+            "size": 4098,
+            "uri": "https://{canondata_backend}/1916746/9ccf3bf29b66cde8fda3bc785e064f8ec28fdc68/resource.tar.gz#test_sql2yql.test_window-win_partition_functions_ansi_current_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[window-win_peephole]": [
         {
             "checksum": "aa07c40598e31b523fbe76adf7ac5a2d",
@@ -15687,6 +15701,16 @@
     "test_sql_format.test[window-win_over_joined]": [
         {
             "uri": "file://test_sql_format.test_window-win_over_joined_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[window-win_partition_functions]": [
+        {
+            "uri": "file://test_sql_format.test_window-win_partition_functions_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[window-win_partition_functions_ansi_current]": [
+        {
+            "uri": "file://test_sql_format.test_window-win_partition_functions_ansi_current_/formatted.sql"
         }
     ],
     "test_sql_format.test[window-win_peephole]": [

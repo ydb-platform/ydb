@@ -956,6 +956,21 @@ TExprNode::TPtr BuildUpdateLambdaForChain1Map(TPositionHandle pos, const TExprNo
         .Build();
 }
 
+TExprNode::TPtr ExtractShiftNonEmpty(TPositionHandle pos,
+                                     const TExprNode::TPtr& queue,
+                                     const TExprNode::TPtr& dependsOn,
+                                     const TStringBuf name,
+                                     THandle handle,
+                                     TExprContext& ctx) {
+    return ctx.Builder(pos)
+            .Callable("Member")
+                .Callable(0, "Unwrap")
+                    .Add(0, ::NYql::BuildWinFrame(pos, queue, handle, dependsOn, ctx, /*isSingleElement=*/true))
+                .Seal()
+                .Atom(1, name)
+            .Seal()
+            .Build();
+}
 class TChain1MapTraits : public TThrRefBase, public TNonCopyable {
 public:
     using TPtr = TIntrusivePtr<TChain1MapTraits>;
@@ -997,6 +1012,7 @@ public:
         Y_UNUSED(ctx);
         return {};
     }
+
 
     ~TChain1MapTraits() override = default;
 private:
@@ -1124,9 +1140,10 @@ public:
 
 class TChain1MapTraitsCumeDist : public TChain1MapTraits {
 public:
-    TChain1MapTraitsCumeDist(TStringBuf name, const TRawTrait& raw, const TString& partitionRowsColumn)
+    TChain1MapTraitsCumeDist(TStringBuf name, const TRawTrait& raw, TMaybe<THandle> handle, const TString& partitionRowsColumn)
         : TChain1MapTraits(name, raw.Pos)
         , PartitionRowsColumn_(partitionRowsColumn)
+        , Handle_(handle)
     {
     }
 
@@ -1178,8 +1195,18 @@ public:
             .Build();
     }
 
+    TExprNode::TPtr ExtractShiftedOutput(const TExprNode::TPtr& queue,
+                                         const TExprNode::TPtr& dependsOn,
+                                         TExprContext& ctx) const override {
+        if (!Handle_.Defined()) {
+            return {};
+        }
+        return ExtractShiftNonEmpty(GetPos(), queue, dependsOn, GetName(), *Handle_, ctx);
+    }
+
 private:
     const TString PartitionRowsColumn_;
+    TMaybe<THandle> Handle_;
 };
 
 class TChain1MapTraitsNTile : public TChain1MapTraits {
@@ -1835,14 +1862,7 @@ public:
         }
 
         if (FrameNeverEmpty_) {
-            return ctx.Builder(GetPos())
-                        .Callable("Member")
-                            .Callable(0, "Unwrap")
-                                .Add(0, ::NYql::BuildWinFrame(GetPos(), queue, *Handle_, dependsOn, ctx, /*isSingleElement=*/true))
-                            .Seal()
-                            .Atom(1, GetName())
-                        .Seal()
-                        .Build();
+            return ExtractShiftNonEmpty(GetPos(), queue, dependsOn, GetName(), *Handle_, ctx);
         }
 
         auto output = ctx.Builder(GetPos())
@@ -2154,17 +2174,31 @@ TChain1MapTraits::TPtr ProcessLeadLag(const TRawTrait& trait,
     }
 }
 
-TChain1MapTraits::TPtr ProcessRowShiftIndependetTraits(const TRawTrait& trait,
-                                                       TStringBuf name,
-                                                       const TMaybe<TString>& partitionRowsColumn) {
+TChain1MapTraits::TPtr ProcessPartitionBaseTraits(const TRawTrait& trait,
+                                                  TStringBuf name,
+                                                  const TMaybe<TString>& partitionRowsColumn,
+                                                  TExprNodeCoreWinFrameCollectorBounds* incrementalBounds) {
     YQL_ENSURE(!trait.UpdateLambda);
     YQL_ENSURE(!trait.DefaultValue);
+
+    auto handle = [&]() -> TMaybe<THandle> {
+        if (!incrementalBounds) {
+            return {};
+        }
+        if (trait.FrameSettings.GetFrameType() != EFrameType::FrameByRange) {
+            return {};
+        }
+        YQL_ENSURE(trait.FrameSettings.IsLeftInf() && trait.FrameSettings.IsRightCurrent());
+        return incrementalBounds->AddRangeIncremental(trait.FrameSettings.GetRangeFrame().GetLast());
+    };
+
     if (trait.CalculateLambda->IsCallable("RowNumber")) {
         return new TChain1MapTraitsRowNumber(name, trait);
     } else if (trait.CalculateLambda->IsCallable("Rank")) {
         return new TChain1MapTraitsRank(name, trait);
     } else if (trait.CalculateLambda->IsCallable("CumeDist")) {
-        return new TChain1MapTraitsCumeDist(name, trait, *partitionRowsColumn);
+        YQL_ENSURE(trait.FrameSettings.GetFrameType() == EFrameType::FrameByRange || trait.FrameSettings.GetFrameType() == EFrameType::FrameByRows);
+        return new TChain1MapTraitsCumeDist(name, trait, handle(), *partitionRowsColumn);
     } else if (trait.CalculateLambda->IsCallable("NTile")) {
         return new TChain1MapTraitsNTile(name, trait, *partitionRowsColumn);
     } else if (trait.CalculateLambda->IsCallable("PercentRank")) {
@@ -2178,6 +2212,7 @@ TChain1MapTraits::TPtr ProcessRowShiftIndependetTraits(const TRawTrait& trait,
 TChain1MapTraits::TPtr ProcessFrameIndependedTraits(const TRawTrait& trait,
                                                     TStringBuf name,
                                                     TExprNodeCoreWinFrameCollectorBounds& bounds,
+                                                    TExprNodeCoreWinFrameCollectorBounds& incrementalBounds,
                                                     const TMaybe<TString>& partitionRowsColumn,
                                                     ui64 currentRowIndex,
                                                     TTypeAnnotationContext& types) {
@@ -2186,18 +2221,21 @@ TChain1MapTraits::TPtr ProcessFrameIndependedTraits(const TRawTrait& trait,
     if (trait.CalculateLambdaLead.Defined()) {
         return ProcessLeadLag(trait, name, bounds, currentRowIndex, types);
     } else {
-        return ProcessRowShiftIndependetTraits(trait, name, partitionRowsColumn);
+        return ProcessPartitionBaseTraits(trait, name, partitionRowsColumn, &incrementalBounds);
     }
 }
 
-TVector<TChain1MapTraits::TPtr> BuildFoldMapTraitsForNonNumericRange(const TExprNode::TPtr& frames, const TStructExprType& rowType,  const TMaybe<TString>& partitionRowsColumn, TExprContext& ctx) {
+TVector<TChain1MapTraits::TPtr> BuildFoldMapTraitsForNonNumericRange(const TExprNode::TPtr& frames,
+                                                                     const TStructExprType& rowType,
+                                                                     const TMaybe<TString>& partitionRowsColumn,
+                                                                     TExprContext& ctx) {
     TVector<TChain1MapTraits::TPtr> result;
     TCalcOverWindowTraits traits = ExtractCalcOverWindowTraits(frames, rowType, ctx);
     for (const auto& item : traits.RawTraits) {
         TStringBuf name = item.first;
         const TRawTrait& trait = item.second;
         if (!trait.InitLambda) {
-            result.push_back(ProcessRowShiftIndependetTraits(trait, name, partitionRowsColumn));
+            result.push_back(ProcessPartitionBaseTraits(trait, name, partitionRowsColumn, nullptr));
             continue;
         }
         YQL_ENSURE(trait.FrameSettings.GetFrameType() == EFrameType::FrameByRange);
@@ -2240,7 +2278,7 @@ TVector<TChain1MapTraits::TPtr> BuildFoldMapTraitsForRowsAndNumericRanges(TQueue
         const TRawTrait& trait = item.second;
 
         if (!trait.InitLambda) {
-            result.push_back(ProcessFrameIndependedTraits(trait, name, bounds, partitionRowsColumn, currentRowIndex, typeCtx));
+            result.push_back(ProcessFrameIndependedTraits(trait, name, bounds, incrementalBounds, partitionRowsColumn, currentRowIndex, typeCtx));
             continue;
         }
 
@@ -3421,6 +3459,11 @@ TExprNode::TPtr AddPartitionRowsColumn(TPositionHandle pos, const TExprNode::TPt
                         .Seal()
                         .List(1)
                             .Atom(0, "end")
+                            .Callable(1, "Void")
+                            .Seal()
+                        .Seal()
+                        .List(2)
+                            .Atom(0, "sortSpec")
                             .Callable(1, "Void")
                             .Seal()
                         .Seal()

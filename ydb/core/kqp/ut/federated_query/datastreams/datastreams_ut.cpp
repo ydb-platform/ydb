@@ -19,6 +19,8 @@
 
 #include <fmt/format.h>
 
+#include <library/cpp/protobuf/interop/cast.h>
+
 namespace NKikimr::NKqp {
 
 using namespace NYdb;
@@ -555,10 +557,10 @@ public:
             retryMapping.AddStatusCode(status);
         }
 
-        auto& policy = *retryMapping.MutableBackoffPolicy();
-        policy.SetRetryPeriodMs(backoffDuration.MilliSeconds());
-        policy.SetBackoffPeriodMs(backoffDuration.MilliSeconds());
-        policy.SetRetryRateLimit(1);
+        auto& policy = *retryMapping.MutableExponentialDelayPolicy();
+        policy.SetBackoffMultiplier(1.5);
+        *policy.MutableInitialBackoff() = NProtoInterop::CastToProto(backoffDuration);
+        *policy.MutableMaxBackoff() = NProtoInterop::CastToProto(backoffDuration);
 
         return retryMapping;
     }

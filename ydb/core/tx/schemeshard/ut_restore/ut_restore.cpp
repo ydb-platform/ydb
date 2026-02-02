@@ -3521,7 +3521,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
               type { optional_type { item { type_id: UTF8 } } }
             }
             primary_key: "key"
-        )", {{"a", 1}});
+        )", {{"k", 1}});
 
         const auto b = GenerateTestData(R"(
             columns {
@@ -3533,7 +3533,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
               type { optional_type { item { type_id: UTF8 } } }
             }
             primary_key: "key"
-        )", {{"b", 1}});
+        )", {{"k", 1}});
 
         Run(runtime, ConvertTestData({{"/a", a}, {"/b", b}}), R"(
             ImportFromS3Settings {

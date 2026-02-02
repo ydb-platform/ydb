@@ -6127,7 +6127,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
 
     Y_UNIT_TEST(IgnoreBasicSchemeLimits) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
         ui64 txId = 100;
 
         TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", R"(
@@ -6153,6 +6153,9 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         });
         UNIT_ASSERT_UNEQUAL(tenantSchemeShard, 0);
 
+        auto initialSubDomainDesc = DescribePath(runtime, tenantSchemeShard, "/MyRoot/Alice");
+        ui64 expectedSubDomainPaths = initialSubDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
+
         TSchemeLimits basicLimits;
         basicLimits.MaxShards = 4;
         basicLimits.MaxShardsInPath = 1;
@@ -6160,7 +6163,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
 
         TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/Alice"), {
             NLs::DomainLimitsIs(basicLimits.MaxPaths, basicLimits.MaxShards),
-            NLs::PathsInsideDomain(0),
+            NLs::PathsInsideDomain(expectedSubDomainPaths),
             NLs::ShardsInsideDomain(3)
         });
 
@@ -6171,6 +6174,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             KeyColumnNames: ["Key"]
         )");
         env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+        expectedSubDomainPaths += 1;
 
         TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/Alice", R"(
                 Name: "table2"
@@ -6227,10 +6231,11 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         ));
         env.TestWaitNotification(runtime, importId, tenantSchemeShard);
         TestGetImport(runtime, tenantSchemeShard, importId, "/MyRoot/Alice");
+        expectedSubDomainPaths += 4;
 
         TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/Alice"), {
             NLs::DomainLimitsIs(basicLimits.MaxPaths, basicLimits.MaxShards),
-            NLs::PathsInsideDomain(5),
+            NLs::PathsInsideDomain(expectedSubDomainPaths),
             NLs::ShardsInsideDomain(7)
         });
     }

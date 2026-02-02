@@ -298,10 +298,10 @@ void TMVP::TryGetGenericOptionsFromConfig(
         opts.CaCertificateFile = server["ca_cert_file"].as<std::string>("");
         opts.SslCertificateFile = server["ssl_cert_file"].as<std::string>("");
         if (parseRes.FindLongOptParseResult("http-port") == nullptr) {
-            opts.HttpPort = server["http_port"].as<ui16>(0);
+            HttpPort = server["http_port"].as<ui16>(0);
         }
         if (parseRes.FindLongOptParseResult("https-port") == nullptr) {
-            opts.HttpsPort = server["https_port"].as<ui16>(0);
+            HttpsPort = server["https_port"].as<ui16>(0);
         }
     }
 
@@ -323,8 +323,8 @@ THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup(int argc, char**
     opts.AddLongOption("stderr", "Redirect log to stderr").NoArgument().SetFlag(&genericOpts.UseStderr);
     opts.AddLongOption("mlock", "Lock resident memory").NoArgument().SetFlag(&genericOpts.Mlock);
     opts.AddLongOption("config", "Path to configuration YAML file").RequiredArgument("PATH").StoreResult(&yamlConfigPath);
-    opts.AddLongOption("http-port", "HTTP port. Default " + ToString(DefaultHttpPort)).StoreResult(&genericOpts.HttpPort);
-    opts.AddLongOption("https-port", "HTTPS port. Default " + ToString(DefaultHttpsPort)).StoreResult(&genericOpts.HttpsPort);
+    opts.AddLongOption("http-port", "HTTP port. Default " + ToString(DefaultHttpPort)).StoreResult(&HttpPort);
+    opts.AddLongOption("https-port", "HTTPS port. Default " + ToString(DefaultHttpsPort)).StoreResult(&HttpsPort);
 
     NLastGetopt::TOptsParseResult res(&opts, argc, argv);
 
@@ -342,24 +342,20 @@ THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup(int argc, char**
     if (genericOpts.Mlock) {
         LockAllMemory(LockCurrentMemory);
     }
-    if (genericOpts.HttpPort > 0) {
+    if (HttpPort > 0) {
         Http = true;
     }
-    if (genericOpts.HttpsPort > 0 || !genericOpts.SslCertificateFile.empty()) {
+    if (HttpsPort > 0 || !genericOpts.SslCertificateFile.empty()) {
         Https = true;
     }
     if (!Http && !Https) {
         Http = true;
     }
-    if (genericOpts.HttpPort == 0) {
+    if (HttpPort == 0) {
         HttpPort = DefaultHttpPort;
-    } else {
-        HttpPort = genericOpts.HttpPort;
     }
-    if (genericOpts.HttpsPort == 0) {
+    if (HttpsPort == 0) {
         HttpsPort = DefaultHttpsPort;
-    } else {
-        HttpsPort = genericOpts.HttpsPort;
     }
 
     NMvp::TTokensConfig tokens;

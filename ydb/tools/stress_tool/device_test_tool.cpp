@@ -45,6 +45,7 @@ int main(int argc, char **argv) {
     opts.AddLongOption("type", "device type  - ROT|SSD|NVME").DefaultValue("ROT");
     opts.AddLongOption("output-format", "wiki|human|json").DefaultValue("wiki");
     opts.AddLongOption("mon-port", "port for monitoring http page").DefaultValue("0");
+    opts.AddLongOption("run-count", "number of times to run each test").DefaultValue("1");
     opts.AddLongOption("no-logo", "disable logo printing on start").NoArgument();
     opts.AddLongOption("disable-file-lock", "disable file locking before test").NoArgument().DefaultValue("0");
     TOptsParseResult res(&opts, argc, argv);
@@ -54,44 +55,55 @@ int main(int argc, char **argv) {
     }
 
     NKikimr::TPerfTestConfig config(res.Get("path"), res.Get("name"), res.Get("type"),
-            res.Get("output-format"), res.Get("mon-port"), !res.Has("disable-file-lock"));
+            res.Get("output-format"), res.Get("mon-port"), !res.Has("disable-file-lock"),
+            res.Get("run-count"));
     NDevicePerfTest::TPerfTests protoTests;
     NKikimr::ParsePBFromFile(res.Get("cfg"), &protoTests);
-    auto printer = MakeIntrusive<NKikimr::TResultPrinter>(config.OutputFormat);
+    auto printer = MakeIntrusive<NKikimr::TResultPrinter>(config.OutputFormat, config.RunCount);
 
     for (ui32 i = 0; i < protoTests.AioTestListSize(); ++i) {
         NDevicePerfTest::TAioTest testProto = protoTests.GetAioTestList(i);
-        THolder<NKikimr::TPerfTest> test(new NKikimr::TAioTest(config, testProto));
-        test->SetPrinter(printer);
-        test->RunTest();
+        for (ui32 run = 0; run < config.RunCount; ++run) {
+            THolder<NKikimr::TPerfTest> test(new NKikimr::TAioTest(config, testProto));
+            test->SetPrinter(printer);
+            test->RunTest();
+        }
     }
     printer->EndTest();
     for (ui32 i = 0; i < protoTests.TrimTestListSize(); ++i) {
         NDevicePerfTest::TTrimTest testProto = protoTests.GetTrimTestList(i);
-        THolder<NKikimr::TPerfTest> test(new NKikimr::TTrimTest(config, testProto));
-        test->SetPrinter(printer);
-        test->RunTest();
+        for (ui32 run = 0; run < config.RunCount; ++run) {
+            THolder<NKikimr::TPerfTest> test(new NKikimr::TTrimTest(config, testProto));
+            test->SetPrinter(printer);
+            test->RunTest();
+        }
     }
     printer->EndTest();
     for (ui32 i = 0; i < protoTests.PDiskTestListSize(); ++i) {
         NDevicePerfTest::TPDiskTest testProto = protoTests.GetPDiskTestList(i);
-        THolder<NKikimr::TPerfTest> test(new NKikimr::TPDiskTest(config, testProto));
-        test->SetPrinter(printer);
-        test->RunTest();
+        for (ui32 run = 0; run < config.RunCount; ++run) {
+            THolder<NKikimr::TPerfTest> test(new NKikimr::TPDiskTest(config, testProto));
+            test->SetPrinter(printer);
+            test->RunTest();
+        }
     }
     printer->EndTest();
     for (ui32 i = 0; i < protoTests.DDiskTestListSize(); ++i) {
         NDevicePerfTest::TDDiskTest testProto = protoTests.GetDDiskTestList(i);
-        THolder<NKikimr::TPerfTest> test(new NKikimr::TDDiskTest(config, testProto));
-        test->SetPrinter(printer);
-        test->RunTest();
+        for (ui32 run = 0; run < config.RunCount; ++run) {
+            THolder<NKikimr::TPerfTest> test(new NKikimr::TDDiskTest(config, testProto));
+            test->SetPrinter(printer);
+            test->RunTest();
+        }
     }
     printer->EndTest();
     if (protoTests.HasDriveEstimatorTest()) {
         NDevicePerfTest::TDriveEstimatorTest testProto = protoTests.GetDriveEstimatorTest();
-        THolder<NKikimr::TPerfTest> test(new NKikimr::TDriveEstimatorTest(config, testProto));
-        test->SetPrinter(printer);
-        test->RunTest();
+        for (ui32 run = 0; run < config.RunCount; ++run) {
+            THolder<NKikimr::TPerfTest> test(new NKikimr::TDriveEstimatorTest(config, testProto));
+            test->SetPrinter(printer);
+            test->RunTest();
+        }
     }
     printer->EndTest();
     return 0;

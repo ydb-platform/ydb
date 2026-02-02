@@ -88,11 +88,14 @@ void TTrimTest::Finish() {
 
 void TTrimTest::PrintReport() {
     double TrimTimeSec = Max(1.0, HPSecondsFloat(TrimTime));
+    double speedMBps = double(EventsDone * Size) / 1e6 / TrimTimeSec;
+    double iops = EventsDone / TrimTimeSec;
     Printer->AddResult("Size", ToString(HumanReadableSize(Size, SF_BYTES)));
     Printer->AddResult("Duration,sec", DurationSec);
     Printer->AddResult("Trims done", EventsDone);
-    Printer->AddResult("Speed", Sprintf("%.1f MB/s", double(EventsDone * Size) / 1e6 / TrimTimeSec));
-    Printer->AddResult("IOPS", Sprintf("%.2f", EventsDone / TrimTimeSec));
+    Printer->AddResult("Speed", Sprintf("%.1f MB/s", speedMBps));
+    Printer->AddResult("IOPS", Sprintf("%.2f", iops));
+    Printer->AddSpeedAndIops(TSpeedAndIops(speedMBps, iops));
     for (float percentile : {1., 0.999, 0.99, 0.9, 0.5, 0.1}) {
         TString perc_name = Sprintf("%.1f perc", percentile * 100);
         Printer->AddResult(perc_name, Sprintf("%lu us", LatencyUs.GetPercentile(percentile)));

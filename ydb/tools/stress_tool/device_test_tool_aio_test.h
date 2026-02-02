@@ -378,11 +378,14 @@ public:
     }
 
     void PrintReadReport() {
+        double speedMBps = double(ReadEventsDone * BuffSize) / 1e6 / DurationSec;
+        double iops = double(ReadEventsDone) / DurationSec;
         Printer->AddResult("Type", Sprintf("Read %.0f%%", ReadProportion * 100));
         Printer->AddResult("Size", ToString(HumanReadableSize(BuffSize, SF_BYTES)));
         Printer->AddResult("QueueDepth", QueueDepth);
-        Printer->AddResult("Speed", Sprintf("%.1f MB/s", double(ReadEventsDone * BuffSize) / 1e6 / DurationSec));
-        Printer->AddResult("IOPS", ui64(ReadEventsDone / DurationSec));
+        Printer->AddResult("Speed", Sprintf("%.1f MB/s", speedMBps));
+        Printer->AddResult("IOPS", ui64(iops));
+        Printer->AddSpeedAndIops(TSpeedAndIops(speedMBps, iops));
         for (float percentile : {1., 0.999, 0.99, 0.9, 0.5, 0.1}) {
             TString perc_name = Sprintf("%.1f perc", percentile * 100);
             Printer->AddResult(perc_name, Sprintf("%lu us", ReadLatencyUs.GetPercentile(percentile)));
@@ -391,11 +394,14 @@ public:
     }
 
     void PrintWriteReport() {
+        double speedMBps = double(WriteEventsDone * BuffSize) / 1e6 / DurationSec;
+        double iops = double(WriteEventsDone) / DurationSec;
         Printer->AddResult("Type", Sprintf("Write %.0f%%", (1 - ReadProportion) * 100));
         Printer->AddResult("Size", ToString(HumanReadableSize(BuffSize, SF_BYTES)));
         Printer->AddResult("QueueDepth", QueueDepth);
-        Printer->AddResult("Speed", Sprintf("%.1f MB/s", double(WriteEventsDone * BuffSize) / 1e6 / DurationSec));
-        Printer->AddResult("IOPS", ui64(WriteEventsDone / DurationSec));
+        Printer->AddResult("Speed", Sprintf("%.1f MB/s", speedMBps));
+        Printer->AddResult("IOPS", ui64(iops));
+        Printer->AddSpeedAndIops(TSpeedAndIops(speedMBps, iops));
         for (float percentile : {1., 0.999, 0.99, 0.9, 0.5, 0.1}) {
             TString perc_name = Sprintf("%.1f perc", percentile * 100);
             Printer->AddResult(perc_name, Sprintf("%lu us", WriteLatencyUs.GetPercentile(percentile)));

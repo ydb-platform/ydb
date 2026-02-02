@@ -87,6 +87,11 @@
   (label=+column-standard; alpha=0.1; theta=5)
 )
 *
+(
+  (label=+keys-negatively-correlated; assort=-0.8) +
+  (label=+keys-rand; assort=0.0)
+)
+*
 // ==================================================================================
 // GROUP 3: JOIN CONSTRAINTS (Pruning Layer)
 // ==================================================================================
@@ -120,6 +125,9 @@
   )
 )
 *
+// This allows to look around the topology by randomizing edges a bit
+(mcmc-edge=1)
+*
 // ==================================================================================
 // GROUP 4: DEFAULTS
 // ==================================================================================
@@ -133,7 +141,5 @@
   left-semi-join=?0.0;
   right-semi-join=?0.0;
   cross-join=?0.0;
-  exclusion-join=?0.0;
-  mcmc-degree=5;
-  mcmc-edge=5
+  exclusion-join=?0.0
 )

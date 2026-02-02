@@ -824,11 +824,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
 
     Y_UNIT_TEST(MergeCopyParallelWithChannelsBindings) { //+
         TTestWithReboots t(true);
-        t.GetTestEnvOptions().EnableRealSystemViewPaths(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             TPathVersion pathVersion;
             {
                 TInactiveZone inactive(activeZone);
+                auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+                ui64 expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
+
                 TestCreateSubDomain(runtime, t.TxId, "/MyRoot/DirA", //1001
                                     "PlanResolution: 50 "
                                     "Coordinators: 1 "
@@ -844,9 +846,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
                                     "  Kind: \"storage-pool-number-2\""
                                     "}");
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
+                expectedDomainPaths += 1;
 
                 TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                                   {NLs::PathsInsideDomain(2),
+                                   {NLs::PathsInsideDomain(expectedDomainPaths),
                                     NLs::ShardsInsideDomain(0)});
 
                 TestCreateTable(runtime, ++t.TxId, "/MyRoot/DirA/USER_0", R"(
@@ -895,10 +898,15 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
 
     Y_UNIT_TEST(ForceDropAndCopyInParallelAllPathsAreLocked) { //+
         TTestWithReboots t(true);
-        t.GetTestEnvOptions().EnableRealSystemViewPaths(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            ui64 expectedDomainPaths;
+            ui64 dirAPathId;
             {
                 TInactiveZone inactive(activeZone);
+                auto initialDirDesc = DescribePath(runtime, "/MyRoot/DirA");
+                dirAPathId = initialDirDesc.GetPathId();
+                expectedDomainPaths = initialDirDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
+
                 TestCreateTable(runtime, ++t.TxId, "/MyRoot/DirA", R"(
                                 Name: "Table"
                                 Columns { Name: "key1"       Type: "Utf8"}
@@ -907,13 +915,16 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
                                 KeyColumnNames: ["key1", "key2"]
                                 )");
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
+                expectedDomainPaths += 1;
 
                 SetAllowLogBatching(runtime, TTestTxConfig::FakeHiveTablets, false);
             }
 
             AsyncCopyTable(runtime, ++t.TxId, "/MyRoot/DirA", "TableCopy", "/MyRoot/DirA/Table");
+            expectedDomainPaths += 1;
 
-            AsyncForceDropUnsafe(runtime, ++t.TxId, 2);
+            AsyncForceDropUnsafe(runtime, ++t.TxId, dirAPathId);
+            expectedDomainPaths -= 3;
 
             AsyncSplitTable(runtime, ++t.TxId, "/MyRoot/DirA/Table", R"(
                             SourceTabletId: 72075186233409546
@@ -935,7 +946,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
             {
                 TInactiveZone inactive(activeZone);
                 TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                                   {NLs::NoChildren});
+                                   {NLs::PathsInsideDomain(expectedDomainPaths)});
             }
         });
     }

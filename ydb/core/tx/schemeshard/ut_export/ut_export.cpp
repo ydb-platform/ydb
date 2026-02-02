@@ -65,6 +65,9 @@ namespace {
             )", TStringBuf(serverless ? "/MyRoot/Shared" : dbName).RNextTok('/').data()));
             env.TestWaitNotification(runtime, txId);
 
+            const auto describeResult = DescribePath(runtime, serverless ? "/MyRoot/Shared" : dbName);
+            const auto subDomainPathId = describeResult.GetPathId();
+
             TestAlterExtSubDomain(runtime, ++txId, "/MyRoot", Sprintf(R"(
                 PlanResolution: 50
                 Coordinators: 1
@@ -94,9 +97,9 @@ namespace {
                     Name: "%s"
                     ResourcesDomainKey {
                         SchemeShard: %lu
-                        PathId: 2
+                        PathId: %lu
                     }
-                )", TStringBuf(dbName).RNextTok('/').data(), TTestTxConfig::SchemeShard), attrs);
+                )", TStringBuf(dbName).RNextTok('/').data(), TTestTxConfig::SchemeShard, subDomainPathId), attrs);
                 env.TestWaitNotification(runtime, txId);
 
                 TestAlterExtSubDomain(runtime, ++txId, "/MyRoot", Sprintf(R"(
@@ -628,7 +631,7 @@ namespace {
 
         void ShouldCheckQuotas(const TSchemeLimits& limits, Ydb::StatusIds::StatusCode expectedFailStatus) {
             const TString userSID = "user@builtin";
-            EnvOptions().SystemBackupSIDs({userSID}).EnableRealSystemViewPaths(false);
+            EnvOptions().SystemBackupSIDs({userSID});
             Env(); // Init test env
 
             SetSchemeshardSchemaLimits(Runtime(), limits);
@@ -1985,7 +1988,7 @@ partitioning_settings {
     }
 
     Y_UNIT_TEST(ShouldCheckQuotasChildrenLimited) {
-        ShouldCheckQuotas(TSchemeLimits{.MaxChildrenInDir = 1}, Ydb::StatusIds::CANCELLED);
+        ShouldCheckQuotas(TSchemeLimits{.MaxChildrenInDir = 2}, Ydb::StatusIds::CANCELLED);
     }
 
     Y_UNIT_TEST(ShouldRetryAtFinalStage) {

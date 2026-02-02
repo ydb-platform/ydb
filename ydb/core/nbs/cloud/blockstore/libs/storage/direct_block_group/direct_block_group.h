@@ -18,7 +18,7 @@ constexpr size_t BlocksCount = 128 * 1024 * 1024 / 4096;
 ////////////////////////////////////////////////////////////////////////////////
 
 class TDirectBlockGroup
-{   
+{
 private:
     struct TBlockMeta {
         TVector<ui64> LsnByPersistentBufferIndex;
@@ -42,7 +42,7 @@ private:
                     return true;
                 }
             }
-            
+
             return false;
         }
 
@@ -86,6 +86,8 @@ private:
     TVector<TDDiskConnection> DDiskConnections;
     TVector<TDDiskConnection> PersistentBufferConnections;
 
+    ui64 TabletId;
+    ui32 Generation;
     ui64 RequestId = 0;
     std::unordered_map<ui64, std::shared_ptr<IRequest>> RequestById;
     TVector<TBlockMeta> BlocksMeta;
@@ -116,7 +118,8 @@ public:
     void RequestBlockFlush(
         const TActorContext& ctx,
         const TWriteRequest& request,
-        bool isErase);
+        bool isErase,
+        NWilson::TTraceId traceId);
 
     void HandlePersistentBufferFlushResult(
         const NDDisk::TEvFlushPersistentBufferResult::TPtr& ev,

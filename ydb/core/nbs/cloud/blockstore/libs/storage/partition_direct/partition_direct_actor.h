@@ -21,6 +21,12 @@ private:
 
     std::unique_ptr<TDirectBlockGroup> DirectBlockGroup;
 
+    std::atomic<NActors::TMonotonic> LastTraceTs{NActors::TMonotonic::Zero()};
+    // Throttle trace ID creation to avoid overwhelming the tracing system
+    // One trace per 100ms should be sufficient for observability
+    // TODO: get from config
+    TDuration TraceSamplePeriod = TDuration::MilliSeconds(100);
+
 public:
     TPartitionActor() = default;
 
@@ -36,7 +42,7 @@ private:
     void HandleControllerAllocateDDiskBlockGroupResult(
         const TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult::TPtr& ev,
         const TActorContext& ctx);
-        
+
     void HandleWriteBlocksRequest(
         const TEvService::TEvWriteBlocksRequest::TPtr& ev,
         const TActorContext& ctx);
@@ -53,7 +59,7 @@ private:
     void HandlePersistentBufferWriteResult(
         const NDDisk::TEvWritePersistentBufferResult::TPtr& ev,
         const TActorContext& ctx);
-    
+
     void HandlePersistentBufferFlushResult(
         const NDDisk::TEvFlushPersistentBufferResult::TPtr& ev,
         const TActorContext& ctx);
@@ -62,6 +68,26 @@ private:
     void HandleReadResult(
         const typename TEvent::TPtr& ev,
         const TActorContext& ctx);
+
+    template<typename TEvPtr>
+    void AddTraceId(const TEvPtr& ev, const NActors::TActorContext& ctx);
 };
+
+////////////////////////////////////////////////////////////////////////////////
+
+template<typename TEvPtr>
+void TPartitionActor::AddTraceId(const TEvPtr& ev, const NActors::TActorContext& ctx)
+{
+    if (!ev->TraceId) {
+        // Generate new trace id with throttling to avoid overwhelming the tracing system
+        ev->TraceId = NWilson::TTraceId::NewTraceIdThrottled(
+            15,                 // verbosity
+            4095,               // timeToLive
+            LastTraceTs,        // atomic counter for throttling
+            ctx.Monotonic(),    // current monotonic time
+            TraceSamplePeriod   // 100ms between samples
+        );
+    }
+}
 
 } // namespace NYdb::NBS::NStorage::NPartitionDirect

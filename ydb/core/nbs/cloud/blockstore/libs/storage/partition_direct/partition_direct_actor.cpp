@@ -103,6 +103,7 @@ void TPartitionActor::HandleWriteBlocksRequest(
     const TEvService::TEvWriteBlocksRequest::TPtr& ev,
     const NActors::TActorContext& ctx)
 {
+    AddTraceId(ev, ctx);
     DirectBlockGroup->HandleWriteBlocksRequest(ev, ctx);
 }
 
@@ -124,6 +125,7 @@ void TPartitionActor::HandleReadBlocksRequest(
     const TEvService::TEvReadBlocksRequest::TPtr& ev,
     const NActors::TActorContext& ctx)
 {
+    AddTraceId(ev, ctx);
     DirectBlockGroup->HandleReadBlocksRequest(ev, ctx);
 }
 

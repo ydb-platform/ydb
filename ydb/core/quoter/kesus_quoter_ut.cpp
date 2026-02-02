@@ -646,6 +646,64 @@ Y_UNIT_TEST_SUITE(KesusProxyTest) {
         UNIT_ASSERT_GT(res.Update[0].Ticks, 0u);
     }
 
+    Y_UNIT_TEST(NegativeAvailableNotAmplifiedOnScaleUp) {
+        // speed=100, prefetch default=0.2, so ResourceBucketMaxSize=20, initial Available=20
+        TKesusProxyTestSetup setup;
+        auto* pipe = setup.GetPipeFactory().ExpectTabletPipeConnection();
+        EXPECT_CALL(*pipe, OnSubscribeOnResources(_, _))
+            .WillOnce(Invoke([&](const NKikimrKesus::TEvSubscribeOnResources& record, ui64 cookie) {
+                UNIT_ASSERT_VALUES_EQUAL(record.ResourcesSize(), 1);
+                NKikimrKesus::TEvSubscribeOnResourcesResult ans;
+                FillResult(ans.AddResults(), 42, 100.0);
+                pipe->SendSubscribeOnResourceResult(ans, cookie);
+            }));
+
+        auto session = setup.ProxyRequest("res");
+        UNIT_ASSERT_VALUES_EQUAL(session->Get()->ResourceId, 42);
+
+        // Drain initial ProxyUpdate from subscription
+        setup.GetProxyUpdate();
+
+        EXPECT_CALL(*pipe, OnUpdateConsumptionState(_, _))
+            .Times(AnyNumber());
+
+        // Consume 25 > Available=20, making Available = -5
+        setup.SendProxyStats({TEvQuota::TProxyStat(42, 1, 25.0, {}, 1, 25.0, 0, 0)});
+        setup.WaitEvent<TEvQuota::TEvProxyStats>();
+
+        // Drain update after consumption (zero-rate channel, Available=-5)
+        auto update = setup.GetProxyUpdate();
+        UNIT_ASSERT_DOUBLES_EQUAL(update->Get()->Resources[0].Update[0].Rate, 0.0, 0.001);
+
+        // Now double the speed: 100 -> 200
+        // ResourceBucketMaxSize goes from 20 to 40, scale = 2.0
+        // BUG: Available = -5 * 2 = -10 (deficit amplified)
+        // FIX: Available should stay -5 or become 0 (not worse)
+        {
+            auto ev = std::make_unique<NKesus::TEvKesus::TEvResourcesAllocated>();
+            auto* resInfo = ev->Record.AddResourcesInfo();
+            resInfo->SetResourceId(42);
+            resInfo->SetAmount(0);
+            resInfo->MutableStateNotification()->SetStatus(Ydb::StatusIds::SUCCESS);
+            FillProps(resInfo->MutableEffectiveProps(), 42, 200.0);
+            setup.GetRuntime().Send(new IEventHandle(setup.GetKesusProxyId(), pipe->GetSelfID(), ev.release(), 0, true));
+        }
+
+        // Get update after props change
+        update = setup.GetProxyUpdate();
+        UNIT_ASSERT_VALUES_EQUAL(update->Get()->Resources.size(), 1);
+
+        // Now send a small allocation of 10 units.
+        // With fix (Available stayed -5): Available = -5 + 10 = 5, rate > 0
+        // With bug (Available became -10): Available = -10 + 10 = 0, rate = 0
+        setup.SendResourcesAllocated(pipe, 42, 10.0);
+        update = setup.GetProxyUpdate();
+        const auto& res = update->Get()->Resources[0];
+        UNIT_ASSERT_GT(res.Update.size(), 0);
+        UNIT_ASSERT_GT_C(res.Update[0].Rate, 0.0,
+            "After allocating 10 units, rate should be positive — negative Available was amplified on scale-up");
+    }
+
     Y_UNIT_TEST(ProxyDoesNotEraseChannelWhenAvailableZero) {
         // speed=100, prefetch default=0.2, so ResourceBucketMaxSize=20, initial Available=20
         TKesusProxyTestSetup setup;

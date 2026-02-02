@@ -377,11 +377,14 @@ bool TKesusProxyTestSetup::ConsumeResource(ui64 resId, double amount, TDuration 
                     UNIT_ASSERT_VALUES_EQUAL(updateTick.Channel, 0);
                     UNIT_ASSERT_VALUES_EQUAL(updateTick.Policy, TEvQuota::ETickPolicy::Front);
                     const bool noAmount = updateTick.Rate <= 0.0;
-                    if (!noAmount) {
-                        UNIT_ASSERT(res.SustainedRate > 0);
-                        UNIT_ASSERT_VALUES_EQUAL(updateTick.Ticks, 2);
-                        UNIT_ASSERT(updateTick.Rate > 0);
+                    if (noAmount) {
+                        // Zero-rate channel (keep-alive with Ticks > 0) — no quota available yet, keep trying
+                        continue;
                     }
+
+                    UNIT_ASSERT(res.SustainedRate > 0);
+                    UNIT_ASSERT_VALUES_EQUAL(updateTick.Ticks, 2);
+                    UNIT_ASSERT(updateTick.Rate > 0);
 
                     const TDuration timeToCharge = amount / updateTick.Rate * tickSize;
                     if (Runtime->GetCurrentTime() - start >= timeToCharge || amount <= updateTick.Rate) {

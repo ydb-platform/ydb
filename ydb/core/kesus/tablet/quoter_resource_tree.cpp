@@ -229,7 +229,7 @@ public:
     void DeactivateIfFull(TInstant now);
 
     bool IsEffectivePropsChanged() const override {
-        return EffectivePropsChanged_;
+        return EffectivePropsChanged;
     }
 
     void SetResourceCounters(TIntrusivePtr<::NMonitoring::TDynamicCounters> resourceCounters) override;
@@ -285,7 +285,7 @@ private:
     double BucketSize = 0.0;
 
     bool Active = false;
-    bool EffectivePropsChanged_ = false;
+    bool EffectivePropsChanged = false;
     THierarchicalDRRResourceConsumer* CurrentActiveChild = nullptr;
     size_t ActiveChildrenCount = 0;
     size_t ActiveV1ChildrenCount = 0;
@@ -752,16 +752,14 @@ void THierarchicalDRRQuoterResourceTree::CalcParameters() {
         parent->ActiveChildrenWeight += weightDiff;
     }
 
-    // Only clamp FreeResource if limits got tighter
     const double freeResourceLimit = HasActiveChildren() ? ResourceTickQuantum : GetBurst();
     if (ResourceTickQuantum < prevResourceTickQuantum || FreeResource > freeResourceLimit) {
         FreeResource = Min(FreeResource, freeResourceLimit);
     }
 
-    // Detect effective props changes before updating
     {
         const auto& oldEffCfg = EffectiveProps.GetHierarchicalDRRResourceConfig();
-        EffectivePropsChanged_ = (MaxUnitsPerSecond != oldEffCfg.GetMaxUnitsPerSecond() ||
+        EffectivePropsChanged = (MaxUnitsPerSecond != oldEffCfg.GetMaxUnitsPerSecond() ||
                                   PrefetchCoefficient != oldEffCfg.GetPrefetchCoefficient() ||
                                   PrefetchWatermark != oldEffCfg.GetPrefetchWatermark() ||
                                   Weight != oldEffCfg.GetWeight());

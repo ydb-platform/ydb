@@ -502,6 +502,14 @@ namespace {
     [[nodiscard]] TString AddConsumerToTopicRequest(
             Ydb::Topic::Consumer* protoConsumer, const TCoTopicConsumer& consumer
     ) {
+        std::optional<TString> type;
+        std::optional<bool> keepMessagesOrder;
+        std::optional<TDuration> defaultProcessingTimeout;
+        std::optional<TString> policy;
+        std::optional<ui64> maxProcessingAttempts;
+        std::optional<TString> dlq;
+
+        
         protoConsumer->set_name(consumer.Name().StringValue());
         auto settings = consumer.Settings().Cast<TCoNameValueTupleList>();
         for (const auto& setting : settings) {
@@ -529,42 +537,81 @@ namespace {
                     protoCodecs->add_codecs(codec);
                 }
             } else if (name == "type"sv) {
-                auto type = GetStringValue(setting);
-                if (type == "streaming") {
+                type = to_lower(GetStringValue(setting));
+                if (type.value() == "streaming") {
                     protoConsumer->mutable_streaming_consumer_type();
-                } else if (type == "shared") {
+                } else if (type.value() == "shared") {
                     protoConsumer->mutable_shared_consumer_type();
                 } else {
-                    return TStringBuilder() << "Unknown consumer type: " << type;
+                    return TStringBuilder() << "Unknown consumer type: " << type.value();
                 }
             } else if (name == "keep_messages_order"sv) {
-                protoConsumer->mutable_shared_consumer_type()->set_keep_messages_order(GetBoolValue(setting));
+                keepMessagesOrder = GetBoolValue(setting);
+                protoConsumer->mutable_shared_consumer_type()->set_keep_messages_order(keepMessagesOrder.value());
             } else if (name == "default_processing_timeout"sv) {
-                auto period = GetIntervalValue(setting);
+                defaultProcessingTimeout = GetIntervalValue(setting);
                 auto* value = protoConsumer->mutable_shared_consumer_type()->mutable_default_processing_timeout();
-                value->set_seconds(period.Seconds());
-                value->set_nanos(period.NanoSecondsOfSecond());
+                value->set_seconds(defaultProcessingTimeout->Seconds());
+                value->set_nanos(defaultProcessingTimeout->NanoSecondsOfSecond());
             } else if (name == "max_processing_attempts"sv) {
-                protoConsumer->mutable_shared_consumer_type()->mutable_dead_letter_policy()->mutable_condition()->set_max_processing_attempts(GetIntValue(setting));
+                maxProcessingAttempts = GetIntValue(setting);
+                protoConsumer->mutable_shared_consumer_type()->mutable_dead_letter_policy()->mutable_condition()->set_max_processing_attempts(maxProcessingAttempts.value());
             } else if (name == "dead_letter_policy"sv) {
-                auto policy = GetStringValue(setting);
+                policy = to_lower(GetStringValue(setting));
                 auto policyProto = protoConsumer->mutable_shared_consumer_type()->mutable_dead_letter_policy();
-                if (policy == "move") {
+                if (policy.value() == "move"sv) {
                     policyProto->set_enabled(true);
                     policyProto->mutable_move_action();
-                } else if (policy == "delete") {
+                } else if (policy.value() == "delete"sv) {
                     policyProto->set_enabled(true);
                     policyProto->mutable_delete_action();
-                } else if (policy == "none") {
+                } else if (policy.value() == "none"sv) {
                     policyProto->set_enabled(false);
                 } else {
-                    return TStringBuilder() << "Unknown dead letter policy: " << policy;
+                    return TStringBuilder() << "Unknown dead letter policy: " << policy.value();
                 }
             } else if (name == "dead_letter_queue"sv) {
+                dlq = GetStringValue(setting);
                 auto policyProto = protoConsumer->mutable_shared_consumer_type()->mutable_dead_letter_policy();
-                policyProto->mutable_move_action()->set_dead_letter_queue(GetStringValue(setting));
+                policyProto->mutable_move_action()->set_dead_letter_queue(dlq.value());
             }
         }
+
+        if (!type || type.value() == "streaming"sv) {
+            if (keepMessagesOrder) {
+                return TStringBuilder() << "keep_messages_order is not supported for streaming consumers";
+            }
+            if (defaultProcessingTimeout) {
+                return TStringBuilder() << "default_processing_timeout is not supported for streaming consumers";
+            }
+            if (maxProcessingAttempts) {
+                return TStringBuilder() << "max_processing_attempts is not supported for streaming consumers";
+            }
+            if (policy) {
+                return TStringBuilder() << "dead_letter_policy is not supported for streaming consumers";
+            }
+            if (dlq) {
+                return TStringBuilder() << "dead_letter_queue is not supported for streaming consumers";
+            }
+        } else {
+            if (!policy || policy.value() == "none"sv) {
+                if (maxProcessingAttempts) {
+                    return TStringBuilder() << "max_processing_attempts is not supported for shared consumers with dead letter policy 'none'";
+                }
+                if (dlq) {
+                    return TStringBuilder() << "dead_letter_queue is not supported for shared consumers with dead letter policy 'none'";
+                }
+            } else if (policy.value() == "delete"sv) {
+                if (dlq) {
+                    return TStringBuilder() << "dead_letter_queue is not supported for shared consumers with dead letter policy 'delete'";
+                }
+            } else {
+                if (!dlq) {
+                    return TStringBuilder() << "dead_letter_queue is required for shared consumers with dead letter policy 'move'";
+                }
+            }
+        }
+
         return {};
     }
 
@@ -2708,7 +2755,7 @@ public:
             for (const auto& consumer : maybeCreate.Cast().Consumers()) {
                 auto error = AddConsumerToTopicRequest(createReq.add_consumers(), consumer);
                 if (!error.empty()) {
-                    ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << error << input->Content()));
+                    ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << error));
                     return SyncError();
                 }
             }

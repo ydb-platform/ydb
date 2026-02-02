@@ -4004,7 +4004,7 @@ TExprNode::TPtr MemberOverFilterSkipNullMembers(const TExprNode::TPtr& node, TEx
 bool IsSqlWithNothingOrNullOpsEnabled(const TOptimizeContext& optCtx) {
     static const char OptName[] = "SqlInWithNothingOrNull";
     YQL_ENSURE(optCtx.Types);
-    return IsOptimizerEnabled<OptName>(*optCtx.Types) && !IsOptimizerDisabled<OptName>(*optCtx.Types);
+    return !IsOptimizerDisabled<OptName>(*optCtx.Types);
 }
 
 } // namespace

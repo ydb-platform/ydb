@@ -63,8 +63,8 @@ ui32 TCountMinSketch::Probe(const char* data, size_t size) const {
     return minValue;
 }
 
-// Returns the cardinality of two-way join.
-// NOTE: this method work given the same column domain, hashing method and seeds, and equal width and depth.
+// Returns cardinality of overlapping keys based on PK domain bucket counts.
+// NOTE: this method works given the same column domain, hashing method and seeds, as well as equal width and depth.
 TMaybe<ui32> TCountMinSketch::GetOverlappingCardinality(const TCountMinSketch& rhs) const {
     if (Width_ != rhs.Width_ || Depth_ != rhs.Depth_) {
         return Nothing();

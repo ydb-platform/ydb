@@ -259,10 +259,10 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
                 newCard = leftStats.Nrows;
                 break;
             default: {
-                //YQL_CLOG(TRACE, CoreDq) << "Commputing join card with histograms";
+                // YQL_CLOG(TRACE, CoreDq) << "Computing join card with histograms isRightPKJoin";
 
                 if (rightStats.Type == EStatisticsType::BaseTable && leftStats.ColumnStatistics && rightStats.ColumnStatistics && !leftJoinKeys.empty() && !rightJoinKeys.empty()) {
-                    //YQL_CLOG(TRACE, CoreDq) << "Histogram used";
+                    // YQL_CLOG(TRACE, CoreDq) << "Histogram used isRightPKJoin";
 
                     auto lhs = leftJoinKeys[0].AttributeName;
                     auto leftHist = leftStats.ColumnStatistics->Data[lhs].EqWidthHistogramEstimator;
@@ -270,11 +270,17 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
                     auto rightHist = rightStats.ColumnStatistics->Data[rhs].EqWidthHistogramEstimator;
 
                     if (leftHist && rightHist) {
+                        // Note, rightHist is PK and leftHist is FK
                         auto overlapCard = rightHist->GetOverlappingCardinality(*leftHist);
-                        //YQL_CLOG(TRACE, CoreDq) << "Overlapping cardinality: " << overlapCard;
-                        auto selectivityCorrection = ((double)rightHist->GetNumElements() / (double)*overlapCard );
-                        //YQL_CLOG(TRACE, CoreDq) << "Cardinality correction: " << selectivityCorrection;
-                        selectivity *= selectivityCorrection;
+                        if (!overlapCard.Defined() || overlapCard.GetRef() == 0) {
+                            YQL_CLOG(TRACE, CoreDq) << "Skipping selectivity correction: no overlap";
+                        } else {
+                            // correction = total PK / overlapping PK
+                            auto selectivityCorrection = static_cast<double>(rightHist->GetNumElements()) / static_cast<double>(overlapCard.GetRef());
+                            // YQL_CLOG(TRACE, CoreDq) << "Overlapping cardinality: " << overlapCard;
+                            // YQL_CLOG(TRACE, CoreDq) << "Cardinality correction: " << selectivityCorrection;
+                            selectivity *= selectivityCorrection;
+                        }
                     }
                 }
                 newCard = leftStats.Nrows * selectivity;
@@ -297,8 +303,10 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
                 newCard = rightStats.Nrows;
                 break;
             default: {
+                // YQL_CLOG(TRACE, CoreDq) << "Computing join card with histograms isLeftPKJoin";
+
                 if (leftStats.Type == EStatisticsType::BaseTable && leftStats.ColumnStatistics && rightStats.ColumnStatistics && !leftJoinKeys.empty() && !rightJoinKeys.empty()) {
-                    //YQL_CLOG(TRACE, CoreDq) << "Histogram used";
+                    // YQL_CLOG(TRACE, CoreDq) << "Histogram used isLeftPKJoin";
 
                     auto lhs = leftJoinKeys[0].AttributeName;
                     auto leftHist = leftStats.ColumnStatistics->Data[lhs].EqWidthHistogramEstimator;
@@ -306,11 +314,17 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
                     auto rightHist = rightStats.ColumnStatistics->Data[rhs].EqWidthHistogramEstimator;
 
                     if (leftHist && rightHist) {
+                        // Note, leftHist is PK and rightHist is FK
                         auto overlapCard = leftHist->GetOverlappingCardinality(*rightHist);
-                        //YQL_CLOG(TRACE, CoreDq) << "Overlapping cardinality: " << overlapCard;
-                        auto selectivityCorrection = ((double)leftHist->GetNumElements() / (double)*overlapCard );
-                        //YQL_CLOG(TRACE, CoreDq) << "Cardinality correction: " << selectivityCorrection;
-                        selectivity *= selectivityCorrection;
+                        if (!overlapCard.Defined() || overlapCard.GetRef() == 0) {
+                            YQL_CLOG(TRACE, CoreDq) << "Skipping selectivity correction: no overlap";
+                        } else {
+                            // correction = total PK / overlapping PK
+                            auto selectivityCorrection = static_cast<double>(leftHist->GetNumElements()) / static_cast<double>(overlapCard.GetRef());
+                            // YQL_CLOG(TRACE, CoreDq) << "Overlapping cardinality: " << overlapCard.GetRef();
+                            // YQL_CLOG(TRACE, CoreDq) << "Cardinality correction: " << selectivityCorrection;
+                            selectivity *= selectivityCorrection;
+                        }
                     }
                 }
                 newCard = rightStats.Nrows * selectivity;

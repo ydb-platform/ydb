@@ -203,29 +203,60 @@ public:
             }
         }
 
-        std::vector<TCoArgument> stageArgs;
-        TExprBase stageBody = Build<TCoToFlow>(ctx, writePos)
-            .Input(input)
-            .Done();
-
+        const auto maybeUnionAll = input.Maybe<TDqCnUnionAll>();
         const bool pureDqExpr = IsDqPureExpr(input);
-        if (!pureDqExpr || !keys.empty()) {
+        if (!pureDqExpr && !maybeUnionAll) {
+            // Wait until union all build for non pure DQ stage
+            return {};
+        }
+
+        if (maybeUnionAll && !NDq::IsSingleConsumerConnection(maybeUnionAll.Cast(), *getParents())) {
+            // Wait until union will be split with DqReplicate
+            return {};
+        }
+
+        std::vector<TCoArgument> stageArgs;
+        TNodeOnNodeOwnedMap stageArgsReplaces;
+        TExprNode::TPtr stageBody;
+
+        if (pureDqExpr) {
+            // Build stage with one sink from scratch
+            stageBody = Build<TCoToFlow>(ctx, writePos)
+                .Input(input)
+                .Done().Ptr();
+        } else if (!keys.empty()) {
+            // Build external stage with one sink
             stageArgs.emplace_back(Build<TCoArgument>(ctx, writePos)
                 .Name("in")
                 .Done());
-            stageBody = stageArgs.back();
+            stageBody = stageArgs.back().Ptr();
+        } else {
+            // Push sink into existing stage and rebuild stage lambda
+            const auto& program = maybeUnionAll.Cast().Output().Stage().Program();
+            stageBody = program.Body().Ptr();
+
+            const auto& args = program.Args();
+            for (size_t i = 0; i < args.Size(); ++i) {
+                const auto& oldArg = args.Arg(i);
+                stageArgs.emplace_back(ctx.NewArgument(oldArg.Pos(), TStringBuilder() << "arg_" << i));
+                YQL_ENSURE(stageArgsReplaces.emplace(oldArg.Raw(), stageArgs.back().Ptr()).second);
+            }
         }
 
         const auto* structType = input.Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
         if (TString error; !UseBlocksSink(format, keys, structType, State_->Configuration, error)){
+            // Build CH udf serializer
             YQL_ENSURE(!error, "Got block sink error");
             stageBody = Build<TS3SinkOutput>(ctx, writePos)
                 .Input(stageBody)
                 .Format(target.Format())
-                .KeyColumns().Add(keys).Build()
+                .KeyColumns()
+                    .Add(keys)
+                    .Build()
                 .Settings(sinkOutputSettingsBuilder.Done())
-                .Done();
+                .Done().Ptr();
         } else {
+            // Build arrow block serializer
             YQL_ENSURE(format == "parquet");
             YQL_ENSURE(keys.empty());
 
@@ -236,25 +267,25 @@ public:
 
             stageBody = Build<TCoToFlow>(ctx, writePos)
                 .Input(stageBody)
-                .Done();
+                .Done().Ptr();
 
             TVector<TString> columns;
             columns.reserve(structType->GetSize());
             for (const auto& item : structType->GetItems()) {
                 columns.emplace_back(item->GetName());
             }
-            stageBody = TExprBase(MakeExpandMap(writePos, columns, stageBody.Ptr(), ctx));
+            stageBody = MakeExpandMap(writePos, columns, stageBody, ctx);
 
             stageBody = Build<TCoWideToBlocks>(ctx, writePos)
                 .Input<TCoFromFlow>()
                     .Input(stageBody)
                     .Build()
-                .Done();
+                .Done().Ptr();
         }
 
         const auto stageProgram = Build<TCoLambda>(ctx, writePos)
             .Args(stageArgs)
-            .Body(stageBody)
+            .Body(ctx.ReplaceNodes(std::move(stageBody), stageArgsReplaces))
             .Done();
 
         const auto sinkSettings = Build<TS3SinkSettings>(ctx, writePos)
@@ -310,20 +341,11 @@ public:
                     .Done().Ptr();
         }
 
-        if (!TDqCnUnionAll::Match(input.Raw())) {
-            return {};
-        }
-
-        const TParentsMap* parentsMap = getParents();
-        const auto dqUnion = input.Cast<TDqCnUnionAll>();
-        if (!NDq::IsSingleConsumerConnection(dqUnion, *parentsMap)) {
-            return {};
-        }
+        const auto dqUnionOutput = maybeUnionAll.Cast().Output();
 
         if (keys.empty()) {
             YQL_CLOG(INFO, ProviderS3) << "Rewrite S3WriteObject `" << cluster << "`.`" << target.Path().StringValue() << "` and push sink into existing stage.";
 
-            const auto dqUnionOutput = dqUnion.Output();
             const auto dqSink = Build<TDqSink>(ctx, writePos)
                 .DataSink(dataSink)
                 .Index(dqUnionOutput.Index())
@@ -341,6 +363,7 @@ public:
 
             const auto dqStageWithSink = Build<TDqStage>(ctx, inputStage.Pos())
                 .InitFrom(inputStage)
+                .Program(stageProgram)
                 .Outputs(outputsBuilder.Done())
                 .Done();
 
@@ -364,8 +387,10 @@ public:
         return Build<TDqStage>(ctx, writePos)
             .Inputs()
                 .Add<TDqCnHashShuffle>()
-                    .Output(dqUnion.Output())
-                    .KeyColumns().Add(keys).Build()
+                    .Output(dqUnionOutput)
+                    .KeyColumns()
+                        .Add(keys)
+                        .Build()
                     .Build()
                 .Build()
             .Program(stageProgram)

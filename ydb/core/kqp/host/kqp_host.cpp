@@ -1922,6 +1922,7 @@ private:
         auto state = MakeIntrusive<TPqState>(sessionId);
         state->SupportRtmrMode = false;
         state->AllowTransparentSystemColumns = false;
+        state->StreamingTopicsReadByDefault = false;
         state->Types = TypesCtx.Get();
         state->DbResolver = FederatedQuerySetup->DatabaseAsyncResolver;
         state->FunctionRegistry = FuncRegistry;
@@ -1930,8 +1931,12 @@ private:
         state->DqIntegration = NYql::CreatePqDqIntegration(state);
         state->Gateway->OpenSession(sessionId, "username");
 
-        if (const auto requestContext = SessionCtx->GetUserRequestContext(); requestContext && requestContext->StreamingDisposition) {
-            state->Disposition = *requestContext->StreamingDisposition;
+        if (const auto requestContext = SessionCtx->GetUserRequestContext()) {
+            state->StreamingTopicsReadByDefault = requestContext->IsStreamingQuery;
+
+            if (const auto disposition = requestContext->StreamingDisposition) {
+                state->Disposition = *disposition;
+            }
         }
 
         TypesCtx->AddDataSource(NYql::PqProviderName, NYql::CreatePqDataSource(state, state->Gateway));
@@ -1976,6 +1981,7 @@ private:
             TypesCtx->OptimizerFlags.insert("sqlinwithnothingornull");
             TypesCtx->OptimizerFlags.insert("filterpushdownoverjoinoptionalsideignoreonlykeys");
         }
+        TypesCtx->OptimizerFlags.insert("disablenormalizeequalityfilteroverjoin");
 
         TypesCtx->IgnoreExpandPg = SessionCtx->ConfigPtr()->GetEnableNewRBO();
 

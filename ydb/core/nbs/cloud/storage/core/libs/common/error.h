@@ -114,6 +114,7 @@ enum EWellKnownResultCodes: ui32
     E_IO_SILENT                  = MAKE_ERROR(13),  // A legacy code for input/output errors. Unlike E_IO, it does not increment the fatal error counter in monitoring
     E_RETRY_TIMEOUT              = MAKE_ERROR(14),  // The total time limit (24 hours) for executing the request has expired
     E_PRECONDITION_FAILED        = MAKE_ERROR(15),  // Transition to the requested state would violate object's preconditions (e.g. unexpected order of operations, write request in read-only state...). This error is not retryable
+    E_TRANSPORT_ERROR            = MAKE_ERROR(16),
 
     E_GRPC_CANCELLED             = MAKE_GRPC_ERROR(1),
     E_GRPC_UNKNOWN               = MAKE_GRPC_ERROR(2),
@@ -205,6 +206,14 @@ EDiagnosticsErrorKind GetDiagnosticsErrorKind(const NProto::TError& e);
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TString FormatError(const NProto::TError& e);
+TString FormatResultCode(ui32 code);
+NJson::TJsonValue FormatErrorJson(const NProto::TError& e);
+
+NProto::TError MakeError(ui32 code, TString message = {}, ui32 flags = 0);
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TServiceError
     : public yexception
 {
@@ -217,9 +226,20 @@ public:
     {}
 
     TServiceError(const NProto::TError& error)
+        : TServiceError("" /* loc */, error)
+    {}
+
+    TServiceError(const char* loc, ui32 code)
+        : TServiceError(loc, MakeError(code))
+    {}
+
+    TServiceError(const char* loc, const NProto::TError& error)
         : Code(error.GetCode())
     {
-        Append(error.GetMessage());
+        Append(loc);
+        Append(FormatError(error));
+        Append(" | "); // appending a delimiter for any extra error details that
+                       // may be further appended via operator<<
     }
 
     ui32 GetCode() const
@@ -234,12 +254,6 @@ public:
 };
 
 ////////////////////////////////////////////////////////////////////////////////
-
-TString FormatError(const NProto::TError& e);
-TString FormatResultCode(ui32 code);
-NJson::TJsonValue FormatErrorJson(const NProto::TError& e);
-
-NProto::TError MakeError(ui32 code, TString message = {}, ui32 flags = 0);
 
 template <typename T>
 concept TAcceptsError = requires(T a)
@@ -452,6 +466,14 @@ T ExtractResponse(NThreading::TFuture<T>& future)
 {
     return SafeExecute<T>([&] {
         return future.ExtractValue();
+    });
+}
+
+template <typename T>
+TResultOrError<T> ResultOrError(const NThreading::TFuture<T>& future)
+{
+    return SafeExecute<TResultOrError<T>>([&] {
+        return future.GetValue();
     });
 }
 

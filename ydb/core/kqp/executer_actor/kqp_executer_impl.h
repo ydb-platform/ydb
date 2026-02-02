@@ -233,7 +233,6 @@ protected:
         auto& reply = *ev->Get();
 
         KqpShardsResolverId = {};
-        TasksGraph.GetMeta().ShardsResolved = true;
 
         // TODO: count resolve time in CpuTime
 
@@ -254,18 +253,18 @@ protected:
         }
 
         KQP_STLOG_D(KQPEX, "Shards nodes resolved",
-            (SuccessNodes, reply.ShardNodes.size()),
+            (SuccessNodes, reply.ShardsToNodes.size()),
             (FailedNodes, reply.Unresolved),
             (trace_id, TraceId()));
 
-        TasksGraph.GetMeta().ShardIdToNodeId = std::move(reply.ShardNodes);
-        for (const auto& [shardId, nodeId] : TasksGraph.GetMeta().ShardIdToNodeId) {
-            TasksGraph.GetMeta().ShardsOnNode[nodeId].push_back(shardId);
+        for (const auto& [_, nodeId] : reply.ShardsToNodes) {
             ParticipantNodes.emplace(nodeId);
             if (TxManager) {
                 TxManager->AddParticipantNode(nodeId);
             }
         }
+
+        TasksGraph.ResolveShards(std::move(reply.ShardsToNodes));
 
         if (IsDebugLogEnabled()) {
             TStringBuilder sb;
@@ -522,6 +521,11 @@ protected:
             return;
 
         if (TasksGraph.GetMeta().DqChannelVersion >= 2u) {
+            if (ev->Get()->Record.GetEnough()) {
+                for (auto& [channelId, inputBuffer] : ResultInputBuffers) {
+                    inputBuffer->EarlyFinish();
+                }
+            }
             return;
         }
 

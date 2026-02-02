@@ -957,28 +957,6 @@ const TPath::TChecker& TPath::TChecker::IsBackupCollection(EStatus status) const
         << " (" << BasicPathInfo(Path.Base()) << ")");
 }
 
-namespace {
-
-bool CheckAvailableInExports(NKikimrSchemeOp::EPathType pathType) {
-    switch (pathType) {
-        case NKikimrSchemeOp::EPathTypeView:
-            return AppData()->FeatureFlags.GetEnableViewExport();
-        case NKikimrSchemeOp::EPathTypeColumnTable:
-            return AppData()->FeatureFlags.GetEnableColumnTablesBackup();
-        case NKikimrSchemeOp::EPathTypeTable:
-        case NKikimrSchemeOp::EPathTypePersQueueGroup:
-        case NKikimrSchemeOp::EPathTypeReplication:
-        case NKikimrSchemeOp::EPathTypeTransfer:
-        case NKikimrSchemeOp::EPathTypeExternalDataSource:
-        case NKikimrSchemeOp::EPathTypeExternalTable:
-            return true;
-        default:
-            return false;
-    };
-}
-
-} // anonymous namespace
-
 const TPath::TChecker& TPath::TChecker::IsSupportedInExports(EStatus status) const {
     if (Failed) {
         return *this;
@@ -988,7 +966,7 @@ const TPath::TChecker& TPath::TChecker::IsSupportedInExports(EStatus status) con
     // when we can be certain that the database will never be downgraded to a version
     // which does not support the YQL export process. Otherwise, they will be considered as tables,
     // and we might cause the process to be aborted.
-    if (CheckAvailableInExports(Path.Base()->PathType)) {
+    if (Path.IsSupportedInExports()) {
         return *this;
     }
 
@@ -1867,6 +1845,30 @@ bool TPath::IsTransfer() const {
     Y_ABORT_UNLESS(IsResolved());
 
     return Base()->IsTransfer();
+}
+
+bool TPath::IsSupportedInExports() const {
+    Y_ABORT_UNLESS(IsResolved());
+
+    switch (Base()->PathType) {
+        case NKikimrSchemeOp::EPathTypeView:
+            return AppData()->FeatureFlags.GetEnableViewExport();
+        case NKikimrSchemeOp::EPathTypeColumnTable:
+            return AppData()->FeatureFlags.GetEnableColumnTablesBackup();
+        case NKikimrSchemeOp::EPathTypeReplication:
+            return SS->BackupSettings.S3Settings.EnableAsyncReplicationExport;
+        case NKikimrSchemeOp::EPathTypeTransfer:
+            return SS->BackupSettings.S3Settings.EnableTransferExport;
+        case NKikimrSchemeOp::EPathTypeExternalDataSource:
+            return SS->BackupSettings.S3Settings.EnableExternalDataSourceExport;
+        case NKikimrSchemeOp::EPathTypeExternalTable:
+            return SS->BackupSettings.S3Settings.EnableExternalTableExport;
+        case NKikimrSchemeOp::EPathTypePersQueueGroup:
+        case NKikimrSchemeOp::EPathTypeTable:
+            return true;
+        default:
+            return false;
+    }
 }
 
 ui32 TPath::Depth() const {

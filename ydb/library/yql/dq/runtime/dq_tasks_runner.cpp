@@ -133,6 +133,13 @@ void ValidateParamValue(std::string_view paramName, const TType* type, const NUd
             break;
         }
 
+        case TType::EKind::Tagged: {
+            auto taggedType = static_cast<const TTaggedType*>(type);
+            TType* baseType = taggedType->GetBaseType();
+            ValidateParamValue(paramName, baseType, value);
+            break;
+        }
+
         default:
             YQL_ENSURE(false, "Unexpected value type in parameter"
                 << ", parameter: " << paramName
@@ -1096,7 +1103,7 @@ private:
         while (AllocatedHolder->Output->GetFillLevel() == NoLimit) {
             NUdf::TUnboxedValue value;
             NUdf::EFetchStatus fetchStatus = NUdf::EFetchStatus::Finish;
-            if (!AllocatedHolder->ResultStreamFinished) {
+            if (!AllocatedHolder->ResultStreamFinished && !AllocatedHolder->Output->IsEarlyFinished()) {
                 if (isWide) {
                     fetchStatus = AllocatedHolder->ResultStream.WideFetch(wideBuffer.data(), wideBuffer.size());
                 } else {

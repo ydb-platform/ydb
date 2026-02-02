@@ -386,7 +386,7 @@ void TDispatcherDynamicConfig::Register(TRegistrar registrar)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void TServiceMethod::Register(TRegistrar registrar)
+void TOverloadTrackedServiceMethod::Register(TRegistrar registrar)
 {
     registrar.Parameter("service", &TThis::Service)
         .Default();
@@ -398,7 +398,7 @@ void TServiceMethod::Register(TRegistrar registrar)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void TServiceMethodConfig::Register(TRegistrar registrar)
+void TOverloadTrackedServiceMethodConfig::Register(TRegistrar registrar)
 {
     registrar.Parameter("service", &TThis::Service)
         .Default();

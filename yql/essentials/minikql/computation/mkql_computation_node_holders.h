@@ -673,7 +673,9 @@ public:
     {
         MKQL_ENSURE(Size_ > 0U, "Can't create empty array holder.");
         MKQL_MEM_TAKE(GetMemInfo(), GetPtr(), Size_ * sizeof(NUdf::TUnboxedValue));
-        std::memset(GetPtr(), 0, Size_ * sizeof(NUdf::TUnboxedValue));
+        for (ui64 i = 0U; i < Size_; ++i) {
+            new (GetPtr() + i) NUdf::TUnboxedValue();
+        }
     }
 
     ~TDirectArrayHolderInplace() override {

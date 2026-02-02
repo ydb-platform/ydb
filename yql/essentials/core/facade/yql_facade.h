@@ -52,6 +52,7 @@ public:
         const TVector<TDataProviderInitializer>& dataProvidersInit,
         const TString& runner);
 
+    void SetIssueReportTarget(const TString& reportTarget);
     void SetLanguageVersion(TLangVersion version);
     void SetMaxLanguageVersion(TLangVersion version);
     void SetVolatileResults();
@@ -86,6 +87,7 @@ public:
     void UnrepeatableRandom();
 
 private:
+    TString IssueReportTarget_;
     const bool UseRepeatableRandomAndTimeProviders_;
     bool UseUnrepeatableRandom_ = false;
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry_;
@@ -367,6 +369,7 @@ public:
 
 private:
     TProgram(
+        const TString& issueReportTarget,
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         const TIntrusivePtr<IRandomProvider> randomProvider,
         const TIntrusivePtr<ITimeProvider> timeProvider,
@@ -425,6 +428,8 @@ private:
     void HandleSourceCode();
     void HandleTranslationSettings(NSQLTranslation::TTranslationSettings& loadedSettings,
                                    NSQLTranslation::TTranslationSettings*& currentSettings);
+
+    const TString IssueReportTarget_;
 
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry_;
     const TIntrusivePtr<IRandomProvider> RandomProvider_;

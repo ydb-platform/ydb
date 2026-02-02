@@ -152,6 +152,10 @@ public:
         return false;
     }
 
+    bool IsEarlyFinished() final {
+        return false;
+    }
+
     bool IsEmpty() final {
         return true;
     }
@@ -206,6 +210,7 @@ public:
     void SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggregator) override;
     void Push(TDataChunk&& data) override;
     bool IsFinished() override;
+    bool IsEarlyFinished() override;
 
     bool IsEmpty() override;
     bool Pop(TDataChunk& data) override;
@@ -286,6 +291,7 @@ public:
     bool CheckGenMajor(ui64 genMajor, const TString& errorMessage);
     /* bool PushToWaitQueue(TDataChunk&& data); */
     bool IsFinished();
+    bool IsEarlyFinished();
     void Terminate();
     bool IsTerminatedOrAborted();
     void AbortChannel(const TString& message);
@@ -377,6 +383,7 @@ public:
     void Push(TDataChunk&& data) override;
     void UpdatePopStats() override;
     bool IsFinished() override;
+    bool IsEarlyFinished() override;
     bool IsEmpty() override;
     bool Pop(TDataChunk& data) override;
     void EarlyFinish() override;
@@ -422,6 +429,7 @@ public:
     ui32 GetQueueSize();
 
     bool IsFinished();
+    bool IsEarlyFinished();
     bool EarlyFinish();
     void Terminate();
 
@@ -472,6 +480,7 @@ public:
 
     void Push(TDataChunk&&) override;
     bool IsFinished() override;
+    bool IsEarlyFinished() override;
     bool IsEmpty() override;
     bool Pop(TDataChunk& data) override;
     void EarlyFinish() override;
@@ -786,6 +795,10 @@ public:
         Serializer->Buffer->PopStats.FinishCheckTime = TInstant::Now();
         Serializer->Buffer->PopStats.FinishCheckResult = finishCheckResult;
         return finishCheckResult;
+    }
+
+    bool IsEarlyFinished() const override {
+        return Serializer->Buffer->IsEarlyFinished();
     }
 
     NKikimr::NMiniKQL::TType* GetOutputType() const override {

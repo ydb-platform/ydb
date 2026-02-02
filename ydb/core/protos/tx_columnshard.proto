@@ -189,9 +189,18 @@ message TEvNotifyTxCompletion {
     optional uint64 TxId = 1;
 }
 
+message TShardOpResult {
+    optional bool Success = 1;
+    optional string Explain = 2;
+    optional uint64 BytesProcessed = 3;
+    optional uint64 RowsProcessed = 4;
+}
+
 message TEvNotifyTxCompletionResult {
     optional uint64 Origin = 1;
     optional uint64 TxId = 2;
+    
+    optional TShardOpResult OpResult = 3;
 }
 
 message TCommitTxBody {
@@ -370,4 +379,9 @@ message TEvOverloadReady {
 // Sent by overload subscribers to unsubscribe and free memory
 message TEvOverloadUnsubscribe {
     optional uint64 SeqNo = 1;
+}
+
+message TCompletedBackupTransaction {
+    optional uint64 TxId = 1;
+    optional TShardOpResult OpResult = 2;
 }

@@ -771,42 +771,6 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
     return alterData;
 }
 
-void TTableInfo::GetIndexObjectCount(const NKikimrSchemeOp::TIndexCreationConfig& indexDesc, ui32& indexTableCount, ui32& sequenceCount, ui32& indexTableShards) {
-    indexTableCount = 1;
-    sequenceCount = 0;
-    switch (GetIndexType(indexDesc)) {
-        case NKikimrSchemeOp::EIndexTypeGlobal:
-        case NKikimrSchemeOp::EIndexTypeGlobalAsync:
-        case NKikimrSchemeOp::EIndexTypeGlobalUnique:
-            break;
-        case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree: {
-            const bool prefixVectorIndex = indexDesc.GetKeyColumnNames().size() > 1;
-            indexTableCount = (prefixVectorIndex ? 3 : 2);
-            sequenceCount = (prefixVectorIndex ? 1 : 0);
-            break;
-        }
-        case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain: {
-            indexTableCount = 1;
-            break;
-        }
-        case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance: {
-            indexTableCount = 4;
-            break;
-        }
-        default:
-            Y_DEBUG_ABORT_S(NTableIndex::InvalidIndexType(indexDesc.GetType()));
-            break;
-    }
-    if (indexDesc.IndexImplTableDescriptionsSize() == indexTableCount) {
-        indexTableShards = 0;
-        for (const auto& indexTableDesc: indexDesc.GetIndexImplTableDescriptions()) {
-            indexTableShards += TTableInfo::ShardsToCreate(indexTableDesc);
-        }
-    } else {
-        indexTableShards = indexTableCount;
-    }
-}
-
 void TTableInfo::ResetDescriptionCache() {
     TableDescription.ClearId_Deprecated();
     TableDescription.ClearPathId();

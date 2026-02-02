@@ -997,6 +997,36 @@ def _node_modules_bundle_needed(unit: NotsUnitType, arc_path: str) -> bool:
 
 
 @_with_report_configure_error
+def on_ts_library_configure(unit: NotsUnitType) -> None:
+    import lib.nots.package_manager.constants as constants
+
+    ts_outputs = unit.get("_TS_OUTPUTS")
+
+    if not ts_outputs:
+        ymake.report_configure_error(
+            "\n"
+            "Module outputs are not set.\n"
+            f"Use macro {COLORS.cyan}TS_BUILD_OUTPUTS(build){COLORS.reset} to set it up."
+        )
+        return
+
+    pm = _create_pm(unit)
+    pj = pm.load_package_json_from_dir(pm.sources_path)
+    has_deps = pj.has_dependencies()
+
+    if has_deps:
+        unit.onpeerdir(pj.get_workspace_dep_paths(base_path=pm.module_path))
+        nm_bundle_needed = _node_modules_bundle_needed(unit, pm.module_path)
+        if nm_bundle_needed:
+            nm_output = _build_directives(["hide", "output"], [constants.NODE_MODULES_WORKSPACE_BUNDLE_FILENAME])
+            unit.set(["_NODE_MODULES_BUNDLE_ARG", f"--nm-bundle yes {nm_output}"])
+
+    # Code navigation
+    if unit.get("TS_YNDEXING") == "yes":
+        unit.on_do_ts_yndexing()
+
+
+@_with_report_configure_error
 def on_node_modules_configure(unit: NotsUnitType) -> None:
     pm = _create_pm(unit)
     pj = pm.load_package_json_from_dir(pm.sources_path)

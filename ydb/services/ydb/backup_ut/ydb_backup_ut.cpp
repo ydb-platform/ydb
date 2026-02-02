@@ -22,6 +22,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/rate_limiter/rate_limiter.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
 
 #include <ydb/library/backup/backup.h>
@@ -3836,6 +3837,8 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             NYdb::NScheme::ESchemeEntryType::Topic,
             NYdb::NScheme::ESchemeEntryType::Replication,
             NYdb::NScheme::ESchemeEntryType::Transfer,
+            NYdb::NScheme::ESchemeEntryType::ExternalDataSource,
+            NYdb::NScheme::ESchemeEntryType::ExternalTable,
         }, entry.Type) && entry.Name != "replica"; // Hack to avoid replica table export
     }
 
@@ -4364,6 +4367,83 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
         );
     }
 
+    void TestExternalTableBackupRestore() {
+        TS3TestEnv testEnv;
+        auto& featureFlags = testEnv.GetServer().GetRuntime()->GetAppData().FeatureFlags;
+        featureFlags.SetEnableExternalDataSources(true);
+
+        const auto endpoint = Sprintf("localhost:%u", testEnv.GetServer().GetPort());
+        auto driverConfig = TDriverConfig().SetEndpoint(endpoint).SetDatabase("/Root");
+
+        auto driver = TDriver(driverConfig);
+        TTableClient tableClient(driver);
+        auto tableSession = tableClient.GetSession().ExtractValueSync().GetSession();
+        NQuery::TQueryClient queryClient(driver);
+        auto querySession = queryClient.GetSession().ExtractValueSync().GetSession();
+
+        TestExternalTableSettingsArePreserved(
+            "/Root/externalTable",
+            "/Root/externalDataSource",
+            tableSession,
+            querySession,
+            CreateBackupLambda(driver, testEnv.GetS3Port()),
+            CreateRestoreLambda(driver, testEnv.GetS3Port(), {"externalTable", "externalDataSource"})
+        );
+    }
+
+    void TestExternalDataSourceBackupRestore(const TMaybe<ESecretType>& secretType, EAuthType authType) {
+        TS3TestEnv testEnv;
+        auto& featureFlags = testEnv.GetServer().GetRuntime()->GetAppData().FeatureFlags;
+        featureFlags.SetEnableExternalDataSources(true);
+        featureFlags.SetEnableSchemaSecrets(secretType == ESecretType::SecretTypeScheme);
+
+        const auto endpoint = Sprintf("localhost:%u", testEnv.GetServer().GetPort());
+        auto driverConfig = TDriverConfig().SetEndpoint(endpoint).SetDatabase("/Root");
+        if (secretType) {
+            driverConfig.SetAuthToken("root@builtin");
+        }
+
+        auto driver = TDriver(driverConfig);
+        TSchemeClient schemeClient(driver);
+        TTableClient tableClient(driver);
+        auto tableSession = tableClient.GetSession().ExtractValueSync().GetSession();
+        NQuery::TQueryClient queryClient(driver);
+        auto querySession = queryClient.GetSession().ExtractValueSync().GetSession();
+
+        if (secretType) {
+            TPermissions permissions("root@builtin", {"ydb.generic.full"});
+            const auto result = schemeClient.ModifyPermissions("/Root",
+                TModifyPermissionsSettings().AddGrantPermissions(permissions)
+            ).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        TestExternalDataSourceSettingsArePreserved(
+            "/Root/externalDataSource",
+            tableSession,
+            querySession,
+            CreateBackupLambda(driver, testEnv.GetS3Port()),
+            CreateRestoreLambda(driver, testEnv.GetS3Port(), {"externalDataSource"}),
+            NDump::TRestoreSettings{},
+            secretType,
+            authType
+        );
+    }
+
+    void TestTopicBackupRestoreWithoutData() {
+        TS3TestEnv testEnv;
+        NTopic::TTopicClient topicClient(testEnv.GetDriver());
+        constexpr const char* topic = "/Root/topic";
+
+        TestTopicSettingsArePreserved(
+            topic,
+            testEnv.GetQuerySession(),
+            topicClient,
+            CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
+            CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "topic" })
+        );
+    }
+
     Y_UNIT_TEST_ALL_PROTO_ENUM_VALUES(TestAllSchemeObjectTypes, NKikimrSchemeOp::EPathType, IsOlap) {
         if (IsOlap) {
             return; // TODO: fix me issue@26498
@@ -4383,7 +4463,8 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             case EPathTypeDir:
                 break; // https://github.com/ydb-platform/ydb/issues/10430
             case EPathTypePersQueueGroup:
-                break; // https://github.com/ydb-platform/ydb/issues/10431
+                TestTopicBackupRestoreWithoutData();
+                break;
             case EPathTypeSubDomain:
             case EPathTypeExtSubDomain:
                 break; // https://github.com/ydb-platform/ydb/issues/10432
@@ -4402,9 +4483,15 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
                 TestTransferBackupRestore(ESecretType::SecretTypeScheme);
                 break;
             case EPathTypeExternalTable:
-                break; // https://github.com/ydb-platform/ydb/issues/10438
-            case EPathTypeExternalDataSource:
-                break; // https://github.com/ydb-platform/ydb/issues/10439
+                return TestExternalTableBackupRestore();
+            case EPathTypeExternalDataSource: {
+                TestExternalDataSourceBackupRestore(/* secretType */ Nothing(), EAuthType::AuthTypeNone);
+                TestExternalDataSourceBackupRestore(ESecretType::SecretTypeOld, EAuthType::AuthTypeToken);
+                TestExternalDataSourceBackupRestore(ESecretType::SecretTypeScheme, EAuthType::AuthTypeToken);
+                TestExternalDataSourceBackupRestore(ESecretType::SecretTypeOld, EAuthType::AuthTypeAws);
+                TestExternalDataSourceBackupRestore(ESecretType::SecretTypeScheme, EAuthType::AuthTypeAws);
+                return;
+            }
             case EPathTypeResourcePool:
                 break; // https://github.com/ydb-platform/ydb/issues/10440
             case EPathTypeKesus:
@@ -4480,9 +4567,15 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
 
     Y_UNIT_TEST(ExcludeNonSupportedObjectsInExport) {
         TS3TestEnv testEnv;
-
+        testEnv.GetServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
         // Disable views export
         testEnv.GetServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableViewExport(false);
+        // Disable external data source export
+        TControlBoard::SetValue(
+            0,
+            testEnv.GetServer().GetRuntime()->GetAppData().Icb->BackupControls.S3Controls.EnableExternalDataSourceExport
+        );
+
         // Enable destination prefix in rpc_export
         testEnv.GetServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableEncryptedExport(true);
 
@@ -4523,6 +4616,30 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
                     Key Uint32,
                     Value Utf8,
                     PRIMARY KEY (Key)
+                );
+            )",
+            true
+        );
+
+        ExecuteQuery(
+            querySession,
+            R"(
+                CREATE EXTERNAL DATA SOURCE `DataSource` WITH (
+                    SOURCE_TYPE="ObjectStorage",
+                    LOCATION="https://object_storage_domain/bucket/",
+                    AUTH_METHOD="NONE"
+                );
+            )",
+            true
+        );
+
+        ExecuteQuery(
+            querySession,
+            R"(
+                CREATE EXTERNAL DATA SOURCE `Dir/DataSource` WITH (
+                    SOURCE_TYPE="ObjectStorage",
+                    LOCATION="https://object_storage_domain/bucket/",
+                    AUTH_METHOD="NONE"
                 );
             )",
             true

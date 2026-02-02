@@ -5,6 +5,8 @@
 #include "kqp_rbo_physical_map_builder.h"
 #include "kqp_rbo_physical_join_builder.h"
 #include "kqp_rbo_physical_filter_builder.h"
+#include "kqp_rbo_physical_source_builder.h"
+#include "kqp_rbo_physical_query_builder.h"
 
 #include <ydb/core/kqp/opt/rbo/kqp_rbo.h>
 #include <yql/essentials/core/yql_opt_utils.h>
@@ -15,234 +17,8 @@
 #include <yql/essentials/core/yql_expr_optimize.h>
 
 using namespace NYql::NNodes;
-
-namespace {
 using namespace NKikimr;
 using namespace NKikimr::NKqp;
-
-bool CanApplyPeepHole(TExprNode::TPtr input, const std::initializer_list<std::string_view>& callableNames) {
-    auto blackList = [&](const TExprNode::TPtr& node) -> bool {
-        if (node->IsCallable(callableNames)) {
-            return true;
-        }
-        return false;
-    };
-    return !FindNode(input, blackList);
-}
-
-TExprNode::TPtr KqpPeepholeStageLambda(TExprNode::TPtr stageLambda, TRBOContext& rboCtx) {
-    auto lambda = TCoLambda(stageLambda);
-    // Compute types of inputs to stage lambda
-    TVector<const TTypeAnnotationNode *> argTypes;
-    for (const auto& arg : lambda.Args()) {
-        const auto* argTypeAnn = arg.Ptr()->GetTypeAnn();
-        Y_ENSURE(argTypeAnn);
-        argTypes.push_back(argTypeAnn);
-    }
-
-    // Yql has a strange bug in final stage peephole for `WideCombiner` with empty keys.
-    const bool withFinalStageRules = CanApplyPeepHole(lambda.Body().Ptr(), {"WideCombiner"});
-    // clang-format off
-    auto program = Build<TKqpProgram>(rboCtx.ExprCtx, stageLambda->Pos())
-        .Lambda(rboCtx.ExprCtx.DeepCopyLambda(*stageLambda.Get()))
-        .ArgsType(ExpandType(stageLambda->Pos(), *rboCtx.ExprCtx.MakeType<TTupleExprType>(argTypes), rboCtx.ExprCtx))
-    .Done();
-    // clang-format on
-
-    TExprNode::TPtr newProgram;
-    auto status = PeepHoleOptimize(program, newProgram, rboCtx.ExprCtx, rboCtx.PeepholeTypeAnnTransformer.GetRef(), rboCtx.TypeCtx, rboCtx.KqpCtx.Config, false,
-                                   withFinalStageRules, {});
-    if (status != IGraphTransformer::TStatus::Ok) {
-        rboCtx.ExprCtx.AddError(TIssue(rboCtx.ExprCtx.GetPosition(program.Pos()), "Peephole optimization failed for stage in NEW RBO"));
-        return nullptr;
-    }
-
-    return TKqpProgram(newProgram).Lambda().Ptr();
-}
-
-void ApplyTypeAnnotation(TExprNode::TPtr input, TRBOContext& rboCtx) {
-    rboCtx.TypeAnnTransformer->Rewind();
-    IGraphTransformer::TStatus status(IGraphTransformer::TStatus::Ok);
-    do {
-        status = rboCtx.TypeAnnTransformer->Transform(input, input, rboCtx.ExprCtx);
-    } while (status == IGraphTransformer::TStatus::Repeat);
-    Y_ENSURE(status == IGraphTransformer::TStatus::Ok);
-}
-
-// This function assumes that stages already sorted in topological orders.
-TVector<TExprNode::TPtr> ApplyKqpPeepholeForPhysicalStages(TVector<std::pair<TExprNode::TPtr, TPositionHandle>>&& physicalStages, TRBOContext& rboCtx) {
-    Y_ENSURE(physicalStages.size());
-    auto root = physicalStages.back().first;
-    // Type is required to wrap stage lambda to `KqpProgram`
-    if (!root->GetTypeAnn()) {
-        ApplyTypeAnnotation(root, rboCtx);
-    }
-    auto& ctx = rboCtx.ExprCtx;
-
-    TNodeOnNodeOwnedMap replaces;
-    TVector<TExprNode::TPtr> newStages;
-    for (auto& [stage, pos]: physicalStages) {
-        auto dqPhyStage = TDqPhyStage(stage);
-        auto stageLambdaAfterPeephole = KqpPeepholeStageLambda(dqPhyStage.Program().Ptr(), rboCtx);
-        Y_ENSURE(stageLambdaAfterPeephole);
-        // clang-format off
-        auto newStage = Build<TDqPhyStage>(ctx, pos)
-            .Inputs(ctx.ReplaceNodes(dqPhyStage.Inputs().Ptr(), replaces))
-            .Program(stageLambdaAfterPeephole)
-            .Settings(dqPhyStage.Settings())
-            .Outputs(dqPhyStage.Outputs())
-        .Done().Ptr();
-        // clang-format on
-        newStages.push_back(newStage);
-        replaces[dqPhyStage.Raw()] = newStage;
-    }
-    return newStages;
-}
-
-TExprNode::TPtr BuildDqPhyStage(const TVector<TExprNode::TPtr>& inputs, const TVector<TExprNode::TPtr>& args, TExprNode::TPtr physicalStageBody,
-                                TExprContext& ctx, TPositionHandle pos) {
-    // clang-format off
-    return Build<TDqPhyStage>(ctx, pos)
-        .Inputs()
-            .Add(inputs)
-        .Build()
-        .Program()
-            .Args(args)
-            .Body(physicalStageBody)
-        .Build()
-        .Settings().Build()
-    .Done().Ptr();
-    // clang-format on
-}
-
-void BuildPhysicalStageGraph(TStageGraph& graph, const THashMap<int, TVector<TExprNode::TPtr>>& stageArgs, const THashMap<int, TExprNode::TPtr>& stages,
-                             const THashMap<int, TPositionHandle>& stagePos, TVector<std::pair<TExprNode::TPtr, TPositionHandle>>& physicalStages,
-                             TRBOContext& rboCtx) {
-    graph.TopologicalSort();
-    const auto& stageIds = graph.StageIds;
-    const auto& stageInputIds = graph.StageInputs;
-    auto& ctx = rboCtx.ExprCtx;
-
-    THashMap<int, TExprNode::TPtr> finalizedStages;
-    for (const auto id : stageIds) {
-        YQL_CLOG(TRACE, CoreDq) << "Finalizing stage " << id;
-
-        TVector<TExprNode::TPtr> inputConnections;
-        THashSet<int> processedInputsIds;
-        for (const auto inputStageId : stageInputIds.at(id)) {
-            if (processedInputsIds.contains(inputStageId)) {
-                continue;
-            }
-            processedInputsIds.insert(inputStageId);
-
-            auto inputStage = finalizedStages.at(inputStageId);
-            const auto connections = graph.GetConnections(inputStageId, id);
-            for (const auto& connection : connections) {
-                YQL_CLOG(TRACE, CoreDq) << "Building connection: " << inputStageId << "->" << id << ", " << connection->Type;
-                TExprNode::TPtr newStage;
-                auto dqConnection = connection->BuildConnection(inputStage, stagePos.at(inputStageId), newStage, ctx);
-                if (newStage) {
-                    physicalStages.emplace_back(newStage, stagePos.at(inputStageId));
-                }
-                YQL_CLOG(TRACE, CoreDq) << "Built connection: " << inputStageId << "->" << id << ", " << connection->Type;
-                inputConnections.push_back(dqConnection);
-            }
-        }
-
-        TExprNode::TPtr stage;
-        if (graph.IsSourceStageRowType(id)) {
-            stage = stages.at(id);
-        } else {
-            TVector<TExprNode::TPtr> stageInputConnections;
-            TVector<TExprNode::TPtr> stageInputArgs;
-            if (!graph.IsSourceStageColumnType(id)) {
-                stageInputConnections = inputConnections;
-                stageInputArgs = stageArgs.at(id);
-            }
-
-            stage = BuildDqPhyStage(stageInputConnections, stageInputArgs, stages.at(id), ctx, stagePos.at(id));
-            physicalStages.emplace_back(stage, stagePos.at(id));
-            YQL_CLOG(TRACE, CoreDq) << "Added stage " << stage->UniqueId();
-        }
-
-        finalizedStages[id] = stage;
-        YQL_CLOG(TRACE, CoreDq) << "Finalized stage " << id;
-    }
-}
-
-TExprNode::TPtr BuildPhysicalQuery(TOpRoot& root, TVector<TExprNode::TPtr>&& physicalStages, TRBOContext& rboCtx) {
-    Y_ENSURE(physicalStages.size());
-
-    auto& ctx = rboCtx.ExprCtx;
-    TVector<TCoAtom> columnAtomList;
-    for (const auto& column : root.ColumnOrder) {
-        columnAtomList.push_back(Build<TCoAtom>(ctx, root.Pos).Value(column).Done());
-    }
-    auto columnOrder = Build<TCoAtomList>(ctx, root.Pos).Add(columnAtomList).Done().Ptr();
-
-    // clang-format off
-    // wrap in DqResult
-    auto dqResult = Build<TDqCnResult>(ctx, root.Pos)
-        .Output()
-            .Stage(physicalStages.back())
-            .Index().Build("0")
-        .Build()
-        .ColumnHints(columnOrder)
-    .Done().Ptr();
-    // clang-format on
-
-    TVector<TExprNode::TPtr> txSettings;
-    // clang-format off
-    txSettings.push_back(Build<TCoNameValueTuple>(ctx, root.Pos)
-                            .Name().Build("type")
-                            .Value<TCoAtom>().Build("compute")
-                        .Done().Ptr());
-    // Build PhysicalTx
-    auto physTx = Build<TKqpPhysicalTx>(ctx, root.Pos)
-        .Stages()
-            .Add(physicalStages)
-        .Build()
-        .Results()
-            .Add({dqResult})
-        .Build()
-        .ParamBindings().Build()
-        .Settings()
-            .Add(txSettings)
-        .Build()
-    .Done().Ptr();
-    // clang-format on
-
-    ApplyTypeAnnotation(dqResult, rboCtx);
-
-    YQL_CLOG(TRACE, CoreDq) << "Inferred final type: " << *dqResult->GetTypeAnn();
-    // clang-format off
-    TVector<TExprNode::TPtr> querySettings;
-    querySettings.push_back(Build<TCoNameValueTuple>(ctx, root.Pos)
-                                .Name().Build("type")
-                                .Value<TCoAtom>().Build("data_query")
-                            .Done().Ptr());
-
-    auto binding = Build<TKqpTxResultBinding>(ctx, root.Pos)
-        .Type(ExpandType(root.Pos, *dqResult->GetTypeAnn(), ctx))
-        .TxIndex().Build("0")
-        .ResultIndex().Build("0")
-    .Done();
-
-    // Build Physical query
-    return Build<TKqpPhysicalQuery>(ctx, root.Pos)
-        .Transactions()
-            .Add({physTx})
-        .Build()
-        .Results()
-            .Add({binding})
-        .Build()
-        .Settings()
-            .Add(querySettings)
-        .Build()
-    .Done().Ptr();
-    // clang-format on
-}
-} // namespace
 
 namespace NKikimr {
 namespace NKqp {
@@ -283,78 +59,9 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot& root, TRBOContext& rboCtx) {
             stagePos[opStageId] = op->Pos;
             YQL_CLOG(TRACE, CoreDq) << "Converted Empty Source " << opStageId;
         } else if (op->Kind == EOperator::Source) {
-            auto opSource = CastOperator<TOpRead>(op);
+            auto opRead = CastOperator<TOpRead>(op);
 
-            auto source = ctx.NewCallable(op->Pos, "DataSource", {ctx.NewAtom(op->Pos, "KqpReadRangesSource")});
-            TVector<TExprNode::TPtr> columns;
-            for (const auto& c : opSource->Columns) {
-                columns.push_back(ctx.NewAtom(op->Pos, c));
-            }
-
-            switch (opSource->GetTableStorageType()) {
-                case NYql::EStorageType::RowStorage: {
-                    // clang-format off
-                    currentStageBody = Build<TDqSource>(ctx, op->Pos)
-                        .DataSource(source)
-                        .Settings<TKqpReadRangesSourceSettings>()
-                            .Table(opSource->TableCallable)
-                            .Columns().Add(columns).Build()
-                            .Settings<TCoNameValueTupleList>().Build()
-                            .RangesExpr<TCoVoid>().Build()
-                            .ExplainPrompt<TCoNameValueTupleList>().Build()
-                        .Build()
-                    .Done().Ptr();
-                    // clang-format on
-                    break;
-                }
-                case NYql::EStorageType::ColumnStorage: {
-                    // clang-format off
-                    auto processLambda = Build<TCoLambda>(ctx, op->Pos)
-                        .Args({"arg"})
-                        .Body("arg")
-                    .Done().Ptr();
-                    // clang-format on
-
-                    if (opSource->OlapFilterLambda) {
-                        processLambda = opSource->OlapFilterLambda;
-                    }
-
-                    // clang-format off
-                    auto olapRead = Build<TKqpBlockReadOlapTableRanges>(ctx, op->Pos)
-                        .Table(opSource->TableCallable)
-                        .Ranges<TCoVoid>().Build()
-                        .Columns().Add(columns).Build()
-                        .Settings<TCoNameValueTupleList>().Build()
-                        .ExplainPrompt<TCoNameValueTupleList>().Build()
-                        .Process(processLambda)
-                    .Done().Ptr();
-
-                    auto flowNonBlockRead = Build<TCoToFlow>(ctx, op->Pos)
-                        .Input<TCoWideFromBlocks>()
-                            .Input<TCoFromFlow>()
-                                .Input(olapRead)
-                            .Build()
-                        .Build()
-                    .Done().Ptr();
-                    // clang-format on
-
-                    auto narrowMap = NPhysicalConvertionUtils::BuildNarrowMapForWideInput(flowNonBlockRead, opSource->Columns, ctx);
-
-                    // clang-format off
-                    currentStageBody = Build<TCoFromFlow>(ctx, op->Pos)
-                        .Input(narrowMap)
-                    .Done().Ptr();
-                    // clang-format on
-
-                    if (NPhysicalConvertionUtils::IsMultiConsumerHandlerNeeded(op)) {
-                        currentStageBody =
-                            NPhysicalConvertionUtils::BuildMultiConsumerHandler(currentStageBody, op->Props.NumOfConsumers.value(), ctx, op->Pos);
-                    }
-                    break;
-                }
-                default:
-                    Y_ENSURE(false, "Unsupported table source type");
-            }
+            currentStageBody = Build<TPhysicalSourceBuilder>(opRead, ctx, op->Pos);
 
             stages[opStageId] = currentStageBody;
             stagePos[opStageId] = op->Pos;
@@ -481,10 +188,7 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot& root, TRBOContext& rboCtx) {
         }
     }
 
-    TVector<std::pair<TExprNode::TPtr, TPositionHandle>> physicalStages;
-    BuildPhysicalStageGraph(graph, stageArgs, stages, stagePos, physicalStages, rboCtx);
-    auto phyStagesAfterPeephole = ApplyKqpPeepholeForPhysicalStages(std::move(physicalStages), rboCtx);
-    return BuildPhysicalQuery(root, std::move(phyStagesAfterPeephole), rboCtx);
+    return TPhysicalQueryBuilder(root, std::move(graph), std::move(stages), std::move(stageArgs), std::move(stagePos), rboCtx).BuildPhysicalQuery();
 }
 } // namespace NKqp
 } // namespace NKikimr

@@ -12,9 +12,10 @@ using namespace NYdb::NTopic;
 
 class TDummyFederatedTopicClient final : public IFederatedTopicClient {
 public:
-    TDummyFederatedTopicClient(const THashMap<TClusterNPath, TDummyTopic>& topics, const TFederatedTopicClientSettings& settings)
+    TDummyFederatedTopicClient(const THashMap<TClusterNPath, TDummyTopic>& topics, const TFederatedTopicClientSettings& settings, const TFileTopicClientSettings& fileClientSettings)
         : Topics(topics)
         , FederatedClientSettings(settings)
+        , FileClientSettings(fileClientSettings)
     {}
 
     NThreading::TFuture<std::vector<TFederatedTopicClient::TClusterInfo>> GetAllTopicClusters() final {
@@ -28,7 +29,7 @@ public:
 
     std::shared_ptr<IWriteSession> CreateWriteSession(const TFederatedWriteSessionSettings& settings) final {
         if (!TopicClient) {
-            TopicClient = CreateFileTopicClient(Topics);
+            TopicClient = CreateFileTopicClient(Topics, FileClientSettings);
         }
 
         return TopicClient->CreateWriteSession(settings);
@@ -37,13 +38,14 @@ public:
 private:
     const THashMap<TClusterNPath, TDummyTopic> Topics;
     const TFederatedTopicClientSettings FederatedClientSettings;
+    const TFileTopicClientSettings FileClientSettings;
     ITopicClient::TPtr TopicClient;
 };
 
 } // anonymous namespace
 
-IFederatedTopicClient::TPtr CreateFileFederatedTopicClient(const THashMap<TClusterNPath, TDummyTopic>& topics, const TFederatedTopicClientSettings& settings) {
-    return MakeIntrusive<TDummyFederatedTopicClient>(topics, settings);
+IFederatedTopicClient::TPtr CreateFileFederatedTopicClient(const THashMap<TClusterNPath, TDummyTopic>& topics, const TFederatedTopicClientSettings& settings, const TFileTopicClientSettings& fileClientSettings) {
+    return MakeIntrusive<TDummyFederatedTopicClient>(topics, settings, fileClientSettings);
 }
 
 } // namespace NYql

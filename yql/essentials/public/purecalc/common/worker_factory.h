@@ -34,6 +34,7 @@ struct TWorkerFactoryOptions {
     bool UseSystemColumns;
     bool UseWorkerPool;
     TInternalProgramSettings InternalSettings;
+    TString IssueReportTarget;
 
     TWorkerFactoryOptions(
         IProgramFactoryPtr Factory,
@@ -55,7 +56,8 @@ struct TWorkerFactoryOptions {
         TMaybe<ui64> deterministicTimeProviderSeed,
         bool useSystemColumns,
         bool useWorkerPool,
-        const TInternalProgramSettings& internalSettings)
+        const TInternalProgramSettings& internalSettings,
+        const TString& issueReportTarget)
         : Factory(std::move(Factory))
         , InputSpec(InputSpec)
         , OutputSpec(OutputSpec)
@@ -76,6 +78,7 @@ struct TWorkerFactoryOptions {
         , UseSystemColumns(useSystemColumns)
         , UseWorkerPool(useWorkerPool)
         , InternalSettings(internalSettings)
+        , IssueReportTarget(issueReportTarget)
     {
     }
 };
@@ -108,6 +111,7 @@ protected:
     bool UseWorkerPool_;
     TLangVersion LangVer_;
     TVector<THolder<IWorker>> WorkerPool_;
+    const TString IssueReportTarget_;
 
 public:
     TWorkerFactory(TWorkerFactoryOptions, EProcessorMode);

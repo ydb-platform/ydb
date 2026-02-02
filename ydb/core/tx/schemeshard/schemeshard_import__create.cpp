@@ -1696,10 +1696,6 @@ private:
             } else {
                 Y_ABORT("Create Scheme Object: schema objects are empty");
             }
-            if (importInfo->Kind == TImportInfo::EKind::FS) {
-                item.State = EState::Done;
-                break;
-            }
             item.State = EState::Transferring;
             AllocateTxId(*importInfo, itemIdx);
             break;

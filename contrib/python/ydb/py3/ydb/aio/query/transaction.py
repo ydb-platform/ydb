@@ -1,6 +1,7 @@
 import logging
 from typing import (
     Optional,
+    TYPE_CHECKING,
 )
 
 from .base import AsyncResponseContextIterator
@@ -12,11 +13,14 @@ from ...query.transaction import (
     QueryTxStateEnum,
 )
 
+if TYPE_CHECKING:
+    from .session import QuerySession
+
 logger = logging.getLogger(__name__)
 
 
 class QueryTxContext(BaseQueryTxContext):
-    def __init__(self, driver, session_state, session, tx_mode):
+    def __init__(self, driver, session: "QuerySession", tx_mode: base.BaseQueryTxMode):
         """
         An object that provides a simple transaction context manager that allows statements execution
         in a transaction. You don't have to open transaction explicitly, because context manager encapsulates
@@ -28,7 +32,7 @@ class QueryTxContext(BaseQueryTxContext):
         This context manager is not thread-safe, so you should not manipulate on it concurrently.
 
         :param driver: A driver instance
-        :param session_state: A state of session
+        :param session: A session instance
         :param tx_mode: Transaction mode, which is a one from the following choices:
          1) QuerySerializableReadWrite() which is default mode;
          2) QueryOnlineReadOnly(allow_inconsistent_reads=False);
@@ -36,7 +40,7 @@ class QueryTxContext(BaseQueryTxContext):
          4) QuerySnapshotReadWrite();
          5) QueryStaleReadOnly().
         """
-        super().__init__(driver, session_state, session, tx_mode)
+        super().__init__(driver, session, tx_mode)
         self._init_callback_handler(base.CallbackHandlerMode.ASYNC)
 
     async def __aenter__(self) -> "QueryTxContext":
@@ -199,10 +203,11 @@ class QueryTxContext(BaseQueryTxContext):
             wrapper=lambda resp: base.wrap_execute_query_response(
                 rpc_state=None,
                 response_pb=resp,
-                session_state=self._session_state,
+                session=self.session,
                 tx=self,
                 commit_tx=commit_tx,
                 settings=self.session._settings,
             ),
+            on_error=self.session._on_execute_stream_error,
         )
         return self._prev_stream

@@ -62,12 +62,20 @@ DEFINE_REFCOUNTED_TYPE(TTableReplicaInfo)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TUnfoldedColumns
+{
+    std::string TableColumn;
+    std::string IndexColumn;
+
+    void Persist(const TStreamPersistenceContext& context);
+};
+
 struct TIndexInfo
 {
     NObjectClient::TObjectId TableId;
     ESecondaryIndexKind Kind;
-    std::optional<TString> Predicate;
-    std::optional<TString> UnfoldedColumn;
+    std::optional<std::string> Predicate;
+    std::optional<TUnfoldedColumns> UnfoldedColumns;
     ETableToIndexCorrespondence Correspondence;
     NTableClient::TTableSchemaPtr EvaluatedColumnsSchema;
 };

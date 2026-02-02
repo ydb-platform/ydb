@@ -1,4 +1,5 @@
 #include "blobstorage_pdisk_ut_actions.h"
+#include <ydb/core/util/lz4_data_generator.h>
 
 namespace NKikimr {
 
@@ -3964,6 +3965,49 @@ void TTestStartingPointRebootsIteration::TestFSM(const TActorContext &ctx) {
         break;
     }
     TestStep += 10;
+}
+
+void TTestRawReadsAndWrites::TestFSM(const TActorContext& ctx) {
+    switch (TestStep++) {
+        case 0:
+            ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, *PDiskGuid));
+            break;
+
+        case 1:
+            TEST_RESPONSE(EvYardInitResult, OK);
+            std::tie(Owner, OwnerRound) = {LastResponse.Owner, LastResponse.OwnerRound};
+            ctx.Send(Yard, new NPDisk::TEvChunkReserve(Owner, OwnerRound, 1));
+            break;
+
+        case 2:
+            TEST_RESPONSE(EvChunkReserveResult, OK);
+            ASSERT_YTHROW(LastResponse.ChunkIds.size() == 1, "Unexpected ChunkIds.size() == " << LastResponse.ChunkIds.size());
+            ChunkIdx = LastResponse.ChunkIds.front();
+            ctx.Send(Yard, new NPDisk::TEvChunkWriteRaw(Owner, OwnerRound, ChunkIdx, 0, TRope(FastGenDataForLZ4(4096, 1))));
+            break;
+
+        case 3:
+            TEST_RESPONSE(EvChunkWriteRawResult, OK);
+            ctx.Send(Yard, new NPDisk::TEvChunkReadRaw(Owner, OwnerRound, ChunkIdx, 0, 4096));
+            break;
+
+        case 4:
+            TEST_RESPONSE(EvChunkReadRawResult, OK);
+            TEST_DATA_EQUALS(LastResponse.Rope.ConvertToString(), FastGenDataForLZ4(4096, 1));
+            ctx.Send(Yard, new NPDisk::TEvChunkWriteRaw(Owner, OwnerRound, ChunkIdx, 4096, TRope(FastGenDataForLZ4(4096, 2))));
+            break;
+
+        case 5:
+            TEST_RESPONSE(EvChunkWriteRawResult, OK);
+            ctx.Send(Yard, new NPDisk::TEvChunkReadRaw(Owner, OwnerRound, ChunkIdx, 0, 8192));
+            break;
+
+        case 6:
+            TEST_RESPONSE(EvChunkReadRawResult, OK);
+            TEST_DATA_EQUALS(LastResponse.Rope.ConvertToString(), FastGenDataForLZ4(4096, 1) + FastGenDataForLZ4(4096, 2));
+            SignalDoneEvent();
+            break;
+    }
 }
 
 } // NKikimr

@@ -1,14 +1,14 @@
 #pragma once
 
+#include <yql/essentials/core/yql_window_frame_settings.h>
 #include <yql/essentials/core/sql_types/window_frames_collector_params.h>
 #include <yql/essentials/ast/yql_expr.h>
 
 namespace NYql::NWindow {
 
 TExprNode::TPtr SerializeWindowAggregatorParamsToExpr(
-    const TStringCoreWinFramesCollectorParams& params,
+    const TExprNodeCoreWinFrameCollectorParams& params,
     TPositionHandle pos,
-    TStringBuf rangeCallableName,
     TExprContext& ctx);
 
 } // namespace NYql::NWindow

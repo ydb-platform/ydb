@@ -35,32 +35,32 @@ public:
         TIterator() = default;
         TIterator(const TIterator&) = default;
 
-        const T& operator* () const
+        const T& operator*() const
         {
             return *Ptr_;
         }
 
-        T& operator* ()
+        T& operator*()
         {
             return *Ptr_;
         }
 
-        const T* operator-> () const
+        const T* operator->() const
         {
             return Ptr_;
         }
 
-        T* operator-> ()
+        T* operator->()
         {
             return Ptr_;
         }
 
-        bool operator == (TIterator other) const
+        bool operator==(TIterator other) const
         {
             return Ptr_ == other.Ptr_;
         }
 
-        TIterator& operator = (TIterator other)
+        TIterator& operator=(TIterator other)
         {
             Ptr_ = other.Ptr_;
             return *this;

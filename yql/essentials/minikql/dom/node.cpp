@@ -76,9 +76,8 @@ TMapNode::TMapNode(const TPair* items, ui32 count)
     : Count_(count)
     , Items_((TPair*)UdfAllocateWithSize(sizeof(TPair) * count))
 {
-    std::memset(Items_, 0, sizeof(TPair) * count);
     for (ui32 i = 0; i < count; ++i) {
-        Items_[i] = std::move(items[i]);
+        new (Items_ + i) TPair(std::move(items[i]));
     }
 
     StableSort(Items_, Items_ + count, StringLess);

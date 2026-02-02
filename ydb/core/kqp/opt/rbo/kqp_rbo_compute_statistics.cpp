@@ -40,16 +40,15 @@ void ComputeAlisesForJoin(const std::shared_ptr<IOperator>& left,
     THashSet<TString> rightAliasSet;
 
     for (auto iu : left->GetOutputIUs()) {
-        auto fullName = iu.GetFullName();
-        if (auto lineage = left->Props.Metadata->ColumnLineage.find(fullName); lineage != left->Props.Metadata->ColumnLineage.end()) {
-            TString alias = lineage->second.SourceAlias;
+        if (auto lineage = left->Props.Metadata->ColumnLineage.Mapping.find(iu); lineage != left->Props.Metadata->ColumnLineage.Mapping.end()) {
+            TString alias = lineage->second.GetSourceAlias();
             if (alias == "") {
                 alias = lineage->second.TableName;
             }
             leftAliasSet.insert(alias);
         }
-        if (auto lineage = right->Props.Metadata->ColumnLineage.find(fullName); lineage != right->Props.Metadata->ColumnLineage.end()) {
-            TString alias = lineage->second.SourceAlias;
+        if (auto lineage = right->Props.Metadata->ColumnLineage.Mapping.find(iu); lineage != right->Props.Metadata->ColumnLineage.Mapping.end()) {
+            TString alias = lineage->second.GetSourceAlias();
             if (alias == "") {
                 alias = lineage->second.TableName;
             }
@@ -145,8 +144,9 @@ void TOpRead::ComputeMetadata(TRBOContext & ctx, TPlanProps & planProps) {
     // Record lineage: source can rename its columns, so already we need to record that
     auto outputIUs = GetOutputIUs();
 
+    int duplicateId = Props.Metadata->ColumnLineage.AddAlias(Alias, path.StringValue());
     for (size_t i=0; i<outputIUs.size(); i++) {
-        Props.Metadata->ColumnLineage.insert({outputIUs[i].GetFullName(), TColumnLineage(Alias, path.StringValue(), Columns[i])});
+        Props.Metadata->ColumnLineage.AddMapping(outputIUs[i], TColumnLineageEntry(Alias, path.StringValue(), Columns[i], duplicateId));
     }
 
     EStorageType storageType = EStorageType::NA;
@@ -227,23 +227,23 @@ void TOpMap::ComputeMetadata(TRBOContext & ctx, TPlanProps & planProps) {
         Props.Metadata->ColumnsCount += inputMetadata.ColumnsCount + MapElements.size();
     }
 
-    auto renames = GetRenamesWithTransforms(planProps);
+    auto renamesWithTransform = GetRenamesWithTransforms(planProps);
 
     for (auto column : inputMetadata.KeyColumns) {
-        auto it = std::find_if(renames.begin(), renames.end(), 
+        auto it = std::find_if(renamesWithTransform.begin(), renamesWithTransform.end(), 
             [&column](const std::pair<TInfoUnit, TInfoUnit> & rename){
                 // Check that a key column has been renamed into something new
                 return column == rename.second;
             });
         
-        if (it != renames.end()) {
+        if (it != renamesWithTransform.end()) {
             // Add the new name to column list
             Props.Metadata->KeyColumns.push_back(it->first);
         } else {
             Props.Metadata->KeyColumns.push_back(column);
         }
 
-        if (Project && it == renames.end()) {
+        if (Project && it == renamesWithTransform.end()) {
             Props.Metadata->KeyColumns = {};
             break;
         }
@@ -251,6 +251,7 @@ void TOpMap::ComputeMetadata(TRBOContext & ctx, TPlanProps & planProps) {
 
     // Build lineage data
     Props.Metadata->ColumnLineage = {};
+    auto renames = GetRenames();
 
     for (auto iu : GetOutputIUs()){
         auto it = std::find_if(renames.begin(), renames.end(), 
@@ -258,10 +259,10 @@ void TOpMap::ComputeMetadata(TRBOContext & ctx, TPlanProps & planProps) {
                 return iu == rename.first;
             });
 
-        if (it != renames.end() && inputMetadata.ColumnLineage.contains(it->second.GetFullName())) {
-            Props.Metadata->ColumnLineage.insert({iu.GetFullName(), inputMetadata.ColumnLineage.at(it->second.GetFullName())});
-        } else if (it == renames.end() && inputMetadata.ColumnLineage.contains(iu.GetFullName())) {
-            Props.Metadata->ColumnLineage.insert({iu.GetFullName(), inputMetadata.ColumnLineage.at(iu.GetFullName())});
+        if (it != renames.end() && inputMetadata.ColumnLineage.Mapping.contains(it->second)) {
+            Props.Metadata->ColumnLineage.AddMapping(iu, inputMetadata.ColumnLineage.Mapping.at(it->second));
+        } else if (it == renames.end() && inputMetadata.ColumnLineage.Mapping.contains(iu)) {
+            Props.Metadata->ColumnLineage.AddMapping(iu, inputMetadata.ColumnLineage.Mapping.at(iu));
         }
     }
 
@@ -309,6 +310,15 @@ void TOpAggregate::ComputeMetadata(TRBOContext & ctx, TPlanProps & planProps) {
     Props.Metadata->Type = EStatisticsType::BaseTable;
     Props.Metadata->KeyColumns = KeyColumns;
     Props.Metadata->ColumnsCount = GetOutputIUs().size();
+
+    // Aggregate acts list a source in terms of lineage
+    // FIXME: We currently delete all lineage of columns before Aggregate, maybe this is suboptimal in some future cases?
+    Props.Metadata->ColumnLineage = {};
+    TString alias = "_aggregate";
+    int duplicateId = Props.Metadata->ColumnLineage.AddAlias(alias, alias);
+    for (const auto & iu : GetOutputIUs()) {
+        Props.Metadata->ColumnLineage.AddMapping(iu, TColumnLineageEntry(alias, alias, iu.GetColumnName(), duplicateId));
+    }
 }
 
 /**
@@ -380,13 +390,13 @@ void TOpJoin::ComputeMetadata(TRBOContext & ctx, TPlanProps & planProps) {
     Props.Metadata->StorageType = CBOStats.StorageType;
     Props.Metadata->Type = CBOStats.Type;
 
-    for (auto iu: GetOutputIUs()) {
-        if (GetLeftInput()->Props.Metadata->ColumnLineage.contains(iu.GetFullName())) {
-            Props.Metadata->ColumnLineage.insert({iu.GetFullName(), GetLeftInput()->Props.Metadata->ColumnLineage.at(iu.GetFullName())});
-        }
-        if (GetRightInput()->Props.Metadata->ColumnLineage.contains(iu.GetFullName())) {
-            Props.Metadata->ColumnLineage.insert({iu.GetFullName(), GetRightInput()->Props.Metadata->ColumnLineage.at(iu.GetFullName())});
-        }
+    if (JoinKind == "LeftOnly" || JoinKind == "LeftSemi") {
+        Props.Metadata->ColumnLineage = GetLeftInput()->Props.Metadata->ColumnLineage;
+    } else if (JoinKind == "RightOnly" || JoinKind == "RightSemi") {
+        Props.Metadata->ColumnLineage = GetRightInput()->Props.Metadata->ColumnLineage;
+    } else {
+        Props.Metadata->ColumnLineage = GetLeftInput()->Props.Metadata->ColumnLineage;
+        Props.Metadata->ColumnLineage.Merge(GetRightInput()->Props.Metadata->ColumnLineage);
     }
 }
 

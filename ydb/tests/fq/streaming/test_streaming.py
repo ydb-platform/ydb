@@ -34,11 +34,10 @@ class TestStreamingInYdb(StreamingTestBase):
         self.init_topics(source_name, create_output=True, partitions_count=partitions_count, endpoint=endpoint)
         self.create_source(kikimr, source_name, shared=shared)
 
-        output_name = f"`{source_name}`.`{self.output_topic}`"
         if local_topics:
-            return f"`{self.input_topic}`", output_name, endpoint
+            return f"`{self.input_topic}`", f"`{self.output_topic}`", endpoint
         else:
-            return f"`{source_name}`.`{self.input_topic}`", output_name, endpoint
+            return f"`{source_name}`.`{self.input_topic}`", f"`{source_name}`.`{self.output_topic}`", endpoint
 
     @pytest.mark.parametrize("local_topics", [True, False])
     def test_read_topic(self, kikimr, entity_name, local_topics):
@@ -46,8 +45,10 @@ class TestStreamingInYdb(StreamingTestBase):
 
         sql = f"""SELECT time FROM {input_name}
             WITH (
-                FORMAT="json_each_row",
-                SCHEMA=(time String NOT NULL))
+                STREAMING = "TRUE",
+                FORMAT = "json_each_row",
+                SCHEMA = (time String NOT NULL)
+            )
             LIMIT 1"""
 
         future = kikimr.ydb_client.query_async(sql)
@@ -63,8 +64,10 @@ class TestStreamingInYdb(StreamingTestBase):
 
         sql = f"""SELECT time FROM {input_name}
             WITH (
-                FORMAT="json_each_row",
-                SCHEMA=(time String NOT NULL))
+                STREAMING = "TRUE",
+                FORMAT = "json_each_row",
+                SCHEMA = (time String NOT NULL)
+            )
             WHERE time like "%lunch%"
             LIMIT 1"""
 
@@ -102,7 +105,7 @@ class TestStreamingInYdb(StreamingTestBase):
         expected_data = ['lunch time']
         self.write_stream(data, endpoint=endpoint)
 
-        assert self.read_stream(len(expected_data), topic_path=self.output_topic) == expected_data
+        assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
         self.wait_completed_checkpoints(kikimr, path)
 
         kikimr.ydb_client.query(f"ALTER STREAMING QUERY `{name}` SET (RUN = FALSE);")
@@ -113,7 +116,7 @@ class TestStreamingInYdb(StreamingTestBase):
         self.write_stream(data, endpoint=endpoint)
 
         kikimr.ydb_client.query(f"ALTER STREAMING QUERY `{name}` SET (RUN = TRUE);")
-        assert self.read_stream(len(expected_data), topic_path=self.output_topic) == expected_data
+        assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
 
         kikimr.ydb_client.query(f"DROP STREAMING QUERY `{name}`;")
 
@@ -142,7 +145,7 @@ class TestStreamingInYdb(StreamingTestBase):
         data = ['{"time": "lunch time"}']
         expected_data = ['lunch time', 'lunch time']
         self.write_stream(data, endpoint=endpoint)
-        assert self.read_stream(len(expected_data), topic_path=self.output_topic) == expected_data
+        assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
         self.wait_completed_checkpoints(kikimr, path1)
 
         sql = R'''ALTER STREAMING QUERY `{query_name}` SET (RUN = FALSE);'''
@@ -158,7 +161,7 @@ class TestStreamingInYdb(StreamingTestBase):
         sql = R'''ALTER STREAMING QUERY `{query_name}` SET (RUN = TRUE);'''
         kikimr.ydb_client.query(sql.format(query_name=query_name1))
         kikimr.ydb_client.query(sql.format(query_name=query_name2))
-        assert self.read_stream(len(expected_data), topic_path=self.output_topic) == expected_data
+        assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
 
         sql = R'''DROP STREAMING QUERY `{query_name}`;'''
         kikimr.ydb_client.query(sql.format(query_name=query_name1))
@@ -186,7 +189,7 @@ class TestStreamingInYdb(StreamingTestBase):
 
         self.write_stream(['{"value": "value1"}'], endpoint=endpoint)
         expected_data = ['value1']
-        assert self.read_stream(len(expected_data), topic_path=self.output_topic) == expected_data
+        assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
         self.wait_completed_checkpoints(kikimr, path)
 
         restart_node_id = None
@@ -202,7 +205,7 @@ class TestStreamingInYdb(StreamingTestBase):
 
         self.write_stream(['{"value": "value2"}'], endpoint=endpoint)
         expected_data = ['value2']
-        assert self.read_stream(len(expected_data), topic_path=self.output_topic) == expected_data
+        assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
         self.wait_completed_checkpoints(kikimr, path)
 
     @pytest.mark.parametrize("local_topics", [True, False])
@@ -247,7 +250,7 @@ class TestStreamingInYdb(StreamingTestBase):
         ]
         self.write_stream(data, endpoint=endpoint)
         expected_data = ['{"a_time":1696849942000001,"b_time":1696849942500001,"c_time":null}']
-        assert self.read_stream(len(expected_data), topic_path=self.output_topic) == expected_data
+        assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
         self.wait_completed_checkpoints(kikimr, path)
 
         restart_node_id = None
@@ -266,7 +269,7 @@ class TestStreamingInYdb(StreamingTestBase):
         self.wait_completed_checkpoints(kikimr, path)
 
         expected_data = ['{"a_time":null,"b_time":1696849942500001,"c_time":1696849943000001}']
-        assert self.read_stream(len(expected_data), topic_path=self.output_topic) == expected_data
+        assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
 
     @pytest.mark.parametrize("local_topics", [True, False])
     def test_json_errors(self, kikimr, entity_name, local_topics):
@@ -296,7 +299,7 @@ class TestStreamingInYdb(StreamingTestBase):
         self.write_stream(data, partition_key="key", endpoint=endpoint)
 
         expected = ['hello1', 'hello2']
-        assert self.read_stream(len(expected), topic_path=self.output_topic) == expected
+        assert self.read_stream(len(expected), topic_path=self.output_topic, endpoint=endpoint) == expected
 
     @pytest.mark.parametrize("local_topics", [True, False])
     def test_restart_query_by_rescaling(self, kikimr, entity_name, local_topics):
@@ -324,7 +327,7 @@ class TestStreamingInYdb(StreamingTestBase):
         message_count = 20
         for i in range(message_count):
             self.write_stream(['{"time": "time to do it"}'], topic_path=None, partition_key=(''.join(random.choices(string.digits, k=8))), endpoint=endpoint)
-        assert self.read_stream(message_count, topic_path=self.output_topic) == ["time to do it" for i in range(message_count)]
+        assert self.read_stream(message_count, topic_path=self.output_topic, endpoint=endpoint) == ["time to do it" for i in range(message_count)]
         self.wait_completed_checkpoints(kikimr, path)
 
         logger.debug(f"stopping query {name}")
@@ -351,7 +354,7 @@ class TestStreamingInYdb(StreamingTestBase):
         message = '{"time": "time to lunch"}'
         for i in range(message_count):
             self.write_stream([message], topic_path=None, partition_key=(''.join(random.choices(string.digits, k=8))), endpoint=endpoint)
-        assert self.read_stream(message_count, topic_path=self.output_topic) == ["time to lunch" for i in range(message_count)]
+        assert self.read_stream(message_count, topic_path=self.output_topic, endpoint=endpoint) == ["time to lunch" for i in range(message_count)]
 
         kikimr.ydb_client.query(f"ALTER STREAMING QUERY `{name}` SET (RUN = FALSE);")
 
@@ -377,7 +380,7 @@ class TestStreamingInYdb(StreamingTestBase):
 
         kikimr.ydb_client.query(sql.format(query_name=query_name, consumer_name=self.consumer_name, inp=inp, out=out))
         self.write_stream(['{"time": "lunch time"}'], endpoint=endpoint)
-        assert self.read_stream(1, topic_path=self.output_topic) == ['lunch time']
+        assert self.read_stream(1, topic_path=self.output_topic, endpoint=endpoint) == ['lunch time']
 
         kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`")
 
@@ -400,7 +403,7 @@ class TestStreamingInYdb(StreamingTestBase):
 
             kikimr.ydb_client.query(sql.format(query_name=query_name, inp=inp, type_name=type, out=out))
             self.write_stream([f"{{\"field_name\": {input}}}"], endpoint=endpoint)
-            assert self.read_stream(1, topic_path=self.output_topic) == [expected_output]
+            assert self.read_stream(1, topic_path=self.output_topic, endpoint=endpoint) == [expected_output]
             kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`")
 
         test_type(self, kikimr, type="String", input='"lunch time"', expected_output='lunch time')
@@ -439,7 +442,7 @@ class TestStreamingInYdb(StreamingTestBase):
         expected_data = ['{"k":"2020-01-01T13:00:00.000000Z","v":"lunch time"}']
         self.write_stream(data, endpoint=endpoint)
 
-        assert self.read_stream(len(expected_data), topic_path=self.output_topic) == expected_data
+        assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
         kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`")
 
         query_name = "test_raw_format_default"
@@ -458,7 +461,7 @@ class TestStreamingInYdb(StreamingTestBase):
         expected_data = ['{"k":"2020-01-01T13:00:00.000000Z","v":"lunch time"}']
         self.write_stream(data, endpoint=endpoint)
 
-        assert self.read_stream(len(expected_data), topic_path=self.output_topic) == expected_data
+        assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
         kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`")
 
         query_name = "test_raw_format_json"
@@ -480,6 +483,6 @@ class TestStreamingInYdb(StreamingTestBase):
         expected_data = ['{"k":"2020-01-01T13:00:00.000000Z","v":"lunch time"}']
         self.write_stream(data, endpoint=endpoint)
 
-        assert self.read_stream(len(expected_data), topic_path=self.output_topic) == expected_data
+        assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
 
         kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`")

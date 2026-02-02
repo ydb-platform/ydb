@@ -1,7 +1,7 @@
 {% extends '//builtin/run.ym' %}
 
-{% block current_version %}8f9cce0bef317076fbdce677d6d6744ebd5dc02a{% endblock %}
-{% block current_date %}2024-10-12{% endblock %}
+{% block current_version %}99f44c8fed5b538ab37c4227d9059a65450b68de{% endblock %}
+{% block current_date %}2024-11-12{% endblock %}
 
 {% block keep_sources %}
 .yandex_meta/scripts/fixlic.py
@@ -33,9 +33,12 @@ SYSINCLS=${WORKDIR}/sysincls
 {% block prepare_env %}
 {{super()}}
 {% if local_llvm %}
-cp -R {{local_llvm.strip()}}/. ${RESOURCES}/
-cd ${RESOURCES}
-git checkout {{self.version().strip()}}
+(
+    cd {{local_llvm.strip()}}
+    git checkout {{self.version().strip()}}
+)
+mkdir ${RESOURCES}/libcxx
+cp -R {{local_llvm.strip()}}/libcxx/. ${RESOURCES}/libcxx/
 {% else %}
 tar xf ${RESOURCES}/{{self.current_url().strip() | basename}} --strip-components=1 --directory=${RESOURCES}
 {% endif %}
@@ -65,6 +68,7 @@ cp ${RESOURCES}/libcxx/vendor/llvm/default_assertion_handler.in include/__assert
 {% block build_source %}
 {{super()}}
 rm src/CMakeLists.txt include/CMakeLists.txt
+rm -r include/__cxx03
 
 sysincls ${SRC} ${SYSINCLS}/stl-to-libcxx.yml
 {% endblock %}

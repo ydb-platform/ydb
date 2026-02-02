@@ -61,7 +61,7 @@ class QuerySessionPool:
     def _create_new_session(self, timeout: Optional[float]):
         session = QuerySession(self._driver, settings=self._query_client_settings)
         session.create(settings=BaseRequestSettings().with_timeout(timeout))
-        logger.debug(f"New session was created for pool. Session id: {session._state.session_id}")
+        logger.debug(f"New session was created for pool. Session id: {session.session_id}")
         return session
 
     def acquire(self, timeout: Optional[float] = None) -> QuerySession:
@@ -98,12 +98,12 @@ class QuerySessionPool:
                     raise issues.SessionPoolEmpty("Timeout on acquire session")
 
             if session is not None:
-                if session._state.attached:
-                    logger.debug(f"Acquired active session from queue: {session._state.session_id}")
+                if session.is_active:
+                    logger.debug(f"Acquired active session from queue: {session.session_id}")
                     return session
                 else:
                     self._current_size -= 1
-                    logger.debug(f"Acquired dead session from queue: {session._state.session_id}")
+                    logger.debug(f"Acquired dead session from queue: {session.session_id}")
 
             logger.debug(f"Session pool is not large enough: {self._current_size} < {self._size}, will create new one.")
             finish = time.monotonic()
@@ -120,7 +120,7 @@ class QuerySessionPool:
         """Release a session back to Session Pool."""
 
         self._queue.put_nowait(session)
-        logger.debug("Session returned to queue: %s", session._state.session_id)
+        logger.debug("Session returned to queue: %s", session.session_id)
 
     def checkout(self, timeout: Optional[float] = None) -> "SimpleQuerySessionCheckout":
         """Return a Session context manager, that acquires session on enter and releases session on exit.

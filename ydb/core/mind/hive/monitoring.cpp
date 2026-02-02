@@ -41,6 +41,14 @@ TCgiParameters GetParams(const NMon::TEvRemoteHttpInfo* ev) {
     return cgi;
 }
 
+NMon::TEvRemoteBinaryInfoRes* MakeRawHttpEvent(const TString& status, const TString& content) {
+    return new NMon::TEvRemoteBinaryInfoRes(
+        TStringBuilder() << "HTTP/1.1 " << status << "\r\n"
+        << "Content-Type: application/json\r\n\r\n"
+        << content
+    );
+}
+
 class TTxMonEvent_DbState : public TTransactionBase<THive> {
 public:
     struct TTabletInfo {
@@ -882,6 +890,7 @@ public:
         UpdateConfig(db, "DryRunTargetTrackingCPU", configUpdates);
         UpdateConfig(db, "NodeRestartsForPenalty", configUpdates);
         UpdateConfig(db, "BalanceCountersRefreshFrequency", configUpdates);
+        UpdateConfig(db, "DataCenterChangeReactionPeriod", configUpdates);
 
         if (params.contains("BalancerIgnoreTabletTypes")) {
             auto value = params.Get("BalancerIgnoreTabletTypes");
@@ -1250,6 +1259,7 @@ public:
         ShowConfig(out, "DryRunTargetTrackingCPU");
         ShowConfig(out, "NodeRestartsForPenalty");
         ShowConfig(out, "BalanceCountersRefreshFrequency");
+        ShowConfig(out, "DataCenterChangeReactionPeriod");
 
         out << "<div class='row' style='margin-top:40px'>";
         out << "<div class='col-sm-2' style='padding-top:30px;text-align:right'><label for='allowedMetrics'>AllowedMetrics:</label></div>";
@@ -2645,6 +2655,7 @@ public:
 class TTxMonEvent_SetDown : public TTxSetDown, public TLoggedMonTransaction {
 public:
     TString Response;
+    TString Status = THttpStatus::OK;
     THolder<NMon::TEvRemoteHttpInfo> Event;
 
     TTxMonEvent_SetDown(const TActorId& source, TNodeId nodeId, bool down, TSelf* hive, NMon::TEvRemoteHttpInfo::TPtr& ev)
@@ -2658,6 +2669,7 @@ public:
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         if (Event->GetMethod() != HTTP_METHOD_POST) {
             Response = R"({"error":"Must use POST request"})";
+            Status = THttpStatus::BAD_REQUEST;
             return true;
         }
         NIceDb::TNiceDb db(txc.DB);
@@ -2669,13 +2681,14 @@ public:
             Response = "{\"NodeId\":" + ToString(NodeId) + ',' + "\"Down\":" + (Down ? "true" : "false") + "}";
         } else {
             Response = "{\"error\":\"Node " + ToString(NodeId) + " not found\"}";
+            Status = THttpStatus::BAD_REQUEST;
         }
         return true;
     }
 
     void Complete(const TActorContext& ctx) override {
         BLOG_D("THive::TTxMonEvent_SetDown(" << NodeId << ")::Complete Response=" << Response);
-        ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(Response));
+        ctx.Send(Source, MakeRawHttpEvent(Status, Response));
     }
 };
 
@@ -2685,6 +2698,7 @@ public:
     const TNodeId NodeId;
     const bool Freeze;
     TString Response;
+    TString Status = THttpStatus::OK;
     THolder<NMon::TEvRemoteHttpInfo> Event;
 
     TTxMonEvent_SetFreeze(const TActorId& source, TNodeId nodeId, bool freeze, TSelf* hive, NMon::TEvRemoteHttpInfo::TPtr& ev)
@@ -2701,6 +2715,7 @@ public:
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         if (Event->GetMethod() != HTTP_METHOD_POST) {
             Response = R"({"error":"Must use POST request"})";
+            Status = THttpStatus::BAD_REQUEST;
             return true;
         }
         NIceDb::TNiceDb db(txc.DB);
@@ -2715,13 +2730,14 @@ public:
             Response = "{\"NodeId\":" + ToString(NodeId) + ',' + "\"Freeze\":" + (Freeze ? "true" : "false") + "}";
         } else {
             Response = "{\"error\":\"Node " + ToString(NodeId) + " not found\"}";
+            Status = THttpStatus::BAD_REQUEST;
         }
         return true;
     }
 
     void Complete(const TActorContext& ctx) override {
         BLOG_D("THive::TTxMonEvent_SetFreeze(" << NodeId << ")::Complete Response=" << Response);
-        ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(Response));
+        ctx.Send(Source, MakeRawHttpEvent(Status, Response));
     }
 };
 
@@ -2730,6 +2746,7 @@ public:
     const TActorId Source;
     const TNodeId NodeId;
     TString Response;
+    TString Status = THttpStatus::OK;
     THolder<NMon::TEvRemoteHttpInfo> Event;
 
     TTxMonEvent_KickNode(const TActorId& source, TNodeId nodeId, TSelf* hive, NMon::TEvRemoteHttpInfo::TPtr& ev)
@@ -2744,6 +2761,7 @@ public:
     bool Execute(TTransactionContext&, const TActorContext&) override {
         if (Event->GetMethod() != HTTP_METHOD_POST) {
             Response = R"({"error":"Must use POST request"})";
+            Status = THttpStatus::BAD_REQUEST;
             return true;
         }
         TNodeInfo* node = Self->FindNode(NodeId);
@@ -2756,13 +2774,14 @@ public:
             Response = "{\"TabletsKicked\":" + ToString(kicked) + "}";
         } else {
             Response = "{\"error\":\"Node " + ToString(NodeId) + " not found\"}";
+            Status = THttpStatus::BAD_REQUEST;
         }
         return true;
     }
 
     void Complete(const TActorContext& ctx) override {
         BLOG_D("THive::TTxMonEvent_KickNode(" << NodeId << ")::Complete Response=" << Response);
-        ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(Response));
+        ctx.Send(Source, MakeRawHttpEvent(Status, Response));
     }
 };
 
@@ -2851,10 +2870,10 @@ public:
                 Self->Execute(Self->CreateSwitchDrainOn(NodeId, {}, WaitActorId));
             } else {
                 Self->Execute(Self->CreateSwitchDrainOn(NodeId, {}, {}));
-                ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(R"({"status":"SCHEDULED"})"));
+                ctx.Send(Source, MakeRawHttpEvent(THttpStatus::OK, R"({"status":"SCHEDULED"})"));
             }
         } else {
-            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(R"({"status":"ERROR"})"));
+            ctx.Send(Source, MakeRawHttpEvent(THttpStatus::BAD_REQUEST, R"({"status":"ERROR"})"));
         }
     }
 };
@@ -2865,6 +2884,7 @@ public:
     int MaxMovements = 1000;
     ui64 MaxInFlight = 1;
     TString Response = "{}";
+    TString Status = THttpStatus::OK;
     THolder<NMon::TEvRemoteHttpInfo> Event;
 
     TTxMonEvent_Rebalance(const TActorId& source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf* hive)
@@ -2872,8 +2892,9 @@ public:
         , Source(source)
         , Event(ev->Release())
     {
-        MaxMovements = FromStringWithDefault(ev->Get()->Cgi().Get("movements"), MaxMovements);
-        MaxInFlight = FromStringWithDefault(ev->Get()->Cgi().Get("inflight"), MaxInFlight);
+        auto cgi = GetParams(ev->Get());
+        MaxMovements = FromStringWithDefault(cgi.Get("movements"), MaxMovements);
+        MaxInFlight = FromStringWithDefault(cgi.Get("inflight"), MaxInFlight);
     }
 
     TTxType GetTxType() const override { return NHive::TXTYPE_MON_REBALANCE; }
@@ -2881,6 +2902,7 @@ public:
     bool Execute(TTransactionContext&, const TActorContext&) override {
         if (Event->GetMethod() != HTTP_METHOD_POST) {
             Response = R"({"error":"Must use POST request"})";
+            Status = THttpStatus::BAD_REQUEST;
             return true;
         }
         Self->StartHiveBalancer({
@@ -2892,7 +2914,7 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(Response));
+        ctx.Send(Source, MakeRawHttpEvent(Status, Response));
     }
 };
 
@@ -2901,6 +2923,7 @@ public:
     const TActorId Source;
     TStorageBalancerSettings Settings;
     TString Response = "{}";
+    TString Status = THttpStatus::OK;
     THolder<NMon::TEvRemoteHttpInfo> Event;
 
     TTxMonEvent_StorageRebalance(const TActorId& source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf* hive)
@@ -2908,9 +2931,10 @@ public:
         , Source(source)
         , Event(ev->Release())
     {
-        Settings.NumReassigns = FromStringWithDefault(ev->Get()->Cgi().Get("reassigns"), 1000);
-        Settings.MaxInFlight = FromStringWithDefault(ev->Get()->Cgi().Get("inflight"), 1);
-        Settings.StoragePool = ev->Get()->Cgi().Get("pool");
+        auto cgi = GetParams(ev->Get());
+        Settings.NumReassigns = FromStringWithDefault(cgi.Get("reassigns"), 1000);
+        Settings.MaxInFlight = FromStringWithDefault(cgi.Get("inflight"), 1);
+        Settings.StoragePool = cgi.Get("pool");
     }
 
     TTxType GetTxType() const override { return NHive::TXTYPE_MON_REBALANCE; }
@@ -2918,6 +2942,7 @@ public:
     bool Execute(TTransactionContext&, const TActorContext&) override {
         if (Event->GetMethod() != HTTP_METHOD_POST) {
             Response = R"({"error":"Must use POST request"})";
+            Status = THttpStatus::BAD_REQUEST;
             return true;
         }
         Self->StartHiveStorageBalancer(Settings);
@@ -2925,7 +2950,7 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(Response));
+        ctx.Send(Source, MakeRawHttpEvent(Status, Response));
     }
 };
 
@@ -2940,7 +2965,7 @@ public:
         , Source(source)
         , Event(ev->Release())
     {
-        TenantName = ev->Get()->Cgi().Get("tenantName");
+        TenantName = GetParams(ev->Get()).Get("tenantName");
     }
 
     TTxType GetTxType() const override { return NHive::TXTYPE_MON_REBALANCE_FROM_SCRATCH; }
@@ -3211,7 +3236,7 @@ public:
 
     void Complete(const TActorContext& ctx) override {
         if (Error) {
-            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << "{\"error\":\"" << Error << "\"}"));
+            ctx.Send(Source, MakeRawHttpEvent(THttpStatus::BAD_REQUEST, TStringBuilder() << "{\"error\":\"" << Error << "\"}"));
         } else {
             if (!Wait) {
                 ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes("{}"));
@@ -3318,7 +3343,7 @@ public:
 
     void Complete(const TActorContext& ctx) override {
         if (Error) {
-            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << "{\"error\":\"" << Error << "\"}"));
+            ctx.Send(Source, MakeRawHttpEvent(THttpStatus::BAD_REQUEST, TStringBuilder() << "{\"error\":\"" << Error << "\"}"));
         } else {
             if (!Wait) {
                 ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes("{}"));
@@ -3466,17 +3491,17 @@ public:
 
     bool Execute(TTransactionContext&, const TActorContext& ctx) override {
         if (Event->GetMethod() != HTTP_METHOD_POST) {
-            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(R"({"error":"Must use POST request"})"));
+            ctx.Send(Source, MakeRawHttpEvent(THttpStatus::BAD_REQUEST, R"({"error":"Must use POST request"})"));
             return true;
         }
         TLeaderTabletInfo* tablet = Self->FindTablet(TabletId);
         if (tablet == nullptr) {
-            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << "{\"error\":\"Tablet not found\"}"));
+            ctx.Send(Source, MakeRawHttpEvent(THttpStatus::BAD_REQUEST, R"({"error":"Tablet not found"})"));
             return true;
         }
         TNodeInfo* node = Self->FindNode(NodeId);
         if (node == nullptr) {
-            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << "{\"error\":\"Node not found\"}"));
+            ctx.Send(Source, MakeRawHttpEvent(THttpStatus::BAD_REQUEST, R"({"error":"Node not found"})"));
             return true;
         }
         if (Wait) {
@@ -3560,7 +3585,7 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         if (Event->GetMethod() != HTTP_METHOD_POST) {
-            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(R"({"error":"Must use POST request"})"));
+            ctx.Send(Source, MakeRawHttpEvent(THttpStatus::BAD_REQUEST, R"({"error":"Must use POST request"})"));
             return true;
         }
         TLeaderTabletInfo* tablet = Self->FindTablet(TabletId);
@@ -3582,7 +3607,7 @@ public:
                 ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes("{}"));
             }
         } else {
-            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << "{\"error\":\"Tablet not found\"}"));
+            ctx.Send(Source, MakeRawHttpEvent(THttpStatus::BAD_REQUEST, R"({"error":"Tablet not found"})"));
         }
         return true;
     }
@@ -3614,7 +3639,7 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         if (Event->GetMethod() != HTTP_METHOD_POST) {
-            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(R"({"error":"Must use POST request"})"));
+            ctx.Send(Source, MakeRawHttpEvent(THttpStatus::BAD_REQUEST, R"({"error":"Must use POST request"})"));
             return true;
         }
         TDomainInfo* domain = Self->FindDomain(DomainId);
@@ -3637,7 +3662,7 @@ public:
             WriteOperation(db, jsonOperation);
             ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes("{\"status\":\"OK\"}"));
         } else {
-            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << "{\"error\":\"Domain not found\"}"));
+            ctx.Send(Source, MakeRawHttpEvent(THttpStatus::BAD_REQUEST, R"({"error":"Domain not found"})"));
         }
         return true;
     }
@@ -3715,7 +3740,7 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         if (Event->GetMethod() != HTTP_METHOD_POST) {
-            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(R"({"error":"Must use POST request"})"));
+            ctx.Send(Source, MakeRawHttpEvent(THttpStatus::BAD_REQUEST, R"({"error":"Must use POST request"})"));
             return true;
         }
         TLeaderTabletInfo* tablet = Self->FindTablet(TabletId);
@@ -3737,7 +3762,7 @@ public:
                 ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes("{}"));
             }
         } else {
-            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(R"({"error":"Tablet not found"})"));
+            ctx.Send(Source, MakeRawHttpEvent(THttpStatus::BAD_REQUEST, R"({"error":"Tablet not found"})"));
         }
         return true;
     }
@@ -4206,7 +4231,7 @@ public:
         if (Info) {
             ctx.Register(new TResetter(std::move(Info), Source, KnownGeneration));
         } else if (Error) {
-            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << "{\"error\":\"" << Error << "\"}"));
+            ctx.Send(Source, MakeRawHttpEvent(THttpStatus::BAD_REQUEST, TStringBuilder() << "{\"error\":\"" << Error << "\"}"));
         } else {
             Y_ABORT("unexpected state");
         }
@@ -4243,7 +4268,7 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         if (Event->GetMethod() != HTTP_METHOD_POST) {
-            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(R"({"error":"Must use POST request"})"));
+            ctx.Send(Source, MakeRawHttpEvent(THttpStatus::BAD_REQUEST, R"({"error":"Must use POST request"})"));
             return true;
         }
         TLeaderTabletInfo* tablet = Self->FindTablet(TabletId);
@@ -4257,7 +4282,7 @@ public:
             }
             TSubDomainKey oldDomain(rowset.GetValueOrDefault<Schema::Tablet::ObjectDomain>());
             if (clientOldDomain && oldDomain != clientOldDomain) {
-                ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << "{\"status\": \"ERROR\", \"error\":\"Old domain does not match, have " << oldDomain <<  ", provided " << clientOldDomain << "\"}"));
+                ctx.Send(Source, MakeRawHttpEvent(THttpStatus::BAD_REQUEST, TStringBuilder() << "{\"status\": \"ERROR\", \"error\":\"Old domain does not match, have " << oldDomain <<  ", provided " << clientOldDomain << "\"}"));
                 return true;
             }
             if (rowset.HaveValue<Schema::Tablet::ObjectDomain>() && (bool)oldDomain) {
@@ -4265,7 +4290,7 @@ public:
                     ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << "{\"status\":\"ALREADY\"}"));
                     return true;
                 } else if (!clientOldDomain) {
-                    ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << "{\"status\": \"ERROR\", \"error\":\"Domain already set to " << oldDomain << "\"}"));
+                    ctx.Send(Source, MakeRawHttpEvent(THttpStatus::BAD_REQUEST, TStringBuilder() << "{\"status\": \"ERROR\", \"error\":\"Domain already set to " << oldDomain << "\"}"));
                     return true;
                 }
             }
@@ -4278,7 +4303,7 @@ public:
             WriteOperation(db, jsonOperation);
             Success = true;
         } else {
-            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << "{\"status\": \"ERROR\", \"error\":\"Tablet not found\"}"));
+            ctx.Send(Source, MakeRawHttpEvent(THttpStatus::BAD_REQUEST, TStringBuilder() << "{\"status\": \"ERROR\", \"error\":\"Tablet not found\"}"));
         }
         return true;
     }
@@ -4826,23 +4851,23 @@ public:
 bool THive::IsSafeOperation(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx) {
     NMon::TEvRemoteHttpInfo* httpInfo = ev->Get();
     if (httpInfo->GetMethod() != HTTP_METHOD_POST) {
-        ctx.Send(ev->Sender, new NMon::TEvRemoteJsonInfoRes(R"({"error":"Must use POST request"})"));
+        ctx.Send(ev->Sender, MakeRawHttpEvent(THttpStatus::BAD_REQUEST, R"({"error":"Must use POST request"})"));
         return false;
     }
     if (!GetEnableDestroyOperations()) {
-        ctx.Send(ev->Sender, new NMon::TEvRemoteJsonInfoRes("{\"error\":\"destroy operations are disabled\"}"));
+        ctx.Send(ev->Sender, MakeRawHttpEvent(THttpStatus::BAD_REQUEST, "{\"error\":\"destroy operations are disabled\"}"));
         return false;
     }
     TCgiParameters cgi(httpInfo->Cgi());
     TStringBuilder keyData;
     keyData << cgi.Get("tablet") << cgi.Get("owner") << cgi.Get("owner_idx");
     if (keyData.empty()) {
-        ctx.Send(ev->Sender, new NMon::TEvRemoteJsonInfoRes("{\"error\":\"tablet, owner or owner_idx parameters not set\"}"));
+        ctx.Send(ev->Sender, MakeRawHttpEvent(THttpStatus::BAD_REQUEST, "{\"error\":\"tablet, owner or owner_idx parameters not set\"}"));
         return false;
     }
     TString key = MD5::Data(keyData);
     if (key != cgi.Get("key")) {
-        ctx.Send(ev->Sender, new NMon::TEvRemoteJsonInfoRes("{\"error\":\"key parameter is incorrect\"}"));
+        ctx.Send(ev->Sender, MakeRawHttpEvent(THttpStatus::BAD_REQUEST, "{\"error\":\"key parameter is incorrect\"}"));
         return false;
     }
     return true;
@@ -4853,7 +4878,7 @@ void THive::CreateEvMonitoring(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorCo
         return Execute(new TTxMonEvent_NotReady(ev->Sender, this), ctx);
     }
     NMon::TEvRemoteHttpInfo* httpInfo = ev->Get();
-    TCgiParameters cgi(httpInfo->Cgi());
+    TCgiParameters cgi = GetParams(httpInfo);
     TString page = cgi.Has("page") ? cgi.Get("page") : "";
     if (page == "MemStateTablets")
         return Execute(new TTxMonEvent_MemStateTablets(ev->Sender, ev, this), ctx);

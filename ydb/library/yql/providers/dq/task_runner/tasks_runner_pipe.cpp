@@ -1126,6 +1126,11 @@ public:
             TaskRunner->RaiseException();
         }
     }
+
+    bool IsEarlyFinished() const override {
+        return false;
+    }
+
     // can throw TDqChannelStorageException
     [[nodiscard]]
     bool Pop(TDqSerializedBatch& data) override {
@@ -1290,6 +1295,10 @@ public:
         } catch (...) {
             TaskRunner->RaiseException();
         }
+    }
+
+    bool IsEarlyFinished() const override {
+        return false;
     }
 
     NKikimr::NMiniKQL::TType* GetOutputType() const override {

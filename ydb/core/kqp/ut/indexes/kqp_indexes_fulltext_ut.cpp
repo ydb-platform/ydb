@@ -9,6 +9,12 @@ using namespace NYdb::NTable;
 
 Y_UNIT_TEST_SUITE(KqpFulltextIndexes) {
 
+TKikimrRunner Kikimr(NKikimrConfig::TFeatureFlags&& featureFlags) {
+    auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+    settings.AppConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+    return TKikimrRunner(settings);
+}
+
 TKikimrRunner Kikimr() {
     NKikimrConfig::TFeatureFlags featureFlags;
     featureFlags.SetEnableFulltextIndex(true);
@@ -162,6 +168,14 @@ TResultSet ReadIndex(NQuery::TQueryClient& db, const char* table = "indexImplTab
     auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     return result.GetResultSet(0);
+}
+
+void TruncateTable(NQuery::TQueryClient& db) {
+    TString query = R"sql(
+        TRUNCATE TABLE `/Root/Texts`;
+    )sql";
+    auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 }
 
 Y_UNIT_TEST(AddIndex) {
@@ -3780,7 +3794,7 @@ Y_UNIT_TEST(SelectWithFulltextContainsAndNgramWildcardBoundaries) {
     }
 }
 
-Y_UNIT_TEST(SelectWithFulltextContainsAndNgramWildcardUtf8) {
+Y_UNIT_TEST(SelectWithFulltextContainsAndNgramWildcardUtf8Size) {
     auto kikimr = Kikimr();
     auto db = kikimr.GetQueryClient();
 
@@ -3943,6 +3957,118 @@ Y_UNIT_TEST(SelectWithFulltextContainsAndNgramWildcardUtf8) {
         CompareYson(R"([
             [[6u];["﷽ that's one character"]]
         ])", NYdb::FormatResultSetYson(result.GetResultSet(6)));
+    }
+}
+
+Y_UNIT_TEST_QUAD(SelectWithFulltextContainsAndNgramWildcardUnicode, RELEVANCE, UTF8) {
+    auto kikimr = Kikimr();
+    auto db = kikimr.GetQueryClient();
+
+    NYdb::NQuery::TExecuteQuerySettings querySettings;
+    querySettings.ClientTimeout(TDuration::Minutes(1));
+
+    CreateTexts(db, UTF8);
+
+    {
+        TString query = R"sql(
+            UPSERT INTO `/Root/Texts` (`Key`, `Text`) VALUES
+                (0, "abc023"),
+                (1, "◌̧◌̇◌̣"),
+                (2, "﷽‎؈ۻ"),
+                (3, "异体字異體字"),
+                (4, "ä̸̱b̴̪͛"),
+                (5, "😢🐶🐕🐈"),
+                (6, "4️⃣🐕‍🦺🐈‍⬛"),
+                (7, "👨‍👩‍👧‍👦🇦🇨")
+
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    {
+        const TString query = std::format(R"sql(
+            ALTER TABLE `/Root/Texts` ADD INDEX fulltext_idx
+                GLOBAL USING {0}
+                ON (Text)
+                WITH (
+                    tokenizer=whitespace,
+                    use_filter_lowercase=true,
+                    use_filter_ngram=true,
+                    filter_ngram_min_length=2,
+                    filter_ngram_max_length=2
+                );
+        )sql", RELEVANCE ? "fulltext_relevance" : "fulltext_plain");
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    {
+        const TString query = R"sql(
+            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextContains(`Text`, "*bc0*")
+            ORDER BY `Key`;
+
+            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextContains(`Text`, "*◌̇*")
+            ORDER BY `Key`;
+
+            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextContains(`Text`, "*؈ۻ")
+            ORDER BY `Key`;
+
+            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextContains(`Text`, "*字異體*")
+            ORDER BY `Key`;
+
+            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextContains(`Text`, "ä̸̱*")
+            ORDER BY `Key`;
+
+            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextContains(`Text`, "*🐶🐕*")
+            ORDER BY `Key`;
+
+            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextContains(`Text`, "*🐶*")  -- should return empty response: query shorter than ngrams
+            ORDER BY `Key`;
+
+            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextContains(`Text`, "*🐕‍🦺*")  -- despite it looks like single character it is not: it's 🐕 with modifiers
+            ORDER BY `Key`;
+
+            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextContains(`Text`, "👨\u200D👩*")  -- 👨‍👩‍👧‍👦 is combination of 👨, 👩, 👧 and 👦
+            ORDER BY `Key`;
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        CompareYson(R"([
+            [[0u];["abc023"]]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+        CompareYson(R"([
+            [[1u];["◌̧◌̇◌̣"]]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(1)));
+        CompareYson(R"([
+            [[2u];["﷽‎؈ۻ"]]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(2)));
+        CompareYson(R"([
+            [[3u];["异体字異體字"]]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(3)));
+        CompareYson(R"([
+            [[4u];["ä̸̱b̴̪͛"]]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(4)));
+        CompareYson(R"([
+            [[5u];["😢🐶🐕🐈"]]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(5)));
+        CompareYson(R"([])", NYdb::FormatResultSetYson(result.GetResultSet(6)));
+        CompareYson(R"([
+            [[6u];["4️⃣🐕‍🦺🐈‍⬛"]]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(7)));
+        CompareYson(R"([
+            [[7u];["👨‍👩‍👧‍👦🇦🇨"]]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(8)));
     }
 }
 
@@ -4222,8 +4348,7 @@ Y_UNIT_TEST_QUAD(SelectWithFulltextContainsShorterThanMinNgram, RELEVANCE, UTF8)
                     filter_ngram_min_length=3,
                     filter_ngram_max_length=3
                 );
-        )sql",
-        RELEVANCE ? "fulltext_relevance" : "fulltext_plain");
+        )sql", RELEVANCE ? "fulltext_relevance" : "fulltext_plain");
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
@@ -4374,6 +4499,88 @@ Y_UNIT_TEST(ExplainFulltextIndexScanQuery) {
     UNIT_ASSERT_VALUES_EQUAL(opProps.at("Index").GetStringSafe(), "fulltext_idx");
 }
 
+Y_UNIT_TEST(AddFullTextFlatIndexWithTruncate) {
+    NKikimrConfig::TFeatureFlags featureFlags;
+    featureFlags.SetEnableFulltextIndex(true);
+    featureFlags.SetEnableTruncateTable(true);
+
+    auto kikimr = Kikimr(std::move(featureFlags));
+    kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+    kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+    auto db = kikimr.GetQueryClient();
+
+    CreateTexts(db);
+    AddIndex(db);
+
+    auto verifyIndexWorksCorrectly = [&](){
+        UpsertTexts(db);
+        auto index = ReadIndex(db);
+        CompareYson(R"([
+            [[100u];"animals"];
+            [[100u];"cats"];
+            [[200u];"cats"];
+            [[300u];"cats"];
+            [[100u];"chase"];
+            [[200u];"chase"];
+            [[200u];"dogs"];
+            [[400u];"dogs"];
+            [[400u];"foxes"];
+            [[300u];"love"];
+            [[400u];"love"];
+            [[100u];"small"];
+            [[200u];"small"]
+        ])", NYdb::FormatResultSetYson(index));
+    };
+
+    verifyIndexWorksCorrectly();
+
+    for (size_t tryIndex = 0; tryIndex < 5; ++tryIndex) {
+        TruncateTable(db);
+        verifyIndexWorksCorrectly();
+    }
+}
+
+Y_UNIT_TEST(AddFullTextRelevanceIndexWithTruncate) {
+    NKikimrConfig::TFeatureFlags featureFlags;
+    featureFlags.SetEnableFulltextIndex(true);
+    featureFlags.SetEnableTruncateTable(true);
+
+    auto kikimr = Kikimr(std::move(featureFlags));
+    kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+    kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+    auto db = kikimr.GetQueryClient();
+
+    CreateTexts(db);
+    AddIndex(db, "fulltext_relevance");
+
+    auto verifyIndexWorksCorrectly = [&](){
+        UpsertTexts(db);
+        auto index = ReadIndex(db);
+        CompareYson(R"([
+            [[100u];1u;"animals"];
+            [[100u];1u;"cats"];
+            [[200u];1u;"cats"];
+            [[300u];2u;"cats"];
+            [[100u];1u;"chase"];
+            [[200u];1u;"chase"];
+            [[200u];1u;"dogs"];
+            [[400u];1u;"dogs"];
+            [[400u];1u;"foxes"];
+            [[300u];1u;"love"];
+            [[400u];1u;"love"];
+            [[100u];1u;"small"];
+            [[200u];1u;"small"]
+        ])", NYdb::FormatResultSetYson(index));
+    };
+
+    verifyIndexWorksCorrectly();
+
+    for (size_t tryIndex = 0; tryIndex < 5; ++tryIndex) {
+        TruncateTable(db);
+        verifyIndexWorksCorrectly();
+    }
+
+}
 
 }
 

@@ -1,4 +1,3 @@
-import abc
 import asyncio
 import enum
 import functools
@@ -69,8 +68,20 @@ class QueryResultSetFormat(enum.IntEnum):
 
 
 class SyncResponseContextIterator(_utilities.SyncResponseIterator):
+    def __init__(self, it, wrapper, on_error=None):
+        super().__init__(it, wrapper)
+        self._on_error = on_error
+
     def __enter__(self) -> "SyncResponseContextIterator":
         return self
+
+    def _next(self):
+        try:
+            return super()._next()
+        except Exception as e:
+            if self._on_error:
+                self._on_error(e)
+            raise e
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         #  To close stream on YDB it is necessary to scroll through it to the end
@@ -105,42 +116,6 @@ class QueryClientSettings:
     def with_native_datetime_in_result_sets(self, enabled: bool) -> "QueryClientSettings":
         self._native_datetime_in_result_sets = enabled
         return self
-
-
-class IQuerySessionState(abc.ABC):
-    def __init__(self, settings: Optional[QueryClientSettings] = None):
-        pass
-
-    @abc.abstractmethod
-    def reset(self) -> None:
-        pass
-
-    @property
-    @abc.abstractmethod
-    def session_id(self) -> Optional[str]:
-        pass
-
-    @abc.abstractmethod
-    def set_session_id(self, session_id: str) -> "IQuerySessionState":
-        pass
-
-    @property
-    @abc.abstractmethod
-    def node_id(self) -> Optional[int]:
-        pass
-
-    @abc.abstractmethod
-    def set_node_id(self, node_id: int) -> "IQuerySessionState":
-        pass
-
-    @property
-    @abc.abstractmethod
-    def attached(self) -> bool:
-        pass
-
-    @abc.abstractmethod
-    def set_attached(self, attached: bool) -> "IQuerySessionState":
-        pass
 
 
 def create_execute_query_request(
@@ -206,11 +181,11 @@ def create_execute_query_request(
 
 def bad_session_handler(func):
     @functools.wraps(func)
-    def decorator(rpc_state, response_pb, session_state: IQuerySessionState, *args, **kwargs):
+    def decorator(rpc_state, response_pb, session: "BaseQuerySession", *args, **kwargs):
         try:
-            return func(rpc_state, response_pb, session_state, *args, **kwargs)
+            return func(rpc_state, response_pb, session, *args, **kwargs)
         except issues.BadSession:
-            session_state.reset()
+            session._invalidate()
             raise
 
     return decorator
@@ -220,9 +195,8 @@ def bad_session_handler(func):
 def wrap_execute_query_response(
     rpc_state: RpcState,
     response_pb: _apis.ydb_query.ExecuteQueryResponsePart,
-    session_state: IQuerySessionState,
+    session: "BaseQuerySession",
     tx: Optional["BaseQueryTxContext"] = None,
-    session: Optional["BaseQuerySession"] = None,
     commit_tx: Optional[bool] = False,
     settings: Optional[QueryClientSettings] = None,
 ) -> convert.ResultSet:

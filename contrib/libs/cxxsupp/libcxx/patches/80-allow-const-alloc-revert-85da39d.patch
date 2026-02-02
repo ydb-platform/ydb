@@ -1,5 +1,5 @@
 diff --git a/include/__memory/allocator.h b/include/__memory/allocator.h
-index aa44ced..e100e45 100644
+index c935c51..d50df9a 100644
 --- a/include/__memory/allocator.h
 +++ b/include/__memory/allocator.h
 @@ -170,6 +170,8 @@ inline _LIBCPP_HIDE_FROM_ABI bool operator!=(const allocator<_Tp>&, const alloca
@@ -34,10 +34,10 @@ index d8c9746..855f190 100644
  }
  
 diff --git a/include/__memory/uninitialized_algorithms.h b/include/__memory/uninitialized_algorithms.h
-index 54af1fa..e025442 100644
+index 627ee44..194914f 100644
 --- a/include/__memory/uninitialized_algorithms.h
 +++ b/include/__memory/uninitialized_algorithms.h
-@@ -562,8 +562,9 @@ struct __allocator_has_trivial_copy_construct<allocator<_Type>, _Type> : true_ty
+@@ -563,8 +563,9 @@ struct __allocator_has_trivial_copy_construct<allocator<_Type>, _Type> : true_ty
  
  template <class _Alloc,
            class _In,
@@ -48,7 +48,7 @@ index 54af1fa..e025442 100644
                              is_same<__remove_const_t<_In>, __remove_const_t<_Out> >::value &&
                              __allocator_has_trivial_copy_construct<_Alloc, _In>::value,
                          int> = 0>
-@@ -577,7 +578,11 @@ __uninitialized_allocator_copy_impl(_Alloc&, _In* __first1, _In* __last1, _Out*
+@@ -578,7 +579,11 @@ __uninitialized_allocator_copy_impl(_Alloc&, _In* __first1, _In* __last1, _Out*
      }
      return __first2;
    } else {
@@ -60,14 +60,14 @@ index 54af1fa..e025442 100644
    }
  }
  
-@@ -638,7 +643,11 @@ __uninitialized_allocator_relocate(_Alloc& __alloc, _Tp* __first, _Tp* __last, _
-     __guard.__complete();
+@@ -640,7 +645,11 @@ __uninitialized_allocator_relocate(_Alloc& __alloc, _Tp* __first, _Tp* __last, _
      std::__allocator_destroy(__alloc, __first, __last);
    } else {
+     // Casting to void* to suppress clang complaining that this is technically UB.
 +#ifdef _LIBCPP_ENABLE_REMOVED_ALLOCATOR_CONST
-+    __builtin_memcpy(const_cast<__remove_const_t<_Tp>*>(__result), __first, sizeof(_Tp) * (__last - __first));
++    __builtin_memcpy(static_cast<void*>(const_cast<__remove_const_t<_Tp>*>(__result)), __first, sizeof(_Tp) * (__last - __first));
 +#else
-     __builtin_memcpy(__result, __first, sizeof(_Tp) * (__last - __first));
+     __builtin_memcpy(static_cast<void*>(__result), __first, sizeof(_Tp) * (__last - __first));
 +#endif
    }
  }

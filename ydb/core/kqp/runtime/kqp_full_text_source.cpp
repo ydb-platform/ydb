@@ -122,12 +122,12 @@ public:
 
 
     template <typename TableRange>
-    std::unique_ptr<TEvDataShard::TEvRead> GetReadRequest(ui64 readId, ui64 shardId, const TableRange& range) {
-        return GetReadRequest(readId, shardId, std::deque<TableRange>{range});
+    std::unique_ptr<TEvDataShard::TEvRead> GetReadRequest(ui64 readId, ui64 shardId, const TableRange& range, bool arrowFormat = false) {
+        return GetReadRequest(readId, shardId, std::deque<TableRange>{range}, arrowFormat);
     }
 
     template <typename TableRange>
-    std::unique_ptr<TEvDataShard::TEvRead> GetReadRequest(ui64 readId, ui64 shardId, const std::deque<TableRange>& ranges) {
+    std::unique_ptr<TEvDataShard::TEvRead> GetReadRequest(ui64 readId, ui64 shardId, const std::deque<TableRange>& ranges, bool arrowFormat = false) {
         auto request = std::make_unique<TEvDataShard::TEvRead>();
         auto& record = request->Record;
 
@@ -166,11 +166,11 @@ public:
         auto MaxRowsDefaultQuota = defaultSettings.GetMaxRows();
         auto MaxBytesDefaultQuota = defaultSettings.GetMaxBytes();
 
-        record.SetMaxRows(MaxRowsDefaultQuota * 100);
+        record.SetMaxRows(MaxRowsDefaultQuota);
         record.SetMaxBytes(MaxBytesDefaultQuota);
-        record.SetResultFormat(NKikimrDataEvents::FORMAT_CELLVEC);
+        record.SetResultFormat(arrowFormat ? NKikimrDataEvents::FORMAT_ARROW : NKikimrDataEvents::FORMAT_CELLVEC);
 
-        CA_LOG_E(TStringBuilder() << "Send EvRead (stream lookup) to shardId=" << shardId
+        CA_LOG_E(TStringBuilder() << "Send EvRead (full text source) to shardId=" << shardId
             << ", readId = " << record.GetReadId()
             << ", snapshot=(txid=" << record.GetSnapshot().GetTxId() << ", step=" << record.GetSnapshot().GetStep() << ")"
             << ", lockTxId=" << record.GetLockTxId()
@@ -205,7 +205,7 @@ public:
             return {0, nullptr};
         }
 
-        auto& [shardId, ranges] = *RangesToRead.begin();
+        auto [shardId, ranges] = *RangesToRead.begin();
         auto request = GetReadRequest(nextReadId, shardId, ranges);
         RangesToRead.erase(shardId);
         return {shardId, std::move(request)};
@@ -360,7 +360,7 @@ class TDocumentInfo : public TAtomicRefCount<TDocumentInfo> {
     TOwnedCellVec KeyCells;
     TOwnedCellVec RowCells;
     TDocumentId DocumentId;
-    std::vector<ui64> WordFrequencies;
+    std::vector<ui32> WordFrequencies;
     ui64 DocumentLength = std::numeric_limits<ui64>::max();
 public:
 
@@ -370,7 +370,7 @@ public:
         , DocumentId(KeyCells)
     {}
 
-    void SetWordFrequencies(std::vector<ui64>&& wordFrequencies) {
+    void SetWordFrequencies(std::vector<ui32>&& wordFrequencies) {
         WordFrequencies = std::move(wordFrequencies);
     }
 
@@ -448,10 +448,12 @@ public:
 class TDocumentIdPointer {
 public:
     size_t WordIndex;
+    ui64 DocId = 0;
     const TCell* Document;
 
-    explicit TDocumentIdPointer(size_t wordIndex, const TCell* document)
+    explicit TDocumentIdPointer(size_t wordIndex, ui64 docId, const TCell* document)
         : WordIndex(wordIndex)
+        , DocId(docId)
         , Document(document)
     {}
 };
@@ -464,6 +466,10 @@ struct TDocumentKeyCompare {
     {}
 
     bool operator()(const TDocumentIdPointer& key1, const TDocumentIdPointer& key2) const {
+        if (key1.Document == nullptr)
+            return key1.DocId > key2.DocId;
+        YQL_ENSURE(key1.Document);
+        YQL_ENSURE(key2.Document);
         return CompareTypedCellVectors(key1.Document, key2.Document, DocumentKeyColumnTypes.data(), DocumentKeyColumnTypes.size()) > 0;
     }
 };
@@ -477,82 +483,13 @@ public:
     {}
 
     bool operator()(const TDocumentIdPointer& key1, const TDocumentIdPointer& key2) const {
+        if (key1.Document == nullptr)
+            return key1.DocId == key2.DocId;
+        YQL_ENSURE(key1.Document);
+        YQL_ENSURE(key2.Document);
         return CompareTypedCellVectors(key1.Document, key2.Document, DocumentKeyColumnTypes.data(), DocumentKeyColumnTypes.size()) == 0;
     }
 };
-
-class TWordReadState {
-public:
-    ui64 WordIndex;
-    TString Word;
-    bool PendingRead = false;
-    std::deque<std::unique_ptr<TEvDataShard::TEvReadResult>> PendingReadResults;
-    // pending ranges
-    TIntrusivePtr<TTableReader<TIndexTableImplReader>> Reader;
-    std::deque<std::pair<ui64, TOwnedTableRange>> RangesToRead;
-    ui32 Frequency = 0;
-    ui32 UnprocessedDocumentPos = 0;
-
-    explicit TWordReadState(ui64 wordIndex, const TString& word, const TIntrusivePtr<TTableReader<TIndexTableImplReader>>& reader)
-        : WordIndex(wordIndex)
-        , Word(word)
-        , Reader(reader)
-    {
-        BuildRangesToRead();
-    }
-
-    TOwnedTableRange GetWordKeyCells() const {
-        TCell tokenCell(Word.data(), Word.size());
-        TVector <TCell> fromCells{tokenCell};
-        return TOwnedTableRange(fromCells);
-    }
-
-    std::pair<ui64, std::unique_ptr<TEvDataShard::TEvRead>> BuildNextRangeToRead(ui64 readId) {
-        YQL_ENSURE(!RangesToRead.empty());
-        auto [shardId, range] = RangesToRead.front();
-        RangesToRead.pop_front();
-        PendingRead = true;
-        return std::make_pair(shardId, Reader->GetReadRequest(readId, shardId, range));
-    }
-
-    bool FinishedRead() const {
-        return RangesToRead.empty() && !PendingRead && PendingReadResults.empty();
-    }
-
-    std::pair<ui64, std::unique_ptr<TEvDataShard::TEvRead>> ScheduleNextRead(ui64 readId) {
-        if (!RangesToRead.empty()) {
-            return BuildNextRangeToRead(readId);
-        }
-
-        PendingRead = false;
-        return std::make_pair(0, nullptr);
-    }
-
-    TDocumentIdPointer GetNextDocumentIdPointer() const {
-        YQL_ENSURE(!PendingReadResults.empty());
-        auto& result = PendingReadResults.front();
-        return TDocumentIdPointer(WordIndex, result->GetCells(UnprocessedDocumentPos).data());
-    }
-
-    void BuildRangesToRead() {
-        TCell tokenCell(Word.data(), Word.size());
-        std::vector <TCell> fromCells(Reader->GetKeyColumnTypes().size() - 1);
-        fromCells.insert(fromCells.begin(), tokenCell);
-
-        std::vector <TCell> toCells;
-        toCells.insert(toCells.begin(), tokenCell);
-
-        bool fromInclusive = true;
-        bool toInclusive = false;
-        auto range = TTableRange(fromCells, fromInclusive, toCells, toInclusive);
-
-        auto rangePartition = Reader->GetRangePartitioning(range);
-        for(const auto& [shardId, range] : rangePartition) {
-            RangesToRead.emplace_back(shardId, range);
-        }
-    }
-};
-
 
 class TIndexTableImplReader : public TTableReader<TIndexTableImplReader> {
     Ydb::Table::FulltextIndexSettings::Layout Layout;
@@ -629,6 +566,190 @@ public:
         }
     }
 };
+
+class TWordReadState {
+public:
+    ui64 WordIndex;
+    TString Word;
+    bool PendingRead = false;
+    std::deque<std::unique_ptr<TEvDataShard::TEvReadResult>> PendingReadResults;
+    std::deque<std::shared_ptr<arrow::UInt64Array>> PendingDocumentIds;
+    std::deque<std::shared_ptr<arrow::UInt32Array>> PendingDocumentFrequencies;
+    bool UseArrowFormat = false;
+    TIntrusivePtr<TIndexTableImplReader> Reader;
+    std::deque<std::pair<ui64, TOwnedTableRange>> RangesToRead;
+    ui32 Frequency = 0;
+    ui32 UnprocessedDocumentPos = 0;
+    ui64 DocumentCount = 0;
+    ui64 PendingDocumentsCount = 0;
+
+    explicit TWordReadState(ui64 wordIndex, const TString& word, const TIntrusivePtr<TIndexTableImplReader>& reader)
+        : WordIndex(wordIndex)
+        , Word(word)
+        , Reader(reader)
+    {
+        BuildRangesToRead();
+        YQL_ENSURE(reader->GetResultColumnTypes().size() >= 1);
+        if (reader->GetResultColumnTypes().size() >= 3) {
+            // not supported yet
+            UseArrowFormat = false;
+        } else {
+            if (reader->GetResultColumnTypes()[0].GetTypeId() == NScheme::NTypeIds::Uint64) {
+                UseArrowFormat = true;
+            } else {
+                UseArrowFormat = false;
+            }
+        }
+    }
+
+    TOwnedTableRange GetWordKeyCells() const {
+        TCell tokenCell(Word.data(), Word.size());
+        TVector <TCell> fromCells{tokenCell};
+        return TOwnedTableRange(fromCells);
+    }
+
+    std::pair<ui64, std::unique_ptr<TEvDataShard::TEvRead>> BuildNextRangeToRead(ui64 readId) {
+        YQL_ENSURE(!RangesToRead.empty());
+        auto [shardId, range] = RangesToRead.front();
+        RangesToRead.pop_front();
+        PendingRead = true;
+        return std::make_pair(shardId, Reader->GetReadRequest(readId, shardId, range, UseArrowFormat));
+    }
+
+    bool FinishedRead() const {
+        return RangesToRead.empty() && !PendingRead && PendingReadResults.empty() && PendingDocumentIds.empty();
+    }
+
+    std::pair<ui64, std::unique_ptr<TEvDataShard::TEvRead>> ScheduleNextRead(ui64 readId) {
+        if (!RangesToRead.empty()) {
+            return BuildNextRangeToRead(readId);
+        }
+
+        PendingRead = false;
+        return std::make_pair(0, nullptr);
+    }
+
+    ui64 GetPendingDocuments() const {
+        return PendingDocumentsCount;
+    }
+
+    void AddDocumentList(std::unique_ptr<TEvDataShard::TEvReadResult>&& msg) {
+        if (msg->GetRowsCount() == 0) {
+            return;
+        }
+
+        DocumentCount += msg->GetRowsCount();
+        PendingDocumentsCount += msg->GetRowsCount();
+        if (!UseArrowFormat) {
+            YQL_ENSURE(msg->Record.GetResultFormat() == NKikimrDataEvents::EDataFormat::FORMAT_CELLVEC);
+        } else {
+            YQL_ENSURE(msg->Record.GetResultFormat() == NKikimrDataEvents::EDataFormat::FORMAT_ARROW);
+            auto batch = msg->GetArrowBatch();
+            YQL_ENSURE(batch);
+            auto array = batch->column(0);
+            auto docIds = std::static_pointer_cast<arrow::UInt64Array>(array);
+            YQL_ENSURE(docIds);
+            YQL_ENSURE(docIds->length() == static_cast<int64_t>(msg->GetRowsCount()));
+            if (batch->num_columns() > 1) {
+                auto array = batch->column(1);
+                auto freq_array = std::static_pointer_cast<arrow::UInt32Array>(array);
+                YQL_ENSURE(freq_array);
+                YQL_ENSURE(freq_array->length() == docIds->length());
+                PendingDocumentFrequencies.emplace_back(std::move(freq_array));
+            }
+            PendingDocumentIds.emplace_back(std::move(docIds));
+        }
+
+        PendingReadResults.emplace_back(std::move(msg));
+    }
+
+    ui64 GetDocumentCount() const {
+        return DocumentCount;
+    }
+
+    std::optional<std::pair<ui64, ui64>> SwitchToNextDocument() {
+        UnprocessedDocumentPos++;
+        PendingDocumentsCount--;
+        YQL_ENSURE(!PendingReadResults.empty());
+        if (UseArrowFormat) {
+            YQL_ENSURE(!PendingDocumentIds.empty());
+            if (UnprocessedDocumentPos == PendingDocumentIds.front()->length()) {
+                DocumentCount -= PendingDocumentIds.front()->length();
+                PendingDocumentIds.pop_front();
+                UnprocessedDocumentPos = 0;
+                if (!PendingDocumentFrequencies.empty()) {
+                    PendingDocumentFrequencies.pop_front();
+                }
+                bool finished = PendingReadResults.front()->Record.GetFinished();
+                auto ackInfo = std::make_pair(PendingReadResults.front()->Record.GetReadId(), PendingReadResults.front()->Record.GetSeqNo());
+                PendingReadResults.pop_front();
+                if (finished) {
+                    return std::nullopt;
+                }
+                return ackInfo;
+            }
+        } else {
+            auto& result = PendingReadResults.front();
+            if (UnprocessedDocumentPos == result->GetRowsCount()) {
+                DocumentCount -= result->GetRowsCount();
+                UnprocessedDocumentPos = 0;
+                bool finished = PendingReadResults.front()->Record.GetFinished();
+                auto ackInfo = std::make_pair(result->Record.GetReadId(), result->Record.GetSeqNo());
+                PendingReadResults.pop_front();
+                if (finished) {
+                    return std::nullopt;
+                }
+                return ackInfo;
+            }
+        }
+        return std::nullopt;
+    }
+
+    ui32 GetCurrentFrequency() const {
+        if (UseArrowFormat) {
+            YQL_ENSURE(!PendingDocumentFrequencies.empty());
+            auto& freq_array = PendingDocumentFrequencies.front();
+            return freq_array->Value(UnprocessedDocumentPos);
+        }
+
+        YQL_ENSURE(!PendingReadResults.empty());
+        auto& result = PendingReadResults.front();
+        const auto& payload = result->GetCells(UnprocessedDocumentPos);
+        return Reader->GetFrequency(payload);
+    }
+
+    TDocumentIdPointer GetNextDocumentIdPointer() {
+        if (UseArrowFormat) {
+            YQL_ENSURE(!PendingDocumentIds.empty());
+            auto& uint64_array = PendingDocumentIds.front();
+            ui64 value = uint64_array->Value(UnprocessedDocumentPos);
+            return TDocumentIdPointer(WordIndex, value, nullptr);
+        }
+
+        auto& result = PendingReadResults.front();
+        return TDocumentIdPointer(WordIndex, 0, result->GetCells(UnprocessedDocumentPos).data());
+    }
+
+    void BuildRangesToRead() {
+        TCell tokenCell(Word.data(), Word.size());
+        std::vector <TCell> fromCells(Reader->GetKeyColumnTypes().size() - 1);
+        fromCells.insert(fromCells.begin(), tokenCell);
+
+        std::vector <TCell> toCells;
+        toCells.insert(toCells.begin(), tokenCell);
+
+        bool fromInclusive = true;
+        bool toInclusive = false;
+        auto range = TTableRange(fromCells, fromInclusive, toCells, toInclusive);
+
+        auto rangePartition = Reader->GetRangePartitioning(range);
+        for(const auto& [shardId, range] : rangePartition) {
+            RangesToRead.emplace_back(shardId, range);
+        }
+    }
+};
+
+
 
 class TDocsTableReader : public TTableReader<TDocsTableReader> {
     Ydb::Table::FulltextIndexSettings::Layout Layout;
@@ -900,6 +1021,7 @@ struct TReadInfo {
     ui64 ReadKind;
     ui64 Cookie;
     ui64 ShardId;
+    ui64 LastSeqNo = 0;
 };
 
 class TMainTableReader : public TTableReader<TMainTableReader> {
@@ -1006,7 +1128,6 @@ public:
             snapshot, logPrefix, keyColumnTypes, resultColumnTypes, resultColumnIds, resultCellIndices, mainTableCovered, searchColumnIdx);
     }
 };
-
 
 class TFullTextContainsSource : public TActorBootstrapped<TFullTextContainsSource>, public NYql::NDq::IDqComputeActorAsyncInput, public NActors::IActorExceptionHandler {
 private:
@@ -1262,7 +1383,11 @@ private:
     }
 
     void AckRead(ui64 readId, ui64 seqno) {
-        auto& readInfo = Reads[readId];
+        auto readIt = Reads.find(readId);
+        if (readIt == Reads.end()) {
+            return;
+        }
+        auto& readInfo = readIt->second;
         ui64 shardId = readInfo.ShardId;
         auto request = GetDefaultReadAckSettings();
         request->Record.SetReadId(readId);
@@ -1279,6 +1404,7 @@ private:
     }
 
     void SendEvRead(ui64 shardId, std::unique_ptr<TEvDataShard::TEvRead>& request) {
+        auto readId = request->Record.GetReadId();
         const bool needToCreatePipe = PipesCreated.insert(shardId).second;
         Send(NKikimr::MakePipePerNodeCacheID(false),
             new TEvPipeCache::TEvForward(
@@ -1289,7 +1415,7 @@ private:
                     .Subscribe = needToCreatePipe,
                 }),
             IEventHandle::FlagTrackDelivery,
-            0);
+            readId);
     }
 
 public:
@@ -1402,6 +1528,15 @@ public:
     void LoadState(const TSourceState&) override {}
 
     void PassAway() override {
+        {
+            for (auto& [id, state] : Reads) {
+                auto cancel = MakeHolder<TEvDataShard::TEvReadCancel>();
+                cancel->Record.SetReadId(id);
+                Send(PipeCacheId, new TEvPipeCache::TEvForward(cancel.Release(), state.ShardId, false));
+            }
+        }
+        Send(PipeCacheId, new TEvPipeCache::TEvUnlink(0));
+
         TBase::PassAway();
     }
 
@@ -1530,10 +1665,12 @@ public:
             }
 
             if (Limit > 0 && ProducedItemsCount + ResultQueue.size() >= static_cast<ui64>(Limit)) {
+                NotifyCA();
                 return;
             }
         }
 
+        // Notify about possibly empty result
         NotifyCA();
     }
 
@@ -1596,9 +1733,17 @@ public:
     void WordResult(std::unique_ptr<NKikimr::TEvDataShard::TEvReadResult> msg, ui64 wordIndex, bool finished) {
         YQL_ENSURE(wordIndex < Words.size());
         auto& incomingWordInfo = Words[wordIndex];
+
         if (msg->GetRowsCount() > 0) {
-            incomingWordInfo.PendingReadResults.emplace_back(std::move(msg));
-            if (incomingWordInfo.PendingReadResults.size() == 1) {
+            // Try to always keep 2*limit rows in memory for maximum pipelining. In this way,
+            // while we process one batch, the data shard already prepares another one for us
+            if (incomingWordInfo.GetPendingDocuments() + msg->GetRowsCount() < 2*GetDefaultReadSettings()->Record.GetMaxRows() &&
+                !msg->Record.GetFinished() && (Limit == 0 || ProducedItemsCount + ResultQueue.size() < static_cast<ui64>(Limit))) {
+                AckRead(msg->Record.GetReadId(), msg->Record.GetSeqNo());
+            }
+            bool wasEmpty = incomingWordInfo.GetDocumentCount() == 0;
+            incomingWordInfo.AddDocumentList(std::move(msg));
+            if (wasEmpty) {
                 MergeQueue.push(incomingWordInfo.GetNextDocumentIdPointer());
             }
         }
@@ -1632,15 +1777,21 @@ public:
             }
 
             if (matchCount >= minShouldMatch) {
-                auto docInfo = MakeIntrusive<TDocumentInfo>(QueryCtx, TConstArrayRef<TCell>(documentIdPointer.Document, DocumentKeyCompare.DocumentKeyColumnTypes.size()));
+                TIntrusivePtr<TDocumentInfo> docInfo;
+                if (documentIdPointer.Document != nullptr) {
+                    docInfo = MakeIntrusive<TDocumentInfo>(QueryCtx, TConstArrayRef<TCell>(documentIdPointer.Document, DocumentKeyCompare.DocumentKeyColumnTypes.size()));
+                } else {
+                    TCell docCell = TCell::Make(documentIdPointer.DocId);
+                    TVector<TCell> documentCells = {docCell};
+                    docInfo = MakeIntrusive<TDocumentInfo>(QueryCtx, documentCells);
+                }
                 auto [it, inserted] = DocumentInfos.emplace(docInfo->GetDocumentId(), std::move(docInfo));
                 YQL_ENSURE(inserted);
                 if (DocsTableReader) {
-                    std::vector<ui64> wordFrequencies(Words.size(), 0);
-                    for (auto wordIndex : matchedWords) {
+                    std::vector<ui32> wordFrequencies(Words.size(), 0);
+                    for (ui32 wordIndex : matchedWords) {
                         auto& wordInfo = Words[wordIndex];
-                        const auto& payload = wordInfo.PendingReadResults.front()->GetCells(wordInfo.UnprocessedDocumentPos);
-                        wordFrequencies[wordIndex] = IndexTableReader->GetFrequency(payload);
+                        wordFrequencies[wordIndex] = wordInfo.GetCurrentFrequency();
                     }
                     it->second->SetWordFrequencies(std::move(wordFrequencies));
                 }
@@ -1648,15 +1799,14 @@ public:
                 FetchDocumentDetails(it->second);
             }
 
-            for (auto wordIndex : matchedWords) {
+            for (ui32 wordIndex : matchedWords) {
                 auto& wordInfo = Words[wordIndex];
-                wordInfo.UnprocessedDocumentPos++;
-                if (wordInfo.UnprocessedDocumentPos == wordInfo.PendingReadResults.front()->GetRowsCount()) {
-                    wordInfo.PendingReadResults.pop_front();
-                    wordInfo.UnprocessedDocumentPos = 0;
+                auto ackInfo = wordInfo.SwitchToNextDocument();
+                if (ackInfo) {
+                    AckRead(ackInfo->first, ackInfo->second);
                 }
 
-                if (!wordInfo.PendingReadResults.empty()) {
+                if (wordInfo.GetDocumentCount() > 0) {
                     MergeQueue.push(wordInfo.GetNextDocumentIdPointer());
                 }
 
@@ -1672,7 +1822,6 @@ public:
         }
 
         NotifyCA();
-
     }
 
     void HandleReadResult(TEvDataShard::TEvReadResult::TPtr& ev) {
@@ -1693,6 +1842,7 @@ public:
             << ", Status=" << Ydb::StatusIds::StatusCode_Name(record.GetStatus().GetCode())
             << ", Finished=" << record.GetFinished()
             << ", RowCount=" << record.GetRowCount()
+            << ", ResultFormat=" << NKikimrDataEvents::EDataFormat_Name(record.GetResultFormat())
             << ", TxLocks= " << [&]() {
                 TStringBuilder builder;
                 for (const auto& lock : record.GetTxLocks()) {
@@ -1717,10 +1867,14 @@ public:
         auto& msg = *ev->Get();
         ui64 cookie = it->second.Cookie;
         auto readKind = it->second.ReadKind;
+        YQL_ENSURE(it->second.LastSeqNo < record.GetSeqNo());
+        it->second.LastSeqNo = record.GetSeqNo();
 
         if (record.GetFinished()) {
             Reads.erase(readId);
-        } else {
+        } else if (readKind != EReadKind_Word) {
+            // Postings are read in a streamed manner, so we only ack them
+            // when we are done with a batch
             AckRead(readId, record.GetSeqNo());
         }
 

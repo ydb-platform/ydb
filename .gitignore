@@ -102,6 +102,7 @@ path.bash.inc
 /.editorconfig
 
 # Cursor ignore
+.cursor/
 .cursorignore
 
 # Harness local cluster working directory

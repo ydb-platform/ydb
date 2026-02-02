@@ -41,7 +41,7 @@ private:
 public:
     TTestICCluster(ui32 numNodes = 1, NActors::TChannelsConfig channelsConfig = NActors::TChannelsConfig(),
                    TTrafficInterrupterSettings* tiSettings = nullptr, TIntrusivePtr<NLog::TSettings> loggerSettings = nullptr, Flags flags = EMPTY,
-                   TCheckerFactory checkerFactory = {}, TDuration deadPeerTimeout = TDuration::Seconds(2))
+                   TCheckerFactory checkerFactory = {}, TDuration deadPeerTimeout = TDuration::Seconds(2), ui32 inflight = TNode::DefaultInflight())
         : NumNodes(numNodes)
         , DeadPeerTimeout(deadPeerTimeout)
         , Counters(new NMonitoring::TDynamicCounters)
@@ -75,7 +75,7 @@ public:
         for (ui32 i = 1; i <= NumNodes; ++i) {
             auto& portMap = tiSettings ? specificNodePortMap[i] : nodeToPortMap;
             Nodes.emplace(i, MakeHolder<TNode>(i, NumNodes, portMap, Address, Counters, DeadPeerTimeout, ChannelsConfig,
-                /*numDynamicNodes=*/0, /*numThreads=*/1, LoggerSettings, TNode::DefaultInflight(),
+                /*numDynamicNodes=*/0, /*numThreads=*/1, LoggerSettings, inflight,
                 flags & USE_ZC ? ESocketSendOptimization::IC_MSG_ZEROCOPY : ESocketSendOptimization::DISABLED,
                 flags & USE_TLS, checkerFactory, flags & RDMA_POLLING_CQ ? NInterconnect::NRdma::ECqMode::POLLING : NInterconnect::NRdma::ECqMode::EVENT));
         }

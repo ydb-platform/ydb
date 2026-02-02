@@ -16,6 +16,15 @@ namespace NKikimr {
 
 namespace NTableIndex {
 
+struct TIndexObjectCounts {
+    ui32 IndexTableCount = 0;
+    ui32 SequenceCount = 0;
+    ui32 IndexTableShards = 0;
+    ui32 ShardsPerPath = 0;
+};
+
+TIndexObjectCounts GetIndexObjectCounts(const NKikimrSchemeOp::TIndexCreationConfig& indexDesc);
+
 NKikimrSchemeOp::TTableDescription CalcImplTableDesc(
     const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
     const TTableColumns& implTableColumns,

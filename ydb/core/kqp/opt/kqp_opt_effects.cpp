@@ -552,20 +552,41 @@ bool BuildEffects(TPositionHandle pos, const TVector<TExprBase>& effects,
             }
         } else if (auto maybeExt = effect.Maybe<TKqlExternalEffect>()) {
             sinkEffect = true;
-            TKqlExternalEffect externalEffect = maybeExt.Cast();
-            TExprBase input = externalEffect.Input();
-            auto maybeStage = input.Maybe<TDqStageBase>();
-            YQL_ENSURE(maybeStage, "External effect should be a DQ stage");
-            auto stage = maybeStage.Cast();
+
+            TExprBase input = maybeExt.Cast().Input();
+            ui64 index = 0; // Index of output in DQ stage result
+            if (input.Ref().IsList()) {
+                YQL_ENSURE(input.Ref().ChildrenSize() == 1, "Expected Tuple(Nth(DQ Stage, output index))");
+
+                const auto maybeNth = TMaybeNode<TCoNth>(input.Ref().Child(0));
+                YQL_ENSURE(maybeNth, "Expected Nth(DQ Stage, output index)");
+                const auto nth = maybeNth.Cast();
+
+                input = nth.Tuple();
+                index = FromString(nth.Index().Value());
+            }
+
+            const auto maybeStage = input.Maybe<TDqStageBase>();
+            YQL_ENSURE(maybeStage, "External effect should be a DQ stage or Tuple(Nth(DQ Stage, output index))");
+            const auto stage = maybeStage.Cast();
             const auto outputsList = stage.Outputs();
             YQL_ENSURE(outputsList, "External effect DQ stage should have at least one output");
-            TDqStageOutputsList outputs = outputsList.Cast();
-            YQL_ENSURE(outputs.Size() == 1, "Multiple sinks are not supported yet");
-            TDqOutputAnnotationBase output = outputs.Item(0);
-            YQL_ENSURE(TDqSink::Match(output.Raw()), "External effect DQ stage should have DQ sink as first output");
+
+            std::optional<ui64> outputIndex; // Index of output in outputsList
+            const auto outputs = outputsList.Cast();
+            for (ui64 i = 0; i < outputs.Size(); ++i) {
+                if (const auto output = outputs.Item(i); FromString<ui64>(output.Index()) == index) {
+                    outputIndex = i;
+                    YQL_ENSURE(TDqSink::Match(output.Raw()), "External effect DQ stage should have DQ sink as " << i << " output");
+                    break;
+                }
+            }
+            YQL_ENSURE(outputIndex, "Unknown stage output index: " << index << ", stage have outputs: " << outputs.Size());
+
             newEffect = Build<TKqpSinkEffect>(ctx, effect.Pos())
-                .Stage(maybeStage.Cast().Ptr())
-                .SinkIndex().Build("0")
+                .Stage(stage.Ptr())
+                .SinkIndex()
+                    .Build(*outputIndex)
                 .Done();
         }
 

@@ -198,7 +198,6 @@ void TTrie::AddPath(TYPath path)
     UpdateRoot();
 }
 
-
 void TTrie::Merge(const TTrie& other)
 {
     for (const auto& path : other.OwnedPaths_) {

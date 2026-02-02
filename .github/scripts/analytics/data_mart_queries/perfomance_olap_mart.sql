@@ -1,4 +1,4 @@
-$start_timestamp = (CurrentUtcDate() - 30 * Interval("P1D"));
+$start_timestamp = (CurrentUtcDate() - 180 * Interval("P1D"));
 
 $all_suites = (
     SELECT 

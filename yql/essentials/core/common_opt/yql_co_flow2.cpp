@@ -49,7 +49,7 @@ bool CheckWindowFramesFieldSubsetEnabled(const TOptimizeContext& optCtx) {
     }
     YQL_ENSURE(optCtx.Types);
     static const char OptName[] = "CheckWindowFramesFieldSubset";
-    return IsOptimizerEnabled<OptName>(*optCtx.Types) || !IsOptimizerDisabled<OptName>(*optCtx.Types);
+    return !IsOptimizerDisabled<OptName>(*optCtx.Types);
 }
 
 THashSet<TStringBuf> GetAggregationInputKeys(const TCoAggregate& node) {

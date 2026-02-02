@@ -29,11 +29,15 @@ void MaskMessageRecursively(Message* msg) {
         }
 
         if (field->is_repeated()) {
-            if (field->cpp_type() == FieldDescriptor::CPPTYPE_STRING && (isCred || isSens)) {
-                int cnt = refl->FieldSize(*msg, field);
-                for (int j = 0; j < cnt; ++j) {
-                    std::string val = refl->GetRepeatedString(*msg, field, j);
-                    refl->SetRepeatedString(msg, field, j, NKikimr::MaskTicket(val));
+            if (isCred || isSens) {
+                if (field->cpp_type() == FieldDescriptor::CPPTYPE_STRING) {
+                    int cnt = refl->FieldSize(*msg, field);
+                    for (int j = 0; j < cnt; ++j) {
+                        std::string val = refl->GetRepeatedString(*msg, field, j);
+                        refl->SetRepeatedString(msg, field, j, NKikimr::MaskTicket(val));
+                    }
+                } else {
+                    refl->ClearField(msg, field);
                 }
             } else if (field->cpp_type() == FieldDescriptor::CPPTYPE_MESSAGE) {
                 int cnt = refl->FieldSize(*msg, field);
@@ -44,10 +48,13 @@ void MaskMessageRecursively(Message* msg) {
             }
         } else {
             if (!refl->HasField(*msg, field)) continue;
-
-            if (field->cpp_type() == FieldDescriptor::CPPTYPE_STRING && (isCred || isSens)) {
-                std::string val = refl->GetString(*msg, field);
-                refl->SetString(msg, field, NKikimr::MaskTicket(val));
+            if (isCred || isSens) {
+                if (field->cpp_type() == FieldDescriptor::CPPTYPE_STRING) {
+                    std::string val = refl->GetString(*msg, field);
+                    refl->SetString(msg, field, NKikimr::MaskTicket(val));
+                } else {
+                    refl->ClearField(msg, field);
+                }
             } else if (field->cpp_type() == FieldDescriptor::CPPTYPE_MESSAGE) {
                 Message* sub = refl->MutableMessage(msg, field);
                 MaskMessageRecursively(sub);

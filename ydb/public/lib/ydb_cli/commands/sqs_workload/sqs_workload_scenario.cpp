@@ -68,12 +68,17 @@ namespace NYdb::NConsoleClient {
         }
 
         Aws::Auth::AWSCredentials credentials;
-        Aws::String accountStr(Account.c_str(), Account.size());
-        Aws::String tokenStr(Token.c_str(), Token.size());
+        if (Account.Defined()) {
+            Aws::String accountStr(Account->c_str(), Account->size());
+            credentials.SetAWSAccessKeyId(accountStr.c_str());
+        }
 
-        credentials.SetAWSAccessKeyId(accountStr.c_str());
+        if (Token.Defined()) {
+            Aws::String tokenStr(Token->c_str(), Token->size());
+            credentials.SetAWSSecretKey(tokenStr.c_str());
+        }
+
         credentials.SetAWSSecretKey("unused");
-        credentials.SetSessionToken(tokenStr.c_str());
 
         if (UseJsonAPI) {
             auto jsonSqsClient = Aws::MakeShared<TSQSJsonClient>(

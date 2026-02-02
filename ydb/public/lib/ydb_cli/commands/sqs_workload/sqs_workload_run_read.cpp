@@ -49,10 +49,8 @@ namespace NYdb::NConsoleClient {
             .DefaultValue(1)
             .StoreResult(&Scenario.Concurrency);
         config.Opts->AddLongOption('a', "account", "AWS account ID.")
-            .Required()
             .StoreResult(&Scenario.Account);
         config.Opts->AddLongOption('t', "token", "AWS token.")
-            .Required()
             .StoreResult(&Scenario.Token);
         config.Opts->AddLongOption("error-messages-rate", "Error messages rate.")
             .Optional()

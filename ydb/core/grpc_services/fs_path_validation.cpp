@@ -7,8 +7,7 @@ namespace NKikimr::NGRpcService {
 
 namespace {
 
-template <typename TTraits>
-bool ValidatePathComponentsRaw(const TString& path, const TString& pathDescription, TString& error) {
+bool ValidatePathComponents(const TString& path, const TString& pathDescription, TString& error) {
 
     for (const auto& component : TPathSplit(path)) {
         if (component == "..") {
@@ -37,16 +36,16 @@ bool ValidateFsPath(const TString& path, const TString& pathDescription, TString
         return false;
     }
 
-#ifdef _win_
-    return ValidatePathComponentsRaw<TPathSplitTraitsWindows>(path, pathDescription, error);
-#else
+#ifndef _win_
     if (path.Contains('\\')) {
         error = TStringBuilder() << pathDescription
             << " contains invalid path separator backslash (\\)";
         return false;
     }
-    return ValidatePathComponentsRaw<TPathSplitTraitsUnix>(path, pathDescription, error);
 #endif
+
+    return ValidatePathComponents(path, pathDescription, error);
+
 }
 
 } // namespace NKikimr::NGRpcService

@@ -18,15 +18,7 @@ def oncuda_srcs(unit, *args):
     CUDA_ARCHITECTURES variable is used to determine the list of architectures to compile device code for.
     """
     architecture_names = (unit.get("CUDA_ARCHITECTURES") or DEFAULT_CUDA_ARCHITECTURES).split(":")
-    architectures = set(int(name.split('_')[1]) for name in architecture_names)
-    max_arch = max(architectures)
-    arch_list = "${__COMMA__}".join([str(arch * 10) for arch in architectures])
-
-    cflags = [
-        f"-D__CUDA_ARCH__={max_arch * 10}",
-        f"-D__CUDA_ARCH_LIST__={arch_list}",
-        "-D__NV_LEGACY_LAUNCH",
-    ]
+    architectures = [name.split('_')[1] for name in architecture_names]
 
     for cu in args:
         name, _ = os.path.splitext(cu)
@@ -40,6 +32,6 @@ def oncuda_srcs(unit, *args):
 
         unit.on_cuda_fatbin([cu, *images])
 
-        unit.on_cuda_compile_host([cu, str(max_arch)])
+        unit.on_cuda_compile_host([cu, architectures[-1]])
 
-        unit.onsrc([f"{name}.cudafe1.cpp", *cflags])
+        unit.onsrc([f"{name}.cudafe1.cpp", "-D__NV_LEGACY_LAUNCH"])

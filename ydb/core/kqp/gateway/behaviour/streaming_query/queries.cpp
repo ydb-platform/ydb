@@ -1811,66 +1811,25 @@ private:
     static std::vector<NKikimrKqp::TScriptExecutionRetryState::TMapping> CreateDefaultRetryMapping() {
         // Retried all statuses except of SUCCESS, CANCELLED
 
-        std::vector<NKikimrKqp::TScriptExecutionRetryState::TMapping> result;
+        NKikimrKqp::TScriptExecutionRetryState::TMapping mapping;
 
-        {   // Immediate retry policy
-            // Query will retry infinitely, if it runtime >= 864s (<= 100 retries per day)
-            // Used for internal / user errors and temporary unavailability
-            NKikimrKqp::TScriptExecutionRetryState::TMapping mapping;
-            mapping.AddStatusCode(Ydb::StatusIds::UNAVAILABLE);
-            mapping.AddStatusCode(Ydb::StatusIds::INTERNAL_ERROR);
-            mapping.AddStatusCode(Ydb::StatusIds::STATUS_CODE_UNSPECIFIED);
-            mapping.AddStatusCode(Ydb::StatusIds::UNDETERMINED);
-            mapping.AddStatusCode(Ydb::StatusIds::ABORTED);
-            mapping.AddStatusCode(Ydb::StatusIds::SESSION_BUSY);
-            mapping.AddStatusCode(Ydb::StatusIds::BAD_SESSION);
-            mapping.AddStatusCode(Ydb::StatusIds::TIMEOUT);
-            mapping.AddStatusCode(Ydb::StatusIds::ALREADY_EXISTS);
-            mapping.AddStatusCode(Ydb::StatusIds::SCHEME_ERROR);
-            mapping.AddStatusCode(Ydb::StatusIds::GENERIC_ERROR);
-            mapping.AddStatusCode(Ydb::StatusIds::PRECONDITION_FAILED);
-            mapping.AddStatusCode(Ydb::StatusIds::SESSION_EXPIRED);
-            mapping.AddStatusCode(Ydb::StatusIds::UNSUPPORTED);
-
-            auto& policy = *mapping.MutableBackoffPolicy();
-            policy.SetRetryPeriodMs(TDuration::Days(1).MilliSeconds());
-            policy.SetRetryRateLimit(100);
-
-            result.push_back(std::move(mapping));
+        const auto* statusDescriptor = Ydb::StatusIds::StatusCode_descriptor();
+        for (int i = 0; i < statusDescriptor->value_count(); ++i) {
+            const auto status = static_cast<Ydb::StatusIds::StatusCode>(statusDescriptor->value(i)->number());
+            if (!IsIn({Ydb::StatusIds::SUCCESS, Ydb::StatusIds::CANCELLED}, status)) {
+                mapping.AddStatusCode(status);
+            }
         }
 
-        {   // Short backoff retry policy
-            // Query will retry infinitely, if it runtime >= 662s (<= 130 retries per day), maximal backoff period is 202s
-            // Used for potentially external errors
-            NKikimrKqp::TScriptExecutionRetryState::TMapping mapping;
-            mapping.AddStatusCode(Ydb::StatusIds::EXTERNAL_ERROR);
-            mapping.AddStatusCode(Ydb::StatusIds::BAD_REQUEST);
-            mapping.AddStatusCode(Ydb::StatusIds::UNAUTHORIZED);
-            mapping.AddStatusCode(Ydb::StatusIds::NOT_FOUND);
+        auto& policy = *mapping.MutableExponentialDelayPolicy();
+        policy.SetBackoffMultiplier(1.5);
+        policy.SetJitterFactor(0.1);
+        *policy.MutableInitialBackoff() = NProtoInterop::CastToProto(TDuration::Seconds(1));
+        *policy.MutableMaxBackoff() = NProtoInterop::CastToProto(TDuration::Minutes(1));
+        *policy.MutableResetBackoffThreshold() = NProtoInterop::CastToProto(TDuration::Hours(1)); // Backoff state reset if uptime > 1h (next retry treated as first after reset)
+        *policy.MutableQueryUptimeThreshold() = NProtoInterop::CastToProto(TDuration::Minutes(1)); // Query retried immediately if uptime > 1m
 
-            auto& policy = *mapping.MutableBackoffPolicy();
-            policy.SetRetryPeriodMs(TDuration::Days(1).MilliSeconds());
-            policy.SetRetryRateLimit(100);
-            policy.SetBackoffPeriodMs(TDuration::Seconds(2).MilliSeconds());
-
-            result.push_back(std::move(mapping));
-        }
-
-        {   // Long backoff retry policy
-            // Query will retry infinitely, if it runtime >= 448s (<= 192 retries per day), maximal backoff period is 404s
-            // Used for cluster overloaded errors
-            NKikimrKqp::TScriptExecutionRetryState::TMapping mapping;
-            mapping.AddStatusCode(Ydb::StatusIds::OVERLOADED);
-
-            auto& policy = *mapping.MutableBackoffPolicy();
-            policy.SetRetryPeriodMs(TDuration::Days(1).MilliSeconds());
-            policy.SetRetryRateLimit(100);
-            policy.SetBackoffPeriodMs(TDuration::Seconds(4).MilliSeconds());
-
-            result.push_back(std::move(mapping));
-        }
-
-        return result;
+        return {std::move(mapping)};
     }
 
 private:

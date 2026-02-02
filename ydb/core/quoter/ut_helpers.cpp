@@ -376,7 +376,7 @@ bool TKesusProxyTestSetup::ConsumeResource(ui64 resId, double amount, TDuration 
                     const auto& updateTick = res.Update.front();
                     UNIT_ASSERT_VALUES_EQUAL(updateTick.Channel, 0);
                     UNIT_ASSERT_VALUES_EQUAL(updateTick.Policy, TEvQuota::ETickPolicy::Front);
-                    const bool noAmount = updateTick.Rate == 0 && updateTick.Ticks == 0;
+                    const bool noAmount = updateTick.Rate <= 0.0;
                     if (!noAmount) {
                         UNIT_ASSERT(res.SustainedRate > 0);
                         UNIT_ASSERT_VALUES_EQUAL(updateTick.Ticks, 2);

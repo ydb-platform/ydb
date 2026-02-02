@@ -600,6 +600,171 @@ Y_UNIT_TEST_SUITE(KesusProxyTest) {
         UNIT_ASSERT(setup.ConsumeResourceAdvanceTime(42, 30.0, session->Get()->TickSize));
     }
 
+    Y_UNIT_TEST(ProxyHandlesSpeedIncrease) {
+        TKesusProxyTestSetup setup;
+        auto* pipe = setup.GetPipeFactory().ExpectTabletPipeConnection();
+        EXPECT_CALL(*pipe, OnSubscribeOnResources(_, _))
+            .WillOnce(Invoke([&](const NKikimrKesus::TEvSubscribeOnResources& record, ui64 cookie) {
+                UNIT_ASSERT_VALUES_EQUAL(record.ResourcesSize(), 1);
+                NKikimrKesus::TEvSubscribeOnResourcesResult ans;
+                FillResult(ans.AddResults(), 42, 100.0);
+                pipe->SendSubscribeOnResourceResult(ans, cookie);
+            }));
+
+        auto session = setup.ProxyRequest("res");
+        UNIT_ASSERT_VALUES_EQUAL(session->Get()->ResourceId, 42);
+
+        // Consume some resource to lower Available
+        EXPECT_CALL(*pipe, OnUpdateConsumptionState(_, _))
+            .Times(AnyNumber());
+        setup.SendProxyStats({TEvQuota::TProxyStat(42, 1, 0, {}, 1, 50.0, 0, 0)});
+        setup.WaitEvent<TEvQuota::TEvProxyStats>();
+
+        // Get baseline update
+        auto update = setup.GetProxyUpdate();
+        UNIT_ASSERT_VALUES_EQUAL(update->Get()->Resources.size(), 1);
+
+        // Now send props change with increased speed (100 -> 200)
+        // This simulates TEvResourcesAllocated with amount=0 and new effective props
+        {
+            auto ev = std::make_unique<NKesus::TEvKesus::TEvResourcesAllocated>();
+            auto* resInfo = ev->Record.AddResourcesInfo();
+            resInfo->SetResourceId(42);
+            resInfo->SetAmount(0);
+            resInfo->MutableStateNotification()->SetStatus(Ydb::StatusIds::SUCCESS);
+            FillProps(resInfo->MutableEffectiveProps(), 42, 200.0);
+            setup.GetRuntime().Send(new IEventHandle(setup.GetKesusProxyId(), pipe->GetSelfID(), ev.release(), 0, true));
+        }
+
+        // Get update after props change — should have positive rate or zero-rate channel (not channel erasure)
+        update = setup.GetProxyUpdate();
+        UNIT_ASSERT_VALUES_EQUAL(update->Get()->Resources.size(), 1);
+        const auto& res = update->Get()->Resources[0];
+        UNIT_ASSERT_VALUES_EQUAL(res.ResourceState, TEvQuota::EUpdateState::Normal);
+        UNIT_ASSERT_GT(res.Update.size(), 0);
+        // Channel must have Ticks > 0 (not erased)
+        UNIT_ASSERT_GT(res.Update[0].Ticks, 0u);
+    }
+
+    Y_UNIT_TEST(ProxyDoesNotEraseChannelWhenAvailableZero) {
+        // speed=100, prefetch default=0.2, so ResourceBucketMaxSize=20, initial Available=20
+        TKesusProxyTestSetup setup;
+        auto* pipe = setup.GetPipeFactory().ExpectTabletPipeConnection();
+        EXPECT_CALL(*pipe, OnSubscribeOnResources(_, _))
+            .WillOnce(Invoke([&](const NKikimrKesus::TEvSubscribeOnResources& record, ui64 cookie) {
+                UNIT_ASSERT_VALUES_EQUAL(record.ResourcesSize(), 1);
+                NKikimrKesus::TEvSubscribeOnResourcesResult ans;
+                FillResult(ans.AddResults(), 42, 100.0);
+                pipe->SendSubscribeOnResourceResult(ans, cookie);
+            }));
+
+        auto session = setup.ProxyRequest("res");
+        UNIT_ASSERT_VALUES_EQUAL(session->Get()->ResourceId, 42);
+
+        // Drain initial ProxyUpdate from subscription
+        setup.GetProxyUpdate();
+
+        // Consume ALL available resource so Available drops to 0 or below
+        EXPECT_CALL(*pipe, OnUpdateConsumptionState(_, _))
+            .Times(AnyNumber());
+        setup.SendProxyStats({TEvQuota::TProxyStat(42, 1, 25.0, {}, 1, 25.0, 0, 0)});
+        setup.WaitEvent<TEvQuota::TEvProxyStats>();
+
+        // Get the post-drain update — channel must NOT be erased (Ticks must be > 0)
+        auto update = setup.GetProxyUpdate();
+        UNIT_ASSERT_VALUES_EQUAL(update->Get()->Resources.size(), 1);
+        const auto& res = update->Get()->Resources[0];
+        UNIT_ASSERT_GT(res.Update.size(), 0);
+        const auto& tick = res.Update[0];
+        // After Bug 4 fix: even with Available <= 0, Ticks should be > 0
+        UNIT_ASSERT_GT(tick.Ticks, 0u);
+        UNIT_ASSERT_DOUBLES_EQUAL(tick.Rate, 0.0, 0.001);
+    }
+
+    Y_UNIT_TEST(ProxyRecoversFromZeroAvailable) {
+        // speed=100, prefetch default=0.2, so ResourceBucketMaxSize=20, initial Available=20
+        TKesusProxyTestSetup setup;
+        auto* pipe = setup.GetPipeFactory().ExpectTabletPipeConnection();
+        EXPECT_CALL(*pipe, OnSubscribeOnResources(_, _))
+            .WillOnce(Invoke([&](const NKikimrKesus::TEvSubscribeOnResources& record, ui64 cookie) {
+                UNIT_ASSERT_VALUES_EQUAL(record.ResourcesSize(), 1);
+                NKikimrKesus::TEvSubscribeOnResourcesResult ans;
+                FillResult(ans.AddResults(), 42, 100.0);
+                pipe->SendSubscribeOnResourceResult(ans, cookie);
+            }));
+
+        auto session = setup.ProxyRequest("res");
+        UNIT_ASSERT_VALUES_EQUAL(session->Get()->ResourceId, 42);
+
+        // Drain initial ProxyUpdate from subscription
+        setup.GetProxyUpdate();
+
+        EXPECT_CALL(*pipe, OnUpdateConsumptionState(_, _))
+            .Times(AnyNumber());
+
+        // Drain Available to slightly below 0 (consume 25 > Available=20)
+        setup.SendProxyStats({TEvQuota::TProxyStat(42, 1, 25.0, {}, 1, 25.0, 0, 0)});
+        setup.WaitEvent<TEvQuota::TEvProxyStats>();
+
+        // Verify we get a zero-rate (but non-erasing) channel
+        auto update = setup.GetProxyUpdate();
+        UNIT_ASSERT_VALUES_EQUAL(update->Get()->Resources.size(), 1);
+        UNIT_ASSERT_GT(update->Get()->Resources[0].Update.size(), 0);
+        UNIT_ASSERT_GT(update->Get()->Resources[0].Update[0].Ticks, 0u);
+        UNIT_ASSERT_DOUBLES_EQUAL(update->Get()->Resources[0].Update[0].Rate, 0.0, 0.001);
+
+        // Now Kesus allocates new quota — Available becomes positive again
+        // Available was -5, +10 = +5
+        setup.SendResourcesAllocated(pipe, 42, 10.0);
+
+        // Get update after allocation — should have a positive rate now
+        update = setup.GetProxyUpdate();
+        UNIT_ASSERT_VALUES_EQUAL(update->Get()->Resources.size(), 1);
+        const auto& res = update->Get()->Resources[0];
+        UNIT_ASSERT_VALUES_EQUAL(res.ResourceState, TEvQuota::EUpdateState::Normal);
+        UNIT_ASSERT_GT(res.Update.size(), 0);
+        UNIT_ASSERT_GT(res.Update[0].Ticks, 0u);
+        UNIT_ASSERT_GT(res.Update[0].Rate, 0.0);
+    }
+
+    Y_UNIT_TEST(ZeroRateChannelExpiresNaturally) {
+        // speed=100, prefetch default=0.2, so ResourceBucketMaxSize=20, initial Available=20
+        TKesusProxyTestSetup setup;
+        auto* pipe = setup.GetPipeFactory().ExpectTabletPipeConnection();
+        EXPECT_CALL(*pipe, OnSubscribeOnResources(_, _))
+            .WillOnce(Invoke([&](const NKikimrKesus::TEvSubscribeOnResources& record, ui64 cookie) {
+                UNIT_ASSERT_VALUES_EQUAL(record.ResourcesSize(), 1);
+                NKikimrKesus::TEvSubscribeOnResourcesResult ans;
+                FillResult(ans.AddResults(), 42, 100.0);
+                pipe->SendSubscribeOnResourceResult(ans, cookie);
+            }));
+
+        auto session = setup.ProxyRequest("res");
+        UNIT_ASSERT_VALUES_EQUAL(session->Get()->ResourceId, 42);
+
+        // Drain initial ProxyUpdate from subscription
+        setup.GetProxyUpdate();
+
+        EXPECT_CALL(*pipe, OnUpdateConsumptionState(_, _))
+            .Times(AnyNumber());
+
+        // Drain Available below 0 (consume 25 > Available=20)
+        setup.SendProxyStats({TEvQuota::TProxyStat(42, 1, 25.0, {}, 1, 25.0, 0, 0)});
+        setup.WaitEvent<TEvQuota::TEvProxyStats>();
+
+        // Get the zero-rate channel update
+        auto update = setup.GetProxyUpdate();
+        UNIT_ASSERT_VALUES_EQUAL(update->Get()->Resources.size(), 1);
+        const auto& tick = update->Get()->Resources[0].Update[0];
+        // Channel has Ticks=2, Rate=0 — it will expire after 2 FeedResource cycles
+        UNIT_ASSERT_VALUES_EQUAL(tick.Ticks, 2u);
+        UNIT_ASSERT_DOUBLES_EQUAL(tick.Rate, 0.0, 0.001);
+        UNIT_ASSERT_VALUES_EQUAL(tick.Channel, 0u);
+        // Ticks=2 means: after 2 feed cycles without a new update, the channel
+        // is naturally removed by FeedResource (Ticks counts down: 2 -> 1 -> erase).
+        // This ensures no permanent channel leak if the proxy stops updating.
+    }
+
     Y_UNIT_TEST(ConnectsDuringOfflineAllocation) {
         TKesusProxyTestSetup setup;
         auto* pipe = setup.GetPipeFactory().ExpectTabletPipeConnection();

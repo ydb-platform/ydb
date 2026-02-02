@@ -1578,7 +1578,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
 Y_UNIT_TEST_SUITE(Utils) {
     Y_UNIT_TEST(GenerateRandomBase64RandomUniqueness) {
         THashSet<TString> seen;
-        for (int i=0; i < 100 ; i++) {
+        for (size_t i = 0; i < 100; ++i) {
             seen.insert(NMVP::NOIDC::GenerateRandomBase64(32));
         }
         UNIT_ASSERT(seen.size() > 95); // soft threshold

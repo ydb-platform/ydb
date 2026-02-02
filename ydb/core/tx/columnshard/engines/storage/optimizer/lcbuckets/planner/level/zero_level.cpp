@@ -40,7 +40,23 @@ ui64 TZeroLevelPortions::DoGetWeight(bool highPriority) const {
     if (NYDBTest::TControllers::GetColumnShardController()->GetCompactionControl() == NYDBTest::EOptimizerCompactionWeightControl::Disable) {
         return 0;
     }
-    if (!NextLevel || Portions.size() < PortionsCountAvailable || Portions.empty()) {
+    bool hasDeletedPortions = false;
+    if (!Portions.empty()) {
+        for (const auto& portion : Portions) {
+            if (portion.GetPortion()->GetMeta().GetDeletionsCount()) {
+                hasDeletedPortions = true;
+                break;
+            }
+        }
+    }
+
+    if (!NextLevel || Portions.empty()) {
+        return 0;
+    }
+    if (hasDeletedPortions) {
+        return (ui64(1) << 63) | HighPriorityContribution;
+    }
+    if (Portions.size() < PortionsCountAvailable) {
         return 0;
     }
     if (PredOptimization && TInstant::Now() - *PredOptimization < DurationToDrop) {

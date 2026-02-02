@@ -271,6 +271,7 @@ Y_UNIT_TEST_SUITE(KqpOlapOptimizer) {
         WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 2000, 10);
 
         csController->WaitCompactions(TDuration::Seconds(25));
+        csController->WaitCleaning(TDuration::Seconds(25));
         {
             auto it = tableClient
                           .StreamExecuteScanQuery(R"(
@@ -331,7 +332,8 @@ Y_UNIT_TEST_SUITE(KqpOlapOptimizer) {
         csController->SetCompactionControl(NYDBTest::EOptimizerCompactionWeightControl::Force);
 
         csController->WaitCompactions(TDuration::Seconds(25));
-        {
+        TString result;
+        csController->WaitCondition(TDuration::Seconds(60), [&]() {
             auto it = tableClient
                           .StreamExecuteScanQuery(R"(
                 --!syntax_v1
@@ -342,10 +344,11 @@ Y_UNIT_TEST_SUITE(KqpOlapOptimizer) {
             )")
                           .GetValueSync();
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-            TString result = StreamResultToYson(it);
-            Cout << result << Endl;
-            CompareYson(result, R"([])");
-        }
+            result = StreamResultToYson(it);
+            return result == "[]";
+        });
+        Cout << result << Endl;
+        CompareYson(result, R"([])");
     }
 }
 

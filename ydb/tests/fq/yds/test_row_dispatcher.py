@@ -25,6 +25,13 @@ import ydb.public.api.protos.draft.fq_pb2 as fq
 YDS_CONNECTION = "yds"
 COMPUTE_NODE_COUNT = 3
 
+class Param(object):
+    def __init__(
+        self,
+        rebalancing_timeout_sec=60
+    ):
+        self.rebalancing_timeout_sec = rebalancing_timeout_sec
+
 
 @pytest.fixture
 def kikimr(request):
@@ -35,7 +42,8 @@ def kikimr(request):
     kikimr.compute_plane.fq_config['row_dispatcher']['enabled'] = True
     kikimr.compute_plane.fq_config['row_dispatcher']['without_consumer'] = True
     kikimr.compute_plane.fq_config['row_dispatcher']['json_parser'] = {}
-
+    if hasattr(request, "param"):
+        kikimr.compute_plane.fq_config['row_dispatcher']['coordinator']['rebalancing_timeout_sec'] = request.param.rebalancing_timeout_sec
     kikimr.start_mvp_mock_server()
     kikimr.start()
     yield kikimr
@@ -60,7 +68,8 @@ def wait_actor_count(kikimr, activity, expected_count):
     while True:
         count = 0
         for node_index in kikimr.compute_plane.kikimr_cluster.nodes:
-            count = count + kikimr.compute_plane.get_actor_count(node_index, activity)
+            if kikimr.compute_plane.kikimr_cluster.nodes[node_index].is_alive():
+                count = count + kikimr.compute_plane.get_actor_count(node_index, activity)
             if count == expected_count:
                 return node_index  # return any node
         assert time.time() < deadline, f"Waiting actor {activity} count failed, current count {count}"
@@ -1245,13 +1254,68 @@ class TestPqRowDispatcher(TestYdsBase):
         stop_yds_query(client, query_id)
 
     @yq_v1
-    def test_redistribute_partition_after_timeout(self, kikimr, client):
-        partitions_count = 3
+    def test_delete_topic(self, kikimr, client):
+        self.init(client, "test_delete_topic")
+
+        sql = Rf'''
+            INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
+            SELECT Cast(time as String) FROM {YDS_CONNECTION}.`{self.input_topic}`
+                WITH (format=json_each_row, SCHEMA (time Int32 NOT NULL, data String NOT NULL));'''
+
+        query_id = start_yds_query(kikimr, client, sql)
+        wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 1)
+
+        data = [
+            '{"time": 101, "data": "hello1", "event": "event1"}',
+            '{"time": 102, "data": "hello2", "event": "event2"}',
+            '{"time": 103, "data": "hello3", "event": "event3"}',
+        ]
+
+        self.write_stream(data)
+        expected = ['101', '102', '103']
+        assert self.read_stream(len(expected), topic_path=self.output_topic) == expected
+        kikimr.compute_plane.wait_completed_checkpoints(
+            query_id, kikimr.compute_plane.get_completed_checkpoints(query_id) + 2
+        )
+        stop_yds_query(client, query_id)
+
+        delete_stream(self.input_topic)
+        create_stream(self.input_topic)
+
+        client.modify_query(
+            query_id,
+            "simple",
+            sql,
+            type=fq.QueryContent.QueryType.STREAMING,
+            state_load_mode=fq.StateLoadMode.EMPTY,
+            streaming_disposition=StreamingDisposition.from_last_checkpoint(),
+        )
+
+        data = [
+            '{"time": 101, "data": "hello1", "event": "event1"}',
+            '{"time": 102, "data": "hello2", "event": "event2"}',
+            '{"time": 103, "data": "hello3", "event": "event3"}',
+            '{"time": 104, "data": "hello4", "event": "event4"}',
+        ]
+
+        self.write_stream(data)
+        expected = ['104']
+        assert self.read_stream(len(expected), topic_path=self.output_topic) == expected
+
+    @yq_v1
+    @pytest.mark.parametrize(
+        "kikimr", [Param(rebalancing_timeout_sec=5)], indirect=["kikimr"]
+    )
+    @pytest.mark.parametrize("single_node", [False, True])
+    def test_redistribute_partition_after_timeout(self, kikimr, client, single_node):
+        partitions_count = 10
         self.init(client, "redistribute", partitions=partitions_count)
         wait_row_dispatcher_sensor_value(kikimr, "KnownRowDispatchers", 2 * COMPUTE_NODE_COUNT - 1)
 
+        single_node = R'''PRAGMA dq.Scheduler=@@{{"type": "single_node"}}@@;'''
+
         sql = Rf'''
-            PRAGMA dq.Scheduler=@@{{"type": "single_node"}}@@;
+            {single_node if single_node else ""}
             INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
             SELECT data FROM {YDS_CONNECTION}.`{self.input_topic}`
                 WITH (format=json_each_row, SCHEMA (time Int32 NOT NULL, data String NOT NULL));'''
@@ -1274,3 +1338,4 @@ class TestPqRowDispatcher(TestYdsBase):
         for i in range(message_count):
             self.write_stream(['{"time": 101, "data": "Relativitätstheorie"}'], topic_path=None, partition_key=str(i))
         assert self.read_stream(message_count, topic_path=self.output_topic) == [expected] * message_count
+        wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", partitions_count)

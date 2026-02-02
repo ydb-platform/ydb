@@ -7,6 +7,8 @@
 
 #include <library/cpp/threading/future/wait/wait.h>
 #include <library/cpp/threading/future/subscription/wait_any.h>
+#include <util/digest/murmur.h>
+#include <util/string/hex.h>
 
 namespace NYdb::inline Dev::NTopic {
 
@@ -93,6 +95,13 @@ TWriteSession::~TWriteSession() {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TKeyedWriteSession
+
+// TKeyedWriteSessionSettings
+
+std::string TKeyedWriteSessionSettings::DefaultPartitioningKeyHasher(const std::string_view key) {
+    ui64 hash = MurmurHash<ui64>(key.data(), key.size());
+    return HexEncode(&hash, sizeof(hash));
+}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TKeyedWriteSession::TPartitionInfo
@@ -1082,7 +1091,7 @@ void TKeyedWriteSession::Write(TContinuationToken&&, const std::string& key, TWr
             return;
         }
 
-        [[unlikely]] if ((message.SeqNo_.has_value() && SeqNoStrategy == ESeqNoStrategy::WithoutSeqNo)
+        if ((message.SeqNo_.has_value() && SeqNoStrategy == ESeqNoStrategy::WithoutSeqNo)
             || (!message.SeqNo_.has_value() && SeqNoStrategy == ESeqNoStrategy::WithSeqNo)) {
             ythrow TContractViolation("Can not mix messages with and without seqNo");
         }

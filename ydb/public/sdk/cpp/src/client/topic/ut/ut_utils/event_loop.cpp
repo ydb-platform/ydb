@@ -24,9 +24,9 @@ void TKeyedWriteSessionEventLoop::Run() {
         if (auto* acks = std::get_if<TWriteSessionEvent::TAcksEvent>(&*event)) {
             std::lock_guard lk(Lock_);
             for (const auto& ack : acks->Acks) {
-                if (AckedSeqNos_.insert(ack.SeqNo).second) {
-                    AckOrder_.push_back(ack.SeqNo);
-                }
+                auto [it, inserted] = AckedSeqNos_.insert(ack.SeqNo);
+                UNIT_ASSERT_C(inserted, TStringBuilder() << "Ack already received: " << ack.SeqNo);
+                AckOrder_.push_back(ack.SeqNo);
             }
         }
     }
@@ -77,9 +77,6 @@ void TKeyedWriteSessionEventLoop::CheckAcksOrder() {
     UNIT_ASSERT_C(AckedSeqNos_.size() == AckOrder_.size(), TStringBuilder() << "Unexpected number of acks: got " << AckOrder_.size() << ", expected " << AckedSeqNos_.size());
     for (const auto& ack : AckOrder_) {
         UNIT_ASSERT_VALUES_EQUAL_C(ack, expectedAck, TStringBuilder() << "Unexpected ack order: got " << ack << ", expected " << expectedAck);
-        // if (ack != expectedAck) {
-        //     return false;
-        // }
         expectedAck++;
     }
 }

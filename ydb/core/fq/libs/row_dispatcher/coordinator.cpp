@@ -25,8 +25,6 @@ using namespace NThreading;
 using NYql::TIssues;
 
 namespace {
-
-const ui64 DefaultRebalancingTimeoutSec = 120;
     
 ////////////////////////////////////////////////////////////////////////////////
 

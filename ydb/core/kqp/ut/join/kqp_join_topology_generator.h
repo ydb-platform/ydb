@@ -397,7 +397,7 @@ struct TMCMCConfig {
         };
     }
 
-    static TMCMCConfig Perturbation(double strength = 0.1) {
+    static TMCMCConfig Perturbation(double strength = 0.05) {
         return TMCMCConfig{
             .IterationMultiplier = strength,
             .MaxAttemptsMultiplier = 5.0

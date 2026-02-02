@@ -776,11 +776,11 @@ struct TMCMCIterationParams {
         TMCMCIterationParams params;
         params.NumIterations = config.NumIterations > 0
             ? config.NumIterations
-            : static_cast<ui32>(base * config.IterationMultiplier);
+            : static_cast<ui32>(ceil(base * config.IterationMultiplier));
 
         params.MaxAttempts = config.MaxAttempts > 0
             ? config.MaxAttempts
-            : static_cast<ui32>(params.NumIterations * config.MaxAttemptsMultiplier);
+            : static_cast<ui32>(ceil(params.NumIterations * config.MaxAttemptsMultiplier));
 
         return params;
     }

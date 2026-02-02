@@ -116,7 +116,7 @@ message TFeatureFlags {
     optional bool EnableSeparationComputeActorsFromRead = 90 [default = true];
     reserved 91; // EnablePQConfigTransactionsAtSchemeShard
     optional bool EnableScriptExecutionOperations = 92 [default = true];
-    optional bool EnableImplicitQueryParameterTypes = 93 [default = true];
+    reserved 93; // EnableImplicitQueryParameterTypes
     optional bool EnableForceImmediateEffectsExecution = 94 [default = false];
     optional bool EnableTopicSplitMerge = 95 [default = true];
     optional bool EnableChangefeedDynamoDBStreamsFormat = 96 [default = true];

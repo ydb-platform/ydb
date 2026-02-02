@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package mvp.masking;
+
+import "ydb/public/api/client/nc_private/annotations.proto";
+
+message TestMask {
+  message NestedMessage {
+    string nested_name = 1;
+    string nested_cred = 2 [(nebius.credentials) = true];
+    string nested_sens = 3 [(nebius.sensitive) = true];
+  }
+
+  string name = 1;
+  string no_value = 2; // field doesn't set for testing
+  string cred = 3 [(nebius.credentials) = true];
+  string sens = 4 [(nebius.sensitive) = true];
+  int64 int_value = 5;
+  int64 int_cred = 6 [(nebius.credentials) = true];
+  int64 int_sens = 7 [(nebius.sensitive) = true];
+  repeated string repeated_name = 9;
+  repeated string repeated_cred = 10 [(nebius.credentials) = true];
+  repeated string repeated_sens = 11 [(nebius.sensitive) = true];
+  NestedMessage nested = 12;
+}

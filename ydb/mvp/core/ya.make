@@ -23,6 +23,7 @@ SRCS(
     mvp_test_runtime.cpp
     mvp_test_runtime.h
     mvp_tokens.cpp
+    proto_masking.cpp
     mvp_tokens.h
     parser.cpp
     parser.h
@@ -43,6 +44,7 @@ PEERDIR(
     ydb/public/api/client/yc_private/ydb/v1
     ydb/public/api/client/yc_private/resourcemanager
     ydb/public/api/client/yc_private/iam
+    ydb/public/api/client/nc_private
     ydb/public/api/client/nc_private/iam/v1
     contrib/libs/googleapis-common-protos
     contrib/libs/jwt-cpp

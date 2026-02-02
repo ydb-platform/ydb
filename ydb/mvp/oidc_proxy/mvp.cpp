@@ -228,7 +228,7 @@ void TMVP::TryGetOidcOptionsFromConfig(const YAML::Node& config) {
     OpenIdConnectSettings.SecretName = oidc["secret_name"].as<std::string>("");
     OpenIdConnectSettings.ClientId = oidc["client_id"].as<std::string>(OpenIdConnectSettings.DEFAULT_CLIENT_ID);
     OpenIdConnectSettings.SessionServiceEndpoint = oidc["session_service_endpoint"].as<std::string>("");
-    OpenIdConnectSettings.SessionServiceTokenName = oidc["session_service_token_name"].as<std::string>("asdf");
+    OpenIdConnectSettings.SessionServiceTokenName = oidc["session_service_token_name"].as<std::string>("");
     OpenIdConnectSettings.AuthorizationServerAddress = oidc["authorization_server_address"].as<std::string>("");
     OpenIdConnectSettings.AuthUrlPath = oidc["auth_url_path"].as<std::string>(OpenIdConnectSettings.DEFAULT_AUTH_URL_PATH);
     OpenIdConnectSettings.TokenUrlPath = oidc["token_url_path"].as<std::string>(OpenIdConnectSettings.DEFAULT_TOKEN_URL_PATH);

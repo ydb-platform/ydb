@@ -733,7 +733,8 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
         TPitmanYorConfig GetPitmanYor(const TParamsMap& params) {
             double alpha = params.GetValue<double>("alpha");
             double theta = params.GetValue<double>("theta");
-            return TPitmanYorConfig{.Alpha = alpha, .Theta = theta};
+            double assortativity = params.GetValue<double>("assort");
+            return TPitmanYorConfig{.Alpha = alpha, .Theta = theta, .Assortativity = assortativity};
         }
 
         TRelationGraph GenTopo(TRNG &rng, const TParamsMap& params) {

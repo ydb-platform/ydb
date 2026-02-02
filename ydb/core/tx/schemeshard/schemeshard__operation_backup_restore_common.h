@@ -236,7 +236,9 @@ public:
     
     static void CollectStats(TOperationId operationId, const TEvColumnShard::TEvNotifyTxCompletionResult::TPtr& ev, TOperationContext& context) {
         const auto& evRecord = ev->Get()->Record;
-
+        if (!evRecord.HasOpResult() || !evRecord.GetOpResult().HasSuccess()) {
+            return;
+        }
         Y_ABORT_UNLESS(context.SS->FindTx(operationId));
         TTxState& txState = *context.SS->FindTx(operationId);
 
@@ -252,7 +254,11 @@ public:
 
         if (!txState.ShardStatuses.contains(shardIdx)) {
             auto& shardStatus = txState.ShardStatuses[shardIdx];
-            shardStatus.Success = true;
+            const auto& opResult = evRecord.GetOpResult();
+            shardStatus.Success = opResult.GetSuccess();
+            shardStatus.Error = opResult.GetExplain();
+            shardStatus.BytesProcessed = opResult.GetBytesProcessed();
+            shardStatus.RowsProcessed = opResult.GetRowsProcessed();
             context.SS->PersistTxShardStatus(db, operationId, shardIdx, shardStatus);
 
             const ui64 ru = TKind::RequestUnits(shardStatus.BytesProcessed, shardStatus.RowsProcessed);

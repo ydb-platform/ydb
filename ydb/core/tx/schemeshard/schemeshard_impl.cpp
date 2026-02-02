@@ -2964,6 +2964,11 @@ void TSchemeShard::PersistTableIsRestore(NIceDb::TNiceDb& db, const TPathId path
     }
 }
 
+void TSchemeShard::PersistTableIsRestore(NIceDb::TNiceDb& db, const TPathId pathId, const TColumnTableInfo::TPtr tableInfo) {
+    db.Table<Schema::ColumnTables>().Key(pathId.LocalPathId).Update(
+        NIceDb::TUpdate<Schema::ColumnTables::IsRestore>(tableInfo->IsRestore));
+}
+
 void TSchemeShard::PersistTableAltered(NIceDb::TNiceDb& db, const TPathId pathId, const TTableInfo::TPtr tableInfo) {
     TString partitionConfig;
     Y_PROTOBUF_SUPPRESS_NODISCARD tableInfo->PartitionConfig().SerializeToString(&partitionConfig);

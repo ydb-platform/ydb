@@ -940,6 +940,8 @@ message TColumnTableDescription {
 
     // For kqp internal use only
     optional bool Temporary = 14;
+    
+    optional bool IsRestore = 15;
 }
 
 message TAlterColumnTable {

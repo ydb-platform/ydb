@@ -29,35 +29,17 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "TopSort-Filter",
+                                        "Node Type": "TopSort",
                                         "Operators": [
-                                            {
-                                                "Inputs": [
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    }
-                                                ],
-                                                "Limit": "1001",
-                                                "Name": "TopSort",
-                                                "TopSortBy": "[row.x1,row.x2,row.y1,row.y2]"
-                                            },
                                             {
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 5
                                                     }
                                                 ],
-                                                "Name": "Filter",
-                                                "Predicate": "Exist(item.y.y2)"
+                                                "Limit": "1001",
+                                                "Name": "TopSort",
+                                                "TopSortBy": "[Arg.x.x1,Arg.x.x2,Arg.y.y1,Arg.y.y2]"
                                             }
                                         ],
                                         "PlanNodeId": 6,
@@ -68,7 +50,18 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "Collect",
+                                                        "Node Type": "Filter",
+                                                        "Operators": [
+                                                            {
+                                                                "Inputs": [
+                                                                    {
+                                                                        "ExternalPlanNodeId": 3
+                                                                    }
+                                                                ],
+                                                                "Name": "Filter",
+                                                                "Predicate": "Exist(item.y2)"
+                                                            }
+                                                        ],
                                                         "PlanNodeId": 4,
                                                         "Plans": [
                                                             {
@@ -125,10 +118,10 @@
                                     }
                                 ],
                                 "SortColumns": [
-                                    "x1 (Asc)",
-                                    "x2 (Asc)",
-                                    "y1 (Asc)",
-                                    "y2 (Asc)"
+                                    "x.x1 (Asc)",
+                                    "x.x2 (Asc)",
+                                    "y.y1 (Asc)",
+                                    "y.y2 (Asc)"
                                 ]
                             }
                         ]

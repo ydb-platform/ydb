@@ -279,7 +279,7 @@ protected:
 
 public:
     IDeprecatedSimpleScanCursor() = default;
-    IDeprecatedSimpleScanCursor(const ui32 deprecatedPortionId, const ui32 recordIndex)
+    IDeprecatedSimpleScanCursor(const ui64 deprecatedPortionId, const ui32 recordIndex)
         : PortionId(deprecatedPortionId)
         , RecordIndex(recordIndex)
     {
@@ -359,7 +359,7 @@ private:
 public:
     TDeprecatedNotSortedSimpleScanCursor() = default;
 
-    TDeprecatedNotSortedSimpleScanCursor(const ui32 deprecatedPortionId, const ui32 recordIndex)
+    TDeprecatedNotSortedSimpleScanCursor(const ui64 deprecatedPortionId, const ui32 recordIndex)
         : IDeprecatedSimpleScanCursor(deprecatedPortionId, recordIndex)
     {
     }

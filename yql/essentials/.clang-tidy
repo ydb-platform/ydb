@@ -53,6 +53,7 @@ Checks: >
   misc-definitions-in-headers,
   misc-misleading-bidirectional,
   misc-misleading-identifier,
+  misc-throw-by-value-catch-by-reference,
   modernize-use-override
 CheckOptions:
   - key: readability-identifier-naming.StructPrefix

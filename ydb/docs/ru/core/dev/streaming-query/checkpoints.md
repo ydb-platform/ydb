@@ -44,5 +44,4 @@ END DO
 
 ## См. также
 
-- [{#T}](../../concepts/streaming-query.md);
-- [{#T}](troubleshooting.md).
+- [{#T}](../../concepts/streaming-query.md).

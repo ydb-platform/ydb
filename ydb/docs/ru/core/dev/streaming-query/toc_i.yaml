@@ -7,5 +7,3 @@ items:
   href: streaming-query-formats.md
 - name: Чекпоинты
   href: checkpoints.md
-- name: Диагностика и устранение неполадок
-  href: troubleshooting.md

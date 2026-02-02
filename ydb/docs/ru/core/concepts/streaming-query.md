@@ -80,5 +80,4 @@
 ## См. также
 
 - [{#T}](../recipes/streaming_queries/topics.md) — пошаговое руководство;
-- [{#T}](../dev/streaming-query/troubleshooting.md) — диагностика проблем;
 - [{#T}](../dev/streaming-query/streaming-query-formats.md) — форматы данных.

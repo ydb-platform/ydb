@@ -20,6 +20,7 @@
 
 * [CREATE TABLE](create_table/index.md)
 * [DROP TABLE](drop_table.md)
+* [TRUNCATE TABLE](truncate-table.md)
 * [INSERT](insert_into.md)
 * [SHOW CREATE](show_create.md)
 

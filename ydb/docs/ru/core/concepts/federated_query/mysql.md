@@ -7,10 +7,10 @@
 1. Создать [секрет](../datamodel/secrets.md), содержащий пароль для подключения к базе данных.
 
     ```yql
-    CREATE OBJECT mysql_datasource_user_password (TYPE SECRET) WITH (value = "<password>");
+    CREATE SECRET mysql_datasource_user_password WITH (value = "<password>");
     ```
 
-1. Создать [внешний источник данных](../datamodel/external_data_source.md), описывающий определённую базу данных MySQL. Параметр `LOCATION` содержит сетевой адрес экземпляра MySQL, к которому осуществляется подключение. В `DATABASE_NAME` указывается имя базы данных (например, `mysql`). Для аутентификации во внешнюю базу используются значения параметров `LOGIN` и `PASSWORD_SECRET_NAME`. Включить шифрование соединений к внешней базе данных можно с помощью параметра `USE_TLS="TRUE"`.
+1. Создать [внешний источник данных](../datamodel/external_data_source.md), описывающий определённую базу данных MySQL. Параметр `LOCATION` содержит сетевой адрес экземпляра MySQL, к которому осуществляется подключение. В `DATABASE_NAME` указывается имя базы данных (например, `mysql`). Для аутентификации во внешнюю базу используются значения параметров `LOGIN` и `PASSWORD_SECRET_PATH`. Включить шифрование соединений к внешней базе данных можно с помощью параметра `USE_TLS="TRUE"`.
 
     ```yql
     CREATE EXTERNAL DATA SOURCE mysql_datasource WITH (
@@ -19,7 +19,7 @@
         DATABASE_NAME="<database>",
         AUTH_METHOD="BASIC",
         LOGIN="user",
-        PASSWORD_SECRET_NAME="mysql_datasource_user_password",
+        PASSWORD_SECRET_PATH="mysql_datasource_user_password",
         USE_TLS="TRUE"
     );
     ```

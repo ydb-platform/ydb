@@ -584,8 +584,8 @@ void CheckRequiredLdapSettings(std::function<void(NKikimrProto::TLdapAuthenticat
 
     LdapMock::TSimpleServer ldapServer({
         .Port = ydbServer.GetLdapPort(),
-        .Cert = CertStorage.GetServerCertFileName(),
-        .Key = CertStorage.GetServerKeyFileName(),
+        .CertFile = CertStorage.GetServerCertFileName(),
+        .KeyFile = CertStorage.GetServerKeyFileName(),
         .UseTls = securityConnectionType == ESecurityConnectionType::LDAPS_SCHEME
     }, LdapMock::TLdapMockResponses());
 
@@ -612,8 +612,8 @@ void LdapFetchGroupsWithDefaultGroupAttributeGood(const ESecurityConnectionType&
 
     LdapMock::TSimpleServer ldapServer({
         .Port = ydbServer.GetLdapPort(),
-        .Cert = CertStorage.GetServerCertFileName(),
-        .Key = CertStorage.GetServerKeyFileName(),
+        .CertFile = CertStorage.GetServerCertFileName(),
+        .KeyFile = CertStorage.GetServerKeyFileName(),
         .UseTls = secureType == ESecurityConnectionType::LDAPS_SCHEME
     }, TCorrectLdapResponse::GetResponses(login));
     ldapServer.Start();

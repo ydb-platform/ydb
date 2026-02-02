@@ -112,8 +112,8 @@ void LdapAuthWithValidCredentials(const ESecurityConnectionType& secureType) {
     });
     LdapMock::TSimpleServer ldapServer({
         .Port = loginConnection.GetLdapPort(),
-        .Cert = CertStorage.GetServerCertFileName(),
-        .Key = CertStorage.GetServerKeyFileName(),
+        .CertFile = CertStorage.GetServerCertFileName(),
+        .KeyFile = CertStorage.GetServerKeyFileName(),
         .UseTls = secureType == ESecurityConnectionType::LDAPS_SCHEME
     }, responses);
 

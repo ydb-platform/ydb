@@ -177,12 +177,12 @@ bool TSimpleServer::InitTlsCtx() {
         return false;
     }
 
-    if (!Opt.Cert.empty() && !Opt.Key.empty()) {
-        if (SSL_CTX_use_certificate_file(Ctx.Get(), Opt.Cert.c_str(), SSL_FILETYPE_PEM) != 1) {
+    if (!Opt.CertFile.empty() && !Opt.KeyFile.empty()) {
+        if (SSL_CTX_use_certificate_file(Ctx.Get(), Opt.CertFile.c_str(), SSL_FILETYPE_PEM) != 1) {
             ERR_print_errors_fp(stderr);
             return false;
         }
-        if (SSL_CTX_use_PrivateKey_file(Ctx.Get(), Opt.Key.c_str(), SSL_FILETYPE_PEM) != 1) {
+        if (SSL_CTX_use_PrivateKey_file(Ctx.Get(), Opt.KeyFile.c_str(), SSL_FILETYPE_PEM) != 1) {
             ERR_print_errors_fp(stderr);
             return false;
         }
@@ -192,16 +192,16 @@ bool TSimpleServer::InitTlsCtx() {
     int mode = SSL_VERIFY_NONE;
     if (Opt.RequireClientCert) {
         mode = SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT;
-    } else if (!Opt.CaCert.empty()) {
+    } else if (!Opt.CaCertFile.empty()) {
         mode = SSL_VERIFY_PEER;
     }
 
-    if (!Opt.CaCert.empty()) {
-        if (SSL_CTX_load_verify_locations(Ctx.Get(), Opt.CaCert.c_str(), nullptr) != 1) {
+    if (!Opt.CaCertFile.empty()) {
+        if (SSL_CTX_load_verify_locations(Ctx.Get(), Opt.CaCertFile.c_str(), nullptr) != 1) {
             return false;
         }
 
-        STACK_OF(X509_NAME)* caList = SSL_load_client_CA_file(Opt.CaCert.c_str());
+        STACK_OF(X509_NAME)* caList = SSL_load_client_CA_file(Opt.CaCertFile.c_str());
         if (caList) SSL_CTX_set_client_CA_list(Ctx.Get(), caList);
     }
 

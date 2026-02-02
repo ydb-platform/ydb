@@ -44,11 +44,11 @@ private:
 public:
     struct TOptions {
         ui16 Port;
-        TString CaCert;
-        TString Cert;
-        TString Key;
-        bool RequireClientCert = false;
+        TString CaCertFile;
+        TString CertFile;
+        TString KeyFile;
         bool UseTls = false;
+        bool RequireClientCert = false;
     };
 
     TSimpleServer(const TOptions& options, TLdapMockResponses responses);

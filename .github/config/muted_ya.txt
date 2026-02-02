@@ -72,7 +72,6 @@ ydb/core/tx/schemeshard/ut_olap_reboots TOlapReboots.CreateTable
 ydb/core/tx/schemeshard/ut_olap_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_replication_reboots TReplicationWithRebootsTests.CreateInParallelWithInitialController
 ydb/core/tx/schemeshard/ut_replication_reboots unittest.[*/*] chunk
-ydb/core/tx/schemeshard/ut_restore TImportTests.ShouldSucceedOnManyTables
 ydb/core/tx/schemeshard/ut_restore TImportWithRebootsTests.ShouldSucceedOnBigCompressedTable
 ydb/core/tx/schemeshard/ut_restore TImportWithRebootsTests.ShouldSucceedOnSingleReplication
 ydb/core/tx/schemeshard/ut_restore TImportWithRebootsTests.ShouldSucceedOnSingleTransfer

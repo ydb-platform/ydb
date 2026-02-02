@@ -13,6 +13,7 @@ PEERDIR(
     ydb/core/testlib/actors
     contrib/libs/jwt-cpp
     ydb/library/testlib/service_mocks
+    ydb/mvp/core/ut/protos
 )
 
 END()

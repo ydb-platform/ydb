@@ -6,8 +6,7 @@ PEERDIR(
 )
 
 SRCS(
-    mvp.proto
-
+    masking_test.proto
 )
 
 EXCLUDE_TAGS(GO_PROTO)

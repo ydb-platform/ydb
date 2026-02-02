@@ -544,8 +544,8 @@ TRowDispatcher::TRowDispatcher(
     , UserPoolMetrics(countersRoot->GetSubgroup("counters", "utils"))
     , PqGateway(pqGateway)
     , Monitoring(monitoring)
-    , NodesTracker(TDuration::Seconds(Config.GetCoordinator().GetRebalancingTimeoutSec() ? Config.GetCoordinator().GetRebalancingTimeoutSec() : DefaultRebalancingTimeoutSec))
     , NodesManagerId(nodesManagerId)
+    , NodesTracker(TDuration::Seconds(Config.GetCoordinator().GetRebalancingTimeoutSec() ? Config.GetCoordinator().GetRebalancingTimeoutSec() : DefaultRebalancingTimeoutSec))
 {
 }
 

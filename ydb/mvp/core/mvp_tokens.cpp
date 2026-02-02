@@ -326,14 +326,4 @@ TString SecureShortDebugString(const yandex::cloud::priv::iam::v1::CreateIamToke
     return copy.ShortDebugString();
 }
 
-template<>
-TString SecureShortDebugString(const nebius::iam::v1::ExchangeTokenRequest& request) {
-    return MaskedShortDebugString(request);
-}
-
-template<>
-TString SecureShortDebugString(const nebius::iam::v1::CreateTokenResponse& request) {
-    return MaskedShortDebugString(request);
-}
-
 }

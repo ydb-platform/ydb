@@ -1190,9 +1190,9 @@
     ],
     "test.test[optimizers-YQL-18826-default.txt-Debug]": [
         {
-            "checksum": "311205317670c51f3e015370b4ad1657",
-            "size": 827,
-            "uri": "https://{canondata_backend}/1937429/ace388227319652812d5b8b652e7bb0810314cdd/resource.tar.gz#test.test_optimizers-YQL-18826-default.txt-Debug_/opt.yql"
+            "checksum": "5b18b63e90f131999f6256e1263c019f",
+            "size": 696,
+            "uri": "https://{canondata_backend}/212715/ccd1dd643665cfb24077532f30f0247f42db72fd/resource.tar.gz#test.test_optimizers-YQL-18826-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[optimizers-YQL-18826-default.txt-Results]": [
@@ -1543,9 +1543,9 @@
     ],
     "test.test[pg-pg_types_window1-default.txt-Debug]": [
         {
-            "checksum": "ee3959aa835455139eabc54fd2960046",
-            "size": 1387,
-            "uri": "https://{canondata_backend}/1881367/226940b6d391bb2a80e5edf7b4e5cb1acd6fe46c/resource.tar.gz#test.test_pg-pg_types_window1-default.txt-Debug_/opt.yql"
+            "checksum": "89f9140dda44d270927c117ad0a9d907",
+            "size": 1293,
+            "uri": "https://{canondata_backend}/212715/ccd1dd643665cfb24077532f30f0247f42db72fd/resource.tar.gz#test.test_pg-pg_types_window1-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[pg-pg_types_window1-default.txt-Results]": [
@@ -2137,9 +2137,9 @@
     ],
     "test.test[window-win_with_as_table-default.txt-Debug]": [
         {
-            "checksum": "7c2709c5c8d1842e45523f18744b56f6",
-            "size": 1131,
-            "uri": "https://{canondata_backend}/1777230/9fcccdbeb15875e4f61b3e326015399a9fbfe958/resource.tar.gz#test.test_window-win_with_as_table-default.txt-Debug_/opt.yql"
+            "checksum": "30631c7d58c66ce8e072e61593fdbefe",
+            "size": 998,
+            "uri": "https://{canondata_backend}/212715/ccd1dd643665cfb24077532f30f0247f42db72fd/resource.tar.gz#test.test_window-win_with_as_table-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[window-win_with_as_table-default.txt-Results]": [

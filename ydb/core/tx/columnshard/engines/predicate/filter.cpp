@@ -240,6 +240,8 @@ TString TPKRangesFilter::SerializeToString(const std::shared_ptr<arrow::Schema>&
 TConclusion<TPKRangesFilter> TPKRangesFilter::BuildFromProto(
     const NKikimrTxDataShard::TEvKqpScan& proto, const std::vector<TNameTypeInfo>& ydbPk, const std::shared_ptr<arrow::Schema>& arrPk) {
     TRangesBuilder builder(ydbPk, arrPk);
+    AFL_CRIT(NKikimrServices::TX_COLUMNSHARD_SCAN)("aboba", "BuildFilter")("proto", proto.ShortDebugString())("ydb", ydbPk.size())(
+        "arr", arrPk->num_fields());
     for (const auto& range : proto.GetRanges()) {
         builder.AddRange(TSerializedTableRange(range));
     }

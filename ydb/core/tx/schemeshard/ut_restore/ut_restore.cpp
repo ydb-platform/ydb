@@ -3541,21 +3541,21 @@ Y_UNIT_TEST_SUITE(TImportTests) {
               scheme: HTTP
               items {
                 source_prefix: "a"
-                destination_path: "/MyRoot/TableA"
+                destination_path: "/MyRoot/DirA/Table"
               }
               items {
                 source_prefix: "b"
-                destination_path: "/MyRoot/TableB"
+                destination_path: "/MyRoot/DirB/Table"
               }
             }
         )");
 
         {
-            auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 0, "TableA", {"key"}, {"key", "value"});
+            auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 0, "Table", {"key"}, {"key", "value"});
             NKqp::CompareYson(a.Data[0].YsonStr, content);
         }
         {
-            auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 1, "TableB", {"key"}, {"key", "value"});
+            auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 1, "Table", {"key"}, {"key", "value"});
             NKqp::CompareYson(b.Data[0].YsonStr, content);
         }
     }

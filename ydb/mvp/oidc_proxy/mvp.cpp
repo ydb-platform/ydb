@@ -228,7 +228,7 @@ void TMVP::TryGetOidcOptionsFromConfig(const YAML::Node& config) {
     OpenIdConnectSettings.SecretName = oidc["secret_name"].as<std::string>("");
     OpenIdConnectSettings.ClientId = oidc["client_id"].as<std::string>(OpenIdConnectSettings.DEFAULT_CLIENT_ID);
     OpenIdConnectSettings.SessionServiceEndpoint = oidc["session_service_endpoint"].as<std::string>("");
-    OpenIdConnectSettings.SessionServiceTokenName = oidc["session_service_token_name"].as<std::string>("");
+    OpenIdConnectSettings.SessionServiceTokenName = oidc["session_service_token_name"].as<std::string>("asdf");
     OpenIdConnectSettings.AuthorizationServerAddress = oidc["authorization_server_address"].as<std::string>("");
     OpenIdConnectSettings.AuthUrlPath = oidc["auth_url_path"].as<std::string>(OpenIdConnectSettings.DEFAULT_AUTH_URL_PATH);
     OpenIdConnectSettings.TokenUrlPath = oidc["token_url_path"].as<std::string>(OpenIdConnectSettings.DEFAULT_TOKEN_URL_PATH);
@@ -289,7 +289,11 @@ void TMVP::TryGetGenericOptionsFromConfig(
             if (opts.JwtTokenEndpoint.empty()) {
                 ythrow yexception() << "Configuration error: 'token_service_endpoint' must be specified in 'federated_creds'.";
             }
-            opts.JwtToken = Strip(TUnbufferedFileInput(tokenPath).ReadAll());
+            try {
+                opts.JwtToken = Strip(TUnbufferedFileInput(tokenPath).ReadAll());
+            } catch (const yexception& ex) {
+                ythrow yexception() << "Failed to read federated token from '" << tokenPath << "': " << ex.what();
+            }
         }
     }
 
@@ -383,6 +387,9 @@ THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup(int argc, char**
         jwtInfo->SetAccountId(genericOpts.JwtSaId);
         jwtInfo->SetToken(genericOpts.JwtToken);
         jwtInfo->SetEndpoint(genericOpts.JwtTokenEndpoint);
+        if (OpenIdConnectSettings.SessionServiceTokenName.empty()) {
+            OpenIdConnectSettings.SessionServiceTokenName = "__jwtToken";
+        }
         jwtInfo->SetName(OpenIdConnectSettings.SessionServiceTokenName); // the only name used
         TYdbLocation::UserToken = genericOpts.JwtToken;
     }
@@ -400,8 +407,6 @@ THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup(int argc, char**
             OpenIdConnectSettings.ClientSecret = secret.GetSecret();
         }
     }
-
-    OpenIdConnectSettings.StateSigningKey = GenerateRandomBase64();
 
     if (!genericOpts.CaCertificateFile.empty()) {
         TString caCertificate = TUnbufferedFileInput(genericOpts.CaCertificateFile).ReadAll();

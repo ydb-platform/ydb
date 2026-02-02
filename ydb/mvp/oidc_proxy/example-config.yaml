@@ -11,8 +11,7 @@ generic:
     ssl_cert_file: path/to/ssl.crt
 
   auth:
-    # only one token_file or federated_creds should be provided
-    token_file: path/to/tokenator_config
+    token_file: path/to/token_file
     federated_creds:
       token_service_endpoint: "grpcs://tokens.net:443"
       k8s_token_path: "path/to/federated_token"
@@ -20,11 +19,11 @@ generic:
 
 oidc:
   client_id: "client-id"
-  secret_name: "oidc-secret"
-  session_service_endpoint: "grpcs://ss.private-api.cloud-preprod.yandex.net:8655"
-  session_service_token_name: "ss-token"
-  authorization_server_address: "https://auth-preprod.cloud.yandex.ru"
+  secret_name: "secret-name"
+  session_service_endpoint: "grpcs://ss.private-api.cloud-preprod.net:8655"
+  session_service_token_name: "token-name"
+  authorization_server_address: "https://auth-preprod.cloud.ru"
   access_service_type: "yandex_v2"
   allowed_proxy_hosts:
-    - "*.yandex.net"
-    - "*.yandex-team.ru"
+    - "*.host.net"
+    - "*.host-team.ru"

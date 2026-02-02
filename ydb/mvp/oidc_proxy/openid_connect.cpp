@@ -94,14 +94,14 @@ NHttp::THttpOutgoingResponsePtr GetHttpOutgoingResponsePtr(const NHttp::THttpInc
     const TString redirectUrl = TStringBuilder() << settings.GetAuthEndpointURL()
                                                  << "?response_type=code"
                                                  << "&scope=openid"
-                                                 << "&state=" << context.GetState(settings.StateSigningKey)
+                                                 << "&state=" << context.GetState(settings.ClientSecret)
                                                  << "&client_id=" << settings.ClientId
                                                  << "&redirect_uri=" << (request->Endpoint->Secure ? "https://" : "http://")
                                                                      << request->Host
                                                                      << GetAuthCallbackUrl();
     NHttp::THeadersBuilder responseHeaders;
     SetCORS(request, &responseHeaders);
-    responseHeaders.Set("Set-Cookie", context.CreateYdbOidcCookie(settings.StateSigningKey));
+    responseHeaders.Set("Set-Cookie", context.CreateYdbOidcCookie(settings.ClientSecret));
     if (context.IsAjaxRequest()) {
         return CreateResponseForAjaxRequest(request, responseHeaders, redirectUrl);
     }

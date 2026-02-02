@@ -51,8 +51,7 @@ SRCS(
 
 IF (OS_DARWIN)
     LDFLAGS(
-        -framework
-        Security
+        "-framework Security"
     )
     SRCS(
         source/darwin/common_cryptor_spi.h

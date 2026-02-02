@@ -739,6 +739,10 @@ public:
         Y_UNUSED(inputActorId);
     }
 
+    bool IsLocal() const override {
+        return false;;
+    }
+
     bool IsFinished() const override {
         ythrow yexception() << "unimplemented";
     }
@@ -1201,6 +1205,10 @@ public:
     void Bind(NActors::TActorId outputActorId, NActors::TActorId inputActorId) override { // noop
         Y_UNUSED(outputActorId);
         Y_UNUSED(inputActorId);
+    }
+
+    bool IsLocal() const override {
+        return false;;
     }
 
     template<typename T>

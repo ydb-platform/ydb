@@ -25,7 +25,6 @@ private:
     void SavePlans(const BenchmarkUtils::TQueryBenchmarkResult& res, TStringBuf queryName, const TStringBuf name) const;
     void PrintResult(const BenchmarkUtils::TQueryBenchmarkResult& res, IOutputStream& out, const std::string& expected) const;
     BenchmarkUtils::TQueryBenchmarkSettings GetBenchmarkSettings(bool withProgress) const;
-    THolder<IOutputStream> OpenOutputFile(const TString& queryName) const;
 
 private:
     class TIterationExecution;

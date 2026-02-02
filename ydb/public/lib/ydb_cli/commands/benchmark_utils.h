@@ -38,9 +38,15 @@ struct TTestInfo {
     void operator /=(const ui32 count);
 };
 
+// Stores result sets for one result index along with total row count
+struct TResultData {
+    TVector<NYdb::TResultSet> ResultSets;  // Stored result set parts (limited by MaxRowsPerResultIndex)
+    size_t TotalRowsRead = 0;              // Total rows read from all parts (including non-stored)
+};
+
 class TQueryBenchmarkResult {
 public:
-    using TRawResults = TMap<ui64, TVector<NYdb::TResultSet>>;
+    using TRawResults = TMap<ui64, TResultData>;
 
 private:
     YDB_READONLY_DEF(TString, ErrorInfo);
@@ -51,13 +57,11 @@ private:
     YDB_READONLY_DEF(TString, ExecStats);
     YDB_READONLY_DEF(TString, DiffErrors);
     YDB_READONLY_DEF(TString, DiffWarrnings);
-    // Pre-computed hash (for streaming mode when full results are not stored)
-    YDB_READONLY_DEF(TString, ResultHash);
     TQueryBenchmarkResult() = default;
 public:
     static TQueryBenchmarkResult Result(TRawResults&& rawResults,
         const TTiming& timing, const TString& queryPlan, const TString& planAst,
-        const TString& execStats, TStringBuf expected, const TString& resultHash = "")
+        const TString& execStats, TStringBuf expected)
     {
         TQueryBenchmarkResult result;
         result.RawResults = std::move(rawResults);
@@ -65,7 +69,6 @@ public:
         result.QueryPlan = queryPlan;
         result.PlanAst = planAst;
         result.ExecStats = execStats;
-        result.ResultHash = resultHash;
         result.CompareWithExpected(expected);
         return result;
     }
@@ -100,11 +103,10 @@ struct TQueryBenchmarkSettings {
     std::optional<TString> PlanFileName;
     bool WithProgress = false;
     NYdb::NRetry::TRetryOperationSettings RetrySettings;
-    // If true, store all results in memory (needed for CompareWithExpected).
-    // If false, stream results to OutputStream and don't store in memory.
-    bool StoreFullResults = true;
-    // Output stream for streaming results when StoreFullResults is false.
-    IOutputStream* OutputStream = nullptr;
+    // Maximum number of rows to store per result index.
+    // Used both for CompareWithExpected and for output.
+    // Should be max(100, lines in expected).
+    size_t MaxRowsPerResultIndex = 100;
 };
 
 TString FullTablePath(const TString& database, const TString& table);

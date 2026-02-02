@@ -816,7 +816,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
 
         const TString topicPath = "acc/topic1";
         const ui32 numMessages = 60;
-        const ui32 messageSize = 500;
+        const ui32 messageSize = 1000;
         const ui64 partitionMaxInFlightBytes = 20'000;
 
         auto driver = pqClient->GetDriver();

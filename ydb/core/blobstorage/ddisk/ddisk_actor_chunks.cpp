@@ -48,6 +48,7 @@ namespace NKikimr::NDDisk {
                     IssuePDiskLogRecord(TLogSignature::SignatureDDiskChunkMap, chunkIdx, CreateChunkMapIncrement(
                             tabletId, vChunkIndex, chunkIdx), nullptr, [this, tabletId, vChunkIndex, chunkIdx] {
                         TChunkRef& chunkRef = ChunkRefs[tabletId][vChunkIndex];
+                        Y_ABORT_UNLESS(!chunkRef.ChunkIdx);
                         chunkRef.ChunkIdx = chunkIdx;
 
                         if (!chunkRef.PendingEventsForChunk.empty()) {
@@ -58,6 +59,10 @@ namespace NKikimr::NDDisk {
                         Y_ABORT_UNLESS(numErased == 1);
                         ++*Counters.Chunks.ChunksOwned;
                     });
+                    if (ChunkMapSnapshotLsn == Max<ui64>()) {
+                        IssuePDiskLogRecord(TLogSignature::SignatureDDiskChunkMap, 0, CreateChunkMapSnapshot(),
+                            &ChunkMapSnapshotLsn, {});
+                    }
 
                     ChunkMapIncrementsInFlight.emplace(tabletId, vChunkIndex, chunkIdx);
                 },
@@ -72,9 +77,9 @@ namespace NKikimr::NDDisk {
                 }
             }, chunkAllocate);
         }
-        if (!ChunkAllocateQueue.empty()) { // ask for another reservation
-            Y_ABORT_UNLESS(ChunkReserve.empty());
-            Send(BaseInfo.PDiskActorID, new NPDisk::TEvChunkReserve(PDiskParams->Owner, PDiskParams->OwnerRound, 5));
+        if (ChunkReserve.size() < MinChunksReserved && !ReserveInFlight) { // ask for another reservation
+            Send(BaseInfo.PDiskActorID, new NPDisk::TEvChunkReserve(PDiskParams->Owner, PDiskParams->OwnerRound,
+                MinChunksReserved - ChunkReserve.size()));
             ReserveInFlight = true;
         }
     }

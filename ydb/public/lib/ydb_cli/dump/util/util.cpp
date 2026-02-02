@@ -169,4 +169,19 @@ TStatus CreateDatabase(TCmsClient& cmsClient, const std::string& path, const TCr
     });
 }
 
+TStatus CheckSysViewCompatibility(
+    const Ydb::Table::DescribeSystemViewResult& dumpedProto,
+    const Ydb::Table::DescribeSystemViewResult& actualProto)
+{
+    NYdb::NIssue::TIssues issues;
+    if (dumpedProto.sys_view_id() != actualProto.sys_view_id()) {
+        issues.AddIssue(NYdb::NIssue::TIssue(TStringBuilder()
+            << "System view ID mismatch: dumped=" << dumpedProto.sys_view_id()
+            << ", actual=" << actualProto.sys_view_id()));
+        return TStatus(EStatus::SCHEME_ERROR, std::move(issues));
+    }
+
+    return TStatus(EStatus::SUCCESS, std::move(issues));
+}
+
 } // NYdb::NDump

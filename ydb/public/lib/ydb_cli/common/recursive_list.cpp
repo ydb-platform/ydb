@@ -42,6 +42,10 @@ namespace {
                 case ESchemeEntryType::ColumnStore:
                 case ESchemeEntryType::Directory:
                 case ESchemeEntryType::BackupCollection: {
+                    if (settings.SkipOldSecrets_ && path.EndsWith(".metadata") && child.Name == "secrets") {
+                        break;
+                    }
+
                     auto status = RecursiveList(dst, client, Join('/', path, child.Name), settings);
                     if (!status.IsSuccess()) {
                         return status;

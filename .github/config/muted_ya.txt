@@ -42,7 +42,6 @@ ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_offset
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_offset+middle_WithRestart
 ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient
 ydb/core/sys_view/ut SystemView.ShowCreateTableChangefeeds
-ydb/core/tx/datashard/ut_incremental_backup IncrementalBackup.MultipleTablesWithIndexesIncrementalRestore
 ydb/core/tx/schemeshard/ut_base_reboots TTablesWithReboots.CopyIndexedTableWithReboots
 ydb/core/tx/schemeshard/ut_base_reboots TTablesWithReboots.CopyTableAndDropWithReboots2
 ydb/core/tx/schemeshard/ut_base_reboots TTablesWithReboots.DropCopyWithRebootsAtCommit

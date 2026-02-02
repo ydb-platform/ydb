@@ -63,6 +63,7 @@ class SafelyCleanupDisks(AbstractSafeEraseDataOnDisk):
             self._cluster.nodes[node_id].ssh_command('sudo systemctl stop kikimr.service')
             self._cluster.nodes[node_id].kill_process_and_daemon()
             self._cluster.nodes[node_id].cleanup_disks()
+            self._cluster.nodes[node_id].ssh_command('sudo systemctl start kikimr.service')
             self._cluster.nodes[node_id].start()
             self._successful_data_erase_count += 1
             self.on_success_inject_fault()

@@ -128,7 +128,51 @@ bool TRelationGraph::HasEdge(unsigned u, unsigned v) const {
     return false;
 }
 
-// Helper for Disconnect
+bool TRelationGraph::SelectRandomEdge(TRNG& rng, unsigned& outU, unsigned& outV) const {
+    std::vector<unsigned> nodesWithEdges;
+    for (unsigned i = 0; i < AdjacencyList_.size(); ++i) {
+        if (!AdjacencyList_[i].empty()) {
+            nodesWithEdges.push_back(i);
+        }
+    }
+
+    if (nodesWithEdges.empty()) {
+        return false;
+    }
+
+    std::uniform_int_distribution<unsigned> nodeDist(0, nodesWithEdges.size() - 1);
+    outU = nodesWithEdges[nodeDist(rng)];
+
+    std::uniform_int_distribution<unsigned> edgeDist(0, AdjacencyList_[outU].size() - 1);
+    outV = AdjacencyList_[outU][edgeDist(rng)].Target;
+
+    return true;
+}
+
+unsigned TRelationGraph::SelectRandomNode(TRNG& rng) const {
+    std::uniform_int_distribution<unsigned> dist(0, GetN() - 1);
+    return dist(rng);
+}
+
+std::optional<TRelationGraph::TEdge> TRelationGraph::GetEdge(unsigned u, unsigned v) const {
+    for (const auto& edge : AdjacencyList_[u]) {
+        if (edge.Target == v) {
+            return TEdge{edge.Target, edge.ColumnLHS, edge.ColumnRHS};
+        }
+    }
+    return std::nullopt;
+}
+
+void TRelationGraph::ConnectWithKeys(unsigned u, unsigned v, unsigned keyU, unsigned keyV) {
+    AdjacencyList_[u].push_back({v, keyU, keyV});
+    AdjacencyList_[v].push_back({u, keyV, keyU});
+
+    NodeStates_[u].Counts[keyU]++;
+    NodeStates_[u].TotalEdges++;
+    NodeStates_[v].Counts[keyV]++;
+    NodeStates_[v].TotalEdges++;
+}
+
 void TRelationGraph::RemoveEdgeFromList(unsigned owner, unsigned target) {
     auto& list = AdjacencyList_[owner];
     for (size_t i = 0; i < list.size(); ++i) {
@@ -720,74 +764,173 @@ TRelationGraph ConstructGraphHavelHakimi(TRNG &rng, std::vector<int> degrees, TP
     return graph;
 }
 
-void MCMCRandomize(TRNG& rng, TRelationGraph& graph, TPitmanYorConfig config) {
-    std::uniform_int_distribution<> nodeDist(0, graph.GetN() - 1);
-    std::uniform_real_distribution<> distribution(0.0, 1.0);
+struct TMCMCIterationParams {
+    ui32 NumIterations;
+    ui32 MaxAttempts;
 
-    ui32 numEdges = graph.GetNumEdges();
-    ui32 numSwaps = numEdges * log(numEdges);
+    static TMCMCIterationParams Calculate(ui32 numEdges, const TMCMCConfig& config) {
+        numEdges = std::max(numEdges, 1u);
+        ui32 base = static_cast<ui32>(numEdges * std::log(numEdges + 1));
+        base = std::max(base, 10u);
 
-    auto& adjacency = graph.GetAdjacencyList();
+        TMCMCIterationParams params;
+        params.NumIterations = config.NumIterations > 0
+            ? config.NumIterations
+            : static_cast<ui32>(base * config.IterationMultiplier);
 
-    // TODO: is this all arbitrary?
-    const double TEMP_START = 5.0;
-    const double TEMP_END = 0.1;
-    const double CONNECTIVITY_PENALTY = 20.0;
-    const int MAX_ATTEMPTS = numSwaps * 10;
+        params.MaxAttempts = config.MaxAttempts > 0
+            ? config.MaxAttempts
+            : static_cast<ui32>(params.NumIterations * config.MaxAttemptsMultiplier);
 
-    ui32 successfulSwaps = 0;
-    int attempt = 0;
+        return params;
+    }
+};
 
-    while (attempt < MAX_ATTEMPTS && (successfulSwaps < numSwaps || !graph.IsConnected())) {
-        double progress = std::min(1.0, static_cast<double>(attempt) / MAX_ATTEMPTS);
-        double temperature = TEMP_START * std::pow(TEMP_END / TEMP_START, progress);
+double CalculateTemperature(const TMCMCConfig& config, ui32 attempt, ui32 maxAttempts) {
+    double progress = std::min(1.0, static_cast<double>(attempt) / maxAttempts);
+    return config.InitialTemperature *
+           std::pow(config.FinalTemperature / config.InitialTemperature, progress);
+}
 
-        ++ attempt;
+TMCMCResult MCMCRandomizeDegreePreserving(TRNG& rng, TRelationGraph& graph, TPitmanYorConfig pyConfig, TMCMCConfig mcmcConfig) {
+    TMCMCResult result;
 
-        int a = nodeDist(rng);
-        if (adjacency[a].empty()) {
+    if (graph.GetN() < 4) {
+        result.FinalComponents = graph.GetNumComponents();
+        return result;
+    }
+
+    auto params = TMCMCIterationParams::Calculate(graph.GetNumEdges() / 2, mcmcConfig);
+    std::uniform_real_distribution<double> uniform01(0.0, 1.0);
+
+    auto shouldContinue = [&]() {
+        if (result.TotalAttempts >= params.MaxAttempts) return false;
+        if (result.SuccessfulSwaps < params.NumIterations) return true;
+        return mcmcConfig.EnsureConnectivity && !graph.IsConnected();
+    };
+
+    while (shouldContinue()) {
+        ++result.TotalAttempts;
+
+        // Select two random edges (a-b) and (c-d)
+        unsigned a, b, c, d;
+        if (!graph.SelectRandomEdge(rng, a, b) || !graph.SelectRandomEdge(rng, c, d)) {
             continue;
         }
 
-        int bIdx = std::uniform_int_distribution<>(0, adjacency[a].size() - 1)(rng);
-        int b = adjacency[a][bIdx].Target;
-
-        int c = nodeDist(rng);
-        if (c == a || c == b || adjacency[c].empty()) {
+        // Validate geometry: all four nodes must be distinct
+        if (a == c || a == d || b == c || b == d) {
+            ++result.RejectedByGeometry;
             continue;
         }
 
-        int dIdx = std::uniform_int_distribution<>(0, adjacency[c].size() - 1)(rng);
-        int d = adjacency[c][dIdx].Target;
-
-        if (d == a || d == b || d == c) {
-            continue;
-        }
+        // Check new edges won't duplicate existing
         if (graph.HasEdge(a, c) || graph.HasEdge(b, d)) {
+            ++result.RejectedByGeometry;
             continue;
         }
+
+        // Save original edges for potential undo
+        auto edgeAB = graph.GetEdge(a, b);
+        auto edgeCD = graph.GetEdge(c, d);
+
+        // Selected edges randomly, so they have to exist
+        Y_ASSERT(edgeAB);
+        Y_ASSERT(edgeCD);
 
         int oldComponents = graph.GetNumComponents();
 
+        // Perform swap: (a-b, c-d) -> (a-c, b-d)
         graph.Disconnect(a, b);
         graph.Disconnect(c, d);
-        graph.Connect(rng, a, c, config);
-        graph.Connect(rng, b, d, config);
+        graph.Connect(rng, a, c, pyConfig);
+        graph.Connect(rng, b, d, pyConfig);
 
         int newComponents = graph.GetNumComponents();
-        double deltaEnergy = CONNECTIVITY_PENALTY * (newComponents - oldComponents);
 
-        bool accept = distribution(rng) < std::exp(-deltaEnergy / temperature);
+        // Metropolis-Hastings acceptance
+        double deltaEnergy = mcmcConfig.ConnectivityPenalty * (newComponents - oldComponents);
+        double temperature = CalculateTemperature(mcmcConfig, result.TotalAttempts, params.MaxAttempts);
+        bool accept = (deltaEnergy <= 0) || (uniform01(rng) < std::exp(-deltaEnergy / temperature));
 
         if (accept) {
-            ++ successfulSwaps;
+            ++result.SuccessfulSwaps;
         } else {
+            // Undo: restore original edges with original keys
             graph.Disconnect(a, c);
             graph.Disconnect(b, d);
-            graph.Connect(rng, a, b, config);
-            graph.Connect(rng, c, d, config);
+            graph.ConnectWithKeys(a, b, edgeAB->ColumnLHS, edgeAB->ColumnRHS);
+            graph.ConnectWithKeys(c, d, edgeCD->ColumnLHS, edgeCD->ColumnRHS);
+            ++result.RejectedByMetropolis;
         }
     }
+
+    if (mcmcConfig.EnsureConnectivity && !graph.IsConnected()) {
+        ForceReconnection(rng, graph, pyConfig);
+        result.ForcedReconnection = true;
+    }
+
+    result.FinalComponents = graph.GetNumComponents();
+    return result;
+}
+
+// Edge preserving MCMC is simpler than degree preserving one, because in space
+// of connected graphs edge preserving MCMC is ergodic without annealing,
+// which degree preserving MCMC is not (e.g. a tree)
+TMCMCResult MCMCRandomizeEdgePreserving(TRNG& rng, TRelationGraph& graph, TPitmanYorConfig pyConfig, TMCMCConfig mcmcConfig) {
+    TMCMCResult result;
+
+    if (graph.GetN() < 2) {
+        result.FinalComponents = graph.GetNumComponents();
+        return result;
+    }
+
+    auto params = TMCMCIterationParams::Calculate(graph.GetNumEdges() / 2, mcmcConfig);
+
+    while (result.TotalAttempts < params.MaxAttempts &&
+           result.SuccessfulSwaps < params.NumIterations)
+    {
+        ++result.TotalAttempts;
+
+        // Select random edge to relocate
+        unsigned oldU, oldV;
+        if (!graph.SelectRandomEdge(rng, oldU, oldV)) {
+            continue;
+        }
+
+        // Select random new endpoints
+        unsigned newU = graph.SelectRandomNode(rng);
+        unsigned newV = graph.SelectRandomNode(rng);
+
+        // Validate
+        if (newU == newV) {
+            ++result.RejectedByGeometry;
+            continue;
+        }
+
+        if ((newU == oldU && newV == oldV) || (newU == oldV && newV == oldU)) {
+            ++result.RejectedByGeometry;
+            continue;
+        }
+
+        if (graph.HasEdge(newU, newV)) {
+            ++result.RejectedByGeometry;
+            continue;
+        }
+
+        // Relocate edge
+        graph.Disconnect(oldU, oldV);
+        graph.Connect(rng, newU, newV, pyConfig);
+        ++result.SuccessfulSwaps;
+    }
+
+    if (mcmcConfig.EnsureConnectivity && !graph.IsConnected()) {
+        ForceReconnection(rng, graph, pyConfig);
+        result.ForcedReconnection = true;
+    }
+
+    result.FinalComponents = graph.GetNumComponents();
+    return result;
 }
 
 void ForceReconnection(TRNG& rng, TRelationGraph& graph, TPitmanYorConfig config) {

@@ -760,10 +760,7 @@ private:
     }
 
     bool CheckMemoryAndSwitchToSpilling() {
-        if (!(AllowSpilling && Ctx.SpillerFactory)) {
-            return false;
-        }
-        if (StateWantsToSpill || IsSwitchToSpillingModeCondition()) {
+        if (AllowSpilling) {
             StateWantsToSpill = false;
             LogMemoryUsage();
 

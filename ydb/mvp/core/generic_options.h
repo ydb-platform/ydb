@@ -7,7 +7,6 @@ struct TGenericOptions {
     TString YdbTokenFile;
     TString JwtToken;
     TString JwtSaId;
-    TString JwtTokenPath;
     TString JwtTokenEndpoint;
     TString CaCertificateFile;
     TString SslCertificateFile;

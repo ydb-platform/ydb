@@ -11,6 +11,9 @@
 #include <ydb/library/testlib/service_mocks/profile_service_mock.h>
 #include <ydb/mvp/core/protos/mvp.pb.h>
 #include <ydb/mvp/core/mvp_test_runtime.h>
+#include "ydb/mvp/core/proto_masking.h"
+#include <ydb/public/api/client/nc_private/iam/v1/token_exchange_service.pb.h>
+#include <ydb/library/security/util.h>
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/string_utils/base64/base64.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -34,7 +37,6 @@ static TOpenIdConnectSettings BuildBaseSettings(NMvp::EAccessServiceType accessS
     s.SessionServiceEndpoint = "localhost:" + ToString(sessionServicePort);
     s.WhoamiExtendedInfoEndpoint = "localhost:" + ToString(profilePort);
     s.ClientSecret = "0123456789abcdef";
-    s.StateSigningKey = "test_state_key";
     return s;
 }
 
@@ -655,7 +657,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
 
         const NActors::TActorId sessionCreator = runtime.Register(new TSessionCreateHandler(edge, settings));
         TContext context({.State = "good_state", .RequestedAddress = "/requested/page", .AjaxRequest = redirectStrategy.IsAjaxRequest()});
-        TString wrongState = context.GetState(settings.StateSigningKey);
+        TString wrongState = context.GetState(settings.ClientSecret);
         if (wrongState[0] != 'a') {
             wrongState[0] = 'a';
         } else {
@@ -665,7 +667,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         TStringBuilder request;
         request << "GET /auth/callback?code=code_template#&state=" << wrongState << " HTTP/1.1\r\n";
         request << "Host: " + hostProxy + "\r\n";
-        TString cookie = context.CreateYdbOidcCookie(settings.StateSigningKey);
+        TString cookie = context.CreateYdbOidcCookie(settings.ClientSecret);
         TStringBuf cookieBuf(cookie);
         TStringBuf cookieValue, suffixCookie;
         cookieBuf.TrySplit(';', cookieValue, suffixCookie);
@@ -711,9 +713,9 @@ Y_UNIT_TEST_SUITE(Mvp) {
 
         TContext context({.State = "test_state", .RequestedAddress = "/requested/page", .AjaxRequest = false});
         TStringBuilder request;
-        request << "GET /auth/callback?code=code_template#&state=" << context.GetState(settings.StateSigningKey) << " HTTP/1.1\r\n";
+        request << "GET /auth/callback?code=code_template#&state=" << context.GetState(settings.ClientSecret) << " HTTP/1.1\r\n";
         request << "Host: oidcproxy.net\r\n";
-        TString cookie = context.CreateYdbOidcCookie(settings.StateSigningKey);
+        TString cookie = context.CreateYdbOidcCookie(settings.ClientSecret);
         TStringBuf cookieBuf(cookie);
         TStringBuf cookieValue, suffixCookie;
         cookieBuf.TrySplit(';', cookieValue, suffixCookie);
@@ -758,9 +760,9 @@ Y_UNIT_TEST_SUITE(Mvp) {
         const NActors::TActorId sessionCreator = runtime.Register(new TSessionCreateHandler(edge, settings));
         TContext context({.State = "test_state", .RequestedAddress = "/requested/page", .AjaxRequest = redirectStrategy.IsAjaxRequest()});
         TStringBuilder request;
-        request << "GET /auth/callback?code=code_template#&state=" << context.GetState(settings.StateSigningKey) << " HTTP/1.1\r\n";
+        request << "GET /auth/callback?code=code_template#&state=" << context.GetState(settings.ClientSecret) << " HTTP/1.1\r\n";
         request << "Host: oidcproxy.net\r\n";
-        TString cookie = context.CreateYdbOidcCookie(settings.StateSigningKey);
+        TString cookie = context.CreateYdbOidcCookie(settings.ClientSecret);
         TStringBuf cookieBuf(cookie);
         TStringBuf cookieValue, suffixCookie;
         cookieBuf.TrySplit(';', cookieValue, suffixCookie);
@@ -819,9 +821,9 @@ Y_UNIT_TEST_SUITE(Mvp) {
 
         TContext context({.State = "test_state", .RequestedAddress = "/requested/page", .AjaxRequest = false});
         TStringBuilder request;
-        request << "GET /callback?code=code_template#&state=" << context.GetState(settings.StateSigningKey) << " HTTP/1.1\r\n";
+        request << "GET /callback?code=code_template#&state=" << context.GetState(settings.ClientSecret) << " HTTP/1.1\r\n";
         request << "Host: oidcproxy.net\r\n";
-        TString cookie = context.CreateYdbOidcCookie(settings.StateSigningKey);
+        TString cookie = context.CreateYdbOidcCookie(settings.ClientSecret);
         TStringBuf cookieBuf(cookie);
         TStringBuf cookieValue, suffixCookie;
         cookieBuf.TrySplit(';', cookieValue, suffixCookie);
@@ -963,7 +965,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         TContext context({.State = "good_state", .RequestedAddress = "/requested/page", .AjaxRequest = false});
         const TString hostProxy = "oidcproxy.net";
         TStringBuilder request;
-        request << "GET /auth/callback?code=code_template#&state=" << context.GetState(settings.StateSigningKey) << " HTTP/1.1\r\n";
+        request << "GET /auth/callback?code=code_template#&state=" << context.GetState(settings.ClientSecret) << " HTTP/1.1\r\n";
         request << "Host: " + hostProxy + "\r\n";
         NHttp::THttpIncomingRequestPtr incomingRequest = new NHttp::THttpIncomingRequest();
         EatWholeString(incomingRequest, request);
@@ -992,7 +994,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
 
         const NActors::TActorId sessionCreator = runtime.Register(new TSessionCreateHandler(edge, settings));
         TContext context({.State = "good_state", .RequestedAddress = "/requested/page", .AjaxRequest = false});
-        TString wrongState = context.GetState(settings.StateSigningKey);
+        TString wrongState = context.GetState(settings.ClientSecret);
         if (wrongState[0] != 'a') {
             wrongState[0] = 'a';
         } else {
@@ -1002,7 +1004,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         TStringBuilder request;
         request << "GET /auth/callback?code=code_template#&state=" << wrongState << " HTTP/1.1\r\n";
         request << "Host: " + hostProxy + "\r\n";
-        TString cookie = context.CreateYdbOidcCookie(settings.StateSigningKey);
+        TString cookie = context.CreateYdbOidcCookie(settings.ClientSecret);
         TStringBuf cookieBuf(cookie);
         TStringBuf cookieValue, suffixCookie;
         cookieBuf.TrySplit(';', cookieValue, suffixCookie);
@@ -1570,14 +1572,40 @@ Y_UNIT_TEST_SUITE(Mvp) {
         UNIT_ASSERT_VALUES_EQUAL(GetAddressWithoutPort("some.domain.name:1234"), "some.domain.name");
         UNIT_ASSERT_VALUES_EQUAL(GetAddressWithoutPort("some.domain.name"), "some.domain.name");
     }
-}
 
-Y_UNIT_TEST_SUITE(GenerateRandom) {
-    Y_UNIT_TEST(Uniqueness) {
+} // Y_UNIT_TEST_SUITE(MVP)
+
+Y_UNIT_TEST_SUITE(Utils) {
+    Y_UNIT_TEST(GenerateRandomBase64RandomUniqueness) {
         THashSet<TString> seen;
         for (int i=0; i < 100 ; i++) {
             seen.insert(NMVP::NOIDC::GenerateRandomBase64(32));
         }
         UNIT_ASSERT(seen.size() > 95); // soft threshold
     }
-}
+
+    Y_UNIT_TEST(MaskProtoCredentials) {
+        nebius::iam::v1::ExchangeTokenRequest req;
+
+        req.set_grant_type("urn:ietf:params:oauth:grant-type:token-exchange");
+        req.set_requested_token_type("urn:ietf:params:oauth:token-type:access_token");
+        req.set_subject_token("SECRET_SUBJECT_TOKEN_12345");
+        req.set_subject_token_type("urn:nebius:params:oauth:token-type:subject_identifier");
+        req.set_audience("example-client-id");
+        req.add_resource("res1");
+        req.set_actor_token("SECRET_ACTOR_TOKEN_12345");
+        req.set_actor_token_type("urn:ietf:params:oauth:token-type:jwt");
+
+        // actual masked representation from helper
+        std::string actual = NKikimr::SecureShortDebugStringMasked(req);
+
+        // invariants: original secrets must not appear
+        UNIT_ASSERT(actual.find("SECRET_SUBJECT_TOKEN_12345") == std::string::npos);
+        UNIT_ASSERT(actual.find("SECRET_ACTOR_TOKEN_12345") == std::string::npos);
+
+        // and output must still contain the field labels
+        UNIT_ASSERT(actual.find("subject_token:") != std::string::npos);
+        UNIT_ASSERT(actual.find("actor_token:") != std::string::npos);
+    }
+
+} // Y_UNIT_TEST_SUITE(Utils)

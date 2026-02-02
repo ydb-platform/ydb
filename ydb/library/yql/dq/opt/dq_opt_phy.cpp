@@ -643,6 +643,7 @@ TMaybeNode<TDqStage> DqPushLambdasToStage(const TDqStage& stage, const std::map<
                 .Body(ctx.ReplaceNodes(newProgram->TailPtr(), inputArgReplaces))
             .Build()
             .Settings(TDqStageSettings().BuildNode(ctx, stage.Pos()))
+            .Outputs(stage.Outputs())
             .Done();
 
     optCtx.RemapNode(stage.Ref(), newStage.Ptr());

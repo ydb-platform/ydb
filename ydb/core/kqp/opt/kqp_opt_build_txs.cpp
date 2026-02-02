@@ -665,6 +665,7 @@ private:
                     // Two table sinks can't be executed in one physical transaction if they write into same table and have same priority.
 
                     const bool needSingleEffect = sinkSettings.Cast().Mode() == "fill_table"
+                        || sinkSettings.Cast().InconsistentWrite().Value() == "true"sv
                         || (kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, sinkSettings.Cast().Table().Path()).Metadata->Kind == EKikimrTableKind::Olap);
 
                     if (needSingleEffect) {

@@ -29,6 +29,7 @@ def oncuda_srcs(unit, *args):
 
             images.append(f"{name}.{arch}.ptx")
             images.append(f"{name}.{arch}.cubin")
+            images.append(f"{name}.{arch}.module_id")
 
         unit.on_cuda_fatbin([cu, *images])
 

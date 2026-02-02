@@ -281,8 +281,16 @@ void TKeyedWriteSession::TSplittedPartitionWorker::LaunchGetMaxSeqNoFutures(std:
 
         auto future = wrappedSession->Session->GetInitSeqNo();
         lock.unlock();
-        future.Subscribe([this](const NThreading::TFuture<uint64_t>& result) {
+        future.Subscribe([this, wrappedSession](const NThreading::TFuture<uint64_t>& result) {
             std::lock_guard lock(Lock);
+            if (result.HasException()) {
+                LOG_LAZY(Session->DbDriverState->Log, TLOG_ERR, TStringBuilder() << "Failed to get max seq no for partition");
+                TSessionClosedEvent sessionClosedEvent(EStatus::INTERNAL_ERROR, {});
+                Session->GetSessionClosedEventAndDie(wrappedSession, std::move(sessionClosedEvent));
+                MoveTo(EState::Done);
+                return;
+            }
+
             UpdateMaxSeqNo(result.GetValue());
             if (--NotReadyFutures == 0) {
                 MoveTo(EState::GotMaxSeqNo);   
@@ -752,7 +760,7 @@ void TKeyedWriteSession::TMessagesWorker::DoWork() {
     auto sessionsWorker = Session->SessionsWorker;
     while (!PendingMessages.empty() && MessagesToResend.empty()) {
         auto& head = PendingMessages.front();
-        if (Session->Partitions[head.Partition].Locked_) {
+        if (Session->Partitions[head.Partition].Locked_ || Session->SplittedPartitionWorkers.contains(head.Partition)) {
             break;
         }
 
@@ -917,9 +925,10 @@ void TKeyedWriteSession::TMessagesWorker::ScheduleResendMessages(ui64 partition,
             if (ackIdx == acksEvent->Acks.size()) {
                 ++ackQueueIt;
                 ackIdx = 0;
-            } else {
-                ++ackIdx;
+                continue;
             }
+
+            ++ackIdx;
         }
         ++resendIt;     
     }
@@ -944,7 +953,8 @@ void TKeyedWriteSession::TMessagesWorker::ScheduleResendMessages(ui64 partition,
                 MessagesToResend.try_emplace(child, childList->second.begin());
             }
         }
-        list.clear();
+
+        list.erase(resendIt, list.end());
     }
 }
 
@@ -1070,6 +1080,7 @@ void TKeyedWriteSession::Write(TContinuationToken&&, const std::string& key, TWr
 
 bool TKeyedWriteSession::Close(TDuration closeTimeout) {
     if (Closed.exchange(true)) {
+        std::lock_guard lock(GlobalLock);
         return MessagesWorker->IsQueueEmpty();
     }
 
@@ -1079,13 +1090,13 @@ bool TKeyedWriteSession::Close(TDuration closeTimeout) {
     ShutdownFuture.Wait(CloseDeadline);
     RunUserEventLoop();
 
+    // No need to lock here, because we are waiting for the shutdown future and it will block until the main worker is done
     return MessagesWorker->IsQueueEmpty();
 }
 
 void TKeyedWriteSession::NonBlockingClose() {
     Closed.store(true);
     ClosePromise.TrySetValue();
-    RunUserEventLoop();
 }
 
 void TKeyedWriteSession::SetCloseDeadline(const TDuration& closeTimeout) {
@@ -1220,6 +1231,30 @@ void TKeyedWriteSession::RunUserEventLoop() {
             break;
         }
     }
+}
+
+void TKeyedWriteSession::GetSessionClosedEventAndDie(WrappedWriteSessionPtr wrappedSession, std::optional<TSessionClosedEvent> sessionClosedEvent) {
+    std::optional<TSessionClosedEvent> receivedSessionClosedEvent;
+    while (true) {
+        auto event = wrappedSession->Session->GetEvent(false);
+        if (!event) {
+            break;
+        }
+
+        if (auto* closedEvent = std::get_if<TSessionClosedEvent>(&*event)) {
+            receivedSessionClosedEvent = std::move(*closedEvent);
+            break;
+        }
+    }
+
+    if (!receivedSessionClosedEvent) {
+        LOG_LAZY(DbDriverState->Log, TLOG_ERR, TStringBuilder() << "Failed to get session closed event");
+        EventsWorker->HandleSessionClosedEvent(std::move(*sessionClosedEvent), wrappedSession->Partition);
+    } else {
+        EventsWorker->HandleSessionClosedEvent(std::move(*receivedSessionClosedEvent), wrappedSession->Partition);
+    }
+
+    NonBlockingClose();
 }
 
 void TKeyedWriteSession::RunMainWorker() {

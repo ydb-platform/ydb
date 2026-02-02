@@ -203,9 +203,6 @@ private:
         using InFlightMessagesIndexIter = std::list<std::list<TMessageInfo>::iterator>::iterator;
         std::unordered_map<ui64, InFlightMessagesIndexIter> MessagesToResend;
         std::unordered_map<ui64, std::deque<TContinuationToken>> ContinuationTokens;
-
-        // NThreading::TPromise<void> MessagesNotEmptyPromise;
-        // NThreading::TFuture<void> MessagesNotEmptyFuture;
         
         ui64 MemoryUsage = 0;
     };
@@ -282,6 +279,8 @@ private:
         NThreading::TFuture<void> EventsFuture;
 
         std::optional<TSessionClosedEvent> CloseEvent;
+
+        friend class TKeyedWriteSession;
     };
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -327,6 +326,8 @@ private:
     void RunUserEventLoop();
 
     TInstant GetCloseDeadline();
+
+    void GetSessionClosedEventAndDie(WrappedWriteSessionPtr wrappedSession, std::optional<TSessionClosedEvent> sessionClosedEvent = std::nullopt);
 
 public:
     TKeyedWriteSession(const TKeyedWriteSessionSettings& settings,
@@ -374,7 +375,7 @@ private:
     std::mutex GlobalLock;
     TMutex QueueLock;
     std::atomic_bool Closed = false;
-    TInstant CloseDeadline = TInstant::Max();  
+    TInstant CloseDeadline = TInstant::Now();  
 
     std::unique_ptr<IPartitionChooser> PartitionChooser;
 

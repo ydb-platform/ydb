@@ -1,6 +1,10 @@
 #pragma once
 
+#include <util/stream/output.h>
+
 #include <type_traits>
+
+namespace NKikimr {
 
 /**
  * A numerical equivalent of TMaybe designed to work specifically with numerical
@@ -95,15 +99,15 @@ private:
     T Value;
 };
 
-class IOutputStream;
-
 template <class T, T EXCLUDED_VALUE>
-IOutputStream& operator<<(IOutputStream& out Y_LIFETIME_BOUND, TNumericalMaybe<T, EXCLUDED_VALUE> maybe) {
+IOutputStream& operator << (IOutputStream& out Y_LIFETIME_BOUND, TNumericalMaybe<T, EXCLUDED_VALUE> maybe) {
     if (maybe.Defined()) {
         out << maybe.Get();
     } else {
-        out << TStringBuf("(undefined)");
+        out << "(undefined)";
     }
 
     return out;
 }
+
+} // namespace NKikimr

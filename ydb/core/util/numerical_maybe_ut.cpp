@@ -1,6 +1,8 @@
+#include "numerical_maybe.h"
+
 #include <library/cpp/testing/unittest/registar.h>
 
-#include "numerical_maybe.h"
+namespace NKikimr {
 
 /**
  * Unit tests, which verify the behavior of the TNumericalMaybe class.
@@ -261,3 +263,5 @@ Y_UNIT_TEST_SUITE(TNumericalMaybeTest) {
         }
     }
 }
+
+} // namespace NKikimr

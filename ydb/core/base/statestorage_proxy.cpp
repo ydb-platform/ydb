@@ -313,28 +313,30 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
         //       to using the deprecated "Follower" and "FollowerTablet" fields.
         if (record.FollowerInfoSize() > 0) {
             for (const auto& followerInfo : record.GetFollowerInfo()) {
-                const TActorId follower = ActorIdFromProto(followerInfo.GetFollower());
+                // Do not report candidate followers here
+                if (followerInfo.GetIsCandidate()) {
+                    continue;
+                }
 
-                // If FollowerId is populated, it must not be zero
-                Y_ABORT_UNLESS(!followerInfo.HasFollowerId() || (followerInfo.GetFollowerId() != 0));
+                const TActorId follower = ActorIdFromProto(followerInfo.GetFollower());
 
                 Followers.insert_or_assign(
                     follower,
                     TEvStateStorage::TEvInfo::TFollowerInfo(
                         follower,
                         ActorIdFromProto(followerInfo.GetFollowerTablet()),
-                        TEvStateStorage::TEvInfo::TFollowerIdHolder(
-                            (followerInfo.HasFollowerId())
-                                ? followerInfo.GetFollowerId()
-                                : 0 // Zero here means "followerId is not known"!
-                        )
+                        // NOTE: If FollowerId is populated, it must not be zero. If this happens,
+                        //       the code below silently drops this value and sets the follower ID
+                        //       for this entry to "followerId is not known".
+                        //
+                        //       If FollowerId is not populated, then the default value of zero
+                        //       is also translated to "followerId is not known".
+                        TEvStateStorage::TEvInfo::TFollowerIdHolder(followerInfo.GetFollowerId())
                     )
                 );
             }
         } else {
-            // NOTE: "Follower" and "FollowerTablet" should have the same number of entries,
-            //       but "OptionalFollowerId" may not be present at all (if comes from older nodes).
-            //       If it is present and populated, then it should have the same size.
+            // NOTE: "Follower" and "FollowerTablet" should have the same number of entries.
             Y_ABORT_UNLESS(record.FollowerSize() == record.FollowerTabletSize());
 
             // TODO: Remove this code once Follower and FollowerTablet fields

@@ -673,9 +673,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
 
                 ui32 prio = info.ResFlags.GetTabletPriority(isLocal, isLocalDc, true);
 
-                // If this follower is selected by the follower ID, do not skip it,
-                // even if it should be disregarded by the selection priority rules
-                if (!info.ResFlags.FollowerId && !prio) {
+                if (!prio) {
                     ++disallowed;
                     continue;
                 }

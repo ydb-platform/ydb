@@ -59,6 +59,7 @@ void RunTokenatorIntegrationTest(TFederatedTestContext& ctx) {
     TPortManager tp;
     ui16 tokenExchangePort = tp.GetPort(9000);
     ui16 sessionServicePort = tp.GetPort(8655);
+    TString endpoint = TStringBuilder() << "localhost:" << tokenExchangePort;
 
     NMvp::TTokensConfig tokensConfig;
     tokensConfig.set_accessservicetype(NMvp::nebius_v1);
@@ -68,19 +69,16 @@ void RunTokenatorIntegrationTest(TFederatedTestContext& ctx) {
     jwt->SetName("nebiusJwt");
     jwt->SetAccountId(ctx.SaId);
     jwt->SetToken(ctx.JwtToken);
+    jwt->SetEndpoint(endpoint);
 
     const TString fixedIamToken = "iam_from_tokenator";
 
     std::unique_ptr<grpc::Server> tokenExchangeServer;
     std::unique_ptr<TTokenExchangeServiceMock> localMock;
-    if (!ctx.ExpectedSaId.empty() && !ctx.ExpectedJwtToken.empty()) {
-        localMock = std::make_unique<TTokenExchangeServiceMock>(ctx.ExpectedSaId, ctx.ExpectedJwtToken, fixedIamToken);
-        TString endpoint = TStringBuilder() << "localhost:" << tokenExchangePort;
-        tokensConfig.MutableJwtInfo(0)->SetEndpoint(endpoint);
-        grpc::ServerBuilder teBuilder;
-        teBuilder.AddListeningPort(endpoint, grpc::InsecureServerCredentials()).RegisterService(localMock.get());
-        tokenExchangeServer = teBuilder.BuildAndStart();
-    }
+    localMock = std::make_unique<TTokenExchangeServiceMock>(ctx.ExpectedSaId, ctx.ExpectedJwtToken, fixedIamToken);
+    grpc::ServerBuilder teBuilder;
+    teBuilder.AddListeningPort(endpoint, grpc::InsecureServerCredentials()).RegisterService(localMock.get());
+    tokenExchangeServer = teBuilder.BuildAndStart();
 
     TMvpTestRuntime runtime(1, true);
     runtime.Initialize();
@@ -154,4 +152,5 @@ Y_UNIT_TEST_SUITE(MvpTokenator) {
         ctx.ExpectAuthHeader = false;
         RunTokenatorIntegrationTest(ctx);
     }
-}
+
+} // Y_UNIT_TEST_SUITE(MvpTokenator)

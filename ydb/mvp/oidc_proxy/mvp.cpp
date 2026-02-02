@@ -272,9 +272,9 @@ void TMVP::TryGetGenericOptionsFromConfig(
 
         if (hasFederatedCreds) {
             auto jwt = auth["federated_creds"];
-            auto tokenPath = jwt["k8s_token_path"] ? jwt["k8s_token_path"].as<std::string>("") : "";
-            opts.JwtTokenEndpoint = jwt["token_service_endpoint"] ? jwt["token_service_endpoint"].as<std::string>("") : "";
-            opts.JwtSaId = jwt["service_account_id"] ? jwt["service_account_id"].as<std::string>("") : "";
+            auto tokenPath = jwt["k8s_token_path"].as<std::string>("");
+            opts.JwtTokenEndpoint = jwt["token_service_endpoint"].as<std::string>("");
+            opts.JwtSaId = jwt["service_account_id"].as<std::string>("");
 
             if (tokenPath.empty()) {
                 ythrow yexception() << "Configuration error: 'k8s_token_path' must be specified in 'federated_creds'.";
@@ -384,10 +384,9 @@ THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup(int argc, char**
         jwtInfo->SetToken(genericOpts.JwtToken);
         jwtInfo->SetEndpoint(genericOpts.JwtTokenEndpoint);
         if (OpenIdConnectSettings.SessionServiceTokenName.empty()) {
-            OpenIdConnectSettings.SessionServiceTokenName = "__jwtToken";
+            OpenIdConnectSettings.SessionServiceTokenName = TOpenIdConnectSettings::DEFAULT_SESSION_SERVICE_TOKEN_NAME;
         }
         jwtInfo->SetName(OpenIdConnectSettings.SessionServiceTokenName); // the only name used
-        TYdbLocation::UserToken = genericOpts.JwtToken;
     }
     TokensConfig = tokens;
     if (!TokensConfig.HasAccessServiceType()) {

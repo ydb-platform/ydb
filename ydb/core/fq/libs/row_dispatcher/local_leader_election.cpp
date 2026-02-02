@@ -276,9 +276,7 @@ void TLocalLeaderElection::ResetState() {
         SendSessionEventFail();
     }
     PendingRpcResponses = 0;
-    while (!RpcResponses.empty()) {  
-        RpcResponses.pop();  
-    }
+    RpcResponses = {};
     PendingAcquire = false;
     SentRequests.clear();
     RpcActor = {};
@@ -445,9 +443,7 @@ void TLocalLeaderElection::Handle(TLocalRpcCtx::TRpcEvents::TEvActorAttached::TP
     SessionClosed = false;
 
     LOG_ROW_DISPATCHER_DEBUG("RpcActor attached: " << RpcActor);
-    while (!RpcResponses.empty()) {  
-        RpcResponses.pop();  
-    }
+    RpcResponses = {};
     SendStartSession();
 }
 

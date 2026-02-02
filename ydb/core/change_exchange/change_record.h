@@ -89,11 +89,11 @@ protected:
 
 public:
     TChangeRecordBuilder()
-        : Record(MakeIntrusive<T>()) 
+        : Record(MakeIntrusive<T>())
     {}
 
     explicit TChangeRecordBuilder(TIntrusivePtr<T> record)
-        : Record(std::move(record)) 
+        : Record(std::move(record))
     {}
 
     TSelf& WithOrder(ui64 order) {

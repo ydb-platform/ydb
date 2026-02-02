@@ -838,7 +838,7 @@ namespace {
 
 TComputationNodeFactory GetFlatShardExecutionFactory(TShardExecData& execData, bool validateOnly, const TString& userSID ) {
     auto builtins = GetBuiltinFactory();
-    return [builtins, &execData, validateOnly, usid=userSID]
+    return [builtins, &execData, validateOnly, localUserSID=userSID]
         (TCallable& callable, const TComputationNodeFactoryContext& ctx) -> IComputationNode* {
         const TEngineFlatSettings& settings = execData.Settings;
         const TFlatEngineStrings& strings = execData.Strings;
@@ -878,11 +878,11 @@ TComputationNodeFactory GetFlatShardExecutionFactory(TShardExecData& execData, b
         }
 
         if (nameStr == strings.EraseRow) {
-            return WrapEraseRow(callable, ctx, usid);
+            return WrapEraseRow(callable, ctx, localUserSID);
         }
 
         if (nameStr == strings.UpdateRow) {
-            return WrapUpdateRow(callable, ctx, settings.Host, usid);
+            return WrapUpdateRow(callable, ctx, settings.Host, localUserSID);
         }
 
         if (nameStr == strings.AcquireLocks) {

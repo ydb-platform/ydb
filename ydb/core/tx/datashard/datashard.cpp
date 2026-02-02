@@ -898,7 +898,7 @@ void TDataShard::PersistChangeRecord(NIceDb::TNiceDb& db, const TChangeRecord& r
             NIceDb::TUpdate<Schema::ChangeRecordDetails::Kind>(record.GetKind()),
             NIceDb::TUpdate<Schema::ChangeRecordDetails::Body>(record.GetBody()),
             NIceDb::TUpdate<Schema::ChangeRecordDetails::Source>(record.GetSource()),
-            NIceDb::TUpdate<Schema::ChangeRecordDetails::User>(record.GetUserSID()));
+            NIceDb::TUpdate<Schema::ChangeRecordDetails::UserSID>(record.GetUserSID()));
 
         auto res = ChangesQueue.emplace(record.GetOrder(), record);
         Y_ENSURE(res.second, "Duplicate change record: " << record.GetOrder());
@@ -980,8 +980,7 @@ void TDataShard::PersistChangeRecord(NIceDb::TNiceDb& db, const TChangeRecord& r
         db.Table<Schema::LockChangeRecordDetails>().Key(record.GetLockId(), record.GetLockOffset()).Update(
             NIceDb::TUpdate<Schema::LockChangeRecordDetails::Kind>(record.GetKind()),
             NIceDb::TUpdate<Schema::LockChangeRecordDetails::Body>(record.GetBody()),
-            NIceDb::TUpdate<Schema::LockChangeRecordDetails::Source>(record.GetSource()),
-            NIceDb::TUpdate<Schema::ChangeRecordDetails::User>(record.GetUserSID()));
+            NIceDb::TUpdate<Schema::LockChangeRecordDetails::Source>(record.GetSource()));
     }
 }
 

@@ -54,7 +54,7 @@ auto GetChangeRecords(TTestActorRuntime& runtime, const TActorId& sender, ui64 t
 auto GetChangeRecordDetails(TTestActorRuntime& runtime, const TActorId& sender, ui64 tabletId) {
     auto protoValue = GetValueFromLocalDb(runtime, sender, tabletId, R"((
         (let range '( '('Order (Uint64 '0) (Void) )))
-        (let columns '('Order 'Kind 'Body 'User) )
+        (let columns '('Order 'Kind 'Body 'UserSID) )
         (let result (SelectRange 'ChangeRecordDetails range columns '()))
         (return (AsList (SetResult 'Result result) ))
     ))");
@@ -68,7 +68,7 @@ auto GetChangeRecordDetails(TTestActorRuntime& runtime, const TActorId& sender, 
             item["Order"],
             static_cast<TChangeRecord::EKind>(ui8(item["Kind"])),
             item["Body"],
-            item["User"]
+            item["UserSID"]
         );
     }
 

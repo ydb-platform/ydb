@@ -367,11 +367,11 @@ public:
             TActorId sender,
             const TLocalMiniKQLProgram &program,
             const TMiniKQLFactory* factory,
-            const TString& userSid)
+            const TString& userSID)
         : Sender(sender)
         , SourceProgram(program)
         , Factory(factory)
-        , UserSID(userSid)
+        , UserSID(userSID)
     {}
 };
 

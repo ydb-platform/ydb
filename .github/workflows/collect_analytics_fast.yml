@@ -41,6 +41,11 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       continue-on-error: true
       run: python3 .github/scripts/analytics/export_issues_to_ydb.py
+    - name: Export GitHub pull_requests
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      continue-on-error: true
+      run: python3 .github/scripts/analytics/export_pull_requests_to_ydb.py
     - name: Upload GitHub issue mapping table
       continue-on-error: true
       run: python3 .github/scripts/analytics/github_issue_mapping.py
@@ -53,6 +58,9 @@ jobs:
     - name: Upload postcommit retry data mart
       continue-on-error: true
       run: python3 .github/scripts/analytics/data_mart_executor.py --query_path .github/scripts/analytics/data_mart_queries/datamart_postcommit_retry.sql --table_path test_results/test_results/analytics/postcommit_retry --store_type column --partition_keys postcommit_start_run_timestamp --primary_keys postcommit_start_run_timestamp commit --ttl_min 259200 --ttl_key postcommit_start_run_timestamp
+    - name: Upload PR blocked by failed tests data mart
+      continue-on-error: true
+      run: python3 .github/scripts/analytics/data_mart_executor.py --query_path .github/scripts/analytics/data_mart_queries/pr_blocked_by_failed_tests_rich.sql --table_path test_results/analytics/pr_blocked_by_failed_tests_rich --store_type column --partition_keys last_run_timestamp --primary_keys last_run_timestamp full_name pr_number job_id --ttl_min 518400 --ttl_key last_run_timestamp --replace
     - name: Upload Nemesis aggregate data mart
       continue-on-error: true
       run: python3 .github/scripts/analytics/data_mart_executor.py --query_path .github/scripts/analytics/data_mart_queries/stability_aggregate_mart.sql --table_path nemesis/aggregated_mart --store_type column --partition_keys RunTs --primary_keys RunTs Db Suite Test --ttl_min 43200 --ttl_key RunTs

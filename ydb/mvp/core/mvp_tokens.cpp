@@ -338,13 +338,15 @@ TString SecureShortDebugString(const yandex::cloud::priv::iam::v1::CreateIamToke
 
 template<>
 TString SecureShortDebugString(const nebius::iam::v1::ExchangeTokenRequest& request) {
-    return NKikimr::SecureShortDebugStringMasked(request);
+    nebius::iam::v1::ExchangeTokenRequest copy = request;
+    MaskMessageRecursively(&copy);
+    return copy.ShortDebugString();
 }
 
 template<>
 TString SecureShortDebugString(const nebius::iam::v1::CreateTokenResponse& request) {
     nebius::iam::v1::CreateTokenResponse copy = request;
-    copy.set_access_token(NKikimr::MaskTicket(copy.access_token()));
+    MaskMessageRecursively(&copy);
     return copy.ShortDebugString();
 }
 

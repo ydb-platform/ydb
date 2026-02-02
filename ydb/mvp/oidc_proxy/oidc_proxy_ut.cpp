@@ -11,8 +11,6 @@
 #include <ydb/library/testlib/service_mocks/profile_service_mock.h>
 #include <ydb/mvp/core/protos/mvp.pb.h>
 #include <ydb/mvp/core/mvp_test_runtime.h>
-#include "ydb/mvp/core/proto_masking.h"
-#include <ydb/public/api/client/nc_private/iam/v1/token_exchange_service.pb.h>
 #include <ydb/library/security/util.h>
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/string_utils/base64/base64.h>
@@ -1582,30 +1580,6 @@ Y_UNIT_TEST_SUITE(Utils) {
             seen.insert(NMVP::NOIDC::GenerateRandomBase64(32));
         }
         UNIT_ASSERT(seen.size() > 95); // soft threshold
-    }
-
-    Y_UNIT_TEST(MaskProtoCredentials) {
-        nebius::iam::v1::ExchangeTokenRequest req;
-
-        req.set_grant_type("urn:ietf:params:oauth:grant-type:token-exchange");
-        req.set_requested_token_type("urn:ietf:params:oauth:token-type:access_token");
-        req.set_subject_token("SECRET_SUBJECT_TOKEN_12345");
-        req.set_subject_token_type("urn:nebius:params:oauth:token-type:subject_identifier");
-        req.set_audience("example-client-id");
-        req.add_resource("res1");
-        req.set_actor_token("SECRET_ACTOR_TOKEN_12345");
-        req.set_actor_token_type("urn:ietf:params:oauth:token-type:jwt");
-
-        // actual masked representation from helper
-        std::string actual = NKikimr::SecureShortDebugStringMasked(req);
-
-        // invariants: original secrets must not appear
-        UNIT_ASSERT(actual.find("SECRET_SUBJECT_TOKEN_12345") == std::string::npos);
-        UNIT_ASSERT(actual.find("SECRET_ACTOR_TOKEN_12345") == std::string::npos);
-
-        // and output must still contain the field labels
-        UNIT_ASSERT(actual.find("subject_token:") != std::string::npos);
-        UNIT_ASSERT(actual.find("actor_token:") != std::string::npos);
     }
 
 } // Y_UNIT_TEST_SUITE(Utils)

@@ -8,11 +8,11 @@
 
 using namespace google::protobuf;
 
-namespace NKikimr {
+namespace NMVP {
 
-static void MaskMessageRecursively(Message* m) {
-    const Descriptor* desc = m->GetDescriptor();
-    const Reflection* refl = m->GetReflection();
+void MaskMessageRecursively(Message* msg) {
+    const Descriptor* desc = msg->GetDescriptor();
+    const Reflection* refl = msg->GetReflection();
 
     for (int i = 0; i < desc->field_count(); ++i) {
         const FieldDescriptor* field = desc->field(i);
@@ -30,37 +30,37 @@ static void MaskMessageRecursively(Message* m) {
 
         if (field->is_repeated()) {
             if (field->cpp_type() == FieldDescriptor::CPPTYPE_STRING && (isCred || isSens)) {
-                int cnt = refl->FieldSize(*m, field);
+                int cnt = refl->FieldSize(*msg, field);
                 for (int j = 0; j < cnt; ++j) {
-                    std::string val = refl->GetRepeatedString(*m, field, j);
-                    refl->SetRepeatedString(m, field, j, NKikimr::MaskTicket(val));
+                    std::string val = refl->GetRepeatedString(*msg, field, j);
+                    refl->SetRepeatedString(msg, field, j, NKikimr::MaskTicket(val));
                 }
             } else if (field->cpp_type() == FieldDescriptor::CPPTYPE_MESSAGE) {
-                int cnt = refl->FieldSize(*m, field);
+                int cnt = refl->FieldSize(*msg, field);
                 for (int j = 0; j < cnt; ++j) {
-                    Message* sub = refl->MutableRepeatedMessage(m, field, j);
+                    Message* sub = refl->MutableRepeatedMessage(msg, field, j);
                     MaskMessageRecursively(sub);
                 }
             }
         } else {
-            if (!refl->HasField(*m, field)) continue;
+            if (!refl->HasField(*msg, field)) continue;
 
             if (field->cpp_type() == FieldDescriptor::CPPTYPE_STRING && (isCred || isSens)) {
-                std::string val = refl->GetString(*m, field);
-                refl->SetString(m, field, NKikimr::MaskTicket(val));
+                std::string val = refl->GetString(*msg, field);
+                refl->SetString(msg, field, NKikimr::MaskTicket(val));
             } else if (field->cpp_type() == FieldDescriptor::CPPTYPE_MESSAGE) {
-                Message* sub = refl->MutableMessage(m, field);
+                Message* sub = refl->MutableMessage(msg, field);
                 MaskMessageRecursively(sub);
             }
         }
     }
 }
 
-std::string SecureShortDebugStringMasked(const Message& msg) {
+std::string MaskedShortDebugString(const Message& msg) {
     std::unique_ptr<Message> copy(msg.New());
     copy->CopyFrom(msg);
     MaskMessageRecursively(copy.get());
     return copy->ShortDebugString();
 }
 
-} // namespace NKikimr
+} // namespace NMVP

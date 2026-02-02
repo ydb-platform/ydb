@@ -2,8 +2,12 @@
 
 #include <google/protobuf/message.h>
 
-namespace NKikimr {
+namespace NMVP {
 
-std::string SecureShortDebugStringMasked(const google::protobuf::Message& msg);
+// Mask sensitive fields in-place on a Message instance.
+void MaskMessageRecursively(google::protobuf::Message* m);
 
-} // namespace NKikimr
+// Return a ShortDebugString of a masked copy of `msg`.
+std::string MaskedShortDebugString(const google::protobuf::Message& msg);
+
+} // namespace NMVP

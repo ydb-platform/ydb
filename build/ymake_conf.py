@@ -2540,6 +2540,12 @@ class Cuda(object):
         if version >= (11, 8):
             architectures.extend(['sm_89', 'sm_90'])
 
+        if version >= (12, 0):
+            architectures.append('sm_90a')
+
+        if version >= (12, 8):
+            architectures.extend(['sm_100', 'sm_100a', 'sm_120', 'sm_120a'])
+
         return ':'.join(architectures)
 
     def auto_use_arcadia_cuda(self):

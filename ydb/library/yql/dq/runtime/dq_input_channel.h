@@ -28,6 +28,7 @@ public:
     virtual void Finish() = 0;
 
     virtual void Bind(NActors::TActorId outputActorId, NActors::TActorId inputActorId) = 0;
+    virtual bool IsLocal() const = 0;
 };
 
 IDqInputChannel::TPtr CreateDqInputChannel(const TDqChannelSettings& settings, const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv);

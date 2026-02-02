@@ -87,7 +87,7 @@ void TSimpleServer::HandleClient_(int fd) {
     }
 
     while (Running) {
-        TLdapRequestProcessor requestProcessor(socket);
+        TLdapRequestProcessor requestProcessor(socket, Opt.ExternalAuthMap);
         unsigned char elementType = requestProcessor.GetByte();
         if (elementType != EElementType::SEQUENCE) {
             if (TLdapResponse().Send(socket)) {
@@ -188,9 +188,9 @@ bool TSimpleServer::InitTlsCtx() {
         }
     }
 
-
     int mode = SSL_VERIFY_NONE;
     if (Opt.RequireClientCert) {
+        // mode = SSL_VERIFY_PEER;
         mode = SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT;
     } else if (!Opt.CaCertFile.empty()) {
         mode = SSL_VERIFY_PEER;

@@ -474,7 +474,7 @@ private:
         if (Settings.GetBindDn().empty()) {
             return {TEvLdapAuthProvider::EStatus::UNAVAILABLE, {.Message = ERROR_MESSAGE, .LogMessage = "Parameter BindDn is empty", .Retryable = false}};
         }
-        if (Settings.GetBindPassword().empty()) {
+        if (Settings.GetBindPassword().empty() && !Settings.GetExtendedSettings().GetEnableMtlsAuth()) {
             return {TEvLdapAuthProvider::EStatus::UNAVAILABLE, {.Message = ERROR_MESSAGE, .LogMessage = "Parameter BindPassword is empty", .Retryable = false}};
         }
         return {TEvLdapAuthProvider::EStatus::SUCCESS, {}};

@@ -4,6 +4,7 @@
 #include <util/system/types.h>
 #include <util/generic/ptr.h>
 #include <util/generic/string.h>
+#include <util/generic/hash.h>
 
 #include <openssl/ssl.h>
 
@@ -49,9 +50,13 @@ public:
         TString KeyFile;
         bool UseTls = false;
         bool RequireClientCert = false;
+        THashMap<TString, TString> ExternalAuthMap;
     };
 
     TSimpleServer(const TOptions& options, TLdapMockResponses responses);
+    ~TSimpleServer() {
+        Stop();
+    }
 
     bool Start();
     void Stop();

@@ -385,5 +385,125 @@ Y_UNIT_TEST_SUITE(TGRpcLdapAuthentication) {
 
         loginConnection.Stop();
     }
+
+    Y_UNIT_TEST(CanAuthWithValidCredentialsUseSaslExternal) {
+        TString login = "ldapuser";
+        TString password = "ldapUserPassword";
+
+        LdapMock::TLdapMockResponses responses;
+        responses.BindResponses.push_back({{{.Login = "cn=robouser,dc=search,dc=yandex,dc=net", .Password = "", .Mechanism = LdapMock::ESaslMechanism::EXTERNAL}}, {.Status = LdapMock::EStatus::SUCCESS}});
+        responses.BindResponses.push_back({{{.Login = "uid=" + login + ",dc=search,dc=yandex,dc=net", .Password = password}}, {.Status = LdapMock::EStatus::SUCCESS}});
+
+        LdapMock::TSearchRequestInfo fetchUserSearchRequestInfo {
+            {
+                .BaseDn = "dc=search,dc=yandex,dc=net",
+                .Scope = 2,
+                .DerefAliases = 0,
+                .Filter = {.Type = LdapMock::EFilterType::LDAP_FILTER_EQUALITY, .Attribute = "uid", .Value = login},
+                .Attributes = {"1.1"}
+            }
+        };
+
+        std::vector<LdapMock::TSearchEntry> fetchUserSearchResponseEntries {
+            {
+                .Dn = "uid=" + login + ",dc=search,dc=yandex,dc=net"
+            }
+        };
+
+        LdapMock::TSearchResponseInfo fetchUserSearchResponseInfo {
+            .ResponseEntries = fetchUserSearchResponseEntries,
+            .ResponseDone = {.Status = LdapMock::EStatus::SUCCESS}
+        };
+        responses.SearchResponses.push_back({fetchUserSearchRequestInfo, fetchUserSearchResponseInfo});
+
+
+        TLoginClientConnection loginConnection(InitLdapSettingsWithMtlsAuth, {
+            .CaCertFile = CertStorage.GetCaCertFileName(),
+            .CertFile = CertStorage.GetClientCertFileName(),
+            .KeyFile = CertStorage.GetClientKeyFileName(),
+            .Type = ESecurityConnectionType::LDAPS_SCHEME
+        });
+        LdapMock::TSimpleServer ldapServer({
+            .Port = loginConnection.GetLdapPort(),
+            .CaCertFile = CertStorage.GetCaCertFileName(),
+            .CertFile = CertStorage.GetServerCertFileName(),
+            .KeyFile = CertStorage.GetServerKeyFileName(),
+            .UseTls = true,
+            .RequireClientCert = true,
+            .ExternalAuthMap = {
+                {"/C=RU/ST=MSK/L=MSK/O=YA/OU=UtTest/CN=localhost", "cn=robouser,dc=search,dc=yandex,dc=net"}
+            }
+        }, responses);
+
+        ldapServer.Start();
+        auto factory = CreateLoginCredentialsProviderFactory({.User = login + "@ldap", .Password = password});
+        auto loginProvider = factory->CreateProvider(loginConnection.GetCoreFacility());
+        TString token;
+        UNIT_ASSERT_NO_EXCEPTION(token = loginProvider->GetAuthInfo());
+        UNIT_ASSERT(!token.empty());
+
+        loginConnection.Stop();
+        ldapServer.Stop();
+    }
+
+    Y_UNIT_TEST(CanNotAuthWithInvalidCredentialsUseSaslExternal) {
+        TString login = "ldapuser";
+        TString password = "ldapUserPassword";
+
+        LdapMock::TLdapMockResponses responses;
+        responses.BindResponses.push_back({{{.Login = "cn=unauthenticatedrobot,dc=search,dc=yandex,dc=net", .Password = "", .Mechanism = LdapMock::ESaslMechanism::EXTERNAL}}, {.Status = LdapMock::EStatus::INVALID_CREDENTIALS}});
+        responses.BindResponses.push_back({{{.Login = "uid=" + login + ",dc=search,dc=yandex,dc=net", .Password = password}}, {.Status = LdapMock::EStatus::SUCCESS}});
+
+        LdapMock::TSearchRequestInfo fetchUserSearchRequestInfo {
+            {
+                .BaseDn = "dc=search,dc=yandex,dc=net",
+                .Scope = 2,
+                .DerefAliases = 0,
+                .Filter = {.Type = LdapMock::EFilterType::LDAP_FILTER_EQUALITY, .Attribute = "uid", .Value = login},
+                .Attributes = {"1.1"}
+            }
+        };
+
+        std::vector<LdapMock::TSearchEntry> fetchUserSearchResponseEntries {
+            {
+                .Dn = "uid=" + login + ",dc=search,dc=yandex,dc=net"
+            }
+        };
+
+        LdapMock::TSearchResponseInfo fetchUserSearchResponseInfo {
+            .ResponseEntries = fetchUserSearchResponseEntries,
+            .ResponseDone = {.Status = LdapMock::EStatus::SUCCESS}
+        };
+        responses.SearchResponses.push_back({fetchUserSearchRequestInfo, fetchUserSearchResponseInfo});
+
+
+        TLoginClientConnection loginConnection(InitLdapSettingsWithMtlsAuth, {
+            .CaCertFile = CertStorage.GetCaCertFileName(),
+            .CertFile = CertStorage.GetClientCertFileName(),
+            .KeyFile = CertStorage.GetClientKeyFileName(),
+            .Type = ESecurityConnectionType::LDAPS_SCHEME
+        });
+        LdapMock::TSimpleServer ldapServer({
+            .Port = loginConnection.GetLdapPort(),
+            .CaCertFile = CertStorage.GetCaCertFileName(),
+            .CertFile = CertStorage.GetServerCertFileName(),
+            .KeyFile = CertStorage.GetServerKeyFileName(),
+            .UseTls = true,
+            .RequireClientCert = true,
+            .ExternalAuthMap = {
+                {"/C=RU/ST=MSK/L=MSK/O=YA/OU=UtTest/CN=localhost", "cn=unauthenticatedrobot,dc=search,dc=yandex,dc=net"}
+            }
+        }, responses);
+
+        ldapServer.Start();
+        auto factory = CreateLoginCredentialsProviderFactory({.User = login + "@ldap", .Password = password});
+        auto loginProvider = factory->CreateProvider(loginConnection.GetCoreFacility());
+        TString token;
+        UNIT_ASSERT_EXCEPTION_CONTAINS(loginProvider->GetAuthInfo(), yexception, "Could not login via LDAP");
+        UNIT_ASSERT(token.empty());
+
+        loginConnection.Stop();
+        ldapServer.Stop();
+    }
 }
 } //namespace NKikimr

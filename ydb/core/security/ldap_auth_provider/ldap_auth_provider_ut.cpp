@@ -1232,6 +1232,85 @@ Y_UNIT_TEST(CanGetErrorIfAppropriateLoginProviderIsAbsent) {
     ldapServer.Stop();
 }
 
+Y_UNIT_TEST(CanFetchGroupsWithValidCredentialsUseExternalSaslAuth) {
+    TString login = "ldapuser";
+    TString password = "ldapUserPassword";
+
+    TLdapKikimrServer ydbServer(InitLdapSettingsWithMtlsAuth, {
+        .CaCertFile = CertStorage.GetCaCertFileName(),
+        .CertFile = CertStorage.GetClientCertFileName(),
+        .KeyFile = CertStorage.GetClientKeyFileName(),
+        .Type = ESecurityConnectionType::LDAPS_SCHEME
+    });
+
+    LdapMock::TLdapMockResponses responses = TCorrectLdapResponse::GetResponses(login);
+    responses.BindResponses.push_back({{{.Login = "cn=robouser,dc=search,dc=yandex,dc=net", .Password = "", .Mechanism = LdapMock::ESaslMechanism::EXTERNAL}}, {.Status = LdapMock::EStatus::SUCCESS}});
+
+    LdapMock::TSimpleServer ldapServer({
+        .Port = ydbServer.GetLdapPort(),
+        .CaCertFile = CertStorage.GetCaCertFileName(),
+        .CertFile = CertStorage.GetServerCertFileName(),
+        .KeyFile = CertStorage.GetServerKeyFileName(),
+        .UseTls = true,
+        .RequireClientCert = true,
+        .ExternalAuthMap = {
+            {"/C=RU/ST=MSK/L=MSK/O=YA/OU=UtTest/CN=localhost", "cn=robouser,dc=search,dc=yandex,dc=net"}
+        }
+    }, responses);
+    ldapServer.Start();
+    TAutoPtr<IEventHandle> handle = LdapAuthenticate(ydbServer, login, password);
+    TEvTicketParser::TEvAuthorizeTicketResult* ticketParserResult = handle->Get<TEvTicketParser::TEvAuthorizeTicketResult>();
+    UNIT_ASSERT_C(ticketParserResult->Error.empty(), ticketParserResult->Error);
+    UNIT_ASSERT(ticketParserResult->Token != nullptr);
+    const TString ldapDomain = "@ldap";
+    UNIT_ASSERT_VALUES_EQUAL(ticketParserResult->Token->GetUserSID(), login + ldapDomain);
+    const auto& fetchedGroups = ticketParserResult->Token->GetGroupSIDs();
+    THashSet<TString> groups(fetchedGroups.begin(), fetchedGroups.end());
+
+    THashSet<TString> expectedGroups = TCorrectLdapResponse::GetAllGroups(ldapDomain);
+    expectedGroups.insert("all-users@well-known");
+
+    UNIT_ASSERT_VALUES_EQUAL(fetchedGroups.size(), expectedGroups.size());
+    for (const auto& expectedGroup : expectedGroups) {
+        UNIT_ASSERT_C(groups.contains(expectedGroup), "Can not find " + expectedGroup);
+    }
+    ldapServer.Stop();
+}
+
+Y_UNIT_TEST(CanNotFetchGroupsWithInvalidCredentialsUseExternalSaslAuth) {
+    TString login = "ldapuser";
+    TString password = "ldapUserPassword";
+
+    TLdapKikimrServer ydbServer(InitLdapSettingsWithMtlsAuth, {
+        .CaCertFile = CertStorage.GetCaCertFileName(),
+        .CertFile = CertStorage.GetClientCertFileName(),
+        .KeyFile = CertStorage.GetClientKeyFileName(),
+        .Type = ESecurityConnectionType::LDAPS_SCHEME
+    });
+
+    LdapMock::TLdapMockResponses responses = TCorrectLdapResponse::GetResponses(login);
+    responses.BindResponses.push_back({{{.Login = "cn=unauthenticatedrobot,dc=search,dc=yandex,dc=net", .Password = "", .Mechanism = LdapMock::ESaslMechanism::EXTERNAL}}, {.Status = LdapMock::EStatus::INVALID_CREDENTIALS}});
+
+    LdapMock::TSimpleServer ldapServer({
+        .Port = ydbServer.GetLdapPort(),
+        .CaCertFile = CertStorage.GetCaCertFileName(),
+        .CertFile = CertStorage.GetServerCertFileName(),
+        .KeyFile = CertStorage.GetServerKeyFileName(),
+        .UseTls = true,
+        .RequireClientCert = true,
+        .ExternalAuthMap = {
+            {"/C=RU/ST=MSK/L=MSK/O=YA/OU=UtTest/CN=localhost", "cn=unauthenticatedrobot,dc=search,dc=yandex,dc=net"}
+        }
+    }, responses);
+    ldapServer.Start();
+    TAutoPtr<IEventHandle> handle = LdapAuthenticate(ydbServer, login, password);
+    TEvTicketParser::TEvAuthorizeTicketResult* ticketParserResult = handle->Get<TEvTicketParser::TEvAuthorizeTicketResult>();
+    UNIT_ASSERT_C(!ticketParserResult->Error.empty(), "Should be error");
+    UNIT_ASSERT(ticketParserResult->Token == nullptr);
+    UNIT_ASSERT_EQUAL_C(ticketParserResult->Error.Message, "Could not login via LDAP", ticketParserResult->Error);
+    ldapServer.Stop();
+}
+
 } // LdapAuthProviderTests
 
 } // NKikimr

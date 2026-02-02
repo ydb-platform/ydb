@@ -56,17 +56,31 @@ enum EElementType {
     SET = 0x31,
 };
 
+enum class ESaslMechanism {
+    SIMPLE,
+    PLAIN,
+    EXTERNAL,
+};
+
+enum EAuthMethod {
+    LDAP_AUTH_NONE = 0x00U,
+    LDAP_AUTH_SIMPLE = 0x80U,
+    LDAP_AUTH_SASL = 0xa3U,
+};
+
 struct TBindRequestInfo {
     struct TInitializeList {
         TString Login;
         TString Password;
+        ESaslMechanism Mechanism = ESaslMechanism::SIMPLE;
     };
 
     TString Login;
     TString Password;
+    ESaslMechanism Mechanism;
 
     TBindRequestInfo() = default;
-    TBindRequestInfo(const TString& login, const TString& password);
+    TBindRequestInfo(const TString& login, const TString& password, const ESaslMechanism& mechanism);
     TBindRequestInfo(const TInitializeList& list);
 
     bool operator==(const TBindRequestInfo& otherRequest) const;

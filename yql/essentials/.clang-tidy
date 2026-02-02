@@ -54,6 +54,7 @@ Checks: >
   misc-misleading-bidirectional,
   misc-misleading-identifier,
   misc-throw-by-value-catch-by-reference,
+  misc-unconventional-assign-operator,
   modernize-use-override
 CheckOptions:
   - key: readability-identifier-naming.StructPrefix

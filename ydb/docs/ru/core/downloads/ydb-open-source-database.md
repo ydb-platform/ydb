@@ -8,12 +8,9 @@
 
 #|
 || Версия |  Дата выпуска | Скачать | Список изменений ||
-<<<<<<< HEAD
-=======
 || **v25.2** | > | > | > ||
 || v.25.2.1.24 | 28.01.26 | [Бинарный файл](https://binaries.ydb.tech/release/25.2.1.24/ydbd-25.2.1.24-linux-amd64.tar.gz) | [См. список](../changelog-server.md#25-2-1-24) ||
 || v.25.2.1.10-rc   | 21.09.25 | [Бинарный файл](https://binaries.ydb.tech/release/25.2.1.10-rc/ydbd-25.2.1.10-rc-linux-amd64.tar.gz) | [См. список](../changelog-server.md#25-2-1-10-rc) ||
->>>>>>> a6f2a38dcb0 (Publish YDB Server 25.2.1.24 (#30572))
 || **v25.1** | > | > | > ||
 || v.25.1.4.7   | 15.09.25 | [Бинарный файл](https://binaries.ydb.tech/release/25.1.4.7/ydbd-25.1.4.7-linux-amd64.tar.gz) | [См. список](../changelog-server.md#25-1-4-7) ||
 || v.25.1.2.7-rc   | 14.07.25 | [Бинарный файл](https://binaries.ydb.tech/release/25.1.2.7-rc/ydbd-25.1.2.7-rc-linux-amd64.tar.gz) | [См. список](../changelog-server.md#25-1-2-7-rc) ||
@@ -40,14 +37,10 @@
 ## Docker
 
 #|
-<<<<<<< HEAD
-|| Версия |  Дата выпуска | Скачать | Список изменений ||
-=======
 || Версия |  Дата выпуска | Docker `registry/image:tag` | Список изменений ||
 || **v25.2** | > | > | > ||
 || v.25.2.1.24  | 28.01.26  | `cr.yandex/crptqonuodf51kdj7a7d/ydb:25.2.1.24` | [См. список](../changelog-server.md#25-2-1-24) ||
 || v.25.2.1.10-rc  | 21.09.25 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:25.2.1.10-rc` | [См. список](../changelog-server.md#25-2-1-10-rc) ||
->>>>>>> a6f2a38dcb0 (Publish YDB Server 25.2.1.24 (#30572))
 || **v25.1** | > | > | > ||
 || v.25.1.4.7  | 15.09.25 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:25.1.4.7` | [См. список](../changelog-server.md#25-1-4-7) ||
 || v.25.1.2.7-rc  | 14.07.25 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:25.1.2.7-rc` | [См. список](../changelog-server.md#25-1-2-7-rc) ||

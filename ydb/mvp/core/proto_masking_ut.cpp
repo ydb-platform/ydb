@@ -11,7 +11,7 @@ Y_UNIT_TEST_SUITE(Masking) {
     Y_UNIT_TEST(Format) {
         mvp::masking::TestMask req;
 
-        req.set_name("value1");
+        req.set_name("value");
         // req.no_value field doesn't set
         req.set_cred("SECRET_CRED_123456");
         req.set_sens("SECRET_SENS_ABCDEF");
@@ -24,7 +24,7 @@ Y_UNIT_TEST_SUITE(Masking) {
         req.add_repeated_cred("RCRED2");
         req.add_repeated_sens("RSENS1");
         auto* nested = req.mutable_nested();
-        nested->set_nested_name("n1");
+        nested->set_nested_name("nested_value");
         nested->set_nested_cred("NSECRET");
         nested->set_nested_sens("NSECRET2");
 
@@ -40,7 +40,7 @@ Y_UNIT_TEST_SUITE(Masking) {
 
         // Build expected string with TStringBuilder for readability
         TStringBuilder b;
-        b << "name: \"value1\""
+        b << "name: \"value\""
           << " cred: \"" << maskedCred << "\""
           << " sens: \"" << maskedSens << "\""
           << " int_value: " << 42
@@ -50,7 +50,7 @@ Y_UNIT_TEST_SUITE(Masking) {
           << " repeated_cred: \"" << maskedRCred2 << "\""
           << " repeated_sens: \"" << maskedRSens1 << "\""
           << " nested { "
-            "nested_name: \"n1\""
+            "nested_name: \"nested_value\""
             " nested_cred: \"" << maskedNestedCred << "\""
             " nested_sens: \"" << maskedNestedSens << "\""
           << " }";

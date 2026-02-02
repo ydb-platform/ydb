@@ -2425,6 +2425,10 @@ private:
             switch (Request.LocksOp) {
                 case ELocksOp::Commit:
                     locks->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
+                    // Set FirstQueryTraceId for accurate lock-breaking attribution
+                    if (Request.FirstQueryTraceId != 0) {
+                        locks->SetFirstQueryTraceId(Request.FirstQueryTraceId);
+                    }
                     break;
                 case ELocksOp::Rollback:
                     locks->SetOp(NKikimrDataEvents::TKqpLocks::Rollback);
@@ -2617,6 +2621,10 @@ private:
 
                 for (auto& [shardId, shardTx] : datashardTxs) {
                     shardTx->MutableLocks()->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
+                    // Set FirstQueryTraceId for accurate lock-breaking attribution
+                    if (Request.FirstQueryTraceId != 0) {
+                        shardTx->MutableLocks()->SetFirstQueryTraceId(Request.FirstQueryTraceId);
+                    }
                     if (!columnShardArbiter) {
                         *shardTx->MutableLocks()->MutableSendingShards() = sendingShards;
                         *shardTx->MutableLocks()->MutableReceivingShards() = receivingShards;
@@ -2644,6 +2652,10 @@ private:
 
                 for (auto& [shardId, tx] : evWriteTxs) {
                     tx->MutableLocks()->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
+                    // Set FirstQueryTraceId for accurate lock-breaking attribution
+                    if (Request.FirstQueryTraceId != 0) {
+                        tx->MutableLocks()->SetFirstQueryTraceId(Request.FirstQueryTraceId);
+                    }
                     if (!columnShardArbiter) {
                         *tx->MutableLocks()->MutableSendingShards() = sendingShards;
                         *tx->MutableLocks()->MutableReceivingShards() = receivingShards;
@@ -3136,7 +3148,9 @@ private:
                         }
 
                         TxManager->AddShard(lock.GetDataShard(), stageInfo.Meta.TableKind == ETableKind::Olap, stageInfo.Meta.TablePath);
-                        TxManager->AddAction(lock.GetDataShard(), flags);
+                        // Pass the lock's QueryTraceId to track which query wrote to this shard
+                        ui64 queryTraceId = lock.HasQueryTraceId() ? lock.GetQueryTraceId() : 0;
+                        TxManager->AddAction(lock.GetDataShard(), flags, queryTraceId);
                         if (!TxManager->AddLock(lock.GetDataShard(), lock)) {
                             // Store the broken lock's QueryTraceId for TLI logging
                             if (lock.HasQueryTraceId() && lock.GetQueryTraceId() != 0) {

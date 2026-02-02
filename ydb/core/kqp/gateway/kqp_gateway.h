@@ -80,10 +80,12 @@ public:
     struct TPhysicalTxData : private TMoveOnly {
         TKqpPhyTxHolder::TConstPtr Body;
         NKikimr::NKqp::TQueryData::TPtr Params;
+        ui64 QueryTraceId = 0;  // Original query's trace ID for lock-breaking attribution
 
-        TPhysicalTxData(const TKqpPhyTxHolder::TConstPtr& body, const TQueryData::TPtr& params)
+        TPhysicalTxData(const TKqpPhyTxHolder::TConstPtr& body, const TQueryData::TPtr& params, ui64 queryTraceId = 0)
             : Body(body)
-            , Params(params) {}
+            , Params(params)
+            , QueryTraceId(queryTraceId) {}
     };
 
     struct TKqpSnapshot {
@@ -167,6 +169,7 @@ public:
         NWilson::TTraceId TraceId;
         TString UserTraceId;
         ui64 QueryTraceId = 0;
+        ui64 FirstQueryTraceId = 0;  // First query's QueryTraceId for lock-breaking attribution
 
         NTopic::TTopicOperations TopicOperations;
 

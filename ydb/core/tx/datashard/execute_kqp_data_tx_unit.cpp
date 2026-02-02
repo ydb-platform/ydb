@@ -244,6 +244,11 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
             KqpEraseLocks(tabletId, kqpLocks, sysLocks);
             auto [_, locksBrokenByTx] = sysLocks.ApplyLocks();
             tx->Result()->Record.MutableTxStats()->SetLocksBrokenAsBreaker(locksBrokenByTx.size());
+            if (!locksBrokenByTx.empty()) {
+                auto breakerQueryTraceId = sysLocks.GetCurrentBreakerQueryTraceId();
+                ui64 effectiveBreakerQueryTraceId = breakerQueryTraceId ? *breakerQueryTraceId : op->QueryTraceId();
+                tx->Result()->Record.MutableTxStats()->SetBreakerQueryTraceId(effectiveBreakerQueryTraceId);
+            }
             NDataIntegrity::LogIntegrityTrailsLocks(ctx, tabletId, txId, locksBrokenByTx);
             DataShard.SubscribeNewLocks(ctx);
 
@@ -314,6 +319,7 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
             // TODO: we would want an actual table id that caused inconsistency,
             //       relevant for future multi-table shards only.
             // NOTE: generation may not match an existing lock, but it's not a problem.
+            ui64 queryTraceId = op->QueryTraceId();
             for (auto& table : guardLocks.AffectedTables) {
                 Y_ENSURE(guardLocks.LockTxId);
                 op->Result()->AddTxLock(
@@ -323,7 +329,8 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
                     Max<ui64>(),
                     table.GetTableId().OwnerId,
                     table.GetTableId().LocalPathId,
-                    false);
+                    false,
+                    queryTraceId);
             }
 
             tx->ReleaseTxData(txc, ctx);
@@ -506,6 +513,14 @@ void TExecuteKqpDataTxUnit::AddLocksToResult(TOperation::TPtr op, const TActorCo
 
     // Set the count of locks broken by this transaction
     op->Result()->Record.MutableTxStats()->SetLocksBrokenAsBreaker(locksBrokenByTx.size());
+    if (!locksBrokenByTx.empty()) {
+        auto breakerQueryTraceId = DataShard.SysLocksTable().GetCurrentBreakerQueryTraceId();
+        ui64 effectiveBreakerQueryTraceId = breakerQueryTraceId ? *breakerQueryTraceId : op->QueryTraceId();
+        op->Result()->Record.MutableTxStats()->SetBreakerQueryTraceId(effectiveBreakerQueryTraceId);
+    }
+
+    // Get the query trace ID to include in the returned locks
+    ui64 queryTraceId = op->QueryTraceId();
 
     LOG_T("add locks to result: " << locks.size());
     for (const auto& lock : locks) {
@@ -515,7 +530,7 @@ void TExecuteKqpDataTxUnit::AddLocksToResult(TOperation::TPtr op, const TActorCo
         }
 
         op->Result()->AddTxLock(lock.LockId, lock.DataShard, lock.Generation, lock.Counter,
-            lock.SchemeShard, lock.PathId, lock.HasWrites);
+            lock.SchemeShard, lock.PathId, lock.HasWrites, queryTraceId);
 
         LOG_T("add lock to result: " << op->Result()->Record.GetTxLocks().rbegin()->ShortDebugString());
     }

@@ -862,6 +862,9 @@ ui64 TQueryExecutionStats::EstimateFinishMem() {
 void TQueryExecutionStats::AddDatashardPrepareStats(NKikimrQueryStats::TTxStats&& txStats) {
     LocksBrokenAsBreaker += txStats.GetLocksBrokenAsBreaker();
     LocksBrokenAsVictim += txStats.GetLocksBrokenAsVictim();
+    if (BreakerQueryTraceId == 0 && txStats.HasBreakerQueryTraceId()) {
+        BreakerQueryTraceId = txStats.GetBreakerQueryTraceId();
+    }
 
     ui64 cpuUs = txStats.GetComputeCpuTimeUsec();
     for (const auto& perShard : txStats.GetPerShardStats()) {
@@ -877,6 +880,9 @@ void TQueryExecutionStats::AddDatashardStats(NYql::NDqProto::TDqComputeActorStat
 {
     LocksBrokenAsBreaker += txStats.GetLocksBrokenAsBreaker();
     LocksBrokenAsVictim += txStats.GetLocksBrokenAsVictim();
+    if (BreakerQueryTraceId == 0 && txStats.HasBreakerQueryTraceId()) {
+        BreakerQueryTraceId = txStats.GetBreakerQueryTraceId();
+    }
 
     UpdateTaskStats(0, stats, &txStats, NYql::NDqProto::COMPUTE_STATE_FINISHED, collectLongTaskStatsTimeout);
 }
@@ -884,6 +890,9 @@ void TQueryExecutionStats::AddDatashardStats(NYql::NDqProto::TDqComputeActorStat
 void TQueryExecutionStats::AddDatashardStats(NKikimrQueryStats::TTxStats&& txStats) {
     LocksBrokenAsBreaker += txStats.GetLocksBrokenAsBreaker();
     LocksBrokenAsVictim += txStats.GetLocksBrokenAsVictim();
+    if (BreakerQueryTraceId == 0 && txStats.HasBreakerQueryTraceId()) {
+        BreakerQueryTraceId = txStats.GetBreakerQueryTraceId();
+    }
 
     ui64 datashardCpuTimeUs = 0;
     for (const auto& perShard : txStats.GetPerShardStats()) {
@@ -901,6 +910,9 @@ void TQueryExecutionStats::AddBufferStats(NYql::NDqProto::TDqTaskStats&& taskSta
     if (taskStats.GetExtra().UnpackTo(&extraStats)) {
         LocksBrokenAsBreaker += extraStats.GetLockStats().GetBrokenAsBreaker();
         LocksBrokenAsVictim += extraStats.GetLockStats().GetBrokenAsVictim();
+        if (BreakerQueryTraceId == 0 && extraStats.GetLockStats().GetBreakerQueryTraceId() != 0) {
+            BreakerQueryTraceId = extraStats.GetLockStats().GetBreakerQueryTraceId();
+        }
     }
     UpdateStorageTables(taskStats, nullptr);
 }
@@ -1005,6 +1017,9 @@ void TQueryExecutionStats::UpdateTaskStats(ui64 taskId, const NYql::NDqProto::TD
             if (taskStats.GetExtra().UnpackTo(&extraStats)) {
                 LocksBrokenAsBreaker += extraStats.GetLockStats().GetBrokenAsBreaker();
                 LocksBrokenAsVictim += extraStats.GetLockStats().GetBrokenAsVictim();
+                if (BreakerQueryTraceId == 0 && extraStats.GetLockStats().GetBreakerQueryTraceId() != 0) {
+                    BreakerQueryTraceId = extraStats.GetLockStats().GetBreakerQueryTraceId();
+                }
             }
         }
 

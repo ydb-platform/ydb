@@ -51,6 +51,7 @@ message TKqpScanTaskExtraStats {
 message TKqpLockStats {
     uint64 BrokenAsBreaker = 1;
     uint64 BrokenAsVictim = 2;
+    uint64 BreakerQueryTraceId = 3;  // QueryTraceId of the query that broke locks
 }
 
 // extra for NYql.NDqProto.TDqTaskStats

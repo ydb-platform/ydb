@@ -1477,6 +1477,7 @@ protected:
 
         ResponseEv->LocksBrokenAsBreaker = Stats->LocksBrokenAsBreaker;
         ResponseEv->LocksBrokenAsVictim = Stats->LocksBrokenAsVictim;
+        ResponseEv->BreakerQueryTraceId = Stats->BreakerQueryTraceId;
 
         Request.Transactions.crop(0);
         this->Send(Target, ResponseEv.release());

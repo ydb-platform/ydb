@@ -46,6 +46,7 @@ message TTxStats {
     repeated TPerShardStats PerShardStats = 4;
     optional uint64 LocksBrokenAsBreaker = 5; // locks broken by this transaction
     optional uint64 LocksBrokenAsVictim = 6;  // this transaction's locks were broken by others
+    optional uint64 BreakerQueryTraceId = 7;  // QueryTraceId of the query that broke other locks
 
     // TODO:
     // optional uint64 CommitLatencyUsec = 3;

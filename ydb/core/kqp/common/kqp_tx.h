@@ -84,9 +84,11 @@ struct TKqpTxLocks {
 struct TDeferredEffect {
     TKqpPhyTxHolder::TConstPtr PhysicalTx;
     TQueryData::TPtr Params;
+    ui64 QueryTraceId = 0;  // Original query's trace ID for lock-breaking attribution
 
-    explicit TDeferredEffect(const TKqpPhyTxHolder::TConstPtr& physicalTx)
-        : PhysicalTx(physicalTx) {}
+    explicit TDeferredEffect(const TKqpPhyTxHolder::TConstPtr& physicalTx, ui64 queryTraceId = 0)
+        : PhysicalTx(physicalTx)
+        , QueryTraceId(queryTraceId) {}
 };
 
 
@@ -112,8 +114,8 @@ public:
 
 private:
     [[nodiscard]]
-    bool Add(const TKqpPhyTxHolder::TConstPtr& physicalTx, const TQueryData::TPtr& params) {
-        DeferredEffects.emplace_back(physicalTx);
+    bool Add(const TKqpPhyTxHolder::TConstPtr& physicalTx, const TQueryData::TPtr& params, ui64 queryTraceId = 0) {
+        DeferredEffects.emplace_back(physicalTx, queryTraceId);
         DeferredEffects.back().Params = params;
         return true;
     }
@@ -190,8 +192,8 @@ public:
     }
 
     [[nodiscard]]
-    bool AddDeferredEffect(const TKqpPhyTxHolder::TConstPtr& physicalTx, const TQueryData::TPtr& params) {
-        return DeferredEffects.Add(physicalTx, params);
+    bool AddDeferredEffect(const TKqpPhyTxHolder::TConstPtr& physicalTx, const TQueryData::TPtr& params, ui64 queryTraceId = 0) {
+        return DeferredEffects.Add(physicalTx, params, queryTraceId);
     }
 
     bool TxHasEffects() const {
@@ -225,6 +227,10 @@ public:
         ++QueriesCount;
         BeginQueryTime = TInstant::Now();
         QueryTextCollector.AddQueryText(queryTraceId, queryText);
+        // Track the first query's QueryTraceId in TxManager for lock-breaking attribution
+        if (TxManager && queryTraceId != 0) {
+            TxManager->SetFirstQueryTraceId(queryTraceId);
+        }
     }
 
     void OnEndQuery() {

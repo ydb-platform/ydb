@@ -261,10 +261,10 @@ void TLockInfo::PersistRemoveLock(ILocksDb* db) {
     for (auto it = ConflictLocks.begin(); it != ConflictLocks.end(); ++it) {
         TLockInfo* otherLock = it->first;
         if (otherLock->IsPersistent() && !otherLock->IsRemoved()) {
-            if (!!(it->second & ELockConflictFlags::BreakThemOnOurCommit)) {
+            if (!!(it->second.Flags & ELockConflictFlags::BreakThemOnOurCommit)) {
                 db->PersistRemoveConflict(LockId, otherLock->LockId);
             }
-            if (!!(it->second & ELockConflictFlags::BreakUsOnTheirCommit)) {
+            if (!!(it->second.Flags & ELockConflictFlags::BreakUsOnTheirCommit)) {
                 db->PersistRemoveConflict(otherLock->LockId, LockId);
             }
         }
@@ -329,7 +329,7 @@ bool TLockInfo::PersistAddRange(const TPathId& tableId, ELockRangeFlags flags, I
     return true;
 }
 
-bool TLockInfo::AddConflict(TLockInfo* otherLock, ILocksDb* db) {
+bool TLockInfo::AddConflict(TLockInfo* otherLock, ILocksDb* db, ui64 breakerQueryTraceId) {
     Y_ENSURE(!IsRemoved());
     Y_ENSURE(!otherLock->IsRemoved());
 
@@ -337,11 +337,15 @@ bool TLockInfo::AddConflict(TLockInfo* otherLock, ILocksDb* db) {
     Y_ENSURE(LockId != otherLock->LockId, "Unexpected conflict between a pair of locks with the same id");
     bool changed = false;
 
-    auto& flags = ConflictLocks[otherLock];
-    if (!(flags & ELockConflictFlags::BreakThemOnOurCommit)) {
-        flags |= ELockConflictFlags::BreakThemOnOurCommit;
-        auto& otherFlags = otherLock->ConflictLocks[this];
-        otherFlags |= ELockConflictFlags::BreakUsOnTheirCommit;
+    auto& conflictInfo = ConflictLocks[otherLock];
+    if (!(conflictInfo.Flags & ELockConflictFlags::BreakThemOnOurCommit)) {
+        conflictInfo.Flags |= ELockConflictFlags::BreakThemOnOurCommit;
+        // Store the BreakerQueryTraceId if provided (only set once, when the conflict is first added)
+        if (breakerQueryTraceId != 0 && conflictInfo.BreakerQueryTraceId == 0) {
+            conflictInfo.BreakerQueryTraceId = breakerQueryTraceId;
+        }
+        auto& otherConflictInfo = otherLock->ConflictLocks[this];
+        otherConflictInfo.Flags |= ELockConflictFlags::BreakUsOnTheirCommit;
         if (IsPersistent() && otherLock->IsPersistent()) {
             // Any conflict between persistent locks is also persistent
             Y_ENSURE(db, "Cannot persist conflicts without a db");
@@ -378,11 +382,11 @@ bool TLockInfo::PersistConflicts(ILocksDb* db) {
             // We don't persist non-persistent conflicts
             continue;
         }
-        if (!!(pr.second & ELockConflictFlags::BreakThemOnOurCommit)) {
+        if (!!(pr.second.Flags & ELockConflictFlags::BreakThemOnOurCommit)) {
             db->PersistAddConflict(LockId, otherLock->LockId);
             changed = true;
         }
-        if (!!(pr.second & ELockConflictFlags::BreakUsOnTheirCommit)) {
+        if (!!(pr.second.Flags & ELockConflictFlags::BreakUsOnTheirCommit)) {
             db->PersistAddConflict(otherLock->LockId, LockId);
             changed = true;
         }
@@ -506,8 +510,8 @@ void TLockInfo::RestorePersistentRange(const ILocksDb::TLockRange& rangeRow) {
 }
 
 void TLockInfo::RestoreInMemoryConflict(TLockInfo* otherLock) {
-    this->ConflictLocks[otherLock] |= ELockConflictFlags::BreakThemOnOurCommit;
-    otherLock->ConflictLocks[this] |= ELockConflictFlags::BreakUsOnTheirCommit;
+    this->ConflictLocks[otherLock].Flags |= ELockConflictFlags::BreakThemOnOurCommit;
+    otherLock->ConflictLocks[this].Flags |= ELockConflictFlags::BreakUsOnTheirCommit;
 }
 
 void TLockInfo::RestorePersistentConflict(TLockInfo* otherLock) {
@@ -1188,13 +1192,19 @@ std::pair<TVector<TSysLocks::TLock>, TVector<ui64>> TSysLocks::ApplyLocks() {
                 }
             }
             for (auto& readConflictLock : Update->ReadConflictLocks) {
-                if (readConflictLock.AddConflict(lock.Get(), Db)) {
+                // Use the Update's BreakerQueryTraceId when adding read conflicts
+                // Note: For read conflicts, we add our lock (current writer) as breaking the read lock
+                // So we also set the reverse conflict: lock (us) -> readConflictLock (them)
+                if (readConflictLock.AddConflict(lock.Get(), Db, Update->BreakerQueryTraceId)) {
                     waitPersistent = true;
                     waitPersistentMore.emplace_back(&readConflictLock);
                 }
+                // Also add the reverse direction so our lock knows to break their lock on our commit
+                lock->AddConflict(&readConflictLock, Db, Update->BreakerQueryTraceId);
             }
             for (auto& writeConflictLock : Update->WriteConflictLocks) {
-                if (lock->AddConflict(&writeConflictLock, Db)) {
+                // Use the Update's BreakerQueryTraceId when adding write conflicts
+                if (lock->AddConflict(&writeConflictLock, Db, Update->BreakerQueryTraceId)) {
                     waitPersistent = true;
                     waitPersistentMore.emplace_back(&writeConflictLock);
                 }
@@ -1353,11 +1363,21 @@ void TSysLocks::EraseLock(const TArrayRef<const TCell>& key) {
 void TSysLocks::CommitLock(const TArrayRef<const TCell>& key) {
     Y_ENSURE(Update);
     if (auto* lock = Locker.FindLockPtr(GetLockId(key))) {
+        bool foundStoredBreakerQueryTraceId = false;
         for (auto& pr : lock->ConflictLocks) {
-            if (!!(pr.second & ELockConflictFlags::BreakThemOnOurCommit) && !pr.first->IsRemoved()) {
+            if (!!(pr.second.Flags & ELockConflictFlags::BreakThemOnOurCommit) && !pr.first->IsRemoved()) {
                 Update->AddBreakLock(pr.first);
+                // Use the stored BreakerQueryTraceId from the conflict if available.
+                // This takes precedence over the explicitly set value (from FirstQueryTraceId)
+                // because the stored value is the actual query that created the conflict.
+                if (pr.second.BreakerQueryTraceId != 0 && !foundStoredBreakerQueryTraceId) {
+                    Update->BreakerQueryTraceId = pr.second.BreakerQueryTraceId;
+                    foundStoredBreakerQueryTraceId = true;
+                }
             }
         }
+        // If no stored BreakerQueryTraceId was found, keep the one that was explicitly set
+        // (e.g., from TSetupSysLocks via the current operation's QueryTraceId)
         Update->AddEraseLock(lock);
     }
 }

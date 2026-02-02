@@ -1726,7 +1726,7 @@ public:
         QueryState->Commited = true;
 
         for (const auto& effect : txCtx.DeferredEffects) {
-            request.Transactions.emplace_back(effect.PhysicalTx, effect.Params);
+            request.Transactions.emplace_back(effect.PhysicalTx, effect.Params, effect.QueryTraceId);
             STLOG_D("TExecPhysicalRequest, add DeferredEffect to Transaction",
                 (transactions_size, request.Transactions.size()),
                 (trace_id, TraceId()));
@@ -1743,7 +1743,7 @@ public:
         auto request = PrepareRequest(/* tx */ nullptr, /* literal */ false, QueryState.get());
 
         for (const auto& effect : txCtx.DeferredEffects) {
-            request.Transactions.emplace_back(effect.PhysicalTx, effect.Params);
+            request.Transactions.emplace_back(effect.PhysicalTx, effect.Params, effect.QueryTraceId);
 
             STLOG_D("TExecPhysicalRequest, add DeferredEffect to Transaction",
                 (transactions_size, request.Transactions.size()),
@@ -1861,7 +1861,7 @@ public:
             QueryState->Commited = true;
 
             for (const auto& effect : txCtx.DeferredEffects) {
-                request.Transactions.emplace_back(effect.PhysicalTx, effect.Params);
+                request.Transactions.emplace_back(effect.PhysicalTx, effect.Params, effect.QueryTraceId);
 
                 STLOG_D("TExecPhysicalRequest, add DeferredEffect to Transaction",
                     (transactions_size, request.Transactions.size()),
@@ -1983,6 +1983,16 @@ public:
         request.MaxShardCount = RequestControls.MaxShardCount;
         request.TraceId = QueryState ? QueryState->KqpSessionSpan.GetTraceId() : NWilson::TTraceId();
         request.QueryTraceId = QueryState ? QueryState->QueryTraceId : 0;
+        // Set FirstQueryTraceId for lock-breaking attribution in separate commit scenarios
+        // Try TxManager first, then fall back to QueryTextCollector
+        if (txCtx->TxManager && txCtx->TxManager->GetFirstQueryTraceId() != 0) {
+            request.FirstQueryTraceId = txCtx->TxManager->GetFirstQueryTraceId();
+        } else if (txCtx->QueryTextCollector.GetQueryCount() > 0) {
+            auto maybeFirstId = txCtx->QueryTextCollector.GetFirstQueryTraceId();
+            if (maybeFirstId) {
+                request.FirstQueryTraceId = *maybeFirstId;
+            }
+        }
         request.CaFactory_ = CaFactory_;
         request.ResourceManager_ = ResourceManager_;
         request.SaveQueryPhysicalGraph = allowSaveState && QueryState->SaveQueryPhysicalGraph;
@@ -1994,6 +2004,13 @@ public:
         if (txCtx->EnableOltpSink.value_or(false) && !txCtx->TxManager) {
             txCtx->TxManager = CreateKqpTransactionManager();
             txCtx->TxManager->SetAllowVolatile(AppData()->FeatureFlags.GetEnableDataShardVolatileTransactions());
+            // Initialize FirstQueryTraceId from QueryTextCollector since OnBeginQuery was called before TxManager was created
+            if (txCtx->QueryTextCollector.GetQueryCount() > 0) {
+                auto maybeFirstId = txCtx->QueryTextCollector.GetFirstQueryTraceId();
+                if (maybeFirstId && *maybeFirstId != 0) {
+                    txCtx->TxManager->SetFirstQueryTraceId(*maybeFirstId);
+                }
+            }
         }
 
         if (txCtx->EnableOltpSink.value_or(false)
@@ -2311,13 +2328,36 @@ public:
             const bool isCommitAction = QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_COMMIT_TX ||
                                        QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_EXECUTE_PREPARED;
 
+            // Use BreakerQueryTraceId from DataShard response if available (this is the authoritative source)
+            ui64 breakerQueryTraceId = ev->BreakerQueryTraceId;
+            TString breakerQueryText;
+
+            // If DataShard provided a BreakerQueryTraceId, look up the query text
+            if (breakerQueryTraceId != 0 && QueryState->TxCtx) {
+                breakerQueryText = QueryState->TxCtx->QueryTextCollector.GetQueryTextByTraceId(breakerQueryTraceId);
+            }
+
+            // Fallback: if DataShard didn't provide BreakerQueryTraceId, use current query
+            if (breakerQueryTraceId == 0) {
+                breakerQueryTraceId = QueryState->QueryTraceId;
+                breakerQueryText = QueryState->ExtractQueryText();
+            }
+
+            // If we still don't have query text, try to find it
+            if (breakerQueryText.empty() && QueryState->TxCtx) {
+                breakerQueryText = QueryState->TxCtx->QueryTextCollector.GetQueryTextByTraceId(breakerQueryTraceId);
+                if (breakerQueryText.empty()) {
+                    breakerQueryText = QueryState->ExtractQueryText();
+                }
+            }
+
             NDataIntegrity::LogTli(NDataIntegrity::TTliLogParams{
                 .Component = "SessionActor",
                 .Message = isCommitAction ? "Commit had broken other locks" : "Query had broken other locks",
-                .QueryText = QueryState->ExtractQueryText(),
+                .QueryText = breakerQueryText,
                 .QueryTexts = QueryState->TxCtx->QueryTextCollector.CombineQueryTexts(),
                 .TraceId = TraceId(),
-                .BreakerQueryTraceId = QueryState->QueryTraceId,
+                .BreakerQueryTraceId = breakerQueryTraceId,
                 .IsCommitAction = isCommitAction,
             }, TlsActivationContext->AsActorContext());
         }

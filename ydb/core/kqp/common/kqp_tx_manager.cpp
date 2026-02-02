@@ -48,10 +48,19 @@ public:
     }
 
     void AddAction(ui64 shardId, ui8 action) override {
+        AddAction(shardId, action, 0);
+    }
+
+    void AddAction(ui64 shardId, ui8 action, ui64 queryTraceId) override {
         AFL_ENSURE(State == ETransactionState::COLLECTING || State == ETransactionState::ERROR);
-        ShardsInfo.at(shardId).Flags |= action;
+        auto& shardInfo = ShardsInfo.at(shardId);
+        shardInfo.Flags |= action;
         if (action & EAction::WRITE) {
             ReadOnly = false;
+            // Track the QueryTraceId of the query that wrote to this shard
+            if (queryTraceId != 0 && shardInfo.BreakerQueryTraceId == 0) {
+                shardInfo.BreakerQueryTraceId = queryTraceId;
+            }
         }
         ++ActionsCount;
     }
@@ -273,7 +282,7 @@ public:
         return GetShardsCount() == 0;
     }
 
-    bool HasLocks() const override { 
+    bool HasLocks() const override {
         for (const auto& [_, shardInfo] : ShardsInfo) {
             if (!shardInfo.Locks.empty()) {
                 return true;
@@ -338,6 +347,38 @@ public:
 
     std::optional<ui64> GetBrokenLockQueryTraceId() const override {
         return BrokenLockQueryTraceId_;
+    }
+
+    void SetShardBreakerQueryTraceId(ui64 shardId, ui64 queryTraceId) override {
+        if (queryTraceId == 0) {
+            return;
+        }
+        auto it = ShardsInfo.find(shardId);
+        if (it == ShardsInfo.end()) {
+            return;
+        }
+        // Store the first BreakerQueryTraceId for this shard (the query that created the conflict)
+        if (it->second.BreakerQueryTraceId == 0) {
+            it->second.BreakerQueryTraceId = queryTraceId;
+        }
+    }
+
+    std::optional<ui64> GetShardBreakerQueryTraceId(ui64 shardId) const override {
+        auto it = ShardsInfo.find(shardId);
+        if (it != ShardsInfo.end() && it->second.BreakerQueryTraceId != 0) {
+            return it->second.BreakerQueryTraceId;
+        }
+        return std::nullopt;
+    }
+
+    void SetFirstQueryTraceId(ui64 queryTraceId) override {
+        if (FirstQueryTraceId_ == 0 && queryTraceId != 0) {
+            FirstQueryTraceId_ = queryTraceId;
+        }
+    }
+
+    ui64 GetFirstQueryTraceId() const override {
+        return FirstQueryTraceId_;
     }
 
     const THashSet<ui64>& GetShards() const override {
@@ -550,6 +591,7 @@ private:
             TKqpLock Lock;
             bool Invalidated = false;
             bool LocksAcquireFailure = false;
+            ui64 BreakerQueryTraceId = 0;  // QueryTraceId of the query that modified this lock
         };
 
         THashMap<TKqpLock::TKey, TLockInfo> Locks;
@@ -560,6 +602,8 @@ private:
         bool Restarting = false;
         bool Reattaching = false;
         TReattachState ReattachState;
+
+        ui64 BreakerQueryTraceId = 0;  // QueryTraceId of the query that created conflicts on this shard
     };
 
     void MakeLocksIssue(const TShardInfo& shardInfo) {
@@ -597,6 +641,7 @@ private:
     bool HasOlapTableShard = false;
     std::optional<NYql::TIssue> LocksIssue;
     std::optional<ui64> BrokenLockQueryTraceId_;
+    ui64 FirstQueryTraceId_ = 0;
 
     THashSet<ui64> SendingShards;
     THashSet<ui64> ReceivingShards;

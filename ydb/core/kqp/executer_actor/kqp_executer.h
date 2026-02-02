@@ -39,6 +39,7 @@ struct TEvKqpExecuter {
         ui64 ResultRowsBytes = 0;
         ui64 LocksBrokenAsBreaker = 0;
         ui64 LocksBrokenAsVictim = 0;
+        ui64 BreakerQueryTraceId = 0;  // QueryTraceId of the query that broke locks (from DataShard)
 
         THashSet<ui32> ParticipantNodes;
 

@@ -2677,13 +2677,19 @@ private:
                 addLock->SetHasWrites(true);
             }
 
-            // Add QueryTraceId for broken locks (needed for TLI logging)
+            // Add QueryTraceId for locks (needed for TLI logging)
+            // For broken locks, use VictimQueryTraceId; for normal locks, use current QueryTraceId
             if (lock.IsError()) {
                 if (auto rawLock = sysLocks.GetRawLock(lock.LockId)) {
                     ui64 queryTraceId = rawLock->GetVictimQueryTraceId();
                     if (queryTraceId != 0) {
                         addLock->SetQueryTraceId(queryTraceId);
                     }
+                }
+            } else {
+                // Set QueryTraceId for normal locks to track which query created the lock
+                if (state.QueryTraceId != 0) {
+                    addLock->SetQueryTraceId(state.QueryTraceId);
                 }
             }
 

@@ -32,6 +32,7 @@ struct TSetupSysLocks
         LockTxId = lockTxId;
         LockNodeId = lockNodeId;
         VictimQueryTraceId = victimQueryTraceId;
+        BreakerQueryTraceId = victimQueryTraceId;  // When creating locks, the query is both victim and potential breaker
 
         SysLocksTable.SetupUpdate(this, db);
     }
@@ -44,6 +45,7 @@ struct TSetupSysLocks
         LockTxId = op->LockTxId();
         LockNodeId = op->LockNodeId();
         VictimQueryTraceId = op->QueryTraceId();
+        BreakerQueryTraceId = op->QueryTraceId();  // When creating locks, the query is both victim and potential breaker
 
         auto mvccVersion = self.GetMvccVersion(op.Get());
 

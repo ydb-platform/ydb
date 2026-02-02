@@ -1445,12 +1445,7 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
                 },
             };
         };
-        LdapMock::TSimpleServer ldapServer({
-            .Port = ldapPort,
-            .Cert = CertStorage.GetServerCertFileName(),
-            .Key = CertStorage.GetServerKeyFileName(),
-            .UseTls = false
-        }, ldapResponses("user1", "password1"));
+        LdapMock::TSimpleServer ldapServer({.Port = ldapPort}, ldapResponses("user1", "password1"));
         ldapServer.Start();
 
         // Get initial audit log size after environment setup and use single counter
@@ -1551,12 +1546,7 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
                 },
             };
         };
-        LdapMock::TSimpleServer ldapServer({
-            .Port = ldapPort,
-            .Cert = CertStorage.GetServerCertFileName(),
-            .Key = CertStorage.GetServerKeyFileName(),
-            .UseTls = false
-        }, ldapResponses("user1", "bad_password"));
+        LdapMock::TSimpleServer ldapServer({.Port = ldapPort}, ldapResponses("user1", "bad_password"));
         ldapServer.Start();
 
         size_t expectedLines = lines.size();
@@ -1655,12 +1645,7 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
                 },
             };
         };
-        LdapMock::TSimpleServer ldapServer({
-            .Port = ldapPort,
-            .Cert = CertStorage.GetServerCertFileName(),
-            .Key = CertStorage.GetServerKeyFileName(),
-            .UseTls = false
-        }, ldapResponses("bad_user", "password1"));
+        LdapMock::TSimpleServer ldapServer({.Port = ldapPort}, ldapResponses("bad_user", "password1"));
         ldapServer.Start();
 
         size_t expectedLines = lines.size();
@@ -1760,12 +1745,7 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
                 },
             };
         };
-        LdapMock::TSimpleServer ldapServer({
-            .Port = ldapPort,
-            .Cert = CertStorage.GetServerCertFileName(),
-            .Key = CertStorage.GetServerKeyFileName(),
-            .UseTls = false
-        }, ldapResponses("user1", "password1"));
+        LdapMock::TSimpleServer ldapServer({.Port = ldapPort}, ldapResponses("user1", "password1"));
         ldapServer.Start();
 
         size_t expectedLines = lines.size();

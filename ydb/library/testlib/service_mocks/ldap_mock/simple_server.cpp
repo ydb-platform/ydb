@@ -177,15 +177,17 @@ bool TSimpleServer::InitTlsCtx() {
         return false;
     }
 
-    if (SSL_CTX_use_certificate_file(Ctx.Get(), Opt.Cert.c_str(), SSL_FILETYPE_PEM) != 1) {
-        ERR_print_errors_fp(stderr);
-        return false;
+    if (!Opt.Cert.empty() && !Opt.Key.empty()) {
+        if (SSL_CTX_use_certificate_file(Ctx.Get(), Opt.Cert.c_str(), SSL_FILETYPE_PEM) != 1) {
+            ERR_print_errors_fp(stderr);
+            return false;
+        }
+        if (SSL_CTX_use_PrivateKey_file(Ctx.Get(), Opt.Key.c_str(), SSL_FILETYPE_PEM) != 1) {
+            ERR_print_errors_fp(stderr);
+            return false;
+        }
     }
 
-    if (SSL_CTX_use_PrivateKey_file(Ctx.Get(), Opt.Key.c_str(), SSL_FILETYPE_PEM) != 1) {
-        ERR_print_errors_fp(stderr);
-        return false;
-    }
 
     int mode = SSL_VERIFY_NONE;
     if (Opt.RequireClientCert) {

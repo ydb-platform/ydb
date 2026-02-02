@@ -656,16 +656,8 @@ Y_UNIT_TEST(CanFetchGroupsWithDefaultGroupAttributeDisableNestedGroups) {
     TString login = "ldapuser";
     TString password = "ldapUserPassword";
 
-    TLdapKikimrServer ydbServer(InitLdapSettingsDisableSearchNestedGroups, {
-        .CaCertFile = CertStorage.GetCaCertFileName(),
-        .Type = ESecurityConnectionType::NON_SECURE
-    });
-    LdapMock::TSimpleServer ldapServer({
-        .Port = ydbServer.GetLdapPort(),
-        .Cert = CertStorage.GetServerCertFileName(),
-        .Key = CertStorage.GetServerKeyFileName(),
-        .UseTls = false
-    }, TCorrectLdapResponse::GetResponses(login, true));
+    TLdapKikimrServer ydbServer(InitLdapSettingsDisableSearchNestedGroups);
+    LdapMock::TSimpleServer ldapServer({.Port = ydbServer.GetLdapPort()}, TCorrectLdapResponse::GetResponses(login, true));
 
     ldapServer.Start();
     TAutoPtr<IEventHandle> handle = LdapAuthenticate(ydbServer, login, password);
@@ -691,16 +683,8 @@ Y_UNIT_TEST(CanFetchGroupsFromAdServer) {
     TString login = "ldapuser";
     TString password = "ldapUserPassword";
 
-    TLdapKikimrServer ydbServer(InitLdapSettings, {
-        .CaCertFile = CertStorage.GetCaCertFileName(),
-        .Type = ESecurityConnectionType::NON_SECURE
-    });
-    LdapMock::TSimpleServer ldapServer({
-        .Port = ydbServer.GetLdapPort(),
-        .Cert = CertStorage.GetServerCertFileName(),
-        .Key = CertStorage.GetServerKeyFileName(),
-        .UseTls = false
-    }, TCorrectLdapResponse::GetResponses(login));
+    TLdapKikimrServer ydbServer(InitLdapSettings);
+    LdapMock::TSimpleServer ldapServer({.Port = ydbServer.GetLdapPort()}, TCorrectLdapResponse::GetResponses(login));
 
     ldapServer.Start();
     TAutoPtr<IEventHandle> handle = LdapAuthenticate(ydbServer, login, password);
@@ -726,16 +710,8 @@ Y_UNIT_TEST(CanFetchGroupsWithDisabledRequestToAD) {
     TString login = "ldapuser";
     TString password = "ldapUserPassword";
 
-    TLdapKikimrServer ydbServer(InitLdapSettingsDisableSearchNestedGroups, {
-        .CaCertFile = CertStorage.GetCaCertFileName(),
-        .Type = ESecurityConnectionType::NON_SECURE
-    });
-    LdapMock::TSimpleServer ldapServer({
-        .Port = ydbServer.GetLdapPort(),
-        .Cert = CertStorage.GetServerCertFileName(),
-        .Key = CertStorage.GetServerKeyFileName(),
-        .UseTls = false
-    }, TCorrectLdapResponse::GetResponses(login, true));
+    TLdapKikimrServer ydbServer(InitLdapSettingsDisableSearchNestedGroups);
+    LdapMock::TSimpleServer ldapServer({.Port = ydbServer.GetLdapPort()}, TCorrectLdapResponse::GetResponses(login, true));
 
     ldapServer.Start();
     TAutoPtr<IEventHandle> handle = LdapAuthenticate(ydbServer, login, password);
@@ -761,16 +737,8 @@ Y_UNIT_TEST(CanFetchGroupsWithDefaultGroupAttributeUseListOfHosts) {
     TString login = "ldapuser";
     TString password = "ldapUserPassword";
 
-    TLdapKikimrServer ydbServer(InitLdapSettingsWithListOfHosts, {
-        .CaCertFile = CertStorage.GetCaCertFileName(),
-        .Type = ESecurityConnectionType::NON_SECURE
-    });
-    LdapMock::TSimpleServer ldapServer({
-        .Port = ydbServer.GetLdapPort(),
-        .Cert = CertStorage.GetServerCertFileName(),
-        .Key = CertStorage.GetServerKeyFileName(),
-        .UseTls = false
-    }, TCorrectLdapResponse::GetResponses(login));
+    TLdapKikimrServer ydbServer(InitLdapSettingsWithListOfHosts);
+    LdapMock::TSimpleServer ldapServer({.Port = ydbServer.GetLdapPort()}, TCorrectLdapResponse::GetResponses(login));
 
     ldapServer.Start();
     TAutoPtr<IEventHandle> handle = LdapAuthenticate(ydbServer, login, password);
@@ -796,16 +764,8 @@ Y_UNIT_TEST(CanFetchGroupsWithCustomGroupAttribute) {
     TString login = "ldapuser";
     TString password = "ldapUserPassword";
 
-    TLdapKikimrServer ydbServer(InitLdapSettingsWithCustomGroupAttribute, {
-        .CaCertFile = CertStorage.GetCaCertFileName(),
-        .Type = ESecurityConnectionType::NON_SECURE
-    });
-    LdapMock::TSimpleServer ldapServer({
-        .Port = ydbServer.GetLdapPort(),
-        .Cert = CertStorage.GetServerCertFileName(),
-        .Key = CertStorage.GetServerKeyFileName(),
-        .UseTls = false
-    }, TCorrectLdapResponse::GetResponses(login, false, "groupDN"));
+    TLdapKikimrServer ydbServer(InitLdapSettingsWithCustomGroupAttribute);
+    LdapMock::TSimpleServer ldapServer({.Port = ydbServer.GetLdapPort()}, TCorrectLdapResponse::GetResponses(login, false, "groupDN"));
 
     ldapServer.Start();
     TAutoPtr<IEventHandle> handle = LdapAuthenticate(ydbServer, login, password);
@@ -831,10 +791,7 @@ Y_UNIT_TEST(CanFetchGroupsWithDontExistGroupAttribute) {
     TString login = "ldapuser";
     TString password = "ldapUserPassword";
 
-    TLdapKikimrServer ydbServer(InitLdapSettingsWithCustomGroupAttribute, {
-        .CaCertFile = CertStorage.GetCaCertFileName(),
-        .Type = ESecurityConnectionType::NON_SECURE
-    });
+    TLdapKikimrServer ydbServer(InitLdapSettingsWithCustomGroupAttribute);
 
     LdapMock::TLdapMockResponses responses;
     responses.BindResponses.push_back({{{.Login = "cn=robouser,dc=search,dc=yandex,dc=net", .Password = "robouserPassword"}}, {.Status = LdapMock::EStatus::SUCCESS}});
@@ -862,12 +819,7 @@ Y_UNIT_TEST(CanFetchGroupsWithDontExistGroupAttribute) {
     };
     responses.SearchResponses.push_back({fetchGroupsSearchRequestInfo, fetchGroupsSearchResponseInfo});
 
-    LdapMock::TSimpleServer ldapServer({
-        .Port = ydbServer.GetLdapPort(),
-        .Cert = CertStorage.GetServerCertFileName(),
-        .Key = CertStorage.GetServerKeyFileName(),
-        .UseTls = false
-    }, responses);
+    LdapMock::TSimpleServer ldapServer({.Port = ydbServer.GetLdapPort()}, responses);
 
     ldapServer.Start();
     TAutoPtr<IEventHandle> handle = LdapAuthenticate(ydbServer, login, password);
@@ -889,16 +841,8 @@ Y_UNIT_TEST(CanNotFetchGroupsWithInvalidRobotUserLogin) {
     LdapMock::TLdapMockResponses responses;
     responses.BindResponses.push_back({{{.Login = "cn=invalidRobouser,dc=search,dc=yandex,dc=net", .Password = "robouserPassword"}}, {.Status = LdapMock::EStatus::INVALID_CREDENTIALS}});
 
-    TLdapKikimrServer ydbServer(InitLdapSettingsWithInvalidRobotUserLogin, {
-        .CaCertFile = CertStorage.GetCaCertFileName(),
-        .Type = ESecurityConnectionType::NON_SECURE
-    });
-    LdapMock::TSimpleServer ldapServer({
-        .Port = ydbServer.GetLdapPort(),
-        .Cert = CertStorage.GetServerCertFileName(),
-        .Key = CertStorage.GetServerKeyFileName(),
-        .UseTls = false
-    }, responses);
+    TLdapKikimrServer ydbServer(InitLdapSettingsWithInvalidRobotUserLogin);
+    LdapMock::TSimpleServer ldapServer({.Port = ydbServer.GetLdapPort()}, responses);
 
     ldapServer.Start();
     TAutoPtr<IEventHandle> handle = LdapAuthenticate(ydbServer, login, password);
@@ -916,16 +860,8 @@ Y_UNIT_TEST(CanNotFetchGroupsWithInvalidRobotUserPassword) {
     LdapMock::TLdapMockResponses responses;
     responses.BindResponses.push_back({{{.Login = "cn=robouser,dc=search,dc=yandex,dc=net", .Password = "invalidPassword"}}, {.Status = LdapMock::EStatus::INVALID_CREDENTIALS}});
 
-    TLdapKikimrServer ydbServer(InitLdapSettingsWithInvalidRobotUserPassword, {
-        .CaCertFile = CertStorage.GetCaCertFileName(),
-        .Type = ESecurityConnectionType::NON_SECURE
-    });
-    LdapMock::TSimpleServer ldapServer({
-        .Port = ydbServer.GetLdapPort(),
-        .Cert = CertStorage.GetServerCertFileName(),
-        .Key = CertStorage.GetServerKeyFileName(),
-        .UseTls = false
-    }, responses);
+    TLdapKikimrServer ydbServer(InitLdapSettingsWithInvalidRobotUserPassword);
+    LdapMock::TSimpleServer ldapServer({.Port = ydbServer.GetLdapPort()}, responses);
 
     ldapServer.Start();
     TAutoPtr<IEventHandle> handle = LdapAuthenticate(ydbServer, login, password);
@@ -959,16 +895,8 @@ Y_UNIT_TEST(CanNotFetchGroupsWithRemovedUserCredentials) {
     };
     responses.SearchResponses.push_back({removedUserSearchRequestInfo, removedUserSearchResponseInfo});
 
-    TLdapKikimrServer ydbServer(InitLdapSettings, {
-        .CaCertFile = CertStorage.GetCaCertFileName(),
-        .Type = ESecurityConnectionType::NON_SECURE
-    });
-    LdapMock::TSimpleServer ldapServer({
-        .Port = ydbServer.GetLdapPort(),
-        .Cert = CertStorage.GetServerCertFileName(),
-        .Key = CertStorage.GetServerKeyFileName(),
-        .UseTls = false
-    }, responses);
+    TLdapKikimrServer ydbServer(InitLdapSettings);
+    LdapMock::TSimpleServer ldapServer({.Port = ydbServer.GetLdapPort()}, responses);
 
     ldapServer.Start();
     TAutoPtr<IEventHandle> handle = LdapAuthenticate(ydbServer, removedUserLogin, removedUserPassword);
@@ -985,16 +913,8 @@ Y_UNIT_TEST(CanNotFetchGroupsUseInvalidSearchFilter) {
     LdapMock::TLdapMockResponses responses;
     responses.BindResponses.push_back({{{.Login = "cn=robouser,dc=search,dc=yandex,dc=net", .Password = "robouserPassword"}}, {.Status = LdapMock::EStatus::SUCCESS}});
 
-    TLdapKikimrServer ydbServer(InitLdapSettingsWithInvalidFilter, {
-        .CaCertFile = CertStorage.GetCaCertFileName(),
-        .Type = ESecurityConnectionType::NON_SECURE
-    });
-    LdapMock::TSimpleServer ldapServer({
-        .Port = ydbServer.GetLdapPort(),
-        .Cert = CertStorage.GetServerCertFileName(),
-        .Key = CertStorage.GetServerKeyFileName(),
-        .UseTls = false
-    }, responses);
+    TLdapKikimrServer ydbServer(InitLdapSettingsWithInvalidFilter);
+    LdapMock::TSimpleServer ldapServer({.Port = ydbServer.GetLdapPort()}, responses);
 
     ldapServer.Start();
     TAutoPtr<IEventHandle> handle = LdapAuthenticate(ydbServer, login, password);
@@ -1012,16 +932,8 @@ Y_UNIT_TEST(CanRefreshGroupsInfo) {
     LdapMock::TLdapMockResponses updatedResponses = TCorrectLdapResponse::GetUpdatedResponses(login);
     const TString ldapDomain = "@ldap";
 
-    TLdapKikimrServer ydbServer(InitLdapSettings, {
-        .CaCertFile = CertStorage.GetCaCertFileName(),
-        .Type = ESecurityConnectionType::NON_SECURE
-    });
-    LdapMock::TSimpleServer ldapServer({
-        .Port = ydbServer.GetLdapPort(),
-        .Cert = CertStorage.GetServerCertFileName(),
-        .Key = CertStorage.GetServerKeyFileName(),
-        .UseTls = false
-    }, TCorrectLdapResponse::GetResponses(login));
+    TLdapKikimrServer ydbServer(InitLdapSettings);
+    LdapMock::TSimpleServer ldapServer({.Port = ydbServer.GetLdapPort()}, TCorrectLdapResponse::GetResponses(login));
     ldapServer.Start();
 
     auto loginResponse = GetLoginResponse(ydbServer, login, password);
@@ -1075,16 +987,8 @@ Y_UNIT_TEST(CanRefreshGroupsInfoWithDisabledNestedGroups) {
     LdapMock::TLdapMockResponses updatedResponses = TCorrectLdapResponse::GetUpdatedResponses(login, true);
     const TString ldapDomain = "@ldap";
 
-    TLdapKikimrServer ydbServer(InitLdapSettingsDisableSearchNestedGroups, {
-        .CaCertFile = CertStorage.GetCaCertFileName(),
-        .Type = ESecurityConnectionType::NON_SECURE
-    });
-    LdapMock::TSimpleServer ldapServer({
-        .Port = ydbServer.GetLdapPort(),
-        .Cert = CertStorage.GetServerCertFileName(),
-        .Key = CertStorage.GetServerKeyFileName(),
-        .UseTls = false
-    }, responses);
+    TLdapKikimrServer ydbServer(InitLdapSettingsDisableSearchNestedGroups);
+    LdapMock::TSimpleServer ldapServer({.Port = ydbServer.GetLdapPort(),}, responses);
 
     ldapServer.Start();
     auto loginResponse = GetLoginResponse(ydbServer, login, password);
@@ -1134,10 +1038,7 @@ Y_UNIT_TEST(CanNotRefreshRemovedUser) {
     TString login = "ldapuser";
     TString password = "ldapUserPassword";
 
-    TLdapKikimrServer ydbServer(InitLdapSettings, {
-        .CaCertFile = CertStorage.GetCaCertFileName(),
-        .Type = ESecurityConnectionType::NON_SECURE
-    });
+    TLdapKikimrServer ydbServer(InitLdapSettings);
     auto responses = TCorrectLdapResponse::GetResponses(login);
     LdapMock::TLdapMockResponses updatedResponses = responses;
     LdapMock::TSearchResponseInfo newFetchGroupsSearchResponseInfo {
@@ -1147,12 +1048,7 @@ Y_UNIT_TEST(CanNotRefreshRemovedUser) {
 
     auto& searchResponse = updatedResponses.SearchResponses.front();
     searchResponse.second = newFetchGroupsSearchResponseInfo;
-    LdapMock::TSimpleServer ldapServer({
-        .Port = ydbServer.GetLdapPort(),
-        .Cert = CertStorage.GetServerCertFileName(),
-        .Key = CertStorage.GetServerKeyFileName(),
-        .UseTls = false
-    }, responses);
+    LdapMock::TSimpleServer ldapServer({.Port = ydbServer.GetLdapPort()}, responses);
 
     ldapServer.Start();
     auto loginResponse = GetLoginResponse(ydbServer, login, password);
@@ -1194,10 +1090,7 @@ Y_UNIT_TEST(CanRefreshGroupsInfoWithError) {
     TString login = "ldapuser";
     TString password = "ldapUserPassword";
 
-    TLdapKikimrServer ydbServer(InitLdapSettings, {
-        .CaCertFile = CertStorage.GetCaCertFileName(),
-        .Type = ESecurityConnectionType::NON_SECURE
-    });
+    TLdapKikimrServer ydbServer(InitLdapSettings);
     auto responses = TCorrectLdapResponse::GetResponses(login);
     LdapMock::TLdapMockResponses updatedResponses = responses;
     LdapMock::TSearchResponseInfo responseServerBusy {
@@ -1207,12 +1100,7 @@ Y_UNIT_TEST(CanRefreshGroupsInfoWithError) {
 
     auto& searchResponse = responses.SearchResponses.front();
     searchResponse.second = responseServerBusy;
-    LdapMock::TSimpleServer ldapServer({
-        .Port = ydbServer.GetLdapPort(),
-        .Cert = CertStorage.GetServerCertFileName(),
-        .Key = CertStorage.GetServerKeyFileName(),
-        .UseTls = false
-    }, responses);
+    LdapMock::TSimpleServer ldapServer({.Port = ydbServer.GetLdapPort()}, responses);
 
     ldapServer.Start();
     auto loginResponse = GetLoginResponse(ydbServer, login, password);
@@ -1278,16 +1166,8 @@ Y_UNIT_TEST(CanFetchGroupsWithDelayUpdateSecurityState) {
     TString login = "ldapuser";
     TString password = "ldapUserPassword";
 
-    TLdapKikimrServer ydbServer(InitLdapSettings, {
-        .CaCertFile = CertStorage.GetCaCertFileName(),
-        .Type = ESecurityConnectionType::NON_SECURE
-    });
-    LdapMock::TSimpleServer ldapServer({
-        .Port = ydbServer.GetLdapPort(),
-        .Cert = CertStorage.GetServerCertFileName(),
-        .Key = CertStorage.GetServerKeyFileName(),
-        .UseTls = false
-    }, TCorrectLdapResponse::GetResponses(login));
+    TLdapKikimrServer ydbServer(InitLdapSettings);
+    LdapMock::TSimpleServer ldapServer({.Port = ydbServer.GetLdapPort()}, TCorrectLdapResponse::GetResponses(login));
 
     ldapServer.Start();
     TTestActorRuntime* runtime = ydbServer.GetRuntime();
@@ -1326,16 +1206,8 @@ Y_UNIT_TEST(CanGetErrorIfAppropriateLoginProviderIsAbsent) {
     TString login = "ldapuser";
     TString password = "ldapUserPassword";
 
-    TLdapKikimrServer ydbServer(InitLdapSettings, {
-        .CaCertFile = CertStorage.GetCaCertFileName(),
-        .Type = ESecurityConnectionType::NON_SECURE
-    });
-    LdapMock::TSimpleServer ldapServer({
-        .Port = ydbServer.GetLdapPort(),
-        .Cert = CertStorage.GetServerCertFileName(),
-        .Key = CertStorage.GetServerKeyFileName(),
-        .UseTls = false
-    }, TCorrectLdapResponse::GetResponses(login));
+    TLdapKikimrServer ydbServer(InitLdapSettings);
+    LdapMock::TSimpleServer ldapServer({.Port = ydbServer.GetLdapPort()}, TCorrectLdapResponse::GetResponses(login));
 
     ldapServer.Start();
     TTestActorRuntime* runtime = ydbServer.GetRuntime();

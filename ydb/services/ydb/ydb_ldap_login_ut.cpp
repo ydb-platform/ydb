@@ -20,7 +20,7 @@ namespace {
 
 class TLoginClientConnection {
 public:
-    TLoginClientConnection(std::function<void(NKikimrProto::TLdapAuthentication*, ui16, const TLdapClientOptions&)> initLdapSettings, const TLdapClientOptions& ldapClientOptions)
+    TLoginClientConnection(std::function<void(NKikimrProto::TLdapAuthentication*, ui16, const TLdapClientOptions&)> initLdapSettings, const TLdapClientOptions& ldapClientOptions = {})
         : LdapClientOptions(ldapClientOptions)
         , Server(InitAuthSettings(std::move(initLdapSettings)))
         , Connection(GetDriverConfig(Server.GetPort()))
@@ -152,16 +152,8 @@ Y_UNIT_TEST_SUITE(TGRpcLdapAuthentication) {
         LdapMock::TLdapMockResponses responses;
         responses.BindResponses.push_back({{{.Login = "cn=invalidRobouser,dc=search,dc=yandex,dc=net", .Password = "robouserPassword"}}, {.Status = LdapMock::EStatus::INVALID_CREDENTIALS}});
 
-        TLoginClientConnection loginConnection(InitLdapSettingsWithInvalidRobotUserLogin, {
-            .CaCertFile = CertStorage.GetCaCertFileName(),
-            .Type = ESecurityConnectionType::NON_SECURE
-        });
-        LdapMock::TSimpleServer ldapServer({
-            .Port = loginConnection.GetLdapPort(),
-            .Cert = CertStorage.GetServerCertFileName(),
-            .Key = CertStorage.GetServerKeyFileName(),
-            .UseTls = false
-        }, responses);
+        TLoginClientConnection loginConnection(InitLdapSettingsWithInvalidRobotUserLogin);
+        LdapMock::TSimpleServer ldapServer({.Port = loginConnection.GetLdapPort()}, responses);
 
         ldapServer.Start();
         auto factory = CreateLoginCredentialsProviderFactory({.User = login + "@ldap", .Password = password});
@@ -179,16 +171,8 @@ Y_UNIT_TEST_SUITE(TGRpcLdapAuthentication) {
         LdapMock::TLdapMockResponses responses;
         responses.BindResponses.push_back({{{.Login = "cn=robouser,dc=search,dc=yandex,dc=net", .Password = "invalidPassword"}}, {.Status = LdapMock::EStatus::INVALID_CREDENTIALS}});
 
-        TLoginClientConnection loginConnection(InitLdapSettingsWithInvalidRobotUserPassword, {
-            .CaCertFile = CertStorage.GetCaCertFileName(),
-            .Type = ESecurityConnectionType::NON_SECURE
-        });
-        LdapMock::TSimpleServer ldapServer({
-            .Port = loginConnection.GetLdapPort(),
-            .Cert = CertStorage.GetServerCertFileName(),
-            .Key = CertStorage.GetServerKeyFileName(),
-            .UseTls = false
-        }, responses);
+        TLoginClientConnection loginConnection(InitLdapSettingsWithInvalidRobotUserPassword);
+        LdapMock::TSimpleServer ldapServer({.Port = loginConnection.GetLdapPort()}, responses);
 
         ldapServer.Start();
         auto factory = CreateLoginCredentialsProviderFactory({.User = login + "@ldap", .Password = password});
@@ -206,16 +190,8 @@ Y_UNIT_TEST_SUITE(TGRpcLdapAuthentication) {
         LdapMock::TLdapMockResponses responses;
         responses.BindResponses.push_back({{{.Login = "cn=robouser,dc=search,dc=yandex,dc=net", .Password = "robouserPassword"}}, {.Status = LdapMock::EStatus::SUCCESS}});
 
-        TLoginClientConnection loginConnection(InitLdapSettingsWithInvalidFilter, {
-            .CaCertFile = CertStorage.GetCaCertFileName(),
-            .Type = ESecurityConnectionType::NON_SECURE
-        });
-        LdapMock::TSimpleServer ldapServer({
-            .Port = loginConnection.GetLdapPort(),
-            .Cert = CertStorage.GetServerCertFileName(),
-            .Key = CertStorage.GetServerKeyFileName(),
-            .UseTls = false
-        }, responses);
+        TLoginClientConnection loginConnection(InitLdapSettingsWithInvalidFilter);
+        LdapMock::TSimpleServer ldapServer({.Port = loginConnection.GetLdapPort()}, responses);
 
         ldapServer.Start();
         auto factory = CreateLoginCredentialsProviderFactory({.User = login + "@ldap", .Password = password});
@@ -231,16 +207,8 @@ Y_UNIT_TEST_SUITE(TGRpcLdapAuthentication) {
         TString password = "ldapUserPassword";
 
         LdapMock::TLdapMockResponses responses;
-        TLoginClientConnection loginConnection(initLdapSettings, {
-            .CaCertFile = CertStorage.GetCaCertFileName(),
-            .Type = ESecurityConnectionType::NON_SECURE
-        });
-        LdapMock::TSimpleServer ldapServer({
-            .Port = loginConnection.GetLdapPort(),
-            .Cert = CertStorage.GetServerCertFileName(),
-            .Key = CertStorage.GetServerKeyFileName(),
-            .UseTls = false
-        }, responses);
+        TLoginClientConnection loginConnection(initLdapSettings);
+        LdapMock::TSimpleServer ldapServer({.Port = loginConnection.GetLdapPort()}, responses);
 
         ldapServer.Start();
         auto factory = CreateLoginCredentialsProviderFactory({.User = login + "@ldap", .Password = password});
@@ -294,16 +262,8 @@ Y_UNIT_TEST_SUITE(TGRpcLdapAuthentication) {
         };
         responses.SearchResponses.push_back({fetchUserSearchRequestInfo, fetchUserSearchResponseInfo});
 
-        TLoginClientConnection loginConnection(InitLdapSettings, {
-            .CaCertFile = CertStorage.GetCaCertFileName(),
-            .Type = ESecurityConnectionType::NON_SECURE
-        });
-        LdapMock::TSimpleServer ldapServer({
-            .Port = loginConnection.GetLdapPort(),
-            .Cert = CertStorage.GetServerCertFileName(),
-            .Key = CertStorage.GetServerKeyFileName(),
-            .UseTls = false
-        }, responses);
+        TLoginClientConnection loginConnection(InitLdapSettings);
+        LdapMock::TSimpleServer ldapServer({.Port = loginConnection.GetLdapPort()}, responses);
 
         ldapServer.Start();
         auto factory = CreateLoginCredentialsProviderFactory({.User = nonExistentUser + "@ldap", .Password = password});
@@ -344,16 +304,8 @@ Y_UNIT_TEST_SUITE(TGRpcLdapAuthentication) {
         };
         responses.SearchResponses.push_back({fetchUserSearchRequestInfo, fetchUserSearchResponseInfo});
 
-        TLoginClientConnection loginConnection(InitLdapSettings, {
-            .CaCertFile = CertStorage.GetCaCertFileName(),
-            .Type = ESecurityConnectionType::NON_SECURE
-        });
-        LdapMock::TSimpleServer ldapServer({
-            .Port = loginConnection.GetLdapPort(),
-            .Cert = CertStorage.GetServerCertFileName(),
-            .Key = CertStorage.GetServerKeyFileName(),
-            .UseTls = false
-        }, responses);
+        TLoginClientConnection loginConnection(InitLdapSettings);
+        LdapMock::TSimpleServer ldapServer({.Port = loginConnection.GetLdapPort()}, responses);
 
         ldapServer.Start();
         auto factory = CreateLoginCredentialsProviderFactory({.User = login + "@ldap", .Password = password});
@@ -393,16 +345,8 @@ Y_UNIT_TEST_SUITE(TGRpcLdapAuthentication) {
         };
         responses.SearchResponses.push_back({fetchUserSearchRequestInfo, fetchUserSearchResponseInfo});
 
-        TLoginClientConnection loginConnection(InitLdapSettings, {
-            .CaCertFile = CertStorage.GetCaCertFileName(),
-            .Type = ESecurityConnectionType::NON_SECURE
-        });
-        LdapMock::TSimpleServer ldapServer({
-            .Port = loginConnection.GetLdapPort(),
-            .Cert = CertStorage.GetServerCertFileName(),
-            .Key = CertStorage.GetServerKeyFileName(),
-            .UseTls = false
-        }, responses);
+        TLoginClientConnection loginConnection(InitLdapSettings);
+        LdapMock::TSimpleServer ldapServer({.Port = loginConnection.GetLdapPort()}, responses);
 
         ldapServer.Start();
         auto factory = CreateLoginCredentialsProviderFactory({.User = login + "@ldap", .Password = password});
@@ -419,10 +363,7 @@ Y_UNIT_TEST_SUITE(TGRpcLdapAuthentication) {
         const TString incorrectLdapDomain = "@ldap.domain"; // Correct domain is AuthConfig.LdapAuthenticationDomain: "ldap"
 
         auto factory = CreateLoginCredentialsProviderFactory({.User = login + incorrectLdapDomain, .Password = password});
-        TLoginClientConnection loginConnection(InitLdapSettings, {
-            .CaCertFile = CertStorage.GetCaCertFileName(),
-            .Type = ESecurityConnectionType::NON_SECURE
-        });
+        TLoginClientConnection loginConnection(InitLdapSettings);
         auto loginProvider = factory->CreateProvider(loginConnection.GetCoreFacility());
         UNIT_ASSERT_EXCEPTION_CONTAINS(loginProvider->GetAuthInfo(), yexception, "Cannot find user 'ldapuser@ldap.domain'");
 
@@ -434,8 +375,6 @@ Y_UNIT_TEST_SUITE(TGRpcLdapAuthentication) {
         TString password = "builtinUserPassword";
 
         TLoginClientConnection loginConnection(InitLdapSettings, {
-            .CaCertFile = CertStorage.GetCaCertFileName(),
-            .Type = ESecurityConnectionType::NON_SECURE,
             .IsLoginAuthenticationEnabled = false
         });
 

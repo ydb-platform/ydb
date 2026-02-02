@@ -72,6 +72,7 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         self._tenant_affiliation = tenant_affiliation
         self.grpc_port = port_allocator.grpc_port
         self.mon_port = port_allocator.mon_port
+        self.mon_uses_https = self.__configurator.monitoring_tls_cert_path is not None
         self.ic_port = port_allocator.ic_port
         self.grpc_ssl_port = port_allocator.grpc_ssl_port
         self.pgwire_port = port_allocator.pgwire_port
@@ -243,6 +244,21 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
                 "--ic-port=%d" % self.ic_port,
             ]
         )
+
+        if self.__configurator.monitoring_tls_cert_path is not None:
+            command.append(
+                "--mon-cert=%s" % self.__configurator.monitoring_tls_cert_path
+            )
+
+        if self.__configurator.monitoring_tls_key_path is not None:
+            command.append(
+                "--mon-key=%s" % self.__configurator.monitoring_tls_key_path
+            )
+
+        if self.__configurator.monitoring_tls_ca_path is not None:
+            command.append(
+                "--mon-ca=%s" % self.__configurator.monitoring_tls_ca_path
+            )
 
         if os.environ.get("YDB_ALLOCATE_PGWIRE_PORT", "") == "true":
             command.append("--pgwire-port=%d" % self.pgwire_port)
@@ -553,7 +569,8 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         bs_needed = ('blob_storage_config' in self.__configurator.yaml_config) or self.__configurator.use_self_management
 
         if bs_needed:
-            self.__wait_for_bs_controller_to_start(timeout_seconds=timeout_seconds)
+            token = self.root_token or self.__configurator.default_clusteradmin
+            self.__wait_for_bs_controller_to_start(timeout_seconds=timeout_seconds, token=token)
             if not self.__configurator.use_self_management:
                 self.__add_bs_box()
 
@@ -571,10 +588,15 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         root_token = self.root_token or self.__configurator.default_clusteradmin
 
         if not root_token and self.__configurator.enable_static_auth:
-            root_token = requests.post("http://localhost:%s/login" % self.nodes[1].mon_port, json={
+            mon_uses_https = any(
+                getattr(node, 'mon_uses_https', False) for node in self.nodes.values()
+            )
+            protocol = "https" if mon_uses_https else "http"
+            login_url = "%s://localhost:%s/login" % (protocol, self.nodes[1].mon_port)
+            root_token = requests.post(login_url, json={
                 "user": self.__configurator.yaml_config["domains_config"]["security_config"]["default_users"][0]["name"],
                 "password": self.__configurator.yaml_config["domains_config"]["security_config"]["default_users"][0]["password"]
-            }).cookies.get('ydb_session_id')
+            }, verify=False if mon_uses_https else True).cookies.get('ydb_session_id')
             logger.info("Obtained root token: %s" % root_token)
 
         if len(pools) > 0:
@@ -910,7 +932,10 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         self._bs_config_invoke(request)
         return name
 
-    def __wait_for_bs_controller_to_start(self, timeout_seconds=240):
+    def __wait_for_bs_controller_to_start(self, timeout_seconds=240, token=None):
+        if token:
+            for node in self.nodes.values():
+                node._monitor_token = token
         monitors = [node.monitor for node in self.nodes.values()]
 
         def predicate():

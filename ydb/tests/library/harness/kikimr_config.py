@@ -242,6 +242,10 @@ class KikimrConfigGenerator(object):
             self.__grpc_tls_key = key_pem
             self.__grpc_tls_cert = cert_pem
 
+        self.monitoring_tls_cert_path = None
+        self.monitoring_tls_key_path = None
+        self.monitoring_tls_ca_path = None
+
         self.__binary_paths = binary_paths
         rings_count = 3 if erasure == Erasure.MIRROR_3_DC else 1
         if nodes is None:

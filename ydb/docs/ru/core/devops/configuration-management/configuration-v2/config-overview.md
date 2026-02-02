@@ -69,7 +69,7 @@ $ ydb -e grpc://<ydb.example.com>:2135 admin cluster config replace -f config.ya
 
 Для конфигурации кластера при первоначальном развёртывании рекомендуется использовать инструкции для выбранного способа управления инфраструктурой:
 
-- [{#T}](../../deployment-options/ansible/initial-deployment.md);
+- [{#T}](../../deployment-options/ansible/initial-deployment/index.md);
 - [{#T}](../../deployment-options/kubernetes/initial-deployment.md);
 - [{#T}](../../deployment-options/manual/initial-deployment/index.md).
 

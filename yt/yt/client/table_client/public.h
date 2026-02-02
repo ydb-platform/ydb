@@ -475,6 +475,9 @@ template <ESimpleLogicalValueType type>
 struct TUnderlyingTzTypeImpl;
 
 template <ESimpleLogicalValueType type>
+static constexpr ESimpleLogicalValueType TUnderlyingTzType = TUnderlyingTzTypeImpl<type>::TValue;
+
+template <ESimpleLogicalValueType type>
 struct TUnderlyingTimestampIntegerTypeImpl;
 
 template <ESimpleLogicalValueType type>

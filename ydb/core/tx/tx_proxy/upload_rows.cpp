@@ -20,7 +20,7 @@ public:
         bool writeToIndexImplTable,
         ui64 cookie,
         TBackoff backoff)
-        : TUploadRowsBase(std::move(rows),userSID)
+        : TUploadRowsBase(std::move(rows), userSID)
         , Sender(sender)
         , Database(database)
         , Table(table)

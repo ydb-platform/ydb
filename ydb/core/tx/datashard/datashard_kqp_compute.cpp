@@ -31,8 +31,8 @@ TComputationNodeFactory GetKqpDatashardComputeFactory(TKqpDatashardComputeContex
     MKQL_ENSURE_S(computeCtx->Database);
 
     auto computeFactory = GetKqpBaseComputeFactory(computeCtx);
-    
-    return [computeFactory, computeCtx, usid=userSID]
+
+    return [computeFactory, computeCtx, localUserSID=userSID]
         (TCallable& callable, const TComputationNodeFactoryContext& ctx) -> IComputationNode* {
             if (auto compute = computeFactory(callable, ctx)) {
                 return compute;
@@ -41,7 +41,7 @@ TComputationNodeFactory GetKqpDatashardComputeFactory(TKqpDatashardComputeContex
             const auto& datashardMap = Singleton<TKqpDatashardComputationMap>()->Map;
             auto it = datashardMap.find(callable.GetType()->GetName());
             if (it != datashardMap.end()) {
-                return it->second(callable, ctx, *computeCtx, usid);
+                return it->second(callable, ctx, *computeCtx, localUserSID);
             }
 
             return nullptr;

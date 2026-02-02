@@ -1411,7 +1411,7 @@ message TEvEraseRowsRequest {
     repeated bytes KeyColumns = 3; // SerilializedCellVector
     optional uint64 SchemaVersion = 5;
     optional uint64 OverloadSubscribe = 6;
-    
+
     oneof Condition {
         TExpirationCondition Expiration = 4;
     }

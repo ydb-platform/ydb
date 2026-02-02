@@ -44,17 +44,15 @@ struct TDataEvents {
         TEvWrite() = default;
 
         /// "cdcuser@before_commit" убрать  конструкторы с userSID ?
-        TEvWrite(const ui64 txId, NKikimrDataEvents::TEvWrite::ETxMode txMode, const TString& userSID = TString()) {
+        TEvWrite(const ui64 txId, NKikimrDataEvents::TEvWrite::ETxMode txMode) {
             Y_ABORT_UNLESS(txMode != NKikimrDataEvents::TEvWrite::MODE_UNSPECIFIED);
             Record.SetTxMode(txMode);
             Record.SetTxId(txId);
-            Record.SetUserSID(userSID);
         }
 
-        TEvWrite(NKikimrDataEvents::TEvWrite::ETxMode txMode, const TString& userSID = TString()) {
+        TEvWrite(NKikimrDataEvents::TEvWrite::ETxMode txMode) {
             Y_ABORT_UNLESS(txMode != NKikimrDataEvents::TEvWrite::MODE_UNSPECIFIED);
             Record.SetTxMode(txMode);
-            Record.SetUserSID(userSID);
         }
 
         TEvWrite& SetTxId(const ui64 txId) {
@@ -65,6 +63,11 @@ struct TDataEvents {
         TEvWrite& SetLockId(const ui64 lockTxId, const ui64 lockNodeId) {
             Record.SetLockTxId(lockTxId);
             Record.SetLockNodeId(lockNodeId);
+            return *this;
+        }
+
+        TEvWrite& SetUserSID(const TString& userSID) {
+            Record.SetUserSID(userSID);
             return *this;
         }
 

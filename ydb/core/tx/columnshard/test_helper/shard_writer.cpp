@@ -9,7 +9,7 @@
 namespace NKikimr::NTxUT {
 
 NKikimrDataEvents::TEvWriteResult TShardWriter::StartCommitImpl(const ui64 txId) {
-    auto evCommit = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(txId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE,"");
+    auto evCommit = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(txId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
     evCommit->Record.MutableLocks()->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
     auto* lock = evCommit->Record.MutableLocks()->AddLocks();
     lock->SetLockId(LockId);
@@ -38,7 +38,7 @@ TPlanStep TShardWriter::StartCommit(const ui64 txId) {
 }
 
 NKikimrDataEvents::TEvWriteResult::EStatus TShardWriter::Abort() {
-    auto evCommit = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, "");
+    auto evCommit = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
     evCommit->Record.MutableLocks()->SetOp(NKikimrDataEvents::TKqpLocks::Rollback);
     auto* lock = evCommit->Record.MutableLocks()->AddLocks();
     lock->SetLockId(LockId);
@@ -56,7 +56,7 @@ NKikimrDataEvents::TEvWriteResult::EStatus TShardWriter::Write(
     TString blobData = NArrow::SerializeBatchNoCompression(batch);
 //    AFL_VERIFY(blobData.size() < NColumnShard::TLimits::GetMaxBlobSize());
 
-    auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, "");
+    auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
     evWrite->SetTxId(txId);
     evWrite->SetLockId(LockId, LockNodeId);
     const ui64 payloadIndex = NEvWrite::TPayloadWriter<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(std::move(blobData));

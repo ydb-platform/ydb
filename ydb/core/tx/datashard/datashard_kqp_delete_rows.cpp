@@ -115,7 +115,7 @@ private:
     IComputationNode* RowsNode;
     const TVector<NScheme::TTypeInfo> RowTypes;
     const TVector<ui32> KeyIndices;
-    TString UserSID;
+    const TString UserSID;
 };
 
 } // namespace

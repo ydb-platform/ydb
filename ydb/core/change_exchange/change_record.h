@@ -34,7 +34,7 @@ public:
     virtual const TString& GetBody() const = 0;
     virtual ESource GetSource() const = 0;
     virtual const TString& GetSourceId() const = 0;
-    virtual const TString& GetUser() const = 0;
+    virtual const TString& GetUserSID() const = 0;
     virtual bool IsBroadcast() const = 0;
 
     virtual void Accept(IVisitor& visitor) const = 0;
@@ -58,7 +58,7 @@ public:
     const TString& GetBody() const override { return Body; }
     ESource GetSource() const override { return Source; }
     const TString& GetSourceId() const override { return SourceId; }
-    const TString& GetUser() const override { return UserSID; };
+    const TString& GetUserSID() const override { return UserSID; };
     bool IsBroadcast() const override { return false; }
 
     void RewriteTxId(ui64) override { Y_ABORT("not implemented"); }
@@ -88,14 +88,13 @@ protected:
     }
 
 public:
-    TChangeRecordBuilder(const TString& userSID)
-        : Record(MakeIntrusive<T>()) {
-        GetRecord()->UserSID = userSID;
-    }
+    TChangeRecordBuilder()
+        : Record(MakeIntrusive<T>()) 
+    {}
 
     explicit TChangeRecordBuilder(TIntrusivePtr<T> record)
-        : Record(std::move(record)) {
-    }
+        : Record(std::move(record)) 
+    {}
 
     TSelf& WithOrder(ui64 order) {
         GetRecord()->Order = order;
@@ -117,12 +116,12 @@ public:
         return static_cast<TSelf&>(*this);
     }
 
-    TSelf& WithUser(const TString& userSID) {
+    TSelf& WithUserSID(const TString& userSID) {
         GetRecord()->UserSID = userSID;
         return static_cast<TSelf&>(*this);
     }
 
-    TSelf& WithUser(TString&& userSID) {
+    TSelf& WithUserSID(TString&& userSID) {
         GetRecord()->UserSID = std::move(userSID);
         return static_cast<TSelf&>(*this);
     }

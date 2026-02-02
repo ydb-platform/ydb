@@ -132,7 +132,7 @@ private:
         ui64 SentOverloadSeqNo = 0;
     };
 
-    TString UserSID;
+    const TString UserSID;
     TActorId SchemeCache;
     TActorId LeaderPipeCache;
     TDuration Timeout;
@@ -1122,7 +1122,7 @@ private:
 
         auto ev = std::make_unique<TEvDataShard::TEvUploadRowsRequest>();
         ev->Record = state->Headers;
-        ev->Record.SetUserSID("cdcuser@RetryShardRequest");
+        ev->Record.SetUserSID(UserSID);
         for (const auto& pr : state->Rows) {
             auto* row = ev->Record.AddRows();
             row->SetKeyColumns(pr.first.GetBuffer());

@@ -814,6 +814,7 @@ void ExecSQL(Tests::TServer::TPtr server,
              Ydb::StatusIds::StatusCode code = Ydb::StatusIds::SUCCESS,
              NYdb::NUt::TTestContext testCtx = NYdb::NUt::TTestContext(),
              const TString &userSID = TString());
+
 void ExecSQL(Tests::TServer::TPtr server,
              TActorId sender,
              const TString &sql,

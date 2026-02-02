@@ -8,9 +8,6 @@
 
 #include <ydb/core/engine/mkql_engine_flat_host.h>
 
-#include <filesystem>
-#include <fstream>
-
 namespace NKikimr {
 namespace NDataShard {
 

@@ -2837,7 +2837,7 @@ namespace NSchemeShardUT_Private {
 
         auto ev = MakeHolder<TEvDataShard::TEvUploadRowsRequest>();
         ev->Record.SetTableId(tableDesc.GetPathId());
-        
+
         auto& scheme = *ev->Record.MutableRowScheme();
         for (ui32 tag : keyTags) {
             scheme.AddKeyColumnIds(tag);
@@ -2877,7 +2877,7 @@ namespace NSchemeShardUT_Private {
 
         const auto& sender = runtime.AllocateEdgeActor();
 
-        auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(txId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, "cdcuser@testing");
+        auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(txId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
         ui64 payloadIndex = NKikimr::NEvWrite::TPayloadWriter<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(std::move(data.ReleaseBuffer()));
         evWrite->AddOperation(operationType, tableId, columnIds, payloadIndex, NKikimrDataEvents::FORMAT_CELLVEC);
 

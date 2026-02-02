@@ -140,7 +140,7 @@ public:
             .WithSchemaVersion(userTable->GetTableSchemaVersion())
             .WithSchema(userTable) // used for debugging purposes
             .WithBody(body.SerializeAsString())
-            .WithUser(userSID)
+            .WithUserSID(userSID)
             .Build();
 
         const auto& record = *recordPtr;

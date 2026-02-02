@@ -1508,7 +1508,7 @@ private:
     IShardedWriteControllerPtr ShardedWriteController = nullptr;
 
     TIntrusivePtr<TKqpCounters> Counters;
-    TString UserSID;
+    const TString UserSID;
 
     TKqpTableWriterStatistics Stats;
 
@@ -2652,7 +2652,7 @@ private:
     bool WaitingForTableActor = false;
 
     NWilson::TSpan DirectWriteActorSpan;
-    TString UserSID;
+    const TString UserSID;
 };
 
 
@@ -3624,7 +3624,8 @@ public:
             ? NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE
             : (TxManager->IsVolatile()
                 ? NKikimrDataEvents::TEvWrite::MODE_VOLATILE_PREPARE
-                : NKikimrDataEvents::TEvWrite::MODE_PREPARE), UserSID);
+                : NKikimrDataEvents::TEvWrite::MODE_PREPARE));
+        evWrite ->SetUserSID(UserSID);
 
         if (isRollback) {
             FillEvWriteRollback(evWrite.get(), shardId, TxManager);
@@ -4857,7 +4858,7 @@ private:
 
     NWilson::TSpan BufferWriteActorSpan;
     NWilson::TSpan BufferWriteActorStateSpan;
-    TString UserSID;
+    const TString UserSID;
 };
 
 class TKqpForwardWriteActor : public TActorBootstrapped<TKqpForwardWriteActor>, public NYql::NDq::IDqComputeActorAsyncOutput {
@@ -5119,18 +5120,19 @@ private:
 
     TWriteToken WriteToken;
     NWilson::TSpan ForwardWriteActorSpan;
-    TString UserSID;
+    const TString UserSID;
 };
 
 NActors::IActor* CreateKqpBufferWriterActor(TKqpBufferWriterSettings&& settings) {
     return new TKqpBufferWriteActor(std::move(settings));
 }
 
+
 void RegisterKqpWriteActor(NYql::NDq::TDqAsyncIoFactory& factory, TIntrusivePtr<TKqpCounters> counters) {
     factory.RegisterSink<NKikimrKqp::TKqpTableSinkSettings>(
         TString(NYql::KqpTableSinkName),
         [counters] (NKikimrKqp::TKqpTableSinkSettings&& settings, NYql::NDq::TDqAsyncIoFactory::TSinkArguments&& args) {
-            TString userSID = settings.GetUserSID();
+            auto userSID = settings.GetUserSID();
             if (!ActorIdFromProto(settings.GetBufferActorId())) {
                 auto* actor = new TKqpDirectWriteActor(std::move(settings), std::move(args), counters, userSID);
                 return std::make_pair<NYql::NDq::IDqComputeActorAsyncOutput*, NActors::IActor*>(actor, actor);

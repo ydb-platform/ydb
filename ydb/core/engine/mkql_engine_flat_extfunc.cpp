@@ -262,7 +262,7 @@ namespace {
         const TTableId TableId;
         TTupleType* const RowType;
         IComputationNode* const Row;
-        TString UserSID;
+        const TString UserSID;
     };
 
     class TUpdateRowWrapper : public TMutableComputationNode<TUpdateRowWrapper> {
@@ -352,7 +352,7 @@ namespace {
         IComputationNode* const Row;
         TStructLiteral* const UpdateStruct;
         IComputationNode* const Update;
-        TString UserSID;
+        const TString UserSID;
     };
 
     IComputationNode* WrapAsDummy(TComputationMutables& mutables) {
@@ -793,8 +793,7 @@ namespace {
         }
 
         return new TUpdateRowWrapper(ctx.Mutables, tableId, tupleType,
-            LocateNode(ctx.NodeLocator, callable, 1), structUpdate, LocateNode(ctx.NodeLocator, callable, 2),
-            userSID);
+            LocateNode(ctx.NodeLocator, callable, 1), structUpdate, LocateNode(ctx.NodeLocator, callable, 2), userSID);
     }
 
     IComputationNode* WrapMergedTakeResults(TCallable& callable, TIncomingResults::const_iterator resultIt,

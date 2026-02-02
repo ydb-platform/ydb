@@ -516,9 +516,7 @@ TEngineBay::TEngineBay(TDataShard* self, TTransactionContext& txc, const TActorC
     EngineHost = MakeHolder<TDataShardEngineHost>(self, *this, txc.DB, stepTxId.TxId, EngineHostCounters, now);
 
     EngineSettings = MakeHolder<TEngineFlatSettings>(IEngineFlat::EProtocol::V1, AppData(ctx)->FunctionRegistry,
-        *TAppData::RandomProvider, *TAppData::TimeProvider, 
-        userSID,
-        EngineHost.Get(), self->AllocCounters);
+        *TAppData::RandomProvider, *TAppData::TimeProvider, userSID, EngineHost.Get(), self->AllocCounters);
 
     auto tabletId = self->TabletID();
     auto txId = stepTxId.TxId;
@@ -560,7 +558,7 @@ TEngineBay::TEngineBay(TDataShard* self, TTransactionContext& txc, const TActorC
 
     KqpExecCtx.FuncRegistry = AppData(ctx)->FunctionRegistry;
     KqpExecCtx.ComputeCtx = ComputeCtx.Get();
-    KqpExecCtx.ComputationFactory = GetKqpDatashardComputeFactory(ComputeCtx.Get(),userSID);
+    KqpExecCtx.ComputationFactory = GetKqpDatashardComputeFactory(ComputeCtx.Get(), userSID);
     KqpExecCtx.RandomProvider = TAppData::RandomProvider.Get();
     KqpExecCtx.TimeProvider = TAppData::TimeProvider.Get();
     KqpExecCtx.ApplyCtx = KqpApplyCtx.Get();

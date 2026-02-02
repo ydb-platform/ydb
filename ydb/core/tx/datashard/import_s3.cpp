@@ -435,8 +435,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
 
     class TUploadRowsRequestBuilder {
     public:
-        void New(const TTableInfo& tableInfo, const NKikimrSchemeOp::TTableDescription& scheme,
-                 const TString& userSID) {
+        void New(const TTableInfo& tableInfo, const NKikimrSchemeOp::TTableDescription& scheme, const TString& userSID) {
             Record = std::make_shared<NKikimrTxDataShard::TEvUploadRowsRequest>();
             Record->SetTableId(tableInfo.GetId());
             Record->SetUserSID(userSID);
@@ -1174,7 +1173,7 @@ private:
     TString ExpectedChecksum;
 
     TCounters Counters;
-    TString UserSID;
+    const TString UserSID;
 
 }; // TS3Downloader
 

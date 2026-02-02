@@ -163,7 +163,7 @@ private:
     TVector<i32> RowTypeMods;
     TVector<ui32> KeyIndices;
     TVector<TUpsertColumn> UpsertColumns;
-    TString UserSID;
+    const TString UserSID;
 };
 
 } // namespace

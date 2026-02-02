@@ -76,7 +76,7 @@ class TFlatLocalMiniKQL : public NTabletFlatExecutor::ITransaction {
     const TActorId Sender;
     const TLocalMiniKQLProgram SourceProgram;
     const TMiniKQLFactory* const Factory;
-    TString UserSID;
+    const TString UserSID;
 
     TString SerializedMiniKQLProgram;
     TString SerializedMiniKQLParams;
@@ -87,7 +87,7 @@ class TFlatLocalMiniKQL : public NTabletFlatExecutor::ITransaction {
     IEngineFlat::EStatus EngineResponseStatus;
     TAutoPtr<NKikimrMiniKQL::TResult> EngineEvaluatedResponse;
     ui64 PageFaultCount = 0;
-    
+
     bool ParseProgram(TStringBuf program, NYql::TIssues &errors, NYql::TExprContainer &expr) {
         NYql::TAstParseResult astResult = NYql::ParseAst(program);
         if (!astResult.Root) {

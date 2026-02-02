@@ -115,8 +115,8 @@ class TDataShard::TTxRequestChangeRecords: public TTransactionBase<TDataShard> {
             .WithSource(source);
 
         if (details.template HaveValue<typename TDetailsTable::User>()) {
-            TString user = details.template GetValue<typename TDetailsTable::User>();
-            builder.WithUser(user);    // Технологическое "cdcuser@from_nice_db"
+            TString userSID = details.template GetValue<typename TDetailsTable::User>();
+            builder.WithUserSID(userSID);
         }
 
         if constexpr (HaveLock) {
@@ -191,7 +191,7 @@ class TDataShard::TTxRequestChangeRecords: public TTransactionBase<TDataShard> {
                         TChangeRecordBuilder(result.Record)
                             .WithLockId(itQueue->second.LockId)
                             .WithLockOffset(itQueue->second.LockOffset)
-                            .WithUser(result.Record->GetUser()+"_send")
+                            .WithUserSID(result.Record->GetUserSID())
                             .Build()
                     );
                 } else {

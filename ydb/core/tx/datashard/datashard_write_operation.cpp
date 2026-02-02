@@ -32,9 +32,6 @@
 #define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, stream)
 #define LOG_C(stream) LOG_CRIT_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, stream)
 
-#include <filesystem>
-#include <fstream>
-
 namespace NKikimr {
 namespace NDataShard {
 

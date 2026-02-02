@@ -101,7 +101,7 @@ auto GetChangeRecordsWithDetails(TTestActorRuntime& runtime, const TActorId& sen
                 .WithPathId(std::get<4>(record))
                 .WithSchemaVersion(std::get<5>(record))
                 .WithBody(std::get<2>(detail))
-                .WithUser(std::get<3>(detail))
+                .WithUserSID(std::get<3>(detail))
                 .Build()
         );
     }
@@ -168,7 +168,7 @@ struct TStructRecordBase {
     TStructValue Update;
     TStructValue OldImage;
     TStructValue NewImage;
-    
+
     TStructRecordBase() = default;
 
     TStructRecordBase(TChangeRecord::EKind kind, NTable::ERowOp rop,
@@ -270,7 +270,7 @@ struct TStructRecordBase {
         NKikimrChangeExchange::TDataChange proto;
         Y_PROTOBUF_SUPPRESS_NODISCARD proto.ParseFromArray(serializedProto.data(), serializedProto.size());
         auto result = Parse(record.GetKind(), proto, tagToName);
-        result.UserSID = record.GetUser();
+        result.UserSID = record.GetUserSID();
         return result;
     }
 
@@ -396,7 +396,7 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeCollector) {
             const auto& pathId = indexNameToPathId.at(name);
 
             UNIT_ASSERT(actualRecords.contains(pathId));
-            const auto& actual = actualRecords.at(pathId); 
+            const auto& actual = actualRecords.at(pathId);
 
             UNIT_ASSERT_VALUES_EQUAL(expected.size(), actual.size());
             for (size_t i = 0; i < expected.size(); ++i) {
@@ -478,7 +478,6 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeCollector) {
         });
     }
 
-    
     TShardedTableOptions MultiIndexedTable() {
         return TShardedTableOptions()
             .Columns({
@@ -735,9 +734,7 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
 
     template <typename SK = ui32>
     void Run(const NSharedCache::TSharedCacheConfig& sharedCacheConfig, const TString& path,
-            const TShardedTableOptions& opts, 
-            const TString& userSID,
-            const TVector<TCdcStream>& streams,
+            const TShardedTableOptions& opts, const TString& userSID, const TVector<TCdcStream>& streams,
             const TVector<TString>& queries, const TStructRecords<SK>& expectedRecords)
     {
         const auto pathParts = SplitPath(path);

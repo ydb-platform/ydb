@@ -97,7 +97,7 @@ public:
             LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Starting a " << GetKind() << " operation"
                 << " at " << DataShard.TabletID());
 
-            if (!Run(op, txc, ctx))  {
+            if (!Run(op, txc, ctx)) {
                 return EExecutionStatus::Executed;
             }
 

@@ -68,7 +68,7 @@ public:
     using TBase::TBase;
 
     explicit TChangeRecordBuilder(EKind kind)
-        : TBase("cdcuser@data_shard_change_record123")  // Чисто технологическое
+        : TBase()
     {
         GetRecord()->Kind = kind;
     }

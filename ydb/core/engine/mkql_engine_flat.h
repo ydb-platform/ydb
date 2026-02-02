@@ -266,7 +266,7 @@ namespace NMiniKQL {
         bool EvaluateResultType = true;
         bool EvaluateResultValue = true;
         bool LlvmRuntime = false;
-        TString UserSID;
+        const TString UserSID;
 
         TEngineFlatSettings(
                 IEngineFlat::EProtocol protocol,

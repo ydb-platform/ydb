@@ -835,7 +835,7 @@ class TDataShard
             struct Kind :  Column<2, NScheme::NTypeIds::Uint8> { using Type = TChangeRecord::EKind; };
             struct Body :  Column<3, NScheme::NTypeIds::String> { using Type = TString; };
             struct Source :  Column<4, NScheme::NTypeIds::Uint8> { using Type = TChangeRecord::ESource; };
-            struct User :  Column<5, NScheme::NTypeIds::String> { using Type = TString; };
+            struct User :  Column<5, NScheme::NTypeIds::String> { using Type = TString; }; // "cdcuser@test@ Подправить тип и название
 
             using TKey = TableKey<Order>;
             using TColumns = TableColumns<Order, Kind, Body, Source, User>;

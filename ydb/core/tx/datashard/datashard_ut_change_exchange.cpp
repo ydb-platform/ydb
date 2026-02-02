@@ -1428,7 +1428,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
                 const TString& userSID = TString())
         {
             Y_UNUSED(checkKey);
-            
+
             TVector<std::pair<TJsonString, TMessageMeta>> recordsWithMetadata(Reserve(records.size()));
             for (const auto& record : records) {
                 recordsWithMetadata.emplace_back(record, TMessageMeta());
@@ -1618,17 +1618,6 @@ Y_UNIT_TEST_SUITE(Cdc) {
         }, true, "user@test");
     }
 
-    void CreateTableTtl(TServer::TPtr server, const TActorId& sender, const TString& root, const TString& name) 
-    {
-        auto opts = TShardedTableOptions()
-            .EnableOutOfOrder(false)
-            .Columns({
-                {"key", "Uint32", true, false},
-                {"value", "Timestamp", false, false}
-            });
-        CreateShardedTable(server, sender, root, name, opts);
-    }
-    
     Y_UNIT_TEST(NewAndOldImagesLogDebezium) {
         TopicRunner::Read(SimpleTable(), NewAndOldImages(NKikimrSchemeOp::ECdcStreamFormatDebeziumJson), {R"(
             UPSERT INTO `/Root/Table` (key, value) VALUES
@@ -1862,7 +1851,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
                 {"eventID", "***"},
                 {"eventName", "REMOVE"},
                 {"eventSource", "ydb:document-table"},
-                {"eventVersion", "1.0"}
+                {"eventVersion", "1.0"},
             }), false),
         }, false /* do not check key */);
     }

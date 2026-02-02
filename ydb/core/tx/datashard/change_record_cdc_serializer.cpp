@@ -327,8 +327,8 @@ protected:
             SerializeJsonValue(record.GetSchema(), json["newImage"], body.GetNewImage());
         }
 
-        if (!record.GetUser().empty()) {
-            json["user"] = record.GetUser();
+        if (!record.GetUserSID().empty()) {
+            json["user"] = record.GetUserSID();
         }
 
         const auto hasAnyImage = body.HasOldImage() || body.HasNewImage();
@@ -534,14 +534,14 @@ protected:
             Y_ENSURE(false, "Unexpected row operation: " << static_cast<int>(body.GetRowOperationCase()));
         }
 
-        if (!record.GetUser().empty()) {
+        if (!record.GetUserSID().empty()) {
             auto& userIdentityJson = json["userIdentity"];
-            if (record.GetUser()=="ttl@system") {       /// cdcuser@test какое название пользователя?
+            if (record.GetUserSID()=="ttl@system") {       /// cdcuser@test какое название пользователя?
                 userIdentityJson["type"] = "Service";   
                 userIdentityJson["principalId"] = "dynamodb.amazonaws.com";
             } else {
                 userIdentityJson["type"] = "User";      /// cdcuser@test какое название сервиса ?
-                userIdentityJson["principalId"] = record.GetUser();
+                userIdentityJson["principalId"] = record.GetUserSID();
             }
         }
     }
@@ -607,8 +607,8 @@ protected:
             // TODO: db & table
         });
 
-        if (!record.GetUser().empty()) {
-            payloadJson["user"] = record.GetUser();
+        if (!record.GetUserSID().empty()) {
+            payloadJson["user"] = record.GetUserSID();
         }
     }
 

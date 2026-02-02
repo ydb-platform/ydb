@@ -3611,7 +3611,7 @@ private:
 
     TGUCSettings::TPtr GUCSettings;
     std::shared_ptr<NYql::NDq::IDqChannelService> ChannelService;
-    TString UserSID;
+    const TString UserSID;
 };
 
 } // namespace

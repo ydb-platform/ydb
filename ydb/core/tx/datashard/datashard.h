@@ -918,7 +918,6 @@ namespace TEvDataShard {
                                                         16*1024, 32*1024> {
         TEvUploadRowsRequest() = default;
 
-
         TString GetUserSID() const {
             return Record.GetUserSID();
         }

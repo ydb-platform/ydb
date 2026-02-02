@@ -699,7 +699,9 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
             std::stringstream ss;
             ss << "(" << (taskIdx + 1) << "/" << TotalTasks_ << ")";
             if (variantIdx > 0) {
-                ss << "[v" << variantIdx << "]";
+                ss << "&[v" << variantIdx << "]";
+            } else {
+                ss << "&";
             }
             ss << "&N = " << n
             << "&Label = " << label << " &";
@@ -715,7 +717,7 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
                 auto computed = stats->ComputeStatistics();
 
                 WriteJsonResult(seed, params, computed, graph, tree, hypergraph, variantIdx);
-                ss << "Time = " << TimeFormatter::Format(computed.Median);
+                ss << "Time = " << TimeFormatter::Format(computed.Median, computed.MAD, "&±");
 
                 if (computed.Median > Config_.SingleRunTimeout) {
                     RegisterTimeout(label, n);

@@ -246,6 +246,7 @@ private:
 
     void Disconnected(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
         ui32 nodeId = ev->Get()->NodeId;
+        Y_UNUSED(nodeId);
         ProcessRows();
     }
 
@@ -270,6 +271,7 @@ private:
             if (PendingNodes.empty()) {
                 batch->Finished = true;
             }
+
         } else {
             ContinuationToken = LastResponse.GetContinuationToken();
         }

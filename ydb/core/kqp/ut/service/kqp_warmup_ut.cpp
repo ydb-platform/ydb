@@ -209,6 +209,55 @@ namespace {
         }
     }
 
+    void FillCacheWithImplicitParams(TKikimrRunner& kikimr, const TVector<TString>& userSids) {
+        ui32 key = 0;
+        for (const auto& userSid : userSids) {
+            // Implicitly parameterized query - no DECLARE in text
+            TString queryImplicit = "SELECT Key, Value FROM `/Root/KeyValue` WHERE Key = $key;";
+            
+            auto paramsImplicit = TParamsBuilder()
+                .AddParam("$key")
+                    .Uint32(key)
+                    .Build()
+                .Build();
+            
+            auto resultImplicit = ExecuteQueryWithCache(kikimr, userSid, queryImplicit, paramsImplicit);
+            UNIT_ASSERT_VALUES_EQUAL_C(resultImplicit.GetStatus(), NYdb::EStatus::SUCCESS, 
+                "Failed implicit parameterized query for user " << userSid << ": " << resultImplicit.GetIssues().ToString());
+
+            // Another implicitly parameterized query with different parameter type
+            TString queryImplicitInt32 = "SELECT Key, Value FROM `/Root/KeyValue` WHERE Key = $key;";
+            
+            auto paramsImplicitInt32 = TParamsBuilder()
+                .AddParam("$key")
+                    .Int32(static_cast<i32>(key))
+                    .Build()
+                .Build();
+            
+            auto resultImplicitInt32 = ExecuteQueryWithCache(kikimr, userSid, queryImplicitInt32, paramsImplicitInt32);
+            UNIT_ASSERT_VALUES_EQUAL_C(resultImplicitInt32.GetStatus(), NYdb::EStatus::SUCCESS, 
+                "Failed implicit Int32 parameterized query for user " << userSid << ": " << resultImplicitInt32.GetIssues().ToString());
+
+            // Implicitly parameterized query with multiple parameters
+            TString queryImplicitMulti = "SELECT Key, Value FROM `/Root/KeyValue` WHERE Key = $key OR Value = $value;";
+            
+            auto paramsImplicitMulti = TParamsBuilder()
+                .AddParam("$key")
+                    .Uint32(key)
+                    .Build()
+                .AddParam("$value")
+                    .String("Value" + ToString(key))
+                    .Build()
+                .Build();
+            
+            auto resultImplicitMulti = ExecuteQueryWithCache(kikimr, userSid, queryImplicitMulti, paramsImplicitMulti);
+            UNIT_ASSERT_VALUES_EQUAL_C(resultImplicitMulti.GetStatus(), NYdb::EStatus::SUCCESS, 
+                "Failed implicit multi-param query for user " << userSid << ": " << resultImplicitMulti.GetIssues().ToString());
+
+            key++;
+        }
+    }
+
     TVector<TCompileCacheEntry> GetCompileCacheEntries(TKikimrRunner& kikimr) {
         auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); });
         auto session = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); });
@@ -333,6 +382,7 @@ namespace {
             TVector<TString> userSids = {"user0", "user1", "user2", "user3", "user4"};
             GrantPermissions(kikimr, "/Root/KeyValue", userSids);
             FillCache(kikimr, userSids);
+            FillCacheWithImplicitParams(kikimr, userSids);
 
             auto cacheEntries = GetCompileCacheEntries(kikimr);
             UNIT_ASSERT_C(!cacheEntries.empty(),

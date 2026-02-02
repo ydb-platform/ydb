@@ -52,9 +52,8 @@ struct TEvPrivate {
 
 class TFetchCacheActor : public TQueryBase {
 public:
-    TFetchCacheActor(const TString& database, ui32 selfNodeId, ui32 maxQueriesToLoad, ui64 maxCompilationDurationMs)
+    TFetchCacheActor(const TString& database, ui32 maxQueriesToLoad, ui64 maxCompilationDurationMs)
         : TQueryBase(NKikimrServices::KQP_COMPILE_SERVICE, {}, database, true, true)
-        , SelfNodeId(selfNodeId)
         , MaxQueriesToLoad(maxQueriesToLoad)
         , MaxCompilationDurationMs(maxCompilationDurationMs)
     {}
@@ -105,7 +104,6 @@ public:
     }
 
 private:
-    [[maybe_unused]] ui32 SelfNodeId;
     ui32 MaxQueriesToLoad;
     ui64 MaxCompilationDurationMs;
     std::unique_ptr<TEvPrivate::TEvFetchCacheResult> Result = std::make_unique<TEvPrivate::TEvFetchCacheResult>(false);
@@ -232,7 +230,7 @@ private:
     void StartFetch() {
         LOG_I("Spawning fetch cache actor");
         const ui64 maxCompilationMs = Config.Deadline.MilliSeconds() / 2;
-        Register(new TFetchCacheActor(Database, SelfId().NodeId(), Config.MaxQueriesToLoad, maxCompilationMs));
+        Register(new TFetchCacheActor(Database, Config.MaxQueriesToLoad, maxCompilationMs));
         Become(&TThis::StateFetching);
     }
 

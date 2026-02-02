@@ -1298,7 +1298,7 @@ value {
         UpdateRow(runtime, "Original", 2, "valueB", secondTablet);
 
         // Add delay after copying tables
-        ui64 copyTablesTxId;
+        ui64 copyTablesTxId = 0;
         auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvSchemeShard::EvModifySchemeTransaction) {
                 const auto* msg = ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>();
@@ -1310,7 +1310,7 @@ value {
         });
 
         TBlockEvents<TEvSchemeShard::TEvNotifyTxCompletionResult> delay(runtime, [&](auto& ev) {
-            return ev->Get()->Record.GetTxId() == copyTablesTxId;
+            return copyTablesTxId != 0 && ev->Get()->Record.GetTxId() == copyTablesTxId;
         });
 
         // Start exporting table
@@ -1447,7 +1447,7 @@ value {
         UpdateRow(runtime, "Original", 2, "valueB", firstTablet);
 
         // Add delay after copying tables
-        ui64 copyTablesTxId;
+        ui64 copyTablesTxId = 0;
         auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvSchemeShard::EvModifySchemeTransaction) {
                 const auto* msg = ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>();
@@ -1459,7 +1459,7 @@ value {
         });
 
         TBlockEvents<TEvSchemeShard::TEvNotifyTxCompletionResult> delay(runtime, [&](auto& ev) {
-            return ev->Get()->Record.GetTxId() == copyTablesTxId;
+            return copyTablesTxId != 0 && ev->Get()->Record.GetTxId() == copyTablesTxId;
         });
 
         // Start exporting table

@@ -18,6 +18,9 @@ private:
     virtual ui64 DoGetEntityId() const override {
         return GetSourceIdx();
     }
+    virtual ui64 DoGetDeprecatedPortionId() const override {
+        return GetSourceIdx();
+    }
 
 public:
     void SetIndex(const ui32 index) {

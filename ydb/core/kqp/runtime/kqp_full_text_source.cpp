@@ -1817,7 +1817,6 @@ public:
             ReadRows++;
 
             if (Limit > 0 && ProducedItemsCount >= static_cast<ui64>(Limit)) {
-                finished = true;
                 break;
             }
 
@@ -1830,7 +1829,7 @@ public:
             NotifyCA();
         }
 
-        finished = Reads.empty() && !ResolveInProgress && ResultQueue.empty();
+        finished = IsFinished();
         return computeBytes;
     }
 
@@ -1857,9 +1856,13 @@ public:
         Send(ComputeActorId, new TEvAsyncInputError(InputIndex, std::move(issues), statusCode));
     }
 
+    bool IsFinished() {
+        return Reads.empty() && !ResolveInProgress && ResultQueue.empty() ||
+            ProducedItemsCount >= static_cast<ui64>(Limit);
+    }
+
     void NotifyCA() {
-        bool finished = Reads.empty() && !ResolveInProgress && ResultQueue.empty();
-        if (!PendingNotify && (finished || !ResultQueue.empty())) {
+        if (!PendingNotify && (!ResultQueue.empty() || IsFinished())) {
             Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
             PendingNotify = true;
         }

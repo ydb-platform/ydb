@@ -108,10 +108,11 @@ void DoValidateRelevanceQuery(NQuery::TQueryClient& db, const TString& relevance
 };
 
 
-void AddIndexNGram(NQuery::TQueryClient& db, const size_t nGramMinLength = 3, const size_t nGramMaxLength = 3, const bool edgeNGram = false, const bool covered = false) {
+void AddIndexNGram(NQuery::TQueryClient& db, const size_t nGramMinLength = 3, const size_t nGramMaxLength = 3,
+    const bool relevance = false, const bool edgeNGram = false, const bool covered = false) {
     const TString query = Sprintf(R"sql(
         ALTER TABLE `/Root/Texts` ADD INDEX fulltext_idx
-            GLOBAL USING fulltext_plain
+            GLOBAL USING %s
             ON (Text) %s
             WITH (
                 tokenizer=standard,
@@ -121,7 +122,11 @@ void AddIndexNGram(NQuery::TQueryClient& db, const size_t nGramMinLength = 3, co
                 filter_ngram_min_length=%d,
                 filter_ngram_max_length=%d
             );
-    )sql", covered ? "COVER (Text, Data)" : "", !edgeNGram, edgeNGram, nGramMinLength, nGramMaxLength);
+        )sql",
+        relevance ? "fulltext_relevance" : "fulltext_plain",
+        covered ? "COVER (Text, Data)" : "",
+        !edgeNGram, edgeNGram, nGramMinLength, nGramMaxLength
+    );
     auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 }
@@ -285,7 +290,7 @@ Y_UNIT_TEST(AddIndexEdgeNGram) {
 
     CreateTexts(db);
     UpsertTexts(db);
-    AddIndexNGram(db, 3, 3, true);
+    AddIndexNGram(db, 3, 3, false, true);
 
     const auto index = ReadIndex(db);
     Cerr << NYdb::FormatResultSetYson(index) << Endl;
@@ -3479,7 +3484,7 @@ Y_UNIT_TEST_QUAD(SelectWithFulltextContainsAndNgram, Edge, Covered) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
-    AddIndexNGram(db, 3, 3, Edge, Covered);
+    AddIndexNGram(db, 3, 3, false, Edge, Covered);
 
     {
         TString query = R"sql(
@@ -3568,7 +3573,7 @@ Y_UNIT_TEST_QUAD(SelectWithFulltextContainsAndNgram, Edge, Covered) {
     }
 }
 
-Y_UNIT_TEST_QUAD(SelectWithFulltextContainsAndNgramWildcard, Edge, Covered) {
+void DoSelectWithFulltextContainsAndNgramWildcard(bool relevance, bool edge, bool covered) {
     auto kikimr = Kikimr();
     auto db = kikimr.GetQueryClient();
 
@@ -3597,7 +3602,7 @@ Y_UNIT_TEST_QUAD(SelectWithFulltextContainsAndNgramWildcard, Edge, Covered) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
-    AddIndexNGram(db, 3, 5, Edge, Covered);
+    AddIndexNGram(db, 3, 5, relevance, edge, covered);
 
     {
         TString query = R"sql(
@@ -3627,7 +3632,7 @@ Y_UNIT_TEST_QUAD(SelectWithFulltextContainsAndNgramWildcard, Edge, Covered) {
         CompareYson(R"([
             [[0u];["Arena Allocation"]]
         ])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
-        CompareYson(Edge ? R"([])" : R"([
+        CompareYson(edge ? R"([])" : R"([
             [[2u];["Werner Heisenberg"]]
         ])", NYdb::FormatResultSetYson(result.GetResultSet(1)));
         CompareYson(R"([
@@ -3640,6 +3645,14 @@ Y_UNIT_TEST_QUAD(SelectWithFulltextContainsAndNgramWildcard, Edge, Covered) {
             [[9u];["морекот"]]
         ])", NYdb::FormatResultSetYson(result.GetResultSet(4)));
     }
+}
+
+Y_UNIT_TEST_QUAD(SelectWithFulltextContainsAndNgramWildcard, Edge, Covered) {
+    DoSelectWithFulltextContainsAndNgramWildcard(false, Edge, Covered);
+}
+
+Y_UNIT_TEST_QUAD(SelectWithRelevanceContainsAndNgramWildcard, Edge, Covered) {
+    DoSelectWithFulltextContainsAndNgramWildcard(true, Edge, Covered);
 }
 
 Y_UNIT_TEST(SelectWithFulltextContainsAndNgramWildcardSpecialCharacters) {
@@ -4091,7 +4104,7 @@ Y_UNIT_TEST(SelectWithFulltextContainsAndEdgeNgramWildcard) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
-    AddIndexNGram(db, 1, 5, true);
+    AddIndexNGram(db, 1, 5, false, true);
 
     {
         const TString query = R"sql(

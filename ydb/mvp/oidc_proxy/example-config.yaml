@@ -12,6 +12,7 @@ generic:
 
   auth:
     token_file: path/to/token_file
+    # federated_creds section is optional and could be used with token_file
     federated_creds:
       token_service_endpoint: "grpcs://tokens.net:443"
       k8s_token_path: "path/to/federated_token"

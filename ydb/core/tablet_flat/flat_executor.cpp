@@ -1964,13 +1964,6 @@ bool TExecutor::CancelTransaction(ui64 id) {
 
     TSeat* seat = it->second.get();
     switch (seat->State) {
-        case ESeatState::None:
-            // Transaction is not paused in any way
-            Y_DEBUG_ABORT_UNLESS(false,
-                "Tablet %" PRIu64 " CancelTransaction(%" PRIu64 ") from inside transaction?",
-                TabletId(), id);
-            return false;
-
         case ESeatState::Active:
             ActivationQueue.Remove(seat);
             Y_ENSURE(ActivateTransactionWaiting > 0);
@@ -1999,9 +1992,7 @@ bool TExecutor::CancelTransaction(ui64 id) {
             return true;
 
         default:
-            Y_DEBUG_ABORT_UNLESS(false,
-                "Tablet %" PRIu64 " CancelTransaction(% " PRIu64 ") for a finished transaction",
-                TabletId(), id);
+            // Transaction is either running right now or it has finished already
             return false;
     }
 

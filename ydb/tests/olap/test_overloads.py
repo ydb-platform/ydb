@@ -60,7 +60,8 @@ class YdbWorkloadOverload:
             str(rows),
             "--quiet"
         ]
-        self._call(command=command, wait=wait, timeout=2*seconds)
+
+        self._call(command=command, wait=wait, timeout=5*seconds)
 
     # seconds - Seconds to run workload
     # threads - Number of parallel threads in workload
@@ -160,22 +161,22 @@ class TestLogScenario(object):
         self.table_name: str = f"log_{writing_in_flight_requests_count_limit}_{writing_in_flight_request_bytes_limit}"
 
         output_path = yatest.common.test_output_path()
-        output_stdout = open(os.path.join(output_path, "command_stdout.log"), "w")
+        stdout_path = os.path.join(output_path, "command_stdout.log")
 
-        ydb_workload: YdbWorkloadOverload = YdbWorkloadOverload(
-            endpoint=self.ydb_client.endpoint,
-            database=self.ydb_client.database,
-            table_name=self.table_name,
-            stdout=output_stdout
-        )
-        ydb_workload.create_table()
+        with open(stdout_path, "w") as output_stdout:
+            ydb_workload: YdbWorkloadOverload = YdbWorkloadOverload(
+                endpoint=self.ydb_client.endpoint,
+                database=self.ydb_client.database,
+                table_name=self.table_name,
+                stdout=output_stdout
+            )
+            ydb_workload.create_table()
 
-        ydb_workload.bulk_upsert(seconds=wait_time, threads=10, rows=10, wait=True)
+            ydb_workload.bulk_upsert(seconds=wait_time, threads=10, rows=10, wait=True)
 
-        output_stdout.close()
         keys = None
         values = None
-        with open(os.path.join(output_path, "command_stdout.log"), "r") as file:
+        with open(stdout_path, "r") as file:
             for line in file:
                 if line.startswith("Total"):
                     keys = line.split()

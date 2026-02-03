@@ -231,6 +231,18 @@ namespace NKikimr::NGRpcProxy::V1 {
                 type->mutable_default_processing_timeout()->CopyFrom(alterType.set_default_processing_timeout());
             }
 
+            if (alterType.has_contentbaseddeduplication()) {
+                type->set_contentbaseddeduplication(alterType.contentbaseddeduplication());
+            }
+
+            if (alterType.has_defaultdelaymessagetimems()) {
+                type->set_defaultdelaymessagetimems(alterType.defaultdelaymessagetimems());
+            }
+
+            if (alterType.has_defaultreceivemessagewaittimems()) {
+                type->set_defaultreceivemessagewaittimems(alterType.defaultreceivemessagewaittimems());
+            }
+
             if (alterType.has_alter_dead_letter_policy()) {
                 auto& alterPolicy = alterType.alter_dead_letter_policy();
                 auto* policy = type->mutable_dead_letter_policy();
@@ -301,6 +313,10 @@ namespace NKikimr::NGRpcProxy::V1 {
 
                 consumer->SetDeadLetterPolicyEnabled(rr.shared_consumer_type().dead_letter_policy().enabled());
                 consumer->SetMaxProcessingAttempts(rr.shared_consumer_type().dead_letter_policy().condition().max_processing_attempts());
+
+                consumer->SetContentBasedDeduplication(rr.shared_consumer_type().contentbaseddeduplication());
+                consumer->SetDefaultDelayMessageTimeMs(rr.shared_consumer_type().defaultdelaymessagetimems());
+                consumer->SetDefaultReceiveMessageWaitTimeMs(rr.shared_consumer_type().defaultreceivemessagewaittimems());
 
                 if (rr.shared_consumer_type().dead_letter_policy().has_move_action()) {
                     consumer->SetDeadLetterPolicy(::NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE);

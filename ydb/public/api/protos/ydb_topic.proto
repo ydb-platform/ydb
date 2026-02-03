@@ -844,8 +844,14 @@ message SharedConsumerType {
     // The duration of blocking messages for its processing. If the message is not committed during this time,
     // it will be returned to the queue and sent for re-processing.
     optional google.protobuf.Duration default_processing_timeout = 11;
-    // The dedad letter policy for this consumer.
+    // The dead letter policy for this consumer.
     optional DeadLetterPolicy dead_letter_policy = 12;
+    // Delay time for message (after sending)
+    optional uint32 DefaultDelayMessageTimeMs = 13;
+    // Time to wait for message if queue empty and if this parameter is not set in receive request
+    optional uint32 DefaultReceiveMessageWaitTimeMs = 14;
+    // Is content based deduplication enabled for consumer
+    optional bool ContentBasedDeduplication = 15;
 }
 
 message AlterSharedConsumerType {
@@ -855,6 +861,12 @@ message AlterSharedConsumerType {
 
     // Change dead letter policy.
     AlterDeadLetterPolicy alter_dead_letter_policy = 11;
+    // Delay time for message (after sending)
+    optional uint32 DefaultDelayMessageTimeMs = 12;
+    // Time to wait for message if queue empty and if this parameter is not set in receive request
+    optional uint32 DefaultReceiveMessageWaitTimeMs = 13;
+    // Is content based deduplication enabled for consumer
+    optional bool ContentBasedDeduplication = 14;
 }
 
 // Consumer description.

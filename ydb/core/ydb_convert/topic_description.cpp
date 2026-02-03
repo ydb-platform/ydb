@@ -54,6 +54,10 @@ bool FillConsumer(Ydb::Topic::Consumer& out, const NKikimrPQ::TPQTabletConfig_TC
             shared->set_keep_messages_order(in.GetKeepMessageOrder());
             shared->mutable_default_processing_timeout()->set_seconds(in.GetDefaultProcessingTimeoutSeconds());
 
+            shared->set_contentbaseddeduplication(in.GetContentBasedDeduplication());
+            shared->set_defaultdelaymessagetimems(in.GetDefaultDelayMessageTimeMs());
+            shared->set_defaultreceivemessagewaittimems(in.GetDefaultReceiveMessageWaitTimeMs());
+
             auto* deadLetterPolicy = shared->mutable_dead_letter_policy();
             deadLetterPolicy->set_enabled(in.GetDeadLetterPolicyEnabled());
             deadLetterPolicy->mutable_condition()->set_max_processing_attempts(in.GetMaxProcessingAttempts());

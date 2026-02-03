@@ -17,6 +17,7 @@ from yql.essentials.providers.common.proto.gateways_config_pb2 import EGenericDa
 import conftest
 import random
 
+MAX_WRITE_STREAM_SIZE = 500
 DEBUG = 0
 SEED = 0  # use fixed seed for regular tests
 if DEBUG:
@@ -986,11 +987,8 @@ class TestJoinStreaming(TestYdsBase):
         fq_client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
         kikimr.compute_plane.wait_zero_checkpoint(query_id)
 
-        offset = 0
-        while offset < len(messages):
-            chunk = messages[offset : offset + 500]
-            self.write_stream(map(lambda x: x[0], chunk))
-            offset += 500
+        for offset in range(0, len(messages), MAX_WRITE_STREAM_SIZE):
+            self.write_stream(map(lambda x: x[0], messages[offset : offset + MAX_WRITE_STREAM_SIZE]))
 
         expected_len = sum(map(len, messages)) - len(messages)
         read_data = self.read_stream(expected_len)

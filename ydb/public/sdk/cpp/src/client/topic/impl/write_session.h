@@ -78,7 +78,7 @@ private:
 
         FLUENT_SETTING(std::string, FromBound);
         FLUENT_SETTING(std::optional<std::string>, ToBound);
-        FLUENT_SETTING(ui32, PartitionId);
+        FLUENT_SETTING(std::uint32_t, PartitionId);
         FLUENT_SETTING(std::vector<ui32>, Children);
         FLUENT_SETTING_DEFAULT(bool, Locked, false);
     };

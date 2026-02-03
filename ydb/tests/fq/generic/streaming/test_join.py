@@ -938,18 +938,20 @@ class TestJoinStreaming(TestYdsBase):
     @pytest.mark.parametrize("fq_client", [{"folder_id": "my_folder_slj"}], indirect=True)
     @pytest.mark.parametrize("partitions_count", [1, 3] if DEBUG else [3])
     @pytest.mark.parametrize("streamlookup", [False, True] if DEBUG else [True])
+    @pytest.mark.parametrize("ca", ["sync", "async"])
     @pytest.mark.parametrize("testcase", [*range(len(TESTCASES))])
     def test_streamlookup(
         self,
         kikimr,
         testcase,
+        ca,
         streamlookup,
         partitions_count,
         fq_client: FederatedQueryClient,
         yq_version,
     ):
         self.init_topics(
-            f"pq_yq_str_lookup_{partitions_count}{streamlookup}{testcase}_{yq_version}",
+            f"slj_{partitions_count}{streamlookup}{testcase}{ca}_{yq_version}",
             partitions_count=partitions_count,
         )
         fq_client.create_yds_connection("myyds", os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"))
@@ -969,11 +971,14 @@ class TestJoinStreaming(TestYdsBase):
             table_name=table_name,
             streamlookup=Rf'/*+ streamlookup({" ".join(options)}) */' if streamlookup else '',
         )
+        sql = f'PRAGMA dq.ComputeActorType = "{ca}";\n{sql}'
 
         one_time_waiter.wait()
 
         query_id = fq_client.create_query(
-            f"streamlookup_{partitions_count}{streamlookup}{testcase}", sql, type=fq.QueryContent.QueryType.STREAMING
+            f"slj_{partitions_count}{streamlookup}{testcase}{ca}",
+            sql,
+            type=fq.QueryContent.QueryType.STREAMING,
         ).result.query_id
 
         if not streamlookup and "MultiGet true" in sql:

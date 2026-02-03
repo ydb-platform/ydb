@@ -366,12 +366,6 @@ protected:
             std::vector<typename TBase::TOutputChannelInfo::TDrainedChannelMessage> channelData = outputChannel.DrainChannel(drainPackSize);
             ui32 idx = 0;
             for (auto&& i : channelData) {
-                if (auto* w = i.GetWatermarkOptional()) {
-                    CA_LOG_I("Resume inputs by watermark");
-                    // This is excessive, inputs should be resumed after async CA received response with watermark from task runner.
-                    // But, let it be here, it's better to have the same code as in checkpoints
-                    TBase::ResumeInputsByWatermark(TInstant::MicroSeconds(w->GetTimestampUs()));
-                }
                 if (i.GetCheckpointOptional()) {
                     CA_LOG_I("Resume inputs by checkpoint");
                     TBase::ResumeInputsByCheckpoint();

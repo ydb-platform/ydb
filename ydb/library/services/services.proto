@@ -458,14 +458,12 @@ enum EServiceKikimr {
 
     SCHEMA_SECRET_CACHE = 3800;
 
-<<<<<<< HEAD
     NBS_PARTITION = 3900;
     NBS2_LOAD_TEST = 3901;
-=======
+
     // BlobChecker
-    BLOB_CHECKER_ORCHESTRATOR = 3900;
-    BLOB_CHECKER_WORKER = 3901;
->>>>>>> 43f8ce924b7 (Introduce BlobChecker)
+    BLOB_CHECKER_ORCHESTRATOR = 3902;
+    BLOB_CHECKER_WORKER = 3903;
 };
 
 message TActivity {

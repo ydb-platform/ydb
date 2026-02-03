@@ -506,12 +506,8 @@ struct Schema : NIceDb::Schema {
         DriveSerial,
         BlobDepotDeleteQueue,
         BridgeSyncState,
-<<<<<<< HEAD
         DirectBlockGroupClaims,
-        BlobCheckerState
-=======
         BlobCheckerGroupStatus
->>>>>>> 585d5763281 (Intermediate 2)
     >;
 
     using TSettings = SchemaSettings<

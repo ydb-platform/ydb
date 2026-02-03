@@ -219,7 +219,11 @@ void TRawPartitionStreamEventQueue<UseMigrationProtocol>::DeleteNotReadyTail(TDe
 
     for (; i != NotReady.end(); ++i) {
         if (i->IsDataEvent()) {
-            infos.push_back(i->GetDataEvent().GetParent());
+            auto info = i->GetDataEvent().GetParent();
+            if (info) {
+                info->OnDestroyReadSession();
+                infos.push_back(std::move(info));
+            }
         }
     }
 
@@ -1378,6 +1382,21 @@ inline void TSingleClusterReadSessionImpl<false>::StopPartitionSessionImpl(
         released.set_partition_session_id(partitionSessionId);
         WriteToProcessorImpl(std::move(req));
         PartitionStreams.erase(partitionSessionId);
+        
+        // Clean up DecompressionQueue entries for this partition to free memory.
+        // These hold TDataDecompressionInfo objects that would otherwise never
+        // be destroyed, causing memory counters to never decrement.
+        std::erase_if(DecompressionQueue, [&](auto& item) {
+            if (item.PartitionStream && item.PartitionStream->GetAssignId() == partitionSessionId) {
+                if (item.BatchInfo) {
+                    item.BatchInfo->OnDestroyReadSession();
+                    deferred.DeferDestroyDecompressionInfos({item.BatchInfo});
+                }
+                return true;
+            }
+            return false;
+        });
+
         pushRes = EventsQueue->PushEvent(
             partitionStream,
             TReadSessionEvent::TPartitionSessionClosedEvent(partitionStream, TReadSessionEvent::TPartitionSessionClosedEvent::EReason::Lost),

@@ -20,6 +20,7 @@ namespace NWilson {
             struct {
                 ui32 Verbosity : 4;
                 ui32 TimeToLive : 12;
+                ui32 RetroTrace : 1;
             };
             ui32 Raw;
         };
@@ -37,7 +38,7 @@ namespace NWilson {
 
     public:
 
-        TTraceId(TTrace traceId, ui64 spanId, ui8 verbosity, ui32 timeToLive)
+        TTraceId(TTrace traceId, ui64 spanId, ui8 verbosity, ui32 timeToLive, bool isRetroTrace = false)
             : TraceId(traceId)
         {
             if (timeToLive == Max<ui32>()) {
@@ -48,6 +49,7 @@ namespace NWilson {
             SpanId = spanId;
             Verbosity = verbosity;
             TimeToLive = timeToLive;
+            RetroTrace = isRetroTrace;
         }
 
 
@@ -130,8 +132,8 @@ namespace NWilson {
         // do not allow implicit copy of trace id
         TTraceId& operator=(const TTraceId& other) = delete;
 
-        static TTraceId NewTraceId(ui8 verbosity, ui32 timeToLive) {
-            return TTraceId(GenerateTraceId(), 0, verbosity, timeToLive);
+        static TTraceId NewTraceId(ui8 verbosity, ui32 timeToLive, bool retroTrace = false) {
+            return TTraceId(GenerateTraceId(), 0, verbosity, timeToLive, retroTrace);
         }
 
         static TTraceId NewTraceIdThrottled(ui8 verbosity, ui32 timeToLive, std::atomic<NActors::TMonotonic>& counter,
@@ -149,9 +151,9 @@ namespace NWilson {
             if (!*this || !TimeToLive) {
                 return TTraceId();
             } else if (verbosity <= Verbosity) {
-                return TTraceId(TraceId, GenerateSpanId(), Verbosity, TimeToLive - 1);
+                return TTraceId(TraceId, GenerateSpanId(), Verbosity, TimeToLive - 1, RetroTrace);
             } else {
-                return TTraceId(TraceId, SpanId, Verbosity, TimeToLive - 1);
+                return TTraceId(TraceId, SpanId, Verbosity, TimeToLive - 1, RetroTrace);
             }
         }
 
@@ -179,6 +181,8 @@ namespace NWilson {
         ui32 GetTimeToLive() const {
             return TimeToLive;
         }
+
+        bool IsRetroTrace() const;
 
         const void *GetTraceIdPtr() const { return TraceId.data(); }
         static constexpr size_t GetTraceIdSize() { return sizeof(TTrace); }

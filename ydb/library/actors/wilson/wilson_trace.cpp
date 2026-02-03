@@ -146,4 +146,7 @@ namespace NWilson {
         }
     }
 
+    bool TTraceId::IsRetroTrace() const {
+        return RetroTrace;
+    }
 }

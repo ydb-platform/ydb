@@ -82,6 +82,7 @@ public:
 
     static TWindowFrameSettings Parse(const TExprNode& node, TExprContext& ctx);
     static TMaybe<TWindowFrameSettings> TryParse(const TExprNode& node, TExprContext& ctx, bool& isUniversal);
+    static TExprNode::TPtr GetSortSpec(const TExprNode& node, TExprContext& ctx);
 
     bool IsNonEmpty() const {
         return NeverEmpty_;

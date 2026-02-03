@@ -6807,6 +6807,26 @@ namespace {
             }
         }
 
+        auto ensureSortSpecValid = [&]() -> IGraphTransformer::TStatus {
+            if (!IsWindowNewPipelineEnabled(ctx.Types)) {
+                return IGraphTransformer::TStatus::Ok;
+            }
+            auto sortSpec = TWindowFrameSettings::GetSortSpec(*input, ctx.Expr);
+            if (!sortSpec) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "Sort specification required."));
+                return IGraphTransformer::TStatus::Error;
+            }
+            if (!sortSpec->IsCallable({"SortTraits", "Void"})) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() << "SortTraits required, but got: " << sortSpec->Content()));
+                return IGraphTransformer::TStatus::Error;
+            }
+            return IGraphTransformer::TStatus::Ok;
+        }();
+
+        if (ensureSortSpecValid != IGraphTransformer::TStatus::Ok) {
+            return ensureSortSpecValid;
+        }
+
         bool isUniversal;
         auto frameSettings = TWindowFrameSettings::TryParse(*input, ctx.Expr, isUniversal);
 

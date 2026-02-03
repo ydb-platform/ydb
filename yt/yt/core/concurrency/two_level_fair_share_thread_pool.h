@@ -29,6 +29,8 @@ struct ITwoLevelFairShareThreadPool
         const std::string& poolName,
         const TFairShareThreadPoolTag& tag) = 0;
 
+    virtual void SetWeightProvider(IPoolWeightProviderPtr weightProvider) = 0;
+
     virtual void Shutdown() = 0;
 
     //! Invoked to inform of the current wait time for invocations via this invoker.
@@ -57,5 +59,6 @@ ITwoLevelFairShareThreadPoolPtr CreateTwoLevelFairShareThreadPool(
     const std::string& threadNamePrefix,
     const TNewTwoLevelFairShareThreadPoolOptions& options = {});
 
+////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NConcurrency

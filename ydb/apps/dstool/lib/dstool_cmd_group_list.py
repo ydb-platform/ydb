@@ -84,7 +84,11 @@ def do(args):
     for group_id, group in group_map.items():
         group_stat = group_stat_map[group_id]
         group_stat['BoxId:PoolId'] = '[%d:%d]' % (group.BoxId, group.StoragePoolId)
-        group_stat['PoolName'] = sp_name[(group.BoxId, group.StoragePoolId)]
+        sp_key = (group.BoxId, group.StoragePoolId)
+        if sp_key in sp_name:
+            group_stat['PoolName'] = sp_name[sp_key]
+        else:
+            group_stat['PoolName'] = 'unknown'
         group_stat['GroupId'] = group.GroupId
         group_stat['Generation'] = group.GroupGeneration
         group_stat['ErasureSpecies'] = group.ErasureSpecies

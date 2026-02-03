@@ -2,6 +2,7 @@ import ydb.core.protos.blobstorage_config_pb2 as kikimr_bsconfig
 import ydb.apps.dstool.lib.common as common
 import ydb.apps.dstool.lib.table as table
 import math
+import sys
 from collections import defaultdict
 
 description = 'List pools'
@@ -140,7 +141,12 @@ def do(args):
 
     group_map = common.build_group_map(base_config)
     for group_id, group in group_map.items():
-        pool = box_pool_map[group.BoxId, group.StoragePoolId]
+        sp_key = (group.BoxId, group.StoragePoolId)
+        if sp_key in box_pool_map:
+            pool = box_pool_map[sp_key]
+        else:
+            print(f"WARNING: Storage pool {sp_key} not found for group {group.GroupId}", file=sys.stderr)
+            continue
 
         if 'groups' not in pool:
             pool['groups'] = defaultdict(int)
@@ -159,7 +165,12 @@ def do(args):
             continue
 
         group = group_map[vslot.GroupId]
-        pool = box_pool_map[group.BoxId, group.StoragePoolId]
+        sp_key = (group.BoxId, group.StoragePoolId)
+        if sp_key in box_pool_map:
+            pool = box_pool_map[sp_key]
+        else:
+            print(f"WARNING: Storage pool {sp_key} not found for group {group.GroupId}", file=sys.stderr)
+            continue
 
         if 'vslots' not in pool:
             pool['vslots'] = defaultdict(int)
@@ -186,7 +197,12 @@ def do(args):
         row['VDiskKind'] = sp.VDiskKind
         row['ItemConfigGeneration'] = sp.ItemConfigGeneration
 
-        pool = box_pool_map[sp.BoxId, sp.StoragePoolId]
+        sp_key = (sp.BoxId, sp.StoragePoolId)
+        if sp_key in box_pool_map:
+            pool = box_pool_map[sp_key]
+        else:
+            print(f"WARNING: Storage pool {sp_key} not found", file=sys.stderr)
+            continue
 
         # fill in groups data
         if 'groups' not in pool:

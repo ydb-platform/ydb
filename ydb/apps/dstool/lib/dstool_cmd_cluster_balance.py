@@ -64,11 +64,15 @@ class ClusterInfo:
         info.pdisk_usage_w_donors = common.build_pdisk_usage_map(info.base_config, count_donors=True)
 
         info.storage_pool_names_map = common.build_storage_pool_names_map(info.storage_pools)
-        info.group_id_to_storage_pool_name_map = {
-            group_id: info.storage_pool_names_map[(group.BoxId, group.StoragePoolId)]
-            for group_id, group in common.build_group_map(info.base_config).items()
-            if (group.BoxId, group.StoragePoolId) != (0, 0)  # static group
-        }
+        info.group_id_to_storage_pool_name_map = {}
+        for group_id, group in common.build_group_map(info.base_config).items():
+            if (group.BoxId, group.StoragePoolId) == (0, 0):  # static group
+                continue
+            sp_key = (group.BoxId, group.StoragePoolId)
+            if sp_key in info.storage_pool_names_map:
+                info.group_id_to_storage_pool_name_map[group_id] = info.storage_pool_names_map[sp_key]
+            else:
+                info.group_id_to_storage_pool_name_map[group_id] = 'unknown'
 
         info.vdisks_groups_count_map = defaultdict(int)
         for group in info.base_config.Group:

@@ -95,7 +95,12 @@ def do(args):
             wiped = group_vslots & set(v[1:] for v in wipe_set)
             if not wiped:
                 continue  # ignore groups we are not going to wipe
-            sp = storage_pools_map[group.BoxId, group.StoragePoolId]
+            sp_key = (group.BoxId, group.StoragePoolId)
+            if sp_key in storage_pools_map:
+                sp = storage_pools_map[sp_key]
+            else:
+                print(f"WARNING: Storage pool {sp_key} not found for group {group.GroupId}", file=sys.stderr)
+                continue
             current = {
                 vslot_coord[v]: vslot_status[v]
                 for v in group_vslots

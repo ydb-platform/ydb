@@ -55,9 +55,21 @@ def check_failure_model(args):
     error_reason = ''
     for sp in storage_pools:
         sp_name = sp.Name
-        location_id_map = box_geoms[sp.BoxId, geom_key(sp.Geometry)]
+        geom_key_value = geom_key(sp.Geometry)
+        if (sp.BoxId, geom_key_value) in box_geoms:
+            location_id_map = box_geoms[sp.BoxId, geom_key_value]
+        else:
+            print(f"WARNING: Geometry for box {sp.BoxId} not found", file=sys.stderr)
+            continue
 
-        for group in storage_pool_groups_map[sp.BoxId, sp.StoragePoolId]:
+        sp_key = (sp.BoxId, sp.StoragePoolId)
+        if sp_key in storage_pool_groups_map:
+            groups = storage_pool_groups_map[sp_key]
+        else:
+            print(f"WARNING: No groups found for storage pool {sp_key}", file=sys.stderr)
+            continue
+
+        for group in groups:
             location_map = {}
             vslot_map = {}
             for id_ in group.VSlotId:

@@ -26,10 +26,13 @@ def do(args):
         for sp in storage_pools
     }
 
-    group_to_sp_name = {
-        group_id: sp_name[group.BoxId, group.StoragePoolId]
-        for group_id, group in group_map.items()
-    }
+    group_to_sp_name = {}
+    for group_id, group in group_map.items():
+        sp_key = (group.BoxId, group.StoragePoolId)
+        if sp_key in sp_name:
+            group_to_sp_name[group_id] = sp_name[sp_key]
+        else:
+            group_to_sp_name[group_id] = 'unknown'
 
     all_columns = [
         'VDiskId',

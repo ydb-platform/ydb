@@ -4,7 +4,9 @@
 #include <ydb/core/grpc_services/rpc_common/rpc_common.h>
 #include <ydb/core/base/auth.h>
 #include <ydb/core/driver_lib/run/grpc_servers_manager.h>
+
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_direct.h>
+#include <ydb/core/nbs/cloud/blockstore/config/storage.pb.h>
 
 namespace NKikimr::NGRpcService {
 
@@ -31,9 +33,16 @@ public:
     void Bootstrap() {
         Become(&TThis::StateWork);
 
+        NYdb::NBS::NProto::TStorageConfig storageConfig;
+        storageConfig.SetDDiskPoolName("ddp1");
+        storageConfig.SetPersistentBufferDDiskPoolName("ddp1");
+        // One trace per 100ms should be sufficient for observability.
+        storageConfig.SetTraceSamplePeriod(100);
+
         // Create partition actor
         auto partition_actor_id = NYdb::NBS::NStorage::NPartitionDirect::CreatePartitionTablet(
-            SelfId());
+            SelfId(),
+            std::move(storageConfig));
 
         LOG_INFO(TActivationContext::AsActorContext(), NKikimrServices::NBS_PARTITION,
             "Grpc service: created partition actor with id: %s",

@@ -20,6 +20,7 @@ public:
 
     ui64 AlterVersion = 0;
     TPtr AlterData;
+    bool IsRestore = false;
 
     TPathId GetOlapStorePathIdVerified() const;
 
@@ -28,6 +29,8 @@ public:
     std::set<ui64> GetShardIdsSet() const;
 
     const google::protobuf::RepeatedField<arc_ui64>& GetColumnShards() const;
+    
+    const google::protobuf::RepeatedField<arc_ui64>& GetPartitions() const;
 
     void SetColumnShards(const std::vector<ui64>& columnShards);
 
@@ -38,6 +41,8 @@ public:
     TMaybe<NKikimrSchemeOp::TAlterColumnTable> AlterBody;
     NKikimrSchemeOp::TBackupTask BackupSettings;
     TMap<TTxId, TTableInfo::TBackupRestoreResult> BackupHistory;
+    NKikimrSchemeOp::TRestoreTask RestoreSettings;
+    TMap<TTxId, TTableInfo::TBackupRestoreResult> RestoreHistory;
 
     TAggregatedStats Stats;
 

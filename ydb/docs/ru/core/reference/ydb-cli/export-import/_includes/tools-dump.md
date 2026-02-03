@@ -18,11 +18,13 @@
 
 Команда `admin database dump` выгружает в клиентскую файловую систему данные и метаданные базы данных, в описанном в статье [{#T}](../file-structure.md) формате:
 
+{% include [limitation](./limitation-dump-column-tables.md) %}
+
+{% include [limitation](./limitation-dump-secrets.md) %}
+
 ```bash
 {{ ydb-cli }} [connection options] admin database dump [options]
 ```
-
-{% include [limitation](./limitation-dump-column-tables.md) %}
 
 {% include [conn_options_ref.md](../../commands/_includes/conn_options_ref.md) %}
 
@@ -34,11 +36,13 @@
 
 Команда `tools dump` выгружает в клиентскую файловую систему данные и информацию об объектах схемы данных, в описанном в статье [{#T}](../file-structure.md) формате:
 
+{% include [limitation](./limitation-dump-column-tables.md) %}
+
+{% include [limitation](./limitation-dump-secrets.md) %}
+
 ```bash
 {{ ydb-cli }} [connection options] tools dump [options]
 ```
-
-{% include [limitation](./limitation-dump-column-tables.md) %}
 
 {% include [conn_options_ref.md](../../commands/_includes/conn_options_ref.md) %}
 

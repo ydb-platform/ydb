@@ -2,8 +2,6 @@ ydb/core/blobstorage/ut_blobstorage BlobPatching.PatchBlock42
 ydb/core/blobstorage/ut_blobstorage GroupReconfiguration.BsControllerDoesNotDisableGroup
 ydb/core/blobstorage/ut_blobstorage GroupReconfiguration.BsControllerDoesNotDisableGroupNoRequestsToNodesWVDisks
 ydb/core/blobstorage/ut_blobstorage unittest.[*/*] chunk
-ydb/core/blobstorage/ut_blobstorage/ut_group_reconfiguration GroupReconfigurationRace.Test_block42
-ydb/core/blobstorage/ut_blobstorage/ut_group_reconfiguration unittest.[*/*] chunk
 ydb/core/blobstorage/ut_blobstorage/ut_huge HugeBlobOnlineSizeChange.Compaction
 ydb/core/blobstorage/ut_blobstorage/ut_huge unittest.[*/*] chunk
 ydb/core/blobstorage/ut_blobstorage/ut_scrub BlobScrubbing.block42
@@ -26,16 +24,13 @@ ydb/core/kqp/ut/olap KqpOlapSysView.StatsSysViewTable
 ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable+ColumnStore
 ydb/core/kqp/ut/query KqpStats.OneShardNonLocalExec+UseSink
 ydb/core/kqp/ut/query KqpStats.OneShardNonLocalExec-UseSink
+ydb/core/kqp/ut/scan KqpScan.StreamExecuteScanQueryClientTimeoutBruteForce
 ydb/core/kqp/ut/scheme KqpOlapScheme.AddPgColumnWithStore
 ydb/core/persqueue/ut TPQTest.TestPartitionWriteQuota
-ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_offset+middle_WithRestart
 ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient
 ydb/core/statistics/aggregator/ut AnalyzeColumnshard.AnalyzeRebootColumnShard
-ydb/core/tx/schemeshard/ut_base_reboots TTablesWithReboots.AlterTableFollowersWithReboots
-ydb/core/tx/schemeshard/ut_base_reboots TTablesWithReboots.ChainedCopyTableAndDropWithReboots
 ydb/core/tx/schemeshard/ut_base_reboots TTablesWithReboots.CopyTableAndDropWithReboots
 ydb/core/tx/schemeshard/ut_base_reboots unittest.[*/*] chunk
-ydb/core/tx/schemeshard/ut_cdc_stream_reboots TCdcStreamWithRebootsTests.CreateStreamOnIndexTableWithInitialScan[TabletReboots]
 ydb/core/tx/schemeshard/ut_cdc_stream_reboots TCdcStreamWithRebootsTests.CreateStreamWithInitialScan[TabletReboots]
 ydb/core/tx/schemeshard/ut_cdc_stream_reboots TCdcStreamWithRebootsTests.CreateStreamWithSchemaChanges[TabletReboots]
 ydb/core/tx/schemeshard/ut_cdc_stream_reboots TCdcStreamWithRebootsTests.DropMultipleStreams[TabletReboots]
@@ -45,47 +40,43 @@ ydb/core/tx/schemeshard/ut_cdc_stream_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_export_reboots_s3 TExportToS3WithRebootsTests.CancelShouldSucceedOnMultiShardTable
 ydb/core/tx/schemeshard/ut_export_reboots_s3 unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_index_build_reboots IndexBuildTestReboots.BaseCaseUniq
-ydb/core/tx/schemeshard/ut_index_build_reboots IndexBuildTestReboots.DropIndexWithDataColumns
 ydb/core/tx/schemeshard/ut_index_build_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_login_large TSchemeShardLoginLargeTest.RemoveLogin_Many
 ydb/core/tx/schemeshard/ut_move_reboots TSchemeShardMoveRebootsTest.ColumnTable
-ydb/core/tx/schemeshard/ut_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_restore TImportTests.ShouldSucceedOnManyTables
+ydb/core/tx/schemeshard/ut_restore TImportWithRebootsTests.ShouldSucceedOnSimpleTable
 ydb/core/tx/schemeshard/ut_restore TImportWithRebootsTests.ShouldSucceedOnSingleChangefeed
-ydb/core/tx/schemeshard/ut_restore TRestoreWithRebootsTests.CancelShouldSucceed[Raw]
+ydb/core/tx/schemeshard/ut_restore TImportWithRebootsTests.ShouldSucceedOnTableWithChecksum
 ydb/core/tx/schemeshard/ut_restore TRestoreWithRebootsTests.ShouldFailOnOutboundKey[Raw]
 ydb/core/tx/schemeshard/ut_restore TRestoreWithRebootsTests.ShouldSucceedOnMultipleFrames
 ydb/core/tx/schemeshard/ut_restore unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_shred_reboots ShredReboots.SimpleShredTest
 ydb/core/tx/schemeshard/ut_shred_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_split_merge_reboots TSchemeShardSplitTestReboots.SplitWithTxInFlightWithReboots
-ydb/core/tx/schemeshard/ut_system_names unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.BaseCase[PipeResets]
-ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.BaseCase[TabletReboots]
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.Overlap[PipeResetsBucket0]
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.Overlap[PipeResetsBucket1]
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.Overlap[TabletRebootsBucket0]
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.Overlap[TabletRebootsBucket1]
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.PrefixedOverlap[PipeResetsBucket0]
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.PrefixedOverlap[PipeResetsBucket1]
-ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.PrefixedOverlap[TabletRebootsBucket0]
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.PrefixedOverlap[TabletRebootsBucket1]
-ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.PrefixedOverlap[TabletRebootsBucket2]
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.PrefixedOverlap[TabletRebootsBucket3]
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.Prefixed[PipeResets]
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.Prefixed[TabletRebootsBucket0]
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.Prefixed[TabletRebootsBucket1]
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots unittest.[*/*] chunk
 ydb/core/tx/tx_proxy/ut_schemereq SchemeReqAccess.AlterLoginProtect-RootDB-Auth-BuiltinUser-CreateUser-17
+ydb/core/tx/tx_proxy/ut_schemereq SchemeReqAccess.AlterLoginProtect-RootDB-Auth-BuiltinUser-CreateUser-19
 ydb/core/tx/tx_proxy/ut_schemereq SchemeReqAccess.AlterLoginProtect-RootDB-Auth-BuiltinUser-CreateUser-20
 ydb/core/tx/tx_proxy/ut_schemereq SchemeReqAccess.AlterLoginProtect-RootDB-Auth-BuiltinUser-CreateUser-21
 ydb/core/tx/tx_proxy/ut_schemereq SchemeReqAccess.AlterLoginProtect-RootDB-Auth-BuiltinUser-CreateUser-22
 ydb/core/tx/tx_proxy/ut_schemereq SchemeReqAccess.AlterLoginProtect-RootDB-Auth-BuiltinUser-CreateUser-23
 ydb/core/tx/tx_proxy/ut_schemereq SchemeReqAccess.AlterLoginProtect-RootDB-Auth-BuiltinUser-CreateUser-24
-ydb/core/tx/tx_proxy/ut_schemereq SchemeReqAccess.AlterLoginProtect-RootDB-Auth-LocalUser-CreateUser-19
 ydb/core/tx/tx_proxy/ut_schemereq SchemeReqAccess.AlterLoginProtect-RootDB-Auth-LocalUser-CreateUser-21
 ydb/core/tx/tx_proxy/ut_schemereq SchemeReqAccess.AlterLoginProtect-RootDB-Auth-LocalUser-CreateUser-24
 ydb/core/tx/tx_proxy/ut_schemereq SchemeReqAccess.AlterLoginProtect-RootDB-NoAuth-BuiltinUser-CreateUser-21
+ydb/core/tx/tx_proxy/ut_schemereq SchemeReqAccess.AlterLoginProtect-RootDB-NoAuth-BuiltinUser-CreateUser-22
 ydb/core/tx/tx_proxy/ut_schemereq SchemeReqAccess.AlterLoginProtect-RootDB-NoAuth-LocalUser-CreateUser-17
 ydb/core/tx/tx_proxy/ut_schemereq SchemeReqAccess.AlterLoginProtect-RootDB-NoAuth-LocalUser-CreateUser-22
 ydb/core/viewer/tests test.py.test_scheme_directory

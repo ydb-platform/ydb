@@ -9386,6 +9386,20 @@
             "uri": "https://{canondata_backend}/1942278/29cbf9b34bce7d402d33a3942ea29f5167d37a1d/resource.tar.gz#test_sql2yql.test_subselect-projection_/sql.yql"
         }
     ],
+    "test_sql2yql.test[subselect-receiver_primitive]": [
+        {
+            "checksum": "55d27e349f96a4cdce76b6aab8271de5",
+            "size": 1639,
+            "uri": "https://{canondata_backend}/1942278/865be9b147b705f1562e3423c723408900b8f7db/resource.tar.gz#test_sql2yql.test_subselect-receiver_primitive_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[subselect-receiver_struct]": [
+        {
+            "checksum": "aae2d6c2fd67e869925aff8ac1ed098d",
+            "size": 1673,
+            "uri": "https://{canondata_backend}/1942278/865be9b147b705f1562e3423c723408900b8f7db/resource.tar.gz#test_sql2yql.test_subselect-receiver_struct_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[subselect-union]": [
         {
             "checksum": "43d04e67d2f8629c531561e34aa41d90",
@@ -15438,6 +15452,16 @@
     "test_sql_format.test[subselect-projection]": [
         {
             "uri": "file://test_sql_format.test_subselect-projection_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[subselect-receiver_primitive]": [
+        {
+            "uri": "file://test_sql_format.test_subselect-receiver_primitive_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[subselect-receiver_struct]": [
+        {
+            "uri": "file://test_sql_format.test_subselect-receiver_struct_/formatted.sql"
         }
     ],
     "test_sql_format.test[subselect-union]": [

@@ -296,7 +296,8 @@ bool CreateConsistentCopyTables(
 
                 indexDescr.SetOmitIndexes(true); 
 
-                auto itCreate = descr.GetIndexImplTableCdcStreams().find(name);
+                TString key = name + "/" + srcImplTableName;
+                auto itCreate = descr.GetIndexImplTableCdcStreams().find(key);
                 if (itCreate != descr.GetIndexImplTableCdcStreams().end()) {
                     indexDescr.MutableCreateSrcCdcStream()->CopyFrom(itCreate->second);
                 }

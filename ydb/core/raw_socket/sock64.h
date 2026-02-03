@@ -190,7 +190,7 @@ public:
 
     std::shared_ptr<X509> GetSslClientCert() {
         int ret = SSL_do_handshake(Ssl.get());
-        Cout << ret << Endl;
+        Cout << "SSL handshake result: " << ret << Endl;
         return std::shared_ptr<X509>(SSL_get_peer_certificate(Ssl.get()), &X509_free);
     }
 

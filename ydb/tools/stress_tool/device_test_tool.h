@@ -59,6 +59,8 @@ public:
     virtual void AddResult(const TString& name, const TString& value) = 0;
     virtual void AddGlobalParam(const TString& name, const TString& value) = 0;
     virtual void AddSpeedAndIops(const TSpeedAndIops& data) = 0;
+    virtual void SetTestType(const TString& testType) = 0;
+    virtual void SetInFlight(ui32 inFlight) = 0;
 
     template<typename T>
     void AddGlobalParam(const TString& name, const T& value) {
@@ -95,9 +97,13 @@ public:
     ui32 RunCount = 1;
     TVector<TStringPair> GlobalParams;
     TVector<TStringPair> Results;
-    TVector<TVector<TStringPair>> AllRuns; // All runs collected for statistics
+    TVector<TVector<TStringPair>> AllRuns; // All runs collected for statistics (for flat mode)
     TSpeedAndIops CurrentSpeedAndIops; // Current run's speed and IOPS
-    TVector<TSpeedAndIops> AllSpeedAndIops; // All runs' speed and IOPS for statistics
+    TVector<TSpeedAndIops> AllSpeedAndIops; // All runs' speed and IOPS for statistics (for flat mode)
+    TString TestType; // Test type name (e.g., "PDiskWriteLoad")
+    ui32 CurrentInFlight = 0; // Current InFlight value
+    TMap<ui32, TVector<TVector<TStringPair>>> RunsByInFlight; // Runs grouped by InFlight
+    TMap<ui32, TVector<TSpeedAndIops>> SpeedAndIopsByInFlight; // Speed/IOPS grouped by InFlight
     bool HeaderPrinted = false;
     NJson::TJsonWriter JsonWriter;
 
@@ -113,16 +119,25 @@ public:
         }
     }
 
-    static double GetMedian(TVector<double>& values) {
+    struct TStatistics {
+        double Min = 0.0;
+        double Max = 0.0;
+        double Median = 0.0;
+    };
+
+    static TStatistics GetStatistics(TVector<double>& values) {
         if (values.empty()) {
-            return 0.0;
+            return {};
         }
         std::sort(values.begin(), values.end());
         size_t n = values.size();
+        double median;
         if (n % 2 == 0) {
-            return (values[n / 2 - 1] + values[n / 2]) / 2.0;
+            median = (values[n / 2 - 1] + values[n / 2]) / 2.0;
+        } else {
+            median = values[n / 2];
         }
-        return values[n / 2];
+        return {values.front(), values.back(), median};
     }
 
     void PrintResultsWikiFormatSingleRow(const TVector<TStringPair>& row) {
@@ -201,7 +216,7 @@ public:
         }
     }
 
-    void PrintStatisticsRow(const TString& statName, const TVector<TStringPair>& templateRow,
+    TVector<TStringPair> MakeStatisticsRow(const TString& statName, const TVector<TStringPair>& templateRow,
                            double speed, double iops, size_t speedCol, size_t iopsCol) {
         TVector<TStringPair> statsRow;
         for (size_t i = 0; i < templateRow.size(); ++i) {
@@ -217,35 +232,138 @@ public:
             }
             statsRow.push_back(pair);
         }
+        return statsRow;
+    }
 
-        switch (OutputFormat) {
-        case OUTPUT_FORMAT_WIKI:
-            PrintResultsWikiFormatSingleRow(statsRow);
-            break;
-        case OUTPUT_FORMAT_HUMAN: {
-            TVector<ui32> columnWidths = CalculateColumnWidths(statsRow);
-            PrintResultsHumanFormatSingleRow(statsRow, columnWidths);
-            break;
+    void PrintAllRunsStructuredJson() {
+        if (RunsByInFlight.empty()) {
+            return;
         }
-        case OUTPUT_FORMAT_JSON: {
-            NJson::TJsonValue value;
-            value["_stat"] = statName;
-            for (const auto& param : GlobalParams) {
-                value[param.Name] = param.Value;
-            }
-            for (const auto& pair : statsRow) {
-                if (!pair.Value.empty() && pair.Value != "-") {
-                    value[pair.Name] = pair.Value;
+
+        NJson::TJsonValue root;
+
+        // Set TestType if provided
+        if (TestType) {
+            root["TestType"] = TestType;
+        }
+
+        // Extract Name from first run if available and not a placeholder
+        if (!AllRuns.empty()) {
+            const auto& firstRun = AllRuns[0];
+            for (const auto& pair : firstRun) {
+                if (pair.Name == "Name" && pair.Value != "Name") {
+                    root["Name"] = pair.Value;
+                    break;
                 }
             }
-            JsonWriter.Write(value);
-            break;
         }
+
+        // Params from GlobalParams
+        NJson::TJsonValue params;
+        for (const auto& param : GlobalParams) {
+            params[param.Name] = param.Value;
         }
+        root["Params"] = params;
+
+        // InFlights array - each entry has InFlight value, statistics, and runs
+        NJson::TJsonValue inFlightsArray;
+        inFlightsArray.SetType(NJson::JSON_ARRAY);
+
+        for (const auto& [inFlight, runs] : RunsByInFlight) {
+            NJson::TJsonValue inFlightObj;
+            inFlightObj["InFlight"] = inFlight;
+
+            // Calculate statistics for this InFlight
+            const auto& speedAndIopsVec = SpeedAndIopsByInFlight[inFlight];
+            if (speedAndIopsVec.size() > 0) {
+                TVector<double> speeds;
+                TVector<double> iopsVec;
+                for (const auto& data : speedAndIopsVec) {
+                    speeds.push_back(data.SpeedMBps);
+                    iopsVec.push_back(data.Iops);
+                }
+
+                auto speedStats = GetStatistics(speeds);
+                auto iopsStats = GetStatistics(iopsVec);
+
+                NJson::TJsonValue speedJson;
+                speedJson["min"] = Sprintf("%.1f MB/s", speedStats.Min);
+                speedJson["max"] = Sprintf("%.1f MB/s", speedStats.Max);
+                speedJson["median"] = Sprintf("%.1f MB/s", speedStats.Median);
+                inFlightObj["Speed"] = speedJson;
+
+                NJson::TJsonValue iopsJson;
+                iopsJson["min"] = Sprintf("%.1f", iopsStats.Min);
+                iopsJson["max"] = Sprintf("%.1f", iopsStats.Max);
+                iopsJson["median"] = Sprintf("%.1f", iopsStats.Median);
+                inFlightObj["IOPS"] = iopsJson;
+            }
+
+            // Runs array for this InFlight (without InFlight field since it's at parent level)
+            NJson::TJsonValue runsArray;
+            runsArray.SetType(NJson::JSON_ARRAY);
+            for (const auto& run : runs) {
+                NJson::TJsonValue runObj;
+                for (const auto& pair : run) {
+                    // Skip InFlight in individual runs since it's at the group level
+                    if (pair.Name != "InFlight") {
+                        runObj[pair.Name] = pair.Value;
+                    }
+                }
+                runsArray.AppendValue(runObj);
+            }
+            inFlightObj["Runs"] = runsArray;
+
+            inFlightsArray.AppendValue(inFlightObj);
+        }
+        root["InFlights"] = inFlightsArray;
+
+        NJson::WriteJson(&Cout, &root, true, true);
+        Cout << Endl;
+    }
+
+    // Calculate column widths based on all rows for consistent alignment
+    TVector<ui32> CalculateColumnWidthsForAllRows(const TVector<TVector<TStringPair>>& allRows) const {
+        if (allRows.empty()) {
+            return {};
+        }
+
+        const ui32 screenWidth = 250;
+        size_t numCols = allRows[0].size();
+        const ui32 maxColumnWidthLimit = numCols > 0 ? screenWidth / numCols - 3 : 10;
+
+        TVector<ui32> columnWidths(numCols, 0);
+
+        // First pass: consider header names
+        for (size_t i = 0; i < numCols; ++i) {
+            columnWidths[i] = std::max(columnWidths[i], static_cast<ui32>(allRows[0][i].Name.size()));
+        }
+
+        // Consider all row values
+        for (const auto& row : allRows) {
+            for (size_t i = 0; i < row.size() && i < numCols; ++i) {
+                columnWidths[i] = std::max(columnWidths[i], static_cast<ui32>(row[i].Value.size()));
+            }
+        }
+
+        // Apply max width limit
+        for (size_t i = 0; i < numCols; ++i) {
+            columnWidths[i] = std::min(columnWidths[i], maxColumnWidthLimit);
+        }
+
+        return columnWidths;
     }
 
     void PrintAllRunsWithStatistics() {
         if (AllRuns.empty()) {
+            return;
+        }
+
+        // For JSON format, use structured output
+        if (OutputFormat == OUTPUT_FORMAT_JSON) {
+            PrintAllRunsStructuredJson();
+            AllRuns.clear();
+            AllSpeedAndIops.clear();
             return;
         }
 
@@ -263,6 +381,34 @@ public:
             }
         }
 
+        // Build statistics rows first (needed for width calculation)
+        TVector<TVector<TStringPair>> statsRows;
+        bool hasSpeedOrIops = (speedCol != SIZE_MAX || iopsCol != SIZE_MAX);
+        if (hasSpeedOrIops && AllSpeedAndIops.size() > 1) {
+            TVector<double> speeds;
+            TVector<double> iopsVec;
+            for (const auto& data : AllSpeedAndIops) {
+                speeds.push_back(data.SpeedMBps);
+                iopsVec.push_back(data.Iops);
+            }
+
+            auto speedStats = GetStatistics(speeds);
+            auto iopsStats = GetStatistics(iopsVec);
+
+            statsRows.push_back(MakeStatisticsRow("Min", firstRun, speedStats.Min, iopsStats.Min, speedCol, iopsCol));
+            statsRows.push_back(MakeStatisticsRow("Max", firstRun, speedStats.Max, iopsStats.Max, speedCol, iopsCol));
+            statsRows.push_back(MakeStatisticsRow("Median", firstRun, speedStats.Median, iopsStats.Median, speedCol, iopsCol));
+        }
+
+        // Calculate column widths based on ALL rows (data + stats) for human format
+        TVector<ui32> columnWidths;
+        if (OutputFormat == OUTPUT_FORMAT_HUMAN) {
+            TVector<TVector<TStringPair>> allRowsForWidth;
+            allRowsForWidth.insert(allRowsForWidth.end(), AllRuns.begin(), AllRuns.end());
+            allRowsForWidth.insert(allRowsForWidth.end(), statsRows.begin(), statsRows.end());
+            columnWidths = CalculateColumnWidthsForAllRows(allRowsForWidth);
+        }
+
         // Print header once
         if (!HeaderPrinted && !firstRun.empty()) {
             HeaderPrinted = true;
@@ -275,7 +421,6 @@ public:
                 }
                 TEST_COUT_LN("|");
             } else if (OutputFormat == OUTPUT_FORMAT_HUMAN) {
-                TVector<ui32> columnWidths = CalculateColumnWidths(firstRun);
                 TEST_COUT("|");
                 for (size_t i = 0; i < firstRun.size(); ++i) {
                     const auto& name = firstRun[i].Name;
@@ -292,50 +437,34 @@ public:
             case OUTPUT_FORMAT_WIKI:
                 PrintResultsWikiFormatSingleRow(run);
                 break;
-            case OUTPUT_FORMAT_HUMAN: {
-                TVector<ui32> columnWidths = CalculateColumnWidths(run);
+            case OUTPUT_FORMAT_HUMAN:
                 PrintResultsHumanFormatSingleRow(run, columnWidths);
                 break;
-            }
-            case OUTPUT_FORMAT_JSON: {
-                NJson::TJsonValue value;
-                for (const auto& param : GlobalParams) {
-                    value[param.Name] = param.Value;
-                }
-                for (const auto& counter : run) {
-                    value[counter.Name] = counter.Value;
-                }
-                JsonWriter.Write(value);
+            case OUTPUT_FORMAT_JSON:
+                // Handled above
                 break;
-            }
             }
         }
 
-        // Calculate and print statistics using stored raw values
-        bool hasSpeedOrIops = (speedCol != SIZE_MAX || iopsCol != SIZE_MAX);
-        if (hasSpeedOrIops && AllSpeedAndIops.size() > 1) {
-            TVector<double> speeds;
-            TVector<double> iops;
-            for (const auto& data : AllSpeedAndIops) {
-                speeds.push_back(data.SpeedMBps);
-                iops.push_back(data.Iops);
+        // Print statistics rows
+        for (const auto& statsRow : statsRows) {
+            switch (OutputFormat) {
+            case OUTPUT_FORMAT_WIKI:
+                PrintResultsWikiFormatSingleRow(statsRow);
+                break;
+            case OUTPUT_FORMAT_HUMAN:
+                PrintResultsHumanFormatSingleRow(statsRow, columnWidths);
+                break;
+            case OUTPUT_FORMAT_JSON:
+                // Handled above
+                break;
             }
-
-            double minSpeed = *std::min_element(speeds.begin(), speeds.end());
-            double maxSpeed = *std::max_element(speeds.begin(), speeds.end());
-            double medianSpeed = GetMedian(speeds);
-
-            double minIops = *std::min_element(iops.begin(), iops.end());
-            double maxIops = *std::max_element(iops.begin(), iops.end());
-            double medianIops = GetMedian(iops);
-
-            PrintStatisticsRow("Min", firstRun, minSpeed, minIops, speedCol, iopsCol);
-            PrintStatisticsRow("Max", firstRun, maxSpeed, maxIops, speedCol, iopsCol);
-            PrintStatisticsRow("Median", firstRun, medianSpeed, medianIops, speedCol, iopsCol);
         }
 
         AllRuns.clear();
         AllSpeedAndIops.clear();
+        RunsByInFlight.clear();
+        SpeedAndIopsByInFlight.clear();
     }
 
 public:
@@ -344,7 +473,8 @@ public:
         , RunCount(runCount)
         , JsonWriter(&Cout, true)
     {
-        if (OutputFormat == OUTPUT_FORMAT_JSON) {
+        // Only open array for single run JSON (backward compatibility)
+        if (OutputFormat == OUTPUT_FORMAT_JSON && RunCount == 1) {
             JsonWriter.OpenArray();
         }
     }
@@ -357,6 +487,12 @@ public:
     }
     void AddSpeedAndIops(const TSpeedAndIops& data) override {
         CurrentSpeedAndIops = data;
+    }
+    void SetTestType(const TString& testType) override {
+        TestType = testType;
+    }
+    void SetInFlight(ui32 inFlight) override {
+        CurrentInFlight = inFlight;
     }
 
     void PrintResults() override {
@@ -378,7 +514,10 @@ public:
                 break;
             }
         } else {
-            // Collect results for later statistics calculation
+            // Collect results grouped by InFlight for later statistics calculation
+            RunsByInFlight[CurrentInFlight].push_back(Results);
+            SpeedAndIopsByInFlight[CurrentInFlight].push_back(CurrentSpeedAndIops);
+            // Also keep flat lists for non-JSON formats
             AllRuns.push_back(Results);
             AllSpeedAndIops.push_back(CurrentSpeedAndIops);
         }
@@ -403,15 +542,14 @@ public:
             if (OutputFormat == OUTPUT_FORMAT_WIKI && HeaderPrinted) {
                 TEST_COUT_LN("|#");
             }
-            if (OutputFormat == OUTPUT_FORMAT_JSON) {
-                JsonWriter.Flush();
-            }
+            // Note: JSON for multiple runs uses NJson::WriteJson in PrintAllRunsStructuredJson()
             HeaderPrinted = false;
         }
     }
 
     ~TResultPrinter() {
-        if (OutputFormat == OUTPUT_FORMAT_JSON) {
+        // Only close array for single run JSON (backward compatibility)
+        if (OutputFormat == OUTPUT_FORMAT_JSON && RunCount == 1) {
             JsonWriter.CloseArray();
             JsonWriter.Flush();
             Cout << Endl;

@@ -79,6 +79,7 @@ class TPerfTestActor : public TActor<TPerfTestActor> {
     const NDevicePerfTest::TPDiskTest& TestProto;
     TIntrusivePtr<IResultPrinter> Printer;
     const TIntrusivePtr<NMonitoring::TDynamicCounters>& Counters;
+    TString CurrentTestType; // Current test type name (e.g., "PDiskWriteLoad")
 
 
 protected:
@@ -89,24 +90,28 @@ protected:
                 auto record = TestProto.GetPDiskTestList(CurrentTest);
                 switch(record.Command_case()) {
                 case NKikimr::TEvLoadTestRequest::CommandCase::kPDiskReadLoad: {
+                    CurrentTestType = "PDiskReadLoad";
                     const auto cfg = record.GetPDiskReadLoad();
                     ctx.Register(CreatePDiskReaderLoadTest(cfg, ctx.SelfID, Counters,
                                 CurrentTest, cfg.HasTag() ? cfg.GetTag() : 0));
                     break;
                 }
                 case NKikimr::TEvLoadTestRequest::CommandCase::kPDiskWriteLoad: {
+                    CurrentTestType = "PDiskWriteLoad";
                     const auto cfg = record.GetPDiskWriteLoad();
                     ctx.Register(CreatePDiskWriterLoadTest(cfg, ctx.SelfID, Counters,
                                 CurrentTest, cfg.HasTag() ? cfg.GetTag() : 0));
                     break;
                 }
                 case NKikimr::TEvLoadTestRequest::CommandCase::kPDiskLogLoad: {
+                    CurrentTestType = "PDiskLogLoad";
                     const auto cfg = record.GetPDiskLogLoad();
                     ctx.Register(CreatePDiskLogWriterLoadTest(cfg, ctx.SelfID, Counters,
                                 CurrentTest, cfg.HasTag() ? cfg.GetTag() : 0));
                     break;
                 }
                 default:
+                    CurrentTestType = "Unknown";
                     Cerr << "Unknown load type" << Endl;
                     break;
                 }
@@ -142,6 +147,8 @@ protected:
         if (report) {
             double speedMBps = report->GetAverageSpeed() / 1e6;
             double iops = report->Size ? (report->GetAverageSpeed() / report->Size) : 0.0;
+            Printer->SetTestType(CurrentTestType);
+            Printer->SetInFlight(report->InFlight);
             Printer->AddResult("Name", Cfg.Name);
             Printer->AddResult("Duration, sec", report->Duration.Seconds());
             Printer->AddResult("Load", report->LoadTypeName());

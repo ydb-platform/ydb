@@ -90,6 +90,8 @@ void TTrimTest::PrintReport() {
     double TrimTimeSec = Max(1.0, HPSecondsFloat(TrimTime));
     double speedMBps = double(EventsDone * Size) / 1e6 / TrimTimeSec;
     double iops = EventsDone / TrimTimeSec;
+    Printer->SetTestType("TrimTest");
+    Printer->SetInFlight(1); // TrimTest doesn't have InFlight, use 1 as default
     Printer->AddResult("Size", ToString(HumanReadableSize(Size, SF_BYTES)));
     Printer->AddResult("Duration,sec", DurationSec);
     Printer->AddResult("Trims done", EventsDone);

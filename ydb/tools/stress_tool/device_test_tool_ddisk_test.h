@@ -77,6 +77,7 @@ class TDDiskPerfTestActor : public TActor<TDDiskPerfTestActor> {
     const NDevicePerfTest::TDDiskTest& TestProto;
     TIntrusivePtr<IResultPrinter> Printer;
     const TIntrusivePtr<NMonitoring::TDynamicCounters>& Counters;
+    TString CurrentTestType; // Current test type name (e.g., "DDiskWriteLoad")
 
 protected:
     void ActTestFSM(const TActorContext& ctx) {
@@ -86,12 +87,14 @@ protected:
                 auto record = TestProto.GetDDiskTestList(CurrentTest);
                 switch (record.Command_case()) {
                 case NKikimr::TEvLoadTestRequest::CommandCase::kDDiskWriteLoad: {
+                    CurrentTestType = "DDiskWriteLoad";
                     const auto cfg = record.GetDDiskWriteLoad();
                     ctx.Register(CreateDDiskWriterLoadTest(cfg, ctx.SelfID, Counters,
                                 CurrentTest, cfg.HasTag() ? cfg.GetTag() : 0));
                     break;
                 }
                 default:
+                    CurrentTestType = "Unknown";
                     Cerr << "Unknown load type" << Endl;
                     break;
                 }
@@ -119,6 +122,8 @@ protected:
         if (report) {
             double speedMBps = report->GetAverageSpeed() / 1e6;
             double iops = report->Size ? (report->GetAverageSpeed() / report->Size) : 0.0;
+            Printer->SetTestType(CurrentTestType);
+            Printer->SetInFlight(report->InFlight);
             Printer->AddResult("Name", Cfg.Name);
             Printer->AddResult("Duration, sec", report->Duration.Seconds());
             Printer->AddResult("Load", report->LoadTypeName());

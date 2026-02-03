@@ -59,6 +59,30 @@ int main(int argc, char **argv) {
             res.Get("run-count"));
     NDevicePerfTest::TPerfTests protoTests;
     NKikimr::ParsePBFromFile(res.Get("cfg"), &protoTests);
+
+    // When run-count > 1, only one test is allowed in the config
+    if (config.RunCount > 1) {
+        ui32 totalTests = 0;
+        totalTests += protoTests.AioTestListSize();
+        totalTests += protoTests.TrimTestListSize();
+        // For PDiskTest, count the inner PDiskTestList items
+        for (ui32 i = 0; i < protoTests.PDiskTestListSize(); ++i) {
+            totalTests += protoTests.GetPDiskTestList(i).PDiskTestListSize();
+        }
+        // For DDiskTest, count the inner DDiskTestList items
+        for (ui32 i = 0; i < protoTests.DDiskTestListSize(); ++i) {
+            totalTests += protoTests.GetDDiskTestList(i).DDiskTestListSize();
+        }
+        if (protoTests.HasDriveEstimatorTest()) {
+            totalTests += 1;
+        }
+
+        if (totalTests > 1) {
+            Cerr << "Error: run-count > 1 requires exactly one test in the config file, but found " << totalTests << " tests" << Endl;
+            return 1;
+        }
+    }
+
     auto printer = MakeIntrusive<NKikimr::TResultPrinter>(config.OutputFormat, config.RunCount);
 
     for (ui32 i = 0; i < protoTests.AioTestListSize(); ++i) {

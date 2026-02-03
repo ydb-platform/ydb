@@ -380,6 +380,8 @@ public:
     void PrintReadReport() {
         double speedMBps = double(ReadEventsDone * BuffSize) / 1e6 / DurationSec;
         double iops = double(ReadEventsDone) / DurationSec;
+        Printer->SetTestType("AioRead");
+        Printer->SetInFlight(QueueDepth);
         Printer->AddResult("Type", Sprintf("Read %.0f%%", ReadProportion * 100));
         Printer->AddResult("Size", ToString(HumanReadableSize(BuffSize, SF_BYTES)));
         Printer->AddResult("QueueDepth", QueueDepth);
@@ -396,6 +398,8 @@ public:
     void PrintWriteReport() {
         double speedMBps = double(WriteEventsDone * BuffSize) / 1e6 / DurationSec;
         double iops = double(WriteEventsDone) / DurationSec;
+        Printer->SetTestType("AioWrite");
+        Printer->SetInFlight(QueueDepth);
         Printer->AddResult("Type", Sprintf("Write %.0f%%", (1 - ReadProportion) * 100));
         Printer->AddResult("Size", ToString(HumanReadableSize(BuffSize, SF_BYTES)));
         Printer->AddResult("QueueDepth", QueueDepth);

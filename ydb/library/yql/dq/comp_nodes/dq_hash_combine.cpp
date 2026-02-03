@@ -1927,6 +1927,7 @@ public:
         BranchInst::Create(main, block);
         block = main;
 
+        const auto checkAsyncTask = BasicBlock::Create(context, "dq_hash_check_async_task", ctx.Func);
         const auto inputLoop = BasicBlock::Create(context, "dq_hash_input_loop", ctx.Func);
         const auto tryDrain = BasicBlock::Create(context, "dq_hash_try_drain_call", ctx.Func);
         const auto tryCheckEmptyInput = BasicBlock::Create(context, "dq_hash_check_empty_input", ctx.Func);
@@ -1944,6 +1945,7 @@ public:
         // State method declarations depend on the boxed state pointer type
         const auto boolStateMethodType = FunctionType::get(Type::getInt1Ty(context), {boxedStatePtr->getType()}, false);
         const auto uvPtrStateMethodType = FunctionType::get(ptrValueType, {boxedStatePtr->getType()}, false);
+        const auto enumStateMethodType = FunctionType::get(statusType, {boxedStatePtr->getType()}, false);
         const auto statusToStatusMethodType = FunctionType::get(statusType, {boxedStatePtr->getType(), statusType}, false);
 
         // Non-virtual state methods
@@ -1957,13 +1959,15 @@ public:
             BlockMode ? GetMethodPtr<&TBlockAggregationState::ProcessInputDirect>() : GetMethodPtr<&TWideAggregationState::ProcessInputDirect>());
         const auto drainMethodAddr = ConstantInt::get(Type::getInt64Ty(context),
             BlockMode ? GetMethodPtr<&TBlockAggregationState::TryDrainDirect>() : GetMethodPtr<&TWideAggregationState::TryDrainDirect>());
+        const auto runCurrentAsyncTaskMethodAddr = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TBaseAggregationState::RunCurrentAsyncTask>());
 
         const auto isDrainingMethodPtr = CastInst::Create(Instruction::IntToPtr, isDrainingMethodAddr, PointerType::getUnqual(boolStateMethodType), "dq_hash_is_draining", atFuncTop);
         const auto isSourceEmptyMethodPtr = CastInst::Create(Instruction::IntToPtr, isSourceEmptyMethodAddr, PointerType::getUnqual(boolStateMethodType), "dq_hash_is_source_empty", atFuncTop);
         const auto getInputBufferMethodPtr = CastInst::Create(Instruction::IntToPtr, getInputBufferMethodAddr, PointerType::getUnqual(uvPtrStateMethodType), "dq_hash_get_input_buffer", atFuncTop);
         const auto getOutputBufferMethodPtr = CastInst::Create(Instruction::IntToPtr, getOutputBufferMethodAddr, PointerType::getUnqual(uvPtrStateMethodType), "dq_hash_get_output_buffer", atFuncTop);
         const auto processInputMethodPtr = CastInst::Create(Instruction::IntToPtr, processInputMethodAddr, PointerType::getUnqual(statusToStatusMethodType), "dq_hash_process_input_fn", atFuncTop);
-        const auto drainMethodPtr = CastInst::Create(Instruction::IntToPtr, drainMethodAddr, PointerType::getUnqual(boolStateMethodType), "dq_hash_try_drain_fn", atFuncTop);
+        const auto drainMethodPtr = CastInst::Create(Instruction::IntToPtr, drainMethodAddr, PointerType::getUnqual(enumStateMethodType), "dq_hash_try_drain_fn", atFuncTop);
+        const auto runCurrentAsyncTaskMethodPtr = CastInst::Create(Instruction::IntToPtr, runCurrentAsyncTaskMethodAddr, PointerType::getUnqual(boolStateMethodType), "dq_run_current_async_task", atFuncTop);
 
         // Allocate and init a pointer to the output buffer on the stack (initialize to nullptr until after the row is processed)
         const auto outputBufPtr = new AllocaInst(ptrValueType, 0U, "dq_hash_output_buf_ptr", atFuncTop);
@@ -1972,7 +1976,11 @@ public:
         outputBufPtr, atFuncTop);
 
         // Re-implementation of C++ DoCalculate starts here
-        BranchInst::Create(inputLoop, block);
+        BranchInst::Create(checkAsyncTask, block);
+
+        block = checkAsyncTask;
+        auto callRunTask = CallInst::Create(boolStateMethodType, runCurrentAsyncTaskMethodPtr, {boxedStatePtr}, "dq_hash_call_run_current_async_task", block);
+        BranchInst::Create(returnYield, inputLoop, callRunTask, block);
 
         block = inputLoop;
         auto callIsDraining = CallInst::Create(boolStateMethodType, isDrainingMethodPtr, {boxedStatePtr}, "dq_hash_call_is_draining", block);
@@ -2046,10 +2054,20 @@ public:
 
         block = tryDrain;
 
-        const auto blockCheckSourceEmpty = BasicBlock::Create(context, "", ctx.Func);
+        const auto blockDrainYield = BasicBlock::Create(context, "dq_hash_drain_yield", ctx.Func);
+        const auto blockDrainOk = BasicBlock::Create(context, "dq_hash_drain_ok", ctx.Func);
+        const auto blockCheckSourceEmpty = BasicBlock::Create(context, "dq_hash_drain_check_empty", ctx.Func);
 
-        auto tryDrainResult = CallInst::Create(boolStateMethodType, drainMethodPtr, {boxedStatePtr}, "", block);
-        BranchInst::Create(returnOne, blockCheckSourceEmpty, tryDrainResult, block);
+        auto tryDrainResult = CallInst::Create(enumStateMethodType, drainMethodPtr, {boxedStatePtr}, "dq_hash_drain_result", block);
+        const auto handleDrainResult = SwitchInst::Create(tryDrainResult, blockCheckSourceEmpty, 2U, block);
+        handleDrainResult->addCase(ConstantInt::get(statusType, static_cast<i32>(NUdf::EFetchStatus::Yield)), blockDrainYield);
+        handleDrainResult->addCase(ConstantInt::get(statusType, static_cast<i32>(NUdf::EFetchStatus::Ok)), blockDrainOk);
+
+        block = blockDrainYield;
+        BranchInst::Create(returnYield, block);
+
+        block = blockDrainOk;
+        BranchInst::Create(returnOne, block);
 
         block = blockCheckSourceEmpty;
         auto callIsEmptyOnDrainResult = CallInst::Create(boolStateMethodType, isSourceEmptyMethodPtr, {boxedStatePtr}, "dq_hash_call_is_empty_on_drain", block);

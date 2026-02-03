@@ -1,93 +1,77 @@
+-- PR-check: только последний 1 день. Regression/nightly/postcommit: 15 дней назад от времени запуска PR-check (включительно).
 
+PRAGMA AnsiInForEmptyOrNullableItemsCollections;
 
+-- PR-check failures за последний 1 день (branch, full_name, run_timestamp)
+$pr_check_failures_1d = (
+    SELECT
+        branch,
+        suite_folder || '/' || test_name AS full_name,
+        run_timestamp
+    FROM
+        `test_results/test_runs_column`
+    WHERE
+        build_type = 'relwithdebinfo'
+        AND job_name = 'PR-check'
+        AND status = 'failure'
+        AND run_timestamp > CurrentUtcDate() - 1 * Interval("P1D")
+        AND pull IS NOT NULL
+        AND pull != ''
+        AND String::Contains(pull, 'PR_')
+        AND job_id IS NOT NULL
+        AND branch IS NOT NULL
+        AND suite_folder IS NOT NULL
+        AND test_name IS NOT NULL
+    GROUP BY
+        branch,
+        suite_folder,
+        test_name,
+        run_timestamp
+);
+
+-- Для каждого (branch, full_name, run_ts) из PR-check: есть ли regression passed в [run_ts - 15d, run_ts] и нет failed/mute
+$pr_check_with_regression_ok = (
+    SELECT
+        p.branch AS branch,
+        p.full_name AS full_name,
+        p.run_timestamp AS run_timestamp
+    FROM
+        $pr_check_failures_1d AS p
+    INNER JOIN
+        `test_results/test_runs_column` AS r
+        ON r.branch = p.branch
+        AND r.suite_folder || '/' || r.test_name = p.full_name
+    WHERE
+        r.build_type = 'relwithdebinfo'
+        AND r.job_name IN (
+            'Nightly-run',
+            'Regression-run',
+            'Regression-run_Large',
+            'Regression-run_Small_and_Medium',
+            'Regression-run_compatibility',
+            'Regression-whitelist-run',
+            'Postcommit_relwithdebinfo',
+            'Postcommit_asan'
+        )
+        AND r.run_timestamp >= p.run_timestamp - 15 * Interval("P1D")
+        AND r.run_timestamp <= p.run_timestamp
+    GROUP BY
+        p.branch,
+        p.full_name,
+        p.run_timestamp
+    HAVING
+        COUNT(DISTINCT CASE WHEN r.status = 'passed' THEN r.job_id ELSE NULL END) > 0
+        AND COUNT(DISTINCT CASE WHEN r.status != 'passed' AND r.status != 'skipped' AND r.status != 'mute' THEN r.job_id ELSE NULL END) = 0
+        AND COUNT(DISTINCT CASE WHEN r.status = 'mute' THEN r.job_id ELSE NULL END) = 0
+);
+
+-- Тесты, которые прошли фильтр: падали в PR-check (1 день) и по времени своего PR-check run имеют regression passed в окне 15 дней назад
 $filtered_tests = (
-    SELECT DISTINCT branch,
-        suite_folder || '/' || test_name AS full_name
-    FROM 
-        `test_results/test_runs_column` AS t2
-    WHERE 
-        t2.build_type = 'relwithdebinfo'
-        AND t2.status != 'skipped'
-        AND t2.job_name != 'Run-tests'
-        AND t2.run_timestamp > CurrentUtcDate() - 15 * Interval("P1D")
-    GROUP BY 
-        branch, suite_folder, test_name
-    HAVING 
-        COUNT(DISTINCT CASE 
-            WHEN t2.job_name = 'PR-check'
-            AND t2.status = 'failure'
-            AND t2.pull IS NOT NULL
-            AND t2.pull != ''
-            AND String::Contains(t2.pull, 'PR_')
-            THEN ListHead(
-                Unicode::SplitToList(
-                    CASE 
-                        WHEN String::Contains(
-                            ListHead(ListSkip(Unicode::SplitToList(CAST(t2.pull AS UTF8), 'PR_'), 1)),
-                            '#'
-                        ) THEN ListHead(
-                            ListSkip(
-                                Unicode::SplitToList(
-                                    ListHead(ListSkip(Unicode::SplitToList(CAST(t2.pull AS UTF8), 'PR_'), 1)),
-                                    '#'
-                                ),
-                                1
-                            )
-                        )
-                        ELSE ListHead(ListSkip(Unicode::SplitToList(CAST(t2.pull AS UTF8), 'PR_'), 1))
-                    END,
-                    '_'
-                )
-            )
-            ELSE NULL
-        END) > 0
-        AND COUNT(DISTINCT CASE 
-            WHEN t2.job_name IN (
-                'Nightly-run',
-                'Regression-run',
-                'Regression-run_Large',
-                'Regression-run_Small_and_Medium',
-                'Regression-run_compatibility',
-                'Regression-whitelist-run',
-                'Postcommit_relwithdebinfo', 
-                'Postcommit_asan'
-            )
-            AND t2.status = 'passed'
-            THEN t2.job_id 
-            ELSE NULL
-        END) > 0
-        AND COUNT(DISTINCT CASE 
-            WHEN t2.job_name IN (
-                'Nightly-run',
-                'Regression-run',
-                'Regression-run_Large',
-                'Regression-run_Small_and_Medium',
-                'Regression-run_compatibility',
-                'Regression-whitelist-run',
-                'Postcommit_relwithdebinfo', 
-                'Postcommit_asan'
-            )
-            AND t2.status != 'passed'
-            AND t2.status != 'skipped'
-            AND t2.status != 'mute'
-            THEN t2.job_id 
-            ELSE NULL
-        END) = 0
-        AND COUNT(DISTINCT CASE 
-            WHEN t2.job_name IN (
-                'Nightly-run',
-                'Regression-run',
-                'Regression-run_Large',
-                'Regression-run_Small_and_Medium',
-                'Regression-run_compatibility',
-                'Regression-whitelist-run',
-                'Postcommit_relwithdebinfo', 
-                'Postcommit_asan'
-            )
-            AND t2.status = 'mute'
-            THEN t2.job_id 
-            ELSE NULL
-        END) = 0
+    SELECT DISTINCT
+        branch,
+        full_name
+    FROM
+        $pr_check_with_regression_ok
 );
 
 $all_failures_with_pr_base = (
@@ -120,23 +104,9 @@ $all_failures_with_pr_base = (
             )
         ) AS pr_number,
         CASE 
-            WHEN NOT String::Contains(base.pull, '_A') THEN 1
-            ELSE COALESCE(
-                CAST(
-                    ListHead(
-                        Unicode::SplitToList(
-                            ListHead(
-                                ListSkip(
-                                    Unicode::SplitToList(CAST(base.pull AS UTF8), '_A'),
-                                    1
-                                )
-                            ),
-                            '_'
-                        )
-                    ) AS Int32
-                ),
-                1
-            )
+            WHEN String::Contains(base.pull, 'attempt_') THEN COALESCE(CAST(ListHead(Unicode::SplitToList(ListHead(ListSkip(Unicode::SplitToList(CAST(base.pull AS UTF8), 'attempt_'), 1)), '_')) AS Int32), 1)
+            WHEN String::Contains(base.pull, '_A') THEN COALESCE(CAST(ListHead(Unicode::SplitToList(ListHead(ListSkip(Unicode::SplitToList(CAST(base.pull AS UTF8), '_A'), 1)), '_')) AS Int32), 1)
+            ELSE 1
         END AS attempt_number
     FROM 
         `test_results/test_runs_column` AS base
@@ -149,7 +119,7 @@ $all_failures_with_pr_base = (
         AND base.status != 'skipped'
         AND base.job_name = 'PR-check'
         AND base.status = 'failure'
-        AND base.run_timestamp > CurrentUtcDate() - 15 * Interval("P1D")
+        AND base.run_timestamp > CurrentUtcDate() - 1 * Interval("P1D")
         AND base.pull IS NOT NULL
         AND base.pull != ''
         AND String::Contains(base.pull, 'PR_')

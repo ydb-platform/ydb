@@ -1250,7 +1250,7 @@ TNodeResult TSqlExpression::UnaryCasualExpr(const TUnaryCasualExprRule& node, co
     if (suffix.HasBlock2()) {
         Ctx_.IncrementMonCounter("sql_errors", "CollateUnarySubexpr");
         Error() << "unary_subexpr: COLLATE is not implemented yet";
-        // FIXME(vityaman): return an error
+        return std::unexpected(ESQLError::Basic);
     }
 
     return Wrap(std::move(lastExpr));

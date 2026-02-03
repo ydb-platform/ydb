@@ -377,7 +377,12 @@ public:
     void CheckMagicSector(ui8 *magicData, ui32 magicDataSize) {
         bool isFormatMagicValid = PDisk->IsFormatMagicValid(magicData, magicDataSize, MainKey);
         if (isFormatMagicValid) {
-            auto format = PDisk->CheckMetadataFormatSector(magicData, magicDataSize, MainKey, PCtx->PDiskLogPrefix);
+            auto format = PDisk->CheckMetadataFormatSector(
+                magicData,
+                magicDataSize,
+                MainKey,
+                PCtx->PDiskLogPrefix,
+                Cfg->EnableFormatEncryption);
             PDisk->InputRequest(PDisk->ReqCreator.CreateFromArgs<TPushUnformattedMetadataSector>(format,
                 !Cfg->MetadataOnly));
             if (Cfg->MetadataOnly) {
@@ -440,16 +445,23 @@ public:
                     SafeEntropyPoolRead(&sysLogKey, sizeof(NKikimr::NPDisk::TKey));
 
                     try {
+                        TFormatOptions options;
+                        options.TrimEntireDevice = cfg->FeatureFlags.GetTrimEntireDeviceOnStartup();
+                        options.SectorMap = cfg->SectorMap;
+                        options.EnableSmallDiskOptimization = cfg->FeatureFlags.GetEnableSmallDiskOptimization();
+                        options.Metadata = metadata;
+                        options.PlainDataChunks = cfg->PlainDataChunks;
+                        options.EnableFormatEncryption = cfg->EnableFormatEncryption;
+                        options.EnableSectorEncryption = cfg->EnableSectorEncryption;
+
                         try {
                             FormatPDisk(cfg->GetDevicePath(), 0, cfg->SectorSize, cfg->ChunkSize,
-                                cfg->PDiskGuid, chunkKey, logKey, sysLogKey, actor->MainKey.Keys.back(), TString(), false,
-                                cfg->FeatureFlags.GetTrimEntireDeviceOnStartup(), cfg->SectorMap,
-                                cfg->FeatureFlags.GetEnableSmallDiskOptimization(), metadata, cfg->PlainDataChunks);
+                                cfg->PDiskGuid, chunkKey, logKey, sysLogKey, actor->MainKey.Keys.back(), TString(),
+                                options);
                         } catch (NPDisk::TPDiskFormatBigChunkException) {
                             FormatPDisk(cfg->GetDevicePath(), 0, cfg->SectorSize, NPDisk::SmallDiskMaximumChunkSize,
-                                cfg->PDiskGuid, chunkKey, logKey, sysLogKey, actor->MainKey.Keys.back(), TString(), false,
-                                cfg->FeatureFlags.GetTrimEntireDeviceOnStartup(), cfg->SectorMap,
-                                cfg->FeatureFlags.GetEnableSmallDiskOptimization(), metadata, cfg->PlainDataChunks);
+                                cfg->PDiskGuid, chunkKey, logKey, sysLogKey, actor->MainKey.Keys.back(), TString(),
+                                options);
                         }
                         actorSystem->Send(pDiskActor, new TEvPDiskFormattingFinished(true, ""));
                     } catch (yexception ex) {
@@ -584,7 +596,6 @@ public:
                     // PDisk GUID is OK and format is complete
                     *PDisk->Mon.PDiskState = NKikimrBlobStorage::TPDiskState::InitialSysLogRead;
                     *PDisk->Mon.PDiskDetailedState = TPDiskMon::TPDisk::BootingSysLogRead;
-                    PDisk->Format.InitMagic();
                     PDisk->ReadSysLog(SelfId());
                 }
             }

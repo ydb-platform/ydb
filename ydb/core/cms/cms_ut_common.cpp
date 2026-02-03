@@ -277,7 +277,7 @@ public:
 };
 
 void GenerateExtendedInfo(TTestActorRuntime &runtime, NKikimrBlobStorage::TBaseConfig *config, const TTestEnvOpts &options, TInstant now, ui32 vdiskPerPdisk = 4)
-{   
+{
     constexpr ui32 MIRROR_3DC_VDISKS_COUNT = 9;
     constexpr ui32 BLOCK_4_2_VDISKS_COUNT = 8;
 
@@ -292,7 +292,7 @@ void GenerateExtendedInfo(TTestActorRuntime &runtime, NKikimrBlobStorage::TBaseC
         numGroups = numNodes * vdisksPerNode / BLOCK_4_2_VDISKS_COUNT;
     else
         numGroups = numNodes * vdisksPerNode;
-    
+
     ui32 maxOneGroupVdisksPerNode = options.UseMirror3dcErasure && numNodes < MIRROR_3DC_VDISKS_COUNT ? 3 : 1;
     std::map<ui32, ui32> groupIdxToGroupId;
 
@@ -339,7 +339,7 @@ void GenerateExtendedInfo(TTestActorRuntime &runtime, NKikimrBlobStorage::TBaseC
         } else {
             node.SystemStateInfo.AddRoles("Storage");
         }
- 
+
         ui32 groupsPerNode = vdisksPerNode / maxOneGroupVdisksPerNode;
         ui32 groupShift;
         if (options.UseMirror3dcErasure) {
@@ -566,6 +566,9 @@ static void SetupServices(TTestBasicRuntime &runtime, const TTestEnvOpts &option
             ui64 pDiskGuid = 1;
             static ui64 iteration = 0;
             ++iteration;
+            TFormatOptions formatOptions;
+            formatOptions.SectorMap = sectorMap;
+            formatOptions.EnableSmallDiskOptimization = false;
             FormatPDisk(pDiskPath,
                         pDiskSize,
                         4 << 10,
@@ -576,10 +579,7 @@ static void SetupServices(TTestBasicRuntime &runtime, const TTestEnvOpts &option
                         0x7890123456 + iteration,
                         NPDisk::YdbDefaultPDiskSequence,
                         TString(""),
-                        false,
-                        false,
-                        sectorMap,
-                        false);
+                        formatOptions);
         }
 
         SetupBSNodeWarden(runtime, nodeIndex, nodeWardenConfig);
@@ -707,8 +707,8 @@ TCmsTestEnv::TCmsTestEnv(const TTestEnvOpts &options)
         for (ui32 i = 1; i <= GetNodeCount(); ++i) {
             ringGroupIdToNodeIds[i % options.PileCount].push_back(i - 1);
         }
-        auto setuper = options.EnableSimpleStateStorageConfig 
-                                              ? CreateCustomStateStorageSetupper(ringGroups, 3) 
+        auto setuper = options.EnableSimpleStateStorageConfig
+                                              ? CreateCustomStateStorageSetupper(ringGroups, 3)
                                               : CreateCustomStateStorageSetupper(ringGroups, ringGroupIdToNodeIds);
 
         for (ui32 nodeIndex = 0; nodeIndex < GetNodeCount(); ++nodeIndex) {

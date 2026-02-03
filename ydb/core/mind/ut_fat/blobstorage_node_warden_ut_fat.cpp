@@ -82,9 +82,11 @@ void FormatPDisk(TString path, ui64 diskSize, ui32 chunkSize, ui64 guid, bool is
         SafeEntropyPoolRead(&guid, sizeof(guid));
     }
 
+    TFormatOptions options;
+    options.EnableSmallDiskOptimization = false;
     NKikimr::FormatPDisk(path, diskSize, 4 << 10, chunkSize, guid,
         chunkKey, logKey, sysLogKey, NPDisk::YdbDefaultPDiskSequence, "Test",
-        false, false, nullptr, false);
+        options);
 }
 
 void SetupLogging(TTestActorRuntime& runtime) {
@@ -233,9 +235,11 @@ void SetupServices(TTestActorRuntime &runtime) {
             ui64 pDiskGuid = 1;
             static ui64 iteration = 0;
             ++iteration;
+            TFormatOptions options;
+            options.EnableSmallDiskOptimization = false;
             ::NKikimr::FormatPDisk(pDiskPath, 16000000000ull, 4 << 10, 32u << 20u, pDiskGuid,
                 0x1234567890 + iteration, 0x4567890123 + iteration, 0x7890123456 + iteration,
-                NPDisk::YdbDefaultPDiskSequence, "", false, false, nullptr, false);
+                NPDisk::YdbDefaultPDiskSequence, "", options);
         }
 
         SetupBSNodeWarden(runtime, nodeIndex, nodeWardenConfig.Release());

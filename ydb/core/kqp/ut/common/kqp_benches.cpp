@@ -235,7 +235,7 @@ static std::pair<std::string, double> SelectUnit(ui64 nanoseconds) {
     } else if (nanoseconds >= 1'000'000) {
         return {"ms", 1e6};
     } else if (nanoseconds >= 1'000) {
-        return {"μs", 1e3};
+        return {"mcs", 1e3};
     } else {
         return {"ns", 1.0};
     }

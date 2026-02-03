@@ -15,6 +15,7 @@
 #include <util/stream/str.h>
 
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 
 namespace NKikimr {
@@ -123,6 +124,7 @@ public:
         double Min = 0.0;
         double Max = 0.0;
         double Median = 0.0;
+        double StdDev = 0.0;
     };
 
     static TStatistics GetStatistics(TVector<double>& values) {
@@ -137,7 +139,21 @@ public:
         } else {
             median = values[n / 2];
         }
-        return {values.front(), values.back(), median};
+
+        // Calculate standard deviation
+        double sum = 0.0;
+        for (double v : values) {
+            sum += v;
+        }
+        double mean = sum / n;
+        double sqDiffSum = 0.0;
+        for (double v : values) {
+            double diff = v - mean;
+            sqDiffSum += diff * diff;
+        }
+        double stddev = std::sqrt(sqDiffSum / n);
+
+        return {values.front(), values.back(), median, stddev};
     }
 
     void PrintResultsWikiFormatSingleRow(const TVector<TStringPair>& row) {
@@ -290,12 +306,14 @@ public:
                 speedJson["min"] = Sprintf("%.1f MB/s", speedStats.Min);
                 speedJson["max"] = Sprintf("%.1f MB/s", speedStats.Max);
                 speedJson["median"] = Sprintf("%.1f MB/s", speedStats.Median);
+                speedJson["stdev"] = Sprintf("%.1f MB/s", speedStats.StdDev);
                 inFlightObj["Speed"] = speedJson;
 
                 NJson::TJsonValue iopsJson;
                 iopsJson["min"] = Sprintf("%.1f", iopsStats.Min);
                 iopsJson["max"] = Sprintf("%.1f", iopsStats.Max);
                 iopsJson["median"] = Sprintf("%.1f", iopsStats.Median);
+                iopsJson["stdev"] = Sprintf("%.1f", iopsStats.StdDev);
                 inFlightObj["IOPS"] = iopsJson;
             }
 
@@ -398,6 +416,7 @@ public:
             statsRows.push_back(MakeStatisticsRow("Min", firstRun, speedStats.Min, iopsStats.Min, speedCol, iopsCol));
             statsRows.push_back(MakeStatisticsRow("Max", firstRun, speedStats.Max, iopsStats.Max, speedCol, iopsCol));
             statsRows.push_back(MakeStatisticsRow("Median", firstRun, speedStats.Median, iopsStats.Median, speedCol, iopsCol));
+            statsRows.push_back(MakeStatisticsRow("StdDev", firstRun, speedStats.StdDev, iopsStats.StdDev, speedCol, iopsCol));
         }
 
         // Calculate column widths based on ALL rows (data + stats) for human format
@@ -567,6 +586,8 @@ struct TPerfTestConfig {
     TResultPrinter::EOutputFormat OutputFormat;
     bool DoLockFile;
     ui32 RunCount;
+    ui32 InFlightFrom = 0; // 0 means not specified
+    ui32 InFlightTo = 0;   // 0 means not specified
 
     TMap<const TString, NPDisk::EDeviceType> DeviceStrToType {
         {"ROT",  NPDisk::DEVICE_TYPE_ROT},
@@ -580,12 +601,15 @@ struct TPerfTestConfig {
     };
 
     TPerfTestConfig(const TString path, const TString name, const TString type, const TString outputFormatName,
-            const TString monPort, bool doLockFile, const TString runCountStr = "1")
+            const TString monPort, bool doLockFile, const TString runCountStr = "1",
+            const TString inFlightFromStr = "0", const TString inFlightToStr = "0")
         : Path(path)
         , Name(name)
         , MonPort(std::strtol(monPort.c_str(), nullptr, 10))
         , DoLockFile(doLockFile)
         , RunCount(std::max(1, static_cast<int>(std::strtol(runCountStr.c_str(), nullptr, 10))))
+        , InFlightFrom(std::strtol(inFlightFromStr.c_str(), nullptr, 10))
+        , InFlightTo(std::strtol(inFlightToStr.c_str(), nullptr, 10))
     {
         auto it_type = DeviceStrToType.find(type);
         if (it_type != DeviceStrToType.end()) {
@@ -599,6 +623,10 @@ struct TPerfTestConfig {
         } else {
             OutputFormat = TResultPrinter::OUTPUT_FORMAT_WIKI;
         }
+    }
+
+    bool HasInFlightOverride() const {
+        return InFlightFrom > 0 && InFlightTo > 0;
     }
 
     bool IsSolidState() const {

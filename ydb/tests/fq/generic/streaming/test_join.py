@@ -1108,32 +1108,27 @@ class TestJoinStreaming(TestYdsBase):
             '''
 
         messages = [
-            (R'{"ts":12, "user": 1}', ),   # 0 # w 9->8
-            (R'{"ts":10, "user": 1}', ),   # 1 # w 7->6
-            (R'{"ts":11, "user": 2}', ),   # 2 # w 8->8
-            (R'{"ts":13, "user": 10}', ),  # 3 # w 10->10 -> close :=10
-            (R'{"ts":16, "user": 3}', ),   # 4 # w 13->12
-            (                              # 5 # w 14->14
-                R'{"ts":17, "user": 1, "skip": true}',
-            ),
+            (R'{"ts":12, "user": 1}',),  # ############ 0 # w 9->8
+            (R'{"ts":10, "user": 1}',),  # ############ 1 # w 7->6
+            (R'{"ts":11, "user": 2}',),  # ############ 2 # w 8->8
+            (R'{"ts":13, "user": 10}',),  # ########### 3 # w 10->10 -> close :=10
+            (R'{"ts":16, "user": 3}',),  # ############ 4 # w 13->12
+            ('{"ts":17, "user": 1, "skip": true}',),  # 5 # w 14->14
             (
-                R'{"ts":19, "user": 4}',   # 6 # w 16->16 -> close :=15
+                R'{"ts":19, "user": 4}',  # ########### 6 # w 16->16 -> close :=15
                 R'{"uid": null,   "hopTime":15, "tsList":[13]}',
                 R'{"uid":"ydb10", "hopTime":15, "tsList":[10, 12]}',
                 R'{"uid":"ydb20", "hopTime":15, "tsList":[11]}',
             ),
-            (
-                R'{"ts":18, "user": 4}',   # 7 # w 15->14
-            ),
-            (                              # 8 # w 18->18
-                R'{"ts":21, "user": 9}',),
-            (                              # 9 # w 25 -> 24 -> close :=20
+            (R'{"ts":18, "user": 4}',),  # ############ 7 # w 15->14
+            (R'{"ts":21, "user": 9}',),  # ############ 8 # w 18->18
+            (  # ###################################### 9 # w 25 -> 24 -> close :=20
                 R'{"ts":28, "user": 5, "skip": true}',
                 R'{"uid": null,   "hopTime":20, "tsList":[13, 18, 19]}',
                 R'{"uid":"ydb10", "hopTime":20, "tsList":[10, 12]}',
                 R'{"uid":"ydb20", "hopTime":20, "tsList":[11]}',
                 R'{"uid":"ydb30", "hopTime":20, "tsList":[16]}',
-            )
+            ),
         ]
         messages = messages[:limit]
 

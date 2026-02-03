@@ -146,11 +146,22 @@ message TEvFlushPersistentBuffer {
     TQueryCredentials Credentials = 1;
     TBlockSelector Selector = 2;
     uint64 Lsn = 3;
-    TDDiskId DDiskId = 4; // when this entry is not filled, record is just deleted from the buffer
-    optional fixed64 DDiskInstanceGuid = 5;
+    TDDiskId DDiskId = 4;
+    fixed64 DDiskInstanceGuid = 5;
 }
 
 message TEvFlushPersistentBufferResult {
+    TReplyStatus.E Status = 1;
+    optional string ErrorReason = 2;
+}
+
+message TEvErasePersistentBuffer {
+    TQueryCredentials Credentials = 1;
+    TBlockSelector Selector = 2;
+    uint64 Lsn = 3;
+}
+
+message TEvErasePersistentBufferResult {
     TReplyStatus.E Status = 1;
     optional string ErrorReason = 2;
 }

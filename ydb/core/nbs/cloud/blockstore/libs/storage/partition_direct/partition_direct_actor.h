@@ -66,6 +66,10 @@ private:
         const NDDisk::TEvFlushPersistentBufferResult::TPtr& ev,
         const TActorContext& ctx);
 
+    void HandlePersistentBufferEraseResult(
+        const NDDisk::TEvErasePersistentBufferResult::TPtr& ev,
+        const TActorContext& ctx);
+
     template <typename TEvent>
     void HandleReadResult(
         const typename TEvent::TPtr& ev,

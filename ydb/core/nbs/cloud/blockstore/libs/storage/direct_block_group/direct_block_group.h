@@ -126,6 +126,10 @@ public:
         const NDDisk::TEvFlushPersistentBufferResult::TPtr& ev,
         const TActorContext& ctx);
 
+    void HandlePersistentBufferEraseResult(
+        const NDDisk::TEvErasePersistentBufferResult::TPtr& ev,
+        const TActorContext& ctx);
+
     void HandleReadBlocksRequest(
         const TEvService::TEvReadBlocksRequest::TPtr& ev,
         const TActorContext& ctx);

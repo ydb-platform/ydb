@@ -287,7 +287,27 @@ void TDirectBlockGroup::RequestBlockFlush(
 
         ++RequestId;
 
-        auto requestToDDisk = std::make_unique<NDDisk::TEvFlushPersistentBuffer>(
+        if (isErase) {
+            auto requestToDDisk = std::make_unique<NDDisk::TEvErasePersistentBuffer>(
+            PersistentBufferConnections[i].Credentials,
+            NDDisk::TBlockSelector(
+                0, // vChunkIndex
+                flushRequest->GetStartOffset(),
+                flushRequest->GetDataSize()),
+            blockMeta.LsnByPersistentBufferIndex[i]);
+            ctx.Send(MakeHolder<IEventHandle>(
+                PersistentBufferConnections[i].GetServiceId(),
+                ctx.SelfID,
+                requestToDDisk.release(),
+                0, // flags
+                RequestId,
+                nullptr,
+                std::move(flushRequest->Span.GetTraceId())));
+        } else {
+            // Now we flush data to ddisk with same index as persistent buffer
+            const auto& ddiskConnection = DDiskConnections[i];
+
+            auto requestToDDisk = std::make_unique<NDDisk::TEvFlushPersistentBuffer>(
             PersistentBufferConnections[i].Credentials,
             NDDisk::TBlockSelector(
                 0, // vChunkIndex
@@ -296,27 +316,55 @@ void TDirectBlockGroup::RequestBlockFlush(
             blockMeta.LsnByPersistentBufferIndex[i],
             std::nullopt,
             std::nullopt);
-
-        if (!isErase) {
-            // Now we flush data to ddisk with same index as persistent buffer
-            const auto& ddiskConnection = DDiskConnections[i];
+            
             ddiskConnection.DDiskId.Serialize(requestToDDisk->Record.MutableDDiskId());
             requestToDDisk->Record.SetDDiskInstanceGuid(*ddiskConnection.Credentials.DDiskInstanceGuid);
-        }
 
-        ctx.Send(MakeHolder<IEventHandle>(
-            PersistentBufferConnections[i].GetServiceId(),
-            ctx.SelfID,
-            requestToDDisk.release(),
-            0, // flags
-            RequestId,
-            nullptr,
-            std::move(flushRequest->Span.GetTraceId())));
+            ctx.Send(MakeHolder<IEventHandle>(
+                PersistentBufferConnections[i].GetServiceId(),
+                ctx.SelfID,
+                requestToDDisk.release(),
+                0, // flags
+                RequestId,
+                nullptr,
+                std::move(flushRequest->Span.GetTraceId())));
+        }
 
         RequestById[RequestId] = flushRequest;
     }
 
     parentSpan.EndOk();
+}
+
+void TDirectBlockGroup::HandlePersistentBufferEraseResult(
+    const NDDisk::TEvErasePersistentBufferResult::TPtr& ev,
+    const TActorContext& ctx)
+{
+    const auto* msg = ev->Get();
+
+    LOG_DEBUG(ctx, NKikimrServices::NBS_PARTITION,
+                "HandlePersistentBuffeEraseResult record is: %s",
+                msg->Record.DebugString().data());
+
+    auto requestId = ev->Cookie;
+    auto& request = static_cast<TFlushRequest&>(*RequestById[requestId]);
+    if (msg->Record.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK) {
+
+        BlocksMeta[request.StartIndex].OnFlushCompleted(
+            request.GetIsErase(),
+            request.GetPersistentBufferIndex(),
+            request.GetLsn());
+
+        request.Span.EndOk();
+        RequestById.erase(requestId);
+    } else {
+        LOG_ERROR(ctx, NKikimrServices::NBS_PARTITION,
+                  "HandlePersistentBuffeEraseResult finished with error: %d, reason: %s",
+                  msg->Record.GetStatus(),
+                  msg->Record.GetErrorReason().data());
+
+        request.Span.EndError("HandlePersistentBuffeEraseResult failed");
+    }
 }
 
 void TDirectBlockGroup::HandlePersistentBufferFlushResult(

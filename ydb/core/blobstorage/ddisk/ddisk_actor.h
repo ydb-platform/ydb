@@ -23,6 +23,7 @@ namespace NKikimrBlobStorage::NDDisk::NInternal {
     XX(WritePersistentBuffer) \
     XX(ReadPersistentBuffer) \
     XX(FlushPersistentBuffer) \
+    XX(ErasePersistentBuffer) \
     XX(ListPersistentBuffer) \
     /**/
 
@@ -338,6 +339,7 @@ namespace NKikimr::NDDisk {
         void Handle(TEvWritePersistentBuffer::TPtr ev);
         void Handle(TEvReadPersistentBuffer::TPtr ev);
         void Handle(TEvFlushPersistentBuffer::TPtr ev);
+        void Handle(TEvErasePersistentBuffer::TPtr ev);
         void Handle(TEvWriteResult::TPtr ev);
         void Handle(TEvents::TEvUndelivered::TPtr ev);
         void Handle(TEvListPersistentBuffer::TPtr ev);

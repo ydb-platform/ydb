@@ -241,30 +241,40 @@ Y_UNIT_TEST_SUITE(DDisk) {
                                 const auto& [offsetInBytes, size, buffer] = persistentBuffers.at(lsn);
                                 const bool doCommit = RandomNumber(2u);
 
-                                std::optional<std::tuple<ui32, ui32, ui32>> targetDDiskId;
-                                std::optional<ui64> ddiskInstanceGuid;
-                                auto testFlush = [&](bool erase, NKikimrBlobStorage::NDDisk::TReplyStatus::E status) {
-                                    Cerr << (erase ? "erase" : "flush") <<" persistent buffer offset# " << offsetInBytes << " size# " << size
-                                        << " lsn# " << lsn << " doCommit# " << erase << "\n";
+                                std::tuple<ui32, ui32, ui32> targetDDiskId(ddiskId.GetNodeId(), ddiskId.GetPDiskId(), ddiskId.GetDDiskSlotId());
+                                ui64 ddiskInstanceGuid = *creds.DDiskInstanceGuid;
+                                auto testFlush = [&](NKikimrBlobStorage::NDDisk::TReplyStatus::E status) {
+                                    Cerr << "flush persistent buffer offset# " << offsetInBytes << " size# " << size
+                                        << " lsn# " << lsn << "\n";
 
                                     runtime->Send(new IEventHandle(pbServiceId, edge, new NDDisk::TEvFlushPersistentBuffer(
-                                        pbCreds, {vChunkIndex, offsetInBytes, size}, lsn, erase ? std::nullopt : targetDDiskId, erase ? std::nullopt :ddiskInstanceGuid)),
+                                        pbCreds, {vChunkIndex, offsetInBytes, size}, lsn, targetDDiskId, ddiskInstanceGuid)),
                                         edge.NodeId());
                                     auto res = env.WaitForEdgeActorEvent<NDDisk::TEvFlushPersistentBufferResult>(edge, false);
                                     UNIT_ASSERT(res->Get()->Record.GetStatus() == status);
                                 };
+
+                                auto testErase = [&](NKikimrBlobStorage::NDDisk::TReplyStatus::E status) {
+                                    Cerr << "erase persistent buffer offset# " << offsetInBytes << " size# " << size
+                                        << " lsn# " << lsn << "\n";
+
+                                    runtime->Send(new IEventHandle(pbServiceId, edge, new NDDisk::TEvErasePersistentBuffer(
+                                        pbCreds, {vChunkIndex, offsetInBytes, size}, lsn)),
+                                        edge.NodeId());
+                                    auto res = env.WaitForEdgeActorEvent<NDDisk::TEvErasePersistentBufferResult>(edge, false);
+                                    UNIT_ASSERT(res->Get()->Record.GetStatus() == status);
+                                };
+
                                 if (doCommit) {
                                     memcpy(surface.Detach() + offsetInBytes, buffer.data(), size);
-                                    targetDDiskId.emplace(ddiskId.GetNodeId(), ddiskId.GetPDiskId(), ddiskId.GetDDiskSlotId());
-                                    ddiskInstanceGuid.emplace(*creds.DDiskInstanceGuid);
-                                    testFlush(false, NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
-                                    testFlush(false, NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
-                                    testFlush(true, NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
-                                    testFlush(true, NKikimrBlobStorage::NDDisk::TReplyStatus::MISSING_RECORD);
-                                    testFlush(false, NKikimrBlobStorage::NDDisk::TReplyStatus::MISSING_RECORD);
+                                    testFlush(NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
+                                    testFlush(NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
+                                    testErase(NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
+                                    testErase(NKikimrBlobStorage::NDDisk::TReplyStatus::MISSING_RECORD);
+                                    testFlush(NKikimrBlobStorage::NDDisk::TReplyStatus::MISSING_RECORD);
                                 } else {
-                                    testFlush(true, NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
-                                    testFlush(true, NKikimrBlobStorage::NDDisk::TReplyStatus::MISSING_RECORD);
+                                    testErase(NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
+                                    testErase(NKikimrBlobStorage::NDDisk::TReplyStatus::MISSING_RECORD);
                                 }
                                 persistentBuffers.erase(lsn);
 

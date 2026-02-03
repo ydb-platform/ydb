@@ -196,11 +196,8 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest) {
                     }
                     break;
                 }
-                case NDDisk::TEvFlushPersistentBuffer::EventType: {
-                    const auto& msg = *ev->Get<NDDisk::TEvFlushPersistentBuffer>();
-                    if (!msg.Record.HasDDiskInstanceGuid()) {
-                        ++eraseRequestsCount;
-                    }
+                case NDDisk::TEvErasePersistentBuffer::EventType: {
+                    ++eraseRequestsCount;
                     break;
                 }
             }

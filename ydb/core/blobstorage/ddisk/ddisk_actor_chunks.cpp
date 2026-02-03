@@ -11,8 +11,11 @@ namespace NKikimr::NDDisk {
     }
 
     void TDDiskActor::IssuePersistentBufferChunkAllocation() {
-        ChunkAllocateQueue.emplace(TChunkForPersistentBuffer{});
-        HandleChunkReserved();
+        if (!IssuePersistentBufferChunkAllocationInflight) {
+            IssuePersistentBufferChunkAllocationInflight = true;
+            ChunkAllocateQueue.emplace(TChunkForPersistentBuffer{});
+            HandleChunkReserved();
+        }
     }
 
     void TDDiskActor::Handle(NPDisk::TEvChunkReserveResult::TPtr ev) {

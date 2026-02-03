@@ -352,7 +352,8 @@ namespace NKikimr::NDDisk {
 
         std::vector<TChunkIdx> PersistentBufferOwnedChunks;
         ui32 PersistentBufferEmptyChunkOffset = 0;
-
+        bool IssuePersistentBufferChunkAllocationInflight = false;
+        
         ui64 PersistentBufferChunkMapSnapshotLsn = Max<ui64>();
         std::queue<TPendingEvent> PendingPersistentBufferEvents;
 

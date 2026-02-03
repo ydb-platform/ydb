@@ -5,6 +5,7 @@
 #include <ydb/public/lib/ydb_cli/commands/ydb_common.h>
 
 #include <library/cpp/json/json_reader.h>
+#include <library/cpp/json/json_writer.h>
 #include <library/cpp/string_utils/base64/base64.h>
 #include <util/generic/set.h>
 
@@ -12,7 +13,6 @@ namespace NYdb::NConsoleClient {
     namespace {
         constexpr i64 MessagesLimitUnlimited = -1;
         constexpr i64 MessagesLimitDefaultPrettyFormat = 10;
-        constexpr i64 MessagesLimitDefaultJsonArrayFormat = 500;
 
         bool IsStreamingFormat(EMessagingFormat format) {
             return format == EMessagingFormat::NewlineDelimited ||
@@ -386,7 +386,6 @@ namespace NYdb::NConsoleClient {
         EMessagingFormat format = ReaderParams_.MessagingFormat();
         if (format == EMessagingFormat::Pretty) {
             PrintMessagesInPrettyFormat(output);
-        }
         } else if (format == EMessagingFormat::JsonArray) {
             PrintMessagesInJsonArrayFormat(output);
         }

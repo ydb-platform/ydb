@@ -596,6 +596,21 @@ public:
             return *status;
         }
 
+        auto updateResultBinding = [this, &ctx](const TKqlQuery& query) {
+            for (ui32 i = 0; i < query.Results().Size(); ++i) {
+                const auto& result = query.Results().Item(i);
+                auto binding = Build<TKqpTxResultBinding>(ctx, query.Pos())
+                    .Type(ExpandType(query.Pos(), *result.Value().Ref().GetTypeAnn(), ctx))
+                    .TxIndex()
+                        .Build(ToString(BuildCtx->PhysicalTxs.size() - 1))
+                    .ResultIndex()
+                        .Build(ToString(i))
+                    .Done();
+
+                BuildCtx->QueryResults.emplace_back(std::move(binding));
+            }
+        };
+
         if (KqpCtx->Config->GetEnableIndexStreamWrite()) {
             auto collectedEffects = CollectEffects(query.Effects(), ctx, *KqpCtx);
 
@@ -613,18 +628,7 @@ public:
 
                 BuildCtx->PhysicalTxs.emplace_back(tx.Cast());
 
-                for (ui32 i = 0; i < query.Results().Size(); ++i) {
-                    const auto& result = query.Results().Item(i);
-                    auto binding = Build<TKqpTxResultBinding>(ctx, query.Pos())
-                        .Type(ExpandType(query.Pos(), *result.Value().Ref().GetTypeAnn(), ctx))
-                        .TxIndex()
-                            .Build(ToString(BuildCtx->PhysicalTxs.size() - 1))
-                        .ResultIndex()
-                            .Build(ToString(i))
-                        .Done();
-
-                    BuildCtx->QueryResults.emplace_back(std::move(binding));
-                }
+                updateResultBinding(resultsQuery);
             }
 
             for (auto& effects : collectedEffects) {
@@ -640,6 +644,8 @@ public:
                 }
 
                 BuildCtx->PhysicalTxs.emplace_back(tx.Cast());
+
+                updateResultBinding(effectsQuery);
             }
             
             return TStatus::Ok;
@@ -653,18 +659,7 @@ public:
 
             BuildCtx->PhysicalTxs.emplace_back(tx.Cast());
 
-            for (ui32 i = 0; i < query.Results().Size(); ++i) {
-                const auto& result = query.Results().Item(i);
-                auto binding = Build<TKqpTxResultBinding>(ctx, query.Pos())
-                    .Type(ExpandType(query.Pos(), *result.Value().Ref().GetTypeAnn(), ctx))
-                    .TxIndex()
-                        .Build(ToString(BuildCtx->PhysicalTxs.size() - 1))
-                    .ResultIndex()
-                        .Build(ToString(i))
-                    .Done();
-
-                BuildCtx->QueryResults.emplace_back(std::move(binding));
-            }
+            updateResultBinding(query);
         }
 
         if (!query.Effects().Empty()) {

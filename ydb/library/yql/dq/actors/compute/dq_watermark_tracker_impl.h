@@ -114,7 +114,7 @@ public:
 
     [[nodiscard]] TMaybe<TInstant> HandleIdleness(TInstant systemTime) {
         if (WatermarksQueue_.size() <= 1 || ExpiresQueue_.empty()) {
-            // ^^ there are no point in expiration of single input
+            // ^^ there is no point in expiration of single input
             return Nothing();
         }
 

@@ -81,6 +81,7 @@ struct TCoroTask
             return false;
         }
         if (Handle.done()) {
+            Handle.destroy();
             Handle = nullptr;
             return false;
         }

@@ -1693,6 +1693,9 @@ public:
         out << "<div class='col-sm-1 col-md-1' style='text-align:center'>";
         out << "<button type='button' class='btn btn-info' onclick='location.href=\"app?TabletID=" << Self->HiveId << "&page=Subactors\";' style='width:138px'>SubActors</button>";
         out << "</div>";
+        out << "<div class='col-sm-1 col-md-1' style='text-align:center'>";
+        out << "<button type='button' class='btn btn-info' onclick='location.href=\"app?TabletID=" << Self->HiveId << "&page=ManualOperations\";' style='width:138px'>Manual Ops</button>";
+        out << "</div>";
         out << "</div>";
 
         out << "<div class='row' style='margin-top:50px'>";
@@ -4848,6 +4851,160 @@ public:
     void Complete(const TActorContext&) override {}
 };
 
+class TTxMonEvent_ManualOps : public TTransactionBase<THive> {
+public:
+    const TActorId Source;
+    THolder<NMon::TEvRemoteHttpInfo> Event;
+
+    TTxMonEvent_ManualOps(const TActorId& source, NMon::TEvRemoteHttpInfo::TPtr&, TSelf* hive)
+        : TBase(hive)
+        , Source(source)
+    {
+    }
+
+    bool Execute(TTransactionContext&, const TActorContext& ctx) override {
+        TStringStream out;
+        out << "<div>";
+        out << "<form id='dynamicForm' method='POST'>";
+        out << R"(
+            <div class="form-group">
+                <label for='page' style='display:block'>Operation type</label>
+                <select id='page' name='page' onchange='toggleCustomInput()'>
+                    <option>SetDown</option>
+                    <option>SetFreeze</option>
+                    <option>ReassignTablet</option>
+                    <option>InitMigration</option>
+                    <option>MoveTablet</option>
+                    <option>StopTablet</option>
+                    <option>ResumeTablet</option>
+                    <option>CreateTablet</option>
+                    <option>ResetTablet</option>
+                    <option>DeleteTablet</option>
+                    <option>UpdateResources</option>
+                    <option>StorageRebalance</option>
+                    <option>TabletAvailability</option>
+                    <option>SetDomain</option>
+                    <option value="other">Other...</option>
+                </select>
+                <input type="text" id="custom_page" name="custom_page"
+                       style='display:none'>
+            </div>
+        )";
+
+        for (auto& param : {"node", "tablet", "wait"}) {
+            out << "<div class='form-group'>";
+            out << "<label style='display:block' for='" << param << "'>" << param << "</label>";
+            out << "<input type='text' id='" << param << "' name='" << param << "'>";
+            out << "</div>";
+        }
+
+        out << R"(
+            <div class="form-group">
+                <label>Custom params</label>
+                <div id="keyValuePairs">
+                    <div class="key-value-pair">
+                        <input type="text" name="key[]" placeholder="key">
+                        <input type="text" name="value[]" placeholder="value">
+                        <button type='button' class='glyphicon glyphicon-remove-sign' onclick='removeKeyValuePair(this)' style='border:none'></button>
+                    </div>
+                </div>
+                <button type='button' class='glyphicon glyphicon-plus' onclick='addKeyValuePair()' style='border:none'></button>
+            </div>
+        )";
+
+        out << "<button type='button' class='btn btn-info' onclick='prepareAndSubmit()'>Send request</button>";
+
+        out << "</form></div>";
+
+        out << "<script>";
+        out << "var hiveId = '" << Self->TabletID() << "';";
+
+        out << R"(
+                function toggleCustomInput() {
+                    const pageSelect = document.getElementById('page');
+                    const customInput = document.getElementById('custom_page');
+
+                    if (pageSelect.value === 'other') {
+                        customInput.style.display = 'block';
+                        customInput.focus();
+                    } else {
+                        customInput.style.display = 'none';
+                        customInput.value = '';
+                    }
+                }
+
+                function addKeyValuePair() {
+                    const container = document.getElementById('keyValuePairs');
+                    const newPair = document.createElement('div');
+                    newPair.className = 'key-value-pair';
+                    newPair.innerHTML = `
+                        <input type="text" name="key[]" placeholder="key">
+                        <input type="text" name="value[]" placeholder="value">
+                        <button type='button' class='glyphicon glyphicon-remove-sign' style='border:none' onclick='removeKeyValuePair(this)'></button>
+                    `;
+                    container.appendChild(newPair);
+                }
+
+                function removeKeyValuePair(button) {
+                    button.parentElement.remove();
+                }
+
+                function prepareAndSubmit() {
+                    const form = document.getElementById('dynamicForm');
+                    const formData = new FormData(form);
+                    const data = {};
+                    data['TabletID'] = hiveId;
+
+                    for (let [key, value] of formData.entries()) {
+                        if (key === 'key[]' || key === 'value[]') {
+                            continue;
+                        }
+
+                        if (key === 'page' && value === 'other') {
+                            const customValue = document.getElementById('custom_page').value;
+                            if (customValue.trim()) {
+                                data[key] = customValue;
+                            } else {
+                                data[key] = value;
+                            }
+                        } else {
+                            data[key] = value;
+                        }
+                    }
+                    const keys = formData.getAll('key[]');
+                    const values = formData.getAll('value[]');
+
+                    for (let i = 0; i < keys.length; i++) {
+                        if (keys[i].trim() && values[i].trim()) {
+                            data[keys[i]] = values[i];
+                        }
+                    }
+                    sendPostRequest(data);
+                }
+
+                function sendPostRequest(data) {
+                    $.ajax({
+                        url: 'app',
+                        method: 'POST',
+                        data: data,
+                        success: function(d) {
+                            alert(JSON.stringify(d));
+                        },
+                        error: function(d) {
+                            alert(JSON.stringify(d));
+                        }
+                    });
+                }
+            </script>
+        )";
+
+        ctx.Send(Source, new NMon::TEvRemoteHttpInfoRes(out.Str()));
+        return true;
+    }
+
+    void Complete(const TActorContext&) override {}
+};
+
 bool THive::IsSafeOperation(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx) {
     NMon::TEvRemoteHttpInfo* httpInfo = ev->Get();
     if (httpInfo->GetMethod() != HTTP_METHOD_POST) {
@@ -5020,6 +5177,9 @@ void THive::CreateEvMonitoring(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorCo
     }
     if (page == "SetDomain") {
         return Execute(new TTxMonEvent_SetDomain(ev->Sender, ev, this), ctx);
+    }
+    if (page == "ManualOperations") {
+        return Execute(new TTxMonEvent_ManualOps(ev->Sender, ev, this), ctx);
     }
     return Execute(new TTxMonEvent_Landing(ev->Sender, ev, this), ctx);
 }

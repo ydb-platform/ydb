@@ -2054,20 +2054,12 @@ public:
 
         block = tryDrain;
 
-        const auto blockDrainYield = BasicBlock::Create(context, "dq_hash_drain_yield", ctx.Func);
-        const auto blockDrainOk = BasicBlock::Create(context, "dq_hash_drain_ok", ctx.Func);
         const auto blockCheckSourceEmpty = BasicBlock::Create(context, "dq_hash_drain_check_empty", ctx.Func);
 
         auto tryDrainResult = CallInst::Create(enumStateMethodType, drainMethodPtr, {boxedStatePtr}, "dq_hash_drain_result", block);
         const auto handleDrainResult = SwitchInst::Create(tryDrainResult, blockCheckSourceEmpty, 2U, block);
-        handleDrainResult->addCase(ConstantInt::get(statusType, static_cast<i32>(NUdf::EFetchStatus::Yield)), blockDrainYield);
-        handleDrainResult->addCase(ConstantInt::get(statusType, static_cast<i32>(NUdf::EFetchStatus::Ok)), blockDrainOk);
-
-        block = blockDrainYield;
-        BranchInst::Create(returnYield, block);
-
-        block = blockDrainOk;
-        BranchInst::Create(returnOne, block);
+        handleDrainResult->addCase(ConstantInt::get(statusType, static_cast<i32>(NUdf::EFetchStatus::Yield)), returnYield);
+        handleDrainResult->addCase(ConstantInt::get(statusType, static_cast<i32>(NUdf::EFetchStatus::Ok)), returnOne);
 
         block = blockCheckSourceEmpty;
         auto callIsEmptyOnDrainResult = CallInst::Create(boolStateMethodType, isSourceEmptyMethodPtr, {boxedStatePtr}, "dq_hash_call_is_empty_on_drain", block);

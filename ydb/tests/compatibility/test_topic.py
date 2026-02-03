@@ -165,7 +165,7 @@ class TestTopicTransaction(RollingUpgradeAndDowngradeFixture):
         message_count_after_transaction = 100
 
         # Write some messages regularly
-        with utils.driver.topic_client.writer(utils.topic_name, producer_id="regular-producer") as writer:
+        with utils.driver.topic_client.writer(utils.topic_name, producer_id="regular-producer-1") as writer:
             for i in range(message_count_before_transaction):
                 writer.write(ydb.TopicWriterMessage(f"regular-message-{i}"))
                 utils.message_count += 1
@@ -176,7 +176,7 @@ class TestTopicTransaction(RollingUpgradeAndDowngradeFixture):
         # Write more messages regularly
         with utils.driver.topic_client.writer(utils.topic_name, producer_id="regular-producer-2") as writer:
             for i in range(message_count_after_transaction):
-                writer.write(ydb.TopicWriterMessage(f"regular-message-{i+2}"))
+                writer.write(ydb.TopicWriterMessage(f"regular-message-{i+message_count_before_transaction}"))
                 utils.message_count += 1
 
         # Read all messages

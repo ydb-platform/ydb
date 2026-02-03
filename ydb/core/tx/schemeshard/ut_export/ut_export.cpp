@@ -3868,6 +3868,21 @@ WITH (
                         Ids: 2
                     }
                 }
+                Consumers {
+                    Name: "consumer_3"
+                    Important: false
+                    Type: CONSUMER_TYPE_MLP
+                    KeepMessageOrder: true
+                    DefaultProcessingTimeoutSeconds: 30
+                    DefaultDelayMessageTimeMs: 5000
+                    DefaultReceiveMessageWaitTimeMs: 3000
+                    ContentBasedDeduplication: true
+                    Codec {
+                        Ids: 0
+                        Ids: 1
+                        Ids: 2
+                    }
+                }
             }
         )";
 
@@ -3930,7 +3945,7 @@ WITH (
             static_cast<int>(Ydb::Topic::METERING_MODE_RESERVED_CAPACITY)
         );
 
-        UNIT_ASSERT_VALUES_EQUAL(topicDescription.consumers_size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(topicDescription.consumers_size(), 3);
 
         const auto& consumer1 = topicDescription.consumers(0);
         UNIT_ASSERT_VALUES_EQUAL(consumer1.name(), "consumer_1");
@@ -3945,6 +3960,18 @@ WITH (
         UNIT_ASSERT_VALUES_EQUAL(consumer2.supported_codecs().codecs_size(), 2);
         UNIT_ASSERT_VALUES_EQUAL(consumer2.supported_codecs().codecs(0), 2);
         UNIT_ASSERT_VALUES_EQUAL(consumer2.supported_codecs().codecs(1), 3);
+
+        const auto& consumer3 = topicDescription.consumers(2);
+        UNIT_ASSERT_VALUES_EQUAL(consumer3.name(), "consumer_3");
+        UNIT_ASSERT_VALUES_EQUAL(consumer3.important(), false);
+        UNIT_ASSERT(consumer3.has_shared_consumer_type());
+        const auto& sharedType = consumer3.shared_consumer_type();
+        UNIT_ASSERT_VALUES_EQUAL(sharedType.keep_messages_order(), true);
+        UNIT_ASSERT_VALUES_EQUAL(sharedType.default_processing_timeout().seconds(), 30);
+        UNIT_ASSERT_VALUES_EQUAL(consumer3.supported_codecs().codecs_size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(consumer3.supported_codecs().codecs(0), 1);
+        UNIT_ASSERT_VALUES_EQUAL(consumer3.supported_codecs().codecs(1), 2);
+        UNIT_ASSERT_VALUES_EQUAL(consumer3.supported_codecs().codecs(2), 3);
 
         const auto& attrs = topicDescription.attributes();
         UNIT_ASSERT(attrs.size() > 0);

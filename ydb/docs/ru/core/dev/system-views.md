@@ -278,7 +278,7 @@ Cистемное представление содержит информаци
 
 * `compile_cache_queries` — содержит информацию о запросах в кэше компиляции всех нод кластера.
 
-У каждой ноды есть кэш скомпилированных запросов, который шарится между всеми сессиями на этой ноде. Если пользовательский запрос есть в этом кэше, то он не компилируется повторно при выполнении. При обращении к системному представлению отправляется запрос ко всем нодам кластера, каждая нода отвечает своим текущим состоянием кэша. Пользователь получает объединённую таблицу по кэшам всех нод.
+У каждой ноды есть кэш скомпилированных запросов, который используется совместно всеми сессиями на этой ноде. Если пользовательский запрос есть в этом кэше, то он не компилируется повторно при выполнении. При обращении к системному представлению отправляется запрос ко всем нодам кластера, каждая нода отвечает своим текущим состоянием кэша. Пользователь получает объединённую таблицу по кэшам всех нод.
 
 Текст запроса ограничен 10 килобайтами. Если запрос превышает этот лимит, он обрезается, а в поле `IsTruncated` устанавливается значение `true`.
 
@@ -295,7 +295,7 @@ Cистемное представление содержит информаци
 | `LastAccessedAt` | Время последнего обращения к запросу на момент записи данных нодой.<br/>Тип: `Timestamp`. |
 | `CompilationDuration` | Длительность компиляции запроса в миллисекундах.<br/>Тип: `Uint64`. |
 | `Warnings` | Предупреждения, возникшие при компиляции запроса.<br/>Тип: `Utf8`. |
-а | `IsTruncated` | Флаг, указывающий, был ли текст запроса обрезан из-за превышения лимита в 10 КБ.<br/>Тип: `Bool`. |
+| `IsTruncated` | Флаг, указывающий, был ли текст запроса обрезан из-за превышения лимита в 10 КБ.<br/>Тип: `Bool`. |
 
 ### Примеры запросов {#compile-cache-queries-examples}
 
@@ -309,8 +309,8 @@ SELECT * FROM `.sys/compile_cache_queries`
 
 ```yql
 SELECT
-  Query,
-  SUM(AccessCount) AS Hits
+    Query,
+    SUM(AccessCount) AS Hits
 FROM `.sys/compile_cache_queries`
 GROUP BY Query
 ORDER BY Hits DESC
@@ -321,10 +321,10 @@ LIMIT 20
 
 ```yql
 SELECT
-   UserSID,
-   COUNT(DISTINCT QueryId) AS Plans,
-   SUM(AccessCount) AS Hits,
-   AVG(CompilationDuration) AS AvgCompileMs
+    UserSID,
+    COUNT(DISTINCT QueryId) AS Plans,
+    SUM(AccessCount) AS Hits,
+    AVG(CompilationDuration) AS AvgCompileMs
 FROM `.sys/compile_cache_queries`
 GROUP BY UserSID
 ORDER BY Hits DESC
@@ -334,14 +334,15 @@ ORDER BY Hits DESC
 
 ```yql
 SELECT
-   Query,
-   NodeId,
-   CompilationDuration,
-   AccessCount
+    Query,
+    NodeId,
+    CompilationDuration,
+    AccessCount
 FROM `.sys/compile_cache_queries`
 WHERE CompilationDuration > 1000
 ORDER BY CompilationDuration DESC
 ```
+
 ## История перегруженных партиций {#top-overload-partitions}
 
 Следующие системные представления содержат историю моментов высокой нагрузки на отдельные партиции таблиц БД:

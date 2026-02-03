@@ -2254,14 +2254,25 @@ TRestoreResult TRestoreClient::RestoreChangefeeds(const TFsPath& fsPath, const T
 
 TRestoreResult TRestoreClient::RestoreConsumers(const TString& topicPath, const std::vector<TConsumer>& consumers) {
     for (const auto& consumer : consumers) {
+        const auto& dlp = consumer.GetDeadLetterPolicy();
+        auto consumerSettings = TAlterTopicSettings()
+            .BeginAddConsumer()
+                .ConsumerName(consumer.GetConsumerName())
+                .Important(consumer.GetImportant())
+                .AvailabilityPeriod(consumer.GetAvailabilityPeriod())
+                .Attributes(consumer.GetAttributes())
+                .KeepMessagesOrder(consumer.GetKeepMessagesOrder())
+                .DefaultProcessingTimeout(consumer.GetDefaultProcessingTimeout())
+                .BeginDeadLetterPolicy()
+                    .Enabled(dlp.GetEnabled())
+                    .BeginCondition()
+                        .MaxProcessingAttempts(dlp.GetCondition().GetMaxProcessingAttempts())
+                    .EndCondition();
+        (dlp.GetAction() == EDeadLetterAction::Move
+            ? consumerSettings.MoveAction(dlp.GetDeadLetterQueue())
+            : consumerSettings.DeleteAction());
         auto result = TopicClient.AlterTopic(topicPath,
-            TAlterTopicSettings()
-                .BeginAddConsumer()
-                    .ConsumerName(consumer.GetConsumerName())
-                    .Important(consumer.GetImportant())
-                    .AvailabilityPeriod(consumer.GetAvailabilityPeriod())
-                    .Attributes(consumer.GetAttributes())
-                .EndAddConsumer()
+            consumerSettings.EndDeadLetterPolicy().EndAddConsumer()
         ).GetValueSync();
         if (result.IsSuccess()) {
             LOG_D("Created consumer " << TString{consumer.GetConsumerName()}.Quote() << " for " << topicPath.Quote());

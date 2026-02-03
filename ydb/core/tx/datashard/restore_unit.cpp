@@ -54,14 +54,14 @@ protected:
         switch (settingsKind) {
         case NKikimrSchemeOp::TRestoreTask::kS3Settings:
         #ifndef KIKIMR_DISABLE_S3_OPS
-            tx->SetAsyncJobActor(CreateDownloaderActor(ctx, op->GetTxId(), restore, tableInfo, "cdcuser@restore"));
+            tx->SetAsyncJobActor(CreateDownloaderActor(ctx, op->GetTxId(), restore, tableInfo, "")); // cdcuser@restore
             break;
         #else
             Abort(op, ctx, "Imports from S3 are disabled");
             return false;
         #endif
         case NKikimrSchemeOp::TRestoreTask::kFSSettings:
-            tx->SetAsyncJobActor(CreateDownloaderActor(ctx, op->GetTxId(), restore, tableInfo, "cdcuser@restore"));
+            tx->SetAsyncJobActor(CreateDownloaderActor(ctx, op->GetTxId(), restore, tableInfo, ""));  // cdcuser@restore
             break;
         default:
             Abort(op, ctx, TStringBuilder() << "Unknown settings: " << static_cast<ui32>(settingsKind));

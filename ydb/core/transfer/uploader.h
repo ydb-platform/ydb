@@ -47,7 +47,7 @@ private:
         auto cookie = ++Cookie;
 
         auto actorId = TActivationContext::AsActorContext().RegisterWithSameMailbox(
-            CreateUploaderInternal(Database, tablePath, data, "cdcuser@DoUpload", cookie)
+            CreateUploaderInternal(Database, tablePath, data, "", cookie) // cdcuser@DoUpload Это трансфер
         );
         CookieMapping[cookie] = {tablePath, actorId};
     }

@@ -43,7 +43,6 @@ struct TDataEvents {
     public:
         TEvWrite() = default;
 
-        /// "cdcuser@before_commit" убрать  конструкторы с userSID ?
         TEvWrite(const ui64 txId, NKikimrDataEvents::TEvWrite::ETxMode txMode) {
             Y_ABORT_UNLESS(txMode != NKikimrDataEvents::TEvWrite::MODE_UNSPECIFIED);
             Record.SetTxMode(txMode);

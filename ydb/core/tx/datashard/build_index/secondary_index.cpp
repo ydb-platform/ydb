@@ -404,7 +404,7 @@ private:
             TargetTable,
             UploadColumnsTypes,
             WriteBuf.GetRowsData(),
-            "cdcuser@Upload",
+            "", // cdcuser@Upload
             UploadMode,
             true /*writeToPrivateTable*/,
             true /*writeToIndexImplTable*/);

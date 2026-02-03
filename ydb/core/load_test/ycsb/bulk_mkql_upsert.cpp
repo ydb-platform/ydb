@@ -33,7 +33,7 @@ TUploadRequest GenerateBulkRowRequest(ui64 tableId, ui64 keyStart, ui64 n) {
     TUploadRowsRequestPtr request(new TEvDataShard::TEvUploadRowsRequest());
     auto& record = request->Record;
     record.SetTableId(tableId);
-    record.SetUserSID("cdcuser@GenerateBulkRowRequest"); // Тесты?
+    // record.SetUserSID("cdcuser@GenerateBulkRowRequest"); // Тесты?
 
     auto& rowScheme = *record.MutableRowScheme();
     for (size_t i = 2; i <= 11; ++i) {
@@ -86,7 +86,7 @@ TUploadRequest GenerateMkqlRowRequest(ui64 /* tableId */, ui64 keyNum, const TSt
     )", key.data()) + programWithoutKey;
 
     auto request = std::make_unique<TEvTablet::TEvLocalMKQL>();
-    request->Record.SetUserSID("cdcuser@bulk_upsert");  // Тесты?
+    // request->Record.SetUserSID("cdcuser@bulk_upsert");  // Тесты?
     request->Record.MutableProgram()->MutableProgram()->SetText(programText);
 
     return TUploadRequest(request.release());

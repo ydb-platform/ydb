@@ -316,7 +316,7 @@ class TUploadColumnsRPCPublic : public NTxProxy::TUploadRowsBase<NKikimrServices
 public:
     explicit TUploadColumnsRPCPublic(IRequestOpCtx* request, bool diskQuotaExceeded)
         : TBase(std::make_shared<TVector<std::pair<TSerializedCellVec, TString>>>(), 
-                (request!=nullptr)?request->GetInternalToken()->GetUserSID():"",
+                (request!=nullptr && request->GetInternalToken()!=nullptr)?request->GetInternalToken()->GetUserSID():"",
                 GetDuration(GetProtoRequest(request)->operation_params().operation_timeout()), diskQuotaExceeded)
         , Request(request)
         , Database(Request->GetDatabaseName().GetOrElse(""))

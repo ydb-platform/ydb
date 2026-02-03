@@ -227,12 +227,12 @@ public:
                 }
                 case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INCREMENT: {
                     FillOps(scheme, userTable, tableInfo, validatedOperation, rowIdx, ops);
-                    userDb.IncrementRow(fullTableId, key, ops, false /*insertMissing*/, userSID  + ";cdcuser@write_increment");  // Полнотекствый индекс
+                    userDb.IncrementRow(fullTableId, key, ops, false /*insertMissing*/, userSID);
                     break;
                 }
                 case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT_INCREMENT: {
                     FillOps(scheme, userTable, tableInfo, validatedOperation, rowIdx, ops);
-                    userDb.IncrementRow(fullTableId, key, ops, true /*insertMissing*/, userSID  + ";cdcuser@write_upsert_increment"); // Полнотекствый индекс
+                    userDb.IncrementRow(fullTableId, key, ops, true /*insertMissing*/, userSID);
                     break;
                 }
                 default:

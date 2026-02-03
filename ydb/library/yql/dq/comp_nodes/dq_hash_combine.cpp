@@ -2,6 +2,7 @@
 #include "dq_hash_operator_common.h"
 #include "dq_hash_operator_serdes.h"
 #include "type_utils.h"
+#include "coro_tasks.h"
 
 #include <ydb/library/yql/dq/runtime/dq_arrow_helpers.h>
 #include <yql/essentials/public/udf/arrow/block_builder.h>
@@ -22,8 +23,6 @@
 #include <util/system/mutex.h>
 #include <yql/essentials/utils/yql_panic.h>
 
-#include <coroutine>
-
 namespace NKikimr {
 namespace NMiniKQL {
 
@@ -31,92 +30,6 @@ using NUdf::TUnboxedValue;
 using NUdf::TUnboxedValuePod;
 
 namespace {
-
-struct TCoroTask
-{
-    struct promise_type;
-    using handle_type = std::coroutine_handle<promise_type>;
-
-    struct promise_type
-    {
-        std::exception_ptr Exception;
-
-        TCoroTask get_return_object() {
-            return TCoroTask(handle_type::from_promise(*this));
-        }
-
-        std::suspend_never initial_suspend() {
-            return {};
-        }
-
-        std::suspend_always final_suspend() noexcept {
-            return {};
-        }
-
-        void return_void() {
-        }
-
-        void unhandled_exception() {
-            Exception = std::current_exception();
-        }
-
-        std::suspend_always yield_value([[maybe_unused]] std::suspend_always) {
-            // suspend_always is just a marker because we have to yield something from the coroutine
-            return {};
-        }
-    };
-
-    handle_type Handle;
-
-    TCoroTask(handle_type handle)
-        : Handle(handle)
-    {
-    }
-
-    TCoroTask(const TCoroTask&) = delete;
-    TCoroTask& operator=(const TCoroTask&) = delete;
-
-    TCoroTask(TCoroTask&& other) noexcept
-        : Handle(other.Handle)
-    {
-        other.Handle = nullptr;
-    }
-
-    TCoroTask& operator=(TCoroTask&& other) noexcept
-    {
-        if (this != &other) {
-            MKQL_ENSURE(Handle, "The previous async task is still active");
-            Handle = other.Handle;
-            other.Handle = nullptr;
-        }
-        return *this;
-    }
-
-    ~TCoroTask()
-    {
-        if (Handle) {
-            Handle.destroy();
-        }
-    }
-
-    bool Done() {
-        return !Handle || Handle.done();
-    }
-
-    bool operator()()
-    {
-        if (Done()) {
-            return false;
-        }
-        Handle();
-        if (Handle.promise().Exception) {
-            auto exc = Handle.promise().Exception;
-            Handle.promise().Exception = nullptr;
-            std::rethrow_exception(exc);
-        }
-        return !Handle.done();
-    }
-};
 
 bool HasMemoryForProcessing() {
     return !TlsAllocState->IsMemoryYellowZoneEnabled();
@@ -209,7 +122,7 @@ struct TSegmentedArena
     }
 
     void* Alloc(const ui32 tag) {
-        YQL_ENSURE(AllocSize > 0, "Allocation size must be specified via Format(...)");
+        MKQL_ENSURE(AllocSize > 0, "Allocation size must be specified via Format(...)");
 
         auto& prevPtr = PagesByTag.at(tag);
 
@@ -244,7 +157,7 @@ struct TSegmentedArena
 
     void CancelAlloc(const ui32 tag) {
         auto& prevPtr = PagesByTag.at(tag);
-        YQL_ENSURE(prevPtr != nullptr && prevPtr->Used, "CancelAlloc doesn't match Alloc");
+        MKQL_ENSURE(prevPtr != nullptr && prevPtr->Used, "CancelAlloc doesn't match Alloc");
         --prevPtr->Used;
         UsedMem -= AllocSize;
     }
@@ -654,6 +567,7 @@ protected:
                     auto pageFuture = spiller.WriteWideItem(pageItems);
                     for (auto& uv : pageItems) {
                         uv.UnRef();
+                        uv = TUnboxedValuePod{};
                     }
                     if (!pageFuture.has_value()) {
                         continue;
@@ -683,7 +597,7 @@ protected:
     [[nodiscard]] bool InitiateSpilling()
     {
         CurrentAsyncTask = InitiateSpillingAsync();
-        return NeedYieldToAsyncTask();
+        return CurrentAsyncTask.CheckPending();
     }
 
     TCoroTask FlushSpillingInputAsync()
@@ -705,6 +619,7 @@ protected:
                     auto pageFuture = spiller.WriteWideItem(pageItems);
                     for (auto& uv : pageItems) {
                         uv.UnRef();
+                        uv = TUnboxedValuePod{};
                     }
                     if (!pageFuture.has_value()) {
                         continue;
@@ -736,7 +651,7 @@ protected:
             return false;
         }
         CurrentAsyncTask = FlushSpillingInputAsync();
-        return NeedYieldToAsyncTask();
+        return CurrentAsyncTask.CheckPending();
     }
 
     bool HasPendingSpillingBuckets()
@@ -879,16 +794,7 @@ protected:
     [[nodiscard]] bool ReadBackNextSpillingBucket()
     {
         CurrentAsyncTask = ReadBackNextSpillingBucketAsync();
-        return NeedYieldToAsyncTask();
-    }
-
-    bool NeedYieldToAsyncTask()
-    {
-        if (!CurrentAsyncTask->Done()) {
-            return true;
-        }
-        CurrentAsyncTask = {};
-        return false;
+        return CurrentAsyncTask.CheckPending();
     }
 
     void CheckAutoGrowMap(const bool hasMemoryForProcessing)
@@ -1140,14 +1046,7 @@ public:
     }
 
     bool RunCurrentAsyncTask() {
-        if (!CurrentAsyncTask.has_value()) {
-            return false;
-        }
-        bool stillRunning = (*CurrentAsyncTask)();
-        if (!stillRunning) {
-            CurrentAsyncTask = {};
-        }
-        return stillRunning;
+        return CurrentAsyncTask();
     }
 
     virtual ~TBaseAggregationState() {
@@ -1378,7 +1277,7 @@ protected:
     bool Draining;
     bool SourceEmpty;
 
-    std::optional<TCoroTask> CurrentAsyncTask;
+    TCoroTask CurrentAsyncTask;
 };
 
 class TWideAggregationState: public TBaseAggregationState
@@ -1454,9 +1353,6 @@ public:
                 return EFillState::Yield;
             }
             return EFillState::SourceEmpty;
-        } else if (sourceState == EFillState::SourceSkipped) {
-            MKQL_ENSURE(CurrentAsyncTask.has_value(), "Not waiting for an async task but no output buffer provided");
-            return EFillState::Yield;
         }
 
         ++InputRows;
@@ -1659,8 +1555,6 @@ public:
             if (!OpenBlock()) {
                 return EFillState::ContinueFilling;
             }
-        } else if (CurrentAsyncTask.has_value()) {
-            return EFillState::Yield;
         }
 
         MKQL_ENSURE(!Draining && !SourceEmpty, "Can't fill while draining or when the source is exhausted");
@@ -1706,12 +1600,14 @@ public:
 
         size_t currentBlockSize = 0;
         void* tuple = nullptr;
+        bool yielding = false;
 
         while (currentBlockSize < MaxOutputBlockLen) {
             tuple = DrainArenaIterator.Next();
             if (!tuple) {
                 if (CheckRefillFromPendingBuckets()) {
-                    return NUdf::EFetchStatus::Yield;
+                    yielding = true;
+                    break;
                 }
                 tuple = DrainArenaIterator.Next();
             }
@@ -1765,6 +1661,11 @@ public:
             OutputRowCounter.Inc();
         }
 
+        if (yielding) {
+            // If yielding with currentBlockSize > 0 we'll do a "real" yield in a next call to WideFetch/DoCalculate
+            return currentBlockSize > 0 ? NUdf::EFetchStatus::Ok : NUdf::EFetchStatus::Yield;
+        }
+
         if (!tuple) {
             Draining = false;
             if (!IsAggregation) {
@@ -1773,6 +1674,7 @@ public:
                 Map.Reset();
                 Store->Clear();
             }
+
             return currentBlockSize > 0 ? NUdf::EFetchStatus::Ok : NUdf::EFetchStatus::Finish;
         }
 
@@ -1860,10 +1762,12 @@ public:
             }
 
             auto drainResult = state.TryDrain(OutputPtrs.data());
-            if (drainResult == NUdf::EFetchStatus::Finish && state.IsSourceEmpty()) {
-                break;
-            } else if (drainResult == NUdf::EFetchStatus::Yield) {
+            if (drainResult == NUdf::EFetchStatus::Yield || drainResult == NUdf::EFetchStatus::Ok) {
                 return drainResult;
+            } else if (drainResult == NUdf::EFetchStatus::Finish && state.IsSourceEmpty()) {
+                break;
+            } else {
+                // Loop back to reading inputs
             }
         }
 

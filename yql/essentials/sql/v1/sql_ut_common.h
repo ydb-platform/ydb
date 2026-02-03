@@ -1082,6 +1082,13 @@ Y_UNIT_TEST(CreateObjectWithFeaturesAndFlags) {
     UNIT_ASSERT_VALUES_EQUAL(1, elementStat["SECRET"]);
 }
 
+Y_UNIT_TEST(CreateObjectWithFeaturesWithoutCluster) {
+    ExpectFailWithError(R"sql(
+        CREATE OBJECT secretId (TYPE SECRET)
+        WITH (Key1=Value1, K2=V2);
+    )sql", "<main>:2:9: Error: No cluster name given and no default cluster is selected\n");
+}
+
 Y_UNIT_TEST(Select1Type) {
     NYql::TAstParseResult res = SqlToYql("SELECT 1 type;");
     UNIT_ASSERT(res.Root);

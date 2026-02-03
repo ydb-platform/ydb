@@ -950,6 +950,8 @@ void TPartitionActor::CommitDone(ui64 cookie, const TActorContext& ctx) {
     bool wasMemoryLimitReached = PartitionInFlightMemoryController.IsMemoryLimitReached();
     bool isMemoryOkNow = PartitionInFlightMemoryController.Remove(CommittedOffset);
     if (wasMemoryLimitReached && isMemoryOkNow && EndOffset > ReadOffset) {
+        LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Partition
+                        << " ready for read after commit with readOffset " << ReadOffset << " endOffset " << EndOffset);
         SendPartitionReady(ctx);
     }
 

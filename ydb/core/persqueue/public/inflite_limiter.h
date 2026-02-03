@@ -9,7 +9,7 @@ struct TInFlightMemoryController {
     TInFlightMemoryController() = default;
     TInFlightMemoryController(ui64 MaxAllowedSize);
     
-    ui64 LayoutUnit = 0;
+    ui64 LayoutUnitSize = 0;
     std::deque<ui64> Layout;
     ui64 TotalSize = 0;
     ui64 MaxAllowedSize = 0;

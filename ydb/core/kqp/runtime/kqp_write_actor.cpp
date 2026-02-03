@@ -118,10 +118,11 @@ namespace {
         }
 
         // Set FirstQueryTraceId for accurate lock-breaking attribution in separate commit scenarios
-        // Use actor's QueryTraceId if provided (most accurate when available)
-        // Fall back to TxManager's tracking or FirstQueryTraceId
+        // Use actor's QueryTraceId if provided - it was set when the actor was created
+        // for the first query that wrote to this table
         ui64 firstQueryTraceId = actorQueryTraceId;
         if (firstQueryTraceId == 0) {
+            // Fallback: try TxManager sources
             auto shardBreakerQueryTraceId = txManager->GetShardBreakerQueryTraceId(shardId);
             firstQueryTraceId = shardBreakerQueryTraceId.value_or(txManager->GetFirstQueryTraceId());
         }
@@ -423,6 +424,14 @@ public:
 
     ~TKqpTableWriteActor() {
         ClearMkqlData();
+    }
+
+    // Update QueryTraceId if a smaller (earlier) one is found.
+    // This handles the case where TEvBufferWrite messages arrive out of order.
+    void MaybeUpdateQueryTraceId(ui64 queryTraceId) {
+        if (queryTraceId != 0 && (QueryTraceId == 0 || queryTraceId < QueryTraceId)) {
+            QueryTraceId = queryTraceId;
+        }
     }
 
     void Bootstrap() {
@@ -1067,9 +1076,11 @@ public:
             }());
 
         // Store locks from DataShard response in TxManager
-        // We need to do this for WRITE mode and IMMEDIATE_COMMIT mode
-        // For IMMEDIATE_COMMIT, locks are created and returned during the same operation
-        if (Mode == EMode::WRITE || Mode == EMode::IMMEDIATE_COMMIT) {
+        // Only do this for WRITE mode - locks need to be collected during the write phase
+        // For IMMEDIATE_COMMIT, we skip AddLock because the transaction is already in EXECUTING state
+        // and AddLock requires COLLECTING state. Broken locks in IMMEDIATE_COMMIT are handled
+        // by the shard returning an error status.
+        if (Mode == EMode::WRITE) {
             for (const auto& lock : ev->Get()->Record.GetTxLocks()) {
                 if (!TxManager->AddLock(ev->Get()->Record.GetOrigin(), lock)) {
                     UpdateStats(ev->Get()->Record.GetTxStats());
@@ -1213,9 +1224,12 @@ public:
                     *protoLocks->AddLocks() = lock;
                 }
                 // Set FirstQueryTraceId for accurate lock-breaking attribution
-                // Use actor's QueryTraceId directly (most accurate)
+                // Use actor's QueryTraceId directly - it was set when the actor was created
+                // for the first query that wrote to this table, which is the most accurate
+                // source for identifying which query is the "breaker"
                 ui64 firstQueryTraceId = QueryTraceId;
                 if (firstQueryTraceId == 0) {
+                    // Fallback: try TxManager sources
                     auto shardBreakerQueryTraceId = TxManager->GetShardBreakerQueryTraceId(shardId);
                     firstQueryTraceId = shardBreakerQueryTraceId.value_or(TxManager->GetFirstQueryTraceId());
                 }
@@ -1571,7 +1585,10 @@ private:
 
     NWilson::TTraceId ParentTraceId;
     NWilson::TSpan TableWriteActorSpan;
-    const ui64 QueryTraceId;
+    // QueryTraceId tracks the first (minimum) query that wrote to this table.
+    // It may be updated when the buffer actor receives a smaller QueryTraceId
+    // due to out-of-order message delivery.
+    ui64 QueryTraceId;
 };
 
 
@@ -2988,7 +3005,7 @@ public:
             // Can't have CTAS here
             AFL_ENSURE(settings.OperationType != NKikimrKqp::TKqpTableSinkSettings::MODE_FILL);
 
-            auto createWriteActor = [&](const TTableId tableId, const TString& tablePath, const TVector<NKikimrKqp::TKqpColumnMetadataProto>& keyColumns) -> std::pair<TKqpTableWriteActor*, TActorId> {
+            auto createWriteActor = [&](const TTableId tableId, const TString& tablePath, const TVector<NKikimrKqp::TKqpColumnMetadataProto>& keyColumns, ui64 firstQueryTraceId) -> std::pair<TKqpTableWriteActor*, TActorId> {
                 TVector<NScheme::TTypeInfo> keyColumnTypes;
                 keyColumnTypes.reserve(keyColumns.size());
                 for (const auto& column : keyColumns) {
@@ -2996,6 +3013,8 @@ public:
                         column.HasTypeInfo() ? &column.GetTypeInfo() : nullptr);
                     keyColumnTypes.push_back(typeInfoMod.TypeInfo);
                 }
+                // Use firstQueryTraceId for breaker attribution - it tracks the earliest query
+                // that wrote to this table, regardless of message delivery order
                 TKqpTableWriteActor* ptr = new TKqpTableWriteActor(
                     this,
                     settings.Database,
@@ -3012,10 +3031,10 @@ public:
                     TxManager,
                     SessionActorId,
                     Counters,
-                    settings.QueryTraceId);
+                    firstQueryTraceId);
                 ptr->SetParentTraceId(BufferWriteActorStateSpan.GetTraceId());
                 TActorId id = RegisterWithSameMailbox(ptr);
-                CA_LOG_D("Create new TableWriteActor for table `" << tablePath << "` (" << tableId << "). lockId=" << LockTxId << ". ActorId=" << id << ". QueryTraceId=" << settings.QueryTraceId);
+                CA_LOG_D("Create new TableWriteActor for table `" << tablePath << "` (" << tableId << "). lockId=" << LockTxId << ". ActorId=" << id << ". firstQueryTraceId=" << firstQueryTraceId);
 
                 return {ptr, id};
             };
@@ -3067,9 +3086,15 @@ public:
 
 
             auto& writeInfo = WriteInfos[settings.TableId.PathId];
+            // Track the first (minimum) QueryTraceId for this table - messages may arrive out of order
+            if (settings.QueryTraceId != 0) {
+                if (writeInfo.FirstQueryTraceId == 0 || settings.QueryTraceId < writeInfo.FirstQueryTraceId) {
+                    writeInfo.FirstQueryTraceId = settings.QueryTraceId;
+                }
+            }
             if (!writeInfo.Actors.contains(settings.TableId.PathId)) {
                 AFL_ENSURE(writeInfo.Actors.empty());
-                const auto [ptr, id] = createWriteActor(settings.TableId, settings.TablePath, settings.KeyColumns);
+                const auto [ptr, id] = createWriteActor(settings.TableId, settings.TablePath, settings.KeyColumns, writeInfo.FirstQueryTraceId);
                 writeInfo.Actors.emplace(settings.TableId.PathId, TWriteInfo::TActorInfo{
                     .WriteActor = ptr,
                     .Id = id,
@@ -3081,6 +3106,9 @@ public:
                         settings.TablePath)) {
                     return;
                 }
+                // Update the actor's QueryTraceId if we found a smaller (earlier) one.
+                // This handles out-of-order TEvBufferWrite message delivery.
+                writeInfo.Actors.at(settings.TableId.PathId).WriteActor->MaybeUpdateQueryTraceId(writeInfo.FirstQueryTraceId);
             }
 
             if (!settings.LookupColumns.empty()) {
@@ -3115,16 +3143,21 @@ public:
             for (const auto& indexSettings : settings.Indexes) {
                 AFL_ENSURE(!settings.IsOlap);
                 if (!writeInfo.Actors.contains(indexSettings.TableId.PathId)) {
-                    const auto [ptr, id] = createWriteActor(indexSettings.TableId, indexSettings.TablePath, indexSettings.KeyColumns);
+                    // Use the same FirstQueryTraceId as the main table for index tables
+                    const auto [ptr, id] = createWriteActor(indexSettings.TableId, indexSettings.TablePath, indexSettings.KeyColumns, writeInfo.FirstQueryTraceId);
                     writeInfo.Actors.emplace(indexSettings.TableId.PathId, TWriteInfo::TActorInfo{
                         .WriteActor = ptr,
                         .Id = id,
                     });
-                } else if (!checkSchemaVersion(
-                        writeInfo.Actors.at(indexSettings.TableId.PathId).WriteActor,
-                        indexSettings.TableId,
-                        indexSettings.TablePath)) {
-                    return;
+                } else {
+                    if (!checkSchemaVersion(
+                            writeInfo.Actors.at(indexSettings.TableId.PathId).WriteActor,
+                            indexSettings.TableId,
+                            indexSettings.TablePath)) {
+                        return;
+                    }
+                    // Update the actor's QueryTraceId if we found a smaller (earlier) one.
+                    writeInfo.Actors.at(indexSettings.TableId.PathId).WriteActor->MaybeUpdateQueryTraceId(writeInfo.FirstQueryTraceId);
                 }
 
                 if (indexSettings.IsUniq) {
@@ -4884,6 +4917,9 @@ private:
         };
 
         THashMap<TPathId, TActorInfo> Actors;
+        // Track the first (minimum) QueryTraceId for this table.
+        // This handles out-of-order TEvBufferWrite message delivery.
+        ui64 FirstQueryTraceId = 0;
     };
 
     struct TLookupInfo {

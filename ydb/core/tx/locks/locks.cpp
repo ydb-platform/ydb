@@ -1193,14 +1193,11 @@ std::pair<TVector<TSysLocks::TLock>, TVector<ui64>> TSysLocks::ApplyLocks() {
             }
             for (auto& readConflictLock : Update->ReadConflictLocks) {
                 // Use the Update's BreakerQueryTraceId when adding read conflicts
-                // Note: For read conflicts, we add our lock (current writer) as breaking the read lock
-                // So we also set the reverse conflict: lock (us) -> readConflictLock (them)
+                // The read lock will break the write lock when the read commits (serialization failure)
                 if (readConflictLock.AddConflict(lock.Get(), Db, Update->BreakerQueryTraceId)) {
                     waitPersistent = true;
                     waitPersistentMore.emplace_back(&readConflictLock);
                 }
-                // Also add the reverse direction so our lock knows to break their lock on our commit
-                lock->AddConflict(&readConflictLock, Db, Update->BreakerQueryTraceId);
             }
             for (auto& writeConflictLock : Update->WriteConflictLocks) {
                 // Use the Update's BreakerQueryTraceId when adding write conflicts

@@ -57,6 +57,7 @@ bool TInFlightController::Remove(ui64 Offset) {
         if (Layout.size() == 1) {
             TotalSize = 0;
         } else {
+            AFL_ENSURE(TotalSize >= LayoutUnitSize);
             TotalSize -= LayoutUnitSize;
         }
     }

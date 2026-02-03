@@ -8,7 +8,7 @@
 
 {% note info %}
 
-Работа с топиками выполняется через [external data source](../../datamodel/external_data_source.md). В примерах `ydb_source` — это заранее созданный external data source, а `input_topic` и `output_topic` — топики, доступные через него.
+Работа с топиками выполняется через [external data source](../../concepts/datamodel/external_data_source.md). В примерах `ydb_source` — это заранее созданный external data source, а `input_topic` и `output_topic` — топики, доступные через него.
 
 {% endnote %}
 
@@ -31,14 +31,16 @@ WITH (
 
 ## Запись в топик (JSON) {#topic-json}
 
-Запрос читает события из входного топика, преобразует все колонки в JSON-строку и записывает результат в выходной топик. Функция `TableRow()` собирает все колонки текущей строки в структуру, `Yson::From` преобразует её в Yson, `Yson::SerializeJson` сериализует в JSON-строку, а `ToBytes` конвертирует в тип `String`, который требуется для записи в топик.
+Запрос читает события из входного топика, формирует JSON-объект из отдельных полей и записывает результат в выходной топик. Функция `AsStruct` создаёт структуру из указанных полей, `Yson::From` преобразует её в Yson, `Yson::SerializeJson` сериализует в JSON-строку, а `ToBytes` конвертирует в тип `String`, который требуется для записи в топик.
 
 ```sql
 -- ydb_source — external data source для работы с топиками
 INSERT INTO ydb_source.output_topic
 SELECT
-    -- Сериализация всех колонок в JSON
-    ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow()))))
+    -- Формирование JSON из отдельных полей
+    ToBytes(Unwrap(Yson::SerializeJson(Yson::From(
+        AsStruct(Id AS id, Name AS name)
+    ))))
 FROM
     ydb_source.input_topic
 WITH (
@@ -50,7 +52,7 @@ WITH (
 )
 ```
 
-Подробнее о функциях: [TableRow](../../yql/reference/builtins/basic#tablerow), [Yson::From](../../yql/reference/udf/list/yson#ysonfrom), [Yson::SerializeJson](../../yql/reference/udf/list/yson#ysonserializejson).
+Подробнее о функциях: [AsStruct](../../yql/reference/builtins/basic#asstruct), [Yson::From](../../yql/reference/udf/list/yson#ysonfrom), [Yson::SerializeJson](../../yql/reference/udf/list/yson#ysonserializejson).
 
 ## Запись в таблицу {#table-write}
 

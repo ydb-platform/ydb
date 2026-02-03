@@ -50,13 +50,13 @@ GRANT CREATE TABLE ON my_queries TO `user@domain`
 
 ### Запись в топик (JSON) {#example-topic-json}
 
-Запрос читает события из входного топика, преобразует все колонки в JSON-строку и записывает результат в выходной топик.
+Запрос читает события из входного топика, формирует JSON-объект из отдельных полей и записывает результат в выходной топик.
 
-Функция `TableRow()` собирает все колонки текущей строки в структуру, `Yson::From` преобразует её в Yson, `Yson::SerializeJson` сериализует в JSON-строку, а `ToBytes` конвертирует в тип `String`, который требуется для записи в топик.
+Функция `AsStruct` создаёт структуру из указанных полей, `Yson::From` преобразует её в Yson, `Yson::SerializeJson` сериализует в JSON-строку, а `ToBytes` конвертирует в тип `String`, который требуется для записи в топик.
 
 {% note info %}
 
-Запись в топики выполняется через [external data source](../../../datamodel/external_data_source.md). В примере `ydb_source` — это заранее созданный external data source, а `output_topic` и `input_topic` — топики, доступные через него.
+Запись в топики выполняется через [external data source](../../../concepts/datamodel/external_data_source.md). В примере `ydb_source` — это заранее созданный external data source, а `output_topic` и `input_topic` — топики, доступные через него.
 
 {% endnote %}
 
@@ -67,8 +67,10 @@ DO BEGIN
 -- ydb_source — external data source для работы с топиками
 INSERT INTO ydb_source.output_topic
 SELECT
-    -- Сериализация всех колонок в JSON
-    ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow()))))
+    -- Формирование JSON из отдельных полей
+    ToBytes(Unwrap(Yson::SerializeJson(Yson::From(
+        AsStruct(Id AS id, Name AS name)
+    ))))
 FROM
     -- Чтение из топика
     ydb_source.input_topic
@@ -130,7 +132,9 @@ DO BEGIN
 -- ydb_source — external data source для работы с топиками
 INSERT INTO ydb_source.output_topic
 SELECT
-    ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow()))))
+    ToBytes(Unwrap(Yson::SerializeJson(Yson::From(
+        AsStruct(Id AS id, Name AS name)
+    ))))
 FROM
     ydb_source.input_topic
 WITH (

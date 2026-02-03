@@ -61,7 +61,7 @@ namespace NYdb::NConsoleClient {
             .StoreResult(&Scenario.ErrorMessagesRate);
         config.Opts
             ->AddLongOption("error-messages-destiny",
-                            "Error messages destiny (fatal, sucess-after-retry).")
+                            "Error messages destiny (fatal, success-after-retry).")
             .DefaultValue("fatal")
             .StoreResult(&Scenario.ErrorMessagesDestiny);
         config.Opts
@@ -80,9 +80,9 @@ namespace NYdb::NConsoleClient {
         config.Opts->AddLongOption("validate-fifo", "Validate FIFO queue.")
             .DefaultValue(false)
             .StoreTrue(&Scenario.ValidateFifo);
-        config.Opts->AddLongOption("use-json-api", "Use JSON API.")
+        config.Opts->AddLongOption("use-xml-api", "Use XML API.")
             .DefaultValue(false)
-            .StoreTrue(&Scenario.UseJsonAPI);
+            .StoreTrue(&Scenario.UseXmlAPI);
         config.Opts
             ->AddLongOption("request-timeout", "Request timeout in milliseconds.")
             .DefaultValue(2000)

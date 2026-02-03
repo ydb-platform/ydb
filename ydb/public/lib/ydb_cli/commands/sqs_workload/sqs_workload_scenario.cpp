@@ -83,15 +83,15 @@ namespace NYdb::NConsoleClient {
             credentials.SetAWSSecretKey(secretKeyStr.c_str());
         }
 
-        if (UseJsonAPI) {
+        if (UseXmlAPI) {
+            SqsClient = Aws::MakeShared<TSQSClientWrapper>(
+                "sqs-client-wrapper", credentials, sqsClientConfiguration, Aws::MakeShared<Aws::SQS::SQSClient>(
+                    "sqs-client", credentials, sqsClientConfiguration), StatsCollector, ValidateFifo);
+        } else {
             auto jsonSqsClient = Aws::MakeShared<TSQSJsonClient>(
                 "json-sqs-client", credentials, sqsClientConfiguration);
             SqsClient = Aws::MakeShared<TSQSClientWrapper>(
                 "sqs-client-wrapper", credentials, sqsClientConfiguration, jsonSqsClient, StatsCollector, ValidateFifo);
-        } else {
-            SqsClient = Aws::MakeShared<TSQSClientWrapper>(
-                "sqs-client-wrapper", credentials, sqsClientConfiguration, Aws::MakeShared<Aws::SQS::SQSClient>(
-                    "sqs-client", credentials, sqsClientConfiguration), StatsCollector, ValidateFifo);
         }
     }
 

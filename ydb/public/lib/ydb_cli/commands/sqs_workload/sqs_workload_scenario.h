@@ -36,7 +36,7 @@ namespace NYdb::NConsoleClient {
         ui32 GroupsAmount;
         ui32 WorkersCount;
         ui32 RequestTimeoutMs;
-        bool UseJsonAPI;
+        bool UseXmlAPI;
         bool SetSubjectToken;
         bool ValidateFifo;
 

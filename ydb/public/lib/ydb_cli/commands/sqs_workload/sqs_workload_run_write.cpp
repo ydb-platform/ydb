@@ -64,9 +64,9 @@ namespace NYdb::NConsoleClient {
             ->AddLongOption('p', "percentile", "Percentile for output statistics.")
             .DefaultValue(80.0)
             .StoreResult(&Scenario.Percentile);
-        config.Opts->AddLongOption("use-json-api", "Use JSON API.")
+        config.Opts->AddLongOption("use-xml-api", "Use XML API.")
             .DefaultValue(false)
-            .StoreTrue(&Scenario.UseJsonAPI);
+            .StoreTrue(&Scenario.UseXmlAPI);
         config.Opts
             ->AddLongOption("request-timeout", "Request timeout in milliseconds.")
             .DefaultValue(2000)

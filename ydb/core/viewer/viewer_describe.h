@@ -68,17 +68,6 @@ public:
         }
         ++Requests;
 
-        if (params.Has("path")) {
-            TAutoPtr<NSchemeCache::TSchemeCacheNavigate> request(new NSchemeCache::TSchemeCacheNavigate());
-            NSchemeCache::TSchemeCacheNavigate::TEntry entry;
-            entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpList;
-            entry.SyncVersion = false;
-            entry.Path = SplitPath(params.Get("path"));
-            request->ResultSet.emplace_back(entry);
-            SendRequest(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request));
-            ++Requests;
-        }
-
         Become(&TThis::StateRequestedDescribe, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
     }
 
@@ -96,6 +85,18 @@ public:
         if (SchemeShardResult->GetRecord().GetStatus() == NKikimrScheme::EStatus::StatusSuccess) {
             ReplyAndPassAway();
         } else {
+            // scheme shard failed -> try scheme cache as a fallback when a path is provided
+            const auto& params = Event->Get()->Request.GetParams();
+            if (params.Has("path")) {
+                TAutoPtr<NSchemeCache::TSchemeCacheNavigate> request(new NSchemeCache::TSchemeCacheNavigate());
+                NSchemeCache::TSchemeCacheNavigate::TEntry entry;
+                entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpList;
+                entry.SyncVersion = false;
+                entry.Path = SplitPath(params.Get("path"));
+                request->ResultSet.emplace_back(entry);
+                SendRequest(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request));
+                ++Requests;
+            }
             RequestDone("TEvDescribeSchemeResult");
         }
     }

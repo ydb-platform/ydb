@@ -3435,6 +3435,21 @@ Y_UNIT_TEST(WindowPartitionByExpressionWithoutAliasesAreAllowed) {
     UNIT_ASSERT_VALUES_EQUAL(1, elementStat["AddMember"]);
 }
 
+Y_UNIT_TEST(WindowPartitionByOrderByWindowFunctionIsNotAllowed) {
+    ExpectFailWithError(
+        R"sql(SELECT Rank() OVER (PARTITION BY x ORDER BY Rank()) FROM (VALUES (1)) AS t(x))sql",
+        "<main>:1:45: Error: Failed to use window function: Rank without window\n");
+    ExpectFailWithError(
+        R"sql(SELECT Rank() OVER (PARTITION BY x ORDER BY RowNumber()) FROM (VALUES (1)) AS t(x))sql",
+        "<main>:1:45: Error: Failed to use window function RowNumber without window specification or in wrong place\n");
+    ExpectFailWithError(
+        R"sql(SELECT RowNumber() OVER (PARTITION BY x ORDER BY Rank()) FROM (VALUES (1)) AS t(x))sql",
+        "<main>:1:50: Error: Failed to use window function: Rank without window\n");
+    ExpectFailWithError(
+        R"sql(SELECT RowNumber() OVER (PARTITION BY x ORDER BY RowNumber()) FROM (VALUES (1)) AS t(x))sql",
+        "<main>:1:50: Error: Failed to use window function RowNumber without window specification or in wrong place\n");
+}
+
 Y_UNIT_TEST(PqReadByAfterUse) {
     ExpectFailWithError("use plato; pragma PqReadBy='plato2';",
                         "<main>:1:28: Error: Cluster in PqReadPqBy pragma differs from cluster specified in USE statement: plato2 != plato\n");

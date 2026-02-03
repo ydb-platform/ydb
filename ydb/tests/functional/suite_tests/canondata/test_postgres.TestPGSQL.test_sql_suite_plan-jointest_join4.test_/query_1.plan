@@ -29,7 +29,7 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "Limit-InnerJoin (MapJoin)-Filter",
+                                        "Node Type": "Limit-InnerJoin (Map)-Filter",
                                         "Operators": [
                                             {
                                                 "Inputs": [
@@ -50,7 +50,7 @@
                                                         "ExternalPlanNodeId": 7
                                                     }
                                                 ],
-                                                "Name": "InnerJoin (MapJoin)"
+                                                "Name": "InnerJoin (Map)"
                                             },
                                             {
                                                 "Inputs": [
@@ -93,7 +93,17 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "Stage",
+                                                        "Node Type": "InnerJoin (Lookup)",
+                                                        "Operators": [
+                                                            {
+                                                                "Inputs": [
+                                                                    {
+                                                                        "ExternalPlanNodeId": 5
+                                                                    }
+                                                                ],
+                                                                "Name": "InnerJoin (Lookup)"
+                                                            }
+                                                        ],
                                                         "PlanNodeId": 6,
                                                         "Plans": [
                                                             {

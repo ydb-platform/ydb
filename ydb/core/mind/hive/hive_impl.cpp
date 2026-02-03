@@ -543,6 +543,7 @@ void THive::Handle(TEvPrivate::TEvBootTablets::TPtr&) {
     TVector<TTabletId> tabletsToReleaseFromParent;
     TSideEffects sideEffects;
     sideEffects.Reset(SelfId());
+    std::vector<TReassignOperation> reassigns;
     for (auto& tab : Tablets) {
         TLeaderTabletInfo& tablet = tab.second;
         if (tablet.NeedToReleaseFromParent) {
@@ -551,9 +552,9 @@ void THive::Handle(TEvPrivate::TEvBootTablets::TPtr&) {
         } else if (tablet.IsReadyToBoot()) {
             tablet.InitiateBoot();
         } else if (tablet.IsReadyToAssignGroups()) {
-            tablet.InitiateAssignTabletGroups();
+            reassigns.emplace_back(tablet.Id);
         } else if (tablet.IsReadyToBlockStorage()) {
-            tablet.InitiateBlockStorage(sideEffects);
+            reassigns.emplace_back(tablet.Id);
         } else if (tablet.IsDeleting()) {
             BlockStorageForDelete(tablet.Id, sideEffects);
         } else if (tablet.IsLockedToActor()) {
@@ -579,6 +580,9 @@ void THive::Handle(TEvPrivate::TEvBootTablets::TPtr&) {
         }
     }
     sideEffects.Complete(DEPRECATED_CTX);
+    if (!reassigns.empty()) {
+        StartReassignActor(std::move(reassigns));
+    }
     if (AreWeRootHive()) {
         BLOG_D("Root Hive is ready");
     } else {

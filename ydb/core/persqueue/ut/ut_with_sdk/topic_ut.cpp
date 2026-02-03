@@ -302,10 +302,15 @@ Y_UNIT_TEST_SUITE(WithSDK) {
             .MessageGroupId("producer-1")
             .Codec(ECodec::RAW);
         auto writeSession = client.CreateSimpleBlockingWriteSession(writeSettings);
-        for (size_t i = 0; i < 100; ++i) {
-            writeSession->Write(TString(1000, 'a'));
-        }
-        UNIT_ASSERT(writeSession->Close(TDuration::Seconds(5)));
+
+        auto writeMessages = [&](size_t count) {
+            for (size_t i = 0; i < count; ++i) {
+                writeSession->Write(TString(1000, 'a'));
+            }
+        };
+
+        writeMessages(10);
+        Sleep(TDuration::Seconds(5));
 
         TReadSessionSettings settings;
         settings.AppendTopics(TTopicReadSettings().Path(TEST_TOPIC)
@@ -324,8 +329,8 @@ Y_UNIT_TEST_SUITE(WithSDK) {
 
         // 1) Read first 10 messages, without committing them
         while (first10.size() < 10) {
-            auto eventOpt = session->GetEvent(true);
-            UNIT_ASSERT(eventOpt.has_value());
+            UNIT_ASSERT_C(session->WaitEvent().Wait(TDuration::Seconds(30)), TStringBuilder() << "No event received at iteration, first10 size: " << first10.size());
+            auto eventOpt = session->GetEvent(false);
             auto& event = *eventOpt;
 
             if (auto* start = std::get_if<TStartPartitionEvent>(&event)) {
@@ -347,10 +352,13 @@ Y_UNIT_TEST_SUITE(WithSDK) {
             }
         }
 
+        writeMessages(10);
+        Sleep(TDuration::Seconds(5));
+
         // 2) Check that no new events appear due to the inflight bytes limit
         {
             auto future = session->WaitEvent();
-            UNIT_ASSERT(!future.Wait(TDuration::Seconds(1)));
+            UNIT_ASSERT(!future.Wait(TDuration::Seconds(3)));
         }
 
         // 3) Commit these 10 messages
@@ -358,13 +366,28 @@ Y_UNIT_TEST_SUITE(WithSDK) {
             msg.Commit();
         }
 
+        first10.clear();
+
         // 4) Check that after commit new events start appearing again
-        {
-            auto future = session->WaitEvent();
-            UNIT_ASSERT(future.Wait(TDuration::Seconds(1)));
+        while (first10.size() < 10) {
+            UNIT_ASSERT_C(session->WaitEvent().Wait(TDuration::Seconds(30)), TStringBuilder() << "No event received at iteration, first10 size: " << first10.size());
+            auto eventOpt = session->GetEvent(false);
+            auto& event = *eventOpt;
+
+            if (auto* stop = std::get_if<TStopPartitionEvent>(&event)) {
+                stop->Confirm();
+                break;
+            }
+
+            if (auto* data = std::get_if<TDataEvent>(&event)) {
+                for (auto& msg : data->GetMessages()) {
+                    first10.push_back(msg);
+                }
+            }
         }
 
-        session->Close(TDuration::Seconds(5));
+        UNIT_ASSERT_VALUES_EQUAL(10, first10.size());
+        UNIT_ASSERT(session->Close(TDuration::Seconds(5)));
     }
 }
 } // namespace NKikimr

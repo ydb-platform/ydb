@@ -1,6 +1,10 @@
 #pragma once
 
+#include <ydb/core/nbs/cloud/blockstore/libs/common/block_range.h>
+
 namespace NYdb::NBS::NBlockStore {
+
+////////////////////////////////////////////////////////////////////////////////
 
 enum class EBlockStoreRequest
 {

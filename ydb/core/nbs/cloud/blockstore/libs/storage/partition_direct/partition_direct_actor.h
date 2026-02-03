@@ -8,7 +8,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/direct_block_group/direct_block_group.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
 
-namespace NYdb::NBS::NStorage::NPartitionDirect {
+namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 using namespace NActors;
 using namespace NYdb::NBS::NProto;
@@ -96,4 +96,4 @@ void TPartitionActor::AddTraceId(const TEvPtr& ev, const NActors::TActorContext&
     }
 }
 
-} // namespace NYdb::NBS::NStorage::NPartitionDirect
+} // namespace NYdb::NBS:NBlockStore::NStorage::NPartitionDirect

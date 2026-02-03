@@ -1,6 +1,6 @@
 #include "request.h"
 
-namespace NYdb::NBS::NStorage::NPartitionDirect {
+namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -171,4 +171,4 @@ void TReadRequest::OnReadRequested(ui64 requestId, NWilson::TSpan span)
     ChildSpanByRequestId.emplace(requestId, std::move(span));
 }
 
-}   // namespace NYdb::NBS::NStorage::NPartitionDirect
+}   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

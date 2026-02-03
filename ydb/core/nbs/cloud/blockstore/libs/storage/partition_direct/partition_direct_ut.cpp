@@ -5,7 +5,8 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_direct_actor.h>
 
 using namespace NKikimr;
-using namespace NYdb::NBS::NStorage::NPartitionDirect;
+using namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect;
+using namespace NYdb::NBS::NBlockStore;
 using namespace NYdb::NBS;
 
 namespace {
@@ -80,7 +81,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest) {
 
         // Read not writed block
         {
-            auto request = std::make_unique<NYdb::NBS::TEvService::TEvReadBlocksRequest>();
+            auto request = std::make_unique<TEvService::TEvReadBlocksRequest>();
             request->Record.SetStartIndex(0);
             request->Record.SetBlocksCount(1);
 
@@ -111,7 +112,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest) {
 
         auto expectedData = TString(1024, 'A') + TString(1024, 'B') + TString(1024, 'C') + TString(1024, 'D');
         {
-            auto request = std::make_unique<NYdb::NBS::TEvService::TEvWriteBlocksRequest>();
+            auto request = std::make_unique<TEvService::TEvWriteBlocksRequest>();
             request->Record.SetStartIndex(1);
             request->Record.MutableBlocks()->AddBuffers(expectedData);
 
@@ -123,7 +124,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest) {
 
         // Read writed block from persistent buffer
         {
-            auto request = std::make_unique<NYdb::NBS::TEvService::TEvReadBlocksRequest>();
+            auto request = std::make_unique<TEvService::TEvReadBlocksRequest>();
             request->Record.SetStartIndex(1);
             request->Record.SetBlocksCount(1);
 
@@ -137,7 +138,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest) {
 
         // Read not writed block
         {
-            auto request = std::make_unique<NYdb::NBS::TEvService::TEvReadBlocksRequest>();
+            auto request = std::make_unique<TEvService::TEvReadBlocksRequest>();
             request->Record.SetStartIndex(0);
             request->Record.SetBlocksCount(1);
 
@@ -153,7 +154,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest) {
 
         // Read writed block from ddisk
         {
-            auto request = std::make_unique<NYdb::NBS::TEvService::TEvReadBlocksRequest>();
+            auto request = std::make_unique<TEvService::TEvReadBlocksRequest>();
             request->Record.SetStartIndex(1);
             request->Record.SetBlocksCount(1);
 
@@ -207,7 +208,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest) {
 
         auto firstWriteData = TString(4096, 'A');
         {
-            auto request = std::make_unique<NYdb::NBS::TEvService::TEvWriteBlocksRequest>();
+            auto request = std::make_unique<TEvService::TEvWriteBlocksRequest>();
             request->Record.SetStartIndex(1);
             request->Record.MutableBlocks()->AddBuffers(firstWriteData);
 
@@ -216,7 +217,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest) {
 
         auto secondWriteData = TString(4096, 'B');
         {
-            auto request = std::make_unique<NYdb::NBS::TEvService::TEvWriteBlocksRequest>();
+            auto request = std::make_unique<TEvService::TEvWriteBlocksRequest>();
             request->Record.SetStartIndex(1);
             request->Record.MutableBlocks()->AddBuffers(secondWriteData);
 
@@ -239,7 +240,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest) {
 
         // Read writed block from ddisk
         {
-            auto request = std::make_unique<NYdb::NBS::TEvService::TEvReadBlocksRequest>();
+            auto request = std::make_unique<TEvService::TEvReadBlocksRequest>();
             request->Record.SetStartIndex(1);
             request->Record.SetBlocksCount(1);
 

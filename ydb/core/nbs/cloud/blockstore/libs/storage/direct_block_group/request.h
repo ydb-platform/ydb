@@ -3,7 +3,7 @@
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
 
-namespace NYdb::NBS::NStorage::NPartitionDirect {
+namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 using namespace NActors;
 
@@ -136,4 +136,4 @@ private:
     ui64 BlocksCount;
 };
 
-}   // namespace NYdb::NBS::NStorage::NPartitionDirect
+}   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

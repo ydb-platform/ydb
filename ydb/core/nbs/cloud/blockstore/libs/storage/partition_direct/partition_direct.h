@@ -4,7 +4,7 @@
 
 #include <ydb/core/nbs/cloud/blockstore/config/storage.pb.h>
 
-namespace NYdb::NBS::NStorage::NPartitionDirect {
+namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 using namespace NYdb::NBS::NProto;
 
@@ -14,4 +14,4 @@ NActors::TActorId CreatePartitionTablet(
     const NActors::TActorId& owner,
     TStorageConfig storageConfig);
 
-}   // namespace NYdb::NBS::NStorage::NPartitionDirect
+}   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

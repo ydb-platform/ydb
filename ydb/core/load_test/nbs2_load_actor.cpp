@@ -187,7 +187,7 @@ public:
         auto sendReadRequest =
             [this]
             (TBlockRange64 range, NYdb::NBS::NBlockStore::NLoadTest::LoadTestSendRequestFunctionCB cb, const void *udata) {
-            auto request = std::make_unique<NYdb::NBS::TEvService::TEvReadBlocksRequest>();
+            auto request = std::make_unique<NYdb::NBS::NBlockStore::TEvService::TEvReadBlocksRequest>();
             request->Record.SetDiskId("TempDiskID");
             request->Record.SetStartIndex(range.Start);
             request->Record.SetBlocksCount(range.Size());
@@ -205,7 +205,7 @@ public:
                 NYdb::NBS::NBlockStore::NLoadTest::LoadTestSendRequestFunctionCB cb,
                 const void *udata
             ) {
-                auto request = std::make_unique<NYdb::NBS::TEvService::TEvWriteBlocksRequest>();
+                auto request = std::make_unique<NYdb::NBS::NBlockStore::TEvService::TEvWriteBlocksRequest>();
                 request->Record.SetDiskId("TempDiskID");
                 request->Record.SetStartIndex(blockIndexWriteTo);
                 auto* dstBlocks = request->Record.MutableBlocks();
@@ -281,7 +281,7 @@ public:
     }
 
     void HandleReadBlocksResponse(
-        const NYdb::NBS::TEvService::TEvReadBlocksResponse::TPtr& ev,
+        const NYdb::NBS::NBlockStore::TEvService::TEvReadBlocksResponse::TPtr& ev,
         const TActorContext& ctx)
     {
         LOG_DEBUG_S(ctx, NKikimrServices::NBS2_LOAD_TEST, "Tag# " << Tag << "HandleReadBlocksResponse " << ev->Cookie);
@@ -290,7 +290,7 @@ public:
     }
 
     void HandleWriteBlocksResponse(
-        const NYdb::NBS::TEvService::TEvWriteBlocksResponse::TPtr& ev,
+        const NYdb::NBS::NBlockStore::TEvService::TEvWriteBlocksResponse::TPtr& ev,
         const TActorContext& ctx)
     {
         LOG_DEBUG_S(ctx, NKikimrServices::NBS2_LOAD_TEST, "Tag# " << Tag << "HandleWriteBlocksResponse " << ev->Cookie);
@@ -319,10 +319,10 @@ public:
     STRICT_STFUNC(StateStart,
         CFunc(TEvents::TSystem::PoisonPill, HandlePoisonPill)
         HFunc(NMon::TEvHttpInfo, HandleHTML)
-        HFunc(NYdb::NBS::TEvService::TEvReadBlocksResponse, HandleReadBlocksResponse)
-        HFunc(NYdb::NBS::TEvService::TEvWriteBlocksResponse, HandleWriteBlocksResponse)
-        HFunc(NYdb::NBS::TEvService::TEvReadBlocksRequest, HandleUndelivery)
-        HFunc(NYdb::NBS::TEvService::TEvWriteBlocksRequest, HandleUndelivery)
+        HFunc(NYdb::NBS::NBlockStore::TEvService::TEvReadBlocksResponse, HandleReadBlocksResponse)
+        HFunc(NYdb::NBS::NBlockStore::TEvService::TEvWriteBlocksResponse, HandleWriteBlocksResponse)
+        HFunc(NYdb::NBS::NBlockStore::TEvService::TEvReadBlocksRequest, HandleUndelivery)
+        HFunc(NYdb::NBS::NBlockStore::TEvService::TEvWriteBlocksRequest, HandleUndelivery)
     )
 
 

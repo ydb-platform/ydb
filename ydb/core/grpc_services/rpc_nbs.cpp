@@ -40,7 +40,7 @@ public:
         storageConfig.SetTraceSamplePeriod(100);
 
         // Create partition actor
-        auto partition_actor_id = NYdb::NBS::NStorage::NPartitionDirect::CreatePartitionTablet(
+        auto partition_actor_id = NYdb::NBS::NBlockStore::NStorage::NPartitionDirect::CreatePartitionTablet(
             SelfId(),
             std::move(storageConfig));
 

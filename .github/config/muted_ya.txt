@@ -1,7 +1,6 @@
 ydb/core/blobstorage/ut_blobstorage GroupReconfiguration.BsControllerDoesNotDisableGroup
 ydb/core/blobstorage/ut_blobstorage/ut_huge HugeBlobOnlineSizeChange.Compaction
 ydb/core/blobstorage/ut_blobstorage/ut_huge unittest.[*/*] chunk
-ydb/core/blobstorage/ut_blobstorage/ut_statestorage TStateStorageRingGroupState.TestProxyConfigMismatch
 ydb/core/blobstorage/ut_vdisk TBsVDiskGC.GCPutKeepBarrierSync
 ydb/core/blobstorage/ut_vdisk TBsVDiskManyPutGet.ManyPutRangeGetCompactionIndexOnly
 ydb/core/blobstorage/ut_vdisk unittest.[*/*] chunk
@@ -19,18 +18,15 @@ ydb/core/kqp/ut/query KqpStats.OneShardNonLocalExec+UseSink
 ydb/core/kqp/ut/scheme KqpOlapScheme.AddPgColumnWithStore
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_offset+middle
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_offset+middle_WithRestart
-ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient
 ydb/core/statistics/aggregator/ut AnalyzeColumnshard.AnalyzeRebootColumnShard
 ydb/core/tx/schemeshard/ut_base_reboots TTablesWithReboots.CopyAlterWithReboots
 ydb/core/tx/schemeshard/ut_base_reboots TTablesWithReboots.CopyIndexedTableWithReboots
-ydb/core/tx/schemeshard/ut_base_reboots TTablesWithReboots.SimpleDropTableWithReboots2
 ydb/core/tx/schemeshard/ut_base_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_cdc_stream_reboots TCdcStreamWithRebootsTests.RacySplitAndDropTable[TabletReboots]
 ydb/core/tx/schemeshard/ut_cdc_stream_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_index unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_index_build_reboots IndexBuildTestReboots.BaseCaseUniq
 ydb/core/tx/schemeshard/ut_index_build_reboots unittest.[*/*] chunk
-ydb/core/tx/schemeshard/ut_olap_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_restore TImportWithRebootsTests.ShouldSucceedOnSingleChangefeed
 ydb/core/tx/schemeshard/ut_restore unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.BaseCase[PipeResets]
@@ -58,7 +54,6 @@ ydb/core/viewer/tests test.py.test_topic_data_cdc
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut TxUsage.Write_Only_Big_Messages_In_Wide_Transactions_Query
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut unittest.[*/*] chunk
 ydb/public/sdk/cpp/tests/integration/sessions_pool YdbSdkSessionsPool.StressTestSync/0
-ydb/public/sdk/cpp/tests/integration/sessions_pool YdbSdkSessionsPool.StressTestSync/1
 ydb/services/persqueue_v1/ut TPersQueueTest.Cache
 ydb/services/ydb/backup_ut BackupRestore.TestReplaceRestoreOptionOnNonExistingSchemeObjects
 ydb/services/ydb/ut YdbLogStore.AlterLogTable
@@ -79,6 +74,7 @@ ydb/tests/functional/dstool test_canonical_requests.py.Test.test_essential
 ydb/tests/functional/hive test_drain.py.TestHive.test_drain_on_stop
 ydb/tests/functional/serverless test_serverless.py.test_database_with_disk_quotas[enable_alter_database_create_hive_first--false]
 ydb/tests/functional/serverless test_serverless.py.test_database_with_disk_quotas[enable_alter_database_create_hive_first--true]
+ydb/tests/functional/sqs/cloud test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_yc_events_processor[tables_format_v0]
 ydb/tests/functional/tenants test_tenants.py.TestTenants.test_create_drop_create_table3[enable_alter_database_create_hive_first--false]
 ydb/tests/functional/tenants test_tenants.py.TestTenants.test_create_drop_create_table3[enable_alter_database_create_hive_first--true]
 ydb/tests/olap py3test.[*/*] chunk

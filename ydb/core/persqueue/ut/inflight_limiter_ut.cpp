@@ -15,7 +15,7 @@ Y_UNIT_TEST_SUITE(TInFlightControllerTest) {
         UNIT_ASSERT(!controller.IsMemoryLimitReached());
         
         UNIT_ASSERT(controller.Add(100, 1000));
-        UNIT_ASSERT(controller.Remove(100));
+        UNIT_ASSERT(controller.Remove(101));
         UNIT_ASSERT(!controller.IsMemoryLimitReached());
     }
 
@@ -43,7 +43,7 @@ Y_UNIT_TEST_SUITE(TInFlightControllerTest) {
         UNIT_ASSERT(!controller.IsMemoryLimitReached());
         
         UNIT_ASSERT(controller.Add(100, 1000));
-        UNIT_ASSERT(controller.Remove(100));
+        UNIT_ASSERT(controller.Remove(101));
     }
 
     Y_UNIT_TEST(TestAddBasic) {
@@ -123,7 +123,7 @@ Y_UNIT_TEST_SUITE(TInFlightControllerTest) {
         controller.Add(100, 50);
         controller.Add(200, 30);
         
-        UNIT_ASSERT(controller.Remove(200));
+        UNIT_ASSERT(controller.Remove(201));
         UNIT_ASSERT_VALUES_EQUAL(controller.TotalSize, 0);
     }
 
@@ -145,8 +145,8 @@ Y_UNIT_TEST_SUITE(TInFlightControllerTest) {
         controller.Add(100, 50);
         controller.Add(200, 30);
         
-        UNIT_ASSERT(controller.Remove(100));
-        UNIT_ASSERT(controller.Remove(200));
+        UNIT_ASSERT(controller.Remove(101));
+        UNIT_ASSERT(controller.Remove(201));
         UNIT_ASSERT_VALUES_EQUAL(controller.TotalSize, 0);
         UNIT_ASSERT(controller.Layout.empty());
         UNIT_ASSERT(!controller.IsMemoryLimitReached());
@@ -206,7 +206,7 @@ Y_UNIT_TEST_SUITE(TInFlightControllerTest) {
         UNIT_ASSERT_VALUES_EQUAL(controller.Layout.size(), 1000);
         UNIT_ASSERT(controller.IsMemoryLimitReached());
 
-        UNIT_ASSERT(controller.Remove(0));
+        UNIT_ASSERT(controller.Remove(1));
         UNIT_ASSERT_VALUES_EQUAL(controller.TotalSize, 0);
         UNIT_ASSERT(controller.Layout.empty());
         UNIT_ASSERT(!controller.IsMemoryLimitReached());
@@ -255,7 +255,7 @@ Y_UNIT_TEST_SUITE(TInFlightControllerTest) {
         TInFlightController controller(10240);
         
         controller.Add(1, 1000001);
-        controller.Remove(1);
+        controller.Remove(2);
         UNIT_ASSERT_VALUES_EQUAL(controller.TotalSize, 0);
         UNIT_ASSERT_VALUES_EQUAL(controller.Layout.size(), 0);
     }
@@ -268,11 +268,11 @@ Y_UNIT_TEST_SUITE(TInFlightControllerTest) {
         }
     
         UNIT_ASSERT(controller.IsMemoryLimitReached());
-        UNIT_ASSERT(controller.Layout.size() == 1035);
+        UNIT_ASSERT_VALUES_EQUAL(controller.Layout.size(), 1024);
         UNIT_ASSERT_VALUES_EQUAL(controller.TotalSize, 103424);
         UNIT_ASSERT_VALUES_EQUAL(controller.Layout[0], 0);
         
-        for (ui64 i = 0; i < 1024; ++i) {
+        for (ui64 i = 1; i <= 1024; ++i) {
             controller.Remove(i);
         }
         UNIT_ASSERT_VALUES_EQUAL(controller.TotalSize, 0);
@@ -292,7 +292,7 @@ Y_UNIT_TEST_SUITE(TInFlightControllerTest) {
         UNIT_ASSERT_VALUES_EQUAL(controller.TotalSize, 101376);
         UNIT_ASSERT_VALUES_EQUAL(controller.Layout[0], 1);
         
-        for (ui64 i = 0; i < 1024; ++i) {
+        for (ui64 i = 1; i <= 1024; ++i) {
             controller.Remove(i);
         }
         UNIT_ASSERT_VALUES_EQUAL(controller.TotalSize, 0);
@@ -314,12 +314,34 @@ Y_UNIT_TEST_SUITE(TInFlightControllerTest) {
             UNIT_ASSERT_VALUES_EQUAL(controller.Layout[i], i);
         }
         
-        for (ui64 i = 0; i < 1024; ++i) {
+        for (ui64 i = 1; i <= 1024; ++i) {
             controller.Remove(i);
         }
         UNIT_ASSERT_VALUES_EQUAL(controller.TotalSize, 0);
         UNIT_ASSERT(controller.Layout.empty());
         UNIT_ASSERT(!controller.IsMemoryLimitReached());
+    }
+
+    Y_UNIT_TEST(TestAddBigMessageAndSmallMessagesAfterIt) {
+        TInFlightController controller(1000);
+        
+        controller.Add(1, 1000001);
+        UNIT_ASSERT_VALUES_EQUAL(controller.TotalSize, 1000001);
+        UNIT_ASSERT_VALUES_EQUAL(controller.Layout.size(), 1024);
+
+        controller.Add(2, 1);
+        UNIT_ASSERT_VALUES_EQUAL(controller.TotalSize, 1000002);
+        UNIT_ASSERT_VALUES_EQUAL(controller.Layout.size(), 1024);
+        UNIT_ASSERT_VALUES_EQUAL(controller.Layout.back(), 2);
+
+        controller.Add(3, 1);
+        UNIT_ASSERT_VALUES_EQUAL(controller.TotalSize, 1000003);
+        UNIT_ASSERT_VALUES_EQUAL(controller.Layout.size(), 1024);
+        UNIT_ASSERT_VALUES_EQUAL(controller.Layout.back(), 3);
+    
+        controller.Remove(4);
+        UNIT_ASSERT_VALUES_EQUAL(controller.TotalSize, 0);
+        UNIT_ASSERT_VALUES_EQUAL(controller.Layout.size(), 0);
     }
 }
 

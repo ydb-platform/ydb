@@ -19,6 +19,10 @@ bool TInFlightController::Add(ui64 Offset, ui64 Size) {
         return true;
     }
 
+    if (Size == 0) {
+        return TotalSize < MaxAllowedSize;
+    }
+
     AFL_ENSURE(Layout.empty() || Offset > Layout.back());
 
     if (TotalSize % LayoutUnitSize != 0) {
@@ -28,10 +32,13 @@ bool TInFlightController::Add(ui64 Offset, ui64 Size) {
 
     auto unitsBefore = (TotalSize + LayoutUnitSize - 1) / LayoutUnitSize;
     TotalSize += Size;
-    auto unitsAfter = (TotalSize + LayoutUnitSize - 1) / LayoutUnitSize;
+    auto unitsAfter = std::min(MAX_LAYOUT_COUNT, (TotalSize + LayoutUnitSize - 1) / LayoutUnitSize);
     for (auto currentUnits = unitsBefore; currentUnits < unitsAfter; currentUnits++) {
         Layout.push_back(Offset);
     }
+    
+    AFL_ENSURE(!Layout.empty());
+    Layout.back() = Offset;
 
     return TotalSize < MaxAllowedSize;
 }
@@ -43,7 +50,7 @@ bool TInFlightController::Remove(ui64 Offset) {
     }
 
     for (auto it = Layout.begin(); it != Layout.end(); it = Layout.erase(it)) {
-        if (*it > Offset) {
+        if (*it >= Offset) {
             break;
         }
 

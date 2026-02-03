@@ -28,7 +28,9 @@ struct TInFlightController {
     ui64 TotalSize = 0;
     ui64 MaxAllowedSize = 0;
 
+    // Adds an offset with size
     bool Add(ui64 Offset, ui64 Size);
+    // Removes offsets <= given offset
     bool Remove(ui64 Offset);
     bool IsMemoryLimitReached() const;
 };

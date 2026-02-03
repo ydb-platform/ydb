@@ -8,6 +8,9 @@
 
 namespace NYdb::NConsoleClient::BenchmarkUtils {
 
+// Default number of rows to store per result index for output and comparison
+constexpr size_t DefaultMaxRowsPerResultIndex = 100;
+
 struct TTiming {
     TDuration Total = TDuration::Zero(); // timings captured by the client application. these timings include time RTT between server and the client application
     TDuration Server = TDuration::Zero(); // total query timings measured by the server
@@ -105,8 +108,8 @@ struct TQueryBenchmarkSettings {
     NYdb::NRetry::TRetryOperationSettings RetrySettings;
     // Maximum number of rows to store per result index.
     // Used both for CompareWithExpected and for output.
-    // Should be max(100, lines in expected).
-    size_t MaxRowsPerResultIndex = 100;
+    // Should be max(DefaultMaxRowsPerResultIndex, lines in expected).
+    size_t MaxRowsPerResultIndex = DefaultMaxRowsPerResultIndex;
 };
 
 TString FullTablePath(const TString& database, const TString& table);

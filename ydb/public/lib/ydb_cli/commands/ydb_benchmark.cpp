@@ -345,8 +345,8 @@ public:
                     if (Owner.PlanFileName) {
                         settings.PlanFileName = TStringBuilder() << Owner.PlanFileName << "." << QueryName << "." << ToString(Iteration) << ".in_progress";
                     }
-                    // Store max(100, lines in expected) rows per result index
-                    settings.MaxRowsPerResultIndex = std::max<size_t>(StringSplitter(Expected.c_str()).Split('\n').Count(), 100);
+                    // Store max(DefaultMaxRowsPerResultIndex, lines in expected) rows per result index
+                    settings.MaxRowsPerResultIndex = std::max<size_t>(StringSplitter(Expected.c_str()).Split('\n').Count(), BenchmarkUtils::DefaultMaxRowsPerResultIndex);
 
                     Result = Execute(Query, Expected, *Owner.QueryClient, settings);
                 } else {

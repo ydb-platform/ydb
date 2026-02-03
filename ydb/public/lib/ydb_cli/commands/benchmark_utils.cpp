@@ -151,7 +151,7 @@ private:
     YDB_ACCESSOR_DEF(TString, ExecStats);
     TQueryBenchmarkResult::TRawResults RawResults;
     // Limit rows stored per result index
-    size_t MaxRowsPerResultIndex = 100;
+    size_t MaxRowsPerResultIndex = DefaultMaxRowsPerResultIndex;
 public:
     void SetMaxRowsPerResultIndex(size_t maxRows) {
         MaxRowsPerResultIndex = maxRows;

@@ -412,7 +412,6 @@ namespace NKikimr::NBsController {
                 }
             }
 
-            std::vector<TGroupId> groupsWithErrorDisks;
             // check that group modification would not degrade failure model
             if (!suppressFailModelChecking) {
                 THashSet<TGroupId> groupsToCheck;
@@ -436,8 +435,6 @@ namespace NKikimr::NBsController {
                     if (!groupsToCheck.contains(groupId)) {
                         continue;
                     }
-                    // at least one VDisk switched to ERROR state in this group
-                    groupsWithErrorDisks.push_back(groupId);
                     if (const TGroupInfo *group = state.Groups.Find(groupId); group && group->VDisksInGroup) {
                         // process only groups with changed content; create topology for group
                         auto& topology = *group->Topology;
@@ -670,6 +667,7 @@ namespace NKikimr::NBsController {
             CommitShredUpdates(state);
             CommitSyncerUpdates(state, txc);
 
+            std::vector<TGroupId> groupsWithErrorDisks;
             // add updated and remove deleted vslots from VSlotReadyTimestampQ
             const TMonotonic now = TActivationContext::Monotonic();
             for (auto&& [base, overlay] : state.VSlots.Diff()) {
@@ -677,6 +675,8 @@ namespace NKikimr::NBsController {
                     (overlay->second ? overlay->second : base->second)->DropFromVSlotReadyTimestampQ();
                     NotReadyVSlotIds.erase(overlay->first);
                 } else if (overlay->second->GetStatus() != NKikimrBlobStorage::EVDiskStatus::READY) {
+                    // at least one VDisk switched to ERROR state in this group
+                    groupsWithErrorDisks.push_back(overlay->second->GroupId);
                     overlay->second->DropFromVSlotReadyTimestampQ();
                 } else if (!base || base->second->GetStatus() != NKikimrBlobStorage::EVDiskStatus::READY) {
                     overlay->second->PutInVSlotReadyTimestampQ(now);

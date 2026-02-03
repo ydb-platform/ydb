@@ -3350,6 +3350,16 @@ public:
         return std::get<Ydb::Import::ImportFromFsSettings>(Settings);
     }
 
+    TString GetSource() const {
+        if (Kind == EKind::S3) {
+            return GetS3Settings().source_prefix();
+        } else if (Kind == EKind::FS) {
+            return GetFsSettings().base_path();
+        }
+        Y_ABORT("Unknown import kind");
+        return {};
+    }
+
     // Getters for common settings fields
     bool GetNoAcl() const {
         return Visit([](const auto& settings) {
@@ -3360,6 +3370,12 @@ public:
     bool GetSkipChecksumValidation() const {
         return Visit([](const auto& settings) {
             return settings.skip_checksum_validation();
+        });
+    }
+
+    TString GetDestinationPath() const {
+        return Visit([](const auto& settings) {
+            return settings.destination_path();
         });
     }
 

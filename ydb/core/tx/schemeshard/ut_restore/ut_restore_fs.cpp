@@ -63,21 +63,24 @@ public:
     }
 
 private:
-    static void WriteDataFileWithChecksum(const TString& dirPath, const TString& csvData, ui32 partNum) {
-        const TString dataFileName = TStringBuilder() << "data_" << Sprintf("%02d", partNum) << ".csv";
-
-        TFileOutput file(dirPath + "/" + dataFileName);
-        file.Write(csvData);
+    static void WriteFileWithChecksum(const TString& dirPath, const TString& fileName, const TString& content) {
+        TFileOutput file(dirPath + "/" + fileName);
+        file.Write(content);
         file.Finish();
 
         // Create checksum file
-        const TString checksum = NBackup::ComputeChecksum(csvData);
-        const TString checksumFileName = dataFileName + ".sha256";
+        const TString checksum = NBackup::ComputeChecksum(content);
+        const TString checksumFileName = fileName + ".sha256";
         TFileOutput checksumFile(dirPath + "/" + checksumFileName);
         checksumFile.Write(checksum);
         checksumFile.Write(" ");
-        checksumFile.Write(dataFileName);
+        checksumFile.Write(fileName);
         checksumFile.Finish();
+    }
+
+    static void WriteDataFileWithChecksum(const TString& dirPath, const TString& csvData, ui32 partNum) {
+        const TString dataFileName = TStringBuilder() << "data_" << Sprintf("%02d", partNum) << ".csv";
+        WriteFileWithChecksum(dirPath, dataFileName, csvData);
     }
 
     static void CreateEmptyDataFile(const TString& dirPath) {
@@ -92,8 +95,7 @@ private:
 
         TString serialized = metadata.Serialize();
 
-        TFileOutput file(dirPath + "/metadata.json");
-        file.Write(serialized);
+        WriteFileWithChecksum(dirPath, "metadata.json", serialized);
     }
 
     static void CreateTableSchemeFile(const TString& dirPath, const TString& tableName,
@@ -131,8 +133,7 @@ private:
         TString serialized;
         Y_ABORT_UNLESS(google::protobuf::TextFormat::PrintToString(table, &serialized));
 
-        TFileOutput file(dirPath + "/" + NYdb::NDump::NFiles::TableScheme().FileName);
-        file.Write(serialized);
+        WriteFileWithChecksum(dirPath, NYdb::NDump::NFiles::TableScheme().FileName, serialized);
     }
 
     static void CreatePermissionsFile(const TString& dirPath) {
@@ -141,8 +142,7 @@ private:
         TString serialized;
         Y_ABORT_UNLESS(google::protobuf::TextFormat::PrintToString(permissions, &serialized));
 
-        TFileOutput file(dirPath + "/permissions.pb");
-        file.Write(serialized);
+        WriteFileWithChecksum(dirPath, "permissions.pb", serialized);
     }
 
     TTempDir TempDir;

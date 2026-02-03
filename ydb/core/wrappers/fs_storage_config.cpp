@@ -21,4 +21,8 @@ TFsExternalStorageConfig::TFsExternalStorageConfig(const Ydb::Export::ExportToFs
 {
 }
 
+TFsExternalStorageConfig::TFsExternalStorageConfig(const Ydb::Import::ImportFromFsSettings& settings)
+    : BasePath(settings.base_path())
+{
+}
 } // NKikimr::NWrappers::NExternalStorage

@@ -81,7 +81,7 @@ We are glad to welcome new contributors! The [contributor's guide](CONTRIBUTING.
 
 There's also a separate section of [YDB documentation for contributors](https://ydb.tech/docs/en/contributor/), mostly with more technical content.
 
-## Success Stories
+##  Success Stories
 
 Visit YDB [website](https://ydb.tech/) for the latest success stories and user scenarios.
 

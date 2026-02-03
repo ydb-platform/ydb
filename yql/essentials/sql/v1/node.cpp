@@ -857,6 +857,10 @@ void TAstListNodeImpl::CollectPreaggregateExprs(TContext& ctx, ISource& src, TVe
     }
 }
 
+const TString* TAstListNodeImpl::GetSourceName() const {
+    return DeriveCommonSourceName(Nodes_);
+}
+
 TNodePtr TAstListNodeImpl::DoClone() const {
     return new TAstListNodeImpl(Pos_, CloneContainer(Nodes_));
 }

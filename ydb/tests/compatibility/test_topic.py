@@ -34,6 +34,22 @@ class Workload:
                 writer.write(ydb.TopicWriterMessage(f"message-{time.time()}"))
                 self.message_count += 1
 
+    def write_to_topic_in_transaction(self, message_count):
+        messages = []
+        for i in range(message_count):
+            messages.append(f"transaction-message-{i}-{time.time()}")
+
+        with ydb.QuerySessionPool(self.driver) as session_pool:
+            def callee(tx):
+                writer = self.driver.topic_client.tx_writer(tx, self.topic_name)
+                for message in messages:
+                    writer.write(ydb.TopicWriterMessage(message))
+                    self.message_count += 1
+
+            session_pool.retry_tx_sync(callee)
+
+        return messages
+
     def read_from_topic(self):
         iteration = 0
         while iteration < 5:
@@ -113,3 +129,61 @@ class TestTopicRollingDowngrade(RollingDowngradeAndUpgradeFixture):
             utils.write_to_topic()
 
         utils.read_from_topic()
+
+
+class TestTopicTransaction(RollingUpgradeAndDowngradeFixture):
+    @pytest.fixture(autouse=True, scope="function")
+    def setup(self):
+        yield from self.setup_cluster()
+
+    def test_write_and_read_in_transaction(self):
+        """Test writing to topic within a transaction and reading the messages"""
+        utils = Workload(self.driver, self.endpoint)
+
+        utils.create_topic()
+
+        # Write messages in transaction
+        expected_messages = utils.write_to_topic_in_transaction(message_count=3000)
+
+        # Read and verify messages
+        utils.read_from_topic()
+
+        # Verify that all expected messages were processed
+        if utils.processed_message_count < len(expected_messages):
+            raise Exception(
+                f"Not all transaction messages were processed. "
+                f"Expected {len(expected_messages)}, got {utils.processed_message_count}"
+            )
+
+    def test_mixed_write_transaction_and_regular(self):
+        """Test mixing transaction and regular writes to the same topic"""
+        utils = Workload(self.driver, self.endpoint)
+
+        utils.create_topic()
+
+        message_count_before_transaction = 200
+        message_count_after_transaction = 100
+
+        # Write some messages regularly
+        with utils.driver.topic_client.writer(utils.topic_name, producer_id="regular-producer") as writer:
+            for i in range(message_count_before_transaction):
+                writer.write(ydb.TopicWriterMessage(f"regular-message-{i}"))
+                utils.message_count += 1
+
+        # Write some messages in transaction
+        transaction_messages = utils.write_to_topic_in_transaction(message_count=2000)
+
+        # Write more messages regularly
+        with utils.driver.topic_client.writer(utils.topic_name, producer_id="regular-producer-2") as writer:
+            for i in range(message_count_after_transaction):
+                writer.write(ydb.TopicWriterMessage(f"regular-message-{i+2}"))
+                utils.message_count += 1
+
+        # Read all messages
+        utils.read_from_topic()
+
+        expected_total = message_count_before_transaction + len(transaction_messages) + message_count_after_transaction
+        if utils.processed_message_count != expected_total:
+            raise Exception(
+                f"Expected {expected_total} messages to be processed, got {utils.processed_message_count}"
+            )

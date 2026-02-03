@@ -5,18 +5,22 @@
 #include "utils.h"
 
 #include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_graph_transformer.h>
+#include <yql/essentials/core/type_ann/type_ann_expr.h>
 #include <yql/essentials/parser/pg_wrapper/interface/parser.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/providers/config/yql_config_provider.h>
 
 namespace NYql {
 namespace NFastCheck {
 
 namespace {
 
-class TTranslatorRunner: public TCheckRunnerBase {
+class TTypecheckRunner: public TCheckRunnerBase {
 public:
     TString GetCheckName() const final {
-        return "translator";
+        return "typecheck";
     }
 
     TCheckResponse DoRun(const TChecksRequest& request, TCheckState& state) final {
@@ -32,40 +36,58 @@ public:
 
 private:
     TCheckResponse RunSExpr(const TChecksRequest& request, TCheckState& state) {
-        Y_UNUSED(request);
         TCheckResponse res{.CheckName = GetCheckName()};
 
         const auto* astResult = state.TranslateSExpr(res.Issues);
-        res.Success = astResult && astResult->IsOk();
+        if (!astResult || !astResult->IsOk()) {
+            res.Success = false;
+            return res;
+        }
+
+        res.Success = DoTypeCheck(astResult->Root, request.LangVer, res.Issues);
 
         return res;
     }
 
     TCheckResponse RunPg(const TChecksRequest& request, TCheckState& state) {
-        Y_UNUSED(request);
         TCheckResponse res{.CheckName = GetCheckName()};
 
         const auto* astResult = state.TranslatePg(res.Issues);
-        res.Success = astResult && astResult->IsOk();
+        if (!astResult || !astResult->IsOk()) {
+            res.Success = false;
+            return res;
+        }
+
+        res.Success = DoTypeCheck(astResult->Root, request.LangVer, res.Issues);
 
         return res;
     }
 
     TCheckResponse RunYql(const TChecksRequest& request, TCheckState& state) {
-        Y_UNUSED(request);
         TCheckResponse res{.CheckName = GetCheckName()};
 
         const auto* astResult = state.TranslateSql(res.Issues);
-        res.Success = astResult && astResult->IsOk();
+        if (!astResult || !astResult->IsOk()) {
+            res.Success = false;
+            return res;
+        }
+
+        res.Success = DoTypeCheck(astResult->Root, request.LangVer, res.Issues);
 
         return res;
+    }
+
+    bool DoTypeCheck(TAstNode* astRoot, TLangVersion langver, TIssues& issues) {
+        return PartialAnnonateTypes(astRoot, langver, issues, [](TTypeAnnotationContext& newTypeCtx) {
+            return CreateConfigProvider(newTypeCtx, nullptr, "", {}, /*forPartialTypeCheck=*/true);
+        });
     }
 };
 
 } // namespace
 
-std::unique_ptr<ICheckRunner> MakeTranslatorRunner() {
-    return std::make_unique<TTranslatorRunner>();
+std::unique_ptr<ICheckRunner> MakeTypecheckRunner() {
+    return std::make_unique<TTypecheckRunner>();
 }
 
 } // namespace NFastCheck

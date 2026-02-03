@@ -344,7 +344,7 @@ bool ParseNumbers(TContext& ctx, const TString& strOrig, ui64& value, TString& s
     }
     if (strLen > 1) {
         auto iter = str.cend() - 1;
-        if (*iter == 'l' || *iter == 's' || *iter == 't' || *iter == 's' || *iter == 'i' || *iter == 'b' || *iter == 'n') {
+        if (*iter == 'l' || *iter == 's' || *iter == 't' || *iter == 'i' || *iter == 'b' || *iter == 'n') {
             --iter;
         }
         if (*iter == 'u' || *iter == 'p') {

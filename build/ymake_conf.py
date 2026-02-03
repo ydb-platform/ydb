@@ -461,6 +461,10 @@ def preset(key, default=None):
     return opts().presets.get(key, default)
 
 
+def remove_preset(key):
+    opts().presets.pop(key, None)
+
+
 def is_positive(key):
     return is_positive_str(preset(key, ''))
 
@@ -2337,6 +2341,7 @@ class Setting(object):
     def emit(self):
         if not self.from_user or self.rewrite:
             emit(self.key, self.value)
+            remove_preset(self.key)
 
     no_value = object()
 
@@ -2539,6 +2544,12 @@ class Cuda(object):
 
         if version >= (11, 8):
             architectures.extend(['sm_89', 'sm_90'])
+
+        if version >= (12, 0):
+            architectures.append('sm_90a')
+
+        if version >= (12, 8):
+            architectures.extend(['sm_100', 'sm_100a', 'sm_120', 'sm_120a'])
 
         return ':'.join(architectures)
 

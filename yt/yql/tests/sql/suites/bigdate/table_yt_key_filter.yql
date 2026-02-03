@@ -3,6 +3,7 @@
 use plato;
 
 pragma yt.UseNewPredicateExtraction;
+pragma yt.KeepWorldDepForFillOp;
 
 insert into OutDate32
 select * from as_table(AsList(

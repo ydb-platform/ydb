@@ -1980,6 +1980,7 @@ bool TKqpTasksGraph::BuildComputeTasks(TStageInfo& stageInfo, const ui32 nodesCo
                 case NKqpProto::TKqpPhyConnection::kParallelUnionAll:
                 case NKqpProto::TKqpPhyConnection::kVectorResolve:
                 case NKqpProto::TKqpPhyConnection::kDqSourceStreamLookup:
+                case NKqpProto::TKqpPhyConnection::kReturningSink:
                     break;
                 default:
                     YQL_ENSURE(false, "Unexpected connection type: " << (ui32)input.GetTypeCase() << Endl);

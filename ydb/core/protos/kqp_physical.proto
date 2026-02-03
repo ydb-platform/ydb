@@ -319,6 +319,40 @@ message TKqpPhyCnStreamLookup {
     TKqpPhyVectorTopK VectorTopK = 11;
 }
 
+message TKqpPhyCnReturningSinkIndexSettings {
+    optional TKqpPhyTableId Table = 1;
+    repeated string KeyColumns = 2;
+    repeated string Columns = 3;
+    optional bool IsUniq = 4;
+    repeated uint32 WriteIndexes = 5;
+    optional uint32 KeyPrefixSize = 6;
+}
+
+message TKqpPhyCnReturningSink {
+    enum EType {
+        MODE_REPLACE = 0;
+        MODE_UPSERT = 1;
+        MODE_INSERT = 2;
+        MODE_DELETE = 3;
+        MODE_UPDATE = 4;
+        MODE_FILL = 5;
+        MODE_UPDATE_CONDITIONAL = 6; // UPDATE WHERE
+        MODE_UPSERT_INCREMENT = 7;
+    }
+
+    optional TKqpPhyTableId Table = 1;
+    repeated string KeyColumns = 2;
+    repeated string Columns = 3;
+    optional EType Type = 4;
+    optional int64 Priority = 5;
+    optional bool IsOlap = 6;
+    repeated uint32 WriteIndexes = 7;
+    optional bool EnableStreamWrite = 8;
+    repeated TKqpPhyCnReturningSinkIndexSettings Indexes = 9;
+    repeated string LookupColumns = 10;
+    repeated string ReturningColumns = 11;
+}
+
 message TKqpPhyCnVectorResolve {
     optional Ydb.Table.VectorIndexSettings IndexSettings = 1;
     TKqpPhyTableId Table = 2;
@@ -391,6 +425,7 @@ message TKqpPhyConnection {
         TKqpPhyCnParallelUnionAll ParallelUnionAll = 15;
         TKqpPhyCnVectorResolve VectorResolve = 16;
         TKqpPhyCnDqSourceStreamLookup DqSourceStreamLookup = 17;
+        TKqpPhyCnReturningSink ReturningSink = 18;
     };
 }
 

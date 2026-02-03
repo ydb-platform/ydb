@@ -384,6 +384,7 @@ bool HasUncommittedChangesRead(THashSet<NKikimr::TTableId>& modifiedTables, cons
                 case NKqpProto::TKqpPhyConnection::kValue:
                 case NKqpProto::TKqpPhyConnection::kMerge:
                 case NKqpProto::TKqpPhyConnection::kDqSourceStreamLookup:
+                case NKqpProto::TKqpPhyConnection::kReturningSink: // TODO:
                 case NKqpProto::TKqpPhyConnection::TYPE_NOT_SET:
                     break;
                 }

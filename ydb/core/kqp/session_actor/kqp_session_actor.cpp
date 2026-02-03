@@ -816,6 +816,8 @@ public:
     }
 
     void OnSuccessCompileRequest() {
+        Cerr << "COMPILED " << QueryState->CompileResult->PreparedQuery->GetPhysicalQuery().GetQueryAst() << Endl;
+
         if (QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_EXPLAIN) {
             TVector<IKqpGateway::TPhysicalTxData> txs;
             std::map<TString, TString> secureParams;

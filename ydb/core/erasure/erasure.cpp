@@ -60,6 +60,7 @@ static void Refurbish(TPartFragment &fragment, ui64 size, ui64 headroom = 0, ui6
 const char *TErasureType::ErasureSpeciesToStr(TErasureType::EErasureSpecies es) {
     switch (es) {
         case ErasureNone:           return "None";
+        case ErasureMirror3:        return "Mirror3";
         case Erasure4Plus2Block:    return "4Plus2Block";
         case ErasureMirror3dc:      return "Mirror3dc";
         case Erasure4Plus3Block:    return "4Plus3Block";
@@ -79,6 +80,7 @@ struct TErasureParameters {
 const TErasureParameters& GetErasureParameters(TErasureType::EErasureSpecies species) {
     static const std::unordered_map<TErasureType::EErasureSpecies, TErasureParameters> erasureSpeciesParameters{{
         {TErasureType::EErasureSpecies::ErasureNone,          {TErasureType::ErasureMirror,       1, 0, 1}}
+        ,{TErasureType::EErasureSpecies::ErasureMirror3,      {TErasureType::ErasureMirror,       1, 2, 1}}
         ,{TErasureType::EErasureSpecies::Erasure4Plus2Block,  {TErasureType::ErasureParityBlock,  4, 2, 5}}
         ,{TErasureType::EErasureSpecies::ErasureMirror3dc,    {TErasureType::ErasureMirror,       1, 2, 1}}
         ,{TErasureType::EErasureSpecies::Erasure4Plus3Block,  {TErasureType::ErasureParityBlock,  4, 3, 5}}
@@ -1939,6 +1941,7 @@ void XorBlockRestore(TErasureType::ECrcMode crcMode, const TErasureType &type, T
 
 const std::unordered_map<TErasureType::EErasureSpecies, TString> TErasureType::ErasureNames{{
     {TErasureType::EErasureSpecies::ErasureNone, "none"},
+    {TErasureType::EErasureSpecies::ErasureMirror3 ,"mirror-3"},
     {TErasureType::EErasureSpecies::Erasure4Plus2Block ,"block-4-2"},
     {TErasureType::EErasureSpecies::ErasureMirror3dc ,"mirror-3-dc"},
     {TErasureType::EErasureSpecies::Erasure4Plus3Block ,"block-4-3"},

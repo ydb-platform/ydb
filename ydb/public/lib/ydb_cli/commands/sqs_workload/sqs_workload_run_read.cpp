@@ -45,13 +45,15 @@ namespace NYdb::NConsoleClient {
             .DefaultValue(80.0)
             .StoreResult(&Scenario.Percentile);
         config.Opts
-            ->AddLongOption("consumers", "Number of concurrent consumers.")
+            ->AddLongOption("workers", "Number of concurrent workers.")
             .DefaultValue(1)
-            .StoreResult(&Scenario.Concurrency);
-        config.Opts->AddLongOption('a', "account", "AWS account ID.")
+            .StoreResult(&Scenario.WorkersCount);
+        config.Opts->AddLongOption("aws-access-key-id", "AWS access key id.")
             .StoreResult(&Scenario.Account);
-        config.Opts->AddLongOption('t', "token", "AWS token.")
+        config.Opts->AddLongOption("aws-session-token", "AWS session token.")
             .StoreResult(&Scenario.Token);
+        config.Opts->AddLongOption("aws-secret-key", "AWS secret access key.")  
+            .StoreResult(&Scenario.SecretKey);
         config.Opts->AddLongOption("error-messages-rate", "Error messages rate.")
             .Optional()
             .ManualDefaultValueDescription(

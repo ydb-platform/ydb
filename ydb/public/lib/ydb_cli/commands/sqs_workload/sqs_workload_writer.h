@@ -23,7 +23,7 @@ namespace NYdb::NConsoleClient {
         std::shared_ptr<TSqsWorkloadStatsCollector> StatsCollector;
         ui64 MaxUniqueMessages;
         ui32 BatchSize;
-        ui32 Concurrency;
+        ui32 WorkersCount;
         ui32 GroupsAmount;
         ui32 MessageSize;
         bool SetSubjectToken;

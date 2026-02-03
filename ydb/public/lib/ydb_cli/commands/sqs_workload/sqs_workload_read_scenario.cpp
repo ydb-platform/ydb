@@ -17,7 +17,7 @@ namespace NYdb::NConsoleClient {
     }
 
     int TSqsWorkloadReadScenario::RunScenario() {
-        InitStatsCollector(0, Concurrency);
+        InitStatsCollector(0, WorkersCount);
         InitMeasuringHttpClient(StatsCollector);
         InitSqsClient();
 
@@ -34,7 +34,7 @@ namespace NYdb::NConsoleClient {
             .Mutex = Mutex,
             .FinishedCond = FinishedCond,
             .StartedCount = StartedCount,
-            .Concurrency = Concurrency,
+            .WorkersCount = WorkersCount,
             .BatchSize = BatchSize,
             .ErrorMessagesRate = ErrorMessagesRate,
             .ErrorMessagesDestiny = ErrorMessagesDestiny,

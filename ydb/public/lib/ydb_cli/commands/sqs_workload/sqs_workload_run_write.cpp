@@ -42,13 +42,15 @@ namespace NYdb::NConsoleClient {
                             "Print timestamp each second with statistics.")
             .StoreTrue(&Scenario.PrintTimestamp);
         config.Opts
-            ->AddLongOption("producers", "Number of concurrent producers.")
+            ->AddLongOption("workers", "Number of concurrent workers.")
             .DefaultValue(1)
-            .StoreResult(&Scenario.Concurrency);
-        config.Opts->AddLongOption('a', "account", "AWS account ID.")
+            .StoreResult(&Scenario.WorkersCount);
+        config.Opts->AddLongOption("aws-access-key-id", "AWS access key id.")
             .StoreResult(&Scenario.Account);
-        config.Opts->AddLongOption('t', "token", "AWS token.")
+        config.Opts->AddLongOption("aws-session-token", "AWS session token.")
             .StoreResult(&Scenario.Token);
+        config.Opts->AddLongOption("aws-secret-key", "AWS secret access key.")
+            .StoreResult(&Scenario.SecretKey);
         config.Opts->AddLongOption('b', "batch-size", "AWS batch size.")
             .DefaultValue(1)
             .StoreResult(&Scenario.BatchSize);

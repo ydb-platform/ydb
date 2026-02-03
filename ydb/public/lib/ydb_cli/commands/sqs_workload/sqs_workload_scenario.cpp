@@ -61,7 +61,7 @@ namespace NYdb::NConsoleClient {
         sqsClientConfiguration.httpRequestTimeoutMs = RequestTimeoutMs;
         sqsClientConfiguration.executor =
             Aws::MakeShared<Aws::Utils::Threading::PooledThreadExecutor>(
-                "pooled-thread-executor", Concurrency);
+                "pooled-thread-executor", WorkersCount);
 
         if (Region.Defined()) {
             sqsClientConfiguration.region = Aws::String(Region->c_str(), Region->size());
@@ -75,10 +75,13 @@ namespace NYdb::NConsoleClient {
 
         if (Token.Defined()) {
             Aws::String tokenStr(Token->c_str(), Token->size());
-            credentials.SetAWSSecretKey(tokenStr.c_str());
+            credentials.SetSessionToken(tokenStr.c_str());
         }
 
-        credentials.SetAWSSecretKey("unused");
+        if (SecretKey.Defined()) {
+            Aws::String secretKeyStr(SecretKey->c_str(), SecretKey->size());
+            credentials.SetAWSSecretKey(secretKeyStr.c_str());
+        }
 
         if (UseJsonAPI) {
             auto jsonSqsClient = Aws::MakeShared<TSQSJsonClient>(

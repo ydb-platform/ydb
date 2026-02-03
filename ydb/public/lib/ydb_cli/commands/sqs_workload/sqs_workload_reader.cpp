@@ -163,8 +163,8 @@ namespace NYdb::NConsoleClient {
 
             {
                 std::unique_lock locker(*params.Mutex);
-                // Concurrency tasks are running in parallel and also Concurrency tasks are waiting in executor queue
-                while (*params.StartedCount >= params.Concurrency * 2) {
+                // WorkersCount tasks are running in parallel and also WorkersCount tasks are waiting in executor queue
+                while (*params.StartedCount >= params.WorkersCount * 2) {
                     params.FinishedCond->wait(locker);
                 }
 

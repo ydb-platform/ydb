@@ -25,6 +25,7 @@ namespace NYdb::NConsoleClient {
         std::shared_ptr<std::atomic_bool> ErrorFlag;
         std::shared_ptr<TSqsWorkloadStatsCollector> StatsCollector;
         TMaybe<TString> Token;
+        TMaybe<TString> SecretKey;
         TString QueueUrl;
         TMaybe<TString> Account;
         TMaybe<TString> Region;
@@ -33,7 +34,7 @@ namespace NYdb::NConsoleClient {
         ui32 BatchSize;
         ui32 MessageSize;
         ui32 GroupsAmount;
-        ui32 Concurrency;
+        ui32 WorkersCount;
         ui32 RequestTimeoutMs;
         bool UseJsonAPI;
         bool SetSubjectToken;

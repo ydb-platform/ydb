@@ -5571,7 +5571,7 @@ Y_UNIT_TEST(BuiltinFileOpNoArgs) {
 Y_UNIT_TEST(ProcessWithHaving) {
     NYql::TAstParseResult res = SqlToYql("process plato.Input using some::udf(value) having value == 1");
     UNIT_ASSERT(!res.Root);
-    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:15: Error: PROCESS does not allow HAVING yet! You may request it on yql@ maillist.\n");
+    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:15: Error: PROCESS does not allow HAVING yet!\n");
 }
 
 Y_UNIT_TEST(ReduceNoBy) {

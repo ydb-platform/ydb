@@ -20,9 +20,9 @@ namespace NYdb::NConsoleClient {
         config.Opts->AddLongOption("queue-url", "AWS queue URL.")
             .Required()
             .StoreResult(&Scenario.QueueUrl);
-        config.Opts->AddLongOption("endpoint-override", "AWS queue endpoint.")
+        config.Opts->AddLongOption("queue-endpoint", "Queue endpoint.")
             .Optional()
-            .StoreResult(&Scenario.EndpointOverride);
+            .StoreResult(&Scenario.QueueEndpoint);
         config.Opts->AddLongOption('s', "seconds", "Seconds to run workload.")
             .DefaultValue(60)
             .StoreResult(&Scenario.TotalSec);

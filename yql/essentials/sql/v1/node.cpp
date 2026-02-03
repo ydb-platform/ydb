@@ -1242,6 +1242,12 @@ bool TWinRank::DoInit(TContext& ctx, ISource* src) {
 
     if (Args_.empty()) {
         for (const auto& spec : orderSpec) {
+            // It relies on a fact that ORDER BY is
+            // already validated at `TSelectCore::InitSelect`.
+            if (!spec->OrderExpr->Init(ctx, src)) {
+                return false;
+            }
+
             Args_.push_back(spec->Clone()->OrderExpr);
         }
 

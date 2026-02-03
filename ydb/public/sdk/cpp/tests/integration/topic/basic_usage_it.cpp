@@ -15,6 +15,7 @@
 #include <gtest/gtest.h>
 
 #include <future>
+#include <ydb/public/sdk/cpp/src/client/topic/impl/write_session.h>
 
 
 namespace NYdb::inline Dev::NPersQueue::NTests {
@@ -37,6 +38,83 @@ std::uint64_t TSimpleWriteSessionTestAdapter::GetAcquiredMessagesCount() const {
         return Session->Writer->TryGetImpl()->MessagesAcquired;
     else
         return 0;
+}
+
+class TKeyedWriteSessionTestAdapter {
+public:
+    TKeyedWriteSessionTestAdapter(NTopic::IKeyedWriteSession* session);
+
+    void WaitForAcks(size_t count, TDuration timeout);
+    std::optional<TContinuationToken> GetContinuationToken(TDuration timeout);
+    size_t GetAckedSeqNosCount() const;
+    bool ValidateAcksOrder() const;
+
+private:
+    void RunEventLoop(TDuration timeout, size_t stopOnAcksCount, bool stopOnContinuationToken = false);
+
+    NTopic::IKeyedWriteSession* Session;
+    std::queue<TContinuationToken> tokens;
+    std::vector<std::uint64_t> ackedSeqNos;
+};
+
+TKeyedWriteSessionTestAdapter::TKeyedWriteSessionTestAdapter(NTopic::IKeyedWriteSession* session)
+    : Session(session)
+{}
+
+void TKeyedWriteSessionTestAdapter::WaitForAcks(size_t count, TDuration timeout) {
+    RunEventLoop(timeout, count, false);
+}
+
+bool TKeyedWriteSessionTestAdapter::ValidateAcksOrder() const {
+    size_t expectedSeqNo = 1;
+    for (const auto& seqNo : ackedSeqNos) {
+        if (seqNo != expectedSeqNo) {
+            return false;
+        }
+        expectedSeqNo++;
+    }
+    return true;
+}
+
+size_t TKeyedWriteSessionTestAdapter::GetAckedSeqNosCount() const {
+    return ackedSeqNos.size();
+}
+
+std::optional<TContinuationToken> TKeyedWriteSessionTestAdapter::GetContinuationToken(TDuration timeout) {
+    RunEventLoop(timeout, 0, true);
+    if (tokens.empty()) {
+        return std::nullopt;
+    }
+    auto token = std::move(tokens.front());
+    tokens.pop();
+    return token;
+}
+
+void TKeyedWriteSessionTestAdapter::RunEventLoop(TDuration timeout, size_t stopOnAcksCount, bool stopOnContinuationToken) {
+    auto deadline = TInstant::Now() + timeout;
+    while (TInstant::Now() < deadline) {
+        Session->WaitEvent().Wait(deadline);
+        auto event = Session->GetEvent(false);
+        if (!event) {
+            continue;
+        }
+        if (auto ev = std::get_if<NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(&*event)) {
+            tokens.push(std::move(ev->ContinuationToken));
+            if (stopOnContinuationToken) {
+                return;
+            }
+            continue;
+        }
+        if (auto ev = std::get_if<NTopic::TWriteSessionEvent::TAcksEvent>(&*event)) {
+            for (const auto& ack : ev->Acks) {
+                ackedSeqNos.push_back(ack.SeqNo);
+            }
+
+            if (ackedSeqNos.size() >= stopOnAcksCount) {
+                return;
+            }
+        }
+    }
 }
 
 }
@@ -828,6 +906,116 @@ TEST_F(BasicUsage, TEST_NAME(TWriteSession_WriteEncoded_Broken)) {
                     }
                     ++readMessageCount;
                 }
+            },
+            [&](TReadSessionEvent::TCommitOffsetAcknowledgementEvent&) {
+                FAIL();
+            },
+            [&](TReadSessionEvent::TStartPartitionSessionEvent& event) {
+                event.Confirm();
+            },
+            [&](TReadSessionEvent::TStopPartitionSessionEvent& event) {
+                event.Confirm();
+            },
+            [&](TReadSessionEvent::TEndPartitionSessionEvent& event) {
+                event.Confirm();
+            },
+            [&](TReadSessionEvent::TPartitionSessionStatusEvent&) {
+                FAIL() << "Test does not support lock sessions yet";
+            },
+            [&](TReadSessionEvent::TPartitionSessionClosedEvent&) {
+                FAIL() << "Test does not support lock sessions yet";
+            },
+            [&](TSessionClosedEvent&) {
+                FAIL() << "Session closed";
+            }
+        }, event);
+    }
+}
+
+TEST_F(BasicUsage, TEST_NAME(TKeyedWriteSessionBasicWrite_NoAutoPartitioning)) {
+    // Basic write test for keyed write session.
+    // Write 10 messages with different keys and check that they are written to different partitions.
+    // Check that the order of messages is preserved.
+    constexpr auto TOPIC_NAME = "test-topic-2";
+    constexpr auto CONSUMER_NAME = "test-consumer-2";
+
+    CreateTopic(TOPIC_NAME, CONSUMER_NAME, 5, 10);
+
+    auto driver = MakeDriver();
+    TTopicClient client(driver);
+
+    auto describeTopicSettings = TDescribeTopicSettings().IncludeStats(true);
+
+    TKeyedWriteSessionSettings writeSettings;
+    writeSettings
+        .Path(GetTopicPath(TOPIC_NAME))
+        .Codec(ECodec::RAW);
+    writeSettings.ProducerIdPrefix(CreateGuidAsString());
+    writeSettings.PartitionChooserStrategy(TKeyedWriteSessionSettings::EPartitionChooserStrategy::Bound);
+    writeSettings.SubSessionIdleTimeout(TDuration::Seconds(30));
+    writeSettings.PartitioningKeyHasher([](const std::string_view key) -> std::string {
+        return std::string{key};
+    });
+
+    auto session = client.CreateKeyedWriteSession(writeSettings);
+    auto keyedSession = std::dynamic_pointer_cast<TKeyedWriteSession>(session);
+    const auto& partitions = keyedSession->GetPartitions();
+
+    std::unordered_map<ui64, ui64> keysCount;
+    for (const auto& p : partitions) {
+        keysCount[p.PartitionId_] = 0;
+    }
+
+    NPersQueue::NTests::TKeyedWriteSessionTestAdapter testAdapter(session.get());
+    for (size_t i = 0; i < 100; ++i) {
+        auto key = CreateGuidAsString();
+        for (const auto& p : partitions) {
+            if (p.InRange(key)) {
+                keysCount[p.PartitionId_]++;
+                break;
+            }
+        }
+
+        auto token = testAdapter.GetContinuationToken(TDuration::Seconds(30));
+        ASSERT_TRUE(token.has_value()) << "Timed out waiting for ReadyToAcceptEvent";
+        TWriteMessage msg("msg");
+        msg.SeqNo(i + 1);
+        session->Write(std::move(*token), key, std::move(msg));
+    }
+
+    testAdapter.WaitForAcks(100, TDuration::Seconds(30));
+    ASSERT_TRUE(session->Close(TDuration::Seconds(10)));
+    ASSERT_EQ(testAdapter.GetAckedSeqNosCount(), 100ull);
+    ASSERT_TRUE(testAdapter.ValidateAcksOrder());
+
+    auto after = client.DescribeTopic(GetTopicPath(TOPIC_NAME), describeTopicSettings).GetValueSync();
+    ASSERT_TRUE(after.IsSuccess()) << after.GetIssues().ToOneLineString();
+    const auto& afterPartitions = after.GetTopicDescription().GetPartitions();
+
+    std::unordered_map<ui64, ui64> endOffsets;
+    for (const auto& p : afterPartitions) {
+        auto stats = p.GetPartitionStats();
+        ASSERT_TRUE(stats.has_value());
+        endOffsets[p.GetPartitionId()] = stats->GetEndOffset();
+    }
+
+    for (const auto& p : partitions) {
+        auto sb = TStringBuilder() << "partitionId=" << p.PartitionId_ << " endOffset=" << endOffsets[p.PartitionId_] << " keysCount=" << keysCount[p.PartitionId_];
+        ASSERT_EQ(endOffsets[p.PartitionId_], keysCount[p.PartitionId_]) << sb.c_str();
+    }
+
+    auto readSettings = TReadSessionSettings()
+        .ConsumerName(GetConsumerName(CONSUMER_NAME))
+        .AppendTopics(GetTopicPath(TOPIC_NAME))
+        ;
+    std::shared_ptr<IReadSession> readSession = client.CreateReadSession(readSettings);
+    std::uint32_t readMessageCount = 0;
+    while (readMessageCount < 100) {
+        std::cerr << "Get event on client\n";
+        auto event = *readSession->GetEvent(true);
+        std::visit(TOverloaded {
+            [&](TReadSessionEvent::TDataReceivedEvent& event) {
+                readMessageCount += event.GetMessages().size();
             },
             [&](TReadSessionEvent::TCommitOffsetAcknowledgementEvent&) {
                 FAIL();

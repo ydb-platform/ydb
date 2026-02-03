@@ -200,7 +200,7 @@ struct TReadSessionSettings: public TRequestSettings<TReadSessionSettings> {
     FLUENT_SETTING_OPTIONAL(TLog, Log);
 
     //! InFlightMemoryController.
-    FLUENT_SETTING_OPTIONAL(ui64, PartitionMaxInFlightBytes);
+    FLUENT_SETTING_OPTIONAL(std::uint64_t, PartitionMaxInFlightBytes);
 };
 
 struct TReadSessionGetEventSettings : public TCommonClientSettingsBase<TReadSessionGetEventSettings> {

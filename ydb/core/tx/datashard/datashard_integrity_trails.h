@@ -140,7 +140,7 @@ inline void LogIntegrityTrailsLocks(const TActorContext& ctx, const ui64 tabletI
         LogKeyValue("TabletId", ToString(tabletId), ss);
         LogKeyValue("PhyTxId", ToString(txId), ss);
 
-        ss << "BreakLocks: [";
+        ss << "BrokenLocks: [";
         for (const auto& lock : locks) {
             ss << lock << " ";
         }

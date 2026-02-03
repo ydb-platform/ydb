@@ -1659,7 +1659,7 @@
         "ColumnsAdded": [
             {
                 "ColumnId": 7,
-                "ColumnName": "QueryTraceId",
+                "ColumnName": "VictimQueryTraceId",
                 "ColumnType": "Uint64"
             },
             {

@@ -35,7 +35,7 @@ public:
         }
         NJson::TJsonValue blobSizeOthers = NJson::JSON_ARRAY;
         for (const auto& otherColumn: AddressesProto.GetOtherColumns()) {
-            blobSizeColumns.AppendValue(otherColumn.GetSize());
+            blobSizeOthers.AppendValue(otherColumn.GetSize());
         }
         NJson::TJsonValue result = NJson::JSON_MAP;
         result.InsertValue("columns", ColumnStats.DebugJson());

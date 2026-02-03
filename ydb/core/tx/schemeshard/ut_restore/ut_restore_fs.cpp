@@ -281,16 +281,22 @@ Y_UNIT_TEST_SUITE(TImportFromFsTests) {
         ui64 txId = 100;
         runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
 
-        // Invalid destination path (empty) should fail validation
-        TestImport(runtime, ++txId, "/MyRoot", R"(
+        TTempBackupFiles backup;
+        backup.CreateTableBackup("backup/Table", "Table");
+
+        // Invalid destination path (empty)
+        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
             ImportFromFsSettings {
-              base_path: "/mnt/backups"
+              base_path: "%s"
               items {
                 source_path: "backup/Table"
                 destination_path: ""
               }
             }
-        )", "", "", Ydb::StatusIds::BAD_REQUEST);
+        )", backup.GetBasePath().c_str()));
+        env.TestWaitNotification(runtime, txId);
+
+        TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::CANCELLED);
     }
 
     Y_UNIT_TEST(ShouldFailOnDuplicateDestination) {

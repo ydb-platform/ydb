@@ -338,7 +338,7 @@ public:
 };
 
 //! Simple blocking keyed write session. Experimental SDK. DO NOT USE IN PRODUCTION.
-class ISimpleBlockingKeyedWriteSession{
+class ISimpleBlockingKeyedWriteSession {
 public:
     //! Write single message.
     //! continuationToken - a token earlier provided to client with ReadyToAccept event.

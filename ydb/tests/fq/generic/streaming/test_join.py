@@ -2,6 +2,7 @@ import pytest
 import os
 import json
 import sys
+import time
 from collections import Counter
 from itertools import chain, islice
 
@@ -1031,8 +1032,8 @@ class TestJoinStreaming(TestYdsBase):
         "mvp_external_ydb_endpoint", [{"endpoint": "tests-fq-generic-streaming-ydb:2136"}], indirect=True
     )
     @pytest.mark.parametrize("fq_client", [{"folder_id": "my_folder_slj"}], indirect=True)
-    @pytest.mark.parametrize("partitions_count", [1])
-    @pytest.mark.parametrize("tasks", [1])
+    @pytest.mark.parametrize("partitions_count", [1, 2])
+    @pytest.mark.parametrize("tasks", [1, 2])
     @pytest.mark.parametrize("streamlookup", [True, False])
     @pytest.mark.parametrize("ca", ["sync", "async"])
     @pytest.mark.parametrize("limit", [6, 7, 8, 9, None])
@@ -1142,7 +1143,12 @@ class TestJoinStreaming(TestYdsBase):
         kikimr.compute_plane.wait_zero_checkpoint(query_id)
 
         for offset in range(0, len(messages), MAX_WRITE_STREAM_SIZE):
-            self.write_stream(map(lambda x: x[0], messages[offset : offset + MAX_WRITE_STREAM_SIZE]))
+            self.write_stream(
+                map(lambda x: x[0], messages[offset : offset + MAX_WRITE_STREAM_SIZE]),
+                partition_key=b'1',
+            )
+        if partitions_count > 1 or tasks > 1:
+            time.sleep(5.0)
 
         expected_len = sum(map(len, messages)) - len(messages)
         read_data = self.read_stream(expected_len)

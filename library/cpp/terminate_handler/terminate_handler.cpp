@@ -11,7 +11,6 @@ namespace {
     thread_local int TerminateCount = 0;
 
     void FancyTerminateHandler() {
-        Cerr << "Fancy terminate handler" << Endl;
         switch (++TerminateCount) {
             case 1:
                 break;

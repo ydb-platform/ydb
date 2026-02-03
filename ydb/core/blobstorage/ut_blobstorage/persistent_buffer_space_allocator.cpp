@@ -1,0 +1,153 @@
+#include <ydb/core/blobstorage/ddisk/persistent_buffer_space_allocator.h>
+#include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
+
+namespace NKikimr::NDDisk {
+
+Y_UNIT_TEST_SUITE(PersistentBufferSpaceAllocator) {
+
+    Y_UNIT_TEST(Empty) {
+        TPersistentBufferSpaceAllocator allocator;
+        UNIT_ASSERT(allocator.Occupy(10).size() == 0);
+    }
+
+    Y_UNIT_TEST(OneOccupy) {
+        TPersistentBufferSpaceAllocator allocator;
+        allocator.AddNewChunk(123);
+        auto result = allocator.Occupy(10);
+        UNIT_ASSERT(result.size() == 10);
+        for(ui32 i : xrange(10)) {
+            UNIT_ASSERT(result[i].ChunkIdx == 123);
+            UNIT_ASSERT(result[i].SectorIdx == i);
+        }
+    }
+
+    Y_UNIT_TEST(OccupyAllSpaceAndAddNewChunk) {
+        TPersistentBufferSpaceAllocator allocator;
+        allocator.AddNewChunk(123);
+        for (ui32 i : xrange(32768 / 10)) {
+            auto result = allocator.Occupy(10);
+            UNIT_ASSERT(result.size() == 10);
+            for(ui32 j : xrange(10)) {
+                UNIT_ASSERT(result[j].ChunkIdx == 123);
+                UNIT_ASSERT(result[j].SectorIdx == i * 10 + j);
+            }
+        }
+        UNIT_ASSERT(allocator.Occupy(10).size() == 0);
+        allocator.AddNewChunk(321);
+        auto result = allocator.Occupy(20);
+        UNIT_ASSERT(result.size() == 20);
+        for(ui32 j : xrange(8)) {
+            UNIT_ASSERT(result[j].ChunkIdx == 123);
+            UNIT_ASSERT(result[j].SectorIdx == 32760 + j);
+        }
+        for(ui32 j : xrange(8, 12)) {
+            UNIT_ASSERT(result[j].ChunkIdx == 321);
+            UNIT_ASSERT(result[j].SectorIdx == j - 8);
+        }
+    }
+
+    Y_UNIT_TEST(OccupyChunkSeedTest) {
+        TPersistentBufferSpaceAllocator allocator;
+        allocator.AddNewChunk(11);
+        allocator.AddNewChunk(22);
+        allocator.AddNewChunk(33);
+        for (ui32 i : xrange(32768 / 10)) {
+            auto result = allocator.Occupy(10);
+            UNIT_ASSERT(result.size() == 10);
+            for(ui32 j : xrange(10)) {
+                UNIT_ASSERT(result[j].ChunkIdx == (i % 3 + 1) * 11);
+                UNIT_ASSERT(result[j].SectorIdx == i / 3 * 10 + j);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(OccupyHoleTest) {
+        TPersistentBufferSpaceAllocator allocator;
+        allocator.AddNewChunk(11);
+        allocator.Occupy(10);
+        allocator.Occupy(10);
+        auto result = allocator.Occupy(10);
+        allocator.Occupy(10);
+        allocator.Occupy(10);
+        auto result2 = allocator.Occupy(10);
+        allocator.Occupy(10);
+        allocator.Free(result);
+        allocator.Free(result2);
+        result = allocator.Occupy(10);
+        UNIT_ASSERT(result.size() == 10);
+        for(ui32 j : xrange(10)) {
+            UNIT_ASSERT(result[j].ChunkIdx == 11);
+            UNIT_ASSERT(result[j].SectorIdx == 20 + j);
+        }
+    }
+
+    Y_UNIT_TEST(OccupyDoubleHoleTest) {
+        TPersistentBufferSpaceAllocator allocator;
+        allocator.AddNewChunk(11);
+        allocator.Occupy(10);
+        allocator.Occupy(10);
+        auto result = allocator.Occupy(10);
+        auto result2 = allocator.Occupy(10);
+        allocator.Occupy(10);
+        allocator.Free(result);
+        allocator.Free(result2);
+        result = allocator.Occupy(15);
+        UNIT_ASSERT(result.size() == 15);
+        for(ui32 j : xrange(15)) {
+            UNIT_ASSERT(result[j].ChunkIdx == 11);
+            UNIT_ASSERT(result[j].SectorIdx == 20 + j);
+        }
+    }
+
+    Y_UNIT_TEST(OccupyBestChoiseTest) {
+        TPersistentBufferSpaceAllocator allocator;
+        // 10 20 10 10 30 30 10
+        //       XX    XX       XXXXXXX
+        //             ^^
+        allocator.AddNewChunk(11);
+        allocator.Occupy(10);
+        allocator.Occupy(20);
+        auto result = allocator.Occupy(10);
+        allocator.Occupy(10);
+        auto result2 = allocator.Occupy(30);
+        allocator.Occupy(30);
+        allocator.Occupy(10);
+        allocator.Free(result);
+        allocator.Free(result2);
+        result = allocator.Occupy(15);
+        UNIT_ASSERT(result.size() == 15);
+        for(ui32 j : xrange(15)) {
+            UNIT_ASSERT(result[j].ChunkIdx == 11);
+            UNIT_ASSERT(result[j].SectorIdx == 50 + j);
+        }
+    }
+
+    Y_UNIT_TEST(FragmentationTest) {
+        TPersistentBufferSpaceAllocator allocator;
+        // 10 20 10 10 30 10 10 ......
+        //       XX    XX
+        //       ^^    ^^
+        allocator.AddNewChunk(11);
+        allocator.Occupy(10);
+        allocator.Occupy(20);
+        auto result = allocator.Occupy(10);
+        allocator.Occupy(10);
+        auto result2 = allocator.Occupy(30);
+        for (ui32 _ : xrange((32768 - 90) / 10)) {
+            allocator.Occupy(10);
+        }
+        allocator.Free(result);
+        allocator.Free(result2);
+        result = allocator.Occupy(37);
+        UNIT_ASSERT(result.size() == 37);
+        for(ui32 j : xrange(10)) {
+            UNIT_ASSERT(result[j].ChunkIdx == 11);
+            UNIT_ASSERT(result[j].SectorIdx == 30 + j);
+        }
+        for(ui32 j : xrange(10, 27)) {
+            UNIT_ASSERT(result[j].ChunkIdx == 11);
+            UNIT_ASSERT(result[j].SectorIdx == 50 + j - 10);
+        }
+    }
+}
+};

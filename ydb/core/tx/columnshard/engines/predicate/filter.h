@@ -144,7 +144,7 @@ private:
 public:
     virtual ~ICursorEntity() = default;
 
-    ui64 GetDeprecaredPortionId() const {
+    ui64 GetDeprecatedPortionId() const {
         return DoGetDeprecatedPortionId();
     }
     ui64 GetEntityId() const {
@@ -265,7 +265,7 @@ protected:
 
     virtual bool DoCheckEntityIsBorder(const ICursorEntity& entity, bool& usage) const override {
         AFL_VERIFY(!!PortionId);
-        if (*PortionId != entity.GetDeprecaredPortionId()) {
+        if (*PortionId != entity.GetDeprecatedPortionId()) {
             return false;
         }
         if (!entity.GetEntityRecordsCount()) {

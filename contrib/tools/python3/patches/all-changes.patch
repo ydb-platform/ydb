@@ -8,93 +8,6 @@
  #endif
 
  #if defined(MS_WINDOWS)
---- a/Lib/ctypes/__init__.py	(index)
-+++ b/Lib/ctypes/__init__.py	(working tree)
-@@ -11,6 +11,7 @@ from _ctypes import CFuncPtr as _CFuncPtr
- from _ctypes import RTLD_LOCAL, RTLD_GLOBAL
- from _ctypes import ArgumentError
- from _ctypes import SIZEOF_TIME_T
-+from .util import find_library as _find_library
- 
- from struct import calcsize as _calcsize
- 
-@@ -372,8 +373,15 @@ class CDLL(object):
-             _restype_ = self._func_restype_
-         self._FuncPtr = _FuncPtr
- 
-+        self._builtin = {}
-+
-         if handle is None:
--            self._handle = _dlopen(self._name, mode)
-+            if isinstance(self._name, dict):
-+                self._builtin = self._name['symbols']
-+                self._name = self._name['name']
-+                self._handle = 0
-+            else:
-+                self._handle = _dlopen(self._name, mode)
-         else:
-             self._handle = handle
- 
-@@ -391,7 +399,13 @@ class CDLL(object):
-         return func
- 
-     def __getitem__(self, name_or_ordinal):
--        func = self._FuncPtr((name_or_ordinal, self))
-+        if self._builtin:
-+            if name_or_ordinal not in self._builtin:
-+                raise AttributeError("function %r not found" % name_or_ordinal)
-+            func = self._FuncPtr(self._builtin[name_or_ordinal])
-+        else:
-+            func = self._FuncPtr((name_or_ordinal, self))
-+
-         if not isinstance(name_or_ordinal, int):
-             func.__name__ = name_or_ordinal
-         return func
-@@ -458,12 +472,20 @@ class LibraryLoader(object):
- cdll = LibraryLoader(CDLL)
- pydll = LibraryLoader(PyDLL)
- 
--if _os.name == "nt":
--    pythonapi = PyDLL("python dll", None, _sys.dllhandle)
--elif _sys.platform == "cygwin":
--    pythonapi = PyDLL("libpython%d.%d.dll" % _sys.version_info[:2])
--else:
-+#if _os.name == "nt":
-+#    pythonapi = PyDLL("python dll", None, _sys.dllhandle)
-+#elif _sys.platform == "cygwin":
-+#    pythonapi = PyDLL("libpython%d.%d.dll" % _sys.version_info[:2])
-+#else:
-+#    pythonapi = PyDLL(None)
-+
-+try:
-     pythonapi = PyDLL(None)
-+except:
-+    try:
-+        pythonapi = PyDLL(_find_library('python'))
-+    except:
-+        pythonapi = PyDLL(dict(name='python', symbols={}))
- 
- 
- if _os.name == "nt":
---- a/Lib/ctypes/util.py	(index)
-+++ b/Lib/ctypes/util.py	(working tree)
-@@ -329,6 +329,16 @@ elif os.name == "posix":
-             return _findSoname_ldconfig(name) or \
-                    _get_soname(_findLib_gcc(name)) or _get_soname(_findLib_ld(name))
- 
-+try:
-+    from library.python.symbols.module import find_library as _find_library
-+except ImportError:
-+    pass
-+else:
-+    _next_find_library = find_library
-+
-+    def find_library(name):
-+        return _find_library(name, _next_find_library)
-+
- ################################################################
- # test code
- 
 --- a/Lib/doctest.py	(index)
 +++ b/Lib/doctest.py	(working tree)
 @@ -957,7 +957,7 @@ class DocTestFinder:
@@ -237,9 +150,9 @@
  
      /* pass NULL as the config: config is read from command line arguments,
         environment variables, configuration files */
---- a/PC/pyconfig.h	(index)
-+++ b/PC/pyconfig.h	(working tree)
-@@ -306,10 +306,6 @@ Py_NO_ENABLE_SHARED to find out.  Also support MS_NO_COREDLL for b/w compat */
+--- a/PC/pyconfig.h.in (index)
++++ b/PC/pyconfig.h.in (working tree)
+@@ -306,10 +306,6 @@
  #       endif
  #endif
  
@@ -250,7 +163,7 @@
  
  #ifdef MS_WIN32
  
-@@ -460,7 +456,9 @@ Py_NO_ENABLE_SHARED to find out.  Also support MS_NO_COREDLL for b/w compat */
+@@ -460,7 +456,9 @@
  /* #define WITH_READLINE 1 */
  
  /* Use Python's own small-block memory-allocator. */
@@ -258,8 +171,8 @@
  #define WITH_PYMALLOC 1
 +#endif
  
- /* Define if you want to compile in object freelists optimization */
- #define WITH_FREELISTS 1
+ /* Define if you want to compile in mimalloc memory allocator. */
+ #define WITH_MIMALLOC 1
 --- a/Python/initconfig.c	(index)
 +++ b/Python/initconfig.c	(working tree)
 @@ -163,7 +163,7 @@ int Py_InspectFlag = 0; /* Needed to determine whether to exit at SystemExit */

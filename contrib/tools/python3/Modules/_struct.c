@@ -7,12 +7,13 @@
 #  define Py_BUILD_CORE_MODULE 1
 #endif
 
-#define PY_SSIZE_T_CLEAN
-
 #include "Python.h"
+#include "pycore_bytesobject.h"   // _PyBytesWriter
+#include "pycore_long.h"          // _PyLong_AsByteArray()
 #include "pycore_moduleobject.h"  // _PyModule_GetState()
-#include "structmember.h"         // PyMemberDef
-#include <ctype.h>
+#include "pycore_weakref.h"       // FT_CLEAR_WEAKREFS()
+
+#include <stddef.h>               // offsetof()
 
 /*[clinic input]
 class Struct "PyStructObject *" "&PyStructType"
@@ -107,19 +108,22 @@ class cache_struct_converter(CConverter):
     type = 'PyStructObject *'
     converter = 'cache_struct_converter'
     c_default = "NULL"
+    broken_limited_capi = True
 
-    def parse_arg(self, argname, displayname):
-        return """
+    def parse_arg(self, argname, displayname, *, limited_capi):
+        assert not limited_capi
+        return self.format_code("""
             if (!{converter}(module, {argname}, &{paramname})) {{{{
                 goto exit;
             }}}}
-            """.format(argname=argname, paramname=self.name,
-                       converter=self.converter)
+            """,
+            argname=argname,
+            converter=self.converter)
 
     def cleanup(self):
         return "Py_XDECREF(%s);\n" % self.name
 [python start generated code]*/
-/*[python end generated code: output=da39a3ee5e6b4b0d input=d6746621c2fb1a7d]*/
+/*[python end generated code: output=da39a3ee5e6b4b0d input=c33b27d6b06006c6]*/
 
 static int cache_struct_converter(PyObject *, PyObject *, PyStructObject **);
 
@@ -996,9 +1000,10 @@ bp_longlong(_structmodulestate *state, char *p, PyObject *v, const formatdef *f)
                               (unsigned char *)p,
                               8,
                               0, /* little_endian */
-                              1  /* signed */);
+                              1, /* signed */
+                              0  /* !with_exceptions */);
     Py_DECREF(v);
-    if (res == -1 && PyErr_Occurred()) {
+    if (res < 0) {
         PyErr_Format(state->StructError,
                      "'%c' format requires %lld <= number <= %lld",
                      f->format,
@@ -1020,9 +1025,10 @@ bp_ulonglong(_structmodulestate *state, char *p, PyObject *v, const formatdef *f
                               (unsigned char *)p,
                               8,
                               0, /* little_endian */
-                              0  /* signed */);
+                              0, /* signed */
+                              0  /* !with_exceptions */);
     Py_DECREF(v);
-    if (res == -1 && PyErr_Occurred()) {
+    if (res < 0) {
         PyErr_Format(state->StructError,
                      "'%c' format requires 0 <= number <= %llu",
                      f->format,
@@ -1256,9 +1262,10 @@ lp_longlong(_structmodulestate *state, char *p, PyObject *v, const formatdef *f)
                               (unsigned char *)p,
                               8,
                               1, /* little_endian */
-                              1  /* signed */);
+                              1, /* signed */
+                              0  /* !with_exceptions */);
     Py_DECREF(v);
-    if (res == -1 && PyErr_Occurred()) {
+    if (res < 0) {
         PyErr_Format(state->StructError,
                      "'%c' format requires %lld <= number <= %lld",
                      f->format,
@@ -1280,9 +1287,10 @@ lp_ulonglong(_structmodulestate *state, char *p, PyObject *v, const formatdef *f
                               (unsigned char *)p,
                               8,
                               1, /* little_endian */
-                              0  /* signed */);
+                              0, /* signed */
+                              0  /* !with_exceptions */);
     Py_DECREF(v);
-    if (res == -1 && PyErr_Occurred()) {
+    if (res < 0) {
         PyErr_Format(state->StructError,
                      "'%c' format requires 0 <= number <= %llu",
                      f->format,
@@ -1632,8 +1640,7 @@ s_dealloc(PyStructObject *s)
 {
     PyTypeObject *tp = Py_TYPE(s);
     PyObject_GC_UnTrack(s);
-    if (s->weakreflist != NULL)
-        PyObject_ClearWeakRefs((PyObject *)s);
+    FT_CLEAR_WEAKREFS((PyObject *)s, s->weakreflist);
     if (s->s_codes != NULL) {
         PyMem_Free(s->s_codes);
     }
@@ -2180,6 +2187,19 @@ s_sizeof(PyStructObject *self, void *unused)
     return PyLong_FromSize_t(size);
 }
 
+static PyObject *
+s_repr(PyStructObject *self)
+{
+    PyObject* fmt = PyUnicode_FromStringAndSize(
+        PyBytes_AS_STRING(self->s_format), PyBytes_GET_SIZE(self->s_format));
+    if (fmt == NULL) {
+        return NULL;
+    }
+    PyObject* s = PyUnicode_FromFormat("%s(%R)", _PyType_Name(Py_TYPE(self)), fmt);
+    Py_DECREF(fmt);
+    return s;
+}
+
 /* List of functions */
 
 static struct PyMethodDef s_methods[] = {
@@ -2193,13 +2213,13 @@ static struct PyMethodDef s_methods[] = {
 };
 
 static PyMemberDef s_members[] = {
-    {"__weaklistoffset__", T_PYSSIZET, offsetof(PyStructObject, weakreflist), READONLY},
+    {"__weaklistoffset__", Py_T_PYSSIZET, offsetof(PyStructObject, weakreflist), Py_READONLY},
     {NULL}  /* sentinel */
 };
 
 static PyGetSetDef s_getsetlist[] = {
-    {"format", (getter)s_get_format, (setter)NULL, "struct format string", NULL},
-    {"size", (getter)s_get_size, (setter)NULL, "struct size in bytes", NULL},
+    {"format", (getter)s_get_format, (setter)NULL, PyDoc_STR("struct format string"), NULL},
+    {"size", (getter)s_get_size, (setter)NULL, PyDoc_STR("struct size in bytes"), NULL},
     {NULL} /* sentinel */
 };
 
@@ -2212,6 +2232,7 @@ static PyType_Slot PyStructType_slots[] = {
     {Py_tp_dealloc, s_dealloc},
     {Py_tp_getattro, PyObject_GenericGetAttr},
     {Py_tp_setattro, PyObject_GenericSetAttr},
+    {Py_tp_repr, s_repr},
     {Py_tp_doc, (void*)s__doc__},
     {Py_tp_traverse, s_traverse},
     {Py_tp_clear, s_clear},
@@ -2250,19 +2271,12 @@ cache_struct_converter(PyObject *module, PyObject *fmt, PyStructObject **ptr)
         return 1;
     }
 
-    if (state->cache == NULL) {
-        state->cache = PyDict_New();
-        if (state->cache == NULL)
-            return 0;
-    }
-
-    s_object = PyDict_GetItemWithError(state->cache, fmt);
-    if (s_object != NULL) {
-        *ptr = (PyStructObject *)Py_NewRef(s_object);
-        return Py_CLEANUP_SUPPORTED;
-    }
-    else if (PyErr_Occurred()) {
+    if (PyDict_GetItemRef(state->cache, fmt, &s_object) < 0) {
         return 0;
+    }
+    if (s_object != NULL) {
+        *ptr = (PyStructObject *)s_object;
+        return Py_CLEANUP_SUPPORTED;
     }
 
     s_object = PyObject_CallOneArg(state->PyStructType, fmt);
@@ -2288,7 +2302,7 @@ static PyObject *
 _clearcache_impl(PyObject *module)
 /*[clinic end generated code: output=ce4fb8a7bf7cb523 input=463eaae04bab3211]*/
 {
-    Py_CLEAR(get_struct_state(module)->cache);
+    PyDict_Clear(get_struct_state(module)->cache);
     Py_RETURN_NONE;
 }
 
@@ -2512,6 +2526,11 @@ _structmodule_exec(PyObject *m)
 {
     _structmodulestate *state = get_struct_state(m);
 
+    state->cache = PyDict_New();
+    if (state->cache == NULL) {
+        return -1;
+    }
+
     state->PyStructType = PyType_FromModuleAndSpec(
         m, &PyStructType_spec, NULL);
     if (state->PyStructType == NULL) {
@@ -2584,6 +2603,7 @@ _structmodule_exec(PyObject *m)
 static PyModuleDef_Slot _structmodule_slots[] = {
     {Py_mod_exec, _structmodule_exec},
     {Py_mod_multiple_interpreters, Py_MOD_PER_INTERPRETER_GIL_SUPPORTED},
+    {Py_mod_gil, Py_MOD_GIL_NOT_USED},
     {0, NULL}
 };
 

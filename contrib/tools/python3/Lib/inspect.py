@@ -313,9 +313,10 @@ def ismethoddescriptor(object):
     But not if ismethod() or isclass() or isfunction() are true.
 
     This is new in Python 2.2, and, for example, is true of int.__add__.
-    An object passing this test has a __get__ attribute but not a __set__
-    attribute, but beyond that the set of attributes varies.  __name__ is
-    usually sensible, and __doc__ often is.
+    An object passing this test has a __get__ attribute, but not a
+    __set__ attribute or a __delete__ attribute. Beyond that, the set
+    of attributes varies; __name__ is usually sensible, and __doc__
+    often is.
 
     Methods implemented via descriptors that also pass one of the other
     tests return false from the ismethoddescriptor() test, simply because
@@ -324,8 +325,15 @@ def ismethoddescriptor(object):
     if isclass(object) or ismethod(object) or isfunction(object):
         # mutual exclusion
         return False
+    if isinstance(object, functools.partial):
+        # Lie for children.  The addition of partial.__get__
+        # doesn't currently change the partial objects behaviour,
+        # not counting a warning about future changes.
+        return False
     tp = type(object)
-    return hasattr(tp, "__get__") and not hasattr(tp, "__set__")
+    return (hasattr(tp, "__get__")
+            and not hasattr(tp, "__set__")
+            and not hasattr(tp, "__delete__"))
 
 def isdatadescriptor(object):
     """Return true if the object is a data descriptor.
@@ -390,8 +398,10 @@ def isfunction(object):
 
 def _has_code_flag(f, flag):
     """Return true if ``f`` is a function (or a method or functools.partial
-    wrapper wrapping a function) whose code object has the given ``flag``
+    wrapper wrapping a function or a functools.partialmethod wrapping a
+    function) whose code object has the given ``flag``
     set in its flags."""
+    f = functools._unwrap_partialmethod(f)
     while ismethod(f):
         f = f.__func__
     f = functools._unwrap_partial(f)
@@ -835,9 +845,8 @@ def _finddoc(obj):
             cls = self.__class__
     # Should be tested before isdatadescriptor().
     elif isinstance(obj, property):
-        func = obj.fget
-        name = func.__name__
-        cls = _findclass(func)
+        name = obj.__name__
+        cls = _findclass(obj.fget)
         if cls is None or getattr(cls, name) is not obj:
             return None
     elif ismethoddescriptor(obj) or isdatadescriptor(obj):
@@ -884,29 +893,28 @@ def cleandoc(doc):
 
     Any whitespace that can be uniformly removed from the second line
     onwards is removed."""
-    try:
-        lines = doc.expandtabs().split('\n')
-    except UnicodeError:
-        return None
-    else:
-        # Find minimum indentation of any non-blank lines after first line.
-        margin = sys.maxsize
-        for line in lines[1:]:
-            content = len(line.lstrip())
-            if content:
-                indent = len(line) - content
-                margin = min(margin, indent)
-        # Remove indentation.
-        if lines:
-            lines[0] = lines[0].lstrip()
-        if margin < sys.maxsize:
-            for i in range(1, len(lines)): lines[i] = lines[i][margin:]
-        # Remove any trailing or leading blank lines.
-        while lines and not lines[-1]:
-            lines.pop()
-        while lines and not lines[0]:
-            lines.pop(0)
-        return '\n'.join(lines)
+    lines = doc.expandtabs().split('\n')
+
+    # Find minimum indentation of any non-blank lines after first line.
+    margin = sys.maxsize
+    for line in lines[1:]:
+        content = len(line.lstrip(' '))
+        if content:
+            indent = len(line) - content
+            margin = min(margin, indent)
+    # Remove indentation.
+    if lines:
+        lines[0] = lines[0].lstrip(' ')
+    if margin < sys.maxsize:
+        for i in range(1, len(lines)):
+            lines[i] = lines[i][margin:]
+    # Remove any trailing or leading blank lines.
+    while lines and not lines[-1]:
+        lines.pop()
+    while lines and not lines[0]:
+        lines.pop(0)
+    return '\n'.join(lines)
+
 
 def getfile(object):
     """Work out which source or compiled file an object was defined in."""
@@ -961,6 +969,10 @@ def getsourcefile(object):
     elif any(filename.endswith(s) for s in
                  importlib.machinery.EXTENSION_SUFFIXES):
         return None
+    elif filename.endswith(".fwork"):
+        # Apple mobile framework markers are another type of non-source file
+        return None
+
     # return a filename found in the linecache even if it doesn't exist on disk
     if filename in linecache.cache:
         return filename
@@ -991,6 +1003,7 @@ def getmodule(object, _filename=None):
         return object
     if hasattr(object, '__module__'):
         return sys.modules.get(object.__module__)
+
     # Try the filename to modulename cache
     if _filename is not None and _filename in modulesbyfile:
         return sys.modules.get(modulesbyfile[_filename])
@@ -1036,37 +1049,6 @@ class ClassFoundException(Exception):
     pass
 
 
-class _ClassFinder(ast.NodeVisitor):
-
-    def __init__(self, qualname):
-        self.stack = []
-        self.qualname = qualname
-
-    def visit_FunctionDef(self, node):
-        self.stack.append(node.name)
-        self.stack.append('<locals>')
-        self.generic_visit(node)
-        self.stack.pop()
-        self.stack.pop()
-
-    visit_AsyncFunctionDef = visit_FunctionDef
-
-    def visit_ClassDef(self, node):
-        self.stack.append(node.name)
-        if self.qualname == '.'.join(self.stack):
-            # Return the decorator for the class if present
-            if node.decorator_list:
-                line_number = node.decorator_list[0].lineno
-            else:
-                line_number = node.lineno
-
-            # decrement by one since lines starts with indexing by zero
-            line_number -= 1
-            raise ClassFoundException(line_number)
-        self.generic_visit(node)
-        self.stack.pop()
-
-
 def findsource(object):
     """Return the entire source file and starting line number for an object.
 
@@ -1084,12 +1066,14 @@ def findsource(object):
         # Allow filenames in form of "<something>" to pass through.
         # `doctest` monkeypatches `linecache` module to enable
         # inspection, so let `linecache.getlines` to be called.
-        if not (file.startswith('<') and file.endswith('>')):
+        if (not (file.startswith('<') and file.endswith('>'))) or file.endswith('.fwork'):
             raise OSError('source code not available')
 
     module = getmodule(object, file)
     if module:
         lines = linecache.getlines(file, module.__dict__)
+        if not lines and file.startswith('<') and hasattr(object, "__code__"):
+            lines = linecache._getlines_from_code(object.__code__)
     else:
         lines = linecache.getlines(file)
     if not lines:
@@ -1099,17 +1083,13 @@ def findsource(object):
         return lines, 0
 
     if isclass(object):
-        qualname = object.__qualname__
-        source = ''.join(lines)
-        tree = ast.parse(source)
-        class_finder = _ClassFinder(qualname)
         try:
-            class_finder.visit(tree)
-        except ClassFoundException as e:
-            line_number = e.args[0]
-            return lines, line_number
-        else:
-            raise OSError('could not find class definition')
+            lnum = vars(object)['__firstlineno__'] - 1
+        except (TypeError, KeyError):
+            raise OSError('source code not available')
+        if lnum >= len(lines):
+            raise OSError('lineno is out of bounds')
+        return lines, lnum
 
     if ismethod(object):
         object = object.__func__
@@ -1123,15 +1103,8 @@ def findsource(object):
         if not hasattr(object, 'co_firstlineno'):
             raise OSError('could not find function definition')
         lnum = object.co_firstlineno - 1
-        pat = re.compile(r'^(\s*def\s)|(\s*async\s+def\s)|(.*(?<!\w)lambda(:|\s))|^(\s*@)')
-        while lnum > 0:
-            try:
-                line = lines[lnum]
-            except IndexError:
-                raise OSError('lineno is out of bounds')
-            if pat.match(line):
-                break
-            lnum = lnum - 1
+        if lnum >= len(lines):
+            raise OSError('lineno is out of bounds')
         return lines, lnum
     raise OSError('could not find code object')
 
@@ -1186,7 +1159,7 @@ class BlockFinder:
     """Provide a tokeneater() method to detect the end of a code block."""
     def __init__(self):
         self.indent = 0
-        self.islambda = False
+        self.singleline = False
         self.started = False
         self.passline = False
         self.indecorator = False
@@ -1195,19 +1168,24 @@ class BlockFinder:
 
     def tokeneater(self, type, token, srowcol, erowcol, line):
         if not self.started and not self.indecorator:
+            if type in (tokenize.INDENT, tokenize.COMMENT, tokenize.NL):
+                pass
+            elif token == "async":
+                pass
             # skip any decorators
-            if token == "@":
+            elif token == "@":
                 self.indecorator = True
-            # look for the first "def", "class" or "lambda"
-            elif token in ("def", "class", "lambda"):
-                if token == "lambda":
-                    self.islambda = True
+            else:
+                # For "def" and "class" scan to the end of the block.
+                # For "lambda" and generator expression scan to
+                # the end of the logical line.
+                self.singleline = token not in ("def", "class")
                 self.started = True
             self.passline = True    # skip to the end of the line
         elif type == tokenize.NEWLINE:
             self.passline = False   # stop skipping when a NEWLINE is seen
             self.last = srowcol[0]
-            if self.islambda:       # lambdas always end at the first NEWLINE
+            if self.singleline:
                 raise EndOfBlock
             # hitting a NEWLINE when in a decorator without args
             # ends the decorator
@@ -2027,7 +2005,7 @@ _NonUserDefinedCallables = (types.WrapperDescriptorType,
                             types.BuiltinFunctionType)
 
 
-def _signature_get_user_defined_method(cls, method_name):
+def _signature_get_user_defined_method(cls, method_name, *, follow_wrapper_chains=True):
     """Private helper. Checks if ``cls`` has an attribute
     named ``method_name`` and returns it only if it is a
     pure python function.
@@ -2036,7 +2014,19 @@ def _signature_get_user_defined_method(cls, method_name):
         meth = getattr(cls, method_name, None)
     else:
         meth = getattr_static(cls, method_name, None)
-    if meth is None or isinstance(meth, _NonUserDefinedCallables):
+    if meth is None:
+        return None
+
+    # NOTE: The meth may wraps a non-user-defined callable.
+    # In this case, we treat the meth as non-user-defined callable too.
+    # (e.g. cls.__new__ generated by @warnings.deprecated)
+    unwrapped_meth = None
+    if follow_wrapper_chains:
+        unwrapped_meth = unwrap(meth, stop=(lambda m: hasattr(m, "__signature__")
+                                  or _signature_is_builtin(m)))
+
+    if (isinstance(meth, _NonUserDefinedCallables)
+          or isinstance(unwrapped_meth, _NonUserDefinedCallables)):
         # Once '__signature__' will be added to 'C'-level
         # callables, this check won't be necessary
         return None
@@ -2261,7 +2251,12 @@ def _signature_fromstr(cls, obj, s, skip_bound_arg=True):
 
     module = None
     module_dict = {}
+
     module_name = getattr(obj, '__module__', None)
+    if not module_name:
+        objclass = getattr(obj, '__objclass__', None)
+        module_name = getattr(objclass, '__module__', None)
+
     if module_name:
         module = sys.modules.get(module_name, None)
         if module:
@@ -2564,7 +2559,7 @@ def _signature_from_callable(obj, *,
             return sig
 
     try:
-        partialmethod = obj._partialmethod
+        partialmethod = obj.__partialmethod__
     except AttributeError:
         pass
     else:
@@ -2591,6 +2586,10 @@ def _signature_from_callable(obj, *,
                 new_params = (first_wrapped_param,) + sig_params
                 return sig.replace(parameters=new_params)
 
+    if isinstance(obj, functools.partial):
+        wrapped_sig = _get_signature_of(obj.func)
+        return _signature_get_partial(wrapped_sig, obj)
+
     if isfunction(obj) or _signature_is_functionlike(obj):
         # If it's a pure Python function, or an object that is duck type
         # of a Python function (Cython functions, for instance), then:
@@ -2602,21 +2601,31 @@ def _signature_from_callable(obj, *,
         return _signature_from_builtin(sigcls, obj,
                                        skip_bound_arg=skip_bound_arg)
 
-    if isinstance(obj, functools.partial):
-        wrapped_sig = _get_signature_of(obj.func)
-        return _signature_get_partial(wrapped_sig, obj)
-
     if isinstance(obj, type):
         # obj is a class or a metaclass
 
         # First, let's see if it has an overloaded __call__ defined
         # in its metaclass
-        call = _signature_get_user_defined_method(type(obj), '__call__')
+        call = _signature_get_user_defined_method(
+            type(obj),
+            '__call__',
+            follow_wrapper_chains=follow_wrapper_chains,
+        )
         if call is not None:
             return _get_signature_of(call)
 
-        new = _signature_get_user_defined_method(obj, '__new__')
-        init = _signature_get_user_defined_method(obj, '__init__')
+        # NOTE: The user-defined method can be a function with a thin wrapper
+        # around object.__new__ (e.g., generated by `@warnings.deprecated`)
+        new = _signature_get_user_defined_method(
+            obj,
+            '__new__',
+            follow_wrapper_chains=follow_wrapper_chains,
+        )
+        init = _signature_get_user_defined_method(
+            obj,
+            '__init__',
+            follow_wrapper_chains=follow_wrapper_chains,
+        )
 
         # Go through the MRO and see if any class has user-defined
         # pure Python __new__ or __init__ method
@@ -2656,10 +2665,14 @@ def _signature_from_callable(obj, *,
         # Last option is to check if its '__init__' is
         # object.__init__ or type.__init__.
         if type not in obj.__mro__:
+            obj_init = obj.__init__
+            obj_new = obj.__new__
+            if follow_wrapper_chains:
+                obj_init = unwrap(obj_init)
+                obj_new = unwrap(obj_new)
             # We have a class (not metaclass), but no user-defined
             # __init__ or __new__ for it
-            if (obj.__init__ is object.__init__ and
-                obj.__new__ is object.__new__):
+            if obj_init is object.__init__ and obj_new is object.__new__:
                 # Return a signature of 'object' builtin.
                 return sigcls.from_callable(object)
             else:
@@ -2670,6 +2683,13 @@ def _signature_from_callable(obj, *,
         # An object with __call__
         call = getattr_static(type(obj), '__call__', None)
         if call is not None:
+            try:
+                text_sig = obj.__text_signature__
+            except AttributeError:
+                pass
+            else:
+                if text_sig:
+                    return _signature_fromstr(sigcls, obj, text_sig)
             call = _descriptor_get(call, obj)
             return _get_signature_of(call)
 
@@ -2848,6 +2868,8 @@ class Parameter:
             formatted = '**' + formatted
 
         return formatted
+
+    __replace__ = replace
 
     def __repr__(self):
         return '<{} "{}">'.format(self.__class__.__name__, self)
@@ -3109,6 +3131,8 @@ class Signature:
         return type(self)(parameters,
                           return_annotation=return_annotation)
 
+    __replace__ = replace
+
     def _hash_basis(self):
         params = tuple(param for param in self.parameters.values()
                              if param.kind != _KEYWORD_ONLY)
@@ -3298,6 +3322,16 @@ class Signature:
         return '<{} {}>'.format(self.__class__.__name__, self)
 
     def __str__(self):
+        return self.format()
+
+    def format(self, *, max_width=None):
+        """Create a string representation of the Signature object.
+
+        If *max_width* integer is passed,
+        signature will try to fit into the *max_width*.
+        If signature is longer than *max_width*,
+        all parameters will be on separate lines.
+        """
         result = []
         render_pos_only_separator = False
         render_kw_only_separator = True
@@ -3335,6 +3369,8 @@ class Signature:
             result.append('/')
 
         rendered = '({})'.format(', '.join(result))
+        if max_width is not None and len(rendered) > max_width:
+            rendered = '(\n    {}\n)'.format(',\n    '.join(result))
 
         if self.return_annotation is not _empty:
             anno = formatannotation(self.return_annotation)

@@ -23,11 +23,17 @@ Copyright (C) 2001-2021 Vinay Sajip. All Rights Reserved.
 To use, simply 'import logging.handlers' and log away!
 """
 
-import io, logging, socket, os, pickle, struct, time, re
-from stat import ST_DEV, ST_INO, ST_MTIME
-import queue
-import threading
 import copy
+import io
+import logging
+import os
+import pickle
+import queue
+import re
+import socket
+import struct
+import threading
+import time
 
 #
 # Some constants...
@@ -272,7 +278,7 @@ class TimedRotatingFileHandler(BaseRotatingHandler):
         # path object (see Issue #27493), but self.baseFilename will be a string
         filename = self.baseFilename
         if os.path.exists(filename):
-            t = os.stat(filename)[ST_MTIME]
+            t = int(os.stat(filename).st_mtime)
         else:
             t = int(time.time())
         self.rolloverAt = self.computeRollover(t)
@@ -465,8 +471,7 @@ class WatchedFileHandler(logging.FileHandler):
     This handler is not appropriate for use under Windows, because
     under Windows open files cannot be moved or renamed - logging
     opens the files with exclusive locks - and so there is no need
-    for such a handler. Furthermore, ST_INO is not supported under
-    Windows; stat always returns zero for this value.
+    for such a handler.
 
     This handler is based on a suggestion and patch by Chad J.
     Schroeder.
@@ -482,9 +487,11 @@ class WatchedFileHandler(logging.FileHandler):
         self._statstream()
 
     def _statstream(self):
-        if self.stream:
-            sres = os.fstat(self.stream.fileno())
-            self.dev, self.ino = sres[ST_DEV], sres[ST_INO]
+        if self.stream is None:
+            return
+        sres = os.fstat(self.stream.fileno())
+        self.dev = sres.st_dev
+        self.ino = sres.st_ino
 
     def reopenIfNeeded(self):
         """
@@ -494,6 +501,9 @@ class WatchedFileHandler(logging.FileHandler):
         has, close the old stream and reopen the file to get the
         current stream.
         """
+        if self.stream is None:
+            return
+
         # Reduce the chance of race conditions by stat'ing by path only
         # once and then fstat'ing our new fd if we opened a new log stream.
         # See issue #14632: Thanks to John Mulligan for the problem report
@@ -501,18 +511,23 @@ class WatchedFileHandler(logging.FileHandler):
         try:
             # stat the file by path, checking for existence
             sres = os.stat(self.baseFilename)
+
+            # compare file system stat with that of our stream file handle
+            reopen = (sres.st_dev != self.dev or sres.st_ino != self.ino)
         except FileNotFoundError:
-            sres = None
-        # compare file system stat with that of our stream file handle
-        if not sres or sres[ST_DEV] != self.dev or sres[ST_INO] != self.ino:
-            if self.stream is not None:
-                # we have an open file handle, clean it up
-                self.stream.flush()
-                self.stream.close()
-                self.stream = None  # See Issue #21742: _open () might fail.
-                # open a new file handle and get new stat info from that fd
-                self.stream = self._open()
-                self._statstream()
+            reopen = True
+
+        if not reopen:
+            return
+
+        # we have an open file handle, clean it up
+        self.stream.flush()
+        self.stream.close()
+        self.stream = None  # See Issue #21742: _open () might fail.
+
+        # open a new file handle and get new stat info from that fd
+        self.stream = self._open()
+        self._statstream()
 
     def emit(self, record):
         """
@@ -682,15 +697,12 @@ class SocketHandler(logging.Handler):
         """
         Closes the socket.
         """
-        self.acquire()
-        try:
+        with self.lock:
             sock = self.sock
             if sock:
                 self.sock = None
                 sock.close()
             logging.Handler.close(self)
-        finally:
-            self.release()
 
 class DatagramHandler(SocketHandler):
     """
@@ -950,15 +962,12 @@ class SysLogHandler(logging.Handler):
         """
         Closes the socket.
         """
-        self.acquire()
-        try:
+        with self.lock:
             sock = self.socket
             if sock:
                 self.socket = None
                 sock.close()
             logging.Handler.close(self)
-        finally:
-            self.release()
 
     def mapPriority(self, levelName):
         """
@@ -1346,11 +1355,8 @@ class BufferingHandler(logging.Handler):
 
         This version just zaps the buffer to empty.
         """
-        self.acquire()
-        try:
+        with self.lock:
             self.buffer.clear()
-        finally:
-            self.release()
 
     def close(self):
         """
@@ -1400,11 +1406,8 @@ class MemoryHandler(BufferingHandler):
         """
         Set the target handler for this handler.
         """
-        self.acquire()
-        try:
+        with self.lock:
             self.target = target
-        finally:
-            self.release()
 
     def flush(self):
         """
@@ -1414,14 +1417,11 @@ class MemoryHandler(BufferingHandler):
 
         The record buffer is only cleared if a target has been set.
         """
-        self.acquire()
-        try:
+        with self.lock:
             if self.target:
                 for record in self.buffer:
                     self.target.handle(record)
                 self.buffer.clear()
-        finally:
-            self.release()
 
     def close(self):
         """
@@ -1432,12 +1432,9 @@ class MemoryHandler(BufferingHandler):
             if self.flushOnClose:
                 self.flush()
         finally:
-            self.acquire()
-            try:
+            with self.lock:
                 self.target = None
                 BufferingHandler.close(self)
-            finally:
-                self.release()
 
 
 class QueueHandler(logging.Handler):
@@ -1548,6 +1545,9 @@ class QueueListener(object):
         This starts up a background thread to monitor the queue for
         LogRecords to process.
         """
+        if self._thread is not None:
+            raise RuntimeError("Listener already started")
+
         self._thread = t = threading.Thread(target=self._monitor)
         t.daemon = True
         t.start()
@@ -1619,6 +1619,7 @@ class QueueListener(object):
         Note that if you don't call this before your application exits, there
         may be some records still left on the queue, which won't be processed.
         """
-        self.enqueue_sentinel()
-        self._thread.join()
-        self._thread = None
+        if self._thread:  # see gh-114706 - allow calling this more than once
+            self.enqueue_sentinel()
+            self._thread.join()
+            self._thread = None

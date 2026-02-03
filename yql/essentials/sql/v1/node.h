@@ -1408,6 +1408,12 @@ struct TTopicConsumerSettings {
     NYql::TResetableSetting<TNodePtr, void> AvailabilityPeriod;
     NYql::TResetableSetting<TNodePtr, void> ReadFromTs;
     NYql::TResetableSetting<TNodePtr, void> SupportedCodecs;
+    TNodePtr Type;
+    TNodePtr KeepMessagesOrder;
+    TNodePtr DefaultProcessingTimeout;
+    TNodePtr MaxProcessingAttempts;
+    TNodePtr DeadLetterPolicy;
+    TNodePtr DeadLetterQueue;
 };
 
 struct TTopicConsumerDescription {

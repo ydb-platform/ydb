@@ -1,0 +1,22 @@
+PRAGMA WindowNewPipeline;
+PRAGMA config.flags('OptimizerFlags', 'ForbidConstantDependsOnFuse');
+
+/* custom error: Expected positive literal value */
+$data = [
+    <|a: 1, count: 1|>,
+    <|a: 2, count: 1|>,
+    <|a: 3, count: 1|>,
+];
+
+SELECT
+    COUNT(*) OVER w1 AS actual_count,
+    count,
+FROM
+    AS_TABLE($data)
+WINDOW
+    w1 AS (
+        ORDER BY
+            a ASC
+        RANGE BETWEEN Float('-1.0') PRECEDING AND Float('1.0') FOLLOWING
+    )
+;

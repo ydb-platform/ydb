@@ -255,9 +255,9 @@ Y_UNIT_TEST(MaxValueRightInterval) {
 Y_UNIT_TEST(BasicRangeInterval) {
     TTestCase<ui64, ESortOrder::Asc> testCase = {
         .RangeIntervals = {
-            TInputRangeWindowFrame<ui64>{
-                TInputRange<ui64>{5, EDirection::Preceding},
-                TInputRange<ui64>{5, EDirection::Following}
+            TInputRangeWindowFrame<TRangeVariant>{
+                TInputRange<TRangeVariant>{5, EDirection::Preceding},
+                TInputRange<TRangeVariant>{5, EDirection::Following}
             }
         },
         .InputElements = {ui64(10), ui64(15), TYield(), TYield(), ui64(20), ui64(25), ui64(30)},
@@ -296,9 +296,9 @@ Y_UNIT_TEST(BasicRangeInterval) {
 Y_UNIT_TEST(RangeIntervalPowersOfTwo) {
     TTestCase<ui64, ESortOrder::Asc> testCase = {
         .RangeIntervals = {
-            TInputRangeWindowFrame<ui64>{
-                TInputRange<ui64>{4, EDirection::Preceding},
-                TInputRange<ui64>{4, EDirection::Following}
+            TInputRangeWindowFrame<TRangeVariant>{
+                TInputRange<TRangeVariant>{4, EDirection::Preceding},
+                TInputRange<TRangeVariant>{4, EDirection::Following}
             }
         },
         .InputElements = {TYield(), TYield(), ui64(1), TYield(), ui64(2), ui64(4), ui64(8), ui64(16), ui64(32)},
@@ -390,13 +390,13 @@ Y_UNIT_TEST(YieldOnlyStream) {
 Y_UNIT_TEST(TwoRangeIntervals_OneInsideAnother) {
     TTestCase<ui64, ESortOrder::Asc> testCase = {
         .RangeIntervals = {
-            TInputRangeWindowFrame<ui64>{
-                TInputRange<ui64>{10, EDirection::Preceding},
-                TInputRange<ui64>{10, EDirection::Following}
+            TInputRangeWindowFrame<TRangeVariant>{
+                TInputRange<TRangeVariant>{10, EDirection::Preceding},
+                TInputRange<TRangeVariant>{10, EDirection::Following}
             },
-            TInputRangeWindowFrame<ui64>{
-                TInputRange<ui64>{5, EDirection::Preceding},
-                TInputRange<ui64>{5, EDirection::Following}
+            TInputRangeWindowFrame<TRangeVariant>{
+                TInputRange<TRangeVariant>{5, EDirection::Preceding},
+                TInputRange<TRangeVariant>{5, EDirection::Following}
             }
         },
         .InputElements = {ui64(10), ui64(20), ui64(30), ui64(40), ui64(50)},
@@ -450,13 +450,13 @@ Y_UNIT_TEST(TwoRangeIntervals_OneInsideAnother) {
 Y_UNIT_TEST(TwoRangeIntervals_PartiallyOverlapLeft) {
     TTestCase<ui64, ESortOrder::Asc> testCase = {
         .RangeIntervals = {
-            TInputRangeWindowFrame<ui64>{
-                TInputRange<ui64>{15, EDirection::Preceding},
-                TInputRange<ui64>{5, EDirection::Following}
+            TInputRangeWindowFrame<TRangeVariant>{
+                TInputRange<TRangeVariant>{15, EDirection::Preceding},
+                TInputRange<TRangeVariant>{5, EDirection::Following}
             },
-            TInputRangeWindowFrame<ui64>{
-                TInputRange<ui64>{5, EDirection::Preceding},
-                TInputRange<ui64>{15, EDirection::Following}
+            TInputRangeWindowFrame<TRangeVariant>{
+                TInputRange<TRangeVariant>{5, EDirection::Preceding},
+                TInputRange<TRangeVariant>{15, EDirection::Following}
             }
         },
         .InputElements = {ui64(10), ui64(20), ui64(30), ui64(40), ui64(50)},
@@ -510,13 +510,13 @@ Y_UNIT_TEST(TwoRangeIntervals_PartiallyOverlapLeft) {
 Y_UNIT_TEST(TwoRangeIntervals_CompletelyDisjointLeft) {
     TTestCase<ui64, ESortOrder::Asc> testCase = {
         .RangeIntervals = {
-            TInputRangeWindowFrame<ui64>{
-                TInputRange<ui64>{30, EDirection::Preceding},
-                TInputRange<ui64>{20, EDirection::Preceding}
+            TInputRangeWindowFrame<TRangeVariant>{
+                TInputRange<TRangeVariant>{30, EDirection::Preceding},
+                TInputRange<TRangeVariant>{20, EDirection::Preceding}
             },
-            TInputRangeWindowFrame<ui64>{
-                TInputRange<ui64>{10, EDirection::Preceding},
-                TInputRange<ui64>{10, EDirection::Following}
+            TInputRangeWindowFrame<TRangeVariant>{
+                TInputRange<TRangeVariant>{10, EDirection::Preceding},
+                TInputRange<TRangeVariant>{10, EDirection::Following}
             }
         },
         .InputElements = {ui64(10), ui64(20), ui64(30), ui64(40), ui64(50), ui64(60)},
@@ -578,13 +578,13 @@ Y_UNIT_TEST(TwoRangeIntervals_CompletelyDisjointLeft) {
 Y_UNIT_TEST(TwoRangeIntervals_CompletelyDisjointRight) {
     TTestCase<ui64, ESortOrder::Asc> testCase = {
         .RangeIntervals = {
-            TInputRangeWindowFrame<ui64>{
-                TInputRange<ui64>{10, EDirection::Preceding},
-                TInputRange<ui64>{10, EDirection::Following}
+            TInputRangeWindowFrame<TRangeVariant>{
+                TInputRange<TRangeVariant>{10, EDirection::Preceding},
+                TInputRange<TRangeVariant>{10, EDirection::Following}
             },
-            TInputRangeWindowFrame<ui64>{
-                TInputRange<ui64>{20, EDirection::Following},
-                TInputRange<ui64>{30, EDirection::Following}
+            TInputRangeWindowFrame<TRangeVariant>{
+                TInputRange<TRangeVariant>{20, EDirection::Following},
+                TInputRange<TRangeVariant>{30, EDirection::Following}
             }
         },
         .InputElements = {ui64(10), ui64(20), ui64(30), ui64(40), ui64(50), ui64(60)},
@@ -646,13 +646,13 @@ Y_UNIT_TEST(TwoRangeIntervals_CompletelyDisjointRight) {
 Y_UNIT_TEST(TwoRangeIntervals_PartiallyOverlapRight) {
     TTestCase<ui64, ESortOrder::Asc> testCase = {
         .RangeIntervals = {
-            TInputRangeWindowFrame<ui64>{
-                TInputRange<ui64>{5, EDirection::Preceding},
-                TInputRange<ui64>{15, EDirection::Following}
+            TInputRangeWindowFrame<TRangeVariant>{
+                TInputRange<TRangeVariant>{5, EDirection::Preceding},
+                TInputRange<TRangeVariant>{15, EDirection::Following}
             },
-            TInputRangeWindowFrame<ui64>{
-                TInputRange<ui64>{5, EDirection::Following},
-                TInputRange<ui64>{25, EDirection::Following}
+            TInputRangeWindowFrame<TRangeVariant>{
+                TInputRange<TRangeVariant>{5, EDirection::Following},
+                TInputRange<TRangeVariant>{25, EDirection::Following}
             }
         },
         .InputElements = {ui64(10), ui64(20), ui64(30), ui64(40), ui64(50), ui64(60)},

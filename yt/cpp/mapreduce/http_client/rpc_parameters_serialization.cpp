@@ -709,6 +709,7 @@ TNode SerializeParamsForReadTable(
     TNode result;
     SetTransactionIdParam(&result, transactionId);
     SerializeSuppressableAccessTrackingOptions(&result, options);
+    result["omit_inaccessible_rows"] = options.OmitInaccessibleRows_;
     result["control_attributes"] = BuildYsonNodeFluently()
         .BeginMap()
             .Item("enable_row_index").Value(options.ControlAttributes_.EnableRowIndex_)
@@ -867,8 +868,8 @@ TNode SerializeParamsForStartDistributedFileSession(
     TNode result;
     SetBasicDistributedStartParams(result, transactionId, richPath, cookieCount);
 
-    if (options.Timeout_) {
-        result["timeout"] = static_cast<i64>(options.Timeout_->MilliSeconds());
+    if (options.SessionTimeout_) {
+        result["session_timeout"] = static_cast<i64>(options.SessionTimeout_->MilliSeconds());
     }
 
     return result;
@@ -883,8 +884,8 @@ TNode SerializeParamsForStartDistributedTableSession(
     TNode result;
     SetBasicDistributedStartParams(result, transactionId, richPath, cookieCount);
 
-    if (options.Timeout_) {
-        result["timeout"] = static_cast<i64>(options.Timeout_->MilliSeconds());
+    if (options.SessionTimeout_) {
+        result["session_timeout"] = static_cast<i64>(options.SessionTimeout_->MilliSeconds());
     }
 
     return result;

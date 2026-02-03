@@ -8,6 +8,58 @@ using namespace NKikimr;
 using namespace NYdb::NBS::NStorage::NPartitionDirect;
 using namespace NYdb::NBS;
 
+namespace {
+
+////////////////////////////////////////////////////////////////////////////////
+
+const TString DDiskPoolName = "ddp1";
+const TString PersistentBufferDDiskPoolName = "ddp1";
+
+void SetupStorage(TEnvironmentSetup& env) {
+    env.CreateBoxAndPool();
+    env.Sim(TDuration::Seconds(30));
+
+    {
+        NKikimrBlobStorage::TConfigRequest request;
+        auto *cmd = request.AddCommand()->MutableDefineDDiskPool();
+        cmd->SetBoxId(1);
+        cmd->SetName(DDiskPoolName);
+        auto *g = cmd->MutableGeometry();
+        g->SetRealmLevelBegin(10);
+        g->SetRealmLevelEnd(20);
+        g->SetDomainLevelBegin(10);
+        g->SetDomainLevelEnd(40);
+        g->SetNumFailRealms(1);
+        g->SetNumFailDomainsPerFailRealm(5);
+        g->SetNumVDisksPerFailDomain(1);
+        cmd->AddPDiskFilter()->AddProperty()->SetType(NKikimrBlobStorage::EPDiskType::ROT);
+        cmd->SetNumDDiskGroups(3);
+        auto res = env.Invoke(request);
+        UNIT_ASSERT_C(res.GetSuccess(), res.GetErrorDescription());
+    }
+}
+
+NYdb::NBS::NProto::TStorageConfig CreateStorageConfig() {
+    NYdb::NBS::NProto::TStorageConfig storageConfig;
+    storageConfig.SetDDiskPoolName(DDiskPoolName);
+    storageConfig.SetPersistentBufferDDiskPoolName(PersistentBufferDDiskPoolName);
+    return storageConfig;
+}
+
+TActorId CreatePartitionActor(TEnvironmentSetup& env) {
+    auto partition = env.Runtime->Register(
+        new TPartitionActor(CreateStorageConfig()),
+        1 // nodeId
+    );
+
+    // Wait for partition and direct block group to be ready
+    env.Sim(TDuration::Seconds(5));
+
+    return partition;
+}
+
+} // namespace
+
 ////////////////////////////////////////////////////////////////////////////////
 
 Y_UNIT_TEST_SUITE(TPartitionDirectTest) {
@@ -19,33 +71,11 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest) {
         }};
         auto& runtime = env.Runtime;
         runtime->SetLogPriority(NKikimrServices::NBS_PARTITION, NActors::NLog::PRI_DEBUG);
-        env.CreateBoxAndPool();
-        env.Sim(TDuration::Seconds(30));
 
-        {
-            NKikimrBlobStorage::TConfigRequest request;
-            auto *cmd = request.AddCommand()->MutableDefineDDiskPool();
-            cmd->SetBoxId(1);
-            cmd->SetName("ddp1");
-            auto *g = cmd->MutableGeometry();
-            g->SetRealmLevelBegin(10);
-            g->SetRealmLevelEnd(20);
-            g->SetDomainLevelBegin(10);
-            g->SetDomainLevelEnd(40);
-            g->SetNumFailRealms(1);
-            g->SetNumFailDomainsPerFailRealm(5);
-            g->SetNumVDisksPerFailDomain(1);
-            cmd->AddPDiskFilter()->AddProperty()->SetType(NKikimrBlobStorage::EPDiskType::ROT);
-            cmd->SetNumDDiskGroups(3);
-            auto res = env.Invoke(request);
-            UNIT_ASSERT_C(res.GetSuccess(), res.GetErrorDescription());
-        }
+        SetupStorage(env);
 
-        auto partition = runtime->Register(new TPartitionActor(), 1);
+        auto partition = CreatePartitionActor(env);
 
-        // Wait for partition and direct block group to be ready
-        env.Sim(TDuration::Seconds(5));
-                
         const TActorId& edge = runtime->AllocateEdgeActor(env.Settings.ControllerNodeId, __FILE__, __LINE__);
 
         // Read not writed block
@@ -120,7 +150,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest) {
         }
 
         env.Sim(TDuration::Seconds(12));
-        
+
         // Read writed block from ddisk
         {
             auto request = std::make_unique<NYdb::NBS::TEvService::TEvReadBlocksRequest>();
@@ -143,33 +173,11 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest) {
         }};
         auto& runtime = env.Runtime;
         runtime->SetLogPriority(NKikimrServices::NBS_PARTITION, NActors::NLog::PRI_DEBUG);
-        env.CreateBoxAndPool();
-        env.Sim(TDuration::Seconds(30));
 
-        {
-            NKikimrBlobStorage::TConfigRequest request;
-            auto *cmd = request.AddCommand()->MutableDefineDDiskPool();
-            cmd->SetBoxId(1);
-            cmd->SetName("ddp1");
-            auto *g = cmd->MutableGeometry();
-            g->SetRealmLevelBegin(10);
-            g->SetRealmLevelEnd(20);
-            g->SetDomainLevelBegin(10);
-            g->SetDomainLevelEnd(40);
-            g->SetNumFailRealms(1);
-            g->SetNumFailDomainsPerFailRealm(5);
-            g->SetNumVDisksPerFailDomain(1);
-            cmd->AddPDiskFilter()->AddProperty()->SetType(NKikimrBlobStorage::EPDiskType::ROT);
-            cmd->SetNumDDiskGroups(3);
-            auto res = env.Invoke(request);
-            UNIT_ASSERT_C(res.GetSuccess(), res.GetErrorDescription());
-        }
+        SetupStorage(env);
 
-        auto partition = runtime->Register(new TPartitionActor(), 1);
+        auto partition = CreatePartitionActor(env);
 
-        // Wait for partition and direct block group to be ready
-        env.Sim(TDuration::Seconds(5));
-                
         const TActorId& edge = runtime->AllocateEdgeActor(env.Settings.ControllerNodeId, __FILE__, __LINE__);
 
         auto writeResponsesCount = 0;
@@ -188,11 +196,8 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest) {
                     }
                     break;
                 }
-                case NDDisk::TEvFlushPersistentBuffer::EventType: {
-                    const auto& msg = *ev->Get<NDDisk::TEvFlushPersistentBuffer>();
-                    if (!msg.Record.HasDDiskInstanceGuid()) {
-                        ++eraseRequestsCount;
-                    }
+                case NDDisk::TEvErasePersistentBuffer::EventType: {
+                    ++eraseRequestsCount;
                     break;
                 }
             }

@@ -48,6 +48,9 @@ Checks: >
   bugprone-use-after-move,
   bugprone-virtual-near-miss,
   google-explicit-constructor,
+  hicpp-exception-baseclass,
+  hicpp-multiway-paths-covered,
+  misc-definitions-in-headers,
   modernize-use-override
 CheckOptions:
   - key: readability-identifier-naming.StructPrefix

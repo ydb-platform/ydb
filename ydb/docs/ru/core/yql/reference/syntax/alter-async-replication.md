@@ -19,6 +19,9 @@ ALTER ASYNC REPLICATION <name> SET (option = value [, ...])
   * `DONE` — [завершение процесса асинхронной репликации](../../../concepts/async-replication.md#done).
 * `FAILOVER_MODE` — режим переключения состояния. Применимо только совместно с параметром `STATE`. Возможные значения:
   * `FORCE` — принудительное переключение состояния.
+* Настройки для аутентификации в базе-источнике одним из способов:
+
+  {% include [x](_includes/async_replication_authentification.md) %}
 
 ## Примеры {#examples}
 
@@ -26,6 +29,12 @@ ALTER ASYNC REPLICATION <name> SET (option = value [, ...])
 
 ```yql
 ALTER ASYNC REPLICATION my_replication SET (STATE = "DONE", FAILOVER_MODE = "FORCE");
+```
+
+Следующий запрос изменяет секрет:
+
+```yql
+ALTER ASYNC REPLICATION my_replication SET (TOKEN_SECRET_PATH = "my_token");
 ```
 
 ## См. также

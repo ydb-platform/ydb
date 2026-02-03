@@ -8,11 +8,11 @@ namespace NYT::NApi {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// Contains the session host data and a set of signed cookies for individual file fragment writes.
-//
-// #Session: signed session host data.
-// #Cookies: signed session cookies per requested participants.
-//           Note: not all cookies need to be used.
+//! Contains the session host data and a set of signed cookies for individual file fragment writes.
+//!
+//! #Session: signed session host data.
+//! #Cookies: signed session cookies per requested participants.
+//!           Note: not all cookies need to be used.
 struct TDistributedWriteFileSessionWithCookies
     : public NYTree::TYsonStructLite
 {
@@ -24,7 +24,7 @@ struct TDistributedWriteFileSessionWithCookies
     static void Register(TRegistrar registrar);
 };
 
-// TODO(achains): Break this class into two separate parameters
+//! TODO(achains): Break this class into two separate parameters
 struct TDistributedWriteFileSessionWithResults
 {
     TSignedDistributedWriteFileSessionPtr Session;
@@ -37,10 +37,12 @@ struct TDistributedWriteFileSessionStartOptions
     : public TTransactionalOptions
     , public TTimeoutOptions
 {
-    // Number of participants for individual file fragment writes.
+    //! Number of participants for individual file fragment writes.
     int CookieCount = 0;
-    // Timeout for session. Similar to transaction timeout.
-    std::optional<TDuration> Timeout;
+    //! Timeout for session. Similar to transaction timeout.
+    //! This option should not be confused with "Timeout",
+    //! which is used to specify the maximum execution time of an API call.
+    std::optional<TDuration> SessionTimeout;
 };
 
 struct TDistributedWriteFileSessionPingOptions
@@ -51,8 +53,8 @@ struct TDistributedWriteFileSessionFinishOptions
     : public TTimeoutOptions
 { };
 
-// Options for file fragment writer in distributed write file session.
-// Note: MD5 and prerequisite transactions are not yet supported.
+//! Options for file fragment writer in distributed write file session.
+//! Note: MD5 and prerequisite transactions are not yet supported.
 struct TFileFragmentWriterOptions
     : public TFileWriterOptions
 { };
@@ -71,12 +73,12 @@ struct IDistributedFileClientBase
         const TSignedDistributedWriteFileSessionPtr& session,
         const TDistributedWriteFileSessionPingOptions& options = {}) = 0;
 
-    // Finish distributed session with merging all write fragment results.
-    //
-    // The write happens by merging fragments in the order they appear in #Results.
-    //
-    // #Session: signed session host data.
-    // #Results: signed results of fragment writes.
+    //! Finish distributed session with merging all write fragment results.
+    //!
+    //! The write happens by merging fragments in the order they appear in #Results.
+    //!
+    //! #Session: signed session host data.
+    //! #Results: signed results of fragment writes.
     virtual TFuture<void> FinishDistributedWriteFileSession(
         const TDistributedWriteFileSessionWithResults& sessionWithResults,
         const TDistributedWriteFileSessionFinishOptions& options = {}) = 0;
@@ -88,10 +90,10 @@ struct IDistributedFileClient
 {
     virtual ~IDistributedFileClient() = default;
 
-    // Creates distributed file fragment writer for given cookie.
-    //
-    // Same cookie may be reused for creating multiple fragment writers.
-    // Every new writer instance writes data to its independant root chunk list.
+    //! Creates distributed file fragment writer for given cookie.
+    //!
+    //! Same cookie may be reused for creating multiple fragment writers.
+    //! Every new writer instance writes data to its independant root chunk list.
     virtual IFileFragmentWriterPtr CreateFileFragmentWriter(
         const TSignedWriteFileFragmentCookiePtr& cookie,
         const TFileFragmentWriterOptions& options = {}) = 0;

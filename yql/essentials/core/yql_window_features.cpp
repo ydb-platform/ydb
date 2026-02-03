@@ -11,7 +11,7 @@ bool IsRangeWindowFrameEnabled(TTypeAnnotationContext& types) {
 }
 
 bool IsWindowNewPipelineEnabled(TTypeAnnotationContext& types) {
-    if (types.WindowNewPipeline && NKikimr::NMiniKQL::RuntimeVersion >= 72u) {
+    if (types.WindowNewPipeline && NKikimr::NMiniKQL::RuntimeVersion >= 73u) {
         // The new window pipeline generates code that is not robust to the absence of ForbidConstantDepends.
         // Therefore, we must ensure that it is enabled.
         YQL_ENSURE(IsForbidConstantDependsEnabled(types), "This feature must be enabled.");

@@ -297,6 +297,7 @@ void TAsyncBufferStats::Resize(ui32 taskCount) {
     Push.Resize(taskCount);
     Pop.Resize(taskCount);
     Egress.Resize(taskCount);
+    LocalBytes.resize(taskCount);
 }
 
 void TAsyncBufferStats::SetHistorySampleCount(ui32 historySampleCount) {
@@ -407,57 +408,6 @@ void TStageExecutionStats::SetHistorySampleCount(ui32 historySampleCount) {
     for (auto& [_, i] : Input)   i.SetHistorySampleCount(historySampleCount);
     for (auto& [_, o] : Output)  o.SetHistorySampleCount(historySampleCount);
     for (auto& [_, e] : Egress)  e.SetHistorySampleCount(historySampleCount);
-}
-
-void TStageExecutionStats::ExportHistory(ui64 baseTimeMs, NYql::NDqProto::TDqStageStats& stageStats) {
-    if (stageStats.HasCpuTimeUs()) {
-        CpuTimeUs.ExportHistory(baseTimeMs, *stageStats.MutableCpuTimeUs());
-    }
-    for (auto& p : *stageStats.MutableIngress()) {
-        auto it = Ingress.find(p.first);
-        if (it != Ingress.end()) {
-            it->second.ExportHistory(baseTimeMs, p.second);
-        }
-    }
-    for (auto& p : *stageStats.MutableInput()) {
-        auto it = Input.find(p.first);
-        if (it != Input.end()) {
-            it->second.ExportHistory(baseTimeMs, p.second);
-        }
-    }
-    for (auto& p : *stageStats.MutableOutput()) {
-        auto it = Output.find(p.first);
-        if (it != Output.end()) {
-            it->second.ExportHistory(baseTimeMs, p.second);
-        }
-    }
-    for (auto& p : *stageStats.MutableEgress()) {
-        auto it = Egress.find(p.first);
-        if (it != Egress.end()) {
-            it->second.ExportHistory(baseTimeMs, p.second);
-        }
-    }
-    if (stageStats.HasMaxMemoryUsage()) {
-        MaxMemoryUsage.ExportHistory(baseTimeMs, *stageStats.MutableMaxMemoryUsage());
-    }
-    if (stageStats.HasWaitInputTimeUs()) {
-        WaitInputTimeUs.ExportHistory(baseTimeMs, *stageStats.MutableWaitInputTimeUs());
-    }
-    if (stageStats.HasWaitOutputTimeUs()) {
-        WaitOutputTimeUs.ExportHistory(baseTimeMs, *stageStats.MutableWaitOutputTimeUs());
-    }
-    if (stageStats.HasSpillingComputeBytes()) {
-        SpillingComputeBytes.ExportHistory(baseTimeMs, *stageStats.MutableSpillingComputeBytes());
-    }
-    if (stageStats.HasSpillingChannelBytes()) {
-        SpillingChannelBytes.ExportHistory(baseTimeMs, *stageStats.MutableSpillingChannelBytes());
-    }
-    if (stageStats.HasSpillingComputeTimeUs()) {
-        SpillingComputeTimeUs.ExportHistory(baseTimeMs, *stageStats.MutableSpillingComputeTimeUs());
-    }
-    if (stageStats.HasSpillingChannelTimeUs()) {
-        SpillingChannelTimeUs.ExportHistory(baseTimeMs, *stageStats.MutableSpillingChannelTimeUs());
-    }
 }
 
 inline void SetNonZero(ui64& target, ui64 source) {
@@ -625,6 +575,7 @@ ui64 TStageExecutionStats::UpdateStats(const NYql::NDqProto::TDqTaskStats& taskS
         }
         baseTimeMs = NonZeroMin(baseTimeMs, UpdateAsyncStats(index, asyncBufferStats.Push, inputChannelStat.GetPush()));
         baseTimeMs = NonZeroMin(baseTimeMs, UpdateAsyncStats(index, asyncBufferStats.Pop, inputChannelStat.GetPop()));
+        SetNonZero(asyncBufferStats.LocalBytes, index, inputChannelStat.GetLocalBytes());
     }
 
     for (auto& outputChannelStat : taskStats.GetOutputChannels()) {
@@ -636,6 +587,7 @@ ui64 TStageExecutionStats::UpdateStats(const NYql::NDqProto::TDqTaskStats& taskS
         }
         baseTimeMs = NonZeroMin(baseTimeMs, UpdateAsyncStats(index, asyncBufferStats.Push, outputChannelStat.GetPush()));
         baseTimeMs = NonZeroMin(baseTimeMs, UpdateAsyncStats(index, asyncBufferStats.Pop, outputChannelStat.GetPop()));
+        SetNonZero(asyncBufferStats.LocalBytes, index, outputChannelStat.GetLocalBytes());
     }
 
     for (auto& sinkStat : taskStats.GetSinks()) {
@@ -1301,6 +1253,7 @@ void TQueryExecutionStats::ExportAggAsyncBufferStats(TAsyncBufferStats& data, NY
     ExportAggAsyncStats(data.Push, *stats.MutablePush());
     ExportAggAsyncStats(data.Pop, *stats.MutablePop());
     ExportAggAsyncStats(data.Egress, *stats.MutableEgress());
+    stats.SetLocalBytes(ExportAggStats(data.LocalBytes));
 }
 
 void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& stats) {
@@ -1446,85 +1399,6 @@ void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& st
 
     ExtraStats.SetAffectedShards(AffectedShards.size());
     stats.MutableExtra()->PackFrom(ExtraStats);
-}
-
-void TQueryExecutionStats::AdjustExternalAggr(NYql::NDqProto::TDqExternalAggrStats& stats) {
-    if (stats.HasFirstMessageMs()) {
-        AdjustDqStatsAggr(*stats.MutableFirstMessageMs());
-    }
-    if (stats.HasLastMessageMs()) {
-        AdjustDqStatsAggr(*stats.MutableLastMessageMs());
-    }
-}
-
-void TQueryExecutionStats::AdjustAsyncAggr(NYql::NDqProto::TDqAsyncStatsAggr& stats) {
-    if (stats.HasFirstMessageMs()) {
-        AdjustDqStatsAggr(*stats.MutableFirstMessageMs());
-    }
-    if (stats.HasPauseMessageMs()) {
-        AdjustDqStatsAggr(*stats.MutablePauseMessageMs());
-    }
-    if (stats.HasResumeMessageMs()) {
-        AdjustDqStatsAggr(*stats.MutableResumeMessageMs());
-    }
-    if (stats.HasLastMessageMs()) {
-        AdjustDqStatsAggr(*stats.MutableLastMessageMs());
-    }
-}
-
-void TQueryExecutionStats::AdjustAsyncBufferAggr(NYql::NDqProto::TDqAsyncBufferStatsAggr& stats) {
-    if (stats.HasExternal()) {
-        AdjustExternalAggr(*stats.MutableExternal());
-    }
-    if (stats.HasIngress()) {
-        AdjustAsyncAggr(*stats.MutableIngress());
-    }
-    if (stats.HasPush()) {
-        AdjustAsyncAggr(*stats.MutablePush());
-    }
-    if (stats.HasPop()) {
-        AdjustAsyncAggr(*stats.MutablePop());
-    }
-    if (stats.HasEgress()) {
-        AdjustAsyncAggr(*stats.MutableEgress());
-    }
-}
-
-void TQueryExecutionStats::AdjustDqStatsAggr(NYql::NDqProto::TDqStatsAggr& stats) {
-    if (auto min = stats.GetMin()) {
-        stats.SetMin(min > BaseTimeMs ? min - BaseTimeMs : 0);
-    }
-    if (auto max = stats.GetMax()) {
-        stats.SetMax(max > BaseTimeMs ? max - BaseTimeMs : 0);
-    }
-    if (auto cnt = stats.GetCnt()) {
-        auto sum = stats.GetSum();
-        auto baseSum = BaseTimeMs * cnt;
-        stats.SetSum(sum > baseSum ? sum - baseSum : 0);
-    }
-}
-
-void TQueryExecutionStats::AdjustBaseTime(NDqProto::TDqStageStats* stageStats) {
-    if (stageStats->HasStartTimeMs()) {
-        AdjustDqStatsAggr(*stageStats->MutableStartTimeMs());
-    }
-    if (stageStats->HasFinishTimeMs()) {
-        AdjustDqStatsAggr(*stageStats->MutableFinishTimeMs());
-    }
-    for (auto& p : *stageStats->MutableIngress()) {
-        AdjustAsyncBufferAggr(p.second);
-    }
-    for (auto& p : *stageStats->MutableInput()) {
-        AdjustAsyncBufferAggr(p.second);
-    }
-    for (auto& p : *stageStats->MutableOutput()) {
-        AdjustAsyncBufferAggr(p.second);
-    }
-    for (auto& p : *stageStats->MutableEgress()) {
-        AdjustAsyncBufferAggr(p.second);
-    }
-    auto updateTimeMs = stageStats->GetUpdateTimeMs();
-    stageStats->SetUpdateTimeMs(updateTimeMs > BaseTimeMs ? updateTimeMs - BaseTimeMs : 0);
 }
 
 TTableStat& TTableStat::operator +=(const TTableStat& rhs) {

@@ -966,11 +966,21 @@ message TScriptExecutionRetryState {
         optional uint64 RetryCountLimit = 4;
     }
 
+    message TExponentialDelayPolicy {
+        optional double BackoffMultiplier = 1;
+        optional google.protobuf.Duration InitialBackoff = 2;
+        optional google.protobuf.Duration MaxBackoff = 3;
+        optional google.protobuf.Duration ResetBackoffThreshold = 4;
+        optional google.protobuf.Duration QueryUptimeThreshold = 5;
+        optional double JitterFactor = 6;
+    }
+
     message TMapping {
         repeated Ydb.StatusIds.StatusCode StatusCode = 1;
 
         oneof Policy {
             TBackoffPolicy BackoffPolicy = 2;
+            TExponentialDelayPolicy ExponentialDelayPolicy = 3;
         }
     }
 

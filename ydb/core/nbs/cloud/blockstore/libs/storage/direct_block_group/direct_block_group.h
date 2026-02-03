@@ -2,6 +2,7 @@
 
 #include <ydb/core/blobstorage/ddisk/ddisk.h>
 #include <ydb/core/mind/bscontroller/types.h>
+
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/direct_block_group/request.h>
 
@@ -18,7 +19,7 @@ constexpr size_t BlocksCount = 128 * 1024 * 1024 / 4096;
 ////////////////////////////////////////////////////////////////////////////////
 
 class TDirectBlockGroup
-{   
+{
 private:
     struct TBlockMeta {
         TVector<ui64> LsnByPersistentBufferIndex;
@@ -42,7 +43,7 @@ private:
                     return true;
                 }
             }
-            
+
             return false;
         }
 
@@ -54,7 +55,7 @@ private:
             }
         }
 
-        [[nodiscard]] bool IsWrited() const
+        [[nodiscard]] bool IsWritten() const
         {
             return IsFlushedToDDisk() || LsnByPersistentBufferIndex[0] != 0;
         }
@@ -86,6 +87,8 @@ private:
     TVector<TDDiskConnection> DDiskConnections;
     TVector<TDDiskConnection> PersistentBufferConnections;
 
+    ui64 TabletId;
+    ui32 Generation;
     ui64 RequestId = 0;
     std::unordered_map<ui64, std::shared_ptr<IRequest>> RequestById;
     TVector<TBlockMeta> BlocksMeta;
@@ -116,10 +119,15 @@ public:
     void RequestBlockFlush(
         const TActorContext& ctx,
         const TWriteRequest& request,
-        bool isErase);
+        bool isErase,
+        NWilson::TTraceId traceId);
 
     void HandlePersistentBufferFlushResult(
         const NDDisk::TEvFlushPersistentBufferResult::TPtr& ev,
+        const TActorContext& ctx);
+
+    void HandlePersistentBufferEraseResult(
+        const NDDisk::TEvErasePersistentBufferResult::TPtr& ev,
         const TActorContext& ctx);
 
     void HandleReadBlocksRequest(

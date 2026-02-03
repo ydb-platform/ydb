@@ -815,9 +815,9 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         server.EnablePQLogs({NKikimrServices::KQP_PROXY}, NLog::EPriority::PRI_EMERG);
 
         const TString topicPath = "acc/topic1";
-        const ui32 numMessages = 60;
+        const ui32 numMessages = 1000;
         const ui32 messageSize = 1000;
-        const ui64 partitionMaxInFlightBytes = 20'000;
+        const ui64 partitionMaxInFlightBytes = 2'000;
 
         auto driver = pqClient->GetDriver();
         {

@@ -5,7 +5,7 @@
 
 #include <ydb/core/nbs/cloud/blockstore/config/storage.pb.h>
 
-namespace NYdb::NBS::NStorage::NPartitionDirect {
+namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -23,4 +23,4 @@ TActorId CreatePartitionTablet(
         NKikimr::AppData()->SystemPoolId);
 }
 
-} // namespace NYdb::NBS::NStorage::NPartitionDirect
+} // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

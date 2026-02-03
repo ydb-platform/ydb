@@ -3,7 +3,7 @@
 #include <ydb/library/wilson_ids/wilson.h>
 #include <util/string/builder.h>
 
-namespace NYdb::NBS::NStorage::NPartitionDirect {
+namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 using namespace NKikimr;
 
@@ -316,7 +316,7 @@ void TDirectBlockGroup::RequestBlockFlush(
             blockMeta.LsnByPersistentBufferIndex[i],
             std::nullopt,
             std::nullopt);
-            
+
             ddiskConnection.DDiskId.Serialize(requestToDDisk->Record.MutableDDiskId());
             requestToDDisk->Record.SetDDiskInstanceGuid(*ddiskConnection.Credentials.DDiskInstanceGuid);
 
@@ -581,4 +581,4 @@ template void TDirectBlockGroup::HandleReadResult<NDDisk::TEvReadResult>(
     const NDDisk::TEvReadResult::TPtr& ev,
     const TActorContext& ctx);
 
-}   // namespace NYdb::NBS::NStorage::NPartitionDirect
+}   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

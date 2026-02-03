@@ -208,6 +208,21 @@ namespace {
         }
         wrapper->Servers.clear();
     }
+
+    TString GetStartupVersionLikeYqlVersion() {
+        // Keep in sync with YQL `Version()` implementation (`ExpandVersion()` peephole):
+        // take the last path segment of `GetBranch()`.
+        const TString branch(GetBranch());
+        TString result;
+        const auto pos = branch.rfind('/');
+        if (pos != TString::npos) {
+            result = branch.substr(pos + 1);
+        }
+        if (result.empty()) {
+            result = "unknown";
+        }
+        return result;
+    }
 }
 
 class TGRpcServersManager : public TActorBootstrapped<TGRpcServersManager> {
@@ -2159,6 +2174,10 @@ void TKikimrRunner::KikimrStart() {
     ThreadSigmask(SIG_BLOCK);
     if (ActorSystem) {
         ActorSystem->Start();
+        LOG_NOTICE_S(*ActorSystem, NKikimrServices::BOOTSTRAPPER,
+            "Starting YDB " << GetStartupVersionLikeYqlVersion()
+                << " r" << GetArcadiaLastChange()
+                << " built by " << GetProgramBuildUser());
     }
 
     if (!!Monitoring) {

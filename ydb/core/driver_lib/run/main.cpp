@@ -20,6 +20,9 @@
 // compatibility info
 #include <ydb/core/driver_lib/version/version.h>
 
+// build/version info
+#include <library/cpp/svnversion/svnversion.h>
+
 // backtrace formatting
 #include <ydb/core/base/backtrace.h>
 
@@ -31,6 +34,25 @@
 
 namespace NKikimr {
 
+namespace {
+
+TString BuildYdbStartupVersionString() {
+    // Keep in sync with YQL `Version()` implementation (`ExpandVersion()` peephole):
+    // take the last path segment of `GetBranch()`.
+    const TString branch(GetBranch());
+    TString result;
+    const auto pos = branch.rfind('/');
+    if (pos != TString::npos) {
+        result = branch.substr(pos + 1);
+    }
+    if (result.empty()) {
+        result = "unknown";
+    }
+    return result;
+}
+
+} // namespace
+
 int MainRun(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories> factories) {
 #ifdef _win32_
     WSADATA dummy;
@@ -38,7 +60,8 @@ int MainRun(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories>
 #endif
 
     TKikimrRunner::SetSignalHandlers();
-    Cout << "Starting Kikimr r" << GetArcadiaLastChange()
+    Cout << "Starting YDB " << BuildYdbStartupVersionString()
+         << " r" << GetArcadiaLastChange()
          << " built by " << GetProgramBuildUser() << Endl;
 
     TIntrusivePtr<TKikimrRunner> runner = TKikimrRunner::CreateKikimrRunner(runConfig, std::move(factories));
@@ -46,7 +69,7 @@ int MainRun(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories>
         runner->KikimrStart();
         runner->BusyLoop();
         // exit busy loop by a signal
-        Cout << "Shutting Kikimr down" << Endl;
+        Cout << "Shutting YDB down" << Endl;
         runner->KikimrStop(false);
     }
 

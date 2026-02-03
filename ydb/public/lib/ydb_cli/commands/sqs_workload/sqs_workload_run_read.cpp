@@ -52,7 +52,7 @@ namespace NYdb::NConsoleClient {
             .StoreResult(&Scenario.Account);
         config.Opts->AddLongOption("aws-session-token", "AWS session token.")
             .StoreResult(&Scenario.Token);
-        config.Opts->AddLongOption("aws-secret-key", "AWS secret access key.")  
+        config.Opts->AddLongOption("aws-secret-key", "AWS secret access key.")
             .StoreResult(&Scenario.SecretKey);
         config.Opts->AddLongOption("error-messages-rate", "Error messages rate.")
             .Optional()

@@ -84,8 +84,8 @@ private:
     };
 
     struct TMessageInfo {
-        TMessageInfo(const std::string& key, TWriteMessage&& message, ui64 partition, TTransactionBase* tx)
-            :Key(key)
+        TMessageInfo(const std::string& key, TWriteMessage&& message, std::uint64_t partition, TTransactionBase* tx)
+            : Key(key)
             , Message(std::move(message))
             , Partition(partition)
             , Tx(tx)

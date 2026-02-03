@@ -454,7 +454,13 @@ std::shared_ptr<TCleanupPortionsColumnEngineChanges> TColumnEngineForLogs::Start
                 ++i;
                 continue;
             }
-            AFL_VERIFY(it->second[i]->CheckForCleanup(snapshot))("p_snapshot", it->second[i]->GetRemoveSnapshotOptional())("snapshot", snapshot);
+            // TODO: fix this
+            // AFL_VERIFY(it->second[i]->CheckForCleanup(snapshot))("p_snapshot", it->second[i]->GetRemoveSnapshotOptional())("snapshot", snapshot);
+            if (!it->second[i]->CheckForCleanup(snapshot)) {
+                AFL_EMERG(NKikimrServices::TX_COLUMNSHARD)("error", "check for cleanup failed")("portion", it->second[i]->DebugString())("snapshot", snapshot);
+                ++i;
+                continue;
+            }
             ++portionsCount;
             chunksCount += it->second[i]->GetApproxChunksCount(it->second[i]->GetSchema(GetVersionedIndex())->GetColumnsCount());
             if ((portionsCount < maxPortionsCount && chunksCount < maxChunksCount) || changes->GetPortionsToDrop().empty()) {

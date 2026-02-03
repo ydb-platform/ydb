@@ -2,10 +2,10 @@
 
 #include <util/memory/alloc.h>
 
-namespace NCloud::NBlockStore::NLoadTest {
+namespace NYdb::NBS::NBlockStore::NLoadTest {
 
 ////////////////////////////////////////////////////////////////////////////////
 
 IAllocator* BufferPool();
 
-}   // namespace NCloud::NBlockStore::NLoadTest
+}   // namespace NYdb::NBS::NBlockStore::NLoadTest

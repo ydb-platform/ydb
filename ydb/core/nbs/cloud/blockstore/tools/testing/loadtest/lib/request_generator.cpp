@@ -10,7 +10,7 @@
 #include <util/random/random.h>
 #include <util/string/builder.h>
 
-namespace NCloud::NBlockStore::NLoadTest {
+namespace NYdb::NBS::NBlockStore::NLoadTest {
 
 namespace {
 
@@ -171,4 +171,4 @@ IRequestGeneratorPtr CreateArtificialRequestGenerator(
         std::move(range));
 }
 
-}   // namespace NCloud::NBlockStore::NLoadTest
+}   // namespace NYdb::NBS::NBlockStore::NLoadTest

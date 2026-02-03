@@ -4,7 +4,7 @@
 #include <util/system/execpath.h>
 #include <util/system/thread.h>
 
-namespace NCloud {
+namespace NYdb::NBS {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -25,4 +25,4 @@ void SetCurrentThreadName(const TString& name, ui32 maxCharsFromProcessName)
 #endif
 }
 
-}   // namespace NCloud
+}   // namespace NYdb::NBS

@@ -34,8 +34,8 @@
 namespace {
 
 void FillLatency(
-    const NCloud::TLatencyHistogram& hist,
-    NCloud::NBlockStore::NProto::TLatency& latency)
+    const NYdb::NBS::TLatencyHistogram& hist,
+    NYdb::NBS::NProto::TLatency& latency)
 {
     latency.SetP50(hist.GetValueAtPercentile(50));
     latency.SetP90(hist.GetValueAtPercentile(90));
@@ -137,14 +137,14 @@ public:
 
     void PrepareTestResult(const TActorContext& ctx)
     {
-        using namespace NCloud::NBlockStore;
+        using namespace NYdb::NBS::NBlockStore;
         LOG_WARN_S(ctx, NKikimrServices::NBS2_LOAD_TEST, " test has been completed " << Name);
 
         auto stopped = TInstant::Now();
         NJson::TJsonValue result;
 
         const auto& suiteResults = TestRunner->GetResults();
-        NProto::TTestResults proto;
+        NYdb::NBS::NProto::TTestResults proto;
         proto.SetName(Name);
         proto.SetResult(suiteResults.Status);
         proto.SetStartTime(TestRunner->GetStartTime().MicroSeconds());
@@ -173,7 +173,7 @@ public:
     void SendIORequest(
         const TActorContext& ctx,
         IEventBasePtr request,
-        NCloud::NBlockStore::NLoadTest::LoadTestSendRequestFunctionCB cb
+        NYdb::NBS::NBlockStore::NLoadTest::LoadTestSendRequestFunctionCB cb
     )
     {
         ui64 cookie = ++LastUsedCookie;
@@ -181,12 +181,12 @@ public:
         SendWithUndeliveryTracking(ctx, DirectPartitionId, std::move(request), cookie);
     }
 
-    NCloud::NBlockStore::NLoadTest::TLoadTestRequestCallbacks GetLoadTestCallbacks()
+    NYdb::NBS::NBlockStore::NLoadTest::TLoadTestRequestCallbacks GetLoadTestCallbacks()
     {
-        using namespace NCloud::NBlockStore;
+        using namespace NYdb::NBS::NBlockStore;
         auto sendReadRequest =
             [this]
-            (TBlockRange64 range, NCloud::NBlockStore::NLoadTest::LoadTestSendRequestFunctionCB cb, const void *udata) {
+            (TBlockRange64 range, NYdb::NBS::NBlockStore::NLoadTest::LoadTestSendRequestFunctionCB cb, const void *udata) {
             auto request = std::make_unique<NYdb::NBS::TEvService::TEvReadBlocksRequest>();
             request->Record.SetDiskId("TempDiskID");
             request->Record.SetStartIndex(range.Start);
@@ -202,7 +202,7 @@ public:
                 ui64 blockIndexWriteTo,
                 const void* data,
                 size_t dataSize,
-                NCloud::NBlockStore::NLoadTest::LoadTestSendRequestFunctionCB cb,
+                NYdb::NBS::NBlockStore::NLoadTest::LoadTestSendRequestFunctionCB cb,
                 const void *udata
             ) {
                 auto request = std::make_unique<NYdb::NBS::TEvService::TEvWriteBlocksRequest>();
@@ -226,7 +226,7 @@ public:
             }
         };
 
-        NCloud::NBlockStore::NLoadTest::TLoadTestRequestCallbacks requestCallbacks;
+        NYdb::NBS::NBlockStore::NLoadTest::TLoadTestRequestCallbacks requestCallbacks;
         requestCallbacks.Read = std::move(sendReadRequest);
         requestCallbacks.NotifyCompleted = std::move(notifyTestCompleted);
         requestCallbacks.Write = std::move(sendWriteRequest);
@@ -235,18 +235,18 @@ public:
     }
 
     void RunTest(const TActorContext& ctx) {
-        using namespace NCloud::NBlockStore;
+        using namespace NYdb::NBS::NBlockStore;
         LOG_WARN_S(ctx, NKikimrServices::NBS2_LOAD_TEST, "Tag# " << Tag << " RunTest called");
 
         try {
-            NCloud::TLogSettings logSettings;
+            NYdb::NBS::TLogSettings logSettings;
             logSettings.FiltrationLevel = ELogPriority::TLOG_INFO;
             auto logging = CreateLoggingService("console", logSettings);
 
             TestRunner = CreateTestRunner(
                 logging,
-                NCloud::NBlockStore::NLoadTest::MakeLoggingTag(Name),
-                NCloud::NBlockStore::NLoadTest::CreateArtificialRequestGenerator(logging, RangeTest),
+                NYdb::NBS::NBlockStore::NLoadTest::MakeLoggingTag(Name),
+                NYdb::NBS::NBlockStore::NLoadTest::CreateArtificialRequestGenerator(logging, RangeTest),
                 RangeTest.GetIoDepth(),
                 TestContext.ShouldStop,
                 std::move(GetLoadTestCallbacks()),
@@ -424,13 +424,13 @@ private:
     NActors::TActorId DirectPartitionId;
     TString Name;
 
-    NCloud::NBlockStore::NProto::TRangeTest RangeTest;
-    NCloud::NBlockStore::NLoadTest::TTestContext TestContext; // TODO remove me
+    NYdb::NBS::NProto::TRangeTest RangeTest;
+    NYdb::NBS::NBlockStore::NLoadTest::TTestContext TestContext; // TODO remove me
 
-    TMap<ui64, NCloud::NBlockStore::NLoadTest::LoadTestSendRequestFunctionCB> CookieToRequestCB;
+    TMap<ui64, NYdb::NBS::NBlockStore::NLoadTest::LoadTestSendRequestFunctionCB> CookieToRequestCB;
     std::atomic<uint64_t> LastUsedCookie = 0;
 
-    NCloud::NBlockStore::NLoadTest::ITestRunnerPtr TestRunner;
+    NYdb::NBS::NBlockStore::NLoadTest::ITestRunnerPtr TestRunner;
     TString ReasonOfFinishing;
     bool ResultSent = false;
     TDuration TestInitializingDuration;

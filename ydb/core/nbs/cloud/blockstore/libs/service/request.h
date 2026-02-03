@@ -1,6 +1,6 @@
 #pragma once
 
-namespace NCloud::NBlockStore {
+namespace NYdb::NBS::NBlockStore {
 
 enum class EBlockStoreRequest
 {
@@ -10,4 +10,4 @@ enum class EBlockStoreRequest
     MAX
 };
 
-} // namespace NCloud::NBlockStore
+}   // namespace NYdb::NBS::NBlockStore

@@ -12,7 +12,7 @@ namespace NYdb::NConsoleClient {
     }
 
     int TSqsWorkloadWriteScenario::RunScenario() {
-        InitStatsCollector(Concurrency, 0);
+        InitStatsCollector(WorkersCount, 0);
         InitMeasuringHttpClient(StatsCollector);
         InitSqsClient();
 
@@ -32,7 +32,7 @@ namespace NYdb::NConsoleClient {
             .StatsCollector = StatsCollector,
             .MaxUniqueMessages = MaxUniqueMessages,
             .BatchSize = BatchSize,
-            .Concurrency = Concurrency,
+            .WorkersCount = WorkersCount,
             .GroupsAmount = GroupsAmount,
             .MessageSize = MessageSize,
             .SetSubjectToken = SetSubjectToken,

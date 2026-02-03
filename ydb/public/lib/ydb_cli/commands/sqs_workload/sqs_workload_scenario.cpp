@@ -52,38 +52,46 @@ namespace NYdb::NConsoleClient {
     void TSqsWorkloadScenario::InitSqsClient() {
         Aws::Client::ClientConfiguration sqsClientConfiguration;
 
-        if (EndpointOverride.Defined()) {
+        if (QueueEndpoint.Defined()) {
             sqsClientConfiguration.endpointOverride =
-                Aws::String(EndpointOverride->c_str(), EndpointOverride->size());
+                Aws::String(QueueEndpoint->c_str(), QueueEndpoint->size());
         }
 
         sqsClientConfiguration.scheme = Aws::Http::Scheme::HTTP;
         sqsClientConfiguration.httpRequestTimeoutMs = RequestTimeoutMs;
         sqsClientConfiguration.executor =
             Aws::MakeShared<Aws::Utils::Threading::PooledThreadExecutor>(
-                "pooled-thread-executor", Concurrency);
+                "pooled-thread-executor", WorkersCount);
 
         if (Region.Defined()) {
             sqsClientConfiguration.region = Aws::String(Region->c_str(), Region->size());
         }
 
         Aws::Auth::AWSCredentials credentials;
-        Aws::String accountStr(Account.c_str(), Account.size());
-        Aws::String tokenStr(Token.c_str(), Token.size());
+        if (Account.Defined()) {
+            Aws::String accountStr(Account->c_str(), Account->size());
+            credentials.SetAWSAccessKeyId(accountStr.c_str());
+        }
 
-        credentials.SetAWSAccessKeyId(accountStr.c_str());
-        credentials.SetAWSSecretKey("unused");
-        credentials.SetSessionToken(tokenStr.c_str());
+        if (Token.Defined()) {
+            Aws::String tokenStr(Token->c_str(), Token->size());
+            credentials.SetSessionToken(tokenStr.c_str());
+        }
 
-        if (UseJsonAPI) {
+        if (SecretKey.Defined()) {
+            Aws::String secretKeyStr(SecretKey->c_str(), SecretKey->size());
+            credentials.SetAWSSecretKey(secretKeyStr.c_str());
+        }
+
+        if (UseXmlAPI) {
+            SqsClient = Aws::MakeShared<TSQSClientWrapper>(
+                "sqs-client-wrapper", credentials, sqsClientConfiguration, Aws::MakeShared<Aws::SQS::SQSClient>(
+                    "sqs-client", credentials, sqsClientConfiguration), StatsCollector, ValidateFifo);
+        } else {
             auto jsonSqsClient = Aws::MakeShared<TSQSJsonClient>(
                 "json-sqs-client", credentials, sqsClientConfiguration);
             SqsClient = Aws::MakeShared<TSQSClientWrapper>(
                 "sqs-client-wrapper", credentials, sqsClientConfiguration, jsonSqsClient, StatsCollector, ValidateFifo);
-        } else {
-            SqsClient = Aws::MakeShared<TSQSClientWrapper>(
-                "sqs-client-wrapper", credentials, sqsClientConfiguration, Aws::MakeShared<Aws::SQS::SQSClient>(
-                    "sqs-client", credentials, sqsClientConfiguration), StatsCollector, ValidateFifo);
         }
     }
 

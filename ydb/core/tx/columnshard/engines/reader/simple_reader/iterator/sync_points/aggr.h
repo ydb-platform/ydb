@@ -149,7 +149,7 @@ private:
         } else {
             AFL_VERIFY(source->GetType() == IDataSource::EType::SimplePortion);
             Collection->OnSourceFinished(source);
-            cursor = cursor = AppDataVerified().ColumnShardConfig.GetEnableCursorV1()
+            cursor = AppDataVerified().ColumnShardConfig.GetEnableCursorV1()
                                   ? static_cast<std::shared_ptr<IScanCursor>>(std::make_shared<TNotSortedSimpleScanCursor>(
                                         source->GetSourceIdx(), source->GetRecordsCount(), source->GetPortionIdOptional()))
                                   : static_cast<std::shared_ptr<IScanCursor>>(std::make_shared<TDeprecatedNotSortedSimpleScanCursor>(

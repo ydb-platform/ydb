@@ -1,7 +1,7 @@
 #include "partition_direct_actor.h"
 
 
-namespace NYdb::NBS::NStorage::NPartitionDirect {
+namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 using namespace NYdb::NBS;
 
@@ -182,4 +182,4 @@ STFUNC(TPartitionActor::StateWork)
     }
 }
 
-}   // namespace NYdb::NBS::NStorage::NPartitionDirect
+}   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

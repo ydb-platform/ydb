@@ -2,7 +2,7 @@
 
 #include <util/datetime/cputimer.h>
 
-namespace NYdb::NBS {
+namespace NYdb::NBS::NBlockStore {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -30,4 +30,4 @@ void TCallContext::SetHasUncountableRejects()
     AtomicSet(HasUncountableRejects, true);
 }
 
-}   // namespace NYdb::NBS
+}   // namespace NYdb::NBS::NBlockStore

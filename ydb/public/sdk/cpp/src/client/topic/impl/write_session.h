@@ -117,7 +117,7 @@ private:
 
     struct TIdleSession {
         TIdleSession(TWriteSessionWrapper* session, TInstant emptySince, TDuration idleTimeout)
-            :Session(session)
+            : Session(session)
             , EmptySince(emptySince)
             , IdleTimeout(idleTimeout)
         {}

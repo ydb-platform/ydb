@@ -19,7 +19,7 @@
 #include <util/system/thread.h>
 #include <util/thread/lfstack.h>
 
-namespace NCloud {
+namespace NYdb::NBS {
 
 using namespace NUnifiedAgent;
 
@@ -271,7 +271,7 @@ private:
             return nullptr;
         }
 
-        ::NCloud::SetCurrentThreadName("Logger");
+        ::NYdb::NBS::SetCurrentThreadName("Logger");
         NProfiling::TMemoryTagScope tagScope("STORAGE_THREAD_LOGGER");
 
         while (!AtomicGet(ShouldStop)) {
@@ -431,4 +431,4 @@ ILoggingServicePtr CreateUnifiedAgentLoggingService(
 
 }
 
-}   // namespace NCloud
+}   // namespace NYdb::NBS

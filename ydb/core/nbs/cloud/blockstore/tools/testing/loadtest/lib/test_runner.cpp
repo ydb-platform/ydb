@@ -19,11 +19,11 @@
 #include <algorithm>
 #include <atomic>
 
-namespace NCloud::NBlockStore::NLoadTest {
+namespace NYdb::NBS::NBlockStore::NLoadTest {
 
 using namespace NThreading;
 
-//using namespace NCloud::NBlockStore::NClient;
+// using namespace NYdb::NBS::NBlockStore::NClient;
 
 namespace {
 
@@ -412,4 +412,4 @@ ITestRunnerPtr CreateTestRunner(
         udata);
 }
 
-}   // namespace NCloud::NBlockStore::NLoadTest
+}   // namespace NYdb::NBS::NBlockStore::NLoadTest

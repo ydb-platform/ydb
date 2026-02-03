@@ -102,7 +102,6 @@
 #include <ydb/public/lib/deprecated/client/msgbus_client.h>
 #include <ydb/core/client/minikql_compile/mkql_compile_service.h>
 #include <ydb/core/client/server/msgbus_server_pq_metacache.h>
-#include <ydb/core/client/server/http_ping.h>
 
 #include <ydb/library/grpc/server/actors/logger.h>
 
@@ -654,7 +653,6 @@ void TKikimrRunner::InitializeMonitoring(const TKikimrRunConfig& runConfig, bool
         }
         if (Monitoring) {
             Monitoring->RegisterCountersPage("counters", "Counters", Counters);
-            Monitoring->Register(NHttp::CreatePing());
             ActorsMonPage = Monitoring->RegisterIndexPage("actors", "Actors");
         }
     }

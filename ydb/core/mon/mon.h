@@ -101,6 +101,7 @@ protected:
     TActorId HttpMonServiceActorId;
     TActorId NodeProxyServiceActorId;
     TActorId CountersServiceActorId;
+    TActorId PingServiceActorId;
     TIntrusivePtr<NMonitoring::TDynamicCountersPage> CountersMonPage;
 
     struct TActorMonPageInfo {

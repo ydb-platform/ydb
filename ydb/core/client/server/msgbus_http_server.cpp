@@ -3,7 +3,6 @@
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/public/lib/base/msgbus.h>
 #include "msgbus_http_server.h"
-#include "http_ping.h"
 #include <ydb/core/base/counters.h>
 #include <ydb/core/mon/mon.h>
 #include <ydb/core/base/ticket_parser.h>

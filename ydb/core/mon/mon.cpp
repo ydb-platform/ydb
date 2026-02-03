@@ -1502,6 +1502,25 @@ public:
     TString RedirectRoot;
 };
 
+class THttpMonPingService : public TActor<THttpMonPingService> {
+public:
+    THttpMonPingService()
+        : TActor(&THttpMonPingService::StateWork)
+    {
+    }
+
+    void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev) {
+        Send(ev->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(ev->Get()->Request->CreateResponseOK("ok /ping", "text/plain")));
+    }
+
+    STATEFN(StateWork) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(NHttp::TEvHttpProxy::TEvHttpIncomingRequest, Handle);
+            cFunc(TEvents::TSystem::Poison, PassAway);
+        }
+    }
+};
+
 TMon::TMon(TConfig config)
     : Config(std::move(config))
     , IndexMonPage(new NMonitoring::TIndexMonPage("", Config.Title))
@@ -1561,6 +1580,7 @@ std::future<void> TMon::Start(TActorSystem* actorSystem) {
     }
     CountersServiceActorId = ActorSystem->Register(countersMonPageServiceActor, TMailboxType::ReadAsFilled, executorPool);
     ActorSystem->RegisterLocalService(CountersServiceActorId, CountersServiceActorId);
+    PingServiceActorId = ActorSystem->Register(new THttpMonPingService(), TMailboxType::ReadAsFilled, executorPool);
 
     TStringBuilder workerName;
     workerName << FQDNHostName() << ":" << Config.Port;
@@ -1587,6 +1607,7 @@ std::future<void> TMon::Start(TActorSystem* actorSystem) {
     ActorSystem->Send(HttpProxyActorId, new NHttp::TEvHttpProxy::TEvRegisterHandler("/", HttpMonServiceActorId));
     ActorSystem->Send(HttpProxyActorId, new NHttp::TEvHttpProxy::TEvRegisterHandler("/node", NodeProxyServiceActorId));
     ActorSystem->Send(HttpProxyActorId, new NHttp::TEvHttpProxy::TEvRegisterHandler(TStringBuilder() << "/" << CountersMonPage->GetPath(), CountersServiceActorId));
+    ActorSystem->Send(HttpProxyActorId, new NHttp::TEvHttpProxy::TEvRegisterHandler("/ping", PingServiceActorId));
     for (auto& pageInfo : ActorMonPages) {
         if (pageInfo.Page) {
             RegisterActorMonPage(pageInfo);
@@ -1609,6 +1630,7 @@ void TMon::Stop() {
         ActorSystem->Send(NodeProxyServiceActorId, new TEvents::TEvPoisonPill);
         ActorSystem->Send(HttpMonServiceActorId, new TEvents::TEvPoisonPill);
         ActorSystem->Send(HttpProxyActorId, new TEvents::TEvPoisonPill);
+        ActorSystem->Send(PingServiceActorId, new TEvents::TEvPoisonPill);
         ActorSystem = nullptr;
     }
 }

@@ -48,45 +48,107 @@ GRANT CREATE TABLE ON my_queries TO `user@domain`
 
 ## Примеры {#examples}
 
-Создание и запуск запроса `my_streaming_query`:
+### Запись в топик (JSON) {#example-topic-json}
+
+Запрос читает события из входного топика, преобразует все колонки в JSON-строку и записывает результат в выходной топик.
+
+Функция `TableRow()` собирает все колонки текущей строки в структуру, `Yson::From` преобразует её в Yson, `Yson::SerializeJson` сериализует в JSON-строку, а `ToBytes` конвертирует в тип `String`, который требуется для записи в топик.
+
+{% note info %}
+
+Запись в топики выполняется через [external data source](../../../datamodel/external_data_source.md). В примере `ydb_source` — это заранее созданный external data source, а `output_topic` и `input_topic` — топики, доступные через него.
+
+{% endnote %}
 
 ```sql
 CREATE STREAMING QUERY my_streaming_query AS
 DO BEGIN
 
-INSERT INTO
-    ydb_source.output_topic
+-- ydb_source — external data source для работы с топиками
+INSERT INTO ydb_source.output_topic
 SELECT
-    *
+    -- Сериализация всех колонок в JSON
+    ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow()))))
 FROM
+    -- Чтение из топика
     ydb_source.input_topic
+WITH (
+    FORMAT = json_each_row,  -- Формат входных данных
+    SCHEMA = (               -- Схема входных данных
+        Id Uint64 NOT NULL,
+        Name Utf8 NOT NULL
+    )
+)
 
 END DO
 ```
 
-Создание запроса `my_streaming_query` в [пуле ресурсов](../../../concepts/glossary.md#resource-pool) `my_resource_pool` без запуска:
+### Запись в таблицу {#example-table}
+
+Запрос читает события из топика и записывает их в таблицу `output_table`. Таблица должна быть создана заранее со схемой, соответствующей выбираемым колонкам.
+
+{% note warning %}
+
+Запись в таблицы в потоковых запросах поддерживается **только в режиме UPSERT**. Операция `INSERT INTO` для таблиц не поддерживается. При UPSERT, если строка с таким первичным ключом уже существует, она будет обновлена, иначе будет вставлена новая строка.
+
+{% endnote %}
+
+```sql
+CREATE STREAMING QUERY my_streaming_query AS
+DO BEGIN
+
+-- Запись в таблицу (только UPSERT, INSERT не поддерживается)
+UPSERT INTO output_table
+SELECT
+    Id,
+    Name
+FROM
+    -- ydb_source — external data source для работы с топиками
+    ydb_source.input_topic
+WITH (
+    FORMAT = json_each_row,  -- Формат входных данных
+    SCHEMA = (               -- Схема входных данных
+        Id Uint64 NOT NULL,
+        Name Utf8 NOT NULL
+    )
+)
+
+END DO
+```
+
+### Запуск в пуле ресурсов {#example-resource-pool}
+
+Запрос создаётся в указанном [пуле ресурсов](../../../concepts/glossary.md#resource-pool), но не запускается автоматически (`RUN = FALSE`). Это позволяет проверить конфигурацию перед запуском или запустить запрос позже через [ALTER STREAMING QUERY](alter-streaming-query.md).
 
 ```sql
 CREATE STREAMING QUERY my_streaming_query WITH (
-    RUN = FALSE,
-    RESOURCE_POOL = my_resource_pool
+    RUN = FALSE,                      -- Не запускать автоматически
+    RESOURCE_POOL = my_resource_pool  -- Пул ресурсов для выполнения
 ) AS
 DO BEGIN
 
-INSERT INTO
-    ydb_source.output_topic
+-- ydb_source — external data source для работы с топиками
+INSERT INTO ydb_source.output_topic
 SELECT
-    *
+    ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow()))))
 FROM
     ydb_source.input_topic
+WITH (
+    FORMAT = json_each_row,
+    SCHEMA = (
+        Id Uint64 NOT NULL,
+        Name Utf8 NOT NULL
+    )
+)
 
 END DO
 ```
 
-Примеры обработки данных в других форматах приведены в статье [{#T}](../../../dev/streaming-query/streaming-query-formats.md). Подробнее о возможностях и ограничениях потоковых запросов [см. в документации](../../../concepts/streaming-query.md).
+Другие примеры: [{#T}](../../../dev/streaming-query/patterns.md).
 
 ## См. также
 
+* [{#T}](../../../dev/streaming-query/patterns.md)
 * [{#T}](../../../concepts/streaming-query.md)
 * [{#T}](alter-streaming-query.md)
 * [{#T}](drop-streaming-query.md)

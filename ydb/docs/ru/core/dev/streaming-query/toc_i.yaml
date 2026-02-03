@@ -1,9 +1,11 @@
 items:
+- name: Типичные шаблоны
+  href: patterns.md
 - name: Запись в таблицы
   href: table-writing.md
 - name: Обогащение данных S3
   href: S3-enrichment.md
-- name: Форматы данных потоковых запросов при чтении/записи топиков
+- name: Форматы данных при чтении/записи топиков
   href: streaming-query-formats.md
 - name: Чекпоинты
   href: checkpoints.md

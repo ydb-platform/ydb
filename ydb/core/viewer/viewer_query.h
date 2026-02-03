@@ -33,6 +33,7 @@ class TJsonQuery : public TViewerPipeClient {
     TDuration StatsPeriod;
     TDuration KeepAlive = TDuration::MilliSeconds(10000);
     TInstant LastSendTime;
+    TInstant QueryStartTime;
     TInstant Deadline;
     static constexpr TDuration WakeupPeriod = TDuration::Seconds(1);
 
@@ -394,6 +395,7 @@ public:
         if (Timeout || KeepAlive || Long || Action == "fetch-long-query") {
             Schedule(WakeupPeriod, new TEvents::TEvWakeup());
         }
+        QueryStartTime = TActivationContext::Now();
         LastSendTime = TActivationContext::Now();
     }
 
@@ -1219,7 +1221,7 @@ private:
 
     void HandleWakeup() {
         auto now = TActivationContext::Now();
-        if (Timeout && (now - LastSendTime > Timeout)) {
+        if (Timeout && (now - QueryStartTime > Timeout)) {
             return ReplyWithTimeoutError();
         }
         if (KeepAlive && (now - LastSendTime > KeepAlive)) {

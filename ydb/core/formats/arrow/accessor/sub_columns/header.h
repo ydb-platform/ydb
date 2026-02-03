@@ -29,12 +29,22 @@ private:
 public:
 
     NJson::TJsonValue DebugJson() const {
+        NJson::TJsonValue blobSizeColumns = NJson::JSON_ARRAY;
+        for (const auto& keyColumn: AddressesProto.GetKeyColumns()) {
+            blobSizeColumns.AppendValue(keyColumn.GetSize());
+        }
+        NJson::TJsonValue blobSizeOthers = NJson::JSON_ARRAY;
+        for (const auto& otherColumn: AddressesProto.GetOtherColumns()) {
+            blobSizeColumns.AppendValue(otherColumn.GetSize());
+        }
         NJson::TJsonValue result = NJson::JSON_MAP;
         result.InsertValue("columns", ColumnStats.DebugJson());
         result.InsertValue("others", OtherStats.DebugJson());
         result.InsertValue("h_size", HeaderSize);
         result.InsertValue("c_size", ColumnsSize);
         result.InsertValue("o_size", OthersSize);
+        result.InsertValue("blob_size_columns", blobSizeColumns);
+        result.InsertValue("blob_size_others", blobSizeOthers);
         return result;
     }
 

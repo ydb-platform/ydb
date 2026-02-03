@@ -275,6 +275,7 @@ protected:
         }
 
         this->WatermarksTracker.SetNotifyHandler([this]() {
+            // This code is called from TaskRunner (either directly or from input transform/helper code), which is owned by sync CA, so `*this` must be alive at that point
             this->ScheduleIdlenessCheck();
         });
 

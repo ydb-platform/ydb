@@ -197,8 +197,8 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
                     if (childPath->PathType != NKikimrSchemeOp::EPathTypeTableIndex && !childPath->Dropped()) {
                         auto indexInfo = context.SS->Indexes.find(childPathId);
                         if (indexInfo != context.SS->Indexes.end() && 
-                            indexInfo->second->Type == NKikimrSchemeOp::EIndexTypeGlobal ||
-                            indexInfo->second->Type == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree) {
+                            (indexInfo->second->Type == NKikimrSchemeOp::EIndexTypeGlobal ||
+                            indexInfo->second->Type == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree)) {
                             
                             auto indexPath = TPath::Init(childPathId, context.SS);
                             for (const auto& [implTableName, implTablePathId] : indexPath.Base()->GetChildren()) {

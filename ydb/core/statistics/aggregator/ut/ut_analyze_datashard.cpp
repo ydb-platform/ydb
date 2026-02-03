@@ -84,9 +84,13 @@ Y_UNIT_TEST_SUITE(AnalyzeDatashard) {
 
         DropTable(env, "Database", "Table");
 
-        Analyze(
+        auto result = Analyze(
             runtime, saTabletId, {pathId},
             "operationId", {}, NKikimrStat::TEvAnalyzeResponse::STATUS_ERROR);
+
+        NYql::TIssues issues;
+        NYql::IssuesFromMessage(result.GetIssues(), issues);
+        UNIT_ASSERT_C(issues.ToString().Contains("Could not find table"), issues.ToString());
 
         std::vector<TCountMinSketchProbes> expected = {
             { .Tag = 1, .Probes = std::nullopt },

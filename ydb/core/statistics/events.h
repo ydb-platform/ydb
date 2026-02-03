@@ -308,6 +308,7 @@ struct TEvStatistics {
             TableNotFound,
         };
         EStatus Status;
+        NYql::TIssues Issues;
         std::vector<TStatisticsItem> Statistics;
 
         explicit TEvFinishTraversal(std::vector<TStatisticsItem> statistics)

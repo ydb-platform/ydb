@@ -45,6 +45,8 @@ struct TStatisticsAggregator::TTxAnalyzeDeadline : public TTxBase {
                 auto response = std::make_unique<TEvStatistics::TEvAnalyzeResponse>();
                 response->Record.SetOperationId(OperationId);
                 response->Record.SetStatus(NKikimrStat::TEvAnalyzeResponse::STATUS_ERROR);
+                NYql::IssueToMessage(
+                    NYql::TIssue("ANALYZE deadline exceeded"), response->Record.AddIssues());
                 ctx.Send(ReplyToActorId, response.release());
             } else {
                 SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyzeDeadline::Complete. No ActorId to send reply. OperationId=" << OperationId);

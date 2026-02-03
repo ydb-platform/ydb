@@ -803,7 +803,7 @@ TSourcePtr TSqlSelect::ProcessCore(const TRule_process_core& node, const TWriteS
     }
 
     if (block5.HasBlock6()) {
-        Ctx_.Error() << "PROCESS does not allow HAVING yet! You may request it on yql@ maillist.";
+        Ctx_.Error() << "PROCESS does not allow HAVING yet!";
         return nullptr;
     }
 

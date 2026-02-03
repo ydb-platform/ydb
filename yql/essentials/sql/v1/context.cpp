@@ -196,6 +196,16 @@ TBlocks& TContext::GetCurrentBlocks() const {
     return *CurrentBlocks_.back();
 }
 
+IOutputStream& TContext::Fatal() {
+    bool isError = false;
+    return MakeIssue(
+        TSeverityIds::S_FATAL,
+        NYql::TIssuesIds::UNEXPECTED,
+        TPosition(),
+        /*forceError=*/false,
+        isError);
+}
+
 IOutputStream& TContext::Error(NYql::TIssueCode code) {
     return Error(Pos(), code);
 }

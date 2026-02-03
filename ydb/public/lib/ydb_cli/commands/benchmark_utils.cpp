@@ -150,7 +150,6 @@ private:
     YDB_ACCESSOR_DEF(TString, DeadlineName);
     YDB_ACCESSOR_DEF(TString, ExecStats);
     TQueryBenchmarkResult::TRawResults RawResults;
-    MD5 ResultHasher;
     // Limit rows stored per result index
     size_t MaxRowsPerResultIndex = 100;
 public:
@@ -160,12 +159,6 @@ public:
 
     TQueryBenchmarkResult::TRawResults&& ExtractRawResults() {
         return std::move(RawResults);
-    }
-
-    TString GetResultHash() const {
-        char buf[25];
-        MD5 hasherCopy = ResultHasher;
-        return hasherCopy.End_b64(buf);
     }
     void OnError(const NYdb::EStatus status, const TString& info) {
         switch (status) {
@@ -248,11 +241,8 @@ public:
                 auto resultSet = streamPart.ExtractResultSet();
                 size_t rowsInThisPart = resultSet.RowsCount();
 
-                // Always compute hash incrementally for all data
-                ResultHasher.Update(FormatResultSetYson(resultSet, NYson::EYsonFormat::Binary));
-
                 // Track total rows read and store only first MaxRowsPerResultIndex rows
-                TResultData& resultData = RawResults[rsIndex];
+                auto& resultData = RawResults[rsIndex];
 
                 // Store result set if we haven't reached the limit yet
                 if (resultData.TotalRowsRead < MaxRowsPerResultIndex) {
@@ -260,7 +250,6 @@ public:
                 }
 
                 resultData.TotalRowsRead += rowsInThisPart;
-                // Results beyond MaxRowsPerResultIndex are not stored (but hash is computed)
             }
         }
         if (execStats) {
@@ -621,7 +610,12 @@ void TQueryBenchmarkResult::CompareWithExpected(TStringBuf expected, size_t resu
     const auto& resultData = RawResults.at(resultSetIndex);
     const auto& resultSets = resultData.ResultSets;
     auto expectedLines = StringSplitter(expected).Split('\n').SkipEmpty().ToList<TString>();
-    if (expectedLines.empty() || resultSets.empty()) {
+    if (expectedLines.empty()) {
+        return;
+    }
+    if (resultSets.empty()) {
+        TStringOutput errStream(DiffErrors);
+        errStream << "Result " << resultSetIndex << ": expected " << (expectedLines.size() - 1) << " rows, but got empty result" << Endl;
         return;
     }
 

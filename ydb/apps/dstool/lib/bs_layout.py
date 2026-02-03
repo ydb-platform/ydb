@@ -3,6 +3,7 @@ from ydb.apps.dstool.lib.common import kikimr_bsconfig
 from operator import itemgetter, attrgetter
 from collections import OrderedDict
 import ydb.core.protos.blobstorage_pb2 as kikimr_bs
+import sys
 
 
 class IdBase(object):
@@ -274,9 +275,14 @@ class BlobStorageLayout(object):
         for group in self.groups.values():
             sp_id = StoragePoolId(group.base.BoxId, group.base.StoragePoolId)
             if sp_id != StoragePoolId(0, 0):
-                sp = self.storage_pools[sp_id]
-                group.storage_pool = sp
-                sp.groups.add(group)
+                # Check if the storage pool exists before accessing it
+                if sp_id in self.storage_pools:
+                    sp = self.storage_pools[sp_id]
+                    group.storage_pool = sp
+                    sp.groups.add(group)
+                else:
+                    # Handle missing storage pool gracefully
+                    print(f"WARNING: Storage pool {sp_id} not found for group {group.base.GroupId}", file=sys.stderr)
 
     def fetch_node_mon_endpoints(self, nodes=None):
         """ Fetch monitoring endpoints for specific nodes (if set) or for all of them. """

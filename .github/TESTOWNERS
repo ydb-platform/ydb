@@ -17,6 +17,9 @@
 /ydb/tests/datashard @ydb-platform/datashard
 /ydb/tests/stress/oltp_workload @ydb-platform/datashard
 /ydb/tests/datashard/vector_index/large @ydb-platform/datashard
+/ydb/core/tx/schemeshard/ut_index_build_reboots @ydb-platform/datashard
+/ydb/core/tx/schemeshard/ut_shred_reboots @ydb-platform/datashard
+/ydb/core/tx/schemeshard/ut_vector_index_build_reboots @ydb-platform/datashard
 
 #Column Tables Development Team @zverevgeny TEAM:@ydb-platform/cs
 /ydb/core/tx/columnshard @ydb-platform/cs
@@ -26,6 +29,8 @@
 /ydb/tests/stress/olap_workload @ydb-platform/cs
 /ydb/tests/functional/tpc @ydb-platform/cs
 /ydb/tests/compatibility/olap @ydb-platform/cs
+/ydb/core/tx/schemeshard/olap @ydb-platform/cs
+/ydb/core/tx/schemeshard/ut_olap_reboots @ydb-platform/cs
 
 #Distributed System Infrastructure Team @ijon TEAM:@ydb-platform/system-infra
 /ydb/core/mind/hive @ydb-platform/system-infra
@@ -49,6 +54,8 @@
 #Security Team @azevaykin TEAM:@ydb-platform/security
 /ydb/core/security @ydb-platform/security
 /ydb/core/tx/tx_proxy/ut_schemereq @ydb-platform/security
+/ydb/core/tx/schemeshard/ut_login* @ydb-platform/security
+/ydb/core/tx/schemeshard/ut_login_large @ydb-platform/security
 
 #YDB Query Execution Team @gridnevvvit TEAM:@ydb-platform/qp
 /ydb/core/kqp @ydb-platform/qp

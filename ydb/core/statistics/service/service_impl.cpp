@@ -293,7 +293,7 @@ private:
             const auto tag = column.GetTag();
 
             for (auto& statistic : column.GetStatistics()) {
-                if (statistic.GetType() == NKikimr::NStat::COUNT_MIN_SKETCH) {
+                if (statistic.GetType() == static_cast<ui32>(EStatType::COUNT_MIN_SKETCH)) {
                     auto data = statistic.GetData().data();
                     auto sketch = reinterpret_cast<const TCountMinSketch*>(data);
                     auto& current = AggregationStatistics.CountMinSketches[tag];
@@ -516,7 +516,7 @@ private:
 
             auto data = it->second.Statistics->AsStringBuf();
             auto statistics = column->AddStatistics();
-            statistics->SetType(NKikimr::NStat::COUNT_MIN_SKETCH);
+            statistics->SetType(static_cast<ui32>(EStatType::COUNT_MIN_SKETCH));
             statistics->SetData(data.data(), data.size());
         }
 

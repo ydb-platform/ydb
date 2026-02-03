@@ -132,7 +132,7 @@ public:
         for (const auto& item : Items) {
             statTypes
                 .AddListItem()
-                .Uint32(item.Type);
+                .Uint32(static_cast<ui32>(item.Type));
         }
         statTypes.EndList().Build();
 
@@ -218,9 +218,9 @@ NActors::IActor* CreateSaveStatisticsQuery(const NActors::TActorId& replyActorId
 
 void DispatchLoadStatisticsQuery(
         const TActorId& replyToActor, ui64 queryId,
-        const TString& database, const TPathId& pathId, ui32 statType, ui32 columnTag) {
+        const TString& database, const TPathId& pathId, EStatType statType, ui32 columnTag) {
     SA_LOG_D("[DispatchLoadStatisticsQuery] QueryId[ " << queryId
-        << " ], PathId[ " << pathId << " ], " << " StatType[ " << statType
+        << " ], PathId[ " << pathId << " ], " << " StatType[ " << static_cast<ui32>(statType)
         << " ], ColumnTag[ " << columnTag << " ]");
 
     const auto statisticsTablePath = CanonizePath(
@@ -235,7 +235,7 @@ void DispatchLoadStatisticsQuery(
             .BeginStruct()
                 .AddMember("owner_id").Uint64(pathId.OwnerId)
                 .AddMember("local_path_id").Uint64(pathId.LocalPathId)
-                .AddMember("stat_type").Uint32(statType)
+                .AddMember("stat_type").Uint32(static_cast<ui32>(statType))
                 .AddMember("column_tag").Uint32(columnTag)
             .EndStruct()
         .EndList();

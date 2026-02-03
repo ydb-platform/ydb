@@ -15,7 +15,11 @@ namespace NYdb::NConsoleClient {
         constexpr i64 MessagesLimitDefaultJsonArrayFormat = 500;
 
         bool IsStreamingFormat(EMessagingFormat format) {
-            return format == EMessagingFormat::NewlineDelimited || format == EMessagingFormat::Concatenated;
+            return format == EMessagingFormat::NewlineDelimited ||
+                   format == EMessagingFormat::Concatenated ||
+                   format == EMessagingFormat::JsonStreamConcat ||
+                   format == EMessagingFormat::Csv ||
+                   format == EMessagingFormat::Tsv;
         }
     }
 
@@ -64,8 +68,10 @@ namespace NYdb::NConsoleClient {
             if (ReaderParams_.MessagingFormat() == EMessagingFormat::Pretty) {
                 MessagesLeft_ = MessagesLimitDefaultPrettyFormat;
             }
-            if (ReaderParams_.MessagingFormat() == EMessagingFormat::JsonArray) {
-                MessagesLeft_ = MessagesLimitDefaultJsonArrayFormat;
+            if (ReaderParams_.MessagingFormat() == EMessagingFormat::JsonArray ||
+                ReaderParams_.MessagingFormat() == EMessagingFormat::Csv ||
+                ReaderParams_.MessagingFormat() == EMessagingFormat::Tsv) {
+                MessagesLeft_ = MessagesLimitUnlimited;
             }
             return;
         }
@@ -144,18 +150,247 @@ namespace NYdb::NConsoleClient {
         OutputTable_->Print(output);
     }
 
+    void TTopicReader::PrintMessageAsJson(const TReceivedMessage& message, IOutputStream& output) const {
+        NJson::TJsonWriter writer(&output, false);
+        writer.OpenMap();
+
+        for (const auto& f : ReaderParams_.MetadataFields()) {
+            switch (f) {
+                case ETopicMetadataField::Body:
+                    writer.Write("body", TString(FormatBody(message.GetData(), ReaderParams_.Transform())));
+                    break;
+                case ETopicMetadataField::CreateTime:
+                    writer.Write("create_time", message.GetCreateTime().ToString());
+                    break;
+                case ETopicMetadataField::MessageGroupID:
+                    writer.Write("message_group_id", TString(message.GetMessageGroupId()));
+                    break;
+                case ETopicMetadataField::Offset:
+                    writer.Write("offset", message.GetOffset());
+                    break;
+                case ETopicMetadataField::WriteTime:
+                    writer.Write("write_time", message.GetWriteTime().ToString());
+                    break;
+                case ETopicMetadataField::SeqNo:
+                    writer.Write("seq_no", message.GetSeqNo());
+                    break;
+                case ETopicMetadataField::MessageMeta:
+                    {
+                        writer.WriteKey("message_meta");
+                        writer.OpenMap();
+                        for (const auto& [k, v] : message.GetMessageMeta()->Fields) {
+                            writer.Write(k, v);
+                        }
+                        writer.CloseMap();
+                    }
+                    break;
+                case ETopicMetadataField::SessionMeta:
+                    {
+                        writer.WriteKey("session_meta");
+                        writer.OpenMap();
+                        for (const auto& [k, v] : message.GetMeta()->Fields) {
+                            writer.Write(k, v);
+                        }
+                        writer.CloseMap();
+                    }
+                    break;
+                default:
+                    break;
+            }
+        }
+
+        writer.CloseMap();
+    }
+
     void TTopicReader::PrintMessagesInJsonArrayFormat(IOutputStream& output) const {
-        // TODO(shmel1k@): not implemented yet.
-        Y_UNUSED(output);
+        output << "[";
+        bool first = true;
+        for (const auto& message : ReceivedMessages_) {
+            if (!first) {
+                output << ",";
+            }
+            first = false;
+            PrintMessageAsJson(message, output);
+        }
+        output << "]" << Endl;
+    }
+
+    void TTopicReader::PrintMessagesInCsvFormat(IOutputStream& output, char delimiter) const {
+        // Print header
+        bool firstCol = true;
+        for (const auto& f : ReaderParams_.MetadataFields()) {
+            if (!firstCol) {
+                output << delimiter;
+            }
+            firstCol = false;
+            output << f;
+        }
+        output << "\n";
+
+        // Print rows
+        for (const auto& message : ReceivedMessages_) {
+            firstCol = true;
+            for (const auto& f : ReaderParams_.MetadataFields()) {
+                if (!firstCol) {
+                    output << delimiter;
+                }
+                firstCol = false;
+
+                switch (f) {
+                    case ETopicMetadataField::Body:
+                        {
+                            TString body(FormatBody(message.GetData(), ReaderParams_.Transform()));
+                            if (body.Contains(delimiter) || body.Contains('"') || body.Contains('\n')) {
+                                TString escaped;
+                                escaped.reserve(body.size() + 2);
+                                escaped += '"';
+                                for (char c : body) {
+                                    if (c == '"') {
+                                        escaped += "\"\"";
+                                    } else {
+                                        escaped += c;
+                                    }
+                                }
+                                escaped += '"';
+                                output << escaped;
+                            } else {
+                                output << body;
+                            }
+                        }
+                        break;
+                    case ETopicMetadataField::CreateTime:
+                        output << message.GetCreateTime();
+                        break;
+                    case ETopicMetadataField::MessageGroupID:
+                        output << message.GetMessageGroupId();
+                        break;
+                    case ETopicMetadataField::Offset:
+                        output << message.GetOffset();
+                        break;
+                    case ETopicMetadataField::WriteTime:
+                        output << message.GetWriteTime();
+                        break;
+                    case ETopicMetadataField::SeqNo:
+                        output << message.GetSeqNo();
+                        break;
+                    case ETopicMetadataField::MessageMeta:
+                        {
+                            NJson::TJsonValue json;
+                            for (const auto& [k, v] : message.GetMessageMeta()->Fields) {
+                                json[k] = v;
+                            }
+                            output << json;
+                        }
+                        break;
+                    case ETopicMetadataField::SessionMeta:
+                        {
+                            NJson::TJsonValue json;
+                            for (const auto& [k, v] : message.GetMeta()->Fields) {
+                                json[k] = v;
+                            }
+                            output << json;
+                        }
+                        break;
+                    default:
+                        break;
+                }
+            }
+            output << "\n";
+        }
+    }
+
+    void TTopicReader::PrintCsvHeader(IOutputStream& output, char delimiter) {
+        bool firstCol = true;
+        for (const auto& f : ReaderParams_.MetadataFields()) {
+            if (!firstCol) {
+                output << delimiter;
+            }
+            firstCol = false;
+            output << f;
+        }
+        output << "\n";
+        CsvHeaderPrinted_ = true;
+    }
+
+    void TTopicReader::PrintMessageAsCsvRow(const TReceivedMessage& message, IOutputStream& output, char delimiter) const {
+        bool firstCol = true;
+        for (const auto& f : ReaderParams_.MetadataFields()) {
+            if (!firstCol) {
+                output << delimiter;
+            }
+            firstCol = false;
+
+            switch (f) {
+                case ETopicMetadataField::Body:
+                    {
+                        TString body(FormatBody(message.GetData(), ReaderParams_.Transform()));
+                        if (body.Contains(delimiter) || body.Contains('"') || body.Contains('\n')) {
+                            TString escaped;
+                            escaped.reserve(body.size() + 2);
+                            escaped += '"';
+                            for (char c : body) {
+                                if (c == '"') {
+                                    escaped += "\"\"";
+                                } else {
+                                    escaped += c;
+                                }
+                            }
+                            escaped += '"';
+                            output << escaped;
+                        } else {
+                            output << body;
+                        }
+                    }
+                    break;
+                case ETopicMetadataField::CreateTime:
+                    output << message.GetCreateTime();
+                    break;
+                case ETopicMetadataField::MessageGroupID:
+                    output << message.GetMessageGroupId();
+                    break;
+                case ETopicMetadataField::Offset:
+                    output << message.GetOffset();
+                    break;
+                case ETopicMetadataField::WriteTime:
+                    output << message.GetWriteTime();
+                    break;
+                case ETopicMetadataField::SeqNo:
+                    output << message.GetSeqNo();
+                    break;
+                case ETopicMetadataField::MessageMeta:
+                    {
+                        NJson::TJsonValue json;
+                        for (const auto& [k, v] : message.GetMessageMeta()->Fields) {
+                            json[k] = v;
+                        }
+                        output << json;
+                    }
+                    break;
+                case ETopicMetadataField::SessionMeta:
+                    {
+                        NJson::TJsonValue json;
+                        for (const auto& [k, v] : message.GetMeta()->Fields) {
+                            json[k] = v;
+                        }
+                        output << json;
+                    }
+                    break;
+                default:
+                    break;
+            }
+        }
+        output << "\n";
     }
 
     void TTopicReader::Close(IOutputStream& output, TDuration closeTimeout) {
-        if (ReaderParams_.MessagingFormat() == EMessagingFormat::Pretty) {
+        EMessagingFormat format = ReaderParams_.MessagingFormat();
+        if (format == EMessagingFormat::Pretty) {
             PrintMessagesInPrettyFormat(output);
         }
-        if (ReaderParams_.MessagingFormat() == EMessagingFormat::JsonArray) {
+        } else if (format == EMessagingFormat::JsonArray) {
             PrintMessagesInJsonArrayFormat(output);
         }
+        // CSV and TSV are streaming formats - rows already output in HandleReceivedMessage
         output.Flush();
         bool success = ReadSession_->Close(closeTimeout);
         if (!success) {
@@ -164,23 +399,41 @@ namespace NYdb::NConsoleClient {
     }
 
     void TTopicReader::HandleReceivedMessage(const TReceivedMessage& message, IOutputStream& output) {
-        EMessagingFormat MessagingFormat = ReaderParams_.MessagingFormat();
-        if (MessagingFormat == EMessagingFormat::SingleMessage || MessagingFormat == EMessagingFormat::Concatenated) {
+        EMessagingFormat format = ReaderParams_.MessagingFormat();
+        if (format == EMessagingFormat::SingleMessage || format == EMessagingFormat::Concatenated) {
             output << FormatBody(message.GetData(), ReaderParams_.Transform());
             output.Flush();
             return;
         }
-        if (MessagingFormat == EMessagingFormat::NewlineDelimited) {
+        if (format == EMessagingFormat::NewlineDelimited) {
             output << FormatBody(message.GetData(), ReaderParams_.Transform());
             output << "\n";
             output.Flush();
             return;
         }
-        if (MessagingFormat == EMessagingFormat::SingleMessage) {
-            output << FormatBody(message.GetData(), ReaderParams_.Transform());
+        if (format == EMessagingFormat::JsonStreamConcat) {
+            PrintMessageAsJson(message, output);
+            output << "\n";
+            output.Flush();
             return;
         }
-
+        if (format == EMessagingFormat::Csv) {
+            if (!CsvHeaderPrinted_) {
+                PrintCsvHeader(output, ',');
+            }
+            PrintMessageAsCsvRow(message, output, ',');
+            output.Flush();
+            return;
+        }
+        if (format == EMessagingFormat::Tsv) {
+            if (!CsvHeaderPrinted_) {
+                PrintCsvHeader(output, '\t');
+            }
+            PrintMessageAsCsvRow(message, output, '\t');
+            output.Flush();
+            return;
+        }
+        // For batch formats (Pretty, JsonArray), accumulate messages
         ReceivedMessages_.push_back(message);
     }
 

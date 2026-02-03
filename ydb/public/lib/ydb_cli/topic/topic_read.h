@@ -84,6 +84,10 @@ namespace NYdb::NConsoleClient {
     private:
         void PrintMessagesInPrettyFormat(IOutputStream& output) const;
         void PrintMessagesInJsonArrayFormat(IOutputStream& output) const;
+        void PrintMessagesInCsvFormat(IOutputStream& output, char delimiter) const;
+        void PrintMessageAsJson(const TReceivedMessage& message, IOutputStream& output) const;
+        void PrintCsvHeader(IOutputStream& output, char delimiter);
+        void PrintMessageAsCsvRow(const TReceivedMessage& message, IOutputStream& output, char delimiter) const;
 
         enum EReadingStatus {
             NoPartitionTaken = 0,
@@ -112,6 +116,7 @@ namespace NYdb::NConsoleClient {
         TVector<TReceivedMessage> ReceivedMessages_;
 
         ui32 PartitionsBeingRead_ = 0;
+        bool CsvHeaderPrinted_ = false;
         bool FirstPartitionSessionCreated = false;
         std::optional<TInstant> AllPartitionsAreFullyReadTime;
 

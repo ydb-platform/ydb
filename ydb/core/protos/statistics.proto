@@ -1,5 +1,6 @@
 import "ydb/core/scheme/protos/pathid.proto";
 import "ydb/core/scheme/protos/type_info.proto";
+import "ydb/public/api/protos/ydb_issue_message.proto";
 import "ydb/public/api/protos/ydb_value.proto";
 
 package NKikimrStat;
@@ -100,6 +101,7 @@ message TEvAnalyzeResponse {
         STATUS_ERROR = 2;
     }
     optional EStatus Status = 2;
+    repeated Ydb.Issue.IssueMessage Issues = 3;
 }
 
 // KQP -> SA

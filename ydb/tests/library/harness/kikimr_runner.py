@@ -255,11 +255,6 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
                 "--mon-key=%s" % self.__configurator.monitoring_tls_key_path
             )
 
-        if self.__configurator.monitoring_tls_ca_path is not None:
-            command.append(
-                "--mon-ca=%s" % self.__configurator.monitoring_tls_ca_path
-            )
-
         if os.environ.get("YDB_ALLOCATE_PGWIRE_PORT", "") == "true":
             command.append("--pgwire-port=%d" % self.pgwire_port)
 
@@ -588,15 +583,10 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         root_token = self.root_token or self.__configurator.default_clusteradmin
 
         if not root_token and self.__configurator.enable_static_auth:
-            mon_uses_https = any(
-                getattr(node, 'mon_uses_https', False) for node in self.nodes.values()
-            )
-            protocol = "https" if mon_uses_https else "http"
-            login_url = "%s://localhost:%s/login" % (protocol, self.nodes[1].mon_port)
-            root_token = requests.post(login_url, json={
+            root_token = requests.post("http://localhost:%s/login" % self.nodes[1].mon_port, json={
                 "user": self.__configurator.yaml_config["domains_config"]["security_config"]["default_users"][0]["name"],
                 "password": self.__configurator.yaml_config["domains_config"]["security_config"]["default_users"][0]["password"]
-            }, verify=False if mon_uses_https else True).cookies.get('ydb_session_id')
+            }).cookies.get('ydb_session_id')
             logger.info("Obtained root token: %s" % root_token)
 
         if len(pools) > 0:

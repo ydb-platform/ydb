@@ -65,8 +65,8 @@ bool TNodesCounterBase::IsNodeLocked(ui32 nodeId, i32 priority) const {
     return HasSameOrHigherPriorityLock(node.Locks, priority);
 }
 
-void TNodesCounterBase::LockNode(ui32 nodeId, i32 priority) {
-    Y_ABORT_UNLESS(!IsNodeLocked(nodeId, priority));
+void TNodesCounterBase::LockNode(ui32 nodeId, const TNodeLockContext& ctx) {
+    Y_ABORT_UNLESS(!IsNodeLocked(nodeId, ctx.Priority));
 
     auto& node = Nodes[nodeId];
 
@@ -80,13 +80,20 @@ void TNodesCounterBase::LockNode(ui32 nodeId, i32 priority) {
         }
     }
 
-    AddPriorityLock(node.Locks, TLock(priority));
+    AddPriorityLock(node.Locks, TLock(ctx.Priority));
+    ++RequestLockCount[ctx.RequestId];
 }
 
-void TNodesCounterBase::UnlockNode(ui32 nodeId, i32 priority) {
+void TNodesCounterBase::UnlockNode(ui32 nodeId, const TNodeLockContext& ctx) {
     auto& node = Nodes[nodeId];
 
-    RemovePriorityLocks(node.Locks, priority);
+    RemovePriorityLocks(node.Locks, ctx.Priority);
+
+    auto it = RequestLockCount.find(ctx.RequestId);
+    Y_ABORT_UNLESS(it != RequestLockCount.end());
+    if (--it->second == 0) {
+        RequestLockCount.erase(it);
+    }
 
     if (node.Locks.empty()) {
         --LockedNodesCount;
@@ -103,7 +110,7 @@ const THashMap<ui32, INodesChecker::TNodeInfo>& TNodesCounterBase::GetNodes() co
     return Nodes;
 }
 
-bool TNodesLimitsCounterBase::TryToLockNode(ui32 nodeId, NKikimrCms::EAvailabilityMode mode, i32 priority, TReason& reason) const {
+bool TNodesLimitsCounterBase::TryToLockNode(ui32 nodeId, const TNodeLockContext& ctx, TReason& reason) const {
     Y_ABORT_UNLESS(Nodes.contains(nodeId));
     auto nodeState = Nodes.at(nodeId).State;
 
@@ -123,7 +130,7 @@ bool TNodesLimitsCounterBase::TryToLockNode(ui32 nodeId, NKikimrCms::EAvailabili
             return false;
         case NODE_STATE_LOCKED:
         case NODE_STATE_RESTART:
-            if (IsNodeLocked(nodeId, priority)) {
+            if (IsNodeLocked(nodeId, ctx.Priority)) {
                 reason = TStringBuilder() << ReasonPrefix(nodeId)
                     << ": node state: '" << nodeState << "'";
                 return false;
@@ -136,7 +143,7 @@ bool TNodesLimitsCounterBase::TryToLockNode(ui32 nodeId, NKikimrCms::EAvailabili
             return true;
     }
 
-    if (mode == NKikimrCms::MODE_FORCE_RESTART) {
+    if (ctx.Mode == NKikimrCms::MODE_FORCE_RESTART) {
         return true;
     }
 
@@ -175,7 +182,7 @@ bool TNodesLimitsCounterBase::TryToLockNode(ui32 nodeId, NKikimrCms::EAvailabili
     return true;
 }
 
-bool TSysTabletsNodesCounter::TryToLockNode(ui32 nodeId, NKikimrCms::EAvailabilityMode mode, i32 priority, TReason& reason) const {
+bool TSysTabletsNodesCounter::TryToLockNode(ui32 nodeId, const TNodeLockContext& ctx, TReason& reason) const {
     Y_ABORT_UNLESS(Nodes.contains(nodeId));
     auto nodeState = Nodes.at(nodeId).State;
 
@@ -194,7 +201,7 @@ bool TSysTabletsNodesCounter::TryToLockNode(ui32 nodeId, NKikimrCms::EAvailabili
             return false;
         case NODE_STATE_LOCKED:
         case NODE_STATE_RESTART:
-            if (IsNodeLocked(nodeId, priority)) {
+            if (IsNodeLocked(nodeId, ctx.Priority)) {
                 reason = TStringBuilder() << "Cannot lock node '" << nodeId << "'"
                     << ": node state: '" << nodeState << "'";
                 return false;
@@ -215,19 +222,38 @@ bool TSysTabletsNodesCounter::TryToLockNode(ui32 nodeId, NKikimrCms::EAvailabili
     const auto disabledNodes = LockedNodesCount + DownNodesCount + 1;
     ui32 limit = 0;
 
-    switch (mode) {
+    const ui32 maxAvailabilityLimit = Nodes.size() / 2;
+    const ui32 keepAvailableLimit = Nodes.size() - 1;
+
+    const bool maxAvailabilityOk = disabledNodes * 2 <= tabletNodes;
+    const bool keepAvailableOk = disabledNodes < tabletNodes;
+
+    switch (ctx.Mode) {
         case NKikimrCms::MODE_FORCE_RESTART:
             return true;
         case NKikimrCms::MODE_MAX_AVAILABILITY:
-            limit = Nodes.size() / 2;
-            if (disabledNodes * 2 <= tabletNodes) {
+            limit = maxAvailabilityLimit;
+            if (maxAvailabilityOk) {
                 return true;
             }
             break;
         case NKikimrCms::MODE_KEEP_AVAILABLE:
-            limit = Nodes.size() - 1;
-            if (disabledNodes < tabletNodes) {
+            limit = keepAvailableLimit;
+            if (keepAvailableOk) {
                 return true;
+            }
+            break;
+        case NKikimrCms::MODE_SMART_AVAILABILITY:
+            limit = maxAvailabilityLimit;
+            if (maxAvailabilityOk) {
+                return true;
+            }
+
+            if (!RequestLockCount.contains(ctx.RequestId)) {
+                limit = keepAvailableLimit;
+                if (keepAvailableOk) {
+                    return true;
+                }
             }
             break;
         default:

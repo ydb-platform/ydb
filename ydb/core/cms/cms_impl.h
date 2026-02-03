@@ -114,6 +114,7 @@ private:
         NKikimrCms::EAvailabilityMode AvailabilityMode;
         bool PartialPermissionAllowed;
         i32 Priority;
+        TString RequestId;
 
         TActionOptions(TDuration dur)
             : PermissionDuration(dur)
@@ -309,6 +310,7 @@ private:
     bool CheckPermissionRequest(const NKikimrCms::TPermissionRequest &request,
         NKikimrCms::TPermissionResponse &response,
         NKikimrCms::TPermissionRequest &scheduled,
+        const TString &requestId,
         const TActorContext &ctx);
     bool IsActionHostValid(const NKikimrCms::TAction &action, TErrorInfo &error) const;
     bool ParseServices(const NKikimrCms::TAction &action, TServices &services, TErrorInfo &error) const;

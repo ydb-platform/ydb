@@ -26,6 +26,8 @@ namespace {
             return NKikimrCms::MODE_KEEP_AVAILABLE;
         case Ydb::Maintenance::AVAILABILITY_MODE_FORCE:
             return NKikimrCms::MODE_FORCE_RESTART;
+        case Ydb::Maintenance::AVAILABILITY_MODE_SMART:
+            return NKikimrCms::MODE_SMART_AVAILABILITY;
         default:
             Y_ABORT("unreachable");
         }
@@ -39,6 +41,8 @@ namespace {
             return Ydb::Maintenance::AVAILABILITY_MODE_WEAK;
         case NKikimrCms::MODE_FORCE_RESTART:
             return Ydb::Maintenance::AVAILABILITY_MODE_FORCE;
+        case NKikimrCms::MODE_SMART_AVAILABILITY:
+            return Ydb::Maintenance::AVAILABILITY_MODE_SMART;
         default:
             Y_ABORT("unreachable");
         }

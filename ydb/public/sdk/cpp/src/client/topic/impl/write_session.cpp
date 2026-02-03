@@ -616,7 +616,8 @@ void TKeyedWriteSession::TEventsWorker::UnsubscribeFromPartition(ui64 partition)
 // TKeyedWriteSession::TSessionsWorker
 
 TKeyedWriteSession::TSessionsWorker::TSessionsWorker(TKeyedWriteSession* session)
-    : Session(session) {}
+    : Session(session)
+{}
 
 TKeyedWriteSession::WrappedWriteSessionPtr TKeyedWriteSession::TSessionsWorker::GetWriteSession(ui64 partition, bool directToPartition) {
     auto sessionIter = SessionsIndex.find(partition);

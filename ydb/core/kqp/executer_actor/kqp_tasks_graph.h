@@ -245,7 +245,11 @@ struct TGraphMeta {
     }
 
     // Get QueryTraceId for a specific transaction index
+    // Fast path: if no per-transaction IDs are stored, return global QueryTraceId directly
     ui64 GetTxQueryTraceId(ui32 txIndex) const {
+        if (TxQueryTraceIds.empty()) {
+            return QueryTraceId;
+        }
         auto it = TxQueryTraceIds.find(txIndex);
         if (it != TxQueryTraceIds.end()) {
             return it->second;

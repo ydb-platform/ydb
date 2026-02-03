@@ -36,7 +36,7 @@ IExternalStorageConfig::TPtr IExternalStorageConfig::Construct(const NKikimrConf
 }
 
 template <>
-IExternalStorageConfig::TPtr IExternalStorageConfig::Construct(const NKikimrConfig::TAwsClientConfig& /*defaultAwsClientSettings*/, const Ydb::Import::ExportToFsSettings& settings) {
+IExternalStorageConfig::TPtr IExternalStorageConfig::Construct(const NKikimrConfig::TAwsClientConfig& /*defaultAwsClientSettings*/, const Ydb::Export::ExportToFsSettings& settings) {
     return std::make_shared<TFsExternalStorageConfig>(settings);
 }
 

@@ -19,4 +19,5 @@ RECURSE(
     topic
     topic_kafka
     transfer
+    streaming
 )

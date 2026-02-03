@@ -716,21 +716,21 @@ namespace NYdb::NConsoleClient {
         if (MaxProcessingAttempts_.Defined() || DlqQueueName_.Defined()) {
             NYdb::NTopic::TDeadLetterPolicySettings dlqSettings;
             dlqSettings.Enabled(true);
-            
+
             NYdb::NTopic::TDeadLetterPolicyConditionSettings conditionSettings;
             if (MaxProcessingAttempts_.Defined()) {
                 conditionSettings.MaxProcessingAttempts(*MaxProcessingAttempts_);
             }
-        
+
             dlqSettings.Condition(conditionSettings);
-            
+
             if (DlqQueueName_.Defined()) {
                 dlqSettings.Action(NTopic::EDeadLetterAction::Move);
                 dlqSettings.DeadLetterQueue(*DlqQueueName_);
             } else {
                 dlqSettings.Action(NTopic::EDeadLetterAction::Delete);
             }
-                        
+
             consumerSettings.DeadLetterPolicy(dlqSettings);
         }
 
@@ -925,6 +925,10 @@ namespace NYdb::NConsoleClient {
                                EMessagingFormat::Pretty,
                                EMessagingFormat::NewlineDelimited,
                                EMessagingFormat::Concatenated,
+                               EMessagingFormat::JsonArray,
+                                EMessagingFormat::Tsv,
+                                EMessagingFormat::Csv,
+                                EMessagingFormat::JsonStreamConcat,
                            });
 
         // TODO(shmel1k@): improve help.

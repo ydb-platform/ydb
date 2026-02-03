@@ -25,7 +25,7 @@
 #include "pycore_moduleobject.h"  // _PyModule_GetState()
 #include "pycore_typeobject.h"    // _PyType_GetModuleState()
 #include "pycore_strhex.h"        // _Py_strhex()
-#include "structmember.h"         // PyMemberDef
+
 #include "hashlib.h"
 
 /*[clinic input]
@@ -53,8 +53,8 @@ typedef struct {
     PyObject_HEAD
     int digestsize;
     // Prevents undefined behavior via multiple threads entering the C API.
-    // The lock will be NULL before threaded access has been enabled.
-    PyThread_type_lock lock;
+    bool use_mutex;
+    PyMutex mutex;
     Hacl_Hash_SHA2_state_t_256 *state;
 } SHA256object;
 
@@ -62,8 +62,8 @@ typedef struct {
     PyObject_HEAD
     int digestsize;
     // Prevents undefined behavior via multiple threads entering the C API.
-    // The lock will be NULL before threaded access has been enabled.
-    PyThread_type_lock lock;
+    bool use_mutex;
+    PyMutex mutex;
     Hacl_Hash_SHA2_state_t_512 *state;
 } SHA512object;
 
@@ -106,7 +106,8 @@ newSHA224object(sha2_state *state)
     if (!sha) {
         return NULL;
     }
-    sha->lock = NULL;
+    HASHLIB_INIT_MUTEX(sha);
+
     PyObject_GC_Track(sha);
     return sha;
 }
@@ -119,7 +120,8 @@ newSHA256object(sha2_state *state)
     if (!sha) {
         return NULL;
     }
-    sha->lock = NULL;
+    HASHLIB_INIT_MUTEX(sha);
+
     PyObject_GC_Track(sha);
     return sha;
 }
@@ -132,7 +134,8 @@ newSHA384object(sha2_state *state)
     if (!sha) {
         return NULL;
     }
-    sha->lock = NULL;
+    HASHLIB_INIT_MUTEX(sha);
+
     PyObject_GC_Track(sha);
     return sha;
 }
@@ -145,7 +148,8 @@ newSHA512object(sha2_state *state)
     if (!sha) {
         return NULL;
     }
-    sha->lock = NULL;
+    HASHLIB_INIT_MUTEX(sha);
+
     PyObject_GC_Track(sha);
     return sha;
 }
@@ -163,9 +167,6 @@ static void
 SHA256_dealloc(SHA256object *ptr)
 {
     Hacl_Hash_SHA2_free_256(ptr->state);
-    if (ptr->lock != NULL) {
-        PyThread_free_lock(ptr->lock);
-    }
     PyTypeObject *tp = Py_TYPE(ptr);
     PyObject_GC_UnTrack(ptr);
     PyObject_GC_Del(ptr);
@@ -176,9 +177,6 @@ static void
 SHA512_dealloc(SHA512object *ptr)
 {
     Hacl_Hash_SHA2_free_512(ptr->state);
-    if (ptr->lock != NULL) {
-        PyThread_free_lock(ptr->lock);
-    }
     PyTypeObject *tp = Py_TYPE(ptr);
     PyObject_GC_UnTrack(ptr);
     PyObject_GC_Del(ptr);
@@ -376,14 +374,14 @@ SHA256Type_update(SHA256object *self, PyObject *obj)
 
     GET_BUFFER_VIEW_OR_ERROUT(obj, &buf);
 
-    if (self->lock == NULL && buf.len >= HASHLIB_GIL_MINSIZE) {
-        self->lock = PyThread_allocate_lock();
+    if (!self->use_mutex && buf.len >= HASHLIB_GIL_MINSIZE) {
+        self->use_mutex = true;
     }
-    if (self->lock != NULL) {
+    if (self->use_mutex) {
         Py_BEGIN_ALLOW_THREADS
-        PyThread_acquire_lock(self->lock, 1);
+        PyMutex_Lock(&self->mutex);
         update_256(self->state, buf.buf, buf.len);
-        PyThread_release_lock(self->lock);
+        PyMutex_Unlock(&self->mutex);
         Py_END_ALLOW_THREADS
     } else {
         update_256(self->state, buf.buf, buf.len);
@@ -410,14 +408,14 @@ SHA512Type_update(SHA512object *self, PyObject *obj)
 
     GET_BUFFER_VIEW_OR_ERROUT(obj, &buf);
 
-    if (self->lock == NULL && buf.len >= HASHLIB_GIL_MINSIZE) {
-        self->lock = PyThread_allocate_lock();
+    if (!self->use_mutex && buf.len >= HASHLIB_GIL_MINSIZE) {
+        self->use_mutex = true;
     }
-    if (self->lock != NULL) {
+    if (self->use_mutex) {
         Py_BEGIN_ALLOW_THREADS
-        PyThread_acquire_lock(self->lock, 1);
+        PyMutex_Lock(&self->mutex);
         update_512(self->state, buf.buf, buf.len);
-        PyThread_release_lock(self->lock);
+        PyMutex_Unlock(&self->mutex);
         Py_END_ALLOW_THREADS
     } else {
         update_512(self->state, buf.buf, buf.len);
@@ -572,18 +570,24 @@ static PyType_Spec sha512_type_spec = {
 /*[clinic input]
 _sha2.sha256
 
-    string: object(c_default="NULL") = b''
+    data: object(c_default="NULL") = b''
     *
     usedforsecurity: bool = True
+    string as string_obj: object(c_default="NULL") = None
 
 Return a new SHA-256 hash object; optionally initialized with a string.
 [clinic start generated code]*/
 
 static PyObject *
-_sha2_sha256_impl(PyObject *module, PyObject *string, int usedforsecurity)
-/*[clinic end generated code: output=243c9dd289931f87 input=6249da1de607280a]*/
+_sha2_sha256_impl(PyObject *module, PyObject *data, int usedforsecurity,
+                  PyObject *string_obj)
+/*[clinic end generated code: output=49828a7bcd418f45 input=9ce1d70e669abc14]*/
 {
     Py_buffer buf;
+    PyObject *string;
+    if (_Py_hashlib_data_argument(&string, data, string_obj) < 0) {
+        return NULL;
+    }
 
     if (string) {
         GET_BUFFER_VIEW_OR_ERROUT(string, &buf);
@@ -628,18 +632,25 @@ _sha2_sha256_impl(PyObject *module, PyObject *string, int usedforsecurity)
 /*[clinic input]
 _sha2.sha224
 
-    string: object(c_default="NULL") = b''
+    data: object(c_default="NULL") = b''
     *
     usedforsecurity: bool = True
+    string as string_obj: object(c_default="NULL") = None
 
 Return a new SHA-224 hash object; optionally initialized with a string.
 [clinic start generated code]*/
 
 static PyObject *
-_sha2_sha224_impl(PyObject *module, PyObject *string, int usedforsecurity)
-/*[clinic end generated code: output=68191f232e4a3843 input=c42bcba47fd7d2b7]*/
+_sha2_sha224_impl(PyObject *module, PyObject *data, int usedforsecurity,
+                  PyObject *string_obj)
+/*[clinic end generated code: output=2163cb03b6cf6157 input=612f7682a889bc2a]*/
 {
     Py_buffer buf;
+    PyObject *string;
+    if (_Py_hashlib_data_argument(&string, data, string_obj) < 0) {
+        return NULL;
+    }
+
     if (string) {
         GET_BUFFER_VIEW_OR_ERROUT(string, &buf);
     }
@@ -682,19 +693,25 @@ _sha2_sha224_impl(PyObject *module, PyObject *string, int usedforsecurity)
 /*[clinic input]
 _sha2.sha512
 
-    string: object(c_default="NULL") = b''
+    data: object(c_default="NULL") = b''
     *
     usedforsecurity: bool = True
+    string as string_obj: object(c_default="NULL") = None
 
 Return a new SHA-512 hash object; optionally initialized with a string.
 [clinic start generated code]*/
 
 static PyObject *
-_sha2_sha512_impl(PyObject *module, PyObject *string, int usedforsecurity)
-/*[clinic end generated code: output=d55c8996eca214d7 input=0576ae2a6ebfad25]*/
+_sha2_sha512_impl(PyObject *module, PyObject *data, int usedforsecurity,
+                  PyObject *string_obj)
+/*[clinic end generated code: output=cc3fcfce001a4538 input=19c9f2c06d59563a]*/
 {
     SHA512object *new;
     Py_buffer buf;
+    PyObject *string;
+    if (_Py_hashlib_data_argument(&string, data, string_obj) < 0) {
+        return NULL;
+    }
 
     sha2_state *state = sha2_get_state(module);
 
@@ -735,19 +752,25 @@ _sha2_sha512_impl(PyObject *module, PyObject *string, int usedforsecurity)
 /*[clinic input]
 _sha2.sha384
 
-    string: object(c_default="NULL") = b''
+    data: object(c_default="NULL") = b''
     *
     usedforsecurity: bool = True
+    string as string_obj: object(c_default="NULL") = None
 
 Return a new SHA-384 hash object; optionally initialized with a string.
 [clinic start generated code]*/
 
 static PyObject *
-_sha2_sha384_impl(PyObject *module, PyObject *string, int usedforsecurity)
-/*[clinic end generated code: output=b29a0d81d51d1368 input=4e9199d8de0d2f9b]*/
+_sha2_sha384_impl(PyObject *module, PyObject *data, int usedforsecurity,
+                  PyObject *string_obj)
+/*[clinic end generated code: output=b6e3db593b5a0330 input=9fd50c942ad9e0bf]*/
 {
     SHA512object *new;
     Py_buffer buf;
+    PyObject *string;
+    if (_Py_hashlib_data_argument(&string, data, string_obj) < 0) {
+        return NULL;
+    }
 
     sha2_state *state = sha2_get_state(module);
 
@@ -868,6 +891,7 @@ static int sha2_exec(PyObject *module)
 static PyModuleDef_Slot _sha2_slots[] = {
     {Py_mod_exec, sha2_exec},
     {Py_mod_multiple_interpreters, Py_MOD_PER_INTERPRETER_GIL_SUPPORTED},
+    {Py_mod_gil, Py_MOD_GIL_NOT_USED},
     {0, NULL}
 };
 

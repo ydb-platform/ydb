@@ -7,6 +7,7 @@
 #endif
 
 #include "Python.h"
+#include "pycore_complexobject.h" // _Py_c_neg()
 #include "pycore_pymath.h"        // _PY_SHORT_FLOAT_REPR
 /* we need DBL_MAX, DBL_MIN, DBL_EPSILON, DBL_MANT_DIG and FLT_RADIX from
    float.h.  We assume that FLT_RADIX is either 2 or 16. */
@@ -1216,29 +1217,29 @@ static PyMethodDef cmath_methods[] = {
 static int
 cmath_exec(PyObject *mod)
 {
-    if (_PyModule_Add(mod, "pi", PyFloat_FromDouble(Py_MATH_PI)) < 0) {
+    if (PyModule_Add(mod, "pi", PyFloat_FromDouble(Py_MATH_PI)) < 0) {
         return -1;
     }
-    if (_PyModule_Add(mod, "e", PyFloat_FromDouble(Py_MATH_E)) < 0) {
+    if (PyModule_Add(mod, "e", PyFloat_FromDouble(Py_MATH_E)) < 0) {
         return -1;
     }
     // 2pi
-    if (_PyModule_Add(mod, "tau", PyFloat_FromDouble(Py_MATH_TAU)) < 0) {
+    if (PyModule_Add(mod, "tau", PyFloat_FromDouble(Py_MATH_TAU)) < 0) {
         return -1;
     }
-    if (_PyModule_Add(mod, "inf", PyFloat_FromDouble(Py_INFINITY)) < 0) {
+    if (PyModule_Add(mod, "inf", PyFloat_FromDouble(Py_INFINITY)) < 0) {
         return -1;
     }
 
     Py_complex infj = {0.0, Py_INFINITY};
-    if (_PyModule_Add(mod, "infj", PyComplex_FromCComplex(infj)) < 0) {
+    if (PyModule_Add(mod, "infj", PyComplex_FromCComplex(infj)) < 0) {
         return -1;
     }
-    if (_PyModule_Add(mod, "nan", PyFloat_FromDouble(fabs(Py_NAN))) < 0) {
+    if (PyModule_Add(mod, "nan", PyFloat_FromDouble(fabs(Py_NAN))) < 0) {
         return -1;
     }
     Py_complex nanj = {0.0, fabs(Py_NAN)};
-    if (_PyModule_Add(mod, "nanj", PyComplex_FromCComplex(nanj)) < 0) {
+    if (PyModule_Add(mod, "nanj", PyComplex_FromCComplex(nanj)) < 0) {
         return -1;
     }
 
@@ -1362,6 +1363,7 @@ cmath_exec(PyObject *mod)
 static PyModuleDef_Slot cmath_slots[] = {
     {Py_mod_exec, cmath_exec},
     {Py_mod_multiple_interpreters, Py_MOD_PER_INTERPRETER_GIL_SUPPORTED},
+    {Py_mod_gil, Py_MOD_GIL_NOT_USED},
     {0, NULL}
 };
 

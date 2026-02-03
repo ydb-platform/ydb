@@ -2,9 +2,9 @@
 
 LIBRARY()
 
-VERSION(3.12.12)
+VERSION(3.13.11)
 
-ORIGINAL_SOURCE(https://github.com/python/cpython/archive/v3.12.12.tar.gz)
+ORIGINAL_SOURCE(https://github.com/python/cpython/archive/v3.13.11.tar.gz)
 
 LICENSE(Python-2.0)
 
@@ -25,8 +25,10 @@ ADDINCL(
     contrib/libs/expat
     contrib/libs/libbz2
     contrib/restricted/libffi/include
+    contrib/tools/python3
     contrib/tools/python3/Include
     contrib/tools/python3/Include/internal
+    contrib/tools/python3/Include/internal/mimalloc
     contrib/tools/python3/Modules
     contrib/tools/python3/Modules/_decimal/libmpdec
     contrib/tools/python3/Modules/_hacl/include
@@ -43,7 +45,7 @@ CFLAGS(
     -DUSE_ZLIB_CRC32
     -DPREFIX=\"/var/empty\"
     -DEXEC_PREFIX=\"/var/empty\"
-    -DVERSION=\"3.12\"
+    -DVERSION=\"3.13\"
     -DVPATH=\"\"
     -DPLATLIBDIR=\"lib\"
 )
@@ -58,7 +60,7 @@ IF (OS_DARWIN)
     CFLAGS(
         -DPLATFORM=\"darwin\"
         -DMULTIARCH=\"darwin\"
-        -DSOABI=\"cpython-312-darwin\"
+        -DSOABI=\"cpython-313-darwin\"
     )
 
     LDFLAGS(
@@ -69,7 +71,7 @@ ELSEIF (OS_LINUX)
     CFLAGS(
         -DPLATFORM=\"linux\"
         -DMULTIARCH=\"x86_64-linux-gnu\"
-        -DSOABI=\"cpython-312-x86_64-linux-gnu\"
+        -DSOABI=\"cpython-313-x86_64-linux-gnu\"
     )
 ELSEIF (OS_WINDOWS)
     CFLAGS(
@@ -125,6 +127,9 @@ SRCS(
     Modules/_hacl/Hacl_Hash_SHA3.c
     Modules/_hashopenssl.c
     Modules/_heapqmodule.c
+    Modules/_interpchannelsmodule.c
+    Modules/_interpqueuesmodule.c
+    Modules/_interpretersmodule.c
     Modules/_io/_iomodule.c
     Modules/_io/bufferedio.c
     Modules/_io/bytesio.c
@@ -150,18 +155,39 @@ SRCS(
     Modules/_stat.c
     Modules/_statisticsmodule.c
     Modules/_struct.c
+    Modules/_suggestions.c
+    Modules/_sysconfig.c
+    Modules/_testinternalcapi/pytime.c
+    Modules/_testinternalcapi/test_critical_sections.c
+    Modules/_testinternalcapi/test_lock.c
+    Modules/_testlimitedcapi/abstract.c
+    Modules/_testlimitedcapi/bytearray.c
+    Modules/_testlimitedcapi/bytes.c
+    Modules/_testlimitedcapi/complex.c
+    Modules/_testlimitedcapi/dict.c
+    Modules/_testlimitedcapi/eval.c
+    Modules/_testlimitedcapi/file.c
+    Modules/_testlimitedcapi/float.c
+    Modules/_testlimitedcapi/heaptype_relative.c
+    Modules/_testlimitedcapi/import.c
+    Modules/_testlimitedcapi/list.c
+    Modules/_testlimitedcapi/long.c
+    Modules/_testlimitedcapi/object.c
+    Modules/_testlimitedcapi/pyos.c
+    Modules/_testlimitedcapi/set.c
+    Modules/_testlimitedcapi/sys.c
+    Modules/_testlimitedcapi/tuple.c
+    Modules/_testlimitedcapi/unicode.c
+    Modules/_testlimitedcapi/vectorcall_limited.c
     Modules/_threadmodule.c
     Modules/_tracemalloc.c
     Modules/_typingmodule.c
     Modules/_weakref.c
-    Modules/_xxinterpchannelsmodule.c
-    Modules/_xxsubinterpretersmodule.c
     Modules/_xxtestfuzz/_xxtestfuzz.c
     Modules/_xxtestfuzz/fuzzer.c
     Modules/_zoneinfo.c
     Modules/arraymodule.c
     Modules/atexitmodule.c
-    Modules/audioop.c
     Modules/binascii.c
     Modules/cjkcodecs/_codecs_cn.c
     Modules/cjkcodecs/_codecs_hk.c
@@ -216,7 +242,6 @@ SRCS(
     Objects/funcobject.c
     Objects/genericaliasobject.c
     Objects/genobject.c
-    Objects/interpreteridobject.c
     Objects/iterobject.c
     Objects/listobject.c
     Objects/longobject.c
@@ -240,6 +265,9 @@ SRCS(
     Objects/unionobject.c
     Objects/weakrefobject.c
     Parser/action_helpers.c
+    Parser/lexer/buffer.c
+    Parser/lexer/lexer.c
+    Parser/lexer/state.c
     Parser/myreadline.c
     Parser/parser.c
     Parser/peg_api.c
@@ -247,7 +275,11 @@ SRCS(
     Parser/pegen_errors.c
     Parser/string_parser.c
     Parser/token.c
-    Parser/tokenizer.c
+    Parser/tokenizer/file_tokenizer.c
+    Parser/tokenizer/helpers.c
+    Parser/tokenizer/readline_tokenizer.c
+    Parser/tokenizer/string_tokenizer.c
+    Parser/tokenizer/utf8_tokenizer.c
     Python/Python-ast.c
     Python/Python-tokenize.c
     Python/_warnings.c
@@ -258,14 +290,17 @@ SRCS(
     Python/ast_unparse.c
     Python/bltinmodule.c
     Python/bootstrap_hash.c
+    Python/brc.c
     Python/ceval.c
     Python/ceval_gil.c
     Python/codecs.c
     Python/compile.c
     Python/context.c
-    Python/deepfreeze/deepfreeze.c
+    Python/critical_section.c
+    Python/crossinterp.c
     Python/dtoa.c
     Python/dynamic_annotations.c
+    Python/emscripten_trampoline.c
     Python/errors.c
     Python/fileutils.c
     Python/flowgraph.c
@@ -273,6 +308,9 @@ SRCS(
     Python/frame.c
     Python/frozen.c
     Python/future.c
+    Python/gc.c
+    Python/gc_free_threading.c
+    Python/gc_gil.c
     Python/getargs.c
     Python/getcompiler.c
     Python/getcopyright.c
@@ -284,14 +322,23 @@ SRCS(
     Python/import.c
     Python/importdl.c
     Python/initconfig.c
+    Python/instruction_sequence.c
     Python/instrumentation.c
+    Python/interpconfig.c
     Python/intrinsics.c
     Python/legacy_tracing.c
+    Python/lock.c
     Python/marshal.c
     Python/modsupport.c
     Python/mysnprintf.c
     Python/mystrtoul.c
+    Python/object_stack.c
+    Python/optimizer.c
+    Python/optimizer_analysis.c
+    Python/optimizer_symbols.c
+    Python/parking_lot.c
     Python/pathconfig.c
+    Python/perf_jit_trampoline.c
     Python/perf_trampoline.c
     Python/preconfig.c
     Python/pyarena.c
@@ -306,6 +353,7 @@ SRCS(
     Python/pystrtod.c
     Python/pythonrun.c
     Python/pytime.c
+    Python/qsbr.c
     Python/specialize.c
     Python/structmember.c
     Python/suggestions.c
@@ -316,20 +364,30 @@ SRCS(
     Python/tracemalloc.c
 )
 
-IF (OS_WINDOWS)
+IF (OS_DARWIN)
+    SRCS(
+        Modules/_scproxy.c
+    )
+ELSEIF (OS_LINUX)
+    SRCS(
+        Python/asm_trampoline.S
+    )
+ELSEIF (OS_WINDOWS)
     SRCS(
         Modules/_winapi.c
         Modules/overlapped.c
         PC/WinMain.c
         PC/invalid_parameter_handler.c
         PC/msvcrtmodule.c
+        PC/venvlauncher.c
         PC/winreg.c
         PC/winsound.c
         Python/dynload_win.c
     )
-ELSE()
+ENDIF()
+
+IF (OS_LINUX OR OS_DARWIN)
     SRCS(
-        Modules/_cryptmodule.c
         Modules/_posixsubprocess.c
         Modules/fcntlmodule.c
         Modules/grpmodule.c
@@ -338,21 +396,6 @@ ELSE()
         Modules/syslogmodule.c
         Modules/termios.c
         Python/dynload_shlib.c
-    )
-ENDIF()
-
-IF (OS_DARWIN)
-    SRCS(
-        Modules/_scproxy.c
-    )
-ELSEIF (OS_LINUX)
-    IF (NOT MUSL)
-        EXTRALIBS(crypt)
-    ENDIF()
-
-    SRCS(
-        Modules/spwdmodule.c
-        Python/asm_trampoline.S
     )
 ENDIF()
 

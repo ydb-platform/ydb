@@ -3910,23 +3910,17 @@ struct LeaseFinalizationInfo {
     ELeaseState NewLeaseState = ELeaseState::ScriptFinalizing;
 };
 
-LeaseFinalizationInfo GetLeaseFinalizationSql(TInstant now, Ydb::StatusIds::StatusCode status, NKikimrKqp::TScriptExecutionRetryState& retryState, NYql::TIssues& issues) {
+LeaseFinalizationInfo GetLeaseFinalizationSql(TInstant startedAt, TInstant now, Ydb::StatusIds::StatusCode status, NKikimrKqp::TScriptExecutionRetryState& retryState, NYql::TIssues& issues) {
     const auto& policy = TRetryPolicyItem::FromProto(status, retryState);
-    TRetryLimiter retryLimiter(
-        retryState.GetRetryCounter(),
-        NProtoInterop::CastFromProto(retryState.GetRetryCounterUpdatedAt()),
-        retryState.GetRetryRate()
-    );
+    TRetryLimiter retryLimiter(retryState);
 
-    const bool retry = policy && retryLimiter.UpdateOnRetry(TInstant::Now(), *policy);
-    retryState.SetRetryCounter(retryLimiter.RetryCount);
-    *retryState.MutableRetryCounterUpdatedAt() = NProtoInterop::CastToProto(now);
-    retryState.SetRetryRate(retryLimiter.RetryRate);
+    const bool retry = policy && retryLimiter.UpdateOnRetry(startedAt, TInstant::Now(), *policy);
+    retryLimiter.SaveToProto(retryState);
 
     if (retry) {
         issues = AddRootIssue(TStringBuilder()
             << "Script execution operation failed with code " << Ydb::StatusIds::StatusCode_Name(status)
-            << " and will be restarted (RetryCount: " << retryLimiter.RetryCount << ", Backoff: " << retryLimiter.Backoff << ", RetryRate: " << retryLimiter.RetryRate << ")"
+            << " and will be restarted (RetryCount: " << retryLimiter.RetryCount << ", Backoff: " << retryLimiter.Backoff << ")"
             << " at " << now, issues);
 
         return {
@@ -3944,7 +3938,7 @@ LeaseFinalizationInfo GetLeaseFinalizationSql(TInstant now, Ydb::StatusIds::Stat
         if (policy) {
             TStringBuilder finalIssue;
             finalIssue << "Script execution operation failed with code " << Ydb::StatusIds::StatusCode_Name(status);
-            if (policy->RetryCount) {
+            if (policy->PolicyInitialized) {
                 finalIssue << " (" << retryLimiter.LastError << ")";
             }
             issues = AddRootIssue(finalIssue << " at " << now, issues);
@@ -3985,6 +3979,7 @@ public:
                 script_sinks,
                 script_secret_names,
                 retry_state,
+                start_ts,
                 graph_compressed IS NOT NULL AS has_graph
             FROM `.metadata/script_executions`
             WHERE database = $database AND execution_id = $execution_id AND
@@ -4120,6 +4115,12 @@ public:
                 // Disable retries if state not saved
                 RetryState.ClearRetryPolicyMapping();
             }
+
+            if (const auto startTs = result.ColumnParser("start_ts").GetOptionalTimestamp()) {
+                StartedAt = *startTs;
+            } else {
+                return Finish(Ydb::StatusIds::INTERNAL_ERROR, "Missing operation start timestamp");
+            }
         }
 
         {   // Lease info
@@ -4197,7 +4198,7 @@ public:
         TInstant retryDeadline = TInstant::Now();
         ELeaseState leaseState = ELeaseState::ScriptFinalizing;
         if (!Response->ApplicateScriptExternalEffectRequired) {
-            const auto leaseInfo = GetLeaseFinalizationSql(retryDeadline, Request.OperationStatus, RetryState, Request.Issues);
+            const auto leaseInfo = GetLeaseFinalizationSql(StartedAt, retryDeadline, Request.OperationStatus, RetryState, Request.Issues);
             sql << leaseInfo.Sql;
             retryDeadline += leaseInfo.Backoff;
             leaseState = leaseInfo.NewLeaseState;
@@ -4333,6 +4334,7 @@ private:
     std::optional<TString> SerializedSinks;
     std::optional<TString> SerializedSecretNames;
     NKikimrKqp::TScriptExecutionRetryState RetryState;
+    TInstant StartedAt;
 };
 
 class TScriptFinalizationFinisherActor : public TQueryBase {
@@ -4365,6 +4367,7 @@ public:
                 issues,
                 retry_state,
                 meta,
+                start_ts,
                 graph_compressed IS NOT NULL AS has_graph
             FROM `.metadata/script_executions`
             WHERE database = $database AND execution_id = $execution_id AND
@@ -4486,6 +4489,12 @@ public:
                     RetryState.ClearRetryPolicyMapping();
                 }
             }
+
+            if (const auto startTs = result.ColumnParser("start_ts").GetOptionalTimestamp()) {
+                StartedAt = *startTs;
+            } else {
+                return Finish(Ydb::StatusIds::INTERNAL_ERROR, "Missing operation start timestamp");
+            }
         }
 
         UpdateOperationFinalStatus();
@@ -4518,7 +4527,7 @@ public:
         Y_ENSURE(OperationStatus);
 
         TInstant retryDeadline = TInstant::Now();
-        const auto leaseInfo = GetLeaseFinalizationSql(retryDeadline, *OperationStatus, RetryState, OperationIssues);
+        const auto leaseInfo = GetLeaseFinalizationSql(StartedAt, retryDeadline, *OperationStatus, RetryState, OperationIssues);
         sql << leaseInfo.Sql;
         retryDeadline += leaseInfo.Backoff;
         WaitRetry = leaseInfo.NewLeaseState == ELeaseState::WaitRetry;
@@ -4583,6 +4592,7 @@ private:
     Ydb::Query::ExecStatus ExecutionStatus = Ydb::Query::EXEC_STATUS_UNSPECIFIED;
     NYql::TIssues OperationIssues;
     NKikimrKqp::TScriptExecutionRetryState RetryState;
+    TInstant StartedAt;
     const i64 LeaseGeneration;
     bool AlreadyFinished = false;
     bool WaitRetry = false;

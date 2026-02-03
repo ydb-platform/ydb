@@ -34,7 +34,7 @@ SRCS(
     counters_ut.cpp
     pqtablet_mock.cpp
     internals_ut.cpp
-    inflite_limiter_ut.cpp
+    inflight_limiter_ut.cpp
     make_config.cpp
     metering_sink_ut.cpp
     partition_chooser_ut.cpp

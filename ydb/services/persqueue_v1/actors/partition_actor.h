@@ -12,7 +12,7 @@
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/public/utils.h>
-#include <ydb/core/persqueue/public/inflite_limiter.h>
+#include <ydb/core/persqueue/public/inflight_limiter.h>
 #include <ydb/core/util/ulid.h>
 
 #include <ydb/library/services/services.pb.h>
@@ -252,7 +252,7 @@ private:
     std::set<ui64> UnpublishedDirectReads;
     std::set<ui64> DirectReadsToForget;
 
-    NPQ::TInFlightMemoryController PartitionInFlightMemoryController;
+    NPQ::TInFlightController PartitionInFlightMemoryController;
 
     enum class EDirectReadRestoreStage {
         None,

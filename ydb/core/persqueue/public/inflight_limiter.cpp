@@ -1,9 +1,9 @@
-#include "inflite_limiter.h"
+#include "inflight_limiter.h"
 #include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NPQ {
 
-TInFlightMemoryController::TInFlightMemoryController(ui64 MaxAllowedSize)
+TInFlightController::TInFlightController(ui64 MaxAllowedSize)
     : LayoutUnitSize(MaxAllowedSize / MAX_LAYOUT_COUNT)
     , TotalSize(0)
     , MaxAllowedSize(MaxAllowedSize)
@@ -13,7 +13,7 @@ TInFlightMemoryController::TInFlightMemoryController(ui64 MaxAllowedSize)
     }
 }
 
-bool TInFlightMemoryController::Add(ui64 Offset, ui64 Size) {
+bool TInFlightController::Add(ui64 Offset, ui64 Size) {
     if (MaxAllowedSize == 0) {
         // means that there are no limits were set
         return true;
@@ -36,7 +36,7 @@ bool TInFlightMemoryController::Add(ui64 Offset, ui64 Size) {
     return TotalSize < MaxAllowedSize;
 }
 
-bool TInFlightMemoryController::Remove(ui64 Offset) {
+bool TInFlightController::Remove(ui64 Offset) {
     if (MaxAllowedSize == 0) {
         // means that there are no limits were set
         return true;
@@ -57,7 +57,7 @@ bool TInFlightMemoryController::Remove(ui64 Offset) {
     return TotalSize < MaxAllowedSize;
 }
 
-bool TInFlightMemoryController::IsMemoryLimitReached() const {
+bool TInFlightController::IsMemoryLimitReached() const {
     if (MaxAllowedSize == 0) {
         // means that there are no limits were set
         return false;

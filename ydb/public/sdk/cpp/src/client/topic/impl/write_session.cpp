@@ -165,7 +165,9 @@ bool TKeyedWriteSession::TIdleSession::IsExpired() const {
 // TKeyedWriteSession::TSplittedPartitionWorker
 
 TKeyedWriteSession::TSplittedPartitionWorker::TSplittedPartitionWorker(TKeyedWriteSession* session, ui32 partitionId, ui64 partitionIdx)
-    : Session(session), PartitionId(partitionId), PartitionIdx(partitionIdx)
+    : Session(session)
+    , PartitionId(partitionId)
+    , PartitionIdx(partitionIdx)
 {}
 
 void TKeyedWriteSession::TSplittedPartitionWorker::DoWork() {

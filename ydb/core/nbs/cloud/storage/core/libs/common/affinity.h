@@ -6,7 +6,7 @@
 
 #include <memory>
 
-namespace NCloud {
+namespace NYdb::NBS {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -43,4 +43,4 @@ public:
     void Release();
 };
 
-}   // namespace NCloud
+}   // namespace NYdb::NBS

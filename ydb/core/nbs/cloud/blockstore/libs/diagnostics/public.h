@@ -14,15 +14,15 @@ class IMetricSupplier;
 
 }   // NMonitoring
 
-namespace NCloud::NStorage {
+namespace NYdb::NBS::NStorage {
 
 ////////////////////////////////////////////////////////////////////////////////
 
 using IUserMetricsSupplierPtr = std::shared_ptr<NMonitoring::IMetricSupplier>;
 
-}   // NCloud::NStorage
+}   // namespace NYdb::NBS::NStorage
 
-namespace NCloud::NBlockStore {
+namespace NYdb::NBS::NBlockStore {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -69,4 +69,4 @@ using IBlockDigestGeneratorPtr = std::shared_ptr<IBlockDigestGenerator>;
 struct IVolumeBalancerSwitch;
 using IVolumeBalancerSwitchPtr = std::shared_ptr<IVolumeBalancerSwitch>;
 
-}   // namespace NCloud::NBlockStore
+}   // namespace NYdb::NBS::NBlockStore

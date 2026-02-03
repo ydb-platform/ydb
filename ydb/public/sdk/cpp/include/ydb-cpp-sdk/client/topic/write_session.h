@@ -356,4 +356,4 @@ public:
     virtual ~ISimpleBlockingKeyedWriteSession() = default;
 };
 
-}
+} // namespace NYdb::NTopic

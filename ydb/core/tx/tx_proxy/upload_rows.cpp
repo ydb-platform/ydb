@@ -139,7 +139,7 @@ IActor* CreateUploadRowsInternal(const TActorId& sender,
         table,
         types,
         std::move(rows),
-        "", // cdcuser@no_user
+        BUILTIN_ACL_CDC_WITHOUT_USER_SID,
         mode,
         writeToPrivateTable,
         writeToIndexImplTable,

@@ -4304,7 +4304,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
         auto records = WaitForContent(server, edgeActor, "/Root/Table/Stream", {
             R"({"resolved":"***"})",
-            R"({"update":{"value":10},"key":[1],"ts":"***"})",
+            R"({"user":"<anonymous>","update":{"value":10},"key":[1],"ts":"***"})",
             R"({"resolved":"***"})",
         });
 
@@ -4384,10 +4384,10 @@ Y_UNIT_TEST_SUITE(Cdc) {
         Cerr << "... checking the update is logged before the new resolved timestamp" << Endl;
         records = WaitForContent(server, edgeActor, "/Root/Table/Stream", {
             R"({"resolved":"***"})",
-            R"({"update":{"value":10},"key":[1],"ts":"***"})",
+            R"({"user":"<anonymous>","update":{"value":10},"key":[1],"ts":"***"})",
             R"({"resolved":"***"})",
-            R"({"update":{"value":20},"key":[2],"ts":"***"})",
-            R"({"update":{"value":30},"key":[3],"ts":"***"})",
+            R"({"user":"<anonymous>","update":{"value":20},"key":[2],"ts":"***"})",
+            R"({"user":"<anonymous>","update":{"value":30},"key":[3],"ts":"***"})",
             R"({"resolved":"***"})",
         });
 

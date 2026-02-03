@@ -16,7 +16,7 @@ TConclusion<std::unique_ptr<NActors::IActor>> CreateAsyncJobImportDownloader(con
     switch (settingsKind) {
     case NKikimrSchemeOp::TRestoreTask::kS3Settings:
     #ifndef KIKIMR_DISABLE_S3_OPS
-        return std::unique_ptr<NActors::IActor>(CreateS3Downloader(subscriberActorId, txId, restoreTask, tableInfo, ""));   // Скорее всего не нужно cdcuser@async_job_import
+        return std::unique_ptr<NActors::IActor>(CreateS3Downloader(subscriberActorId, txId, restoreTask, tableInfo, BUILTIN_ACL_CDC_WITHOUT_USER_SID));
     #else
         return TConclusionStatus::Fail("Import from S3 are disabled");
     #endif

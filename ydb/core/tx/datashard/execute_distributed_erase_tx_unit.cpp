@@ -171,13 +171,12 @@ public:
             }
 
             if (changeCollector) {
-                const TString ttlUserSID = "ttl@system"; // Где определить эту константу "cdcuser@"ttl
                 if (!volatileDependencies.empty() || volatileOrdered) {
-                    if (!changeCollector->OnUpdateTx(fullTableId, tableInfo.LocalTid, NTable::ERowOp::Erase, key, {}, globalTxId, ttlUserSID)) {
+                    if (!changeCollector->OnUpdateTx(fullTableId, tableInfo.LocalTid, NTable::ERowOp::Erase, key, {}, globalTxId, BUILTIN_ACL_TTL)) {
                         pageFault = true;
                     }
                 } else {
-                    if (!changeCollector->OnUpdate(fullTableId, tableInfo.LocalTid, NTable::ERowOp::Erase, key, {}, mvccVersion, ttlUserSID)) {
+                    if (!changeCollector->OnUpdate(fullTableId, tableInfo.LocalTid, NTable::ERowOp::Erase, key, {}, mvccVersion, BUILTIN_ACL_TTL)) {
                         pageFault = true;
                     }
                 }

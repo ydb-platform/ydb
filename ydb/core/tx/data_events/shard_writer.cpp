@@ -57,7 +57,7 @@ namespace NKikimr::NEvWrite {
 
     void TShardWriter::SendWriteRequest() {
         auto ev = MakeHolder<NEvents::TDataEvents::TEvWrite>(NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
-        // ev->SetUserSID("cdcuser@shard_writer");  // недрами уходит в TLongTxWriteBase. Что это?
+        ev->SetUserSID(BUILTIN_ACL_CDC_WITHOUT_USER_SID);  // посмотреть автора кода и спросить. недрами уходит в TLongTxWriteBase. Что это?
         DataForShard->Serialize(*ev, TableId, SchemaVersion);
         if (Timeout) {
             ev->Record.SetTimeoutSeconds(Timeout->Seconds());

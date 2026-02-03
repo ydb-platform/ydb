@@ -411,19 +411,8 @@ Y_UNIT_TEST_SUITE(EraseRowsTests) {
 
         TServerSettings serverSettings(pm.GetPort(2134), {}, pqConfig);
         serverSettings.SetUseRealThreads(true)
-                .SetDomainName(databaseName)
-                .SetGrpcPort(pm.GetPort(2135))
-                .SetEnableChangefeedDynamoDBStreamsFormat(true)
-                .SetEnableChangefeedDebeziumJsonFormat(true)
-                .SetEnableTopicMessageMeta(true)
-                .SetEnableChangefeedInitialScan(true)
-                .SetEnableUuidAsPrimaryKey(true)
-                .SetEnableTablePgTypes(true)
-                .SetEnableTableDatetime64(true)
-                .SetEnableParameterizedDecimal(true)
-                .SetEnablePgSyntax(true)
-                .SetEnableTopicSplitMerge(true)
-                .SetEnableTopicAutopartitioningForCDC(true); // cdcuser@test Что реально нужно
+            .SetDomainName(databaseName)
+            .SetGrpcPort(pm.GetPort(2135));
         
         TServer::TPtr server = new TServer(serverSettings);
         server->EnableGRpc(serverSettings.GrpcPort);

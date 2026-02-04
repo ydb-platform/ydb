@@ -28,7 +28,7 @@ TPartitionActor::TPartitionActor(
         const ui64 tabletID, const TTopicCounters& counters, bool commitsDisabled,
         const TString& clientDC, bool rangesMode, const NPersQueue::TTopicConverterPtr& topic, const TString& database,
         bool directRead, bool useMigrationProtocol, ui32 maxTimeLagMs, ui64 readTimestampMs, const TTopicHolder::TPtr& topicHolder,
-        const std::unordered_set<ui64>& notCommitedToFinishParents
+        const std::unordered_set<ui64>& notCommitedToFinishParents, ui64 partitionMaxInFlightBytes
 )
     : ParentId(parentId)
     , ClientId(clientId)
@@ -73,6 +73,7 @@ TPartitionActor::TPartitionActor(
     , Topic(topic)
     , Database(database)
     , DirectRead(directRead)
+    , PartitionInFlightMemoryController(partitionMaxInFlightBytes)
     , UseMigrationProtocol(useMigrationProtocol)
     , FirstRead(true)
     , ReadingFinishedSent(false)
@@ -822,13 +823,14 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
 
         AFL_ENSURE(!WaitForData);
 
+        bool isInFlightMemoryOk = PartitionInFlightMemoryController.Add(dr.GetReadOffset(), dr.GetBytesSizeEstimate());
         ReadOffset = dr.GetLastOffset() + 1;
 
         AFL_ENSURE(!RequestInfly);
 
-        if (EndOffset > ReadOffset) {
+        if (EndOffset > ReadOffset && isInFlightMemoryOk) {
             SendPartitionReady(ctx);
-        } else {
+        } else if (EndOffset == ReadOffset) {
             WaitForData = true;
             if (PipeClient) //pipe will be recreated soon
                 WaitDataInPartition(ctx);
@@ -872,9 +874,15 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
 
     AFL_ENSURE(!WaitForData);
 
-    if (EndOffset > ReadOffset) {
+    for (ui32 i = 0; i < res.ResultSize(); ++i) {
+        const auto& resultItem = res.GetResult(i);
+        PartitionInFlightMemoryController.Add(resultItem.GetOffset(), resultItem.GetData().size());
+    }
+
+    auto isMemoryLimitReached = PartitionInFlightMemoryController.IsMemoryLimitReached();
+    if (EndOffset > ReadOffset && !isMemoryLimitReached) {
         SendPartitionReady(ctx);
-    } else {
+    } else if (EndOffset == ReadOffset) {
         WaitForData = true;
         if (PipeClient) //pipe will be recreated soon
             WaitDataInPartition(ctx);
@@ -938,6 +946,15 @@ void TPartitionActor::CommitDone(ui64 cookie, const TActorContext& ctx) {
     }
 
     CommittedOffset = CommitsInfly.front().second.Offset;
+    
+    bool wasMemoryLimitReached = PartitionInFlightMemoryController.IsMemoryLimitReached();
+    bool isMemoryOkNow = PartitionInFlightMemoryController.Remove(CommittedOffset);
+    if (wasMemoryLimitReached && isMemoryOkNow && EndOffset > ReadOffset) {
+        LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Partition
+                        << " ready for read after commit with readOffset " << ReadOffset << " endOffset " << EndOffset);
+        SendPartitionReady(ctx);
+    }
+
     ui64 startReadId = CommitsInfly.front().second.StartReadId;
     ctx.Send(ParentId, new TEvPQProxy::TEvCommitDone(Partition.AssignId, startReadId, readId, CommittedOffset, EndOffset, ReadingFinishedSent));
 
@@ -1305,7 +1322,9 @@ void TPartitionActor::Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr& ev, con
         if (ReadOffset < EndOffset) {
             WaitForData = false;
             WaitDataInfly.clear();
-            SendPartitionReady(ctx);
+            if (!PartitionInFlightMemoryController.IsMemoryLimitReached()) {
+                SendPartitionReady(ctx);
+            }
         } else if (PipeClient) {
             WaitDataInPartition(ctx);
         }

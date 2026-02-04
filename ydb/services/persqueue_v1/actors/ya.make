@@ -10,6 +10,7 @@ PEERDIR(
     ydb/core/grpc_services
     ydb/core/persqueue/common
     ydb/core/persqueue/events
+    ydb/core/persqueue/public
     ydb/core/persqueue/public/counters
     ydb/core/persqueue/public/cluster_tracker
     ydb/core/protos

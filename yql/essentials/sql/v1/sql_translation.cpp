@@ -2601,7 +2601,8 @@ static bool StoreConsumerSettingsEntry(
             return false;
         }
     }
-    if (to_lower(id.Name) == "important") {
+    auto name = to_lower(id.Name);
+    if (name == "important") {
         if (settings.Important) {
             ctx.Error() << to_upper(id.Name) << " specified multiple times in " << statement << " statement for single consumer";
             return false;
@@ -2615,7 +2616,7 @@ static bool StoreConsumerSettingsEntry(
             return false;
         }
         settings.Important = valueExprNode;
-    } else if (to_lower(id.Name) == "availability_period") {
+    } else if (name == "availability_period") {
         if (settings.AvailabilityPeriod) {
             ctx.Error() << to_upper(id.Name) << " specified multiple times in " << statement << " statement for single consumer";
             return false;
@@ -2629,7 +2630,7 @@ static bool StoreConsumerSettingsEntry(
             }
             settings.AvailabilityPeriod.Set(valueExprNode);
         }
-    } else if (to_lower(id.Name) == "read_from") {
+    } else if (name == "read_from") {
         if (settings.ReadFromTs) {
             ctx.Error() << to_upper(id.Name) << " specified multiple times in " << statement << " statement for single consumer";
             return false;
@@ -2637,10 +2638,9 @@ static bool StoreConsumerSettingsEntry(
         if (reset) {
             settings.ReadFromTs.Reset();
         } else {
-            // ToDo: !! validate
             settings.ReadFromTs.Set(valueExprNode);
         }
-    } else if (to_lower(id.Name) == "supported_codecs") {
+    } else if (name == "supported_codecs") {
         if (settings.SupportedCodecs) {
             ctx.Error() << to_upper(id.Name) << " specified multiple times in " << statement << " statement for single consumer";
             return false;
@@ -2654,6 +2654,108 @@ static bool StoreConsumerSettingsEntry(
             }
             settings.SupportedCodecs.Set(valueExprNode);
         }
+    } else if (name == "type") {
+        if (settings.Type) {
+            ctx.Error() << to_upper(id.Name) << " specified multiple times in " << statement << " statement for single consumer";
+            return false;
+        }
+        if (alter) {
+            ctx.Error() << to_upper(id.Name) << " alter is not supported";
+            return false;
+        }
+        if (reset) {
+            ctx.Error() << to_upper(id.Name) << " reset is not supported";
+            return false;
+        }
+        if (!valueExprNode->IsLiteral() || (valueExprNode->GetLiteralType() != "String" && valueExprNode->GetLiteralType() != "Enum")) {
+            ctx.Error() << to_upper(id.Name) << " value should be a string literal";
+            return false;
+        }
+        TString value = to_upper(valueExprNode->GetLiteralValue());
+        if (value != "STREAMING" && value != "SHARED") {
+            ctx.Error() << to_upper(id.Name) << " value should be 'STREAMING' or 'SHARED', got: " << valueExprNode->GetLiteralValue();
+            return false;
+        }
+        settings.Type = valueExprNode;
+    } else if (name == "keep_messages_order") {
+        if (settings.KeepMessagesOrder) {
+            ctx.Error() << to_upper(id.Name) << " specified multiple times in " << statement << " statement for single consumer";
+            return false;
+        }
+        if (alter) {
+            ctx.Error() << to_upper(id.Name) << " alter is not supported";
+            return false;
+        }
+        if (reset) {
+            ctx.Error() << to_upper(id.Name) << " reset is not supported";
+            return false;
+        }
+        if (!valueExprNode->IsLiteral() || valueExprNode->GetLiteralType() != "Bool") {
+            ctx.Error() << to_upper(id.Name) << " value should be boolean";
+            return false;
+        }
+        settings.KeepMessagesOrder = valueExprNode;
+    } else if (name == "default_processing_timeout") {
+        if (settings.DefaultProcessingTimeout) {
+            ctx.Error() << to_upper(id.Name) << " specified multiple times in " << statement << " statement for single consumer";
+            return false;
+        }
+        if (reset) {
+            ctx.Error() << to_upper(id.Name) << " reset is not supported";
+            return false;
+        }
+        if (valueExprNode->GetOpName() != "Interval") {
+            ctx.Error() << "Literal of Interval type is expected for " << to_upper(id.Name) << " setting";
+            return false;
+        }
+        settings.DefaultProcessingTimeout = valueExprNode;
+    } else if (name == "max_processing_attempts") {
+        if (settings.MaxProcessingAttempts) {
+            ctx.Error() << to_upper(id.Name) << " specified multiple times in " << statement << " statement for single consumer";
+            return false;
+        }
+        if (reset) {
+            ctx.Error() << to_upper(id.Name) << " reset is not supported";
+            return false;
+        }
+        if (!valueExprNode->IsIntegerLiteral()) {
+            ctx.Error() << to_upper(id.Name) << " value should be a integer";
+            return false;
+        }
+        settings.MaxProcessingAttempts = valueExprNode;
+    } else if (name == "dead_letter_policy") {
+        if (settings.DeadLetterPolicy) {
+            ctx.Error() << to_upper(id.Name) << " specified multiple times in " << statement << " statement for single consumer";
+            return false;
+        }
+        if (reset) {
+            ctx.Error() << to_upper(id.Name) << " reset is not supported";
+            return false;
+        }
+        if (!valueExprNode->IsLiteral() || (valueExprNode->GetLiteralType() != "String" && valueExprNode->GetLiteralType() != "Enum")) {
+            ctx.Error() << to_upper(id.Name) << " value should be a string literal";
+            return false;
+        }
+        TString value = to_upper(valueExprNode->GetLiteralValue());
+        if (value != "MOVE" && value != "DELETE" && value != "NONE") {
+            ctx.Error() << to_upper(id.Name) << " value should be 'MOVE', 'DELETE' or 'NONE', got: " << valueExprNode->GetLiteralValue();
+            return false;
+        }
+        settings.DeadLetterPolicy = valueExprNode;
+    } else if (name == "dead_letter_queue") {
+        if (settings.DeadLetterQueue) {
+            ctx.Error() << to_upper(id.Name) << " specified multiple times in " << statement << " statement for single consumer";
+            return false;
+        }
+        if (reset) {
+            ctx.Error() << to_upper(id.Name) << " reset is not supported";
+            return false;
+        }
+        if (!valueExprNode->IsLiteral() || valueExprNode->GetLiteralType() != "String") {
+            ctx.Error() << to_upper(id.Name) << " value should be a string literal";
+            return false;
+        }
+        settings.DeadLetterQueue = valueExprNode;
     } else {
         ctx.Error() << to_upper(id.Name) << ": unknown option for consumer";
         return false;

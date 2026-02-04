@@ -82,6 +82,11 @@ TObjectProcessorImpl::TObjectProcessorImpl(TPosition pos, const TString& objectI
 }
 
 bool TObjectProcessorImpl::DoInit(TContext& ctx, ISource* src) {
+    if (Cluster.Empty()) {
+        ctx.Error(GetPos()) << "No cluster name given and no default cluster is selected";
+        return false;
+    }
+
     Scoped_->UseCluster(ServiceId, Cluster);
     auto options = FillFeatures(BuildOptions());
     auto keys = BuildKeys();

@@ -857,6 +857,10 @@ void TAstListNodeImpl::CollectPreaggregateExprs(TContext& ctx, ISource& src, TVe
     }
 }
 
+const TString* TAstListNodeImpl::GetSourceName() const {
+    return DeriveCommonSourceName(Nodes_);
+}
+
 TNodePtr TAstListNodeImpl::DoClone() const {
     return new TAstListNodeImpl(Pos_, CloneContainer(Nodes_));
 }
@@ -1242,6 +1246,12 @@ bool TWinRank::DoInit(TContext& ctx, ISource* src) {
 
     if (Args_.empty()) {
         for (const auto& spec : orderSpec) {
+            // It relies on a fact that ORDER BY is
+            // already validated at `TSelectCore::InitSelect`.
+            if (!spec->OrderExpr->Init(ctx, src)) {
+                return false;
+            }
+
             Args_.push_back(spec->Clone()->OrderExpr);
         }
 

@@ -249,7 +249,7 @@ void TDataShard::Handle(TEvDataShard::TEvGetDataHistogramRequest::TPtr& ev) {
     if (rec.GetActualData()) {
         if (CurrentKeySampler == DisabledKeySampler) {
             // datashard stores expired stats
-            Send(ev->Sender, response);
+            Send(ev->Sender, response, 0, ev->Cookie);
             return;
         }
     }
@@ -268,7 +268,7 @@ void TDataShard::Handle(TEvDataShard::TEvGetDataHistogramRequest::TPtr& ev) {
         SerializeKeySample(tinfo, tinfo.Stats.AccessStats, *hist.MutableKeyAccessSample());
     }
 
-    Send(ev->Sender, response);
+    Send(ev->Sender, response, 0, ev->Cookie);
 }
 
 void TDataShard::Handle(TEvDataShard::TEvGetRSInfoRequest::TPtr& ev) {

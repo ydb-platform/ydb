@@ -1,6 +1,7 @@
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/test_with_reboots.h>
 
 #include <google/protobuf/text_format.h>
 
@@ -811,8 +812,7 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
         });
     }
 
-    Y_UNIT_TEST(CopyTableAndDropWithReboots2) { //+
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CopyTableAndDropWithReboots2, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);

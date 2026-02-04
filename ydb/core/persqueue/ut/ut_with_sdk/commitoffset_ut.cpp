@@ -1,3 +1,4 @@
+#include <include/ydb-cpp-sdk/client/query/client.h>
 #include <ydb/core/persqueue/ut/common/autoscaling_ut_common.h>
 
 #include <ydb/public/sdk/cpp/src/client/topic/ut/ut_utils/topic_sdk_test_setup.h>
@@ -18,6 +19,11 @@ using namespace NSchemeShardUT_Private;
 using namespace NKikimr::NPQ::NTest;
 
 Y_UNIT_TEST_SUITE(CommitOffset) {
+
+    void ExecuteQuery(NYdb::NQuery::TSession& session, const TString& query ) {
+        const auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+    }
 
     void PrepareFlatTopic(TTopicSdkTestSetup& setup) {
         setup.CreateTopic();
@@ -66,6 +72,61 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
         setup.Write("message-4-1", 4);
         setup.Write("message-4-2", 4);
         setup.Write("message-4-3", 4);
+    }
+
+    void PrepareAutopartitionedCDC(TTopicSdkTestSetup& setup) {
+        auto client = NYdb::NQuery::TQueryClient(setup.MakeDriver());
+        auto session = client.GetSession().GetValueSync().GetSession();
+
+        ExecuteQuery(session, R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/origin` (
+                id Uint64,
+                value Text,
+                PRIMARY KEY (id)
+            );
+        )");
+
+        ExecuteQuery(session, R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/origin`
+                ADD CHANGEFEED `feed` WITH (
+                    MODE = 'UPDATES',
+                    FORMAT = 'JSON',
+                    TOPIC_AUTO_PARTITIONING = 'ENABLED'
+                );
+        )");
+
+        ExecuteQuery(session, R"(
+            --!syntax_v1
+            ALTER TOPIC `/Root/origin/feed`
+                ADD CONSUMER `my_consumer`;
+        )");
+
+        ExecuteQuery(session, R"(
+            --!syntax_v1
+            INSERT INTO `/Root/origin` (id, value)
+            VALUES (1, 'message-0-1'), (2, 'message-0-2'), (3, 'message-0-3');
+        )");
+
+        // Creating partition hierarchy
+        // 0 ──┬──> 1
+        //     │
+        //     └──> 2
+        //
+        // Each partition has 3 messages
+
+        {
+            ui64 txId = 1006;
+            SplitPartition(setup.GetRuntime(), ++txId, "/Root/origin/feed", "streamImpl", 0, "a");
+        }
+
+        ExecuteQuery(session, R"(
+            --!syntax_v1
+            INSERT INTO `/Root/origin` (id, value)
+            VALUES (4, 'message-1-1'), (5, 'message-1-2'), (6, 'message-1-3');
+        )");
+
     }
 
     ui64 GetCommittedOffset(TTopicSdkTestSetup& setup, size_t partition) {
@@ -753,6 +814,23 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
         UNIT_ASSERT_VALUES_EQUAL(3, GetCommittedOffset(setup, 3));
         UNIT_ASSERT_VALUES_EQUAL(3, GetCommittedOffset(setup, 4));
     }
+
+    Y_UNIT_TEST(CommitCDC_WithoutSession_WithChildren) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        PrepareAutopartitionedCDC(setup);
+
+        {
+            // Commit parent partition to non end
+            auto result = setup.Commit("/Root/origin/feed", "my_consumer", 0, 1);
+            UNIT_ASSERT(result.IsSuccess());
+        }
+
+        {
+            auto result = setup.Commit("/Root/origin/feed", "my_consumer", 1, 1);
+            UNIT_ASSERT(result.IsSuccess());
+        }
+    }
+
 
 }
 

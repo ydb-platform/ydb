@@ -11,6 +11,7 @@ NKikimrSchemeOp::TModifyScheme CreateTransaction(const TString& parentPath, ::NK
     tx.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterPersQueueGroup);
     tx.SetWorkingDir(parentPath);
     tx.MutableAlterPersQueueGroup()->CopyFrom(scheme);
+    tx.SetInternal(true);
     return tx;
 }
 
@@ -25,12 +26,16 @@ ui64 DoRequest(TTopicSdkTestSetup& setup, ui64& txId, NKikimrSchemeOp::TPersQueu
 }
 
 ui64 DoRequest(NActors::TTestActorRuntime& runtime, ui64& txId, NKikimrSchemeOp::TPersQueueGroupDescription& scheme) {
+    return DoRequest(runtime, txId, "/Root", scheme);
+}
+
+ui64 DoRequest(NActors::TTestActorRuntime& runtime, ui64& txId, const TString& dir, NKikimrSchemeOp::TPersQueueGroupDescription& scheme) {
     Sleep(TDuration::Seconds(1));
 
     Cerr << "ALTER_SCHEME: " << scheme << Endl << Flush;
 
     const auto sender = runtime.AllocateEdgeActor();
-    const auto request = CreateRequest(txId, CreateTransaction("/Root", scheme));
+    const auto request = CreateRequest(txId, CreateTransaction(dir, scheme));
     runtime.Send(new IEventHandle(
             MakeTabletResolverID(),
             sender,
@@ -66,14 +71,18 @@ ui64 SplitPartition(NActors::TTestActorRuntime& runtime, ui64& txId, const ui32 
     return SplitPartition(runtime, txId, TString{TEST_TOPIC}, partition, boundary);
 }
 
-ui64 SplitPartition(NActors::TTestActorRuntime& runtime, ui64& txId, const TString& topic, const ui32 partition, TString boundary) {
+ui64 SplitPartition(NActors::TTestActorRuntime& runtime, ui64& txId, const TString& dir, const TString& topic, const ui32 partition, TString boundary) {
     ::NKikimrSchemeOp::TPersQueueGroupDescription scheme;
     scheme.SetName(topic);
     auto* split = scheme.AddSplit();
     split->SetPartition(partition);
     split->SetSplitBoundary(boundary);
 
-    return DoRequest(runtime, txId, scheme);
+    return DoRequest(runtime, txId, dir,scheme);
+}
+
+ui64 SplitPartition(NActors::TTestActorRuntime& runtime, ui64& txId, const TString& topic, const ui32 partition, TString boundary) {
+    return SplitPartition(runtime, txId, "/Root", topic, partition, boundary);
 }
 
 void MergePartition(TTopicSdkTestSetup& setup, ui64& txId, const ui32 partitionLeft, const ui32 partitionRight) {

@@ -185,6 +185,10 @@ class TOpRead : public IOperator {
 class TMapElement {
 public:
     TMapElement(const TInfoUnit& elementName, TExpression expr);
+    TMapElement(const TInfoUnit& elementName, const TInfoUnit& rename);
+
+    bool IsRename() const;
+    TInfoUnit GetRename() const;
 
     TInfoUnit GetElementName() const;
     TExpression GetExpression() const;
@@ -202,7 +206,8 @@ class TOpMap : public IUnaryOperator {
     virtual TVector<TInfoUnit> GetOutputIUs() override;
     virtual TVector<TInfoUnit> GetUsedIUs(TPlanProps& props) override;
     virtual TVector<TInfoUnit> GetSubplanIUs(TPlanProps& props) override;
-    virtual TVector<TExpression> GetComplexExpressions() override;
+    virtual TVector<TExpression> GetExpressions() override;
+    virtual TVector<TExpression> GetComplexExpressions();
     TVector<std::pair<TInfoUnit, TInfoUnit>> GetRenames() const;
     TVector<std::pair<TInfoUnit, TInfoUnit>> GetRenamesWithTransforms(TPlanProps& props) const;
     virtual void ApplyReplaceMap(TNodeOnNodeOwnedMap map, TRBOContext & ctx) override;
@@ -338,14 +343,14 @@ class TOpLimit : public IUnaryOperator {
 
 class TOpSort : public IUnaryOperator {
   public:
-    TOpSort(std::shared_ptr<IOperator> input, TPositionHandle pos, const TVector<TSortElement>& sortElements, TExpression limitCond = {});
+    TOpSort(std::shared_ptr<IOperator> input, TPositionHandle pos, const TVector<TSortElement>& sortElements, std::optional<TExpression> limitCond = std::nullopt);
     virtual TVector<TInfoUnit> GetOutputIUs() override;
     virtual TVector<TInfoUnit> GetUsedIUs(TPlanProps& props) override;
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap, TExprContext &ctx, const THashSet<TInfoUnit, TInfoUnit::THashFunction> &stopList = {}) override;
     virtual TString ToString(TExprContext& ctx) override;
 
     TVector<TSortElement> SortElements;
-    TExpression LimitCond;
+    std::optional<TExpression> LimitCond;
 };
 
 /***
@@ -460,9 +465,6 @@ class TOpRoot : public IUnaryOperator {
     Iterator begin() { return Iterator(this); }
     Iterator end() { return Iterator(nullptr); }
 };
-
-TVector<TInfoUnit> IUSetDiff(TVector<TInfoUnit> left, TVector<TInfoUnit> right);
-TVector<TInfoUnit> IUSetIntersect(TVector<TInfoUnit> left, TVector<TInfoUnit> right);
 
 TString PrintRBOExpression(TExprNode::TPtr expr, TExprContext & ctx);
 

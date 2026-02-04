@@ -129,7 +129,7 @@ TStatus ComputeTypes(std::shared_ptr<TOpFilter> filter, TRBOContext& ctx, TPlanP
     YQL_CLOG(TRACE, CoreDq) << "Type annotation for Filter, itemType after scalars: " << *(TTypeAnnotationNode*)itemType;
 
 
-    auto& lambda = filter->FilterLambda;
+    auto& lambda = filter->FilterExpr.Node;
 
     if (!UpdateLambdaAllArgumentsTypes(lambda, {itemType}, ctx.ExprCtx)) {
         YQL_CLOG(TRACE, CoreDq) << "Could not update lambda arg types";
@@ -202,7 +202,7 @@ TStatus ComputeTypes(std::shared_ptr<TOpMap> map, TRBOContext& ctx) {
             resStructItemTypes.push_back(renameType);
         } else {
             // This is type annotation update inplace, which is different comparing to yql type annotation.
-            auto& lambda = mapElement.GetExpression();
+            auto& lambda = mapElement.GetExpression().Node;
             if (!UpdateLambdaAllArgumentsTypes(lambda, {structType}, ctx.ExprCtx)) {
                 return IGraphTransformer::TStatus::Error;
             }

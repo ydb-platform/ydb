@@ -1,5 +1,6 @@
 #include "kqp_rbo_rules.h"
 #include "kqp_operator.h"
+#include "kqp_rbo_utils.h"
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/utils/log/log.h>
@@ -166,6 +167,7 @@ void UpdateNumOfConsumers(std::shared_ptr<IOperator> &input) {
     }
 }
 
+/*
 bool IsNullRejectingPredicate(const TFilterInfo &filter, TExprContext &ctx) {
     Y_UNUSED(ctx);
 #ifdef DEBUG_PREDICATE
@@ -179,6 +181,7 @@ bool IsNullRejectingPredicate(const TFilterInfo &filter, TExprContext &ctx) {
     }
     return false;
 }
+*/
 
 std::shared_ptr<TOpCBOTree> JoinCBOTrees(std::shared_ptr<TOpCBOTree> & left, std::shared_ptr<TOpCBOTree> & right, std::shared_ptr<TOpJoin> &join) {
     auto newJoin = std::make_shared<TOpJoin>(left->TreeRoot, right->TreeRoot, join->Pos, join->JoinKind, join->JoinKeys);
@@ -218,10 +221,10 @@ void ExtractConjuncts(TExprNode::TPtr node, TVector<TExprNode::TPtr> & conjuncts
     }
 }
 
-std::shared_ptr<TOpFilter> FuseFilters(const std::shared_ptr<TOpFilter>& top, const std::shared_ptr<TOpFilter>& bottom, TExprContext &ctx) {
+std::shared_ptr<TOpFilter> FuseFilters(const std::shared_ptr<TOpFilter>& top, const std::shared_ptr<TOpFilter>& bottom) {
     TVector<TExpression> conjuncts = top->FilterExpr.SplitConjunct();
     TVector<TExpression> bottomConjuncts = bottom->FilterExpr.SplitConjunct();
-    conjuncts.insert(conjunts.begin(), bottomConjuncts.begin(), bottomConjuncts.end());
+    conjuncts.insert(conjuncts.begin(), bottomConjuncts.begin(), bottomConjuncts.end());
 
     return make_shared<TOpFilter>(bottom->GetInput(), top->Pos, MakeConjunct(conjuncts));
 }
@@ -258,7 +261,7 @@ std::shared_ptr<IOperator> TRemoveIdenityMapRule::SimpleMatchAndApply(const std:
         if (!mapElement.IsRename()) {
             return input;
         }
-        auto fromColumn = mapElement.GetRename();
+        auto fromColumn = mapElement.GetExpression().GetRename();
         if (fromColumn != mapElement.GetElementName()) {
             return input;
         }
@@ -271,7 +274,9 @@ std::shared_ptr<IOperator> TRemoveIdenityMapRule::SimpleMatchAndApply(const std:
 // We match the parent of the filter, currently we support only Map and Aggregate
 
 bool TPullUpCorrelatedFilterRule::MatchAndApply(std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
-    
+    Y_UNUSED(ctx);
+    Y_UNUSED(props);
+
     if (input->Kind != EOperator::Map && input->Kind != EOperator::Aggregate) {
         return false;
     }
@@ -311,14 +316,14 @@ bool TPullUpCorrelatedFilterRule::MatchAndApply(std::shared_ptr<IOperator> &inpu
     THashSet<TInfoUnit, TInfoUnit::THashFunction> correlated;
 
     for (const auto & jc : joinConditions) {
-        TJoinCondition cond = TJoinCondition(jc);
-        if (std::find(deps->Dependencies.begin(), deps->Dependencies.end(), cond.LeftIU) != deps->Dependencies.end()) {
+        TJoinCondition cond(jc);
+        if (std::find(deps->Dependencies.begin(), deps->Dependencies.end(), cond.GetLeftIU()) != deps->Dependencies.end()) {
             dependentSubset.push_back(jc);
-            correlated.insert(cond.RightIU);
+            correlated.insert(cond.GetRightIU());
         }
-        else if (std::find(deps->Dependencies.begin(), deps->Dependencies.end(), cond.RightIU) != deps->Dependencies.end()) {
+        else if (std::find(deps->Dependencies.begin(), deps->Dependencies.end(), cond.GetRightIU()) != deps->Dependencies.end()) {
             dependentSubset.push_back(jc);
-            correlated.insert(cond.LeftIU);
+            correlated.insert(cond.GetLeftIU());
         } else {
             remainderSubset.push_back(jc);
         }
@@ -334,7 +339,7 @@ bool TPullUpCorrelatedFilterRule::MatchAndApply(std::shared_ptr<IOperator> &inpu
     std::shared_ptr<IOperator> remainingFilter = deps->GetInput();
     if (!otherFilters.empty() || !remainderSubset.empty()) {
         auto newConjuncts = otherFilters;
-        newConjuncts.insert(newConjuncts.end(), remainderSubset.begin(), remaindedSubset.end());
+        newConjuncts.insert(newConjuncts.end(), remainderSubset.begin(), remainderSubset.end());
         auto expr = MakeConjunct(newConjuncts);
         remainingFilter = std::make_shared<TOpFilter>(deps->GetInput(), remainingFilter->Pos, expr);
     }
@@ -346,9 +351,9 @@ bool TPullUpCorrelatedFilterRule::MatchAndApply(std::shared_ptr<IOperator> &inpu
 
         // Stop if we compute something from one of the dependent columns, except for Just
         for (const auto & mapEl : map->MapElements) {
-            for (const auto & iu : mapEl.InputIUs()) {
+            for (const auto & iu : mapEl.GetExpression().GetInputIUs()) {
                 if (correlated.contains(iu)) {
-                    if (!mapEl.IsRename() && !mapEl.IsSingleCallable({"Just"})) {
+                    if (!mapEl.IsRename() && !mapEl.GetExpression().IsSingleCallable({"Just"})) {
                         return false;
                     }
                 }
@@ -404,6 +409,8 @@ bool TPullUpCorrelatedFilterRule::MatchAndApply(std::shared_ptr<IOperator> &inpu
 // Currently we only extract simple expressions where there is only one variable on either side
 
 bool TExtractJoinExpressionsRule::MatchAndApply(std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
+    Y_UNUSED(props);
+
     if (input->Kind != EOperator::Filter) {
         return false;
     }
@@ -415,9 +422,9 @@ bool TExtractJoinExpressionsRule::MatchAndApply(std::shared_ptr<IOperator> &inpu
 
     YQL_CLOG(TRACE, CoreDq) << "Testing expr extraction";
 
-    for (size_t idx = 0; idx < conjunts.size(); idx++) {
+    for (size_t idx = 0; idx < conjuncts.size(); idx++) {
         auto c = conjuncts[idx];
-        if (c.MaybeJoinConidition(false)) {
+        if (c.MaybeJoinCondition(false)) {
             continue;
         }
 
@@ -432,9 +439,10 @@ bool TExtractJoinExpressionsRule::MatchAndApply(std::shared_ptr<IOperator> &inpu
         TVector<TMapElement> mapElements;
         TNodeOnNodeOwnedMap replaceMap;
 
-        for (auto [idx, conj] : matchedConjuncts) {
+        for (auto [idx, expr] : matchedConjuncts) {
             TNodeOnNodeOwnedMap localMap;
-            conj = ExtractExpressionsFromJoinCondition(conj, localMap, props);
+            TJoinCondition conj(expr);
+            conj.ExtractExpressions(localMap);
             for (auto const & [key, value] : localMap) {
                 replaceMap.insert({key, value});
             }
@@ -497,10 +505,7 @@ bool TExtractJoinExpressionsRule::MatchAndApply(std::shared_ptr<IOperator> &inpu
             */
         }
 
-        TOptimizeExprSettings settings(&ctx.TypeCtx);
-        TExprNode::TPtr newFilterLambda;
         filter->FilterExpr.ApplyReplaceMap(replaceMap, ctx);
-
         auto newMap = std::make_shared<TOpMap>(filter->GetInput(), input->Pos, mapElements, false);
         filter->SetInput(newMap);
         return true;
@@ -545,7 +550,6 @@ bool TInlineScalarSubplanRule::MatchAndApply(std::shared_ptr<IOperator> &input, 
         auto addDeps = CastOperator<TOpAddDependencies>(filter->GetInput());
         auto uncorrSubplan = addDeps->GetInput();
 
-        auto conjInfo = filter->GetConjunctInfo(props);
         TVector<std::pair<TInfoUnit, TInfoUnit>> joinKeys;
 
         TVector<TMapElement> mappings;
@@ -554,9 +558,16 @@ bool TInlineScalarSubplanRule::MatchAndApply(std::shared_ptr<IOperator> &input, 
         auto leftIUs = child->GetOutputIUs();
         bool conflictsWithLeft = false;
 
-        for (const auto & cj : conjInfo.JoinConditions) {
-            TInfoUnit leftKey = cj.LeftIU;
-            TInfoUnit rightKey = cj.RightIU;
+        auto conjuncts = filter->FilterExpr.SplitConjunct();
+
+        for (const auto & conj : conjuncts) {
+            if (!conj.MaybeJoinCondition()) {
+                continue;
+            }
+
+            TJoinCondition jc(conj);
+            TInfoUnit leftKey = jc.GetLeftIU();
+            TInfoUnit rightKey = jc.GetRightIU();
 
             if (std::find(addDeps->Dependencies.begin(), addDeps->Dependencies.end(), rightKey) != addDeps->Dependencies.end()) {
                 std::swap(leftKey, rightKey);
@@ -593,19 +604,11 @@ bool TInlineScalarSubplanRule::MatchAndApply(std::shared_ptr<IOperator> &input, 
     else {
         auto emptySource = std::make_shared<TOpEmptySource>(subplan->Pos);
 
+        TVector<TMapElement> mapElements;
+
         // FIXME: This works only for postgres types, because they are null-compatible
         // For YQL types we will need to handle optionality
-        auto nullExpr = ctx.ExprCtx.NewCallable(subplan->Pos, "Nothing", {ExpandType(subplan->Pos, *subplanResType, ctx.ExprCtx)});
-
-        // clang-format off
-        auto mapLambda = Build<TCoLambda>(ctx.ExprCtx, subplan->Pos)
-            .Args({"arg"})
-            .Body(nullExpr)
-        .Done().Ptr();
-        // clang-format on
-
-        TVector<TMapElement> mapElements;
-        mapElements.emplace_back(scalarIU, mapLambda);
+        mapElements.emplace_back(scalarIU, MakeNothing(subplan->Pos, subplanResType, &ctx.ExprCtx));
         auto map = std::make_shared<TOpMap>(emptySource, subplan->Pos, mapElements, true);
 
         TVector<TMapElement> renameElements;
@@ -615,8 +618,7 @@ bool TInlineScalarSubplanRule::MatchAndApply(std::shared_ptr<IOperator> &input, 
 
         auto unionAll = std::make_shared<TOpUnionAll>(rename, map, subplan->Pos, true);
 
-        auto limitExpr = ctx.ExprCtx.NewCallable(subplan->Pos, "Uint64", {ctx.ExprCtx.NewAtom(subplan->Pos, "1")});
-        auto limit = std::make_shared<TOpLimit>(unionAll, subplan->Pos, limitExpr);
+        auto limit = std::make_shared<TOpLimit>(unionAll, subplan->Pos, MakeConstant("UInt64", "1", &ctx.ExprCtx));
     
         TVector<std::pair<TInfoUnit, TInfoUnit>> joinKeys;
         auto cross = std::make_shared<TOpJoin>(child, limit, subplan->Pos, "Cross", joinKeys);
@@ -635,21 +637,14 @@ std::shared_ptr<IOperator> TInlineSimpleInExistsSubplanRule::SimpleMatchAndApply
 
     // Check that the filter lambda is a conjunction of one or more elements
     auto filter = CastOperator<TOpFilter>(input);
-    auto lambdaBody = filter->FilterLambda->ChildPtr(1);
+    auto lambdaBody = filter->FilterExpr.Node->ChildPtr(1);
 
     if (!TCoAnd::Match(lambdaBody.Get()) && !TCoNot::Match(lambdaBody.Get()) && !TCoMember::Match(lambdaBody.Get())) {
         return input;
     }
 
     // Decompose the conjunction into individual conjuncts
-    TVector<TExprNode::TPtr> conjuncts;
-    if (TCoAnd::Match(lambdaBody.Get())) {
-        for (const auto& child : lambdaBody->Children()) {
-            conjuncts.push_back(child);
-        }
-    } else {
-        conjuncts.push_back(lambdaBody);
-    }
+    auto conjuncts = filter->FilterExpr.SplitConjunct();
 
     // Find the first conjunct that is a simple in or exists subplan
     bool negated = false;
@@ -658,14 +653,14 @@ std::shared_ptr<IOperator> TInlineSimpleInExistsSubplanRule::SimpleMatchAndApply
     size_t conjunctIdx;
 
     for (conjunctIdx = 0; conjunctIdx < conjuncts.size(); conjunctIdx++) {
-        auto maybeSubplan = conjuncts[conjunctIdx];
+        auto maybeSubplan = conjuncts[conjunctIdx].Node;
 
-        if (TCoNot::Match(maybeSubplan.Get())) {
-            maybeSubplan = maybeSubplan->ChildPtr(0);
+        if (TCoNot::Match(maybeSubplan->ChildPtr(1).Get())) {
+            maybeSubplan = maybeSubplan->ChildPtr(1)->ChildPtr(0);
             negated = true;
         }
         if (TCoMember::Match(maybeSubplan.Get())) {
-            auto name = TString(maybeSubplan->Child(1)->Content());
+            auto name = TString(maybeSubplan->ChildPtr(1)->Content());
             iu = TInfoUnit(name);
             if (props.Subplans.PlanMap.contains(iu)) {
                 subplanEntry = props.Subplans.PlanMap.at(iu);
@@ -689,13 +684,17 @@ std::shared_ptr<IOperator> TInlineSimpleInExistsSubplanRule::SimpleMatchAndApply
         auto addDeps = CastOperator<TOpAddDependencies>(filter->GetInput());
         uncorrSubplan = addDeps->GetInput();
 
-        auto conjInfo = filter->GetConjunctInfo(props);
+        for (const auto & conj : conjuncts) {
+            if (!conj.MaybeJoinCondition()) {
+                Y_ENSURE(false, "Expected a filter with only join conditions");
+            }
 
-        for (const auto & cj : conjInfo.JoinConditions) {
-            if (std::find(addDeps->Dependencies.begin(), addDeps->Dependencies.end(), cj.LeftIU) != addDeps->Dependencies.end()) {
-                extraJoinKeys.push_back(std::make_pair(cj.LeftIU, cj.RightIU));
-            } else if (std::find(addDeps->Dependencies.begin(), addDeps->Dependencies.end(), cj.RightIU) != addDeps->Dependencies.end()) {
-                extraJoinKeys.push_back(std::make_pair(cj.RightIU, cj.LeftIU));
+            auto jc = TJoinCondition(conj);
+
+            if (std::find(addDeps->Dependencies.begin(), addDeps->Dependencies.end(), jc.GetLeftIU()) != addDeps->Dependencies.end()) {
+                extraJoinKeys.push_back(std::make_pair(jc.GetLeftIU(), jc.GetRightIU()));
+            } else if (std::find(addDeps->Dependencies.begin(), addDeps->Dependencies.end(), jc.GetRightIU()) != addDeps->Dependencies.end()) {
+                extraJoinKeys.push_back(std::make_pair(jc.GetRightIU(), jc.GetLeftIU()));
             } else {
                 Y_ENSURE(false, "Correlated filter missing join condition");
             }   
@@ -722,21 +721,14 @@ std::shared_ptr<IOperator> TInlineSimpleInExistsSubplanRule::SimpleMatchAndApply
     }
     // EXISTS and NOT EXISTS
     else {
-        auto one = ctx.ExprCtx.NewCallable(filter->Pos, "Uint64", {ctx.ExprCtx.NewAtom(filter->Pos, "1")});
-        auto zero = ctx.ExprCtx.NewCallable(filter->Pos, "Uint64", {ctx.ExprCtx.NewAtom(filter->Pos, "0")});
-        auto limit = std::make_shared<TOpLimit>(uncorrSubplan, filter->Pos, one);
+        auto limit = std::make_shared<TOpLimit>(uncorrSubplan, filter->Pos, MakeConstant("UInt64", "1", &ctx.ExprCtx));
+
         auto countResult = TInfoUnit("_rbo_arg_" + std::to_string(props.InternalVarIdx++), true);
         TVector<TMapElement> countMapElements;
-
-        // clang-format off
-        auto zeroLambda = Build<TCoLambda>(ctx.ExprCtx, filter->Pos)
-            .Args({"arg"})
-            .Body(zero)
-        .Done().Ptr();
-        // clang-format on
-
-        countMapElements.emplace_back(countResult, zeroLambda);
+        auto zero = MakeConstant("UInt64", "0", &ctx.ExprCtx);
+        countMapElements.emplace_back(countResult, zero);
         auto countMap = std::make_shared<TOpMap>(limit, filter->Pos, countMapElements, true);
+
         TOpAggregationTraits aggFunction(countResult, "count", countResult);
         TVector<TOpAggregationTraits> aggs = {aggFunction};
         TVector<TInfoUnit> keyColumns;
@@ -744,39 +736,16 @@ std::shared_ptr<IOperator> TInlineSimpleInExistsSubplanRule::SimpleMatchAndApply
         auto agg = std::make_shared<TOpAggregate>(countMap, aggs, keyColumns, EAggregationPhase::Final, false, filter->Pos);
         const TString compareCallable = negated ? "==" : "!=";
 
-        auto arg = Build<TCoArgument>(ctx.ExprCtx, filter->Pos).Name("lambda_arg").Done();
-        // clang-format off
-        auto member = Build<TCoMember>(ctx.ExprCtx, filter->Pos)
-            .Struct(arg)
-            .Name().Value(countResult.GetFullName()).Build()
-        .Done().Ptr();
-        // clang-format on
-
-        auto body = ctx.ExprCtx.NewCallable(filter->Pos, compareCallable, {member, zero});
-
-        // clang-format off
-        auto lambda = Build<TCoLambda>(ctx.ExprCtx, filter->Pos)
-            .Args({arg})
-            .Body(body)
-        .Done().Ptr();
-        // clang-format on
-
+        auto comparePredicate = MakeBinaryPredicate(compareCallable, MakeColumnAccess(countResult, &ctx.ExprCtx), zero);
         TVector<TMapElement> mapElements;
         auto compareResult = TInfoUnit("_rbo_arg_" + std::to_string(props.InternalVarIdx++), true);
-        mapElements.emplace_back(compareResult, lambda);
+        mapElements.emplace_back(compareResult, comparePredicate);
         auto map = std::make_shared<TOpMap>(agg, filter->Pos, mapElements, true);
 
         TVector<std::pair<TInfoUnit, TInfoUnit>> joinKeys;
         join = std::make_shared<TOpJoin>(filter->GetInput(), map, filter->Pos, "Cross", joinKeys);
 
-        // clang-format off
-        auto resultMember = Build<TCoMember>(ctx.ExprCtx, filter->Pos)
-            .Struct(arg)
-            .Name().Value(compareResult.GetFullName()).Build()
-        .Done().Ptr();
-        // clang-format on
-
-        conjuncts[conjunctIdx] = resultMember;
+        conjuncts[conjunctIdx] = MakeColumnAccess(compareResult, &ctx.ExprCtx);
     }
 
     props.Subplans.Remove(iu);
@@ -786,23 +755,8 @@ std::shared_ptr<IOperator> TInlineSimpleInExistsSubplanRule::SimpleMatchAndApply
     }
 
     // Otherwise, we need to pack the remaining conjuncts back into the filter
-    auto arg = Build<TCoArgument>(ctx.ExprCtx, input->Pos).Name("lambda_arg").Done().Ptr();
-    TExprNode::TPtr newLambdaBody;
-    if (conjuncts.size() == 1) {
-        newLambdaBody = conjuncts[0];
-    } else {
-        newLambdaBody = Build<TCoAnd>(ctx.ExprCtx, input->Pos).Add(conjuncts).Done().Ptr();
-    }
-    newLambdaBody = ReplaceArg(newLambdaBody, arg, ctx.ExprCtx);
-
-    // clang-format off
-    auto newLambda = Build<TCoLambda>(ctx.ExprCtx, input->Pos)
-        .Args({arg})
-        .Body(newLambdaBody)
-    .Done().Ptr();
-    // clang-format on
-
-    return std::make_shared<TOpFilter>(join, filter->Pos, newLambda);
+    auto remainingConjuncts = std::sliced_vec(conjuncts.begin() + 1, conjuncts.end());
+    return std::make_shared<TOpFilter>(join, filter->Pos, remainingConjuncts);
 }
 
 // We push the map operator only below join right now
@@ -1342,7 +1296,7 @@ std::shared_ptr<IOperator> TExpandCBOTreeRule::SimpleMatchAndApply(const std::sh
         }
 
         if (maybeFilter && maybeAnotherFilter) {
-            maybeFilter = FuseFilters(maybeFilter, maybeAnotherFilter, ctx.ExprCtx);
+            maybeFilter = FuseFilters(maybeFilter, maybeAnotherFilter);
         } else if (maybeAnotherFilter) {
             maybeFilter = maybeAnotherFilter;
         }

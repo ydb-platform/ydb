@@ -166,7 +166,8 @@ std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpMap(TExprNode::TPtr node)
                 auto fromIU = TInfoUnit(name.StringValue());
                 mapElements.emplace_back(iu, fromIU);
             } else {
-                mapElements.emplace_back(iu, GetMapElementLambda(element.Lambda().Ptr(), forceOptional, Ctx));
+                TExpression exprLambda(GetMapElementLambda(element.Lambda().Ptr(), forceOptional, Ctx), &Ctx);
+                mapElements.emplace_back(iu, exprLambda);
             }
         }
     }
@@ -197,7 +198,7 @@ std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpFilter(TExprNode::TPtr no
     auto input = ExprNodeToOperator(opFilter.Input().Ptr());
     auto lambda = opFilter.Lambda().Ptr();
     auto newLambda = RemoveSubplans(lambda);
-    return std::make_shared<TOpFilter>(input, node->Pos(), newLambda);
+    return std::make_shared<TOpFilter>(input, node->Pos(), TExpression(newLambda, &Ctx));
 }
 
 std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpJoin(TExprNode::TPtr node) {
@@ -228,7 +229,8 @@ std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpUnionAll(TExprNode::TPtr 
 std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpLimit(TExprNode::TPtr node) {
     auto opLimit = TKqpOpLimit(node);
     auto input = ExprNodeToOperator(opLimit.Input().Ptr());
-    return std::make_shared<TOpLimit>(input, node->Pos(), opLimit.Count().Ptr());
+    TExpression count(opLimit.Count().Ptr(), &Ctx);
+    return std::make_shared<TOpLimit>(input, node->Pos(), count);
 }
 
 std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpProject(TExprNode::TPtr node) {

@@ -12,7 +12,7 @@ message TestMask {
   }
 
   string name = 1;
-  string no_value = 2; // field doesn't set for testing
+  string no_value = 2; // field isn't set for testing
   string cred = 3 [(nebius.credentials) = true];
   string sens = 4 [(nebius.sensitive) = true];
   int64 int_value = 5;

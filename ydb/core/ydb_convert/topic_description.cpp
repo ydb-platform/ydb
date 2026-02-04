@@ -55,8 +55,8 @@ bool FillConsumer(Ydb::Topic::Consumer& out, const NKikimrPQ::TPQTabletConfig_TC
             shared->mutable_default_processing_timeout()->set_seconds(in.GetDefaultProcessingTimeoutSeconds());
 
             shared->set_content_based_deduplication(in.GetContentBasedDeduplication());
-            shared->mutable_default_delay_message_time()->set_seconds(in.GetDefaultDelayMessageTimeMs() / 1'000);
-            shared->mutable_default_delay_message_time()->set_nanos((in.GetDefaultDelayMessageTimeMs() % 1'000) * 1'000'000);
+            shared->mutable_default_message_delay()->set_seconds(in.GetDefaultDelayMessageTimeMs() / 1'000);
+            shared->mutable_default_message_delay()->set_nanos((in.GetDefaultDelayMessageTimeMs() % 1'000) * 1'000'000);
             shared->mutable_default_receive_message_wait_time()->set_seconds(in.GetDefaultReceiveMessageWaitTimeMs() / 1'000);
             shared->mutable_default_receive_message_wait_time()->set_nanos((in.GetDefaultReceiveMessageWaitTimeMs() % 1'000) * 1'000'000);
 

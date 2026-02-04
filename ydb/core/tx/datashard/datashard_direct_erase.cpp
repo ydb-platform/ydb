@@ -151,11 +151,11 @@ TDirectTxErase::EStatus TDirectTxErase::CheckedExecute(
                     throw TNeedGlobalTxId();
                 }
 
-                if (!collector->OnUpdateTx(fullTableId, localTableId, NTable::ERowOp::Erase, key, {}, params.GlobalTxId, BUILTIN_ACL_TTL)) {
+                if (!collector->OnUpdateTx(fullTableId, localTableId, NTable::ERowOp::Erase, key, {}, params.GlobalTxId, BUILTIN_ACL_CDC_TTL)) {
                     pageFault = true;
                 }
             } else {
-                if (!collector->OnUpdate(fullTableId, localTableId, NTable::ERowOp::Erase, key, {}, params.MvccVersion, BUILTIN_ACL_TTL)) {
+                if (!collector->OnUpdate(fullTableId, localTableId, NTable::ERowOp::Erase, key, {}, params.MvccVersion, BUILTIN_ACL_CDC_TTL)) {
                     pageFault = true;
                 }
             }

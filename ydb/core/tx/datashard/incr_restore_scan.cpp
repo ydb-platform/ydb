@@ -246,7 +246,7 @@ public:
                 // .WithSchemaVersion(ReadVersion) // TODO(use SchemaVersion)
                 .WithBody(body.SerializeAsString())
                 .WithSource(TChangeRecord::ESource::InitialScan)
-                .WithUserSID(BUILTIN_ACL_CDC_WITHOUT_USER_SID) // Обсужить. Восстановление инкрементального backup
+                .WithUserSID(BUILTIN_ACL_CDC_WITHOUT_USER_SID)
                 .Build();
 
             const auto& record = *recordPtr;

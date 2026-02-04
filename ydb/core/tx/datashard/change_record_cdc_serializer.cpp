@@ -536,11 +536,11 @@ protected:
 
         if (!record.GetUserSID().empty()) {
             auto& userIdentityJson = json["userIdentity"];
-            if (record.GetUserSID()==BUILTIN_ACL_TTL) {
+            if (record.GetUserSID()==BUILTIN_ACL_CDC_TTL) {
                 userIdentityJson["type"] = "Service";   
                 userIdentityJson["principalId"] = "dynamodb.amazonaws.com";
             } else {
-                userIdentityJson["type"] = "User";      /// cdcuser@test какое название сервиса ?
+                userIdentityJson["type"] = "User";
                 userIdentityJson["principalId"] = record.GetUserSID();
             }
         }

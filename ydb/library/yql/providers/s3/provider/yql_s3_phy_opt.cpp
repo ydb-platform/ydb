@@ -145,17 +145,17 @@ public:
         TExprNode::TPtr stageBody;
 
         const auto& keys = GetPartitionKeys(GetPartitionBy(target.Settings().Ref()));
-        if (pureDqExpr) {
-            // Build stage with one sink from scratch
-            stageBody = sink.BuildSerializer(Build<TCoToFlow>(ctx, writePos)
-                .Input(input)
-                .Done().Ptr(), ctx);
-        } else if (!keys.empty()) {
+        if (!keys.empty()) {
             // Build external stage with one sink
             stageArgs.emplace_back(Build<TCoArgument>(ctx, writePos)
                 .Name("in")
                 .Done());
             stageBody = sink.BuildSerializer(stageArgs.back().Ptr(), ctx);
+        } else if (pureDqExpr) {
+            // Build stage with one sink from scratch
+            stageBody = sink.BuildSerializer(Build<TCoToFlow>(ctx, writePos)
+                .Input(input)
+                .Done().Ptr(), ctx);
         } else {
             // Push sink into existing stage and rebuild stage lambda
             const auto& stage = maybeUnionAll.Cast().Output().Stage();

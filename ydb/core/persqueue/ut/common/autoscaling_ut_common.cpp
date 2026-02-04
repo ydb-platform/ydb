@@ -78,7 +78,7 @@ ui64 SplitPartition(NActors::TTestActorRuntime& runtime, ui64& txId, const TStri
     split->SetPartition(partition);
     split->SetSplitBoundary(boundary);
 
-    return DoRequest(runtime, txId, dir,scheme);
+    return DoRequest(runtime, txId, dir, scheme);
 }
 
 ui64 SplitPartition(NActors::TTestActorRuntime& runtime, ui64& txId, const TString& topic, const ui32 partition, TString boundary) {

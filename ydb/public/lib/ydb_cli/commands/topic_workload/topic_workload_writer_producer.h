@@ -40,7 +40,7 @@ namespace NYdb::NConsoleClient {
         void HandleAckEvent(NYdb::NTopic::TWriteSessionEvent::TAcksEvent& event);
 
         void HandleSessionClosed(const NYdb::NTopic::TSessionClosedEvent& event);
-    private:
+    protected:
         TString GetGeneratedMessage() const;
         NTopic::TWriteMessage::TMessageMeta GenerateMessageMeta() const;
 

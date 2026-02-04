@@ -88,6 +88,7 @@ public:
     bool CleanupPolicyCompact = false;
     std::optional<size_t> ConsumerMaxMemoryUsageBytes;
     std::optional<size_t> ProducerMaxMemoryUsageBytes;
+    bool KeyedWrites = false;
 
 protected:
     void CreateTopic(const TString& database,

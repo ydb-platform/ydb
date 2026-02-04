@@ -109,6 +109,9 @@ void TCommandWorkloadTopicRunWrite::Config(TConfig& config)
     config.Opts->AddLongOption("max-memory-usage-per-producer", "Max memory usage per producer in bytes.")
         .DefaultValue(HumanReadableSize(15_MB, SF_BYTES))
         .StoreMappedResult(&Scenario.ProducerMaxMemoryUsageBytes, NYdb::SizeFromString);
+    config.Opts->AddLongOption("keyed-writes", "Use keyed writes. This mode will write messages to topic, choosing partition by random generated keys.")
+        .DefaultValue(false)
+        .StoreTrue(&Scenario.KeyedWrites);
     config.IsNetworkIntensive = true;
 }
 

@@ -174,8 +174,6 @@
 #endif
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 
-#include <library/cpp/svnversion/svnversion.h>
-
 #include <util/charset/wide.h>
 #include <util/folder/dirut.h>
 #include <util/system/file.h>

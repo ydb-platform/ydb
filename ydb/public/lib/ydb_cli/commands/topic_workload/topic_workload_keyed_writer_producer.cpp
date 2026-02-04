@@ -1,5 +1,6 @@
 #include "topic_workload_keyed_writer_producer.h"
 
+#include <util/generic/guid.h>
 #include <util/random/random.h>
 
 using namespace NYdb::NConsoleClient;
@@ -32,7 +33,7 @@ void TTopicWorkloadKeyedWriterProducer::Send(const TInstant& createTimestamp,
     Y_ASSERT(WriteSession_);
 
     const TString data = GetGeneratedMessage();
-    const std::string key = GenerateKeyValue();
+    const std::string key = TGUID::CreateTimebased().AsGuidString();
 
     InflightMessagesCreateTs_.Insert(MessageId_, createTimestamp);
     InflightMessagesCount_.fetch_add(1, std::memory_order_relaxed);

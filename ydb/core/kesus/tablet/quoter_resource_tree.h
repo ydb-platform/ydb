@@ -263,6 +263,10 @@ public:
         return Children;
     }
 
+    virtual bool IsEffectivePropsChanged() const {
+        return true; // default: assume changed for safety
+    }
+
     virtual void ReportConsumed(double consumed, TTickProcessorQueue& queue, TInstant now) = 0;
 
     // Static children manipulation.

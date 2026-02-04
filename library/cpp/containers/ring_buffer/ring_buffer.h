@@ -55,6 +55,15 @@ public:
         }
     }
 
+    void PushBack(T&& t) {
+        if (Items.size() < MaxSize) {
+            Items.push_back(std::move(t));
+        } else {
+            Items[RealIndex(Begin)] = std::move(t);
+            Begin += 1;
+        }
+    }
+
     void Clear() {
         Items.clear();
         Begin = 0;

@@ -222,6 +222,10 @@ namespace NActors {
         return TlsActivationContext->Mailbox.CountMailboxEvents(SelfActorId.LocalId(), maxTraverse);
     }
 
+    void IActor::SetTraceMessages(bool traceMessages) noexcept {
+        TraceMessages = traceMessages;
+    }
+
     void IActor::Die(const TActorContext& ctx) {
         if (ctx.SelfID)
             Y_ABORT_UNLESS(ctx.SelfID == SelfActorId);

@@ -15,6 +15,9 @@ namespace NActors {
     void DoActorInit(TActorSystem* sys, IActor* actor, const TActorId& self, const TActorId& owner) {
         actor->SelfActorId = self;
         actor->Registered(sys, owner);
+        if (auto tracer = sys->GetActorTracer()) [[likely]] {
+            tracer->HandleNew(*actor);
+        }
     }
 
     TExecutorPoolBaseMailboxed::TExecutorPoolBaseMailboxed(ui32 poolId)
@@ -86,7 +89,12 @@ namespace NActors {
             TlsThreadContext->IsCurrentRecipientAService = ev->Recipient.IsService();
         }
 
+
         if (TMailbox* mailbox = MailboxTable->Get(ev->GetRecipientRewrite().Hint())) {
+            if (auto tracer = ActorSystem->GetActorTracer()) [[likely]] {
+                tracer->HandleSend(*ev);
+            }
+
             switch (mailbox->Push(ev)) {
                 case EMailboxPush::Pushed:
                     return true;
@@ -113,6 +121,9 @@ namespace NActors {
         }
 
         if (TMailbox* mailbox = MailboxTable->Get(ev->GetRecipientRewrite().Hint())) {
+            if (auto tracer = ActorSystem->GetActorTracer()) [[likely]] {
+                tracer->HandleSend(*ev);
+            }
             switch (mailbox->Push(ev)) {
                 case EMailboxPush::Pushed:
                     return true;

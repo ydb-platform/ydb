@@ -470,12 +470,13 @@ Y_UNIT_TEST_SUITE(TImportFromFsTests) {
         UNIT_ASSERT_VALUES_EQUAL(totalRows, 4);
     }
 
-    Y_UNIT_TEST(ShouldExportThenImportWithDataValidation) {
+    void ExportImportWithDataValidationImpl(bool encrypted) {
         TTempDir tempDir;
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
         runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
+        runtime.GetAppData().FeatureFlags.SetEnableEncryptedExport(encrypted);
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
@@ -503,6 +504,17 @@ Y_UNIT_TEST_SUITE(TImportFromFsTests) {
         ui32 originalRows = CountRows(runtime, "/MyRoot/OriginalTable");
         UNIT_ASSERT_VALUES_EQUAL(originalRows, 5);
 
+        // Prepare encryption settings
+        TString encryptionSettings;
+        if (encrypted) {
+            encryptionSettings = R"(encryption_settings {
+                encryption_algorithm: "ChaCha20-Poly1305"
+                symmetric_key {
+                    key: "Very very secret export key!!!!!"
+                }
+            })";
+        }
+
         // Step 3: Export to FS
         TString basePath = tempDir.Path();
         TString exportSettings = Sprintf(R"(
@@ -512,8 +524,9 @@ Y_UNIT_TEST_SUITE(TImportFromFsTests) {
                 source_path: "/MyRoot/OriginalTable"
                 destination_path: "backup/OriginalTable"
               }
+              %s
             }
-        )", basePath.c_str());
+        )", basePath.c_str(), encryptionSettings.c_str());
 
         TestExport(runtime, ++txId, "/MyRoot", exportSettings);
         const ui64 exportId = txId;
@@ -534,8 +547,9 @@ Y_UNIT_TEST_SUITE(TImportFromFsTests) {
                 source_path: "backup/OriginalTable"
                 destination_path: "/MyRoot/RestoredTable"
               }
+              %s
             }
-        )", basePath.c_str());
+        )", basePath.c_str(), encryptionSettings.c_str());
 
         TestImport(runtime, ++txId, "/MyRoot", importSettings);
         const ui64 importId = txId;
@@ -575,5 +589,13 @@ Y_UNIT_TEST_SUITE(TImportFromFsTests) {
         for (size_t i = 0; i < originalData.size(); ++i) {
             UNIT_ASSERT_VALUES_EQUAL(originalData[i], restoredData[i]);
         }
+    }
+
+    Y_UNIT_TEST(ShouldExportThenImportWithDataValidation) {
+        ExportImportWithDataValidationImpl(false);
+    }
+
+    Y_UNIT_TEST(ShouldExportThenImportWithDataValidationEncrypted) {
+        ExportImportWithDataValidationImpl(true);
     }
 }

@@ -296,8 +296,13 @@ protected:
 // Downloads scheme-related objects from S3
 class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
     static TString GetItemSource(const TImportInfo& importInfo, ui32 itemIdx) {
-        TString prefix = importInfo.Kind == TImportInfo::EKind::FS ? importInfo.GetFsSettings().base_path() : "";
-        return CanonizePath(TStringBuilder() << prefix << "/" << importInfo.GetItemSrcPrefix(itemIdx));
+        TString srcPrefix = importInfo.GetItemSrcPrefix(itemIdx);
+
+        if (importInfo.Kind == TImportInfo::EKind::FS && !srcPrefix.empty() && srcPrefix[0] != '/') {
+            return CanonizePath(TStringBuilder() << importInfo.GetFsSettings().base_path() << "/" << srcPrefix);
+        }
+
+        return srcPrefix;
     }
 
     static TString MetadataKeyFromSettings(const TImportInfo& importInfo, ui32 itemIdx) {

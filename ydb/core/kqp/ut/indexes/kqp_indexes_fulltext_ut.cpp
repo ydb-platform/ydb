@@ -108,10 +108,11 @@ void DoValidateRelevanceQuery(NQuery::TQueryClient& db, const TString& relevance
 };
 
 
-void AddIndexNGram(NQuery::TQueryClient& db, const size_t nGramMinLength = 3, const size_t nGramMaxLength = 3, const bool edgeNGram = false, const bool covered = false) {
+void AddIndexNGram(NQuery::TQueryClient& db, const size_t nGramMinLength = 3, const size_t nGramMaxLength = 3,
+    const bool relevance = false, const bool edgeNGram = false, const bool covered = false) {
     const TString query = Sprintf(R"sql(
         ALTER TABLE `/Root/Texts` ADD INDEX fulltext_idx
-            GLOBAL USING fulltext_plain
+            GLOBAL USING %s
             ON (Text) %s
             WITH (
                 tokenizer=standard,
@@ -121,7 +122,11 @@ void AddIndexNGram(NQuery::TQueryClient& db, const size_t nGramMinLength = 3, co
                 filter_ngram_min_length=%d,
                 filter_ngram_max_length=%d
             );
-    )sql", covered ? "COVER (Text, Data)" : "", !edgeNGram, edgeNGram, nGramMinLength, nGramMaxLength);
+        )sql",
+        relevance ? "fulltext_relevance" : "fulltext_plain",
+        covered ? "COVER (Text, Data)" : "",
+        !edgeNGram, edgeNGram, nGramMinLength, nGramMaxLength
+    );
     auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 }
@@ -285,7 +290,7 @@ Y_UNIT_TEST(AddIndexEdgeNGram) {
 
     CreateTexts(db);
     UpsertTexts(db);
-    AddIndexNGram(db, 3, 3, true);
+    AddIndexNGram(db, 3, 3, false, true);
 
     const auto index = ReadIndex(db);
     Cerr << NYdb::FormatResultSetYson(index) << Endl;
@@ -3479,7 +3484,7 @@ Y_UNIT_TEST_QUAD(SelectWithFulltextContainsAndNgram, Edge, Covered) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
-    AddIndexNGram(db, 3, 3, Edge, Covered);
+    AddIndexNGram(db, 3, 3, false, Edge, Covered);
 
     {
         TString query = R"sql(
@@ -3568,7 +3573,7 @@ Y_UNIT_TEST_QUAD(SelectWithFulltextContainsAndNgram, Edge, Covered) {
     }
 }
 
-Y_UNIT_TEST_QUAD(SelectWithFulltextContainsAndNgramWildcard, Edge, Covered) {
+void DoSelectWithFulltextContainsAndNgramWildcard(bool relevance, bool edge, bool covered) {
     auto kikimr = Kikimr();
     auto db = kikimr.GetQueryClient();
 
@@ -3597,7 +3602,7 @@ Y_UNIT_TEST_QUAD(SelectWithFulltextContainsAndNgramWildcard, Edge, Covered) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
-    AddIndexNGram(db, 3, 5, Edge, Covered);
+    AddIndexNGram(db, 3, 5, relevance, edge, covered);
 
     {
         TString query = R"sql(
@@ -3627,7 +3632,7 @@ Y_UNIT_TEST_QUAD(SelectWithFulltextContainsAndNgramWildcard, Edge, Covered) {
         CompareYson(R"([
             [[0u];["Arena Allocation"]]
         ])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
-        CompareYson(Edge ? R"([])" : R"([
+        CompareYson(edge ? R"([])" : R"([
             [[2u];["Werner Heisenberg"]]
         ])", NYdb::FormatResultSetYson(result.GetResultSet(1)));
         CompareYson(R"([
@@ -3640,6 +3645,14 @@ Y_UNIT_TEST_QUAD(SelectWithFulltextContainsAndNgramWildcard, Edge, Covered) {
             [[9u];["морекот"]]
         ])", NYdb::FormatResultSetYson(result.GetResultSet(4)));
     }
+}
+
+Y_UNIT_TEST_QUAD(SelectWithFulltextContainsAndNgramWildcard, Edge, Covered) {
+    DoSelectWithFulltextContainsAndNgramWildcard(false, Edge, Covered);
+}
+
+Y_UNIT_TEST_QUAD(SelectWithRelevanceContainsAndNgramWildcard, Edge, Covered) {
+    DoSelectWithFulltextContainsAndNgramWildcard(true, Edge, Covered);
 }
 
 Y_UNIT_TEST(SelectWithFulltextContainsAndNgramWildcardSpecialCharacters) {
@@ -3729,6 +3742,68 @@ Y_UNIT_TEST(SelectWithFulltextContainsAndNgramWildcardSpecialCharacters) {
         CompareYson(R"([
             [[2u];["{}n$321 ^...&-"]]
         ])", NYdb::FormatResultSetYson(result.GetResultSet(5)));
+    }
+}
+
+Y_UNIT_TEST(ImbalanceNgrams) {
+    auto kikimr = Kikimr();
+    auto db = kikimr.GetQueryClient();
+    kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPUTE, NActors::NLog::PRI_DEBUG);
+
+    NYdb::NQuery::TExecuteQuerySettings querySettings;
+    querySettings.ClientTimeout(TDuration::Minutes(1));
+
+    CreateTexts(db);
+
+    {
+        TString query = R"sql(
+            UPSERT INTO `/Root/Texts` (`Key`, `Text`) VALUES
+                (1, "Users/Ab"),
+                (2, "Users/Ann"),
+                (3, "Users/Britt"),
+                (4, "Users/Jack"),
+                (5, "Users/Joe"),
+                (6, "Users/Henry"),
+                (7, "Users/Pete"),
+                (8, "Users/Zoe"),
+                (9, "Users/John"),
+                (10, "Users/James"),
+                (11, "Users/Lewis")
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    {
+        const TString query = R"sql(
+            ALTER TABLE `/Root/Texts` ADD INDEX fulltext_idx
+                GLOBAL USING fulltext_relevance
+                ON (Text)
+                WITH (
+                    tokenizer=whitespace,
+                    use_filter_lowercase=true,
+                    use_filter_ngram=true,
+                    filter_ngram_min_length=3,
+                    filter_ngram_max_length=3
+                );
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    {
+        // Check that imbalanced ngram filtering doesn't break the result
+        TString query = R"sql(
+            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextContains(`Text`, "*Users/Br*")
+            ORDER BY `Key`;
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        CompareYson(R"([
+            [[3u];["Users/Britt"]]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
     }
 }
 
@@ -4091,7 +4166,7 @@ Y_UNIT_TEST(SelectWithFulltextContainsAndEdgeNgramWildcard) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
-    AddIndexNGram(db, 1, 5, true);
+    AddIndexNGram(db, 1, 5, false, true);
 
     {
         const TString query = R"sql(

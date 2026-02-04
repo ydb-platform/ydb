@@ -14,11 +14,8 @@ namespace NMVP {
 
 template<typename TProto>
 TString SecureShortDebugString(const TProto& request) {
-    if constexpr (std::is_base_of_v<::google::protobuf::Message, TProto>) {
-        return TString(MVPSecureDebugString(request));
-    } else {
-        return request.ShortDebugString();
-    }
+    static_assert(std::is_base_of_v<::google::protobuf::Message, TProto>, "SecureShortDebugString requires a protobuf message");
+    return TString(MVPSecureDebugString(request));
 }
 
 template <typename TGRpcService>

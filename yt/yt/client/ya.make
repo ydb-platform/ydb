@@ -70,6 +70,7 @@ SRCS(
 
     election/public.cpp
 
+    hive/config.cpp
     hive/timestamp_map.cpp
 
     hydra/version.cpp

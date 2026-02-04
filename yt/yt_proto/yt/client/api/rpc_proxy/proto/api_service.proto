@@ -9,6 +9,7 @@ option go_package = "a.yandex-team.ru/yt/go/proto/client/api/rpc_proxy";
 import "yt_proto/yt/core/misc/proto/error.proto";
 import "yt_proto/yt/core/misc/proto/guid.proto";
 import "yt_proto/yt/core/misc/proto/hyperloglog.proto";
+import "yt_proto/yt/core/rpc/proto/rpc.proto";
 import "yt_proto/yt/core/ytree/proto/attributes.proto";
 import "yt_proto/yt/core/ytree/proto/request_complexity_limits.proto";
 import "yt_proto/yt/client/chunk_client/proto/data_statistics.proto";
@@ -637,6 +638,7 @@ message TReqMultiLookup
     optional TTabletReadOptions tablet_read_options = 3;
     optional EReplicaConsistency replica_consistency = 6;
     optional EMultiplexingBand multiplexing_band = 4;
+    optional string execution_pool = 7;
 }
 
 message TRspMultiLookup
@@ -1553,6 +1555,12 @@ message TReplicaInfo
     required int32 mode = 4; // ETableReplicaMode
 }
 
+message TUnfoldedColumns
+{
+    required string table_column = 1;
+    required string index_column = 2;
+}
+
 message TIndexInfo
 {
     required NYT.NProto.TGuid index_table_id = 1;
@@ -1561,6 +1569,7 @@ message TIndexInfo
     optional string unfolded_column = 4;
     optional int32 index_correspondence = 6; // NTableClient::ESecondaryIndexState
     optional TTableSchema evaluated_columns_schema = 7;
+    optional TUnfoldedColumns unfolded_columns = 8;
 }
 
 message TReqGetTableMountInfo
@@ -3805,7 +3814,7 @@ message TReqStartDistributedWriteSession
 {
     required bytes path = 1; // RichYPath
     required int32 cookie_count = 2;
-    optional int64 timeout = 3;
+    optional int64 session_timeout = 3;
 
     optional TTransactionalOptions transactional_options = 100;
 }
@@ -3860,7 +3869,7 @@ message TReqStartDistributedWriteFileSession
 {
     required bytes path = 1; // RichYPath
     required int32 cookie_count = 2;
-    optional int64 timeout = 3;
+    optional int64 session_timeout = 3;
 
     optional TTransactionalOptions transactional_options = 100;
 }
@@ -3956,3 +3965,18 @@ message TReqWriteShuffleData
 message TRspWriteShuffleData
 {
 }
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TReqFairSharePoolExt
+{
+    extend NRpc.NProto.TRequestHeader
+    {
+        optional TReqFairSharePoolExt req_fair_share_pool_ext = 202;
+    }
+
+    optional string execution_pool = 1 [default = "default"];
+    optional string execution_tag = 2 [default = "default"];
+}
+
+////////////////////////////////////////////////////////////////////////////////

@@ -118,8 +118,7 @@ namespace NKikimr::NDDisk {
             .Attribute("vchunk_index", static_cast<long>(selector.VChunkIndex))
             .Attribute("offset_in_bytes", selector.OffsetInBytes)
             .Attribute("size", selector.Size)
-            .Attribute("lsn", static_cast<long>(lsn))
-            .Attribute("do_commit", record.HasDDiskId()));
+            .Attribute("lsn", static_cast<long>(lsn)));
 
         const auto it = PersistentBuffers.find({creds.TabletId, selector.VChunkIndex});
         if (it == PersistentBuffers.end()) {
@@ -143,30 +142,71 @@ namespace NKikimr::NDDisk {
         TRope data = std::move(pr.Data);
         Y_ABORT_UNLESS(pr.OffsetInBytes == selector.OffsetInBytes);
         Y_ABORT_UNLESS(pr.Size == selector.Size);
+        Y_DEBUG_ABORT_UNLESS(record.HasDDiskId());
+
+        auto query = std::make_unique<TEvWrite>(TQueryCredentials(creds.TabletId, creds.Generation,
+            record.GetDDiskInstanceGuid(), true), selector, TWriteInstruction(0));
+        query->AddPayload(std::move(data));
+
+        const ui64 cookie = NextWriteCookie++;
+        const auto& ddiskId = record.GetDDiskId();
+        Send(MakeBlobStorageDDiskId(ddiskId.GetNodeId(), ddiskId.GetPDiskId(), ddiskId.GetDDiskSlotId()),
+            query.release(), IEventHandle::FlagTrackDelivery, cookie, span.GetTraceId());
+        WritesInFlight.emplace(cookie, TWriteInFlight{ev->Sender, ev->Cookie, ev->InterconnectSession,
+            std::move(span), selector.Size});
+    }
+
+    void TDDiskActor::Handle(TEvErasePersistentBuffer::TPtr ev) {
+        if (!CheckQuery(*ev, &Counters.Interface.ErasePersistentBuffer)) {
+            return;
+        }
+
+        const auto& record = ev->Get()->Record;
+        const TQueryCredentials creds(record.GetCredentials());
+        const TBlockSelector selector(record.GetSelector());
+        const ui64 lsn = record.GetLsn();
+
+        Counters.Interface.ErasePersistentBuffer.Request();
+
+        auto span = std::move(NWilson::TSpan(TWilson::DDiskTopLevel, std::move(ev->TraceId), "DDisk.ErasePersistentBuffer",
+                NWilson::EFlags::NONE, TActivationContext::ActorSystem())
+            .Attribute("tablet_id", static_cast<long>(creds.TabletId))
+            .Attribute("vchunk_index", static_cast<long>(selector.VChunkIndex))
+            .Attribute("offset_in_bytes", selector.OffsetInBytes)
+            .Attribute("size", selector.Size)
+            .Attribute("lsn", static_cast<long>(lsn))
+            .Attribute("erase", true));
+
+        const auto it = PersistentBuffers.find({creds.TabletId, selector.VChunkIndex});
+        if (it == PersistentBuffers.end()) {
+            Counters.Interface.ErasePersistentBuffer.Reply(false);
+            span.End();
+            SendReply(*ev, std::make_unique<TEvErasePersistentBufferResult>(
+                NKikimrBlobStorage::NDDisk::TReplyStatus::MISSING_RECORD));
+            return;
+        }
+        TPersistentBuffer& buffer = it->second;
+
+        const auto jt = buffer.Records.find(lsn);
+        if (jt == buffer.Records.end()) {
+            Counters.Interface.ErasePersistentBuffer.Reply(false);
+            span.End();
+            SendReply(*ev, std::make_unique<TEvErasePersistentBufferResult>(
+                NKikimrBlobStorage::NDDisk::TReplyStatus::MISSING_RECORD));
+            return;
+        }
+        TPersistentBuffer::TRecord& pr = jt->second;
+        TRope data = std::move(pr.Data);
+        Y_ABORT_UNLESS(pr.OffsetInBytes == selector.OffsetInBytes);
+        Y_ABORT_UNLESS(pr.Size == selector.Size);
 
         buffer.Records.erase(jt);
         if (buffer.Records.empty()) {
             PersistentBuffers.erase(it);
         }
-
-        if (record.HasDDiskId()) {
-            Y_DEBUG_ABORT_UNLESS(record.HasDDiskInstanceGuid());
-
-            auto query = std::make_unique<TEvWrite>(TQueryCredentials(creds.TabletId, creds.Generation,
-                record.GetDDiskInstanceGuid(), true), selector, TWriteInstruction(0));
-            query->AddPayload(std::move(data));
-
-            const ui64 cookie = NextWriteCookie++;
-            const auto& ddiskId = record.GetDDiskId();
-            Send(MakeBlobStorageDDiskId(ddiskId.GetNodeId(), ddiskId.GetPDiskId(), ddiskId.GetDDiskSlotId()),
-                query.release(), IEventHandle::FlagTrackDelivery, cookie, span.GetTraceId());
-            WritesInFlight.emplace(cookie, TWriteInFlight{ev->Sender, ev->Cookie, ev->InterconnectSession,
-                std::move(span), selector.Size});
-        } else {
-            Counters.Interface.FlushPersistentBuffer.Reply(true);
-            span.End();
-            SendReply(*ev, std::make_unique<TEvFlushPersistentBufferResult>(NKikimrBlobStorage::NDDisk::TReplyStatus::OK));
-        }
+        Counters.Interface.ErasePersistentBuffer.Reply(true);
+        span.End();
+        SendReply(*ev, std::make_unique<TEvErasePersistentBufferResult>(NKikimrBlobStorage::NDDisk::TReplyStatus::OK));
     }
 
     void TDDiskActor::Handle(TEvWriteResult::TPtr ev) {

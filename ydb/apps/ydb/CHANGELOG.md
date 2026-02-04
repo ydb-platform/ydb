@@ -1,3 +1,5 @@
+* Fixed Out Of Memory issue in the `ydb workload query run` command for queries with large result sets.
+* Improved the `ydb init` and `ydb config profile` commands with interactive menus.
 * Added download progress bar to the `ydb update` command.
 * Improved progress bars: consistent MiB/GiB units, stable speed display, dual progress bar for the `ydb import file` command showing both in-progress and confirmed bytes.
 * Interactive mode enhancements:

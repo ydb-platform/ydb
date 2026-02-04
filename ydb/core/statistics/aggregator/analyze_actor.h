@@ -16,7 +16,7 @@ class TAnalyzeActor : public NActors::TActorBootstrapped<TAnalyzeActor> {
     TPathId PathId;
     TVector<ui32> RequestedColumnTags;
 
-    void FinishWithFailure(TEvStatistics::TEvFinishTraversal::EStatus);
+    void FinishWithFailure(TEvStatistics::TEvFinishTraversal::EStatus, NYql::TIssue);
 
     // StateNavigate
 

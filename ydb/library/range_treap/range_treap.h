@@ -202,6 +202,17 @@ public:
         return true;
     }
 
+    /**
+      * Calls callback for each range intersecting with the query
+      */
+    template <class TCallback>
+    bool EachIntersection(const TBorder& left, const TBorder& right, TCallback&& callback) const {
+        if (Root) {
+            return DoEachIntersection(Root.Get(), left, right, callback);
+        }
+        return true;
+    }
+
 private:
     /**
       * Inserts a new (leftKey, value, rightKey, prio) node into subtree rooted at tptr

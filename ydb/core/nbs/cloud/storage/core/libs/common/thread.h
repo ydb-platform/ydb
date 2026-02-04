@@ -4,10 +4,10 @@
 
 #include <util/generic/string.h>
 
-namespace NCloud {
+namespace NYdb::NBS {
 
 ////////////////////////////////////////////////////////////////////////////////
 
 void SetCurrentThreadName(const TString& name, ui32 maxCharsFromProcessName = 8);
 
-}   // namespace NCloud
+}   // namespace NYdb::NBS

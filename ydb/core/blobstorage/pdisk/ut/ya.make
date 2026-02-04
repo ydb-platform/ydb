@@ -27,6 +27,12 @@ IF (YDB_ENABLE_PDISK_SHRED)
     )
 ENDIF()
 
+IF (YDB_DISABLE_PDISK_ENCRYPTION)
+    CFLAGS(
+        -DDISABLE_PDISK_ENCRYPTION
+    )
+ENDIF()
+
 SRCS(
     blobstorage_pdisk_blockdevice_ut.cpp
     blobstorage_pdisk_crypto_ut.cpp

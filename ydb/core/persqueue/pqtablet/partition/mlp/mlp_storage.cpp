@@ -64,6 +64,10 @@ void TStorage::SetDeadLetterPolicy(std::optional<NKikimrPQ::TPQTabletConfig::EDe
 
 }
 
+bool TStorage::GetKeepMessageOrder() const {
+    return KeepMessageOrder;
+}
+
 std::optional<ui32> TStorage::GetRetentionDeadlineDelta() const {
     if (RetentionPeriod) {
         auto retentionDeadline = TrimToSeconds(TimeProvider->Now(), false) - RetentionPeriod.value();
@@ -390,6 +394,7 @@ bool TStorage::AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupId
         // The message will be deleted by retention policy. Skip it.
         if (removedByRetention && Messages.empty()) {
             ++Metrics.TotalDeletedByRetentionMessageCount;
+            Batch.AddNewMessage(offset);
             return true;
         }
     }
@@ -1046,6 +1051,8 @@ TStorage::TMessageWrapper TStorage::TMessageIterator::operator*() const {
             Storage.BaseDeadline + TDuration::Seconds(message->DeadlineDelta) : TInstant::Zero(),
         .WriteTimestamp = Storage.BaseWriteTimestamp + TDuration::Seconds(message->WriteTimestampDelta),
         .LockingTimestamp = Storage.GetMessageLockingTime(*message),
+        .MessageGroupIdHash = message->HasMessageGroupId ? std::optional<ui32>(message->MessageGroupIdHash) : std::nullopt,
+        .MessageGroupIsLocked = Storage.KeepMessageOrder && message->HasMessageGroupId && Storage.LockedMessageGroupsId.contains(message->MessageGroupIdHash),
     };
 }
 

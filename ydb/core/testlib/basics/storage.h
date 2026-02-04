@@ -64,10 +64,13 @@ namespace NKikimr {
             PDiskPath = TStringBuilder() << baseDir << "pdisk_1.dat";
 
             if (!Mock && conf.FormatDisk) {
+                TFormatOptions options;
+                options.SectorMap = SectorMap;
+                options.EnableSmallDiskOptimization = false;
                 FormatPDisk(PDiskPath,
                     Conf.DiskSize, Conf.SectorSize, Conf.ChunkSize, PDiskGuid,
                     0x123 + salt, 0x456 + salt, 0x789 + salt, mainKey,
-                    "", false, false, SectorMap, false);
+                    "", options);
             }
         }
 

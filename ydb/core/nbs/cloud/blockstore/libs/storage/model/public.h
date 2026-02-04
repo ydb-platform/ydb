@@ -6,7 +6,7 @@
 #include <util/generic/ylimits.h>
 #include <util/system/defaults.h>
 
-namespace NCloud::NBlockStore::NStorage {
+namespace NYdb::NBS::NBlockStore::NStorage {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -14,7 +14,7 @@ constexpr ui32 MaxBlocksCount = 1024;
 
 constexpr ui64 MaxPartitionBlocksCount = Max<ui32>() - 1;
 constexpr ui64 MaxPartitionBlocksCountForMultipartitionVolume = 1u << 31;
-constexpr ui64 MaxVolumeBlocksCount = 256_TB / DefaultBlockSize;
+constexpr ui64 MaxVolumeBlocksCount = 256_TB / NYdb::NBS::DefaultBlockSize;
 // 1 system + 1 log + 1 index + 252 data channel count
 constexpr ui32 MaxChannelCount = 255;
 constexpr ui32 MaxMergedChannelCount = 248;
@@ -44,4 +44,4 @@ enum class EOptimizationMode
     OptimizeForShortRanges,
 };
 
-}   // namespace NCloud::NBlockStore::NStorage
+}   // namespace NYdb::NBS::NBlockStore::NStorage

@@ -40,6 +40,7 @@ Checks: >
   bugprone-swapped-arguments,
   bugprone-terminating-continue,
   bugprone-throw-keyword-missing,
+  bugprone-undefined-memory-manipulation,
   bugprone-undelegated-constructor,
   bugprone-unhandled-exception-at-new,
   bugprone-unused-raii,
@@ -47,6 +48,15 @@ Checks: >
   bugprone-use-after-move,
   bugprone-virtual-near-miss,
   google-explicit-constructor,
+  hicpp-exception-baseclass,
+  hicpp-multiway-paths-covered,
+  misc-definitions-in-headers,
+  misc-misleading-bidirectional,
+  misc-misleading-identifier,
+  misc-redundant-expression,
+  misc-static-assert,
+  misc-throw-by-value-catch-by-reference,
+  misc-unconventional-assign-operator,
   modernize-use-override
 CheckOptions:
   - key: readability-identifier-naming.StructPrefix

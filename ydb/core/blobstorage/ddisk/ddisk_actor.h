@@ -14,6 +14,7 @@
 
 namespace NKikimrBlobStorage::NDDisk::NInternal {
     class TChunkMapLogRecord;
+    class TPersistentBufferChunkMapLogRecord;
 }
 
 #define LIST_COUNTERS_INTERFACE_OPS(XX) \
@@ -22,6 +23,7 @@ namespace NKikimrBlobStorage::NDDisk::NInternal {
     XX(WritePersistentBuffer) \
     XX(ReadPersistentBuffer) \
     XX(FlushPersistentBuffer) \
+    XX(ErasePersistentBuffer) \
     XX(ListPersistentBuffer) \
     /**/
 
@@ -184,9 +186,18 @@ namespace NKikimr::NDDisk {
 
         // Chunk management code
 
+        static constexpr ui32 MinChunksReserved = 2;
         std::queue<TChunkIdx> ChunkReserve;
         bool ReserveInFlight = false;
-        std::queue<std::tuple<ui64, ui64>> ChunkAllocateQueue;
+
+        struct TChunkForData {
+            ui64 TabletId;
+            ui64 VChunkIndex;
+        };
+
+        struct TChunkForPersistentBuffer {};
+
+        std::queue<std::variant<TChunkForData, TChunkForPersistentBuffer>> ChunkAllocateQueue;
         THashMap<ui64, std::function<void()>> LogCallbacks;
         ui64 NextCookie = 1;
         THashMap<ui64, std::tuple<NWilson::TSpan, std::function<void(NPDisk::TEvChunkWriteRawResult&, NWilson::TSpan&&)>>> WriteCallbacks;
@@ -208,6 +219,7 @@ namespace NKikimr::NDDisk {
         void IssuePDiskLogRecord(TLogSignature signature, TChunkIdx chunkIdxToCommit, const NProtoBuf::Message& data,
             ui64 *startingPointLsnPtr, std::function<void()> callback);
 
+        NKikimrBlobStorage::NDDisk::NInternal::TPersistentBufferChunkMapLogRecord CreatePersistentBufferChunkMapSnapshot();
         NKikimrBlobStorage::NDDisk::NInternal::TChunkMapLogRecord CreateChunkMapSnapshot();
         NKikimrBlobStorage::NDDisk::NInternal::TChunkMapLogRecord CreateChunkMapIncrement(ui64 tabletId, ui64 vChunkIndex,
             TChunkIdx chunkIdx);
@@ -306,8 +318,12 @@ namespace NKikimr::NDDisk {
             std::map<ui64, TRecord> Records;
         };
 
-        THashMap<TString, size_t> BlockRefCount;
         std::map<std::tuple<ui64, ui64>, TPersistentBuffer> PersistentBuffers;
+
+        std::set<TChunkIdx> PersistentBufferOwnedChunks;
+        ui64 PersistentBufferChunkMapSnapshotLsn = Max<ui64>();
+
+        void IssuePersistentBufferChunkAllocation();
 
         struct TWriteInFlight {
             TActorId Sender;
@@ -323,6 +339,7 @@ namespace NKikimr::NDDisk {
         void Handle(TEvWritePersistentBuffer::TPtr ev);
         void Handle(TEvReadPersistentBuffer::TPtr ev);
         void Handle(TEvFlushPersistentBuffer::TPtr ev);
+        void Handle(TEvErasePersistentBuffer::TPtr ev);
         void Handle(TEvWriteResult::TPtr ev);
         void Handle(TEvents::TEvUndelivered::TPtr ev);
         void Handle(TEvListPersistentBuffer::TPtr ev);

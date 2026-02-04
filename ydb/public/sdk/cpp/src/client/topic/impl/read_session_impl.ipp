@@ -530,6 +530,10 @@ inline void TSingleClusterReadSessionImpl<false>::InitImpl(TDeferredActions<fals
         LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "Enable direct read");
     }
 
+    if (Settings.PartitionMaxInFlightBytes_) {
+        init.set_partition_max_in_flight_bytes(*Settings.PartitionMaxInFlightBytes_);
+    }
+
     for (const TTopicReadSettings& topic : Settings.Topics_) {
         auto* topicSettings = init.add_topics_read_settings();
         topicSettings->set_path(TStringType{topic.Path_});

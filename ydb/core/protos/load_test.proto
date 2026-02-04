@@ -1,6 +1,8 @@
 import "ydb/core/protos/blobstorage_base.proto";
+import "ydb/core/protos/blobstorage_ddisk.proto";
 import "ydb/core/protos/blobstorage_disk.proto";
 import "ydb/core/protos/datashard_load.proto";
+import "ydb/core/nbs/cloud/blockstore/tools/testing/loadtest/lib/protos/nbs2_load.proto";
 
 package NKikimr;
 option java_package = "ru.yandex.kikimr.proto";
@@ -138,6 +140,39 @@ message TEvLoadTestRequest {
         optional bool IsWardenlessTest = 13 [default = false];
         optional uint32 DelayBeforeMeasurementsSeconds = 14 [default = 15];
     }
+    message TDDiskWriteLoad {
+        // In a most simple case there is a single TWriteArea.
+        // However for various test cases it is possible to split
+        // DDisk into areas of different size, weight and write order (seq or random).
+        message TWriteArea {
+            enum EAreaInit {
+                INIT_NONE = 0;
+
+                // requires ExpectedChunkSize: the idea is just to preallocate all chunks
+                INIT_ZEROES_FIRST_BLOCK = 1;
+
+                INIT_ZEROES_FULL = 2;
+            }
+            optional uint32 AreaSize = 1; // must be a multiple of 4096
+            optional EAreaInit InitType = 2 [default = INIT_ZEROES_FIRST_BLOCK];
+            optional uint32 Weight = 3 [default = 1]; // probability weight
+            optional bool Sequential = 4 [default = true];
+        }
+
+        optional uint64 Tag = 1;
+        optional NKikimrBlobStorage.NDDisk.TDDiskId DDiskId = 2;
+        optional uint32 DurationSeconds = 3;
+        optional uint32 DelayBeforeMeasurementsSeconds = 4 [default = 15];
+        optional uint32 InFlightWrites = 5;
+        optional uint32 InitInFlightWrites = 6;
+
+        optional uint32 IntervalMsMin = 7;
+        optional uint32 IntervalMsMax = 8;
+
+        optional uint32 ExpectedChunkSize = 9 [default = 134217728]; // 128 MB
+
+        repeated TWriteArea Areas = 10;
+    }
     message TVDiskLoad {
         optional uint64 Tag = 1;
 
@@ -267,6 +302,13 @@ message TEvLoadTestRequest {
             TKvWorkload Kv = 10;
         }
     }
+    message TNBS2Load {
+        optional uint64 Tag = 1;
+        optional string Name = 2;
+        optional uint32 DurationSeconds = 3;
+        optional string DirectPartitionId = 4;
+        optional NYdb.NBS.NProto.TRangeTest RangeTest = 5;
+    }
 
     message TMemoryLoad {
         optional uint64 Tag = 1;
@@ -304,6 +346,8 @@ message TEvLoadTestRequest {
         TMemoryLoad MemoryLoad = 10;
         NKikimrDataShardLoad.TEvYCSBTestLoadRequest YCSBLoad = 11;
         TInterconnectLoad InterconnectLoad = 15;
+        TNBS2Load NBS2Load = 16;
+        TDDiskWriteLoad DDiskWriteLoad = 17;
     }
     optional uint64 Tag = 12;
     optional string Uuid = 13;

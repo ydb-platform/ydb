@@ -2664,8 +2664,6 @@ namespace NTypeAnnImpl {
 
         const TDataExprType* dataType[2];
         bool isOptional[2];
-        bool haveOptional = false;
-        const TDataExprType* commonType = nullptr;
         for (ui32 i = 0; i < 2; ++i) {
             if (IsNull(*input->Child(i))) {
                 output = input->ChildPtr(i);
@@ -2681,8 +2679,6 @@ namespace NTypeAnnImpl {
                 input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
                 return IGraphTransformer::TStatus::Ok;
             }
-
-            haveOptional |= isOptional[i];
         }
 
         if (!checked) {
@@ -2692,45 +2688,16 @@ namespace NTypeAnnImpl {
             }
         }
 
-        const bool isLeftNumeric = IsDataTypeNumeric(dataType[0]->GetSlot());
-        const bool isRightNumeric = IsDataTypeNumeric(dataType[1]->GetSlot());
-        // bool isOk = false;
-        if (isLeftNumeric && isRightNumeric) {
-            // isOk = true;
-            auto commonTypeSlot = GetNumericDataTypeByLevel(Max(GetNumericDataTypeLevel(dataType[0]->GetSlot()),
-                GetNumericDataTypeLevel(dataType[1]->GetSlot())));
-            commonType = ctx.Expr.MakeType<TDataExprType>(commonTypeSlot);
-        } else if ((IsDataTypeDate(dataType[0]->GetSlot()) || IsDataTypeTzDate(dataType[0]->GetSlot())) && IsDataTypeInterval(dataType[1]->GetSlot())) {
-            commonType = dataType[0];
-            haveOptional = true;
-        } else if (IsDataTypeInterval(dataType[0]->GetSlot()) && (IsDataTypeDate(dataType[1]->GetSlot()) || IsDataTypeTzDate(dataType[1]->GetSlot()))) {
-            commonType = dataType[1];
-            haveOptional = true;
-        } else if (IsDataTypeInterval(dataType[0]->GetSlot()) && IsDataTypeInterval(dataType[1]->GetSlot())) {
-            commonType = IsDataTypeBigDate(dataType[0]->GetSlot()) ? dataType[0] : dataType[1];
-            haveOptional = true;
-        } else if (IsDataTypeDecimal(dataType[0]->GetSlot()) && IsDataTypeDecimal(dataType[1]->GetSlot())) {
-            const auto dataTypeOne = static_cast<const TDataExprParamsType*>(dataType[0]);
-            const auto dataTypeTwo = static_cast<const TDataExprParamsType*>(dataType[1]);
-
-            if (!(*dataTypeOne == *dataTypeTwo)) {
-                ctx.Expr.AddError(TIssue(
-                    ctx.Expr.GetPosition(input->Pos()),
-                    TStringBuilder() << "Cannot add different decimals."
-                ));
-
-                return IGraphTransformer::TStatus::Error;
-            }
-
-            commonType = dataType[0];
-        } else {
+        auto isAddAllowed = IsAddAllowedYqlTypes(input->ChildPtr(0)->GetTypeAnn(), input->ChildPtr(1)->GetTypeAnn(), ctx.Expr);
+        if (!isAddAllowed.has_value()) {
             ctx.Expr.AddError(TIssue(
                 ctx.Expr.GetPosition(input->Pos()),
-                TStringBuilder() << "Cannot add type " << *input->Head().GetTypeAnn() << " and " << *input->Tail().GetTypeAnn()
-            ));
-
+                isAddAllowed.error()));
             return IGraphTransformer::TStatus::Error;
         }
+
+        auto [commonType, haveOptionalInAdd] = isAddAllowed.value();
+        auto haveOptional = haveOptionalInAdd;
 
         const TTypeAnnotationNode* resultType = commonType;
         if (checked) {
@@ -6796,6 +6763,11 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             }
 
             if constexpr (!IsSet) {
+                if (child->GetTypeAnn() && child->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+                    input->SetTypeAnn(child->GetTypeAnn());
+                    return IGraphTransformer::TStatus::Ok;
+                }
+
                 if (!EnsureTupleSize(*child, 2, ctx.Expr)) {
                     return IGraphTransformer::TStatus::Error;
                 }

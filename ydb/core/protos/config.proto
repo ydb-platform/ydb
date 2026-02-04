@@ -2530,6 +2530,8 @@ message TColumnShardConfig {
     optional uint64 CompactionStageMemoryLimit = 64 [default = 3221225472];
     optional uint64 TieringStageMemoryLimit = 65 [default = 1000000000];
     optional uint64 CleanupPortionsStageMemoryLimit = 66 [default = 1000000000];
+    optional bool EnableIntervalTreeForMetadataSelect = 67 [default = true];
+    optional bool EnableCursorV1 = 68 [default = false];
 }
 
 message TSchemeShardConfig {
@@ -2886,6 +2888,18 @@ message TAwsClientConfig {
 
     // Logging options
     optional TLogConfig LogConfig = 1;
+
+    // Default connection settings
+    optional bool VerifySSL = 2 [default = true];
+    optional uint32 RequestTimeoutMs = 3;
+    optional uint32 HttpRequestTimeoutMs = 4;
+    optional uint32 ConnectionTimeoutMs = 5 [default = 10000];
+    optional bool EnableTcpKeepAlive = 6 [default = true];
+    optional uint32 TcpKeepAliveIntervalMs = 7;
+    optional uint32 MaxConnectionsCount = 8 [default = 32];
+    optional uint32 ExecutorThreadsCount = 9 [default = 32];
+    optional string CaPath = 10 [default = "/etc/ssl/certs"];
+    optional string CaFile = 11;
 }
 
 message TMetadataCacheConfig {

@@ -1,5 +1,6 @@
 #include "linter.h"
 #include "check_runner.h"
+#include "check_state.h"
 
 #include <yql/essentials/ast/yql_ast.h>
 #include <yql/essentials/ast/yql_expr.h>
@@ -22,6 +23,7 @@ public:
         Registry_.emplace("parser", MakeParserRunner);
         Registry_.emplace("format", MakeFormatRunner);
         Registry_.emplace("translator", MakeTranslatorRunner);
+        Registry_.emplace("typecheck", MakeTypecheckRunner);
         for (const auto& x : Registry_) {
             CheckNames_.emplace(x.first);
         }
@@ -101,17 +103,21 @@ TSet<TString> ListChecks(const TMaybe<TVector<TCheckFilter>>& filters) {
 TChecksResponse RunChecks(const TChecksRequest& request) {
     auto enabledChecks = GetEnabledChecks(GetCheckRunnerFactory().ListChecks(), request.Filters);
     TChecksResponse res;
+
+    // Create shared state for caching intermediate results between checks
+    TCheckState state(request);
+
     for (const auto& c : enabledChecks) {
         auto checkRunner = GetCheckRunnerFactory().MakeRunner(c);
         if (checkRunner) {
             try {
-                res.Checks.push_back(checkRunner->Run(request));
+                res.Checks.push_back(checkRunner->Run(request, state));
             } catch (const std::exception& e) {
                 TCheckResponse r;
                 r.CheckName = c;
                 r.Success = false;
                 r.Issues.AddIssue(ExceptionToIssue(e));
-                CheckFatalIssues(r.Issues);
+                CheckFatalIssues(r.Issues, request.IssueReportTarget);
                 res.Checks.push_back(std::move(r));
             }
         }

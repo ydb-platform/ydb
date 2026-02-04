@@ -2,7 +2,7 @@
 
 #include "public.h"
 
-namespace NCloud {
+namespace NYdb::NBS {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -14,4 +14,4 @@ struct IStartable
     virtual void Stop() = 0;
 };
 
-}   // namespace NCloud
+}   // namespace NYdb::NBS

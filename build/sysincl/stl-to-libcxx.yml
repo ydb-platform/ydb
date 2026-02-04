@@ -16,12 +16,12 @@
   - fenv.h:       contrib/libs/cxxsupp/libcxx/include/fenv.h
   - float.h:      contrib/libs/cxxsupp/libcxx/include/float.h
   - inttypes.h:   contrib/libs/cxxsupp/libcxx/include/inttypes.h
-  - locale.h:     contrib/libs/cxxsupp/libcxx/include/locale.h
+  - locale.h:     ""
   - math.h:       contrib/libs/cxxsupp/libcxx/include/math.h
   - stdatomic.h:  contrib/libs/cxxsupp/libcxx/include/stdatomic.h
   - stdbool.h:    contrib/libs/cxxsupp/libcxx/include/stdbool.h
   - stddef.h:     contrib/libs/cxxsupp/libcxx/include/stddef.h
-  - stdint.h:     contrib/libs/cxxsupp/libcxx/include/stdint.h
+  - stdint.h:     ""
   - stdio.h:      contrib/libs/cxxsupp/libcxx/include/stdio.h
   - stdlib.h:     contrib/libs/cxxsupp/libcxx/include/stdlib.h
   - string.h:     contrib/libs/cxxsupp/libcxx/include/string.h
@@ -103,6 +103,7 @@
   - coroutine:                                             contrib/libs/cxxsupp/libcxx/include/coroutine
   - csetjmp:                                               contrib/libs/cxxsupp/libcxx/include/csetjmp
   - csignal:                                               contrib/libs/cxxsupp/libcxx/include/csignal
+  - cstdalign:                                             contrib/libs/cxxsupp/libcxx/include/cstdalign
   - cstdarg:                                               contrib/libs/cxxsupp/libcxx/include/cstdarg
   - cstdbool:                                              contrib/libs/cxxsupp/libcxx/include/cstdbool
   - cstddef:                                               contrib/libs/cxxsupp/libcxx/include/cstddef
@@ -120,6 +121,7 @@
   - execution:                                             contrib/libs/cxxsupp/libcxx/include/execution
   - expected:                                              contrib/libs/cxxsupp/libcxx/include/expected
   - filesystem:                                            contrib/libs/cxxsupp/libcxx/include/filesystem
+  - flat_map:                                              contrib/libs/cxxsupp/libcxx/include/flat_map
   - format:                                                contrib/libs/cxxsupp/libcxx/include/format
   - forward_list:                                          contrib/libs/cxxsupp/libcxx/include/forward_list
   - fstream:                                               contrib/libs/cxxsupp/libcxx/include/fstream
@@ -431,6 +433,7 @@
   - __bit/popcount.h:                                      contrib/libs/cxxsupp/libcxx/include/__bit/popcount.h
   - __bit/rotate.h:                                        contrib/libs/cxxsupp/libcxx/include/__bit/rotate.h
   - __charconv/chars_format.h:                             contrib/libs/cxxsupp/libcxx/include/__charconv/chars_format.h
+  - __charconv/from_chars_floating_point.h:                contrib/libs/cxxsupp/libcxx/include/__charconv/from_chars_floating_point.h
   - __charconv/from_chars_integral.h:                      contrib/libs/cxxsupp/libcxx/include/__charconv/from_chars_integral.h
   - __charconv/from_chars_result.h:                        contrib/libs/cxxsupp/libcxx/include/__charconv/from_chars_result.h
   - __charconv/tables.h:                                   contrib/libs/cxxsupp/libcxx/include/__charconv/tables.h
@@ -552,6 +555,8 @@
   - __filesystem/recursive_directory_iterator.h:           contrib/libs/cxxsupp/libcxx/include/__filesystem/recursive_directory_iterator.h
   - __filesystem/space_info.h:                             contrib/libs/cxxsupp/libcxx/include/__filesystem/space_info.h
   - __filesystem/u8path.h:                                 contrib/libs/cxxsupp/libcxx/include/__filesystem/u8path.h
+  - __flat_map/flat_map.h:                                 contrib/libs/cxxsupp/libcxx/include/__flat_map/flat_map.h
+  - __flat_map/sorted_unique.h:                            contrib/libs/cxxsupp/libcxx/include/__flat_map/sorted_unique.h
   - __format/buffer.h:                                     contrib/libs/cxxsupp/libcxx/include/__format/buffer.h
   - __format/concepts.h:                                   contrib/libs/cxxsupp/libcxx/include/__format/concepts.h
   - __format/container_adaptor.h:                          contrib/libs/cxxsupp/libcxx/include/__format/container_adaptor.h
@@ -680,6 +685,7 @@
   - __iterator/segmented_iterator.h:                       contrib/libs/cxxsupp/libcxx/include/__iterator/segmented_iterator.h
   - __iterator/size.h:                                     contrib/libs/cxxsupp/libcxx/include/__iterator/size.h
   - __iterator/sortable.h:                                 contrib/libs/cxxsupp/libcxx/include/__iterator/sortable.h
+  - __iterator/static_bounded_iter.h:                      contrib/libs/cxxsupp/libcxx/include/__iterator/static_bounded_iter.h
   - __iterator/unreachable_sentinel.h:                     contrib/libs/cxxsupp/libcxx/include/__iterator/unreachable_sentinel.h
   - __iterator/wrap_iter.h:                                contrib/libs/cxxsupp/libcxx/include/__iterator/wrap_iter.h
   - __locale_dir/locale_base_api.h:                        contrib/libs/cxxsupp/libcxx/include/__locale_dir/locale_base_api.h
@@ -688,11 +694,13 @@
   - __locale_dir/locale_base_api/bsd_locale_fallbacks.h:   contrib/libs/cxxsupp/libcxx/include/__locale_dir/locale_base_api/bsd_locale_fallbacks.h
   - __locale_dir/locale_base_api/fuchsia.h:                contrib/libs/cxxsupp/libcxx/include/__locale_dir/locale_base_api/fuchsia.h
   - __locale_dir/locale_base_api/ibm.h:                    contrib/libs/cxxsupp/libcxx/include/__locale_dir/locale_base_api/ibm.h
-  - __locale_dir/locale_base_api/locale_guard.h:           contrib/libs/cxxsupp/libcxx/include/__locale_dir/locale_base_api/locale_guard.h
   - __locale_dir/locale_base_api/musl.h:                   contrib/libs/cxxsupp/libcxx/include/__locale_dir/locale_base_api/musl.h
-  - __locale_dir/locale_base_api/newlib.h:                 contrib/libs/cxxsupp/libcxx/include/__locale_dir/locale_base_api/newlib.h
   - __locale_dir/locale_base_api/openbsd.h:                contrib/libs/cxxsupp/libcxx/include/__locale_dir/locale_base_api/openbsd.h
   - __locale_dir/locale_base_api/win32.h:                  contrib/libs/cxxsupp/libcxx/include/__locale_dir/locale_base_api/win32.h
+  - __locale_dir/locale_guard.h:                           contrib/libs/cxxsupp/libcxx/include/__locale_dir/locale_guard.h
+  - __locale_dir/support/apple.h:                          contrib/libs/cxxsupp/libcxx/include/__locale_dir/support/apple.h
+  - __locale_dir/support/bsd_like.h:                       contrib/libs/cxxsupp/libcxx/include/__locale_dir/support/bsd_like.h
+  - __locale_dir/support/freebsd.h:                        contrib/libs/cxxsupp/libcxx/include/__locale_dir/support/freebsd.h
   - __math/abs.h:                                          contrib/libs/cxxsupp/libcxx/include/__math/abs.h
   - __math/copysign.h:                                     contrib/libs/cxxsupp/libcxx/include/__math/copysign.h
   - __math/error_functions.h:                              contrib/libs/cxxsupp/libcxx/include/__math/error_functions.h
@@ -924,12 +932,10 @@
   - __tuple/tuple_like_no_subrange.h:                      contrib/libs/cxxsupp/libcxx/include/__tuple/tuple_like_no_subrange.h
   - __tuple/tuple_size.h:                                  contrib/libs/cxxsupp/libcxx/include/__tuple/tuple_size.h
   - __tuple/tuple_types.h:                                 contrib/libs/cxxsupp/libcxx/include/__tuple/tuple_types.h
-  - __type_traits/add_const.h:                             contrib/libs/cxxsupp/libcxx/include/__type_traits/add_const.h
-  - __type_traits/add_cv.h:                                contrib/libs/cxxsupp/libcxx/include/__type_traits/add_cv.h
+  - __type_traits/add_cv_quals.h:                          contrib/libs/cxxsupp/libcxx/include/__type_traits/add_cv_quals.h
   - __type_traits/add_lvalue_reference.h:                  contrib/libs/cxxsupp/libcxx/include/__type_traits/add_lvalue_reference.h
   - __type_traits/add_pointer.h:                           contrib/libs/cxxsupp/libcxx/include/__type_traits/add_pointer.h
   - __type_traits/add_rvalue_reference.h:                  contrib/libs/cxxsupp/libcxx/include/__type_traits/add_rvalue_reference.h
-  - __type_traits/add_volatile.h:                          contrib/libs/cxxsupp/libcxx/include/__type_traits/add_volatile.h
   - __type_traits/aligned_storage.h:                       contrib/libs/cxxsupp/libcxx/include/__type_traits/aligned_storage.h
   - __type_traits/aligned_union.h:                         contrib/libs/cxxsupp/libcxx/include/__type_traits/aligned_union.h
   - __type_traits/alignment_of.h:                          contrib/libs/cxxsupp/libcxx/include/__type_traits/alignment_of.h
@@ -1066,9 +1072,18 @@
   - __utility/priority_tag.h:                              contrib/libs/cxxsupp/libcxx/include/__utility/priority_tag.h
   - __utility/private_constructor_tag.h:                   contrib/libs/cxxsupp/libcxx/include/__utility/private_constructor_tag.h
   - __utility/rel_ops.h:                                   contrib/libs/cxxsupp/libcxx/include/__utility/rel_ops.h
+  - __utility/scope_guard.h:                               contrib/libs/cxxsupp/libcxx/include/__utility/scope_guard.h
   - __utility/small_buffer.h:                              contrib/libs/cxxsupp/libcxx/include/__utility/small_buffer.h
   - __utility/swap.h:                                      contrib/libs/cxxsupp/libcxx/include/__utility/swap.h
   - __utility/to_underlying.h:                             contrib/libs/cxxsupp/libcxx/include/__utility/to_underlying.h
   - __utility/unreachable.h:                               contrib/libs/cxxsupp/libcxx/include/__utility/unreachable.h
   - __variant/monostate.h:                                 contrib/libs/cxxsupp/libcxx/include/__variant/monostate.h
+  - __vector/comparison.h:                                 contrib/libs/cxxsupp/libcxx/include/__vector/comparison.h
+  - __vector/container_traits.h:                           contrib/libs/cxxsupp/libcxx/include/__vector/container_traits.h
+  - __vector/erase.h:                                      contrib/libs/cxxsupp/libcxx/include/__vector/erase.h
+  - __vector/pmr.h:                                        contrib/libs/cxxsupp/libcxx/include/__vector/pmr.h
+  - __vector/swap.h:                                       contrib/libs/cxxsupp/libcxx/include/__vector/swap.h
+  - __vector/vector.h:                                     contrib/libs/cxxsupp/libcxx/include/__vector/vector.h
+  - __vector/vector_bool.h:                                contrib/libs/cxxsupp/libcxx/include/__vector/vector_bool.h
+  - __vector/vector_bool_formatter.h:                      contrib/libs/cxxsupp/libcxx/include/__vector/vector_bool_formatter.h
 # END OF GENERATION

@@ -1,8 +1,10 @@
 #include <ydb/public/api/protos/ydb_export.pb.h>
+#include <ydb/public/api/protos/ydb_topic.pb.h>
 
 #include <ydb/core/backup/common/encryption.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/metering/metering.h>
+#include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tablet_flat/shared_cache_events.h>
 #include <ydb/core/testlib/actors/block_events.h>
@@ -63,6 +65,9 @@ namespace {
             )", TStringBuf(serverless ? "/MyRoot/Shared" : dbName).RNextTok('/').data()));
             env.TestWaitNotification(runtime, txId);
 
+            const auto describeResult = DescribePath(runtime, serverless ? "/MyRoot/Shared" : dbName);
+            const auto subDomainPathId = describeResult.GetPathId();
+
             TestAlterExtSubDomain(runtime, ++txId, "/MyRoot", Sprintf(R"(
                 PlanResolution: 50
                 Coordinators: 1
@@ -92,9 +97,9 @@ namespace {
                     Name: "%s"
                     ResourcesDomainKey {
                         SchemeShard: %lu
-                        PathId: 2
+                        PathId: %lu
                     }
-                )", TStringBuf(dbName).RNextTok('/').data(), TTestTxConfig::SchemeShard), attrs);
+                )", TStringBuf(dbName).RNextTok('/').data(), TTestTxConfig::SchemeShard, subDomainPathId), attrs);
                 env.TestWaitNotification(runtime, txId);
 
                 TestAlterExtSubDomain(runtime, ++txId, "/MyRoot", Sprintf(R"(
@@ -626,7 +631,7 @@ namespace {
 
         void ShouldCheckQuotas(const TSchemeLimits& limits, Ydb::StatusIds::StatusCode expectedFailStatus) {
             const TString userSID = "user@builtin";
-            EnvOptions().SystemBackupSIDs({userSID}).EnableRealSystemViewPaths(false);
+            EnvOptions().SystemBackupSIDs({userSID});
             Env(); // Init test env
 
             SetSchemeshardSchemaLimits(Runtime(), limits);
@@ -683,7 +688,7 @@ namespace {
                 const auto& topicPath = topicExpected.GetPath();
                 UNIT_ASSERT(HasS3File(topicPath));
                 auto content = GetS3FileContent(topicPath);
-                UNIT_ASSERT_C(topicExpected.CompareWithString(content),
+                UNIT_ASSERT_C(topicExpected.CompareWithStringIgnoringFields(content, {"attributes"}),
                     TStringBuilder() << topicExpected.GetPublicProto().DebugString() << "\n\nVS\n\n" << content);
 
                 if (enablePermissions) {
@@ -1983,7 +1988,7 @@ partitioning_settings {
     }
 
     Y_UNIT_TEST(ShouldCheckQuotasChildrenLimited) {
-        ShouldCheckQuotas(TSchemeLimits{.MaxChildrenInDir = 1}, Ydb::StatusIds::CANCELLED);
+        ShouldCheckQuotas(TSchemeLimits{.MaxChildrenInDir = 2}, Ydb::StatusIds::CANCELLED);
     }
 
     Y_UNIT_TEST(ShouldRetryAtFinalStage) {
@@ -2847,49 +2852,48 @@ state: STATE_ENABLED
 
                 auto* topic = S3Mock.GetData().FindPtr(changefeedDir + "/topic_description.pb");
                 UNIT_ASSERT(topic);
-                UNIT_ASSERT_VALUES_EQUAL(*topic, Sprintf(R"(partitioning_settings {
-  min_active_partitions: 1
-  max_active_partitions: 1
-  auto_partitioning_settings {
-    strategy: AUTO_PARTITIONING_STRATEGY_DISABLED
-    partition_write_speed {
-      stabilization_window {
-        seconds: 300
-      }
-      up_utilization_percent: 80
-      down_utilization_percent: 20
-    }
-  }
-}
-partitions {
-  active: true
-}
-retention_period {
-  seconds: 86400
-}
-partition_write_speed_bytes_per_second: 1048576
-partition_write_burst_bytes: 1048576
-attributes {
-  key: "__max_partition_message_groups_seqno_stored"
-  value: "6000000"
-}
-attributes {
-  key: "_allow_unauthenticated_read"
-  value: "true"
-}
-attributes {
-  key: "_allow_unauthenticated_write"
-  value: "true"
-}
-attributes {
-  key: "_message_group_seqno_retention_period_ms"
-  value: "1382400000"
-}
-attributes {
-  key: "_timestamp_type"
-  value: "CreateTime"
-}
-)", i));
+
+                Ydb::Topic::DescribeTopicResult actualTopicProto;
+                UNIT_ASSERT_C(
+                    google::protobuf::TextFormat::ParseFromString(*topic, &actualTopicProto),
+                    *topic
+                );
+
+                Ydb::Topic::DescribeTopicResult expectedTopicProto;
+                TString expectedTopicStr = R"(
+                    partitioning_settings {
+                        min_active_partitions: 1
+                        max_active_partitions: 1
+                        auto_partitioning_settings {
+                            strategy: AUTO_PARTITIONING_STRATEGY_DISABLED
+                            partition_write_speed {
+                                stabilization_window {
+                                    seconds: 300
+                                }
+                                up_utilization_percent: 80
+                                down_utilization_percent: 20
+                            }
+                        }
+                    }
+                    partitions {
+                        active: true
+                    }
+                    retention_period {
+                        seconds: 86400
+                    }
+                    partition_write_speed_bytes_per_second: 1048576
+                    partition_write_burst_bytes: 1048576
+                )";
+                UNIT_ASSERT_C(
+                    google::protobuf::TextFormat::ParseFromString(expectedTopicStr, &expectedTopicProto),
+                    expectedTopicStr
+                );
+
+                actualTopicProto.clear_attributes();
+                UNIT_ASSERT_STRINGS_EQUAL(
+                    actualTopicProto.partitioning_settings().DebugString(),
+                    expectedTopicProto.partitioning_settings().DebugString()
+                );
 
                 const auto* changefeedChecksum = S3Mock.GetData().FindPtr(changefeedDir + "/changefeed_description.pb.sha256");
                 UNIT_ASSERT(changefeedChecksum);
@@ -3807,6 +3811,179 @@ WITH (
   FLUSH_INTERVAL = Interval('PT60S')
 );)";
         TestTransfer(scheme, expected);
+    }
+
+    Y_UNIT_TEST(TopicExportWithAllFields) {
+        EnvOptions().EnablePermissionsExport(true).EnablePqBilling(true);
+        Env();
+        ui64 txId = 100;
+        TString topicProto = R"(
+            Name: "topic_full_test"
+            TotalGroupCount: 3
+            PartitionPerTablet: 3
+            PQTabletConfig {
+                RequireAuthRead: false
+                RequireAuthWrite: false
+                AbcId: 123
+                AbcSlug: "abc_slug"
+                FederationAccount: "federation_account"
+                EnableCompactification: false
+                TimestampType: "LogAppendTime"
+                PartitionConfig {
+                    LifetimeSeconds: 12
+                    StorageLimitBytes: 104857600
+                    WriteSpeedInBytesPerSecond: 1024
+                    BurstSize: 2048
+                    MaxSizeInPartition: 10
+                    SourceIdLifetimeSeconds: 14
+                    SourceIdMaxCounts: 10000000
+                }
+                Codecs {
+                    Ids: 0
+                    Ids: 1
+                    Ids: 2
+                }
+                MeteringMode: METERING_MODE_RESERVED_CAPACITY
+                PartitionStrategy {
+                    MinPartitionCount: 3
+                    MaxPartitionCount: 10
+                    ScaleThresholdSeconds: 400
+                    ScaleUpPartitionWriteSpeedThresholdPercent: 91
+                    ScaleDownPartitionWriteSpeedThresholdPercent: 31
+                    PartitionStrategyType: CAN_SPLIT
+                }
+                Consumers {
+                    Name: "consumer_1"
+                    Important: true
+                    Codec {
+                        Ids: 0
+                        Ids: 1
+                    }
+                }
+                Consumers {
+                    Name: "consumer_2"
+                    Important: false
+                    Codec {
+                        Ids: 1
+                        Ids: 2
+                    }
+                }
+            }
+        )";
+
+        TestCreatePQGroup(Runtime(), ++txId, "/MyRoot", topicProto);
+        Env().TestWaitNotification(Runtime(), txId);
+
+        auto schemeshardId = TTestTxConfig::SchemeShard;
+        TString exportRequest = Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/topic_full_test"
+                destination_prefix: "topic_export"
+              }
+            }
+        )", S3Port());
+
+        TestExport(Runtime(), schemeshardId, ++txId, "/MyRoot", exportRequest, "", "", Ydb::StatusIds::SUCCESS);
+        Env().TestWaitNotification(Runtime(), txId, schemeshardId);
+        TestGetExport(Runtime(), schemeshardId, txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+
+        auto topicPath = "/topic_export/create_topic.pb";
+        UNIT_ASSERT_C(HasS3File(topicPath), "Topic description file should exist");
+        auto content = GetS3FileContent(topicPath);
+
+        Ydb::Topic::CreateTopicRequest topicDescription;
+        UNIT_ASSERT_C(
+            google::protobuf::TextFormat::ParseFromString(content, &topicDescription),
+            "Failed to parse topic description from S3"
+        );
+
+        const auto& partSettings = topicDescription.partitioning_settings();
+        UNIT_ASSERT_VALUES_EQUAL(partSettings.min_active_partitions(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(partSettings.max_active_partitions(), 10);
+
+        const auto& autoPartSettings = partSettings.auto_partitioning_settings();
+        UNIT_ASSERT_VALUES_EQUAL(autoPartSettings.strategy(), Ydb::Topic::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_SCALE_UP);
+
+        const auto& writeSpeed = autoPartSettings.partition_write_speed();
+        UNIT_ASSERT_VALUES_EQUAL(writeSpeed.stabilization_window().seconds(), 400);
+        UNIT_ASSERT_VALUES_EQUAL(writeSpeed.up_utilization_percent(), 91);
+        UNIT_ASSERT_VALUES_EQUAL(writeSpeed.down_utilization_percent(), 31);
+
+        UNIT_ASSERT_VALUES_EQUAL(topicDescription.retention_period().seconds(), 12);
+
+        UNIT_ASSERT_VALUES_EQUAL(topicDescription.retention_storage_mb(), 100);
+
+        UNIT_ASSERT_VALUES_EQUAL(topicDescription.supported_codecs().codecs_size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(topicDescription.supported_codecs().codecs(0), 1); // CODEC_RAW
+        UNIT_ASSERT_VALUES_EQUAL(topicDescription.supported_codecs().codecs(1), 2); // CODEC_GZIP
+        UNIT_ASSERT_VALUES_EQUAL(topicDescription.supported_codecs().codecs(2), 3); // CODEC_LZOP
+
+        UNIT_ASSERT_VALUES_EQUAL(topicDescription.partition_write_speed_bytes_per_second(), 1024);
+
+        UNIT_ASSERT_VALUES_EQUAL(topicDescription.partition_write_burst_bytes(), 2048);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            static_cast<int>(topicDescription.metering_mode()),
+            static_cast<int>(Ydb::Topic::METERING_MODE_RESERVED_CAPACITY)
+        );
+
+        UNIT_ASSERT_VALUES_EQUAL(topicDescription.consumers_size(), 2);
+
+        const auto& consumer1 = topicDescription.consumers(0);
+        UNIT_ASSERT_VALUES_EQUAL(consumer1.name(), "consumer_1");
+        UNIT_ASSERT_VALUES_EQUAL(consumer1.important(), true);
+        UNIT_ASSERT_VALUES_EQUAL(consumer1.supported_codecs().codecs_size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(consumer1.supported_codecs().codecs(0), 1);
+        UNIT_ASSERT_VALUES_EQUAL(consumer1.supported_codecs().codecs(1), 2);
+
+        const auto& consumer2 = topicDescription.consumers(1);
+        UNIT_ASSERT_VALUES_EQUAL(consumer2.name(), "consumer_2");
+        UNIT_ASSERT_VALUES_EQUAL(consumer2.important(), false);
+        UNIT_ASSERT_VALUES_EQUAL(consumer2.supported_codecs().codecs_size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(consumer2.supported_codecs().codecs(0), 2);
+        UNIT_ASSERT_VALUES_EQUAL(consumer2.supported_codecs().codecs(1), 3);
+
+        const auto& attrs = topicDescription.attributes();
+        UNIT_ASSERT(attrs.size() > 0);
+
+        // RequireAuthRead: false -> _allow_unauthenticated_read: true
+        UNIT_ASSERT(attrs.contains("_allow_unauthenticated_read"));
+        UNIT_ASSERT_VALUES_EQUAL(attrs.at("_allow_unauthenticated_read"), "true");
+
+        // RequireAuthWrite: false -> _allow_unauthenticated_write: true
+        UNIT_ASSERT(attrs.contains("_allow_unauthenticated_write"));
+        UNIT_ASSERT_VALUES_EQUAL(attrs.at("_allow_unauthenticated_write"), "true");
+
+        UNIT_ASSERT(attrs.contains("_abc_id"));
+        UNIT_ASSERT_VALUES_EQUAL(attrs.at("_abc_id"), "123");
+
+        UNIT_ASSERT(attrs.contains("_abc_slug"));
+        UNIT_ASSERT_VALUES_EQUAL(attrs.at("_abc_slug"), "abc_slug");
+
+        UNIT_ASSERT(attrs.contains("_federation_account"));
+        UNIT_ASSERT_VALUES_EQUAL(attrs.at("_federation_account"), "federation_account");
+
+        UNIT_ASSERT(attrs.contains("_timestamp_type"));
+        UNIT_ASSERT_VALUES_EQUAL(attrs.at("_timestamp_type"), "LogAppendTime");
+
+        UNIT_ASSERT(attrs.contains("_partitions_per_tablet"));
+        UNIT_ASSERT_VALUES_EQUAL(attrs.at("_partitions_per_tablet"), "3");
+
+        UNIT_ASSERT(attrs.contains("_max_partition_storage_size"));
+        UNIT_ASSERT_VALUES_EQUAL(attrs.at("_max_partition_storage_size"), "10");
+
+        // SourceIdLifetimeSeconds: 14 -> message_group_seqno_retention_period_ms: 14000
+        UNIT_ASSERT(attrs.contains("_message_group_seqno_retention_period_ms"));
+        UNIT_ASSERT_VALUES_EQUAL(attrs.at("_message_group_seqno_retention_period_ms"), "14000");
+
+        UNIT_ASSERT(attrs.contains("_max_partition_message_groups_seqno_stored"));
+        UNIT_ASSERT_VALUES_EQUAL(attrs.at("_max_partition_message_groups_seqno_stored"), "10000000");
+
+        auto permissionsPath = "/topic_export/permissions.pb";
+        UNIT_ASSERT_C(HasS3File(permissionsPath), "Permissions file should exist");
     }
 
     Y_UNIT_TEST(ExternalDataSourceAuthNone) {

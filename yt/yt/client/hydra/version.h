@@ -116,7 +116,7 @@ public:
     [[nodiscard]] TAutomatonVersion Advance() const;
 
 private:
-    explicit TAutomatonVersion(
+    TAutomatonVersion(
         TPhysicalVersion physicalVersion,
         TLogicalVersion logicalVersion);
 

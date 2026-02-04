@@ -653,18 +653,18 @@ private:
 
     std::optional<TVector<TExprList>> CollectEffects(const TExprList& list, TExprContext& ctx, TKqpOptimizeContext& kqpCtx) {
         TVector<TEffectsInfo> effectsInfos;
-        TVector<TExprNode::TPtr> externalEffects;
+        TVector<TKqpSinkEffect> externalEffects;
 
         for (const auto& expr : list) {
             if (auto sinkEffect = expr.Maybe<TKqpSinkEffect>()) {
                 const auto sinkSettings = GetStageSink(sinkEffect.Cast()).Settings().Maybe<TKqpTableSinkSettings>();
                 if (!sinkSettings) {
-                    // External writes always added into one physical transaction.
-                    externalEffects.emplace_back(expr.Ptr());
+                    externalEffects.emplace_back(sinkEffect.Cast());
                 } else {
                     // Two table sinks can't be executed in one physical transaction if they write into same table and have same priority.
 
                     const bool needSingleEffect = sinkSettings.Cast().Mode() == "fill_table"
+                        || sinkSettings.Cast().InconsistentWrite().Value() == "true"sv
                         || (kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, sinkSettings.Cast().Table().Path()).Metadata->Kind == EKikimrTableKind::Olap);
 
                     if (needSingleEffect) {
@@ -712,13 +712,22 @@ private:
             }
         }
 
-        if (externalEffects) {
-            if (!effectsInfos) {
+        for (const auto& sinkEffect : externalEffects) {
+            // Two external writes can not be in single physical transaction if they use same sink of same stage.
+
+            auto it = std::find_if(
+                effectsInfos.begin(),
+                effectsInfos.end(),
+                [id = std::pair(sinkEffect.Stage().Raw(), FromString<ui64>(sinkEffect.SinkIndex()))](const TEffectsInfo& effectsInfo) {
+                    return !effectsInfo.SinkEffects.contains(id);
+                });
+
+            if (it == effectsInfos.end()) {
                 effectsInfos.emplace_back();
+                it = std::prev(effectsInfos.end());
             }
-            for (const auto& expr : externalEffects) {
-                effectsInfos.back().AddExpr(expr);
-            }
+
+            it->AddExpr(sinkEffect.Ptr());
         }
 
         TVector<TExprList> results;

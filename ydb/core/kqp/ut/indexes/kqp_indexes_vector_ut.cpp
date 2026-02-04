@@ -222,27 +222,54 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         return session;
     }
 
-    TSession DoCreateTableForVectorIndex(TTableClient& db, int flags = 0) {
-        const char* dataCol = flags & F_UNDERSCORE_DATA ? "___data" : "data";
-        auto session = DoOnlyCreateTableForVectorIndex(db, flags);
-        {
-            const TString query1 = TStringBuilder()
-                << "UPSERT INTO `/Root/TestTable` (pk, emb, " << dataCol << ") VALUES "
-                << "(0, \"\x03\x30\x02\", \"0\"),"
-                    "(1, \"\x13\x31\x02\", \"1\"),"
-                    "(2, \"\x23\x32\x02\", \"2\"),"
-                    "(3, \"\x53\x33\x02\", \"3\"),"
-                    "(4, \"\x43\x34\x02\", \"4\"),"
-                    "(5, \"\x50\x60\x02\", \"5\"),"
-                    "(6, \"\x61\x11\x02\", \"6\"),"
-                    "(7, \"\x12\x62\x02\", \"7\"),"
-                    "(8, \"\x75\x76\x02\", \"8\"),"
-                    "(9, \"\x76\x76\x02\", \"9\");";
+    void DoTruncateTable(TSession& session) {
+        const TString truncateTable(Q_(R"(
+            TRUNCATE TABLE `/Root/TestTable`;
+        )"));
 
-            auto result = session.ExecuteDataQuery(Q_(query1), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
-                .ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
+        auto result = session.ExecuteSchemeQuery(truncateTable).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+
+    bool IsTableEmpty(TSession& session, const TString& tablePath) {
+        TString query = Sprintf(R"(
+            SELECT COUNT(*) FROM `%s`;
+        )"
+        , tablePath.c_str());
+
+        auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto resultSet = result.GetResultSet(0);
+        TResultSetParser parser(resultSet);
+        UNIT_ASSERT(parser.TryNextRow());
+        auto count = parser.ColumnParser(0).GetUint64();
+        return count == 0;
+    }
+
+    void DoOnlyUpsertValuesIntoTable(TSession& session, int flags = 0) {
+        const char* dataCol = flags & F_UNDERSCORE_DATA ? "___data" : "data";
+        const TString query1 = TStringBuilder()
+            << "UPSERT INTO `/Root/TestTable` (pk, emb, " << dataCol << ") VALUES "
+            << "(0, \"\x03\x30\x02\", \"0\"),"
+                "(1, \"\x13\x31\x02\", \"1\"),"
+                "(2, \"\x23\x32\x02\", \"2\"),"
+                "(3, \"\x53\x33\x02\", \"3\"),"
+                "(4, \"\x43\x34\x02\", \"4\"),"
+                "(5, \"\x50\x60\x02\", \"5\"),"
+                "(6, \"\x61\x11\x02\", \"6\"),"
+                "(7, \"\x12\x62\x02\", \"7\"),"
+                "(8, \"\x75\x76\x02\", \"8\"),"
+                "(9, \"\x76\x76\x02\", \"9\");";
+
+        auto result = session.ExecuteDataQuery(Q_(query1), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+            .ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+
+    TSession DoCreateTableForVectorIndex(TTableClient& db, int flags = 0) {
+        auto session = DoOnlyCreateTableForVectorIndex(db, flags);
+        DoOnlyUpsertValuesIntoTable(session, flags);
         return session;
     }
 
@@ -442,6 +469,48 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
 
     Y_UNIT_TEST(OrderByCosineDistanceNotNullableLevel3WithOverlap) {
         DoTestOrderByCosine(3, F_OVERLAP);
+    }
+
+    Y_UNIT_TEST(BadFormat) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetFeatureFlags(featureFlags)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+
+        auto db = kikimr.GetTableClient();
+
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            const TString createTableSql(R"(
+                --!syntax_v1
+                CREATE TABLE TestVector2 (id Uint64, embedding String, embedding_bit String, PRIMARY KEY (id));
+            )");
+            auto result = session.ExecuteSchemeQuery(createTableSql).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const TString createIndex(Q_(R"(
+                ALTER TABLE `/Root/TestVector2` ADD INDEX idx_vector_3_200 GLOBAL USING vector_kmeans_tree
+                ON (embedding) WITH (distance=cosine, vector_type="uint8", vector_dimension=200, levels=3, clusters=2);
+            )"));
+            auto result = session.ExecuteSchemeQuery(createIndex).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const TString query1(Q_(R"(UPSERT INTO TestVector2 (id, embedding) VALUES (1, "00"), (2, "01"), (3, "10"), (4, "11"),
+                (5, "00"), (6, "01"), (7, "10"), (8, "11");)"));
+            auto result = session.ExecuteDataQuery(Q_(query1), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                .ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
     }
 
     Y_UNIT_TEST_QUAD(OrderByCosineLevel1WithBitQuantization, Nullable, Overlap) {
@@ -1157,7 +1226,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         }
     }
 
-    TVector<std::pair<TActorId, TActorId>> ResolveFollowers(TTestActorRuntime &runtime, ui64 tabletId, ui32 nodeIndex) {
+    TVector<TEvStateStorage::TEvInfo::TFollowerInfo> ResolveFollowers(TTestActorRuntime & runtime, ui64 tabletId, ui32 nodeIndex) {
         auto sender = runtime.AllocateEdgeActor(nodeIndex);
         runtime.Send(new IEventHandle(MakeStateStorageProxyID(), sender,
             new TEvStateStorage::TEvLookup(tabletId, 0)),
@@ -1208,8 +1277,8 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
                 actorTypes[actorId] = type;
                 if (Followers) {
                     auto followers = ResolveFollowers(*runtime, shardId, 0);
-                    for (auto& [_, followerId]: followers) {
-                        actorTypes[followerId] = type | followerTypeFlag;
+                    for (const auto& followerInfo: followers) {
+                        actorTypes[followerInfo.FollowerTablet] = type | followerTypeFlag;
                     }
                 }
             }
@@ -1266,6 +1335,48 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         }
     }
 
+    Y_UNIT_TEST_QUAD(VectorIndexTruncateTable, Covered, Overlap) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableTruncateTable(true);
+        auto serverSettings = TKikimrSettings().SetFeatureFlags(featureFlags);
+        TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+
+        const int flags = F_NULLABLE | (Covered ? F_COVERING : 0) | (Overlap ? F_OVERLAP : 0);
+        auto db = kikimr.GetTableClient();
+        auto session = DoCreateTableForVectorIndex(db, flags);
+
+        {
+            const TString createIndex(Q_(Sprintf(R"(
+                ALTER TABLE `/Root/TestTable`
+                    ADD INDEX index
+                    GLOBAL USING vector_kmeans_tree
+                    ON (emb)%s
+                    WITH (distance=cosine, vector_type="uint8", vector_dimension=2, levels=1, clusters=2%s);
+                )",
+                (flags & F_COVERING ? " COVER (data, emb)" : ""),
+                (flags & F_OVERLAP ? ", overlap_clusters=2" : ""))));
+
+            auto result = session.ExecuteSchemeQuery(createIndex)
+                            .ExtractValueSync();
+
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        DoPositiveQueriesVectorIndexOrderByCosine(session);
+
+        UNIT_ASSERT(!IsTableEmpty(session, "/Root/TestTable"));
+        UNIT_ASSERT(!IsTableEmpty(session, "/Root/TestTable/index/indexImplPostingTable"));
+        UNIT_ASSERT(!IsTableEmpty(session, "/Root/TestTable/index/indexImplLevelTable"));
+        DoTruncateTable(session);
+        UNIT_ASSERT(IsTableEmpty(session, "/Root/TestTable"));
+        UNIT_ASSERT(IsTableEmpty(session, "/Root/TestTable/index/indexImplPostingTable"));
+        UNIT_ASSERT(!IsTableEmpty(session, "/Root/TestTable/index/indexImplLevelTable"));
+
+        DoOnlyUpsertValuesIntoTable(session);
+        DoPositiveQueriesVectorIndexOrderByCosine(session);
+    }
 }
 
 }

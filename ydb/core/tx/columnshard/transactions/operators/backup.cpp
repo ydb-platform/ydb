@@ -35,31 +35,44 @@ bool TBackupTransactionOperator::DoParse(TColumnShard& owner, const TString& dat
 }
 
 TBackupTransactionOperator::TProposeResult TBackupTransactionOperator::DoStartProposeOnExecute(TColumnShard& /*owner*/, NTabletFlatExecutor::TTransactionContext& txc) {
-    if (!TaskExists) {
-        AFL_VERIFY(!!TxAddTask);
+    if (!TaskExists && TxAddTask) {
         AFL_VERIFY(TxAddTask->Execute(txc, NActors::TActivationContext::AsActorContext()));
     }
     return TProposeResult();
 }
 
 void TBackupTransactionOperator::DoStartProposeOnComplete(TColumnShard& /*owner*/, const TActorContext& ctx) {
-    if (!TaskExists) {
-        AFL_VERIFY(!!TxAddTask);
+    if (!TaskExists && TxAddTask) {
         TxAddTask->Complete(ctx);
         TxAddTask.reset();
     }
 }
 
 bool TBackupTransactionOperator::ProgressOnExecute(
-    TColumnShard& /*owner*/, const NOlap::TSnapshot& /*version*/, NTabletFlatExecutor::TTransactionContext& /*txc*/) {
-    return true;
+    TColumnShard& owner, const NOlap::TSnapshot& /*version*/, NTabletFlatExecutor::TTransactionContext& txc) {
+    AFL_VERIFY(!TxRemove);
+    auto status = owner.GetBackgroundSessionsManager()->GetStatus(ExportTask->GetClassName(), ::ToString(ExportTask->GetIdentifier().GetPathId()));
+    owner.LastCompletedBackupTransaction.SetTxId(GetTxId());
+    auto& opResult = *owner.LastCompletedBackupTransaction.MutableOpResult();
+    opResult.SetSuccess(status.Success);
+    opResult.SetExplain(status.ErrorMessage);
+    TxRemove = owner.GetBackgroundSessionsManager()->TxRemove(ExportTask->GetClassName(), ::ToString(ExportTask->GetIdentifier().GetPathId()));
+    NIceDb::TNiceDb db(txc.DB);
+    Schema::SaveSpecialValue(db, Schema::EValueIds::LastCompletedBackupTransaction, owner.LastCompletedBackupTransaction.SerializeAsString());
+    return TxRemove->Execute(txc, NActors::TActivationContext::AsActorContext()); 
 }
 
 bool TBackupTransactionOperator::ProgressOnComplete(TColumnShard& owner, const TActorContext& ctx) {
+    auto status = owner.GetBackgroundSessionsManager()->GetStatus(ExportTask->GetClassName(), ::ToString(ExportTask->GetIdentifier().GetPathId()));
     for (TActorId subscriber : NotifySubscribers) {
         auto event = MakeHolder<TEvColumnShard::TEvNotifyTxCompletionResult>(owner.TabletID(), GetTxId());
+        auto& opResult = *event->Record.MutableOpResult();
+        opResult.SetSuccess(status.Success);
+        opResult.SetExplain(status.ErrorMessage);
         ctx.Send(subscriber, event.Release(), 0, 0);
     }
+    AFL_VERIFY(!!TxRemove);
+    TxRemove->Complete(NActors::TActivationContext::AsActorContext());
     return true;
 }
 
@@ -71,9 +84,13 @@ bool TBackupTransactionOperator::ExecuteOnAbort(TColumnShard& owner, NTabletFlat
     return TxAbort->Execute(txc, NActors::TActivationContext::AsActorContext());
 }
 
-bool TBackupTransactionOperator::CompleteOnAbort(TColumnShard & /*owner*/, const TActorContext & /*ctx*/) {
+bool TBackupTransactionOperator::CompleteOnAbort(TColumnShard& /*owner*/, const TActorContext& ctx) {
+    if (TxAbort) { 
+        TxAbort->Complete(ctx); 
+    }
     return true;
 }
+
 void TBackupTransactionOperator::RegisterSubscriber(const TActorId &actorId) {
     NotifySubscribers.insert(actorId);
 }

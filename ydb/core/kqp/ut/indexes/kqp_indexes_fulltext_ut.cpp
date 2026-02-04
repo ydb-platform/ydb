@@ -108,10 +108,11 @@ void DoValidateRelevanceQuery(NQuery::TQueryClient& db, const TString& relevance
 };
 
 
-void AddIndexNGram(NQuery::TQueryClient& db, const size_t nGramMinLength = 3, const size_t nGramMaxLength = 3, const bool edgeNGram = false, const bool covered = false) {
+void AddIndexNGram(NQuery::TQueryClient& db, const size_t nGramMinLength = 3, const size_t nGramMaxLength = 3,
+    const bool relevance = false, const bool edgeNGram = false, const bool covered = false) {
     const TString query = Sprintf(R"sql(
         ALTER TABLE `/Root/Texts` ADD INDEX fulltext_idx
-            GLOBAL USING fulltext_plain
+            GLOBAL USING %s
             ON (Text) %s
             WITH (
                 tokenizer=standard,
@@ -121,7 +122,11 @@ void AddIndexNGram(NQuery::TQueryClient& db, const size_t nGramMinLength = 3, co
                 filter_ngram_min_length=%d,
                 filter_ngram_max_length=%d
             );
-    )sql", covered ? "COVER (Text, Data)" : "", !edgeNGram, edgeNGram, nGramMinLength, nGramMaxLength);
+        )sql",
+        relevance ? "fulltext_relevance" : "fulltext_plain",
+        covered ? "COVER (Text, Data)" : "",
+        !edgeNGram, edgeNGram, nGramMinLength, nGramMaxLength
+    );
     auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 }
@@ -285,7 +290,7 @@ Y_UNIT_TEST(AddIndexEdgeNGram) {
 
     CreateTexts(db);
     UpsertTexts(db);
-    AddIndexNGram(db, 3, 3, true);
+    AddIndexNGram(db, 3, 3, false, true);
 
     const auto index = ReadIndex(db);
     Cerr << NYdb::FormatResultSetYson(index) << Endl;
@@ -3479,7 +3484,7 @@ Y_UNIT_TEST_QUAD(SelectWithFulltextContainsAndNgram, Edge, Covered) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
-    AddIndexNGram(db, 3, 3, Edge, Covered);
+    AddIndexNGram(db, 3, 3, false, Edge, Covered);
 
     {
         TString query = R"sql(
@@ -3568,7 +3573,7 @@ Y_UNIT_TEST_QUAD(SelectWithFulltextContainsAndNgram, Edge, Covered) {
     }
 }
 
-Y_UNIT_TEST_QUAD(SelectWithFulltextContainsAndNgramWildcard, Edge, Covered) {
+void DoSelectWithFulltextContainsAndNgramWildcard(bool relevance, bool edge, bool covered) {
     auto kikimr = Kikimr();
     auto db = kikimr.GetQueryClient();
 
@@ -3597,7 +3602,7 @@ Y_UNIT_TEST_QUAD(SelectWithFulltextContainsAndNgramWildcard, Edge, Covered) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
-    AddIndexNGram(db, 3, 5, Edge, Covered);
+    AddIndexNGram(db, 3, 5, relevance, edge, covered);
 
     {
         TString query = R"sql(
@@ -3627,7 +3632,7 @@ Y_UNIT_TEST_QUAD(SelectWithFulltextContainsAndNgramWildcard, Edge, Covered) {
         CompareYson(R"([
             [[0u];["Arena Allocation"]]
         ])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
-        CompareYson(Edge ? R"([])" : R"([
+        CompareYson(edge ? R"([])" : R"([
             [[2u];["Werner Heisenberg"]]
         ])", NYdb::FormatResultSetYson(result.GetResultSet(1)));
         CompareYson(R"([
@@ -3640,6 +3645,14 @@ Y_UNIT_TEST_QUAD(SelectWithFulltextContainsAndNgramWildcard, Edge, Covered) {
             [[9u];["морекот"]]
         ])", NYdb::FormatResultSetYson(result.GetResultSet(4)));
     }
+}
+
+Y_UNIT_TEST_QUAD(SelectWithFulltextContainsAndNgramWildcard, Edge, Covered) {
+    DoSelectWithFulltextContainsAndNgramWildcard(false, Edge, Covered);
+}
+
+Y_UNIT_TEST_QUAD(SelectWithRelevanceContainsAndNgramWildcard, Edge, Covered) {
+    DoSelectWithFulltextContainsAndNgramWildcard(true, Edge, Covered);
 }
 
 Y_UNIT_TEST(SelectWithFulltextContainsAndNgramWildcardSpecialCharacters) {
@@ -3732,6 +3745,68 @@ Y_UNIT_TEST(SelectWithFulltextContainsAndNgramWildcardSpecialCharacters) {
     }
 }
 
+Y_UNIT_TEST(ImbalanceNgrams) {
+    auto kikimr = Kikimr();
+    auto db = kikimr.GetQueryClient();
+    kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPUTE, NActors::NLog::PRI_DEBUG);
+
+    NYdb::NQuery::TExecuteQuerySettings querySettings;
+    querySettings.ClientTimeout(TDuration::Minutes(1));
+
+    CreateTexts(db);
+
+    {
+        TString query = R"sql(
+            UPSERT INTO `/Root/Texts` (`Key`, `Text`) VALUES
+                (1, "Users/Ab"),
+                (2, "Users/Ann"),
+                (3, "Users/Britt"),
+                (4, "Users/Jack"),
+                (5, "Users/Joe"),
+                (6, "Users/Henry"),
+                (7, "Users/Pete"),
+                (8, "Users/Zoe"),
+                (9, "Users/John"),
+                (10, "Users/James"),
+                (11, "Users/Lewis")
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    {
+        const TString query = R"sql(
+            ALTER TABLE `/Root/Texts` ADD INDEX fulltext_idx
+                GLOBAL USING fulltext_relevance
+                ON (Text)
+                WITH (
+                    tokenizer=whitespace,
+                    use_filter_lowercase=true,
+                    use_filter_ngram=true,
+                    filter_ngram_min_length=3,
+                    filter_ngram_max_length=3
+                );
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    {
+        // Check that imbalanced ngram filtering doesn't break the result
+        TString query = R"sql(
+            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextContains(`Text`, "*Users/Br*")
+            ORDER BY `Key`;
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        CompareYson(R"([
+            [[3u];["Users/Britt"]]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+    }
+}
+
 Y_UNIT_TEST(SelectWithFulltextContainsAndNgramWildcardBoundaries) {
     auto kikimr = Kikimr();
     auto db = kikimr.GetQueryClient();
@@ -3794,7 +3869,7 @@ Y_UNIT_TEST(SelectWithFulltextContainsAndNgramWildcardBoundaries) {
     }
 }
 
-Y_UNIT_TEST(SelectWithFulltextContainsAndNgramWildcardUtf8) {
+Y_UNIT_TEST(SelectWithFulltextContainsAndNgramWildcardUtf8Size) {
     auto kikimr = Kikimr();
     auto db = kikimr.GetQueryClient();
 
@@ -3960,6 +4035,118 @@ Y_UNIT_TEST(SelectWithFulltextContainsAndNgramWildcardUtf8) {
     }
 }
 
+Y_UNIT_TEST_QUAD(SelectWithFulltextContainsAndNgramWildcardUnicode, RELEVANCE, UTF8) {
+    auto kikimr = Kikimr();
+    auto db = kikimr.GetQueryClient();
+
+    NYdb::NQuery::TExecuteQuerySettings querySettings;
+    querySettings.ClientTimeout(TDuration::Minutes(1));
+
+    CreateTexts(db, UTF8);
+
+    {
+        TString query = R"sql(
+            UPSERT INTO `/Root/Texts` (`Key`, `Text`) VALUES
+                (0, "abc023"),
+                (1, "◌̧◌̇◌̣"),
+                (2, "﷽‎؈ۻ"),
+                (3, "异体字異體字"),
+                (4, "ä̸̱b̴̪͛"),
+                (5, "😢🐶🐕🐈"),
+                (6, "4️⃣🐕‍🦺🐈‍⬛"),
+                (7, "👨‍👩‍👧‍👦🇦🇨")
+
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    {
+        const TString query = std::format(R"sql(
+            ALTER TABLE `/Root/Texts` ADD INDEX fulltext_idx
+                GLOBAL USING {0}
+                ON (Text)
+                WITH (
+                    tokenizer=whitespace,
+                    use_filter_lowercase=true,
+                    use_filter_ngram=true,
+                    filter_ngram_min_length=2,
+                    filter_ngram_max_length=2
+                );
+        )sql", RELEVANCE ? "fulltext_relevance" : "fulltext_plain");
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    {
+        const TString query = R"sql(
+            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextContains(`Text`, "*bc0*")
+            ORDER BY `Key`;
+
+            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextContains(`Text`, "*◌̇*")
+            ORDER BY `Key`;
+
+            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextContains(`Text`, "*؈ۻ")
+            ORDER BY `Key`;
+
+            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextContains(`Text`, "*字異體*")
+            ORDER BY `Key`;
+
+            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextContains(`Text`, "ä̸̱*")
+            ORDER BY `Key`;
+
+            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextContains(`Text`, "*🐶🐕*")
+            ORDER BY `Key`;
+
+            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextContains(`Text`, "*🐶*")  -- should return empty response: query shorter than ngrams
+            ORDER BY `Key`;
+
+            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextContains(`Text`, "*🐕‍🦺*")  -- despite it looks like single character it is not: it's 🐕 with modifiers
+            ORDER BY `Key`;
+
+            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextContains(`Text`, "👨\u200D👩*")  -- 👨‍👩‍👧‍👦 is combination of 👨, 👩, 👧 and 👦
+            ORDER BY `Key`;
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        CompareYson(R"([
+            [[0u];["abc023"]]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+        CompareYson(R"([
+            [[1u];["◌̧◌̇◌̣"]]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(1)));
+        CompareYson(R"([
+            [[2u];["﷽‎؈ۻ"]]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(2)));
+        CompareYson(R"([
+            [[3u];["异体字異體字"]]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(3)));
+        CompareYson(R"([
+            [[4u];["ä̸̱b̴̪͛"]]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(4)));
+        CompareYson(R"([
+            [[5u];["😢🐶🐕🐈"]]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(5)));
+        CompareYson(R"([])", NYdb::FormatResultSetYson(result.GetResultSet(6)));
+        CompareYson(R"([
+            [[6u];["4️⃣🐕‍🦺🐈‍⬛"]]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(7)));
+        CompareYson(R"([
+            [[7u];["👨‍👩‍👧‍👦🇦🇨"]]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(8)));
+    }
+}
+
 Y_UNIT_TEST(SelectWithFulltextContainsAndEdgeNgramWildcard) {
         auto kikimr = Kikimr();
     auto db = kikimr.GetQueryClient();
@@ -3979,7 +4166,7 @@ Y_UNIT_TEST(SelectWithFulltextContainsAndEdgeNgramWildcard) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
-    AddIndexNGram(db, 1, 5, true);
+    AddIndexNGram(db, 1, 5, false, true);
 
     {
         const TString query = R"sql(
@@ -4236,8 +4423,7 @@ Y_UNIT_TEST_QUAD(SelectWithFulltextContainsShorterThanMinNgram, RELEVANCE, UTF8)
                     filter_ngram_min_length=3,
                     filter_ngram_max_length=3
                 );
-        )sql",
-        RELEVANCE ? "fulltext_relevance" : "fulltext_plain");
+        )sql", RELEVANCE ? "fulltext_relevance" : "fulltext_plain");
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
@@ -4469,6 +4655,534 @@ Y_UNIT_TEST(AddFullTextRelevanceIndexWithTruncate) {
         verifyIndexWorksCorrectly();
     }
 
+}
+
+// Tests for different primary key types
+
+Y_UNIT_TEST(FulltextIndexWithUtf8Key) {
+    auto kikimr = Kikimr();
+    auto db = kikimr.GetQueryClient();
+
+    { // Create table with Utf8 primary key
+        TString query = R"sql(
+            CREATE TABLE `/Root/TextsUtf8Key` (
+                Key Utf8,
+                Text String,
+                Data String,
+                PRIMARY KEY (Key)
+            );
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    { // Insert data
+        TString query = R"sql(
+            UPSERT INTO `/Root/TextsUtf8Key` (Key, Text, Data) VALUES
+                ("alpha", "Cats chase small animals.", "cats data"),
+                ("beta", "Dogs chase small cats.", "dogs data"),
+                ("gamma", "Cats love cats.", "cats cats data"),
+                ("delta", "Foxes love dogs.", "foxes data")
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    { // Add fulltext index
+        TString query = R"sql(
+            ALTER TABLE `/Root/TextsUtf8Key` ADD INDEX fulltext_idx
+                GLOBAL USING fulltext_plain
+                ON (Text)
+                WITH (tokenizer=standard, use_filter_lowercase=true)
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    { // Query using FulltextContains
+        TString query = R"sql(
+            SELECT Key, Text FROM `/Root/TextsUtf8Key` VIEW `fulltext_idx`
+            WHERE FulltextContains(Text, "cats")
+            ORDER BY Key
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        auto resultSet = result.GetResultSet(0);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 3);
+    }
+}
+
+Y_UNIT_TEST(FulltextIndexWithStringKey) {
+    auto kikimr = Kikimr();
+    auto db = kikimr.GetQueryClient();
+
+    { // Create table with String primary key
+        TString query = R"sql(
+            CREATE TABLE `/Root/TextsStringKey` (
+                Key String NOT NULL,
+                Text String,
+                Data String,
+                PRIMARY KEY (Key)
+            );
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    { // Insert data
+        TString query = R"sql(
+            UPSERT INTO `/Root/TextsStringKey` (Key, Text, Data) VALUES
+                ("key_one", "Cats chase small animals.", "cats data"),
+                ("key_two", "Dogs chase small cats.", "dogs data"),
+                ("key_three", "Cats love cats.", "cats cats data"),
+                ("key_four", "Foxes love dogs.", "foxes data")
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    { // Add fulltext index
+        TString query = R"sql(
+            ALTER TABLE `/Root/TextsStringKey` ADD INDEX fulltext_idx
+                GLOBAL USING fulltext_plain
+                ON (Text)
+                WITH (tokenizer=standard, use_filter_lowercase=true)
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    { // Query using FulltextContains
+        TString query = R"sql(
+            SELECT Key, Text FROM `/Root/TextsStringKey` VIEW `fulltext_idx`
+            WHERE FulltextContains(Text, "dogs")
+            ORDER BY Key
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        auto resultSet = result.GetResultSet(0);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 2);
+    }
+}
+
+Y_UNIT_TEST(FulltextIndexWithInt64Key) {
+    auto kikimr = Kikimr();
+    auto db = kikimr.GetQueryClient();
+
+    { // Create table with Int64 primary key
+        TString query = R"sql(
+            CREATE TABLE `/Root/TextsInt64Key` (
+                Key Int64,
+                Text String,
+                Data String,
+                PRIMARY KEY (Key)
+            );
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    { // Insert data with negative and positive keys
+        TString query = R"sql(
+            UPSERT INTO `/Root/TextsInt64Key` (Key, Text, Data) VALUES
+                (-100, "Cats chase small animals.", "cats data"),
+                (-50, "Dogs chase small cats.", "dogs data"),
+                (0, "Cats love cats.", "cats cats data"),
+                (50, "Foxes love dogs.", "foxes data"),
+                (100, "Birds fly high.", "birds data")
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    { // Add fulltext index
+        TString query = R"sql(
+            ALTER TABLE `/Root/TextsInt64Key` ADD INDEX fulltext_idx
+                GLOBAL USING fulltext_plain
+                ON (Text)
+                WITH (tokenizer=standard, use_filter_lowercase=true)
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    { // Query using FulltextContains
+        TString query = R"sql(
+            SELECT Key, Text FROM `/Root/TextsInt64Key` VIEW `fulltext_idx`
+            WHERE FulltextContains(Text, "cats")
+            ORDER BY Key
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        auto resultSet = result.GetResultSet(0);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 3);
+    }
+
+    { // Query using FulltextContains - verify correct keys returned
+        TString query = R"sql(
+            SELECT Key FROM `/Root/TextsInt64Key` VIEW `fulltext_idx`
+            WHERE FulltextContains(Text, "love")
+            ORDER BY Key
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([
+            [[0]];
+            [[50]]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+    }
+}
+
+// Tests for composite primary keys
+
+Y_UNIT_TEST(FulltextIndexWithCompositeKeyTwoColumns) {
+    auto kikimr = Kikimr();
+    auto db = kikimr.GetQueryClient();
+
+    { // Create table with composite key (2 columns: Utf8 + Int64)
+        TString query = R"sql(
+            CREATE TABLE `/Root/TextsCompositeKey2` (
+                Category Utf8,
+                Id Int64,
+                Text String,
+                Data String,
+                PRIMARY KEY (Category, Id)
+            );
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    { // Insert data
+        TString query = R"sql(
+            UPSERT INTO `/Root/TextsCompositeKey2` (Category, Id, Text, Data) VALUES
+                ("animals", 1, "Cats chase small animals.", "cats data"),
+                ("animals", 2, "Dogs chase small cats.", "dogs data"),
+                ("pets", 1, "Cats love cats.", "cats cats data"),
+                ("pets", 2, "Foxes love dogs.", "foxes data"),
+                ("wildlife", 1, "Birds fly high in the sky.", "birds data")
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    { // Add fulltext index
+        TString query = R"sql(
+            ALTER TABLE `/Root/TextsCompositeKey2` ADD INDEX fulltext_idx
+                GLOBAL USING fulltext_plain
+                ON (Text)
+                WITH (tokenizer=standard, use_filter_lowercase=true)
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    { // Query using FulltextContains
+        TString query = R"sql(
+            SELECT Category, Id, Text FROM `/Root/TextsCompositeKey2` VIEW `fulltext_idx`
+            WHERE FulltextContains(Text, "cats")
+            ORDER BY Category, Id
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        auto resultSet = result.GetResultSet(0);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 3);
+    }
+
+    { // Query with specific composite key result
+        TString query = R"sql(
+            SELECT Category, Id FROM `/Root/TextsCompositeKey2` VIEW `fulltext_idx`
+            WHERE FulltextContains(Text, "birds fly")
+            ORDER BY Category, Id
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([
+            [["wildlife"];[1]]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+    }
+}
+
+Y_UNIT_TEST(FulltextIndexWithCompositeKeyThreeColumns) {
+    auto kikimr = Kikimr();
+    auto db = kikimr.GetQueryClient();
+
+    { // Create table with composite key (3 columns: String + Utf8 + Int64)
+        TString query = R"sql(
+            CREATE TABLE `/Root/TextsCompositeKey3` (
+                Tenant String,
+                Category Utf8,
+                Id Int64,
+                Text String,
+                Data String,
+                PRIMARY KEY (Tenant, Category, Id)
+            );
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    { // Insert data
+        TString query = R"sql(
+            UPSERT INTO `/Root/TextsCompositeKey3` (Tenant, Category, Id, Text, Data) VALUES
+                ("tenant_a", "animals", 1, "Cats chase small animals.", "cats data"),
+                ("tenant_a", "animals", 2, "Dogs chase small cats.", "dogs data"),
+                ("tenant_a", "pets", 1, "Cats love cats.", "cats cats data"),
+                ("tenant_b", "animals", 1, "Foxes love dogs.", "foxes data"),
+                ("tenant_b", "wildlife", 1, "Birds fly high in the sky.", "birds data"),
+                ("tenant_b", "wildlife", 2, "Eagles soar above the mountains.", "eagles data")
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    { // Add fulltext index
+        TString query = R"sql(
+            ALTER TABLE `/Root/TextsCompositeKey3` ADD INDEX fulltext_idx
+                GLOBAL USING fulltext_plain
+                ON (Text)
+                WITH (tokenizer=standard, use_filter_lowercase=true)
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    { // Query using FulltextContains
+        TString query = R"sql(
+            SELECT Tenant, Category, Id, Text FROM `/Root/TextsCompositeKey3` VIEW `fulltext_idx`
+            WHERE FulltextContains(Text, "cats")
+            ORDER BY Tenant, Category, Id
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        auto resultSet = result.GetResultSet(0);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 3);
+    }
+
+    { // Query with specific composite key result
+        TString query = R"sql(
+            SELECT Tenant, Category, Id FROM `/Root/TextsCompositeKey3` VIEW `fulltext_idx`
+            WHERE FulltextContains(Text, "eagles soar")
+            ORDER BY Tenant, Category, Id
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([
+            [["tenant_b"];["wildlife"];[2]]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    { // Query multiple words across tenants
+        TString query = R"sql(
+            SELECT Tenant, Category, Id FROM `/Root/TextsCompositeKey3` VIEW `fulltext_idx`
+            WHERE FulltextContains(Text, "love")
+            ORDER BY Tenant, Category, Id
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([
+            [["tenant_a"];["pets"];[1]];
+            [["tenant_b"];["animals"];[1]]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+    }
+}
+
+Y_UNIT_TEST(FulltextIndexWithCompositeKeyMixedTypes) {
+    auto kikimr = Kikimr();
+    auto db = kikimr.GetQueryClient();
+
+    { // Create table with composite key (3 columns: Int64 + String + Utf8)
+        TString query = R"sql(
+            CREATE TABLE `/Root/TextsCompositeKeyMixed` (
+                Year Int64,
+                Region String ,
+                Name Utf8,
+                Description String,
+                Tags String,
+                PRIMARY KEY (Year, Region, Name)
+            );
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    { // Insert data
+        TString query = R"sql(
+            UPSERT INTO `/Root/TextsCompositeKeyMixed` (Year, Region, Name, Description, Tags) VALUES
+                (2023, "us-west", "project-alpha", "Machine learning platform for data science.", "ml data"),
+                (2023, "us-east", "project-beta", "Cloud computing infrastructure.", "cloud infra"),
+                (2024, "us-west", "project-gamma", "Advanced analytics and machine learning tools.", "ml analytics"),
+                (2024, "eu-central", "project-delta", "Enterprise data management system.", "data enterprise"),
+                (2024, "eu-central", "project-epsilon", "Real-time data streaming platform.", "streaming data")
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    { // Add fulltext index
+        TString query = R"sql(
+            ALTER TABLE `/Root/TextsCompositeKeyMixed` ADD INDEX fulltext_idx
+                GLOBAL USING fulltext_plain
+                ON (Description)
+                WITH (tokenizer=standard, use_filter_lowercase=true)
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    { // Query using FulltextContains - find machine learning projects
+        TString query = R"sql(
+            SELECT Year, Region, Name FROM `/Root/TextsCompositeKeyMixed` VIEW `fulltext_idx`
+            WHERE FulltextContains(Description, "machine learning")
+            ORDER BY Year, Region, Name
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([
+            [[2023];["us-west"];["project-alpha"]];
+            [[2024];["us-west"];["project-gamma"]]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    { // Query using FulltextContains - find data related projects
+        TString query = R"sql(
+            SELECT Year, Region, Name FROM `/Root/TextsCompositeKeyMixed` VIEW `fulltext_idx`
+            WHERE FulltextContains(Description, "data")
+            ORDER BY Year, Region, Name
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        auto resultSet = result.GetResultSet(0);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 3);
+    }
+
+    { // Insert new row and verify it appears in index
+        TString query = R"sql(
+            INSERT INTO `/Root/TextsCompositeKeyMixed` (Year, Region, Name, Description, Tags) VALUES
+                (2025, "ap-south", "project-zeta", "Quantum computing research platform.", "quantum research")
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    { // Query the newly inserted row
+        TString query = R"sql(
+            SELECT Year, Region, Name FROM `/Root/TextsCompositeKeyMixed` VIEW `fulltext_idx`
+            WHERE FulltextContains(Description, "quantum")
+            ORDER BY Year, Region, Name
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([
+            [[2025];["ap-south"];["project-zeta"]]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    { // Update a row and verify index is updated
+        TString query = R"sql(
+            UPDATE `/Root/TextsCompositeKeyMixed`
+            SET Description = "Updated machine learning and AI platform."
+            WHERE Year = 2023 AND Region = "us-west" AND Name = "project-alpha"
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    { // Query should now find the updated row
+        TString query = R"sql(
+            SELECT Year, Region, Name FROM `/Root/TextsCompositeKeyMixed` VIEW `fulltext_idx`
+            WHERE FulltextContains(Description, "updated")
+            ORDER BY Year, Region, Name
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([
+            [[2023];["us-west"];["project-alpha"]]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    { // Delete a row and verify it's removed from index
+        TString query = R"sql(
+            DELETE FROM `/Root/TextsCompositeKeyMixed`
+            WHERE Year = 2024 AND Region = "eu-central" AND Name = "project-epsilon"
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    { // Query should not find the deleted row
+        TString query = R"sql(
+            SELECT Year, Region, Name FROM `/Root/TextsCompositeKeyMixed` VIEW `fulltext_idx`
+            WHERE FulltextContains(Description, "streaming")
+            ORDER BY Year, Region, Name
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+    }
+}
+
+Y_UNIT_TEST(FulltextRelevanceIndexWithCompositeKey) {
+    auto kikimr = Kikimr();
+    auto db = kikimr.GetQueryClient();
+
+    { // Create table with composite key (2 columns: Utf8 + Int64)
+        TString query = R"sql(
+            CREATE TABLE `/Root/TextsCompositeKeyRelevance` (
+                Category Utf8,
+                Id Int64,
+                Text String,
+                Data String,
+                PRIMARY KEY (Category, Id)
+            );
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    { // Insert data with varying term frequencies
+        TString query = R"sql(
+            UPSERT INTO `/Root/TextsCompositeKeyRelevance` (Category, Id, Text, Data) VALUES
+                ("docs", 1, "Cats love cats and more cats.", "high cat frequency"),
+                ("docs", 2, "Dogs chase cats.", "medium frequency"),
+                ("docs", 3, "Animals in the wild.", "no cats"),
+                ("articles", 1, "Cats are domestic animals.", "single cat mention")
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    { // Add fulltext_relevance index
+        TString query = R"sql(
+            ALTER TABLE `/Root/TextsCompositeKeyRelevance` ADD INDEX fulltext_idx
+                GLOBAL USING fulltext_relevance
+                ON (Text)
+                WITH (tokenizer=standard, use_filter_lowercase=true)
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    { // Query using FulltextScore - should return results ordered by relevance
+        TString query = R"sql(
+            SELECT Category, Id, FulltextScore(Text, "cats") as Relevance
+            FROM `/Root/TextsCompositeKeyRelevance` VIEW `fulltext_idx`
+            ORDER BY Relevance DESC
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        auto resultSet = result.GetResultSet(0);
+        // Should return 3 rows (docs/1, docs/2, articles/1) - docs/3 has no cats
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 3);
+
+        // First result should be docs/1 with highest frequency
+        NYdb::TResultSetParser parser(resultSet);
+        UNIT_ASSERT(parser.TryNextRow());
+        auto category = parser.ColumnParser("Category").GetOptionalUtf8();
+        auto id = parser.ColumnParser("Id").GetOptionalInt64();
+        UNIT_ASSERT_VALUES_EQUAL(*category, "docs");
+        UNIT_ASSERT_VALUES_EQUAL(*id, 1);
+    }
 }
 
 }

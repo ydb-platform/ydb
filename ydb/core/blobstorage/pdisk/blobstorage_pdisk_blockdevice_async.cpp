@@ -805,8 +805,6 @@ protected:
     TPDiskMon &Mon;
     TString Path;
 
-    TPDiskConfig cfg{0, 0, 0};
-
 private:
     THolder<TCompletionThreads> CompletionThreads;
     THolder<TTrimThread> TrimThread;

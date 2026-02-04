@@ -931,4 +931,555 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
     }
 
 
+    struct TGetQueueAttributesParams {
+        bool Fifo = false;
+        bool Dlq = false;
+        int SharedConsumers = 1;
+        TDuration RetentionPeriod = TDuration::Zero();
+    };
+
+    void TestGetQueueAttributesImpl(TFixture& fixture, const TGetQueueAttributesParams& params) {
+        const TString database = "/Root";
+        const TString topicName = "ExampleQueueName";
+        const TString queueName = TString::Join(topicName, params.Fifo ? ".fifo" : "");
+        auto driver = MakeDriver(fixture);
+        auto consumerName = [](int i) { return std::format("ydb-sqs-consumer-{}", i); };
+        auto queueUrlForConsumer = [&](int i) { return std::format("/v1/{}/{}/{}/{}/{}/{}", database.size(), database.c_str(), topicName.size(), topicName.c_str(), consumerName(i).size(), consumerName(i).c_str()); };
+        const TDuration retentionPeriod = TDuration::Hours(10);
+        {
+            NYdb::NTopic::TCreateTopicSettings settings;
+            settings.RetentionPeriod(retentionPeriod);
+            settings.BeginAddConsumer("regular-consumer").EndAddConsumer();
+            for (int i = 0; i < params.SharedConsumers; ++i) {
+                auto& consumer = settings.BeginAddSharedConsumer(consumerName(i));
+                consumer.KeepMessagesOrder(params.Fifo);
+                consumer.DefaultProcessingTimeout(TDuration::Seconds(25));
+                if (params.Dlq) {
+                    auto&& dlqSettings = consumer.BeginDeadLetterPolicy();
+                    dlqSettings.Enable();
+                    dlqSettings.BeginCondition().MaxProcessingAttempts(117).EndCondition();
+                    dlqSettings.MoveAction("DeadLetterQueue");
+                    dlqSettings.EndDeadLetterPolicy();
+                }
+                if (params.RetentionPeriod != TDuration::Zero()) {
+                    consumer.AvailabilityPeriod(params.RetentionPeriod);
+                }
+                consumer.EndAddConsumer();
+
+            }
+            Y_ENSURE(CreateTopic(driver, topicName, settings));
+        }
+
+        {
+            const TString wrongConsumerQueueUrl = queueUrlForConsumer(params.SharedConsumers + 1);
+            auto json = fixture.GetQueueAttributes({
+                {"QueueUrl", wrongConsumerQueueUrl},
+                {"AttributeNames", NJson::TJsonArray{"All"}},
+            }, 400);
+            UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(json, "__type"), "AWS.SimpleQueueService.NonExistentQueue");
+        }
+        if (params.SharedConsumers == 0) {
+            return;
+        }
+
+        const TString resultQueueUrl = queueUrlForConsumer(0);
+
+        fixture.GetQueueAttributes({{"wrong-field", "some-value"}}, 400);
+        fixture.GetQueueAttributes({{"QueueUrl", "invalid-url"}}, 400);
+
+        auto checkDlq = [&params](const NJson::TJsonValue& json, bool expectRedrivePolicyIfHasDlq = true, std::source_location loc = std::source_location::current()) {
+            const TString subcase = std::format("line={}", loc.line());
+            if (expectRedrivePolicyIfHasDlq && params.Dlq) {
+                UNIT_ASSERT_C(json["Attributes"].Has("RedrivePolicy"), subcase);
+                TString redrivePolicyJson = json["Attributes"]["RedrivePolicy"].GetString();
+                NJson::TJsonValue redrivePolicy;
+                UNIT_ASSERT_C(ReadJsonTree(redrivePolicyJson, &redrivePolicy), subcase);
+                UNIT_ASSERT_VALUES_EQUAL_C(redrivePolicy["maxReceiveCount"].GetInteger(), 117, subcase);
+                UNIT_ASSERT_VALUES_EQUAL_C(redrivePolicy["deadLetterTargetArn"].GetString(), "yrn:yc:ymq:ru-central1::/v1/5//Root/15/DeadLetterQueue/18/ydb-sqs-consumer-0", subcase);
+            } else {
+                TString redrivePolicyJson = json["Attributes"]["RedrivePolicy"].GetStringSafe("null");
+                NJson::TJsonValue redrivePolicy;
+                UNIT_ASSERT_C(ReadJsonTree(redrivePolicyJson, &redrivePolicy), subcase);
+                UNIT_ASSERT_C(redrivePolicy.IsNull() || redrivePolicy.IsMap() && redrivePolicy.GetMap().empty(), subcase);
+            }
+        };
+        auto checkFifo = [&params](const NJson::TJsonValue& json, bool expectFifoAttr = true, std::source_location loc = std::source_location::current()) {
+            const TString subcase = std::format("line={}", loc.line());
+            if (!expectFifoAttr) {
+                UNIT_ASSERT_C(!json["Attributes"]["FifoQueue"].IsDefined(), subcase);
+                return;
+            } else if (params.Fifo) {
+                UNIT_ASSERT_VALUES_EQUAL_C(json["Attributes"]["FifoQueue"].GetStringSafe(), "true", subcase);
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL_C(json["Attributes"]["FifoQueue"].GetStringSafe("false"), "false", subcase);
+            }
+        };
+
+        {
+            auto json = fixture.GetQueueAttributes({
+                {"QueueUrl", resultQueueUrl},
+            });
+            UNIT_ASSERT(json.GetMapSafe().empty());
+        }
+
+        {
+            auto json = fixture.GetQueueAttributes({
+                {"QueueUrl", resultQueueUrl},
+                {"AttributeNames", NJson::TJsonArray{}}
+            });
+            UNIT_ASSERT(json.GetMapSafe().empty());
+         }
+
+        {
+            auto json = fixture.GetQueueAttributes({
+                {"QueueUrl", resultQueueUrl},
+                {"AttributeNames", NJson::TJsonArray{"All"}}
+            });
+            UNIT_ASSERT_VALUES_EQUAL(json["Attributes"]["DelaySeconds"], "0");
+            UNIT_ASSERT_VALUES_EQUAL(json["Attributes"]["VisibilityTimeout"], "25");
+            UNIT_ASSERT_VALUES_EQUAL(json["Attributes"]["MessageRetentionPeriod"], ToString(Max(retentionPeriod, params.RetentionPeriod).Seconds()));
+            UNIT_ASSERT_GT(json["Attributes"].GetMapSafe().size(), 5);
+            checkFifo(json);
+            checkDlq(json);
+        }
+
+        {
+            auto json = fixture.GetQueueAttributes({
+                {"QueueUrl", resultQueueUrl},
+                {"AttributeNames", NJson::TJsonArray{"All", "VisibilityTimeout"}}
+            });
+            UNIT_ASSERT_GT(json["Attributes"].GetMapSafe().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(json["Attributes"]["VisibilityTimeout"], "25");
+            checkFifo(json);
+            checkDlq(json);
+        }
+
+        {
+            auto json = fixture.GetQueueAttributes({
+                {"QueueUrl", resultQueueUrl},
+                {"AttributeNames", NJson::TJsonArray{"VisibilityTimeout"}}
+            });
+            UNIT_ASSERT_VALUES_EQUAL(json["Attributes"].GetMapSafe().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(json["Attributes"]["VisibilityTimeout"], "25");
+            checkFifo(json, false);
+            checkDlq(json, false);
+        }
+
+        fixture.GetQueueAttributes({
+            {"QueueUrl", resultQueueUrl},
+            {"AttributeNames", NJson::TJsonArray{"UnknownAttribute"}}
+        }, 400);
+
+        fixture.GetQueueAttributes({
+            {"QueueUrl", resultQueueUrl},
+            {"AttributeNames", NJson::TJsonArray{"All", "UnknownAttribute"}}
+        }, 400);
+
+        fixture.GetQueueAttributes({
+            {"QueueUrl", resultQueueUrl},
+            {"AttributeNames", NJson::TJsonArray{"DelaySeconds", "UnknownAttribute"}}
+        }, 400);
+
+        {
+            auto json = fixture.GetQueueAttributes({
+                {"QueueUrl", resultQueueUrl},
+                {"AttributeNames", NJson::TJsonArray{
+                    "ApproximateNumberOfMessages",
+                    "ApproximateNumberOfMessagesDelayed",
+                    "ApproximateNumberOfMessagesNotVisible",
+                    "CreatedTimestamp",
+                    "DelaySeconds",
+                    // "LastModifiedTimestamp",  // Not supported at this moment.
+                    "MaximumMessageSize",
+                    "MessageRetentionPeriod",
+                    "QueueArn",
+                    "ReceiveMessageWaitTimeSeconds",
+                    "VisibilityTimeout",
+                    "RedrivePolicy",
+                    "FifoQueue",
+                    "ContentBasedDeduplication",
+                }}
+            });
+            UNIT_ASSERT_VALUES_EQUAL(json["Attributes"]["VisibilityTimeout"], "25");
+            UNIT_ASSERT_VALUES_EQUAL(json["Attributes"]["MessageRetentionPeriod"], ToString(Max(retentionPeriod, params.RetentionPeriod).Seconds()));
+            UNIT_ASSERT_GT(json["Attributes"].GetMapSafe().size(), 5);
+            checkFifo(json);
+            checkDlq(json);
+        }
+    }
+
+    Y_UNIT_TEST_F(TestGetQueueAttributesStd, TFixture) {
+        TestGetQueueAttributesImpl(*this, TGetQueueAttributesParams{.Fifo = false, .Dlq = false, .SharedConsumers = 1});
+    }
+    Y_UNIT_TEST_F(TestGetQueueAttributesFifo, TFixture) {
+        TestGetQueueAttributesImpl(*this, TGetQueueAttributesParams{.Fifo = true, .Dlq = false, .SharedConsumers = 1});
+    }
+    Y_UNIT_TEST_F(TestGetQueueAttributesStdDlq, TFixture) {
+        TestGetQueueAttributesImpl(*this, TGetQueueAttributesParams{.Fifo = false, .Dlq = true, .SharedConsumers = 1});
+    }
+    Y_UNIT_TEST_F(TestGetQueueAttributesFifoDlq, TFixture) {
+        TestGetQueueAttributesImpl(*this, TGetQueueAttributesParams{.Fifo = true, .Dlq = true, .SharedConsumers = 1});
+    }
+    Y_UNIT_TEST_F(TestGetQueueAttributesStd3Consumers, TFixture) {
+        TestGetQueueAttributesImpl(*this, TGetQueueAttributesParams{.Fifo = false, .Dlq = false, .SharedConsumers = 3});
+    }
+    Y_UNIT_TEST_F(TestGetQueueAttributesFifo3Consumers, TFixture) {
+        TestGetQueueAttributesImpl(*this, TGetQueueAttributesParams{.Fifo = true, .Dlq = false, .SharedConsumers = 3});
+    }
+    Y_UNIT_TEST_F(TestGetQueueAttributesStdDlq3Consumers, TFixture) {
+        TestGetQueueAttributesImpl(*this, TGetQueueAttributesParams{.Fifo = false, .Dlq = true, .SharedConsumers = 3});
+    }
+    Y_UNIT_TEST_F(TestGetQueueAttributesFifoDlq3Consumers, TFixture) {
+        TestGetQueueAttributesImpl(*this, TGetQueueAttributesParams{.Fifo = true, .Dlq = true, .SharedConsumers = 3});
+    }
+    Y_UNIT_TEST_F(TestGetQueueAttributesStd0Consumers, TFixture) {
+        TestGetQueueAttributesImpl(*this, TGetQueueAttributesParams{.Fifo = false, .Dlq = false, .SharedConsumers = 0});
+    }
+    Y_UNIT_TEST_F(TestGetQueueAttributesFifo0Consumers, TFixture) {
+        TestGetQueueAttributesImpl(*this, TGetQueueAttributesParams{.Fifo = true, .Dlq = false, .SharedConsumers = 0});
+    }
+    Y_UNIT_TEST_F(TestGetQueueAttributesStdDlq0Consumers, TFixture) {
+        TestGetQueueAttributesImpl(*this, TGetQueueAttributesParams{.Fifo = false, .Dlq = true, .SharedConsumers = 0});
+    }
+    Y_UNIT_TEST_F(TestGetQueueAttributesFifoDlq0Consumers, TFixture) {
+        TestGetQueueAttributesImpl(*this, TGetQueueAttributesParams{.Fifo = true, .Dlq = true, .SharedConsumers = 0});
+    }
+    Y_UNIT_TEST_F(TestGetQueueAttributesStdWithConsumersRetentionExtended, TFixture) {
+        TestGetQueueAttributesImpl(*this, TGetQueueAttributesParams{.Fifo = false, .SharedConsumers = 1, .RetentionPeriod = TDuration::Hours(50)});
+    }
+    Y_UNIT_TEST_F(TestGetQueueAttributesFifoWithConsumersRetentionExtended, TFixture) {
+        TestGetQueueAttributesImpl(*this, TGetQueueAttributesParams{.Fifo = true, .SharedConsumers = 1, .RetentionPeriod = TDuration::Hours(50)});
+    }
+    Y_UNIT_TEST_F(TestGetQueueAttributesStdWithConsumersRetentionShrinked, TFixture) {
+        TestGetQueueAttributesImpl(*this, TGetQueueAttributesParams{.Fifo = false, .SharedConsumers = 1, .RetentionPeriod = TDuration::Hours(1)});
+    }
+    Y_UNIT_TEST_F(TestGetQueueAttributesFifoWithConsumersRetentionShrinked, TFixture) {
+        TestGetQueueAttributesImpl(*this, TGetQueueAttributesParams{.Fifo = true, .SharedConsumers = 1, .RetentionPeriod = TDuration::Hours(1)});
+    }
+
+    Y_UNIT_TEST_F(TestCreateQueue, TFixture) {
+        auto json = CreateQueue({{"QueueName", "ExampleQueueName"}});
+        UNIT_ASSERT(!GetByPath<TString>(json, "QueueUrl").empty());
+        TString queueUrl = GetPathFromQueueUrlMap(json);
+        UNIT_ASSERT(queueUrl.Contains("ExampleQueueName"));
+        UNIT_ASSERT(queueUrl.Contains("ydb-sqs-consumer"));
+    }
+
+    Y_UNIT_TEST_F(TestCreateQueueWithCustomConsumer, TFixture) {
+        auto json = CreateQueue({{"QueueName", "ExampleQueueName@custom-consumer"}});
+        UNIT_ASSERT(!GetByPath<TString>(json, "QueueUrl").empty());
+        TString queueUrl = GetPathFromQueueUrlMap(json);
+        UNIT_ASSERT(queueUrl.Contains("ExampleQueueName"));
+        UNIT_ASSERT(queueUrl.Contains("custom-consumer"));
+    }
+
+    Y_UNIT_TEST_F(TestCreateQueueWithSameNameAndSameParams, TFixture) {
+        auto req = NJson::TJsonMap{{"QueueName", "ExampleQueueName"}};
+        auto json1 = CreateQueue(req);
+        auto json2 = CreateQueue(req);
+        UNIT_ASSERT_VALUES_EQUAL(GetPathFromQueueUrlMap(json1), GetPathFromQueueUrlMap(json2));
+    }
+
+    Y_UNIT_TEST_F(TestCreateQueueWithSameNameAndDifferentParams, TFixture) {
+        auto req = NJson::TJsonMap{
+            {"QueueName", "ExampleQueueName"},
+            {"Attributes", NJson::TJsonMap{{"MessageRetentionPeriod", "60"}}}
+        };
+        CreateQueue(req);
+
+        req["Attributes"]["MessageRetentionPeriod"] = "61";
+        auto json = CreateQueue(req, 400);
+        TString resultType = GetByPath<TString>(json, "__type");
+        UNIT_ASSERT_VALUES_EQUAL(resultType, "ValidationError");
+    }
+
+    Y_UNIT_TEST_F(TestCreateQueueWithBadQueueName, TFixture) {
+        auto json = CreateQueue({
+            {"QueueName", "B/d_queue_name"},
+            {"Attributes", NJson::TJsonMap{{"MessageRetentionPeriod", "60"}}}
+        }, 400);
+        TString resultType = GetByPath<TString>(json, "__type");
+        UNIT_ASSERT_VALUES_EQUAL(resultType, "InvalidParameterValue");
+    }
+
+    Y_UNIT_TEST_F(TestCreateQueueWithEmptyName, TFixture) {
+        auto json = CreateQueue({}, 400);
+        TString resultType = GetByPath<TString>(json, "__type");
+        UNIT_ASSERT_VALUES_EQUAL(resultType, "MissingParameter");
+    }
+
+    Y_UNIT_TEST_F(TestCreateQueueFifo, TFixture) {
+        auto json = CreateQueue({
+            {"QueueName", "ExampleQueue.fifo"},
+            {"Attributes", NJson::TJsonMap{{"FifoQueue", "true"}}}
+        });
+        TString queueUrl = GetPathFromQueueUrlMap(json);
+        UNIT_ASSERT(queueUrl.Contains("ExampleQueue.fifo"));
+    }
+
+    Y_UNIT_TEST_F(TestCreateQueueWithAttributes, TFixture) {
+        auto json = CreateQueue({
+            {"QueueName", "ExampleQueueName"},
+            {"Attributes", NJson::TJsonMap{
+                {"VisibilityTimeout", "30"},
+                {"MessageRetentionPeriod", "3600"},
+                {"MaximumMessageSize", "262144"}
+            }}
+        });
+        UNIT_ASSERT(!GetByPath<TString>(json, "QueueUrl").empty());
+    }
+
+    Y_UNIT_TEST_F(TestCreateQueueExistingTopicWithSharedConsumer, TFixture) {
+        // Create topic with shared consumer via Topic API
+        auto driver = MakeDriver(*this);
+        const TString topicName = "ExistingTopic";
+        const TString consumerName = "ydb-sqs-consumer";
+
+        Y_ENSURE(CreateTopic(driver, topicName, NYdb::NTopic::TCreateTopicSettings()
+            .BeginAddSharedConsumer(consumerName)
+                .KeepMessagesOrder(false)
+                .DefaultProcessingTimeout(TDuration::Seconds(30))
+            .EndAddConsumer()));
+
+        // Try to create queue with same topic and consumer - should succeed
+        auto json = CreateQueue({{"QueueName", topicName}});
+        UNIT_ASSERT(!GetByPath<TString>(json, "QueueUrl").empty());
+        TString queueUrl = GetPathFromQueueUrlMap(json);
+        UNIT_ASSERT(queueUrl.Contains(topicName));
+        UNIT_ASSERT(queueUrl.Contains(consumerName));
+    }
+
+    Y_UNIT_TEST_F(TestCreateQueueExistingTopicWithStreamingConsumer, TFixture) {
+        // Create topic with regular (streaming) consumer via Topic API
+        auto driver = MakeDriver(*this);
+        const TString topicName = "ExistingTopicStreaming";
+        const TString consumerName = "regular-consumer";
+
+        Y_ENSURE(CreateTopic(driver, topicName, NYdb::NTopic::TCreateTopicSettings()
+            .BeginAddConsumer(consumerName)  // Regular consumer, not shared
+            .EndAddConsumer()));
+
+        // Try to create queue with same topic and consumer - should fail
+        auto json = CreateQueue({{"QueueName", topicName + "@" + consumerName}}, 400);
+        TString resultType = GetByPath<TString>(json, "__type");
+        UNIT_ASSERT_VALUES_EQUAL(resultType, "InvalidParameterValue");
+    }
+
+    Y_UNIT_TEST_F(TestCreateQueueExistingTopicNoConsumer, TFixture) {
+        auto driver = MakeDriver(*this);
+        const TString topicName = "ExistingTopicNoConsumer";
+        const TString consumerName = "ydb-sqs-consumer";
+
+        Y_ENSURE(CreateTopic(driver, topicName, NYdb::NTopic::TCreateTopicSettings()
+            .RetentionPeriod(TDuration::Hours(24))
+            .BeginAddConsumer("other-consumer")
+            .EndAddConsumer()));
+
+        auto json = CreateQueue({{"QueueName", topicName}});
+        UNIT_ASSERT(!GetByPath<TString>(json, "QueueUrl").empty());
+        TString queueUrl = GetPathFromQueueUrlMap(json);
+        UNIT_ASSERT(queueUrl.Contains(topicName));
+        UNIT_ASSERT(queueUrl.Contains(consumerName));
+    }
+
+    Y_UNIT_TEST_F(TestCreateQueueExistingTopicNoConsumerWithExtendedRetention, TFixture) {
+        auto driver = MakeDriver(*this);
+        const TString topicName = "ExistingTopicNoConsumerRetention";
+        const TString consumerName = "ydb-sqs-consumer";
+        const TDuration topicRetention = TDuration::Hours(24);
+        const TDuration queueRetention = TDuration::Hours(48);
+
+        Y_ENSURE(CreateTopic(driver, topicName, NYdb::NTopic::TCreateTopicSettings()
+            .RetentionPeriod(topicRetention)
+            .BeginAddConsumer("other-consumer")
+            .EndAddConsumer()));
+
+        auto json = CreateQueue({
+            {"QueueName", topicName},
+            {"Attributes", NJson::TJsonMap{{"MessageRetentionPeriod", ToString(queueRetention.Seconds())}}}
+        });
+        UNIT_ASSERT(!GetByPath<TString>(json, "QueueUrl").empty());
+        TString queueUrl = GetPathFromQueueUrlMap(json);
+        UNIT_ASSERT(queueUrl.Contains(topicName));
+        UNIT_ASSERT(queueUrl.Contains(consumerName));
+
+        auto attrJson = GetQueueAttributes({
+            {"QueueUrl", queueUrl},
+            {"AttributeNames", NJson::TJsonArray{"MessageRetentionPeriod"}}
+        });
+        UNIT_ASSERT_VALUES_EQUAL(attrJson["Attributes"]["MessageRetentionPeriod"], ToString(queueRetention.Seconds()));
+    }
+
+    Y_UNIT_TEST_F(TestSetQueueAttributesBasic, TFixture) {
+        auto json = CreateQueue({
+            {"QueueName", "TestSetAttrsQueue"},
+            {"Attributes", NJson::TJsonMap{{"VisibilityTimeout", "30"}}}
+        });
+        TString queueUrl = GetPathFromQueueUrlMap(json);
+
+        SetQueueAttributes({
+            {"QueueUrl", queueUrl},
+            {"Attributes", NJson::TJsonMap{{"VisibilityTimeout", "60"}}}
+        });
+
+        auto attrJson = GetQueueAttributes({
+            {"QueueUrl", queueUrl},
+            {"AttributeNames", NJson::TJsonArray{"VisibilityTimeout"}}
+        });
+        UNIT_ASSERT_VALUES_EQUAL(attrJson["Attributes"]["VisibilityTimeout"], "60");
+    }
+
+    Y_UNIT_TEST_F(TestSetQueueAttributesMultiple, TFixture) {
+        auto json = CreateQueue({
+            {"QueueName", "TestSetAttrsMultiQueue"},
+            {"Attributes", NJson::TJsonMap{
+                {"VisibilityTimeout", "30"},
+                {"DelaySeconds", "0"},
+                {"ReceiveMessageWaitTimeSeconds", "0"}
+            }}
+        });
+        TString queueUrl = GetPathFromQueueUrlMap(json);
+
+        SetQueueAttributes({
+            {"QueueUrl", queueUrl},
+            {"Attributes", NJson::TJsonMap{
+                {"VisibilityTimeout", "120"},
+                {"DelaySeconds", "5"},
+                {"ReceiveMessageWaitTimeSeconds", "10"}
+            }}
+        });
+
+        auto attrJson = GetQueueAttributes({
+            {"QueueUrl", queueUrl},
+            {"AttributeNames", NJson::TJsonArray{"All"}}
+        });
+        UNIT_ASSERT_VALUES_EQUAL(attrJson["Attributes"]["VisibilityTimeout"], "120");
+        UNIT_ASSERT_VALUES_EQUAL(attrJson["Attributes"]["DelaySeconds"], "5");
+        UNIT_ASSERT_VALUES_EQUAL(attrJson["Attributes"]["ReceiveMessageWaitTimeSeconds"], "10");
+    }
+
+    Y_UNIT_TEST_F(TestSetQueueAttributesFifoImmutable, TFixture) {
+        auto json = CreateQueue({
+            {"QueueName", "TestFifoImmutable.fifo"},
+            {"Attributes", NJson::TJsonMap{{"FifoQueue", "true"}}}
+        });
+        TString queueUrl = GetPathFromQueueUrlMap(json);
+
+        auto errorJson = SetQueueAttributes({
+            {"QueueUrl", queueUrl},
+            {"Attributes", NJson::TJsonMap{{"FifoQueue", "false"}}}
+        }, 400);
+        UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(errorJson, "__type"), "InvalidParameterValue");
+    }
+
+    Y_UNIT_TEST_F(TestSetQueueAttributesNonExistentQueue, TFixture) {
+        auto errorJson = SetQueueAttributes({
+            {"QueueUrl", "/v1/5//Root/16/NonExistentQueue/16/ydb-sqs-consumer"},
+            {"Attributes", NJson::TJsonMap{{"VisibilityTimeout", "60"}}}
+        }, 400);
+        UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(errorJson, "__type"), "AWS.SimpleQueueService.NonExistentQueue");
+    }
+
+    Y_UNIT_TEST_F(TestSetQueueAttributesNonExistentConsumer, TFixture) {
+        auto driver = MakeDriver(*this);
+        const TString topicName = "SetAttrsTopicNoConsumer";
+
+        Y_ENSURE(CreateTopic(driver, topicName, NYdb::NTopic::TCreateTopicSettings()
+            .BeginAddConsumer("other-consumer")
+            .EndAddConsumer()));
+
+        auto errorJson = SetQueueAttributes({
+            {"QueueUrl", std::format("/v1/5//Root/{}/{}/16/ydb-sqs-consumer", topicName.size(), topicName.c_str())},
+            {"Attributes", NJson::TJsonMap{{"VisibilityTimeout", "60"}}}
+        }, 400);
+        UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(errorJson, "__type"), "AWS.SimpleQueueService.NonExistentQueue");
+    }
+
+    Y_UNIT_TEST_F(TestSetQueueAttributesInvalidValues, TFixture) {
+        auto json = CreateQueue({
+            {"QueueName", "TestSetAttrsInvalid"},
+            {"Attributes", NJson::TJsonMap{{"VisibilityTimeout", "30"}}}
+        });
+        TString queueUrl = GetPathFromQueueUrlMap(json);
+
+        auto errorJson = SetQueueAttributes({
+            {"QueueUrl", queueUrl},
+            {"Attributes", NJson::TJsonMap{{"VisibilityTimeout", "-1"}}}
+        }, 400);
+        UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(errorJson, "__type"), "InvalidParameterValue");
+
+        errorJson = SetQueueAttributes({
+            {"QueueUrl", queueUrl},
+            {"Attributes", NJson::TJsonMap{{"DelaySeconds", "901"}}}
+        }, 400);
+        UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(errorJson, "__type"), "InvalidParameterValue");
+    }
+
+    Y_UNIT_TEST_F(TestSetQueueAttributesUnknownAttribute, TFixture) {
+        auto json = CreateQueue({{"QueueName", "TestSetAttrsUnknown"}});
+        TString queueUrl = GetPathFromQueueUrlMap(json);
+
+        auto errorJson = SetQueueAttributes({
+            {"QueueUrl", queueUrl},
+            {"Attributes", NJson::TJsonMap{{"UnknownAttribute", "value"}}}
+        }, 400);
+        UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(errorJson, "__type"), "InvalidParameterValue");
+    }
+
+    Y_UNIT_TEST_F(TestSetQueueAttributesRedrivePolicy, TFixture) {
+        auto dlqJson = CreateQueue({
+            {"QueueName", "SetAttrsDLQ.fifo"},
+            {"Attributes", NJson::TJsonMap{{"FifoQueue", "true"}}}
+        });
+        TString dlqUrl = GetPathFromQueueUrlMap(dlqJson);
+
+        auto dlqAttrJson = GetQueueAttributes({
+            {"QueueUrl", dlqUrl},
+            {"AttributeNames", NJson::TJsonArray{"QueueArn"}}
+        });
+        TString dlqArn = GetByPath<TString>(dlqAttrJson, "Attributes.QueueArn");
+
+        auto json = CreateQueue({
+            {"QueueName", "SetAttrsMain.fifo"},
+            {"Attributes", NJson::TJsonMap{{"FifoQueue", "true"}}}
+        });
+        TString queueUrl = GetPathFromQueueUrlMap(json);
+
+        TString redrivePolicy = TStringBuilder() << R"({"deadLetterTargetArn":")" << dlqArn << R"(","maxReceiveCount":5})";
+        SetQueueAttributes({
+            {"QueueUrl", queueUrl},
+            {"Attributes", NJson::TJsonMap{{"RedrivePolicy", redrivePolicy}}}
+        });
+
+        auto attrJson = GetQueueAttributes({
+            {"QueueUrl", queueUrl},
+            {"AttributeNames", NJson::TJsonArray{"RedrivePolicy"}}
+        });
+        UNIT_ASSERT(attrJson["Attributes"].Has("RedrivePolicy"));
+        TString resultPolicy = attrJson["Attributes"]["RedrivePolicy"].GetString();
+        NJson::TJsonValue policyJson;
+        UNIT_ASSERT(NJson::ReadJsonTree(resultPolicy, &policyJson));
+        UNIT_ASSERT_VALUES_EQUAL(policyJson["maxReceiveCount"].GetInteger(), 5);
+    }
+
+    Y_UNIT_TEST_F(TestSetQueueAttributesRetentionPeriod, TFixture) {
+        auto json = CreateQueue({
+            {"QueueName", "TestSetAttrsRetention"},
+            {"Attributes", NJson::TJsonMap{{"MessageRetentionPeriod", "3600"}}}
+        });
+        TString queueUrl = GetPathFromQueueUrlMap(json);
+
+        SetQueueAttributes({
+            {"QueueUrl", queueUrl},
+            {"Attributes", NJson::TJsonMap{{"MessageRetentionPeriod", "7200"}}}
+        });
+
+        auto attrJson = GetQueueAttributes({
+            {"QueueUrl", queueUrl},
+            {"AttributeNames", NJson::TJsonArray{"MessageRetentionPeriod"}}
+        });
+        UNIT_ASSERT_VALUES_EQUAL(attrJson["Attributes"]["MessageRetentionPeriod"], "7200");
+    }
+
+
 } // Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy)

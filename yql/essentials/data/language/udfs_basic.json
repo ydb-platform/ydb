@@ -1083,6 +1083,27 @@
   ],
   "Yson": [
     {
+      "name": "AsBool"
+    },
+    {
+      "name": "AsDict"
+    },
+    {
+      "name": "AsDouble"
+    },
+    {
+      "name": "AsInt64"
+    },
+    {
+      "name": "AsList"
+    },
+    {
+      "name": "AsString"
+    },
+    {
+      "name": "AsUint64"
+    },
+    {
       "name": "Attributes"
     },
     {
@@ -1228,6 +1249,27 @@
     },
     {
       "name": "SerializeText"
+    },
+    {
+      "name": "TryAsBool"
+    },
+    {
+      "name": "TryAsDict"
+    },
+    {
+      "name": "TryAsDouble"
+    },
+    {
+      "name": "TryAsInt64"
+    },
+    {
+      "name": "TryAsList"
+    },
+    {
+      "name": "TryAsString"
+    },
+    {
+      "name": "TryAsUint64"
     },
     {
       "name": "WithAttributes"

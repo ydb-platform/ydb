@@ -27,6 +27,7 @@ namespace NKikimr {
         DEFINE_TRACING_LEVELS(TTablet, 3, 8, 12, 14, 15)
         DEFINE_TRACING_LEVELS(TDistributedStorage, 4, 9, 13, 14, 15)
         DEFINE_TRACING_LEVELS(TTopic, 4, 9, 13, 14, 15)
+        DEFINE_TRACING_LEVELS(TNbs, 4, 9, 13, 14, 15)
 
 #undef DEFINE_TRACING_LEVELS
 
@@ -122,6 +123,15 @@ namespace NKikimr {
             TopicBasic = TComponentTracingLevels::TTopic::Basic,
             TopicDetailed = TComponentTracingLevels::TTopic::Detailed,
             TopicTrace = TComponentTracingLevels::TTopic::Trace,
+        };
+    };
+
+    struct TWilsonNbs {
+        enum {
+            NbsTopLevel = TComponentTracingLevels::TNbs::TopLevel,
+            NbsBasic = TComponentTracingLevels::TNbs::Basic,
+            NbsDetailed = TComponentTracingLevels::TNbs::Detailed,
+            NbsTrace = TComponentTracingLevels::TNbs::Trace,
         };
     };
 

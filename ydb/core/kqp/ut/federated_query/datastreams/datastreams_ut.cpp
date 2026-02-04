@@ -19,6 +19,8 @@
 
 #include <fmt/format.h>
 
+#include <library/cpp/protobuf/interop/cast.h>
+
 namespace NKikimr::NKqp {
 
 using namespace NYdb;
@@ -135,6 +137,7 @@ public:
                 .CheckpointPeriod = CheckpointPeriod,
                 .LogSettings = LogSettings,
                 .UseLocalCheckpointsInStreamingQueries = true,
+                .InternalInitFederatedQuerySetupFactory = InternalInitFederatedQuerySetupFactory,
             });
 
             Kikimr->GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableSchemaSecrets(true);
@@ -204,14 +207,18 @@ public:
         return ExternalDriver;
     }
 
-    std::shared_ptr<NTopic::TTopicClient> GetTopicClient() {
+    std::shared_ptr<NTopic::TTopicClient> GetTopicClient(bool local = false) {
+        if (local && !LocalTopicClient) {
+            LocalTopicClient = std::make_shared<NTopic::TTopicClient>(*GetInternalDriver(), TopicClientSettings);
+        }
+
         if (!TopicClient) {
             TopicClient = std::make_shared<NTopic::TTopicClient>(*GetExternalDriver(), NTopic::TTopicClientSettings()
                 .DiscoveryEndpoint(YDB_ENDPOINT)
                 .Database(YDB_DATABASE));
         }
 
-        return TopicClient;
+        return local ? LocalTopicClient : TopicClient;
     }
 
     std::shared_ptr<TQueryClient> GetExternalQueryClient() {
@@ -232,18 +239,18 @@ public:
 
     // Topic client SDK (external YDB recipe)
 
-    void CreateTopic(const TString& topicName, std::optional<NTopic::TCreateTopicSettings> settings = std::nullopt) {
+    void CreateTopic(const TString& topicName, std::optional<NTopic::TCreateTopicSettings> settings = std::nullopt, bool local = false) {
         if (!settings) {
             settings.emplace()
                 .PartitioningSettings(1, 1);
         }
 
-        const auto result = GetTopicClient()->CreateTopic(topicName, *settings).ExtractValueSync();
+        const auto result = GetTopicClient(local)->CreateTopic(topicName, *settings).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
     }
 
-    void WriteTopicMessage(const TString& topicName, const TString& message, ui64 partition = 0) {
-        auto writeSession = GetTopicClient()->CreateSimpleBlockingWriteSession(NTopic::TWriteSessionSettings()
+    void WriteTopicMessage(const TString& topicName, const TString& message, ui64 partition = 0, bool local = false) {
+        auto writeSession = GetTopicClient(local)->CreateSimpleBlockingWriteSession(NTopic::TWriteSessionSettings()
             .Path(topicName)
             .PartitionId(partition));
 
@@ -257,11 +264,11 @@ public:
         }
     }
 
-    void ReadTopicMessage(const TString& topicName, const TString& expectedMessage, TInstant disposition = TInstant::Now() - TDuration::Seconds(100)) {
-        ReadTopicMessages(topicName, {expectedMessage}, disposition);
+    void ReadTopicMessage(const TString& topicName, const TString& expectedMessage, TInstant disposition = TInstant::Now() - TDuration::Seconds(100), bool local = false) {
+        ReadTopicMessages(topicName, {expectedMessage}, disposition, /* sort */ false, local);
     }
 
-    void ReadTopicMessages(const TString& topicName, TVector<TString> expectedMessages, TInstant disposition = TInstant::Now() - TDuration::Seconds(100), bool sort = false) {
+    void ReadTopicMessages(const TString& topicName, TVector<TString> expectedMessages, TInstant disposition = TInstant::Now() - TDuration::Seconds(100), bool sort = false, bool local = false) {
         NTopic::TReadSessionSettings readSettings;
         readSettings
             .WithoutConsumer()
@@ -276,7 +283,7 @@ public:
             }
         );
 
-        auto readSession = GetTopicClient()->CreateReadSession(readSettings);
+        auto readSession = GetTopicClient(local)->CreateReadSession(readSettings);
         std::vector<std::string> received;
         WaitFor(TEST_OPERATION_TIMEOUT, "topic output messages", [&](TString& error) {
             if (!readSession->WaitEvent().HasValue()) {
@@ -460,6 +467,19 @@ public:
         ));
     }
 
+    void CreateSolomonSource(const TString& solomonSourceName) {
+        ExecQuery(fmt::format(R"(
+            CREATE EXTERNAL DATA SOURCE `{solomon_source}` WITH (
+                SOURCE_TYPE = "Solomon",
+                LOCATION = "localhost:{solomon_port}",
+                AUTH_METHOD = "NONE",
+                USE_TLS = "false"
+            );)",
+            "solomon_source"_a = solomonSourceName,
+            "solomon_port"_a = getenv("SOLOMON_HTTP_PORT")
+        ));
+    }
+
     // Script executions (using query client SDK)
 
     TOperation::TOperationId ExecScript(const TString& query, std::optional<TExecuteScriptSettings> settings = std::nullopt, bool waitRunning = true) {
@@ -606,10 +626,10 @@ public:
             retryMapping.AddStatusCode(status);
         }
 
-        auto& policy = *retryMapping.MutableBackoffPolicy();
-        policy.SetRetryPeriodMs(backoffDuration.MilliSeconds());
-        policy.SetBackoffPeriodMs(backoffDuration.MilliSeconds());
-        policy.SetRetryRateLimit(1);
+        auto& policy = *retryMapping.MutableExponentialDelayPolicy();
+        policy.SetBackoffMultiplier(1.5);
+        *policy.MutableInitialBackoff() = NProtoInterop::CastToProto(backoffDuration);
+        *policy.MutableMaxBackoff() = NProtoInterop::CastToProto(backoffDuration);
 
         return retryMapping;
     }
@@ -772,6 +792,23 @@ public:
         }
     }
 
+    // Other helpers
+
+    static std::function<void(const TString)> AstChecker(ui64 txCount, ui64 stagesCount) {
+        const auto stringCounter = [](const TString& str, const TString& subStr) {
+            ui64 count = 0;
+            for (size_t i = str.find(subStr); i != TString::npos; i = str.find(subStr, i + subStr.size())) {
+                ++count;
+            }
+            return count;
+        };
+
+        return [txCount, stagesCount, stringCounter](const TString& ast) {
+            UNIT_ASSERT_VALUES_EQUAL(stringCounter(ast, "KqpPhysicalTx"), txCount);
+            UNIT_ASSERT_VALUES_EQUAL(stringCounter(ast, "DqPhyStage"), stagesCount);
+        };
+    }
+
 private:
     void EnsureNotInitialized(const TString& info) {
         UNIT_ASSERT_C(!Kikimr, "Kikimr runner is already initialized, can not setup " << info);
@@ -789,7 +826,9 @@ private:
 protected:
     TDuration CheckpointPeriod = TDuration::MilliSeconds(200);
     TTestLogSettings LogSettings;
+    bool InternalInitFederatedQuerySetupFactory = false;
     TClientSettings QueryClientSettings = TClientSettings().AuthToken(BUILTIN_ACL_ROOT);
+    NTopic::TTopicClientSettings TopicClientSettings = NTopic::TTopicClientSettings().AuthToken(BUILTIN_ACL_ROOT);
 
 private:
     std::optional<NKikimrConfig::TAppConfig> AppConfig;
@@ -802,6 +841,7 @@ private:
     std::shared_ptr<TQueryClient> QueryClient;
     std::shared_ptr<NYdb::NTable::TTableClient> TableClient;
     std::shared_ptr<NYdb::NTable::TSession> TableClientSession;
+    std::shared_ptr<NTopic::TTopicClient> LocalTopicClient;
 
     // Attached to database from recipe (YDB_ENDPOINT / YDB_DATABASE)
     std::shared_ptr<TDriver> ExternalDriver;
@@ -1814,16 +1854,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         CreatePqSource(pqSource);
 
         constexpr char solomonSink[] = "solomonSinkName";
-        ExecQuery(fmt::format(R"(
-            CREATE EXTERNAL DATA SOURCE `{solomon_source}` WITH (
-                SOURCE_TYPE = "Solomon",
-                LOCATION = "localhost:{solomon_port}",
-                AUTH_METHOD = "NONE",
-                USE_TLS = "false"
-            );)",
-            "solomon_source"_a = solomonSink,
-            "solomon_port"_a = getenv("SOLOMON_HTTP_PORT")
-        ));
+        CreateSolomonSource(solomonSink);
 
         constexpr char sourceTable[] = "source";
         constexpr char rowSinkTable[] = "rowSink";
@@ -1856,21 +1887,6 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             "table"_a = sourceTable
         ));
 
-        const auto astChecker = [](ui64 txCount, ui64 stagesCount) {
-            const auto stringCounter = [](const TString& str, const TString& subStr) {
-                ui64 count = 0;
-                for (size_t i = str.find(subStr); i != TString::npos; i = str.find(subStr, i + subStr.size())) {
-                    ++count;
-                }
-                return count;
-            };
-
-            return [txCount, stagesCount, stringCounter](const TString& ast) {
-                UNIT_ASSERT_VALUES_EQUAL(stringCounter(ast, "KqpPhysicalTx"), txCount);
-                UNIT_ASSERT_VALUES_EQUAL(stringCounter(ast, "DqPhyStage"), stagesCount);
-            };
-        };
-
         TInstant disposition = TInstant::Now();
 
         // Double PQ insert
@@ -1883,7 +1899,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                 "pq_source"_a = pqSource,
                 "output_topic1"_a = firstOutputTopic,
                 "output_topic2"_a = secondOutputTopic
-            ), EStatus::SUCCESS, "", astChecker(1, 1));
+            ), EStatus::SUCCESS, "", AstChecker(1, 1));
 
             ReadTopicMessage(firstOutputTopic, R"([{"Val": "ABC"}])", disposition);
             ReadTopicMessage(secondOutputTopic, R"({"Val": "ABC"}-B)", disposition);
@@ -1924,7 +1940,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                 "second_solomon_project"_a = secondSoLocation.ProjectId,
                 "second_solomon_folder"_a = secondSoLocation.FolderId,
                 "second_solomon_service"_a = secondSoLocation.Service
-            ), EStatus::SUCCESS, "", astChecker(1, 1));
+            ), EStatus::SUCCESS, "", AstChecker(1, 1));
 
             TString expectedMetrics = R"([
   {
@@ -1975,7 +1991,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                 "output_topic"_a = firstOutputTopic,
                 "row_table"_a = rowSinkTable,
                 "column_table"_a = columnSinkTable
-            ), EStatus::SUCCESS, "", astChecker(2, 4));
+            ), EStatus::SUCCESS, "", AstChecker(2, 4));
 
             ReadTopicMessage(firstOutputTopic, R"([{"Val": "ABC"}])", disposition);
             disposition = TInstant::Now();
@@ -1996,6 +2012,114 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                 UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser("C").GetString(), R"({"Val": "ABC"}-C)");
             });
         }
+    }
+
+    Y_UNIT_TEST_F(ReadFromLocalTopicsWithAuth, TStreamingTestFixture) {
+        InternalInitFederatedQuerySetupFactory = true;
+
+        auto& config = SetupAppConfig();
+        config.MutableFeatureFlags()->SetEnableTopicsSqlIoOperations(true);
+        config.MutablePQConfig()->SetRequireCredentialsInNewProtocol(true);
+
+        constexpr char inputTopic[] = "inputTopicName";
+        constexpr char outputTopic[] = "outputTopicName";
+        CreateTopic(inputTopic, std::nullopt, /* local */ true);
+        CreateTopic(outputTopic, std::nullopt, /* local */ true);
+
+        auto asyncResult = GetQueryClient()->ExecuteQuery(fmt::format(R"(
+                INSERT INTO `{output_topic}`
+                SELECT * FROM `{input_topic}` WITH (
+                    STREAMING = "TRUE"
+                ) LIMIT 1
+            )",
+            "input_topic"_a = inputTopic,
+            "output_topic"_a = outputTopic
+        ), TTxControl::NoTx());
+
+        Sleep(TDuration::Seconds(1));
+        WriteTopicMessage(inputTopic, "data", 0, /* local */ true);
+        ReadTopicMessage(outputTopic, "data", TInstant::Now() - TDuration::Seconds(100), /* local */ true);
+
+        const auto result = asyncResult.ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+    }
+
+    Y_UNIT_TEST_F(ScalarFederativeWriting, TStreamingTestFixture) {
+        constexpr char firstOutputTopic[] = "replicatedWritingOutputTopicName1";
+        constexpr char secondOutputTopic[] = "replicatedWritingOutputTopicName2";
+        constexpr char pqSource[] = "pqSourceName";
+        CreateTopic(firstOutputTopic);
+        CreateTopic(secondOutputTopic);
+        CreatePqSource(pqSource);
+
+        constexpr char solomonSink[] = "solomonSinkName";
+        CreateSolomonSource(solomonSink);
+
+        const TSolomonLocation soLocation = {
+            .ProjectId = "cloudId1",
+            .FolderId = "folderId1",
+            .Service = "custom1",
+            .IsCloud = false,
+        };
+        CleanupSolomon(soLocation);
+        ExecQuery(fmt::format(R"(
+            INSERT INTO `{pq_source}`.`{output_topic1}` SELECT "TestData1";
+            INSERT INTO `{pq_source}`.`{output_topic2}` SELECT "TestData2" AS Data;
+            INSERT INTO `{pq_source}`.`{output_topic2}`(Data) VALUES ("TestData2");
+
+            INSERT INTO `{solomon_sink}`.`{solomon_project}/{solomon_folder}/{solomon_service}`
+            SELECT
+                13333 AS value,
+                "test-insert" AS sensor,
+                Timestamp("2025-03-12T14:40:39Z") AS ts;
+
+            INSERT INTO `{solomon_sink}`.`{solomon_project}/{solomon_folder}/{solomon_service}`
+                (value, sensor, ts)
+            VALUES
+                (23333, "test-insert-2", Timestamp("2025-03-12T14:40:39Z"));)",
+            "pq_source"_a = pqSource,
+            "output_topic1"_a = firstOutputTopic,
+            "output_topic2"_a = secondOutputTopic,
+            "solomon_sink"_a = solomonSink,
+            "solomon_project"_a = soLocation.ProjectId,
+            "solomon_folder"_a = soLocation.FolderId,
+            "solomon_service"_a = soLocation.Service
+        ), EStatus::SUCCESS, "", AstChecker(2, 5));
+
+        ReadTopicMessage(firstOutputTopic, "TestData1");
+        ReadTopicMessages(secondOutputTopic, {"TestData2", "TestData2"});
+
+        TString expectedMetrics = R"([
+  {
+    "labels": [
+      [
+        "name",
+        "value"
+      ],
+      [
+        "sensor",
+        "test-insert"
+      ]
+    ],
+    "ts": 1741790439,
+    "value": 13333
+  },
+  {
+    "labels": [
+      [
+        "name",
+        "value"
+      ],
+      [
+        "sensor",
+        "test-insert-2"
+      ]
+    ],
+    "ts": 1741790439,
+    "value": 23333
+  }
+])";
+        UNIT_ASSERT_VALUES_EQUAL(GetSolomonMetrics(soLocation), expectedMetrics);
     }
 }
 
@@ -2456,16 +2580,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         CreatePqSource(pqSourceName);
 
         constexpr char solomonSinkName[] = "sinkName";
-        ExecQuery(fmt::format(R"(
-            CREATE EXTERNAL DATA SOURCE `{solomon_source}` WITH (
-                SOURCE_TYPE = "Solomon",
-                LOCATION = "localhost:{solomon_port}",
-                AUTH_METHOD = "NONE",
-                USE_TLS = "false"
-            );)",
-            "solomon_source"_a = solomonSinkName,
-            "solomon_port"_a = getenv("SOLOMON_HTTP_PORT")
-        ));
+        CreateSolomonSource(solomonSinkName);
 
         constexpr char queryName[] = "streamingQuery";
         const TSolomonLocation soLocation = {
@@ -2824,7 +2939,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             SetupMockConnectorTableData(connectorClient, {
                 .TableName = ydbTable,
                 .Columns = columns,
-                .NumberReadSplits = 2,
+                .NumberReadSplits = 4, // Read from ydb source is not deduplicated because spilling is disabled for streaming queries
                 .ResultFactory = [&]() {
                     return MakeRecordBatch(MakeArray<arrow::BinaryBuilder>("fqdn", fqdnColumn, arrow::binary()));
                 }
@@ -4395,6 +4510,182 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         Sleep(TDuration::Seconds(1));
         WriteTopicMessage(inputTopicName, TStringBuilder() << "data" << ++dataIdx);
         ReadTopicMessage(outputTopicName, TStringBuilder() << "data" << dataIdx, writeDisposition);
+    }
+
+    Y_UNIT_TEST_F(StreamingQueryWithMultipleWrites, TStreamingWithSchemaSecretsTestFixture) {
+        constexpr char inputTopic[] = "createStreamingQueryWithMultipleWritesInputTopic";
+        constexpr char outputTopic1[] = "createStreamingQueryWithMultipleWritesOutputTopic1";
+        constexpr char outputTopic2[] = "createStreamingQueryWithMultipleWritesOutputTopic2";
+        constexpr char pqSource[] = "sourceName";
+        CreateTopic(inputTopic);
+        CreateTopic(outputTopic1);
+        CreateTopic(outputTopic2);
+        CreatePqSource(pqSource);
+
+        constexpr char sinkBucket[] = "test_bucket_streaming_query_multi_insert";
+        constexpr char s3SinkName[] = "s3SinkName";
+        CreateBucket(sinkBucket);
+        CreateS3Source(sinkBucket, s3SinkName);
+
+        constexpr char solomonSink[] = "solomonSinkName";
+        CreateSolomonSource(solomonSink);
+
+        constexpr char rowSinkTable[] = "rowSink";
+        constexpr char columnSinkTable[] = "columnSink";
+        ExecQuery(fmt::format(R"(
+            CREATE TABLE `{row_table}` (
+                B Utf8 NOT NULL,
+                PRIMARY KEY (B)
+            );
+            CREATE TABLE `{column_table}` (
+                C String NOT NULL,
+                PRIMARY KEY (C)
+            ) WITH (
+                STORE = COLUMN
+            );)",
+            "row_table"_a = rowSinkTable,
+            "column_table"_a = columnSinkTable
+        ));
+
+        constexpr char queryName[] = "streamingQuery";
+        const TSolomonLocation soLocation = {
+            .ProjectId = "cloudId1",
+            .FolderId = "folderId1",
+            .Service = "custom",
+            .IsCloud = false,
+        };
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                $rows = SELECT * FROM `{pq_source}`.`{input_topic}`;
+
+                INSERT INTO `{pq_source}`.`{output_topic1}` SELECT Data || "-A" AS X FROM $rows;
+
+                INSERT INTO `{pq_source}`.`{output_topic2}` SELECT Data || "-B" AS Y FROM $rows;
+
+                UPSERT INTO `{row_table}` SELECT Unwrap(CAST(Data || "-C" AS Utf8)) AS B FROM $rows;
+
+                UPSERT INTO `{column_table}` SELECT Data || "-D" AS C FROM $rows;
+
+                INSERT INTO `{s3_sink}`.`test/` WITH (
+                    FORMAT = raw
+                ) SELECT Data || "-E" AS D FROM $rows;
+
+                INSERT INTO `{solomon_sink}`.`{solomon_project}/{solomon_folder}/{solomon_service}`
+                SELECT
+                    42 AS value,
+                    Data || "-F" AS sensor,
+                    Timestamp("2025-03-12T14:40:39Z") AS ts
+                FROM $rows;
+            END DO;)",
+            "query_name"_a = queryName,
+            "pq_source"_a = pqSource,
+            "input_topic"_a = inputTopic,
+            "output_topic1"_a = outputTopic1,
+            "output_topic2"_a = outputTopic2,
+            "row_table"_a = rowSinkTable,
+            "column_table"_a = columnSinkTable,
+            "s3_sink"_a = s3SinkName,
+            "solomon_sink"_a = solomonSink,
+            "solomon_project"_a = soLocation.ProjectId,
+            "solomon_folder"_a = soLocation.FolderId,
+            "solomon_service"_a = soLocation.Service
+        ));
+        CheckScriptExecutionsCount(1, 1);
+
+        CleanupSolomon(soLocation);
+        Sleep(TDuration::Seconds(1));
+        WriteTopicMessage(inputTopic, "test");
+        ReadTopicMessage(outputTopic1, "test-A");
+        ReadTopicMessage(outputTopic2, "test-B");
+
+        const auto& results = ExecQuery(fmt::format(R"(
+            SELECT * FROM `{row_table}`;
+            SELECT * FROM `{column_table}`;)",
+            "row_table"_a = rowSinkTable,
+            "column_table"_a = columnSinkTable
+        ));
+        UNIT_ASSERT_VALUES_EQUAL(results.size(), 2);
+
+        CheckScriptResult(results[0], 1, 1, [&](TResultSetParser& resultSet) {
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser("B").GetUtf8(), "test-C");
+        });
+
+        CheckScriptResult(results[1], 1, 1, [&](TResultSetParser& resultSet) {
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser("C").GetString(), "test-D");
+        });
+
+        UNIT_ASSERT_VALUES_EQUAL(GetAllObjects(sinkBucket), "test-E");
+
+        const TString expectedMetrics = R"([
+  {
+    "labels": [
+      [
+        "name",
+        "value"
+      ],
+      [
+        "sensor",
+        "test-F"
+      ]
+    ],
+    "ts": 1741790439,
+    "value": 42
+  }
+])";
+        UNIT_ASSERT_STRINGS_EQUAL(GetSolomonMetrics(soLocation), expectedMetrics);
+    }
+
+    Y_UNIT_TEST_F(DropStreamingQueryDuringRetries, TStreamingWithSchemaSecretsTestFixture) {
+        constexpr char topic[] = "dropStreamingQueryDuringRetriesTopic";
+        constexpr char pqSource[] = "pqSource";
+        CreateTopic(topic);
+        CreatePqSource(pqSource);
+
+        const auto queryName = "streamingQuery";
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                PRAGMA pq.Consumer = "test-consumer";
+                INSERT INTO `{pq_source}`.`{topic}`
+                SELECT * FROM `{pq_source}`.`{topic}`;
+            END DO;)",
+            "query_name"_a = queryName,
+            "pq_source"_a = pqSource,
+            "topic"_a = topic
+        ));
+
+        Sleep(TDuration::Seconds(3));
+
+        ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
+        {
+            const auto& result = ExecQuery("SELECT RetryCount, SuspendedUntil FROM `.sys/streaming_queries`");
+            UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
+            CheckScriptResult(result[0], 2, 1, [&](TResultSetParser& resultSet) {
+                UNIT_ASSERT_GE(*resultSet.ColumnParser("RetryCount").GetOptionalUint64(), 1);
+                UNIT_ASSERT(*resultSet.ColumnParser("SuspendedUntil").GetOptionalTimestamp());
+            });
+        }
+
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (RUN = FALSE);)",
+            "query_name"_a = queryName
+        ));
+
+        {
+            const auto& result = ExecQuery("SELECT Status FROM `.sys/streaming_queries`");
+            UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
+            CheckScriptResult(result[0], 1, 1, [&](TResultSetParser& resultSet) {
+                UNIT_ASSERT_VALUES_EQUAL(*resultSet.ColumnParser("Status").GetOptionalUtf8(), "FAILED");
+            });
+        }
+
+        ExecQuery(fmt::format(R"(
+            DROP STREAMING QUERY `{query_name}`;)",
+            "query_name"_a = queryName
+        ));
+
+        CheckScriptExecutionsCount(0, 0);
     }
 }
 

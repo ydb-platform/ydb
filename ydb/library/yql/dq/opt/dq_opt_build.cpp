@@ -622,6 +622,7 @@ TDqPhyStage RebuildStageOutputAsWide(const TDqPhyStage& stage, const TStructExpr
         .Outputs(stage.Outputs())
         .Done();
 }
+}
 
 TDqPhyStage RebuildStageInputsAsWide(const TDqPhyStage& stage, TExprContext& ctx) {
     TVector<TCoArgument> newArgs;
@@ -744,6 +745,7 @@ TDqPhyStage RebuildStageInputsAsWide(const TDqPhyStage& stage, TExprContext& ctx
         .Done();
 }
 
+namespace {
 TDqPhyStage DqEnableWideChannelsInputForStage(const TDqPhyStage& stage, TExprContext& ctx) {
     auto stageSettings = TDqStageSettings::Parse(stage);
     if (stageSettings.WideChannels) {

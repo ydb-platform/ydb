@@ -1,5 +1,5 @@
 diff --git a/include/__exception/exception_ptr.h b/include/__exception/exception_ptr.h
-index 2cb250d..6ca25c6 100644
+index c43c005..3a7fa82 100644
 --- a/include/__exception/exception_ptr.h
 +++ b/include/__exception/exception_ptr.h
 @@ -55,8 +55,6 @@ _LIBCPP_OVERRIDABLE_FUNC_VIS __cxa_exception* __cxa_init_primary_exception(

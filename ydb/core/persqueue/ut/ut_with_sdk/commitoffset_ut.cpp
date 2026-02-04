@@ -74,8 +74,8 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
         setup.Write("message-4-3", 4);
     }
 
-    void PrepareAutopartitionedCDC(TTopicSdkTestSetup& setup) {
-        auto client = NYdb::NQuery::TQueryClient(setup.MakeDriver());
+    void PrepareAutopartitionedCDC(NActors::TTestActorRuntime& runtime, NYdb::TDriver& driver) {
+        auto client = NYdb::NQuery::TQueryClient(driver);
         auto session = client.GetSession().GetValueSync().GetSession();
 
         ExecuteQuery(session, R"(
@@ -118,7 +118,7 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
 
         {
             ui64 txId = 1006;
-            SplitPartition(setup.GetRuntime(), ++txId, "/Root/origin/feed", "streamImpl", 0, "a");
+            SplitPartition(runtime, ++txId, "/Root/origin/feed", "streamImpl", 0, "a");
         }
 
         ExecuteQuery(session, R"(
@@ -126,14 +126,17 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
             INSERT INTO `/Root/origin` (id, value)
             VALUES (4, 'message-1-1'), (5, 'message-1-2'), (6, 'message-1-3');
         )");
-
     }
 
-    ui64 GetCommittedOffset(TTopicSdkTestSetup& setup, size_t partition) {
-        auto description = setup.DescribeConsumer();
+    ui64 GetCommittedOffset(TTopicSdkTestSetup& setup, const std::string& topic, const std::string& consumer, size_t partition) {
+        auto description = setup.DescribeConsumer(topic, consumer);
         auto stats = description.GetPartitions().at(partition).GetPartitionConsumerStats();
         UNIT_ASSERT(stats);
         return stats->GetCommittedOffset();
+    }
+
+    ui64 GetCommittedOffset(TTopicSdkTestSetup& setup, size_t partition) {
+        return GetCommittedOffset(setup, TEST_TOPIC, TEST_CONSUMER, partition);
     }
 
     Y_UNIT_TEST(Commit_Flat_WithWrongSession) {
@@ -817,21 +820,64 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
 
     Y_UNIT_TEST(CommitCDC_WithoutSession_WithChildren) {
         TTopicSdkTestSetup setup = CreateSetup();
-        PrepareAutopartitionedCDC(setup);
+        auto driver = setup.MakeDriver();
+        PrepareAutopartitionedCDC(setup.GetRuntime(), driver);
 
         {
             // Commit parent partition to non end
             auto result = setup.Commit("/Root/origin/feed", "my_consumer", 0, 1);
             UNIT_ASSERT(result.IsSuccess());
+
+            UNIT_ASSERT_VALUES_EQUAL(1, GetCommittedOffset(setup, "/Root/origin/feed", "my_consumer", 0));
+            UNIT_ASSERT_VALUES_EQUAL(0, GetCommittedOffset(setup, "/Root/origin/feed", "my_consumer", 1));
+            UNIT_ASSERT_VALUES_EQUAL(0, GetCommittedOffset(setup, "/Root/origin/feed", "my_consumer", 2));
         }
 
         {
             auto result = setup.Commit("/Root/origin/feed", "my_consumer", 1, 1);
             UNIT_ASSERT(result.IsSuccess());
+
+            UNIT_ASSERT_VALUES_EQUAL(3, GetCommittedOffset(setup, "/Root/origin/feed", "my_consumer", 0));
+            UNIT_ASSERT_VALUES_EQUAL(1, GetCommittedOffset(setup, "/Root/origin/feed", "my_consumer", 1));
+            UNIT_ASSERT_VALUES_EQUAL(0, GetCommittedOffset(setup, "/Root/origin/feed", "my_consumer", 2));
         }
     }
 
+    Y_UNIT_TEST_FLAG(DistributedTxCommitCDC, autoPartitioningSupport) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        auto driver = setup.MakeDriver();
+        PrepareAutopartitionedCDC(setup.GetRuntime(), driver);
 
+        auto count = 0;
+        const auto expected = 6;
+
+        auto result = setup.Read("/Root/origin/feed", "my_consumer", [&](auto& x) {
+            auto& messages = x.GetMessages();
+            for (size_t i = 0u; i < messages.size(); ++i) {
+                ++count;
+                auto& message = messages[i];
+                Cerr << "SESSION EVENT read message: " << count << " from partition: " << message.GetPartitionSession()->GetPartitionId() << Endl << Flush;
+                message.Commit();
+            }
+
+            return true;
+        }, std::nullopt, TDuration::Seconds(5), autoPartitioningSupport);
+
+        UNIT_ASSERT(result.Timeout);
+        UNIT_ASSERT_VALUES_EQUAL(count, expected);
+
+        auto description = setup.DescribeConsumer("/Root/origin/feed", "my_consumer");
+        {
+            auto partition = description.GetPartitions().at(1);
+            auto stats = partition.GetPartitionConsumerStats();
+            UNIT_ASSERT_VALUES_EQUAL(partition.GetPartitionStats()->GetEndOffset(), stats->GetCommittedOffset());
+        }
+        {
+            auto partition = description.GetPartitions().at(2);
+            auto stats = partition.GetPartitionConsumerStats();
+            UNIT_ASSERT_VALUES_EQUAL(partition.GetPartitionStats()->GetEndOffset(), stats->GetCommittedOffset());
+        }
+    }
 }
 
 } // namespace NKikimr

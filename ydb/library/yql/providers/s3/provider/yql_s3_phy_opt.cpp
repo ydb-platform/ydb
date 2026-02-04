@@ -161,6 +161,9 @@ public:
             const auto& stage = maybeUnionAll.Cast().Output().Stage();
             const auto& program = stage.Program();
             const auto& args = program.Args();
+
+            stageArgs.reserve(args.Size());
+            stageArgsReplaces.reserve(args.Size());
             for (size_t i = 0; i < args.Size(); ++i) {
                 auto newArg = Build<TCoArgument>(ctx, writePos)
                     .Name(TStringBuilder() << "in_" << i)
@@ -346,9 +349,9 @@ public:
 
         if (resultPtr) {
             return resultPtr;
-        } else {
-            return node;
         }
+
+        return node;
     }
 
     TMaybeNode<TExprBase> S3WriteObject(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) const {
@@ -363,18 +366,19 @@ public:
             /* wrapWithNth */ false
         );
 
-        if (resultPtr) {
-            const auto maybeStage = TMaybeNode<TDqStage>(resultPtr);
-            YQL_ENSURE(maybeStage);
-            return Build<TDqQuery>(ctx, write.Pos())
-                .World(write.World())
-                .SinkStages()
-                    .Add(maybeStage.Cast())
-                    .Build()
-                .Done();
-        } else {
+        if (!resultPtr) {
             return node;
         }
+
+        const auto maybeStage = TMaybeNode<TDqStage>(resultPtr);
+        YQL_ENSURE(maybeStage);
+
+        return Build<TDqQuery>(ctx, write.Pos())
+            .World(write.World())
+            .SinkStages()
+                .Add(maybeStage.Cast())
+                .Build()
+            .Done();
     }
 
 private:

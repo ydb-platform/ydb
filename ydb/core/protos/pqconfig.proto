@@ -220,6 +220,7 @@ message TPQConfig {
     }
 
     optional TCompactionConfig CompactionConfig = 58;
+    optional uint64 MaxMessageSizeBytes = 59 [default = 125829120]; // 120MB
 }
 
 message TChannelProfile {
@@ -397,6 +398,9 @@ message TPQTabletConfig {
         optional uint32 MaxProcessingAttempts = 15 [default = 1000]; // For MLP consumers
         optional uint32 DefaultProcessingTimeoutSeconds = 16 [default = 30]; // For MLP consumers
         optional string DeadLetterQueue = 17; // For MLP consumers
+        optional uint32 DefaultDelayMessageTimeMs = 18 [default = 0]; // For MLP consumers
+        optional uint32 DefaultReceiveMessageWaitTimeMs = 19 [default = 0]; // For MLP consumers
+        optional bool ContentBasedDeduplication = 20 [default = false]; // For MLP consumers
     }
 
     repeated TConsumer Consumers = 37;
@@ -472,6 +476,8 @@ message TPQTabletConfig {
 
     // The ID of the Monitoring project that will be used as the value of `project` label for detailed metrics level.
     optional string MonitoringProjectId = 41;
+
+    optional string TimestampType = 42;
 }
 
 message THeartbeat {
@@ -793,6 +799,8 @@ message TAggregatedCounters {
         optional uint64 DeletedByMovedToDLQ = 7;
 
         optional uint64 CPUUsage = 8;
+
+        repeated uint64 WaitingLockingDurationValues = 9;
     }
 }
 
@@ -1367,11 +1375,14 @@ message TEvMLPUnlockResponse {
 // To PQTablet
 // Изменяет дедлайн сообщения
 message TEvMLPChangeMessageDeadlineRequest {
+    message TOffsetWithDeadline {
+        optional uint64 Offset = 1;
+        optional uint64 DeadlineTimestampSeconds = 2;
+    }
     optional string Topic = 1; // PathId? Нужен для возможности в одной таблетке хранить несколько топиков
     optional string Consumer = 2;
     optional uint32 PartitionId = 3;
-    optional uint64 DeadlineTimestampSeconds = 4;
-    repeated uint64 Offset = 5;
+    repeated TOffsetWithDeadline Message = 6;
 }
 
 // From PQTablet

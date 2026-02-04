@@ -2,8 +2,11 @@ LIBRARY()
 
 SRCS(
     actor.cpp
-    error.cpp
+    change_message_visibility.cpp
     delete_message.cpp
+    error.cpp
+    get_queue_attributes.cpp
+    list_queues.cpp
     receipt.cpp
     receive_message.cpp
     send_message.cpp
@@ -35,6 +38,7 @@ PEERDIR(
     ydb/core/ymq/attributes
     ydb/core/ymq/base
     ydb/core/ymq/error
+    library/cpp/json
 )
 
 END()

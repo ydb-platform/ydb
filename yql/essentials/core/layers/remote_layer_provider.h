@@ -7,7 +7,7 @@ namespace NYql::NLayers {
 class IRemoteLayerProvider: public TThrRefBase {
 public:
     virtual NThreading::TFuture<TLayerInfo> GetLayerInfo(const TMaybe<TString>& parent, const TString& url) const = 0;
-    virtual ~IRemoteLayerProvider() = default;
+    ~IRemoteLayerProvider() override = default;
 };
 
 using IRemoteLayerProviderPtr = TIntrusivePtr<IRemoteLayerProvider>;

@@ -523,7 +523,9 @@ class ElementTree:
 
     """
     def __init__(self, element=None, file=None):
-        # assert element is None or iselement(element)
+        if element is not None and not iselement(element):
+            raise TypeError('expected an Element, not %s' %
+                            type(element).__name__)
         self._root = element # first node
         if file:
             self.parse(file)
@@ -539,7 +541,9 @@ class ElementTree:
         with the given element.  Use with care!
 
         """
-        # assert iselement(element)
+        if not iselement(element):
+            raise TypeError('expected an Element, not %s'
+                            % type(element).__name__)
         self._root = element
 
     def parse(self, source, parser=None):
@@ -705,6 +709,8 @@ class ElementTree:
                                     of start/end tags
 
         """
+        if self._root is None:
+            raise TypeError('ElementTree not initialized')
         if not method:
             method = "xml"
         elif method not in _serialize:
@@ -1248,10 +1254,17 @@ def iterparse(source, events=None, parser=None):
             if close_source:
                 source.close()
 
+    gen = iterator(source)
     class IterParseIterator(collections.abc.Iterator):
-        __next__ = iterator(source).__next__
+        __next__ = gen.__next__
+        def close(self):
+            if close_source:
+                source.close()
+            gen.close()
 
         def __del__(self):
+            # TODO: Emit a ResourceWarning if it was not explicitly closed.
+            # (When the close() method will be supported in all maintained Python versions.)
             if close_source:
                 source.close()
 

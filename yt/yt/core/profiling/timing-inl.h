@@ -48,7 +48,7 @@ TTimerGuard<TTimer>::TTimerGuard(TTimerGuard&& other) noexcept
 { }
 
 template <class TTimer>
-TTimerGuard<TTimer>& TTimerGuard<TTimer>::operator = (TTimerGuard&& other) noexcept
+TTimerGuard<TTimer>& TTimerGuard<TTimer>::operator=(TTimerGuard&& other) noexcept
 {
     TryStopTimer();
 

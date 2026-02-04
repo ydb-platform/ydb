@@ -28,6 +28,8 @@ class SchemeEntryType(enum.IntEnum):
     EXTERNAL_DATA_SOURCE = 19
     VIEW = 20
     RESOURCE_POOL = 21
+    TRANSFER = 23
+    SYS_VIEW = 24
 
     @classmethod
     def _missing_(cls, value):
@@ -147,6 +149,14 @@ class SchemeEntryType(enum.IntEnum):
         """
         return entry == SchemeEntryType.TOPIC
 
+    @staticmethod
+    def is_sysview(entry):
+        """
+        :param entry: A scheme entry to check
+        :return: True if scheme entry is a system view and False otherwise
+        """
+        return entry == SchemeEntryType.SYS_VIEW
+
 
 class SchemeEntry(object):
     __slots__ = (
@@ -252,6 +262,12 @@ class SchemeEntry(object):
         :return: True if scheme entry is a resource pool and False otherwise
         """
         return SchemeEntryType.is_resource_pool(self.type)
+
+    def is_sysview(self):
+        """
+        :return: True if scheme entry is a system view and False otherwise
+        """
+        return SchemeEntryType.is_sysview(self.type)
 
 
 class Directory(SchemeEntry):

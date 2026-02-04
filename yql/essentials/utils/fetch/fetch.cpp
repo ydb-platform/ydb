@@ -142,8 +142,9 @@ inline bool IsRedirectCode(unsigned code) {
         case HTTP_SEE_OTHER:
         case HTTP_TEMPORARY_REDIRECT:
             return true;
+        default:
+            return false;
     }
-    return false;
 }
 
 } // namespace

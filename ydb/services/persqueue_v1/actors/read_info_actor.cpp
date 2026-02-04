@@ -38,7 +38,7 @@ void TReadInfoActor::Bootstrap(const TActorContext& ctx) {
     Become(&TThis::StateFunc);
 
     auto request = dynamic_cast<const ReadInfoRequest*>(GetProtoRequest());
-    Y_ABORT_UNLESS(request);
+    AFL_ENSURE(request);
     ClientId = NPersQueue::ConvertNewConsumerName(request->consumer().path(), ctx);
 
     bool readOnlyLocal = request->get_only_original();
@@ -78,6 +78,17 @@ void TReadInfoActor::Bootstrap(const TActorContext& ctx) {
     ));
 }
 
+
+bool TReadInfoActor::OnUnhandledException(const std::exception& exc) {
+    auto ctx = *NActors::TlsActivationContext;
+    LOG_CRIT_S(ctx, NKikimrServices::PQ_READ_PROXY,
+        TStringBuilder() << " unhandled exception " << TypeName(exc) << ": " << exc.what() << Endl
+            << TBackTrace::FromCurrentException().PrintToString());
+
+    AnswerError( "Internal error", PersQueue::ErrorCode::ERROR, ctx.AsActorContext());
+
+    return true;
+}
 
 void TReadInfoActor::Die(const TActorContext& ctx) {
 
@@ -122,9 +133,9 @@ void TReadInfoActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCon
     ReadInfoResult result;
 
     const auto& resp = ev->Get()->Record;
-    Y_ABORT_UNLESS(resp.HasMetaResponse());
+    AFL_ENSURE(resp.HasMetaResponse());
 
-    Y_ABORT_UNLESS(resp.GetMetaResponse().GetCmdGetReadSessionsInfoResult().TopicResultSize() == TopicAndTablets.size());
+    AFL_ENSURE(resp.GetMetaResponse().GetCmdGetReadSessionsInfoResult().TopicResultSize() == TopicAndTablets.size());
     TMap<std::pair<TString, ui64>, ReadInfoResult::TopicInfo::PartitionInfo*> partResultMap;
     for (auto& tt : resp.GetMetaResponse().GetCmdGetReadSessionsInfoResult().GetTopicResult()) {
         auto topicRes = result.add_topics();

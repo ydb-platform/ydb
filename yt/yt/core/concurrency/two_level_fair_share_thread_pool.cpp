@@ -30,6 +30,8 @@ namespace NYT::NConcurrency {
 
 using namespace NProfiling;
 
+const TFairShareThreadPoolTag DefaultExecutionTag = "default";
+
 ////////////////////////////////////////////////////////////////////////////////
 
 namespace {
@@ -70,7 +72,7 @@ public:
         }
     }
 
-    T& operator* ()
+    T& operator*()
     {
         return *Ptr_;
     }
@@ -90,7 +92,7 @@ public:
         return Ptr_;
     }
 
-    bool operator < (const THeapItem<T>& other) const
+    bool operator<(const THeapItem<T>& other) const
     {
         return *Ptr_ < *other;
     }
@@ -194,7 +196,7 @@ public:
         return Items_.size();
     }
 
-    T& operator[] (size_t index)
+    T& operator[](size_t index)
     {
         return *Items_[index];
     }
@@ -238,7 +240,7 @@ struct TEnqueuedTime
     TCpuInstant Value = 0;
 };
 
-bool operator < (const TEnqueuedTime& lhs, const TEnqueuedTime& rhs)
+bool operator<(const TEnqueuedTime& lhs, const TEnqueuedTime& rhs)
 {
     return lhs.Value < rhs.Value;
 }
@@ -286,7 +288,7 @@ struct TExecutionPool final
     { }
 };
 
-bool operator < (const TExecutionPool& lhs, const TExecutionPool& rhs)
+bool operator<(const TExecutionPool& lhs, const TExecutionPool& rhs)
 {
     return lhs.ExcessTime < rhs.ExcessTime;
 }
@@ -314,7 +316,7 @@ struct TBucketBase
     { }
 };
 
-bool operator < (const TBucketBase& lhs, const TBucketBase& rhs)
+bool operator<(const TBucketBase& lhs, const TBucketBase& rhs)
 {
     return std::tie(lhs.ExcessTime, lhs.EnqueuedTime) < std::tie(rhs.ExcessTime, rhs.EnqueuedTime);
 }
@@ -385,7 +387,7 @@ class TBucketMapping
 public:
     struct TExecutionPoolToListNode
     {
-        auto operator() (TExecutionPool* pool) const
+        auto operator()(TExecutionPool* pool) const
         {
             return &pool->LinkedListNode;
         }
@@ -609,9 +611,14 @@ public:
         , CumulativeSchedulingTimeCounter_(Profiler_
             .WithTags(GetThreadTags(ThreadNamePrefix_))
             .TimeCounter("/time/scheduling_cumulative"))
-        , PoolWeightProvider_(options.PoolWeightProvider)
         , VerboseLogging_(options.VerboseLogging)
+        , PoolWeightProvider_(options.PoolWeightProvider)
     { }
+
+    void SetWeightProvider(IPoolWeightProviderPtr weightProvider)
+    {
+        PoolWeightProvider_ = std::move(weightProvider);
+    }
 
     ~TTwoLevelFairShareQueue()
     {
@@ -821,9 +828,9 @@ private:
     const std::string ThreadNamePrefix_;
     const TProfiler Profiler_;
     const NProfiling::TTimeCounter CumulativeSchedulingTimeCounter_;
-    const IPoolWeightProviderPtr PoolWeightProvider_;
     const bool VerboseLogging_;
 
+    IPoolWeightProviderPtr PoolWeightProvider_;
     std::atomic<bool> Stopped_ = false;
     TMpscStack<TAction> InvokeQueue_;
     char Padding0_[CacheLineSize - sizeof(TMpscStack<TAction>)];
@@ -1355,6 +1362,11 @@ public:
     {
         EnsureStarted();
         return Queue_->GetInvoker(poolName, bucketName);
+    }
+
+    void SetWeightProvider(IPoolWeightProviderPtr weightProvider) override
+    {
+        Queue_->SetWeightProvider(std::move(weightProvider));
     }
 
     void Shutdown() override

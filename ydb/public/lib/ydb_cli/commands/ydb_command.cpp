@@ -41,8 +41,8 @@ void TYdbSimpleCommand::Config(TConfig& config) {
     TClientCommand::Config(config);
 
     TClientCommandOptions& opts = *config.Opts;
-    opts.AddLongOption("timeout", "Client timeout. There is no point waiting for the result after this long.")
-        .RequiredArgument("ms").StoreResult(&ClientTimeout);
+    opts.AddLongOption("timeout", "Client timeout. Supports time units (e.g., '5s', '1m'). Plain number interpreted as milliseconds.")
+        .RequiredArgument("DURATION").StoreResult(&ClientTimeout);
 }
 
 TYdbOperationCommand::TYdbOperationCommand(const TString& name, const std::initializer_list<TString>& aliases, const TString& description)
@@ -53,9 +53,9 @@ void TYdbOperationCommand::Config(TConfig& config) {
     TYdbCommand::Config(config);
 
     TClientCommandOptions& opts = *config.Opts;
-    opts.AddLongOption("timeout", "Operation timeout. Operation should be executed on server within this timeout. "
+    opts.AddLongOption("timeout", "Operation timeout. Supports time units (e.g., '5s', '1m'). Plain number interpreted as milliseconds. "
             "There could also be a delay up to 200ms to receive timeout error from server.")
-        .RequiredArgument("ms").StoreResult(&OperationTimeout);
+        .RequiredArgument("DURATION").StoreResult(&OperationTimeout);
 }
 
 } // namespace NYdb::NConsoleClient

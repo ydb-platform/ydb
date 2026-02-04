@@ -731,7 +731,7 @@ public:
 
         auto cancelAfter = ev->Get()->GetCancelAfter();
         auto timeout = ev->Get()->GetOperationTimeout();
-        auto timerDuration = ev->Get()->GetDisableDefaultTimeout() ? timeout : GetQueryTimeout(queryType, timeout.MilliSeconds(), TableServiceConfig, QueryServiceConfig);
+        auto timerDuration = GetQueryTimeout(queryType, timeout.MilliSeconds(), TableServiceConfig, QueryServiceConfig, ev->Get()->GetDisableDefaultTimeout());
         if (cancelAfter) {
             timerDuration = Min(timerDuration, cancelAfter);
         }
@@ -746,7 +746,7 @@ public:
     void Handle(TEvKqp::TEvScriptRequest::TPtr& ev) {
         if (CheckScriptExecutionsTablesReady(ev, EDelayedRequestType::ScriptRequest)) {
             auto req = ev->Get()->Record.MutableRequest();
-            auto maxRunTime = ev->Get()->DisableDefaultTimeout ? TDuration::MilliSeconds(req->GetTimeoutMs()) : GetQueryTimeout(req->GetType(), req->GetTimeoutMs(), TableServiceConfig, QueryServiceConfig);
+            auto maxRunTime = GetQueryTimeout(req->GetType(), req->GetTimeoutMs(), TableServiceConfig, QueryServiceConfig, ev->Get()->DisableDefaultTimeout);
             req->SetTimeoutMs(maxRunTime.MilliSeconds());
             if (req->GetCancelAfterMs()) {
                 maxRunTime = TDuration::MilliSeconds(Min(req->GetCancelAfterMs(), maxRunTime.MilliSeconds()));
@@ -1606,7 +1606,7 @@ private:
 
     void StartScriptExecutionsTablesCreation() {
         ScriptExecutionsCreationStatus = EScriptExecutionsCreationStatus::Pending;
-        Register(CreateScriptExecutionsTablesCreator(FeatureFlags, ScriptExecutionsTalesGeneration), TMailboxType::HTSwap, AppData()->SystemPoolId);
+        Register(CreateScriptExecutionsTablesCreator(FeatureFlags.GetEnableSecureScriptExecutions(), ScriptExecutionsTalesGeneration), TMailboxType::HTSwap, AppData()->SystemPoolId);
     }
 
     template<typename TEvent>

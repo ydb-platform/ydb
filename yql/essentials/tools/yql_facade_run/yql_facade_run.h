@@ -185,7 +185,7 @@ private:
 
 class TFacadeRunner {
 public:
-    TFacadeRunner(TString name);
+    explicit TFacadeRunner(TString name);
     ~TFacadeRunner();
 
     int Main(int argc, const char* argv[]);

@@ -123,17 +123,15 @@ DECLARE_REFCOUNTED_STRUCT(TFiberManagerDynamicConfig)
 DECLARE_REFCOUNTED_STRUCT(TFairThrottlerConfig)
 DECLARE_REFCOUNTED_STRUCT(TFairThrottlerBucketConfig)
 
-DECLARE_REFCOUNTED_STRUCT(IThrottlerIpc)
-DECLARE_REFCOUNTED_STRUCT(IIpcBucket)
-
-DECLARE_REFCOUNTED_CLASS(TFairThrottler)
-DECLARE_REFCOUNTED_CLASS(TBucketThrottler)
+DECLARE_REFCOUNTED_STRUCT(IFairThrottler)
 
 DECLARE_REFCOUNTED_STRUCT(ICallbackProvider)
 
 class TPropagatingStorage;
 
 YT_DECLARE_RECONFIGURABLE_SINGLETON(TFiberManagerConfig, TFiberManagerDynamicConfig);
+
+extern const TFairShareThreadPoolTag DefaultExecutionTag;
 
 ////////////////////////////////////////////////////////////////////////////////
 

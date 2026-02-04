@@ -25,6 +25,15 @@ TConclusion<bool> TFetchingScriptCursor::Execute(const std::shared_ptr<IDataSour
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "empty_result")("scan_step_idx", CurrentStepIdx);
             break;
         }
+        const NColumnShard::TConcreteScanCounters& counters = source->GetContext()->GetCommonContext()->GetCounters();
+        if (StepEndIfStepIsAsync.has_value()) {
+            // previous step was asynchronous; measure how long we waited since it finished
+            auto waitDuration = TMonotonic::Now() - *StepEndIfStepIsAsync;
+            if (CurrentStepIdx == 0) {
+                return TConclusionStatus::Fail("Internal error: step 0 should not have a predecessor");
+            }
+            counters.CountersForStep(Script->GetStep(CurrentStepIdx - 1)->GetName()).WaitDurationMicroSeconds->Add(waitDuration.MicroSeconds());
+        }
         auto step = Script->GetStep(CurrentStepIdx);
         std::optional<TMemoryProfileGuard> mGuard;
         if (IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY)) {
@@ -35,7 +44,9 @@ TConclusion<bool> TFetchingScriptCursor::Execute(const std::shared_ptr<IDataSour
         const TMonotonic startInstant = TMonotonic::Now();
         const TConclusion<bool> resultStep = step->ExecuteInplace(source, *this);
         const auto executionTime = TMonotonic::Now() - startInstant;
-        source->GetContext()->GetCommonContext()->GetCounters().AddExecutionDuration(executionTime);
+
+        counters.CountersForStep(step->GetName()).ExecutionDurationMicroSeconds->Add(executionTime.MicroSeconds());
+        counters.AddExecutionDuration(executionTime);
 
         Script->AddStepDuration(CurrentStepIdx, executionTime, TMonotonic::Now() - StepStartInstant);
         if (resultStep.IsFail()) {
@@ -44,8 +55,11 @@ TConclusion<bool> TFetchingScriptCursor::Execute(const std::shared_ptr<IDataSour
             return resultStep;
         }
         if (!*resultStep) {
+            StepEndIfStepIsAsync.emplace(TMonotonic::Now());
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("scan_step", step->DebugString())("scan_step_idx", CurrentStepIdx);
             return false;
+        } else {
+            StepEndIfStepIsAsync = std::nullopt;
         }
         StepStartInstant = TMonotonic::Now();
         ++CurrentStepIdx;

@@ -3,6 +3,7 @@
 #include <ydb/public/lib/ydb_cli/common/format.h>
 #include <ydb/public/lib/ydb_cli/common/plan2svg.h>
 #include <ydb/public/lib/ydb_cli/common/pretty_table.h>
+#include <ydb/public/lib/ydb_cli/common/duration.h>
 #include <library/cpp/json/json_writer.h>
 #include <util/stream/null.h>
 #include <util/string/printf.h>
@@ -90,11 +91,11 @@ void TWorkloadCommandBenchmark::Config(TConfig& config) {
 
     config.Opts->AddLongOption('v', "verbose", "Verbose output").NoArgument().StoreValue(&VerboseLevel, 1);
 
-    config.Opts->AddLongOption("global-timeout", "Global timeout for all requests")
-        .StoreResult(&GlobalTimeout);
+    config.Opts->AddLongOption("global-timeout", "Global timeout for all requests. Supports time units (e.g., '5s', '1m'). Plain number interpreted as milliseconds.")
+        .StoreMappedResult(&GlobalTimeout, &ParseDurationMilliseconds);
 
-    config.Opts->AddLongOption("request-timeout", "Timeout for each iteration of each request")
-        .StoreResult(&RequestTimeout);
+    config.Opts->AddLongOption("request-timeout", "Timeout for each iteration of each request. Supports time units (e.g., '5s', '1m'). Plain number interpreted as milliseconds.")
+        .StoreMappedResult(&RequestTimeout, &ParseDurationMilliseconds);
 
     config.Opts->AddLongOption('t', "threads", "Number of parallel threads in workload")
         .StoreResult(&Threads).DefaultValue(Threads).RequiredArgument("COUNT");
@@ -344,6 +345,9 @@ public:
                     if (Owner.PlanFileName) {
                         settings.PlanFileName = TStringBuilder() << Owner.PlanFileName << "." << QueryName << "." << ToString(Iteration) << ".in_progress";
                     }
+                    // Store max(DefaultMaxRowsPerResultIndex, lines in expected) rows per result index
+                    settings.MaxRowsPerResultIndex = std::max<size_t>(StringSplitter(Expected.c_str()).Split('\n').Count(), BenchmarkUtils::DefaultMaxRowsPerResultIndex);
+
                     Result = Execute(Query, Expected, *Owner.QueryClient, settings);
                 } else {
                     Result = Explain(Query, *Owner.QueryClient, settings);
@@ -499,7 +503,7 @@ int TWorkloadCommandBenchmark::RunBench(NYdbWorkload::IWorkloadQueryGenerator& w
                 ++successIteration;
                 if (successIteration == 1) {
                     outFStream << iterExec->GetQueryName() << ": " << Endl;
-                    PrintResult(iterExec->GetResult(), outFStream, iterExec->GetExpected());
+                    PrintResult(iterExec->GetResult(), outFStream);
                 }
                 const auto resHash = iterExec->GetResult().CalcHash();
                 if ((!prevResult || *prevResult != resHash) && iterExec->GetResult().GetDiffErrors()) {
@@ -508,7 +512,7 @@ int TWorkloadCommandBenchmark::RunBench(NYdbWorkload::IWorkloadQueryGenerator& w
                             << iterExec->GetQuery() << Endl << Endl <<
                             "UNEXPECTED DIFF: " << Endl
                             << "RESULT: " << Endl;
-                    PrintResult(iterExec->GetResult(), outFStream, iterExec->GetExpected());
+                    PrintResult(iterExec->GetResult(), outFStream);
                     outFStream << Endl
                             << "EXPECTATION: " << Endl << iterExec->GetExpected() << Endl;
                     prevResult = resHash;
@@ -574,16 +578,22 @@ int TWorkloadCommandBenchmark::RunBench(NYdbWorkload::IWorkloadQueryGenerator& w
     return (queriesWithSomeFails || queriesWithDiff) ? EXIT_FAILURE : EXIT_SUCCESS;
 }
 
-void TWorkloadCommandBenchmark::PrintResult(const BenchmarkUtils::TQueryBenchmarkResult& res, IOutputStream& out, const std::string& expected) const {
-    TResultSetPrinter printer(TResultSetPrinter::TSettings()
-        .SetOutput(&out)
-        .SetMaxRowsCount(std::max(StringSplitter(expected.c_str()).Split('\n').Count(), (size_t)100))
-        .SetFormat(EDataFormat::Pretty).SetMaxWidth(GetBenchmarkTableWidth())
-    );
-    for (const auto& [i, rr]: res.GetRawResults()) {
-        for(const auto& r: rr) {
+void TWorkloadCommandBenchmark::PrintResult(const BenchmarkUtils::TQueryBenchmarkResult& res, IOutputStream& out) const {
+    for (const auto& [i, resultData]: res.GetRawResults()) {
+        TResultSetPrinter printer(TResultSetPrinter::TSettings()
+            .SetOutput(&out)
+            .SetFormat(EDataFormat::Pretty)
+            .SetMaxWidth(GetBenchmarkTableWidth())
+        );
+        size_t printedRows = 0;
+        for (const auto& r: resultData.ResultSets) {
             printer.Print(r);
+            printedRows += r.RowsCount();
             printer.Reset();
+        }
+        // Show message if there are more rows than printed
+        if (printedRows < resultData.TotalRowsRead) {
+            out << "And " << (resultData.TotalRowsRead - printedRows) << " more lines, total " << resultData.TotalRowsRead << Endl;
         }
     }
     out << Endl << Endl;

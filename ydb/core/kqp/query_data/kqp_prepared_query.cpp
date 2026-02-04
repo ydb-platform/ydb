@@ -302,7 +302,7 @@ void TPreparedQueryHolder::FillTables(const google::protobuf::RepeatedPtrField< 
             if (input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kSequencer) {
                 auto& info = GetInfo(MakeTableId(input.GetSequencer().GetTable()));
                 for(auto& column: input.GetSequencer().GetColumns()) {
-                    info->AddColumn(column);
+                    info->AddColumn(column.GetName());
                 }
             }
         }

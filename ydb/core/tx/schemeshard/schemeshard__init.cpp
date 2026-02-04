@@ -1857,6 +1857,11 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     bool parseOk = ParseFromStringNoSizeLimit(tableDesc, alterTabletFull);
                     Y_ABORT_UNLESS(parseOk);
 
+                    // Load CoordinatedSchemaVersion from proto (for crash recovery)
+                    if (tableDesc.HasCoordinatedSchemaVersion()) {
+                        tableInfo->AlterData->CoordinatedSchemaVersion = tableDesc.GetCoordinatedSchemaVersion();
+                    }
+
                     if (tableDesc.HasPartitionConfig() &&
                         tableDesc.GetPartitionConfig().ColumnFamiliesSize() > 1)
                     {
@@ -2050,6 +2055,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 backupCollection->AlterVersion = rowset.GetValue<Schema::BackupCollection::AlterVersion>();
                 Y_PROTOBUF_SUPPRESS_NODISCARD backupCollection->Description.ParseFromString(rowset.GetValue<Schema::BackupCollection::Description>());
                 Self->IncrementPathDbRefCount(pathId);
+                Self->RegisterBackupCollectionTables(backupCollection);
 
                 if (!rowset.Next()) {
                     return false;
@@ -4137,7 +4143,6 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     continue;
                 }
 
-                TTableInfo::TPtr tableInfo = Self->Tables.at(pathId);
 
                 if (statusesByTxId.contains(txId)) {
                     for (auto& recByTxId: statusesByTxId.at(txId)) {
@@ -4151,16 +4156,25 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     }
                 }
 
-                switch (kind) {
-                case TTableInfo::TBackupRestoreResult::EKind::Backup:
-                    tableInfo->BackupHistory[txId] = std::move(info);
-                    break;
-                case TTableInfo::TBackupRestoreResult::EKind::Restore:
-                    tableInfo->RestoreHistory[txId] = std::move(info);
-                    if (tableInfo->IsRestore) {
-                        RestoreTablesToUnmark.push_back(pathId);
+                auto fillBackupInfo = [&](auto& tableInfo) {
+                    switch (kind) {
+                    case TTableInfo::TBackupRestoreResult::EKind::Backup:
+                        tableInfo->BackupHistory[txId] = std::move(info);
+                        break;
+                    case TTableInfo::TBackupRestoreResult::EKind::Restore:
+                        tableInfo->RestoreHistory[txId] = std::move(info);
+                        if (tableInfo->IsRestore) {
+                            RestoreTablesToUnmark.push_back(pathId);
+                        }
+                        break;
                     }
-                    break;
+                };
+
+                if (auto it = Self->Tables.find(pathId); it != Self->Tables.end()) {
+                    fillBackupInfo(it->second);
+                } else if (Self->ColumnTables.contains(pathId)) {
+                    auto tableInfo = Self->ColumnTables.at(pathId).GetPtr();
+                    fillBackupInfo(tableInfo);
                 }
 
                 LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -4465,10 +4479,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         exportInfo->ExportMetadata = rowset.GetValue<Schema::Exports::ExportMetadata>();
                     }
 
-                    Self->Exports[id] = exportInfo;
-                    if (uid) {
-                        Self->ExportsByUid[uid] = exportInfo;
-                    }
+                    Self->AddExport(exportInfo);
 
                     if (exportInfo->WaitTxId != InvalidTxId) {
                         Self->TxIdToExport[exportInfo->WaitTxId] = {id, Max<ui32>()};
@@ -4562,10 +4573,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     importInfo->StartTime = TInstant::Seconds(rowset.GetValueOrDefault<Schema::Imports::StartTime>());
                     importInfo->EndTime = TInstant::Seconds(rowset.GetValueOrDefault<Schema::Imports::EndTime>());
 
-                    Self->Imports[id] = importInfo;
-                    if (uid) {
-                        Self->ImportsByUid[uid] = importInfo;
-                    }
+                    Self->AddImport(importInfo);
 
                     switch (importInfo->State) {
                     case TImportInfo::EState::DownloadExportMetadata:
@@ -4733,20 +4741,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         buildInfo->TargetName = TPath::Init(buildInfo->TablePathId, Self).PathString();
                     }
 
-                    // prevent build index from progress
-                    if (buildInfo->IsBuildVectorIndex() && !Self->EnableVectorIndex) {
-                        buildInfo->IsBroken = true;
-                        buildInfo->AddIssue(TStringBuilder() << "Vector index is not enabled");
-                    }
-
                     // Note: broken build are also added to IndexBuilds
-                    Y_ASSERT(!Self->IndexBuilds.contains(buildInfo->Id));
-                    Self->IndexBuilds[buildInfo->Id] = buildInfo;
-
-                    if (buildInfo->Uid) {
-                        Y_ASSERT(!Self->IndexBuildsByUid.contains(buildInfo->Uid));
-                        Self->IndexBuildsByUid[buildInfo->Uid] = buildInfo;
-                    }
+                    Self->AddIndexBuild(buildInfo);
 
                     OnComplete.ToProgress(buildInfo->Id);
 
@@ -5119,6 +5115,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                             itStore->second->ColumnTablesUnderOperation.insert(pathId);
                         }
                     }
+                }
+                
+                if (rowset.HaveValue<Schema::ColumnTables::IsRestore>()) {
+                    tableInfo->IsRestore = rowset.GetValue<Schema::ColumnTables::IsRestore>();
                 }
 
                 if (!rowset.Next()) {

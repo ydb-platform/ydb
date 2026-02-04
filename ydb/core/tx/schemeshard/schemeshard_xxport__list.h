@@ -25,7 +25,8 @@ struct TSchemeShard::TXxport::TTxList: public TSchemeShard::TXxport::TTxBase {
     {
     }
 
-    bool DoExecuteImpl(const TMap<ui64, typename TInfo::TPtr>& container, TTransactionContext&, const TActorContext&) {
+    bool DoExecuteImpl(const THashMap<ui64, typename TInfo::TPtr>& container,
+        const TSet<std::pair<TInstant, ui64>> containerByTime, TTransactionContext&, const TActorContext&) {
         const auto& record = Request->Get()->Record;
         const auto& request = record.GetRequest();
 
@@ -54,25 +55,27 @@ struct TSchemeShard::TXxport::TTxList: public TSchemeShard::TXxport::TTxBase {
 
         resp.SetStatus(Ydb::StatusIds::SUCCESS);
 
-        auto it = container.end();
+        auto it = containerByTime.end();
         ui64 skip = (page - 1) * pageSize;
-        while (it != container.begin() && skip) {
+        while (it != containerByTime.begin() && skip) {
             --it;
-            if (IsSameDomain(it->second, domainPathId) && it->second->Kind == kind) {
+            auto& item = container.at(it->second);
+            if (IsSameDomain(item, domainPathId) && item->Kind == kind) {
                 --skip;
             }
         }
 
         ui64 size = 0;
-        while (it != container.begin() && size < pageSize) {
+        while (it != containerByTime.begin() && size < pageSize) {
             --it;
-            if (IsSameDomain(it->second, domainPathId) && it->second->Kind == kind) {
-                Self->FromXxportInfo(*resp.MutableEntries()->Add(), *it->second);
+            auto& item = container.at(it->second);
+            if (IsSameDomain(item, domainPathId) && item->Kind == kind) {
+                Self->FromXxportInfo(*resp.MutableEntries()->Add(), *item);
                 ++size;
             }
         }
 
-        if (it == container.begin()) {
+        if (it == containerByTime.begin()) {
             resp.SetNextPageToken("0");
         } else {
             resp.SetNextPageToken(ToString(page + 1));

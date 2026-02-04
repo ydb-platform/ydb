@@ -30,7 +30,7 @@ namespace boost { namespace program_options {
 
     /** Results of parsing an input source.
         The primary use of this class is passing information from parsers
-        component to value storage component. This class does not makes
+        component to value storage component. This class does not make
         much sense itself.
     */
     template<class charT>
@@ -48,7 +48,7 @@ namespace boost { namespace program_options {
         const options_description* description;
 
         /** Mainly used for the diagnostic messages in exceptions.
-         *  The canonical option prefix  for the parser which generated these results,
+         *  The canonical option prefix for the parser which generated these results,
          *  depending on the settings for basic_command_line_parser::style() or
          *  cmdline::style(). In order of precedence of command_line_style enums:
          *      allow_long
@@ -77,7 +77,7 @@ namespace boost { namespace program_options {
         basic_parsed_options<char> utf8_encoded_options;
 
         /** Mainly used for the diagnostic messages in exceptions.
-         *  The canonical option prefix  for the parser which generated these results,
+         *  The canonical option prefix for the parser which generated these results,
          *  depending on the settings for basic_command_line_parser::style() or
          *  cmdline::style(). In order of precedence of command_line_style enums:
          *      allow_long
@@ -150,7 +150,7 @@ namespace boost { namespace program_options {
             instance of basic_option<charT> will be added to result,
             with 'unrecognized' field set to 'true'. It's possible to
             collect all unrecognized options with the 'collect_unrecognized'
-            funciton.
+            function.
         */
         basic_command_line_parser& allow_unregistered();
 
@@ -214,7 +214,7 @@ namespace boost { namespace program_options {
     /** Collects the original tokens for all named options with
         'unregistered' flag set. If 'mode' is 'include_positional'
         also collects all positional options.
-        Returns the vector of origianl tokens for all collected
+        Returns the vector of original tokens for all collected
         options.
     */
     template<class charT>
@@ -254,8 +254,8 @@ namespace boost { namespace program_options {
 
     /** Splits a given string to a collection of single strings which
         can be passed to command_line_parser. The second parameter is
-        used to specify a collection of possible seperator chars used
-        for splitting. The seperator is defaulted to space " ".
+        used to specify a collection of possible separator chars used
+        for splitting. The separator is defaulted to space " ".
         Splitting is done in a unix style way, with respect to quotes '"'
         and escape characters '\'
     */

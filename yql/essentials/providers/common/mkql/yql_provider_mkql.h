@@ -61,7 +61,7 @@ public:
     virtual TCompiler FindCallable(const std::string_view& name) const = 0;
     virtual TCompiler GetCallable(const std::string_view& name) const = 0;
 
-    virtual ~IMkqlCallableCompiler() {
+    ~IMkqlCallableCompiler() override {
     }
 };
 

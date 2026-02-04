@@ -1,6 +1,8 @@
 /*.md @ydb-platform/docs
 /CHANGELOG.md @ydb-platform/changelog-reviewers
 
+/.github/docker @ydb-platform/appteam
+
 /build @ydb-platform/ci
 /certs @ydb-platform/ci
 /contrib @ydb-platform/ci
@@ -79,17 +81,24 @@
 /ydb/core/tablet_flat @ydb-platform/datashard
 /ydb/core/tx/datashard @ydb-platform/datashard
 /ydb/core/tx/coordinator @ydb-platform/datashard
+/ydb/core/tx/schemeshard/ut_index_build_reboots @ydb-platform/datashard
+/ydb/core/tx/schemeshard/ut_shred_reboots @ydb-platform/datashard
+/ydb/core/tx/schemeshard/ut_vector_index_build_reboots @ydb-platform/datashard
 
 /ydb/core/formats/arrow @ydb-platform/cs
 /ydb/core/tx/columnshard @ydb-platform/cs
 /ydb/core/tx/schemeshard/olap @ydb-platform/cs
+/ydb/core/tx/schemeshard/ut_olap_reboots @ydb-platform/cs
 
 /ydb/apps/ydb @ydb-platform/cli
 /ydb/public/lib/ydb_cli @ydb-platform/cli
+/ydb/public/lib/ydb_cli/dump @ydb-platform/core
 /ydb/public/sdk/cpp @ydb-platform/cpp-sdk
+/ydb/public/tools/local_ydb/ @ydb-platform/appteam
 
 /ydb/core/security @ydb-platform/Security
 /ydb/core/tx/schemeshard/ut_login* @ydb-platform/Security
+/ydb/core/tx/schemeshard/ut_login_large @ydb-platform/Security
 /ydb/library/login @ydb-platform/Security
 /ydb/library/aclib @ydb-platform/Security
 /ydb/services/ydb/ydb_ldap_login_ut.cpp @ydb-platform/Security
@@ -99,3 +108,5 @@
 /ydb/core/sys_view/ut_registry.cpp @ydb-platform/Security
 /ydb/tests/compatibility/test_system_views.py @ydb-platform/Security
 /ydb/tests/functional/tenants/test_system_views.py @ydb-platform/Security
+
+/ydb/tests/library @ydb-platform/Engineering

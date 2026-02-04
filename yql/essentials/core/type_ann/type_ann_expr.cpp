@@ -1,6 +1,7 @@
 #include "type_ann_expr.h"
 
 #include <yql/essentials/core/yql_expr_type_annotation.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/core/yql_opt_proposed_by_data.h>
 #include <yql/essentials/core/yql_opt_rewrite_io.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
@@ -27,7 +28,7 @@ public:
     {
     }
 
-    ~TTypeAnnotationTransformer() {
+    ~TTypeAnnotationTransformer() override {
         if (PrintCallableTimes) {
             std::vector<std::pair<TStringBuf, std::pair<ui64, ui64>>> pairs;
             pairs.reserve(CallableTimes_.size());
@@ -123,7 +124,7 @@ public:
         return combinedStatus;
     }
 
-    void Rewind() {
+    void Rewind() override {
         CallableTransformer_->Rewind();
         CallableInputs_.clear();
         Processed_.clear();
@@ -589,6 +590,10 @@ protected:
         return CallableTransformer_->Transform(input, output, ctx);
     }
 
+    TTypeAnnotationContext& GetTypes() {
+        return Types_;
+    }
+
 private:
     TAutoPtr<IGraphTransformer> CallableTransformer_;
     TTypeAnnotationContext& Types_;
@@ -762,13 +767,26 @@ public:
     IGraphTransformer::TStatus DoCallableTransform(const TExprNode::TPtr& input,
         TExprNode::TPtr& output, TExprContext& ctx) final {
         output = input;
+        if (input->IsCallable("Configure!") && input->Child(1)->Head().Content() == ConfigProviderName) {
+            auto ptr = GetTypes().DataSourceMap.FindPtr(ConfigProviderName);
+            YQL_ENSURE(ptr);
+            auto status = (*ptr)->GetConfigurationTransformer().Transform(input, output, ctx);
+            if (status == IGraphTransformer::TStatus::Ok) {
+                input->SetTypeAnn(ctx.MakeType<TWorldExprType>());
+            }
+
+            return status;
+        }
+
         if (input->IsCallable({"Commit!", "CommitAll!", "Write!", "Configure!"})) {
             input->SetTypeAnn(ctx.MakeType<TWorldExprType>());
             return IGraphTransformer::TStatus::Ok;
         }
 
         if (input->IsCallable({"MrTableConcat", "MrTableRange",
-            "MrTableConcatStrict", "MrTableRangeStrict"})) {
+            "MrTableConcatStrict", "MrTableRangeStrict", "TempTable", "MrFolder",
+            "MrTableEach", "MrTableEachStrict", "MrPartitions", "MrPartitionsStrict",
+            "MrPartitionList", "MrPartitionListStrict", "MrWalkFolders"})) {
             input->SetTypeAnn(ctx.MakeType<TUnitExprType>());
             return IGraphTransformer::TStatus::Ok;
         }
@@ -782,21 +800,19 @@ public:
         }
 
         if (input->IsCallable({"Udf", "ScriptUdf", "EvaluateAtom",
-            "EvaluateExpr", "EvaluateType", "EvaluateCode", "QuoteCode"})) {
+            "EvaluateExpr", "EvaluateType", "EvaluateCode", "QuoteCode", "Parameter",
+            "SubqueryOrderBy", "SubqueryAssumeOrderBy", "SubqueryExtendFor", "SubqueryUnionAllFor",
+            "SubqueryMergeFor", "SubqueryUnionMergeFor",
+            "SubqueryExtend","SubqueryUnionAll", "SubqueryMerge", "SubqueryUnionMerge",
+            "EvaluateFor!", "EvaluateParallelFor!", "EvaluateIf!"})) {
             input->SetTypeAnn(ctx.MakeType<TUniversalExprType>());
             return IGraphTransformer::TStatus::Ok;
         }
 
-        if (input->IsCallable({"FileContent","FilePath","FolderPath"})) {
+        if (input->IsCallable({"FileContent","FilePath","FolderPath", "TableName",
+            "SecureParam", "TablePath"})) {
             input->SetTypeAnn(ctx.MakeType<TDataExprType>(NUdf::EDataSlot::String));
             return IGraphTransformer::TStatus::Ok;
-        }
-
-        for (auto child : input->Children()) {
-            if (child->GetTypeAnn() && child->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
-                input->SetTypeAnn(child->GetTypeAnn());
-                return IGraphTransformer::TStatus::Ok;
-            }
         }
 
         return TBase::DoCallableTransform(input, output, ctx);
@@ -815,7 +831,7 @@ namespace {
 class TFakeArrowResolver : public IArrowResolver {
 public:
     EStatus LoadFunctionMetadata(const TPosition& pos, TStringBuf name, const TVector<const TTypeAnnotationNode*>& argTypes,
-        const TTypeAnnotationNode* returnType, TExprContext& ctx) const {
+        const TTypeAnnotationNode* returnType, TExprContext& ctx) const override {
         Y_UNUSED(pos);
         Y_UNUSED(name);
         Y_UNUSED(argTypes);
@@ -824,7 +840,7 @@ public:
         return EStatus::OK;
     }
 
-    EStatus HasCast(const TPosition& pos, const TTypeAnnotationNode* from, const TTypeAnnotationNode* to, TExprContext& ctx) const {
+    EStatus HasCast(const TPosition& pos, const TTypeAnnotationNode* from, const TTypeAnnotationNode* to, TExprContext& ctx) const override {
         Y_UNUSED(pos);
         Y_UNUSED(from);
         Y_UNUSED(to);
@@ -832,7 +848,7 @@ public:
         return EStatus::OK;
     }
 
-    virtual EStatus AreTypesSupported(const TPosition& pos, const TVector<const TTypeAnnotationNode*>& types, TExprContext& ctx,
+    EStatus AreTypesSupported(const TPosition& pos, const TVector<const TTypeAnnotationNode*>& types, TExprContext& ctx,
         const TUnsupportedTypeCallback& onUnsupported = {}) const final {
         Y_UNUSED(pos);
         Y_UNUSED(types);
@@ -842,9 +858,51 @@ public:
     }
 };
 
+class TFakeLayersRegistry : public NLayers::ILayersRegistry {
+public:
+    TMaybe<TVector<NLayers::TKey>> ResolveLogicalLayers(const TVector<NLayers::TLayerOrder>& orders, TExprContext& ctx) const final {
+        Y_UNUSED(orders);
+        Y_UNUSED(ctx);
+        return Nothing();
+    }
+
+    TMaybe<NLayers::TLocations> ResolveLayers(const TVector<NLayers::TKey>& order, const TString& system, const TString& cluster, TExprContext& ctx) const final {
+        Y_UNUSED(order);
+        Y_UNUSED(system);
+        Y_UNUSED(cluster);
+        Y_UNUSED(ctx);
+        return Nothing();
+    }
+
+    bool HasLayer(const NLayers::TKey& key) const override {
+        Y_UNUSED(key);
+        return false;
+    }
+
+    bool AddLayer(const TString& name, const TMaybe<TString>& parent, const TMaybe<TString>& url, TExprContext& ctx) override {
+        Y_UNUSED(name);
+        Y_UNUSED(parent);
+        Y_UNUSED(url);
+        Y_UNUSED(ctx);
+        return true;
+    }
+
+    bool AddLayerFromJson(TStringBuf json, TExprContext& ctx) final {
+        Y_UNUSED(json);
+        Y_UNUSED(ctx);
+        return true;
+    }
+
+    void ClearLayers() final {
+    }
+};
+
 }
 
-bool PartialAnnonateTypes(TAstNode* astRoot, TLangVersion langver, TIssues& issues) {
+bool PartialAnnonateTypes(TAstNode* astRoot, TLangVersion langver, TIssues& issues,
+    std::function<TIntrusivePtr<IDataProvider>(TTypeAnnotationContext&)> configProviderFactory) {
+    YQL_ENSURE(astRoot, "AST root is null");
+
     TExprContext ctx;
     TExprNode::TPtr exprRoot;
     if (!CompileExpr(*astRoot, exprRoot, ctx, /* resolver= */ nullptr, /* urlListerManager */ nullptr,
@@ -856,12 +914,29 @@ bool PartialAnnonateTypes(TAstNode* astRoot, TLangVersion langver, TIssues& issu
     TTypeAnnotationContext typeCtx;
     typeCtx.LangVer = langver;
     typeCtx.ArrowResolver = new TFakeArrowResolver;
-    typeCtx.DeriveColumnOrder = true;
-    typeCtx.OrderedColumns = true;
+    typeCtx.LayersRegistry = new TFakeLayersRegistry;
+    typeCtx.UserDataStorage = new TUserDataStorage(nullptr, {}, nullptr, new TUdfIndex);
+    auto configProvder = configProviderFactory(typeCtx);
+    typeCtx.AddDataSource(ConfigProviderName, configProvder);
     auto callableTypeAnnTransformer = CreateExtCallableTypeAnnotationTransformer(typeCtx);
     TVector<TTransformStage> transformers;
     transformers.push_back(TTransformStage(CreateFunctorTransformer(&ExpandApply),
                                             "ExpandApply", TIssuesIds::CORE_PRE_TYPE_ANN));
+    transformers.push_back(TTransformStage(CreateFunctorTransformer([&typeCtx](TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx){
+        TOptimizeExprSettings settings(&typeCtx);
+        return OptimizeExpr(input, output, [](const TExprNode::TPtr& node, TExprContext& ctx){
+            if (node->IsCallable("FormatCode")) {
+                return ctx.Builder(node->Pos())
+                    .Callable("String")
+                        .Atom(0, "")
+                    .Seal()
+                    .Build();
+            }
+
+            return node;
+        }, ctx, settings);
+    }),
+                                            "RewriteEvaluation", TIssuesIds::CORE_PRE_TYPE_ANN));
     transformers.push_back(TTransformStage(
         CreatePartialTypeAnnotationTransformer(std::move(callableTypeAnnTransformer), typeCtx),
         "PartialTypeAnn", TIssuesIds::CORE_PARTIAL_TYPE_ANN));

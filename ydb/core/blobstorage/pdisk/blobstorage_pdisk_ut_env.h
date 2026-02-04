@@ -35,6 +35,10 @@ public:
         bool ReadOnly = false;
         bool InitiallyZeroed = false; // Only for sector map. Zero first 1MiB on start.
         bool PlainDataChunks = false;
+        std::optional<bool> EnableFormatEncryption;
+        std::optional<bool> EnableSectorEncryption;
+        std::optional<bool> RandomizeMagic = std::nullopt;
+        std::optional<ui64> NonceRandNum = std::nullopt;
         bool UseRdmaAllocator = false;
     };
 
@@ -52,9 +56,10 @@ public:
     // this pointer doesn't own the object (only Runtime does)
     NWilson::TFakeWilsonUploader *WilsonUploader = new NWilson::TFakeWilsonUploader;
 
-    void DoFormatPDisk(ui64 guid) {
+    void DoFormatPDisk(ui64 guid, bool enableFormatEncryption = true, std::optional<bool> enableSectorEncryption = std::nullopt) {
         FormatPDiskForTest(TestCtx.Path, guid, Settings.ChunkSize, Settings.DiskSize,
-            false, TestCtx.SectorMap, Settings.SmallDisk, Settings.PlainDataChunks);
+            false, TestCtx.SectorMap, Settings.SmallDisk, Settings.PlainDataChunks, enableFormatEncryption,
+            enableSectorEncryption, Settings.RandomizeMagic);
     }
 
     TIntrusivePtr<TPDiskConfig> DefaultPDiskConfig(bool isBad) {
@@ -75,8 +80,18 @@ public:
             TestCtx.SectorMap->ZeroInit(1_MB / NPDisk::NSectorMap::SECTOR_SIZE);
         }
 
+        // not set by user, keep old behaviour
+        if (!Settings.EnableSectorEncryption.has_value()) {
+            Settings.EnableSectorEncryption = !TestCtx.SectorMap;
+        }
+
+        // here old behaviour is to always encrypt format
+        if (!Settings.EnableFormatEncryption.has_value()) {
+            Settings.EnableFormatEncryption = true;
+        }
+
         if (!Settings.ReadOnly && !Settings.InitiallyZeroed) {
-            DoFormatPDisk(formatGuid);
+            DoFormatPDisk(formatGuid, *Settings.EnableFormatEncryption, *Settings.EnableSectorEncryption);
         }
 
         ui64 pDiskCategory = 0;
@@ -85,12 +100,15 @@ public:
         pDiskConfig->WriteCacheSwitch = NKikimrBlobStorage::TPDiskConfig::DoNotTouch;
         pDiskConfig->ChunkSize = Settings.ChunkSize;
         pDiskConfig->SectorMap = TestCtx.SectorMap;
-        pDiskConfig->EnableSectorEncryption = !pDiskConfig->SectorMap;
+        pDiskConfig->EnableSectorEncryption = *Settings.EnableSectorEncryption;
+        pDiskConfig->EnableFormatEncryption = *Settings.EnableFormatEncryption;
         pDiskConfig->FeatureFlags.SetEnableSmallDiskOptimization(Settings.SmallDisk);
         pDiskConfig->FeatureFlags.SetSuppressCompatibilityCheck(Settings.SuppressCompatibilityCheck);
         pDiskConfig->FeatureFlags.SetEnablePDiskLogForSmallDisks(false);
         pDiskConfig->ReadOnly = Settings.ReadOnly;
         pDiskConfig->PlainDataChunks = Settings.PlainDataChunks;
+        pDiskConfig->NonceRandNum = Settings.NonceRandNum;
+
         return pDiskConfig;
     }
 
@@ -143,7 +161,8 @@ public:
         }
 
         if (reformat) {
-            DoFormatPDisk(TestCtx.PDiskGuid + static_cast<ui64>(Settings.IsBad));
+            DoFormatPDisk(TestCtx.PDiskGuid + static_cast<ui64>(Settings.IsBad),
+                cfg->EnableFormatEncryption, cfg->EnableSectorEncryption);
         }
 
         if (Settings.UsePDiskMock) {
@@ -453,5 +472,5 @@ private:
     }
 };
 
-void TestChunkWriteReleaseRun();
+void TestChunkWriteReleaseRun(bool encryption);
 }

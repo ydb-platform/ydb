@@ -42,7 +42,8 @@ namespace NYql::NDq {
                 args.TypeEnv,
                 args.HolderFactory,
                 args.MaxKeysInRequest,
-                args.SecureParams
+                args.SecureParams,
+                args.IsMultiMatches
             );
         };
 

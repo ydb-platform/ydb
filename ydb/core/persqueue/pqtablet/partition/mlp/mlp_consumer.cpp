@@ -3,9 +3,7 @@
 
 #include <ydb/core/persqueue/common/key.h>
 #include <ydb/core/persqueue/public/constants.h>
-#include <ydb/core/protos/counters_pq.pb.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
-#include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/library/persqueue/counter_time_keeper/counter_time_keeper.h>
 
 namespace NKikimr::NPQ::NMLP {
@@ -89,16 +87,18 @@ void AddReadWAL(std::unique_ptr<TEvKeyValue::TEvRequest>& request, ui32 partitio
 }
 
 TConsumerActor::TConsumerActor(const TString& database,ui64 tabletId, const TActorId& tabletActorId, ui32 partitionId,
-    const TActorId& partitionActorId, const NKikimrPQ::TPQTabletConfig_TConsumer& config,
-    std::optional<TDuration> retentionPeriod, ui64 partitionEndOffset)
+    const TActorId& partitionActorId, const NKikimrPQ::TPQTabletConfig& topicConfig, const NKikimrPQ::TPQTabletConfig_TConsumer& config,
+    std::optional<TDuration> retentionPeriod, ui64 partitionEndOffset, NMonitoring::TDynamicCounterPtr& detailedMetricsRoot)
     : TBaseTabletActor(tabletId, tabletActorId, NKikimrServices::EServiceKikimr::PQ_MLP_CONSUMER)
     , Database(database)
     , PartitionId(partitionId)
     , PartitionActorId(partitionActorId)
+    , TopicConfig(topicConfig)
     , Config(config)
     , RetentionPeriod(retentionPeriod)
     , PartitionEndOffset(partitionEndOffset)
-    , Storage(std::make_unique<TStorage>(CreateDefaultTimeProvider())) {
+    , Storage(std::make_unique<TStorage>(CreateDefaultTimeProvider()))
+    , DetailedMetricsRoot(detailedMetricsRoot) {
 }
 
 void TConsumerActor::Bootstrap() {
@@ -106,6 +106,7 @@ void TConsumerActor::Bootstrap() {
     Become(&TConsumerActor::StateInit);
 
     UpdateStorageConfig();
+    InitializeDetailedMetrics();
 
     auto request = std::make_unique<TEvKeyValue::TEvRequest>();
     request->Record.SetCookie(static_cast<ui64>(EKvCookie::InitialRead));
@@ -365,16 +366,27 @@ void TConsumerActor::UpdateStorageConfig() {
     }
 }
 
+void TConsumerActor::InitializeDetailedMetrics() {
+    if (DetailedMetricsAreEnabled(TopicConfig)) {
+        DetailedMetrics = std::make_unique<TDetailedMetrics>(Config, DetailedMetricsRoot);
+    } else {
+        DetailedMetrics = nullptr;
+    }
+}
+
 void TConsumerActor::Handle(TEvPQ::TEvMLPConsumerUpdateConfig::TPtr& ev) {
     AFL_ENSURE(Config.GetGeneration() == ev->Get()->Config.GetGeneration())
         ("c", Config.GetName())
         ("l", Config.GetGeneration())
         ("r", ev->Get()->Config.GetGeneration());
 
+    TopicConfig = std::move(ev->Get()->TopicConfig);
     Config = std::move(ev->Get()->Config);
-    RetentionPeriod = ev->Get()->RetentionPeriod;
+    RetentionPeriod = std::move(ev->Get()->RetentionPeriod);
+    DetailedMetricsRoot = std::move(ev->Get()->DetailedMetricsRoot);
 
-   UpdateStorageConfig();
+    UpdateStorageConfig();
+    InitializeDetailedMetrics();
 }
 
 void TConsumerActor::HandleInit(TEvPQ::TEvEndOffsetChanged::TPtr& ev) {
@@ -517,9 +529,8 @@ void TConsumerActor::ProcessEventQueue() {
     UnlockRequestsQueue.clear();
 
     for (auto& ev : ChangeMessageDeadlineRequestsQueue) {
-        auto deadlineTimestamp = ev->Get()->GetDeadlineTimestamp();
-        for (auto offset : ev->Get()->Record.GetOffset()) {
-            Storage->ChangeMessageDeadline(offset, deadlineTimestamp);
+        for (const auto &message : ev->Get()->Record.GetMessage()) {
+            Storage->ChangeMessageDeadline(message.GetOffset(), TInstant::Seconds(message.GetDeadlineTimestampSeconds()));
         }
 
         PendingChangeMessageDeadlineQueue.emplace_back(ev->Sender, ev->Cookie);
@@ -578,6 +589,7 @@ void TConsumerActor::Persist() {
     auto batch = Storage->GetBatch();
     if (batch.Empty()) {
         LOG_D("Batch is empty");
+        MoveToDLQIfPossible();
         return;
     }
 
@@ -657,7 +669,7 @@ void TConsumerActor::Persist() {
 size_t TConsumerActor::RequiredToFetchMessageCount() const {
     auto& metrics = Storage->GetMetrics();
 
-    auto maxMessages = Storage->MinMessages;
+    auto maxMessages = Storage->HasRetentionExpiredMessages() ? Storage->MaxMessages : Storage->MinMessages;
     if (metrics.LockedMessageCount * 2 > metrics.UnprocessedMessageCount) {
         maxMessages = std::max<size_t>(maxMessages, metrics.LockedMessageCount * 2 - metrics.UnprocessedMessageCount);
     }
@@ -680,7 +692,10 @@ bool TConsumerActor::FetchMessagesIfNeeded() {
         LOG_D("Skip fetch: infly limit exceeded");
         return false;
     }
-    if (!Config.GetKeepMessageOrder() && metrics.InflightMessageCount >= Storage->MinMessages && metrics.UnprocessedMessageCount >= metrics.LockedMessageCount * 2) {
+    if (!Config.GetKeepMessageOrder()
+        && metrics.InflightMessageCount >= Storage->MinMessages
+        && metrics.UnprocessedMessageCount >= metrics.LockedMessageCount * 2
+        && !Storage->HasRetentionExpiredMessages()) {
         LOG_D("Skip fetch: there are enough messages. InflightMessageCount=" << metrics.InflightMessageCount
             << ", UnprocessedMessageCount=" << metrics.UnprocessedMessageCount
             << ", LockedMessageCount=" << metrics.LockedMessageCount);
@@ -839,50 +854,18 @@ void TConsumerActor::SendToPQTablet(std::unique_ptr<IEventBase> ev) {
     FirstPipeCacheRequest = false;
 }
 
-void TConsumerActor::UpdateMetrics() {
-    auto& metrics = Storage->GetMetrics();
-
-    NKikimrPQ::TAggregatedCounters::TMLPConsumerCounters counters;
-    counters.SetConsumer(Config.GetName());
-
-    auto* values = counters.MutableCountersValues();
-    values->Resize(NAux::GetLabeledCounterOpts<EMLPConsumerLabeledCounters_descriptor>()->Size, 0);
-    values->Set(EMLPConsumerLabeledCounters::METRIC_INFLIGHT_COMMITTED_COUNT, metrics.CommittedMessageCount);
-    values->Set(EMLPConsumerLabeledCounters::METRIC_INFLIGHT_LOCKED_COUNT, metrics.LockedMessageCount);
-    values->Set(EMLPConsumerLabeledCounters::METRIC_INFLIGHT_DELAYED_COUNT, metrics.DelayedMessageCount);
-    values->Set(EMLPConsumerLabeledCounters::METRIC_INFLIGHT_UNLOCKED_COUNT, metrics.UnprocessedMessageCount);
-    values->Set(EMLPConsumerLabeledCounters::METRIC_INFLIGHT_SCHEDULED_TO_DLQ_COUNT, metrics.TotalScheduledToDLQMessageCount);
-    values->Set(EMLPConsumerLabeledCounters::METRIC_COMMITTED_COUNT, metrics.TotalCommittedMessageCount);
-    values->Set(EMLPConsumerLabeledCounters::METRIC_PURGED_COUNT, metrics.TotalPurgedMessageCount);
-
-    for (size_t i = 0; i < metrics.MessageLocks.GetRangeCount(); ++i) {
-        counters.AddMessageLocksValues(metrics.MessageLocks.GetRangeValue(i));
-    }
-
-    for (size_t i = 0; i < metrics.MessageLockingDuration.GetRangeCount(); ++i) {
-        counters.AddMessageLockingDurationValues(metrics.MessageLockingDuration.GetRangeValue(i));
-    }
-
-    counters.SetDeletedByRetentionPolicy(metrics.TotalDeletedByRetentionMessageCount);
-    counters.SetDeletedByDeadlinePolicy(metrics.TotalDeletedByDeadlinePolicyMessageCount);
-    counters.SetDeletedByMovedToDLQ(metrics.TotalMovedToDLQMessageCount);
-
-    counters.SetCPUUsage(CPUUsageMetric);
-    CPUUsageMetric = 0;
-
-    Send(PartitionActorId, new TEvPQ::TEvMLPConsumerState(std::move(counters)));
-}
-
 NActors::IActor* CreateConsumerActor(
     const TString& database,
     ui64 tabletId,
     const NActors::TActorId& tabletActorId,
     ui32 partitionId,
     const NActors::TActorId& partitionActorId,
+    const NKikimrPQ::TPQTabletConfig& topicConfig,
     const NKikimrPQ::TPQTabletConfig_TConsumer& config,
     const std::optional<TDuration> retention,
-    ui64 partitionEndOffset) {
-    return new TConsumerActor(database, tabletId, tabletActorId, partitionId, partitionActorId, config, retention, partitionEndOffset);
+    ui64 partitionEndOffset,
+    NMonitoring::TDynamicCounterPtr detailedMetricsRoot) {
+    return new TConsumerActor(database, tabletId, tabletActorId, partitionId, partitionActorId, topicConfig, config, retention, partitionEndOffset, detailedMetricsRoot);
 }
 
 }

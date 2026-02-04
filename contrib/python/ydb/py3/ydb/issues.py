@@ -87,7 +87,7 @@ class ConnectionLost(ConnectionError):
     status = StatusCode.CONNECTION_LOST
 
 
-class DeadlineExceed(ConnectionError):
+class DeadlineExceed(Error):
     status = StatusCode.DEADLINE_EXCEEDED
 
 

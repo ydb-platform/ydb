@@ -75,7 +75,7 @@ const TString StartTimeLabel = "StartTime";
 
 class TUrlLoader: public IUrlLoader {
 public:
-    TUrlLoader(TFileStoragePtr storage)
+    explicit TUrlLoader(TFileStoragePtr storage)
         : Storage_(storage)
     {
     }
@@ -215,6 +215,10 @@ void TProgramFactory::EnableRangeComputeFor() {
     EnableRangeComputeFor_ = true;
 }
 
+void TProgramFactory::SetIssueReportTarget(const TString& reportTarget) {
+    IssueReportTarget_ = reportTarget;
+}
+
 void TProgramFactory::SetLanguageVersion(TLangVersion version) {
     LangVer_ = version;
 }
@@ -317,7 +321,7 @@ TProgramPtr TProgramFactory::Create(
     }
 
     // make UserDataTable_ copy here
-    return new TProgram(FunctionRegistry_, randomProvider, timeProvider, NextUniqueId_, DataProvidersInit_,
+    return new TProgram(IssueReportTarget_, FunctionRegistry_, randomProvider, timeProvider, NextUniqueId_, DataProvidersInit_,
                         LangVer_, MaxLangVer_, VolatileResults_, UserDataTable_, Credentials_, moduleResolver, urlListerManager,
                         udfResolver, udfIndex, udfIndexPackageSet, FileStorage_, UrlPreprocessing_,
                         GatewaysConfig_, filename, sourceCode, sessionId, Runner_, EnableRangeComputeFor_, ArrowResolver_, hiddenMode,
@@ -328,6 +332,7 @@ TProgramPtr TProgramFactory::Create(
 // TProgram
 ///////////////////////////////////////////////////////////////////////////////
 TProgram::TProgram(
+    const TString& issueReportTarget,
     const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     const TIntrusivePtr<IRandomProvider> randomProvider,
     const TIntrusivePtr<ITimeProvider> timeProvider,
@@ -356,7 +361,8 @@ TProgram::TProgram(
     const TQContext& qContext,
     TMaybe<TString> gatewaysForMerge,
     THashMap<TString, NLayers::IRemoteLayerProviderPtr> remoteLayersProviders)
-    : FunctionRegistry_(functionRegistry)
+    : IssueReportTarget_(issueReportTarget)
+    , FunctionRegistry_(functionRegistry)
     , RandomProvider_(randomProvider)
     , TimeProvider_(timeProvider)
     , NextUniqueId_(nextUniqueId)
@@ -956,7 +962,11 @@ TProgram::TStatus TProgram::TestPartialTypecheck() {
     Y_ENSURE(AstRoot_ || ExprCtx_, "Program not parsed or compiled yet");
 
     TIssues issues;
-    auto ret = PartialAnnonateTypes(AstRoot_, LangVer_, issues) ? TProgram::TStatus::Ok : TProgram::TStatus::Error;
+    auto ret = PartialAnnonateTypes(AstRoot_, LangVer_, issues, [&](TTypeAnnotationContext& newTypeCtx) {
+        return CreateConfigProvider(newTypeCtx, nullptr, "", {}, /*forPartialTypeCheck=*/true);
+    })
+                   ? TProgram::TStatus::Ok
+                   : TProgram::TStatus::Error;
     ExprCtx_->IssueManager.AddIssues(issues);
     return ret;
 }
@@ -1429,7 +1439,7 @@ TProgram::TFutureStatus TProgram::RunAsync(
     if (!ProvideAnnotationContext(username)->Initialize(*ExprCtx_) || !CollectUsedClusters()) {
         return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
     }
-    TypeCtx_->IsReadOnly = (HiddenMode_ != EHiddenMode::Disable);
+    TypeCtx_->IsReadOnly = (HiddenMode_ != EHiddenMode::Disable) || QContext_.CanRead();
 
     TVector<TDataProviderInfo> dataProviders;
     with_lock (DataProvidersLock_) {
@@ -1508,7 +1518,7 @@ TProgram::TFutureStatus TProgram::RunAsyncWithConfig(
     if (!ProvideAnnotationContext(username)->Initialize(*ExprCtx_) || !CollectUsedClusters()) {
         return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
     }
-    TypeCtx_->IsReadOnly = (HiddenMode_ != EHiddenMode::Disable);
+    TypeCtx_->IsReadOnly = (HiddenMode_ != EHiddenMode::Disable) || QContext_.CanRead();
 
     TVector<TDataProviderInfo> dataProviders;
     with_lock (DataProvidersLock_) {
@@ -1972,7 +1982,7 @@ TIssues TProgram::Issues() const {
         result.AddIssues(ExprCtx_->IssueManager.GetIssues());
     }
     result.AddIssues(FinalIssues_);
-    CheckFatalIssues(result);
+    CheckFatalIssues(result, IssueReportTarget_);
     return result;
 }
 
@@ -1982,7 +1992,7 @@ TIssues TProgram::CompletedIssues() const {
         result.AddIssues(ExprCtx_->IssueManager.GetCompletedIssues());
     }
     result.AddIssues(FinalIssues_);
-    CheckFatalIssues(result);
+    CheckFatalIssues(result, IssueReportTarget_);
     return result;
 }
 

@@ -115,6 +115,19 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
         return TestModificationResults(runtime, txId, {expectedResult});
     }
 
+    void TestAlterTable(TTestBasicRuntime& runtime, ui64 txId, const TString& workingDir, const TString& request, const TExpectedResult& expectedResult = {NKikimrScheme::StatusAccepted}) {
+        auto modifyTx = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>(txId, TTestTxConfig::SchemeShard);
+        auto transaction = modifyTx->Record.AddTransaction();
+        transaction->SetWorkingDir(workingDir);
+        transaction->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable);
+
+        bool parseOk = ::google::protobuf::TextFormat::ParseFromString(request, transaction->MutableAlterTable());
+        UNIT_ASSERT(parseOk);
+
+        AsyncSend(runtime, TTestTxConfig::SchemeShard, modifyTx.release(), 0);
+        TestModificationResults(runtime, txId, {expectedResult});
+    }
+
     Y_UNIT_TEST(HiddenByFeatureFlag) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions());
@@ -2960,5 +2973,139 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
 
             prevSystemStreamName = newSystemStreamName;
         }
+    }
+
+    Y_UNIT_TEST(BackupRestoreCoveringIndex) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+        PrepareDirs(runtime, env, txId);
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+                Name: "CoverTable"
+                Columns { Name: "id" Type: "Uint64" }
+                Columns { Name: "name" Type: "Utf8" }
+                Columns { Name: "age" Type: "Uint64" }
+                Columns { Name: "ega" Type: "Uint64" }
+                KeyColumnNames: ["id"]
+            }
+            IndexDescription {
+                Name: "idx_name_age"
+                KeyColumnNames: ["name", "age"]
+                DataColumnNames: ["ega"]     # This corresponds to COVER (ega)
+                Type: EIndexTypeGlobal
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/CoverTable/idx_name_age"), {
+            NLs::PathExist,
+            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobal),
+            NLs::IndexKeys({"name", "age"}),
+            NLs::IndexDataColumns({"ega"})
+        });
+
+        TString collectionSettings = R"(
+            Name: "CoverCollection"
+            ExplicitEntryList {
+                Entries {
+                    Type: ETypeTable
+                    Path: "/MyRoot/CoverTable"
+                }
+            }
+            Cluster: {}
+            IncrementalBackupConfig: {}
+        )";
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", collectionSettings);
+        env.TestWaitNotification(runtime, txId);
+
+        TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/CoverCollection")");
+        env.TestWaitNotification(runtime, txId);
+
+        runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+        TestBackupIncrementalBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/CoverCollection")");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDropTable(runtime, ++txId, "/MyRoot", "CoverTable");
+        env.TestWaitNotification(runtime, txId);
+
+        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/CoverCollection")");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/CoverTable"), {
+            NLs::PathExist,
+            NLs::IndexesCount(1)
+        });
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/CoverTable/idx_name_age"), {
+            NLs::PathExist,
+            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobal),
+            NLs::IndexKeys({"name", "age"}),
+            NLs::IndexDataColumns({"ega"})
+        });
+    }
+
+    Y_UNIT_TEST(AlterTableInBackupCollectionProtection) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+        PrepareDirs(runtime, env, txId);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ProtectedTable"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TString collectionSettings = R"(
+            Name: "ProtectionCollection"
+            ExplicitEntryList {
+                Entries {
+                    Type: ETypeTable
+                    Path: "/MyRoot/ProtectedTable"
+                }
+            }
+        )";
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", collectionSettings);
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ProtectedTable"
+            Columns { Name: "new_column" Type: "Uint64" }
+        )", {NKikimrScheme::StatusPreconditionFailed});
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/ProtectedTable"), {
+            NLs::CheckColumns("ProtectedTable", {"key", "value"}, {}, {"key"})
+        });
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ProtectedTable"
+            DropColumns { Name: "value" }
+        )", {NKikimrScheme::StatusPreconditionFailed});
+        env.TestWaitNotification(runtime, txId);
+
+        TestDropBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", "Name: \"ProtectionCollection\"");
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ProtectedTable"
+            Columns { Name: "new_column" Type: "Uint64" }
+        )", {NKikimrScheme::StatusAccepted});
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/ProtectedTable"), {
+            NLs::CheckColumns("ProtectedTable", {"key", "value", "new_column"}, {}, {"key"})
+        });
     }
 } // TBackupCollectionTests

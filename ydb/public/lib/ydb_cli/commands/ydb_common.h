@@ -3,7 +3,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/operation/operation.h>
 #include <ydb/public/lib/ydb_cli/common/command.h>
-#include <util/string/strip.h>
+#include <ydb/public/lib/ydb_cli/common/duration.h>
 
 namespace NYdb::NConsoleClient {
 
@@ -12,14 +12,6 @@ inline void ThrowOnError(const NYdb::TOperation& operation) {
         return;
     }
     NStatusHelpers::ThrowOnError(operation.Status());
-}
-
-inline TDuration ParseDuration(TStringBuf str) {
-    StripInPlace(str);
-    if (!str.empty() && !IsAsciiAlpha(str.back())) {
-        throw TMisuseException() << "Duration must end with a unit name (ex. 'h' for hours, 's' for seconds)";
-    }
-    return TDuration::Parse(str);
 }
 
 } // namespace NYdb::NConsoleClient

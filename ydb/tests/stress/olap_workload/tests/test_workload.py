@@ -11,7 +11,7 @@ class TestYdbWorkload(StressFixture):
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
         yield from self.setup_cluster(
-            erasure=Erasure.MIRROR_3_DC,
+            erasure=Erasure.NONE,
             extra_feature_flags={
                 "enable_move_column_table": True,
                 "enable_columnshard_bool": True
@@ -28,5 +28,5 @@ class TestYdbWorkload(StressFixture):
             yatest.common.binary_path(os.environ["YDB_WORKLOAD_PATH"]),
             "--endpoint", self.endpoint,
             "--database", self.database,
-            "--duration", "120",
+            "--duration", self.base_duration,
         ])

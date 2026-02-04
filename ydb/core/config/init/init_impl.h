@@ -1619,7 +1619,7 @@ public:
                 fs::path tempPath = configDirPath / (TStringBuilder() << configName << "."
                     << Sprintf("%08" PRIx32, RandomNumber<ui32>())).c_str();
                 *std::make_unique<TFileOutput>(tempPath) << config;
-                if (Chmod(tempPath.c_str(), S_IRUSR | S_IRGRP | S_IROTH) != 0) {
+                if (Chmod(tempPath.string().c_str(), S_IRUSR | S_IRGRP | S_IROTH) != 0) {
                     NFs::Remove(tempPath.string());
                     return false;
                 }

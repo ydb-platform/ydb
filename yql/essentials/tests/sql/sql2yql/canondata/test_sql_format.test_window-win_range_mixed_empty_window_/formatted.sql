@@ -1,0 +1,44 @@
+PRAGMA WindowNewPipeline;
+PRAGMA config.flags('OptimizerFlags', 'ForbidConstantDependsOnFuse');
+
+$data = [
+    <|a: 1, expected_count: 0, expected_sum: NULL|>,
+    <|a: 2, expected_count: 0, expected_sum: NULL|>,
+    <|a: 3, expected_count: 0, expected_sum: NULL|>,
+    <|a: 4, expected_count: 0, expected_sum: NULL|>,
+    <|a: 5, expected_count: 0, expected_sum: NULL|>,
+];
+
+$win_result = (
+    SELECT
+        a,
+        COUNT(*) OVER w1 AS count_w1,
+        SUM(a) OVER w2 AS sum_w1,
+        expected_count,
+        expected_sum,
+    FROM
+        AS_TABLE($data)
+    WINDOW
+        w1 AS (
+            ORDER BY
+                a ASC
+            RANGE BETWEEN Float('1.0') FOLLOWING AND 0 FOLLOWING
+        ),
+        w2 AS (
+            ORDER BY
+                a ASC
+            RANGE BETWEEN Float('10000000000000000') FOLLOWING AND 10000000000000ul FOLLOWING
+        )
+);
+
+$str = ($x) -> {
+    RETURN CAST($x AS String) ?? 'null';
+};
+
+-- Verify empty window (left > right)
+SELECT
+    Ensure(expected_count, count_w1 IS NOT DISTINCT FROM expected_count, 'count_w1: ' || $str(count_w1) || ' expected: ' || $str(expected_count)),
+    Ensure(expected_sum, sum_w1 IS NOT DISTINCT FROM expected_sum, 'sum_w1: ' || $str(sum_w1) || ' expected: ' || $str(expected_sum)),
+FROM
+    $win_result
+;

@@ -1,3 +1,4 @@
+// NOLINTBEGIN(misc-definitions-in-headers)
 #pragma once
 
 #include "sql_select_yql.h"
@@ -28,7 +29,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
 /// This function is used in BACKWARD COMPATIBILITY tests below that LIMIT the sets of token that CAN NOT be used
 /// as identifiers in different contexts in a SQL request
 ///\return list of tokens that failed this check
-TVector<TString> ValidateTokens(const THashSet<TString>& forbidden, const std::function<TString(const TString&)>& makeRequest) {
+inline TVector<TString> ValidateTokens(const THashSet<TString>& forbidden, const std::function<TString(const TString&)>& makeRequest) {
     THashMap<TString, bool> allTokens;
     for (const auto& t : NSQLFormat::GetKeywords()) {
         allTokens[t] = !forbidden.contains((t));
@@ -1081,6 +1082,13 @@ Y_UNIT_TEST(CreateObjectWithFeaturesAndFlags) {
     UNIT_ASSERT_VALUES_EQUAL(1, elementStat["SECRET"]);
 }
 
+Y_UNIT_TEST(CreateObjectWithFeaturesWithoutCluster) {
+    ExpectFailWithError(R"sql(
+        CREATE OBJECT secretId (TYPE SECRET)
+        WITH (Key1=Value1, K2=V2);
+    )sql", "<main>:2:9: Error: No cluster name given and no default cluster is selected\n");
+}
+
 Y_UNIT_TEST(Select1Type) {
     NYql::TAstParseResult res = SqlToYql("SELECT 1 type;");
     UNIT_ASSERT(res.Root);
@@ -1722,9 +1730,20 @@ Y_UNIT_TEST(CreateTableWithIfNotExists) {
     UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write!"]);
 }
 
-Y_UNIT_TEST(CreateTableWithIfNotExistsYtNotSupported) {
-    ExpectFailWithError("CREATE TABLE IF NOT EXISTS plato.t (a int32);",
-                        "<main>:1:34: Error: CREATE TABLE IF NOT EXISTS is not supported for yt provider.\n");
+Y_UNIT_TEST(CreateTableWithIfNotExistsYt) {
+    NYql::TAstParseResult res = SqlToYql("USE plato; CREATE TABLE IF NOT EXISTS t (a int32);");
+    UNIT_ASSERT(res.Root);
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write!") {
+            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos,
+                                       line.find(R"__((Write! world sink (Key '('tablescheme (String '"t"))) values '('('mode 'create_if_not_exists) '('columns '('('"a" (AsOptionalType (DataType 'Int32)) '('columnConstrains '()) '()))))))__"));
+        }
+    };
+    TWordCountHive elementStat = {{TString("Write!"), 0}};
+    VerifyProgram(res, elementStat, verifyLine);
+
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write!"]);
 }
 
 Y_UNIT_TEST(CreateTempTable) {
@@ -3414,6 +3433,21 @@ Y_UNIT_TEST(WindowPartitionByExpressionWithoutAliasesAreAllowed) {
 
     UNIT_ASSERT_VALUES_EQUAL(1, elementStat["CalcOverWindow"]);
     UNIT_ASSERT_VALUES_EQUAL(1, elementStat["AddMember"]);
+}
+
+Y_UNIT_TEST(WindowPartitionByOrderByWindowFunctionIsNotAllowed) {
+    ExpectFailWithError(
+        R"sql(SELECT Rank() OVER (PARTITION BY x ORDER BY Rank()) FROM (VALUES (1)) AS t(x))sql",
+        "<main>:1:45: Error: Failed to use window function: Rank without window\n");
+    ExpectFailWithError(
+        R"sql(SELECT Rank() OVER (PARTITION BY x ORDER BY RowNumber()) FROM (VALUES (1)) AS t(x))sql",
+        "<main>:1:45: Error: Failed to use window function RowNumber without window specification or in wrong place\n");
+    ExpectFailWithError(
+        R"sql(SELECT RowNumber() OVER (PARTITION BY x ORDER BY Rank()) FROM (VALUES (1)) AS t(x))sql",
+        "<main>:1:50: Error: Failed to use window function: Rank without window\n");
+    ExpectFailWithError(
+        R"sql(SELECT RowNumber() OVER (PARTITION BY x ORDER BY RowNumber()) FROM (VALUES (1)) AS t(x))sql",
+        "<main>:1:50: Error: Failed to use window function RowNumber without window specification or in wrong place\n");
 }
 
 Y_UNIT_TEST(PqReadByAfterUse) {
@@ -5537,7 +5571,7 @@ Y_UNIT_TEST(BuiltinFileOpNoArgs) {
 Y_UNIT_TEST(ProcessWithHaving) {
     NYql::TAstParseResult res = SqlToYql("process plato.Input using some::udf(value) having value == 1");
     UNIT_ASSERT(!res.Root);
-    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:15: Error: PROCESS does not allow HAVING yet! You may request it on yql@ maillist.\n");
+    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:15: Error: PROCESS does not allow HAVING yet!\n");
 }
 
 Y_UNIT_TEST(ReduceNoBy) {
@@ -6926,7 +6960,7 @@ Y_UNIT_TEST(ScalarContextUsage4) {
 }
 } // Y_UNIT_TEST_SUITE(SqlToYQLErrors)
 
-void CheckUnused(const TString& req, const TString& symbol, unsigned row, unsigned col) {
+inline void CheckUnused(const TString& req, const TString& symbol, unsigned row, unsigned col) {
     auto res = SqlToYql(req);
 
     UNIT_ASSERT(res.Root);
@@ -8946,7 +8980,7 @@ Y_UNIT_TEST(DropExternalTableIfExists) {
 } // Y_UNIT_TEST_SUITE(ExternalTable)
 
 Y_UNIT_TEST_SUITE(TopicsDDL) {
-void TestQuery(const TString& query, bool expectOk = true, const TVector<TString> issueSubstrings = {}) {
+inline void TestQuery(const TString& query, bool expectOk = true, const TVector<TString> issueSubstrings = {}) {
     TStringBuilder finalQuery;
 
     finalQuery << "use plato;" << Endl << query;
@@ -9260,6 +9294,30 @@ Y_UNIT_TEST(DropViewIfExists) {
                 USE ydb;
                 DROP VIEW IF EXISTS {};
             )", name));
+    UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+
+    TVerifyLineFunc verifyLine = [&](const TString& word, const TString& line) {
+        if (word == "Write!") {
+            UNIT_ASSERT_STRING_CONTAINS(line, name);
+            UNIT_ASSERT_STRING_CONTAINS(line, "dropObjectIfExists");
+        }
+    };
+
+    TWordCountHive elementStat = {{"Write!"}};
+    VerifyProgram(res, elementStat, verifyLine);
+
+    UNIT_ASSERT_VALUES_EQUAL(elementStat["Write!"], 1);
+}
+
+Y_UNIT_TEST(DropViewIfExistsYt) {
+    constexpr const char* name = "TheView";
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::MakeLangVersion(2025, 5);
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(std::format(R"(
+                USE plato;
+                DROP VIEW IF EXISTS {};
+            )", name), settings);
     UNIT_ASSERT_C(res.Root, res.Issues.ToString());
 
     TVerifyLineFunc verifyLine = [&](const TString& word, const TString& line) {
@@ -10597,6 +10655,38 @@ Y_UNIT_TEST(HoppingWindow) {
     UNIT_ASSERT_VALUES_EQUAL(0, res.Issues.Size());
 }
 
+Y_UNIT_TEST(HoppingWindowNamedParameters) {
+    {
+        auto query = R"sql(
+            SELECT
+                *
+            FROM plato.Input
+            GROUP BY HoppingWindow(key, 39, 42,
+                                   "max" AS SizeLimit, "PT10S" AS TimeLimit,
+                                   "close" AS EarlyPolicy, "adjust" AS LatePolicy);
+            )sql";
+
+        NYql::TAstParseResult res = SqlToYql(query);
+        UNIT_ASSERT_VALUES_UNEQUAL(nullptr, res.Root);
+        UNIT_ASSERT(res.IsOk());
+        UNIT_ASSERT_VALUES_EQUAL(0, res.Issues.Size());
+    }
+    {
+        auto query = R"sql(
+            SELECT
+                *
+            FROM plato.Input
+            GROUP BY HoppingWindow(key, 39, 42,
+                                   "drop" AS LatePolicy, "adjust" AS EarlyPolicy);
+            )sql";
+
+        NYql::TAstParseResult res = SqlToYql(query);
+        UNIT_ASSERT_VALUES_UNEQUAL(nullptr, res.Root);
+        UNIT_ASSERT(res.IsOk());
+        UNIT_ASSERT_VALUES_EQUAL(0, res.Issues.Size());
+    }
+}
+
 Y_UNIT_TEST(HoppingWindowWithoutSource) {
     ExpectFailWithError(
         R"sql(SELECT 1 + HoppingWindow(key, 39, 42);)sql",
@@ -10637,6 +10727,34 @@ Y_UNIT_TEST(HoppingWindowWithNonConstIntervals) {
 
         "<main>:7:21: Error: Source does not allow column references\n"
         "<main>:7:45: Error: Column reference 'subkey'\n");
+
+    ExpectFailWithError(
+        R"sql(
+                SELECT
+                    key,
+                    hopping_start
+                FROM plato.Input
+                GROUP BY
+                    HoppingWindow(key, 39, 42, (subkey + 42) AS SizeLimit) AS hopping_start,
+                    key;
+            )sql",
+
+        "<main>:7:21: Error: Source does not allow column references\n"
+        "<main>:7:49: Error: Column reference 'subkey'\n");
+
+    ExpectFailWithError(
+        R"sql(
+                SELECT
+                    key,
+                    hopping_start
+                FROM plato.Input
+                GROUP BY
+                    HoppingWindow(key, 39, 42, subkey AS LatePolicy) AS hopping_start,
+                    key;
+            )sql",
+
+        "<main>:7:21: Error: Source does not allow column references\n"
+        "<main>:7:48: Error: Column reference 'subkey'\n");
 }
 
 Y_UNIT_TEST(HoppingWindowWithWrongNumberOfArgs) {
@@ -10648,7 +10766,7 @@ Y_UNIT_TEST(HoppingWindowWithWrongNumberOfArgs) {
                 GROUP BY HoppingWindow(key, 39);
             )sql",
 
-        "<main>:5:26: Error: HoppingWindow requires three arguments\n");
+        "<main>:5:26: Error: HoppingWindow requires three positional arguments\n");
 
     ExpectFailWithError(
         R"sql(
@@ -10658,7 +10776,35 @@ Y_UNIT_TEST(HoppingWindowWithWrongNumberOfArgs) {
                 GROUP BY HoppingWindow(key, 39, 42, 63);
             )sql",
 
-        "<main>:5:26: Error: HoppingWindow requires three arguments\n");
+        "<main>:5:26: Error: HoppingWindow requires three positional arguments\n");
+}
+
+Y_UNIT_TEST(HoppingWindowWithUnknownNamedArg) {
+    ExpectFailWithError(
+        R"sql(
+                SELECT
+                    *
+                FROM plato.Input
+                GROUP BY HoppingWindow(key, 39, 42, 13 AS Foobar);
+            )sql",
+
+        "<main>:5:53: Error: HoppingWindow: unsupported parameter: Foobar; expected: SizeLimit, TimeLimit, EarlyPolicy, LatePolicy\n");
+}
+
+Y_UNIT_TEST(HoppingWindowWithEvaluatedLimit) {
+    {
+        auto query = R"sql(
+            SELECT
+                *
+            FROM plato.Input
+            GROUP BY HoppingWindow(key, 39, 42, (Uint64("13") + Uint64("17")) AS SizeLimit);
+            )sql";
+
+        NYql::TAstParseResult res = SqlToYql(query);
+        UNIT_ASSERT_VALUES_UNEQUAL(nullptr, res.Root);
+        UNIT_ASSERT(res.IsOk());
+        UNIT_ASSERT_VALUES_EQUAL(0, res.Issues.Size());
+    }
 }
 
 Y_UNIT_TEST(DuplicateHoppingWindow) {
@@ -10797,7 +10943,10 @@ USE plato;
 -- Some comment
 CREATE STREAMING QUERY MyQuery WITH (
     RUN = TRUE,
-    RESOURCE_POOL = my_pool
+    RESOURCE_POOL = my_pool,
+    STREAMING_DISPOSITION = (
+        FROM_TIME = "2025-05-04T11:30:34.336938Z"
+    )
 ) AS DO )sql" << "\r" << R"sql(BEGIN
 USE plato;
 $source = SELECT * FROM Input;
@@ -10815,7 +10964,9 @@ USE hahn;
         }
 
         if (word == "__query_text") {
-            UNIT_ASSERT_STRING_CONTAINS(line, R"#('('"__query_text" '"\nUSE plato;\n$source = SELECT * FROM Input;\nINSERT INTO Output1 SELECT * FROM $source;\nINSERT INTO Output2 SELECT * FROM $source;\n") '('"resource_pool" '"my_pool") '('"run" (Bool '"true")))#");
+            UNIT_ASSERT_STRING_CONTAINS(line, TStringBuilder()
+                                                  << R"#('('"__query_text" '"\nUSE plato;\n$source = SELECT * FROM Input;\nINSERT INTO Output1 SELECT * FROM $source;\nINSERT INTO Output2 SELECT * FROM $source;\n") )#"
+                                                  << R"#('('"resource_pool" '"my_pool") '('"run" (Bool '"true")) '('"streaming_disposition" '('('"from_time" '"2025-05-04T11:30:34.336938Z"))))#");
         }
     };
 
@@ -10990,14 +11141,17 @@ Y_UNIT_TEST(AlterStreamingQuerySetOptions) {
             USE plato;
             ALTER STREAMING QUERY MyQuery SET (
                 WAIT_CHECKPOINT = TRUE,
-                RESOURCE_POOL = other_pool
+                RESOURCE_POOL = other_pool,
+                STREAMING_DISPOSITION = (
+                    TIME_AGO = "PT1H"
+                )
             );
         )sql");
     UNIT_ASSERT_C(res.Root, res.Issues.ToOneLineString());
 
     TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
         if (word == "Write") {
-            UNIT_ASSERT_STRING_CONTAINS(line, R"#('('('"resource_pool" '"other_pool") '('"wait_checkpoint" (Bool '"true"))))#");
+            UNIT_ASSERT_STRING_CONTAINS(line, R"#('('('"resource_pool" '"other_pool") '('"streaming_disposition" '('('"time_ago" '"PT1H"))) '('"wait_checkpoint" (Bool '"true"))))#");
             UNIT_ASSERT_STRING_CONTAINS(line, "alterObject");
         }
     };
@@ -12191,6 +12345,94 @@ Y_UNIT_TEST(DiagnosticMandatoryAsTable) {
     UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), ":4:36: Error: Expecting mandatory AS here");
 }
 
+Y_UNIT_TEST(NamedNodeSubqueryScalar) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        $x = (SELECT 1);
+        $y = SELECT 1;
+        SELECT $x, $y;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect", "YqlSubLink"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 3 + 2);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSubLink"], 2);
+}
+
+Y_UNIT_TEST(NamedNodeSubqueryIn) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        $x = (SELECT 1);
+        $y = SELECT 1;
+        SELECT 1 IN $x, 1 IN $y;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect", "YqlSubLink"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 3 + 2);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSubLink"], 2);
+}
+
+Y_UNIT_TEST(NamedNodeSubqueryExists) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        $x = (SELECT 1);
+        $y = SELECT 1;
+        SELECT 1 FROM (SELECT 1)
+        WHERE EXISTS $x AND EXISTS $y;
+    )sql", settings);
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRINGS_EQUAL(Err2Str(res), "<main>:6:21: Error: no viable alternative at input 'EXISTS $'\n");
+}
+
+Y_UNIT_TEST(NamedNodeSubquerySource) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        PRAGMA AnsiImplicitCrossJoin;
+        $x = (SELECT 1 AS a);
+        $y = SELECT 1 AS b;
+        SELECT a, b FROM $x, $y;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect", "YqlSubLink"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 3 + 2);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSubLink"], 0);
+}
+
+Y_UNIT_TEST(NamedNodeSubqueryReuse) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        PRAGMA AnsiImplicitCrossJoin;
+        $x = (SELECT 1 AS a);
+        SELECT a FROM $x;
+        SELECT a FROM $x;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 3 + 1);
+}
+
 } // Y_UNIT_TEST_SUITE(YqlSelect)
 
 Y_UNIT_TEST_SUITE(CreateViewNewSyntax) {
@@ -12304,4 +12546,24 @@ Y_UNIT_TEST(ErrorOnMissingCluster) {
     ExpectFailWithError("create view foo as do begin select 1; end do", "<main>:1:1: Error: No cluster name given and no default cluster is selected\n", settings);
 }
 
+Y_UNIT_TEST(CreateViewIfNotExists) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::MakeLangVersion(2025, 5);
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings("create view if not exists plato.foo as do begin select 1; end do", settings);
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+
+    TVerifyLineFunc verifyLine = [&](const TString& word, const TString& line) {
+        if (word == "Write!") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "createObjectIfNotExists");
+        }
+    };
+
+    TWordCountHive elementStat = {{"Write!"}};
+    VerifyProgram(res, elementStat, verifyLine);
+
+    UNIT_ASSERT_VALUES_EQUAL(elementStat["Write!"], 1);
+}
+
 } // Y_UNIT_TEST_SUITE(CreateViewNewSyntax)
+// NOLINTEND(misc-definitions-in-headers)

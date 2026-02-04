@@ -216,7 +216,6 @@ struct TDqTaskRunnerSettings {
     NDqProto::EDqStatsMode StatsMode = NDqProto::DQ_STATS_MODE_NONE;
     bool TerminateOnError = false;
     bool UseCacheForLLVM = true;
-    TDqComputeActorWatermarks* WatermarksTracker = nullptr;
     TString OptLLVM = "";
     THashMap<TString, TString> SecureParams;
     THashMap<TString, TString> TaskParams;
@@ -451,7 +450,8 @@ public:
     virtual ui64 GetTaskId() const = 0;
 
     virtual void Prepare(const TDqTaskSettings& task, const TDqTaskRunnerMemoryLimits& memoryLimits,
-        const IDqTaskRunnerExecutionContext& execCtx) = 0;
+        const IDqTaskRunnerExecutionContext& execCtx,
+        TDqComputeActorWatermarks* watermarksTracker = nullptr) = 0;
     virtual ERunStatus Run() = 0;
 
     virtual bool HasEffects() const = 0;
@@ -461,6 +461,7 @@ public:
     virtual IDqOutputChannel::TPtr GetOutputChannel(ui64 channelId) = 0;
     virtual IDqAsyncOutputBuffer::TPtr GetSink(ui64 outputIndex) = 0;
     virtual std::optional<std::pair<NUdf::TUnboxedValue, IDqAsyncInputBuffer::TPtr>> GetInputTransform(ui64 inputIndex) = 0;
+    virtual TDqComputeActorWatermarks *GetInputTransformWatermarksTracker(ui64 inputId) = 0;
     virtual std::pair<IDqAsyncOutputBuffer::TPtr, IDqOutputConsumer::TPtr> GetOutputTransform(ui64 outputIndex) = 0;
 
     virtual IRandomProvider* GetRandomProvider() const = 0;

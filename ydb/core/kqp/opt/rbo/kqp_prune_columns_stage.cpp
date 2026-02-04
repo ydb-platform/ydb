@@ -27,13 +27,13 @@ void TPruneColumnsStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
     for (auto it : root) {
 
         auto usedIUs = it.Current->GetUsedIUs(root.PlanProps);
-        for (auto iu : usedIUs) {
+        for (const auto& iu : usedIUs) {
             usedSet.insert(iu);
         }
     }
 
     // Add all IUs visible at the root level
-    for (auto iu : root.GetInput()->GetOutputIUs()) {
+    for (const auto& iu : root.GetInput()->GetOutputIUs()) {
         usedSet.insert(iu);
     }
 
@@ -42,11 +42,11 @@ void TPruneColumnsStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
     // We first create a rename map
     THashMap<TInfoUnit, THashSet<TInfoUnit, TInfoUnit::THashFunction>, TInfoUnit::THashFunction> renameMap;
 
-    for (auto it : root ) {
+    for (auto it : root) {
         if (it.Current->Kind == EOperator::Map) {
             auto map = CastOperator<TOpMap>(it.Current);
             auto renames = map->GetRenames();
-            for (auto & [to, from] : renames) {
+            for (const auto& [to, from] : renames) {
                 if (to != from) {
                     if (!renameMap.contains(from)) {
                         renameMap.insert({from, {}});
@@ -60,7 +60,7 @@ void TPruneColumnsStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
     // Now we check every key in the rename map if it maps to a used IU
     // Add it to the usedSet if that's the case
     THashMap<TInfoUnit, THashSet<TInfoUnit, TInfoUnit::THashFunction>, TInfoUnit::THashFunction> closedMap;
-    for (auto & [from, to] : renameMap) {
+    for (const auto& [from, to] : renameMap) {
         closedMap.insert({from, to});
     }
 
@@ -68,15 +68,15 @@ void TPruneColumnsStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
     while (!closure) {
         closure = true;
 
-        for (auto & [from, toSet] : closedMap) {
-            for (auto & t : toSet) {
+        for (auto& [from, toSet] : closedMap) {
+            for (const auto& t : toSet) {
                 if (closedMap.contains(t)) {
-                    auto & finalSet = closedMap.at(t);
+                    auto& finalSet = closedMap.at(t);
                     if (std::any_of(finalSet.begin(), finalSet.end(), [&toSet] (const TInfoUnit& u) {
                         return !toSet.contains(u);
                     })) {
                         closure = false;
-                        for (auto & iu : finalSet) {
+                        for (const auto& iu : finalSet) {
                             toSet.insert(iu);
                         }
                         break;
@@ -89,12 +89,12 @@ void TPruneColumnsStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
         }
     }
 
-    for (auto &[from, toSet] : closedMap) {
+    for (const auto& [from, toSet] : closedMap) {
         if(usedSet.contains(from) || std::any_of(toSet.begin(), toSet.end(), [&usedSet](const TInfoUnit& t) {
             return usedSet.contains(t);
         })) {
             usedSet.insert(from);
-            for (auto & t : toSet) {
+            for (const auto & t : toSet) {
                 usedSet.insert(t);
             }
         }
@@ -107,7 +107,7 @@ void TPruneColumnsStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
             TVector<TString> newColumns;
             TVector<TInfoUnit> newIUs;
 
-            for (size_t i=0; i<read->OutputIUs.size(); i++) {
+            for (size_t i = 0; i < read->OutputIUs.size(); i++) {
                 if (usedSet.contains(read->OutputIUs[i])) {
                     newColumns.push_back(read->Columns[i]);
                     newIUs.push_back(read->OutputIUs[i]);
@@ -126,13 +126,13 @@ void TPruneColumnsStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
 
         } else if (it.Current->Kind == EOperator::Map) {
             auto map = CastOperator<TOpMap>(it.Current);
-            TVector<std::pair<TInfoUnit, std::variant<TInfoUnit, TExprNode::TPtr>>> newMapElements;
+            TVector<TMapElement> newMapElements;
 
-            for (auto & [to, body] : map->MapElements) {
-                if (std::holds_alternative<TInfoUnit>(body) && usedSet.contains(to)) {
-                    newMapElements.push_back(std::make_pair(to, body));
-                } else if (std::holds_alternative<TExprNode::TPtr>(body)) {
-                    newMapElements.push_back(std::make_pair(to, body));
+            for (const auto& mapElement : map->MapElements) {
+                if (mapElement.IsRename() && usedSet.contains(mapElement.GetElementName())) {
+                    newMapElements.emplace_back(mapElement.GetElementName(), mapElement.GetRename());
+                } else if (mapElement.IsExpression()) {
+                    newMapElements.emplace_back(mapElement.GetElementName(), mapElement.GetExpression());
                 }
             }
             map->MapElements = newMapElements;

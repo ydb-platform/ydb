@@ -1,4 +1,6 @@
 #include "sql_query.h"
+
+#include "select_yql.h"
 #include "sql_expression.h"
 #include "sql_select.h"
 #include "sql_select_yql.h"
@@ -312,40 +314,33 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 return false;
             }
 
-            if (Ctx_.GetYqlSelectMode() != EYqlSelectMode::Disable) {
-                const NYql::TLangVersion langVer = YqlSelectLangVersion();
-                if (!IsBackwardCompatibleFeatureAvailable(langVer)) {
-                    Error() << "YqlSelect is not available before "
-                            << FormatLangVersion(langVer);
-                    return false;
-                }
+            const auto& stmt = core.GetAlt_sql_stmt_core2().GetRule_select_stmt1();
+            TNodePtr node = YqlSelectOrLegacy(
+                [&]() -> TNodeResult {
+                    return BuildYqlSelectStatement(Ctx_, Mode_, stmt);
+                },
+                [&]() -> TNodePtr {
+                    Ctx_.BodyPart();
 
-                const auto stmt = core.GetAlt_sql_stmt_core2().GetRule_select_stmt1();
-                if (auto result = BuildYqlSelect(Ctx_, Mode_, stmt)) {
-                    blocks.emplace_back(std::move(*result));
-                    break;
-                } else if (
-                    result.error() == ESQLError::UnsupportedYqlSelect &&
-                    Ctx_.GetYqlSelectMode() == EYqlSelectMode::Force)
-                {
-                    Error() << "Translation of the statement "
-                            << "to YqlSelect was forced, but unsupported";
-                    return false;
-                } else if (result.error() == ESQLError::Basic) {
-                    return false;
-                }
-            }
+                    TPosition pos;
+                    TSourcePtr source = TSqlSelect(Ctx_, Mode_).Build(stmt, pos);
+                    if (!source) {
+                        return nullptr;
+                    }
 
-            Ctx_.BodyPart();
-            TSqlSelect select(Ctx_, Mode_);
-            TPosition pos;
-            auto source = select.Build(core.GetAlt_sql_stmt_core2().GetRule_select_stmt1(), pos);
-            if (!source) {
+                    return BuildSelectResult(
+                        pos,
+                        std::move(source),
+                        Mode_ != NSQLTranslation::ESqlMode::LIMITED_VIEW && Mode_ != NSQLTranslation::ESqlMode::SUBQUERY,
+                        Mode_ == NSQLTranslation::ESqlMode::SUBQUERY,
+                        Ctx_.Scoped);
+                });
+
+            if (!node) {
                 return false;
             }
-            blocks.emplace_back(BuildSelectResult(pos, std::move(source),
-                                                  Mode_ != NSQLTranslation::ESqlMode::LIMITED_VIEW && Mode_ != NSQLTranslation::ESqlMode::SUBQUERY, Mode_ == NSQLTranslation::ESqlMode::SUBQUERY,
-                                                  Ctx_.Scoped));
+
+            blocks.emplace_back(std::move(node));
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore3: {
@@ -355,6 +350,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             if (!nodeExpr) {
                 return false;
             }
+
             TVector<TNodePtr> nodes;
             auto subquery = nodeExpr->GetSource();
             if (subquery && Mode_ == NSQLTranslation::ESqlMode::LIBRARY && Ctx_.ScopeLevel == 0) {
@@ -383,6 +379,16 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                     }
                 } else {
                     nodes.push_back(std::move(nodeExpr));
+                }
+            } else if (auto source = GetYqlSource(nodeExpr)) {
+                const auto alias = Ctx_.MakeName("yqlsubquerynode");
+                const auto ref = Ctx_.MakeName("yqlsubquery");
+
+                blocks.push_back(BuildYqlSubquery(source, alias));
+                blocks.back()->SetLabel(ref);
+
+                for (size_t i = 0; i < names.size(); ++i) {
+                    nodes.push_back(BuildYqlSubqueryRef(blocks.back(), ref));
                 }
             } else {
                 const auto ref = Ctx_.MakeName("namedexprnode");
@@ -452,11 +458,6 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
 
             TTableRef tr;
             if (!SimpleTableRefImpl(rule.GetRule_simple_table_ref5(), tr)) {
-                return false;
-            }
-
-            if (existingOk && tr.Service == YtProviderName) {
-                Error() << "CREATE TABLE IF NOT EXISTS is not supported for " << tr.Service << " provider.";
                 return false;
             }
 
@@ -732,38 +733,34 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 return false;
             }
 
-            if (Ctx_.GetYqlSelectMode() != EYqlSelectMode::Disable) {
-                const NYql::TLangVersion langVer = YqlSelectLangVersion();
-                if (!IsBackwardCompatibleFeatureAvailable(langVer)) {
-                    Error() << "YqlSelect is not available before "
-                            << FormatLangVersion(langVer);
-                    return false;
-                }
+            const auto& stmt = core.GetAlt_sql_stmt_core21().GetRule_values_stmt1();
+            TNodePtr node = YqlSelectOrLegacy(
+                [&]() -> TNodeResult {
+                    return BuildYqlSelectStatement(Ctx_, Mode_, stmt);
+                },
+                [&]() -> TNodePtr {
+                    Ctx_.BodyPart();
 
-                const auto stmt = core.GetAlt_sql_stmt_core21().GetRule_values_stmt1();
-                if (auto result = BuildYqlSelect(Ctx_, Mode_, stmt)) {
-                    blocks.emplace_back(std::move(*result));
-                    break;
-                } else if (
-                    result.error() == ESQLError::UnsupportedYqlSelect &&
-                    Ctx_.GetYqlSelectMode() == EYqlSelectMode::Force)
-                {
-                    Error() << "Translation of the statement "
-                            << "to YqlSelect was forced, but unsupported";
-                    return false;
-                }
-            }
+                    TPosition pos;
+                    TSourcePtr source = TSqlValues(Ctx_, Mode_).Build(stmt, pos, {}, TPosition());
 
-            Ctx_.BodyPart();
-            TSqlValues values(Ctx_, Mode_);
-            TPosition pos;
-            auto source = values.Build(core.GetAlt_sql_stmt_core21().GetRule_values_stmt1(), pos, {}, TPosition());
-            if (!source) {
+                    if (!source) {
+                        return nullptr;
+                    }
+
+                    return BuildSelectResult(
+                        pos,
+                        std::move(source),
+                        Mode_ != NSQLTranslation::ESqlMode::LIMITED_VIEW && Mode_ != NSQLTranslation::ESqlMode::SUBQUERY,
+                        Mode_ == NSQLTranslation::ESqlMode::SUBQUERY,
+                        Ctx_.Scoped);
+                });
+
+            if (!node) {
                 return false;
             }
-            blocks.emplace_back(BuildSelectResult(pos, std::move(source),
-                                                  Mode_ != NSQLTranslation::ESqlMode::LIMITED_VIEW && Mode_ != NSQLTranslation::ESqlMode::SUBQUERY, Mode_ == NSQLTranslation::ESqlMode::SUBQUERY,
-                                                  Ctx_.Scoped));
+
+            blocks.emplace_back(std::move(node));
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore22: {
@@ -1010,6 +1007,10 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
         case TRule_sql_stmt_core::kAltSqlStmtCore27: {
             // create_object_stmt: CREATE OBJECT (IF NOT EXISTS)? name (TYPE type [WITH k=v,...]);
             auto& node = core.GetAlt_sql_stmt_core27().GetRule_create_object_stmt1();
+
+            Token(node.GetToken1());
+            const TPosition pos = Ctx_.Pos();
+
             TObjectOperatorContext context(Ctx_.Scoped);
             if (node.GetRule_object_ref4().HasBlock1()) {
                 if (!ClusterExpr(node.GetRule_object_ref4().GetBlock1().GetRule_cluster_expr1(),
@@ -1036,7 +1037,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 }
             }
 
-            AddStatementToBlocks(blocks, BuildCreateObjectOperation(Ctx_.Pos(), objectId, typeId, existingOk, false, std::move(kv), context));
+            AddStatementToBlocks(blocks, BuildCreateObjectOperation(pos, objectId, typeId, existingOk, false, new TObjectFeatureNode(Ctx_.Pos(), std::move(kv)), context));
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore28: {
@@ -1057,7 +1058,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 return false;
             }
 
-            AddStatementToBlocks(blocks, BuildAlterObjectOperation(Ctx_.Pos(), objectId, typeId, false, std::move(kv), std::set<TString>(), context));
+            AddStatementToBlocks(blocks, BuildAlterObjectOperation(Ctx_.Pos(), objectId, typeId, false, new TObjectFeatureNode(Ctx_.Pos(), std::move(kv)), std::set<TString>(), context));
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore29: {
@@ -1088,7 +1089,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 }
             }
 
-            AddStatementToBlocks(blocks, BuildDropObjectOperation(Ctx_.Pos(), objectId, typeId, missingOk, std::move(kv), context));
+            AddStatementToBlocks(blocks, BuildDropObjectOperation(Ctx_.Pos(), objectId, typeId, missingOk, new TObjectFeatureNode(Ctx_.Pos(), std::move(kv)), context));
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore30: {
@@ -1127,7 +1128,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             const auto prefixPath = Ctx_.GetPrefixPath(context.ServiceId, context.Cluster);
             AdjustSecretPaths(kv, EDS_SECRETS_SETTINGS, prefixPath);
 
-            AddStatementToBlocks(blocks, BuildCreateObjectOperation(Ctx_.Pos(), BuildTablePath(prefixPath, objectId), "EXTERNAL_DATA_SOURCE", existingOk, replaceIfExists, std::move(kv), context));
+            AddStatementToBlocks(blocks, BuildCreateObjectOperation(Ctx_.Pos(), BuildTablePath(prefixPath, objectId), "EXTERNAL_DATA_SOURCE", existingOk, replaceIfExists, new TObjectFeatureNode(Ctx_.Pos(), std::move(kv)), context));
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore31: {
@@ -1160,7 +1161,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
 
             auto operation = BuildAlterObjectOperation(
                 Ctx_.Pos(), BuildTablePath(prefixPath, objectId), "EXTERNAL_DATA_SOURCE",
-                /* missingOk = */ false, std::move(kv), std::move(toReset), context);
+                /* missingOk = */ false, new TObjectFeatureNode(Ctx_.Pos(), std::move(kv)), std::move(toReset), context);
             AddStatementToBlocks(blocks, std::move(operation));
             break;
         }
@@ -1427,7 +1428,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 return false;
             }
 
-            AddStatementToBlocks(blocks, BuildAlterObjectOperation(Ctx_.Pos(), objectId, typeId, false, std::move(kv), std::set<TString>(), context));
+            AddStatementToBlocks(blocks, BuildAlterObjectOperation(Ctx_.Pos(), objectId, typeId, false, new TObjectFeatureNode(Ctx_.Pos(), std::move(kv)), std::set<TString>(), context));
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore41: {
@@ -1450,7 +1451,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 }
             }
 
-            AddStatementToBlocks(blocks, BuildUpsertObjectOperation(Ctx_.Pos(), objectId, typeId, std::move(kv), context));
+            AddStatementToBlocks(blocks, BuildUpsertObjectOperation(Ctx_.Pos(), objectId, typeId, new TObjectFeatureNode(Ctx_.Pos(), std::move(kv)), context));
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore42: {
@@ -1527,7 +1528,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                                                             TypeId,
                                                             existingOk,
                                                             false,
-                                                            std::move(features),
+                                                            new TObjectFeatureNode(Ctx_.Pos(), std::move(features)),
                                                             context));
             break;
         }
@@ -1611,7 +1612,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 return false;
             }
 
-            AddStatementToBlocks(blocks, BuildCreateObjectOperation(Ctx_.Pos(), objectId, "RESOURCE_POOL", false, false, std::move(kv), context));
+            AddStatementToBlocks(blocks, BuildCreateObjectOperation(Ctx_.Pos(), objectId, "RESOURCE_POOL", false, false, new TObjectFeatureNode(Ctx_.Pos(), std::move(kv)), context));
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore46: {
@@ -1639,7 +1640,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 }
             }
 
-            AddStatementToBlocks(blocks, BuildAlterObjectOperation(Ctx_.Pos(), objectId, "RESOURCE_POOL", false, std::move(kv), std::move(toReset), context));
+            AddStatementToBlocks(blocks, BuildAlterObjectOperation(Ctx_.Pos(), objectId, "RESOURCE_POOL", false, new TObjectFeatureNode(Ctx_.Pos(), std::move(kv)), std::move(toReset), context));
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore47: {
@@ -1845,7 +1846,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 return false;
             }
 
-            AddStatementToBlocks(blocks, BuildCreateObjectOperation(Ctx_.Pos(), objectId, "RESOURCE_POOL_CLASSIFIER", false, false, std::move(kv), context));
+            AddStatementToBlocks(blocks, BuildCreateObjectOperation(Ctx_.Pos(), objectId, "RESOURCE_POOL_CLASSIFIER", false, false, new TObjectFeatureNode(Ctx_.Pos(), std::move(kv)), context));
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore53: {
@@ -1873,7 +1874,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 }
             }
 
-            AddStatementToBlocks(blocks, BuildAlterObjectOperation(Ctx_.Pos(), objectId, "RESOURCE_POOL_CLASSIFIER", false, std::move(kv), std::move(toReset), context));
+            AddStatementToBlocks(blocks, BuildAlterObjectOperation(Ctx_.Pos(), objectId, "RESOURCE_POOL_CLASSIFIER", false, new TObjectFeatureNode(Ctx_.Pos(), std::move(kv)), std::move(toReset), context));
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore54: {
@@ -3723,6 +3724,7 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
     TABLE_ELEM("UseTablePrefixForEach", PragmaUseTablePrefixForEach, true),
     PAIRED_TABLE_ELEM("SimpleColumns", SimpleColumns),
     PAIRED_TABLE_ELEM("DebugPositions", DebugPositions),
+    PAIRED_TABLE_ELEM("WindowNewPipeline", WindowNewPipeline),
     PAIRED_TABLE_ELEM("CoalesceJoinKeysOnQualifiedAll", CoalesceJoinKeysOnQualifiedAll),
     PAIRED_TABLE_ELEM("PullUpFlatMapOverJoin", PragmaPullUpFlatMapOverJoin),
     PAIRED_TABLE_ELEM("FilterPushdownOverJoinOptionalSide", FilterPushdownOverJoinOptionalSide),

@@ -3,6 +3,7 @@
 #include <future>
 #include <library/cpp/monlib/service/monservice.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
+#include <library/cpp/monlib/dynamic_counters/page.h>
 #include <library/cpp/monlib/service/pages/index_mon_page.h>
 #include <library/cpp/monlib/service/pages/resources/css_mon_page.h>
 #include <library/cpp/monlib/service/pages/resources/fonts_mon_page.h>
@@ -41,6 +42,7 @@ public:
         ui32 MaxRequestsPerSecond = 0;
         TDuration InactivityTimeout = TDuration::Minutes(2);
         TString AllowOrigin;
+        bool RequireCountersAuthentication = false;
     };
 
     TMon(TConfig config);
@@ -100,6 +102,9 @@ protected:
     TActorId HttpMonServiceActorId;
     TActorId HttpAuthMonServiceActorId;
     TActorId NodeProxyServiceActorId;
+    TActorId CountersServiceActorId;
+    TActorId PingServiceActorId;
+    TIntrusivePtr<NMonitoring::TDynamicCountersPage> CountersMonPage;
 
     struct TActorMonPageInfo {
         NMonitoring::TMonPagePtr Page;

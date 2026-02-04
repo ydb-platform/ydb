@@ -148,7 +148,7 @@ std::optional<TString> TMessageIdDeduplicator::SerializeTo(NKikimrPQ::TMessageDe
 
     for (size_t i = startIndex; i < Queue.size(); ++i) {
         auto messageTime = std::max(Queue[i].ExpirationTime, lastExpirationTime);
-        
+
         auto* message = wal.AddMessage();
         message->SetOffsetDelta(Queue[i].Offset - lastOffset);
         message->SetDeduplicationId(Queue[i].DeduplicationId);

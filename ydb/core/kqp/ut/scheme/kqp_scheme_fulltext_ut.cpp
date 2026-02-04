@@ -34,10 +34,10 @@ Y_UNIT_TEST_SUITE(KqpSchemeFulltext) {
                     Data String,
                     PRIMARY KEY (Key),
                     INDEX fulltext_idx
-                        GLOBAL USING fulltext
+                        GLOBAL USING fulltext_plain
                         ON (Text)
                         COVER (Data)
-                        WITH (layout=flat, tokenizer=whitespace, use_filter_lowercase=true)
+                        WITH (tokenizer=whitespace, use_filter_lowercase=true)
                 );
             )";
             auto result = ExecuteSchemeQuery(kikimr, query, UseQueryClient);
@@ -81,11 +81,11 @@ Y_UNIT_TEST_SUITE(KqpSchemeFulltext) {
 
             auto indexDesc = result.GetTableDescription().GetIndexDescriptions()[0];
             Cout << indexDesc.ToString() << Endl;
-            // { name: "fulltext_idx", type: GlobalFulltext, index_columns: [Text], data_columns: [Data], 
-            //     fulltext_settings: { layout: flat, columns: [{ column: Text, 
+            // { name: "fulltext_idx", type: GlobalFulltextPlain, index_columns: [Text], data_columns: [Data],
+            //     fulltext_settings: { layout: flat, columns: [{ column: Text,
             //         analyzers: { tokenizer: whitespace, use_filter_lowercase: true } }] } }
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetIndexName(), "fulltext_idx");
-            UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetIndexType(), EIndexType::GlobalFulltext);
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetIndexType(), EIndexType::GlobalFulltextPlain);
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetIndexColumns().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetIndexColumns()[0], "Text");
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetDataColumns().size(), 1);
@@ -123,10 +123,10 @@ Y_UNIT_TEST_SUITE(KqpSchemeFulltext) {
             TString query = R"(
                 --!syntax_v1
                 ALTER TABLE `/Root/TestTable` ADD INDEX fulltext_idx
-                    GLOBAL USING fulltext
+                    GLOBAL USING fulltext_plain
                     ON (Text)
                     COVER (Data)
-                    WITH (layout=flat, tokenizer=whitespace, use_filter_lowercase=true)
+                    WITH (tokenizer=whitespace, use_filter_lowercase=true)
             )";
             auto result = ExecuteSchemeQuery(kikimr, query, UseQueryClient);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -162,9 +162,9 @@ Y_UNIT_TEST_SUITE(KqpSchemeFulltext) {
             columnAnalyzers.Column = "Text";
             columnAnalyzers.Analyzers = analyzers;
             indexSettings.Columns.push_back(columnAnalyzers);
-            
+
             TAlterTableSettings alterSettings;
-            alterSettings.AppendAddIndexes({ "fulltext_idx", EIndexType::GlobalFulltext, {"Text"}, {"Data"}, {}, indexSettings });
+            alterSettings.AppendAddIndexes({ "fulltext_idx", EIndexType::GlobalFulltextPlain, {"Text"}, {"Data"}, {}, indexSettings });
 
             auto result = session.AlterTable("/Root/TestTable", alterSettings).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -176,11 +176,11 @@ Y_UNIT_TEST_SUITE(KqpSchemeFulltext) {
 
             auto indexDesc = result.GetTableDescription().GetIndexDescriptions()[0];
             Cout << indexDesc.ToString() << Endl;
-            // { name: "fulltext_idx", type: GlobalFulltext, index_columns: [Text], data_columns: [Data], 
-            //     fulltext_settings: { layout: flat, columns: [{ column: Text, 
+            // { name: "fulltext_idx", type: GlobalFulltextPlain, index_columns: [Text], data_columns: [Data],
+            //     fulltext_settings: { layout: flat, columns: [{ column: Text,
             //         analyzers: { tokenizer: whitespace, use_filter_lowercase: true } }] } }
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetIndexName(), "fulltext_idx");
-            UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetIndexType(), EIndexType::GlobalFulltext);
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetIndexType(), EIndexType::GlobalFulltextPlain);
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetIndexColumns().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetIndexColumns()[0], "Text");
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetDataColumns().size(), 1);
@@ -209,9 +209,9 @@ Y_UNIT_TEST_SUITE(KqpSchemeFulltext) {
                     Text String,
                     PRIMARY KEY (Key),
                     INDEX fulltext_idx
-                        GLOBAL USING fulltext
+                        GLOBAL USING fulltext_plain
                         ON (Text)
-                        WITH (layout=flat, tokenizer=whitespace, use_filter_lowercase=true)
+                        WITH (tokenizer=whitespace, use_filter_lowercase=true)
                 );
             )";
             auto result = ExecuteSchemeQuery(kikimr, query, UseQueryClient);
@@ -242,9 +242,9 @@ Y_UNIT_TEST_SUITE(KqpSchemeFulltext) {
             TString query = R"(
                 --!syntax_v1
                 ALTER TABLE `/Root/TestTable` ADD INDEX fulltext_idx
-                    GLOBAL USING fulltext
+                    GLOBAL USING fulltext_plain
                     ON (Text)
-                    WITH (layout=flat, tokenizer=whitespace, use_filter_lowercase=true)
+                    WITH (tokenizer=whitespace, use_filter_lowercase=true)
             )";
             auto result = ExecuteSchemeQuery(kikimr, query, UseQueryClient);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
@@ -265,9 +265,9 @@ Y_UNIT_TEST_SUITE(KqpSchemeFulltext) {
                     Text String,
                     PRIMARY KEY (Key),
                     INDEX fulltext_idx
-                        GLOBAL USING FULLtext
+                        GLOBAL USING FULLtext_PLAIN
                         ON (Text)
-                        WITH (layOUT=FLat, tokenIZER=WHITEspace, use_FILTER_lowercase=TRUE)
+                        WITH (tokenIZER=WHITEspace, use_FILTER_lowercase=TRUE)
                 );
             )";
             auto result = ExecuteSchemeQuery(kikimr, query, UseQueryClient);
@@ -288,14 +288,14 @@ Y_UNIT_TEST_SUITE(KqpSchemeFulltext) {
                     Text String,
                     PRIMARY KEY (Key),
                     INDEX fulltext_idx
-                        GLOBAL USING fulltext
+                        GLOBAL USING fulltext_plain
                         ON (Text)
-                        WITH (layout=flat, tokenizer=asdf, use_filter_lowercase=true)
+                        WITH (tokenizer=asdf, use_filter_lowercase=true)
                 );
             )";
             auto result = ExecuteSchemeQuery(kikimr, query, UseQueryClient);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "<main>:10:54: Error: Invalid tokenizer: asdf");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Invalid tokenizer: asdf");
         }
         { // no tokenizer
             TString query = R"(
@@ -305,14 +305,14 @@ Y_UNIT_TEST_SUITE(KqpSchemeFulltext) {
                     Text String,
                     PRIMARY KEY (Key),
                     INDEX fulltext_idx
-                        GLOBAL USING fulltext
+                        GLOBAL USING fulltext_plain
                         ON (Text)
-                        WITH (layout=flat, use_filter_lowercase=true)
+                        WITH (use_filter_lowercase=true)
                 );
             )";
             auto result = ExecuteSchemeQuery(kikimr, query, UseQueryClient);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "<main>:9:29: Error: tokenizer should be set");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "tokenizer should be set");
         }
         { // no WITH section
             TString query = R"(
@@ -322,13 +322,13 @@ Y_UNIT_TEST_SUITE(KqpSchemeFulltext) {
                     Text String,
                     PRIMARY KEY (Key),
                     INDEX fulltext_idx
-                        GLOBAL USING fulltext
+                        GLOBAL USING fulltext_plain
                         ON (Text)
                 );
             )";
             auto result = ExecuteSchemeQuery(kikimr, query, UseQueryClient);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "<main>:9:29: Error: layout should be set");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "column analyzers should be set");
         }
     }
 
@@ -354,36 +354,36 @@ Y_UNIT_TEST_SUITE(KqpSchemeFulltext) {
             TString query = R"(
                 --!syntax_v1
                 ALTER TABLE `/Root/TestTable` ADD INDEX fulltext_idx
-                    GLOBAL USING fulltext
+                    GLOBAL USING fulltext_plain
                     ON (Text)
-                    WITH (layout=flat, tokenizer=asdf, use_filter_lowercase=true)
+                    WITH (tokenizer=asdf, use_filter_lowercase=true)
             )";
             auto result = ExecuteSchemeQuery(kikimr, query, UseQueryClient);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "<main>:6:50: Error: Invalid tokenizer: asdf");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Invalid tokenizer: asdf");
         }
         { // no tokenizer
             TString query = R"(
                 --!syntax_v1
                 ALTER TABLE `/Root/TestTable` ADD INDEX fulltext_idx
-                    GLOBAL USING fulltext
+                    GLOBAL USING fulltext_plain
                     ON (Text)
-                    WITH (layout=flat, use_filter_lowercase=true)
+                    WITH (use_filter_lowercase=true)
             )";
             auto result = ExecuteSchemeQuery(kikimr, query, UseQueryClient);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "<main>:5:25: Error: tokenizer should be set");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "tokenizer should be set");
         }
         { // no WITH section
             TString query = R"(
                 --!syntax_v1
                 ALTER TABLE `/Root/TestTable` ADD INDEX fulltext_idx
-                    GLOBAL USING fulltext
+                    GLOBAL USING fulltext_plain
                     ON (Text)
             )";
             auto result = ExecuteSchemeQuery(kikimr, query, UseQueryClient);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "<main>:5:25: Error: layout should be set");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "columns should be set");
         }
     }
 
@@ -400,9 +400,9 @@ Y_UNIT_TEST_SUITE(KqpSchemeFulltext) {
                     Text Uint64,
                     PRIMARY KEY (Key),
                     INDEX fulltext_idx
-                        GLOBAL USING fulltext
+                        GLOBAL USING fulltext_plain
                         ON (Text)
-                        WITH (layout=flat, tokenizer=whitespace, use_filter_lowercase=true)
+                        WITH (tokenizer=whitespace, use_filter_lowercase=true)
                 );
             )";
             auto result = ExecuteSchemeQuery(kikimr, query, UseQueryClient);

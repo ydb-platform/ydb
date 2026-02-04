@@ -77,6 +77,7 @@ THashMap<TStringBuf, TPragmaField> CTX_PRAGMA_FIELDS = {
     {"OptimizeSimpleILIKE", &TContext::OptimizeSimpleIlike},
     {"DebugPositions", &TContext::DebugPositions},
     {"ExceptIntersectBefore202503", &TContext::ExceptIntersectBefore202503},
+    {"WindowNewPipeline", &TContext::WindowNewPipeline},
 };
 
 typedef TMaybe<bool> TContext::*TPragmaMaybeField;
@@ -193,6 +194,16 @@ void TContext::PopCurrentBlocks() {
 TBlocks& TContext::GetCurrentBlocks() const {
     YQL_ENSURE(!CurrentBlocks_.empty());
     return *CurrentBlocks_.back();
+}
+
+IOutputStream& TContext::Fatal() {
+    bool isError = false;
+    return MakeIssue(
+        TSeverityIds::S_FATAL,
+        NYql::TIssuesIds::UNEXPECTED,
+        TPosition(),
+        /*forceError=*/false,
+        isError);
 }
 
 IOutputStream& TContext::Error(NYql::TIssueCode code) {

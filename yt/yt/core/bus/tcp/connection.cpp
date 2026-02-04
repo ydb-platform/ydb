@@ -1420,7 +1420,7 @@ TFuture<void> TTcpConnection::SendViaLocalBypass(TSharedRefArray message, const 
     LocalBypassHandler_->HandleMessage(std::move(message), LocalBypassReplyBus_);
 
     // No delivery tracking for local bypass.
-    return VoidFuture;
+    return OKFuture;
 }
 
 TTcpConnection::TPacket* TTcpConnection::EnqueuePacket(
@@ -2112,7 +2112,7 @@ bool TTcpConnection::DoSslHandshake()
 void TTcpConnection::DoSslShutdown()
 {
     for (int i = 0;; ++i) {
-        YT_ASSERT(i < 2);
+        YT_VERIFY(i < 2);
 
         auto result = SSL_shutdown(Ssl_.get());
         switch (result) {

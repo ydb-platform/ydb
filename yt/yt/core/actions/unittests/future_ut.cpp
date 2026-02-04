@@ -92,7 +92,7 @@ TEST_F(TFutureTest, VoidUniqueApply)
 
 TEST_F(TFutureTest, WellKnownUniqueFuture)
 {
-    auto future = VoidFuture.AsUnique();
+    auto future = OKFuture.AsUnique();
     // Multiple subscriptions are fine.
     EXPECT_TRUE(future.IsSet());
     EXPECT_TRUE(future.Get().IsOK());
@@ -210,7 +210,7 @@ TEST_F(TFutureTest, NoncopyableApply7)
 
 TEST_F(TFutureTest, NoncopyableApply8)
 {
-    auto f = VoidFuture;
+    auto f = OKFuture;
     auto g = f.Apply(BIND([] {
         return MakeFuture<std::unique_ptr<double>>(nullptr).AsUnique();
     }));
@@ -260,7 +260,7 @@ TEST_F(TFutureTest, NoncopyableApplySO5086)
 TEST_F(TFutureTest, NonAssignable1)
 {
     auto f = MakeFuture<TNonAssignable>({
-        .Value = 1
+        .Value = 1,
     });
 
     auto g = f.AsUnique().Apply(BIND([] (TNonAssignable&& object) {
@@ -274,7 +274,7 @@ TEST_F(TFutureTest, NonAssignable1)
 TEST_F(TFutureTest, NonAssignable2)
 {
     auto f = MakeFuture<TNonAssignable>({
-        .Value = 1
+        .Value = 1,
     });
 
     std::vector<decltype(f)> futures;
@@ -295,7 +295,7 @@ TEST_F(TFutureTest, NonAssignable2)
 TEST_F(TFutureTest, NonAssignable3)
 {
     auto f = MakeFuture<TNonAssignable>({
-        .Value = 1
+        .Value = 1,
     });
 
     std::vector<decltype(f)> futures;
@@ -373,7 +373,7 @@ TEST_F(TFutureTest, IsNull)
 TEST_F(TFutureTest, IsNullVoid)
 {
     TFuture<void> empty;
-    TFuture<void> nonEmpty = VoidFuture;
+    TFuture<void> nonEmpty = OKFuture;
 
     EXPECT_FALSE(empty);
     EXPECT_TRUE(nonEmpty);
@@ -1229,7 +1229,7 @@ TEST_F(TFutureTest, AllCombinerCancel)
 TEST_F(TFutureTest, AllCombinerVoid0)
 {
     std::vector<TFuture<void>> futures;
-    EXPECT_EQ(VoidFuture, AllSucceeded(futures));
+    EXPECT_EQ(OKFuture, AllSucceeded(futures));
 }
 
 TEST_F(TFutureTest, AllCombinerVoid1)
@@ -2151,6 +2151,24 @@ TEST_W(TFutureTest, WaitForUniqueFast)
     EXPECT_FALSE(switchTracker.IsSwitched());
     EXPECT_TRUE(result.IsOK());
     EXPECT_EQ(*result.Value(), 123);
+}
+
+TEST_F(TFutureTest, TrySetDoesNotMoveValueOnFailure)
+{
+    auto promise = NewPromise<std::vector<int>>();
+    auto v = std::vector{1, 2, 3};
+    promise.Set(v);
+    EXPECT_FALSE(promise.TrySet(std::move(v)));
+    EXPECT_EQ(std::ssize(v), 3);
+}
+
+TEST_F(TFutureTest, TrySetDoesNotMoveErrorOnFailure)
+{
+    auto promise = NewPromise<std::vector<int>>();
+    auto err = TError("oops");
+    promise.Set(err);
+    EXPECT_FALSE(promise.TrySet(std::move(err)));
+    EXPECT_FALSE(err.IsOK());
 }
 
 ////////////////////////////////////////////////////////////////////////////////

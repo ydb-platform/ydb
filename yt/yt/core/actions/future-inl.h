@@ -78,17 +78,6 @@ inline TError TryExtractCancelationError()
     return TError(NYT::EErrorCode::Canceled, "Promise abandoned");
 }
 
-template <class T>
-TFuture<T> MakeWellKnownFuture(TErrorOr<T> value)
-{
-    return TFuture<T>(New<NDetail::TPromiseState<T>>(
-        /*wellKnown*/ true,
-        /*promiseRefCount*/ -1,
-        /*futureRefCount*/ -1,
-        /*cancelableRefCount*/ -1,
-        std::move(value)));
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class T, TFutureCallbackCookie MinCookie, TFutureCallbackCookie MaxCookie>
@@ -162,8 +151,13 @@ class TCancelableStateBase
     : public TRefCountedBase
 {
 public:
-    TCancelableStateBase(bool wellKnown, int cancelableRefCount)
-        : WellKnown_(wellKnown)
+    explicit constexpr TCancelableStateBase(TOKFutureTag)
+        : WellKnown_(true)
+        , CancelableRefCount_(-1)
+    { }
+
+    explicit TCancelableStateBase(int cancelableRefCount)
+        : WellKnown_(false)
         , CancelableRefCount_(cancelableRefCount)
     { }
 
@@ -382,15 +376,22 @@ protected:
     TCancelHandlers CancelHandlers_;
     mutable std::unique_ptr<NThreading::TEvent> ReadyEvent_;
 
+    explicit constexpr TFutureState(TOKFutureTag)
+        : TCancelableStateBase(TOKFutureTag())
+        , PromiseRefCount_(-1)
+        , FutureRefCount_(-1)
+        , Set_(true)
+    { }
+
     TFutureState(int promiseRefCount, int futureRefCount, int cancelableRefCount)
-        : TCancelableStateBase(false, cancelableRefCount)
+        : TCancelableStateBase(cancelableRefCount)
         , PromiseRefCount_(promiseRefCount)
         , FutureRefCount_(futureRefCount)
         , Set_(false)
     { }
 
-    TFutureState(bool wellKnown, int promiseRefCount, int futureRefCount, int cancelableRefCount, TError&& error)
-        : TCancelableStateBase(wellKnown, cancelableRefCount)
+    TFutureState(int promiseRefCount, int futureRefCount, int cancelableRefCount, TError&& error)
+        : TCancelableStateBase(cancelableRefCount)
         , PromiseRefCount_(promiseRefCount)
         , FutureRefCount_(futureRefCount)
         , Set_(true)
@@ -584,17 +585,15 @@ private:
     }
 
 protected:
-    TFutureState(int promiseRefCount, int futureRefCount, int cancelableRefCount)
-        : TFutureState<void>(promiseRefCount, futureRefCount, cancelableRefCount)
-    { }
+    using TFutureState<void>::TFutureState;
 
-    TFutureState(bool wellKnown, int promiseRefCount, int futureRefCount, int cancelableRefCount, TErrorOr<T>&& value)
-        : TFutureState<void>(wellKnown, promiseRefCount, futureRefCount, cancelableRefCount, TError(static_cast<const TError&>(value)))
+    TFutureState(int promiseRefCount, int futureRefCount, int cancelableRefCount, TErrorOr<T>&& value)
+        : TFutureState<void>(promiseRefCount, futureRefCount, cancelableRefCount, TError(static_cast<const TError&>(value)))
         , Result_(std::move(value))
     { }
 
-    TFutureState(bool wellKnown, int promiseRefCount, int futureRefCount, int cancelableRefCount, T&& value)
-        : TFutureState<void>(wellKnown, promiseRefCount, futureRefCount, cancelableRefCount, TError())
+    TFutureState(int promiseRefCount, int futureRefCount, int cancelableRefCount, T&& value)
+        : TFutureState<void>(promiseRefCount, futureRefCount, cancelableRefCount, TError())
         , Result_(std::move(value))
     { }
 
@@ -730,14 +729,7 @@ class TPromiseState
     : public TFutureState<T>
 {
 public:
-    TPromiseState(int promiseRefCount, int futureRefCount, int cancelableRefCount)
-        : TFutureState<T>(promiseRefCount, futureRefCount, cancelableRefCount)
-    { }
-
-    template <class U>
-    TPromiseState(bool wellKnown, int promiseRefCount, int futureRefCount, int cancelableRefCount, U&& value)
-        : TFutureState<T>(wellKnown, promiseRefCount, futureRefCount, cancelableRefCount, std::forward<U>(value))
-    { }
+    using TFutureState<T>::TFutureState;
 };
 
 template <class T>
@@ -987,31 +979,50 @@ TFuture<T> ApplyTimeoutHelper(
 template <class T>
 TPromise<T> NewPromise()
 {
-    return TPromise<T>(New<NYT::NDetail::TPromiseState<T>>(1, 1, 1));
+    return TPromise<T>(New<NYT::NDetail::TPromiseState<T>>(
+        /*promiseRefCount*/ 1,
+        /*futureRefCount*/ 1,
+        /*cancelableRefCount*/ 1));
 }
 
 template <class T>
 TPromise<T> MakePromise(TErrorOr<T> value)
 {
-    return TPromise<T>(New<NYT::NDetail::TPromiseState<T>>(false, 1, 1, 1, std::move(value)));
+    return TPromise<T>(New<NYT::NDetail::TPromiseState<T>>(
+        /*promiseRefCount*/ 1,
+        /*futureRefCount*/ 1,
+        /*cancelableRefCount*/ 1,
+        std::move(value)));
 }
 
 template <class T>
 TPromise<T> MakePromise(T value)
 {
-    return TPromise<T>(New<NYT::NDetail::TPromiseState<T>>(false, 1, 1, 1, std::move(value)));
+    return TPromise<T>(New<NYT::NDetail::TPromiseState<T>>(
+        /*promiseRefCount*/ 1,
+        /*futureRefCount*/ 1,
+        /*cancelableRefCount*/ 1,
+        std::move(value)));
 }
 
 template <class T>
 TFuture<T> MakeFuture(TErrorOr<T> value)
 {
-    return TFuture<T>(New<NYT::NDetail::TPromiseState<T>>(false, 0, 1, 1, std::move(value)));
+    return TFuture<T>(New<NYT::NDetail::TPromiseState<T>>(
+        /*promiseRefCount*/ 0,
+        /*futureRefCount*/ 1,
+        /*cancelableRefCount*/ 1,
+        std::move(value)));
 }
 
 template <class T>
 TFuture<T> MakeFuture(T value)
 {
-    return TFuture<T>(New<NYT::NDetail::TPromiseState<T>>(false, 0, 1, 1, std::move(value)));
+    return TFuture<T>(New<NYT::NDetail::TPromiseState<T>>(
+        /*promiseRefCount*/ 0,
+        /*futureRefCount*/ 1,
+        /*cancelableRefCount*/ 1,
+        std::move(value)));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1246,8 +1257,9 @@ TFuture<R> TFutureBase<T>::Apply(TCallback<TFuture<R>(const TErrorOr<T>&)> callb
 
 template <class T>
 template <class U>
-TFuture<U> TFutureBase<T>::As() const
+TFuture<U> TFutureBase<T>::As() const&
 {
+    // Fast path for void conversion.
     if constexpr (std::is_same_v<U, void>) {
         return TFuture<void>(Impl_);
     }
@@ -1267,6 +1279,19 @@ TFuture<U> TFutureBase<T>::As() const
     }));
 
     return promise;
+}
+
+template <class T>
+template <class U>
+TFuture<U> TFutureBase<T>::As() &&
+{
+    // Fast path for void conversion.
+    if constexpr (std::is_same_v<U, void>) {
+        return TFuture<void>(std::move(Impl_));
+    }
+
+    // This overload makes little sense for arbitrary type conversions.
+    return As<U>();
 }
 
 template <class T>
@@ -1305,6 +1330,11 @@ TUniqueFuture<T> TFutureBase<T>::AsUnique() &&
 template <class T>
 TFutureBase<T>::TFutureBase(TIntrusivePtr<NYT::NDetail::TFutureState<T>> impl)
     : Impl_(std::move(impl))
+{ }
+
+template <class T>
+constexpr TFutureBase<T>::TFutureBase(NDetail::TOKFutureTag, NYT::NDetail::TFutureState<T>* impl)
+    : Impl_(impl, /*addReference*/ false)
 { }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1363,6 +1393,10 @@ TFuture<T>::TFuture(TIntrusivePtr<NYT::NDetail::TFutureState<T>> impl)
 ////////////////////////////////////////////////////////////////////////////////
 
 inline TFuture<void>::TFuture(std::nullopt_t)
+{ }
+
+constexpr TFuture<void>::TFuture(NDetail::TOKFutureTag, NDetail::TFutureState<void>* impl)
+    : TFutureBase<void>(NDetail::TOKFutureTag(), impl)
 { }
 
 template <class R>
@@ -1645,13 +1679,15 @@ void TPromise<T>::Set(T&& value) const
 template <class T>
 void TPromise<T>::Set(const TError& error) const
 {
-    Set(TErrorOr<T>(error));
+    YT_ASSERT(this->Impl_);
+    this->Impl_->Set(error);
 }
 
 template <class T>
 void TPromise<T>::Set(TError&& error) const
 {
-    Set(TErrorOr<T>(std::move(error)));
+    YT_ASSERT(this->Impl_);
+    this->Impl_->Set(std::move(error));
 }
 
 template <class T>
@@ -1671,13 +1707,15 @@ bool TPromise<T>::TrySet(T&& value) const
 template <class T>
 bool TPromise<T>::TrySet(const TError& error) const
 {
-    return TrySet(TErrorOr<T>(error));
+    YT_ASSERT(this->Impl_);
+    return this->Impl_->TrySet(error);
 }
 
 template <class T>
 bool TPromise<T>::TrySet(TError&& error) const
 {
-    return TrySet(TErrorOr<T>(std::move(error)));
+    YT_ASSERT(this->Impl_);
+    return this->Impl_->TrySet(std::move(error));
 }
 
 template <class T>
@@ -2484,7 +2522,7 @@ TFuture<typename TFutureCombinerTraits<T>::TCombinedVector> AllSucceeded(
     auto size = futures.size();
     if constexpr (std::is_same_v<T, void>) {
         if (size == 0) {
-            return VoidFuture;
+            return OKFuture;
         }
         if (size == 1) {
             return std::move(futures[0]);
@@ -2592,7 +2630,7 @@ public:
         bool failOnError = false)
         : Callbacks_(std::move(callbacks))
         , ConcurrencyLimit_(concurrencyLimit)
-        , Futures_(Callbacks_.size(), VoidFuture)
+        , Futures_(Callbacks_.size(), OKFuture)
         , Results_(Callbacks_.size())
         , CurrentIndex_(std::min<int>(ConcurrencyLimit_, std::ssize(Callbacks_)))
         , FailOnFirstError_(failOnError)
@@ -2846,7 +2884,7 @@ TFuture<std::vector<TErrorOr<T>>> RunWithAllSucceededBoundedConcurrency(
 template <class T>
 struct THash<NYT::TFuture<T>>
 {
-    size_t operator () (const NYT::TFuture<T>& future) const
+    size_t operator()(const NYT::TFuture<T>& future) const
     {
         return THash<NYT::TIntrusivePtr<NYT::NDetail::TFutureState<T>>>()(future.Impl_);
     }
@@ -2856,7 +2894,7 @@ struct THash<NYT::TFuture<T>>
 template <class T>
 struct THash<NYT::TPromise<T>>
 {
-    size_t operator () (const NYT::TPromise<T>& promise) const
+    size_t operator()(const NYT::TPromise<T>& promise) const
     {
         return THash<NYT::TIntrusivePtr<NYT::NDetail::TPromiseState<T>>>()(promise.Impl_);
     }

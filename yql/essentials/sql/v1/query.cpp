@@ -150,8 +150,10 @@ static INode::TPtr CreateIndexType(TIndexDescription::EType type, const INode& n
             return node.Q("syncGlobalUnique");
         case TIndexDescription::EType::GlobalVectorKmeansTree:
             return node.Q("globalVectorKmeansTree");
-        case TIndexDescription::EType::GlobalFulltext:
-            return node.Q("globalFulltext");
+        case TIndexDescription::EType::GlobalFulltextPlain:
+            return node.Q("globalFulltextPlain");
+        case TIndexDescription::EType::GlobalFulltextRelevance:
+            return node.Q("globalFulltextRelevance");
     }
 }
 
@@ -1884,35 +1886,49 @@ TNodePtr BuildDropTable(TPosition pos, const TTableRef& tr, bool missingOk, ETab
     return new TDropTableNode(pos, tr, missingOk, tableType, scoped);
 }
 
-static INode::TPtr CreateConsumerDesc(const TTopicConsumerDescription& desc, const INode& node, bool alter) {
+static TNullable<TNodePtr> CreateConsumerDesc(TContext& ctx, const TTopicConsumerDescription& desc, const INode& node, bool alter) {
+    auto setValue = [&](const TNodePtr& settings, const TNodePtr& value, const auto& setter) {
+        if (value) {
+            return node.L(settings, node.Q(node.Y(node.Q(setter), value)));
+        }
+        return settings;
+    };
+
+    auto setValueWithReset = [&](const TNodePtr& settings, const NYql::TResetableSetting<TNodePtr, void>& value, const auto& setter, const auto& resetter) {
+        if (!value) {
+            return settings;
+        }
+        if (value.IsSet()) {
+            return node.L(settings, node.Q(node.Y(node.Q(setter), value.GetValueSet())));
+        } else {
+            YQL_ENSURE(alter, "Cannot reset on create");
+            return node.L(settings, node.Q(node.Y(node.Q(resetter), node.Q(node.Y()))));
+        }
+    };
+
+    if (alter) {
+        if (desc.Settings.Type) {
+            ctx.Error() << "type alter is not supported";
+            return {nullptr};
+        }
+        if (desc.Settings.KeepMessagesOrder) {
+            ctx.Error() << "keep_messages_order alter is not supported";
+            return {nullptr};
+        }
+    }
+
     auto settings = node.Y();
-    if (desc.Settings.Important) {
-        settings = node.L(settings, node.Q(node.Y(node.Q("important"), desc.Settings.Important)));
-    }
-    if (const auto& availabilityPeriod = desc.Settings.AvailabilityPeriod) {
-        if (availabilityPeriod.IsSet()) {
-            settings = node.L(settings, node.Q(node.Y(node.Q("setAvailabilityPeriod"), availabilityPeriod.GetValueSet())));
-        } else {
-            YQL_ENSURE(alter, "Cannot reset on create");
-            settings = node.L(settings, node.Q(node.Y(node.Q("resetAvailabilityPeriod"), node.Q(node.Y()))));
-        }
-    }
-    if (const auto& readFromTs = desc.Settings.ReadFromTs) {
-        if (readFromTs.IsSet()) {
-            settings = node.L(settings, node.Q(node.Y(node.Q("setReadFromTs"), readFromTs.GetValueSet())));
-        } else {
-            YQL_ENSURE(alter, "Cannot reset on create");
-            settings = node.L(settings, node.Q(node.Y(node.Q("resetReadFromTs"), node.Q(node.Y()))));
-        }
-    }
-    if (const auto& readFromTs = desc.Settings.SupportedCodecs) {
-        if (readFromTs.IsSet()) {
-            settings = node.L(settings, node.Q(node.Y(node.Q("setSupportedCodecs"), readFromTs.GetValueSet())));
-        } else {
-            YQL_ENSURE(alter, "Cannot reset on create");
-            settings = node.L(settings, node.Q(node.Y(node.Q("resetSupportedCodecs"), node.Q(node.Y()))));
-        }
-    }
+    settings = setValue(settings, desc.Settings.Important, "important");
+    settings = setValueWithReset(settings, desc.Settings.AvailabilityPeriod, "setAvailabilityPeriod", "resetAvailabilityPeriod");
+    settings = setValueWithReset(settings, desc.Settings.ReadFromTs, "setReadFromTs", "resetReadFromTs");
+    settings = setValueWithReset(settings, desc.Settings.SupportedCodecs, "setSupportedCodecs", "resetSupportedCodecs");
+    settings = setValue(settings, desc.Settings.Type, "type");
+    settings = setValue(settings, desc.Settings.KeepMessagesOrder, "keep_messages_order");
+    settings = setValue(settings, desc.Settings.DefaultProcessingTimeout, "default_processing_timeout");
+    settings = setValue(settings, desc.Settings.MaxProcessingAttempts, "max_processing_attempts");
+    settings = setValue(settings, desc.Settings.DeadLetterPolicy, "dead_letter_policy");
+    settings = setValue(settings, desc.Settings.DeadLetterQueue, "dead_letter_queue");
+
     return node.Y(
         node.Q(node.Y(node.Q("name"), BuildQuotedAtom(desc.Name.Pos, desc.Name.Name))),
         node.Q(node.Y(node.Q("settings"), node.Q(settings))));
@@ -1951,7 +1967,10 @@ public:
         opts = L(opts, Q(Y(Q("mode"), Q(mode))));
 
         for (const auto& consumer : Params_.Consumers) {
-            const auto& desc = CreateConsumerDesc(consumer, *this, false);
+            const auto desc = CreateConsumerDesc(ctx, consumer, *this, false);
+            if (!desc) {
+                return false;
+            }
             opts = L(opts, Q(Y(Q("consumer"), Q(desc))));
         }
 
@@ -2062,12 +2081,18 @@ public:
         opts = L(opts, Q(Y(Q("mode"), Q(mode))));
 
         for (const auto& consumer : Params_.AddConsumers) {
-            const auto& desc = CreateConsumerDesc(consumer, *this, false);
+            const auto desc = CreateConsumerDesc(ctx, consumer, *this, false);
+            if (!desc) {
+                return false;
+            }
             opts = L(opts, Q(Y(Q("addConsumer"), Q(desc))));
         }
 
         for (const auto& [_, consumer] : Params_.AlterConsumers) {
-            const auto& desc = CreateConsumerDesc(consumer, *this, true);
+            const auto desc = CreateConsumerDesc(ctx, consumer, *this, true);
+            if (!desc) {
+                return false;
+            }
             opts = L(opts, Q(Y(Q("alterConsumer"), Q(desc))));
         }
 
@@ -2625,23 +2650,23 @@ private:
 };
 
 TNodePtr BuildUpsertObjectOperation(TPosition pos, const TString& objectId, const TString& typeId,
-                                    std::map<TString, TDeferredAtom>&& features, const TObjectOperatorContext& context) {
-    return new TUpsertObject(pos, objectId, typeId, context, std::move(features));
+                                    TObjectFeatureNodePtr features, const TObjectOperatorContext& context) {
+    return new TUpsertObject(pos, objectId, typeId, context, TObjectFeatureNode::SkipEmpty(features));
 }
 
 TNodePtr BuildCreateObjectOperation(TPosition pos, const TString& objectId, const TString& typeId,
-                                    bool existingOk, bool replaceIfExists, std::map<TString, TDeferredAtom>&& features, const TObjectOperatorContext& context) {
-    return new TCreateObject(pos, objectId, typeId, context, std::move(features), existingOk, replaceIfExists);
+                                    bool existingOk, bool replaceIfExists, TObjectFeatureNodePtr features, const TObjectOperatorContext& context) {
+    return new TCreateObject(pos, objectId, typeId, context, TObjectFeatureNode::SkipEmpty(features), existingOk, replaceIfExists);
 }
 
 TNodePtr BuildAlterObjectOperation(TPosition pos, const TString& secretId, const TString& typeId,
-                                   bool missingOk, std::map<TString, TDeferredAtom>&& features, std::set<TString>&& featuresToReset, const TObjectOperatorContext& context) {
-    return new TAlterObject(pos, secretId, typeId, context, std::move(features), std::move(featuresToReset), missingOk);
+                                   bool missingOk, TObjectFeatureNodePtr features, std::set<TString>&& featuresToReset, const TObjectOperatorContext& context) {
+    return new TAlterObject(pos, secretId, typeId, context, TObjectFeatureNode::SkipEmpty(features), std::move(featuresToReset), missingOk);
 }
 
 TNodePtr BuildDropObjectOperation(TPosition pos, const TString& secretId, const TString& typeId,
-                                  bool missingOk, std::map<TString, TDeferredAtom>&& options, const TObjectOperatorContext& context) {
-    return new TDropObject(pos, secretId, typeId, context, std::move(options), missingOk);
+                                  bool missingOk, TObjectFeatureNodePtr features, const TObjectOperatorContext& context) {
+    return new TDropObject(pos, secretId, typeId, context, TObjectFeatureNode::SkipEmpty(features), missingOk);
 }
 
 TNodePtr BuildDropRoles(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TVector<TDeferredAtom>& toDrop, bool isUser, bool missingOk, TScopedStatePtr scoped) {
@@ -3148,7 +3173,7 @@ TNodePtr BuildWriteTable(TPosition pos, const TString& label, const TTableRef& t
 
 class TClustersSinkOperationBase: public TAstListNode {
 protected:
-    TClustersSinkOperationBase(TPosition pos)
+    explicit TClustersSinkOperationBase(TPosition pos)
         : TAstListNode(pos)
     {
     }
@@ -3177,7 +3202,7 @@ protected:
 
 class TCommitClustersNode: public TClustersSinkOperationBase {
 public:
-    TCommitClustersNode(TPosition pos)
+    explicit TCommitClustersNode(TPosition pos)
         : TClustersSinkOperationBase(pos)
     {
     }
@@ -3193,7 +3218,7 @@ TNodePtr BuildCommitClusters(TPosition pos) {
 
 class TRollbackClustersNode: public TClustersSinkOperationBase {
 public:
-    TRollbackClustersNode(TPosition pos)
+    explicit TRollbackClustersNode(TPosition pos)
         : TClustersSinkOperationBase(pos)
     {
     }
@@ -3494,6 +3519,11 @@ public:
                 if (ctx.DebugPositions) {
                     Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource,
                                             BuildQuotedAtom(Pos_, "DebugPositions"))));
+                }
+
+                if (ctx.WindowNewPipeline) {
+                    Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource,
+                                            BuildQuotedAtom(Pos_, "WindowNewPipeline"))));
                 }
 
                 if (ctx.DirectRowDependsOn.Defined()) {
@@ -4038,7 +4068,7 @@ public:
     {
     }
 
-    virtual INode::TPtr FillOptions(TContext& ctx, INode::TPtr options) const final {
+    INode::TPtr FillOptions(TContext& ctx, INode::TPtr options) const final {
         options->Add(Q(Y(Q("mode"), Q("create"))));
 
         auto settings = Y();
@@ -4084,7 +4114,7 @@ public:
     {
     }
 
-    virtual INode::TPtr FillOptions(TContext& ctx, INode::TPtr options) const final {
+    INode::TPtr FillOptions(TContext& ctx, INode::TPtr options) const final {
         options->Add(Q(Y(Q("mode"), Q("alter"))));
 
         auto settings = Y();
@@ -4139,7 +4169,7 @@ public:
     {
     }
 
-    virtual INode::TPtr FillOptions(TContext&, INode::TPtr options) const final {
+    INode::TPtr FillOptions(TContext&, INode::TPtr options) const final {
         options->Add(Q(Y(Q("mode"), Q("drop"))));
 
         return options;

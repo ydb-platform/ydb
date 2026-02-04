@@ -112,6 +112,7 @@ public:
 
     TString MakeName(const TString& name);
 
+    IOutputStream& Fatal();
     IOutputStream& Error(NYql::TIssueCode code = NYql::TIssuesIds::DEFAULT_ERROR);
     IOutputStream& Error(NYql::TPosition pos, NYql::TIssueCode code = NYql::TIssuesIds::DEFAULT_ERROR);
     bool Warning(NYql::TPosition pos, NYql::TIssueCode code, std::function<void(IOutputStream&)> message,
@@ -410,6 +411,7 @@ public:
     bool DisableLegacyNotNull = false;
     bool DebugPositions = false;
     bool StrictWarningAsError = false;
+    bool WindowNewPipeline = false;
     TMaybe<bool> DirectRowDependsOn;
     TVector<size_t> ForAllStatementsParts;
     TMaybe<TString> Engine;
@@ -464,7 +466,7 @@ protected:
     typedef TSet<ui32> TSetType;
 
 protected:
-    TTranslation(TContext& ctx);
+    explicit TTranslation(TContext& ctx);
 
 public:
     TContext& Context();

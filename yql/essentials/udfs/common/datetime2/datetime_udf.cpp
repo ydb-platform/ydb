@@ -643,11 +643,15 @@ ACCESSORS(TimezoneId, ui16)
 #undef ACCESSORS
 #undef ACCESSORS_POLY
 
+// FIXME(YQL-20908): Currently here is a bug hidden under NOLINTs,
+// the condition is always true, see the linked ticket.
 template <const char* TResourceName>
 inline bool ValidateYear(std::conditional_t<TResourceName == TMResourceName, ui16, i32> year) {
     if constexpr (TResourceName == TMResourceName) {
+        // NOLINTNEXTLINE(misc-redundant-expression)
         return year >= NUdf::MIN_YEAR || year < NUdf::MAX_YEAR;
     } else {
+        // NOLINTNEXTLINE(misc-redundant-expression)
         return year >= NUdf::MIN_YEAR32 || year < NUdf::MAX_YEAR32;
     }
 }
@@ -819,8 +823,16 @@ public:
         }
         auto argType = argsTuple.GetElementType(0);
 
+        const auto typeId = TDataType<TUserDataType>::Id;
+        const auto features = NUdf::GetDataTypeInfo(NUdf::GetDataSlot(typeId)).Features;
+
         builder.UserType(userType);
-        builder.SupportsBlocks();
+
+        // FIXME: Kernels for the extended date type are NYI.
+        if (!(features & NUdf::ExtDateType)) {
+            builder.SupportsBlocks();
+        }
+
         builder.IsStrict();
 
         TBlockTypeInspector block(*typeInfoHelper, argType);

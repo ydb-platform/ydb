@@ -543,6 +543,7 @@ void THive::Handle(TEvPrivate::TEvBootTablets::TPtr&) {
     TVector<TTabletId> tabletsToReleaseFromParent;
     TSideEffects sideEffects;
     sideEffects.Reset(SelfId());
+    std::vector<TReassignOperation> reassigns;
     for (auto& tab : Tablets) {
         TLeaderTabletInfo& tablet = tab.second;
         if (tablet.NeedToReleaseFromParent) {
@@ -551,9 +552,9 @@ void THive::Handle(TEvPrivate::TEvBootTablets::TPtr&) {
         } else if (tablet.IsReadyToBoot()) {
             tablet.InitiateBoot();
         } else if (tablet.IsReadyToAssignGroups()) {
-            tablet.InitiateAssignTabletGroups();
+            reassigns.emplace_back(tablet.Id);
         } else if (tablet.IsReadyToBlockStorage()) {
-            tablet.InitiateBlockStorage(sideEffects);
+            reassigns.emplace_back(tablet.Id);
         } else if (tablet.IsDeleting()) {
             BlockStorageForDelete(tablet.Id, sideEffects);
         } else if (tablet.IsLockedToActor()) {
@@ -579,6 +580,9 @@ void THive::Handle(TEvPrivate::TEvBootTablets::TPtr&) {
         }
     }
     sideEffects.Complete(DEPRECATED_CTX);
+    if (!reassigns.empty()) {
+        StartReassignActor(std::move(reassigns));
+    }
     if (AreWeRootHive()) {
         BLOG_D("Root Hive is ready");
     } else {
@@ -2006,9 +2010,16 @@ void THive::Handle(TEvHive::TEvRequestHiveInfo::TPtr& ev) {
             BLOG_W("Can't find the tablet from RequestHiveInfo(TabletID=" << tabletId << ")");
         }
     } else {
+        std::optional<TSubDomainKey> filterObjectDomain;
+        if (record.HasFilterTabletsByObjectDomain()) {
+            filterObjectDomain = TSubDomainKey(record.GetFilterTabletsByObjectDomain());
+        }
         response->Record.MutableTablets()->Reserve(Tablets.size());
         for (auto it = Tablets.begin(); it != Tablets.end(); ++it) {
             if (record.HasTabletType() && record.GetTabletType() != it->second.Type) {
+                continue;
+            }
+            if (filterObjectDomain && it->second.NodeFilter.ObjectDomain != *filterObjectDomain) {
                 continue;
             }
             if (it->second.IsDeleting()) {
@@ -2875,7 +2886,7 @@ void THive::AddRegisteredDataCentersNode(TDataCenterId dataCenterId, TNodeId nod
         dataCenter.RegisteredNodes.insert(nodeId);
         if (!wasRegistered && !dataCenter.UpdateScheduled) {
             dataCenter.UpdateScheduled = true;
-            Schedule(TDuration::Seconds(1), new TEvPrivate::TEvUpdateDataCenterFollowers(dataCenterId));
+            Schedule(GetDataCenterChangeReactionPeriod(), new TEvPrivate::TEvUpdateDataCenterFollowers(dataCenterId));
         }
     }
 }
@@ -2888,7 +2899,7 @@ void THive::RemoveRegisteredDataCentersNode(TDataCenterId dataCenterId, TNodeId 
         dataCenter.RegisteredNodes.erase(nodeId);
         if (wasRegistered && !dataCenter.IsRegistered() && !dataCenter.UpdateScheduled) {
             dataCenter.UpdateScheduled = true;
-            Schedule(TDuration::Seconds(1), new TEvPrivate::TEvUpdateDataCenterFollowers(dataCenterId));
+            Schedule(GetDataCenterChangeReactionPeriod(), new TEvPrivate::TEvUpdateDataCenterFollowers(dataCenterId));
         }
     }
 }

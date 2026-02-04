@@ -322,6 +322,7 @@ enum EServiceKikimr {
     IMPORT = 802;
     S3_WRAPPER = 803;
     CONTINUOUS_BACKUP = 804;
+    FS_WRAPPER = 805;
 
     TX_COLUMNSHARD_ACTUALIZATION = 850;
     TX_COLUMNSHARD_COMPACTION = 851;
@@ -435,6 +436,7 @@ enum EServiceKikimr {
 
     // Distributed storage debugging
     BS_REQUEST_COST = 2500;
+    BS_DDISK = 2501;
 
     GROUPED_MEMORY_LIMITER = 2700;
 
@@ -455,6 +457,9 @@ enum EServiceKikimr {
     LOCAL_DB_BACKUP = 3700;
 
     SCHEMA_SECRET_CACHE = 3800;
+
+    NBS_PARTITION = 3900;
+    NBS2_LOAD_TEST = 3901;
 };
 
 message TActivity {
@@ -1139,5 +1144,6 @@ message TActivity {
         FILTER_KMEANS_SCAN_ACTOR = 675;
         BS_SYNC_SST_WRITER = 676;
         BS_ASYNC_SYNC_SST_COMMITTER = 677;
+        NBS2_TEST_WORKLOAD = 678;
     };
 };

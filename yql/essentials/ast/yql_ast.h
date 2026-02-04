@@ -295,7 +295,7 @@ public:
 
 class IAutoParamBuilder: public TThrRefBase {
 public:
-    virtual ~IAutoParamBuilder() = default;
+    ~IAutoParamBuilder() override = default;
 
     virtual ui32 Size() const = 0;
 

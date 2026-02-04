@@ -79,12 +79,13 @@ TTerminal::TTerminal(size_t terminalID,
                      bool noDelays,
                      int simulateTransactionMs,
                      int simulateTransactionSelect1Count,
+                     NQuery::TTxSettings txMode,
                      std::stop_token stopToken,
                      std::atomic<bool>& stopWarmup,
                      std::shared_ptr<TTerminalStats>& stats,
                      std::shared_ptr<TLog>& log)
     : TaskQueue(taskQueue)
-    , Context(terminalID, warehouseID, warehouseCount, TaskQueue, simulateTransactionMs, simulateTransactionSelect1Count, client, path, log)
+    , Context(terminalID, warehouseID, warehouseCount, TaskQueue, simulateTransactionMs, simulateTransactionSelect1Count, client, path, log, txMode)
     , NoDelays(noDelays)
     , StopToken(stopToken)
     , StopWarmup(stopWarmup)

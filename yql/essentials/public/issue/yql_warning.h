@@ -41,7 +41,7 @@ using TWarningRules = TVector<TWarningRule>;
 
 class TWarningPolicy {
 public:
-    TWarningPolicy(bool isReplay = false);
+    explicit TWarningPolicy(bool isReplay = false);
 
     void AddRule(const TWarningRule& rule);
 

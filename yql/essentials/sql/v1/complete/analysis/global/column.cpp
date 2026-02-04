@@ -16,7 +16,7 @@ namespace {
 
 class TInferenceVisitor: public TSQLv1BaseVisitor {
 public:
-    TInferenceVisitor(const TNamedNodes* nodes)
+    explicit TInferenceVisitor(const TNamedNodes* nodes)
         : Nodes_(nodes)
     {
     }

@@ -44,7 +44,7 @@ Y_UNIT_TEST_SUITE(MapTests) {
             .Output = {fmrOutputRef}
         };
         TFmrUserJobSettings settings{.ThreadPoolSize = 3, .QueueSizeLimit = 100};
-        FillMapFmrJob(mapJob, mapTaskParams, {}, tableDataServiceHostsFile.Name(), settings, MakeFileYtJobSerivce());
+        FillMapFmrJob(mapJob, mapTaskParams, {}, tableDataServiceHostsFile.Name(), settings, MakeFileYtJobService());
 
         {
             auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());

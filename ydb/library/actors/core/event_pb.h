@@ -11,6 +11,7 @@
 #include <util/system/context.h>
 #include <util/system/filemap.h>
 #include <util/string/builder.h>
+#include <util/string/hex.h>
 #include <util/thread/lfstack.h>
 #include <array>
 #include <span>
@@ -246,7 +247,8 @@ namespace NActors {
                 // parse the protobuf
                 TRopeStream stream(iter, size);
                 if (!ev->Record.ParseFromZeroCopyStream(&stream)) {
-                    Y_ENSURE(false, "Failed to parse protobuf event type " << TEventType << " class " << TypeName(ev->Record));
+                    Y_ENSURE(false, "Failed to parse protobuf event type " << TEventType << " class " << TypeName(ev->Record) <<
+                            " size# " << size << " hexDump# " << HexEncode(input->GetString()));
                 }
             }
             ev->CachedByteSize = input->GetSize();

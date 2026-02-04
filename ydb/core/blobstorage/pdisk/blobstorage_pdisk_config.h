@@ -108,6 +108,12 @@ struct TPDiskConfig : public TThrRefBase {
     TIntrusivePtr<NPDisk::TSectorMap> SectorMap; // set only by warden
     bool EnableSectorEncryption = true;
 
+    // EnableSectorEncryption is not the same as the DISABLE_PDISK_ENCRYPTION macro:
+    // unlike the macro, it does not disable metadata encryption.
+    // Tests need a runtime way to emulate DISABLE_PDISK_ENCRYPTION.
+    // Until runtime on/off encryption is fully supported, keep this hacky flag.
+    bool EnableFormatEncryption = true;
+
     ui32 ChunkSize = 128 << 20;
     ui32 SectorSize = 4 << 10;
 
@@ -178,6 +184,9 @@ struct TPDiskConfig : public TThrRefBase {
     bool MetadataOnly = false;
 
     bool ReadOnly = false;
+
+    // used for tests only
+    std::optional<ui64> NonceRandNum;
 
     TPDiskConfig(ui64 pDiskGuid, ui32 pdiskId, ui64 pDiskCategory)
         : TPDiskConfig({}, pDiskGuid, pdiskId, pDiskCategory)
@@ -449,6 +458,34 @@ struct TPDiskConfig : public TThrRefBase {
         ui32 vu = groupSizeInUnits ? groupSizeInUnits : 1;
         ui32 pu = slotSizeInUnits ? slotSizeInUnits : 1;
         return int(vu / pu) + !!(vu % pu);
+    }
+};
+
+struct TInferPDiskSlotCountSettingsForDriveType {
+    ui64 UnitSize = 0;
+    ui32 MaxSlots = 0;
+    bool PreferInferredSettingsOverExplicit = false;
+
+    TInferPDiskSlotCountSettingsForDriveType(const NKikimrBlobStorage::TInferPDiskSlotCountSettings& settings, NPDisk::EDeviceType type) {
+        switch (type) {
+            case NPDisk::DEVICE_TYPE_ROT:
+                UnitSize = settings.GetRot().GetUnitSize();
+                MaxSlots = settings.GetRot().GetMaxSlots();
+                PreferInferredSettingsOverExplicit = settings.GetRot().GetPreferInferredSettingsOverExplicit();
+                break;
+            case NPDisk::DEVICE_TYPE_SSD:
+            case NPDisk::DEVICE_TYPE_NVME:
+                UnitSize = settings.GetSsd().GetUnitSize();
+                MaxSlots = settings.GetSsd().GetMaxSlots();
+                PreferInferredSettingsOverExplicit = settings.GetSsd().GetPreferInferredSettingsOverExplicit();
+                break;
+            case NPDisk::DEVICE_TYPE_UNKNOWN:
+                break;
+        }
+    }
+
+    explicit operator bool() const {
+        return UnitSize && MaxSlots;
     }
 };
 

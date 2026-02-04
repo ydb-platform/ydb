@@ -3,7 +3,7 @@
 #include "quoter_base.h"
 
 namespace NKikimr::NPQ {
-    
+
 class TWriteQuoter : public TPartitionQuoterBase {
     using TBase = TPartitionQuoterBase;
 

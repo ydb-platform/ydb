@@ -435,9 +435,8 @@ class TestTenants():
 
             result = driver.scheme_client.list_directory(database_path)
             logger.debug("From database: list database <%s> is %s", database_path, convert(result))
-            assert len(result.children) > 1
-            assert result.children[0].name == ".metadata"
-            assert result.children[1].name == ".sys"
+            assert len(result.children) > 0
+            assert result.children[0].name == ".sys"
 
         driver_config_for_root = ydb.DriverConfig(ydb_endpoint, ydb_root)
         with ydb.Driver(driver_config_for_root) as driver:
@@ -445,18 +444,16 @@ class TestTenants():
 
             result = driver.scheme_client.list_directory(database_path)
             logger.debug("From root: list database <%s> is %s", database_path, convert(result))
-            assert len(result.children) > 1
-            assert result.children[0].name == ".metadata"
-            assert result.children[1].name == ".sys"
+            assert len(result.children) > 0
+            assert result.children[0].name == ".sys"
 
             dirname, basename = os.path.split(database_path)
             result = driver.scheme_client.list_directory(dirname)
             logger.debug("From root: list above database <%s> is %s", dirname, convert(result))
             assert len(result.children) > 1
-            assert result.children[0].name == ".metadata"
-            assert result.children[1].name == ".sys"
-            assert result.children[2].name == basename
-            assert result.children[2].type == ydb.scheme.SchemeEntryType.DATABASE
+            assert result.children[0].name == ".sys"
+            assert result.children[1].name == basename
+            assert result.children[1].type == ydb.scheme.SchemeEntryType.DATABASE
 
 
 def _initial_credit(pool):

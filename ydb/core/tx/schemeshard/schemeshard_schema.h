@@ -1749,9 +1749,10 @@ struct Schema : NIceDb::Schema {
         struct Description : Column<3, NScheme::NTypeIds::String> {}; // TColumnTableDescription
         struct Sharding : Column<4, NScheme::NTypeIds::String> {}; // TColumnTableSharding
         struct StandaloneSharding : Column<5, NScheme::NTypeIds::String> {}; // TColumnStoreSharding
+        struct IsRestore : Column<6, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<PathId>;
-        using TColumns = TableColumns<PathId, AlterVersion, Description, Sharding, StandaloneSharding>;
+        using TColumns = TableColumns<PathId, AlterVersion, Description, Sharding, StandaloneSharding, IsRestore>;
     };
 
     struct ColumnTablesAlters : Table<91> {
@@ -2248,7 +2249,7 @@ struct Schema : NIceDb::Schema {
     struct Secrets : Table<127> {
         struct PathId : Column<1, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
         struct AlterVersion : Column<2, NScheme::NTypeIds::Uint64> {};
-        struct Description : Column<3, NScheme::NTypeIds::String> {};
+        struct Description : Column<3, NScheme::NTypeIds::String, false, true> {}; // Sensitive column
 
         using TKey = TableKey<PathId>;
         using TColumns = TableColumns<PathId, AlterVersion, Description>;
@@ -2257,7 +2258,7 @@ struct Schema : NIceDb::Schema {
     struct SecretsAlterData : Table<128> {
         struct PathId : Column<1, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
         struct AlterVersion : Column<2, NScheme::NTypeIds::Uint64> {};
-        struct Description : Column<3, NScheme::NTypeIds::String> {};
+        struct Description : Column<3, NScheme::NTypeIds::String, false, true> {}; // Sensitive column
 
         using TKey = TableKey<PathId>;
         using TColumns = TableColumns<PathId, AlterVersion, Description>;

@@ -323,7 +323,8 @@ void TGetPipelineStateCommand::DoExecute(ICommandContextPtr context)
     auto result = WaitFor(client->GetPipelineState(PipelinePath, Options))
         .ValueOrThrow();
 
-    context->ProduceOutputValue(TYsonString(ToString(result.State)));
+    // TODO(dgolear): Switch to std::string.
+    context->ProduceOutputValue(TYsonString(TString(ToString(result.State))));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -361,7 +362,7 @@ void TFlowExecuteCommand::Register(TRegistrar registrar)
 TYsonString TFlowExecuteCommand::DoFlowExecute(ICommandContextPtr context, const TYsonString& argument)
 {
     auto client = context->GetClient();
-    return WaitFor(client->FlowExecute(PipelinePath, TString(FlowCommand), argument, Options))
+    return WaitFor(client->FlowExecute(PipelinePath, FlowCommand, argument, Options))
         .ValueOrThrow()
         .Result;
 }

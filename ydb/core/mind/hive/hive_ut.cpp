@@ -212,6 +212,9 @@ namespace {
                 nodeWardenConfig->SectorMaps[pDiskPath] = sectorMap;
             }
             ui64 pDiskGuid = i + 1;
+            TFormatOptions options;
+            options.SectorMap = sectorMap;
+            options.EnableSmallDiskOptimization = false;
             FormatPDisk(
                         pDiskPath,
                         pDiskSize,
@@ -223,10 +226,7 @@ namespace {
                         0x7890123456 + iteration,
                         NPDisk::YdbDefaultPDiskSequence,
                         TString(""),
-                        false,
-                        false,
-                        sectorMap,
-                        false);
+                        options);
         }
     }
 
@@ -467,9 +467,11 @@ void FormatPDiskForTest(TString path, ui64 diskSize, ui32 chunkSize, ui64 guid,
     SafeEntropyPoolRead(&logKey, sizeof(NKikimr::NPDisk::TKey));
     SafeEntropyPoolRead(&sysLogKey, sizeof(NKikimr::NPDisk::TKey));
 
+    TFormatOptions options;
+    options.SectorMap = sectorMap;
+    options.EnableSmallDiskOptimization = false;
     NKikimr::FormatPDisk(path, diskSize, 4 << 10, chunkSize, guid,
-        chunkKey, logKey, sysLogKey, NPDisk::YdbDefaultPDiskSequence, "", false, false, sectorMap,
-        false);
+        chunkKey, logKey, sysLogKey, NPDisk::YdbDefaultPDiskSequence, "", options);
 }
 
 void InitSchemeRoot(TTestBasicRuntime& runtime, const TActorId& sender) {
@@ -8132,6 +8134,15 @@ Y_UNIT_TEST_SUITE(THiveTest) {
 
         MakeSureTabletIsUp(runtime, tablet, 0);
 
+        auto getJsonAnswer = [&] {
+            TAutoPtr<IEventHandle> handle;
+            auto resp = runtime.GrabEdgeEventRethrow<NMon::TEvRemoteBinaryInfoRes>(handle);
+            auto lines = SplitString(resp->Blob, "\r\n");
+            NJson::TJsonValue value;
+            ReadJsonTree(lines.back(), &value, false);
+            return value;
+        };
+
         {
             NActorsProto::TRemoteHttpInfo pb;
             pb.SetMethod(HTTP_METHOD_POST);
@@ -8159,11 +8170,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             p7->SetValue(TStringBuilder() << wrongOldDomain.GetPathId());
             runtime.SendToPipe(hiveTablet, sender, new NMon::TEvRemoteHttpInfo(std::move(pb)), 0, GetPipeConfigWithRetries());
 
-            TAutoPtr<IEventHandle> handle;
-            auto resp = runtime.GrabEdgeEventRethrow<NMon::TEvRemoteJsonInfoRes>(handle);
-            Ctest << "Hive response: " << resp->Json << Endl;
-            NJson::TJsonValue value;
-            ReadJsonTree(resp->Json, &value, false);
+            auto value = getJsonAnswer();
             UNIT_ASSERT_VALUES_EQUAL(value["status"].GetStringSafe(), "ERROR");
         }
 
@@ -8223,11 +8230,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             p5->SetValue(TStringBuilder() << newDomain.GetPathId());
             runtime.SendToPipe(hiveTablet, sender, new NMon::TEvRemoteHttpInfo(std::move(pb)), 0, GetPipeConfigWithRetries());
 
-            TAutoPtr<IEventHandle> handle;
-            auto resp = runtime.GrabEdgeEventRethrow<NMon::TEvRemoteJsonInfoRes>(handle);
-            Ctest << "Hive response: " << resp->Json << Endl;
-            NJson::TJsonValue value;
-            ReadJsonTree(resp->Json, &value, false);
+            auto value = getJsonAnswer();
             UNIT_ASSERT_VALUES_EQUAL(value["status"].GetStringSafe(), "ERROR");
         }
     }

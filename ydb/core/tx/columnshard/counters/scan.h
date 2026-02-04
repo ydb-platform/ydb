@@ -1,8 +1,10 @@
 #pragma once
 #include "sub_columns.h"
 
+#include <ydb/core/kqp/compute_actor/kqp_compute_events_stats.h>
 #include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/tx/columnshard/counters/duplicate_filtering.h>
+#include <ydb/core/tx/columnshard/counters/thread_safe_value.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/counters.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/task.h>
 #include <ydb/core/tx/columnshard/resources/memory.h>
@@ -160,6 +162,8 @@ private:
     std::shared_ptr<TDuplicateFilteringCounters> DuplicateFilteringCounters;
 
     NMonitoring::TDynamicCounters::TCounterPtr HangingRequests;
+
+    NMonitoring::THistogramPtr HistogramReadMetadataDurationMs;
 
 public:
     const std::shared_ptr<TSubColumnCounters>& GetSubColumns() const {
@@ -332,6 +336,10 @@ public:
     TScanAggregations BuildAggregations();
 
     void FillStats(::NKikimrTableStats::TTableStats& output) const;
+
+    void OnReadMetadata(const TDuration d) const {
+        HistogramReadMetadataDurationMs->Collect(d.MilliSeconds());
+    }
 };
 
 class TCounterGuard: TMoveOnly {
@@ -357,6 +365,19 @@ public:
 };
 
 class TConcreteScanCounters: public TScanCounters {
+public:
+    struct TPerStepAtomicCounters {
+        std::shared_ptr<TAtomicCounter> ExecutionDurationMicroSeconds = std::make_shared<TAtomicCounter>(); // time step was executing in conveyor
+        std::shared_ptr<TAtomicCounter> WaitDurationMicroSeconds = std::make_shared<TAtomicCounter>(); // time spent not in same step before next step(for example in deduplication)
+        std::shared_ptr<TAtomicCounter> RawBytesRead = std::make_shared<TAtomicCounter>(); // From BS, S3, previous step
+    };
+
+    struct TPerStepCounters {
+        TDuration ExecutionDuration;
+        TDuration WaitDuration;
+        ui64 RawBytesRead = 0;
+        TString DebugString() const;
+    };
 private:
     using TBase = TScanCounters;
     std::shared_ptr<TAtomicCounter> FetchAccessorsCount = std::make_shared<TAtomicCounter>();
@@ -374,7 +395,7 @@ private:
     std::shared_ptr<TAtomicCounter> AccessorsForConstructionGuard = std::make_shared<TAtomicCounter>();
     THashMap<ui32, std::shared_ptr<TAtomicCounter>> SkipNodesCount;
     THashMap<ui32, std::shared_ptr<TAtomicCounter>> ExecuteNodesCount;
-
+    NColumnShard::TThreadSafeValue<THashMap<TString, TPerStepAtomicCounters>> AtomicStepCounters;
 public:
     TScanAggregations Aggregations;
 
@@ -393,6 +414,12 @@ public:
             it->second->Inc();
         }
     }
+
+    THashMap<TString, TPerStepCounters> ReadStepsCounters() const;
+
+    TString StepsCountersDebugString() const;
+
+    TPerStepAtomicCounters CountersForStep(TStringBuf stepName) const;
 
     void AddExecutionDuration(const TDuration d) const {
         TotalExecutionDurationUs->Add(d.MicroSeconds());

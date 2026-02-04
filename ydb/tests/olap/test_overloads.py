@@ -1,5 +1,6 @@
 import os
 import pytest
+import time
 
 import logging
 import yatest.common
@@ -42,7 +43,7 @@ class YdbWorkloadOverload:
         self.table_name = table_name
 
     def _call(self, command: list[str], wait=False, timeout=None):
-        logging.info(f'YdbWorkloadOverload execute {' '.join(command)} with wait = {wait}')
+        logging.info(f'YdbWorkloadOverload execute {" ".join(command)} with wait = {wait}')
         yatest.common.execute(command=command, wait=wait, timeout=timeout, stderr=self.stderr, stdout=self.stdout)
 
     def create_table(self):
@@ -62,7 +63,8 @@ class YdbWorkloadOverload:
             str(rows),
             "--quiet"
         ]
-        self._call(command=command, wait=wait, timeout=2*seconds)
+
+        self._call(command=command, wait=wait, timeout=5*seconds)
 
     # seconds - Seconds to run workload
     # threads - Number of parallel threads in workload
@@ -139,7 +141,7 @@ class TestLogScenario(object):
             CREATE TABLE `{table_path}` (
                 id Uint64 NOT NULL,
                 val Uint64,
-                PRIMARY KEY(id),
+                PRIMARY KEY(id)
             )
             WITH (
                 STORE = COLUMN,
@@ -161,11 +163,24 @@ class TestLogScenario(object):
             }
             for i in range(rows_count)
         ]
-        self.ydb_client.bulk_upsert(
-            table_path,
-            column_types,
-            data,
-        )
+
+        max_retries = 10
+        retry_delay = 0.5
+        for attempt in range(max_retries):
+            try:
+                self.ydb_client.bulk_upsert(
+                    table_path,
+                    column_types,
+                    data,
+                )
+
+                break
+            except ydb.issues.Overloaded:
+                if attempt == max_retries - 1:
+                    raise
+
+                time.sleep(retry_delay)
+                retry_delay *= 1.5
 
         assert self.ydb_client.query(f"select count(*) as Rows from `{table_path}`")[0].rows[0]["Rows"] == rows_count
 
@@ -177,22 +192,22 @@ class TestLogScenario(object):
         self.table_name: str = f"log_{writing_in_flight_requests_count_limit}_{writing_in_flight_request_bytes_limit}"
 
         output_path = yatest.common.test_output_path()
-        output_stdout = open(os.path.join(output_path, "command_stdout.log"), "w")
+        stdout_path = os.path.join(output_path, "command_stdout.log")
 
-        ydb_workload: YdbWorkloadOverload = YdbWorkloadOverload(
-            endpoint=self.ydb_client.endpoint,
-            database=self.ydb_client.database,
-            table_name=self.table_name,
-            stdout=output_stdout
-        )
-        ydb_workload.create_table()
+        with open(stdout_path, "w") as output_stdout:
+            ydb_workload: YdbWorkloadOverload = YdbWorkloadOverload(
+                endpoint=self.ydb_client.endpoint,
+                database=self.ydb_client.database,
+                table_name=self.table_name,
+                stdout=output_stdout
+            )
+            ydb_workload.create_table()
 
-        ydb_workload.bulk_upsert(seconds=wait_time, threads=10, rows=10, wait=True)
+            ydb_workload.bulk_upsert(seconds=wait_time, threads=10, rows=10, wait=True)
 
-        output_stdout.close()
         keys = None
         values = None
-        with open(os.path.join(output_path, "command_stdout.log"), "r") as file:
+        with open(stdout_path, "r") as file:
             for line in file:
                 if line.startswith("Total"):
                     keys = line.split()
@@ -227,7 +242,7 @@ class TestLogScenario(object):
                 id Uint64 NOT NULL,
                 v1 Int64,
                 v2 Int64,
-                PRIMARY KEY(id),
+                PRIMARY KEY(id)
             )
             WITH (
                 STORE = COLUMN,
@@ -253,7 +268,18 @@ class TestLogScenario(object):
             for i in range(rows_count)
         ]
 
-        self.ydb_client.bulk_upsert(table_path, column_types, data)
+        max_retries = 10
+        retry_delay = 0.5
+        for attempt in range(max_retries):
+            try:
+                self.ydb_client.bulk_upsert(table_path, column_types, data)
+                break
+            except ydb.issues.Overloaded:
+                if attempt == max_retries - 1:
+                    raise
+
+                time.sleep(retry_delay)
+                retry_delay *= 1.5
 
         futures = []
 

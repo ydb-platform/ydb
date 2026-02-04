@@ -26,7 +26,7 @@
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
-#include <ydb/core/kqp/federated_query/kqp_federated_query_actors.h>
+#include <ydb/core/kqp/federated_query/actors/kqp_federated_query_actors.h>
 #include <ydb/core/kqp/opt/kqp_query_plan.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/core/grpc_services/local_rate_limiter.h>
@@ -155,7 +155,7 @@ public:
         , VerboseMemoryLimitException(executerConfig.MutableConfig->VerboseMemoryLimitException.load())
         , BatchOperationSettings(std::move(batchOperationSettings))
         , AccountDefaultPoolInScheduler(executerConfig.TableServiceConfig.GetComputeSchedulerSettings().GetAccountDefaultPool())
-        , TasksGraph(Database, Request.Transactions, Request.TxAlloc, partitionPrunerConfig, AggregationSettings, Counters, BufferActorId)
+        , TasksGraph(Database, Request.Transactions, Request.TxAlloc, partitionPrunerConfig, AggregationSettings, Counters, BufferActorId, UserToken)
         , ChannelService(channelService)
     {
         ArrayBufferMinFillPercentage = executerConfig.TableServiceConfig.GetArrayBufferMinFillPercentage();
@@ -233,7 +233,6 @@ protected:
         auto& reply = *ev->Get();
 
         KqpShardsResolverId = {};
-        TasksGraph.GetMeta().ShardsResolved = true;
 
         // TODO: count resolve time in CpuTime
 
@@ -254,18 +253,18 @@ protected:
         }
 
         KQP_STLOG_D(KQPEX, "Shards nodes resolved",
-            (SuccessNodes, reply.ShardNodes.size()),
+            (SuccessNodes, reply.ShardsToNodes.size()),
             (FailedNodes, reply.Unresolved),
             (trace_id, TraceId()));
 
-        TasksGraph.GetMeta().ShardIdToNodeId = std::move(reply.ShardNodes);
-        for (const auto& [shardId, nodeId] : TasksGraph.GetMeta().ShardIdToNodeId) {
-            TasksGraph.GetMeta().ShardsOnNode[nodeId].push_back(shardId);
+        for (const auto& [_, nodeId] : reply.ShardsToNodes) {
             ParticipantNodes.emplace(nodeId);
             if (TxManager) {
                 TxManager->AddParticipantNode(nodeId);
             }
         }
+
+        TasksGraph.ResolveShards(std::move(reply.ShardsToNodes));
 
         if (IsDebugLogEnabled()) {
             TStringBuilder sb;
@@ -522,6 +521,11 @@ protected:
             return;
 
         if (TasksGraph.GetMeta().DqChannelVersion >= 2u) {
+            if (ev->Get()->Record.GetEnough()) {
+                for (auto& [channelId, inputBuffer] : ResultInputBuffers) {
+                    inputBuffer->EarlyFinish();
+                }
+            }
             return;
         }
 
@@ -572,40 +576,43 @@ protected:
         YQL_ENSURE(Stats);
 
         if (state.HasStats()) {
-            ui64 cycleCount = GetCycleCountFast();
+            Stats->UpdateTaskStats(taskId, state.GetStats(), nullptr, (NYql::NDqProto::EComputeState) state.GetState(),
+                TDuration::MilliSeconds(AggregationSettings.GetCollectLongTasksStatsTimeoutMs()));
 
-            Stats->UpdateTaskStats(taskId, state.GetStats(), (NYql::NDqProto::EComputeState) state.GetState());
+            if (CollectBasicStats(Request.StatsMode)) {
+                ui64 cycleCount = GetCycleCountFast();
 
-            if (Stats->DeadlockedStageId) {
-                NYql::TIssues issues;
-                issues.AddIssue(TStringBuilder() << "Deadlock detected: stage " << *Stats->DeadlockedStageId << " waits for input while peer(s) wait for output");
-                auto abortEv = MakeHolder<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::CANCELLED, issues);
-                this->Send(this->SelfId(), abortEv.Release());
-            }
-
-            if (Request.ProgressStatsPeriod) {
-                auto now = TInstant::Now();
-                if (LastProgressStats + Request.ProgressStatsPeriod <= now) {
-                    auto progress = MakeHolder<TEvKqpExecuter::TEvExecuterProgress>();
-                    auto& execStats = *progress->Record.MutableQueryStats()->AddExecutions();
-                    Stats->ExportExecStats(execStats);
-                    for (ui32 txId = 0; txId < Request.Transactions.size(); ++txId) {
-                        const auto& tx = Request.Transactions[txId].Body;
-                        auto planWithStats = AddExecStatsToTxPlan(tx->GetPlan(), execStats);
-                        execStats.AddTxPlansWithStats(planWithStats);
-                    }
-                    this->Send(Target, progress.Release());
-                    LastProgressStats = now;
+                if (Stats->DeadlockedStageId) {
+                    NYql::TIssues issues;
+                    issues.AddIssue(TStringBuilder() << "Deadlock detected: stage " << *Stats->DeadlockedStageId << " waits for input while peer(s) wait for output");
+                    auto abortEv = MakeHolder<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::CANCELLED, issues);
+                    this->Send(this->SelfId(), abortEv.Release());
                 }
-            }
-            auto collectBytes = Stats->EstimateCollectMem();
-            auto deltaCpuTime = NHPTimer::GetSeconds(GetCycleCountFast() - cycleCount);
 
-            Counters->Counters->QueryStatMemCollectInflightBytes->Add(
-                static_cast<i64>(collectBytes) - static_cast<i64>(StatCollectInflightBytes)
-            );
-            StatCollectInflightBytes = collectBytes;
-            Counters->Counters->QueryStatCpuCollectUs->Add(deltaCpuTime * 1'000'000);
+                if (Request.ProgressStatsPeriod) {
+                    auto now = TInstant::Now();
+                    if (LastProgressStats + Request.ProgressStatsPeriod <= now) {
+                        auto progress = MakeHolder<TEvKqpExecuter::TEvExecuterProgress>();
+                        auto& execStats = *progress->Record.MutableQueryStats()->AddExecutions();
+                        Stats->ExportExecStats(execStats);
+                        for (ui32 txId = 0; txId < Request.Transactions.size(); ++txId) {
+                            const auto& tx = Request.Transactions[txId].Body;
+                            auto planWithStats = AddExecStatsToTxPlan(tx->GetPlan(), execStats);
+                            execStats.AddTxPlansWithStats(planWithStats);
+                        }
+                        this->Send(Target, progress.Release());
+                        LastProgressStats = now;
+                    }
+                }
+                auto collectBytes = Stats->EstimateCollectMem();
+                auto deltaCpuTime = NHPTimer::GetSeconds(GetCycleCountFast() - cycleCount);
+
+                Counters->Counters->QueryStatMemCollectInflightBytes->Add(
+                    static_cast<i64>(collectBytes) - static_cast<i64>(StatCollectInflightBytes)
+                );
+                StatCollectInflightBytes = collectBytes;
+                Counters->Counters->QueryStatCpuCollectUs->Add(deltaCpuTime * 1'000'000);
+            }
         }
 
         YQL_ENSURE(Planner);
@@ -621,14 +628,6 @@ protected:
                     auto& extraData = ExtraData[computeActor];
                     extraData.TaskId = taskId;
                     extraData.Data.Swap(state.MutableExtraData());
-
-                    Stats->AddComputeActorStats(
-                        computeActor.NodeId(),
-                        std::move(*state.MutableStats()),
-                        (NYql::NDqProto::EComputeState) state.GetState(),
-                        TDuration::MilliSeconds(AggregationSettings.GetCollectLongTasksStatsTimeoutMs())
-                    );
-
                     LastTaskId = taskId;
                     LastComputeActorId = computeActor.ToString();
 
@@ -1058,13 +1057,13 @@ protected:
     void HandleAbortExecution(TEvKqp::TEvAbortExecution::TPtr& ev) {
         auto& msg = ev->Get()->Record;
         NYql::TIssues issues = ev->Get()->GetIssues();
-        HandleAbortExecution(msg.GetStatusCode(), ev->Get()->GetIssues(), ev->Sender != Target);
+        HandleAbortExecution(msg.GetStatusCode(), ev->Get()->GetIssues(), ev->Sender == Target);
     }
 
     void HandleAbortExecution(
             NYql::NDqProto::StatusIds::StatusCode statusCode,
             const NYql::TIssues& issues,
-            const bool sessionSender) {
+            const bool isTargetSender) {
         KQP_STLOG_D(KQPEX, "Got EvAbortExecution",
             (Status, NYql::NDqProto::StatusIds_StatusCode_Name(statusCode)),
             (Issues, issues.ToOneLineString()),
@@ -1073,7 +1072,7 @@ protected:
         if (ydbStatusCode == Ydb::StatusIds::INTERNAL_ERROR) {
             InternalError(issues);
         } else if (ydbStatusCode == Ydb::StatusIds::TIMEOUT) {
-            TimeoutError(sessionSender, issues);
+            TimeoutError(isTargetSender, issues);
         } else {
             RuntimeError(NYql::NDq::DqStatusToYdbStatus(statusCode), issues);
         }
@@ -1282,7 +1281,7 @@ protected:
         ReplyErrorAndDie(status, &issues);
     }
 
-    void TimeoutError(bool sessionSender, NYql::TIssues issues) {
+    void TimeoutError(bool isTargetSender, NYql::TIssues issues) {
         if (AlreadyReplied) {
             KQP_STLOG_E(KQPEX, "Timeout when we already replied - not good",
                 (Backtrace, TBackTrace().PrintToString()),
@@ -1310,8 +1309,8 @@ protected:
         ResponseEv->Record.MutableResponse()->SetStatus(Ydb::StatusIds::TIMEOUT);
         NYql::IssuesToMessage(issues, ResponseEv->Record.MutableResponse()->MutableIssues());
 
-        // TEvAbortExecution can come from either ComputeActor or SessionActor (== Target).
-        if (!sessionSender) {
+        // TEvAbortExecution can come from ComputeActor or SessionActor/PartitionedExecuterActor (== Target).
+        if (!isTargetSender) {
             auto abortEv = MakeHolder<TEvKqp::TEvAbortExecution>(status, issues);
             this->Send(Target, abortEv.Release());
         }
@@ -1417,33 +1416,35 @@ protected:
 
             Stats->FinishTs = TInstant::Now();
 
-            Stats->Finish();
-
-            if (Stats->CollectStatsByLongTasks || CollectFullStats(Request.StatsMode)) {
-
-                ui64 jsonSize = 0;
+            {
                 ui64 cycleCount = GetCycleCountFast();
+                Stats->ExportExecStats(*response.MutableResult()->MutableStats());
 
-                response.MutableResult()->MutableStats()->ClearTxPlansWithStats();
-                for (ui32 txId = 0; txId < Request.Transactions.size(); ++txId) {
-                    const auto& tx = Request.Transactions[txId].Body;
-                    auto planWithStats = AddExecStatsToTxPlan(tx->GetPlan(), response.GetResult().GetStats());
-                    jsonSize += planWithStats.size();
-                    response.MutableResult()->MutableStats()->AddTxPlansWithStats(planWithStats);
+                if (CollectFullStats(Request.StatsMode)) {
+                    ui64 jsonSize = 0;
+
+                    response.MutableResult()->MutableStats()->ClearTxPlansWithStats();
+                    for (ui32 txId = 0; txId < Request.Transactions.size(); ++txId) {
+                        const auto& tx = Request.Transactions[txId].Body;
+                        auto planWithStats = AddExecStatsToTxPlan(tx->GetPlan(), response.GetResult().GetStats());
+                        jsonSize += planWithStats.size();
+                        response.MutableResult()->MutableStats()->AddTxPlansWithStats(planWithStats);
+                    }
+
+                    Counters->Counters->QueryStatMemConvertBytes->Add(jsonSize);
+                    response.MutableResult()->MutableStats()->SetStatConvertBytes(jsonSize);
+
+                    if (Stats->CollectStatsByLongTasks) {
+                        const auto& txPlansWithStats = response.GetResult().GetStats().GetTxPlansWithStats();
+                        if (!txPlansWithStats.empty()) {
+                            KQP_STLOG_I(KQPEX, "Full stats: " << response.GetResult().GetStats(),
+                                (trace_id, TraceId()));
+                        }
+                    }
                 }
 
                 auto deltaCpuTime = NHPTimer::GetSeconds(GetCycleCountFast() - cycleCount);
                 Counters->Counters->QueryStatCpuConvertUs->Add(deltaCpuTime * 1'000'000);
-                Counters->Counters->QueryStatMemConvertBytes->Add(jsonSize);
-                response.MutableResult()->MutableStats()->SetStatConvertBytes(jsonSize);
-            }
-
-            if (Stats->CollectStatsByLongTasks) {
-                const auto& txPlansWithStats = response.GetResult().GetStats().GetTxPlansWithStats();
-                if (!txPlansWithStats.empty()) {
-                    KQP_STLOG_I(KQPEX, "Full stats: " << response.GetResult().GetStats(),
-                        (trace_id, TraceId()));
-                }
             }
 
             if (!BatchOperationSettings.Empty() && !Stats->TableStats.empty()) {

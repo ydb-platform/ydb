@@ -102,7 +102,6 @@
 #include <ydb/public/lib/deprecated/client/msgbus_client.h>
 #include <ydb/core/client/minikql_compile/mkql_compile_service.h>
 #include <ydb/core/client/server/msgbus_server_pq_metacache.h>
-#include <ydb/core/client/server/http_ping.h>
 
 #include <ydb/library/grpc/server/actors/logger.h>
 
@@ -144,6 +143,11 @@
 #include <ydb/services/ydb/ydb_object_storage.h>
 #include <ydb/services/tablet/ydb_tablet.h>
 #include <ydb/services/view/grpc_service.h>
+
+#if defined(OS_LINUX)
+#include <ydb/services/nbs/grpc_service.h>
+#endif
+
 
 #include <ydb/core/fq/libs/init/init.h>
 
@@ -461,8 +465,8 @@ public:
                 Y_ABORT_UNLESS(channel.HasErasureSpecies());
                 Y_ABORT_UNLESS(channel.HasPDiskCategory());
                 TString name = channel.GetErasureSpecies();
-                TBlobStorageGroupType::EErasureSpecies erasure = TBlobStorageGroupType::ErasureSpeciesByName(name);
-                if (erasure == TBlobStorageGroupType::ErasureSpeciesCount) {
+                TBlobStorageGroupType::EErasureSpecies erasure;
+                if (!TBlobStorageGroupType::ParseErasureName(erasure, name)) {
                     ythrow yexception() << "wrong erasure species \"" << name << "\"";
                 }
                 const ui64 pDiskCategory = channel.GetPDiskCategory();
@@ -616,6 +620,7 @@ void TKikimrRunner::InitializeMonitoring(const TKikimrRunConfig& runConfig, bool
         monConfig.CertificateFile = appConfig.GetMonitoringConfig().GetMonitoringCertificateFile();
         monConfig.PrivateKeyFile = appConfig.GetMonitoringConfig().GetMonitoringPrivateKeyFile();
         monConfig.RedirectMainPageTo = appConfig.GetMonitoringConfig().GetRedirectMainPageTo();
+        monConfig.RequireCountersAuthentication = appConfig.GetMonitoringConfig().GetRequireCountersAuthentication();
         if (includeHostName) {
             if (appConfig.HasNameserviceConfig() && appConfig.GetNameserviceConfig().NodeSize() > 0) {
                 for (const auto& it : appConfig.GetNameserviceConfig().GetNode()) {
@@ -648,7 +653,6 @@ void TKikimrRunner::InitializeMonitoring(const TKikimrRunConfig& runConfig, bool
         }
         if (Monitoring) {
             Monitoring->RegisterCountersPage("counters", "Counters", Counters);
-            Monitoring->Register(NHttp::CreatePing());
             ActorsMonPage = Monitoring->RegisterIndexPage("actors", "Actors");
         }
     }
@@ -814,6 +818,10 @@ TGRpcServers TKikimrRunner::CreateGRpcServers(const TKikimrRunConfig& runConfig)
         names["bridge"] = &hasBridge;
         TServiceCfg hasTestShard = services.empty();
         names["test_shard"] = &hasTestShard;
+#if defined(OS_LINUX)
+        TServiceCfg hasNbs = services.empty();
+        names["nbs"] = &hasNbs;
+#endif
 
         std::unordered_set<TString> enabled;
         for (const auto& name : services) {
@@ -1120,7 +1128,11 @@ TGRpcServers TKikimrRunner::CreateGRpcServers(const TKikimrRunConfig& runConfig)
         if (hasTestShard) {
             server.AddService(new NGRpcService::TTestShardGRpcService(ActorSystem.Get(), Counters, grpcRequestProxies[0]));
         }
-
+#if defined(OS_LINUX)
+        if (hasNbs) {
+            server.AddService(new NGRpcService::TNbsGRpcService(ActorSystem.Get(), Counters, grpcRequestProxies[0]));
+        }
+#endif
         if (ModuleFactories) {
             for (const auto& service : ModuleFactories->GrpcServiceFactory.Create(enabled, disabled, ActorSystem.Get(), Counters, grpcRequestProxies[0])) {
                 server.AddService(service);

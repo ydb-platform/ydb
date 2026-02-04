@@ -32,6 +32,9 @@ public:
     //! client will connect to others nodes according to client loadbalancing
     TDriverConfig& SetEndpoint(const std::string& endpoint);
 
+    //! Get endpoint, returns the endpoint set via connection string or SetEndpoint()
+    const std::string& GetEndpoint() const;
+
     //! Set number of network threads, default: 2
     TDriverConfig& SetNetworkThreadsNum(size_t sz);
 
@@ -99,6 +102,13 @@ public:
     //! NOTE: Please read OS documentation and investigate your network topology before touching this option.
     //! default: true, 30, 5, 10 for linux, and true and OS default for others POSIX
     TDriverConfig& SetTcpKeepAliveSettings(bool enable, size_t idle, size_t count, size_t interval);
+
+    //! Set TCP_NODELAY socket option
+    //! enable - if true TCP_NODELAY is enabled (default, no Nagle algorithm, low latency, packet fragmentation)
+    //!        - if false TCP_NODELAY is disabled (Nagle algorithm enabled, reduced packet fragmentation)
+    //! NOTE: This affects network performance. Disable only if you want to reduce packet fragmentation.
+    //! default: true
+    TDriverConfig& SetTcpNoDelay(bool enable);
 
     //! Enable or disable drain of client logic (e.g. session pool drain) during dtor call
     TDriverConfig& SetDrainOnDtors(bool allowed);

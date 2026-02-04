@@ -91,7 +91,7 @@ void Scopes::ComputeScopes(std::shared_ptr<IOperator> &op) {
     for (auto &[id, sc] : ScopeMap) {
         auto topOp = sc.Operators[0];
         for (auto &p : topOp->Parents) {
-            auto parentScopeId = RevScopeMap.at(p.lock());
+            auto parentScopeId = RevScopeMap.at(p.first.lock());
             sc.ParentScopes.push_back(parentScopeId);
         }
     }
@@ -111,7 +111,6 @@ TRenameStage::TRenameStage() : IRBOStage("Remove redundant maps") {
 }
 
 void TRenameStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
-
     // We need to build scopes for the plan, because same aliases and variable names may be
     // used multiple times in different scopes
     auto scopes = Scopes();
@@ -143,14 +142,14 @@ void TRenameStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
         TVector<TInfoUnit> mapsTo;
         THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> mapsFrom;
         
-        if (iter.Current->Kind == EOperator::Map && CastOperator<TOpMap>(iter.Current)->Project) {
+        if (iter.Current->Kind == EOperator::Map) {
             auto map = CastOperator<TOpMap>(iter.Current);
-            for (const auto& [to, body] : map->MapElements) {
-                mapsTo.push_back(to);
-                if (std::holds_alternative<TInfoUnit>(body)) {
-                    auto from = std::get<TInfoUnit>(body);
-                    if (to != from) {
-                        mapsFrom[to] = from;
+            for (const auto& mapElement: map->MapElements) {
+                mapsTo.push_back(mapElement.GetElementName());
+                if (mapElement.IsRename()) {
+                    auto from = mapElement.GetRename();
+                    if (mapElement.GetElementName() != from) {
+                        mapsFrom[mapElement.GetElementName()] = from;
                     }
                 }
             }
@@ -173,6 +172,7 @@ void TRenameStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
             }
             for (const auto& trait : agg->AggregationTraitsList) {
                 mapsTo.push_back(trait.OriginalColName);
+                mapsTo.push_back(trait.ResultColName);
             }
         }
 
@@ -334,7 +334,7 @@ void TRenameStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
         }
 
         // If we have anything but the map operator, apply the stop list to the mapping
-        if (it.Current->Kind != EOperator::Map) {
+        if (it.Current->Kind != EOperator::Map && it.Current->Kind != EOperator::Aggregate) {
             for (auto s : scopedStopList) {
                 if (scopedRenameMap.contains(s)) {
                     scopedRenameMap.erase(s);

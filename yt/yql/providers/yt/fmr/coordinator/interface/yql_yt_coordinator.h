@@ -41,6 +41,17 @@ struct TStartOperationResponse {
     TString OperationId;
 };
 
+struct TPrepareOperationRequest {
+    TOperationParams OperationParams;
+    std::unordered_map<TFmrTableId, TClusterConnection> ClusterConnections;
+    TMaybe<NYT::TNode> FmrOperationSpec;
+};
+
+struct TPrepareOperationResponse {
+    TString PartitionId;
+    ui64 TasksNum;
+};
+
 struct TGetOperationRequest {
     TString OperationId;
 };
@@ -49,6 +60,7 @@ struct TGetOperationResponse {
     EOperationStatus Status;
     std::vector<TFmrError> ErrorMessages = {};
     std::vector<TTableStats> OutputTablesStats = {};
+    std::vector<TString> OperationResultsYson = {};
 };
 
 struct TDeleteOperationRequest {
@@ -104,6 +116,7 @@ struct TPingSessionResponse {
     bool Success;
 };
 
+
 class IFmrCoordinator: public TThrRefBase {
 public:
     using TPtr = TIntrusivePtr<IFmrCoordinator>;
@@ -129,6 +142,8 @@ public:
     virtual NThreading::TFuture<TPingSessionResponse> PingSession(const TPingSessionRequest& request) = 0;
 
     virtual NThreading::TFuture<TListSessionsResponse> ListSessions(const TListSessionsRequest& request) = 0;
+
+    virtual NThreading::TFuture<TPrepareOperationResponse> PrepareOperation(const TPrepareOperationRequest& request) = 0;
 };
 
 } // namespace NYql::NFmr

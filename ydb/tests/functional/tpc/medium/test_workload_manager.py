@@ -60,3 +60,56 @@ class TestClickbenchWMComputeSchedulerP1T1(wm.TestWorkloadManagerClickbenchCompu
 #         cls.run_cli(['workload', 'clickbench', '-p', 'olap_yatests/clickbench/hits', 'import', 'files', '--input',
 #                      yatest.common.source_path("ydb/tests/functional/clickbench/data/hits.csv")])
 #         super().setup_class()
+
+class TestWMOltp50(wm.TestWorkloadManagerOltp50, FunctionalTestBase):
+    timeout: float = 60
+    tpcc_warehouses: int = 10
+
+    @classmethod
+    def setup_class(cls) -> None:
+        cls.setup_cluster()
+        cls.run_cli(['workload', 'tpcc', '-p', f'olap_yatests/{cls.get_tpcc_path()}', 'init', '--warehouses', str(cls.tpcc_warehouses)])
+        cls.run_cli(['workload', 'tpcc', '-p', f'olap_yatests/{cls.get_tpcc_path()}', 'import', '--warehouses', str(cls.tpcc_warehouses), '--no-tui'])
+        super().setup_class()
+
+
+class TestWMOltpTpchS0_1(wm.WorkloadManagerOltpTpch20Base, FunctionalTestBase):
+    tables_size: dict[str, int] = {
+        'lineitem': 600572,
+    }
+    scale: float = 0.1
+    iterations: int = 1
+    tpcc_warehouses: int = 10
+
+    @classmethod
+    def get_resource_pools(cls) -> list[wm.ResourcePool]:
+        return [
+            wm.ResourcePool('test_pool_20', ['testuser20'], total_cpu_limit_percent_per_node=50, resource_weight=4),
+        ]
+
+    @classmethod
+    def setup_class(cls) -> None:
+        cls.setup_cluster()
+        cls.run_cli(['workload', 'tpcc', '-p', f'olap_yatests/{cls.get_tpcc_path()}', 'init', '--warehouses', str(cls.tpcc_warehouses)])
+        cls.run_cli(['workload', 'tpcc', '-p', f'olap_yatests/{cls.get_tpcc_path()}', 'import', '--warehouses', str(cls.tpcc_warehouses), '--no-tui'])
+        cls.run_cli(['workload', 'tpch', '-p', f'olap_yatests/{cls.get_path()}', 'init', '--store=column', '--datetime-types=dt64'])
+        cls.run_cli(['workload', 'tpch', '-p', f'olap_yatests/{cls.get_path()}', 'import', 'generator', f'--scale={cls.scale}'])
+        super().setup_class()
+
+
+class TestWMOltpAdHoc(wm.TestWorkloadManagerOltpAdHoc, FunctionalTestBase):
+    tpcc_warehouses: int = 10
+    iterations = 3
+
+    @classmethod
+    def get_resource_pools(cls) -> list[wm.ResourcePool]:
+        return [
+            wm.ResourcePool('test_pool_10', ['testuser10'], total_cpu_limit_percent_per_node=50, resource_weight=4),
+        ]
+
+    @classmethod
+    def setup_class(cls) -> None:
+        cls.setup_cluster()
+        cls.run_cli(['workload', 'tpcc', '-p', f'olap_yatests/{cls.get_tpcc_path()}', 'init', '--warehouses', str(cls.tpcc_warehouses)])
+        cls.run_cli(['workload', 'tpcc', '-p', f'olap_yatests/{cls.get_tpcc_path()}', 'import', '--warehouses', str(cls.tpcc_warehouses), '--no-tui'])
+        super().setup_class()

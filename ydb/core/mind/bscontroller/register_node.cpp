@@ -175,10 +175,12 @@ public:
                     "Error during UpdateDevicesInfo after receiving TEvControllerRegisterNode", (TExError, e.what()));
         }
 
-        TString error;
-        if (!updateIsSuccessful || (State->Changed() && !Self->CommitConfigUpdates(*State, false, false, false, txc, &error))) {
-            State->Rollback();
-            State.reset();
+        bool validated = true;
+        if (updateIsSuccessful) {
+            validated = !Self->ValidateAndCommitConfigUpdate(State, TConfigTxFlags(), txc);
+        }
+        if (!updateIsSuccessful || !validated) {
+            Self->RollbackConfigUpdate(State);
         }
 
         return true;
@@ -429,7 +431,7 @@ void TBlobStorageController::ReadGroups(TSet<TGroupId>& groupIDsToRead, bool dis
                     Y_ABORT_UNLESS(!info.SchemeshardId && !info.PathItemId);
                 }
 
-                SerializeGroupInfo(groupProto, *group, info.Name, scopeId);
+                SerializeGroupInfo(groupProto, *group, info, scopeId);
             } else if (nodeId) {
                 // group is not listable, so we have to postpone the request from NW
                 group->WaitingNodes.insert(nodeId);
@@ -463,12 +465,6 @@ void TBlobStorageController::ReadPDisk(const TPDiskId& pdiskId, const TPDiskInfo
         if (pdisk.PDiskConfig && !pDisk->MutablePDiskConfig()->ParseFromString(pdisk.PDiskConfig)) {
             STLOG(PRI_CRIT, BS_CONTROLLER, BSCTXRN02, "PDiskConfig invalid", (NodeId, pdiskId.NodeId),
                 (PDiskId, pdiskId.PDiskId));
-        }
-        if (pdisk.InferPDiskSlotCountFromUnitSize) {
-            pDisk->SetInferPDiskSlotCountFromUnitSize(pdisk.InferPDiskSlotCountFromUnitSize);
-        }
-        if (pdisk.InferPDiskSlotCountMax) {
-            pDisk->SetInferPDiskSlotCountMax(pdisk.InferPDiskSlotCountMax);
         }
     }
     pDisk->SetExpectedSerial(pdisk.ExpectedSerial);

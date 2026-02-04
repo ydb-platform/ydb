@@ -264,6 +264,7 @@ TPCCRunner::TPCCRunner(const NConsoleClient::TClientCommand::TConfig& connection
             Config.NoDelays,
             Config.SimulateTransactionMs,
             Config.SimulateTransactionSelect1Count,
+            Config.TxMode,
             TerminalsStopSource.get_token(),
             StopWarmup,
             PerThreadTerminalStats[i % threadCount],

@@ -2,6 +2,7 @@
 
 #include <ydb/core/persqueue/common/percentiles.h>
 #include <ydb/core/persqueue/pqtablet/common/constants.h>
+#include <ydb/core/persqueue/public/config.h>
 
 namespace NKikimr {
 namespace NPQ {
@@ -322,8 +323,7 @@ TUsersInfoStorage::TUsersInfoStorage(
     const TString& dbId,
     const TString& dbPath,
     const bool isServerless,
-    const TString& folderId,
-    const TString& monitoringProjectId
+    const TString& folderId
 )
     : DCId(std::move(dcId))
     , TopicConverter(topicConverter)
@@ -334,7 +334,6 @@ TUsersInfoStorage::TUsersInfoStorage(
     , DbPath(dbPath)
     , IsServerless(isServerless)
     , FolderId(folderId)
-    , MonitoringProjectId(monitoringProjectId)
     , CurReadRuleGeneration(0)
 {
 }
@@ -440,7 +439,7 @@ TUserInfo& TUsersInfoStorage::GetOrCreate(const TString& user, const TActorConte
 }
 
 ::NMonitoring::TDynamicCounterPtr TUsersInfoStorage::GetPartitionCounterSubgroup(const TActorContext& ctx) const {
-    if (!DetailedMetricsAreEnabled()) {
+    if (!DetailedMetricsAreEnabled(Config)) {
         return nullptr;
     }
     auto counters = AppData(ctx)->Counters;
@@ -451,8 +450,8 @@ TUserInfo& TUsersInfoStorage::GetOrCreate(const TString& user, const TActorConte
         auto s = counters
             ->GetSubgroup("counters", IsServerless ? "topics_per_partition_serverless" : "topics_per_partition")
             ->GetSubgroup("host", "");
-        if (!MonitoringProjectId.empty()) {
-            s = s->GetSubgroup("monitoring_project_id", MonitoringProjectId);
+        if (const auto& id = Config.GetMonitoringProjectId(); !id.empty()) {
+            s = s->GetSubgroup("monitoring_project_id", id);
         }
         return s
             ->GetSubgroup("database", Config.GetYdbDatabasePath())
@@ -465,8 +464,8 @@ TUserInfo& TUsersInfoStorage::GetOrCreate(const TString& user, const TActorConte
         auto s = counters
             ->GetSubgroup("counters", "topics_per_partition")
             ->GetSubgroup("host", "cluster");
-        if (!MonitoringProjectId.empty()) {
-            s = s->GetSubgroup("monitoring_project_id", MonitoringProjectId);
+        if (const auto& id = Config.GetMonitoringProjectId(); !id.empty()) {
+            s = s->GetSubgroup("monitoring_project_id", id);
         }
         return s
             ->GetSubgroup("Account", TopicConverter->GetAccount())
@@ -491,10 +490,6 @@ void TUsersInfoStorage::ResetDetailedMetrics() {
     for (auto&& userInfo : GetAll()) {
         userInfo.second.ResetDetailedMetrics();
     }
-}
-
-bool TUsersInfoStorage::DetailedMetricsAreEnabled() const {
-    return AppData()->FeatureFlags.GetEnableMetricsLevel() && (Config.HasMetricsLevel() && Config.GetMetricsLevel() == METRICS_LEVEL_DETAILED);
 }
 
 const TUserInfo* TUsersInfoStorage::GetIfExists(const TString& user) const {

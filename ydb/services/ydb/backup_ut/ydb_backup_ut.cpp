@@ -22,6 +22,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/rate_limiter/rate_limiter.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
 
 #include <ydb/library/backup/backup.h>
@@ -179,7 +180,7 @@ void ArePermissionsEqual(const THashMap<TString, THashSet<TString>>& lhs, const 
     }
 }
 
-#define Y_UNIT_TEST_ALL_PROTO_ENUM_VALUES(N, ENUM_TYPE, BOOL_VALUE) \
+#define Y_UNIT_TEST_ALL_PROTO_ENUM_VALUES_WITH_FLAG(N, ENUM_TYPE, BOOL_VALUE) \
     struct TTestCase##N : public TCurrentTestCase { \
         ENUM_TYPE Value; \
         bool BOOL_VALUE; \
@@ -201,6 +202,32 @@ void ArePermissionsEqual(const THashMap<TString, THashSet<TString>>& lhs, const 
                 for (bool flag : {false, true}) { \
                     TCurrentTest::AddTest([value, flag] { return TTestCase##N::Create(value, flag); }); \
                 } \
+            } \
+        } \
+    }; \
+    static TTestRegistration##N testRegistration##N; \
+    void TTestCase##N::Execute_(NUnitTest::TTestContext& ut_context Y_DECLARE_UNUSED)
+    
+    
+#define Y_UNIT_TEST_ALL_PROTO_ENUM_VALUES(N, ENUM_TYPE) \
+    struct TTestCase##N : public TCurrentTestCase { \
+        ENUM_TYPE Value; \
+        TString ParametrizedTestName; \
+\
+        TTestCase##N(ENUM_TYPE value) : TCurrentTestCase(), Value(value), ParametrizedTestName(#N "-" + ENUM_TYPE##_Name(Value)) { \
+            Name_ = ParametrizedTestName.c_str(); \
+        } \
+\
+        static THolder<NUnitTest::TBaseTestCase> Create(ENUM_TYPE value) { return ::MakeHolder<TTestCase##N>(value); } \
+        void Execute_(NUnitTest::TTestContext&) override; \
+    }; \
+    struct TTestRegistration##N { \
+        TTestRegistration##N() { \
+            const auto* enumDescriptor = google::protobuf::GetEnumDescriptor<ENUM_TYPE>(); \
+            for (int i = 0; i < enumDescriptor->value_count(); ++i) { \
+                const auto* valueDescriptor = enumDescriptor->value(i); \
+                const auto value = static_cast<ENUM_TYPE>(valueDescriptor->number()); \
+                TCurrentTest::AddTest([value] { return TTestCase##N::Create(value); }); \
             } \
         } \
     }; \
@@ -336,11 +363,27 @@ auto CreateHasIndexChecker(const TString& indexName, EIndexType indexType, bool 
                     }
                     break;
                 }
-                case EIndexType::GlobalFulltext: {
+                case EIndexType::GlobalFulltextPlain: {
                     Ydb::Table::FulltextIndexSettings settings;
                     std::get<TFulltextIndexSettings>(indexDesc.GetIndexSettings()).SerializeTo(settings);
                     Ydb::Table::FulltextIndexSettings expected;
                     expected.set_layout(Ydb::Table::FulltextIndexSettings::FLAT);
+                    auto column = expected.add_columns();
+                    column->set_column("Value");
+                    column->mutable_analyzers()->set_tokenizer(Ydb::Table::FulltextIndexSettings::STANDARD);
+                    column->mutable_analyzers()->set_use_filter_lowercase(true);
+                    column->mutable_analyzers()->set_use_filter_length(true);
+                    column->mutable_analyzers()->set_filter_length_max(42);
+                    if (!google::protobuf::util::MessageDifferencer::Equals(settings, expected)) {
+                        continue;
+                    }
+                    break;
+                }
+                case EIndexType::GlobalFulltextRelevance: {
+                    Ydb::Table::FulltextIndexSettings settings;
+                    std::get<TFulltextIndexSettings>(indexDesc.GetIndexSettings()).SerializeTo(settings);
+                    Ydb::Table::FulltextIndexSettings expected;
+                    expected.set_layout(Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE);
                     auto column = expected.add_columns();
                     column->set_column("Value");
                     column->mutable_analyzers()->set_tokenizer(Ydb::Table::FulltextIndexSettings::STANDARD);
@@ -444,21 +487,21 @@ using TBackupFunction = std::function<void(void)>;
 using TRestoreFunction = std::function<void(void)>;
 
 void TestTableContentIsPreserved(
-    const char* table, TSession& session, TBackupFunction&& backup, TRestoreFunction&& restore, const bool isOlap, const NDump::TRestoreSettings& restorationSettings = {}
+    const char* table, NQuery::TSession& session, TBackupFunction&& backup, TRestoreFunction&& restore, const bool isOlap, const NDump::TRestoreSettings& restorationSettings = {}
 ) {
     using namespace fmt::literals;
-    ExecuteDataDefinitionQuery(session, fmt::format(R"(
+    ExecuteQuery(session, fmt::format(R"(
             CREATE TABLE `{table}` (
-                Key Uint32,
+                Key Uint32 {not_null},
                 Value Utf8,
                 PRIMARY KEY (Key)
             ) WITH (
                 STORE = {store}
             );
         )",
-        "table"_a = table, "store"_a = isOlap ? "COLUMN" : "ROW"
-    ));
-    ExecuteDataModificationQuery(session, Sprintf(R"(
+        "table"_a = table, "store"_a = isOlap ? "COLUMN" : "ROW", "not_null"_a = isOlap ? "NOT NULL" : ""
+    ), true);
+    ExecuteQuery(session, Sprintf(R"(
             UPSERT INTO `%s` (
                 Key,
                 Value
@@ -477,10 +520,10 @@ void TestTableContentIsPreserved(
     backup();
 
     if (!restorationSettings.Replace_) {
-        ExecuteDataDefinitionQuery(session, Sprintf(R"(
+        ExecuteQuery(session, Sprintf(R"(
                 DROP TABLE `%s`;
             )", table
-        ));
+        ), true);
     }
 
     restore();
@@ -488,7 +531,7 @@ void TestTableContentIsPreserved(
 }
 
 void TestTablePartitioningSettingsArePreserved(
-    const char* table, ui32 minPartitions, TSession& session, TBackupFunction&& backup, TRestoreFunction&& restore, const bool isOlap
+    const char* table, ui32 minPartitions, TSession& session, TBackupFunction&& backup, TRestoreFunction&& restore
 ) {
     using namespace fmt::literals;
     ExecuteDataDefinitionQuery(session, fmt::format(R"(
@@ -499,11 +542,10 @@ void TestTablePartitioningSettingsArePreserved(
             )
             WITH (
                 AUTO_PARTITIONING_BY_LOAD = ENABLED,
-                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = {min_partitions},
-                STORE = {store}
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = {min_partitions}
             );
         )",
-        "table"_a = table, "min_partitions"_a = minPartitions, "store"_a = isOlap ? "COLUMN" : "ROW"
+        "table"_a = table, "min_partitions"_a = minPartitions
     ));
     CheckTableDescription(session, table, CreateMinPartitionsChecker(minPartitions, DEBUG_HINT));
 
@@ -520,7 +562,7 @@ void TestTablePartitioningSettingsArePreserved(
 
 void TestIndexTablePartitioningSettingsArePreserved(
     const char* table, const char* index, ui32 minIndexPartitions, TSession& session,
-    TBackupFunction&& backup, TRestoreFunction&& restore, const bool isOlap
+    TBackupFunction&& backup, TRestoreFunction&& restore
 ) {
     using namespace fmt::literals;
     const TString indexTablePath = JoinFsPaths(table, index, "indexImplTable");
@@ -531,11 +573,9 @@ void TestIndexTablePartitioningSettingsArePreserved(
                 Value Uint32,
                 PRIMARY KEY (Key),
                 INDEX {index} GLOBAL ON (Value)
-            ) WITH (
-                STORE = {store}
-            );
+            )
         )",
-        "table"_a = table, "index"_a = index, "store"_a = isOlap ? "COLUMN" : "ROW"
+        "table"_a = table, "index"_a = index
     ));
     ExecuteDataDefinitionQuery(session, Sprintf(R"(
             ALTER TABLE `%s` ALTER INDEX %s SET (
@@ -559,7 +599,7 @@ void TestIndexTablePartitioningSettingsArePreserved(
 
 void TestIndexTableReadReplicasSettingsArePreserved(
     const char* table, const char* index, NYdb::NTable::TReadReplicasSettings::EMode readReplicasMode, const ui64 readReplicasCount, TSession& session,
-    TBackupFunction&& backup, TRestoreFunction&& restore, const bool isOlap
+    TBackupFunction&& backup, TRestoreFunction&& restore
 ) {
     using namespace fmt::literals;
     const TString indexTablePath = JoinFsPaths(table, index, "indexImplTable");
@@ -581,11 +621,9 @@ void TestIndexTableReadReplicasSettingsArePreserved(
                 Value Uint32,
                 PRIMARY KEY (Key),
                 INDEX {index} GLOBAL ON (Value)
-            ) WITH (
-                STORE = {store}
-            );
+            )
         )",
-        "table"_a = table, "index"_a = index, "store"_a = isOlap ? "COLUMN" : "ROW"
+        "table"_a = table, "index"_a = index
     ));
     ExecuteDataDefinitionQuery(session, Sprintf(R"(
             ALTER TABLE `%s` ALTER INDEX %s SET (
@@ -607,7 +645,7 @@ void TestIndexTableReadReplicasSettingsArePreserved(
 }
 
 void TestTableSplitBoundariesArePreserved(
-    const char* table, ui64 partitions, TSession& session, TBackupFunction&& backup, TRestoreFunction&& restore, const bool isOlap
+    const char* table, ui64 partitions, TSession& session, TBackupFunction&& backup, TRestoreFunction&& restore
 ) {
     using namespace fmt::literals;
     ExecuteDataDefinitionQuery(session, fmt::format(R"(
@@ -617,11 +655,10 @@ void TestTableSplitBoundariesArePreserved(
                 PRIMARY KEY (Key)
             )
             WITH (
-                PARTITION_AT_KEYS = (1, 2, 4, 8, 16, 32, 64, 128, 256),
-                STORE = {store}
+                PARTITION_AT_KEYS = (1, 2, 4, 8, 16, 32, 64, 128, 256)
             );
         )",
-        "table"_a = table, "store"_a = isOlap ? "COLUMN" : "ROW"
+        "table"_a = table
     ));
     const auto describeSettings = TDescribeTableSettings()
             .WithTableStatistics(true)
@@ -685,7 +722,7 @@ void TestIndexTableSplitBoundariesArePreserved(
 }
 
 void TestRestoreTableWithSerial(
-    const char* table, TSession& session, TBackupFunction&& backup, TRestoreFunction&& restore, const bool isOlap
+    const char* table, TSession& session, TBackupFunction&& backup, TRestoreFunction&& restore
 ) {
     using namespace fmt::literals;
     ExecuteDataDefinitionQuery(session, fmt::format(R"(
@@ -693,11 +730,9 @@ void TestRestoreTableWithSerial(
                 Key Serial,
                 Value Uint32,
                 PRIMARY KEY (Key)
-            ) WITH (
-                STORE = {store}
-            );
+            )
         )",
-        "table"_a = table, "store"_a = isOlap ? "COLUMN" : "ROW"
+        "table"_a = table
     ));
     ExecuteDataModificationQuery(session, Sprintf(R"(
             UPSERT INTO `%s` (
@@ -746,8 +781,10 @@ NYdb::NTable::EIndexType ConvertIndexTypeToAPI(NKikimrSchemeOp::EIndexType index
             return NYdb::NTable::EIndexType::GlobalUnique;
         case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
             return NYdb::NTable::EIndexType::GlobalVectorKMeansTree;
-        case NKikimrSchemeOp::EIndexTypeGlobalFulltext:
-            return NYdb::NTable::EIndexType::GlobalFulltext;
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
+            return NYdb::NTable::EIndexType::GlobalFulltextPlain;
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
+            return NYdb::NTable::EIndexType::GlobalFulltextRelevance;
         default:
             UNIT_FAIL("No conversion to API for this index type");
             return NYdb::NTable::EIndexType::Unknown;
@@ -756,7 +793,7 @@ NYdb::NTable::EIndexType ConvertIndexTypeToAPI(NKikimrSchemeOp::EIndexType index
 
 void TestRestoreTableWithIndex(
     const char* table, const char* index, NKikimrSchemeOp::EIndexType indexType, bool prefix, TSession& session,
-    TBackupFunction&& backup, TRestoreFunction&& restore, const bool isOlap
+    TBackupFunction&& backup, TRestoreFunction&& restore
 ) {
     using namespace fmt::literals;
     TString query;
@@ -771,10 +808,8 @@ void TestRestoreTableWithIndex(
                     Value Uint32,
                     PRIMARY KEY (Key),
                     INDEX {index} {index_type} ON (Value)
-                ) WITH (
-                    STORE = {store}
-                );
-            )", "table"_a = table, "index"_a = index, "index_type"_a = ConvertIndexTypeToSQL(indexType), "store"_a = isOlap ? "COLUMN" : "ROW");
+                )
+            )", "table"_a = table, "index"_a = index, "index_type"_a = ConvertIndexTypeToSQL(indexType));
             break;
         case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
             if (prefix) {
@@ -786,9 +821,7 @@ void TestRestoreTableWithIndex(
                     INDEX {index} GLOBAL USING vector_kmeans_tree
                         ON (Group, Value)
                         WITH (similarity=inner_product, vector_type=float, vector_dimension=768, levels=2, clusters=80, overlap_clusters=3, overlap_ratio="1.2")
-                    ) WITH (
-                        STORE = {store}
-                    );)", "table"_a = table, "index"_a = index, "store"_a = isOlap ? "COLUMN" : "ROW");
+                    ))", "table"_a = table, "index"_a = index);
             } else {
                 query = fmt::format(R"(CREATE TABLE `{table}` (
                     Key Uint32,
@@ -798,23 +831,30 @@ void TestRestoreTableWithIndex(
                     INDEX {index} GLOBAL USING vector_kmeans_tree
                         ON (Value)
                         WITH (similarity=inner_product, vector_type=float, vector_dimension=768, levels=2, clusters=80, overlap_clusters=3, overlap_ratio="1.2")
-                    ) WITH (
-                        STORE = {store}
-                    );)", "table"_a = table, "index"_a = index, "store"_a = isOlap ? "COLUMN" : "ROW");
+                    ))", "table"_a = table, "index"_a = index);
             }
             break;
-        case NKikimrSchemeOp::EIndexTypeGlobalFulltext:
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
             query = fmt::format(R"(CREATE TABLE `{table}` (
                 Key Uint32,
                 Group Uint32,
                 Value String,
                 PRIMARY KEY (Key),
-                INDEX {index} GLOBAL USING fulltext
+                INDEX {index} GLOBAL USING fulltext_plain
                     ON (Value)
-                    WITH (layout=flat, tokenizer=standard, use_filter_lowercase=true, use_filter_length=true, filter_length_max=42)
-                ) WITH (
-                    STORE = {store}
-                );)", "table"_a = table, "index"_a = index, "store"_a = isOlap ? "COLUMN" : "ROW");
+                    WITH (tokenizer=standard, use_filter_lowercase=true, use_filter_length=true, filter_length_max=42)
+                ))", "table"_a = table, "index"_a = index);
+            break;
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
+            query = fmt::format(R"(CREATE TABLE `{table}` (
+                Key Uint32,
+                Group Uint32,
+                Value String,
+                PRIMARY KEY (Key),
+                INDEX {index} GLOBAL USING fulltext_relevance
+                    ON (Value)
+                    WITH (tokenizer=standard, use_filter_lowercase=true, use_filter_length=true, filter_length_max=42)
+                ))", "table"_a = table, "index"_a = index);
             break;
         default:
             UNIT_FAIL("No creation this index type");
@@ -1010,13 +1050,13 @@ void TestViewReferenceTableIsPreserved(
     using namespace fmt::literals;
     ExecuteQuery(aliceSession, fmt::format(R"(
                 CREATE TABLE `{table}` (
-                    Key Uint32,
+                    Key Uint32 {not_null},
                     Value Utf8,
                     PRIMARY KEY (Key)
                 ) WITH (
                     STORE = {store}
                 );
-            )", "table"_a = table, "store"_a = isOlap ? "COLUMN" : "ROW"
+            )", "table"_a = table, "store"_a = isOlap ? "COLUMN" : "ROW", "not_null"_a = isOlap ? "NOT NULL" : ""
         ), true
     );
     ExecuteQuery(aliceSession, Sprintf(R"(
@@ -1104,13 +1144,13 @@ void TestViewRelativeReferencesArePreserved(
     ExecuteQuery(session, fmt::format(R"(
                 {path_prefix}
                 CREATE TABLE `{table}` (
-                    Key Uint32,
+                    Key Uint32 {not_null},
                     Value Utf8,
                     PRIMARY KEY (Key)
                 ) WITH (
                     STORE = {store}
                 );
-            )", "path_prefix"_a = pathPrefix.GetOrElse("").c_str(), "table"_a = table, "store"_a = isOlap ? "COLUMN" : "ROW"
+            )", "path_prefix"_a = pathPrefix.GetOrElse("").c_str(), "table"_a = table, "store"_a = isOlap ? "COLUMN" : "ROW", "not_null"_a = isOlap ? "NOT NULL" : ""
         ), true
     );
     ExecuteQuery(session, Sprintf(R"(
@@ -1278,7 +1318,7 @@ GetChangefeedAndTopicDescriptions(const char* table, TSession& session, NTopic::
 
 void TestChangefeedAndTopicDescriptionsIsPreserved(
     const char* table, TSession& session, NTopic::TTopicClient& topicClient,
-    TBackupFunction&& backup, TRestoreFunction&& restore, const TVector<TString>& changefeeds, const bool isOlap
+    TBackupFunction&& backup, TRestoreFunction&& restore, const TVector<TString>& changefeeds
 ) {
     using namespace fmt::literals;
     ExecuteDataDefinitionQuery(session, fmt::format(R"(
@@ -1286,11 +1326,9 @@ void TestChangefeedAndTopicDescriptionsIsPreserved(
                 Key Uint32,
                 Value Utf8,
                 PRIMARY KEY (Key)
-            ) WITH (
-                STORE = {store}
-            );
+            )
         )",
-        "table"_a = table, "store"_a = isOlap ? "COLUMN" : "ROW"
+        "table"_a = table
     ));
 
     for (const auto& changefeed : changefeeds) {
@@ -1537,7 +1575,6 @@ void TestReplicationSettingsArePreserved(
         TBackupFunction&& backup,
         TRestoreFunction&& restore,
         const TMaybe<ESecretType> tokenSecretType,
-        const bool isOlap,
         const NDump::TRestoreSettings& restorationSettings = {})
 {
     using namespace fmt::literals;
@@ -1546,7 +1583,7 @@ void TestReplicationSettingsArePreserved(
     } else if (tokenSecretType == ESecretType::SecretTypeOld) {
         ExecuteQuery(session, "CREATE OBJECT `replication_secret` (TYPE SECRET) WITH (value = 'root@builtin');", true);
     }
-    ExecuteQuery(session, fmt::format("CREATE TABLE `/Root/table` (k Uint32, v Utf8, PRIMARY KEY (k)) WITH (STORE = {store});", "store"_a = isOlap ? "COLUMN" : "ROW"), true);
+    ExecuteQuery(session, "CREATE TABLE `/Root/table` (k Uint32, v Utf8, PRIMARY KEY (k));", true);
     ExecuteQuery(session, Sprintf(R"(
                 CREATE ASYNC REPLICATION `/Root/replication` FOR
                     `/Root/table` AS `/Root/replica`
@@ -1963,16 +2000,16 @@ std::string_view GetSampleValue(Ydb::Type::PrimitiveTypeId type) {
         case Ydb::Type_PrimitiveTypeId_FLOAT: return "0.0f";
         case Ydb::Type_PrimitiveTypeId_DOUBLE: return "0.0";
         case Ydb::Type_PrimitiveTypeId_DATE: return TYPE_CAST(Date, "2020-01-01");
-        case Ydb::Type_PrimitiveTypeId_DATETIME: return TYPE_CAST(Datetime, "2020-01-01");
-        case Ydb::Type_PrimitiveTypeId_TIMESTAMP: return TYPE_CAST(Timestamp, "2020-01-01");
-        case Ydb::Type_PrimitiveTypeId_INTERVAL: return TYPE_CAST(Interval, "P1H");
+        case Ydb::Type_PrimitiveTypeId_DATETIME: return TYPE_CAST(Datetime, "2020-01-01T00:00:00Z");
+        case Ydb::Type_PrimitiveTypeId_TIMESTAMP: return TYPE_CAST(Timestamp, "2020-01-01T00:00:00Z");
+        case Ydb::Type_PrimitiveTypeId_INTERVAL: return TYPE_CAST(Interval, "PT1H");
         case Ydb::Type_PrimitiveTypeId_TZ_DATE: return TYPE_CAST(TzDate, "2020-01-01");
-        case Ydb::Type_PrimitiveTypeId_TZ_DATETIME: return TYPE_CAST(TzDatetime, "2020-01-01");
-        case Ydb::Type_PrimitiveTypeId_TZ_TIMESTAMP: return TYPE_CAST(TzTimestamp, "2020-01-01");
+        case Ydb::Type_PrimitiveTypeId_TZ_DATETIME: return TYPE_CAST(TzDatetime, "2020-01-01T00:00:00Z");
+        case Ydb::Type_PrimitiveTypeId_TZ_TIMESTAMP: return TYPE_CAST(TzTimestamp, "2020-01-01T00:00:00Z");
         case Ydb::Type_PrimitiveTypeId_DATE32: return TYPE_CAST(Date32, "2020-01-01");
-        case Ydb::Type_PrimitiveTypeId_DATETIME64: return TYPE_CAST(Datetime64, "2020-01-01");
-        case Ydb::Type_PrimitiveTypeId_TIMESTAMP64: return TYPE_CAST(Timestamp64, "2020-01-01");
-        case Ydb::Type_PrimitiveTypeId_INTERVAL64: return TYPE_CAST(Interval64, "P1H");
+        case Ydb::Type_PrimitiveTypeId_DATETIME64: return TYPE_CAST(Datetime64, "2020-01-01T00:00:00Z");
+        case Ydb::Type_PrimitiveTypeId_TIMESTAMP64: return TYPE_CAST(Timestamp64, "2020-01-01T00:00:00Z");
+        case Ydb::Type_PrimitiveTypeId_INTERVAL64: return TYPE_CAST(Interval64, "PT1H");
         case Ydb::Type_PrimitiveTypeId_STRING: return "\"foo\"";
         case Ydb::Type_PrimitiveTypeId_UTF8: return "\"foo\"u";
         case Ydb::Type_PrimitiveTypeId_YSON: return TYPE_CONSTRUCTOR(Yson, "{ foo = bar }");
@@ -2031,13 +2068,18 @@ bool CanBePrimaryKey(Ydb::Type::PrimitiveTypeId type) {
     }
 }
 
-bool DontTestThisType(Ydb::Type::PrimitiveTypeId type) {
+bool DontTestThisType(Ydb::Type::PrimitiveTypeId type, const bool isOlap = false) {
     switch (type) {
         case Ydb::Type_PrimitiveTypeId_TZ_DATE:
         case Ydb::Type_PrimitiveTypeId_TZ_DATETIME:
         case Ydb::Type_PrimitiveTypeId_TZ_TIMESTAMP:
             // CREATE TABLE with a column of this type is not supported by storage
             return true;
+        case Ydb::Type_PrimitiveTypeId_UUID:
+        case Ydb::Type_PrimitiveTypeId_INTERVAL:
+        case Ydb::Type_PrimitiveTypeId_DYNUMBER:
+        case Ydb::Type_PrimitiveTypeId_BOOL:
+            return isOlap; // these types aren't supported for column tables    
         case Ydb::Type_PrimitiveTypeId_PRIMITIVE_TYPE_ID_UNSPECIFIED:
         case Ydb::Type_PrimitiveTypeId_Type_PrimitiveTypeId_INT_MIN_SENTINEL_DO_NOT_USE_:
         case Ydb::Type_PrimitiveTypeId_Type_PrimitiveTypeId_INT_MAX_SENTINEL_DO_NOT_USE_:
@@ -2058,27 +2100,27 @@ void TestPrimitiveType(
     using namespace fmt::literals;
     const auto yqlType = GetYqlType(type);
     const auto tableName = GetTableName(yqlType);
-    const auto sampleValue = GetSampleValue(type);
+    const TString sampleValue = isOlap ? TStringBuilder{} << "Unwrap(" << GetSampleValue(type) << ")": TString{GetSampleValue(type)};
 
     std::string_view key = sampleValue;
     std::string_view value = "1";
     if (CanBePrimaryKey(type)) {
         ExecuteQuery(session, std::format(R"(
-                CREATE TABLE `{}` (Key {}, Value Int32, PRIMARY KEY (Key)) WITH (STORE={});
-            )", tableName, yqlType, isOlap ? "COLUMN" : "ROW"
+                CREATE TABLE `{}` (Key {} {}, Value Int32, PRIMARY KEY (Key)) WITH (STORE={});
+            )", tableName, yqlType, isOlap ? "NOT NULL" : "", isOlap ? "COLUMN" : "ROW"
         ), true);
     } else {
         {
             // test if the type cannot in fact be a primary key to future-proof the test suite
             const auto result = session.ExecuteQuery(std::format(R"(
-                    CREATE TABLE `{}` (Key {}, Value Int32, PRIMARY KEY (Key)) WITH (STORE={});
-                )", tableName, yqlType, isOlap ? "COLUMN" : "ROW"
+                    CREATE TABLE `{}` (Key {} {}, Value Int32, PRIMARY KEY (Key)) WITH (STORE={});
+                )", tableName, yqlType, isOlap ? "NOT NULL" : "", isOlap ? "COLUMN" : "ROW"
             ), NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
         }
         ExecuteQuery(session, std::format(R"(
-                CREATE TABLE `{}` (Key Int32, Value {}, PRIMARY KEY (Key)) WITH (STORE={});
-            )", tableName, yqlType, isOlap ? "COLUMN" : "ROW"
+                CREATE TABLE `{}` (Key Int32 {}, Value {}, PRIMARY KEY (Key)) WITH (STORE={});
+            )", tableName, isOlap ? "NOT NULL" : "", yqlType, isOlap ? "COLUMN" : "ROW"
         ), true);
         std::swap(key, value);
     }
@@ -2119,10 +2161,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         };
     }
 
-    Y_UNIT_TEST_TWIN(RestoreTablePartitioningSettings, IsOlap) {
-        if (IsOlap) {
-            return; // TODO: fix me issue@26498
-        }
+    Y_UNIT_TEST(RestoreTablePartitioningSettings) {
         TKikimrWithGrpcAndRootSchema server;
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
         TTableClient tableClient(driver);
@@ -2138,15 +2177,11 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             minPartitions,
             session,
             CreateBackupLambda(driver, pathToBackup),
-            CreateRestoreLambda(driver, pathToBackup),
-            IsOlap
+            CreateRestoreLambda(driver, pathToBackup)
         );
     }
 
-    Y_UNIT_TEST_TWIN(RestoreIndexTablePartitioningSettings, IsOlap) {
-        if (IsOlap) {
-            return; // TODO: fix me issue@26498
-        }
+    Y_UNIT_TEST(RestoreIndexTablePartitioningSettings) {
         TKikimrWithGrpcAndRootSchema server;
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
         TTableClient tableClient(driver);
@@ -2164,15 +2199,11 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             minIndexPartitions,
             session,
             CreateBackupLambda(driver, pathToBackup),
-            CreateRestoreLambda(driver, pathToBackup),
-            IsOlap
+            CreateRestoreLambda(driver, pathToBackup)
         );
     }
 
-    Y_UNIT_TEST_TWIN(RestoreIndexTableReadReplicasSettings, IsOlap) {
-        if (IsOlap) {
-            return; // TODO: fix me issue@26498
-        }
+    Y_UNIT_TEST(RestoreIndexTableReadReplicasSettings) {
         TKikimrWithGrpcAndRootSchema server;
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
         TTableClient tableClient(driver);
@@ -2192,15 +2223,11 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             readReplicasCount,
             session,
             CreateBackupLambda(driver, pathToBackup),
-            CreateRestoreLambda(driver, pathToBackup),
-            IsOlap
+            CreateRestoreLambda(driver, pathToBackup)
         );
     }
 
-    Y_UNIT_TEST_TWIN(RestoreTableSplitBoundaries, IsOlap) {
-        if (IsOlap) {
-            return; // TODO: fix me issue@26498
-        }
+    Y_UNIT_TEST(RestoreTableSplitBoundaries) {
         TKikimrWithGrpcAndRootSchema server;
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
         TTableClient tableClient(driver);
@@ -2216,15 +2243,11 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             partitions,
             session,
             CreateBackupLambda(driver, pathToBackup),
-            CreateRestoreLambda(driver, pathToBackup),
-            IsOlap
+            CreateRestoreLambda(driver, pathToBackup)
         );
     }
 
-    Y_UNIT_TEST_TWIN(ImportDataShouldHandleErrors, IsOlap) {
-        if (IsOlap) {
-            return; // TODO: fix me issue@26498
-        }
+    Y_UNIT_TEST(ImportDataShouldHandleErrors) {
         using namespace fmt::literals;
         TKikimrWithGrpcAndRootSchema server;
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
@@ -2241,12 +2264,9 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
                     Key Uint32,
                     Value Utf8,
                     PRIMARY KEY (Key)
-                ) WITH (
-                    STORE = {store}
-                );
+                )
             )",
-            "table"_a = table,
-            "store"_a = IsOlap ? "COLUMN" : "ROW"
+            "table"_a = table
         ));
         ExecuteDataModificationQuery(session, Sprintf(R"(
                 UPSERT INTO `%s` (Key, Value)
@@ -2273,10 +2293,8 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
                     Key Utf8,
                     Value Uint32,
                     PRIMARY KEY (Key)
-                ) WITH (
-                    STORE = {store}
                 );
-            )", "table"_a = table, "store"_a = IsOlap ? "COLUMN" : "ROW"
+            )", "table"_a = table
         ));
         UNIT_ASSERT_EXCEPTION_SATISFIES(backupClient.Restore(pathToBackup, dbPath, opts), TYdbErrorException,
             [](const TYdbErrorException& e) { return e.GetStatus().GetStatus() == EStatus::BAD_REQUEST; });
@@ -2289,10 +2307,8 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
                 CREATE TABLE `{table}` (
                     Key Uint32,
                     PRIMARY KEY (Key)
-                ) WITH (
-                    STORE = {store}
-                );
-            )", "table"_a = table, "store"_a = IsOlap ? "COLUMN" : "ROW"
+                )
+            )", "table"_a = table
         ));
         UNIT_ASSERT_EXCEPTION_SATISFIES(backupClient.Restore(pathToBackup, dbPath, opts), TYdbErrorException,
             [](const TYdbErrorException& e) { return e.GetStatus().GetStatus() == EStatus::BAD_REQUEST; });
@@ -2307,19 +2323,14 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
                     Value Utf8,
                     PRIMARY KEY (Key),
                     INDEX Idx GLOBAL SYNC ON (Value)
-                ) WITH (
-                    STORE = {store}
-                );
-            )", "table"_a = table, "store"_a = IsOlap ? "COLUMN" : "ROW"
+                )
+            )", "table"_a = table
         ));
         UNIT_ASSERT_EXCEPTION_SATISFIES(backupClient.Restore(pathToBackup, dbPath, opts), TYdbErrorException,
             [](const TYdbErrorException& e) { return e.GetStatus().GetStatus() == EStatus::SCHEME_ERROR; });
     }
 
-    Y_UNIT_TEST_TWIN(BackupUuid, IsOlap) {
-        if (IsOlap) {
-            return; // TODO: fix me issue@26498
-        }
+    Y_UNIT_TEST(BackupUuid) {
         using namespace fmt::literals;
         TKikimrWithGrpcAndRootSchema server;
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
@@ -2336,12 +2347,9 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
                     Key Uuid,
                     Value Utf8,
                     PRIMARY KEY (Key)
-                ) WITH (
-                    STORE = {store}
-                );
+                )
             )",
-            "table"_a = table,
-            "store"_a = IsOlap ? "COLUMN" : "ROW"
+            "table"_a = table
         ));
 
         std::vector<std::string> uuids = {
@@ -2426,7 +2434,6 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
     Y_UNIT_TEST(RestoreViewWithNamedExpressions) {
         TKikimrWithGrpcAndRootSchema server;
-        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableViews(true);
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
         NQuery::TQueryClient queryClient(driver);
         auto session = queryClient.GetSession().ExtractValueSync().GetSession();
@@ -2447,7 +2454,6 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
     Y_UNIT_TEST(RestoreViewSelectFromIndex) {
         TKikimrWithGrpcAndRootSchema server;
-        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableViews(true);
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
         NQuery::TQueryClient queryClient(driver);
         auto session = queryClient.GetSession().ExtractValueSync().GetSession();
@@ -2466,12 +2472,8 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         );
     }
 
-    Y_UNIT_TEST_TWIN(RestoreViewReferenceTable, IsOlap) {
-        if (IsOlap) {
-            return; // TODO: fix me issue@26498
-        }
+    Y_UNIT_TEST(RestoreViewReferenceTable) {
         TKikimrWithGrpcAndRootSchema server;
-        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableViews(true);
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
         NQuery::TQueryClient queryClient(driver);
         auto session = queryClient.GetSession().ExtractValueSync().GetSession();
@@ -2487,14 +2489,11 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             session,
             CreateBackupLambda(driver, pathToBackup),
             CreateRestoreLambda(driver, pathToBackup),
-            IsOlap
+            false
         );
     }
 
-    Y_UNIT_TEST_TWIN(RestoreViewToDifferentDatabase, IsOlap) {
-        if (IsOlap) {
-            return; // TODO: fix me issue@26498
-        }
+    Y_UNIT_TEST(RestoreViewToDifferentDatabase) {
         TBasicKikimrWithGrpcAndRootSchema<TTenantsTestSettings> server;
         server.GetRuntime()->GetAppData().FeatureFlags.SetEnableShowCreate(true);
 
@@ -2524,9 +2523,6 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         TTempDir tempDir;
         const auto& pathToBackup = tempDir.Path();
 
-        // query client lives on the node 0, so it is enough to enable the views only on it
-        server.GetRuntime()->GetAppData(0).FeatureFlags.SetEnableViews(true);
-
         const TString view = JoinFsPaths(alice, "view");
         const TString table = JoinFsPaths(alice, "a", "b", "c", "table");
         const TString restoredView = JoinFsPaths(bob, "view");
@@ -2539,13 +2535,12 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             bobSession,
             CreateBackupLambda(aliceDriver, pathToBackup, alice, alice),
             CreateRestoreLambda(bobDriver, pathToBackup, bob),
-            IsOlap
+            false
         );
     }
 
     Y_UNIT_TEST(RestoreViewDependentOnAnotherView) {
         TKikimrWithGrpcAndRootSchema server;
-        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableViews(true);
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
         NQuery::TQueryClient queryClient(driver);
         auto session = queryClient.GetSession().ExtractValueSync().GetSession();
@@ -2564,10 +2559,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         );
     }
 
-    Y_UNIT_TEST_TWIN(RestoreViewRelativeReferences, IsOlap) {
-        if (IsOlap) {
-            return; // TODO: fix me issue@26498
-        }
+    Y_UNIT_TEST(RestoreViewRelativeReferences) {
         TKikimrWithGrpcAndRootSchema server;
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
         NQuery::TQueryClient queryClient(driver);
@@ -2586,7 +2578,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             session,
             CreateBackupLambda(driver, pathToBackup, "/Root/a/b/c"),
             CreateRestoreLambda(driver, pathToBackup, "/Root/restore/point"),
-            IsOlap
+            false
         );
     }
 
@@ -2655,11 +2647,11 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         );
     }
 
-    void TestTableBackupRestore(const bool isOlap) {
+    void TestTableBackupRestore() {
         TKikimrWithGrpcAndRootSchema server;
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
-        TTableClient tableClient(driver);
-        auto session = tableClient.GetSession().ExtractValueSync().GetSession();
+        NQuery::TQueryClient queryClient(driver);
+        auto session = CreateSession(queryClient);
         TTempDir tempDir;
         const auto& pathToBackup = tempDir.Path();
 
@@ -2670,11 +2662,11 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             session,
             CreateBackupLambda(driver, pathToBackup),
             CreateRestoreLambda(driver, pathToBackup),
-            isOlap
+            false
         );
     }
 
-    void TestTableWithIndexBackupRestore(const bool isOlap, NKikimrSchemeOp::EIndexType indexType = NKikimrSchemeOp::EIndexTypeGlobal, bool prefix = false) {
+    void TestTableWithIndexBackupRestore(NKikimrSchemeOp::EIndexType indexType = NKikimrSchemeOp::EIndexTypeGlobal, bool prefix = false) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableFeatureFlags()->SetEnableVectorIndex(true);
         appConfig.MutableFeatureFlags()->SetEnableAddUniqueIndex(true);
@@ -2696,13 +2688,12 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             prefix,
             session,
             CreateBackupLambda(driver, pathToBackup),
-            CreateRestoreLambda(driver, pathToBackup),
-            isOlap
+            CreateRestoreLambda(driver, pathToBackup)
         );
         CheckBuildIndexOperationsCleared(driver);
     }
 
-    void TestTableWithSerialBackupRestore(const bool isOlap) {
+    void TestTableWithSerialBackupRestore() {
         TKikimrWithGrpcAndRootSchema server;
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
         TTableClient tableClient(driver);
@@ -2715,8 +2706,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             table,
             session,
             CreateBackupLambda(driver, pathToBackup),
-            CreateRestoreLambda(driver, pathToBackup),
-            isOlap
+            CreateRestoreLambda(driver, pathToBackup)
         );
     }
 
@@ -2738,7 +2728,6 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
     void TestViewBackupRestore() {
         TKikimrWithGrpcAndRootSchema server;
-        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableViews(true);
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
         NQuery::TQueryClient queryClient(driver);
         auto session = queryClient.GetSession().ExtractValueSync().GetSession();
@@ -2792,7 +2781,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         );
     }
 
-    void TestChangefeedBackupRestore(const bool isOlap) {
+    void TestChangefeedBackupRestore() {
         TKikimrWithGrpcAndRootSchema server;
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
         TTableClient tableClient(driver);
@@ -2809,12 +2798,11 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             topicClient,
             CreateBackupLambda(driver, pathToBackup),
             CreateRestoreLambda(driver, pathToBackup),
-            {"a", "b", "c"},
-            isOlap
+            {"a", "b", "c"}
         );
     }
 
-    void TestReplicationBackupRestore(const bool isOlap, const TMaybe<ESecretType>& tokenSecretType) {
+    void TestReplicationBackupRestore(const TMaybe<ESecretType>& tokenSecretType) {
         TKikimrWithGrpcAndRootSchema server;
         server.GetRuntime()->GetAppData().FeatureFlags.SetEnableSchemaSecrets(tokenSecretType == ESecretType::SecretTypeScheme);
 
@@ -2844,7 +2832,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             endpoint, session, replicationClient,
             CreateBackupLambda(driver, pathToBackup),
             CreateRestoreLambda(driver, pathToBackup),
-            tokenSecretType, isOlap
+            tokenSecretType
         );
     }
 
@@ -2889,10 +2877,8 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         );
     }
 
-    Y_UNIT_TEST_QUAD(RestoreReplicationWithoutSecret, IsOlap, UseSchemeSecret) {
-        if (IsOlap) {
-            return; // TODO: fix me issue@26498
-        }
+
+    Y_UNIT_TEST_TWIN(RestoreReplicationWithoutSecret, UseSchemeSecret) {
         using namespace fmt::literals;
         TKikimrWithGrpcAndRootSchema server;
 
@@ -2918,7 +2904,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         } else {
             ExecuteQuery(session, "CREATE OBJECT `secret` (TYPE SECRET) WITH (value = 'root@builtin');", true);
         }
-        ExecuteQuery(session, fmt::format("CREATE TABLE `/Root/table` (k Uint32, v Utf8, PRIMARY KEY (k)) WITH (STORE = {store});", "store"_a = IsOlap ? "COLUMN" : "ROW"), true);
+        ExecuteQuery(session, "CREATE TABLE `/Root/table` (k Uint32, v Utf8, PRIMARY KEY (k));", true);
         ExecuteQuery(session,
             Sprintf(R"(
                 CREATE ASYNC REPLICATION `/Root/replication` FOR
@@ -3111,19 +3097,16 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         }
     }
 
-    Y_UNIT_TEST_ALL_PROTO_ENUM_VALUES(TestAllSchemeObjectTypes, NKikimrSchemeOp::EPathType, IsOlap) {
-        if (IsOlap) {
-            return; // TODO: fix me issue@26498
-        }
+    Y_UNIT_TEST_ALL_PROTO_ENUM_VALUES(TestAllSchemeObjectTypes, NKikimrSchemeOp::EPathType) {
         using namespace NKikimrSchemeOp;
 
         switch (Value) {
             case EPathTypeTable:
-                return TestTableBackupRestore(IsOlap);
+                return TestTableBackupRestore();
             case EPathTypeTableIndex:
-                return TestTableWithIndexBackupRestore(IsOlap);
+                return TestTableWithIndexBackupRestore();
             case EPathTypeSequence:
-                return TestTableWithSerialBackupRestore(IsOlap);
+                return TestTableWithSerialBackupRestore();
             case EPathTypeDir:
                 return TestDirectoryBackupRestore();
             case EPathTypePersQueueGroup:
@@ -3134,10 +3117,10 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             case EPathTypeView:
                 return TestViewBackupRestore();
             case EPathTypeCdcStream:
-                return TestChangefeedBackupRestore(IsOlap);
+                return TestChangefeedBackupRestore();
             case EPathTypeReplication: {
-                TestReplicationBackupRestore(IsOlap, ESecretType::SecretTypeOld);
-                TestReplicationBackupRestore(IsOlap, ESecretType::SecretTypeScheme);
+                TestReplicationBackupRestore(ESecretType::SecretTypeOld);
+                TestReplicationBackupRestore(ESecretType::SecretTypeScheme);
                 return;
             }
             case EPathTypeTransfer:
@@ -3181,10 +3164,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         }
     }
 
-    Y_UNIT_TEST_ALL_PROTO_ENUM_VALUES(TestAllIndexTypes, NKikimrSchemeOp::EIndexType, IsOlap) {
-        if (IsOlap) {
-            return; // TODO: fix me issue@26498
-        }
+    Y_UNIT_TEST_ALL_PROTO_ENUM_VALUES(TestAllIndexTypes, NKikimrSchemeOp::EIndexType) {
         using namespace NKikimrSchemeOp;
 
         switch (Value) {
@@ -3192,8 +3172,9 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             case EIndexTypeGlobalAsync:
             case EIndexTypeGlobalUnique:
             case EIndexTypeGlobalVectorKmeansTree:
-            case EIndexTypeGlobalFulltext:
-                return TestTableWithIndexBackupRestore(IsOlap, Value);
+            case EIndexTypeGlobalFulltextPlain:
+            case EIndexTypeGlobalFulltextRelevance:
+                return TestTableWithIndexBackupRestore(Value);
             case EIndexTypeInvalid:
                 break; // not applicable
             default:
@@ -3202,9 +3183,6 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
     }
 
     Y_UNIT_TEST_TWIN(TestReplaceRestoreOption, IsOlap) {
-        if (IsOlap) {
-            return; // TODO: fix me issue@26498
-        }
         NKikimrConfig::TAppConfig config;
         config.MutableFeatureFlags()->SetEnableShowCreate(true);
         config.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
@@ -3262,7 +3240,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         const auto restorationSettings = NDump::TRestoreSettings().Replace(true);
 
         cleanup();
-        TestTableContentIsPreserved(table, tableSession,
+        TestTableContentIsPreserved(table, querySession,
             CreateBackupLambda(driver, pathToBackup), CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings), IsOlap, restorationSettings
         );
 
@@ -3300,7 +3278,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
         cleanup();
         TestReplicationSettingsArePreserved(endpoint, querySession, replicationClient,
-            CreateBackupLambda(driver, pathToBackup), CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings), ESecretType::SecretTypeOld, IsOlap, restorationSettings
+            CreateBackupLambda(driver, pathToBackup), CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings), ESecretType::SecretTypeOld, restorationSettings
         );
 
         cleanup();
@@ -3314,10 +3292,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         );
     }
 
-    Y_UNIT_TEST_TWIN(TestReplaceRestoreOptionOnNonExistingSchemeObjects, IsOlap) {
-        if (IsOlap) {
-            return; // TODO: fix me issue@26498
-        }
+    Y_UNIT_TEST(TestReplaceRestoreOptionOnNonExistingSchemeObjects) {
         NKikimrConfig::TAppConfig config;
         config.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
         config.MutableFeatureFlags()->SetEnableShowCreate(true);
@@ -3370,8 +3345,8 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         const auto restorationSettings = NDump::TRestoreSettings().Replace(true);
 
         cleanup();
-        TestTableContentIsPreserved(table, tableSession,
-            CreateBackupLambda(driver, pathToBackup), CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings), IsOlap
+        TestTableContentIsPreserved(table, querySession,
+            CreateBackupLambda(driver, pathToBackup), CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings), false
         );
 
         cleanup();
@@ -3408,26 +3383,20 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
         cleanup();
         TestReplicationSettingsArePreserved(endpoint, querySession, replicationClient,
-            CreateBackupLambda(driver, pathToBackup), CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings), ESecretType::SecretTypeOld, IsOlap
+            CreateBackupLambda(driver, pathToBackup), CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings), ESecretType::SecretTypeOld
         );
 
         cleanup();
         TestReplicationSettingsArePreserved(endpoint, querySession, replicationClient,
-            CreateBackupLambda(driver, pathToBackup), CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings), ESecretType::SecretTypeScheme, IsOlap
+            CreateBackupLambda(driver, pathToBackup), CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings), ESecretType::SecretTypeScheme
         );
     }
 
-    Y_UNIT_TEST_TWIN(PrefixedVectorIndex, IsOlap) {
-        if (IsOlap) {
-            return; // TODO: fix me issue@26498
-        }
-        TestTableWithIndexBackupRestore(IsOlap, NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, true);
+    Y_UNIT_TEST(PrefixedVectorIndex) {
+        TestTableWithIndexBackupRestore(NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, true);
     }
 
-    Y_UNIT_TEST_ALL_PROTO_ENUM_VALUES(TestAllPrimitiveTypes, Ydb::Type::PrimitiveTypeId, IsOlap) {
-        if (IsOlap) {
-            return; // TODO: fix me issue@26498
-        }
+    Y_UNIT_TEST_ALL_PROTO_ENUM_VALUES(TestAllPrimitiveTypes, Ydb::Type::PrimitiveTypeId) {
         if (DontTestThisType(Value)) {
             return;
         }
@@ -3443,12 +3412,12 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             session,
             CreateBackupLambda(driver, pathToBackup),
             CreateRestoreLambda(driver, pathToBackup),
-            IsOlap
+            false
         );
     }
 
     Y_UNIT_TEST(RestoreReplicationThatDoesNotUseSecret) {
-        TestReplicationBackupRestore(false, /* tokenSecretType */ Nothing());
+        TestReplicationBackupRestore(/* tokenSecretType */ Nothing());
     }
 
     Y_UNIT_TEST(BackupRestoreTransfer_UseTokenWithOldSecret) {
@@ -3612,10 +3581,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         });
     }
 
-    Y_UNIT_TEST_QUAD(ReplicasAreNotBackedUp, IsOlap, UseSchemeSecret) {
-        if (IsOlap) {
-            return; // TODO: fix me issue@26498
-        }
+    Y_UNIT_TEST_TWIN(ReplicasAreNotBackedUp, UseSchemeSecret) {
         using namespace fmt::literals;
         TKikimrWithGrpcAndRootSchema server;
 
@@ -3641,7 +3607,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         } else {
             ExecuteQuery(session, "CREATE OBJECT `secret` (TYPE SECRET) WITH (value = 'root@builtin');", true);
         }
-        ExecuteQuery(session, fmt::format("CREATE TABLE `/Root/table` (k Uint32, v Utf8, PRIMARY KEY (k)) WITH (STORE = {store});", "store"_a = IsOlap ? "COLUMN" : "ROW"), true);
+        ExecuteQuery(session, fmt::format("CREATE TABLE `/Root/table` (k Uint32, v Utf8, PRIMARY KEY (k));"), true);
         ExecuteQuery(session,
             Sprintf(R"(
                 CREATE ASYNC REPLICATION `/Root/replication` FOR
@@ -3763,7 +3729,6 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             runtime.SetLogPriority(NKikimrServices::EXPORT, NLog::EPriority::PRI_DEBUG);
             runtime.SetLogPriority(NKikimrServices::IMPORT, NLog::EPriority::PRI_DEBUG);
             runtime.GetAppData().DataShardExportFactory = &DataShardExportFactory;
-            runtime.GetAppData().FeatureFlags.SetEnableViews(true);
             runtime.GetAppData().FeatureFlags.SetEnableViewExport(true);
         }
 
@@ -3808,9 +3773,14 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
 
     bool FilterSupportedSchemeObjects(const NYdb::NScheme::TSchemeEntry& entry) {
         return IsIn({
+            NYdb::NScheme::ESchemeEntryType::ColumnTable,
             NYdb::NScheme::ESchemeEntryType::Table,
             NYdb::NScheme::ESchemeEntryType::View,
+            NYdb::NScheme::ESchemeEntryType::Topic,
             NYdb::NScheme::ESchemeEntryType::Replication,
+            NYdb::NScheme::ESchemeEntryType::Transfer,
+            NYdb::NScheme::ESchemeEntryType::ExternalDataSource,
+            NYdb::NScheme::ESchemeEntryType::ExternalTable,
         }, entry.Type) && entry.Name != "replica"; // Hack to avoid replica table export
     }
 
@@ -3909,10 +3879,7 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
         };
     }
 
-    Y_UNIT_TEST_TWIN(RestoreTablePartitioningSettings, IsOlap) {
-        if (IsOlap) {
-            return; // TODO: fix me issue@26498
-        }
+    Y_UNIT_TEST(RestoreTablePartitioningSettings) {
         TS3TestEnv testEnv;
         constexpr const char* table = "/Root/table";
         constexpr ui32 minPartitions = 10;
@@ -3922,15 +3889,11 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             minPartitions,
             testEnv.GetTableSession(),
             CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
-            CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "table" }),
-            IsOlap
+            CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "table" })
         );
     }
 
-    Y_UNIT_TEST_TWIN(RestoreIndexTablePartitioningSettings, IsOlap) {
-        if (IsOlap) {
-            return; // TODO: fix me issue@26498
-        }
+    Y_UNIT_TEST(RestoreIndexTablePartitioningSettings) {
         TS3TestEnv testEnv;
         constexpr const char* table = "/Root/table";
         constexpr const char* index = "byValue";
@@ -3942,15 +3905,11 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             minIndexPartitions,
             testEnv.GetTableSession(),
             CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
-            CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "table" }),
-            IsOlap
+            CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "table" })
         );
     }
 
-    Y_UNIT_TEST_TWIN(RestoreIndexTableReadReplicasSettings, IsOlap) {
-        if (IsOlap) {
-            return; // TODO: fix me issue@26498
-        }
+    Y_UNIT_TEST(RestoreIndexTableReadReplicasSettings) {
         TS3TestEnv testEnv;
         constexpr const char* table = "/Root/table";
         constexpr const char* index = "byValue";
@@ -3964,15 +3923,11 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             readReplicasCount,
             testEnv.GetTableSession(),
             CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
-            CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "table" }),
-            IsOlap
+            CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "table" })
         );
     }
 
-    Y_UNIT_TEST_TWIN(RestoreTableSplitBoundaries, IsOlap) {
-        if (IsOlap) {
-            return; // TODO: fix me issue@26498
-        }
+    Y_UNIT_TEST(RestoreTableSplitBoundaries) {
         TS3TestEnv testEnv;
         constexpr const char* table = "/Root/table";
         constexpr ui64 partitions = 10;
@@ -3982,12 +3937,11 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             partitions,
             testEnv.GetTableSession(),
             CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
-            CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "table" }),
-            IsOlap
+            CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "table" })
         );
     }
 
-    Y_UNIT_TEST_TWIN(RestoreIndexTableSplitBoundaries, IsOlap) {
+    Y_UNIT_TEST(RestoreIndexTableSplitBoundaries) {
         TS3TestEnv testEnv;
         constexpr const char* table = "/Root/table";
         constexpr const char* index = "byValue";
@@ -4122,10 +4076,7 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
         );
     }
 
-    Y_UNIT_TEST_TWIN(RestoreViewReferenceTable, IsOlap) {
-        if (IsOlap) {
-            return; // TODO: fix me issue@26498
-        }
+    Y_UNIT_TEST(RestoreViewReferenceTable) {
         TS3TestEnv testEnv;
         constexpr const char* view = "/Root/view";
         constexpr const char* table = "/Root/a/b/c/table";
@@ -4136,7 +4087,7 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             testEnv.GetQuerySession(),
             CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
             CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "view", "a/b/c/table" }),
-            IsOlap
+            false
         );
     }
 
@@ -4190,20 +4141,20 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
 
     // TO DO: test view restoration to a different database
 
-    void TestTableBackupRestore(const bool isOlap) {
+    void TestTableBackupRestore() {
         TS3TestEnv testEnv;
         constexpr const char* table = "/Root/table";
 
         TestTableContentIsPreserved(
             table,
-            testEnv.GetTableSession(),
+            testEnv.GetQuerySession(),
             CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
             CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "table" }),
-            isOlap
+            false
         );
     }
 
-    void TestTableWithIndexBackupRestore(const bool isOlap, NKikimrSchemeOp::EIndexType indexType = NKikimrSchemeOp::EIndexTypeGlobal, bool prefix = false) {
+    void TestTableWithIndexBackupRestore(NKikimrSchemeOp::EIndexType indexType = NKikimrSchemeOp::EIndexTypeGlobal, bool prefix = false) {
         TS3TestEnv testEnv;
         constexpr const char* table = "/Root/table";
         constexpr const char* index = "value_idx";
@@ -4215,12 +4166,11 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             prefix,
             testEnv.GetTableSession(),
             CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
-            CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "table" }),
-            isOlap
+            CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "table" })
         );
     }
 
-    void TestTableWithSerialBackupRestore(const bool isOlap) {
+    void TestTableWithSerialBackupRestore() {
         TS3TestEnv testEnv;
         constexpr const char* table = "/Root/table";
 
@@ -4228,8 +4178,7 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             table,
             testEnv.GetTableSession(),
             CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
-            CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "table" }),
-            isOlap
+            CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "table" })
         );
     }
 
@@ -4245,7 +4194,7 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
         );
     }
 
-    void TestChangefeedBackupRestore(const bool isOlap) {
+    void TestChangefeedBackupRestore() {
         TS3TestEnv testEnv;
         NTopic::TTopicClient topicClient(testEnv.GetDriver());
 
@@ -4259,12 +4208,11 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             topicClient,
             CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
             CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "table" }),
-            {"a", "b", "c"},
-            isOlap
+            {"a", "b", "c"}
         );
     }
 
-    void TestReplicationBackupRestore(const bool isOlap, const TMaybe<ESecretType>& tokenSecretType) {
+    void TestReplicationBackupRestore( const TMaybe<ESecretType>& tokenSecretType) {
         TS3TestEnv testEnv;
         auto& featureFlags = testEnv.GetServer().GetRuntime()->GetAppData().FeatureFlags;
         featureFlags.SetEnableSchemaSecrets(tokenSecretType == ESecretType::SecretTypeScheme);
@@ -4294,31 +4242,146 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             replicationClient,
             CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
             CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), {"replication"}),
-            tokenSecretType, isOlap
+            tokenSecretType
         );
 
     }
 
-    Y_UNIT_TEST_ALL_PROTO_ENUM_VALUES(TestAllSchemeObjectTypes, NKikimrSchemeOp::EPathType, IsOlap) {
-        if (IsOlap) {
-            return; // TODO: fix me issue@26498
+    void TestTransferBackupRestore(const TMaybe<ESecretType>& tokenSecretType) {
+        TS3TestEnv testEnv;
+        auto& featureFlags = testEnv.GetServer().GetRuntime()->GetAppData().FeatureFlags;
+        featureFlags.SetEnableSchemaSecrets(tokenSecretType == ESecretType::SecretTypeScheme);
+
+        const auto endpoint = Sprintf("localhost:%u", testEnv.GetServer().GetPort());
+        auto driverConfig = TDriverConfig().SetEndpoint(endpoint).SetDatabase("/Root");
+        if (tokenSecretType) {
+            driverConfig.SetAuthToken("root@builtin");
         }
+        auto driver = TDriver(driverConfig);
+        TSchemeClient schemeClient(driver);
+        NQuery::TQueryClient queryClient(driver);
+        auto session = queryClient.GetSession().ExtractValueSync().GetSession();
+        TReplicationClient replicationClient(driver);
+
+        if (tokenSecretType) {
+            TPermissions permissions("root@builtin", {"ydb.generic.full"});
+            const auto result = schemeClient.ModifyPermissions("/Root",
+                TModifyPermissionsSettings().AddGrantPermissions(permissions)
+            ).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        TTransferTestConfig config;
+        config.SecretType = tokenSecretType;
+
+        TTempDir tempDir;
+
+        TestTransferSettingsArePreserved(
+            endpoint,
+            session,
+            replicationClient,
+            CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
+            CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), {"test_transfer", "test_topic"}),
+            tempDir.Path(),
+            config
+        );
+    }
+
+    void TestExternalTableBackupRestore() {
+        TS3TestEnv testEnv;
+        auto& featureFlags = testEnv.GetServer().GetRuntime()->GetAppData().FeatureFlags;
+        featureFlags.SetEnableExternalDataSources(true);
+
+        const auto endpoint = Sprintf("localhost:%u", testEnv.GetServer().GetPort());
+        auto driverConfig = TDriverConfig().SetEndpoint(endpoint).SetDatabase("/Root");
+
+        auto driver = TDriver(driverConfig);
+        TTableClient tableClient(driver);
+        auto tableSession = tableClient.GetSession().ExtractValueSync().GetSession();
+        NQuery::TQueryClient queryClient(driver);
+        auto querySession = queryClient.GetSession().ExtractValueSync().GetSession();
+
+        TestExternalTableSettingsArePreserved(
+            "/Root/externalTable",
+            "/Root/externalDataSource",
+            tableSession,
+            querySession,
+            CreateBackupLambda(driver, testEnv.GetS3Port()),
+            CreateRestoreLambda(driver, testEnv.GetS3Port(), {"externalTable", "externalDataSource"})
+        );
+    }
+
+    void TestExternalDataSourceBackupRestore(const TMaybe<ESecretType>& secretType, EAuthType authType) {
+        TS3TestEnv testEnv;
+        auto& featureFlags = testEnv.GetServer().GetRuntime()->GetAppData().FeatureFlags;
+        featureFlags.SetEnableExternalDataSources(true);
+        featureFlags.SetEnableSchemaSecrets(secretType == ESecretType::SecretTypeScheme);
+
+        const auto endpoint = Sprintf("localhost:%u", testEnv.GetServer().GetPort());
+        auto driverConfig = TDriverConfig().SetEndpoint(endpoint).SetDatabase("/Root");
+        if (secretType) {
+            driverConfig.SetAuthToken("root@builtin");
+        }
+
+        auto driver = TDriver(driverConfig);
+        TSchemeClient schemeClient(driver);
+        TTableClient tableClient(driver);
+        auto tableSession = tableClient.GetSession().ExtractValueSync().GetSession();
+        NQuery::TQueryClient queryClient(driver);
+        auto querySession = queryClient.GetSession().ExtractValueSync().GetSession();
+
+        if (secretType) {
+            TPermissions permissions("root@builtin", {"ydb.generic.full"});
+            const auto result = schemeClient.ModifyPermissions("/Root",
+                TModifyPermissionsSettings().AddGrantPermissions(permissions)
+            ).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        TestExternalDataSourceSettingsArePreserved(
+            "/Root/externalDataSource",
+            tableSession,
+            querySession,
+            CreateBackupLambda(driver, testEnv.GetS3Port()),
+            CreateRestoreLambda(driver, testEnv.GetS3Port(), {"externalDataSource"}),
+            NDump::TRestoreSettings{},
+            secretType,
+            authType
+        );
+    }
+
+    void TestTopicBackupRestoreWithoutData() {
+        TS3TestEnv testEnv;
+        NTopic::TTopicClient topicClient(testEnv.GetDriver());
+        constexpr const char* topic = "/Root/topic";
+
+        TestTopicSettingsArePreserved(
+            topic,
+            testEnv.GetQuerySession(),
+            topicClient,
+            CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
+            CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "topic" })
+        );
+    }
+
+    Y_UNIT_TEST_ALL_PROTO_ENUM_VALUES(TestAllSchemeObjectTypes, NKikimrSchemeOp::EPathType) {
         using namespace NKikimrSchemeOp;
 
         switch (Value) {
             case EPathTypeTable:
-                TestTableBackupRestore(IsOlap);
+                TestTableBackupRestore();
                 break;
             case EPathTypeTableIndex:
-                TestTableWithIndexBackupRestore(IsOlap);
+                TestTableWithIndexBackupRestore();
                 break;
             case EPathTypeSequence:
-                TestTableWithSerialBackupRestore(IsOlap);
+                TestTableWithSerialBackupRestore();
                 break;
             case EPathTypeDir:
                 break; // https://github.com/ydb-platform/ydb/issues/10430
             case EPathTypePersQueueGroup:
-                break; // https://github.com/ydb-platform/ydb/issues/10431
+                TestTopicBackupRestoreWithoutData();
+                break;
             case EPathTypeSubDomain:
             case EPathTypeExtSubDomain:
                 break; // https://github.com/ydb-platform/ydb/issues/10432
@@ -4326,18 +4389,26 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
                 TestViewBackupRestore();
                 break;
             case EPathTypeCdcStream:
-                TestChangefeedBackupRestore(IsOlap);
+                TestChangefeedBackupRestore();
                 break;
             case EPathTypeReplication:
-                TestReplicationBackupRestore(IsOlap, ESecretType::SecretTypeOld);
-                TestReplicationBackupRestore(IsOlap, ESecretType::SecretTypeScheme);
+                TestReplicationBackupRestore(ESecretType::SecretTypeOld);
+                TestReplicationBackupRestore(ESecretType::SecretTypeScheme);
                 return;
             case EPathTypeTransfer:
-                break; // https://github.com/ydb-platform/ydb/issues/10436
+                TestTransferBackupRestore(ESecretType::SecretTypeOld);
+                TestTransferBackupRestore(ESecretType::SecretTypeScheme);
+                break;
             case EPathTypeExternalTable:
-                break; // https://github.com/ydb-platform/ydb/issues/10438
-            case EPathTypeExternalDataSource:
-                break; // https://github.com/ydb-platform/ydb/issues/10439
+                return TestExternalTableBackupRestore();
+            case EPathTypeExternalDataSource: {
+                TestExternalDataSourceBackupRestore(/* secretType */ Nothing(), EAuthType::AuthTypeNone);
+                TestExternalDataSourceBackupRestore(ESecretType::SecretTypeOld, EAuthType::AuthTypeToken);
+                TestExternalDataSourceBackupRestore(ESecretType::SecretTypeScheme, EAuthType::AuthTypeToken);
+                TestExternalDataSourceBackupRestore(ESecretType::SecretTypeOld, EAuthType::AuthTypeAws);
+                TestExternalDataSourceBackupRestore(ESecretType::SecretTypeScheme, EAuthType::AuthTypeAws);
+                return;
+            }
             case EPathTypeResourcePool:
                 break; // https://github.com/ydb-platform/ydb/issues/10440
             case EPathTypeKesus:
@@ -4364,10 +4435,7 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
         }
     }
 
-    Y_UNIT_TEST_ALL_PROTO_ENUM_VALUES(TestAllIndexTypes, NKikimrSchemeOp::EIndexType, IsOlap) {
-        if (IsOlap) {
-            return; // TODO: fix me issue@26498
-        }
+    Y_UNIT_TEST_ALL_PROTO_ENUM_VALUES(TestAllIndexTypes, NKikimrSchemeOp::EIndexType) {
         using namespace NKikimrSchemeOp;
 
         switch (Value) {
@@ -4375,8 +4443,9 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             case EIndexTypeGlobalAsync:
             case EIndexTypeGlobalUnique:
             case EIndexTypeGlobalVectorKmeansTree:
-            case EIndexTypeGlobalFulltext:
-                TestTableWithIndexBackupRestore(IsOlap, Value);
+            case EIndexTypeGlobalFulltextPlain:
+            case EIndexTypeGlobalFulltextRelevance:
+                TestTableWithIndexBackupRestore(Value);
                 break;
             case EIndexTypeInvalid:
                 break; // not applicable
@@ -4385,18 +4454,12 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(PrefixedVectorIndex, IsOlap) {
-        if (IsOlap) {
-            return; // TODO: fix me issue@26498
-        }
-        TestTableWithIndexBackupRestore(IsOlap, NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, true);
+    Y_UNIT_TEST(PrefixedVectorIndex) {
+        TestTableWithIndexBackupRestore(NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, true);
     }
 
-    Y_UNIT_TEST_ALL_PROTO_ENUM_VALUES(TestAllPrimitiveTypes, Ydb::Type::PrimitiveTypeId, IsOlap) {
-        if (IsOlap) {
-            return; // TODO: fix me issue@26498
-        }
-        if (DontTestThisType(Value)) {
+    Y_UNIT_TEST_ALL_PROTO_ENUM_VALUES_WITH_FLAG(TestAllPrimitiveTypes, Ydb::Type::PrimitiveTypeId, IsOlap) {
+        if (DontTestThisType(Value, IsOlap)) {
             return;
         }
         TS3TestEnv testEnv;
@@ -4412,9 +4475,15 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
 
     Y_UNIT_TEST(ExcludeNonSupportedObjectsInExport) {
         TS3TestEnv testEnv;
-
+        testEnv.GetServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
         // Disable views export
         testEnv.GetServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableViewExport(false);
+        // Disable external data source export
+        TControlBoard::SetValue(
+            0,
+            testEnv.GetServer().GetRuntime()->GetAppData().Icb->BackupControls.S3Controls.EnableExternalDataSourceExport
+        );
+
         // Enable destination prefix in rpc_export
         testEnv.GetServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableEncryptedExport(true);
 
@@ -4455,6 +4524,30 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
                     Key Uint32,
                     Value Utf8,
                     PRIMARY KEY (Key)
+                );
+            )",
+            true
+        );
+
+        ExecuteQuery(
+            querySession,
+            R"(
+                CREATE EXTERNAL DATA SOURCE `DataSource` WITH (
+                    SOURCE_TYPE="ObjectStorage",
+                    LOCATION="https://object_storage_domain/bucket/",
+                    AUTH_METHOD="NONE"
+                );
+            )",
+            true
+        );
+
+        ExecuteQuery(
+            querySession,
+            R"(
+                CREATE EXTERNAL DATA SOURCE `Dir/DataSource` WITH (
+                    SOURCE_TYPE="ObjectStorage",
+                    LOCATION="https://object_storage_domain/bucket/",
+                    AUTH_METHOD="NONE"
                 );
             )",
             true

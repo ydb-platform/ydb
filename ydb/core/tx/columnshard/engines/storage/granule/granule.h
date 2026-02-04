@@ -1,4 +1,6 @@
 #pragma once
+
+#include "portion_interval_tree.h"
 #include "portions_index.h"
 
 #include <ydb/core/base/appdata.h>
@@ -123,9 +125,9 @@ private:
     THashMap<TInsertWriteId, std::shared_ptr<TWrittenPortionInfo>> InsertedPortions;
     THashMap<ui64, std::shared_ptr<TWrittenPortionInfo>> InsertedPortionsById;
     THashMap<TInsertWriteId, std::shared_ptr<TPortionDataAccessor>> InsertedAccessors;
+    std::unique_ptr<PortionIntervalTree::TPortionIntervalTree> IntervalTree;
     mutable std::optional<TGranuleAdditiveSummary> AdditiveSummaryCache;
 
-    void RebuildHardMetrics() const;
     void RebuildAdditiveMetrics() const;
 
     mutable bool AllowInsertionFlag = false;
@@ -361,6 +363,15 @@ public:
 
     const THashMap<ui64, std::shared_ptr<TPortionInfo>>& GetPortions() const {
         return Portions;
+    }
+
+    bool HasPortionIntervalTree() const {
+        return IntervalTree != nullptr;
+    }
+
+    const PortionIntervalTree::TPortionIntervalTree& GetPortionIntervalTreeVerified() const {
+        AFL_VERIFY(HasPortionIntervalTree());
+        return *IntervalTree;
     }
 
     const THashMap<TInsertWriteId, std::shared_ptr<TWrittenPortionInfo>>& GetInsertedPortions() const {

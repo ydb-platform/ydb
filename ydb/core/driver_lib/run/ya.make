@@ -75,7 +75,7 @@ PEERDIR(
     ydb/core/kesus/tablet
     ydb/core/keyvalue
     ydb/core/kqp
-    ydb/core/kqp/federated_query
+    ydb/core/kqp/federated_query/actors
     ydb/core/kqp/finalize_script_service
     ydb/core/kqp/rm_service
     ydb/core/load_test
@@ -186,6 +186,12 @@ PEERDIR(
     yt/yql/providers/yt/comp_nodes/dq/llvm16
     yt/yql/providers/yt/comp_nodes/llvm16
 )
+
+IF (OS_LINUX)
+    PEERDIR(
+        ydb/services/nbs
+    )
+ENDIF()
 
 IF (NOT OS_WINDOWS)
     PEERDIR(

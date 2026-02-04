@@ -30,8 +30,8 @@
 #include <ydb/core/protos/console_tenant.pb.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/kesus/tablet/events.h>
+#include <ydb/core/kqp/federated_query/actors/kqp_federated_query_actors.h>
 #include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
-#include <ydb/core/kqp/federated_query/kqp_federated_query_actors.h>
 #include <ydb/core/security/ticket_parser.h>
 #include <ydb/core/security/ticket_parser_settings.h>
 #include <ydb/core/security/token_manager/token_manager.h>
@@ -191,7 +191,9 @@ namespace Tests {
         std::function<IActor*(const TTokenManagerSettings&)> CreateTokenManager = NKikimr::CreateTokenManager;
         std::shared_ptr<TGrpcServiceFactory> GrpcServiceFactory;
         std::shared_ptr<NYql::NDq::IS3ActorsFactory> S3ActorsFactory = NYql::NDq::CreateDefaultS3ActorsFactory();
+        std::shared_ptr<void> KqpLoggerScope;
 
+        TServerSettings& SetKqpLoggerScope(std::shared_ptr<void> value) { KqpLoggerScope = value; return *this; }
         TServerSettings& SetGrpcPort(ui16 value) { GrpcPort = value; return *this; }
         TServerSettings& SetGrpcHost(TString value) { GrpcHost = value; return *this; }
         TServerSettings& SetGrpcMaxMessageSize(int value) { GrpcMaxMessageSize = value; return *this; }

@@ -25,6 +25,7 @@ YQL_LAST_ABI_VERSION()
 SRCS(
     ut_auth.cpp
     ut_kqp.cpp
+    ut_tli.cpp
     ut_common.cpp
     ut_counters.cpp
     ut_labeled.cpp

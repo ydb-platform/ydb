@@ -87,7 +87,7 @@ static void BenchmarkFixedSizeCoalesce(benchmark::State& state) {
 
 } // namespace NKikimr::NMiniKQL
 
-static void CustomArguments(benchmark::internal::Benchmark* b) {
+static void CustomArguments(benchmark::Benchmark* b) {
     b->Args({9000000, 0});
     b->Args({9000000, 1});
 }

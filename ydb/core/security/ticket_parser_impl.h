@@ -146,7 +146,7 @@ protected:
         TStackVec<TString> AdditionalSIDs;
         bool RefreshRetryableErrorImmediately = false;
         TExternalAuthInfo ExternalAuthInfo;
-        bool IsLowAccessServiceRequestPriority = false;
+        bool IsLowRequestPriority = false;
 
         TTokenRecordBase(const TStringBuf ticket)
             : Ticket(ticket)
@@ -328,7 +328,8 @@ private:
     ::NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsAS;
     ::NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsCacheHit;
     ::NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsCacheMiss;
-    ::NMonitoring::THistogramPtr CounterTicketsBuildTime;
+    ::NMonitoring::THistogramPtr CounterTicketsHighPriorityBuildTime;
+    ::NMonitoring::THistogramPtr CounterTicketsLowPriorityBuildTime;
 
     TDuration RefreshPeriod = TDuration::Seconds(1); // how often do we check for ticket freshness/expiration
     TDuration RefreshTime = TDuration::Hours(1); // within this time we will try to refresh valid ticket
@@ -426,7 +427,7 @@ private:
             }
         }
 
-        if (record.IsLowAccessServiceRequestPriority) {
+        if (record.IsLowRequestPriority) {
             auto& headers = request->Headers;
             headers["x-ya-priority"] = "low";
         }
@@ -1870,10 +1871,15 @@ protected:
         }
         record.RefreshRetryableErrorImmediately = true;
         CounterTicketsSuccess->Inc();
-        CounterTicketsBuildTime->Collect((now - record.InitTime).MilliSeconds());
+        TDuration::TValue ticketBuildTime = (now - record.InitTime).MilliSeconds();
+        if (record.IsLowRequestPriority) {
+            CounterTicketsLowPriorityBuildTime->Collect(ticketBuildTime);
+        } else {
+            CounterTicketsHighPriorityBuildTime->Collect(ticketBuildTime);
+        }
         BLOG_D("Ticket " << record.GetMaskedTicket() << " ("
                     << record.PeerName << ") has now valid token of " << record.Subject);
-        record.IsLowAccessServiceRequestPriority = true;
+        record.IsLowRequestPriority = true;
         RefreshQueue.push({.Key = key, .RefreshTime = record.RefreshTime});
     }
 
@@ -1906,7 +1912,7 @@ protected:
                         << record.PeerName << ") has now permanent error message '" << error.Message << errorLogMessage << "'");
         }
         CounterTicketsErrors->Inc();
-        record.IsLowAccessServiceRequestPriority = true;
+        record.IsLowRequestPriority = true;
         RefreshQueue.push({.Key = key, .RefreshTime = record.RefreshTime});
     }
 
@@ -2139,8 +2145,10 @@ protected:
         CounterTicketsAS = counters->GetCounter("TicketsAS", true);
         CounterTicketsCacheHit = counters->GetCounter("TicketsCacheHit", true);
         CounterTicketsCacheMiss = counters->GetCounter("TicketsCacheMiss", true);
-        CounterTicketsBuildTime = counters->GetHistogram("TicketsBuildTimeMs",
-                                                         NMonitoring::ExplicitHistogram({0, 1, 5, 10, 50, 100, 500, 1000, 2000, 5000, 10000, 30000, 60000}));
+        CounterTicketsHighPriorityBuildTime = counters->GetSubgroup("TicketsBuildTimeMs", "HighPriority")->GetHistogram("TicketsBuildTimeMs",
+            NMonitoring::ExplicitHistogram({0, 1, 5, 10, 50, 100, 500, 1000, 2000, 5000, 10000, 30000, 60000}));
+        CounterTicketsLowPriorityBuildTime = counters->GetSubgroup("TicketsBuildTimeMs", "LowPriority")->GetHistogram("TicketsBuildTimeMs",
+            NMonitoring::ExplicitHistogram({0, 1, 5, 10, 50, 100, 500, 1000, 2000, 5000, 10000, 30000, 60000}));
     }
 
     void FillAccessServiceSettings(NGrpcActorClient::TGrpcClientSettings& settings) {

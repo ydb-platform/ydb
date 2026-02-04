@@ -34,7 +34,7 @@ inline void InvalidToken<antlr4::Token>(IOutputStream& err, const antlr4::Token*
 template <typename TParser, typename TLexer>
 class TProtoASTBuilder4 {
 public:
-    TProtoASTBuilder4(
+    explicit TProtoASTBuilder4(
         TStringBuf data,
         const TString& queryName = "query",
         google::protobuf::Arena* arena = nullptr,

@@ -35,8 +35,8 @@ from ruamel.yaml.loader import Loader as UnsafeLoader  # NOQA
 from ruamel.yaml.comments import CommentedMap, CommentedSeq, C_PRE
 from ruamel.yaml.docinfo import DocInfo, version, Version
 
+from typing import List, Set, Dict, Tuple, Union, Any, Callable, Optional, Text, Type  # NOQA
 if False:  # MYPY
-    from typing import List, Set, Dict, Tuple, Union, Any, Callable, Optional, Text, Type  # NOQA
     from ruamel.yaml.compat import StreamType, StreamTextType, VersionType  # NOQA
     from types import TracebackType
     from pathlib import Path
@@ -94,6 +94,7 @@ class YAML:
         self.Serializer: Any = None
         self.default_flow_style: Any = None
         self.comment_handling = None
+        self.max_depth = 0
         typ_found = 1
         setup_rt = False
         if 'rt' in self.typ:
@@ -646,8 +647,8 @@ class YAML:
             except AttributeError:
                 raise
                 # self.dumper.dispose()  # cyaml
-            delattr(self, '_serializer')
-            delattr(self, '_emitter')
+            delattr(self, '_serializer')  # NOQA
+            delattr(self, '_emitter')  # NOQA
         if transform:
             val = stream.getvalue()
             if self.encoding:
@@ -923,8 +924,8 @@ class YAMLContextManager:
             raise
             # self.dumper.dispose()  # cyaml
         try:
-            delattr(self._yaml, '_serializer')
-            delattr(self._yaml, '_emitter')
+            delattr(self._yaml, '_serializer')  # NOQA
+            delattr(self._yaml, '_emitter')  # NOQA
         except AttributeError:
             raise
         if self._transform:

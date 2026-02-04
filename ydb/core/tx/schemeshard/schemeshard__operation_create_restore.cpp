@@ -23,29 +23,52 @@ struct TRestore {
 
     static void ProposeTx(const TOperationId& opId, TTxState& txState, TOperationContext& context) {
         const auto& pathId = txState.TargetPathId;
-        Y_ABORT_UNLESS(context.SS->Tables.contains(pathId));
-        TTableInfo::TPtr table = context.SS->Tables.at(pathId);
+        const TPath sourcePath = TPath::Init(pathId, context.SS);
+        if (sourcePath->IsTable()) {
+            Y_ABORT_UNLESS(context.SS->Tables.contains(pathId));
+            TTableInfo::TPtr table = context.SS->Tables.at(pathId);
+            return ProposeTableTx(table->RestoreSettings, opId, txState, context);
+        } else {
+            Y_ABORT_UNLESS(context.SS->ColumnTables.contains(pathId));
+            TColumnTableInfo::TPtr table = context.SS->ColumnTables.at(pathId).GetPtr();
+            return ProposeTableTx(table->RestoreSettings, opId, txState, context);
+        }
+    }
 
+    static void ProposeTableTx(const NKikimrSchemeOp::TRestoreTask& restoreSettings, const TOperationId& opId, TTxState& txState, TOperationContext& context) {
+        const auto& pathId = txState.TargetPathId;
+        const TPath sourcePath = TPath::Init(pathId, context.SS);
         const auto seqNo = context.SS->StartRound(txState);
         for (ui32 i = 0; i < txState.Shards.size(); ++i) {
             const auto& idx = txState.Shards[i].Idx;
-            const auto& datashardId = context.SS->ShardInfos[idx].TabletID;
+            const auto& shardId = context.SS->ShardInfos[idx].TabletID;
 
             LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                         "Propose restore"
-                            << ", datashard: " << datashardId
+                            << ", shard: " << shardId
                             << ", opId: " <<  opId
                             << ", at schemeshard: " << context.SS->TabletID());
+        
+            auto fillRestoreTask = [&](auto& restore) {
+                restore.CopyFrom(restoreSettings);
+                restore.SetTableId(pathId.LocalPathId);
+                restore.SetShardNum(i);
+            };
 
-            NKikimrTxDataShard::TFlatSchemeTransaction tx;
-            context.SS->FillSeqNo(tx, seqNo);
-            auto& restore = *tx.MutableRestore();
-            restore.CopyFrom(table->RestoreSettings);
-            restore.SetTableId(pathId.LocalPathId);
-            restore.SetShardNum(i);
-
-            auto ev = context.SS->MakeDataShardProposal(pathId, opId, tx.SerializeAsString(), context.Ctx);
-            context.OnComplete.BindMsgToPipe(opId, datashardId, idx, ev.Release());
+            if (sourcePath->IsTable()) {
+                NKikimrTxDataShard::TFlatSchemeTransaction tx;
+                context.SS->FillSeqNo(tx, seqNo);
+                auto& restore = *tx.MutableRestore();
+                fillRestoreTask(restore);
+                auto ev = context.SS->MakeDataShardProposal(pathId, opId, tx.SerializeAsString(), context.Ctx);
+                context.OnComplete.BindMsgToPipe(opId, shardId, idx, ev.Release());
+            } else {
+                NKikimrTxColumnShard::TRestoreTxBody txBodyRestore;
+                auto& restore = *txBodyRestore.MutableRestoreTask();
+                fillRestoreTask(restore);
+                auto ev = context.SS->MakeColumnShardProposal(pathId, opId, seqNo, txBodyRestore.SerializeAsString(), context.Ctx, NKikimrTxColumnShard::TX_KIND_RESTORE);
+                context.OnComplete.BindMsgToPipe(opId, shardId, idx, ev.Release());
+            }
         }
     }
 
@@ -54,15 +77,27 @@ struct TRestore {
     }
 
     static void Finish(const TOperationId& opId, TTxState& txState, TOperationContext& context) {
+        const auto& pathId = txState.TargetPathId;
+        const TPath sourcePath = TPath::Init(pathId, context.SS);
+        if (sourcePath->IsTable()) {
+            Y_ABORT_UNLESS(context.SS->Tables.contains(txState.TargetPathId));
+            TTableInfo::TPtr table = context.SS->Tables[txState.TargetPathId];
+            return TableFinish(table, opId, txState, context);
+        } else {
+            Y_ABORT_UNLESS(context.SS->ColumnTables.contains(txState.TargetPathId));
+            TColumnTableInfo::TPtr table = context.SS->ColumnTables.at(txState.TargetPathId).GetPtr();
+            return TableFinish(table, opId, txState, context);
+        }
+    }
+
+    template <typename TTableInfo>
+    static void TableFinish(const TTableInfo& table, const TOperationId& opId, TTxState& txState, TOperationContext& context) {
         if (txState.TxType != TTxState::TxRestore) {
             return;
         }
 
         Y_ABORT_UNLESS(TAppData::TimeProvider.Get() != nullptr);
         const ui64 ts = TAppData::TimeProvider->Now().Seconds();
-
-        Y_ABORT_UNLESS(context.SS->Tables.contains(txState.TargetPathId));
-        TTableInfo::TPtr table = context.SS->Tables[txState.TargetPathId];
 
         auto& restoreInfo = table->RestoreHistory[opId.GetTxId()];
 
@@ -83,10 +118,21 @@ struct TRestore {
     }
 
     static void PersistTask(const TPathId& pathId, const TTxTransaction& tx, TOperationContext& context) {
-        const auto& restore = tx.GetRestore();
+        const TPath sourcePath = TPath::Init(pathId, context.SS);
+        if (sourcePath->IsTable()) {
+            Y_ABORT_UNLESS(context.SS->Tables.contains(pathId));
+            TTableInfo::TPtr table = context.SS->Tables.at(pathId);
+            return PersistTableTask(table, pathId, tx, context);
+        } else {
+            Y_ABORT_UNLESS(context.SS->ColumnTables.contains(pathId));
+            TColumnTableInfo::TPtr table = context.SS->ColumnTables.at(pathId).GetPtr();
+            return PersistTableTask(table, pathId, tx, context);
+        }
+    }
 
-        Y_ABORT_UNLESS(context.SS->Tables.contains(pathId));
-        TTableInfo::TPtr table = context.SS->Tables.at(pathId);
+    template <typename TTableInfo>
+    static void PersistTableTask(const TTableInfo& table, const TPathId& pathId, const TTxTransaction& tx, TOperationContext& context) {        
+        const auto& restore = tx.GetRestore();
         table->RestoreSettings = restore;
 
         NIceDb::TNiceDb db(context.GetDB());

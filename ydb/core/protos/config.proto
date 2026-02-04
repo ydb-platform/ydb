@@ -92,6 +92,7 @@ message TActorSystemConfig {
         optional int32 MaxAvgPingDeviation = 17;
 
         optional bool HasSharedThread = 18;
+        optional bool AllThreadsAreShared = 24;
         optional uint32 MaxLocalQueueSize = 20;
         optional uint32 MinLocalQueueSize = 21;
 
@@ -133,6 +134,7 @@ message TActorSystemConfig {
     optional ENodeType NodeType = 14 [default = COMPUTE];
     optional uint32 ForceIOPoolThreads = 17;
     optional bool UseSharedThreads = 18;
+    optional bool UseUnitedPool = 22;
     optional bool UseRingQueue = 19 [default = true];
 
     optional bool MonitorStuckActors = 15;
@@ -367,7 +369,8 @@ message TBlobStorageConfig {
     optional NKikimrBlobStorage.TBscConfig BscSettings = 12;
 
     optional uint64 BridgeSyncRateBytesPerSecond = 13 [default = 500000000]; // default 500 MB/s per node
- }
+    optional NKikimrBlobStorage.TInferPDiskSlotCountSettings InferPDiskSlotCountSettings = 14;
+}
 
 message TSelfManagementConfig {
     // whether the self management is enabled (through distconf)? (mandatory field)
@@ -616,6 +619,7 @@ message TMonitoringConfig {
     optional uint32 MaxRequestsPerSecond = 17 [default = 0];
     optional string InactivityTimeout = 18 [default = "2m"];
     optional bool HideHttpEndpoint = 19 [default = false];
+    optional bool RequireCountersAuthentication = 21 [default = false];
 }
 
 message TRestartsCountConfig {
@@ -1234,8 +1238,10 @@ message TStreamingQueriesConfig {
         optional string DiscoveryCommonHostnamePrefixPatch = 1; // Added to discovered hostnames if original hostname starts with this prefix
     }
 
-    optional TExternalStorageConfig ExternalStorage = 1;
-    optional TExternalTopicsSettings TopicSdkSettings = 2;
+    reserved 1;
+    reserved 2;
+    optional TExternalStorageConfig ExternalStorage = 3;
+    optional TExternalTopicsSettings TopicSdkSettings = 4;
 }
 
 message TQueryServiceConfig {
@@ -1264,9 +1270,8 @@ message TQueryServiceConfig {
     repeated string AvailableExternalDataSources = 22;                  // Ignored if AllExternalDataSourcesAreAvailable is true
     optional bool AllExternalDataSourcesAreAvailable = 23 [default = true];
     reserved 24;
-    reserved 25;
+    optional TStreamingQueriesConfig StreamingQueries = 25;
     reserved 26;
-    optional TStreamingQueriesConfig StreamingQueries = 27;
 }
 
 // Config describes immediate controls and allows
@@ -2092,6 +2097,60 @@ message TImmediateControlsConfig {
         }];
     }
 
+    message TBackupControls {
+        message TBackupToS3Controls {
+            optional uint64 EnableAsyncReplicationExport = 1 [(ControlOptions) = {
+                Description: "Enable Async Replication export",
+                MinValue: 0,
+                MaxValue: 1,
+                DefaultValue: 1 }];
+
+            optional uint64 EnableAsyncReplicationImport = 2 [(ControlOptions) = {
+                Description: "Enable Async Replication import",
+                MinValue: 0,
+                MaxValue: 1,
+                DefaultValue: 1 }];
+
+            optional uint64 EnableTransferExport = 3 [(ControlOptions) = {
+                Description: "Enable Transfer export",
+                MinValue: 0,
+                MaxValue: 1,
+                DefaultValue: 1 }];
+
+            optional uint64 EnableTransferImport = 4 [(ControlOptions) = {
+                Description: "Enable Transfer import",
+                MinValue: 0,
+                MaxValue: 1,
+                DefaultValue: 1 }];
+
+            optional uint64 EnableExternalDataSourceExport = 5 [(ControlOptions) = {
+                Description: "Enable External Data Source export",
+                MinValue: 0,
+                MaxValue: 1,
+                DefaultValue: 1 }];
+
+            optional uint64 EnableExternalDataSourceImport = 6 [(ControlOptions) = {
+                Description: "Enable External Data Source import",
+                MinValue: 0,
+                MaxValue: 1,
+                DefaultValue: 1 }];
+
+            optional uint64 EnableExternalTableExport = 7 [(ControlOptions) = {
+                Description: "Enable External Table export",
+                MinValue: 0,
+                MaxValue: 1,
+                DefaultValue: 1 }];
+
+            optional uint64 EnableExternalTableImport = 8 [(ControlOptions) = {
+                Description: "Enable External Table import",
+                MinValue: 0,
+                MaxValue: 1,
+                DefaultValue: 1 }];
+        }
+
+        optional TBackupToS3Controls S3Controls = 1;
+    }
+
     optional TDataShardControls DataShardControls = 1;
     optional TTxLimitControls TxLimitControls = 2;
     optional TCoordinatorControls CoordinatorControls = 3;
@@ -2110,6 +2169,7 @@ message TImmediateControlsConfig {
     optional TKQPSessionControls KQPSessionControls = 16;
     optional TColumnShardControls ColumnShardControls = 17;
     optional TGroupMapperControls GroupMapperControls = 18;
+    optional TBackupControls BackupControls = 19;
 };
 
 message TMeteringConfig {
@@ -2347,6 +2407,7 @@ message THiveConfig {
     optional uint64 BalanceCountersRefreshFrequency = 88 [default = 15000]; // milliseconds
     optional bool LockedTabletsSendMetrics = 89 [default = false]; // if true then hive will process metrics from locked tablets
     optional uint64 MaxDeleteTabletInProgress = 90 [default = 100];
+    optional uint64 DataCenterChangeReactionPeriod = 91 [default = 1]; // seconds
 }
 
 message THealthCheckConfig {
@@ -2464,6 +2525,13 @@ message TColumnShardConfig {
         string DefaultCompactionPreset = 61 [default = "tiling"];
         NKikimrSchemeOp.TCompactionPlannerConstructorContainer DefaultCompactionConstructor = 62;
     }
+
+    optional uint64 ScanMemoryLimit = 63 [default = 3221225472];
+    optional uint64 CompactionStageMemoryLimit = 64 [default = 3221225472];
+    optional uint64 TieringStageMemoryLimit = 65 [default = 1000000000];
+    optional uint64 CleanupPortionsStageMemoryLimit = 66 [default = 1000000000];
+    optional bool EnableIntervalTreeForMetadataSelect = 67 [default = true];
+    optional bool EnableCursorV1 = 68 [default = false];
 }
 
 message TSchemeShardConfig {
@@ -2820,6 +2888,18 @@ message TAwsClientConfig {
 
     // Logging options
     optional TLogConfig LogConfig = 1;
+
+    // Default connection settings
+    optional bool VerifySSL = 2 [default = true];
+    optional uint32 RequestTimeoutMs = 3;
+    optional uint32 HttpRequestTimeoutMs = 4;
+    optional uint32 ConnectionTimeoutMs = 5 [default = 10000];
+    optional bool EnableTcpKeepAlive = 6 [default = true];
+    optional uint32 TcpKeepAliveIntervalMs = 7;
+    optional uint32 MaxConnectionsCount = 8 [default = 32];
+    optional uint32 ExecutorThreadsCount = 9 [default = 32];
+    optional string CaPath = 10 [default = "/etc/ssl/certs"];
+    optional string CaFile = 11;
 }
 
 message TMetadataCacheConfig {

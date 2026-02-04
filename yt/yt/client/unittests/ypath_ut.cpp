@@ -3,6 +3,7 @@
 #include <yt/yt/core/test_framework/framework.h>
 
 #include <yt/yt/client/ypath/rich.h>
+#include <yt/yt/client/ypath/rich_constrained.h>
 
 #include <yt/yt/client/chunk_client/helpers.h>
 
@@ -64,7 +65,7 @@ public:
         return TextifyYson(SyncYPathGet(RootService, path));
     }
 
-    std::vector<TString> List(const TYPath& path)
+    std::vector<std::string> List(const TYPath& path)
     {
         return SyncYPathList(RootService, path);
     }
@@ -184,7 +185,7 @@ TEST_F(TYPathTest, Ls)
     auto result = List("");
     std::sort(result.begin(), result.end());
 
-    std::vector<TString> expected;
+    std::vector<std::string> expected;
     expected.push_back("a");
     expected.push_back("c");
     expected.push_back("d");
@@ -990,6 +991,32 @@ TEST_F(TEmbeddedYPathOpsTest, attributes)
 
     EXPECT_THROW(GetNodeByYPath(node, "/home/dir1/@user_attr/bar"), std::exception);
     EXPECT_THROW(GetNodeByYPath(node, "/home/dir2/@account"), std::exception);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+inline constexpr char MyAttributeKey1[] = "my_attribute_1";
+inline constexpr char MyAttributeKey2[] = "my_attribute_2";
+
+TEST(TConstraintRichYPathTest, AllowedAttributes)
+{
+    using TWhitelistAttributePath = TConstrainedRichYPath<TWhitelistAttributesValidator<MyAttributeKey1, MyAttributeKey2>>;
+    EXPECT_THROW_WITH_SUBSTRING(Y_UNUSED(TWhitelistAttributePath(TRichYPath("<a=b>//home/path"))), "YPath \"<\\\"a\\\"=\\\"b\\\";\\n>//home/path\" has unexpected attribute \"a\"");
+    EXPECT_THROW_WITH_SUBSTRING(Y_UNUSED(TWhitelistAttributePath(TRichYPath("<a=b;my_attribute_1=b>//home/path"))), "YPath \"<\\\"a\\\"=\\\"b\\\";\\n\\\"my_attribute_1\\\"=\\\"b\\\";\\n>//home/path\" has unexpected attribute \"a\"");
+    EXPECT_THROW_WITH_SUBSTRING(Y_UNUSED(TWhitelistAttributePath(TRichYPath("<a=b;my_attribute_1=b;my_attribute_2=b>//home/path"))), "YPath \"<\\\"a\\\"=\\\"b\\\";\\n\\\"my_attribute_1\\\"=\\\"b\\\";\\n\\\"my_attribute_2\\\"=\\\"b\\\";\\n>//home/path\" has unexpected attribute \"a\"");
+    Y_UNUSED(TWhitelistAttributePath(TRichYPath("<my_attribute_1=b>//home/path")));
+    Y_UNUSED(TWhitelistAttributePath(TRichYPath("<my_attribute_2=b>//home/path")));
+    Y_UNUSED(TWhitelistAttributePath(TRichYPath("<my_attribute_2=b;my_attribute_1=b>//home/path")));
+};
+
+TEST(TConstraintRichYPathTest, RequiredAttributes)
+{
+    using TRequiredAttributePath = TConstrainedRichYPath<TRequiredAttributesValidator<MyAttributeKey1, MyAttributeKey2>>;
+    EXPECT_THROW_WITH_SUBSTRING(Y_UNUSED(TRequiredAttributePath(TRichYPath("<a=b>//home/path"))), "YPath \"<\\\"a\\\"=\\\"b\\\";\\n>//home/path\" does not have attribute \"my_attribute_");
+    EXPECT_THROW_WITH_SUBSTRING(Y_UNUSED(TRequiredAttributePath(TRichYPath("<a=b;my_attribute_1=b>//home/path"))), "YPath \"<\\\"a\\\"=\\\"b\\\";\\n\\\"my_attribute_1\\\"=\\\"b\\\";\\n>//home/path\" does not have attribute \"my_attribute_2\"");
+    EXPECT_THROW_WITH_SUBSTRING(Y_UNUSED(TRequiredAttributePath(TRichYPath("<my_attribute_2=b>//home/path"))), "YPath \"<\\\"my_attribute_2\\\"=\\\"b\\\";\\n>//home/path\" does not have attribute \"my_attribute_1\"");
+    Y_UNUSED(TRequiredAttributePath(TRichYPath("<my_attribute_1=b;my_attribute_2=b>//home/path")));
+    Y_UNUSED(TRequiredAttributePath(TRichYPath("<my_attribute_1=b;my_attribute_2=b;a=b>//home/path")));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

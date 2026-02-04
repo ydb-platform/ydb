@@ -35,6 +35,9 @@ const constexpr ui32 FILL_COUNTERS_SIZE = 4u;
 struct TDqFillAggregator {
 
     alignas(64) std::array<std::atomic<ui64>, FILL_COUNTERS_SIZE> Counts;
+    std::atomic<ui64> TotalCount;
+    std::atomic<ui64> EarlyFinishedCount;
+    std::atomic<ui64> FinishedCount;
 
     ui64 GetCount(EDqFillLevel level) {
         ui32 index = static_cast<ui32>(level);
@@ -46,12 +49,14 @@ struct TDqFillAggregator {
         ui32 index = static_cast<ui32>(level);
         YQL_ENSURE(index < FILL_COUNTERS_SIZE);
         Counts[index]++;
+        TotalCount++;
     }
 
-    void SubCount(EDqFillLevel level) {
+    void SubCount(EDqFillLevel level) { // deprecated
         ui32 index = static_cast<ui32>(level);
         YQL_ENSURE(index < FILL_COUNTERS_SIZE);
         Counts[index]--;
+        TotalCount--;
     }
 
     void UpdateCount(EDqFillLevel prevLevel, EDqFillLevel level) {
@@ -72,6 +77,16 @@ struct TDqFillAggregator {
             return NoLimit;
         }
         return Counts[static_cast<ui32>(SoftLimit)].load() ? SoftLimit : NoLimit;
+    }
+
+    bool IsEarlyFinished() {
+        auto totalCount = TotalCount.load();
+        return totalCount && totalCount == EarlyFinishedCount.load();
+    }
+
+    bool IsFinished() {
+        auto totalCount = TotalCount.load();
+        return totalCount && totalCount == FinishedCount.load();
     }
 
     TString DebugString() {
@@ -103,11 +118,13 @@ public:
     // Push checkpoint. Checkpoints may be pushed to channel even after it is finished.
     virtual void Push(NDqProto::TCheckpoint&& checkpoint) = 0;
     virtual void Finish() = 0;
+    virtual void Flush() = 0;
 
     // <| consumer methods
     [[nodiscard]]
     virtual bool HasData() const = 0;
     virtual bool IsFinished() const = 0;
+    virtual bool IsEarlyFinished() const = 0;
 
     virtual NKikimr::NMiniKQL::TType* GetOutputType() const = 0;
 };

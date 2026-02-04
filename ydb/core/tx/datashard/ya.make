@@ -213,6 +213,7 @@ SRCS(
     store_snapshot_tx_unit.cpp
     store_write_unit.cpp
     stream_scan_common.cpp
+    truncate_unit.cpp
     type_serialization.cpp
     upload_stats.cpp
     volatile_tx.cpp
@@ -347,6 +348,7 @@ RECURSE_FOR_TESTS(
     ut_snapshot_isolation
     ut_stats
     ut_trace
+    ut_truncate
     ut_upload_rows
     ut_vacuum
     ut_volatile

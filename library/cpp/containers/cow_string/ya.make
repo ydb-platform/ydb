@@ -5,6 +5,7 @@ SRCS(
     output.cpp
     reverse.cpp
     subst.cpp
+    ysaveload.cpp
 )
 
 END()

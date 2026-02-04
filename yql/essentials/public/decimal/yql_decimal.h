@@ -150,9 +150,11 @@ inline TInt128 FromHalfs(ui64 lo, i64 hi) {
 }
 
 inline std::pair<ui64, ui64> MakePair(const TInt128 v) {
-    std::pair<ui64, ui64> r;
-    std::memcpy(&r, &v, sizeof(v));
-    return r;
+    struct TPair {
+        ui64 FirstHalf;
+        ui64 SecondHalf;
+    } r = std::bit_cast<TPair>(v);
+    return std::make_pair(r.FirstHalf, r.SecondHalf);
     static_assert(sizeof(r) == sizeof(v), "Bad pair size.");
 }
 
@@ -174,7 +176,7 @@ struct TDecimal {
     TDecimal() = default;
 
     template <typename T>
-    TDecimal(T t)
+    TDecimal(T t) // NOLINT(google-explicit-constructor)
         : Value(t)
     {
     }
@@ -231,7 +233,7 @@ protected:
     const TInt128 Bound_;
 
 public:
-    TDecimalMultiplicator(
+    explicit TDecimalMultiplicator(
         ui8 precision,
         ui8 scale = 0 /* unused */)
         : Bound_(GetDivider(precision))
@@ -279,7 +281,7 @@ public:
 template <typename TRight>
 class TDecimalDivisor {
 public:
-    TDecimalDivisor(
+    explicit TDecimalDivisor(
         ui8 precision = 0 /* unused */,
         ui8 scale = 0 /* unused */)
     {
@@ -350,7 +352,7 @@ public:
 template <>
 class TDecimalRemainder<TInt128> {
 public:
-    TDecimalRemainder(
+    explicit TDecimalRemainder(
         ui8 precision = 0 /*unused*/,
         ui8 scale = 0 /*unused*/)
     {

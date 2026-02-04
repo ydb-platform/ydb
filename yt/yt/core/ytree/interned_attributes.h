@@ -43,7 +43,9 @@ void InternAttribute(const TString& uninternedKey, TInternedAttributeKey interne
 ////////////////////////////////////////////////////////////////////////////////
 
 #define REGISTER_INTERNED_ATTRIBUTE(uninternedKey, internedKey) \
-    YT_STATIC_INITIALIZER(::NYT::NYTree::InternAttribute(#uninternedKey, internedKey));
+    YT_STATIC_INITIALIZER({ \
+        ::NYT::NYTree::InternAttribute(#uninternedKey, internedKey); \
+    })
 
 ////////////////////////////////////////////////////////////////////////////////
 

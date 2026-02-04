@@ -13,6 +13,7 @@ namespace NKqp {
 NYql::NDqProto::EDqStatsMode GetDqStatsMode(Ydb::Table::QueryStatsCollection::Mode mode);
 NYql::NDqProto::EDqStatsMode GetDqStatsModeShard(Ydb::Table::QueryStatsCollection::Mode mode);
 
+bool CollectBasicStats(Ydb::Table::QueryStatsCollection::Mode statsMode);
 bool CollectFullStats(Ydb::Table::QueryStatsCollection::Mode statsMode);
 bool CollectProfileStats(Ydb::Table::QueryStatsCollection::Mode statsMode);
 
@@ -21,7 +22,7 @@ struct TMinStats {
     ui64 MinValue = 0;
 
     void Resize(ui32 count);
-    void Set(ui32 index, ui64 value);
+    void SetNonZero(ui32 index, ui64 value);
 };
 
 struct TMaxStats {
@@ -29,19 +30,26 @@ struct TMaxStats {
     ui64 MaxValue = 0;
 
     void Resize(ui32 count);
-    void Set(ui32 index, ui64 value);
+    void SetNonZero(ui32 index, ui64 value);
 };
 
-struct TTimeSeriesStats {
+struct TSumStats {
     std::vector<ui64> Values;
-    ui32 HistorySampleCount = 0;
     ui64 Sum = 0;
+
+    void Resize(ui32 count);
+    void SetNonZero(ui32 index, ui64 value);
+    ui64 ExportAggStats(NYql::NDqProto::TDqStatsAggr& stats);
+};
+
+struct TTimeSeriesStats : public TSumStats {
+    using TSumStats::ExportAggStats;
+
+    ui32 HistorySampleCount = 0;
     std::vector<std::pair<ui64, ui64>> History;
 
     void ExportHistory(ui64 baseTimeMs, NYql::NDqProto::TDqStatsAggr& stats);
-    void ExportAggStats(NYql::NDqProto::TDqStatsAggr& stats);
-    void ExportAggStats(ui64 baseTimeMs, NYql::NDqProto::TDqStatsAggr& stats);
-    void Resize(ui32 count);
+    ui64 ExportAggStats(ui64 baseTimeMs, NYql::NDqProto::TDqStatsAggr& stats);
     void SetNonZero(ui32 index, ui64 value);
     void Pack();
     void AppendHistory();
@@ -143,6 +151,7 @@ struct TAsyncBufferStats {
     TAsyncStats Push;
     TAsyncStats Pop;
     TAsyncStats Egress;
+    std::vector<ui64> LocalBytes;
 
     void Resize(ui32 taskCount);
     static TMetricInfo EstimateMem() {
@@ -150,16 +159,6 @@ struct TAsyncBufferStats {
     }
     void SetHistorySampleCount(ui32 historySampleCount);
     void ExportHistory(ui64 baseTimeMs, NYql::NDqProto::TDqAsyncBufferStatsAggr& stats);
-};
-
-struct TIngressStats : public TAsyncBufferStats {
-
-    TIngressStats() = default;
-    TIngressStats(ui32 taskCount) {
-        Resize(taskCount);
-    }
-
-    void Resize(ui32 taskCount);
 };
 
 struct TTableStats {
@@ -254,11 +253,12 @@ struct TStageExecutionStats {
     TTimeSeriesStats MaxMemoryUsage;
 
     ui32 HistorySampleCount = 0;
-    ui32 TaskCount = 0; // rounded to 4 value of Task2Index.size(), which is actual
+    ui32 TaskCount = 0; // up rounded to multiple of 4, actual is Task2Index.size()
     std::vector<bool> Finished;
     ui32 FinishedCount = 0;
     std::vector<TStageExecutionStats*> InputStages;
     std::vector<TStageExecutionStats*> OutputStages;
+    std::unordered_map<ui32, NYql::NDqProto::TDqComputeActorStats> ComputeActors;
 
     void Resize(ui32 taskCount);
     ui32 EstimateMem() {
@@ -269,7 +269,6 @@ struct TStageExecutionStats {
         return (info.ScalarCount * TaskCount + info.TimeSeriesCount * HistorySampleCount * 2) * sizeof(ui64);
     }
     void SetHistorySampleCount(ui32 historySampleCount);
-    void ExportHistory(ui64 baseTimeMs, NYql::NDqProto::TDqStageStats& stageStats);
     ui64 UpdateAsyncStats(ui32 index, TAsyncStats& aggrAsyncStats, const NYql::NDqProto::TDqAsyncBufferStats& asyncStats);
     ui64 UpdateStats(const NYql::NDqProto::TDqTaskStats& taskStats, NYql::NDqProto::EComputeState state, ui64 maxMemoryUsage, ui64 durationUs);
     bool IsDeadlocked(ui64 deadline);
@@ -298,6 +297,36 @@ struct TIngressExternalPartitionStat {
     TIngressExternalPartitionStat(const TString& name) : Name(name) {}
 };
 
+struct TStorageTableStats {
+    ui64 ReadRows = 0;
+    ui64 ReadBytes = 0;
+    ui64 WriteRows = 0;
+    ui64 WriteBytes = 0;
+    ui64 EraseRows = 0;
+    ui64 EraseBytes = 0;
+    ui64 AffectedPartitions = 0;
+};
+
+struct TQueryTableStats {
+
+    TQueryTableStats() = default;
+    TQueryTableStats(ui32 taskCount) {
+        Resize(taskCount);
+    }
+
+    TSumStats ReadRows;
+    TSumStats ReadBytes;
+    TSumStats WriteRows;
+    TSumStats WriteBytes;
+    TSumStats EraseRows;
+    TSumStats EraseBytes;
+    TSumStats AffectedPartitions;
+    TStorageTableStats StorageStats;
+    ui64 AffectedPartitionsUniqueCount = 0;
+
+    void Resize(ui32 taskCount);
+};
+
 struct TQueryExecutionStats {
 private:
     std::unordered_map<ui32, std::map<ui32, ui32>> ShardsCountByNode;
@@ -308,21 +337,22 @@ private:
     std::unordered_map<ui32, TDuration> LongestTaskDurations;
     void ExportAggAsyncStats(TAsyncStats& data, NYql::NDqProto::TDqAsyncStatsAggr& stats);
     void ExportAggAsyncBufferStats(TAsyncBufferStats& data, NYql::NDqProto::TDqAsyncBufferStatsAggr& stats);
-    void AdjustExternalAggr(NYql::NDqProto::TDqExternalAggrStats& stats);
-    void AdjustAsyncAggr(NYql::NDqProto::TDqAsyncStatsAggr& stats);
-    void AdjustAsyncBufferAggr(NYql::NDqProto::TDqAsyncBufferStatsAggr& stats);
-    void AdjustDqStatsAggr(NYql::NDqProto::TDqStatsAggr& stats);
-    void AdjustBaseTime(NYql::NDqProto::TDqStageStats* stageStats);
 public:
     const Ydb::Table::QueryStatsCollection::Mode StatsMode;
     const TKqpTasksGraph* const TasksGraph = nullptr;
     NYql::NDqProto::TDqExecutionStats* const Result;
     std::optional<ui32> DeadlockedStageId;
 
+    // common stats
+    ui64 StorageCpuTimeUs = 0;
+    TSumStats ComputeCpuTimeUs;
+
     // basic stats
+    ui32 TaskCount = 0;
+    ui32 TaskCount4 = 0;
+    std::map<TString, TQueryTableStats> Tables;
+
     std::unordered_set<ui64> AffectedShards;
-    ui32 HistorySampleCount = 0;
-    ui32 TotalTasks = 0;
     ui64 ResultBytes = 0;
     ui64 ResultRows = 0;
     TDuration ExecuterCpuTime;
@@ -335,10 +365,12 @@ public:
 
     NKqpProto::TKqpExecutionExtraStats ExtraStats;
 
+    // full stats
+    ui32 HistorySampleCount = 0;
+
     // profile stats
     TDuration ResolveCpuTime;
     TDuration ResolveWallTime;
-    TVector<NKikimrQueryStats::TTxStats> DatashardStats;
 
     bool CollectStatsByLongTasks = false;
 
@@ -353,12 +385,6 @@ public:
 
     void Prepare();
 
-    void AddComputeActorStats(
-        ui32 nodeId,
-        NYql::NDqProto::TDqComputeActorStats&& stats,
-        NYql::NDqProto::EComputeState state,
-        TDuration collectLongTaskStatsTimeout = TDuration::Max()
-    );
     void AddNodeShardsCount(const ui32 stageId, const ui32 nodeId, const ui32 shardsCount) {
         Y_ABORT_UNLESS(ShardsCountByNode[stageId].emplace(nodeId, shardsCount).second);
     }
@@ -378,25 +404,14 @@ public:
     ui64 LocksBrokenAsBreaker = 0;
     ui64 LocksBrokenAsVictim = 0;
 
-    void UpdateTaskStats(ui64 taskId, const NYql::NDqProto::TDqComputeActorStats& stats, NYql::NDqProto::EComputeState state);
+    void UpdateQueryTables(const NYql::NDqProto::TDqTaskStats& taskStats, NKikimrQueryStats::TTxStats* txStats);
+    void UpdateStorageTables(const NYql::NDqProto::TDqTaskStats& taskStats, NKikimrQueryStats::TTxStats* txStats);
+    void UpdateTaskStats(ui64 taskId, const NYql::NDqProto::TDqComputeActorStats& stats, NKikimrQueryStats::TTxStats* txStats,
+        NYql::NDqProto::EComputeState state, TDuration collectLongTaskStatsTimeout);
     void ExportExecStats(NYql::NDqProto::TDqExecutionStats& stats);
     void FillStageDurationUs(NYql::NDqProto::TDqStageStats& stats);
     ui64 EstimateCollectMem();
     ui64 EstimateFinishMem();
-    void Finish();
-
-private:
-    void AddComputeActorFullStatsByTask(
-        const NYql::NDqProto::TDqTaskStats& task,
-        const NYql::NDqProto::TDqComputeActorStats& stats,
-        NYql::NDqProto::EComputeState state);
-    void AddComputeActorProfileStatsByTask(
-        const NYql::NDqProto::TDqTaskStats& task,
-        const NYql::NDqProto::TDqComputeActorStats& stats,
-        bool keepOnlyLastTask);
-    void AddDatashardFullStatsByTask(
-        const NYql::NDqProto::TDqTaskStats& task,
-        ui64 datashardCpuTimeUs);
 };
 
 struct TTableStat {

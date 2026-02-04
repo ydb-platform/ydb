@@ -1,7 +1,6 @@
 #include "mock_pq_gateway.h"
 
 #include <ydb/library/testlib/common/test_utils.h>
-#include <ydb/library/yql/providers/pq/gateway/dummy/yql_pq_blocking_queue.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/threading/future/async.h>

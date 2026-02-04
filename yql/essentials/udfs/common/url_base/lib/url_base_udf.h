@@ -91,19 +91,19 @@ END_SIMPLE_ARROW_UDF(TGetScheme, TGetSchemeKernelExec::Do);
 
 ARROW_UDF_SINGLE_STRING_FUNCTION_FOR_URL(TGetHost, GetOnlyHost)
 
-std::string_view GetHostAndPortAfterCut(const std::string_view url) {
+inline std::string_view GetHostAndPortAfterCut(const std::string_view url) {
     return GetHostAndPort(CutSchemePrefix(url));
 }
 
 ARROW_UDF_SINGLE_STRING_FUNCTION_FOR_URL(TGetHostPort, GetHostAndPortAfterCut)
 
-std::string_view GetSchemeHostParameterized(const std::string_view url) {
+inline std::string_view GetSchemeHostParameterized(const std::string_view url) {
     return GetSchemeHost(url, /* trimHttp */ false);
 }
 
 ARROW_UDF_SINGLE_STRING_FUNCTION_FOR_URL(TGetSchemeHost, GetSchemeHostParameterized);
 
-std::string_view GetSchemeHostPortParameterized(const std::string_view url) {
+inline std::string_view GetSchemeHostPortParameterized(const std::string_view url) {
     return GetSchemeHostAndPort(url, /* trimHttp */ false, /* trimDefaultPort */ false);
 }
 
@@ -228,7 +228,7 @@ struct TGetFragmentKernelExec: public TUnaryKernelExec<TGetFragmentKernelExec> {
 };
 END_SIMPLE_ARROW_UDF(TGetFragment, TGetFragmentKernelExec::Do);
 
-std::optional<std::pair<ui32, ui32>> GetDomain(const std::string_view url, const ui8 level) {
+inline std::optional<std::pair<ui32, ui32>> GetDomain(const std::string_view url, const ui8 level) {
     const std::string_view host(GetOnlyHost(url));
     std::vector<std::string_view> parts;
     StringSplitter(host).Split('.').AddTo(&parts);
@@ -325,7 +325,7 @@ SIMPLE_UDF_WITH_OPTIONAL_ARGS(TGetSignificantDomain, char*(TAutoMap<char*>, TOpt
     return valueBuilder->SubString(args[0], std::distance(url.begin(), host.begin()), host.length());
 }
 
-std::optional<std::pair<ui32, ui32>> GetCGIParam(const std::string_view url, const std::string_view key) {
+inline std::optional<std::pair<ui32, ui32>> GetCGIParam(const std::string_view url, const std::string_view key) {
     const auto queryStart = url.find('?');
     if (queryStart != std::string_view::npos) {
         const auto from = queryStart + 1U;

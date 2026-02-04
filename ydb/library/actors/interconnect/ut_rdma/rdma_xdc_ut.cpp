@@ -42,9 +42,21 @@ public:
 
 class TSendActor: public TActorBootstrapped<TSendActor> {
 public:
-    TSendActor(TActorId recipient, IEventBase* ev)
+    struct TExtCtx {
+        std::atomic<bool> Undelivered = false;
+        bool WhaitForUndelivered(ui32 maxAttempt) {
+            while (Undelivered.load(std::memory_order_relaxed) == false && maxAttempt) {
+                Sleep(TDuration::MilliSeconds(1000));
+                maxAttempt--;
+            }
+            return Undelivered.load(std::memory_order_relaxed);
+        }
+    };
+
+    TSendActor(TActorId recipient, IEventBase* ev, std::shared_ptr<TExtCtx> ctx = nullptr)
         : Recipient(recipient)
         , Event(ev)
+        , Ctx(ctx)
     {}
 
     void Bootstrap() {
@@ -53,7 +65,9 @@ public:
     }
 
     void HandleUndelivered() {
-        Undelivered = true;
+        if (Ctx) {
+            Ctx->Undelivered.store(true);
+        }
     }
 
     STATEFN(StateResolve) {
@@ -63,11 +77,10 @@ public:
         }
     }
 
-public:
-    bool Undelivered = false;
 private:
     TActorId Recipient;
     IEventBase* Event;
+    std::shared_ptr<TExtCtx> Ctx;
 };
 
 class TReceiveActor: public TActorBootstrapped<TReceiveActor> {
@@ -93,7 +106,11 @@ public:
             Sleep(TDuration::MilliSeconds(1000));
             maxAttempt--;
         }
-        return ReceivedEvents.load(std::memory_order_relaxed) == expected;
+        auto recieved = ReceivedEvents.load(std::memory_order_relaxed);
+        if (recieved != expected) {
+            Cerr << "recieved != expected " << recieved << " " << expected << Endl;
+        }
+        return recieved == expected;
     }
 private:
     std::function<void(TEvTestSerialization::TPtr)> Check;
@@ -115,7 +132,12 @@ struct TEventsForTest {
             const bool isInline = i % 3 == 0;
             const bool isXdc = i % 3 == 1;
             const bool isRdma = i % 3 == 2;
-            const ui32 numPayloads = i % 5 + (isXdc || isRdma);
+            ui32 numPayloads = i % 5 + (isXdc || isRdma);
+            ui32 sz = 5000;
+            if (i % 128 == 127) {
+                numPayloads += 500;
+                sz = 512;
+            }
 
             auto ev = new TEvTestSerialization();
             ev->Record.SetBlobID(i);
@@ -124,12 +146,13 @@ struct TEventsForTest {
                 if (isInline) {
                     ev->AddPayload(TRope(TString(10 + j, j + i)));
                 } else if (isXdc) {
-                    ev->AddPayload(TRope(TString(5000 + j, j + i)));
+                    ev->AddPayload(TRope(TString(sz + j, j + i)));
                 } else if (isRdma) {
-                    auto buf = memPool->AllocRcBuf(5000 + j, 0).value();
-                    std::fill(buf.GetDataMut(), buf.GetDataMut() + 5000 + j, j + i);
+                    auto buf = memPool->AllocRcBuf(sz + j, 0).value();
+                    Y_ABORT_UNLESS(buf);
+                    std::fill(buf.GetDataMut(), buf.GetDataMut() + sz + j, j + i);
                     ev->AddPayload(TRope(std::move(buf)));
-                    UNIT_ASSERT_VALUES_EQUAL(ev->GetPayload().back().size(), 5000 + j);
+                    UNIT_ASSERT_VALUES_EQUAL(ev->GetPayload().back().size(), sz + j);
                 }
             }
 
@@ -139,12 +162,12 @@ struct TEventsForTest {
 
             Events.push_back(ev);
 
-            Checks.emplace(i, [i, numPayloads, isInline](TEvTestSerialization* ev) {
+            Checks.emplace(i, [i, numPayloads, isInline, sz](TEvTestSerialization* ev) {
                 UNIT_ASSERT_VALUES_EQUAL(ev->Record.GetBlobID(), i);
                 UNIT_ASSERT_VALUES_EQUAL(ev->Record.GetBuffer(), TStringBuilder{} << "hello world " << i);
                 UNIT_ASSERT_VALUES_EQUAL(ev->GetPayload().size(), numPayloads);
                 for (ui32 j = 0; j < numPayloads; ++j) {
-                    ui32 payloadSize = isInline ? 10 + j : 5000 + j;
+                    ui32 payloadSize = isInline ? 10 + j : sz + j;
                     UNIT_ASSERT_VALUES_EQUAL(ev->GetPayload()[j].GetSize(), payloadSize);
                     UNIT_ASSERT_VALUES_EQUAL(ev->GetPayload()[j].ConvertToString(), TString(payloadSize, j + i));
                 }
@@ -184,7 +207,7 @@ TEvTestSerialization* MakeTestEvent(ui64 blobId, NInterconnect::NRdma::IMemPool*
     if (!memPool) {
         TRope tmp(TString(5000, 'X'));
         if (withOffset) {
-            tmp.Insert(tmp.End(), TRope(TString(999, 'Z'))); 
+            tmp.Insert(tmp.End(), TRope(TString(999, 'Z')));
         }
         ev->AddPayload(std::move(tmp));
     } else {
@@ -222,14 +245,14 @@ TEvTestSerialization* MakeTestEvent(ui64 blobId, NInterconnect::NRdma::IMemPool*
             if (withOffset) {
                 TRcBuf rcbuf3 = memPool->AllocRcBuf(999, 0).value();
                 std::fill(rcbuf3.UnsafeGetDataMut(), rcbuf3.UnsafeGetDataMut() + 999, 'Z');
-                tmp.Insert(tmp.End(), TRope(std::move(rcbuf3))); 
+                tmp.Insert(tmp.End(), TRope(std::move(rcbuf3)));
             }
             ev->AddPayload(std::move(tmp));
             UNIT_ASSERT_VALUES_EQUAL(ev->GetPayload().back().size(), withOffset ? 5999u : 5000u);
         }
     }
     bool done = ev->AllowExternalDataChannel();
-    UNIT_ASSERT_VALUES_EQUAL(done, true); 
+    UNIT_ASSERT_VALUES_EQUAL(done, true);
     return ev;
 }
 
@@ -425,6 +448,111 @@ TEST_F(XdcRdmaTest, SendRdmaWithMultiGlue) {
     UNIT_ASSERT(recieverPtr->WhaitForRecieve(1, 20));
 }
 
+TEST_F(XdcRdmaTest, RestoreRdmaSession) {
+    const NInterconnect::NRdma::TMemPoolSettings settings {
+        .SizeLimitMb = 256
+    };
+    auto pool = NInterconnect::NRdma::CreateSlotMemPool(nullptr, settings);
+    TTestICCluster cluster(2, NActors::TChannelsConfig(), nullptr, nullptr, TTestICCluster::Flags::EMPTY,
+        TTestICCluster::TCheckerFactory(), TDuration::Minutes(9999)); //Disable dead peer detection to parallel activity
+
+    std::vector<NInterconnect::NRdma::TMemRegionPtr> regions;
+
+    // Create reciever
+    ui32 index = 0;
+    auto recieverPtr = new TReceiveActor([&index](TEvTestSerialization::TPtr ev) {
+        Cerr << "Blob ID: " << ev->Get()->Record.GetBlobID() << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetBlobID(), index++);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetBuffer(), "hello world");
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload().size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload()[0].GetSize(), 5000u);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload()[0].ConvertToString(), TString(5000, 'X'));
+    });
+    const TActorId receiver = cluster.RegisterActor(recieverPtr, 1);
+
+    Sleep(TDuration::MilliSeconds(1000));
+
+    // Send one packet to establish session
+    {
+        auto memPool = NInterconnect::NRdma::CreateDummyMemPool();
+        auto* ev = MakeTestEvent(0, memPool.get());
+        auto senderPtr = new TSendActor(receiver, ev);
+        cluster.RegisterActor(senderPtr, 2);
+
+        UNIT_ASSERT(recieverPtr->WhaitForRecieve(1, 20));
+    }
+
+    // Allocate all rdma memory to trigger an error during the next transmissions
+    for (size_t i = 0; i < 7; i++) {
+        regions.emplace_back(pool->Alloc(32u << 20, 0));
+    }
+
+    // Send more
+    {
+        auto extCtx = std::make_shared<TSendActor::TExtCtx>();
+        auto memPool = NInterconnect::NRdma::CreateDummyMemPool();
+        auto* ev = MakeTestEvent(1, memPool.get());
+        auto senderPtr = new TSendActor(receiver, ev, extCtx);
+        cluster.RegisterActor(senderPtr, 2);
+        // Undelivered because we can't allocate memory on the reciever side
+        UNIT_ASSERT(extCtx->WhaitForUndelivered(10));
+    }
+
+    // The event was not delivered
+    UNIT_ASSERT(recieverPtr->WhaitForRecieve(1, 20));
+
+    // Session is going to be recreated without rdma
+    // but pending handshake timer are triggered (we can't check it directly in this ut(()
+    TString lastRdmaStatus;
+    for (size_t i = 0; i < 10; i++) {
+        lastRdmaStatus = GetRdmaChecksumStatus(cluster, 2, 1);
+        if (lastRdmaStatus == "Off") {
+            break;
+        }
+        Sleep(TDuration::Seconds(1));
+    }
+
+    UNIT_ASSERT_VALUES_EQUAL(lastRdmaStatus, "Off");
+    lastRdmaStatus.clear();
+
+    // Send one more time (will be delivered through TCP)
+    {
+        auto memPool = NInterconnect::NRdma::CreateDummyMemPool();
+        auto* ev = MakeTestEvent(1, memPool.get());
+        auto senderPtr = new TSendActor(receiver, ev);
+        cluster.RegisterActor(senderPtr, 2);
+    }
+    UNIT_ASSERT(recieverPtr->WhaitForRecieve(2, 20));
+    // Free memory
+    regions.clear();
+    // Whait for the pending hendshake timer
+    Sleep(TDuration::MilliSeconds(5000));
+
+    for (size_t i = 0; i < 5; i++) {
+        try {
+            lastRdmaStatus = GetRdmaChecksumStatus(cluster, 2, 1);
+        } catch (const TPatternNotFound&) {
+            // retry case if the session was not created yiet
+            Sleep(TDuration::Seconds(1));
+            continue;
+        }
+        if (lastRdmaStatus == "On") {
+            break;
+        }
+        Sleep(TDuration::Seconds(1));
+    }
+
+    {
+        auto memPool = NInterconnect::NRdma::CreateDummyMemPool();
+        auto* ev = MakeTestEvent(2, memPool.get());
+        auto senderPtr = new TSendActor(receiver, ev);
+        cluster.RegisterActor(senderPtr, 2);
+    }
+    UNIT_ASSERT(recieverPtr->WhaitForRecieve(3, 20));
+    lastRdmaStatus = GetRdmaChecksumStatus(cluster, 2, 1);
+    UNIT_ASSERT_VALUES_EQUAL(lastRdmaStatus, "On | SoftwareChecksum");
+}
+
 TEST_P(XdcRdmaTestCqMode, SendMix) {
     TTestICCluster::Flags flags = TTestICCluster::EMPTY;
     if (GetParam() == NInterconnect::NRdma::ECqMode::POLLING) {
@@ -463,14 +591,20 @@ TEST_P(XdcRdmaTestCqMode, SendMixBig) {
         flags = TTestICCluster::RDMA_POLLING_CQ;
     }
     TTestICCluster cluster(2, NActors::TChannelsConfig(), nullptr, nullptr, flags);
-    TEventsForTest events(1000);
+    std::mutex mtx;
+    mtx.lock();
+    TEventsForTest events(500);
+    mtx.unlock();
 
-    auto recieverPtr = new TReceiveActor([&events](TEvTestSerialization::TPtr ev) {
+    auto recieverPtr = new TReceiveActor([&events, &mtx](TEvTestSerialization::TPtr ev) {
         ui64 blobId = ev->Get()->Record.GetBlobID();
-        auto checkIt = events.Checks.find(blobId);
-        UNIT_ASSERT(checkIt != events.Checks.end());
-        checkIt->second(ev->Get());
-        events.Checks.erase(checkIt);
+        {
+            std::lock_guard<std::mutex> guard(mtx);
+            auto checkIt = events.Checks.find(blobId);
+            UNIT_ASSERT(checkIt != events.Checks.end());
+            checkIt->second(ev->Get());
+            events.Checks.erase(checkIt);
+        }
     });
     const TActorId receiver = cluster.RegisterActor(recieverPtr, 1);
     Sleep(TDuration::MilliSeconds(1000));
@@ -480,12 +614,169 @@ TEST_P(XdcRdmaTestCqMode, SendMixBig) {
         cluster.RegisterActor(senderPtr, 2);
     }
 
-    for (ui32 attempt = 0; attempt < 10 && !events.Checks.empty(); ++attempt) {
+    for (ui32 attempt = 0; attempt < 50; ++attempt) {
+        {
+            std::lock_guard<std::mutex> guard(mtx);
+            if (events.Checks.empty()) {
+                break;
+            }
+        }
         Sleep(TDuration::MilliSeconds(1000));
     }
     UNIT_ASSERT_VALUES_EQUAL(events.Checks.size(), 0u);
 }
 
+static void DoSendHugePayloadsNum(const ui32 numPayloads, const size_t payloadSz, TTestICCluster& cluster,
+    std::shared_ptr<NInterconnect::NRdma::IMemPool> pool)
+{
+    auto ev = new TEvTestSerialization();
+    ev->Record.SetBlobID(0);
+    ev->Record.SetBuffer(TStringBuilder{} << "hello world ");
+    for (ui32 j = 0; j < numPayloads; ++j) {
+        auto buf = pool->AllocRcBuf(payloadSz, NInterconnect::NRdma::IMemPool::PAGE_ALIGNED).value();
+        ui32* p = reinterpret_cast<ui32*>(buf.GetDataMut());
+        std::fill(p, p + (payloadSz / sizeof(*p)), j);
+        ev->AddPayload(TRope(std::move(buf)));
+    }
+    UNIT_ASSERT(ev->AllowExternalDataChannel());
+
+    auto recieverPtr = new TReceiveActor([numPayloads, payloadSz](TEvTestSerialization::TPtr ev) {
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayloadCount(), numPayloads);
+        for (ui32 j = 0; j < numPayloads; ++j) {
+            TRope buf = ev->Get()->GetPayload(j);
+            auto span = buf.GetContiguousSpan();
+            const ui32* p = reinterpret_cast<const ui32*>(span.GetData());
+            UNIT_ASSERT_VALUES_EQUAL(span.GetSize(), payloadSz);
+
+            while (p < reinterpret_cast<const ui32*>(span.GetData() + payloadSz)) {
+                UNIT_ASSERT_VALUES_EQUAL(*p, j);
+                p++;
+            }
+        }
+    });
+    const TActorId receiver = cluster.RegisterActor(recieverPtr, 1);
+
+    Sleep(TDuration::MilliSeconds(100));
+
+    {
+        auto senderPtr = new TSendActor(receiver, ev);
+        cluster.RegisterActor(senderPtr, 2);
+    }
+
+    UNIT_ASSERT(recieverPtr->WhaitForRecieve(1, 20));
+}
+
+TEST_F(XdcRdmaTest, Send1Payload) {
+    const NInterconnect::NRdma::TMemPoolSettings settings {
+        .SizeLimitMb = 256
+    };
+    auto pool = NInterconnect::NRdma::CreateSlotMemPool(nullptr, settings);
+
+    TTestICCluster cluster(2, NActors::TChannelsConfig(), nullptr, nullptr, TTestICCluster::Flags::EMPTY,
+        TTestICCluster::TCheckerFactory(), TDuration::Minutes(1), 50u << 20);
+
+    DoSendHugePayloadsNum(1, 8192, cluster, pool);
+}
+
+TEST_F(XdcRdmaTest, Send2Payloads) {
+    const NInterconnect::NRdma::TMemPoolSettings settings {
+        .SizeLimitMb = 256
+    };
+    auto pool = NInterconnect::NRdma::CreateSlotMemPool(nullptr, settings);
+
+    TTestICCluster cluster(2, NActors::TChannelsConfig(), nullptr, nullptr, TTestICCluster::Flags::EMPTY,
+        TTestICCluster::TCheckerFactory(), TDuration::Minutes(1), 50u << 20);
+
+    DoSendHugePayloadsNum(2, 8192, cluster, pool);
+}
+
+TEST_F(XdcRdmaTest, Send250Payloads) {
+        const NInterconnect::NRdma::TMemPoolSettings settings {
+        .SizeLimitMb = 256
+    };
+    auto pool = NInterconnect::NRdma::CreateSlotMemPool(nullptr, settings);
+
+    TTestICCluster cluster(2, NActors::TChannelsConfig(), nullptr, nullptr, TTestICCluster::Flags::EMPTY,
+        TTestICCluster::TCheckerFactory(), TDuration::Minutes(1), 50u << 20);
+
+    DoSendHugePayloadsNum(250, 512, cluster, pool);
+}
+
+TEST_F(XdcRdmaTest, Send500Payloads) {
+    const NInterconnect::NRdma::TMemPoolSettings settings {
+        .SizeLimitMb = 256
+    };
+    auto pool = NInterconnect::NRdma::CreateSlotMemPool(nullptr, settings);
+
+    TTestICCluster cluster(2, NActors::TChannelsConfig(), nullptr, nullptr, TTestICCluster::Flags::EMPTY,
+        TTestICCluster::TCheckerFactory(), TDuration::Minutes(1), 50u << 20);
+
+    DoSendHugePayloadsNum(500, 512, cluster, pool);
+}
+
+TEST_F(XdcRdmaTest, Send4000Payloads) {
+    const NInterconnect::NRdma::TMemPoolSettings settings {
+        .SizeLimitMb = 256
+    };
+    auto pool = NInterconnect::NRdma::CreateSlotMemPool(nullptr, settings);
+
+    TTestICCluster cluster(2, NActors::TChannelsConfig(), nullptr, nullptr, TTestICCluster::Flags::EMPTY,
+        TTestICCluster::TCheckerFactory(), TDuration::Minutes(1), 50u << 20);
+
+    DoSendHugePayloadsNum(4000, 512, cluster, pool);
+}
+
+TEST_F(XdcRdmaTest, Send16000Payloads) {
+    const NInterconnect::NRdma::TMemPoolSettings settings {
+        .SizeLimitMb = 256
+    };
+    auto pool = NInterconnect::NRdma::CreateSlotMemPool(nullptr, settings);
+
+    TTestICCluster cluster(2, NActors::TChannelsConfig(), nullptr, nullptr, TTestICCluster::Flags::EMPTY,
+        TTestICCluster::TCheckerFactory(), TDuration::Minutes(1), 50u << 20);
+
+    DoSendHugePayloadsNum(16000, 512, cluster, pool);
+}
+
+TEST_F(XdcRdmaTest, Send32000Payloads) {
+    const NInterconnect::NRdma::TMemPoolSettings settings {
+        .SizeLimitMb = 256
+    };
+    auto pool = NInterconnect::NRdma::CreateSlotMemPool(nullptr, settings);
+
+    TTestICCluster cluster(2, NActors::TChannelsConfig(), nullptr, nullptr, TTestICCluster::Flags::EMPTY,
+        TTestICCluster::TCheckerFactory(), TDuration::Minutes(1), 50u << 20);
+
+    DoSendHugePayloadsNum(32000, 512, cluster, pool);
+}
+
+TEST_F(XdcRdmaTest, SendXPayloads) {
+    const NInterconnect::NRdma::TMemPoolSettings settings {
+        .SizeLimitMb = 256
+    };
+    auto pool = NInterconnect::NRdma::CreateSlotMemPool(nullptr, settings);
+
+    TTestICCluster cluster(2, NActors::TChannelsConfig(), nullptr, nullptr, TTestICCluster::Flags::EMPTY,
+        TTestICCluster::TCheckerFactory(), TDuration::Minutes(1), 50u << 20);
+
+    for (size_t i = 640; i < 650; i++) {
+        DoSendHugePayloadsNum(i, 512, cluster, pool);
+    }
+}
+
+TEST_F(XdcRdmaTest, SendXPayloadsWithRandSize) {
+    const NInterconnect::NRdma::TMemPoolSettings settings {
+        .SizeLimitMb = 256
+    };
+    auto pool = NInterconnect::NRdma::CreateSlotMemPool(nullptr, settings);
+
+    TTestICCluster cluster(2, NActors::TChannelsConfig(), nullptr, nullptr, TTestICCluster::Flags::EMPTY,
+        TTestICCluster::TCheckerFactory(), TDuration::Minutes(1), 50u << 20);
+
+    for (size_t i = 640; i < 650; i++) {
+        DoSendHugePayloadsNum(i, 512 + (RandomNumber<ui16>(4096) * 4), cluster, pool);
+    }
+}
 
 INSTANTIATE_TEST_SUITE_P(
     XdcRdmaTest,
@@ -495,11 +786,15 @@ INSTANTIATE_TEST_SUITE_P(
         NInterconnect::NRdma::ECqMode::EVENT
     ),
     [](const testing::TestParamInfo<NInterconnect::NRdma::ECqMode>& info) {
+        const NInterconnect::NRdma::TMemPoolSettings settings {
+            .SizeLimitMb = 256
+        };
+        NInterconnect::NRdma::CreateSlotMemPool(nullptr, settings);
         switch (info.param) {
             case NInterconnect::NRdma::ECqMode::POLLING:
                 return "POLLING";
             case NInterconnect::NRdma::ECqMode::EVENT:
-                return "EVENT"; 
+                return "EVENT";
         }
     }
 );

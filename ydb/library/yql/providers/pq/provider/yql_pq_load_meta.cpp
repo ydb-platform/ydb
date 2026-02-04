@@ -148,7 +148,7 @@ private:
     NThreading::TFuture<void> AsyncFuture_;
 };
 
-}
+} // anonymous namespace
 
 THolder<IGraphTransformer> CreatePqLoadTopicMetadataTransformer(TPqState::TPtr state) {
     return MakeHolder<TPqLoadTopicMetadataTransformer>(state);

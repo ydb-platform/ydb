@@ -2,7 +2,35 @@
 
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
+#include <google/protobuf/text_format.h>
+#include <util/folder/path.h>
+#include <util/folder/tempdir.h>
+#include <util/stream/file.h>
+#include <util/system/fs.h>
+
 using namespace NSchemeShardUT_Private;
+
+namespace {
+
+    TString ReadFileContent(const TString& path) {
+        if (!TFsPath(path).Exists()) {
+            return "";
+        }
+        TFileInput file(path);
+        return file.ReadAll();
+    }
+
+    bool FileExists(const TString& path) {
+        return TFsPath(path).Exists();
+    }
+
+    TString MakeExportPath(const TString& basePath, const TString& destPath, const TString& file) {
+        TFsPath result(basePath);
+        result = result / destPath / file;
+        return result.GetPath();
+    }
+
+} // namespace
 
 Y_UNIT_TEST_SUITE(TSchemeShardExportToFsTests) {
     Y_UNIT_TEST(ShouldSucceedCreateExportToFs) {
@@ -167,5 +195,201 @@ Y_UNIT_TEST_SUITE(TSchemeShardExportToFsTests) {
         
         const auto& settings = response.GetResponse().GetEntry().GetExportToFsSettings();
         UNIT_ASSERT_VALUES_EQUAL(settings.items_size(), 2);
+    }
+
+    Y_UNIT_TEST(ShouldExportDataAndSchemaToFs) {
+        TTempDir tempDir;
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+        runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
+        runtime.SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::S3_WRAPPER, NActors::NLog::PRI_TRACE);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        WriteRow(runtime, ++txId, "/MyRoot/Table", 0, 1, "row1");
+        WriteRow(runtime, ++txId, "/MyRoot/Table", 0, 2, "row2");
+        WriteRow(runtime, ++txId, "/MyRoot/Table", 0, 3, "row3");
+
+        TString basePath = tempDir.Path();
+        TString requestStr = Sprintf(R"(
+            ExportToFsSettings {
+              base_path: "%s"
+              items {
+                source_path: "/MyRoot/Table"
+                destination_path: "backup/Table"
+              }
+            }
+        )", basePath.c_str());
+
+        TestExport(runtime, ++txId, "/MyRoot", requestStr);
+
+        env.TestWaitNotification(runtime, txId);
+
+        auto desc = TestGetExport(runtime, txId, "/MyRoot");
+        const auto& entry = desc.GetResponse().GetEntry();
+        UNIT_ASSERT_VALUES_EQUAL(entry.GetProgress(), Ydb::Export::ExportProgress::PROGRESS_DONE);
+        UNIT_ASSERT(entry.HasStartTime());
+        UNIT_ASSERT(entry.HasEndTime());
+
+        TString schemePath = MakeExportPath(basePath, "backup/Table", "scheme.pb");
+        TString metadataPath = MakeExportPath(basePath, "backup/Table", "metadata.json");
+        TString dataPath = MakeExportPath(basePath, "backup/Table", "data_00.csv");
+
+        UNIT_ASSERT_C(FileExists(schemePath), "Scheme file not found: " << schemePath);
+        UNIT_ASSERT_C(FileExists(metadataPath), "Metadata file not found: " << metadataPath);
+        UNIT_ASSERT_C(FileExists(dataPath), "Data file not found: " << dataPath);
+
+        TString schemeContent = ReadFileContent(schemePath);
+        Cerr << "Scheme content: " << schemeContent << Endl;
+        UNIT_ASSERT_C(!schemeContent.empty(), "Scheme file is empty");
+
+        Ydb::Table::CreateTableRequest schemeProto;
+        UNIT_ASSERT_C(google::protobuf::TextFormat::ParseFromString(schemeContent, &schemeProto), 
+                     "Failed to parse scheme.pb");
+        UNIT_ASSERT_VALUES_EQUAL(schemeProto.columns_size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(schemeProto.columns(0).name(), "key");
+        UNIT_ASSERT_VALUES_EQUAL(schemeProto.columns(1).name(), "value");
+
+        TString metadataContent = ReadFileContent(metadataPath);
+        UNIT_ASSERT_C(!metadataContent.empty(), "Metadata file is empty");
+        UNIT_ASSERT_C(metadataContent.Contains("\"version\""), "Metadata missing version field");
+
+        TString dataContent = ReadFileContent(dataPath);
+        UNIT_ASSERT_C(!dataContent.empty(), "Data file is empty");
+        UNIT_ASSERT_C(dataContent.Contains("row1") || dataContent.Contains("row2") || dataContent.Contains("row3"), 
+                     "Data file doesn't contain expected rows");
+    }
+
+    Y_UNIT_TEST(ShouldExportMultipleTablesWithData) {
+        TTempDir tempDir;
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+        runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table1"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table2"
+            Columns { Name: "id" Type: "Uint32" }
+            Columns { Name: "name" Type: "Utf8" }
+            KeyColumnNames: ["id"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        WriteRow(runtime, ++txId, "/MyRoot/Table1", 0, 10, "data1");
+        WriteRow(runtime, ++txId, "/MyRoot/Table1", 0, 20, "data2");
+        WriteRow(runtime, ++txId, "/MyRoot/Table2", 0, 100, "name1");
+        WriteRow(runtime, ++txId, "/MyRoot/Table2", 0, 200, "name2");
+
+        TString basePath = tempDir.Path();
+        TString requestStr = Sprintf(R"(
+            ExportToFsSettings {
+              base_path: "%s"
+              items {
+                source_path: "/MyRoot/Table1"
+                destination_path: "backup/Table1"
+              }
+              items {
+                source_path: "/MyRoot/Table2"
+                destination_path: "backup/Table2"
+              }
+            }
+        )", basePath.c_str());
+
+        TestExport(runtime, ++txId, "/MyRoot", requestStr);
+        env.TestWaitNotification(runtime, txId);
+
+        UNIT_ASSERT_C(FileExists(MakeExportPath(basePath, "backup/Table1", "scheme.pb")),
+                     "Table1 scheme.pb not found");
+        UNIT_ASSERT_C(FileExists(MakeExportPath(basePath, "backup/Table1", "metadata.json")),
+                     "Table1 metadata.json not found");
+        UNIT_ASSERT_C(FileExists(MakeExportPath(basePath, "backup/Table1", "data_00.csv")),
+                     "Table1 data not found");
+
+        UNIT_ASSERT_C(FileExists(MakeExportPath(basePath, "backup/Table2", "scheme.pb")),
+                     "Table2 scheme.pb not found");
+        UNIT_ASSERT_C(FileExists(MakeExportPath(basePath, "backup/Table2", "metadata.json")),
+                     "Table2 metadata.json not found");
+        UNIT_ASSERT_C(FileExists(MakeExportPath(basePath, "backup/Table2", "data_00.csv")),
+                     "Table2 data not found");
+
+        TString scheme1Content = ReadFileContent(MakeExportPath(basePath, "backup/Table1", "scheme.pb"));
+        Ydb::Table::CreateTableRequest schemeProto1;
+        UNIT_ASSERT_C(google::protobuf::TextFormat::ParseFromString(scheme1Content, &schemeProto1), 
+                     "Failed to parse scheme.pb");
+        UNIT_ASSERT_VALUES_EQUAL(schemeProto1.columns_size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(schemeProto1.columns(0).name(), "key");
+
+        TString scheme2Content = ReadFileContent(MakeExportPath(basePath, "backup/Table2", "scheme.pb"));
+        Ydb::Table::CreateTableRequest schemeProto2;
+        UNIT_ASSERT_C(google::protobuf::TextFormat::ParseFromString(scheme2Content, &schemeProto2), 
+                     "Failed to parse scheme.pb");
+        UNIT_ASSERT_VALUES_EQUAL(schemeProto2.columns_size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(schemeProto2.columns(0).name(), "id");
+
+        TString data1 = ReadFileContent(MakeExportPath(basePath, "backup/Table1", "data_00.csv"));
+        UNIT_ASSERT_C(data1.Contains("data1") || data1.Contains("data2"), "Table1 data incorrect");
+
+        TString data2 = ReadFileContent(MakeExportPath(basePath, "backup/Table2", "data_00.csv"));
+        UNIT_ASSERT_C(data2.Contains("name1") || data2.Contains("name2"), "Table2 data incorrect");
+    }
+
+    Y_UNIT_TEST(ShouldExportWithCompressionToFs) {
+        TTempDir tempDir;
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+        runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        for (ui32 i = 1; i <= 10; ++i) {
+            WriteRow(runtime, ++txId, "/MyRoot/Table", 0, i, Sprintf("value_%u", i));
+        }
+
+        TString basePath = tempDir.Path();
+        TString requestStr = Sprintf(R"(
+            ExportToFsSettings {
+              base_path: "%s"
+              compression: "zstd-3"
+              items {
+                source_path: "/MyRoot/Table"
+                destination_path: "backup/Table"
+              }
+            }
+        )", basePath.c_str());
+
+        TestExport(runtime, ++txId, "/MyRoot", requestStr);
+        env.TestWaitNotification(runtime, txId);
+
+        TString dataPath = MakeExportPath(basePath, "backup/Table", "data_00.csv.zst");
+        UNIT_ASSERT_C(FileExists(dataPath), "Compressed data file not found: " << dataPath);
+
+        UNIT_ASSERT_C(FileExists(MakeExportPath(basePath, "backup/Table", "scheme.pb")),
+                     "Scheme file not found");
+        UNIT_ASSERT_C(FileExists(MakeExportPath(basePath, "backup/Table", "metadata.json")),
+                     "Metadata file not found");
     }
 }

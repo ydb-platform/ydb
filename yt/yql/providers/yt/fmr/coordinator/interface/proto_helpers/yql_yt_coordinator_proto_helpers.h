@@ -74,4 +74,12 @@ NProto::TListSessionsResponse ListSessionsResponseToProto(const TListSessionsRes
 
 TListSessionsResponse ListSessionsResponseFromProto(const NProto::TListSessionsResponse& protoResponse);
 
+NProto::TPrepareOperationRequest PrepareOperationRequestToProto(const TPrepareOperationRequest& request);
+
+TPrepareOperationRequest PrepareOperationRequestFromProto(const NProto::TPrepareOperationRequest& protoRequest);
+
+NProto::TPrepareOperationResponse PrepareOperationResponseToProto(const TPrepareOperationResponse& response);
+
+TPrepareOperationResponse PrepareOperationResponseFromProto(const NProto::TPrepareOperationResponse& protoResponse);
+
 } // namespace NYql::NFmr

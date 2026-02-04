@@ -1,4 +1,5 @@
 #include "ydb_service_table.h"
+#include "ydb_common.h"
 
 #include <ydb/public/lib/json_value/ydb_json_value.h>
 #include <ydb/public/lib/ydb_cli/common/colors.h>
@@ -1492,10 +1493,8 @@ void TCommandTtlSet::Config(TConfig& config) {
             ColumnUnit = value;
         });
 
-    config.Opts->AddLongOption("run-interval", "[Advanced] How often to run cleanup operation on the same partition.")
-        .RequiredArgument("SECONDS").GetOpt().Handler1T<TDuration::TValue>([this](const TDuration::TValue& arg) {
-            RunInterval = TDuration::Seconds(arg);
-        });
+    config.Opts->AddLongOption("run-interval", "[Advanced] How often to run cleanup operation on the same partition. Supports time units (e.g., '5s', '1m'). Plain number interpreted as seconds.")
+        .RequiredArgument("DURATION").StoreMappedResult(&RunInterval, &ParseDurationSeconds);
 
     config.SetFreeArgsNum(1);
     SetFreeArgTitle(0, "<table path>", "Path to a table");

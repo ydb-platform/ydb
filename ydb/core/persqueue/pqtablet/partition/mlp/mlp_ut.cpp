@@ -50,6 +50,6 @@ Y_UNIT_TEST(SetRetentionStorage) {
 
     UNIT_ASSERT_VALUES_EQUAL_C(status.IsSuccess(), false, status.GetIssues().ToString());
 }
-    
+
 }
 }

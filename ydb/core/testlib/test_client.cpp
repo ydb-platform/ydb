@@ -1,6 +1,6 @@
 #include "test_client.h"
 
-#include <ydb/core/kqp/federated_query/kqp_federated_query_actors.h>
+#include <ydb/core/kqp/federated_query/actors/kqp_federated_query_actors.h>
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/appdata.h>
@@ -698,6 +698,8 @@ namespace Tests {
 
     void TServer::EnableGRpc(const NYdbGrpc::TServerOptions& options, ui32 grpcServiceNodeId, const std::optional<TString>& tenant) {
         auto* grpcInfo = &TenantsGRpc[tenant ? *tenant : Settings->DomainName][grpcServiceNodeId];
+        grpcInfo->Shutdown();
+
         grpcInfo->GRpcServerRootCounters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
         auto& counters = grpcInfo->GRpcServerRootCounters;
 
@@ -1342,10 +1344,14 @@ namespace Tests {
         {
             auto kqpProxySharedResources = std::make_shared<NKqp::TKqpProxySharedResources>();
 
-            IActor* kqpRmService = NKqp::CreateKqpResourceManagerActor(
-                Settings->AppConfig->GetTableServiceConfig().GetResourceManager(), nullptr, {}, kqpProxySharedResources, Runtime->GetNodeId(nodeIdx));
+            const auto& rmConfig = Settings->AppConfig->GetTableServiceConfig().GetResourceManager();
+            IActor* kqpRmService = NKqp::CreateKqpResourceManagerActor(rmConfig, nullptr, {}, kqpProxySharedResources, Runtime->GetNodeId(nodeIdx));
             TActorId kqpRmServiceId = Runtime->Register(kqpRmService, nodeIdx, userPoolId);
             Runtime->RegisterService(NKqp::MakeKqpRmServiceID(Runtime->GetNodeId(nodeIdx)), kqpRmServiceId, nodeIdx);
+
+            if (Settings->KqpLoggerScope) {
+                KqpLoggerScope = Settings->KqpLoggerScope;
+            }
 
             if (!KqpLoggerScope) {
                 // We need to keep YqlLoggerScope alive longer than the actor system
@@ -1392,8 +1398,12 @@ namespace Tests {
                 auto actorSystemPtr = std::make_shared<NKikimr::TDeferredActorLogBackend::TAtomicActorSystemPtr>(nullptr);
                 actorSystemPtr->store(Runtime->GetActorSystem(nodeIdx));
 
-                auto driver = NKqp::MakeYdbDriver(actorSystemPtr, queryServiceConfig.GetStreamingQueries().GetTopicSdkSettings());
-                auto pqGateway = NKqp::MakePqGateway(driver);
+                auto uniqueDriver = NKqp::MakeYdbDriver(actorSystemPtr, queryServiceConfig.GetStreamingQueries().GetTopicSdkSettings());
+                auto driver = NKqp::MakeSharedYdbDriverWithStop(std::move(uniqueDriver));
+                auto pqGateway = NKqp::MakePqGateway(driver, NKqp::TLocalTopicClientSettings{
+                    .ActorSystem = Runtime->GetActorSystem(nodeIdx),
+                    .ChannelBufferSize = rmConfig.GetChannelBufferSize(),
+                });
 
                 federatedQuerySetupFactory = std::make_shared<NKikimr::NKqp::TKqpFederatedQuerySetupFactoryMock>(
                     NKqp::MakeHttpGateway(queryServiceConfig.GetHttpGateway(), Runtime->GetAppData(nodeIdx).Counters),
@@ -1865,6 +1875,12 @@ namespace Tests {
         if (Bus) {
             Bus->Stop();
             Bus.Drop();
+        }
+
+        if (Driver) {
+            // Stop requests and wait for their completion
+            Driver->Stop(true);
+            Driver.Reset();
         }
     }
 
@@ -3124,8 +3140,18 @@ namespace Tests {
         ForwardToTablet(*runtime, tabletId, sender, new NActors::NMon::TEvRemoteHttpInfo(args...), 0);
         TAutoPtr<IEventHandle> handle;
         // Timeout for DEBUG purposes only
-        runtime->GrabEdgeEvent<NMon::TEvRemoteJsonInfoRes>(handle);
-        TString res = handle->Get<NMon::TEvRemoteJsonInfoRes>()->Json;
+        runtime->GrabEdgeEvents<NMon::TEvRemoteJsonInfoRes, NMon::TEvRemoteBinaryInfoRes>(handle);
+        TString res;
+        switch (handle->GetTypeRewrite()) {
+            case NMon::RemoteJsonInfoRes:
+                res = handle->Get<NMon::TEvRemoteJsonInfoRes>()->Json;
+                break;
+            case NMon::RemoteBinaryInfoRes:
+                res = handle->Get<NMon::TEvRemoteBinaryInfoRes>()->Blob;
+                break;
+            default:
+                Y_FAIL("unreachable");
+        }
         Cerr << res << Endl;
         return res;
     }

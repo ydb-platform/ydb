@@ -77,10 +77,24 @@ public:
         }
 
         auto fmrOperationSpec = GetMergedFmrOperationSpec(request.FmrOperationSpec);
-        auto taskParams = PartitionOperationIntoSeveralTasks(request.OperationParams, fmrOperationSpec, request.ClusterConnections);
+
+        TString partitionId;
+
+        try {
+            if (auto distUploadParams = std::get_if<TSortedUploadOperationParams>(&request.OperationParams)) {
+                partitionId = distUploadParams->PartitionId;
+                YQL_ENSURE(OperationPartitions_.contains(partitionId), "Partition " << partitionId << " should to be prepered before starting operation");
+            } else {
+                partitionId = PartitionOperationIntoSeveralTasks(request.OperationParams, fmrOperationSpec, request.ClusterConnections);
+            }
+        } catch (const std::exception& e) {
+            YQL_CLOG(ERROR, FastMapReduce) << "Failed to start operation with exception: " << e.what();
+            return NThreading::MakeFuture(TStartOperationResponse(EOperationStatus::Failed, e.what()));
+        }
+
+        std::vector<TTaskParams> taskParams = GetOutputTaskParams(OperationPartitions_.at(partitionId), request.OperationParams);
 
         std::unordered_set<TString> taskIds;
-
         for (auto& currentTaskParams: taskParams) {
             TString taskId = GenerateId();
             auto fmrResourceTasks = PartitionFmrResourcesIntoTasks(request.FmrResources, fmrOperationSpec);
@@ -92,7 +106,13 @@ public:
         }
 
         Operations_[operationId] = {.TaskIds = taskIds, .OperationStatus = EOperationStatus::Accepted, .SessionId = request.SessionId};
+
+        if (std::holds_alternative<TSortedUploadOperationParams>(request.OperationParams)) {
+            InitializeSortedUploadOperation(operationId, taskIds.size(), request.ClusterConnections);
+        }
+
         YQL_CLOG(DEBUG, FastMapReduce) << "Starting operation with id " << operationId;
+        OperationPartitions_.erase(partitionId);
         return NThreading::MakeFuture(TStartOperationResponse(EOperationStatus::Accepted, operationId));
     }
 
@@ -109,13 +129,15 @@ public:
         auto operationStatus =  operationInfo.OperationStatus;
         auto errorMessages = operationInfo.ErrorMessages;
         std::vector<TTableStats> outputTablesStats;
+        std::vector<TString> result;
         if (operationStatus == EOperationStatus::Completed) {
             // Calculating output table stats only in case of successful completion of opereation
             for (auto& tableId : operationInfo.OutputTableIds) {
                 outputTablesStats.emplace_back(CalculateTableStats(tableId));
             }
+            result = GetOperationToProcessAfterResult(operationId);
         }
-        return NThreading::MakeFuture(TGetOperationResponse(operationStatus, errorMessages, outputTablesStats));
+        return NThreading::MakeFuture(TGetOperationResponse(operationStatus, errorMessages, outputTablesStats, result));
     }
 
     NThreading::TFuture<TDeleteOperationResponse> DeleteOperation(const TDeleteOperationRequest& request) override {
@@ -237,6 +259,10 @@ public:
                     }
                     // TODO - проверка на валидность возвращаемой воркером статистики?
                 }
+
+                if (OperationsToProcessAfter_.contains(operationId) &&taskStatus == ETaskStatus::Completed) {
+                    HandleOperationToProcessAfterTaskCompleted(operationId, requestTaskState);
+                }
             }
             if (isTaskToDelete) {
                 ClearTaskAndPartIds(taskId);
@@ -357,6 +383,42 @@ public:
             }
         }
         return NThreading::MakeFuture(TListSessionsResponse{.SessionIds = sessionIds});
+    }
+
+    NThreading::TFuture<TPrepareOperationResponse> PrepareOperation(const TPrepareOperationRequest& request) override {
+        TGuard<TMutex> guard(Mutex_);
+
+        auto fmrOperationSpec = GetMergedFmrOperationSpec(request.FmrOperationSpec);
+
+        try {
+            auto partitionId = PartitionOperationIntoSeveralTasks(
+                request.OperationParams,
+                fmrOperationSpec,
+                request.ClusterConnections
+            );
+
+            YQL_CLOG(DEBUG, FastMapReduce) << "Successfully prepared operation with partitionId=" << partitionId
+                << ", tasksNum=" << OperationPartitions_[partitionId].TaskInputs.size();
+            return NThreading::MakeFuture(TPrepareOperationResponse{.PartitionId = partitionId, .TasksNum = OperationPartitions_[partitionId].TaskInputs.size()});
+        } catch (const std::exception& e) {
+            YQL_CLOG(ERROR, FastMapReduce) << "Failed to prepare operation: " << e.what();
+            return NThreading::MakeErrorFuture<TPrepareOperationResponse>(std::current_exception());
+        }
+    }
+
+    std::vector<TString> GetOperationToProcessAfterResult(TString operationId) {
+        std::vector<TString> result;
+
+        if (!OperationsToProcessAfter_.contains(operationId)) {
+            return result;
+        }
+        auto& distributedOpInfo = OperationsToProcessAfter_[operationId];
+
+        if (auto* uploadMeta = std::get_if<TSortedUploadOperatonMeta>(&distributedOpInfo)) {
+            result = std::move(uploadMeta->FragmentResultsYson);
+            OperationsToProcessAfter_.erase(operationId);
+        }
+        return result;
     }
 
 private:
@@ -566,12 +628,14 @@ private:
 
     bool CheckIsOperationOrdered(const TOperationParams& operationParams) {
         if (auto mapOptions = std::get_if<TMapOperationParams>(&operationParams)) {
-                return mapOptions->IsOrdered;
+            return mapOptions->IsOrdered;
+        } else if (auto reduceOptions = std::get_if<TSortedUploadOperationParams>(&operationParams)) {
+            return reduceOptions->IsOrdered;
         }
         return false;
     }
 
-    TOperationPartitions PartitionOperationIntoSeveralTasks(const TOperationParams& operationParams, const NYT::TNode& fmrOperationSpec, const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections) {
+    TString PartitionOperationIntoSeveralTasks(const TOperationParams& operationParams, const NYT::TNode& fmrOperationSpec, const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections) {
         bool isOrdered = CheckIsOperationOrdered(operationParams);
         auto ytPartitionerSettings = GetYtPartitionerSettings(fmrOperationSpec);
         auto partitionId = GenerateId();
@@ -601,7 +665,8 @@ private:
             ythrow yexception() << "Failed to partition input tables into tasks";
             // TODO - return FAILED_PARTITIONING status instead.
         }
-        return GetOutputTaskParams(partitionResult, operationParams);
+        OperationPartitions_[partitionId] = partitionResult;
+        return partitionId;
     }
 
     std::vector<TFmrResourceTaskInfo> PartitionFmrResourcesIntoTasks(const std::vector<TFmrResourceOperationInfo>& fmrResources, const NYT::TNode& fmrOperationSpec) {
@@ -775,6 +840,37 @@ private:
         return tableStats;
     }
 
+    void InitializeSortedUploadOperation(
+        const TString& operationId,
+        ui64 tasksNum,
+        const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections
+    ) {
+        YQL_ENSURE(clusterConnections.size() == 1, "SortedUpload should have exactly one cluster connection");
+
+        TSortedUploadOperatonMeta uploadMeta{
+            .FragmentResultsYson = std::vector<TString>(tasksNum)
+        };
+
+        OperationsToProcessAfter_[operationId] = uploadMeta;
+
+        YQL_CLOG(DEBUG, FastMapReduce) << "Initialized SortedUpload operation " << operationId
+            << " with " << tasksNum << " tasks";
+    }
+
+    void HandleOperationToProcessAfterTaskCompleted(const TString& operationId, TTaskState::TPtr taskState) {
+        if (!OperationsToProcessAfter_.contains(operationId)) {
+            return;
+        }
+
+        auto& distributedOpInfo = OperationsToProcessAfter_[operationId];
+
+        if (auto* taskSortedUploadResult = std::get_if<TTaskSortedUploadResult>(&taskState->Stats.TaskResult)) {
+            if (auto* uploadMeta = std::get_if<TSortedUploadOperatonMeta>(&distributedOpInfo)) {
+                uploadMeta->FragmentResultsYson[taskSortedUploadResult->FragmentOrder] = taskSortedUploadResult->FragmentResultYson;
+            }
+        }
+    }
+
     //////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     struct TCoordinatorTaskInfo {
@@ -783,6 +879,13 @@ private:
         TString OperationId;
         ui64 NumRetries;
     };
+
+
+    struct TSortedUploadOperatonMeta {
+        std::vector<TString> FragmentResultsYson;  // order -> YSON-serialized fragment result
+    };
+
+    using TOperationsToProcessAfterMeta = std::variant<TSortedUploadOperatonMeta>;
 
     struct TOperationInfo {
         std::unordered_set<TString> TaskIds;
@@ -813,9 +916,10 @@ private:
     std::queue<std::pair<TTask::TPtr, TString>> TasksToRun_; // Task, and TaskId
     std::unordered_set<TString> TaskToDeleteIds_; // TaskIds we want to pass to worker for deletion
     std::unordered_map<TString, TOperationInfo> Operations_; // OperationId -> current info about it
+    std::unordered_map<TString, TOperationsToProcessAfterMeta> OperationsToProcessAfter_; // OperationId -> distributed operation tracking
     std::unordered_map<TString, TIdempotencyKeyInfo> IdempotencyKeys_; // IdempotencyKey -> current info about it
     std::unordered_map<TString, TSessionInfo> Sessions_; // SessionId -> Session info (operations and activity)
-
+    std::unordered_map<TString, TPartitionResult> OperationPartitions_; // PartitionId -> TaskParamsPartition
     std::unordered_map<ui64, TWorkerInfo> Workers_; // WorkerId -> Info About It
 
     TMutex Mutex_;
@@ -842,22 +946,23 @@ private:
 
     //////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    // Helper structs for partitioning operation into tasks
-
     struct TOperationInputTablesGetter {
         std::vector<TOperationTableRef> OperationTableRef; // will be filled when std::visit is called
 
-        void operator () (const TUploadOperationParams& uploadOperationParams) {
+        void operator()(const TUploadOperationParams& uploadOperationParams) {
             OperationTableRef.emplace_back(uploadOperationParams.Input);
         }
-        void operator () (const TDownloadOperationParams& downloadOperationParams) {
+        void operator()(const TDownloadOperationParams& downloadOperationParams) {
             OperationTableRef.emplace_back(downloadOperationParams.Input);
         }
-        void operator () (const TMergeOperationParams& mergeOperationParams) {
+        void operator()(const TMergeOperationParams& mergeOperationParams) {
             OperationTableRef = mergeOperationParams.Input;
         }
-        void operator () (const TMapOperationParams& mapOperationParams) {
+        void operator()(const TMapOperationParams& mapOperationParams) {
             OperationTableRef = mapOperationParams.Input;
+        }
+        void operator()(const TSortedUploadOperationParams& SortedUploadOperationParams) {
+            OperationTableRef.emplace_back(SortedUploadOperationParams.Input);
         }
     };
 
@@ -865,7 +970,7 @@ private:
         std::vector<TTaskParams> TaskParams; // Will be filled when std::visit is called
         TPartitionResult PartitionResult;
 
-        void operator () (const TUploadOperationParams& uploadOperationParams) {
+        void operator()(const TUploadOperationParams& uploadOperationParams) {
             for (auto& task: PartitionResult.TaskInputs) {
                 TUploadTaskParams uploadTaskParams;
                 YQL_ENSURE(task.Inputs.size() == 1, "Upload task should have exactly one fmr table partition input");
@@ -875,7 +980,21 @@ private:
                 TaskParams.emplace_back(uploadTaskParams);
             }
         }
-        void operator () (const TDownloadOperationParams& downloadOperationParams) {
+        void operator()(const TSortedUploadOperationParams& SortedUploadOperationParams) {
+            ui64 taskOrder = 0;
+            for (auto& task: PartitionResult.TaskInputs) {
+                TSortedUploadTaskParams SortedUploadTaskParams;
+                YQL_ENSURE(task.Inputs.size() == 1, "Distributed upload task should have exactly one fmr table partition input");
+                auto& fmrTablePart = task.Inputs[0];
+                SortedUploadTaskParams.Input = std::get<TFmrTableInputRef>(fmrTablePart);
+                SortedUploadTaskParams.Output = SortedUploadOperationParams.Output;
+                SortedUploadTaskParams.CookieYson = SortedUploadOperationParams.Cookies[taskOrder];
+                SortedUploadTaskParams.Order = taskOrder;
+                TaskParams.emplace_back(SortedUploadTaskParams);
+                taskOrder++;
+            }
+        }
+        void operator()(const TDownloadOperationParams& downloadOperationParams) {
             for (auto& task: PartitionResult.TaskInputs) {
                 TDownloadTaskParams downloadTaskParams;
                 YQL_ENSURE(task.Inputs.size() == 1, "Download task should have exactly one yt table partition input");
@@ -886,7 +1005,7 @@ private:
                 TaskParams.emplace_back(downloadTaskParams);
             }
         }
-        void operator () (const TMergeOperationParams& mergeOperationParams) {
+        void operator()(const TMergeOperationParams& mergeOperationParams) {
             for (auto& task: PartitionResult.TaskInputs) {
                 TMergeTaskParams mergeTaskParams;
                 mergeTaskParams.Input = task;
@@ -894,7 +1013,7 @@ private:
                 TaskParams.emplace_back(mergeTaskParams);
             }
         }
-        void operator () (const TMapOperationParams& mapOperationParams) {
+        void operator()(const TMapOperationParams& mapOperationParams) {
             for (auto& task: PartitionResult.TaskInputs) {
                 TMapTaskParams mapTaskParams;
                 mapTaskParams.Input = task;

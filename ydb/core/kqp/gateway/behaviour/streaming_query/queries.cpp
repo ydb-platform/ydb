@@ -21,6 +21,7 @@
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/conclusion/status.h>
 #include <ydb/library/query_actor/query_actor.h>
+#include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 
 #include <fmt/format.h>
 
@@ -1517,6 +1518,7 @@ public:
         NKikimrKqp::TStreamingQueryState InitialState;
         TPathId QueryPathId;
         ui64 QueryTextRevision = 0;
+        std::shared_ptr<NYql::NPq::NProto::StreamingDisposition> StreamingDisposition;
     };
 
     TStartStreamingQueryTableActor(const TExternalContext& context, const TString& queryPath, const TSettings& settings)
@@ -1747,6 +1749,8 @@ private:
         ev->Generation = PreviousGeneration + 1;
         ev->CheckpointId = State.GetCheckpointId();
         ev->StreamingQueryPath = QueryPath;
+        ev->CustomerSuppliedId = State.GetCurrentExecutionId();
+        ev->StreamingDisposition = Settings.StreamingDisposition;
 
         if (const auto statsPeriod = AppData()->QueryServiceConfig.GetProgressStatsPeriodMs()) {
             ev->ProgressStatsPeriod = TDuration::MilliSeconds(statsPeriod);
@@ -1807,66 +1811,25 @@ private:
     static std::vector<NKikimrKqp::TScriptExecutionRetryState::TMapping> CreateDefaultRetryMapping() {
         // Retried all statuses except of SUCCESS, CANCELLED
 
-        std::vector<NKikimrKqp::TScriptExecutionRetryState::TMapping> result;
+        NKikimrKqp::TScriptExecutionRetryState::TMapping mapping;
 
-        {   // Immediate retry policy
-            // Query will retry infinitely, if it runtime >= 864s (<= 100 retries per day)
-            // Used for internal / user errors and temporary unavailability
-            NKikimrKqp::TScriptExecutionRetryState::TMapping mapping;
-            mapping.AddStatusCode(Ydb::StatusIds::UNAVAILABLE);
-            mapping.AddStatusCode(Ydb::StatusIds::INTERNAL_ERROR);
-            mapping.AddStatusCode(Ydb::StatusIds::STATUS_CODE_UNSPECIFIED);
-            mapping.AddStatusCode(Ydb::StatusIds::UNDETERMINED);
-            mapping.AddStatusCode(Ydb::StatusIds::ABORTED);
-            mapping.AddStatusCode(Ydb::StatusIds::SESSION_BUSY);
-            mapping.AddStatusCode(Ydb::StatusIds::BAD_SESSION);
-            mapping.AddStatusCode(Ydb::StatusIds::TIMEOUT);
-            mapping.AddStatusCode(Ydb::StatusIds::ALREADY_EXISTS);
-            mapping.AddStatusCode(Ydb::StatusIds::SCHEME_ERROR);
-            mapping.AddStatusCode(Ydb::StatusIds::GENERIC_ERROR);
-            mapping.AddStatusCode(Ydb::StatusIds::PRECONDITION_FAILED);
-            mapping.AddStatusCode(Ydb::StatusIds::SESSION_EXPIRED);
-            mapping.AddStatusCode(Ydb::StatusIds::UNSUPPORTED);
-
-            auto& policy = *mapping.MutableBackoffPolicy();
-            policy.SetRetryPeriodMs(TDuration::Days(1).MilliSeconds());
-            policy.SetRetryRateLimit(100);
-
-            result.push_back(std::move(mapping));
+        const auto* statusDescriptor = Ydb::StatusIds::StatusCode_descriptor();
+        for (int i = 0; i < statusDescriptor->value_count(); ++i) {
+            const auto status = static_cast<Ydb::StatusIds::StatusCode>(statusDescriptor->value(i)->number());
+            if (!IsIn({Ydb::StatusIds::SUCCESS, Ydb::StatusIds::CANCELLED}, status)) {
+                mapping.AddStatusCode(status);
+            }
         }
 
-        {   // Short backoff retry policy
-            // Query will retry infinitely, if it runtime >= 662s (<= 130 retries per day), maximal backoff period is 202s
-            // Used for potentially external errors
-            NKikimrKqp::TScriptExecutionRetryState::TMapping mapping;
-            mapping.AddStatusCode(Ydb::StatusIds::EXTERNAL_ERROR);
-            mapping.AddStatusCode(Ydb::StatusIds::BAD_REQUEST);
-            mapping.AddStatusCode(Ydb::StatusIds::UNAUTHORIZED);
-            mapping.AddStatusCode(Ydb::StatusIds::NOT_FOUND);
+        auto& policy = *mapping.MutableExponentialDelayPolicy();
+        policy.SetBackoffMultiplier(1.5);
+        policy.SetJitterFactor(0.1);
+        *policy.MutableInitialBackoff() = NProtoInterop::CastToProto(TDuration::Seconds(1));
+        *policy.MutableMaxBackoff() = NProtoInterop::CastToProto(TDuration::Minutes(1));
+        *policy.MutableResetBackoffThreshold() = NProtoInterop::CastToProto(TDuration::Hours(1)); // Backoff state reset if uptime > 1h (next retry treated as first after reset)
+        *policy.MutableQueryUptimeThreshold() = NProtoInterop::CastToProto(TDuration::Minutes(1)); // Query retried immediately if uptime > 1m
 
-            auto& policy = *mapping.MutableBackoffPolicy();
-            policy.SetRetryPeriodMs(TDuration::Days(1).MilliSeconds());
-            policy.SetRetryRateLimit(100);
-            policy.SetBackoffPeriodMs(TDuration::Seconds(2).MilliSeconds());
-
-            result.push_back(std::move(mapping));
-        }
-
-        {   // Long backoff retry policy
-            // Query will retry infinitely, if it runtime >= 448s (<= 192 retries per day), maximal backoff period is 404s
-            // Used for cluster overloaded errors
-            NKikimrKqp::TScriptExecutionRetryState::TMapping mapping;
-            mapping.AddStatusCode(Ydb::StatusIds::OVERLOADED);
-
-            auto& policy = *mapping.MutableBackoffPolicy();
-            policy.SetRetryPeriodMs(TDuration::Days(1).MilliSeconds());
-            policy.SetRetryRateLimit(100);
-            policy.SetBackoffPeriodMs(TDuration::Seconds(4).MilliSeconds());
-
-            result.push_back(std::move(mapping));
-        }
-
-        return result;
+        return {std::move(mapping)};
     }
 
 private:
@@ -2113,6 +2076,7 @@ private:
             .InitialState = State,
             .QueryPathId = SchemeInfo.PathId,
             .QueryTextRevision = QuerySettings.QueryTextRevision,
+            .StreamingDisposition = QuerySettings.StreamingDisposition,
         }));
         LOG_D("Start TStartStreamingQueryTableActor " << startActorId);
     }
@@ -2346,9 +2310,17 @@ template <typename TDerived>
 class TRequestHandlerWithSync : public TRequestHandlerBase<TDerived> {
     using TBase = TRequestHandlerBase<TDerived>;
 
+    static NYql::NPq::NProto::StreamingDisposition GetDefaultStreamingDisposition() {
+        NYql::NPq::NProto::StreamingDisposition result;
+        result.mutable_from_last_checkpoint()->set_force(true);
+        return result;
+    }
+
 public:
     using TBase::LogPrefix;
     using TBase::TBase;
+
+    static inline const TString DefaultStreamingDisposition = GetDefaultStreamingDisposition().SerializeAsString();
 
     STFUNC(StateFuncSync) {
         switch (ev->GetTypeRewrite()) {
@@ -2522,6 +2494,7 @@ private:
         CHECK_STATUS(validator.SaveRequired(ESqlSettings::QUERY_TEXT_FEATURE, &TPropertyValidator::ValidateNotEmpty));
         CHECK_STATUS(validator.SaveDefault(EName::Run, "true", &TPropertyValidator::ValidateBool));
         CHECK_STATUS(validator.SaveDefault(EName::ResourcePool, NResourcePool::DEFAULT_POOL_ID));
+        CHECK_STATUS(validator.SaveDefault(EName::StreamingDisposition, DefaultStreamingDisposition));
         CHECK_STATUS(validator.Save(
             EName::QueryTextRevision,
             ToString(SchemeInfo ? TStreamingQuerySettings().FromProto(SchemeInfo->Properties).QueryTextRevision + 1 : 1)
@@ -2630,14 +2603,26 @@ private:
         CHECK_STATUS(validator.SaveDefault(EName::ResourcePool, previousSettings.ResourcePool));
         CHECK_STATUS_RET(force, validator.ExtractDefault(EName::Force, "false", &TPropertyValidator::ValidateBool));
         CHECK_STATUS_RET(queryText, validator.ExtractOptional(ESqlSettings::QUERY_TEXT_FEATURE, &TPropertyValidator::ValidateNotEmpty));
+        CHECK_STATUS_RET(streamingDisposition, validator.ExtractOptional(EName::StreamingDisposition));
 
         const auto queryTextValue = queryText.DetachResult();
         if (queryTextValue && force.GetResult() != "true") {
             return TStatus::Fail(Ydb::StatusIds::PRECONDITION_FAILED, "Changing the query text will result in the loss of the checkpoint. Please use FORCE=true to change the request text");
         }
 
+        const auto streamingDispositionValue = streamingDisposition.DetachResult();
+        auto queryTestRevision = previousSettings.QueryTextRevision;
+        if (queryTextValue) {
+            queryTestRevision++;
+        } else if (streamingDispositionValue) {
+            NYql::NPq::NProto::StreamingDisposition disposition;
+            Y_VALIDATE(disposition.ParseFromString(*streamingDispositionValue), "Failed to parse StreamingDisposition");
+            queryTestRevision += !disposition.has_from_last_checkpoint(); // Recompile query and drop checkpoint if disposition changed
+        }
+
         CHECK_STATUS(validator.Save(ESqlSettings::QUERY_TEXT_FEATURE, queryTextValue.value_or(previousSettings.QueryText)));
-        CHECK_STATUS(validator.Save(EName::QueryTextRevision, ToString(queryTextValue.has_value() + previousSettings.QueryTextRevision)));
+        CHECK_STATUS(validator.Save(EName::QueryTextRevision, ToString(queryTestRevision)));
+        CHECK_STATUS(validator.Save(EName::StreamingDisposition, streamingDispositionValue.value_or(DefaultStreamingDisposition)));
 
         return validator.Finish();
     }

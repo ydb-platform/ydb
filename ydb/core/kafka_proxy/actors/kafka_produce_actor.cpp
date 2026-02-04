@@ -709,21 +709,37 @@ void TKafkaProduceActor::RecreatePartitionWriterAndRetry(ui64 cookie, const TAct
             Send(txnIt->second.ActorId, new TEvents::TEvPoison());
             TransactionalWriters.erase(txnIt);
         }
-        TProduceRequestData::TProduceRequestData::TTopicProduceData::TPartitionProduceData partitionData;
-        for (const auto& topicData : cookieInfo.Request->Request->Get()->Request->TopicData) {
-            TString topicPath = NormalizePath(Context->DatabasePath, *topicData.Name);
-            if (topicPath == cookieInfo.TopicPath) {
-                for(const auto& partitionData : topicData.PartitionData) {
-                    if (partitionData.Index == static_cast<int>(cookieInfo.PartitionId)) {
-                        SendWriteRequest(partitionData, topicPath, cookieInfo.Request, cookieInfo.Position, cookieInfo.RuPerRequest, ctx);
-                        break;
+
+        // resending ProduceRequests that were previously sent to the same PartitionWriter
+        std::vector<ui64> cookiesToDelete;
+        ui64 currMaxCookie = (--Cookies.end())->first;
+        for (auto& [requestCookie, requestCookieInfo] : Cookies) {
+            if (requestCookie > currMaxCookie) {
+                break;
+            }
+            if (requestCookie < cookie) {
+                continue;
+            }
+            if (requestCookieInfo.TopicPath == cookieInfo.TopicPath && requestCookieInfo.PartitionId == cookieInfo.PartitionId) {
+                for (const auto& topicData : requestCookieInfo.Request->Request->Get()->Request->TopicData) {
+                    TString topicPath = NormalizePath(Context->DatabasePath, *topicData.Name);
+                    if (topicPath == requestCookieInfo.TopicPath) {
+                        for(const auto& partitionData : topicData.PartitionData) {
+                            if (partitionData.Index == static_cast<int>(requestCookieInfo.PartitionId)) {
+                                SendWriteRequest(partitionData, topicPath, requestCookieInfo.Request, requestCookieInfo.Position, requestCookieInfo.RuPerRequest, ctx);
+                                requestCookieInfo.Request->WaitResultCookies.erase(requestCookie);
+                                requestCookieInfo.Request->WaitAcceptingCookies.erase(requestCookie);
+                                cookiesToDelete.push_back(requestCookie);
+                                break;
+                            }
+                        }
                     }
                 }
             }
         }
-        cookieInfo.Request->WaitResultCookies.erase(cookie);
-        cookieInfo.Request->WaitAcceptingCookies.erase(cookie);
-        Cookies.erase(it);
+        for (const ui64& c : cookiesToDelete) {
+            Cookies.erase(c);
+        }
     }
 }
 

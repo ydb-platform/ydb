@@ -194,6 +194,36 @@ namespace NKikimr::NHttpProxy {
         return parsedQueueUrl->Database;
     }
 
+    static TString LogHttpRequestResponseCommonInfoString(const THttpRequestContext& httpContext, TInstant startTime, TStringBuf api, TStringBuf topicPath, TStringBuf method, TStringBuf userSid, int httpCode, TStringBuf httpResponseMessage) {
+        const TDuration duration = TInstant::Now() - startTime;
+        TStringBuilder logString;
+        logString << "Request done.";
+        if (!api.empty()) {
+            logString << " Api [" << api << "]";
+        }
+        if (!method.empty()) {
+            logString << " Action [" << method << "]";
+        }
+        if (!httpContext.UserName.empty()) {
+            logString << " User [" << httpContext.UserName << "]";
+        }
+        if (!httpContext.DatabasePath.empty()) {
+            logString << " Database [" << httpContext.DatabasePath << "]";
+        }
+        if (!topicPath.empty()) {
+            logString << " Queue [" << topicPath << "]";
+        }
+        logString << " IP [" << httpContext.SourceAddress << "] Duration [" << duration.MilliSeconds() << "ms]";
+        if (!userSid.empty()) {
+            logString << " Subject [" << userSid << "]";
+        }
+        logString << " Code [" << httpCode << "]";
+        if (httpCode != 200) {
+            logString << " Response [" << httpResponseMessage << "]";
+        }
+        return logString;
+    }
+
     constexpr TStringBuf IAM_HEADER = "x-yacloud-subjecttoken";
     constexpr TStringBuf SECURITY_TOKEN_HEADER = "x-amz-security-token";
     constexpr TStringBuf AUTHORIZATION_HEADER = "authorization";
@@ -830,12 +860,22 @@ namespace NKikimr::NHttpProxy {
 
             void ReplyToHttpContext(const TActorContext& ctx, std::optional<size_t> issueCode = std::nullopt) {
                 ReportLatencyCounters(ctx);
+                LogHttpRequestResponse(ctx, issueCode);
 
                 if (issueCode.has_value()) {
                     HttpContext.DoReply(ctx, issueCode.value());
                 } else {
                     HttpContext.DoReply(ctx);
                 }
+            }
+
+            void LogHttpRequestResponse(const TActorContext& ctx, const std::optional<size_t> issueCode) {
+                const int httpCode = issueCode ? MapToException(HttpContext.ResponseData.Status, Method, *issueCode).second : 200;
+                const bool isServerError = IsServerError(httpCode);
+                auto priority = isServerError ? NActors::NLog::PRI_WARN : NActors::NLog::PRI_INFO;
+                LOG_LOG_S_SAMPLED_BY(ctx, priority, NKikimrServices::HTTP_PROXY,
+                                     NSqsTopic::SampleIdFromRequestId(HttpContext.RequestId),
+                                     "Request [" << HttpContext.RequestId << "] " << LogHttpRequestResponseCommonInfoString(HttpContext, StartTime, "Kinesis", HttpContext.StreamName, Method, {}, httpCode, HttpContext.ResponseData.ErrorText));
             }
 
             void ReportInputCounters(const TActorContext& ctx) {
@@ -1144,7 +1184,7 @@ namespace NKikimr::NHttpProxy {
                                  {"code", TStringBuilder() << (int)MapToException(status, Method, issueCode).second},
                                  {"name", "api.sqs.response.count"},
                              })});
-                ReplyToHttpContext(ctx, issueCode);
+                ReplyToHttpContext(ctx, 0, issueCode);
 
                 ctx.Send(AuthActor, new TEvents::TEvPoisonPill());
 
@@ -1169,21 +1209,32 @@ namespace NKikimr::NHttpProxy {
                                  {"code", ToString(httpStatusCode)},
                                  {"name", "api.sqs.response.count"},
                              })});
-                ReplyToHttpContext(ctx);
+                ReplyToHttpContext(ctx, errorText.size(), std::nullopt);
 
                 ctx.Send(AuthActor, new TEvents::TEvPoisonPill());
 
                 TBase::Die(ctx);
             }
 
-            void ReplyToHttpContext(const TActorContext& ctx, std::optional<size_t> issueCode = std::nullopt) {
+            void ReplyToHttpContext(const TActorContext& ctx, size_t messageSize, std::optional<size_t> issueCode) {
                 ReportLatencyCounters(ctx);
+                ReportResponseSizeCounters(TStringBuilder() << HttpContext.ResponseData.YmqHttpCode, messageSize, ctx);
+                LogHttpRequestResponse(ctx);
 
                 if (issueCode.has_value()) {
                     HttpContext.DoReply(ctx, issueCode.value());
                 } else {
                     HttpContext.DoReply(ctx);
                 }
+            }
+
+            void LogHttpRequestResponse(const TActorContext& ctx) {
+                const int httpCode = HttpContext.ResponseData.UseYmqStatusCode ? HttpContext.ResponseData.YmqHttpCode : 200;
+                const bool isServerError = IsServerError(httpCode);
+                auto priority = isServerError ? NActors::NLog::PRI_WARN : NActors::NLog::PRI_INFO;
+                LOG_LOG_S_SAMPLED_BY(ctx, priority, NKikimrServices::SQS,
+                                     NSqsTopic::SampleIdFromRequestId(HttpContext.RequestId),
+                                     "Request [" << HttpContext.RequestId << "] " << LogHttpRequestResponseCommonInfoString(HttpContext, StartTime, "SqsTopic", TopicPath, Method, UserSid_, httpCode, HttpContext.ResponseData.ErrorText));
             }
 
             void ReportInputCounters(const TActorContext& ctx) {
@@ -1201,7 +1252,17 @@ namespace NKikimr::NHttpProxy {
                 TDuration dur = ctx.Now() - StartTime;
                 ctx.Send(MakeMetricsServiceID(),
                          new TEvServerlessProxy::TEvHistCounter{static_cast<i64>(dur.MilliSeconds()), 1,
-                             BuildLabels(Method, HttpContext, "api.sqs.response.duration_milliseconds")
+                            AddCommonLabels({{"name", "api.sqs.response.duration_milliseconds"}})
+                        });
+            }
+
+            void ReportResponseSizeCounters(const TString& code, size_t value, const TActorContext& ctx) {
+                ctx.Send(MakeMetricsServiceID(),
+                         new TEvServerlessProxy::TEvCounter{static_cast<i64>(value), true, true,
+                            AddCommonLabels({
+                                {"code", code},
+                                {"name", "api.sqs.response.bytes"}
+                            })
                         });
             }
 
@@ -1218,7 +1279,7 @@ namespace NKikimr::NHttpProxy {
                                  AddCommonLabels({
                                      {"code", "200"},
                                      {"name", "api.sqs.response.count"}})});
-                    ReplyToHttpContext(ctx);
+                    ReplyToHttpContext(ctx, ev->Get()->Message->ByteSizeLong(), std::nullopt);
                 } else {
                     auto retryClass =
                         NYdb::NTopic::GetRetryErrorClass(ev->Get()->Status->GetStatus());
@@ -1355,6 +1416,7 @@ namespace NKikimr::NHttpProxy {
 
             TActorId AuthActor;
             bool InputCountersReported = false;
+            TString UserSid_;
         };
     };
 
@@ -1437,6 +1499,7 @@ namespace NKikimr::NHttpProxy {
                                                             NKikimr::NGRpcService::TEvSqsTopic##name##Request>>(#name, &Ydb::SqsTopic::V1::SqsTopicService::Stub::AsyncSqsTopic##name)
 
         DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_UNKNOWN(GetQueueUrl);
+        DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_UNKNOWN(ListQueues);
 
 #undef DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_UNKNOWN
 
@@ -1447,11 +1510,14 @@ namespace NKikimr::NHttpProxy {
                                                           Ydb::Ymq::V1::name##Result,                                      \
                                                           decltype(&Ydb::SqsTopic::V1::SqsTopicService::Stub::AsyncSqsTopic##name),       \
                                                           NKikimr::NGRpcService::TEvSqsTopic##name##Request>>(#name, &Ydb::SqsTopic::V1::SqsTopicService::Stub::AsyncSqsTopic##name)
+        DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN(GetQueueAttributes);
         DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN(SendMessage);
         DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN(SendMessageBatch);
         DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN(ReceiveMessage);
         DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN(DeleteMessage);
         DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN(DeleteMessageBatch);
+        DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN(ChangeMessageVisibility);
+        DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN(ChangeMessageVisibilityBatch);
 #undef DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN
     }
 

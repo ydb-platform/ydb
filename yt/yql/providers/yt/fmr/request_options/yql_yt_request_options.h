@@ -8,6 +8,7 @@
 #include <vector>
 
 #include <yt/cpp/mapreduce/interface/common.h>
+#include <yt/cpp/mapreduce/interface/distributed_session.h>
 
 namespace NYql::NFmr {
 
@@ -33,6 +34,7 @@ enum class ETaskType {
     Unknown,
     Download,
     Upload,
+    SortedUpload,
     Merge,
     Map
 };
@@ -83,7 +85,7 @@ struct TYtTableRef {
     TYtTableRef(const NYT::TRichYPath& richPath, const TMaybe<TString>& filePath = Nothing());
     TYtTableRef(const TString& cluster, const TString& path, const TMaybe<TString>& filePath = Nothing());
 
-    bool operator == (const TYtTableRef&) const = default;
+    bool operator==(const TYtTableRef&) const = default;
 };
 
 struct TYtTableTaskRef {
@@ -93,7 +95,7 @@ struct TYtTableTaskRef {
     void Save(IOutputStream* buffer) const;
     void Load(IInputStream* buffer);
 
-    bool operator == (const TYtTableTaskRef&) const = default;
+    bool operator==(const TYtTableTaskRef&) const = default;
 }; // corresponds to a partition of several yt input tables.
 
 void SaveRichPath(IOutputStream* buffer, const NYT::TRichYPath& path);
@@ -116,14 +118,14 @@ struct TFmrTableId {
     void Save(IOutputStream* buffer) const;
     void Load(IInputStream* buffer);
 
-    bool operator == (const TFmrTableId&) const = default;
+    bool operator==(const TFmrTableId&) const = default;
 };
 
 struct TFmrTableRef {
     TFmrTableId FmrTableId;
     std::vector<TString> Columns = {};
     TString SerializedColumnGroups = TString();
-    bool operator == (const TFmrTableRef&) const = default;
+    bool operator==(const TFmrTableRef&) const = default;
 };
 
 struct TTableRange {
@@ -134,7 +136,7 @@ struct TTableRange {
     void Save(IOutputStream* buffer) const;
     void Load(IInputStream* buffer);
 
-    bool operator == (const TTableRange&) const = default;
+    bool operator==(const TTableRange&) const = default;
 }; // Corresnponds to range [MinChunk, MaxChunk)
 
 struct TFmrTableInputRef {
@@ -146,7 +148,7 @@ struct TFmrTableInputRef {
     void Save(IOutputStream* buffer) const;
     void Load(IInputStream* buffer);
 
-    bool operator == (const TFmrTableInputRef&) const = default;
+    bool operator==(const TFmrTableInputRef&) const = default;
 }; // Corresponds to part of table with fixed TableId but several PartIds, Empty TablesRanges means that this table is not present in task.
 
 struct TFmrTableOutputRef {
@@ -163,37 +165,38 @@ struct TFmrTableOutputRef {
     void Save(IOutputStream* buffer) const;
     void Load(IInputStream* buffer);
 
-    bool operator == (const TFmrTableOutputRef&) const = default;
+    bool operator==(const TFmrTableOutputRef&) const = default;
 };
 
 struct TTableStats {
     ui64 Chunks = 0;
     ui64 Rows = 0;
     ui64 DataWeight = 0;
-    bool operator == (const TTableStats&) const = default;
+    bool operator==(const TTableStats&) const = default;
 };
 
 struct TSortedChunkStats {
     bool IsSorted = false;
     NYT::TNode FirstRowKeys;
+    NYT::TNode LastRowKeys;
 
     void Save(IOutputStream* buffer) const;
     void Load(IInputStream* buffer);
 
-    bool operator == (const TSortedChunkStats&) const = default;
+    bool operator==(const TSortedChunkStats&) const = default;
 };
 
 struct TChunkStats {
     ui64 Rows = 0;
     ui64 DataWeight = 0;
     TSortedChunkStats SortedChunkStats = TSortedChunkStats();
-    bool operator == (const TChunkStats&) const = default;
+    bool operator==(const TChunkStats&) const = default;
 };
 
 struct TTableChunkStats {
     TString PartId;
     std::vector<TChunkStats> PartIdChunkStats;
-    bool operator == (const TTableChunkStats&) const = default;
+    bool operator==(const TTableChunkStats&) const = default;
 }; // detailed statistics for all chunks in partition
 
 } // namespace NYql::NFmr
@@ -218,8 +221,24 @@ namespace std {
 
 namespace NYql::NFmr {
 
+struct TTaskUploadResult {};
+
+struct TTaskDownloadResult {};
+
+struct TTaskMergeResult {};
+
+struct TTaskMapResult {};
+
+struct TTaskSortedUploadResult {
+    TString FragmentResultYson;
+    ui64 FragmentOrder;
+};
+
+using TTaskResult = std::variant<TTaskUploadResult, TTaskDownloadResult, TTaskMergeResult, TTaskMapResult, TTaskSortedUploadResult>;
+
 struct TStatistics {
     std::unordered_map<TFmrTableOutputRef, TTableChunkStats> OutputTables;
+    TTaskResult TaskResult;
 };
 
 using TOperationTableRef = std::variant<TYtTableRef, TFmrTableRef>;
@@ -228,14 +247,54 @@ using TTaskTableRef = std::variant<TYtTableTaskRef, TFmrTableInputRef>;
 
 // TODO - TYtTableTaskRef может быть из нескольких входных таблиц, но TFmrTableInputRef - часть одной таблицы, подумать как лучше
 
+struct TClusterConnection {
+    TString TransactionId;
+    TString YtServerName;
+    TMaybe<TString> Token;
+
+    void Save(IOutputStream* buffer) const;
+    void Load(IInputStream* buffer);
+};
+
+struct TYtReaderSettings {
+    bool WithAttributes = false; // Enable RowIndex and RangeIndex, for now only mode = false is supported.
+};
+
+struct TYtWriterSettings {
+    TMaybe<ui64> MaxRowWeight = Nothing();
+};
+
+struct TStartDistributedWriteOptions {
+    TDuration Timeout = TDuration::Minutes(5);
+    TDuration PingInterval = TDuration::Seconds(1);
+};
+
 struct TUploadOperationParams {
     TFmrTableRef Input;
     TYtTableRef Output;
 };
 
+struct TSortedUploadOperationParams {
+    void UpdateAfterPreparation(std::vector<TString> cookies, TString PartitionId);
+
+    TFmrTableRef Input;
+    TYtTableRef Output;
+    TString SessionId;
+    std::vector<TString> Cookies;
+    TString PartitionId;
+    bool IsOrdered = true;
+};
+
 struct TUploadTaskParams {
     TFmrTableInputRef Input;
     TYtTableRef Output;
+};
+
+struct TSortedUploadTaskParams {
+    TFmrTableInputRef Input;
+    TYtTableRef Output;
+    TString CookieYson;
+    ui64 Order;
 };
 
 struct TDownloadOperationParams {
@@ -279,18 +338,9 @@ struct TMapTaskParams {
     bool IsOrdered;
 };
 
-using TOperationParams = std::variant<TUploadOperationParams, TDownloadOperationParams, TMergeOperationParams, TMapOperationParams>;
+using TOperationParams = std::variant<TUploadOperationParams, TDownloadOperationParams, TMergeOperationParams, TMapOperationParams, TSortedUploadOperationParams>;
 
-using TTaskParams = std::variant<TUploadTaskParams, TDownloadTaskParams, TMergeTaskParams, TMapTaskParams>;
-
-struct TClusterConnection {
-    TString TransactionId;
-    TString YtServerName;
-    TMaybe<TString> Token;
-
-    void Save(IOutputStream* buffer) const;
-    void Load(IInputStream* buffer);
-};
+using TTaskParams = std::variant<TUploadTaskParams, TDownloadTaskParams, TMergeTaskParams, TMapTaskParams, TSortedUploadTaskParams>;
 
 struct TFileInfo {
     TString LocalPath; // Path to local file, filled in worker.

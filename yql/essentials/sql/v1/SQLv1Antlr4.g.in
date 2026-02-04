@@ -249,7 +249,7 @@ smart_parenthesis: LPAREN (select_subexpr | COMMA?) RPAREN;
 
 expr_list: expr (COMMA expr)*;
 
-pure_column_list: LPAREN an_id (COMMA an_id)* RPAREN;
+pure_column_list: LPAREN an_id (COMMA an_id)* COMMA? RPAREN;
 
 pure_column_or_named: bind_parameter | an_id;
 pure_column_or_named_list: LPAREN pure_column_or_named (COMMA pure_column_or_named)* RPAREN;
@@ -621,7 +621,7 @@ into_values_source:
 values_stmt: VALUES values_source_row_list;
 
 values_source: values_stmt | select_stmt;
-values_source_row_list: values_source_row (COMMA values_source_row)*;
+values_source_row_list: values_source_row (COMMA values_source_row)* COMMA?;
 values_source_row: LPAREN expr_list RPAREN;
 
 create_external_data_source_stmt: CREATE (OR REPLACE)? EXTERNAL DATA SOURCE (IF NOT EXISTS)? object_ref
@@ -661,6 +661,7 @@ streaming_query_setting_value:
     id_or_type
   | STRING_VALUE
   | bool_value
+  | streaming_query_settings
 ;
 
 streaming_query_definition: AS DO inline_action;

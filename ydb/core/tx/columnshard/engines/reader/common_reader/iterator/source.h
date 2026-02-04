@@ -88,6 +88,7 @@ private:
     TAtomic SyncSectionFlag = 1;
     YDB_READONLY(EType, Type, EType::Undefined);
     YDB_READONLY(ui32, SourceIdx, 0);
+    YDB_READONLY_DEF(ui64, DeprecatedPortionId);
     static inline TAtomicCounter MemoryGroupCounter = 0;
     YDB_READONLY(ui64, SequentialMemoryGroupIdx, MemoryGroupCounter.Inc());
     YDB_READONLY(TSnapshot, RecordSnapshotMin, TSnapshot::Zero());
@@ -102,6 +103,9 @@ private:
 
     virtual ui64 DoGetEntityId() const override {
         return SourceIdx;
+    }
+    virtual ui64 DoGetDeprecatedPortionId() const override {
+        return DeprecatedPortionId;
     }
 
     virtual ui64 DoGetEntityRecordsCount() const override;
@@ -218,7 +222,7 @@ public:
 
     IDataSource(const EType type, const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context,
         const TSnapshot& recordSnapshotMin, const TSnapshot& recordSnapshotMax, const std::optional<ui32> recordsCount,
-        const std::optional<ui64> shardingVersion, const bool hasDeletions);
+        const std::optional<ui64> shardingVersion, const bool hasDeletions, const ui64 deprecatedPortionId);
 
     virtual ~IDataSource() = default;
 

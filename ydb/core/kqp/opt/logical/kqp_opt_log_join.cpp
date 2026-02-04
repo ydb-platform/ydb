@@ -496,7 +496,7 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
     size_t rightPrefixSize;
     TMaybeNode<TExprBase> rightPrefixExpr;
 
-    auto prefixLookup = RewriteReadToPrefixLookup(rightReadMatch->Read, ctx, kqpCtx, kqpCtx.Config->IdxLookupJoinsPrefixPointLimit);
+    auto prefixLookup = RewriteReadToPrefixLookup(rightReadMatch->Read, ctx, kqpCtx, kqpCtx.Config->GetIdxLookupJoinPointsLimit());
     if (prefixLookup) {
         lookupTable = prefixLookup->LookupTableName;
         indexName = prefixLookup->IndexName;
@@ -540,7 +540,7 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
     }
 
     const bool useStreamIndexLookupJoin = (kqpCtx.IsDataQuery() || kqpCtx.IsGenericQuery())
-        && kqpCtx.Config->EnableKqpDataQueryStreamIdxLookupJoin;
+        && kqpCtx.Config->GetEnableKqpDataQueryStreamIdxLookupJoin();
 
     auto leftRowArg = Build<TCoArgument>(ctx, join.Pos())
         .Name("leftRowArg")
@@ -961,7 +961,7 @@ TExprBase KqpJoinToIndexLookup(const TExprBase& node, TExprContext& ctx, const T
         useCBO = false;
     }
 
-    if (!useCBO && kqpCtx.IsScanQuery() && !kqpCtx.Config->EnableKqpScanQueryStreamIdxLookupJoin) {
+    if (!useCBO && kqpCtx.IsScanQuery() && !kqpCtx.Config->GetEnableKqpScanQueryStreamIdxLookupJoin()) {
         return node;
     }
 

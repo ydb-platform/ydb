@@ -124,12 +124,16 @@ Y_UNIT_TEST_SUITE(KqpSnapshotIsolation) {
                 UNIT_ASSERT(false);
             }
 
-            if (WriteOperation == "insert" && GetFillTables() && GetIsOlap()) { // olap needs to return aborted too?
-                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            if (WriteOperation == "insert" && GetFillTables()) {
+                // Key (1, "Paul") exists at snapshot time, must be unique constraint violation
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, WriteOperation << ": " << result.GetIssues().ToString());
             } else if (!GetFillTables() && (WriteOperation == "delete" || WriteOperation == "update")) {
-                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, WriteOperation << ": " << result.GetIssues().ToString());
+            } else if (!GetFillTables() && (WriteOperation == "delete_on" || WriteOperation == "update_on") && !GetIsOlap()) {
+                // Datashard cannot distinguish between delete/update and blind delete_on/update_on in SnapshotRW isolation
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, WriteOperation << ": " << result.GetIssues().ToString());
             } else {
-                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, WriteOperation << ": " << result.GetIssues().ToString());
             }
 
             result = session2.ExecuteQuery(Q_(R"(
@@ -642,7 +646,14 @@ Y_UNIT_TEST_SUITE(KqpSnapshotIsolation) {
     }
 
     class TUniqueSecondaryIndex : public TTableDataModificationTester {
+    public:
+        bool EnableIndexStreamWrite = false;
+
     protected:
+        void Setup(TKikimrSettings& settings) override {
+            settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(EnableIndexStreamWrite);
+        }
+
         void DoExecute() override {
             {
                 auto client = Kikimr->GetTableClient();
@@ -685,8 +696,9 @@ Y_UNIT_TEST_SUITE(KqpSnapshotIsolation) {
         }
     };
 
-    Y_UNIT_TEST(TUniqueSecondaryIndexOltp) {
+    Y_UNIT_TEST_TWIN(TUniqueSecondaryIndexOltp, EnableIndexStreamWrite) {
         TUniqueSecondaryIndex tester;
+        tester.EnableIndexStreamWrite = EnableIndexStreamWrite;
         tester.SetIsOlap(false);
         tester.SetFillTables(false);
         tester.Execute();
@@ -741,6 +753,242 @@ Y_UNIT_TEST_SUITE(KqpSnapshotIsolation) {
         TUniqueSecondaryWriteIndex tester;
         tester.SetIsOlap(false);
         tester.SetFillTables(false);
+        tester.Execute();
+    }
+
+    class TUpdateOrDeleteOnSnapshotCheck : public TTableDataModificationTester {
+    public:
+        YDB_ACCESSOR(bool, IsUpdate, true);
+
+    protected:
+        void DoExecute() override {
+            auto client = Kikimr->GetQueryClient();
+            auto session1 = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+            auto session2 = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+
+            auto& runtime = *Kikimr->GetTestServer().GetRuntime();
+
+            {
+                std::vector<std::unique_ptr<IEventHandle>> writes;
+
+                auto grab = [&](TAutoPtr<IEventHandle> &ev) -> auto {
+                    if (ev->GetTypeRewrite() == NKikimr::NEvents::TDataEvents::TEvWrite::EventType) {
+                        auto* evWrite = ev->Get<NKikimr::NEvents::TDataEvents::TEvWrite>();
+                        UNIT_ASSERT(evWrite->Record.OperationsSize() <= 1);
+                        if (evWrite->Record.OperationsSize() == 1
+                                && (evWrite->Record.GetOperations()[0].GetType() == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE
+                                    || evWrite->Record.GetOperations()[0].GetType() == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE)) {
+                            
+                            UNIT_ASSERT(evWrite->Record.GetLockMode() == NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION);
+                            UNIT_ASSERT(evWrite->Record.GetMvccSnapshot().GetStep() != 0);
+                            UNIT_ASSERT(evWrite->Record.GetMvccSnapshot().GetTxId() != 0);
+
+                            writes.emplace_back(ev.Release());
+                            return TTestActorRuntime::EEventAction::DROP;
+                        }
+                    }
+
+                    return TTestActorRuntime::EEventAction::PROCESS;
+                };
+
+                auto saveObserver = runtime.SetObserverFunc(grab);
+                Y_DEFER {
+                    runtime.SetObserverFunc(saveObserver);
+                };
+
+                // no writes (/Root/KV is empty) => tx commits successfully
+                auto future = Kikimr->RunInThreadPool([&]{
+                    return session1.ExecuteQuery(std::format(R"(
+                        PRAGMA ydb.DefaultTxMode="SnapshotRW";
+
+                        SELECT * FROM `/Root/KV`;
+
+                        {}
+                    )", GetIsUpdate()
+                        ? R"(UPDATE `/Root/KV` ON (Key, Value) VALUES (1u, "one");)"
+                        : R"(DELETE FROM `/Root/KV` ON (Key) VALUES (1u);)"),
+                        TTxControl::NoTx()).ExtractValueSync();
+                });
+
+                {
+                    TDispatchOptions opts;
+                    opts.FinalEvents.emplace_back([&](IEventHandle&) {
+                        return writes.size() == 1;
+                    });
+                    runtime.DispatchEvents(opts);
+                    UNIT_ASSERT(writes.size() == 1);
+                }
+
+                {
+                    // Another request changes data
+                    auto insetResult = Kikimr->RunCall([&]{
+                        return session2.ExecuteQuery(R"(
+                            PRAGMA ydb.DefaultTxMode="SnapshotRW";
+
+                            UPSERT INTO `/Root/KV` (Key, Value) VALUES (1u, "two");
+                        )", TTxControl::NoTx()).ExtractValueSync();
+                    });
+
+                    UNIT_ASSERT_VALUES_EQUAL_C(insetResult.GetStatus(), EStatus::SUCCESS, insetResult.GetIssues().ToString());
+                }
+
+                UNIT_ASSERT(writes.size() == 1);
+
+                for(auto& ev: writes) {
+                    runtime.Send(ev.release());
+                }
+
+                {
+                    auto result = runtime.WaitFuture(future);
+                    UNIT_ASSERT_VALUES_EQUAL_C(
+                        result.GetStatus(),
+                        GetIsOlap() ? EStatus::ABORTED : EStatus::SUCCESS, // Must be EStatus::SUCCESS
+                        result.GetIssues().ToString());
+                }
+            }
+        }
+    };
+
+    Y_UNIT_TEST_TWIN(TUpdateOrDeleteOnSnapshotCheckOltp, IsUpdate) {
+        TUpdateOrDeleteOnSnapshotCheck tester;
+        tester.SetIsOlap(false);
+        tester.SetUseRealThreads(false);
+        tester.SetFillTables(false);
+        tester.SetIsUpdate(IsUpdate);
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST_TWIN(TUpdateOrDeleteOnSnapshotCheckOlap, IsUpdate) {
+        TUpdateOrDeleteOnSnapshotCheck tester;
+        tester.SetIsOlap(true);
+        tester.SetUseRealThreads(false);
+        tester.SetFillTables(false);
+        tester.SetIsUpdate(IsUpdate);
+        tester.Execute();
+    }
+
+    class TUpdateOrDeleteOnLocks : public TTableDataModificationTester {
+    public:
+        YDB_ACCESSOR(bool, IsUpdate, true);
+
+    protected:
+        void DoExecute() override {
+            auto client = Kikimr->GetQueryClient();
+            auto session1 = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+            auto session2 = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+
+            auto& runtime = *Kikimr->GetTestServer().GetRuntime();
+
+            {
+                std::vector<std::unique_ptr<IEventHandle>> writes;
+                bool hasWrite = false;
+                auto grab = [&](TAutoPtr<IEventHandle> &ev) -> auto {
+                    if (ev->GetTypeRewrite() == NKikimr::NEvents::TDataEvents::TEvWrite::EventType) {
+                        auto* evWrite = ev->Get<NKikimr::NEvents::TDataEvents::TEvWrite>();
+                        UNIT_ASSERT(evWrite->Record.OperationsSize() <= 1);
+
+                        // Data
+                        if (evWrite->Record.OperationsSize() == 1
+                                && (evWrite->Record.GetOperations()[0].GetType() == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE
+                                    || evWrite->Record.GetOperations()[0].GetType() == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE)) {
+                            
+                            hasWrite = true;
+                            UNIT_ASSERT(evWrite->Record.GetLockMode() == NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION);
+                            UNIT_ASSERT(evWrite->Record.GetMvccSnapshot().GetStep() != 0);
+                            UNIT_ASSERT(evWrite->Record.GetMvccSnapshot().GetTxId() != 0);
+                            return TTestActorRuntime::EEventAction::PROCESS;
+                        }
+
+                        // Commit
+                        if (writes.empty() && evWrite->Record.OperationsSize() == 0) {
+                            // ColumnShard doesn't need info about snapshot/lockmode for PREPARE/COMMIT
+                            UNIT_ASSERT(GetIsOlap() || evWrite->Record.GetLockMode() == NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION);
+                            UNIT_ASSERT(GetIsOlap() || evWrite->Record.GetMvccSnapshot().GetStep() != 0);
+                            UNIT_ASSERT(GetIsOlap() || evWrite->Record.GetMvccSnapshot().GetTxId() != 0);
+
+                            writes.emplace_back(ev.Release());
+                            return TTestActorRuntime::EEventAction::DROP;
+                        }
+                    }
+
+                    return TTestActorRuntime::EEventAction::PROCESS;
+                };
+
+                auto saveObserver = runtime.SetObserverFunc(grab);
+                Y_DEFER {
+                    runtime.SetObserverFunc(saveObserver);
+                };
+
+                // no writes (/Root/KV is empty) => tx commits successfully
+                auto future = Kikimr->RunInThreadPool([&]{
+                    return session1.ExecuteQuery(std::format(R"(
+                        PRAGMA ydb.DefaultTxMode="SnapshotRW";
+
+                        {}
+
+                        -- force flush writes
+                        SELECT * FROM `/Root/KV`;
+                    )", GetIsUpdate()
+                        ? R"(UPDATE `/Root/KV` ON (Key, Value) VALUES (1u, "one");)"
+                        : R"(DELETE FROM `/Root/KV` ON (Key) VALUES (1u);)"),
+                        TTxControl::NoTx()).ExtractValueSync();
+                });
+
+                {
+                    TDispatchOptions opts;
+                    opts.FinalEvents.emplace_back([&](IEventHandle&) {
+                        return writes.size() == 1;
+                    });
+                    runtime.DispatchEvents(opts);
+                    UNIT_ASSERT(writes.size() == 1);
+                    UNIT_ASSERT(hasWrite);
+                }
+
+                {
+                    // Another request changes data
+                    auto insetResult = Kikimr->RunCall([&]{
+                        return session2.ExecuteQuery(R"(
+                            PRAGMA ydb.DefaultTxMode="SnapshotRW";
+
+                            UPSERT INTO `/Root/KV` (Key, Value) VALUES (1u, "two");
+                        )", TTxControl::NoTx()).ExtractValueSync();
+                    });
+
+                    UNIT_ASSERT_VALUES_EQUAL_C(insetResult.GetStatus(), EStatus::SUCCESS, insetResult.GetIssues().ToString());
+                }
+
+                UNIT_ASSERT(writes.size() == 1);
+
+                for(auto& ev: writes) {
+                    runtime.Send(ev.release());
+                }
+
+                {
+                    auto result = runtime.WaitFuture(future);
+                    UNIT_ASSERT_VALUES_EQUAL_C(
+                        result.GetStatus(),
+                        GetIsOlap() ? EStatus::ABORTED : EStatus::SUCCESS, // Must be EStatus::SUCCESS
+                        result.GetIssues().ToString());
+                }
+            }
+        }
+    };
+
+    Y_UNIT_TEST_TWIN(TUpdateOrDeleteOnLocksOltp, IsUpdate) {
+        TUpdateOrDeleteOnLocks tester;
+        tester.SetIsOlap(false);
+        tester.SetUseRealThreads(false);
+        tester.SetFillTables(false);
+        tester.SetIsUpdate(IsUpdate);
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST_TWIN(TUpdateOrDeleteOnLocksOlap, IsUpdate) {
+        TUpdateOrDeleteOnLocks tester;
+        tester.SetIsOlap(true);
+        tester.SetUseRealThreads(false);
+        tester.SetFillTables(false);
+        tester.SetIsUpdate(IsUpdate);
         tester.Execute();
     }
 }

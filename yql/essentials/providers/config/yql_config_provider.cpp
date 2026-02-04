@@ -16,6 +16,7 @@
 #include <yql/essentials/utils/retry.h>
 
 #include <library/cpp/json/json_reader.h>
+#include <library/cpp/yson/node/node_io.h>
 
 #include <util/string/cast.h>
 #include <util/generic/hash.h>
@@ -26,12 +27,15 @@
 
 namespace NYql {
 
+const TString ActivationComponent = "Activation";
+const TString ActivationLabel = "YqlCore";
+
 namespace {
 using namespace NNodes;
 
 class TConfigCallableExecutionTransformer: public TSyncTransformerBase {
 public:
-    TConfigCallableExecutionTransformer(const TTypeAnnotationContext& types)
+    explicit TConfigCallableExecutionTransformer(const TTypeAnnotationContext& types)
         : Types_(types)
     {
         Y_UNUSED(Types_);
@@ -130,8 +134,10 @@ public:
         }
     };
 
-    TConfigProvider(TTypeAnnotationContext& types, const TGatewaysConfig* config, const TString& username, const TAllowSettingPolicy& policy)
+    TConfigProvider(TTypeAnnotationContext& types, const TGatewaysConfig* config, const TString& username,
+                    const TAllowSettingPolicy& policy, bool forPartialTypeCheck)
         : Types_(types)
+        , ForPartialTypeCheck_(forPartialTypeCheck)
         , CoreConfig_(config && config->HasYqlCore() ? &config->GetYqlCore() : nullptr)
         , Username_(username)
         , Policy_(policy)
@@ -161,17 +167,21 @@ public:
         };
         if (CoreConfig_) {
             TPosition pos;
-            for (auto& flag : CoreConfig_->GetFlags()) {
-                if (filter(flag)) {
-                    TVector<TStringBuf> args;
-                    for (auto& arg : flag.GetArgs()) {
-                        args.push_back(arg);
-                    }
-                    if (!ApplyFlag(pos, flag.GetName(), args, ctx)) {
-                        return false;
-                    }
+            TVector<TCoreAttr> flags;
+            if (auto loadedFlags = LoadFlags()) {
+                flags = std::move(*loadedFlags);
+            } else {
+                const auto& configFlags = CoreConfig_->GetFlags();
+                CopyIf(configFlags.begin(), configFlags.end(), std::back_inserter(flags), filter);
+            }
+            for (const auto& flag : flags) {
+                const auto& flagArgs = flag.GetArgs();
+                TVector<TStringBuf> args(flagArgs.begin(), flagArgs.end());
+                if (!ApplyFlag(pos, flag.GetName(), args, ctx)) {
+                    return false;
                 }
             }
+            SaveFlags(flags);
         }
         return true;
     }
@@ -580,6 +590,10 @@ private:
                 return false;
             }
 
+            if (ForPartialTypeCheck_) {
+                return true;
+            }
+
             auto dataSource = args[0];
             if (Find(Types_.AvailablePureResultDataSources, dataSource) == Types_.AvailablePureResultDataSources.end()) {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Unsupported datasource for result provider: " << dataSource));
@@ -745,6 +759,12 @@ private:
                 return false;
             }
             Types_.DiscoveryMode = true;
+        } else if (name == "WindowNewPipeline" || name == "DisableWindowNewPipeline") {
+            if (args.size() != 0) {
+                ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
+                return false;
+            }
+            Types_.WindowNewPipeline = (name == "WindowNewPipeline");
         } else if (name == "EnableSystemColumns") {
             if (args.size() != 0) {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
@@ -1155,6 +1175,10 @@ private:
             return false;
         }
 
+        if (ForPartialTypeCheck_) {
+            return true;
+        }
+
         // file alias
         const auto& fileAlias = args[0];
         TString customUdfPrefix = args.size() > 1 ? TString(args[1]) : "";
@@ -1222,6 +1246,10 @@ private:
     }
 
     bool AddFileByUrl(const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
+        if (ForPartialTypeCheck_) {
+            return true;
+        }
+
         if (args.size() < 2 || args.size() > 3) {
             ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 2 or 3 arguments, but got " << args.size()));
             return false;
@@ -1252,6 +1280,10 @@ private:
     }
 
     bool SetFileOption(const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
+        if (ForPartialTypeCheck_) {
+            return true;
+        }
+
         if (args.size() != 3) {
             ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 3 arguments, but got " << args.size()));
             return false;
@@ -1260,6 +1292,10 @@ private:
     }
 
     bool SetPackageVersion(const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
+        if (ForPartialTypeCheck_) {
+            return true;
+        }
+
         if (args.size() != 2) {
             ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 2 arguments, but got " << args.size()));
             return false;
@@ -1336,6 +1372,10 @@ private:
     }
 
     bool AddFolderByUrl(const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
+        if (ForPartialTypeCheck_) {
+            return true;
+        }
+
         if (args.size() < 2 || args.size() > 3) {
             ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 2 or 3 arguments, but got " << args.size()));
             return false;
@@ -1405,8 +1445,43 @@ private:
         return parseResult == TWarningRule::EParseResult::PARSE_OK;
     }
 
+    TMaybe<TVector<TCoreAttr>> LoadFlags() {
+        TMaybe<TVector<TCoreAttr>> loadedFlags;
+        if (!Types_.QContext.CanRead()) {
+            return loadedFlags;
+        }
+        if (auto loaded = Types_.QContext.GetReader()->Get({ActivationComponent, ActivationLabel}).GetValueSync()) {
+            auto flagsNode = NYT::NodeFromYsonString(loaded->Value);
+            TVector<TCoreAttr> flags;
+            for (const auto& [flagName, flagValue] : flagsNode.AsMap()) {
+                TCoreAttr flag;
+                YQL_ENSURE(flag.ParseFromString(flagValue.AsString()));
+                flags.emplace_back(std::move(flag));
+            }
+            loadedFlags = std::move(flags);
+            YQL_CLOG(INFO, ProviderConfig) << "YqlCore flags are loaded at replay mode";
+        }
+        return loadedFlags;
+    }
+
+    void SaveFlags(const TVector<TCoreAttr>& flags) {
+        if (!Types_.QContext.CanWrite()) {
+            return;
+        }
+        auto flagsNode = NYT::TNode::CreateMap();
+        for (const auto& flag : flags) {
+            TString data;
+            YQL_ENSURE(flag.SerializeToString(&data));
+            flagsNode[flag.GetName()] = std::move(data);
+        }
+        auto flagsYson = NYT::NodeToYsonString(flagsNode, NYT::NYson::EYsonFormat::Binary);
+        Types_.QContext.GetWriter()->Put({ActivationComponent, ActivationLabel}, flagsYson).GetValueSync();
+        YQL_CLOG(INFO, ProviderConfig) << "YqlCore flags are saved to QStorage";
+    }
+
 private:
     TTypeAnnotationContext& Types_;
+    const bool ForPartialTypeCheck_;
     TAutoPtr<IGraphTransformer> TypeAnnotationTransformer_;
     TAutoPtr<IGraphTransformer> ConfigurationTransformer_;
     TAutoPtr<IGraphTransformer> CallableExecutionTransformer_;
@@ -1418,9 +1493,9 @@ private:
 } // namespace
 
 TIntrusivePtr<IDataProvider> CreateConfigProvider(TTypeAnnotationContext& types, const TGatewaysConfig* config, const TString& username,
-                                                  const TAllowSettingPolicy& policy)
+                                                  const TAllowSettingPolicy& policy, bool forPartialTypeCheck)
 {
-    return new TConfigProvider(types, config, username, policy);
+    return new TConfigProvider(types, config, username, policy, forPartialTypeCheck);
 }
 
 const THashSet<TStringBuf>& ConfigProviderFunctions() {

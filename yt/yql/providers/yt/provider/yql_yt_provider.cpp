@@ -313,6 +313,9 @@ void TYtState::Reset() {
     WalkFoldersState.clear();
     NextEpochId = 1;
     FlowDependsOnId = 0;
+    if (FullCapture_) {
+        FullCapture_ = CreateYtFullCapture();
+    }
 }
 
 void TYtState::EnterEvaluation(ui64 id) {

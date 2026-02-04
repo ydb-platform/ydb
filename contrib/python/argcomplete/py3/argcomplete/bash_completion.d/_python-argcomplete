@@ -193,7 +193,8 @@ _python_argcomplete_global() {
             if (__python_argcomplete_scan_head_noerr "$SCRIPT_NAME" easy_install \
                 && "${interpreter[@]}" "$(__python_argcomplete_which python-argcomplete-check-easy-install-script)" "$SCRIPT_NAME") >/dev/null 2>&1; then
                 ARGCOMPLETE=1
-            elif __python_argcomplete_run "${interpreter[@]}" -m argcomplete._check_console_script "$SCRIPT_NAME"; then
+            elif ([[ "${interpreter[@]}" == *python* ]] || [[ "${interpreter[@]}" == *pypy* ]])\
+                && __python_argcomplete_run "${interpreter[@]}" -m argcomplete._check_console_script "$SCRIPT_NAME"; then
                 ARGCOMPLETE=1
             fi
         fi
@@ -215,7 +216,7 @@ _python_argcomplete_global() {
             if is-at-least 5.8; then
                 nosort=(-o nosort)
             fi
-            if [[ "${completions-}" =~ ([^\\]): && "${BASH_REMATCH[2]}" =~ [=/:] ]]; then
+            if [[ "${completions-}" =~ ([^\\\\]): && "${BASH_REMATCH[2]}" =~ [=/:] ]]; then
                 nospace=(-S '')
             fi
             _describe "$executable" completions "${nosort[@]}" "${nospace[@]}"

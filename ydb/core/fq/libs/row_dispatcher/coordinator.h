@@ -8,6 +8,8 @@ namespace NFq {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+const ui64 DefaultRebalancingTimeoutSec = 120;
+
 std::unique_ptr<NActors::IActor> NewCoordinator(
     NActors::TActorId rowDispatcherId,
     const TRowDispatcherSettings::TCoordinatorSettings& config,

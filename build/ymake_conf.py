@@ -461,6 +461,10 @@ def preset(key, default=None):
     return opts().presets.get(key, default)
 
 
+def remove_preset(key):
+    opts().presets.pop(key, None)
+
+
 def is_positive(key):
     return is_positive_str(preset(key, ''))
 
@@ -2337,6 +2341,7 @@ class Setting(object):
     def emit(self):
         if not self.from_user or self.rewrite:
             emit(self.key, self.value)
+            remove_preset(self.key)
 
     no_value = object()
 
@@ -2353,14 +2358,14 @@ class Cuda(object):
         self.cuda_root = Setting('CUDA_ROOT')
         self.cuda_target_root = Setting('CUDA_TARGET_ROOT')
         self.cuda_version = Setting('CUDA_VERSION', auto=self.auto_cuda_version, convert=self.convert_major_version, rewrite=True)
-        self.cuda_architectures = Setting('CUDA_ARCHITECTURES', auto=self.auto_cuda_architectures, rewrite=True)
+        self.cuda_architectures = Setting('CUDA_ARCHITECTURES', auto=self.auto_cuda_architectures, convert=self.augment_cuda_architectures, rewrite=True)
         self.use_arcadia_cuda = Setting('USE_ARCADIA_CUDA', auto=self.auto_use_arcadia_cuda, convert=to_bool)
         self.use_arcadia_cuda_host_compiler = Setting('USE_ARCADIA_CUDA_HOST_COMPILER', auto=self.auto_use_arcadia_cuda_host_compiler, convert=to_bool)
         self.cuda_use_clang = Setting('CUDA_USE_CLANG', auto=False, convert=to_bool)
         self.cuda_host_compiler = Setting('CUDA_HOST_COMPILER', auto=self.auto_cuda_host_compiler)
         self.cuda_host_compiler_env = Setting('CUDA_HOST_COMPILER_ENV')
         self.cuda_host_msvc_version = Setting('CUDA_HOST_MSVC_VERSION')
-        self.cuda_nvcc_flags = Setting('CUDA_NVCC_FLAGS', auto=[])
+        self.cuda_nvcc_flags = Setting('CUDA_NVCC_FLAGS', auto=[], convert=self.filter_nvcc_flags, rewrite=True)
 
         self.peerdirs = ['build/internal/platform/cuda']
 
@@ -2381,7 +2386,17 @@ class Cuda(object):
             # Set paths explicitly
             "--dont-use-profile",
             "--libdevice-directory=$CUDA_ROOT/nvvm/libdevice",
+
+            # --keep is necessary to prevent nvcc from embedding nvcc pid in generated
+            # symbols.  It makes nvcc use the original file name as the prefix in the
+            # generated files (otherwise it also prepends tmpxft_{pid}_00000000-5), and
+            # cicc derives the module name from its {input}.cpp1.ii file name.
+            "--keep",
+            "--keep-dir=${BINDIR}",
         ]
+
+        self.nvcc_gencode_flags = []
+        self.legacy_cuda_architectures = set()
 
         if not self.have_cuda.value:
             return
@@ -2402,6 +2417,8 @@ class Cuda(object):
             if self.build.target.is_linux_x86_64 and self.build.tc.is_clang:
                 # TODO(somov): Эта настройка должна приезжать сюда автоматически из другого места
                 self.nvcc_flags.append('-I$OS_SDK_ROOT/usr/include/x86_64-linux-gnu')
+
+        self.cuda_nvcc_flags.calculate_value()
 
     def print_(self):
         self.print_variables()
@@ -2434,6 +2451,7 @@ class Cuda(object):
         emit('NVCC_OLD_UNQUOTED', self.build.host.exe('$CUDA_ROOT', 'bin', 'nvcc'))
         emit('NVCC_OLD', '${quo:NVCC_OLD_UNQUOTED}')
         emit('NVCC_FLAGS', self.nvcc_flags, '$CUDA_NVCC_FLAGS')
+        emit('NVCC_GENCODE_FLAGS', self.nvcc_gencode_flags)
         emit('NVCC_OBJ_EXT', '.o' if not self.build.target.is_windows else '.obj')
         emit('NVCC_ENV', '${env:_NVCC_ENV}')
         emit('_NVCC_ENV', 'PATH=$CUDA_ROOT/nvvm/bin:$CUDA_ROOT/bin')
@@ -2445,6 +2463,9 @@ class Cuda(object):
         else:
             emit('NVCC_STD_VER', '20')
 
+        emit('CUDAFE', '"{}"'.format(self.build.host.exe('$CUDA_ROOT', 'bin', 'cudafe++')))
+        emit('FATBINARY', '"{}"'.format(self.build.host.exe('$CUDA_ROOT', 'bin', 'fatbinary')))
+
     def print_macros(self):
         mtime = ' '
         custom_pid = ' '
@@ -2452,7 +2473,7 @@ class Cuda(object):
             mtime = ' --mtime ${tool:"tools/mtime0"} '
             custom_pid = '--custom-pid ${tool:"tools/custom_pid"} '
         if not self.cuda_use_clang.value:
-            cmd = '$YMAKE_PYTHON3 ${input:"build/scripts/compile_cuda.py"}' + mtime + custom_pid + '$NVCC $NVCC_STD $NVCC_FLAGS -c ${input:SRC} -o ${output;suf=${OBJ_SUF}${NVCC_OBJ_EXT}:SRC} ${pre=-I:_C__INCLUDE} --cflags $C_FLAGS_PLATFORM $CXXFLAGS $NVCC_STD $SRCFLAGS ${hide;input:"build/internal/platform/cuda/cuda_runtime_include.h"} $NVCC_ENV $CUDA_HOST_COMPILER_ENV ${hide;kv:"p CC"} ${hide;kv:"pc light-green"}'  # noqa E501
+            cmd = '$YMAKE_PYTHON3 ${input:"build/scripts/compile_cuda.py"}' + mtime + custom_pid + '$NVCC $NVCC_STD $NVCC_FLAGS $NVCC_GENCODE_FLAGS -c ${input:SRC} -o ${output;suf=${OBJ_SUF}${NVCC_OBJ_EXT}:SRC} ${pre=-I:_C__INCLUDE} --cflags $C_FLAGS_PLATFORM $CXXFLAGS $NVCC_STD $SRCFLAGS ${hide;input:"build/internal/platform/cuda/cuda_runtime_include.h"} $NVCC_ENV $CUDA_HOST_COMPILER_ENV ${hide;kv:"p CU"} ${hide;kv:"pc light-green"}'  # noqa E501
         else:
             cmd = '$CXX_COMPILER --cuda-path=$CUDA_ROOT $C_FLAGS_PLATFORM -c ${input:SRC} -o ${output;suf=${OBJ_SUF}${NVCC_OBJ_EXT}:SRC} ${pre=-I:_C__INCLUDE} $CXXFLAGS $SRCFLAGS $TOOLCHAIN_ENV ${hide;kv:"p CU"} ${hide;kv:"pc green"}'  # noqa E501
 
@@ -2510,32 +2531,82 @@ class Cuda(object):
         else:
             return value
 
+    # Filter `-gencode` flags out of CUDA_NVCC_FLAGS
+    # TODO Remove after migration to CUDA_ARCHITECTURES
+    def filter_nvcc_flags(self, value):
+        self.legacy_cuda_architectures = set()
+        self.nvcc_gencode_flags = []
+        nvcc_flags = []
+
+        gencode = False
+
+        for flag in value.split(' '):
+            spec = None
+
+            if gencode:
+                self.nvcc_gencode_flags.append(flag)
+                spec = flag
+                gencode = False
+            elif flag.startswith('-gencode') or flag.startswith('--generate-code'):
+                self.nvcc_gencode_flags.append(flag)
+
+                if flag in ('-gencode', '--generate-code'):
+                    gencode = True
+                    continue
+
+                _, spec = flag.split('=', 1)
+            else:
+                nvcc_flags.append(flag)
+                continue
+
+            _, arch = spec.rsplit('=', 1)
+            self.legacy_cuda_architectures.add(arch)
+
+        return nvcc_flags
+
+    # Augment CUDA_ARCHITECTURES with values mined from `-gencode` flags
+    # TODO Remove after migration to CUDA_ARCHITECTURES
+    def augment_cuda_architectures(self, value):
+        cuda_architectures = set(value.split(':'))
+
+        if not cuda_architectures.issuperset(self.legacy_cuda_architectures):
+            extra_architectures = self.legacy_cuda_architectures.difference(cuda_architectures)
+            logger.warning('Adding extra architectures mined from CUDA_NVCC_FLAGS (%s) to CUDA_ARCHITECTURES', ':'.join(sorted(extra_architectures)))
+            cuda_architectures.update(self.legacy_cuda_architectures)
+
+        return ':'.join(sorted(cuda_architectures))
+
     def auto_cuda_architectures(self):
-        # empty list does not mean "no architectures"
-        # it means "no restriction -- any available architecture"
+        if self.legacy_cuda_architectures:
+            logger.warning('Using architectures mined from CUDA_NVCC_FLAGS (%s) for CUDA_ARCHITECTURES', ':'.join(sorted(self.legacy_cuda_architectures)))
+            return ':'.join(sorted(self.legacy_cuda_architectures))
 
-        host, target = self.build.host_target
-        if not target.is_linux_x86_64:
-            # do not impose any restrictions, when build not for "linux 64-bit"
-            return ''
+        architectures = []
 
-        # Equality to CUDA 11.4 is rather strict comparison
-        # TODO: find out how we can relax check (e.g. to include more version of CUDA toolkit)
-        if self.cuda_version.value == '11.4':
-            # * use output of CUDA 11.4 `nvcc --help`
-            # * drop support for '53', '62', '72' and '87'
-            #   (these devices run only on arm64)
-            # * drop support for '37'
-            #   the single place it's used in Arcadia is https://a.yandex-team.ru/arcadia/sdg/sdc/third_party/cub/common.mk?rev=r13268523#L69
-            return ':'.join(
-                ['sm_35',
-                 'sm_50', 'sm_52',
-                 'sm_60', 'sm_61',
-                 'sm_70', 'sm_75',
-                 'sm_80', 'sm_86',
-                 'compute_86'])
-        else:
-            return ''
+        version = tuple(map(int, self.cuda_version.value.split('.')))
+
+        if version < (12, 0):
+            architectures.append('sm_35')
+
+        if version < (13, 0):
+            architectures.extend(['sm_50', 'sm_52', 'sm_60', 'sm_61', 'sm_70'])
+
+        if version >= (11, 0):
+            architectures.append('sm_80')
+
+        if version >= (11, 1):
+            architectures.append('sm_86')
+
+        if version >= (11, 8):
+            architectures.extend(['sm_89', 'sm_90'])
+
+        if version >= (12, 0):
+            architectures.append('sm_90a')
+
+        if version >= (12, 8):
+            architectures.extend(['sm_100', 'sm_100a', 'sm_120', 'sm_120a'])
+
+        return ':'.join(architectures)
 
     def auto_use_arcadia_cuda(self):
         return not self.cuda_root.from_user
@@ -2605,10 +2676,10 @@ class CuDNN(object):
         self.cudnn_version = Setting('CUDNN_VERSION', auto=self.auto_cudnn_version)
 
     def have_cudnn(self):
-        return self.cudnn_version.value in ('7.6.5', '8.0.5', '8.6.0', '8.9.7', '9.0.0', '9.12.0')
+        return self.cudnn_version.value in ('7.6.5', '8.0.5', '8.6.0', '8.9.7', '9.0.0', '9.10.2', '9.12.0')
 
     def auto_cudnn_version(self):
-        return '9.0.0'
+        return '9.10.2'
 
     def print_(self):
         if self.cuda.have_cuda.value and self.have_cudnn():

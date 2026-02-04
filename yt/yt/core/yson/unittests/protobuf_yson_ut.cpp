@@ -31,8 +31,8 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-DECLARE_PROTO_EXTENSION(NYT::NYson::NProto::TMessageExt, 12345)
-REGISTER_PROTO_EXTENSION(NYT::NYson::NProto::TNestedMessageWithCustomConverter, 12345, ext)
+DECLARE_PROTO_EXTENSION(NYT::NYson::NProto::TMessageExt, 12345);
+REGISTER_PROTO_EXTENSION(NYT::NYson::NProto::TNestedMessageWithCustomConverter, 12345, ext);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -95,7 +95,7 @@ void Deserialize(TNestedMessageWithCustomConverter& message, NYTree::INodePtr no
     message.Y = mapNode->GetChildOrThrow("y")->AsInt64()->GetValue() - 1;
 }
 
-REGISTER_INTERMEDIATE_PROTO_INTEROP_REPRESENTATION(NYT::NYson::NProto::TNestedMessageWithCustomConverter, TNestedMessageWithCustomConverter)
+REGISTER_INTERMEDIATE_PROTO_INTEROP_REPRESENTATION(NYT::NYson::NProto::TNestedMessageWithCustomConverter, TNestedMessageWithCustomConverter);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -127,8 +127,8 @@ void Deserialize(TBytesIntermediateRepresentation& value, NYTree::INodePtr node)
     value.X = mapNode->GetChildOrThrow("x")->AsInt64()->GetValue() - 1;
 }
 
-REGISTER_INTERMEDIATE_PROTO_INTEROP_BYTES_FIELD_REPRESENTATION(NYT::NYson::NProto::TMessage, 29, TBytesIntermediateRepresentation)
-REGISTER_INTERMEDIATE_PROTO_INTEROP_BYTES_FIELD_REPRESENTATION(NYT::NYson::NProto::TMessage, 30, TBytesIntermediateRepresentation)
+REGISTER_INTERMEDIATE_PROTO_INTEROP_BYTES_FIELD_REPRESENTATION(NYT::NYson::NProto::TMessage, 29, TBytesIntermediateRepresentation);
+REGISTER_INTERMEDIATE_PROTO_INTEROP_BYTES_FIELD_REPRESENTATION(NYT::NYson::NProto::TMessage, 30, TBytesIntermediateRepresentation);
 
 ////////////////////////////////////////////////////////////////////////////////
 

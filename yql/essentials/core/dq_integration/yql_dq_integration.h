@@ -30,7 +30,7 @@ class TMkqlCallableCompilerBase;
 
 class TFallbackError: public yexception {
 public:
-    TFallbackError(TIssuePtr issue = {})
+    explicit TFallbackError(TIssuePtr issue = {})
         : Issue_(std::move(issue))
     {
     }
@@ -53,6 +53,10 @@ public:
         size_t MaxPartitions = 0;
         TMaybe<bool> EnableComputeActor;
         bool CanFallback = false;
+    };
+
+    struct TSourceWatermarksSettings {
+        TMaybe<ui64> IdleTimeoutUs;
     };
 
     virtual ui64 Partition(const TExprNode& node, TVector<TString>& partitions, TString* clusterName, TExprContext& ctx, const TPartitionSettings& settings) = 0;
@@ -82,6 +86,7 @@ public:
     virtual void RegisterMkqlCompiler(NCommon::TMkqlCallableCompilerBase& compiler) = 0;
     virtual bool CanFallback() = 0;
     virtual void FillSourceSettings(const TExprNode& node, ::google::protobuf::Any& settings, TString& sourceType, size_t maxPartitions, TExprContext& ctx) = 0;
+    virtual TMaybe<TSourceWatermarksSettings> ExtractSourceWatermarksSettings(const TExprNode& node, const ::google::protobuf::Any& settings, const TString& sourceType) = 0;
     virtual void FillLookupSourceSettings(const TExprNode& node, ::google::protobuf::Any& settings, TString& sourceType) = 0;
     virtual void FillSinkSettings(const TExprNode& node, ::google::protobuf::Any& settings, TString& sinkType) = 0;
     virtual void FillTransformSettings(const TExprNode& node, ::google::protobuf::Any& settings) = 0;

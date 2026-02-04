@@ -3,6 +3,7 @@
 #include "rpc_export_base.h"
 #include "rpc_calls.h"
 #include "rpc_operation_request_base.h"
+#include "fs_path_validation.h"
 
 #include <ydb/public/api/protos/ydb_export.pb.h>
 #include <ydb/core/backup/common/encryption.h>
@@ -13,8 +14,14 @@
 
 #include <ydb/library/actors/core/hfunc.h>
 
+#include <util/folder/path.h>
 #include <util/generic/ptr.h>
 #include <util/string/builder.h>
+
+#ifdef _linux_
+#include <sys/vfs.h>
+#include <linux/magic.h>
+#endif
 
 namespace NKikimr {
 namespace NGRpcService {
@@ -174,9 +181,15 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
 
             }
             case NSchemeCache::TSchemeCacheNavigate::KindTopic:
-            case NSchemeCache::TSchemeCacheNavigate::KindReplication:
-            case NSchemeCache::TSchemeCacheNavigate::KindTransfer:
                 return true;
+            case NSchemeCache::TSchemeCacheNavigate::KindReplication:
+                return AppData()->Icb->BackupControls.S3Controls.EnableAsyncReplicationExport.AtomicLoad()->Get();
+            case NSchemeCache::TSchemeCacheNavigate::KindTransfer:
+                return AppData()->Icb->BackupControls.S3Controls.EnableTransferExport.AtomicLoad()->Get();
+            case NSchemeCache::TSchemeCacheNavigate::KindExternalDataSource:
+                return AppData()->Icb->BackupControls.S3Controls.EnableExternalDataSourceExport.AtomicLoad()->Get();
+            case NSchemeCache::TSchemeCacheNavigate::KindExternalTable:
+                return AppData()->Icb->BackupControls.S3Controls.EnableExternalTableExport.AtomicLoad()->Get();
             case NSchemeCache::TSchemeCacheNavigate::KindColumnTable:
                 return AppData()->FeatureFlags.GetEnableColumnTablesBackup();
             case NSchemeCache::TSchemeCacheNavigate::KindView:
@@ -563,9 +576,33 @@ public:
         }
 
         if constexpr (IsFsExport) {
-            if (!settings.base_path().StartsWith("/")) {
+            if (!TFsPath(settings.base_path()).IsAbsolute()) {
                 return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR,
                     "base_path must be an absolute path");
+            }
+
+#ifdef _linux_
+            struct statfs fsInfo;
+            if (statfs(settings.base_path().c_str(), &fsInfo) == 0) {
+                if (fsInfo.f_type != NFS_SUPER_MAGIC) {
+                    return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR,
+                        "base_path must be on NFS filesystem");
+                }
+            }
+#endif
+
+            TString error;
+            if (!ValidateFsPath(settings.base_path(), "base_path", error)) {
+                return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, error);
+            }
+
+            for (const auto& item : TTraits::GetItems(settings)) {
+                if (!TTraits::GetDestination(item).empty()) {
+                    const auto pathDesc = TStringBuilder() << "destination_path for item \"" << item.source_path() << "\"";
+                    if (!ValidateFsPath(TTraits::GetDestination(item), pathDesc, error)) {
+                        return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, error);
+                    }
+                }
             }
         }
 

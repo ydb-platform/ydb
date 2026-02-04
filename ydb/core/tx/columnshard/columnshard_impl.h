@@ -163,6 +163,7 @@ template <typename T>
 using TTransactionBase = NTabletFlatExecutor::TTransactionBase<T>;
 
 class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTabletExecutedFlat {
+    friend class TEvWriteCommitSyncTransactionOperator;
     friend class TEvWriteCommitSecondaryTransactionOperator;
     friend class TEvWriteCommitPrimaryTransactionOperator;
     friend class TTxInit;
@@ -171,6 +172,7 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     friend class TTxUpdateSchema;
     friend class TTxProposeTransaction;
     friend class TTxNotifyTxCompletion;
+    friend class TTxTxAbort;
     friend class TTxPlanStep;
     friend class TTxWrite;
     friend class TTxBlobsWritingFinished;
@@ -306,6 +308,8 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     void Handle(NColumnShard::TEvPrivate::TEvAskTabletDataAccessors::TPtr& ev, const TActorContext& ctx);
     void Handle(NColumnShard::TEvPrivate::TEvAskColumnData::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvCancelBackup::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvCancelRestore::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvColumnShard::TEvOverloadUnsubscribe::TPtr& ev, const TActorContext& ctx);
     void Handle(NLongTxService::TEvLongTxService::TEvLockStatus::TPtr& ev, const TActorContext& ctx);
@@ -478,6 +482,8 @@ protected:
             HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
             HFunc(TEvColumnShard::TEvOverloadUnsubscribe, Handle);
             HFunc(NLongTxService::TEvLongTxService::TEvLockStatus, Handle);
+            HFunc(TEvDataShard::TEvCancelBackup, Handle);
+            HFunc(TEvDataShard::TEvCancelRestore, Handle);
 
             default:
                 if (!HandleDefaultEvents(ev, SelfId())) {
@@ -516,6 +522,7 @@ private:
     ui64 LastPlannedTxId = 0;
     NOlap::TSnapshot LastCompletedTx = NOlap::TSnapshot::Zero();
     ui64 LastExportNo = 0;
+    NKikimrTxColumnShard::TCompletedBackupTransaction LastCompletedBackupTransaction;
 
     ui64 StatsReportRound = 0;
     TString OwnerPath;

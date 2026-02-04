@@ -1,0 +1,11 @@
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:35:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At tuple, At function: SqlProjectItem, At lambda
+    	SELECT
+	^
+        <tmp_path>/program.sql:<main>:36:5: Warning: At function: EnsureWarn
+        	    Ensure(sum, sum IS NOT DISTINCT FROM actual_sum, $str(actual_sum)),
+	    ^
+            <tmp_path>/program.sql:<main>:36:12: Warning: Consider using non-singular type as first argument of Ensure
+            	    Ensure(sum, sum IS NOT DISTINCT FROM actual_sum, $str(actual_sum)),
+	           ^

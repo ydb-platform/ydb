@@ -22,7 +22,7 @@ std::shared_ptr<TJoinOptimizerNode> ConvertJoinTree(std::shared_ptr<TOpCBOTree> 
     THashSet<TInfoUnit, TInfoUnit::THashFunction> allJoinColumns;
     std::shared_ptr<TJoinOptimizerNode> result;
 
-    auto lineageMap = cboTree->TreeRoot->Props.Metadata->ColumnLineage;
+    auto lineage = cboTree->TreeRoot->Props.Metadata->ColumnLineage;
     int fakeAliasId = 0;
 
     for (auto op : cboTree->TreeNodes) {
@@ -43,7 +43,7 @@ std::shared_ptr<TJoinOptimizerNode> ConvertJoinTree(std::shared_ptr<TOpCBOTree> 
 
         for (auto col : allJoinColumns) {
             if (std::find(childIUs.begin(), childIUs.end(), col) != childIUs.end()) {
-                if (auto it = lineageMap.find(col.GetFullName()); it != lineageMap.end()) {
+                if (auto it = lineage.Mapping.find(col); it != lineage.Mapping.end()) {
                     auto alias = it->second.GetCannonicalAlias();
                     if (std::find(childAliases.begin(), childAliases.end(), alias) == childAliases.end()) {
                         childAliases.push_back(alias);
@@ -66,7 +66,7 @@ std::shared_ptr<TJoinOptimizerNode> ConvertJoinTree(std::shared_ptr<TOpCBOTree> 
         rels.push_back(relNode);
         nodeMap.insert({child.get(), relNode});
     }
-    
+
     for (auto node : cboTree->TreeNodes) {
         auto join = CastOperator<TOpJoin>(node);
         auto leftNode = nodeMap.at(join->GetLeftInput().get());
@@ -82,11 +82,11 @@ std::shared_ptr<TJoinOptimizerNode> ConvertJoinTree(std::shared_ptr<TOpCBOTree> 
             rightKeys.push_back(TJoinColumn(mappedRightKey.GetAlias(), mappedRightKey.GetColumnName()));
         }
 
-        result = std::make_shared<TJoinOptimizerNode>(leftNode, 
-            rightNode, 
-            leftKeys, 
-            rightKeys, 
-            ConvertToJoinKind(join->JoinKind), 
+        result = std::make_shared<TJoinOptimizerNode>(leftNode,
+            rightNode,
+            leftKeys,
+            rightKeys,
+            ConvertToJoinKind(join->JoinKind),
             EJoinAlgoType::Undefined,
             false,
             false,
@@ -97,8 +97,9 @@ std::shared_ptr<TJoinOptimizerNode> ConvertJoinTree(std::shared_ptr<TOpCBOTree> 
 
     return result;
 }
-std::shared_ptr<IOperator> ConvertOptimizedTreeRec(std::shared_ptr<IBaseOptimizerNode> tree,
-        THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> & mapping,
+
+std::shared_ptr<IOperator> ConvertOptimizedTree(std::shared_ptr<IBaseOptimizerNode> tree,
+        const TColumnLineage & lineage,
         TPositionHandle pos) {
 
     if (tree->Kind == RelNodeType) {
@@ -106,8 +107,8 @@ std::shared_ptr<IOperator> ConvertOptimizedTreeRec(std::shared_ptr<IBaseOptimize
         return rel->Op;
     } else {
         auto join = std::static_pointer_cast<TJoinOptimizerNode>(tree);
-        auto leftArg = ConvertOptimizedTreeRec(join->LeftArg, mapping, pos);
-        auto rightArg = ConvertOptimizedTreeRec(join->RightArg, mapping, pos);
+        auto leftArg = ConvertOptimizedTree(join->LeftArg, lineage, pos);
+        auto rightArg = ConvertOptimizedTree(join->RightArg, lineage, pos);
 
         Y_ENSURE(join->LeftJoinKeys.size() == join->RightJoinKeys.size());
 
@@ -115,11 +116,12 @@ std::shared_ptr<IOperator> ConvertOptimizedTreeRec(std::shared_ptr<IBaseOptimize
         for (size_t i=0; i<join->LeftJoinKeys.size(); i++) {
             auto leftKey = TInfoUnit(join->LeftJoinKeys[i].RelName, join->LeftJoinKeys[i].AttributeName);
             auto rightKey = TInfoUnit(join->RightJoinKeys[i].RelName, join->RightJoinKeys[i].AttributeName);
-            if (mapping.contains(leftKey)) {
-                leftKey = mapping.at(leftKey);
+        
+            if (lineage.ReverseMapping.contains(leftKey)) {
+                leftKey = lineage.ReverseMapping.at(leftKey);
             }
-            if (mapping.contains(rightKey)) {
-                rightKey = mapping.at(rightKey);
+            if (lineage.ReverseMapping.contains(rightKey)) {
+                rightKey = lineage.ReverseMapping.at(rightKey);
             }
             joinKeys.push_back(std::make_pair(leftKey, rightKey));
         }
@@ -132,37 +134,6 @@ std::shared_ptr<IOperator> ConvertOptimizedTreeRec(std::shared_ptr<IBaseOptimize
     }
 }
 
-std::shared_ptr<IOperator> ConvertOptimizedTree(std::shared_ptr<TJoinOptimizerNode> tree, std::shared_ptr<TOpCBOTree> & cboTree) {
-    THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> reverseJoinCondMap;
-    auto lineageMap = cboTree->TreeRoot->Props.Metadata->ColumnLineage;
-
-    auto createReverseMapping = [&lineageMap, &reverseJoinCondMap](TInfoUnit column) {
-        auto fullName = column.GetFullName();
-        if (lineageMap.contains(fullName)) {
-            auto lineage = lineageMap.at(fullName);
-            auto alias = lineage.GetCannonicalAlias();
-            auto columnName = lineage.ColumnName;
-            TInfoUnit target(alias, columnName);
-
-            if (reverseJoinCondMap.contains(target)) {
-                Y_ENSURE(reverseJoinCondMap.at(target) == column);
-            }
-
-            reverseJoinCondMap.insert({target, column});
-        }
-    };
-
-    for (auto op : cboTree->TreeNodes) {
-        auto joinOp = CastOperator<TOpJoin>(op);
-        for (auto & [left, right] : joinOp->JoinKeys) {
-            createReverseMapping(left);
-            createReverseMapping(right);
-        }
-    }
-
-    return ConvertOptimizedTreeRec(tree, reverseJoinCondMap, cboTree->Pos);
-}
-
 }
 
 namespace NKikimr {
@@ -171,7 +142,7 @@ namespace NKqp {
 
 /**
  * Run dynamic programming CBO and convert the resulting tree into operator tree
- * 
+ *
  * In order to support good CBO with pg syntax, where all the variables in the joins
  * are transformed into Pg types, we remap the synthenic variables back into original ones
  * to run the CBO, and then map them back
@@ -184,14 +155,14 @@ std::shared_ptr<IOperator> TOptimizeCBOTreeRule::SimpleMatchAndApply(const std::
     }
 
     auto & Config = ctx.KqpCtx.Config;
-    auto optLevel = Config->CostBasedOptimizationLevel.Get().GetOrElse(Config->DefaultCostBasedOptimizationLevel);
+    auto optLevel = Config->CostBasedOptimizationLevel.Get().GetOrElse(Config->GetDefaultCostBasedOptimizationLevel());
 
     if (optLevel <= 1) {
         return input;
     }
 
     auto cboTree = CastOperator<TOpCBOTree>(input);
-    
+
     // Check that all inputs have statistics
     for (auto c : cboTree->Children) {
         if (!c->Props.Statistics.has_value()) {
@@ -222,7 +193,7 @@ std::shared_ptr<IOperator> TOptimizeCBOTreeRule::SimpleMatchAndApply(const std::
     };
 
     // Shuffle elimination is currently disabled
-    //bool enableShuffleElimination = ctx.KqpCtx.Config->OptShuffleElimination.Get().GetOrElse(ctx.KqpCtx.Config->DefaultEnableShuffleElimination);
+    //bool enableShuffleElimination = ctx.KqpCtx.Config->OptShuffleElimination.Get().GetOrElse(ctx.KqpCtx.Config->GetDefaultEnableShuffleElimination());
 
     auto providerCtx = TRBOProviderContext(ctx.KqpCtx, optLevel);
     auto opt = std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(providerCtx, settings, ctx.ExprCtx, false, nullptr, nullptr));
@@ -246,7 +217,7 @@ std::shared_ptr<IOperator> TOptimizeCBOTreeRule::SimpleMatchAndApply(const std::
         YQL_CLOG(TRACE, CoreDq) << str.str();
     }
 
-    return ConvertOptimizedTree(joinTree, cboTree);
+    return ConvertOptimizedTree(joinTree, cboTree->Props.Metadata->ColumnLineage, cboTree->Pos);
 }
 
 }

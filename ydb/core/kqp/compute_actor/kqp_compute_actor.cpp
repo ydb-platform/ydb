@@ -75,6 +75,10 @@ TComputationNodeFactory GetKqpActorComputeFactory(TKqpScanComputeContext* comput
                 return WrapDqHashCombine(callable, ctx);
             }
 
+            if (name == "DqHashAggregate"sv) {
+                return WrapDqHashAggregate(callable, ctx);
+            }
+
             if (name == "FulltextAnalyze"sv) {
                 return WrapFulltextAnalyze(callable, ctx);
             }

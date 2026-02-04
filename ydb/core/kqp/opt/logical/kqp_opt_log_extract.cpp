@@ -19,6 +19,7 @@ static constexpr size_t TKqlReadColumnsNodeIdx = 2;
 static_assert(TKqlReadTableBase::idx_Columns == TKqlReadColumnsNodeIdx);
 static_assert(TKqlLookupTableBase::idx_Columns == TKqlReadColumnsNodeIdx);
 static_assert(TKqlReadTableRangesBase::idx_Columns == TKqlReadColumnsNodeIdx);
+static_assert(TKqlReadTableFullTextIndex::idx_Columns == TKqlReadColumnsNodeIdx);
 
 
 TMaybeNode<TCoAtomList> GetUsedColumns(TExprBase read, TCoAtomList columns, const TParentsMap& parentsMap,
@@ -65,7 +66,11 @@ TMaybeNode<TCoAtomList> GetUsedColumns(TExprBase read, TCoAtomList columns, cons
 TExprBase KqpApplyExtractMembersToReadTable(TExprBase node, TExprContext& ctx, const TParentsMap& parentsMap,
     bool allowMultiUsage)
 {
-    if (!node.Maybe<TKqlReadTableBase>() && !node.Maybe<TKqlLookupTableBase>() && !node.Maybe<TKqlReadTableRangesBase>()) {
+    if (!node.Maybe<TKqlReadTableBase>() &&
+        !node.Maybe<TKqlLookupTableBase>() &&
+        !node.Maybe<TKqlReadTableRangesBase>() &&
+        !node.Maybe<TKqlReadTableFullTextIndex>()
+    ) {
         return node;
     }
 

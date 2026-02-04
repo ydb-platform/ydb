@@ -62,6 +62,7 @@ public:
 class TResponseMock
     : public IResponse
 {
+public:
     TResponseMock();
 
     MOCK_METHOD(EStatusCode, GetStatusCode, (), (override));

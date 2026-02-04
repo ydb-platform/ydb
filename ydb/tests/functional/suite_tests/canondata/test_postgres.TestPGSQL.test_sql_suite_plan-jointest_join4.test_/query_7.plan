@@ -29,7 +29,7 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "Limit-Filter",
+                                        "Node Type": "Limit-Filter-InnerJoin (Lookup)",
                                         "Operators": [
                                             {
                                                 "Inputs": [
@@ -52,11 +52,19 @@
                                             {
                                                 "Inputs": [
                                                     {
-                                                        "ExternalPlanNodeId": 5
+                                                        "InternalOperatorId": 2
                                                     }
                                                 ],
                                                 "Name": "Filter",
                                                 "Predicate": "item.tt5.f1 == item.tt5.f2 - item.tt6.f2"
+                                            },
+                                            {
+                                                "Inputs": [
+                                                    {
+                                                        "ExternalPlanNodeId": 5
+                                                    }
+                                                ],
+                                                "Name": "InnerJoin (Lookup)"
                                             }
                                         ],
                                         "PlanNodeId": 6,

@@ -80,7 +80,7 @@ TConstantFoldingStage::TConstantFoldingStage() : IRBOStage("Constant folding sta
 
 void TConstantFoldingStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
     TVector<TExprNode::TPtr> lambdasWithConstExpr;
-    bool foldUdfs = ctx.KqpCtx.Config->EnableFoldUdfs;
+    bool foldUdfs = ctx.KqpCtx.Config->GetEnableFoldUdfs();
 
     // Iterate through all operators that contain lambdas with potential constant expression
 

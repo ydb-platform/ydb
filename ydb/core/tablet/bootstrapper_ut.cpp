@@ -1,61 +1,22 @@
 #include "bootstrapper.h"
 #include "bootstrapper_impl.h"
+#include <ydb/core/mind/configured_tablet_bootstrapper.h>
+#include <ydb/core/tablet/simple_tablet.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/base/statestorage_impl.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
+#include <ydb/core/cms/console/configs_dispatcher.h>
+#include <ydb/core/cms/console/console.h>
+#include <ydb/core/config/init/init.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <library/cpp/testing/unittest/registar.h>
+#include <ydb/core/testlib/actor_helpers.h>
 
 namespace NKikimr {
 
 Y_UNIT_TEST_SUITE(BootstrapperTest) {
-
-    class TSimpleTablet
-        : public TActor<TSimpleTablet>
-        , public NTabletFlatExecutor::TTabletExecutedFlat
-    {
-    public:
-        TSimpleTablet(const TActorId &tablet, TTabletStorageInfo *info)
-            : TActor(&TThis::StateInit)
-            , TTabletExecutedFlat(info, tablet, nullptr)
-        {}
-
-    private:
-        void DefaultSignalTabletActive(const TActorContext&) override {
-            // must be empty
-        }
-
-        void OnActivateExecutor(const TActorContext& ctx) override {
-            Become(&TThis::StateWork);
-            SignalTabletActive(ctx);
-        }
-
-        void OnDetach(const TActorContext &ctx) override {
-            return Die(ctx);
-        }
-
-        void OnTabletDead(TEvTablet::TEvTabletDead::TPtr &, const TActorContext &ctx) override {
-            return Die(ctx);
-        }
-
-        void Handle(TEvents::TEvPing::TPtr& ev) {
-            Send(ev->Sender, new TEvents::TEvPong);
-        }
-
-        STFUNC(StateInit) {
-            StateInitImpl(ev, SelfId());
-        }
-
-        STFUNC(StateWork) {
-            switch (ev->GetTypeRewrite()) {
-                hFunc(TEvents::TEvPing, Handle);
-            default:
-                HandleDefaultEvents(ev, SelfId());
-            }
-        }
-    };
 
     TIntrusivePtr<TTabletStorageInfo> CreateSimpleTabletStorageInfo(ui64 tabletId = TTestTxConfig::TxTablet0) {
         return CreateTestTabletInfo(tabletId, TTabletTypes::Dummy);
@@ -447,5 +408,310 @@ Y_UNIT_TEST_SUITE(BootstrapperTest) {
     }
 
 } // Y_UNIT_TEST_SUITE(BootstrapperTest)
+
+void FillDummyTabletChannels(NKikimrTabletBase::TTabletStorageInfo* info) {
+    for (ui32 channel = 0; channel < 5; ++channel) {
+        auto* channelInfo = info->AddChannels();
+        channelInfo->SetChannel(channel);
+        channelInfo->SetChannelType(TBlobStorageGroupType::ErasureNone);
+        channelInfo->SetStoragePool("Storage Pool with id: 1");
+        auto* history = channelInfo->AddHistory();
+        history->SetFromGeneration(0);
+        history->SetGroupID(0);
+    }
+}
+
+void SendConfigUpdate(TTestBasicRuntime& runtime,
+                        const TVector<TActorId>& bootstrappers,
+                        const NKikimrConfig::TBootstrap& config) {
+    for (size_t i = 0; i < bootstrappers.size(); ++i) {
+        auto nodeIdx = bootstrappers[i].NodeId() - runtime.GetNodeId(0);
+        auto configDispatcher = runtime.AllocateEdgeActor(nodeIdx);
+        auto notification = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+        notification->Record.MutableConfig()->MutableBootstrapConfig()->CopyFrom(config);
+        notification->Record.SetLocal(true);
+        notification->Record.AddItemKinds((ui32)NKikimrConsole::TConfigItem::BootstrapConfigItem);
+
+        runtime.Send(new IEventHandle(bootstrappers[i], configDispatcher, notification.Release(), nodeIdx, 1));
+
+        auto responseEvent = runtime.GrabEdgeEventRethrow<NConsole::TEvConsole::TEvConfigNotificationResponse>(configDispatcher);
+        UNIT_ASSERT(responseEvent);
+    }
+}
+
+Y_UNIT_TEST_SUITE(ConfiguredTabletBootstrapperTest) {
+
+    Y_UNIT_TEST(BasicInitialization) {
+        TTestBasicRuntime runtime(3);
+        SetupTabletServices(runtime);
+        runtime.SetLogPriority(NKikimrServices::BOOTSTRAPPER, NActors::NLog::PRI_DEBUG);
+
+        NKikimrConfig::TBootstrap bootstrapConfig;
+
+        auto* tablet1 = bootstrapConfig.AddTablet();
+        tablet1->SetType(NKikimrConfig::TBootstrap::TX_DUMMY);
+        tablet1->MutableInfo()->SetTabletID(72075186232723360ULL);
+        tablet1->SetAllowDynamicConfiguration(true);
+        tablet1->AddNode(runtime.GetNodeId(0));
+        FillDummyTabletChannels(tablet1->MutableInfo());
+
+        auto* tablet2 = bootstrapConfig.AddTablet();
+        tablet2->SetType(NKikimrConfig::TBootstrap::TX_DUMMY);
+        tablet2->MutableInfo()->SetTabletID(72075186232723361ULL);
+        tablet2->SetAllowDynamicConfiguration(true);
+        tablet2->AddNode(runtime.GetNodeId(1));
+        FillDummyTabletChannels(tablet2->MutableInfo());
+
+        auto configuredBootstrapper = runtime.Register(
+            CreateConfiguredTabletBootstrapper(bootstrapConfig), 0);
+        Y_UNUSED(configuredBootstrapper);
+
+        runtime.SimulateSleep(TDuration::MilliSeconds(100));
+
+        auto tabletObserver = runtime.AllocateEdgeActor(0);
+
+        auto pipeClient = runtime.ConnectToPipe(72075186232723360ULL, tabletObserver, 0,
+            NTabletPipe::TClientRetryPolicy::WithRetries());
+        Y_UNUSED(pipeClient);
+
+        auto connectEvent = runtime.GrabEdgeEventRethrow<TEvTabletPipe::TEvClientConnected>(tabletObserver);
+        UNIT_ASSERT_VALUES_EQUAL(connectEvent->Get()->Status, NKikimrProto::OK);
+
+    }
+
+    Y_UNIT_TEST(ConfigChangeHandling) {
+        TTestBasicRuntime runtime(2);
+        SetupTabletServices(runtime);
+        runtime.SetLogPriority(NKikimrServices::BOOTSTRAPPER, NActors::NLog::PRI_DEBUG);
+
+        NKikimrConfig::TBootstrap initialConfig;
+        auto* tablet = initialConfig.AddTablet();
+        tablet->SetType(NKikimrConfig::TBootstrap::TX_DUMMY);
+        tablet->MutableInfo()->SetTabletID(72075186232723360ULL);
+        tablet->SetAllowDynamicConfiguration(true);
+        tablet->AddNode(runtime.GetNodeId(0));
+        FillDummyTabletChannels(tablet->MutableInfo());
+
+        auto configuredBootstrapper = runtime.Register(
+            CreateConfiguredTabletBootstrapper(initialConfig), 0);
+
+        runtime.SimulateSleep(TDuration::MilliSeconds(100));
+
+        auto tabletObserver = runtime.AllocateEdgeActor(0);
+        auto initialPipe = runtime.ConnectToPipe(72075186232723360ULL, tabletObserver, 0,
+            NTabletPipe::TClientRetryPolicy::WithRetries());
+        Y_UNUSED(initialPipe);
+
+        auto initialConnectEvent = runtime.GrabEdgeEventRethrow<TEvTabletPipe::TEvClientConnected>(tabletObserver);
+        UNIT_ASSERT_VALUES_EQUAL(initialConnectEvent->Get()->Status, NKikimrProto::OK);
+
+        NKikimrConfig::TBootstrap updatedConfig;
+        auto* updatedTablet = updatedConfig.AddTablet();
+        updatedTablet->SetType(NKikimrConfig::TBootstrap::TX_DUMMY);
+        updatedTablet->MutableInfo()->SetTabletID(72075186232723360ULL);
+        updatedTablet->SetAllowDynamicConfiguration(true);
+        updatedTablet->AddNode(runtime.GetNodeId(0));
+        updatedTablet->AddNode(runtime.GetNodeId(1));
+        FillDummyTabletChannels(updatedTablet->MutableInfo());
+
+        auto configDispatcher = runtime.AllocateEdgeActor(0);
+        auto notification = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+        notification->Record.MutableConfig()->MutableBootstrapConfig()->CopyFrom(updatedConfig);
+        notification->Record.SetLocal(true);
+        notification->Record.AddItemKinds((ui32)NKikimrConsole::TConfigItem::BootstrapConfigItem);
+
+        runtime.Send(new IEventHandle(configuredBootstrapper, configDispatcher, notification.Release(), 0, 1));
+
+        auto responseEvent = runtime.GrabEdgeEventRethrow<NConsole::TEvConsole::TEvConfigNotificationResponse>(configDispatcher);
+        UNIT_ASSERT(responseEvent);
+    }
+
+    Y_UNIT_TEST(NodeListChange) {
+        TTestBasicRuntime runtime(3);
+        SetupTabletServices(runtime);
+        runtime.SetLogPriority(NKikimrServices::BOOTSTRAPPER, NActors::NLog::PRI_DEBUG);
+
+        // initial config: tablet allowed only on node 0
+        NKikimrConfig::TBootstrap initialConfig;
+        auto* tablet = initialConfig.AddTablet();
+        tablet->SetType(NKikimrConfig::TBootstrap::TX_DUMMY);
+        tablet->MutableInfo()->SetTabletID(72075186232723360ULL);
+        tablet->SetAllowDynamicConfiguration(true);
+        tablet->AddNode(runtime.GetNodeId(0));
+        FillDummyTabletChannels(tablet->MutableInfo());
+
+        // create configured bootstrappers on all nodes
+        [[maybe_unused]] auto configuredBootstrapper0 = runtime.Register(
+            CreateConfiguredTabletBootstrapper(initialConfig), 0);
+        [[maybe_unused]] auto configuredBootstrapper1 = runtime.Register(
+            CreateConfiguredTabletBootstrapper(initialConfig), 1);
+
+        runtime.SimulateSleep(TDuration::MilliSeconds(100));
+
+        // verify tablet is available on node 0
+        auto tabletObserver = runtime.AllocateEdgeActor(0);
+        auto initialPipe = runtime.ConnectToPipe(72075186232723360ULL, tabletObserver, 0,
+            NTabletPipe::TClientRetryPolicy::WithRetries());
+        Y_UNUSED(initialPipe);
+
+        auto initialConnectEvent = runtime.GrabEdgeEventRethrow<TEvTabletPipe::TEvClientConnected>(tabletObserver);
+        UNIT_ASSERT_VALUES_EQUAL(initialConnectEvent->Get()->Status, NKikimrProto::OK);
+
+        // updated config: tablet allowed only on node 1
+        NKikimrConfig::TBootstrap updatedConfig;
+        auto* updatedTablet = updatedConfig.AddTablet();
+        updatedTablet->SetType(NKikimrConfig::TBootstrap::TX_DUMMY);
+        updatedTablet->MutableInfo()->SetTabletID(72075186232723360ULL);
+        updatedTablet->SetAllowDynamicConfiguration(true);
+        updatedTablet->AddNode(runtime.GetNodeId(1)); // Only node 1
+        FillDummyTabletChannels(updatedTablet->MutableInfo());
+
+        // send config change notification directly to configured bootstrappers
+        // send to configured bootstrapper on node 0
+        {
+            auto configDispatcher = runtime.AllocateEdgeActor(0);
+            auto notification = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+            notification->Record.MutableConfig()->MutableBootstrapConfig()->CopyFrom(updatedConfig);
+            notification->Record.SetLocal(true);
+            notification->Record.AddItemKinds((ui32)NKikimrConsole::TConfigItem::BootstrapConfigItem);
+
+            runtime.Send(new IEventHandle(configuredBootstrapper0, configDispatcher, notification.Release(), 0, 1));
+
+            auto responseEvent = runtime.GrabEdgeEventRethrow<NConsole::TEvConsole::TEvConfigNotificationResponse>(configDispatcher);
+            UNIT_ASSERT(responseEvent);
+        }
+
+        // send to configured bootstrapper on node 1
+        {
+            auto configDispatcher = runtime.AllocateEdgeActor(1);
+            auto notification = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+            notification->Record.MutableConfig()->MutableBootstrapConfig()->CopyFrom(updatedConfig);
+            notification->Record.SetLocal(true);
+            notification->Record.AddItemKinds((ui32)NKikimrConsole::TConfigItem::BootstrapConfigItem);
+
+            runtime.Send(new IEventHandle(configuredBootstrapper1, configDispatcher, notification.Release(), 1, 1));
+
+            auto responseEvent = runtime.GrabEdgeEventRethrow<NConsole::TEvConsole::TEvConfigNotificationResponse>(configDispatcher);
+            UNIT_ASSERT(responseEvent);
+        }
+
+        // tablet should disappear from node 0
+        runtime.SimulateSleep(TDuration::MilliSeconds(200));
+        runtime.GrabEdgeEventRethrow<TEvTabletPipe::TEvClientDestroyed>(tabletObserver);
+
+        // tablet should appear on node 1
+        auto node1Observer = runtime.AllocateEdgeActor(1);
+        auto node1Pipe = runtime.ConnectToPipe(72075186232723360ULL, node1Observer, 1,
+            NTabletPipe::TClientRetryPolicy::WithRetries());
+        Y_UNUSED(node1Pipe);
+
+        runtime.SimulateSleep(TDuration::MilliSeconds(200));
+
+        auto node1ConnectEvent = runtime.GrabEdgeEventRethrow<TEvTabletPipe::TEvClientConnected>(node1Observer);
+        UNIT_ASSERT_VALUES_EQUAL(node1ConnectEvent->Get()->Status, NKikimrProto::OK);
+    }
+
+    Y_UNIT_TEST(ComplexConfigChanges) {
+        TTestBasicRuntime runtime(4);
+        SetupTabletServices(runtime);
+        runtime.SetLogPriority(NKikimrServices::BOOTSTRAPPER, NActors::NLog::PRI_DEBUG);
+
+        // initial config: tablet only on node 0
+        NKikimrConfig::TBootstrap initialConfig;
+        auto* tablet = initialConfig.AddTablet();
+        tablet->SetType(NKikimrConfig::TBootstrap::TX_DUMMY);
+        tablet->MutableInfo()->SetTabletID(72075186232723361ULL);
+        tablet->SetAllowDynamicConfiguration(true);
+        tablet->AddNode(runtime.GetNodeId(0));
+        FillDummyTabletChannels(tablet->MutableInfo());
+
+        // create configured bootstrappers on all nodes
+        [[maybe_unused]] auto configuredBootstrapper0 = runtime.Register(
+            CreateConfiguredTabletBootstrapper(initialConfig), 0);
+        [[maybe_unused]] auto configuredBootstrapper1 = runtime.Register(
+            CreateConfiguredTabletBootstrapper(initialConfig), 1);
+        [[maybe_unused]] auto configuredBootstrapper2 = runtime.Register(
+            CreateConfiguredTabletBootstrapper(initialConfig), 2);
+        [[maybe_unused]] auto configuredBootstrapper3 = runtime.Register(
+            CreateConfiguredTabletBootstrapper(initialConfig), 3);
+
+        runtime.SimulateSleep(TDuration::MilliSeconds(100));
+
+        // phase 1: tablet starts on node 0
+        auto tabletObserver0 = runtime.AllocateEdgeActor(0);
+        auto pipe0 = runtime.ConnectToPipe(72075186232723361ULL, tabletObserver0, 0,
+            NTabletPipe::TClientRetryPolicy::WithRetries());
+        Y_UNUSED(pipe0);
+
+        auto connectEvent = runtime.GrabEdgeEventRethrow<TEvTabletPipe::TEvClientConnected>(tabletObserver0);
+        UNIT_ASSERT_VALUES_EQUAL(connectEvent->Get()->Status, NKikimrProto::OK);
+
+        // phase 2: expand to [0,1] - tablet should stay on node 0
+        NKikimrConfig::TBootstrap config2;
+        auto* tablet2 = config2.AddTablet();
+        tablet2->SetType(NKikimrConfig::TBootstrap::TX_DUMMY);
+        tablet2->MutableInfo()->SetTabletID(72075186232723361ULL);
+        tablet2->SetAllowDynamicConfiguration(true);
+        tablet2->AddNode(runtime.GetNodeId(0));
+        tablet2->AddNode(runtime.GetNodeId(1));
+        FillDummyTabletChannels(tablet2->MutableInfo());
+
+        SendConfigUpdate(runtime, {configuredBootstrapper0, configuredBootstrapper1}, config2);
+
+        // tablet should still be available on node 0
+        runtime.SimulateSleep(TDuration::MilliSeconds(100));
+
+        // phase 3: change to [1] - tablet migrates to node 1
+        NKikimrConfig::TBootstrap config3;
+        auto* tablet3 = config3.AddTablet();
+        tablet3->SetType(NKikimrConfig::TBootstrap::TX_DUMMY);
+        tablet3->MutableInfo()->SetTabletID(72075186232723361ULL);
+        tablet3->SetAllowDynamicConfiguration(true);
+        tablet3->AddNode(runtime.GetNodeId(1));
+        FillDummyTabletChannels(tablet3->MutableInfo());
+
+        SendConfigUpdate(runtime, {configuredBootstrapper0, configuredBootstrapper1}, config3);
+
+        // tablet disappears from node 0
+        runtime.SimulateSleep(TDuration::MilliSeconds(200));
+        runtime.GrabEdgeEventRethrow<TEvTabletPipe::TEvClientDestroyed>(tabletObserver0);
+
+        // tablet appears on node 1
+        auto node1Observer = runtime.AllocateEdgeActor(1);
+        auto node1Pipe = runtime.ConnectToPipe(72075186232723361ULL, node1Observer, 1,
+            NTabletPipe::TClientRetryPolicy::WithRetries());
+        Y_UNUSED(node1Pipe);
+
+        runtime.SimulateSleep(TDuration::MilliSeconds(200));
+        auto node1ConnectEvent = runtime.GrabEdgeEventRethrow<TEvTabletPipe::TEvClientConnected>(node1Observer);
+        UNIT_ASSERT_VALUES_EQUAL(node1ConnectEvent->Get()->Status, NKikimrProto::OK);
+
+        // phase 4: change to [3] - tablet migrates to node 3
+        NKikimrConfig::TBootstrap config4;
+        auto* tablet4 = config4.AddTablet();
+        tablet4->SetType(NKikimrConfig::TBootstrap::TX_DUMMY);
+        tablet4->MutableInfo()->SetTabletID(72075186232723361ULL);
+        tablet4->SetAllowDynamicConfiguration(true);
+        tablet4->AddNode(runtime.GetNodeId(3));
+        FillDummyTabletChannels(tablet4->MutableInfo());
+
+        SendConfigUpdate(runtime, {configuredBootstrapper1, configuredBootstrapper3}, config4);
+
+        // tablet disappears from node 1
+        runtime.SimulateSleep(TDuration::MilliSeconds(200));
+        runtime.GrabEdgeEventRethrow<TEvTabletPipe::TEvClientDestroyed>(node1Observer);
+
+        // tablet appears on node 3
+        auto node3Observer = runtime.AllocateEdgeActor(3);
+        auto node3Pipe = runtime.ConnectToPipe(72075186232723361ULL, node3Observer, 3,
+            NTabletPipe::TClientRetryPolicy::WithRetries());
+        Y_UNUSED(node3Pipe);
+
+        runtime.SimulateSleep(TDuration::MilliSeconds(200));
+        auto node3ConnectEvent = runtime.GrabEdgeEventRethrow<TEvTabletPipe::TEvClientConnected>(node3Observer);
+        UNIT_ASSERT_VALUES_EQUAL(node3ConnectEvent->Get()->Status, NKikimrProto::OK);
+    }
+
+} // Y_UNIT_TEST_SUITE(ConfiguredTabletBootstrapperTest)
 
 } // namespace NKikimr

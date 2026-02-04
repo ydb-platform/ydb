@@ -22,7 +22,7 @@ DEFINE_REFCOUNTED_TYPE(IThreadPoolPoller)
 
 IThreadPoolPollerPtr CreateThreadPoolPoller(
     int threadCount,
-    std::string threadNamePrefix,
+    TStringBuf threadNamePrefix,
     TDuration pollingPeriod = TDuration::MilliSeconds(10));
 
 ////////////////////////////////////////////////////////////////////////////////

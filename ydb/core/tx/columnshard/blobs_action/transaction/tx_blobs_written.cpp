@@ -57,37 +57,47 @@ bool TTxBlobsWritingFinished::DoExecute(TTransactionContext& txc, const TActorCo
     std::set<TOperationWriteId> operationIds;
     for (auto&& writeResult : Pack.GetWriteResults()) {
         const auto& writeMeta = writeResult.GetWriteMeta();
-        auto operation = Self->OperationsManager->GetOperationVerified((TOperationWriteId)writeMeta.GetWriteId());
-        if (!operationIds.emplace(operation->GetWriteId()).second) {
+        auto op = Self->OperationsManager->GetOperationVerified((TOperationWriteId)writeMeta.GetWriteId());
+        if (!operationIds.emplace(op->GetWriteId()).second) {
             continue;
         }
         AFL_VERIFY(Self->TablesManager.IsReadyForFinishWrite(writeMeta.GetPathId().InternalPathId, minReadSnapshot));
-        Y_ABORT_UNLESS(operation->GetStatus() == EOperationStatus::Started);
-        if (operation->GetBehaviour() == EOperationBehaviour::NoTxWrite) {
-            operation->OnWriteFinish(txc, {}, true);
+        Y_ABORT_UNLESS(op->GetStatus() == EOperationStatus::Started);
+        if (op->GetBehaviour() == EOperationBehaviour::NoTxWrite) {
+            op->OnWriteFinish(txc, {}, true);
         } else {
-            operation->OnWriteFinish(txc, InsertWriteIds, false);
-            Self->OperationsManager->LinkInsertWriteIdToOperationWriteId(InsertWriteIds, operation->GetWriteId());
+            op->OnWriteFinish(txc, InsertWriteIds, false);
+            Self->OperationsManager->LinkInsertWriteIdToOperationWriteId(InsertWriteIds, op->GetWriteId());
         }
-        if (operation->GetBehaviour() == EOperationBehaviour::NoTxWrite) {
-            LWPROBE(EvWriteResult, Self->TabletID(), writeMeta.GetSource().ToString(), 0, operation->GetCookie(), "no_tx_write", true, "");
+        if (op->GetBehaviour() == EOperationBehaviour::NoTxWrite) {
+            LWPROBE(EvWriteResult, Self->TabletID(), writeMeta.GetSource().ToString(), 0, op->GetCookie(), "no_tx_write", true, "");
             auto ev = NEvents::TDataEvents::TEvWriteResult::BuildCompleted(Self->TabletID());
             AddTableAccessStatsToTxStats(*ev->Record.MutableTxStats(), writeMeta.GetPathId().SchemeShardLocalPathId.GetRawValue(),
-                                         writeResult.GetRecordsCount(), writeResult.GetDataSize(), operation->GetModificationType(), Self->TabletID());
-            Results.emplace_back(std::move(ev), writeMeta.GetSource(), operation->GetCookie());
+                                         writeResult.GetRecordsCount(), writeResult.GetDataSize(), op->GetModificationType(), Self->TabletID());
+            Results.emplace_back(std::move(ev), writeMeta.GetSource(), op->GetCookie());
+
+            if (!writeResult.GetNoDataToWrite() && Self->GetOperationsManager().HasReadLocks(writeMeta.GetPathId().InternalPathId)) {
+                // detect active reads which the given noTxWrite has conflicts with
+                auto evWrite = std::make_shared<NOlap::NTxInteractions::TEvWriteWriter>(
+                    writeMeta.GetPathId().InternalPathId, writeResult.GetPKBatchVerified(), Self->GetIndexOptional()->GetVersionedIndex().GetPrimaryKey());
+                Self->GetOperationsManager().AddEventForLock(*Self, op->GetLockId(), evWrite);
+                // No tx writes (bulk upsert) must break decent/proper txs.
+                // Decent/proper txs asked for isolation, so we have to give them isolation. 
+                Self->OperationsManager->BreakConflictingTxs(op->GetLockId(), txc);
+            }
         } else {
-            auto& info = Self->OperationsManager->GetLockVerified(operation->GetLockId());
+            auto& info = Self->OperationsManager->GetLockVerified(op->GetLockId());
             NKikimrDataEvents::TLock lock;
-            lock.SetLockId(operation->GetLockId());
+            lock.SetLockId(op->GetLockId());
             lock.SetDataShard(Self->TabletID());
             lock.SetGeneration(info.GetGeneration());
             lock.SetCounter(info.GetInternalGenerationCounter());
             writeMeta.GetPathId().SchemeShardLocalPathId.ToProto(lock);
-            LWPROBE(EvWriteResult, Self->TabletID(), writeMeta.GetSource().ToString(), 0, operation->GetCookie(), "tx_write", true, "");
-            auto ev = NEvents::TDataEvents::TEvWriteResult::BuildCompleted(Self->TabletID(), operation->GetLockId(), lock);
+            LWPROBE(EvWriteResult, Self->TabletID(), writeMeta.GetSource().ToString(), 0, op->GetCookie(), "tx_write", true, "");
+            auto ev = NEvents::TDataEvents::TEvWriteResult::BuildCompleted(Self->TabletID(), op->GetLockId(), lock);
             AddTableAccessStatsToTxStats(*ev->Record.MutableTxStats(), writeMeta.GetPathId().SchemeShardLocalPathId.GetRawValue(),
-                                         writeResult.GetRecordsCount(), writeResult.GetDataSize(), operation->GetModificationType(), Self->TabletID());
-            Results.emplace_back(std::move(ev), writeMeta.GetSource(), operation->GetCookie());
+                                         writeResult.GetRecordsCount(), writeResult.GetDataSize(), op->GetModificationType(), Self->TabletID());
+            Results.emplace_back(std::move(ev), writeMeta.GetSource(), op->GetCookie());
         }
     }
     TransactionTime = TInstant::Now() - startTransactionTime;
@@ -116,13 +126,11 @@ void TTxBlobsWritingFinished::DoComplete(const TActorContext& ctx) {
         }
         auto op = Self->GetOperationsManager().GetOperationVerified((TOperationWriteId)writeMeta.GetWriteId());
         pathIds.emplace(op->GetPathId().InternalPathId);
-        if (op->GetBehaviour() == EOperationBehaviour::WriteWithLock || op->GetBehaviour() == EOperationBehaviour::NoTxWrite) {
-            if (op->GetBehaviour() != EOperationBehaviour::NoTxWrite || Self->GetOperationsManager().HasReadLocks(writeMeta.GetPathId().InternalPathId)) {
-                // detect active reads which the given tx has conflicts with
-                auto evWrite = std::make_shared<NOlap::NTxInteractions::TEvWriteWriter>(
-                    writeMeta.GetPathId().InternalPathId, writeResult.GetPKBatchVerified(), Self->GetIndexOptional()->GetVersionedIndex().GetPrimaryKey());
-                Self->GetOperationsManager().AddEventForLock(*Self, op->GetLockId(), evWrite);
-            }
+        if (op->GetBehaviour() == EOperationBehaviour::WriteWithLock && Self->GetOperationsManager().HasReadLocks(writeMeta.GetPathId().InternalPathId)) {
+            // detect active reads which the given tx has conflicts with
+            auto evWrite = std::make_shared<NOlap::NTxInteractions::TEvWriteWriter>(
+                writeMeta.GetPathId().InternalPathId, writeResult.GetPKBatchVerified(), Self->GetIndexOptional()->GetVersionedIndex().GetPrimaryKey());
+            Self->GetOperationsManager().AddEventForLock(*Self, op->GetLockId(), evWrite);
         }
     }
     auto& index = Self->MutableIndexAs<NOlap::TColumnEngineForLogs>();
@@ -142,9 +150,6 @@ void TTxBlobsWritingFinished::DoComplete(const TActorContext& ctx) {
         auto op = Self->GetOperationsManager().GetOperationVerified((TOperationWriteId)writeMeta.GetWriteId());
         if (op->GetBehaviour() == EOperationBehaviour::NoTxWrite) {
             AFL_VERIFY(CommitSnapshot);
-            // No tx writes (bulk upsert) must break decent/proper txs.
-            // Decent/proper txs asked for serializable, so we have to give them serializable. 
-            Self->OperationsManager->BreakConflictingTxs(op->GetLockId());
             Self->OperationsManager->CommitTransactionOnComplete(*Self, 0, op->GetLockId(), *CommitSnapshot);
             Self->Counters.GetTabletCounters()->IncCounter(COUNTER_IMMEDIATE_TX_COMPLETED);
         } else {

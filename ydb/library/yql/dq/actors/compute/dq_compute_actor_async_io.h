@@ -188,7 +188,7 @@ struct IDqComputeActorAsyncOutput {
     virtual const TDqAsyncStats& GetEgressStats() const = 0;
 
     // Sends data.
-    // Method shoud be called under bound mkql allocator.
+    // Method should be called under bound mkql allocator.
     // Could throw YQL errors.
     // Checkpoint (if any) is supposed to be ordered after batch,
     // and finished flag is supposed to be ordered after checkpoint.
@@ -281,6 +281,7 @@ public:
         const NKikimr::NMiniKQL::THolderFactory& HolderFactory;
         const THashMap<TString, TString>& SecureParams;
         size_t MaxKeysInRequest;
+        const bool IsMultiMatches;
     };
 
     struct TSinkArguments {
@@ -314,6 +315,7 @@ public:
         const NKikimr::NMiniKQL::TTypeEnvironment& TypeEnv;
         const NKikimr::NMiniKQL::THolderFactory& HolderFactory;
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
+        TDqComputeActorWatermarks* WatermarksTracker = nullptr;
         NWilson::TTraceId TraceId;
     };
 

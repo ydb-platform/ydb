@@ -1744,6 +1744,7 @@ void TPartition::Handle(TEvPQ::TEvGetMaxSeqNoRequest::TPtr& ev, const TActorCont
     resp.SetErrorCode(NPersQueue::NErrorCode::OK);
 
     auto& result = *resp.MutablePartitionResponse()->MutableCmdGetMaxSeqNoResult();
+    result.SetIsPartitionActive(IsActive());
     for (const auto& sourceId : ev->Get()->SourceIds) {
         auto& protoInfo = *result.AddSourceIdInfo();
         protoInfo.SetSourceId(sourceId);
@@ -1958,6 +1959,7 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
             }
 
             SET_METRIC(userInfo.LabeledCounters, METRIC_COMMIT_MESSAGE_LAG, lag);
+            SET_METRIC(userInfo.LabeledCounters, METRIC_TOTAL_COMMIT_MESSAGE_LAG, lag);
         }
 
         ui64 readMessageLag = GetEndOffset() - snapshot.ReadOffset;
@@ -2861,6 +2863,8 @@ bool TPartition::HasPendingCommitsOrPendingWrites() const
 
 void TPartition::TryAddCmdWriteForTransaction(const TTransaction& tx)
 {
+    Y_ENSURE(!IsSupportive());
+
     if (!tx.SerializedTx.Defined()) {
         return;
     }
@@ -2873,7 +2877,7 @@ void TPartition::TryAddCmdWriteForTransaction(const TTransaction& tx)
     PQ_ENSURE(tx.SerializedTx->SerializeToString(&value));
 
     auto command = PersistRequest->Record.AddCmdWrite();
-    command->SetKey(GetTxKey(*txId));
+    command->SetKey(GetTxKey(*txId, Partition.OriginalPartitionId));
     command->SetValue(value);
     command->SetStorageChannel(NKikimrClient::TKeyValueRequest::INLINE);
 
@@ -3437,11 +3441,12 @@ void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
         OffloadActor = {};
     }
 
-    MonitoringProjectId = Config.GetMonitoringProjectId();
-    if (DetailedMetricsAreEnabled()) {
-        SetupDetailedMetrics();
-    } else {
+    if (MonitoringProjectId != Config.GetMonitoringProjectId() || !DetailedMetricsAreEnabled(Config)) {
         ResetDetailedMetrics();
+    }
+    MonitoringProjectId = Config.GetMonitoringProjectId();
+    if (DetailedMetricsAreEnabled(Config)) {
+        SetupDetailedMetrics();
     }
 }
 
@@ -4571,7 +4576,7 @@ IActor* CreatePartitionActor(ui64 tabletId, const TPartitionId& partition, const
 }
 
 void TPartition::SetupDetailedMetrics() {
-    if (!DetailedMetricsAreEnabled()) {
+    if (!DetailedMetricsAreEnabled(Config)) {
         return;
     }
     if (WriteTimeLagMsByLastWritePerPartition) {

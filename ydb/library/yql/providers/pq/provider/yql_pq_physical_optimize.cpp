@@ -125,62 +125,95 @@ public:
         return dqQueryBuilder.Done();
     }
 
-    TMaybeNode<TExprBase> PqInsert(TExprBase node, TExprContext& ctx, IOptimizationContext& /*optCtx*/, const TGetParents& getParents) const {
-        auto insert = node.Cast<TPqInsert>();
-        if (!TDqCnUnionAll::Match(insert.Input().Raw())) {
-            return node;
-        }
-
+    TMaybeNode<TExprBase> PqInsert(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) const {
+        const auto insert = node.Cast<TPqInsert>();
         const auto& topicNode = insert.Topic();
         const TString cluster(topicNode.Cluster().Value());
-
-        const TParentsMap* parentsMap = getParents();
-        auto dqUnion = insert.Input().Cast<TDqCnUnionAll>();
-        if (!NDq::IsSingleConsumerConnection(dqUnion, *parentsMap)) {
-            return node;
-        }
-
-        const auto* topicMeta = State_->FindTopicMeta(topicNode);
-        if (!topicMeta) {
-            ctx.AddError(TIssue(ctx.GetPosition(insert.Pos()), TStringBuilder() << "Unknown topic `" << topicNode.Cluster().StringValue() << "`.`"
-                                << topicNode.Path().StringValue() << "`"));
+        if (!State_->FindTopicMeta(topicNode)) {
+            ctx.AddError(TIssue(ctx.GetPosition(insert.Pos()), TStringBuilder() << "Unknown topic `" << cluster << "`.`" << topicNode.Path().StringValue() << "`"));
             return nullptr;
         }
 
-        YQL_CLOG(INFO, ProviderPq) << "Optimize PqInsert `" << topicNode.Cluster().StringValue() << "`.`" << topicNode.Path().StringValue() << "`";
-
-        auto dqPqTopicSinkSettingsBuilder = Build<TDqPqTopicSink>(ctx, insert.Pos());
-        dqPqTopicSinkSettingsBuilder.Topic(topicNode);
-        dqPqTopicSinkSettingsBuilder.Settings(BuildTopicWriteSettings(cluster, insert.Pos(), ctx));
-        dqPqTopicSinkSettingsBuilder.Token<TCoSecureParam>().Name().Build("cluster:default_" + cluster).Build();
-        auto dqPqTopicSinkSettings = dqPqTopicSinkSettingsBuilder.Done();
-
-        auto dqSink = Build<TDqSink>(ctx, insert.Pos())
+        auto dqSinkBuilder = Build<TDqSink>(ctx, insert.Pos())
             .DataSink(insert.DataSink())
-            .Settings(dqPqTopicSinkSettings)
-            .Index(dqUnion.Output().Index())
+            .Settings<TDqPqTopicSink>()
+                .Topic(topicNode)
+                .Settings(BuildTopicWriteSettings(cluster, insert.Pos(), ctx))
+                .Token<TCoSecureParam>()
+                    .Name()
+                        .Value(TStringBuilder() << "cluster:default_" << cluster)
+                        .Build()
+                    .Build()
+                .Build();
+
+        const auto input = insert.Input();
+        if (IsDqPureExpr(input)) {
+            YQL_CLOG(INFO, ProviderPq) << "Optimize PqInsert `" << cluster << "`.`" << topicNode.Path().StringValue() << "`, build pure stage with sink";
+
+            const auto dqSink = dqSinkBuilder
+                .Index().Build(0)
+                .Done();
+
+            return Build<TDqStage>(ctx, insert.Pos())
+                .Inputs().Build()
+                .Program<TCoLambda>()
+                    .Args({})
+                    .Body<TCoToFlow>()
+                        .Input(input)
+                        .Build()
+                    .Build()
+                .Outputs()
+                    .Add(dqSink)
+                    .Build()
+                .Settings().Build()
+                .Done();
+        }
+
+        if (!TDqCnUnionAll::Match(input.Raw())) {
+            return node;
+        }
+
+        const auto dqUnion = input.Cast<TDqCnUnionAll>();
+        if (!NDq::IsSingleConsumerConnection(dqUnion, *getParents())) {
+            return node;
+        }
+
+        YQL_CLOG(INFO, ProviderPq) << "Optimize PqInsert `" << cluster << "`.`" << topicNode.Path().StringValue() << "`, push into existing stage";
+
+        const auto dqUnionOutput = dqUnion.Output();
+        const auto dqSink = dqSinkBuilder
+            .Index(dqUnionOutput.Index())
             .Done();
 
-        TDqStage inputStage = dqUnion.Output().Stage().Cast<TDqStage>();
+        const auto inputStage = dqUnionOutput.Stage().Cast<TDqStage>();
 
         auto outputsBuilder = Build<TDqStageOutputsList>(ctx, topicNode.Pos());
-        if (inputStage.Outputs()) {
-            outputsBuilder.InitFrom(inputStage.Outputs().Cast());
+        if (const auto outputs = inputStage.Outputs()) {
+            outputsBuilder.InitFrom(outputs.Cast());
+            YQL_ENSURE(inputStage.Program().Body().Maybe<TDqReplicate>(), "Can not push multiple async outputs into stage without TDqReplicate");
         }
         outputsBuilder.Add(dqSink);
 
-        auto dqStageWithSink = Build<TDqStage>(ctx, inputStage.Pos())
+        const auto dqStageWithSink = Build<TDqStage>(ctx, inputStage.Pos())
             .InitFrom(inputStage)
             .Outputs(outputsBuilder.Done())
             .Done();
-        return dqStageWithSink;
+
+        optCtx.RemapNode(inputStage.Ref(), dqStageWithSink.Ptr());
+
+        const auto dqResult = Build<TCoNth>(ctx, dqStageWithSink.Pos())
+            .Tuple(dqStageWithSink)
+            .Index(dqUnionOutput.Index())
+            .Done();
+
+        return ctx.NewList(dqStageWithSink.Pos(), {dqResult.Ptr()});
     }
 
 private:
     TPqState::TPtr State_;
 };
 
-} // namespace
+} // anonymous namespace
 
 THolder<IGraphTransformer> CreatePqPhysicalOptProposalTransformer(TPqState::TPtr state) {
     return MakeHolder<TPqPhysicalOptProposalTransformer>(std::move(state));

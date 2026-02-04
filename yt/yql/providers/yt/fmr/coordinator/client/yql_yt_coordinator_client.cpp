@@ -30,8 +30,13 @@ public:
         TStringStream outputStream;
 
         auto startOperationFunc = [&]() {
-            httpClient.DoPost(startOperationRequestUrl, protoStartOperationRequest.SerializeAsString(), &outputStream, GetHeadersWithLogContext(Headers_, false));
+            auto statusCode = httpClient.DoPost(
+                startOperationRequestUrl,
+                protoStartOperationRequest.SerializeAsString(),
+                &outputStream,
+                GetHeadersWithLogContext(Headers_, false));
             TString serializedResponse = outputStream.ReadAll();
+            HandleHttpError(statusCode, serializedResponse);
             NProto::TStartOperationResponse protoStartOperationResponse;
             YQL_ENSURE(protoStartOperationResponse.ParseFromString(serializedResponse));
             return NThreading::MakeFuture(StartOperationResponseFromProto(protoStartOperationResponse));
@@ -178,6 +183,22 @@ public:
             return NThreading::MakeFuture(ListSessionsResponseFromProto(protoResponse));
         };
         return *DoWithRetry<NThreading::TFuture<TListSessionsResponse>, yexception>(func, RetryPolicy_, true, OnFail_);
+    }
+
+    NThreading::TFuture<TPrepareOperationResponse> PrepareOperation(const TPrepareOperationRequest& request) override {
+        NProto::TPrepareOperationRequest protoRequest = PrepareOperationRequestToProto(request);
+        TString url = "/prepare_partition";
+        auto httpClient = TKeepAliveHttpClient(Host_, Port_);
+        TStringStream outputStream;
+
+        auto func = [&]() {
+            httpClient.DoPost(url, protoRequest.SerializeAsString(),&outputStream, GetHeadersWithLogContext(Headers_, false));
+            TString serializedResponse = outputStream.ReadAll();
+            NProto::TPrepareOperationResponse protoResponse;
+            YQL_ENSURE(protoResponse.ParseFromString(serializedResponse));
+            return NThreading::MakeFuture(PrepareOperationResponseFromProto(protoResponse));
+        };
+        return *DoWithRetry<NThreading::TFuture<TPrepareOperationResponse>, yexception>(func, RetryPolicy_, true, OnFail_);
     }
 
 private:

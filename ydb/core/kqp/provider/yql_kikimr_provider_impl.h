@@ -339,9 +339,7 @@ Ydb::Table::VectorIndexSettings_VectorType VectorIndexSettingsParseVectorType(st
 bool IsPgNullExprNode(const NNodes::TExprBase& maybeLiteral);
 std::optional<TString> FillLiteralProto(NNodes::TExprBase maybeLiteral, const TTypeAnnotationNode* valueType, Ydb::TypedValue& proto);
 void FillLiteralProto(const NNodes::TCoDataCtor& literal, Ydb::TypedValue& proto);
-// todo gvit switch to ydb typed value.
-void FillLiteralProto(const NNodes::TCoDataCtor& literal, NKqpProto::TKqpPhyLiteralValue& proto);
-void FillLiteralProto(const NNodes::TCoPgConst& literal, NKqpProto::TKqpPhyLiteralValue& proto);
+void FillLiteralProto(const NNodes::TCoPgConst& literal, Ydb::TypedValue& proto);
 
 // Optimizer rules
 TExprNode::TPtr KiBuildQuery(NNodes::TExprBase node, TExprContext& ctx, TStringBuf database, TIntrusivePtr<TKikimrTablesData> tablesData,

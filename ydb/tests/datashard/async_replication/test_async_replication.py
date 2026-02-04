@@ -1,5 +1,4 @@
 import pytest
-import time
 
 from ydb.tests.sql.lib.test_query import Query
 from ydb.tests.library.common.wait_for import wait_for
@@ -8,7 +7,7 @@ from ydb.tests.datashard.lib.dml_operations import DMLOperations
 from ydb.tests.datashard.lib.test_pg_base import TestPgBase
 from ydb.tests.datashard.lib.types_of_variables import pk_types, non_pk_types, index_first, index_second, \
     index_first_sync, index_second_sync, index_three_sync, index_four_sync, index_zero_sync, \
-    pk_pg_types, non_pk_pg_types
+    pk_pg_types_mixed, non_pk_pg_types_mixed
 
 
 class TestAsyncReplicationBase(MulticlusterTestBase):
@@ -28,13 +27,8 @@ class TestAsyncReplicationBase(MulticlusterTestBase):
                         CONNECTION_STRING = 'grpc://{self.get_endpoint(self.clusters[0])}/?database={self.get_database()}'
                             )
                          """)
-        for _ in range(100):
-            try:
-                dml_cluster_2.query(
-                    f"select count(*) as count from {table_name}")
-                break
-            except Exception:
-                time.sleep(1)
+        assert wait_for(lambda: dml_cluster_2.table_exists(table_name), timeout_seconds=100), "Table not created"
+        assert wait_for(self.create_predicate(False, table_name, dml_cluster_2.query), timeout_seconds=100), "Expected non-zero rows after insert"
         dml_cluster_2.select_after_insert(
             table_name, all_types, pk_types, index, ttl)
         dml_cluster_1.query(f"delete from {table_name}")
@@ -102,13 +96,13 @@ class TestPgAsyncReplication(TestPgBase, TestAsyncReplicationBase):
         "table_name, pk_types, all_types, index, ttl, unique, sync",
         [
             # TODO: add UNIQUE_SYNC
-            ("table_index_0__SYNC", pk_pg_types, {}, pk_pg_types, "", "", "SYNC"),
-            ("table_index_0__ASYNC", pk_pg_types, {}, pk_pg_types, "", "", "ASYNC"),
-            ("table_all_types", pk_pg_types, {**pk_pg_types, **non_pk_pg_types}, {}, "", "", ""),
-            ("table_ttl_pgint4", pk_pg_types, {}, {}, "pgint4", "", ""),
-            ("table_ttl_pgint8", pk_pg_types, {}, {}, "pgint8", "", ""),
-            ("table_ttl_pgdate", pk_pg_types, {}, {}, "pgdate", "", ""),
-            ("table_ttl_pgtimestamp", pk_pg_types, {}, {}, "pgtimestamp", "", ""),
+            ("table_index_0__SYNC", pk_pg_types_mixed, {}, pk_pg_types_mixed, "", "", "SYNC"),
+            ("table_index_0__ASYNC", pk_pg_types_mixed, {}, pk_pg_types_mixed, "", "", "ASYNC"),
+            ("table_all_types", pk_pg_types_mixed, {**pk_pg_types_mixed, **non_pk_pg_types_mixed}, {}, "", "", ""),
+            ("table_ttl_pgint4", pk_pg_types_mixed, {}, {}, "pgint4", "", ""),
+            ("table_ttl_pgint8", pk_pg_types_mixed, {}, {}, "pgint8", "", ""),
+            ("table_ttl_pgdate", pk_pg_types_mixed, {}, {}, "pgdate", "", ""),
+            ("table_ttl_pgtimestamp", pk_pg_types_mixed, {}, {}, "pgtimestamp", "", ""),
         ]
     )
     def test_async_replication(self, table_name: str, pk_types: dict[str, str], all_types: dict[str, str], index: dict[str, str], ttl: str, unique: str, sync: str):

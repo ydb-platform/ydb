@@ -16,7 +16,7 @@ public:
     virtual bool AddLayer(const TString& name, const TMaybe<TString>& parent, const TMaybe<TString>& url, TExprContext& ctx) = 0;
     virtual bool AddLayerFromJson(TStringBuf json, TExprContext& ctx) = 0;
     virtual void ClearLayers() = 0;
-    virtual ~ILayersRegistry() = default;
+    ~ILayersRegistry() override = default;
 };
 using ILayersRegistryPtr = TIntrusivePtr<ILayersRegistry>;
 

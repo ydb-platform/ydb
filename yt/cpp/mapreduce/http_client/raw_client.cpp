@@ -753,7 +753,7 @@ std::unique_ptr<IOutputStream> THttpRawClient::WriteTable(
 std::unique_ptr<IInputStream> THttpRawClient::ReadTable(
     const TTransactionId& transactionId,
     const TRichYPath& path,
-    const TMaybe<TFormat>& format,
+    const TFormat& format,
     const TTableReaderOptions& options)
 {
     TMutationId mutationId;
@@ -779,7 +779,7 @@ std::unique_ptr<IOutputStream> THttpRawClient::WriteFile(
 
 std::unique_ptr<IInputStream> THttpRawClient::ReadTablePartition(
     const TString& cookie,
-    const TMaybe<TFormat>& format,
+    const TFormat& format,
     const TTablePartitionReaderOptions& options)
 {
     TMutationId mutationId;

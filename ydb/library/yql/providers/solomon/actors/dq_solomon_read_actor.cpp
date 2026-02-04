@@ -238,7 +238,7 @@ public:
 
         TIssues issues { TIssue(metricsReadError->Get()->Record.GetIssues()) };
         SOURCE_LOG_W("Got " << "error list metrics response[" << metricsReadError->Cookie << "] from solomon: " << issues.ToOneLineString());
-        Send(ComputeActorId, new TEvAsyncInputError(InputIndex, issues, NYql::NDqProto::StatusIds::EXTERNAL_ERROR));
+        Send(ComputeActorId, new TEvAsyncInputError(InputIndex, issues, NYql::NDqProto::StatusIds::BAD_REQUEST));
         return;
     }
 
@@ -248,7 +248,7 @@ public:
         if (batch.Response.Status != NSo::EStatus::STATUS_OK) {
             TIssues issues { TIssue(batch.Response.Error) };
             SOURCE_LOG_W("Got " << "error points count response[" << pointsCountBatch->Cookie << "] from solomon: " << issues.ToOneLineString());
-            Send(ComputeActorId, new TEvAsyncInputError(InputIndex, issues, NYql::NDqProto::StatusIds::EXTERNAL_ERROR));
+            Send(ComputeActorId, new TEvAsyncInputError(InputIndex, issues, NYql::NDqProto::StatusIds::BAD_REQUEST));
             return;
         }
 
@@ -581,7 +581,7 @@ private:
         if (batch.Response.Status != NSo::EStatus::STATUS_OK) {
             TIssues issues { TIssue(batch.Response.Error) };
             SOURCE_LOG_W("Got " << "error data response[" << newDataBatch->Cookie << "] from solomon: " << issues.ToOneLineString());
-            Send(ComputeActorId, new TEvAsyncInputError(InputIndex, issues, NYql::NDqProto::StatusIds::EXTERNAL_ERROR));
+            Send(ComputeActorId, new TEvAsyncInputError(InputIndex, issues, NYql::NDqProto::StatusIds::BAD_REQUEST));
             return false;
         }
 

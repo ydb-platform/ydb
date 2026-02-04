@@ -3136,6 +3136,10 @@ private:
             input->AddConstraint(ctx.MakeConstraint<TDistinctConstraintNode>(columns));
         }
 
+        if (auto c = input->Child(TCoMultiHoppingCore::idx_Input)->GetConstraint<TEmptyConstraintNode>()) {
+            input->AddConstraint(c);
+        }
+
         return TStatus::Ok;
     }
 
@@ -3306,7 +3310,7 @@ public:
     {
     }
 
-    ~TConstraintTransformer() = default;
+    ~TConstraintTransformer() override = default;
 
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
         YQL_PROFILE_SCOPE(DEBUG, "ConstraintTransformer::DoTransform");

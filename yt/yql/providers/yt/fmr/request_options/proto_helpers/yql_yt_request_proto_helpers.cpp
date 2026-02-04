@@ -197,6 +197,9 @@ NProto::TSortedChunkStats SortedChunkStatsToProto(const TSortedChunkStats& sorte
     if (!sortedChunkStats.FirstRowKeys.IsUndefined()) {
         protoSortedChunkStats.SetFirstRowKeys(NYT::NodeToYsonString(sortedChunkStats.FirstRowKeys));
     }
+    if (!sortedChunkStats.LastRowKeys.IsUndefined()) {
+        protoSortedChunkStats.SetLastRowKeys(NYT::NodeToYsonString(sortedChunkStats.LastRowKeys));
+    }
     return protoSortedChunkStats;
 }
 
@@ -205,6 +208,9 @@ TSortedChunkStats SortedChunkStatsFromProto(const NProto::TSortedChunkStats& pro
     sortedChunkStats.IsSorted = protoSortedChunkStats.GetIsSorted();
     if (!protoSortedChunkStats.GetFirstRowKeys().empty()) {
         sortedChunkStats.FirstRowKeys = NYT::NodeFromYsonString(protoSortedChunkStats.GetFirstRowKeys());
+    }
+    if (!protoSortedChunkStats.GetLastRowKeys().empty()) {
+        sortedChunkStats.LastRowKeys = NYT::NodeFromYsonString(protoSortedChunkStats.GetLastRowKeys());
     }
     return sortedChunkStats;
 }
@@ -259,6 +265,8 @@ NProto::TStatistics StatisticsToProto(const TStatistics& stats) {
         auto* curOutputTable = protoStatistics.AddOutputTables();
         curOutputTable->Swap(&statTableObject);
     }
+    NProto::TTaskResult protoTaskResult = TaskResultToProto(stats.TaskResult);
+    protoStatistics.MutableTaskResult()->Swap(&protoTaskResult);
     return protoStatistics;
 }
 
@@ -270,7 +278,11 @@ TStatistics StatisticsFromProto(const NProto::TStatistics& protoStats) {
         TTableChunkStats tableChunkStats = TableChunkStatsFromProto(protoStatTableObject.GetTableChunkStats());
         outputTables[fmrTableOutputRef] = tableChunkStats;
     }
-    return TStatistics{.OutputTables = outputTables};
+    TStatistics stats{.OutputTables = std::move(outputTables)};
+    if (protoStats.HasTaskResult()) {
+        stats.TaskResult = TaskResultFromProto(protoStats.GetTaskResult());
+    }
+    return stats;
 }
 
 NProto::TOperationTableRef OperationTableRefToProto(const TOperationTableRef& operationTableRef) {
@@ -348,10 +360,40 @@ NProto::TUploadOperationParams UploadOperationParamsToProto(const TUploadOperati
 }
 
 TUploadOperationParams UploadOperationParamsFromProto(const NProto::TUploadOperationParams& protoUploadOperationParams) {
-    return TUploadOperationParams(
-        FmrTableRefFromProto(protoUploadOperationParams.GetInput()),
-        YtTableRefFromProto(protoUploadOperationParams.GetOutput())
-    );
+    return TUploadOperationParams{
+        .Input = FmrTableRefFromProto(protoUploadOperationParams.GetInput()),
+        .Output = YtTableRefFromProto(protoUploadOperationParams.GetOutput())
+    };
+}
+
+NProto::TSortedUploadOperationParams SortedUploadOperationParamsToProto(const TSortedUploadOperationParams& SortedUploadOperationParams) {
+    NProto::TSortedUploadOperationParams protoSortedUploadOperationParams;
+    auto input = FmrTableRefToProto(SortedUploadOperationParams.Input);
+    auto output = YtTableRefToProto(SortedUploadOperationParams.Output);
+    protoSortedUploadOperationParams.MutableInput()->Swap(&input);
+    protoSortedUploadOperationParams.MutableOutput()->Swap(&output);
+    protoSortedUploadOperationParams.SetSessionId(SortedUploadOperationParams.SessionId);
+    for (const auto& cookie : SortedUploadOperationParams.Cookies) {
+        protoSortedUploadOperationParams.AddCookies(cookie);
+    }
+    protoSortedUploadOperationParams.SetIsOrdered(SortedUploadOperationParams.IsOrdered);
+    protoSortedUploadOperationParams.SetPartitionId(SortedUploadOperationParams.PartitionId);
+    return protoSortedUploadOperationParams;
+}
+
+TSortedUploadOperationParams SortedUploadOperationParamsFromProto(const NProto::TSortedUploadOperationParams& protoSortedUploadOperationParams) {
+    std::vector<TString> cookies;
+    for (const auto& cookie : protoSortedUploadOperationParams.GetCookies()) {
+        cookies.push_back(cookie);
+    }
+    return TSortedUploadOperationParams{
+        .Input = FmrTableRefFromProto(protoSortedUploadOperationParams.GetInput()),
+        .Output = YtTableRefFromProto(protoSortedUploadOperationParams.GetOutput()),
+        .SessionId = protoSortedUploadOperationParams.GetSessionId(),
+        .Cookies = cookies,
+        .PartitionId = protoSortedUploadOperationParams.GetPartitionId(),
+        .IsOrdered = protoSortedUploadOperationParams.GetIsOrdered()
+    };
 }
 
 NProto::TUploadTaskParams UploadTaskParamsToProto(const TUploadTaskParams& uploadTaskParams) {
@@ -380,10 +422,10 @@ NProto::TDownloadOperationParams DownloadOperationParamsToProto(const TDownloadO
 }
 
 TDownloadOperationParams DownloadOperationParamsFromProto(const NProto::TDownloadOperationParams& protoDownloadOperationParams) {
-    return TDownloadOperationParams(
-        YtTableRefFromProto(protoDownloadOperationParams.GetInput()),
-        FmrTableRefFromProto(protoDownloadOperationParams.GetOutput())
-    );
+    return TDownloadOperationParams{
+        .Input = YtTableRefFromProto(protoDownloadOperationParams.GetInput()),
+        .Output = FmrTableRefFromProto(protoDownloadOperationParams.GetOutput())
+    };
 }
 
 NProto::TDownloadTaskParams DownloadTaskParamsToProto(const TDownloadTaskParams& downloadTaskParams) {
@@ -415,10 +457,10 @@ NProto::TMergeOperationParams MergeOperationParamsToProto(const TMergeOperationP
 }
 
 TMergeOperationParams MergeOperationParamsFromProto(const NProto::TMergeOperationParams& protoMergeOperationParams) {
-    TMergeOperationParams mergeOperationParams(
-        {},
-        FmrTableRefFromProto(protoMergeOperationParams.GetOutput())
-    );
+    TMergeOperationParams mergeOperationParams{
+        .Input = {},
+        .Output = FmrTableRefFromProto(protoMergeOperationParams.GetOutput())
+    };
     for (size_t i = 0; i < protoMergeOperationParams.InputSize(); ++i) {
         TOperationTableRef inputTable = OperationTableRefFromProto(protoMergeOperationParams.GetInput(i));
         mergeOperationParams.Input.emplace_back(inputTable);
@@ -509,6 +551,9 @@ NProto::TOperationParams OperationParamsToProto(const TOperationParams& operatio
     } else if (auto* mapOperationParamsPtr = std::get_if<TMapOperationParams>(&operationParams)) {
         NProto::TMapOperationParams protoMapOperationParams = MapOperationParamsToProto(*mapOperationParamsPtr);
         protoOperationParams.MutableMapOperationParams()->Swap(&protoMapOperationParams);
+    } else if (auto* SortedUploadOperationParamsPtr = std::get_if<TSortedUploadOperationParams>(&operationParams)) {
+        NProto::TSortedUploadOperationParams protoSortedUploadOperationParams = SortedUploadOperationParamsToProto(*SortedUploadOperationParamsPtr);
+        protoOperationParams.MutableSortedUploadOperationParams()->Swap(&protoSortedUploadOperationParams);
     }
     return protoOperationParams;
 }
@@ -522,8 +567,31 @@ TOperationParams OperationParamsFromProto(const NProto::TOperationParams& protoO
         return MergeOperationParamsFromProto(protoOperationParams.GetMergeOperationParams());
     } else if (protoOperationParams.HasMapOperationParams()) {
         return MapOperationParamsFromProto(protoOperationParams.GetMapOperationParams());
+    } else if (protoOperationParams.HasSortedUploadOperationParams()) {
+        return SortedUploadOperationParamsFromProto(protoOperationParams.GetSortedUploadOperationParams());
     }
     return TOperationParams();
+}
+
+TSortedUploadTaskParams SortedUploadTaskParamsFromProto(const NProto::TSortedUploadTaskParams& protoSortedUploadTaskParams) {
+    TSortedUploadTaskParams SortedUploadTaskParams;
+    SortedUploadTaskParams.Input = FmrTableInputRefFromProto(protoSortedUploadTaskParams.GetInput());
+    SortedUploadTaskParams.Output = YtTableRefFromProto(protoSortedUploadTaskParams.GetOutput());
+    SortedUploadTaskParams.CookieYson = protoSortedUploadTaskParams.GetCookieYson();
+    SortedUploadTaskParams.Order = protoSortedUploadTaskParams.GetOrder();
+    return SortedUploadTaskParams;
+}
+
+NProto::TSortedUploadTaskParams SortedUploadTaskParamsToProto(const TSortedUploadTaskParams& SortedUploadTaskParams) {
+    NProto::TSortedUploadTaskParams protoSortedUploadTaskParams;
+    auto input = FmrTableInputRefToProto(SortedUploadTaskParams.Input);
+    auto output = YtTableRefToProto(SortedUploadTaskParams.Output);
+    protoSortedUploadTaskParams.MutableInput()->Swap(&input);
+    protoSortedUploadTaskParams.MutableOutput()->Swap(&output);
+    protoSortedUploadTaskParams.SetCookieYson(SortedUploadTaskParams.CookieYson);
+    protoSortedUploadTaskParams.SetOrder(SortedUploadTaskParams.Order);
+
+    return protoSortedUploadTaskParams;
 }
 
 NProto::TTaskParams TaskParamsToProto(const TTaskParams& taskParams) {
@@ -540,6 +608,9 @@ NProto::TTaskParams TaskParamsToProto(const TTaskParams& taskParams) {
     } else if (auto* mapTaskParamsPtr = std::get_if<TMapTaskParams>(&taskParams)) {
         NProto::TMapTaskParams protoMapTaskParams = MapTaskParamsToProto(*mapTaskParamsPtr);
         protoTaskParams.MutableMapTaskParams()->Swap(&protoMapTaskParams);
+    } else if (auto* SortedUploadTaskParamsPtr = std::get_if<TSortedUploadTaskParams>(&taskParams)) {
+        NProto::TSortedUploadTaskParams protoSortedUploadTaskParams = SortedUploadTaskParamsToProto(*SortedUploadTaskParamsPtr);
+        protoTaskParams.MutableSortedUploadTaskParams()->Swap(&protoSortedUploadTaskParams);
     }
     return protoTaskParams;
 }
@@ -554,6 +625,8 @@ TTaskParams TaskParamsFromProto(const NProto::TTaskParams& protoTaskParams) {
         taskParams = MergeTaskParamsFromProto(protoTaskParams.GetMergeTaskParams());
     } else if (protoTaskParams.HasMapTaskParams()) {
         taskParams = MapTaskParamsFromProto(protoTaskParams.GetMapTaskParams());
+    } else if (protoTaskParams.HasSortedUploadTaskParams()) {
+        taskParams = SortedUploadTaskParamsFromProto(protoTaskParams.GetSortedUploadTaskParams());
     }
     return taskParams;
 }
@@ -650,7 +723,7 @@ TFmrResourceTaskInfo FmrResourceTaskInfoFromProto(const NProto::TFmrResourceTask
 
 NProto::TTask TaskToProto(const TTask& task) {
     NProto::TTask protoTask;
-    protoTask.SetTaskType(static_cast<NProto::ETaskType>(task.TaskType));
+    protoTask.SetTaskType(NProto::ETaskType(task.TaskType));
     protoTask.SetTaskId(task.TaskId);
     auto taskParams = TaskParamsToProto(task.TaskParams);
     protoTask.MutableTaskParams()->Swap(&taskParams);
@@ -683,7 +756,7 @@ NProto::TTask TaskToProto(const TTask& task) {
 
 TTask TaskFromProto(const NProto::TTask& protoTask) {
     TTask task;
-    task.TaskType = static_cast<ETaskType>(protoTask.GetTaskType());
+    task.TaskType = ETaskType(protoTask.GetTaskType());
     task.TaskId = protoTask.GetTaskId();
     task.TaskParams = TaskParamsFromProto(protoTask.GetTaskParams());
     task.SessionId = protoTask.GetSessionId();
@@ -711,17 +784,98 @@ TTask TaskFromProto(const NProto::TTask& protoTask) {
     return task;
 }
 
-NProto::TTaskState TaskStateToProto(const TTaskState& taskState) {
-    NProto::TTaskState protoTaskState;
-    protoTaskState.SetTaskStatus(static_cast<NProto::ETaskStatus>(taskState.TaskStatus));
-    protoTaskState.SetTaskId(taskState.TaskId);
-    if (taskState.TaskErrorMessage) {
-        auto fmrError = FmrErrorToProto(*taskState.TaskErrorMessage);
-        protoTaskState.MutableTaskErrorMessage()->Swap(&fmrError);
+NProto::TTaskUploadResult TaskUploadResultToProto(const TTaskUploadResult& taskUploadResult) {
+    Y_UNUSED(taskUploadResult);
+    NProto::TTaskUploadResult protoTaskUploadResult;
+    return protoTaskUploadResult;
+}
+
+TTaskUploadResult TaskUploadResultFromProto(const NProto::TTaskUploadResult& protoTaskUploadResult) {
+    Y_UNUSED(protoTaskUploadResult);
+    return TTaskUploadResult();
+}
+
+NProto::TTaskDownloadResult TaskDownloadResultToProto(const TTaskDownloadResult& taskDownloadResult) {
+    Y_UNUSED(taskDownloadResult);
+    NProto::TTaskDownloadResult protoTaskDownloadResult;
+    return protoTaskDownloadResult;
+}
+
+TTaskDownloadResult TaskDownloadResultFromProto(const NProto::TTaskDownloadResult& protoTaskDownloadResult) {
+    Y_UNUSED(protoTaskDownloadResult);
+    return TTaskDownloadResult();
+}
+
+NProto::TTaskMergeResult TaskMergeResultToProto(const TTaskMergeResult& taskMergeResult) {
+    Y_UNUSED(taskMergeResult);
+    NProto::TTaskMergeResult protoTaskMergeResult;
+    return protoTaskMergeResult;
+}
+
+TTaskMergeResult TaskMergeResultFromProto(const NProto::TTaskMergeResult& protoTaskMergeResult) {
+    Y_UNUSED(protoTaskMergeResult);
+    return TTaskMergeResult();
+}
+
+NProto::TTaskMapResult TaskMapResultToProto(const TTaskMapResult& taskMapResult) {
+    Y_UNUSED(taskMapResult);
+    NProto::TTaskMapResult protoTaskMapResult;
+    return protoTaskMapResult;
+}
+
+TTaskMapResult TaskMapResultFromProto(const NProto::TTaskMapResult& protoTaskMapResult) {
+    Y_UNUSED(protoTaskMapResult);
+    return TTaskMapResult();
+}
+
+NProto::TTaskSortedUploadResult TaskSortedUploadResultToProto(const TTaskSortedUploadResult& taskSortedUploadResult) {
+    NProto::TTaskSortedUploadResult protoTaskSortedUploadResult;
+    protoTaskSortedUploadResult.SetFragmentResult(taskSortedUploadResult.FragmentResultYson);
+    protoTaskSortedUploadResult.SetFragmentOrder(taskSortedUploadResult.FragmentOrder);
+    return protoTaskSortedUploadResult;
+}
+
+TTaskSortedUploadResult TaskSortedUploadResultFromProto(const NProto::TTaskSortedUploadResult& protoTaskSortedUploadResult) {
+    TTaskSortedUploadResult taskSortedUploadResult;
+    taskSortedUploadResult.FragmentResultYson = protoTaskSortedUploadResult.GetFragmentResult();
+    taskSortedUploadResult.FragmentOrder = protoTaskSortedUploadResult.GetFragmentOrder();
+    return taskSortedUploadResult;
+}
+
+TTaskResult TaskResultFromProto(const NProto::TTaskResult& protoTaskResult) {
+    if (protoTaskResult.HasTaskUploadResult()) {
+        return TaskUploadResultFromProto(protoTaskResult.GetTaskUploadResult());
+    } else if (protoTaskResult.HasTaskDownloadResult()) {
+        return TaskDownloadResultFromProto(protoTaskResult.GetTaskDownloadResult());
+    } else if (protoTaskResult.HasTaskMergeResult()) {
+        return TaskMergeResultFromProto(protoTaskResult.GetTaskMergeResult());
+    } else if (protoTaskResult.HasTaskMapResult()) {
+        return TaskMapResultFromProto(protoTaskResult.GetTaskMapResult());
+    } else if (protoTaskResult.HasTaskSortedUploadResult()) {
+        return TaskSortedUploadResultFromProto(protoTaskResult.GetTaskSortedUploadResult());
     }
-    auto protoStatistics = StatisticsToProto(taskState.Stats);
-    protoTaskState.MutableStats()->Swap(&protoStatistics);
-    return protoTaskState;
+    return TTaskUploadResult();
+}
+
+NProto::TTaskResult TaskResultToProto(const TTaskResult& taskResult) {
+    NProto::TTaskResult protoTaskResult;
+    if (auto* taskUploadResultPtr = std::get_if<TTaskUploadResult>(&taskResult)) {
+        auto uploadTask = TaskUploadResultToProto(*taskUploadResultPtr);
+        protoTaskResult.MutableTaskUploadResult()->Swap(&uploadTask);
+    } else if (auto* taskDownloadResultPtr = std::get_if<TTaskDownloadResult>(&taskResult)) {
+        auto downloadTask = TaskDownloadResultToProto(*taskDownloadResultPtr);
+        protoTaskResult.MutableTaskDownloadResult()->Swap(&downloadTask);
+    } else if (auto* taskMergeResultPtr = std::get_if<TTaskMergeResult>(&taskResult)) {
+        auto mergeTask = TaskMergeResultToProto(*taskMergeResultPtr);
+        protoTaskResult.MutableTaskMergeResult()->Swap(&mergeTask);
+    } else if (auto* taskMapResultPtr = std::get_if<TTaskMapResult>(&taskResult)) {
+        auto mapTask = TaskMapResultToProto(*taskMapResultPtr);
+        protoTaskResult.MutableTaskMapResult()->Swap(&mapTask);
+    } else if (auto* taskSortedUploadResultPtr = std::get_if<TTaskSortedUploadResult>(&taskResult)) {
+        auto SortedUploadTask = TaskSortedUploadResultToProto(*taskSortedUploadResultPtr);
+        protoTaskResult.MutableTaskSortedUploadResult()->Swap(&SortedUploadTask);
+    }
+    return protoTaskResult;
 }
 
 TTaskState TaskStateFromProto(const NProto::TTaskState& protoTaskState) {
@@ -733,6 +887,19 @@ TTaskState TaskStateFromProto(const NProto::TTaskState& protoTaskState) {
     }
     taskState.Stats = StatisticsFromProto(protoTaskState.GetStats());
     return taskState;
+}
+
+NProto::TTaskState TaskStateToProto(const TTaskState& taskState) {
+    NProto::TTaskState protoTaskState;
+    protoTaskState.SetTaskStatus(static_cast<NProto::ETaskStatus>(taskState.TaskStatus));
+    protoTaskState.SetTaskId(taskState.TaskId);
+    if (taskState.TaskErrorMessage) {
+        auto fmrError = FmrErrorToProto(*taskState.TaskErrorMessage);
+        protoTaskState.MutableTaskErrorMessage()->Swap(&fmrError);
+    }
+    auto protoStatistics = StatisticsToProto(taskState.Stats);
+    protoTaskState.MutableStats()->Swap(&protoStatistics);
+    return protoTaskState;
 }
 
 } // namespace NYql::NFmr

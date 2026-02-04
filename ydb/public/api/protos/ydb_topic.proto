@@ -840,18 +840,18 @@ message AlterStreamingConsumerType {
 message SharedConsumerType {
     // If this is a shared consumer, then the value true means that the order of messages within the same message group will be preserved.
     // For streaming consumers, the order of messages is always preserved.
-    optional bool keep_messages_order = 10;
+    bool keep_messages_order = 10;
     // The duration of blocking messages for its processing. If the message is not committed during this time,
     // it will be returned to the queue and sent for re-processing.
-    optional google.protobuf.Duration default_processing_timeout = 11;
+    google.protobuf.Duration default_processing_timeout = 11;
     // The dead letter policy for this consumer.
-    optional DeadLetterPolicy dead_letter_policy = 12;
+    DeadLetterPolicy dead_letter_policy = 12;
     // Delay time for message (after sending)
-    optional google.protobuf.Duration message_delay = 13;
+    google.protobuf.Duration message_delay = 13;
     // Time to wait for message if queue empty and if this parameter is not set in receive request
-    optional google.protobuf.Duration receive_message_wait_time = 14;
+    google.protobuf.Duration receive_message_wait_time = 14;
     // Is content based deduplication enabled for consumer
-    optional bool content_based_deduplication = 15;
+    bool content_based_deduplication = 15;
 }
 
 message AlterSharedConsumerType {
@@ -862,9 +862,9 @@ message AlterSharedConsumerType {
     // Change dead letter policy.
     AlterDeadLetterPolicy alter_dead_letter_policy = 11;
     // Delay time for message (after sending)
-    optional google.protobuf.Duration set_message_delay = 12;
+    google.protobuf.Duration set_message_delay = 12;
     // Time to wait for message if queue empty and if this parameter is not set in receive request
-    optional google.protobuf.Duration set_receive_message_wait_time = 13;
+    google.protobuf.Duration set_receive_message_wait_time = 13;
     // Is content based deduplication enabled for consumer
     optional bool set_content_based_deduplication = 14;
 }

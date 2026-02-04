@@ -1886,15 +1886,15 @@ TNodePtr BuildDropTable(TPosition pos, const TTableRef& tr, bool missingOk, ETab
     return new TDropTableNode(pos, tr, missingOk, tableType, scoped);
 }
 
-static std::optional<INode::TPtr> CreateConsumerDesc(TContext& ctx, const TTopicConsumerDescription& desc, const INode& node, bool alter) {
-    auto setValue = [&](const INode::TPtr& settings, const TNodePtr& value, const auto& setter) {
+static TNullable<TNodePtr> CreateConsumerDesc(TContext& ctx, const TTopicConsumerDescription& desc, const INode& node, bool alter) {
+    auto setValue = [&](const TNodePtr& settings, const TNodePtr& value, const auto& setter) {
         if (value) {
             return node.L(settings, node.Q(node.Y(node.Q(setter), value)));
         }
         return settings;
     };
 
-    auto setValueWithReset = [&](const INode::TPtr& settings, const NYql::TResetableSetting<TNodePtr, void>& value, const auto& setter, const auto& resetter) {
+    auto setValueWithReset = [&](const TNodePtr& settings, const NYql::TResetableSetting<TNodePtr, void>& value, const auto& setter, const auto& resetter) {
         if (!value) {
             return settings;
         }
@@ -1909,11 +1909,11 @@ static std::optional<INode::TPtr> CreateConsumerDesc(TContext& ctx, const TTopic
     if (alter) {
         if (desc.Settings.Type) {
             ctx.Error() << "type alter is not supported";
-            return std::nullopt;
+            return {nullptr};
         }
         if (desc.Settings.KeepMessagesOrder) {
             ctx.Error() << "keep_messages_order alter is not supported";
-            return std::nullopt;
+            return {nullptr};
         }
     }
 
@@ -1971,7 +1971,7 @@ public:
             if (!desc) {
                 return false;
             }
-            opts = L(opts, Q(Y(Q("consumer"), Q(desc.value()))));
+            opts = L(opts, Q(Y(Q("consumer"), Q(desc))));
         }
 
         if (Params_.TopicSettings.IsSet()) {
@@ -2085,7 +2085,7 @@ public:
             if (!desc) {
                 return false;
             }
-            opts = L(opts, Q(Y(Q("addConsumer"), Q(desc.value()))));
+            opts = L(opts, Q(Y(Q("addConsumer"), Q(desc))));
         }
 
         for (const auto& [_, consumer] : Params_.AlterConsumers) {
@@ -2093,7 +2093,7 @@ public:
             if (!desc) {
                 return false;
             }
-            opts = L(opts, Q(Y(Q("alterConsumer"), Q(desc.value()))));
+            opts = L(opts, Q(Y(Q("alterConsumer"), Q(desc))));
         }
 
         for (const auto& consumer : Params_.DropConsumers) {

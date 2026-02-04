@@ -1,4 +1,5 @@
 #include "check_runner.h"
+#include "check_state.h"
 #include <yql/essentials/sql/v1/format/sql_format.h>
 #include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
@@ -46,31 +47,34 @@ public:
         return "format";
     }
 
-    TCheckResponse DoRun(const TChecksRequest& request) final {
-        switch (request.Syntax) {
+    TCheckResponse DoRun(const TChecksRequest& request, TCheckState& state) final {
+        switch (state.GetEffectiveSyntax()) {
             case ESyntax::SExpr:
-                return RunSExpr(request);
+                return RunSExpr(request, state);
             case ESyntax::PG:
-                return RunPg(request);
+                return RunPg(request, state);
             case ESyntax::YQL:
-                return RunYql(request);
+                return RunYql(request, state);
         }
     }
 
 private:
-    TCheckResponse RunSExpr(const TChecksRequest& request) {
+    TCheckResponse RunSExpr(const TChecksRequest& request, TCheckState& state) {
         Y_UNUSED(request);
+        Y_UNUSED(state);
         // no separate check for format here
         return TCheckResponse{.CheckName = GetCheckName(), .Success = true};
     }
 
-    TCheckResponse RunPg(const TChecksRequest& request) {
+    TCheckResponse RunPg(const TChecksRequest& request, TCheckState& state) {
         Y_UNUSED(request);
+        Y_UNUSED(state);
         // no separate check for format here
         return TCheckResponse{.CheckName = GetCheckName(), .Success = true};
     }
 
-    TCheckResponse RunYql(const TChecksRequest& request) {
+    TCheckResponse RunYql(const TChecksRequest& request, TCheckState& state) {
+        Y_UNUSED(state);
         TCheckResponse res{.CheckName = GetCheckName()};
         if (request.SyntaxVersion != 1) {
             res.Issues.AddIssue(TIssue({}, "Only SyntaxVersion 1 is supported"));

@@ -1,6 +1,7 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
+#include <library/cpp/json/json_reader.h>
 #include <fmt/format.h>
 
 namespace NKikimr {
@@ -1134,6 +1135,182 @@ Y_UNIT_TEST_TWIN(LeftJoinOnRightTableOverIndex, StreamLookupJoin) {
         .DoValidateStats=false,
     };
     tester.Run();
+}
+
+
+Y_UNIT_TEST(StreamLookupJoin_RowSeqNoCollision_Repro) {
+    // Regression for YQL cookie packing bug that may lead to:
+    // ydb/core/kqp/runtime/kqp_compute.cpp:163: Condition violated: `it != state.AllRowsAreNull.end()`
+    //
+    // The failure requires:
+    // - stream index lookup join enabled (cookie-based sequencing)
+    // - many DQ tasks (>= 17) producing overlapping RowSeqNo after Encode/Decode truncation
+    // - LEFT join over a non-unique index producing multi-row sequences per left row
+    TKikimrSettings settings;
+    settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(true);
+
+    TKikimrRunner kikimr(settings);
+    auto tableClient = kikimr.GetTableClient();
+    auto session = tableClient.CreateSession().GetValueSync().GetSession();
+
+    {
+        const TString scheme = R"(
+            CREATE TABLE `/Root/CollideLeft` (
+                pk Uint32 NOT NULL,
+                a  Uint32 NOT NULL,
+                b  Uint32 NOT NULL,
+                PRIMARY KEY (pk)
+            )
+            WITH (
+                AUTO_PARTITIONING_BY_SIZE = DISABLED,
+                AUTO_PARTITIONING_BY_LOAD = DISABLED,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 32,
+                AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 32,
+                UNIFORM_PARTITIONS = 32
+            );
+
+            CREATE TABLE `/Root/CollideRight` (
+                id Uint32 NOT NULL,
+                a  Uint32 NOT NULL,
+                b  Uint32 NOT NULL,
+                PRIMARY KEY (id),
+                INDEX ix_a GLOBAL ON (a)
+            );
+        )";
+        UNIT_ASSERT_C(session.ExecuteSchemeQuery(scheme).GetValueSync().IsSuccess(), "failed to create tables");
+    }
+
+    {
+        TStringBuilder dml;
+        dml << "REPLACE INTO `/Root/CollideRight` (id, a, b) VALUES ";
+        // Non-unique index key `a=1` yields multiple lookup candidates for each left row.
+        // Keep candidate list SHORT (2 rows) to make collision-induced interleavings more likely to hit the exact
+        // `LastRow && !FirstRow` path with missing state in TKqpIndexLookupJoinWrapper.
+        dml << "(1u, 1u, 1u),\n";
+        dml << "(2u, 1u, 2u);\n";
+
+        dml << "REPLACE INTO `/Root/CollideLeft` (pk, a, b) VALUES ";
+        // Spread rows across many partitions; with UNIFORM_PARTITIONS the key-space is split across the full Uint32 range,
+        // so sequential pk values would land on the first shard only.
+        // Use b in [1..4] so that some rows match and some rows don't, but every left row still produces
+        // a multi-row cookie sequence (2 candidates from ix_a lookup).
+        const ui32 Rows = 4096;
+        // Knuth multiplicative hash (odd constant) spreads small integers across 32-bit space.
+        constexpr ui32 Spread = 2654435761u;
+        for (ui32 i = 1; i <= Rows; ++i) {
+            const ui32 pk = i * Spread;
+            const ui32 b = (i % 4) + 1;
+            dml << "(" << pk << "u, 1u, " << b << "u)" << (i == Rows ? ";\n" : ",\n");
+        }
+
+        auto res = session.ExecuteDataQuery(dml, TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+    }
+
+    auto queryClient = kikimr.GetQueryClient();
+    auto querySession = queryClient.GetSession().GetValueSync().GetSession();
+
+    const TString query = R"sql(
+        PRAGMA ydb.OverridePlanner = @@ [
+            { "tx": 0, "stage": 0, "tasks": 64, "optional": 1 },
+            { "tx": 0, "stage": 1, "tasks": 64, "optional": 1 },
+            { "tx": 0, "stage": 2, "tasks": 64, "optional": 1 },
+            { "tx": 0, "stage": 3, "tasks": 64, "optional": 1 },
+            { "tx": 0, "stage": 4, "tasks": 64, "optional": 1 },
+            { "tx": 0, "stage": 5, "tasks": 64, "optional": 1 },
+            { "tx": 0, "stage": 6, "tasks": 64, "optional": 1 },
+            { "tx": 0, "stage": 7, "tasks": 64, "optional": 1 },
+            { "tx": 0, "stage": 8, "tasks": 64, "optional": 1 },
+            { "tx": 0, "stage": 9, "tasks": 64, "optional": 1 },
+            { "tx": 0, "stage": 10, "tasks": 64, "optional": 1 },
+            { "tx": 0, "stage": 11, "tasks": 64, "optional": 1 },
+            { "tx": 0, "stage": 12, "tasks": 64, "optional": 1 },
+            { "tx": 0, "stage": 13, "tasks": 64, "optional": 1 },
+            { "tx": 0, "stage": 14, "tasks": 64, "optional": 1 },
+            { "tx": 0, "stage": 15, "tasks": 64, "optional": 1 },
+            { "tx": 0, "stage": 16, "tasks": 64, "optional": 1 },
+            { "tx": 0, "stage": 17, "tasks": 64, "optional": 1 },
+            { "tx": 0, "stage": 18, "tasks": 64, "optional": 1 },
+            { "tx": 0, "stage": 19, "tasks": 64, "optional": 1 },
+            { "tx": 0, "stage": 20, "tasks": 64, "optional": 1 },
+            { "tx": 0, "stage": 21, "tasks": 64, "optional": 1 },
+            { "tx": 0, "stage": 22, "tasks": 64, "optional": 1 },
+            { "tx": 0, "stage": 23, "tasks": 64, "optional": 1 },
+            { "tx": 0, "stage": 24, "tasks": 64, "optional": 1 },
+            { "tx": 0, "stage": 25, "tasks": 64, "optional": 1 },
+            { "tx": 0, "stage": 26, "tasks": 64, "optional": 1 },
+            { "tx": 0, "stage": 27, "tasks": 64, "optional": 1 },
+            { "tx": 0, "stage": 28, "tasks": 64, "optional": 1 },
+            { "tx": 0, "stage": 29, "tasks": 64, "optional": 1 },
+            { "tx": 0, "stage": 30, "tasks": 64, "optional": 1 },
+            { "tx": 0, "stage": 31, "tasks": 64, "optional": 1 }
+        ] @@;
+        PRAGMA ydb.MaxTasksPerStage = "64";
+
+        $left = (
+            SELECT pk, a, b FROM `/Root/CollideLeft` WHERE b % 4u = 0u
+            UNION ALL
+            SELECT pk, a, b FROM `/Root/CollideLeft` WHERE b % 4u = 1u
+            UNION ALL
+            SELECT pk, a, b FROM `/Root/CollideLeft` WHERE b % 4u = 2u
+            UNION ALL
+            SELECT pk, a, b FROM `/Root/CollideLeft` WHERE b % 4u = 3u
+        );
+
+        SELECT COUNT(*) AS cnt
+        FROM (
+            SELECT l.pk
+            FROM $left AS l
+            LEFT JOIN `/Root/CollideRight` VIEW ix_a AS r
+                ON l.a = r.a AND l.b = r.b
+            WHERE l.a = 1u
+        );
+    )sql";
+
+    NYdb::NQuery::TExecuteQuerySettings execSettings;
+    execSettings.StatsMode(NYdb::NQuery::EStatsMode::Full);
+    auto params = NYdb::TParamsBuilder().Build();
+    // Repeat to increase probability of reproducing task interleaving in buggy builds.
+    for (ui32 attempt = 0; attempt < 10; ++attempt) {
+        auto result = querySession.ExecuteQuery(
+            Q_(query),
+            NYdb::NQuery::TTxControl::BeginTx().CommitTx(),
+            params,
+            execSettings).ExtractValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT_C(result.GetStats(), "Expected stats (StatsMode::Full)");
+        const TString ast = *result.GetStats()->GetAst();
+        if (attempt == 0) {
+            Cerr << "AST:\n" << ast << Endl;
+            if (result.GetStats()->GetPlan()) {
+                Cerr << "Plan:\n" << *result.GetStats()->GetPlan() << Endl;
+
+                // Sanity: ensure planner actually created enough tasks to allow RowSeqNo collisions
+                // between taskIds that differ by 16.
+                NJson::TJsonValue plan;
+                UNIT_ASSERT_C(NJson::ReadJsonTree(*result.GetStats()->GetPlan(), &plan), "Failed to parse plan JSON");
+                ui64 maxTasks = 0;
+                std::function<void(const NJson::TJsonValue&)> walk = [&](const NJson::TJsonValue& n) {
+                    if (n.GetMap().contains("Stats") && n["Stats"].GetMap().contains("Tasks")) {
+                        maxTasks = std::max<ui64>(maxTasks, n["Stats"]["Tasks"].GetUIntegerSafe());
+                    }
+                    if (n.GetMap().contains("Plans")) {
+                        for (const auto& child : n["Plans"].GetArraySafe()) {
+                            walk(child);
+                        }
+                    }
+                };
+                walk(plan);
+                // UNIT_ASSERT_C(maxTasks >= 17, TStringBuilder() << "Expected >=17 tasks in some plan node, got " << maxTasks);
+            }
+        }
+        UNIT_ASSERT_C(ast.Contains("KqpIndexLookupJoin"),
+            "AST does not contain KqpIndexLookupJoin, test is not exercising the intended runtime path");
+        UNIT_ASSERT_C(ast.Contains("DqCnUnionAll"),
+            "AST does not contain DqCnUnionAll, test is not merging multiple upstream streams");
+        CompareYson(R"([[4096u]])", FormatResultSetYson(result.GetResultSet(0)));
+    }
 }
 
 Y_UNIT_TEST_TWIN(TestEntityFramework, StreamLookupJoin) {

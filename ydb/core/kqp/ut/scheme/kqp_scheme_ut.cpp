@@ -12639,28 +12639,6 @@ END DO)",
         {
             const auto result = db.ExecuteQuery(TStringBuilder() << prefix << R"()
                 AS DO BEGIN
-                    INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic;
-                    INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic;
-                END DO)",
-                NQuery::TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToOneLineString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Streaming query with more than one write is not supported now");
-        }
-
-        {
-            const auto result = db.ExecuteQuery(TStringBuilder() << prefix << R"()
-                AS DO BEGIN
-                    INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic;
-                    UPSERT INTO `MyFolder/MyTable` (Key) VALUES ("1");
-                END DO)",
-                NQuery::TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToOneLineString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Streaming query with more than one write is not supported now");
-        }
-
-        {
-            const auto result = db.ExecuteQuery(TStringBuilder() << prefix << R"()
-                AS DO BEGIN
                     SELECT 42;
                 END DO)",
                 NQuery::TTxControl::NoTx()).ExtractValueSync();

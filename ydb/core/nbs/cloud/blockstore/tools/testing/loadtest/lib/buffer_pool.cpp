@@ -17,7 +17,7 @@
 #   include <util/system/winint.h>
 #endif
 
-namespace NCloud::NBlockStore::NLoadTest {
+namespace NYdb::NBS::NBlockStore::NLoadTest {
 
 namespace {
 
@@ -124,4 +124,4 @@ IAllocator* BufferPool()
     return HugeSingletonWithPriority<TBufferPool, 0>();
 }
 
-}   // namespace NCloud::NBlockStore::NLoadTest
+}   // namespace NYdb::NBS::NBlockStore::NLoadTest

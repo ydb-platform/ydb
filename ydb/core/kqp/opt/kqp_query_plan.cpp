@@ -1238,6 +1238,8 @@ private:
             return {CurrentArgContext.AddArg(node.Get())};
         } else if (auto maybeCrossJoin = TMaybeNode<TDqPhyCrossJoin>(node)) {
             operatorId = Visit(maybeCrossJoin.Cast(), planNode);
+        } else if (auto lookupJoin = TMaybeNode<TKqpIndexLookupJoin>(node)) {
+            operatorId = Visit(lookupJoin.Cast(), planNode);
         } else if (auto maybeCombineByKey = TMaybeNode<TCoCombineByKey>(node)) {
             operatorId = Visit(maybeCombineByKey.Cast(), planNode);
         }
@@ -1765,7 +1767,7 @@ private:
     }
 
     std::variant<ui32, TArgContext> Visit(const TCoFlatMapBase& flatMap, const TCoMapJoinCore& join, TQueryPlanNode& planNode) {
-        const auto name = TStringBuilder() << join.JoinKind().Value() << "Join (MapJoin)";
+        const auto name = TStringBuilder() << join.JoinKind().Value() << "Join (Map)";
 
         TOperator op;
         op.Properties["Name"] = name;
@@ -1789,8 +1791,18 @@ private:
         return AddOperator(planNode, name, std::move(op));
     }
 
+    std::variant<ui32, TArgContext> Visit(const TKqpIndexLookupJoin& join, TQueryPlanNode& planNode) {
+        const auto name = TStringBuilder() << join.JoinType().Value() << "Join (Lookup)";
+
+        TOperator op;
+        op.Properties["Name"] = name;
+        // op["LookupKeyColumns"] = plan.GetMapSafe().at("LookupKeyColumns");
+
+        return AddOperator(planNode, name, std::move(op));
+    }
+
     std::variant<ui32, TArgContext> Visit(const TCoMapJoinCore& join, TQueryPlanNode& planNode) {
-        const auto name = TStringBuilder() << join.JoinKind().Value() << "Join (MapJoin)";
+        const auto name = TStringBuilder() << join.JoinKind().Value() << "Join (Map)";
 
         TOperator op;
         op.Properties["Name"] = name;
@@ -1803,7 +1815,7 @@ private:
     }
 
     std::variant<ui32, TArgContext> Visit(const TCoFlatMapBase& flatMap, const TCoJoinDict& join, TQueryPlanNode& planNode) {
-        const auto name = TStringBuilder() << join.JoinKind().Value() << "Join (JoinDict)";
+        const auto name = TStringBuilder() << join.JoinKind().Value() << "Join (Dict)";
 
         TOperator op;
         op.Properties["Name"] = name;
@@ -1818,7 +1830,7 @@ private:
     }
 
     std::variant<ui32, TArgContext> Visit(const TCoJoinDict& join, TQueryPlanNode& planNode) {
-        const auto name = TStringBuilder() << join.JoinKind().Value() << "Join (JoinDict)";
+        const auto name = TStringBuilder() << join.JoinKind().Value() << "Join (Dict)";
 
         TOperator op;
         op.Properties["Name"] = name;
@@ -1832,7 +1844,7 @@ private:
         auto joinAlgo = "(Grace)";
         for (size_t i=0; i<join.Flags().Size(); i++) {
             if (join.Flags().Item(i).StringValue() == "Broadcast") {
-                joinAlgo = "(MapJoin)";
+                joinAlgo = "(Map)";
             }
         }
         const auto name = TStringBuilder() << join.JoinKind().Value() << "Join " << joinAlgo;
@@ -1854,7 +1866,7 @@ private:
         auto joinAlgo = "(Grace)";
         for (size_t i=0; i<join.Flags().Size(); i++) {
             if (join.Flags().Item(i).StringValue() == "Broadcast") {
-                joinAlgo = "(MapJoin)";
+                joinAlgo = "(Map)";
             }
         }
         const auto name = TStringBuilder() << join.JoinKind().Value() << "Join " << joinAlgo;
@@ -2371,7 +2383,7 @@ private:
             NJson::TJsonValue newOps;
             NJson::TJsonValue op;
 
-            op["Name"] = "LookupJoin";
+            op["Name"] = "Lookup";
             op["LookupKeyColumns"] = plan.GetMapSafe().at("LookupKeyColumns");
 
             newOps.AppendValue(std::move(op));
@@ -3290,6 +3302,9 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
                         if (input.second.HasPop()) {
                             FillAsyncAggrStat(inputInfo.InsertValue("Pop", NJson::JSON_MAP), input.second.GetPop());
                         }
+                        if (auto localBytes = input.second.GetLocalBytes()) {
+                            inputInfo["LocalBytes"] = localBytes;
+                        }
                     }
                 }
                 if (!(*stat)->GetOutput().empty()) {
@@ -3309,6 +3324,9 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
                         }
                         if (output.second.HasPop()) {
                             FillAsyncAggrStat(outputInfo.InsertValue("Pop", NJson::JSON_MAP), output.second.GetPop());
+                        }
+                        if (auto localBytes = output.second.GetLocalBytes()) {
+                            outputInfo["LocalBytes"] = localBytes;
                         }
                     }
                 }

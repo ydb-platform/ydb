@@ -16,6 +16,7 @@ SRCS(
 
 PEERDIR(
     contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3
+    library/cpp/protobuf/interop
     ydb/core/kqp/ut/common
     ydb/core/kqp/ut/federated_query/common
     ydb/library/testlib/s3_recipe_helper

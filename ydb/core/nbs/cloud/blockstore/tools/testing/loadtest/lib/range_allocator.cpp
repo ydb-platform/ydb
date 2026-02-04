@@ -4,7 +4,7 @@
 #include <util/generic/yexception.h>
 #include <util/random/random.h>
 
-namespace NCloud::NBlockStore::NLoadTest {
+namespace NYdb::NBS::NBlockStore::NLoadTest {
 
 using namespace NProto;
 
@@ -126,4 +126,4 @@ void TRangeAllocator::SetupRequestSizes(const NProto::TRangeTest& rangeTest)
     }
 }
 
-}   // namespace NCloud::NBlockStore::NLoadTest
+}   // namespace NYdb::NBS::NBlockStore::NLoadTest

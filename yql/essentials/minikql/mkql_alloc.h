@@ -300,12 +300,13 @@ public:
         other.CurrentPages_ = TAllocState::EmptyCurrentPages;
     }
 
-    void operator=(const TPagedArena&) = delete;
-    void operator=(TPagedArena&& other) noexcept {
+    TPagedArena& operator=(const TPagedArena&) = delete;
+    TPagedArena& operator=(TPagedArena&& other) noexcept {
         Clear();
         PagePool_ = other.PagePool_;
         CurrentPages_ = other.CurrentPages_;
         other.CurrentPages_ = TAllocState::EmptyCurrentPages;
+        return *this;
     }
 
     ~TPagedArena() noexcept {

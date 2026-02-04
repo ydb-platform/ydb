@@ -4,7 +4,7 @@
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/context.h>
 
-namespace NYdb::NBS {
+namespace NYdb::NBS::NBlockStore {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -16,7 +16,7 @@ private:
     TAtomic HasUncountableRejects = false;
 
 public:
-    TCallContext(ui64 requestId = 0);
+    explicit TCallContext(ui64 requestId = 0);
 
     bool GetSilenceRetriableErrors() const;
     void SetSilenceRetriableErrors(bool silence);
@@ -25,4 +25,4 @@ public:
     void SetHasUncountableRejects();
 };
 
-}   // namespace NYdb::NBS
+}   // namespace NYdb::NBS::NBlockStore

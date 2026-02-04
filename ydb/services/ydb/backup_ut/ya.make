@@ -38,4 +38,8 @@ PEERDIR(
 
 YQL_LAST_ABI_VERSION()
 
+IF (OS_LINUX)
+    LDFLAGS(-Wl,--wrap=statfs)
+ENDIF()
+
 END()

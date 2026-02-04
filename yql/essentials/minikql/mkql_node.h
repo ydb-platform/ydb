@@ -339,7 +339,7 @@ public:
     {
     }
 
-    const TInternName& operator=(const TInternName& other) {
+    TInternName& operator=(const TInternName& other) {
         StrBuf_ = other.StrBuf_;
         return *this;
     }

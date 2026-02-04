@@ -14,7 +14,7 @@
 #include <util/generic/string.h>
 #include <util/generic/typetraits.h>
 
-namespace NYdb::NBS {
+namespace NYdb::NBS::NBlockStore {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -220,4 +220,4 @@ struct TProtoResponseEvent
     BLOCKSTORE_DECLARE_REQUEST(name, __VA_ARGS__)                              \
 // BLOCKSTORE_DECLARE_PROTO_EVENTS
 
-}   // namespace NYdb::NBS
+}   // namespace NYdb::NBS::NBlockStore

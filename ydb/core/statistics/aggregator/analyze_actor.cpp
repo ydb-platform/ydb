@@ -89,8 +89,22 @@ void TAnalyzeActor::Bootstrap() {
     Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.release()));
 }
 
-void TAnalyzeActor::FinishWithFailure(TEvStatistics::TEvFinishTraversal::EStatus status) {
+void TAnalyzeActor::FinishWithFailure(
+        TEvStatistics::TEvFinishTraversal::EStatus status,
+        NYql::TIssue issue) {
     auto response = std::make_unique<TEvStatistics::TEvFinishTraversal>(status);
+    if (status != TEvStatistics::TEvFinishTraversal::EStatus::Success) {
+        TStringBuilder errMsg;
+        errMsg << "Analyzing table ";
+        if (!TableName.empty()) {
+            errMsg << TableName;
+        } else {
+            errMsg << "id: " << PathId.LocalPathId;
+        }
+        NYql::TIssue error(errMsg);
+        error.AddSubIssue(MakeIntrusive<NYql::TIssue>(std::move(issue)));
+        response->Issues.AddIssue(std::move(error));
+    }
     Send(Parent, response.release());
     PassAway();
 }
@@ -109,7 +123,8 @@ void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&
         FinishWithFailure(
             entry.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown
             ? TEvStatistics::TEvFinishTraversal::EStatus::TableNotFound
-            : TEvStatistics::TEvFinishTraversal::EStatus::InternalError);
+            : TEvStatistics::TEvFinishTraversal::EStatus::InternalError,
+            NYql::TIssue(TStringBuilder() << "Navigate request failed with " << entry.Status));
         return;
     }
 
@@ -188,9 +203,12 @@ NKikimrStat::TSimpleColumnStatistics TAnalyzeActor::TColumnDesc::ExtractSimpleSt
 }
 
 void TAnalyzeActor::HandleStage1(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
-    const auto& result = *ev->Get();
+    auto& result = *ev->Get();
     if (result.Status != Ydb::StatusIds::SUCCESS) {
-        FinishWithFailure(TEvStatistics::TEvFinishTraversal::EStatus::InternalError);
+        NYql::TIssue error(TStringBuilder() << "Stage 1 SELECT failed with " << result.Status);
+        FinishWithFailure(
+            TEvStatistics::TEvFinishTraversal::EStatus::InternalError,
+            std::move(error));
         return;
     }
 
@@ -237,7 +255,10 @@ void TAnalyzeActor::HandleStage1(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
 void TAnalyzeActor::HandleStage2(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
     const auto& result = *ev->Get();
     if (result.Status != Ydb::StatusIds::SUCCESS) {
-        FinishWithFailure(TEvStatistics::TEvFinishTraversal::EStatus::InternalError);
+        NYql::TIssue error(TStringBuilder() << "Stage 2 SELECT failed with " << result.Status);
+        FinishWithFailure(
+            TEvStatistics::TEvFinishTraversal::EStatus::InternalError,
+            std::move(error));
         return;
     }
 

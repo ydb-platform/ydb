@@ -9,12 +9,14 @@ struct TStatisticsAggregator::TTxFinishTraversal : public TTxBase {
     TPathId PathId;
     TActorId ReplyToActorId;
     bool Success;
+    NYql::TIssues Issues;
 
-    TTxFinishTraversal(TSelf* self, bool success)
+    TTxFinishTraversal(TSelf* self, bool success, NYql::TIssues issues = NYql::TIssues())
         : TTxBase(self)
         , OperationId(self->ForceTraversalOperationId)
         , PathId(self->TraversalPathId)
         , Success(success)
+        , Issues(std::move(issues))
     {
         auto forceTraversal = Self->CurrentForceTraversalOperation();
         if (forceTraversal) {
@@ -56,6 +58,9 @@ struct TStatisticsAggregator::TTxFinishTraversal : public TTxBase {
                 Success
                     ? NKikimrStat::TEvAnalyzeResponse::STATUS_SUCCESS
                     : NKikimrStat::TEvAnalyzeResponse::STATUS_ERROR);
+            for (const auto& issue : Issues) {
+                NYql::IssueToMessage(issue, response->Record.AddIssues());
+            }
             ctx.Send(ReplyToActorId, response.release());
         }
     }
@@ -64,7 +69,9 @@ void TStatisticsAggregator::Handle(TEvStatistics::TEvSaveStatisticsQueryResponse
     Execute(new TTxFinishTraversal(this, true), TActivationContext::AsActorContext());
 }
 void TStatisticsAggregator::Handle(TEvStatistics::TEvDeleteStatisticsQueryResponse::TPtr&) {
-    Execute(new TTxFinishTraversal(this, false), TActivationContext::AsActorContext());
+    NYql::TIssue error(TStringBuilder() << "Could not find table id: "
+        << TraversalPathId.LocalPathId << ", deleted its statistics");
+    Execute(new TTxFinishTraversal(this, false, {error}), TActivationContext::AsActorContext());
 }
 void TStatisticsAggregator::Handle(TEvStatistics::TEvFinishTraversal::TPtr& ev) {
     using EStatus = TEvStatistics::TEvFinishTraversal::EStatus;
@@ -80,7 +87,7 @@ void TStatisticsAggregator::Handle(TEvStatistics::TEvFinishTraversal::TPtr& ev) 
         return;
     case EStatus::InternalError:
         Execute(
-            new TTxFinishTraversal(this, false),
+            new TTxFinishTraversal(this, false, std::move(ev->Get()->Issues)),
             TActivationContext::AsActorContext());
         return;
     }

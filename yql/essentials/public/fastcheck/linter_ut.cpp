@@ -681,13 +681,12 @@ Y_UNIT_TEST(TypeCheckBasicOk) {
     )sql";
     request.ClusterMode = EClusterMode::Unknown;
     request.Syntax = ESyntax::YQL;
-    request.WithTypeCheck = true;
     request.Filters.ConstructInPlace();
-    request.Filters->push_back(TCheckFilter{.CheckNameGlob = "translator"});
+    request.Filters->push_back(TCheckFilter{.CheckNameGlob = "typecheck"});
 
     auto res = RunChecks(request);
     UNIT_ASSERT_VALUES_EQUAL(res.Checks.size(), 1);
-    UNIT_ASSERT_VALUES_EQUAL(res.Checks[0].CheckName, "translator");
+    UNIT_ASSERT_VALUES_EQUAL(res.Checks[0].CheckName, "typecheck");
     UNIT_ASSERT_C(res.Checks[0].Success, res.Checks[0].Issues.ToString());
 }
 
@@ -698,13 +697,12 @@ Y_UNIT_TEST(TypeCheckBasicFail) {
     )sql";
     request.ClusterMode = EClusterMode::Unknown;
     request.Syntax = ESyntax::YQL;
-    request.WithTypeCheck = true;
     request.Filters.ConstructInPlace();
-    request.Filters->push_back(TCheckFilter{.CheckNameGlob = "translator"});
+    request.Filters->push_back(TCheckFilter{.CheckNameGlob = "typecheck"});
 
     auto res = RunChecks(request);
     UNIT_ASSERT_VALUES_EQUAL(res.Checks.size(), 1);
-    UNIT_ASSERT_VALUES_EQUAL(res.Checks[0].CheckName, "translator");
+    UNIT_ASSERT_VALUES_EQUAL(res.Checks[0].CheckName, "typecheck");
     UNIT_ASSERT(!res.Checks[0].Success);
     auto err = res.Checks[0].Issues.ToString();
     UNIT_ASSERT_C(err.find("2:27: Error: Expected type, but got: String") != TString::npos, err);
@@ -718,13 +716,12 @@ Y_UNIT_TEST(TypeCheckSelectColumn) {
     )sql";
     request.ClusterMode = EClusterMode::Unknown;
     request.Syntax = ESyntax::YQL;
-    request.WithTypeCheck = true;
     request.Filters.ConstructInPlace();
-    request.Filters->push_back(TCheckFilter{.CheckNameGlob = "translator"});
+    request.Filters->push_back(TCheckFilter{.CheckNameGlob = "typecheck"});
 
     auto res = RunChecks(request);
     UNIT_ASSERT_VALUES_EQUAL(res.Checks.size(), 1);
-    UNIT_ASSERT_VALUES_EQUAL(res.Checks[0].CheckName, "translator");
+    UNIT_ASSERT_VALUES_EQUAL(res.Checks[0].CheckName, "typecheck");
     UNIT_ASSERT_C(res.Checks[0].Success, res.Checks[0].Issues.ToString());
 }
 
@@ -737,13 +734,12 @@ Y_UNIT_TEST(TypeCheckInsert) {
     )sql";
     request.ClusterMode = EClusterMode::Unknown;
     request.Syntax = ESyntax::YQL;
-    request.WithTypeCheck = true;
     request.Filters.ConstructInPlace();
-    request.Filters->push_back(TCheckFilter{.CheckNameGlob = "translator"});
+    request.Filters->push_back(TCheckFilter{.CheckNameGlob = "typecheck"});
 
     auto res = RunChecks(request);
     UNIT_ASSERT_VALUES_EQUAL(res.Checks.size(), 1);
-    UNIT_ASSERT_VALUES_EQUAL(res.Checks[0].CheckName, "translator");
+    UNIT_ASSERT_VALUES_EQUAL(res.Checks[0].CheckName, "typecheck");
     UNIT_ASSERT_C(res.Checks[0].Success, res.Checks[0].Issues.ToString());
 }
 
@@ -755,13 +751,12 @@ Y_UNIT_TEST(TypeCheckColumnExpr) {
     )sql";
     request.ClusterMode = EClusterMode::Unknown;
     request.Syntax = ESyntax::YQL;
-    request.WithTypeCheck = true;
     request.Filters.ConstructInPlace();
-    request.Filters->push_back(TCheckFilter{.CheckNameGlob = "translator"});
+    request.Filters->push_back(TCheckFilter{.CheckNameGlob = "typecheck"});
 
     auto res = RunChecks(request);
     UNIT_ASSERT_VALUES_EQUAL(res.Checks.size(), 1);
-    UNIT_ASSERT_VALUES_EQUAL(res.Checks[0].CheckName, "translator");
+    UNIT_ASSERT_VALUES_EQUAL(res.Checks[0].CheckName, "typecheck");
     UNIT_ASSERT_C(res.Checks[0].Success, res.Checks[0].Issues.ToString());
 }
 

@@ -392,6 +392,39 @@ TSingleMetric::TSingleMetric(std::shared_ptr<TSummaryMetric> summary)
     Summary->Add(Details.Sum);
 }
 
+TScalarMetric::TScalarMetric(std::shared_ptr<TSummaryMetric> summary, ui64 value)
+    : Summary(summary), Value(value) {
+    Summary->Add(Value);
+}
+
+TString ParseTableOrIndexName(const TString& table) {
+    auto n = table.find_last_of('/');
+    if (n == table.npos) {
+        return table;
+    }
+
+    auto tableName = table.substr(n + 1);
+    if (n == 0 || tableName != "indexImplTable") {
+        return tableName;
+    }
+
+    auto ni = table.find_last_of('/', n - 1);
+    if (ni == table.npos) {
+        return table.substr(0, n);
+    }
+
+    if (ni == 0) {
+        return table.substr(ni + 1, n - ni - 1);
+    }
+
+    auto nt = table.find_last_of('/', ni - 1);
+    if (nt == table.npos) {
+        return table.substr(0, n);
+    } else {
+        return table.substr(nt + 1, nt - n - 1);
+    }
+}
+
 TString ParseColumns(const NJson::TJsonValue* node) {
     TStringBuilder builder;
     builder << '(';
@@ -533,6 +566,18 @@ void TPlan::ResolveCteRefs() {
                                 } else {
                                     cteRef.second->InputRows = std::make_shared<TSingleMetric>(InputRows);
                                 }
+                                if (auto* chunksNode = pushNode->GetValueByPath("Chunks")) {
+                                    if (auto* sumNode = chunksNode->GetValueByPath("Sum")) {
+                                        cteRef.second->InputChunks = sumNode->GetIntegerSafe();
+                                        if (cteRef.second->InputChunks) {
+                                            cteRef.second->InputChunkSize = std::make_shared<TScalarMetric>(InputChunkSize,
+                                                cteRef.second->InputBytes->Details.Sum / cteRef.second->InputChunks);
+                                        }
+                                    }
+                                }
+                            }
+                            if (auto* localBytesNode = subNode.GetValueByPath("LocalBytes")) {
+                                cteRef.second->InputLocalBytes = localBytesNode->GetIntegerSafe();
                             }
                         }
                     }
@@ -560,9 +605,22 @@ void TPlan::ResolveCteRefs() {
                                 }
                                 if (auto* rowsNode = popNode->GetValueByPath("Rows")) {
                                     cteRef.second->CteOutputRows = std::make_shared<TSingleMetric>(OutputRows, *rowsNode);
+                                    cteRef.second->CteOperatorOutputRows = std::make_shared<TSingleMetric>(OperatorOutputRows, *rowsNode);
                                 } else {
                                     cteRef.second->CteOutputRows = std::make_shared<TSingleMetric>(OutputRows);
                                 }
+                                if (auto* chunksNode = popNode->GetValueByPath("Chunks")) {
+                                    if (auto* sumNode = chunksNode->GetValueByPath("Sum")) {
+                                        cteRef.second->CteOutputChunks = sumNode->GetIntegerSafe();
+                                        if (cteRef.second->CteOutputChunks) {
+                                            cteRef.second->CteOutputChunkSize = std::make_shared<TScalarMetric>(OutputChunkSize,
+                                                cteRef.second->CteOutputBytes->Details.Sum / cteRef.second->CteOutputChunks);
+                                        }
+                                    }
+                                }
+                            }
+                            if (auto* localBytesNode = subNode.GetValueByPath("LocalBytes")) {
+                                cteRef.second->CteOutputLocalBytes = localBytesNode->GetIntegerSafe();
                             }
                         }
                     }
@@ -645,7 +703,9 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
         }
     }
 
-    stage->StatsNode = node.GetValueByPath("Stats");
+    if (!stage->StatsNode) {
+        stage->StatsNode = node.GetValueByPath("Stats");
+    }
     auto operators = node.GetValueByPath("Operators");
 
     std::vector<TOperatorInfo> externalOperators;
@@ -806,12 +866,7 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                 } else if (name == "TableFullScan" || name == "TablePointLookup" || name == "TableRangeScan") {
                     TStringBuilder builder;
                     if (auto* tableNode = subNode.GetValueByPath("Table")) {
-                        auto table = tableNode->GetStringSafe();
-                        auto n = table.find_last_of('/');
-                        if (n != table.npos) {
-                            table = table.substr(n + 1);
-                        }
-                        builder << table;
+                        builder << ParseTableOrIndexName(tableNode->GetStringSafe());
                     }
                     builder << ParseColumns(subNode.GetValueByPath("ReadColumns"));
 
@@ -863,7 +918,8 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
 
                 std::vector<TOperatorInput> inputs;
 
-                if (auto* inputsArrayNode = subNode.GetValueByPath("Inputs")) {
+                auto* inputsArrayNode = subNode.GetValueByPath("Inputs");
+                if (inputsArrayNode && !inputsArrayNode->GetArraySafe().empty()) {
                     for (const auto& inputNode : inputsArrayNode->GetArray()) {
                         if (auto* internalOperatorIdNode = inputNode.GetValueByPath("InternalOperatorId")) {
                             auto internalOperatorId = internalOperatorIdNode->GetUIntegerSafe();
@@ -914,7 +970,7 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                     }
                 } else if (auto* precomputeRefNode = subNode.GetValueByPath("Input")) {
                     inputs.emplace_back();
-                    inputs.back().PrecomputeRef = precomputeRefNode->GetStringSafe();
+                    inputs.back().PrecomputeRef = "CTE " + precomputeRefNode->GetStringSafe();
                 }
 
                 if (externalOperator && !stage->External) {
@@ -984,7 +1040,16 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                                         externalOperators.back().Blocks = true;
                                     }
                                 }
-                                if (auto* ingressNode = ingress0.GetValueByPath("Ingress")) {
+                                auto* ingressNode = ingress0.GetValueByPath("Ingress");
+                                if (ingressNode) {
+                                    if (!ingressNode->GetValueByPath("Bytes.Sum")) {
+                                        ingressNode = nullptr;
+                                    }
+                                }
+                                if (!ingressNode) {
+                                    ingressNode = ingress0.GetValueByPath("Push");
+                                }
+                                if (ingressNode) {
                                     if (auto* bytesNode = ingressNode->GetValueByPath("Bytes")) {
                                         stage->IngressBytes = std::make_shared<TSingleMetric>(IngressBytes,
                                             *bytesNode, 0, 0,
@@ -1117,6 +1182,18 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                                     stage->Operators.front().OutputRows = std::make_shared<TSingleMetric>(OperatorOutputRows);
                                 }
                             }
+                            if (auto* chunksNode = popNode->GetValueByPath("Chunks")) {
+                                if (auto* sumNode = chunksNode->GetValueByPath("Sum")) {
+                                    stage->OutputChunks = sumNode->GetIntegerSafe();
+                                    if (stage->OutputChunks) {
+                                        stage->OutputChunkSize = std::make_shared<TScalarMetric>(OutputChunkSize,
+                                            stage->OutputBytes->Details.Sum / stage->OutputChunks);
+                                    }
+                                }
+                            }
+                        }
+                        if (auto* localBytesNode = subNode.GetValueByPath("LocalBytes")) {
+                            stage->OutputLocalBytes = localBytesNode->GetIntegerSafe();
                         }
                     }
                 }
@@ -1225,6 +1302,18 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                                                 } else {
                                                     connection->InputRows = std::make_shared<TSingleMetric>(InputRows);
                                                 }
+                                                if (auto* chunksNode = pushNode->GetValueByPath("Chunks")) {
+                                                    if (auto* sumNode = chunksNode->GetValueByPath("Sum")) {
+                                                        connection->InputChunks = sumNode->GetIntegerSafe();
+                                                        if (connection->InputChunks) {
+                                                            connection->InputChunkSize = std::make_shared<TScalarMetric>(InputChunkSize,
+                                                                connection->InputBytes->Details.Sum / connection->InputChunks);
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            if (auto* localBytesNode = subNode.GetValueByPath("LocalBytes")) {
+                                                connection->InputLocalBytes = localBytesNode->GetIntegerSafe();
                                             }
                                         }
                                     }
@@ -1238,7 +1327,7 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                         LoadStage(Stages.back(), subPlan, connection.get());
 
                         if (subNodeType == "Lookup" || subNodeType == "LookupJoin") {
-                            auto stage = Stages.back();
+                            // auto stage = Stages.back();
                             auto connection = std::make_shared<TConnection>(Viz.NextGroupId(), *stage, "External", 0);
                             stage->Connections.push_back(connection);
                             Stages.push_back(std::make_shared<TStage>(Viz.NextGroupId(), this, "External"));
@@ -1248,12 +1337,7 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                             Stages.back()->External = true;
                             TStringBuilder builder;
                             if (auto* tableNode = plan.GetValueByPath("Table")) {
-                                auto table = tableNode->GetStringSafe();
-                                auto n = table.find_last_of('/');
-                                if (n != table.npos) {
-                                    table = table.substr(n + 1);
-                                }
-                                builder << table;
+                                builder << ParseTableOrIndexName(tableNode->GetStringSafe());
                             }
                             builder << ParseColumns(plan.GetValueByPath("Columns")) << " by " << ParseColumns(plan.GetValueByPath("LookupKeyColumns"));
                             Stages.back()->Operators.emplace_back("TableLookup", builder);
@@ -1305,7 +1389,16 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                         if (auto* ingressTopNode = stage->StatsNode->GetValueByPath("Ingress")) {
                             // only 1 ingress node is possible (???)
                             auto& ingress0 = (*ingressTopNode)[0];
-                            if (auto* ingressNode = ingress0.GetValueByPath("Ingress")) {
+                            auto* ingressNode = ingress0.GetValueByPath("Ingress");
+                            if (ingressNode) {
+                                if (!ingressNode->GetValueByPath("Bytes.Sum")) {
+                                    ingressNode = nullptr;
+                                }
+                            }
+                            if (!ingressNode) {
+                                ingressNode = ingress0.GetValueByPath("Push");
+                            }
+                            if (ingressNode) {
                                 if (auto* bytesNode = ingressNode->GetValueByPath("Bytes")) {
                                     stage->IngressBytes = std::make_shared<TSingleMetric>(IngressBytes,
                                         *bytesNode, 0, 0,
@@ -1329,12 +1422,7 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                     }
                     LoadSource(plan, stage->Operators, ingressRowsNode);
                 } else if (subNodeType == "TableFullScan" || subNodeType == "TableRangeScan") {
-                    if (stage->IngressName) {
-                        ythrow yexception() << "Plan stage already has Ingress [" << stage->IngressName << "]";
-                    }
-
                     NodeToSource.insert(connectionPlanNodeId);
-                    stage->IngressName = subNodeType;
                     LoadStage(stage, plan, outputConnection);
                 } else {
                     stage->Connections.push_back(std::make_shared<TConnection>(Viz.NextGroupId(), *stage, "Implicit", 0));
@@ -1596,7 +1684,7 @@ void TPlan::PrintValues(TStringBuilder& canvas, TMetricHistory& history, ui32 x,
     }
 }
 
-void TPlan::PrintStageSummary(TStringBuilder& background, ui32 viewLeft, ui32 viewWidth, ui32 y0, ui32 h, std::shared_ptr<TSingleMetric> metric, const TString& mediumColor, const TString& lightColor, const TString& textSum, const TString& tooltip, ui32 taskCount, const TString& iconRef, const TString& iconColor, const TString& iconScale, bool backgroundRect, const TString& peerId) {
+void TPlan::PrintStageSummary(TStringBuilder& background, ui32 viewLeft, ui32 viewWidth, ui32 y0, ui32 h, std::shared_ptr<TSingleMetric>& metric, const TString& mediumColor, const TString& lightColor, const TString& textSum, const TString& tooltip, ui32 taskCount, const TString& iconRef, const TString& iconColor, const TString& iconScale, bool backgroundRect, const TString& peerId, ui64 split, const std::shared_ptr<TScalarMetric>& scalar) {
 
     ui32 x0 = viewLeft + INTERNAL_GAP_X;
     ui32 width = viewWidth - INTERNAL_GAP_X * 2;
@@ -1647,6 +1735,22 @@ void TPlan::PrintStageSummary(TStringBuilder& background, ui32 viewLeft, ui32 vi
         << "  <rect x='" << x0 << "' y='" << y0
         << "' width='" << width << "' height='" << h
         << "' stroke-width='0' fill='" << mediumColor << "'/>" << Endl;
+    }
+    if (split && split < metric->Details.Sum) {
+        auto xs = x0 + width - split * width / metric->Details.Sum;
+        background
+        << "  <line x1='" << xs << "' y1='" << y0 << "' x2='" << xs << "' y2='" << y0 + h
+        << "' stroke-width='2' stroke='" << lightColor << "'/>" << Endl;
+    }
+    if (scalar) {
+        ui32 width = viewWidth - INTERNAL_GAP_X * 2;
+        if (iconRef) {
+            width -= INTERNAL_WIDTH;
+        }
+        auto x2 = x0 + width - scalar->Value * width / scalar->Summary->Max;
+        background
+        << "  <line x1='" << x0 << "' y1='" << y0 + h - 3 << "' x2='" << x2 << "' y2='" << y0 + h - 3
+        << "' stroke-width='3' stroke='" << lightColor << "' stroke-dasharray='1,1'/>" << Endl;
     }
     if (textSum) {
         background
@@ -1938,10 +2042,22 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
 
             TStringBuilder tooltip;
             auto textSum = FormatTooltip(tooltip, "Output", s->OutputBytes.get(), FormatBytes);
+            if (s->OutputLocalBytes && s->OutputBytes->Details.Sum) {
+                tooltip << ", Local " << s->OutputLocalBytes * 100 / s->OutputBytes->Details.Sum << "%, \u2211" << FormatBytes(s->OutputLocalBytes);
+            }
             if (s->OutputRows) {
                 FormatTooltip(tooltip, ", Rows", s->OutputRows.get(), FormatInteger);
+                if (s->OutputRows->Details.Sum) {
+                    tooltip << ", Width " << FormatBytes(s->OutputBytes->Details.Sum / s->OutputRows->Details.Sum);
+                }
             }
-            PrintStageSummary(builder, Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT, s->OutputBytes, Config.Palette.OutputMedium, Config.Palette.OutputLight, textSum, tooltip, s->Tasks, "#icon_output", Config.Palette.OutputLight, "0.0325 0.0325", true, s->OutputPhysicalStageId ? ToString(s->OutputPhysicalStageId) : "");
+            if (s->OutputChunks) {
+                tooltip << ", Chunks \u2211" << FormatInteger(s->OutputChunks);
+                if (s->OutputChunkSize) {
+                    tooltip << " ~ " << FormatBytes(s->OutputChunkSize->Value);
+                }
+            }
+            PrintStageSummary(builder, Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT, s->OutputBytes, Config.Palette.OutputMedium, Config.Palette.OutputLight, textSum, tooltip, s->Tasks, "#icon_output", Config.Palette.OutputLight, "0.0325 0.0325", true, s->OutputPhysicalStageId ? ToString(s->OutputPhysicalStageId) : "", s->OutputLocalBytes, s->OutputChunkSize);
 
             if (s->SpillingChannelBytes && s->SpillingChannelBytes->Details.Sum) {
                 builder
@@ -2131,32 +2247,34 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
             }
         }
 
-        if (s->External) {
-            s->_Builder
-            << "<g><title>External Source, partitions: " << s->Tasks << ", finished: " << s->FinishedTasks << "</title>" << Endl;
-            if (s->FinishedTasks && s->FinishedTasks <= s->Tasks) {
-                auto unfinishedPercent = 100 * (s->Tasks - s->FinishedTasks) / s->Tasks;
-                auto xx = Config.TaskLeft + Config.TaskWidth / 8;
+        if (s->Tasks) {
+            if (s->External) {
                 s->_Builder
-                << "<line x1='" << xx << "' y1='" << unfinishedPercent << "%' x2='" << xx << "' y2='100%'"
-                << " stroke-width='" << Config.TaskWidth / 4 << "' stroke='" << Config.Palette.StageText << "' stroke-dasharray='1,1' />" << Endl;
-            }
-            s->_Builder
-            << "  " << SvgText(Config.TaskLeft + Config.TaskWidth - 2, "50%", "textc", ToString(s->Tasks))
-            << "</g>" << Endl;
-        } else {
-            s->_Builder
-            << "<g><title>Stage " << s->PhysicalStageId << ", tasks: " << s->Tasks << ", finished: " << s->FinishedTasks << "</title>" << Endl;
-            if (s->FinishedTasks && s->FinishedTasks <= s->Tasks) {
-                auto unfinishedPercent = 100 * (s->Tasks - s->FinishedTasks) / s->Tasks;
-                auto xx = Config.TaskLeft + Config.TaskWidth / 8;
+                << "<g><title>External Source, partitions: " << s->Tasks << ", finished: " << s->FinishedTasks << "</title>" << Endl;
+                if (s->FinishedTasks && s->FinishedTasks <= s->Tasks) {
+                    auto unfinishedPercent = 100 * (s->Tasks - s->FinishedTasks) / s->Tasks;
+                    auto xx = Config.TaskLeft + Config.TaskWidth / 8;
+                    s->_Builder
+                    << "<line x1='" << xx << "' y1='" << unfinishedPercent << "%' x2='" << xx << "' y2='100%'"
+                    << " stroke-width='" << Config.TaskWidth / 4 << "' stroke='" << Config.Palette.StageText << "' stroke-dasharray='1,1' />" << Endl;
+                }
                 s->_Builder
-                << "<line x1='" << xx << "' y1='" << unfinishedPercent << "%' x2='" << xx << "' y2='100%'"
-                << " stroke-width='" << Config.TaskWidth / 4 << "' stroke='" << Config.Palette.StageText << "' stroke-dasharray='1,1' />" << Endl;
+                << "  " << SvgText(Config.TaskLeft + Config.TaskWidth - 2, "50%", "textc", ToString(s->Tasks))
+                << "</g>" << Endl;
+            } else {
+                s->_Builder
+                << "<g><title>Stage " << s->PhysicalStageId << ", tasks: " << s->Tasks << ", finished: " << s->FinishedTasks << "</title>" << Endl;
+                if (s->FinishedTasks && s->FinishedTasks <= s->Tasks) {
+                    auto unfinishedPercent = 100 * (s->Tasks - s->FinishedTasks) / s->Tasks;
+                    auto xx = Config.TaskLeft + Config.TaskWidth / 8;
+                    s->_Builder
+                    << "<line x1='" << xx << "' y1='" << unfinishedPercent << "%' x2='" << xx << "' y2='100%'"
+                    << " stroke-width='" << Config.TaskWidth / 4 << "' stroke='" << Config.Palette.StageText << "' stroke-dasharray='1,1' />" << Endl;
+                }
+                s->_Builder
+                << "  " << SvgText(Config.TaskLeft + Config.TaskWidth - 2, "50%", "textc", ToString(s->Tasks))
+                << "</g>" << Endl;
             }
-            s->_Builder
-            << "  " << SvgText(Config.TaskLeft + Config.TaskWidth - 2, "50%", "textc", ToString(s->Tasks))
-            << "</g>" << Endl;
         }
 
         if (!s->Connections.empty()) {
@@ -2221,7 +2339,15 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
                     << SvgRect(Config.TaskLeft, y, Config.TaskWidth, INTERNAL_HEIGHT + INTERNAL_GAP_Y * 2, "clone")
                     << SvgRect(Config.HeaderLeft + x, y, Config.HeaderWidth - x, INTERNAL_HEIGHT + INTERNAL_GAP_Y * 2, "clone")
                     << SvgRect(Config.SummaryLeft, y, Config.SummaryWidth, INTERNAL_HEIGHT + INTERNAL_GAP_Y * 2, "clone")
-                    << SvgRect(Config.OperatorLeft, y, Config.OperatorWidth, INTERNAL_HEIGHT + INTERNAL_GAP_Y * 2, "clone")
+                    << SvgRect(Config.OperatorLeft, y, Config.OperatorWidth, INTERNAL_HEIGHT + INTERNAL_GAP_Y * 2, "clone");
+
+                if (c->CteOperatorOutputRows) {
+                    TStringBuilder tooltip;
+                    auto textSum = FormatTooltip(tooltip, "Output Rows", c->CteOperatorOutputRows.get(), FormatInteger);
+                    PrintStageSummary(c->_CteBuilder, Config.OperatorLeft, Config.OperatorWidth, y, INTERNAL_HEIGHT, c->CteOperatorOutputRows, Config.Palette.OutputMedium, Config.Palette.OutputLight, textSum, tooltip, 0, "", "", "");
+                }
+
+                c->_CteBuilder
                     << SvgRect(Config.TimelineLeft, y, Config.TimelineWidth, INTERNAL_HEIGHT + INTERNAL_GAP_Y * 2, "clone")
                     << SvgStageId(Config.HeaderLeft + x + INTERNAL_GAP_X + INTERNAL_WIDTH * 3 / 2, y + INTERNAL_GAP_Y + INTERNAL_HEIGHT / 2, ToString(c->FromStage->PhysicalStageId))
                     << SvgText(Config.HeaderLeft + x + INTERNAL_GAP_X + INTERNAL_WIDTH * 2 + 2, y + INTERNAL_GAP_Y + INTERNAL_TEXT_HEIGHT + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2, "texts clipped", c->FromStage->Operators[0].Name + ": " + c->FromStage->Operators[0].Info)
@@ -2232,13 +2358,22 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
 
                     TStringBuilder tooltip;
                     auto textSum = FormatTooltip(tooltip, "Output", c->CteOutputBytes.get(), FormatBytes);
+                    if (c->CteOutputLocalBytes && c->CteOutputBytes->Details.Sum) {
+                        tooltip << ", Local " << c->CteOutputLocalBytes * 100 / c->CteOutputBytes->Details.Sum << "%, \u2211" << FormatBytes(c->CteOutputLocalBytes);
+                    }
                     if (c->CteOutputRows) {
                         FormatTooltip(tooltip, ", Rows", c->CteOutputRows.get(), FormatInteger);
                         if (c->CteOutputRows->Details.Sum) {
-                            tooltip << ", Width " << FormatBytes(c->CteOutputRows->Details.Sum / c->CteOutputRows->Details.Sum);
+                            tooltip << ", Width " << FormatBytes(c->CteOutputBytes->Details.Sum / c->CteOutputRows->Details.Sum);
                         }
                     }
-                    PrintStageSummary(c->_CteBuilder, Config.SummaryLeft, Config.SummaryWidth, y + INTERNAL_GAP_Y, INTERNAL_HEIGHT, c->CteOutputBytes, Config.Palette.OutputMedium, Config.Palette.OutputLight, textSum, tooltip, 0, "#icon_output", Config.Palette.OutputLight, "0.0325 0.0325", true, ToString(s->PhysicalStageId));
+                    if (c->CteOutputChunks) {
+                        tooltip << ", Chunks \u2211" << FormatInteger(c->CteOutputChunks);
+                        if (c->CteOutputChunkSize) {
+                            tooltip << " ~ " << FormatBytes(c->CteOutputChunkSize->Value);
+                        }
+                    }
+                    PrintStageSummary(c->_CteBuilder, Config.SummaryLeft, Config.SummaryWidth, y + INTERNAL_GAP_Y, INTERNAL_HEIGHT, c->CteOutputBytes, Config.Palette.OutputMedium, Config.Palette.OutputLight, textSum, tooltip, 0, "#icon_output", Config.Palette.OutputLight, "0.0325 0.0325", true, ToString(s->PhysicalStageId), c->CteOutputLocalBytes, c->CteOutputChunkSize);
 
                     auto d = c->CteOutputBytes->MaxTime - c->CteOutputBytes->MinTime;
                     TStringBuilder title;
@@ -2302,13 +2437,22 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
 
                 TStringBuilder tooltip;
                 auto textSum = FormatTooltip(tooltip, "Input", c->InputBytes.get(), FormatBytes);
+                if (c->InputLocalBytes && c->InputBytes->Details.Sum) {
+                    tooltip << ", Local " << c->InputLocalBytes * 100 / c->InputBytes->Details.Sum << "%, \u2211" << FormatBytes(c->InputLocalBytes);
+                }
                 if (c->InputRows) {
                     FormatTooltip(tooltip, ", Rows", c->InputRows.get(), FormatInteger);
                     if (c->InputRows->Details.Sum) {
                         tooltip << ", Width " << FormatBytes(c->InputBytes->Details.Sum / c->InputRows->Details.Sum);
                     }
                 }
-                PrintStageSummary(s->_Builder, Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT, c->InputBytes, Config.Palette.InputMedium, Config.Palette.InputLight, textSum, tooltip, s->Tasks, "#icon_input", Config.Palette.InputLight, "0.0325 0.0325", true, ToString(c->FromStage->PhysicalStageId));
+                if (c->InputChunks) {
+                    tooltip << ", Chunks \u2211" << FormatInteger(c->InputChunks);
+                    if (c->InputChunkSize) {
+                        tooltip << " ~ " << FormatBytes(c->InputChunkSize->Value);
+                    }
+                }
+                PrintStageSummary(s->_Builder, Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT, c->InputBytes, Config.Palette.InputMedium, Config.Palette.InputLight, textSum, tooltip, s->Tasks, "#icon_input", Config.Palette.InputLight, "0.0325 0.0325", true, ToString(c->FromStage->PhysicalStageId), c->InputLocalBytes, c->InputChunkSize);
 
                 auto d = c->InputBytes->MaxTime - c->InputBytes->MinTime;
                 TStringBuilder title;
@@ -2564,8 +2708,38 @@ TString TPlanVisualizer::PrintSvg() {
     ui32 offsetY = 0;
     ui32 timelineDelta = (UpdateTime > MaxTime) ? std::min<ui32>(Config.TimelineWidth * (UpdateTime - MaxTime) / UpdateTime, Config.TimelineWidth / 10) : 0;
 
+    ui64 maxSec = MaxTime / 1000;
+    ui64 deltaSec = 0;
+
+            if (maxSec <=  10) deltaSec = 1;
+    else if (maxSec <=  20) deltaSec = 2;
+    else if (maxSec <=  30) deltaSec = 3;
+    else if (maxSec <=  40) deltaSec = 4;
+    else if (maxSec <=  50) deltaSec = 5;
+    else if (maxSec <=  60) deltaSec = 6;
+    else if (maxSec <= 100) deltaSec = 10;
+    else if (maxSec <= 150) deltaSec = 15;
+    else if (maxSec <= 200) deltaSec = 20;
+    else if (maxSec <= 300) deltaSec = 30;
+    else if (maxSec <= 600) deltaSec = 60;
+    else if (maxSec <= 1200) deltaSec = 120;
+    else if (maxSec <= 1800) deltaSec = 180;
+    else if (maxSec <= 3600) deltaSec = 360;
+    else {
+        ui64 stepSec = maxSec / 10;
+        deltaSec = stepSec - (stepSec % 60);
+    }
+
+    auto x = Config.TimelineLeft + INTERNAL_GAP_X;
+    auto w = Config.TimelineWidth - timelineDelta - INTERNAL_GAP_X * 2;
+
     for (auto plan : Plans) {
         plan->PrepareSvg(MaxTime, timelineDelta, offsetY);
+        for (ui64 t = 0; t < maxSec; t += deltaSec) {
+            ui64 x1 = t * w / maxSec;
+            auto timeLabel = Sprintf("%lu:%.2lu", t / 60, t % 60);
+            plan->_Builder << SvgTextS(x + x1 + 2, INTERNAL_GAP_Y + INTERNAL_TEXT_HEIGHT, timeLabel);
+        }
     }
 
     for (auto plan : Plans) {
@@ -2812,42 +2986,11 @@ TString TPlanVisualizer::PrintSvg() {
 )";
     svg << TString(background) << Endl;
 
-    {
-        ui64 maxSec = MaxTime / 1000;
-        ui64 deltaSec = 0;
-
-             if (maxSec <=  10) deltaSec = 1;
-        else if (maxSec <=  20) deltaSec = 2;
-        else if (maxSec <=  30) deltaSec = 3;
-        else if (maxSec <=  40) deltaSec = 4;
-        else if (maxSec <=  50) deltaSec = 5;
-        else if (maxSec <=  60) deltaSec = 6;
-        else if (maxSec <= 100) deltaSec = 10;
-        else if (maxSec <= 150) deltaSec = 15;
-        else if (maxSec <= 200) deltaSec = 20;
-        else if (maxSec <= 300) deltaSec = 30;
-        else if (maxSec <= 600) deltaSec = 60;
-        else if (maxSec <= 1200) deltaSec = 120;
-        else if (maxSec <= 1800) deltaSec = 180;
-        else if (maxSec <= 3600) deltaSec = 360;
-        else {
-            ui64 stepSec = maxSec / 10;
-            deltaSec = stepSec - (stepSec % 60);
-        }
-
-        auto x = Config.TimelineLeft + INTERNAL_GAP_X;
-        auto w = Config.TimelineWidth - timelineDelta - INTERNAL_GAP_X * 2;
-
-        for (ui64 t = 0; t < maxSec; t += deltaSec) {
-            ui64 x1 = t * w / maxSec;
-            svg
-                << "<line x1='" << x + x1 << "' y1='0' x2='" << x + x1 << "' y2='" << "100%" // offsetY
-                << "' stroke-width='1' stroke='" << Config.Palette.StageGrid << "' stroke-dasharray='1,2'/>" << Endl;
-            auto timeLabel = Sprintf("%lu:%.2lu", t / 60, t % 60);
-            for (auto p : Plans) {
-                svg << SvgTextS(x + x1 + 2, p->OffsetY - INTERNAL_HEIGHT - (TIME_HEIGHT - INTERNAL_TEXT_HEIGHT), timeLabel);
-            }
-        }
+    for (ui64 t = 0; t < maxSec; t += deltaSec) {
+        ui64 x1 = t * w / maxSec;
+        svg
+            << "<line x1='" << x + x1 << "' y1='0' x2='" << x + x1 << "' y2='" << "100%" // offsetY
+            << "' stroke-width='1' stroke='" << Config.Palette.StageGrid << "' stroke-dasharray='1,2'/>" << Endl;
     }
 
     if (timelineDelta) {

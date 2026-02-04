@@ -273,7 +273,7 @@ message TEvLoadTestRequest {
         optional string Name = 2;
         optional uint32 DurationSeconds = 3;
         optional string DirectPartitionId = 4;
-        optional NCloud.NBlockStore.NProto.TRangeTest RangeTest = 5;
+        optional NYdb.NBS.NProto.TRangeTest RangeTest = 5;
     }
 
     message TMemoryLoad {

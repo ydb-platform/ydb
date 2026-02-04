@@ -23,6 +23,10 @@ const google::protobuf::RepeatedField<arc_ui64>& TColumnTableInfo::GetColumnShar
     return Description.GetSharding().GetColumnShards();
 }
 
+const google::protobuf::RepeatedField<arc_ui64>& TColumnTableInfo::GetPartitions() const {
+    return Description.GetSharding().GetColumnShards();
+}
+
 void TColumnTableInfo::SetColumnShards(const std::vector<ui64>& columnShards) {
     AFL_VERIFY(GetColumnShards().empty())("original", Description.DebugString());
     AFL_VERIFY(columnShards.size());

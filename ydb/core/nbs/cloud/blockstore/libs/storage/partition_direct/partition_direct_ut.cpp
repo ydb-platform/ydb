@@ -5,8 +5,61 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_direct_actor.h>
 
 using namespace NKikimr;
-using namespace NYdb::NBS::NStorage::NPartitionDirect;
+using namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect;
+using namespace NYdb::NBS::NBlockStore;
 using namespace NYdb::NBS;
+
+namespace {
+
+////////////////////////////////////////////////////////////////////////////////
+
+const TString DDiskPoolName = "ddp1";
+const TString PersistentBufferDDiskPoolName = "ddp1";
+
+void SetupStorage(TEnvironmentSetup& env) {
+    env.CreateBoxAndPool();
+    env.Sim(TDuration::Seconds(30));
+
+    {
+        NKikimrBlobStorage::TConfigRequest request;
+        auto *cmd = request.AddCommand()->MutableDefineDDiskPool();
+        cmd->SetBoxId(1);
+        cmd->SetName(DDiskPoolName);
+        auto *g = cmd->MutableGeometry();
+        g->SetRealmLevelBegin(10);
+        g->SetRealmLevelEnd(20);
+        g->SetDomainLevelBegin(10);
+        g->SetDomainLevelEnd(40);
+        g->SetNumFailRealms(1);
+        g->SetNumFailDomainsPerFailRealm(5);
+        g->SetNumVDisksPerFailDomain(1);
+        cmd->AddPDiskFilter()->AddProperty()->SetType(NKikimrBlobStorage::EPDiskType::ROT);
+        cmd->SetNumDDiskGroups(3);
+        auto res = env.Invoke(request);
+        UNIT_ASSERT_C(res.GetSuccess(), res.GetErrorDescription());
+    }
+}
+
+NYdb::NBS::NProto::TStorageConfig CreateStorageConfig() {
+    NYdb::NBS::NProto::TStorageConfig storageConfig;
+    storageConfig.SetDDiskPoolName(DDiskPoolName);
+    storageConfig.SetPersistentBufferDDiskPoolName(PersistentBufferDDiskPoolName);
+    return storageConfig;
+}
+
+TActorId CreatePartitionActor(TEnvironmentSetup& env) {
+    auto partition = env.Runtime->Register(
+        new TPartitionActor(CreateStorageConfig()),
+        1 // nodeId
+    );
+
+    // Wait for partition and direct block group to be ready
+    env.Sim(TDuration::Seconds(5));
+
+    return partition;
+}
+
+} // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -19,38 +72,16 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest) {
         }};
         auto& runtime = env.Runtime;
         runtime->SetLogPriority(NKikimrServices::NBS_PARTITION, NActors::NLog::PRI_DEBUG);
-        env.CreateBoxAndPool();
-        env.Sim(TDuration::Seconds(30));
 
-        {
-            NKikimrBlobStorage::TConfigRequest request;
-            auto *cmd = request.AddCommand()->MutableDefineDDiskPool();
-            cmd->SetBoxId(1);
-            cmd->SetName("ddp1");
-            auto *g = cmd->MutableGeometry();
-            g->SetRealmLevelBegin(10);
-            g->SetRealmLevelEnd(20);
-            g->SetDomainLevelBegin(10);
-            g->SetDomainLevelEnd(40);
-            g->SetNumFailRealms(1);
-            g->SetNumFailDomainsPerFailRealm(5);
-            g->SetNumVDisksPerFailDomain(1);
-            cmd->AddPDiskFilter()->AddProperty()->SetType(NKikimrBlobStorage::EPDiskType::ROT);
-            cmd->SetNumDDiskGroups(3);
-            auto res = env.Invoke(request);
-            UNIT_ASSERT_C(res.GetSuccess(), res.GetErrorDescription());
-        }
+        SetupStorage(env);
 
-        auto partition = runtime->Register(new TPartitionActor(), 1);
+        auto partition = CreatePartitionActor(env);
 
-        // Wait for partition and direct block group to be ready
-        env.Sim(TDuration::Seconds(5));
-                
         const TActorId& edge = runtime->AllocateEdgeActor(env.Settings.ControllerNodeId, __FILE__, __LINE__);
 
         // Read not writed block
         {
-            auto request = std::make_unique<NYdb::NBS::TEvService::TEvReadBlocksRequest>();
+            auto request = std::make_unique<TEvService::TEvReadBlocksRequest>();
             request->Record.SetStartIndex(0);
             request->Record.SetBlocksCount(1);
 
@@ -81,7 +112,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest) {
 
         auto expectedData = TString(1024, 'A') + TString(1024, 'B') + TString(1024, 'C') + TString(1024, 'D');
         {
-            auto request = std::make_unique<NYdb::NBS::TEvService::TEvWriteBlocksRequest>();
+            auto request = std::make_unique<TEvService::TEvWriteBlocksRequest>();
             request->Record.SetStartIndex(1);
             request->Record.MutableBlocks()->AddBuffers(expectedData);
 
@@ -93,7 +124,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest) {
 
         // Read writed block from persistent buffer
         {
-            auto request = std::make_unique<NYdb::NBS::TEvService::TEvReadBlocksRequest>();
+            auto request = std::make_unique<TEvService::TEvReadBlocksRequest>();
             request->Record.SetStartIndex(1);
             request->Record.SetBlocksCount(1);
 
@@ -107,7 +138,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest) {
 
         // Read not writed block
         {
-            auto request = std::make_unique<NYdb::NBS::TEvService::TEvReadBlocksRequest>();
+            auto request = std::make_unique<TEvService::TEvReadBlocksRequest>();
             request->Record.SetStartIndex(0);
             request->Record.SetBlocksCount(1);
 
@@ -120,10 +151,10 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest) {
         }
 
         env.Sim(TDuration::Seconds(12));
-        
+
         // Read writed block from ddisk
         {
-            auto request = std::make_unique<NYdb::NBS::TEvService::TEvReadBlocksRequest>();
+            auto request = std::make_unique<TEvService::TEvReadBlocksRequest>();
             request->Record.SetStartIndex(1);
             request->Record.SetBlocksCount(1);
 
@@ -143,33 +174,11 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest) {
         }};
         auto& runtime = env.Runtime;
         runtime->SetLogPriority(NKikimrServices::NBS_PARTITION, NActors::NLog::PRI_DEBUG);
-        env.CreateBoxAndPool();
-        env.Sim(TDuration::Seconds(30));
 
-        {
-            NKikimrBlobStorage::TConfigRequest request;
-            auto *cmd = request.AddCommand()->MutableDefineDDiskPool();
-            cmd->SetBoxId(1);
-            cmd->SetName("ddp1");
-            auto *g = cmd->MutableGeometry();
-            g->SetRealmLevelBegin(10);
-            g->SetRealmLevelEnd(20);
-            g->SetDomainLevelBegin(10);
-            g->SetDomainLevelEnd(40);
-            g->SetNumFailRealms(1);
-            g->SetNumFailDomainsPerFailRealm(5);
-            g->SetNumVDisksPerFailDomain(1);
-            cmd->AddPDiskFilter()->AddProperty()->SetType(NKikimrBlobStorage::EPDiskType::ROT);
-            cmd->SetNumDDiskGroups(3);
-            auto res = env.Invoke(request);
-            UNIT_ASSERT_C(res.GetSuccess(), res.GetErrorDescription());
-        }
+        SetupStorage(env);
 
-        auto partition = runtime->Register(new TPartitionActor(), 1);
+        auto partition = CreatePartitionActor(env);
 
-        // Wait for partition and direct block group to be ready
-        env.Sim(TDuration::Seconds(5));
-                
         const TActorId& edge = runtime->AllocateEdgeActor(env.Settings.ControllerNodeId, __FILE__, __LINE__);
 
         auto writeResponsesCount = 0;
@@ -188,11 +197,8 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest) {
                     }
                     break;
                 }
-                case NDDisk::TEvFlushPersistentBuffer::EventType: {
-                    const auto& msg = *ev->Get<NDDisk::TEvFlushPersistentBuffer>();
-                    if (!msg.Record.HasDDiskInstanceGuid()) {
-                        ++eraseRequestsCount;
-                    }
+                case NDDisk::TEvErasePersistentBuffer::EventType: {
+                    ++eraseRequestsCount;
                     break;
                 }
             }
@@ -202,7 +208,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest) {
 
         auto firstWriteData = TString(4096, 'A');
         {
-            auto request = std::make_unique<NYdb::NBS::TEvService::TEvWriteBlocksRequest>();
+            auto request = std::make_unique<TEvService::TEvWriteBlocksRequest>();
             request->Record.SetStartIndex(1);
             request->Record.MutableBlocks()->AddBuffers(firstWriteData);
 
@@ -211,7 +217,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest) {
 
         auto secondWriteData = TString(4096, 'B');
         {
-            auto request = std::make_unique<NYdb::NBS::TEvService::TEvWriteBlocksRequest>();
+            auto request = std::make_unique<TEvService::TEvWriteBlocksRequest>();
             request->Record.SetStartIndex(1);
             request->Record.MutableBlocks()->AddBuffers(secondWriteData);
 
@@ -234,7 +240,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest) {
 
         // Read writed block from ddisk
         {
-            auto request = std::make_unique<NYdb::NBS::TEvService::TEvReadBlocksRequest>();
+            auto request = std::make_unique<TEvService::TEvReadBlocksRequest>();
             request->Record.SetStartIndex(1);
             request->Record.SetBlocksCount(1);
 

@@ -12,7 +12,7 @@
 #include <concepts>
 #include <optional>
 
-namespace NCloud::NBlockStore {
+namespace NYdb::NBS::NBlockStore {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -273,4 +273,4 @@ IOutputStream& operator<<(IOutputStream& out, const TBlockRange<T>& rhs)
     return out;
 }
 
-}   // namespace NCloud::NBlockStore
+}   // namespace NYdb::NBS::NBlockStore

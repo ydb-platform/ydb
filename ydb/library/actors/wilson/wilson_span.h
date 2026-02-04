@@ -79,6 +79,9 @@ namespace NWilson {
         TSpan& operator =(const TSpan&) = delete;
         TSpan& operator=(TSpan&& other);
 
+        static TSpan ConstructTerminated(const TTraceId& parentId, const TTraceId& spanId,
+                TInstant startTs, TInstant endTs, const TString& name);
+
         explicit operator bool() const {
             return Data && !Data->Sent && !Data->Ignored;
         }

@@ -4,10 +4,9 @@
 
 namespace NRetroTracing {
 
-TRetroSpan::TRetroSpan(ui32 type, ui32 size, NWilson::TTraceId&& traceId)
+TRetroSpan::TRetroSpan(ui32 type, ui32 size)
     : Type(type)
     , Size(size)
-    , TraceId(std::move(traceId))
 {}
 
 ui32 TRetroSpan::GetType() const {
@@ -26,12 +25,17 @@ void* TRetroSpan::GetDataMut() {
     return reinterpret_cast<void*>(this);
 }
 
-NWilson::TTraceId TRetroSpan::GetTraceId() const {
-    return NWilson::TTraceId(TraceId);
+NWilson::TTraceId TRetroSpan::GetParentId() const {
+    return NWilson::TTraceId(ParentId);
 }
 
-void TRetroSpan::SetTraceId(NWilson::TTraceId&& traceId) {
-    TraceId = std::move(traceId);
+NWilson::TTraceId TRetroSpan::GetTraceId() const {
+    return NWilson::TTraceId(SpanId);
+}
+
+void TRetroSpan::AttachToTrace(const NWilson::TTraceId& parentId) {
+    ParentId = NWilson::TTraceId(parentId);
+    SpanId = ParentId.Span(DefaultVerbosity);
 }
 
 TRetroSpan* TRetroSpan::Deserialize(const char* data) {
@@ -47,12 +51,27 @@ std::shared_ptr<TRetroSpan> TRetroSpan::DeserializeToShared(const char* data) {
     return std::shared_ptr<TRetroSpan>(TRetroSpan::Deserialize(data));
 }
 
-void TRetroSpan::Serialize(void*) const {
-    return;
+void TRetroSpan::Serialize(void* destination) const {
+    std::memcpy(destination, GetData(), GetSize());
 }
 
 std::unique_ptr<NWilson::TSpan> TRetroSpan::MakeWilsonSpan() {
+    std::unique_ptr<NWilson::TSpan> res = std::make_unique<NWilson::TSpan>(
+            NWilson::TSpan::ConstructTerminated(GetParentId(), GetTraceId(),
+                    GetStartTs(), GetEndTs(), GetName()));
     return nullptr;
+}
+
+bool TRetroSpan::IsEnded() const {
+    return EndTs != TInstant::Zero();
+}
+
+TInstant TRetroSpan::GetStartTs() const {
+    return StartTs;
+}
+
+TInstant TRetroSpan::GetEndTs() const {
+    return EndTs;
 }
 
 } // namespace NRetroTracing

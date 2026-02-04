@@ -22,7 +22,7 @@ private:
     static TRetroSpan* Deserialize(const char* data);
 
 public:
-    TRetroSpan(ui32 type, ui32 size, NWilson::TTraceId&& traceId);
+    TRetroSpan(ui32 type, ui32 size);
     virtual ~TRetroSpan() = default;
 
     static std::unique_ptr<TRetroSpan> DeserializeToUnique(const char* data);
@@ -34,60 +34,48 @@ public:
     const void* GetData() const;
     void* GetDataMut();
 
+    NWilson::TTraceId GetParentId() const;
     NWilson::TTraceId GetTraceId() const;
-    void SetTraceId(NWilson::TTraceId&& traceId);
+    void AttachToTrace(const NWilson::TTraceId& parentId);
 
     virtual void Serialize(void* destination) const;
     virtual std::unique_ptr<NWilson::TSpan> MakeWilsonSpan();
 
     template <class T>
+    requires std::derived_from<T, TRetroSpan>
     const T* Cast() const {
-        return reinterpret_cast<const T*>(this);
+        return dynamic_cast<const T*>(this);
     }
 
     template <class T>
+    requires std::derived_from<T, TRetroSpan>
     T* Cast() {
-        return reinterpret_cast<T*>(this);
+        return dynamic_cast<T*>(this);
     }
+
+    virtual TString GetName() const = 0;
+
+    bool IsEnded() const;
+
+    TInstant GetStartTs() const;
+    TInstant GetEndTs() const;
 
 public:
     static constexpr ui32 MaxPossibleSpanSize = 1_KB;
+    static constexpr ui8 DefaultVerbosity = 1;
 
 private:
     ui32 Type = 0;
     ui32 Size = 0;
 
-    NWilson::TTraceId TraceId = NWilson::TTraceId{};
-};
-
-template <ui32 Id, typename T>
-class TTypedRetroSpan : public TRetroSpan {
 protected:
-    static constexpr ui32 TypeId = Id;
-    using TThisTyped = TTypedRetroSpan<TypeId, T>;
+    NWilson::TFlags Flags = NWilson::EFlags::NONE;
 
-public:
-    TTypedRetroSpan(NWilson::TTraceId&& traceId = NWilson::TTraceId{})
-        : TRetroSpan(Id, sizeof(T), std::move(traceId))
-    {}
+    NWilson::TTraceId ParentId = NWilson::TTraceId{};
+    NWilson::TTraceId SpanId = NWilson::TTraceId{};
 
-    // Constructs retro-span from args for wilson span
-    static T Construct(ui8 verbosity, const NWilson::TTraceId& parentId, const char* name,
-            NWilson::TFlags flags = NWilson::EFlags::NONE,
-            NActors::TActorSystem* actorSystem = nullptr) {
-        Y_UNUSED(verbosity);
-        Y_UNUSED(name);
-        Y_UNUSED(flags);
-        Y_UNUSED(actorSystem);
-
-        T res;
-        res.SetTraceId(NWilson::TTraceId(parentId));
-        return res;
-    }
-
-    virtual void Serialize(void* destination) const override {
-        std::memcpy(destination, GetData(), GetSize());
-    }
+    TInstant StartTs = TInstant::Zero();
+    TInstant EndTs = TInstant::Zero();
 };
 
 } // namespace NRetroTracing

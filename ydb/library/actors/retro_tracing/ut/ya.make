@@ -4,7 +4,7 @@ FORK_SUBTESTS()
 
 SRCS(
     test_spans.cpp
-    universal_span_ut.cpp
+    main.cpp
 )
 
 PEERDIR(

@@ -145,4 +145,21 @@ namespace NWilson {
         Y_DEBUG_ABORT_UNLESS(ActorSystem, "Attempting to create NWilson::TSpan outside of actor system without providing actorSystem pointer");
     }
 
+    TSpan TSpan::ConstructTerminated(const NWilson::TTraceId& parentId, const NWilson::TTraceId& spanId,
+            TInstant startTs, TInstant endTs, const TString& name) {
+        TSpan res;
+        res.Data = std::make_unique<TData>(TInstant::Zero(), 0, NWilson::TTraceId(spanId), EFlags::NONE,
+                nullptr);
+        res.Data->Span.set_trace_id(parentId.GetTraceIdPtr(), parentId.GetTraceIdSize());
+        res.Data->Span.set_parent_span_id(parentId.GetSpanIdPtr(), parentId.GetSpanIdSize());
+        res.Data->Span.set_span_id(parentId.GetSpanIdPtr(), parentId.GetSpanIdSize());
+        res.Data->Span.set_start_time_unix_nano(startTs.NanoSeconds());
+        res.Data->Span.set_end_time_unix_nano(endTs.NanoSeconds());
+        res.Name(name);
+        res.Attribute("node_id", res.Data->ActorSystem->NodeId);
+        res.Data->Ignored = true;
+
+        return res;
+    }
+
 } // NWilson

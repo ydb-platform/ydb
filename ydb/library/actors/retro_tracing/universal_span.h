@@ -2,6 +2,7 @@
 
 #include "retro_span.h"
 
+#include <util/datetime/base.h>
 #include <util/generic/overloaded.h>
 
 #include <ydb/library/actors/wilson/wilson_span.h>
@@ -48,9 +49,9 @@ public:
         NWilson::TSpan* res;
         std::visit(TOverloaded{
             [&](NWilson::TSpan& span) -> void { res = &span; },
-            [&](const TRetroSpanType&) -> void { Y_ABORT("Attempted to get wilson span"
+            [&](const TRetroSpanType&) -> void { Y_ABORT("Attempted to get wilson span "
                     "from universal span initialized as retro"); },
-            [&](const std::monostate&) -> void { Y_ABORT("Attempted to get wilson span"
+            [&](const std::monostate&) -> void { Y_ABORT("Attempted to get wilson span "
                     "from uninitialized universal span"); },
         }, Span);
         return res;
@@ -60,9 +61,9 @@ public:
         const NWilson::TSpan* res;
         std::visit(TOverloaded{
             [&](const NWilson::TSpan& span) -> void { res = &span; },
-            [&](const TRetroSpanType&) -> void { Y_ABORT("Attempted to get wilson span"
+            [&](const TRetroSpanType&) -> void { Y_ABORT("Attempted to get wilson span "
                     "from universal span initialized as retro"); },
-            [&](const std::monostate&) -> void { Y_ABORT("Attempted to get wilson span"
+            [&](const std::monostate&) -> void { Y_ABORT("Attempted to get wilson span "
                     "from uninitialized universal span"); },
         }, Span);
         return res;
@@ -71,10 +72,10 @@ public:
     TRetroSpanType* GetRetroSpanPtr() {
         TRetroSpanType* res;
         std::visit(TOverloaded{
-            [&](const NWilson::TSpan&) -> void { Y_ABORT("Attempted to get retro span"
+            [&](const NWilson::TSpan&) -> void { Y_ABORT("Attempted to get retro span "
                     "from universal span initialized as wilson"); },
             [&](TRetroSpanType& span) -> void { res = &span; },
-            [&](const std::monostate&) -> void { Y_ABORT("Attempted to get retro span"
+            [&](const std::monostate&) -> void { Y_ABORT("Attempted to get retro span "
                     "from uninitialized universal span"); },
         }, Span);
         return res;
@@ -83,16 +84,16 @@ public:
     const TRetroSpanType* GetRetroSpanPtr() const {
         TRetroSpanType* res;
         std::visit(TOverloaded{
-            [&](const NWilson::TSpan&) -> void { Y_ABORT("Attempted to get retro span"
+            [&](const NWilson::TSpan&) -> void { Y_ABORT("Attempted to get retro span "
                     "from universal span initialized as wilson"); },
             [&](TRetroSpanType& span) -> void { res = &span; },
-            [&](const std::monostate&) -> void { Y_ABORT("Attempted to get retro span"
+            [&](const std::monostate&) -> void { Y_ABORT("Attempted to get retro span "
                     "from uninitialized universal span"); },
         }, Span);
         return res;
     }
 
-    EUniversalSpanType GetSpanType() {
+    EUniversalSpanType GetSpanType() const {
         if (std::holds_alternative<std::monostate>(Span)) {
             return EUniversalSpanType::Empty;
         } else if (std::holds_alternative<NWilson::TSpan>(Span)) {

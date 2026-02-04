@@ -147,9 +147,9 @@ public:
         const auto& keys = GetPartitionKeys(GetPartitionBy(target.Settings().Ref()));
         if (pureDqExpr) {
             // Build stage with one sink from scratch
-            stageBody = Build<TCoToFlow>(ctx, writePos)
-                .Input(sink.BuildSerializer(input.Ptr(), ctx))
-                .Done().Ptr();
+            stageBody = sink.BuildSerializer(Build<TCoToFlow>(ctx, writePos)
+                .Input(input)
+                .Done().Ptr(), ctx);
         } else if (!keys.empty()) {
             // Build external stage with one sink
             stageArgs.emplace_back(Build<TCoArgument>(ctx, writePos)

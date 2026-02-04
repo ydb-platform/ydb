@@ -461,7 +461,8 @@ message TRequestedMaxIndex {
 }
 
 message TRequestedMinMaxIndex {
-    optional string ColumnName = 1;
+    optional string ColumnName = 3;
+    optional TIndexDataExtractor DataExtractor = 4;
 }
 
 message TRequestedCountMinSketch {
@@ -510,6 +511,8 @@ message TMaxIndex {
 
 message TMinMaxIndex {
     optional uint32 ColumnId = 1;
+    optional TIndexDataExtractor DataExtractor = 4;
+
 }
 
 message TCountMinSketch {

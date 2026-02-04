@@ -31,6 +31,7 @@ protected:
         return NArrow::TStatusValidator::GetValid(ArrayVariants->GetScalar(GetIndexImpl(index)));
     }
     virtual std::shared_ptr<arrow::Scalar> DoGetMaxScalar() const override;
+    virtual std::shared_ptr<arrow::Scalar> DoGetMinScalar() const override;
     virtual std::shared_ptr<IChunkedArray> DoISlice(const ui32 offset, const ui32 count) const override;
     virtual ui32 DoGetNullsCount() const override {
         return ArrayRecords->null_count();

@@ -275,6 +275,9 @@ bool TIndexInfo::DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema&
         for (const auto& idx : schema.GetIndexes()) {
             NIndexes::TIndexMetaContainer meta;
             AFL_VERIFY(meta.DeserializeFromProto(idx));
+            AFL_VERIFY(false);
+            
+            Cerr << "emplace index: " << idx.DebugString() << Indexes.size();
             Indexes.emplace(meta->GetIndexId(), meta);
         }
     }
@@ -490,7 +493,7 @@ std::shared_ptr<NIndexes::NMax::TIndexMeta> TIndexInfo::GetIndexMetaMax(const ui
         if (i.second->GetClassName() != NIndexes::NMax::TIndexMeta::GetClassNameStatic()) {
             continue;
         }
-        auto maxIndex = static_pointer_cast<NIndexes::NMax::TIndexMeta>(i.second.GetObjectPtr());
+        auto maxIndex = dynamic_pointer_cast<NIndexes::NMax::TIndexMeta>(i.second.GetObjectPtr());
         if (maxIndex->GetColumnId() == columnId) {
             return maxIndex;
         }
@@ -503,7 +506,7 @@ std::shared_ptr<NIndexes::NCountMinSketch::TIndexMeta> TIndexInfo::GetIndexMetaC
         if (i.second->GetClassName() != NIndexes::NCountMinSketch::TIndexMeta::GetClassNameStatic()) {
             continue;
         }
-        auto index = static_pointer_cast<NIndexes::NCountMinSketch::TIndexMeta>(i.second.GetObjectPtr());
+        auto index = dynamic_pointer_cast<NIndexes::NCountMinSketch::TIndexMeta>(i.second.GetObjectPtr());
         if (index->GetColumnIds() == columnIds) {
             return index;
         }
@@ -591,6 +594,7 @@ TIndexInfo::TIndexInfo(const TIndexInfo& original, const TSchemaDiffView& diff, 
     {
         TMemoryProfileGuard g("TIndexInfo::ApplyDiff::Indexes");
         Indexes = original.Indexes;
+        AFL_VERIFY(false);
         for (auto&& i : diff.GetModifiedIndexes()) {
             if (!i.second) {
                 // It is possible to have a non-existent element here after merging schemas
@@ -704,7 +708,9 @@ std::vector<std::shared_ptr<NIndexes::TSkipIndex>> TIndexInfo::FindSkipIndexes(
         if (!i->IsSkipIndex()) {
             continue;
         }
-        auto skipIndex = std::static_pointer_cast<NIndexes::TSkipIndex>(i.GetObjectPtrVerified());
+        auto skipIndex = std::dynamic_pointer_cast<NIndexes::TSkipIndex>(i.GetObjectPtrVerified());
+        AFL_VERIFY(skipIndex != nullptr);
+        Cerr << Sprintf("skipIndex type: %s, or this way: %s", typeid(skipIndex.get()).name(), skipIndex->GetClassName().c_str()) << Endl;
         if (skipIndex->IsAppropriateFor(originalDataAddress, op)) {
             result.emplace_back(skipIndex);
         }

@@ -297,6 +297,11 @@ void DoTabletKillRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProv
     f.RegisterActor(NMsgBusProxy::CreateMessageBusTabletKillRequest(ctx));
 }
 
+void DoLocalMKQL(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {
+    NKikimr::NMsgBusProxy::TBusMessageContext ctx(std::move(p), NMsgBusProxy::MTYPE_CLIENT_LOCAL_MINIKQL);
+    f.RegisterActor(NMsgBusProxy::CreateMessageBusLocalMKQL(ctx));
+}
+
 } // namespace NLegacyGrpcService
 
 } // namespace NKikimr::NGRpcService

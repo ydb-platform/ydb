@@ -155,6 +155,7 @@ void TGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     SETUP_SERVER_METHOD(LocalSchemeTx, TLocalSchemeTx, TResponse, DoLocalSchemeTx, Off, UNSPECIFIED, legacy, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
     SETUP_SERVER_METHOD(LocalEnumerateTablets, TLocalEnumerateTablets, TResponse, DoLocalEnumerateTablets, Off, UNSPECIFIED, legacy, TAuditMode::NonModifying());
     SETUP_SERVER_METHOD(TabletKillRequest, TTabletKillRequest, TResponse, DoTabletKillRequest, Off, UNSPECIFIED, legacy, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
+    SETUP_SERVER_METHOD(LocalMKQL, TLocalMKQL, TResponse, DoLocalMKQL, Off, UNSPECIFIED, legacy, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
 }
 
 }

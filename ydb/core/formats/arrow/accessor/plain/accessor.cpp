@@ -18,6 +18,11 @@ std::shared_ptr<arrow::Scalar> TTrivialArray::DoGetMaxScalar() const {
     return NArrow::TStatusValidator::GetValid(Array->GetScalar(minMaxPos.second));
 }
 
+std::shared_ptr<arrow::Scalar> TTrivialArray::DoGetMinScalar() const {
+    auto minMaxPos = NArrow::FindMinMaxPosition(Array);
+    return NArrow::TStatusValidator::GetValid(Array->GetScalar(minMaxPos.first));
+}
+
 ui32 TTrivialArray::DoGetValueRawBytes() const {
     return NArrow::GetArrayDataSize(Array);
 }
@@ -87,6 +92,22 @@ std::optional<ui64> TTrivialChunkedArray::DoGetRawSize() const {
     for (auto&& i : Array->chunks()) {
         result += NArrow::GetArrayDataSize(i);
     }
+    return result;
+}
+
+std::shared_ptr<arrow::Scalar> TTrivialChunkedArray::DoGetMinScalar() const {
+    std::shared_ptr<arrow::Scalar> result;
+    for (auto&& i : Array->chunks()) {
+        if (!i->length()) {
+            continue;
+        }
+        auto minMaxPos = NArrow::FindMinMaxPosition(i);
+        auto scalarCurrent = NArrow::TStatusValidator::GetValid(i->GetScalar(minMaxPos.first));
+        if (!result || ScalarCompare(result, scalarCurrent) > 0) {
+            result = scalarCurrent;
+        }
+    }
+
     return result;
 }
 

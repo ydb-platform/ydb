@@ -17,12 +17,12 @@ struct TKeyPair {
 namespace NArrowProtocol {
 constexpr static const char* MaxFieldName = "Max";
 constexpr static const char* MinFieldName = "Min";
-std::shared_ptr<arrow::Scalar> Serialize(TKeyPair typedDair) {
+inline std::shared_ptr<arrow::Scalar> Serialize(TKeyPair typedDair) {
     auto res = arrow::StructScalar::Make({ typedDair.Max, typedDair.Min }, { "Max", "Min" });
     AFL_VERIFY(res.ok())("arrow error", Sprintf("MinMax struct creation error: %s", res.status().ToString().c_str()));
     return *res;
 }
-TKeyPair Deserialize(std::shared_ptr<arrow::Scalar> untypedPair) {
+inline TKeyPair Deserialize(std::shared_ptr<arrow::Scalar> untypedPair) {
     auto struct_value = std::dynamic_pointer_cast<arrow::StructScalar>(untypedPair);
     TString typeErrorMessage = Sprintf("MinMax struct type error: expected arrow struct type with 2 field: [%s,%s], got: %s", MinFieldName,
         MaxFieldName, untypedPair->type->ToString().c_str());
@@ -94,7 +94,7 @@ protected:
     virtual std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> DoBuildIndexImpl(
         TChunkedBatchReader& reader, const ui32 recordsCount) const override {
         TKeyPair thisChunkIndex;
-        AFL_VERIFY(reader.GetColumnsCount() == 1)("count", reader.GetColumnsCount());
+        AFL_VERIFY(reader.GetColumnsCount() == 1)("got_count", reader.GetColumnsCount());
         {
             TChunkedColumnReader cReader = *reader.begin();
             for (reader.Start(); cReader.IsCorrect(); cReader.ReadNextChunk()) {
@@ -119,12 +119,8 @@ protected:
     virtual bool DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& proto) override {
         AFL_VERIFY(TBase::DoDeserializeFromProto(proto));
         AFL_VERIFY(proto.HasMinMaxIndex());
-        auto& bFilter = proto.GetMinMaxIndex();
-        if (!bFilter.HasColumnId()) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("problem", "incorrect column id");
-            return false;
-        };
-        AddColumnId(bFilter.GetColumnId());
+        auto& minMax = proto.GetMinMaxIndex();
+        AddColumnId(minMax.GetColumnId());
         return true;
     }
     enum class ValueShape {
@@ -215,8 +211,8 @@ protected:
 
 public:
     TIndexMeta() = default;
-    TIndexMeta(const ui32 indexId, const TString& indexName, const TString& storageId, const bool inheritPortionStorage, const ui32& columnId)
-        : TBase(indexId, indexName, columnId, storageId, inheritPortionStorage, std::make_shared<TDefaultDataExtractor>())
+    TIndexMeta(const ui32 indexId, const TString& indexName, const TString& storageId, const bool inheritPortionStorage, const ui32& columnId, TReadDataExtractorContainer dataExtractor)
+        : TBase(indexId, indexName, columnId, storageId, inheritPortionStorage, dataExtractor)
     {
     }
 

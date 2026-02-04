@@ -1,3 +1,4 @@
+#include <library/cpp/yson/parser.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/ut/olap/combinatory/variator.h>
@@ -12,8 +13,133 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr::NKqp {
+// class TSkipIndexTestFixture : public NUnitTest::TBaseFixture {
+// public:
+//     TKikimrRunner kikimr = TKikimrSettings()
+//             .SetColumnShardAlterObjectEnabled(true)
+//             .SetWithSampleTables(false);
+//     NYdb::NTable::TTableClient tableClient = kikimr.GetTableClient();
+//     NYdb::Dev::TStatus RunSql(TString query) {
+//         auto session = tableClient.CreateSession().GetValueSync().GetSession();
+//         return session.ExecuteSchemeQuery(query).GetValueSync();
+//     }
 
+//     void SetUp(NUnitTest::TTestContext& ctx) override {
+
+//     }
+
+
+//     void AssertSqlOk(TString query) {
+//         auto res = RunSql(query);
+//         UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), NYdb::EStatus::SUCCESS, res.GetIssues().ToString());
+//     }
+
+    
+// };
 Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
+    Y_UNIT_TEST(CreateMinMaxIndex) {
+        auto settings = TKikimrSettings()
+            .SetColumnShardAlterObjectEnabled(true)
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        TLocalHelper(kikimr).CreateTestOlapStandaloneTable();
+        auto tableClient = kikimr.GetTableClient();
+
+        auto runSql = [&](TString query) {
+            auto session = tableClient.CreateSession().GetValueSync().GetSession();
+            return session.ExecuteSchemeQuery(query).GetValueSync();
+        };
+
+        auto assertSqlOk = [&](TString query) {
+            auto res = runSql(query);
+            UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), NYdb::EStatus::SUCCESS, res.GetIssues().ToString());
+        };
+        
+
+        assertSqlOk(R"(ALTER OBJECT `/Root/olapTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=index_minmax_level, TYPE=MINMAX,
+            FEATURES=`{"column_name" : "level"}`);
+        )");
+
+    }
+    Y_UNIT_TEST(MinMaxIndexSanityCheck) {
+        auto settings = TKikimrSettings()
+            .SetColumnShardAlterObjectEnabled(true)
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
+        csController->SetCompactionControl(NYDBTest::EOptimizerCompactionWeightControl::Disable);
+        csController->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings());
+
+        TLocalHelper(kikimr).CreateTestOlapStandaloneTable();
+        auto tableClient = kikimr.GetTableClient();
+
+        auto runSql = [&](TString query) {
+            auto session = tableClient.CreateSession().GetValueSync().GetSession();
+            return session.ExecuteSchemeQuery(query).GetValueSync();
+        };
+
+        auto assertSqlOk = [&](TString query) {
+            auto res = runSql(query);
+            UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), NYdb::EStatus::SUCCESS, res.GetIssues().ToString());
+        };
+        
+
+        assertSqlOk(R"(ALTER OBJECT `/Root/olapTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=index_minmax_level, TYPE=MINMAX,
+            FEATURES=`{"column_name" : "level"}`);
+        )");
+
+        WriteTestData(kikimr, "/Root/olapTable", 123, 213, 3);
+
+        // csController->SetCompactionControl(NYDBTest::EOptimizerCompactionWeightControl::Force);
+        // UNIT_ASSERT(csController->WaitCompactions(TDuration::Seconds(30), 1));
+
+        auto mismatchErrorMessage = [](TString key, TString actual) {
+            return Sprintf("actual %s: %s", key.data(), actual.data());
+        };
+
+        auto selectInt64 = [&](TString select) {
+            auto it = kikimr.GetTableClient().StreamExecuteScanQuery(select).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            TString result = StreamResultToYson(it); // todo: verify results
+            Cerr << result << Endl;
+            auto node = NYT::NodeFromYsonString(result);
+            auto ptr1 = &node.AsList();
+            auto ptr2 = &(*ptr1)[0].AsList();
+            UNIT_ASSERT(ptr1 != ptr2);
+            UNIT_ASSERT_VALUES_EQUAL_C(node.AsList().size(), 1,mismatchErrorMessage("yson", NYT::NodeToYsonString(node)));
+            return node.AsList()[0]
+                       .AsList()[0]
+                       .AsList()[0]
+                       .AsInt64();
+        };
+
+
+        i64 level = selectInt64("select cast(sum(level) as Int64) from `/Root/olapTable`;");
+
+        UNIT_ASSERT_VALUES_EQUAL_C(level, 0+1+2, mismatchErrorMessage("level", ToString(level)));
+
+
+
+        i64 countFiltered = selectInt64("select cast(count(level) as Int64) from `/Root/olapTable` where level = 5;");
+
+
+        i64 indexMissingBefore = csController->GetIndexesSkippedNoData().Val();
+        i64 skippedRowsBefore = csController->GetIndexesSkippingOnSelect().Val();
+        i64 notSkippedRowsBefore = csController->GetIndexesApprovedOnSelect().Val();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(countFiltered, -1, mismatchErrorMessage("level", ToString(countFiltered)));
+
+        UNIT_ASSERT(indexMissingBefore == csController->GetIndexesSkippedNoData().Val());
+        UNIT_ASSERT(skippedRowsBefore < csController->GetIndexesSkippingOnSelect().Val());
+        UNIT_ASSERT(notSkippedRowsBefore == csController->GetIndexesApprovedOnSelect().Val());
+
+        Cerr << ToString(csController->GetIndexesSkippingOnSelect().Val() - skippedRowsBefore) << Endl;
+
+
+        // assertSqlOk(TString query)
+    }
+
     Y_UNIT_TEST(TablesInStore) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);

@@ -36,9 +36,9 @@ private:
             case EOperation::EndsWith:
             case EOperation::Contains:
                 return !CaseSensitive || op.GetCaseSensitive();
+            default:
+                return false;
         }
-
-        return false;
     }
 
 protected:

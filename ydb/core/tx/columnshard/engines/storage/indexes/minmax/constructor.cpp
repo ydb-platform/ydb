@@ -21,10 +21,13 @@ std::shared_ptr<NKikimr::NOlap::NIndexes::IIndexMeta> TIndexConstructor::DoCreat
         columnId = columnInfo->GetId();
     }
     return std::make_shared<NMinMax::TIndexMeta>(indexId, indexName, GetStorageId().value_or(NBlobOperations::TGlobal::LocalMetadataStorageId),
-        GetInheritPortionStorage().value_or(false), columnId);
+        GetInheritPortionStorage().value_or(false), columnId, DataExtractor);
 }
 
 NKikimr::TConclusionStatus TIndexConstructor::DoDeserializeFromJson(const NJson::TJsonValue& jsonInfo) {
+    if (auto conc = DataExtractor.DeserializeFromJson(jsonInfo["data_extractor"]); conc.IsFail()) {
+        return conc;
+    }
     if (!jsonInfo.Has("column_name")) {
         return TConclusionStatus::Fail("column_name have to be in minmax index features");
     }
@@ -41,10 +44,11 @@ NKikimr::TConclusionStatus TIndexConstructor::DoDeserializeFromProto(const NKiki
         return TConclusionStatus::Fail(errorMessage);
     }
     auto& bIndex = proto.GetMinMaxIndex();
-    if (!bIndex.HasColumnName()) {
-        return TConclusionStatus::Fail(Sprintf("Empty column name in %s proto", bIndex.GetTypeName().c_str()));
-    }
     ColumnName = bIndex.GetColumnName();
+    if (!DataExtractor.DeserializeFromProto(bIndex.GetDataExtractor())) {
+        return TConclusionStatus::Fail("cannot parse data extractor: " + bIndex.GetDataExtractor().DebugString());
+    }
+    AFL_VERIFY(DataExtractor.HasObject());
     return TConclusionStatus::Success();
 }
 
@@ -52,6 +56,7 @@ void TIndexConstructor::DoSerializeToProto(NKikimrSchemeOp::TOlapIndexRequested&
     auto* filterProto = proto.MutableMinMaxIndex();
     AFL_VERIFY(!!ColumnName)("problem", "not initialized max index info trying to serialize");
     filterProto->SetColumnName(ColumnName);
+    *filterProto->MutableDataExtractor() = DataExtractor.SerializeToProto();
 }
 
 }   // namespace NKikimr::NOlap::NIndexes::NMax

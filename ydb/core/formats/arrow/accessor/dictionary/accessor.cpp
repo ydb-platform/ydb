@@ -94,5 +94,13 @@ std::shared_ptr<arrow::Scalar> TDictionaryArray::DoGetMaxScalar() const {
     auto minMaxPos = NArrow::FindMinMaxPosition(ArrayVariants);
     return NArrow::TStatusValidator::GetValid(ArrayVariants->GetScalar(minMaxPos.second));
 }
+std::shared_ptr<arrow::Scalar> TDictionaryArray::DoGetMinScalar() const {
+    std::shared_ptr<arrow::Scalar> result;
+    if (!ArrayVariants->length()) {
+        return result;
+    }
+    auto minMaxPos = NArrow::FindMinMaxPosition(ArrayVariants);
+    return NArrow::TStatusValidator::GetValid(ArrayVariants->GetScalar(minMaxPos.first));
+}
 
 }   // namespace NKikimr::NArrow::NAccessor

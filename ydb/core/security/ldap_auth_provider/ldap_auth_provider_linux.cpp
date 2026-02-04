@@ -23,14 +23,28 @@ char* noAttributes[] = {ldapNoAttribute, nullptr};
 const TString LDAPS_SCHEME = "ldaps";
 
 int Bind(LDAP* ld, const TString& dn, const ESaslMechanism& mechanism, std::vector<char>* credentials) {
-    BerValue* credPtr = nullptr;
-    BerValue cred;
+    static char initBvVal[] = "";
+    static constexpr BerValue defaultCredentials {.bv_len = 0, .bv_val = initBvVal};
+    BerValue cred = defaultCredentials;
+    BerValue* credPtr = &cred;
     if (credentials) {
         cred.bv_len = credentials->size();
         cred.bv_val = credentials->data();
-        credPtr = &cred;
     }
-    return ldap_sasl_bind_s(ld, dn.c_str(), ConvertSaslMechanism(mechanism), credPtr, nullptr, nullptr, nullptr);
+    struct berval* servercredp = nullptr;
+    int res = ldap_sasl_bind_s(ld, (dn.empty() ? nullptr : dn.c_str()), ConvertSaslMechanism(mechanism), credPtr, nullptr, nullptr, &servercredp);
+    if (mechanism == ESaslMechanism::EXTERNAL && res == LDAP_SASL_BIND_IN_PROGRESS) {
+        if (servercredp) {
+            cred.bv_len = servercredp->bv_len;
+            cred.bv_val = servercredp->bv_val;
+            ber_bvfree(servercredp);
+            servercredp = nullptr;
+        } else {
+            cred  = defaultCredentials;
+        }
+        return ldap_sasl_bind_s(ld, (dn.empty() ? nullptr : dn.c_str()), ConvertSaslMechanism(mechanism), credPtr, nullptr, nullptr, &servercredp);
+    }
+    return res;
 }
 
 int Unbind(LDAP* ld) {

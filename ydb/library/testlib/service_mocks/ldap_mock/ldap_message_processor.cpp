@@ -233,6 +233,14 @@ std::vector<TLdapRequestProcessor::TProtocolOpData> TLdapRequestProcessor::Proce
             return {responseOpData};
         }
         TString saslMechanism = GetString();
+        elementType = GetByte();
+        if (elementType != EElementType::STRING) {
+            responseOpData.Data = CreateResponse({.Status = EStatus::PROTOCOL_ERROR});
+            Cerr << "LDAP_MOCK: BindRequest, protocol error, sasl mechanism is not a string" << Endl;
+            return {responseOpData};
+        }
+        TString credentials = GetString();
+        Y_UNUSED(credentials);
         if (saslMechanism == "EXTERNAL") {
             requestInfo.Mechanism = ESaslMechanism::EXTERNAL;
             TString bindDn = GetBindDnFromClientCert();

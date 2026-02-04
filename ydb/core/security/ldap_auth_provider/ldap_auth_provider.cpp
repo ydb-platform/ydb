@@ -192,13 +192,15 @@ private:
             }
         }
 
-        LDAP_LOG_D("bind: bindDn: " << Settings.GetBindDn());
         if (Settings.GetExtendedSettings().GetEnableMtlsAuth()) {
+            LDAP_LOG_D("bind: Sasl EXTERNAL");
             result = NKikimrLdap::Bind(*ld, "", NKikimrLdap::ESaslMechanism::EXTERNAL, nullptr);
         } else {
+            LDAP_LOG_D("bind: bindDn: " << Settings.GetBindDn());
             const TString& bindPassword = Settings.GetBindPassword();
             std::vector<char> credentials(bindPassword.begin(), bindPassword.end());
             result = NKikimrLdap::Bind(*ld, Settings.GetBindDn(), NKikimrLdap::ESaslMechanism::SIMPLE, &credentials);
+
         }
         if (!NKikimrLdap::IsSuccess(result)) {
             TStringBuilder logErrorMessage;
@@ -471,7 +473,7 @@ private:
         if (Settings.GetBaseDn().empty()) {
             return {TEvLdapAuthProvider::EStatus::UNAVAILABLE, {.Message = ERROR_MESSAGE, .LogMessage = "Parameter BaseDn is empty", .Retryable = false}};
         }
-        if (Settings.GetBindDn().empty()) {
+        if (Settings.GetBindDn().empty() && !Settings.GetExtendedSettings().GetEnableMtlsAuth()) {
             return {TEvLdapAuthProvider::EStatus::UNAVAILABLE, {.Message = ERROR_MESSAGE, .LogMessage = "Parameter BindDn is empty", .Retryable = false}};
         }
         if (Settings.GetBindPassword().empty() && !Settings.GetExtendedSettings().GetEnableMtlsAuth()) {

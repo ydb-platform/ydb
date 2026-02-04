@@ -102,6 +102,7 @@ public:
     bool FullExpr = false;
     bool WithTypes = false;
     bool FullStatistics = false;
+    bool PrintDiagnostics = false;
     int Verbosity = TLOG_ERR;
     bool ShowLog = false;
     bool WithFinalIssues = false;

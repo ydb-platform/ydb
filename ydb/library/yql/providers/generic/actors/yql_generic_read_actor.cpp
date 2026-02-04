@@ -63,7 +63,7 @@ namespace NYql::NDq {
             IngressStats_.Level = statsLevel;
 
             LogPrefix = TStringBuilder() << "Task=" << taskId;
-            const auto dsi = source.select().data_source_instance();
+            const auto& dsi = Source_.select().data_source_instance();
             GENERIC_LOG_I("Creating read actor with params:"
                     << " kind=" << NYql::EGenericDataSourceKind_Name(dsi.kind())
                     << ", endpoint=" << dsi.endpoint().ShortDebugString()
@@ -71,7 +71,7 @@ namespace NYql::NDq {
                     << ", use_tls=" << ToString(dsi.use_tls())
                     << ", protocol=" << NYql::EGenericProtocol_Name(dsi.protocol())
                     << ", task_id=" << taskId
-                    << ", partitions_count=" << partitions.size());
+                    << ", partitions_count=" << Partitions_.size());
         }
 
         ~TGenericReadActor() {

@@ -20,6 +20,7 @@
 #include <yql/essentials/public/issue/yql_issue.h>
 
 #include <library/cpp/protobuf/json/util.h>
+
 #include <util/generic/hash.h>
 
 namespace NKikimr {

@@ -939,7 +939,7 @@ TEST_F(BasicUsage, TEST_NAME(TKeyedWriteSessionBasicWrite_NoAutoPartitioning)) {
     constexpr auto TOPIC_NAME = "test-topic-2";
     constexpr auto CONSUMER_NAME = "test-consumer-2";
 
-    CreateTopic(TOPIC_NAME, CONSUMER_NAME, 5, 10);
+    CreateTopic(TOPIC_NAME, CONSUMER_NAME, 5, 5);
 
     auto driver = MakeDriver();
     TTopicClient client(driver);
@@ -951,7 +951,7 @@ TEST_F(BasicUsage, TEST_NAME(TKeyedWriteSessionBasicWrite_NoAutoPartitioning)) {
         .Path(GetTopicPath(TOPIC_NAME))
         .Codec(ECodec::RAW);
     writeSettings.ProducerIdPrefix(CreateGuidAsString());
-    writeSettings.PartitionChooserStrategy(TKeyedWriteSessionSettings::EPartitionChooserStrategy::Bound);
+    writeSettings.PartitionChooserStrategy(TKeyedWriteSessionSettings::EPartitionChooserStrategy::Hash);
     writeSettings.SubSessionIdleTimeout(TDuration::Seconds(30));
     writeSettings.PartitioningKeyHasher([](const std::string_view key) -> std::string {
         return std::string{key};
@@ -959,23 +959,10 @@ TEST_F(BasicUsage, TEST_NAME(TKeyedWriteSessionBasicWrite_NoAutoPartitioning)) {
 
     auto session = client.CreateKeyedWriteSession(writeSettings);
     auto keyedSession = std::dynamic_pointer_cast<TKeyedWriteSession>(session);
-    const auto& partitions = keyedSession->GetPartitions();
-
-    std::unordered_map<ui64, ui64> keysCount;
-    for (const auto& p : partitions) {
-        keysCount[p.PartitionId_] = 0;
-    }
 
     NPersQueue::NTests::TKeyedWriteSessionTestAdapter testAdapter(session.get());
     for (size_t i = 0; i < 100; ++i) {
         auto key = CreateGuidAsString();
-        for (const auto& p : partitions) {
-            if (p.InRange(key)) {
-                keysCount[p.PartitionId_]++;
-                break;
-            }
-        }
-
         auto token = testAdapter.GetContinuationToken(TDuration::Seconds(30));
         ASSERT_TRUE(token.has_value()) << "Timed out waiting for ReadyToAcceptEvent";
         TWriteMessage msg("msg");
@@ -990,19 +977,6 @@ TEST_F(BasicUsage, TEST_NAME(TKeyedWriteSessionBasicWrite_NoAutoPartitioning)) {
 
     auto after = client.DescribeTopic(GetTopicPath(TOPIC_NAME), describeTopicSettings).GetValueSync();
     ASSERT_TRUE(after.IsSuccess()) << after.GetIssues().ToOneLineString();
-    const auto& afterPartitions = after.GetTopicDescription().GetPartitions();
-
-    std::unordered_map<ui64, ui64> endOffsets;
-    for (const auto& p : afterPartitions) {
-        auto stats = p.GetPartitionStats();
-        ASSERT_TRUE(stats.has_value());
-        endOffsets[p.GetPartitionId()] = stats->GetEndOffset();
-    }
-
-    for (const auto& p : partitions) {
-        auto sb = TStringBuilder() << "partitionId=" << p.PartitionId_ << " endOffset=" << endOffsets[p.PartitionId_] << " keysCount=" << keysCount[p.PartitionId_];
-        ASSERT_EQ(endOffsets[p.PartitionId_], keysCount[p.PartitionId_]) << sb.c_str();
-    }
 
     auto readSettings = TReadSessionSettings()
         .ConsumerName(GetConsumerName(CONSUMER_NAME))

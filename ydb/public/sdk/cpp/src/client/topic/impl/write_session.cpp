@@ -362,7 +362,7 @@ void TKeyedWriteSession::TEventsWorker::HandleSessionClosedEvent(TSessionClosedE
     Session->NonBlockingClose();
 }
 
-void TKeyedWriteSession::TEventsWorker::RunEventLoop(WrappedWriteSessionPtr wrappedSession, std::uint64_t partition) {
+bool TKeyedWriteSession::TEventsWorker::RunEventLoop(WrappedWriteSessionPtr wrappedSession, std::uint64_t partition) {
     while (true) {
         auto event = wrappedSession->Session->GetEvent(false);
         if (!event) {
@@ -371,7 +371,7 @@ void TKeyedWriteSession::TEventsWorker::RunEventLoop(WrappedWriteSessionPtr wrap
 
         if (auto sessionClosedEvent = std::get_if<TSessionClosedEvent>(&*event); sessionClosedEvent) {
             HandleSessionClosedEvent(std::move(*sessionClosedEvent), partition);
-            break;
+            return true;
         }
 
         if (auto readyToAcceptEvent = std::get_if<TWriteSessionEvent::TReadyToAcceptEvent>(&*event)) {
@@ -385,6 +385,8 @@ void TKeyedWriteSession::TEventsWorker::RunEventLoop(WrappedWriteSessionPtr wrap
             continue;
         }
     }
+
+    return false;
 }
 
 void TKeyedWriteSession::TEventsWorker::DoWork() {
@@ -396,12 +398,18 @@ void TKeyedWriteSession::TEventsWorker::DoWork() {
         lock.unlock();
         // RunEventLoop without Lock: sub-session's WaitEvent() completion may run the Subscribe
         // callback (ReadyFutures.insert) synchronously; that callback takes Lock -> same-thread deadlock.
-        RunEventLoop(Session->SessionsWorker->GetWriteSession(idx), idx);
-        SubscribeToPartition(idx);
+        auto isSessionClosed = RunEventLoop(Session->SessionsWorker->GetWriteSession(idx), idx);
+        if (!isSessionClosed) {
+            SubscribeToPartition(idx);
+        } else {
+            UnsubscribeFromPartition(idx);
+        }
         lock.lock();
     }
 
-    TransferEventsToOutputQueue();
+    if (!Session->Done.load()) {
+        TransferEventsToOutputQueue();
+    }
 }
 
 void TKeyedWriteSession::TEventsWorker::SubscribeToPartition(std::uint64_t partition) {
@@ -434,19 +442,21 @@ void TKeyedWriteSession::TEventsWorker::AddReadyToAcceptEvent() {
     EventsPromise.TrySetValue();
 }
 
-void TKeyedWriteSession::TEventsWorker::AddSessionClosedEvent() {
+bool TKeyedWriteSession::TEventsWorker::AddSessionClosedEvent() {
     if (!Session->Closed.load()) {
-        return;
+        return false;
     }
 
     if (!CloseEvent.has_value()) {
         CloseEvent = TSessionClosedEvent(EStatus::SUCCESS, {});
     }
 
-    if (EventsOutputQueue.empty() && Session->MessagesWorker->IsQueueEmpty()) {
+    if (EventsOutputQueue.empty() && (Session->MessagesWorker->IsQueueEmpty() || Session->Done.load())) {
         EventsOutputQueue.push_back(*CloseEvent);
-        EventsPromise.TrySetValue();
+        return true;
     }
+
+    return false;
 }
 
 void TKeyedWriteSession::TEventsWorker::TransferEventsToOutputQueue() {
@@ -541,43 +551,54 @@ std::list<TWriteSessionEvent::TEvent>::iterator TKeyedWriteSession::TEventsWorke
     return queueIt->second.end();
 }
 
-std::optional<TWriteSessionEvent::TEvent> TKeyedWriteSession::TEventsWorker::GetEvent(bool block) {
+std::optional<TWriteSessionEvent::TEvent> TKeyedWriteSession::TEventsWorker::GetEventImpl(bool block) {
     std::unique_lock lock(Lock);
-    AddSessionClosedEvent();
-
     if (EventsOutputQueue.empty() && block) {
         lock.unlock();
         WaitEvent().Wait();
         lock.lock();
     }
 
-    if (EventsOutputQueue.empty()) {
-        return std::nullopt;
+    if (!EventsOutputQueue.empty()) {
+        auto event = std::move(EventsOutputQueue.front());
+        EventsOutputQueue.pop_front();
+        return event;
     }
 
-    auto event = std::move(EventsOutputQueue.front());
-    EventsOutputQueue.pop_front();
+    return std::nullopt;
+}
+
+std::optional<TWriteSessionEvent::TEvent> TKeyedWriteSession::TEventsWorker::GetEvent(bool block) {
+    {
+        std::unique_lock lock(Lock);
+        AddSessionClosedEvent();
+    }
+    auto event = GetEventImpl(block);
 
     return event;
 }
 
 std::vector<TWriteSessionEvent::TEvent> TKeyedWriteSession::TEventsWorker::GetEvents(bool block, std::optional<size_t> maxEventsCount) {
-    std::unique_lock lock(Lock);
-    AddSessionClosedEvent();
+    if (maxEventsCount.has_value() && maxEventsCount.value() == 0) {
+        return {};
+    }
 
-    while (!Session->Closed.load() && maxEventsCount.has_value() && EventsOutputQueue.size() < maxEventsCount.value() && block) {
-        lock.unlock();
-        WaitEvent().Wait();
-        lock.lock();
+    {
+        std::unique_lock lock(Lock);
+        AddSessionClosedEvent();
     }
 
     std::vector<TWriteSessionEvent::TEvent> events;
-    auto eventsToReturn = maxEventsCount.value_or(EventsOutputQueue.size());
-    events.reserve(eventsToReturn);
-    while (!EventsOutputQueue.empty() && events.size() < eventsToReturn) {      
-        auto event = std::move(EventsOutputQueue.front());
-        events.push_back(std::move(event));
-        EventsOutputQueue.pop_front();
+    while (true) {
+        auto event = GetEventImpl(block);
+        if (!event) {
+            break;
+        }
+
+        events.push_back(std::move(*event));
+        if (maxEventsCount.has_value() && events.size() >= maxEventsCount.value()) {
+            break;
+        }
     }
 
     return events;
@@ -590,21 +611,17 @@ NThreading::TFuture<void> TKeyedWriteSession::TEventsWorker::Wait() {
 NThreading::TFuture<void> TKeyedWriteSession::TEventsWorker::WaitEvent() {
     std::unique_lock lock(Lock);
 
+    AddSessionClosedEvent();
     if (!EventsOutputQueue.empty()) {
         return NThreading::MakeFuture();
     }
 
-    if (EventsFuture.IsReady()) {
+    if (EventsFuture.IsReady() && !Session->Closed.load()) {
         EventsPromise = NThreading::NewPromise();
         EventsFuture = EventsPromise.GetFuture();
     }
 
-    AddSessionClosedEvent();
-
-    std::vector<NThreading::TFuture<void>> futures{EventsFuture, Session->CloseFuture};
-    auto retFuture = NThreading::NWait::WaitAny(futures);
-
-    return retFuture;
+    return EventsFuture;
 }
 
 void TKeyedWriteSession::TEventsWorker::UnsubscribeFromPartition(std::uint64_t partition) {
@@ -722,13 +739,6 @@ void TKeyedWriteSession::TSessionsWorker::DoWork() {
         if (sessionIter != SessionsIndex.end()) {
             DestroyWriteSession(sessionIter, TDuration::Zero());
         }
-    }
-}
-
-void TKeyedWriteSession::TSessionsWorker::Die(TDuration timeout) {
-    auto sessionsToClose = SessionsIndex.size();
-    for (auto it = SessionsIndex.begin(); it != SessionsIndex.end(); ++it) {
-       it->second->Session->Close(timeout / sessionsToClose);
     }
 }
 
@@ -1128,6 +1138,7 @@ bool TKeyedWriteSession::Close(TDuration closeTimeout) {
     ClosePromise.TrySetValue();
     ShutdownFuture.Wait(CloseDeadline);
     RunUserEventLoop();
+    Done.store(true);
 
     // No need to lock here, because we are waiting for the shutdown future and it will block until the main worker is done
     return MessagesWorker->IsQueueEmpty();
@@ -1135,7 +1146,7 @@ bool TKeyedWriteSession::Close(TDuration closeTimeout) {
 
 void TKeyedWriteSession::NonBlockingClose() {
     Closed.store(true);
-    ClosePromise.TrySetValue();
+    Done.store(true);
 }
 
 void TKeyedWriteSession::SetCloseDeadline(const TDuration& closeTimeout) {
@@ -1292,25 +1303,26 @@ void TKeyedWriteSession::GetSessionClosedEventAndDie(WrappedWriteSessionPtr wrap
     } else {
         EventsWorker->HandleSessionClosedEvent(std::move(*receivedSessionClosedEvent), wrappedSession->Partition);
     }
-
-    NonBlockingClose();
 }
 
 void TKeyedWriteSession::RunMainWorker() {
     RunSplittedPartitionWorkers();
     {
         std::unique_lock lock(GlobalLock);
-        EventsWorker->DoWork();    
-        SessionsWorker->DoWork();
-        MessagesWorker->DoWork();
+        EventsWorker->DoWork();   
+        if (!Done.load()) {
+            SessionsWorker->DoWork();
+            MessagesWorker->DoWork();
+        }
     }
     RunUserEventLoop();
 
     auto isClosed = Closed.load();
     auto closeTimeout = GetCloseTimeout();
-    if (isClosed && (MessagesWorker->IsQueueEmpty() || closeTimeout == TDuration::Zero())) {
-        SessionsWorker->Die(TDuration::Zero());
+    if (isClosed && (Done.load() || MessagesWorker->IsQueueEmpty() || closeTimeout == TDuration::Zero())) {
         ShutdownPromise.TrySetValue();
+        EventsWorker->EventsPromise.TrySetValue();
+        ClosePromise.TrySetValue();
         return;
     }
 

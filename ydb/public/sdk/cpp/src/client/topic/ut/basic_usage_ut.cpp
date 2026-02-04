@@ -1031,6 +1031,39 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         UNIT_ASSERT_EXCEPTION(setup.MakeClient().CreateKeyedWriteSession(writeSettings), TContractViolation);
     }
 
+    Y_UNIT_TEST(KeyedWriteSession_SessionClosedDueToUserError) {
+        TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
+        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 2);
+        auto publicClient = setup.MakeClient();
+
+        TKeyedWriteSessionSettings writeSettings;
+        writeSettings
+            .Path(setup.GetTopicPath(TEST_TOPIC))
+            .Codec(ECodec::RAW);
+        writeSettings.ProducerIdPrefix(CreateGuidAsString());
+        writeSettings.PartitionChooserStrategy(TKeyedWriteSessionSettings::EPartitionChooserStrategy::Hash);
+        writeSettings.SubSessionIdleTimeout(TDuration::Seconds(30));
+
+        auto session = publicClient.CreateKeyedWriteSession(writeSettings);
+        TKeyedWriteSessionEventLoop eventLoop(session);
+        auto token = eventLoop.GetContinuationToken(TDuration::Seconds(30));
+
+        TWriteMessage msg("msg0");
+        msg.SeqNo(0);
+        session->Write(std::move(*token), "key", std::move(msg));
+
+        auto readyToAcceptEvent = session->GetEvent(false);
+        UNIT_ASSERT_C(std::holds_alternative<TWriteSessionEvent::TReadyToAcceptEvent>(*readyToAcceptEvent), "ReadyToAcceptEvent is not received");
+
+        UNIT_ASSERT_C(session->WaitEvent().Wait(TDuration::Seconds(1000)), "Timed out waiting for event");
+        auto event = session->GetEvent(false);
+        UNIT_ASSERT_C(event, "Event is not received");
+        auto sessionClosedEvent = std::get_if<TSessionClosedEvent>(&*event);
+        UNIT_ASSERT_C(sessionClosedEvent, "SessionClosedEvent is not received");
+        UNIT_ASSERT_C(sessionClosedEvent->GetStatus() == EStatus::BAD_REQUEST, "Status is not BAD_REQUEST");
+        UNIT_ASSERT(!session->Close(TDuration::Seconds(10)));
+    }
+
     Y_UNIT_TEST(KeyedWriteSession_NoAutoPartitioning_HashPartitionChooser) {
         TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
         setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 2);

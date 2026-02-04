@@ -168,7 +168,6 @@ private:
         void OnReadFromSession(WrappedWriteSessionPtr wrappedSession);
         void OnWriteToSession(WrappedWriteSessionPtr wrappedSession);
         void DoWork();
-        void Die(TDuration timeout = TDuration::Zero());
     
     private:
         void AddIdleSession(WrappedWriteSessionPtr wrappedSession, TInstant emptySince, TDuration idleTimeout);
@@ -275,10 +274,11 @@ private:
     private:
         void HandleSessionClosedEvent(TSessionClosedEvent&& event, std::uint64_t partition);
         void HandleReadyToAcceptEvent(std::uint64_t partition, TWriteSessionEvent::TReadyToAcceptEvent&& event);
-        void RunEventLoop(WrappedWriteSessionPtr wrappedSession, std::uint64_t partition);
+        bool RunEventLoop(WrappedWriteSessionPtr wrappedSession, std::uint64_t partition);
         void TransferEventsToOutputQueue();
         void AddReadyToAcceptEvent();
-        void AddSessionClosedEvent();
+        bool AddSessionClosedEvent();
+        std::optional<TWriteSessionEvent::TEvent> GetEventImpl(bool block);
 
         TKeyedWriteSession* Session;
 
@@ -389,6 +389,7 @@ private:
 
     std::mutex GlobalLock;
     std::atomic_bool Closed = false;
+    std::atomic_bool Done = false;
     TInstant CloseDeadline = TInstant::Now();  
 
     std::unique_ptr<IPartitionChooser> PartitionChooser;

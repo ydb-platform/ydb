@@ -288,8 +288,6 @@ public:
                 }
             }
 
-            optCtx.RemapNode(inputStage.Ref(), dqStageWithSink.Ptr());
-
             if (!wrapWithNth) {
                 return dqStageWithSink.Ptr();
             }

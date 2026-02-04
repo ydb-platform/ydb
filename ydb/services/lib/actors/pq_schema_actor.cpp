@@ -231,16 +231,16 @@ namespace NKikimr::NGRpcProxy::V1 {
                 type->mutable_default_processing_timeout()->CopyFrom(alterType.set_default_processing_timeout());
             }
 
-            if (alterType.has_contentbaseddeduplication()) {
-                type->set_contentbaseddeduplication(alterType.contentbaseddeduplication());
+            if (alterType.has_set_content_based_deduplication()) {
+                type->set_content_based_deduplication(alterType.set_content_based_deduplication());
             }
 
-            if (alterType.has_defaultdelaymessagetimems()) {
-                type->set_defaultdelaymessagetimems(alterType.defaultdelaymessagetimems());
+            if (alterType.has_set_default_delay_message_time()) {
+                type->mutable_default_delay_message_time()->CopyFrom(alterType.set_default_delay_message_time());
             }
 
-            if (alterType.has_defaultreceivemessagewaittimems()) {
-                type->set_defaultreceivemessagewaittimems(alterType.defaultreceivemessagewaittimems());
+            if (alterType.has_set_default_receive_message_wait_time()) {
+                type->mutable_default_receive_message_wait_time()->CopyFrom(alterType.set_default_receive_message_wait_time());
             }
 
             if (alterType.has_alter_dead_letter_policy()) {
@@ -314,9 +314,9 @@ namespace NKikimr::NGRpcProxy::V1 {
                 consumer->SetDeadLetterPolicyEnabled(rr.shared_consumer_type().dead_letter_policy().enabled());
                 consumer->SetMaxProcessingAttempts(rr.shared_consumer_type().dead_letter_policy().condition().max_processing_attempts());
 
-                consumer->SetContentBasedDeduplication(rr.shared_consumer_type().contentbaseddeduplication());
-                consumer->SetDefaultDelayMessageTimeMs(rr.shared_consumer_type().defaultdelaymessagetimems());
-                consumer->SetDefaultReceiveMessageWaitTimeMs(rr.shared_consumer_type().defaultreceivemessagewaittimems());
+                consumer->SetContentBasedDeduplication(rr.shared_consumer_type().content_based_deduplication());
+                consumer->SetDefaultDelayMessageTimeMs(rr.shared_consumer_type().default_delay_message_time().seconds() * 1'000 + rr.shared_consumer_type().default_delay_message_time().nanos() / 1'000'000);
+                consumer->SetDefaultReceiveMessageWaitTimeMs(rr.shared_consumer_type().default_receive_message_wait_time().seconds() * 1'000 + rr.shared_consumer_type().default_receive_message_wait_time().nanos() / 1'000'000);
 
                 if (rr.shared_consumer_type().dead_letter_policy().has_move_action()) {
                     consumer->SetDeadLetterPolicy(::NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE);

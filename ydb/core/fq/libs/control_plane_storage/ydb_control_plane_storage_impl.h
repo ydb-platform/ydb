@@ -263,7 +263,7 @@ protected:
         TTxSettings transactionMode = TTxSettings::SerializableRW(),
         bool retryOnTli = true);
 
-    TAsyncStatus Validate(
+    static TAsyncStatus Validate(
         NActors::TActorSystem* actorSystem,
         std::shared_ptr<std::optional<TTransaction>> transaction,
         size_t item, const TVector<TValidationQuery>& validators,
@@ -281,7 +281,8 @@ protected:
         TTxSettings transactionMode = TTxSettings::SerializableRW(),
         bool retryTli = true);
 
-    TAsyncStatus ReadModifyWrite(
+    static TAsyncStatus ReadModifyWrite(
+        TDbPool::TPtr dbPool,
         const TString& readQuery,
         const NYdb::TParams& readParams,
         const std::function<std::pair<TString, NYdb::TParams>(const std::vector<NYdb::TResultSet>&)>& prepare,
@@ -290,6 +291,18 @@ protected:
         const TVector<TValidationQuery>& validators = {},
         TTxSettings transactionMode = TTxSettings::SerializableRW(),
         bool retryOnTli = true);
+
+    TAsyncStatus ReadModifyWrite(
+        const TString& readQuery,
+        const NYdb::TParams& readParams,
+        const std::function<std::pair<TString, NYdb::TParams>(const std::vector<NYdb::TResultSet>&)>& prepare,
+        const TRequestCounters& requestCounters,
+        TDebugInfoPtr debugInfo = {},
+        const TVector<TValidationQuery>& validators = {},
+        TTxSettings transactionMode = TTxSettings::SerializableRW(),
+        bool retryOnTli = true) {
+        return ReadModifyWrite(DbPool, readQuery, readParams, prepare, requestCounters, debugInfo, validators, transactionMode, retryOnTli);
+    }
 
 protected:
     TDbPool::TPtr DbPool;
@@ -316,6 +329,7 @@ protected:
     * Utility
     */
     bool IsSuperUser(const TString& user) const;
+    static bool IsSuperUser(const std::shared_ptr<::NFq::TControlPlaneStorageConfig>& config, const TString& user);
 
     template<typename T>
     NYql::TIssues ValidateConnection(T& ev, bool passwordRequired = true) const
@@ -612,23 +626,26 @@ protected:
     std::pair<FederatedQuery::Query, FederatedQuery::Job> GetCreateQueryProtos(
         const FederatedQuery::CreateQueryRequest& request, const TString& user, TInstant startTime) const;
 
-    FederatedQuery::Internal::QueryInternal GetQueryInternalProto(
+    static FederatedQuery::Internal::QueryInternal GetQueryInternalProto(
+        const std::shared_ptr<::NFq::TControlPlaneStorageConfig>& config,
         const FederatedQuery::CreateQueryRequest& request, const TString& cloudId, const TString& token,
-        const TMaybe<TQuotaMap>& quotas) const;
+        const TMaybe<TQuotaMap>& quotas);
 
-    void FillConnectionsAndBindings(
+    static void FillConnectionsAndBindings(
+        const std::shared_ptr<::NFq::TControlPlaneStorageConfig>& config,
         FederatedQuery::Internal::QueryInternal& queryInternal, FederatedQuery::QueryContent::QueryType queryType,
         const TVector<FederatedQuery::Connection>& allConnections,
         const THashMap<TString, FederatedQuery::Connection>& visibleConnections,
-        const THashMap<TString, FederatedQuery::Binding>& visibleBindings) const;
+        const THashMap<TString, FederatedQuery::Binding>& visibleBindings);
 
     // Describe query request
 
     NYql::TIssues ValidateRequest(TEvControlPlaneStorage::TEvDescribeQueryRequest::TPtr& ev) const;
 
-    void FillDescribeQueryResult(
+    static void FillDescribeQueryResult(
+        const std::shared_ptr<::NFq::TControlPlaneStorageConfig>& config,
         FederatedQuery::DescribeQueryResult& result, FederatedQuery::Internal::QueryInternal internal,
-        const TString& user, TPermissions permissions) const;
+        const TString& user, TPermissions permissions);
 
     // Get result data request
 
@@ -674,7 +691,7 @@ protected:
 
     NYql::TIssues ValidateRequest(TEvControlPlaneStorage::TEvGetTaskRequest::TPtr& ev) const;
 
-    void FillGetTaskResult(Fq::Private::GetTaskResult& result, const TVector<TTask>& tasks) const;
+    static void FillGetTaskResult(Fq::Private::GetTaskResult& result, const TVector<TTask>& tasks);
 
     // Ping task request
 
@@ -691,14 +708,14 @@ protected:
 
     NYql::TIssues ValidateRequest(TEvControlPlaneStorage::TEvPingTaskRequest::TPtr& ev) const;
 
-    void UpdateTaskInfo(
-        NActors::TActorSystem* actorSystem, Fq::Private::PingTaskRequest& request, const std::shared_ptr<TFinalStatus>& finalStatus, FederatedQuery::Query& query,
+    static void UpdateTaskInfo(
+        NActors::TActorSystem* actorSystem, const std::shared_ptr<::NFq::TControlPlaneStorageConfig>& config, Fq::Private::PingTaskRequest& request, const std::shared_ptr<TFinalStatus>& finalStatus, FederatedQuery::Query& query,
         FederatedQuery::Internal::QueryInternal& internal, FederatedQuery::Job& job, TString& owner,
-        TRetryLimiter& retryLimiter, TDuration& backoff, TInstant& expireAt) const;
+        TRetryLimiter& retryLimiter, TDuration& backoff, TInstant& expireAt);
 
-    void FillQueryStatistics(
+    static void FillQueryStatistics(
         const std::shared_ptr<TFinalStatus>& finalStatus, const FederatedQuery::Query& query,
-        const FederatedQuery::Internal::QueryInternal& internal, const TRetryLimiter& retryLimiter) const;
+        const FederatedQuery::Internal::QueryInternal& internal, const TRetryLimiter& retryLimiter);
 
     void Handle(TEvControlPlaneStorage::TEvFinalStatusReport::TPtr& ev);
 
@@ -819,10 +836,13 @@ class TYdbControlPlaneStorageActor : public NActors::TActorBootstrapped<TYdbCont
 
     NKikimr::TYdbCredentialsProviderFactory CredProviderFactory;
     // Query Quota
-    TQueryQuotasMap QueryQuotas;
-    THashMap<TString, TEvQuotaService::TQuotaUsageRequest::TPtr> QueryQuotaRequests;
-    TInstant QuotasUpdatedAt = TInstant::Zero();
-    bool QuotasUpdating = false;
+    struct TQueryQuotaState {
+        TQueryQuotasMap Query;
+        THashMap<TString, TEvQuotaService::TQuotaUsageRequest::TPtr> Requests;
+        TInstant UpdatedAt = TInstant::Zero();
+        bool Updating = false;
+    };
+    std::shared_ptr<TQueryQuotaState> Quotas = std::make_shared<TQueryQuotaState>();
 
     TString TablePathPrefix;
 
@@ -975,7 +995,7 @@ private:
         const std::function<Result()>& prepare,
         TDebugInfoPtr debugInfo)
     {
-        return status.Apply([=, requestCounters=requestCounters](const auto& future) mutable {
+        return status.Apply([prepare, actorSystem, name, debugInfo, startTime, self, sender=ev->Sender, cookie=ev->Cookie, requestCounters=requestCounters](const auto& future) mutable {
             NYql::TIssues internalIssues;
             NYql::TIssues issues;
             Result result;
@@ -1010,7 +1030,7 @@ private:
                 std::unique_ptr<ResponseEvent> event(new ResponseEvent(issues));
                 event->DebugInfo = debugInfo;
                 responseByteSize = event->GetByteSize();
-                actorSystem->Send(new IEventHandle(ev->Sender, self, event.release(), 0, ev->Cookie));
+                actorSystem->Send(new IEventHandle(sender, self, event.release(), 0, cookie));
                 requestCounters.IncError();
                 for (const auto& issue : issues) {
                     NYql::WalkThroughIssues(issue, true, [&requestCounters](const NYql::TIssue& err, ui16 level) {
@@ -1023,7 +1043,7 @@ private:
                 std::unique_ptr<ResponseEvent> event(new ResponseEvent(std::make_from_tuple<ResponseEvent>(result)));
                 event->DebugInfo = debugInfo;
                 responseByteSize = event->GetByteSize();
-                actorSystem->Send(new IEventHandle(ev->Sender, self, event.release(), 0, ev->Cookie));
+                actorSystem->Send(new IEventHandle(sender, self, event.release(), 0, cookie));
                 requestCounters.IncOk();
             }
             requestCounters.DecInFly();
@@ -1042,7 +1062,8 @@ private:
         bool RetryOnTli = false;
     };
 
-    NThreading::TFuture<void> PickTask(
+    static NThreading::TFuture<void> PickTask(
+        TDbPool::TPtr dbPool,
         const TPickTaskParams& taskParams,
         const TRequestCounters& requestCounters,
         TDebugInfoPtr debugInfo,

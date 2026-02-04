@@ -74,10 +74,8 @@ public:
         , RuntimeParameterSizeLimit(runtimeParameterSizeLimit)
     {
         RequestEv.reset(ev->Release().Release());
-        bool enableImplicitQueryParameterTypes = tableServiceConfig.GetEnableImplicitQueryParameterTypes() ||
-            AppData()->FeatureFlags.GetEnableImplicitQueryParameterTypes();
 
-        if (enableImplicitQueryParameterTypes && !RequestEv->GetYdbParameters().empty()) {
+        if (!RequestEv->GetYdbParameters().empty()) {
             QueryParameterTypes = std::make_shared<std::map<TString, Ydb::Type>>();
 
             for (const auto& [name, typedValue] : RequestEv->GetYdbParameters()) {

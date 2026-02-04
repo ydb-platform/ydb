@@ -318,7 +318,7 @@ message TTableServiceConfig {
 
     optional bool EnableConstantFolding = 65 [ default = true, (InvalidateCompileCache) = true];
 
-    optional bool EnableImplicitQueryParameterTypes = 66 [ default = true , (InvalidateCompileCache) = true];
+    reserved 66; // EnableImplicitQueryParameterTypes
 
     optional string EnableSpillingNodes = 67 [ default = "All", (InvalidateCompileCache) = true ];
 

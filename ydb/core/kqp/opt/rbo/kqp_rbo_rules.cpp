@@ -1,4 +1,5 @@
 #include "kqp_rbo_rules.h"
+#include "kqp_operator.h"
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/utils/log/log.h>
@@ -71,6 +72,7 @@ TExprNode::TPtr FindMemberArg(TExprNode::TPtr input) {
     return TExprNode::TPtr();
 }
 
+/*
 TExprNode::TPtr BuildFilterLambdaFromConjuncts(TPositionHandle pos, TVector<TFilterInfo> filters, TVector<TJoinConditionInfo> conjuncts, TExprContext &ctx, bool pgSyntax) {
     auto arg = Build<TCoArgument>(ctx, pos).Name("lambda_arg").Done();
     TExprNode::TPtr lambda;
@@ -126,6 +128,7 @@ TExprNode::TPtr BuildFilterLambdaFromConjuncts(TPositionHandle pos, TVector<TFil
         // clang-format on
     }
 }
+*/
 
 const THashSet<TString> CmpOperators{"=", "<", ">", "<=", ">="};
 
@@ -216,24 +219,11 @@ void ExtractConjuncts(TExprNode::TPtr node, TVector<TExprNode::TPtr> & conjuncts
 }
 
 std::shared_ptr<TOpFilter> FuseFilters(const std::shared_ptr<TOpFilter>& top, const std::shared_ptr<TOpFilter>& bottom, TExprContext &ctx) {
-    auto topLambda = TCoLambda(top->FilterLambda);
-    auto bottomLambda = TCoLambda(bottom->FilterLambda);
-    auto arg = Build<TCoArgument>(ctx, top->Pos).Name("lambda_arg").Done();
+    TVector<TExpression> conjuncts = top->FilterExpr.SplitConjunct();
+    TVector<TExpression> bottomConjuncts = bottom->FilterExpr.SplitConjunct();
+    conjuncts.insert(conjunts.begin(), bottomConjuncts.begin(), bottomConjuncts.end());
 
-    TVector<TExprNode::TPtr> newConjuncts;
-    ExtractConjuncts(ReplaceArg(topLambda.Body().Ptr(), arg.Ptr(), ctx), newConjuncts);
-    ExtractConjuncts(ReplaceArg(bottomLambda.Body().Ptr(), arg.Ptr(), ctx), newConjuncts);
-
-    // clang-format off
-    auto newLambda = Build<TCoLambda>(ctx, top->Pos)
-        .Args(arg)
-        .Body<TCoAnd>()
-            .Add(newConjuncts)
-        .Build()
-    .Done().Ptr();
-    // clang-format on
-
-    return make_shared<TOpFilter>(bottom->GetInput(), top->Pos, newLambda);
+    return make_shared<TOpFilter>(bottom->GetInput(), top->Pos, MakeConjunct(conjuncts));
 }
 
 } // namespace
@@ -300,24 +290,35 @@ bool TPullUpCorrelatedFilterRule::MatchAndApply(std::shared_ptr<IOperator> &inpu
 
     auto deps = CastOperator<TOpAddDependencies>(filter->GetInput());
 
-    auto conjInfo = filter->GetConjunctInfo(props);
-    if (conjInfo.JoinConditions.empty()) {
+    auto conjuncts = filter->FilterExpr.SplitConjunct();
+    TVector<TExpression> joinConditions;
+    TVector<TExpression> otherFilters;
+    for (auto const & conj : conjuncts) {
+        if (conj.MaybeJoinCondition()) {
+            joinConditions.push_back(conj);
+        } else {
+            otherFilters.push_back(conj);
+        }
+    }
+    
+    if (joinConditions.empty()) {
         return false;
     }
 
     // Select a subset of join conditions that cover all dependencies
-    TVector<TJoinConditionInfo> dependentSubset;
-    TVector<TJoinConditionInfo> remainderSubset;
+    TVector<TExpression> dependentSubset;
+    TVector<TExpression> remainderSubset;
     THashSet<TInfoUnit, TInfoUnit::THashFunction> correlated;
 
-    for (const auto & jc : conjInfo.JoinConditions) {
-        if (std::find(deps->Dependencies.begin(), deps->Dependencies.end(), jc.LeftIU) != deps->Dependencies.end()) {
+    for (const auto & jc : joinConditions) {
+        TJoinCondition cond = TJoinCondition(jc);
+        if (std::find(deps->Dependencies.begin(), deps->Dependencies.end(), cond.LeftIU) != deps->Dependencies.end()) {
             dependentSubset.push_back(jc);
-            correlated.insert(jc.RightIU);
+            correlated.insert(cond.RightIU);
         }
-        else if (std::find(deps->Dependencies.begin(), deps->Dependencies.end(), jc.RightIU) != deps->Dependencies.end()) {
+        else if (std::find(deps->Dependencies.begin(), deps->Dependencies.end(), cond.RightIU) != deps->Dependencies.end()) {
             dependentSubset.push_back(jc);
-            correlated.insert(jc.LeftIU);
+            correlated.insert(cond.LeftIU);
         } else {
             remainderSubset.push_back(jc);
         }
@@ -331,13 +332,14 @@ bool TPullUpCorrelatedFilterRule::MatchAndApply(std::shared_ptr<IOperator> &inpu
 
     // Split the predicate into a remaining and new part with only dependent conditions
     std::shared_ptr<IOperator> remainingFilter = deps->GetInput();
-    if (!conjInfo.Filters.empty() || !remainderSubset.empty()) {
-
-        auto lambda = BuildFilterLambdaFromConjuncts(deps->Pos, conjInfo.Filters, remainderSubset, ctx.ExprCtx, props.PgSyntax);
-        remainingFilter = std::make_shared<TOpFilter>(deps->GetInput(), remainingFilter->Pos, lambda);
+    if (!otherFilters.empty() || !remainderSubset.empty()) {
+        auto newConjuncts = otherFilters;
+        newConjuncts.insert(newConjuncts.end(), remainderSubset.begin(), remaindedSubset.end());
+        auto expr = MakeConjunct(newConjuncts);
+        remainingFilter = std::make_shared<TOpFilter>(deps->GetInput(), remainingFilter->Pos, expr);
     }
 
-    auto newFilterLambda = BuildFilterLambdaFromConjuncts(filter->Pos, {}, dependentSubset, ctx.ExprCtx, props.PgSyntax);
+    auto newExpr = MakeConjunct(dependentSubset);
 
     if (input->Kind == EOperator::Map) {
         auto map = CastOperator<TOpMap>(input);
@@ -370,7 +372,7 @@ bool TPullUpCorrelatedFilterRule::MatchAndApply(std::shared_ptr<IOperator> &inpu
             }
         }
 
-        filter->FilterLambda = newFilterLambda;
+        filter->FilterExpr = newExpr;
         map->SetInput(remainingFilter);
         deps->SetInput(map);
         input = filter;
@@ -387,7 +389,7 @@ bool TPullUpCorrelatedFilterRule::MatchAndApply(std::shared_ptr<IOperator> &inpu
             }
         }
 
-        filter->FilterLambda = newFilterLambda;
+        filter->FilterExpr = newExpr;
         aggregate->SetInput(remainingFilter);
         deps->SetInput(aggregate);
         input = filter;
@@ -407,41 +409,22 @@ bool TExtractJoinExpressionsRule::MatchAndApply(std::shared_ptr<IOperator> &inpu
     }
 
     auto filter = CastOperator<TOpFilter>(input);
-    auto conjInfo = filter->GetConjunctInfo(props);
+    auto conjuncts = filter->FilterExpr.SplitConjunct();
 
-    TVector<std::pair<int, TExprNode::TPtr>> matchedConjuncts;
+    TVector<std::pair<int, TExpression>> matchedConjuncts;
 
     YQL_CLOG(TRACE, CoreDq) << "Testing expr extraction";
 
-    for (size_t idx = 0; idx < conjInfo.Filters.size(); idx++) {
-        auto f = conjInfo.Filters[idx];
-        YQL_CLOG(TRACE, CoreDq) << "IUs in filter " << f.FilterIUs.size();
+    for (size_t idx = 0; idx < conjunts.size(); idx++) {
+        auto c = conjuncts[idx];
+        if (c.MaybeJoinConidition(false)) {
+            continue;
+        }
 
-        if (f.FilterIUs.size() == 2) {
-            auto predicate = f.FilterBody;
+        YQL_CLOG(TRACE, CoreDq) << "IUs in filter " << c.GetInputIUs().size();
 
-            if (predicate->IsCallable("FromPg")) {
-                predicate = predicate->Child(0);
-            }
-
-            TExprNode::TPtr leftSide;
-            TExprNode::TPtr rightSide;
-
-            if (TestAndExtractEqualityPredicate(predicate, leftSide, rightSide)) {
-
-                if (leftSide->IsCallable("Member") && rightSide->IsCallable("Member")) {
-                    continue;
-                }
-
-                TVector<TInfoUnit> leftIUs;
-                TVector<TInfoUnit> rightIUs;
-                GetAllMembers(leftSide, leftIUs, props, false, true);
-                GetAllMembers(rightSide, rightIUs, props, false, true);
-
-                if (leftIUs.size() == 1 && rightIUs.size() == 1) {
-                    matchedConjuncts.push_back(std::make_pair(idx, f.FilterBody));
-                }
-            }
+        if (c.MaybeJoinCondition(true)) {
+            matchedConjuncts.push_back(std::make_pair(idx, c));
         }
     }
 
@@ -450,6 +433,13 @@ bool TExtractJoinExpressionsRule::MatchAndApply(std::shared_ptr<IOperator> &inpu
         TNodeOnNodeOwnedMap replaceMap;
 
         for (auto [idx, conj] : matchedConjuncts) {
+            TNodeOnNodeOwnedMap localMap;
+            conj = ExtractExpressionsFromJoinCondition(conj, localMap, props);
+            for (auto const & [key, value] : localMap) {
+                replaceMap.insert({key, value});
+            }
+
+            /*
             if (conj->IsCallable("FromPg")) {
                 conj = conj->Child(0);
             }
@@ -504,12 +494,12 @@ bool TExtractJoinExpressionsRule::MatchAndApply(std::shared_ptr<IOperator> &inpu
 
                 replaceMap[rightSide] = newRightSide;
             }
+            */
         }
 
         TOptimizeExprSettings settings(&ctx.TypeCtx);
         TExprNode::TPtr newFilterLambda;
-        RemapExpr(filter->FilterLambda, newFilterLambda, replaceMap, ctx.ExprCtx, settings);
-        filter->FilterLambda = newFilterLambda;
+        filter->FilterExpr.ApplyReplaceMap(replaceMap, ctx);
 
         auto newMap = std::make_shared<TOpMap>(filter->GetInput(), input->Pos, mapElements, false);
         filter->SetInput(newMap);

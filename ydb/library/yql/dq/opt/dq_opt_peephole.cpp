@@ -1020,7 +1020,7 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
 
     // Ensure inputs are in blocks (BlockHashJoinCore requires blocks)
     if (!leftIsBlocks) {
-        leftInput = ctx.Builder(pos)
+        leftInputStream = ctx.Builder(pos)
             .Callable("WideToBlocks")
                 .Add(0, std::move(leftInputStream))
             .Seal()
@@ -1028,7 +1028,7 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
     }
 
     if (!rightIsBlocks) {
-        rightInput = ctx.Builder(pos)
+        rightInputStream = ctx.Builder(pos)
             .Callable("WideToBlocks")
                 .Add(0, std::move(rightInputStream))
             .Seal()

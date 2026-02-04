@@ -16613,5 +16613,19 @@
             "size": 147,
             "uri": "https://{canondata_backend}/1924537/c7a75d88255019fa5cdd3450d7e30c52905fc710/resource.tar.gz#test_sql_negative.test_window-win_func_with_group_by-_/err_file.out"
         }
+    ],
+    "test_sql_negative.test[window-win_order_by_unknown_from_join_select_1-]": [
+        {
+            "checksum": "03d0791c893da162cabd7c1fc6c42777",
+            "size": 95,
+            "uri": "https://{canondata_backend}/1937367/d8348348004a597f033192e19ff0e76adf3d0f91/resource.tar.gz#test_sql_negative.test_window-win_order_by_unknown_from_join_select_1-_/err_file.out"
+        }
+    ],
+    "test_sql_negative.test[window-win_order_by_unknown_from_join_select_2-]": [
+        {
+            "checksum": "4d1df76dcf350b30101504926b87a825",
+            "size": 117,
+            "uri": "https://{canondata_backend}/1937367/d8348348004a597f033192e19ff0e76adf3d0f91/resource.tar.gz#test_sql_negative.test_window-win_order_by_unknown_from_join_select_2-_/err_file.out"
+        }
     ]
 }

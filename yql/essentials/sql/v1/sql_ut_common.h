@@ -10412,6 +10412,23 @@ Y_UNIT_TEST(MetricsLevelValueValidation) {
     UNIT_ASSERT_C(!res.IsOk(), "Should reject invalid metrics level");
     UNIT_ASSERT_C(res.Issues.ToString().Contains("Invalid metrics_level value"), res.Issues.ToString());
 }
+
+Y_UNIT_TEST(MetricsLevelNumericValue) {
+    NYql::TAstParseResult res = SqlToYql(R"sql(
+        USE plato;
+        $b = ($x) -> { return "A" || $x; };
+
+        CREATE TRANSFER `TransferName`
+        FROM `TopicName` TO `TableName`
+        USING ($x) -> { return $b($x); }
+        WITH (
+            CONNECTION_STRING = "grpc://localhost:2135/?database=/Root",
+            METRICS_LEVEL = "1"
+         );
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToString());
+}
+
 Y_UNIT_TEST(MetricsLevelEmptyValue) {
     NYql::TAstParseResult res = SqlToYql(R"sql(
         USE plato;
@@ -10423,16 +10440,17 @@ Y_UNIT_TEST(MetricsLevelEmptyValue) {
     UNIT_ASSERT(!res.IsOk());
     UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "metrics_level value must be a string literal");
 }
-Y_UNIT_TEST(MetricsLevelNonStringValue) {
+
+Y_UNIT_TEST(MetricsLevelBadNumericValue) {
     NYql::TAstParseResult res = SqlToYql(R"sql(
         USE plato;
         CREATE TRANSFER `TransferName`
         FROM `TopicName` TO `TableName`
         USING ($x) -> { return $x; }
-        WITH (METRICS_LEVEL = 123);
+        WITH (METRICS_LEVEL = 11);
     )sql");
     UNIT_ASSERT(!res.IsOk());
-    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "Invalid metrics_level value");
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "Invalid numeric value for metrics_value");
 }
 } // Y_UNIT_TEST_SUITE(Transfer)
 

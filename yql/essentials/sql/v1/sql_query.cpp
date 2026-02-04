@@ -208,6 +208,7 @@ static bool TransferSettingsEntry(std::map<TString, TNodePtr>& out,
     };
 
     static const TSet<TString> MetricsLevelValues = {
+        "default",
         "database",
         "object",
         "detailed",
@@ -236,15 +237,24 @@ static bool TransferSettingsEntry(std::map<TString, TNodePtr>& out,
             return false;
         }
 
-        auto valueStr = to_lower(literalValue);
-        if (!MetricsLevelValues.contains(valueStr)) {
-            TStringBuilder validOptions;
-            for (const auto& val : MetricsLevelValues) {
-                validOptions << val << ", ";
-            }
-            ctx.Error() << "Invalid metrics_level value: " << valueStr
-                        << ". Allowed values: " << validOptions;
+        if (!literalValue.empty() && literalValue[0] == '-') {
+            ctx.Error() << "Invalid numeric value for metrics_value: negative numbers are not allowed";
             return false;
+        }
+
+        if (ui64 numericVal; TryFromString<ui64>(literalValue, numericVal)) {
+            if (numericVal >= MetricsLevelValues.size()) {
+                ctx.Error() << "Invalid numeric value for metrics_value " << numericVal << ", valid values: from 0 to "
+                            << (MetricsLevelValues.size() - 1);
+                return false;
+            }
+        } else {
+            auto valueStr = to_lower(literalValue);
+            if (!MetricsLevelValues.contains(valueStr)) {
+                ctx.Error() << "Invalid metrics_level value: " << valueStr
+                            << ". Allowed values: " << JoinSeq(", ", MetricsLevelValues);
+                return false;
+            }
         }
     }
     if (!out.emplace(keyName, value).second) {

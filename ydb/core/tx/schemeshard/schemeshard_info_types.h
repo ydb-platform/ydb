@@ -3379,6 +3379,12 @@ public:
         });
     }
 
+    bool GetEncryptedBackup() const {
+        return Visit([](const auto& settings) {
+            return settings.has_encryption_settings();
+        });
+    }
+
     bool CompileExcludeRegexps(TString& errorDescription);
 
     bool IsExcludedFromImport(const TString& path) const;

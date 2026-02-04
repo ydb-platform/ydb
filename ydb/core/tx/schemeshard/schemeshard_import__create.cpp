@@ -289,6 +289,10 @@ struct TSchemeShard::TImport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
                     return Reply(std::move(response), Ydb::StatusIds::UNSUPPORTED, "The feature flag \"EnableFsBackups\" is disabled. The operation cannot be performed.");
                 }
 
+                if (AppData()->FeatureFlags.GetEnableEncryptedExport()) {
+                    initialState = TImportInfo::EState::DownloadExportMetadata;
+                }
+
                 const auto& settings = request.GetRequest().GetImportFromFsSettings();
 
                 importInfo = new TImportInfo(id, uid, TImportInfo::EKind::FS, settings, domainPath.Base()->PathId, request.GetPeerName());
@@ -955,7 +959,7 @@ private:
 
         SendNotificationsIfFinished(importInfo);
     }
-    
+
     TMaybe<TString> GetIssues(const TImportInfo::TItem& item, TTxId restoreTxId) {
         if (item.Table->store_type() == Ydb::Table::STORE_TYPE_COLUMN) {
             Y_ABORT_UNLESS(Self->ColumnTables.contains(item.DstPathId));
@@ -1259,12 +1263,8 @@ private:
         }
 
         if (!importInfo->SchemaMapping->Items.empty()) {
-            // TODO(st-shchetinin): Only S3 imports support schema mapping with encryption (add for FS)
-            if (importInfo->Kind == TImportInfo::EKind::S3) {
-                auto settings = importInfo->GetS3Settings();
-                if (settings.has_encryption_settings() != importInfo->SchemaMapping->Items[0].IV.Defined()) {
-                    return CancelAndPersist(db, importInfo, -1, {}, "incorrect schema mapping");
-                }
+            if (importInfo->GetEncryptedBackup() != importInfo->SchemaMapping->Items[0].IV.Defined()) {
+                return CancelAndPersist(db, importInfo, -1, {}, "incorrect schema mapping");
             }
         }
 

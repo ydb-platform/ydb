@@ -35,8 +35,8 @@ NYql::TIssue GetLocksInvalidatedIssue(const TKqpTransactionContext& txCtx, const
         return YqlIssue(TPosition(), TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message);
     } else {
         // Olap tables don't return SchemeShard in locks, thus we use tableId here.
-        for (const auto& [pathId, table] : txCtx.TableByIdMap) {
-            if (pathId.TableId() == pathId.TableId()) {
+        for (const auto& [candidatePathId, table] : txCtx.TableByIdMap) {
+            if (candidatePathId.TableId() == pathId.TableId()) {
                 message << " Table: `" << table << "`.";
                 AppendQueryTraceIdInfo(message, victimQueryTraceId);
                 return YqlIssue(TPosition(), TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message);

@@ -66,7 +66,6 @@ ydb/core/tx/schemeshard/ut_index_build_reboots IndexBuildTestReboots.UniqueIndex
 ydb/core/tx/schemeshard/ut_index_build_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_login_large TSchemeShardLoginLargeTest.RemoveLogin_Many
 ydb/core/tx/schemeshard/ut_move_reboots TSchemeShardMoveRebootsTest.ColumnTable
-ydb/core/tx/schemeshard/ut_olap_reboots TOlapReboots.CreateTable
 ydb/core/tx/schemeshard/ut_olap_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_replication_reboots TReplicationWithRebootsTests.CreateInParallelWithInitialController
 ydb/core/tx/schemeshard/ut_replication_reboots unittest.[*/*] chunk

@@ -6,6 +6,8 @@
 #include <util/string/cast.h>
 #include <util/generic/vector.h>
 
+#include <format>
+
 namespace NYdbWorkload {
 
 TFulltextWorkloadGenerator::TFulltextWorkloadGenerator(const TFulltextWorkloadParams* params)
@@ -16,14 +18,22 @@ void TFulltextWorkloadGenerator::Init() {
 }
 
 std::string TFulltextWorkloadGenerator::GetDDLQueries() const {
-    return TStringBuilder() << "CREATE TABLE `" << Params.DbPath << "/" << Params.TableName << "` ("
-        << "id Uint64, "
-        << "text String, "
-        << "PRIMARY KEY (id)"
-        << ") WITH ("
-        << "AUTO_PARTITIONING_BY_LOAD = " << (Params.AutoPartitioningByLoad ? "ENABLED" : "DISABLED") << ", "
-        << "AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = " << Params.MinPartitions
-        << ");";
+    return std::format(
+        R"sql(
+            CREATE TABLE `{}/{}` (
+                `id` Uint64,
+                `text` String,
+                PRIMARY KEY (`id`)
+            ) WITH (
+                AUTO_PARTITIONING_BY_LOAD = {},
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = {}
+            );
+        )sql",
+        Params.DbPath.c_str(),
+        Params.TableName.c_str(),
+        Params.AutoPartitioningByLoad ? "ENABLED" : "DISABLED",
+        Params.MinPartitions
+    );
 }
 
 TQueryInfoList TFulltextWorkloadGenerator::GetInitialData() {

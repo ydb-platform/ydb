@@ -847,7 +847,7 @@ message SharedConsumerType {
     // The dead letter policy for this consumer.
     optional DeadLetterPolicy dead_letter_policy = 12;
     // Delay time for message (after sending)
-    optional google.protobuf.Duration default_delay_message_time = 13;
+    optional google.protobuf.Duration default_message_delay = 13;
     // Time to wait for message if queue empty and if this parameter is not set in receive request
     optional google.protobuf.Duration default_receive_message_wait_time = 14;
     // Is content based deduplication enabled for consumer
@@ -862,7 +862,7 @@ message AlterSharedConsumerType {
     // Change dead letter policy.
     AlterDeadLetterPolicy alter_dead_letter_policy = 11;
     // Delay time for message (after sending)
-    optional google.protobuf.Duration set_default_delay_message_time = 12;
+    optional google.protobuf.Duration set_default_message_delay = 12;
     // Time to wait for message if queue empty and if this parameter is not set in receive request
     optional google.protobuf.Duration set_default_receive_message_wait_time = 13;
     // Is content based deduplication enabled for consumer

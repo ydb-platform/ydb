@@ -116,7 +116,7 @@ void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&
 
     if (entry.Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
         SA_LOG_W("Navigate request failed with " << entry.Status
-            << ", operationId: " << OperationId
+            << ", operationId: " << OperationId.Quote()
             << ", PathId: " << PathId
             << ", DatabaseName: " << DatabaseName);
 

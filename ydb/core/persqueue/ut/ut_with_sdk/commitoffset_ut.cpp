@@ -1,3 +1,4 @@
+#include <include/ydb-cpp-sdk/client/query/client.h>
 #include <ydb/core/persqueue/ut/common/autoscaling_ut_common.h>
 
 #include <ydb/public/sdk/cpp/src/client/topic/ut/ut_utils/topic_sdk_test_setup.h>
@@ -18,6 +19,11 @@ using namespace NSchemeShardUT_Private;
 using namespace NKikimr::NPQ::NTest;
 
 Y_UNIT_TEST_SUITE(CommitOffset) {
+
+    void ExecuteQuery(NYdb::NQuery::TSession& session, const TString& query ) {
+        const auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+    }
 
     void PrepareFlatTopic(TTopicSdkTestSetup& setup) {
         setup.CreateTopic();
@@ -68,11 +74,69 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
         setup.Write("message-4-3", 4);
     }
 
-    ui64 GetCommittedOffset(TTopicSdkTestSetup& setup, size_t partition) {
-        auto description = setup.DescribeConsumer();
+    void PrepareAutopartitionedCDC(NActors::TTestActorRuntime& runtime, NYdb::TDriver& driver) {
+        auto client = NYdb::NQuery::TQueryClient(driver);
+        auto session = client.GetSession().GetValueSync().GetSession();
+
+        ExecuteQuery(session, R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/origin` (
+                id Uint64,
+                value Text,
+                PRIMARY KEY (id)
+            );
+        )");
+
+        ExecuteQuery(session, R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/origin`
+                ADD CHANGEFEED `feed` WITH (
+                    MODE = 'UPDATES',
+                    FORMAT = 'JSON',
+                    TOPIC_AUTO_PARTITIONING = 'ENABLED'
+                );
+        )");
+
+        ExecuteQuery(session, R"(
+            --!syntax_v1
+            ALTER TOPIC `/Root/origin/feed`
+                ADD CONSUMER `my_consumer`;
+        )");
+
+        ExecuteQuery(session, R"(
+            --!syntax_v1
+            INSERT INTO `/Root/origin` (id, value)
+            VALUES (1, 'message-0-1'), (2, 'message-0-2'), (3, 'message-0-3');
+        )");
+
+        // Creating partition hierarchy
+        // 0 ──┬──> 1
+        //     │
+        //     └──> 2
+        //
+        // Each partition has 3 messages
+
+        {
+            ui64 txId = 1006;
+            SplitPartition(runtime, ++txId, "/Root/origin/feed", "streamImpl", 0, "a");
+        }
+
+        ExecuteQuery(session, R"(
+            --!syntax_v1
+            INSERT INTO `/Root/origin` (id, value)
+            VALUES (4, 'message-1-1'), (5, 'message-1-2'), (6, 'message-1-3');
+        )");
+    }
+
+    ui64 GetCommittedOffset(TTopicSdkTestSetup& setup, const std::string& topic, const std::string& consumer, size_t partition) {
+        auto description = setup.DescribeConsumer(topic, consumer);
         auto stats = description.GetPartitions().at(partition).GetPartitionConsumerStats();
         UNIT_ASSERT(stats);
         return stats->GetCommittedOffset();
+    }
+
+    ui64 GetCommittedOffset(TTopicSdkTestSetup& setup, size_t partition) {
+        return GetCommittedOffset(setup, TEST_TOPIC, TEST_CONSUMER, partition);
     }
 
     Y_UNIT_TEST(Commit_Flat_WithWrongSession) {
@@ -704,6 +768,119 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
         UNIT_ASSERT_VALUES_EQUAL(4 + expected - other, GetCommittedOffset(setup, 2));
     }
 
+<<<<<<< HEAD
+=======
+    Y_UNIT_TEST_FLAG(CommitMessages_ReloadPQRB, autoPartitioningSupport) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        PrepareAutopartitionedTopic(setup);
+
+        auto status = setup.Commit(TEST_TOPIC, TEST_CONSUMER, 0, 3);
+        UNIT_ASSERT_VALUES_EQUAL(NYdb::EStatus::SUCCESS, status.GetStatus());
+
+        status = setup.Commit(TEST_TOPIC, TEST_CONSUMER, 2, 1);
+        UNIT_ASSERT_VALUES_EQUAL(NYdb::EStatus::SUCCESS, status.GetStatus());
+
+        bool reloaded = false;
+        bool firstMessage = true;
+
+        auto count = 0;
+
+        auto result = setup.Read(TEST_TOPIC, TEST_CONSUMER, [&](auto& x) {
+            auto& messages = x.GetMessages();
+            for (size_t i = 0u; i < messages.size(); ++i) {
+                ++count;
+
+                setup.Write(TStringBuilder() << "message-new-" << count, 2);
+
+                auto& message = messages[i];
+                Cerr << "SESSION EVENT read message: " << count << " from partition: " << message.GetPartitionSession()->GetPartitionId() << Endl << Flush;
+                message.Commit();
+            }
+
+            if (!reloaded && x.GetPartitionSession()->GetPartitionId() == 2) {
+                if (firstMessage) {
+                    firstMessage = false;
+                    return true;
+                }
+
+                reloaded = true;
+                ReloadPQRBTablet(setup.GetRuntime(), TString{setup.GetDatabase()},
+                    TStringBuilder() << setup.GetDatabase() << "/" << TEST_TOPIC);
+            }
+
+            return true;
+        }, std::nullopt, TDuration::Seconds(10), autoPartitioningSupport);
+
+        UNIT_ASSERT(result.Timeout);
+
+        UNIT_ASSERT_VALUES_EQUAL(3, GetCommittedOffset(setup, 0));
+        UNIT_ASSERT_VALUES_EQUAL(3, GetCommittedOffset(setup, 1));
+        UNIT_ASSERT_LE(3, GetCommittedOffset(setup, 2));
+        UNIT_ASSERT_VALUES_EQUAL(3, GetCommittedOffset(setup, 3));
+        UNIT_ASSERT_VALUES_EQUAL(3, GetCommittedOffset(setup, 4));
+    }
+
+    Y_UNIT_TEST(CommitCDC_WithoutSession_WithChildren) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        auto driver = setup.MakeDriver();
+        PrepareAutopartitionedCDC(setup.GetRuntime(), driver);
+
+        {
+            // Commit parent partition to non end
+            auto result = setup.Commit("/Root/origin/feed", "my_consumer", 0, 1);
+            UNIT_ASSERT(result.IsSuccess());
+
+            UNIT_ASSERT_VALUES_EQUAL(1, GetCommittedOffset(setup, "/Root/origin/feed", "my_consumer", 0));
+            UNIT_ASSERT_VALUES_EQUAL(0, GetCommittedOffset(setup, "/Root/origin/feed", "my_consumer", 1));
+            UNIT_ASSERT_VALUES_EQUAL(0, GetCommittedOffset(setup, "/Root/origin/feed", "my_consumer", 2));
+        }
+
+        {
+            auto result = setup.Commit("/Root/origin/feed", "my_consumer", 1, 1);
+            UNIT_ASSERT(result.IsSuccess());
+
+            UNIT_ASSERT_VALUES_EQUAL(3, GetCommittedOffset(setup, "/Root/origin/feed", "my_consumer", 0));
+            UNIT_ASSERT_VALUES_EQUAL(1, GetCommittedOffset(setup, "/Root/origin/feed", "my_consumer", 1));
+            UNIT_ASSERT_VALUES_EQUAL(0, GetCommittedOffset(setup, "/Root/origin/feed", "my_consumer", 2));
+        }
+    }
+
+    Y_UNIT_TEST_FLAG(DistributedTxCommitCDC, autoPartitioningSupport) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        auto driver = setup.MakeDriver();
+        PrepareAutopartitionedCDC(setup.GetRuntime(), driver);
+
+        auto count = 0;
+        const auto expected = 6;
+
+        auto result = setup.Read("/Root/origin/feed", "my_consumer", [&](auto& x) {
+            auto& messages = x.GetMessages();
+            for (size_t i = 0u; i < messages.size(); ++i) {
+                ++count;
+                auto& message = messages[i];
+                Cerr << "SESSION EVENT read message: " << count << " from partition: " << message.GetPartitionSession()->GetPartitionId() << Endl << Flush;
+                message.Commit();
+            }
+
+            return true;
+        }, std::nullopt, TDuration::Seconds(5), autoPartitioningSupport);
+
+        UNIT_ASSERT(result.Timeout);
+        UNIT_ASSERT_VALUES_EQUAL(count, expected);
+
+        auto description = setup.DescribeConsumer("/Root/origin/feed", "my_consumer");
+        {
+            auto partition = description.GetPartitions().at(1);
+            auto stats = partition.GetPartitionConsumerStats();
+            UNIT_ASSERT_VALUES_EQUAL(partition.GetPartitionStats()->GetEndOffset(), stats->GetCommittedOffset());
+        }
+        {
+            auto partition = description.GetPartitions().at(2);
+            auto stats = partition.GetPartitionConsumerStats();
+            UNIT_ASSERT_VALUES_EQUAL(partition.GetPartitionStats()->GetEndOffset(), stats->GetCommittedOffset());
+        }
+    }
+>>>>>>> 5c55673ae3f (Fixed commit to CDC topic with enabled autopartitioning (#33363))
 }
 
 } // namespace NKikimr

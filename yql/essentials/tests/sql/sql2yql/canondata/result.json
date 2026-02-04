@@ -9330,6 +9330,13 @@
             "uri": "https://{canondata_backend}/1942278/d4aeb569707e31b9d1898c7eee38a87ffd0b47b9/resource.tar.gz#test_sql2yql.test_simple_pg-to_date_/sql.yql"
         }
     ],
+    "test_sql2yql.test[subselect-YQL-20844]": [
+        {
+            "checksum": "2e9df5125448ccd7c689f7391b9d45ee",
+            "size": 1520,
+            "uri": "https://{canondata_backend}/1784117/0ed3370dfcccfe32979fa5d538a2327a707d26fb/resource.tar.gz#test_sql2yql.test_subselect-YQL-20844_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[subselect-aggregate]": [
         {
             "checksum": "f948f4ad0c25bd1bf52f63dc1ba367e7",
@@ -15412,6 +15419,11 @@
     "test_sql_format.test[simple_pg-to_date]": [
         {
             "uri": "file://test_sql_format.test_simple_pg-to_date_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[subselect-YQL-20844]": [
+        {
+            "uri": "file://test_sql_format.test_subselect-YQL-20844_/formatted.sql"
         }
     ],
     "test_sql_format.test[subselect-aggregate]": [

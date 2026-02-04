@@ -1730,6 +1730,20 @@
             "uri": "file://test.test_simple_pg-to_char-default.txt-Results_/extracted"
         }
     ],
+    "test.test[subselect-YQL-20844-default.txt-Debug]": [
+        {
+            "checksum": "efcb1500eee7969513053fff14cb9559",
+            "size": 247,
+            "uri": "https://{canondata_backend}/1942173/1e0a4a5b4d02ed69bc033c7121d7e8f95c1099ae/resource.tar.gz#test.test_subselect-YQL-20844-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[subselect-YQL-20844-default.txt-Results]": [
+        {
+            "checksum": "8c981e46a75bd2675dea18bf12ce58af",
+            "size": 887,
+            "uri": "https://{canondata_backend}/1942173/1e0a4a5b4d02ed69bc033c7121d7e8f95c1099ae/resource.tar.gz#test.test_subselect-YQL-20844-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[udf-logger_resolve--Debug]": [
         {
             "checksum": "df551ab2d87bb2dec98cc1e869a6b915",

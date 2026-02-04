@@ -2308,6 +2308,9 @@ TNodeResult TSqlExpression::BinOper(const TString& opName, const TNode& node, TG
     if (begin == end) {
         return SubExpr(node, tail);
     }
+
+    IsSourceAllowed_ = false;
+
     // can't have top level smart_parenthesis node if any binary operation is present
     MaybeUnnamedSmartParenOnTop_ = false;
     Ctx_.IncrementMonCounter("sql_binary_operations", opName);
@@ -2339,6 +2342,8 @@ TNodeResult TSqlExpression::BinOpList(const TNode& node, TGetNode getNode, TIter
     MaybeUnnamedSmartParenOnTop_ = MaybeUnnamedSmartParenOnTop_ && (begin == end);
     TNodeResult partialResult = SubExpr(node, (begin == end) ? tail : TTrailingQuestions{});
     while (begin != end) {
+        IsSourceAllowed_ = false;
+
         Ctx_.IncrementMonCounter("sql_features", "BinaryOperation");
         Token(begin->GetToken1());
         TPosition pos(Ctx_.Pos());

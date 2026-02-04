@@ -221,6 +221,10 @@ public:
             settings.Add(std::move(streamingTopicRead));
         }
 
+        if (auto sharedReading = topicKeyParser.GetSharedReading()) {
+            settings.Add(std::move(sharedReading));
+        }
+
         auto builder = Build<TPqReadTopic>(ctx, read.Pos())
             .World(read.World())
             .DataSource(read.DataSource())

@@ -420,14 +420,6 @@ public:
         auto clusterConfiguration = GetClusterConfiguration(cluster);
 
         Add(props, EndpointSetting, clusterConfiguration->Endpoint, pos, ctx);
-        Add(props, SharedReading, ToString(UseSharedReading(clusterConfiguration, format)), pos, ctx);
-        Add(props, ReconnectPeriod, ToString(clusterConfiguration->ReconnectPeriod), pos, ctx);
-        Add(props, Format, format, pos, ctx);
-        Add(props, ReadGroup, clusterConfiguration->ReadGroup, pos, ctx);
-
-        if (clusterConfiguration->UseSsl) {
-            Add(props, UseSslSetting, "1", pos, ctx);
-        }
 
         if (clusterConfiguration->AddBearerToToken) {
             Add(props, AddBearerToTokenSetting, "1", pos, ctx);
@@ -437,6 +429,8 @@ public:
         TMaybe<TString> watermarksLateEventsPolicy;
         TMaybe<ui64> watermarksGranularityMs;
         TMaybe<ui64> watermarksIdleTimeoutMs;
+        bool skipJsonErrors = false;
+        bool withSharedReading = false;
         for (const auto& setting : settings.Raw()->Children()) {
             const auto settingName = setting->Child(0)->Content();
             if ("skip.json.errors" == settingName) {
@@ -448,7 +442,6 @@ public:
                 if (!EnsureAtom(*settingValue, ctx)) {
                     return {};
                 }
-                bool skipJsonErrors = true;
                 if (!TryFromString<bool>(settingValue->Content(), skipJsonErrors)) {
                     ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "`skip.json.errors` must be boolean type"));
                     return {};
@@ -456,11 +449,6 @@ public:
                 if (!skipJsonErrors) {
                     continue;
                 }
-                if (!UseSharedReading(clusterConfiguration, format)) {
-                    ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "`skip.json.errors` is supported only in shared reading mode"));
-                    return {};
-                }
-
                 Add(props, SkipJsonErrors, ToString(skipJsonErrors), pos, ctx);
             } else if ("watermarkadjustlateevents" == settingName) {
                 if (setting->ChildrenSize() > 2) {
@@ -555,9 +543,33 @@ public:
                 } else {
                     return {};
                 }
+            } else if ("sharedreading" == settingName) {
+                if (setting->ChildrenSize() != 2) {
+                    ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Expected `SHARED_READING` = value"));
+                    return {};
+                }
+                const auto settingValue = setting->Child(1);
+                if (!EnsureAtom(*settingValue, ctx)) {
+                    return {};
+                }
+                if (!TryFromString<bool>(settingValue->Content(), withSharedReading)) {
+                    ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "`SHARED_READING` must be boolean type"));
+                    return {};
+                }
             }
         }
-
+        bool sharedReading = UseSharedReading(clusterConfiguration, withSharedReading, format);
+        if (!sharedReading && skipJsonErrors) {
+            ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "`skip.json.errors` is supported only in shared reading mode"));
+            return {};
+        }
+        Add(props, SharedReading, ToString(sharedReading), pos, ctx);
+        Add(props, ReconnectPeriod, ToString(clusterConfiguration->ReconnectPeriod), pos, ctx);
+        Add(props, Format, format, pos, ctx);
+        Add(props, ReadGroup, clusterConfiguration->ReadGroup, pos, ctx);
+        if (clusterConfiguration->UseSsl) {
+            Add(props, UseSslSetting, "1", pos, ctx);
+        }
         if (!streamingTopicReadEnabled) {
             ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Finite topic reading is not supported now, please use WITH (STREAMING = \"TRUE\") after topic name to read from topics in streaming mode"));
             return nullptr;
@@ -626,7 +638,21 @@ public:
         }
 
         const auto clusterConfiguration = GetClusterConfiguration(pqReadTopic.DataSource().Cluster().StringValue());
-        Add(innerSettings, SharedReading, ToString(UseSharedReading(clusterConfiguration, pqReadTopic.Format().Ref().Content())), pos, ctx);
+        
+        bool withSharedReading = false;
+        const auto& readTopicSettings = pqReadTopic.Settings();
+        for (const auto& setting : readTopicSettings.Raw()->Children()) {
+            const auto settingName = setting->Child(0)->Content();
+            if ("sharedreading" != settingName) {
+                continue;
+            }
+            const auto settingValue = setting->Child(1);
+            if (!EnsureAtom(*settingValue, ctx)) {
+                continue;
+            }
+            TryFromString<bool>(settingValue->Content(), withSharedReading);
+        }
+        Add(innerSettings, SharedReading, ToString(UseSharedReading(clusterConfiguration, withSharedReading, pqReadTopic.Format().Ref().Content())), pos, ctx);
 
         if (!innerSettings.empty()) {
             settings.push_back(Build<TCoNameValueTuple>(ctx, pos)
@@ -650,8 +676,8 @@ public:
         return clusterConfiguration;
     }
 
-    static bool UseSharedReading(const TPqClusterConfigurationSettings* clusterConfiguration, std::string_view format) {
-        return clusterConfiguration->SharedReading && (format == "json_each_row" || format == "raw");
+    static bool UseSharedReading(const TPqClusterConfigurationSettings* clusterConfiguration, bool withSharedReading, std::string_view format) {
+        return (clusterConfiguration->SharedReading || withSharedReading) && (format == "json_each_row" || format == "raw");
     }
 
 private:

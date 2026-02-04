@@ -78,6 +78,10 @@ public:
         return StreamingTopicRead;
     }
 
+    TExprNode::TPtr GetSharedReading() const {
+        return SharedReading;
+    }
+
     bool Parse(const TExprNode& expr, TExprNode::TPtr readSettings, TExprContext& ctx);
 
     static std::optional<bool> ParseStreamingTopicRead(const TExprNode& expr, TExprContext& ctx);
@@ -104,6 +108,7 @@ private:
     TExprNode::TPtr Watermark;
     TExprNode::TPtr SkipJsonErrors;
     TExprNode::TPtr StreamingTopicRead;
+    TExprNode::TPtr SharedReading;
 };
 
 } // namespace NYql

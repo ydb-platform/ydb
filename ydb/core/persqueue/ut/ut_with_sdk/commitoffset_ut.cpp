@@ -768,58 +768,6 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
         UNIT_ASSERT_VALUES_EQUAL(4 + expected - other, GetCommittedOffset(setup, 2));
     }
 
-<<<<<<< HEAD
-=======
-    Y_UNIT_TEST_FLAG(CommitMessages_ReloadPQRB, autoPartitioningSupport) {
-        TTopicSdkTestSetup setup = CreateSetup();
-        PrepareAutopartitionedTopic(setup);
-
-        auto status = setup.Commit(TEST_TOPIC, TEST_CONSUMER, 0, 3);
-        UNIT_ASSERT_VALUES_EQUAL(NYdb::EStatus::SUCCESS, status.GetStatus());
-
-        status = setup.Commit(TEST_TOPIC, TEST_CONSUMER, 2, 1);
-        UNIT_ASSERT_VALUES_EQUAL(NYdb::EStatus::SUCCESS, status.GetStatus());
-
-        bool reloaded = false;
-        bool firstMessage = true;
-
-        auto count = 0;
-
-        auto result = setup.Read(TEST_TOPIC, TEST_CONSUMER, [&](auto& x) {
-            auto& messages = x.GetMessages();
-            for (size_t i = 0u; i < messages.size(); ++i) {
-                ++count;
-
-                setup.Write(TStringBuilder() << "message-new-" << count, 2);
-
-                auto& message = messages[i];
-                Cerr << "SESSION EVENT read message: " << count << " from partition: " << message.GetPartitionSession()->GetPartitionId() << Endl << Flush;
-                message.Commit();
-            }
-
-            if (!reloaded && x.GetPartitionSession()->GetPartitionId() == 2) {
-                if (firstMessage) {
-                    firstMessage = false;
-                    return true;
-                }
-
-                reloaded = true;
-                ReloadPQRBTablet(setup.GetRuntime(), TString{setup.GetDatabase()},
-                    TStringBuilder() << setup.GetDatabase() << "/" << TEST_TOPIC);
-            }
-
-            return true;
-        }, std::nullopt, TDuration::Seconds(10), autoPartitioningSupport);
-
-        UNIT_ASSERT(result.Timeout);
-
-        UNIT_ASSERT_VALUES_EQUAL(3, GetCommittedOffset(setup, 0));
-        UNIT_ASSERT_VALUES_EQUAL(3, GetCommittedOffset(setup, 1));
-        UNIT_ASSERT_LE(3, GetCommittedOffset(setup, 2));
-        UNIT_ASSERT_VALUES_EQUAL(3, GetCommittedOffset(setup, 3));
-        UNIT_ASSERT_VALUES_EQUAL(3, GetCommittedOffset(setup, 4));
-    }
-
     Y_UNIT_TEST(CommitCDC_WithoutSession_WithChildren) {
         TTopicSdkTestSetup setup = CreateSetup();
         auto driver = setup.MakeDriver();
@@ -880,7 +828,6 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
             UNIT_ASSERT_VALUES_EQUAL(partition.GetPartitionStats()->GetEndOffset(), stats->GetCommittedOffset());
         }
     }
->>>>>>> 5c55673ae3f (Fixed commit to CDC topic with enabled autopartitioning (#33363))
 }
 
 } // namespace NKikimr

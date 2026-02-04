@@ -22,20 +22,32 @@ namespace NKikimr::NDDisk {
                 ui32 Last;
 
                 ui32 Size() const { return Last - First + 1; }
+                TString ToString() const {return TStringBuilder() << First << "-" << Last;}
+            };
 
-                bool operator<(const TSpaceRange& other) const {
-                    return First < other.First;
+            struct TSequentialComparator {
+                bool operator()(const TSpaceRange& a, const TSpaceRange& b) const {
+                    return a.First < b.First;
+                }
+            };
+
+            struct TBestChoiceComparator {
+                bool operator()(const TSpaceRange& a, const TSpaceRange& b) const {
+                    return a.Size() > b.Size() || (a.Size() == b.Size() && a.First < b.First);
                 }
             };
 
             ui32 ChunkIdx;
             ui32 FreeSpace;
-            std::set<TSpaceRange> FreeSectors;
+            std::set<TSpaceRange, TSequentialComparator> FreeSectors;
+            std::set<TSpaceRange, TBestChoiceComparator> FreeSectorsQueue;
 
             void Occupy(ui32 sectorsCount, std::vector<TPersistentBufferSectorInfo>& result);
             void Free(ui32 fromSectorIdx, ui32 toSectorIdx);
 
             TChunkSpaceOccupation(ui32 chunkIdx, ui32 first, ui32 last);
+
+            TString ToString() const;
         };
 
         ui32 SectorsInChunk;

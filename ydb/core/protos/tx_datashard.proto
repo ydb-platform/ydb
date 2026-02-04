@@ -1034,6 +1034,7 @@ message TEvGetInfoResponse {
         optional string State = 5;
         optional bool IsActive = 6;
         optional bool HasSharedBlobs = 7;
+        optional uint32 FollowerId = 8;
     }
 
     message TNamedValue {

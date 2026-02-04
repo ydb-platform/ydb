@@ -48,10 +48,10 @@ struct TStatisticsAggregator::TTxFinishTraversal : public TTxBase {
         
         if (forceTraversalRemained) {
             SA_LOG_D("[" << Self->TabletID() << "] TTxFinishTraversal::Complete. Don't send TEvAnalyzeResponse. " <<
-                "There are pending operations, OperationId " << OperationId << " , ActorId=" << ReplyToActorId);
+                "There are pending operations, OperationId " << OperationId.Quote() << " , ActorId=" << ReplyToActorId);
         } else {
             SA_LOG_D("[" << Self->TabletID() << "] TTxFinishTraversal::Complete. " <<
-                "Send TEvAnalyzeResponse, OperationId=" << OperationId << ", ActorId=" << ReplyToActorId);
+                "Send TEvAnalyzeResponse, OperationId=" << OperationId.Quote() << ", ActorId=" << ReplyToActorId);
             auto response = std::make_unique<TEvStatistics::TEvAnalyzeResponse>();
             response->Record.SetOperationId(OperationId);
             response->Record.SetStatus(

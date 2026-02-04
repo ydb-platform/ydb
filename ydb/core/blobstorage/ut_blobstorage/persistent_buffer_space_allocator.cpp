@@ -7,17 +7,17 @@ Y_UNIT_TEST_SUITE(PersistentBufferSpaceAllocator) {
 
     Y_UNIT_TEST(Empty) {
         TPersistentBufferSpaceAllocator allocator;
-        UNIT_ASSERT(allocator.Occupy(10).size() == 0);
+        UNIT_ASSERT_EQUAL(allocator.Occupy(10).size(), 0);
     }
 
     Y_UNIT_TEST(OneOccupy) {
         TPersistentBufferSpaceAllocator allocator;
         allocator.AddNewChunk(123);
         auto result = allocator.Occupy(10);
-        UNIT_ASSERT(result.size() == 10);
+        UNIT_ASSERT_EQUAL(result.size(), 10);
         for(ui32 i : xrange(10)) {
-            UNIT_ASSERT(result[i].ChunkIdx == 123);
-            UNIT_ASSERT(result[i].SectorIdx == i);
+            UNIT_ASSERT_EQUAL(result[i].ChunkIdx, 123);
+            UNIT_ASSERT_EQUAL(result[i].SectorIdx, i);
         }
     }
 
@@ -26,23 +26,23 @@ Y_UNIT_TEST_SUITE(PersistentBufferSpaceAllocator) {
         allocator.AddNewChunk(123);
         for (ui32 i : xrange(32768 / 10)) {
             auto result = allocator.Occupy(10);
-            UNIT_ASSERT(result.size() == 10);
+            UNIT_ASSERT_EQUAL(result.size(), 10);
             for(ui32 j : xrange(10)) {
-                UNIT_ASSERT(result[j].ChunkIdx == 123);
-                UNIT_ASSERT(result[j].SectorIdx == i * 10 + j);
+                UNIT_ASSERT_EQUAL(result[j].ChunkIdx, 123);
+                UNIT_ASSERT_EQUAL(result[j].SectorIdx, i * 10 + j);
             }
         }
-        UNIT_ASSERT(allocator.Occupy(10).size() == 0);
+        UNIT_ASSERT_EQUAL(allocator.Occupy(10).size(), 0);
         allocator.AddNewChunk(321);
         auto result = allocator.Occupy(20);
-        UNIT_ASSERT(result.size() == 20);
+        UNIT_ASSERT_EQUAL(result.size(), 20);
         for(ui32 j : xrange(8)) {
-            UNIT_ASSERT(result[j].ChunkIdx == 123);
-            UNIT_ASSERT(result[j].SectorIdx == 32760 + j);
+            UNIT_ASSERT_EQUAL(result[j].ChunkIdx, 123);
+            UNIT_ASSERT_EQUAL(result[j].SectorIdx, 32760 + j);
         }
         for(ui32 j : xrange(8, 12)) {
-            UNIT_ASSERT(result[j].ChunkIdx == 321);
-            UNIT_ASSERT(result[j].SectorIdx == j - 8);
+            UNIT_ASSERT_EQUAL(result[j].ChunkIdx, 321);
+            UNIT_ASSERT_EQUAL(result[j].SectorIdx, j - 8);
         }
     }
 
@@ -53,10 +53,10 @@ Y_UNIT_TEST_SUITE(PersistentBufferSpaceAllocator) {
         allocator.AddNewChunk(33);
         for (ui32 i : xrange(32768 / 10)) {
             auto result = allocator.Occupy(10);
-            UNIT_ASSERT(result.size() == 10);
+            UNIT_ASSERT_EQUAL(result.size(), 10);
             for(ui32 j : xrange(10)) {
-                UNIT_ASSERT(result[j].ChunkIdx == (i % 3 + 1) * 11);
-                UNIT_ASSERT(result[j].SectorIdx == i / 3 * 10 + j);
+                UNIT_ASSERT_EQUAL(result[j].ChunkIdx, (i % 3 + 1) * 11);
+                UNIT_ASSERT_EQUAL(result[j].SectorIdx, i / 3 * 10 + j);
             }
         }
     }
@@ -74,10 +74,10 @@ Y_UNIT_TEST_SUITE(PersistentBufferSpaceAllocator) {
         allocator.Free(result);
         allocator.Free(result2);
         result = allocator.Occupy(10);
-        UNIT_ASSERT(result.size() == 10);
+        UNIT_ASSERT_EQUAL(result.size(), 10);
         for(ui32 j : xrange(10)) {
-            UNIT_ASSERT(result[j].ChunkIdx == 11);
-            UNIT_ASSERT(result[j].SectorIdx == 20 + j);
+            UNIT_ASSERT_EQUAL(result[j].ChunkIdx, 11);
+            UNIT_ASSERT_EQUAL(result[j].SectorIdx, 20 + j);
         }
     }
 
@@ -92,10 +92,10 @@ Y_UNIT_TEST_SUITE(PersistentBufferSpaceAllocator) {
         allocator.Free(result);
         allocator.Free(result2);
         result = allocator.Occupy(15);
-        UNIT_ASSERT(result.size() == 15);
+        UNIT_ASSERT_EQUAL(result.size(), 15);
         for(ui32 j : xrange(15)) {
-            UNIT_ASSERT(result[j].ChunkIdx == 11);
-            UNIT_ASSERT(result[j].SectorIdx == 20 + j);
+            UNIT_ASSERT_EQUAL(result[j].ChunkIdx, 11);
+            UNIT_ASSERT_EQUAL(result[j].SectorIdx, 20 + j);
         }
     }
 
@@ -115,10 +115,10 @@ Y_UNIT_TEST_SUITE(PersistentBufferSpaceAllocator) {
         allocator.Free(result);
         allocator.Free(result2);
         result = allocator.Occupy(15);
-        UNIT_ASSERT(result.size() == 15);
+        UNIT_ASSERT_EQUAL(result.size(), 15);
         for(ui32 j : xrange(15)) {
-            UNIT_ASSERT(result[j].ChunkIdx == 11);
-            UNIT_ASSERT(result[j].SectorIdx == 50 + j);
+            UNIT_ASSERT_EQUAL(result[j].ChunkIdx, 11);
+            UNIT_ASSERT_EQUAL(result[j].SectorIdx, 50 + j);
         }
     }
 
@@ -128,25 +128,37 @@ Y_UNIT_TEST_SUITE(PersistentBufferSpaceAllocator) {
         //       XX    XX
         //       ^^    ^^
         allocator.AddNewChunk(11);
+        ui32 free = 32768;
+        UNIT_ASSERT_EQUAL(allocator.GetFreeSpace(), free);
         allocator.Occupy(10);
+        UNIT_ASSERT_EQUAL(allocator.GetFreeSpace(), free - 10);
         allocator.Occupy(20);
+        UNIT_ASSERT_EQUAL(allocator.GetFreeSpace(), free - 10 - 20);
         auto result = allocator.Occupy(10);
+        UNIT_ASSERT_EQUAL(allocator.GetFreeSpace(), free - 10 - 20 - 10);
         allocator.Occupy(10);
+        UNIT_ASSERT_EQUAL(allocator.GetFreeSpace(), free - 10 - 20 - 10 - 10);
         auto result2 = allocator.Occupy(30);
-        for (ui32 _ : xrange((32768 - 90) / 10)) {
+        UNIT_ASSERT_EQUAL(allocator.GetFreeSpace(), free - 10 - 20 - 10 - 10 - 30);
+        for (ui32 i : xrange((32768 - 80) / 10)) {
             allocator.Occupy(10);
+            UNIT_ASSERT_EQUAL(allocator.GetFreeSpace(), free - 90 - 10 * i);
         }
+        UNIT_ASSERT_EQUAL(allocator.GetFreeSpace(), 8);
         allocator.Free(result);
+        UNIT_ASSERT_EQUAL(allocator.GetFreeSpace(), 18);
         allocator.Free(result2);
+        UNIT_ASSERT_EQUAL(allocator.GetFreeSpace(), 48);
         result = allocator.Occupy(37);
-        UNIT_ASSERT(result.size() == 37);
+        UNIT_ASSERT_EQUAL(allocator.GetFreeSpace(), 11);
+        UNIT_ASSERT_EQUAL(result.size(), 37);
         for(ui32 j : xrange(10)) {
-            UNIT_ASSERT(result[j].ChunkIdx == 11);
-            UNIT_ASSERT(result[j].SectorIdx == 30 + j);
+            UNIT_ASSERT_EQUAL(result[j].ChunkIdx, 11);
+            UNIT_ASSERT_EQUAL(result[j].SectorIdx, 30 + j);
         }
         for(ui32 j : xrange(10, 27)) {
-            UNIT_ASSERT(result[j].ChunkIdx == 11);
-            UNIT_ASSERT(result[j].SectorIdx == 50 + j - 10);
+            UNIT_ASSERT_EQUAL(result[j].ChunkIdx, 11);
+            UNIT_ASSERT_EQUAL(result[j].SectorIdx, 50 + j - 10);
         }
     }
 }

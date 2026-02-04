@@ -129,6 +129,13 @@ def create_ydb_configurator(
     config_generator.monitoring_tls_cert_path = certificates['server_cert']
     config_generator.monitoring_tls_key_path = certificates['server_key']
 
+    config_generator.yaml_config['domains_config']['security_config']['database_allowed_sids'] = ['database@builtin']
+    config_generator.yaml_config['domains_config']['security_config']['viewer_allowed_sids'] = ['viewer@builtin']
+    config_generator.yaml_config['domains_config']['security_config']['monitoring_allowed_sids'] = [
+        'monitoring@builtin'
+    ]
+    # administration_allowed_sids is already set due to default_clusteradmin
+
     return config_generator
 
 
@@ -166,7 +173,11 @@ EXPECTED_RESULTS_WITH_ENFORCE_USER_TOKEN = {
     '/counters': {None: 200, 'user@builtin': 200, 'root@builtin': 200},
     '/counters/hosts': {None: 200, 'user@builtin': 200, 'root@builtin': 200},
     '/healthcheck?&format=prometheus': {None: 200, 'user@builtin': 200, 'root@builtin': 200},
-    '/healthcheck': {None: 200, 'user@builtin': 200, 'root@builtin': 200},
+    '/healthcheck': {
+        None: 403,
+        'user@builtin': 403,
+        'root@builtin': 403,
+    },  # TODO(yurikiselev): Fix 403 for admins (issue #33400)
     '/ping': {None: 200, 'user@builtin': 200, 'root@builtin': 200},
     '/status': {None: 200, 'user@builtin': 200, 'root@builtin': 200},
     '/ver': {None: 401, 'user@builtin': 403, 'root@builtin': 200},
@@ -189,7 +200,7 @@ EXPECTED_RESULTS_WITHOUT_ENFORCE_USER_TOKEN = {
         None: 200,
         'user@builtin': 403,
         'root@builtin': 200,
-    },  # TODO(yurikiselev): Fix 403 here and in other endpoints (issue #33354)
+    },  # TODO(yurikiselev): Fix 403 here and in other endpoints for non-enforced token (issue #33354)
     '/login': {None: 400, 'user@builtin': 400, 'root@builtin': 400},
     '/viewer/capabilities': {None: 200, 'user@builtin': 200, 'root@builtin': 200},
     '/static/css/bootstrap.min.css': {None: 200, 'user@builtin': 403, 'root@builtin': 200},

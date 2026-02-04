@@ -1306,9 +1306,9 @@ void TKeyedWriteSession::GetSessionClosedEventAndDie(WrappedWriteSessionPtr wrap
 }
 
 void TKeyedWriteSession::RunMainWorker() {
-    RunSplittedPartitionWorkers();
     {
         std::unique_lock lock(GlobalLock);
+        RunSplittedPartitionWorkers();
         EventsWorker->DoWork();   
         if (!Done.load()) {
             SessionsWorker->DoWork();

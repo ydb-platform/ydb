@@ -961,7 +961,7 @@ namespace NYdb::NConsoleClient {
             .Optional()
             .Hidden()
             .GetOpt().SplitHandler(&PartitionIds_, ',');
-        config.Opts->AddLongOption('p', "partitions", "Comma separated list of partition ids to read from. All -p, --partitions, --partition-ids namings are allowed. If not specified, messages are read from all partitions. E.g. \"--partitions 0,1,10\"")
+        config.Opts->AddLongOption("partitions", "Comma separated list of partition ids to read from. If not specified, messages are read from all partitions. E.g. \"--partitions 0,1,10\"")
             .Optional()
             .GetOpt().SplitHandler(&PartitionIds_, ',');
         config.Opts->AddLongOption("start-offset", "Offset to start reading from. If not specified, messages are read from the last commit point for the chosen consumer.\nExactly one partition id should be specified with the '--partitions' option.")

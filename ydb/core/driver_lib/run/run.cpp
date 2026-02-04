@@ -174,6 +174,8 @@
 #endif
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 
+#include <library/cpp/svnversion/svnversion.h>
+
 #include <util/charset/wide.h>
 #include <util/folder/dirut.h>
 #include <util/system/file.h>
@@ -2159,6 +2161,7 @@ void TKikimrRunner::KikimrStart() {
     ThreadSigmask(SIG_BLOCK);
     if (ActorSystem) {
         ActorSystem->Start();
+        LOG_NOTICE_S(*ActorSystem, NActorsServices::GLOBAL, GetProgramSvnVersion());
     }
 
     if (!!Monitoring) {

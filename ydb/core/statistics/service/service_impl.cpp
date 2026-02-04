@@ -35,7 +35,6 @@
 namespace NKikimr {
 namespace NStat {
 
-using TEvReadRowsRequest = NGRpcService::TGrpcRequestNoOperationCall<Ydb::Table::ReadRowsRequest, Ydb::Table::ReadRowsResponse>;
 using TNavigate = NSchemeCache::TSchemeCacheNavigate;
 
 struct TAggregationStatistics {
@@ -123,8 +122,6 @@ struct TAggregationStatistics {
 class TStatService : public TActorBootstrapped<TStatService> {
 public:
     using TBase = TActorBootstrapped<TStatService>;
-
-    static constexpr TStringBuf StatisticsTable = "/.metadata/_statistics";
 
     TStatService(const TStatServiceSettings& settings)
         : Settings(settings)
@@ -651,70 +648,9 @@ private:
         }
     }
 
-    void LoadStatistics(const TString& database, const TString& tablePath,
-                        const TPathId& pathId, ui32 statType, ui32 columnTag, ui64 queryId) {
-        SA_LOG_D("[TStatService::LoadStatistics] QueryId[ " << queryId
-            << " ], PathId[ " << pathId << " ], " << " StatType[ " << statType
-            << " ], ColumnTag[ " << columnTag << " ]");
-
-        auto readRowsRequest = Ydb::Table::ReadRowsRequest();
-        readRowsRequest.set_path(tablePath);
-
-        NYdb::TValueBuilder keys_builder;
-        keys_builder.BeginList()
-            .AddListItem()
-                .BeginStruct()
-                    .AddMember("owner_id").Uint64(pathId.OwnerId)
-                    .AddMember("local_path_id").Uint64(pathId.LocalPathId)
-                    .AddMember("stat_type").Uint32(statType)
-                    .AddMember("column_tag").Uint32(columnTag)
-                .EndStruct()
-            .EndList();
-        auto keys = keys_builder.Build();
-        auto protoKeys = readRowsRequest.mutable_keys();
-        *protoKeys->mutable_type() = NYdb::TProtoAccessor::GetProto(keys.GetType());
-        *protoKeys->mutable_value() = NYdb::TProtoAccessor::GetProto(keys);
-
-        auto actorSystem = TlsActivationContext->ActorSystem();
-        auto rpcFuture = NRpcService::DoLocalRpc<TEvReadRowsRequest>(
-            std::move(readRowsRequest), database, Nothing(), TActivationContext::ActorSystem(), true
-        );
-        rpcFuture.Subscribe([replyTo = SelfId(), queryId, actorSystem](const NThreading::TFuture<Ydb::Table::ReadRowsResponse>& future) mutable {
-            const auto& response = future.GetValueSync();
-            auto query_response = std::make_unique<TEvStatistics::TEvLoadStatisticsQueryResponse>();
-
-            if (response.status() == Ydb::StatusIds::SUCCESS) {
-                NYdb::TResultSetParser parser(response.result_set());
-                const auto rowsCount = parser.RowsCount();
-                Y_ABORT_UNLESS(rowsCount < 2);
-
-                if (rowsCount == 0) {
-                    SA_LOG_E("[TStatService::ReadRowsResponse] QueryId[ "
-                        << queryId << " ], RowsCount[ 0 ]");
-                }
-
-                query_response->Success = rowsCount > 0;
-
-                while(parser.TryNextRow()) {
-                    auto& col = parser.ColumnParser("data");
-                    // may be not optional from versions before fix of bug https://github.com/ydb-platform/ydb/issues/15701
-                    query_response->Data = col.GetKind() == NYdb::TTypeParser::ETypeKind::Optional
-                        ? col.GetOptionalString()
-                        : col.GetString();
-                 }
-            } else {
-                SA_LOG_E("[TStatService::ReadRowsResponse] QueryId[ "
-                    << queryId << " ] " << NYql::IssuesFromMessageAsString(response.issues()));
-                query_response->Success = false;
-            }
-
-            actorSystem->Send(replyTo, query_response.release(), 0, queryId);
-        });
-    }
-
-    void QueryStatistics(const TString& database, const TString& tablePath, ui64 requestId) {
+    void QueryStatistics(const TString& database, ui64 requestId) {
         SA_LOG_D("[TStatService::QueryStatistics] RequestId[ " << requestId
-            << " ], Database[ " << database << " ], TablePath[ " << tablePath << " ]");
+            << " ], Database[ " << database << " ]");
 
         auto it = InFlight.find(requestId);
         if (it == InFlight.end()) {
@@ -738,7 +674,8 @@ private:
             ui64 queryId = NextLoadQueryCookie++;
             LoadQueriesInFlight[queryId] = std::make_pair(requestId, reqIndex);
 
-            LoadStatistics(database, tablePath, req.PathId, request.StatType, *req.ColumnTag, queryId);
+            DispatchLoadStatisticsQuery(
+                SelfId(), queryId, database, req.PathId, request.StatType, *req.ColumnTag);
 
             ++request.ReplyCounter;
             ++reqIndex;
@@ -803,8 +740,7 @@ private:
 
             if (navigate->Cookie == 0) {
                 const auto database = JoinPath(entry->Path);
-                const auto tablePath = CanonizePath(database + StatisticsTable);
-                QueryStatistics(database, tablePath, requestId);
+                QueryStatistics(database, requestId);
                 return;
             }
 

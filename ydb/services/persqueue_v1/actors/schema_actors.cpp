@@ -561,7 +561,7 @@ void TDescribeTopicActorImpl::RestartTablet(ui64 tabletId, const TActorContext& 
         if (GotLocation && GotReadSessions) {
             return;
         }
-        BalancerPipe = nullptr;
+        BalancerPipe = {};
     }
 
     NTabletPipe::CloseClient(ctx, tabletInfo.Pipe);
@@ -619,7 +619,7 @@ void TDescribeTopicActorImpl::RequestTablet(TTabletInfo& tablet, const TActorCon
         tablet.Pipe = CreatePipe(tablet.TabletId, ctx);
 
     if (tablet.TabletId == BalancerTabletId) {
-        BalancerPipe = &tablet.Pipe;
+        BalancerPipe = tablet.Pipe;
         RequestBalancer(ctx);
     } else {
         RequestPartitionStatus(tablet, ctx);
@@ -680,7 +680,7 @@ void TDescribeTopicActorImpl::RequestPartitionsLocation(const TActorContext& ctx
         }
     }
     NTabletPipe::SendData(
-        ctx, *BalancerPipe,
+        ctx, BalancerPipe,
         new TEvPersQueue::TEvGetPartitionsLocation(partsVector)
     );
     ++RequestsInfly;
@@ -689,7 +689,7 @@ void TDescribeTopicActorImpl::RequestPartitionsLocation(const TActorContext& ctx
 void TDescribeTopicActorImpl::RequestReadSessionsInfo(const TActorContext& ctx) {
     Y_ABORT_UNLESS(Settings.Mode == TDescribeTopicActorSettings::EMode::DescribeConsumer);
     NTabletPipe::SendData(
-            ctx, *BalancerPipe,
+            ctx, BalancerPipe,
                     new TEvPersQueue::TEvGetReadSessionsInfo(NPersQueue::ConvertNewConsumerName(Settings.Consumer, ctx))
             );
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "DescribeTopicImpl " << ctx.SelfID.ToString() << ": Request sessions");
@@ -789,8 +789,10 @@ void TDescribeTopicActorImpl::Handle(TEvPersQueue::TEvGetPartitionsLocationRespo
 void TDescribeTopicActorImpl::CheckCloseBalancerPipe(const TActorContext& ctx) {
     if (!GotLocation || !GotReadSessions)
         return;
-    NTabletPipe::CloseClient(ctx, *BalancerPipe);
-    *BalancerPipe = TActorId{};
+    if (BalancerPipe) {
+        NTabletPipe::CloseClient(ctx, BalancerPipe);
+        BalancerPipe = {};
+    }
     BalancerTabletId = 0;
 }
 

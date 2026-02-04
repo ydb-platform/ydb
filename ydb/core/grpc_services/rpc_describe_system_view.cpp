@@ -68,6 +68,7 @@ private:
                         LOG_ERROR(ctx, NKikimrServices::GRPC_SERVER, error);
                         [[fallthrough]];
                     case Ydb::StatusIds::SCHEME_ERROR:
+                        [[fallthrough]];
                     default:
                         Request_->RaiseIssue(NYql::TIssue(error));
                         return Reply(status, ctx);

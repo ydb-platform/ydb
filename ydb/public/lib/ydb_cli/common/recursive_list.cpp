@@ -42,7 +42,7 @@ namespace {
                 case ESchemeEntryType::ColumnStore:
                 case ESchemeEntryType::Directory:
                 case ESchemeEntryType::BackupCollection: {
-                    if (settings.SkipOldSecrets_ && path.EndsWith(".metadata") && child.Name == "secrets") {
+                    if (settings.SkipOldSecrets_ && path.EndsWith(METADATA_DIR_NAME) && child.Name == OLD_SECRETS_DIR_NAME) {
                         break;
                     }
 

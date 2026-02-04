@@ -181,7 +181,6 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
 
             }
             case NSchemeCache::TSchemeCacheNavigate::KindTopic:
-            case NSchemeCache::TSchemeCacheNavigate::KindSysView:
                 return true;
             case NSchemeCache::TSchemeCacheNavigate::KindReplication:
                 return AppData()->Icb->BackupControls.S3Controls.EnableAsyncReplicationExport.AtomicLoad()->Get();
@@ -191,6 +190,8 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
                 return AppData()->Icb->BackupControls.S3Controls.EnableExternalDataSourceExport.AtomicLoad()->Get();
             case NSchemeCache::TSchemeCacheNavigate::KindExternalTable:
                 return AppData()->Icb->BackupControls.S3Controls.EnableExternalTableExport.AtomicLoad()->Get();
+            case NSchemeCache::TSchemeCacheNavigate::KindSysView:
+                return AppData()->Icb->BackupControls.S3Controls.EnableSysViewPermissionsExport.AtomicLoad()->Get();
             case NSchemeCache::TSchemeCacheNavigate::KindColumnTable:
                 return AppData()->FeatureFlags.GetEnableColumnTablesBackup();
             case NSchemeCache::TSchemeCacheNavigate::KindView:

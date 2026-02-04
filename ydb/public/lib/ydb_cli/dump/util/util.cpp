@@ -176,8 +176,9 @@ TStatus CheckSysViewCompatibility(
     NYdb::NIssue::TIssues issues;
     if (dumpedProto.sys_view_id() != actualProto.sys_view_id()) {
         issues.AddIssue(NYdb::NIssue::TIssue(TStringBuilder()
-            << "System view ID mismatch: dumped=" << dumpedProto.sys_view_id()
-            << ", actual=" << actualProto.sys_view_id()));
+            << "System view ID mismatch"
+            << ": dumped = '" << dumpedProto.sys_view_id() << "'"
+            << ", actual = '" << actualProto.sys_view_id() << "'"));
         return TStatus(EStatus::SCHEME_ERROR, std::move(issues));
     }
 

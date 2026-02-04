@@ -3,8 +3,6 @@
 #include "table_settings.h"
 #include "ydb_convert.h"
 
-#include <library/cpp/protobuf/json/util.h>
-
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/table_index.h>
@@ -21,6 +19,7 @@
 #include <ydb/library/ydb_issue/proto/issue_id.pb.h>
 #include <yql/essentials/public/issue/yql_issue.h>
 
+#include <library/cpp/protobuf/json/util.h>
 #include <util/generic/hash.h>
 
 namespace NKikimr {
@@ -1829,9 +1828,9 @@ bool FillColumnTableDescription(NKikimrSchemeOp::TModifyScheme& out,
     if (!FillColumnDescription(tableDesc, in.columns(), status, error)) {
         return false;
     }
-    
+
     tableDesc.MutableSchema()->MutableKeyColumnNames()->CopyFrom(in.primary_key());
-    
+
     // NOTICE: TTableProfiles aren't supported for column tables
     // NOTICE: ColumnFamilies aren't supported for column tables
 
@@ -2030,7 +2029,8 @@ bool FillSequenceDescription(NKikimrSchemeOp::TSequenceDescription& out, const Y
 }
 
 bool FillSysViewDescription(Ydb::Table::DescribeSystemViewResult& out, const NKikimrSchemeOp::TPathDescription& in,
-    Ydb::StatusIds_StatusCode& status, TString& error) {
+    Ydb::StatusIds_StatusCode& status, TString& error)
+{
     if (in.GetSelf().GetPathType() != NKikimrSchemeOp::EPathTypeSysView) {
         error = TStringBuilder() << "Unexpected path type: " << in.GetSelf().GetPathType();
         status = Ydb::StatusIds::SCHEME_ERROR;

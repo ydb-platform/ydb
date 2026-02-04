@@ -1106,7 +1106,7 @@ private:
 
         SendNotificationsIfFinished(importInfo);
     }
-    
+
     TMaybe<TString> GetIssues(const TImportInfo::TItem& item, TTxId restoreTxId) {
         if (item.Table->store_type() == Ydb::Table::STORE_TYPE_COLUMN) {
             Y_ABORT_UNLESS(Self->ColumnTables.contains(item.DstPathId));
@@ -1698,9 +1698,7 @@ private:
             Self->TxIdToImport[txId] = {importInfo->Id, itemIdx};
         }
 
-        if (txId != InvalidTxId) {
-            item.WaitTxId = txId;
-        }
+        item.WaitTxId = txId;
 
         Self->PersistImportItemState(db, *importInfo, itemIdx);
 

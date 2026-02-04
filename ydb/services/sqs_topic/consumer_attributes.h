@@ -22,7 +22,7 @@ namespace NKikimr::NSqsTopic::V1 {
         TMaybe<bool> SqsManagedSseEnabled;
     };
 
-    enum class EConsumerAtributeUsageTarget {
+    enum class EConsumerAttributeUsageTarget {
         Create,
         Alter,
     };
@@ -32,7 +32,7 @@ namespace NKikimr::NSqsTopic::V1 {
         const TString& queueName,
         const TString& consumerName,
         const TString& database,
-        EConsumerAtributeUsageTarget usageTarget
+        EConsumerAttributeUsageTarget usageTarget
     );
 
     std::expected<void, std::string> CompareWithExistingQueueAttributes(
@@ -42,5 +42,4 @@ namespace NKikimr::NSqsTopic::V1 {
     );
 
     std::expected<void, std::string> ValidateLimits(const TConsumerAttributes& config);
-
 } // namespace NKikimr::NSqsTopic::V1

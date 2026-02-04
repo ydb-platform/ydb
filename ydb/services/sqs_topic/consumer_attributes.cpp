@@ -17,7 +17,7 @@ namespace NKikimr::NSqsTopic::V1 {
         const TString& queueName,
         const TString& consumerName,
         const TString& database,
-        EConsumerAtributeUsageTarget usageTarget
+        EConsumerAttributeUsageTarget usageTarget
     ) {
         TConsumerAttributes result;
 
@@ -113,7 +113,7 @@ namespace NKikimr::NSqsTopic::V1 {
         }
 
         if (fifoQueueByName) {
-            bool fifoQueueByAttrIfNotSet = (usageTarget == EConsumerAtributeUsageTarget::Alter) ? fifoQueueByName : false;
+            bool fifoQueueByAttrIfNotSet = (usageTarget == EConsumerAttributeUsageTarget::Alter) ? fifoQueueByName : false;
             if (!fifoQueueByAttr.GetOrElse(fifoQueueByAttrIfNotSet)) {
                 return std::unexpected("Fifo queue with an '.fifo' suffix should have the FifoQueue attribute");
             }

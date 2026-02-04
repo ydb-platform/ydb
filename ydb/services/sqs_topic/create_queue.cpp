@@ -82,7 +82,7 @@ namespace NKikimr::NSqsTopic::V1 {
             if (auto check = ValidateQueueName(QueueName); !check.has_value()) {
                 return ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE, std::format("Invalid queue name: {}", check.error())));
             }
-            if (auto cc = ParseConsumerAttributes(request.attributes(), QueueName, ConsumerName, this->Database, EConsumerAtributeUsageTarget::Create); !cc.has_value()) {
+            if (auto cc = ParseConsumerAttributes(request.attributes(), QueueName, ConsumerName, this->Database, EConsumerAttributeUsageTarget::Create); !cc.has_value()) {
                 return ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE, std::format("{}", cc.error())));
             } else {
                 ConsumerConfig = std::move(cc).value();
@@ -169,7 +169,8 @@ namespace NKikimr::NSqsTopic::V1 {
 
             if (!AddingConsumer) {
                 Ydb::Topic::CreateTopicRequest topicRequest;
-                {                    auto* partitioningSettings = topicRequest.mutable_partitioning_settings();
+                {
+                    auto* partitioningSettings = topicRequest.mutable_partitioning_settings();
                     auto* autoPartitioning = partitioningSettings->mutable_auto_partitioning_settings();
 
                     autoPartitioning->set_strategy(::Ydb::Topic::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_SCALE_UP);
@@ -179,6 +180,7 @@ namespace NKikimr::NSqsTopic::V1 {
 
                 topicRequest.mutable_retention_period()->set_seconds(ConsumerConfig.MessageRetentionPeriod.GetOrElse(DEFAULT_MESSAGE_RETENTION_PERIOD).Seconds());
                 topicRequest.set_partition_write_speed_bytes_per_second(1_MB);
+                topicRequest.mutable_supported_codecs()->add_codecs(Ydb::Topic::CODEC_RAW);
 
                 auto pqDescr = modifyScheme.MutableCreatePersQueueGroup();
                 pqDescr->MutablePQTabletConfig()->AddConsumers()->CopyFrom(ConsumerConfig.Consumer);

@@ -129,7 +129,7 @@ namespace NKikimr::NSqsTopic::V1 {
 
             const Ydb::Ymq::V1::SetQueueAttributesRequest& request = Request();
             const TString& queueName = QueueUrl_->TopicPath;
-            if (auto cc = ParseConsumerAttributes(request.attributes(), queueName, QueueUrl_->Consumer, this->Database, EConsumerAtributeUsageTarget::Alter); !cc.has_value()) {
+            if (auto cc = ParseConsumerAttributes(request.attributes(), queueName, QueueUrl_->Consumer, this->Database, EConsumerAttributeUsageTarget::Alter); !cc.has_value()) {
                 return ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE, std::format("{}", cc.error())));
             } else {
                 NewConsumerConfig = std::move(cc).value();

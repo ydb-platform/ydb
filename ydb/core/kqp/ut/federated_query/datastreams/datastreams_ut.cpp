@@ -4635,6 +4635,58 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 ])";
         UNIT_ASSERT_STRINGS_EQUAL(GetSolomonMetrics(soLocation), expectedMetrics);
     }
+
+    Y_UNIT_TEST_F(DropStreamingQueryDuringRetries, TStreamingWithSchemaSecretsTestFixture) {
+        constexpr char topic[] = "dropStreamingQueryDuringRetriesTopic";
+        constexpr char pqSource[] = "pqSource";
+        CreateTopic(topic);
+        CreatePqSource(pqSource);
+
+        const auto queryName = "streamingQuery";
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                PRAGMA pq.Consumer = "test-consumer";
+                INSERT INTO `{pq_source}`.`{topic}`
+                SELECT * FROM `{pq_source}`.`{topic}`;
+            END DO;)",
+            "query_name"_a = queryName,
+            "pq_source"_a = pqSource,
+            "topic"_a = topic
+        ));
+
+        Sleep(TDuration::Seconds(3));
+
+        ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
+        {
+            const auto& result = ExecQuery("SELECT RetryCount, SuspendedUntil FROM `.sys/streaming_queries`");
+            UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
+            CheckScriptResult(result[0], 2, 1, [&](TResultSetParser& resultSet) {
+                UNIT_ASSERT_GE(*resultSet.ColumnParser("RetryCount").GetOptionalUint64(), 1);
+                UNIT_ASSERT(*resultSet.ColumnParser("SuspendedUntil").GetOptionalTimestamp());
+            });
+        }
+
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (RUN = FALSE);)",
+            "query_name"_a = queryName
+        ));
+
+        {
+            const auto& result = ExecQuery("SELECT Status FROM `.sys/streaming_queries`");
+            UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
+            CheckScriptResult(result[0], 1, 1, [&](TResultSetParser& resultSet) {
+                UNIT_ASSERT_VALUES_EQUAL(*resultSet.ColumnParser("Status").GetOptionalUtf8(), "FAILED");
+            });
+        }
+
+        ExecQuery(fmt::format(R"(
+            DROP STREAMING QUERY `{query_name}`;)",
+            "query_name"_a = queryName
+        ));
+
+        CheckScriptExecutionsCount(0, 0);
+    }
 }
 
 Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {

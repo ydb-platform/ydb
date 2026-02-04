@@ -67,40 +67,13 @@ TExprNode::TPtr WrapToShuffle(
         .Ptr();
 }
 
-TMaybe<bool> BuildWatermarkMode(
-    const TCoAggregate& aggregate,
-    const TCoHoppingTraits& hoppingTraits,
-    TExprContext& ctx,
-    bool analyticsMode,
-    bool defaultWatermarksMode,
-    bool syncActor)
-{
-    const auto hoppingVersion = hoppingTraits.Version().Cast<TCoAtom>().StringValue();
-    const bool enableWatermarks = !analyticsMode && defaultWatermarksMode;
-
-    if (enableWatermarks && syncActor) {
-        ctx.AddError(TIssue(ctx.GetPosition(aggregate.Pos()), "Watermarks should be used only with async compute actor"));
-        return Nothing();
-    }
-
-    if (hoppingVersion == "v1" && enableWatermarks) {
-        ctx.AddError(TIssue(
-            ctx.GetPosition(aggregate.Pos()),
-            "HOP requires watermarks to be disabled. Use HoppingWindow instead."));
-        return Nothing();
-    }
-
-    return enableWatermarks;
-}
-
 TMaybeNode<TExprBase> RewriteAsHoppingWindowFullOutput(
     const TExprBase node,
     TExprContext& ctx,
     const TDqConnection& input,
     bool analyticsMode,
     TDuration lateArrivalDelay,
-    bool defaultWatermarksMode,
-    bool syncActor) {
+    bool defaultWatermarksMode) {
     const auto aggregate = node.Cast<TCoAggregate>();
     const auto pos = aggregate.Pos();
 
@@ -139,10 +112,7 @@ TMaybeNode<TExprBase> RewriteAsHoppingWindowFullOutput(
     const auto loadLambda = BuildLoadHopLambda(aggregate, ctx);
     const auto mergeLambda = BuildMergeHopLambda(aggregate, ctx);
     const auto finishLambda = BuildFinishHopLambda(aggregate, keysDescription.GetActualGroupKeys(), hopTraits.Column, ctx);
-    const auto enableWatermarks = BuildWatermarkMode(aggregate, hopTraits.Traits, ctx, analyticsMode, defaultWatermarksMode, syncActor);
-    if (!enableWatermarks) {
-        return nullptr;
-    }
+    const bool enableWatermarks = hopTraits.Traits.Version().Cast<TCoAtom>().StringValue() == "v2" && !analyticsMode && defaultWatermarksMode;
 
     const auto streamArg = Build<TCoArgument>(ctx, pos).Name("stream").Done();
     auto multiHoppingCoreBuilder = Build<TCoMultiHoppingCore>(ctx, pos)
@@ -157,10 +127,10 @@ TMaybeNode<TExprBase> RewriteAsHoppingWindowFullOutput(
         .FinishHandler(finishLambda)
         .SaveHandler(saveLambda)
         .LoadHandler(loadLambda)
-        .WatermarkMode<TCoAtom>().Build(ToString(*enableWatermarks))
+        .WatermarkMode<TCoAtom>().Build(ToString(enableWatermarks))
         .HoppingColumn<TCoAtom>().Build(hopTraits.Column);
 
-    if (*enableWatermarks) {
+    if (enableWatermarks) {
         const auto hop = hopTraits.Hop;
         const auto delay = lateArrivalDelay ? (lateArrivalDelay.MicroSeconds() + hop - 1) / hop * hop : hop;
         multiHoppingCoreBuilder.Delay<TCoInterval>()
@@ -238,10 +208,9 @@ TMaybeNode<TExprBase> RewriteAsHoppingWindow(
     const TDqConnection& input,
     bool analyticsMode,
     TDuration lateArrivalDelay,
-    bool defaultWatermarksMode,
-    bool syncActor)
+    bool defaultWatermarksMode)
 {
-    auto result = RewriteAsHoppingWindowFullOutput(node, ctx, input, analyticsMode, lateArrivalDelay, defaultWatermarksMode, syncActor);
+    auto result = RewriteAsHoppingWindowFullOutput(node, ctx, input, analyticsMode, lateArrivalDelay, defaultWatermarksMode);
     if (!result) {
         return result;
     }

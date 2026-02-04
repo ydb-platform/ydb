@@ -17,6 +17,7 @@ from yql.essentials.providers.common.proto.gateways_config_pb2 import EGenericDa
 import conftest
 import random
 
+MAX_WRITE_STREAM_SIZE = 500
 DEBUG = 0
 SEED = 0  # use fixed seed for regular tests
 if DEBUG:
@@ -856,18 +857,20 @@ class TestJoinStreaming(TestYdsBase):
     @pytest.mark.parametrize("fq_client", [{"folder_id": "my_folder_slj"}], indirect=True)
     @pytest.mark.parametrize("partitions_count", [1, 3] if DEBUG else [3])
     @pytest.mark.parametrize("streamlookup", [False, True] if DEBUG else [True])
+    @pytest.mark.parametrize("ca", ["sync", "async"])
     @pytest.mark.parametrize("testcase", [*range(len(TESTCASES))])
     def test_streamlookup(
         self,
         kikimr,
         testcase,
+        ca,
         streamlookup,
         partitions_count,
         fq_client: FederatedQueryClient,
         yq_version,
     ):
         self.init_topics(
-            f"pq_yq_str_lookup_{partitions_count}{streamlookup}{testcase}_{yq_version}",
+            f"slj_{partitions_count}{streamlookup}{testcase}{ca}_{yq_version}",
             partitions_count=partitions_count,
         )
         fq_client.create_yds_connection("myyds", os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"))
@@ -887,11 +890,14 @@ class TestJoinStreaming(TestYdsBase):
             table_name=table_name,
             streamlookup=Rf'/*+ streamlookup({" ".join(options)}) */' if streamlookup else '',
         )
+        sql = f'PRAGMA dq.ComputeActorType = "{ca}";\n{sql}'
 
         one_time_waiter.wait()
 
         query_id = fq_client.create_query(
-            f"streamlookup_{partitions_count}{streamlookup}{testcase}", sql, type=fq.QueryContent.QueryType.STREAMING
+            f"slj_{partitions_count}{streamlookup}{testcase}{ca}",
+            sql,
+            type=fq.QueryContent.QueryType.STREAMING,
         ).result.query_id
 
         if not streamlookup and "MultiGet true" in sql:
@@ -905,11 +911,8 @@ class TestJoinStreaming(TestYdsBase):
         fq_client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
         kikimr.compute_plane.wait_zero_checkpoint(query_id)
 
-        offset = 0
-        while offset < len(messages):
-            chunk = messages[offset : offset + 500]
-            self.write_stream(map(lambda x: x[0], chunk))
-            offset += 500
+        for offset in range(0, len(messages), MAX_WRITE_STREAM_SIZE):
+            self.write_stream(map(lambda x: x[0], messages[offset : offset + MAX_WRITE_STREAM_SIZE]))
 
         read_data = self.read_stream(len(messages))
         if DEBUG:
@@ -932,6 +935,165 @@ class TestJoinStreaming(TestYdsBase):
                         f'node[{node_index}].operation[{query_id}].component[{component}].{k} = {componentSensors[k]}',
                         file=sys.stderr,
                     )
+
+        fq_client.abort_query(query_id)
+        fq_client.wait_query(query_id)
+
+        describe_response = fq_client.describe_query(query_id)
+        status = describe_response.result.query.meta.status
+        assert not describe_response.issues, str(describe_response.issues)
+        assert status == fq.QueryMeta.ABORTED_BY_USER, fq.QueryMeta.ComputeStatus.Name(status)
+
+    @yq_v1
+    @pytest.mark.parametrize(
+        "mvp_external_ydb_endpoint", [{"endpoint": "tests-fq-generic-streaming-ydb:2136"}], indirect=True
+    )
+    @pytest.mark.parametrize("fq_client", [{"folder_id": "my_folder_slj"}], indirect=True)
+    @pytest.mark.parametrize("partitions_count", [1])
+    @pytest.mark.parametrize("tasks", [1])
+    @pytest.mark.parametrize("streamlookup", [True, False])
+    @pytest.mark.parametrize("ca", ["sync", "async"])
+    @pytest.mark.parametrize("limit", [6, 7, 8, 9, None])
+    def test_streamlookup_with_watermarks(
+        self,
+        kikimr,
+        ca,
+        limit,
+        streamlookup,
+        tasks,
+        partitions_count,
+        fq_client: FederatedQueryClient,
+        yq_version,
+    ):
+        self.init_topics(
+            f"slj_wm_{partitions_count}{streamlookup}{limit}{ca}{tasks}_{yq_version}",
+            partitions_count=partitions_count,
+        )
+        fq_client.create_yds_connection(
+            "wmyds",
+            os.getenv("YDB_DATABASE"),
+            os.getenv("YDB_ENDPOINT"),
+            shared_reading=True,
+        )
+
+        table_name = 'join_table'
+        ydb_conn_name = f'ydb_conn_{table_name}'
+
+        fq_client.create_ydb_connection(
+            name=ydb_conn_name,
+            database_id='local',
+        )
+
+        options = ()
+        streamlookup_hint = Rf'/*+ streamlookup({" ".join(options)}) */' if streamlookup else ''
+        idle_clause = R", WATERMARK_IDLE_TIMEOUT = 'PT5S'" if tasks > 1 or partitions_count > 1 else ""
+        sql = Rf'''
+            PRAGMA dq.ComputeActorType = "{ca}";
+            PRAGMA dq.WatermarksMode = "default";
+            PRAGMA dq.MaxTasksPerStage = "{tasks}";
+            PRAGMA dq.WatermarksGranularityMs = "2000";
+
+            $event_time = ($ts) -> (CAST(($ts*1000000ul) AS Timestamp));
+
+            $input = SELECT * FROM wmyds.`{self.input_topic}`
+                    WITH (
+                        FORMAT=json_each_row,
+                        SCHEMA (
+                            ts Uint64,
+                            user Int32,
+                            skip Bool
+                        )
+                        , WATERMARK AS ($event_time(`ts`) - Interval('PT3S'))
+                        , WATERMARK_GRANULARITY = 'PT2S'
+                        {idle_clause}
+                    )            ;
+            $input =
+                SELECT e.*, $event_time(ts) AS event_time FROM $input AS e WHERE skip IS DISTINCT FROM true;
+            $enriched = SELECT event_time, ts, u.data as uid
+                FROM
+                    $input as e
+                LEFT JOIN {streamlookup_hint} ANY ydb_conn_{table_name}.{table_name} AS u
+                ON(e.user = u.id)
+            ;
+            $enriched =
+                SELECT CAST(HOP_END() AS Uint64)/1000000ul as hopTime, uid, ListSort(AGGREGATE_LIST(ts)) AS tsList FROM $enriched
+                    GROUP BY HoppingWindow(event_time, 'PT5S', 'PT10S', "max" AS TimeLimit)
+                            , uid
+                ;
+
+            insert into wmyds.`{self.output_topic}`
+            select Unwrap(Yson::SerializeJson(Yson::From(TableRow()))) from $enriched;
+            '''
+
+        messages = [
+            (R'{"ts":12, "user": 1}',),  # ############ 0 # w 9->8
+            (R'{"ts":10, "user": 1}',),  # ############ 1 # w 7->6
+            (R'{"ts":11, "user": 2}',),  # ############ 2 # w 8->8
+            (R'{"ts":13, "user": 10}',),  # ########### 3 # w 10->10 -> close :=10
+            (R'{"ts":16, "user": 3}',),  # ############ 4 # w 13->12
+            ('{"ts":17, "user": 1, "skip": true}',),  # 5 # w 14->14
+            (
+                R'{"ts":19, "user": 4}',  # ########### 6 # w 16->16 -> close :=15
+                R'{"uid": null,   "hopTime":15, "tsList":[13]}',
+                R'{"uid":"ydb10", "hopTime":15, "tsList":[10, 12]}',
+                R'{"uid":"ydb20", "hopTime":15, "tsList":[11]}',
+            ),
+            (R'{"ts":18, "user": 4}',),  # ############ 7 # w 15->14
+            (R'{"ts":21, "user": 9}',),  # ############ 8 # w 18->18
+            (  # ###################################### 9 # w 25 -> 24 -> close :=20
+                R'{"ts":28, "user": 5, "skip": true}',
+                R'{"uid": null,   "hopTime":20, "tsList":[13, 18, 19]}',
+                R'{"uid":"ydb10", "hopTime":20, "tsList":[10, 12]}',
+                R'{"uid":"ydb20", "hopTime":20, "tsList":[11]}',
+                R'{"uid":"ydb30", "hopTime":20, "tsList":[16]}',
+            ),
+        ]
+        messages = messages[:limit]
+
+        one_time_waiter.wait()
+
+        query_id = fq_client.create_query(
+            f"slj_wm_{partitions_count}{streamlookup}{limit}{ca}{tasks}", sql, type=fq.QueryContent.QueryType.STREAMING
+        ).result.query_id
+
+        fq_client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
+        kikimr.compute_plane.wait_zero_checkpoint(query_id)
+
+        for offset in range(0, len(messages), MAX_WRITE_STREAM_SIZE):
+            self.write_stream(map(lambda x: x[0], messages[offset : offset + MAX_WRITE_STREAM_SIZE]))
+
+        expected_len = sum(map(len, messages)) - len(messages)
+        read_data = self.read_stream(expected_len)
+        if DEBUG:
+            print(streamlookup, file=sys.stderr)
+            print(sql, file=sys.stderr)
+            print(*zip(messages, read_data), file=sys.stderr, sep="\n")
+        read_data_ctr = Counter(map(freeze, map(json.loads, read_data)))
+        messages_ctr = Counter(map(freeze, map(json.loads, chain(*map(lambda row: islice(row, 1, None), messages)))))
+        assert read_data_ctr == messages_ctr
+
+        for node_index in kikimr.compute_plane.kikimr_cluster.nodes:
+            sensors = kikimr.compute_plane.get_sensors(node_index, "dq_tasks")
+            for component in ["Lookup", "LookupSrc"]:
+                componentSensors = sensors.find_sensors(
+                    labels={"operation": query_id, "component": component},
+                    key_label="sensor",
+                )
+                for k in componentSensors:
+                    print(
+                        f'node[{node_index}].operation[{query_id}].component[{component}].{k} = {componentSensors[k]}',
+                        file=sys.stderr,
+                    )
+            sensors = kikimr.compute_plane.get_sensors(node_index, "yq")
+            mkqlSensors = sensors.find_sensors(
+                labels={"query_id": query_id, "sensor": "MkqlMaxMemoryUsage"},
+                key_label="Stage",
+            )
+            for k in mkqlSensors:
+                print(
+                    f'node[{node_index}].query_id[{query_id}].Stage[{k}].MkqlMaxMemoryUsage = {mkqlSensors[k]}',
+                    file=sys.stderr,
+                )
 
         fq_client.abort_query(query_id)
         fq_client.wait_query(query_id)

@@ -13,13 +13,12 @@ class TestWatermarksInYdb(StreamingTestBase):
     @pytest.mark.parametrize("shared_reading", [False], ids=["no_shared"])
     @pytest.mark.parametrize("tasks", [1])
     def test_watermarks(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], shared_reading: bool, tasks: int) -> None:
-        source_name = entity_name("test_watermarks")
+        query_name = f"test_watermarks_{shared_reading}_{tasks}"
+        source_name = entity_name(query_name)
         self.init_topics(source_name, partitions_count=tasks)
         self.create_source(kikimr, source_name, shared_reading)
 
-        event_time = "ts" if shared_reading else "write_time"
-
-        query_name = "test_watermarks"
+        ts = "CAST(ts AS Timestamp)" if shared_reading else "SystemMetadata('write_time')"
         sql = f'''
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
@@ -29,7 +28,7 @@ class TestWatermarksInYdb(StreamingTestBase):
                 $input = (
                     SELECT
                         {self.input_topic}.*,
-                        SystemMetadata("write_time") as write_time
+                        {ts} AS event_time,
                     FROM {self.input_topic}
                     WITH (
                         FORMAT=json_each_row,
@@ -37,13 +36,15 @@ class TestWatermarksInYdb(StreamingTestBase):
                             ts String NOT NULL,
                             pass Uint64
                         )
+                        , WATERMARK AS ({ts} - Interval('PT5S'))
+                        , WATERMARK_IDLE_TIMEOUT = "PT10S"
+                        , WATERMARK_GRANULARITY = "PT1S"
                     )
                 );
 
                 $filter = (
                     SELECT
-                        input.*,
-                        {event_time} AS event_time
+                        input.*
                     FROM $input AS input
                     WHERE pass > 0
                 );
@@ -53,7 +54,7 @@ class TestWatermarksInYdb(StreamingTestBase):
                         CAST(HOP_END() AS String) AS event_time,
                         AGGREGATE_LIST(ts) AS ts
                     FROM $filter
-                    GROUP BY HoppingWindow(CAST(event_time AS Timestamp), "PT1S", "PT1S")
+                    GROUP BY HoppingWindow(CAST(event_time AS Timestamp), "PT1S", "PT1S", "max" as TimeLimit)
                 );
 
                 $output = (
@@ -61,7 +62,7 @@ class TestWatermarksInYdb(StreamingTestBase):
                         CAST(HOP_END() AS String) AS event_time,
                         AGGREGATE_LIST(ts) AS ts
                     FROM $hop
-                    GROUP BY HoppingWindow(CAST(event_time AS Timestamp), "PT1S", "PT1S")
+                    GROUP BY HoppingWindow(CAST(event_time AS Timestamp), "PT1S", "PT1S", "max" as TimeLimit)
                 );
 
                 INSERT INTO {self.output_topic}
@@ -83,7 +84,7 @@ class TestWatermarksInYdb(StreamingTestBase):
             '[["1970-01-01T00:00:50Z"]]',
         ]
         actual = self.read_stream(len(expected), topic_path=self.output_topic)
-        assert actual == expected
+        assert sorted(actual) == expected
 
         sql = f'''DROP STREAMING QUERY `{query_name}`;'''
         kikimr.ydb_client.query(sql)

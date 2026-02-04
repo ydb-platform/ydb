@@ -584,7 +584,6 @@ public:
                     // PDisk GUID is OK and format is complete
                     *PDisk->Mon.PDiskState = NKikimrBlobStorage::TPDiskState::InitialSysLogRead;
                     *PDisk->Mon.PDiskDetailedState = TPDiskMon::TPDisk::BootingSysLogRead;
-                    PDisk->Format.InitMagic();
                     PDisk->ReadSysLog(SelfId());
                 }
             }

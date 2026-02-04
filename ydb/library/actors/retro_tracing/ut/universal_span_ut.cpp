@@ -18,6 +18,7 @@ Y_UNIT_TEST_SUITE(UniversalSpan) {
 
         {
             TUniversalSpan<TTestSpan1> span(verbosity, parentId, "Test1");
+            UNIT_ASSERT(span.GetSpanType() == EUniversalSpanType::Retro);
             const ui64 var1 = RandomNumber<ui64>();
             const ui32 var2 = RandomNumber<ui32>();
             NWilson::TTraceId spanTraceId = span.GetTraceId();
@@ -37,6 +38,7 @@ Y_UNIT_TEST_SUITE(UniversalSpan) {
 
         {
             TUniversalSpan<TTestSpan2> span(verbosity, parentId, "Test2");
+            UNIT_ASSERT(span.GetSpanType() == EUniversalSpanType::Retro);
             const ui8 var3 = RandomNumber<ui8>();
             span.GetRetroSpanPtr()->Var3 = var3;
             NWilson::TTraceId spanTraceId = span.GetTraceId();

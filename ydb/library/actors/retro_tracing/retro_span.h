@@ -64,7 +64,7 @@ template <ui32 Id, typename T>
 class TTypedRetroSpan : public TRetroSpan {
 protected:
     static constexpr ui32 TypeId = Id;
-    using TThis = TTypedRetroSpan<TypeId, T>;
+    using TThisTyped = TTypedRetroSpan<TypeId, T>;
 
 public:
     TTypedRetroSpan(NWilson::TTraceId&& traceId = NWilson::TTraceId{})
@@ -79,6 +79,7 @@ public:
         Y_UNUSED(name);
         Y_UNUSED(flags);
         Y_UNUSED(actorSystem);
+
         T res;
         res.SetTraceId(NWilson::TTraceId(parentId));
         return res;

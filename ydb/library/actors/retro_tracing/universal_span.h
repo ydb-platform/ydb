@@ -11,15 +11,15 @@
 
 namespace NKikimr {
 
+enum class EUniversalSpanType : ui8 {
+    Empty,
+    Wilson,
+    Retro,
+};
+
 template <class TRetroSpanType>
 class TUniversalSpan {
 public:
-    enum class ESpanType : ui8 {
-        Empty,
-        Wilson,
-        Retro,
-    };
-
     TUniversalSpan() = default;
 
     TUniversalSpan(ui8 verbosity, const NWilson::TTraceId& parentId, const char* name,
@@ -32,6 +32,17 @@ public:
             Span.template emplace<NWilson::TSpan>(verbosity, NWilson::TTraceId(parentId), name, flags, actorSystem);
         }
     }
+
+    TUniversalSpan(NWilson::TSpan&& span)
+        : Span(std::move(span))
+    {}
+
+    TUniversalSpan(TRetroSpanType&& span)
+        : Span(std::move(span))
+    {}
+
+    TUniversalSpan(TUniversalSpan&& span) = default;
+    TUniversalSpan(const TUniversalSpan& span) = delete;
 
     NWilson::TSpan* GetWilsonSpanPtr() {
         NWilson::TSpan* res;
@@ -81,13 +92,13 @@ public:
         return res;
     }
 
-    ESpanType GetSpanType() {
+    EUniversalSpanType GetSpanType() {
         if (std::holds_alternative<std::monostate>(Span)) {
-            return ESpanType::Empty;
+            return EUniversalSpanType::Empty;
         } else if (std::holds_alternative<NWilson::TSpan>(Span)) {
-            return ESpanType::Wilson;
+            return EUniversalSpanType::Wilson;
         } else {
-            return ESpanType::Retro;
+            return EUniversalSpanType::Retro;
         }
     }
 

@@ -141,6 +141,7 @@ public:
 
         // Build DQ stage program with S3 serializer
         std::vector<TCoArgument> stageArgs;
+        TNodeOnNodeOwnedMap stageArgsReplaces;
         TExprNode::TPtr stageBody;
 
         const auto& keys = GetPartitionKeys(GetPartitionBy(target.Settings().Ref()));
@@ -160,7 +161,14 @@ public:
             const auto& stage = maybeUnionAll.Cast().Output().Stage();
             const auto& program = stage.Program();
             const auto& args = program.Args();
-            stageArgs.assign(args.begin(), args.end());
+            for (size_t i = 0; i < args.Size(); ++i) {
+                auto newArg = Build<TCoArgument>(ctx, writePos)
+                    .Name(TStringBuilder() << "in_" << i)
+                    .Done();
+
+                stageArgs.emplace_back(newArg);
+                YQL_ENSURE(stageArgsReplaces.emplace(args.Arg(i).Raw(), newArg.Ptr()).second);
+            }
 
             const auto& currentBody = program.Body();
             if (const auto branchesCount = GetStageOutputsCount(stage); branchesCount == 1) {
@@ -183,9 +191,13 @@ public:
 
                     TExprNode::TPtr newBranchProgram;
                     if (i == outputIndex) {
+                        const auto newArg = Build<TCoArgument>(ctx, writePos)
+                            .Name(TStringBuilder() << "in_dq_replicate_" << i)
+                            .Done();
+
                         newBranchProgram = Build<TCoLambda>(ctx, writePos)
-                            .Args(branchLambda.Args())
-                            .Body(sink.BuildSerializer(branchLambda.Body().Ptr(), ctx))
+                            .Args({newArg})
+                            .Body(ctx.ReplaceNode(sink.BuildSerializer(branchLambda.Body().Ptr(), ctx), branchLambda.Args().Arg(0).Ref(), newArg.Ptr()))
                             .Done().Ptr();
                     } else {
                         newBranchProgram = branchLambda.Ptr();
@@ -205,7 +217,7 @@ public:
 
         const auto stageProgram = Build<TCoLambda>(ctx, writePos)
             .Args(stageArgs)
-            .Body(stageBody)
+            .Body(ctx.ReplaceNodes(std::move(stageBody), stageArgsReplaces))
             .Done();
 
         // Build DQ stage with sink and corresponding connections
@@ -376,7 +388,7 @@ private:
 
         TExprNode::TPtr BuildSerializer(TExprNode::TPtr input, TExprContext& ctx) {
             YQL_ENSURE(Serializer, "Can not build serializer twice");
-            auto result = ctx.ReplaceNodes(std::move(Serializer), {{SerializerArgument.Raw(), std::move(input)}});
+            auto result = ctx.ReplaceNode(std::move(Serializer), SerializerArgument.Ref(), std::move(input));
             Serializer = nullptr;
             return result;
         }

@@ -29,16 +29,24 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "Limit",
+                                        "Node Type": "Limit-InnerJoin (Lookup)",
                                         "Operators": [
+                                            {
+                                                "Inputs": [
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    }
+                                                ],
+                                                "Limit": "1001",
+                                                "Name": "Limit"
+                                            },
                                             {
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 5
                                                     }
                                                 ],
-                                                "Limit": "1001",
-                                                "Name": "Limit"
+                                                "Name": "InnerJoin (Lookup)"
                                             }
                                         ],
                                         "PlanNodeId": 6,

@@ -26,6 +26,8 @@ namespace NKikimr::NDDisk {
             EvReadPersistentBufferResult,
             EvFlushPersistentBuffer,
             EvFlushPersistentBufferResult,
+            EvErasePersistentBuffer,
+            EvErasePersistentBufferResult,
             EvListPersistentBuffer,
             EvListPersistentBufferResult,
         };
@@ -168,6 +170,8 @@ namespace NKikimr::NDDisk {
     struct TEvReadPersistentBufferResult;
     struct TEvFlushPersistentBuffer;
     struct TEvFlushPersistentBufferResult;
+    struct TEvErasePersistentBuffer;
+    struct TEvErasePersistentBufferResult;
     struct TEvListPersistentBuffer;
     struct TEvListPersistentBufferResult;
 
@@ -348,6 +352,30 @@ namespace NKikimr::NDDisk {
         TEvFlushPersistentBufferResult() = default;
 
         TEvFlushPersistentBufferResult(NKikimrBlobStorage::NDDisk::TReplyStatus::E status,
+                const std::optional<TString>& errorReason = std::nullopt) {
+            Record.SetStatus(status);
+            if (errorReason) {
+                Record.SetErrorReason(*errorReason);
+            }
+        }
+    };
+
+    DECLARE_DDISK_EVENT(ErasePersistentBuffer) {
+        using TResult = TEvErasePersistentBufferResult;
+
+        TEvErasePersistentBuffer() = default;
+
+        TEvErasePersistentBuffer(const TQueryCredentials& creds, const TBlockSelector& selector, ui64 lsn) {
+            creds.Serialize(Record.MutableCredentials());
+            selector.Serialize(Record.MutableSelector());
+            Record.SetLsn(lsn);
+        }
+    };
+
+    DECLARE_DDISK_EVENT(ErasePersistentBufferResult) {
+        TEvErasePersistentBufferResult() = default;
+
+        TEvErasePersistentBufferResult(NKikimrBlobStorage::NDDisk::TReplyStatus::E status,
                 const std::optional<TString>& errorReason = std::nullopt) {
             Record.SetStatus(status);
             if (errorReason) {

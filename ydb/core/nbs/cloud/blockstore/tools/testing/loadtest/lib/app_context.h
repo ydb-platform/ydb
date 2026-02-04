@@ -7,7 +7,7 @@
 
 #include <atomic>
 
-namespace NCloud::NBlockStore::NLoadTest {
+namespace NYdb::NBS::NBlockStore::NLoadTest {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -45,4 +45,4 @@ struct TAppContext
     TTempDir TempDir;
 };
 
-}   // namespace NCloud::NBlockStore::NLoadTest
+}   // namespace NYdb::NBS::NBlockStore::NLoadTest

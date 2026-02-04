@@ -8,7 +8,7 @@
 #include <util/generic/maybe.h>
 #include <util/random/random.h>
 
-namespace NCloud::NBlockStore::NLoadTest {
+namespace NYdb::NBS::NBlockStore::NLoadTest {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -41,4 +41,4 @@ public:
     TString DumpRanges() const;
 };
 
-}   // namespace NCloud::NBlockStore::NLoadTest
+}   // namespace NYdb::NBS::NBlockStore::NLoadTest

@@ -234,6 +234,7 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
         const auto& record = analyzeResponse->Get()->Record;
         UNIT_ASSERT_VALUES_EQUAL(record.GetOperationId(), "operationId");
         UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrStat::TEvAnalyzeResponse::STATUS_ERROR);
+        UNIT_ASSERT(!record.GetIssues().empty());
     }    
 }
 

@@ -52,9 +52,11 @@ public:
     TCpuDuration GetElapsedCpuTime() const;
     TCpuDuration GetCurrentCpuDuration() const;
 
-    void Start();
+    //! Returns true if the state was actually changed (timer was stopped).
+    bool Start();
     void StartIfNotActive();
-    void Stop();
+    //! Returns true if the state was actually changed (timer was started).
+    bool Stop();
     void Restart();
 
     void Persist(const TStreamPersistenceContext& context);

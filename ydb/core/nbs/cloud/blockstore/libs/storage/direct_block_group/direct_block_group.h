@@ -6,7 +6,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/direct_block_group/request.h>
 
-namespace NYdb::NBS::NStorage::NPartitionDirect {
+namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 using namespace NKikimr;
 using namespace NKikimr::NBsController;
@@ -126,6 +126,10 @@ public:
         const NDDisk::TEvFlushPersistentBufferResult::TPtr& ev,
         const TActorContext& ctx);
 
+    void HandlePersistentBufferEraseResult(
+        const NDDisk::TEvErasePersistentBufferResult::TPtr& ev,
+        const TActorContext& ctx);
+
     void HandleReadBlocksRequest(
         const TEvService::TEvReadBlocksRequest::TPtr& ev,
         const TActorContext& ctx);
@@ -140,4 +144,4 @@ public:
         const TActorContext& ctx);
 };
 
-}   // namespace NYdb::NBS::NStorage::NPartitionDirect
+}   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

@@ -24,7 +24,7 @@ class IMetricConsumer;
 
 }   // namespace NMonitoring
 
-namespace NCloud {
+namespace NYdb::NBS {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -89,4 +89,4 @@ using IStatsFetcherPtr = std::shared_ptr<IStatsFetcher>;
 
 }   // namespace NStorage
 
-}   // namespace NCloud
+}   // namespace NYdb::NBS

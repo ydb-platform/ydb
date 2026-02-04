@@ -14,6 +14,9 @@
 namespace NKikimr {
 namespace NHive {
 
+static constexpr ui64 MAX_REASSIGNS_WITHOUT_CONFIRMATION = 1000;
+static constexpr i64 REASSIGN_CONFIRMATION_ERROR_MARGIN = 10;
+
 TLoggedMonTransaction::TLoggedMonTransaction(const NMon::TEvRemoteHttpInfo::TPtr& ev, THive* self) {
     Index = ++self->OperationsLogIndex;
 
@@ -1693,6 +1696,9 @@ public:
         out << "<div class='col-sm-1 col-md-1' style='text-align:center'>";
         out << "<button type='button' class='btn btn-info' onclick='location.href=\"app?TabletID=" << Self->HiveId << "&page=Subactors\";' style='width:138px'>SubActors</button>";
         out << "</div>";
+        out << "<div class='col-sm-1 col-md-1' style='text-align:center'>";
+        out << "<button type='button' class='btn btn-info' onclick='location.href=\"app?TabletID=" << Self->HiveId << "&page=ManualOperations\";' style='width:138px'>Manual Ops</button>";
+        out << "</div>";
         out << "</div>";
 
         out << "<div class='row' style='margin-top:50px'>";
@@ -1754,10 +1760,19 @@ public:
                                        </div>
                                    </div>
                                </div>
-                               <div class='row'>
-                                 <div class='col-md-12'>
+                               <div class='row' style='margin-top:20px'>
+                                 <div class='col-md-9'>
                                    <input id='reassign_async' type='checkbox' name='Async'>
                                    <label for='reassign_async'>Async</label>
+                                 </div>
+                                 <div class='col-md-3'>
+                                 <div id='store_state_group' class='input-group'>
+                                    <span class='input-group-addon'>Store state in</span>
+                                    <select id='store_state' class='form-control'>
+                                        <option value='actor'>Actor</option>
+                                        <option value='browser'>Browser</option>
+                                    </select>
+                                 </div>
                                  </div>
                                </div>
                                <div class='row'>
@@ -1804,6 +1819,18 @@ public:
                                        </div>
                                    </div>
                                </div>
+                           </div>
+                           <div class='row'>
+                                 <div class='col-md-3'>
+                                     <div id='confirm_tablets_group' class='input-group' style='visibility:hidden'>
+                                           <label for='confirm_tablets' style='margin-top:20px'>Confirm number of tablets</label>
+                                           <input id='confirm_tablets' type='number' class='form-control'>
+                                     </div>
+                                 </div>
+                           </div>
+                           <div class='row'>
+                               <h4 class='col-md-6' id='last_reassign'></h4>
+                               <h4 class='col-md-6'>Reassigns currently running: <a id='current_reassigns' href='#'>0</a></h4>
                            </div>
                            <div class='modal-footer'>
                                <span id='status_text' style='float:left'></span>
@@ -1924,6 +1951,8 @@ public:
             out << "{type:" << (ui32)(itTablet->first) << ",name:'" << TTabletTypes::TypeToStr(itTablet->first) << "',channels:" << itTablet->second << "}";
         }
         out << "];";
+        out << "var lastReassign = '" << Self->LastReassignStatus << "';";
+        out << "var maxReassigns = " << MAX_REASSIGNS_WITHOUT_CONFIRMATION << ";";
         out << R"___(
 
 $('.container')
@@ -1939,6 +1968,9 @@ function initReassignGroups() {
         opt.value = tablets[tab].type;
         domTabletType.add(opt);
     }
+    $('#last_reassign').text(lastReassign);
+    var current_reassigns_link = document.getElementById('current_reassigns');
+    current_reassigns_link.href = 'app?TabletID=' + hiveId + '&page=Subactors';
 }
 
 initReassignGroups();
@@ -1977,9 +2009,13 @@ function queryTablets() {
         url: url,
         success: function(result) {
             tablets_found = result;
+            var num_tablets_found = tablets_found.length;
             $('#tablets_found_group').parent().css({visibility: 'visible'});
-            $('#tablets_found').text(tablets_found.length);
+            $('#tablets_found').text(num_tablets_found);
             $('#button_reassign').removeClass('disabled');
+            if (num_tablets_found > maxReassigns) {
+                $('#confirm_tablets_group').css({visibility: 'visible'});
+            }
         },
         error: function(jqXHR, status) {
             $('#status_text').text(status);
@@ -2034,15 +2070,65 @@ function cancel() {
 }
 
 function reassignGroups() {
-    $('#tablets_processed_group').parent().css({visibility: 'visible'});
-    $('#current_inflight_group').parent().css({visibility: 'visible'});
-    //$('#time_left_group').parent().css({visibility: 'visible'});
-    $('#progress_bar_group').parent().css({visibility: 'visible'});
-    $('#button_query').addClass('disabled');
-    $('#button_reassign').addClass('disabled');
-    tablets_processed = 0;
-    current_inflight = 0;
-    continueReassign();
+    if ($('#store_state').val() == 'browser') {
+        $('#tablets_processed_group').parent().css({visibility: 'visible'});
+        $('#current_inflight_group').parent().css({visibility: 'visible'});
+        //$('#time_left_group').parent().css({visibility: 'visible'});
+        $('#progress_bar_group').parent().css({visibility: 'visible'});
+        $('#button_query').addClass('disabled');
+        $('#button_reassign').addClass('disabled');
+        tablets_processed = 0;
+        current_inflight = 0;
+        continueReassign();
+    } else {
+        var storage_pool = $('#tablet_storage_pool').val();
+        var storage_group = $('#tablet_storage_group').val();
+        var tablet_type = $('#tablet_type').val();
+        var channel_from = parseInt($('#tablet_from_channel').val());
+        var channel_to = parseInt($('#tablet_to_channel').val());
+        var percent = $('#tablet_percent').val();
+        var max_inflight = $('#tablet_reassign_inflight').val();
+        var async = $('#reassign_async')[0].checked;
+        var num_tablets = $('#confirm_tablets').val();
+        var url = 'app?TabletID=' + hiveId + '&page=ReassignTablet' + '&tablet=all' + '&wait=0';
+        if (storage_pool) {
+            url = url + '&storagePool=' + storage_pool;
+        }
+        if (storage_group) {
+            url = url + '&group=' + storage_group;
+        }
+        if (tablet_type) {
+            url = url + '&type=' + tablet_type;
+        }
+        if (percent) {
+            url = url + '&percent=' + percent;
+        }
+        if (channel_from != 0 || channel_to != 255) {
+            var channels = [];
+            for (let i = channel_from; i <= channel_to; i++) {
+                channels.push(i);
+            }
+            url = url + '&channel=' + channels.join(',');
+        }
+        if (num_tablets) {
+            url = url + '&numTablets=' + num_tablets;
+        }
+        url = url + '&inflight=' + max_inflight;
+        url = url + '&async=' + (async ? '1' : '0');
+        $.ajax({
+            type: 'POST',
+            url: url,
+            success: function() {
+
+            },
+            error: function(jqXHR, status) {
+                $('#status_text').text(status);
+            },
+            complete: function() {
+                $('#status_text').text("Started reassign actor");
+            },
+        });
+    }
 }
 
 function setDown(element, nodeId, down) {
@@ -2236,6 +2322,7 @@ function fillDataShort(result) {
                     balancerHtml.cells[5].innerHTML = '';
                 }
             }
+            $('#current_reassigns').text(result.ReassignsRunning);
         }
         clearAlert();
     }
@@ -2567,6 +2654,7 @@ public:
         jsonData["StorageScatter"] = GetValueWithColoredGlyph(Self->StorageScatter, Self->GetMinStorageScatterToBalance());
         jsonData["WarmUp"] = Self->WarmUp;
         jsonData["Types"] = GetTypesHtml(Self->SeenTabletTypes, Self->GetTabletLimit());
+        jsonData["ReassignsRunning"] = Self->ReassignsRunning;
 
         if (Cgi.Get("nodes") == "1") {
             TVector<TNodeInfo*> nodeInfos;
@@ -2998,68 +3086,7 @@ public:
     }
 };
 
-class TReassignTabletWaitActor : public TActor<TReassignTabletWaitActor>, public ISubActor {
-public:
-    TActorId Source;
-    ui32 TabletsTotal = 0;
-    ui32 TabletsDone = 0;
-    THive* Hive;
-    NJson::TJsonValue Response;
-
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::HIVE_MON_REQUEST;
-    }
-
-    TReassignTabletWaitActor(const TActorId& source, THive* hive)
-        : TActor(&TReassignTabletWaitActor::StateWork)
-        , Source(source)
-        , Hive(hive)
-    {}
-
-    void PassAway() override {
-        Hive->RemoveSubActor(this);
-        return IActor::PassAway();
-    }
-
-    void Cleanup() override {
-        PassAway();
-    }
-
-    TSubActorId GetId() const override {
-        return SelfId().LocalId();
-    }
-
-    void AddTablet(TLeaderTabletInfo* tablet) {
-        tablet->ActorsToNotifyOnRestart.push_back(SelfId());
-        ++TabletsTotal;
-    }
-
-    void AddContext(const TString& key, const TString& value) {
-        Response[key] = value;
-    }
-
-    void CheckCompletion() {
-        if (TabletsDone >= TabletsTotal) {
-            Response["total"] = TabletsDone;
-            Send(Source, new NMon::TEvRemoteJsonInfoRes(NJson::WriteJson(Response, false)));
-            PassAway();
-        }
-    }
-
-    void Handle(TEvPrivate::TEvRestartComplete::TPtr&) {
-        ++TabletsDone;
-        CheckCompletion();
-    }
-
-    STATEFN(StateWork) {
-        switch (ev->GetTypeRewrite()) {
-            cFunc(TEvents::TSystem::PoisonPill, PassAway);
-            hFunc(TEvPrivate::TEvRestartComplete, Handle);
-        }
-    }
-};
-
-class TTxMonEvent_ReassignTablet : public TTransactionBase<THive> {
+class TTxMonEvent_ReassignTablet : public TTransactionBase<THive>, public TLoggedMonTransaction {
 public:
     struct TTabletFilter {
         struct TAllTablets {};
@@ -3105,6 +3132,16 @@ public:
             return std::holds_alternative<TAllTablets>(TabletId) && TabletType == TTabletTypes::TypeInvalid;
         }
 
+        template <typename TStream>
+        void ToString(TStream& out) const {
+            if (std::holds_alternative<TTabletId>(TabletId)) {
+                out << std::get<TTabletId>(TabletId) << ", ";
+            }
+            if (TabletType != TTabletTypes::TypeInvalid) {
+                out << TTabletTypes::EType_Name(TabletType) << ", ";
+            }
+        }
+
     };
 
     TAutoPtr<NMon::TEvRemoteHttpInfo> Event;
@@ -3112,38 +3149,45 @@ public:
     TTabletFilter TabletFilter;
     TVector<ui32> TabletChannels;
     ui32 GroupId = 0;
+    TString StoragePool;
     TVector<ui32> ForcedGroupIds;
     TString Error;
     bool Wait = true;
     bool Async = false;
-    bool BypassLimit = false;
-
-    static constexpr size_t REASSIGN_SOFT_LIMIT = 500;
+    ui64 MaxInFlight = 1;
+    ui32 TabletPercent = 100;
+    i64 NumTablets = MAX_REASSIGNS_WITHOUT_CONFIRMATION;
 
     TTxMonEvent_ReassignTablet(const TActorId& source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf* hive, const TCgiParameters& params)
         : TBase(hive)
+        , TLoggedMonTransaction(ev, hive)
         , Event(ev->Release())
         , Source(source)
         , TabletFilter(params)
     {
         TabletChannels = Scan<ui32>(SplitString(params.Get("channel"), ","));
         GroupId = FromStringWithDefault(params.Get("group"), GroupId);
+        StoragePool = params.Get("storagePool");
         ForcedGroupIds = Scan<ui32>(SplitString(params.Get("forcedGroup"), ","));
         Wait = FromStringWithDefault(params.Get("wait"), Wait);
         Async = FromStringWithDefault(params.Get("async"), Async);
-        BypassLimit = FromStringWithDefault(params.Get("bypassLimit"), BypassLimit);
+        MaxInFlight = FromStringWithDefault(params.Get("inflight"), MaxInFlight);
+        TabletPercent = FromStringWithDefault<ui32>(params.Get("percent"), TabletPercent);
+        TabletPercent = std::min(TabletPercent, 100u);
+        NumTablets = FromStringWithDefault(params.Get("numTablets"), NumTablets);
     }
 
     TTxType GetTxType() const override { return NHive::TXTYPE_MON_REASSIGN_TABLET; }
 
-    TInstant GetMaxTimestamp(const TLeaderTabletInfo* tablet) const {
+    TInstant GetMaxTimestamp(const TReassignOperation& operation) const {
         TInstant max;
+        const auto* tablet = Self->FindTablet(operation.TabletId);
         for (const auto& channel : tablet->TabletStorageInfo->Channels) {
-            if (TabletChannels.empty()
+            if (operation.TabletChannels.empty()
                     || std::find(
-                        TabletChannels.begin(),
-                        TabletChannels.end(),
-                        channel.Channel) != TabletChannels.end()) {
+                        operation.TabletChannels.begin(),
+                        operation.TabletChannels.end(),
+                        channel.Channel) != operation.TabletChannels.end()) {
                 if (tablet->ChannelProfileNewGroup.test(channel.Channel)) {
                     return TInstant::Max();
                 }
@@ -3156,7 +3200,7 @@ public:
         return max;
     }
 
-    bool Execute(TTransactionContext&, const TActorContext& ctx) override {
+    bool Execute(TTransactionContext& txc, const TActorContext&) override {
         if (Event->GetMethod() != HTTP_METHOD_POST) {
             Error = "Must use POST request";
             return true;
@@ -3172,22 +3216,11 @@ public:
         if (!TabletFilter.IsValidFilter(Error)) {
             return true;
         }
-        if (TabletFilter.AllowsEverything() && GroupId == 0) {
-            Error = "cannot reassign all tablets";
-            return true;
-        }
         auto tablets = Self->Tablets
             | std::views::transform([](auto&& p) -> TLeaderTabletInfo* { return &p.second; })
             | std::views::filter(TabletFilter);
 
-        TVector<THolder<TEvHive::TEvReassignTablet>> operations;
-        TActorId waitActorId;
-        TReassignTabletWaitActor* waitActor = nullptr;
-        if (Wait) {
-            waitActor = new TReassignTabletWaitActor(Source, Self);
-            waitActorId = ctx.RegisterWithSameMailbox(waitActor);
-            Self->SubActors.emplace_back(waitActor);
-        }
+        std::vector<TReassignOperation> operations;
         for (TLeaderTabletInfo* tablet : tablets) {
             TVector<ui32> channels;
             TVector<ui32> forcedGroupIds;
@@ -3195,6 +3228,9 @@ public:
             if (GroupId != 0) {
                 skip = true;
                 for (const auto& channel : tablet->TabletStorageInfo->Channels) {
+                    if (StoragePool && channel.StoragePool != StoragePool) {
+                        continue;
+                    }
                     if (TabletChannels.empty() || Find(TabletChannels, channel.Channel) != TabletChannels.end()) {
                         const auto* latest = channel.LatestEntry();
                         if (latest != nullptr && latest->GroupID == GroupId) {
@@ -3214,23 +3250,37 @@ public:
             if (skip) {
                 continue;
             }
-            if (Wait) {
-                waitActor->AddTablet(tablet);
-            }
-            operations.emplace_back(new TEvHive::TEvReassignTablet(tablet->Id, channels, forcedGroupIds, Async));
-            if (!BypassLimit && operations.size() >= REASSIGN_SOFT_LIMIT) {
-                if (Wait) {
-                    waitActor->AddContext("limit_reached", "true");
-                }
-                break;
-            }
+            operations.emplace_back(tablet->Id, channels, forcedGroupIds, Async);
         }
-        if (Wait) {
-            waitActor->CheckCompletion();
+
+        TStringBuilder description;
+        if (TabletPercent != 100) {
+            description << TabletPercent << "% of ";
         }
-        for (auto& op : operations) {
-            ctx.Send(Self->SelfId(), op.Release());
+        TabletFilter.ToString(description);
+        if (StoragePool) {
+            description << StoragePool << ", ";
         }
+        description << (GroupId ? ToString(GroupId) : "all groups");
+        if (TabletPercent != 100) {
+            std::sort(operations.begin(), operations.end(), [this](const auto& lhs, const auto& rhs) -> bool {
+                return GetMaxTimestamp(lhs) < GetMaxTimestamp(rhs);
+            });
+            auto it = operations.begin() + operations.size() * TabletPercent / 100;
+            operations.erase(it, operations.end());
+        }
+
+        if (operations.size() > MAX_REASSIGNS_WITHOUT_CONFIRMATION && std::abs(static_cast<i64>(operations.size()) - NumTablets) > REASSIGN_CONFIRMATION_ERROR_MARGIN) {
+            Error = "must confirm number of tablets";
+            return true;
+        }
+
+        NIceDb::TNiceDb db(txc.DB);
+        NJson::TJsonValue jsonOperation;
+        jsonOperation["Reassign"] = description;
+        WriteOperation(db, jsonOperation);
+
+        Self->StartReassignActor(std::move(operations), Wait ? Source : TActorId(), MaxInFlight, description);
         return true;
     }
 
@@ -4771,7 +4821,7 @@ public:
             out << "<input type='hidden' name='TabletID' value='" << Self->HiveId << "'/>";
             out << "<input type='hidden' name='page' value='Subactors'/>";
             out << "<input type='hidden' name='stop' value='" << subActor->GetId() << "'/>";
-            out << "<span class='glyphicon glyphicon-remove-sign' title='Stop SubActor' type='submit'></span>";
+            out << "<button class='glyphicon glyphicon-remove-sign' title='Stop SubActor' type='submit'></span>";
             out << "</form></td>";
             out << "</tr>";
         }
@@ -4841,6 +4891,160 @@ public:
         out << "</tbody>";
         out << "</table>";
         out << "</body>";
+        ctx.Send(Source, new NMon::TEvRemoteHttpInfoRes(out.Str()));
+        return true;
+    }
+
+    void Complete(const TActorContext&) override {}
+};
+
+class TTxMonEvent_ManualOps : public TTransactionBase<THive> {
+public:
+    const TActorId Source;
+    THolder<NMon::TEvRemoteHttpInfo> Event;
+
+    TTxMonEvent_ManualOps(const TActorId& source, NMon::TEvRemoteHttpInfo::TPtr&, TSelf* hive)
+        : TBase(hive)
+        , Source(source)
+    {
+    }
+
+    bool Execute(TTransactionContext&, const TActorContext& ctx) override {
+        TStringStream out;
+        out << "<div>";
+        out << "<form id='dynamicForm' method='POST'>";
+        out << R"(
+            <div class="form-group">
+                <label for='page' style='display:block'>Operation type</label>
+                <select id='page' name='page' onchange='toggleCustomInput()'>
+                    <option>SetDown</option>
+                    <option>SetFreeze</option>
+                    <option>ReassignTablet</option>
+                    <option>InitMigration</option>
+                    <option>MoveTablet</option>
+                    <option>StopTablet</option>
+                    <option>ResumeTablet</option>
+                    <option>CreateTablet</option>
+                    <option>ResetTablet</option>
+                    <option>DeleteTablet</option>
+                    <option>UpdateResources</option>
+                    <option>StorageRebalance</option>
+                    <option>TabletAvailability</option>
+                    <option>SetDomain</option>
+                    <option value="other">Other...</option>
+                </select>
+                <input type="text" id="custom_page" name="custom_page"
+                       style='display:none'>
+            </div>
+        )";
+
+        for (auto& param : {"node", "tablet", "wait"}) {
+            out << "<div class='form-group'>";
+            out << "<label style='display:block' for='" << param << "'>" << param << "</label>";
+            out << "<input type='text' id='" << param << "' name='" << param << "'>";
+            out << "</div>";
+        }
+
+        out << R"(
+            <div class="form-group">
+                <label>Custom params</label>
+                <div id="keyValuePairs">
+                    <div class="key-value-pair">
+                        <input type="text" name="key[]" placeholder="key">
+                        <input type="text" name="value[]" placeholder="value">
+                        <button type='button' class='glyphicon glyphicon-remove-sign' onclick='removeKeyValuePair(this)' style='border:none'></button>
+                    </div>
+                </div>
+                <button type='button' class='glyphicon glyphicon-plus' onclick='addKeyValuePair()' style='border:none'></button>
+            </div>
+        )";
+
+        out << "<button type='button' class='btn btn-info' onclick='prepareAndSubmit()'>Send request</button>";
+
+        out << "</form></div>";
+
+        out << "<script>";
+        out << "var hiveId = '" << Self->TabletID() << "';";
+
+        out << R"(
+                function toggleCustomInput() {
+                    const pageSelect = document.getElementById('page');
+                    const customInput = document.getElementById('custom_page');
+
+                    if (pageSelect.value === 'other') {
+                        customInput.style.display = 'block';
+                        customInput.focus();
+                    } else {
+                        customInput.style.display = 'none';
+                        customInput.value = '';
+                    }
+                }
+
+                function addKeyValuePair() {
+                    const container = document.getElementById('keyValuePairs');
+                    const newPair = document.createElement('div');
+                    newPair.className = 'key-value-pair';
+                    newPair.innerHTML = `
+                        <input type="text" name="key[]" placeholder="key">
+                        <input type="text" name="value[]" placeholder="value">
+                        <button type='button' class='glyphicon glyphicon-remove-sign' style='border:none' onclick='removeKeyValuePair(this)'></button>
+                    `;
+                    container.appendChild(newPair);
+                }
+
+                function removeKeyValuePair(button) {
+                    button.parentElement.remove();
+                }
+
+                function prepareAndSubmit() {
+                    const form = document.getElementById('dynamicForm');
+                    const formData = new FormData(form);
+                    const data = {};
+                    data['TabletID'] = hiveId;
+
+                    for (let [key, value] of formData.entries()) {
+                        if (key === 'key[]' || key === 'value[]') {
+                            continue;
+                        }
+
+                        if (key === 'page' && value === 'other') {
+                            const customValue = document.getElementById('custom_page').value;
+                            if (customValue.trim()) {
+                                data[key] = customValue;
+                            } else {
+                                data[key] = value;
+                            }
+                        } else {
+                            data[key] = value;
+                        }
+                    }
+                    const keys = formData.getAll('key[]');
+                    const values = formData.getAll('value[]');
+
+                    for (let i = 0; i < keys.length; i++) {
+                        if (keys[i].trim() && values[i].trim()) {
+                            data[keys[i]] = values[i];
+                        }
+                    }
+                    sendPostRequest(data);
+                }
+
+                function sendPostRequest(data) {
+                    $.ajax({
+                        url: 'app',
+                        method: 'POST',
+                        data: data,
+                        success: function(d) {
+                            alert(JSON.stringify(d));
+                        },
+                        error: function(d) {
+                            alert(JSON.stringify(d));
+                        }
+                    });
+                }
+            </script>
+        )";
+
         ctx.Send(Source, new NMon::TEvRemoteHttpInfoRes(out.Str()));
         return true;
     }
@@ -5020,6 +5224,9 @@ void THive::CreateEvMonitoring(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorCo
     }
     if (page == "SetDomain") {
         return Execute(new TTxMonEvent_SetDomain(ev->Sender, ev, this), ctx);
+    }
+    if (page == "ManualOperations") {
+        return Execute(new TTxMonEvent_ManualOps(ev->Sender, ev, this), ctx);
     }
     return Execute(new TTxMonEvent_Landing(ev->Sender, ev, this), ctx);
 }

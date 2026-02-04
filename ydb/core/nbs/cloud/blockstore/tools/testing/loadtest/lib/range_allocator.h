@@ -7,7 +7,7 @@
 
 #include <util/generic/vector.h>
 
-namespace NCloud::NBlockStore::NLoadTest {
+namespace NYdb::NBS::NBlockStore::NLoadTest {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -42,4 +42,4 @@ private:
     void SetupRequestSizes(const NProto::TRangeTest& rangeTest);
 };
 
-}   // namespace NCloud::NBlockStore::NLoadTest
+}   // namespace NYdb::NBS::NBlockStore::NLoadTest

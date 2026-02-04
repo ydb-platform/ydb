@@ -1,7 +1,7 @@
 #include "partition_direct_actor.h"
 
 
-namespace NYdb::NBS::NStorage::NPartitionDirect {
+namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 using namespace NYdb::NBS;
 
@@ -126,6 +126,13 @@ void TPartitionActor::HandlePersistentBufferFlushResult(
     DirectBlockGroup->HandlePersistentBufferFlushResult(ev, ctx);
 }
 
+void TPartitionActor::HandlePersistentBufferEraseResult(
+    const NDDisk::TEvErasePersistentBufferResult::TPtr& ev,
+    const TActorContext& ctx)
+{
+    DirectBlockGroup->HandlePersistentBufferEraseResult(ev, ctx);
+}
+
 void TPartitionActor::HandleReadBlocksRequest(
     const TEvService::TEvReadBlocksRequest::TPtr& ev,
     const NActors::TActorContext& ctx)
@@ -161,6 +168,7 @@ STFUNC(TPartitionActor::StateWork)
         HFunc(TEvService::TEvWriteBlocksRequest, HandleWriteBlocksRequest);
         HFunc(NDDisk::TEvWritePersistentBufferResult, HandlePersistentBufferWriteResult);
         HFunc(NDDisk::TEvFlushPersistentBufferResult, HandlePersistentBufferFlushResult);
+        HFunc(NDDisk::TEvErasePersistentBufferResult, HandlePersistentBufferEraseResult);
 
         HFunc(TEvService::TEvReadBlocksRequest, HandleReadBlocksRequest);
         HFunc(NDDisk::TEvReadPersistentBufferResult, HandleReadResult<NDDisk::TEvReadPersistentBufferResult>);
@@ -174,4 +182,4 @@ STFUNC(TPartitionActor::StateWork)
     }
 }
 
-}   // namespace NYdb::NBS::NStorage::NPartitionDirect
+}   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

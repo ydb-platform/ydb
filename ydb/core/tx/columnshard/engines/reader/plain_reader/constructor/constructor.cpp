@@ -44,7 +44,8 @@ NKikimr::TConclusion<std::shared_ptr<TReadMetadataBase>> TIndexScannerConstructo
     return static_pointer_cast<TReadMetadataBase>(readMetadata);
 }
 
-std::shared_ptr<IScanCursor> TIndexScannerConstructor::DoBuildCursor() const {
+std::shared_ptr<IScanCursor> TIndexScannerConstructor::DoBuildCursor(const NKikimrKqp::TEvKqpScanCursor::ImplementationCase impl) const {
+    AFL_VERIFY(impl == NKikimrKqp::TEvKqpScanCursor::ImplementationCase::kColumnShardPlain || impl == NKikimrKqp::TEvKqpScanCursor::ImplementationCase::IMPLEMENTATION_NOT_SET);
     return std::make_shared<TPlainScanCursor>();
 }
 

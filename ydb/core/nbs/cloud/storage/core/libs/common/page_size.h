@@ -2,10 +2,10 @@
 
 #include <cstddef>
 
-namespace NCloud {
+namespace NYdb::NBS {
 
 ////////////////////////////////////////////////////////////////////////////////
 
 size_t GetPlatformPageSize();
 
-}   // namespace NCloud
+}   // namespace NYdb::NBS

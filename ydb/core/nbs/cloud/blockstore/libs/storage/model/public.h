@@ -6,7 +6,7 @@
 #include <util/generic/ylimits.h>
 #include <util/system/defaults.h>
 
-namespace NCloud::NBlockStore::NStorage {
+namespace NYdb::NBS::NBlockStore::NStorage {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -44,4 +44,4 @@ enum class EOptimizationMode
     OptimizeForShortRanges,
 };
 
-}   // namespace NCloud::NBlockStore::NStorage
+}   // namespace NYdb::NBS::NBlockStore::NStorage

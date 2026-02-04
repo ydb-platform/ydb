@@ -2,7 +2,7 @@
 #include <util/generic/ptr.h>
 #include <util/generic/string.h>
 #include "ldap_defines.h"
-#include "ldap_socket_wrapper.h"
+#include "socket.h"
 
 class TStreamSocket;
 
@@ -15,9 +15,9 @@ public:
         TString Data;
     };
 
-    TLdapRequestProcessor(TAtomicSharedPtr<TLdapSocketWrapper> socket);
+    TLdapRequestProcessor(std::shared_ptr<TSocket> socket);
     int ExtractMessageId();
-    std::vector<TProtocolOpData> Process(const TLdapMockResponses& responses);
+    std::vector<TProtocolOpData> Process(std::shared_ptr<const TLdapMockResponses> responses);
     unsigned char GetByte();
     size_t GetLength();
 
@@ -34,7 +34,7 @@ private:
     void ProcessFilterOr(TSearchRequestInfo::TSearchFilter* filter, size_t lengthFilter);
 
 private:
-    TAtomicSharedPtr<TLdapSocketWrapper> Socket;
+    std::shared_ptr<TSocket> Socket;
     size_t ReadBytes = 0;
 };
 

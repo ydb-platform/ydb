@@ -18,6 +18,9 @@
 namespace NKikimr {
 
 NPDisk::TEvChunkWrite::TPartsPtr GenParts(TReallyFastRng32& rng, size_t size) {
+    if (size == 0) {
+        return MakeIntrusive<NPDisk::TEvChunkWrite::TAlignedParts>(PrepareData(0));
+    }
     static int testCase = 0;
     switch(testCase++) {
         case 0: {
@@ -30,6 +33,7 @@ NPDisk::TEvChunkWrite::TPartsPtr GenParts(TReallyFastRng32& rng, size_t size) {
         }
         case 1: {
             size_t partsCount = rng.Uniform(1, 10);
+            partsCount = Min(partsCount, size);
             TRope rope;
             size_t createdBytes = 0;
             if (size >= partsCount) {
@@ -1292,9 +1296,9 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
 
         testCtx.MainKey.Keys.push_back(0xFull);
         testCtx.RestartPDiskSync();
+
         mock.InitFull();
         readChunk();
-
         testCtx.MainKey.Keys = { 0xFull };
         testCtx.RestartPDiskSync();
         mock.InitFull();

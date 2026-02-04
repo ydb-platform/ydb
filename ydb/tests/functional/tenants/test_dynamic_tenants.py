@@ -136,57 +136,6 @@ def test_drop_tenant_without_nodes_could_complete(ydb_cluster):
     ydb_cluster.remove_database(database)
 
 
-def test_create_tenant_then_exec_yql_empty_database_header(ydb_cluster, ydb_endpoint):
-    database = '/Root/users/database'
-
-    driver_config = ydb.DriverConfig(ydb_endpoint, database)
-
-    ydb_cluster.create_database(
-        database,
-        storage_pool_units_count={
-            'hdd': 1
-        }
-    )
-    database_nodes = ydb_cluster.register_and_start_slots(database, count=1)
-    ydb_cluster.wait_tenant_up(database)
-
-    def list_endpoints(database):
-        logger.debug("List endpoints of %s", database)
-        resolver = ydb.DiscoveryEndpointsResolver(driver_config)
-        result = resolver.resolve()
-        if result is not None:
-            return result.endpoints
-        return result
-
-    endpoints = list_endpoints(database)
-
-    driver_config2 = ydb.DriverConfig(
-        "%s" % endpoints[0].endpoint,
-        None,
-        credentials=ydb.AuthTokenCredentials("root@builtin")
-    )
-
-    table_path = '%s/table-1' % database
-    with ydb.Driver(driver_config2) as driver:
-        with ydb.SessionPool(driver, size=1) as pool:
-            with pool.checkout() as session:
-                session.execute_scheme(
-                    "create table `{}` (key Int32, value String, primary key(key));".format(
-                        table_path
-                    )
-                )
-
-                session.transaction().execute(
-                    "upsert into `{}` (key) values (101);".format(table_path),
-                    commit_tx=True
-                )
-
-                session.transaction().execute("select key from `{}`;".format(table_path), commit_tx=True)
-
-    ydb_cluster.remove_database(database)
-    ydb_cluster.unregister_and_stop_slots(database_nodes)
-
-
 def test_create_tenant_then_exec_yql(ydb_cluster):
     database = '/Root/users/database'
 

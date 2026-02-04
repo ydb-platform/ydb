@@ -8,6 +8,7 @@
 
 #include <util/system/hp_timer.h>
 
+#include <memory>
 #include <type_traits>
 
 namespace NMVP {

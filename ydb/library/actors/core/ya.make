@@ -97,6 +97,8 @@ SRCS(
     subsystem.cpp
     subsystem.h
     servicemap.h
+    tracer.cpp
+    tracer.h
 )
 
 GENERATE_ENUM_SERIALIZATION(defs.h)
@@ -111,8 +113,10 @@ PEERDIR(
     ydb/library/actors/memory_log
     ydb/library/actors/prof
     ydb/library/actors/protos
+    ydb/library/actors/trace_data
     ydb/library/actors/util
     ydb/library/services
+    library/cpp/containers/concurrent_hash
     library/cpp/execprofile
     library/cpp/json/writer
     library/cpp/logger
@@ -121,6 +125,7 @@ PEERDIR(
     library/cpp/svnversion
     library/cpp/time_provider
     library/cpp/threading/future
+    library/cpp/threading/queue
 )
 
 IF (SANITIZER_TYPE == "thread")

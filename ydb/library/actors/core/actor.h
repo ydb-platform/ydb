@@ -575,6 +575,7 @@ namespace NActors {
         TIntrusiveList<TActorTask> ActorTasks;
         absl::flat_hash_map<ui64, TIntrusiveList<TActorEventAwaiter>> EventAwaiters;
         bool PassedAway = false;
+        bool TraceMessages = false;
 
         void FinishPassAway();
         void DestroyActorTasks();
@@ -845,6 +846,7 @@ namespace NActors {
 
         std::pair<ui32, ui32> CountMailboxEvents(ui32 maxTraverse = Max<ui32>()) const;
 
+        void SetTraceMessages(bool traceMessages) noexcept;
     private:
         void ChangeSelfId(TActorId actorId) {
             SelfActorId = actorId;

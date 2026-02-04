@@ -1,0 +1,37 @@
+import "ydb/library/actors/protos/actors.proto";
+
+package NActorsProtoLog;
+option java_package = "ru.yandex.kikimr.proto";
+option java_outer_classname = "NActorsBaseProtoLog";
+
+message TActorSendMessage {
+    optional NActorsProto.TActorId Sender = 1;
+    optional NActorsProto.TActorId RecipientRewrite = 2;
+    optional fixed64 ObjectId = 3;
+}
+
+message TActorReceiveMessage {
+    optional uint32 ActivityIndex = 1;
+    optional NActorsProto.TActorId Sender = 2;
+    optional NActorsProto.TActorId RecipientRewrite = 3;
+    optional fixed64 ObjectId = 4;
+    optional fixed32 MessageType = 5;
+}
+
+message TNewActorMessage {
+    optional NActorsProto.TActorId ActorId = 1;
+}
+
+message TDieActorMessage {
+    optional NActorsProto.TActorId ActorId = 2;
+}
+
+message TLogMessage {
+    oneof Message {
+        TActorSendMessage SendMessage = 1;
+        TActorReceiveMessage ReceiveMessage = 2;
+        TNewActorMessage NewMessage = 3;
+        TDieActorMessage DieMessage = 4;
+    }
+    optional fixed32 Timestamp = 5;
+}

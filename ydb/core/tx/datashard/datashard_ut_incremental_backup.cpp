@@ -865,7 +865,6 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
             .SetDomainName("Root")
             .SetEnableChangefeedInitialScan(true)
             .SetEnableBackupService(true)
-            .SetEnableRealSystemViewPaths(false)
         );
 
         auto& runtime = *server->GetRuntime();
@@ -943,7 +942,6 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
             .SetDomainName("Root")
             .SetEnableChangefeedInitialScan(true)
             .SetEnableBackupService(true)
-            .SetEnableRealSystemViewPaths(false)
         );
 
         auto& runtime = *server->GetRuntime();
@@ -1440,7 +1438,6 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
             .SetDomainName("Root")
             .SetEnableChangefeedInitialScan(true)
             .SetEnableBackupService(true)
-            .SetEnableRealSystemViewPaths(false)
         );
 
         auto& runtime = *server->GetRuntime();
@@ -1545,7 +1542,6 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
             .SetDomainName("Root")
             .SetEnableChangefeedInitialScan(true)
             .SetEnableBackupService(true)
-            .SetEnableRealSystemViewPaths(false)
         );
 
         auto& runtime = *server->GetRuntime();
@@ -2047,7 +2043,6 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
             .SetDomainName("Root")
             .SetEnableChangefeedInitialScan(true)
             .SetEnableBackupService(true)
-            .SetEnableRealSystemViewPaths(false)
         );
 
         auto& runtime = *server->GetRuntime();
@@ -2085,7 +2080,6 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
             .SetDomainName("Root")
             .SetEnableChangefeedInitialScan(true)
             .SetEnableBackupService(true)
-            .SetEnableRealSystemViewPaths(false)
         );
 
         auto& runtime = *server->GetRuntime();
@@ -2126,7 +2120,6 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
             .SetDomainName("Root")
             .SetEnableChangefeedInitialScan(true)
             .SetEnableBackupService(true)
-            .SetEnableRealSystemViewPaths(false)
         );
 
         auto& runtime = *server->GetRuntime();
@@ -2727,7 +2720,6 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
             .SetDomainName("Root")
             .SetEnableChangefeedInitialScan(true)
             .SetEnableBackupService(true)
-            .SetEnableRealSystemViewPaths(false)
             .SetEnableDataColumnForIndexTable(true)
         );
 
@@ -2827,7 +2819,6 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
             .SetDomainName("Root")
             .SetEnableChangefeedInitialScan(true)
             .SetEnableBackupService(true)
-            .SetEnableRealSystemViewPaths(false)
             .SetEnableDataColumnForIndexTable(true)
         );
 
@@ -2922,7 +2913,6 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
             .SetDomainName("Root")
             .SetEnableChangefeedInitialScan(true)
             .SetEnableBackupService(true)
-            .SetEnableRealSystemViewPaths(false)
             .SetEnableDataColumnForIndexTable(true)
         );
 
@@ -3038,7 +3028,6 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
             .SetDomainName("Root")
             .SetEnableChangefeedInitialScan(true)
             .SetEnableBackupService(true)
-            .SetEnableRealSystemViewPaths(false)
             .SetEnableDataColumnForIndexTable(true)
         );
 
@@ -3148,7 +3137,6 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
             .SetDomainName("Root")
             .SetEnableChangefeedInitialScan(true)
             .SetEnableBackupService(true)
-            .SetEnableRealSystemViewPaths(false)
         );
 
         auto& runtime = *server->GetRuntime();
@@ -3262,7 +3250,6 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
             .SetDomainName("Root")
             .SetEnableChangefeedInitialScan(true)
             .SetEnableBackupService(true)
-            .SetEnableRealSystemViewPaths(false)
         );
 
         auto& runtime = *server->GetRuntime();
@@ -3383,7 +3370,6 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
             .SetDomainName("Root")
             .SetEnableChangefeedInitialScan(true)
             .SetEnableBackupService(true)
-            .SetEnableRealSystemViewPaths(false)
         );
 
         auto& runtime = *server->GetRuntime();
@@ -3498,7 +3484,6 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
             .SetDomainName("Root")
             .SetEnableChangefeedInitialScan(true)
             .SetEnableBackupService(true)
-            .SetEnableRealSystemViewPaths(false)
         );
 
         auto& runtime = *server->GetRuntime();
@@ -3621,7 +3606,6 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
             .SetDomainName("Root")
             .SetEnableChangefeedInitialScan(true)
             .SetEnableBackupService(true)
-            .SetEnableRealSystemViewPaths(false)
         );
 
         auto& runtime = *server->GetRuntime();
@@ -3755,7 +3739,6 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
             .SetDomainName("Root")
             .SetEnableChangefeedInitialScan(true)
             .SetEnableBackupService(true)
-            .SetEnableRealSystemViewPaths(false)
         );
 
         auto& runtime = *server->GetRuntime();

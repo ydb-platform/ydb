@@ -185,7 +185,11 @@ EXPECTED_RESULTS_WITHOUT_ENFORCE_USER_TOKEN = {
     '/healthcheck': {None: 200, 'user@builtin': 200, 'root@builtin': 200},
     '/ping': {None: 200, 'user@builtin': 200, 'root@builtin': 200},
     '/status': {None: 200, 'user@builtin': 200, 'root@builtin': 200},
-    '/ver': {None: 200, 'user@builtin': 403, 'root@builtin': 200},
+    '/ver': {
+        None: 200,
+        'user@builtin': 403,
+        'root@builtin': 200,
+    },  # TODO(yurikiselev): Fix 403 here and in other endpoints (issue #33354)
     '/login': {None: 400, 'user@builtin': 400, 'root@builtin': 400},
     '/viewer/capabilities': {None: 200, 'user@builtin': 200, 'root@builtin': 200},
     '/static/css/bootstrap.min.css': {None: 200, 'user@builtin': 403, 'root@builtin': 200},

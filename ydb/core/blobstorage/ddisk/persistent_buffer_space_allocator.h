@@ -16,6 +16,19 @@ namespace NKikimr::NDDisk {
     class TPersistentBufferSpaceAllocator {
         protected:
 
+        struct TChunkRank {
+            ui32 ChunkIdx;
+            ui32 FreeSpace;
+
+            bool operator==(const TChunkRank& other) const {
+                return ChunkIdx == other.ChunkIdx;
+            }
+
+            bool operator<(const TChunkRank& other) const {
+                return FreeSpace > other.FreeSpace || (FreeSpace == other.FreeSpace && ChunkIdx < other.ChunkIdx);
+            }
+        };
+
         struct TChunkSpaceOccupation {
             struct TSpaceRange {
                 ui32 First;
@@ -40,12 +53,14 @@ namespace NKikimr::NDDisk {
             ui32 ChunkIdx;
             ui32 FreeSpace;
             std::set<TSpaceRange, TSequentialComparator> FreeSectors;
-            std::set<TSpaceRange, TBestChoiceComparator> FreeSectorsQueue;
+            std::set<TSpaceRange, TBestChoiceComparator> FreeSectorsPriorityQueue;
+            std::set<TChunkRank>& OwnerChunksQueue;
 
             void Occupy(ui32 sectorsCount, std::vector<TPersistentBufferSectorInfo>& result);
             void Free(ui32 fromSectorIdx, ui32 toSectorIdx);
+            TChunkRank GetRank() const { return {ChunkIdx, FreeSpace}; }
 
-            TChunkSpaceOccupation(ui32 chunkIdx, ui32 first, ui32 last);
+            TChunkSpaceOccupation(std::set<TChunkRank>& chunksQueue, ui32 chunkIdx, ui32 first, ui32 last);
 
             TString ToString() const;
         };
@@ -53,7 +68,7 @@ namespace NKikimr::NDDisk {
         ui32 SectorsInChunk;
         ui32 MaxChunks;
         std::unordered_map<ui32, TChunkSpaceOccupation> FreeSpaceMap;
-        ui32 OccupyChunkSeed = 0;
+        std::set<TChunkRank> ChunksPriorityQueue;
         ui32 FreeSpace = 0;
 
         public:
@@ -67,5 +82,7 @@ namespace NKikimr::NDDisk {
         ui32 GetFreeSpace() const {
             return FreeSpace;
         }
+        TString ToString() const;
+
     };
 }

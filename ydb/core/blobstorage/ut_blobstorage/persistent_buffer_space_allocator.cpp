@@ -36,14 +36,31 @@ Y_UNIT_TEST_SUITE(PersistentBufferSpaceAllocator) {
         allocator.AddNewChunk(321);
         auto result = allocator.Occupy(20);
         UNIT_ASSERT_EQUAL(result.size(), 20);
+        for(ui32 j : xrange(20)) {
+            UNIT_ASSERT_EQUAL(result[j].ChunkIdx, 321);
+            UNIT_ASSERT_EQUAL(result[j].SectorIdx, j);
+        }
+    }
+
+    Y_UNIT_TEST(AddNewChunkAndOccupyAllSpace) {
+        TPersistentBufferSpaceAllocator allocator;
+        allocator.AddNewChunk(123);
+        allocator.AddNewChunk(321);
+        for (ui32 _ : xrange(32768 / 10 * 2)) {
+            allocator.Occupy(10);
+        }
+        UNIT_ASSERT_EQUAL(allocator.Occupy(20).size(), 0);
+        auto result = allocator.Occupy(15);
+        UNIT_ASSERT_EQUAL(result.size(), 15);
         for(ui32 j : xrange(8)) {
             UNIT_ASSERT_EQUAL(result[j].ChunkIdx, 123);
             UNIT_ASSERT_EQUAL(result[j].SectorIdx, 32760 + j);
         }
-        for(ui32 j : xrange(8, 12)) {
+        for(ui32 j : xrange(8, 7)) {
             UNIT_ASSERT_EQUAL(result[j].ChunkIdx, 321);
-            UNIT_ASSERT_EQUAL(result[j].SectorIdx, j - 8);
+            UNIT_ASSERT_EQUAL(result[j].SectorIdx, 32760 + j - 8);
         }
+        UNIT_ASSERT_EQUAL(allocator.GetFreeSpace(), 1);
     }
 
     Y_UNIT_TEST(OccupyChunkSeedTest) {

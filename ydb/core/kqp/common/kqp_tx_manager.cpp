@@ -330,7 +330,11 @@ public:
     }
 
     void SetBrokenLockQueryTraceId(ui64 queryTraceId) override {
-        if (!BrokenLockQueryTraceId_ && queryTraceId != 0) {
+        if (queryTraceId == 0) {
+            return;
+        }
+
+        if (!BrokenLockQueryTraceId_) {
             BrokenLockQueryTraceId_ = queryTraceId;
 
             // If we already have a LocksIssue, update its message to include the victim query trace id

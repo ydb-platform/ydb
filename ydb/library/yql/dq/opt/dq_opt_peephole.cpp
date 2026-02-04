@@ -923,6 +923,22 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
     const auto itemTypeRight =
         GetSequenceItemType(blockHashJoin.RightInput(), false, ctx)->Cast<TStructExprType>();
 
+    // Build renames for output mapping (input index -> output index)
+    TExprNode::TListType leftRenames, rightRenames;
+    ui32 outputIndex = 0;
+
+    for (auto i = 0u; i < itemTypeLeft->GetSize(); i++) {
+        leftRenames.emplace_back(ctx.NewAtom(pos, ctx.GetIndexAsString(i)));
+        leftRenames.emplace_back(ctx.NewAtom(pos, ctx.GetIndexAsString(outputIndex++)));
+    }
+
+    if (needRightColumns) {
+        for (auto i = 0u; i < itemTypeRight->GetSize(); i++) {
+            rightRenames.emplace_back(ctx.NewAtom(pos, ctx.GetIndexAsString(i)));
+            rightRenames.emplace_back(ctx.NewAtom(pos, ctx.GetIndexAsString(outputIndex++)));
+        }
+    }
+
     // These hold synthetic (converted) join-key columns appended to the end of the wide row
     std::vector<std::pair<TString, const TTypeAnnotationNode*>> leftConvertedItems;
     std::vector<std::pair<TString, const TTypeAnnotationNode*>> rightConvertedItems;
@@ -1027,17 +1043,17 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
             .Add(2, blockHashJoin.JoinType().Ptr())
             .Add(3, ctx.NewList(pos, std::move(leftKeyColumnNodes)))
             .Add(4, ctx.NewList(pos, std::move(rightKeyColumnNodes)))
+            .Add(5, ctx.NewList(pos, std::move(leftRenames)))
+            .Add(6, ctx.NewList(pos, std::move(rightRenames)))
         .Seal()
         .Build();
 
-    // BlockHashJoinCore output: Flow of blocks.
-    // Convert it to Flow of wide scalars: FromFlow(Flow-of-blocks) -> WideFromBlocks -> ToFlow
+    // BlockHashJoinCore output: Stream of blocks.
+    // Convert it to Flow of wide scalars: ToFlow(Stream-of-blocks) -> WideFromBlocks
     auto wideResultFlow = ctx.Builder(pos)
-        .Callable("ToFlow")
-            .Callable(0, "WideFromBlocks")
-                .Callable(0, "FromFlow")
-                    .Add(0, std::move(blockJoinCore))
-                .Seal()
+        .Callable("WideFromBlocks")
+            .Callable(0, "ToFlow")
+                .Add(0, std::move(blockJoinCore))
             .Seal()
         .Seal()
         .Build();

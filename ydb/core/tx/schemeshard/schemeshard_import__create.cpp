@@ -1699,7 +1699,6 @@ private:
         }
 
         item.WaitTxId = txId;
-
         Self->PersistImportItemState(db, *importInfo, itemIdx);
 
         if (importInfo->State != EState::Waiting && item.State == EState::Transferring) {

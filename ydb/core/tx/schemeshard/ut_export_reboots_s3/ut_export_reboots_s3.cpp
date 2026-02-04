@@ -995,11 +995,10 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
     }
 
     // System view
-    Y_UNIT_TEST(ShouldSucceedOnSysViewPermissions) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnSysViewPermissions, 2, 1, false) {
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
 
-        TTestWithReboots t;
         t.GetTestEnvOptions().EnablePermissionsExport(true);
         TS3Mock s3Mock({}, TS3Mock::TSettings(port));
         UNIT_ASSERT(s3Mock.Start());
@@ -1055,11 +1054,10 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         });
     }
 
-    Y_UNIT_TEST(CancelShouldSucceedOnSysViewPermissions) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CancelShouldSucceedOnSysViewPermissions, 2, 1, false) {
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
 
-        TTestWithReboots t;
         t.GetTestEnvOptions().EnablePermissionsExport(true);
         TS3Mock s3Mock({}, TS3Mock::TSettings(port));
         UNIT_ASSERT(s3Mock.Start());
@@ -1118,11 +1116,10 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         });
     }
 
-    Y_UNIT_TEST(ForgetShouldSucceedOnSysViewPermissions) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ForgetShouldSucceedOnSysViewPermissions, 2, 1, false) {
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
 
-        TTestWithReboots t;
         t.GetTestEnvOptions().EnablePermissionsExport(true);
         TS3Mock s3Mock({}, TS3Mock::TSettings(port));
         UNIT_ASSERT(s3Mock.Start());

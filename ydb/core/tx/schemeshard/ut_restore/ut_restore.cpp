@@ -7834,8 +7834,8 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         );
     }
 
-    Y_UNIT_TEST(ShouldSucceedOnSystemView) {
-        ShouldSucceed(
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnSystemView, 2, 1, false) {
+        ShouldSucceed(t,
             {
                 {
                     "/partition_stats",
@@ -7860,7 +7860,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         );
     }
 
-    Y_UNIT_TEST(ShouldSucceedOnSystemViewWithPermissions) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnSystemViewWithPermissions, 2, 1, false) {
         const TString permissions = R"(
             actions {
                 change_owner: "user1@builtin"
@@ -7903,7 +7903,6 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         TS3Mock s3Mock(ConvertTestData(bucketContent), TS3Mock::TSettings(port));
         UNIT_ASSERT(s3Mock.Start());
 
-        TTestWithReboots t;
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -8272,7 +8271,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         );
     }
 
-    Y_UNIT_TEST(CancelShouldSucceedOnSystemViewWithPermissions) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CancelShouldSucceedOnSystemViewWithPermissions, 2, 1, false) {
         const TString permissions = R"(
             actions {
                 change_owner: "user1@builtin"
@@ -8315,7 +8314,6 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         TS3Mock s3Mock(ConvertTestData(bucketContent), TS3Mock::TSettings(port));
         UNIT_ASSERT(s3Mock.Start());
 
-        TTestWithReboots t;
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);

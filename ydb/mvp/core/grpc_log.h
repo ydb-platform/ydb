@@ -2,7 +2,7 @@
 
 #include "appdata.h"
 #include "mvp_log.h"
-#include "proto_masking.h"
+#include "mvp_security_printer.h"
 
 #include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
 
@@ -15,7 +15,7 @@ namespace NMVP {
 template<typename TProto>
 TString SecureShortDebugString(const TProto& request) {
     if constexpr (std::is_base_of_v<::google::protobuf::Message, TProto>) {
-        return TString(NMVP::MaskedShortDebugString(request));
+        return TString(MVPSecureDebugString(request));
     } else {
         return request.ShortDebugString();
     }

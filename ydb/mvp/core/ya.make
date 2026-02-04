@@ -23,7 +23,6 @@ SRCS(
     mvp_test_runtime.cpp
     mvp_test_runtime.h
     mvp_tokens.cpp
-    proto_masking.cpp
     mvp_tokens.h
     parser.cpp
     parser.h

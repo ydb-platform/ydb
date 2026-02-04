@@ -1,5 +1,4 @@
 #include "mvp_tokens.h"
-#include "proto_masking.h"
 #include <contrib/libs/jwt-cpp/include/jwt-cpp/jwt.h>
 #include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/library/security/util.h>

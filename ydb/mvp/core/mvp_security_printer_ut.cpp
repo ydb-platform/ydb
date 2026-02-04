@@ -1,4 +1,4 @@
-#include "proto_masking.h"
+#include "mvp_security_printer.h"
 
 #include <ydb/mvp/core/ut/protos/masking_test.pb.h>
 #include <ydb/library/security/util.h>
@@ -42,33 +42,36 @@ Y_UNIT_TEST_SUITE(Masking) {
         nested->set_nested_cred("NSECRET");
         nested->set_nested_sens("NSECRET2");
 
-        std::string actual = NMVP::MaskedShortDebugString(req);
+        auto secure = NMVP::MVPSecureDebugString(req);
+        std::string actual(secure.data(), secure.size());
 
-        // Build expected string with TStringBuilder for readability
         TStringBuilder b;
         b << "name: \"value\""
-          << " cred: \"" << NKikimr::MaskTicket(req.cred()) << "\""
-          << " sens: \"" << NKikimr::MaskTicket(req.sens()) << "\""
-          << " int_value: " << 42;
+          << " cred: \"***\""
+          << " sens: \"***\""
+          << " int_value: 42"
+          << " int_cred: ***"
+          << " int_sens: ***";
         for (const auto& name : repeatedNames) {
             b << " repeated_name: \"" << name << "\"";
         }
         for (const auto& s : maskedRCreds) {
-            b << " repeated_cred: \"" << NKikimr::MaskTicket(s) << "\"";
+            (void)s;
+            b << " repeated_cred: \"***\"";
         }
         for (const auto& s : maskedRSens) {
-            b << " repeated_sens: \"" << NKikimr::MaskTicket(s) << "\"";
+            (void)s;
+            b << " repeated_sens: \"***\"";
         }
-        b << " nested { "
-          << "nested_name: \"nested_value\""
-          << " nested_cred: \"" << NKikimr::MaskTicket(nested->nested_cred()) << "\""
-          << " nested_sens: \"" << NKikimr::MaskTicket(nested->nested_sens()) << "\""
-          << " }";
+        b << " nested {"
+          << " nested_name: \"nested_value\""
+          << " nested_cred: \"***\""
+          << " nested_sens: \"***\""
+          << " } ";
         TString expectedT = b;
         std::string expected(expectedT.data(), expectedT.size());
-
-        UNIT_ASSERT(actual.find("int_cred:") == std::string::npos);
-        UNIT_ASSERT(actual.find("int_sens:") == std::string::npos);
+            UNIT_ASSERT(actual.find("int_cred:") != std::string::npos);
+            UNIT_ASSERT(actual.find("int_sens:") != std::string::npos);
         UNIT_ASSERT_VALUES_EQUAL(actual, expected);
     }
 

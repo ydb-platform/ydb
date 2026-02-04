@@ -6,7 +6,7 @@ SRCS(
     mvp_ut.cpp
     mvp_tokens.cpp
     mvp_test_runtime.cpp
-    proto_masking_ut.cpp
+    mvp_security_printer_ut.cpp
 )
 
 PEERDIR(

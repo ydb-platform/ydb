@@ -1,10 +1,28 @@
 #include "select_builder.h"
 
 #include <util/string/builder.h>
+#include <util/string/escape.h>
 
 #include <format>
 
 namespace NKikimr::NStat {
+
+namespace {
+
+struct TEscapedId {
+    TStringBuf raw;
+};
+
+TStringBuilder& operator<<(TStringBuilder& out, const TEscapedId& identifier) {
+    // Reference: https://ydb.tech/docs/ru/yql/reference/syntax/lexer?version=v25.4#keywords-and-ids
+    // YDB has additional restrictions for column and table names, but we don't rely on them.
+    auto escaped = EscapeC(identifier.raw);
+    SubstGlobal(escaped, "`", "\\`");
+    out << '`' << escaped << '`';
+    return out;
+}
+
+}
 
 ui32 TSelectBuilder::AddBuiltinAggregation(std::optional<TString> columnName, TString aggName) {
     auto column = TAggColumn{
@@ -58,20 +76,20 @@ TString TSelectBuilder::Build(const TStringBuf& table) const {
         }
         if (agg.UdafFactory) {
             Y_ABORT_UNLESS(agg.ColumnName);
-            res << "AGGREGATE_BY(" << agg.ColumnName
+            res << "AGGREGATE_BY(" << TEscapedId{*agg.ColumnName}
                 << "," << "$f" << *agg.UdafFactory << "(" << agg.Params << "))";
         } else {
             Y_ABORT_UNLESS(agg.AggName);
             res << *agg.AggName;
             if (agg.ColumnName) {
-                res << "(" << *agg.ColumnName << ")";
+                res << "(" << TEscapedId{*agg.ColumnName} << ")";
             } else {
                 res << "(*)";
             }
         }
     }
 
-    res << " FROM `" << table << "`";
+    res << " FROM " << TEscapedId{table};
     return res;
 }
 

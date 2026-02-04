@@ -17,8 +17,6 @@ class TSocketDescriptor : public NActors::TSharedDescriptor, public TNetworkConf
     TSpinLock Lock;
     std::shared_ptr<X509> SecureConnectionClientCert;
 
-    SSL* SslPointer;
-
 public:
     TSocketDescriptor(TSocketType&& s, std::shared_ptr<TEndpointInfo> endpoint)
         : Socket(std::make_unique<TNetworkConfig::TSocketType>(std::move(s)))
@@ -60,9 +58,6 @@ public:
     int UpgradeToSecure() {
         std::unique_ptr<TNetworkConfig::TSecureSocketType> socket = std::make_unique<TNetworkConfig::TSecureSocketType>(std::move(*Socket));
         int res = socket->SecureAccept(Endpoint->SecureContext.get());
-        // X509 *c = socket->GetSslClientCert();
-        // SecureConnectionClientCert = std::shared_ptr<X509>(c, X509_free);
-        SslPointer = socket->GetSsl();
         TGuard lock(Lock);
         Socket.reset(socket.release());
         return res;
@@ -93,16 +88,10 @@ public:
         return *Socket;
     }
 
-    SSL* GetSslPointer() {
-        return SslPointer;
-    }
-
     std::shared_ptr<X509> GetSslClientCert() {
         auto *socket = dynamic_cast<TNetworkConfig::TSecureSocketType*>(Socket.get());
 
         SecureConnectionClientCert = socket->GetSslClientCert();
-        // TGuard lock(Lock);
-        // Socket.reset(socket.release());
         return SecureConnectionClientCert;
     }
 

@@ -928,7 +928,7 @@ struct TDiskFormat {
         }
     }
 
-    void Clear(bool enableFormatAndMeatadaEncryption) {
+    void Clear(bool enableFormatAndMetadataEncryption) {
         Version = PDISK_FORMAT_VERSION;
         DiskSize = 0;
         Guid = 0;
@@ -950,7 +950,7 @@ struct TDiskFormat {
             FormatFlagErasureEncodeNextChunkReference |
             FormatFlagEncryptData;
 
-        if (enableFormatAndMeatadaEncryption) {
+        if (enableFormatAndMetadataEncryption) {
             FormatFlags |= FormatFlagEncryptFormat;
         }
 

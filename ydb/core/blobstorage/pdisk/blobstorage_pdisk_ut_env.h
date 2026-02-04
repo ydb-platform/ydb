@@ -56,9 +56,9 @@ public:
     // this pointer doesn't own the object (only Runtime does)
     NWilson::TFakeWilsonUploader *WilsonUploader = new NWilson::TFakeWilsonUploader;
 
-    void DoFormatPDisk(ui64 guid, bool enableFormatAndMeatadaEncryption = true, std::optional<bool> enableSectorEncryption = std::nullopt) {
+    void DoFormatPDisk(ui64 guid, bool enableFormatAndMetadataEncryption = true, std::optional<bool> enableSectorEncryption = std::nullopt) {
         FormatPDiskForTest(TestCtx.Path, guid, Settings.ChunkSize, Settings.DiskSize,
-            false, TestCtx.SectorMap, Settings.SmallDisk, Settings.PlainDataChunks, enableFormatAndMeatadaEncryption,
+            false, TestCtx.SectorMap, Settings.SmallDisk, Settings.PlainDataChunks, enableFormatAndMetadataEncryption,
             enableSectorEncryption, Settings.RandomizeMagic);
     }
 

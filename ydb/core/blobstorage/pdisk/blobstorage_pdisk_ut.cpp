@@ -766,7 +766,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         UNIT_ASSERT_VALUES_EQUAL(readRes->Data.ToString(), writeData);
     }
 
-    void AfterObliterateShouldNotReadLog(bool enableFormatAndMeatadaEncryption) {
+    void AfterObliterateShouldNotReadLog(bool enableFormatAndMetadataEncryption) {
         // regression test for #31337
         const TString expectedLogData = PrepareData(12346);
         TActorTestContext::TSettings settings{};
@@ -775,7 +775,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         settings.ChunkSize = NPDisk::SmallDiskMaximumChunkSize;
         settings.DiskSize = (ui64)settings.ChunkSize * 50;
         settings.SmallDisk = true;
-        settings.EnableFormatAndMetadataEncryption = enableFormatAndMeatadaEncryption;
+        settings.EnableFormatAndMetadataEncryption = enableFormatAndMetadataEncryption;
         settings.EnableSectorEncryption = false;
         settings.NonceRandNum = 13;
 
@@ -836,7 +836,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         AfterObliterateShouldNotReadLog(false);
     }
 
-    void AfterObliterateDontReuseOldChunkData(bool enableFormatAndMeatadaEncryption) {
+    void AfterObliterateDontReuseOldChunkData(bool enableFormatAndMetadataEncryption) {
         // regression test for #31337
         const TString writeData = PrepareData(4096);
         const size_t chunkCount = 10;
@@ -849,7 +849,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         settings.DiskSize = (ui64)settings.ChunkSize * 50;
         settings.SmallDisk = true;
         settings.PlainDataChunks = false;
-        settings.EnableFormatAndMetadataEncryption = enableFormatAndMeatadaEncryption;
+        settings.EnableFormatAndMetadataEncryption = enableFormatAndMetadataEncryption;
         settings.EnableSectorEncryption = false;
         settings.NonceRandNum = 13;
 

@@ -145,9 +145,6 @@ void SetupRuntimeAndHive(TTestBasicRuntime& runtime) {
 
             nodeWardenConfig->SectorMaps[pDiskPath] = sectorMap;
 
-            TFormatOptions formatOptions;
-            formatOptions.SectorMap = sectorMap;
-            formatOptions.EnableSmallDiskOptimization = false;
             FormatPDisk(
                 pDiskPath,
                 pDiskSize,
@@ -159,7 +156,10 @@ void SetupRuntimeAndHive(TTestBasicRuntime& runtime) {
                 0x7890123456,
                 NPDisk::YdbDefaultPDiskSequence,
                 TString(""),
-                formatOptions
+                {
+                    .SectorMap = sectorMap,
+                    .EnableSmallDiskOptimization = false,
+                }
             );
         }
 

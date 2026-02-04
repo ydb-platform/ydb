@@ -77,6 +77,7 @@ class TDDiskPerfTestActor : public TActor<TDDiskPerfTestActor> {
     const NDevicePerfTest::TDDiskTest& TestProto;
     TIntrusivePtr<IResultPrinter> Printer;
     const TIntrusivePtr<NMonitoring::TDynamicCounters>& Counters;
+    TString CurrentTestType; // Current test type name (e.g., "DDiskWriteLoad")
 
 protected:
     void ActTestFSM(const TActorContext& ctx) {
@@ -86,12 +87,14 @@ protected:
                 auto record = TestProto.GetDDiskTestList(CurrentTest);
                 switch (record.Command_case()) {
                 case NKikimr::TEvLoadTestRequest::CommandCase::kDDiskWriteLoad: {
+                    CurrentTestType = "DDiskWriteLoad";
                     const auto cfg = record.GetDDiskWriteLoad();
                     ctx.Register(CreateDDiskWriterLoadTest(cfg, ctx.SelfID, Counters,
                                 CurrentTest, cfg.HasTag() ? cfg.GetTag() : 0));
                     break;
                 }
                 default:
+                    CurrentTestType = "Unknown";
                     Cerr << "Unknown load type" << Endl;
                     break;
                 }
@@ -117,17 +120,22 @@ protected:
         Y_ABORT_UNLESS(ev->Get());
         TIntrusivePtr<TEvLoad::TLoadReport> report = ev->Get()->Report;
         if (report) {
+            double speedMBps = report->GetAverageSpeed() / 1e6;
+            double iops = report->Size ? (report->GetAverageSpeed() / report->Size) : 0.0;
+            Printer->SetTestType(CurrentTestType);
+            Printer->SetInFlight(report->InFlight);
             Printer->AddResult("Name", Cfg.Name);
             Printer->AddResult("Duration, sec", report->Duration.Seconds());
             Printer->AddResult("Load", report->LoadTypeName());
             Printer->AddResult("Size", ToString(HumanReadableSize(report->Size, SF_BYTES)));
             Printer->AddResult("InFlight", report->InFlight);
-            Printer->AddResult("Speed", Sprintf("%.1f MB/s", report->GetAverageSpeed() / 1e6));
+            Printer->AddResult("Speed", Sprintf("%.1f MB/s", speedMBps));
             if (report->Size) {
-                Printer->AddResult("IOPS", Sprintf("%.0f", report->GetAverageSpeed() / report->Size));
+                Printer->AddResult("IOPS", Sprintf("%.0f", iops));
             } else {
                 Printer->AddResult("IOPS", TString("N/A"));
             }
+            Printer->AddSpeedAndIops(TSpeedAndIops(speedMBps, iops));
             for (double perc : {1.0, 0.9999, 0.999, 0.99, 0.95, 0.9, 0.5, 0.1}) {
                 TString perc_name = Sprintf("p%.2f", perc * 100);
                 size_t val = report->LatencyUs.GetPercentile(perc);

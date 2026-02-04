@@ -40,6 +40,15 @@ struct TPrinterStub : NKikimr::IResultPrinter {
     void AddGlobalParam(const TString&, const TString&) override {
     }
 
+    void AddSpeedAndIops(const NKikimr::TSpeedAndIops&) override {
+    }
+
+    void SetTestType(const TString&) override {
+    }
+
+    void SetInFlight(ui32) override {
+    }
+
     void PrintResults() override {
     }
 

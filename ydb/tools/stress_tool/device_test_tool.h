@@ -14,7 +14,8 @@
 #include <util/generic/map.h>
 #include <util/stream/str.h>
 
-
+#include <algorithm>
+#include <cmath>
 #include <cstdlib>
 
 namespace NKikimr {
@@ -36,6 +37,17 @@ do { \
 #define TEST_COUT_LN(str) \
     TEST_COUT(str << Endl)
 
+struct TSpeedAndIops {
+    double SpeedMBps = 0.0;
+    double Iops = 0.0;
+
+    TSpeedAndIops() = default;
+    TSpeedAndIops(double speed, double iops)
+        : SpeedMBps(speed)
+        , Iops(iops)
+    {}
+};
+
 class IResultPrinter : public TThrRefBase {
 public:
     template<typename T>
@@ -47,6 +59,9 @@ public:
 
     virtual void AddResult(const TString& name, const TString& value) = 0;
     virtual void AddGlobalParam(const TString& name, const TString& value) = 0;
+    virtual void AddSpeedAndIops(const TSpeedAndIops& data) = 0;
+    virtual void SetTestType(const TString& testType) = 0;
+    virtual void SetInFlight(ui32 inFlight) = 0;
 
     template<typename T>
     void AddGlobalParam(const TString& name, const T& value) {
@@ -80,8 +95,16 @@ public:
     };
 
     EOutputFormat OutputFormat = OUTPUT_FORMAT_WIKI;
+    ui32 RunCount = 1;
     TVector<TStringPair> GlobalParams;
     TVector<TStringPair> Results;
+    TVector<TVector<TStringPair>> AllRuns; // All runs collected for statistics (for flat mode)
+    TSpeedAndIops CurrentSpeedAndIops; // Current run's speed and IOPS
+    TVector<TSpeedAndIops> AllSpeedAndIops; // All runs' speed and IOPS for statistics (for flat mode)
+    TString TestType; // Test type name (e.g., "PDiskWriteLoad")
+    ui32 CurrentInFlight = 0; // Current InFlight value
+    TMap<ui32, TVector<TVector<TStringPair>>> RunsByInFlight; // Runs grouped by InFlight
+    TMap<ui32, TVector<TSpeedAndIops>> SpeedAndIopsByInFlight; // Speed/IOPS grouped by InFlight
     bool HeaderPrinted = false;
     NJson::TJsonWriter JsonWriter;
 
@@ -97,6 +120,50 @@ public:
         }
     }
 
+    struct TStatistics {
+        double Min = 0.0;
+        double Max = 0.0;
+        double Median = 0.0;
+        double StdDev = 0.0;
+    };
+
+    static TStatistics GetStatistics(TVector<double>& values) {
+        if (values.empty()) {
+            return {};
+        }
+        std::sort(values.begin(), values.end());
+        size_t n = values.size();
+        double median;
+        if (n % 2 == 0) {
+            median = (values[n / 2 - 1] + values[n / 2]) / 2.0;
+        } else {
+            median = values[n / 2];
+        }
+
+        // Calculate standard deviation
+        double sum = 0.0;
+        for (double v : values) {
+            sum += v;
+        }
+        double mean = sum / n;
+        double sqDiffSum = 0.0;
+        for (double v : values) {
+            double diff = v - mean;
+            sqDiffSum += diff * diff;
+        }
+        double stddev = std::sqrt(sqDiffSum / n);
+
+        return {values.front(), values.back(), median, stddev};
+    }
+
+    void PrintResultsWikiFormatSingleRow(const TVector<TStringPair>& row) {
+        TEST_COUT("||");
+        for (const auto& counter : row) {
+            TEST_COUT(" " << counter.Value << " |");
+        }
+        TEST_COUT_LN("|");
+    }
+
     void PrintResultsWikiFormat() {
         if (!HeaderPrinted) {
             HeaderPrinted = true;
@@ -108,24 +175,34 @@ public:
             }
             TEST_COUT_LN("|");
         }
-        TEST_COUT("||");
-        for (const auto& counter : Results) {
-            TEST_COUT(" " << counter.Value << " |");
-        }
-        TEST_COUT_LN("|");
+        PrintResultsWikiFormatSingleRow(Results);
     }
 
-    void PrintResultsHumanFormat() {
-        const ui32 screenWidth = 250;
-        const ui32 maxColumnWidthLimit = screenWidth / Results.size() - 3; // 3 symbols is additional 2 spaces and | sign
+    void PrintResultsHumanFormatSingleRow(const TVector<TStringPair>& row, const TVector<ui32>& columnWidths) {
+        TEST_COUT("|");
+        for (size_t i = 0; i < row.size(); ++i) {
+            const auto& value = row[i].Value;
+            ui32 width = columnWidths[i];
+            TEST_COUT(std::format(" {:>{}.{}} |", value.c_str(), width, width));
+        }
+        TEST_COUT_LN("");
+    }
 
-        // calculate max width per column
+    TVector<ui32> CalculateColumnWidths(const TVector<TStringPair>& row) const {
+        const ui32 screenWidth = 250;
+        const ui32 maxColumnWidthLimit = row.size() > 0 ? screenWidth / row.size() - 3 : 10;
+
         TVector<ui32> columnWidths;
-        columnWidths.reserve(Results.size());
-        for (const auto& counter : Results) {
+        columnWidths.reserve(row.size());
+        for (const auto& counter : row) {
             ui32 maxWidth = std::max(counter.Name.size(), counter.Value.size());
             columnWidths.push_back(std::min<ui32>(maxWidth, maxColumnWidthLimit));
         }
+        return columnWidths;
+    }
+
+    void PrintResultsHumanFormat() {
+        TVector<ui32> columnWidths = CalculateColumnWidths(Results);
 
         if (!HeaderPrinted) {
             HeaderPrinted = true;
@@ -139,13 +216,7 @@ public:
             TEST_COUT_LN("");
         }
 
-        TEST_COUT("|");
-        for (size_t i = 0; i < Results.size(); ++i) {
-            const auto& value = Results[i].Value;
-            ui32 width = columnWidths[i];
-            TEST_COUT(std::format(" {:>{}.{}} |", value.c_str(), width, width));
-        }
-        TEST_COUT_LN("");
+        PrintResultsHumanFormatSingleRow(Results, columnWidths);
     }
 
     void PrintResultsJsonFormat() {
@@ -161,12 +232,268 @@ public:
         }
     }
 
+    TVector<TStringPair> MakeStatisticsRow(const TString& statName, const TVector<TStringPair>& templateRow,
+                           double speed, double iops, size_t speedCol, size_t iopsCol) {
+        TVector<TStringPair> statsRow;
+        for (size_t i = 0; i < templateRow.size(); ++i) {
+            TStringPair pair(templateRow[i].Name, "");
+            if (i == 0) {
+                pair.Value = statName;
+            } else if (i == speedCol) {
+                pair.Value = Sprintf("%.1f MB/s", speed);
+            } else if (i == iopsCol) {
+                pair.Value = Sprintf("%.1f", iops);
+            } else {
+                pair.Value = "-";
+            }
+            statsRow.push_back(pair);
+        }
+        return statsRow;
+    }
+
+    void PrintAllRunsStructuredJson() {
+        if (RunsByInFlight.empty()) {
+            return;
+        }
+
+        NJson::TJsonValue root;
+
+        // Set TestType if provided
+        if (TestType) {
+            root["TestType"] = TestType;
+        }
+
+        // Extract Name from first run if available and not a placeholder
+        if (!AllRuns.empty()) {
+            const auto& firstRun = AllRuns[0];
+            for (const auto& pair : firstRun) {
+                if (pair.Name == "Name" && pair.Value != "Name") {
+                    root["Name"] = pair.Value;
+                    break;
+                }
+            }
+        }
+
+        // Params from GlobalParams
+        NJson::TJsonValue params;
+        for (const auto& param : GlobalParams) {
+            params[param.Name] = param.Value;
+        }
+        root["Params"] = params;
+
+        // InFlights array - each entry has InFlight value, statistics, and runs
+        NJson::TJsonValue inFlightsArray;
+        inFlightsArray.SetType(NJson::JSON_ARRAY);
+
+        for (const auto& [inFlight, runs] : RunsByInFlight) {
+            NJson::TJsonValue inFlightObj;
+            inFlightObj["InFlight"] = inFlight;
+
+            // Calculate statistics for this InFlight
+            const auto& speedAndIopsVec = SpeedAndIopsByInFlight[inFlight];
+            if (speedAndIopsVec.size() > 0) {
+                TVector<double> speeds;
+                TVector<double> iopsVec;
+                for (const auto& data : speedAndIopsVec) {
+                    speeds.push_back(data.SpeedMBps);
+                    iopsVec.push_back(data.Iops);
+                }
+
+                auto speedStats = GetStatistics(speeds);
+                auto iopsStats = GetStatistics(iopsVec);
+
+                NJson::TJsonValue speedJson;
+                speedJson["min"] = Sprintf("%.1f MB/s", speedStats.Min);
+                speedJson["max"] = Sprintf("%.1f MB/s", speedStats.Max);
+                speedJson["median"] = Sprintf("%.1f MB/s", speedStats.Median);
+                speedJson["stdev"] = Sprintf("%.1f MB/s", speedStats.StdDev);
+                inFlightObj["Speed"] = speedJson;
+
+                NJson::TJsonValue iopsJson;
+                iopsJson["min"] = Sprintf("%.1f", iopsStats.Min);
+                iopsJson["max"] = Sprintf("%.1f", iopsStats.Max);
+                iopsJson["median"] = Sprintf("%.1f", iopsStats.Median);
+                iopsJson["stdev"] = Sprintf("%.1f", iopsStats.StdDev);
+                inFlightObj["IOPS"] = iopsJson;
+            }
+
+            // Runs array for this InFlight (without InFlight field since it's at parent level)
+            NJson::TJsonValue runsArray;
+            runsArray.SetType(NJson::JSON_ARRAY);
+            for (const auto& run : runs) {
+                NJson::TJsonValue runObj;
+                for (const auto& pair : run) {
+                    // Skip InFlight in individual runs since it's at the group level
+                    if (pair.Name != "InFlight") {
+                        runObj[pair.Name] = pair.Value;
+                    }
+                }
+                runsArray.AppendValue(runObj);
+            }
+            inFlightObj["Runs"] = runsArray;
+
+            inFlightsArray.AppendValue(inFlightObj);
+        }
+        root["InFlights"] = inFlightsArray;
+
+        NJson::WriteJson(&Cout, &root, true, true);
+        Cout << Endl;
+    }
+
+    // Calculate column widths based on all rows for consistent alignment
+    TVector<ui32> CalculateColumnWidthsForAllRows(const TVector<TVector<TStringPair>>& allRows) const {
+        if (allRows.empty()) {
+            return {};
+        }
+
+        const ui32 screenWidth = 250;
+        size_t numCols = allRows[0].size();
+        const ui32 maxColumnWidthLimit = numCols > 0 ? screenWidth / numCols - 3 : 10;
+
+        TVector<ui32> columnWidths(numCols, 0);
+
+        // First pass: consider header names
+        for (size_t i = 0; i < numCols; ++i) {
+            columnWidths[i] = std::max(columnWidths[i], static_cast<ui32>(allRows[0][i].Name.size()));
+        }
+
+        // Consider all row values
+        for (const auto& row : allRows) {
+            for (size_t i = 0; i < row.size() && i < numCols; ++i) {
+                columnWidths[i] = std::max(columnWidths[i], static_cast<ui32>(row[i].Value.size()));
+            }
+        }
+
+        // Apply max width limit
+        for (size_t i = 0; i < numCols; ++i) {
+            columnWidths[i] = std::min(columnWidths[i], maxColumnWidthLimit);
+        }
+
+        return columnWidths;
+    }
+
+    void PrintAllRunsWithStatistics() {
+        if (AllRuns.empty()) {
+            return;
+        }
+
+        // For JSON format, use structured output
+        if (OutputFormat == OUTPUT_FORMAT_JSON) {
+            PrintAllRunsStructuredJson();
+            AllRuns.clear();
+            AllSpeedAndIops.clear();
+            return;
+        }
+
+        // Find column indices for Speed and IOPS
+        size_t speedCol = SIZE_MAX;
+        size_t iopsCol = SIZE_MAX;
+        const auto& firstRun = AllRuns[0];
+        for (size_t i = 0; i < firstRun.size(); ++i) {
+            TString nameLower = firstRun[i].Name;
+            nameLower.to_lower();
+            if (nameLower == "speed") {
+                speedCol = i;
+            } else if (nameLower == "iops") {
+                iopsCol = i;
+            }
+        }
+
+        // Build statistics rows first (needed for width calculation)
+        TVector<TVector<TStringPair>> statsRows;
+        bool hasSpeedOrIops = (speedCol != SIZE_MAX || iopsCol != SIZE_MAX);
+        if (hasSpeedOrIops && AllSpeedAndIops.size() > 1) {
+            TVector<double> speeds;
+            TVector<double> iopsVec;
+            for (const auto& data : AllSpeedAndIops) {
+                speeds.push_back(data.SpeedMBps);
+                iopsVec.push_back(data.Iops);
+            }
+
+            auto speedStats = GetStatistics(speeds);
+            auto iopsStats = GetStatistics(iopsVec);
+
+            statsRows.push_back(MakeStatisticsRow("Min", firstRun, speedStats.Min, iopsStats.Min, speedCol, iopsCol));
+            statsRows.push_back(MakeStatisticsRow("Max", firstRun, speedStats.Max, iopsStats.Max, speedCol, iopsCol));
+            statsRows.push_back(MakeStatisticsRow("Median", firstRun, speedStats.Median, iopsStats.Median, speedCol, iopsCol));
+            statsRows.push_back(MakeStatisticsRow("StdDev", firstRun, speedStats.StdDev, iopsStats.StdDev, speedCol, iopsCol));
+        }
+
+        // Calculate column widths based on ALL rows (data + stats) for human format
+        TVector<ui32> columnWidths;
+        if (OutputFormat == OUTPUT_FORMAT_HUMAN) {
+            TVector<TVector<TStringPair>> allRowsForWidth;
+            allRowsForWidth.insert(allRowsForWidth.end(), AllRuns.begin(), AllRuns.end());
+            allRowsForWidth.insert(allRowsForWidth.end(), statsRows.begin(), statsRows.end());
+            columnWidths = CalculateColumnWidthsForAllRows(allRowsForWidth);
+        }
+
+        // Print header once
+        if (!HeaderPrinted && !firstRun.empty()) {
+            HeaderPrinted = true;
+            PrintGlobalParams();
+            if (OutputFormat == OUTPUT_FORMAT_WIKI) {
+                TEST_COUT_LN("#|");
+                TEST_COUT("||");
+                for (const auto& counter : firstRun) {
+                    TEST_COUT(" " << counter.Name << " |");
+                }
+                TEST_COUT_LN("|");
+            } else if (OutputFormat == OUTPUT_FORMAT_HUMAN) {
+                TEST_COUT("|");
+                for (size_t i = 0; i < firstRun.size(); ++i) {
+                    const auto& name = firstRun[i].Name;
+                    ui32 width = columnWidths[i];
+                    TEST_COUT(std::format(" {:>{}.{}} |", name.c_str(), width, width));
+                }
+                TEST_COUT_LN("");
+            }
+        }
+
+        // Print each run
+        for (const auto& run : AllRuns) {
+            switch (OutputFormat) {
+            case OUTPUT_FORMAT_WIKI:
+                PrintResultsWikiFormatSingleRow(run);
+                break;
+            case OUTPUT_FORMAT_HUMAN:
+                PrintResultsHumanFormatSingleRow(run, columnWidths);
+                break;
+            case OUTPUT_FORMAT_JSON:
+                // Handled above
+                break;
+            }
+        }
+
+        // Print statistics rows
+        for (const auto& statsRow : statsRows) {
+            switch (OutputFormat) {
+            case OUTPUT_FORMAT_WIKI:
+                PrintResultsWikiFormatSingleRow(statsRow);
+                break;
+            case OUTPUT_FORMAT_HUMAN:
+                PrintResultsHumanFormatSingleRow(statsRow, columnWidths);
+                break;
+            case OUTPUT_FORMAT_JSON:
+                // Handled above
+                break;
+            }
+        }
+
+        AllRuns.clear();
+        AllSpeedAndIops.clear();
+        RunsByInFlight.clear();
+        SpeedAndIopsByInFlight.clear();
+    }
+
 public:
-    TResultPrinter(const EOutputFormat outputFormat)
+    TResultPrinter(const EOutputFormat outputFormat, ui32 runCount = 1)
         : OutputFormat(outputFormat)
+        , RunCount(runCount)
         , JsonWriter(&Cout, true)
     {
-        if (OutputFormat == OUTPUT_FORMAT_JSON) {
+        // Only open array for single run JSON (backward compatibility)
+        if (OutputFormat == OUTPUT_FORMAT_JSON && RunCount == 1) {
             JsonWriter.OpenArray();
         }
     }
@@ -177,39 +504,71 @@ public:
     void AddGlobalParam(const TString& name, const TString& value) override {
         GlobalParams.emplace_back(name, value);
     }
+    void AddSpeedAndIops(const TSpeedAndIops& data) override {
+        CurrentSpeedAndIops = data;
+    }
+    void SetTestType(const TString& testType) override {
+        TestType = testType;
+    }
+    void SetInFlight(ui32 inFlight) override {
+        CurrentInFlight = inFlight;
+    }
 
     void PrintResults() override {
         if (Results.empty()) {
             return;
         }
 
-        switch(OutputFormat) {
-        case OUTPUT_FORMAT_WIKI:
-            PrintResultsWikiFormat();
-            break;
-        case OUTPUT_FORMAT_HUMAN:
-            PrintResultsHumanFormat();
-            break;
-        case OUTPUT_FORMAT_JSON:
-            PrintResultsJsonFormat();
-            break;
+        if (RunCount == 1) {
+            // Original behavior
+            switch(OutputFormat) {
+            case OUTPUT_FORMAT_WIKI:
+                PrintResultsWikiFormat();
+                break;
+            case OUTPUT_FORMAT_HUMAN:
+                PrintResultsHumanFormat();
+                break;
+            case OUTPUT_FORMAT_JSON:
+                PrintResultsJsonFormat();
+                break;
+            }
+        } else {
+            // Collect results grouped by InFlight for later statistics calculation
+            RunsByInFlight[CurrentInFlight].push_back(Results);
+            SpeedAndIopsByInFlight[CurrentInFlight].push_back(CurrentSpeedAndIops);
+            // Also keep flat lists for non-JSON formats
+            AllRuns.push_back(Results);
+            AllSpeedAndIops.push_back(CurrentSpeedAndIops);
         }
         Results.clear();
+        CurrentSpeedAndIops = TSpeedAndIops();
     }
 
     void EndTest() override {
-        if (OutputFormat == OUTPUT_FORMAT_WIKI && HeaderPrinted) {
-            TEST_COUT_LN("|#");
+        if (RunCount == 1) {
+            // Original behavior
+            if (OutputFormat == OUTPUT_FORMAT_WIKI && HeaderPrinted) {
+                TEST_COUT_LN("|#");
+            }
+            if (OutputFormat == OUTPUT_FORMAT_JSON) {
+                JsonWriter.Flush();
+            }
+            HeaderPrinted = false;
+            PrintResults();
+        } else {
+            // Print all runs with statistics
+            PrintAllRunsWithStatistics();
+            if (OutputFormat == OUTPUT_FORMAT_WIKI && HeaderPrinted) {
+                TEST_COUT_LN("|#");
+            }
+            // Note: JSON for multiple runs uses NJson::WriteJson in PrintAllRunsStructuredJson()
+            HeaderPrinted = false;
         }
-        if (OutputFormat == OUTPUT_FORMAT_JSON) {
-            JsonWriter.Flush();
-        }
-        HeaderPrinted = false;
-        PrintResults();
     }
 
     ~TResultPrinter() {
-        if (OutputFormat == OUTPUT_FORMAT_JSON) {
+        // Only close array for single run JSON (backward compatibility)
+        if (OutputFormat == OUTPUT_FORMAT_JSON && RunCount == 1) {
             JsonWriter.CloseArray();
             JsonWriter.Flush();
             Cout << Endl;
@@ -226,6 +585,9 @@ struct TPerfTestConfig {
     NPDisk::EDeviceType DeviceType;
     TResultPrinter::EOutputFormat OutputFormat;
     bool DoLockFile;
+    ui32 RunCount;
+    ui32 InFlightFrom = 0; // 0 means not specified
+    ui32 InFlightTo = 0;   // 0 means not specified
 
     TMap<const TString, NPDisk::EDeviceType> DeviceStrToType {
         {"ROT",  NPDisk::DEVICE_TYPE_ROT},
@@ -239,11 +601,15 @@ struct TPerfTestConfig {
     };
 
     TPerfTestConfig(const TString path, const TString name, const TString type, const TString outputFormatName,
-            const TString monPort, bool doLockFile)
+            const TString monPort, bool doLockFile, const TString runCountStr = "1",
+            const TString inFlightFromStr = "0", const TString inFlightToStr = "0")
         : Path(path)
         , Name(name)
         , MonPort(std::strtol(monPort.c_str(), nullptr, 10))
         , DoLockFile(doLockFile)
+        , RunCount(std::max(1, static_cast<int>(std::strtol(runCountStr.c_str(), nullptr, 10))))
+        , InFlightFrom(std::strtol(inFlightFromStr.c_str(), nullptr, 10))
+        , InFlightTo(std::strtol(inFlightToStr.c_str(), nullptr, 10))
     {
         auto it_type = DeviceStrToType.find(type);
         if (it_type != DeviceStrToType.end()) {
@@ -257,6 +623,10 @@ struct TPerfTestConfig {
         } else {
             OutputFormat = TResultPrinter::OUTPUT_FORMAT_WIKI;
         }
+    }
+
+    bool HasInFlightOverride() const {
+        return InFlightFrom > 0 && InFlightTo > 0;
     }
 
     bool IsSolidState() const {

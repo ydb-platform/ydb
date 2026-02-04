@@ -19,6 +19,7 @@ SRCS(
     merger.h
     mvp_log.h
     mvp_mem_profiler.cpp
+    mvp_security_printer.cpp
     mvp_swagger.h
     mvp_test_runtime.cpp
     mvp_test_runtime.h
@@ -56,6 +57,7 @@ PEERDIR(
     ydb/library/actors/http
     ydb/library/actors/protos
     ydb/library/security
+    ydb/library/protobuf_printer
     library/cpp/lwtrace/protos
     library/cpp/lfalloc/alloc_profiler
     ydb/core/viewer/json

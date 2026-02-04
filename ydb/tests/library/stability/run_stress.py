@@ -216,14 +216,16 @@ class StressRunExecutor:
 
                             # Update node statistics
                             node_result.total_execution_time += execution_time
+                            sleep_between_runs = 240
                             if success:
                                 logging.info(
                                     f"Run {current_iteration} on {node_host} completed successfully"
                                 )
+                                time_module.sleep(min(sleep_between_runs, planned_end_time - time_module.time()))
                             else:
                                 logging.warning(
-                                    f"Run {current_iteration} on {node_host} failed. Continuing after 120s delay")
-                                time_module.sleep(120)
+                                    f"Run {current_iteration} on {node_host} failed. Continuing after {sleep_between_runs}s delay")
+                                time_module.sleep(sleep_between_runs)
                             current_iteration += 1
                             run_duration = planned_end_time - time_module.time()
 

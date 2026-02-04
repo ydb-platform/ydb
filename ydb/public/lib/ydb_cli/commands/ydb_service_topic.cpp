@@ -609,7 +609,7 @@ namespace NYdb::NConsoleClient {
 
     void TCommandTopicConsumerAdd::Config(TConfig& config) {
         TYdbCommand::Config(config);
-        config.Opts->AddLongOption("consumer", "New consumer for topic")
+        config.Opts->AddLongOption('c', "consumer", "New consumer for topic")
             .Required()
             .StoreResult(&ConsumerName_);
         config.Opts->AddLongOption("starting-message-timestamp", "'Written_at' timestamp from which read is allowed. " TIMESTAMP_FORMAT_OPTION_DESCRIPTION)
@@ -744,7 +744,7 @@ namespace NYdb::NConsoleClient {
 
     void TCommandTopicConsumerDrop::Config(TConfig& config) {
         TYdbCommand::Config(config);
-        config.Opts->AddLongOption("consumer", "Consumer which will be dropped")
+        config.Opts->AddLongOption('c', "consumer", "Consumer which will be dropped")
             .Required()
             .StoreResult(&ConsumerName_);
         config.Opts->SetFreeArgsNum(1);
@@ -784,7 +784,7 @@ namespace NYdb::NConsoleClient {
 
     void TCommandTopicConsumerDescribe::Config(TConfig& config) {
         TYdbCommand::Config(config);
-        config.Opts->AddLongOption("consumer", "Consumer to describe")
+        config.Opts->AddLongOption('c', "consumer", "Consumer to describe")
             .Required()
             .StoreResult(&ConsumerName_);
         config.Opts->AddLongOption("partition-stats", "Show partition statistics")
@@ -820,7 +820,7 @@ namespace NYdb::NConsoleClient {
 
     void TCommandTopicConsumerCommitOffset::Config(TConfig& config) {
         TYdbCommand::Config(config);
-        config.Opts->AddLongOption("consumer", "Consumer which offset will be changed")
+        config.Opts->AddLongOption('c', "consumer", "Consumer which offset will be changed")
             .Required()
             .StoreResult(&ConsumerName_);
 
@@ -929,7 +929,7 @@ namespace NYdb::NConsoleClient {
                            });
 
         // TODO(shmel1k@): improve help.
-        config.Opts->AddLongOption('c', "consumer", "Consumer name. If not set, then you need to specify partitions through --partition-ids to read without consumer")
+        config.Opts->AddLongOption('c', "consumer", "Consumer name. If not set, then you need to specify partitions through --partitions to read without consumer")
             .Optional()
             .StoreResult(&Consumer_);
 
@@ -961,10 +961,10 @@ namespace NYdb::NConsoleClient {
             .Optional()
             .Hidden()
             .GetOpt().SplitHandler(&PartitionIds_, ',');
-        config.Opts->AddLongOption("partitions", "Comma separated list of partition ids to read from. If not specified, messages are read from all partitions. E.g. \"--partition-ids 0,1,10\"")
+        config.Opts->AddLongOption('p', "partitions", "Comma separated list of partition ids to read from. All -p, --partitions, --partition-ids namings are allowed. If not specified, messages are read from all partitions. E.g. \"--partitions 0,1,10\"")
             .Optional()
             .GetOpt().SplitHandler(&PartitionIds_, ',');
-        config.Opts->AddLongOption("start-offset", "Offset to start reading from. If not specified, messages are read from the last commit point for the chosen consumer.\nExactly one partition id should be specified with the '--partition-ids' option.")
+        config.Opts->AddLongOption("start-offset", "Offset to start reading from. If not specified, messages are read from the last commit point for the chosen consumer.\nExactly one partition id should be specified with the '--partitions' option.")
             .Optional()
             .StoreResult(&Offset_);
 
@@ -1056,11 +1056,11 @@ namespace NYdb::NConsoleClient {
 
         // validate partitions ids are specified, if no consumer is provided. no-consumer mode will be used.
         if (!Consumer_ && !PartitionIds_) {
-            throw TMisuseException() << "Please specify either --consumer or --partition-ids to read without consumer";
+            throw TMisuseException() << "Please specify either --consumer or --partitions to read without consumer";
         }
 
         if (Offset_ && !(PartitionIds_.size() == 1)) {
-            throw TMisuseException() << "Please specify exactly one partition id with the '--partition-ids' option from which reading will be performed, starting from the specified offset.";
+            throw TMisuseException() << "Please specify exactly one partition id with the '--partitions' option from which reading will be performed, starting from the specified offset.";
         }
     }
 

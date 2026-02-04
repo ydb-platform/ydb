@@ -143,9 +143,7 @@ protected:
                 input.Cast(),
                 false,
                 TDuration::MilliSeconds(TDqSettings::TDefault::WatermarksLateArrivalDelayMs),
-                KqpCtx.Config->GetEnableWatermarks(),
-                false
-            );
+                KqpCtx.Config->GetEnableWatermarks());
         } else {
             NDq::TSpillingSettings spillingSettings(KqpCtx.Config->GetEnabledSpillingNodes());
             output = DqRewriteAggregate(node, ctx, TypesCtx, false, KqpCtx.Config->HasOptEnableOlapPushdown() || KqpCtx.Config->HasOptUseFinalizeByKey(), KqpCtx.Config->HasOptUseFinalizeByKey(), spillingSettings.IsAggregationSpillingEnabled());

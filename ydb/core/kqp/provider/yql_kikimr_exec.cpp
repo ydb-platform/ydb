@@ -486,7 +486,7 @@ namespace {
     }
 
     auto GetConsumerTimestampParseError(const auto& consumer, auto field) {
-        return TStringBuilder() <<  "Failed to parse " << field << " setting value for consumer"
+        return TStringBuilder() <<  "Failed to parse " << field << " setting value for consumer "
                                 << consumer.Name().StringValue()
                                 << ". Datetime(), Timestamp or integer value is supported";
     }

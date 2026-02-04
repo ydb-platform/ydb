@@ -5,6 +5,7 @@
 
 #include "device_test_tool.h"
 #include "device_test_tool_aio_test.h"
+#include "device_test_tool_ddisk_test.h"
 #include "device_test_tool_driveestimator.h"
 #include "device_test_tool_pdisk_test.h"
 #include "device_test_tool_trim_test.h"
@@ -75,6 +76,13 @@ int main(int argc, char **argv) {
     for (ui32 i = 0; i < protoTests.PDiskTestListSize(); ++i) {
         NDevicePerfTest::TPDiskTest testProto = protoTests.GetPDiskTestList(i);
         THolder<NKikimr::TPerfTest> test(new NKikimr::TPDiskTest(config, testProto));
+        test->SetPrinter(printer);
+        test->RunTest();
+    }
+    printer->EndTest();
+    for (ui32 i = 0; i < protoTests.DDiskTestListSize(); ++i) {
+        NDevicePerfTest::TDDiskTest testProto = protoTests.GetDDiskTestList(i);
+        THolder<NKikimr::TPerfTest> test(new NKikimr::TDDiskTest(config, testProto));
         test->SetPrinter(printer);
         test->RunTest();
     }

@@ -1692,7 +1692,9 @@ public:
             }
         }
         if (!locksToInvalidate.empty()) {
-            NKikimr::NDataIntegrity::LogLocksBroken(ctx, TabletID(), "Schema change: table removed invalidated locks", locksToInvalidate);
+            auto victimQueryTraceIds = SysLocks.ExtractVictimQueryTraceIds(locksToInvalidate);
+            NKikimr::NDataIntegrity::LogLocksBroken(ctx, TabletID(), "Schema change: table removed invalidated locks",
+                locksToInvalidate, Nothing(), victimQueryTraceIds);
         }
 
         SysLocks.RemoveSchema(tableId, locksDb);

@@ -70,8 +70,8 @@ Y_UNIT_TEST_SUITE(Masking) {
           << " } ";
         TString expectedT = b;
         std::string expected(expectedT.data(), expectedT.size());
-            UNIT_ASSERT(actual.find("int_cred:") != std::string::npos);
-            UNIT_ASSERT(actual.find("int_sens:") != std::string::npos);
+        UNIT_ASSERT(actual.find("int_cred:") != std::string::npos);
+        UNIT_ASSERT(actual.find("int_sens:") != std::string::npos);
         UNIT_ASSERT_VALUES_EQUAL(actual, expected);
     }
 

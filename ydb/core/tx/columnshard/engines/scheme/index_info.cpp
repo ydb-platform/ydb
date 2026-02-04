@@ -1,5 +1,6 @@
 #include "index_info.h"
 
+#include <ydb/core/tx/columnshard/common/myprint.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/formats/arrow/serializer/native.h>
@@ -14,7 +15,6 @@
 #include <ydb/library/formats/arrow/simple_arrays_cache.h>
 
 #include <util/string/join.h>
-
 namespace NKikimr::NOlap {
 
 TConclusionStatus TIndexInfo::CheckCompatible(const TIndexInfo& other) const {
@@ -552,6 +552,7 @@ TIndexInfo::TIndexInfo(const TIndexInfo& original, const TSchemaDiffView& diff, 
     const std::shared_ptr<TSchemaObjectsCache>& cache)
     : PresetId(original.PresetId)
 {
+    Cerr << Sprintf("TIndexInfo ctor, obj: %i, Indexes.size(): %i, original.Indexes.size(): %i\n", this, Indexes.size(), original.Indexes.size());
     {
         std::vector<std::shared_ptr<arrow::Field>> fields;
         const auto addFromOriginal = [&](const ui32 index) {
@@ -594,7 +595,7 @@ TIndexInfo::TIndexInfo(const TIndexInfo& original, const TSchemaDiffView& diff, 
     {
         TMemoryProfileGuard g("TIndexInfo::ApplyDiff::Indexes");
         Indexes = original.Indexes;
-        AFL_VERIFY(false);
+        // AFL_VERIFY(false);
         for (auto&& i : diff.GetModifiedIndexes()) {
             if (!i.second) {
                 // It is possible to have a non-existent element here after merging schemas
@@ -603,6 +604,7 @@ TIndexInfo::TIndexInfo(const TIndexInfo& original, const TSchemaDiffView& diff, 
                 auto it = Indexes.find(i.first);
                 NIndexes::TIndexMetaContainer meta;
                 AFL_VERIFY(meta.DeserializeFromProto(*i.second));
+                Cerr << MySprintf("adding index through modification(Indexes.size(): %i). proto debug string: %s, index name: %s\n",Indexes.size(), i.second->DebugString(), meta->GetClassName());
                 if (it != Indexes.end()) {
                     it->second = std::move(meta);
                 } else {
@@ -704,6 +706,7 @@ ui32 TIndexInfo::GetColumnIndexVerified(const ui32 id) const {
 std::vector<std::shared_ptr<NIndexes::TSkipIndex>> TIndexInfo::FindSkipIndexes(
     const NIndexes::NRequest::TOriginalDataAddress& originalDataAddress, const NArrow::NSSA::TIndexCheckOperation& op) const {
     std::vector<std::shared_ptr<NIndexes::TSkipIndex>> result;
+    Cerr << MySprintf("FindSkipIndexes. this: %p, &result: %p, Indexes.size(): %i", this, &result, Indexes.size());
     for (auto&& [_, i] : Indexes) {
         if (!i->IsSkipIndex()) {
             continue;
@@ -715,6 +718,10 @@ std::vector<std::shared_ptr<NIndexes::TSkipIndex>> TIndexInfo::FindSkipIndexes(
             result.emplace_back(skipIndex);
         }
     }
+    Cerr << MySprintf("FindSkipIndexes end. obj: %i, Indexes.size(): %i", this, Indexes.size());
+    AFL_VERIFY(false);
+
+
     return result;
 }
 

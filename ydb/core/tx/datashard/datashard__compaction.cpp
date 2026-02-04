@@ -263,7 +263,7 @@ void TDataShard::ReplyCompactionWaiters(
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
             "ReplyCompactionWaiters of tablet# "<< TabletID() << ", table# " << tableId
             << " sending TEvCompactTableResult to# " << waiter.ActorId
-            << "pathId# " << TPathId(GetPathOwnerId(), localPathId));
+            << ", pathId# " << TPathId(GetPathOwnerId(), localPathId));
 
         fullCompactionQueue->pop_front();
     }
@@ -286,7 +286,7 @@ void TDataShard::ReplyCompactionWaiters(
                     LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
                         "ReplyCompactionWaiters of tablet# "<< TabletID() << ", table# " << tableId
                         << " sending TEvCompactBorrowedResult to# " << waiter->ActorId
-                        << "pathId# " << TPathId(GetPathOwnerId(), waiter->RequestedTable));
+                        << ", pathId# " << TPathId(GetPathOwnerId(), waiter->RequestedTable));
                 }
 
                 compactBorrowedQueue->pop_front();

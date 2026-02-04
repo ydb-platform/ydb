@@ -160,6 +160,8 @@ public:
         BIO_set_data(Bio.get(), static_cast<TStreamSocket*>(this));
         BIO_set_nbio(Bio.get(), 1);
         Ssl = TSslHelpers::ConstructSsl(ctx, Bio.get());
+        // тут по флагу надо
+        SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, &Verify);
         SSL_set_accept_state(Ssl.get());
     }
 
@@ -186,6 +188,47 @@ public:
         }
         int res = SSL_accept(Ssl.get());
         return ProcessResult(res);
+    }
+
+    static int Verify(int preverify, X509_STORE_CTX *) {
+        // X509* const current = X509_STORE_CTX_get_current_cert(ctx);
+        // auto* const ssl = static_cast<SSL*>(X509_STORE_CTX_get_ex_data(ctx, SSL_get_ex_data_X509_STORE_CTX_idx()));
+        // auto* const errp = static_cast<TString*>(SSL_get_ex_data(ssl, GetExIndex()));
+        // auto* const secureSocketContext = static_cast<TSecureSocketContext*>(SSL_get_ex_data(ssl, GetContextIndex()));
+
+        // if (!preverify) {
+        //     int err = X509_STORE_CTX_get_error(ctx);
+        //     int depth = X509_STORE_CTX_get_error_depth(ctx);
+        //     char buffer[1024];
+        //     X509_NAME_oneline(X509_get_subject_name(current), buffer, sizeof(buffer));
+        //     TStringBuilder s;
+        //     s << "Error during certificate validation"
+        //         << " error# " << X509_verify_cert_error_string(err)
+        //         << " depth# " << depth
+        //         << " cert# " << buffer;
+        //     if (err == X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT) {
+        //         X509_NAME_oneline(X509_get_issuer_name(current), buffer, sizeof(buffer));
+        //         s << " issuer# " << buffer;
+        //     }
+        //     *errp = s;
+        // } else if (auto& forbidden = secureSocketContext->Impl->Common->Settings.ForbiddenSignatureAlgorithms) {
+        //     do {
+        //         int pknid;
+        //         if (X509_get_signature_info(current, nullptr, &pknid, nullptr, nullptr) != 1) {
+        //             *errp = TStringBuilder() << "failed to acquire signature info";
+        //         } else if (const char *ln = OBJ_nid2ln(pknid); ln && forbidden.contains(ln)) {
+        //             *errp = TStringBuilder() << "forbidden signature algorithm: " << ln;
+        //         } else if (const char *sn = OBJ_nid2ln(pknid); sn && forbidden.contains(sn)) {
+        //             *errp = TStringBuilder() << "forbidden signature algorithm: " << sn;
+        //         } else {
+        //             break;
+        //         }
+        //         X509_STORE_CTX_set_error(ctx, X509_V_ERR_UNSUPPORTED_SIGNATURE_ALGORITHM);
+        //         return 0;
+        //     } while (false);
+        // }
+        Cout << "Verifying client cert" << Endl;
+        return preverify;
     }
 
     std::shared_ptr<X509> GetSslClientCert() {

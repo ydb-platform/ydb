@@ -388,7 +388,7 @@ protected:
     bool ProcessRequest(const TActorContext& ctx) {
         if (IsSslActive) {
             std::shared_ptr<X509> cert = Socket->GetSslClientCert();
-            Cout << (cert != nullptr) << Endl;
+            Cout << "Recieved cert? :" << (cert != nullptr) << Endl;
         }
 
         KAFKA_LOG_D("process message: ApiKey=" << Request->Header.RequestApiKey << ", ExpectedSize=" << Request->ExpectedSize

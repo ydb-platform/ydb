@@ -21,6 +21,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/rate_limiter/rate_limiter.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
 
 #include <ydb/library/backup/backup.h>
@@ -3454,7 +3455,166 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
         );
     }
 
+<<<<<<< HEAD
     Y_UNIT_TEST_ALL_PROTO_ENUM_VALUES(TestAllSchemeObjectTypes, NKikimrSchemeOp::EPathType) {
+=======
+    void TestReplicationBackupRestore(const bool isOlap, const TMaybe<ESecretType>& tokenSecretType) {
+        TS3TestEnv testEnv;
+        auto& featureFlags = testEnv.GetServer().GetRuntime()->GetAppData().FeatureFlags;
+        featureFlags.SetEnableSchemaSecrets(tokenSecretType == ESecretType::SecretTypeScheme);
+
+        const auto endpoint = Sprintf("localhost:%u", testEnv.GetServer().GetPort());
+        auto driverConfig = TDriverConfig().SetEndpoint(endpoint).SetDatabase("/Root");
+        if (tokenSecretType) {
+            driverConfig.SetAuthToken("root@builtin");
+        }
+        auto driver = TDriver(driverConfig);
+        TSchemeClient schemeClient(driver);
+        NQuery::TQueryClient queryClient(driver);
+        auto session = queryClient.GetSession().ExtractValueSync().GetSession();
+        TReplicationClient replicationClient(driver);
+
+        if (tokenSecretType) {
+            TPermissions permissions("root@builtin", {"ydb.generic.full"});
+            const auto result = schemeClient.ModifyPermissions("/Root",
+                TModifyPermissionsSettings().AddGrantPermissions(permissions)
+            ).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        TestReplicationSettingsArePreserved(
+            endpoint,
+            session,
+            replicationClient,
+            CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
+            CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), {"replication"}),
+            tokenSecretType, isOlap
+        );
+
+    }
+
+    void TestTransferBackupRestore(const TMaybe<ESecretType>& tokenSecretType) {
+        TS3TestEnv testEnv;
+        auto& featureFlags = testEnv.GetServer().GetRuntime()->GetAppData().FeatureFlags;
+        featureFlags.SetEnableSchemaSecrets(tokenSecretType == ESecretType::SecretTypeScheme);
+
+        const auto endpoint = Sprintf("localhost:%u", testEnv.GetServer().GetPort());
+        auto driverConfig = TDriverConfig().SetEndpoint(endpoint).SetDatabase("/Root");
+        if (tokenSecretType) {
+            driverConfig.SetAuthToken("root@builtin");
+        }
+        auto driver = TDriver(driverConfig);
+        TSchemeClient schemeClient(driver);
+        NQuery::TQueryClient queryClient(driver);
+        auto session = queryClient.GetSession().ExtractValueSync().GetSession();
+        TReplicationClient replicationClient(driver);
+
+        if (tokenSecretType) {
+            TPermissions permissions("root@builtin", {"ydb.generic.full"});
+            const auto result = schemeClient.ModifyPermissions("/Root",
+                TModifyPermissionsSettings().AddGrantPermissions(permissions)
+            ).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        TTransferTestConfig config;
+        config.SecretType = tokenSecretType;
+
+        TTempDir tempDir;
+
+        TestTransferSettingsArePreserved(
+            endpoint,
+            session,
+            replicationClient,
+            CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
+            CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), {"test_transfer", "test_topic"}),
+            tempDir.Path(),
+            config
+        );
+    }
+
+    void TestExternalTableBackupRestore() {
+        TS3TestEnv testEnv;
+        auto& featureFlags = testEnv.GetServer().GetRuntime()->GetAppData().FeatureFlags;
+        featureFlags.SetEnableExternalDataSources(true);
+
+        const auto endpoint = Sprintf("localhost:%u", testEnv.GetServer().GetPort());
+        auto driverConfig = TDriverConfig().SetEndpoint(endpoint).SetDatabase("/Root");
+
+        auto driver = TDriver(driverConfig);
+        TTableClient tableClient(driver);
+        auto tableSession = tableClient.GetSession().ExtractValueSync().GetSession();
+        NQuery::TQueryClient queryClient(driver);
+        auto querySession = queryClient.GetSession().ExtractValueSync().GetSession();
+
+        TestExternalTableSettingsArePreserved(
+            "/Root/externalTable",
+            "/Root/externalDataSource",
+            tableSession,
+            querySession,
+            CreateBackupLambda(driver, testEnv.GetS3Port()),
+            CreateRestoreLambda(driver, testEnv.GetS3Port(), {"externalTable", "externalDataSource"})
+        );
+    }
+
+    void TestExternalDataSourceBackupRestore(const TMaybe<ESecretType>& secretType, EAuthType authType) {
+        TS3TestEnv testEnv;
+        auto& featureFlags = testEnv.GetServer().GetRuntime()->GetAppData().FeatureFlags;
+        featureFlags.SetEnableExternalDataSources(true);
+        featureFlags.SetEnableSchemaSecrets(secretType == ESecretType::SecretTypeScheme);
+
+        const auto endpoint = Sprintf("localhost:%u", testEnv.GetServer().GetPort());
+        auto driverConfig = TDriverConfig().SetEndpoint(endpoint).SetDatabase("/Root");
+        if (secretType) {
+            driverConfig.SetAuthToken("root@builtin");
+        }
+
+        auto driver = TDriver(driverConfig);
+        TSchemeClient schemeClient(driver);
+        TTableClient tableClient(driver);
+        auto tableSession = tableClient.GetSession().ExtractValueSync().GetSession();
+        NQuery::TQueryClient queryClient(driver);
+        auto querySession = queryClient.GetSession().ExtractValueSync().GetSession();
+
+        if (secretType) {
+            TPermissions permissions("root@builtin", {"ydb.generic.full"});
+            const auto result = schemeClient.ModifyPermissions("/Root",
+                TModifyPermissionsSettings().AddGrantPermissions(permissions)
+            ).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        TestExternalDataSourceSettingsArePreserved(
+            "/Root/externalDataSource",
+            tableSession,
+            querySession,
+            CreateBackupLambda(driver, testEnv.GetS3Port()),
+            CreateRestoreLambda(driver, testEnv.GetS3Port(), {"externalDataSource"}),
+            NDump::TRestoreSettings{},
+            secretType,
+            authType
+        );
+    }
+
+    void TestTopicBackupRestoreWithoutData() {
+        TS3TestEnv testEnv;
+        NTopic::TTopicClient topicClient(testEnv.GetDriver());
+        constexpr const char* topic = "/Root/topic";
+
+        TestTopicSettingsArePreserved(
+            topic,
+            testEnv.GetQuerySession(),
+            topicClient,
+            CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
+            CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "topic" })
+        );
+    }
+
+    Y_UNIT_TEST_ALL_PROTO_ENUM_VALUES(TestAllSchemeObjectTypes, NKikimrSchemeOp::EPathType, IsOlap) {
+        if (IsOlap) {
+            return; // TODO: fix me issue@26498
+        }
+>>>>>>> 7bfef2a6632 (Topic Export With All Fields Test (#31628))
         using namespace NKikimrSchemeOp;
 
         switch (Value) {
@@ -3470,7 +3630,8 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             case EPathTypeDir:
                 break; // https://github.com/ydb-platform/ydb/issues/10430
             case EPathTypePersQueueGroup:
-                break; // https://github.com/ydb-platform/ydb/issues/10431
+                TestTopicBackupRestoreWithoutData();
+                break;
             case EPathTypeSubDomain:
             case EPathTypeExtSubDomain:
                 break; // https://github.com/ydb-platform/ydb/issues/10432

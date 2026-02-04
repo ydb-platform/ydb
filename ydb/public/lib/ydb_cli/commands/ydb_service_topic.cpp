@@ -115,9 +115,6 @@ namespace NYdb::NConsoleClient {
 
         constexpr TDuration DefaultIdleTimeout = TDuration::Seconds(1);
 
-        bool IsStreamingFormat(EMessagingFormat format) {
-            return format == EMessagingFormat::NewlineDelimited || format == EMessagingFormat::Concatenated;
-        }
     } // namespace
 
     std::function<void(const TString& opt)> TimestampOptionHandler(TMaybe<TInstant>* destination) {
@@ -962,6 +959,10 @@ namespace NYdb::NConsoleClient {
             .Handler(TimestampOptionHandler(&Timestamp_));
         config.Opts->AddLongOption("partition-ids", "Comma separated list of partition ids to read from. If not specified, messages are read from all partitions. E.g. \"--partition-ids 0,1,10\"")
             .Optional()
+            .Hidden()
+            .GetOpt().SplitHandler(&PartitionIds_, ',');
+        config.Opts->AddLongOption("partitions", "Comma separated list of partition ids to read from. If not specified, messages are read from all partitions. E.g. \"--partition-ids 0,1,10\"")
+            .Optional()
             .GetOpt().SplitHandler(&PartitionIds_, ',');
         config.Opts->AddLongOption("start-offset", "Offset to start reading from. If not specified, messages are read from the last commit point for the chosen consumer.\nExactly one partition id should be specified with the '--partition-ids' option.")
             .Optional()
@@ -1049,9 +1050,8 @@ namespace NYdb::NConsoleClient {
 
     void TCommandTopicRead::ValidateConfig() {
         // TODO(shmel1k@): add more formats.
-        if (!IsStreamingFormat(MessagingFormat) && (Limit_.Defined() && (Limit_ <= 0 || Limit_ > 500))) {
-            throw TMisuseException() << "OutputFormat " << MessagingFormat << " is not compatible with "
-                                     << "limit less and equal '0' or more than '500': '" << *Limit_ << "' was given";
+        if (Limit_.Defined() && Limit_ < 0) {
+            throw TMisuseException() << "Limit must be a non-negative number, but " << *Limit_ << " was given";
         }
 
         // validate partitions ids are specified, if no consumer is provided. no-consumer mode will be used.

@@ -115,6 +115,7 @@ namespace NYql::NDq {
                         /* maxTime */ TDuration::Minutes(5),
                         /* scaleFactor */ 2))
         {
+            LogPrefix = TStringBuilder() << "ParentId=" << ParentId << " ";
             InitMonCounters(taskCounters);
         }
 
@@ -149,7 +150,7 @@ namespace NYql::NDq {
     public:
 
         void Bootstrap() {
-            auto dsi = LookupSource.data_source_instance();
+            const auto& dsi = LookupSource.data_source_instance();
             GENERIC_LOG_I("New generic proivider lookup source actor(ActorId=" << SelfId() << ") for"
                     << " kind=" << NYql::EGenericDataSourceKind_Name(dsi.kind())
                     << ", endpoint=" << dsi.endpoint().ShortDebugString()
@@ -501,7 +502,7 @@ namespace NYql::NDq {
             if (error) {
                 return error;
             }
-            *select.mutable_data_source_instance() = dsi;
+            *select.mutable_data_source_instance() = std::move(dsi);
 
             for (ui32 i = 0; i != SelectResultType->GetMembersCount(); ++i) {
                 auto c = select.mutable_what()->add_items()->mutable_column();

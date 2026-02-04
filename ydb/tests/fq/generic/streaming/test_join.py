@@ -951,10 +951,8 @@ class TestJoinStreaming(TestYdsBase):
         fq_client: FederatedQueryClient,
         yq_version,
     ):
-        self.init_topics(
-            f"slj_{partitions_count}{streamlookup}{testcase}{ca}_{yq_version}",
-            partitions_count=partitions_count,
-        )
+        title = f"slj_{partitions_count}{str(streamlookup)[:1]}{testcase}{ca[:1]}{yq_version}"
+        self.init_topics(title, partitions_count=partitions_count)
         fq_client.create_yds_connection("myyds", os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"))
 
         table_name = 'join_table'
@@ -976,11 +974,7 @@ class TestJoinStreaming(TestYdsBase):
 
         one_time_waiter.wait()
 
-        query_id = fq_client.create_query(
-            f"slj_{partitions_count}{streamlookup}{testcase}{ca}",
-            sql,
-            type=fq.QueryContent.QueryType.STREAMING,
-        ).result.query_id
+        query_id = fq_client.create_query(title, sql, type=fq.QueryContent.QueryType.STREAMING).result.query_id
 
         if not streamlookup and "MultiGet true" in sql:
             fq_client.wait_query_status(query_id, fq.QueryMeta.FAILED)
@@ -1037,7 +1031,7 @@ class TestJoinStreaming(TestYdsBase):
     @pytest.mark.parametrize("streamlookup", [True, False])
     @pytest.mark.parametrize("ca", ["sync", "async"])
     @pytest.mark.parametrize("limit", [6, 7, 8, 9, None])
-    def test_streamlookup_with_watermarks(
+    def test_streamlookup_watermarks(
         self,
         kikimr,
         ca,
@@ -1048,10 +1042,8 @@ class TestJoinStreaming(TestYdsBase):
         fq_client: FederatedQueryClient,
         yq_version,
     ):
-        self.init_topics(
-            f"slj_wm_{partitions_count}{streamlookup}{limit}{ca}{tasks}_{yq_version}",
-            partitions_count=partitions_count,
-        )
+        title = f"slj_wm_{partitions_count}{str(streamlookup)[:1]}{limit}{ca[:1]}{tasks}"
+        self.init_topics(title, partitions_count=partitions_count)
         fq_client.create_yds_connection(
             "wmyds",
             os.getenv("YDB_DATABASE"),
@@ -1135,9 +1127,7 @@ class TestJoinStreaming(TestYdsBase):
 
         one_time_waiter.wait()
 
-        query_id = fq_client.create_query(
-            f"slj_wm_{partitions_count}{streamlookup}{limit}{ca}{tasks}", sql, type=fq.QueryContent.QueryType.STREAMING
-        ).result.query_id
+        query_id = fq_client.create_query(title, sql, type=fq.QueryContent.QueryType.STREAMING).result.query_id
 
         fq_client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
         kikimr.compute_plane.wait_zero_checkpoint(query_id)

@@ -251,11 +251,11 @@ struct TPDiskTest : public TPerfTest {
         Setup->NodeId = 1;
         Setup->ExecutorsCount = 4;
         Setup->Executors.Reset(new TAutoPtr<IExecutorPool>[4]);
-        Setup->Executors[0].Reset(new TBasicExecutorPool(0, 2, 20));
-        Setup->Executors[1].Reset(new TBasicExecutorPool(1, 6, 20)); //PDisk's pool
-        Setup->Executors[2].Reset(new TBasicExecutorPool(2, 4, 20)); //PerfActor's pool
-        Setup->Executors[3].Reset(new TIOExecutorPool(3, 3));
-        Setup->Scheduler.Reset(new TBasicSchedulerThread(TSchedulerConfig(128, 100)));
+        Setup->Executors[0].Reset(new TBasicExecutorPool(0, 2, 20, "nameservice"));
+        Setup->Executors[1].Reset(new TBasicExecutorPool(1, 1, 20, "pdisk_actors"));
+        Setup->Executors[2].Reset(new TBasicExecutorPool(2, 4, 20, "perf_actors"));
+        Setup->Executors[3].Reset(new TIOExecutorPool(3, 1, "IO"));
+        Setup->Scheduler.Reset(new TBasicSchedulerThread(TSchedulerConfig(64, 20)));
 
         const TActorId nameserviceId = GetNameserviceActorId();
         TActorSetupCmd nameserviceSetup(CreateNameserverTable(nameserverTable), TMailboxType::Simple, 0);
@@ -273,6 +273,7 @@ struct TPDiskTest : public TPerfTest {
         pDiskConfig->WriteCacheSwitch = NKikimrBlobStorage::TPDiskConfig::DoNotTouch;
         pDiskConfig->ChunkSize = ChunkSize;
         pDiskConfig->DeviceInFlight = TestProto.GetDeviceInFlight() != 0 ? FastClp2(TestProto.GetDeviceInFlight()) : 4;
+        pDiskConfig->UseNoopScheduler = true;
         pDiskConfig->FeatureFlags.SetEnableSeparateSubmitThreadForPDisk(true);
         if (!TestProto.GetEnableTrim()) {
             pDiskConfig->DriveModelTrimSpeedBps = 0;
@@ -292,7 +293,8 @@ struct TPDiskTest : public TPerfTest {
 #endif
 
         TActorSetupCmd pDiskSetup(CreatePDisk(pDiskConfig.Get(),
-                    NPDisk::TMainKey{ .Keys = { NPDisk::YdbDefaultPDiskSequence }, .IsInitialized = true }, Counters), TMailboxType::Revolving, 1);
+                    NPDisk::TMainKey{ .Keys = { NPDisk::YdbDefaultPDiskSequence }, .IsInitialized = true }, Counters),
+                    TMailboxType::ReadAsFilled, 1);
         Setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(PDiskId, std::move(pDiskSetup)));
 
         /////////////////////// LOGGER ///////////////////////////////////////////////
@@ -325,7 +327,7 @@ struct TPDiskTest : public TPerfTest {
         TActorId yardId = PDiskId;
         TestId = MakeBlobStorageProxyID(1);
         TActorSetupCmd testSetup(new TPerfTestActor(yardId, TVDiskID(0, 1, 0, 0, 0), Cfg, TestProto, Printer, Counters),
-                TMailboxType::Revolving, 2);
+            TMailboxType::ReadAsFilled, 2);
         Setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(TestId, std::move(testSetup)));
     }
 

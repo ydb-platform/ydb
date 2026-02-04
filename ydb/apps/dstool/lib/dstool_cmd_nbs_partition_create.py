@@ -16,7 +16,8 @@ def is_successful_response(response):
 
 
 def do(args):
-    request = nbs.CreatePartitionRequest(BlockSize=4096, BlocksCount=1024, StoragePoolName="test")
+    request = nbs.CreatePartitionRequest(BlockSize=args.block_size,
+        BlocksCount=args.blocks_count, StoragePoolName=args.pool)
     response = common.invoke_nbs_request('CreatePartition', request)
 
     common.print_nbs_request_result(args, request, response)

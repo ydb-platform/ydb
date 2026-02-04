@@ -18,9 +18,10 @@ NKikimrTxDataShard::TEvCompactTableResult CompactTable(
         Tests::TServer::TPtr server,
         NKikimrTxDataShard::TEvGetInfoResponse::TUserTable& userTable,
         ui64 tabletId,
-        ui64 ownerId)
+        ui64 ownerId,
+        ui64 cookie)
 {
-    return CompactTable(*server->GetRuntime(), tabletId, TTableId(ownerId, userTable.GetPathId()));
+    return CompactTable(*server->GetRuntime(), tabletId, TTableId(ownerId, userTable.GetPathId()), false, cookie);
 }
 
 } // namespace
@@ -47,7 +48,7 @@ Y_UNIT_TEST_SUITE(DataShardBackgroundCompaction) {
         auto shards = GetTableShards(server, sender, "/Root/table-1");
 
         auto [tables, ownerId] = GetTables(server, shards.at(0));
-        auto compactionResult = CompactTable(server, tables["table-1"], shards.at(0), ownerId);
+        auto compactionResult = CompactTable(server, tables["table-1"], shards.at(0), ownerId, 42u);
         UNIT_ASSERT_VALUES_EQUAL(compactionResult.GetStatus(), NKikimrTxDataShard::TEvCompactTableResult::OK);
     }
 
@@ -82,14 +83,14 @@ Y_UNIT_TEST_SUITE(DataShardBackgroundCompaction) {
 
         for (auto shard: shards) {
             auto [tables, ownerId] = GetTables(server, shard);
-            auto compactionResult = CompactTable(server, tables["table-1"], shard, ownerId);
+            auto compactionResult = CompactTable(server, tables["table-1"], shard, ownerId, 43u);
             UNIT_ASSERT_VALUES_EQUAL(compactionResult.GetStatus(), NKikimrTxDataShard::TEvCompactTableResult::BORROWED);
         }
 
         {
             auto [tables, ownerId] = GetTables(server, originalShard);
             // try to compact original table (should be inactive now)
-            auto compactionResult = CompactTable(server, tables["table-1"], originalShard, ownerId);
+            auto compactionResult = CompactTable(server, tables["table-1"], originalShard, ownerId, 21u);
             UNIT_ASSERT_VALUES_EQUAL(compactionResult.GetStatus(), NKikimrTxDataShard::TEvCompactTableResult::FAILED);
         }
     }
@@ -119,7 +120,7 @@ Y_UNIT_TEST_SUITE(DataShardBackgroundCompaction) {
             auto shards = GetTableShards(server, sender, "/Root/table-1");
 
             auto [tables, ownerId] = GetTables(server, shards.at(0));
-            auto compactionResult = CompactTable(server, tables["table-1"], shards.at(0), ownerId);
+            auto compactionResult = CompactTable(server, tables["table-1"], shards.at(0), ownerId, 33u);
             UNIT_ASSERT_VALUES_EQUAL(compactionResult.GetStatus(), NKikimrTxDataShard::TEvCompactTableResult::LOANED);
         }
 
@@ -127,7 +128,7 @@ Y_UNIT_TEST_SUITE(DataShardBackgroundCompaction) {
             auto shards = GetTableShards(server, sender, "/Root/table-2");
 
             auto [tables, ownerId] = GetTables(server, shards.at(0));
-            auto compactionResult = CompactTable(server, tables["table-2"], shards.at(0), ownerId);
+            auto compactionResult = CompactTable(server, tables["table-2"], shards.at(0), ownerId, 55u);
             UNIT_ASSERT_VALUES_EQUAL(compactionResult.GetStatus(), NKikimrTxDataShard::TEvCompactTableResult::BORROWED);
         }
     }
@@ -151,7 +152,7 @@ Y_UNIT_TEST_SUITE(DataShardBackgroundCompaction) {
         auto shards = GetTableShards(server, sender, "/Root/table-1");
 
         auto [tables, ownerId] = GetTables(server, shards.at(0));
-        auto compactionResult = CompactTable(server, tables["table-1"], shards.at(0), ownerId);
+        auto compactionResult = CompactTable(server, tables["table-1"], shards.at(0), ownerId, 134u);
         UNIT_ASSERT(compactionResult.GetStatus() == NKikimrTxDataShard::TEvCompactTableResult::NOT_NEEDED);
     }
 
@@ -176,10 +177,10 @@ Y_UNIT_TEST_SUITE(DataShardBackgroundCompaction) {
         auto shards = GetTableShards(server, sender, "/Root/table-1");
 
         auto [tables, ownerId] = GetTables(server, shards.at(0));
-        auto compactionResult = CompactTable(server, tables["table-1"], shards.at(0), ownerId);
+        auto compactionResult = CompactTable(server, tables["table-1"], shards.at(0), ownerId, 11u);
         UNIT_ASSERT_VALUES_EQUAL(compactionResult.GetStatus(), NKikimrTxDataShard::TEvCompactTableResult::OK);
 
-        compactionResult = CompactTable(server, tables["table-1"], shards.at(0), ownerId);
+        compactionResult = CompactTable(server, tables["table-1"], shards.at(0), ownerId, 13u);
         UNIT_ASSERT_VALUES_EQUAL(compactionResult.GetStatus(), NKikimrTxDataShard::TEvCompactTableResult::NOT_NEEDED);
     }
 }

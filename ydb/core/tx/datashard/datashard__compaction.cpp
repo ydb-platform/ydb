@@ -28,7 +28,7 @@ public:
                 record.GetPathId().GetOwnerId(),
                 record.GetPathId().GetLocalId(),
                 NKikimrTxDataShard::TEvCompactTableResult::FAILED);
-            ctx.Send(Ev->Sender, std::move(response));
+            ctx.Send(Ev->Sender, std::move(response), 0, Ev->Cookie);
             return true;
         }
 
@@ -43,7 +43,7 @@ public:
                 Self->TabletID(),
                 pathId,
                 NKikimrTxDataShard::TEvCompactTableResult::FAILED);
-            ctx.Send(Ev->Sender, std::move(response));
+            ctx.Send(Ev->Sender, std::move(response), 0, Ev->Cookie);
             return true;
         }
 
@@ -58,7 +58,7 @@ public:
                 Self->TabletID(),
                 pathId,
                 NKikimrTxDataShard::TEvCompactTableResult::FAILED);
-            ctx.Send(Ev->Sender, std::move(response));
+            ctx.Send(Ev->Sender, std::move(response), 0, Ev->Cookie);
             return true;
         }
         const TUserTable& tableInfo = *it->second;
@@ -82,7 +82,7 @@ public:
                 Self->TabletID(),
                 pathId,
                 NKikimrTxDataShard::TEvCompactTableResult::BORROWED);
-            ctx.Send(Ev->Sender, std::move(response));
+            ctx.Send(Ev->Sender, std::move(response), 0, Ev->Cookie);
             return true;
         }
 
@@ -101,7 +101,7 @@ public:
                 Self->TabletID(),
                 pathId,
                 NKikimrTxDataShard::TEvCompactTableResult::LOANED);
-            ctx.Send(Ev->Sender, std::move(response));
+            ctx.Send(Ev->Sender, std::move(response), 0, Ev->Cookie);
             return true;
         }
 
@@ -123,7 +123,7 @@ public:
                 Self->TabletID(),
                 pathId,
                 NKikimrTxDataShard::TEvCompactTableResult::NOT_NEEDED);
-            ctx.Send(Ev->Sender, std::move(response));
+            ctx.Send(Ev->Sender, std::move(response), 0, Ev->Cookie);
             return true;
         }
 
@@ -141,7 +141,7 @@ public:
                 << ", memtableRows# " << stats.MemRowCount);
 
             Self->IncCounter(COUNTER_TX_BACKGROUND_COMPACTION);
-            Self->CompactionWaiters[tableInfo.LocalTid].emplace_back(std::make_tuple(compactionId, Ev->Sender));
+            Self->CompactionWaiters[tableInfo.LocalTid].emplace_back(compactionId, Ev->Sender, Ev->Cookie);
             ++tableInfo.Stats.BackgroundCompactionCount;
         } else {
             // compaction failed, for now we don't care
@@ -150,7 +150,7 @@ public:
                 Self->TabletID(),
                 pathId,
                 NKikimrTxDataShard::TEvCompactTableResult::FAILED);
-            ctx.Send(Ev->Sender, std::move(response));
+            ctx.Send(Ev->Sender, std::move(response), 0, Ev->Cookie);
         }
 
         return true;
@@ -237,26 +237,25 @@ void TDataShard::ReplyCompactionWaiters(
     LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
         "ReplyCompactionWaiters of tablet# "<< TabletID() << ", table# " << tableId
         << ", finished edge# " << compactionInfo.Edge
-        << ", front# " << (CompactionWaiters[tableId].empty() ? 0UL : std::get<0>(CompactionWaiters[tableId].front())));
+        << ", front# " << (CompactionWaiters[tableId].empty() ? 0UL : CompactionWaiters[tableId].front().CompactionId));
 
     auto fullCompactionQueue = CompactionWaiters.FindPtr(tableId);
     while (fullCompactionQueue && !fullCompactionQueue->empty()) {
         const auto& waiter = fullCompactionQueue->front();
-        if (std::get<0>(waiter) > compactionInfo.Edge) {
+        if (waiter.CompactionId > compactionInfo.Edge) {
             break;
         }
 
-        const auto& sender = std::get<1>(waiter);
         auto response = MakeHolder<TEvDataShard::TEvCompactTableResult>(
             TabletID(),
             GetPathOwnerId(),
             localPathId,
             NKikimrTxDataShard::TEvCompactTableResult::OK);
-        ctx.Send(sender, std::move(response));
+        ctx.Send(waiter.ActorId, std::move(response), 0, waiter.Cookie);
 
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
             "ReplyCompactionWaiters of tablet# "<< TabletID() << ", table# " << tableId
-            << " sending TEvCompactTableResult to# " << sender
+            << " sending TEvCompactTableResult to# " << waiter.ActorId
             << "pathId# " << TPathId(GetPathOwnerId(), localPathId));
 
         fullCompactionQueue->pop_front();

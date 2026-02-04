@@ -28,7 +28,7 @@ message TFeatureFlags {
     optional bool EnableChunkGraceForPDisk = 7 [default = true];
     optional bool AllowConsistentOperationsForSchemeShard = 8 [default = true];
     optional bool EnableSchemeBoard = 9 [default = true]; // deprecated: always true
-    optional bool AllowYdbRequestsWithoutDatabase = 10 [default = true, (RequireRestart) = true];
+    optional bool AllowYdbRequestsWithoutDatabase = 10 [default = false, (RequireRestart) = true];
     optional bool EnableExternalSubdomains = 11 [default = true];
     optional bool AllowRecursiveMkDir = 12 [default = true]; // deprecated: always true
     optional bool AllowHugeKeyValueDeletes = 13 [default = true]; // delete when all clients limit deletes per request

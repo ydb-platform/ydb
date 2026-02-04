@@ -939,7 +939,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
 
         for (const auto& column : Scheme.GetColumns()) {
             if (!TableInfo.HasColumn(column.GetName())) {
-                return finish(TStringBuilder() << Settings.GetDataKey(DataFormat, CompressionCodec)
+                return finish(TStringBuilder() << Settings.GetObjectKeyPattern()
                     << ": cannot find column '" << column.GetName() << "'");
             }
 
@@ -947,7 +947,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
             auto schemeType = NScheme::TypeInfoModFromProtoColumnType(column.GetTypeId(),
                 column.HasTypeInfo() ? &column.GetTypeInfo() : nullptr);
             if (type.first != schemeType.TypeInfo || type.second != schemeType.TypeMod) {
-                return finish(TStringBuilder() << Settings.GetDataKey(DataFormat, CompressionCodec)
+                return finish(TStringBuilder() << Settings.GetObjectKeyPattern()
                     << ": column '" << column.GetName() << "' type mismatch"
                     << ": expected '" << NScheme::TypeName(type.first, type.second) << "'"
                     << ", got '" << NScheme::TypeName(schemeType.TypeInfo, schemeType.TypeMod) << "'");
@@ -955,7 +955,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
         }
 
         if (TableInfo.GetKeyColumnIds().size() != (ui32)Scheme.KeyColumnNamesSize()) {
-            return finish(TStringBuilder() << Settings.GetDataKey(DataFormat, CompressionCodec)
+            return finish(TStringBuilder() << Settings.GetObjectKeyPattern()
                 << ": key column count mismatch"
                 << ": expected '" << TableInfo.GetKeyColumnIds().size() << "'"
                 << ", got '" << Scheme.KeyColumnNamesSize() << "'");
@@ -966,7 +966,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
             const ui32 keyOrder = TableInfo.KeyOrder(name);
 
             if (keyOrder != i) {
-                return finish(TStringBuilder() << Settings.GetDataKey(DataFormat, CompressionCodec)
+                return finish(TStringBuilder() << Settings.GetObjectKeyPattern()
                     << ": key column '" << name << "' order mismatch"
                     << ": expected '" << keyOrder << "'"
                     << ", got '" << i << "'");

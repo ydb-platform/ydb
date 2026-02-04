@@ -151,7 +151,7 @@ namespace NYql::NDq {
 
         void Bootstrap() {
             const auto& dsi = LookupSource.data_source_instance();
-            GENERIC_LOG_I("New generic proivider lookup source actor(ActorId=" << SelfId() << ") for"
+            GENERIC_LOG_I("New generic provider lookup source actor(ActorId=" << SelfId() << ") for"
                     << " kind=" << NYql::EGenericDataSourceKind_Name(dsi.kind())
                     << ", endpoint=" << dsi.endpoint().ShortDebugString()
                     << ", database=" << dsi.database()

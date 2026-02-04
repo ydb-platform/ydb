@@ -4,6 +4,8 @@
 
 #include <ydb/library/workload/abstract/workload_query_generator.h>
 
+#include <util/generic/vector.h>
+
 namespace NYdbWorkload {
 
 class TFulltextWorkloadGenerator final: public TWorkloadQueryGeneratorBase<TFulltextWorkloadParams> {

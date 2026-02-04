@@ -4,6 +4,7 @@
 #include <util/random/random.h>
 #include <util/string/builder.h>
 #include <util/string/cast.h>
+#include <util/generic/vector.h>
 
 namespace NYdbWorkload {
 
@@ -35,17 +36,18 @@ TVector<std::string> TFulltextWorkloadGenerator::GetCleanPaths() const {
 
 TQueryInfoList TFulltextWorkloadGenerator::GetWorkload(int type) {
     switch (type) {
-        case 0: return Upsert();
-        case 1: return Select();
-        default: return {};
+        case 0:
+            return Select();
+        default:
+            return {};
     }
 }
 
 TVector<IWorkloadQueryGenerator::TWorkloadType> TFulltextWorkloadGenerator::GetSupportedWorkloadTypes() const {
-    return {
-        {0, "upsert", "Upsert random text"},
-        {1, "select", "Select random text"}
-    };
+    TVector<TWorkloadType> result;
+    result.emplace_back(0, "select", "Select");
+    return result;
+
 }
 
 TQueryInfoList TFulltextWorkloadGenerator::Upsert() {

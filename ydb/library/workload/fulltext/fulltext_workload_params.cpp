@@ -6,6 +6,8 @@
 namespace NYdbWorkload {
 
 void TFulltextWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int workloadType) {
+    Y_UNUSED(workloadType);
+
     switch (commandType) {
     case TWorkloadParams::ECommandType::Init:
         opts.AddLongOption("table", "Table name")
@@ -41,6 +43,8 @@ TString TFulltextWorkloadParams::GetWorkloadName() const {
 
 void TFulltextWorkloadParams::Validate(const ECommandType commandType, int workloadType) {
     // Validation logic if needed
+    Y_UNUSED(commandType);
+    Y_UNUSED(workloadType);
 }
 
 void TFulltextWorkloadParams::Init() {

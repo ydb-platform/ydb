@@ -63,7 +63,7 @@ void TTopicWorkloadKeyedWriterWorker::WaitTillNextMessageExpectedCreateTimeAndCo
     TDuration timeToNextMessage = Params.BytesPerSec == 0 ? TDuration::Zero() :
         GetExpectedCurrMessageCreationTimestamp() - now;
 
-    if (timeToNextMessage > TDuration::Zero() || !producer->ContinuationTokenDefined()) {
+    if (timeToNextMessage > TDuration::Zero() || !producer->HasContinuationTokens()) {
         producer->WaitForContinuationToken(timeToNextMessage);
     }
 }
@@ -89,7 +89,7 @@ void TTopicWorkloadKeyedWriterWorker::Process(TInstant endTime)
 
         WaitTillNextMessageExpectedCreateTimeAndContinuationToken(producer);
 
-        bool writingAllowed = producer->ContinuationTokenDefined();
+        bool writingAllowed = producer->HasContinuationTokens();
 
         if (Params.BytesPerSec != 0) {
             ui64 bytesMustBeWritten = (now - StartTimestamp).SecondsFloat() * Params.BytesPerSec / Params.ProducerThreadCount;
@@ -153,6 +153,8 @@ std::shared_ptr<TTopicWorkloadKeyedWriterProducer> TTopicWorkloadKeyedWriterWork
         std::bind(&TTopicWorkloadKeyedWriterProducer::HandleAckEvent, producer, std::placeholders::_1));
     eventHandlers.SessionClosedHandler(
         std::bind(&TTopicWorkloadKeyedWriterProducer::HandleSessionClosed, producer, std::placeholders::_1));
+    eventHandlers.ReadyToAcceptHandler(
+        std::bind(&TTopicWorkloadKeyedWriterProducer::HandleReadyToAcceptEvent, producer, std::placeholders::_1));
     settings.EventHandlers(eventHandlers);
 
     settings.DirectWriteToPartition(Params.Direct);

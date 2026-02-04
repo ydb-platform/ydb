@@ -47,7 +47,8 @@ void TTopicWorkloadKeyedWriterProducer::Send(const TInstant& createTimestamp,
     }
 
     TTransactionBase* txPtr = writeMessage.GetTxPtr();
-    WriteSession_->Write(std::move(*ContinuationToken_), key, std::move(writeMessage), txPtr);
+    auto continuationToken = GetContinuationToken();
+    WriteSession_->Write(std::move(continuationToken), key, std::move(writeMessage), txPtr);
 
     WRITE_LOG(Params_.Log, ELogPriority::TLOG_DEBUG,
               TStringBuilder() << "Sent keyed message with id " << MessageId_
@@ -104,33 +105,23 @@ NYdb::NTopic::TWriteMessage::TMessageMeta TTopicWorkloadKeyedWriterProducer::Gen
 
 void TTopicWorkloadKeyedWriterProducer::WaitForContinuationToken(const TDuration& timeout)
 {
-    WRITE_LOG(Params_.Log, ELogPriority::TLOG_DEBUG, TStringBuilder()
-        << "WriterId " << Params_.WriterIdx
-        << " keyed producer id " << ProducerId_
-        << ": WaitEvent for timeToNextMessage " << timeout);
+    auto deadline = Clock_.Now() + timeout;
+    while (!HasContinuationTokens()) {
+        WRITE_LOG(Params_.Log, ELogPriority::TLOG_DEBUG, TStringBuilder()
+            << "WriterId " << Params_.WriterIdx
+            << " keyed producer id " << ProducerId_
+            << ": WaitEvent for timeToNextMessage " << timeout);
 
-    const bool foundEvent = WriteSession_->WaitEvent().Wait(timeout);
-    WRITE_LOG(Params_.Log, ELogPriority::TLOG_DEBUG, TStringBuilder()
-        << "Keyed producer " << ProducerId_
-        << " in writer " << Params_.WriterIdx
-        << ": foundEvent - " << foundEvent);
-
-    if (!foundEvent) {
-        return;
-    }
-
-    auto variant = WriteSession_->GetEvent(true).value();
-    if (std::holds_alternative<NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(variant)) {
-        auto event = std::get<NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(variant);
-        ContinuationToken_ = std::move(event.ContinuationToken);
+        const bool foundEvent = WriteSession_->WaitEvent().Wait(deadline);
         WRITE_LOG(Params_.Log, ELogPriority::TLOG_DEBUG, TStringBuilder()
             << "Keyed producer " << ProducerId_
             << " in writer " << Params_.WriterIdx
-            << ": Got new ContinuationToken");
-        return;
-    }
+            << ": foundEvent - " << foundEvent);
 
-    ythrow yexception() << "Unexpected event type in keyed WaitForContinuationToken";
+        if (!foundEvent) {
+            return;
+        }
+    }
 }
 
 void TTopicWorkloadKeyedWriterProducer::HandleAckEvent(NYdb::NTopic::TWriteSessionEvent::TAcksEvent& event)
@@ -160,6 +151,12 @@ void TTopicWorkloadKeyedWriterProducer::HandleAckEvent(NYdb::NTopic::TWriteSessi
     }
 }
 
+void TTopicWorkloadKeyedWriterProducer::HandleReadyToAcceptEvent(NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent& event)
+{
+    std::lock_guard lk(Lock_);
+    ContinuationTokens_.push(std::move(event.ContinuationToken));
+}
+
 void TTopicWorkloadKeyedWriterProducer::HandleSessionClosed(const NYdb::NTopic::TSessionClosedEvent& event)
 {
     WRITE_LOG(Params_.Log, ELogPriority::TLOG_DEBUG, TStringBuilder()
@@ -167,9 +164,18 @@ void TTopicWorkloadKeyedWriterProducer::HandleSessionClosed(const NYdb::NTopic::
         << ": got close event: " << event.DebugString());
 }
 
-bool TTopicWorkloadKeyedWriterProducer::ContinuationTokenDefined() const
+bool TTopicWorkloadKeyedWriterProducer::HasContinuationTokens()
 {
-    return !!ContinuationToken_;
+    std::lock_guard lk(Lock_);
+    return !ContinuationTokens_.empty();
+}
+
+NYdb::NTopic::TContinuationToken TTopicWorkloadKeyedWriterProducer::GetContinuationToken()
+{
+    std::lock_guard lk(Lock_);
+    auto token = std::move(ContinuationTokens_.front());    
+    ContinuationTokens_.pop();
+    return token;
 }
 
 ui64 TTopicWorkloadKeyedWriterProducer::GetCurrentMessageId() const

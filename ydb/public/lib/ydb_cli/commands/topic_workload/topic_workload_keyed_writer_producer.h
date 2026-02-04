@@ -7,6 +7,7 @@
 #include <library/cpp/unified_agent_client/clock.h>
 
 #include <util/generic/string.h>
+#include <queue>
 
 namespace NYdb::NConsoleClient {
 
@@ -28,7 +29,9 @@ public:
     void Send(const TInstant& createTimestamp,
               std::optional<NYdb::NTable::TTransaction> transaction);
 
-    bool ContinuationTokenDefined() const;
+    bool HasContinuationTokens();
+
+    NYdb::NTopic::TContinuationToken GetContinuationToken();
 
     ui64 GetCurrentMessageId() const;
 
@@ -36,6 +39,7 @@ public:
 
     void HandleAckEvent(NYdb::NTopic::TWriteSessionEvent::TAcksEvent& event);
     void HandleSessionClosed(const NYdb::NTopic::TSessionClosedEvent& event);
+    void HandleReadyToAcceptEvent(NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent& event);
 
 private:
     TString GetGeneratedMessage() const;
@@ -47,7 +51,8 @@ private:
     std::shared_ptr<NYdb::NTopic::IKeyedWriteSession> WriteSession_;
     ui64 MessageId_ = 0;
     const TString ProducerId_;
-    TMaybe<NYdb::NTopic::TContinuationToken> ContinuationToken_ = {};
+    std::mutex Lock_;
+    std::queue<NYdb::NTopic::TContinuationToken> ContinuationTokens_;
     TConcurrentHashMap<ui64, TInstant> InflightMessagesCreateTs_;
     std::atomic<ui64> InflightMessagesCount_{};
 

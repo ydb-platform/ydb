@@ -683,7 +683,7 @@ namespace NKikimr::NGRpcProxy::V1 {
                     try {
                         i64 count = FromString<i64>(attrValue);
                         if (count < 0) {
-                            error = TStringBuilder() << attrName << "can't be negative, provided " << count;
+                            error = TStringBuilder() << attrName << " can't be negative, provided " << count;
                             return Ydb::StatusIds::BAD_REQUEST;
                         }
                         if (count > 0) {

@@ -2241,7 +2241,10 @@ void TReadSessionActor<UseMigrationProtocol>::ProcessReads(const TActorContext& 
         typename TFormedReadResponse<TServerMessage>::TPtr formedResponse =
             new TFormedReadResponse<TServerMessage>(guid, ctx.Now());
 
-        while (!AvailablePartitions.empty()) {
+        size_t maxPartitionsInReadBatch = 0;
+        while (!AvailablePartitions.empty() && maxPartitionsInReadBatch < MAX_PARTITION_IN_READ_BATCH) {
+            ++maxPartitionsInReadBatch;
+
             auto part = *AvailablePartitions.begin();
             AvailablePartitions.erase(AvailablePartitions.begin());
 

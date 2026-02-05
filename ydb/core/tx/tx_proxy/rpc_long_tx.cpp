@@ -51,8 +51,7 @@ protected:
     using TThis = typename TBase::TThis;
 
 public:
-    TLongTxWriteBase(const TString& databaseName, const TString& path, const TString& token, const TLongTxId& longTxId, const TString& dedupId,
-        const TString& userSID)
+    TLongTxWriteBase(const TString& databaseName, const TString& path, const TString& token, const TLongTxId& longTxId, const TString& dedupId, const TString& userSID)
         : DatabaseName(databaseName)
         , Path(path)
         , DedupId(dedupId)

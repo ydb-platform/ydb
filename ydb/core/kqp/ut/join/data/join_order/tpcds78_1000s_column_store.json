@@ -15,7 +15,7 @@
                     "args":
                       [
                         {
-                          "op_name":"LeftOnlyJoin (Grace)",
+                          "op_name":"LeftJoin (Grace)",
                           "args":
                             [
                               {
@@ -61,7 +61,7 @@
                           "args":
                             [
                               {
-                                "op_name":"LeftOnlyJoin (Grace)",
+                                "op_name":"LeftJoin (Grace)",
                                 "args":
                                   [
                                     {
@@ -105,7 +105,7 @@
                     "args":
                       [
                         {
-                          "op_name":"LeftOnlyJoin (Grace)",
+                          "op_name":"LeftJoin (Grace)",
                           "args":
                             [
                               {

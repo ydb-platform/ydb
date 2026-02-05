@@ -392,7 +392,7 @@ message TTableServiceConfig {
 
     optional bool EnableFoldUdfs = 82 [ default = true , (InvalidateCompileCache) = true];
 
-    optional bool FilterPushdownOverJoinOptionalSide = 83 [ default = true, (InvalidateCompileCache) = true];
+    optional bool FilterPushdownOverJoinOptionalSide = 83 [ default = false, (InvalidateCompileCache) = true];
 
     optional bool EnableNewRBO = 84 [default = false, (InvalidateCompileCache) = true];
     optional bool EnableSpillingInHashJoinShuffleConnections = 85 [default = true, (InvalidateCompileCache) = true];
@@ -405,7 +405,7 @@ message TTableServiceConfig {
 
     optional uint64 BufferPageAllocSize = 90  [ default = 4096 ];
 
-    optional bool EnableOlapPushdownProjections = 91  [ default = true, (InvalidateCompileCache) = true ];
+    optional bool EnableOlapPushdownProjections = 91  [ default = false, (InvalidateCompileCache) = true ];
 
     optional uint32 DefaultLangVer = 92 [default = 202501, (InvalidateCompileCache) = true];
 
@@ -439,7 +439,7 @@ message TTableServiceConfig {
 
     optional bool EnableDqHashCombineByDefault = 105 [default = false, (InvalidateCompileCache) = true];
 
-    optional bool EnableBuildAggregationResultStages = 106 [default = true, (InvalidateCompileCache) = true];
+    optional bool EnableBuildAggregationResultStages = 106 [default = false, (InvalidateCompileCache) = true];
 
     optional bool EnforceSqlVersionV1 = 107 [default = true, (InvalidateCompileCache) = true];
 

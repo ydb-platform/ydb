@@ -1,8 +1,8 @@
-#include <yt/yt/core/test_framework/framework.h>
+#include <library/cpp/yt/misc/range_helpers.h>
 
-#include <yt/yt/core/misc/range_helpers.h>
+#include <library/cpp/testing/gtest/gtest.h>
 
-#include <library/cpp/yt/compact_containers/compact_vector.h>
+#include <list>
 
 namespace NYT {
 namespace {
@@ -32,8 +32,8 @@ TEST(TRangeHelpersTest, RangeToVector)
 
     std::initializer_list<std::string> expectedValues{"_A", "_B", "_C", "_D"};
     EXPECT_EQ(std::vector<std::string>(expectedValues), RangeTo<std::vector<std::string>>(range));
-    using TSomeCompactVector = TCompactVector<std::string, 4>;
-    EXPECT_EQ(TSomeCompactVector(expectedValues), RangeTo<TSomeCompactVector>(range));
+    using TListStrings = std::list<std::string>;
+    EXPECT_EQ(TListStrings(expectedValues), RangeTo<TListStrings>(range));
 }
 
 TEST(TRangeHelpersTest, RangeToString)
@@ -59,8 +59,8 @@ TEST(TRangeHelpersTest, MonadicRangeToVector)
 
     std::initializer_list<std::string> expectedValues{"_A", "_B", "_C", "_D"};
     EXPECT_EQ(std::vector<std::string>(expectedValues), range | RangeTo<std::vector<std::string>>());
-    using TSomeCompactVector = TCompactVector<std::string, 4>;
-    EXPECT_EQ(TSomeCompactVector(expectedValues), range  | RangeTo<TSomeCompactVector>());
+    using TListStrings = std::list<std::string>;
+    EXPECT_EQ(TListStrings(expectedValues), range  | RangeTo<TListStrings>());
 }
 
 TEST(TRangeHelpersTest, MonadicRangeToString)

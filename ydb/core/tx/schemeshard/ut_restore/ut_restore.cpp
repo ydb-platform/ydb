@@ -5879,7 +5879,6 @@ Y_UNIT_TEST_SUITE(TImportTests) {
                 AbcSlug: "abc_slug"
                 FederationAccount: "federation_account"
                 EnableCompactification: false
-                TimestampType: "LogAppendTime"
                 PartitionConfig {
                     LifetimeSeconds: 12
                     WriteSpeedInBytesPerSecond: 1024

@@ -221,16 +221,18 @@ private:
         std::uint64_t MemoryUsage = 0;
     };
 
-    struct TSplittedPartitionWorker {
+    struct TSplittedPartitionWorker : public std::enable_shared_from_this<TSplittedPartitionWorker> {
     private:
         enum class EState {
-            Init,
-            PendingDescribe,
-            GotDescribe,
-            PendingMaxSeqNo,
-            GotMaxSeqNo,
-            Done,
+            Init = 0,
+            PendingDescribe = 1,
+            GotDescribe = 2,
+            PendingMaxSeqNo = 3,
+            GotMaxSeqNo = 4,
+            Done = 5,
         };
+
+        std::string StateToString(EState state);
 
         void MoveTo(EState state);
         void UpdateMaxSeqNo(uint64_t maxSeqNo);
@@ -343,6 +345,8 @@ private:
     TInstant GetCloseDeadline();
 
     void GetSessionClosedEventAndDie(WrappedWriteSessionPtr wrappedSession, std::optional<TSessionClosedEvent> sessionClosedEvent = std::nullopt);
+
+    std::uint32_t GetPartitionId(std::uint64_t partitionIdx);
 
 public:
     TKeyedWriteSession(const TKeyedWriteSessionSettings& settings,

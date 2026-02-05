@@ -165,16 +165,6 @@ namespace {
         return value.empty() ? std::nullopt : std::make_optional(FromString<ui64>(value));
     }
 
-    std::optional<ui64> ExtractQueryTraceId(const TString& logs, const TString& component, const TString& messagePattern) {
-        for (const auto& record : ExtractTliRecords(logs)) {
-            if (!record.Contains("Component: " + component) || !MatchesMessage(record, messagePattern)) {
-                continue;
-            }
-            return ExtractNumericField(record, "QueryTraceId");
-        }
-        return std::nullopt;
-    }
-
     std::optional<ui64> ExtractCurrentQueryTraceId(const TString& logs, const TString& component, const TString& messagePattern) {
         for (const auto& record : ExtractTliRecords(logs)) {
             if (!record.Contains("Component: " + component) || !MatchesMessage(record, messagePattern)) {
@@ -282,14 +272,10 @@ namespace {
         std::optional<TString> VictimQueryTexts;
         std::optional<TString> BreakerQueryText;
         std::optional<TString> VictimQueryText;
-        std::optional<ui64> BreakerSessionQueryTraceId;
-        std::optional<ui64> BreakerShardQueryTraceId;
         std::optional<ui64> BreakerSessionBreakerQueryTraceId;
         std::optional<ui64> BreakerShardBreakerQueryTraceId;
         std::optional<std::vector<ui64>> BreakerShardVictimQueryTraceIds;
 
-        std::optional<ui64> VictimSessionQueryTraceId;
-        std::optional<ui64> VictimShardQueryTraceId;
         std::optional<ui64> VictimSessionCurrentQueryTraceId;
         std::optional<ui64> VictimShardCurrentQueryTraceId;
         std::optional<ui64> VictimSessionVictimQueryTraceId;
@@ -303,13 +289,9 @@ namespace {
         data.VictimQueryTexts = ExtractVictimQueryTexts(logs, patterns.VictimSessionActorMessagePattern);
         data.BreakerQueryText = ExtractQueryText(logs, patterns.BreakerSessionActorMessagePattern);
         data.VictimQueryText = ExtractVictimQueryText(logs, patterns.VictimSessionActorMessagePattern);
-        data.BreakerSessionQueryTraceId = ExtractQueryTraceId(logs, "SessionActor", patterns.BreakerSessionActorMessagePattern);
-        data.BreakerShardQueryTraceId = ExtractQueryTraceId(logs, "DataShard", patterns.BreakerDatashardMessage);
         data.BreakerSessionBreakerQueryTraceId = ExtractBreakerQueryTraceId(logs, "SessionActor", patterns.BreakerSessionActorMessagePattern);
         data.BreakerShardBreakerQueryTraceId = ExtractBreakerQueryTraceId(logs, "DataShard", patterns.BreakerDatashardMessage);
         data.BreakerShardVictimQueryTraceIds = ExtractVictimQueryTraceIds(logs, "DataShard", patterns.BreakerDatashardMessage);
-        data.VictimSessionQueryTraceId = ExtractQueryTraceId(logs, "SessionActor", patterns.VictimSessionActorMessagePattern);
-        data.VictimShardQueryTraceId = ExtractQueryTraceId(logs, "DataShard", patterns.VictimDatashardMessage);
         data.VictimSessionCurrentQueryTraceId = ExtractCurrentQueryTraceId(logs, "SessionActor", patterns.VictimSessionActorMessagePattern);
         data.VictimShardCurrentQueryTraceId = ExtractCurrentQueryTraceId(logs, "DataShard", patterns.VictimDatashardMessage);
         data.VictimSessionVictimQueryTraceId = ExtractVictimQueryTraceId(logs, "SessionActor", patterns.VictimSessionActorMessagePattern);
@@ -345,23 +327,6 @@ namespace {
             data.BreakerShardVictimQueryTraceIds->end(), *data.VictimShardVictimQueryTraceId)
             != data.BreakerShardVictimQueryTraceIds->end();
         UNIT_ASSERT_C(foundVictimQueryTraceId, "DS Breaker ↔ DS Victim: victim VictimQueryTraceId should be in breaker VictimQueryTraceIds");
-
-        // BreakerQueryTraceId consistency - breaker's QueryTraceId should match BreakerQueryTraceId
-        UNIT_ASSERT_VALUES_EQUAL_C(*data.BreakerSessionQueryTraceId, *data.BreakerSessionBreakerQueryTraceId,
-            "breaker SessionActor QueryTraceId should match BreakerQueryTraceId");
-
-        UNIT_ASSERT_VALUES_EQUAL_C(*data.BreakerShardQueryTraceId, *data.BreakerShardBreakerQueryTraceId,
-            "breaker DataShard QueryTraceId should match BreakerQueryTraceId");
-
-        // VictimQueryTraceId consistency - victim's first query QueryTraceId should match VictimQueryTraceId
-        if (data.VictimSessionQueryTraceId && data.VictimSessionVictimQueryTraceId) {
-            UNIT_ASSERT_VALUES_EQUAL_C(*data.VictimSessionQueryTraceId, *data.VictimSessionVictimQueryTraceId,
-                "victim SessionActor QueryTraceId should match VictimQueryTraceId");
-        }
-        if (data.VictimShardQueryTraceId && data.VictimShardVictimQueryTraceId) {
-            UNIT_ASSERT_VALUES_EQUAL_C(*data.VictimShardQueryTraceId, *data.VictimShardVictimQueryTraceId,
-                "victim DataShard QueryTraceId should match VictimQueryTraceId");
-        }
 
         // Query text assertions
         UNIT_ASSERT_C(data.BreakerQueryTexts && data.BreakerQueryTexts->Contains(breakerQueryText),

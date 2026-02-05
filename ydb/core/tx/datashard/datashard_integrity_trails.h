@@ -183,7 +183,6 @@ inline void LogLocksBroken(const NActors::TActorContext& ctx, const ui64 tabletI
         TStringStream ss;
         LogKeyValue("Component", "DataShard", ss);
         if (breakerQueryTraceId && *breakerQueryTraceId != 0) {
-            LogKeyValue("QueryTraceId", ToString(*breakerQueryTraceId), ss);
             LogKeyValue("BreakerQueryTraceId", ToString(*breakerQueryTraceId), ss);
         }
         ss << "VictimQueryTraceIds: [";
@@ -233,8 +232,6 @@ inline void LogVictimDetected(const NActors::TActorContext& ctx, const ui64 tabl
     TStringStream bodySs;
     LogKeyValue("TabletId", ToString(tabletId), bodySs);
     if (victimQueryTraceId && *victimQueryTraceId != 0) {
-        // QueryTraceId = VictimQueryTraceId for victim logs
-        LogKeyValue("QueryTraceId", ToString(*victimQueryTraceId), bodySs);
         LogKeyValue("VictimQueryTraceId", ToString(*victimQueryTraceId), bodySs);
     }
     if (currentQueryTraceId && *currentQueryTraceId != 0) {

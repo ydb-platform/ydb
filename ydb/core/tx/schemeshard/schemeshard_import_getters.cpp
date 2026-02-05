@@ -298,6 +298,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
     static TString GetItemSource(const TImportInfo& importInfo, ui32 itemIdx) {
         TString srcPrefix = importInfo.GetItemSrcPrefix(itemIdx);
 
+        // Absolute path in the prefix is possible if the backup with SchemaMapping
         if (importInfo.Kind == TImportInfo::EKind::FS && !srcPrefix.empty() && srcPrefix[0] != '/') {
             return CanonizePath(TStringBuilder() << importInfo.GetFsSettings().base_path() << "/" << srcPrefix);
         }

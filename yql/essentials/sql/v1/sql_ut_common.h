@@ -2501,6 +2501,13 @@ Y_UNIT_TEST(PragmasFileAndUdfOrder) {
     UNIT_ASSERT(file < udfs);
 }
 
+Y_UNIT_TEST(PragmaPackageURLSyntaxError) {
+    ExpectFailWithError(R"sql(
+        PRAGMA Package("project.package", "yt://plato/{$_path/to/package");
+    )sql", "<main>:2:43: Error: Failed to substitute parameters into url: "
+           "'yt://plato/{$_path/to/package', reason: 'Missing }', position: 28\n");
+}
+
 Y_UNIT_TEST(ProcessUserType) {
     NYql::TAstParseResult res = SqlToYql("process plato.Input using Kikimr::PushData(TableRows());", 1, TString(NYql::KikimrProviderName));
     UNIT_ASSERT(res.Root);

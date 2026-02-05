@@ -212,10 +212,12 @@ private:
 
         std::list<TMessageInfo> PendingMessages;
         std::list<TMessageInfo> InFlightMessages;
-        std::unordered_map<std::uint64_t, std::list<std::list<TMessageInfo>::iterator>> InFlightMessagesIndex;
+        using MessageIter = std::list<TMessageInfo>::iterator;
+        std::unordered_map<std::uint64_t, std::list<MessageIter>> InFlightMessagesIndex;
 
-        using InFlightMessagesIndexIter = std::list<std::list<TMessageInfo>::iterator>::iterator;
-        std::unordered_map<std::uint64_t, InFlightMessagesIndexIter> MessagesToResend;
+        // using InFlightMessagesIndexIter = std::list<std::list<TMessageInfo>::iterator>::iterator;
+        // std::unordered_map<std::uint64_t, InFlightMessagesIndexIter> MessagesToResend;
+        std::unordered_map<std::uint64_t, std::list<MessageIter>> MessagesToResendIndex;
         std::unordered_map<std::uint64_t, std::deque<TContinuationToken>> ContinuationTokens;
         
         std::uint64_t MemoryUsage = 0;

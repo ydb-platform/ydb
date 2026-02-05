@@ -797,7 +797,7 @@ void TKeyedWriteSession::TMessagesWorker::RechoosePartitionIfNeeded(TMessageInfo
 
 void TKeyedWriteSession::TMessagesWorker::DoWork() {
     auto sessionsWorker = Session->SessionsWorker;
-    while (!PendingMessages.empty() && MessagesToResend.empty()) {
+    while (!PendingMessages.empty() && MessagesToResendIndex.empty()) {
         auto& head = PendingMessages.front();
         if (Session->Partitions[head.Partition].Locked_ || Session->SplittedPartitionWorkers.contains(head.Partition)) {
             break;
@@ -815,29 +815,26 @@ void TKeyedWriteSession::TMessagesWorker::DoWork() {
         PushInFlightMessage(msgToSave.Partition, std::move(msgToSave));
     }
 
-    std::vector<std::uint64_t> partitionsConsumed;
-    for (auto& [partition, iter] : MessagesToResend) {
-        auto inFlightMessagesIndexChain = InFlightMessagesIndex.find(partition);
-        Y_ABORT_UNLESS(inFlightMessagesIndexChain != InFlightMessagesIndex.end(), "InFlightMessagesIndex not found");
-        
-        while (iter != inFlightMessagesIndexChain->second.end()) {
-            auto msgToSend = **iter;
+    std::vector<std::uint64_t> partitionsProcessed;
+    for (auto& [partition, messagesToResendIndexChain] : MessagesToResendIndex) {
+        while (!messagesToResendIndexChain.empty()) {
+            auto msgToSend = *messagesToResendIndexChain.front();
             auto wrappedSession = sessionsWorker->GetWriteSession(msgToSend.Partition);
             if (!SendMessage(wrappedSession, std::move(msgToSend))) {
                 break;
             }
 
             sessionsWorker->OnWriteToSession(wrappedSession);
-            ++iter;
+            messagesToResendIndexChain.pop_front();
         }
 
-        if (iter == inFlightMessagesIndexChain->second.end()) {
-            partitionsConsumed.push_back(partition);
+        if (messagesToResendIndexChain.empty()) {
+            partitionsProcessed.push_back(partition);
         }
     }
 
-    for (const auto& partition : partitionsConsumed) {
-        MessagesToResend.erase(partition);
+    for (const auto& partition : partitionsProcessed) {
+        MessagesToResendIndex.erase(partition);
     }
 
     if (Session->MessagesNotEmptyFuture.IsReady()) {
@@ -987,25 +984,21 @@ void TKeyedWriteSession::TMessagesWorker::ScheduleResendMessages(std::uint64_t p
 
     // IMPORTANT: do not mutate InFlightMessagesIndex while holding references/iterators to its elements.
     // try_emplace()/rehash may invalidate 'it' and 'list' -> use-after-free and segfaults.
-    using TInFlightIt = std::list<TMessageInfo>::iterator;
-    std::vector<std::pair<std::uint64_t, TInFlightIt>> toMove;
-    toMove.reserve(std::distance(resendIt, list.end()));
+    std::vector<std::pair<std::uint64_t, MessageIter>> toResend;
+    toResend.reserve(std::distance(resendIt, list.end()));
     for (auto iter = resendIt; iter != list.end(); ++iter) {
         auto newPartition = Session->PartitionChooser->ChoosePartition((*iter)->Key);
         (*iter)->Partition = newPartition;
-        toMove.emplace_back(newPartition, *iter);
+        toResend.emplace_back(newPartition, *iter);
     }
     
     list.erase(resendIt, list.end());
-    for (const auto& [newPartition, msgIt] : toMove) {
-        auto [listIt, _] = InFlightMessagesIndex.try_emplace(newPartition, std::list<std::list<TMessageInfo>::iterator>());
-        listIt->second.push_back(msgIt);
-    }
+    for (const auto& [newPartition, msgIt] : toResend) {
+        auto [inFlightMessagesIndexChainIt, _] = InFlightMessagesIndex.try_emplace(newPartition, std::list<MessageIter>());
+        inFlightMessagesIndexChainIt->second.push_back(msgIt);
 
-    for (const auto& child : Session->Partitions[partitionIdx].Children_) {
-        if (auto childList = InFlightMessagesIndex.find(child); childList != InFlightMessagesIndex.end()) {
-            MessagesToResend.try_emplace(child, childList->second.begin());
-        }
+        auto [messagesToResendChainIt, __] = MessagesToResendIndex.try_emplace(newPartition, std::list<MessageIter>());
+        messagesToResendChainIt->second.push_back(msgIt);
     }
 }
 

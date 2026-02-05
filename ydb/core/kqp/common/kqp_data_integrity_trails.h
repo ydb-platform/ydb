@@ -16,6 +16,46 @@
 namespace NKikimr {
 namespace NDataIntegrity {
 
+// Node-level cache for QueryTraceId -> QueryText mapping
+// Used to lookup breaker query text in deferred lock scenarios where the breaker's session has completed
+// but victim's session needs to log the breaker's query text
+class TNodeQueryTextCache {
+public:
+    static constexpr size_t MaxCacheSize = 10000;
+
+    static TNodeQueryTextCache& Instance() {
+        return *Singleton<TNodeQueryTextCache>();
+    }
+
+    void Add(ui64 queryTraceId, const TString& queryText) {
+        if (queryTraceId == 0 || queryText.empty()) {
+            return;
+        }
+        with_lock(Lock) {
+            // Remove oldest entry if cache is full
+            while (Cache.size() >= MaxCacheSize) {
+                Cache.pop_front();
+            }
+            Cache.push_back({queryTraceId, queryText});
+        }
+    }
+
+    TString Get(ui64 queryTraceId) const {
+        with_lock(Lock) {
+            for (const auto& [traceId, queryText] : Cache) {
+                if (traceId == queryTraceId) {
+                    return queryText;
+                }
+            }
+        }
+        return "";
+    }
+
+private:
+    mutable TAdaptiveLock Lock;
+    std::deque<std::pair<ui64, TString>> Cache;
+};
+
 // Class for collecting and managing query texts and QueryTraceIds for TLI logging
 // and victim stats attribution (LocksBrokenAsVictim)
 class TQueryTextCollector {
@@ -27,6 +67,8 @@ public:
         if (queryText.empty()) {
             return;
         }
+        // Also add to node-level cache for deferred lock scenario lookups
+        TNodeQueryTextCache::Instance().Add(queryTraceId, queryText);
 
         // Always store the first query (needed for victim stats attribution)
         // For subsequent queries, only store if TLI logging is enabled

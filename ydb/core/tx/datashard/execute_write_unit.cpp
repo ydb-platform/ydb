@@ -505,6 +505,8 @@ public:
                     LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Executed write operation for " << *writeOp << " at " << DataShard.TabletID() << ", row count=" << validatedOperation.GetMatrix().GetRowCount());
                 }
                 validatedOperationIndex = SIZE_MAX;
+                // Track this write for TLI breaker linkage in deferred lock scenarios
+                DataShard.AddRecentWriteForTli(mvccVersion, writeOp->QueryTraceId());
             } else {
                 LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Skip empty write operation for " << *writeOp << " at " << DataShard.TabletID());
             }

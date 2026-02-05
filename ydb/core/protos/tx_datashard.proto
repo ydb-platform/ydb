@@ -238,6 +238,7 @@ message TEvKqpInputActorResultInfo {
     repeated NKikimrDataEvents.TLock Locks = 1;
     optional string BatchOperationMaxKey = 2;
     repeated uint32 BatchOperationKeyIds = 3;
+    repeated uint64 DeferredBreakerQueryTraceIds = 4; // QueryTraceIds of transactions that broke locks in deferred scenarios
 }
 
 message TKqpReadRangesSourceSettings {
@@ -2308,6 +2309,9 @@ message TEvReadResult {
     optional uint64 RowCount = 12;
 
     optional uint32 NodeId = 13;
+
+    // QueryTraceIds of transactions that broke locks in deferred scenarios (e.g., OLTP sink UPSERT...SELECT)
+    repeated uint64 DeferredBreakerQueryTraceIds = 14;
 
     // Data for the possibly partial result
     oneof ReadResult {

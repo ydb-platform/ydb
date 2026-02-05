@@ -3119,6 +3119,10 @@ private:
 
                     ResponseEv->BatchOperationMaxKeys.emplace_back(info.GetBatchOperationMaxKey());
                 }
+                // Collect deferred breaker QueryTraceIds for TLI logging at SessionActor level
+                for (auto breakerQueryTraceId : info.GetDeferredBreakerQueryTraceIds()) {
+                    ResponseEv->DeferredBreakerQueryTraceIds.push_back(breakerQueryTraceId);
+                }
             } else if (data.GetData().template Is<NKikimrKqp::TEvKqpOutputActorResultInfo>()) {
                 NKikimrKqp::TEvKqpOutputActorResultInfo info;
                 YQL_ENSURE(data.GetData().UnpackTo(&info), "Failed to unpack settings");

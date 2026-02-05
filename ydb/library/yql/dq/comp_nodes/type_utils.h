@@ -55,42 +55,6 @@ struct TWideUnboxedHasher {
     const TKeyTypes& Types;
 };
 
-struct TWideUnboxedHasherWithExternalValue {
-    TWideUnboxedHasherWithExternalValue(const TKeyTypes& types, const NUdf::THashType& externalValue)
-        : Types(types)
-        , ExternalValue(externalValue)
-    {}
-
-    NUdf::THashType operator()(const NUdf::TUnboxedValuePod* values) const {
-        if (ExternalValue) {
-            return ExternalValue;
-        }
-
-        if (Types.size() == 1U) {
-            if (const auto& v = *values) {
-                return NUdf::GetValueHash(Types.front().first, v);
-            }
-            else {
-                return HashOfNull;
-            }
-        }
-
-        NUdf::THashType hash = 0ULL;
-        for (const auto& type : Types) {
-            if (const auto& v = *values++) {
-                hash = CombineHashes(hash, NUdf::GetValueHash(type.first, v));
-            } else {
-                hash = CombineHashes(hash, HashOfNull);
-            }
-        }
-
-        return hash;
-    }
-
-    const TKeyTypes& Types;
-    const NUdf::THashType& ExternalValue;
-};
-
 bool UnwrapBlockTypes(const TArrayRef<TType* const>& typeComponents, std::vector<TType*>& result);
 
 void WrapArrayBlockTypes(std::vector<TType*>& types, const TProgramBuilder& pb);

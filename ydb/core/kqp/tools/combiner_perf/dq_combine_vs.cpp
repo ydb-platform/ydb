@@ -7,6 +7,7 @@
 #include "kqp_setup.h"
 
 #include <ydb/library/yql/dq/comp_nodes/ut/utils/preallocated_spiller.h>
+#include <ydb/library/yql/dq/comp_nodes/dq_rh_hash.h>
 #include <yql/essentials/minikql/comp_nodes/ut/mkql_computation_node_ut.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
@@ -436,7 +437,24 @@ struct TCachedHasher {
     ui64& RawHashCalls;
 };
 
-template<bool WithBuckets>
+template<bool IsDq>
+struct TMapImpl;
+
+template<>
+struct TMapImpl<false>
+{
+    using TMap = TRobinHoodHashSet<NUdf::TUnboxedValuePod*, TTestWideUnboxedEqual, TTestWideUnboxedHasher, TMKQLAllocator<char, EMemorySubPool::Temporary>>;
+    using TMapWithCachedHash = TRobinHoodHashSet<NUdf::TUnboxedValuePod*, TTestWideUnboxedEqual, TCachedHasher, TMKQLAllocator<char, EMemorySubPool::Temporary>>;
+};
+
+template<>
+struct TMapImpl<true>
+{
+    using TMap = TDqRobinHoodHashSet<NUdf::TUnboxedValuePod*, TTestWideUnboxedEqual, TTestWideUnboxedHasher, TMKQLAllocator<char, EMemorySubPool::Temporary>>;
+    using TMapWithCachedHash = TDqRobinHoodHashSet<NUdf::TUnboxedValuePod*, TTestWideUnboxedEqual, TCachedHasher, TMKQLAllocator<char, EMemorySubPool::Temporary>>;
+};
+
+template<bool WithBuckets, bool DqMap>
 TRunResult RunHashMapTest(
     const TRunParams& params,
     const std::vector<TFieldDescr>& keyFields,
@@ -451,8 +469,8 @@ TRunResult RunHashMapTest(
     const auto end = inputData.end();
     const ui32 stride = keyFields.size() + valueFields.size();
 
-    using TMap = TRobinHoodHashSet<NUdf::TUnboxedValuePod*, TTestWideUnboxedEqual, TTestWideUnboxedHasher, TMKQLAllocator<char, EMemorySubPool::Temporary>>;
-    using TMapWithCachedHash = TRobinHoodHashSet<NUdf::TUnboxedValuePod*, TTestWideUnboxedEqual, TCachedHasher, TMKQLAllocator<char, EMemorySubPool::Temporary>>;
+    using TMap = TMapImpl<DqMap>::TMap;
+    using TMapWithCachedHash = TMapImpl<DqMap>::TMapWithCachedHash;
 
     TKeyTypes keyTypes;
     for (const auto& key : keyFields) {
@@ -695,7 +713,7 @@ void RunTestDqHashCombineVsWideCombine(const TRunParams& params, TTestResultColl
     Cerr << "======== " << __func__ << ", keys: " << params.NumKeys << ", llvm: " << LLVM << ", mem limit: " << params.WideCombinerMemLimit << Endl;
 
     /*
-    finalResult = RunHashMapTest<false>(params, keyFields, valueFields);
+    finalResult = RunHashMapTest<false, false>(params, keyFields, valueFields);
     printout.SubmitMetrics(params, *finalResult, "DqHashCombine", LLVM);
     if (true) {
         return;

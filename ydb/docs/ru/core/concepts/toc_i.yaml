@@ -20,7 +20,9 @@ items:
   href: query_execution/index.md
   include:
     path: query_execution/toc_p.yaml
-    mode: link  
+    mode: link
+- name: Полнотекстовый поиск
+  href: fulltext_search.md
 - name: Транзакции
   href: transactions.md
 - name: Change Data Capture (CDC)

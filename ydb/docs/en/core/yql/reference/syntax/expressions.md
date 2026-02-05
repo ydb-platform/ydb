@@ -38,6 +38,17 @@ All other characters are literals that represent themselves.
 
 The most popular way to use the `LIKE` and `REGEXP` keywords is to filter a table using the statements with the `WHERE` clause. However, there are no restrictions on using templates in this context: you can use them in most of contexts involving strings, for example, with concatenation by using `||`.
 
+### LIKE / ILIKE with a fulltext index {#like-ilike-with-fulltext-index}
+
+For [fulltext indexes](../../../dev/fulltext-indexes.md) with n-grams (`use_filter_ngram` / `use_filter_edge_ngram`), `LIKE`/`ILIKE` over the indexed text column is supported.
+
+```yql
+SELECT id, title
+FROM articles VIEW ft_idx
+WHERE body ILIKE "%learn%ing%"
+ORDER BY id;
+```
+
 ### Examples
 
 ```yql

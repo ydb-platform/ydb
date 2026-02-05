@@ -17,6 +17,11 @@ items:
   include:
     mode: link
     path: vector-search/toc_p.yaml
+- name: Fulltext search
+  href: fulltext-search/index.md
+  include:
+    mode: link
+    path: fulltext-search/toc_p.yaml
 - name: Transfer
   href: transfer/index.md
   include:

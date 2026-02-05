@@ -16278,6 +16278,13 @@
             "uri": "https://{canondata_backend}/1923547/b5b8195ecbefd69ddf9a6d63b4f3896f5822995d/resource.tar.gz#test_sql_negative.test_intersect-intersect_2025_02_disable-_/err_file.out"
         }
     ],
+    "test_sql_negative.test[join-eq_bad_dependency_detection-]": [
+        {
+            "checksum": "8fa4772f7feae8be57c57a98421e5ae2",
+            "size": 165,
+            "uri": "https://{canondata_backend}/1936273/5444587eab49aaa39a9440817ff2785ec843e026/resource.tar.gz#test_sql_negative.test_join-eq_bad_dependency_detection-_/err_file.out"
+        }
+    ],
     "test_sql_negative.test[join-join_and_distinct_key_without_correlation-]": [
         {
             "checksum": "6437a9515880c0a61c7dc62801d670c2",

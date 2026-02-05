@@ -923,9 +923,9 @@ namespace NYdb::NConsoleClient {
                                EMessagingFormat::NewlineDelimited,
                                EMessagingFormat::Concatenated,
                                EMessagingFormat::JsonArray,
-                                EMessagingFormat::Tsv,
-                                EMessagingFormat::Csv,
-                                EMessagingFormat::JsonStreamConcat,
+                               EMessagingFormat::Tsv,
+                               EMessagingFormat::Csv,
+                               EMessagingFormat::JsonStreamConcat,
                            });
 
         // TODO(shmel1k@): improve help.

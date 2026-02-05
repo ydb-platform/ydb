@@ -62,15 +62,9 @@ namespace NYdb::NConsoleClient {
         OutputTable_ = std::make_unique<TPrettyTable>(table);
 
         if (!ReaderParams_.Limit().Defined()) {
-            if (IsStreamingFormat(ReaderParams_.MessagingFormat())) {
-                MessagesLeft_ = MessagesLimitUnlimited;
-            }
             if (ReaderParams_.MessagingFormat() == EMessagingFormat::Pretty) {
                 MessagesLeft_ = MessagesLimitDefaultPrettyFormat;
-            }
-            if (ReaderParams_.MessagingFormat() == EMessagingFormat::JsonArray ||
-                ReaderParams_.MessagingFormat() == EMessagingFormat::Csv ||
-                ReaderParams_.MessagingFormat() == EMessagingFormat::Tsv) {
+            } else if (IsStreamingFormat(ReaderParams_.MessagingFormat()) || ReaderParams_.MessagingFormat() == EMessagingFormat::JsonArray) {
                 MessagesLeft_ = MessagesLimitUnlimited;
             }
             return;
@@ -215,6 +209,67 @@ namespace NYdb::NConsoleClient {
         output << "]" << Endl;
     }
 
+    void TTopicReader::PrintCsvFieldValue(const ETopicMetadataField& f, TReceivedMessage const& message, IOutputStream& output, char delimiter) const {
+        switch (f) {
+            case ETopicMetadataField::Body:
+                {
+                    TString body(FormatBody(message.GetData(), ReaderParams_.Transform()));
+                    if (body.Contains(delimiter) || body.Contains('"') || body.Contains('\n')) {
+                        TString escaped;
+                        escaped.reserve(body.size() + 2);
+                        escaped += '"';
+                        for (char c : body) {
+                            if (c == '"') {
+                                escaped += "\"\"";
+                            } else {
+                                escaped += c;
+                            }
+                        }
+                        escaped += '"';
+                        output << escaped;
+                    } else {
+                        output << body;
+                    }
+                }
+                break;
+            case ETopicMetadataField::CreateTime:
+                output << message.GetCreateTime();
+                break;
+            case ETopicMetadataField::MessageGroupID:
+                output << message.GetMessageGroupId();
+                break;
+            case ETopicMetadataField::Offset:
+                output << message.GetOffset();
+                break;
+            case ETopicMetadataField::WriteTime:
+                output << message.GetWriteTime();
+                break;
+            case ETopicMetadataField::SeqNo:
+                output << message.GetSeqNo();
+                break;
+            case ETopicMetadataField::MessageMeta:
+                {
+                    NJson::TJsonValue json;
+                    for (const auto& [k, v] : message.GetMessageMeta()->Fields) {
+                        json[k] = v;
+                    }
+                    output << json;
+                }
+                break;
+            case ETopicMetadataField::SessionMeta:
+                {
+                    NJson::TJsonValue json;
+                    for (const auto& [k, v] : message.GetMeta()->Fields) {
+                        json[k] = v;
+                    }
+                    output << json;
+                }
+                break;
+            default:
+                break;
+        }
+    }
+
     void TTopicReader::PrintMessagesInCsvFormat(IOutputStream& output, char delimiter) const {
         // Print header
         bool firstCol = true;
@@ -235,65 +290,7 @@ namespace NYdb::NConsoleClient {
                     output << delimiter;
                 }
                 firstCol = false;
-
-                switch (f) {
-                    case ETopicMetadataField::Body:
-                        {
-                            TString body(FormatBody(message.GetData(), ReaderParams_.Transform()));
-                            if (body.Contains(delimiter) || body.Contains('"') || body.Contains('\n')) {
-                                TString escaped;
-                                escaped.reserve(body.size() + 2);
-                                escaped += '"';
-                                for (char c : body) {
-                                    if (c == '"') {
-                                        escaped += "\"\"";
-                                    } else {
-                                        escaped += c;
-                                    }
-                                }
-                                escaped += '"';
-                                output << escaped;
-                            } else {
-                                output << body;
-                            }
-                        }
-                        break;
-                    case ETopicMetadataField::CreateTime:
-                        output << message.GetCreateTime();
-                        break;
-                    case ETopicMetadataField::MessageGroupID:
-                        output << message.GetMessageGroupId();
-                        break;
-                    case ETopicMetadataField::Offset:
-                        output << message.GetOffset();
-                        break;
-                    case ETopicMetadataField::WriteTime:
-                        output << message.GetWriteTime();
-                        break;
-                    case ETopicMetadataField::SeqNo:
-                        output << message.GetSeqNo();
-                        break;
-                    case ETopicMetadataField::MessageMeta:
-                        {
-                            NJson::TJsonValue json;
-                            for (const auto& [k, v] : message.GetMessageMeta()->Fields) {
-                                json[k] = v;
-                            }
-                            output << json;
-                        }
-                        break;
-                    case ETopicMetadataField::SessionMeta:
-                        {
-                            NJson::TJsonValue json;
-                            for (const auto& [k, v] : message.GetMeta()->Fields) {
-                                json[k] = v;
-                            }
-                            output << json;
-                        }
-                        break;
-                    default:
-                        break;
-                }
+                PrintCsvFieldValue(f, message, output, delimiter);
             }
             output << "\n";
         }
@@ -320,64 +317,7 @@ namespace NYdb::NConsoleClient {
             }
             firstCol = false;
 
-            switch (f) {
-                case ETopicMetadataField::Body:
-                    {
-                        TString body(FormatBody(message.GetData(), ReaderParams_.Transform()));
-                        if (body.Contains(delimiter) || body.Contains('"') || body.Contains('\n')) {
-                            TString escaped;
-                            escaped.reserve(body.size() + 2);
-                            escaped += '"';
-                            for (char c : body) {
-                                if (c == '"') {
-                                    escaped += "\"\"";
-                                } else {
-                                    escaped += c;
-                                }
-                            }
-                            escaped += '"';
-                            output << escaped;
-                        } else {
-                            output << body;
-                        }
-                    }
-                    break;
-                case ETopicMetadataField::CreateTime:
-                    output << message.GetCreateTime();
-                    break;
-                case ETopicMetadataField::MessageGroupID:
-                    output << message.GetMessageGroupId();
-                    break;
-                case ETopicMetadataField::Offset:
-                    output << message.GetOffset();
-                    break;
-                case ETopicMetadataField::WriteTime:
-                    output << message.GetWriteTime();
-                    break;
-                case ETopicMetadataField::SeqNo:
-                    output << message.GetSeqNo();
-                    break;
-                case ETopicMetadataField::MessageMeta:
-                    {
-                        NJson::TJsonValue json;
-                        for (const auto& [k, v] : message.GetMessageMeta()->Fields) {
-                            json[k] = v;
-                        }
-                        output << json;
-                    }
-                    break;
-                case ETopicMetadataField::SessionMeta:
-                    {
-                        NJson::TJsonValue json;
-                        for (const auto& [k, v] : message.GetMeta()->Fields) {
-                            json[k] = v;
-                        }
-                        output << json;
-                    }
-                    break;
-                default:
-                    break;
-            }
+            PrintCsvFieldValue(f, message, output, delimiter);
         }
         output << "\n";
     }

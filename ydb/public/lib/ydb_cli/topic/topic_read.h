@@ -88,6 +88,7 @@ namespace NYdb::NConsoleClient {
         void PrintMessageAsJson(const TReceivedMessage& message, IOutputStream& output) const;
         void PrintCsvHeader(IOutputStream& output, char delimiter);
         void PrintMessageAsCsvRow(const TReceivedMessage& message, IOutputStream& output, char delimiter) const;
+        void PrintCsvFieldValue(const ETopicMetadataField& f, TReceivedMessage const& message, IOutputStream& output, char delimiter) const;
 
         enum EReadingStatus {
             NoPartitionTaken = 0,

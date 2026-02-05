@@ -152,7 +152,7 @@ message TFeatureFlags {
     optional bool EnableExternalSourceSchemaInference = 126 [default = false];
     optional bool EnableDbMetadataCache = 127 [default = false];
     optional bool EnableTableDatetime64 = 128 [default = true];
-    optional bool EnableResourcePools = 129 [default = true];
+    optional bool EnableResourcePools = 129 [default = false];
     optional bool EnableColumnStatistics = 130 [default = false];
     optional bool EnableSingleCompositeActionGroup = 131 [default = false];
     optional bool EnableResourcePoolsOnServerless = 132 [default = false];
@@ -248,7 +248,7 @@ message TFeatureFlags {
     optional bool EnableIndexMaterialization = 221 [default = false];
     optional bool EnableFsBackups = 222 [default = false];
     optional bool EnableCmsLocksPriority = 223 [default = false];
-    optional bool EnableResourcePoolsScheduler = 224 [default = true]; // works only with EnableResourcePools = true
+    optional bool EnableResourcePoolsScheduler = 224 [default = false]; // works only with EnableResourcePools = true
     optional bool EnableTruncateTable = 225 [default = false];
     optional bool EnableTopicsSqlIoOperations = 226 [default = false];
 }

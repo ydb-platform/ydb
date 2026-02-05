@@ -417,7 +417,7 @@ Y_UNIT_TEST_SUITE(TGRpcLdapAuthentication) {
         responses.SearchResponses.push_back({fetchUserSearchRequestInfo, fetchUserSearchResponseInfo});
 
 
-        TLoginClientConnection loginConnection(InitLdapSettingsWithMtlsAuth, {
+        TLoginClientConnection loginConnection(InitLdapSettingsWithSaslExternalBind, {
             .CaCertFile = CertStorage.GetCaCertFileName(),
             .CertFile = CertStorage.GetClientCertFileName(),
             .KeyFile = CertStorage.GetClientKeyFileName(),
@@ -446,12 +446,12 @@ Y_UNIT_TEST_SUITE(TGRpcLdapAuthentication) {
         ldapServer.Stop();
     }
 
-    Y_UNIT_TEST(CanNotAuthWithInvalidCredentialsUseSaslExternal) {
+    Y_UNIT_TEST(CanNotAuthOverSaslExternalWithoutClientCert) {
         TString login = "ldapuser";
         TString password = "ldapUserPassword";
 
         LdapMock::TLdapMockResponses responses;
-        responses.BindResponses.push_back({{{.Login = "cn=unauthenticatedrobot,dc=search,dc=yandex,dc=net", .Password = "", .Mechanism = LdapMock::ESaslMechanism::EXTERNAL}}, {.Status = LdapMock::EStatus::INVALID_CREDENTIALS}});
+        responses.BindResponses.push_back({{{.Login = "cn=robouser,dc=search,dc=yandex,dc=net", .Password = "", .Mechanism = LdapMock::ESaslMechanism::EXTERNAL}}, {.Status = LdapMock::EStatus::SUCCESS}});
         responses.BindResponses.push_back({{{.Login = "uid=" + login + ",dc=search,dc=yandex,dc=net", .Password = password}}, {.Status = LdapMock::EStatus::SUCCESS}});
 
         LdapMock::TSearchRequestInfo fetchUserSearchRequestInfo {
@@ -477,10 +477,8 @@ Y_UNIT_TEST_SUITE(TGRpcLdapAuthentication) {
         responses.SearchResponses.push_back({fetchUserSearchRequestInfo, fetchUserSearchResponseInfo});
 
 
-        TLoginClientConnection loginConnection(InitLdapSettingsWithMtlsAuth, {
+        TLoginClientConnection loginConnection(InitLdapSettingsWithSaslExternalBind, {
             .CaCertFile = CertStorage.GetCaCertFileName(),
-            .CertFile = CertStorage.GetClientCertFileName(),
-            .KeyFile = CertStorage.GetClientKeyFileName(),
             .Type = ESecurityConnectionType::LDAPS_SCHEME
         });
         LdapMock::TSimpleServer ldapServer({
@@ -491,7 +489,7 @@ Y_UNIT_TEST_SUITE(TGRpcLdapAuthentication) {
             .UseTls = true,
             .RequireClientCert = true,
             .ExternalAuthMap = {
-                {"/C=RU/ST=MSK/L=MSK/O=YA/OU=UtTest/CN=localhost", "cn=unauthenticatedrobot,dc=search,dc=yandex,dc=net"}
+                {"/C=RU/ST=MSK/L=MSK/O=YA/OU=UtTest/CN=localhost", "cn=robouser,dc=search,dc=yandex,dc=net"}
             }
         }, responses);
 
@@ -499,7 +497,7 @@ Y_UNIT_TEST_SUITE(TGRpcLdapAuthentication) {
         auto factory = CreateLoginCredentialsProviderFactory({.User = login + "@ldap", .Password = password});
         auto loginProvider = factory->CreateProvider(loginConnection.GetCoreFacility());
         TString token;
-        UNIT_ASSERT_EXCEPTION_CONTAINS(loginProvider->GetAuthInfo(), yexception, "Could not login via LDAP");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(token = loginProvider->GetAuthInfo(), yexception, "Could not login via LDAP");
         UNIT_ASSERT(token.empty());
 
         loginConnection.Stop();

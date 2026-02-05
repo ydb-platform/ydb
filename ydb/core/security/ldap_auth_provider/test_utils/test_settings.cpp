@@ -126,10 +126,11 @@ void InitLdapSettingsDisableSearchNestedGroups(NKikimrProto::TLdapAuthentication
     extendedSettings->SetEnableNestedGroupsSearch(false);
 }
 
-void InitLdapSettingsWithMtlsAuth(NKikimrProto::TLdapAuthentication* ldapSettings, ui16 ldapPort, const TLdapClientOptions& ldapClientOptions) {
+void InitLdapSettingsWithSaslExternalBind(NKikimrProto::TLdapAuthentication* ldapSettings, ui16 ldapPort, const TLdapClientOptions& ldapClientOptions) {
     InitLdapSettings(ldapSettings, ldapPort, ldapClientOptions);
+    ldapSettings->SetBindDn("");
     ldapSettings->SetBindPassword("");
-    ldapSettings->MutableExtendedSettings()->SetEnableMtlsAuth(true);
+    ldapSettings->MutableExtendedSettings()->SetEnableSaslExternalBind(true);
 }
 
 } // NKikimr

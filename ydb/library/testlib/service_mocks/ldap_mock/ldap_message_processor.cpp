@@ -503,7 +503,7 @@ void TLdapRequestProcessor::ProcessFilterOr(TSearchRequestInfo::TSearchFilter* f
 
 TString TLdapRequestProcessor::GetBindDnFromClientCert() {
     auto it = ExternalAuthMap.find(Socket->GetClientCertSubjectName());
-    return (it != ExternalAuthMap.end() ? it->second : "");
+    return (it != ExternalAuthMap.end() ? it->second : Socket->GetClientCertSubjectName());
 }
 
 }

@@ -1,4 +1,4 @@
-#include "uploader_common.h"
+#include "fields_wrappers.h"
 
 #include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/protos/fs_settings.pb.h>

@@ -3,8 +3,8 @@ LIBRARY()
 SRCS(
     checksum.cpp
     encryption.cpp
+    fields_wrappers.cpp
     metadata.cpp
-    uploader_common.cpp
 )
 
 PEERDIR(

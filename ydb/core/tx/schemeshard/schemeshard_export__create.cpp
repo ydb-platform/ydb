@@ -12,7 +12,7 @@
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 #include <ydb/core/backup/common/encryption.h>
-#include <ydb/core/backup/common/uploader_common.h>
+#include <ydb/core/backup/common/fields_wrappers.h>
 
 #include <util/generic/algorithm.h>
 #include <util/generic/ptr.h>

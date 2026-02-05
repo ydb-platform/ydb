@@ -15,32 +15,32 @@ enum EListenerType {
 };
 
 enum EApiKey {
-    HEADER = -1, // [] 
-    PRODUCE = 0, // [ZK_BROKER, BROKER] 
-    FETCH = 1, // [ZK_BROKER, BROKER, CONTROLLER] 
-    LIST_OFFSETS = 2, // [ZK_BROKER, BROKER] 
-    METADATA = 3, // [ZK_BROKER, BROKER] 
-    OFFSET_COMMIT = 8, // [ZK_BROKER, BROKER] 
-    OFFSET_FETCH = 9, // [ZK_BROKER, BROKER] 
-    FIND_COORDINATOR = 10, // [ZK_BROKER, BROKER] 
-    JOIN_GROUP = 11, // [ZK_BROKER, BROKER] 
-    HEARTBEAT = 12, // [ZK_BROKER, BROKER] 
-    LEAVE_GROUP = 13, // [ZK_BROKER, BROKER] 
-    SYNC_GROUP = 14, // [ZK_BROKER, BROKER] 
-    DESCRIBE_GROUPS = 15, // [ZK_BROKER, BROKER] 
-    LIST_GROUPS = 16, // [ZK_BROKER, BROKER] 
-    SASL_HANDSHAKE = 17, // [ZK_BROKER, BROKER, CONTROLLER] 
-    API_VERSIONS = 18, // [ZK_BROKER, BROKER, CONTROLLER] 
-    CREATE_TOPICS = 19, // [ZK_BROKER, BROKER, CONTROLLER] 
-    INIT_PRODUCER_ID = 22, // [ZK_BROKER, BROKER] 
-    ADD_PARTITIONS_TO_TXN = 24, // [ZK_BROKER, BROKER] 
-    ADD_OFFSETS_TO_TXN = 25, // [ZK_BROKER, BROKER] 
-    END_TXN = 26, // [ZK_BROKER, BROKER] 
-    TXN_OFFSET_COMMIT = 28, // [ZK_BROKER, BROKER] 
-    DESCRIBE_CONFIGS = 32, // [ZK_BROKER, BROKER] 
-    ALTER_CONFIGS = 33, // [ZK_BROKER, BROKER, CONTROLLER] 
-    SASL_AUTHENTICATE = 36, // [ZK_BROKER, BROKER, CONTROLLER] 
-    CREATE_PARTITIONS = 37, // [ZK_BROKER, BROKER, CONTROLLER] 
+    HEADER = -1, // []
+    PRODUCE = 0, // [ZK_BROKER, BROKER]
+    FETCH = 1, // [ZK_BROKER, BROKER, CONTROLLER]
+    LIST_OFFSETS = 2, // [ZK_BROKER, BROKER]
+    METADATA = 3, // [ZK_BROKER, BROKER]
+    OFFSET_COMMIT = 8, // [ZK_BROKER, BROKER]
+    OFFSET_FETCH = 9, // [ZK_BROKER, BROKER]
+    FIND_COORDINATOR = 10, // [ZK_BROKER, BROKER]
+    JOIN_GROUP = 11, // [ZK_BROKER, BROKER]
+    HEARTBEAT = 12, // [ZK_BROKER, BROKER]
+    LEAVE_GROUP = 13, // [ZK_BROKER, BROKER]
+    SYNC_GROUP = 14, // [ZK_BROKER, BROKER]
+    DESCRIBE_GROUPS = 15, // [ZK_BROKER, BROKER]
+    LIST_GROUPS = 16, // [ZK_BROKER, BROKER]
+    SASL_HANDSHAKE = 17, // [ZK_BROKER, BROKER, CONTROLLER]
+    API_VERSIONS = 18, // [BROKER, CONTROLLER]
+    CREATE_TOPICS = 19, // [ZK_BROKER, BROKER, CONTROLLER]
+    INIT_PRODUCER_ID = 22, // [ZK_BROKER, BROKER]
+    ADD_PARTITIONS_TO_TXN = 24, // [ZK_BROKER, BROKER]
+    ADD_OFFSETS_TO_TXN = 25, // [ZK_BROKER, BROKER]
+    END_TXN = 26, // [ZK_BROKER, BROKER]
+    TXN_OFFSET_COMMIT = 28, // [ZK_BROKER, BROKER]
+    DESCRIBE_CONFIGS = 32, // [ZK_BROKER, BROKER]
+    ALTER_CONFIGS = 33, // [ZK_BROKER, BROKER, CONTROLLER]
+    SASL_AUTHENTICATE = 36, // [ZK_BROKER, BROKER, CONTROLLER]
+    CREATE_PARTITIONS = 37, // [ZK_BROKER, BROKER, CONTROLLER]
 };
 
 extern const std::unordered_map<EApiKey, TString> EApiKeyNames;
@@ -5518,7 +5518,7 @@ public:
     typedef std::shared_ptr<TApiVersionsRequestData> TPtr;
 
     struct MessageMeta {
-        static constexpr TKafkaVersions PresentVersions = {0, 3};
+        static constexpr TKafkaVersions PresentVersions = {0, 4};
         static constexpr TKafkaVersions FlexibleVersions = {3, Max<TKafkaVersion>()};
     };
 
@@ -5569,7 +5569,7 @@ public:
     typedef std::shared_ptr<TApiVersionsResponseData> TPtr;
 
     struct MessageMeta {
-        static constexpr TKafkaVersions PresentVersions = {0, 3};
+        static constexpr TKafkaVersions PresentVersions = {0, 4};
         static constexpr TKafkaVersions FlexibleVersions = {3, Max<TKafkaVersion>()};
     };
 
@@ -5579,7 +5579,7 @@ public:
     class TApiVersion : public TMessage {
     public:
         struct MessageMeta {
-            static constexpr TKafkaVersions PresentVersions = {0, 3};
+            static constexpr TKafkaVersions PresentVersions = {0, 4};
             static constexpr TKafkaVersions FlexibleVersions = {3, Max<TKafkaVersion>()};
         };
 
@@ -5641,7 +5641,7 @@ public:
     class TSupportedFeatureKey : public TMessage {
     public:
         struct MessageMeta {
-            static constexpr TKafkaVersions PresentVersions = {3, 3};
+            static constexpr TKafkaVersions PresentVersions = {3, 4};
             static constexpr TKafkaVersions FlexibleVersions = VersionsAlways;
         };
 
@@ -5703,7 +5703,7 @@ public:
     class TFinalizedFeatureKey : public TMessage {
     public:
         struct MessageMeta {
-            static constexpr TKafkaVersions PresentVersions = {3, 3};
+            static constexpr TKafkaVersions PresentVersions = {3, 4};
             static constexpr TKafkaVersions FlexibleVersions = VersionsAlways;
         };
 
@@ -5815,7 +5815,7 @@ public:
         using TypeDesc = NPrivate::TKafkaArrayDesc;
 
         static constexpr const char* Name = "supportedFeatures";
-        static constexpr const char* About = "Features supported by the broker.";
+        static constexpr const char* About = "Features supported by the broker. Note: in v0-v3, features with MinSupportedVersion = 0 are omitted.";
         static constexpr const TKafkaInt32 Tag = 0;
 
         static constexpr TKafkaVersions PresentVersions = {3, Max<TKafkaVersion>()};
@@ -5863,7 +5863,7 @@ public:
         using TypeDesc = NPrivate::TKafkaBoolDesc;
 
         static constexpr const char* Name = "zkMigrationReady";
-        static constexpr const char* About = "Set by a KRaft controller if the required configurations for ZK migration are present";
+        static constexpr const char* About = "Set by a KRaft controller if the required configurations for ZK migration are present.";
         static constexpr const TKafkaInt32 Tag = 3;
         static const Type Default; // = false;
 
@@ -8711,4 +8711,4 @@ public:
     bool operator==(const TCreatePartitionsResponseData& other) const = default;
 };
 
-} // namespace NKafka 
+} // namespace NKafka

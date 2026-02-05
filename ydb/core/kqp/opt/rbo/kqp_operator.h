@@ -466,7 +466,5 @@ class TOpRoot : public IUnaryOperator {
     Iterator end() { return Iterator(nullptr); }
 };
 
-TString PrintRBOExpression(TExprNode::TPtr expr, TExprContext & ctx);
-
 } // namespace NKqp
 } // namespace NKikimr

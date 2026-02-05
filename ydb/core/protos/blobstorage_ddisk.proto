@@ -12,6 +12,7 @@ message TReplyStatus {
         SESSION_MISMATCH = 5;
         INCORRECT_REQUEST = 6;
         MISSING_RECORD = 7;
+        OUTDATED = 8;
     }
 }
 
@@ -151,6 +152,19 @@ message TEvFlushPersistentBuffer {
 }
 
 message TEvFlushPersistentBufferResult {
+    TReplyStatus.E Status = 1;
+    optional string ErrorReason = 2;
+}
+
+message TEvPullFromPersistentBuffer {
+    TQueryCredentials Credentials = 1;
+    TBlockSelector Selector = 2;
+    uint64 Lsn = 3;
+    TDDiskId DDiskId = 4; // DDiskId of Persistent Buffer
+    fixed64 DDiskInstanceGuid = 5;
+}
+
+message TEvPullFromPersistentBufferResult {
     TReplyStatus.E Status = 1;
     optional string ErrorReason = 2;
 }

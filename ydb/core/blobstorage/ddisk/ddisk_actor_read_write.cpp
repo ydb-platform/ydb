@@ -5,15 +5,15 @@
 
 namespace NKikimr::NDDisk {
 
-    void TDDiskActor::Handle(TEvWrite::TPtr ev) {
-        if (!CheckQuery(*ev, &Counters.Interface.Write)) {
-            return;
-        }
-
+    template <typename TEventPtr>
+    void TDDiskActor::InternalWrite(
+            TEventPtr ev,
+            const TWriteInstruction &instr,
+            std::function<void(NPDisk::TEvChunkWriteRawResult&, NWilson::TSpan&&)> callback
+    ) {
         const auto& record = ev->Get()->Record;
         const TQueryCredentials creds(record.GetCredentials());
         const TBlockSelector selector(record.GetSelector());
-        const TWriteInstruction instr(record.GetInstruction());
 
         TChunkRef& chunkRef = ChunkRefs[creds.TabletId][selector.VChunkIndex];
         if (!chunkRef.PendingEventsForChunk.empty() || !chunkRef.ChunkIdx) {
@@ -48,7 +48,16 @@ namespace NKikimr::NDDisk {
             selector.OffsetInBytes,
             std::move(data)), 0, cookie);
 
-        WriteCallbacks.try_emplace(cookie, TPendingWrite{std::move(span), [this, sender = ev->Sender, cookie = ev->Cookie,
+        WriteCallbacks.try_emplace(cookie, TPendingWrite{std::move(span)}, callback);
+    }
+
+    void TDDiskActor::Handle(TEvWrite::TPtr ev) {
+        if (!CheckQuery(*ev, &Counters.Interface.Write)) {
+            return;
+        }
+
+        const TWriteInstruction instr(ev->Get()->Record.GetInstruction());
+        auto callback = [this, sender = ev->Sender, cookie = ev->Cookie,
                 session = ev->InterconnectSession](NPDisk::TEvChunkWriteRawResult& /*ev*/, NWilson::TSpan&& span) {
             auto reply = std::make_unique<TEvWriteResult>(NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
             auto h = std::make_unique<IEventHandle>(sender, SelfId(), reply.release(), 0, cookie, nullptr, span.GetTraceId());
@@ -58,7 +67,8 @@ namespace NKikimr::NDDisk {
             Counters.Interface.Write.Reply(true);
             span.End();
             TActivationContext::Send(h.release());
-        }});
+        };
+        InternalWrite(ev, instr, std::move(callback));
     }
 
 	void TDDiskActor::Handle(NPDisk::TEvChunkWriteRawResult::TPtr ev) {

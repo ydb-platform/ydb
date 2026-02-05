@@ -71,6 +71,19 @@ namespace NKikimr::NDDisk {
         InitPDiskInterface();
     }
 
+    void TDDiskActor::Handle(TEvents::TEvUndelivered::TPtr ev) {
+        if (ev->Get()->SourceType == TEv::EvWrite) {
+            HandleWriteInFlight(ev->Cookie, [&] {
+                return std::make_unique<TEvFlushPersistentBufferResult>(NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR,
+                    "write undelivered");
+            });
+        } else if (ev->Get()->SourceType == TEv::EvPullFromPersistentBuffer) {
+            if (auto it = PullingsInFlight.find(ev->Cookie); it != PullingsInFlight.end()) {
+                ReplyPullingResult(it, NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR, "write undelivered");
+            }
+        }
+    }
+
     STFUNC(TDDiskActor::StateFunc) {
         auto handleQuery = [&](auto& ev) {
             if (CanHandleQuery(ev)) {
@@ -88,9 +101,11 @@ namespace NKikimr::NDDisk {
             hFunc(TEvFlushPersistentBuffer, handleQuery)
             hFunc(TEvErasePersistentBuffer, handleQuery)
             hFunc(TEvListPersistentBuffer, handleQuery)
+            hFunc(TEvPullFromPersistentBuffer, handleQuery)
 
             hFunc(TEvWriteResult, Handle)
             hFunc(TEvents::TEvUndelivered, Handle)
+            hFunc(TEvReadPersistentBufferResult, Handle)
 
             hFunc(NPDisk::TEvYardInitResult, Handle)
             hFunc(NPDisk::TEvReadLogResult, Handle)

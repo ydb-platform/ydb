@@ -26,6 +26,7 @@ namespace NKikimrBlobStorage::NDDisk::NInternal {
     XX(FlushPersistentBuffer) \
     XX(ErasePersistentBuffer) \
     XX(ListPersistentBuffer) \
+    XX(PullFromPersistentBuffer) \
     /**/
 
 namespace NKikimr::NDDisk {
@@ -429,6 +430,30 @@ namespace NKikimr::NDDisk {
         ui64 NextWriteCookie = 1;
         THashMap<ui64, TWriteInFlight> WritesInFlight;
 
+        struct TPullingInFlight {
+            TActorId Sender;
+            ui64 Cookie;
+            TActorId InterconnectionSessionId;
+            NWilson::TSpan Span;
+            ui32 Offset;
+            ui32 End;
+            std::set<std::tuple<ui32, ui32>> DroppedSegments; // (offset, segment_end);
+
+            bool AddDroppedSegment(ui32 offset, ui32 size);
+        };
+        ui64 NextPullingCookie = 1;
+        THashMap<ui64, TPullingInFlight> PullingsInFlight; // cookie -> TPullingInFlight
+        TMap<std::tuple<ui64, ui64>, THashMap<ui64, TPullingInFlight>::iterator> PullingOffsetsInFlight; // (vchunk_id, offset) -> iterator TPullingInFlight
+        using TPullingInFlightIterator = THashMap<ui64, TPullingInFlight>::iterator;
+
+        void DropSegmentFromPulling(const TBlockSelector &selector);
+        template <typename TEventPtr>
+        void InternalWrite(
+            TEventPtr ev,
+            const TWriteInstruction &instr,
+            std::function<void(NPDisk::TEvChunkWriteRawResult&, NWilson::TSpan&&)> callback
+        );
+
         void Handle(TEvWritePersistentBuffer::TPtr ev);
         void Handle(TEvReadPersistentBuffer::TPtr ev);
         void Handle(TEvFlushPersistentBuffer::TPtr ev);
@@ -436,7 +461,12 @@ namespace NKikimr::NDDisk {
         void Handle(TEvWriteResult::TPtr ev);
         void Handle(TEvents::TEvUndelivered::TPtr ev);
         void Handle(TEvListPersistentBuffer::TPtr ev);
+
+        void Handle(TEvPullFromPersistentBuffer::TPtr ev);
+        void Handle(TEvReadPersistentBufferResult::TPtr ev);
+
         void HandleWriteInFlight(ui64 cookie, const std::function<std::unique_ptr<IEventBase>()>& factory);
+        void ReplyPullingResult(TPullingInFlightIterator it, NKikimrBlobStorage::NDDisk::TReplyStatus::E status, TString errorReason = "");
     };
 
 } // NKikimr::NDDisk

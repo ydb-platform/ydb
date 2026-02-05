@@ -16,4 +16,4 @@ TString& GetMutableItemDestination(TItem&);
 template <typename TItem>
 TString GetItemDestination(const TItem&);
 
-} // NKikimr::NBackup
+} // NKikimr::NBackup::NFieldsWrappers

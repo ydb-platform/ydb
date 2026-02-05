@@ -127,6 +127,7 @@ void DoTabletStateRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityPro
 void DoLocalSchemeTx(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f);
 void DoLocalEnumerateTablets(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f);
 void DoTabletKillRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f);
+void DoLocalMKQL(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f);
 
 } // namespace NLegacyGrpcService
 } // namespace NKikimr::NGRpcService

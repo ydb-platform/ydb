@@ -3081,5 +3081,75 @@ Y_UNIT_TEST(The_Keys_Are_Loaded_In_Several_Iterations) {
     });
 }
 
+Y_UNIT_TEST(TestSizeLag) {
+    TTestContext tc;
+    tc.EnableDetailedPQLog = true;
+    RunTestWithReboots(tc.TabletIds, [&]() {
+        return tc.InitialEventsFilter.Prepare();
+    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
+        activeZone = false;
+        TFinalizer finalizer(tc);
+        tc.Prepare(dispatchName, setup, activeZone);
+        activeZone = false;
+        tc.Runtime->SetScheduledLimit(1000);
+
+        ui32 sourceIdx = 0;
+        auto cmdWrite = [&](size_t count, size_t size) {
+            TVector<std::pair<ui64, TString>> data;
+            for (size_t k = 1; k <= count; ++k) {
+                data.emplace_back(k, TString(size, 'x'));
+            }
+            TString sourceId = "sourceid_" + ToString(sourceIdx++);
+            CmdWrite(0, sourceId, data, tc, false, {}, false, "", -1, -1, false, false, true);
+        };
+        auto cmdCompaction = [&]() {
+            CmdRunCompaction(0, tc);
+        };
+
+        PQTabletPrepare({.partitions = 1, .writeSpeed = 50_MB}, {{"user1", true}}, tc);
+
+        // CompactZone.Body
+        cmdWrite(27, 300_KB);
+        cmdWrite(27, 300_KB);
+
+        // CompactZone.Head
+        cmdWrite(10, 300_KB);
+
+        cmdCompaction();
+
+        // FastWriteZone.Body
+        cmdWrite(10, 10_KB);
+        cmdWrite(1, 10_KB);
+        cmdWrite(1, 10_KB);
+        cmdWrite(1, 10_KB);
+        cmdWrite(1, 10_KB);
+
+        PQTabletRestart(tc);
+
+        PQGetPartInfo(0, 78, tc);
+
+        // SYNC INIT DATA KEY: d0000000000_00000000000000000000_00000_0000000027_00000 size 8295737
+        // SYNC INIT DATA KEY: d0000000000_00000000000000000027_00000_0000000027_00000 size 8295737
+        // SYNC INIT HEAD KEY: d0000000000_00000000000000000054_00000_0000000010_00000| size 3072490
+        // SYNC INIT DATA KEY: d0000000000_00000000000000000064_00000_0000000010_00000? size 102562
+        // SYNC INIT DATA KEY: d0000000000_00000000000000000074_00000_0000000001_00000? size 10301
+        // SYNC INIT DATA KEY: d0000000000_00000000000000000075_00000_0000000001_00000? size 10301
+        // SYNC INIT DATA KEY: d0000000000_00000000000000000076_00000_0000000001_00000? size 10301
+        // SYNC INIT DATA KEY: d0000000000_00000000000000000077_00000_0000000001_00000? size 10301
+
+        ui64 currentSizeLag = Max<ui64>();
+        for (i32 offset = 0; offset < 78; ++offset) {
+            const ui64 sizeLag = GetSizeLag(0, offset, tc);
+
+            UNIT_ASSERT_LT(sizeLag, Max<ui64>());
+            // лаг не должен увеличиваться
+            UNIT_ASSERT_LE_C(sizeLag, currentSizeLag,
+                             "offset=" << offset << ", sizeLag=" << sizeLag << ", currentSizeLag=" << currentSizeLag);
+
+            currentSizeLag = sizeLag;
+        }
+    });
+}
+
 } // Y_UNIT_TEST_SUITE(TPQTest)
 } // namespace NKikimr::NPQ

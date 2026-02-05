@@ -1008,7 +1008,11 @@ bool CheckCmdReadResult(const TPQCmdReadSettings& settings, TEvPersQueue::TEvRes
     UNIT_ASSERT_EQUAL_C(result->Record.GetErrorCode(), NPersQueue::NErrorCode::OK, result->Record.DebugString());
     if (!settings.DirectReadId) {
         UNIT_ASSERT_C(result->Record.GetPartitionResponse().HasCmdReadResult(), result->Record.GetPartitionResponse().DebugString());
-        auto res = result->Record.GetPartitionResponse().GetCmdReadResult();
+        const auto& res = result->Record.GetPartitionResponse().GetCmdReadResult();
+
+        if (settings.SizeLag) {
+            *settings.SizeLag = res.GetSizeLag();
+        }
 
         UNIT_ASSERT_GE_C(res.ResultSize(), settings.ResCount,
                       "res.ResultSize()=" << res.ResultSize() << ", settings.ResCount=" << settings.ResCount);
@@ -1040,13 +1044,25 @@ bool CheckCmdReadResult(const TPQCmdReadSettings& settings, TEvPersQueue::TEvRes
 
 void CmdRead(
         const ui32 partition, const ui64 offset, const ui32 count, const ui32 size, const ui32 resCount, bool timeouted,
-        TTestContext& tc, TVector<i32> offsets, const ui32 maxTimeLagMs, const ui64 readTimestampMs, const TString user
+        TTestContext& tc, TVector<i32> offsets, const ui32 maxTimeLagMs, const ui64 readTimestampMs, const TString user,
+        ui64* sizeLag
 ) {
     return CmdRead(
             TPQCmdReadSettings("", partition, offset, count, size, resCount, timeouted,
-                               offsets, maxTimeLagMs, readTimestampMs, user),
+                               offsets, maxTimeLagMs, readTimestampMs, user,
+                               0, // lastOffset
+                               sizeLag),
             tc
     );
+}
+
+ui64 GetSizeLag(const ui32 partition,
+                const ui64 offset,
+                TTestContext& tc)
+{
+    ui64 sizeLag = 0;
+    CmdRead(partition, offset, 1, Max<i32>(), 1, false, tc, {static_cast<i32>(offset)}, 0, 0, "user", &sizeLag);
+    return sizeLag;
 }
 
 void BeginCmdRead(const TPQCmdReadSettings& settings, TTestContext& tc)

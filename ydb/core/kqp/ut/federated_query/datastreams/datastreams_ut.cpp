@@ -2019,6 +2019,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 
         auto& config = SetupAppConfig();
         config.MutableFeatureFlags()->SetEnableTopicsSqlIoOperations(true);
+        config.MutableTableServiceConfig()->SetEnableDataShardCreateTableAs(true);
         config.MutablePQConfig()->SetRequireCredentialsInNewProtocol(true);
 
         constexpr char inputTopic[] = "inputTopicName";

@@ -430,6 +430,14 @@ namespace Tests {
         const bool UseStoragePools;
 
         std::shared_ptr<void> KqpLoggerScope;
+        // This Driver is used exclusively by TKqpFederatedQuerySetup
+        // (DO NOT USE IT IN A TSERVER), but is stored here in
+        // TServer to ensure it outlives TTestActorRuntime. During
+        // graceful shutdown, the Driver must be destroyed after all
+        // actors are gone; otherwise, lingering gRPC contexts or
+        // background operations can cause the gRPC client to hang
+        // or trigger use-after-free during its destruction.
+        std::shared_ptr<NYdb::TDriver> FederatedQuerySetupDriver_;
         THolder<TTestActorRuntime> Runtime;
         THolder<NYdb::TDriver> Driver;
         TIntrusivePtr<NBus::TBusMessageQueue> Bus;

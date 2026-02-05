@@ -344,8 +344,8 @@ namespace NKikimr::NDDisk {
             ui64 Signature[2];
             ui64 TabletId;
             ui64 VChunkIndex;
-            ui64 OffsetInBytes;
-            ui64 Size;
+            ui32 OffsetInBytes;
+            ui32 Size;
             ui64 Lsn;
             TPersistentBufferSectorInfo HeaderLocation;
             TPersistentBufferSectorInfo Locations[MaxSectorsPerBuffer];
@@ -353,6 +353,16 @@ namespace NKikimr::NDDisk {
         static_assert(sizeof(TPersistentBufferHeader) <= ChunkSize);
 
         bool IssuePersistentBufferChunkAllocationInflight = false;
+        struct TPersistentBufferToDiskWriteInFlight {
+            TActorId Sender;
+            ui64 Cookie;
+            TActorId Session;
+            ui32 OffsetInBytes;
+            ui32 Size;
+            std::set<ui64> WriteCookies;
+            TRope Data;
+        };
+        std::map<std::tuple<ui64, ui64, ui64>, TPersistentBufferToDiskWriteInFlight> PersistentBufferWriteInflight;
         TPersistentBufferSpaceAllocator PersistentBufferSpaceAllocator;
 
         ui64 PersistentBufferChunkMapSnapshotLsn = Max<ui64>();
@@ -360,6 +370,7 @@ namespace NKikimr::NDDisk {
 
         void IssuePersistentBufferChunkAllocation();
         void ProcessPersistentBufferQueue();
+        std::vector<std::tuple<ui32, ui32, ui32, TRope>> SlicePersistentBuffer(ui64 tabletId, ui64 vchunkIndex, ui64 lsn, ui32 offsetInBytes, ui32 size, TRope&& data, const std::vector<TPersistentBufferSectorInfo>& sectors);
 
         struct TWriteInFlight {
             TActorId Sender;

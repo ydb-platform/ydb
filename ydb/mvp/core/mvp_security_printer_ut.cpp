@@ -23,55 +23,62 @@ Y_UNIT_TEST_SUITE(Masking) {
         mvp::masking::TestMask req;
         req.set_name("value");
         // req.no_value field doesn't set
-        req.set_cred("SECRET_CRED_123456");
-        req.set_sens("SECRET_SENS_ABCDEF");
+        req.set_nc_cred("SECRET_CRED_123456");
+        req.set_nc_sens("SECRET_SENS_ABCDEF");
+        req.set_yc_sens("SECRET_YC_SENS_XYZ");
         req.set_int_value(42);
-        req.set_int_cred(98765);
-        req.set_int_sens(55555);
+        req.set_int_nc_cred(98765);
+        req.set_int_nc_sens(55555);
+        req.set_int_yc_sens(45222);
         for (const auto& name : repeatedNames) {
             req.add_repeated_name(name);
         }
         for (const auto& s : maskedRCreds) {
-            req.add_repeated_cred(s);
+            req.add_repeated_nc_cred(s);
         }
         for (const auto& s : maskedRSens) {
-            req.add_repeated_sens(s);
+            req.add_repeated_nc_sens(s);
         }
         auto* nested = req.mutable_nested();
         nested->set_nested_name("nested_value");
-        nested->set_nested_cred("NSECRET");
-        nested->set_nested_sens("NSECRET2");
+        nested->set_nested_nc_cred("NSECRET");
+        nested->set_nested_nc_sens("NSECRET2");
+        nested->set_nested_yc_sens("NSECRET3");
 
         auto secure = NMVP::MVPSecureDebugString(req);
         std::string actual(secure.data(), secure.size());
 
         TStringBuilder b;
         b << "name: \"value\""
-          << " cred: \"***\""
-          << " sens: \"***\""
+          << " nc_cred: \"***\""
+          << " nc_sens: \"***\""
+          << " yc_sens: \"***\""
           << " int_value: 42"
-          << " int_cred: ***"
-          << " int_sens: ***";
+          << " int_nc_cred: ***"
+          << " int_nc_sens: ***"
+          << " int_yc_sens: ***";
         for (const auto& name : repeatedNames) {
             b << " repeated_name: \"" << name << "\"";
         }
         for (const auto& s : maskedRCreds) {
             (void)s;
-            b << " repeated_cred: \"***\"";
+            b << " repeated_nc_cred: \"***\"";
         }
         for (const auto& s : maskedRSens) {
             (void)s;
-            b << " repeated_sens: \"***\"";
+            b << " repeated_nc_sens: \"***\"";
         }
         b << " nested {"
           << " nested_name: \"nested_value\""
-          << " nested_cred: \"***\""
-          << " nested_sens: \"***\""
+          << " nested_nc_cred: \"***\""
+          << " nested_nc_sens: \"***\""
+          << " nested_yc_sens: \"***\""
           << " } ";
         TString expectedT = b;
         std::string expected(expectedT.data(), expectedT.size());
-        UNIT_ASSERT(actual.find("int_cred:") != std::string::npos);
-        UNIT_ASSERT(actual.find("int_sens:") != std::string::npos);
+        UNIT_ASSERT(actual.find("int_nc_cred:") != std::string::npos);
+        UNIT_ASSERT(actual.find("int_nc_sens:") != std::string::npos);
+        UNIT_ASSERT(actual.find("int_yc_sens:") != std::string::npos);
         UNIT_ASSERT_VALUES_EQUAL(actual, expected);
     }
 

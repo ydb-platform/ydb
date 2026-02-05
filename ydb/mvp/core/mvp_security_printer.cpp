@@ -1,4 +1,7 @@
 #include "mvp_security_printer.h"
+#include <ydb/public/api/client/nc_private/annotations.pb.h>
+#include <ydb/public/api/client/yc_private/accessservice/sensitive.pb.h>
+
 #include <ydb/library/protobuf_printer/hide_field_printer.h>
 
 NMVP::TMVPSecurityTextFormatPrinterBase::TMVPSecurityTextFormatPrinterBase(const google::protobuf::Descriptor* desc) {
@@ -14,7 +17,9 @@ void NMVP::TMVPSecurityTextFormatPrinterBase::Walk(const google::protobuf::Descr
     for (int i = 0; i < desc->field_count(); i++) {
         const auto field = desc->field(i);
         const auto options = field->options();
-        if (options.GetExtension(nebius::sensitive) || options.GetExtension(nebius::credentials)) {
+        if (options.GetExtension(nebius::sensitive)
+                || options.GetExtension(nebius::credentials)
+                || options.GetExtension(yandex::cloud::sensitive)) {
             RegisterFieldValuePrinter(field, new NKikimr::THideFieldValuePrinter());
         }
         Walk(field->message_type(), visited);

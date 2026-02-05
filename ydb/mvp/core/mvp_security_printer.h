@@ -1,6 +1,4 @@
 #pragma once
-
-#include <ydb/public/api/client/nc_private/annotations.pb.h>
 #include <ydb/library/security/util.h>
 
 #include <google/protobuf/descriptor.h>

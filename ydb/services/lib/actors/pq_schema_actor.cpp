@@ -199,7 +199,7 @@ namespace NKikimr::NGRpcProxy::V1 {
         if (alter.has_set_supported_codecs()) {
             consumer.mutable_supported_codecs()->CopyFrom(alter.set_supported_codecs());
         }
-        for (auto& [attrName, attrValue] : alter.alter_attributes()) {
+        for (const auto& [attrName, attrValue] : alter.alter_attributes()) {
             (*consumer.mutable_attributes())[attrName] = attrValue;
         }
         if (alter.has_set_availability_period()) {

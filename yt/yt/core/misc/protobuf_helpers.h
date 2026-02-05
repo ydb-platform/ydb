@@ -156,14 +156,14 @@ void FromProto(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-template <class TSerialized, class T, class TTag>
-void FromProto(TStrongTypedef<T, TTag>* original, const TSerialized& serialized);
+template <class TSerialized, class T, class TTag, TStrongTypedefOptions Options>
+void FromProto(TStrongTypedef<T, TTag, Options>* original, const TSerialized& serialized);
 
-template <class TSerialized, class T, class TTag>
-void ToProto(TSerialized* serialized, const TStrongTypedef<T, TTag>& original);
+template <class TSerialized, class T, class TTag, TStrongTypedefOptions Options>
+void ToProto(TSerialized* serialized, const TStrongTypedef<T, TTag, Options>& original);
 
-template <class T, class TTag>
-struct TProtoTraits<TStrongTypedef<T, TTag>>
+template <class T, class TTag, TStrongTypedefOptions Options>
+struct TProtoTraits<TStrongTypedef<T, TTag, Options>>
 {
     using TSerialized = T;
 };

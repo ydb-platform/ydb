@@ -29,7 +29,7 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "TopSort-LeftJoin (MapJoin)",
+                                        "Node Type": "TopSort-LeftJoin (Map)",
                                         "Operators": [
                                             {
                                                 "Inputs": [
@@ -51,7 +51,7 @@
                                                         "ExternalPlanNodeId": 3
                                                     }
                                                 ],
-                                                "Name": "LeftJoin (MapJoin)"
+                                                "Name": "LeftJoin (Map)"
                                             }
                                         ],
                                         "PlanNodeId": 7,
@@ -96,7 +96,7 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "InnerJoin (MapJoin)-Filter",
+                                                        "Node Type": "InnerJoin (Map)-Filter",
                                                         "Operators": [
                                                             {
                                                                 "Condition": "i2_1.q1 = ss.x",
@@ -108,7 +108,7 @@
                                                                         "Other": "ConstantExpression"
                                                                     }
                                                                 ],
-                                                                "Name": "InnerJoin (MapJoin)"
+                                                                "Name": "InnerJoin (Map)"
                                                             },
                                                             {
                                                                 "Inputs": [

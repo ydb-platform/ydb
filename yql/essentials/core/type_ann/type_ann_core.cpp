@@ -6763,6 +6763,11 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             }
 
             if constexpr (!IsSet) {
+                if (child->GetTypeAnn() && child->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+                    input->SetTypeAnn(child->GetTypeAnn());
+                    return IGraphTransformer::TStatus::Ok;
+                }
+
                 if (!EnsureTupleSize(*child, 2, ctx.Expr)) {
                     return IGraphTransformer::TStatus::Error;
                 }

@@ -3,7 +3,7 @@
 #include <ydb/library/wilson_ids/wilson.h>
 #include <util/string/builder.h>
 
-namespace NYdb::NBS::NStorage::NPartitionDirect {
+namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 using namespace NKikimr;
 
@@ -13,8 +13,14 @@ TDirectBlockGroup::TDirectBlockGroup(
     ui64 tabletId,
     ui32 generation,
     const TVector<TDDiskId>& ddisksIds,
-    const TVector<TDDiskId>& persistentBufferDDiskIds)
-    : BlocksMeta(BlocksCount, TBlockMeta(persistentBufferDDiskIds.size()))
+    const TVector<TDDiskId>& persistentBufferDDiskIds,
+    ui32 blockSize,
+    ui64 blocksCount)
+    : BlockSize(blockSize)
+    , BlocksCountParam(blocksCount)
+    , TabletId(tabletId)
+    , Generation(generation)
+    , BlocksMeta(BlocksCount, TBlockMeta(persistentBufferDDiskIds.size()))
 {
     auto addDDiskConnections = [&](const TVector<TDDiskId>& ddisksIds,
                                    TVector<TDDiskConnection>& ddiskConnections,
@@ -119,7 +125,7 @@ void TDirectBlockGroup::HandleWriteBlocksRequest(
 
     // Round up
     // Move to separate function
-    totalSize = (totalSize + 4096 - 1) / 4096 * 4096;
+    totalSize = (totalSize + BlockSize - 1) / BlockSize * BlockSize;
 
     TString data = TString::Uninitialized(totalSize);
     char* ptr = data.Detach();
@@ -130,7 +136,7 @@ void TDirectBlockGroup::HandleWriteBlocksRequest(
     memset(ptr, 0, data.end() - ptr);
 
     // now we expect only 1 block writes
-    Y_ABORT_UNLESS(totalSize == 4096);
+    Y_ABORT_UNLESS(totalSize == BlockSize);
 
     auto request = std::make_shared<TWriteRequest>(
         ev->Sender,
@@ -237,6 +243,10 @@ void TDirectBlockGroup::HandlePersistentBufferWriteResult(
                 0, // flags
                 request.GetCookie());
 
+            if (WriteBlocksReplyCallback) {
+                WriteBlocksReplyCallback(true, request.GetDataSize());
+            }
+
             RequestById.erase(requestId);
         }
     } else {
@@ -253,6 +263,10 @@ void TDirectBlockGroup::HandlePersistentBufferWriteResult(
             std::move(response),
             0, // flags
             request.GetCookie());
+
+        if (WriteBlocksReplyCallback) {
+            WriteBlocksReplyCallback(false, 0);
+        }
 
         request.ChildSpanEndError(requestId, "HandlePersistentBufferWriteResult failed");
         request.Span.EndError("HandlePersistentBufferWriteResult failed");
@@ -316,7 +330,7 @@ void TDirectBlockGroup::RequestBlockFlush(
             blockMeta.LsnByPersistentBufferIndex[i],
             std::nullopt,
             std::nullopt);
-            
+
             ddiskConnection.DDiskId.Serialize(requestToDDisk->Record.MutableDDiskId());
             requestToDDisk->Record.SetDDiskInstanceGuid(*ddiskConnection.Credentials.DDiskInstanceGuid);
 
@@ -428,7 +442,7 @@ void TDirectBlockGroup::HandleReadBlocksRequest(
     {
         auto response = std::make_unique<TEvService::TEvReadBlocksResponse>(MakeError(S_OK));
         auto& blocks = *response->Record.MutableBlocks();
-        blocks.AddBuffers(TString(4096, 0));
+        blocks.AddBuffers(TString(BlockSize, 0));
 
         span.EndOk();
         ctx.Send(
@@ -436,6 +450,11 @@ void TDirectBlockGroup::HandleReadBlocksRequest(
             std::move(response),
             0, // flags
             ev->Cookie);
+
+        if (ReadBlocksReplyCallback) {
+            ReadBlocksReplyCallback(true, BlockSize);
+        }
+
         return;
     }
 
@@ -545,6 +564,10 @@ void TDirectBlockGroup::HandleReadResult(
                 0, // flags
                 request.GetCookie());
 
+            if (ReadBlocksReplyCallback) {
+                ReadBlocksReplyCallback(true, rope.size());
+            }
+
             // End top-level span
             request.Span.EndOk();
             RequestById.erase(requestId);
@@ -564,6 +587,10 @@ void TDirectBlockGroup::HandleReadResult(
             0, // flags
             request.GetCookie());
 
+        if (ReadBlocksReplyCallback) {
+            ReadBlocksReplyCallback(false, 0);
+        }
+
         request.ChildSpanEndError(requestId, "HandleReadResult failed");
         request.Span.EndError("HandleReadResult failed");
 
@@ -581,4 +608,4 @@ template void TDirectBlockGroup::HandleReadResult<NDDisk::TEvReadResult>(
     const NDDisk::TEvReadResult::TPtr& ev,
     const TActorContext& ctx);
 
-}   // namespace NYdb::NBS::NStorage::NPartitionDirect
+}   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

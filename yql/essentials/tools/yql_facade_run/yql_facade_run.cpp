@@ -357,6 +357,7 @@ void TFacadeRunOptions::Parse(int argc, const char* argv[]) {
         }
     });
     opts.AddLongOption("full-stat", "Output full execution statistics").Optional().NoArgument().SetFlag(&FullStatistics);
+    opts.AddLongOption("diagnostics", "Output diagnostics").Optional().NoArgument().SetFlag(&PrintDiagnostics);
 
     opts.AddLongOption("sql-flags", "SQL translator pragma flags").SplitHandler(&SqlFlags, ',');
     opts.AddLongOption("syntax-version", "SQL syntax version").StoreResult(&SyntaxVersion).DefaultValue(1);
@@ -1026,6 +1027,14 @@ int TFacadeRunner::DoRun(TProgramFactory& factory) {
     if (RunOptions_.StatStream) {
         if (auto st = program->GetStatistics(!RunOptions_.FullStatistics)) {
             *RunOptions_.StatStream << *st;
+        }
+    }
+
+    if (RunOptions_.PrintDiagnostics) {
+        if (auto diag = program->GetDiagnostics()) {
+            RunOptions_.PrintInfo("Diagnostics:");
+            TStringInput diagStream(*diag);
+            NYson::ReformatYsonStream(&diagStream, &Cerr, NYT::NYson::EYsonFormat::Pretty);
         }
     }
 

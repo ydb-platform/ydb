@@ -68,7 +68,36 @@ TTranslationSettings::TTranslationSettings()
 {
 }
 
-bool ParseTranslationSettings(const TString& query, TTranslationSettings& settings, NYql::TIssues& issues) {
+bool TParsedSettings::ApplyTo(TTranslationSettings& settings, NYql::TIssues& issues) const {
+    if ((HasSyntaxV0 || HasSyntaxV1) && !settings.InferSyntaxVersion) {
+        issues.AddIssue(NYql::YqlIssue(NYql::TPosition(0, 0), NYql::TIssuesIds::DEFAULT_ERROR,
+                                       "Explicit syntax version is not allowed"));
+        return false;
+    }
+
+    if (HasSyntaxV0) {
+        if (settings.V0ForceDisable || settings.V0Behavior == EV0Behavior::Disable) {
+            issues.AddIssue(NYql::YqlIssue(NYql::TPosition(0, 0), NYql::TIssuesIds::DEFAULT_ERROR,
+                                           "V0 syntax is disabled"));
+            return false;
+        }
+        settings.SyntaxVersion = 0;
+    } else if (HasSyntaxV1) {
+        settings.SyntaxVersion = 1;
+    }
+
+    if (HasAnsiLexer) {
+        settings.AnsiLexer = true;
+    }
+
+    if (HasPgParser) {
+        settings.PgParser = true;
+    }
+
+    return true;
+}
+
+bool ParseTranslationSettingsFromComments(const TString& query, TParsedSettings& parsed, NYql::TIssues& issues) {
     if (!NYql::IsUtf8(query)) {
         issues.AddIssue(NYql::YqlIssue(NYql::TPosition(0, 0), NYql::TIssuesIds::DEFAULT_ERROR, "Invalid UTF8 input"));
         return false;
@@ -106,28 +135,16 @@ bool ParseTranslationSettings(const TString& query, TTranslationSettings& settin
             continue;
         }
 
-        if ((value == "syntax_v0" || value == "syntax_v1") && !settings.InferSyntaxVersion) {
-            issues.AddIssue(NYql::YqlIssue(NYql::TPosition(0, lineNumber), NYql::TIssuesIds::DEFAULT_ERROR,
-                                           "Explicit syntax version is not allowed"));
-            return false;
-        }
-
         if (value == "syntax_v0") {
-            if (settings.V0ForceDisable || settings.V0Behavior == NSQLTranslation::EV0Behavior::Disable) {
-                issues.AddIssue(NYql::YqlIssue(NYql::TPosition(0, lineNumber), NYql::TIssuesIds::DEFAULT_ERROR,
-                                               "V0 syntax is disabled"));
-                return false;
-            }
-
-            settings.SyntaxVersion = 0;
+            parsed.HasSyntaxV0 = true;
         } else if (value == "syntax_v1") {
-            settings.SyntaxVersion = 1;
+            parsed.HasSyntaxV1 = true;
         } else if (value == "ansi_lexer") {
-            settings.AnsiLexer = true;
+            parsed.HasAnsiLexer = true;
         } else if (value == "antlr4_parser") {
-            // Is always turned on
+            // Is always turned on, ignore
         } else if (value == "syntax_pg") {
-            settings.PgParser = true;
+            parsed.HasPgParser = true;
         } else {
             issues.AddIssue(NYql::YqlIssue(NYql::TPosition(0, lineNumber), NYql::TIssuesIds::DEFAULT_ERROR,
                                            TStringBuilder() << "Unknown SQL translation setting: " << value));
@@ -136,6 +153,14 @@ bool ParseTranslationSettings(const TString& query, TTranslationSettings& settin
     }
 
     return true;
+}
+
+bool ParseTranslationSettings(const TString& query, TTranslationSettings& settings, NYql::TIssues& issues) {
+    TParsedSettings parsed;
+    if (!ParseTranslationSettingsFromComments(query, parsed, issues)) {
+        return false;
+    }
+    return parsed.ApplyTo(settings, issues);
 }
 
 } // namespace NSQLTranslation

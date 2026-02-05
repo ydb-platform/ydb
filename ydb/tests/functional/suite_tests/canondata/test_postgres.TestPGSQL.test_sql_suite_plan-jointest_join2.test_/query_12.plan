@@ -29,17 +29,25 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "TopSort",
+                                        "Node Type": "TopSort-InnerJoin (Lookup)",
                                         "Operators": [
+                                            {
+                                                "Inputs": [
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    }
+                                                ],
+                                                "Limit": "1001",
+                                                "Name": "TopSort",
+                                                "TopSortBy": "argument.x_1.x1"
+                                            },
                                             {
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 9
                                                     }
                                                 ],
-                                                "Limit": "1001",
-                                                "Name": "TopSort",
-                                                "TopSortBy": "argument.x_1.x1"
+                                                "Name": "InnerJoin (Lookup)"
                                             }
                                         ],
                                         "PlanNodeId": 10,
@@ -81,7 +89,17 @@
                                                                 "PlanNodeType": "Connection",
                                                                 "Plans": [
                                                                     {
-                                                                        "Node Type": "Stage",
+                                                                        "Node Type": "LeftJoin (Lookup)",
+                                                                        "Operators": [
+                                                                            {
+                                                                                "Inputs": [
+                                                                                    {
+                                                                                        "ExternalPlanNodeId": 5
+                                                                                    }
+                                                                                ],
+                                                                                "Name": "LeftJoin (Lookup)"
+                                                                            }
+                                                                        ],
                                                                         "PlanNodeId": 6,
                                                                         "Plans": [
                                                                             {

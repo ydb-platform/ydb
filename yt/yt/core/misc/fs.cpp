@@ -51,7 +51,8 @@ namespace {
 
 YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "FS");
 
-[[maybe_unused]] void ThrowNotSupported()
+[[noreturn]] [[maybe_unused]]
+void ThrowNotSupported()
 {
     THROW_ERROR_EXCEPTION("Unsupported platform");
 }
@@ -394,8 +395,6 @@ TPathStatistics GetPathStatistics(const std::string& path)
     return statistics;
 #else
     ThrowNotSupported();
-    // Suppress clang's error about reaching end of non-void function without return.
-    Y_UNREACHABLE();
 #endif
 }
 
@@ -691,7 +690,6 @@ std::vector<TMountPoint> GetMountPoints(const std::string& mountsFile)
 #else
     Y_UNUSED(mountsFile);
     ThrowNotSupported();
-    YT_ABORT();
 #endif
 }
 
@@ -709,7 +707,6 @@ void MountTmpfs(const std::string& path, int userId, i64 size)
 #else
     Y_UNUSED(path, userId, size);
     ThrowNotSupported();
-    YT_ABORT();
 #endif
 }
 
@@ -757,7 +754,6 @@ i64 GetBlockSize(const std::string& device)
     return static_cast<i64>(statInfo.st_blksize);
 #else
     ThrowNotSupported();
-    Y_UNREACHABLE();
 #endif
 }
 
@@ -1006,7 +1002,6 @@ TFuture<void> ReadWriteCopyAsync(
 #else
     Y_UNUSED(existingPath, newPath, chunkSize);
     ThrowNotSupported();
-    return OKFuture;
 #endif
 }
 
@@ -1030,7 +1025,6 @@ TFuture<void> ReadWriteCopyAsync(
 #else
     Y_UNUSED(source, destination, chunkSize);
     ThrowNotSupported();
-    return OKFuture;
 #endif
 }
 

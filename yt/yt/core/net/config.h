@@ -17,7 +17,7 @@ struct TDialerConfig
 {
     bool EnableNoDelay;
     bool EnableAggressiveReconnect;
-    bool AllowBypassTLS;
+    bool AllowBypassTls;
 
     TDuration MinRto;
     TDuration MaxRto;

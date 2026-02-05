@@ -6,14 +6,14 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/direct_block_group/request.h>
 
-namespace NYdb::NBS::NStorage::NPartitionDirect {
+namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 using namespace NKikimr;
 using namespace NKikimr::NBsController;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// BlocksCount in one vChunk
+// BlocksCount in one vChunk - current limitation
 constexpr size_t BlocksCount = 128 * 1024 * 1024 / 4096;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -21,6 +21,8 @@ constexpr size_t BlocksCount = 128 * 1024 * 1024 / 4096;
 class TDirectBlockGroup
 {
 private:
+    ui32 BlockSize;
+    ui64 BlocksCountParam; // Currently unused, uses hardcoded BlocksCount
     struct TBlockMeta {
         TVector<ui64> LsnByPersistentBufferIndex;
         TVector<bool> IsFlushedToDDiskByPersistentBufferIndex;
@@ -93,10 +95,25 @@ private:
     std::unordered_map<ui64, std::shared_ptr<IRequest>> RequestById;
     TVector<TBlockMeta> BlocksMeta;
 
+    std::function<void(bool, ui32)> WriteBlocksReplyCallback;
+    std::function<void(bool, ui32)> ReadBlocksReplyCallback;
+
 public:
-    TDirectBlockGroup(ui64 tabletId, ui32 generation,
-                      const TVector<TDDiskId>& ddisksIds,
-                      const TVector<TDDiskId>& persistentBufferDDiskIds);
+    TDirectBlockGroup(
+        ui64 tabletId,
+        ui32 generation,
+        const TVector<TDDiskId>& ddisksIds,
+        const TVector<TDDiskId>& persistentBufferDDiskIds,
+        ui32 blockSize,
+        ui64 blocksCount);
+
+    void SetWriteBlocksReplyCallback(std::function<void(bool, ui32)> callback) {
+        WriteBlocksReplyCallback = std::move(callback);
+    }
+
+    void SetReadBlocksReplyCallback(std::function<void(bool, ui32)> callback) {
+        ReadBlocksReplyCallback = std::move(callback);
+    }
 
     void EstablishConnections(const TActorContext& ctx);
 
@@ -144,4 +161,4 @@ public:
         const TActorContext& ctx);
 };
 
-}   // namespace NYdb::NBS::NStorage::NPartitionDirect
+}   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

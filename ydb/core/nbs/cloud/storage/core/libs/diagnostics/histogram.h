@@ -7,7 +7,7 @@
 #include <util/datetime/base.h>
 #include <util/system/sanitizers.h>
 
-namespace NCloud {
+namespace NYdb::NBS {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -126,4 +126,4 @@ public:
     {}
 };
 
-}   // namespace NCloud
+}   // namespace NYdb::NBS

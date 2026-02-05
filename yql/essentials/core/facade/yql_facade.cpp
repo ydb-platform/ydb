@@ -1907,25 +1907,30 @@ TMaybe<TString> TProgram::GetStatistics(bool totalOnly, THashMap<TString, TStrin
     }
 
     // lineage
-    if (TypeCtx_->CorrectLineage) {
-        writer.OnKeyedItem("CorrectLineage");
+    if (TypeCtx_->LineageStats.Correct || TypeCtx_->LineageStats.CorrectStandalone) {
+        writer.OnKeyedItem("Lineage");
         writer.OnBeginMap();
-        writer.OnKeyedItem("count");
-        writer.OnInt64Scalar(*TypeCtx_->CorrectLineage);
-        writer.OnEndMap();
-    }
-    if (TypeCtx_->CorrectStandaloneLineage) {
-        writer.OnKeyedItem("CorrectStandaloneLineage");
-        writer.OnBeginMap();
-        writer.OnKeyedItem("count");
-        writer.OnInt64Scalar(*TypeCtx_->CorrectStandaloneLineage);
-        writer.OnEndMap();
-    }
-    if (TypeCtx_->LineageSize) {
-        writer.OnKeyedItem("LineageSize");
-        writer.OnBeginMap();
-        writer.OnKeyedItem("count");
-        writer.OnInt64Scalar(*TypeCtx_->LineageSize);
+            if (TypeCtx_->LineageStats.Correct) {
+                writer.OnKeyedItem("Correct");
+                writer.OnBeginMap();
+                writer.OnKeyedItem("count");
+                writer.OnInt64Scalar(*TypeCtx_->LineageStats.Correct);
+                writer.OnEndMap();
+            }
+            if (TypeCtx_->LineageStats.CorrectStandalone) {
+                writer.OnKeyedItem("CorrectStandalone");
+                writer.OnBeginMap();
+                writer.OnKeyedItem("count");
+                writer.OnInt64Scalar(*TypeCtx_->LineageStats.CorrectStandalone);
+                writer.OnEndMap();
+            }
+            if (TypeCtx_->LineageStats.Size > 0) {
+                writer.OnKeyedItem("Size");
+                writer.OnBeginMap();
+                writer.OnKeyedItem("count");
+                writer.OnInt64Scalar(TypeCtx_->LineageStats.Size);
+                writer.OnEndMap();
+            }
         writer.OnEndMap();
     }
 

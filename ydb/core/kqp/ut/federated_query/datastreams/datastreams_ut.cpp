@@ -792,6 +792,23 @@ public:
         }
     }
 
+    // Other helpers
+
+    static std::function<void(const TString)> AstChecker(ui64 txCount, ui64 stagesCount) {
+        const auto stringCounter = [](const TString& str, const TString& subStr) {
+            ui64 count = 0;
+            for (size_t i = str.find(subStr); i != TString::npos; i = str.find(subStr, i + subStr.size())) {
+                ++count;
+            }
+            return count;
+        };
+
+        return [txCount, stagesCount, stringCounter](const TString& ast) {
+            UNIT_ASSERT_VALUES_EQUAL(stringCounter(ast, "KqpPhysicalTx"), txCount);
+            UNIT_ASSERT_VALUES_EQUAL(stringCounter(ast, "DqPhyStage"), stagesCount);
+        };
+    }
+
 private:
     void EnsureNotInitialized(const TString& info) {
         UNIT_ASSERT_C(!Kikimr, "Kikimr runner is already initialized, can not setup " << info);
@@ -1870,21 +1887,6 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             "table"_a = sourceTable
         ));
 
-        const auto astChecker = [](ui64 txCount, ui64 stagesCount) {
-            const auto stringCounter = [](const TString& str, const TString& subStr) {
-                ui64 count = 0;
-                for (size_t i = str.find(subStr); i != TString::npos; i = str.find(subStr, i + subStr.size())) {
-                    ++count;
-                }
-                return count;
-            };
-
-            return [txCount, stagesCount, stringCounter](const TString& ast) {
-                UNIT_ASSERT_VALUES_EQUAL(stringCounter(ast, "KqpPhysicalTx"), txCount);
-                UNIT_ASSERT_VALUES_EQUAL(stringCounter(ast, "DqPhyStage"), stagesCount);
-            };
-        };
-
         TInstant disposition = TInstant::Now();
 
         // Double PQ insert
@@ -1897,7 +1899,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                 "pq_source"_a = pqSource,
                 "output_topic1"_a = firstOutputTopic,
                 "output_topic2"_a = secondOutputTopic
-            ), EStatus::SUCCESS, "", astChecker(1, 1));
+            ), EStatus::SUCCESS, "", AstChecker(1, 1));
 
             ReadTopicMessage(firstOutputTopic, R"([{"Val": "ABC"}])", disposition);
             ReadTopicMessage(secondOutputTopic, R"({"Val": "ABC"}-B)", disposition);
@@ -1938,7 +1940,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                 "second_solomon_project"_a = secondSoLocation.ProjectId,
                 "second_solomon_folder"_a = secondSoLocation.FolderId,
                 "second_solomon_service"_a = secondSoLocation.Service
-            ), EStatus::SUCCESS, "", astChecker(1, 1));
+            ), EStatus::SUCCESS, "", AstChecker(1, 1));
 
             TString expectedMetrics = R"([
   {
@@ -1989,7 +1991,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                 "output_topic"_a = firstOutputTopic,
                 "row_table"_a = rowSinkTable,
                 "column_table"_a = columnSinkTable
-            ), EStatus::SUCCESS, "", astChecker(2, 4));
+            ), EStatus::SUCCESS, "", AstChecker(2, 4));
 
             ReadTopicMessage(firstOutputTopic, R"([{"Val": "ABC"}])", disposition);
             disposition = TInstant::Now();
@@ -2040,6 +2042,84 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 
         const auto result = asyncResult.ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+    }
+
+    Y_UNIT_TEST_F(ScalarFederativeWriting, TStreamingTestFixture) {
+        constexpr char firstOutputTopic[] = "replicatedWritingOutputTopicName1";
+        constexpr char secondOutputTopic[] = "replicatedWritingOutputTopicName2";
+        constexpr char pqSource[] = "pqSourceName";
+        CreateTopic(firstOutputTopic);
+        CreateTopic(secondOutputTopic);
+        CreatePqSource(pqSource);
+
+        constexpr char solomonSink[] = "solomonSinkName";
+        CreateSolomonSource(solomonSink);
+
+        const TSolomonLocation soLocation = {
+            .ProjectId = "cloudId1",
+            .FolderId = "folderId1",
+            .Service = "custom1",
+            .IsCloud = false,
+        };
+        CleanupSolomon(soLocation);
+        ExecQuery(fmt::format(R"(
+            INSERT INTO `{pq_source}`.`{output_topic1}` SELECT "TestData1";
+            INSERT INTO `{pq_source}`.`{output_topic2}` SELECT "TestData2" AS Data;
+            INSERT INTO `{pq_source}`.`{output_topic2}`(Data) VALUES ("TestData2");
+
+            INSERT INTO `{solomon_sink}`.`{solomon_project}/{solomon_folder}/{solomon_service}`
+            SELECT
+                13333 AS value,
+                "test-insert" AS sensor,
+                Timestamp("2025-03-12T14:40:39Z") AS ts;
+
+            INSERT INTO `{solomon_sink}`.`{solomon_project}/{solomon_folder}/{solomon_service}`
+                (value, sensor, ts)
+            VALUES
+                (23333, "test-insert-2", Timestamp("2025-03-12T14:40:39Z"));)",
+            "pq_source"_a = pqSource,
+            "output_topic1"_a = firstOutputTopic,
+            "output_topic2"_a = secondOutputTopic,
+            "solomon_sink"_a = solomonSink,
+            "solomon_project"_a = soLocation.ProjectId,
+            "solomon_folder"_a = soLocation.FolderId,
+            "solomon_service"_a = soLocation.Service
+        ), EStatus::SUCCESS, "", AstChecker(2, 5));
+
+        ReadTopicMessage(firstOutputTopic, "TestData1");
+        ReadTopicMessages(secondOutputTopic, {"TestData2", "TestData2"});
+
+        TString expectedMetrics = R"([
+  {
+    "labels": [
+      [
+        "name",
+        "value"
+      ],
+      [
+        "sensor",
+        "test-insert"
+      ]
+    ],
+    "ts": 1741790439,
+    "value": 13333
+  },
+  {
+    "labels": [
+      [
+        "name",
+        "value"
+      ],
+      [
+        "sensor",
+        "test-insert-2"
+      ]
+    ],
+    "ts": 1741790439,
+    "value": 23333
+  }
+])";
+        UNIT_ASSERT_VALUES_EQUAL(GetSolomonMetrics(soLocation), expectedMetrics);
     }
 }
 
@@ -4554,6 +4634,58 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
   }
 ])";
         UNIT_ASSERT_STRINGS_EQUAL(GetSolomonMetrics(soLocation), expectedMetrics);
+    }
+
+    Y_UNIT_TEST_F(DropStreamingQueryDuringRetries, TStreamingWithSchemaSecretsTestFixture) {
+        constexpr char topic[] = "dropStreamingQueryDuringRetriesTopic";
+        constexpr char pqSource[] = "pqSource";
+        CreateTopic(topic);
+        CreatePqSource(pqSource);
+
+        const auto queryName = "streamingQuery";
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                PRAGMA pq.Consumer = "test-consumer";
+                INSERT INTO `{pq_source}`.`{topic}`
+                SELECT * FROM `{pq_source}`.`{topic}`;
+            END DO;)",
+            "query_name"_a = queryName,
+            "pq_source"_a = pqSource,
+            "topic"_a = topic
+        ));
+
+        Sleep(TDuration::Seconds(3));
+
+        ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
+        {
+            const auto& result = ExecQuery("SELECT RetryCount, SuspendedUntil FROM `.sys/streaming_queries`");
+            UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
+            CheckScriptResult(result[0], 2, 1, [&](TResultSetParser& resultSet) {
+                UNIT_ASSERT_GE(*resultSet.ColumnParser("RetryCount").GetOptionalUint64(), 1);
+                UNIT_ASSERT(*resultSet.ColumnParser("SuspendedUntil").GetOptionalTimestamp());
+            });
+        }
+
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (RUN = FALSE);)",
+            "query_name"_a = queryName
+        ));
+
+        {
+            const auto& result = ExecQuery("SELECT Status FROM `.sys/streaming_queries`");
+            UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
+            CheckScriptResult(result[0], 1, 1, [&](TResultSetParser& resultSet) {
+                UNIT_ASSERT_VALUES_EQUAL(*resultSet.ColumnParser("Status").GetOptionalUtf8(), "FAILED");
+            });
+        }
+
+        ExecQuery(fmt::format(R"(
+            DROP STREAMING QUERY `{query_name}`;)",
+            "query_name"_a = queryName
+        ));
+
+        CheckScriptExecutionsCount(0, 0);
     }
 }
 

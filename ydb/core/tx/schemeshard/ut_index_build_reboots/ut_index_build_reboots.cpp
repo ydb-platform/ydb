@@ -1,5 +1,6 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/test_with_reboots.h>
 
 using namespace NKikimr;
 using namespace NSchemeShard;
@@ -89,8 +90,7 @@ static void WriteNullKey(TTestActorRuntime& runtime, ui64 tabletId, ui32 index) 
 
 Y_UNIT_TEST_SUITE(IndexBuildTestReboots) {
 
-    void BaseCase(NKikimrSchemeOp::EIndexType indexType) {
-        TTestWithReboots t(false);
+    void DoBaseCase(TTestWithReboots& t, NKikimrSchemeOp::EIndexType indexType) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             runtime.GetAppData().FeatureFlags.SetEnableAddUniqueIndex(true);
             {
@@ -196,16 +196,15 @@ Y_UNIT_TEST_SUITE(IndexBuildTestReboots) {
         });
     }
 
-    Y_UNIT_TEST(BaseCase) {
-        BaseCase(NKikimrSchemeOp::EIndexTypeGlobal);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(BaseCase, 2 /*rebootBuckets*/, 2 /*pipeResetBuckets*/, false /*killOnCommit*/) {
+        DoBaseCase(t, NKikimrSchemeOp::EIndexTypeGlobal);
     }
 
-    Y_UNIT_TEST(BaseCaseUniq) {
-        BaseCase(NKikimrSchemeOp::EIndexTypeGlobalUnique);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(BaseCaseUniq, 2 /*rebootBuckets*/, 2 /*pipeResetBuckets*/, false /*killOnCommit*/) {
+        DoBaseCase(t, NKikimrSchemeOp::EIndexTypeGlobalUnique);
     }
 
-    void BaseCaseWithDataColumns(NKikimrSchemeOp::EIndexType indexType) {
-        TTestWithReboots t(false);
+    void DoBaseCaseWithDataColumns(TTestWithReboots& t, NKikimrSchemeOp::EIndexType indexType) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             runtime.GetAppData().FeatureFlags.SetEnableAddUniqueIndex(true);
             {
@@ -284,16 +283,15 @@ Y_UNIT_TEST_SUITE(IndexBuildTestReboots) {
         });
     }
 
-    Y_UNIT_TEST(BaseCaseWithDataColumns) {
-        BaseCaseWithDataColumns(NKikimrSchemeOp::EIndexTypeGlobal);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(BaseCaseWithDataColumns, 2 /*rebootBuckets*/, 2 /*pipeResetBuckets*/, false /*killOnCommit*/) {
+        DoBaseCaseWithDataColumns(t, NKikimrSchemeOp::EIndexTypeGlobal);
     }
 
-    Y_UNIT_TEST(BaseCaseWithDataColumnsUniq) {
-        BaseCaseWithDataColumns(NKikimrSchemeOp::EIndexTypeGlobalUnique);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(BaseCaseWithDataColumnsUniq, 2 /*rebootBuckets*/, 2 /*pipeResetBuckets*/, false /*killOnCommit*/) {
+        DoBaseCaseWithDataColumns(t, NKikimrSchemeOp::EIndexTypeGlobalUnique);
     }
 
-    void DropIndex(NKikimrSchemeOp::EIndexType indexType) {
-        TTestWithReboots t(false);
+    void DoDropIndex(TTestWithReboots& t, NKikimrSchemeOp::EIndexType indexType) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             runtime.GetAppData().FeatureFlags.SetEnableAddUniqueIndex(true);
             {
@@ -347,16 +345,15 @@ Y_UNIT_TEST_SUITE(IndexBuildTestReboots) {
         });
     }
 
-    Y_UNIT_TEST(DropIndex) {
-        DropIndex(NKikimrSchemeOp::EIndexTypeGlobal);
+    Y_UNIT_TEST_WITH_REBOOTS(DropIndex) {
+        DoDropIndex(t, NKikimrSchemeOp::EIndexTypeGlobal);
     }
 
-    Y_UNIT_TEST(DropIndexUniq) {
-        DropIndex(NKikimrSchemeOp::EIndexTypeGlobalUnique);
+    Y_UNIT_TEST_WITH_REBOOTS(DropIndexUniq) {
+        DoDropIndex(t, NKikimrSchemeOp::EIndexTypeGlobalUnique);
     }
 
-    void DropIndexWithDataColumns(NKikimrSchemeOp::EIndexType indexType) {
-        TTestWithReboots t(false);
+    void DoDropIndexWithDataColumns(TTestWithReboots& t, NKikimrSchemeOp::EIndexType indexType) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             runtime.GetAppData().FeatureFlags.SetEnableAddUniqueIndex(true);
             {
@@ -411,16 +408,15 @@ Y_UNIT_TEST_SUITE(IndexBuildTestReboots) {
         });
     }
 
-    Y_UNIT_TEST(DropIndexWithDataColumns) {
-        DropIndexWithDataColumns(NKikimrSchemeOp::EIndexTypeGlobal);
+    Y_UNIT_TEST_WITH_REBOOTS(DropIndexWithDataColumns) {
+        DoDropIndexWithDataColumns(t, NKikimrSchemeOp::EIndexTypeGlobal);
     }
 
-    Y_UNIT_TEST(DropIndexWithDataColumnsUniq) {
-        DropIndexWithDataColumns(NKikimrSchemeOp::EIndexTypeGlobalUnique);
+    Y_UNIT_TEST_WITH_REBOOTS(DropIndexWithDataColumnsUniq) {
+        DoDropIndexWithDataColumns(t, NKikimrSchemeOp::EIndexTypeGlobalUnique);
     }
 
-    void CancelBuild(NKikimrSchemeOp::EIndexType indexType) {
-        TTestWithReboots t(false);
+    void DoCancelBuild(TTestWithReboots& t, NKikimrSchemeOp::EIndexType indexType) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             runtime.GetAppData().FeatureFlags.SetEnableAddUniqueIndex(true);
             {
@@ -536,16 +532,15 @@ Y_UNIT_TEST_SUITE(IndexBuildTestReboots) {
         });
     }
 
-    Y_UNIT_TEST(CancelBuild) {
-        CancelBuild(NKikimrSchemeOp::EIndexTypeGlobal);
+    Y_UNIT_TEST_WITH_REBOOTS(CancelBuild) {
+        DoCancelBuild(t, NKikimrSchemeOp::EIndexTypeGlobal);
     }
 
-    Y_UNIT_TEST(CancelBuildUniq) {
-        CancelBuild(NKikimrSchemeOp::EIndexTypeGlobalUnique);
+    Y_UNIT_TEST_WITH_REBOOTS(CancelBuildUniq) {
+        DoCancelBuild(t, NKikimrSchemeOp::EIndexTypeGlobalUnique);
     }
 
-    void IndexPartitioning(NKikimrSchemeOp::EIndexType indexType) {
-        TTestWithReboots t(false);
+    void DoIndexPartitioning(TTestWithReboots& t, NKikimrSchemeOp::EIndexType indexType) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             runtime.GetAppData().FeatureFlags.SetEnableAddUniqueIndex(true);
             {
@@ -616,16 +611,15 @@ Y_UNIT_TEST_SUITE(IndexBuildTestReboots) {
         });
     }
 
-    Y_UNIT_TEST(IndexPartitioning) {
-        IndexPartitioning(NKikimrSchemeOp::EIndexTypeGlobal);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(IndexPartitioning, 2 /*rebootBuckets*/, 2 /*pipeResetBuckets*/, false /*killOnCommit*/) {
+        DoIndexPartitioning(t, NKikimrSchemeOp::EIndexTypeGlobal);
     }
 
-    Y_UNIT_TEST(IndexPartitioningUniq) {
-        IndexPartitioning(NKikimrSchemeOp::EIndexTypeGlobalUnique);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(IndexPartitioningUniq, 2 /*rebootBuckets*/, 2 /*pipeResetBuckets*/, false /*killOnCommit*/) {
+        DoIndexPartitioning(t, NKikimrSchemeOp::EIndexTypeGlobalUnique);
     }
 
-    void UniqueIndexValidationFails(bool crossShardsViolation) {
-        TTestWithReboots t(false);
+    void DoUniqueIndexValidationFails(TTestWithReboots& t, bool crossShardsViolation) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             runtime.GetAppData().FeatureFlags.SetEnableAddUniqueIndex(true);
             {
@@ -764,11 +758,11 @@ Y_UNIT_TEST_SUITE(IndexBuildTestReboots) {
         });
     }
 
-    Y_UNIT_TEST(UniqueIndexValidationFailsInsideShard) {
-        UniqueIndexValidationFails(false);
+    Y_UNIT_TEST_WITH_REBOOTS(UniqueIndexValidationFailsInsideShard) {
+        DoUniqueIndexValidationFails(t, false);
     }
 
-    Y_UNIT_TEST(UniqueIndexValidationFailsBetweenShards) {
-        UniqueIndexValidationFails(true);
+    Y_UNIT_TEST_WITH_REBOOTS(UniqueIndexValidationFailsBetweenShards) {
+        DoUniqueIndexValidationFails(t, true);
     }
 }

@@ -37,11 +37,11 @@ struct TStatisticsAggregator::TTxAnalyze : public TTxBase {
         // update existing force traversal
         if (existingOperation) {
             if (existingOperation->Tables.size() == Record().TablesSize()) {
-                SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyze::Execute. Update existing force traversal. OperationId " << operationId << " , ReplyToActorId " << ReplyToActorId);
+                SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyze::Execute. Update existing force traversal. OperationId " << operationId.Quote() << " , ReplyToActorId " << ReplyToActorId);
                 existingOperation->ReplyToActorId = ReplyToActorId;
                 return true;
             } else {
-                SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyze::Execute. Delete broken force traversal. OperationId " << operationId << " , ReplyToActorId " << ReplyToActorId);
+                SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyze::Execute. Delete broken force traversal. OperationId " << operationId.Quote() << " , ReplyToActorId " << ReplyToActorId);
                 Self->DeleteForceTraversalOperation(operationId, db);
             }
         }
@@ -50,7 +50,7 @@ struct TStatisticsAggregator::TTxAnalyze : public TTxBase {
         const TString& databaseName = Record().GetDatabase();
 
         SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyze::Execute. Create new force traversal operation"
-            << ", OperationId: `" << operationId << "'"
+            << ", OperationId: " << operationId.Quote()
             << ", DatabaseName: `" << databaseName << "'"
             << ", Types: " << types);
 
@@ -73,7 +73,7 @@ struct TStatisticsAggregator::TTxAnalyze : public TTxBase {
             const auto status = TForceTraversalTable::EStatus::None;
 
             SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyze::Execute. Create new force traversal table"
-                << ", OperationId: `" << operationId << "'"
+                << ", OperationId: " << operationId.Quote()
                 << ", PathId: " << pathId
                 << ", ColumnTags: " << columnTagsStr);
 

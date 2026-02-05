@@ -848,7 +848,7 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
     }
 
     Y_UNIT_TEST_TWIN(TestJoinHint2, ColumnStore) {
-        CheckJoinCardinality("queries/test_join_hint2.sql", "stats/basic.json", "InnerJoin (MapJoin)", 1, false, ColumnStore);
+        CheckJoinCardinality("queries/test_join_hint2.sql", "stats/basic.json", "InnerJoin (Map)", 1, false, ColumnStore);
     }
 
     Y_UNIT_TEST(BytesHintForceGraceJoin) {
@@ -949,11 +949,11 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         auto joinFinder = TFindJoinWithLabels(plan);
         {
             auto join = joinFinder.Find({"customer", "customer_address"});
-            UNIT_ASSERT_EQUAL(join.Join, "InnerJoin (MapJoin)");
+            UNIT_ASSERT_EQUAL(join.Join, "InnerJoin (Map)");
         }
         {
             auto join = joinFinder.Find({"customer_demographics", "customer", "customer_address"});
-            UNIT_ASSERT_EQUAL(join.Join, "InnerJoin (MapJoin)");
+            UNIT_ASSERT_EQUAL(join.Join, "InnerJoin (Map)");
         }
         {
             auto join = joinFinder.Find({"customer_demographics", "customer", "customer_address", "store_sales"});
@@ -972,16 +972,16 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         auto [plan, _] =  ExecuteJoinOrderTestGenericQueryWithStats("queries/tpch9.sql", "stats/tpch100s.json", false, true);
         auto joinFinder = TFindJoinWithLabels(plan);
         auto join = joinFinder.Find({"nation"}, TFindJoinWithLabels::PartialMatch);
-        UNIT_ASSERT_C(join.Join == "InnerJoin (MapJoin)", join.Join);
+        UNIT_ASSERT_C(join.Join == "InnerJoin (Map)", join.Join);
     }
 
     Y_UNIT_TEST(OltpJoinTypeHintCBOTurnOFF) {
         auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/oltp_join_type_hint_cbo_turnoff.sql", "stats/basic.json", false, false, false);
         auto joinFinder = TFindJoinWithLabels(plan);
         UNIT_ASSERT(joinFinder.Find({"R", "S"}).Join == "InnerJoin (Grace)");
-        UNIT_ASSERT(joinFinder.Find({"R", "S", "T"}).Join == "InnerJoin (MapJoin)");
+        UNIT_ASSERT(joinFinder.Find({"R", "S", "T"}).Join == "InnerJoin (Map)");
         UNIT_ASSERT(joinFinder.Find({"R", "S", "T", "U"}).Join == "InnerJoin (Grace)");
-        UNIT_ASSERT(joinFinder.Find({"R", "S", "T", "U", "V"}).Join == "InnerJoin (MapJoin)");
+        UNIT_ASSERT(joinFinder.Find({"R", "S", "T", "U", "V"}).Join == "InnerJoin (Map)");
     }
 
     Y_UNIT_TEST_TWIN(TestJoinOrderHintsSimple, ColumnStore) {

@@ -208,6 +208,7 @@ static bool TransferSettingsEntry(std::map<TString, TNodePtr>& out,
     };
 
     static const TSet<TString> MetricsLevelValues = {
+        "default",
         "database",
         "object",
         "detailed",
@@ -236,15 +237,24 @@ static bool TransferSettingsEntry(std::map<TString, TNodePtr>& out,
             return false;
         }
 
-        auto valueStr = to_lower(literalValue);
-        if (!MetricsLevelValues.contains(valueStr)) {
-            TStringBuilder validOptions;
-            for (const auto& val : MetricsLevelValues) {
-                validOptions << val << ", ";
-            }
-            ctx.Error() << "Invalid metrics_level value: " << valueStr
-                        << ". Allowed values: " << validOptions;
+        if (!literalValue.empty() && literalValue[0] == '-') {
+            ctx.Error() << "Invalid numeric value for metrics_value: negative numbers are not allowed";
             return false;
+        }
+
+        if (ui64 numericVal; TryFromString<ui64>(literalValue, numericVal)) {
+            if (numericVal >= MetricsLevelValues.size()) {
+                ctx.Error() << "Invalid numeric value for metrics_value " << numericVal << ", valid values: from 0 to "
+                            << (MetricsLevelValues.size() - 1);
+                return false;
+            }
+        } else {
+            auto valueStr = to_lower(literalValue);
+            if (!MetricsLevelValues.contains(valueStr)) {
+                ctx.Error() << "Invalid metrics_level value: " << valueStr
+                            << ". Allowed values: " << JoinSeq(", ", MetricsLevelValues);
+                return false;
+            }
         }
     }
     if (!out.emplace(keyName, value).second) {
@@ -1007,6 +1017,10 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
         case TRule_sql_stmt_core::kAltSqlStmtCore27: {
             // create_object_stmt: CREATE OBJECT (IF NOT EXISTS)? name (TYPE type [WITH k=v,...]);
             auto& node = core.GetAlt_sql_stmt_core27().GetRule_create_object_stmt1();
+
+            Token(node.GetToken1());
+            const TPosition pos = Ctx_.Pos();
+
             TObjectOperatorContext context(Ctx_.Scoped);
             if (node.GetRule_object_ref4().HasBlock1()) {
                 if (!ClusterExpr(node.GetRule_object_ref4().GetBlock1().GetRule_cluster_expr1(),
@@ -1033,7 +1047,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 }
             }
 
-            AddStatementToBlocks(blocks, BuildCreateObjectOperation(Ctx_.Pos(), objectId, typeId, existingOk, false, new TObjectFeatureNode(Ctx_.Pos(), std::move(kv)), context));
+            AddStatementToBlocks(blocks, BuildCreateObjectOperation(pos, objectId, typeId, existingOk, false, new TObjectFeatureNode(Ctx_.Pos(), std::move(kv)), context));
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore28: {

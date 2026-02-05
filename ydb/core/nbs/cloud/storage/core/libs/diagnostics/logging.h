@@ -15,7 +15,7 @@
 #include <util/stream/printf.h>
 #include <util/system/src_location.h>
 
-namespace NCloud {
+namespace NYdb::NBS {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -168,4 +168,4 @@ ILoggingServicePtr CreateUnifiedAgentLoggingService(
 #define STORAGE_TRACE_T(throttler, ...)                                        \
     STORAGE_LOG_THROTTLED(throttler, TLOG_RESOURCES, __VA_ARGS__)
 
-}   // namespace NCloud
+}   // namespace NYdb::NBS

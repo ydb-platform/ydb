@@ -602,8 +602,8 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
 
             CompressionCodec = NBackupRestoreTraits::NextCompressionCodec(CompressionCodec);
             if (CompressionCodec == NBackupRestoreTraits::ECompressionCodec::Invalid) {
-                return Finish(false, TStringBuilder() << "Cannot find any supported data file"
-                    << ": prefix# " << Settings.GetObjectKeyPattern());
+                return Finish(false, TStringBuilder() << "Cannot find any supported data file with prefix"
+                    << ": " << Settings.GetObjectKeyPattern());
             }
 
             return HeadObject(Settings.GetDataKey(DataFormat, CompressionCodec));
@@ -643,7 +643,8 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
 
         if (!ContentLength && Settings.EncryptionSettings.EncryptedBackup) {
             // Encrypted file can not have zero length
-            const TString error = "File is corrupted";
+            const TString error = TStringBuilder() << Settings.GetDataKey(DataFormat, CompressionCodec)
+                << ": file is corrupted";
             IMPORT_LOG_E(error);
             return Finish(false, error);
         }
@@ -685,7 +686,8 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
                 Checksum->SetState(info.ProcessedChecksumState);
             }
             if (TString restoreErr; !Reader->RestoreFromState(DownloadState, restoreErr)) {
-                const TString error = TStringBuilder() << "Failed to restore reader state: " << restoreErr;
+                const TString error = TStringBuilder() << Settings.GetDataKey(DataFormat, CompressionCodec)
+                    << ": failed to restore reader state: " << restoreErr;
                 IMPORT_LOG_E(error);
                 return Finish(false, error);
             }
@@ -784,8 +786,8 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
             [[fallthrough]];
 
         default: // ERROR
-            return Finish(false, TStringBuilder() << "Cannot process data"
-                << ": " << error);
+            return Finish(false, TStringBuilder() << Settings.GetDataKey(DataFormat, CompressionCodec)
+                << ": cannot process data: " << error);
         }
 
         Counters.LatencyProcess.Start(Now());
@@ -847,13 +849,15 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
         TString strError;
 
         if (!NFormats::TYdbDump::ParseLine(line, columnOrderTypes, pool, keys, values, strError, PendingBytes)) {
-            Finish(false, TStringBuilder() << strError << " on line: " << origLine);
+            Finish(false, TStringBuilder() << Settings.GetDataKey(DataFormat, CompressionCodec)
+                << ": " << strError << " on line: " << origLine);
             return false;
         }
 
         Y_ENSURE(!keys.empty());
         if (!TableInfo.IsMyKey(keys) /* TODO: maybe skip */) {
-            Finish(false, TStringBuilder() << "Key is out of range on line: " << origLine);
+            Finish(false, TStringBuilder() << Settings.GetDataKey(DataFormat, CompressionCodec)
+                << ": key is out of range on line: " << origLine);
             return false;
         }
 
@@ -891,7 +895,8 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
         } else if (ev->Get()->IsRetriableError()) {
             return RetryOrFinish(record.GetErrorDescription());
         } else {
-            return Finish(false, record.GetErrorDescription());
+            return Finish(false, TStringBuilder() << Settings.GetDataKey(DataFormat, CompressionCodec)
+                << ": " << record.GetErrorDescription());
         }
     }
 
@@ -913,9 +918,10 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
             return true;
         }
 
-        const TString error = TStringBuilder() << "ETag mismatch at '" << marker << "'"
-            << ": expected# " << expected
-            << ", got# " << got;
+        const TString error = TStringBuilder() << Settings.GetDataKey(DataFormat, CompressionCodec)
+            << ": ETag mismatch at '" << marker << "'"
+            << ": expected '" << expected << "'"
+            << ", got '" << got << "'";
 
         IMPORT_LOG_E(error);
         Finish(false, error);
@@ -933,25 +939,26 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
 
         for (const auto& column : Scheme.GetColumns()) {
             if (!TableInfo.HasColumn(column.GetName())) {
-                return finish(TStringBuilder() << "Scheme mismatch: cannot find column"
-                    << ": name# " << column.GetName());
+                return finish(TStringBuilder() << Settings.GetObjectKeyPattern()
+                    << ": cannot find column '" << column.GetName() << "'");
             }
 
             const auto type = TableInfo.GetColumnType(column.GetName());
             auto schemeType = NScheme::TypeInfoModFromProtoColumnType(column.GetTypeId(),
                 column.HasTypeInfo() ? &column.GetTypeInfo() : nullptr);
             if (type.first != schemeType.TypeInfo || type.second != schemeType.TypeMod) {
-                return finish(TStringBuilder() << "Scheme mismatch: column type mismatch"
-                    << ": name# " << column.GetName()
-                    << ", expected# " << NScheme::TypeName(type.first, type.second)
-                    << ", got# " << NScheme::TypeName(schemeType.TypeInfo, schemeType.TypeMod));
+                return finish(TStringBuilder() << Settings.GetObjectKeyPattern()
+                    << ": column '" << column.GetName() << "' type mismatch"
+                    << ": expected '" << NScheme::TypeName(type.first, type.second) << "'"
+                    << ", got '" << NScheme::TypeName(schemeType.TypeInfo, schemeType.TypeMod) << "'");
             }
         }
 
         if (TableInfo.GetKeyColumnIds().size() != (ui32)Scheme.KeyColumnNamesSize()) {
-            return finish(TStringBuilder() << "Scheme mismatch: key column count mismatch"
-                << ": expected# " << TableInfo.GetKeyColumnIds().size()
-                << ", got# " << Scheme.KeyColumnNamesSize());
+            return finish(TStringBuilder() << Settings.GetObjectKeyPattern()
+                << ": key column count mismatch"
+                << ": expected '" << TableInfo.GetKeyColumnIds().size() << "'"
+                << ", got '" << Scheme.KeyColumnNamesSize() << "'");
         }
 
         for (ui32 i = 0; i < (ui32)Scheme.KeyColumnNamesSize(); ++i) {
@@ -959,10 +966,10 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
             const ui32 keyOrder = TableInfo.KeyOrder(name);
 
             if (keyOrder != i) {
-                return finish(TStringBuilder() << "Scheme mismatch: key order mismatch"
-                    << ": name# " << name
-                    << ", expected# " << keyOrder
-                    << ", got# " << i);
+                return finish(TStringBuilder() << Settings.GetObjectKeyPattern()
+                    << ": key column '" << name << "' order mismatch"
+                    << ": expected '" << keyOrder << "'"
+                    << ", got '" << i << "'");
             }
         }
 
@@ -979,10 +986,10 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
             return true;
         }
 
-        const TString error = TStringBuilder() << "Checksum mismatch for "
-            << Settings.GetDataKey(DataFormat, ECompressionCodec::None)
-            << " expected# " << ExpectedChecksum
-            << ", got# " << gotChecksum;
+        const TString error = TStringBuilder() << Settings.GetDataKey(DataFormat, ECompressionCodec::None)
+            << ": checksum mismatch"
+            << ": expected '" << ExpectedChecksum << "'"
+            << ", got '" << gotChecksum << "'";
 
         IMPORT_LOG_E(error);
         Finish(false, error);
@@ -1015,9 +1022,11 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
             Retry();
         } else {
             if constexpr (std::is_same_v<T, Aws::S3::S3Error>) {
-                Finish(false, TStringBuilder() << "S3 error: " << error.GetMessage().c_str());
+                Finish(false, TStringBuilder() << Settings.GetDataKey(DataFormat, CompressionCodec)
+                    << ": S3 error: " << error.GetMessage().c_str());
             } else {
-                Finish(false, error);
+                Finish(false, TStringBuilder() << Settings.GetDataKey(DataFormat, CompressionCodec)
+                    << ": " << error);
             }
         }
     }

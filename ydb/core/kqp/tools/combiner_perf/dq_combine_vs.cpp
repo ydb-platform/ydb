@@ -104,7 +104,7 @@ TStreamValues GenerateSample(size_t numKeys, size_t numRows, const std::vector<T
     return result;
 }
 
-size_t CountStreamOutputs(const NUdf::TUnboxedValue& wideStream, size_t width)
+size_t CountStreamOutputs(const NUdf::TUnboxedValue& wideStream, size_t width, bool sleepOnYield)
 {
     std::vector<TUnboxedValue> resultValues;
     resultValues.resize(width);
@@ -116,13 +116,15 @@ size_t CountStreamOutputs(const NUdf::TUnboxedValue& wideStream, size_t width)
     while ((fetchStatus = wideStream.WideFetch(resultValues.data(), width)) != NUdf::EFetchStatus::Finish) {
         if (fetchStatus == NUdf::EFetchStatus::Ok) {
             ++lineCount;
+        } else if (sleepOnYield) {
+            ::Sleep(TDuration::MilliSeconds(1));
         }
     }
 
     return lineCount;
 }
 
-size_t CollectStreamOutputs(const NUdf::TUnboxedValue& wideStream, const std::vector<TFieldDescr>& keyFields, size_t width, TVerificationReferenceData& data)
+size_t CollectStreamOutputs(const NUdf::TUnboxedValue& wideStream, const std::vector<TFieldDescr>& keyFields, size_t width, TVerificationReferenceData& data, bool sleepOnYield)
 {
     std::vector<TUnboxedValue> resultValues;
     Cerr << "collect width: " << width << Endl;
@@ -135,6 +137,9 @@ size_t CollectStreamOutputs(const NUdf::TUnboxedValue& wideStream, const std::ve
     NUdf::EFetchStatus fetchStatus;
     while ((fetchStatus = wideStream.WideFetch(resultValues.data(), width)) != NUdf::EFetchStatus::Finish) {
         if (fetchStatus == NUdf::EFetchStatus::Yield) {
+            if (sleepOnYield) {
+                ::Sleep(TDuration::MilliSeconds(1));
+            }
             continue;
         }
 
@@ -522,7 +527,8 @@ TRunResult RunTestOverGraph(
     const std::vector<TFieldDescr>& keyFields,
     const std::vector<TFieldDescr>& valueFields,
     const bool doVerification,
-    const bool measureReference)
+    const bool measureReference,
+    const bool slowSpilling = false)
 {
     TKqpSetup<LLVM, Spilling> setup(GetPerfTestFactory());
 
@@ -530,7 +536,11 @@ TRunResult RunTestOverGraph(
 
     NYql::NLog::InitLogger("cerr", false);
 
-    std::shared_ptr<TPreallocatedSpillerFactory> spillerFactory = Spilling ? std::make_shared<TPreallocatedSpillerFactory>() : nullptr;
+    std::shared_ptr<TPreallocatedSpillerFactory> realSpillerFactory = Spilling ? std::make_shared<TPreallocatedSpillerFactory>() : nullptr;
+    std::shared_ptr<ISpillerFactory> spillerFactory = realSpillerFactory;
+    if (realSpillerFactory && slowSpilling) {
+        spillerFactory = std::make_shared<TSlowSpillerFactory>(spillerFactory);
+    }
 
     TVerificationReferenceData referenceData;
     TVerificationReferenceData collectedData;
@@ -539,10 +549,10 @@ TRunResult RunTestOverGraph(
         doVerification ? &referenceData : nullptr);
 
     auto makeStream = [&]() -> THolder<NUdf::TBoxedValue> {
-        size_t yellowZoneTrigger = Spilling ? 1000000 : 0;
+        size_t yellowZoneTrigger = Spilling ? 1000000 : std::numeric_limits<size_t>::max();
         return MakeHolder<TPrebuiltStream>(inputData, keyFields.size() + valueFields.size(), params.NumRuns, yellowZoneTrigger, [&](){
-            //Cerr << "Enabling yellow zone" << Endl;
-            //setup.Alloc.Ref().ForcefullySetMemoryYellowZone(true);
+            Cerr << "Enabling yellow zone" << Endl;
+            setup.Alloc.Ref().ForcefullySetMemoryYellowZone(true);
         });
     };
 
@@ -551,17 +561,17 @@ TRunResult RunTestOverGraph(
         const auto graphTimeStart = GetThreadCPUTime();
         size_t lineCount;
         if (!doVerification) {
-            lineCount = CountStreamOutputs(computeGraphPtr->GetValue(), keyFields.size() + valueFields.size());
+            lineCount = CountStreamOutputs(computeGraphPtr->GetValue(), keyFields.size() + valueFields.size(), slowSpilling);
             Cerr << "Output row count: " << lineCount << Endl;
         } else {
-            lineCount = CollectStreamOutputs(computeGraphPtr->GetValue(), keyFields, keyFields.size() + valueFields.size(), collectedData);
+            lineCount = CollectStreamOutputs(computeGraphPtr->GetValue(), keyFields, keyFields.size() + valueFields.size(), collectedData, slowSpilling);
             Cerr << "Output row count: " << lineCount << Endl;
             Cerr << "Output distinct value count: " << collectedData.size() << Endl;
         }
 
         auto duration = GetThreadCPUTimeDelta(graphTimeStart);
-        if (spillerFactory) {
-            for (auto& spiller : spillerFactory->GetCreatedSpillers()) {
+        if (realSpillerFactory) {
+            for (auto& spiller : realSpillerFactory->GetCreatedSpillers()) {
                 auto preallocSpiller = dynamic_cast<TPreallocatedSpiller*>(spiller.get());
                 if (!preallocSpiller) {
                     continue;
@@ -571,7 +581,7 @@ TRunResult RunTestOverGraph(
                 auto putAmount = std::accumulate(preallocSpiller->GetPutSizes().begin(), preallocSpiller->GetPutSizes().end(), 0ull);
                 Cerr << "\"Written\" MB: " << putAmount / 1_MB << Endl;
             }
-            spillerFactory->ForgetSpillers();
+            realSpillerFactory->ForgetSpillers();
         }
         return duration;
     };

@@ -29,17 +29,25 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "TopSort",
+                                        "Node Type": "TopSort-LeftJoin (Lookup)",
                                         "Operators": [
+                                            {
+                                                "Inputs": [
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    }
+                                                ],
+                                                "Limit": "1001",
+                                                "Name": "TopSort",
+                                                "TopSortBy": "argument.pv.x"
+                                            },
                                             {
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 5
                                                     }
                                                 ],
-                                                "Limit": "1001",
-                                                "Name": "TopSort",
-                                                "TopSortBy": "argument.pv.x"
+                                                "Name": "LeftJoin (Lookup)"
                                             }
                                         ],
                                         "PlanNodeId": 6,

@@ -1,21 +1,25 @@
-
 /* fcntl module */
 
-#define PY_SSIZE_T_CLEAN
+// Need limited C API version 3.13 for PyLong_AsInt()
+#include "pyconfig.h"   // Py_GIL_DISABLED
+#ifndef Py_GIL_DISABLED
+#  define Py_LIMITED_API 0x030d0000
+#endif
 
 #include "Python.h"
 
+#include <errno.h>                // EINTR
+#include <fcntl.h>                // fcntl()
+#include <string.h>               // memcpy()
+#include <sys/ioctl.h>            // ioctl()
 #ifdef HAVE_SYS_FILE_H
-#include <sys/file.h>
+#  include <sys/file.h>           // flock()
 #endif
 #ifdef HAVE_LINUX_FS_H
-#include <linux/fs.h>
+#  include <linux/fs.h>
 #endif
-
-#include <sys/ioctl.h>
-#include <fcntl.h>
 #ifdef HAVE_STROPTS_H
-#include <stropts.h>
+#  include <stropts.h>            // I_FLUSHBAND
 #endif
 
 /*[clinic input]
@@ -33,22 +37,28 @@ fcntl.fcntl
     arg: object(c_default='NULL') = 0
     /
 
-Perform the operation `cmd` on file descriptor fd.
+Perform the operation cmd on file descriptor fd.
 
-The values used for `cmd` are operating system dependent, and are available
-as constants in the fcntl module, using the same names as used in
-the relevant C header files.  The argument arg is optional, and
-defaults to 0; it may be an int or a string.  If arg is given as a string,
-the return value of fcntl is a string of that length, containing the
-resulting value put in the arg buffer by the operating system.  The length
-of the arg string is not allowed to exceed 1024 bytes.  If the arg given
-is an integer or if none is specified, the result value is an integer
-corresponding to the return value of the fcntl call in the C code.
+The values used for cmd are operating system dependent, and are
+available as constants in the fcntl module, using the same names as used
+in the relevant C header files.  The argument arg is optional, and
+defaults to 0; it may be an integer, a bytes-like object or a string.
+If arg is given as a string, it will be encoded to binary using the
+UTF-8 encoding.
+
+If the arg given is an integer or if none is specified, the result value
+is an integer corresponding to the return value of the fcntl() call in
+the C code.
+
+If arg is given as a bytes-like object, the return value of fcntl() is a
+bytes object of that length, containing the resulting value put in the
+arg buffer by the operating system.  The length of the arg buffer is not
+allowed to exceed 1024 bytes.
 [clinic start generated code]*/
 
 static PyObject *
 fcntl_fcntl_impl(PyObject *module, int fd, int code, PyObject *arg)
-/*[clinic end generated code: output=888fc93b51c295bd input=7955340198e5f334]*/
+/*[clinic end generated code: output=888fc93b51c295bd input=56c6d6196a4854df]*/
 {
     unsigned int int_arg = 0;
     int ret;
@@ -113,40 +123,40 @@ fcntl.ioctl
     mutate_flag as mutate_arg: bool = True
     /
 
-Perform the operation `request` on file descriptor `fd`.
+Perform the operation request on file descriptor fd.
 
-The values used for `request` are operating system dependent, and are available
-as constants in the fcntl or termios library modules, using the same names as
-used in the relevant C header files.
+The values used for request are operating system dependent, and are
+available as constants in the fcntl or termios library modules, using
+the same names as used in the relevant C header files.
 
-The argument `arg` is optional, and defaults to 0; it may be an int or a
-buffer containing character data (most likely a string or an array).
+The argument arg is optional, and defaults to 0; it may be an integer, a
+bytes-like object or a string.  If arg is given as a string, it will be
+encoded to binary using the UTF-8 encoding.
 
-If the argument is a mutable buffer (such as an array) and if the
-mutate_flag argument (which is only allowed in this case) is true then the
-buffer is (in effect) passed to the operating system and changes made by
-the OS will be reflected in the contents of the buffer after the call has
-returned.  The return value is the integer returned by the ioctl system
-call.
+If the arg given is an integer or if none is specified, the result value
+is an integer corresponding to the return value of the ioctl() call in
+the C code.
 
-If the argument is a mutable buffer and the mutable_flag argument is false,
-the behavior is as if a string had been passed.
+If the argument is a mutable buffer (such as a bytearray) and the
+mutate_flag argument is true (default) then the buffer is (in effect)
+passed to the operating system and changes made by the OS will be
+reflected in the contents of the buffer after the call has returned.
+The return value is the integer returned by the ioctl() system call.
 
-If the argument is an immutable buffer (most likely a string) then a copy
-of the buffer is passed to the operating system and the return value is a
-string of the same length containing whatever the operating system put in
-the buffer.  The length of the arg buffer in this case is not allowed to
+If the argument is a mutable buffer and the mutable_flag argument is
+false, the behavior is as if an immutable buffer had been passed.
+
+If the argument is an immutable buffer then a copy of the buffer is
+passed to the operating system and the return value is a bytes object of
+the same length containing whatever the operating system put in the
+buffer.  The length of the arg buffer in this case is not allowed to
 exceed 1024 bytes.
-
-If the arg given is an integer or if none is specified, the result value is
-an integer corresponding to the return value of the ioctl call in the C
-code.
 [clinic start generated code]*/
 
 static PyObject *
 fcntl_ioctl_impl(PyObject *module, int fd, unsigned int code,
                  PyObject *ob_arg, int mutate_arg)
-/*[clinic end generated code: output=7f7f5840c65991be input=967b4a4cbeceb0a8]*/
+/*[clinic end generated code: output=7f7f5840c65991be input=e345d82d499e5273]*/
 {
 #define IOCTL_BUFSZ 1024
     /* We use the unsigned non-checked 'I' format for the 'code' parameter
@@ -276,7 +286,7 @@ fcntl.flock
     operation as code: int
     /
 
-Perform the lock operation `operation` on file descriptor `fd`.
+Perform the lock operation on file descriptor fd.
 
 See the Unix manual page for flock(2) for details (On some systems, this
 function is emulated using fcntl()).
@@ -284,7 +294,7 @@ function is emulated using fcntl()).
 
 static PyObject *
 fcntl_flock_impl(PyObject *module, int fd, int code)
-/*[clinic end generated code: output=84059e2b37d2fc64 input=0bfc00f795953452]*/
+/*[clinic end generated code: output=84059e2b37d2fc64 input=ade68943e8599f0a]*/
 {
     int ret;
     int async_err = 0;
@@ -347,22 +357,22 @@ fcntl.lockf
 
 A wrapper around the fcntl() locking calls.
 
-`fd` is the file descriptor of the file to lock or unlock, and operation is one
-of the following values:
+fd is the file descriptor of the file to lock or unlock, and operation
+is one of the following values:
 
     LOCK_UN - unlock
     LOCK_SH - acquire a shared lock
     LOCK_EX - acquire an exclusive lock
 
 When operation is LOCK_SH or LOCK_EX, it can also be bitwise ORed with
-LOCK_NB to avoid blocking on lock acquisition.  If LOCK_NB is used and the
-lock cannot be acquired, an OSError will be raised and the exception will
-have an errno attribute set to EACCES or EAGAIN (depending on the operating
-system -- for portability, check for either value).
+LOCK_NB to avoid blocking on lock acquisition.  If LOCK_NB is used and
+the lock cannot be acquired, an OSError will be raised and the exception
+will have an errno attribute set to EACCES or EAGAIN (depending on the
+operating system -- for portability, check for either value).
 
-`len` is the number of bytes to lock, with the default meaning to lock to
-EOF.  `start` is the byte offset, relative to `whence`, to that the lock
-starts.  `whence` is as with fileobj.seek(), specifically:
+len is the number of bytes to lock, with the default meaning to lock to
+EOF.  start is the byte offset, relative to whence, to that the lock
+starts.  whence is as with fileobj.seek(), specifically:
 
     0 - relative to the start of the file (SEEK_SET)
     1 - relative to the current buffer position (SEEK_CUR)
@@ -372,7 +382,7 @@ starts.  `whence` is as with fileobj.seek(), specifically:
 static PyObject *
 fcntl_lockf_impl(PyObject *module, int fd, int code, PyObject *lenobj,
                  PyObject *startobj, int whence)
-/*[clinic end generated code: output=4985e7a172e7461a input=5480479fc63a04b8]*/
+/*[clinic end generated code: output=4985e7a172e7461a input=369bef4d7a1c5ff4]*/
 {
     int ret;
     int async_err = 0;
@@ -576,11 +586,40 @@ all_ins(PyObject* m)
 #ifdef F_GETPIPE_SZ
     if (PyModule_AddIntMacro(m, F_GETPIPE_SZ)) return -1;
 #endif
+
+/* On Android, FICLONE is blocked by SELinux. */
+#ifndef __ANDROID__
 #ifdef FICLONE
     if (PyModule_AddIntMacro(m, FICLONE)) return -1;
 #endif
 #ifdef FICLONERANGE
     if (PyModule_AddIntMacro(m, FICLONERANGE)) return -1;
+#endif
+#endif
+
+#ifdef F_GETOWN_EX
+    // since Linux 2.6.32
+    if (PyModule_AddIntMacro(m, F_GETOWN_EX)) return -1;
+    if (PyModule_AddIntMacro(m, F_SETOWN_EX)) return -1;
+    if (PyModule_AddIntMacro(m, F_OWNER_TID)) return -1;
+    if (PyModule_AddIntMacro(m, F_OWNER_PID)) return -1;
+    if (PyModule_AddIntMacro(m, F_OWNER_PGRP)) return -1;
+#endif
+#ifdef F_GET_RW_HINT
+    // since Linux 4.13
+    if (PyModule_AddIntMacro(m, F_GET_RW_HINT)) return -1;
+    if (PyModule_AddIntMacro(m, F_SET_RW_HINT)) return -1;
+    if (PyModule_AddIntMacro(m, F_GET_FILE_RW_HINT)) return -1;
+    if (PyModule_AddIntMacro(m, F_SET_FILE_RW_HINT)) return -1;
+#ifndef RWH_WRITE_LIFE_NOT_SET  // typo in Linux < 5.5
+# define RWH_WRITE_LIFE_NOT_SET RWF_WRITE_LIFE_NOT_SET
+#endif
+    if (PyModule_AddIntMacro(m, RWH_WRITE_LIFE_NOT_SET)) return -1;
+    if (PyModule_AddIntMacro(m, RWH_WRITE_LIFE_NONE)) return -1;
+    if (PyModule_AddIntMacro(m, RWH_WRITE_LIFE_SHORT)) return -1;
+    if (PyModule_AddIntMacro(m, RWH_WRITE_LIFE_MEDIUM)) return -1;
+    if (PyModule_AddIntMacro(m, RWH_WRITE_LIFE_LONG)) return -1;
+    if (PyModule_AddIntMacro(m, RWH_WRITE_LIFE_EXTREME)) return -1;
 #endif
 
 /* OS X specifics */
@@ -597,6 +636,32 @@ all_ins(PyObject* m)
 #endif
 #ifdef F_DUP2FD_CLOEXEC
     if (PyModule_AddIntMacro(m, F_DUP2FD_CLOEXEC)) return -1;
+#endif
+#ifdef F_READAHEAD
+    if (PyModule_AddIntMacro(m, F_READAHEAD)) return -1;
+#endif
+#ifdef F_RDAHEAD
+    if (PyModule_AddIntMacro(m, F_RDAHEAD)) return -1;
+#endif
+#ifdef F_ISUNIONSTACK
+    if (PyModule_AddIntMacro(m, F_ISUNIONSTACK)) return -1;
+#endif
+#ifdef F_KINFO
+    if (PyModule_AddIntMacro(m, F_KINFO)) return -1;
+#endif
+
+/* NetBSD specifics */
+#ifdef F_CLOSEM
+    if (PyModule_AddIntMacro(m, F_CLOSEM)) return -1;
+#endif
+#ifdef F_MAXFD
+    if (PyModule_AddIntMacro(m, F_MAXFD)) return -1;
+#endif
+#ifdef F_GETNOSIGPIPE
+    if (PyModule_AddIntMacro(m, F_GETNOSIGPIPE)) return -1;
+#endif
+#ifdef F_SETNOSIGPIPE
+    if (PyModule_AddIntMacro(m, F_SETNOSIGPIPE)) return -1;
 #endif
 
 /* For F_{GET|SET}FL */
@@ -672,6 +737,9 @@ all_ins(PyObject* m)
     if (PyModule_AddIntMacro(m, F_SEAL_SHRINK)) return -1;
     if (PyModule_AddIntMacro(m, F_SEAL_GROW)) return -1;
     if (PyModule_AddIntMacro(m, F_SEAL_WRITE)) return -1;
+#ifdef F_SEAL_FUTURE_WRITE
+    if (PyModule_AddIntMacro(m, F_SEAL_FUTURE_WRITE)) return -1;
+#endif
 #endif
     return 0;
 }
@@ -688,6 +756,7 @@ fcntl_exec(PyObject *module)
 static PyModuleDef_Slot fcntl_slots[] = {
     {Py_mod_exec, fcntl_exec},
     {Py_mod_multiple_interpreters, Py_MOD_PER_INTERPRETER_GIL_SUPPORTED},
+    {Py_mod_gil, Py_MOD_GIL_NOT_USED},
     {0, NULL}
 };
 

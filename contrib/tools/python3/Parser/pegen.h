@@ -1,7 +1,6 @@
 #ifndef PEGEN_H
 #define PEGEN_H
 
-#define PY_SSIZE_T_CLEAN
 #include <Python.h>
 #include <pycore_ast.h>
 #include <pycore_token.h>
@@ -21,7 +20,6 @@
 #define PyPARSE_IGNORE_COOKIE 0x0010
 #define PyPARSE_BARRY_AS_BDFL 0x0020
 #define PyPARSE_TYPE_COMMENTS 0x0040
-#define PyPARSE_ASYNC_HACKS   0x0080
 #define PyPARSE_ALLOW_INCOMPLETE_INPUT 0x0100
 
 #define CURRENT_POS (-5)
@@ -134,10 +132,11 @@ int _PyPegen_insert_memo(Parser *p, int mark, int type, void *node);
 int _PyPegen_update_memo(Parser *p, int mark, int type, void *node);
 int _PyPegen_is_memoized(Parser *p, int type, void *pres);
 
-int _PyPegen_lookahead_with_name(int, expr_ty (func)(Parser *), Parser *);
-int _PyPegen_lookahead_with_int(int, Token *(func)(Parser *, int), Parser *, int);
-int _PyPegen_lookahead_with_string(int , expr_ty (func)(Parser *, const char*), Parser *, const char*);
 int _PyPegen_lookahead(int, void *(func)(Parser *), Parser *);
+int _PyPegen_lookahead_for_expr(int, expr_ty (func)(Parser *), Parser *);
+int _PyPegen_lookahead_for_stmt(int, stmt_ty (func)(Parser *), Parser *);
+int _PyPegen_lookahead_with_int(int, Token *(func)(Parser *, int), Parser *, int);
+int _PyPegen_lookahead_with_string(int, expr_ty (func)(Parser *, const char*), Parser *, const char*);
 
 Token *_PyPegen_expect_token(Parser *p, int type);
 void* _PyPegen_expect_forced_result(Parser *p, void* result, const char* expected);
@@ -153,7 +152,6 @@ void *_PyPegen_string_token(Parser *p);
 Py_ssize_t _PyPegen_byte_offset_to_character_offset_line(PyObject *line, Py_ssize_t col_offset, Py_ssize_t end_col_offset);
 Py_ssize_t _PyPegen_byte_offset_to_character_offset(PyObject *line, Py_ssize_t col_offset);
 Py_ssize_t _PyPegen_byte_offset_to_character_offset_raw(const char*, Py_ssize_t col_offset);
-Py_ssize_t _PyPegen_calculate_display_width(PyObject *segment, Py_ssize_t character_offset);
 
 // Error handling functions and APIs
 typedef enum {
@@ -357,7 +355,8 @@ stmt_ty _PyPegen_checked_future_import(Parser *p, identifier module, asdl_alias_
 Parser *_PyPegen_Parser_New(struct tok_state *, int, int, int, int *, PyArena *);
 void _PyPegen_Parser_Free(Parser *);
 mod_ty _PyPegen_run_parser_from_file_pointer(FILE *, int, PyObject *, const char *,
-                                    const char *, const char *, PyCompilerFlags *, int *, PyArena *);
+                                    const char *, const char *, PyCompilerFlags *, int *, PyObject **,
+                                    PyArena *);
 void *_PyPegen_run_parser(Parser *);
 mod_ty _PyPegen_run_parser_from_string(const char *, int, PyObject *, PyCompilerFlags *, PyArena *);
 asdl_stmt_seq *_PyPegen_interactive_exit(Parser *);

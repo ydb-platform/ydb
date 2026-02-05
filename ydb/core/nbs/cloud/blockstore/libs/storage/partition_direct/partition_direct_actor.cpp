@@ -1,15 +1,24 @@
 #include "partition_direct_actor.h"
 
+#include <ydb/core/base/counters.h>
 
-namespace NYdb::NBS::NStorage::NPartitionDirect {
+namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 using namespace NYdb::NBS;
+using namespace NYdb::NBS::NProto;
+using namespace NKikimr;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TPartitionActor::TPartitionActor(TStorageConfig storageConfig)
-    : StorageConfig(std::move(storageConfig))
+TPartitionActor::TPartitionActor(
+    TStorageConfig storageConfig,
+    TVolumeConfig volumeConfig,
+    const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters)
+    : StorageConfig(std::move(storageConfig)),
+    VolumeConfig(std::move(volumeConfig)),
+    CountersBase(counters ? GetServiceCounters(counters, "nbs_partitions") : nullptr)
 {
+    Y_ABORT_UNLESS(VolumeConfig.GetPartitions().size() == 1);
     TraceSamplePeriod = TDuration::MilliSeconds(StorageConfig.GetTraceSamplePeriod());
 }
 
@@ -20,6 +29,31 @@ void TPartitionActor::Bootstrap(const TActorContext& ctx)
 
     LOG_INFO(TActivationContext::AsActorContext(), NKikimrServices::NBS_PARTITION,
         "Started NBS partition: actor id %s", SelfId().ToString().data());
+
+    // Build complete counter chain: ddiskPool -> tabletId -> subsystem:interface
+    if (CountersBase) {
+        CountersChain.emplace_back("ddiskPool", StorageConfig.GetDDiskPoolName());
+        CountersChain.emplace_back("tabletId", SelfId().ToString());
+
+        auto finalCounters = CountersBase;
+        for (const auto& [name, value] : CountersChain) {
+            finalCounters = finalCounters->GetSubgroup(name, value);
+        }
+
+        auto cInterface = finalCounters->GetSubgroup("subsystem", "interface");
+        auto cInterfaceWriteBlocks = cInterface->GetSubgroup("operation", "WriteBlocks");
+        auto cInterfaceReadBlocks = cInterface->GetSubgroup("operation", "ReadBlocks");
+
+        Counters.WriteBlocks.Requests = cInterfaceWriteBlocks->GetCounter("Requests", true);
+        Counters.WriteBlocks.ReplyOk = cInterfaceWriteBlocks->GetCounter("ReplyOk", true);
+        Counters.WriteBlocks.ReplyErr = cInterfaceWriteBlocks->GetCounter("ReplyErr", true);
+        Counters.WriteBlocks.Bytes = cInterfaceWriteBlocks->GetCounter("Bytes", true);
+
+        Counters.ReadBlocks.Requests = cInterfaceReadBlocks->GetCounter("Requests", true);
+        Counters.ReadBlocks.ReplyOk = cInterfaceReadBlocks->GetCounter("ReplyOk", true);
+        Counters.ReadBlocks.ReplyErr = cInterfaceReadBlocks->GetCounter("ReplyErr", true);
+        Counters.ReadBlocks.Bytes = cInterfaceReadBlocks->GetCounter("Bytes", true);
+    }
 
     AllocateDDiskBlockGroup(ctx);
 }
@@ -79,7 +113,18 @@ void TPartitionActor::HandleControllerAllocateDDiskBlockGroupResult(
             1, // tabletId
             1, // generation
             ddiskIds,
-            persistentBufferDDiskIds);
+            persistentBufferDDiskIds,
+            VolumeConfig.GetBlockSize(),
+            VolumeConfig.GetPartitions(0).GetBlockCount());
+
+        // Set up counter callbacks
+        DirectBlockGroup->SetWriteBlocksReplyCallback([this](bool ok, ui32 bytes) {
+            Counters.WriteBlocks.Reply(ok, bytes);
+        });
+
+        DirectBlockGroup->SetReadBlocksReplyCallback([this](bool ok, ui32 bytes) {
+            Counters.ReadBlocks.Reply(ok, bytes);
+        });
 
         DirectBlockGroup->EstablishConnections(ctx);
     } else {
@@ -108,6 +153,16 @@ void TPartitionActor::HandleWriteBlocksRequest(
     const TEvService::TEvWriteBlocksRequest::TPtr& ev,
     const NActors::TActorContext& ctx)
 {
+    const auto* msg = ev->Get();
+    const auto& blocks = msg->Record.GetBlocks();
+
+    size_t totalSize = 0;
+    for (const auto& buffer : blocks.GetBuffers()) {
+        totalSize += buffer.size();
+    }
+
+    Counters.WriteBlocks.Request(totalSize);
+
     AddTraceId(ev, ctx);
     DirectBlockGroup->HandleWriteBlocksRequest(ev, ctx);
 }
@@ -137,6 +192,12 @@ void TPartitionActor::HandleReadBlocksRequest(
     const TEvService::TEvReadBlocksRequest::TPtr& ev,
     const NActors::TActorContext& ctx)
 {
+    const auto* msg = ev->Get();
+    const ui32 blocksCount = msg->Record.GetBlocksCount();
+    const size_t totalSize = static_cast<size_t>(blocksCount) * VolumeConfig.GetBlockSize();
+
+    Counters.ReadBlocks.Request(totalSize);
+
     AddTraceId(ev, ctx);
     DirectBlockGroup->HandleReadBlocksRequest(ev, ctx);
 }
@@ -182,4 +243,4 @@ STFUNC(TPartitionActor::StateWork)
     }
 }
 
-}   // namespace NYdb::NBS::NStorage::NPartitionDirect
+}   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

@@ -684,7 +684,7 @@ void TStatisticsAggregator::ScheduleNextAnalyze(NIceDb::TNiceDb& db, const TActo
             }
         }
 
-        SA_LOG_D("[" << TabletID() << "] ScheduleNextAnalyze. All the force traversal tables sent the requests. OperationId=" << operation.OperationId);
+        SA_LOG_D("[" << TabletID() << "] ScheduleNextAnalyze. All the force traversal tables sent the requests. OperationId=" << operation.OperationId.Quote());
         continue;
     }
 
@@ -1036,7 +1036,7 @@ bool TStatisticsAggregator::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev
             str << "NavigatePathId: " << NavigatePathId << Endl;
 
             str << Endl;
-            str << "ForceTraversalOperationId: " << ForceTraversalOperationId << Endl;
+            str << "ForceTraversalOperationId: " << ForceTraversalOperationId.Quote() << Endl;
             if (ForceTraversalOperationId) {
                 auto forceTraversal = CurrentForceTraversalOperation();
                 str << "  CreatedAt: " << forceTraversal->CreatedAt << Endl;

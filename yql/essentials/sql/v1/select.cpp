@@ -160,11 +160,12 @@ TNodePtr BuildYqlSubquery(TNodePtr source, TString alias) {
 
 class TSourceNode: public INode {
 public:
-    TSourceNode(TPosition pos, TSourcePtr&& source, bool checkExist, bool withTables)
+    TSourceNode(TPosition pos, TSourcePtr&& source, bool checkExist, bool withTables, bool isInlineScalar)
         : INode(pos)
         , Source_(std::move(source))
         , CheckExist_(checkExist)
         , WithTables_(withTables)
+        , IsInlineScalar_(isInlineScalar)
     {
     }
 
@@ -173,6 +174,13 @@ public:
     }
 
     bool DoInit(TContext& ctx, ISource* src) override {
+        if (IsInlineScalar_ &&
+            !ctx.IsBackwardCompatibleFeatureAvailable(MakeLangVersion(2025, 04))) {
+            ctx.Error(Source_->GetPos())
+                << "Inline subquery is not available before 2025.04";
+            return false;
+        }
+
         if (AsInner_) {
             Source_->UseAsInner();
         }
@@ -231,7 +239,7 @@ public:
     }
 
     TPtr DoClone() const final {
-        return new TSourceNode(Pos_, Source_->CloneSource(), CheckExist_, WithTables_);
+        return new TSourceNode(Pos_, Source_->CloneSource(), CheckExist_, WithTables_, IsInlineScalar_);
     }
 
 protected:
@@ -239,10 +247,11 @@ protected:
     TNodePtr Node_;
     bool CheckExist_;
     bool WithTables_;
+    bool IsInlineScalar_;
 };
 
-TNodePtr BuildSourceNode(TPosition pos, TSourcePtr source, bool checkExist, bool withTables) {
-    return new TSourceNode(pos, std::move(source), checkExist, withTables);
+TNodePtr BuildSourceNode(TPosition pos, TSourcePtr source, bool checkExist, bool withTables, bool isInlineScalar) {
+    return new TSourceNode(pos, std::move(source), checkExist, withTables, isInlineScalar);
 }
 
 class TFakeSource: public ISource {

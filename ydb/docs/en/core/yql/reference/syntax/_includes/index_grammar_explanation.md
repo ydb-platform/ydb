@@ -13,6 +13,8 @@
 
     * `secondary` — secondary index. Only `GLOBAL` is available. This is the default value.
     * `vector_kmeans_tree` — vector index. Described in detail in [{#T}](../create_table/vector_index.md).
+    * `fulltext_plain` — basic fulltext index. Described in detail in [{#T}](../create_table/fulltext_index.md).
+    * `fulltext_relevance` — fulltext index with [BM25](https://en.wikipedia.org/wiki/Okapi_BM25) statistics for relevance scoring. Described in detail in [{#T}](../create_table/fulltext_index.md).
 
 * `UNIQUE` — creates an index with uniqueness guarantee for inserted values.
 * `<index_columns>` — comma-separated list of column names from the created table that can be used for index searches. Must be specified.

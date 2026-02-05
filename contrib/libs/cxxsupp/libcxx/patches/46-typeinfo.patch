@@ -1,8 +1,8 @@
 diff --git a/include/typeinfo b/include/typeinfo
-index 888faec..94fe832 100644
+index 295b292..19a42c4 100644
 --- a/include/typeinfo
 +++ b/include/typeinfo
-@@ -335,24 +335,40 @@ public:
+@@ -337,24 +337,40 @@ public:
  
  class _LIBCPP_EXPORTED_FROM_ABI bad_cast : public exception {
  public:
@@ -40,6 +40,6 @@ index 888faec..94fe832 100644
 +class type_info : public std::type_info {};
 +#  endif
 +
- #endif // defined(_LIBCPP_ABI_VCRUNTIME)
+ #  endif // defined(_LIBCPP_ABI_VCRUNTIME)
  
- #if defined(_LIBCPP_ABI_VCRUNTIME) && _HAS_EXCEPTIONS == 0
+ #  if defined(_LIBCPP_ABI_VCRUNTIME) && _HAS_EXCEPTIONS == 0

@@ -81,10 +81,10 @@ index 0c96f76..dcc54f2 100644
  // isnormal
  
 diff --git a/include/complex b/include/complex
-index 2dc6d29..a3922bc 100644
+index bfc27bb..06ae736 100644
 --- a/include/complex
 +++ b/include/complex
-@@ -1454,6 +1454,7 @@ _LIBCPP_HIDE_FROM_ABI inline constexpr complex<double> operator""i(unsigned long
+@@ -1456,6 +1456,7 @@ _LIBCPP_HIDE_FROM_ABI inline constexpr complex<double> operator""i(unsigned long
    return {0.0, static_cast<double>(__im)};
  }
  
@@ -92,28 +92,28 @@ index 2dc6d29..a3922bc 100644
  _LIBCPP_HIDE_FROM_ABI inline constexpr complex<float> operator""if(long double __im) {
    return {0.0f, static_cast<float>(__im)};
  }
-@@ -1461,6 +1462,7 @@ _LIBCPP_HIDE_FROM_ABI inline constexpr complex<float> operator""if(long double _
+@@ -1463,6 +1464,7 @@ _LIBCPP_HIDE_FROM_ABI inline constexpr complex<float> operator""if(long double _
  _LIBCPP_HIDE_FROM_ABI inline constexpr complex<float> operator""if(unsigned long long __im) {
    return {0.0f, static_cast<float>(__im)};
  }
 +#  endif
  } // namespace complex_literals
  } // namespace literals
- #endif
+ #  endif
 diff --git a/include/tuple b/include/tuple
-index c3f7b80..550380b 100644
+index 035c67a..3e6fec7 100644
 --- a/include/tuple
 +++ b/include/tuple
-@@ -305,7 +305,7 @@ class __tuple_leaf {
+@@ -307,7 +307,7 @@ class __tuple_leaf {
  
    template <class _Tp>
    static _LIBCPP_HIDE_FROM_ABI constexpr bool __can_bind_reference() {
--#  if __has_keyword(__reference_binds_to_temporary)
-+#  if __has_keyword(__reference_binds_to_temporary) && !defined(__CUDACC__)
+-#    if __has_keyword(__reference_binds_to_temporary)
++#    if __has_keyword(__reference_binds_to_temporary) && !defined(__CUDACC__)
      return !__reference_binds_to_temporary(_Hp, _Tp);
- #  else
+ #    else
      return true;
-@@ -612,8 +612,16 @@ public:
+@@ -614,8 +614,16 @@ public:
                is_constructible<_Tp, _Up>... > {};
  
    template <class... _Up,

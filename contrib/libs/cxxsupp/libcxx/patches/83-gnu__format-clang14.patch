@@ -1,5 +1,5 @@
 diff --git a/include/__locale_dir/locale_base_api.h b/include/__locale_dir/locale_base_api.h
-index 5cbe912..3351900 100644
+index 8ed4c29..b9e1b98 100644
 --- a/include/__locale_dir/locale_base_api.h
 +++ b/include/__locale_dir/locale_base_api.h
 @@ -256,7 +256,7 @@ __mbsrtowcs(wchar_t* __dest, const char** __src, size_t __len, mbstate_t* __ps,

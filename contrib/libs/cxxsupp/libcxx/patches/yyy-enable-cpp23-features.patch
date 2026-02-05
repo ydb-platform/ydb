@@ -64,15 +64,15 @@ index 0206ce2..4302c4b 100644
  template <class _Ap, class _Bp>
  using _CopyConst = _If<is_const_v<_Ap>, const _Bp, _Bp>;
 diff --git a/include/expected b/include/expected
-index 6a2f12f..ccdbc3b 100644
+index ac2415f..d5779cd 100644
 --- a/include/expected
 +++ b/include/expected
-@@ -40,7 +40,7 @@ namespace std {
+@@ -42,7 +42,7 @@ namespace std {
+ #else // 0
+ #  include <__config>
  
- #include <__config>
- 
--#if _LIBCPP_STD_VER >= 23
-+#if _LIBCPP_STD_VER >= 20
- #  include <__expected/bad_expected_access.h>
- #  include <__expected/expected.h>
- #  include <__expected/unexpect.h>
+-#  if _LIBCPP_STD_VER >= 23
++#  if _LIBCPP_STD_VER >= 20
+ #    include <__expected/bad_expected_access.h>
+ #    include <__expected/expected.h>
+ #    include <__expected/unexpect.h>

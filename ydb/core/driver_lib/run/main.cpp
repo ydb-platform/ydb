@@ -27,6 +27,8 @@
 #include <sys/mman.h>
 #endif
 
+#include <library/cpp/svnversion/svnversion.h>
+
 #include <filesystem>
 
 namespace NKikimr {
@@ -38,8 +40,8 @@ int MainRun(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories>
 #endif
 
     TKikimrRunner::SetSignalHandlers();
-    Cout << "Starting Kikimr r" << GetArcadiaLastChange()
-         << " built by " << GetProgramBuildUser() << Endl;
+    Cout << "Starting Kikimr" << Endl;
+    Cout << GetProgramSvnVersion() << Endl;
 
     TIntrusivePtr<TKikimrRunner> runner = TKikimrRunner::CreateKikimrRunner(runConfig, std::move(factories));
     if (runner) {

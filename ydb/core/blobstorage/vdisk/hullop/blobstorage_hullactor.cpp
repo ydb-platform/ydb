@@ -304,8 +304,7 @@ namespace NKikimr {
                     break;
                 }
                 case NHullComp::ActDeleteSsts: {
-                    Y_ABORT_UNLESS(CompactionTask->GetSstsToAdd().Empty() && !CompactionTask->GetSstsToDelete().Empty(),
-                        HullDs->HullCtx->VCtx->VDiskLogPrefix);
+                    Y_ABORT_UNLESS(CompactionTask->GetSstsToAdd().Empty() && !CompactionTask->GetSstsToDelete().Empty());
                     if (CompactionTask->GetHugeBlobsToDelete().Empty() && CompactionTask->GetHugeBlobsAllocated().Empty()) {
                         ApplyCompactionResult(ctx, {}, {}, 0);
                     } else {

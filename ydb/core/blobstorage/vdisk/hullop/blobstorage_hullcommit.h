@@ -312,8 +312,7 @@ namespace NKikimr {
             , CallerInfo(callerInfo)
             , WId(wId)
         {
-            Y_VERIFY_S(!WId == (Metadata.RemovedHugeBlobs.Empty() && Metadata.AllocatedHugeBlobs.Empty()),
-                HullLogCtx->VCtx->VDiskLogPrefix);
+            Y_VERIFY_S(!WId == (Metadata.RemovedHugeBlobs.Empty() && Metadata.AllocatedHugeBlobs.Empty()));
             // we create commit message in the constructor to avoid race condition
             GenerateCommitMessage();
         }

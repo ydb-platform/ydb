@@ -36,4 +36,20 @@
     template<bool OPT1, bool OPT2>                                                                                                   \
     void N(NUnitTest::TTestContext&)
 
-
+#define Y_UNIT_TEST_OCT(N, OPT1, OPT2, OPT3)                                                                                                          \
+    template<bool OPT1, bool OPT2, bool OPT3> void N(NUnitTest::TTestContext&);                                                                       \
+    struct TTestRegistration##N {                                                                                                                     \
+        TTestRegistration##N() {                                                                                                                      \
+            TCurrentTest::AddTest(#N "-" #OPT1 "-" #OPT2 "-" #OPT3, static_cast<void (*)(NUnitTest::TTestContext&)>(&N<false, false, false>), false); \
+            TCurrentTest::AddTest(#N "+" #OPT1 "-" #OPT2 "-" #OPT3, static_cast<void (*)(NUnitTest::TTestContext&)>(&N<true, false, false>), false);  \
+            TCurrentTest::AddTest(#N "-" #OPT1 "+" #OPT2 "-" #OPT3, static_cast<void (*)(NUnitTest::TTestContext&)>(&N<false, true, false>), false);  \
+            TCurrentTest::AddTest(#N "-" #OPT1 "-" #OPT2 "+" #OPT3, static_cast<void (*)(NUnitTest::TTestContext&)>(&N<false, false, true>), false);  \
+            TCurrentTest::AddTest(#N "+" #OPT1 "+" #OPT2 "-" #OPT3, static_cast<void (*)(NUnitTest::TTestContext&)>(&N<true, true, false>), false);   \
+            TCurrentTest::AddTest(#N "-" #OPT1 "+" #OPT2 "+" #OPT3, static_cast<void (*)(NUnitTest::TTestContext&)>(&N<false, true, true>), false);   \
+            TCurrentTest::AddTest(#N "+" #OPT1 "-" #OPT2 "+" #OPT3, static_cast<void (*)(NUnitTest::TTestContext&)>(&N<true, false, true>), false);   \
+            TCurrentTest::AddTest(#N "+" #OPT1 "+" #OPT2 "+" #OPT3, static_cast<void (*)(NUnitTest::TTestContext&)>(&N<true, true, true>), false);    \
+        }                                                                                                                                             \
+    };                                                                                                                                                \
+    static TTestRegistration##N testRegistration##N;                                                                                                  \
+    template<bool OPT1, bool OPT2, bool OPT3>                                                                                                         \
+    void N(NUnitTest::TTestContext&)

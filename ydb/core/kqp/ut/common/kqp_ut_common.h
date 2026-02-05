@@ -468,5 +468,27 @@ private:
 
 void CheckOwner(NYdb::NTable::TSession& session, const TString& path, const TString& name);
 
+template <bool UseQueryService>
+NYdb::TStatus ExecuteDDL(NYdb::NQuery::TSession& querySession, NYdb::NTable::TSession& tableSession, const std::string& query) {
+    if constexpr (UseQueryService) {
+        return querySession.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    } else {
+        return tableSession.ExecuteSchemeQuery(query).ExtractValueSync();
+    }
+}
+
+template <bool UseQueryService>
+std::pair<NYdb::TStatus, std::vector<NYdb::TResultSet>> ExecuteDML(
+    NYdb::NQuery::TSession& querySession, NYdb::NTable::TSession& tableSession, const std::string& query)
+{
+    if constexpr (UseQueryService) {
+        auto result = querySession.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        return {result, result.GetResultSets()};
+    } else {
+        auto result = tableSession.ExecuteDataQuery(query, NYdb::NTable::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        return {result, result.GetResultSets()};
+    }
+}
+
 } // namespace NKqp
 } // namespace NKikimr

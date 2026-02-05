@@ -484,6 +484,7 @@ public:
     explicit TAstListNodeImpl(TPosition pos);
     TAstListNodeImpl(TPosition pos, TVector<TNodePtr> nodes);
     void CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode::TPtr>& exprs) override;
+    const TString* GetSourceName() const override;
 
 protected:
     TNodePtr DoClone() const final;
@@ -1408,6 +1409,12 @@ struct TTopicConsumerSettings {
     NYql::TResetableSetting<TNodePtr, void> AvailabilityPeriod;
     NYql::TResetableSetting<TNodePtr, void> ReadFromTs;
     NYql::TResetableSetting<TNodePtr, void> SupportedCodecs;
+    TNodePtr Type;
+    TNodePtr KeepMessagesOrder;
+    TNodePtr DefaultProcessingTimeout;
+    TNodePtr MaxProcessingAttempts;
+    TNodePtr DeadLetterPolicy;
+    TNodePtr DeadLetterQueue;
 };
 
 struct TTopicConsumerDescription {

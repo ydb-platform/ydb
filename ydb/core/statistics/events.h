@@ -32,7 +32,8 @@ struct TStatEqWidthHistogram {
     std::shared_ptr<TEqWidthHistogram> Data;
 };
 
-enum EStatType {
+// NB: enum values are serialized into the .metadata/_statistics table.
+enum class EStatType {
     SIMPLE = 0,
     SIMPLE_COLUMN = 1,
     COUNT_MIN_SKETCH = 2,

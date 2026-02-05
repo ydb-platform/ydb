@@ -1189,6 +1189,13 @@ TNodeResult TSqlExpression::UnaryCasualExpr(const TUnaryCasualExprRule& node, co
             case TRule_unary_subexpr_suffix::TBlock1::TBlock1::kAlt3: {
                 // dot
                 if (lastExpr) {
+                    if (TSourcePtr source = MoveOutIfSource(lastExpr)) {
+                        lastExpr = ToSubSelectNode(std::move(source));
+                        if (!lastExpr) {
+                            return std::unexpected(ESQLError::Basic);
+                        }
+                    }
+
                     ids.push_back(lastExpr);
                 }
 
@@ -1243,7 +1250,7 @@ TNodeResult TSqlExpression::UnaryCasualExpr(const TUnaryCasualExprRule& node, co
     if (suffix.HasBlock2()) {
         Ctx_.IncrementMonCounter("sql_errors", "CollateUnarySubexpr");
         Error() << "unary_subexpr: COLLATE is not implemented yet";
-        // FIXME(vityaman): return an error
+        return std::unexpected(ESQLError::Basic);
     }
 
     return Wrap(std::move(lastExpr));
@@ -2604,17 +2611,42 @@ bool TSqlExpression::IsTopLevelGroupBy() const {
            SmartParenthesisMode_ == ESmartParenthesis::GroupBy;
 }
 
+bool TSqlExpression::EnsureSubSelectAvailable(const ISource& source) {
+    if (!IsBackwardCompatibleFeatureAvailable(MakeLangVersion(2025, 04))) {
+        Ctx_.Error(source.GetPos()) << "Inline subquery is not available before 2025.04";
+        return false;
+    }
+
+    return true;
+}
+
 TSourcePtr TSqlExpression::LangVersionedSubSelect(TSourcePtr source) {
     if (!source) {
         return nullptr;
     }
 
-    if (!IsSourceAllowed_ && !IsBackwardCompatibleFeatureAvailable(MakeLangVersion(2025, 04))) {
-        Ctx_.Error(source->GetPos()) << "Inline subquery is not available before 2025.04";
+    if (IsSourceAllowed_) {
+        return source;
+    }
+
+    if (!EnsureSubSelectAvailable(*source)) {
         return nullptr;
     }
 
     return source;
+}
+
+TNodePtr TSqlExpression::ToSubSelectNode(TSourcePtr source) {
+    if (IsSubqueryRef(source)) {
+        return TNonNull(TNodePtr(std::move(source)));
+    }
+
+    if (!EnsureSubSelectAvailable(*source)) {
+        return nullptr;
+    }
+
+    source->UseAsInner();
+    return BuildSourceNode(source->GetPos(), source);
 }
 
 TNodeResult TSqlExpression::SelectSubExpr(const TRule_select_subexpr& node) {
@@ -2635,12 +2667,11 @@ TNodeResult TSqlExpression::SelectSubExpr(const TRule_select_subexpr& node) {
     }
 
     if (TSourcePtr source = MoveOutIfSource(*result)) {
-        if (IsSourceAllowed_ || IsSubqueryRef(source)) {
+        if (IsSourceAllowed_) {
             return TNonNull(TNodePtr(std::move(source)));
         }
 
-        source->UseAsInner();
-        result = Wrap(BuildSourceNode(source->GetPos(), source));
+        result = Wrap(ToSubSelectNode(std::move(source)));
     }
 
     return result;

@@ -102,7 +102,7 @@
                                                                                 "PlanNodeType": "Connection",
                                                                                 "Plans": [
                                                                                     {
-                                                                                        "Node Type": "Top-InnerJoin (MapJoin)-Filter",
+                                                                                        "Node Type": "Top-InnerJoin (Map)-Filter",
                                                                                         "Operators": [
                                                                                             {
                                                                                                 "Inputs": [
@@ -127,7 +127,7 @@
                                                                                                         "ExternalPlanNodeId": 13
                                                                                                     }
                                                                                                 ],
-                                                                                                "Name": "InnerJoin (MapJoin)"
+                                                                                                "Name": "InnerJoin (Map)"
                                                                                             },
                                                                                             {
                                                                                                 "Inputs": [
@@ -245,7 +245,7 @@
                                                                                 "PlanNodeType": "Connection",
                                                                                 "Plans": [
                                                                                     {
-                                                                                        "Node Type": "Top-LeftOnlyJoin (MapJoin)",
+                                                                                        "Node Type": "Top-LeftOnlyJoin (Map)",
                                                                                         "Operators": [
                                                                                             {
                                                                                                 "Inputs": [
@@ -267,7 +267,7 @@
                                                                                                         "ExternalPlanNodeId": 3
                                                                                                     }
                                                                                                 ],
-                                                                                                "Name": "LeftOnlyJoin (MapJoin)"
+                                                                                                "Name": "LeftOnlyJoin (Map)"
                                                                                             }
                                                                                         ],
                                                                                         "PlanNodeId": 7,

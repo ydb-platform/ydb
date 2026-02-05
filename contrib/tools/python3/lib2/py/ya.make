@@ -11,6 +11,8 @@ NO_PYTHON_INCLUDES()
 SRCDIR(contrib/tools/python3/Lib)
 
 NO_CHECK_IMPORTS(
+    _ios_support
+    _pyrepl.*
     antigravity
     asyncio.unix_events
     asyncio.windows_events
@@ -20,6 +22,7 @@ NO_CHECK_IMPORTS(
     curses.*
     dbm.gnu
     dbm.ndbm
+    dbm.sqlite3
     distutils._msvccompiler
     distutils.command.bdist_msi
     distutils.msvc9compiler
@@ -45,23 +48,52 @@ PY_SRCS(
     __future__.py
     __hello__.py
     _aix_support.py
+    _android_support.py
+    _apple_support.py
     _collections_abc.py
+    _colorize.py
     _compat_pickle.py
     _compression.py
+    _ios_support.py
     _markupbase.py
+    _opcode_metadata.py
     _osx_support.py
     _py_abc.py
     _pydatetime.py
     _pydecimal.py
     _pyio.py
     _pylong.py
+    _pyrepl/__init__.py
+    _pyrepl/__main__.py
+    _pyrepl/_minimal_curses.py
+    _pyrepl/_threading_handler.py
+    _pyrepl/base_eventqueue.py
+    _pyrepl/commands.py
+    _pyrepl/completing_reader.py
+    _pyrepl/console.py
+    _pyrepl/curses.py
+    _pyrepl/fancy_termios.py
+    _pyrepl/historical_reader.py
+    _pyrepl/input.py
+    _pyrepl/keymap.py
+    _pyrepl/main.py
+    _pyrepl/pager.py
+    _pyrepl/reader.py
+    _pyrepl/readline.py
+    _pyrepl/simple_interact.py
+    _pyrepl/trace.py
+    _pyrepl/types.py
+    _pyrepl/unix_console.py
+    _pyrepl/unix_eventqueue.py
+    _pyrepl/utils.py
+    _pyrepl/windows_console.py
+    _pyrepl/windows_eventqueue.py
     _sitebuiltins.py
     _strptime.py
     _sysconfigdata_arcadia.py
     _threading_local.py
     _weakrefset.py
     abc.py
-    aifc.py
     antigravity.py
     argparse.py
     ast.py
@@ -104,15 +136,11 @@ PY_SRCS(
     bz2.py
     cProfile.py
     calendar.py
-    cgi.py
-    cgitb.py
-    chunk.py
     cmd.py
     code.py
     codecs.py
     codeop.py
     collections/__init__.py
-    collections/abc.py
     colorsys.py
     compileall.py
     concurrent/__init__.py
@@ -125,7 +153,6 @@ PY_SRCS(
     contextvars.py
     copy.py
     copyreg.py
-    crypt.py
     csv.py
     ctypes/__init__.py
     ctypes/_aix.py
@@ -147,6 +174,7 @@ PY_SRCS(
     dbm/dumb.py
     dbm/gnu.py
     dbm/ndbm.py
+    dbm/sqlite3.py
     decimal.py
     difflib.py
     dis.py
@@ -331,7 +359,6 @@ PY_SRCS(
     http/cookies.py
     http/server.py
     imaplib.py
-    imghdr.py
     importlib/__init__.py
     importlib/_abc.py
     importlib/_bootstrap.py
@@ -345,12 +372,13 @@ PY_SRCS(
     importlib/metadata/_itertools.py
     importlib/metadata/_meta.py
     importlib/metadata/_text.py
+    importlib/metadata/diagnose.py
     importlib/readers.py
     importlib/resources/__init__.py
     importlib/resources/_adapters.py
     importlib/resources/_common.py
+    importlib/resources/_functional.py
     importlib/resources/_itertools.py
-    importlib/resources/_legacy.py
     importlib/resources/abc.py
     importlib/resources/readers.py
     importlib/resources/simple.py
@@ -372,13 +400,8 @@ PY_SRCS(
     logging/handlers.py
     lzma.py
     mailbox.py
-    mailcap.py
     mimetypes.py
     modulefinder.py
-    msilib/__init__.py
-    msilib/schema.py
-    msilib/sequence.py
-    msilib/text.py
     multiprocessing/__init__.py
     multiprocessing/connection.py
     multiprocessing/context.py
@@ -403,7 +426,6 @@ PY_SRCS(
     multiprocessing/synchronize.py
     multiprocessing/util.py
     netrc.py
-    nntplib.py
     ntpath.py
     nturl2path.py
     numbers.py
@@ -411,11 +433,12 @@ PY_SRCS(
     operator.py
     optparse.py
     os.py
-    pathlib.py
+    pathlib/__init__.py
+    pathlib/_abc.py
+    pathlib/_local.py
     pdb.py
     pickle.py
     pickletools.py
-    pipes.py
     pkgutil.py
     platform.py
     plistlib.py
@@ -450,7 +473,6 @@ PY_SRCS(
     signal.py
     site.py
     smtplib.py
-    sndhdr.py
     socket.py
     socketserver.py
     sqlite3/__init__.py
@@ -467,12 +489,11 @@ PY_SRCS(
     stringprep.py
     struct.py
     subprocess.py
-    sunau.py
     symtable.py
-    sysconfig.py
+    sysconfig/__init__.py
+    sysconfig/__main__.py
     tabnanny.py
     tarfile.py
-    telnetlib.py
     tempfile.py
     textwrap.py
     this.py
@@ -510,7 +531,6 @@ PY_SRCS(
     urllib/request.py
     urllib/response.py
     urllib/robotparser.py
-    uu.py
     uuid.py
     venv/__init__.py
     venv/__main__.py
@@ -525,7 +545,6 @@ PY_SRCS(
     wsgiref/types.py
     wsgiref/util.py
     wsgiref/validate.py
-    xdrlib.py
     xml/__init__.py
     xml/dom/NodeFilter.py
     xml/dom/__init__.py

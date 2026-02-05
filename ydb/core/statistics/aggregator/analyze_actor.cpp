@@ -116,7 +116,7 @@ void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&
 
     if (entry.Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
         SA_LOG_W("Navigate request failed with " << entry.Status
-            << ", operationId: " << OperationId
+            << ", operationId: " << OperationId.Quote()
             << ", PathId: " << PathId
             << ", DatabaseName: " << DatabaseName);
 
@@ -222,7 +222,7 @@ void TAnalyzeActor::HandleStage1(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
         auto simpleStats = col.ExtractSimpleStats(rowCount, result.AggColumns);
         Results.emplace_back(
             col.Tag,
-            NKikimr::NStat::SIMPLE_COLUMN,
+            EStatType::SIMPLE_COLUMN,
             simpleStats.SerializeAsString());
 
         for (auto type : supportedStatTypes) {

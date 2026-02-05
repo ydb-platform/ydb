@@ -11632,6 +11632,29 @@ Y_UNIT_TEST(NamedNode) {
         )sql");
     UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
 }
+
+Y_UNIT_TEST(LangVerBefore202504) {
+    NSQLTranslation::TTranslationSettings s;
+    s.LangVer = 202502;
+
+    NYql::TAstParseResult res;
+    res = SqlToYqlWithSettings(R"sql(SELECT 1 + (SELECT 1);)sql", s);
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "is not available");
+
+    res = SqlToYqlWithSettings(R"sql(SELECT (SELECT 1);)sql", s);
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "is not available");
+
+    res = SqlToYqlWithSettings(R"sql($x = SELECT 1 + (SELECT 1); SELECT $x;)sql", s);
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "is not available");
+
+    res = SqlToYqlWithSettings(R"sql($x = SELECT (SELECT 1); SELECT $x;)sql", s);
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "is not available");
+
+    // Historically, there was a bug, because of which a langver was not checked.
+    res = SqlToYqlWithSettings(R"sql($x = (SELECT 1);)sql", s);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
 } // Y_UNIT_TEST_SUITE(InlineUncorrelatedSubquery)
 
 Y_UNIT_TEST_SUITE(YqlSelect) {

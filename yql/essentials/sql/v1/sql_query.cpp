@@ -3188,7 +3188,13 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
             }
 
             TSet<TString> names;
-            SubstParameters(first->first, Nothing(), &names);
+            try {
+                SubstParameters(first->first, Nothing(), &names);
+            } catch (const NYql::TErrorException& e) {
+                ctx.Issues.AddIssue(ExceptionToIssue(e, ctx.Pos()));
+                return {};
+            }
+
             for (const auto& name : names) {
                 auto namedNode = query.GetNamedNode(name);
                 if (!namedNode) {
@@ -3257,7 +3263,13 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
         }
 
         TSet<TString> names;
-        SubstParameters(urlLiteral.first, Nothing(), &names);
+        try {
+            SubstParameters(urlLiteral.first, Nothing(), &names);
+        } catch (const NYql::TErrorException& e) {
+            ctx.Issues.AddIssue(ExceptionToIssue(e, ctx.Pos()));
+            return {};
+        }
+
         for (const auto& name : names) {
             auto namedNode = query.GetNamedNode(name);
             if (!namedNode) {

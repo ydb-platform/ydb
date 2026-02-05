@@ -1,13 +1,16 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/util/actorsys_test/testactorsys.h>
 
+#include <ydb/core/mon/mon.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_direct_actor.h>
+
 
 using namespace NKikimr;
 using namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect;
 using namespace NYdb::NBS::NBlockStore;
 using namespace NYdb::NBS;
+using namespace NMonitoring;
 
 namespace {
 
@@ -47,9 +50,18 @@ NYdb::NBS::NProto::TStorageConfig CreateStorageConfig() {
     return storageConfig;
 }
 
+NKikimrBlockStore::TVolumeConfig CreateVolumeConfig() {
+    NKikimrBlockStore::TVolumeConfig volumeConfig;
+    volumeConfig.SetBlockSize(4096);
+    auto* partition = volumeConfig.AddPartitions();
+    partition->SetBlockCount(32768);
+    return volumeConfig;
+}
+
 TActorId CreatePartitionActor(TEnvironmentSetup& env) {
+    TDynamicCounterPtr counters = MakeIntrusive<TDynamicCounters>();
     auto partition = env.Runtime->Register(
-        new TPartitionActor(CreateStorageConfig()),
+        new TPartitionActor(CreateStorageConfig(), CreateVolumeConfig(), counters),
         1 // nodeId
     );
 

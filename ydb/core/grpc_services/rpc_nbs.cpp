@@ -7,6 +7,7 @@
 
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_direct.h>
 #include <ydb/core/nbs/cloud/blockstore/config/storage.pb.h>
+#include <ydb/core/protos/blockstore_config.pb.h>
 
 namespace NKikimr::NGRpcService {
 
@@ -33,20 +34,36 @@ public:
     void Bootstrap() {
         Become(&TThis::StateWork);
 
+        // Extract parameters from request
+        const auto* request = GetProtoRequest();
+        const TString storagePoolName = request->GetStoragePoolName();
+        const ui32 blockSize = request->GetBlockSize() ? request->GetBlockSize() : 4096;
+        const ui64 blocksCount = request->GetBlocksCount() ? request->GetBlocksCount() : 32768;
+
         NYdb::NBS::NProto::TStorageConfig storageConfig;
-        storageConfig.SetDDiskPoolName("ddp1");
-        storageConfig.SetPersistentBufferDDiskPoolName("ddp1");
+        storageConfig.SetDDiskPoolName(storagePoolName);
+        storageConfig.SetPersistentBufferDDiskPoolName(storagePoolName);
         // One trace per 100ms should be sufficient for observability.
         storageConfig.SetTraceSamplePeriod(100);
+
+        NKikimrBlockStore::TVolumeConfig volumeConfig;
+        volumeConfig.SetBlockSize(blockSize);
+
+        auto* partition = volumeConfig.AddPartitions();
+        partition->SetBlockCount(blocksCount);
 
         // Create partition actor
         auto partition_actor_id = NYdb::NBS::NBlockStore::NStorage::NPartitionDirect::CreatePartitionTablet(
             SelfId(),
-            std::move(storageConfig));
+            std::move(storageConfig),
+            std::move(volumeConfig));
 
         LOG_INFO(TActivationContext::AsActorContext(), NKikimrServices::NBS_PARTITION,
-            "Grpc service: created partition actor with id: %s",
-            partition_actor_id.ToString().data());
+            "Grpc service: created partition actor with id: %s, storagePoolName: %s, blockSize: %u, blocksCount: %lu",
+            partition_actor_id.ToString().data(),
+            storagePoolName.data(),
+            blockSize,
+            blocksCount);
 
         Ydb::Nbs::CreatePartitionResult result;
         result.SetTabletId(partition_actor_id.ToString());

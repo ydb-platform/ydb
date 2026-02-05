@@ -48,12 +48,12 @@ class TExpression {
 
 class TJoinCondition {
   public:
-    TJoinCondition(TExpression expr);
+    TJoinCondition(const TExpression& expr);
     TInfoUnit GetLeftIU();
     TInfoUnit GetRightIU();
     void ExtractExpressions(TNodeOnNodeOwnedMap& map);
 
-    TExpression Expr;
+    TExpression& Expr;
     TVector<TInfoUnit> LeftIUs;
     TVector<TInfoUnit> RightIUs;
 
@@ -65,8 +65,8 @@ class TJoinCondition {
 TExpression MakeColumnAccess(TInfoUnit column, const TExprContext* ctx, const TPlanProps* props = nullptr);
 TExpression MakeConstant(TString type, TString value, const TExprContext* ctx);
 TExpression MakeNothing(TPositionHandle pos, const TTypeAnnotationNode* type, const TExprContext* ctx);
-TExpression MakeConjunct(TVector<TExpression> vec, bool pgSyntax = false);
-TExpression MakeBinaryPredicate(TString callable, TExpression left, TExpression right);
+TExpression MakeConjunct(const TVector<TExpression>& vec, bool pgSyntax = false);
+TExpression MakeBinaryPredicate(TString callable, const TExpression& left, const TExpression& right);
 
 void GetAllMembers(TExprNode::TPtr node, TVector<TInfoUnit> &IUs);
 }

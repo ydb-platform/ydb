@@ -81,9 +81,9 @@ class IOperator {
 
     const TTypeAnnotationNode* GetIUType(const TInfoUnit& iu);
 
-    virtual TVector<TExpression> GetExpressions() { return {}; }
+    virtual TVector<std::reference_wrapper<TExpression>> GetExpressions() { return {}; }
 
-    virtual void ApplyReplaceMap(TNodeOnNodeOwnedMap map, TRBOContext & ctx) { Y_UNUSED(map); Y_UNUSED(ctx); }
+    virtual void ApplyReplaceMap(const TNodeOnNodeOwnedMap& map, TRBOContext & ctx) { Y_UNUSED(map); Y_UNUSED(ctx); }
 
     virtual void ReplaceChild(std::shared_ptr<IOperator> oldChild, std::shared_ptr<IOperator> newChild);
 
@@ -126,7 +126,7 @@ class IUnaryOperator : public IOperator {
   public:
     IUnaryOperator(EOperator kind, TPositionHandle pos) : IOperator(kind, pos) {}
     IUnaryOperator(EOperator kind, TPositionHandle pos, std::shared_ptr<IOperator> input) : IOperator(kind, pos) { Children.push_back(input); }
-    std::shared_ptr<IOperator> &GetInput() { return Children[0]; }
+    std::shared_ptr<IOperator> & GetInput() { return Children[0]; }
     void SetInput(std::shared_ptr<IOperator> newInput) { Children[0] = newInput; }
 
     virtual void ComputeMetadata(TRBOContext & ctx, TPlanProps & planProps) override;
@@ -141,8 +141,8 @@ class IBinaryOperator : public IOperator {
         Children.push_back(rightInput);
     }
 
-    std::shared_ptr<IOperator> &GetLeftInput() { return Children[0]; }
-    std::shared_ptr<IOperator> &GetRightInput() { return Children[1]; }
+    std::shared_ptr<IOperator> & GetLeftInput() { return Children[0]; }
+    std::shared_ptr<IOperator> & GetRightInput() { return Children[1]; }
 
     void SetLeftInput(std::shared_ptr<IOperator> newInput) { Children[0] = newInput; }
     void SetRightInput(std::shared_ptr<IOperator> newInput) { Children[1] = newInput; }
@@ -184,7 +184,7 @@ class TOpRead : public IOperator {
 
 class TMapElement {
 public:
-    TMapElement(const TInfoUnit& elementName, TExpression expr);
+    TMapElement(const TInfoUnit& elementName, const TExpression& expr);
     TMapElement(const TInfoUnit& elementName, const TInfoUnit& rename);
 
     bool IsRename() const;
@@ -206,11 +206,11 @@ class TOpMap : public IUnaryOperator {
     virtual TVector<TInfoUnit> GetOutputIUs() override;
     virtual TVector<TInfoUnit> GetUsedIUs(TPlanProps& props) override;
     virtual TVector<TInfoUnit> GetSubplanIUs(TPlanProps& props) override;
-    virtual TVector<TExpression> GetExpressions() override;
-    virtual TVector<TExpression> GetComplexExpressions();
+    virtual TVector<std::reference_wrapper<TExpression>> GetExpressions() override;
+    virtual TVector<std::reference_wrapper<TExpression>> GetComplexExpressions();
     TVector<std::pair<TInfoUnit, TInfoUnit>> GetRenames() const;
     TVector<std::pair<TInfoUnit, TInfoUnit>> GetRenamesWithTransforms(TPlanProps& props) const;
-    virtual void ApplyReplaceMap(TNodeOnNodeOwnedMap map, TRBOContext & ctx) override;
+    virtual void ApplyReplaceMap(const TNodeOnNodeOwnedMap& map, TRBOContext & ctx) override;
 
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
                    const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList = {}) override;
@@ -283,14 +283,14 @@ public:
 
 class TOpFilter: public IUnaryOperator {
 public:
-    TOpFilter(std::shared_ptr<IOperator> input, TPositionHandle pos, TExpression filterExpr);
+    TOpFilter(std::shared_ptr<IOperator> input, TPositionHandle pos, const TExpression& filterExpr);
 
     virtual TVector<TInfoUnit> GetOutputIUs() override;
     virtual TVector<TInfoUnit> GetUsedIUs(TPlanProps& props) override;
     virtual TVector<TInfoUnit> GetSubplanIUs(TPlanProps& props) override;
     virtual TString ToString(TExprContext& ctx) override;
-    virtual TVector<TExpression> GetExpressions() override;
-    virtual void ApplyReplaceMap(TNodeOnNodeOwnedMap map, TRBOContext & ctx) override;
+    virtual TVector<std::reference_wrapper<TExpression>> GetExpressions() override;
+    virtual void ApplyReplaceMap(const TNodeOnNodeOwnedMap& map, TRBOContext & ctx) override;
 
     TVector<TInfoUnit> GetFilterIUs(TPlanProps& props) const;
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap, TExprContext &ctx, const THashSet<TInfoUnit, TInfoUnit::THashFunction> &stopList = {}) override;
@@ -333,7 +333,7 @@ class TOpUnionAll : public IBinaryOperator {
 
 class TOpLimit : public IUnaryOperator {
   public:
-    TOpLimit(std::shared_ptr<IOperator> input, TPositionHandle pos, TExpression limitCond);
+    TOpLimit(std::shared_ptr<IOperator> input, TPositionHandle pos, const TExpression& limitCond);
     virtual TVector<TInfoUnit> GetOutputIUs() override;
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap, TExprContext &ctx, const THashSet<TInfoUnit, TInfoUnit::THashFunction> &stopList = {}) override;
     virtual TString ToString(TExprContext& ctx) override;

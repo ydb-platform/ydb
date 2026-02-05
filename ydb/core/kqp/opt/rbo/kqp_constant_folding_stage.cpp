@@ -96,7 +96,7 @@ void TConstantFoldingStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
             auto expressions = it.Current->GetExpressions();
             bool affected = false;
             for (auto e : expressions) {
-                auto lambda = TCoLambda(e.Node);
+                auto lambda = TCoLambda(e.get().Node);
                 TVector<std::pair<TExprNode::TPtr, TExprNode::TPtr>> extractedExprs;
                 ExtractConstantExprs(lambda.Body().Ptr(), extractedExprs, ctx.ExprCtx, foldUdfs);
                 if (!extractedExprs.empty()) {

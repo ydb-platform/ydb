@@ -420,7 +420,7 @@ TString TOpRead::ToString(TExprContext& ctx) {
     return res;
 }
 
-TMapElement::TMapElement(const TInfoUnit& elementName, TExpression expr)
+TMapElement::TMapElement(const TInfoUnit& elementName, const TExpression& expr)
     : ElementName(elementName)
     , Expr(expr) {
 }
@@ -470,24 +470,24 @@ TVector<TInfoUnit> TOpMap::GetUsedIUs(TPlanProps& props) {
     TVector<TInfoUnit> result;
 
     for (auto expr : GetExpressions()) {
-        auto usedIUs = expr.GetInputIUs(false, true);
+        auto usedIUs = expr.get().GetInputIUs(false, true);
         AddUnique<TInfoUnit>(usedIUs, result);
     }
 
     return result;
 }
 
-TVector<TExpression> TOpMap::GetExpressions() {
-    TVector<TExpression> result;
-    for (const auto& mapElement : MapElements) {
+TVector<std::reference_wrapper<TExpression>> TOpMap::GetExpressions() {
+    TVector<std::reference_wrapper<TExpression>> result;
+    for (auto& mapElement : MapElements) {
         result.push_back(mapElement.GetExpression());
     }
     return result;
 }
 
-TVector<TExpression> TOpMap::GetComplexExpressions() {
-    TVector<TExpression> result;
-    for (const auto& mapElement : MapElements) {
+TVector<std::reference_wrapper<TExpression>> TOpMap::GetComplexExpressions() {
+    TVector<std::reference_wrapper<TExpression>> result;
+    for (auto& mapElement : MapElements) {
         if (!mapElement.IsRename()) {
             result.push_back(mapElement.GetExpression());
         }
@@ -579,7 +579,7 @@ void TOpMap::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunc
     MapElements = std::move(newMapElements);
 }
 
-void TOpMap::ApplyReplaceMap(TNodeOnNodeOwnedMap map, TRBOContext& ctx) {
+void TOpMap::ApplyReplaceMap(const TNodeOnNodeOwnedMap& map, TRBOContext& ctx) {
     TOptimizeExprSettings settings(&ctx.TypeCtx);
     for (size_t i = 0; i < MapElements.size(); i++) {
         if (!MapElements[i].IsRename()) {
@@ -684,7 +684,7 @@ TString TOpProject::ToString(TExprContext& ctx) {
  * OpFilter operator methods
  */
 
-TOpFilter::TOpFilter(std::shared_ptr<IOperator> input, TPositionHandle pos, TExpression filterExpr)
+TOpFilter::TOpFilter(std::shared_ptr<IOperator> input, TPositionHandle pos, const TExpression& filterExpr)
     : IUnaryOperator(EOperator::Filter, pos, input)
     , FilterExpr(filterExpr) {
 }
@@ -697,11 +697,11 @@ void TOpFilter::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashF
     FilterExpr.ApplyRenames(renameMap);
 }
 
-TVector<TExpression> TOpFilter::GetExpressions() {
+TVector<std::reference_wrapper<TExpression>> TOpFilter::GetExpressions() {
     return {FilterExpr};
 }
 
-void TOpFilter::ApplyReplaceMap(TNodeOnNodeOwnedMap map, TRBOContext & ctx) {
+void TOpFilter::ApplyReplaceMap(const TNodeOnNodeOwnedMap& map, TRBOContext & ctx) {
     TOptimizeExprSettings settings(&ctx.TypeCtx);
     FilterExpr.ApplyReplaceMap(map, ctx);
 }
@@ -725,75 +725,6 @@ TVector<TInfoUnit> TOpFilter::GetSubplanIUs(TPlanProps& props) {
     }
     return res;
 }
-
-bool TestAndExtractEqualityPredicate(TExprNode::TPtr pred, TExprNode::TPtr& leftArg, TExprNode::TPtr& rightArg) {
-    if (pred->IsCallable("PgResolvedOp") && pred->Child(0)->Content() == "=") {
-        leftArg = pred->Child(2);
-        rightArg = pred->Child(3);
-        return true;
-    } else if (pred->IsCallable("==")) {
-        leftArg = pred->Child(0);
-        rightArg = pred->Child(1);
-        return true;
-    }
-    return false;
-}
-/*
-TConjunctInfo TOpFilter::GetConjunctInfo(TPlanProps& props) const {
-    TConjunctInfo res;
-
-    auto lambdaBody = TCoLambda(FilterLambda).Body().Ptr();
-    if (lambdaBody->IsCallable("ToPg")) {
-        lambdaBody = lambdaBody->ChildPtr(0);
-    }
-
-    TVector<TExprNode::TPtr> conjuncts;
-    if (lambdaBody->IsCallable("And")) {
-        for (auto conj : lambdaBody->Children()) {
-            conjuncts.push_back(conj);
-        }
-    } else {
-        conjuncts.push_back(lambdaBody);
-    }
-
-    for (auto conj : conjuncts) {
-        auto conjObj = conj;
-        bool fromPg = false;
-
-        if (conj->IsCallable("FromPg")) {
-            conjObj = conj->ChildPtr(0);
-            fromPg = true;
-        }
-
-        TExprNode::TPtr leftArg;
-        TExprNode::TPtr rightArg;
-        if (TestAndExtractEqualityPredicate(conjObj, leftArg, rightArg)) {
-            TVector<TInfoUnit> conjIUs;
-            GetAllMembers(conj, conjIUs, props, false, true);
-
-            if (leftArg->IsCallable("Member") && rightArg->IsCallable("Member") && conjIUs.size() >= 2) {
-                TVector<TInfoUnit> leftIUs;
-                TVector<TInfoUnit> rightIUs;
-                GetAllMembers(leftArg, leftIUs, props, false, true);
-                GetAllMembers(rightArg, rightIUs, props, false, true);
-                res.JoinConditions.push_back(TJoinConditionInfo(conjObj, leftIUs[0], rightIUs[0]));
-            }
-            else {
-                TVector<TInfoUnit> conjIUs;
-                GetAllMembers(conj, conjIUs, props, false, true);
-                res.Filters.push_back(TFilterInfo(conj, conjIUs, fromPg));
-            }
-        } else {
-            TVector<TInfoUnit> conjIUs;
-            GetAllMembers(conj, conjIUs, props, false, true);
-            res.Filters.push_back(TFilterInfo(conj, conjIUs, fromPg));
-        }
-    }
-
-    return res;
-}
-
-*/
 
 TString TOpFilter::ToString(TExprContext& ctx) {
     Y_UNUSED(ctx);
@@ -895,7 +826,7 @@ TString TOpUnionAll::ToString(TExprContext& ctx) {
  * OpLimit operator methods
  */
 
-TOpLimit::TOpLimit(std::shared_ptr<IOperator> input, TPositionHandle pos, TExpression limitCond)
+TOpLimit::TOpLimit(std::shared_ptr<IOperator> input, TPositionHandle pos, const TExpression& limitCond)
     : IUnaryOperator(EOperator::Limit, pos, input), LimitCond(limitCond) {}
 
 TVector<TInfoUnit> TOpLimit::GetOutputIUs() { return GetInput()->GetOutputIUs(); }

@@ -26,6 +26,7 @@ from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
 import ydb.core.protos.blobstorage_config_pb2 as bs
 from ydb.tests.library.predicates.blobstorage import blobstorage_controller_has_started_on_some_node
 from ydb.tests.library.clients.kikimr_config_client import config_client_factory
+from ydb.tests.library.clients.kikimr_monitoring import KikimrMonitor
 
 
 logger = logging.getLogger(__name__)
@@ -923,10 +924,15 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         return name
 
     def __wait_for_bs_controller_to_start(self, timeout_seconds=240, token=None):
-        if token:
-            for node in self.nodes.values():
-                node._monitor_token = token
-        monitors = [node.monitor for node in self.nodes.values()]
+        monitors = [
+            KikimrMonitor(
+                node.host,
+                node.mon_port,
+                use_https=getattr(node, 'mon_uses_https', False),
+                token=token
+            )
+            for node in self.nodes.values()
+        ]
 
         def predicate():
             return blobstorage_controller_has_started_on_some_node(monitors)

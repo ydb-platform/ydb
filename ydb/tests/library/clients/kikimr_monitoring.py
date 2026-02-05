@@ -5,6 +5,7 @@ import collections
 import ssl
 import urllib.request
 
+
 class KikimrMonitor(object):
     def __init__(self, host, mon_port, update_interval_seconds=1.0, use_https=False, token=None):
         super(KikimrMonitor, self).__init__()

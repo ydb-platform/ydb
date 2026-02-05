@@ -673,7 +673,6 @@ public:
         , HashFunc(std::move(hashFunc))
     {
         TTypeInfoHelper helper;
-        YQL_ENSURE(OutputWidth_ > KeyColumns_.size());
 
         TVector<const NMiniKQL::TType*> blockTypes;
         for (auto& columnType : OutputType_->GetElements()) {

@@ -13,8 +13,7 @@ namespace NDataShard {
 
 class TTableInfo;
 
-IActor* CreateS3Downloader(const TActorId& dataShard, ui64 txId, const NKikimrSchemeOp::TRestoreTask& task, const TTableInfo& info,
-    const TString& userSID);
+IActor* CreateS3Downloader(const TActorId& dataShard, ui64 txId, const NKikimrSchemeOp::TRestoreTask& task, const TTableInfo& info);
 
 } // NDataShard
 } // NKikimr

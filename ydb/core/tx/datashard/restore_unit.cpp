@@ -12,11 +12,10 @@ private:
         const TActorContext& ctx,
         ui64 txId,
         const NKikimrSchemeOp::TRestoreTask& restore,
-        const TTableInfo& tableInfo,
-        const TString& userSID) const
+        const TTableInfo& tableInfo) const
     {
         return ctx.Register(
-            CreateS3Downloader(DataShard.SelfId(), txId, restore, tableInfo, userSID),
+            CreateS3Downloader(DataShard.SelfId(), txId, restore, tableInfo),
             TMailboxType::HTSwap,
             AppData(ctx)->BatchPoolId);
     }
@@ -54,14 +53,14 @@ protected:
         switch (settingsKind) {
         case NKikimrSchemeOp::TRestoreTask::kS3Settings:
         #ifndef KIKIMR_DISABLE_S3_OPS
-            tx->SetAsyncJobActor(CreateDownloaderActor(ctx, op->GetTxId(), restore, tableInfo, ""));
+            tx->SetAsyncJobActor(CreateDownloaderActor(ctx, op->GetTxId(), restore, tableInfo));
             break;
         #else
             Abort(op, ctx, "Imports from S3 are disabled");
             return false;
         #endif
         case NKikimrSchemeOp::TRestoreTask::kFSSettings:
-            tx->SetAsyncJobActor(CreateDownloaderActor(ctx, op->GetTxId(), restore, tableInfo, ""));
+            tx->SetAsyncJobActor(CreateDownloaderActor(ctx, op->GetTxId(), restore, tableInfo));
             break;
         default:
             Abort(op, ctx, TStringBuilder() << "Unknown settings: " << static_cast<ui32>(settingsKind));

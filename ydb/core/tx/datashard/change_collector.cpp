@@ -111,8 +111,12 @@ public:
         WriteTxId = state.WriteTxId;
     }
 
-    void AddChange(const TTableId& tableId, const TPathId& pathId, TChangeRecord::EKind kind, 
-                   const TDataChange& body, const TString& userSID) override {
+    void AddChange(
+        const TTableId& tableId,
+        const TPathId& pathId,
+        TChangeRecord::EKind kind,
+        const TDataChange& body,
+        const TString& userSID) override {
         NIceDb::TNiceDb db(Db);
 
         Y_ENSURE(Self->IsUserTable(tableId), "Unknown table: " << tableId);

@@ -404,7 +404,6 @@ private:
             TargetTable,
             UploadColumnsTypes,
             WriteBuf.GetRowsData(),
-            "",
             UploadMode,
             true /*writeToPrivateTable*/,
             true /*writeToIndexImplTable*/);

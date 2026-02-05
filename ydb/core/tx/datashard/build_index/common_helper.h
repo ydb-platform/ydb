@@ -210,7 +210,6 @@ private:
         Y_ENSURE(Owner);
         auto actor = NTxProxy::CreateUploadRowsInternal(
             Owner, Database, Uploading.Table, Uploading.Types, Uploading.Buffer.GetRowsData(),
-            "",
             NTxProxy::EUploadRowsMode::WriteToTableShadow,
             true /*writeToPrivateTable*/,
             true /*writeToIndexImplTable*/);

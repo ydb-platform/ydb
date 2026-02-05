@@ -116,7 +116,7 @@ class TDataShard::TTxRequestChangeRecords: public TTransactionBase<TDataShard> {
 
         if constexpr (std::is_same<TDetailsTable, Schema::ChangeRecordDetails>::value) {
             if (details.template HaveValue<typename TDetailsTable::UserSID>()) {
-                TString userSID = details.template GetValue<typename TDetailsTable::UserSID>();
+                const TString userSID = details.template GetValue<typename TDetailsTable::UserSID>();
                 builder.WithUserSID(userSID);
             }
         }

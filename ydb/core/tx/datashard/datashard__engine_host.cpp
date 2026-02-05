@@ -355,7 +355,8 @@ public:
     }
 
     void UpdateRow(const TTableId& tableId, const TArrayRef<const TCell>& row, const TArrayRef<const TUpdateCommand>& commands,
-                   const TString& userSID) override {
+        const TString& userSID) override 
+    {
         if (TSysTables::IsSystemTable(tableId)) {
             DataShardSysTable(tableId).UpdateRow(row, commands);
             return;
@@ -372,33 +373,36 @@ public:
         UserDb.UpsertRow(tableId, key, ops, userSID);
     }
 
-    void UpsertRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops, 
-                   const ui32 defaultFilledColumnCount, const TString& userSID) override {
+    void UpsertRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops,
+        const ui32 defaultFilledColumnCount, const TString& userSID) override 
+    {
         UserDb.UpsertRow(tableId, key, ops, defaultFilledColumnCount, userSID);
     }
 
-    void UpsertRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops,
-                   const TString& userSID) override {
+    void UpsertRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops, 
+        const TString& userSID) override 
+    {
         UserDb.UpsertRow(tableId, key, ops, userSID);
     }
 
-    void ReplaceRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops,
-                    const TString& userSID) override {
+    void ReplaceRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops, 
+        const TString& userSID) override 
+    {
         UserDb.ReplaceRow(tableId, key, ops, userSID);
     }
 
-    void InsertRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops,
-                   const TString& userSID) override {
+    void InsertRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops, const TString& userSID) override 
+    {
         UserDb.InsertRow(tableId, key, ops, userSID);
     }
 
-    void UpdateRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops,
-                   const TString& userSID) override {
+    void UpdateRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops, const TString& userSID) override 
+    {
         UserDb.UpdateRow(tableId, key, ops, userSID);
     }
 
-    void IncrementRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops, 
-                      bool insertMissing, const TString& userSID) override {
+    void IncrementRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops, bool insertMissing, const TString& userSID) override
+    {
         UserDb.IncrementRow(tableId, key, ops, insertMissing, userSID);
     }
     

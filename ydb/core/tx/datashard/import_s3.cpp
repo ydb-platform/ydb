@@ -435,10 +435,9 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
 
     class TUploadRowsRequestBuilder {
     public:
-        void New(const TTableInfo& tableInfo, const NKikimrSchemeOp::TTableDescription& scheme, const TString& userSID) {
+        void New(const TTableInfo& tableInfo, const NKikimrSchemeOp::TTableDescription& scheme) {
             Record = std::make_shared<NKikimrTxDataShard::TEvUploadRowsRequest>();
             Record->SetTableId(tableInfo.GetId());
-            Record->SetUserSID(userSID);
 
             TVector<TString> columnNames;
             for (const auto& column : scheme.GetColumns()) {
@@ -791,7 +790,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
 
         Counters.LatencyProcess.Start(Now());
 
-        RequestBuilder.New(TableInfo, Scheme, UserSID);
+        RequestBuilder.New(TableInfo, Scheme);
 
         // Special case:
         // in encrypted file we have nonzero bytes on input, but can still have zero bytes on output
@@ -1071,8 +1070,7 @@ public:
         }
     }
 
-    explicit TS3Downloader(const TActorId& dataShard, ui64 txId, const NKikimrSchemeOp::TRestoreTask& task, const TTableInfo& tableInfo, 
-        const TString& userSID)
+    explicit TS3Downloader(const TActorId& dataShard, ui64 txId, const NKikimrSchemeOp::TRestoreTask& task, const TTableInfo& tableInfo)
         : ExternalStorageConfig(NWrappers::IExternalStorageConfig::Construct(AppData()->AwsClientConfig, GetSettings(task)))
         , DataShard(dataShard)
         , TxId(txId)
@@ -1088,7 +1086,6 @@ public:
         , Checksum(task.GetValidateChecksums() ? CreateChecksum() : nullptr)
         , ProcessedChecksumState(Checksum ? Checksum->GetState() : NKikimrBackup::TChecksumState())
         , Counters(GetServiceCounters(AppData()->Counters, "tablets")->GetSubgroup("subsystem", "import"))
-        , UserSID(userSID)
     {
     }
 
@@ -1173,7 +1170,6 @@ private:
     TString ExpectedChecksum;
 
     TCounters Counters;
-    const TString UserSID;
 
 }; // TS3Downloader
 
@@ -1195,23 +1191,21 @@ IActor* CreateDownloaderBySettingsType(
     const TActorId& dataShard,
     ui64 txId,
     const NKikimrSchemeOp::TRestoreTask& task,
-    const TTableInfo& tableInfo,
-    const TString& userSID)
+    const TTableInfo& tableInfo)
 {
     if (task.HasS3Settings()) {
         return new TS3Downloader<NKikimrSchemeOp::TS3Settings>(
-            dataShard, txId, task, tableInfo, userSID);
+            dataShard, txId, task, tableInfo);
     } else if (task.HasFSSettings()) {
         return new TS3Downloader<NKikimrSchemeOp::TFSSettings>(
-            dataShard, txId, task, tableInfo, userSID);
+            dataShard, txId, task, tableInfo);
     }
 
     Y_ABORT("Unsupported storage type in restore task");
 }
 
-IActor* CreateS3Downloader(const TActorId& dataShard, ui64 txId, const NKikimrSchemeOp::TRestoreTask& task, const TTableInfo& info,
-    const TString& userSID) {
-    return CreateDownloaderBySettingsType(dataShard, txId, task, info, userSID);
+IActor* CreateS3Downloader(const TActorId& dataShard, ui64 txId, const NKikimrSchemeOp::TRestoreTask& task, const TTableInfo& info) {
+    return CreateDownloaderBySettingsType(dataShard, txId, task, info);
 }
 
 } // NDataShard

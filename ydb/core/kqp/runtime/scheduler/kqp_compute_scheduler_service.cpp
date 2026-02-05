@@ -245,10 +245,10 @@ namespace NKikimr::NKqp {
 
 namespace NScheduler {
 
-TComputeScheduler::TComputeScheduler(TIntrusivePtr<TKqpCounters> counters, const TDelayParams& delayParams, bool allowFairShareOverlimit)
+TComputeScheduler::TComputeScheduler(TIntrusivePtr<TKqpCounters> counters, const TDelayParams& delayParams, NHdrf::NSnapshot::ELeafFairShare fairShareMode)
     : Root(std::make_shared<TRoot>(counters))
     , DelayParams(delayParams)
-    , AllowFairShareOverlimit(allowFairShareOverlimit)
+    , FairShareMode(fairShareMode)
     , KqpCounters(counters)
 {
     auto group = counters->GetKqpCounters();
@@ -306,7 +306,8 @@ TQueryPtr TComputeScheduler::AddOrUpdateQuery(const NHdrf::TDatabaseId& database
     if (query = std::static_pointer_cast<TQuery>(pool->GetQuery(queryId))) {
         query->Update(attrs);
     } else {
-        bool allowMinFairShare = (!pool->Limit || *pool->Limit > 0) && AllowFairShareOverlimit;
+        bool allowMinFairShare = (!pool->Limit || *pool->Limit > 0)
+            && (FairShareMode == NHdrf::NSnapshot::ELeafFairShare::ALLOW_OVERLIMIT);
         query = std::make_shared<TQuery>(queryId, &DelayParams, allowMinFairShare, attrs);
         pool->AddQuery(query);
         Y_ENSURE(Queries.emplace(queryId, query).second);
@@ -337,7 +338,7 @@ void TComputeScheduler::UpdateFairShare() {
     }
 
     snapshot->UpdateBottomUp(Root->TotalLimit);
-    snapshot->UpdateTopDown(AllowFairShareOverlimit);
+    snapshot->UpdateTopDown(FairShareMode);
 
     {
         TWriteGuard lock(Mutex);

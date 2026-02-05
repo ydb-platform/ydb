@@ -297,7 +297,6 @@ namespace NYdb::NConsoleClient {
             }
             UNIT_ASSERT_VALUES_EQUAL(split.size(), expected.size());
         }
-        
         NTopic::TReadSessionSettings PrepareReadSessionSettings(const std::string& topicPath) {
             NTopic::TReadSessionSettings settings;
             settings.ConsumerName("user");

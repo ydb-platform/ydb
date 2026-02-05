@@ -1410,7 +1410,9 @@ public:
         if (ev->Get()->Request->Method == "OPTIONS") {
             return ReplyWithOptions(ev);
         }
-        Register(new THttpMonAuthorizedPageRequest(std::move(ev), Page.Get(), AllowedSIDs, Authorizer, true, AuthMode));
+        Register(new THttpMonAuthorizedPageRequest(
+            std::move(ev), Page.Get(), AllowedSIDs, Authorizer, /* authMode */ true, AuthMode)
+        );
     }
 
     STATEFN(StateWork) {

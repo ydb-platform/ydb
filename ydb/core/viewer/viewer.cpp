@@ -125,7 +125,8 @@ public:
                 .ActorId = ctx.SelfID,
                 .AuthMode = TMon::EAuthMode::Disabled,
             });
-            const bool requireCountersAuth = KikimrRunConfig.AppConfig.GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenRequirement() &&
+            const bool enforceUserToken = KikimrRunConfig.AppConfig.GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenRequirement();
+            const bool requireCountersAuth = enforceUserToken &&
                 KikimrRunConfig.AppConfig.GetMonitoringConfig().GetRequireCountersAuthentication();
             mon->RegisterActorPage({
                 .RelPath = "counters/hosts",
@@ -134,10 +135,8 @@ public:
                 .AuthMode = requireCountersAuth ? TMon::EAuthMode::Enforce : TMon::EAuthMode::Disabled,
                 .AllowedSIDs = requireCountersAuth ? databaseAllowedSIDs : TVector<TString>(),
             });
-            // For healthcheck, always extract token if enforce_user_token_requirement is enabled,
-            // so handler can check access. require_healthcheck_authentication only affects
-            // whether access is checked in monitoring layer or in handler.
-            const bool enforceUserToken = KikimrRunConfig.AppConfig.GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenRequirement();
+            // For healthcheck, always extract token if enforce_user_token_requirement is enabled, so access can be checked.
+            // requireHealthcheckAuth only affects whether access is checked in monitoring layer or in handler.
             const bool requireHealthcheckAuth = enforceUserToken &&
                 KikimrRunConfig.AppConfig.GetMonitoringConfig().GetRequireHealthcheckAuthentication();
             mon->RegisterActorPage({

@@ -31,11 +31,23 @@ void CrackAddress(const TString& address, TString& hostname, TIpPort& port);
 [[nodiscard]] TStringBuf TrimEnd(TStringBuf target, char delim);
 [[nodiscard]] TStringBuf Trim(TStringBuf target, char delim);
 void TrimEnd(TString& target, char delim);
-TString CompressDeflate(TStringBuf source);
-TString DecompressDeflate(TStringBuf source);
 TString GetObfuscatedData(TString data, const THeaders& headers);
 TString ToHex(size_t value);
 bool IsReadableContent(TStringBuf contentType);
+
+class TCompressContext {
+public:
+    void InitCompress();
+    void InitDecompress();
+    void Clear();
+    TString Compress(TStringBuf source, bool finish); // compresses a portion of data, finish indicates end of data
+    TString Decompress(TStringBuf source); // decompresses a portion of data
+    operator bool() const;
+
+private:
+    struct TImpl;
+    std::shared_ptr<TImpl> Impl;
+};
 
 struct TLessNoCase {
     bool operator()(TStringBuf l, TStringBuf r) const {
@@ -261,6 +273,7 @@ public:
     size_t ChunkLength = 0;
     TString Content; // body storage
     std::optional<size_t> TotalSize;
+    TCompressContext CompressContext;
 
     THttpParser(const THttpParser& src)
         : TSocketBuffer(src)
@@ -336,9 +349,8 @@ public:
     void ProcessHeader(TStringBuf& data) {
         if (ProcessData(Header, data, "\r\n", MaxHeaderSize)) {
             if (Header.empty()) {
-                if (HasBody() && (HeaderType::ContentLength.empty() || HeaderType::ContentLength != "0")) {
-                    Stage = EParseStage::Body;
-                } else if (TotalSize.has_value() && !data.empty()) {
+                if ((HasBody() && (HeaderType::ContentLength.empty() || HeaderType::ContentLength != "0"))
+                    || (TotalSize.has_value() && !data.empty())) {
                     Stage = EParseStage::Body;
                 } else {
                     Stage = EParseStage::Done;
@@ -351,6 +363,9 @@ public:
     }
 
     void ProcessBody(TStringBuf& data) {
+        if (HeaderType::ContentEncoding == "deflate") {
+            CompressContext.InitDecompress();
+        }
         if (IsChunkedEncoding()) {
             Stage = EParseStage::ChunkLength;
             Line = {};
@@ -360,8 +375,8 @@ public:
                 Stage = EParseStage::Error;
             } else if (ProcessData(HeaderType::Body, data, FromStringWithDefault(HeaderType::ContentLength, 0))) {
                 Stage = EParseStage::Done;
-                if (HeaderType::Body && HeaderType::ContentEncoding == "deflate") {
-                    Content = DecompressDeflate(HeaderType::Body);
+                if (HeaderType::Body && CompressContext) {
+                    Content = CompressContext.Decompress(HeaderType::Body);
                     HeaderType::Body = Content;
                 }
             }
@@ -369,8 +384,8 @@ public:
             if (ProcessData(Content, data, GetBodySizeFromTotalSize())) {
                 HeaderType::Body = Content;
                 Stage = EParseStage::Done;
-                if (HeaderType::Body && HeaderType::ContentEncoding == "deflate") {
-                    Content = DecompressDeflate(HeaderType::Body);
+                if (HeaderType::Body && CompressContext) {
+                    Content = CompressContext.Decompress(HeaderType::Body);
                     HeaderType::Body = Content;
                 }
             }
@@ -414,8 +429,8 @@ public:
                     Stage = EParseStage::Done;
                 } else {
                     // append chunk data to content
-                    if (HeaderType::ContentEncoding == "deflate") {
-                        HeaderType::Body = Content += DecompressDeflate(Line);
+                    if (CompressContext) {
+                        HeaderType::Body = Content += CompressContext.Decompress(Line);
                     } else {
                         if (HeaderType::Body.empty()) {
                             HeaderType::Body = Line;
@@ -495,6 +510,7 @@ public:
         Stage = GetInitialStage();
         Line.Clear();
         Content.clear();
+        CompressContext.Clear();
     }
 
     bool IsReady() const {
@@ -654,6 +670,7 @@ public:
 
     ERenderStage Stage = ERenderStage::Init;
     TString Content; // body storage
+    TCompressContext CompressContext;
 
     //THttpRenderer(TStringBuf method, TStringBuf url, TStringBuf protocol, TStringBuf version); // request
     void InitRequest(TStringBuf method, TStringBuf url, TStringBuf protocol, TStringBuf version) {
@@ -739,6 +756,7 @@ public:
         Y_DEBUG_ABORT_UNLESS(Stage == ERenderStage::Header);
         if (Count(ALLOWED_CONTENT_ENCODINGS, contentEncoding) != 0) {
             Set("Content-Encoding", contentEncoding);
+            CompressContext.InitCompress();
         }
     }
 
@@ -809,6 +827,7 @@ public:
     void Clear() {
         TSocketBuffer::Clear();
         HeaderType::Clear();
+        CompressContext.Clear();
     }
 
     void Reparse() {
@@ -932,6 +951,9 @@ public:
         Append(ToHex(DataSize) + "\r\n");
         Append(TStringBuf(data));
         Append("\r\n");
+        if (DataSize == 0) {
+            EndOfData = true;
+        }
     }
 
     void SetEndOfData() {
@@ -1118,8 +1140,8 @@ public:
     }
 
     void SetBody(TStringBuf body) {
-        if (ContentEncoding == "deflate") {
-            TString compressedBody = CompressDeflate(body);
+        if (CompressContext) {
+            TString compressedBody = CompressContext.Compress(body, true);
             THttpRenderer<THttpResponse>::SetBody(compressedBody);
             Body = Content = body;
         } else {
@@ -1128,8 +1150,8 @@ public:
     }
 
     void SetBody(const TString& body) {
-        if (ContentEncoding == "deflate") {
-            TString compressedBody = CompressDeflate(body);
+        if (CompressContext) {
+            TString compressedBody = CompressContext.Compress(body, true);
             THttpRenderer<THttpResponse>::SetBody(compressedBody);
             Body = Content = body;
         } else {

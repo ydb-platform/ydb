@@ -1644,6 +1644,8 @@ std::future<void> TMon::Start(TActorSystem* actorSystem) {
         "application/javascript",
         "application/json",
         "application/yaml",
+        "multipart/form-data",
+        "multipart/x-mixed-replace",
     };
     addPort->SslCertificatePem = Config.Certificate;
     addPort->CertificateFile = Config.CertificateFile;

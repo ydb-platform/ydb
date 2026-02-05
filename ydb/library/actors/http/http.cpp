@@ -570,14 +570,13 @@ THttpIncomingResponsePtr THttpOutgoingResponse::Reverse(THttpOutgoingRequestPtr 
 THttpOutgoingDataChunk::THttpOutgoingDataChunk(THttpOutgoingResponsePtr response, TStringBuf data)
     : Response(std::move(response))
 {
-    if (data) {
-        if (Response->ContentEncoding == "deflate") {
-            SetData(CompressDeflate(data));
-        } else {
-            SetData(data);
+    if (Response->CompressContext) {
+        SetData(Response->CompressContext.Compress(data, data.empty()));
+        if (data.empty() && !IsEndOfData()) {
+            SetEndOfData(); // because we have compressed empty chunk (end of compressed stream), we need to mark it as end of data
         }
     } else {
-        SetEndOfData();
+        SetData(data);
     }
 }
 

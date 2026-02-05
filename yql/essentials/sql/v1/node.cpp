@@ -1875,9 +1875,12 @@ bool UnescapeQuoted(const TString& str, TPosition& pos, char quoteChar, TString&
     if (unescapeResult != EUnescapeResult::OK) {
         TTextWalker walker(pos, utf8Aware);
         walker.Advance(atom.Trunc(readBytes));
-        error = UnescapeResultToString(unescapeResult);
+        error = TStringBuilder()
+                << UnescapeResultToString(unescapeResult)
+                << " near byte " << readBytes;
         return false;
     }
+
     return true;
 }
 

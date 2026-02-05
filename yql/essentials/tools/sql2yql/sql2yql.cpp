@@ -66,9 +66,11 @@ struct TPosOutput {
     }
 };
 
-static void ExtractQuery(TPosOutput& out, const google::protobuf::Message& node);
+namespace {
 
-static void VisitField(TPosOutput& out, const google::protobuf::FieldDescriptor& descr, const google::protobuf::Message& field) {
+void ExtractQuery(TPosOutput& out, const google::protobuf::Message& node);
+
+void VisitField(TPosOutput& out, const google::protobuf::FieldDescriptor& descr, const google::protobuf::Message& field) {
     using namespace google::protobuf;
     const Descriptor* d = descr.message_type();
     if (!d) {
@@ -82,7 +84,7 @@ static void VisitField(TPosOutput& out, const google::protobuf::FieldDescriptor&
     }
 }
 
-static void ExtractQuery(TPosOutput& out, const google::protobuf::Message& node) {
+void ExtractQuery(TPosOutput& out, const google::protobuf::Message& node) {
     using namespace google::protobuf;
     TVector<const FieldDescriptor*> fields;
     const Reflection* ref = node.GetReflection();
@@ -99,6 +101,8 @@ static void ExtractQuery(TPosOutput& out, const google::protobuf::Message& node)
         }
     }
 }
+
+} // namespace
 
 bool TestFormat(
     const TString& query,
@@ -172,12 +176,16 @@ void ParseProtoConfig(const TString& cfgFile, google::protobuf::Message* config)
     }
 }
 
+namespace {
+
 template <typename TMessage>
-static THolder<TMessage> ParseProtoConfig(const TString& cfgFile) {
+THolder<TMessage> ParseProtoConfig(const TString& cfgFile) {
     auto config = MakeHolder<TMessage>();
     ParseProtoConfig(cfgFile, config.Get());
     return config;
 }
+
+} // namespace
 
 int BuildAST(int argc, char* argv[]) {
     NLastGetopt::TOpts opts = NLastGetopt::TOpts::Default();

@@ -7,7 +7,9 @@ namespace NSQLTranslationV1 {
 
 using namespace NSQLv1Generated;
 
-static bool ValidateForCounters(const TString& input) {
+namespace {
+
+bool ValidateForCounters(const TString& input) {
     for (auto c : input) {
         if (!(IsAlnum(c) || c == '_')) {
             return false;
@@ -15,6 +17,8 @@ static bool ValidateForCounters(const TString& input) {
     }
     return true;
 }
+
+} // namespace
 
 TNodePtr TSqlCallExpr::BuildUdf(bool forReduce) {
     auto result = Node_ ? Node_ : BuildCallable(Pos_, Module_, Func_, Args_, forReduce);

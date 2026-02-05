@@ -398,7 +398,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
             case NKikimrSchemeOp::EPathTypeExternalTable:
                 return AppData()->Icb->BackupControls.S3Controls.EnableExternalTableImport.AtomicLoad()->Get();
             case NKikimrSchemeOp::EPathTypeSysView:
-                return AppData()->Icb->BackupControls.S3Controls.EnableSysViewPermissionsImport.AtomicLoad()->Get();
+                return AppData()->FeatureFlags.GetEnableSysViewPermissionsExport();
             case NKikimrSchemeOp::EPathTypePersQueueGroup:
             case NKikimrSchemeOp::EPathTypeTable:
                 return true;

@@ -7448,6 +7448,8 @@ Y_UNIT_TEST_SUITE(TImportTests) {
     Y_UNIT_TEST(ShouldRestoreSystemViewPermissions) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableSysViewPermissionsExport(true);
+
         ui64 txId = 100;
 
         const auto permissions = R"(
@@ -7511,6 +7513,8 @@ Y_UNIT_TEST_SUITE(TImportTests) {
     Y_UNIT_TEST(ShouldFailOnSystemViewWrongPath) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableSysViewPermissionsExport(true);
+
         ui64 txId = 100;
 
         const auto data = GenerateTestData(
@@ -7586,6 +7590,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
                 runtime.SetLogPriority(NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
                 runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
                 runtime.GetAppData().FeatureFlags.SetEnableChangefeedsImport(true);
+                runtime.GetAppData().FeatureFlags.SetEnableSysViewPermissionsExport(true);
                 if (createdByQuery) {
                     runtime.GetAppData().FeatureFlags.SetEnableViews(true);
                     runtime.GetAppData().FeatureFlags.SetEnableReplication(true);
@@ -7907,6 +7912,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
             {
                 TInactiveZone inactive(activeZone);
                 runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+                runtime.GetAppData().FeatureFlags.SetEnableSysViewPermissionsExport(true);
             }
 
             const TString importRequest = Sprintf(R"(
@@ -7958,6 +7964,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
 
                 runtime.SetLogPriority(NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
                 runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+                runtime.GetAppData().FeatureFlags.SetEnableSysViewPermissionsExport(true);
                 if (createsViews) {
                     runtime.GetAppData().FeatureFlags.SetEnableViews(true);
                 }
@@ -8318,6 +8325,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
             {
                 TInactiveZone inactive(activeZone);
                 runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+                runtime.GetAppData().FeatureFlags.SetEnableSysViewPermissionsExport(true);
             }
 
             const ui64 importId = ++t.TxId;

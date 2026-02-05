@@ -3213,9 +3213,11 @@ state: STATE_ENABLED
       TestTopic(true, 5, 4);
     }
 
-    Y_UNIT_TEST(SysViewWithPermissionsExport) {
+    Y_UNIT_TEST(SystemViewWithPermissionsExport) {
         Env();
         ui64 txId = 100;
+
+        Runtime().GetAppData().FeatureFlags.SetEnableSysViewPermissionsExport(true);
 
         TestLs(Runtime(), "/MyRoot/.sys/partition_stats", false, NLs::PathExist);
 

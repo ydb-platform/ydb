@@ -995,7 +995,7 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
     }
 
     // System view
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnSysViewPermissions, 2, 1, false) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnSystemViewPermissions, 2, 1, false) {
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
 
@@ -1007,6 +1007,7 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
             runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
             {
                 TInactiveZone inactive(activeZone);
+                runtime.GetAppData().FeatureFlags.SetEnableSysViewPermissionsExport(true);
 
                 // Set permissions on the system view
                 NACLib::TDiffACL diffACL;
@@ -1054,7 +1055,7 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         });
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CancelShouldSucceedOnSysViewPermissions, 2, 1, false) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CancelShouldSucceedOnSystemViewPermissions, 2, 1, false) {
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
 
@@ -1066,6 +1067,7 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
             runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
             {
                 TInactiveZone inactive(activeZone);
+                runtime.GetAppData().FeatureFlags.SetEnableSysViewPermissionsExport(true);
 
                 // Set permissions on the system view
                 NACLib::TDiffACL diffACL;
@@ -1116,7 +1118,7 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         });
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ForgetShouldSucceedOnSysViewPermissions, 2, 1, false) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ForgetShouldSucceedOnSystemViewPermissions, 2, 1, false) {
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
 
@@ -1128,6 +1130,7 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
             runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
             {
                 TInactiveZone inactive(activeZone);
+                runtime.GetAppData().FeatureFlags.SetEnableSysViewPermissionsExport(true);
 
                 // Set permissions on the system view
                 NACLib::TDiffACL diffACL;

@@ -191,7 +191,7 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
             case NSchemeCache::TSchemeCacheNavigate::KindExternalTable:
                 return AppData()->Icb->BackupControls.S3Controls.EnableExternalTableExport.AtomicLoad()->Get();
             case NSchemeCache::TSchemeCacheNavigate::KindSysView:
-                return AppData()->Icb->BackupControls.S3Controls.EnableSysViewPermissionsExport.AtomicLoad()->Get();
+                return AppData()->FeatureFlags.GetEnableSysViewPermissionsExport();
             case NSchemeCache::TSchemeCacheNavigate::KindColumnTable:
                 return AppData()->FeatureFlags.GetEnableColumnTablesBackup();
             case NSchemeCache::TSchemeCacheNavigate::KindView:

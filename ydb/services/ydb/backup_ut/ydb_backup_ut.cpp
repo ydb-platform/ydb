@@ -3730,6 +3730,7 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             runtime.SetLogPriority(NKikimrServices::IMPORT, NLog::EPriority::PRI_DEBUG);
             runtime.GetAppData().DataShardExportFactory = &DataShardExportFactory;
             runtime.GetAppData().FeatureFlags.SetEnableViewExport(true);
+            runtime.GetAppData().FeatureFlags.SetEnableSysViewPermissionsExport(true);
         }
 
         TKikimrWithGrpcAndRootSchema& GetServer() {

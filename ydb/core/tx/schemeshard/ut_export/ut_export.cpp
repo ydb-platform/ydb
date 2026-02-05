@@ -3111,7 +3111,6 @@ state: STATE_ENABLED
                 AbcSlug: "abc_slug"
                 FederationAccount: "federation_account"
                 EnableCompactification: false
-                TimestampType: "LogAppendTime"
                 PartitionConfig {
                     LifetimeSeconds: 12
                     StorageLimitBytes: 104857600
@@ -3248,9 +3247,6 @@ state: STATE_ENABLED
 
         UNIT_ASSERT(attrs.contains("_federation_account"));
         UNIT_ASSERT_VALUES_EQUAL(attrs.at("_federation_account"), "federation_account");
-
-        UNIT_ASSERT(attrs.contains("_timestamp_type"));
-        UNIT_ASSERT_VALUES_EQUAL(attrs.at("_timestamp_type"), "LogAppendTime");
 
         UNIT_ASSERT(attrs.contains("_partitions_per_tablet"));
         UNIT_ASSERT_VALUES_EQUAL(attrs.at("_partitions_per_tablet"), "3");

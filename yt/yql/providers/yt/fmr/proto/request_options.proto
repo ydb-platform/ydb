@@ -38,7 +38,9 @@ enum EFmrComponent {
 
 enum EFmrReason {
     REASON_UNKNOWN = 0;
-    USER_ERROR = 1;
+    REASON_RESTART_OPERATION = 1;
+    REASON_RESTART_QUERY = 2;
+    REASON_UDF_TERMINATE = 3;
 }
 
 message TFmrError {

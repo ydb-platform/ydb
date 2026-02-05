@@ -34,9 +34,13 @@ public:
                 auto taskResult = Function_(task, cancelFlag);
                 finalTaskStatus = taskResult.TaskStatus;
                 finalTaskStatistics = taskResult.Stats;
+                auto error = taskResult.Error;
+                if (error.Defined()) {
+                    taskErrorMessage = TFmrError{.Component = EFmrComponent::Job, .Reason = error->Reason, .ErrorMessage = error->ErrorMessage, .TaskId = task->TaskId, .JobId = jobId};
+                }
             } catch (...) {
                 finalTaskStatus = ETaskStatus::Failed;
-                taskErrorMessage = TFmrError{.Component = EFmrComponent::Job, .ErrorMessage = CurrentExceptionMessage(), .TaskId = task->TaskId, .JobId = jobId};
+                taskErrorMessage = TFmrError{.Component = EFmrComponent::Job, .Reason = EFmrErrorReason::Unknown, .ErrorMessage = CurrentExceptionMessage(), .TaskId = task->TaskId, .JobId = jobId};
             }
             promise.SetValue(MakeTaskState(finalTaskStatus, task->TaskId, taskErrorMessage, finalTaskStatistics));
         };

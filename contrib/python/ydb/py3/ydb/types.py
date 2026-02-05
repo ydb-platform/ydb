@@ -56,13 +56,14 @@ def _to_date32(pb: ydb_value_pb2.Value, value: typing.Union[date, int]) -> None:
 
 def _from_datetime_number(
     x: typing.Union[float, datetime], table_client_settings: table.TableClientSettings
-) -> datetime:
+) -> typing.Union[float, datetime]:
     if table_client_settings is not None and table_client_settings._native_datetime_in_result_sets:
-        return datetime.utcfromtimestamp(x)
+        # x is float when native_datetime_in_result_sets is True
+        return datetime.utcfromtimestamp(typing.cast(float, x))
     return x
 
 
-def _from_json(x: typing.Union[str, bytearray, bytes], table_client_settings: table.TableClientSettings):
+def _from_json(x: typing.Union[str, bytearray, bytes], table_client_settings: table.TableClientSettings) -> typing.Any:
     if table_client_settings is not None and table_client_settings._native_json_in_result_sets:
         return json.loads(x)
     return x
@@ -72,7 +73,7 @@ def _to_uuid(value_pb: ydb_value_pb2.Value, table_client_settings: table.TableCl
     return uuid.UUID(bytes_le=struct.pack("QQ", value_pb.low_128, value_pb.high_128))
 
 
-def _from_uuid(pb: ydb_value_pb2.Value, value: uuid.UUID):
+def _from_uuid(pb: ydb_value_pb2.Value, value: uuid.UUID) -> None:
     pb.low_128 = struct.unpack("Q", value.bytes_le[0:8])[0]
     pb.high_128 = struct.unpack("Q", value.bytes_le[8:16])[0]
 
@@ -89,7 +90,7 @@ def _from_interval(
     return value_pb.int64_value
 
 
-def _to_interval(pb: ydb_value_pb2.Value, value: typing.Union[timedelta, int]):
+def _to_interval(pb: ydb_value_pb2.Value, value: typing.Union[timedelta, int]) -> None:
     if isinstance(value, timedelta):
         pb.int64_value = _timedelta_to_microseconds(value)
     else:
@@ -104,7 +105,7 @@ def _from_timestamp(
     return value_pb.uint64_value
 
 
-def _to_timestamp(pb: ydb_value_pb2.Value, value: typing.Union[datetime, int]):
+def _to_timestamp(pb: ydb_value_pb2.Value, value: typing.Union[datetime, int]) -> None:
     if isinstance(value, datetime):
         if value.tzinfo:
             epoch = _EPOCH_UTC
@@ -123,7 +124,7 @@ def _from_timestamp64(
     return value_pb.int64_value
 
 
-def _to_timestamp64(pb: ydb_value_pb2.Value, value: typing.Union[datetime, int]):
+def _to_timestamp64(pb: ydb_value_pb2.Value, value: typing.Union[datetime, int]) -> None:
     if isinstance(value, datetime):
         if value.tzinfo:
             epoch = _EPOCH_UTC
@@ -210,14 +211,18 @@ class PrimitiveType(enum.Enum):
     DyNumber = _apis.primitive_types.DYNUMBER, "text_value"
 
     def __init__(
-        self, idn: ydb_value_pb2.Type.PrimitiveTypeId, proto_field: typing.Optional[str], to_obj=None, from_obj=None
-    ):
+        self,
+        idn: ydb_value_pb2.Type.PrimitiveTypeId,
+        proto_field: typing.Optional[str],
+        to_obj: typing.Optional[typing.Callable[..., typing.Any]] = None,
+        from_obj: typing.Optional[typing.Callable[..., None]] = None,
+    ) -> None:
         self._idn_ = idn
         self._to_obj = to_obj
         self._from_obj = from_obj
         self._proto_field = proto_field
 
-    def get_value(self, value_pb: ydb_value_pb2.Value, table_client_settings: table.TableClientSettings):
+    def get_value(self, value_pb: ydb_value_pb2.Value, table_client_settings: table.TableClientSettings) -> typing.Any:
         """
         Extracts value from protocol buffer
         :param value_pb: A protocol buffer
@@ -229,9 +234,10 @@ class PrimitiveType(enum.Enum):
         if self._to_obj is not None:
             return self._to_obj(value_pb, table_client_settings)
 
+        assert self._proto_field is not None
         return getattr(value_pb, self._proto_field)
 
-    def set_value(self, pb: ydb_value_pb2.Value, value):
+    def set_value(self, pb: ydb_value_pb2.Value, value: typing.Any) -> None:
         """
         Sets value in a protocol buffer
         :param pb: A protocol buffer
@@ -241,13 +247,14 @@ class PrimitiveType(enum.Enum):
         if self._from_obj:
             self._from_obj(pb, value)
         else:
+            assert self._proto_field is not None
             setattr(pb, self._proto_field, value)
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self._name_
 
     @property
-    def proto(self):
+    def proto(self) -> ydb_value_pb2.Type:
         """
         Returns protocol buffer representation of a primitive type
         :return: A protocol buffer representation
@@ -272,12 +279,10 @@ class DataQuery(object):
 DataType = PrimitiveType
 
 
-class AbstractTypeBuilder(object):
-    __metaclass__ = abc.ABCMeta
-
+class AbstractTypeBuilder(abc.ABC):
     @property
     @abc.abstractmethod
-    def proto(self):
+    def proto(self) -> ydb_value_pb2.Type:
         """
         Returns protocol buffer representation of a type
         :return: A protocol buffer representation
@@ -288,7 +293,7 @@ class AbstractTypeBuilder(object):
 class DecimalType(AbstractTypeBuilder):
     __slots__ = ("_proto", "_precision", "_scale")
 
-    def __init__(self, precision=22, scale=9):
+    def __init__(self, precision: int = 22, scale: int = 9) -> None:
         """
         Represents a decimal type
         :param precision: A precision value
@@ -300,25 +305,27 @@ class DecimalType(AbstractTypeBuilder):
         self._proto.decimal_type.MergeFrom(_apis.ydb_value.DecimalType(precision=self._precision, scale=self._scale))
 
     @property
-    def precision(self):
+    def precision(self) -> int:
         return self._precision
 
     @property
-    def scale(self):
+    def scale(self) -> int:
         return self._scale
 
     @property
-    def proto(self):
+    def proto(self) -> ydb_value_pb2.Type:
         """
         Returns protocol buffer representation of a type
         :return: A protocol buffer representation
         """
         return self._proto
 
-    def __eq__(self, other):
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, DecimalType):
+            return NotImplemented
         return self._precision == other.precision and self._scale == other.scale
 
-    def __str__(self):
+    def __str__(self) -> str:
         """
         Returns string representation of a type
         :return: A string representation
@@ -329,21 +336,21 @@ class DecimalType(AbstractTypeBuilder):
 class NullType(AbstractTypeBuilder):
     __slots__ = ("_repr", "_proto")
 
-    def __init__(self):
-        self._proto = _apis.ydb_value.Type(null_type=struct_pb2.NULL_VALUE)
+    def __init__(self) -> None:
+        self._proto = _apis.ydb_value.Type(null_type=struct_pb2.NULL_VALUE)  # type: ignore[arg-type]
 
     @property
-    def proto(self):
+    def proto(self) -> ydb_value_pb2.Type:
         return self._proto
 
-    def __str__(self):
+    def __str__(self) -> str:
         return "NullType"
 
 
 class OptionalType(AbstractTypeBuilder):
     __slots__ = ("_repr", "_proto", "_item")
 
-    def __init__(self, optional_type: typing.Union[AbstractTypeBuilder, PrimitiveType]):
+    def __init__(self, optional_type: typing.Union[AbstractTypeBuilder, PrimitiveType]) -> None:
         """
         Represents optional type that wraps inner type
         :param optional_type: An instance of an inner type
@@ -354,28 +361,30 @@ class OptionalType(AbstractTypeBuilder):
         self._proto.optional_type.MergeFrom(_apis.ydb_value.OptionalType(item=optional_type.proto))
 
     @property
-    def item(self):
+    def item(self) -> typing.Union[AbstractTypeBuilder, PrimitiveType]:
         return self._item
 
     @property
-    def proto(self):
+    def proto(self) -> ydb_value_pb2.Type:
         """
         Returns protocol buffer representation of a type
         :return: A protocol buffer representation
         """
         return self._proto
 
-    def __eq__(self, other):
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, OptionalType):
+            return NotImplemented
         return self._item == other.item
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self._repr
 
 
 class ListType(AbstractTypeBuilder):
     __slots__ = ("_repr", "_proto")
 
-    def __init__(self, list_type: typing.Union[AbstractTypeBuilder, PrimitiveType]):
+    def __init__(self, list_type: typing.Union[AbstractTypeBuilder, PrimitiveType]) -> None:
         """
         :param list_type: List item type builder
         """
@@ -383,14 +392,14 @@ class ListType(AbstractTypeBuilder):
         self._proto = _apis.ydb_value.Type(list_type=_apis.ydb_value.ListType(item=list_type.proto))
 
     @property
-    def proto(self):
+    def proto(self) -> ydb_value_pb2.Type:
         """
         Returns protocol buffer representation of type
         :return: A protocol buffer representation
         """
         return self._proto
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self._repr
 
 
@@ -401,7 +410,7 @@ class DictType(AbstractTypeBuilder):
         self,
         key_type: typing.Union[AbstractTypeBuilder, PrimitiveType],
         payload_type: typing.Union[AbstractTypeBuilder, PrimitiveType],
-    ):
+    ) -> None:
         """
         :param key_type: Key type builder
         :param payload_type: Payload type builder
@@ -415,10 +424,10 @@ class DictType(AbstractTypeBuilder):
         )
 
     @property
-    def proto(self):
+    def proto(self) -> ydb_value_pb2.Type:
         return self._proto
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self._repr
 
 
@@ -428,7 +437,7 @@ class SetType(AbstractTypeBuilder):
     def __init__(
         self,
         key_type: typing.Union[AbstractTypeBuilder, PrimitiveType],
-    ):
+    ) -> None:
         """
         :param key_type: Key type builder
         """
@@ -436,26 +445,26 @@ class SetType(AbstractTypeBuilder):
         self._proto = _apis.ydb_value.Type(
             dict_type=_apis.ydb_value.DictType(
                 key=key_type.proto,
-                payload=_apis.ydb_value.Type(void_type=struct_pb2.NULL_VALUE),
+                payload=_apis.ydb_value.Type(void_type=struct_pb2.NULL_VALUE),  # type: ignore[arg-type]
             )
         )
 
     @property
-    def proto(self):
+    def proto(self) -> ydb_value_pb2.Type:
         return self._proto
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self._repr
 
 
 class TupleType(AbstractTypeBuilder):
     __slots__ = ("__elements_repr", "__proto")
 
-    def __init__(self):
-        self.__elements_repr = []
+    def __init__(self) -> None:
+        self.__elements_repr: typing.List[str] = []
         self.__proto = _apis.ydb_value.Type(tuple_type=_apis.ydb_value.TupleType())
 
-    def add_element(self, element_type: typing.Union[AbstractTypeBuilder, PrimitiveType]):
+    def add_element(self, element_type: typing.Union[AbstractTypeBuilder, PrimitiveType]) -> "TupleType":
         """
         :param element_type: Adds additional element of tuple
         :return: self
@@ -466,21 +475,21 @@ class TupleType(AbstractTypeBuilder):
         return self
 
     @property
-    def proto(self):
+    def proto(self) -> ydb_value_pb2.Type:
         return self.__proto
 
-    def __str__(self):
+    def __str__(self) -> str:
         return "Tuple<%s>" % ",".join(self.__elements_repr)
 
 
 class StructType(AbstractTypeBuilder):
     __slots__ = ("__members_repr", "__proto")
 
-    def __init__(self):
-        self.__members_repr = []
+    def __init__(self) -> None:
+        self.__members_repr: typing.List[str] = []
         self.__proto = _apis.ydb_value.Type(struct_type=_apis.ydb_value.StructType())
 
-    def add_member(self, name: str, member_type: typing.Union[AbstractTypeBuilder, PrimitiveType]):
+    def add_member(self, name: str, member_type: typing.Union[AbstractTypeBuilder, PrimitiveType]) -> "StructType":
         """
         :param name:
         :param member_type:
@@ -493,21 +502,23 @@ class StructType(AbstractTypeBuilder):
         return self
 
     @property
-    def proto(self):
+    def proto(self) -> ydb_value_pb2.Type:
         return self.__proto
 
-    def __str__(self):
+    def __str__(self) -> str:
         return "Struct<%s>" % ",".join(self.__members_repr)
 
 
 class BulkUpsertColumns(AbstractTypeBuilder):
     __slots__ = ("__columns_repr", "__proto")
 
-    def __init__(self):
-        self.__columns_repr = []
+    def __init__(self) -> None:
+        self.__columns_repr: typing.List[str] = []
         self.__proto = _apis.ydb_value.Type(struct_type=_apis.ydb_value.StructType())
 
-    def add_column(self, name: str, column_type: typing.Union[AbstractTypeBuilder, PrimitiveType]):
+    def add_column(
+        self, name: str, column_type: typing.Union[AbstractTypeBuilder, PrimitiveType]
+    ) -> "BulkUpsertColumns":
         """
         :param name: A column name
         :param column_type: A column type
@@ -519,10 +530,10 @@ class BulkUpsertColumns(AbstractTypeBuilder):
         return self
 
     @property
-    def proto(self):
+    def proto(self) -> ydb_value_pb2.Type:
         return self.__proto
 
-    def __str__(self):
+    def __str__(self) -> str:
         return "BulkUpsertColumns<%s>" % ",".join(self.__columns_repr)
 
 

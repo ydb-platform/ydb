@@ -57,7 +57,8 @@ IActor* TTableUploader<arrow::RecordBatch>::CreateUploaderInternal(
     const TString& userSID,
     ui64 cookie)
 {
-    return NTxProxy::CreateUploadColumnsInternal(SelfId(), database, tablePath, Scheme->Types, data, userSID, cookie);
+    Y_UNUSED(userSID);
+    return NTxProxy::CreateUploadColumnsInternal(SelfId(), database, tablePath, Scheme->Types, data, cookie);
 }
 
 }

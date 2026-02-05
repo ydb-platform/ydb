@@ -14,9 +14,8 @@ public:
         const TString& table,
         std::shared_ptr<TUploadTypes>& types,
         std::shared_ptr<arrow::RecordBatch>& data,
-        const TString& userSID,
         ui64 cookie)
-        : TUploadRowsBase(std::make_shared<TVector<std::pair<TSerializedCellVec, TString>>>(), userSID)
+        : TUploadRowsBase(std::make_shared<TVector<std::pair<TSerializedCellVec, TString>>>(), BUILTIN_ACL_CDC_WITHOUT_USER_SID)
         , Sender(sender)
         , Database(database)
         , Table(table)
@@ -85,9 +84,8 @@ IActor* CreateUploadColumnsInternal(const TActorId& sender,
                                     const TString& table,
                                     std::shared_ptr<TUploadTypes> types,
                                     std::shared_ptr<arrow::RecordBatch> data,
-                                    const TString& userSID,
                                     ui64 cookie = 0) {
-    return new TUploadColumnsInternal(sender, database, table, types, data, userSID, cookie);
+    return new TUploadColumnsInternal(sender, database, table, types, data, cookie);
 }
 
 

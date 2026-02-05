@@ -160,6 +160,25 @@ void MakeJsonErrorReply(NJson::TJsonValue& jsonResponse, TString& message, const
     }
 }
 
+TVector<TString> TMon::GetCountersAllowedSIDs(TActorSystem* actorSystem) {
+    TVector<TString> countersAllowedSIDs;
+    NKikimr::TAppData* appData = actorSystem->AppData<NKikimr::TAppData>();
+    if (!appData) {
+        return countersAllowedSIDs;
+    }
+    const auto& securityConfig = appData->DomainsConfig.GetSecurityConfig();
+    auto addSIDs = [&countersAllowedSIDs](const auto& protoAllowedSIDs) {
+        for (const auto& sid : protoAllowedSIDs) {
+            countersAllowedSIDs.emplace_back(sid);
+        }
+    };
+    addSIDs(securityConfig.GetDatabaseAllowedSIDs());
+    addSIDs(securityConfig.GetViewerAllowedSIDs());
+    addSIDs(securityConfig.GetMonitoringAllowedSIDs());
+    addSIDs(securityConfig.GetAdministrationAllowedSIDs());
+    return countersAllowedSIDs;
+}
+
 IMonPage* TMon::RegisterActorPage(TIndexMonPage* index, const TString& relPath,
     const TString& title, bool preTag, TActorSystem* actorSystem, const TActorId& actorId, bool useAuth, bool sortPages) {
     return RegisterActorPage({
@@ -1657,19 +1676,7 @@ std::future<void> TMon::Start(TActorSystem* actorSystem) {
     ActorSystem->RegisterLocalService(NodeProxyServiceActorId, nodeProxyActorId);
     IActor* countersMonPageServiceActor;
     if (Config.RequireCountersAuthentication) {
-        // Add DatabaseAllowedSIDs and ViewerAllowedSIDs to AllowedSIDs for /counters
-        // to allow access with database@builtin and viewer@builtin tokens
-        TVector<TString> countersAllowedSIDs = Config.AllowedSIDs;
-        NKikimr::TAppData* appData = ActorSystem->AppData<NKikimr::TAppData>();
-        if (appData) {
-            const auto& securityConfig = appData->DomainsConfig.GetSecurityConfig();
-            if (securityConfig.DatabaseAllowedSIDsSize() > 0) {
-                countersAllowedSIDs.insert(countersAllowedSIDs.end(), securityConfig.GetDatabaseAllowedSIDs().begin(), securityConfig.GetDatabaseAllowedSIDs().end());
-            }
-            if (securityConfig.ViewerAllowedSIDsSize() > 0) {
-                countersAllowedSIDs.insert(countersAllowedSIDs.end(), securityConfig.GetViewerAllowedSIDs().begin(), securityConfig.GetViewerAllowedSIDs().end());
-            }
-        }
+        TVector<TString> countersAllowedSIDs = GetCountersAllowedSIDs(ActorSystem);
         countersMonPageServiceActor = new THttpMonPageService(
             HttpProxyActorId,
             CountersMonPage,

@@ -81,6 +81,8 @@ public:
     NMonitoring::IMonPage* RegisterCountersPage(const TString& path, const TString& title, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters);
     NMonitoring::IMonPage* FindPage(const TString& relPath);
 
+    static TVector<TString> GetCountersAllowedSIDs(TActorSystem* actorSystem);
+
     struct TRegisterHandlerFields {
         TString Path;
         TActorId Handler;

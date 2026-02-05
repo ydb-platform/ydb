@@ -192,7 +192,7 @@ private:
             }
         }
 
-        if (Settings.GetExtendedSettings().GetEnableMtlsAuth()) {
+        if (Settings.GetExtendedSettings().GetEnableSaslExternalBind()) {
             LDAP_LOG_D("bind: Sasl EXTERNAL");
             result = NKikimrLdap::Bind(*ld, "", NKikimrLdap::ESaslMechanism::EXTERNAL, nullptr);
         } else {
@@ -473,10 +473,10 @@ private:
         if (Settings.GetBaseDn().empty()) {
             return {TEvLdapAuthProvider::EStatus::UNAVAILABLE, {.Message = ERROR_MESSAGE, .LogMessage = "Parameter BaseDn is empty", .Retryable = false}};
         }
-        if (Settings.GetBindDn().empty() && !Settings.GetExtendedSettings().GetEnableMtlsAuth()) {
+        if (Settings.GetBindDn().empty() && !Settings.GetExtendedSettings().GetEnableSaslExternalBind()) {
             return {TEvLdapAuthProvider::EStatus::UNAVAILABLE, {.Message = ERROR_MESSAGE, .LogMessage = "Parameter BindDn is empty", .Retryable = false}};
         }
-        if (Settings.GetBindPassword().empty() && !Settings.GetExtendedSettings().GetEnableMtlsAuth()) {
+        if (Settings.GetBindPassword().empty() && !Settings.GetExtendedSettings().GetEnableSaslExternalBind()) {
             return {TEvLdapAuthProvider::EStatus::UNAVAILABLE, {.Message = ERROR_MESSAGE, .LogMessage = "Parameter BindPassword is empty", .Retryable = false}};
         }
         return {TEvLdapAuthProvider::EStatus::SUCCESS, {}};

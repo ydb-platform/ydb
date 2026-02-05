@@ -116,7 +116,7 @@ message TLdapAuthentication {
 
     message TExtendedSettings {
         optional bool EnableNestedGroupsSearch = 1 [default = false];
-        optional bool EnableMtlsAuth = 2 [default = false];
+        optional bool EnableSaslExternalBind = 2 [default = false];
     }
 
     optional string Host = 1; // DEPRECATED: Use Hosts instead it

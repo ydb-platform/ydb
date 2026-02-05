@@ -1,0 +1,6 @@
+Failed to execute query, invalid final status FAILED, issues:
+<main>: Error: Query failed with code ABORTED at ISOTIME
+    <main>: Error: Run query failed: Error
+        <main>: Error: Optimization, code: 1070
+            <main>:27:10: Error: HoppingWindow: EarlyPolicy: expected one of 'drop', 'adjust', 'close', but got foobar
+

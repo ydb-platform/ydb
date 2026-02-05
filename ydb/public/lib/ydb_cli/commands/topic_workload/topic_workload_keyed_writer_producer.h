@@ -50,6 +50,7 @@ private:
 private:
     std::shared_ptr<NYdb::NTopic::IKeyedWriteSession> WriteSession_;
     ui64 MessageId_ = 0;
+    ui64 AckedMessageId_ = 0;
     const TString ProducerId_;
     std::mutex Lock_;
     std::queue<NYdb::NTopic::TContinuationToken> ContinuationTokens_;

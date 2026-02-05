@@ -700,9 +700,9 @@ TKeyedWriteSession::WrappedWriteSessionPtr TKeyedWriteSession::TSessionsWorker::
         .MaxMemoryUsage(std::numeric_limits<std::uint64_t>::max())
         .RetryPolicy(Session->RetryPolicy)
         .EventHandlers(TWriteSessionSettings::TEventHandlers()
-                        .ReadyToAcceptHandler({})
-                        .AcksHandler({})
-                        .SessionClosedHandler({}));
+        .ReadyToAcceptHandler({})
+        .AcksHandler({})
+        .SessionClosedHandler({}));
     
     if (directToPartition) {    
         alteredSettings.DirectWriteToPartition(true);

@@ -13,52 +13,52 @@
 
 namespace NYdb::NConsoleClient {
 
-        // Keyed writer uses the same parameters as the regular writer for now.
-        using TTopicWorkloadKeyedWriterParams = TTopicWorkloadWriterParams;
+// Keyed writer uses the same parameters as the regular writer for now.
+using TTopicWorkloadKeyedWriterParams = TTopicWorkloadWriterParams;
 
-        class TTopicWorkloadKeyedWriterProducer;
-        class TTopicWorkloadKeyedWriterWorker {
-        public:
-            static const size_t GENERATED_MESSAGES_COUNT = 32;
-            static void RetryableWriterLoop(const TTopicWorkloadKeyedWriterParams& params);
-            static void WriterLoop(const TTopicWorkloadKeyedWriterParams& params, TInstant endTime);
-            static std::vector<TString> GenerateMessages(size_t messageSize);
+class TTopicWorkloadKeyedWriterProducer;
+class TTopicWorkloadKeyedWriterWorker {
+public:
+    static const size_t GENERATED_MESSAGES_COUNT = 32;
+    static void RetryableWriterLoop(const TTopicWorkloadKeyedWriterParams& params);
+    static void WriterLoop(const TTopicWorkloadKeyedWriterParams& params, TInstant endTime);
+    static std::vector<TString> GenerateMessages(size_t messageSize);
 
-        protected:
-            TTopicWorkloadKeyedWriterWorker(const TTopicWorkloadKeyedWriterParams& params);
-            ~TTopicWorkloadKeyedWriterWorker();
+protected:
+    TTopicWorkloadKeyedWriterWorker(const TTopicWorkloadKeyedWriterParams& params);
+    ~TTopicWorkloadKeyedWriterWorker();
 
-            void Close();
-            void CloseProducers();
+    void Close();
+    void CloseProducers();
 
-            std::shared_ptr<TTopicWorkloadKeyedWriterProducer> CreateProducer();
+    std::shared_ptr<TTopicWorkloadKeyedWriterProducer> CreateProducer();
 
-            void WaitTillNextMessageExpectedCreateTimeAndContinuationToken(
-                std::shared_ptr<TTopicWorkloadKeyedWriterProducer> producer);
+    void WaitTillNextMessageExpectedCreateTimeAndContinuationToken(
+        std::shared_ptr<TTopicWorkloadKeyedWriterProducer> producer);
 
-            void Process(TInstant endTime);
+    void Process(TInstant endTime);
 
-            TInstant GetExpectedCurrMessageCreationTimestamp() const;
-            TInstant GetCreateTimestampForNextMessage();
+    TInstant GetExpectedCurrMessageCreationTimestamp() const;
+    TInstant GetCreateTimestampForNextMessage();
 
-            void TryCommitTx(TInstant& commitTime);
-            void TryCommitTableChanges();
+    void TryCommitTx(TInstant& commitTime);
+    void TryCommitTableChanges();
 
-            size_t InflightMessagesSize();
-            bool InflightMessagesEmpty();
+    size_t InflightMessagesSize();
+    bool InflightMessagesEmpty();
 
-            TTopicWorkloadKeyedWriterParams Params;
-            ui64 BytesWritten = 0;
-            std::optional<TTransactionSupport> TxSupport;
-            TInstant StartTimestamp;
+    TTopicWorkloadKeyedWriterParams Params;
+    ui64 BytesWritten = 0;
+    std::optional<TTransactionSupport> TxSupport;
+    TInstant StartTimestamp;
 
-            std::vector<std::shared_ptr<TTopicWorkloadKeyedWriterProducer>> Producers;
-            ui64 PartitionToWriteId = 0;
+    std::vector<std::shared_ptr<TTopicWorkloadKeyedWriterProducer>> Producers;
+    ui64 PartitionToWriteId = 0;
 
-            std::shared_ptr<std::atomic<bool>> Closed;
-            std::shared_ptr<TTopicWorkloadStatsCollector> StatsCollector;
+    std::shared_ptr<std::atomic<bool>> Closed;
+    std::shared_ptr<TTopicWorkloadStatsCollector> StatsCollector;
 
-            bool WaitForCommitTx = false;
-        };
+    bool WaitForCommitTx = false;
+};
 
 } // namespace NYdb::NConsoleClient

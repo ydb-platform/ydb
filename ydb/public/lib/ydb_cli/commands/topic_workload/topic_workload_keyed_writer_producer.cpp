@@ -130,7 +130,7 @@ void TTopicWorkloadKeyedWriterProducer::HandleAckEvent(NYdb::NTopic::TWriteSessi
     const auto now = Clock_.Now();
     for (const auto& ack : event.Acks) {
         const ui64 ackedMessageId = ack.SeqNo;
-        WRITE_LOG(Params_.Log, ELogPriority::TLOG_DEBUG, TStringBuilder() << "Got ack for keyed write " << ackedMessageId);
+        Y_ABORT_UNLESS(ackedMessageId == ++AckedMessageId_, "AckedMessageId %d is not in sequence, expected %d", ackedMessageId, AckedMessageId_);
 
         TInstant createTimestamp = now;
         if (InflightMessagesCreateTs_.TryRemove(ackedMessageId, createTimestamp)) {

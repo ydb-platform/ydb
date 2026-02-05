@@ -4,6 +4,7 @@ from ydb.oauth2_token_exchange.token_source import TokenSource
 from ydb.oauth2_token_exchange.token_exchange import Oauth2TokenExchangeCredentialsBase
 import typing
 
+aiohttp: typing.Any
 try:
     import aiohttp
 except ImportError:

@@ -5,13 +5,27 @@ from google.protobuf import text_format
 import enum
 import queue
 import typing
+from typing import ClassVar, Optional, Iterable, Any, Union, Protocol, runtime_checkable
 
 from . import _apis
 
 try:
-    from ydb.public.api.protos import ydb_issue_message_pb2, ydb_operation_pb2
+    from ydb.public.api.protos import ydb_issue_message_pb2
 except ImportError:
-    from contrib.ydb.public.api.protos import ydb_issue_message_pb2, ydb_operation_pb2
+    from contrib.ydb.public.api.protos import ydb_issue_message_pb2
+
+
+@runtime_checkable
+class _StatusResponseProtocol(Protocol):
+    """Protocol for objects that have status and issues attributes."""
+
+    @property
+    def status(self) -> Union[StatusCode, int]:
+        ...
+
+    @property
+    def issues(self) -> Iterable[Any]:
+        ...
 
 
 _TRANSPORT_STATUSES_FIRST = 401000
@@ -63,7 +77,7 @@ class _IssueMessage:
 
 
 class Error(Exception):
-    status = None
+    status: ClassVar[Optional[StatusCode]] = None
 
     def __init__(self, message: str, issues: typing.Optional[typing.Iterable[_IssueMessage]] = None):
         super(Error, self).__init__(message)
@@ -72,122 +86,122 @@ class Error(Exception):
 
 
 class TruncatedResponseError(Error):
-    status = None
+    status: ClassVar[Optional[StatusCode]] = None
 
 
 class ConnectionError(Error):
-    status = None
+    status: ClassVar[Optional[StatusCode]] = None
 
 
 class ConnectionFailure(ConnectionError):
-    status = StatusCode.CONNECTION_FAILURE
+    status: ClassVar[Optional[StatusCode]] = StatusCode.CONNECTION_FAILURE
 
 
 class ConnectionLost(ConnectionError):
-    status = StatusCode.CONNECTION_LOST
+    status: ClassVar[Optional[StatusCode]] = StatusCode.CONNECTION_LOST
 
 
 class DeadlineExceed(Error):
-    status = StatusCode.DEADLINE_EXCEEDED
+    status: ClassVar[Optional[StatusCode]] = StatusCode.DEADLINE_EXCEEDED
 
 
 class Unimplemented(ConnectionError):
-    status = StatusCode.UNIMPLEMENTED
+    status: ClassVar[Optional[StatusCode]] = StatusCode.UNIMPLEMENTED
 
 
 class Unauthenticated(Error):
-    status = StatusCode.UNAUTHENTICATED
+    status: ClassVar[Optional[StatusCode]] = StatusCode.UNAUTHENTICATED
 
 
 class BadRequest(Error):
-    status = StatusCode.BAD_REQUEST
+    status: ClassVar[Optional[StatusCode]] = StatusCode.BAD_REQUEST
 
 
 class Unauthorized(Error):
-    status = StatusCode.UNAUTHORIZED
+    status: ClassVar[Optional[StatusCode]] = StatusCode.UNAUTHORIZED
 
 
 class InternalError(Error):
-    status = StatusCode.INTERNAL_ERROR
+    status: ClassVar[Optional[StatusCode]] = StatusCode.INTERNAL_ERROR
 
 
 class Aborted(Error):
-    status = StatusCode.ABORTED
+    status: ClassVar[Optional[StatusCode]] = StatusCode.ABORTED
 
 
 class Unavailable(Error):
-    status = StatusCode.UNAVAILABLE
+    status: ClassVar[Optional[StatusCode]] = StatusCode.UNAVAILABLE
 
 
 class Overloaded(Error):
-    status = StatusCode.OVERLOADED
+    status: ClassVar[Optional[StatusCode]] = StatusCode.OVERLOADED
 
 
 class SchemeError(Error):
-    status = StatusCode.SCHEME_ERROR
+    status: ClassVar[Optional[StatusCode]] = StatusCode.SCHEME_ERROR
 
 
 class GenericError(Error):
-    status = StatusCode.GENERIC_ERROR
+    status: ClassVar[Optional[StatusCode]] = StatusCode.GENERIC_ERROR
 
 
 class BadSession(Error):
-    status = StatusCode.BAD_SESSION
+    status: ClassVar[Optional[StatusCode]] = StatusCode.BAD_SESSION
 
 
 class Timeout(Error):
-    status = StatusCode.TIMEOUT
+    status: ClassVar[Optional[StatusCode]] = StatusCode.TIMEOUT
 
 
 class PreconditionFailed(Error):
-    status = StatusCode.PRECONDITION_FAILED
+    status: ClassVar[Optional[StatusCode]] = StatusCode.PRECONDITION_FAILED
 
 
 class NotFound(Error):
-    status = StatusCode.NOT_FOUND
+    status: ClassVar[Optional[StatusCode]] = StatusCode.NOT_FOUND
 
 
 class AlreadyExists(Error):
-    status = StatusCode.ALREADY_EXISTS
+    status: ClassVar[Optional[StatusCode]] = StatusCode.ALREADY_EXISTS
 
 
 class SessionExpired(Error):
-    status = StatusCode.SESSION_EXPIRED
+    status: ClassVar[Optional[StatusCode]] = StatusCode.SESSION_EXPIRED
 
 
 class Cancelled(Error):
-    status = StatusCode.CANCELLED
+    status: ClassVar[Optional[StatusCode]] = StatusCode.CANCELLED
 
 
 class Undetermined(Error):
-    status = StatusCode.UNDETERMINED
+    status: ClassVar[Optional[StatusCode]] = StatusCode.UNDETERMINED
 
 
 class Unsupported(Error):
-    status = StatusCode.UNSUPPORTED
+    status: ClassVar[Optional[StatusCode]] = StatusCode.UNSUPPORTED
 
 
 class SessionBusy(Error):
-    status = StatusCode.SESSION_BUSY
+    status: ClassVar[Optional[StatusCode]] = StatusCode.SESSION_BUSY
 
 
 class ExternalError(Error):
-    status = StatusCode.EXTERNAL_ERROR
+    status: ClassVar[Optional[StatusCode]] = StatusCode.EXTERNAL_ERROR
 
 
 class SessionPoolEmpty(Error, queue.Empty):
-    status = StatusCode.SESSION_POOL_EMPTY
+    status: ClassVar[Optional[StatusCode]] = StatusCode.SESSION_POOL_EMPTY
 
 
 class SessionPoolClosed(Error):
-    status = StatusCode.SESSION_POOL_CLOSED
+    status: ClassVar[Optional[StatusCode]] = StatusCode.SESSION_POOL_CLOSED
 
     def __init__(self):
         super().__init__("Session pool is closed.")
 
 
 class ClientInternalError(Error):
-    status = StatusCode.CLIENT_INTERNAL_ERROR
+    status: ClassVar[Optional[StatusCode]] = StatusCode.CLIENT_INTERNAL_ERROR
 
 
 class UnexpectedGrpcMessage(Error):
@@ -202,7 +216,7 @@ def _format_issues(issues: typing.Iterable[ydb_issue_message_pb2.IssueMessage]) 
     return " ,".join(text_format.MessageToString(issue, as_utf8=False, as_one_line=True) for issue in issues)
 
 
-def _format_response(response: ydb_operation_pb2.Operation) -> str:
+def _format_response(response: _StatusResponseProtocol) -> str:
     fmt_issues = _format_issues(response.issues)
     return f"{fmt_issues} (server_code: {response.status})"
 
@@ -231,7 +245,22 @@ _server_side_error_map = {
 }
 
 
-def _process_response(response_proto: ydb_operation_pb2.Operation) -> None:
-    if response_proto.status not in _success_status_codes:
-        exc_obj = _server_side_error_map.get(response_proto.status)
-        raise exc_obj(_format_response(response_proto), response_proto.issues)
+def _process_response(response_proto: _StatusResponseProtocol) -> None:
+    """Process response and raise appropriate exception if status is not success.
+
+    :param response_proto: Any object with status and issues attributes
+        (Operation, ServerStatus, ExecuteQueryResponsePart, etc.)
+    :raises: Appropriate YDB error based on status code
+    """
+    try:
+        status = StatusCode(response_proto.status)
+    except ValueError:
+        # Unknown status code from server - treat as GenericError
+        raise GenericError(
+            "Unknown status code: %s. %s" % (response_proto.status, _format_response(response_proto)),
+            response_proto.issues,
+        )
+
+    if status not in _success_status_codes:
+        exc_class = _server_side_error_map.get(status, GenericError)
+        raise exc_class(_format_response(response_proto), response_proto.issues)

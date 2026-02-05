@@ -6,6 +6,7 @@ from typing import (
     Dict,
     Any,
     Union,
+    TYPE_CHECKING,
 )
 
 from .base import AsyncResponseContextIterator
@@ -23,25 +24,29 @@ from ..._constants import DEFAULT_INITIAL_RESPONSE_TIMEOUT
 
 import logging
 
+if TYPE_CHECKING:
+    from ...aio.driver import Driver as AsyncDriver
+
 logger = logging.getLogger(__name__)
 
 
-class QuerySession(BaseQuerySession):
+class QuerySession(BaseQuerySession["AsyncDriver"]):
     """Session object for Query Service. It is not recommended to control
-    session's lifecycle manually - use a QuerySessionPool is always a better choise.
+    session's lifecycle manually - use a QuerySessionPool is always a better choice.
     """
 
     _loop: asyncio.AbstractEventLoop
-    _status_stream: _utilities.AsyncResponseIterator = None
+    _status_stream: Optional[_utilities.AsyncResponseIterator]
 
     def __init__(
         self,
-        driver: common_utils.SupportedDriverType,
+        driver: "AsyncDriver",
         settings: Optional[base.QueryClientSettings] = None,
-        loop: asyncio.AbstractEventLoop = None,
+        loop: Optional[asyncio.AbstractEventLoop] = None,
     ):
         super(QuerySession, self).__init__(driver, settings)
         self._loop = loop if loop is not None else asyncio.get_running_loop()
+        self._status_stream = None
 
     async def _attach(self) -> None:
         self._stream = await self._attach_call()
@@ -63,6 +68,8 @@ class QuerySession(BaseQuerySession):
         self._loop.create_task(self._check_session_status_loop(), name="check session status task")
 
     async def _check_session_status_loop(self) -> None:
+        if self._status_stream is None:
+            return
         try:
             async for status in self._status_stream:
                 issues._process_response(status)

@@ -751,7 +751,12 @@ bool ValidateBlockAggs(TPositionHandle pos, const TTypeAnnotationNode::TListType
             }
         }
 
-        auto retAggType = overState ? agg->HeadPtr()->GetTypeAnn() : AggApplySerializedStateType(agg->HeadPtr(), ctx);
+        const TTypeAnnotationNode* retAggType;
+        if (overState) {
+            retAggType = agg->HeadPtr()->GetTypeAnn();
+        } else {
+            retAggType = AggApplySerializedStateType(agg->HeadPtr(), ctx);
+        }
         retMultiType.push_back(retAggType);
     }
 

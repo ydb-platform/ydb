@@ -13304,7 +13304,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
 
         // ON ERROR and ON EMPTY values must be castable to resultSlot or "Null"
         auto isValidCaseHandler = [&] (const TExprNode& node) {
-            const auto* typeAnn = node.GetTypeAnn();
+            const auto typeAnn = node.GetTypeAnn();
             if (!typeAnn) {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(node.Pos()), "Expected computable value, but got lambda"));
                 return false;

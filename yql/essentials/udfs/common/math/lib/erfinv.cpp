@@ -4,14 +4,18 @@
 
 #include "erfinv.h"
 
+namespace {
+
 template <size_t N>
-static double PolEval(double x, const std::array<double, N>& coef) {
+double PolEval(double x, const std::array<double, N>& coef) {
     static_assert(N > 0, "Array coef[] should not be empty.");
     return std::accumulate(coef.crbegin() + 1, coef.crend(), coef[N - 1],
                            [x](auto init, auto cur) {
                                return std::move(init) * x + cur;
                            });
 }
+
+} // namespace
 
 namespace NMathUdf {
 

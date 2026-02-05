@@ -1075,7 +1075,9 @@ TSourcePtr BuildInnerSource(TPosition pos, TNodePtr node, const TString& service
     return new TInnerSource(pos, node, service, cluster, label);
 }
 
-static bool IsComparableExpression(TContext& ctx, const TNodePtr& expr, bool assume, const char* sqlConstruction) {
+namespace {
+
+bool IsComparableExpression(TContext& ctx, const TNodePtr& expr, bool assume, const char* sqlConstruction) {
     if (assume && !expr->IsPlainColumn()) {
         ctx.Error(expr->GetPos()) << "Only column names can be used in " << sqlConstruction;
         return false;
@@ -1098,6 +1100,8 @@ static bool IsComparableExpression(TContext& ctx, const TNodePtr& expr, bool ass
     }
     return true;
 }
+
+} // namespace
 
 /// \todo move to reduce.cpp? or mapreduce.cpp?
 class TReduceSource: public IRealSource {

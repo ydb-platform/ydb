@@ -6,12 +6,14 @@
 
 namespace NYql {
 
-static char HexDigit(char c)
+namespace {
+
+char HexDigit(char c)
 {
     return (c < 10 ? '0' + c : 'A' + (c - 10));
 }
 
-static void EscapedPrintChar(ui8 c, IOutputStream* out)
+void EscapedPrintChar(ui8 c, IOutputStream* out)
 {
     switch (c) {
         case '\\':
@@ -54,7 +56,7 @@ static void EscapedPrintChar(ui8 c, IOutputStream* out)
     }
 }
 
-static void EscapedPrintUnicode(wchar32 rune, IOutputStream* out)
+void EscapedPrintUnicode(wchar32 rune, IOutputStream* out)
 {
     static const int MaxEscapeLen = 10;
 
@@ -85,7 +87,7 @@ static void EscapedPrintUnicode(wchar32 rune, IOutputStream* out)
     }
 }
 
-static bool TryParseOctal(const char*& p, const char* e, int maxlen, wchar32* value)
+bool TryParseOctal(const char*& p, const char* e, int maxlen, wchar32* value)
 {
     while (maxlen-- && p != e) {
         if (*value > 255) {
@@ -104,7 +106,7 @@ static bool TryParseOctal(const char*& p, const char* e, int maxlen, wchar32* va
     return (maxlen == -1);
 }
 
-static bool TryParseHex(const char*& p, const char* e, int maxlen, wchar32* value)
+bool TryParseHex(const char*& p, const char* e, int maxlen, wchar32* value)
 {
     while (maxlen-- > 0 && p != e) {
         char ch = *p++;
@@ -127,9 +129,11 @@ static bool TryParseHex(const char*& p, const char* e, int maxlen, wchar32* valu
     return (maxlen == -1);
 }
 
-static bool IsValidUtf8Rune(wchar32 value) {
+bool IsValidUtf8Rune(wchar32 value) {
     return value <= 0x10ffff && (value < 0xd800 || value > 0xdfff);
 }
+
+} // namespace
 
 TStringBuf UnescapeResultToString(EUnescapeResult result)
 {

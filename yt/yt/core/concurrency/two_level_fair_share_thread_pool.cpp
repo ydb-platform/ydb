@@ -681,6 +681,8 @@ public:
     // Invoke is lock free on a fast path (a.k.a. no shutdown).
     void Invoke(TClosure callback, TBucket* bucket) override
     {
+        YT_VERIFY(bucket);
+
         // We can't guarantee read of |true| in time anyway
         // So relaxed order is enough.
         if (Stopped_.load(std::memory_order::relaxed)) {

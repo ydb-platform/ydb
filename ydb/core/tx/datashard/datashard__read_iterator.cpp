@@ -2641,6 +2641,21 @@ private:
                     "Read transaction was a victim of broken locks",
                     state.LockId ? sysLocks.GetVictimQueryTraceIdForLock(state.LockId) : Nothing(),
                     state.QueryTraceId ? TMaybe<ui64>(state.QueryTraceId) : Nothing());
+                
+                // In deferred lock scenarios, emit breaker logs and pass info to SessionActor
+                if (state.QueryTraceId) {
+                    auto breakerQueryTraceIds = Self->FindBreakerQueryTraceIds(state.ReadVersion);
+                    TVector<ui64> victimIds = {state.QueryTraceId};
+                    for (ui64 breakerQueryTraceId : breakerQueryTraceIds) {
+                        NDataIntegrity::LogLocksBroken(ctx, Self->TabletID(),
+                            "Write transaction broke other locks (deferred)",
+                            {}, // No specific lock IDs in deferred scenario
+                            TMaybe<ui64>(breakerQueryTraceId),
+                            victimIds);
+                        // Add to result for SessionActor to emit KQP-level breaker log
+                        Result->Record.AddDeferredBreakerQueryTraceIds(breakerQueryTraceId);
+                    }
+                }
             }
 
             break;
@@ -2652,6 +2667,21 @@ private:
                     "Read transaction was a victim of broken locks",
                     state.LockId ? sysLocks.GetVictimQueryTraceIdForLock(state.LockId) : Nothing(),
                     state.QueryTraceId ? TMaybe<ui64>(state.QueryTraceId) : Nothing());
+                
+                // In deferred lock scenarios, emit breaker logs and pass info to SessionActor
+                if (state.QueryTraceId) {
+                    auto breakerQueryTraceIds = Self->FindBreakerQueryTraceIds(state.ReadVersion);
+                    TVector<ui64> victimIds = {state.QueryTraceId};
+                    for (ui64 breakerQueryTraceId : breakerQueryTraceIds) {
+                        NDataIntegrity::LogLocksBroken(ctx, Self->TabletID(),
+                            "Write transaction broke other locks (deferred)",
+                            {}, // No specific lock IDs in deferred scenario
+                            TMaybe<ui64>(breakerQueryTraceId),
+                            victimIds);
+                        // Add to result for SessionActor to emit KQP-level breaker log
+                        Result->Record.AddDeferredBreakerQueryTraceIds(breakerQueryTraceId);
+                    }
+                }
             }
 
             break;

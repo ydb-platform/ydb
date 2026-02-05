@@ -1066,6 +1066,11 @@ public:
             BrokenLocks.push_back(lock);
         }
 
+        // Collect deferred breaker QueryTraceIds for TLI logging
+        for (auto breakerQueryTraceId : record.GetDeferredBreakerQueryTraceIds()) {
+            DeferredBreakerQueryTraceIds.push_back(breakerQueryTraceId);
+        }
+
         if (UseFollowers) {
             YQL_ENSURE(Locks.empty());
         }
@@ -1517,6 +1522,10 @@ public:
         for (auto& lock : BrokenLocks) {
             resultInfo.AddLocks()->CopyFrom(lock);
         }
+        // Add deferred breaker QueryTraceIds for TLI logging
+        for (auto breakerQueryTraceId : DeferredBreakerQueryTraceIds) {
+            resultInfo.AddDeferredBreakerQueryTraceIds(breakerQueryTraceId);
+        }
         if (Settings->GetIsBatch() && !BatchOperationMaxRow.GetCells().empty()) {
             std::vector<TCell> keyRow;
             auto cells = BatchOperationMaxRow.GetCells();
@@ -1589,6 +1598,7 @@ private:
 
     TVector<NKikimrDataEvents::TLock> Locks;
     TVector<NKikimrDataEvents::TLock> BrokenLocks;
+    TVector<ui64> DeferredBreakerQueryTraceIds;
 
     IKqpGateway::TKqpSnapshot Snapshot;
 

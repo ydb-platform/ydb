@@ -2362,6 +2362,32 @@ public:
             }, TlsActivationContext->AsActorContext());
         }
 
+        // Emit TLI logs for deferred breakers (transactions that broke locks in deferred lock creation scenarios)
+        if (!ev->DeferredBreakerQueryTraceIds.empty() && IS_INFO_LOG_ENABLED(NKikimrServices::TLI)) {
+            const bool isCommitAction = QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_COMMIT_TX ||
+                                       QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_EXECUTE_PREPARED;
+            
+            for (ui64 deferredBreakerQueryTraceId : ev->DeferredBreakerQueryTraceIds) {
+                // Look up breaker's query text from node-level cache
+                TString breakerQueryText = NDataIntegrity::TNodeQueryTextCache::Instance().Get(deferredBreakerQueryTraceId);
+                TString breakerQueryTexts;
+                if (!breakerQueryText.empty()) {
+                    breakerQueryTexts = TStringBuilder() << "[QueryTraceId=" << deferredBreakerQueryTraceId 
+                        << " QueryText=" << breakerQueryText << "]";
+                }
+                
+                NDataIntegrity::LogTli(NDataIntegrity::TTliLogParams{
+                    .Component = "SessionActor",
+                    .Message = isCommitAction ? "Commit had broken other locks (deferred)" : "Query had broken other locks (deferred)",
+                    .QueryText = breakerQueryText,
+                    .QueryTexts = breakerQueryTexts,
+                    .TraceId = TraceId(),
+                    .BreakerQueryTraceId = deferredBreakerQueryTraceId,
+                    .IsCommitAction = isCommitAction,
+                }, TlsActivationContext->AsActorContext());
+            }
+        }
+
         if (QueryState->TxCtx->TxManager) {
             QueryState->ParticipantNodes = QueryState->TxCtx->TxManager->GetParticipantNodes();
         } else {
@@ -2389,7 +2415,7 @@ public:
                 TMaybe<ui64> victimQueryTraceId;
                 TString victimQueryText;
 
-                // Try sources in priority order: TxManager > DataShard response > first query
+                // Determine the VictimQueryTraceId (must match DataShard for consistency)
                 if (txManagerQueryTraceId) {
                     victimQueryTraceId = *txManagerQueryTraceId;
                     victimQueryText = QueryState->TxCtx->QueryTextCollector.GetQueryTextByTraceId(*txManagerQueryTraceId);
@@ -2399,6 +2425,16 @@ public:
                 } else if (QueryState->TxCtx->QueryTextCollector.GetQueryCount() > 0) {
                     victimQueryTraceId = QueryState->TxCtx->QueryTextCollector.GetFirstQueryTraceId();
                     victimQueryText = QueryState->TxCtx->QueryTextCollector.GetFirstQueryText();
+                }
+
+                // In deferred lock scenarios (OLTP sink), the VictimQueryTraceId from TxManager/DataShard
+                // might be from commit-time validation, not the original query. The query text is stored
+                // under FirstQueryTraceId (the first query that established the MVCC snapshot).
+                if (victimQueryText.empty() && QueryState->TxCtx->TxManager) {
+                    ui64 firstQueryTraceId = QueryState->TxCtx->TxManager->GetFirstQueryTraceId();
+                    if (firstQueryTraceId != 0) {
+                        victimQueryText = QueryState->TxCtx->QueryTextCollector.GetQueryTextByTraceId(firstQueryTraceId);
+                    }
                 }
 
                 return {victimQueryTraceId, victimQueryText};

@@ -766,6 +766,49 @@ Y_UNIT_TEST_SUITE(KqpTli) {
 
         VerifyTliIssueAndLogsWithEnabled(issues, ss, breakerQueryText, victimRead1Text);
     }
+
+    // Test: Concurrent UPSERT...SELECT transactions - replicates user's production scenario
+    // Tests that BreakerQueryTraceId and VictimQueryTraceId linkage is maintained even with
+    // OLTP sink + UPSERT...SELECT where locks may be created lazily (deferred lock creation).
+    Y_UNIT_TEST(ConcurrentUpsertSelect) {
+        TStringStream ss;
+        TTliTestContext ctx(ss);
+        ctx.CreateTable("/Root/Tenant1/ConcurrentTable");
+
+        // Seed with initial data in the key range 1-10
+        for (ui64 i = 1; i <= 10; ++i) {
+            ctx.SeedTable("/Root/Tenant1/ConcurrentTable", {{i, Sprintf("Initial%lu", i)}});
+        }
+
+        // Victim transaction: UPSERT...SELECT that reads and writes keys 1-5
+        const TString victimUpsertSelect = "UPSERT INTO `/Root/Tenant1/ConcurrentTable` (Key, Value) "
+                                           "SELECT Key, \"VictimModified\" AS Value FROM `/Root/Tenant1/ConcurrentTable` "
+                                           "WHERE Key >= 1u AND Key <= 5u";
+
+        // Breaker transaction: simple UPSERT to key 3 (overlaps with victim's range)
+        const TString breakerUpsert = "UPSERT INTO `/Root/Tenant1/ConcurrentTable` (Key, Value) VALUES (3u, \"BreakerValue\")";
+
+        // Victim: start transaction with UPSERT...SELECT (reads keys 1-5, then writes them)
+        // Note: with OLTP sink, the lock is NOT created immediately here (deferred lock creation)
+        std::optional<TTransaction> victimTx;
+        {
+            auto result = ctx.VictimSession.ExecuteDataQuery(victimUpsertSelect, TTxControl::BeginTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == EStatus::SUCCESS, result.GetIssues().ToString());
+            victimTx = result.GetTransaction();
+        }
+
+        // Breaker: write to key 3
+        // At this point, victim's lock doesn't exist yet (deferred lock creation)
+        // The breaker's write is tracked for later TLI linkage via RecentWritesForTli cache
+        ctx.ExecuteQuery(breakerUpsert);
+
+        // Victim: try to commit - should be aborted due to MVCC conflict detection
+        auto [status, issues] = CommitTxWithIssues(*victimTx);
+        UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
+
+        // Verify issue and TLI logs using common verification function
+        VerifyTliIssueAndLogsWithEnabled(issues, ss, breakerUpsert, victimUpsertSelect);
+    }
 }
 
 } // namespace NKqp

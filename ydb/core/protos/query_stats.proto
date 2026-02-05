@@ -47,6 +47,7 @@ message TTxStats {
     optional uint64 LocksBrokenAsBreaker = 5; // locks broken by this transaction
     optional uint64 LocksBrokenAsVictim = 6;  // this transaction's locks were broken by others
     optional uint64 BreakerQueryTraceId = 7;  // QueryTraceId of the query that broke other locks
+    repeated uint64 DeferredBreakerQueryTraceIds = 8; // QueryTraceIds of transactions that broke locks in deferred scenarios
 
     // TODO:
     // optional uint64 CommitLatencyUsec = 3;

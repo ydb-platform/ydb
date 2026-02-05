@@ -3093,7 +3093,44 @@ private:
 
     ui64 CurrentVacuumGeneration = 0;
 
+    // Cache for tracking recent writes for TLI breaker linkage in deferred lock creation scenarios
+    // Maps (MvccVersion) -> QueryTraceId for writes that may have broken locks
+    // Used when InvisibleRowSkips are detected to identify the breaker
+    static constexpr size_t MaxRecentWritesForTli = 1000;
+    struct TRecentWriteForTli {
+        TRowVersion WriteVersion;
+        ui64 QueryTraceId;
+    };
+    TDeque<TRecentWriteForTli> RecentWritesForTli;
+
 public:
+    // Add a recent write entry for TLI breaker tracking
+    void AddRecentWriteForTli(const TRowVersion& writeVersion, ui64 queryTraceId) {
+        if (queryTraceId == 0) {
+            return; // Don't track writes without QueryTraceId
+        }
+        // Keep the cache bounded
+        while (RecentWritesForTli.size() >= MaxRecentWritesForTli) {
+            RecentWritesForTli.pop_front();
+        }
+        RecentWritesForTli.push_back({writeVersion, queryTraceId});
+    }
+
+    // Find breaker QueryTraceIds for writes that happened after a given read version
+    TVector<ui64> FindBreakerQueryTraceIds(const TRowVersion& readVersion) const {
+        TVector<ui64> result;
+        // Iterate from newest to oldest for efficiency
+        for (auto it = RecentWritesForTli.rbegin(); it != RecentWritesForTli.rend(); ++it) {
+            if (it->WriteVersion > readVersion) {
+                result.push_back(it->QueryTraceId);
+            } else {
+                // Since writes are added in order, older writes won't match
+                break;
+            }
+        }
+        return result;
+    }
+
     auto& GetLockChangeRecords() {
         return LockChangeRecords;
     }

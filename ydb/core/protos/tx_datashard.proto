@@ -2058,9 +2058,6 @@ message TEvKqpScan {
     optional NKikimrDataEvents.ELockMode LockMode = 28;
     optional double CpuGroupThreadsLimit = 29;
     optional string CpuGroupName = 30;
-
-    // Globally unique query trace ID for TLI log linkage
-    optional uint64 QueryTraceId = 31;
 }
 
 message TEvCompactTable {

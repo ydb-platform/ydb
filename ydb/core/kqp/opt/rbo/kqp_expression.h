@@ -11,46 +11,83 @@ namespace NKqp {
 
 using namespace NYql;
 
+/**
+ * This is a wrapper class with convenient methods to work with expressions in YQL
+ * Ideally it should be the single point of entry for all operations with expressions
+ */
 class TExpression {
   public:
 
-    TExpression(TExprNode::TPtr node, const TExprContext* ctx, const TPlanProps* props = nullptr) :
-      Node(node),
-      Ctx(ctx),
-      PlanProps(props) {}
+    // Constructs an expression from ExprNode, also save expression context and plan
+    // properties. Plan properties are needed to access subplan IUs
+    TExpression(TExprNode::TPtr node, TExprContext* ctx, const TPlanProps* props = nullptr); 
 
     TExpression() = default;
     ~TExpression() = default;
 
+    // Split a conjunct into a vector of expressions. If the is no conjunction at the top level,
+    // just return a vector with this node. Handles pg conversions as well
     TVector<TExpression> SplitConjunct() const;
 
+    // Check if the expression is just getting a single column from a tuple
     bool IsColumnAccess() const;
-    bool IsSingleCallable(THashSet<TString> allowedCallables) const;
-    bool IsCast() const;
-    bool IsConstantExpr() const;
-    bool MaybeJoinCondition(bool includeExpression = false, bool equiJoinOnly = true) const;
 
+    // Check if the expression is a just a single callable on top of a column expression
+    bool IsSingleCallable(THashSet<TString> allowedCallables) const;
+
+    // Check if the expression is a cast
+    bool IsCast() const;
+
+    // Check is the expression can be folded
+    bool IsConstantExpr() const;
+
+    // Check if this is a potential join condition
+    bool MaybeJoinCondition(bool includeExpressions = false) const;
+
+    // Return the full lambda ExprNode of this expression
     TExprNode::TPtr GetLambda() const;
+
+    // Return just the body part of the lambda
     TExprNode::TPtr GetExpressionBody() const;
 
+    // Return all column references used in this expression
+    // Optionally include columns that bind to subplan results and external columns inside correlated subqueries
+    // If the result list of column references is not empty and plan properties are not set in the expression,
+    // an exception will be thrown
     TVector<TInfoUnit> GetInputIUs(bool includeSubplanVars = false, bool includeCorrelatedDeps = false) const;
 
+    // Rename column references in the expression
     TExpression ApplyRenames(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap);
+
+    // Apply a generic replace map to the lambda of the expression
     TExpression ApplyReplaceMap(TNodeOnNodeOwnedMap map, TRBOContext& ctx);
+
+    // Remove a cast from the expression
     TExpression PruneCast();
 
+    // Produce a pretty string for this expression
     TString ToString() const;
 
     TExprNode::TPtr Node;
-    const TExprContext* Ctx;
+    TExprContext* Ctx;
     const TPlanProps* PlanProps;
 };
 
+/**
+ * Model a generic potential join condition
+ */
 class TJoinCondition {
   public:
+
     TJoinCondition(const TExpression& expr);
+
+    // In case this is a simple predicate that contains a single column reference on each side, return left column
     TInfoUnit GetLeftIU();
+
+    // In case this is a simple predicate that contains a single column reference on each side, return right column
     TInfoUnit GetRightIU();
+
+    // Find all non-column reference expression in this condition and insert them into a map
     void ExtractExpressions(TNodeOnNodeOwnedMap& map);
 
     TExpression& Expr;
@@ -69,5 +106,7 @@ TExpression MakeConjunct(const TVector<TExpression>& vec, bool pgSyntax = false)
 TExpression MakeBinaryPredicate(TString callable, const TExpression& left, const TExpression& right);
 
 void GetAllMembers(TExprNode::TPtr node, TVector<TInfoUnit> &IUs);
+void GetAllMembers(TExprNode::TPtr node, TVector<TInfoUnit> &IUs, const TPlanProps& props, bool withSubplanContext, bool withDependencies);
+
 }
 }

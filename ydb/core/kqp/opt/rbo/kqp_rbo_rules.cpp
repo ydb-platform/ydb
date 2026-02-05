@@ -94,12 +94,12 @@ std::shared_ptr<TOpCBOTree> AddJoinToCBOTree(std::shared_ptr<TOpCBOTree> & cboTr
     return std::make_shared<TOpCBOTree>(join, treeNodes, join->Pos);
 }
 
-std::shared_ptr<TOpFilter> FuseFilters(const std::shared_ptr<TOpFilter>& top, const std::shared_ptr<TOpFilter>& bottom) {
+std::shared_ptr<TOpFilter> FuseFilters(const std::shared_ptr<TOpFilter>& top, const std::shared_ptr<TOpFilter>& bottom, bool pgSyntax) {
     TVector<TExpression> conjuncts = top->FilterExpr.SplitConjunct();
     TVector<TExpression> bottomConjuncts = bottom->FilterExpr.SplitConjunct();
     conjuncts.insert(conjuncts.begin(), bottomConjuncts.begin(), bottomConjuncts.end());
 
-    return make_shared<TOpFilter>(bottom->GetInput(), top->Pos, MakeConjunct(conjuncts, props.PgSyntax));
+    return make_shared<TOpFilter>(bottom->GetInput(), top->Pos, MakeConjunct(conjuncts, pgSyntax));
 }
 
 } // namespace
@@ -319,63 +319,6 @@ bool TExtractJoinExpressionsRule::MatchAndApply(std::shared_ptr<IOperator> &inpu
             for (auto const & [key, value] : localMap) {
                 replaceMap.insert({key, value});
             }
-
-            /*
-            if (conj->IsCallable("FromPg")) {
-                conj = conj->Child(0);
-            }
-
-            auto leftSide = conj->Child(2);
-            auto rightSide = conj->Child(3);
-
-            auto memberArg = FindMemberArg(leftSide);
-
-            if (!leftSide->IsCallable("Member")) {
-                TString newName = "_rbo_arg_" + std::to_string(props.InternalVarIdx++);
-                auto lambda_arg = Build<TCoArgument>(ctx.ExprCtx, leftSide->Pos()).Name("arg").Done().Ptr();
-
-                // clang-format off
-                auto mapLambda = Build<TCoLambda>(ctx.ExprCtx, leftSide->Pos())
-                    .Args({lambda_arg})
-                    .Body(ReplaceArg(leftSide, lambda_arg, ctx.ExprCtx))
-                    .Done().Ptr();
-                // clang-format on
-
-                mapElements.emplace_back(TInfoUnit(newName), mapLambda);
-
-                // clang-format off
-                auto newLeftSide = Build<TCoMember>(ctx.ExprCtx, leftSide->Pos())
-                    .Struct(memberArg)
-                    .Name().Value(newName).Build()
-                    .Done().Ptr();
-                // clang-format on
-
-                replaceMap[leftSide] = newLeftSide;
-            }
-
-            if (!rightSide->IsCallable("Member")) {
-                TString newName = "_rbo_arg_" + std::to_string(props.InternalVarIdx++);
-                auto lambda_arg = Build<TCoArgument>(ctx.ExprCtx, rightSide->Pos()).Name("arg").Done().Ptr();
-
-                // clang-format off
-                auto mapLambda = Build<TCoLambda>(ctx.ExprCtx, rightSide->Pos())
-                    .Args({lambda_arg})
-                    .Body(ReplaceArg(rightSide, lambda_arg, ctx.ExprCtx))
-                    .Done().Ptr();
-                // clang-format on
-
-                mapElements.emplace_back(TInfoUnit(newName), mapLambda);
-
-                // clang-format off
-                auto newRightSide = Build<TCoMember>(ctx.ExprCtx, leftSide->Pos())
-                    .Struct(memberArg)
-                    .Name().Value(newName).Build()
-                    .Done().Ptr();
-                // clang-format on
-
-                replaceMap[rightSide] = newRightSide;
-            }
-            */
         }
 
         filter->FilterExpr.ApplyReplaceMap(replaceMap, ctx);
@@ -1160,7 +1103,7 @@ std::shared_ptr<IOperator> TExpandCBOTreeRule::SimpleMatchAndApply(const std::sh
         }
 
         if (maybeFilter && maybeAnotherFilter) {
-            maybeFilter = FuseFilters(maybeFilter, maybeAnotherFilter);
+            maybeFilter = FuseFilters(maybeFilter, maybeAnotherFilter, props.PgSyntax);
         } else if (maybeAnotherFilter) {
             maybeFilter = maybeAnotherFilter;
         }

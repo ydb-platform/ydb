@@ -323,7 +323,7 @@ namespace NKikimr::NGRpcProxy::V1 {
         bool hasPassword = false;
 
         ui32 version = 0;
-        for (auto& [attrName, attrValue] : rr.attributes()) {
+        for (const auto& [attrName, attrValue] : rr.attributes()) {
             if (attrName == "_version") {
                 try {
                     if (!attrValue.empty())

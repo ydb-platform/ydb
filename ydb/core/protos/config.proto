@@ -2471,7 +2471,7 @@ message TColumnShardConfig {
     }
 
     optional uint32 MaxInFlightIntervalsOnRequest = 16;
-    optional uint32 MaxReadStaleness_ms = 18 [default = 300000];
+    optional uint32 MaxReadStaleness_ms = 18 [default = 1800000];
     optional uint32 GCIntervalMs = 19 [default = 30000];
     optional uint32 CompactionActualizationLagMs = 20 [default = 1000];
     optional uint32 ActualizationTasksLagMs = 21 [default = 1000];
@@ -2522,7 +2522,7 @@ message TColumnShardConfig {
     optional uint32 ProxyMaxRetriesPerShard = 60 [default = 10];
 
     oneof DefaultCompaction {
-        string DefaultCompactionPreset = 61 [default = "tiling"];
+        string DefaultCompactionPreset = 61 [default = "lc-buckets"];
         NKikimrSchemeOp.TCompactionPlannerConstructorContainer DefaultCompactionConstructor = 62;
     }
 
@@ -2530,7 +2530,7 @@ message TColumnShardConfig {
     optional uint64 CompactionStageMemoryLimit = 64 [default = 3221225472];
     optional uint64 TieringStageMemoryLimit = 65 [default = 1000000000];
     optional uint64 CleanupPortionsStageMemoryLimit = 66 [default = 1000000000];
-    optional bool EnableIntervalTreeForMetadataSelect = 67 [default = true];
+    optional bool EnableIntervalTreeForMetadataSelect = 67 [default = false];
     optional bool EnableCursorV1 = 68 [default = false];
 }
 

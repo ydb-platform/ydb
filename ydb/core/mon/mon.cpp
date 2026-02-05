@@ -169,7 +169,7 @@ IMonPage* TMon::RegisterActorPage(TIndexMonPage* index, const TString& relPath,
         .Index = index,
         .PreTag = preTag,
         .ActorId = actorId,
-        .UseAuth = useAuth,
+        .AuthMode = useAuth ? TMon::EAuthMode::Enforce : TMon::EAuthMode::Disabled,
         .SortPages = sortPages,
     });
 }
@@ -519,7 +519,7 @@ public:
             AuditCtx.SetSubjectType(result.UserToken->GetSubjectType());
             Event->Get()->UserToken = result.UserToken->GetSerializedToken();
         }
-        if (ActorMonPage->GetOnlyAuthInfo) {
+        if (ActorMonPage->AuthMode == TMon::EAuthMode::ExtractOnly) {
             // Extract token but don't enforce authorization - let the handler decide
             SendRequest(&result);
             return;
@@ -999,7 +999,7 @@ public:
     void Bootstrap() {
         AuditCtx.InitAudit(Event);
         Send(Event->Sender, new NHttp::TEvHttpProxy::TEvSubscribeForCancel(), IEventHandle::FlagTrackDelivery);
-        if ((Fields.UseAuth || Fields.GetOnlyAuthInfo) && Authorizer) {
+        if (Fields.AuthMode != TMon::EAuthMode::Disabled && Authorizer) {
             NActors::IEventHandle* handle = Authorizer(SelfId(), Event->Get()->Request.Get());
             if (handle) {
                 Send(handle);
@@ -1146,7 +1146,7 @@ public:
             AuditCtx.SetSubjectType(result.UserToken->GetSubjectType());
             Event->Get()->UserToken = result.UserToken->GetSerializedToken();
         }
-        if (Fields.GetOnlyAuthInfo) {
+        if (Fields.AuthMode == TMon::EAuthMode::ExtractOnly) {
             // Extract token but don't enforce authorization - let the handler decide
             SendRequest(&result);
             return;
@@ -1203,15 +1203,15 @@ public:
     NMonitoring::NAudit::TAuditCtx AuditCtx;
     bool NeedAudit;
 
-    bool GetOnlyAuthInfo;
+    TMon::EAuthMode AuthMode;
 
-    THttpMonAuthorizedPageRequest(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event, NMonitoring::IMonPage* page, TVector<TString> allowedSIDs, TMon::TRequestAuthorizer authorizer, bool needAudit = true, bool getOnlyAuthInfo = false)
+    THttpMonAuthorizedPageRequest(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event, NMonitoring::IMonPage* page, TVector<TString> allowedSIDs, TMon::TRequestAuthorizer authorizer, bool needAudit = true, TMon::EAuthMode authMode = TMon::EAuthMode::Enforce)
         : Event(std::move(event))
         , Container(Event->Get()->Request, page)
         , AllowedSIDs(std::move(allowedSIDs))
         , Authorizer(std::move(authorizer))
         , NeedAudit(needAudit)
-        , GetOnlyAuthInfo(getOnlyAuthInfo)
+        , AuthMode(authMode)
     {}
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -1337,7 +1337,7 @@ public:
             AuditCtx.SetSubjectType(result.UserToken->GetSubjectType());
             Event->Get()->UserToken = result.UserToken->GetSerializedToken();
         }
-        if (GetOnlyAuthInfo) {
+        if (AuthMode == TMon::EAuthMode::ExtractOnly) {
             // Extract token but don't enforce authorization - let the handler decide
             ProcessRequest();
             return;
@@ -1366,16 +1366,16 @@ class THttpMonPageService : public TActor<THttpMonPageService> {
     TIntrusivePtr<NMonitoring::IMonPage> Page;
     TMon::TRequestAuthorizer Authorizer;
     TVector<TString> AllowedSIDs;
-    bool GetOnlyAuthInfo;
+    TMon::EAuthMode AuthMode;
 
 public:
-    THttpMonPageService(const TActorId& httpProxyActorId, TIntrusivePtr<NMonitoring::IMonPage> page, TMon::TRequestAuthorizer authorizer = {}, TVector<TString> allowedSIDs = {}, bool getOnlyAuthInfo = false)
+    THttpMonPageService(const TActorId& httpProxyActorId, TIntrusivePtr<NMonitoring::IMonPage> page, TMon::TRequestAuthorizer authorizer = {}, TVector<TString> allowedSIDs = {}, TMon::EAuthMode authMode = TMon::EAuthMode::Enforce)
         : TActor(&THttpMonPageService::StateWork)
         , HttpProxyActorId(httpProxyActorId)
         , Page(std::move(page))
         , Authorizer(std::move(authorizer))
         , AllowedSIDs(std::move(allowedSIDs))
-        , GetOnlyAuthInfo(getOnlyAuthInfo)
+        , AuthMode(authMode)
     {
     }
 
@@ -1410,7 +1410,7 @@ public:
         if (ev->Get()->Request->Method == "OPTIONS") {
             return ReplyWithOptions(ev);
         }
-        Register(new THttpMonAuthorizedPageRequest(std::move(ev), Page.Get(), AllowedSIDs, Authorizer, true, GetOnlyAuthInfo));
+        Register(new THttpMonAuthorizedPageRequest(std::move(ev), Page.Get(), AllowedSIDs, Authorizer, true, AuthMode));
     }
 
     STATEFN(StateWork) {
@@ -1607,7 +1607,7 @@ void TMon::RegisterLwtrace() {
     RegisterActorHandler({
         .Path = "/trace",
         .Handler = HttpAuthMonServiceActorId,
-        .UseAuth = true,
+        .AuthMode = TMon::EAuthMode::Enforce,
         .AllowedSIDs = monitoringAllowedSIDs,
     });
 }
@@ -1774,8 +1774,8 @@ NMonitoring::IMonPage* TMon::RegisterActorPage(TRegisterActorPageFields fields) 
         fields.ActorSystem,
         fields.ActorId,
         fields.AllowedSIDs ? fields.AllowedSIDs : Config.AllowedSIDs,
-        (fields.UseAuth || fields.GetOnlyAuthInfo) ? Config.Authorizer : TRequestAuthorizer(),
-        fields.GetOnlyAuthInfo,
+        fields.AuthMode != TMon::EAuthMode::Disabled ? Config.Authorizer : TRequestAuthorizer(),
+        fields.AuthMode,
         fields.MonServiceName);
     if (fields.Index) {
         fields.Index->Register(page);

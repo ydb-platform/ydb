@@ -23,6 +23,12 @@ void MakeJsonErrorReply(NJson::TJsonValue& jsonResponse, TString& message, const
 
 class TMon {
 public:
+    enum class EAuthMode {
+        Disabled,      // Don't check authorization
+        Enforce,       // Check authorization in monitoring layer
+        ExtractOnly    // Extract token only, check authorization in handler
+    };
+
     using TRequestAuthorizer = std::function<IEventHandle*(const TActorId& owner, NHttp::THttpIncomingRequest* request)>;
 
     static IEventHandle* DefaultAuthorizer(const TActorId& owner, NHttp::THttpIncomingRequest* request);
@@ -63,8 +69,7 @@ public:
         NMonitoring::TIndexMonPage* Index;
         bool PreTag = false;
         TActorId ActorId;
-        bool UseAuth = true;
-        bool GetOnlyAuthInfo = false;  // If true, extract token but don't enforce authorization
+        EAuthMode AuthMode = EAuthMode::Enforce;
         TVector<TString> AllowedSIDs;
         bool SortPages = true;
         TString MonServiceName = "utils";
@@ -79,8 +84,7 @@ public:
     struct TRegisterHandlerFields {
         TString Path;
         TActorId Handler;
-        bool UseAuth = true;
-        bool GetOnlyAuthInfo = false;  // If true, extract token but don't enforce authorization
+        EAuthMode AuthMode = EAuthMode::Enforce;
         TVector<TString> AllowedSIDs;
     };
 
@@ -123,4 +127,4 @@ protected:
     void RegisterActorMonPage(const TActorMonPageInfo& pageInfo);
 };
 
-} // NActors
+} // namespace NActors

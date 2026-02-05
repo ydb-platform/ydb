@@ -103,14 +103,14 @@ public:
                 .RelPath = "viewer",
                 .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
-                .UseAuth = true,
+                .AuthMode = TMon::EAuthMode::Enforce,
                 .AllowedSIDs = databaseAllowedSIDs,
             });
             mon->RegisterActorPage({
                 .RelPath = "viewer/capabilities",
                 .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
-                .UseAuth = false,
+                .AuthMode = TMon::EAuthMode::Disabled,
             });
             mon->RegisterActorPage({
                 .Title = "Viewer",
@@ -123,7 +123,7 @@ public:
                 .RelPath = "monitoring",
                 .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
-                .UseAuth = false,
+                .AuthMode = TMon::EAuthMode::Disabled,
             });
             const bool requireCountersAuth = KikimrRunConfig.AppConfig.GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenRequirement() &&
                 KikimrRunConfig.AppConfig.GetMonitoringConfig().GetRequireCountersAuthentication();
@@ -131,59 +131,62 @@ public:
                 .RelPath = "counters/hosts",
                 .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
-                .UseAuth = requireCountersAuth,
+                .AuthMode = requireCountersAuth ? TMon::EAuthMode::Enforce : TMon::EAuthMode::Disabled,
                 .AllowedSIDs = requireCountersAuth ? databaseAllowedSIDs : TVector<TString>(),
             });
-            const bool requireHealthcheckAuth = KikimrRunConfig.AppConfig.GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenRequirement() &&
+            // For healthcheck, always extract token if enforce_user_token_requirement is enabled,
+            // so handler can check access. require_healthcheck_authentication only affects
+            // whether access is checked in monitoring layer or in handler.
+            const bool enforceUserToken = KikimrRunConfig.AppConfig.GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenRequirement();
+            const bool requireHealthcheckAuth = enforceUserToken &&
                 KikimrRunConfig.AppConfig.GetMonitoringConfig().GetRequireHealthcheckAuthentication();
             mon->RegisterActorPage({
                 .RelPath = "healthcheck",
                 .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
-                .UseAuth = requireHealthcheckAuth,
-                .GetOnlyAuthInfo = true, // Extract token but let handler check access
+                .AuthMode = enforceUserToken ? TMon::EAuthMode::ExtractOnly : TMon::EAuthMode::Disabled,
                 .AllowedSIDs = requireHealthcheckAuth ? databaseAllowedSIDs : TVector<TString>(),
             });
             mon->RegisterActorPage({
                 .RelPath = "vdisk",
                 .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
-                .UseAuth = true,
+                .AuthMode = TMon::EAuthMode::Enforce,
                 .AllowedSIDs = viewerAllowedSIDs,
             });
             mon->RegisterActorPage({
                 .RelPath = "pdisk",
                 .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
-                .UseAuth = true,
+                .AuthMode = TMon::EAuthMode::Enforce,
                 .AllowedSIDs = viewerAllowedSIDs,
             });
             mon->RegisterActorPage({
                 .RelPath = "operation",
                 .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
-                .UseAuth = true,
+                .AuthMode = TMon::EAuthMode::Enforce,
                 .AllowedSIDs = databaseAllowedSIDs,
             });
             mon->RegisterActorPage({
                 .RelPath = "query",
                 .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
-                .UseAuth = true,
+                .AuthMode = TMon::EAuthMode::Enforce,
                 .AllowedSIDs = databaseAllowedSIDs,
             });
             mon->RegisterActorPage({
                 .RelPath = "scheme",
                 .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
-                .UseAuth = true,
+                .AuthMode = TMon::EAuthMode::Enforce,
                 .AllowedSIDs = databaseAllowedSIDs,
             });
             mon->RegisterActorPage({
                 .RelPath = "storage",
                 .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
-                .UseAuth = true,
+                .AuthMode = TMon::EAuthMode::Enforce,
                 .AllowedSIDs = databaseAllowedSIDs,
             });
             if (!KikimrRunConfig.AppConfig.GetMonitoringConfig().GetHideHttpEndpoint()) {
@@ -225,7 +228,7 @@ public:
                     mon->RegisterActorHandler({
                         .Path = name,
                         .Handler = ctx.SelfID,
-                        .UseAuth = true,
+                        .AuthMode = TMon::EAuthMode::Enforce,
                         .AllowedSIDs = databaseAllowedSIDs,
                     });
                 }

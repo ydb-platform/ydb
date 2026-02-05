@@ -17,6 +17,7 @@ public:
     NCommon::TConfSetting<bool, Static> _EnableSolomonClientPostApi;
     NCommon::TConfSetting<ui64, Static> _TruePointsFindRange;
     NCommon::TConfSetting<ui64, Static> _MaxListingPageSize;
+    NCommon::TConfSetting<TString, Static> Auth;
     NCommon::TConfSetting<ui64, Static> MetricsQueueBatchCountLimit;
     NCommon::TConfSetting<ui64, Static> ComputeActorBatchSize;
     NCommon::TConfSetting<ui64, Static> MaxApiInflight;

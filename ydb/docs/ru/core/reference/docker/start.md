@@ -46,8 +46,6 @@ docker run "${docker_args[@]}"
 При указанных в примере выше параметрах и запуске Docker локально, [Embedded UI](../embedded-ui/index.md) {{ ydb-short-name }} будет доступен по адресу [http://localhost:8765⁠](http://localhost:8765).
 
 Подробнее про остановку и удаление Docker-контейнера с {{ ydb-short-name }} можно узнать в разделе [{#T}](cleanup.md).
-<<<<<<< HEAD
-=======
 
 ### Переопределение файла конфигурации
 
@@ -121,4 +119,3 @@ docker run "${docker_args[@]}" --config-path /path/to/your/config/file
 - `/ydb_config/my-ydb-config.yaml` - путь к файлу конфигурации внутри контейнера
 
 Таким образом, ваш локальный файл конфигурации становится доступным внутри контейнера по указанному пути.
->>>>>>> 5a79507a617 (Add a note about  docker no healthcheck option (#31931))

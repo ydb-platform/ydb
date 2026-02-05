@@ -46,8 +46,6 @@ For more information about environment variables available when running a Docker
 With the parameters specified in the example above and running Docker locally, [Embedded UI](../embedded-ui/index.md) will be available at [http://localhost:8765](http://localhost:8765).
 
 For more information about stopping and deleting a Docker container with {{ ydb-short-name }}, see [{#T}](cleanup.md).
-<<<<<<< HEAD
-=======
 
 ### Overriding the configuration file
 
@@ -121,4 +119,3 @@ In this example:
  - `/ydb_config/my-ydb-config.yaml` - path to the configuration file inside the container
 
 This way, your local configuration file becomes accessible inside the container at the specified path.
->>>>>>> 5a79507a617 (Add a note about  docker no healthcheck option (#31931))

@@ -3,6 +3,7 @@
 #include "defs.h"
 
 #include "ddisk.h"
+#include "persistent_buffer_space_allocator.h"
 
 #include <ydb/core/blobstorage/vdisk/common/vdisk_config.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
@@ -331,11 +332,13 @@ namespace NKikimr::NDDisk {
         std::map<std::tuple<ui64, ui64>, TPersistentBuffer> PersistentBuffers;
 
         static constexpr ui32 SectorSize = 4096;
-        static constexpr ui32 ChunkSize = SectorSize * 32768;
+        static constexpr ui32 SectorInChunk = 32768;
+        static constexpr ui32 ChunkSize = SectorSize * SectorInChunk;
+        static constexpr ui32 MaxChunks = 128;
+        static constexpr ui32 MaxSectorsPerBuffer = 128;
 
 
         struct TPersistentBufferHeader {
-            static constexpr ui32 MaxSectorsPerBuffer = 128;
             static constexpr ui64 PersistentBufferHeaderSignature[2] = {17823859641143956470ull, 2161636001838356059ull};
 
             ui64 Signature[2];
@@ -344,16 +347,14 @@ namespace NKikimr::NDDisk {
             ui64 OffsetInBytes;
             ui64 Size;
             ui64 Lsn;
-            ui32 SectorFlags[MaxSectorsPerBuffer];
-            ui64 SectorChecksum[MaxSectorsPerBuffer];
-            ui64 HeaderChecksum;
+            TPersistentBufferSectorInfo HeaderLocation;
+            TPersistentBufferSectorInfo Locations[MaxSectorsPerBuffer];
         };
         static_assert(sizeof(TPersistentBufferHeader) <= ChunkSize);
 
-        std::vector<TChunkIdx> PersistentBufferOwnedChunks;
-        ui32 PersistentBufferEmptyChunkOffset = 0;
         bool IssuePersistentBufferChunkAllocationInflight = false;
-        
+        TPersistentBufferSpaceAllocator PersistentBufferSpaceAllocator;
+
         ui64 PersistentBufferChunkMapSnapshotLsn = Max<ui64>();
         std::queue<TPendingEvent> PendingPersistentBufferEvents;
 

@@ -72,8 +72,7 @@ namespace NKikimr::NDDisk {
                 [this, chunkIdx](const TChunkForPersistentBuffer&) {
                     IssuePDiskLogRecord(TLogSignature::SignaturePersistentBufferChunkMap, chunkIdx
                         , CreatePersistentBufferChunkMapSnapshot(), &PersistentBufferChunkMapSnapshotLsn, [this, chunkIdx] {
-                        PersistentBufferOwnedChunks.emplace_back(chunkIdx);
-                        PersistentBufferEmptyChunkOffset = 0;
+                        PersistentBufferSpaceAllocator.AddNewChunk(chunkIdx);
                         Send(SelfId(), new TEvPrivate::TEvHandlePersistentBufferEventForChunk(chunkIdx));
                         ++*Counters.Chunks.ChunksOwned;
                     });
@@ -126,7 +125,7 @@ namespace NKikimr::NDDisk {
 
     NKikimrBlobStorage::NDDisk::NInternal::TPersistentBufferChunkMapLogRecord TDDiskActor::CreatePersistentBufferChunkMapSnapshot() {
         NKikimrBlobStorage::NDDisk::NInternal::TPersistentBufferChunkMapLogRecord record;
-        for (const auto& chunkIdx : PersistentBufferOwnedChunks) {
+        for (const auto& chunkIdx : PersistentBufferSpaceAllocator.OwnedChunks) {
             record.AddChunkIdxs(chunkIdx);
         }
         return record;

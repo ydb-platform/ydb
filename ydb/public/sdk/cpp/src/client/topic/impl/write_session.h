@@ -215,8 +215,6 @@ private:
         using MessageIter = std::list<TMessageInfo>::iterator;
         std::unordered_map<std::uint64_t, std::list<MessageIter>> InFlightMessagesIndex;
 
-        // using InFlightMessagesIndexIter = std::list<std::list<TMessageInfo>::iterator>::iterator;
-        // std::unordered_map<std::uint64_t, InFlightMessagesIndexIter> MessagesToResend;
         std::unordered_map<std::uint64_t, std::list<MessageIter>> MessagesToResendIndex;
         std::unordered_map<std::uint64_t, std::deque<TContinuationToken>> ContinuationTokens;
         
@@ -407,6 +405,11 @@ private:
     std::unordered_map<std::uint64_t, std::shared_ptr<TSplittedPartitionWorker>> SplittedPartitionWorkers;
     std::shared_ptr<TMessagesWorker> MessagesWorker;
     std::shared_ptr<TKeyedWriteSessionRetryPolicy> RetryPolicy;
+
+    // TFuture::Subscribe may invoke callback synchronously when the future is already ready.
+    // Also, callbacks may arrive concurrently with the attempt to go idle.
+    // Use a small state machine to avoid re-entrancy and lost wakeups.
+    std::atomic<ui8> MainWorkerState = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

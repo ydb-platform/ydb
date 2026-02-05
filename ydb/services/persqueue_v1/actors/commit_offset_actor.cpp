@@ -91,8 +91,9 @@ void TCommitOffsetActor::Handle(TEvPQProxy::TEvAuthResultOk::TPtr& ev, const TAc
         AnswerError("empty list of topics", PersQueue::ErrorCode::UNKNOWN_TOPIC, ctx);
         return;
     }
-    Y_ABORT_UNLESS(TopicAndTablets.size() == 1);
-    auto& [topic, topicInitInfo] = *TopicAndTablets.begin();
+
+    AFL_ENSURE(TopicAndTablets.size() == 1);
+    auto& [_, topicInitInfo] = *TopicAndTablets.begin();
 
     if (topicInitInfo.Partitions.find(PartitionId) == topicInitInfo.Partitions.end()) {
         AnswerError("partition id not found in topic", PersQueue::ErrorCode::WRONG_PARTITION_NUMBER, ctx);
@@ -144,6 +145,7 @@ void TCommitOffsetActor::Handle(TEvPQProxy::TEvAuthResultOk::TPtr& ev, const TAc
         };
         commits.push_back(commit);
 
+        auto topic = topicInitInfo.TopicNameConverter->GetPrimaryPath();
         Kqp = std::make_unique<TDistributedCommitHelper>(Request().GetDatabaseName().GetOrElse(TString()), ClientId, topic, commits);
         Kqp->SendCreateSessionRequest(ctx);
     }

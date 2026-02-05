@@ -782,7 +782,7 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
                 return;
             }
 
-            // check what if we issue a new huge hull keeper entry point -- would it allow us to
+            // check that if we issue a new huge hull keeper entry point -- would it allow us to
             // move the FirstLsnToKeep barrier forward? if so, try to issue an entry point, otherwise exit
             const ui64 pendingLsn = State.PendingWrites.empty() ? Max<ui64>() : State.PendingWrites.begin()->first;
             const ui64 minInFlightLsn = Min(pendingLsn, State.LsnFifo.FirstLsnToKeep());

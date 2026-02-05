@@ -888,7 +888,7 @@ void TKeyedWriteSession::TMessagesWorker::PopInFlightMessage() {
 }
 
 bool TKeyedWriteSession::TMessagesWorker::IsMemoryUsageOK() const {
-    return MemoryUsage <= Session->Settings.MaxMemoryUsage_;
+    return MemoryUsage <= Session->Settings.MaxMemoryUsage_ / 2;
 }
 
 void TKeyedWriteSession::TMessagesWorker::AddMessage(const std::string& key, TWriteMessage&& message, std::uint64_t partition, TTransactionBase* tx) {
@@ -1133,7 +1133,6 @@ TKeyedWriteSession::TKeyedWriteSession(
 
     // Start handlers executor for user callbacks (Acks/ReadyToAccept/SessionClosed/Common).
     Settings.EventHandlers_.HandlersExecutor_->Start();
-    
 
     // Start main worker loop (it will arm NextFuture subscription itself).
     RunMainWorker();
@@ -1350,16 +1349,16 @@ void TKeyedWriteSession::RunMainWorker() {
     // We must handle two properties:
     // - TFuture::Subscribe may call back synchronously when future is already ready.
     // - A callback may race with the runner trying to go idle (avoid lost wakeups).
-    enum : ui8 {
+    enum : std::uint8_t {
         Running = 1,
         Rerun = 2,
     };
 
     // Try to become the runner. If already running, just request a rerun.
-    ui8 state = MainWorkerState.load(std::memory_order_acquire);
+    std::uint8_t state = MainWorkerState.load(std::memory_order_acquire);
     for (;;) {
         if (state & Running) {
-            if (MainWorkerState.compare_exchange_weak(state, ui8(state | Rerun),
+            if (MainWorkerState.compare_exchange_weak(state, std::uint8_t(state | Rerun),
                                                      std::memory_order_acq_rel,
                                                      std::memory_order_acquire)) {
                 return;
@@ -1378,7 +1377,7 @@ void TKeyedWriteSession::RunMainWorker() {
     // Runner loop: process, arm subscription, then either go idle or loop again.
     for (;;) {
         // Clear rerun request for this iteration.
-        MainWorkerState.fetch_and(ui8(~Rerun), std::memory_order_acq_rel);
+        MainWorkerState.fetch_and(std::uint8_t(~Rerun), std::memory_order_acq_rel);
 
         {
             std::unique_lock lock(GlobalLock);
@@ -1407,12 +1406,12 @@ void TKeyedWriteSession::RunMainWorker() {
         });
 
         // Try to go idle. If someone requested rerun concurrently, keep running.
-        ui8 cur = MainWorkerState.load(std::memory_order_acquire);
+        std::uint8_t cur = MainWorkerState.load(std::memory_order_acquire);
         for (;;) {
             if (cur & Rerun) {
                 break; // continue outer loop
             }
-            if (MainWorkerState.compare_exchange_weak(cur, ui8(0),
+            if (MainWorkerState.compare_exchange_weak(cur, std::uint8_t(0),
                                                      std::memory_order_acq_rel,
                                                      std::memory_order_acquire)) {
                 return; // successfully went idle

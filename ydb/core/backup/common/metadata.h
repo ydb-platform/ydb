@@ -69,7 +69,7 @@ public:
     void AddIndex(const TIndexMetadata& index);
     const std::optional<std::vector<TIndexMetadata>>& GetIndexes() const;
 
-    void AddRateLimiterResource(const TRateLimiterResourceMetadata& index);
+    void AddRateLimiterResource(const TRateLimiterResourceMetadata& resource);
     const std::optional<std::vector<TRateLimiterResourceMetadata>>& GetRateLimiterResources() const;
 
     void SetEnablePermissions(bool enablePermissions = true);

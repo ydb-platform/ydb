@@ -7,6 +7,7 @@
 #include <ydb/core/metering/metering.h>
 #include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
+#include <ydb/core/protos/sqs.pb.h>
 #include <ydb/core/tablet_flat/shared_cache_events.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/testlib/audit_helpers/audit_helper.h>
@@ -4255,10 +4256,12 @@ CREATE EXTERNAL TABLE IF NOT EXISTS `ExternalTable` (
 
         CheckPathWithChecksum("/Kesus/permissions.pb");
         const auto permissions = GetS3FileContent("/Kesus/permissions.pb");
-        const auto permissions_expected = "actions {\n  change_owner: \"root@builtin\"\n}\n";
-        UNIT_ASSERT_EQUAL_C(
-            permissions, permissions_expected,
-            TStringBuilder() << "\nExpected:\n\n" << permissions_expected << "\n\nActual:\n\n" << permissions);
+        const auto permissions_expected = R"(
+            actions {
+                change_owner: "root@builtin"
+            }
+        )";
+        CompareAsProtos<NKikimr::NSQS::TModifyPermissionsRequest>(permissions, permissions_expected);
     }
 
     Y_UNIT_TEST(KesusManyResources) {

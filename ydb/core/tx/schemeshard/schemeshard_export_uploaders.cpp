@@ -199,7 +199,7 @@ protected:
         IActor::PassAway();
     }
 
-    const Ydb::Export::ExportToS3Settings& GetSettings() {
+    const Ydb::Export::ExportToS3Settings& GetSettings() const {
         return Settings;
     }
 
@@ -240,19 +240,19 @@ protected:
 
     void HandleConnected(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
         if (ev->Get()->Status != NKikimrProto::OK) {
-            Finish(false, "failed to connect to kesus");
+            Finish(false, TStringBuilder() << "failed to connect to tablet " << ev->Get()->TabletId);
         }
     }
 
-    void HandleDestroyed(TEvTabletPipe::TEvClientDestroyed::TPtr&) {
-        Finish(false, "connection to kesus was lost");
+    void HandleDestroyed(TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {
+        Finish(false, TStringBuilder() << "connection lost to tablet " << ev->Get()->TabletId);
     }
 
     virtual void Finish(bool success = true, const TString& error = TString()) = 0;
 
     void PassAway() override {
         ClosePipe();
-        TExportFilesUploader<TDerived>::PassAway();
+        TBase::PassAway();
     }
 
 public:
@@ -325,7 +325,7 @@ class TKesusResourcesUploader : public TSchemeWithPipeUploader<TKesusResourcesUp
             auto& resource = Resources[resourceIdx];
             TString scheme;
             if (!BuildRateLimiterResourceScheme(resource, scheme)) {
-                Finish(false, "failed to build rate limiter scheme");
+                return Finish(false, "failed to build rate limiter scheme");
             }
 
             std::stringstream prefix;
@@ -405,7 +405,7 @@ private:
 
     const bool EnableChecksums;
 
-    i32 BatchSize = 100;
+    const i32 BatchSize = 100;
     i32 Offset = 0;
 
     google::protobuf::RepeatedPtrField<NKikimrKesus::TStreamingQuoterResource> Resources;
@@ -423,6 +423,8 @@ IActor* CreateKesusResourcesUploader(
 }
 
 class TSchemeUploader: public TExportFilesUploader<TSchemeUploader> {
+    using TBase = TExportFilesUploader<TSchemeUploader>;
+
     void GetDescription() {
         Send(SchemeShard, new TEvSchemeShard::TEvDescribeScheme(SourcePathId));
         Become(&TThis::StateDescribe);
@@ -508,12 +510,9 @@ class TSchemeUploader: public TExportFilesUploader<TSchemeUploader> {
         }
 
         // Fill metadata with rate limiter resources
-        auto metadata = NBackup::TMetadata::Deserialize(Metadata);
         for (auto& rateLimiterMetadata : record->ResourcesMetadata) {
-            metadata.AddRateLimiterResource(rateLimiterMetadata);
+            Metadata.AddRateLimiterResource(rateLimiterMetadata);
         }
-
-        Metadata = metadata.Serialize();
 
         // Upload everything else
         StartUploadFiles();
@@ -568,16 +567,17 @@ class TSchemeUploader: public TExportFilesUploader<TSchemeUploader> {
             }
         }
 
-        if (!Metadata) {
+        const auto serializedMetadata = Metadata.Serialize();
+        if (!serializedMetadata) {
             return Finish(false, "empty metadata");
         }
 
-        if (!AddFile("metadata.json", Metadata, IV)) {
+        if (!AddFile("metadata.json", serializedMetadata, IV)) {
             return;
         }
 
         if (EnableChecksums) {
-            if (!AddFile(NBackup::ChecksumKey("metadata.json"), NBackup::ComputeChecksum(Metadata))) {
+            if (!AddFile(NBackup::ChecksumKey("metadata.json"), NBackup::ComputeChecksum(serializedMetadata))) {
                 return;
             }
         }
@@ -604,7 +604,7 @@ class TSchemeUploader: public TExportFilesUploader<TSchemeUploader> {
         if (KesusResourcesUploader) {
             Send(KesusResourcesUploader, new TEvents::TEvPoisonPill());
         }
-        TExportFilesUploader<TSchemeUploader>::PassAway();
+        TBase::PassAway();
     }
 
 public:
@@ -615,7 +615,7 @@ public:
         TPathId sourcePathId,
         const Ydb::Export::ExportToS3Settings& settings,
         const TString& databaseRoot,
-        const TString& metadata,
+        NBackup::TMetadata metadata,
         bool enablePermissions,
         bool enableChecksums,
         const TMaybe<NBackup::TEncryptionIV>& iv
@@ -669,11 +669,11 @@ private:
     const bool EnablePermissions;
     const bool EnableChecksums;
     TString Permissions;
-    TString Metadata;
+    NBackup::TMetadata Metadata;
 
     TActorId KesusResourcesUploader;
     ui32 KesusResourcesUploadAttempts = 0;
-    ui32 MaxKesusResourcesUploadAttempts = 10;
+    const ui32 MaxKesusResourcesUploadAttempts = 10;
 }; // TSchemeUploader
 
 class TExportMetadataUploader: public TExportFilesUploader<TExportMetadataUploader> {
@@ -789,11 +789,11 @@ private:
 };
 
 IActor* CreateSchemeUploader(TActorId schemeShard, ui64 exportId, ui32 itemIdx, TPathId sourcePathId,
-    const Ydb::Export::ExportToS3Settings& settings, const TString& databaseRoot, const TString& metadata,
+    const Ydb::Export::ExportToS3Settings& settings, const TString& databaseRoot, NBackup::TMetadata metadata,
     bool enablePermissions, bool enableChecksums, const TMaybe<NBackup::TEncryptionIV>& iv
 ) {
     return new TSchemeUploader(schemeShard, exportId, itemIdx, sourcePathId, settings, databaseRoot,
-        metadata, enablePermissions, enableChecksums, iv);
+        std::move(metadata), enablePermissions, enableChecksums, iv);
 }
 
 NActors::IActor* CreateExportMetadataUploader(NActors::TActorId schemeShard, ui64 exportId,

@@ -52,7 +52,7 @@ namespace NKikimr::NDDisk {
             FreeSectors.erase(*it);
             FreeSectorsPriorityQueue.erase(it);
             while(result.size() < sectorsCount && freeRange.First <= freeRange.Last) {
-                result.emplace_back(TPersistentBufferSectorInfo{ChunkIdx, freeRange.First, 0, 0});
+                result.emplace_back(TPersistentBufferSectorInfo{ChunkIdx, freeRange.First, 0, 0, 0});
                 Y_ABORT_UNLESS(FreeSpace > 0);
                 FreeSpace--;
                 freeRange.First++;

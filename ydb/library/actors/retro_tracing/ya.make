@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     retro_span.cpp
+    span_buffer.cpp
 )
 
 PEERDIR(

@@ -110,6 +110,11 @@ namespace NWilson {
         return HexEncode(GetTraceIdPtr(), GetTraceIdSize());
     }
 
+    TString TTraceId::GetHexFullTraceId() const {
+        return HexEncode(GetTraceIdPtr(), GetTraceIdSize()) + "." +
+                HexEncode(GetSpanIdPtr(), GetSpanIdSize());
+    }
+
     TTraceId::TTrace TTraceId::GenerateTraceId() {
         static thread_local TReallyFastRng32 rng(RandomNumber<ui64>());
 
@@ -148,5 +153,9 @@ namespace NWilson {
 
     bool TTraceId::IsRetroTrace() const {
         return RetroTrace;
+    }
+
+    bool TTraceId::IsSameTrace(const NWilson::TTraceId& other) const {
+        return std::memcmp(GetTraceIdPtr(), other.GetTraceIdPtr(), GetTraceIdSize()) == 0;
     }
 }

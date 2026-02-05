@@ -3,7 +3,7 @@
 
 namespace NRetroTracing {
 
-TRetroSpan* TRetroSpan::DeserializeImpl(ui32 type, ui32/* size*/, const char* data) {
+TRetroSpan* TRetroSpan::DeserializeImpl(ui32 type, ui32/* size*/, const void* data) {
 
     switch (type) {
 #define SPAN_TYPE(typeId, TSpanType)                                        \

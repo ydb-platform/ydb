@@ -1,5 +1,7 @@
 #include "retro_span.h"
+#include "span_buffer.h"
 
+#include <util/stream/str.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
 namespace NRetroTracing {
@@ -7,7 +9,15 @@ namespace NRetroTracing {
 TRetroSpan::TRetroSpan(ui32 type, ui32 size)
     : Type(type)
     , Size(size)
-{}
+{
+    StartTs = TInstant::Now();
+}
+
+TRetroSpan::~TRetroSpan() {
+    if (!IsEnded() && (Flags & NWilson::EFlags::AUTO_END)) {
+        End();
+    }
+}
 
 ui32 TRetroSpan::GetType() const {
     return Type;
@@ -38,17 +48,13 @@ void TRetroSpan::AttachToTrace(const NWilson::TTraceId& parentId) {
     SpanId = ParentId.Span(DefaultVerbosity);
 }
 
-TRetroSpan* TRetroSpan::Deserialize(const char* data) {
+TRetroSpan* TRetroSpan::Deserialize(const void* data) {
     const TRetroSpan* base = reinterpret_cast<const TRetroSpan*>(data);
     return TRetroSpan::DeserializeImpl(base->GetType(), base->GetSize(), data);
 }
 
-std::unique_ptr<TRetroSpan> TRetroSpan::DeserializeToUnique(const char* data) {
+std::unique_ptr<TRetroSpan> TRetroSpan::DeserializeToUnique(const void* data) {
     return std::unique_ptr<TRetroSpan>(TRetroSpan::Deserialize(data));
-}
-
-std::shared_ptr<TRetroSpan> TRetroSpan::DeserializeToShared(const char* data) {
-    return std::shared_ptr<TRetroSpan>(TRetroSpan::Deserialize(data));
 }
 
 void TRetroSpan::Serialize(void* destination) const {
@@ -62,6 +68,11 @@ std::unique_ptr<NWilson::TSpan> TRetroSpan::MakeWilsonSpan() {
     return nullptr;
 }
 
+void TRetroSpan::End() {
+    EndTs = TInstant::Now();
+    WriteSpan(this);
+}
+
 bool TRetroSpan::IsEnded() const {
     return EndTs != TInstant::Zero();
 }
@@ -72,6 +83,21 @@ TInstant TRetroSpan::GetStartTs() const {
 
 TInstant TRetroSpan::GetEndTs() const {
     return EndTs;
+}
+
+TString TRetroSpan::ToString() const {
+    TStringStream str;
+    str << "TRetroSpan {";
+    str << " Type# " << GetType();
+    str << " Size# " << GetSize();
+    str << " Flags# " << Flags;
+    str << " ParentId# " << ParentId.GetHexFullTraceId();
+    str << " SpanId# " << SpanId.GetHexFullTraceId();
+    str << " StartTs# " << StartTs;
+    str << " EndTs# " << EndTs;
+    str << " IsEnded# " << IsEnded();
+    str << "}";
+    return str.Str();
 }
 
 } // namespace NRetroTracing

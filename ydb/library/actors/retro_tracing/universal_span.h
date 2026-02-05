@@ -27,8 +27,8 @@ public:
             NWilson::TFlags flags = NWilson::EFlags::NONE,
             NActors::TActorSystem* actorSystem = nullptr) {
         if (parentId.IsRetroTrace()) {
-            Span.template emplace<TRetroSpanType>(TRetroSpanType::Construct(verbosity, parentId, name,
-                    flags, actorSystem));
+            Span.template emplace<TRetroSpanType>();
+            std::get<TRetroSpanType>(Span).Initialize(verbosity, NWilson::TTraceId(parentId), name, flags, actorSystem);
         } else {
             Span.template emplace<NWilson::TSpan>(verbosity, NWilson::TTraceId(parentId), name, flags, actorSystem);
         }

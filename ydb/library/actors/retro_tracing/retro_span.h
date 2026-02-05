@@ -1,6 +1,5 @@
 #pragma once
 
-#include <util/generic/size_literals.h>
 #include <util/system/compiler.h>
 #include <util/system/types.h>
 #include <util/system/yassert.h>
@@ -17,16 +16,15 @@ class TRetroSpan {
 private:
     // User of the library must provide the definition of this method
     // See UT for implementation example
-    static TRetroSpan* DeserializeImpl(ui32 type, ui32 size, const char* data);
+    static TRetroSpan* DeserializeImpl(ui32 type, ui32 size, const void* data);
 
-    static TRetroSpan* Deserialize(const char* data);
+    static TRetroSpan* Deserialize(const void* data);
 
 public:
     TRetroSpan(ui32 type, ui32 size);
-    virtual ~TRetroSpan() = default;
+    virtual ~TRetroSpan();
 
-    static std::unique_ptr<TRetroSpan> DeserializeToUnique(const char* data);
-    static std::shared_ptr<TRetroSpan> DeserializeToShared(const char* data);
+    static std::unique_ptr<TRetroSpan> DeserializeToUnique(const void* data);
 
     ui32 GetType() const;
     ui32 GetSize() const;
@@ -54,14 +52,15 @@ public:
     }
 
     virtual TString GetName() const = 0;
+    virtual TString ToString() const;
 
+    void End();
     bool IsEnded() const;
 
     TInstant GetStartTs() const;
     TInstant GetEndTs() const;
 
 public:
-    static constexpr ui32 MaxPossibleSpanSize = 1_KB;
     static constexpr ui8 DefaultVerbosity = 1;
 
 private:

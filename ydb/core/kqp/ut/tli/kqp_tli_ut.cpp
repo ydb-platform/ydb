@@ -767,6 +767,38 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         VerifyTliIssueAndLogsWithEnabled(issues, ss, breakerQueryText, victimRead1Text);
     }
 
+    // Test: Victim snapshots on one key, breaker commits, victim reads and writes another key
+    Y_UNIT_TEST(SnapshotThenReadWrite) {
+        TStringStream ss;
+        TTliTestContext ctx(ss);
+        ctx.CreateTable("/Root/Tenant1/TableSnapshot");
+        ctx.SeedTable("/Root/Tenant1/TableSnapshot", {{1, "V1"}, {2, "V2"}});
+
+        const TString victimSnapshotText = "SELECT * FROM `/Root/Tenant1/TableSnapshot` WHERE Key = 2u /* snapshot */";
+        const TString breakerQueryText = "UPSERT INTO `/Root/Tenant1/TableSnapshot` (Key, Value) VALUES (1u, \"BreakerValue\")";
+        const TString victimReadText = "SELECT * FROM `/Root/Tenant1/TableSnapshot` WHERE Key = 1u /* victim-read */";
+        const TString victimWriteText = "UPSERT INTO `/Root/Tenant1/TableSnapshot` (Key, Value) VALUES (1u, \"VictimValue\")";
+
+        // Victim: start tx and get snapshot on a different key
+        auto victimTx = BeginReadTx(ctx.VictimSession, victimSnapshotText);
+
+        // Breaker: write and commit key 1
+        ctx.ExecuteQuery(breakerQueryText);
+
+        // Victim: read the conflicting key after breaker commit
+        {
+            auto result = ctx.VictimSession.ExecuteDataQuery(victimReadText, TTxControl::Tx(victimTx)).ExtractValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == EStatus::SUCCESS, result.GetIssues().ToString());
+            victimTx = *result.GetTransaction();
+        }
+
+        // Victim: write the key and try to commit -> should be aborted
+        auto [status, issues] = ExecuteVictimCommitWithIssues(ctx.VictimSession, victimTx, victimWriteText);
+        UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
+
+        VerifyTliIssueAndLogsWithEnabled(issues, ss, breakerQueryText, victimReadText, victimSnapshotText);
+    }
+
     // Test: Concurrent UPSERT...SELECT transactions - replicates user's production scenario
     // Tests that BreakerQueryTraceId and VictimQueryTraceId linkage is maintained even with
     // OLTP sink + UPSERT...SELECT where locks may be created lazily (deferred lock creation).

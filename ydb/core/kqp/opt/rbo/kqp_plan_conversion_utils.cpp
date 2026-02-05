@@ -154,7 +154,7 @@ std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpMap(TExprNode::TPtr node)
         if (mapElement.Maybe<TKqpOpMapElementRename>()) {
             auto element = mapElement.Cast<TKqpOpMapElementRename>();
             auto fromIU = TInfoUnit(element.From().StringValue());
-            mapElements.emplace_back(iu, fromIU);
+            mapElements.emplace_back(iu, fromIU, &Ctx);
         } else {
             auto element = mapElement.Cast<TKqpOpMapElementLambda>();
             const auto forceOptional = GetForceOptional(element);
@@ -164,7 +164,7 @@ std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpMap(TExprNode::TPtr node)
                 auto member = maybeMember.Cast();
                 auto name = member.Name().Cast<TCoAtom>();
                 auto fromIU = TInfoUnit(name.StringValue());
-                mapElements.emplace_back(iu, fromIU);
+                mapElements.emplace_back(iu, fromIU, &Ctx);
             } else {
                 TExpression exprLambda(GetMapElementLambda(element.Lambda().Ptr(), forceOptional, Ctx), &Ctx);
                 mapElements.emplace_back(iu, exprLambda);

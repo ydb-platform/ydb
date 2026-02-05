@@ -246,7 +246,7 @@ bool TPullUpCorrelatedFilterRule::MatchAndApply(std::shared_ptr<IOperator> &inpu
         // First we add needed columns to the map, if its a projection map
         if (!addToMap.empty() && map->Project) {
             for (const auto & add : addToMap) {
-                map->MapElements.push_back(TMapElement(add, add));
+                map->MapElements.push_back(TMapElement(add, add, &ctx.ExprCtx, &props));
             }
         }
 
@@ -369,7 +369,7 @@ bool TInlineScalarSubplanRule::MatchAndApply(std::shared_ptr<IOperator> &input, 
         TVector<std::pair<TInfoUnit, TInfoUnit>> joinKeys;
 
         TVector<TMapElement> mappings;
-        mappings.push_back(TMapElement(subplanResIU, subplanResIU));
+        mappings.push_back(TMapElement(subplanResIU, subplanResIU, &ctx.ExprCtx, &props));
 
         auto leftIUs = child->GetOutputIUs();
         bool conflictsWithLeft = false;
@@ -393,11 +393,11 @@ bool TInlineScalarSubplanRule::MatchAndApply(std::shared_ptr<IOperator> &input, 
 
             if (std::find(leftIUs.begin(), leftIUs.end(), rightKey) != leftIUs.end()) {
                 auto newKey = TInfoUnit("_rbo_arg_" + std::to_string(props.InternalVarIdx++), false);
-                mappings.push_back(TMapElement(newKey, rightKey));
+                mappings.push_back(TMapElement(newKey, rightKey, &ctx.ExprCtx, &props));
                 rightKey = newKey;
                 conflictsWithLeft = true;
             } else {
-                mappings.push_back(TMapElement(rightKey, rightKey));
+                mappings.push_back(TMapElement(rightKey, rightKey, &ctx.ExprCtx, &props));
             }
 
             joinKeys.push_back(std::make_pair(leftKey, rightKey));
@@ -410,7 +410,7 @@ bool TInlineScalarSubplanRule::MatchAndApply(std::shared_ptr<IOperator> &input, 
         auto leftJoin = std::make_shared<TOpJoin>(child, uncorrSubplan, subplan->Pos, "Left", joinKeys);
 
         TVector<TMapElement> renameElements;
-        renameElements.emplace_back(scalarIU, subplanResIU);
+        renameElements.emplace_back(scalarIU, subplanResIU, &ctx.ExprCtx, &props);
         auto rename = std::make_shared<TOpMap>(leftJoin, subplan->Pos, renameElements, false);
         unaryOp->SetInput(rename);
     }
@@ -428,7 +428,7 @@ bool TInlineScalarSubplanRule::MatchAndApply(std::shared_ptr<IOperator> &input, 
         auto map = std::make_shared<TOpMap>(emptySource, subplan->Pos, mapElements, true);
 
         TVector<TMapElement> renameElements;
-        renameElements.emplace_back(scalarIU, subplanResIU);
+        renameElements.emplace_back(scalarIU, subplanResIU, &ctx.ExprCtx, &props);
         auto rename = std::make_shared<TOpMap>(subplan, subplan->Pos, renameElements, true);
         rename->Props.EnsureAtMostOne = true;
 

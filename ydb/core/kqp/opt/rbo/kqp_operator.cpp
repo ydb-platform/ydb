@@ -425,6 +425,11 @@ TMapElement::TMapElement(const TInfoUnit& elementName, const TExpression& expr)
     , Expr(expr) {
 }
 
+TMapElement::TMapElement(const TInfoUnit& elementName, const TInfoUnit& rename, const TExprContext* ctx, const TPlanProps* props)
+    : ElementName(elementName)
+    , Expr(MakeColumnAccess(rename, ctx, props)) {
+}
+
 TInfoUnit TMapElement::GetElementName() const {
     return ElementName;
 }

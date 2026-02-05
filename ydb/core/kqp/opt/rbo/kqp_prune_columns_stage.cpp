@@ -130,7 +130,7 @@ void TPruneColumnsStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
 
             for (const auto& mapElement : map->MapElements) {
                 if (mapElement.IsRename() && usedSet.contains(mapElement.GetElementName())) {
-                    newMapElements.emplace_back(mapElement.GetElementName(), mapElement.GetRename());
+                    newMapElements.emplace_back(mapElement.GetElementName(), mapElement.GetRename(), &ctx.ExprCtx, &root.PlanProps);
                 } else {
                     newMapElements.emplace_back(mapElement.GetElementName(), mapElement.GetExpression());
                 }

@@ -1930,7 +1930,16 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                        CAST(JSON_VALUE(jsonDoc1, "$.\"b\"") as Double) as col3
                 FROM `/Root/foo`
                 ORDER BY col2;
-            )"
+            )",
+            R"(
+                PRAGMA kikimr.OptEnableOlapPushdownProjections="true";
+
+                SELECT a, JSON_VALUE(jsonDoc, "$.\"a.b.c\"") as result
+                FROM `/Root/foo`
+                WHERE timestamp = Timestamp("1970-01-01T00:00:03.000001Z")
+                ORDER BY a
+                LIMIT 1;
+            )",
         };
 
         std::vector<TString> results = {
@@ -1941,7 +1950,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             R"([[1;["a1"];["b1"];["c1"]];[2;["a2"];["b2"];["c2"]];[3;#;["b3"];["c3"]]])",
             R"([[#];[[1.1]];[[2.1]]])",
             R"([[#;#];[[%true];[1.1]];[[%false];[2.1]]])",
-            R"([[#;#;#];[[%true];[1.1];[1.2]];[[%false];[2.1];[2.2]]])"
+            R"([[#;#;#];[[%true];[1.1];[1.2]];[[%false];[2.1];[2.2]]])",
+            R"([[1;["a1"]]])"
         };
 
         for (ui32 i = 0; i < queries.size(); ++i) {

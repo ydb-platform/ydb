@@ -84,7 +84,7 @@ public:
     TDriverConfig& SetMaxQueuedRequests(size_t sz);
 
     //! Limit using of memory for grpc buffer pool. 0 means disabled.
-    //! If enabled the size must be greater than size of received message.
+    //! If enabled the size must be greater than size of recieved message.
     //! default: 0
     TDriverConfig& SetGrpcMemoryQuota(uint64_t bytes);
 

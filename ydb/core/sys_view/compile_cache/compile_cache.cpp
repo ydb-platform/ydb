@@ -87,12 +87,22 @@ public:
         : TBase(ownerId, scanId, database, sysViewInfo, tableRange, columns)
     {
         const auto& cellsFrom = TableRange.From.GetCells();
+        if (cellsFrom.size() > 0 && !cellsFrom[0].IsNull()) {
+            NodeIdFrom = cellsFrom[0].AsValue<ui32>();
+            NodeIdFromInclusive = TableRange.FromInclusive;
+            HasNodeIdFrom = true;
+        }
         if (cellsFrom.size() > 1 && !cellsFrom[1].IsNull()) {
             QueryIdFrom = cellsFrom[1].AsBuf();
             QueryIdFromInclusive = TableRange.FromInclusive;
         }
 
         const auto& cellsTo = TableRange.To.GetCells();
+        if (cellsTo.size() > 0 && !cellsTo[0].IsNull()) {
+            NodeIdTo = cellsTo[0].AsValue<ui32>();
+            NodeIdToInclusive = TableRange.ToInclusive;
+            HasNodeIdTo = true;
+        }
         if (cellsTo.size() > 1 && !cellsTo[1].IsNull()) {
             QueryIdTo = cellsTo[1].AsBuf();
             QueryIdToInclusive = TableRange.ToInclusive;
@@ -151,7 +161,17 @@ private:
         // if feature flag is not set -- return only for self node
         if (!AppData()->FeatureFlags.GetEnableCompileCacheView()) {
             PendingNodesInitialized = true;
-            PendingNodes.emplace_back(SelfId().NodeId());
+            ui32 selfNodeId = SelfId().NodeId();
+            
+            // Check if self node matches the NodeId filter
+            bool matchFrom = !HasNodeIdFrom || 
+                (NodeIdFromInclusive ? selfNodeId >= NodeIdFrom : selfNodeId > NodeIdFrom);
+            bool matchTo = !HasNodeIdTo || 
+                (NodeIdToInclusive ? selfNodeId <= NodeIdTo : selfNodeId < NodeIdTo);
+            
+            if (matchFrom && matchTo) {
+                PendingNodes.emplace_back(selfNodeId);
+            }
         }
 
         if (AckReceived) {
@@ -206,13 +226,26 @@ private:
         if (AppData()->FeatureFlags.GetEnableCompileCacheView()) {
             auto& proxies = ev->Get()->ProxyNodes;
             std::sort(proxies.begin(), proxies.end());
+            
+            // Filter nodes by NodeId range if specified
+            std::vector<ui32> filteredProxies;
+            for (ui32 nodeId : proxies) {
+                bool matchFrom = !HasNodeIdFrom || 
+                    (NodeIdFromInclusive ? nodeId >= NodeIdFrom : nodeId > NodeIdFrom);
+                bool matchTo = !HasNodeIdTo || 
+                    (NodeIdToInclusive ? nodeId <= NodeIdTo : nodeId < NodeIdTo);
+                if (matchFrom && matchTo) {
+                    filteredProxies.push_back(nodeId);
+                }
+            }
+            
             // limit nodes for fast warmup response
             ui32 maxNodesToQuery = ev->Get()->MaxNodesToQuery;
 
-            if (maxNodesToQuery > 0 && proxies.size() > maxNodesToQuery) {
-                PendingNodes = std::deque<ui32>(proxies.begin(), proxies.begin() + maxNodesToQuery);
+            if (maxNodesToQuery > 0 && filteredProxies.size() > maxNodesToQuery) {
+                PendingNodes = std::deque<ui32>(filteredProxies.begin(), filteredProxies.begin() + maxNodesToQuery);
             } else {
-                PendingNodes = std::deque<ui32>(proxies.begin(), proxies.end());
+                PendingNodes = std::deque<ui32>(filteredProxies.begin(), filteredProxies.end());
             }
             PendingNodesInitialized = true;
         }
@@ -288,6 +321,13 @@ private:
     }
 
 private:
+    ui32 NodeIdFrom = 0;
+    bool NodeIdFromInclusive = false;
+    bool HasNodeIdFrom = false;
+    ui32 NodeIdTo = 0;
+    bool NodeIdToInclusive = false;
+    bool HasNodeIdTo = false;
+
     TString QueryIdFrom;
     bool QueryIdFromInclusive = false;
     TString QueryIdTo;

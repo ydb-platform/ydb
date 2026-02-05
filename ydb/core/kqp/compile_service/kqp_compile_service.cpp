@@ -31,12 +31,14 @@ using namespace NYql;
 
 struct TKqpCompileSettings {
     TKqpCompileSettings(bool keepInCache, bool isQueryActionPrepare, bool perStatementResult,
-        const TInstant& deadline, ECompileActorAction action = ECompileActorAction::COMPILE)
+        const TInstant& deadline, ECompileActorAction action = ECompileActorAction::COMPILE,
+        bool isWarmupCompilation = false)
         : KeepInCache(keepInCache)
         , IsQueryActionPrepare(isQueryActionPrepare)
         , PerStatementResult(perStatementResult)
         , Deadline(deadline)
         , Action(action)
+        , IsWarmupCompilation(isWarmupCompilation)
     {}
 
     bool KeepInCache;
@@ -44,6 +46,7 @@ struct TKqpCompileSettings {
     bool PerStatementResult;
     TInstant Deadline;
     ECompileActorAction Action;
+    bool IsWarmupCompilation = false;
 };
 
 struct TKqpCompileRequest {
@@ -292,6 +295,7 @@ private:
         auto response = std::make_unique<TEvKqp::TEvListQueryCacheQueriesResponse>();
         if (AppData()->TenantName != tenant or snapshot.empty()) {
             response->Record.SetFinished(true);
+            response->Record.SetNodeId(SelfId().NodeId());
             Send(ev->Sender, response.release());
             return;
         }
@@ -345,6 +349,7 @@ private:
         if (!finished) {
             record.SetContinuationToken(currentIt->CompileResult->Uid);
         }
+        record.SetNodeId(SelfId().NodeId());
         Send(ev->Sender, response.release());
     }
 
@@ -483,7 +488,8 @@ private:
                 ? ECompileActorAction::SPLIT
                 : (TableServiceConfig.GetEnableAstCache() && !request.QueryAst)
                     ? ECompileActorAction::PARSE
-                    : ECompileActorAction::COMPILE);
+                    : ECompileActorAction::COMPILE,
+            request.IsWarmupCompilation);
         TKqpCompileRequest compileRequest(ev->Sender, CreateGuidAsString(), std::move(*request.Query),
             compileSettings, request.UserToken, request.ClientAddress, dbCounters, request.GUCSettings, request.ApplicationName, ev->Cookie, std::move(ev->Get()->IntrestedInResult),
             ev->Get()->UserRequestContext, std::move(ev->Get()->Orbit), std::move(compileServiceSpan),
@@ -642,7 +648,7 @@ private:
         try {
             if (compileResult->Status == Ydb::StatusIds::SUCCESS) {
                 if (!hasTempTablesNameClashes) {
-                    UpdateQueryCache(ctx, compileResult, keepInCache, compileRequest.CompileSettings.IsQueryActionPrepare, isPerStatementExecution);
+                    UpdateQueryCache(ctx, compileResult, keepInCache, compileRequest.CompileSettings.IsQueryActionPrepare, isPerStatementExecution, compileRequest.CompileSettings.IsWarmupCompilation);
                 }
 
                 if (ev->Get()->ReplayMessage && !QueryReplayBackend->IsNull()) {
@@ -711,7 +717,7 @@ private:
         StartCheckQueriesTtlTimer();
     }
 
-    void UpdateQueryCache(const TActorContext& ctx, TKqpCompileResult::TConstPtr compileResult, bool keepInCache, bool isQueryActionPrepare, bool isPerStatementExecution) {
+    void UpdateQueryCache(const TActorContext& ctx, TKqpCompileResult::TConstPtr compileResult, bool keepInCache, bool isQueryActionPrepare, bool isPerStatementExecution, bool isWarmupCompilation) {
         if (QueryCache->FindByUid(compileResult->Uid, false)) {
             QueryCache->Replace(compileResult);
         } else if (keepInCache) {
@@ -724,7 +730,7 @@ private:
             if (QueryCache->Insert(compileResult, TableServiceConfig.GetEnableAstCache(), isPerStatementExecution)) {
                 Counters->CompileQueryCacheEvicted->Inc();
             }
-            if (compileResult->Query && isQueryActionPrepare) {
+            if (compileResult->Query && isQueryActionPrepare && !isWarmupCompilation) {
                 if (InsertPreparingQuery(ctx, compileResult, true, isPerStatementExecution)) {
                     Counters->CompileQueryCacheEvicted->Inc();
                 };

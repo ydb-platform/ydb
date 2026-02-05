@@ -169,6 +169,7 @@ message TQueryRequest {
     optional Ydb.Query.SchemaInclusionMode SchemaInclusionMode = 38;
     optional Ydb.ResultSet.Format ResultSetFormat = 39;
     optional Ydb.Formats.ArrowFormatSettings ArrowFormatSettings = 40;
+    optional bool IsWarmupCompilation = 41;
 }
 
 message TVectorIndexKmeansTreeDescription {

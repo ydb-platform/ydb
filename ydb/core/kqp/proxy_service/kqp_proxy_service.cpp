@@ -1014,9 +1014,14 @@ public:
 
         if (PeerProxyNodeResources.size() > 1) {
             WarmupStarted = true;
+            TVector<ui32> nodeIds;
+            nodeIds.reserve(PeerProxyNodeResources.size());
+            for (const auto& resource : PeerProxyNodeResources) {
+                nodeIds.push_back(resource.GetNodeId());
+            }
             KQP_PROXY_LOG_I("Discovered " << PeerProxyNodeResources.size() 
                 << " proxy nodes, starting warmup");
-            Send(MakeKqpWarmupActorId(SelfId().NodeId()), new TEvStartWarmup(PeerProxyNodeResources.size()));
+            Send(MakeKqpWarmupActorId(SelfId().NodeId()), new TEvStartWarmup(PeerProxyNodeResources.size(), std::move(nodeIds)));
         }
     }
 

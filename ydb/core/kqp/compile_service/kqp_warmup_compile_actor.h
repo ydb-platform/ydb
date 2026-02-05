@@ -24,9 +24,11 @@ struct TEvKqpWarmupComplete : public NActors::TEventLocal<TEvKqpWarmupComplete, 
 
 struct TEvStartWarmup : public NActors::TEventLocal<TEvStartWarmup, TKqpEvents::EvStartWarmup> {
     ui32 DiscoveredNodesCount;
+    TVector<ui32> NodeIds;
 
-    explicit TEvStartWarmup(ui32 nodesCount)
+    explicit TEvStartWarmup(ui32 nodesCount, TVector<ui32> nodeIds = {})
         : DiscoveredNodesCount(nodesCount)
+        , NodeIds(std::move(nodeIds))
     {}
 };
 

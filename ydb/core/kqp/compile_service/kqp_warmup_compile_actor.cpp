@@ -12,6 +12,10 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 
+#include <util/generic/hash.h>
+#include <library/cpp/json/json_reader.h>
+#include <ydb/public/api/protos/ydb_value.pb.h>
+
 namespace NKikimr::NKqp {
 
 #define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, LogPrefix() << stream)
@@ -32,6 +36,7 @@ struct TEvPrivate {
         TString QueryText;
         TString UserSID;
         ui64 CompilationDurationMs = 0;
+        TString Metadata;
     };
 
     struct TEvFetchCacheResult : public NActors::TEventLocal<TEvFetchCacheResult, EvFetchCacheResult> {
@@ -52,21 +57,33 @@ struct TEvPrivate {
 
 class TFetchCacheActor : public TQueryBase {
 public:
-    TFetchCacheActor(const TString& database, ui32 maxQueriesToLoad, ui64 maxCompilationDurationMs)
+    TFetchCacheActor(const TString& database, ui32 maxQueriesToLoad, ui64 maxCompilationDurationMs, const TVector<ui32>& nodeIds)
         : TQueryBase(NKikimrServices::KQP_COMPILE_SERVICE, {}, database, true, true)
         , MaxQueriesToLoad(maxQueriesToLoad)
         , MaxCompilationDurationMs(maxCompilationDurationMs)
+        , NodeIds(nodeIds)
     {}
 
     void OnRunQuery() override {
         const auto limit = std::max<ui32>(1u, MaxQueriesToLoad);
-        TString sql = TStringBuilder()
-            << "SELECT Query, UserSID, SUM(AccessCount) AS AccessCount, MAX(CompilationDuration) AS CompilationDuration"
+        TStringBuilder sql;
+        sql << "SELECT Query, UserSID, MAX(Metadata) AS Metadata, SUM(AccessCount) AS AccessCount, MAX(CompilationDuration) AS CompilationDuration"
             << " FROM `" << Database << "/.sys/compile_cache_queries` "
             << "WHERE IsTruncated = false "
             << "  AND AccessCount > 0 "
-            << "  AND CompilationDuration < " << MaxCompilationDurationMs
-            << "GROUP BY Query, UserSID "
+            << "  AND CompilationDuration < " << MaxCompilationDurationMs;
+
+        if (!NodeIds.empty()) {
+            const size_t nodesToUse = std::min<size_t>(3, NodeIds.size());
+            sql << "  AND NodeId IN (";
+            for (size_t i = 0; i < nodesToUse; ++i) {
+                if (i > 0) sql << ", ";
+                sql << NodeIds[i];
+            }
+            sql << ")";
+        }
+
+        sql << " GROUP BY Query, UserSID "
             << "ORDER BY AccessCount DESC "
             << "LIMIT " << limit;
 
@@ -78,12 +95,14 @@ public:
         while (parser.TryNextRow()) {
             auto queryText = parser.ColumnParser("Query").GetOptionalUtf8();
             auto userSID = parser.ColumnParser("UserSID").GetOptionalUtf8();
+            auto metadata = parser.ColumnParser("Metadata").GetOptionalUtf8();
             auto compilationDuration = parser.ColumnParser("CompilationDuration").GetOptionalUint64();
 
             if (queryText && !queryText->empty()) {
                 TEvPrivate::TQueryToCompile query;
                 query.QueryText = TString(*queryText);
                 query.UserSID = userSID ? TString(*userSID) : TString();
+                query.Metadata = metadata ? TString(*metadata) : TString();
                 query.CompilationDurationMs = compilationDuration.value_or(0);
                 Result->Queries.push_back(std::move(query));
             }
@@ -106,8 +125,58 @@ public:
 private:
     ui32 MaxQueriesToLoad;
     ui64 MaxCompilationDurationMs;
+    TVector<ui32> NodeIds;
     std::unique_ptr<TEvPrivate::TEvFetchCacheResult> Result = std::make_unique<TEvPrivate::TEvFetchCacheResult>(false);
 };
+
+namespace {
+
+void FillYdbParametersFromMetadata(
+    const TString& metadata,
+    google::protobuf::Map<TProtoStringType, Ydb::TypedValue>& params)
+{
+    if (metadata.empty()) {
+        return;
+    }
+
+    try {
+        NJson::TJsonValue json;
+        if (!NJson::ReadJsonTree(metadata, &json, true)) {
+            return;
+        }
+
+        if (!json.Has("parameters") || !json["parameters"].IsMap()) {
+            return;
+        }
+
+        const auto& parameters = json["parameters"].GetMap();
+
+        for (const auto& [paramName, encodedType] : parameters) {
+            if (!encodedType.IsString()) {
+                continue;
+            }
+
+            try {
+                TString decodedProto = Base64Decode(encodedType.GetString());
+                Ydb::Type typeProto;
+                if (!typeProto.ParseFromString(decodedProto)) {
+                    continue;
+                }
+
+                Ydb::TypedValue typedValue;
+                typedValue.mutable_type()->CopyFrom(typeProto);
+                
+                params[paramName] = std::move(typedValue);
+            } catch (...) {
+                continue;
+            }
+        }
+    } catch (...) {
+        // Ignore errors - will compile without parameters if metadata is invalid
+    }
+}
+
+} // anonymous namespace
 
 
 class TKqpCompileCacheWarmupActor : public NActors::TActorBootstrapped<TKqpCompileCacheWarmupActor> {
@@ -215,6 +284,7 @@ private:
 
     void HandleStartWarmup(TEvStartWarmup::TPtr& ev) {
         const auto discoveredNodes = ev->Get()->DiscoveredNodesCount;
+        NodeIds = ev->Get()->NodeIds;
         if (discoveredNodes <= 1) {
             LOG_I("Received TEvStartWarmup with single node, skipping warmup");
             Complete(true, "Skipped: single node");
@@ -222,15 +292,16 @@ private:
         }
 
         LOG_I("Received TEvStartWarmup, discovered nodes: " << discoveredNodes
+              << ", nodeIds count: " << NodeIds.size()
               << ", scheduling soft deadline: " << Config.Deadline);
         Schedule(Config.Deadline, new TEvPrivate::TEvSoftDeadline());
         StartFetch();
     }
 
     void StartFetch() {
-        LOG_I("Spawning fetch cache actor");
+        LOG_I("Spawning fetch cache actor, filtering by " << std::min<size_t>(3, NodeIds.size()) << " nodes");
         const ui64 maxCompilationMs = Config.Deadline.MilliSeconds() / 2;
-        Register(new TFetchCacheActor(Database, Config.MaxQueriesToLoad, maxCompilationMs));
+        Register(new TFetchCacheActor(Database, Config.MaxQueriesToLoad, maxCompilationMs, NodeIds));
         Become(&TThis::StateFetching);
     }
 
@@ -265,6 +336,40 @@ private:
         const auto& record = ev->Get()->Record;
         bool success = (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS);
         
+        ui64 cookie = ev->Cookie;
+        auto it = PendingQueriesByCookie.find(cookie);
+        
+        if (it != PendingQueriesByCookie.end()) {
+            const auto& query = it->second;
+            if (success) {
+                LOG_I("Query compiled successfully, user: " << query.UserSID
+                      << ", has_metadata: " << !query.Metadata.empty()
+                      << ", query: " << query.QueryText.substr(0, 200) 
+                      << (query.QueryText.size() > 200 ? "..." : ""));
+            } else {
+                TString errorMsg;
+                const auto& issues = record.GetResponse().GetQueryIssues();
+                if (issues.size() > 0) {
+                    for (const auto& issue : issues) {
+                        if (!errorMsg.empty()) {
+                            errorMsg += "; ";
+                        }
+                        errorMsg += issue.message();
+                    }
+                }
+                LOG_W("Query compilation failed, user: " << query.UserSID
+                      << ", has_metadata: " << !query.Metadata.empty()
+                      << ", status: " << Ydb::StatusIds::StatusCode_Name(record.GetYdbStatus())
+                      << ", error: " << errorMsg
+                      << ", query: " << query.QueryText.substr(0, 200)
+                      << (query.QueryText.size() > 200 ? "..." : ""));
+            }
+            PendingQueriesByCookie.erase(it);
+        } else {
+            LOG_W("Received response for unknown cookie: " << cookie 
+                  << ", success: " << success);
+        }
+        
         if (success) {
             EntriesLoaded++;
             if (Counters) {
@@ -281,7 +386,8 @@ private:
         const TString& database,
         const TString& queryText,
         const TString& userSid,
-        TDuration timeout)
+        TDuration timeout,
+        const TString& metadata)
     {
         auto queryEv = std::make_unique<TEvKqp::TEvQueryRequest>();
         auto& record = queryEv->Record;
@@ -297,16 +403,26 @@ private:
         request.SetKeepSession(false);
         request.SetTimeoutMs(timeout.MilliSeconds());
         request.SetIsInternalCall(true);
+        request.SetIsWarmupCompilation(true);
+        
+        if (!metadata.empty()) {
+            FillYdbParametersFromMetadata(metadata, *request.MutableYdbParameters());
+        }
         
         return queryEv;
     }
 
     void SendPrepareRequest(const TEvPrivate::TQueryToCompile& query) {
         LOG_T("Sending PREPARE request for user: " << query.UserSID
-              << ", query length: " << query.QueryText.size());
+              << ", query length: " << query.QueryText.size()
+              << ", has_metadata: " << !query.Metadata.empty());
+        
+        ui64 cookie = NextCookie++;
+        PendingQueriesByCookie[cookie] = query;
         
         Send(MakeKqpProxyID(SelfId().NodeId()), 
-             CreatePrepareRequest(Database, query.QueryText, query.UserSID, Config.Deadline).release());
+             CreatePrepareRequest(Database, query.QueryText, query.UserSID, Config.Deadline, query.Metadata).release(),
+             0, cookie);
     }
 
     void StartCompilations() {
@@ -374,12 +490,15 @@ private:
     TIntrusivePtr<TKqpCounters> Counters;
 
     std::deque<TEvPrivate::TQueryToCompile> QueriesToCompile;
+    THashMap<ui64, TEvPrivate::TQueryToCompile> PendingQueriesByCookie;
+    ui64 NextCookie = 1;
     ui32 PendingCompilations = 0;
     ui32 EntriesLoaded = 0;
     ui32 EntriesFailed = 0;
     ui32 MaxConcurrentCompilations = 1;
     bool Completed = false;
     TString SkipReason;
+    TVector<ui32> NodeIds;
 };
 
 NActors::IActor* CreateKqpWarmupActor(

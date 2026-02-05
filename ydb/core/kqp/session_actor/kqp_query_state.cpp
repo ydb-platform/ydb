@@ -326,7 +326,8 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileRequest(s
 
     return std::make_unique<TEvKqp::TEvCompileRequest>(UserToken, ClientAddress, uid, std::move(query), keepInCache,
         isQueryActionPrepare, perStatementResult, compileDeadline, DbCounters, gUCSettingsPtr, ApplicationName, std::move(cookie),
-        UserRequestContext, std::move(Orbit), TempTablesState, GetCollectDiagnostics(), statementAst);
+        UserRequestContext, std::move(Orbit), TempTablesState, GetCollectDiagnostics(), statementAst,
+        false, nullptr, nullptr, IsWarmupCompilation_);
 }
 
 std::unique_ptr<TEvKqp::TEvRecompileRequest> TKqpQueryState::BuildReCompileRequest(std::shared_ptr<std::atomic<bool>> cookie, const TGUCSettings::TPtr& gUCSettingsPtr) {

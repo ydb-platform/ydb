@@ -911,6 +911,45 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
             F_NULLABLE | F_RETURNING | (Covered ? F_COVERING : 0));
     }
 
+    Y_UNIT_TEST_TWIN(TwoIndexUpsert, UseUpsert) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetFeatureFlags(featureFlags)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+
+        const int flags = 0;
+        auto db = kikimr.GetTableClient();
+        auto session = DoCreateTableForPrefixedVectorIndex(db, flags);
+        DoCreatePrefixedVectorIndex(session, 2, flags);
+
+        {
+            const TString createIndex(Q_(Sprintf(R"(
+                ALTER TABLE `/Root/TestTable`
+                    ADD INDEX index2
+                    GLOBAL USING vector_kmeans_tree
+                    ON (user, emb)
+                    WITH (distance=cosine, vector_type="uint8", vector_dimension=2, levels=1, clusters=3);
+                )")));
+            auto result = session.ExecuteSchemeQuery(createIndex).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        // Insert/upsert to the table should succeed
+        {
+            auto updateQuery = Q_(Sprintf(
+                R"(%s INTO `/Root/TestTable` (`pk`, `user`, `emb`, `data`) VALUES (101, "user_a", "\x03\x31\x02", "20");)",
+                UseUpsert ? "UPSERT" : "INSERT"
+            ));
+            auto result = session.ExecuteDataQuery(updateQuery, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                .ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+        }
+    }
+
     Y_UNIT_TEST_TWIN(VectorSearchPushdown, Covered) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()

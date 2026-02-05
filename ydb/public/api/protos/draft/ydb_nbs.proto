@@ -13,6 +13,12 @@ import "ydb/public/api/protos/ydb_operation.proto";
 ////////////////////////////////////////////////////////////////////////////////
 // Partition create request/response.
 
+enum StorageMediaKind {
+    STORAGE_MEDIA_DEFAULT = 0;
+    STORAGE_MEDIA_SSD = 1;
+    STORAGE_MEDIA_MEMORY = 2;
+}
+
 message CreatePartitionRequest {
     Ydb.Operations.OperationParams operation_params = 1;
 
@@ -24,6 +30,9 @@ message CreatePartitionRequest {
 
     // Maximum number of blocks stored in partition.
     uint64 BlocksCount = 4;
+
+    // Storage media type
+    StorageMediaKind StorageMedia = 5;
 }
 
 message CreatePartitionResponse {

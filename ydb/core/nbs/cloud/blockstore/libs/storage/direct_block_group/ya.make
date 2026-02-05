@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     direct_block_group.cpp
+    direct_block_group_in_mem.cpp
     request.cpp
 )
 

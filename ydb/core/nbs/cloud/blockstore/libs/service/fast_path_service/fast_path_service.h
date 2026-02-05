@@ -19,7 +19,7 @@ class TFastPathService
 {
 private:
     TMutex Lock;
-    NStorage::NPartitionDirect::TDirectBlockGroup DirectBlockGroup;
+    std::unique_ptr<NStorage::NPartitionDirect::IDirectBlockGroup> DirectBlockGroup;
 
     std::atomic<NActors::TMonotonic> LastTraceTs{NActors::TMonotonic::Zero()};
     // Throttle trace ID creation to avoid overwhelming the tracing system
@@ -62,6 +62,7 @@ public:
         TVector<NKikimr::NBsController::TDDiskId> persistentBufferDDiskIds,
         ui32 blockSize,
         ui64 blocksCount,
+        ui32 storageMedia,
         const NYdb::NBS::NProto::TStorageConfig& storageConfig,
         const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters = nullptr);
 

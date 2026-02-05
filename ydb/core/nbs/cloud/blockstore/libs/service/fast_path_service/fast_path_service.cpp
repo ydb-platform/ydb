@@ -1,5 +1,9 @@
 #include "fast_path_service.h"
 
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/direct_block_group/direct_block_group_in_mem.h>
+
+#include <ydb/core/nbs/cloud/storage/core/protos/media.pb.h>
+
 #include <ydb/core/base/counters.h>
 
 namespace NYdb::NBS::NBlockStore {
@@ -15,20 +19,32 @@ TFastPathService::TFastPathService(
     TVector<NBsController::TDDiskId> persistentBufferDDiskIds,
     ui32 blockSize,
     ui64 blocksCount,
+    ui32 storageMedia,
     const NYdb::NBS::NProto::TStorageConfig& storageConfig,
     const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters)
-    : DirectBlockGroup(
+    : TraceSamplePeriod(
+          TDuration::MilliSeconds(storageConfig.GetTraceSamplePeriod()))
+    , CountersBase(
+          counters ? GetServiceCounters(counters, "nbs_partitions") : nullptr)
+{
+    if (storageMedia == NYdb::NBS::NProto::EStorageMediaKind::STORAGE_MEDIA_MEMORY) {
+        DirectBlockGroup = std::make_unique<NStorage::NPartitionDirect::TInMemoryDirectBlockGroup>(
           tabletId,
           generation,
           std::move(ddiskIds),
           std::move(persistentBufferDDiskIds),
           blockSize,
-          blocksCount)
-    , TraceSamplePeriod(
-          TDuration::MilliSeconds(storageConfig.GetTraceSamplePeriod()))
-    , CountersBase(
-          counters ? GetServiceCounters(counters, "nbs_partitions") : nullptr)
-{
+          blocksCount);
+    } else {
+        DirectBlockGroup = std::make_unique<NStorage::NPartitionDirect::TDirectBlockGroup>(
+          tabletId,
+          generation,
+          std::move(ddiskIds),
+          std::move(persistentBufferDDiskIds),
+          blockSize,
+          blocksCount);
+    }
+
     // Build complete counter chain: ddiskPool -> tabletId -> subsystem:interface
     if (CountersBase) {
         CountersChain.emplace_back("ddiskPool", storageConfig.GetDDiskPoolName());
@@ -55,15 +71,15 @@ TFastPathService::TFastPathService(
     }
 
     // Set up counter callbacks
-    DirectBlockGroup.SetWriteBlocksReplyCallback([this](bool ok) {
+    DirectBlockGroup->SetWriteBlocksReplyCallback([this](bool ok) {
         Counters.WriteBlocks.Reply(ok);
     });
 
-    DirectBlockGroup.SetReadBlocksReplyCallback([this](bool ok) {
+    DirectBlockGroup->SetReadBlocksReplyCallback([this](bool ok) {
         Counters.ReadBlocks.Reply(ok);
     });
 
-    DirectBlockGroup.EstablishConnections();
+    DirectBlockGroup->EstablishConnections();
 }
 
 NThreading::TFuture<TReadBlocksLocalResponse> TFastPathService::ReadBlocksLocal(
@@ -80,7 +96,7 @@ NThreading::TFuture<TReadBlocksLocalResponse> TFastPathService::ReadBlocksLocal(
         );
 
         Counters.ReadBlocks.Request(request->Range.Size() * NStorage::NPartitionDirect::BlockSize);
-        return DirectBlockGroup.ReadBlocksLocal(std::move(callContext), std::move(request), std::move(traceId));
+        return DirectBlockGroup->ReadBlocksLocal(std::move(callContext), std::move(request), std::move(traceId));
     }
 }
 
@@ -98,7 +114,7 @@ NThreading::TFuture<TWriteBlocksLocalResponse> TFastPathService::WriteBlocksLoca
         );
 
         Counters.WriteBlocks.Request(request->Range.Size() * NStorage::NPartitionDirect::BlockSize);
-        return DirectBlockGroup.WriteBlocksLocal(std::move(callContext), std::move(request), std::move(traceId));
+        return DirectBlockGroup->WriteBlocksLocal(std::move(callContext), std::move(request), std::move(traceId));
     }
 }
 

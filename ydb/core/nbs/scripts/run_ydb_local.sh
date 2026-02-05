@@ -60,6 +60,7 @@ function parse_args {
 parse_args "$@"
 
 YDBD_BIN="`pwd`/../../../../ydb/apps/ydbd/ydbd"
+DSTOOL_BIN="`pwd`/../../../../ydb/apps/dstool/ydb-dstool"
 
 for bin in $YDBD_BIN
 do
@@ -69,6 +70,10 @@ do
   fi
 done
 
+function dstool {
+  $DSTOOL_BIN "$@"
+}
+
 function ydbd {
   LD_LIBRARY_PATH=$(dirname $YDBD_BIN) $YDBD_BIN "$@"
 }
@@ -76,6 +81,7 @@ function ydbd {
 function stop_ydbd {
     echo "Stop ydbd"
     ps aux | grep "$YDBD_BIN server" | grep -v "grep" | awk '{print $2}' | while read line;do kill -9 $line;done
+    sleep 3
 }
 
 function start_ydbd {
@@ -184,6 +190,24 @@ ConfigsConfig {
     printf "\n\nYdbd monitoring is running at $MON_PORT, logs in $PERSISTENT_TMP_DIR/logs/ydbd.log\n"
 }
 
+function create_ddisk_pool {
+    echo ""
+    echo "Create ddisk pool"
+    ydbd --server localhost:$GRPC_PORT admin bs config invoke \
+        --proto 'Command { DefineDDiskPool
+            { BoxId: 1 Name: "ddp1" Geometry
+            { NumFailRealms: 1 NumFailDomainsPerFailRealm: 1
+            NumVDisksPerFailDomain: 1 RealmLevelBegin: 10
+            RealmLevelEnd: 10 DomainLevelBegin: 10 DomainLevelEnd: 40 }
+            PDiskFilter { Property { Type: SSD } } NumDDiskGroups: 10 } }'
+}
+
+function create_partition {
+    echo ""
+    echo "Create partition"
+    dstool --endpoint grpc://localhost:$GRPC_PORT nbs partition create --pool ddp1
+}
+
 
 # Handle different actions
 case "$ACTION" in
@@ -192,12 +216,14 @@ case "$ACTION" in
         ;;
     start)
         start_ydbd
+        create_ddisk_pool
+        create_partition
         ;;
     *)
         echo "Usage: $0 [start|stop] [--port PORT] [--mon-port PORT]"
         echo "  start [--port PORT] [--mon-port PORT] - Stop any existing ydbd process and start a new one (default)"
         echo "  stop                                    - Stop any existing ydbd process and exit"
-        echo "  --port PORT                             - Specify GRPC port number (default: 9901)"
+        echo "  --port PORT                             - Specify GRPC port number (default: 9001)"
         echo "  --mon-port PORT                         - Specify monitoring port number (default: 8765)"
         exit 1
         ;;

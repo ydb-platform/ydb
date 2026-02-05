@@ -634,6 +634,9 @@ void TKikimrRunner::CreateSampleTables() {
             (9, 4, 13, "94", 2);
     )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).GetValueSync());
 
+    auto r = session.Close().GetValueSync();
+    client.Stop();
+    driver.Stop(true);
 }
 
 static TMaybe<NActors::NLog::EPriority> ParseLogLevel(const TString& level) {

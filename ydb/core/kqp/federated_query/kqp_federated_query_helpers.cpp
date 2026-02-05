@@ -316,6 +316,7 @@ namespace {
         }
 
         auto result = TKqpFederatedQuerySetup{
+            Driver,
             HttpGateway,
             ConnectorClient,
             CredentialsFactory,
@@ -332,7 +333,7 @@ namespace {
             PqGatewayConfig,
             PqGateway,
             ActorSystemPtr,
-            Driver};
+        };
 
         // Init DatabaseAsyncResolver only if all requirements are met
         if (DatabaseResolverActorId && MdbEndpointGenerator &&

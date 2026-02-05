@@ -284,14 +284,16 @@ void TKeyedWriteSession::TSplittedPartitionWorker::LaunchGetMaxSeqNoFutures(std:
     NotReadyFutures = ancestors.size();
     for (const auto& ancestor : ancestors) {
         auto partitionIdx = Session->PartitionIdsMapping.find(ancestor);
-        Y_ABORT_UNLESS(partitionIdx != Session->PartitionIdsMapping.end(), "Partition index not found");
+        Y_ABORT_UNLESS(partitionIdx != Session->PartitionIdsMapping.end(), "Partition index not found for partition %d", ancestor);
         auto wrappedSession = Session->SessionsWorker->GetWriteSession(partitionIdx->second, false);
         Y_ABORT_UNLESS(wrappedSession, "Write session not found");
         WriteSessions.push_back(wrappedSession);
 
+        auto now = TInstant::Now();
+        LOG_LAZY(Session->DbDriverState->Log, TLOG_INFO, TStringBuilder() << "Getting max seq no for partition " << ancestor << " for splitted partition " << PartitionId);
         auto future = wrappedSession->Session->GetInitSeqNo();
         lock.unlock();
-        future.Subscribe([this, wrappedSession](const NThreading::TFuture<uint64_t>& result) {
+        future.Subscribe([this, wrappedSession, ancestor, now](const NThreading::TFuture<uint64_t>& result) {
             std::lock_guard lock(Lock);
             if (result.HasException()) {
                 LOG_LAZY(Session->DbDriverState->Log, TLOG_ERR, TStringBuilder() << "Failed to get max seq no for partition");
@@ -301,6 +303,7 @@ void TKeyedWriteSession::TSplittedPartitionWorker::LaunchGetMaxSeqNoFutures(std:
                 return;
             }
 
+            LOG_LAZY(Session->DbDriverState->Log, TLOG_INFO, TStringBuilder() << "Got max seq no for partition " << ancestor << " = " << result.GetValue() << " in " << TInstant::Now() - now);
             UpdateMaxSeqNo(result.GetValue());
             if (--NotReadyFutures == 0) {
                 MoveTo(EState::GotMaxSeqNo);   
@@ -1041,10 +1044,6 @@ TKeyedWriteSession::TKeyedWriteSession(
                                 strategy != EAutoPartitioningStrategy::Unspecified);
 
     for (const auto& partition : partitions) {
-        if (!partition.GetActive()) {
-            continue;
-        }
-
         auto partitionId = partition.GetPartitionId();
         PartitionIdsMapping[partitionId] = Partitions.size();
         Partitions.push_back(
@@ -1052,6 +1051,18 @@ TKeyedWriteSession::TKeyedWriteSession(
             .PartitionId(partitionId)
             .FromBound(partition.GetFromBound().value_or(""))
             .ToBound(partition.GetToBound()));
+    }
+
+    for (const auto& partition : partitions) {
+        auto children = partition.GetChildPartitionIds();
+
+        std::vector<std::uint32_t> childrenIds;
+        for (auto child : children) {
+            auto childPartitionIdx = PartitionIdsMapping.find(child);
+            Y_ABORT_UNLESS(childPartitionIdx != PartitionIdsMapping.end(), "Child partition index not found for partition %d", child);
+            childrenIds.push_back(child);
+        }
+        Partitions[PartitionIdsMapping[partition.GetPartitionId()]].Children(childrenIds);
     }
 
     Y_ABORT_UNLESS(!Partitions.empty(), "No active partitions found");
@@ -1063,6 +1074,10 @@ TKeyedWriteSession::TKeyedWriteSession(
             for (size_t i = 0; i < Partitions.size(); ++i) {
                 if (i > 0 && Partitions[i].FromBound_.empty() && !Partitions[i].ToBound_.has_value()) {
                     ythrow TContractViolation("Unbounded partition is not supported for Bound partition chooser strategy");
+                }
+
+                if (!Partitions[i].Children_.empty()) {
+                    continue;
                 }
 
                 PartitionsIndex[Partitions[i].FromBound_] = i;

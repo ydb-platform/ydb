@@ -139,11 +139,19 @@ std::shared_ptr<TTopicWorkloadKeyedWriterProducer> TTopicWorkloadKeyedWriterWork
         std::move(clock)
     );
 
+    auto topicClient = NYdb::NTopic::TTopicClient(Params.Driver);
+    auto describeResult = topicClient.DescribeTopic(Params.TopicName).GetValueSync();
+    auto autoPartitioningStrategy = describeResult.GetTopicDescription().GetPartitioningSettings().GetAutoPartitioningSettings().GetStrategy();
+    auto isAutoPartitioningEnabled = autoPartitioningStrategy != NTopic::EAutoPartitioningStrategy::Unspecified && autoPartitioningStrategy != NTopic::EAutoPartitioningStrategy::Disabled;
+
     NYdb::NTopic::TKeyedWriteSessionSettings settings;
     settings.Codec((NYdb::NTopic::ECodec)Params.Codec);
     settings.Path(Params.TopicName);
     settings.ProducerIdPrefix(producerId);
-    settings.PartitionChooserStrategy(NYdb::NTopic::TKeyedWriteSessionSettings::EPartitionChooserStrategy::Hash);
+    settings.PartitionChooserStrategy(
+        isAutoPartitioningEnabled ?
+        NYdb::NTopic::TKeyedWriteSessionSettings::EPartitionChooserStrategy::Bound :
+        NYdb::NTopic::TKeyedWriteSessionSettings::EPartitionChooserStrategy::Hash);
     if (Params.MaxMemoryUsageBytes.has_value()) {
         settings.MaxMemoryUsage(Params.MaxMemoryUsageBytes.value());
     }
@@ -159,7 +167,7 @@ std::shared_ptr<TTopicWorkloadKeyedWriterProducer> TTopicWorkloadKeyedWriterWork
 
     settings.DirectWriteToPartition(Params.Direct);
 
-    producer->SetWriteSession(NYdb::NTopic::TTopicClient(Params.Driver).CreateKeyedWriteSession(settings));
+    producer->SetWriteSession(topicClient.CreateKeyedWriteSession(settings));
     return producer;
 }
 

@@ -9330,6 +9330,13 @@
             "uri": "https://{canondata_backend}/1942278/d4aeb569707e31b9d1898c7eee38a87ffd0b47b9/resource.tar.gz#test_sql2yql.test_simple_pg-to_date_/sql.yql"
         }
     ],
+    "test_sql2yql.test[subselect-YQL-20844]": [
+        {
+            "checksum": "2e9df5125448ccd7c689f7391b9d45ee",
+            "size": 1520,
+            "uri": "https://{canondata_backend}/1784117/0ed3370dfcccfe32979fa5d538a2327a707d26fb/resource.tar.gz#test_sql2yql.test_subselect-YQL-20844_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[subselect-aggregate]": [
         {
             "checksum": "f948f4ad0c25bd1bf52f63dc1ba367e7",
@@ -15414,6 +15421,11 @@
             "uri": "file://test_sql_format.test_simple_pg-to_date_/formatted.sql"
         }
     ],
+    "test_sql_format.test[subselect-YQL-20844]": [
+        {
+            "uri": "file://test_sql_format.test_subselect-YQL-20844_/formatted.sql"
+        }
+    ],
     "test_sql_format.test[subselect-aggregate]": [
         {
             "uri": "file://test_sql_format.test_subselect-aggregate_/formatted.sql"
@@ -16600,6 +16612,20 @@
             "checksum": "328676c084b002b87c703412e9f8cc2a",
             "size": 147,
             "uri": "https://{canondata_backend}/1924537/c7a75d88255019fa5cdd3450d7e30c52905fc710/resource.tar.gz#test_sql_negative.test_window-win_func_with_group_by-_/err_file.out"
+        }
+    ],
+    "test_sql_negative.test[window-win_order_by_unknown_from_join_select_1-]": [
+        {
+            "checksum": "03d0791c893da162cabd7c1fc6c42777",
+            "size": 95,
+            "uri": "https://{canondata_backend}/1937367/d8348348004a597f033192e19ff0e76adf3d0f91/resource.tar.gz#test_sql_negative.test_window-win_order_by_unknown_from_join_select_1-_/err_file.out"
+        }
+    ],
+    "test_sql_negative.test[window-win_order_by_unknown_from_join_select_2-]": [
+        {
+            "checksum": "4d1df76dcf350b30101504926b87a825",
+            "size": 117,
+            "uri": "https://{canondata_backend}/1937367/d8348348004a597f033192e19ff0e76adf3d0f91/resource.tar.gz#test_sql_negative.test_window-win_order_by_unknown_from_join_select_2-_/err_file.out"
         }
     ]
 }

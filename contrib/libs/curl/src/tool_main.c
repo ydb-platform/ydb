@@ -23,21 +23,17 @@
  ***************************************************************************/
 #include "tool_setup.h"
 
-#include <sys/stat.h>
-
 #ifdef _WIN32
 #include <tchar.h>
 #endif
 
+#ifndef UNDER_CE
 #include <signal.h>
+#endif
 
 #ifdef HAVE_FCNTL_H
 #include <fcntl.h>
 #endif
-
-#define ENABLE_CURLX_PRINTF
-/* use our own printf() functions */
-#include "curlx.h"
 
 #include "tool_cfgable.h"
 #include "tool_doswin.h"
@@ -65,6 +61,15 @@
 int vms_show = 0;
 #endif
 
+#ifdef __AMIGA__
+#ifdef __GNUC__
+#define CURL_USED __attribute__((used))
+#else
+#define CURL_USED
+#endif
+static const char CURL_USED min_stack[] = "$STACK:16384";
+#endif
+
 #ifdef __MINGW32__
 /*
  * There seems to be no way to escape "*" in command-line arguments with MinGW
@@ -81,7 +86,7 @@ int _CRT_glob = 0;
 #if defined(HAVE_PIPE) && defined(HAVE_FCNTL)
 /*
  * Ensure that file descriptors 0, 1 and 2 (stdin, stdout, stderr) are
- * open before starting to run.  Otherwise, the first three network
+ * open before starting to run. Otherwise, the first three network
  * sockets opened by curl could be used for input sources, downloaded data
  * or error logs as they will effectively be stdin, stdout and/or stderr.
  *
@@ -108,12 +113,12 @@ static void memory_tracking_init(void)
 {
   char *env;
   /* if CURL_MEMDEBUG is set, this starts memory tracking message logging */
-  env = curlx_getenv("CURL_MEMDEBUG");
+  env = curl_getenv("CURL_MEMDEBUG");
   if(env) {
-    /* use the value as file name */
-    char fname[CURL_MT_LOGFNAME_BUFSIZE];
-    if(strlen(env) >= CURL_MT_LOGFNAME_BUFSIZE)
-      env[CURL_MT_LOGFNAME_BUFSIZE-1] = '\0';
+    /* use the value as filename */
+    char fname[512];
+    if(strlen(env) >= sizeof(fname))
+      env[sizeof(fname)-1] = '\0';
     strcpy(fname, env);
     curl_free(env);
     curl_dbg_memdebug(fname);
@@ -122,104 +127,25 @@ static void memory_tracking_init(void)
        without an alloc! */
   }
   /* if CURL_MEMLIMIT is set, this enables fail-on-alloc-number-N feature */
-  env = curlx_getenv("CURL_MEMLIMIT");
+  env = curl_getenv("CURL_MEMLIMIT");
   if(env) {
-    char *endptr;
-    long num = strtol(env, &endptr, 10);
-    if((endptr != env) && (endptr == env + strlen(env)) && (num > 0))
-      curl_dbg_memlimit(num);
+    curl_off_t num;
+    const char *p = env;
+    if(!curlx_str_number(&p, &num, LONG_MAX))
+      curl_dbg_memlimit((long)num);
     curl_free(env);
   }
 }
 #else
-#  define memory_tracking_init() Curl_nop_stmt
+#  define memory_tracking_init() tool_nop_stmt
 #endif
-
-/*
- * This is the main global constructor for the app. Call this before
- * _any_ libcurl usage. If this fails, *NO* libcurl functions may be
- * used, or havoc may be the result.
- */
-static CURLcode main_init(struct GlobalConfig *config)
-{
-  CURLcode result = CURLE_OK;
-
-#if defined(__DJGPP__) || defined(__GO32__)
-  /* stop stat() wasting time */
-  _djstat_flags |= _STAT_INODE | _STAT_EXEC_MAGIC | _STAT_DIRSIZE;
-#endif
-
-  /* Initialise the global config */
-  config->showerror = FALSE;          /* show errors when silent */
-  config->styled_output = TRUE;       /* enable detection */
-  config->parallel_max = PARALLEL_DEFAULT;
-
-  /* Allocate the initial operate config */
-  config->first = config->last = malloc(sizeof(struct OperationConfig));
-  if(config->first) {
-    /* Perform the libcurl initialization */
-    result = curl_global_init(CURL_GLOBAL_DEFAULT);
-    if(!result) {
-      /* Get information about libcurl */
-      result = get_libcurl_info();
-
-      if(!result) {
-        /* Initialise the config */
-        config_init(config->first);
-        config->first->global = config;
-      }
-      else {
-        errorf(config, "error retrieving curl library information");
-        free(config->first);
-      }
-    }
-    else {
-      errorf(config, "error initializing curl library");
-      free(config->first);
-    }
-  }
-  else {
-    errorf(config, "error initializing curl");
-    result = CURLE_FAILED_INIT;
-  }
-
-  return result;
-}
-
-static void free_globalconfig(struct GlobalConfig *config)
-{
-  Curl_safefree(config->trace_dump);
-
-  if(config->trace_fopened && config->trace_stream)
-    fclose(config->trace_stream);
-  config->trace_stream = NULL;
-
-  Curl_safefree(config->libcurl);
-}
-
-/*
- * This is the main global destructor for the app. Call this after
- * _all_ libcurl usage is done.
- */
-static void main_free(struct GlobalConfig *config)
-{
-  /* Cleanup the easy handle */
-  /* Main cleanup */
-  curl_global_cleanup();
-  free_globalconfig(config);
-
-  /* Free the config structures */
-  config_free(config->last);
-  config->first = NULL;
-  config->last = NULL;
-}
 
 /*
 ** curl tool main function.
 */
-#ifdef _UNICODE
-#if defined(__GNUC__)
-/* GCC doesn't know about wmain() */
+#if defined(_UNICODE) && !defined(UNDER_CE)
+#if defined(__GNUC__) || defined(__clang__)
+/* GCC does not know about wmain() */
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wmissing-prototypes"
 #pragma GCC diagnostic ignored "-Wmissing-declarations"
@@ -230,12 +156,10 @@ int main(int argc, char *argv[])
 #endif
 {
   CURLcode result = CURLE_OK;
-  struct GlobalConfig global;
-  memset(&global, 0, sizeof(global));
 
   tool_init_stderr();
 
-#ifdef _WIN32
+#if defined(_WIN32) && !defined(UNDER_CE)
   /* Undocumented diagnostic option to list the full paths of all loaded
      modules. This is purposely pre-init. */
   if(argc == 2 && !_tcscmp(argv[1], _T("--dump-module-paths"))) {
@@ -245,16 +169,18 @@ int main(int argc, char *argv[])
     curl_slist_free_all(head);
     return head ? 0 : 1;
   }
+#endif
+#ifdef _WIN32
   /* win32_init must be called before other init routines. */
   result = win32_init();
   if(result) {
-    errorf(&global, "(%d) Windows-specific init failed", result);
-    return result;
+    errorf("(%d) Windows-specific init failed", result);
+    return (int)result;
   }
 #endif
 
   if(main_checkfds()) {
-    errorf(&global, "out of file descriptors");
+    errorf("out of file descriptors");
     return CURLE_FAILED_INIT;
   }
 
@@ -267,13 +193,13 @@ int main(int argc, char *argv[])
 
   /* Initialize the curl library - do not call any libcurl functions before
      this point */
-  result = main_init(&global);
+  result = globalconf_init();
   if(!result) {
     /* Start our curl operation */
-    result = operate(&global, argc, argv);
+    result = operate(argc, argv);
 
     /* Perform the main cleanup */
-    main_free(&global);
+    globalconf_free();
   }
 
 #ifdef _WIN32
@@ -288,8 +214,8 @@ int main(int argc, char *argv[])
 #endif
 }
 
-#ifdef _UNICODE
-#ifdef __GNUC__
+#if defined(_UNICODE) && !defined(UNDER_CE)
+#if defined(__GNUC__) || defined(__clang__)
 #pragma GCC diagnostic pop
 #endif
 #endif

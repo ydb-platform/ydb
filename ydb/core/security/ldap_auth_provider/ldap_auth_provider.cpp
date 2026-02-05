@@ -200,7 +200,6 @@ private:
             const TString& bindPassword = Settings.GetBindPassword();
             std::vector<char> credentials(bindPassword.begin(), bindPassword.end());
             result = NKikimrLdap::Bind(*ld, Settings.GetBindDn(), NKikimrLdap::ESaslMechanism::SIMPLE, &credentials);
-
         }
         if (!NKikimrLdap::IsSuccess(result)) {
             TStringBuilder logErrorMessage;

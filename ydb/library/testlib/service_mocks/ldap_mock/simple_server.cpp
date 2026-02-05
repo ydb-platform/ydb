@@ -190,7 +190,6 @@ bool TSimpleServer::InitTlsCtx() {
 
     int mode = SSL_VERIFY_NONE;
     if (Opt.RequireClientCert) {
-        // mode = SSL_VERIFY_PEER;
         mode = SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT;
     } else if (!Opt.CaCertFile.empty()) {
         mode = SSL_VERIFY_PEER;

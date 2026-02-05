@@ -236,7 +236,7 @@ std::vector<TLdapRequestProcessor::TProtocolOpData> TLdapRequestProcessor::Proce
         elementType = GetByte();
         if (elementType != EElementType::STRING) {
             responseOpData.Data = CreateResponse({.Status = EStatus::PROTOCOL_ERROR});
-            Cerr << "LDAP_MOCK: BindRequest, protocol error, sasl mechanism is not a string" << Endl;
+            Cerr << "LDAP_MOCK: BindRequest, protocol error, credentials is not a string" << Endl;
             return {responseOpData};
         }
         TString credentials = GetString();

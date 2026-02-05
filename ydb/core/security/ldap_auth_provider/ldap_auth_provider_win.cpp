@@ -23,14 +23,16 @@ char* noAttributes[] = {ldapNoAttribute, nullptr};
 const TString LDAPS_SCHEME = "ldaps";
 
 int Bind(LDAP* ld, const TString& dn, const ESaslMechanism& mechanism, std::vector<char>* credentials) {
-    BerValue* credPtr = nullptr;
-    BerValue cred;
+    static char initBvVal[] = "";
+    static constexpr BerValue defaultCredentials {.bv_len = 0, .bv_val = initBvVal};
+    BerValue cred = defaultCredentials;
+    BerValue* credPtr = &cred;
     if (credentials) {
         cred.bv_len = credentials->size();
         cred.bv_val = credentials->data();
-        credPtr = &cred;
     }
-    return ldap_sasl_bind_s(ld, dn.c_str(), ConvertSaslMechanism(mechanism), credPtr, nullptr, nullptr, nullptr);
+    struct berval* servercredp = nullptr;
+    return ldap_sasl_bind_s(ld, (dn.empty() ? nullptr : dn.c_str()), ConvertSaslMechanism(mechanism), credPtr, nullptr, nullptr, &servercredp);
 }
 
 int Unbind(LDAP* ld) {

@@ -5073,7 +5073,7 @@ Y_UNIT_TEST(InvalidHexInStringLiteral) {
     NYql::TAstParseResult res = SqlToYql("select \"foo\\x1\\xfe\"");
     UNIT_ASSERT(!res.Root);
     TString a1 = Err2Str(res);
-    TString a2 = "<main>:1:15: Error: Failed to parse string literal: Invalid hexadecimal value\n";
+    TString a2 = "<main>:1:15: Error: Failed to parse string literal: Invalid hexadecimal value near byte 7\n";
 
     UNIT_ASSERT_NO_DIFF(a1, a2);
 }
@@ -5084,7 +5084,7 @@ Y_UNIT_TEST(InvalidOctalInMultilineStringLiteral) {
                                          "\\01\"");
     UNIT_ASSERT(!res.Root);
     TString a1 = Err2Str(res);
-    TString a2 = "<main>:3:4: Error: Failed to parse string literal: Invalid octal value\n";
+    TString a2 = "<main>:3:4: Error: Failed to parse string literal: Invalid octal value near byte 12\n";
 
     UNIT_ASSERT_NO_DIFF(a1, a2);
 }
@@ -7510,6 +7510,13 @@ Y_UNIT_TEST(JsonQueryNullInput) {
     VerifyProgram(res, elementStat, verifyLine);
     UNIT_ASSERT(elementStat["JsonQuery"] > 0);
 }
+
+Y_UNIT_TEST(YQL_20777) {
+    ExpectFailWithError(
+        R"sql(SELECT JSON_QUERY ('{}'j, '\1');)sql",
+        "<main>:1:30: Error: Failed to parse string literal: Invalid octal value near byte 3\n");
+}
+
 } // Y_UNIT_TEST_SUITE(JsonQuery)
 
 Y_UNIT_TEST_SUITE(JsonPassing) {

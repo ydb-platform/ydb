@@ -549,6 +549,7 @@ TNodePtr TSqlExpression::JsonPathSpecification(const TRule_jsonpath_spec& node) 
     if (!parsed) {
         return nullptr;
     }
+
     return new TCallNodeImpl(pos, "Utf8", {BuildQuotedAtom(pos, parsed->Content, parsed->Flags)});
 }
 
@@ -660,6 +661,9 @@ TSQLStatus TSqlExpression::AddJsonCommonArgs(const TRule_json_common_args& node,
 
     if (!IsUnwrappable(jsonExpr)) {
         return std::unexpected(jsonExpr.error());
+    }
+    if (!jsonPath) {
+        return std::unexpected(ESQLError::Basic);
     }
     if (!IsUnwrappable(variables)) {
         return std::unexpected(variables.error());

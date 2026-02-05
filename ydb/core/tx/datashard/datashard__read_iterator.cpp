@@ -2636,16 +2636,46 @@ private:
             }
 
             if (Reader->HadInvisibleRowSkips() || Reader->HadInconsistentResult()) {
+                // Check if lock was already broken before we call BreakSetLocks
+                bool lockWasAlreadyBroken = false;
+                if (state.LockId) {
+                    if (auto rawLock = sysLocks.GetRawLock(state.LockId)) {
+                        lockWasAlreadyBroken = rawLock->IsBroken();
+                    }
+                }
+                
                 sysLocks.BreakSetLocks();
+                
+                // Determine victim query trace ID:
+                // - If lock was already broken (e.g., breaker wrote to same key), use the original victim
+                // - If lock wasn't broken before (deferred scenario), use current query as victim
+                TMaybe<ui64> victimQueryTraceId;
+                if (lockWasAlreadyBroken) {
+                    // Lock was broken by a breaker that wrote to the same key - original victim
+                    victimQueryTraceId = state.LockId ? sysLocks.GetVictimQueryTraceIdForLock(state.LockId) : Nothing();
+                } else {
+                    // Deferred scenario: current query detected the conflict
+                    victimQueryTraceId = state.QueryTraceId
+                        ? TMaybe<ui64>(state.QueryTraceId)
+                        : (state.LockId ? sysLocks.GetVictimQueryTraceIdForLock(state.LockId) : Nothing());
+                    
+                    // Update the lock's VictimQueryTraceId so SessionActor receives the correct victim info
+                    if (state.LockId && state.QueryTraceId) {
+                        if (auto rawLock = sysLocks.GetRawLock(state.LockId)) {
+                            rawLock->SetVictimQueryTraceId(state.QueryTraceId);
+                        }
+                    }
+                }
+                
                 NDataIntegrity::LogVictimDetected(ctx, Self->TabletID(),
                     "Read transaction was a victim of broken locks",
-                    state.LockId ? sysLocks.GetVictimQueryTraceIdForLock(state.LockId) : Nothing(),
+                    victimQueryTraceId,
                     state.QueryTraceId ? TMaybe<ui64>(state.QueryTraceId) : Nothing());
-                
+
                 // In deferred lock scenarios, emit breaker logs and pass info to SessionActor
-                if (state.QueryTraceId) {
+                if (victimQueryTraceId) {
                     auto breakerQueryTraceIds = Self->FindBreakerQueryTraceIds(state.ReadVersion);
-                    TVector<ui64> victimIds = {state.QueryTraceId};
+                    TVector<ui64> victimIds = {*victimQueryTraceId};
                     for (ui64 breakerQueryTraceId : breakerQueryTraceIds) {
                         NDataIntegrity::LogLocksBroken(ctx, Self->TabletID(),
                             "Write transaction broke other locks (deferred)",
@@ -2662,16 +2692,46 @@ private:
 
         case NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION:
             if (Reader->HadInconsistentResult()) {
+                // Check if lock was already broken before we call BreakSetLocks
+                bool lockWasAlreadyBroken = false;
+                if (state.LockId) {
+                    if (auto rawLock = sysLocks.GetRawLock(state.LockId)) {
+                        lockWasAlreadyBroken = rawLock->IsBroken();
+                    }
+                }
+                
                 sysLocks.BreakSetLocks();
+                
+                // Determine victim query trace ID:
+                // - If lock was already broken (e.g., breaker wrote to same key), use the original victim
+                // - If lock wasn't broken before (deferred scenario), use current query as victim
+                TMaybe<ui64> victimQueryTraceId;
+                if (lockWasAlreadyBroken) {
+                    // Lock was broken by a breaker that wrote to the same key - original victim
+                    victimQueryTraceId = state.LockId ? sysLocks.GetVictimQueryTraceIdForLock(state.LockId) : Nothing();
+                } else {
+                    // Deferred scenario: current query detected the conflict
+                    victimQueryTraceId = state.QueryTraceId
+                        ? TMaybe<ui64>(state.QueryTraceId)
+                        : (state.LockId ? sysLocks.GetVictimQueryTraceIdForLock(state.LockId) : Nothing());
+                    
+                    // Update the lock's VictimQueryTraceId so SessionActor receives the correct victim info
+                    if (state.LockId && state.QueryTraceId) {
+                        if (auto rawLock = sysLocks.GetRawLock(state.LockId)) {
+                            rawLock->SetVictimQueryTraceId(state.QueryTraceId);
+                        }
+                    }
+                }
+                
                 NDataIntegrity::LogVictimDetected(ctx, Self->TabletID(),
                     "Read transaction was a victim of broken locks",
-                    state.LockId ? sysLocks.GetVictimQueryTraceIdForLock(state.LockId) : Nothing(),
+                    victimQueryTraceId,
                     state.QueryTraceId ? TMaybe<ui64>(state.QueryTraceId) : Nothing());
-                
+
                 // In deferred lock scenarios, emit breaker logs and pass info to SessionActor
-                if (state.QueryTraceId) {
+                if (victimQueryTraceId) {
                     auto breakerQueryTraceIds = Self->FindBreakerQueryTraceIds(state.ReadVersion);
-                    TVector<ui64> victimIds = {state.QueryTraceId};
+                    TVector<ui64> victimIds = {*victimQueryTraceId};
                     for (ui64 breakerQueryTraceId : breakerQueryTraceIds) {
                         NDataIntegrity::LogLocksBroken(ctx, Self->TabletID(),
                             "Write transaction broke other locks (deferred)",

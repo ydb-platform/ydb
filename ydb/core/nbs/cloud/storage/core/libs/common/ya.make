@@ -13,6 +13,7 @@ SRCS(
     page_size.cpp
     sglist_iter.cpp
     sglist.cpp
+    sglist_test.cpp
     startable.cpp
     thread.cpp
 )

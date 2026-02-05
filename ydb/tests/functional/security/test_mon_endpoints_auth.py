@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 import os
 import subprocess
-import tempfile
 import urllib3
 
 import pytest
@@ -140,9 +139,9 @@ def create_ydb_configurator(
 
 
 @pytest.fixture(scope='module')
-def certificates():
-    certs_tmp_dir = tempfile.mkdtemp(prefix='monitoring_certs_')
-    return generate_certificates(certs_tmp_dir)
+def certificates(tmp_path_factory):
+    certs_tmp_dir = tmp_path_factory.mktemp('monitoring_certs_')
+    return generate_certificates(str(certs_tmp_dir))
 
 
 @pytest.fixture(scope='module')
@@ -186,7 +185,7 @@ EXPECTED_RESULTS_WITH_ENFORCE_USER_TOKEN = {
         'monitoring@builtin': 200,
         'root@builtin': 200,
     },
-    '/healthcheck?&format=prometheus': {
+    '/healthcheck?format=prometheus': {
         None: 200,
         'user@builtin': 200,
         'database@builtin': 200,
@@ -293,7 +292,7 @@ EXPECTED_RESULTS_WITHOUT_ENFORCE_USER_TOKEN = {
         'monitoring@builtin': 200,
         'root@builtin': 200,
     },
-    '/healthcheck?&format=prometheus': {
+    '/healthcheck?format=prometheus': {
         None: 200,
         'user@builtin': 200,
         'database@builtin': 200,

@@ -2,10 +2,8 @@
 import time
 import json
 import collections
-from six.moves.urllib import request
 import ssl
 import urllib.request
-
 
 class KikimrMonitor(object):
     def __init__(self, host, mon_port, update_interval_seconds=1.0, use_https=False, token=None):
@@ -34,7 +32,7 @@ class KikimrMonitor(object):
             ctx.verify_mode = ssl.CERT_NONE
             return urllib.request.urlopen(req, context=ctx)
         else:
-            return request.urlopen(req)
+            return urllib.request.urlopen(req)
 
     def tabletcounters(self, tablet_id):
         url_str = "{monitoring_address}/viewer/json/tabletcounters?tablet_id={tablet_id}".format(

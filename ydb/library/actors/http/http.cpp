@@ -275,6 +275,12 @@ THttpOutgoingResponsePtr THttpIncomingRequest::CreateResponseString(TStringBuf d
         if (parser.ExpectedBody() && !headers.IsChunkedEncoding() && !response->ContentLength) {
             response->Set<&THttpResponse::ContentLength>("0"); // workaround for buggy responses
         }
+        if (parser.ContentType && !Endpoint->CompressContentTypes.empty()) {
+            TStringBuf contentType = Trim(parser.ContentType.Before(';'), ' ');
+            if (Count(Endpoint->CompressContentTypes, contentType) != 0) {
+                response->EnableCompression();
+            }
+        }
         if (parser.HasCompletedHeaders()) {
             response->FinishHeader(); // for partial responses (data follows later)
         }

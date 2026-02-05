@@ -1639,6 +1639,7 @@ std::future<void> TMon::Start(TActorSystem* actorSystem) {
         "text/plain",
         "text/html",
         "text/css",
+        "text/event-stream",
         "text/javascript",
         "application/javascript",
         "application/json",

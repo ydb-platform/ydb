@@ -1848,6 +1848,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
     Y_UNIT_TEST_F(ReplicatedFederativeWriting, TStreamingTestFixture) {
         auto& config = SetupAppConfig();
         config.MutableTableServiceConfig()->SetEnableDataShardCreateTableAs(true);
+        config.MutableTableServiceConfig()->SetEnableHtapTx(true);
         constexpr char firstOutputTopic[] = "replicatedWritingOutputTopicName1";
         constexpr char secondOutputTopic[] = "replicatedWritingOutputTopicName2";
         constexpr char pqSource[] = "pqSourceName";
@@ -3122,6 +3123,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     Y_UNIT_TEST_F(StreamingQueryWithLocalYdbJoin, TStreamingTestFixture) {
         auto& config = SetupAppConfig();
         config.MutableTableServiceConfig()->SetEnableDataShardCreateTableAs(true);
+        config.MutableTableServiceConfig()->SetEnableHtapTx(true);
 
         constexpr char inputTopicName[] = "streamingQueryWithLocalYdbJoinInputTopic";
         constexpr char outputTopicName[] = "streamingQueryWithLocalYdbJoinOutputTopic";
@@ -4521,6 +4523,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     Y_UNIT_TEST_F(StreamingQueryWithMultipleWrites, TStreamingWithSchemaSecretsTestFixture) {
         auto& config = SetupAppConfig();
         config.MutableTableServiceConfig()->SetEnableDataShardCreateTableAs(true);
+        config.MutableTableServiceConfig()->SetEnableHtapTx(true);
 
         constexpr char inputTopic[] = "createStreamingQueryWithMultipleWritesInputTopic";
         constexpr char outputTopic1[] = "createStreamingQueryWithMultipleWritesOutputTopic1";

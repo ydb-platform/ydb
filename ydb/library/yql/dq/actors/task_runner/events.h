@@ -128,7 +128,7 @@ struct TEvInputChannelData
     { }
 
     const ui32 ChannelId;
-    std::optional<TDqSerializedBatch> Data; //not const, because we want to efficiently move data out of this event on a reciever side
+    std::optional<TDqSerializedBatch> Data; //not const, because we want to efficiently move data out of this event on a receiver side
     const bool Finish;
     const bool PauseAfterPush;
     const TMaybe<TInstant> WatermarkAfterPush;

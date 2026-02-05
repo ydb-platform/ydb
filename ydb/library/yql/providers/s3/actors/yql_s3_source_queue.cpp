@@ -387,7 +387,7 @@ public:
         if (!UpdatedConsumers.contains(ev->Sender)) {
             LOG_D(
                 "TS3FileQueueActor",
-                "HandleUpdateConsumersCount Reducing ConsumersCount by " << ev->Get()->Record.GetConsumersCountDelta() << ", recieved from " << ev->Sender);
+                "HandleUpdateConsumersCount Reducing ConsumersCount by " << ev->Get()->Record.GetConsumersCountDelta() << ", received from " << ev->Sender);
             UpdatedConsumers.insert(ev->Sender);
             ConsumersCount -= ev->Get()->Record.GetConsumersCountDelta();
         }

@@ -67,7 +67,7 @@ void Load(IInputStream& input, void* buf, size_t size) {
 } // namespace {
 
 i64 SaveRopeToPipe(IOutputStream& output, const TChunkedBuffer& rope) {
-    // TODO: can this function recieve rope by rvalue?
+    // TODO: can this function receive rope by rvalue?
     TChunkedBuffer toSave(rope);
     i64 total = 0;
     while (!toSave.Empty()) {

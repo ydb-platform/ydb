@@ -4913,7 +4913,7 @@ private:
     }
 
     void Handle(TEvBufferWriteResult::TPtr& result) {
-        CA_LOG_D("TKqpForwardWriteActor recieve EvBufferWriteResult from " << BufferActorId);
+        CA_LOG_D("TKqpForwardWriteActor receive EvBufferWriteResult from " << BufferActorId);
 
         WriteToken = result->Get()->Token;
         OnFlushed();

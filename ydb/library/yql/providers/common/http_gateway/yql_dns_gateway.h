@@ -216,7 +216,7 @@ private:
 
         if (result.empty()) {
             YQL_CLOG(WARN, HttpGateway)
-                << "No IPV4 or IPV6 address was recieved as a result of DNS "
+                << "No IPV4 or IPV6 address was received as a result of DNS "
                    "resolution for hostname: "
                 << host << ":" << port;
             ResolutionErrorCounter->Inc();

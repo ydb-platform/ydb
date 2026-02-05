@@ -70,6 +70,7 @@ TExprNode::TPtr BuildSourceStage(TExprNode::TPtr dqsource, TExprContext &ctx) {
     // clang-format on
 }
 
+/*
 TExprNode::TPtr RenameMembers(TExprNode::TPtr input, const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap,
                               TExprContext &ctx) {
     if (input->IsCallable("Member")) {
@@ -115,6 +116,7 @@ TExprNode::TPtr RenameMembers(TExprNode::TPtr input, const THashMap<TInfoUnit, T
         return input;
     }
 }
+*/
 
 } // namespace
 
@@ -641,7 +643,7 @@ TString TOpMap::ToString(TExprContext& ctx) {
 
     auto res = TStringBuilder();
     res << "Map [";
-    for (size_t i = 0, e = MapElements.size() i < e; i++) {
+    for (size_t i = 0, e = MapElements.size(); i < e; i++) {
         const auto& mapElement = MapElements[i];
         const auto& k = mapElement.GetElementName();
 
@@ -758,9 +760,8 @@ TVector<TInfoUnit> TOpFilter::GetFilterIUs(TPlanProps& props) const {
 }
 
 TVector<TInfoUnit> TOpFilter::GetUsedIUs(TPlanProps& props) {
-    TVector<TInfoUnit> res;
-    GetAllMembers(FilterLambda, res, props, false, true);
-    return res;
+    Y_UNUSED(props);
+    return FilterExpr.GetInputIUs(false, true);
 }
 
 TVector<TInfoUnit> TOpFilter::GetSubplanIUs(TPlanProps& props) {
@@ -942,25 +943,27 @@ TString TOpUnionAll::ToString(TExprContext& ctx) {
  * OpLimit operator methods
  */
 
-TOpLimit::TOpLimit(std::shared_ptr<IOperator> input, TPositionHandle pos, TExprNode::TPtr limitCond)
+TOpLimit::TOpLimit(std::shared_ptr<IOperator> input, TPositionHandle pos, TExpression limitCond)
     : IUnaryOperator(EOperator::Limit, pos, input), LimitCond(limitCond) {}
 
 TVector<TInfoUnit> TOpLimit::GetOutputIUs() { return GetInput()->GetOutputIUs(); }
 
 void TOpLimit::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap, TExprContext &ctx, const THashSet<TInfoUnit, TInfoUnit::THashFunction> &stopList) {
+    Y_UNUSED(ctx);
     Y_UNUSED(stopList);
-    LimitCond = RenameMembers(LimitCond, renameMap, ctx);
+    LimitCond.ApplyRenames(renameMap);
 }
 
 TString TOpLimit::ToString(TExprContext& ctx) {
-    return TStringBuilder() << "Limit: " << PrintRBOExpression(LimitCond, ctx); 
+    Y_UNUSED(ctx);
+    return TStringBuilder() << "Limit: " << LimitCond.ToString(); 
 }
 
 /**
  * Sort operator
  * FIXME: This is temporary, we want to get enforcers working
  */
-TOpSort::TOpSort(std::shared_ptr<IOperator> input, TPositionHandle pos, const TVector<TSortElement>& sortElements, TExprNode::TPtr limitCond)
+TOpSort::TOpSort(std::shared_ptr<IOperator> input, TPositionHandle pos, const TVector<TSortElement>& sortElements, std::optional<TExpression> limitCond)
     : IUnaryOperator(EOperator::Sort, pos, input), SortElements(sortElements), LimitCond(limitCond) {}
 
 TVector<TInfoUnit> TOpSort::GetOutputIUs() { return GetInput()->GetOutputIUs(); }
@@ -975,6 +978,7 @@ TVector<TInfoUnit> TOpSort::GetUsedIUs(TPlanProps& props) {
 }
 
 void TOpSort::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap, TExprContext &ctx, const THashSet<TInfoUnit, TInfoUnit::THashFunction> &stopList) {
+    Y_UNUSED(ctx);
     Y_UNUSED(stopList);
     TVector<TSortElement> newSortElements;
     for (const auto& element : SortElements) {
@@ -989,12 +993,13 @@ void TOpSort::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFun
         newSortElements.push_back(sortElement);
     }
 
-    if (LimitCond) {
-        LimitCond = RenameMembers(LimitCond, renameMap, ctx);
+    if (LimitCond.has_value()) {
+        LimitCond->ApplyRenames(renameMap);
     }
 }
 
 TString TOpSort::ToString(TExprContext& ctx) {
+    Y_UNUSED(ctx);
     TStringBuilder res;
     res << "Sort: [";
     for (size_t i=0; i<SortElements.size(); i++) {
@@ -1011,8 +1016,8 @@ TString TOpSort::ToString(TExprContext& ctx) {
         }
     }
     res << "]";
-    if (LimitCond) {
-        res << ", Limit: " << PrintRBOExpression(LimitCond, ctx);
+    if (LimitCond.has_value()) {
+        res << ", Limit: " << LimitCond->ToString();
     }
     
     return res;

@@ -106,7 +106,7 @@ TExprNode::TPtr TPhysicalSortBuilder::BuildPhysicalOp(TExprNode::TPtr input) {
         // clang-format off
         input = Build<TCoWideTopSort>(Ctx, Pos)
             .Input(input)
-            .Count(Sort->LimitCond->Node)
+            .Count(Sort->LimitCond->GetExpressionBody())
             .Keys<TCoSortKeys>()
                 .Add(BuildSortKeysForWideSort(inputs, sortElements))
             .Build()

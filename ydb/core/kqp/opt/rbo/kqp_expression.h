@@ -30,8 +30,8 @@ class TExpression {
     bool IsConstantExpr() const;
     bool MaybeJoinCondition(bool includeExpression = false, bool equiJoinOnly = true) const;
 
-    TExprNode::TPtr GetLambda();
-    TExprNode::TPtr GetExpressionBody();
+    TExprNode::TPtr GetLambda() const;
+    TExprNode::TPtr GetExpressionBody() const;
 
     TVector<TInfoUnit> GetInputIUs(bool includeSubplanVars = false, bool includeCorrelatedDeps = false) const;
 
@@ -65,8 +65,9 @@ class TJoinCondition {
 TExpression MakeColumnAccess(TInfoUnit column, const TExprContext* ctx, const TPlanProps* props = nullptr);
 TExpression MakeConstant(TString type, TString value, const TExprContext* ctx);
 TExpression MakeNothing(TPositionHandle pos, const TTypeAnnotationNode* type, const TExprContext* ctx);
-TExpression MakeConjunct(TVector<TExpression> vec);
+TExpression MakeConjunct(TVector<TExpression> vec, bool pgSyntax = false);
 TExpression MakeBinaryPredicate(TString callable, TExpression left, TExpression right);
 
+void GetAllMembers(TExprNode::TPtr node, TVector<TInfoUnit> &IUs);
 }
 }

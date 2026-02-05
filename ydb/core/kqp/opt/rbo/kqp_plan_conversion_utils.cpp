@@ -260,7 +260,7 @@ std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpSort(TExprNode::TPtr node
         } else {
             TString newName = "_rbo_arg_" + std::to_string(PlanProps.InternalVarIdx++);
             column = TInfoUnit(newName);
-            mapElements.emplace_back(column, el.Lambda().Ptr());
+            mapElements.emplace_back(column, TExpression(el.Lambda().Ptr(), &Ctx));
         }
         sortElements.push_back(TSortElement(column, el.Direction().StringValue() == "asc", el.NullsFirst().StringValue() == "first"));
     }

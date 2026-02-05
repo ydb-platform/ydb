@@ -1736,8 +1736,13 @@ bool TReadSessionActor::ProcessReads(const TActorContext& ctx) {
         ui32 maxPartitions = MaxReadPartitionsCount;
         ui32 partitionsAsked = 0;
 
+        static constexpr size_t MAX_PARTITION_IN_READ_BATCH = 10;
+        size_t maxPartitionsInReadBatch = 0;
+
         TFormedReadResponse::TPtr formedResponse = new TFormedReadResponse(Reads.front()->Guid, ctx.Now());
-        while (!AvailablePartitions.empty()) {
+        while (!AvailablePartitions.empty() && maxPartitionsInReadBatch < MAX_PARTITION_IN_READ_BATCH) {
+            ++maxPartitionsInReadBatch;
+
             auto part = *AvailablePartitions.begin();
             AvailablePartitions.erase(AvailablePartitions.begin());
 

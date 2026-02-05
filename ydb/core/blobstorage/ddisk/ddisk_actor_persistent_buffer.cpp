@@ -97,7 +97,8 @@ namespace NKikimr::NDDisk {
             .Session = temp->InterconnectSession,
             .OffsetInBytes = selector.OffsetInBytes,
             .Size = selector.Size,
-            .Data = std::move(payload)
+            .Sectors = std::move(sectors),
+            .Data = std::move(payload),
         };
 
         for(auto part : parts) {
@@ -116,8 +117,10 @@ namespace NKikimr::NDDisk {
                 tabletId = creds.TabletId, vchunkIndex = selector.VChunkIndex, lsn = lsn](NPDisk::TEvChunkWriteRawResult& /*ev*/, NWilson::TSpan&& span) {
                 Counters.Interface.WritePersistentBuffer.Reply(true);
                 auto itInflight = PersistentBufferWriteInflight.find({tabletId, vchunkIndex, lsn});
+                Y_ABORT_UNLESS(itInflight != PersistentBufferWriteInflight.end());
                 auto& inflight = itInflight->second;
-                Y_ABORT_UNLESS(inflight.WriteCookies.erase(writeCookie) == 1);
+                auto eraseCnt = inflight.WriteCookies.erase(writeCookie);
+                Y_ABORT_UNLESS(eraseCnt == 1);
                 if (inflight.WriteCookies.empty()) {
                     span.End();
                     auto& buffer = PersistentBuffers[{tabletId, vchunkIndex}];
@@ -127,6 +130,7 @@ namespace NKikimr::NDDisk {
                         pr = {
                             .OffsetInBytes = inflight.OffsetInBytes,
                             .Size = inflight.Size,
+                            .Sectors = std::move(inflight.Sectors),
                             .Data = std::move(inflight.Data),
                         };
                     } else {
@@ -306,6 +310,8 @@ namespace NKikimr::NDDisk {
         TRope data = std::move(pr.Data);
         Y_ABORT_UNLESS(pr.OffsetInBytes == selector.OffsetInBytes);
         Y_ABORT_UNLESS(pr.Size == selector.Size);
+
+        PersistentBufferSpaceAllocator.Free(pr.Sectors);
 
         buffer.Records.erase(jt);
         if (buffer.Records.empty()) {

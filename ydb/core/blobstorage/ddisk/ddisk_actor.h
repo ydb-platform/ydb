@@ -323,6 +323,7 @@ namespace NKikimr::NDDisk {
             struct TRecord {
                 ui32 OffsetInBytes;
                 ui32 Size;
+                std::vector<TPersistentBufferSectorInfo> Sectors;
                 TRope Data;
             };
 
@@ -360,6 +361,7 @@ namespace NKikimr::NDDisk {
             ui32 OffsetInBytes;
             ui32 Size;
             std::set<ui64> WriteCookies;
+            std::vector<TPersistentBufferSectorInfo> Sectors;
             TRope Data;
         };
         std::map<std::tuple<ui64, ui64, ui64>, TPersistentBufferToDiskWriteInFlight> PersistentBufferWriteInflight;

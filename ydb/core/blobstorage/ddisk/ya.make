@@ -10,6 +10,7 @@ LIBRARY()
         ddisk_actor_connect.cpp
         ddisk_actor_persistent_buffer.cpp
         ddisk_actor_read_write.cpp
+        persistent_buffer_space_allocator.cpp
     )
 
     PEERDIR(

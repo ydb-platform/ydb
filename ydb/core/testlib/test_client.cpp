@@ -1398,9 +1398,13 @@ namespace Tests {
                 auto actorSystemPtr = std::make_shared<NKikimr::TDeferredActorLogBackend::TAtomicActorSystemPtr>(nullptr);
                 actorSystemPtr->store(Runtime->GetActorSystem(nodeIdx));
 
+                if (FederatedQuerySetupDriver_) {
+                    FederatedQuerySetupDriver_.reset();
+                }
+
                 auto uniqueDriver = NKqp::MakeYdbDriver(actorSystemPtr, queryServiceConfig.GetStreamingQueries().GetTopicSdkSettings());
-                auto driver = NKqp::MakeSharedYdbDriverWithStop(std::move(uniqueDriver));
-                auto pqGateway = NKqp::MakePqGateway(driver, NKqp::TLocalTopicClientSettings{
+                auto FederatedQuerySetupDriver_ = NKqp::MakeSharedYdbDriverWithStop(std::move(uniqueDriver));
+                auto pqGateway = NKqp::MakePqGateway(FederatedQuerySetupDriver_, NKqp::TLocalTopicClientSettings{
                     .ActorSystem = Runtime->GetActorSystem(nodeIdx),
                     .ChannelBufferSize = rmConfig.GetChannelBufferSize(),
                 });
@@ -1422,7 +1426,7 @@ namespace Tests {
                     NYql::TPqGatewayConfig{},
                     Settings->PqGateway ? Settings->PqGateway : pqGateway,
                     actorSystemPtr,
-                    driver);
+                    FederatedQuerySetupDriver_);
             }
 
             const auto& allExternalSourcesTypes = NYql::GetAllExternalDataSourceTypes();
@@ -1870,6 +1874,12 @@ namespace Tests {
             WaitFinalization();
             SysViewsRosterUpdateObserver.Remove();
             Runtime.Destroy();
+        }
+
+        if (FederatedQuerySetupDriver_) {
+            // Stop is inside a destruction proccess
+            // see MakeSharedYdbDriverWithStop
+            FederatedQuerySetupDriver_.reset();
         }
 
         if (Bus) {

@@ -267,7 +267,7 @@ void TAddReadRuleActor::ModifyPersqueueConfig(
     auto serviceTypes = GetSupportedClientServiceTypes(pqConfig);
 
     TString error;
-    auto messageAndCode = AddReadRuleToConfig(tabletConfig, rule, serviceTypes, pqConfig);
+    auto messageAndCode = AddReadRuleToConfig(tabletConfig, rule, serviceTypes, pqConfig, nullptr);
     auto status = messageAndCode.PQCode == Ydb::PersQueue::ErrorCode::OK ?
                                 CheckConfig(*tabletConfig, serviceTypes, messageAndCode.Message, pqConfig, Ydb::StatusIds::ALREADY_EXISTS)
                                 : Ydb::StatusIds::BAD_REQUEST;

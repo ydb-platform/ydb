@@ -1,7 +1,5 @@
 # Yandex Enterprise Database changelog
 
-<<<<<<< HEAD
-=======
 ## Version 25.1 {#25-1}
 
 ### Version 25.1.4.ent.3 {#24-1-4-ent-3}
@@ -122,7 +120,6 @@ Release date: November 25, 2025.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/22203) an [issue](https://github.com/ydb-platform/ydb/issues/22030) that caused tablets to hang when nodes experienced critical memory shortage. Now tablets will automatically start as soon as any of the nodes frees up sufficient resources.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/24278) an issue where only the first message from a batch was saved when writing Kafka messages, with all other messages in the batch being ignored.
 
->>>>>>> c596a025a3b (Remove vector index feature flag from docs (#32620))
 ## Version 24.4 {#24-4}
 
 ### Version 24.4.4.13 {#24-4-4-13}

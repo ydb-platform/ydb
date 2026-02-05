@@ -7,13 +7,10 @@
 namespace NKikimr::NDDisk {
 
     struct TPersistentBufferSectorInfo {
-        enum EFlags {
-            HasSignatureCorrection = 1,
-        };
-
         ui64 ChunkIdx : 32;
         ui64 SectorIdx : 16;
-        ui64 Flags : 16;
+        ui64 HasSignatureCorrection : 1;
+        ui64 Reserved : 15;
         ui64 Checksum : 64;
     };
 

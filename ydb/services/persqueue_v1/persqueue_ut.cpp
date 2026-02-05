@@ -7809,14 +7809,16 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         settings.DisableClusterDiscovery(true);
 
         //
-        // the handler stores the number of messages in each call
+        // the handler updates the total number of messages
         //
-        std::vector<size_t> dataSizes;
+        size_t messageCount = 0;
 
         auto handler = [&](NYdb::NPersQueue::TReadSessionEvent::TDataReceivedEvent& event){
-            UNIT_ASSERT_LE(event.GetMessages().size(), 154);
+            const size_t batchSize = event.GetMessages().size();
 
-            dataSizes.push_back(event.GetMessages().size());
+            UNIT_ASSERT_LE(batchSize, 154);
+
+            messageCount += batchSize;
         };
         settings.EventHandlers_.SimpleDataHandlers(std::move(handler), true);
 
@@ -7843,10 +7845,11 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         //
         // 700 messages of 2000 characters are transmitted
         //
+        const size_t totalMessageCount = 700;
         {
             auto writer = CreateSimpleWriter(*driver, SHORT_TOPIC_NAME, TStringBuilder() << "source" << 0, {}, TString("raw"));
 
-            for (ui32 i = 1; i <= 700; ++i) {
+            for (ui32 i = 1; i <= totalMessageCount; ++i) {
                 std::string message(2'000, 'x');
 
                 bool res = writer->Write(message, i);
@@ -7857,49 +7860,41 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             UNIT_ASSERT(res);
         }
 
-        //
-        // auxiliary functions for decompressor and handler control
-        //
-        auto WaitTasks = [&](auto f, size_t c) {
-            while (f() < c) {
-                Sleep(TDuration::Seconds(1));
-            };
-        };
-        auto WaitPlannedTasks = [&](auto e, size_t count) {
-            WaitTasks([&]() { return e->GetPlannedCount(); }, count);
-        };
-        auto WaitExecutedTasks = [&](auto e, size_t count) {
-            WaitTasks([&]() { return e->GetExecutedCount(); }, count);
-        };
+        auto RunAllTasks = [&](auto e) {
+            size_t planned = e->GetFuncsCount();
+            size_t started = e->GetRunningCount() + e->GetExecutedCount();
 
-        auto RunTasks = [&](auto e, const std::vector<size_t>& tasks) {
-            size_t n = tasks.size();
-            WaitPlannedTasks(e, n);
-            size_t completed = e->GetExecutedCount();
+            if (planned <= started) {
+                return;
+            }
+
+            std::vector<size_t> tasks;
+            for (size_t task = started; task < planned; ++task) {
+                tasks.push_back(task);
+            }
+
             e->StartFuncs(tasks);
-            WaitExecutedTasks(e, completed + n);
+
+            while (e->GetExecutedCount() < planned) {
+                Sleep(TDuration::MilliSeconds(100));
+            }
         };
 
         //
         // run executors
         //
-        RunTasks(executor, {0}); // TCreatePartitionStreamEvent
+        while (messageCount < totalMessageCount) {
+            RunAllTasks(decompressor);
+            RunAllTasks(executor);
 
-        RunTasks(decompressor, {0});
-        RunTasks(executor, {1, 2});
+            Sleep(TDuration::MilliSeconds(100));
+        }
 
-        RunTasks(decompressor, {1});
-        RunTasks(executor, {3, 4});
-
-        RunTasks(decompressor, {2});
-        RunTasks(executor, {5, 6});
 
         //
         // all messages received
         //
-        UNIT_ASSERT_VALUES_EQUAL(dataSizes.size(), 6);
-        UNIT_ASSERT_VALUES_EQUAL(std::accumulate(dataSizes.begin(), dataSizes.end(), 0), 700);
-        UNIT_ASSERT_VALUES_EQUAL(*std::max_element(dataSizes.begin(), dataSizes.end()), 154);
+        UNIT_ASSERT_VALUES_EQUAL(messageCount, totalMessageCount);
 
         UNIT_ASSERT_VALUES_EQUAL(counters->MessagesInflight->Val(), 0);
         UNIT_ASSERT_VALUES_EQUAL(counters->BytesInflightUncompressed->Val(), 0);

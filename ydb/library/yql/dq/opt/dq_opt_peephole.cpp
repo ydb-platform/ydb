@@ -1047,24 +1047,16 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
             .Add(6, ctx.NewList(pos, std::move(rightRenames)))
         .Seal()
         .Build();
-    //
-    // BlockHashJoinCore: type ann says Stream (dq_type_ann.cpp:1286 TStreamExprType), and the
-    // computation node returns TStreamValue (dq_block_hash_join.cpp). So by design it returns Stream.
-    // In KQP pipeline the value can end up as Flow (e.g. after TDqStage->TDqPhyStage or channel
-    // typing), so WideFromBlocks(blockJoinCore) fails with "Expected wide stream type, but got: Flow".
-    // Workaround: FromFlow(blockJoinCore) so that WideFromBlocks always receives Stream.
-    // To make BlockHashJoinCore truly return Stream everywhere, find where Flow is introduced in
-    // KQP (e.g. GetMKqlResultType expects Flow; connection/arg typing in dq_opt_build.cpp).
+
+    // BlockHashJoinCore output: Stream of blocks.
+    // Convert it to Flow of wide scalars: ToFlow(Stream-of-blocks) -> WideFromBlocks
     auto wideResultFlow = ctx.Builder(pos)
-        .Callable("ToFlow")
-            .Callable(0, "WideFromBlocks")
-                .Callable(0, "FromFlow")
-                    .Add(0, std::move(blockJoinCore))
-                .Seal()
+        .Callable("WideFromBlocks")
+            .Callable(0, "ToFlow")
+                .Add(0, std::move(blockJoinCore))
             .Seal()
         .Seal()
         .Build();
-
 
     // Determine wide row layout:
     const ui32 leftBase = itemTypeLeft->GetSize();

@@ -3,8 +3,6 @@
 #include <ydb/library/workload/benchmark_base/workload.h>
 #include <ydb/library/workload/abstract/workload_query_generator.h>
 
-#include <string>
-
 namespace NYdbWorkload {
 
 class TFulltextWorkloadParams final: public TWorkloadBaseParams {
@@ -17,7 +15,7 @@ public:
 
     void Init() override;
 
-    TString TableName = "fulltext_test";
+    TString TableName = "fulltext_workload";
     ui64 MinPartitions = 1;
     ui64 PartitionSizeMb = 0;
     bool AutoPartitioningByLoad = true;

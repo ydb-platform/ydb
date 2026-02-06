@@ -151,11 +151,17 @@ public:
 
         const auto& suiteResults = TestRunner->GetResults();
         NYdb::NBS::NProto::TTestResults proto;
+        auto startTime = TestRunner->GetStartTime().MicroSeconds();
+        auto endTime = stopped.MicroSeconds();
+        auto duration_s = (endTime - startTime) / 1e6;
+        auto dataSizeMb = (suiteResults.BlocksRead + suiteResults.BlocksWritten) * 4 / 1024;
         proto.SetName(Name);
         proto.SetResult(suiteResults.Status);
-        proto.SetStartTime(TestRunner->GetStartTime().MicroSeconds());
-        proto.SetEndTime(stopped.MicroSeconds());
+        proto.SetStartTime(startTime);
+        proto.SetEndTime(endTime);
         proto.SetRequestsCompleted(suiteResults.RequestsCompleted);
+        proto.SetIops(suiteResults.RequestsCompleted / duration_s);
+        proto.SetThroughputMbs(dataSizeMb / duration_s);
 
         if (suiteResults.BlocksRead) {
             proto.SetBlocksRead(suiteResults.BlocksRead);
@@ -173,7 +179,7 @@ public:
         }
 
         NProtobufJson::Proto2Json(proto, result["TestResults"], {});
-        TestContext.Result = NJson::WriteJson(result, false, false, false);
+        TestContext.Result = NJson::WriteJson(result, true, true, false);
     }
 
     void SendIORequest(
@@ -205,7 +211,7 @@ public:
                 TraceSamplePeriod           // sample period
             );
 
-            auto span = NWilson::TSpan(15, std::move(traceId), "NBS.ReadBlocks");
+            auto span = NWilson::TSpan(15, std::move(traceId), "NbsLoadActor.ReadBlocks");
             span.Event("PrepareRequest");
 
             auto request = std::make_unique<NYdb::NBS::NBlockStore::TEvService::TEvReadBlocksRequest>();
@@ -238,7 +244,7 @@ public:
                     TraceSamplePeriod           // sample period
                 );
 
-                auto span = NWilson::TSpan(15, std::move(traceId), "NBS.WriteBlocks");
+                auto span = NWilson::TSpan(15, std::move(traceId), "NbsLoadActor.WriteBlocks");
                 span.Event("PrepareRequest");
 
                 auto request = std::make_unique<NYdb::NBS::NBlockStore::TEvService::TEvWriteBlocksRequest>();

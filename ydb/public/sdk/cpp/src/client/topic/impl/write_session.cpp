@@ -98,8 +98,17 @@ TWriteSession::~TWriteSession() {
 // TKeyedWriteSessionSettings
 
 std::string TKeyedWriteSessionSettings::DefaultPartitioningKeyHasher(const std::string_view key) {
-    std::uint64_t hash = MurmurHash<std::uint64_t>(key.data(), key.size());
-    return HexEncode(&hash, sizeof(hash));
+    const ui64 lo = MurmurHash<ui64>(key.data(), key.size(), ui64{0});
+    const ui64 hi = MurmurHash<ui64>(key.data(), key.size(), ui64{0x9E3779B97F4A7C15ull}); // фиксированный seed
+
+    const ui64 hiBe = y_absl::gntohll(hi);
+    const ui64 loBe = y_absl::gntohll(lo);
+
+    std::string out;
+    out.resize(16);
+    memcpy(out.data() + 0, &hiBe, 8);
+    memcpy(out.data() + 8, &loBe, 8);
+    return out; // 16 сырых байт
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -498,7 +507,7 @@ void TKeyedWriteSession::TEventsWorker::TransferEventsToOutputQueue() {
     std::unordered_map<std::uint64_t, std::deque<TWriteSessionEvent::TWriteAck>> acks;
 
     auto messagesWorker = Session->MessagesWorker;
-    auto buildOutputAckEvent = [](std::deque<TWriteSessionEvent::TWriteAck>& acksQueue, std::optional<std::uint64_t> expectedSeqNo) -> TWriteSessionEvent::TAcksEvent {
+    auto buildOutputAckEvent = [&](std::deque<TWriteSessionEvent::TWriteAck>& acksQueue, std::optional<std::uint64_t> expectedSeqNo) -> TWriteSessionEvent::TAcksEvent {
         TWriteSessionEvent::TAcksEvent ackEvent;
 
         if (expectedSeqNo.has_value()) {

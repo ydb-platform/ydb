@@ -57,12 +57,12 @@ struct TProducerSessionOptions
 struct IProducerSession
     : public NTableClient::IUnversionedRowsetWriter
 {
-    //! Get sequence number of last pushed row.
+    //! Gets sequence number of last pushed row.
     //! For example, it can be gotten right after creating session
     //! to understand what rows should be written now.
     virtual TQueueProducerSequenceNumber GetLastSequenceNumber() const = 0;
 
-    //! Get user meta saved in the producer session.
+    //! Gets user meta saved in the producer session.
     virtual const NYTree::INodePtr& GetUserMeta() const = 0;
 
     //! Flush all written rows.
@@ -79,7 +79,7 @@ DEFINE_REFCOUNTED_TYPE(IProducerSession)
 struct IProducerClient
     : public virtual TRefCounted
 {
-    //! Create a session (or increase its epoch) and return session writer.
+    //! Creates a session (or increase its epoch) and return session writer.
     virtual TFuture<IProducerSessionPtr> CreateSession(
         const NYPath::TRichYPath& queuePath,
         const NTableClient::TNameTablePtr& nameTable,
@@ -87,6 +87,7 @@ struct IProducerClient
         const TProducerSessionOptions& options = {},
         const IInvokerPtr& invoker = nullptr) = 0;
 };
+
 DEFINE_REFCOUNTED_TYPE(IProducerClient)
 
 ////////////////////////////////////////////////////////////////////////////////

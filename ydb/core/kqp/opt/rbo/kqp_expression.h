@@ -20,7 +20,7 @@ class TExpression {
 
     // Constructs an expression from ExprNode, also save expression context and plan
     // properties. Plan properties are needed to access subplan IUs
-    TExpression(TExprNode::TPtr node, TExprContext* ctx, const TPlanProps* props = nullptr); 
+    TExpression(TExprNode::TPtr node, TExprContext* ctx, TPlanProps* props = nullptr); 
 
     TExpression() = default;
     ~TExpression() = default;
@@ -57,20 +57,20 @@ class TExpression {
     TVector<TInfoUnit> GetInputIUs(bool includeSubplanVars = false, bool includeCorrelatedDeps = false) const;
 
     // Rename column references in the expression
-    TExpression ApplyRenames(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap);
+    TExpression ApplyRenames(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap) const;
 
     // Apply a generic replace map to the lambda of the expression
-    TExpression ApplyReplaceMap(TNodeOnNodeOwnedMap map, TRBOContext& ctx);
+    TExpression ApplyReplaceMap(TNodeOnNodeOwnedMap map, TRBOContext& ctx) const;
 
     // Remove a cast from the expression
-    TExpression PruneCast();
+    TExpression PruneCast() const;
 
     // Produce a pretty string for this expression
     TString ToString() const;
 
     TExprNode::TPtr Node;
     TExprContext* Ctx;
-    const TPlanProps* PlanProps;
+    TPlanProps* PlanProps;
 };
 
 /**
@@ -82,31 +82,31 @@ class TJoinCondition {
     TJoinCondition(const TExpression& expr);
 
     // In case this is a simple predicate that contains a single column reference on each side, return left column
-    TInfoUnit GetLeftIU();
+    TInfoUnit GetLeftIU() const;
 
     // In case this is a simple predicate that contains a single column reference on each side, return right column
-    TInfoUnit GetRightIU();
+    TInfoUnit GetRightIU() const;
 
     // Find all non-column reference expression in this condition and insert them into a map
-    void ExtractExpressions(TNodeOnNodeOwnedMap& map);
+    void ExtractExpressions(TNodeOnNodeOwnedMap& renameMap, TVector<std::pair<TInfoUnit, TExprNode::TPtr>>& exprMap);
 
-    TExpression& Expr;
+    const TExpression& Expr;
     TVector<TInfoUnit> LeftIUs;
     TVector<TInfoUnit> RightIUs;
 
-    bool PairCondition = true;
-    bool IncludesExpressions = false;
-    bool EquiJoin = true;
+    bool IncludesExpressions = true;
+    bool EquiJoin = false;
 };
 
-TExpression MakeColumnAccess(TInfoUnit column, const TExprContext* ctx, const TPlanProps* props = nullptr);
-TExpression MakeConstant(TString type, TString value, const TExprContext* ctx);
-TExpression MakeNothing(TPositionHandle pos, const TTypeAnnotationNode* type, const TExprContext* ctx);
+TExpression MakeColumnAccess(TInfoUnit column, TPositionHandle pos, TExprContext* ctx, TPlanProps* props = nullptr);
+TExpression MakeConstant(TString type, TString value, TPositionHandle pos, TExprContext* ctx);
+TExpression MakeNothing(TPositionHandle pos, const TTypeAnnotationNode* type, TExprContext* ctx);
 TExpression MakeConjunct(const TVector<TExpression>& vec, bool pgSyntax = false);
 TExpression MakeBinaryPredicate(TString callable, const TExpression& left, const TExpression& right);
 
 void GetAllMembers(TExprNode::TPtr node, TVector<TInfoUnit> &IUs);
 void GetAllMembers(TExprNode::TPtr node, TVector<TInfoUnit> &IUs, const TPlanProps& props, bool withSubplanContext, bool withDependencies);
+TString PrintRBOExpression(TExprNode::TPtr expr, TExprContext & ctx);
 
 }
 }

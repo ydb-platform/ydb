@@ -1,4 +1,5 @@
 #include "kqp_operator.h"
+#include "kqp_expression.h"
 #include "kqp_rbo_utils.h"
 #include <yql/essentials/core/yql_expr_optimize.h>
 
@@ -77,74 +78,6 @@ namespace NKqp {
 
 using namespace NYql;
 using namespace NNodes;
-
-TString PrintRBOExpression(TExprNode::TPtr expr, TExprContext & ctx) {
-    if (expr->IsLambda()) {
-        expr = expr->Child(1);
-    }
-    try {
-        TConvertToAstSettings settings;
-        settings.AllowFreeArgs = true;
- 
-        auto ast = ConvertToAst(*expr, ctx, settings);
-        TStringStream exprStream;
-        YQL_ENSURE(ast.Root);
-        ast.Root->PrintTo(exprStream);
-
-        TString exprText = exprStream.Str();
-
-        return exprText;
-    } catch (const std::exception& e) {
-        return TStringBuilder() << "Failed to render expression to pretty string: " << e.what();
-    }
-}
-
-/**
- * Scan expression and retrieve all members
- */
-void GetAllMembers(TExprNode::TPtr node, TVector<TInfoUnit> &IUs) {
-    if (node->IsCallable("Member")) {
-        auto member = TCoMember(node);
-        auto iu = TInfoUnit(member.Name().StringValue());
-        IUs.push_back(TInfoUnit(member.Name().StringValue()));
-        return;
-    }
-
-    for (auto c : node->Children()) {
-        GetAllMembers(c, IUs);
-    }
-}
-
-/**
- * Scan expression and retrieve all members while respecting subplan context variables:
- *   If `withSubplanContext` is true - retrieve all members including all subplan context IUs
- */
-void GetAllMembers(TExprNode::TPtr node, TVector<TInfoUnit> &IUs, TPlanProps& props, bool withSubplanContext, bool withDependencies) {
-    if (node->IsCallable("Member")) {
-        auto member = TCoMember(node);
-        auto iu = TInfoUnit(member.Name().StringValue());
-        if (props.Subplans.PlanMap.contains(iu)){
-            if (withSubplanContext) {
-                iu.SetSubplanContext(true);
-                iu.AddDependencies(props.Subplans.PlanMap.at(iu).Tuple);
-                IUs.push_back(iu);
-            }
-            if (withDependencies) {
-                for (auto dep : props.Subplans.PlanMap.at(iu).Tuple) {
-                    IUs.push_back(dep);
-                }
-            }
-        }
-        else {
-            IUs.push_back(iu);
-        }
-        return;
-    }
-
-    for (auto c : node->Children()) {
-        GetAllMembers(c, IUs, props, withSubplanContext, withDependencies);
-    }
-}
 
 template <typename DqConnectionType>
 TExprNode::TPtr TConnection::BuildConnectionImpl(TExprNode::TPtr inputStage, TPositionHandle pos, TExprNode::TPtr& newStage, TExprContext& ctx) {
@@ -425,9 +358,13 @@ TMapElement::TMapElement(const TInfoUnit& elementName, const TExpression& expr)
     , Expr(expr) {
 }
 
-TMapElement::TMapElement(const TInfoUnit& elementName, const TInfoUnit& rename, const TExprContext* ctx, const TPlanProps* props)
+TMapElement::TMapElement(const TInfoUnit& elementName, const TInfoUnit& rename, TPositionHandle pos, TExprContext* ctx, TPlanProps* props)
     : ElementName(elementName)
-    , Expr(MakeColumnAccess(rename, ctx, props)) {
+    , Expr(MakeColumnAccess(rename, pos, ctx, props)) {
+}
+
+bool TMapElement::IsRename() const {
+    return Expr.IsColumnAccess();
 }
 
 TInfoUnit TMapElement::GetElementName() const {
@@ -440,6 +377,12 @@ TExpression TMapElement::GetExpression() const {
 
 TExpression& TMapElement::GetExpression() {
     return Expr;
+}
+
+TInfoUnit TMapElement::GetRename() const {
+    auto IUs = Expr.GetInputIUs(true);
+    Y_ENSURE(IUs.size()==1, "No or multiple column references in rename");
+    return IUs[0];
 }
 
 void TMapElement::SetExpression(TExpression expr) {
@@ -574,7 +517,7 @@ void TOpMap::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunc
             if (renameMap.contains(from) && !stopList.contains(from)) {
                 from = renameMap.at(from);
             }
-            newMapElements.emplace_back(newIU, MakeColumnAccess(from, expr.Ctx, expr.PlanProps));
+            newMapElements.emplace_back(newIU, MakeColumnAccess(from, Pos, expr.Ctx, expr.PlanProps));
         } else {
             auto expr = el.GetExpression();
             auto newBody = expr.ApplyRenames(renameMap);

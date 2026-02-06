@@ -185,7 +185,7 @@ class TOpRead : public IOperator {
 class TMapElement {
 public:
     TMapElement(const TInfoUnit& elementName, const TExpression& expr);
-    TMapElement(const TInfoUnit& elementName, const TInfoUnit& rename, const TExprContext* ctx, const TPlanProps* props = nullptr);
+    TMapElement(const TInfoUnit& elementName, const TInfoUnit& rename, TPositionHandle pos, TExprContext* ctx, TPlanProps* props = nullptr);
 
     bool IsRename() const;
     TInfoUnit GetRename() const;

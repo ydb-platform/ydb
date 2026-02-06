@@ -1,4 +1,5 @@
 #include "kqp_expression.h"
+#include <yql/essentials/core/yql_expr_optimize.h>
 
 using namespace NYql::NNodes;
 
@@ -57,12 +58,78 @@ bool TestAndExtractEqualityPredicate(TExprNode::TPtr pred, TExprNode::TPtr& left
     }
     return false;
 }
+
+TExprNode::TPtr RenameMembers(TExprNode::TPtr input, const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap,
+                              TExprContext &ctx) {
+    if (input->IsCallable("Member")) {
+        auto member = TCoMember(input);
+        auto memberName = member.Name();
+        if (renameMap.contains(TInfoUnit(memberName.StringValue()))) {
+            auto renamed = renameMap.at(TInfoUnit(memberName.StringValue()));
+            // clang-format off
+             memberName = Build<TCoAtom>(ctx, input->Pos()).Value(renamed.GetFullName()).Done();
+            // clang-format on
+        }
+        // clang-format off
+        return Build<TCoMember>(ctx, input->Pos())
+            .Struct(member.Struct())
+            .Name(memberName)
+        .Done().Ptr();
+        // clang-format on
+    } else if (input->IsCallable()) {
+        TVector<TExprNode::TPtr> newChildren;
+        for (auto c : input->Children()) {
+            newChildren.push_back(RenameMembers(c, renameMap, ctx));
+        }
+        // clang-format off
+            return ctx.Builder(input->Pos())
+                .Callable(input->Content())
+                    .Add(std::move(newChildren))
+                    .Seal()
+                .Build();
+        // clang-format on
+    } else if (input->IsList()) {
+        TVector<TExprNode::TPtr> newChildren;
+        for (auto c : input->Children()) {
+            newChildren.push_back(RenameMembers(c, renameMap, ctx));
+        }
+        // clang-format off
+            return ctx.Builder(input->Pos())
+                .List()
+                    .Add(std::move(newChildren))
+                    .Seal()
+                .Build();
+        // clang-format on
+    } else {
+        return input;
+    }
+}
+
+TExprNode::TPtr FindMemberArg(TExprNode::TPtr input) {
+    if (input->IsCallable("Member")) {
+        auto member = TCoMember(input);
+        return member.Struct().Ptr();
+    } else if (input->IsCallable()) {
+        for (auto c : input->Children()) {
+            if (auto arg = FindMemberArg(c))
+                return arg;
+        }
+    } else if (input->IsList()) {
+        for (auto c : input->Children()) {
+            if (auto arg = FindMemberArg(c)) {
+                return arg;
+            }
+        }
+    }
+    return TExprNode::TPtr();
+}
+
 }
 
 namespace NKikimr {
 namespace NKqp {
 
-TExpression::TExpression(TExprNode::TPtr node, TExprContext* ctx, const TPlanProps* props) : Ctx(ctx), PlanProps(props) {
+TExpression::TExpression(TExprNode::TPtr node, TExprContext* ctx, TPlanProps* props) : Ctx(ctx), PlanProps(props) {
     Y_ENSURE(ctx, "Creating an expression will null context");
 
     if (node->IsLambda()) {
@@ -115,6 +182,7 @@ bool TExpression::IsColumnAccess() const {
  }
 
  bool TExpression::IsCast() const {
+    Y_ENSURE(Node->IsLambda(), "Expression node is not a lambda");
     auto body = Node->ChildPtr(1);
     return (body->IsCallable("ToPg") || body->IsCallable("PgCast"));
  }
@@ -130,7 +198,7 @@ bool TExpression::MaybeJoinCondition(bool includeExpressions) const {
     TExprNode::TPtr rightArg;
     if (TestAndExtractEqualityPredicate(body, leftArg, rightArg)) {
         TVector<TInfoUnit> bodyIUs;
-        GetAllMembers(body, bodyIUs, *PlanProps, false, true);
+        GetAllMembers(body, bodyIUs, *PlanProps, true, false);
 
         if (bodyIUs.size() < 2) {
             return false;
@@ -142,8 +210,8 @@ bool TExpression::MaybeJoinCondition(bool includeExpressions) const {
 
         TVector<TInfoUnit> leftIUs;
         TVector<TInfoUnit> rightIUs;
-        GetAllMembers(leftArg, leftIUs, *PlanProps, false, true);
-        GetAllMembers(rightArg, rightIUs, *PlanProps, false, true);
+        GetAllMembers(leftArg, leftIUs, *PlanProps, true, false);
+        GetAllMembers(rightArg, rightIUs, *PlanProps, true, false);
 
         if (!includeExpressions) {
             return leftIUs.size()==1 && rightIUs.size()==1 && leftArg->IsCallable("Member") && rightArg->IsCallable("Member");
@@ -154,7 +222,219 @@ bool TExpression::MaybeJoinCondition(bool includeExpressions) const {
     return false;
 }
 
+TExprNode::TPtr TExpression::GetLambda() const {
+    Y_ENSURE(Node->IsLambda(), "Expression node is not a lambda");
+    return Node;
+}
 
+TExprNode::TPtr TExpression::GetExpressionBody() const {
+    Y_ENSURE(Node->IsLambda(), "Expression node is not a lambda");
+    return Node->ChildPtr(1);
+}
+
+TVector<TInfoUnit> TExpression::GetInputIUs(bool includeSubplanVars, bool includeCorrelatedDeps) const {
+    Y_ENSURE(Node->IsLambda(), "Expression node is not lambda");
+    TVector<TInfoUnit> IUs;
+    GetAllMembers(Node, IUs);
+    if (IUs.empty()) {
+        return {};
+    }
+    else {
+        IUs.clear();
+        Y_ENSURE(PlanProps, "Plan properties null for an expression with members");
+        GetAllMembers(Node, IUs, *PlanProps, includeSubplanVars, includeCorrelatedDeps);
+        return IUs;
+    }
+}
+
+TExpression TExpression::ApplyRenames(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap) const {
+    Y_ENSURE(Node->IsLambda(), "Expression node is not lambda");
+    return TExpression(RenameMembers(Node, renameMap, *Ctx), Ctx, PlanProps);
+}
+
+TExpression TExpression::ApplyReplaceMap(TNodeOnNodeOwnedMap map, TRBOContext& ctx) const {
+    Y_ENSURE(Node->IsLambda(), "Expression node is not lambda");
+    TOptimizeExprSettings settings(&ctx.TypeCtx);
+    TExprNode::TPtr output;
+    RemapExpr(Node, output, map, ctx.ExprCtx, settings);
+    return TExpression(output, Ctx, PlanProps);
+}
+
+TExpression TExpression::PruneCast() const {
+    Y_ENSURE(Node->IsLambda(), "Expression node is not a lambda");
+    auto body = Node->ChildPtr(1);
+    Y_ENSURE(body->IsCallable("ToPg") || body->IsCallable("PgCast"), "Not a cast in prune cast call");
+    return TExpression(body->ChildPtr(0), Ctx, PlanProps);
+}
+
+TString PrintRBOExpression(TExprNode::TPtr expr, TExprContext & ctx) {
+    if (expr->IsLambda()) {
+        expr = expr->Child(1);
+    }
+    try {
+        TConvertToAstSettings settings;
+        settings.AllowFreeArgs = true;
+ 
+        auto ast = ConvertToAst(*expr, ctx, settings);
+        TStringStream exprStream;
+        YQL_ENSURE(ast.Root);
+        ast.Root->PrintTo(exprStream);
+
+        TString exprText = exprStream.Str();
+
+        return exprText;
+    } catch (const std::exception& e) {
+        return TStringBuilder() << "Failed to render expression to pretty string: " << e.what();
+    }
+}
+
+TString TExpression::ToString() const {
+    return PrintRBOExpression(Node, *Ctx);
+}
+
+TJoinCondition::TJoinCondition(const TExpression& expr) : Expr(expr)
+{
+    auto body = Expr.Node->ChildPtr(1);
+
+    if (body->IsCallable("FromPg")) {
+        body = body->ChildPtr(0);
+    }
+
+    TExprNode::TPtr leftArg;
+    TExprNode::TPtr rightArg;
+    if (TestAndExtractEqualityPredicate(body, leftArg, rightArg)) {
+        EquiJoin = true;
+
+        TVector<TInfoUnit> bodyIUs;
+        GetAllMembers(body, bodyIUs, *Expr.PlanProps, false, true);
+
+        GetAllMembers(leftArg, LeftIUs, *Expr.PlanProps, false, true);
+        GetAllMembers(rightArg, RightIUs, *Expr.PlanProps, false, true);
+    } else {
+        EquiJoin = false;
+
+        Y_ENSURE(body->ChildrenSize()==2, "Non-binary callable in join condition");
+
+        GetAllMembers(body->ChildPtr(0), LeftIUs, *Expr.PlanProps, false, true);
+        GetAllMembers(body->ChildPtr(1), RightIUs, *Expr.PlanProps, false, true);
+    }
+
+    if (body->ChildPtr(0)->IsCallable("Member") && body->ChildPtr(1)->IsCallable("Member")) {
+        IncludesExpressions = false;
+    }
+}
+
+TInfoUnit TJoinCondition::GetLeftIU() const {
+    Y_ENSURE(LeftIUs.size()==1);
+
+    return LeftIUs[0];
+}
+
+TInfoUnit TJoinCondition::GetRightIU() const {
+    Y_ENSURE(RightIUs.size()==1);
+
+    return RightIUs[0];
+}
+
+void TJoinCondition::ExtractExpressions(TNodeOnNodeOwnedMap& renameMap, TVector<std::pair<TInfoUnit, TExprNode::TPtr>>& exprMap) {
+    Y_ENSURE(IncludesExpressions, "Trying to extract expressions from a join condition that doesn't contain them");
+    Y_ENSURE(Expr.PlanProps, "Plan properties null when extracting expressions from join condition");
+
+    auto body = Expr.Node->ChildPtr(1);
+
+    if (body->IsCallable("FromPg")) {
+        body = body->ChildPtr(0);
+    }
+
+    TExprNode::TPtr leftArg;
+    TExprNode::TPtr rightArg;
+    TestAndExtractEqualityPredicate(body, leftArg, rightArg);
+
+    if (!leftArg->IsCallable("Member")) {
+        auto memberArg = FindMemberArg(leftArg);
+        TString newName = "_rbo_arg_" + std::to_string(Expr.PlanProps->InternalVarIdx++);
+
+        // clang-format off
+        auto newLeftArg= Build<TCoMember>(*Expr.Ctx, leftArg->Pos())
+            .Struct(memberArg)
+            .Name().Value(newName).Build()
+            .Done().Ptr();
+        // clang-format on
+
+        renameMap[leftArg.Get()] = newLeftArg;
+        exprMap.emplace_back(TInfoUnit(newName), leftArg);
+    }
+
+    if (!rightArg->IsCallable("Member")) {
+        auto memberArg = FindMemberArg(rightArg);
+        TString newName = "_rbo_arg_" + std::to_string(Expr.PlanProps->InternalVarIdx++);
+
+        // clang-format off
+        auto newRightArg= Build<TCoMember>(*Expr.Ctx, rightArg->Pos())
+            .Struct(memberArg)
+            .Name().Value(newName).Build()
+            .Done().Ptr();
+        // clang-format on
+
+        renameMap[rightArg.Get()] = newRightArg;
+        exprMap.emplace_back(TInfoUnit(newName), rightArg);
+    }
+}
+
+TExpression MakeColumnAccess(TInfoUnit column, TPositionHandle pos, TExprContext* ctx, TPlanProps* props) {
+    auto lambda_arg = Build<TCoArgument>(*ctx, pos).Name("arg").Done().Ptr();
+
+    // clang-format off
+    auto lambda = Build<TCoLambda>(*ctx, pos)
+        .Args({lambda_arg})
+        .Body<TCoMember>()
+            .Struct(lambda_arg)
+            .Name().Value(column.GetFullName()).Build()
+        .Build()
+        .Done().Ptr();
+        // clang-format on
+
+    return TExpression(lambda, ctx, props);
+}
+
+void GetAllMembers(TExprNode::TPtr node, TVector<TInfoUnit> &IUs) {
+    if (node->IsCallable("Member")) {
+        auto member = TCoMember(node);
+        IUs.push_back(TInfoUnit(member.Name().StringValue()));
+        return;
+    }
+
+    for (auto c : node->Children()) {
+        GetAllMembers(c, IUs);
+    }
+}
+
+void GetAllMembers(TExprNode::TPtr node, TVector<TInfoUnit> &IUs, const TPlanProps& props, bool withSubplanContext, bool withDependencies) {
+    if (node->IsCallable("Member")) {
+        auto member = TCoMember(node);
+        auto iu = TInfoUnit(member.Name().StringValue());
+        if (props.Subplans.PlanMap.contains(iu)){
+            if (withSubplanContext) {
+                iu.SetSubplanContext(true);
+                iu.AddDependencies(props.Subplans.PlanMap.at(iu).Tuple);
+                IUs.push_back(iu);
+            }
+            if (withDependencies) {
+                for (auto dep : props.Subplans.PlanMap.at(iu).Tuple) {
+                    IUs.push_back(dep);
+                }
+            }
+        }
+        else {
+            IUs.push_back(iu);
+        }
+        return;
+    }
+
+    for (auto c : node->Children()) {
+        GetAllMembers(c, IUs, props, withSubplanContext, withDependencies);
+    }
+}
 
 }
 }

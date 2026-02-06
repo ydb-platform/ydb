@@ -1584,7 +1584,7 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& node, TExprContext& ctx, co
                         .Done().Ptr();
 
                     if (!columnType) {
-                        YQL_CLOG(TRACE, CoreDq) << "didn't find " << inputColumn->Content() << " in: " << *(TTypeAnnotationNode*)itemType;
+                        YQL_CLOG(TRACE, CoreDq) << "didn't find " << inputColumn->Content() << " in: " << *(const TTypeAnnotationNode*)itemType;
                     }
                     Y_ENSURE(columnType);
 

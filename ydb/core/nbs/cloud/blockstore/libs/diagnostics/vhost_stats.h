@@ -22,8 +22,8 @@ struct TMetricRequest
 
     TMetricRequest(
         EBlockStoreRequest requestType,
-        const TString& diskId,
         const TString& clientId,
+        const TString& diskId,
         ui64 start,
         ui64 size,
         ui32 blockSize);

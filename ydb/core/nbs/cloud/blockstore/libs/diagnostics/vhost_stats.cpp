@@ -10,7 +10,7 @@ TBlockRange64 GetBlockRange(ui64 start, ui64 size, ui32 blockSize)
 {
     const ui64 startBlock = start / blockSize;
     const ui64 endBlock = (start + size + blockSize - 1) / blockSize;
-    return TBlockRange64::MakeClosedInterval(startBlock, endBlock);
+    return TBlockRange64::WithLength(startBlock, endBlock - startBlock);
 }
 
 bool IsUnaligned(ui64 start, ui64 size, ui32 blockSize)
@@ -24,8 +24,8 @@ bool IsUnaligned(ui64 start, ui64 size, ui32 blockSize)
 
 TMetricRequest::TMetricRequest(
     EBlockStoreRequest requestType,
-    const TString& diskId,
     const TString& clientId,
+    const TString& diskId,
     ui64 start,
     ui64 size,
     ui32 blockSize)

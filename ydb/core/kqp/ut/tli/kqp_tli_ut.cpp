@@ -848,6 +848,59 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         VerifyTliIssueAndLogsWithEnabled(issues, ss, breakerQueryText, victimReadText, victimSnapshotText);
     }
 
+    // Test: Deferred lock detection with many queries in both breaker and victim transactions.
+    // Like SnapshotThenReadWrite but with several UPSERTs in breaker (only the middle one conflicts)
+    // and several SELECTs in victim (only the middle one detects InvisibleRowSkips).
+    Y_UNIT_TEST(ManyUpsertsDeferredLock) {
+        TStringStream ss;
+        TTliTestContext ctx(ss);
+        for (int i = 1; i <= 6; ++i) {
+            ctx.CreateTable(Sprintf("/Root/Tenant1/Table%d", i));
+            ctx.SeedTable(Sprintf("/Root/Tenant1/Table%d", i), {{1, Sprintf("Init%d", i)}, {2, Sprintf("Init%d_2", i)}});
+        }
+
+        // Victim queries
+        const TString victimSnapshotTable1 = "SELECT * FROM `/Root/Tenant1/Table1` WHERE Key = 2u /* snapshot */";
+        const TString victimSelectTable2 = "SELECT * FROM `/Root/Tenant1/Table2` WHERE Key = 1u";
+        const TString victimSelectTable3 = "SELECT * FROM `/Root/Tenant1/Table3` WHERE Key = 1u /* victim-read */";
+        const TString victimSelectTable4 = "SELECT * FROM `/Root/Tenant1/Table4` WHERE Key = 1u";
+        const TString victimWriteTable3 = "UPSERT INTO `/Root/Tenant1/Table3` (Key, Value) VALUES (1u, \"VictimValue\")";
+
+        // Breaker queries
+        const TString breakerUpdateTable5 = "UPDATE `/Root/Tenant1/Table5` SET Value = \"BreakerUpdate5\" WHERE Key = 1u";
+        const TString breakerUpdateTable3 = "UPDATE `/Root/Tenant1/Table3` SET Value = \"BreakerUpdate3\" WHERE Key = 1u";
+        const TString breakerUpdateTable6 = "UPDATE `/Root/Tenant1/Table6` SET Value = \"BreakerUpdate6\" WHERE Key = 1u";
+
+        // Step 1: Victim starts tx with snapshot on a safe key of Table1
+        auto victimTx = BeginReadTx(ctx.VictimSession, victimSnapshotTable1);
+
+        // Step 2: Breaker writes to tables 5, 3, 6 and commits (only Table3 key 1 conflicts)
+        std::optional<TTransaction> breakerTx;
+        {
+            auto result = ctx.Session.ExecuteDataQuery(breakerUpdateTable5, TTxControl::BeginTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == EStatus::SUCCESS, result.GetIssues().ToString());
+            breakerTx = result.GetTransaction();
+        }
+        NKqp::AssertSuccessResult(ctx.Session.ExecuteDataQuery(breakerUpdateTable3, TTxControl::Tx(*breakerTx)).GetValueSync());
+        NKqp::AssertSuccessResult(ctx.Session.ExecuteDataQuery(breakerUpdateTable6, TTxControl::Tx(*breakerTx).CommitTx()).GetValueSync());
+
+        // Step 3: Victim reads tables 2, 3, 4 after breaker committed
+        // Only SELECT Table3 key 1 triggers InvisibleRowSkips (deferred detection)
+        NKqp::AssertSuccessResult(ctx.VictimSession.ExecuteDataQuery(victimSelectTable2, TTxControl::Tx(victimTx)).GetValueSync());
+        {
+            auto result = ctx.VictimSession.ExecuteDataQuery(victimSelectTable3, TTxControl::Tx(victimTx)).ExtractValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == EStatus::SUCCESS, result.GetIssues().ToString());
+            victimTx = *result.GetTransaction();
+        }
+        NKqp::AssertSuccessResult(ctx.VictimSession.ExecuteDataQuery(victimSelectTable4, TTxControl::Tx(victimTx)).GetValueSync());
+
+        // Step 4: Victim writes and tries to commit -> should be aborted
+        auto [status, issues] = ExecuteVictimCommitWithIssues(ctx.VictimSession, victimTx, victimWriteTable3);
+        UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
+
+        VerifyTliIssueAndLogsWithEnabled(issues, ss, breakerUpdateTable3, victimSelectTable3, victimSnapshotTable1);
+    }
+
     // Test: Concurrent UPSERT...SELECT transactions - replicates user's production scenario
     // Tests that BreakerQueryTraceId and VictimQueryTraceId linkage is maintained even with
     // OLTP sink + UPSERT...SELECT where locks may be created lazily (deferred lock creation).

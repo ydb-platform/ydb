@@ -12,6 +12,7 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include <util/generic/yexception.h>
 
 
 namespace NKikimr::NKqp {
@@ -53,7 +54,7 @@ public:
     TValue GetValue(const std::string& key) const {
         auto it = Find(key);
         if (it == Data_.end()) {
-            throw std::out_of_range("Key not found: " + key);
+            ythrow yexception() << "Key not found: " << key;
         }
         return Parse<TValue>(it->second);
     }
@@ -108,7 +109,7 @@ private:
 
             if (ptr == endptr) {
                 // We encountered text without a number (e.g., just "ms"?) or garbage
-                throw std::invalid_argument("Invalid duration format in: " + s);
+                ythrow yexception() << "Invalid duration format in: " << s;
             }
             ptr = endptr;
 
@@ -150,7 +151,7 @@ private:
                 segmentNs = duration<double>(val);
             }
             else {
-                throw std::invalid_argument("Unknown suffix: " + suffix);
+                ythrow yexception() << "Unknown suffix: " << suffix;
             }
 
             totalNs += segmentNs;
@@ -274,7 +275,7 @@ private:
         });
 
         if (raw.empty()) {
-            throw std::runtime_error("Empty value at " + std::to_string(Pos_));
+            ythrow yexception() << "Empty value at " << Pos_;
         }
 
         // Check if this is a range expression
@@ -297,7 +298,7 @@ private:
             auto parts = Split(input, ",");
 
             if (parts.empty()) {
-                throw std::runtime_error("Empty range expression");
+                ythrow yexception() << "Empty range expression";
             }
 
             bool isFloat = ShouldFormatAsFloat(parts);
@@ -312,13 +313,10 @@ private:
                 return GenerateSequence(std::stod(parts[0]), std::stod(range[range.size() - 1]), step, isFloat);
             }
 
-            throw std::runtime_error(
-                "Invalid range format: only 'X..Y' or 'X,Y..Z' allowed, got " +
-                std::to_string(parts.size()) + " parts"
-            );
-
+            ythrow yexception() << "Invalid range format: only 'X..Y' or 'X,Y..Z' allowed, got "
+                                << parts.size() << " parts";
         } catch (const std::exception& e) {
-            throw std::runtime_error("Invalid range format: " + input + " (" + e.what() + ")");
+            ythrow yexception() << "Invalid range format: " << input << " (" << e.what() << ")";
         }
     }
 
@@ -341,11 +339,11 @@ private:
         std::vector<std::string> result;
 
         if (std::abs(step) < 1e-9) {
-            throw std::runtime_error("Step size cannot be zero");
+            ythrow yexception() << "Step size cannot be zero";
         }
 
         if (std::abs((end - start) / step) > 100000) {
-            throw std::runtime_error("Range too large");
+            ythrow yexception() << "Range too large";
         }
 
         double current = start;
@@ -475,7 +473,8 @@ private:
         }
 
         if (start == Pos_) {
-            throw std::runtime_error("Expected string at " + std::to_string(Pos_));
+            ythrow yexception() << "Expected string at " << Pos_;
+
         }
 
         std::string value = Input_.substr(start, Pos_ - start);
@@ -511,7 +510,7 @@ private:
 
     void Ensure(char c) {
         if (!Match(c)) {
-            throw std::runtime_error("Expected: '" + std::to_string(c) + "'");
+            ythrow yexception() << "Expected: '" << c << "'";
         }
     }
 

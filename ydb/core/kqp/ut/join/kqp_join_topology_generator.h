@@ -2,10 +2,12 @@
 
 #include <util/stream/output.h>
 #include <util/string/builder.h>
+#include <util/generic/map.h>
 #include <ydb/core/kqp/ut/common/kqp_serializable_rng.h>
 #include <ydb/core/kqp/ut/common/kqp_mcmc_rng.h>
 #include <library/cpp/json/writer/json.h>
 #include <library/cpp/json/writer/json_value.h>
+#include <library/cpp/disjoint_sets/disjoint_sets.h>
 
 #include <queue>
 #include <random>
@@ -69,6 +71,7 @@ struct TPitmanYorConfig {
     double Alpha = 0.0;
     double Theta = 0.0;
     double Assortativity = 0.0;
+    bool UseGlobalStats = false;
 
     void DumpParamsHeader(IOutputStream& os) {
         os << "alpha,theta,assortativity";
@@ -129,13 +132,16 @@ private:
     std::vector<TTable> Tables_;
 };
 
+
+using TWeightAccessor = std::function<double(ui32 keyIndex)>;
+
 struct TPitmanYorNodeState {
-    std::vector<ui32> Counts;      // How many edges use Key[i]
+    TMap<ui32, ui32> Counts;      // How many edges use Key[i]
     std::vector<ui32> FreeKeys;    // Recycled keys to keep vector small
     ui32 TotalEdges = 0;           // Total active edges ("customers")
     ui32 ActiveTables = 0;         // How many keys have Count > 0
 
-    ui32 GenerateKey(TRNG& rng, TPitmanYorConfig config, double forceQuantile = -1.0);
+    ui32 GenerateKey(TRNG& rng, TPitmanYorConfig config, double forceQuantile = -1.0, TWeightAccessor weightAccessor = nullptr);
     void ReleaseKey(ui32 key);
 };
 
@@ -213,8 +219,13 @@ private:
 
     // Stores live distribution state for every node
     std::vector<TPitmanYorNodeState> NodeStates_;
+    TDisjointSets EquivalenceClasses_{0};
+
+    // Maps [TableID][KeyID] -> DSU Element ID
+    std::vector<std::vector<size_t>> GlobalKeyMapping_;
 
     void RemoveEdgeFromList(unsigned owner, unsigned target);
+    size_t EnsureGlobalID(unsigned table, unsigned key);
 };
 
 class TSchemaStats {
@@ -331,6 +342,10 @@ TRelationGraph GeneratePath(TRNG& rng, unsigned numNodes, TPitmanYorConfig confi
 TRelationGraph GenerateStar(TRNG& rng, unsigned numNodes, TPitmanYorConfig config);
 TRelationGraph GenerateClique(TRNG& rng, unsigned numNodes, TPitmanYorConfig config);
 
+// Generates spanning tree and then just randomly connects nodes until
+// desired number of edges is reached. Guaranteed to be connected.
+TRelationGraph GenerateRandomGraphFixedM(TRNG &rng, unsigned numNodes, unsigned numEdges, TPitmanYorConfig config);
+
 // Generate a tree from Prufer sequence (each labeled tree has a
 // corresponding unique sequence)
 TRelationGraph GenerateTreeFromPruferSequence(TRNG& rng, const std::vector<unsigned>& prufer, TPitmanYorConfig config);
@@ -340,6 +355,19 @@ TRelationGraph GenerateRandomTree(TRNG& rng, unsigned numNodes, TPitmanYorConfig
 
 // Random graph using Chung Lu model that approximates graph with given degrees
 TRelationGraph GenerateRandomChungLuGraph(TRNG& rng, const std::vector<int>& degrees, TPitmanYorConfig config);
+
+// Path, but the ends are connected
+TRelationGraph GenerateRing(TRNG& rng, unsigned numNodes, TPitmanYorConfig config);
+
+// Lattice, very large diameter, most nodes have degree of 4, tries to be square-ish
+TRelationGraph GenerateGrid(TRNG& rng, unsigned numNodes, TPitmanYorConfig config);
+
+// Half of nodes is a clique, other half is a long tail
+TRelationGraph GenerateLollipop(TRNG& rng, unsigned numNodes, TPitmanYorConfig config);
+
+// Two stars, and a bunch of nodes which belong to either one or the other star, or both with equal probability
+TRelationGraph GenerateGalaxy(TRNG& rng, unsigned numNodes, TPitmanYorConfig config);
+
 
 std::vector<double> GenerateLogNormalProbabilities(TRNG& rng, double mu, double sigma);
 
@@ -400,14 +428,18 @@ struct TMCMCConfig {
     static TMCMCConfig Perturbation(double strength = 0.05) {
         return TMCMCConfig{
             .IterationMultiplier = strength,
-            .MaxAttemptsMultiplier = 5.0
+            // High max attempts multiplier to prevent returning
+            // the same graph as the initial one
+            .MaxAttemptsMultiplier = 20.0
         };
     }
 
     static TMCMCConfig FixedSwaps(ui32 numSwaps) {
         return TMCMCConfig{
             .NumIterations = numSwaps,
-            .MaxAttempts = numSwaps * 10
+            // High max attempts multiplier to prevent returning
+            // the same graph as the initial one
+            .MaxAttempts = numSwaps * 20
         };
     }
 };

@@ -63,18 +63,16 @@ public:
 
         const auto [credsLookupResult, userHashInitParams] = TStaticCredentialsProvider::GetInstance()
             .GetUserHashInitParams(Database, AuthcId);
-        CredsLookupResult = credsLookupResult;
 
-        // it can happen if SchemeShard works on a old version and doesn't pass hashes params
-        // after migration it has to become an error
-        if (CredsLookupResult == TStaticCredentialsProvider::UnknownDatabase) {
+        if (credsLookupResult == TStaticCredentialsProvider::UnknownDatabase) {
+            std::string error = "Unknown database";
             LOG_INFO_S(ctx, NKikimrServices::SASL_AUTH,
                 ActorName << "# " << ctx.SelfID.ToString() <<
-                ", " << "Unknown database or SchemeShard works on old version"
+                ", " << "Authentication failed: " << error
             );
-            ResolveSchemeShard(ctx);
+            SendError(NKikimrIssues::TIssuesIds::DATABASE_NOT_EXIST, error);
             return;
-        } else if (CredsLookupResult == TStaticCredentialsProvider::UnknownUser) {
+        } else if (credsLookupResult == TStaticCredentialsProvider::UnknownUser) {
             std::stringstream error;
             error << "Cannot find user '" << AuthcId << "'";
             LOG_INFO_S(ctx, NKikimrServices::SASL_AUTH,
@@ -85,6 +83,19 @@ public:
             return CleanupAndDie(ctx);
         }
 
+        // it can happen if SchemeShard works on a old version and doesn't pass hashes params
+        // after migration it has to become an error
+        if (userHashInitParams.empty()) {
+            std::string error = "SchemeShard works on old version";
+            LOG_INFO_S(ctx, NKikimrServices::SASL_AUTH,
+                ActorName << "# " << ctx.SelfID.ToString() <<
+                ", " << error
+            );
+
+            ResolveSchemeShard(ctx);
+            return;
+        }
+
         ComputeHash(ctx, userHashInitParams);
         ResolveSchemeShard(ctx);
         return;
@@ -92,7 +103,7 @@ public:
 
 private:
     virtual NKikimrScheme::TEvLogin CreateLoginRequest() const override final {
-        if (CredsLookupResult == TStaticCredentialsProvider::UnknownDatabase) { // for backward compatibility
+        if (ChosenAuthHashType == EHashType::Unknown) { // for backward compatibility
             return NKikimr::CreatePlainLoginRequestOldFormat(TString(AuthcId), TString(Passwd), TString(PeerName),
                 AppData()->AuthConfig);
         } else {
@@ -238,7 +249,6 @@ private:
     }
 
 private:
-    TStaticCredentialsProvider::ELookupResultCode CredsLookupResult;
     NLoginProto::EHashType::HashType ChosenAuthHashType = EHashType::Unknown;
     std::string ComputedHash;
 

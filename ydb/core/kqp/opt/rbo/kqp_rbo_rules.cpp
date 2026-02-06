@@ -437,7 +437,7 @@ bool TInlineScalarSubplanRule::MatchAndApply(std::shared_ptr<IOperator> &input, 
 
         auto unionAll = std::make_shared<TOpUnionAll>(rename, map, subplan->Pos, true);
 
-        auto limit = std::make_shared<TOpLimit>(unionAll, subplan->Pos, MakeConstant("UInt64", "1", subplan->Pos, &ctx.ExprCtx));
+        auto limit = std::make_shared<TOpLimit>(unionAll, subplan->Pos, MakeConstant("Uint64", "1", subplan->Pos, &ctx.ExprCtx));
     
         TVector<std::pair<TInfoUnit, TInfoUnit>> joinKeys;
         auto cross = std::make_shared<TOpJoin>(child, limit, subplan->Pos, "Cross", joinKeys);
@@ -541,11 +541,11 @@ std::shared_ptr<IOperator> TInlineSimpleInExistsSubplanRule::SimpleMatchAndApply
     }
     // EXISTS and NOT EXISTS
     else {
-        auto limit = std::make_shared<TOpLimit>(uncorrSubplan, filter->Pos, MakeConstant("UInt64", "1", filter->Pos, &ctx.ExprCtx));
+        auto limit = std::make_shared<TOpLimit>(uncorrSubplan, filter->Pos, MakeConstant("Uint64", "1", filter->Pos, &ctx.ExprCtx));
 
         auto countResult = TInfoUnit("_rbo_arg_" + std::to_string(props.InternalVarIdx++), true);
         TVector<TMapElement> countMapElements;
-        auto zero = MakeConstant("UInt64", "0", filter->Pos, &ctx.ExprCtx);
+        auto zero = MakeConstant("Uint64", "0", filter->Pos, &ctx.ExprCtx);
         countMapElements.emplace_back(countResult, zero);
         auto countMap = std::make_shared<TOpMap>(limit, filter->Pos, countMapElements, true);
 

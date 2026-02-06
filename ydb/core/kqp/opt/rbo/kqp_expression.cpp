@@ -405,6 +405,7 @@ TExpression MakeConstant(TString type, TString value, TPositionHandle pos, TExpr
 }
 
 TExpression MakeNothing(TPositionHandle pos, const TTypeAnnotationNode* type, TExprContext* ctx) {
+    Y_ENSURE(type);
     auto nullExpr = ctx->NewCallable(pos, "Nothing", {ExpandType(pos, *type, *ctx)});
     return TExpression(nullExpr, ctx);
 }

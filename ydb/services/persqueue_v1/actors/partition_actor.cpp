@@ -63,7 +63,7 @@ TPartitionActor::TPartitionActor(
     , RequestInfly(false)
     , EndOffset(0)
     , SizeLag(0)
-    , WaitDataCookie(0)
+    , RequestCookie(1)
     , WaitForData(false)
     , LockCounted(false)
     , TopicHolder(topicHolder)
@@ -192,7 +192,7 @@ void TPartitionActor::SendCommit(const ui64 readId, const ui64 offset, const TAc
         NKikimrClient::TPersQueueRequest request;
         request.MutablePartitionRequest()->SetTopic(Topic->GetPrimaryPath());
         request.MutablePartitionRequest()->SetPartition(Partition.Partition);
-        request.MutablePartitionRequest()->SetCookie(readId);
+        request.MutablePartitionRequest()->SetCookie(++RequestCookie);
 
         AFL_ENSURE(PipeClient);
 
@@ -257,7 +257,7 @@ void TPartitionActor::SendPublishDirectRead(const ui64 directReadId, const TActo
     NKikimrClient::TPersQueueRequest request;
     request.MutablePartitionRequest()->SetTopic(Topic->GetPrimaryPath());
     request.MutablePartitionRequest()->SetPartition(Partition.Partition);
-    request.MutablePartitionRequest()->SetCookie(ReadOffset);
+    request.MutablePartitionRequest()->SetCookie(++RequestCookie);
 
     AFL_ENSURE(PipeClient);
 
@@ -282,7 +282,7 @@ void TPartitionActor::SendForgetDirectRead(const ui64 directReadId, const TActor
     NKikimrClient::TPersQueueRequest request;
     request.MutablePartitionRequest()->SetTopic(Topic->GetPrimaryPath());
     request.MutablePartitionRequest()->SetPartition(Partition.Partition);
-    request.MutablePartitionRequest()->SetCookie(ReadOffset);
+    request.MutablePartitionRequest()->SetCookie(++RequestCookie);
 
     AFL_ENSURE(PipeClient);
 
@@ -636,6 +636,12 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
         return;
     }
 
+    if (result.GetCookie() < LastInitRequestCookie) {
+        LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Partition
+            << " unexpcted cookie " << result.GetCookie());
+        return;
+    }
+
     auto MaskResult = [](const NKikimrClient::TPersQueuePartitionResponse& resp) {
             if (resp.HasCmdReadResult()) {
                 auto res = resp;
@@ -653,9 +659,10 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
 
     if (!InitDone) {
         AFL_ENSURE(DirectReadRestoreStage == EDirectReadRestoreStage::None);
-        if (result.GetCookie() != INIT_COOKIE) {
+        if (result.GetCookie() != LastInitRequestCookie) {
             LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Partition
                             << " unwaited response in init with cookie " << result.GetCookie());
+            AFL_ENSURE(false);
             return;
         }
         AFL_ENSURE(RequestInfly);
@@ -1095,12 +1102,14 @@ void TPartitionActor::InitStartReading(const TActorContext& ctx) {
 }
 
 //TODO: add here reaction on client release request
-NKikimrClient::TPersQueueRequest TPartitionActor::MakeCreateSessionRequest(bool initial) const {
+NKikimrClient::TPersQueueRequest TPartitionActor::MakeCreateSessionRequest(bool initial) {
     NKikimrClient::TPersQueueRequest request;
+
+    LastInitRequestCookie = ++RequestCookie;
 
     request.MutablePartitionRequest()->SetTopic(Topic->GetPrimaryPath());
     request.MutablePartitionRequest()->SetPartition(Partition.Partition);
-    request.MutablePartitionRequest()->SetCookie(INIT_COOKIE);
+    request.MutablePartitionRequest()->SetCookie(LastInitRequestCookie);
 
     ActorIdToProto(PipeClient, request.MutablePartitionRequest()->MutablePipeClient());
 
@@ -1200,7 +1209,7 @@ bool TPartitionActor::SendNextRestorePrepareOrForget() {
         AFL_ENSURE(dr.GetReadOffset() <= dr.GetLastOffset());
 
         auto request = MakeReadRequest(dr.GetReadOffset(), dr.GetLastOffset() + 1, std::numeric_limits<i32>::max(),
-                                    std::numeric_limits<i32>::max(), 0, 0, dr.GetDirectReadId(), dr.GetBytesSizeEstimate());
+                                    std::numeric_limits<i32>::max(), 0, 0, dr.GetDirectReadId(), dr.GetBytesSizeEstimate(), ++RequestCookie);
 
         if (!PipeClient) //Pipe will be recreated soon
             return true;
@@ -1265,7 +1274,7 @@ void TPartitionActor::WaitDataInPartition(const TActorContext& ctx) {
     TAutoPtr<TEvPersQueue::TEvHasDataInfo> event(new TEvPersQueue::TEvHasDataInfo());
     event->Record.SetPartition(Partition.Partition);
     event->Record.SetOffset(ReadOffset);
-    event->Record.SetCookie(++WaitDataCookie);
+    event->Record.SetCookie(++RequestCookie);
     ui64 deadline = (ctx.Now() + WAIT_DATA - WAIT_DELTA).MilliSeconds();
     event->Record.SetDeadline(deadline);
     event->Record.SetClientId(ClientId);
@@ -1278,13 +1287,13 @@ void TPartitionActor::WaitDataInPartition(const TActorContext& ctx) {
 
 
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY,
-            PQ_LOG_PREFIX << " " << Partition << " wait data in partition inited, cookie " << WaitDataCookie << " from offset " << ReadOffset);
+            PQ_LOG_PREFIX << " " << Partition << " wait data in partition inited, cookie " << RequestCookie << " from offset " << ReadOffset);
 
     NTabletPipe::SendData(ctx, PipeClient, event.Release());
 
-    ctx.Schedule(WAIT_DATA, new TEvPQProxy::TEvDeadlineExceeded(WaitDataCookie));
+    ctx.Schedule(WAIT_DATA, new TEvPQProxy::TEvDeadlineExceeded(RequestCookie));
 
-    WaitDataInfly.insert(WaitDataCookie);
+    WaitDataInfly.insert(RequestCookie);
 }
 
 void TPartitionActor::Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr& ev, const TActorContext& ctx) {
@@ -1354,14 +1363,22 @@ void TPartitionActor::Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr& ev, con
 
 
 NKikimrClient::TPersQueueRequest TPartitionActor::MakeReadRequest(
-        ui64 readOffset, ui64 lastOffset, ui64 maxCount, ui64 maxSize, ui64 maxTimeLagMs, ui64 readTimestampMs, ui64 directReadId, ui64 sizeEstimate
+        ui64 readOffset,
+        ui64 lastOffset,
+        ui64 maxCount,
+        ui64 maxSize,
+        ui64 maxTimeLagMs,
+        ui64 readTimestampMs,
+        ui64 directReadId,
+        ui64 sizeEstimate,
+        ui64 cookie
 ) const {
     NKikimrClient::TPersQueueRequest request;
 
     request.MutablePartitionRequest()->SetTopic(Topic->GetPrimaryPath());
 
     request.MutablePartitionRequest()->SetPartition(Partition.Partition);
-    request.MutablePartitionRequest()->SetCookie(readOffset);
+    request.MutablePartitionRequest()->SetCookie(cookie);
 
     ActorIdToProto(PipeClient, request.MutablePartitionRequest()->MutablePipeClient());
     auto read = request.MutablePartitionRequest()->MutableCmdRead();
@@ -1407,7 +1424,7 @@ void TPartitionActor::Handle(TEvPQProxy::TEvRead::TPtr& ev, const TActorContext&
 
     const auto req = ev->Get();
 
-    auto request = MakeReadRequest(ReadOffset, 0, req->MaxCount, req->MaxSize, req->MaxTimeLagMs, req->ReadTimestampMs, DirectReadId);
+    auto request = MakeReadRequest(ReadOffset, 0, req->MaxCount, req->MaxSize, req->MaxTimeLagMs, req->ReadTimestampMs, DirectReadId, 0, ++RequestCookie);
     RequestInfly = true;
     CurrentRequest = request;
 

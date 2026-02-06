@@ -171,15 +171,13 @@ std::optional<bool> DetectIsFlow(const TTypeAnnotationNode* inputType) {
     } else {
         return {};
     }
-};
+}
 
 bool DetectIsBlocks(TExprNode::TPtr& input) {
     bool inputIsBlocks = false;
     while (input->IsCallable()) {
         auto callableName = input->Content();
-        if (!(callableName == "ToFlow"sv || callableName == "FromFlow"sv
-                    || callableName == "WideFromBlocks"sv || callableName == "WideToBlocks"sv))
-        {
+        if (!(callableName == "ToFlow"sv || callableName == "FromFlow"sv || callableName == "WideFromBlocks"sv || callableName == "WideToBlocks"sv)) {
             break;
         }
         auto next = input->ChildPtr(0);
@@ -195,7 +193,7 @@ bool DetectIsBlocks(TExprNode::TPtr& input) {
         input = next;
     }
     return inputIsBlocks;
-};
+}
 
 } // anonymous namespace end
 
@@ -902,83 +900,78 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
     if (!node.Maybe<TDqPhyBlockHashJoin>()) {
         return node;
     }
-
     const auto blockHashJoin = node.Cast<TDqPhyBlockHashJoin>();
     const auto pos = blockHashJoin.Pos();
 
-    // Cache join type checks
-    const TString joinTypeStr(blockHashJoin.JoinType().Value());
-    const bool needRightColumns = (joinTypeStr != "LeftOnly" && joinTypeStr != "LeftSemi");
-
-    // Extract table labels
+    // Extract table labels from TDqJoinBase API
     const TString leftTableLabel(GetTableLabel(blockHashJoin.LeftLabel()));
     const TString rightTableLabel(GetTableLabel(blockHashJoin.RightLabel()));
 
-    // Extract key columns (atoms with names at this stage)
-    auto [leftKeyColumnNodes, rightKeyColumnNodes] =
-        JoinKeysToAtoms(ctx, blockHashJoin, leftTableLabel, rightTableLabel);
+    // Extract key columns using TDqJoinBase API
+    auto [leftKeyColumnNodes, rightKeyColumnNodes] = JoinKeysToAtoms(ctx, blockHashJoin, leftTableLabel, rightTableLabel);
 
-    const auto itemTypeLeft =
-        GetSequenceItemType(blockHashJoin.LeftInput(), false, ctx)->Cast<TStructExprType>();
-    const auto itemTypeRight =
-        GetSequenceItemType(blockHashJoin.RightInput(), false, ctx)->Cast<TStructExprType>();
+    const auto itemTypeLeft = GetSequenceItemType(blockHashJoin.LeftInput(), false, ctx)->Cast<TStructExprType>();
+    const auto itemTypeRight = GetSequenceItemType(blockHashJoin.RightInput(), false, ctx)->Cast<TStructExprType>();
 
-    // Build renames for output mapping (input index -> output index)
     TExprNode::TListType leftRenames, rightRenames;
+    std::vector<TString> fullColNames;
     ui32 outputIndex = 0;
 
+    // Build renames and full column names for left side
     for (auto i = 0u; i < itemTypeLeft->GetSize(); i++) {
+        TString name(itemTypeLeft->GetItems()[i]->GetName());
+        if (leftTableLabel) {
+            name = leftTableLabel + "." + name;
+        }
+        fullColNames.push_back(name);
         leftRenames.emplace_back(ctx.NewAtom(pos, ctx.GetIndexAsString(i)));
         leftRenames.emplace_back(ctx.NewAtom(pos, ctx.GetIndexAsString(outputIndex++)));
     }
 
-    if (needRightColumns) {
+    // Build renames and full column names for right side
+    if (blockHashJoin.JoinType().Value() != "LeftOnly" && blockHashJoin.JoinType().Value() != "LeftSemi") {
         for (auto i = 0u; i < itemTypeRight->GetSize(); i++) {
+            TString name(itemTypeRight->GetItems()[i]->GetName());
+            if (rightTableLabel) {
+                name = rightTableLabel + "." + name;
+            }
+            fullColNames.push_back(name);
             rightRenames.emplace_back(ctx.NewAtom(pos, ctx.GetIndexAsString(i)));
             rightRenames.emplace_back(ctx.NewAtom(pos, ctx.GetIndexAsString(outputIndex++)));
         }
     }
 
-    // These hold synthetic (converted) join-key columns appended to the end of the wide row
     std::vector<std::pair<TString, const TTypeAnnotationNode*>> leftConvertedItems;
     std::vector<std::pair<TString, const TTypeAnnotationNode*>> rightConvertedItems;
 
-    // Resolve join key indices and build conversion plan
+    // Process key types and conversions (similar to GraceJoin logic)
     YQL_ENSURE(leftKeyColumnNodes.size() == rightKeyColumnNodes.size());
-    for (ui32 i = 0; i < leftKeyColumnNodes.size(); ++i) {
-        const auto leftName = leftKeyColumnNodes[i]->Content();
-        const auto leftIndex = itemTypeLeft->FindItem(leftName);
+    for (auto i = 0U; i < leftKeyColumnNodes.size(); ++i) {
+
+        auto leftName = leftKeyColumnNodes[i]->Content();
+        auto leftIndex = itemTypeLeft->FindItem(leftName);
         YQL_ENSURE(leftIndex);
         const auto keyTypeLeft = itemTypeLeft->GetItems()[*leftIndex]->GetItemType();
 
-        const auto rightName = rightKeyColumnNodes[i]->Content();
-        const auto rightIndex = itemTypeRight->FindItem(rightName);
+        auto rightName = rightKeyColumnNodes[i]->Content();
+        auto rightIndex = itemTypeRight->FindItem(rightName);
         YQL_ENSURE(rightIndex);
         const auto keyTypeRight = itemTypeRight->GetItems()[*rightIndex]->GetItemType();
 
         bool hasOptional = false;
-        const auto dryType = JoinDryKeyType(keyTypeLeft, keyTypeRight, hasOptional, ctx);
+        auto dryType = JoinDryKeyType(keyTypeLeft, keyTypeRight, hasOptional, ctx);
 
-        // Replace key atoms with *indices* into the wide row
         if (keyTypeLeft->Equals(*dryType)) {
             leftKeyColumnNodes[i] = ctx.NewAtom(leftKeyColumnNodes[i]->Pos(), ctx.GetIndexAsString(*leftIndex));
         } else {
-            // synthetic column will be appended after original columns
-            leftKeyColumnNodes[i] = ctx.NewAtom(
-                leftKeyColumnNodes[i]->Pos(),
-                ctx.GetIndexAsString(itemTypeLeft->GetSize() + leftConvertedItems.size())
-            );
-            leftConvertedItems.emplace_back(TString(leftName), dryType);
+            leftKeyColumnNodes[i] = ctx.NewAtom(leftKeyColumnNodes[i]->Pos(), ctx.GetIndexAsString(itemTypeLeft->GetSize() + leftConvertedItems.size()));
+            leftConvertedItems.emplace_back(leftName, dryType);
         }
-
         if (keyTypeRight->Equals(*dryType)) {
             rightKeyColumnNodes[i] = ctx.NewAtom(rightKeyColumnNodes[i]->Pos(), ctx.GetIndexAsString(*rightIndex));
         } else {
-            rightKeyColumnNodes[i] = ctx.NewAtom(
-                rightKeyColumnNodes[i]->Pos(),
-                ctx.GetIndexAsString(itemTypeRight->GetSize() + rightConvertedItems.size())
-            );
-            rightConvertedItems.emplace_back(TString(rightName), dryType);
+            rightKeyColumnNodes[i] = ctx.NewAtom(rightKeyColumnNodes[i]->Pos(), ctx.GetIndexAsString(itemTypeRight->GetSize() + rightConvertedItems.size()));
+            rightConvertedItems.emplace_back(rightName, dryType);
         }
     }
 
@@ -988,39 +981,28 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
     const bool leftIsBlocks = DetectIsBlocks(leftInput);
     const bool rightIsBlocks = DetectIsBlocks(rightInput);
 
-    // Expand inputs to wide flow (adds synthetic columns for conversions if needed)
-    auto leftWideFlow = ExpandJoinInput(
-        *itemTypeLeft,
+    // Expand inputs to wide flows (using ExpandJoinInput like GraceJoin)
+    auto leftWideFlow = ExpandJoinInput(*itemTypeLeft,
         ctx.NewCallable(blockHashJoin.LeftInput().Pos(), "ToFlow", {blockHashJoin.LeftInput().Ptr()}),
-        ctx,
-        leftConvertedItems,
-        pos
-    );
-
-    auto rightWideFlow = ExpandJoinInput(
-        *itemTypeRight,
+        ctx, leftConvertedItems, pos);
+    auto rightWideFlow = ExpandJoinInput(*itemTypeRight,
         ctx.NewCallable(blockHashJoin.RightInput().Pos(), "ToFlow", {blockHashJoin.RightInput().Ptr()}),
-        ctx,
-        rightConvertedItems,
-        pos
-    );
+        ctx, rightConvertedItems, pos);
 
-    // Convert wide flows -> wide streams
-    TExprNode::TPtr leftInputStream = ctx.Builder(pos)
+    auto leftInputStream = ctx.Builder(pos)
         .Callable("FromFlow")
             .Add(0, std::move(leftWideFlow))
         .Seal()
         .Build();
 
-    TExprNode::TPtr rightInputStream = ctx.Builder(pos)
+    auto rightInputStream = ctx.Builder(pos)
         .Callable("FromFlow")
             .Add(0, std::move(rightWideFlow))
         .Seal()
         .Build();
 
-    // Ensure inputs are in blocks (BlockHashJoinCore requires blocks)
     if (!leftIsBlocks) {
-        leftInputStream = ctx.Builder(pos)
+        leftInput = ctx.Builder(pos)
             .Callable("WideToBlocks")
                 .Add(0, std::move(leftInputStream))
             .Seal()
@@ -1028,14 +1010,14 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
     }
 
     if (!rightIsBlocks) {
-        rightInputStream = ctx.Builder(pos)
+        rightInput = ctx.Builder(pos)
             .Callable("WideToBlocks")
                 .Add(0, std::move(rightInputStream))
             .Seal()
             .Build();
     }
 
-    // Build join core
+    // Build block hash join - now inputs are guaranteed to be blocks
     auto blockJoinCore = ctx.Builder(pos)
         .Callable("BlockHashJoinCore")
             .Add(0, std::move(leftInputStream))
@@ -1043,22 +1025,23 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
             .Add(2, blockHashJoin.JoinType().Ptr())
             .Add(3, ctx.NewList(pos, std::move(leftKeyColumnNodes)))
             .Add(4, ctx.NewList(pos, std::move(rightKeyColumnNodes)))
-            .Add(5, ctx.NewList(pos, std::move(leftRenames)))
-            .Add(6, ctx.NewList(pos, std::move(rightRenames)))
         .Seal()
         .Build();
 
-    // BlockHashJoinCore output: Stream of blocks.
-    // Convert it to Flow of wide scalars: ToFlow(Stream-of-blocks) -> WideFromBlocks
+
     auto wideResultFlow = ctx.Builder(pos)
-        .Callable("WideFromBlocks")
-            .Callable(0, "ToFlow")
-                .Add(0, std::move(blockJoinCore))
+        .Callable("ToFlow")
+            .Callable(0, "WideFromBlocks")
+                .Callable(0, "FromFlow")
+                    .Add(0, std::move(blockJoinCore))
+                .Seal()
             .Seal()
         .Seal()
         .Build();
 
-    // Determine wide row layout:
+
+    const TString joinTypeStr(blockHashJoin.JoinType().Value());
+    const bool needRightColumns = (joinTypeStr != "LeftOnly" && joinTypeStr != "LeftSemi");
     const ui32 leftBase = itemTypeLeft->GetSize();
     const ui32 leftConv = leftConvertedItems.size();
 
@@ -1066,57 +1049,27 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
     const ui32 rightConv = needRightColumns ? rightConvertedItems.size() : 0;
 
     const ui32 totalColumns = leftBase + leftConv + rightBase + rightConv;
+    std::cerr << "[MISHA]: " << totalColumns << " " << fullColNames.size() << std::endl;
 
-    // Build "keep indices" (exclude synthetic converted columns from output struct)
-    // Layout: [L base][L conv][R base][R conv]
-    TVector<ui32> keep;
-    keep.reserve(leftBase + rightBase);
-    for (ui32 i = 0; i < leftBase; ++i) {
-        keep.push_back(i);
-    }
-    const ui32 rightStart = leftBase + leftConv;
-    for (ui32 i = 0; i < rightBase; ++i) {
-        keep.push_back(rightStart + i);
-    }
 
-    // NarrowMap to struct with original columns only
+    // Structure the result using NarrowMap (complete processing)
     auto result = ctx.Builder(pos)
         .Callable("NarrowMap")
-            .Add(0, std::move(wideResultFlow)) // already Flow
+            .Callable(0, "ToFlow")
+                .Add(0, std::move(wideResultFlow))
+            .Seal()
             .Lambda(1)
                 .Params("output", totalColumns)
                 .Callable("AsStruct")
                     .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
-                        ui32 fieldIdx = 0;
-
-                        // Left fields
-                        for (ui32 i = 0; i < leftBase; ++i, ++fieldIdx) {
-                            const TStringBuf col = itemTypeLeft->GetItems()[i]->GetName();
-                            TString name(col);
-                            if (leftTableLabel) {
-                                name = leftTableLabel + "." + name;
-                            }
-
-                            parent.List(fieldIdx)
-                                .Atom(0, name)
-                                .Arg(1, "output", keep[fieldIdx])
+                        ui32 i = 0U;
+                        for (const auto& colName : fullColNames) {
+                            parent.List(i)
+                                .Atom(0, colName)
+                                .Arg(1, "output", i)
                             .Seal();
+                            i++;
                         }
-
-                        // Right fields (if present)
-                        for (ui32 i = 0; i < rightBase; ++i, ++fieldIdx) {
-                            const TStringBuf col = itemTypeRight->GetItems()[i]->GetName();
-                            TString name(col);
-                            if (rightTableLabel) {
-                                name = rightTableLabel + "." + name;
-                            }
-
-                            parent.List(fieldIdx)
-                                .Atom(0, name)
-                                .Arg(1, "output", keep[fieldIdx])
-                            .Seal();
-                        }
-
                         return parent;
                     })
                 .Seal()
@@ -1126,7 +1079,6 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
 
     return TExprBase(result);
 }
-
 
 NNodes::TExprBase DqPeepholeRewriteWideCombiner(const NNodes::TExprBase& node, TExprContext& ctx, const bool rewritingFinalAggregator, const bool useBlocks)
 {
@@ -1149,17 +1101,29 @@ NNodes::TExprBase DqPeepholeRewriteWideCombiner(const NNodes::TExprBase& node, T
     bool inputIsFlow = false;
     bool outputIsFlow = false;
 
+    auto detectIsFlow = [&](const TTypeAnnotationNode* inputType) -> std::optional<bool> {
+        if (inputType->GetKind() == ETypeAnnotationKind::Stream) {
+            return false;
+        } else if (inputType->GetKind() == ETypeAnnotationKind::Flow) {
+            return true;
+        } else {
+            return {};
+        }
+    };
+
     bool simpleReplace = !useBlocks;
 
     auto input = wideCombiner.Input().Ptr();
-    auto inputKind = DetectIsFlow(input->GetTypeAnn());
-    auto outputKind = DetectIsFlow(node.Ptr()->GetTypeAnn());
+    auto inputKind = detectIsFlow(input->GetTypeAnn());
+    auto outputKind = detectIsFlow(node.Ptr()->GetTypeAnn());
     if (!inputKind.has_value() || !outputKind.has_value()) {
         simpleReplace = true;
     } else {
         inputIsFlow = *inputKind;
         outputIsFlow = *outputKind;
     }
+
+    bool inputIsBlocks = false;
 
     if (simpleReplace) {
         return Build<TDqPhyHashCombine>(ctx, node.Pos())
@@ -1172,7 +1136,26 @@ NNodes::TExprBase DqPeepholeRewriteWideCombiner(const NNodes::TExprBase& node, T
         .Done();
     }
 
-    bool inputIsBlocks = DetectIsBlocks(input);
+    while (input->IsCallable()) {
+        auto callableName = input->Content();
+        if (!(callableName == "ToFlow"sv || callableName == "FromFlow"sv
+            || callableName == "WideFromBlocks"sv || callableName == "WideToBlocks"sv))
+        {
+            break;
+        }
+        auto next = input->ChildPtr(0);
+        auto nextKind = detectIsFlow(next->GetTypeAnn());
+        if (!nextKind.has_value()) {
+            break;
+        }
+        inputIsFlow = *nextKind;
+        if (callableName == "WideFromBlocks"sv) {
+            inputIsBlocks = true;
+        } else if (callableName == "WideToBlocks"sv) {
+            inputIsBlocks = false;
+        }
+        input = next;
+    }
 
     auto wrappedInput = NNodes::TExprBase(input);
 

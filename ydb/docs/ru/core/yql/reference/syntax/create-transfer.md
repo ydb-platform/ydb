@@ -161,6 +161,8 @@ WITH (
 );
 ```
 
+## lambda-функция {#lambda}
+
 {% include [x](../_includes/transfer_lambda.md) %}
 
 ## См. также

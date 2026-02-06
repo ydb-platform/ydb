@@ -980,7 +980,9 @@ void TDataShard::PersistChangeRecord(NIceDb::TNiceDb& db, const TChangeRecord& r
         db.Table<Schema::LockChangeRecordDetails>().Key(record.GetLockId(), record.GetLockOffset()).Update(
             NIceDb::TUpdate<Schema::LockChangeRecordDetails::Kind>(record.GetKind()),
             NIceDb::TUpdate<Schema::LockChangeRecordDetails::Body>(record.GetBody()),
-            NIceDb::TUpdate<Schema::LockChangeRecordDetails::Source>(record.GetSource()));
+            NIceDb::TUpdate<Schema::LockChangeRecordDetails::Source>(record.GetSource()),
+            NIceDb::TUpdate<Schema::LockChangeRecordDetails::UserSID>(record.GetUserSID())
+        );
     }
 }
 

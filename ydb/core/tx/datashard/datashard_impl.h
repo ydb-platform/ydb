@@ -984,9 +984,10 @@ class TDataShard
             struct Kind :       Column<3, NScheme::NTypeIds::Uint8> { using Type = TChangeRecord::EKind; };
             struct Body :       Column<4, NScheme::NTypeIds::String> { using Type = TString; };
             struct Source :     Column<5, NScheme::NTypeIds::Uint8> { using Type = TChangeRecord::ESource; };
+            struct UserSID :    Column<6, NScheme::NTypeIds::Utf8> { using Type = TString; };
             
             using TKey = TableKey<LockId, LockOffset>;
-            using TColumns = TableColumns<LockId, LockOffset, Kind, Body, Source>;
+            using TColumns = TableColumns<LockId, LockOffset, Kind, Body, Source, UserSID>;
         };
 
         // Maps [Order ... Order+N-1] change records in the shard order

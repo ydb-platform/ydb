@@ -151,7 +151,7 @@ Y_UNIT_TEST_SUITE(SpanBuffer) {
         t.join();
     }
 
-    constexpr static ui32 BufferSize = 10_MB;
+    constexpr static ui32 BufferSize = 1_KB;
     char Buffer[BufferSize];
     NWilson::TTraceId TraceId;
 

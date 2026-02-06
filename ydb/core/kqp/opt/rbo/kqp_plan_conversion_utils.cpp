@@ -69,6 +69,15 @@ TOpRoot PlanConverter::ConvertRoot(TExprNode::TPtr node) {
     res.Node = node;
     res.PlanProps = PlanProps;
     res.PlanProps.PgSyntax = std::stoi(opRoot.PgSyntax().StringValue());
+
+    // We need to propagate plan properties reference into expressions in the plan
+    for (auto it : res) {
+        auto exprRefs = it.Current->GetExpressions();
+        for (auto r : exprRefs) {
+            r.get().PlanProps = &res.PlanProps;
+        }
+    }
+    
     return res;
 }
 

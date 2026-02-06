@@ -397,6 +397,87 @@ TExpression MakeColumnAccess(TInfoUnit column, TPositionHandle pos, TExprContext
     return TExpression(lambda, ctx, props);
 }
 
+TExpression MakeConstant(TString type, TString value, TPositionHandle pos, TExprContext* ctx) {
+     auto constExpr = ctx->NewCallable(pos, type, {ctx->NewAtom(pos, value)});
+     return TExpression(constExpr, ctx);
+}
+
+TExpression MakeNothing(TPositionHandle pos, const TTypeAnnotationNode* type, TExprContext* ctx) {
+    auto nullExpr = ctx->NewCallable(pos, "Nothing", {ExpandType(pos, *type, *ctx)});
+    return TExpression(nullExpr, ctx);
+}
+
+TExpression MakeConjunct(const TVector<TExpression>& vec, bool pgSyntax) {
+    Y_ENSURE(vec.size());
+
+    // Fetch context and plan properties from one of the conjuncts
+    TExprContext* ctx;
+    TPlanProps* props;
+
+    for (auto & expr : vec) {
+        if (expr.Ctx) {
+            ctx = expr.Ctx;
+        }
+        if (expr.PlanProps) {
+            props = expr.PlanProps;
+        }
+    }
+
+    Y_ENSURE(ctx);
+    Y_ENSURE(props);
+
+    auto pos = vec[0].Node->Pos();
+
+    auto lambda_arg = Build<TCoArgument>(*ctx, pos).Name("arg").Done().Ptr();
+    TVector<TExprNode::TPtr> conjuncts;
+
+    for (auto & expr : vec) {
+        auto exprLambda = expr.GetExpressionBody();
+        conjuncts.push_back(ReplaceArg(exprLambda, lambda_arg, *ctx));
+    }
+
+    auto lambda = Build<TCoLambda>(*ctx, pos)
+        .Args({lambda_arg})
+        .Body<TCoAnd>()
+            .Add(conjuncts)
+        .Build()
+        .Done().Ptr();
+
+    if (pgSyntax) {
+        lambda = ctx->Builder(pos).Callable("FromPg").Add(0, lambda).Seal().Build();
+    }
+
+    return TExpression(lambda, ctx, props);
+}
+
+TExpression MakeBinaryPredicate(TString callable, const TExpression& left, const TExpression& right) {
+    // Fetch context and plan properties from one of the arguments
+    TExprContext* ctx;
+    TPlanProps* props;
+
+    if (left.Ctx) {
+        ctx = left.Ctx;
+    }
+    if (left.PlanProps) {
+        props = left.PlanProps;
+    }
+    if (right.Ctx) {
+        ctx = right.Ctx;
+    }
+    if (right.PlanProps) {
+        props = right.PlanProps;
+    }
+
+    auto pos = left.Node->Pos();
+
+    Y_ENSURE(ctx);
+    Y_ENSURE(props);
+
+    auto lambda = ctx->NewCallable(pos, callable, {left.GetExpressionBody(), right.GetExpressionBody()});
+    return TExpression(lambda, ctx, props);
+}
+
+
 void GetAllMembers(TExprNode::TPtr node, TVector<TInfoUnit> &IUs) {
     if (node->IsCallable("Member")) {
         auto member = TCoMember(node);

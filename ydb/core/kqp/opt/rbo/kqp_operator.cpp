@@ -76,6 +76,15 @@ TExprNode::TPtr BuildSourceStage(TExprNode::TPtr dqsource, TExprContext &ctx) {
 namespace NKikimr {
 namespace NKqp {
 
+template <class T>
+void AddUnique(TVector<T>& target, TVector<T>& toAdd) {
+    for (const auto & e : toAdd) {
+        if (std::find(target.begin(), target.end(), e) == target.end()) {
+            target.push_back(e);
+        }
+    }
+}
+
 using namespace NYql;
 using namespace NNodes;
 

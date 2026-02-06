@@ -218,25 +218,7 @@ void TKeyedWriteSession::TSplittedPartitionWorker::DoWork() {
 }
 
 void TKeyedWriteSession::TSplittedPartitionWorker::MoveTo(EState state) {
-    LOG_LAZY(Session->DbDriverState->Log, TLOG_INFO, TStringBuilder() << "Moving to state " << StateToString(state) << " for splitted partition " << PartitionId);
     State = state;
-}
-
-std::string TKeyedWriteSession::TSplittedPartitionWorker::StateToString(EState state) {
-    switch (state) {
-        case EState::Init:
-            return "Init";
-        case EState::PendingDescribe:
-            return "PendingDescribe";
-        case EState::GotDescribe:
-            return "GotDescribe";
-        case EState::PendingMaxSeqNo:
-            return "PendingMaxSeqNo";
-        case EState::GotMaxSeqNo:
-            return "GotMaxSeqNo";
-        case EState::Done:
-            return "Done";
-    }
 }
 
 void TKeyedWriteSession::TSplittedPartitionWorker::UpdateMaxSeqNo(std::uint64_t maxSeqNo) {

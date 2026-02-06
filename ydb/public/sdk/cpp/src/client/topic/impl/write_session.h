@@ -232,8 +232,6 @@ private:
             Done = 5,
         };
 
-        std::string StateToString(EState state);
-
         void MoveTo(EState state);
         void UpdateMaxSeqNo(uint64_t maxSeqNo);
         void LaunchGetMaxSeqNoFutures(std::unique_lock<std::mutex>& lock);

@@ -1,7 +1,7 @@
 #include "topic_workload_keyed_writer_producer.h"
+#include "topic_workload_writer_producer_utils.h"
 
 #include <util/generic/guid.h>
-#include <util/random/random.h>
 
 using namespace NYdb::NConsoleClient;
 
@@ -32,7 +32,7 @@ void TTopicWorkloadKeyedWriterProducer::Send(const TInstant& createTimestamp,
 {
     Y_ASSERT(WriteSession_);
 
-    const TString data = GetGeneratedMessage();
+    const TString data = NYdb::NConsoleClient::NTopicWorkloadWriterInternal::GetGeneratedMessage(Params_, MessageId_);
     const std::string key = TGUID::CreateTimebased().AsGuidString();
 
     InflightMessagesCreateTs_.Insert(MessageId_, createTimestamp);
@@ -41,7 +41,7 @@ void TTopicWorkloadKeyedWriterProducer::Send(const TInstant& createTimestamp,
     NYdb::NTopic::TWriteMessage writeMessage(data);
     writeMessage.SeqNo(MessageId_);
     writeMessage.CreateTimestamp(createTimestamp);
-    writeMessage.MessageMeta(GenerateMessageMeta(key));
+    writeMessage.MessageMeta(NYdb::NConsoleClient::NTopicWorkloadWriterInternal::MakeKeyMeta(key));
 
     if (transaction.has_value()) {
         writeMessage.Tx(transaction.value());
@@ -64,44 +64,6 @@ void TTopicWorkloadKeyedWriterProducer::Close()
     if (WriteSession_) {
         WriteSession_->Close(TDuration::Zero());
     }
-}
-
-TString TTopicWorkloadKeyedWriterProducer::GetGeneratedMessage() const
-{
-    return Params_.GeneratedMessages[MessageId_ % TTopicWorkloadKeyedWriterWorker::GENERATED_MESSAGES_COUNT];
-}
-
-std::string TTopicWorkloadKeyedWriterProducer::GenerateKeyValue() const
-{
-    // If key prefix is provided, keep it compatible with non-keyed writer's "__key" meta:
-    // {prefix}.{(messageId + seed) % keyCount}
-    if (Params_.KeyPrefix.Defined()) {
-        TStringBuilder sb;
-        sb << *Params_.KeyPrefix;
-        if (Params_.KeyCount > 0) {
-            sb << '.' << ((MessageId_ + Params_.KeySeed) % Params_.KeyCount);
-        } else {
-            sb << '.' << MessageId_;
-        }
-        return sb;
-    }
-
-    // Otherwise generate a reasonably distributed key.
-    // If KeyCount is set, still limit to that many distinct keys.
-    if (Params_.KeyCount > 0) {
-        return ToString((MessageId_ + Params_.KeySeed) % Params_.KeyCount);
-    }
-
-    const ui64 rnd = RandomNumber<ui64>();
-    return ToString(rnd);
-}
-
-NYdb::NTopic::TWriteMessage::TMessageMeta TTopicWorkloadKeyedWriterProducer::GenerateMessageMeta(const std::string& key) const
-{
-    NYdb::NTopic::TWriteMessage::TMessageMeta meta;
-    // Keep the same meta key name as non-keyed writer for debugging/compatibility.
-    meta.emplace_back("__key", key);
-    return meta;
 }
 
 void TTopicWorkloadKeyedWriterProducer::WaitForContinuationToken(const TDuration& timeout)

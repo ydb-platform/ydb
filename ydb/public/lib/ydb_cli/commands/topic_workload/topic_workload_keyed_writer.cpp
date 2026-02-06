@@ -1,5 +1,6 @@
 #include "topic_workload_keyed_writer.h"
 #include "topic_workload_keyed_writer_producer.h"
+#include "topic_workload_writer_worker_common.h"
 
 #include <util/generic/overloaded.h>
 #include <util/generic/guid.h>
@@ -53,7 +54,11 @@ std::vector<TString> TTopicWorkloadKeyedWriterWorker::GenerateMessages(size_t me
  * */
 TInstant TTopicWorkloadKeyedWriterWorker::GetExpectedCurrMessageCreationTimestamp() const
 {
-    return StartTimestamp + TDuration::Seconds((double)BytesWritten / Params.BytesPerSec * Params.ProducerThreadCount);
+    return NYdb::NConsoleClient::NTopicWorkloadWriterInternal::GetExpectedCurrMessageCreationTimestamp(
+        StartTimestamp,
+        BytesWritten,
+        Params
+    );
 }
 
 void TTopicWorkloadKeyedWriterWorker::WaitTillNextMessageExpectedCreateTimeAndContinuationToken(
@@ -70,61 +75,41 @@ void TTopicWorkloadKeyedWriterWorker::WaitTillNextMessageExpectedCreateTimeAndCo
 
 void TTopicWorkloadKeyedWriterWorker::Process(TInstant endTime)
 {
-    Sleep(TDuration::Seconds((float)Params.WarmupSec * Params.WriterIdx / Params.ProducerThreadCount));
-
-    TInstant commitTime = TInstant::Now() + TDuration::MilliSeconds(Params.CommitIntervalMs);
-
-    StartTimestamp = Now();
-    WRITE_LOG(Params.Log, ELogPriority::TLOG_DEBUG, TStringBuilder()
-        << "WriterIdx: " << Params.WriterIdx
-        << ": StartTimestamp " << StartTimestamp);
-
-    while (!*Params.ErrorFlag) {
-        auto now = Now();
-        if (now > endTime) {
-            break;
+    NYdb::NConsoleClient::NTopicWorkloadWriterInternal::ProcessWriterLoopCommon(
+        Params,
+        Producers,
+        BytesWritten,
+        PartitionToWriteId,
+        StartTimestamp,
+        TxSupport,
+        WaitForCommitTx,
+        endTime,
+        [](const std::shared_ptr<TTopicWorkloadKeyedWriterProducer>& producer) {
+            return producer->HasContinuationTokens();
+        },
+        [this]() {
+            return GetExpectedCurrMessageCreationTimestamp();
+        },
+        [this]() {
+            return GetCreateTimestampForNextMessage();
+        },
+        [this](TInstant& commitTime) {
+            TryCommitTx(commitTime);
+        },
+        [this]() {
+            return InflightMessagesSize();
+        },
+        [this](const TInstant& startTimestamp) {
+            WRITE_LOG(Params.Log, ELogPriority::TLOG_DEBUG, TStringBuilder()
+                << "WriterIdx: " << Params.WriterIdx
+                << ": StartTimestamp " << startTimestamp);
+        },
+        [](const std::shared_ptr<TTopicWorkloadKeyedWriterProducer>&,
+           const TInstant&,
+           const TInstant&) {
+            // No extra per-message logging for keyed writer.
         }
-
-        auto producer = Producers[0];
-
-        WaitTillNextMessageExpectedCreateTimeAndContinuationToken(producer);
-
-        bool writingAllowed = producer->HasContinuationTokens();
-
-        if (Params.BytesPerSec != 0) {
-            ui64 bytesMustBeWritten = (now - StartTimestamp).SecondsFloat() * Params.BytesPerSec / Params.ProducerThreadCount;
-            writingAllowed &= BytesWritten < bytesMustBeWritten;
-        } else {
-            writingAllowed &= InflightMessagesSize() <= 1_MB / Params.MessageSize;
-        }
-
-        if (writingAllowed && !WaitForCommitTx) {
-            TInstant createTimestamp = GetCreateTimestampForNextMessage();
-            BytesWritten += Params.MessageSize;
-
-            std::optional<NYdb::NTable::TTransaction> transaction;
-            if (TxSupport && !TxSupport->Transaction) {
-                TxSupport->BeginTx();
-            }
-            if (TxSupport) {
-                transaction = *TxSupport->Transaction;
-            }
-
-            producer->Send(createTimestamp, transaction);
-
-            if (TxSupport) {
-                TxSupport->AppendRow("");
-                TryCommitTx(commitTime);
-            }
-
-            PartitionToWriteId++;
-        } else {
-            if (TxSupport) {
-                TryCommitTx(commitTime);
-            }
-            Sleep(TDuration::MilliSeconds(1));
-        }
-    }
+    );
 }
 
 std::shared_ptr<TTopicWorkloadKeyedWriterProducer> TTopicWorkloadKeyedWriterWorker::CreateProducer()
@@ -173,21 +158,12 @@ std::shared_ptr<TTopicWorkloadKeyedWriterProducer> TTopicWorkloadKeyedWriterWork
 
 size_t TTopicWorkloadKeyedWriterWorker::InflightMessagesSize()
 {
-    size_t total = 0;
-    for (auto& producer : Producers) {
-        total += producer->InflightMessagesCnt();
-    }
-    return total;
+    return NYdb::NConsoleClient::NTopicWorkloadWriterInternal::InflightMessagesSize(Producers);
 }
 
 bool TTopicWorkloadKeyedWriterWorker::InflightMessagesEmpty()
 {
-    for (auto& producer : Producers) {
-        if (producer->InflightMessagesCnt() != 0) {
-            return false;
-        }
-    }
-    return true;
+    return NYdb::NConsoleClient::NTopicWorkloadWriterInternal::InflightMessagesEmpty(Producers);
 }
 
 void TTopicWorkloadKeyedWriterWorker::RetryableWriterLoop(const TTopicWorkloadKeyedWriterParams& params)
@@ -234,18 +210,15 @@ void TTopicWorkloadKeyedWriterWorker::WriterLoop(const TTopicWorkloadKeyedWriter
 void TTopicWorkloadKeyedWriterWorker::TryCommitTx(TInstant& commitTime)
 {
     Y_ABORT_UNLESS(TxSupport);
-    auto now = Now();
-
-    bool commitTimeIsInFuture = now < commitTime;
-    bool notEnoughRowsInCommit = TxSupport->Rows.size() < Params.CommitMessages;
-    if (commitTimeIsInFuture && notEnoughRowsInCommit) {
-        return;
-    }
-
-    TryCommitTableChanges();
-
-    commitTime += TDuration::MilliSeconds(Params.CommitIntervalMs);
-    WaitForCommitTx = false;
+    NYdb::NConsoleClient::NTopicWorkloadWriterInternal::TryCommitTxCommon(
+        Params,
+        TxSupport,
+        commitTime,
+        WaitForCommitTx,
+        [](const TInstant&, const TInstant&, size_t) {
+            // Keyed writer: keep the previous behavior (no extra debug logging).
+        }
+    );
 }
 
 void TTopicWorkloadKeyedWriterWorker::TryCommitTableChanges()
@@ -253,19 +226,13 @@ void TTopicWorkloadKeyedWriterWorker::TryCommitTableChanges()
     if (TxSupport->Rows.empty()) {
         return;
     }
-
-    auto execTimes = TxSupport->CommitTx(Params.UseTableSelect, Params.UseTableUpsert);
-    Params.StatsCollector->AddWriterSelectEvent(Params.WriterIdx, {execTimes.SelectTime.MilliSeconds()});
-    Params.StatsCollector->AddWriterUpsertEvent(Params.WriterIdx, {execTimes.UpsertTime.MilliSeconds()});
-    Params.StatsCollector->AddWriterCommitTxEvent(Params.WriterIdx, {execTimes.CommitTime.MilliSeconds()});
+    NYdb::NConsoleClient::NTopicWorkloadWriterInternal::CommitTableChangesCommon(Params, TxSupport);
 }
 
 TInstant TTopicWorkloadKeyedWriterWorker::GetCreateTimestampForNextMessage()
 {
-    if (Params.UseCpuTimestamp || Params.BytesPerSec == 0) {
-        return TInstant::Now();
-    }
-    return GetExpectedCurrMessageCreationTimestamp();
+    const TInstant expectedTs = Params.BytesPerSec == 0 ? TInstant() : GetExpectedCurrMessageCreationTimestamp();
+    return NYdb::NConsoleClient::NTopicWorkloadWriterInternal::GetCreateTimestampForNextMessage(Params, expectedTs);
 }
 
 } // namespace NYdb::NConsoleClient

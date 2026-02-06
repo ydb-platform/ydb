@@ -42,11 +42,6 @@ public:
     void HandleReadyToAcceptEvent(NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent& event);
 
 private:
-    TString GetGeneratedMessage() const;
-
-    std::string GenerateKeyValue() const;
-    NYdb::NTopic::TWriteMessage::TMessageMeta GenerateMessageMeta(const std::string& key) const;
-
 private:
     std::shared_ptr<NYdb::NTopic::IKeyedWriteSession> WriteSession_;
     ui64 MessageId_ = 0;

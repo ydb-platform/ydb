@@ -52,7 +52,7 @@ bool FillConsumer(Ydb::Topic::Consumer& out, const NKikimrPQ::TPQTabletConfig_TC
             auto* shared = out.mutable_shared_consumer_type();
 
             shared->set_keep_messages_order(in.GetKeepMessageOrder());
-            shared->mutable_default_processing_timeout()->set_seconds(in.GetDefaultProcessingTimeoutSeconds());
+            shared->mutable_processing_timeout()->set_seconds(in.GetDefaultProcessingTimeoutSeconds());
 
             shared->set_content_based_deduplication(in.GetContentBasedDeduplication());
             shared->mutable_message_delay()->set_seconds(in.GetDefaultDelayMessageTimeMs() / 1'000);

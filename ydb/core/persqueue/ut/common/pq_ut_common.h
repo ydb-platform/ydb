@@ -492,10 +492,14 @@ struct TPQCmdReadSettings : public TPQCmdSettingsBase {
     ui64 DirectReadId = 0;
     i64 LastOffset = 0;
     TActorId Pipe;
+
+    ui64* SizeLag = nullptr;
+
     TPQCmdReadSettings() = default;
     TPQCmdReadSettings(const TString& session, ui32 partition, i64 offset, ui32 count, ui32 size, ui32 resCount, bool timeout = false,
                        TVector<i32> offsets = {}, const ui32 maxTimeLagMs = 0, const ui64 readTimestampMs = 0,
-                       const TString user = "user", const i64 lastOffset = 0)
+                       const TString user = "user", const i64 lastOffset = 0,
+                       ui64* sizeLag = nullptr)
 
         : TPQCmdSettingsBase{partition, user, session, 0, offset, false}
         , Count(count)
@@ -506,6 +510,7 @@ struct TPQCmdReadSettings : public TPQCmdSettingsBase {
         , MaxTimeLagMs(maxTimeLagMs)
         , ReadTimestampMs(readTimestampMs)
         , LastOffset(lastOffset)
+        , SizeLag(sizeLag)
     {}
 };
 
@@ -560,11 +565,17 @@ void CmdRead(
     TVector<i32> offsets = {},
     const ui32 maxTimeLagMs = 0,
     const ui64 readTimestampMs = 0,
-    const TString user = "user");
+    const TString user = "user",
+    ui64* sizeLag = nullptr);
 
 void CmdRead(
     const TPQCmdReadSettings& settings,
     TTestContext& tc);
+
+ui64 GetSizeLag(const ui32 partition,
+                const ui64 offset,
+                bool isEndOffset,
+                TTestContext& tc);
 
 void BeginCmdRead(const TPQCmdReadSettings& settings, TTestContext& tc);
 bool EndCmdRead(const TPQCmdReadSettings& settings, TTestContext& tc);

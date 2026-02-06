@@ -76,7 +76,7 @@ Y_UNIT_TEST_SUITE(THiveTestWithTenants) {
 
         Cerr << "3.Drain" << Endl;
 
-        const auto nodeId = tenants.List("/Root/db1").front();
+        const auto nodeId = runtime.GetNodeId(tenants.List("/Root/db1").front());
 
         {
             runtime.SendToPipe(hiveTablet, sender, new TEvHive::TEvDrainNode(nodeId));

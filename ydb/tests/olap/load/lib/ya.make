@@ -5,6 +5,7 @@ PY3_LIBRARY()
         clickbench.py
         external.py
         import_csv.py
+        tpcc.py
         tpcds.py
         tpch.py
         workload_executor.py

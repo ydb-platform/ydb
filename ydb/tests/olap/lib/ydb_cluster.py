@@ -71,6 +71,15 @@ class YdbCluster:
     _tables_path = get_external_param('tables-path', 'olap_yatests').rstrip('/')
     _monitoring_urls: list[YdbCluster.MonitoringUrl] = None
     _dyn_nodes_count: Optional[int] = None
+    _client_host: Optional[str] = None
+
+    @classmethod
+    def get_client_host(cls) -> str:
+        if not cls._client_host:
+            cls._client_host = get_external_param('client-host', 'localhost')
+            if cls._client_host == 'static':
+                cls._client_host = cls.get_cluster_nodes(role=YdbCluster.Node.Role.STORAGE, db_only=False)[0]
+        return cls._client_host
 
     @classmethod
     def get_tables_path(cls, subpath: str = '') -> str:

@@ -6,12 +6,13 @@ import os
 import re
 import subprocess
 import logging
+import ydb.tests.olap.lib.remote_execution as remote_execution
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.olap.lib.utils import get_external_param
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from enum import StrEnum, Enum
 from types import TracebackType
-from time import time
+from time import time, sleep
 from hashlib import md5
 
 
@@ -20,6 +21,11 @@ class WorkloadType(StrEnum):
     TPC_H = 'tpch'
     TPC_DS = 'tpcds'
     EXTERNAL = 'query'
+
+
+class TxMode(StrEnum):
+    SerializableRW = 'serializable-rw'
+    SnapshotRW = 'snapshot-rw'
 
 
 class CheckCanonicalPolicy(Enum):
@@ -415,3 +421,88 @@ class YdbCliHelper:
             results = as_completed([executor.submit(__get_result, r) for r in runners])
         results_by_q = [r.result() for r in results]
         return {q: YdbCliHelper.WorkloadRunResult().merge(*[r.get(q) for r in results_by_q]) for q in extended_query_names}
+
+    @classmethod
+    def _get_remote_tpcc_tmpdir(cls):
+        tmpdir = '/tmp'
+        if remote_execution.is_localhost(YdbCluster.get_client_host()):
+            tmpdir = os.getenv('TMP') or os.getenv('TMPDIR') or yatest.common.work_path()
+        return os.path.join(tmpdir, 'scripts', 'tpcc')
+
+    @classmethod
+    def run_tpcc(cls, path: str, time: float, warehouses: int = 10, threads: int = 0, warmup: float = 0.,
+                 tx_mode: TxMode = TxMode.SerializableRW, users=['']) -> dict[str, YdbCliHelper.WorkloadRunResult]:
+        tmpdir = cls._get_remote_tpcc_tmpdir()
+        node = YdbCluster.get_cluster_nodes(role=YdbCluster.Node.Role.STORAGE, db_only=False)[0]
+        files_for_deploy = [cls.get_cli_path()]
+        for user in users:
+            cmd = ['start-stop-daemon', '--start', '--pidfile', f'{tmpdir}/ydb_{user}_pid', '--make-pid', '--background', '--no-close', '--exec']
+            cmd += [f'{tmpdir}/ydb', '--', '-e', f'grpc://{node.host}:{node.grpc_port}', '-d', f'/{YdbCluster.ydb_database}']
+            if user:
+                cmd += ['--user', user, '--no-password']
+            cmd += ['workload', 'tpcc', '--path', YdbCluster.get_tables_path(path), 'run', '--no-tui', '--format', 'Json', '--tx-mode', str(tx_mode), '--highres-histogram']
+            if warmup > 0:
+                cmd += ['--warmup', f'{warmup}s']
+            cmd += ['--time', f'{time}s', '--warehouses', str(warehouses)]
+            if threads:
+                cmd += ['--threads', str(threads)]
+            cmd += [f'>{tmpdir}/ydb_{user}_out', f'2>{tmpdir}/ydb_{user}_err']
+
+            script_path = yatest.common.work_path(f'run_tpcc_{user}.sh')
+            with open(script_path, 'w') as script_file:
+                script_file.write('#!/bin/bash\n')
+                script_file.write(' '.join(cmd))
+            files_for_deploy.append(script_path)
+
+        results = remote_execution.deploy_binaries_to_hosts(
+            files_for_deploy,
+            [YdbCluster.get_client_host()],
+            tmpdir
+        )
+        for host, host_results in results.items():
+            for bin, res in host_results.items():
+                assert res.get('success', False), f"host: {host}, bin: {bin}, path: {res.get('path')}, error: {res.get('error')}"
+
+        for user in users:
+            res = remote_execution.execute_command(YdbCluster.get_client_host(), f'{tmpdir}/run_tpcc_{user}.sh')
+
+        user_for_check = set(users)
+        while user_for_check:
+            finished = []
+            for user in user_for_check:
+                cmd = ['start-stop-daemon', '--status', '--pidfile', f'{tmpdir}/ydb_{user}_pid']
+                if remote_execution.execute_command(host, ' '.join(cmd), raise_on_error=False).exit_code != 0:
+                    finished.append(user)
+            for u in finished:
+                user_for_check.remove(u)
+            if user_for_check:
+                sleep(10)
+
+        results = {}
+        for user in users:
+            res = YdbCliHelper.WorkloadRunResult()
+            try:
+                res.stdout = remote_execution.execute_command(YdbCluster.get_client_host(), f'cat {tmpdir}/ydb_{user}_out').stdout
+                res.stderr = remote_execution.execute_command(YdbCluster.get_client_host(), f'cat {tmpdir}/ydb_{user}_err').stdout
+                ans = json.loads(res.stdout)
+                sum = ans.get('summary', {})
+                res.add_stat('test', 'tpcc_tpmc', sum.get('tpmc', 0))
+                res.add_stat('test', 'tpcc_warehouses', sum.get('warehouses', 0))
+                res.add_stat('test', 'tpcc_efficiency', sum.get('efficiency', 0))
+                res.add_stat('test', 'tpcc_time_seconds', sum.get('time_seconds', 0))
+                for tr, stats in ans.get('transactions', {}).items():
+                    res.add_stat('test', f'tpcc_{tr}_ok_count', stats.get('ok_count', 0))
+                    res.add_stat('test', f'tpcc_{tr}_failed_count', stats.get('failed_count', 0))
+                    for p, t in stats.get('percentiles', {}).items():
+                        res.add_stat('test', f'tpcc_{tr}_perc_{p.replace(".", "_")}', t)
+            except BaseException as e:
+                res.add_error(str(e))
+            results[user] = res
+
+        return results
+
+    @classmethod
+    def terminate_tpcc(cls, users=['']):
+        tmpdir = cls._get_remote_tpcc_tmpdir()
+        for user in users:
+            remote_execution.execute_command(YdbCluster.get_client_host(), f'start-stop-daemon --stop --pidfile {tmpdir}/ydb_{user}_pid', raise_on_error=False)

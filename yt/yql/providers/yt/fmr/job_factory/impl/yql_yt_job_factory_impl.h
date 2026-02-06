@@ -10,6 +10,7 @@ namespace NYql::NFmr {
 struct TJobResult {
     ETaskStatus TaskStatus;
     TStatistics Stats;
+    TMaybe<TFmrError> Error = Nothing();
 };
 
 struct TFmrJobFactorySettings {

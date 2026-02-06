@@ -35,4 +35,9 @@ extern "C" void ThrowBadDecimal() {
     throw yexception() << "Codegen is not available";
 }
 
+extern "C" void ThrowBadTz(int slot) {
+    Y_UNUSED(slot);
+    throw yexception() << "Codegen is not available";
+}
+
 }

@@ -28,7 +28,7 @@
                 TCurrentTest::AddTest(#N "-" #OPT, static_cast<void (*)(NUnitTest::TTestContext&)>(&N<false>), false); \
             }                                                                                                          \
         };                                                                                                             \
-        static TTestRegistration##N testRegistration##N;
+        static TTestRegistration##N testRegistration##N; /* NOLINT(misc-use-anonymous-namespace) */
 #else
     #define Y_UNIT_TEST_TWIN_IMPL_REGISTER(N, OPT)                                                                     \
         template <bool OPT>                                                                                            \
@@ -39,7 +39,7 @@
                 TCurrentTest::AddTest(#N "+" #OPT, static_cast<void (*)(NUnitTest::TTestContext&)>(&N<true>), false);  \
             }                                                                                                          \
         };                                                                                                             \
-        static TTestRegistration##N testRegistration##N;
+        static TTestRegistration##N testRegistration##N; /* NOLINT(misc-use-anonymous-namespace) */
 #endif
 
 #define Y_UNIT_TEST_TWIN(N, OPT)           \
@@ -61,7 +61,7 @@
             TCurrentTest::AddTest(#N "+" #OPT1 "+" #OPT2, static_cast<void (*)(NUnitTest::TTestContext&)>(&N<true, true>), false);   \
         }                                                                                                                            \
     };                                                                                                                               \
-    static TTestRegistration##N testRegistration##N;                                                                                 \
+    static TTestRegistration##N testRegistration##N; /* NOLINT(misc-use-anonymous-namespace) */                                      \
     template <bool OPT1, bool OPT2>                                                                                                  \
     void N(NUnitTest::TTestContext&)
 

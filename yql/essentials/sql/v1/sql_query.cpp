@@ -47,8 +47,10 @@ void TSqlQuery::AddStatementToBlocks(TVector<TNodePtr>& blocks, TNodePtr node) {
     blocks.emplace_back(node);
 }
 
-static bool AsyncReplicationSettingsEntry(std::map<TString, TNodePtr>& out,
-                                          const TRule_replication_settings_entry& in, TSqlExpression& ctx, bool create)
+namespace {
+
+bool AsyncReplicationSettingsEntry(std::map<TString, TNodePtr>& out,
+                                   const TRule_replication_settings_entry& in, TSqlExpression& ctx, bool create)
 {
     auto key = IdEx(in.GetRule_an_id1(), ctx);
     TNodePtr value = Unwrap(ctx.Build(in.GetRule_expr3()));
@@ -124,9 +126,9 @@ static bool AsyncReplicationSettingsEntry(std::map<TString, TNodePtr>& out,
     return true;
 }
 
-static bool AsyncReplicationSettings(std::map<TString, TNodePtr>& out,
-                                     const TRule_replication_settings& in, TSqlExpression& ctx, bool create,
-                                     const TStringBuf& tablePathPrefix)
+bool AsyncReplicationSettings(std::map<TString, TNodePtr>& out,
+                              const TRule_replication_settings& in, TSqlExpression& ctx, bool create,
+                              const TStringBuf& tablePathPrefix)
 {
     if (!AsyncReplicationSettingsEntry(out, in.GetRule_replication_settings_entry1(), ctx, create)) {
         return false;
@@ -145,8 +147,8 @@ static bool AsyncReplicationSettings(std::map<TString, TNodePtr>& out,
     return true;
 }
 
-static bool AsyncReplicationTarget(std::vector<std::pair<TString, TString>>& out, TStringBuf prefixPath,
-                                   const TRule_replication_target& in, TTranslation& ctx)
+bool AsyncReplicationTarget(std::vector<std::pair<TString, TString>>& out, TStringBuf prefixPath,
+                            const TRule_replication_target& in, TTranslation& ctx)
 {
     const TString remote = Id(in.GetRule_object_ref1().GetRule_id_or_at2(), ctx).second;
     const TString local = Id(in.GetRule_object_ref3().GetRule_id_or_at2(), ctx).second;
@@ -154,16 +156,16 @@ static bool AsyncReplicationTarget(std::vector<std::pair<TString, TString>>& out
     return true;
 }
 
-static bool AsyncReplicationAlterAction(std::map<TString, TNodePtr>& settings,
-                                        const TRule_alter_replication_action& in, TSqlExpression& ctx, const TStringBuf& tablePathPrefix)
+bool AsyncReplicationAlterAction(std::map<TString, TNodePtr>& settings,
+                                 const TRule_alter_replication_action& in, TSqlExpression& ctx, const TStringBuf& tablePathPrefix)
 {
     // TODO(ilnaz): support other actions
     return AsyncReplicationSettings(settings, in.GetRule_alter_replication_set_setting1().GetRule_replication_settings3(), ctx, false,
                                     tablePathPrefix);
 }
 
-static bool TransferSettingsEntry(std::map<TString, TNodePtr>& out,
-                                  const TRule_transfer_settings_entry& in, TSqlExpression& ctx, bool create)
+bool TransferSettingsEntry(std::map<TString, TNodePtr>& out,
+                           const TRule_transfer_settings_entry& in, TSqlExpression& ctx, bool create)
 {
     auto key = IdEx(in.GetRule_an_id1(), ctx);
     TNodePtr value = Unwrap(ctx.Build(in.GetRule_expr3()));
@@ -264,8 +266,8 @@ static bool TransferSettingsEntry(std::map<TString, TNodePtr>& out,
     return true;
 }
 
-static bool TransferSettings(std::map<TString, TNodePtr>& out,
-                             const TRule_transfer_settings& in, TSqlExpression& ctx, bool create, const TStringBuf& tablePathPrefix)
+bool TransferSettings(std::map<TString, TNodePtr>& out,
+                      const TRule_transfer_settings& in, TSqlExpression& ctx, bool create, const TStringBuf& tablePathPrefix)
 {
     if (!TransferSettingsEntry(out, in.GetRule_transfer_settings_entry1(), ctx, create)) {
         return false;
@@ -283,6 +285,8 @@ static bool TransferSettings(std::map<TString, TNodePtr>& out,
 
     return true;
 }
+
+} // namespace
 
 bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& core, size_t statementNumber) {
     TString internalStatementName;
@@ -3184,7 +3188,13 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
             }
 
             TSet<TString> names;
-            SubstParameters(first->first, Nothing(), &names);
+            try {
+                SubstParameters(first->first, Nothing(), &names);
+            } catch (const NYql::TErrorException& e) {
+                ctx.Issues.AddIssue(ExceptionToIssue(e, ctx.Pos()));
+                return {};
+            }
+
             for (const auto& name : names) {
                 auto namedNode = query.GetNamedNode(name);
                 if (!namedNode) {
@@ -3253,7 +3263,13 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
         }
 
         TSet<TString> names;
-        SubstParameters(urlLiteral.first, Nothing(), &names);
+        try {
+            SubstParameters(urlLiteral.first, Nothing(), &names);
+        } catch (const NYql::TErrorException& e) {
+            ctx.Issues.AddIssue(ExceptionToIssue(e, ctx.Pos()));
+            return {};
+        }
+
         for (const auto& name : names) {
             auto namedNode = query.GetNamedNode(name);
             if (!namedNode) {

@@ -1,9 +1,20 @@
 #include "yql_yt_request_options.h"
+#include <yql/essentials/public/issue/yql_issue.h>
 #include <yql/essentials/utils/yql_panic.h>
 #include <yt/cpp/mapreduce/common/helpers.h>
 #include <yt/cpp/mapreduce/interface/serialize.h>
 
 namespace NYql::NFmr {
+
+EFmrErrorReason ParseFmrReasonFromErrorMessage(const TString& errorMessage) {
+    TStringBuf message = errorMessage;
+    if (TryParseTerminationMessage(message).Defined()) {
+        return EFmrErrorReason::UdfTerminate;
+    } else if (message.contains(FmrNonRetryableJobExceptionMarker)) {
+        return EFmrErrorReason::RestartQuery;
+    }
+    return EFmrErrorReason::Unknown;
+}
 
 void TFmrUserJobSettings::Save(IOutputStream* buffer) const {
     ::SaveMany(

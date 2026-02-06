@@ -6896,9 +6896,12 @@ const TTypeAnnotationNode* AggApplySerializedStateType(const TExprNode::TPtr& in
     if (name == "count" || name == "count_all" || name == "min" || name == "max" || name == "some") {
         return input->GetTypeAnn();
     } else if (name == "avg" || name == "sum") {
-        auto itemType = input->Content().StartsWith("AggBlock") ?
-            input->Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType() :
-            input->Child(2)->GetTypeAnn();
+        const TTypeAnnotationNode* itemType;
+        if (input->Content().StartsWith("AggBlock")) {
+            itemType = input->Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+        } else {
+            itemType = input->Child(2)->GetTypeAnn();
+        }
         if (input->Content().EndsWith("State")) {
             return itemType;
         }

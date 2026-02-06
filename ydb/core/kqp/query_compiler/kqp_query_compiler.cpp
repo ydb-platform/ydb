@@ -391,7 +391,7 @@ void FillNothingPg(const TPgExprType& pgType, Ydb::TypedValue& value) {
 }
 
 void FillNothing(TCoNothing expr, Ydb::TypedValue& value) {
-    auto* typeann = expr.Raw()->GetTypeAnn();
+    auto typeann = expr.Raw()->GetTypeAnn();
     switch (typeann->GetKind()) {
         case ETypeAnnotationKind::Optional: {
             typeann = typeann->Cast<TOptionalExprType>()->GetItemType();

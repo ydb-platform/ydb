@@ -1,5 +1,4 @@
 ydb/apps/ydb/ut YdbWorkloadTransferTopicToTable.Default_Run
-ydb/core/blobstorage/ut_blobstorage GroupReconfiguration.BsControllerDoesNotDisableGroup
 ydb/core/blobstorage/ut_blobstorage/ut_huge HugeBlobOnlineSizeChange.Compaction
 ydb/core/blobstorage/ut_blobstorage/ut_huge [*/*] chunk chunk
 ydb/core/blobstorage/ut_blobstorage/ut_scrub BlobScrubbing.block42
@@ -42,7 +41,6 @@ ydb/core/persqueue/ut TPQTest.TestComactifiedWithRetention
 ydb/core/persqueue/ut [*/*] chunk chunk
 ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient
 ydb/core/statistics/aggregator/ut AnalyzeColumnshard.AnalyzeRebootColumnShard
-ydb/core/tablet_flat/ut TSharedPageCache.ClockPro
 ydb/core/tablet_flat/ut TSharedPageCache.Compaction_BTreeIndex
 ydb/core/transfer/ut/large TransferLarge.Transfer1KM_1KP_ColumnTable
 ydb/core/tx/datashard/ut_incremental_backup IncrementalBackup.ComplexRestoreBackupCollection+WithIncremental
@@ -53,6 +51,8 @@ ydb/core/tx/schemeshard/ut_pq_reboots TPqGroupTestReboots.AlterWithReboots-PQCon
 ydb/core/viewer/tests test.py.test_topic_data_cdc
 ydb/core/viewer/tests test.py.test_viewer_query_long
 ydb/core/viewer/tests test.py.test_viewer_query_long_multipart
+ydb/library/actors/interconnect/ut_huge_cluster HugeCluster.AllToAll
+ydb/library/actors/interconnect/ut_huge_cluster sole chunk chunk
 ydb/library/yql/providers/generic/connector/tests/join test.py.test_join[join_ch_ch-kqprun]
 ydb/library/yql/providers/generic/connector/tests/join test.py.test_join[join_pg_pg-kqprun]
 ydb/services/ydb/sdk_sessions_pool_ut YdbSdkSessionsPool.StressTestSync1
@@ -129,6 +129,7 @@ ydb/tests/functional/tenants test_tenants.py.TestTenants.test_create_drop_create
 ydb/tests/functional/tenants test_tenants.py.TestTenants.test_create_drop_create_table3[enable_alter_database_create_hive_first--true]
 ydb/tests/functional/ydb_cli [test_ydb_backup.py] chunk chunk
 ydb/tests/functional/ydb_cli test_ydb_backup.py.TestClusterBackupRestore.test_cluster_backup_restore
+ydb/tests/functional/ydb_cli test_ydb_backup.py.TestDatabaseBackup.test_database_backup
 ydb/tests/functional/ydb_cli test_ydb_backup.py.TestDatabaseBackupRestore.test_database_backup_restore
 ydb/tests/olap sole chunk chunk
 ydb/tests/olap test_quota_exhaustion.py.TestYdbWorkload.test

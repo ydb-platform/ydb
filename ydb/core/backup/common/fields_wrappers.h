@@ -3,21 +3,21 @@
 #include <util/generic/string.h>
 
 namespace NKikimrSchemeOp {
-class TBackupTask;
+    class TBackupTask;
 } // namespace NKikimrSchemeOp
 
 namespace NKikimr::NBackup::NFieldsWrappers {
 
 template <typename TSettings>
-TSettings GetSettings(const NKikimrSchemeOp::TBackupTask& task);
+const TSettings& GetSettings(const NKikimrSchemeOp::TBackupTask& task);
 
 template <typename TSettings>
-TString GetCommonDestination(const TSettings&);
+const TString& GetCommonDestination(const TSettings&);
 
 template <typename TItem>
 TString& GetMutableItemDestination(TItem&);
 
 template <typename TItem>
-TString GetItemDestination(const TItem&);
+const TString& GetItemDestination(const TItem&);
 
 } // NKikimr::NBackup

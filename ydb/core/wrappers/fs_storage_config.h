@@ -5,11 +5,11 @@
 #include <ydb/library/accessor/accessor.h>
 
 namespace NKikimrSchemeOp {
-class TFSSettings;
+    class TFSSettings;
 } // namespace NKikimrSchemeOp
 
 namespace Ydb::Export {
-class ExportToFsSettings;
+    class ExportToFsSettings;
 } // namespace Ydb::Export
 
 namespace NKikimr::NWrappers::NExternalStorage {

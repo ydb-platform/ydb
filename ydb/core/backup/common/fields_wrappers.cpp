@@ -1,65 +1,49 @@
 #include "fields_wrappers.h"
 
-#include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/fs_settings.pb.h>
+#include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/public/api/protos/ydb_export.pb.h>
 
 namespace NKikimr::NBackup::NFieldsWrappers {
 
 template <>
-NKikimrSchemeOp::TS3Settings GetSettings(
-    const NKikimrSchemeOp::TBackupTask& task)
-{
+const NKikimrSchemeOp::TS3Settings& GetSettings(const NKikimrSchemeOp::TBackupTask& task) {
     return task.GetS3Settings();
 }
 
 template <>
-NKikimrSchemeOp::TFSSettings GetSettings(
-    const NKikimrSchemeOp::TBackupTask& task)
-{
+const NKikimrSchemeOp::TFSSettings& GetSettings(const NKikimrSchemeOp::TBackupTask& task) {
     return task.GetFSSettings();
 }
 
 template <>
-TString GetCommonDestination(
-    const Ydb::Export::ExportToS3Settings& settings)
-{
+const TString& GetCommonDestination(const Ydb::Export::ExportToS3Settings& settings) {
     return settings.destination_prefix();
 }
 
 template <>
-TString GetCommonDestination(
-    const Ydb::Export::ExportToFsSettings& settings)
-{
+const TString& GetCommonDestination(const Ydb::Export::ExportToFsSettings& settings) {
     return settings.base_path();
 }
 
 template <>
-TString& GetMutableItemDestination(
-    Ydb::Export::ExportToS3Settings::Item& item)
-{
+TString& GetMutableItemDestination(Ydb::Export::ExportToS3Settings::Item& item) {
     return *item.mutable_destination_prefix();
 }
 
 template <>
-TString& GetMutableItemDestination(
-    Ydb::Export::ExportToFsSettings::Item& item)
-{
+TString& GetMutableItemDestination(Ydb::Export::ExportToFsSettings::Item& item) {
     return *item.mutable_destination_path();
 }
 
 template <>
-TString GetItemDestination(
-    const Ydb::Export::ExportToS3Settings::Item& item)
-{
+const TString& GetItemDestination(const Ydb::Export::ExportToS3Settings::Item& item) {
     return item.destination_prefix();
 }
 
 template <>
-TString GetItemDestination(
-    const Ydb::Export::ExportToFsSettings::Item& item)
-{
+const TString& GetItemDestination(const Ydb::Export::ExportToFsSettings::Item& item) {
     return item.destination_path();
 }
 

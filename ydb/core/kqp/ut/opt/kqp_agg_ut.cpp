@@ -392,7 +392,7 @@ Y_UNIT_TEST_SUITE(KqpAgg) {
             )"
         };
 
-        std::vector<ui32> txCount{1, 2, 1};
+        std::vector<ui32> txCount{2, 2, 2};
         std::vector<TString> results = {
             R"([[[1]];[[1]];[[1]];[[3]]])",
             R"([[[[["f";"Void"];["d";"Void"]]]]])",

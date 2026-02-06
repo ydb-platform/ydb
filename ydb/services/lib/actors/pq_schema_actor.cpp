@@ -227,8 +227,8 @@ namespace NKikimr::NGRpcProxy::V1 {
             auto* type = consumer.mutable_shared_consumer_type();
             auto& alterType = alter.alter_shared_consumer_type();
 
-            if (alterType.has_set_default_processing_timeout()) {
-                type->mutable_default_processing_timeout()->CopyFrom(alterType.set_default_processing_timeout());
+            if (alterType.has_set_processing_timeout()) {
+                type->mutable_processing_timeout()->CopyFrom(alterType.set_processing_timeout());
             }
 
             if (alterType.has_set_content_based_deduplication()) {
@@ -309,7 +309,7 @@ namespace NKikimr::NGRpcProxy::V1 {
                 consumer->SetType(::NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP);
 
                 consumer->SetKeepMessageOrder(rr.shared_consumer_type().keep_messages_order());
-                consumer->SetDefaultProcessingTimeoutSeconds(rr.shared_consumer_type().default_processing_timeout().seconds());
+                consumer->SetDefaultProcessingTimeoutSeconds(rr.shared_consumer_type().processing_timeout().seconds());
 
                 consumer->SetDeadLetterPolicyEnabled(rr.shared_consumer_type().dead_letter_policy().enabled());
                 consumer->SetMaxProcessingAttempts(rr.shared_consumer_type().dead_letter_policy().condition().max_processing_attempts());

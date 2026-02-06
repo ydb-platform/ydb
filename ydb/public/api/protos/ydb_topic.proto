@@ -843,7 +843,7 @@ message SharedConsumerType {
     bool keep_messages_order = 10;
     // The duration of blocking messages for its processing. If the message is not committed during this time,
     // it will be returned to the queue and sent for re-processing.
-    google.protobuf.Duration default_processing_timeout = 11;
+    google.protobuf.Duration processing_timeout = 11;
     // The dead letter policy for this consumer.
     DeadLetterPolicy dead_letter_policy = 12;
     // Delay time for message (after sending)
@@ -857,7 +857,7 @@ message SharedConsumerType {
 message AlterSharedConsumerType {
     // The duration of blocking messages for its processing. If the message is not committed during this time,
     // it will be returned to the queue and sent for re-processing.
-    google.protobuf.Duration set_default_processing_timeout = 10;
+    google.protobuf.Duration set_processing_timeout = 10;
 
     // Change dead letter policy.
     AlterDeadLetterPolicy alter_dead_letter_policy = 11;

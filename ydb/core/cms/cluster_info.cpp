@@ -105,12 +105,14 @@ bool TLockableItem::IsDown(TErrorInfo &error, TInstant defaultDeadline) const
 
 void TLockableItem::RollbackLocks(ui64 point)
 {
-    for (auto it = TempLocks.begin(); it != TempLocks.end(); ++it)
+    for (auto it = TempLocks.begin(); it != TempLocks.end(); ++it) {
         if (it->RollbackPoint >= point) {
             RemoveLockByRequest(it->RequestId);
-            TempLocks.erase(it, TempLocks.end());
-            break;
+            it = TempLocks.erase(it);
+        } else {
+            ++it;
         }
+    }
 }
 
 void TLockableItem::ResetPriorityToCheck()
@@ -665,7 +667,7 @@ void TClusterInfo::ApplyActionWithoutLog(const NKikimrCms::TAction &action, i32 
         return;
     }
 
-    TNodeLockContext ctx(priority, requestId, NKikimrCms::MODE_MAX_AVAILABILITY);
+    TNodeLockContext ctx(priority, requestId);
 
     switch (action.GetType()) {
     case TAction::RESTART_SERVICES:
@@ -1073,7 +1075,7 @@ void TOperationLogManager::ApplyAction(const NKikimrCms::TAction &action, i32 pr
                                        const TString &requestId, TClusterInfoPtr clusterState)
 {
     TNodeLockContext ctx(priority, requestId);
-    
+
     switch (action.GetType()) {
     case NKikimrCms::TAction::RESTART_SERVICES:
     case NKikimrCms::TAction::SHUTDOWN_HOST:

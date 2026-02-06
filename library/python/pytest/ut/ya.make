@@ -15,4 +15,5 @@ END()
 
 RECURSE_FOR_TESTS(
     conftest_local
+    pytest_plugins_env
 )

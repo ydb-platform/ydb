@@ -111,6 +111,7 @@ void TCommandWorkloadTopicRunWrite::Config(TConfig& config)
         .StoreMappedResult(&Scenario.ProducerMaxMemoryUsageBytes, NYdb::SizeFromString);
     config.Opts->AddLongOption("keyed-writes", "Use keyed writes. This mode will write messages to topic, choosing partition by random generated keys.")
         .DefaultValue(false)
+        .Hidden()
         .StoreTrue(&Scenario.KeyedWrites);
     config.IsNetworkIntensive = true;
 }

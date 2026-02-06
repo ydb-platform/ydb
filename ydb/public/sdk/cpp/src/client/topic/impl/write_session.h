@@ -407,7 +407,7 @@ private:
     // TFuture::Subscribe may invoke callback synchronously when the future is already ready.
     // Also, callbacks may arrive concurrently with the attempt to go idle.
     // Use a small state machine to avoid re-entrancy and lost wakeups.
-    std::atomic<ui8> MainWorkerState = 0;
+    std::atomic<std::uint8_t> MainWorkerState = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

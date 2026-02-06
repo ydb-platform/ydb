@@ -98,11 +98,11 @@ TWriteSession::~TWriteSession() {
 // TKeyedWriteSessionSettings
 
 std::string TKeyedWriteSessionSettings::DefaultPartitioningKeyHasher(const std::string_view key) {
-    const ui64 lo = MurmurHash<ui64>(key.data(), key.size(), ui64{0});
-    const ui64 hi = MurmurHash<ui64>(key.data(), key.size(), ui64{0x9E3779B97F4A7C15ull}); // fixed seed
+    const std::uint64_t lo = MurmurHash<std::uint64_t>(key.data(), key.size(), std::uint64_t{0});
+    const std::uint64_t hi = MurmurHash<std::uint64_t>(key.data(), key.size(), std::uint64_t{0x9E3779B97F4A7C15ull}); // fixed seed
 
-    const ui64 hiBe = y_absl::gntohll(hi);
-    const ui64 loBe = y_absl::gntohll(lo);
+    const std::uint64_t hiBe = y_absl::gntohll(hi);
+    const std::uint64_t loBe = y_absl::gntohll(lo);
 
     std::string out;
     out.resize(16);

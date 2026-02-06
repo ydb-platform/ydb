@@ -16,6 +16,8 @@ public:
     void Init() override;
 
     TString TableName = "fulltext_workload";
+    TString IndexName = "fulltext_index";
+    TString IndexType = "fulltext_plain";
     ui64 MinPartitions = 1;
     ui64 PartitionSizeMb = 0;
     bool AutoPartitioningByLoad = true;

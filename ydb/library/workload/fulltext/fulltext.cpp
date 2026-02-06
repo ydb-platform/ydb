@@ -1,4 +1,5 @@
 #include "fulltext.h"
+#include "fulltext_command_index.h"
 
 #include <ydb/public/lib/ydb_cli/commands/ydb_workload_import.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_workload.h>
@@ -13,6 +14,9 @@ TCommandFulltext::TCommandFulltext()
     if (auto import = TWorkloadCommandImport::Create(*Params)) {
         AddCommand(std::move(import));
     }
+
+    AddCommand(std::make_unique<NYdbWorkload::TFulltextWorkloadCommandBuildIndex>(*Params));
+    AddCommand(std::make_unique<NYdbWorkload::TFulltextWorkloadCommandDropIndex>(*Params));
 
     auto supportedWorkloads = Params->CreateGenerator()->GetSupportedWorkloadTypes();
     switch (supportedWorkloads.size()) {

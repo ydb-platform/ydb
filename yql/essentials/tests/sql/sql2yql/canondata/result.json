@@ -2836,9 +2836,30 @@
     ],
     "test_sql2yql.test[expr-cast_decimal]": [
         {
-            "checksum": "0beea95df85e9ea70b06ffa9d9eac69f",
-            "size": 4965,
-            "uri": "https://{canondata_backend}/1937150/ec0019724df75083b0e89cab22f57e10ef36744e/resource.tar.gz#test_sql2yql.test_expr-cast_decimal_/sql.yql"
+            "checksum": "516eb39f82fe3c94951162e0da5a1b83",
+            "size": 6001,
+            "uri": "https://{canondata_backend}/1784117/30ea169afcb95c01597ed603d28a50d31fe02139/resource.tar.gz#test_sql2yql.test_expr-cast_decimal_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[expr-cast_decimal_bound_1]": [
+        {
+            "checksum": "1bef135768d9291503caee719a4731a3",
+            "size": 1099,
+            "uri": "https://{canondata_backend}/1784117/30ea169afcb95c01597ed603d28a50d31fe02139/resource.tar.gz#test_sql2yql.test_expr-cast_decimal_bound_1_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[expr-cast_decimal_bound_2]": [
+        {
+            "checksum": "a7246fb75e98c3007efcb9b668e9c269",
+            "size": 1101,
+            "uri": "https://{canondata_backend}/1936842/7966e8f414f8ddeb9e099fd7bd11bb0d2c79733f/resource.tar.gz#test_sql2yql.test_expr-cast_decimal_bound_2_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[expr-cast_decimal_fail]": [
+        {
+            "checksum": "dfb0588cec4672fb8e7d794167daa264",
+            "size": 1099,
+            "uri": "https://{canondata_backend}/1937001/148a5f7275b829096c74bf6601aae10f48dfa1aa/resource.tar.gz#test_sql2yql.test_expr-cast_decimal_fail_/sql.yql"
         }
     ],
     "test_sql2yql.test[expr-cast_decimal_implicit_fail_1]": [
@@ -12254,6 +12275,21 @@
     "test_sql_format.test[expr-cast_decimal]": [
         {
             "uri": "file://test_sql_format.test_expr-cast_decimal_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[expr-cast_decimal_bound_1]": [
+        {
+            "uri": "file://test_sql_format.test_expr-cast_decimal_bound_1_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[expr-cast_decimal_bound_2]": [
+        {
+            "uri": "file://test_sql_format.test_expr-cast_decimal_bound_2_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[expr-cast_decimal_fail]": [
+        {
+            "uri": "file://test_sql_format.test_expr-cast_decimal_fail_/formatted.sql"
         }
     ],
     "test_sql_format.test[expr-cast_decimal_implicit_fail_1]": [

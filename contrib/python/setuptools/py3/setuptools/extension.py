@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import functools
 import re
+from collections.abc import Iterable
 from typing import TYPE_CHECKING
 
 from setuptools._path import StrPath
@@ -13,7 +14,7 @@ import distutils.errors
 import distutils.extension
 
 
-def _have_cython():
+def _have_cython() -> bool:
     """
     Return True if Cython can be imported.
     """
@@ -52,8 +53,9 @@ class Extension(_Extension):
       the full name of the extension, including any packages -- ie.
       *not* a filename or pathname, but Python dotted name
 
-    :arg list[str|os.PathLike[str]] sources:
-      list of source filenames, relative to the distribution root
+    :arg Iterable[str | os.PathLike[str]] sources:
+      iterable of source filenames, (except strings, which could be misinterpreted
+      as a single filename), relative to the distribution root
       (where the setup script lives), in Unix form (slash-separated)
       for portability.  Source files may be C, C++, SWIG (.i),
       platform-specific resource files, or whatever else is recognized
@@ -143,7 +145,7 @@ class Extension(_Extension):
     def __init__(
         self,
         name: str,
-        sources: list[StrPath],
+        sources: Iterable[StrPath],
         *args,
         py_limited_api: bool = False,
         **kw,

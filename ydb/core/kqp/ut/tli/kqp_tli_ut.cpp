@@ -84,25 +84,20 @@ namespace {
             if (!record.Contains("Component: SessionActor") || !MatchesMessage(record, messagePattern)) {
                 continue;
             }
-            const size_t allPos = record.find("QueryText: ");
+            const size_t allPos = record.find("BreakerQueryText: ");
             if (allPos == TString::npos) {
                 continue;
             }
-            TString result = record.substr(allPos + 11);
-            // Stop at BreakerQueryTexts or VictimQueryTexts field
-            size_t endPos = result.find(", BreakerQueryTexts:");
-            if (endPos == TString::npos) {
-                endPos = result.find(", VictimQueryTexts:");
-            }
-            if (endPos != TString::npos) {
-                result = result.substr(0, endPos);
+            TString result = record.substr(allPos + 18);
+            size_t nextFieldPos = result.find(", BreakerQueryTexts:");
+            if (nextFieldPos != TString::npos) {
+                result = result.substr(0, nextFieldPos);
             }
             return UnescapeC(result);
         }
         return std::nullopt;
     }
 
-    // Extract VictimQueryText field (the original query whose locks were broken)
     std::optional<TString> ExtractVictimQueryText(const TString& logs, const TString& messagePattern) {
         for (const auto& record : ExtractTliRecords(logs)) {
             if (!record.Contains("Component: SessionActor") || !MatchesMessage(record, messagePattern)) {
@@ -113,8 +108,7 @@ namespace {
                 continue;
             }
             TString result = record.substr(victimPos + 17);
-            // Stop at comma followed by QueryText:
-            const size_t nextFieldPos = result.find(", QueryText:");
+            const size_t nextFieldPos = result.find(", VictimQueryTexts:");
             if (nextFieldPos != TString::npos) {
                 result = result.substr(0, nextFieldPos);
             }

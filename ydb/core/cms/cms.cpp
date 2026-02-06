@@ -406,8 +406,6 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
 
         LOG_DEBUG(ctx, NKikimrServices::CMS, "Checking action: %s", action.ShortDebugString().data());
 
-        Cerr << "Checking requestId: " << requestId << Endl;
-
         bool prepared = !request.GetEvictVDisks();
         if (!prepared) {
             prepared = CheckEvictVDisks(action, error);
@@ -962,7 +960,6 @@ bool TCms::TryToLockVDisks(const TAction &action,
     auto point = ClusterInfo->PushRollbackPoint();
     for (const auto &vdId : vdisks) {
         const auto &vdisk = ClusterInfo->VDisk(vdId);
-        Cerr << "Trying to lock VDisk: " << vdId.ToString() << ", RequestId " << opts.RequestId << Endl;
         if (TryToLockVDisk(opts, vdisk, duration, error)) {
             ClusterInfo->AddVDiskTempLock(vdId, action, opts.RequestId);
         } else {
@@ -1051,7 +1048,6 @@ bool TCms::CheckActionReplaceDevices(const TAction &action,
                                      const TActionOptions &opts,
                                      TErrorInfo &error) const
 {
-    Cerr << "Checking replace devices action, RequestId " << opts.RequestId << Endl;
     auto point = ClusterInfo->PushRollbackPoint();
     bool res = true;
     TDuration duration = TDuration::MicroSeconds(action.GetDuration());
@@ -1631,7 +1627,7 @@ void TCms::ManuallyApproveRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, con
     TActorId approveActorId = ctx.RegisterWithSameMailbox(actor);
 
     auto handle = new IEventHandle(approveActorId, SelfId(), resp.Release(), 0, ev->Cookie);
-    Execute(CreateTxStorePermissions(std::move(ev->Release()), handle, rec.GetUser(), std::move(copy)), ctx);
+    Execute(CreateTxStorePermissions(std::move(ev->Release()), handle, rec.GetUser(), rec.GetRequestId(), Min<i32>(), std::move(copy)), ctx);
 }
 
 void TCms::GetNotifications(TEvCms::TEvManageNotificationRequest::TPtr &ev, bool all,
@@ -2205,7 +2201,7 @@ void TCms::Handle(TEvCms::TEvPermissionRequest::TPtr &ev,
         }
 
         auto handle = new IEventHandle(ev->Sender, SelfId(), resp.Release(), 0, ev->Cookie);
-        Execute(CreateTxStorePermissions(std::move(ev->Release()), handle, user, std::move(copy), maintenanceTaskId), ctx);
+        Execute(CreateTxStorePermissions(std::move(ev->Release()), handle, user, reqId, priority, std::move(copy), maintenanceTaskId), ctx);
     }
 
     TabletCounters->Percentile()[COUNTER_LATENCY_PERMISSION_REQUEST].IncrementFor((TInstant::Now() - requestStartTime).MilliSeconds());
@@ -2281,7 +2277,7 @@ void TCms::Handle(TEvCms::TEvCheckRequest::TPtr &ev, const TActorContext &ctx)
             AcceptPermissions(resp->Record, rec.GetRequestId(), user, priority, ctx, true);
 
         auto handle = new IEventHandle(ev->Sender, SelfId(), resp.Release(), 0, ev->Cookie);
-        Execute(CreateTxStorePermissions(std::move(ev->Release()), handle, user, std::move(copy)), ctx);
+        Execute(CreateTxStorePermissions(std::move(ev->Release()), handle, user, rec.GetRequestId(), request.Priority, std::move(copy)), ctx);
     }
 
     TabletCounters->Percentile()[COUNTER_LATENCY_CHECK_REQUEST].IncrementFor((TInstant::Now() - requestStartTime).MilliSeconds());

@@ -8,6 +8,12 @@ namespace NKikimr::NCms {
 #define NCH_LOG_D(stream) LOG_DEBUG_S (*TlsActivationContext, NKikimrServices::CMS, "[Nodes Counter] " << stream)
 #define NCH_LOG_T(stream) LOG_TRACE_S (*TlsActivationContext, NKikimrServices::CMS, "[Nodes Counter] " << stream)
 
+TNodeLockContext::TNodeLockContext(i32 priority, const TString& requestId, NKikimrCms::EAvailabilityMode mode)
+    : Priority(priority)
+    , RequestId(requestId)
+    , Mode(mode)
+{}
+
 INodesChecker::TLock::TLock(i32 priority)
     : Priority(priority)
 {}
@@ -81,19 +87,12 @@ void TNodesCounterBase::LockNode(ui32 nodeId, const TNodeLockContext& ctx) {
     }
 
     AddPriorityLock(node.Locks, TLock(ctx.Priority));
-    ++RequestLockCount[ctx.RequestId];
 }
 
 void TNodesCounterBase::UnlockNode(ui32 nodeId, const TNodeLockContext& ctx) {
     auto& node = Nodes[nodeId];
 
     RemovePriorityLocks(node.Locks, ctx.Priority);
-
-    auto it = RequestLockCount.find(ctx.RequestId);
-    Y_ABORT_UNLESS(it != RequestLockCount.end() && it->second >= 1);
-    if (--it->second == 0) {
-        RequestLockCount.erase(it);
-    }
 
     if (node.Locks.empty()) {
         --LockedNodesCount;
@@ -182,6 +181,24 @@ bool TNodesLimitsCounterBase::TryToLockNode(ui32 nodeId, const TNodeLockContext&
     return true;
 }
 
+void TSysTabletsNodesCounter::LockNode(ui32 nodeId, const TNodeLockContext& ctx) {
+    TNodesCounterBase::LockNode(nodeId, ctx);
+
+    Y_DEBUG_ABORT_UNLESS(!ctx.RequestId.empty());
+    ++LockedByRequests[ctx.RequestId];
+}
+
+void TSysTabletsNodesCounter::UnlockNode(ui32 nodeId, const TNodeLockContext& ctx) {
+    TNodesCounterBase::UnlockNode(nodeId, ctx);
+
+    Y_DEBUG_ABORT_UNLESS(!ctx.RequestId.empty());
+    auto it = LockedByRequests.find(ctx.RequestId);
+    Y_ABORT_UNLESS(it != LockedByRequests.end());
+    if (--it->second == 0) {
+        LockedByRequests.erase(it);
+    }
+}
+
 bool TSysTabletsNodesCounter::TryToLockNode(ui32 nodeId, const TNodeLockContext& ctx, TReason& reason) const {
     Y_ABORT_UNLESS(Nodes.contains(nodeId));
     auto nodeState = Nodes.at(nodeId).State;
@@ -249,7 +266,7 @@ bool TSysTabletsNodesCounter::TryToLockNode(ui32 nodeId, const TNodeLockContext&
                 return true;
             }
 
-            if (!RequestLockCount.contains(ctx.RequestId)) {
+            if (!LockedByRequests.contains(ctx.RequestId)) {
                 limit = keepAvailableLimit;
                 if (keepAvailableOk) {
                     return true;

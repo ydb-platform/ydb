@@ -17,12 +17,7 @@ struct TNodeLockContext {
     TString RequestId;
     NKikimrCms::EAvailabilityMode Mode = NKikimrCms::MODE_MAX_AVAILABILITY;
 
-    TNodeLockContext(i32 priority, const TString& requestId = "",
-                     NKikimrCms::EAvailabilityMode mode = NKikimrCms::MODE_MAX_AVAILABILITY)
-        : Priority(priority)
-        , RequestId(requestId)
-        , Mode(mode)
-    {}
+    TNodeLockContext(i32 priority, const TString& requestId, NKikimrCms::EAvailabilityMode mode);
 };
 
 /**
@@ -75,7 +70,6 @@ protected:
     THashMap<ui32, TNodeInfo> Nodes;
     ui32 LockedNodesCount;
     ui32 DownNodesCount;
-    THashMap<TString, size_t> RequestLockCount;
 
 public:
     TNodesCounterBase()
@@ -167,6 +161,7 @@ public:
 class TSysTabletsNodesCounter : public TNodesCounterBase {
 private:
     const NKikimrConfig::TBootstrap::ETabletType TabletType;
+    THashMap<TString, size_t> LockedByRequests;
 
 public:
     explicit TSysTabletsNodesCounter(NKikimrConfig::TBootstrap::ETabletType tabletType)
@@ -174,6 +169,8 @@ public:
     {
     }
 
+    void LockNode(ui32 nodeId, const TNodeLockContext& ctx) override;
+    void UnlockNode(ui32 nodeId, const TNodeLockContext& ctx) override;
     bool TryToLockNode(ui32 nodeId, const TNodeLockContext& ctx, TReason& reason) const override final;
 };
 

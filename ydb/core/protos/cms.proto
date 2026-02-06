@@ -164,7 +164,7 @@ enum EAvailabilityMode {
     MODE_FORCE_RESTART = 2;
     // Behaves like MODE_MAX_AVAILABILITY but automatically
     // falls back to MODE_KEEP_AVAILABLE when it is not possible
-    // to restart nodes in group using MODE_MAX_AVAILABILITY.
+    // to restart nodes using MODE_MAX_AVAILABILITY.
     MODE_SMART_AVAILABILITY = 3;
 }
 

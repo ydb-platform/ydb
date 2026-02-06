@@ -2892,167 +2892,54 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
 
     Y_UNIT_TEST(TestSmartAvailabilityModeFeatureFlagDisabled)
     {
-        // Test that Smart mode is rejected when feature flag is disabled
         TCmsTestEnv env(8);
-
-        // Smart mode should be rejected with WRONG_REQUEST
         env.CheckPermissionRequest("user", false, false, false,
                                    true, MODE_SMART_AVAILABILITY, TStatus::WRONG_REQUEST,
                                    MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(0), 60000000));
     }
 
-    Y_UNIT_TEST(TestSmartAvailabilityModeZeroPriorLocksFallsBackToWeak)
+    Y_UNIT_TEST(TestSmartAvailabilityModeFallsBackToKeepAvailable)
     {
-        // Test: with zero prior locks, Smart mode should fallback to Weak mode when Strong denies
-        // Setup: 8 nodes with block-4-2 erasure (8 VDisks per group, can lose 2)
-        // In Strong mode (MODE_MAX_AVAILABILITY): only 1 VDisk can be locked per group
-        // In Weak mode (MODE_KEEP_AVAILABLE): up to 2 VDisks can be locked per group
         TCmsTestEnv env(TTestEnvOpts(8).WithEnableCmsSmartAvailabilityMode());
-        env.AdvanceCurrentTime(TDuration::Minutes(3));
+        env.EnableSysNodeChecking();
 
-        // Lock first node - should succeed in both Strong and Smart mode
+        // Works as max availability
         env.CheckPermissionRequest("user", false, false, false,
                                    true, MODE_SMART_AVAILABILITY, TStatus::ALLOW,
                                    MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(0), 60000000));
 
-        // Lock second node - Strong mode would deny (only 1 allowed), but Smart mode
-        // with zero prior locks should fallback to Weak mode and allow (up to 2)
-        // Note: this is a new request, so it has zero locks initially
+        // Works as keep available
         env.CheckPermissionRequest("user", false, false, false,
                                    true, MODE_SMART_AVAILABILITY, TStatus::ALLOW,
                                    MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(1), 60000000));
 
-        // Verify that Strong mode would have denied the second request
-        env.CheckPermissionRequest("user", false, true, false,
-                                   true, MODE_MAX_AVAILABILITY, TStatus::DISALLOW_TEMP,
-                                   MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(2), 60000000));
-
-        // Third node should be denied in Smart mode too (Weak mode limit of 2 reached)
+        // Works as keep available
         env.CheckPermissionRequest("user", false, false, false,
                                    true, MODE_SMART_AVAILABILITY, TStatus::DISALLOW_TEMP,
                                    MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(2), 60000000));
     }
 
-    Y_UNIT_TEST(TestSmartAvailabilityModeWithExistingLocksStaysStrong)
+    Y_UNIT_TEST(TestSmartAvailabilityModeStaysMaxAvailability)
     {
-        // Test: when a request already holds locks, Smart mode should stay in Strong mode
-        // Setup: Use scheduled request with multiple actions in a fresh environment
         TCmsTestEnv env(TTestEnvOpts(8).WithEnableCmsSmartAvailabilityMode());
-        env.AdvanceCurrentTime(TDuration::Minutes(3));
+        env.EnableSysNodeChecking();
 
-        // Create a scheduled request with partial permissions for multiple nodes
-        // In Smart mode with zero locks, the first action should use Strong mode.
-        // If Strong allows, it proceeds. If Strong denies and zero locks, fallback to Weak.
-        // Once a lock is granted, subsequent actions in the same request stay in Strong mode.
+        // Works as max availability
         auto res1 = env.ExtractPermissions(
             env.CheckPermissionRequest("user", true, false, true,
                                        true, MODE_SMART_AVAILABILITY, TStatus::ALLOW_PARTIAL,
                                        MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(0), 60000000),
                                        MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(1), 60000000),
                                        MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(2), 60000000)));
-
-        // First action should get a permission (allowed in Strong mode since it's the first lock)
         UNIT_ASSERT_VALUES_EQUAL(res1.second.size(), 1);
 
-        // Now the request has a lock. When checking the next action,
-        // Smart mode should stay in Strong mode. Since only 1 VDisk allowed per group in Strong mode,
-        // the second action should be denied.
+        // Works as max availability
         env.CheckRequest("user", res1.first, false, MODE_SMART_AVAILABILITY, TStatus::DISALLOW_TEMP, 0);
 
-        // Complete the first permission
         env.CheckDonePermission("user", res1.second[0]);
 
-        // Now the request has zero locks again (the permission is completed).
-        // The next action should be allowed with fallback to Weak mode.
-        // But once the first action (node 1) is granted, the request has a lock again
-        // and must stay in Strong mode - so the second action (node 2) will be denied.
-        // Result: ALLOW_PARTIAL with 1 permission.
+        // Works as max availability
         env.CheckRequest("user", res1.first, false, MODE_SMART_AVAILABILITY, TStatus::ALLOW_PARTIAL, 1);
-    }
-
-    Y_UNIT_TEST(TestSmartAvailabilityModeForStateStorage)
-    {
-        // Test Smart mode for state storage rings
-        // Setup: Multiple rings, verify correct ring lock counting
-        TCmsTestEnv env(TTestEnvOpts(8, 1, {}).WithEnableCmsSmartAvailabilityMode());
-        env.AdvanceCurrentTime(TDuration::Minutes(3));
-        env.EnableSysNodeChecking();
-
-        // In Strong mode (MODE_MAX_AVAILABILITY) for state storage: only 1 ring can be locked
-        // In Weak mode (MODE_KEEP_AVAILABLE): up to (nToSelect - 1) / 2 rings can be locked
-
-        // First request - should be allowed in Strong mode
-        env.CheckPermissionRequest("user", false, false, false,
-                                   true, MODE_SMART_AVAILABILITY, TStatus::ALLOW,
-                                   MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(0), 60000000));
-
-        // Second request for a different node - Smart mode should try Strong first,
-        // fail, then fallback to Weak mode (if zero locks)
-        // The behavior depends on the ring configuration
-        auto result = env.CheckPermissionRequest("user", false, false, false,
-                                   true, MODE_SMART_AVAILABILITY, TStatus::ALLOW,
-                                   MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(1), 60000000));
-
-        // Verify that the request was processed (either allowed or denied based on ring config)
-        // The key point is that Smart mode doesn't crash and handles state storage correctly
-    }
-
-    Y_UNIT_TEST(TestSmartAvailabilityModeForSystemTablets)
-    {
-        // Test Smart mode for system tablets node checking
-        TCmsTestEnv env(TTestEnvOpts(8).WithEnableCmsSmartAvailabilityMode());
-        env.AdvanceCurrentTime(TDuration::Minutes(3));
-        env.EnableSysNodeChecking();
-
-        // Lock first node - should succeed
-        env.CheckPermissionRequest("user", false, false, false,
-                                   true, MODE_SMART_AVAILABILITY, TStatus::ALLOW,
-                                   MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(0), 60000000));
-
-        // Lock second node - Smart mode should fallback to Weak mode and allow
-        // (since this is a new request with zero locks)
-        env.CheckPermissionRequest("user", false, false, false,
-                                   true, MODE_SMART_AVAILABILITY, TStatus::ALLOW,
-                                   MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(1), 60000000));
-
-        // Third node should be denied - Weak mode limit of 2 VDisks per group is reached
-        env.CheckPermissionRequest("user", false, false, false,
-                                   true, MODE_SMART_AVAILABILITY, TStatus::DISALLOW_TEMP,
-                                   MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(2), 60000000));
-    }
-
-    Y_UNIT_TEST(TestSmartAvailabilityModeCompareWithStrongAndWeak)
-    {
-        // Test that Smart mode behaves correctly compared to Strong and Weak modes
-        // This test verifies the fallback logic by comparing results
-        TCmsTestEnv env(TTestEnvOpts(8).WithEnableCmsSmartAvailabilityMode());
-        env.AdvanceCurrentTime(TDuration::Minutes(3));
-
-        // First, lock one node
-        env.CheckPermissionRequest("user", false, false, false,
-                                   true, MODE_SMART_AVAILABILITY, TStatus::ALLOW,
-                                   MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(0), 60000000));
-
-        // Check that Strong mode would deny the second node
-        env.CheckPermissionRequest("user", false, true, false,
-                                   true, MODE_MAX_AVAILABILITY, TStatus::DISALLOW_TEMP,
-                                   MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(1), 60000000));
-
-        // Check that Weak mode would allow the second node
-        env.CheckPermissionRequest("user", false, true, false,
-                                   true, MODE_KEEP_AVAILABLE, TStatus::ALLOW,
-                                   MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(1), 60000000));
-
-        // Smart mode with a NEW request (zero locks) should also allow the second node
-        // because it falls back to Weak mode
-        env.CheckPermissionRequest("user", false, false, false,
-                                   true, MODE_SMART_AVAILABILITY, TStatus::ALLOW,
-                                   MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(1), 60000000));
-
-        // Now try a third node - should be denied in all modes
-        env.CheckPermissionRequest("user", false, true, false,
-                                   true, MODE_SMART_AVAILABILITY, TStatus::DISALLOW_TEMP,
-                                   MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(2), 60000000));
     }
 }
 

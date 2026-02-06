@@ -148,7 +148,8 @@ private:
     ITransaction *CreateTxRemoveWalleTask(const TString &id);
     ITransaction *CreateTxRemoveMaintenanceTask(const TString &id);
     ITransaction *CreateTxStorePermissions(THolder<IEventBase> req, TAutoPtr<IEventHandle> resp,
-                                           const TString &owner, TAutoPtr<TRequestInfo> scheduled,
+                                           const TString &owner, const TString &requestId, i32 priority,
+                                           TAutoPtr<TRequestInfo> scheduled,
                                            const TMaybe<TString> &maintenanceTaskId = {});
     ITransaction *CreateTxStoreWalleTask(const TTaskInfo &task, THolder<IEventBase> req, TAutoPtr<IEventHandle> resp);
     ITransaction *CreateTxUpdateConfig(TEvCms::TEvSetConfigRequest::TPtr &ev);

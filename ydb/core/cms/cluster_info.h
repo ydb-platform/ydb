@@ -267,19 +267,21 @@ public:
     void AddExternalLock(const TNotificationInfo &notification,
             const NKikimrCms::TAction &action)
     {
+        AddLockByRequest(notification.NotificationId);
+    
         TExternalLock lock(notification, action);
         auto pos = LowerBound(ExternalLocks.begin(), ExternalLocks.end(), lock, [](auto &l, auto &r) {
                 return l.LockStart < r.LockStart;
             });
         ExternalLocks.insert(pos, std::move(lock));
-        AddLockByRequest(notification.NotificationId);
     }
 
     void ScheduleLock(TScheduledLock &&lock) {
+        AddLockByRequest(lock.RequestId);
+
         auto pos = LowerBound(ScheduledLocks.begin(), ScheduledLocks.end(), lock, [](auto &l, auto &r) {
             return l.Priority < r.Priority;
         });
-        AddLockByRequest(lock.RequestId);
         ScheduledLocks.insert(pos, std::move(lock));
     }
 
@@ -299,7 +301,7 @@ public:
     void RemoveScheduledLocks(const TString &requestId);
 
     void AddLockByRequest(const TString &requestId);
-    void RemoveLocksByRequest(const TString &requestId, size_t count);
+    void RemoveLockByRequest(const TString &requestId);
     bool IsLockedByRequest(const TString &requestId) const;
 
     // Fill some item info (e.g. Downtime) basing on previous item state.
@@ -312,8 +314,8 @@ public:
     // Recent item downtimes.
     TDowntime Downtime = TDowntime(TDuration::Zero());
 
-    // Counts all locks hold by requests
-    THashMap<TString, size_t> RequestLockCount;
+    // Requests that have lock on this item
+    THashSet<TString> LockedByRequests;
 
     std::list<TLock> Locks;
     std::list<TExternalLock> ExternalLocks;
@@ -508,20 +510,21 @@ struct TBSGroupInfo {
 class TStateStorageRingInfo : public TThrRefBase {
 public:
     /**
-     * Ok:          we can allow to restart nodes;
+     * Ok:                   we can allow to restart nodes;
      *
-     * Locked:      all nodes are up. We restarted some nodes before and waiting
-     *              some timeout to allow restart nodes from other ring.
-     *              But, we still can restart nodes from this ring;
+     * Locked:               all nodes are up. We restarted some nodes before and waiting
+     *                       some timeout to allow restart nodes from other ring.
+     *                       But, we still can restart nodes from this ring;
      *
-     * Disabled:    Disabled ring (see state storage config). The ring
-     *              affects permissions of other rings, but this ring
-     *              can be disabled without considering the others;
+     * Disabled:             Disabled ring (see state storage config). The ring
+     *                       affects permissions of other rings, but this ring
+     *                       can be disabled without considering the others;
      *
-     * Restart:     has some restarting or down nodes. We can still restart
-     *              nodes from this ring;
+     * Restart:              has some restarting or down nodes. We can still restart
+     *                       nodes from this ring;
      *
-     * RestartByThisRequest: same as Restart, but provide additional info.
+     * RestartByThisRequest: same as Restart, but provide additional info
+                             that nodes are restarted by this request;
     */
 
     enum RingState : ui8 {

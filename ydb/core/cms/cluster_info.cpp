@@ -107,7 +107,7 @@ void TLockableItem::RollbackLocks(ui64 point)
 {
     for (auto it = TempLocks.begin(); it != TempLocks.end(); ++it)
         if (it->RollbackPoint >= point) {
-            RemoveLocksByRequest(it->RequestId, 1);
+            RemoveLockByRequest(it->RequestId);
             TempLocks.erase(it, TempLocks.end());
             break;
         }
@@ -125,43 +125,28 @@ void TLockableItem::SetPriorityToCheck(i32 priority)
 
 void TLockableItem::RemoveScheduledLocks(const TString &requestId)
 {
-    size_t removed = ScheduledLocks.remove_if([&requestId](auto &lock) {
+    ScheduledLocks.remove_if([&requestId](auto &lock) {
         return lock.RequestId == requestId;
     });
-    RemoveLocksByRequest(requestId, removed);
+    RemoveLockByRequest(requestId);
 }
 
 void TLockableItem::AddLockByRequest(const TString &requestId)
 {
-    Cerr << "Adding lock for request " << requestId << " for " << PrettyItemName() << Endl;
-    TStringStream ss;
-    DebugLocksDump(ss, "  ");
-    Cerr << ss.Str();
-    ++RequestLockCount[requestId];
+    Y_DEBUG_ABORT_UNLESS(!requestId.empty());
+    LockedByRequests.insert(requestId);
 }
 
-void TLockableItem::RemoveLocksByRequest(const TString &requestId, size_t count)
+void TLockableItem::RemoveLockByRequest(const TString &requestId)
 {
-    if (count == 0) {
-        return;
-    }
-
-    Cerr << "Removing " << count << " locks for request " << requestId << " for " << PrettyItemName() << Endl;
-    TStringStream ss;
-    DebugLocksDump(ss, "  ");
-    Cerr << ss.Str();
-    auto it = RequestLockCount.find(requestId);
-    Y_ABORT_UNLESS(it != RequestLockCount.end() && it->second >= count);
-
-    it->second -= count;
-    if (it->second == 0) {
-        RequestLockCount.erase(it);
-    }
+    Y_DEBUG_ABORT_UNLESS(!requestId.empty());
+    LockedByRequests.erase(requestId);
 }
 
 bool TLockableItem::IsLockedByRequest(const TString &requestId) const
 {
-    return RequestLockCount.contains(requestId);
+    Y_DEBUG_ABORT_UNLESS(!requestId.empty());
+    return LockedByRequests.contains(requestId);
 }
 
 void TLockableItem::MigrateOldInfo(const TLockableItem &old)
@@ -351,33 +336,22 @@ TStateStorageRingInfo::RingState TStateStorageRingInfo::CountState(TInstant now,
         return Disabled;
     }
 
-    bool hasUnavailableReplicas = false;
-    bool hasUnavailableReplicasByThisRequest = false;
     bool hasTimeout = false;
     TErrorInfo error;
     for (auto &node : Replicas) {
         if (node->IsDown(error, now + retryTime)
             || node->IsLocked(error, retryTime, now, duration)) {
-            hasUnavailableReplicas = true;
 
             if (node->IsLockedByRequest(requestId)) {
-                hasUnavailableReplicasByThisRequest = true;
+                return RestartByThisRequest;
+            } else {
+                return Restart;
             }
-
-            continue;
         }
 
         if (now <= node->StartTime + Timeout) {
             hasTimeout = true;
         }
-    }
-
-    if (hasUnavailableReplicasByThisRequest) {
-        return RestartByThisRequest;
-    }
-
-    if (hasUnavailableReplicas) {
-        return Restart;
     }
 
     if (hasTimeout) {
@@ -664,8 +638,6 @@ void TClusterInfo::AddPDiskTempLock(TPDiskID pdiskId, const NKikimrCms::TAction 
 
 void TClusterInfo::AddVDiskTempLock(TVDiskID vdiskId, const NKikimrCms::TAction &action, const TString &requestId)
 {
-    Cerr << "Trying to lock VDisk: " << vdiskId.ToString() << ", RequestId " << requestId << Endl;
-
     auto &vdisk = VDiskRef(vdiskId);
     vdisk.AddTempLock({RollbackPoint, action, requestId});
 }

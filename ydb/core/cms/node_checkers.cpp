@@ -90,7 +90,7 @@ void TNodesCounterBase::UnlockNode(ui32 nodeId, const TNodeLockContext& ctx) {
     RemovePriorityLocks(node.Locks, ctx.Priority);
 
     auto it = RequestLockCount.find(ctx.RequestId);
-    Y_ABORT_UNLESS(it != RequestLockCount.end());
+    Y_ABORT_UNLESS(it != RequestLockCount.end() && it->second >= 1);
     if (--it->second == 0) {
         RequestLockCount.erase(it);
     }

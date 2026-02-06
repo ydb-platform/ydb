@@ -406,6 +406,8 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
 
         LOG_DEBUG(ctx, NKikimrServices::CMS, "Checking action: %s", action.ShortDebugString().data());
 
+        Cerr << "Checking requestId: " << requestId << Endl;
+
         bool prepared = !request.GetEvictVDisks();
         if (!prepared) {
             prepared = CheckEvictVDisks(action, error);
@@ -625,7 +627,7 @@ bool TCms::CheckAction(const TAction &action, const TActionOptions &opts, TError
         case TAction::REBOOT_HOST:
             return CheckActionShutdownHost(action, opts, error, ctx);
         case TAction::REPLACE_DEVICES:
-            return CheckActionReplaceDevices(action, opts.PermissionDuration, error);
+            return CheckActionReplaceDevices(action, opts, error);
         case TAction::DRAIN_NODE:
         case TAction::CORDON_NODE:
             error.Deadline = TActivationContext::Now() + opts.PermissionDuration;
@@ -766,7 +768,7 @@ bool TCms::TryToLockStateStorageReplica(const TAction& action,
     auto now = AppData(ctx)->TimeProvider->Now();
     TDuration duration = TDuration::MicroSeconds(action.GetDuration()) + opts.PermissionDuration;
     for (auto ringInfo : ClusterInfo->StateStorageRings[ringGroupId]) {
-        auto state = ringInfo->CountState(now, State->Config.DefaultRetryTime, duration);
+        auto state = ringInfo->CountState(now, State->Config.DefaultRetryTime, duration, opts.RequestId);
         LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS, "Ring: " << ringInfo->RingId
                                                                  << "; State: " << TStateStorageRingInfo::RingStateToString(state));
         
@@ -960,6 +962,7 @@ bool TCms::TryToLockVDisks(const TAction &action,
     auto point = ClusterInfo->PushRollbackPoint();
     for (const auto &vdId : vdisks) {
         const auto &vdisk = ClusterInfo->VDisk(vdId);
+        Cerr << "Trying to lock VDisk: " << vdId.ToString() << ", RequestId " << opts.RequestId << Endl;
         if (TryToLockVDisk(opts, vdisk, duration, error)) {
             ClusterInfo->AddVDiskTempLock(vdId, action, opts.RequestId);
         } else {
@@ -1048,6 +1051,7 @@ bool TCms::CheckActionReplaceDevices(const TAction &action,
                                      const TActionOptions &opts,
                                      TErrorInfo &error) const
 {
+    Cerr << "Checking replace devices action, RequestId " << opts.RequestId << Endl;
     auto point = ClusterInfo->PushRollbackPoint();
     bool res = true;
     TDuration duration = TDuration::MicroSeconds(action.GetDuration());

@@ -523,6 +523,7 @@ class TCreateMaintenanceTask
         case Ydb::Maintenance::AVAILABILITY_MODE_STRONG:
         case Ydb::Maintenance::AVAILABILITY_MODE_WEAK:
         case Ydb::Maintenance::AVAILABILITY_MODE_FORCE:
+        case Ydb::Maintenance::AVAILABILITY_MODE_SMART:
             break;
         default:
             Reply(Ydb::StatusIds::BAD_REQUEST, "Unknown availability mode");

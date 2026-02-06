@@ -133,16 +133,28 @@ void TLockableItem::RemoveScheduledLocks(const TString &requestId)
 
 void TLockableItem::AddLockByRequest(const TString &requestId)
 {
+    Cerr << "Adding lock for request " << requestId << " for " << PrettyItemName() << Endl;
+    TStringStream ss;
+    DebugLocksDump(ss, "  ");
+    Cerr << ss.Str();
     ++RequestLockCount[requestId];
 }
 
 void TLockableItem::RemoveLocksByRequest(const TString &requestId, size_t count)
 {
+    if (count == 0) {
+        return;
+    }
+
+    Cerr << "Removing " << count << " locks for request " << requestId << " for " << PrettyItemName() << Endl;
+    TStringStream ss;
+    DebugLocksDump(ss, "  ");
+    Cerr << ss.Str();
     auto it = RequestLockCount.find(requestId);
     Y_ABORT_UNLESS(it != RequestLockCount.end() && it->second >= count);
 
     it->second -= count;
-    if (--it->second == 0) {
+    if (it->second == 0) {
         RequestLockCount.erase(it);
     }
 }
@@ -641,19 +653,21 @@ void TClusterInfo::AddNodeTenants(ui32 nodeId, const NKikimrTenantPool::TTenantP
 void TClusterInfo::AddNodeTempLock(ui32 nodeId, const NKikimrCms::TAction &action, const TString &requestId)
 {
     auto &node = NodeRef(nodeId);
-    node.TempLocks.push_back({RollbackPoint, action, requestId});
+    node.AddTempLock({RollbackPoint, action, requestId});
 }
 
 void TClusterInfo::AddPDiskTempLock(TPDiskID pdiskId, const NKikimrCms::TAction &action, const TString &requestId)
 {
     auto &pdisk = PDiskRef(pdiskId);
-    pdisk.TempLocks.push_back({RollbackPoint, action, requestId});
+    pdisk.AddTempLock({RollbackPoint, action, requestId});
 }
 
 void TClusterInfo::AddVDiskTempLock(TVDiskID vdiskId, const NKikimrCms::TAction &action, const TString &requestId)
 {
+    Cerr << "Trying to lock VDisk: " << vdiskId.ToString() << ", RequestId " << requestId << Endl;
+
     auto &vdisk = VDiskRef(vdiskId);
-    vdisk.TempLocks.push_back({RollbackPoint, action, requestId});
+    vdisk.AddTempLock({RollbackPoint, action, requestId});
 }
 
 static TServices MakeServices(const NKikimrCms::TAction &action) {

@@ -260,8 +260,8 @@ public:
     }
 
     void AddLock(const TPermissionInfo &permission) {
-        AddPriorityLock(Locks, TLock(permission));
         AddLockByRequest(permission.RequestId);
+        AddPriorityLock(Locks, TLock(permission));
     }
 
     void AddExternalLock(const TNotificationInfo &notification,
@@ -279,13 +279,13 @@ public:
         auto pos = LowerBound(ScheduledLocks.begin(), ScheduledLocks.end(), lock, [](auto &l, auto &r) {
             return l.Priority < r.Priority;
         });
-        ScheduledLocks.insert(pos, std::move(lock));
         AddLockByRequest(lock.RequestId);
+        ScheduledLocks.insert(pos, std::move(lock));
     }
 
     void AddTempLock(TTemporaryLock &&lock) {
-        TempLocks.push_back(std::move(lock));
         AddLockByRequest(lock.RequestId);
+        TempLocks.push_back(std::move(lock));
     }
 
     bool IsLocked(TErrorInfo &error, TDuration defaultRetryTime, TInstant no, TDuration durationw) const;

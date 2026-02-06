@@ -12,8 +12,6 @@ items:
   include:
     mode: link
     path: ../yql/reference/recipes/toc_i.yaml
-<<<<<<< HEAD
-=======
 - name: AI
   href: vector-search/index.md
   include:
@@ -24,4 +22,3 @@ items:
   include:
     mode: link
     path: transfer/toc_p.yaml
->>>>>>> 66cbf112120 (Added transaction control examples for multiple SDKs in tx-control.md (#30113))

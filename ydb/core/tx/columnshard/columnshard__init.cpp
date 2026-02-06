@@ -283,21 +283,6 @@ bool TTxInitSchema::Execute(TTransactionContext& txc, const TActorContext&) {
         }
     }
 
-    // Enable compression for the SmallBlobs table
-    const auto* smallBlobsDefaultColumnFamily = txc.DB.GetScheme().DefaultFamilyFor(Schema::SmallBlobs::TableId);
-    if (!smallBlobsDefaultColumnFamily || smallBlobsDefaultColumnFamily->Codec != NTable::TAlter::ECodec::LZ4) {
-        txc.DB.Alter().SetFamilyCompression(Schema::SmallBlobs::TableId, 0, NTable::TAlter::ECodec::LZ4);
-    }
-
-    // SmallBlobs table has compaction policy suitable for a big table
-    const auto* smallBlobsTable = txc.DB.GetScheme().GetTableInfo(Schema::SmallBlobs::TableId);
-    NLocalDb::TCompactionPolicyPtr bigTableCompactionPolicy = NLocalDb::CreateDefaultUserTablePolicy();
-    bigTableCompactionPolicy->MinDataPageSize = 32 * 1024;
-    if (!smallBlobsTable || !smallBlobsTable->CompactionPolicy ||
-        smallBlobsTable->CompactionPolicy->Generations.size() != bigTableCompactionPolicy->Generations.size()) {
-        txc.DB.Alter().SetCompactionPolicy(Schema::SmallBlobs::TableId, *bigTableCompactionPolicy);
-    }
-
     return true;
 }
 

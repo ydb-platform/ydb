@@ -101,13 +101,13 @@ struct Schema : NIceDb::Schema {
         SchemaPresetInfo = 3,
         TtlSettingsPresetInfo = 4,
         TableInfo = 5,
-        LongTxWrites = 6,
+        LongTxWrites_NotUsedAnymore = 6,
         BlobsToKeep = 7,
         BlobsToDelete = 8,
         SchemaPresetVersionInfo = 9,
         TtlSettingsPresetVersionInfo = 10,
         TableVersionInfo = 11,
-        SmallBlobs = 12,
+        SmallBlobs_NotUsedAnymore = 12,
         OneToOneEvictedBlobs = 13,
         BlobsToDeleteWT = 14,
         InFlightSnapshots = 15,
@@ -202,16 +202,6 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<PathId, SinceStep, SinceTxId, InfoProto>;
     };
 
-    struct LongTxWrites : Table<(ui32)ECommonTables::LongTxWrites> {
-        struct WriteId: Column<1, NScheme::NTypeIds::Uint64> {};
-        struct LongTxId : Column<2, NScheme::NTypeIds::String> {};
-        struct WritePartId: Column<3, NScheme::NTypeIds::Uint32> {};
-        struct GranuleShardingVersion: Column<4, NScheme::NTypeIds::Uint32> {};
-
-        using TKey = TableKey<WriteId>;
-        using TColumns = TableColumns<WriteId, LongTxId, WritePartId, GranuleShardingVersion>;
-    };
-
     struct BlobsToKeep : Table<(ui32)ECommonTables::BlobsToKeep> {
         struct BlobId : Column<1, NScheme::NTypeIds::String> {};
 
@@ -224,14 +214,6 @@ struct Schema : NIceDb::Schema {
 
         using TKey = TableKey<BlobId>;
         using TColumns = TableColumns<BlobId>;
-    };
-
-    struct SmallBlobs : Table<(ui32)ECommonTables::SmallBlobs> {
-        struct BlobId : Column<1, NScheme::NTypeIds::String> {};
-        struct Data : Column<2, NScheme::NTypeIds::String> {};
-
-        using TKey = TableKey<BlobId>;
-        using TColumns = TableColumns<BlobId, Data>;
     };
 
     struct OneToOneEvictedBlobs : Table<(ui32)ECommonTables::OneToOneEvictedBlobs> {
@@ -292,26 +274,6 @@ struct Schema : NIceDb::Schema {
 
     // Index tables
 
-    // InsertTable - common for all indices
-    struct InsertTable : NIceDb::Schema::Table<InsertTableId> {
-        struct Committed : Column<1, NScheme::NTypeIds::Byte> {};
-        struct PlanStep : Column<2, NScheme::NTypeIds::Uint64> {};
-        struct WriteTxId : Column<3, NScheme::NTypeIds::Uint64> {};
-        struct PathId : Column<4, NScheme::NTypeIds::Uint64> {};
-        struct DedupId : Column<5, NScheme::NTypeIds::String> {};
-        struct BlobId: Column<6, NScheme::NTypeIds::String> {};
-        struct Meta : Column<7, NScheme::NTypeIds::String> {};
-        struct IndexPlanStep : Column<8, NScheme::NTypeIds::Uint64> {};
-        struct IndexTxId : Column<9, NScheme::NTypeIds::Uint64> {};
-        struct SchemaVersion : Column<10, NScheme::NTypeIds::Uint64> {};
-
-        struct BlobRangeOffset: Column<11, NScheme::NTypeIds::Uint64> {};
-        struct BlobRangeSize: Column<12, NScheme::NTypeIds::Uint64> {};
-        struct InsertWriteId: Column<13, NScheme::NTypeIds::Uint64> {};
-
-        using TKey = TableKey<Committed, PlanStep, WriteTxId, PathId, DedupId>;
-        using TColumns = TableColumns<Committed, PlanStep, WriteTxId, PathId, DedupId, BlobId, Meta, IndexPlanStep, IndexTxId, SchemaVersion, BlobRangeOffset, BlobRangeSize, InsertWriteId>;
-    };
 
     struct IndexGranules : NIceDb::Schema::Table<GranulesTableId> {
         struct Index : Column<1, NScheme::NTypeIds::Uint32> {};
@@ -595,15 +557,12 @@ struct Schema : NIceDb::Schema {
         TtlSettingsPresetVersionInfo,
         TableInfo,
         TableVersionInfo,
-        LongTxWrites,
         BlobsToKeep,
         BlobsToDelete,
         BlobsToDeleteWT,
-        InsertTable,
         IndexGranules,
         IndexColumns,
         IndexCounters,
-        SmallBlobs,
         OneToOneEvictedBlobs,
         Operations,
         TierBlobsDraft,
@@ -825,21 +784,21 @@ struct Schema : NIceDb::Schema {
         db.Table<TableInfo>().Key(pathId.GetRawValue()).Delete();
     }
 
-    static void SaveLongTxWrite(NIceDb::TNiceDb& db, const TInsertWriteId writeId, const ui32 writePartId, const NLongTxService::TLongTxId& longTxId, const std::optional<ui32> granuleShardingVersion) {
-        NKikimrLongTxService::TLongTxId proto;
-        longTxId.ToProto(&proto);
-        TString serialized;
-        Y_ABORT_UNLESS(proto.SerializeToString(&serialized));
-        db.Table<LongTxWrites>().Key((ui64)writeId).Update(
-            NIceDb::TUpdate<LongTxWrites::LongTxId>(serialized), 
-            NIceDb::TUpdate<LongTxWrites::WritePartId>(writePartId), 
-            NIceDb::TUpdate<LongTxWrites::GranuleShardingVersion>(granuleShardingVersion.value_or(0))
-            );
-    }
+    // static void SaveLongTxWrite(NIceDb::TNiceDb& db, const TInsertWriteId writeId, const ui32 writePartId, const NLongTxService::TLongTxId& longTxId, const std::optional<ui32> granuleShardingVersion) {
+    //     NKikimrLongTxService::TLongTxId proto;
+    //     longTxId.ToProto(&proto);
+    //     TString serialized;
+    //     Y_ABORT_UNLESS(proto.SerializeToString(&serialized));
+    //     db.Table<LongTxWrites>().Key((ui64)writeId).Update(
+    //         NIceDb::TUpdate<LongTxWrites::LongTxId>(serialized), 
+    //         NIceDb::TUpdate<LongTxWrites::WritePartId>(writePartId), 
+    //         NIceDb::TUpdate<LongTxWrites::GranuleShardingVersion>(granuleShardingVersion.value_or(0))
+    //         );
+    // }
 
-    static void EraseLongTxWrite(NIceDb::TNiceDb& db, const TInsertWriteId writeId) {
-        db.Table<LongTxWrites>().Key((ui64)writeId).Delete();
-    }
+    // static void EraseLongTxWrite(NIceDb::TNiceDb& db, const TInsertWriteId writeId) {
+    //     db.Table<LongTxWrites>().Key((ui64)writeId).Delete();
+    // }
 
     // IndexCounters
 

@@ -3126,7 +3126,9 @@ Y_UNIT_TEST(TestSizeLag) {
 
         PQTabletRestart(tc);
 
-        PQGetPartInfo(0, 78, tc);
+        const ui64 endOffset = 78;
+
+        PQGetPartInfo(0, endOffset, tc);
 
         // SYNC INIT DATA KEY: d0000000000_00000000000000000000_00000_0000000027_00000 size 8295737
         // SYNC INIT DATA KEY: d0000000000_00000000000000000027_00000_0000000027_00000 size 8295737
@@ -3138,11 +3140,13 @@ Y_UNIT_TEST(TestSizeLag) {
         // SYNC INIT DATA KEY: d0000000000_00000000000000000077_00000_0000000001_00000? size 10301
 
         TVector<ui64> sizeLags;
-        for (ui64 offset = 0; offset < 78; ++offset) {
-            sizeLags.push_back(GetSizeLag(0, offset, tc));
+        for (ui64 offset = 0; offset < endOffset; ++offset) {
+            sizeLags.push_back(GetSizeLag(0, offset, false, tc));
         }
 
-        for (size_t i = 0; i < 77; ++i) {
+        sizeLags.push_back(GetSizeLag(0, endOffset, true, tc));
+
+        for (size_t i = 0; i < endOffset; ++i) {
             // лаг не должен увеличиваться
             UNIT_ASSERT_GE(sizeLags[i], sizeLags[i + 1]);
         }
@@ -3159,6 +3163,9 @@ Y_UNIT_TEST(TestSizeLag) {
         UNIT_ASSERT_GT(sizeLags[74], sizeLags[75]);
         UNIT_ASSERT_GT(sizeLags[75], sizeLags[76]);
         UNIT_ASSERT_GT(sizeLags[76], sizeLags[77]);
+        UNIT_ASSERT_GT(sizeLags[77], sizeLags[endOffset]);
+
+        UNIT_ASSERT_VALUES_EQUAL(sizeLags[endOffset], 0);
     });
 }
 

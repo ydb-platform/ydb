@@ -574,6 +574,7 @@ void CmdRead(
 
 ui64 GetSizeLag(const ui32 partition,
                 const ui64 offset,
+                bool isEndOffset,
                 TTestContext& tc);
 
 void BeginCmdRead(const TPQCmdReadSettings& settings, TTestContext& tc);

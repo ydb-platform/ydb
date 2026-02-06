@@ -1058,10 +1058,15 @@ void CmdRead(
 
 ui64 GetSizeLag(const ui32 partition,
                 const ui64 offset,
+                bool isEndOffset,
                 TTestContext& tc)
 {
     ui64 sizeLag = 0;
-    CmdRead(partition, offset, 1, Max<i32>(), 1, false, tc, {static_cast<i32>(offset)}, 0, 0, "user", &sizeLag);
+    if (isEndOffset) {
+        CmdRead(partition, offset, 1, Max<i32>(), 0, false, tc, {}, 0, 0, "user", &sizeLag);
+    } else {
+        CmdRead(partition, offset, 1, Max<i32>(), 1, false, tc, {static_cast<i32>(offset)}, 0, 0, "user", &sizeLag);
+    }
     return sizeLag;
 }
 

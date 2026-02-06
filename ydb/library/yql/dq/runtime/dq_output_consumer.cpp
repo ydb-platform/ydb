@@ -368,6 +368,15 @@ public:
         return true;
     }
 
+    TString DebugString() override {
+        TStringBuilder builder;
+        builder << "TDqOutputMultiConsumer [";
+        for (auto consumer : Consumers) {
+            builder << consumer->DebugString();
+        }
+        builder << ']';
+        return builder;
+    }
 
 private:
     TVector<IDqOutputConsumer::TPtr> Consumers;
@@ -414,6 +423,10 @@ public:
         return Output->IsEarlyFinished();
     }
 
+    TString DebugString() override {
+        return "TDqOutputMapConsumer";
+    }
+
 private:
     IDqOutput::TPtr Output;
 };
@@ -452,10 +465,10 @@ public:
 
     TString DebugString() override {
         TStringBuilder builder;
-        builder << Aggregator->DebugString() << " TDqOutputHashPartitionConsumer {";
+        builder << "TDqOutputHashPartitionConsumer " << Aggregator->DebugString() << " Channels {";
         ui32 i = 0;
         for (auto output : Outputs) {
-            builder << " C" << i++ << ":" << static_cast<ui32>(output->UpdateFillLevel());
+            builder << " C" << i++ << ":" << FillLevelToString(output->UpdateFillLevel());
             if (i >= 20) {
                 builder << "...";
                 break;
@@ -573,10 +586,10 @@ private:
 
     TString DebugString() override {
         TStringBuilder builder;
-        builder << Aggregator->DebugString() << " TDqOutputHashPartitionConsumerScalar {";
+        builder << "TDqOutputHashPartitionConsumerScalar " << Aggregator->DebugString() << " Channels {";
         ui32 i = 0;
         for (auto output : Outputs_) {
-            builder << " C" << i++ << ":" << static_cast<ui32>(output->UpdateFillLevel());
+            builder << " C" << i++ << ":" << FillLevelToString(output->UpdateFillLevel());
             if (i >= 20) {
                 builder << "...";
                 break;
@@ -703,10 +716,10 @@ private:
 
     TString DebugString() override {
         TStringBuilder builder;
-        builder << Aggregator->DebugString() << " TDqOutputHashPartitionConsumerBlock {";
+        builder << "TDqOutputHashPartitionConsumerBlock " << Aggregator->DebugString() << " Channels {";
         ui32 i = 0;
         for (auto output : Outputs_) {
-            builder << " C" << i++ << ":" << static_cast<ui32>(output->UpdateFillLevel());
+            builder << " C" << i++ << ":" << FillLevelToString(output->UpdateFillLevel());
             if (i >= 20) {
                 builder << "...";
                 break;
@@ -900,10 +913,10 @@ public:
 
     TString DebugString() override {
         TStringBuilder builder;
-        builder << Aggregator->DebugString() << " TDqOutputBroadcastConsumer {";
+        builder << "TDqOutputBroadcastConsumer " << Aggregator->DebugString() << " Channels {";
         ui32 i = 0;
         for (auto output : Outputs) {
-            builder << " C" << i++ << ":" << static_cast<ui32>(output->UpdateFillLevel());
+            builder << " C" << i++ << ":" << FillLevelToString(output->UpdateFillLevel());
             if (i >= 20) {
                 builder << "...";
                 break;

@@ -1617,7 +1617,23 @@ protected:
                 str << "  TaskId: " << Task.GetId() << Endl;
                 str << "  StageId: " << Task.GetStageId() << Endl;
                 str << "  State: " << NDqProto::EComputeState_Name(State) << Endl;
-
+                str << "  ExecuterId: ";
+                HREF(TStringBuilder() << "/node/" << ExecuterId.NodeId() << "/actors/kqp_node?ex=" << ExecuterId)  {
+                    str << ExecuterId;
+                }
+                str << Endl;
+                if (auto stats = GetTaskRunnerStats()) {
+                    str << "  CurrentWaitInputStartTime: ";
+                    if (stats->CurrentWaitInputStartTime) {
+                        str << stats->CurrentWaitInputStartTime;
+                    }
+                    str << Endl
+                        << "  CurrentWaitOutputStartTime: ";
+                    if (stats->CurrentWaitOutputStartTime) {
+                        str << stats->CurrentWaitOutputStartTime;
+                    }
+                    str << Endl;
+                }
                 TaskRunnerMonitoringInfo(str);
 
                 COLLAPSED_BUTTON_CONTENT("ProcessOutputsState", TStringBuilder() << "ProcessOutputsState: " << ProcessOutputsState.LastRunTime << ' ' << ProcessOutputsState.LastRunStatus) {

@@ -51,7 +51,7 @@ namespace NYdb {
             static void RetryableWriterLoop(const TTopicWorkloadWriterParams& params);
             static void WriterLoop(const TTopicWorkloadWriterParams& params, TInstant endTime);
             static std::vector<TString> GenerateMessages(size_t messageSize);
-        protected:
+        private:
             TTopicWorkloadWriterWorker(const TTopicWorkloadWriterParams& params);
             ~TTopicWorkloadWriterWorker();
 

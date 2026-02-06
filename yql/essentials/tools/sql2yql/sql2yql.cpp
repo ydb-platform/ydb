@@ -443,7 +443,7 @@ int BuildAST(int argc, char* argv[]) {
                 hasError = !TestFormat(query, settings, outFileNameFormat, res.Has("test-double-format"));
             }
 
-            if (res.Has("test-lexers") && syntaxVersion == 1 && !hasError && parseRes.Root) {
+            if (res.Has("test-lexers") && syntaxVersion == 1 && !res.Has("pg") && !hasError && parseRes.Root) {
                 hasError = !TestLexers(query);
             }
 

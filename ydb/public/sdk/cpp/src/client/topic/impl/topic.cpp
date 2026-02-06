@@ -107,7 +107,7 @@ TConsumer::TConsumer(const Ydb::Topic::Consumer& consumer)
     if (consumer.has_shared_consumer_type()) {
         ConsumerType_ = EConsumerType::Shared;
         KeepMessagesOrder_ = consumer.shared_consumer_type().keep_messages_order();
-        DefaultProcessingTimeout_ = TDuration::Seconds(consumer.shared_consumer_type().default_processing_timeout().seconds());
+        DefaultProcessingTimeout_ = TDuration::Seconds(consumer.shared_consumer_type().processing_timeout().seconds());
     } else {
         ConsumerType_ = EConsumerType::Streaming;
     }
@@ -728,7 +728,7 @@ TConsumerSettings<TSettings>::TConsumerSettings(TSettings& parent, const Ydb::To
     , ReadFrom_(TInstant::Seconds(proto.read_from().seconds()))
     , SupportedCodecs_(DeserializeCodecs(proto.supported_codecs()))
     , KeepMessagesOrder_(proto.shared_consumer_type().keep_messages_order())
-    , DefaultProcessingTimeout_(TDuration::Seconds(proto.shared_consumer_type().default_processing_timeout().seconds()))
+    , DefaultProcessingTimeout_(TDuration::Seconds(proto.shared_consumer_type().processing_timeout().seconds()))
     , DeadLetterPolicy_(proto.shared_consumer_type().dead_letter_policy())
     , Attributes_(DeserializeAttributes(proto.attributes()))
     , Parent_(parent)
@@ -761,7 +761,7 @@ void TConsumerSettings<TSettings>::SerializeTo(Ydb::Topic::Consumer& proto) cons
                 shared->set_keep_messages_order(KeepMessagesOrder_.value());
             }
             if (DefaultProcessingTimeout_) {
-                shared->mutable_default_processing_timeout()->set_seconds(DefaultProcessingTimeout_.value().Seconds());
+                shared->mutable_processing_timeout()->set_seconds(DefaultProcessingTimeout_.value().Seconds());
             }
             if (DeadLetterPolicy_.Enabled_) {
                 shared->mutable_dead_letter_policy()->set_enabled(DeadLetterPolicy_.Enabled_.value());
@@ -819,7 +819,7 @@ void TAlterConsumerSettings::SerializeTo(Ydb::Topic::AlterConsumer& proto) const
     }
 
     if (DefaultProcessingTimeout_) {
-        proto.mutable_alter_shared_consumer_type()->mutable_set_default_processing_timeout()
+        proto.mutable_alter_shared_consumer_type()->mutable_set_processing_timeout()
             ->set_seconds(DefaultProcessingTimeout_.value().Seconds());
     }
 

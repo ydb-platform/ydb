@@ -239,6 +239,7 @@ message TEvKqpInputActorResultInfo {
     optional string BatchOperationMaxKey = 2;
     repeated uint32 BatchOperationKeyIds = 3;
     repeated uint64 DeferredBreakerQueryTraceIds = 4; // QueryTraceIds of transactions that broke locks in deferred scenarios
+    repeated uint32 DeferredBreakerNodeIds = 5; // Node IDs where breaker query texts are cached (parallel to DeferredBreakerQueryTraceIds)
 }
 
 message TKqpReadRangesSourceSettings {
@@ -2312,6 +2313,9 @@ message TEvReadResult {
 
     // QueryTraceIds of transactions that broke locks in deferred scenarios (e.g., OLTP sink UPSERT...SELECT)
     repeated uint64 DeferredBreakerQueryTraceIds = 14;
+
+    // Node IDs where breaker query texts are cached (parallel to DeferredBreakerQueryTraceIds)
+    repeated uint32 DeferredBreakerNodeIds = 15;
 
     // Data for the possibly partial result
     oneof ReadResult {

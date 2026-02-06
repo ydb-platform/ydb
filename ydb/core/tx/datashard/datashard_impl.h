@@ -3100,12 +3100,18 @@ private:
     struct TRecentWriteForTli {
         TRowVersion WriteVersion;
         ui64 QueryTraceId;
+        ui32 SenderNodeId;  // Node where the breaker's SessionActor ran (where TNodeQueryTextCache is populated)
     };
     TDeque<TRecentWriteForTli> RecentWritesForTli;
 
 public:
+    struct TBreakerInfo {
+        ui64 QueryTraceId;
+        ui32 SenderNodeId;
+    };
+
     // Add a recent write entry for TLI breaker tracking
-    void AddRecentWriteForTli(const TRowVersion& writeVersion, ui64 queryTraceId) {
+    void AddRecentWriteForTli(const TRowVersion& writeVersion, ui64 queryTraceId, ui32 senderNodeId) {
         if (queryTraceId == 0) {
             return; // Don't track writes without QueryTraceId
         }
@@ -3113,16 +3119,16 @@ public:
         while (RecentWritesForTli.size() >= MaxRecentWritesForTli) {
             RecentWritesForTli.pop_front();
         }
-        RecentWritesForTli.push_back({writeVersion, queryTraceId});
+        RecentWritesForTli.push_back({writeVersion, queryTraceId, senderNodeId});
     }
 
-    // Find breaker QueryTraceIds for writes that happened after a given read version
-    TVector<ui64> FindBreakerQueryTraceIds(const TRowVersion& readVersion) const {
-        TVector<ui64> result;
+    // Find breaker info (QueryTraceId + SenderNodeId) for writes that happened after a given read version
+    TVector<TBreakerInfo> FindBreakerInfoForTli(const TRowVersion& readVersion) const {
+        TVector<TBreakerInfo> result;
         // Iterate from newest to oldest for efficiency
         for (auto it = RecentWritesForTli.rbegin(); it != RecentWritesForTli.rend(); ++it) {
             if (it->WriteVersion > readVersion) {
-                result.push_back(it->QueryTraceId);
+                result.push_back({it->QueryTraceId, it->SenderNodeId});
             } else {
                 // Since writes are added in order, older writes won't match
                 break;

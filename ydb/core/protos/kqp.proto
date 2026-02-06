@@ -1058,3 +1058,15 @@ message TStreamingQueryState {
     optional string ResourcePool = 10;
     optional uint64 QueryTextRevision = 12;
 }
+
+// Cross-node lookup of QueryTraceId -> QueryText for TLI logging.
+// Used when the victim's SessionActor needs to look up the breaker's query text
+// from the node where the breaker's SessionActor ran (where TNodeQueryTextCache is populated).
+message TEvLookupQueryTextRequest {
+    optional uint64 QueryTraceId = 1;
+}
+
+message TEvLookupQueryTextResponse {
+    optional uint64 QueryTraceId = 1;
+    optional string QueryText = 2;
+}

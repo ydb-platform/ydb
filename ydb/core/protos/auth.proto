@@ -105,10 +105,13 @@ message TLdapAuthentication {
         optional bool Enable = 1 [default = false];
         optional string CaCertFile = 2;
         optional TCertRequire CertRequire = 3 [default = DEMAND];
+        optional string CertFile = 4;
+        optional string KeyFile = 5;
     }
 
     message TExtendedSettings {
         optional bool EnableNestedGroupsSearch = 1 [default = false];
+        optional bool EnableSaslExternalBind = 2 [default = false];
     }
 
     optional string Host = 1; // DEPRECATED: Use Hosts instead it

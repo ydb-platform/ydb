@@ -17,6 +17,29 @@ message ESidType {
     }
 }
 
+message ESaslAuthMech {
+    enum SaslAuthMech {
+        Unknown = 0;
+        Plain = 1;
+        Scram = 2;
+        Simple = 3;
+        External = 4;
+    }
+}
+
+message EHashType {
+    enum HashType {
+        Unknown = 0;
+        Argon = 1;
+        ScramSha256 = 2;
+    }
+}
+
+message THashInitParams {
+    EHashType.HashType HashType = 1;
+    string InitParams = 2;
+}
+
 message TSid {
     string Name = 1;
     ESidType.SidType Type = 2;

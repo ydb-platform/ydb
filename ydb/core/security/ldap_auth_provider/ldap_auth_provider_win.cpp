@@ -1,5 +1,6 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/login/protos/login.pb.h>
 #include <ydb/core/base/ticket_parser.h>
 #include <ydb/core/security/ticket_parser_log.h>
 #include "ldap_auth_provider.h"
@@ -15,14 +16,14 @@ namespace {
 
 char ldapNoAttribute[] = LDAP_NO_ATTRS;
 
-const char* ConvertSaslMechanism(const ESaslMechanism& mechanism);
+const char* ConvertSaslMechanism(const NLoginProto::ESaslAuthMech::SaslAuthMech& mechanism);
 
 }
 
 char* noAttributes[] = {ldapNoAttribute, nullptr};
 const TString LDAPS_SCHEME = "ldaps";
 
-int Bind(LDAP* ld, const TString& dn, const ESaslMechanism& mechanism, std::vector<char>* credentials) {
+int Bind(LDAP* ld, const TString& dn, const NLoginProto::ESaslAuthMech::SaslAuthMech& mechanism, std::vector<char>* credentials) {
     static char initBvVal[] = "";
     static constexpr BerValue defaultCredentials {.bv_len = 0, .bv_val = initBvVal};
     BerValue cred = defaultCredentials;
@@ -122,12 +123,12 @@ ui32 GetPort(const TString& scheme) {
 
 int GetScope(const EScope& scope) {
     switch (scope) {
-        case EScope::BASE:
-            return LDAP_SCOPE_BASE;
-        case EScope::ONE_LEVEL:
-            return LDAP_SCOPE_ONELEVEL;
-        case EScope::SUBTREE:
-            return LDAP_SCOPE_SUBTREE;
+    case EScope::BASE:
+        return LDAP_SCOPE_BASE;
+    case EScope::ONE_LEVEL:
+        return LDAP_SCOPE_ONELEVEL;
+    case EScope::SUBTREE:
+        return LDAP_SCOPE_SUBTREE;
     }
 }
 
@@ -142,26 +143,26 @@ int SetProtocolVersion(LDAP* ld) {
 
 NKikimr::TEvLdapAuthProvider::EStatus ErrorToStatus(int err) {
     switch (err) {
-        case LDAP_SUCCESS:
-            return NKikimr::TEvLdapAuthProvider::EStatus::SUCCESS;
-        case LDAP_INVALID_CREDENTIALS:
-            return NKikimr::TEvLdapAuthProvider::EStatus::UNAUTHORIZED;
-        case LDAP_FILTER_ERROR:
-            return NKikimr::TEvLdapAuthProvider::EStatus::BAD_REQUEST;
-        default:
-            return NKikimr::TEvLdapAuthProvider::EStatus::UNAVAILABLE;
+    case LDAP_SUCCESS:
+        return NKikimr::TEvLdapAuthProvider::EStatus::SUCCESS;
+    case LDAP_INVALID_CREDENTIALS:
+        return NKikimr::TEvLdapAuthProvider::EStatus::UNAUTHORIZED;
+    case LDAP_FILTER_ERROR:
+        return NKikimr::TEvLdapAuthProvider::EStatus::BAD_REQUEST;
+    default:
+        return NKikimr::TEvLdapAuthProvider::EStatus::UNAVAILABLE;
     }
 }
 
 bool IsRetryableError(int error) {
     switch (error) {
-        case LDAP_SERVER_DOWN:
-        case LDAP_TIMEOUT:
-        case LDAP_CONNECT_ERROR:
-        case LDAP_BUSY:
-        case LDAP_UNAVAILABLE:
-        case LDAP_ADMIN_LIMIT_EXCEEDED:
-            return true;
+    case LDAP_SERVER_DOWN:
+    case LDAP_TIMEOUT:
+    case LDAP_CONNECT_ERROR:
+    case LDAP_BUSY:
+    case LDAP_UNAVAILABLE:
+    case LDAP_ADMIN_LIMIT_EXCEEDED:
+        return true;
     }
     return false;
 }
@@ -187,17 +188,20 @@ int ConvertRequireCert(const NKikimrProto::TLdapAuthentication::TUseTls::TCertRe
 
 namespace {
 
-const char* ConvertSaslMechanism(const ESaslMechanism& mechanism) {
+const char* ConvertSaslMechanism(const NLoginProto::ESaslAuthMech::SaslAuthMech& mechanism) {
     switch (mechanism) {
-        case ESaslMechanism::SIMPLE: {
-            return LDAP_SASL_SIMPLE;
-        }
-        case ESaslMechanism::PLAIN: {
-            return "PLAIN";
-        }
-        case ESaslMechanism::EXTERNAL: {
-            return "EXTERNAL";
-        }
+    case NLoginProto::ESaslAuthMech::Simple: {
+        return LDAP_SASL_SIMPLE;
+    }
+    case NLoginProto::ESaslAuthMech::Plain: {
+        return "PLAIN";
+    }
+    case NLoginProto::ESaslAuthMech::External: {
+        return "EXTERNAL";
+    }
+    default: {
+        return "UNKNOWN";
+    }
     }
 }
 

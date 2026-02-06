@@ -216,7 +216,7 @@ std::vector<TLdapRequestProcessor::TProtocolOpData> TLdapRequestProcessor::Proce
     case EAuthMethod::LDAP_AUTH_NONE:
         break;
     case EAuthMethod::LDAP_AUTH_SIMPLE:
-        requestInfo.Mechanism = ESaslMechanism::SIMPLE;
+        requestInfo.Mechanism = "simple";
         requestInfo.Password = GetString();
         break;
     case EAuthMethod::LDAP_AUTH_SASL:
@@ -242,7 +242,7 @@ std::vector<TLdapRequestProcessor::TProtocolOpData> TLdapRequestProcessor::Proce
         TString credentials = GetString();
         Y_UNUSED(credentials);
         if (saslMechanism == "EXTERNAL") {
-            requestInfo.Mechanism = ESaslMechanism::EXTERNAL;
+            requestInfo.Mechanism = "external";
             TString bindDn = GetBindDnFromClientCert();
             if (bindDn.empty()) {
                 responseOpData.Data = CreateResponse({.Status = EStatus::PROTOCOL_ERROR});

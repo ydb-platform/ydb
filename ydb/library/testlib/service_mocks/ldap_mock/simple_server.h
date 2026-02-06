@@ -1,10 +1,10 @@
 #pragma once
 #include "ldap_defines.h"
 
-#include <util/system/types.h>
+#include <util/generic/hash.h>
 #include <util/generic/ptr.h>
 #include <util/generic/string.h>
-#include <util/generic/hash.h>
+#include <util/system/types.h>
 
 #include <openssl/ssl.h>
 

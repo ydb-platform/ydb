@@ -125,7 +125,6 @@ void LdapAuthWithValidCredentials(const ESecurityConnectionType& secureType) {
     UNIT_ASSERT(!token.empty());
 
     loginConnection.Stop();
-    ldapServer.Stop();
 }
 
 } // namespace
@@ -161,7 +160,6 @@ Y_UNIT_TEST_SUITE(TGRpcLdapAuthentication) {
         UNIT_ASSERT_EXCEPTION_CONTAINS(loginProvider->GetAuthInfo(), yexception, "Could not login via LDAP");
 
         loginConnection.Stop();
-        ldapServer.Stop();
     }
 
     Y_UNIT_TEST(LdapAuthWithInvalidRobouserPassword) {
@@ -180,7 +178,6 @@ Y_UNIT_TEST_SUITE(TGRpcLdapAuthentication) {
         UNIT_ASSERT_EXCEPTION_CONTAINS(loginProvider->GetAuthInfo(), yexception, "Could not login via LDAP");
 
         loginConnection.Stop();
-        ldapServer.Stop();
     }
 
     Y_UNIT_TEST(LdapAuthWithInvalidSearchFilter) {
@@ -199,7 +196,6 @@ Y_UNIT_TEST_SUITE(TGRpcLdapAuthentication) {
         UNIT_ASSERT_EXCEPTION_CONTAINS(loginProvider->GetAuthInfo(), yexception, "Could not login via LDAP");
 
         loginConnection.Stop();
-        ldapServer.Stop();
     }
 
     void CheckRequiredLdapSettings(std::function<void(NKikimrProto::TLdapAuthentication*, ui16, const TLdapClientOptions&)> initLdapSettings, const TString& expectedErrorMessage) {
@@ -216,7 +212,6 @@ Y_UNIT_TEST_SUITE(TGRpcLdapAuthentication) {
         UNIT_ASSERT_EXCEPTION_CONTAINS(loginProvider->GetAuthInfo(), yexception, expectedErrorMessage);
 
         loginConnection.Stop();
-        ldapServer.Stop();
     }
 
     Y_UNIT_TEST(LdapAuthServerIsUnavailable) {
@@ -271,7 +266,6 @@ Y_UNIT_TEST_SUITE(TGRpcLdapAuthentication) {
         UNIT_ASSERT_EXCEPTION_CONTAINS(loginProvider->GetAuthInfo(), yexception, "Could not login via LDAP");
 
         loginConnection.Stop();
-        ldapServer.Stop();
     }
 
     Y_UNIT_TEST(LdapAuthWithInvalidPassword) {
@@ -313,7 +307,6 @@ Y_UNIT_TEST_SUITE(TGRpcLdapAuthentication) {
         UNIT_ASSERT_EXCEPTION_CONTAINS(loginProvider->GetAuthInfo(), yexception, "Could not login via LDAP");
 
         loginConnection.Stop();
-        ldapServer.Stop();
     }
 
     Y_UNIT_TEST(LdapAuthWithEmptyPassword) {
@@ -354,7 +347,6 @@ Y_UNIT_TEST_SUITE(TGRpcLdapAuthentication) {
         UNIT_ASSERT_EXCEPTION_CONTAINS(loginProvider->GetAuthInfo(), yexception, "Could not login via LDAP");
 
         loginConnection.Stop();
-        ldapServer.Stop();
     }
 
     Y_UNIT_TEST(LdapAuthSetIncorrectDomain) {
@@ -391,7 +383,7 @@ Y_UNIT_TEST_SUITE(TGRpcLdapAuthentication) {
         TString password = "ldapUserPassword";
 
         LdapMock::TLdapMockResponses responses;
-        responses.BindResponses.push_back({{{.Login = "cn=robouser,dc=search,dc=yandex,dc=net", .Password = "", .Mechanism = LdapMock::ESaslMechanism::EXTERNAL}}, {.Status = LdapMock::EStatus::SUCCESS}});
+        responses.BindResponses.push_back({{{.Login = "cn=robouser,dc=search,dc=yandex,dc=net", .Password = "", .Mechanism = "external"}}, {.Status = LdapMock::EStatus::SUCCESS}});
         responses.BindResponses.push_back({{{.Login = "uid=" + login + ",dc=search,dc=yandex,dc=net", .Password = password}}, {.Status = LdapMock::EStatus::SUCCESS}});
 
         LdapMock::TSearchRequestInfo fetchUserSearchRequestInfo {
@@ -443,7 +435,6 @@ Y_UNIT_TEST_SUITE(TGRpcLdapAuthentication) {
         UNIT_ASSERT(!token.empty());
 
         loginConnection.Stop();
-        ldapServer.Stop();
     }
 
     Y_UNIT_TEST(CanNotAuthOverSaslExternalWithoutClientCert) {
@@ -451,7 +442,7 @@ Y_UNIT_TEST_SUITE(TGRpcLdapAuthentication) {
         TString password = "ldapUserPassword";
 
         LdapMock::TLdapMockResponses responses;
-        responses.BindResponses.push_back({{{.Login = "cn=robouser,dc=search,dc=yandex,dc=net", .Password = "", .Mechanism = LdapMock::ESaslMechanism::EXTERNAL}}, {.Status = LdapMock::EStatus::SUCCESS}});
+        responses.BindResponses.push_back({{{.Login = "cn=robouser,dc=search,dc=yandex,dc=net", .Password = "", .Mechanism = "external"}}, {.Status = LdapMock::EStatus::SUCCESS}});
         responses.BindResponses.push_back({{{.Login = "uid=" + login + ",dc=search,dc=yandex,dc=net", .Password = password}}, {.Status = LdapMock::EStatus::SUCCESS}});
 
         LdapMock::TSearchRequestInfo fetchUserSearchRequestInfo {
@@ -501,7 +492,6 @@ Y_UNIT_TEST_SUITE(TGRpcLdapAuthentication) {
         UNIT_ASSERT(token.empty());
 
         loginConnection.Stop();
-        ldapServer.Stop();
     }
 }
 } //namespace NKikimr

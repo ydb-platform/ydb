@@ -261,11 +261,18 @@ lrwxrwxrwx 1 root root    10 Nov 26 12:54 ydb_disk_ssd_03 -> ../../vdd1
   domains_config:
     security_config:
       enforce_user_token_requirement: true
-      default_users:
-        - name: "root"
-          password: ""
-      default_access:
-        - "+(F):root"
+      monitoring_allowed_sids:
+      - "root"
+      - "ADMINS"
+      - "DATABASE-ADMINS"
+      administration_allowed_sids:
+      - "root"
+      - "ADMINS"
+      - "DATABASE-ADMINS"
+      viewer_allowed_sids:
+      - "root"
+      - "ADMINS"
+      - "DATABASE-ADMINS"
     domain:
     - name: Root
       storage_pool_types:
@@ -291,29 +298,8 @@ lrwxrwxrwx 1 root root    10 Nov 26 12:54 ydb_disk_ssd_03 -> ../../vdd1
   table_service_config:
     sql_version: 1
   actor_system_config:
-    executor:
-    - name: System
-      threads: 2
-      type: BASIC
-    - name: User
-      threads: 3
-      type: BASIC
-    - name: Batch
-      threads: 2
-      type: BASIC
-    - name: IO
-      threads: 1
-      time_per_mailbox_micro_secs: 100
-      type: IO
-    - name: IC
-      spin_threshold: 10
-      threads: 1
-      time_per_mailbox_micro_secs: 100
-      type: BASIC
-    scheduler:
-      progress_threshold: 10000
-      resolution: 256
-      spin_threshold: 0
+    use_auto_config: true
+    cpu_count: 8
   blob_storage_config:
     service_set:
       groups:
@@ -461,11 +447,18 @@ lrwxrwxrwx 1 root root    10 Nov 26 12:54 ydb_disk_ssd_03 -> ../../vdd1
   domains_config:
     security_config:
       enforce_user_token_requirement: true
-      default_users:
-        - name: "root"
-          password: ""
-      default_access:
-        - "+(F):root"
+      monitoring_allowed_sids:
+      - "root"
+      - "ADMINS"
+      - "DATABASE-ADMINS"
+      administration_allowed_sids:
+      - "root"
+      - "ADMINS"
+      - "DATABASE-ADMINS"
+      viewer_allowed_sids:
+      - "root"
+      - "ADMINS"
+      - "DATABASE-ADMINS"
     domain:
     - name: Root
       storage_pool_types:
@@ -486,29 +479,8 @@ lrwxrwxrwx 1 root root    10 Nov 26 12:54 ydb_disk_ssd_03 -> ../../vdd1
   table_service_config:
     sql_version: 1
   actor_system_config:
-    executor:
-    - name: System
-      threads: 2
-      type: BASIC
-    - name: User
-      threads: 3
-      type: BASIC
-    - name: Batch
-      threads: 2
-      type: BASIC
-    - name: IO
-      threads: 1
-      time_per_mailbox_micro_secs: 100
-      type: IO
-    - name: IC
-      spin_threshold: 10
-      threads: 1
-      time_per_mailbox_micro_secs: 100
-      type: BASIC
-    scheduler:
-      progress_threshold: 10000
-      resolution: 256
-      spin_threshold: 0
+    use_auto_config: true
+    cpu_count: 8
   blob_storage_config:
     service_set:
       groups:
@@ -650,11 +622,18 @@ lrwxrwxrwx 1 root root    10 Nov 26 12:54 ydb_disk_ssd_03 -> ../../vdd1
   domains_config:
     security_config:
       enforce_user_token_requirement: true
-      default_users:
-        - name: "root"
-          password: ""
-      default_access:
-        - "+(F):root"
+      monitoring_allowed_sids:
+      - "root"
+      - "ADMINS"
+      - "DATABASE-ADMINS"
+      administration_allowed_sids:
+      - "root"
+      - "ADMINS"
+      - "DATABASE-ADMINS"
+      viewer_allowed_sids:
+      - "root"
+      - "ADMINS"
+      - "DATABASE-ADMINS"
     domain:
     - name: Root
       storage_pool_types:
@@ -675,29 +654,8 @@ lrwxrwxrwx 1 root root    10 Nov 26 12:54 ydb_disk_ssd_03 -> ../../vdd1
   table_service_config:
     sql_version: 1
   actor_system_config:
-    executor:
-    - name: System
-      threads: 2
-      type: BASIC
-    - name: User
-      threads: 3
-      type: BASIC
-    - name: Batch
-      threads: 2
-      type: BASIC
-    - name: IO
-      threads: 1
-      time_per_mailbox_micro_secs: 100
-      type: IO
-    - name: IC
-      spin_threshold: 10
-      threads: 1
-      time_per_mailbox_micro_secs: 100
-      type: BASIC
-    scheduler:
-      progress_threshold: 10000
-      resolution: 256
-      spin_threshold: 0
+    use_auto_config: true
+    cpu_count: 8
   blob_storage_config:
     service_set:
       groups:

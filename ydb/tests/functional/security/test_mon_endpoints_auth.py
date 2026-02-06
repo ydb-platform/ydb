@@ -113,6 +113,10 @@ def generate_certificates(certs_tmp_dir):
 def create_ydb_configurator(
     certificates,
     enforce_user_token_requirement=True,
+    require_counters_authentication=None,
+    database_allowed_sids=['database@builtin'],
+    viewer_allowed_sids=['viewer@builtin'],
+    monitoring_allowed_sids=['monitoring@builtin'],
 ):
     cluster_config = {
         'default_clusteradmin': 'root@builtin',
@@ -128,11 +132,27 @@ def create_ydb_configurator(
     config_generator.monitoring_tls_cert_path = certificates['server_cert']
     config_generator.monitoring_tls_key_path = certificates['server_key']
 
-    config_generator.yaml_config['domains_config']['security_config']['database_allowed_sids'] = ['database@builtin']
-    config_generator.yaml_config['domains_config']['security_config']['viewer_allowed_sids'] = ['viewer@builtin']
-    config_generator.yaml_config['domains_config']['security_config']['monitoring_allowed_sids'] = [
-        'monitoring@builtin'
-    ]
+    if require_counters_authentication is not None:
+        if 'monitoring_config' not in config_generator.yaml_config:
+            config_generator.yaml_config['monitoring_config'] = {}
+        if require_counters_authentication is not None:
+            config_generator.yaml_config['monitoring_config'][
+                'require_counters_authentication'
+            ] = require_counters_authentication
+
+    if database_allowed_sids is not None:
+        config_generator.yaml_config['domains_config']['security_config'][
+            'database_allowed_sids'
+        ] = database_allowed_sids
+
+    if viewer_allowed_sids is not None:
+        config_generator.yaml_config['domains_config']['security_config']['viewer_allowed_sids'] = viewer_allowed_sids
+
+    if monitoring_allowed_sids is not None:
+        config_generator.yaml_config['domains_config']['security_config'][
+            'monitoring_allowed_sids'
+        ] = monitoring_allowed_sids
+
     # administration_allowed_sids is already set due to default_clusteradmin
 
     return config_generator
@@ -161,6 +181,19 @@ def ydb_cluster_without_enforce_user_token(certificates):
     configurator = create_ydb_configurator(
         certificates,
         enforce_user_token_requirement=False,
+    )
+    cluster = KiKiMR(configurator)
+    cluster.start()
+    yield cluster
+    cluster.stop()
+
+
+@pytest.fixture(scope='module')
+def ydb_cluster_with_require_counters_auth(certificates):
+    configurator = create_ydb_configurator(
+        certificates,
+        enforce_user_token_requirement=True,
+        require_counters_authentication=True,
     )
     cluster = KiKiMR(configurator)
     cluster.start()
@@ -416,3 +449,33 @@ def test_with_enforce_user_token(ydb_cluster_with_enforce_user_token):
 
 def test_without_enforce_user_token(ydb_cluster_without_enforce_user_token):
     _test_endpoints(ydb_cluster_without_enforce_user_token, EXPECTED_RESULTS_WITHOUT_ENFORCE_USER_TOKEN)
+
+
+def test_with_require_counters_authentication(ydb_cluster_with_require_counters_auth):
+    EXPECTED_RESULTS_WITH_REQUIRE_COUNTERS_AUTH = {
+        '/counters': {
+            None: 401,
+            'user@builtin': 403,
+            'database@builtin': 403,
+            'viewer@builtin': 200,
+            'monitoring@builtin': 200,
+            'root@builtin': 200,
+        },
+        '/counters/hosts': {
+            None: 401,
+            'user@builtin': 403,
+            'database@builtin': 403,
+            'viewer@builtin': 200,
+            'monitoring@builtin': 200,
+            'root@builtin': 200,
+        },
+        '/ping': {
+            None: 200,
+            'user@builtin': 200,
+            'database@builtin': 200,
+            'viewer@builtin': 200,
+            'monitoring@builtin': 200,
+            'root@builtin': 200,
+        },  # checks this just in case
+    }
+    _test_endpoints(ydb_cluster_with_require_counters_auth, EXPECTED_RESULTS_WITH_REQUIRE_COUNTERS_AUTH)

@@ -125,11 +125,13 @@ public:
                 .ActorId = ctx.SelfID,
                 .AuthMode = TMon::EAuthMode::Disabled,
             });
+            const bool requireCountersAuth = KikimrRunConfig.AppConfig.GetMonitoringConfig().GetRequireCountersAuthentication();
             mon->RegisterActorPage({
                 .RelPath = "counters/hosts",
                 .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
-                .AuthMode = TMon::EAuthMode::Disabled,
+                .AuthMode = requireCountersAuth ? TMon::EAuthMode::Enforce : TMon::EAuthMode::Disabled,
+                .AllowedSIDs = requireCountersAuth ? viewerAllowedSIDs : TVector<TString>(),
             });
             // For healthcheck, always extract token if enforce_user_token_requirement is enabled, so access can be checked in handler.
             const bool enforceUserToken = KikimrRunConfig.AppConfig.GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenRequirement();

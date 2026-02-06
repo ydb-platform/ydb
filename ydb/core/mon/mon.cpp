@@ -160,6 +160,24 @@ void MakeJsonErrorReply(NJson::TJsonValue& jsonResponse, TString& message, const
     }
 }
 
+TVector<TString> TMon::GetCountersAllowedSIDs(TActorSystem* actorSystem) {
+    TVector<TString> countersAllowedSIDs;
+    NKikimr::TAppData* appData = actorSystem->AppData<NKikimr::TAppData>();
+    if (!appData) {
+        return countersAllowedSIDs;
+    }
+    const auto& securityConfig = appData->DomainsConfig.GetSecurityConfig();
+    auto addSIDs = [&countersAllowedSIDs](const auto& protoAllowedSIDs) {
+        for (const auto& sid : protoAllowedSIDs) {
+            countersAllowedSIDs.emplace_back(sid);
+        }
+    };
+    addSIDs(securityConfig.GetViewerAllowedSIDs());
+    addSIDs(securityConfig.GetMonitoringAllowedSIDs());
+    addSIDs(securityConfig.GetAdministrationAllowedSIDs());
+    return countersAllowedSIDs;
+}
+
 IMonPage* TMon::RegisterActorPage(TIndexMonPage* index, const TString& relPath,
     const TString& title, bool preTag, TActorSystem* actorSystem, const TActorId& actorId, bool useAuth, bool sortPages) {
     return RegisterActorPage({
@@ -1662,11 +1680,12 @@ std::future<void> TMon::Start(TActorSystem* actorSystem) {
     ActorSystem->RegisterLocalService(NodeProxyServiceActorId, nodeProxyActorId);
     IActor* countersMonPageServiceActor;
     if (Config.RequireCountersAuthentication) {
+        const auto countersAllowedSIDs = GetCountersAllowedSIDs(ActorSystem);
         countersMonPageServiceActor = new THttpMonPageService(
             HttpProxyActorId,
             CountersMonPage,
             Config.Authorizer,
-            Config.AllowedSIDs);
+            countersAllowedSIDs);
     } else {
         countersMonPageServiceActor = new THttpMonPageService(
             HttpProxyActorId,

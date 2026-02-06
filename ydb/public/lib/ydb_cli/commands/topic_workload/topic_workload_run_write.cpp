@@ -113,6 +113,10 @@ void TCommandWorkloadTopicRunWrite::Config(TConfig& config)
         .DefaultValue(false)
         .Hidden()
         .StoreTrue(&Scenario.KeyedWrites);
+    config.Opts->AddLongOption("producer-keys-count", "The number of different keys to generate.")
+        .DefaultValue(0)
+        .Hidden()
+        .StoreResult(&Scenario.ProducerKeysCount);
     config.IsNetworkIntensive = true;
 }
 

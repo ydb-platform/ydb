@@ -42,7 +42,8 @@ public:
     void HandleReadyToAcceptEvent(NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent& event);
 
 private:
-private:
+    std::string GetKey() const;
+
     std::shared_ptr<NYdb::NTopic::IKeyedWriteSession> WriteSession_;
     ui64 MessageId_ = 0;
     ui64 AckedMessageId_ = 0;
@@ -52,9 +53,11 @@ private:
     TConcurrentHashMap<ui64, TInstant> InflightMessagesCreateTs_;
     std::atomic<ui64> InflightMessagesCount_{};
 
-    NYdb::NConsoleClient::TTopicWorkloadWriterParams Params_;
+    NYdb::NConsoleClient::TTopicWorkloadKeyedWriterParams Params_;
     std::shared_ptr<NYdb::NConsoleClient::TTopicWorkloadStatsCollector> StatsCollector_;
     const NUnifiedAgent::TClock Clock_;
+    std::string KeyPrefix_;
+    ui64 KeyId_ = 0;
 };
 
 } // namespace NYdb::NConsoleClient

@@ -16,6 +16,8 @@ TTopicWorkloadKeyedWriterProducer::TTopicWorkloadKeyedWriterProducer(
     , Params_(params)
     , StatsCollector_(std::move(statsCollector))
     , Clock_(clock)
+    , KeyPrefix_(TGUID::CreateTimebased().AsGuidString())
+    , KeyId_(0)
 {
     WRITE_LOG(Params_.Log, ELogPriority::TLOG_INFO,
               TStringBuilder() << "Created keyed producer with id " << ProducerId_);
@@ -27,13 +29,22 @@ void TTopicWorkloadKeyedWriterProducer::SetWriteSession(std::shared_ptr<NYdb::NT
     InflightMessagesCount_.store(0);
 }
 
+std::string TTopicWorkloadKeyedWriterProducer::GetKey() const
+{
+    if (Params_.ProducerKeysCount > 0) {
+        return std::format("{}_{}", KeyPrefix_, KeyId_);
+    }
+
+    return TGUID::CreateTimebased().AsGuidString();
+}
+
 void TTopicWorkloadKeyedWriterProducer::Send(const TInstant& createTimestamp,
                                              std::optional<NYdb::NTable::TTransaction> transaction)
 {
     Y_ASSERT(WriteSession_);
 
     const TString data = NYdb::NConsoleClient::NTopicWorkloadWriterInternal::GetGeneratedMessage(Params_, MessageId_);
-    const std::string key = TGUID::CreateTimebased().AsGuidString();
+    const std::string key = GetKey();
 
     InflightMessagesCreateTs_.Insert(MessageId_, createTimestamp);
     InflightMessagesCount_.fetch_add(1, std::memory_order_relaxed);
@@ -57,6 +68,10 @@ void TTopicWorkloadKeyedWriterProducer::Send(const TInstant& createTimestamp,
                                << " in writer " << Params_.WriterIdx);
 
     ++MessageId_;
+
+    if (Params_.ProducerKeysCount > 0 && ++KeyId_ >= Params_.ProducerKeysCount) {
+        KeyId_ = 0;
+    }
 }
 
 void TTopicWorkloadKeyedWriterProducer::Close()

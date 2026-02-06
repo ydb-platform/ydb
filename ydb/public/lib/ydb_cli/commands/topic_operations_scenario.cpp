@@ -310,8 +310,11 @@ void TTopicOperationsScenario::StartProducerThreads(std::vector<std::future<void
         };
 
         if (KeyedWrites) {
-            threads.push_back(std::async([writerParams = std::move(writerParams)]() {
-                TTopicWorkloadKeyedWriterWorker::RetryableWriterLoop(writerParams);
+            TTopicWorkloadKeyedWriterParams keyedWriterParams(writerParams);
+            keyedWriterParams.ProducerKeysCount = ProducerKeysCount;
+
+            threads.push_back(std::async([keyedWriterParams = std::move(keyedWriterParams)]() {
+                TTopicWorkloadKeyedWriterWorker::RetryableWriterLoop(keyedWriterParams);
             }));
         } else {
             threads.push_back(std::async([writerParams = std::move(writerParams)]() {

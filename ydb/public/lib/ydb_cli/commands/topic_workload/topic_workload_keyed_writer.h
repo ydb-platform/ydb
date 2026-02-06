@@ -14,7 +14,9 @@
 namespace NYdb::NConsoleClient {
 
 // Keyed writer uses the same parameters as the regular writer for now.
-using TTopicWorkloadKeyedWriterParams = TTopicWorkloadWriterParams;
+struct TTopicWorkloadKeyedWriterParams : public TTopicWorkloadWriterParams {
+    size_t ProducerKeysCount = 0;
+};
 
 class TTopicWorkloadKeyedWriterProducer;
 class TTopicWorkloadKeyedWriterWorker {
@@ -24,7 +26,7 @@ public:
     static void WriterLoop(const TTopicWorkloadKeyedWriterParams& params, TInstant endTime);
     static std::vector<TString> GenerateMessages(size_t messageSize);
 
-protected:
+private:
     TTopicWorkloadKeyedWriterWorker(const TTopicWorkloadKeyedWriterParams& params);
     ~TTopicWorkloadKeyedWriterWorker();
 

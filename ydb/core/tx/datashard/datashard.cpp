@@ -3341,7 +3341,8 @@ void TDataShard::ProposeTransaction(TEvDataShard::TEvProposeTransaction::TPtr &&
             datashardTransactionSpan.Attribute("Shard", std::to_string(TabletID()));
         }
 
-        Execute(new TTxProposeTransactionBase(this, std::move(ev), TAppData::TimeProvider->Now(), NextTieBreakerIndex++, /* delayed */ false, std::move(datashardTransactionSpan)), ctx);
+        Execute(new TTxProposeTransactionBase(this, std::move(ev), TAppData::TimeProvider->Now(), NextTieBreakerIndex++, /* delayed */ false, std::move(datashardTransactionSpan), ev->Get()->Record.GetUserSID()), 
+            ctx );
     }
 }
 
@@ -3434,7 +3435,8 @@ void TDataShard::Handle(TEvPrivate::TEvDelayedProposeTransaction::TPtr &ev, cons
                         datashardTransactionSpan.Attribute("Shard", std::to_string(TabletID()));
                     }
 
-                    Execute(new TTxProposeTransactionBase(this, std::move(event), item.ReceivedAt, item.TieBreakerIndex, /* delayed */ true, std::move(datashardTransactionSpan)), ctx);
+                    Execute(new TTxProposeTransactionBase(this, std::move(event), item.ReceivedAt, item.TieBreakerIndex, /* delayed */ true, std::move(datashardTransactionSpan), 
+                        event->Get()->Record.GetUserSID()), ctx);
                     return;
                 }
                 case NEvents::TDataEvents::TEvWrite::EventType: {

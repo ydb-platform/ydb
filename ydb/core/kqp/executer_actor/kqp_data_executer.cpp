@@ -134,6 +134,10 @@ public:
         ReadOnlyTx = IsReadOnlyTx();
     }
 
+    TString GetUserSID() const {
+        return (UserToken != nullptr) ? UserToken->GetUserSID() : BUILTIN_ACL_CDC_WITHOUT_USER_SID;
+    }
+
     bool CheckExecutionComplete() {
         ui32 notFinished = 0;
         for (const auto& x : ShardStates) {
@@ -1773,6 +1777,7 @@ private:
                     GetSnapshot().Step,
                     GetSnapshot().TxId,
                     flags));
+                evData->Record.SetUserSID(GetUserSID());
             } else {
                 evData.reset(new TEvDataShard::TEvProposeTransaction(
                     NKikimrTxDataShard::TX_KIND_DATA,
@@ -1780,6 +1785,7 @@ private:
                     TxId,
                     dataTransaction.SerializeAsString(),
                     flags));
+                evData->Record.SetUserSID(GetUserSID());
             }
 
             NDataIntegrity::LogIntegrityTrails("DatashardTx", dataTransaction.GetKqpTransaction().GetLocks().ShortDebugString(),
@@ -1811,7 +1817,7 @@ private:
         evWriteTransaction->Record = evWrite;
         evWriteTransaction->Record.SetTxMode(ImmediateTx ? NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE : NKikimrDataEvents::TEvWrite::MODE_PREPARE);
         evWriteTransaction->Record.SetTxId(TxId);
-        evWriteTransaction->Record.SetUserSID((UserToken!=nullptr)?UserToken->GetUserSID():"");
+        evWriteTransaction->Record.SetUserSID(GetUserSID());
 
         auto locksCount = evWriteTransaction->Record.GetLocks().LocksSize();
         shardState.DatashardState->ShardReadLocks = locksCount > 0;
@@ -2387,7 +2393,7 @@ private:
                     locks = it->second->MutableLocks();
                 } else {
                     auto ev = TasksGraph.GetMeta().Allocate<NKikimrDataEvents::TEvWrite>();
-                    ev->SetUserSID((UserToken!=nullptr)?UserToken->GetUserSID():"");
+                    ev->SetUserSID(GetUserSID());
                     auto [eIt, success] = evWriteTxs.emplace(shardId, ev);
                     locks = eIt->second->MutableLocks();
                 }

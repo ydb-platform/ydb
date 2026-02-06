@@ -398,10 +398,9 @@ public:
                 << " affected shards " << PerShardStates.size()
                 << " marker# P3");
 
-            Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward(
-                    new TEvDataShard::TEvProposeTransaction(NKikimrTxDataShard::TX_KIND_SNAPSHOT,
-                        ctx.SelfID, TxId, txBody, TxFlags),
-                    shardId, true));
+            auto ev = new TEvDataShard::TEvProposeTransaction(NKikimrTxDataShard::TX_KIND_SNAPSHOT, ctx.SelfID, TxId, txBody, TxFlags);
+            // ev->Record.SetUserSID(BUILTIN_ACL_CDC_WITHOUT_USER_SID  /* todo not required */);
+            Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward(ev, shardId, true));
 
             state.AffectedFlags |= TPerShardState::AffectedRead;
             state.Status = TPerShardState::EStatus::Wait;

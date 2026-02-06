@@ -747,6 +747,7 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
                 auto propose = MakeHolder<TEvDataShard::TEvProposeTransaction>(
                     NKikimrTxDataShard::TX_KIND_DISTRIBUTED_ERASE, SelfId(), TxId, tx.SerializeAsString()
                 );
+                // propose->Record.SetUserSID(ev->Get()->Record.GetUserSID() /* BUILTIN_ACL_CDC_WITHOUT_USER_SID todo It is required?*/);
 
                 Send(LeaderPipeCache, new TEvPipeCache::TEvForward(propose.Release(), shardId, true));
 

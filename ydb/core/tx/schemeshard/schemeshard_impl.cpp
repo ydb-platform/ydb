@@ -381,10 +381,12 @@ THolder<TEvDataShard::TEvProposeTransaction> TSchemeShard::MakeDataShardProposal
         const TPathId& pathId, const TOperationId& opId,
         const TString& body, const TActorContext& ctx) const
 {
-    return MakeHolder<TEvDataShard::TEvProposeTransaction>(
+    auto result = MakeHolder<TEvDataShard::TEvProposeTransaction>(
         NKikimrTxDataShard::TX_KIND_SCHEME, TabletID(), ctx.SelfID,
         ui64(opId.GetTxId()), body, SelectProcessingParams(pathId)
     );
+    // result->Record.SetUserSID(BUILTIN_ACL_CDC_WITHOUT_USER_SID  /* todo What DDL operation generate CDC? */);
+    return result;
 }
 
 THolder<TEvColumnShard::TEvProposeTransaction> TSchemeShard::MakeColumnShardProposal(

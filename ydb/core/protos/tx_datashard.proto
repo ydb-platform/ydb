@@ -625,6 +625,7 @@ message TEvProposeTransaction {
     optional uint64 SubDomainPathId = 9; // LocalPathId (SchemeShardId is the OwnerId)
     optional NKikimrDataEvents.TMvccSnapshot MvccSnapshot = 10;
     optional bool MvccSnapshotRepeatable = 11 [default = true];
+    optional string UserSID = 12;
 }
 
 message TEvCancelTransactionProposal {
@@ -1411,7 +1412,7 @@ message TEvEraseRowsRequest {
     repeated bytes KeyColumns = 3; // SerilializedCellVector
     optional uint64 SchemaVersion = 5;
     optional uint64 OverloadSubscribe = 6;
-
+    
     oneof Condition {
         TExpirationCondition Expiration = 4;
     }

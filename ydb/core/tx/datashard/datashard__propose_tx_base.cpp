@@ -15,7 +15,8 @@ TDataShard::TTxProposeTransactionBase::TTxProposeTransactionBase(TDataShard *sel
                                                                         TEvDataShard::TEvProposeTransaction::TPtr &&ev,
                                                                         TInstant receivedAt, ui64 tieBreakerIndex,
                                                                         bool delayed,
-                                                                        NWilson::TSpan &&datashardTransactionSpan)
+                                                                        NWilson::TSpan &&datashardTransactionSpan,
+                                                                        const TString& userSID)
     : TBase(self, datashardTransactionSpan.GetTraceId())
     , Ev(std::move(ev))
     , ReceivedAt(receivedAt)
@@ -24,6 +25,7 @@ TDataShard::TTxProposeTransactionBase::TTxProposeTransactionBase(TDataShard *sel
     , TxId(Ev->Get()->GetTxId())
     , Acked(!delayed)
     , DatashardTransactionSpan(std::move(datashardTransactionSpan))
+    , UserSID(userSID)
 { }
 
 bool TDataShard::TTxProposeTransactionBase::Execute(NTabletFlatExecutor::TTransactionContext &txc,
@@ -74,7 +76,7 @@ bool TDataShard::TTxProposeTransactionBase::Execute(NTabletFlatExecutor::TTransa
                 return true;
             }
             
-            TOperation::TPtr op = Self->Pipeline.BuildOperation(Ev, ReceivedAt, TieBreakerIndex, txc, ctx, std::move(DatashardTransactionSpan));
+            TOperation::TPtr op = Self->Pipeline.BuildOperation(Ev, ReceivedAt, TieBreakerIndex, txc, ctx, std::move(DatashardTransactionSpan), UserSID);
 
             // Unsuccessful operation parse.
             if (op->IsAborted()) {

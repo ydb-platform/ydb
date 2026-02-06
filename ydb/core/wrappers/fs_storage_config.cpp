@@ -1,6 +1,7 @@
 #include "fs_storage.h"
 #include "fs_storage_config.h"
 
+#include <ydb/core/protos/fs_settings.pb.h>
 #include <ydb/public/api/protos/ydb_export.pb.h>
 
 namespace NKikimr::NWrappers::NExternalStorage {

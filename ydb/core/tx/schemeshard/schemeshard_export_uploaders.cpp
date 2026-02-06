@@ -302,7 +302,6 @@ class TSchemeUploader: public TExportFilesUploader<TSchemeUploader<TSettings>, T
             << ", error: " << error
         );
 
-
         this->Send(SchemeShard, new TEvPrivate::TEvExportSchemeUploadResult(ExportId, ItemIdx, success, error));
         this->PassAway();
     }

@@ -1459,6 +1459,7 @@ private:
                 Self->EraseEncryptionKey(db, *exportInfo);
                 break;
             }
+
             if (supportEncryptedExport && UploadExportMetadata(*exportInfo, ctx)) {
                 exportInfo->State = EState::UploadExportMetadata;
 

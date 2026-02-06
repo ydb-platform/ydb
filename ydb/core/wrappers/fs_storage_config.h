@@ -2,8 +2,11 @@
 
 #include "abstract.h"
 
-#include <ydb/core/protos/fs_settings.pb.h>
 #include <ydb/library/accessor/accessor.h>
+
+namespace NKikimrSchemeOp {
+class TFSSettings;
+} // namespace NKikimrSchemeOp
 
 namespace Ydb::Export {
 class ExportToFsSettings;

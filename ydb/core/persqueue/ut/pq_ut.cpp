@@ -3137,17 +3137,28 @@ Y_UNIT_TEST(TestSizeLag) {
         // SYNC INIT DATA KEY: d0000000000_00000000000000000076_00000_0000000001_00000? size 10301
         // SYNC INIT DATA KEY: d0000000000_00000000000000000077_00000_0000000001_00000? size 10301
 
-        ui64 currentSizeLag = Max<ui64>();
-        for (i32 offset = 0; offset < 78; ++offset) {
-            const ui64 sizeLag = GetSizeLag(0, offset, tc);
-
-            UNIT_ASSERT_LT(sizeLag, Max<ui64>());
-            // лаг не должен увеличиваться
-            UNIT_ASSERT_LE_C(sizeLag, currentSizeLag,
-                             "offset=" << offset << ", sizeLag=" << sizeLag << ", currentSizeLag=" << currentSizeLag);
-
-            currentSizeLag = sizeLag;
+        TVector<ui64> sizeLags;
+        for (ui64 offset = 0; offset < 78; ++offset) {
+            sizeLags.push_back(GetSizeLag(0, offset, tc));
         }
+
+        for (size_t i = 0; i < 77; ++i) {
+            // лаг не должен увеличиваться
+            UNIT_ASSERT_GE(sizeLags[i], sizeLags[i + 1]);
+        }
+
+        // перепады на границах блобов
+        UNIT_ASSERT_VALUES_EQUAL(sizeLags[0], sizeLags[26]);
+        UNIT_ASSERT_GT(sizeLags[26], sizeLags[27]);
+        UNIT_ASSERT_VALUES_EQUAL(sizeLags[27], sizeLags[53]);
+        UNIT_ASSERT_GT(sizeLags[53], sizeLags[54]);
+        UNIT_ASSERT_VALUES_EQUAL(sizeLags[54], sizeLags[63]);
+        UNIT_ASSERT_GT(sizeLags[63], sizeLags[64]);
+        UNIT_ASSERT_VALUES_EQUAL(sizeLags[64], sizeLags[73]);
+        UNIT_ASSERT_GT(sizeLags[73], sizeLags[74]);
+        UNIT_ASSERT_GT(sizeLags[74], sizeLags[75]);
+        UNIT_ASSERT_GT(sizeLags[75], sizeLags[76]);
+        UNIT_ASSERT_GT(sizeLags[76], sizeLags[77]);
     });
 }
 

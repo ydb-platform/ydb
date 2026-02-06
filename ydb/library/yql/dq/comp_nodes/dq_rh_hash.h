@@ -14,8 +14,7 @@
 #include <util/digest/city.h>
 #include <util/generic/scope.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 template <typename TKey>
 struct TDqRobinHoodBatchRequestItem {
@@ -51,7 +50,7 @@ public:
 protected:
     THash HashLocal_;
     TEqual EqualLocal_;
-    
+
 public:
     struct TPSLStorage {
         i32 Distance;
@@ -92,7 +91,7 @@ public:
     void operator=(TDqRobinHoodHashSet&&) = delete;
 
     // returns iterator
-    Y_FORCE_INLINE char* Insert(TKey key, const ui64 hash, bool& isNew) {        
+    Y_FORCE_INLINE char* Insert(TKey key, const ui64 hash, bool& isNew) {
         auto shortHash = static_cast<ui32>(hash);
         auto ptr = MakeIterator(shortHash, Data_, CapacityShift_);
         auto ret = InsertImpl(key, shortHash, isNew, Data_, DataEnd_, ptr);
@@ -104,7 +103,7 @@ public:
     Y_FORCE_INLINE char* Insert(TKey key, bool& isNew) {
         return Insert(key, HashLocal_(key), isNew);
     }
-    
+
     // should be called after Insert if isNew is true
     Y_FORCE_INLINE void CheckGrow() {
         if (RHHashTableNeedsGrow(Size_, Capacity_)) {
@@ -195,7 +194,7 @@ private:
     };
 
     Y_FORCE_INLINE char* MakeIterator(const ui32 hash, char* data, ui32 capacityShift) {
-        // https://probablydance.com/2018/06/16/fibonacci-hashing-the-optimization-that-the-world-forgot-or-a-better-alternative-to-integer-modulo/
+        // https://web.archive.org/web/20180620004325/https://probablydance.com/2018/06/16/fibonacci-hashing-the-optimization-that-the-world-forgot-or-a-better-alternative-to-integer-modulo/
         ui32 bucket = static_cast<ui32>(((SelfHash_ ^ static_cast<ui64>(hash)) * 11400714819323198485ull)) >> capacityShift;
         char* ptr = data + GetCellSize() * bucket;
         return ptr;
@@ -279,7 +278,7 @@ private:
             Allocator_.deallocate(newData, newDataEnd - newData);
         };
 
-        std::array<TInternalBatchRequestItem, PrefetchBatchSize> batch;
+        std::array<TInternalBatchRequestItem, TDqRobinHoodHashSet::PrefetchBatchSize> batch;
         ui32 batchLen = 0;
         for (auto iter = Begin(); iter != End(); Advance(iter)) {
             TPSLStorage pslData = ReadUnaligned<TPSLStorage>(GetPslPtr(iter));
@@ -356,6 +355,4 @@ private:
     char* DataEnd_ = nullptr;
 };
 
-
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

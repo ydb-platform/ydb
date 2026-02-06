@@ -14374,7 +14374,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["WithWorld"] = &WithWorldWrapper;
         Functions["Concat"] = &ConcatWrapper;
         Functions["AggrConcat"] = &AggrConcatWrapper;
-        ExtFunctions["FulltextContains"] = &FullTextBuiltinWrapper<false>;
+        ExtFunctions["FulltextMatch"] = &FullTextBuiltinWrapper<false>;
         ExtFunctions["FulltextScore"] = &FullTextBuiltinWrapper<true>;
         ExtFunctions["SqlConcat"] = &SqlConcatWrapper;
         ExtFunctions["Substring"] = &SubstringWrapper;

@@ -3,6 +3,7 @@
 #include <ydb/core/protos/data_integrity_trails.pb.h>
 
 #include <algorithm>
+#include <memory>
 #include <optional>
 #include <regex>
 #include <util/string/escape.h>
@@ -397,6 +398,60 @@ namespace {
         void ExecuteQuery(const TString& query) {
             NKqp::AssertSuccessResult(Session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync());
         }
+    };
+
+    // 2-node test context: victim session on node 0, breaker session on node 1.
+    // Logs from both nodes are captured via per-node log backends.
+    struct TTli2NodeTestContext {
+        TKikimrRunner Kikimr;
+        std::unique_ptr<NYdb::TDriver> VictimDriver;
+        std::unique_ptr<NYdb::TDriver> BreakerDriver;
+        std::unique_ptr<TTableClient> VictimClient;
+        std::unique_ptr<TTableClient> BreakerClient;
+        std::optional<TSession> VictimSession;
+        std::optional<TSession> BreakerSession;
+
+        TTli2NodeTestContext(TStringStream& ss)
+            : Kikimr(MakeKikimrSettings(ss).SetNodeCount(2))
+        {
+            ConfigureKikimrForTli(Kikimr);
+
+            auto& portManager = Kikimr.GetTestServer().GetRuntime()->GetPortManager();
+            const ui16 breakerPort = portManager.GetPort();
+            Kikimr.GetTestServer().EnableGRpc(breakerPort, 1);
+
+            const auto baseConfig = Kikimr.GetDriverConfig();
+            auto victimConfig = baseConfig;
+            auto breakerConfig = baseConfig;
+
+            victimConfig.SetEndpoint(Kikimr.GetEndpoint());
+            breakerConfig.SetEndpoint(TStringBuilder() << "localhost:" << breakerPort);
+
+            VictimDriver = std::make_unique<NYdb::TDriver>(victimConfig);
+            BreakerDriver = std::make_unique<NYdb::TDriver>(breakerConfig);
+
+            VictimClient = std::make_unique<TTableClient>(*VictimDriver);
+            BreakerClient = std::make_unique<TTableClient>(*BreakerDriver);
+
+            VictimSession = VictimClient->CreateSession().GetValueSync().GetSession();
+            BreakerSession = BreakerClient->CreateSession().GetValueSync().GetSession();
+        }
+
+        void CreateTable(const TString& tableName) {
+            NKqp::AssertSuccessResult(BreakerSession->ExecuteSchemeQuery(
+                Sprintf(R"(CREATE TABLE `%s` (Key Uint64, Value String, PRIMARY KEY (Key));)", tableName.c_str())
+            ).GetValueSync());
+        }
+
+        void SeedTable(const TString& tableName, const TVector<std::pair<ui64, TString>>& rows) {
+            for (const auto& [key, value] : rows) {
+                NKqp::AssertSuccessResult(BreakerSession->ExecuteDataQuery(
+                    Sprintf("UPSERT INTO `%s` (Key, Value) VALUES (%luu, \"%s\")", tableName.c_str(), key, value.c_str()),
+                    TTxControl::BeginTx().CommitTx()
+                ).GetValueSync());
+            }
+        }
+
     };
 
     TTransaction BeginReadTx(TSession& session, const TString& queryText) {
@@ -839,6 +894,91 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
 
         // Verify issue and TLI logs using common verification function
+        VerifyTliIssueAndLogsWithEnabled(issues, ss, breakerUpsert, victimUpsertSelect);
+    }
+
+    // ==================== 2-Node Tests ====================
+    // These tests use a 2-node environment:
+    // - Node 0: victim KQP session
+    // - Node 1: breaker KQP session
+    // This tests that TLI logging works correctly when breaker and victim sessions
+    // are on different nodes.
+
+    // Test: 2-node version of ManyUpsertsSeparateCommit
+    Y_UNIT_TEST(ManyUpsertsSeparateCommit2Node) {
+        TStringStream ss;
+        TTli2NodeTestContext ctx(ss);
+        for (int i = 1; i <= 6; ++i) {
+            ctx.CreateTable(Sprintf("/Root/Tenant1/Table%d", i));
+            ctx.SeedTable(Sprintf("/Root/Tenant1/Table%d", i), {{1, Sprintf("Init%d", i)}});
+        }
+
+        const TString victimSelectTable1 = "SELECT * FROM `/Root/Tenant1/Table1` WHERE Key = 1u";
+        const TString victimSelectTable2 = "SELECT * FROM `/Root/Tenant1/Table2` WHERE Key = 1u";
+        const TString victimSelectTable3 = "SELECT * FROM `/Root/Tenant1/Table3` WHERE Key = 1u";
+        const TString victimUpdateTable4 = "UPDATE `/Root/Tenant1/Table4` SET Value = \"VictimUpdate\" WHERE Key = 1u";
+        const TString breakerUpdateTable2 = "UPDATE `/Root/Tenant1/Table2` SET Value = \"BreakerUpdate2\" WHERE Key = 1u";
+        const TString breakerUpdateTable5 = "UPDATE `/Root/Tenant1/Table5` SET Value = \"BreakerUpdate5\" WHERE Key = 1u";
+        const TString breakerUpdateTable6 = "UPDATE `/Root/Tenant1/Table6` SET Value = \"BreakerUpdate6\" WHERE Key = 1u";
+
+        // Victim: read tables 1,2,3, then update table 4 (without commit)
+        auto victimTx = BeginReadTx(*ctx.VictimSession, victimSelectTable1);
+        NKqp::AssertSuccessResult(ctx.VictimSession->ExecuteDataQuery(victimSelectTable2, TTxControl::Tx(victimTx)).GetValueSync());
+        NKqp::AssertSuccessResult(ctx.VictimSession->ExecuteDataQuery(victimSelectTable3, TTxControl::Tx(victimTx)).GetValueSync());
+        NKqp::AssertSuccessResult(ctx.VictimSession->ExecuteDataQuery(victimUpdateTable4, TTxControl::Tx(victimTx)).GetValueSync());
+
+        // Breaker: update tables 5,2,6, then commit separately (breaks victim's lock on table 2)
+        std::optional<TTransaction> breakerTx;
+        {
+            auto result = ctx.BreakerSession->ExecuteDataQuery(breakerUpdateTable5, TTxControl::BeginTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == EStatus::SUCCESS, result.GetIssues().ToString());
+            breakerTx = result.GetTransaction();
+        }
+        NKqp::AssertSuccessResult(ctx.BreakerSession->ExecuteDataQuery(breakerUpdateTable2, TTxControl::Tx(*breakerTx)).GetValueSync());
+        NKqp::AssertSuccessResult(ctx.BreakerSession->ExecuteDataQuery(breakerUpdateTable6, TTxControl::Tx(*breakerTx).CommitTx()).GetValueSync());
+
+        auto [status, issues] = CommitTxWithIssues(victimTx);
+        UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
+
+        VerifyTliIssueAndLogsWithEnabled(issues, ss, breakerUpdateTable2, victimSelectTable2);
+    }
+
+    // Test: 2-node version of ConcurrentUpsertSelect
+    Y_UNIT_TEST(ConcurrentUpsertSelect2Node) {
+        TStringStream ss;
+        TTli2NodeTestContext ctx(ss);
+        ctx.CreateTable("/Root/Tenant1/ConcurrentTable");
+
+        // Seed with initial data in the key range 1-10
+        for (ui64 i = 1; i <= 10; ++i) {
+            ctx.SeedTable("/Root/Tenant1/ConcurrentTable", {{i, Sprintf("Initial%lu", i)}});
+        }
+
+        // Victim transaction: UPSERT...SELECT that reads and writes keys 1-5
+        const TString victimUpsertSelect = "UPSERT INTO `/Root/Tenant1/ConcurrentTable` (Key, Value) "
+                                           "SELECT Key, \"VictimModified\" AS Value FROM `/Root/Tenant1/ConcurrentTable` "
+                                           "WHERE Key >= 1u AND Key <= 5u";
+
+        // Breaker transaction: simple UPSERT to key 3 (overlaps with victim's range)
+        const TString breakerUpsert = "UPSERT INTO `/Root/Tenant1/ConcurrentTable` (Key, Value) VALUES (3u, \"BreakerValue\")";
+
+        // Victim: start transaction with UPSERT...SELECT
+        std::optional<TTransaction> victimTx;
+        {
+            auto result = ctx.VictimSession->ExecuteDataQuery(victimUpsertSelect, TTxControl::BeginTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == EStatus::SUCCESS, result.GetIssues().ToString());
+            victimTx = result.GetTransaction();
+        }
+
+        // Breaker: write to key 3
+        NKqp::AssertSuccessResult(ctx.BreakerSession->ExecuteDataQuery(
+            breakerUpsert, TTxControl::BeginTx().CommitTx()).GetValueSync());
+
+        // Victim: try to commit - should be aborted
+        auto [status, issues] = CommitTxWithIssues(*victimTx);
+        UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
+
+        // Verify issue and TLI logs
         VerifyTliIssueAndLogsWithEnabled(issues, ss, breakerUpsert, victimUpsertSelect);
     }
 }

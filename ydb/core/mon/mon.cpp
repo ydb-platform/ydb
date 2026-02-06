@@ -1416,7 +1416,7 @@ THttpMonPageService(const TActorId& httpProxyActorId, TIntrusivePtr<NMonitoring:
             return ReplyWithOptions(ev);
         }
         Register(new THttpMonAuthorizedPageRequest(
-            std::move(ev), Page.Get(), AllowedSIDs, Authorizer, /* authMode */ true, AuthMode)
+            std::move(ev), Page.Get(), AllowedSIDs, Authorizer, /* needAudit */ true, AuthMode)
         );
     }
 

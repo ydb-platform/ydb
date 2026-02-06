@@ -1,6 +1,7 @@
 #include "fields_wrappers.h"
 
 #include <ydb/core/protos/s3_settings.pb.h>
+#include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/fs_settings.pb.h>
 #include <ydb/public/api/protos/ydb_export.pb.h>
 

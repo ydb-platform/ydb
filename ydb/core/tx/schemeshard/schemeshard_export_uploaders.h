@@ -4,11 +4,6 @@
 
 #include <ydb/library/actors/core/actor.h>
 
-namespace Ydb::Export {
-    class ExportToS3Settings;
-    class ExportToFsSettings;
-}
-
 namespace NKikimrSchemeOp {
     class TExportMetadata;
 }

@@ -1,6 +1,8 @@
 #include "fs_storage.h"
 #include "fs_storage_config.h"
 
+#include <ydb/public/api/protos/ydb_export.pb.h>
+
 namespace NKikimr::NWrappers::NExternalStorage {
 
 TString TFsExternalStorageConfig::DoGetStorageId() const {

@@ -1,6 +1,10 @@
 #pragma once
 
-#include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <util/generic/string.h>
+
+namespace NKikimrSchemeOp {
+class TBackupTask;
+} // namespace NKikimrSchemeOp
 
 namespace NKikimr::NBackup::NFieldsWrappers {
 

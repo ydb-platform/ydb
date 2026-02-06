@@ -331,7 +331,7 @@ public:
         bool enableChecksums,
         const TMaybe<NBackup::TEncryptionIV>& iv
     )
-        : TExportFilesUploader<TSchemeUploader<TSettings>, TSettings>(settings, GetDestinationPrefix(settings, itemIdx))
+        : TExportFilesUploader<TSchemeUploader, TSettings>(settings, GetDestinationPrefix(settings, itemIdx))
         , SchemeShard(schemeShard)
         , ExportId(exportId)
         , ItemIdx(itemIdx)
@@ -385,7 +385,7 @@ public:
         const NKikimrSchemeOp::TExportMetadata& exportMetadata,
         bool enableChecksums
     )
-        : TExportFilesUploader<TExportMetadataUploader<TSettings>, TSettings>(settings, NBackup::NFieldsWrappers::GetCommonDestination(settings))
+        : TExportFilesUploader<TExportMetadataUploader, TSettings>(settings, NBackup::NFieldsWrappers::GetCommonDestination(settings))
         , SchemeShard(schemeShard)
         , ExportId(exportId)
         , EnableChecksums(enableChecksums)

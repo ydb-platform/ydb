@@ -4,7 +4,10 @@
 
 #include <ydb/core/protos/fs_settings.pb.h>
 #include <ydb/library/accessor/accessor.h>
-#include <ydb/public/api/protos/ydb_export.pb.h>
+
+namespace Ydb::Export {
+class ExportToFsSettings;
+} // namespace Ydb::Export
 
 namespace NKikimr::NWrappers::NExternalStorage {
 

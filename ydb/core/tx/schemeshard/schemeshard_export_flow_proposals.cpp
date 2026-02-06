@@ -140,8 +140,12 @@ void FillTableDescription(TSchemeShard* ss, NKikimrSchemeOp::TBackupTask& task, 
 }
 
 template <typename TSettings>
-void FillEncryptionSettings(NKikimrSchemeOp::TBackupTask& task, const TSettings& exportSettings,
-                            const TExportInfo& exportInfo, ui32 itemIdx) {
+void FillEncryptionSettings(
+    NKikimrSchemeOp::TBackupTask& task,
+    const TSettings& exportSettings,
+    const TExportInfo& exportInfo,
+    ui32 itemIdx)
+{
     if (exportSettings.has_encryption_settings()) {
         auto& encryptionSettings = *task.MutableEncryptionSettings();
         encryptionSettings.SetEncryptionAlgorithm(exportInfo.ExportMetadata.GetEncryptionAlgorithm());

@@ -4485,11 +4485,7 @@ IActor* CreatePartitionActor(ui64 tabletId, const TPartitionId& partition, const
 }
 
 void TPartition::SetupDetailedMetrics() {
-<<<<<<< HEAD
-    if (!DetailedMetricsAreEnabled()) {
-=======
     if (!DetailedMetricsAreEnabled(Config) || IsSupportive()) {
->>>>>>> 556ac4a6cdc (Metrics are not needed for service partitions (#33562))
         return;
     }
     if (WriteTimeLagMsByLastWritePerPartition) {

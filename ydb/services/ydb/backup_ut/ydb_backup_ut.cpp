@@ -3059,6 +3059,7 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
         return IsIn({
             NYdb::NScheme::ESchemeEntryType::Table,
             NYdb::NScheme::ESchemeEntryType::View,
+            NYdb::NScheme::ESchemeEntryType::Topic,
         }, entry.Type);
     }
 

@@ -1,145 +1,468 @@
+
 // ==================================================================================
-// GROUP 1: TOPOLOGIES
-// Controls the shape of Connected Subgraphs (csg).
+// ==================== CBO LATENCY PREDICTOR DATASET DEFINITION ====================
 // ==================================================================================
+// This file contains the definition of parameters for randomized CBO benchmarks.
+// Results from these benches are collected to train ML model for predicting latency
+// of said optimizer without launching it (from hypergraph properties of query).
+
+// The definition is given in a special domain specific language (DSL), that allows
+// to conveniently define complex interactions of many degrees of freedom this bench
+// framework allows to control.
+
+// ==================== INTRODUCTION TO DOMAIN SPECIFIC LANGUAGE ====================
+
+// The result of evaluation of this language is a table with columns for different
+// keys and with values in each row.
+
+// This language revolves around tuples, in general they have the following syntax:
+// (key=value; another-key=another-value; ...)
+
+// Tuple represents a table with one row. I.e. tuple (type=path; N=1) will produce:
+// | type | N |
+// |------+---|
+// | path | 1 |
+
+// Tuples can be combined with (+) to produce a table which contains rows from
+// both left hand side and right hand side of the operator.
+// E.g. (type=path; N=1) + (type=star; N=4) will produce the following table:
+// | type | N |
+// |------+---|
+// | path | 1 |
+// | star | 4 |
+
+
+// For convenience tuples also support automatic expansion of some ranges:
+// E.g. (type=path; N=1..200) will automatically generate table with 200 entries:
+// | type | N |
+// |------+---|
+// | path | 1 |
+// | path | 2 |
+// | .  . | . |
+// | .  . | . |
+// | .  . | . |
+// | path | 2 |
+
+// You can also enumerate keys separated by comma, e.g. N=1,2,3,7,15
+// Or use a range with a step, like this: N=5,10..100, which will produce
+// entries 5, 10, 15, 20, ... - every value from 5 up to 100 with a step (10 - 5)
+
+// Tuples can also be combined with (*) which is the Cartesian product operator.
+// This operator allows for exploration of combinatorial sets of parameters.
+// E.g. (N=3,4,5) * (type=path,star)
+
+// | N | type |
+// |---+------|
+// | 3 | path |
+// | 4 | path |
+// | 5 | path |
+// | 3 | star |
+// | 4 | star |
+// | 5 | star |
+
+// If multiple ranges are met inside one tuple, the result will be a Cartesian
+// product of all those keys, i.e. the same result as shown above can be obtained
+// with by saying (N=3..5, type=path,star)
+
+// The language also allows a few special values, including: +, and ? keys.
+
+// + keys are specified like this (label=+value) and if after cross product multiple
+// of those appear, they are concatentated into a single string separated by comma
+// E.g. (key=+1st) * (key=+2nd) will result in:
+// | key     |
+// |---------|
+// | 1st,2nd |
+
+// ? keys are specified like this (label=?value) and serve as optionals, i.e. if
+// after cross product two equal keys appear in one table, the one without ?
+// dominates and the one with disappears, this allows to specify defaults:
+// E.g. ((key=value; N=1) + (N=2)) * (key=?default) will result in:
+// | key     | N |
+// |---------+---|
+// | value   | 1 |
+// | default | 2 |
+
+// ==================== INTRODUCTION TO TOPOLOGICAL BENCHMARKING ====================
+
+// Topological benchmarks have the following steps:
+//
+// 1. Generation of the base relation graph, it's always a connected simple graph.
+//    The following topologies can be chosen from:
+//    + Fixed topologies
+//      + type=path                       (N) - relations chained together in a line
+//      + type=star                       (N) - center and N-1 nodes connected to it
+//      + type=cycle                      (N) - path, with both ends connected
+//      + type=clique                     (N) - fully connected graph
+//      + type=lollipop                   (N) - N/2 clique + N/2 path
+//      + type=grid                       (N) - lattice of tables, sqrt(N) in width
+//    + Randomized topologies with predictable structure
+//      + type=galaxy                     (N) - two stars with some common relations
+//      + type=random-tree                (N) - uniformely random labeled trees
+//    + Randomized topologies with probabilistic structure
+//      + type=random-fixed-edges         (N; M) - random connected graphs with M edges
+//      + type=log-normal-havel-hakimi    (N; mu; sigma) - tree with lognormal degrees
+//      + type=random-log-normal          (N; mu; sigma) - random with lognormal degrees
+//      + type=random-log-normal-chung-lu (N; mu; sigma) - the same with Chung-Lu model
+//
+// 2. Randomize equi-join keys (happens online during relation graph generation)
+//    This step uses Pitman Yor distribution to decide how popular a particular key
+//    will be (alpha; theta).
+//
+//    Each edge that describes equality has keys so we should
+//    also decide do keys prefer to connect to keys of bigger or smaller popularity
+//    this is controlled by (assert).
+//
+//    Key popularity is decided either locally (how many times other tables join with
+//    this table on this key) or globally (how many times other tables join with this
+//    key's equivalence class globally), this behaviour is controlled by (global-stats)
+//
+// 3. Generation of join tree as random decomposition of generated relation graph.
+//    This is controlled by (bushiness), bushiness of 0 strongly prefers left-deep
+//    trees, meanwhile bushiness of 1 stronly prefers bushy trees
+//
+// 4. Randomization of join types (inner-join; left-join; right-join; outer-join;
+//    left-only-join; right-only-join; left-semi-join; right-semi-join; cross-join;
+//    exclusion-join) - specifies probability of each join turning into that specific
+//    join type, these need to sum up to 1.
+//
+// 5. Post-evaluation, you can set (mcmc-e) or (mcmc-d) to try different nearby
+//    variations of the same graph. mcmc-e preserves number of edges.
+//
+//    1. mcmc-d preserves degree of each relation. After every iteration the tree is
+//       regenerated with the same rng, trying to preserve it's broad structure.
+//       The same applies to join type randomization.
+//
+//       It works by generating degree sequence using log normal distribution, making
+//       it discreet, checking Erdos-Gallai theorem and reducing bigger degrees until
+//       holds. At this step basic test for connectivity is also done (degree != 0,
+//       sum of all degrees is enough to connect all verticies).
+//
+//       After this O(M log M) degree preserving switches are performed. Since space of
+//       connected graphs with the same degrees are not ergodic under this change,
+//       we use simulated annealing with Metropolis-Hastings acceptance to accept all
+//       transformations at the beginning and exponentially reduce probability of
+//       accepting states with more connected components.
+//
+//       This mechanism also drives random-log-normal topology, but mcmc-d does ~5%
+//       of randomizations that corresponding topology does
+//
+//    2. mcmc-e is pretty much the same, but it instead uses edge preserving switches.
+//       And doesn't need simulated annealing since space of connected graphs is
+//       ergodic under edge preserving switches.
+
+// NOTE: the following restrictions, apply:
+//   + type - topology type, has to be one of the choices described in item (1)
+//   + N - number of relations, 2 <= N
+//   + M - number of edges, 1 <= M <= N * (N - 1) / 2
+//   + mu - expected median degree of log normal distribution, 1 <= mu (connectivity)
+//   + sigma - standard deviation of the underlying normal distribution, 0 < sigma
+//   + alpha - Pitman Yor (PY) discount, 0 <= alpha < 1
+//   + theta - Pitman Yor (PY) concentration, theta > - alpha
+//   + assert - preference of keys to connect to more popular keys, -1 <= assert <= 1
+//   + global-stats - use global key popularity or local, global-stats=true or false
+//   + bushiness - preference for bushy trees over left deep, 0 <= bushiness <= 1
+//   + ...join - probability of node turning into specific join type, 0 <= join <= 1,
+//     these also need to sum up to one
+
+// A bit more information about how tests are executed:
+// 1. Table is generated from this definition
+// 2. Benches are executed in parallel, i.e. each thread takes one row from the table
+//    atomically until are tests are completed
+// 3. If test takes too long, it timeouts automatically. If timeout occurs, it is
+//    recorded and benches with the same label (yes, label key serves this purpose as
+//    well as just being descriptive, so beware) and larger N will be skipped if met
+//    ever again. This is a practical decision that prevents tests from hanging.
+
+// This property can be exploited by engineering label in a way that timeouts the way
+// you want. The technic for this I call the fading lines.
+
+// The idea is simple, if you want to repeat test you have two choices:
+// 1. Silently. I.e. if any of the attempts with a given N fail, than the next N is
+//    considered to be timeouted and is never run again
+// 2. Fading lines. Repetitions are labeled strategically so that if you get unlucky
+//    at a certain N you will repeat attempts at a bigger N, but with a bit less
+//    attempts (since one lane has already timeouted), this is useful for random
+//    topologies, to keep trying even after a few first timeouts.
+
 (
-  // --- 1.1 Geometric Bounds (The Unit Tests) ---
+  // Most of these tests behave quite predictably, i.e. if N gets bigger with the
+  // same topology, they will fail, which is why I keep N quite high here, I'm
+  // essentially saying keep trying until it timeouts
   (
-    // Paths: Easiest case (linear complexity). Large N to test overhead.
-    (label=+path; type=path; N=5..70) +
+    // Start from 2, since you can't have a join with only 1 table
+    (label=+tp-path; type=path; N=2..128) +
+    (label=+tp-cycle; type=cycle; N=3..128) +
 
-    // Stars: Hardest standard case (exponential complexity).
-    (label=+star; type=star; N=5..35) +
+    // N=4 is a first star that differs from ring and path
+    (label=+tp-star; type=star; N=4..64) +
 
-    // Cliques: Maximum density. Keep N small or DPhyp will timeout/OOM.
-    (label=+clique; type=clique; N=3..20) +
+    // Grid only takes shape from 6 (which gives 2x3 grid), lower than that and
+    // you get a path (N=1,2,3), a cycle (N=4)
+    (label=+tp-grid; type=grid; N=5..64) +
 
-    (label=+random-tree; type=random-tree; N=3..30)
+    // Hardest possible challenge for an optimizer, blows up exponentially
+    // TODO: this doesn't need so much key exploration
+    (label=+tp-clique; type=clique; N=4..16) +
+
+    // Combination of the hardest and easiest topologies: clique + path
+    // Splits relations 50/50 between path and clique
+    (label=+tp-lollipop; type=lollipop; N=5..32)
+  )
+  +
+  // Topologies with highly predictible, but random structure
+  (
+    (
+      (label=+galaxy; type=galaxy; N=5..64) +
+
+      // All possible topologies up to 4 are already enumerated, so let's start with N=5
+      // Uniformely random trees with given N
+      (label=+random-tree; type=random-tree; N=5..64)
+    )
+    *
+    // This topologies aren't too random, but enough for fading lines
+    // to be possibly somewhat beneficial. But since the overall structure is
+    // quite predictable, we won't repeat generation too many times
+
+    // NOTE: t is short for topology, when we repeat generation of let's say
+    // keys, we will use a different symbol to have a clear visual
+    ((label=+t0; repeat=0) + (label=+t1; repeat=1) + (label=+t2; repeat=2))
+  )
+  +
+  // The most interesting part, highly random topologies, generation for
+  // most is repeated multiple times to get a good overview
+  (
+    (
+      (  // OLTP / Sparse structures
+         //
+         // This models a sparse structure with some variation so that a few
+         // stars are possible, tries to model OLTP worloads
+         //
+         // mu=0.8 gives median degree of exp(0.8) = 2.23, with mean being a bit
+         // higher than that because of heavy tail, this produces sparse strctures
+         // with small variation
+         (
+           (label=+tp-oltp; type=random-log-normal; mu=0.8; sigma=0.5)
+           *
+           ((label=+t0; repeat=0) + (label=+t1; repeat=1) + (label=+t2; repeat=2))
+         )
+         +
+         // The same thing, but generate trees, no repetition needed since this
+         // should be completely determenistic
+         (label=+tp-oltp-tree; type=log-normal-havel-hakimi; mu=0.8; sigma=0.5)
+      )
+      +
+      (  // OLAP / Snowflakes, less sparse structures
+         //
+         // Tries to model snowlake-like topologies
+         // mu=1.6 gives median degree of exp(1.6) = 5, with a moderate tail
+         (label=+tp-olap; type=random-log-normal; mu=1.6; sigma=0.6)
+         *
+         ((label=+t0; repeat=0) + (label=+t1; repeat=1) + (label=+t2; repeat=2))
+         +
+         // The same thing, but generate trees, no repetition needed since this
+         // should be completely determenistic
+         (label=+tp-olap-tree; type=log-normal-havel-hakimi; mu=1.6; sigma=0.6)
+      )
+      +
+      (  // ETL / Dense structures, high variation
+         //
+         // mu=2.3 gives median degree of exp(2.3) = 10, with a long tail
+         (label=+tp-etl; type=random-log-normal; mu=2.3; sigma=0.8)
+         *
+         // This is likely slower due to density, so let's let it timeout
+         // a bit quicker due to density, but also allow one more variation
+         ((label=+t0; repeat=0) + (label=+t1; repeat=1)) * (silent-repeat=0..1)
+         +
+         (label=+tp-etl-tree; type=log-normal-havel-hakimi; mu=1.6; sigma=0.7)
+      )
+      +
+      (  // Big Data / Dense structures, high variation, but less than ETL
+         //
+         // mu=2.1 gives median degree of exp(2.1) = 8, with a long tail
+         (label=+tp-bd; type=random-log-normal; mu=2.1; sigma=0.7)
+         *
+         // This is likely slower due to density + similar to ETL, so
+         // let's make a bit less repetitions
+         ((label=+t0; repeat=0) + (label=+t1; repeat=1))
+         +
+         (label=+tp-bd-tree; type=log-normal-havel-hakimi; mu=2.1; sigma=0.7)
+      )
+    )
+    *
+    // Run until it runs, fading lines impact how quickly everything will timeout
+    (N=5..64)
+    *
+    // Nearby topology exploration should help with learning how local structure
+    // impacts global parameters and prevent overfitting to particular generation
+    // quirks.
+
+    // I feel like changing edges randomly is the most useful thing to do, because
+    // it shows what happens when scale-free properties of our distributin break,
+    // so let's focus on exploring this in particular
+    (mcmc-e=2; mcmc-d=1)
+  )
+  +
+  // Even though there are already a lot of random structures, most of them have
+  // predictable structure, to make predictor more resistant towards different
+  // topologies, I added this high entropy topology:
+  (
+    (label=+tp-entropy; type=random-fixed-edges)
+    *
+    (
+      // Fixed edges, changing number of relations
+      (M=6; N=2..5) +
+      (M=7; N=5..10) +
+      (M=10; N=10..12) +
+      (M=15; N=15..20) +
+      (M=30; N=15..20) +
+      (M=37; N=15..20) +
+      (M=45; N=15..30) +
+      (M=52; N=20..40) +
+
+      // Fixed number of relations, changing number of edges
+      // Let's specifically focus on smaller queries, because they are quick to
+      // explore and should be enough to correct model if it struggles with
+      // full randomness in topology
+      (N=5; M=6..8) +
+      (N=6; M=7..12) +
+      (N=7; M=8..14) +
+      (N=8; M=12..20) +
+      (N=9; M=15..25)
+    )
+  )
+)
+*
+(
+  (
+    // This is worst-case benchmark since inner joins are fully reorderable
+
+    // With inner joins structure of join tree doesn't matter, so let's
+    // avoid testing different kinds of trees here.
+    (label=+join-inner; inner-join=1.0; bushiness=0.0)
+    +
+    (
+      // This is a pretty common pattern in OLAP or so I am told
+      (label=+join-inner-left; inner-join=0.6; left-join=0.4) +
+
+      // A combination of pretty common join types that should produce a large
+      // variety of different queries, algebraic-property wise this most things
+      // I've read such combinations can appear in OLAP and also in some Big Data
+      // scenarios, which makes this more meaningful
+      (label=+join-noisy; inner-join=0.4; left-join=0.2; left-semi-join=0.2; outer-join=0.2) +
+
+      // This is essentially the let's just throw everything at it approach
+      (label=+join-all;
+       // All probabilities are the same here (10 joins, 1/10 chance each)
+       inner-join=0.1;
+       left-join=0.1; right-join=0.1;
+       outer-join=0.1;
+       left-only-join=0.1; right-only-join=0.1;
+       left-semi-join=0.1; right-semi-join=0.1;
+       cross-join=0.1;
+       exclusion-join=0.1
+      ) +
+
+      // This will execute very quickly even for very large queries, I'm hoping
+      // it will force predictor to learn about hyperedge sizes and how they
+      // restrict search space to become very fast
+      (label=+join-fully-restricted; inner-join=0; outer-join=1.0) +
+
+      // Similar to previous one, but still very restricted, the idea is to
+      // teach it something in-between in terms of restrictiveness.
+      (label=+join-highly-restricted; inner-join=0.4; outer-join=0.4; left-join=0.2)
+    )
+    *
+    (
+      // This all is pretty self explanatory, tree structure impacts heavily
+      // which restrictions will be imposed by different join types, so this
+      // let's us explore this space naturally
+
+      // Corner case to see how the model will behave
+      (label=+tree-left-deep; bushiness=0.0) +
+
+      // Completely random trees, high entropy, we explore vast spaces
+      (label=+tree-bushy; bushiness=1.0) +
+
+      // Probably the most realistic one, the tree is almost left-deep,
+      // but some bushiness appears because of either separated inner joins,
+      // subqueries, correlated queries or whatever
+      (label=+tree-mostly-left; bushiness=0.3) +
+
+      // Just one more point to explore between two already explored states,
+      // complext tree, but more reasonable than pure randomness
+      (label=+tree-mostly-bushy; bushiness=0.7)
+    )
+  )
+  *
+  (
+    inner-join=?0.0;
+    left-join=?0.0; right-join=?0.0;
+    outer-join=?0.0;
+    left-only-join=?0.0; right-only-join=?0.0;
+    left-semi-join=?0.0; right-semi-join=?0.0;
+    cross-join=?0.0;
+    exclusion-join=?0.0
+  )
+)
+*
+(
+  (label=+keys-preserve-topo;
+    // Alpha ~ 1, but still < 1 and theta barely bigger than -alpha gives
+    // a distribution which is going to put each key in a separate bucket
+    // with overwhelming probability
+    alpha=0.999999999; theta=-0.99999999;
+
+    // Since all keys are very likely to be separated in their own buckets,
+    // assortativity - which is what I call preference of same sized keys
+    // to connect to same size keys doesn't really matter much
+
+    // And globality of preference doesn't matter much either, since each
+    // of keys is going to have a separate equivalence class anyway
+
+    // But just to reinforce the property of this set of parameters not
+    // chaning topology in any way, let's set global stats and neg. corr:
+    assort=-1;
+
+    // We need to not break topology globally, so let's use global weight
+    global-stats=true
   )
   +
   (
-    // --- 1.2 Randomized Schemas (Scale-Free / Hubs) ---
     (
-      // Real databases have Fact tables (hubs).
-      // Chun-Lu/Havel-Hakimi with High Sigma creates these hubs.
+      (label=+keys-clear-power-law;
+        // This is similar to the set of parameters that preserves topology
+        // fully, but sometimes significantly more popular keys will appear,
+        // which is, I think, pretty realistic
+        alpha=0.8; theta=3;
 
-      // mu=1.1 (~3 neighbors), sigma=0.8 (moderate variance)
-      (label=+schema-small; type=mcmc; N=5..30; mu=1.1; sigma=0.8) +
+        // We are using heavily skewed distribution, let's make decision
+        // local, to get more variantion and less straight up cliquing
+        global-stats=false
+      )
+      +
+      (label=+keys-mild-power-law;
+        // Slight heavy tail. This will create more popular clusters than the
+        // previous ones, where usually one or two would dominate completely
+        alpha=0.2; theta=5;
 
-      // mu=1.6 (~5 neighbors), sigma=1.2 (high variance = distinct hubs)
-      (label=+schema-erp; type=mcmc; N=5..30; mu=1.6; sigma=1.2) +
-
-      // The "Lollipop"
-      // High Sigma (2.0) forces a graph with a dense core/clique and a long tail.
-      // DPhyp often struggles to partition the dense part from the sparse part.
-      (label=+stress-lollipop; type=mcmc; N=5..30; mu=1.0; sigma=2.0)
+        // Here distribution has less skew, so using global stats is more plausible
+        // This serves as a benchmarks of more intentional sizing of clusters
+        global-stats=true
+      )
     )
-    +
-    // --- 1.3 Memory Stress Tests (Regular/Mesh Structures) ---
+    *
     (
-      // These graphs maximize the size of the DP Table without being Cliques.
-      // Low Sigma ensures strictly regular shape (no hubs).
-
-      // "The Ring" (Degree 2 constant).
-      // Optimization relies on breaking the cycle correctly.
-      (label=+topo-cycle; type=havel-hakimi; N=5..30; mu=0.7; sigma=0.01) +
-
-      // "The Grid" (Degree 4 constant).
-      // mu=1.38 -> e^1.38 ~= 4.0.
-      // Generates a Mesh. Hardest non-clique case for memory.
-      (label=+topo-grid-dense; type=havel-hakimi; N=5..30; mu=1.38; sigma=0.05)
+      // Let's explore how guided preference for larger keys impacts the CBO
+      assort=-0.7,0.0,0.7
     )
   )
-  *
-  (
-    // Generate random graphs multiple times
-    repeat=0..5
+  +
+  (label=+keys-all-same;
+    // Slight heavy tail, with a few clusters
+    alpha=0; theta=0;
+
+    // Both irrelevant since all keys fall in the same bucket
+    assort=0.0;
+    global-stats=false
   )
-)
-*
-// ==================================================================================
-// GROUP 2: COLUMN CONNECTIVITY (Pitman-Yor Semantic Layer)
-// Controls Transitive Closure intensity and number of interesting
-// ordering for shuffle elimination
-// ==================================================================================
-(
-  // --- 2.1 The "Identity" Case (Zero Closure) ---
-  // Alpha=0, Theta=Very High.
-  // Almost every edge gets a unique bucket.
-  // Effectively disables transitive closure. The graph stays exactly defined.
-  (label=+column-identity; alpha=0.0; theta=100) +
-
-  // --- 2.2 The "TenantID" Case (Power Law Dominance) ---
-  // Alpha=0.8 is extremely high.
-  // Most generated edges will snap to Bucket #1.
-  // This turns almost any topology into a Clique (or near-Clique).
-  // Tests if the model detects "Hidden Cliques" inside sparse topologies.
-  (label=+column-power-law; alpha=0.8; theta=10) +
-
-  // --- 2.3 The "Correlated Subgroups" Case (Low Theta) ---
-  // Alpha=0 (uniform), but Theta=1 (Tiny).
-  // Forces edges into very few buckets uniformly.
-  // This creates "blocky" transitive closures (partitions merge completely).
-  (label=+column-dense-uniform; alpha=0.0; theta=1) +
-
-  // --- 2.4 The Standard Case ---
-  // Balanced parameters mimicking standard FK relationships.
-  (label=+column-standard; alpha=0.1; theta=5)
-)
-*
-(
-  (label=+keys-negatively-correlated; assort=-0.8) +
-  (label=+keys-rand; assort=0.0)
-)
-*
-// ==================================================================================
-// GROUP 3: JOIN CONSTRAINTS (Pruning Layer)
-// ==================================================================================
-(
-  // --- 3.1 Unconstrained (Slowest) ---
-  (label=+join-inner; inner-join=1.0; bushiness=0.0) +
-
-  (
-    // --- 3.2 "Data Warehouse" Pattern ---
-    // Fact tables (Hubs) usually Inner Join, Dimensions Left Join out.
-    (label=+join-inner-left; inner-join=0.6; left-join=0.4) +
-
-    // --- 3.3 "Generated SQL" Pattern (Maximum Noise) ---
-    // This creates complex Table Elimination Sets (TES) and should restrict number of CSGs.
-    (label=+join-noisy; inner-join=0.4; left-join=0.2; left-semi-join=0.2; outer-join=0.2) +
-
-    // --- 3.4 The "Chain-Link" Constraint ---
-    // Pure left joins enforce a strict ordering ((A left B) left C).
-    // The complexity should be effectively O(N^2) or O(N), regardless of topology.
-    (label=+join-fully-restricted; inner-join=0; cross-join=1.0) +
-    (label=+join-highly-restricted; inner-join=0.3; cross-join=0.7)
-  )
-  *
-  // Many constraint joins depend on join tree form (it creates different TES),
-  // this controls which random tree decomposition is choosen
-  (
-    (label=+hyper-left-deep; bushiness=0.0) +
-    (label=+hyper-mostly-left-deep; bushiness=0.2) +
-    (label=+hyper-balanced; bushiness=0.5) +
-    (label=+hyper-bushy-trees; bushiness=1.0)
-  )
-)
-*
-// This allows to look around the topology by randomizing edges a bit
-(mcmc-edge=1)
-*
-// ==================================================================================
-// GROUP 4: DEFAULTS
-// ==================================================================================
-(
-  inner-join=?1.0;
-  left-join=?0.0;
-  right-join=?0.0;
-  outer-join=?0.0;
-  left-only-join=?0.0;
-  right-only-join=?0.0;
-  left-semi-join=?0.0;
-  right-semi-join=?0.0;
-  cross-join=?0.0;
-  exclusion-join=?0.0
 )

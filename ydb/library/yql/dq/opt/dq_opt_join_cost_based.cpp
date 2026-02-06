@@ -339,6 +339,7 @@ public:
     ) override {
         auto relsCount = joinTree->Labels().size();
 
+        Y_ASSERT(EnableShuffleElimination && relsCount <= OptimizerSettings_.ShuffleEliminationJoinNumCutoff);
         if (EnableShuffleElimination && relsCount <= OptimizerSettings_.ShuffleEliminationJoinNumCutoff) {
             return JoinSearchImpl<TNodeSet64, TDPHypSolverShuffleElimination<TNodeSet64>>(joinTree, false, hints);
         } else if (relsCount <= 64) { // The algorithm is more efficient.

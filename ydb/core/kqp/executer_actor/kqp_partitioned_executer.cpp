@@ -1,4 +1,5 @@
 #include "kqp_partitioned_executer.h"
+#include "kqp_executer_stats.h"
 #include "kqp_executer.h"
 
 #include <ydb/core/engine/minikql/minikql_engine_host.h>
@@ -63,6 +64,7 @@ public:
 
     explicit TKqpPartitionedExecuter(TKqpPartitionedExecuterSettings settings, std::shared_ptr<NYql::NDq::IDqChannelService> channelService)
         : Request(std::move(settings.Request))
+        , Stats(Request.StatsMode)
         , SessionActorId(std::move(settings.SessionActorId))
         , FuncRegistry(std::move(settings.FuncRegistry))
         , TimeProvider(std::move(settings.TimeProvider))
@@ -103,6 +105,7 @@ public:
         Become(&TKqpPartitionedExecuter::PrepareState);
 
         PE_STLOG_I("Start resolving table partitions");
+        Stats.StartTs = TInstant::Now();
 
         FillTableMetaInfo();
         ResolvePartitioning();
@@ -413,6 +416,8 @@ private:
                 return "BATCH UPDATE";
             case TKeyDesc::ERowOperation::Erase:
                 return "BATCH DELETE";
+            case TKeyDesc::ERowOperation::Unknown:
+                return "BATCH";
             default:
                 return "";
         }
@@ -638,9 +643,12 @@ private:
 
     void ForgetPartition(const TBatchPartitionInfo::TPtr& partInfo) {
         YQL_ENSURE(StartedPartitions.erase(partInfo->PartitionIndex) == 1);
+        Stats.AffectedPartitions.insert(partInfo->PartitionIndex);
     }
 
     void OnSuccessResponse(TBatchPartitionInfo::TPtr& partInfo, TEvKqpExecuter::TEvTxResponse* ev) {
+        Stats.TakeExecStats(std::move(*ev->Record.MutableResponse()->MutableResult()->MutableStats()));
+
         TSerializedCellVec minKey = GetMinCellVecKey(std::move(ev->BatchOperationMaxKeys), std::move(ev->BatchOperationKeyIds));
         if (minKey) {
             if (!IsKeyInPartition(minKey.GetCells(), partInfo)) {
@@ -803,6 +811,9 @@ private:
                 (Status, Ydb::StatusIds_StatusCode_Name(ReturnStatus)),
                 (Issues, ReturnIssues.ToOneLineString()));
 
+            Stats.FinishTs = TInstant::Now();
+            Stats.ExportExecStats(*ResponseEv->Record.MutableResponse()->MutableResult()->MutableStats());
+
             if (ReturnStatus != Ydb::StatusIds::SUCCESS) {
                 return ReplyErrorAndDie(ReturnStatus, ReturnIssues);
             }
@@ -865,6 +876,7 @@ private:
     std::unique_ptr<TEvKqpExecuter::TEvTxResponse> ResponseEv;
     NBatchOperations::TSettings Settings;
 
+    TBatchOperationExecutionStats Stats;
     Ydb::StatusIds::StatusCode ReturnStatus = Ydb::StatusIds::SUCCESS;
     NYql::TIssues ReturnIssues;
 
@@ -879,7 +891,7 @@ private:
     THashMap<TActorId, TBatchPartitionInfo::TPtr> ExecuterToPartition;
     THashMap<TActorId, TBatchPartitionInfo::TPtr> BufferToPartition;
 
-    TKeyDesc::ERowOperation OperationType;
+    TKeyDesc::ERowOperation OperationType = TKeyDesc::ERowOperation::Unknown;
     TTableId TableId;
 
     const TActorId SessionActorId;

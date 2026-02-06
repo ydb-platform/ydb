@@ -1914,6 +1914,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         appConfig.MutableTableServiceConfig()->SetEnableOltpSink(enableOltp);
         appConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
         appConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
+        appConfig.MutableTableServiceConfig()->SetEnableDataShardCreateTableAs(true);
         appConfig.MutableFeatureFlags()->SetEnableTempTables(true);
         auto kikimr = NTestUtils::MakeKikimrRunner(appConfig, {.DomainRoot = "TestDomain"});
 
@@ -3044,7 +3045,9 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
     }
 
     Y_UNIT_TEST(TestRestartQueryAndCleanupWithGetOperation) {
-        auto kikimr = NTestUtils::MakeKikimrRunner(std::nullopt, {.EnableScriptExecutionBackgroundChecks = false});
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableDataShardCreateTableAs(true);
+        auto kikimr = NTestUtils::MakeKikimrRunner(appConfig, {.EnableScriptExecutionBackgroundChecks = false});
         auto db = kikimr->GetQueryClient();
 
         constexpr char BUCKET[] = "test_restart_query_and_cleanup_with_get_operation_bucket";

@@ -82,10 +82,6 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, const TTestEnvSettings& 
 
 TTestEnv::~TTestEnv() {
     Driver->Stop(true);
-
-    if (LdapServer) {
-        LdapServer->Stop();
-    }
 }
 
 } // NKikimr

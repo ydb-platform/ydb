@@ -85,9 +85,9 @@ void TSimpleServer::HandleClient_(int fd) {
     if (Opt.UseTls) {
         socket->UpgradeToTls(Ctx.Get());
     }
+    TLdapRequestProcessor requestProcessor(socket, Opt.ExternalAuthMap);
 
     while (Running) {
-        TLdapRequestProcessor requestProcessor(socket);
         unsigned char elementType = requestProcessor.GetByte();
         if (elementType != EElementType::SEQUENCE) {
             if (TLdapResponse().Send(socket)) {
@@ -187,7 +187,6 @@ bool TSimpleServer::InitTlsCtx() {
             return false;
         }
     }
-
 
     int mode = SSL_VERIFY_NONE;
     if (Opt.RequireClientCert) {

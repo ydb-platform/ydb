@@ -1,4 +1,5 @@
 #include "socket.h"
+#include <util/generic/string.h>
 #include <openssl/err.h>
 
 namespace LdapMock {
@@ -40,8 +41,19 @@ bool TSocket::UpgradeToTls(SSL_CTX* ctx) {
         return false;
     }
 
+    TSslHolder<X509> clientCert(SSL_get_peer_certificate(Ssl.Get()));
+    if (clientCert) {
+        char buf[1024];
+        X509_NAME_oneline(X509_get_subject_name(clientCert.Get()), buf, sizeof(buf));
+        ClientSubjectName = TString(buf);
+    }
+
     UseTls = true;
     return true;
+}
+
+TString TSocket::GetClientCertSubjectName() const {
+    return ClientSubjectName;
 }
 
 bool TSocket::ReceivePlain(void* buf, size_t len) {

@@ -665,7 +665,7 @@ void TClusterInfo::ApplyActionWithoutLog(const NKikimrCms::TAction &action, i32 
         return;
     }
 
-    TNodeLockContext ctx(priority, requestId);
+    TNodeLockContext ctx(priority, requestId, NKikimrCms::MODE_MAX_AVAILABILITY);
 
     switch (action.GetType()) {
     case TAction::RESTART_SERVICES:

@@ -17,7 +17,7 @@ struct TNodeLockContext {
     TString RequestId;
     NKikimrCms::EAvailabilityMode Mode = NKikimrCms::MODE_MAX_AVAILABILITY;
 
-    TNodeLockContext(i32 priority, const TString& requestId, NKikimrCms::EAvailabilityMode mode);
+    TNodeLockContext(i32 priority, const TString& requestId, NKikimrCms::EAvailabilityMode mode = NKikimrCms::MODE_MAX_AVAILABILITY);
 };
 
 /**

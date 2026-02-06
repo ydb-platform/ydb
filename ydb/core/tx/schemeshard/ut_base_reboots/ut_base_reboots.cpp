@@ -783,8 +783,7 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
         });
     }
 
-    Y_UNIT_TEST(CopyTableAndDropWithReboots) { //+
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CopyTableAndDropWithReboots, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);

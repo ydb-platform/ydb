@@ -53,7 +53,7 @@ public:
         AddHandler(0, &TKqlUpsertRowsBase::Match, HNDL(ExcessUpsertInputColumns));
         AddHandler(0, &TCoTake::Match, HNDL(DropTakeOverLookupTable));
         AddHandler(0, &TCoTopSort::Match, HNDL(RewriteFlatMapOverFullTextRelevance));
-        AddHandler(0, &TCoFlatMapBase::Match, HNDL(RewriteFlatMapOverFullTextContains));
+        AddHandler(0, &TCoFlatMapBase::Match, HNDL(RewriteFlatMapOverFullTextMatch));
 
         AddHandler(0, &TKqlReadTableBase::Match, HNDL(ApplyExtractMembersToReadTable<false>));
         AddHandler(0, &TKqlReadTableRangesBase::Match, HNDL(ApplyExtractMembersToReadTable<false>));
@@ -235,9 +235,9 @@ protected:
         return output;
     }
 
-    TMaybeNode<TExprBase> RewriteFlatMapOverFullTextContains(TExprBase node, TExprContext& ctx, const TGetParents& getParents) {
-        TExprBase output = KqpRewriteFlatMapOverFullTextContains(node, ctx, KqpCtx, *getParents());
-        DumpAppliedRule("RewriteFlatMapOverFullTextContains", node.Ptr(), output.Ptr(), ctx);
+    TMaybeNode<TExprBase> RewriteFlatMapOverFullTextMatch(TExprBase node, TExprContext& ctx, const TGetParents& getParents) {
+        TExprBase output = KqpRewriteFlatMapOverFullTextMatch(node, ctx, KqpCtx, *getParents());
+        DumpAppliedRule("RewriteFlatMapOverFullTextMatch", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 

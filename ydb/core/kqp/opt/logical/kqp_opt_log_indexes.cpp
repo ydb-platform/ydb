@@ -1327,7 +1327,7 @@ TFullTextApplyParseResult FindMatchingApply(const TExprBase& node, TExprContext&
     TFullTextApplyParseResult result;
 
     VisitExpr(node.Ptr(), [&] (const TExprNode::TPtr& expr) {
-        if (expr->Content() == "FulltextScore" || expr->Content() == "FulltextContains") {
+        if (expr->Content() == "FulltextScore" || expr->Content() == "FulltextMatch") {
             if (!EnsureArgsCount(*expr, 2, ctx)) {
                 return false;
             }
@@ -1510,7 +1510,7 @@ TExprBase KqpRewriteFlatMapOverFullTextRelevance(const NYql::NNodes::TExprBase& 
     return mapResult;
 };
 
-TExprBase KqpRewriteFlatMapOverFullTextContains(const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx,
+TExprBase KqpRewriteFlatMapOverFullTextMatch(const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx,
     const TKqpOptimizeContext& kqpCtx, const NYql::TParentsMap& parentsMap)
 {
     Y_UNUSED(kqpCtx, parentsMap);

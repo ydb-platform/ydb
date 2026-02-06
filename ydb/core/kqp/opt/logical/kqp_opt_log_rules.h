@@ -50,7 +50,7 @@ NYql::NNodes::TExprBase KqpRewriteTopSortOverIndexRead(const NYql::NNodes::TExpr
 NYql::NNodes::TExprBase KqpRewriteFlatMapOverFullTextRelevance(const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx,
     const TKqpOptimizeContext& kqpCtx, const NYql::TParentsMap& parentsMap);
 
-NYql::NNodes::TExprBase KqpRewriteFlatMapOverFullTextContains(const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx,
+NYql::NNodes::TExprBase KqpRewriteFlatMapOverFullTextMatch(const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx,
     const TKqpOptimizeContext& kqpCtx, const NYql::TParentsMap& parentsMap);
 
 NYql::NNodes::TExprBase KqpRewriteTopSortOverFlatMap(const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx);

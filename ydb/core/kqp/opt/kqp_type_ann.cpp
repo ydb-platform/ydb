@@ -552,7 +552,7 @@ TStatus AnnotateReadTableRanges(const TExprNode::TPtr& node, TExprContext& ctx, 
 
 TStatus AnnotateReadTableFullTextIndex(const TExprNode::TPtr& node, TExprContext& ctx, const TString& cluster, const TKikimrTablesData& tablesData) {
     if (!EnsureArgsCount(*node, 6, ctx)) {
-        ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Expected 3 arguments for FullTextContains"));
+        ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Expected 3 arguments for FullTextMatch"));
         return TStatus::Error;
     }
 

@@ -18,7 +18,9 @@ namespace NDataIntegrity {
 
 // Node-level cache for QueryTraceId -> QueryText mapping
 // Used to lookup breaker query text in deferred lock scenarios where the breaker's session has completed
-// but victim's session needs to log the breaker's query text
+// but victim's session needs to log the breaker's query text.
+// In production multi-node deployments, the victim's SessionActor performs a targeted cross-node
+// lookup to the breaker's node via TKqpQueryTextCacheService when the local cache misses.
 class TNodeQueryTextCache {
 public:
     static constexpr size_t MaxCacheSize = 10000;

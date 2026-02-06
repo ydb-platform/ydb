@@ -6,6 +6,7 @@
 #include <ydb/core/kqp/common/buffer/buffer.h>
 #include <ydb/core/kqp/common/buffer/events.h>
 #include <ydb/core/kqp/common/kqp_data_integrity_trails.h>
+#include <ydb/core/kqp/common/kqp_query_text_cache_events.h>
 #include <ydb/core/kqp/common/kqp_lwtrace_probes.h>
 #include <ydb/core/kqp/common/kqp_ru_calc.h>
 #include <ydb/core/kqp/common/kqp_timeouts.h>
@@ -146,6 +147,63 @@ struct TKqpCleanupCtx {
     bool CleanupFinished() {
         return TransactionsToBeAborted.empty() && !IsWaitingForWorkerToClose && !IsWaitingForWorkloadServiceCleanup;
     }
+};
+
+// Helper actor that performs a cross-node query text lookup for TLI deferred lock logging.
+// Spawned by the SessionActor when the local TNodeQueryTextCache misses and the breaker's
+// query text is on a different node. Sends TEvLookupQueryText to the breaker's node,
+// emits the TLI log upon response, and self-destructs.
+class TDeferredTliLogActor : public TActorBootstrapped<TDeferredTliLogActor> {
+public:
+    TDeferredTliLogActor(
+        ui64 breakerQueryTraceId,
+        ui32 breakerNodeId,
+        TString traceId,
+        bool isCommitAction)
+        : BreakerQueryTraceId(breakerQueryTraceId)
+        , BreakerNodeId(breakerNodeId)
+        , TraceId(std::move(traceId))
+        , IsCommitAction(isCommitAction)
+    {}
+
+    void Bootstrap() {
+        auto request = MakeHolder<TEvLookupQueryText>();
+        request->Record.SetQueryTraceId(BreakerQueryTraceId);
+        Send(MakeKqpQueryTextCacheServiceId(BreakerNodeId), request.Release());
+        Become(&TDeferredTliLogActor::StateFunc);
+    }
+
+    STRICT_STFUNC(StateFunc,
+        hFunc(TEvLookupQueryTextResponse, HandleResponse)
+    )
+
+private:
+    void HandleResponse(TEvLookupQueryTextResponse::TPtr& ev) {
+        auto& record = ev->Get()->Record;
+        TString breakerQueryText = record.GetQueryText();
+        TString breakerQueryTexts;
+        if (!breakerQueryText.empty()) {
+            breakerQueryTexts = TStringBuilder() << "[QueryTraceId=" << BreakerQueryTraceId
+                << " QueryText=" << breakerQueryText << "]";
+        }
+
+        NDataIntegrity::LogTli(NDataIntegrity::TTliLogParams{
+            .Component = "SessionActor",
+            .Message = IsCommitAction ? "Commit had broken other locks (deferred)" : "Query had broken other locks (deferred)",
+            .QueryText = breakerQueryText,
+            .QueryTexts = breakerQueryTexts,
+            .TraceId = TraceId,
+            .BreakerQueryTraceId = BreakerQueryTraceId,
+            .IsCommitAction = IsCommitAction,
+        }, TlsActivationContext->AsActorContext());
+
+        PassAway();
+    }
+
+    const ui64 BreakerQueryTraceId;
+    const ui32 BreakerNodeId;
+    const TString TraceId;
+    const bool IsCommitAction;
 };
 
 class TKqpSessionActor : public TActorBootstrapped<TKqpSessionActor>, IActorExceptionHandler {
@@ -2366,25 +2424,40 @@ public:
         if (!ev->DeferredBreakerQueryTraceIds.empty() && IS_INFO_LOG_ENABLED(NKikimrServices::TLI)) {
             const bool isCommitAction = QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_COMMIT_TX ||
                                        QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_EXECUTE_PREPARED;
-            
-            for (ui64 deferredBreakerQueryTraceId : ev->DeferredBreakerQueryTraceIds) {
-                // Look up breaker's query text from node-level cache
+            const ui32 localNodeId = SelfId().NodeId();
+
+            for (size_t i = 0; i < ev->DeferredBreakerQueryTraceIds.size(); ++i) {
+                ui64 deferredBreakerQueryTraceId = ev->DeferredBreakerQueryTraceIds[i];
+                ui32 breakerNodeId = i < ev->DeferredBreakerNodeIds.size() ? ev->DeferredBreakerNodeIds[i] : 0;
+
+                // Try local cache first
                 TString breakerQueryText = NDataIntegrity::TNodeQueryTextCache::Instance().Get(deferredBreakerQueryTraceId);
-                TString breakerQueryTexts;
-                if (!breakerQueryText.empty()) {
-                    breakerQueryTexts = TStringBuilder() << "[QueryTraceId=" << deferredBreakerQueryTraceId 
-                        << " QueryText=" << breakerQueryText << "]";
+
+                if (!breakerQueryText.empty() || breakerNodeId == 0 || breakerNodeId == localNodeId) {
+                    // Found locally, or no remote node info available — log immediately
+                    TString breakerQueryTexts;
+                    if (!breakerQueryText.empty()) {
+                        breakerQueryTexts = TStringBuilder() << "[QueryTraceId=" << deferredBreakerQueryTraceId
+                            << " QueryText=" << breakerQueryText << "]";
+                    }
+
+                    NDataIntegrity::LogTli(NDataIntegrity::TTliLogParams{
+                        .Component = "SessionActor",
+                        .Message = isCommitAction ? "Commit had broken other locks (deferred)" : "Query had broken other locks (deferred)",
+                        .QueryText = breakerQueryText,
+                        .QueryTexts = breakerQueryTexts,
+                        .TraceId = TraceId(),
+                        .BreakerQueryTraceId = deferredBreakerQueryTraceId,
+                        .IsCommitAction = isCommitAction,
+                    }, TlsActivationContext->AsActorContext());
+                } else {
+                    // Cache miss and breaker is on a different node — do async cross-node lookup
+                    Register(new TDeferredTliLogActor(
+                        deferredBreakerQueryTraceId,
+                        breakerNodeId,
+                        TraceId(),
+                        isCommitAction));
                 }
-                
-                NDataIntegrity::LogTli(NDataIntegrity::TTliLogParams{
-                    .Component = "SessionActor",
-                    .Message = isCommitAction ? "Commit had broken other locks (deferred)" : "Query had broken other locks (deferred)",
-                    .QueryText = breakerQueryText,
-                    .QueryTexts = breakerQueryTexts,
-                    .TraceId = TraceId(),
-                    .BreakerQueryTraceId = deferredBreakerQueryTraceId,
-                    .IsCommitAction = isCommitAction,
-                }, TlsActivationContext->AsActorContext());
             }
         }
 

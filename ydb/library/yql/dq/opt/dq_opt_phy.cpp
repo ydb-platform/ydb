@@ -3093,7 +3093,7 @@ TExprBase DqPropagatePrecomuteTake(TExprBase node, TExprContext& ctx, IOptimizat
         return node;
     }
 
-    auto* typeAnn = precompute.Connection().Raw()->GetTypeAnn();
+    auto typeAnn = precompute.Connection().Raw()->GetTypeAnn();
 
     YQL_ENSURE(typeAnn);
     typeAnn = GetSeqItemType(typeAnn);

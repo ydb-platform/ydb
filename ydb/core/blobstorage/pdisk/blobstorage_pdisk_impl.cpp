@@ -138,6 +138,13 @@ TCheckDiskFormatResult TPDisk::ReadChunk0Format(ui8* formatSectors, const NPDisk
     Format.SectorSize = FormatSectorSize;
     ui32 mainKeySize = mainKey.Keys.size();
 
+    const bool allowObsoleteKey =
+#ifdef DISABLE_PDISK_ENCRYPTION
+        false;
+#else
+        true;
+#endif
+
     for (ui32 k = 0; k < mainKeySize; ++k) {
         TPDiskStreamCypher cypher(Cfg->EnableFormatEncryption);
         cypher.SetKey(mainKey.Keys[k]);
@@ -183,7 +190,10 @@ TCheckDiskFormatResult TPDisk::ReadChunk0Format(ui8* formatSectors, const NPDisk
             ui64 sectorOffset = lastGoodIdx * FormatSectorSize;
             ui8* formatSector = formatSectors + sectorOffset;
             if (k < mainKeySize - 1) { // obsolete key is used
-                return TCheckDiskFormatResult(true, true);
+                if (allowObsoleteKey) {
+                    return TCheckDiskFormatResult(true, true);
+                }
+                continue;
             } else if (isBadPresent) {
                 for (ui32 i = 0; i < ReplicationFactor; ++i) {
                     if (isBad[i]) {

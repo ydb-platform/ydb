@@ -2146,6 +2146,19 @@ message TImmediateControlsConfig {
                 MinValue: 0,
                 MaxValue: 1,
                 DefaultValue: 1 }];
+
+            optional uint64 EnableSysViewPermissionsExport = 9 [(ControlOptions) = {
+                Description: "Enable System view ACL export",
+                MinValue: 0,
+                MaxValue: 1,
+                DefaultValue: 1 }];
+
+            optional uint64 EnableSysViewPermissionsImport = 10 [(ControlOptions) = {
+                Description: "Enable System view ACL import",
+                MinValue: 0,
+                MaxValue: 1,
+                DefaultValue: 1 }];
+
         }
 
         optional TBackupToS3Controls S3Controls = 1;

@@ -1863,6 +1863,8 @@ bool TPath::IsSupportedInExports() const {
             return SS->BackupSettings.S3Settings.EnableExternalDataSourceExport;
         case NKikimrSchemeOp::EPathTypeExternalTable:
             return SS->BackupSettings.S3Settings.EnableExternalTableExport;
+        case NKikimrSchemeOp::EPathTypeSysView:
+            return AppData()->FeatureFlags.GetEnableSysViewPermissionsExport();
         case NKikimrSchemeOp::EPathTypePersQueueGroup:
         case NKikimrSchemeOp::EPathTypeTable:
             return true;

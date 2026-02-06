@@ -213,7 +213,7 @@ message TFeatureFlags {
     optional bool EnableAccessToIndexImplTables = 186 [default = true];
     optional bool EnableAddUniqueIndex = 187 [default = false];
     optional bool EnableSharedMetadataAccessorCache = 188 [default = true, deprecated = true];
-    optional bool RequireDbPrefixInSecretName = 189 [default = false];
+    reserved 189; // RequireDbPrefixInSecretName
     optional bool EnableSystemNamesProtection = 190 [default = false];
     optional bool EnableRealSystemViewPaths = 191 [default = true];
     optional bool EnableCSSchemasCollapsing = 192 [default = false];

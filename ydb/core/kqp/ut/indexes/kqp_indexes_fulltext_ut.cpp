@@ -5116,7 +5116,7 @@ Y_UNIT_TEST(FulltextIndexWithCompositeKeyMixedTypes) {
     { // Query should not find the deleted row
         TString query = R"sql(
             SELECT Year, Region, Name FROM `/Root/TextsCompositeKeyMixed` VIEW `fulltext_idx`
-./ut/indexes/kqp_indexes_fulltext_ut.cpp            WHERE FulltextMatch(Description, "streaming")
+            WHERE FulltextMatch(Description, "streaming")
             ORDER BY Year, Region, Name
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();

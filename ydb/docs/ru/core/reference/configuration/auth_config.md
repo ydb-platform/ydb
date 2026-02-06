@@ -186,11 +186,14 @@ auth_config:
       enable: true
       ca_cert_file: "/path/to/ca.pem"
       cert_require: DEMAND
-  ldap_authentication_domain: "ldap"
-  scheme: "ldap"
-  requested_group_attribute: "memberOf"
-  extended_settings:
+      cert_file: "/path/to/client-cert.pem"
+      key_file: "/path/to/client-key.pem"
+    scheme: "ldap"
+    requested_group_attribute: "memberOf"
+    extended_settings:
       enable_nested_groups_search: true
+      enable_sasl_external_bind: true
+  ldap_authentication_domain: "ldap"
 
   refresh_time: "1h"
   ...
@@ -237,10 +240,11 @@ auth_config:
 
 Значение по умолчанию: `DEMAND`
     ||
-|| `ldap_authentication_domain`
-| Идентификатор, прикрепляемый к имени пользователя, позволяющий отличать пользователей из LDAP-каталога от пользователей аутентифицируемых с помощью других провайдеров.
-
-Значение по умолчанию: `ldap`
+|| `cert_file`
+| Путь до файла клиентского сертификата
+    ||
+|| `key_file`
+| Путь до файла ключа клиентского сертификата
     ||
 || `scheme`
 | Схема соединения с LDAP-сервером.
@@ -266,8 +270,23 @@ auth_config:
 
 Значение по умолчанию: `false`
     ||
+|| `extended_settings.enable_sasl_external_bind`
+| Флаг определяет, будет ли выполняться аутентификация сервисного аккаунта по протоколу SASL с механизмом EXTERNAL.
+
+Возможные значения:
+
+- `true` - Для аутентификации сервисного аккаунта будет задействован протокол SASL с механизмом EXTERNAL. Такой способ позволяет аутентифицировать пользователя с помощью протокола mutual TLS. В качестве аутентификационной информации используется клиентский сертификат, указанный в параметрах `use_tls.cert_file` и `use_tls.key_file`. Указывать параметры `bind_dn` и `bind_password` не требуется.
+- `false` - Для аутентификации сервисного аккаунта будет использоваться метод simple bind. Требуется указать параметры `bind_dn` и `bind_password`.
+
+Значение по умолчанию: `false`
+    ||
 || `host`
 | Имя хоста, на котором работает LDAP-сервер. Это устаревший параметр, вместо него должен использоваться параметр `hosts`
+    ||
+|| `ldap_authentication_domain`
+| Идентификатор, прикрепляемый к имени пользователя, позволяющий отличать пользователей из LDAP-каталога от пользователей аутентифицируемых с помощью других провайдеров.
+
+Значение по умолчанию: `ldap`
     ||
 |#
 

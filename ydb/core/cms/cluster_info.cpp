@@ -105,7 +105,7 @@ bool TLockableItem::IsDown(TErrorInfo &error, TInstant defaultDeadline) const
 
 void TLockableItem::RollbackLocks(ui64 point)
 {
-    for (auto it = TempLocks.begin(); it != TempLocks.end(); ++it) {
+    for (auto it = TempLocks.begin(); it != TempLocks.end();) {
         if (it->RollbackPoint >= point) {
             RemoveLockByRequest(it->RequestId);
             it = TempLocks.erase(it);

@@ -78,7 +78,7 @@ class YdbCluster:
         if not cls._client_host:
             cls._client_host = get_external_param('client-host', 'localhost')
             if cls._client_host == 'static':
-                cls._client_host = cls.get_cluster_nodes(role=YdbCluster.Node.Role.STORAGE, db_only=False)[0]
+                cls._client_host = cls.get_cluster_nodes(role=YdbCluster.Node.Role.STORAGE, db_only=False)[0].host
         return cls._client_host
 
     @classmethod

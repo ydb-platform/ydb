@@ -199,12 +199,13 @@ public:
 
     void Finalize() {
         Y_ABORT_UNLESS(!AlreadyReplied);
+
+        FillLocksFromExtraData();
+
         if (LocksBroken) {
             YQL_ENSURE(ResponseEv->BrokenLockShardId);
             return ReplyErrorAndDie(Ydb::StatusIds::ABORTED, {});
         }
-
-        FillLocksFromExtraData();
 
         if (TxManager) {
             TxManager->SetHasSnapshot(GetSnapshot().IsValid());
@@ -620,6 +621,7 @@ private:
                         ResponseEv->BrokenLockQueryTraceId = brokenLock.GetQueryTraceId();
                     }
                 }
+                FillLocksFromExtraData();
                 ReplyErrorAndDie(Ydb::StatusIds::ABORTED, {});
                 return;
             }
@@ -1389,6 +1391,7 @@ private:
                     if (brokenLock.HasQueryTraceId()) {
                         ResponseEv->BrokenLockQueryTraceId = brokenLock.GetQueryTraceId();
                     }
+                    FillLocksFromExtraData();
                     ReplyErrorAndDie(Ydb::StatusIds::ABORTED, {});
                     return;
                 }
@@ -1468,6 +1471,7 @@ private:
                     if (brokenLock.HasQueryTraceId()) {
                         ResponseEv->BrokenLockQueryTraceId = brokenLock.GetQueryTraceId();
                     }
+                    FillLocksFromExtraData();
                     return ReplyErrorAndDie(Ydb::StatusIds::ABORTED, {});
                 }
 

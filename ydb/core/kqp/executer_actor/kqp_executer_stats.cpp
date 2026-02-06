@@ -1460,21 +1460,15 @@ TBatchOperationExecutionStats::TBatchOperationExecutionStats(Ydb::Table::QuerySt
     : StatsMode(statsMode) {}
 
 void TBatchOperationExecutionStats::TakeExecStats(NYql::NDqProto::TDqExecutionStats&& stats) {
-    YQL_ENSURE(stats.TablesSize() == 1, "Expected 1 table in stats, got " << stats.TablesSize());
-    auto tableStat = std::move(stats.GetTables(0));
-
-    if (TablePath.empty()) {
-        TablePath = std::move(tableStat.GetTablePath());
-    } else {
-        YQL_ENSURE(tableStat.GetTablePath() == TablePath, "Expected path: " << TablePath << ", got: " << tableStat.GetTablePath());
+    for (const auto& tableStat : stats.GetTables()) {
+        auto& tableStats = TableStats[tableStat.GetTablePath()];
+        tableStats.ReadRows += tableStat.GetReadRows();
+        tableStats.ReadBytes += tableStat.GetReadBytes();
+        tableStats.WriteRows += tableStat.GetWriteRows();
+        tableStats.WriteBytes += tableStat.GetWriteBytes();
+        tableStats.EraseRows += tableStat.GetEraseRows();
+        tableStats.EraseBytes += tableStat.GetEraseBytes();
     }
-
-    ReadRows += tableStat.GetReadRows();
-    ReadBytes += tableStat.GetReadBytes();
-    WriteRows += tableStat.GetWriteRows();
-    WriteBytes += tableStat.GetWriteBytes();
-    EraseRows += tableStat.GetEraseRows();
-    EraseBytes += tableStat.GetEraseBytes();
 
     CpuTimeUs += stats.GetCpuTimeUs();
     DurationUs += stats.GetDurationUs();
@@ -1500,15 +1494,19 @@ void TBatchOperationExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecution
             break;
     }
 
-    auto& tableAggr = *stats.AddTables();
-    tableAggr.SetTablePath(TablePath.c_str());
-    tableAggr.SetReadRows(ReadRows);
-    tableAggr.SetReadBytes(ReadBytes);
-    tableAggr.SetWriteRows(WriteRows);
-    tableAggr.SetWriteBytes(WriteBytes);
-    tableAggr.SetEraseRows(EraseRows);
-    tableAggr.SetEraseBytes(EraseBytes);
-    tableAggr.SetAffectedPartitions(AffectedPartitions.size());
+    for (const auto& [tablePath, tableStats] : TableStats) {
+        auto& tableAggr = *stats.AddTables();
+        tableAggr.SetTablePath(tablePath.c_str());
+        tableAggr.SetReadRows(tableStats.ReadRows);
+        tableAggr.SetReadBytes(tableStats.ReadBytes);
+        tableAggr.SetWriteRows(tableStats.WriteRows);
+        tableAggr.SetWriteBytes(tableStats.WriteBytes);
+        tableAggr.SetEraseRows(tableStats.EraseRows);
+        tableAggr.SetEraseBytes(tableStats.EraseBytes);
+
+        // TODO: it is not correct for indexImplTables
+        tableAggr.SetAffectedPartitions(AffectedPartitions.size());
+    }
 }
 
 } // namespace NKikimr::NKqp

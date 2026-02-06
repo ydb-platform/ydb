@@ -452,6 +452,15 @@ private:
     TEntry Cur;
 };
 
+struct TBatchOperationTableStats {
+    ui64 ReadRows = 0;
+    ui64 ReadBytes = 0;
+    ui64 WriteRows = 0;
+    ui64 WriteBytes = 0;
+    ui64 EraseRows = 0;
+    ui64 EraseBytes = 0;
+};
+
 struct TBatchOperationExecutionStats {
 public:
     explicit TBatchOperationExecutionStats(Ydb::Table::QueryStatsCollection::Mode statsMode);
@@ -468,14 +477,10 @@ public:
     TInstant FinishTs = TInstant::Max();
     std::unordered_set<ui64> AffectedPartitions;
 
-    // Accumulated stats from child executers
-    std::string TablePath;
-    ui64 ReadRows = 0;
-    ui64 ReadBytes = 0;
-    ui64 WriteRows = 0;
-    ui64 WriteBytes = 0;
-    ui64 EraseRows = 0;
-    ui64 EraseBytes = 0;
+    // Per-table accumulated stats from child executers
+    std::unordered_map<std::string, TBatchOperationTableStats> TableStats;
+
+    // Common accumulated stats from child executers
     ui64 CpuTimeUs = 0;
     ui64 DurationUs = 0;
     ui64 ExecutersCpuTimeUs = 0;

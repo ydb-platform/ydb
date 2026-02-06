@@ -2239,7 +2239,6 @@ Y_UNIT_TEST_SUITE(KqpCost) {
         appConfig.MutableTableServiceConfig()->SetEnableBatchUpdates(true);
 
         auto settings = TKikimrSettings(appConfig)
-            .SetUseRealThreads(false)
             .SetWithSampleTables(false);
 
         TKikimrRunner kikimr(settings);
@@ -2274,7 +2273,6 @@ Y_UNIT_TEST_SUITE(KqpCost) {
         appConfig.MutableTableServiceConfig()->SetEnableBatchUpdates(true);
 
         auto settings = TKikimrSettings(appConfig)
-            .SetUseRealThreads(false)
             .SetWithSampleTables(false);
 
         TKikimrRunner kikimr(settings);
@@ -2476,6 +2474,57 @@ Y_UNIT_TEST_SUITE(KqpCost) {
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().bytes(), 16);
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().rows(), 2);
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().bytes(), 32);
+    }
+
+    Y_UNIT_TEST(BatchOperation_SecondaryIndex) {
+        auto appConfig = GetAppConfig(false, false, true);
+        appConfig.MutableTableServiceConfig()->SetEnableBatchUpdates(true);
+
+        auto settings = TKikimrSettings(appConfig)
+            .SetWithSampleTables(false);
+
+        TKikimrRunner kikimr(settings);
+
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        CreateTestTable(session, false);
+
+        {
+            const auto query = R"(
+                ALTER TABLE `/Root/TestTable`
+                    ADD INDEX `TestIndex` GLOBAL SYNC ON (Amount);
+            )";
+
+            auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const auto query = R"(
+                BATCH UPDATE `/Root/TestTable`
+                    SET Amount = 1000;
+            )";
+
+            auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            Cerr << "BATCH UPDATE secondary index: " << Endl << stats.DebugString() << Endl;
+
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases_size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access_size(), 2);
+
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().bytes(), 64);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().rows(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().bytes(), 64);
+
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(1).updates().rows(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(1).updates().bytes(), 64);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(1).deletes().rows(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(1).deletes().bytes(), 0);
+        }
     }
 }
 

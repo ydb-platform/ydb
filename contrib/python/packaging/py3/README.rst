@@ -13,7 +13,7 @@ or benefit greatly from having a single shared implementation (eg: :pep:`425`).
 .. end-intro
 
 The ``packaging`` project includes the following: version handling, specifiers,
-markers, requirements, tags, utilities.
+markers, requirements, tags, metadata, lockfiles, utilities.
 
 Documentation
 -------------
@@ -25,6 +25,8 @@ The `documentation`_ provides information and the API for the following:
 - Markers
 - Requirements
 - Tags
+- Metadata
+- Lockfiles
 - Utilities
 
 Installation

@@ -635,8 +635,11 @@ class Distribution(_Distribution):
             Usage of dash-separated {opt!r} will not be supported in future
             versions. Please use the underscore name {underscore_opt!r} instead.
             {affected}
+
+            Available configuration options are listed in:
+            https://setuptools.pypa.io/en/latest/userguide/declarative_config.html
             """,
-            see_docs="userguide/declarative_config.html",
+            see_url="https://github.com/pypa/setuptools/discussions/5011",
             due_date=(2026, 3, 3),
             # Warning initially introduced in 3 Mar 2021
         )
@@ -655,8 +658,11 @@ class Distribution(_Distribution):
             Usage of uppercase key {opt!r} in {section!r} will not be supported in
             future versions. Please use lowercase {lowercase_opt!r} instead.
             {affected}
+
+            Available configuration options are listed in:
+            https://setuptools.pypa.io/en/latest/userguide/declarative_config.html
             """,
-            see_docs="userguide/declarative_config.html",
+            see_url="https://github.com/pypa/setuptools/discussions/5011",
             due_date=(2026, 3, 3),
             # Warning initially introduced in 6 Mar 2021
         )
@@ -803,7 +809,7 @@ class Distribution(_Distribution):
             if value is not None:
                 ep.load()(self, ep.name, value)
 
-    def get_egg_cache_dir(self):
+    def get_egg_cache_dir(self) -> str:
         from . import windows_support
 
         egg_cache_dir = os.path.join(os.curdir, '.eggs')
@@ -1050,7 +1056,7 @@ class Distribution(_Distribution):
 
         return d
 
-    def iter_distribution_names(self):
+    def iter_distribution_names(self) -> Iterator[str]:
         """Yield all packages, modules, and extension names in distribution"""
 
         yield from self.packages or ()
@@ -1062,8 +1068,7 @@ class Distribution(_Distribution):
                 name, _buildinfo = ext
             else:
                 name = ext.name
-            if name.endswith('module'):
-                name = name[:-6]
+            name = name.removesuffix('module')
             yield name
 
     def handle_display_options(self, option_order):

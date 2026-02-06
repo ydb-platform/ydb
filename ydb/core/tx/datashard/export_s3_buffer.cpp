@@ -445,7 +445,7 @@ IExport::IBuffer* TS3Export::CreateBuffer() const {
     const ui64 configMaxBytes = AppData()->DataShardConfig.GetBackupBytesBatchSize();
     const ui64 maxBytes = scanSettings.HasBytesBatchSize() ? scanSettings.GetBytesBatchSize() : configMaxBytes;
 
-    const ui64 minBytes = Task.GetS3Settings().GetLimits().GetMinWriteBatchSize();
+    const ui64 minBytes = Task.HasS3Settings() ? Task.GetS3Settings().GetLimits().GetMinWriteBatchSize() : 5242880; // 5MB
 
     TS3ExportBufferSettings bufferSettings;
     bufferSettings

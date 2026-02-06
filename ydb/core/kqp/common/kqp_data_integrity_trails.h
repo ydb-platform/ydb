@@ -187,15 +187,6 @@ inline void LogQueryText(TStringStream& ss, const TString& queryText) {
     LogQueryTextImpl(ss, queryText, config.GetQueryTextLogMode() == NKikimrProto::TDataIntegrityTrailsConfig_ELogMode_HASHED);
 }
 
-inline void LogQueryTextTli(TStringStream& ss, const TString& queryText, bool isCommitAction) {
-    if (isCommitAction && queryText.empty()) {
-        LogKeyValue("QueryText", "Commit", ss);
-        return;
-    }
-
-    LogKeyValue("QueryText", EscapeC(queryText), ss);
-}
-
 inline bool ShouldBeLogged(NKikimrKqp::EQueryAction action, NKikimrKqp::EQueryType type) {
     switch (type) {
         case NKikimrKqp::QUERY_TYPE_SQL_DDL:
@@ -319,19 +310,12 @@ inline void LogTli(const TTliLogParams& params, const TActorContext& ctx) {
         LogKeyValue("CurrentQueryTraceId", ToString(*params.CurrentQueryTraceId), ss);
     }
 
-    // For victim logs, log the original victim query text separately
-    if (!params.VictimQueryText.empty()) {
-        LogKeyValue("VictimQueryText", EscapeC(params.VictimQueryText), ss);
-    }
-
     // Use appropriate field names based on breaker vs victim
     if (isBreaker) {
-        LogQueryTextTli(ss, params.QueryText, params.IsCommitAction);
-        // For breaker, rename to BreakerQueryTexts but keep content as AllQueryTexts for compatibility
+        LogKeyValue("BreakerQueryText", EscapeC(params.QueryText), ss);
         LogKeyValue("BreakerQueryTexts", EscapeC(params.QueryTexts), ss, true);
     } else {
-        LogQueryTextTli(ss, params.QueryText, params.IsCommitAction);
-        // For victim, use VictimQueryTexts
+        LogKeyValue("VictimQueryText", EscapeC(params.VictimQueryText), ss);
         LogKeyValue("VictimQueryTexts", EscapeC(params.QueryTexts), ss, true);
     }
 

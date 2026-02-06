@@ -61,7 +61,7 @@ bool AreFiltersEqual(const TSearchRequestInfo::TSearchFilter& filter1, const TSe
 }
 } // namespace
 
-TBindRequestInfo::TBindRequestInfo(const TString& login, const TString& password, const ESaslMechanism& mechanism)
+TBindRequestInfo::TBindRequestInfo(const TString& login, const TString& password, const TString& mechanism)
     : Login(login)
     , Password(password)
     , Mechanism(mechanism)

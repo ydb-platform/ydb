@@ -194,12 +194,12 @@ private:
 
         if (Settings.GetExtendedSettings().GetEnableSaslExternalBind()) {
             LDAP_LOG_D("bind: Sasl EXTERNAL");
-            result = NKikimrLdap::Bind(*ld, "", NKikimrLdap::ESaslMechanism::EXTERNAL, nullptr);
+            result = NKikimrLdap::Bind(*ld, "", NLoginProto::ESaslAuthMech::External, nullptr);
         } else {
             LDAP_LOG_D("bind: bindDn: " << Settings.GetBindDn());
             const TString& bindPassword = Settings.GetBindPassword();
             std::vector<char> credentials(bindPassword.begin(), bindPassword.end());
-            result = NKikimrLdap::Bind(*ld, Settings.GetBindDn(), NKikimrLdap::ESaslMechanism::SIMPLE, &credentials);
+            result = NKikimrLdap::Bind(*ld, Settings.GetBindDn(), NLoginProto::ESaslAuthMech::Simple, &credentials);
         }
         if (!NKikimrLdap::IsSuccess(result)) {
             TStringBuilder logErrorMessage;
@@ -314,7 +314,7 @@ private:
         TEvLdapAuthProvider::TError error;
         LDAP_LOG_D("bind: bindDn: " << dn);
         std::vector<char> credentials(request.Password.begin(), request.Password.end());
-        int result = NKikimrLdap::Bind(*request.Ld, dn, NKikimrLdap::ESaslMechanism::SIMPLE, &credentials);
+        int result = NKikimrLdap::Bind(*request.Ld, dn, NLoginProto::ESaslAuthMech::Simple, &credentials);
         if (!NKikimrLdap::IsSuccess(result)) {
             TStringBuilder logErrorMessage;
             logErrorMessage << "LDAP login failed for user " << TString(dn) << " on server " << UrisCreator.GetUris() << ". "

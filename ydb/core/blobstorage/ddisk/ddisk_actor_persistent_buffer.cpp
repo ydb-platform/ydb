@@ -173,6 +173,17 @@ namespace NKikimr::NDDisk {
         if (!CheckQuery(*ev, &Counters.Interface.WritePersistentBuffer)) {
             return;
         }
+        const auto& record = ev->Get()->Record;
+        const TBlockSelector selector(record.GetSelector());
+        if (selector.Size > MaxSectorsPerBuffer * SectorSize) {
+            Counters.Interface.WritePersistentBuffer.Request(selector.Size);
+            Counters.Interface.WritePersistentBuffer.Reply(false);
+            SendReply(*ev, std::make_unique<TEvWritePersistentBufferResult>(
+                NKikimrBlobStorage::NDDisk::TReplyStatus::INCORRECT_REQUEST,
+                TStringBuilder() << "persistent buffer write limit "
+                    << (MaxSectorsPerBuffer * SectorSize) << " bytes, received " << selector.Size << " bytes"));
+            return;
+        }
         PendingPersistentBufferEvents.emplace(ev, "WaitingPersistentBufferWrite");
         ProcessPersistentBufferQueue();
     }

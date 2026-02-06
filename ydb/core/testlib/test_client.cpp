@@ -1359,7 +1359,7 @@ namespace Tests {
                 }
 
                 auto uniqueDriver = NKqp::MakeYdbDriver(actorSystemPtr, queryServiceConfig.GetStreamingQueries().GetTopicSdkSettings());
-                auto FederatedQuerySetupDriver_ = NKqp::MakeSharedYdbDriverWithStop(std::move(uniqueDriver));
+                FederatedQuerySetupDriver_ = NKqp::MakeSharedYdbDriverWithStop(std::move(uniqueDriver));
                 auto pqGateway = NKqp::MakePqGateway(FederatedQuerySetupDriver_);
 
                 federatedQuerySetupFactory = std::make_shared<NKikimr::NKqp::TKqpFederatedQuerySetupFactoryMock>(

@@ -206,9 +206,6 @@ ui64 TPartitionBlobEncoder::GetHeadGapSize() const
 ui64 TPartitionBlobEncoder::GetSizeLag(i64 offset) const
 {
     ui64 sizeLag = 0;
-<<<<<<< HEAD
-    if (!DataKeysBody.empty() && PositionInBody(offset, 0)) { // there will be something in body
-=======
     bool offsetInBody = false;
 
     if (!DataKeysBody.empty()) {
@@ -226,7 +223,6 @@ ui64 TPartitionBlobEncoder::GetSizeLag(i64 offset) const
     }
 
     if (offsetInBody) {
->>>>>>> 654a42eb47b (The size lag is calculated incorrectly (#33530))
         auto it = std::upper_bound(DataKeysBody.begin(), DataKeysBody.end(), std::make_pair(offset, 0),
                 [](const std::pair<ui64, ui16>& offsetAndPartNo, const TDataKey& p) { return offsetAndPartNo.first < p.Key.GetOffset() || offsetAndPartNo.first == p.Key.GetOffset() && offsetAndPartNo.second < p.Key.GetPartNo();});
         if (it != DataKeysBody.begin())

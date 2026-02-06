@@ -56,6 +56,7 @@ namespace NWilson {
             int UncaughtExceptions = std::uncaught_exceptions();
             bool Sent = false;
             bool Ignored = false;
+            bool EndAsIs = false; // don't update any data on End()
             NActors::TActorSystem* ActorSystem;
 
             TData(TInstant startTime, ui64 startCycles, TTraceId traceId, TFlags flags, NActors::TActorSystem* actorSystem);

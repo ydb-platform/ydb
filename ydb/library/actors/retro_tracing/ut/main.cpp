@@ -4,10 +4,13 @@
 #include <util/random/random.h>
 #include <util/stream/null.h>
 
-#include <ydb/library/actors/retro_tracing/universal_span.h>
+#include <ydb/library/actors/retro_tracing/retro_collector.h>
 #include <ydb/library/actors/retro_tracing/span_buffer.h>
+#include <ydb/library/actors/retro_tracing/universal_span.h>
+#include <ydb/library/actors/testlib/test_runtime.h>
 
 #include "test_spans.h"
+#include "fake_wilson_uploader.h"
 
 #include <thread>
 
@@ -22,7 +25,7 @@ Y_UNIT_TEST_SUITE(UniversalSpan) {
 
         NWilson::TTraceId parentId = NWilson::TTraceId::NewTraceId(verbosity, ttl, true);
 
-        TUniversalSpan<TTestSpan1> span(verbosity, parentId, "Test1");
+        TUniversalSpan<TTestSpan1> span(verbosity, NWilson::TTraceId(parentId), "Test1");
         UNIT_ASSERT(span.GetSpanType() == EUniversalSpanType::Retro);
         UNIT_ASSERT(span.GetTraceId() != NWilson::TTraceId{});
         UNIT_ASSERT(span.GetRetroSpanPtr()->GetName().find("TTestSpan1") != std::string::npos);
@@ -38,7 +41,7 @@ Y_UNIT_TEST_SUITE(UniversalSpan) {
         NWilson::TTraceId parentId = NWilson::TTraceId::NewTraceId(verbosity, ttl, true);
 
         {
-            TUniversalSpan<TTestSpan1> span(verbosity, parentId, "Test1");
+            TUniversalSpan<TTestSpan1> span(verbosity, NWilson::TTraceId(parentId), "Test1");
             UNIT_ASSERT(span.GetSpanType() == EUniversalSpanType::Retro);
             TInstant start = span.GetRetroSpanPtr()->GetStartTs();
 
@@ -66,7 +69,7 @@ Y_UNIT_TEST_SUITE(UniversalSpan) {
         }
 
         {
-            TUniversalSpan<TTestSpan2> span(verbosity, parentId, "Test2");
+            TUniversalSpan<TTestSpan2> span(verbosity, NWilson::TTraceId(parentId), "Test2");
             UNIT_ASSERT(span.GetSpanType() == EUniversalSpanType::Retro);
             TInstant start = span.GetRetroSpanPtr()->GetStartTs();
 
@@ -112,13 +115,14 @@ Y_UNIT_TEST_SUITE(SpanBuffer) {
         ui64 var = RandomNumber<ui64>();
 
         if (parameters & AUTO_END) {
-            TUniversalSpan<TTestSpan1> span(Verbosity, parentId, "Test", NWilson::EFlags::AUTO_END);
+            TUniversalSpan<TTestSpan1> span(Verbosity, NWilson::TTraceId(parentId), "Test",
+                    NWilson::EFlags::AUTO_END);
             span.GetRetroSpanPtr()->Var = var;
             if (parameters & MANUAL_END) {
                 span.GetRetroSpanPtr()->End();
             }
         } else {
-            TUniversalSpan<TTestSpan1> span(Verbosity, parentId, "Test");
+            TUniversalSpan<TTestSpan1> span(Verbosity, NWilson::TTraceId(parentId), "Test");
             span.GetRetroSpanPtr()->Var = var;
             span.GetRetroSpanPtr()->End();
         }
@@ -163,7 +167,8 @@ Y_UNIT_TEST_SUITE(SpanBuffer) {
         while (TInstant::Now() < end) {
             ui32 pos = RandomNumber<ui32>(BufferSize - sizeof(ui64));
             ui64 val = GetValue(pos);
-            TUniversalSpan<TTestSpan2> span(Verbosity, TraceId, "Test", NWilson::EFlags::AUTO_END);
+            TUniversalSpan<TTestSpan2> span(Verbosity, NWilson::TTraceId(TraceId), "Test",
+                    NWilson::EFlags::AUTO_END);
             span.GetRetroSpanPtr()->Var1 = pos;
             span.GetRetroSpanPtr()->Var2 = val;
         }
@@ -204,6 +209,106 @@ Y_UNIT_TEST_SUITE(SpanBuffer) {
         for (std::thread& thread : threads) {
             thread.join();
         }
+    }
+}
+
+Y_UNIT_TEST_SUITE(RetroCollector) {
+    const ui8 Verbosity = 1;
+
+    class TTestActor : public NActors::TActorBootstrapped<TTestActor> {
+    public:
+        TTestActor(const NWilson::TTraceId& traceId, const NActors::TActorId& edgeActorId)
+            : TraceId(traceId)
+            , EdgeActorId(edgeActorId)
+        {}
+
+        void Bootstrap() {
+            Foo(NWilson::TTraceId(TraceId));
+            NRetroTracing::DemandTrace(TraceId);
+            Sleep(TDuration::Seconds(1));
+            Send(EdgeActorId, new NActors::TEvents::TEvGone);
+            PassAway();
+        }
+
+        void Foo(NWilson::TTraceId&& traceId) {
+            Ctest << "Foo()" << Endl;
+            TUniversalSpan<TTestSpan1> span(Verbosity, std::move(traceId), "Name", NWilson::EFlags::AUTO_END);
+            span.GetRetroSpanPtr()->Var = 111;
+            Sleep(TDuration::MilliSeconds(100));
+
+            for (ui32 i = 0; i < ChildSpans; ++i) {
+                Bar(span.GetTraceId(), i);
+            }
+        }
+
+        void Bar(NWilson::TTraceId&& traceId, ui32 idx) {
+            Ctest << "Bar()" << Endl;
+            TUniversalSpan<TTestSpan2> span(Verbosity, std::move(traceId), "Name", NWilson::EFlags::AUTO_END);
+            span.GetRetroSpanPtr()->Var1 = idx;
+            span.GetRetroSpanPtr()->Var2 = 999;
+            Sleep(TDuration::MilliSeconds(20));
+        }
+
+    public:
+        NWilson::TTraceId TraceId;
+        NActors::TActorId EdgeActorId;
+
+        constexpr static ui32 ChildSpans = 5;
+    };
+
+    Y_UNIT_TEST(Simple) {
+        NActors::TTestActorRuntimeBase actorSystem(1);
+        actorSystem.Initialize();
+
+        { // register retro collector
+            NActors::TActorId actorId = actorSystem.Register(NRetroTracing::CreateRetroCollector());
+            actorSystem.RegisterService(NRetroTracing::MakeRetroCollectorId(), actorId);
+        }
+
+        TFakeWilsonUploader* wilson = dynamic_cast<TFakeWilsonUploader*>(CreateFakeWilsonUploader());
+        { // register fake wilson collector
+            NActors::TActorId actorId = actorSystem.Register(wilson);
+            actorSystem.RegisterService(NWilson::MakeWilsonUploaderId(), actorId);
+        }
+
+        const ui32 ttl = Max<ui32>();
+        NWilson::TTraceId traceId = NWilson::TTraceId::NewTraceId(Verbosity, ttl, true);
+
+        NActors::TActorId edge = actorSystem.AllocateEdgeActor();
+        {
+            actorSystem.Register(new TTestActor(traceId, edge));
+        }
+
+        actorSystem.GrabEdgeEvent<NActors::TEvents::TEvGone>(edge);
+
+        ui32 numSpan1 = 0;
+        ui32 numSpan2 = 0;
+        ui64 rootSpanId = 0;
+        std::unordered_set<ui64> childSpans = {};
+        std::unordered_set<ui64> childSpanParents = {};
+        for (const auto& span : wilson->Spans) {
+            UNIT_ASSERT_VALUES_EQUAL(span.span_id().size(), sizeof(ui64));
+            UNIT_ASSERT_VALUES_EQUAL(span.parent_span_id().size(), sizeof(ui64));
+            ui64 spanId = *reinterpret_cast<const ui64*>(span.span_id().data());
+            ui64 parentSpanId = *reinterpret_cast<const ui64*>(span.parent_span_id().data());
+            UNIT_ASSERT_VALUES_UNEQUAL(spanId, 0);
+            if (span.name().find("TTestSpan1") != std::string::npos) {
+                ++numSpan1;
+                rootSpanId = spanId;
+            } else if (span.name().find("TTestSpan2") != std::string::npos) {
+                ++numSpan2;
+                childSpans.insert(spanId);
+                childSpanParents.insert(parentSpanId);
+            } else {
+                UNIT_FAIL(span.name());
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(numSpan1, 1);
+        UNIT_ASSERT_VALUES_EQUAL(numSpan2, TTestActor::ChildSpans);
+        UNIT_ASSERT_VALUES_UNEQUAL(rootSpanId, 0);
+        UNIT_ASSERT_VALUES_EQUAL(childSpans.size(), numSpan2);
+        UNIT_ASSERT_VALUES_EQUAL(childSpanParents.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(*childSpanParents.begin(), rootSpanId);
     }
 }
 

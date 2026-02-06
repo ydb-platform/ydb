@@ -23,14 +23,14 @@ class TUniversalSpan {
 public:
     TUniversalSpan() = default;
 
-    TUniversalSpan(ui8 verbosity, const NWilson::TTraceId& parentId, const char* name,
+    TUniversalSpan(ui8 verbosity, NWilson::TTraceId parentId, const char* name,
             NWilson::TFlags flags = NWilson::EFlags::NONE,
             NActors::TActorSystem* actorSystem = nullptr) {
         if (parentId.IsRetroTrace()) {
             Span.template emplace<TRetroSpanType>();
-            std::get<TRetroSpanType>(Span).Initialize(verbosity, NWilson::TTraceId(parentId), name, flags, actorSystem);
+            std::get<TRetroSpanType>(Span).Initialize(verbosity, std::move(parentId), name, flags, actorSystem);
         } else {
-            Span.template emplace<NWilson::TSpan>(verbosity, NWilson::TTraceId(parentId), name, flags, actorSystem);
+            Span.template emplace<NWilson::TSpan>(verbosity, std::move(parentId), name, flags, actorSystem);
         }
     }
 

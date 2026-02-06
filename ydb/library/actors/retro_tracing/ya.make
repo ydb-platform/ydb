@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    retro_collector.cpp
     retro_span.cpp
     span_buffer.cpp
 )

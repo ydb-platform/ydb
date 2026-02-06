@@ -65,7 +65,7 @@ std::unique_ptr<NWilson::TSpan> TRetroSpan::MakeWilsonSpan() {
     std::unique_ptr<NWilson::TSpan> res = std::make_unique<NWilson::TSpan>(
             NWilson::TSpan::ConstructTerminated(GetParentId(), GetTraceId(),
                     GetStartTs(), GetEndTs(), GetName()));
-    return nullptr;
+    return res;
 }
 
 void TRetroSpan::End() {

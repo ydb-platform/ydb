@@ -47,7 +47,7 @@ public:
 
     template <class T>
     requires std::derived_from<T, TRetroSpan>
-    T* Cast() {
+    T* CastMut() {
         return dynamic_cast<T*>(this);
     }
 

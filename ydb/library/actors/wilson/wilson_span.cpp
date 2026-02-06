@@ -124,9 +124,11 @@ namespace NWilson {
 
     void TSpan::End() {
         if (Y_UNLIKELY(*this)) {
-            Data->Span.set_trace_id(Data->TraceId.GetTraceIdPtr(), Data->TraceId.GetTraceIdSize());
-            Data->Span.set_span_id(Data->TraceId.GetSpanIdPtr(), Data->TraceId.GetSpanIdSize());
-            Data->Span.set_end_time_unix_nano(TimeUnixNano());
+            if (!Data->EndAsIs) {
+                Data->Span.set_trace_id(Data->TraceId.GetTraceIdPtr(), Data->TraceId.GetTraceIdSize());
+                Data->Span.set_span_id(Data->TraceId.GetSpanIdPtr(), Data->TraceId.GetSpanIdSize());
+                Data->Span.set_end_time_unix_nano(TimeUnixNano());
+            }
             Send();
         } else {
             VerifyNotSent();
@@ -152,13 +154,13 @@ namespace NWilson {
                 nullptr);
         res.Data->Span.set_trace_id(parentId.GetTraceIdPtr(), parentId.GetTraceIdSize());
         res.Data->Span.set_parent_span_id(parentId.GetSpanIdPtr(), parentId.GetSpanIdSize());
-        res.Data->Span.set_span_id(parentId.GetSpanIdPtr(), parentId.GetSpanIdSize());
+        res.Data->Span.set_span_id(spanId.GetSpanIdPtr(), spanId.GetSpanIdSize());
         res.Data->Span.set_start_time_unix_nano(startTs.NanoSeconds());
         res.Data->Span.set_end_time_unix_nano(endTs.NanoSeconds());
+        res.Data->Span.mutable_status()->set_code(NTraceProto::Status::STATUS_CODE_OK);
         res.Name(name);
         res.Attribute("node_id", res.Data->ActorSystem->NodeId);
-        res.Data->Ignored = true;
-
+        res.Data->EndAsIs = true;
         return res;
     }
 

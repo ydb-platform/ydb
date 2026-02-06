@@ -9,6 +9,7 @@ SRCS(
 
 PEERDIR(
     ydb/library/actors/retro_tracing
+    ydb/library/actors/testlib
 )
 
 END()

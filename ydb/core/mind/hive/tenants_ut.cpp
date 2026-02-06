@@ -1,17 +1,15 @@
+#include <ydb/core/cms/cms.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/public/api/grpc/ydb_cms_v1.grpc.pb.h>
+#include <ydb/public/api/grpc/draft/ydb_maintenance_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_scripting_v1.grpc.pb.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/threading/future/async.h>
 
-#ifdef NDEBUG
-static constexpr bool ENABLE_DETAILED_HIVE_LOG = false;
-#else
-static constexpr bool ENABLE_DETAILED_HIVE_LOG = true;
-#endif
+#include "ut_common.h"
 
 using namespace NKikimr;
 
@@ -105,5 +103,74 @@ Y_UNIT_TEST_SUITE(THiveTestWithTenants) {
             }
             UNIT_ASSERT_VALUES_EQUAL(aliveTablets, 0);
         }
+    }
+
+    Y_UNIT_TEST(TestSetDown) {
+        TPortManager pm;
+        Tests::TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetNodeCount(1)
+            .SetDynamicNodeCount(2)
+            .SetUseRealThreads(true)
+            .AddStoragePoolType("ssd");
+
+        Tests::TServer::TPtr server = new Tests::TServer(serverSettings);
+
+        auto& runtime = *server->GetRuntime();
+        auto cms = CreateTestBootstrapper(runtime, CreateTestTabletInfo(MakeCmsID(), TTabletTypes::Cms), &NCms::CreateCms);
+        runtime.EnableScheduleForActor(cms);
+        if (ENABLE_DETAILED_HIVE_LOG) {
+            runtime.SetLogPriority(NKikimrServices::HIVE, NActors::NLog::PRI_TRACE);
+            runtime.SetLogPriority(NKikimrServices::CMS, NActors::NLog::PRI_TRACE);
+        }
+        const auto sender = runtime.AllocateEdgeActor();
+        const ui64 hiveTablet = Tests::ChangeStateStorage(Tests::Hive, serverSettings.Domain);
+
+        Tests::TTenants tenants(server);
+
+        Cerr << "1.Create tenant" << Endl;
+        {
+            Ydb::Cms::CreateDatabaseRequest request;
+            request.set_path("/Root/db1");
+            auto* resources = request.mutable_resources();
+            auto* storage = resources->add_storage_units();
+            storage->set_unit_kind("ssd");
+            storage->set_count(1);
+            tenants.CreateTenant(request, 2, TDuration::Minutes(1));
+        }
+
+        const auto nodeId = runtime.GetNodeId(tenants.List("/Root/db1").front());
+
+        {
+            Ydb::Maintenance::CreateMaintenanceTaskRequest request;
+            request.mutable_task_options()->set_availability_mode(Ydb::Maintenance::AVAILABILITY_MODE_WEAK);
+            request.mutable_task_options()->set_task_uid("cordon-task");
+            auto* cordon = request.add_action_groups()->add_actions()->mutable_cordon_action();
+            cordon->mutable_scope()->set_node_id(nodeId);
+
+            auto ev = std::make_unique<NCms::TEvCms::TEvCreateMaintenanceTaskRequest>();
+            ev->Record.SetUserSID("test-user");
+            *ev->Record.MutableRequest() = std::move(request);
+            runtime.SendToPipe(MakeCmsID(), sender, ev.release(), 0, GetPipeConfigWithRetries());
+            TAutoPtr<IEventHandle> handle;
+            auto reply = runtime.GrabEdgeEventRethrow<NCms::TEvCms::TEvMaintenanceTaskResponse>(handle);
+            Cerr << "Cordon result: " << reply->Record.ShortDebugString() << Endl;
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(GetSimpleCounter(runtime, hiveTablet, NHive::COUNTER_NODES_DOWN), 1);
+
+        {
+            Ydb::Maintenance::DropMaintenanceTaskRequest request;
+            request.set_task_uid("cordon-task");
+
+            auto ev = std::make_unique<NCms::TEvCms::TEvDropMaintenanceTaskRequest>();
+            *ev->Record.MutableRequest() = std::move(request);
+            runtime.SendToPipe(MakeCmsID(), sender, ev.release(), 0, GetPipeConfigWithRetries());
+            TAutoPtr<IEventHandle> handle;
+            auto reply = runtime.GrabEdgeEventRethrow<NCms::TEvCms::TEvManageMaintenanceTaskResponse>(handle);
+            Cerr << "Uncordon result: " << reply->Record.ShortDebugString() << Endl;
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(GetSimpleCounter(runtime, hiveTablet, NHive::COUNTER_NODES_DOWN), 0);
     }
 }

@@ -69,44 +69,6 @@ void TSchema::Rename(std::vector<int> oldToNew) {
     Tables_ = newTables;
 }
 
-void TRelationGraph::Connect(TRNG& rng, unsigned u, unsigned v, TPitmanYorConfig config) {
-    // 1. Generate L.H.S (Source) Key
-    // LHS is the "Leader" - it picks purely based on its internal PY weights
-    double quantileU = getRandomNormalizedDouble(rng);
-    ui32 keyU = NodeStates_[u].GenerateKey(rng, config, quantileU);
-
-    // 2. Calculate coupling logic for R.H.S (Target)
-    // Default: Random (Independent)
-    double quantileV = -1.0;
-
-    // Check if we should enforce correlation
-    bool enforceCorrelation = false;
-    if (std::abs(config.Assortativity) > 1e-6) {
-        // Probability of coupling equals the magnitude of assortativity
-        if (getRandomNormalizedDouble(rng) < std::abs(config.Assortativity)) {
-            enforceCorrelation = true;
-        }
-    }
-
-    if (enforceCorrelation) {
-        if (config.Assortativity > 0) {
-            // Positive: Rich connects to Rich (match quantile)
-            quantileV = quantileU;
-        } else {
-            // Negative: Rich connects to Poor (invert quantile)
-            quantileV = 1.0 - quantileU;
-        }
-    }
-
-    // 3. Generate R.H.S (Target) Key
-    // RHS is the "Follower" - it might successfully find a key at the requested
-    // quantile, or create a new one if it has to.
-    ui32 keyV = NodeStates_[v].GenerateKey(rng, config, quantileV);
-
-    // 4. Update Topology
-    AdjacencyList_[u].push_back({v, keyU, keyV});
-    AdjacencyList_[v].push_back({u, keyV, keyU});
-}
 
 void TRelationGraph::Rewire(TRNG& rng, unsigned u, unsigned oldV, unsigned newV, TPitmanYorConfig config) {
     Disconnect(u, oldV);
@@ -171,6 +133,76 @@ void TRelationGraph::ConnectWithKeys(unsigned u, unsigned v, unsigned keyU, unsi
     NodeStates_[u].TotalEdges++;
     NodeStates_[v].Counts[keyV]++;
     NodeStates_[v].TotalEdges++;
+
+    size_t idU = EnsureGlobalID(u, keyU);
+    size_t idV = EnsureGlobalID(v, keyV);
+    EquivalenceClasses_.UnionSets(idU, idV);
+}
+
+void TRelationGraph::Connect(TRNG& rng, unsigned u, unsigned v, TPitmanYorConfig config) {
+    // 1. Define Accessor for LHS (U)
+    // If GlobalStats is on, chance of picking a key is proportional to its Class Size.
+    TWeightAccessor accessorU = nullptr;
+    if (config.UseGlobalStats) {
+        accessorU = [&](ui32 k) -> double {
+            if (GlobalKeyMapping_.size() > u && GlobalKeyMapping_[u].size() > k &&
+                GlobalKeyMapping_[u][k] != std::numeric_limits<size_t>::max())
+            {
+                return (double)EquivalenceClasses_.SizeOfSet(GlobalKeyMapping_[u][k]);
+            }
+            return 1.0;
+        };
+    }
+
+    // 2. Generate LHS Key
+    double quantileU = getRandomNormalizedDouble(rng);
+    ui32 keyU = NodeStates_[u].GenerateKey(rng, config, quantileU, accessorU);
+
+    // 3. Calculate Coupling (Assortativity)
+    double quantileV = -1.0;
+    bool enforceCorrelation = false;
+    if (std::abs(config.Assortativity) > 1e-6) {
+        if (getRandomNormalizedDouble(rng) < std::abs(config.Assortativity)) {
+            enforceCorrelation = true;
+        }
+    }
+
+    if (enforceCorrelation) {
+        if (config.Assortativity > 0) {
+            quantileV = quantileU; // Pos: Big joins Big
+        } else {
+            quantileV = 1.0 - quantileU; // Neg: Big joins Small
+        }
+    }
+
+    // 4. Define Accessor for RHS (V)
+    // Same logic as U.
+    TWeightAccessor accessorV = nullptr;
+    if (config.UseGlobalStats) {
+        accessorV = [&](ui32 k) -> double {
+            if (GlobalKeyMapping_.size() > v && GlobalKeyMapping_[v].size() > k &&
+                GlobalKeyMapping_[v][k] != std::numeric_limits<size_t>::max())
+            {
+                return (double)EquivalenceClasses_.SizeOfSet(GlobalKeyMapping_[v][k]);
+            }
+            return 1.0;
+        };
+    }
+
+    // 5. Generate RHS Key
+    ui32 keyV = NodeStates_[v].GenerateKey(rng, config, quantileV, accessorV);
+
+    // 6. Update Graph & DSU
+    // We duplicate the logic of ConnectWithKeys here because GenerateKey
+    // has already incremented Counts/TotalEdges, so calling ConnectWithKeys
+    // would double-count the stats. We only need the adjacency and DSU update.
+
+    AdjacencyList_[u].push_back({v, keyU, keyV});
+    AdjacencyList_[v].push_back({u, keyV, keyU});
+
+    size_t idU = EnsureGlobalID(u, keyU);
+    size_t idV = EnsureGlobalID(v, keyV);
+    EquivalenceClasses_.UnionSets(idU, idV);
 }
 
 void TRelationGraph::RemoveEdgeFromList(unsigned owner, unsigned target) {
@@ -192,6 +224,22 @@ void TRelationGraph::RemoveEdgeFromList(unsigned owner, unsigned target) {
             return;
         }
     }
+}
+
+
+size_t TRelationGraph::EnsureGlobalID(unsigned table, unsigned key) {
+    if (GlobalKeyMapping_.size() <= table) GlobalKeyMapping_.resize(table + 1);
+    if (GlobalKeyMapping_[table].size() <= key) {
+        GlobalKeyMapping_[table].resize(key + 1, std::numeric_limits<size_t>::max());
+    }
+
+    if (GlobalKeyMapping_[table][key] == std::numeric_limits<size_t>::max()) {
+        // Allocate new slot in DSU
+        size_t currentCap = EquivalenceClasses_.InitialSetCount();
+        EquivalenceClasses_.Expand(currentCap + 1);
+        GlobalKeyMapping_[table][key] = currentCap;
+    }
+    return GlobalKeyMapping_[table][key];
 }
 
 std::vector<int> TRelationGraph::FindComponents() const {
@@ -432,6 +480,147 @@ TRelationGraph GenerateClique(TRNG &rng, unsigned numNodes, TPitmanYorConfig con
     return graph;
 }
 
+TRelationGraph GenerateRing(TRNG& rng, unsigned numNodes, TPitmanYorConfig config) {
+    if (numNodes < 3) {
+        // Fallback to path for degenerate rings
+        return GeneratePath(rng, numNodes, config);
+    }
+
+    TRelationGraph graph(numNodes);
+
+    // 1. Create a path: 0 -> 1 -> ... -> N-1
+    for (unsigned i = 0; i < numNodes - 1; ++i) {
+        graph.Connect(rng, i, i + 1, config);
+    }
+
+    // 2. Close the loop: N-1 -> 0
+    graph.Connect(rng, numNodes - 1, 0, config);
+
+    return graph;
+}
+
+TRelationGraph GenerateGrid(TRNG& rng, unsigned numNodes, TPitmanYorConfig config) {
+    TRelationGraph graph(numNodes);
+
+    if (numNodes == 0) return graph;
+
+    // Calculate dimensions to be as square as possible
+    // width * height >= numNodes
+    unsigned width = static_cast<unsigned>(std::ceil(std::sqrt(numNodes)));
+    // height is implicitly determined by the loop
+
+    for (unsigned i = 0; i < numNodes; ++i) {
+        unsigned col = i % width;
+
+        // Connect Right: (row, col) -> (row, col+1)
+        // Check if next node is within the same row AND within bounds
+        if (col + 1 < width && (i + 1) < numNodes) {
+            graph.Connect(rng, i, i + 1, config);
+        }
+
+        // Connect Down: (row, col) -> (row+1, col)
+        // Check if node below exists
+        if ((i + width) < numNodes) {
+            graph.Connect(rng, i, i + width, config);
+        }
+    }
+
+    return graph;
+}
+
+TRelationGraph GenerateLollipop(TRNG& rng, unsigned numNodes, TPitmanYorConfig config) {
+    // If N is too small, just return a Clique
+    if (numNodes < 4) {
+        return GenerateClique(rng, numNodes, config);
+    }
+
+    TRelationGraph graph(numNodes);
+
+    // Split: 1/2 nodes for Clique (Head), 1/2 nodes for Path (Tail)
+    unsigned headSize = numNodes / 2;
+
+    // 1. Build the Head (Clique)
+    for (unsigned i = 0; i < headSize; ++i) {
+        for (unsigned j = i + 1; j < headSize; ++j) {
+            graph.Connect(rng, i, j, config);
+        }
+    }
+
+    // 2. Build the Tail (Path)
+    // Connect first node of tail (headSize) to a node in the clique (headSize - 1)
+    // Then connect subsequent tail nodes linearly
+    for (unsigned i = headSize; i < numNodes; ++i) {
+        // i connects to i-1.
+        // When i == headSize, i-1 is the last node of the clique.
+        graph.Connect(rng, i - 1, i, config);
+    }
+
+    return graph;
+}
+
+TRelationGraph GenerateGalaxy(TRNG& rng, unsigned numNodes, TPitmanYorConfig config) {
+    TRelationGraph graph(numNodes);
+
+    if (numNodes < 2) {
+        return GeneratePath(rng, numNodes, config);
+    }
+
+    // Defines two "Centers" (Hubs) for the galaxy, i.e. two large fact tables joined together
+    unsigned hub1 = 0;
+    unsigned hub2 = 1;
+
+    // Connect the two hubs (The "Bridge")
+    graph.Connect(rng, hub1, hub2, config);
+
+    // Distribute the remaining nodes (Dimensions) between the two hubs.
+    std::uniform_int_distribution<> dist(0, 2);
+
+    for (unsigned i = 2; i < numNodes; ++i) {
+        int type = dist(rng);
+
+        if (type == 0) {
+            // Exclusive to Hub 1
+            graph.Connect(rng, hub1, i, config);
+        } else if (type == 1) {
+            // Exclusive to Hub 2
+            graph.Connect(rng, hub2, i, config);
+        } else {
+            // Shared Dimension (creates a cycle between hubs)
+            graph.Connect(rng, hub1, i, config);
+            graph.Connect(rng, hub2, i, config);
+        }
+    }
+
+    return graph;
+}
+
+TRelationGraph GenerateRandomGraphFixedM(TRNG &rng, unsigned numNodes, unsigned numEdges, TPitmanYorConfig config) {
+    if (numEdges < numNodes - 1) {
+        throw std::invalid_argument("Need at least N-1 edges for connected graph");
+    }
+
+    TRelationGraph graph = GenerateRandomTree(rng, numNodes, config);
+
+    unsigned edgesCreated = numNodes - 1;
+
+    unsigned maxIters = numNodes * (numNodes - 1) / 2;
+    // Allow a bit more iterations to account for us being unlucky
+    maxIters *= 3;
+
+    for (ui32 i = 0; edgesCreated < numEdges && i < maxIters; ++ i) {
+        unsigned u = rng() % numNodes;
+        unsigned v = rng() % numNodes;
+
+        if (u == v) continue;
+        if (graph.HasEdge(u, v)) continue;
+
+        graph.Connect(rng, u, v, config);
+        ++edgesCreated;
+    }
+
+    return graph;
+}
+
 TRelationGraph GenerateTreeFromPruferSequence(TRNG &rng, const std::vector<unsigned>& prufer, TPitmanYorConfig config) {
     unsigned n = prufer.size() + 2;
 
@@ -554,41 +743,71 @@ std::vector<int> GenerateLogNormalDegrees(TRNG& rng, int numVertices, double log
     return degrees;
 }
 
-ui32 TPitmanYorNodeState::GenerateKey(TRNG& rng, TPitmanYorConfig config, double forceQuantile) {
-    double denom = TotalEdges + config.Theta;
+ui32 TPitmanYorNodeState::GenerateKey(TRNG& rng, TPitmanYorConfig config, double forceQuantile, TWeightAccessor weightAccessor) {
     double r = (forceQuantile >= 0.0) ? forceQuantile : getRandomNormalizedDouble(rng);
 
-    // 1. Try joining existing tables
+    // 1. Structural Decision: New vs Existing?
+    // Using standard Pitman-Yor logic based on Theta and Alpha.
+    // P(New) = (Theta + Alpha * ActiveTables) / (Total + Theta)
+    double probNew = (config.Theta + config.Alpha * ActiveTables) / TotalEdges + config.Theta;
+
+    // If random value falls in the upper slice, create NEW key
+    if (r >= (1.0 - probNew)) {
+        ui32 newKey;
+        if (!FreeKeys.empty()) {
+            newKey = FreeKeys.back();
+            FreeKeys.pop_back();
+        } else {
+            newKey = static_cast<ui32>(Counts.size());
+            //Counts.push_back(0);
+        }
+        Counts[newKey] = 1;
+        TotalEdges++;
+        ActiveTables++;
+        return newKey;
+    }
+
+    // 2. Selection Decision: Which Existing?
+    // Scale r to [0, 1] relative to the existing probability mass
+    double rExisting = r / (1.0 - probNew);
+
+    // Calculate normalization sum for the weights
+    double totalWeight = 0.0;
+    if (weightAccessor) {
+        for (ui32 k = 0; k < Counts.size(); ++k) {
+            if (Counts[k] > 0) totalWeight += weightAccessor(k);
+        }
+    } else {
+        totalWeight = TotalEdges; // Default: proportional to edge counts
+    }
+
     double cumulative = 0.0;
     for (ui32 k = 0; k < Counts.size(); ++k) {
         if (Counts[k] == 0) continue;
 
-        // Probability of joining table k = (Count - Alpha) / (Total + Theta)
-        double prob = (Counts[k] - config.Alpha) / denom;
-        cumulative += prob;
+        // Use custom weight (Global Size) or default (Local Count)
+        double w = weightAccessor ? weightAccessor(k) : (double)Counts[k];
+        double prob = w / totalWeight;
 
-        if (r < cumulative) {
+        cumulative += prob;
+        if (rExisting < cumulative) {
             Counts[k]++;
             TotalEdges++;
             return k;
         }
     }
 
-    // 2. Create new table
-    // If we get here, 'r' fell into the "New Table" probability space
-    ui32 newKey;
-    if (!FreeKeys.empty()) {
-        newKey = FreeKeys.back();
-        FreeKeys.pop_back();
-    } else {
-        newKey = static_cast<ui32>(Counts.size());
-        Counts.push_back(0);
+    // Fallback for floating point errors
+    for (int k = Counts.size() - 1; k >= 0; --k) {
+        if (Counts[k] > 0) {
+            Counts[k]++;
+            TotalEdges++;
+            return k;
+        }
     }
 
-    Counts[newKey] = 1;
-    TotalEdges++;
-    ActiveTables++;
-    return newKey;
+    // Should be unreachable
+    return 0;
 }
 
 void TPitmanYorNodeState::ReleaseKey(ui32 key) {
@@ -918,8 +1137,21 @@ TMCMCResult MCMCRandomizeEdgePreserving(TRNG& rng, TRelationGraph& graph, TPitma
             continue;
         }
 
+        int oldComponents = graph.GetNumComponents();
+
         // Relocate edge
         graph.Disconnect(oldU, oldV);
+
+        int componentsAfterDisconnect = graph.GetNumComponents();
+
+        // If disconnection increased components, reject this move
+        if (componentsAfterDisconnect > oldComponents) {
+            // Restore the edge
+            graph.Connect(rng, oldU, oldV, pyConfig);
+            ++result.RejectedByGeometry;  // or could add a new rejection category
+            continue;
+        }
+
         graph.Connect(rng, newU, newV, pyConfig);
         ++result.SuccessfulSwaps;
     }

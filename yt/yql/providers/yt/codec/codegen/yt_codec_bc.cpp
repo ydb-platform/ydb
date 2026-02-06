@@ -234,11 +234,9 @@ namespace {
 
 template<typename T>
 void ValidateTzData(typename NUdf::TDataType<T>::TLayout value, ui16 tzId) {
-    if (!NUdf::IsValidLayoutValue<T>(value)) {
+    if (!NUdf::IsValidLayoutValue<T>(value) || !NKikimr::NMiniKQL::IsValidTimezoneId(tzId)) {
         ThrowBadTz((int)NUdf::TDataType<T>::Slot);
     }
-    // TODO: write fast and LLVM_BC-friendly version of NKikimr::NMiniKQL::IsValidTimezoneId(tzId)
-    Y_UNUSED(tzId);
 }
 
 template<typename T>

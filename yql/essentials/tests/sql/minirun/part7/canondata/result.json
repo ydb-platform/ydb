@@ -824,6 +824,20 @@
             "uri": "https://{canondata_backend}/1942100/4698224697ac3c42fd9587b062e9ec0d74d84dfd/resource.tar.gz#test.test_library-library_via_http--Results_/results.txt"
         }
     ],
+    "test.test[linear-linear_destroy--Debug]": [
+        {
+            "checksum": "200068e9b98ba33fadc9f2acd087cbc9",
+            "size": 312,
+            "uri": "https://{canondata_backend}/1599023/120e9368b8a938eb425ad1e294a3553a3038f798/resource.tar.gz#test.test_linear-linear_destroy--Debug_/opt.yql"
+        }
+    ],
+    "test.test[linear-linear_destroy--Results]": [
+        {
+            "checksum": "3432be66794780aaeaad6d43b71e08e5",
+            "size": 695,
+            "uri": "https://{canondata_backend}/1599023/120e9368b8a938eb425ad1e294a3553a3038f798/resource.tar.gz#test.test_linear-linear_destroy--Results_/results.txt"
+        }
+    ],
     "test.test[linear-mutdict_pop-default.txt-Debug]": [
         {
             "checksum": "05a9fedf4542bd0ff6e3270e803360d6",

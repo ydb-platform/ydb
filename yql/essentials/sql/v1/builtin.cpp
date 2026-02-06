@@ -3151,6 +3151,7 @@ struct TBuiltinFuncData {
 
             {"todynamiclinear", {"ToDynamicLinear", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ToDynamicLinear", 1, 1)}},
             {"fromdynamiclinear", {"FromDynamicLinear", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("FromDynamicLinear", 1, 1)}},
+            {"lineardestroy", {"LinearDestroy", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("LinearDestroy", 1, -1)}},
             // MutDict builtins
             {"mutdictcreate", {"MutDictCreate", "Normal", BuildSimpleBuiltinFactoryCallback<TMutDictCreateBuiltin>()}},
             {"tomutdict", {"ToMutDict", "Normal", BuildSimpleBuiltinFactoryCallback<TToMutDictBuiltin>()}},

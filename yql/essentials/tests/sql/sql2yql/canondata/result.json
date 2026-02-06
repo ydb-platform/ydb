@@ -5263,6 +5263,13 @@
             "uri": "https://{canondata_backend}/1600758/7c1723286a23b3ec39f2b69eade79c510ce6cc5b/resource.tar.gz#test_sql2yql.test_linear-good_struct_/sql.yql"
         }
     ],
+    "test_sql2yql.test[linear-linear_destroy]": [
+        {
+            "checksum": "618fa9bcbc54168e5c2076387b49eeda",
+            "size": 1131,
+            "uri": "https://{canondata_backend}/1881367/98aa116e369d17406050661e70d171d3efd6f55d/resource.tar.gz#test_sql2yql.test_linear-linear_destroy_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[linear-mutdict_contains]": [
         {
             "checksum": "dcd70eb662e088e8f1e8b937f86447b4",
@@ -13991,6 +13998,11 @@
     "test_sql_format.test[linear-good_struct]": [
         {
             "uri": "file://test_sql_format.test_linear-good_struct_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[linear-linear_destroy]": [
+        {
+            "uri": "file://test_sql_format.test_linear-linear_destroy_/formatted.sql"
         }
     ],
     "test_sql_format.test[linear-mutdict_contains]": [

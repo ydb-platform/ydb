@@ -205,7 +205,7 @@ namespace NKikimr {
         };
 
         ECompactionTokenState CompactionTokenState = ECompactionTokenState::NotNeeded;
-        ui64 CompactionToken = 0;
+        TCompactionTokenId CompactionToken = 0;
 
         friend class TActorBootstrapped<TThis>;
 
@@ -394,21 +394,14 @@ namespace NKikimr {
             Y_VERIFY_S(CompactionTokenState == ECompactionTokenState::Idle || 
                        CompactionTokenState == ECompactionTokenState::Requested,
                 HullDs->HullCtx->VCtx->VDiskLogPrefix << " Unexpected compaction token state: " << (int)CompactionTokenState);
-            
-            if (CompactionTokenState == ECompactionTokenState::Requested) {
-                ctx.Send(MakeBlobStorageCompBrokerID(), new TEvUpdateCompactionTokenRequest(
-                    HullLogCtx->PDiskCtx->PDiskIdString, HullLogCtx->VCtx->SelfVDisk.ToString(), maxRatio));
-                LOG_DEBUG(ctx, NKikimrServices::BS_HULLCOMP,
-                    VDISKP(HullDs->HullCtx->VCtx, "%s: compaction request updated with ratio %f",
-                        PDiskSignatureForHullDbKey<TKey>().ToString().data(), maxRatio));
-            } else {
-                CompactionTokenState = ECompactionTokenState::Requested;
-                ctx.Send(MakeBlobStorageCompBrokerID(), new TEvCompactionTokenRequest(
-                    HullLogCtx->PDiskCtx->PDiskIdString, HullLogCtx->VCtx->SelfVDisk.ToString(), maxRatio));
-                LOG_DEBUG(ctx, NKikimrServices::BS_HULLCOMP,
-                    VDISKP(HullDs->HullCtx->VCtx, "%s: compaction requested with ratio %f",
-                        PDiskSignatureForHullDbKey<TKey>().ToString().data(), maxRatio));
-            }
+
+            CompactionTokenState = ECompactionTokenState::Requested;
+            ctx.Send(MakeBlobStorageCompBrokerID(), new TEvCompactionTokenRequest(
+                Config->BaseInfo.PDiskId, HullLogCtx->VCtx->GroupId, HullLogCtx->VCtx->ShortSelfVDisk, maxRatio));
+            LOG_DEBUG(ctx, NKikimrServices::BS_HULLCOMP,
+                VDISKP(HullDs->HullCtx->VCtx, "%s: compaction requested with ratio %f",
+                    PDiskSignatureForHullDbKey<TKey>().ToString().data(), maxRatio));
+        
         }
 
         void Handle(typename TEvCompactionTokenResult::TPtr &ev, const TActorContext &ctx) {
@@ -686,7 +679,7 @@ namespace NKikimr {
                     if (CompactionTokenState == ECompactionTokenState::InProgress) {
                         Y_VERIFY_S(CompactionToken != 0, HullDs->HullCtx->VCtx->VDiskLogPrefix);
                         ctx.Send(MakeBlobStorageCompBrokerID(), new TEvReleaseCompactionToken(
-                            HullLogCtx->PDiskCtx->PDiskIdString, HullLogCtx->VCtx->SelfVDisk.ToString(), CompactionToken));
+                            Config->BaseInfo.PDiskId, HullLogCtx->VCtx->GroupId, HullLogCtx->VCtx->ShortSelfVDisk, CompactionToken));
                         LOG_INFO(ctx, NKikimrServices::BS_HULLCOMP,
                             VDISKP(HullDs->HullCtx->VCtx, "%s: compaction token# %" PRIu64 " released",
                                 PDiskSignatureForHullDbKey<TKey>().ToString().data(), CompactionToken));
@@ -812,7 +805,7 @@ namespace NKikimr {
                 CompactionTokenState == ECompactionTokenState::InProgress) {
                 Y_VERIFY_S(CompactionToken != 0, HullDs->HullCtx->VCtx->VDiskLogPrefix);
                 ctx.Send(MakeBlobStorageCompBrokerID(), new TEvReleaseCompactionToken(
-                    HullLogCtx->PDiskCtx->PDiskIdString, HullLogCtx->VCtx->SelfVDisk.ToString(), CompactionToken));
+                    Config->BaseInfo.PDiskId, HullLogCtx->VCtx->GroupId, HullLogCtx->VCtx->ShortSelfVDisk, CompactionToken));
                 LOG_INFO(ctx, NKikimrServices::BS_HULLCOMP,
                     VDISKP(HullDs->HullCtx->VCtx, "Releasing compaction token# %" PRIu64 " on shutdown",
                         CompactionToken));

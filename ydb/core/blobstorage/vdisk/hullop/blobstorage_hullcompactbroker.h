@@ -9,57 +9,47 @@ namespace NKikimr {
     using TCompactionTokenId = ui64;
 
     struct TEvCompactionTokenRequest : public TEventLocal<TEvCompactionTokenRequest, TEvBlobStorage::EvCompactionTokenRequest> {
-        TString PDiskId;
-        TString VDiskId;
+        ui32 PDiskId;
+        TGroupId GroupId;
+        TVDiskIdShort VDiskId;
         double Ratio;
 
-        TEvCompactionTokenRequest(const TString& pdiskId, const TString& vdiskId, double ratio)
-            : PDiskId(pdiskId), VDiskId(vdiskId), Ratio(ratio) {}
+        TEvCompactionTokenRequest(ui32 pdiskId, const TGroupId& groupId, const TVDiskIdShort& vdiskId, double ratio)
+            : PDiskId(pdiskId), GroupId(groupId), VDiskId(vdiskId), Ratio(ratio) {}
 
         TString ToString() const {
             TStringStream str;
-            str << "{EvCompactionTokenRequest PDiskId# " << PDiskId << " VDiskId# " << VDiskId << " Ratio# " << Ratio << "}";
-            return str.Str();
-        }
-    };
-
-    struct TEvUpdateCompactionTokenRequest : public TEventLocal<TEvUpdateCompactionTokenRequest, TEvBlobStorage::EvUpdateCompactionTokenRequest> {
-        TString PDiskId;
-        TString VDiskId;
-        double Ratio;
-
-        TEvUpdateCompactionTokenRequest(const TString& pdiskId, const TString& vdiskId, double ratio)
-            : PDiskId(pdiskId), VDiskId(vdiskId), Ratio(ratio) {}
-
-        TString ToString() const {
-            TStringStream str;
-            str << "{TEvUpdateCompactionTokenRequest PDiskId# " << PDiskId << " VDiskId# " << VDiskId << " Ratio# " << Ratio << "}";
+            str << "{EvCompactionTokenRequest PDiskId# " << PDiskId << " GroupId# " << GroupId << " VDiskId# " << VDiskId.ToString() << " Ratio# " << Ratio << "}";
             return str.Str();
         }
     };
 
     struct TEvCompactionTokenResult : TEventLocal<TEvCompactionTokenResult, TEvBlobStorage::EvCompactionTokenResult> {
         TCompactionTokenId Token;
-        TString VDiskId;
+        TGroupId GroupId;
+        TVDiskIdShort VDiskId;
 
-        TEvCompactionTokenResult(const TCompactionTokenId& token, const TString& vdiskId) : Token(token), VDiskId(vdiskId) {}
+        TEvCompactionTokenResult(const TCompactionTokenId& token, const TGroupId& groupId, const TVDiskIdShort& vdiskId) 
+            : Token(token), GroupId(groupId), VDiskId(vdiskId) {}
 
         TString ToString() const {
             TStringStream str;
-            str << "{EvCompactionTokenResult Token# " << Token << " VDiskId# " << VDiskId << "}";
+            str << "{EvCompactionTokenResult Token# " << Token << " GroupId# " << GroupId << " VDiskId# " << VDiskId.ToString() << "}";
             return str.Str();
         }
     };
 
     struct TEvReleaseCompactionToken : TEventLocal<TEvReleaseCompactionToken, TEvBlobStorage::EvReleaseCompactionToken> {
-        TString PDiskId;
-        TString VDiskId;
+        ui32 PDiskId;
+        TGroupId GroupId;
+        TVDiskIdShort VDiskId;
         TCompactionTokenId Token;
-        TEvReleaseCompactionToken(const TString& pdiskId, const TString& vdiskId, TCompactionTokenId token) : PDiskId(pdiskId), VDiskId(vdiskId), Token(token) {}
+        TEvReleaseCompactionToken(ui32 pdiskId, const TGroupId& groupId, const TVDiskIdShort& vdiskId, TCompactionTokenId token) 
+            : PDiskId(pdiskId), GroupId(groupId), VDiskId(vdiskId), Token(token) {}
 
         TString ToString() const {
             TStringStream str;
-            str << "{TEvReleaseCompactionToken PDiskId# " << PDiskId << " VDiskId# " << VDiskId << " Token# " << Token << "}";
+            str << "{TEvReleaseCompactionToken PDiskId# " << PDiskId << " GroupId# " << GroupId << " VDiskId# " << VDiskId.ToString() << " Token# " << Token << "}";
             return str.Str();
         }
     };

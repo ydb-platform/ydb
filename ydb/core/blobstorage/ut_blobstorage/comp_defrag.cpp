@@ -521,6 +521,7 @@ struct TTestEnvCompBroker {
 
         for (ui32 groupIdx = 0; groupIdx < GroupInfos.size(); ++groupIdx) {
             auto& groupInfo = GroupInfos[groupIdx];
+            GroupIdToGroupIdx[groupInfo->GroupID] = groupIdx;
             for (ui32 i = 0; i < groupInfo->GetTotalVDisksNum(); ++i) {
                 TVDiskID vdiskId = groupInfo->GetVDiskId(i);
                 TActorId actorId = groupInfo->GetActorId(i);
@@ -565,6 +566,12 @@ struct TTestEnvCompBroker {
         return it->second;
     }
 
+    ui32 GetGroupIdxByGroupId(const TGroupId& groupId) const {
+        auto it = GroupIdToGroupIdx.find(groupId);
+        Y_ABORT_UNLESS(it != GroupIdToGroupIdx.end());
+        return it->second;
+    }
+
     TString GetVDiskId(const TActorId& actorId) const {
         auto it = VDiskActorIdToVDiskId.find(actorId);
         Y_ABORT_UNLESS(it != VDiskActorIdToVDiskId.end());
@@ -583,6 +590,7 @@ struct TTestEnvCompBroker {
     const ui32 MaxCompactionsLimit;
     TEnvironmentSetup Env;
     std::vector<TIntrusivePtr<TBlobStorageGroupInfo>> GroupInfos;
+    std::unordered_map<TGroupId, ui32> GroupIdToGroupIdx;
     std::unordered_map<TString, ui32> VDiskIdToGroupIdx;
     std::unordered_map<TActorId, TString> VDiskActorIdToVDiskId;
 };
@@ -943,9 +951,9 @@ Y_UNIT_TEST_SUITE(CompDefrag) {
                 }
                 case TEvBlobStorage::EvCompactionTokenResult: {
                     auto* msg = ev->Get<TEvCompactionTokenResult>();
-                    TString vdiskId = msg->VDiskId;
-                    activeCompactionsPerNode[nodeId].insert(vdiskId);
-                    vdiskActors[ev->Recipient] = vdiskId;
+                    TString vdiskKey = TStringBuilder() << msg->GroupId << ":" << msg->VDiskId.ToString();
+                    activeCompactionsPerNode[nodeId].insert(vdiskKey);
+                    vdiskActors[ev->Recipient] = vdiskKey;
                     if (activeCompactionsPerNode[nodeId].size() > maxCompactionsPerNode[nodeId].size()) {
                         maxCompactionsPerNode[nodeId] = activeCompactionsPerNode[nodeId];
                     }
@@ -955,8 +963,8 @@ Y_UNIT_TEST_SUITE(CompDefrag) {
                 }
                 case TEvBlobStorage::EvReleaseCompactionToken: {
                     auto* msg = ev->Get<TEvReleaseCompactionToken>();
-                    TString vdiskId = msg->VDiskId;
-                    activeCompactionsPerNode[nodeId].erase(vdiskId);
+                    TString vdiskKey = TStringBuilder() << msg->GroupId << ":" << msg->VDiskId.ToString();
+                    activeCompactionsPerNode[nodeId].erase(vdiskKey);
                     break;
                 }
                 case TEvBlobStorage::EvHullCommitFinished: {
@@ -1023,13 +1031,13 @@ Y_UNIT_TEST_SUITE(CompDefrag) {
                 case TEvBlobStorage::EvCompactionTokenRequest: {
                     auto* msg = ev->Get<TEvCompactionTokenRequest>();
                     compactionsRequested++;
-                    ui32 groupIdx = env.GetGroupIdx(msg->VDiskId);
+                    ui32 groupIdx = env.GetGroupIdxByGroupId(msg->GroupId);
                     msg->Ratio = groupRatio[groupIdx];
                     break;
                 }
                 case TEvBlobStorage::EvCompactionTokenResult: {
                     auto* msg = ev->Get<TEvCompactionTokenResult>();
-                    ui32 groupIdx = env.GetGroupIdx(msg->VDiskId);
+                    ui32 groupIdx = env.GetGroupIdxByGroupId(msg->GroupId);
                     // remember all compaction by groupIdx order per node
                     compactionGroupIdxOrderPerNode[nodeId].push_back(groupIdx);
                     break;
@@ -1108,34 +1116,36 @@ Y_UNIT_TEST_SUITE(CompDefrag) {
         TActorId compactionToBlock;
 
         const TActorId& group0VDisk0ActorId = env.GroupInfos[0]->GetActorId(0);
-        TVDiskID group0VDisk0Id = env.GroupInfos[0]->GetVDiskId(0);
-        TString group0VDisk0Str = group0VDisk0Id.ToString();
+        TVDiskIdShort group0VDisk0Id = TVDiskIdShort(env.GroupInfos[0]->GetVDiskId(0));
+        TGroupId group0Id = env.GroupInfos[0]->GroupID;
+        TString group0VDisk0Key = TStringBuilder() << group0Id << ":" << group0VDisk0Id.ToString();
         
         const TActorId& group1VDisk0ActorId = env.GroupInfos[1]->GetActorId(0);
-        TVDiskID group1VDisk0Id = env.GroupInfos[1]->GetVDiskId(0);
-        TString group1VDisk0Str = group1VDisk0Id.ToString();
+        TVDiskIdShort group1VDisk0Id = TVDiskIdShort(env.GroupInfos[1]->GetVDiskId(0));
+        TGroupId group1Id = env.GroupInfos[1]->GroupID;
+        TString group1VDisk0Key = TStringBuilder() << group1Id << ":" << group1VDisk0Id.ToString();
 
         env.Env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 case TEvBlobStorage::EvCompactionTokenRequest: {
                     auto* msg = ev->Get<TEvCompactionTokenRequest>();
-                    TString vdiskId = msg->VDiskId;
-                    tokenRequestsPerVDisk[vdiskId]++;
-                    if (group0VDisk0Id.ToString() == vdiskId) {
+                    TString vdiskKey = TStringBuilder() << msg->GroupId << ":" << msg->VDiskId.ToString();
+                    tokenRequestsPerVDisk[vdiskKey]++;
+                    if (group0VDisk0Key == vdiskKey) {
                         compactionToBlock = ev->Sender;
                     }
                     break;
                 }
                 case TEvBlobStorage::EvCompactionTokenResult: {
                     auto* msg = ev->Get<TEvCompactionTokenResult>();
-                    TString vdiskId = msg->VDiskId;
-                    activeCompactionsPerVDisk[vdiskId]++;
+                    TString vdiskKey = TStringBuilder() << msg->GroupId << ":" << msg->VDiskId.ToString();
+                    activeCompactionsPerVDisk[vdiskKey]++;
                     break;
                 }
                 case TEvBlobStorage::EvReleaseCompactionToken: {
                     auto* msg = ev->Get<TEvReleaseCompactionToken>();
-                    TString vdiskId = msg->VDiskId;
-                    activeCompactionsPerVDisk[vdiskId]--;
+                    TString vdiskKey = TStringBuilder() << msg->GroupId << ":" << msg->VDiskId.ToString();
+                    activeCompactionsPerVDisk[vdiskKey]--;
                     break;
                 }
                 case TEvBlobStorage::EvHullCommitFinished: {
@@ -1161,9 +1171,9 @@ Y_UNIT_TEST_SUITE(CompDefrag) {
         env.Env.Sim(TDuration::Seconds(10));
         
         // compaction was requested
-        UNIT_ASSERT(tokenRequestsPerVDisk[group0VDisk0Str] == 1);
+        UNIT_ASSERT(tokenRequestsPerVDisk[group0VDisk0Key] == 1);
         // compaction was started
-        UNIT_ASSERT(activeCompactionsPerVDisk[group0VDisk0Str] == 1);
+        UNIT_ASSERT(activeCompactionsPerVDisk[group0VDisk0Key] == 1);
         // commit was blocked
         UNIT_ASSERT(blockedCommits.size() == 1);
         
@@ -1174,7 +1184,7 @@ Y_UNIT_TEST_SUITE(CompDefrag) {
         env.Env.Sim(TDuration::Seconds(15));
 
         // compaction token was released
-        UNIT_ASSERT(activeCompactionsPerVDisk[group0VDisk0Str] == 0);
+        UNIT_ASSERT(activeCompactionsPerVDisk[group0VDisk0Key] == 0);
         
         // Start compaction on group1 vdisk0
         auto edge1 = env.Env.Runtime->AllocateEdgeActor(group1VDisk0ActorId.NodeId());
@@ -1191,7 +1201,7 @@ Y_UNIT_TEST_SUITE(CompDefrag) {
         env.Env.Sim(TDuration::Seconds(30));
         
         UNIT_ASSERT(edge1Result && edge1Result->GetTypeRewrite() == TEvBlobStorage::EvCompactVDiskResult);
-        UNIT_ASSERT(tokenRequestsPerVDisk[group1VDisk0Str] == 2); // level0 + PartlySorted compactions
+        UNIT_ASSERT(tokenRequestsPerVDisk[group1VDisk0Key] == 2); // level0 + PartlySorted compactions
     }
 
     Y_UNIT_TEST(CompBrokerUpdateTokenRequest) {
@@ -1201,7 +1211,6 @@ Y_UNIT_TEST_SUITE(CompDefrag) {
         env.StabilizeWithCompaction();
 
         ui32 tokenRequestCount = 0;
-        ui32 tokenUpdateCount = 0;
         TVector<std::unique_ptr<IEventHandle>> blockedTokenResults;
 
         const TActorId& group0VDisk0ActorId = env.GroupInfos[0]->GetActorId(0);
@@ -1214,10 +1223,6 @@ Y_UNIT_TEST_SUITE(CompDefrag) {
             switch (ev->GetTypeRewrite()) {
                 case TEvBlobStorage::EvCompactionTokenRequest: {
                     tokenRequestCount++;
-                    break;
-                }
-                case TEvBlobStorage::EvUpdateCompactionTokenRequest: {
-                    tokenUpdateCount++;
                     break;
                 }
                 case TEvBlobStorage::EvCompactionTokenResult: {
@@ -1238,12 +1243,10 @@ Y_UNIT_TEST_SUITE(CompDefrag) {
             group0VDisk0ActorId.NodeId());
         
         env.Env.Sim(TDuration::Seconds(60));
-        
-        UNIT_ASSERT(tokenRequestCount == 1);
+ 
+        UNIT_ASSERT(tokenRequestCount > 1);
         UNIT_ASSERT(blockedTokenResults.size() == 1);
         
-        // Check that update requests were sent while compaction was waiting
-        UNIT_ASSERT(tokenUpdateCount >= 1);
         
         // Release the token result
         needToBlock = false;

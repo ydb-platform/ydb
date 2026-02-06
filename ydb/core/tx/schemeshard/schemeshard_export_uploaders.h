@@ -14,12 +14,13 @@ namespace NKikimrSchemeOp {
 
 namespace NBackup {
     class TEncryptionIV;
+    class TMetadata;
 }
 
 namespace NKikimr::NSchemeShard {
 
 NActors::IActor* CreateSchemeUploader(NActors::TActorId schemeShard, ui64 exportId, ui32 itemIdx, TPathId sourcePathId,
-    const Ydb::Export::ExportToS3Settings& settings, const TString& databaseRoot, const TString& metadata,
+    const Ydb::Export::ExportToS3Settings& settings, const TString& databaseRoot, NBackup::TMetadata metadata,
     bool enablePermissions, bool enableChecksums, const TMaybe<NBackup::TEncryptionIV>& iv
 );
 

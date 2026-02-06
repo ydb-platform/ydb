@@ -546,6 +546,10 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
             return ExternalTableScheme;
         }
 
+        static const TTypedScheme& Kesus() {
+            return KesusScheme;
+        }
+
         static TString Request(EPathType pathType = EPathType::EPathTypeTable) {
             switch (pathType) {
             case EPathType::EPathTypeTable:
@@ -558,6 +562,8 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
                 return RequestStringExternalDataSource;
             case EPathType::EPathTypeExternalTable:
                 return RequestStringExternalTable;
+            case EPathType::EPathTypeKesus:
+                return RequestStringKesus;
             default:
                 Y_ABORT("not supported");
             }
@@ -573,6 +579,7 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         static const TTypedScheme TransferScheme;
         static const TTypedScheme ExternalDataSourceScheme;
         static const TTypedScheme ExternalTableScheme;
+        static const TTypedScheme KesusScheme;
         static const TTypedScheme IndexedTableScheme;
 
         static const TString RequestStringTable;
@@ -580,6 +587,7 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         static const TString RequestStringTransfer;
         static const TString RequestStringExternalDataSource;
         static const TString RequestStringExternalTable;
+        static const TString RequestStringKesus;
 
     };
 
@@ -679,6 +687,14 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         )"
     };
 
+    const TTypedScheme TTestData::KesusScheme = TTypedScheme {
+        EPathTypeKesus,
+        R"(
+            Name: "Kesus"
+            Config: { self_check_period_millis: 1234 session_grace_period_millis: 5678 }
+        )"
+    };
+
     const TTypedScheme TTestData::IndexedTableScheme = TTypedScheme {
         EPathTypeTableIndex, // TODO: Replace with IndexedTable
         Sprintf(R"(
@@ -743,6 +759,17 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
             scheme: HTTP
             items {
                 source_path: "/MyRoot/ExternalTable"
+                destination_prefix: ""
+            }
+        }
+    )";
+
+    const TString TTestData::RequestStringKesus = R"(
+        ExportToS3Settings {
+            endpoint: "localhost:%d"
+            scheme: HTTP
+            items {
+                source_path: "/MyRoot/Kesus"
                 destination_prefix: ""
             }
         }
@@ -992,5 +1019,24 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
             TTestData::ExternalDataSource(),
             TTestData::ExternalTable(),
         }, TTestData::Request(EPathTypeExternalTable));
+    }
+
+    // Kesus
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnSingleKesus, 2, 1, false) {
+        RunS3(t, {
+            TTestData::Kesus(),
+        }, TTestData::Request(EPathTypeKesus));
+    }
+
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CancelShouldSucceedOnSingleKesus, 2, 1, false) {
+        CancelS3(t, {
+            TTestData::Kesus(),
+        }, TTestData::Request(EPathTypeKesus));
+    }
+
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ForgetShouldSucceedOnSingleKesus, 2, 1, false) {
+        ForgetS3(t, {
+            TTestData::Kesus(),
+        }, TTestData::Request(EPathTypeKesus));
     }
 }

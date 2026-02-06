@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-from tests import unittest
+from . import unittest
 from datetime import datetime, timedelta
 import json
 

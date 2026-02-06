@@ -1,6 +1,6 @@
 import sys
 import decimal
-from tests import unittest, OrderedDict
+from . import unittest, OrderedDict
 
 import jmespath
 import jmespath.functions

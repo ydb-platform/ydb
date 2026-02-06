@@ -228,7 +228,12 @@ inline void LogIntegrityTrails(const NKqp::TEvKqp::TEvQueryRequest::TPtr& reques
         TStringStream ss;
         LogKeyValue("Component", "SessionActor", ss);
         LogKeyValue("SessionId", request->Get()->GetSessionId(), ss);
-        LogKeyValue("TraceId", request->Get()->GetTraceId(), ss);
+
+        // Only log TraceId if it's not empty
+        if (!request->Get()->GetTraceId().empty()) {
+            LogKeyValue("TraceId", request->Get()->GetTraceId(), ss);
+        }
+
         LogKeyValue("Type", "Request", ss);
         LogKeyValue("QueryAction", ToString(request->Get()->GetAction()), ss);
         LogKeyValue("QueryType", ToString(request->Get()->GetType()), ss);
@@ -256,7 +261,12 @@ inline void LogIntegrityTrails(const TString& traceId, NKikimrKqp::EQueryAction 
         TStringStream ss;
         LogKeyValue("Component", "SessionActor", ss);
         LogKeyValue("SessionId", record.GetResponse().GetSessionId(), ss);
-        LogKeyValue("TraceId", traceId, ss);
+
+        // Only log TraceId if it's not empty
+        if (!traceId.empty()) {
+            LogKeyValue("TraceId", traceId, ss);
+        }
+
         LogKeyValue("Type", "Response", ss);
         LogKeyValue("TxId", record.GetResponse().HasTxMeta() ? record.GetResponse().GetTxMeta().id() : "Empty", ss);
         LogKeyValue("Status", ToString(record.GetYdbStatus()), ss);
@@ -290,7 +300,11 @@ inline void LogTli(const TTliLogParams& params, const TActorContext& ctx) {
     TStringStream ss;
     LogKeyValue("Component", params.Component, ss);
     LogKeyValue("Message", params.Message, ss);
-    LogKeyValue("TraceId", params.TraceId, ss);
+
+    // Only log TraceId if it's not empty
+    if (!params.TraceId.empty()) {
+        LogKeyValue("TraceId", params.TraceId, ss);
+    }
 
     // Determine if this is a breaker or victim log based on which TraceId is set (and non-zero)
     const bool isBreaker = params.BreakerQueryTraceId.Defined() && *params.BreakerQueryTraceId != 0;
@@ -330,7 +344,12 @@ inline void LogIntegrityTrails(const TString& txType, const TString& txLocksDebu
         TStringStream ss;
         LogKeyValue("Component", "Executer", ss);
         LogKeyValue("Type", "Request", ss);
-        LogKeyValue("TraceId", traceId, ss);
+
+        // Only log TraceId if it's not empty
+        if (!traceId.empty()) {
+            LogKeyValue("TraceId", traceId, ss);
+        }
+
         LogKeyValue("PhyTxId", ToString(txId), ss);
         LogKeyValue("Locks", "[" + txLocksDebugStr + "]", ss);
 
@@ -354,7 +373,12 @@ inline void LogIntegrityTrails(const TString& state, const TString& traceId, con
         LogKeyValue("Component", "Executer", ss);
         LogKeyValue("Type", "Response", ss);
         LogKeyValue("State", state, ss);
-        LogKeyValue("TraceId", traceId, ss);
+
+        // Only log TraceId if it's not empty
+        if (!traceId.empty()) {
+            LogKeyValue("TraceId", traceId, ss);
+        }
+
         LogKeyValue("PhyTxId", ToString(record.GetTxId()), ss);
         LogKeyValue("ShardId", ToString(record.GetOrigin()), ss);
 
@@ -386,7 +410,12 @@ inline void LogIntegrityTrails(const TString& state, const TString& traceId, con
         LogKeyValue("Component", "Executer", ss);
         LogKeyValue("Type", "Response", ss);
         LogKeyValue("State", state, ss);
-        LogKeyValue("TraceId", traceId, ss);
+
+        // Only log TraceId if it's not empty
+        if (!traceId.empty()) {
+            LogKeyValue("TraceId", traceId, ss);
+        }
+
         LogKeyValue("PhyTxId", ToString(record.GetTxId()), ss);
         LogKeyValue("ShardId", ToString(record.GetOrigin()), ss);
 
@@ -413,7 +442,12 @@ inline void LogIntegrityTrails(const TString& type, const TString& traceId, ui64
         TStringStream ss;
         LogKeyValue("Component", "Executer", ss);
         LogKeyValue("Type", type, ss);
-        LogKeyValue("TraceId", traceId, ss);
+
+        // Only log TraceId if it's not empty
+        if (!traceId.empty()) {
+            LogKeyValue("TraceId", traceId, ss);
+        }
+
         LogKeyValue("PhyTxId", ToString(txId), ss);
 
         TStringBuilder locksDebugStr;

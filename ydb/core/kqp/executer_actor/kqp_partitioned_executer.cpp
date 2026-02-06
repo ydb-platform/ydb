@@ -643,11 +643,11 @@ private:
 
     void ForgetPartition(const TBatchPartitionInfo::TPtr& partInfo) {
         YQL_ENSURE(StartedPartitions.erase(partInfo->PartitionIndex) == 1);
-        Stats.AffectedPartitions.insert(partInfo->PartitionIndex);
     }
 
     void OnSuccessResponse(TBatchPartitionInfo::TPtr& partInfo, TEvKqpExecuter::TEvTxResponse* ev) {
         Stats.TakeExecStats(std::move(*ev->Record.MutableResponse()->MutableResult()->MutableStats()));
+        Stats.AffectedPartitions.insert(partInfo->PartitionIndex);
 
         TSerializedCellVec minKey = GetMinCellVecKey(std::move(ev->BatchOperationMaxKeys), std::move(ev->BatchOperationKeyIds));
         if (minKey) {

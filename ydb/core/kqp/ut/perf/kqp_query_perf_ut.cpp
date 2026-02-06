@@ -696,7 +696,7 @@ Y_UNIT_TEST_SUITE(KqpQueryPerf) {
 
         CompareYson(R"([[["Anna"];[3800u]]])", FormatResultSetYson(results[0]));
 
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
     }
 
     Y_UNIT_TEST_QUAD(MultiDeleteFromTable, QueryService, UseSink) {

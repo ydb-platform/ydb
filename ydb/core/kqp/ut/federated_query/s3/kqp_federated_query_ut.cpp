@@ -1914,6 +1914,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         appConfig.MutableTableServiceConfig()->SetEnableOltpSink(enableOltp);
         appConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
         appConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
+        appConfig.MutableTableServiceConfig()->SetEnableDataShardCreateTableAs(true);
         appConfig.MutableFeatureFlags()->SetEnableTempTables(true);
         auto kikimr = NTestUtils::MakeKikimrRunner(appConfig, {.DomainRoot = "TestDomain"});
 
@@ -2167,8 +2168,9 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
-        ui32 source1_id_and_join = 0;
+        ui32 source1_id = 0;
         ui32 source2_id = 0;
+        ui32 join_id = 0;
         ui32 limit_id = 0;
         auto queryClient = kikimr->GetQueryClient();
 
@@ -2188,19 +2190,21 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
                 sql,
                 TTxControl::BeginTx().CommitTx(),
                 TExecuteQuerySettings().ExecMode(EExecMode::Execute).StatsMode(EStatsMode::Full)).GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(queryResult.GetStatus(), EStatus::SUCCESS, queryResult.GetIssues().ToString());
+                UNIT_ASSERT(queryResult.GetStats());
+                UNIT_ASSERT(queryResult.GetStats()->GetPlan());
 
-            UNIT_ASSERT_VALUES_EQUAL_C(queryResult.GetStatus(), EStatus::SUCCESS, queryResult.GetIssues().ToString());
-            UNIT_ASSERT(queryResult.GetStats());
-            UNIT_ASSERT(queryResult.GetStats()->GetPlan());
-            NJson::TJsonValue plan;
-            UNIT_ASSERT(NJson::ReadJsonTree(*queryResult.GetStats()->GetPlan(), &plan));
-            UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe(), 4);
-            UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe(), 1);
+                NJson::TJsonValue plan;
+                UNIT_ASSERT(NJson::ReadJsonTree(*queryResult.GetStats()->GetPlan(), &plan));
+                UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe(), 2);
+                UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][1]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe(), 2);
+                UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe(), 4);
+                UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe(), 1);
 
-            source1_id_and_join = plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Stats"]["PhysicalStageId"].GetIntegerSafe();
-            source2_id = plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Stats"]["PhysicalStageId"].GetIntegerSafe();
-            limit_id = plan["Plan"]["Plans"][0]["Plans"][0]["Stats"]["PhysicalStageId"].GetIntegerSafe();
+                source1_id = plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Stats"]["PhysicalStageId"].GetIntegerSafe();
+                source2_id = plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][1]["Plans"][0]["Stats"]["PhysicalStageId"].GetIntegerSafe();
+                join_id    = plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Stats"]["PhysicalStageId"].GetIntegerSafe();
+                limit_id   = plan["Plan"]["Plans"][0]["Plans"][0]["Stats"]["PhysicalStageId"].GetIntegerSafe();
         }
 
         {
@@ -2210,15 +2214,17 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
                     pragma s3.UseRuntimeListing = "false";
                     pragma ydb.CostBasedOptimizationLevel = "1";
                     pragma ydb.OverridePlanner = @@ [
-                        {{ "tx": 0, "stage": {source1_id_and_join}, "tasks": 1 }},
+                        {{ "tx": 0, "stage": {source1_id}, "tasks": 1 }},
                         {{ "tx": 0, "stage": {source2_id}, "tasks": 1 }},
+                        {{ "tx": 0, "stage": {join_id}, "tasks": 1 }},
                         {{ "tx": 0, "stage": {limit_id}, "tasks": 1 }}
                     ] @@;
 
                     SELECT SUM(t1.bar + t2.bar) as sum FROM `{table1}` as t1 JOIN /*+grace()*/ `{table2}`as t2 ON t1.foo = t2.foo
                 )",
-                "source1_id_and_join"_a = source1_id_and_join,
+                "source1_id"_a = source1_id,
                 "source2_id"_a = source2_id,
+                "join_id"_a = join_id,
                 "limit_id"_a = limit_id,
                 "table1"_a = root + table1,
                 "table2"_a = root + table2);
@@ -2234,6 +2240,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
             NJson::TJsonValue plan;
             UNIT_ASSERT(NJson::ReadJsonTree(*queryResult.GetStats()->GetPlan(), &plan));
             UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][1]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe(), 1);
             UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe(), 1);
             UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe(), 1);
         }
@@ -2245,15 +2252,17 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
                     pragma s3.UseRuntimeListing = "false";
                     pragma ydb.CostBasedOptimizationLevel = "1";
                     pragma ydb.OverridePlanner = @@ [
-                        {{ "tx": 0, "stage": {source1_id_and_join}, "tasks": 10 }},
+                        {{ "tx": 0, "stage": {source1_id}, "tasks": 10 }},
                         {{ "tx": 0, "stage": {source2_id}, "tasks": 10 }},
+                        {{ "tx": 0, "stage": {join_id}, "tasks": 10 }},
                         {{ "tx": 0, "stage": {limit_id}, "tasks": 10 }}
                     ] @@;
 
                     SELECT SUM(t1.bar + t2.bar) as sum FROM `{table1}` as t1 JOIN /*+grace()*/ `{table2}`as t2 ON t1.foo = t2.foo
                 )",
-                "source1_id_and_join"_a = source1_id_and_join,
+                "source1_id"_a = source1_id,
                 "source2_id"_a = source2_id,
+                "join_id"_a = join_id,
                 "limit_id"_a = limit_id,
                 "table1"_a = root + table1,
                 "table2"_a = root + table2);
@@ -2271,8 +2280,9 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
             // only 2 files => sources stay with 2 tasks
             // join scales to 10 tasks
             // limit ignores hint and keeps being in the only task
-            UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe(), 10);
-            UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][1]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe(), 10);
             UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe(), 1);
         }
     }
@@ -3044,7 +3054,9 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
     }
 
     Y_UNIT_TEST(TestRestartQueryAndCleanupWithGetOperation) {
-        auto kikimr = NTestUtils::MakeKikimrRunner(std::nullopt, {.EnableScriptExecutionBackgroundChecks = false});
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableDataShardCreateTableAs(true);
+        auto kikimr = NTestUtils::MakeKikimrRunner(appConfig, {.EnableScriptExecutionBackgroundChecks = false});
         auto db = kikimr->GetQueryClient();
 
         constexpr char BUCKET[] = "test_restart_query_and_cleanup_with_get_operation_bucket";

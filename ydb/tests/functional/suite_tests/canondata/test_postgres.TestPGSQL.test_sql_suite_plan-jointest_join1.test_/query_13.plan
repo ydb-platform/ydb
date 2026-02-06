@@ -29,10 +29,19 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "Limit-InnerJoin (Lookup)",
+                                        "Node Type": "Limit-Filter",
                                         "Operators": [
                                             {
                                                 "Inputs": [
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
                                                     {
                                                         "InternalOperatorId": 1
                                                     }
@@ -46,7 +55,8 @@
                                                         "ExternalPlanNodeId": 5
                                                     }
                                                 ],
-                                                "Name": "InnerJoin (Lookup)"
+                                                "Name": "Filter",
+                                                "Predicate": "item.J2_TBL.k == 1"
                                             }
                                         ],
                                         "PlanNodeId": 6,
@@ -57,18 +67,7 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "Filter",
-                                                        "Operators": [
-                                                            {
-                                                                "Inputs": [
-                                                                    {
-                                                                        "ExternalPlanNodeId": 3
-                                                                    }
-                                                                ],
-                                                                "Name": "Filter",
-                                                                "Predicate": "item.k == 1"
-                                                            }
-                                                        ],
+                                                        "Node Type": "Collect",
                                                         "PlanNodeId": 4,
                                                         "Plans": [
                                                             {

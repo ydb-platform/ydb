@@ -1,5 +1,11 @@
 # Развёртывание кластера под аналитическую нагрузку (OLAP)
 
+{% note warning %}
+
+   Данная инструкция предназначена только для развёртывания кластеров {{ ydb-short-name }} с [конфигурацией V1](../../../configuration-management\configuration-v1\index.md). Развёртывание кластеров {{ ydb-short-name }} с [конфигурацией V2](../../../configuration-management\configuration-v2\index.md) с помощью Ansible в настоящий момент находится в разработке.
+
+{% endnote %}
+
 ## Подготовьте окружение {# deployment-preparation}
 
 Перед развёртыванием системы обязательно выполните подготовительные действия. Ознакомьтесь с документом [{#T}](deployment-preparation.md).

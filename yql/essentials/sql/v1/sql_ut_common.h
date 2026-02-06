@@ -2975,7 +2975,7 @@ Y_UNIT_TEST(UdfSyntaxSugarOnlyCallable) {
     auto res = SqlToYql(req);
     UNIT_ASSERT(res.Root);
     const auto programm = GetPrettyPrint(res);
-    auto expected = "(SqlCall '\"DateTime.FromString\" '((PositionalArgs (String '\"2022-01-01\")) (AsStruct)) (TupleType))";
+    auto expected = "(SqlCall '\"DateTime2.FromString\" '((PositionalArgs (String '\"2022-01-01\")) (AsStruct)) (TupleType))";
     UNIT_ASSERT(programm.find(expected) != TString::npos);
 }
 
@@ -2984,7 +2984,7 @@ Y_UNIT_TEST(UdfSyntaxSugarTypeNoRun) {
     auto res = SqlToYql(req);
     UNIT_ASSERT(res.Root);
     const auto programm = GetPrettyPrint(res);
-    auto expected = "(SqlCall '\"DateTime.FromString\" '((PositionalArgs (String '\"2022-01-01\")) (AsStruct)) (TupleType (DataType 'String) (TupleType (DataType 'Int32) (DataType 'Float))) '\"foo\")";
+    auto expected = "(SqlCall '\"DateTime2.FromString\" '((PositionalArgs (String '\"2022-01-01\")) (AsStruct)) (TupleType (DataType 'String) (TupleType (DataType 'Int32) (DataType 'Float))) '\"foo\")";
     UNIT_ASSERT(programm.find(expected) != TString::npos);
 }
 
@@ -2993,7 +2993,7 @@ Y_UNIT_TEST(UdfSyntaxSugarRunNoType) {
     auto res = SqlToYql(req);
     UNIT_ASSERT(res.Root);
     const auto programm = GetPrettyPrint(res);
-    auto expected = "(SqlCall '\"DateTime.FromString\" '((PositionalArgs (String '\"2022-01-01\")) (AsStruct)) (TupleType (DataType 'String) (TupleType (DataType 'Int32) (DataType 'Float))) '\"\" (Void))";
+    auto expected = "(SqlCall '\"DateTime2.FromString\" '((PositionalArgs (String '\"2022-01-01\")) (AsStruct)) (TupleType (DataType 'String) (TupleType (DataType 'Int32) (DataType 'Float))) '\"\" (Void))";
     UNIT_ASSERT(programm.find(expected) != TString::npos);
 }
 
@@ -3002,7 +3002,7 @@ Y_UNIT_TEST(UdfSyntaxSugarFullTest) {
     auto res = SqlToYql(req);
     UNIT_ASSERT(res.Root);
     const auto programm = GetPrettyPrint(res);
-    auto expected = "(SqlCall '\"DateTime.FromString\" '((PositionalArgs (String '\"2022-01-01\")) (AsStruct)) (TupleType (DataType 'String) (TupleType (DataType 'Int32) (DataType 'Float))) '\"foo\" (Void))";
+    auto expected = "(SqlCall '\"DateTime2.FromString\" '((PositionalArgs (String '\"2022-01-01\")) (AsStruct)) (TupleType (DataType 'String) (TupleType (DataType 'Int32) (DataType 'Float))) '\"foo\" (Void))";
     UNIT_ASSERT(programm.find(expected) != TString::npos);
 }
 
@@ -3011,7 +3011,7 @@ Y_UNIT_TEST(UdfSyntaxSugarOtherRunConfigs) {
     auto res = SqlToYql(req);
     UNIT_ASSERT(res.Root);
     const auto programm = GetPrettyPrint(res);
-    auto expected = "(SqlCall '\"DateTime.FromString\" '((PositionalArgs (String '\"2022-01-01\")) (AsStruct)) (TupleType (DataType 'String) (TupleType (DataType 'Int32) (DataType 'Float))) '\"foo\" (String '\"55\"))";
+    auto expected = "(SqlCall '\"DateTime2.FromString\" '((PositionalArgs (String '\"2022-01-01\")) (AsStruct)) (TupleType (DataType 'String) (TupleType (DataType 'Int32) (DataType 'Float))) '\"foo\" (String '\"55\"))";
     UNIT_ASSERT(programm.find(expected) != TString::npos);
 }
 
@@ -3020,7 +3020,7 @@ Y_UNIT_TEST(UdfSyntaxSugarOtherRunConfigs2) {
     auto res = SqlToYql(req);
     UNIT_ASSERT(res.Root);
     const auto programm = GetPrettyPrint(res);
-    auto expected = "(SqlCall '\"DateTime.FromString\" '((PositionalArgs (String '\"2022-01-01\")) (AsStruct)) (TupleType (DataType 'String) (TupleType (DataType 'Int32) (DataType 'Float))) '\"foo\" '((Int32 '\"32\") (String '\"no\") (AsStruct '('\"SomeFloat\" (Double '\"1e-9\")))))";
+    auto expected = "(SqlCall '\"DateTime2.FromString\" '((PositionalArgs (String '\"2022-01-01\")) (AsStruct)) (TupleType (DataType 'String) (TupleType (DataType 'Int32) (DataType 'Float))) '\"foo\" '((Int32 '\"32\") (String '\"no\") (AsStruct '('\"SomeFloat\" (Double '\"1e-9\")))))";
     UNIT_ASSERT(programm.find(expected) != TString::npos);
 }
 
@@ -3029,7 +3029,7 @@ Y_UNIT_TEST(UdfSyntaxSugarOptional) {
     auto res = SqlToYql(req);
     UNIT_ASSERT(res.Root);
     const auto programm = GetPrettyPrint(res);
-    auto expected = "(SqlCall '\"DateTime.FromString\" '((PositionalArgs (String '\"2022-01-01\")) (AsStruct)) (TupleType (OptionalType (DataType 'String)) (OptionalType (OptionalType (DataType 'Int32))) (TupleType (DataType 'Int32) (DataType 'Float))) '\"foo\" (Void))";
+    auto expected = "(SqlCall '\"DateTime2.FromString\" '((PositionalArgs (String '\"2022-01-01\")) (AsStruct)) (TupleType (OptionalType (DataType 'String)) (OptionalType (OptionalType (DataType 'Int32))) (TupleType (DataType 'Int32) (DataType 'Float))) '\"foo\" (Void))";
     UNIT_ASSERT(programm.find(expected) != TString::npos);
 }
 

@@ -11,7 +11,8 @@ NKikimrTabletBase::TEvGetCountersResponse GetCounters(TTestActorRuntime& runtime
 }
 
 ui64 GetSimpleCounter(TTestActorRuntime& runtime, ui64 tabletId,
-                      NHive::ESimpleCounters counter) {
+        NHive::ESimpleCounters counter)
+{
   return GetCounters(runtime, tabletId)
       .GetTabletCounters()
       .GetAppCounters()

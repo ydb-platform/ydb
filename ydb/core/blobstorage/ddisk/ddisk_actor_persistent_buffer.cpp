@@ -1,8 +1,10 @@
 #include "ddisk_actor.h"
 
 #include <ydb/core/util/stlog.h>
-
 #include <ydb/core/util/pb.h>
+
+#define XXH_INLINE_ALL
+#include <contrib/libs/xxhash/xxhash.h>
 
 namespace NKikimr::NDDisk {
 
@@ -12,52 +14,63 @@ namespace NKikimr::NDDisk {
         ProcessPersistentBufferQueue();
     }
 
-    std::vector<std::tuple<ui32, ui32, ui32, TRope>> TDDiskActor::SlicePersistentBuffer(
-          ui64 tabletId
-        , ui64 vchunkIndex
-        , ui64 lsn
-        , ui32 offsetInBytes
-        , ui32 sizeInBytes
-        , TRope&& payload, const std::vector<TPersistentBufferSectorInfo>& sectors) {
-        TString headerBuffer;
-        headerBuffer.resize(SectorSize);
-        TPersistentBufferHeader *header = (TPersistentBufferHeader*)headerBuffer.data();
-        header->Signature[0] = TPersistentBufferHeader::PersistentBufferHeaderSignature[0];
-        header->Signature[1] = TPersistentBufferHeader::PersistentBufferHeaderSignature[1];
+    ui64 CalculateChecksum(const TRope::TIterator begin, size_t numBytes) {
+        XXH3_state_t state;
+        XXH3_64bits_reset(&state);
+
+        for (auto it = begin; numBytes && it.Valid(); it.AdvanceToNextContiguousBlock()) {
+            const size_t n = Min(numBytes, it.ContiguousSize());
+            XXH3_64bits_update(&state, it.ContiguousData(), n);
+            numBytes -= n;
+        }
+
+        return XXH3_64bits_digest(&state);
+    }
+
+    std::vector<std::tuple<ui32, ui32, TRope>> TDDiskActor::SlicePersistentBuffer(ui64 tabletId, ui64 vchunkIndex,
+        ui64 lsn, ui32 offsetInBytes, ui32 sizeInBytes, TRope&& payload, const std::vector<TPersistentBufferSectorInfo>& sectors) {
+        auto headerData = TRcBuf::Uninitialized(SectorSize);
+        TPersistentBufferHeader *header = (TPersistentBufferHeader*)headerData.GetDataMut();
+        memcpy(header->Signature, TPersistentBufferHeader::PersistentBufferHeaderSignature, 16);
         header->TabletId = tabletId;
         header->VChunkIndex = vchunkIndex;
         header->OffsetInBytes = offsetInBytes;
         header->Size = sizeInBytes;
+        header->Lsn = lsn;
 
-        header->HeaderLocation = sectors[0];
-        for (ui32 i = 0; i < sectors.size() - 1; ++i) {
-            header->Locations[i] = sectors[i + 1];
+        for (ui32 i = 1; i < sectors.size(); ++i) {
+            auto& loc = header->Locations[i - 1];
+            loc = sectors[i];
+            auto it = payload.Position(SectorSize * (i - 1));
+            if (memcmp((*it).first, header->Signature, 16) != 0) {
+                loc.HasSignatureCorrection = true;
+                *payload.Position(SectorSize * (i - 1)).ContiguousDataMut() = 0;
+            }
+            loc.Checksum = CalculateChecksum(payload.Position(SectorSize * (i - 1)), SectorSize);
         }
-
-        header->Lsn = lsn; std::vector<std::tuple<ui32, ui32, ui32, TRope>> parts;
+        header->HeaderChecksum = 0;
+        std::vector<std::tuple<ui32, ui32, TRope>> parts;
         parts.reserve(sectors.size());
         for (ui32 sectorIdx = 0, first = 0; sectorIdx <= sectors.size(); sectorIdx++) {
             if (sectorIdx == sectors.size()
                 || sectors[first].ChunkIdx != sectors[sectorIdx].ChunkIdx
-                || sectors[first].SectorIdx != sectors[sectorIdx].SectorIdx) {
+                || sectors[first].SectorIdx != sectors[sectorIdx].SectorIdx + sectorIdx - first) {
                 TRope data;
-                ui32 partSize = 0;
+                ui32 partSize = (sectorIdx - (first == 0 ? 1 : first)) * SectorSize;
                 if (first == 0) {
-                    data = TRope(headerBuffer);
-                    partSize = std::min((sectorIdx - 1) * SectorSize, sizeInBytes);
-                } else {
-                    partSize = std::min((sectorIdx - first) * SectorSize, sizeInBytes - first * SectorSize);
+                    data = headerData;
+                    auto cs = CalculateChecksum(data.Position(TPersistentBufferHeader::HeaderChecksumOffset + TPersistentBufferHeader::HeaderChecksumSize)
+                        , SectorSize - TPersistentBufferHeader::HeaderChecksumOffset - TPersistentBufferHeader::HeaderChecksumSize);
+                    memcpy(data.Position(TPersistentBufferHeader::HeaderChecksumOffset).ContiguousDataMut(), &cs, TPersistentBufferHeader::HeaderChecksumSize);
+
                 }
-                TRope dataPart;
-                payload.ExtractFront(partSize, &dataPart);
-                data.Insert(data.End(), std::move(dataPart));
-                parts.emplace_back(sectors[first].ChunkIdx, sectors[first].SectorIdx * SectorSize, partSize, std::move(data));
+                payload.ExtractFront(partSize, &data);
+                parts.emplace_back(sectors[first].ChunkIdx, sectors[first].SectorIdx * SectorSize, std::move(data));
                 first = sectorIdx;
             }
         }
         return parts;
     }
-
 
     void TDDiskActor::ProcessPersistentBufferQueue() {
         Y_ABORT_UNLESS(!PendingPersistentBufferEvents.empty());
@@ -66,9 +79,9 @@ namespace NKikimr::NDDisk {
         const TQueryCredentials creds(record.GetCredentials());
         const TBlockSelector selector(record.GetSelector());
         const ui64 lsn = record.GetLsn();
-        ui32 sectorsCnt = (selector.Size + SectorSize - 1) / SectorSize;
+        ui32 sectorsCnt = selector.Size / SectorSize;
         const auto sectors = PersistentBufferSpaceAllocator.Occupy(sectorsCnt);
-        if (sectors.size() < sectorsCnt) {
+        if (sectors.size() == 0) {
             IssuePersistentBufferChunkAllocation();
             return;
         }
@@ -86,6 +99,7 @@ namespace NKikimr::NDDisk {
             .Attribute("offset_in_bytes", selector.OffsetInBytes)
             .Attribute("size", selector.Size)
             .Attribute("lsn", static_cast<long>(lsn)));
+        Counters.Interface.WritePersistentBuffer.Request(selector.Size);
 
         auto parts = SlicePersistentBuffer(creds.TabletId,
             selector.VChunkIndex, lsn, selector.OffsetInBytes, selector.Size, TRope(payload), sectors);
@@ -99,30 +113,30 @@ namespace NKikimr::NDDisk {
             .Size = selector.Size,
             .Sectors = std::move(sectors),
             .Data = std::move(payload),
+            .Span = std::move(span),
         };
 
-        for(auto part : parts) {
-            Counters.Interface.WritePersistentBuffer.Request(std::get<2>(part));
+        for(auto& [chunkIdx, offset, data] : parts) {
             const ui64 cookie = NextCookie++;
             inflightRecord.WriteCookies.insert(cookie);
 
             Send(BaseInfo.PDiskActorID, new NPDisk::TEvChunkWriteRaw(
                 PDiskParams->Owner,
                 PDiskParams->OwnerRound,
-                std::get<0>(part),
-                std::get<1>(part),
-                std::move(std::get<3>(part))), 0, cookie);
+                chunkIdx,
+                offset,
+                std::move(data)), 0, cookie);
 
-            WriteCallbacks.try_emplace(cookie, std::move(span),  [this, writeCookie = cookie,
-                tabletId = creds.TabletId, vchunkIndex = selector.VChunkIndex, lsn = lsn](NPDisk::TEvChunkWriteRawResult& /*ev*/, NWilson::TSpan&& span) {
-                Counters.Interface.WritePersistentBuffer.Reply(true);
+            WriteCallbacks.try_emplace(cookie, [this, writeCookie = cookie, tabletId = creds.TabletId,
+                vchunkIndex = selector.VChunkIndex, lsn = lsn](NPDisk::TEvChunkWriteRawResult& /*ev*/) {
                 auto itInflight = PersistentBufferWriteInflight.find({tabletId, vchunkIndex, lsn});
                 Y_ABORT_UNLESS(itInflight != PersistentBufferWriteInflight.end());
                 auto& inflight = itInflight->second;
                 auto eraseCnt = inflight.WriteCookies.erase(writeCookie);
                 Y_ABORT_UNLESS(eraseCnt == 1);
                 if (inflight.WriteCookies.empty()) {
-                    span.End();
+                    Counters.Interface.WritePersistentBuffer.Reply(true);
+                    inflight.Span.End();
                     auto& buffer = PersistentBuffers[{tabletId, vchunkIndex}];
                     auto [it, inserted] = buffer.Records.try_emplace(lsn);
                     TPersistentBuffer::TRecord& pr = it->second;

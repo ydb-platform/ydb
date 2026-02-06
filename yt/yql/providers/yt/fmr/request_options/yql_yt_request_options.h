@@ -154,6 +154,10 @@ struct TFmrTableInputRef {
     std::vector<TString> Columns = {};
     TString SerializedColumnGroups = TString();
 
+    TMaybe<bool> IsFirstRowInclusive;
+    TMaybe<TString> FirstRowKeys; // Binary YSON MAP
+    TMaybe<TString> LastRowKeys;  // Binary YSON MAP
+
     void Save(IOutputStream* buffer) const;
     void Load(IInputStream* buffer);
 

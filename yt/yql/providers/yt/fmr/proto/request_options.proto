@@ -84,6 +84,9 @@ message TFmrTableInputRef {
     repeated TTableRange TableRanges = 2;
     repeated string Columns = 3;
     optional string ColumnGroups = 4;
+    optional bool   IsFirstRowInclusive = 5;
+    optional string FirstRowKeys = 6;
+    optional string LastRowKeys = 7;
 }
 
 message TFmrTableOutputRef {

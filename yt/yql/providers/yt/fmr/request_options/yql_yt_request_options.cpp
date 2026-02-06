@@ -144,7 +144,10 @@ void TFmrTableInputRef::Save(IOutputStream* buffer) const {
         TableId,
         TableRanges,
         Columns,
-        SerializedColumnGroups
+        SerializedColumnGroups,
+        IsFirstRowInclusive,
+        FirstRowKeys,
+        LastRowKeys
     );
 }
 
@@ -154,7 +157,10 @@ void TFmrTableInputRef::Load(IInputStream* buffer) {
         TableId,
         TableRanges,
         Columns,
-        SerializedColumnGroups
+        SerializedColumnGroups,
+        IsFirstRowInclusive,
+        FirstRowKeys,
+        LastRowKeys
     );
 }
 
@@ -224,12 +230,17 @@ void TFmrTableId::Load(IInputStream* buffer) {
 }
 
 void TSortedChunkStats::Save(IOutputStream* buffer) const {
-    ::SaveMany(buffer, IsSorted,
-               NYT::NodeToYsonString(FirstRowKeys), NYT::NodeToYsonString(LastRowKeys));
+    ::SaveMany(
+        buffer,
+        IsSorted,
+        NYT::NodeToYsonString(FirstRowKeys),
+        NYT::NodeToYsonString(LastRowKeys)
+    );
 }
 
 void TSortedChunkStats::Load(IInputStream* buffer) {
-    TString FirstRowKeysStr, LastRowKeysStr;
+    TString FirstRowKeysStr;
+    TString LastRowKeysStr;
     ::LoadMany(buffer, IsSorted, FirstRowKeysStr, LastRowKeysStr);
     FirstRowKeys = NYT::NodeFromYsonString(FirstRowKeysStr);
     LastRowKeys = NYT::NodeFromYsonString(LastRowKeysStr);

@@ -98,6 +98,7 @@ namespace NKikimr::NDDisk {
             hFunc(NPDisk::TEvChunkReserveResult, Handle)
             hFunc(NPDisk::TEvLogResult, Handle)
             hFunc(TEvPrivate::TEvHandleEventForChunk, Handle)
+            hFunc(TEvPrivate::TEvHandlePersistentBufferEventForChunk, Handle)
             hFunc(NPDisk::TEvCutLog, Handle)
             hFunc(NPDisk::TEvChunkWriteRawResult, Handle)
             hFunc(NPDisk::TEvChunkReadRawResult, Handle)

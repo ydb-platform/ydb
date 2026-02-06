@@ -11,8 +11,11 @@ namespace NKikimr::NDDisk {
     }
 
     void TDDiskActor::IssuePersistentBufferChunkAllocation() {
-        ChunkAllocateQueue.emplace(TChunkForPersistentBuffer{});
-        HandleChunkReserved();
+        if (!IssuePersistentBufferChunkAllocationInflight) {
+            IssuePersistentBufferChunkAllocationInflight = true;
+            ChunkAllocateQueue.emplace(TChunkForPersistentBuffer{});
+            HandleChunkReserved();
+        }
     }
 
     void TDDiskActor::Handle(NPDisk::TEvChunkReserveResult::TPtr ev) {
@@ -67,11 +70,10 @@ namespace NKikimr::NDDisk {
                     ChunkMapIncrementsInFlight.emplace(tabletId, vChunkIndex, chunkIdx);
                 },
                 [this, chunkIdx](const TChunkForPersistentBuffer&) {
-                    Y_ABORT_UNLESS(!PersistentBufferOwnedChunks.contains(chunkIdx));
                     IssuePDiskLogRecord(TLogSignature::SignaturePersistentBufferChunkMap, chunkIdx
                         , CreatePersistentBufferChunkMapSnapshot(), &PersistentBufferChunkMapSnapshotLsn, [this, chunkIdx] {
-                        PersistentBufferOwnedChunks.insert(chunkIdx);
-                        // TODO: Send(SelfId(), new TEvPrivate::TEvHandlePersistentBufferEventForChunk(chunkIdx));
+                        PersistentBufferSpaceAllocator.AddNewChunk(chunkIdx);
+                        Send(SelfId(), new TEvPrivate::TEvHandlePersistentBufferEventForChunk(chunkIdx));
                         ++*Counters.Chunks.ChunksOwned;
                     });
                 }
@@ -123,7 +125,7 @@ namespace NKikimr::NDDisk {
 
     NKikimrBlobStorage::NDDisk::NInternal::TPersistentBufferChunkMapLogRecord TDDiskActor::CreatePersistentBufferChunkMapSnapshot() {
         NKikimrBlobStorage::NDDisk::NInternal::TPersistentBufferChunkMapLogRecord record;
-        for (const auto& chunkIdx : PersistentBufferOwnedChunks) {
+        for (const auto& chunkIdx : PersistentBufferSpaceAllocator.OwnedChunks) {
             record.AddChunkIdxs(chunkIdx);
         }
         return record;

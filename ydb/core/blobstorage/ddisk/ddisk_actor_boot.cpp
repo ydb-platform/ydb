@@ -44,7 +44,7 @@ namespace NKikimr::NDDisk {
             const bool success = chunkMap.ParseFromArray(record.Data.data(), record.Data.size());
             Y_ABORT_UNLESS(success);
             for (auto idx : chunkMap.GetChunkIdxs()) {
-                PersistentBufferOwnedChunks.insert(idx);
+                PersistentBufferSpaceAllocator.AddNewChunk(idx);
                 ++*Counters.Chunks.ChunksOwned;
             }
         }

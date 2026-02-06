@@ -472,10 +472,10 @@ std::shared_ptr<IOperator> TInlineSimpleInExistsSubplanRule::SimpleMatchAndApply
     size_t conjunctIdx;
 
     for (conjunctIdx = 0; conjunctIdx < conjuncts.size(); conjunctIdx++) {
-        auto maybeSubplan = conjuncts[conjunctIdx].Node;
+        auto maybeSubplan = conjuncts[conjunctIdx].GetExpressionBody();
 
-        if (TCoNot::Match(maybeSubplan->ChildPtr(1).Get())) {
-            maybeSubplan = maybeSubplan->ChildPtr(1)->ChildPtr(0);
+        if (TCoNot::Match(maybeSubplan.Get())) {
+            maybeSubplan = maybeSubplan->ChildPtr(0);
             negated = true;
         }
         if (TCoMember::Match(maybeSubplan.Get())) {
@@ -499,11 +499,12 @@ std::shared_ptr<IOperator> TInlineSimpleInExistsSubplanRule::SimpleMatchAndApply
     std::shared_ptr<IOperator> uncorrSubplan = subplanEntry.Plan;
 
     if (subplanEntry.Plan->Kind == EOperator::Filter && CastOperator<TOpFilter>(subplanEntry.Plan)->GetInput()->Kind == EOperator::AddDependencies) {
-        auto filter = CastOperator<TOpFilter>(subplanEntry.Plan);
-        auto addDeps = CastOperator<TOpAddDependencies>(filter->GetInput());
+        auto subplanFilter = CastOperator<TOpFilter>(subplanEntry.Plan);
+        auto addDeps = CastOperator<TOpAddDependencies>(subplanFilter->GetInput());
         uncorrSubplan = addDeps->GetInput();
+        auto subplanConjuncts = subplanFilter->FilterExpr.SplitConjunct();
 
-        for (const auto & conj : conjuncts) {
+        for (const auto & conj : subplanConjuncts) {
             if (!conj.MaybeJoinCondition()) {
                 Y_ENSURE(false, "Expected a filter with only join conditions");
             }
@@ -574,8 +575,7 @@ std::shared_ptr<IOperator> TInlineSimpleInExistsSubplanRule::SimpleMatchAndApply
     }
 
     // Otherwise, we need to pack the remaining conjuncts back into the filter
-    auto remainingConjuncts = TVector<TExpression>(conjuncts.begin() + 1, conjuncts.end());
-    return std::make_shared<TOpFilter>(join, filter->Pos, MakeConjunct(remainingConjuncts, props.PgSyntax));
+    return std::make_shared<TOpFilter>(join, filter->Pos, MakeConjunct(conjuncts, props.PgSyntax));
 }
 
 // We push the map operator only below join right now

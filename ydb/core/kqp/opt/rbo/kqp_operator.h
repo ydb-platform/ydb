@@ -192,7 +192,7 @@ public:
 
     TInfoUnit GetElementName() const;
     TExpression GetExpression() const;
-    TExpression& GetExpression();
+    TExpression& GetExpressionRef();
     void SetExpression(TExpression expr);
 
 private:

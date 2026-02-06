@@ -164,6 +164,7 @@ TVector<TExpression> TExpression::SplitConjunct() const {
 }
 
 bool TExpression::IsColumnAccess() const {
+    Y_ENSURE(Node->IsLambda(), "Expression node is not a lambda");
     auto body = Node->ChildPtr(1);
     if (body->IsCallable("FromPg")) {
         body = body->ChildPtr(0);
@@ -173,6 +174,7 @@ bool TExpression::IsColumnAccess() const {
 }
 
  bool TExpression::IsSingleCallable(THashSet<TString> allowedCallables) const {
+    Y_ENSURE(Node->IsLambda(), "Expression node is not a lambda");
      auto body = Node->ChildPtr(1);
     if (body->IsCallable(allowedCallables) && body->ChildrenSize() == 1 && body->Child(0)->IsCallable("Member")) {
         return true;

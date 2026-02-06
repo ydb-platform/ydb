@@ -77,7 +77,7 @@ namespace NKikimr {
 namespace NKqp {
 
 template <class T>
-void AddUnique(TVector<T>& target, TVector<T>& toAdd) {
+void AddUnique(TVector<T>& toAdd, TVector<T>& target) {
     for (const auto & e : toAdd) {
         if (std::find(target.begin(), target.end(), e) == target.end()) {
             target.push_back(e);
@@ -349,7 +349,7 @@ TString TOpRead::ToString(TExprContext& ctx) {
     res << "Read (" << TKqpTable(TableCallable).Path().StringValue() << "," << Alias << ", [";
 
     for (size_t i = 0; i < Columns.size(); i++) {
-        res << Columns[i] << ":" << OutputIUs[i].GetFullName();
+        res << Columns[i] << "->" << OutputIUs[i].GetFullName();
         if (i != Columns.size() - 1) {
             res << ", ";
         }
@@ -384,7 +384,7 @@ TExpression TMapElement::GetExpression() const {
     return Expr;
 }
 
-TExpression& TMapElement::GetExpression() {
+TExpression& TMapElement::GetExpressionRef() {
     return Expr;
 }
 
@@ -437,7 +437,7 @@ TVector<TInfoUnit> TOpMap::GetUsedIUs(TPlanProps& props) {
 TVector<std::reference_wrapper<TExpression>> TOpMap::GetExpressions() {
     TVector<std::reference_wrapper<TExpression>> result;
     for (auto& mapElement : MapElements) {
-        result.push_back(mapElement.GetExpression());
+        result.push_back(mapElement.GetExpressionRef());
     }
     return result;
 }
@@ -446,7 +446,7 @@ TVector<std::reference_wrapper<TExpression>> TOpMap::GetComplexExpressions() {
     TVector<std::reference_wrapper<TExpression>> result;
     for (auto& mapElement : MapElements) {
         if (!mapElement.IsRename()) {
-            result.push_back(mapElement.GetExpression());
+            result.push_back(mapElement.GetExpressionRef());
         }
     }
     return result;
@@ -556,7 +556,13 @@ TString TOpMap::ToString(TExprContext& ctx) {
         const auto& mapElement = MapElements[i];
         const auto& k = mapElement.GetElementName();
 
-        res << k.GetFullName() << ":" << mapElement.GetExpression().ToString();
+        if (mapElement.IsRename()) {
+            res << mapElement.GetRename().GetFullName();
+        } else {
+            res << mapElement.GetExpression().ToString();
+        }
+        res << "->" << k.GetFullName();
+
         if (i != e - 1) {
             res << ", ";
         }

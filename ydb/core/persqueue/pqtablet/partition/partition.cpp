@@ -4482,7 +4482,7 @@ IActor* CreatePartitionActor(ui64 tabletId, const TPartitionId& partition, const
 }
 
 void TPartition::SetupDetailedMetrics() {
-    if (!DetailedMetricsAreEnabled()) {
+    if (!DetailedMetricsAreEnabled() || IsSupportive()) {
         return;
     }
     if (WriteTimeLagMsByLastWritePerPartition) {

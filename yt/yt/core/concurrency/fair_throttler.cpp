@@ -28,6 +28,9 @@ void TFairThrottlerConfig::Register(TRegistrar registrar)
 
     registrar.Parameter("ipc_path", &TThis::IpcPath)
         .Default();
+
+    registrar.Parameter("use_shmem", &TThis::UseShmem)
+        .Default(false);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -481,7 +484,7 @@ public:
         , Config_(std::move(config))
     {
         if (Config_->IpcPath) {
-            Ipc_ = CreateFairThrottlerFileIpc(*Config_->IpcPath);
+            Ipc_ = CreateFairThrottlerFileIpc(*Config_->IpcPath, Config_->UseShmem, Logger);
 
             SharedBucket_->Limit.Value = std::shared_ptr<std::atomic<i64>>(
                 &Ipc_->GetState()->Value,

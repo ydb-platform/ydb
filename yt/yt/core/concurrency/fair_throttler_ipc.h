@@ -2,6 +2,8 @@
 
 #include "public.h"
 
+#include <library/cpp/yt/logging/logger.h>
+
 #include <atomic>
 
 namespace NYT::NConcurrency {
@@ -52,7 +54,10 @@ DEFINE_REFCOUNTED_TYPE(IFairThrottlerIpc);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-IFairThrottlerIpcPtr CreateFairThrottlerFileIpc(const std::string& path);
+IFairThrottlerIpcPtr CreateFairThrottlerFileIpc(
+    const std::string& rootPath,
+    bool useShmem,
+    NLogging::TLogger logger);
 
 ////////////////////////////////////////////////////////////////////////////////
 

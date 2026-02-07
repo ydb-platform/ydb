@@ -3108,4 +3108,93 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
             NLs::CheckColumns("ProtectedTable", {"key", "value", "new_column"}, {}, {"key"})
         });
     }
+
+    Y_UNIT_TEST(BackupRestoreAsyncIndex) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+        PrepareDirs(runtime, env, txId);
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+                Name: "Table"
+                Columns { Name: "id" Type: "Uint64" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["id"]
+            }
+            IndexDescription {
+                Name: "idx_async"
+                KeyColumnNames: ["value"]
+                Type: EIndexTypeGlobalAsync
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/idx_async"), {
+            NLs::PathExist,
+            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalAsync),
+            NLs::IndexKeys({"value"})
+        });
+
+        TString collectionSettings = R"(
+            Name: "AsyncCollection"
+            ExplicitEntryList {
+                Entries {
+                    Type: ETypeTable
+                    Path: "/MyRoot/Table"
+                }
+            }
+            Cluster: {}
+            IncrementalBackupConfig: {}
+        )";
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", collectionSettings);
+        env.TestWaitNotification(runtime, txId);
+
+        TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/AsyncCollection")");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/.backups/collections/AsyncCollection"), {
+            NLs::PathExist,
+            NLs::ChildrenCount(1)
+        });
+
+        runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+
+        TestBackupIncrementalBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/AsyncCollection")");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDropTable(runtime, ++txId, "/MyRoot", "Table");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {NLs::PathNotExist});
+
+        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/AsyncCollection")");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {
+            NLs::PathExist,
+            NLs::IsTable,
+            NLs::IndexesCount(1)
+        });
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/idx_async"), {
+            NLs::PathExist,
+            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalAsync),
+            NLs::IndexKeys({"value"})
+        });
+
+        auto indexDesc = DescribePrivatePath(runtime, "/MyRoot/Table/idx_async", true, true);
+        UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetPathDescription().ChildrenSize(), 1);
+        TString implName = indexDesc.GetPathDescription().GetChildren(0).GetName();
+        
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/idx_async/" + implName), {
+            NLs::PathExist,
+            NLs::IsTable
+        });
+    }
 } // TBackupCollectionTests

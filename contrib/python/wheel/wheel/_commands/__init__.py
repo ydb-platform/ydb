@@ -9,9 +9,7 @@ import os
 import sys
 from argparse import ArgumentTypeError
 
-
-class WheelError(Exception):
-    pass
+from ..wheelfile import WheelError
 
 
 def unpack_f(args: argparse.Namespace) -> None:
@@ -75,7 +73,7 @@ output filename(s) will be displayed on stdout for further processing.
 """
 
 
-def parser():
+def parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser()
     s = p.add_subparsers(help="commands")
 
@@ -140,7 +138,7 @@ def parser():
     return p
 
 
-def main():
+def main() -> int:
     p = parser()
     args = p.parse_args()
     if not hasattr(args, "func"):

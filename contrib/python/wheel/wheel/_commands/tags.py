@@ -119,9 +119,10 @@ def tags(
         )
         final_wheel_path = os.path.join(os.path.dirname(f.filename), final_wheel_name)
 
-        with WheelFile(original_wheel_path, "r") as fin, WheelFile(
-            final_wheel_path, "w"
-        ) as fout:
+        with (
+            WheelFile(original_wheel_path, "r") as fin,
+            WheelFile(final_wheel_path, "w") as fout,
+        ):
             fout.comment = fin.comment  # preserve the comment
             for item in fin.infolist():
                 if item.is_dir():

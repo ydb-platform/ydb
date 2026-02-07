@@ -51,7 +51,7 @@ public:
         return dynamic_cast<T*>(this);
     }
 
-    virtual TString GetName() const = 0;
+    virtual TString GetName() const;
     virtual TString ToString() const;
 
     void End();

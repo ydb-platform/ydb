@@ -26,7 +26,9 @@ public:
     TUniversalSpan(ui8 verbosity, NWilson::TTraceId parentId, const char* name,
             NWilson::TFlags flags = NWilson::EFlags::NONE,
             NActors::TActorSystem* actorSystem = nullptr) {
-        if (parentId.IsRetroTrace()) {
+        if (!parentId) {
+            // span is set to std::monostate
+        } else if (parentId.IsRetroTrace()) {
             Span.template emplace<TRetroSpanType>();
             std::get<TRetroSpanType>(Span).Initialize(verbosity, std::move(parentId), name, flags, actorSystem);
         } else {
@@ -49,10 +51,8 @@ public:
         NWilson::TSpan* res;
         std::visit(TOverloaded{
             [&](NWilson::TSpan& span) -> void { res = &span; },
-            [&](const TRetroSpanType&) -> void { Y_ABORT("Attempted to get wilson span "
-                    "from universal span initialized as retro"); },
-            [&](const std::monostate&) -> void { Y_ABORT("Attempted to get wilson span "
-                    "from uninitialized universal span"); },
+            [&](const TRetroSpanType&) -> void { res = nullptr; },
+            [&](const std::monostate&) -> void { res = nullptr; },
         }, Span);
         return res;
     }
@@ -61,10 +61,8 @@ public:
         const NWilson::TSpan* res;
         std::visit(TOverloaded{
             [&](const NWilson::TSpan& span) -> void { res = &span; },
-            [&](const TRetroSpanType&) -> void { Y_ABORT("Attempted to get wilson span "
-                    "from universal span initialized as retro"); },
-            [&](const std::monostate&) -> void { Y_ABORT("Attempted to get wilson span "
-                    "from uninitialized universal span"); },
+            [&](const TRetroSpanType&) -> void { res = nullptr; },
+            [&](const std::monostate&) -> void { res = nullptr; },
         }, Span);
         return res;
     }
@@ -72,23 +70,19 @@ public:
     TRetroSpanType* GetRetroSpanPtr() {
         TRetroSpanType* res;
         std::visit(TOverloaded{
-            [&](const NWilson::TSpan&) -> void { Y_ABORT("Attempted to get retro span "
-                    "from universal span initialized as wilson"); },
+            [&](const NWilson::TSpan&) -> void { res = nullptr; },
             [&](TRetroSpanType& span) -> void { res = &span; },
-            [&](const std::monostate&) -> void { Y_ABORT("Attempted to get retro span "
-                    "from uninitialized universal span"); },
+            [&](const std::monostate&) -> void { res = nullptr; },
         }, Span);
         return res;
     }
 
     const TRetroSpanType* GetRetroSpanPtr() const {
-        TRetroSpanType* res;
+        const TRetroSpanType* res;
         std::visit(TOverloaded{
-            [&](const NWilson::TSpan&) -> void { Y_ABORT("Attempted to get retro span "
-                    "from universal span initialized as wilson"); },
+            [&](const NWilson::TSpan&) -> void { res = nullptr; },
             [&](TRetroSpanType& span) -> void { res = &span; },
-            [&](const std::monostate&) -> void { Y_ABORT("Attempted to get retro span "
-                    "from uninitialized universal span"); },
+            [&](const std::monostate&) -> void { res = nullptr; },
         }, Span);
         return res;
     }

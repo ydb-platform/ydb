@@ -40,6 +40,7 @@ namespace NWilson {
 
         TTraceId(TTrace traceId, ui64 spanId, ui8 verbosity, ui32 timeToLive, bool isRetroTrace = false)
             : TraceId(traceId)
+            , Raw(0)
         {
             if (timeToLive == Max<ui32>()) {
                 timeToLive = MAX_TIME_TO_LIVE;

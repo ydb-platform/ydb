@@ -159,7 +159,6 @@ namespace NWilson {
         res.Data->Span.set_end_time_unix_nano(endTs.NanoSeconds());
         res.Data->Span.mutable_status()->set_code(NTraceProto::Status::STATUS_CODE_OK);
         res.Name(name);
-        res.Attribute("node_id", res.Data->ActorSystem->NodeId);
         res.Data->EndAsIs = true;
         return res;
     }

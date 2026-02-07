@@ -48,10 +48,12 @@ public:
             std::lock_guard guard(Lock);
             std::memcpy(static_cast<void*>(TmpBuffer), static_cast<const void*>(Buffer), BufferSize);
         }
+        TRetroSpan spanHeader(0, sizeof(TRetroSpan));
         std::vector<std::unique_ptr<TRetroSpan>> res;
         for (ui32 pos = 0; pos < BufferSize; pos += CellSize) {
             const void* ptr = TmpBuffer + pos;
-            if (reinterpret_cast<const TRetroSpan*>(ptr)->GetTraceId().IsSameTrace(traceId)) {
+            std::memcpy(reinterpret_cast<void*>(&spanHeader), ptr, sizeof(TRetroSpan));
+            if (spanHeader.GetTraceId() && spanHeader.GetTraceId().IsSameTrace(traceId)) {
                 res.push_back(TRetroSpan::DeserializeToUnique(ptr));
             }
         }

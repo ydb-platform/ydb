@@ -85,6 +85,10 @@ TInstant TRetroSpan::GetEndTs() const {
     return EndTs;
 }
 
+TString TRetroSpan::GetName() const {
+    return "Unnamed retro span";
+}
+
 TString TRetroSpan::ToString() const {
     TStringStream str;
     str << "TRetroSpan {";

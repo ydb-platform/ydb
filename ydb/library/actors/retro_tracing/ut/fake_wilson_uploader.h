@@ -23,6 +23,6 @@ public:
     std::vector<TOtelSpan> Spans;
 };
 
-NActors::IActor* CreateFakeWilsonUploader() {
+inline NActors::IActor* CreateFakeWilsonUploader() {
     return new TFakeWilsonUploader;
 }

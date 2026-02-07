@@ -3,6 +3,8 @@
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/event.h>
 
+#include <ydb/library/actors/wilson/wilson_trace.h>
+
 namespace NRetroTracing {
 
 NActors::IActor* CreateRetroCollector();

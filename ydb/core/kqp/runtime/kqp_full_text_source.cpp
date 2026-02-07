@@ -1650,7 +1650,7 @@ public:
     }
 };
 
-class TFullTextContainsSource : public TActorBootstrapped<TFullTextContainsSource>, public NYql::NDq::IDqComputeActorAsyncInput, public NActors::IActorExceptionHandler {
+class TFullTextMatchSource : public TActorBootstrapped<TFullTextMatchSource>, public NYql::NDq::IDqComputeActorAsyncInput, public NActors::IActorExceptionHandler {
 private:
 
     struct TEvPrivate {
@@ -1971,7 +1971,7 @@ private:
 
 
 public:
-    TFullTextContainsSource(const NKikimrKqp::TKqpFullTextSourceSettings* settings,
+    TFullTextMatchSource(const NKikimrKqp::TKqpFullTextSourceSettings* settings,
         TIntrusivePtr<NActors::TProtoArenaHolder> arena,
         const NActors::TActorId& computeActorId,
         ui64 inputIndex,
@@ -2023,7 +2023,7 @@ public:
     void Bootstrap() {
         ReadsState.SetSelfId(this->SelfId());
         LogPrefix = TStringBuilder() << "SelfId: " << this->SelfId() << ", " << LogPrefix;
-        Become(&TFullTextContainsSource::StateWork);
+        Become(&TFullTextMatchSource::StateWork);
         PrepareTableReaders();
     }
 
@@ -2513,7 +2513,7 @@ public:
     }
 
 private:
-    using TBase = TActorBootstrapped<TFullTextContainsSource>;
+    using TBase = TActorBootstrapped<TFullTextMatchSource>;
 };
 
 std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateKqpFullTextSource(const NKikimrKqp::TKqpFullTextSourceSettings* settings,
@@ -2529,7 +2529,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateKqpFullTextSourc
     const NWilson::TTraceId& traceId,
     TIntrusivePtr<TKqpCounters> counters)
 {
-    auto* actor = new TFullTextContainsSource(settings, arena, computeActorId, inputIndex, statsLevel, txId, taskId, typeEnv, holderFactory, alloc, traceId, counters);
+    auto* actor = new TFullTextMatchSource(settings, arena, computeActorId, inputIndex, statsLevel, txId, taskId, typeEnv, holderFactory, alloc, traceId, counters);
     return std::make_pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*>(actor, actor);
 }
 

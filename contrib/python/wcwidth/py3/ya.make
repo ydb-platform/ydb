@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(0.2.14)
+VERSION(0.3.0)
 
 LICENSE(MIT)
 
@@ -11,10 +11,16 @@ NO_LINT()
 PY_SRCS(
     TOP_LEVEL
     wcwidth/__init__.py
-    wcwidth/table_vs15.py
+    wcwidth/bisearch.py
+    wcwidth/control_codes.py
+    wcwidth/escape_sequences.py
+    wcwidth/grapheme.py
+    wcwidth/table_ambiguous.py
+    wcwidth/table_grapheme.py
     wcwidth/table_vs16.py
     wcwidth/table_wide.py
     wcwidth/table_zero.py
+    wcwidth/textwrap.py
     wcwidth/unicode_versions.py
     wcwidth/wcwidth.py
 )

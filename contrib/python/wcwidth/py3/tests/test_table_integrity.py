@@ -1,6 +1,4 @@
-"""
-Executes verify-table-integrity.py as a unit test.
-"""
+"""Executes verify-table-integrity.py as a unit test."""
 # std imports
 import os
 import sys

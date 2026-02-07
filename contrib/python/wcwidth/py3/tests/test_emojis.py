@@ -1,8 +1,12 @@
+"""Tests for emoji width measurement and ZWJ sequences."""
 # std imports
 import os
 
 # 3rd party
 import pytest
+
+# local
+import wcwidth
 
 # some tests cannot be done on some builds of python, where the internal
 # unicode structure is limited to 0x10000 for memory conservation,
@@ -13,9 +17,6 @@ try:
 except ValueError:
     NARROW_ONLY = True
 
-# local
-import wcwidth
-
 
 def make_sequence_from_line(line):
     # convert '002A FE0F  ; ..' -> (0x2a, 0xfe0f) -> chr(0x2a) + chr(0xfe0f)
@@ -24,13 +25,11 @@ def make_sequence_from_line(line):
 
 @pytest.mark.skipif(NARROW_ONLY, reason="Test cannot verify on python 'narrow' builds")
 def emoji_zwj_sequence():
-    """
-    Emoji zwj sequence of four codepoints is just 2 cells.
-    """
+    """Emoji zwj sequence of four codepoints is just 2 cells."""
     phrase = ("\U0001f469"   # Base, Category So, East Asian Width property 'W' -- WOMAN
               "\U0001f3fb"   # Modifier, Category Sk, East Asian Width property 'W' -- EMOJI MODIFIER FITZPATRICK TYPE-1-2
               "\u200d"       # Joiner, Category Cf, East Asian Width property 'N'  -- ZERO WIDTH JOINER
-              "\U0001f4bb")  # Fused, Category So, East Asian Width peroperty 'W' -- PERSONAL COMPUTER
+              "\U0001f4bb")  # Fused, Category So, East Asian Width property 'W' -- PERSONAL COMPUTER
     # This test adapted from https://www.unicode.org/L2/L2023/23107-terminal-suppt.pdf
     expect_length_each = (2, 0, 0, 2)
     expect_length_phrase = 2
@@ -46,9 +45,7 @@ def emoji_zwj_sequence():
 
 @pytest.mark.skipif(NARROW_ONLY, reason="Test cannot verify on python 'narrow' builds")
 def test_unfinished_zwj_sequence():
-    """
-    Ensure index-out-of-bounds does not occur for zero-width joiner without any following character
-    """
+    """Ensure index-out-of-bounds does not occur for ZWJ without any following character."""
     phrase = ("\U0001f469"   # Base, Category So, East Asian Width property 'W' -- WOMAN
               "\U0001f3fb"   # Modifier, Category Sk, East Asian Width property 'W' -- EMOJI MODIFIER FITZPATRICK TYPE-1-2
               "\u200d")      # Joiner, Category Cf, East Asian Width property 'N'  -- ZERO WIDTH JOINER
@@ -66,9 +63,7 @@ def test_unfinished_zwj_sequence():
 
 @pytest.mark.skipif(NARROW_ONLY, reason="Test cannot verify on python 'narrow' builds")
 def test_non_recommended_zwj_sequence():
-    """
-    Verify ZWJ is measured as though successful with characters that cannot be joined, wcwidth does not verify
-    """
+    """Verify ZWJ with characters that cannot be joined, wcwidth does not verify."""
     phrase = ("\U0001f469"   # Base, Category So, East Asian Width property 'W' -- WOMAN
               "\U0001f3fb"   # Modifier, Category Sk, East Asian Width property 'W' -- EMOJI MODIFIER FITZPATRICK TYPE-1-2
               "\u200d")      # Joiner, Category Cf, East Asian Width property 'N'  -- ZERO WIDTH JOINER
@@ -109,8 +104,8 @@ def test_longer_emoji_zwj_sequence():
     """
     A much longer emoji ZWJ sequence of 10 total codepoints is just 2 cells!
 
-    Also test the same sequence in duplicate, verifying multiple VS-16 sequences
-    in a single function call.
+    Also test the same sequence in duplicate, verifying multiple VS-16 sequences in a single
+    function call.
     """
     # 'Category Code', 'East Asian Width property' -- 'description'
     phrase = ("\U0001F9D1"   # 'So', 'W' -- ADULT
@@ -138,20 +133,17 @@ def test_longer_emoji_zwj_sequence():
 
 
 def read_sequences_from_file(filename):
-    fp = open(os.path.join(os.path.dirname(__file__), filename), 'r', encoding='utf-8')
-    lines = [line.strip()
-             for line in fp.readlines()
-             if not line.startswith('#') and line.strip()]
-    fp.close()
+    with open(os.path.join(os.path.dirname(__file__), filename), encoding='utf-8') as fp:
+        lines = [line.strip()
+                 for line in fp.readlines()
+                 if not line.startswith('#') and line.strip()]
     sequences = [make_sequence_from_line(line) for line in lines]
     return lines, sequences
 
 
 @pytest.mark.skipif(NARROW_ONLY, reason="Some sequences in text file are not compatible with 'narrow' builds")
 def test_recommended_emoji_zwj_sequences():
-    """
-    Test wcswidth of all of the unicode.org-published emoji-zwj-sequences.txt
-    """
+    """Test wcswidth of all of the unicode.org-published emoji-zwj-sequences.txt."""
     # given,
     lines, sequences = read_sequences_from_file('emoji-zwj-sequences.txt')
 
@@ -170,14 +162,12 @@ def test_recommended_emoji_zwj_sequences():
             })
 
     # verify
-    assert errors == []
+    assert not errors
     assert num >= 1468
 
 
 def test_recommended_variation_16_sequences():
-    """
-    Test wcswidth of all of the unicode.org-published emoji-variation-sequences.txt
-    """
+    """Test wcswidth of all of the unicode.org-published emoji-variation-sequences.txt."""
     # given,
     lines, sequences = read_sequences_from_file('emoji-variation-sequences.txt')
 
@@ -198,12 +188,12 @@ def test_recommended_variation_16_sequences():
             })
 
     # verify
-    assert errors == []
+    assert not errors
     assert num >= 742
 
 
 def test_unicode_9_vs16():
-    """Verify effect of VS-16 on unicode_version 9.0 and later"""
+    """Verify effect of VS-16 on unicode_version 9.0 and later."""
     phrase = ("\u2640"        # FEMALE SIGN
               "\uFE0F")       # VARIATION SELECTOR-16
 
@@ -220,7 +210,7 @@ def test_unicode_9_vs16():
 
 
 def test_unicode_8_vs16():
-    """Verify that VS-16 has no effect on unicode_version 8.0 and earler"""
+    """Verify that VS-16 has no effect on unicode_version 8.0 and earlier."""
     phrase = ("\u2640"        # FEMALE SIGN
               "\uFE0F")       # VARIATION SELECTOR-16
 

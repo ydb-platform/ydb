@@ -452,6 +452,7 @@ PY_SRCS(
     pyclbr.py
     pydoc.py
     pydoc_data/__init__.py
+    pydoc_data/module_docs.py
     pydoc_data/topics.py
     queue.py
     quopri.py

@@ -76,6 +76,19 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 25538:added basic monitoring tests and separate events file [#25538](https://github.com/ydb-platform/ydb/pull/25538) ([Andrei Rykov](https://github.com/StekPerepolnen))
 * 25458:Сейчас при автопартициронировании топиков учитывается скорость записи различными producer-ами: партиция делится не пополам, а стараемся разделить партицию таким образом, что бы producer-ы распределились по новым партициям равномерно с учетом скорости записи. [#25458](https://github.com/ydb-platform/ydb/pull/25458) ([Nikolay Shestakov](https://github.com/nshestakov))
 * 25387:Change the audit logging logic from AllowedList checking to DenyList checking [#25387](https://github.com/ydb-platform/ydb/pull/25387) ([Andrei Rykov](https://github.com/StekPerepolnen))
+* 31708:The original implementation of slot mem pool has no ability to reuse chunk for slots size X if it was split for slots size Y. It can cause the situation when we have no abbility to allocate memory if all chunks was split for workset with different size.
+
+The proposed change track usage of chunk and allows to reuse it for any slot size if use count for chunk become 0.
+
+This commit also changes limit so allocate object up to 32MB are allowed.
+
+Two improvement should be implemented in a future work:
+- Priority to alocate slots by use count of underlying chunk. This heuristic increases probability of success reclaimation
+- Varied chunk size. No need to allocate 32Mb chunk to split it in to 4K slots. It also increases probability of success reclaimation and improve perfomance of it
+
+
+
+... [#31708](https://github.com/ydb-platform/ydb/pull/31708) ([Daniil Cherednik](https://github.com/dcherednik))
 
 ### Bug fixes
 
@@ -146,12 +159,7 @@ https://github.com/ydb-platform/ydb/issues/25454 [#25536](https://github.com/ydb
 * 25515:Fixed fault for checkpoint on not drained channels [#25515](https://github.com/ydb-platform/ydb/pull/25515) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
 * 25412:https://github.com/ydb-platform/ydb/issues/23180 [#25412](https://github.com/ydb-platform/ydb/pull/25412) ([Vasily Gerasimov](https://github.com/UgnineSirdis))
 * 25408:Fixed tests:
-
-* TestRetryLimiter 
-* RestoreScriptPhysicalGraphOnRetry 
-* CreateStreamingQueryMatchRecognize 
-
-Also increased default test logs level [#25408](https://github.com/ydb-platform/ydb/pull/25408) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
+* None:CreateStreamingQueryMatchRecognize
 
 ### YDB UI
 

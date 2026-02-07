@@ -64,6 +64,8 @@ const google::protobuf::Message* GetCommandFromRequest(const TEvLoadTestRequest&
         return &request.GetStorageLoad();
     case TEvLoadTestRequest::CommandCase::kPDiskWriteLoad:
         return &request.GetPDiskWriteLoad();
+    case TEvLoadTestRequest::CommandCase::kDDiskWriteLoad:
+        return &request.GetDDiskWriteLoad();
     case TEvLoadTestRequest::CommandCase::kVDiskLoad:
         return &request.GetVDiskLoad();
     case TEvLoadTestRequest::CommandCase::kPDiskReadLoad:
@@ -97,6 +99,8 @@ ui64 ExtractTagFromCommand(const TEvLoadTestRequest& request) {
         return request.GetStorageLoad().GetTag();
     case TEvLoadTestRequest::CommandCase::kPDiskWriteLoad:
         return request.GetPDiskWriteLoad().GetTag();
+    case TEvLoadTestRequest::CommandCase::kDDiskWriteLoad:
+        return request.GetDDiskWriteLoad().GetTag();
     case TEvLoadTestRequest::CommandCase::kVDiskLoad:
         return request.GetVDiskLoad().GetTag();
     case TEvLoadTestRequest::CommandCase::kPDiskReadLoad:
@@ -528,6 +532,17 @@ public:
                 }
                 LOG_D("Create new load actor with tag# " << tag);
                 LoadActors.emplace(tag, TlsActivationContext->Register(CreatePDiskWriterLoadTest(
+                                cmd, SelfId(), GetServiceCounters(Counters, "load_actor"), 0, tag)));
+                break;
+            }
+
+            case NKikimr::TEvLoadTestRequest::CommandCase::kDDiskWriteLoad: {
+                const auto& cmd = record.GetDDiskWriteLoad();
+                if (LoadActors.count(tag) != 0) {
+                    ythrow TLoadActorException() << Sprintf("duplicate load actor with Tag# %" PRIu64, tag);
+                }
+                LOG_D("Create new load actor with tag# " << tag);
+                LoadActors.emplace(tag, TlsActivationContext->Register(CreateDDiskWriterLoadTest(
                                 cmd, SelfId(), GetServiceCounters(Counters, "load_actor"), 0, tag)));
                 break;
             }

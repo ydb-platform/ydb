@@ -85,7 +85,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         NJson::ReadJsonTree(*res.PlanJson, &plan, true);
         UNIT_ASSERT(ValidatePlanNodeIds(plan));
 
-        auto join = FindPlanNodeByKv(plan, "Node Type", "Aggregate-InnerJoin (MapJoin)-Filter-TableFullScan");
+        auto join = FindPlanNodeByKv(plan, "Node Type", "Aggregate-InnerJoin (Map)-Filter-TableFullScan");
         UNIT_ASSERT(join.IsDefined());
         auto left = FindPlanNodeByKv(join, "Table", "EightShard");
         UNIT_ASSERT(left.IsDefined());
@@ -113,7 +113,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         NJson::ReadJsonTree(*res.PlanJson, &plan, true);
         UNIT_ASSERT(ValidatePlanNodeIds(plan));
 
-        auto join = FindPlanNodeByKv(plan, "Node Type", "Aggregate-InnerJoin (MapJoin)-Filter-TableFullScan");
+        auto join = FindPlanNodeByKv(plan, "Node Type", "Aggregate-InnerJoin (Map)-Filter-TableFullScan");
         UNIT_ASSERT(join.IsDefined());
         auto left = FindPlanNodeByKv(join, "Table", "EightShard");
         UNIT_ASSERT(left.IsDefined());
@@ -203,7 +203,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         auto join = FindPlanNodeByKv(
             plan,
             "Node Type",
-            "Aggregate-InnerJoin (MapJoin)-Filter-TableFullScan"
+            "Aggregate-InnerJoin (Map)-Filter-TableFullScan"
         );
 
         UNIT_ASSERT(join.IsDefined());
@@ -366,9 +366,9 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         NJson::ReadJsonTree(*res.PlanJson, &plan, true);
         UNIT_ASSERT(ValidatePlanNodeIds(plan));
 
-        auto join1 = FindPlanNodeByKv(plan, "Node Type", "Sort-InnerJoin (MapJoin)-Filter");
+        auto join1 = FindPlanNodeByKv(plan, "Node Type", "Sort-InnerJoin (Map)-Filter");
         UNIT_ASSERT(join1.IsDefined());
-        auto join2 = FindPlanNodeByKv(plan, "Node Type", "Aggregate-InnerJoin (MapJoin)-Filter");
+        auto join2 = FindPlanNodeByKv(plan, "Node Type", "Aggregate-InnerJoin (Map)-Filter");
         UNIT_ASSERT(join2.IsDefined());
     }
 
@@ -594,7 +594,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         UNIT_ASSERT(ValidatePlanNodeIds(plan));
 
         Cout << plan.GetStringRobust() << Endl;
-        auto join = FindPlanNodeByKv(plan, "Node Type", "FullJoin (JoinDict)");
+        auto join = FindPlanNodeByKv(plan, "Node Type", "FullJoin (Dict)");
         UNIT_ASSERT(join.IsDefined());
         auto left = FindPlanNodeByKv(join, "Table", "EightShard");
         UNIT_ASSERT(left.IsDefined());
@@ -958,7 +958,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
             settings.StatsMode(NYdb::NQuery::EStatsMode::Full);
         }
 
-        {    
+        {
             auto result = client.ExecuteQuery(R"(
                 CREATE TABLE `/Root/Destination` (
                     PRIMARY KEY (Col1)
@@ -991,7 +991,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
             UNIT_ASSERT_VALUES_EQUAL(sink["Table"], "Destination");
         }
 
-        {    
+        {
             auto result = client.ExecuteQuery(R"(
                 CREATE TABLE `test/Destination2` (
                     PRIMARY KEY (Col1)
@@ -1024,7 +1024,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
             UNIT_ASSERT_VALUES_EQUAL(sink["Table"], "test/Destination2");
         }
 
-        {    
+        {
             auto result = client.ExecuteQuery(R"(
                 PRAGMA TablePathPrefix("/Root/test");
 
@@ -1408,7 +1408,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
             };
 
             countOperationsByType("writes");
-            
+
             UNIT_ASSERT_VALUES_EQUAL(counter["MultiUpdate"], 0);
             UNIT_ASSERT_VALUES_EQUAL(counter["MultiUpsert"], 1);
             UNIT_ASSERT_VALUES_EQUAL(counter["MultiErase"], 0);
@@ -1474,7 +1474,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
 
         auto deletesCount = CountPlanNodesByKv(plan, "Name", "Delete");
         UNIT_ASSERT_VALUES_EQUAL(deletesCount, UseSink ? (UseStreamIndex ? 0 : 1) : 1);
-        
+
         auto lookupCount = CountPlanNodesByKv(plan, "Node Type", "TableLookup");
         UNIT_ASSERT_VALUES_EQUAL(lookupCount, UseSink ? (UseStreamIndex ? 0 : 1) : 1);
 
@@ -1554,7 +1554,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
 
         auto deletesCount = CountPlanNodesByKv(plan, "Name", "Delete");
         UNIT_ASSERT_VALUES_EQUAL(deletesCount, UseSink ? 0 : 0);
-        
+
         auto lookupCount = CountPlanNodesByKv(plan, "Node Type", "TableLookup");
         UNIT_ASSERT_VALUES_EQUAL(lookupCount, UseSink ? 0 : 1);
 

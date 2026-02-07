@@ -1,0 +1,78 @@
+diff --git a/include/__expected/bad_expected_access.h b/include/__expected/bad_expected_access.h
+index 1b73438..d954545 100644
+--- a/include/__expected/bad_expected_access.h
++++ b/include/__expected/bad_expected_access.h
+@@ -20,7 +20,7 @@
+ _LIBCPP_PUSH_MACROS
+ #include <__undef_macros>
+ 
+-#if _LIBCPP_STD_VER >= 23
++#if _LIBCPP_STD_VER >= 20
+ 
+ _LIBCPP_BEGIN_NAMESPACE_STD
+ 
+diff --git a/include/__expected/expected.h b/include/__expected/expected.h
+index 3d3f119..3e4de32 100644
+--- a/include/__expected/expected.h
++++ b/include/__expected/expected.h
+@@ -55,7 +55,7 @@
+ _LIBCPP_PUSH_MACROS
+ #include <__undef_macros>
+ 
+-#if _LIBCPP_STD_VER >= 23
++#if _LIBCPP_STD_VER >= 20
+ 
+ _LIBCPP_BEGIN_NAMESPACE_STD
+ 
+diff --git a/include/__expected/unexpect.h b/include/__expected/unexpect.h
+index df52787..fc3be4c 100644
+--- a/include/__expected/unexpect.h
++++ b/include/__expected/unexpect.h
+@@ -15,7 +15,7 @@
+ #  pragma GCC system_header
+ #endif
+ 
+-#if _LIBCPP_STD_VER >= 23
++#if _LIBCPP_STD_VER >= 20
+ 
+ _LIBCPP_BEGIN_NAMESPACE_STD
+ 
+diff --git a/include/__expected/unexpected.h b/include/__expected/unexpected.h
+index cf110bc..55360dc 100644
+--- a/include/__expected/unexpected.h
++++ b/include/__expected/unexpected.h
+@@ -34,7 +34,7 @@
+ _LIBCPP_PUSH_MACROS
+ #include <__undef_macros>
+ 
+-#if _LIBCPP_STD_VER >= 23
++#if _LIBCPP_STD_VER >= 20
+ 
+ _LIBCPP_BEGIN_NAMESPACE_STD
+ 
+diff --git a/include/__utility/forward_like.h b/include/__utility/forward_like.h
+index 0206ce2..4302c4b 100644
+--- a/include/__utility/forward_like.h
++++ b/include/__utility/forward_like.h
+@@ -22,7 +22,7 @@
+ 
+ _LIBCPP_BEGIN_NAMESPACE_STD
+ 
+-#if _LIBCPP_STD_VER >= 23
++#if _LIBCPP_STD_VER >= 20
+ 
+ template <class _Ap, class _Bp>
+ using _CopyConst = _If<is_const_v<_Ap>, const _Bp, _Bp>;
+diff --git a/include/expected b/include/expected
+index 6a2f12f..ccdbc3b 100644
+--- a/include/expected
++++ b/include/expected
+@@ -40,7 +40,7 @@ namespace std {
+ 
+ #include <__config>
+ 
+-#if _LIBCPP_STD_VER >= 23
++#if _LIBCPP_STD_VER >= 20
+ #  include <__expected/bad_expected_access.h>
+ #  include <__expected/expected.h>
+ #  include <__expected/unexpect.h>

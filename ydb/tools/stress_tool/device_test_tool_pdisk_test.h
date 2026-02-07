@@ -79,6 +79,7 @@ class TPerfTestActor : public TActor<TPerfTestActor> {
     const NDevicePerfTest::TPDiskTest& TestProto;
     TIntrusivePtr<IResultPrinter> Printer;
     const TIntrusivePtr<NMonitoring::TDynamicCounters>& Counters;
+    TString CurrentTestType; // Current test type name (e.g., "PDiskWriteLoad")
 
 
 protected:
@@ -89,24 +90,28 @@ protected:
                 auto record = TestProto.GetPDiskTestList(CurrentTest);
                 switch(record.Command_case()) {
                 case NKikimr::TEvLoadTestRequest::CommandCase::kPDiskReadLoad: {
+                    CurrentTestType = "PDiskReadLoad";
                     const auto cfg = record.GetPDiskReadLoad();
                     ctx.Register(CreatePDiskReaderLoadTest(cfg, ctx.SelfID, Counters,
                                 CurrentTest, cfg.HasTag() ? cfg.GetTag() : 0));
                     break;
                 }
                 case NKikimr::TEvLoadTestRequest::CommandCase::kPDiskWriteLoad: {
+                    CurrentTestType = "PDiskWriteLoad";
                     const auto cfg = record.GetPDiskWriteLoad();
                     ctx.Register(CreatePDiskWriterLoadTest(cfg, ctx.SelfID, Counters,
                                 CurrentTest, cfg.HasTag() ? cfg.GetTag() : 0));
                     break;
                 }
                 case NKikimr::TEvLoadTestRequest::CommandCase::kPDiskLogLoad: {
+                    CurrentTestType = "PDiskLogLoad";
                     const auto cfg = record.GetPDiskLogLoad();
                     ctx.Register(CreatePDiskLogWriterLoadTest(cfg, ctx.SelfID, Counters,
                                 CurrentTest, cfg.HasTag() ? cfg.GetTag() : 0));
                     break;
                 }
                 default:
+                    CurrentTestType = "Unknown";
                     Cerr << "Unknown load type" << Endl;
                     break;
                 }
@@ -140,17 +145,22 @@ protected:
         Y_ABORT_UNLESS(ev->Get());
         TIntrusivePtr<TEvLoad::TLoadReport> report = ev->Get()->Report;
         if (report) {
+            double speedMBps = report->GetAverageSpeed() / 1e6;
+            double iops = report->Size ? (report->GetAverageSpeed() / report->Size) : 0.0;
+            Printer->SetTestType(CurrentTestType);
+            Printer->SetInFlight(report->InFlight);
             Printer->AddResult("Name", Cfg.Name);
             Printer->AddResult("Duration, sec", report->Duration.Seconds());
             Printer->AddResult("Load", report->LoadTypeName());
             Printer->AddResult("Size", ToString(HumanReadableSize(report->Size, SF_BYTES)));
             Printer->AddResult("InFlight", report->InFlight);
-            Printer->AddResult("Speed", Sprintf("%.1f MB/s", report->GetAverageSpeed() / 1e6));
+            Printer->AddResult("Speed", Sprintf("%.1f MB/s", speedMBps));
             if (report->Size) {
-                Printer->AddResult("IOPS", Sprintf("%.0f", report->GetAverageSpeed() / report->Size));
+                Printer->AddResult("IOPS", Sprintf("%.0f", iops));
             } else {
                 Printer->AddResult("IOPS", TString("N/A"));
             }
+            Printer->AddSpeedAndIops(TSpeedAndIops(speedMBps, iops));
             for (double perc : {1.0, 0.9999, 0.999, 0.99, 0.95, 0.9, 0.5, 0.1}) {
                 TString perc_name = Sprintf("p%.2f", perc * 100);
                 size_t val = report->LatencyUs.GetPercentile(perc);
@@ -189,6 +199,9 @@ public:
 
 template<ui32 ChunkSize = 128 << 20 >
 struct TPDiskTest : public TPerfTest {
+    THolder<TActorSystemSetup> Setup;
+    TIntrusivePtr<NActors::NLog::TSettings> LogSettings;
+    TActorId PDiskId;
     THolder<TActorSystem> ActorSystem;
     TAppData AppData;
     std::shared_ptr<NPDisk::IIoContextFactory> IoContext;
@@ -203,6 +216,13 @@ struct TPDiskTest : public TPerfTest {
 
     TPDiskTest(const TPerfTestConfig& cfg, const NDevicePerfTest::TPDiskTest& testProto)
         : TPerfTest(cfg)
+        , Setup(new TActorSystemSetup())
+        , LogSettings(new NActors::NLog::TSettings(NActors::TActorId(1, "logger"),
+                                                   NActorsServices::LOGGER,
+                                                   NActors::NLog::PRI_ERROR,
+                                                   NActors::NLog::PRI_ERROR,
+                                                   0))
+        , PDiskId(MakeBlobStoragePDiskID(1, 1))
         , AppData(0 // sysPoolId
                 , 1 // userPoolid
                 , 3 // ioPoolId
@@ -216,9 +236,6 @@ struct TPDiskTest : public TPerfTest {
         , TestProto(testProto)
     {
          AppData.IoContextFactory = IoContext.get();
-    }
-
-    void PrintKikimrConfiguration() {
     }
 
     void FormatPDiskForTest() {
@@ -236,107 +253,105 @@ struct TPDiskTest : public TPerfTest {
             chunkKey, logKey, sysLogKey, NPDisk::YdbDefaultPDiskSequence, "Info", options);
     }
 
-    void Init() override {
-        TActorId pDiskId;
+    void DoBasicSetup() {
+        Counters = TIntrusivePtr<NMonitoring::TDynamicCounters>(new NMonitoring::TDynamicCounters());
 
-        PrintKikimrConfiguration();
-        try {
-            Counters = TIntrusivePtr<NMonitoring::TDynamicCounters>(new NMonitoring::TDynamicCounters());
+        TIntrusivePtr<TTableNameserverSetup> nameserverTable(new TTableNameserverSetup());
 
-            TIntrusivePtr<TTableNameserverSetup> nameserverTable(new TTableNameserverSetup());
+        Setup->NodeId = 1;
+        Setup->ExecutorsCount = 4;
+        Setup->Executors.Reset(new TAutoPtr<IExecutorPool>[4]);
+        Setup->Executors[0].Reset(new TBasicExecutorPool(0, 2, 20, "nameservice"));
+        Setup->Executors[1].Reset(new TBasicExecutorPool(1, 1, 20, "pdisk_actors"));
+        Setup->Executors[2].Reset(new TBasicExecutorPool(2, 4, 20, "perf_actors"));
+        Setup->Executors[3].Reset(new TIOExecutorPool(3, 1, "IO"));
+        Setup->Scheduler.Reset(new TBasicSchedulerThread(TSchedulerConfig(64, 20)));
 
-            THolder<TActorSystemSetup> setup(new TActorSystemSetup());
-            setup->NodeId = 1;
-            setup->ExecutorsCount = 4;
-            setup->Executors.Reset(new TAutoPtr<IExecutorPool>[4]);
-            setup->Executors[0].Reset(new TBasicExecutorPool(0, 2, 20));
-            setup->Executors[1].Reset(new TBasicExecutorPool(1, 6, 20)); //PDisk's pool
-            setup->Executors[2].Reset(new TBasicExecutorPool(2, 4, 20)); //PerfActor's pool
-            setup->Executors[3].Reset(new TIOExecutorPool(3, 3));
-            setup->Scheduler.Reset(new TBasicSchedulerThread(TSchedulerConfig(128, 100)));
+        const TActorId nameserviceId = GetNameserviceActorId();
+        TActorSetupCmd nameserviceSetup(CreateNameserverTable(nameserverTable), TMailboxType::Simple, 0);
+        Setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(nameserviceId, std::move(nameserviceSetup)));
 
-            const TActorId nameserviceId = GetNameserviceActorId();
-            TActorSetupCmd nameserviceSetup(CreateNameserverTable(nameserverTable), TMailboxType::Simple, 0);
-            setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(nameserviceId, std::move(nameserviceSetup)));
+        // PDisk
+        FormatPDiskForTest();
 
-            // PDisk
-            FormatPDiskForTest();
+        TIntrusivePtr<TPDiskConfig> pDiskConfig = new TPDiskConfig(Cfg.Path, PDiskGuid, 1, TPDiskCategory(Cfg.DeviceType, 0).GetRaw());
+        pDiskConfig->DriveModelSeekTimeNs = 1000ull;
+        pDiskConfig->DriveModelSpeedBps = 1 << 30;
+        pDiskConfig->DriveModelSpeedBpsMin = 1 << 30;
+        pDiskConfig->DriveModelSpeedBpsMax = 1 << 30;
+        pDiskConfig->GetDriveDataSwitch = NKikimrBlobStorage::TPDiskConfig::DoNotTouch;
+        pDiskConfig->WriteCacheSwitch = NKikimrBlobStorage::TPDiskConfig::DoNotTouch;
+        pDiskConfig->ChunkSize = ChunkSize;
+        pDiskConfig->DeviceInFlight = TestProto.GetDeviceInFlight() != 0 ? FastClp2(TestProto.GetDeviceInFlight()) : 4;
+        pDiskConfig->UseNoopScheduler = true;
+        pDiskConfig->FeatureFlags.SetEnableSeparateSubmitThreadForPDisk(true);
+        if (!TestProto.GetEnableTrim()) {
+            pDiskConfig->DriveModelTrimSpeedBps = 0;
+        }
 
-            pDiskId = MakeBlobStoragePDiskID(1, 1);
-            TIntrusivePtr<TPDiskConfig> pDiskConfig = new TPDiskConfig(Cfg.Path, PDiskGuid, 1, TPDiskCategory(Cfg.DeviceType, 0).GetRaw());
-            pDiskConfig->DriveModelSeekTimeNs = 1000ull;
-            pDiskConfig->DriveModelSpeedBps = 1 << 30;
-            pDiskConfig->DriveModelSpeedBpsMin = 1 << 30;
-            pDiskConfig->DriveModelSpeedBpsMax = 1 << 30;
-            pDiskConfig->GetDriveDataSwitch = NKikimrBlobStorage::TPDiskConfig::DoNotTouch;
-            pDiskConfig->WriteCacheSwitch = NKikimrBlobStorage::TPDiskConfig::DoNotTouch;
-            pDiskConfig->ChunkSize = ChunkSize;
-            pDiskConfig->DeviceInFlight = TestProto.GetDeviceInFlight() != 0 ? FastClp2(TestProto.GetDeviceInFlight()) : 4;
-            pDiskConfig->FeatureFlags.SetEnableSeparateSubmitThreadForPDisk(true);
-            if (!TestProto.GetEnableTrim()) {
-                pDiskConfig->DriveModelTrimSpeedBps = 0;
-            }
-
-            if (pDiskConfig->DriveModelTrimSpeedBps > 0) {
-                Printer->AddGlobalParam("Trim", "on");
-                Printer->AddGlobalParam("TrimSpeedBps", pDiskConfig->DriveModelTrimSpeedBps);
-            } else {
-                Printer->AddGlobalParam("Trim", "off");
-            }
-            Printer->AddGlobalParam("PDiskInFlight", pDiskConfig->DeviceInFlight);
+        if (pDiskConfig->DriveModelTrimSpeedBps > 0) {
+            Printer->AddGlobalParam("Trim", "on");
+            Printer->AddGlobalParam("TrimSpeedBps", pDiskConfig->DriveModelTrimSpeedBps);
+        } else {
+            Printer->AddGlobalParam("Trim", "off");
+        }
+        Printer->AddGlobalParam("PDiskInFlight", pDiskConfig->DeviceInFlight);
 #if ENABLE_PDISK_ENCRYPTION
-            Printer->AddGlobalParam("Encryption", "on");
+        Printer->AddGlobalParam("Encryption", "on");
 #else
-            Printer->AddGlobalParam("Encryption", "off");
+        Printer->AddGlobalParam("Encryption", "off");
 #endif
 
+        TActorSetupCmd pDiskSetup(CreatePDisk(pDiskConfig.Get(),
+                    NPDisk::TMainKey{ .Keys = { NPDisk::YdbDefaultPDiskSequence }, .IsInitialized = true }, Counters),
+                    TMailboxType::ReadAsFilled, 1);
+        Setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(PDiskId, std::move(pDiskSetup)));
 
-            TActorSetupCmd pDiskSetup(CreatePDisk(pDiskConfig.Get(),
-                        NPDisk::TMainKey{ .Keys = { NPDisk::YdbDefaultPDiskSequence }, .IsInitialized = true }, Counters), TMailboxType::Revolving, 1);
-            setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(pDiskId, std::move(pDiskSetup)));
+        /////////////////////// LOGGER ///////////////////////////////////////////////
 
-            TActorId yardId = pDiskId;
+        LogSettings->Append(
+            NActorsServices::EServiceCommon_MIN,
+            NActorsServices::EServiceCommon_MAX,
+            NActorsServices::EServiceCommon_Name
+        );
+        LogSettings->Append(
+            NKikimrServices::EServiceKikimr_MIN,
+            NKikimrServices::EServiceKikimr_MAX,
+            NKikimrServices::EServiceKikimr_Name
+        );
 
-            TestId = MakeBlobStorageProxyID(1);
-            TActorSetupCmd testSetup(new TPerfTestActor(yardId, TVDiskID(0, 1, 0, 0, 0), Cfg, TestProto, Printer, Counters),
-                    TMailboxType::Revolving, 2);
-            setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(TestId, std::move(testSetup)));
+        TString explanation;
+        LogSettings->SetLevel(NLog::PRI_EMERG, NKikimrServices::BS_DEVICE, explanation);
+        LogSettings->SetLevel(NLog::PRI_DEBUG, NKikimrServices::BS_LOAD_TEST, explanation);
+        LogSettings->SetLevel(NLog::PRI_ERROR, NKikimrServices::BS_PDISK, explanation);
 
+        NActors::TLoggerActor *loggerActor = new NActors::TLoggerActor(LogSettings, NActors::CreateStderrBackend(),
+            GetServiceCounters(Counters, "utils"));
+        NActors::TActorSetupCmd loggerActorCmd(loggerActor, NActors::TMailboxType::Simple, 3);
+        std::pair<NActors::TActorId, NActors::TActorSetupCmd> loggerActorPair(NActors::TActorId(1, "logger"),
+            std::move(loggerActorCmd));
+        Setup->LocalServices.push_back(std::move(loggerActorPair));
+    }
 
-            /////////////////////// LOGGER ///////////////////////////////////////////////
+    virtual void SetupLoadActor() {
+        TActorId yardId = PDiskId;
+        TestId = MakeBlobStorageProxyID(1);
+        TActorSetupCmd testSetup(new TPerfTestActor(yardId, TVDiskID(0, 1, 0, 0, 0), Cfg, TestProto, Printer, Counters),
+            TMailboxType::ReadAsFilled, 2);
+        Setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(TestId, std::move(testSetup)));
+    }
 
-            NActors::TActorId loggerActorId = NActors::TActorId(1, "logger");
-            TIntrusivePtr<NActors::NLog::TSettings> logSettings(
-                new NActors::NLog::TSettings(loggerActorId, NActorsServices::LOGGER, NActors::NLog::PRI_ERROR, NActors::NLog::PRI_ERROR, 0));
-            logSettings->Append(
-                NActorsServices::EServiceCommon_MIN,
-                NActorsServices::EServiceCommon_MAX,
-                NActorsServices::EServiceCommon_Name
-            );
-            logSettings->Append(
-                NKikimrServices::EServiceKikimr_MIN,
-                NKikimrServices::EServiceKikimr_MAX,
-                NKikimrServices::EServiceKikimr_Name
-            );
+    void StartActorSystem() {
+        ActorSystem.Reset(new TActorSystem(Setup, &AppData, LogSettings));
+        ActorSystem->Start();
+        Sleep(InitialSleep);
+    }
 
-            TString explanation;
-            logSettings->SetLevel(NLog::PRI_EMERG, NKikimrServices::BS_DEVICE, explanation);
-            logSettings->SetLevel(NLog::PRI_DEBUG, NKikimrServices::BS_LOAD_TEST, explanation);
-            logSettings->SetLevel(NLog::PRI_ERROR, NKikimrServices::BS_PDISK, explanation);
-
-            NActors::TLoggerActor *loggerActor = new NActors::TLoggerActor(logSettings, NActors::CreateStderrBackend(),
-                GetServiceCounters(Counters, "utils"));
-            NActors::TActorSetupCmd loggerActorCmd(loggerActor, NActors::TMailboxType::Simple, 3);
-            std::pair<NActors::TActorId, NActors::TActorSetupCmd> loggerActorPair(loggerActorId, std::move(loggerActorCmd));
-            setup->LocalServices.push_back(std::move(loggerActorPair));
-            //////////////////////////////////////////////////////////////////////////////
-
-            ActorSystem.Reset(new TActorSystem(setup, &AppData, logSettings));
-
-            ActorSystem->Start();
-
-            Sleep(InitialSleep);
-
+    void Init() override {
+        try {
+            DoBasicSetup();
+            SetupLoadActor();
+            StartActorSystem();
         } catch (yexception& ex) {
             IsLastExceptionSet = true;
             VERBOSE_COUT("Error on init state, what# " << ex.what());

@@ -98,6 +98,24 @@ Y_UNIT_TEST_SUITE(AnalyzeDatashard) {
         };
         CheckCountMinSketch(runtime, pathId, expected);
     }
+
+    Y_UNIT_TEST(TrickyTableAndColumnNames) {
+        TTestEnv env(1, 1);
+        auto& runtime = *env.GetServer().GetRuntime();
+        CreateDatabase(env, "Database");
+        ExecuteYqlScript(env, R"(
+            CREATE TABLE `Root/Database/test\\Test\`test`(
+                key Uint32,
+                `val-Val` Uint32,
+                PRIMARY KEY (key)
+            )
+        )");
+
+        ui64 saTabletId = 0;
+        auto pathId = ResolvePathId(runtime, R"(/Root/Database/test\Test`test)", nullptr, &saTabletId);
+        // Check that ANALYZE is successful
+        Analyze(runtime, saTabletId, {pathId}, "operationId");
+    }
 }
 
 } // NStat

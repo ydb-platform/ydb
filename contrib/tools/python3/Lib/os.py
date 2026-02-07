@@ -10,7 +10,7 @@ This exports:
   - os.extsep is the extension separator (always '.')
   - os.altsep is the alternate pathname separator (None or '/')
   - os.pathsep is the component separator used in $PATH etc
-  - os.linesep is the line separator in text files ('\r' or '\n' or '\r\n')
+  - os.linesep is the line separator in text files ('\n' or '\r\n')
   - os.defpath is the default search path for executables
   - os.devnull is the file path of the null device ('/dev/null', etc.)
 
@@ -110,6 +110,7 @@ if _exists("_have_functions"):
     _add("HAVE_FCHMODAT",   "chmod")
     _add("HAVE_FCHOWNAT",   "chown")
     _add("HAVE_FSTATAT",    "stat")
+    _add("HAVE_LSTAT",      "lstat")
     _add("HAVE_FUTIMESAT",  "utime")
     _add("HAVE_LINKAT",     "link")
     _add("HAVE_MKDIRAT",    "mkdir")
@@ -131,6 +132,7 @@ if _exists("_have_functions"):
     _set = set()
     _add("HAVE_FCHDIR",     "chdir")
     _add("HAVE_FCHMOD",     "chmod")
+    _add("MS_WINDOWS",      "chmod")
     _add("HAVE_FCHOWN",     "chown")
     _add("HAVE_FDOPENDIR",  "listdir")
     _add("HAVE_FDOPENDIR",  "scandir")
@@ -171,6 +173,7 @@ if _exists("_have_functions"):
     _add("HAVE_FSTATAT",    "stat")
     _add("HAVE_LCHFLAGS",   "chflags")
     _add("HAVE_LCHMOD",     "chmod")
+    _add("MS_WINDOWS",      "chmod")
     if _exists("lchown"): # mac os x10.3
         _add("HAVE_LCHOWN", "chown")
     _add("HAVE_LINKAT",     "link")
@@ -1090,6 +1093,12 @@ def _fspath(path):
         else:
             raise TypeError("expected str, bytes or os.PathLike object, "
                             "not " + path_type.__name__)
+    except TypeError:
+        if path_type.__fspath__ is None:
+            raise TypeError("expected str, bytes or os.PathLike object, "
+                            "not " + path_type.__name__) from None
+        else:
+            raise
     if isinstance(path_repr, (str, bytes)):
         return path_repr
     else:
@@ -1107,6 +1116,8 @@ if not _exists('fspath'):
 class PathLike(abc.ABC):
 
     """Abstract base class for implementing the file system path protocol."""
+
+    __slots__ = ()
 
     @abc.abstractmethod
     def __fspath__(self):
@@ -1157,3 +1168,17 @@ if name == 'nt':
             cookie,
             nt._remove_dll_directory
         )
+
+
+if _exists('sched_getaffinity') and sys._get_cpu_count_config() < 0:
+    def process_cpu_count():
+        """
+        Get the number of CPUs of the current process.
+
+        Return the number of logical CPUs usable by the calling thread of the
+        current process. Return None if indeterminable.
+        """
+        return len(sched_getaffinity(0))
+else:
+    # Just an alias to cpu_count() (same docstring)
+    process_cpu_count = cpu_count

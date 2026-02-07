@@ -1675,7 +1675,9 @@ std::future<void> TMon::Start(TActorSystem* actorSystem) {
     ActorSystem->Register(new THttpMonInitializator(HttpProxyActorId, std::move(addPort), std::move(promise)));
     ActorSystem->Send(HttpProxyActorId, new NHttp::TEvHttpProxy::TEvRegisterHandler("/", HttpMonServiceActorId));
     ActorSystem->Send(HttpProxyActorId, new NHttp::TEvHttpProxy::TEvRegisterHandler("/node", NodeProxyServiceActorId));
-    ActorSystem->Send(HttpProxyActorId, new NHttp::TEvHttpProxy::TEvRegisterHandler(TStringBuilder() << "/" << CountersMonPage->GetPath(), CountersServiceActorId));
+    if (CountersMonPage) {
+        ActorSystem->Send(HttpProxyActorId, new NHttp::TEvHttpProxy::TEvRegisterHandler(TStringBuilder() << "/" << CountersMonPage->GetPath(), CountersServiceActorId));
+    }
     ActorSystem->Send(HttpProxyActorId, new NHttp::TEvHttpProxy::TEvRegisterHandler("/ping", PingServiceActorId));
     for (auto& pageInfo : ActorMonPages) {
         if (pageInfo.Page) {

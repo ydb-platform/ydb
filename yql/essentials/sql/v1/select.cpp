@@ -2106,6 +2106,20 @@ private:
             src->SetLegacyHoppingWindowSpec(LegacyHoppingWindowSpec_);
         }
 
+        for (auto iter : WinSpecs_) {
+            auto winSpec = *iter.second;
+            for (auto orderSpec : winSpec.OrderBy) {
+                // Ensure the ORDER BY is correct before terms
+                // (potentially containing window functions)
+                // initialization to avoid window function
+                // recursive dependency, e.g.:
+                // `Rank() OVER (PARTITION BY x ORDER BY Rank())`
+                if (!orderSpec->OrderExpr->Init(ctx, src)) {
+                    hasError = true;
+                }
+            }
+        }
+
         for (auto& term : Terms_) {
             if (!term->Init(ctx, src)) {
                 hasError = true;
@@ -2152,15 +2166,6 @@ private:
                     CompositeTerms_ = L(CompositeTerms_, Y("let", "row", Y("AddMember", "row", BuildQuotedAtom(Pos_, column), Y("Nothing", Y("MatchType",
                                                                                                                                              Y("StructMemberType", Y("ListItemType", Y("TypeOf", tableName)), Q(column)),
                                                                                                                                              Q("Optional"), Y("lambda", Q(Y("item")), "item"), Y("lambda", Q(Y("item")), Y("OptionalType", "item")))))));
-                }
-            }
-        }
-
-        for (auto iter : WinSpecs_) {
-            auto winSpec = *iter.second;
-            for (auto orderSpec : winSpec.OrderBy) {
-                if (!orderSpec->OrderExpr->Init(ctx, src)) {
-                    hasError = true;
                 }
             }
         }

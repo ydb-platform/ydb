@@ -15,6 +15,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/test_with_reboots.h>
 #include <ydb/core/util/aws.h>
 #include <ydb/core/wrappers/events/get_object.h>
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
@@ -7446,7 +7447,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         }
     )";
 
-    void ShouldSucceed(const THashMap<TString, TTypedScheme>& schemes, TStringBuf importSettings = DefaultImportSettings) {
+    void ShouldSucceed(TTestWithReboots& t, const THashMap<TString, TTypedScheme>& schemes, TStringBuf importSettings = DefaultImportSettings) {
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
 
@@ -7457,7 +7458,6 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         TS3Mock s3Mock(ConvertTestData(bucketContent), TS3Mock::TSettings(port));
         UNIT_ASSERT(s3Mock.Start());
 
-        TTestWithReboots t;
         const bool createdByQuery = AnyOf(schemes, [](const auto& scheme) {
             return scheme.second.Scheme.Contains("CREATE"); // Hack
         });
@@ -7494,8 +7494,18 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         });
     }
 
+    void ShouldSucceed(const THashMap<TString, TTypedScheme>& schemes, TStringBuf importSettings = DefaultImportSettings) {
+        TTestWithReboots t;
+        ShouldSucceed(t, schemes, importSettings);
+    }
+
+    void ShouldSucceed(TTestWithReboots& t, const TTypedScheme& scheme) {
+        ShouldSucceed(t, {{"", scheme}});
+    }
+
     void ShouldSucceed(const TTypedScheme& scheme) {
-        ShouldSucceed({{"", scheme}});
+        TTestWithReboots t;
+        ShouldSucceed(t, {{"", scheme}});
     }
 
     Y_UNIT_TEST(ShouldSucceedOnSimpleTable) {
@@ -7554,7 +7564,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         });
     }
 
-    Y_UNIT_TEST(ShouldSucceedOnBigCompressedTable) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnBigCompressedTable, 2, 1, false) {
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
 
@@ -7573,7 +7583,6 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         TS3Mock s3Mock(ConvertTestData(data), TS3Mock::TSettings(port));
         UNIT_ASSERT(s3Mock.Start());
 
-        TTestWithReboots t;
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -8037,7 +8046,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         }, topic.GetImportRequest());
     }
 
-    Y_UNIT_TEST(ShouldSucceedOnMaterializedIndex) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnMaterializedIndex, 2, 1, false) {
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
 
@@ -8074,7 +8083,6 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         TS3Mock s3Mock(ConvertTestData({{"/a", a}, {"/a/by_value/indexImplTable", b}}), TS3Mock::TSettings(port));
         UNIT_ASSERT(s3Mock.Start());
 
-        TTestWithReboots t;
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -8108,8 +8116,8 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         });
     }
 
-    Y_UNIT_TEST(ShouldSucceedOnSingleReplication) {
-        ShouldSucceed(
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnSingleReplication, 2, 1, false) {
+        ShouldSucceed(t,
             {
                 EPathTypeReplication,
                 R"(
@@ -8129,7 +8137,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         );
     }
 
-    Y_UNIT_TEST(ShouldSucceedOnSingleTransfer) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnSingleTransfer, 2, 1, false) {
         const auto settings = R"(
             ImportFromS3Settings {
                 endpoint: "localhost:%d"
@@ -8145,7 +8153,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
             }
         )";
 
-        ShouldSucceed({
+        ShouldSucceed(t, {
             {
                 "/Table",
                 {

@@ -29,7 +29,7 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "TopSort-Filter-LeftJoin (MapJoin)",
+                                        "Node Type": "TopSort-Filter-LeftJoin (Map)",
                                         "Operators": [
                                             {
                                                 "Inputs": [
@@ -63,7 +63,7 @@
                                                         "ExternalPlanNodeId": 3
                                                     }
                                                 ],
-                                                "Name": "LeftJoin (MapJoin)"
+                                                "Name": "LeftJoin (Map)"
                                             }
                                         ],
                                         "PlanNodeId": 7,

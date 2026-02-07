@@ -7,7 +7,8 @@ PEERDIR(
     library/cpp/getopt
     library/cpp/svnversion
     ydb/core/scheme
-    yql/essentials/public/udf/service/stub
+    ydb/core/testlib
+    ydb/core/testlib/basics
     yql/essentials/sql/pg_dummy
 )
 
@@ -19,6 +20,7 @@ SRCS(
     logoblob_ut.cpp
     memory_stats_ut.cpp
     path_ut.cpp
+    state_storage_follower_ids_ut.cpp
     statestorage_guardian_impl_ut.cpp
     statestorage_ut.cpp
     table_index_ut.cpp

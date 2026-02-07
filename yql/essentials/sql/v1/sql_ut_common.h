@@ -1082,6 +1082,13 @@ Y_UNIT_TEST(CreateObjectWithFeaturesAndFlags) {
     UNIT_ASSERT_VALUES_EQUAL(1, elementStat["SECRET"]);
 }
 
+Y_UNIT_TEST(CreateObjectWithFeaturesWithoutCluster) {
+    ExpectFailWithError(R"sql(
+        CREATE OBJECT secretId (TYPE SECRET)
+        WITH (Key1=Value1, K2=V2);
+    )sql", "<main>:2:9: Error: No cluster name given and no default cluster is selected\n");
+}
+
 Y_UNIT_TEST(Select1Type) {
     NYql::TAstParseResult res = SqlToYql("SELECT 1 type;");
     UNIT_ASSERT(res.Root);
@@ -3428,6 +3435,21 @@ Y_UNIT_TEST(WindowPartitionByExpressionWithoutAliasesAreAllowed) {
     UNIT_ASSERT_VALUES_EQUAL(1, elementStat["AddMember"]);
 }
 
+Y_UNIT_TEST(WindowPartitionByOrderByWindowFunctionIsNotAllowed) {
+    ExpectFailWithError(
+        R"sql(SELECT Rank() OVER (PARTITION BY x ORDER BY Rank()) FROM (VALUES (1)) AS t(x))sql",
+        "<main>:1:45: Error: Failed to use window function: Rank without window\n");
+    ExpectFailWithError(
+        R"sql(SELECT Rank() OVER (PARTITION BY x ORDER BY RowNumber()) FROM (VALUES (1)) AS t(x))sql",
+        "<main>:1:45: Error: Failed to use window function RowNumber without window specification or in wrong place\n");
+    ExpectFailWithError(
+        R"sql(SELECT RowNumber() OVER (PARTITION BY x ORDER BY Rank()) FROM (VALUES (1)) AS t(x))sql",
+        "<main>:1:50: Error: Failed to use window function: Rank without window\n");
+    ExpectFailWithError(
+        R"sql(SELECT RowNumber() OVER (PARTITION BY x ORDER BY RowNumber()) FROM (VALUES (1)) AS t(x))sql",
+        "<main>:1:50: Error: Failed to use window function RowNumber without window specification or in wrong place\n");
+}
+
 Y_UNIT_TEST(PqReadByAfterUse) {
     ExpectFailWithError("use plato; pragma PqReadBy='plato2';",
                         "<main>:1:28: Error: Cluster in PqReadPqBy pragma differs from cluster specified in USE statement: plato2 != plato\n");
@@ -5549,7 +5571,7 @@ Y_UNIT_TEST(BuiltinFileOpNoArgs) {
 Y_UNIT_TEST(ProcessWithHaving) {
     NYql::TAstParseResult res = SqlToYql("process plato.Input using some::udf(value) having value == 1");
     UNIT_ASSERT(!res.Root);
-    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:15: Error: PROCESS does not allow HAVING yet! You may request it on yql@ maillist.\n");
+    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:15: Error: PROCESS does not allow HAVING yet!\n");
 }
 
 Y_UNIT_TEST(ReduceNoBy) {

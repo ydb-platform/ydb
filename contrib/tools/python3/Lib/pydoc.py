@@ -77,6 +77,18 @@ from collections import deque
 from reprlib import Repr
 from traceback import format_exception_only
 
+from _pyrepl.pager import (get_pager, plain, pipe_pager,
+                           plain_pager, tempfile_pager, tty_pager)
+
+
+# --------------------------------------------------------- old names
+
+getpager = get_pager
+pipepager = pipe_pager
+plainpager = plain_pager
+tempfilepager = tempfile_pager
+ttypager = tty_pager
+
 
 # --------------------------------------------------------- common routines
 
@@ -128,9 +140,8 @@ def _finddoc(obj):
             cls = self.__class__
     # Should be tested before isdatadescriptor().
     elif isinstance(obj, property):
-        func = obj.fget
-        name = func.__name__
-        cls = _findclass(func)
+        name = obj.__name__
+        cls = _findclass(obj.fget)
         if cls is None or getattr(cls, name) is not obj:
             return None
     elif inspect.ismethoddescriptor(obj) or inspect.isdatadescriptor(obj):
@@ -197,6 +208,27 @@ def splitdoc(doc):
     elif len(lines) >= 2 and not lines[1].rstrip():
         return lines[0], '\n'.join(lines[2:])
     return '', '\n'.join(lines)
+
+def _getargspec(object):
+    try:
+        signature = inspect.signature(object)
+        if signature:
+            name = getattr(object, '__name__', '')
+            # <lambda> function are always single-line and should not be formatted
+            max_width = (80 - len(name)) if name != '<lambda>' else None
+            return signature.format(max_width=max_width)
+    except (ValueError, TypeError):
+        argspec = getattr(object, '__text_signature__', None)
+        if argspec:
+            if argspec[:2] == '($':
+                argspec = '(' + argspec[2:]
+            if getattr(object, '__self__', None) is not None:
+                # Strip the bound argument.
+                m = re.match(r'\(\w+(?:(?=\))|,\s*(?:/(?:(?=\))|,\s*))?)', argspec)
+                if m:
+                    argspec = '(' + argspec[m.end():]
+        return argspec
+    return None
 
 def classname(object, modname):
     """Get a class name and qualify it with a module name if necessary."""
@@ -294,7 +326,8 @@ def visiblename(name, all=None, obj=None):
     if name in {'__author__', '__builtins__', '__cached__', '__credits__',
                 '__date__', '__doc__', '__file__', '__spec__',
                 '__loader__', '__module__', '__name__', '__package__',
-                '__path__', '__qualname__', '__slots__', '__version__'}:
+                '__path__', '__qualname__', '__slots__', '__version__',
+                '__static_attributes__', '__firstlineno__'}:
         return 0
     # Private names are hidden, but special names are displayed.
     if name.startswith('__') and name.endswith('__'): return 1
@@ -340,6 +373,8 @@ def sort_attributes(attrs, object):
 
 def ispackage(path):
     """Guess whether a path refers to a package directory."""
+    warnings.warn('The pydoc.ispackage() function is deprecated',
+                  DeprecationWarning, stacklevel=2)
     if os.path.isdir(path):
         for ext in ('.py', '.pyc'):
             if os.path.isfile(os.path.join(path, '__init__' + ext)):
@@ -842,9 +877,10 @@ class HTMLDoc(Doc):
                             cdict[key] = cdict[base] = modname + '.html#' + key
         funcs, fdict = [], {}
         for key, value in inspect.getmembers(object, inspect.isroutine):
-            # if __all__ exists, believe it.  Otherwise use old heuristic.
-            if (all is not None or
-                inspect.isbuiltin(value) or inspect.getmodule(value) is object):
+            # if __all__ exists, believe it.  Otherwise use a heuristic.
+            if (all is not None
+                or inspect.isbuiltin(value)
+                or (inspect.getmodule(value) or object) is object):
                 if visiblename(key, all, object):
                     funcs.append((key, value))
                     fdict[key] = '#-' + key
@@ -1046,14 +1082,9 @@ class HTMLDoc(Doc):
             title = title + '(%s)' % ', '.join(parents)
 
         decl = ''
-        try:
-            signature = inspect.signature(object)
-        except (ValueError, TypeError):
-            signature = None
-        if signature:
-            argspec = str(signature)
-            if argspec and argspec != '()':
-                decl = name + self.escape(argspec) + '\n\n'
+        argspec = _getargspec(object)
+        if argspec and argspec != '()':
+            decl = name + self.escape(argspec) + '\n\n'
 
         doc = getdoc(object)
         if decl:
@@ -1129,19 +1160,14 @@ class HTMLDoc(Doc):
                 anchor, name, reallink)
         argspec = None
         if inspect.isroutine(object):
-            try:
-                signature = inspect.signature(object)
-            except (ValueError, TypeError):
-                signature = None
-            if signature:
-                argspec = str(signature)
-                if realname == '<lambda>':
-                    title = '<strong>%s</strong> <em>lambda</em> ' % name
-                    # XXX lambda's won't usually have func_annotations['return']
-                    # since the syntax doesn't support but it is possible.
-                    # So removing parentheses isn't truly safe.
-                    if not object.__annotations__:
-                        argspec = argspec[1:-1] # remove parentheses
+            argspec = _getargspec(object)
+            if argspec and realname == '<lambda>':
+                title = '<strong>%s</strong> <em>lambda</em> ' % name
+                # XXX lambda's won't usually have func_annotations['return']
+                # since the syntax doesn't support but it is possible.
+                # So removing parentheses isn't truly safe.
+                if not object.__annotations__:
+                    argspec = argspec[1:-1] # remove parentheses
         if not argspec:
             argspec = '(...)'
 
@@ -1296,9 +1322,10 @@ location listed above.
                     classes.append((key, value))
         funcs = []
         for key, value in inspect.getmembers(object, inspect.isroutine):
-            # if __all__ exists, believe it.  Otherwise use old heuristic.
-            if (all is not None or
-                inspect.isbuiltin(value) or inspect.getmodule(value) is object):
+            # if __all__ exists, believe it.  Otherwise use a heuristic.
+            if (all is not None
+                or inspect.isbuiltin(value)
+                or (inspect.getmodule(value) or object) is object):
                 if visiblename(key, all, object):
                     funcs.append((key, value))
         data = []
@@ -1388,14 +1415,9 @@ location listed above.
         contents = []
         push = contents.append
 
-        try:
-            signature = inspect.signature(object)
-        except (ValueError, TypeError):
-            signature = None
-        if signature:
-            argspec = str(signature)
-            if argspec and argspec != '()':
-                push(name + argspec + '\n')
+        argspec = _getargspec(object)
+        if argspec and argspec != '()':
+            push(name + argspec + '\n')
 
         doc = getdoc(object)
         if doc:
@@ -1582,19 +1604,14 @@ location listed above.
         argspec = None
 
         if inspect.isroutine(object):
-            try:
-                signature = inspect.signature(object)
-            except (ValueError, TypeError):
-                signature = None
-            if signature:
-                argspec = str(signature)
-                if realname == '<lambda>':
-                    title = self.bold(name) + ' lambda '
-                    # XXX lambda's won't usually have func_annotations['return']
-                    # since the syntax doesn't support but it is possible.
-                    # So removing parentheses isn't truly safe.
-                    if not object.__annotations__:
-                        argspec = argspec[1:-1] # remove parentheses
+            argspec = _getargspec(object)
+            if argspec and realname == '<lambda>':
+                title = self.bold(name) + ' lambda '
+                # XXX lambda's won't usually have func_annotations['return']
+                # since the syntax doesn't support but it is possible.
+                # So removing parentheses isn't truly safe.
+                if not object.__annotations__:
+                    argspec = argspec[1:-1]
         if not argspec:
             argspec = '(...)'
         decl = asyncqualifier + title + argspec + note
@@ -1643,140 +1660,11 @@ class _PlainTextDoc(TextDoc):
 
 # --------------------------------------------------------- user interfaces
 
-def pager(text):
+def pager(text, title=''):
     """The first time this is called, determine what kind of pager to use."""
     global pager
-    pager = getpager()
-    pager(text)
-
-def getpager():
-    """Decide what method to use for paging through text."""
-    if not hasattr(sys.stdin, "isatty"):
-        return plainpager
-    if not hasattr(sys.stdout, "isatty"):
-        return plainpager
-    if not sys.stdin.isatty() or not sys.stdout.isatty():
-        return plainpager
-    if sys.platform == "emscripten":
-        return plainpager
-    use_pager = os.environ.get('MANPAGER') or os.environ.get('PAGER')
-    if use_pager:
-        if sys.platform == 'win32': # pipes completely broken in Windows
-            return lambda text: tempfilepager(plain(text), use_pager)
-        elif os.environ.get('TERM') in ('dumb', 'emacs'):
-            return lambda text: pipepager(plain(text), use_pager)
-        else:
-            return lambda text: pipepager(text, use_pager)
-    if os.environ.get('TERM') in ('dumb', 'emacs'):
-        return plainpager
-    if sys.platform == 'win32':
-        return lambda text: tempfilepager(plain(text), 'more <')
-    if hasattr(os, 'system') and os.system('(less) 2>/dev/null') == 0:
-        return lambda text: pipepager(text, 'less')
-
-    import tempfile
-    (fd, filename) = tempfile.mkstemp()
-    os.close(fd)
-    try:
-        if hasattr(os, 'system') and os.system('more "%s"' % filename) == 0:
-            return lambda text: pipepager(text, 'more')
-        else:
-            return ttypager
-    finally:
-        os.unlink(filename)
-
-def plain(text):
-    """Remove boldface formatting from text."""
-    return re.sub('.\b', '', text)
-
-def pipepager(text, cmd):
-    """Page through text by feeding it to another program."""
-    import subprocess
-    proc = subprocess.Popen(cmd, shell=True, stdin=subprocess.PIPE,
-                            errors='backslashreplace')
-    try:
-        with proc.stdin as pipe:
-            try:
-                pipe.write(text)
-            except KeyboardInterrupt:
-                # We've hereby abandoned whatever text hasn't been written,
-                # but the pager is still in control of the terminal.
-                pass
-    except OSError:
-        pass # Ignore broken pipes caused by quitting the pager program.
-    while True:
-        try:
-            proc.wait()
-            break
-        except KeyboardInterrupt:
-            # Ignore ctl-c like the pager itself does.  Otherwise the pager is
-            # left running and the terminal is in raw mode and unusable.
-            pass
-
-def tempfilepager(text, cmd):
-    """Page through text by invoking a program on a temporary file."""
-    import tempfile
-    with tempfile.TemporaryDirectory() as tempdir:
-        filename = os.path.join(tempdir, 'pydoc.out')
-        with open(filename, 'w', errors='backslashreplace',
-                  encoding=os.device_encoding(0) if
-                  sys.platform == 'win32' else None
-                  ) as file:
-            file.write(text)
-        os.system(cmd + ' "' + filename + '"')
-
-def _escape_stdout(text):
-    # Escape non-encodable characters to avoid encoding errors later
-    encoding = getattr(sys.stdout, 'encoding', None) or 'utf-8'
-    return text.encode(encoding, 'backslashreplace').decode(encoding)
-
-def ttypager(text):
-    """Page through text on a text terminal."""
-    lines = plain(_escape_stdout(text)).split('\n')
-    try:
-        import tty
-        fd = sys.stdin.fileno()
-        old = tty.tcgetattr(fd)
-        tty.setcbreak(fd)
-        getchar = lambda: sys.stdin.read(1)
-    except (ImportError, AttributeError, io.UnsupportedOperation):
-        tty = None
-        getchar = lambda: sys.stdin.readline()[:-1][:1]
-
-    try:
-        try:
-            h = int(os.environ.get('LINES', 0))
-        except ValueError:
-            h = 0
-        if h <= 1:
-            h = 25
-        r = inc = h - 1
-        sys.stdout.write('\n'.join(lines[:inc]) + '\n')
-        while lines[r:]:
-            sys.stdout.write('-- more --')
-            sys.stdout.flush()
-            c = getchar()
-
-            if c in ('q', 'Q'):
-                sys.stdout.write('\r          \r')
-                break
-            elif c in ('\r', '\n'):
-                sys.stdout.write('\r          \r' + lines[r] + '\n')
-                r = r + 1
-                continue
-            if c in ('b', 'B', '\x1b'):
-                r = r - inc - inc
-                if r < 0: r = 0
-            sys.stdout.write('\n' + '\n'.join(lines[r:r+inc]) + '\n')
-            r = r + inc
-
-    finally:
-        if tty:
-            tty.tcsetattr(fd, tty.TCSAFLUSH, old)
-
-def plainpager(text):
-    """Simply print unformatted text.  This is the ultimate fallback."""
-    sys.stdout.write(plain(_escape_stdout(text)))
+    pager = get_pager()
+    pager(text, title)
 
 def describe(thing):
     """Produce a short description of the given thing."""
@@ -1876,7 +1764,15 @@ def doc(thing, title='Python Library Documentation: %s', forceload=0,
     """Display text documentation, given an object or a path to an object."""
     if output is None:
         try:
-            pager(render_doc(thing, title, forceload))
+            if isinstance(thing, str):
+                what = thing
+            else:
+                what = getattr(thing, '__qualname__', None)
+                if not isinstance(what, str):
+                    what = getattr(thing, '__name__', None)
+                    if not isinstance(what, str):
+                        what = type(thing).__name__ + ' object'
+            pager(render_doc(thing, title, forceload), f'Help on {what!s}')
         except ImportError as exc:
             if is_cli:
                 raise
@@ -1976,6 +1872,7 @@ class Helper:
         ':': 'SLICINGS DICTIONARYLITERALS',
         '@': 'def class',
         '\\': 'STRINGS',
+        ':=': 'ASSIGNMENTEXPRESSIONS',
         '_': 'PRIVATENAMES',
         '__': 'PRIVATENAMES SPECIALMETHODS',
         '`': 'BACKQUOTES',
@@ -2069,6 +1966,7 @@ class Helper:
         'ASSERTION': 'assert',
         'ASSIGNMENT': ('assignment', 'AUGMENTEDASSIGNMENT'),
         'AUGMENTEDASSIGNMENT': ('augassign', 'NUMBERMETHODS'),
+        'ASSIGNMENTEXPRESSIONS': ('assignment-expressions', ''),
         'DELETION': 'del',
         'RETURNING': 'return',
         'IMPORTING': 'import',
@@ -2130,7 +2028,7 @@ has the same effect as typing a particular string at the help> prompt.
             if (len(request) > 2 and request[0] == request[-1] in ("'", '"')
                     and request[0] not in request[1:-1]):
                 request = request[1:-1]
-            if request.lower() in ('q', 'quit'): break
+            if request.lower() in ('q', 'quit', 'exit'): break
             if request == 'help':
                 self.intro()
             else:
@@ -2182,11 +2080,11 @@ the modules whose name or summary contain a given string such as "spam",
 enter "modules spam".
 
 To quit this help utility and return to the interpreter,
-enter "q" or "quit".
+enter "q", "quit" or "exit".
 '''.format('%d.%d' % sys.version_info[:2]))
 
     def list(self, items, columns=4, width=80):
-        items = list(sorted(items))
+        items = sorted(items)
         colw = width // columns
         rows = (len(items) + columns - 1) // columns
         for row in range(rows):
@@ -2218,7 +2116,7 @@ to. Enter any symbol to get more help.
 Here is a list of available topics.  Enter any topic name to get more help.
 
 ''')
-        self.list(self.topics.keys())
+        self.list(self.topics.keys(), columns=3)
 
     def showtopic(self, topic, more_xrefs=''):
         try:
@@ -2252,7 +2150,7 @@ module "pydoc_data.topics" could not be found.
             doc += '\n%s\n' % '\n'.join(wrapped_text)
 
         if self._output is None:
-            pager(doc)
+            pager(doc, f'Help on {topic!s}')
         else:
             self.output.write(doc)
 

@@ -1237,9 +1237,6 @@ TMaybe<TKqlQueryList> BuildKqlQuery(TKiDataQueryBlocks dataQueryBlocks, const TK
                             if (kqpCtx->Config->GetEnableWatermarks()) {
                                 wrSettings = {
                                     .WatermarksMode = "default",
-                                    .WatermarksGranularityMs = 1000,
-                                    .WatermarksLateArrivalDelayMs = 5000,
-                                    .WatermarksEnableIdlePartitions = false,
                                 };
                             }
                             auto newRead = dqIntegration->WrapRead(input.Cast().Ptr(), ctx, wrSettings);

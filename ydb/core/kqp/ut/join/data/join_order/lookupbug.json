@@ -1,13 +1,13 @@
 {
-  "op_name":"LeftJoin (MapJoin)",
+  "op_name":"LeftJoin (Map)",
   "args":
     [
       {
-        "op_name":"LeftJoin (MapJoin)",
+        "op_name":"LeftJoin (Map)",
         "args":
           [
             {
-              "op_name":"LeftJoin (MapJoin)",
+              "op_name":"LeftJoin (Map)",
               "args":
                 [
                   {

@@ -71,6 +71,7 @@ void TDataShard::Handle(TEvDataShard::TEvGetInfoRequest::TPtr& ev) {
     info.SetState(DatashardStateName(State));
     info.SetIsActive(IsStateActive());
     info.SetHasSharedBlobs(HasSharedBlobs());
+    info.SetFollowerId(FollowerId());
 
     auto addControl = [&](ui64 value, const TString& name) {
         auto& control = *response->Record.AddControls();

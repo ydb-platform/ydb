@@ -20,6 +20,8 @@
 #include "Python.h"
 #include "pycore_strhex.h"       // _Py_strhex()
 
+#include <stdbool.h>
+
 #include "../hashlib.h"
 #include "blake2module.h"
 
@@ -42,7 +44,8 @@ typedef struct {
     PyObject_HEAD
     blake2b_param    param;
     blake2b_state    state;
-    PyThread_type_lock lock;
+    bool use_mutex;
+    PyMutex mutex;
 } BLAKE2bObject;
 
 #include "clinic/blake2b_impl.c.h"
@@ -59,17 +62,18 @@ new_BLAKE2bObject(PyTypeObject *type)
 {
     BLAKE2bObject *self;
     self = (BLAKE2bObject *)type->tp_alloc(type, 0);
-    if (self != NULL) {
-        self->lock = NULL;
+    if (self == NULL) {
+        return NULL;
     }
+    HASHLIB_INIT_MUTEX(self);
+
     return self;
 }
 
 /*[clinic input]
 @classmethod
 _blake2.blake2b.__new__ as py_blake2b_new
-    data: object(c_default="NULL") = b''
-    /
+    data as data_obj: object(c_default="NULL") = b''
     *
     digest_size: int(c_default="BLAKE2B_OUTBYTES") = _blake2.blake2b.MAX_DIGEST_SIZE
     key: Py_buffer(c_default="NULL", py_default="b''") = None
@@ -83,20 +87,26 @@ _blake2.blake2b.__new__ as py_blake2b_new
     inner_size: int = 0
     last_node: bool = False
     usedforsecurity: bool = True
+    string: object(c_default="NULL") = None
 
 Return a new BLAKE2b hash object.
 [clinic start generated code]*/
 
 static PyObject *
-py_blake2b_new_impl(PyTypeObject *type, PyObject *data, int digest_size,
+py_blake2b_new_impl(PyTypeObject *type, PyObject *data_obj, int digest_size,
                     Py_buffer *key, Py_buffer *salt, Py_buffer *person,
                     int fanout, int depth, unsigned long leaf_size,
                     unsigned long long node_offset, int node_depth,
-                    int inner_size, int last_node, int usedforsecurity)
-/*[clinic end generated code: output=32bfd8f043c6896f input=b947312abff46977]*/
+                    int inner_size, int last_node, int usedforsecurity,
+                    PyObject *string)
+/*[clinic end generated code: output=de64bd850606b6a0 input=a876354eae7e3c39]*/
 {
     BLAKE2bObject *self = NULL;
+    PyObject *data;
     Py_buffer buf;
+    if (_Py_hashlib_data_argument(&data, data_obj, string) < 0) {
+        return NULL;
+    }
 
     self = new_BLAKE2bObject(type);
     if (self == NULL) {
@@ -278,18 +288,19 @@ _blake2_blake2b_update(BLAKE2bObject *self, PyObject *data)
 
     GET_BUFFER_VIEW_OR_ERROUT(data, &buf);
 
-    if (self->lock == NULL && buf.len >= HASHLIB_GIL_MINSIZE)
-        self->lock = PyThread_allocate_lock();
-
-    if (self->lock != NULL) {
-       Py_BEGIN_ALLOW_THREADS
-       PyThread_acquire_lock(self->lock, 1);
-       blake2b_update(&self->state, buf.buf, buf.len);
-       PyThread_release_lock(self->lock);
-       Py_END_ALLOW_THREADS
+    if (!self->use_mutex && buf.len >= HASHLIB_GIL_MINSIZE) {
+        self->use_mutex = true;
+    }
+    if (self->use_mutex) {
+        Py_BEGIN_ALLOW_THREADS
+        PyMutex_Lock(&self->mutex);
+        blake2b_update(&self->state, buf.buf, buf.len);
+        PyMutex_Unlock(&self->mutex);
+        Py_END_ALLOW_THREADS
     } else {
         blake2b_update(&self->state, buf.buf, buf.len);
     }
+
     PyBuffer_Release(&buf);
 
     Py_RETURN_NONE;
@@ -389,10 +400,6 @@ py_blake2b_dealloc(PyObject *self)
     /* Try not to leave state in memory. */
     secure_zero_memory(&obj->param, sizeof(obj->param));
     secure_zero_memory(&obj->state, sizeof(obj->state));
-    if (obj->lock) {
-        PyThread_free_lock(obj->lock);
-        obj->lock = NULL;
-    }
 
     PyTypeObject *type = Py_TYPE(self);
     PyObject_Free(self);

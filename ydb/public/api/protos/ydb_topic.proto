@@ -327,6 +327,8 @@ message StreamReadMessage {
         bool direct_read = 4;
         // Indicates that the SDK supports auto partitioning.
         bool auto_partitioning_support = 5;
+        // Max in flight bytes per partition
+        uint64 partition_max_in_flight_bytes = 6; 
 
         message TopicReadSettings {
             // Topic path.

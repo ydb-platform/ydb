@@ -118,6 +118,7 @@ public:
             auto& featureFlags = *AppConfig->MutableFeatureFlags();
             featureFlags.SetEnableStreamingQueries(true);
             featureFlags.SetEnableSchemaSecrets(true);
+            featureFlags.SetEnableResourcePools(true);
 
             auto& queryServiceConfig = *AppConfig->MutableQueryServiceConfig();
             queryServiceConfig.SetEnableMatchRecognize(true);
@@ -142,6 +143,7 @@ public:
 
             Kikimr->GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableSchemaSecrets(true);
             Kikimr->GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableStreamingQueries(true);
+            Kikimr->GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableResourcePools(true);
         }
 
         return Kikimr;

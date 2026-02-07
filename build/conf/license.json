@@ -72,6 +72,7 @@
             "LicenseRef-scancode-anu-license",
             "LicenseRef-scancode-autoconf-simple-exception",
             "LicenseRef-scancode-autoconf-simple-exception-2.0",
+            "LicenseRef-scancode-bsd-3-clause-devine",
             "LicenseRef-scancode-bsd-3-clause-jtag",
             "LicenseRef-scancode-bsd-axis-nomod",
             "LicenseRef-scancode-bsd-new-nomod",
@@ -109,6 +110,7 @@
             "LicenseRef-scancode-pcre",
             "LicenseRef-scancode-ppp",
             "LicenseRef-scancode-proprietary-license",
+            "LicenseRef-scancode-python-cwi",
             "LicenseRef-scancode-secret-labs-2011",
             "LicenseRef-scancode-ssleay-windows",
             "LicenseRef-scancode-sun-source",
@@ -205,8 +207,23 @@
             "Custom-clarified-artistic-proofread",
             "Custom-eigen",
             "Custom-epsg-database-license",
-            "Custom-fft2d",
+            // Custom-fft stands for fft and fft2d code used by tensorflow and tflite. The text is as follows:
+            //
+            // Copyright(C) 1997,2001 Takuya OOURA (email: ooura@kurims.kyoto-u.ac.jp).
+            // You may use, copy, modify this code for any purpose and
+            // without fee. You may distribute this ORIGINAL package.
+            "Custom-fft",
+
+            // Custom-fft4g stands for fft4g code used by webrtc. The text is as follows:
+            //
+            // http://www.kurims.kyoto-u.ac.jp/~ooura/fft.html
+            // Copyright Takuya OOURA, 1996-2001
+            //
+            // You may use, copy, modify and distribute this code for any purpose (include
+            // commercial use) and without fee. Please refer to this package when you modify
+            // this code.
             "Custom-fft4g",
+
             "Custom-Oasis-Pkcs11",
             "Custom-openldap",
             "Custom-punycode",
@@ -258,6 +275,7 @@
             "LicenseRef-scancode-fftpack-2004",
             "LicenseRef-scancode-happy-bunny",
             "LicenseRef-scancode-mit-no-advert-export-control",
+            "LicenseRef-scancode-nvidia-2002",
             "LicenseRef-scancode-oasis-ws-security-spec",
             "LicenseRef-scancode-paul-mackerras-binary",
             "LicenseRef-scancode-swig",
@@ -282,14 +300,12 @@
             "NCSA",
             "NetCDF",
             "NTP",
-            "Nvidia",
             "OGC-1.0",
             "OLDAP-2.8",
             "OML",
             "OpenSSL",
             "PayPal-SDK",
             "PCRE",
-            "PD",
             "PHP-3.01",
             "PIL",
             "Plexus",
@@ -332,6 +348,7 @@
             "X11",
             "X11-Lucent",
             "X11-XConsortium-Veillard",
+            "XPP",
             "Zlib",
             "ZPL-2.1"
         ]

@@ -15,7 +15,7 @@ val {{ varprefix }}{{ copy['_object_index'] }} = tasks.register<Copy>("{{ varpre
     from({{ PatchRoots(src_path, copy['flags']|select("eq", "src_is_depend")|length) }}) {
         include("{{ src_name }}")
     }
-    into({{ PatchRoots(dst_path, false, true) }})
+    into({{ PatchRoots(dst_path, false, "_") }})
 {%-         if src_name != dst_name %}
     rename("{{ src_name }}", "{{ dst_name }}")
 {%-         endif %}

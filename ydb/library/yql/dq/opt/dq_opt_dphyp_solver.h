@@ -715,10 +715,25 @@ template <typename TNodeSet> TBestJoin TDPHypSolverShuffleElimination<TNodeSet>:
 
     if (shuffleLeftSide || shuffleRightSide) { // we don't have rules to put shuffles into not grace join yet.
         auto stats = this->Pctx_.ComputeJoinStatsV2(left->Stats, right->Stats, edge.LeftJoinKeys, edge.RightJoinKeys, EJoinAlgoType::GraceJoin, edge.JoinKind, maybeCardHint, shuffleLeftSide, shuffleRightSide, maybeBytesHint);
+        if (!edge.IsCommutative) {
+            return TBestJoin {
+                .Stats = std::move(stats),
+                .Algo = EJoinAlgoType::GraceJoin,
+                .IsReversed = false
+            };
+        }
+        auto reversedStats = this->Pctx_.ComputeJoinStatsV2(right->Stats, left->Stats, edge.RightJoinKeys, edge.LeftJoinKeys, EJoinAlgoType::GraceJoin, edge.JoinKind, maybeCardHint, shuffleRightSide, shuffleLeftSide, maybeBytesHint);
+        if (stats.Cost <= reversedStats.Cost) {
+            return TBestJoin {
+                .Stats = std::move(stats),
+                .Algo = EJoinAlgoType::GraceJoin,
+                .IsReversed = false
+            };
+        }
         return TBestJoin {
-            .Stats = std::move(stats),
+            .Stats = std::move(reversedStats),
             .Algo = EJoinAlgoType::GraceJoin,
-            .IsReversed = false
+            .IsReversed = true
         };
     }
 

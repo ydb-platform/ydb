@@ -120,15 +120,34 @@ bool TStagePredictor::DeserializeFromKqpSettings(const NYql::NDqProto::TProgram:
 }
 
 ui32 TStagePredictor::GetUsableThreads() {
-    std::optional<ui32> userPoolSize;
+    std::optional<ui32> userPoolCurrentThreadsCount;
     if (HasAppData() && TlsActivationContext && TlsActivationContext->ActorSystem()) {
-        userPoolSize = TlsActivationContext->ActorSystem()->GetPoolThreadsCount(AppData()->UserPoolId);
+        TExecutorPoolState poolState;
+        TlsActivationContext->ActorSystem()->GetExecutorPoolState(AppData()->UserPoolId, poolState);
+        userPoolCurrentThreadsCount = poolState.CurrentLimit;
     }
-    if (!userPoolSize) {
+
+    if (!userPoolCurrentThreadsCount) {
         ALS_INFO(NKikimrServices::KQP_EXECUTER) << "user pool is undefined for executer tasks construction";
-        userPoolSize = NSystemInfo::NumberOfCpus();
+        userPoolCurrentThreadsCount = NSystemInfo::NumberOfCpus();
     }
-    return Max<ui32>(1, *userPoolSize);
+
+    return Max<ui32>(1, *userPoolCurrentThreadsCount);
+}
+
+ui32 TStagePredictor::GetMaxExecutorThreadLimit() {
+    std::optional<ui32> userPoolMaxThreadsCount;
+    if (HasAppData() && TlsActivationContext && TlsActivationContext->ActorSystem()) {
+        TExecutorPoolState poolState;
+        TlsActivationContext->ActorSystem()->GetExecutorPoolState(AppData()->UserPoolId, poolState);
+        userPoolMaxThreadsCount = poolState.PossibleMaxLimit;
+    }
+
+    if (!userPoolMaxThreadsCount) {
+       return GetUsableThreads();
+    }
+
+    return Max<ui32>(GetUsableThreads(), *userPoolMaxThreadsCount);
 }
 
 ui32 TStagePredictor::CalcTasksOptimalCount(const ui32 availableThreadsCount, const std::optional<ui32> previousStageTasksCount) const {

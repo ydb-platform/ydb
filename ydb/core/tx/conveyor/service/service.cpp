@@ -10,7 +10,7 @@ namespace NKikimr::NConveyor {
 LWTRACE_USING(YDB_CONVEYOR_PROVIDER);
 
 TWorkersPool::TWorkersPool(const TString& conveyorName, const NActors::TActorId& distributorId, const TConfig& config, const TCounters& counters)
-    : WorkersCount(config.GetWorkersCountForConveyor(NKqp::TStagePredictor::GetUsableThreads()))
+    : WorkersCount(config.GetWorkersCountForConveyor(NKqp::TStagePredictor::GetMaxExecutorThreadLimit()))
     , Counters(counters) {
     Workers.reserve(WorkersCount);
     for (ui32 i = 0; i < WorkersCount; ++i) {
@@ -18,6 +18,7 @@ TWorkersPool::TWorkersPool(const TString& conveyorName, const NActors::TActorId&
         Workers.emplace_back(usage, std::make_unique<TWorker>(conveyorName, usage, distributorId, i, Counters.SendFwdHistogram, Counters.SendFwdDuration));
         MaxWorkerThreads += usage;
     }
+
     AFL_VERIFY(WorkersCount)("name", conveyorName)("action", "conveyor_registered")("config", config.DebugString())("actor_id", distributorId)("count", WorkersCount);
     Counters.AmountCPULimit->Set(0);
     Counters.AvailableWorkersCount->Set(0);

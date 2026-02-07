@@ -3865,7 +3865,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
             R"({"update":{"value":10},"key":[1]})",
             R"({"resolved":"***"})",
             R"({"update":{"value":50},"key":[5]})",
-            R"({"update":{"value":30},"key":[3]})",
+            R"({"user":"<anonymous>","update":{"value":30},"key":[3]})",
             R"({"resolved":"***"})",
         });
         WaitForContent(server, edgeActor, "/Root/Table2/Stream", {
@@ -3873,7 +3873,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
             R"({"update":{"value":20},"key":[2]})",
             R"({"resolved":"***"})",
             R"({"update":{"value":60},"key":[6]})",
-            R"({"update":{"value":40},"key":[4]})",
+            R"({"user":"<anonymous>","update":{"value":40},"key":[4]})",
             R"({"resolved":"***"})",
         });
     }

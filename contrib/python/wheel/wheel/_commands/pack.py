@@ -6,8 +6,7 @@ import re
 from email.generator import BytesGenerator
 from email.parser import BytesParser
 
-from wheel.cli import WheelError
-from wheel.wheelfile import WheelFile
+from ..wheelfile import WheelError, WheelFile
 
 DIST_INFO_RE = re.compile(r"^(?P<namever>(?P<name>.+?)-(?P<ver>\d.*?))\.dist-info$")
 

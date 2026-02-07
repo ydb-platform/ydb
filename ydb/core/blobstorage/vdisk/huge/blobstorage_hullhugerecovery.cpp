@@ -88,6 +88,7 @@ namespace NKikimr {
                                     enableTinyDisks, freeChunksReservation, chunksSoftLocking))
             , Guid(TAppData::RandomProvider->GenRand64())
             , EnableTinyDisks(enableTinyDisks)
+            , ChunksSoftLocking(chunksSoftLocking)
         {
             Heap->FinishRecovery();
             logFunc(VDISKP(VCtx->VDiskLogPrefix,
@@ -249,7 +250,7 @@ namespace NKikimr {
             Y_VERIFY_S(success, VCtx->VDiskLogPrefix);
 
             LogPos.LoadFromProto(entryPoint.GetLogPos());
-            Heap.reset(new NHuge::THeap(VCtx->VDiskLogPrefix, entryPoint.GetHeap()));
+            Heap.reset(new NHuge::THeap(VCtx->VDiskLogPrefix, entryPoint.GetHeap(), ChunksSoftLocking));
 
             LoadedFromProto = true;
         }

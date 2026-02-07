@@ -45,6 +45,7 @@ RUN apt-get update  \
 RUN mkdir -p /ydb_data && mkdir -p /ydb_certs
 
 COPY main/.github/docker/files/ /
+RUN chmod +x /health_check /initialize_local_ydb /health_liveness /health_readiness
 COPY --from=builder \
     /ydbwork/out/ydb/apps/ydbd/ydbd \
     /ydbwork/out/ydb/apps/ydb/ydb \
@@ -63,6 +64,6 @@ ENV GRPC_TLS_PORT=${GRPC_TLS_PORT:-2135}
 ENV MON_PORT=${MON_PORT:-8765}
 ENV YDB_KAFKA_PROXY_PORT=${YDB_KAFKA_PROXY_PORT:-9092}
 
-HEALTHCHECK --start-period=10s --interval=15s CMD sh /health_check
+HEALTHCHECK --start-period=5s --interval=2s --timeout=3s --retries=3 CMD bash /health_check
 
 ENTRYPOINT ["bash", "/initialize_local_ydb"]

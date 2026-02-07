@@ -21,9 +21,11 @@ void TFairThrottlerConfig::Register(TRegistrar registrar)
         .GreaterThan(TDuration::Zero());
 
     registrar.Parameter("bucket_accumulation_ticks", &TThis::BucketAccumulationTicks)
+        .GreaterThan(0)
         .Default(5);
 
     registrar.Parameter("global_accumulation_ticks", &TThis::GlobalAccumulationTicks)
+        .GreaterThan(0)
         .Default(5);
 
     registrar.Parameter("ipc_path", &TThis::IpcPath)
@@ -83,6 +85,8 @@ std::optional<i64> TFairThrottlerBucketConfig::GetGuarantee(i64 totalLimit)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+namespace {
+
 DECLARE_REFCOUNTED_STRUCT(TBucketThrottleRequest)
 
 struct TBucketThrottleRequest
@@ -110,57 +114,87 @@ DEFINE_REFCOUNTED_TYPE(TBucketThrottleRequest)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TLeakyCounter
+using TAtomicValuePtr = std::shared_ptr<std::atomic<i64>>;
+
+class TLeakyCounter
 {
-    TLeakyCounter(int windowSize, NProfiling::TGauge quotaGauge)
-        : Value(std::make_shared<std::atomic<i64>>(0))
-        , Window(windowSize)
-        , QuotaGauge(std::move(quotaGauge))
+public:
+    TLeakyCounter(
+        int windowSize,
+        NProfiling::TGauge quotaGauge,
+        TAtomicValuePtr value = nullptr)
+        : Value_(value
+            ? std::move(value)
+            : std::make_shared<std::atomic<i64>>(0))
+        , Window_(windowSize)
+        , QuotaGauge_(std::move(quotaGauge))
     { }
 
-    std::shared_ptr<std::atomic<i64>> Value;
-
-    std::vector<i64> Window;
-    int WindowPosition = 0;
-
-    const NProfiling::TGauge QuotaGauge;
-
-    i64 Increment(i64 delta)
+    i64 GetValue() const
     {
-        return Increment(delta, delta);
+        return Value_->load();
     }
 
-    i64 Increment(i64 delta, i64 limit)
+    void Acquire(i64 amount)
     {
-        auto maxValue = std::accumulate(Window.begin(), Window.end(), i64(0)) - Window[WindowPosition];
+        *Value_ -= amount;
+    }
 
-        auto currentValue = Value->load();
+    void Release(i64 amount)
+    {
+        *Value_ += amount;
+    }
+
+    i64 Refill(i64 delta)
+    {
+        return Refill(delta, delta);
+    }
+
+    i64 Refill(i64 delta, i64 limit)
+    {
+        auto maxValue = std::accumulate(Window_.begin(), Window_.end(), i64(0)) - Window_[WindowPosition_];
+
+        // CAS loop for `Value = std::min(Value, maxValue)`.
+        auto currentValue = Value_->load();
         do {
             if (currentValue <= maxValue) {
                 break;
             }
-        } while (!Value->compare_exchange_strong(currentValue, maxValue));
+        } while (!Value_->compare_exchange_weak(currentValue, maxValue));
 
-        Window[WindowPosition] = limit;
-
-        WindowPosition++;
-        if (WindowPosition >= std::ssize(Window)) {
-            WindowPosition = 0;
+        Window_[WindowPosition_] = limit;
+        WindowPosition_++;
+        if (WindowPosition_ >= std::ssize(Window_)) {
+            WindowPosition_ = 0;
         }
 
-        *Value += delta;
-        QuotaGauge.Update(Value->load());
+        auto newValue = (*Value_ += delta);
+        QuotaGauge_.Update(newValue);
 
         return std::max<i64>(currentValue - maxValue, 0);
     }
+
+private:
+    TAtomicValuePtr Value_;
+
+    std::vector<i64> Window_;
+    int WindowPosition_ = 0;
+
+    const NProfiling::TGauge QuotaGauge_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
 struct TSharedBucket final
 {
-    TSharedBucket(int windowSize, const NProfiling::TProfiler& profiler)
-        : Limit(windowSize, profiler.Gauge("/shared_quota"))
+    TSharedBucket(
+        int windowSize,
+        const NProfiling::TProfiler& profiler,
+        TAtomicValuePtr limitValue)
+        : Limit(
+            windowSize,
+            profiler.Gauge("/shared_quota"),
+            std::move(limitValue))
     { }
 
     TLeakyCounter Limit;
@@ -224,18 +258,18 @@ public:
     {
         YT_VERIFY(amount >= 0);
 
-        auto available = Quota_.Value->load();
+        auto available = Quota_.GetValue();
         auto globalAvailable = IsLimited()
             ? 0
-            : std::max<i64>(0, SharedBucket_->Limit.Value->load());
+            : std::max<i64>(0, SharedBucket_->Limit.GetValue());
 
         if (amount > available + globalAvailable) {
             return false;
         }
 
         auto globalConsumed = std::clamp<i64>(amount - available, 0, globalAvailable);
-        *Quota_.Value -= amount - globalConsumed;
-        *SharedBucket_->Limit.Value -= globalConsumed;
+        Quota_.Acquire(amount - globalConsumed);
+        SharedBucket_->Limit.Acquire(globalConsumed);
 
         ValueCounter_.Increment(amount);
         Usage_ += amount;
@@ -247,16 +281,16 @@ public:
     {
         YT_VERIFY(amount >= 0);
 
-        auto available = Quota_.Value->load();
+        auto available = Quota_.GetValue();
         auto globalAvailable = IsLimited()
             ? 0
-            : std::max<i64>(0, SharedBucket_->Limit.Value->load());
+            : std::max<i64>(0, SharedBucket_->Limit.GetValue());
 
         auto consumed = std::min(amount, available + globalAvailable);
 
         auto globalConsumed = std::clamp<i64>(consumed - available, 0, globalAvailable);
-        *Quota_.Value -= consumed - globalConsumed;
-        *SharedBucket_->Limit.Value -= globalConsumed;
+        Quota_.Acquire(consumed - globalConsumed);
+        SharedBucket_->Limit.Acquire(globalConsumed);
 
         ValueCounter_.Increment(consumed);
         Usage_ += consumed;
@@ -268,15 +302,15 @@ public:
     {
         YT_VERIFY(amount >= 0);
 
-        auto available = Quota_.Value->load();
+        auto available = Quota_.GetValue();
         // NB: Shared bucket limit can get below zero because resource acquisition is racy.
         auto globalAvailable = IsLimited()
             ? 0
-            : std::max<i64>(0, SharedBucket_->Limit.Value->load());
+            : std::max<i64>(0, SharedBucket_->Limit.GetValue());
 
         auto globalConsumed = std::clamp<i64>(amount - available, 0, globalAvailable);
-        *Quota_.Value -= amount - globalConsumed;
-        *SharedBucket_->Limit.Value -= globalConsumed;
+        Quota_.Acquire(amount - globalConsumed);
+        SharedBucket_->Limit.Acquire(globalConsumed);
 
         ValueCounter_.Increment(amount);
         Usage_ += amount;
@@ -290,7 +324,7 @@ public:
             return;
         }
 
-        *Quota_.Value += amount;
+        Quota_.Release(amount);
         Usage_ -= amount;
 
         ReleasedCounter_.Increment(amount);
@@ -303,7 +337,7 @@ public:
 
     i64 GetQueueTotalAmount() const override
     {
-        return Max<i64>(-Quota_.Value->load(), 0) + QueueSize_.load();
+        return Max<i64>(-Quota_.GetValue(), 0) + QueueSize_.load();
     }
 
     TDuration GetEstimatedOverdraftDuration() const override
@@ -324,8 +358,8 @@ public:
 
     i64 GetAvailable() const override
     {
-        auto available = Quota_.Value->load();
-        auto globalAvailable = IsLimited() ? 0 : SharedBucket_->Limit.Value->load();
+        auto available = Quota_.GetValue();
+        auto globalAvailable = IsLimited() ? 0 : SharedBucket_->Limit.GetValue();
         return available + globalAvailable;
     }
 
@@ -339,7 +373,7 @@ public:
 
     TBucketState Peek()
     {
-        auto quota = Quota_.Value->load();
+        auto quota = Quota_.GetValue();
 
         return TBucketState{
             .Usage = Usage_.exchange(0),
@@ -397,12 +431,12 @@ public:
         // the bucket gets low quota however it is eligible for greater quota that is at least |guaranteedQuota|.
         EstimatedLimit_ = std::max(quota, guaranteedQuota);
 
-        if (Quota_.Value->load() < 0) {
-            auto remainingQuota = Quota_.Increment(quota);
+        if (Quota_.GetValue() < 0) {
+            auto remainingQuota = Quota_.Refill(quota);
             return SatisfyRequests(remainingQuota);
         } else {
             auto remainingQuota = SatisfyRequests(quota);
-            return Quota_.Increment(remainingQuota, quota);
+            return Quota_.Refill(remainingQuota, quota);
         }
     }
 
@@ -480,16 +514,16 @@ public:
         NProfiling::TProfiler profiler)
         : Logger(std::move(logger))
         , Profiler_(std::move(profiler))
-        , SharedBucket_(New<TSharedBucket>(config->GlobalAccumulationTicks, Profiler_))
         , Config_(std::move(config))
+        , Ipc_(Config_->IpcPath
+            ? CreateFairThrottlerFileIpc(*Config_->IpcPath, Config_->UseShmem, Logger)
+            : nullptr)
+        , SharedBucket_(New<TSharedBucket>(
+            Config_->GlobalAccumulationTicks,
+            Profiler_,
+            GetSharedBucketValue()))
     {
-        if (Config_->IpcPath) {
-            Ipc_ = CreateFairThrottlerFileIpc(*Config_->IpcPath, Config_->UseShmem, Logger);
-
-            SharedBucket_->Limit.Value = std::shared_ptr<std::atomic<i64>>(
-                &Ipc_->GetState()->Value,
-                [state = Ipc_] (auto /*ptr*/) { });
-
+        if (Ipc_) {
             Profiler_.AddFuncGauge("/leader", MakeStrong(this), [this] {
                 return IsLeader_.load();
             });
@@ -497,12 +531,12 @@ public:
             IsLeader_ = true;
         }
 
-        ScheduleLimitUpdate(TInstant::Now());
-
         Profiler_.AddFuncGauge("/total_limit", MakeStrong(this), [this] {
             auto guard = Guard(Lock_);
             return Config_->TotalLimit;
         });
+
+        ScheduleLimitUpdate(TInstant::Now());
     }
 
     IThroughputThrottlerPtr CreateBucketThrottler(
@@ -560,8 +594,6 @@ private:
     const NLogging::TLogger Logger;
     const NProfiling::TProfiler Profiler_;
 
-    const TSharedBucketPtr SharedBucket_;
-
     std::atomic<bool> IsLeader_ = false;
 
     struct TBucket
@@ -576,7 +608,17 @@ private:
     TFairThrottlerConfigPtr Config_;
     THashMap<std::string, TBucket> Buckets_;
 
-    IFairThrottlerIpcPtr Ipc_;
+    const IFairThrottlerIpcPtr Ipc_;
+    const TSharedBucketPtr SharedBucket_;
+
+    TAtomicValuePtr GetSharedBucketValue()
+    {
+        return Ipc_
+            ? TAtomicValuePtr(
+                &Ipc_->GetState()->Value,
+                [ipc = Ipc_] (auto /*ptr*/) { })
+            : nullptr;
+    }
 
     void DoUpdateLeader()
     {
@@ -687,12 +729,12 @@ private:
             leakedQuota = tickLimit;
         }
 
-        i64 droppedQuota = SharedBucket_->Limit.Increment(leakedQuota);
+        i64 droppedQuota = SharedBucket_->Limit.Refill(leakedQuota);
 
         RefillFromSharedBucket();
 
         YT_LOG_DEBUG("Fair throttler tick (SharedBucket: %v, TickLimit: %v, FreeQuota: %v, DroppedQuota: %v)",
-            SharedBucket_->Limit.Value->load(),
+            SharedBucket_->Limit.GetValue(),
             tickLimit, // How many bytes was distributed?
             freeQuota, // How many bytes was left unconsumed?
             droppedQuota);
@@ -746,7 +788,7 @@ private:
         RefillFromSharedBucket();
 
         YT_LOG_DEBUG("Fair throttler tick (SharedBucket: %v, InFlow: %v, OutFlow: %v)",
-            SharedBucket_->Limit.Value->load(),
+            SharedBucket_->Limit.GetValue(),
             inFlow,
             outFlow);
 
@@ -766,7 +808,7 @@ private:
         Shuffle(throttlers.begin(), throttlers.end());
 
         for (const auto& throttler : throttlers) {
-            auto limit = SharedBucket_->Limit.Value->load();
+            auto limit = SharedBucket_->Limit.GetValue();
             if (limit <= 0) {
                 break;
             }
@@ -775,7 +817,7 @@ private:
                 continue;
             }
 
-            *SharedBucket_->Limit.Value -= limit - throttler->SatisfyRequests(limit);
+            SharedBucket_->Limit.Acquire(limit - throttler->SatisfyRequests(limit));
         }
     }
 
@@ -804,6 +846,8 @@ private:
             at);
     }
 };
+
+} // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 

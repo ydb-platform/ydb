@@ -24,9 +24,7 @@ namespace {
 constexpr TStringBuf LockFileName = "lock";
 constexpr TStringBuf BucketLockFileNameSuffix = ".lock";
 constexpr TStringBuf SharedFileName = "shared.v1";
-constexpr TStringBuf BucketsFileName = "buckets.v1";
-
-} // namespace
+constexpr TStringBuf BucketsDirName = "buckets.v1";
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -236,7 +234,7 @@ public:
         , Logger(std::move(logger))
     {
         NFS::MakeDirRecursive(RootPath_);
-        NFS::MakeDirRecursive(RootPath_ + "/" + BucketsFileName);
+        NFS::MakeDirRecursive(RootPath_ + "/" + BucketsDirName);
 
         Lock_ = std::make_unique<TFileLock>(RootPath_ + "/" + LockFileName);
 
@@ -304,7 +302,7 @@ private:
         auto openBuckets = std::exchange(OpenBuckets_, {});
 
         TVector<TString> currentBucketPaths;
-        TFsPath{RootPath_ + "/" + BucketsFileName}.ListNames(currentBucketPaths);
+        TFsPath{RootPath_ + "/" + BucketsDirName}.ListNames(currentBucketPaths);
         for (const auto& fileName : currentBucketPaths) {
             if (fileName.EndsWith(BucketLockFileNameSuffix)) {
                 continue;
@@ -341,9 +339,11 @@ private:
 
     TString GetBucketPath(const std::string& fileName) const
     {
-        return RootPath_ + "/" + BucketsFileName + "/" + fileName;
+        return RootPath_ + "/" + BucketsDirName + "/" + fileName;
     }
 };
+
+} // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 

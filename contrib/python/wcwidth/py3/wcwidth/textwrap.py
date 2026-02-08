@@ -4,16 +4,21 @@ Sequence-aware text wrapping functions.
 This module provides functions for wrapping text that may contain terminal escape sequences, with
 proper handling of Unicode grapheme clusters and character display widths.
 """
+from __future__ import annotations
+
 # std imports
 import textwrap
 
-from typing import List
+from typing import TYPE_CHECKING
 
 # local
 from .wcwidth import width as _width
 from .wcwidth import iter_sequences
 from .grapheme import iter_graphemes
 from .escape_sequences import ZERO_WIDTH_PATTERN
+
+if TYPE_CHECKING:  # pragma: no cover
+    from typing import Any, Literal
 
 
 class SequenceTextWrapper(textwrap.TextWrapper):
@@ -32,10 +37,10 @@ class SequenceTextWrapper(textwrap.TextWrapper):
     """
 
     def __init__(self, width: int = 70, *,
-                 control_codes: str = 'parse',
+                 control_codes: Literal['parse', 'strict', 'ignore'] = 'parse',
                  tabsize: int = 8,
                  ambiguous_width: int = 1,
-                 **kwargs):
+                 **kwargs: Any) -> None:
         """
         Initialize the wrapper.
 
@@ -71,7 +76,7 @@ class SequenceTextWrapper(textwrap.TextWrapper):
                 result.append(segment)
         return ''.join(result)
 
-    def _split(self, text: str) -> List[str]:  # pylint: disable=too-many-locals
+    def _split(self, text: str) -> list[str]:  # pylint: disable=too-many-locals
         """
         Sequence-aware variant of :meth:`textwrap.TextWrapper._split`.
 
@@ -87,7 +92,7 @@ class SequenceTextWrapper(textwrap.TextWrapper):
         # aren't lost when whitespace is dropped.
         #
         # char_end[i] = position in original text right after the i-th stripped char
-        char_end: List[int] = []
+        char_end: list[int] = []
         stripped_text = ''
         original_pos = 0
 
@@ -114,7 +119,7 @@ class SequenceTextWrapper(textwrap.TextWrapper):
             return [text]
 
         # Map the chunks back to the original text with sequences
-        result: List[str] = []
+        result: list[str] = []
         stripped_pos = 0
         num_chunks = len(stripped_chunks)
 
@@ -137,7 +142,7 @@ class SequenceTextWrapper(textwrap.TextWrapper):
 
         return result
 
-    def _wrap_chunks(self, chunks: List[str]) -> List[str]:  # pylint: disable=too-many-branches
+    def _wrap_chunks(self, chunks: list[str]) -> list[str]:  # pylint: disable=too-many-branches
         """
         Wrap chunks into lines using sequence-aware width.
 
@@ -148,14 +153,14 @@ class SequenceTextWrapper(textwrap.TextWrapper):
         if not chunks:
             return []
 
-        lines = []
+        lines: list[str] = []
         is_first_line = True
 
         # Arrange in reverse order so items can be efficiently popped
         chunks = list(reversed(chunks))
 
         while chunks:
-            current_line: List[str] = []
+            current_line: list[str] = []
             current_width = 0
 
             # Get the indent and available width for current line
@@ -216,8 +221,8 @@ class SequenceTextWrapper(textwrap.TextWrapper):
 
         return lines
 
-    def _handle_long_word(self, reversed_chunks: List[str],
-                          cur_line: List[str], cur_len: int,
+    def _handle_long_word(self, reversed_chunks: list[str],
+                          cur_line: list[str], cur_len: int,
                           width: int) -> None:
         """
         Sequence-aware :meth:`textwrap.TextWrapper._handle_long_word`.
@@ -318,13 +323,13 @@ class SequenceTextWrapper(textwrap.TextWrapper):
 
 
 def wrap(text: str, width: int = 70, *,
-         control_codes: str = 'parse',
+         control_codes: Literal['parse', 'strict', 'ignore'] = 'parse',
          tabsize: int = 8,
          ambiguous_width: int = 1,
          initial_indent: str = '',
          subsequent_indent: str = '',
          break_long_words: bool = True,
-         break_on_hyphens: bool = True) -> List[str]:
+         break_on_hyphens: bool = True) -> list[str]:
     r"""
     Wrap text to fit within given width, returning a list of wrapped lines.
 
@@ -332,18 +337,17 @@ def wrap(text: str, width: int = 70, *,
     characters, correctly handling wide characters, combining marks, and terminal
     escape sequences.
 
-    :param str text: Text to wrap, may contain terminal sequences.
-    :param int width: Maximum line width in display cells.
-    :param str control_codes: How to handle terminal sequences (see :func:`~.width`).
-    :param int tabsize: Tab stop width for tab expansion.
-    :param int ambiguous_width: Width to use for East Asian Ambiguous (A)
+    :param text: Text to wrap, may contain terminal sequences.
+    :param width: Maximum line width in display cells.
+    :param control_codes: How to handle terminal sequences (see :func:`~.width`).
+    :param tabsize: Tab stop width for tab expansion.
+    :param ambiguous_width: Width to use for East Asian Ambiguous (A)
         characters. Default is ``1`` (narrow). Set to ``2`` for CJK contexts.
-    :param str initial_indent: String prepended to first line.
-    :param str subsequent_indent: String prepended to subsequent lines.
-    :param bool break_long_words: If True, break words longer than width.
-    :param bool break_on_hyphens: If True, allow breaking at hyphens.
+    :param initial_indent: String prepended to first line.
+    :param subsequent_indent: String prepended to subsequent lines.
+    :param break_long_words: If True, break words longer than width.
+    :param break_on_hyphens: If True, allow breaking at hyphens.
     :returns: List of wrapped lines without trailing newlines.
-    :rtype: list[str]
 
     Like :func:`textwrap.wrap`, newlines in the input text are treated as
     whitespace and collapsed. To preserve paragraph breaks, wrap each

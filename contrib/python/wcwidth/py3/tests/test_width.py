@@ -189,15 +189,69 @@ def test_vs16_selector():
     assert wcwidth.width("A\uFE0F") == 1
 
 
+def test_zwj_with_non_emoji_chars():
+    """ZWJ with non-emoji characters and trailing VS16."""
+    # ZWJ (Zero Width Joiner) skips both itself and the following character, treating them as a
+    # failed emoji ZWJ sequence. When followed by VS16, the VS16 should NOT apply to the earlier
+    # emoji because VS16 must immediately follow the character it modifies.
+    #
+    # In the full parse loop, VS16 checks `last_measured_idx == idx - 1` (immediate adjacency).
+    # The ZWJ+char skip means VS16 is not adjacent to the smiley, so VS16 has no effect.
+    #
+    # Control test,
+    assert wcwidth.width("\u263A\uFE0F") == 2  # smiley + VS16 = 2
+
+    # ZWJ followed by non-emoji, VS16 does not apply (not adjacent)
+    assert wcwidth.width("\u263A\u200Da\uFE0F") == 1
+    assert wcwidth.width("\u263A\u200Dx\uFE0F") == 1
+    assert wcwidth.width("\u263A\u200Da\u200Db\uFE0F") == 1
+
+    # ZWJ at end of string
+    assert wcwidth.width("\u263A\u200D") == 1  # smiley + ZWJ = 1
+
+    # Long strings (>20 chars) use fast path which routes to wcswidth().
+    # wcswidth() has more lenient VS16 handling, causing VS16 to incorrectly apply (!)
+    # Multiply by 10 to exceed threshold: "\u263A\u200Da\uFE0F" (4 chars) * 10 = 40 chars
+    assert wcwidth.width("\u263A\u200Da\uFE0F" * 10) == 20  # (smiley(1) + ZWJ+a(0) + VS16(+1)) * 10 (!)
+
+
 def test_vs16_after_control_chars():
-    """VS16 after control characters should not add width."""
-    # Emoji, then control char, then VS16 - VS16 should NOT apply to emoji
-    # width() returns max extent, so BS/CR don't reduce it
-    assert wcwidth.width("\u263A\x07\uFE0F") == 1  # smiley(1) + BEL(0) + VS16(0)
-    assert wcwidth.width("\u263A\x08\uFE0F") == 1  # smiley(1) + BS(back) + VS16(0), extent=1
-    assert wcwidth.width("\u263A\x0d\uFE0F") == 1  # smiley(1) + CR(reset) + VS16(0), extent=1
+    """VS16 after control characters does not apply (not adjacent)."""
+    # When VS16 is separated from a potential emoji by control characters or escape sequences,
+    # VS16 should NOT apply because it must immediately follow the character it modifies.
+    #
+    # Control tests,
+    assert wcwidth.width("a\uFE0F") == 1  # a(1) + VS16(0), 'a' not in VS16 table
     assert wcwidth.width("\u263A\x1b[m\uFE0F") == 1  # smiley(1) + SGR(0) + VS16(0)
-    assert wcwidth.width("\u263A\u200Da\uFE0F") == 1  # smiley(1) + ZWJ+a(0) + VS16(0)
+    assert wcwidth.width("\u263A\x07\uFE0F") == 1  # smiley(1) + BEL(0) + VS16(0)
+    assert wcwidth.width("\u263A\x08\uFE0F") == 1  # smiley(1) + BS(-1) + VS16(0), extent=1
+    assert wcwidth.width("\u263A\x0d\uFE0F") == 1  # smiley(1) + CR(reset) + VS16(0), extent=1
+
+    # Long strings (>20 chars) use fast path which routes to wcswidth().
+    # wcswidth() has more lenient VS16 handling (`last_measured_idx >= 0` vs `== idx - 1`),
+    # causing VS16 to incorrectly apply when separated by control chars (!)
+    # Multiply by 10 to exceed threshold
+    assert wcwidth.width(("\u263A\x07\uFE0F") * 10) == 20  # (smiley(1) + BEL(0) + VS16(+1)) * 10 (!)
+
+
+def test_width_long_horizontal_fastpath():
+    # Long strings with horizontal movement chars use full parse loop (not fast path).
+    # width() returns max_extent (maximum position reached), not final position.
+    assert wcwidth.width("a" * 25 + "\b") == 25  # max is 25, BS reduces pos not max
+    assert wcwidth.width("a" * 25 + "\t") == 32  # 25 + tab to next 8-col stop
+    assert wcwidth.width("a" * 25 + "\r") == 25  # max is 25, CR resets pos not max
+
+    # Long strings with cursor movement sequences use full parse loop.
+    # Cursor right increases max, cursor left only decreases pos.
+    assert wcwidth.width("a" * 25 + "\x1b[C") == 26  # 25 + cursor right 1
+    assert wcwidth.width("a" * 25 + "\x1b[2D") == 25  # max is 25, cursor left reduces pos
+
+    # Long plain strings (no \x1b) take the fast path via wcswidth()
+    assert wcwidth.width("a" * 25) == 25
+    assert wcwidth.width("hello world, this is a test") == 27
+
+    # Long strings with non-cursor escape sequences (SGR) also take fast path
+    assert wcwidth.width("\x1b[31m" + "a" * 25 + "\x1b[0m") == 25
 
 
 def test_backspace_at_column_zero():

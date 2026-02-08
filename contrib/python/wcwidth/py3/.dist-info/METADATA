@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: wcwidth
-Version: 0.3.0
+Version: 0.3.3
 Summary: Measures the displayed width of unicode strings in a terminal
 Project-URL: Homepage, https://github.com/jquast/wcwidth
 Author-email: Jeff Quast <contact@jeffquast.com>
@@ -24,6 +24,7 @@ Classifier: Topic :: Software Development :: Internationalization
 Classifier: Topic :: Software Development :: Libraries
 Classifier: Topic :: Software Development :: Localization
 Classifier: Topic :: Terminals
+Classifier: Typing :: Typed
 Requires-Python: >=3.8
 Description-Content-Type: text/x-rst
 
@@ -127,7 +128,7 @@ Measures width of a string, returns -1 for control codes.
 .. code-block:: python
 
     >>> # '♀️' emoji w/vs-16
-    >>> wcwidth.wcswidth('♀️')
+    >>> wcwidth.wcswidth('\u2640\ufe0f')
     2
 
 Use function `wcswidth()`_ to determine the length of many, a *string of unicode characters*.
@@ -471,6 +472,16 @@ languages.
 History
 =======
 
+0.3.3 *2026-01-24*
+  * **Performance** improvement in `width()`_. `PR #185`_.
+  * **Bugfix** missing ``py.typed``, ``Typing :: Typed``. `PR #184`_.
+
+0.3.2 *2026-01-23*
+  * **Updated** type hinting for full ``mympy --strict`` compliance. `PR #183`_.
+
+0.3.1 *2026-01-22*
+  * **Performance** improvement up to 30% in `width()_`. `PR #181`_.
+
 0.3.0 *2026-01-21*
   * **New** Function `iter_graphemes()`_. `PR #165`_.
   * **New** Functions `width()`_ and `iter_sequences()`_. `PR #166`_.
@@ -623,6 +634,10 @@ https://www.cl.cam.ac.uk/~mgk25/ucs/wcwidth.c::
 .. _`PR #173`: https://github.com/jquast/wcwidth/pull/173
 .. _`PR #174`: https://github.com/jquast/wcwidth/pull/174
 .. _`PR #175`: https://github.com/jquast/wcwidth/pull/175
+.. _`PR #181`: https://github.com/jquast/wcwidth/pull/181
+.. _`PR #183`: https://github.com/jquast/wcwidth/pull/183
+.. _`PR #184`: https://github.com/jquast/wcwidth/pull/184
+.. _`PR #185`: https://github.com/jquast/wcwidth/pull/185
 .. _`Issue #101`: https://github.com/jquast/wcwidth/issues/101
 .. _`jquast/blessed`: https://github.com/jquast/blessed
 .. _`selectel/pyte`: https://github.com/selectel/pyte

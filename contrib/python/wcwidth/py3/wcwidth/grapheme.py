@@ -6,11 +6,14 @@ defined in UAX #29: Unicode Text Segmentation.
 
 https://www.unicode.org/reports/tr29/
 """
+
+from __future__ import annotations
+
 # std imports
 from enum import IntEnum
 from functools import lru_cache
 
-from typing import Iterator, Optional, NamedTuple
+from typing import TYPE_CHECKING, NamedTuple
 
 # local
 from .bisearch import bisearch as _bisearch
@@ -28,6 +31,10 @@ from .table_grapheme import (GRAPHEME_L,
                              GRAPHEME_SPACINGMARK,
                              EXTENDED_PICTOGRAPHIC,
                              GRAPHEME_REGIONAL_INDICATOR)
+
+if TYPE_CHECKING:  # pragma: no cover
+    # std imports
+    from collections.abc import Iterator
 
 
 class GCB(IntEnum):
@@ -87,25 +94,25 @@ def _grapheme_cluster_break(ucs: int) -> GCB:
 @lru_cache(maxsize=512)
 def _is_extended_pictographic(ucs: int) -> bool:
     """Check if codepoint has Extended_Pictographic property."""
-    return _bisearch(ucs, EXTENDED_PICTOGRAPHIC)
+    return bool(_bisearch(ucs, EXTENDED_PICTOGRAPHIC))
 
 
 @lru_cache(maxsize=128)
 def _is_incb_linker(ucs: int) -> bool:
     """Check if codepoint has InCB=Linker property."""
-    return _bisearch(ucs, INCB_LINKER)
+    return bool(_bisearch(ucs, INCB_LINKER))
 
 
 @lru_cache(maxsize=256)
 def _is_incb_consonant(ucs: int) -> bool:
     """Check if codepoint has InCB=Consonant property."""
-    return _bisearch(ucs, INCB_CONSONANT)
+    return bool(_bisearch(ucs, INCB_CONSONANT))
 
 
 @lru_cache(maxsize=256)
 def _is_incb_extend(ucs: int) -> bool:
     """Check if codepoint has InCB=Extend property."""
-    return _bisearch(ucs, INCB_EXTEND)
+    return bool(_bisearch(ucs, INCB_EXTEND))
 
 
 class BreakResult(NamedTuple):
@@ -116,7 +123,7 @@ class BreakResult(NamedTuple):
 
 
 @lru_cache(maxsize=196)  # 14 GCB values × 14 = 196 max combinations
-def _simple_break_check(prev_gcb: GCB, curr_gcb: GCB) -> Optional[BreakResult]:
+def _simple_break_check(prev_gcb: GCB, curr_gcb: GCB) -> BreakResult | None:
     """
     Check simple GCB-pair-based break rules (cacheable).
 
@@ -234,7 +241,7 @@ def _should_break(
 def iter_graphemes(
     unistr: str,
     start: int = 0,
-    end: Optional[int] = None,
+    end: int | None = None,
 ) -> Iterator[str]:
     r"""
     Iterate over grapheme clusters in a Unicode string.

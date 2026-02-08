@@ -133,7 +133,8 @@ def test_longer_emoji_zwj_sequence():
 
 
 def read_sequences_from_file(filename):
-    with open(os.path.join(os.path.dirname(__file__), filename), encoding='utf-8') as fp:
+    import yatest.common as yc
+    with open(os.path.join(os.path.dirname(yc.source_path(__file__)), filename), encoding='utf-8') as fp:
         lines = [line.strip()
                  for line in fp.readlines()
                  if not line.startswith('#') and line.strip()]
@@ -142,54 +143,49 @@ def read_sequences_from_file(filename):
 
 
 @pytest.mark.skipif(NARROW_ONLY, reason="Some sequences in text file are not compatible with 'narrow' builds")
-def test_recommended_emoji_zwj_sequences():
+def test_recommended_emoji_zwj_sequences(benchmark):
     """Test wcswidth of all of the unicode.org-published emoji-zwj-sequences.txt."""
-    # given,
     lines, sequences = read_sequences_from_file('emoji-zwj-sequences.txt')
 
-    errors = []
-    # Exercise, track by zipping with original text file line, a debugging aide
-    num = 0
-    for sequence, line in zip(sequences, lines):
-        num += 1
-        measured_width = wcwidth.wcswidth(sequence)
-        if measured_width != 2:
-            errors.append({
-                'expected_width': 2,
-                'line': line,
-                'measured_width': measured_width,
-                'sequence': sequence,
-            })
+    def measure_all():
+        errors = []
+        for sequence, line in zip(sequences, lines):
+            measured_width = wcwidth.wcswidth(sequence)
+            if measured_width != 2:
+                errors.append({
+                    'expected_width': 2,
+                    'line': line,
+                    'measured_width': measured_width,
+                    'sequence': sequence,
+                })
+        return errors
 
-    # verify
+    errors = benchmark(measure_all)
     assert not errors
-    assert num >= 1468
+    assert len(sequences) >= 1468
 
 
-def test_recommended_variation_16_sequences():
+def test_recommended_variation_16_sequences(benchmark):
     """Test wcswidth of all of the unicode.org-published emoji-variation-sequences.txt."""
-    # given,
     lines, sequences = read_sequences_from_file('emoji-variation-sequences.txt')
+    vs16_sequences = [(seq, line) for seq, line in zip(sequences, lines) if '\ufe0f' in seq]
 
-    errors = []
-    num = 0
-    for sequence, line in zip(sequences, lines):
-        num += 1
-        if '\ufe0f' not in sequence:
-            # filter for only \uFE0F (VS-16)
-            continue
-        measured_width = wcwidth.wcswidth(sequence)
-        if measured_width != 2:
-            errors.append({
-                'expected_width': 2,
-                'line': line,
-                'measured_width': wcwidth.wcswidth(sequence),
-                'sequence': sequence,
-            })
+    def measure_all():
+        errors = []
+        for sequence, line in vs16_sequences:
+            measured_width = wcwidth.wcswidth(sequence)
+            if measured_width != 2:
+                errors.append({
+                    'expected_width': 2,
+                    'line': line,
+                    'measured_width': measured_width,
+                    'sequence': sequence,
+                })
+        return errors
 
-    # verify
+    errors = benchmark(measure_all)
     assert not errors
-    assert num >= 742
+    assert len(sequences) >= 742
 
 
 def test_unicode_9_vs16():

@@ -26,6 +26,7 @@ namespace NKikimrBlobStorage::NDDisk::NInternal {
     XX(FlushPersistentBuffer) \
     XX(ErasePersistentBuffer) \
     XX(ListPersistentBuffer) \
+    XX(RestorePersistentBuffer) \
     /**/
 
 namespace NKikimr::NDDisk {
@@ -219,7 +220,15 @@ namespace NKikimr::NDDisk {
         using TPersistentBufferPendingWrite = std::function<void(NPDisk::TEvChunkWriteRawResult&)>;
 
         THashMap<ui64, std::variant<TPendingWrite, TPersistentBufferPendingWrite>> WriteCallbacks;
-        THashMap<ui64, std::tuple<NWilson::TSpan, std::function<void(NPDisk::TEvChunkReadRawResult&, NWilson::TSpan&&)>>> ReadCallbacks;
+
+        struct TPendingRead {
+            NWilson::TSpan Span;
+            std::function<void(NPDisk::TEvChunkReadRawResult&, NWilson::TSpan&&)> Callback;
+        };
+
+        using TPersistentBufferPendingRead = std::function<void(NPDisk::TEvChunkReadRawResult&)>;
+
+        THashMap<ui64, std::variant<TPendingRead, TPersistentBufferPendingRead>> ReadCallbacks;
 
         void IssueChunkAllocation(ui64 tabletId, ui64 vChunkIndex);
         void Handle(NPDisk::TEvChunkReserveResult::TPtr ev);
@@ -332,7 +341,9 @@ namespace NKikimr::NDDisk {
                 ui32 OffsetInBytes;
                 ui32 Size;
                 std::vector<TPersistentBufferSectorInfo> Sectors;
-                TRope Data;
+                std::map<ui32, TRope> DataParts;
+                ui32 PartsCount;
+                TRope JoinData();
             };
 
             std::map<ui64, TRecord> Records;
@@ -376,6 +387,15 @@ namespace NKikimr::NDDisk {
         };
         std::map<std::tuple<ui64, ui64, ui64>, TPersistentBufferToDiskWriteInFlight> PersistentBufferWriteInflight;
 
+        struct TPersistentBufferToDiskReadInFlight {
+            NWilson::TSpan Span;
+        };
+        
+        std::map<ui64, TPersistentBufferToDiskReadInFlight> PersistentBufferReadInflight;
+
+        NWilson::TSpan PersistentBufferRestoreSpan;
+        ui32 PersistentBufferRestoreChunksInflight = 0;
+
         TPersistentBufferSpaceAllocator PersistentBufferSpaceAllocator;
 
         ui64 PersistentBufferChunkMapSnapshotLsn = Max<ui64>();
@@ -384,6 +404,8 @@ namespace NKikimr::NDDisk {
         void IssuePersistentBufferChunkAllocation();
         void ProcessPersistentBufferQueue();
         std::vector<std::tuple<ui32, ui32, TRope>> SlicePersistentBuffer(ui64 tabletId, ui64 vchunkIndex, ui64 lsn, ui32 offsetInBytes, ui32 size, TRope&& data, const std::vector<TPersistentBufferSectorInfo>& sectors);
+        void StartRestorePersistentBuffer();
+        void GetPersistentBufferRecordData(TDDiskActor::TPersistentBuffer::TRecord& pr, std::function<void(TRope data)> callback);
 
         struct TWriteInFlight {
             TActorId Sender;

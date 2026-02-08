@@ -1519,7 +1519,11 @@ void TNodeState::CleanupUnbound() {
         if (front.second > now) {
             break;
         }
-        InputDescriptors.erase(front.first);
+        if (auto it = InputDescriptors.find(front.first); it != InputDescriptors.end()) {
+            if (!it->second->IsBound) {
+                InputDescriptors.erase(it);
+            }
+        }
         UnboundInputs.pop();
     }
     while (!UnboundOutputs.empty()) {
@@ -1527,7 +1531,11 @@ void TNodeState::CleanupUnbound() {
         if (front.second > now) {
             break;
         }
-        OutputDescriptors.erase(front.first);
+        if (auto it = OutputDescriptors.find(front.first); it != OutputDescriptors.end()) {
+            if (!it->second->IsBound) {
+                OutputDescriptors.erase(it);
+            }
+        }
         UnboundOutputs.pop();
     }
 }

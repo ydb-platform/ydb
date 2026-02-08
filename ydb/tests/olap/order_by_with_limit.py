@@ -424,9 +424,9 @@ class TestOrderBy(object):
         # assert order == [6, 1, 0, 2, 3, 4, 5]
         assert order == [6, 1, 0, 3, 2, 5, 4]
 
-    def test_reproduce(self):
+    def test_reproduce_with_prefix(self):
         test_dir = f"{self.ydb_client.database}/{self.test_name}"
-        table_path = f"{test_dir}/test_reproduce"
+        table_path = f"{test_dir}/test_reproduce_with_prefix"
 
         self.ydb_client.query(
             f"""

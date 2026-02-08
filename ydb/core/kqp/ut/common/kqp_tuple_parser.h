@@ -1,5 +1,9 @@
 #pragma once
 
+#include <library/cpp/json/writer/json.h>
+#include <library/cpp/json/writer/json_value.h>
+#include <util/generic/yexception.h>
+
 #include <algorithm>
 #include <cassert>
 #include <cctype>
@@ -12,10 +16,11 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
-#include <util/generic/yexception.h>
 
 
 namespace NKikimr::NKqp {
+
+// TODO: implementation to .cpp file
 
 class TParamsMap {
 public:
@@ -44,7 +49,7 @@ public:
             return defaultValue;
         }
         try {
-            return Parse<TValue>(it->second);
+            return GetValue<TValue>(key);
         } catch (...) {
             return defaultValue;
         }
@@ -56,7 +61,13 @@ public:
         if (it == Data_.end()) {
             ythrow yexception() << "Key not found: " << key;
         }
-        return Parse<TValue>(it->second);
+
+        auto parsed = Parse<TValue>(it->second);
+        // record that this value was accessed, this allows
+        // to later serialize values that were accessed
+        AccessedEntries_.insert(key);
+
+        return parsed;
     }
 
     using TUnderlyingStorage = std::vector<std::pair<std::string, std::string>>;
@@ -69,8 +80,38 @@ public:
         return Data_;
     }
 
+    NJson::TJsonValue Serialize(bool onlyAccessed = true, const std::set<std::string>& excludeKeys = {}) const {
+        NJson::TJsonValue params;
+        for (auto &[key, value]: Data_) {
+            if ((!onlyAccessed || AccessedEntries_.contains(key)) && !excludeKeys.contains(key)) {
+                params.InsertValue(key, value);
+            }
+        }
+
+        return params;
+    }
+
+    std::string ToString(std::string delimeter = ", ", bool onlyAccessed = true, const std::set<std::string>& excludeKeys = {}) const {
+        std::stringstream ss;
+
+        bool isFirst = true;
+        for (auto &[key, value]: Data_) {
+            if ((!onlyAccessed || AccessedEntries_.contains(key)) && !excludeKeys.contains(key)) {
+                if (!isFirst) {
+                    ss << delimeter;
+                }
+
+                ss << key << "=" << value;
+                isFirst = false;
+            }
+        }
+
+        return ss.str();
+    }
+
 private:
     TUnderlyingStorage Data_;
+    mutable std::set<std::string> AccessedEntries_;
 
     template<typename T> struct is_chrono_duration : std::false_type {};
     template<typename Rep, typename Period>

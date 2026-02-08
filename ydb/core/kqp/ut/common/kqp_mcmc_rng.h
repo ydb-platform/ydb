@@ -11,12 +11,14 @@ class TMCMCMT19937 {
 public:
     using result_type = uint32_t;
 
-    // Constructor
     explicit TMCMCMT19937(uint64_t seed) : Seed_(seed), Counter_(0) {
         Engine_.seed(static_cast<uint32_t>(seed));
     }
 
-    // Standard RNG interface
+    explicit TMCMCMT19937(std::string serializedMT) : TMCMCMT19937(0) {
+        RestoreFromHex(serializedMT);
+    }
+
     result_type operator()() {
         ++Counter_;
         return Engine_();
@@ -25,7 +27,6 @@ public:
     static constexpr result_type min() { return std::mt19937::min(); }
     static constexpr result_type max() { return std::mt19937::max(); }
 
-    // Seed management
     void seed(uint64_t s) {
         Seed_ = s;
         Counter_ = 0;
@@ -34,7 +35,6 @@ public:
         Engine_.seed(static_cast<uint32_t>(s));
     }
 
-    // Discard operations
     void discard(uint64_t z) {
         Counter_ += z;
         Engine_.discard(z);
@@ -77,7 +77,6 @@ public:
         JumpTo(Markers_[depth]);
     }
 
-    // Serialization
     std::string SerializeToHex() const {
         std::vector<uint8_t> binary = SerializeToBinary();
         return BinaryToHex(binary);
@@ -88,7 +87,6 @@ public:
         RestoreFromBinary(binary);
     }
 
-    // Accessors
     uint64_t GetCounter() const { return Counter_; }
     uint64_t GetSeed() const { return Seed_; }
     bool IsReplayMode() const { return !SnapshotMarkers_.empty(); }
@@ -148,7 +146,6 @@ private:
         return result;
     }
 
-    // Binary serialization
     std::vector<uint8_t> SerializeToBinary() const {
         std::vector<uint8_t> result;
 
@@ -225,9 +222,18 @@ private:
     }
 
     static int HexCharToInt(char c) {
-        if (c >= '0' && c <= '9') return c - '0';
-        if (c >= 'a' && c <= 'f') return c - 'a' + 10;
-        if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+        if (c >= '0' && c <= '9') {
+            return c - '0';
+        }
+
+        if (c >= 'a' && c <= 'f') {
+            return c - 'a' + 10;
+        }
+
+        if (c >= 'A' && c <= 'F') {
+            return c - 'A' + 10;
+        }
+
         return -1;
     }
 };

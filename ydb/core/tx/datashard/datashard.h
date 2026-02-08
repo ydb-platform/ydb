@@ -1383,6 +1383,9 @@ struct TEvDataShard {
                             NKikimrTxDataShard::TEvObjectStorageListingRequest,
                             TEvDataShard::EvObjectStorageListingRequest> {
         TEvObjectStorageListingRequest() = default;
+
+        // Wilson span for this request.
+        NWilson::TSpan ListingSpan;
     };
 
     struct TEvObjectStorageListingResponse

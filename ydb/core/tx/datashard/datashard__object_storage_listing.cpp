@@ -237,8 +237,6 @@ public:
             }
         }
 
-        // Do not add request-derived attributes to the span.
-
         TAutoPtr<NTable::TTableIter> iter = txc.DB.IterateRange(localTableId, keyRange, columnsToReturn);
 
         ui64 foundKeys = Result->Record.ContentsRowsSize() + Result->Record.CommonPrefixesRowsSize();

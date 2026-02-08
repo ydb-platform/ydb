@@ -5,7 +5,7 @@ namespace NTi {
 namespace {
 
 static constexpr std::initializer_list<const std::string_view> TimezonesInit = {
-#include "tz.gen"
+#include "tz_gen.h"
 };
 
 static constexpr TArrayRef<const std::string_view> Timezones(TimezonesInit);

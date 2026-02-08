@@ -195,7 +195,7 @@ public:
 
         if (!maxKeys) {
             // Nothing to return, don't bother searching
-            fillSpan("Max keys is 0");
+            fillSpan();
             return true;
         }
 

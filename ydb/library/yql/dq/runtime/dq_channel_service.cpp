@@ -983,7 +983,11 @@ void TNodeState::HandleChannelData(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
     auto descriptor = GetOrCreateInputDescriptor(info, false, record.GetLeading());
     if (!descriptor) {
         // do not auto create if not leading and fail sender
-        SendAckWithError(ev->Cookie, "Can't find peer for not leading message");
+        SendAckWithError(ev->Cookie,
+            TStringBuilder() << "Can't find peer for Info: {ChannelId: " << info.ChannelId
+            << ", OutputActorId: " << info.OutputActorId
+            << ", InputActorId: " << info.InputActorId << "} Leading:" << record.GetLeading()
+        );
         return;
     }
 
@@ -1341,7 +1345,7 @@ void TNodeState::HandleAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
                 if (!item->Descriptor->IsTerminatedOrAborted()) {
                     if (item->Descriptor->CheckGenMajor(GenMajor, "by Ack")) {
                         if (status == NYql::NDqProto::TEvChannelAckV2::ERROR) {
-                            item->Descriptor->AbortChannel("(Peer)" + record.GetMessage());
+                            item->Descriptor->AbortChannel("(Peer) " + record.GetMessage());
                         } else {
                             auto earlyFinished = record.GetEarlyFinished();
                             auto popBytes = record.GetPopBytes();

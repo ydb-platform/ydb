@@ -4,17 +4,18 @@
 
 namespace NKikimr::NOlap::NReader::NSimple::NSysView::NOptimizer {
 
-TConstructor::TConstructor(const NOlap::IPathIdTranslator& pathIdTranslator, const IColumnEngine& engine, const ui64 tabletId,
-    const std::optional<NOlap::TInternalPathId> internalPathId, const std::shared_ptr<NOlap::TPKRangesFilter>& pkFilter,
+TConstructor::TConstructor(const NColumnShard::TUnifiedOptionalPathId& unifiedPathId, const IColumnEngine& engine, const ui64 tabletId,
+    const std::shared_ptr<NOlap::TPKRangesFilter>& pkFilter,
     const ERequestSorting sorting)
     : TBase(sorting, tabletId) {
     const TColumnEngineForLogs* engineImpl = dynamic_cast<const TColumnEngineForLogs*>(&engine);
     std::deque<TDataSourceConstructor> constructors;
     for (auto&& i : engineImpl->GetTables()) {
-        if (internalPathId && *internalPathId != i.first) {
+        if (unifiedPathId.HasInternalPathId() && unifiedPathId.GetInternalPathIdVerified() != i.first) {
             continue;
         }
-        constructors.emplace_back(pathIdTranslator.ResolveSchemeShardLocalPathIdVerified(i.first), TabletId, i.second);
+        AFL_VERIFY(unifiedPathId.HasSchemeShardLocalPathId());
+        constructors.emplace_back(unifiedPathId.GetSchemeShardLocalPathIdVerified(), TabletId, i.second);
         if (!pkFilter->IsUsed(constructors.back().GetStart().GetValue().BuildSortablePosition(),
                 constructors.back().GetFinish().GetValue().BuildSortablePosition())) {
             constructors.pop_back();

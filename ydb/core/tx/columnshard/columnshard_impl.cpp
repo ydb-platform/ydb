@@ -256,6 +256,10 @@ void TColumnShard::RunSchemaTx(const NKikimrTxColumnShard::TSchemaTxBody& body, 
             RunMoveTable(body.GetMoveTable(), version, txc);
             return;
         }
+        case NKikimrTxColumnShard::TSchemaTxBody::kCopyTable: {
+            RunCopyTable(body.GetCopyTable(), version, txc);
+            return;
+        }
         case NKikimrTxColumnShard::TSchemaTxBody::TXBODY_NOT_SET: {
             break;
         }
@@ -322,7 +326,7 @@ void TColumnShard::RunEnsureTable(const NKikimrTxColumnShard::TCreateTable& tabl
 
     {
         THashSet<NTiers::TExternalStorageId> usedTiers;
-        TTableInfo table(TUnifiedPathId::BuildValid(internalPathId, schemeShardLocalPathId));
+        TTableInfo table({TUnifiedPathId::BuildValid(internalPathId, schemeShardLocalPathId)});
         if (tableProto.HasTtlSettings()) {
             const auto& ttlSettings = tableProto.GetTtlSettings();
             *tableVerProto.MutableTtlSettings() = ttlSettings;
@@ -401,7 +405,7 @@ void TColumnShard::RunDropTable(const NKikimrTxColumnShard::TDropTable& dropProt
     }
 
     LOG_S_DEBUG("DropTable for pathId: " << pathId << " at tablet " << TabletID());
-    TablesManager.DropTable(*internalPathId, version, db);
+    TablesManager.DropTable(schemeShardLocalPathId, *internalPathId, version, db);
 }
 
 void TColumnShard::RunMoveTable(const NKikimrTxColumnShard::TMoveTable& proto, const NOlap::TSnapshot& /*version*/,
@@ -417,6 +421,13 @@ void TColumnShard::RunMoveTable(const NKikimrTxColumnShard::TMoveTable& proto, c
     TablesManager.MoveTableProgress(db, srcPathId, dstPathId);
 }
 
+void TColumnShard::RunCopyTable(const NKikimrTxColumnShard::TCopyTable& proto, const NOlap::TSnapshot& version,
+                                 NTabletFlatExecutor::TTransactionContext& txc) {
+    NIceDb::TNiceDb db(txc.DB);
+    const auto srcPathId = TSchemeShardLocalPathId::FromRawValue(proto.GetSrcPathId());
+    const auto dstPathId = TSchemeShardLocalPathId::FromRawValue(proto.GetDstPathId());
+    TablesManager.CopyTableProgress(db, version, srcPathId, dstPathId);
+}
 
 void TColumnShard::RunAlterStore(const NKikimrTxColumnShard::TAlterStore& proto, const NOlap::TSnapshot& version,
     NTabletFlatExecutor::TTransactionContext& txc) {

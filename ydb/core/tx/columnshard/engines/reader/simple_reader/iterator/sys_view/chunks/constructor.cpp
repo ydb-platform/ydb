@@ -23,15 +23,15 @@ std::shared_ptr<NCommon::IDataSource> TConstructor::DoExtractNextImpl(const std:
     return result;
 }
 
-TConstructor::TConstructor(const NOlap::IPathIdTranslator& pathIdTranslator, const IColumnEngine& engine, const ui64 tabletId,
-    const std::optional<NOlap::TInternalPathId> internalPathId, const TSnapshot reqSnapshot,
-    const std::shared_ptr<NOlap::TPKRangesFilter>& pkFilter, const ERequestSorting sorting)
+TConstructor::TConstructor(const NColumnShard::TUnifiedOptionalPathId& unifiedPathId, const IColumnEngine& engine, const ui64 tabletId,
+    const TSnapshot reqSnapshot, const std::shared_ptr<NOlap::TPKRangesFilter>& pkFilter,
+    const ERequestSorting sorting)
     : TBase(sorting) {
     const TColumnEngineForLogs* engineImpl = dynamic_cast<const TColumnEngineForLogs*>(&engine);
     const TVersionedIndex& originalSchemaInfo = engineImpl->GetVersionedIndex();
     std::deque<TPortionDataConstructor> constructors;
     for (auto&& i : engineImpl->GetTables()) {
-        if (internalPathId && *internalPathId != i.first) {
+        if (unifiedPathId.HasInternalPathId() && unifiedPathId.GetInternalPathIdVerified() != i.first) {
             continue;
         }
         for (auto&& [_, p] : i.second->GetPortions()) {
@@ -41,8 +41,8 @@ TConstructor::TConstructor(const NOlap::IPathIdTranslator& pathIdTranslator, con
             if (p->IsRemovedFor(reqSnapshot)) {
                 continue;
             }
-            constructors.emplace_back(
-                pathIdTranslator.GetUnifiedByInternalVerified(p->GetPathId()), tabletId, p, p->GetSchema(originalSchemaInfo));
+            AFL_VERIFY(unifiedPathId.HasSchemeShardLocalPathId());
+            constructors.emplace_back(NColumnShard::TUnifiedPathId::BuildValid(unifiedPathId.GetInternalPathIdVerified(), unifiedPathId.GetSchemeShardLocalPathIdVerified()), tabletId, p, p->GetSchema(originalSchemaInfo));
             if (!pkFilter->IsUsed(
                     constructors.back().GetStart().GetValue().BuildSortablePosition(), constructors.back().GetFinish().GetValue().BuildSortablePosition())) {
                 constructors.pop_back();

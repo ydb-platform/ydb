@@ -350,12 +350,17 @@ namespace NKikimr::NDDisk {
         };
 
         std::map<std::tuple<ui64, ui64>, TPersistentBuffer> PersistentBuffers;
+        ui64 PersistentBufferInMemoryCacheSize = 0;
+
+        void SanitizePersistentBufferInMemoryCache(TPersistentBuffer::TRecord& record, bool force = false);
 
         static constexpr ui32 SectorSize = 4096;
         static constexpr ui32 SectorInChunk = 32768;
         static constexpr ui32 ChunkSize = SectorSize * SectorInChunk;
         static constexpr ui32 MaxChunks = 128;
         static constexpr ui32 MaxSectorsPerBuffer = 128;
+        static constexpr ui32 MaxPersistentBufferInMemoryCache = ChunkSize;
+
 
 
         struct TPersistentBufferHeader {
@@ -390,7 +395,7 @@ namespace NKikimr::NDDisk {
         struct TPersistentBufferToDiskReadInFlight {
             NWilson::TSpan Span;
         };
-        
+
         std::map<ui64, TPersistentBufferToDiskReadInFlight> PersistentBufferReadInflight;
 
         NWilson::TSpan PersistentBufferRestoreSpan;

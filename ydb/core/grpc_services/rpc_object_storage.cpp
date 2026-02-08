@@ -4,7 +4,6 @@
 #include <util/string/vector.h>
 #include <util/system/unaligned_mem.h>
 
-#include <ydb/library/yql/minikql/mkql_type_ops.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/base/tablet_pipecache.h>
@@ -17,8 +16,9 @@
 #include <ydb/core/scheme/scheme_type_info.h>
 
 #include <ydb/library/wilson_ids/wilson.h>
+#include <ydb/library/yql/minikql/mkql_type_ops.h>
 
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 
 namespace NKikimr {
 namespace NGRpcService {

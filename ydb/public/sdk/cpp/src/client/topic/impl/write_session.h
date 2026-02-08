@@ -1,6 +1,5 @@
 #pragma once
 
-#include <library/cpp/containers/concurrent_hash/concurrent_hash.h>
 #include <util/system/mutex.h>
 #include <util/system/thread.h>
 #include <ydb/public/sdk/cpp/src/client/topic/common/callback_context.h>

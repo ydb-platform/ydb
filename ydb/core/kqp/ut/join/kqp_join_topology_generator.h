@@ -452,8 +452,27 @@ struct TMCMCResult {
     bool ForcedReconnection = false;
     int FinalComponents = 1;
 
+    // This is very expensive to serialize, so it's usually just for debugging
+    std::optional<NJson::TJsonValue> Steps;
+
     double AcceptanceRate() const {
         return TotalAttempts > 0 ? static_cast<double>(SuccessfulSwaps) / TotalAttempts : 0.0;
+    }
+
+    NJson::TJsonValue Serialize() const {
+        NJson::TJsonValue entry;
+        entry.InsertValue("total-attempts", NJson::TJsonValue(TotalAttempts));
+        entry.InsertValue("successful-swaps", NJson::TJsonValue(SuccessfulSwaps));
+        entry.InsertValue("rejected-by-geometry", NJson::TJsonValue(RejectedByGeometry));
+        entry.InsertValue("rejected-by-metropolis", NJson::TJsonValue(RejectedByMetropolis));
+        entry.InsertValue("forced-reconnection", NJson::TJsonValue(ForcedReconnection));
+        entry.InsertValue("final-components", NJson::TJsonValue(FinalComponents));
+
+        if (Steps) {
+            entry.InsertValue("steps", *Steps);
+        }
+
+        return entry;
     }
 };
 
@@ -465,12 +484,14 @@ TMCMCResult MCMCRandomizeDegreePreserving(
     TRNG& rng,
     TRelationGraph& graph,
     TPitmanYorConfig pyConfig,
-    TMCMCConfig mcmcConfig = TMCMCConfig::Default());
+    TMCMCConfig mcmcConfig = TMCMCConfig::Default(),
+    bool saveProcess = false);
 
 TMCMCResult MCMCRandomizeEdgePreserving(
     TRNG& rng,
     TRelationGraph& graph,
     TPitmanYorConfig pyConfig,
-    TMCMCConfig mcmcConfig = TMCMCConfig::Default());
+    TMCMCConfig mcmcConfig = TMCMCConfig::Default(),
+    bool saveProcess = false);
 
 } // namespace NKikimr::NKqp

@@ -78,7 +78,7 @@ TExprNode::TPtr RenameMembers(TExprNode::TPtr input, const THashMap<TInfoUnit, T
         // clang-format on
     } else if (input->IsCallable()) {
         TVector<TExprNode::TPtr> newChildren;
-        for (auto c : input->Children()) {
+        for (auto c : input->ChildrenList()) {
             newChildren.push_back(RenameMembers(c, renameMap, ctx));
         }
         // clang-format off
@@ -100,6 +100,12 @@ TExprNode::TPtr RenameMembers(TExprNode::TPtr input, const THashMap<TInfoUnit, T
                     .Seal()
                 .Build();
         // clang-format on
+    } else if (input->IsLambda()){
+        auto lambda = TCoLambda(input);
+        return Build<TCoLambda>(ctx, input->Pos())
+            .Args(lambda.Args())
+            .Body(RenameMembers(lambda.Body().Ptr(), renameMap, ctx))
+            .Done().Ptr();
     } else {
         return input;
     }
@@ -120,6 +126,8 @@ TExprNode::TPtr FindMemberArg(TExprNode::TPtr input) {
                 return arg;
             }
         }
+    } else if (input->IsLambda()) {
+        return FindMemberArg(input->ChildPtr(1));
     }
     return TExprNode::TPtr();
 }

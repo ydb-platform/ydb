@@ -201,7 +201,6 @@ private:
         bool IsQueueEmpty() const;
         bool HasInFlightMessages() const;
         const TMessageInfo& GetFrontInFlightMessage() const;
-        bool HasMessagesToResend() const;
 
     private:
         void PushInFlightMessage(std::uint64_t partition, TMessageInfo&& message);

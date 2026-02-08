@@ -1,35 +1,26 @@
 #pragma once
-#include <ydb/library/security/util.h>
-
 #include <google/protobuf/descriptor.h>
 #include <google/protobuf/message.h>
-#include <google/protobuf/text_format.h>
 
-#include <util/generic/set.h>
+#include <ydb/library/protobuf_printer/security_printer.h>
 
-#include <memory>
+#include <ydb/public/api/client/nc_private/annotations.pb.h>
+#include <ydb/public/api/client/yc_private/accessservice/sensitive.pb.h>
+
+#include <type_traits>
 
 namespace NMVP {
 
-class TMVPSecurityTextFormatPrinterBase : public google::protobuf::TextFormat::Printer {
-public:
-    TMVPSecurityTextFormatPrinterBase(const google::protobuf::Descriptor* desc);
-
-    void Walk(const google::protobuf::Descriptor* desc, TSet<std::pair<TString, int>>& visited);
-};
-
-template<typename TMsg>
-class TMVPSecurityTextFormatPrinter : public TMVPSecurityTextFormatPrinterBase {
-public:
-    TMVPSecurityTextFormatPrinter()
-        : TMVPSecurityTextFormatPrinterBase(TMsg::descriptor())
-    {}
-};
+static inline bool NeedHideField(const google::protobuf::Descriptor*, const google::protobuf::FieldDescriptor* field) {
+    const auto& ops = field->options();
+    return ops.GetExtension(nebius::sensitive) || ops.GetExtension(nebius::credentials) || ops.GetExtension(yandex::cloud::sensitive);
+}
 
 template <typename TMsg>
-inline TString MVPSecureDebugString(const TMsg& message) {
+inline TString SecureShortDebugString(const TMsg& message) {
+    static_assert(std::is_base_of_v<::google::protobuf::Message, TMsg>, "SecureShortDebugString requires a protobuf message");
     TString result;
-    TMVPSecurityTextFormatPrinter<TMsg> printer;
+    NKikimr::TSecurityTextFormatPrinterBase printer(TMsg::descriptor(), &NMVP::NeedHideField);
     printer.SetSingleLineMode(true);
     printer.PrintToString(message, &result);
     return result;

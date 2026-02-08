@@ -9,15 +9,8 @@
 #include <util/system/hp_timer.h>
 
 #include <memory>
-#include <type_traits>
 
 namespace NMVP {
-
-template<typename TProto>
-TString SecureShortDebugString(const TProto& request) {
-    static_assert(std::is_base_of_v<::google::protobuf::Message, TProto>, "SecureShortDebugString requires a protobuf message");
-    return TString(MVPSecureDebugString(request));
-}
 
 template <typename TGRpcService>
 class TLoggedGrpcServiceConnection {

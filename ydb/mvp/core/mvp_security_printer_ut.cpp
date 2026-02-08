@@ -45,7 +45,7 @@ Y_UNIT_TEST_SUITE(Masking) {
         nested->set_nested_nc_sens("NSECRET2");
         nested->set_nested_yc_sens("NSECRET3");
 
-        auto secure = NMVP::MVPSecureDebugString(req);
+        auto secure = NMVP::SecureShortDebugString(req);
         std::string actual(secure.data(), secure.size());
 
         TStringBuilder b;

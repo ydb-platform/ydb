@@ -19,7 +19,6 @@ SRCS(
     merger.h
     mvp_log.h
     mvp_mem_profiler.cpp
-    mvp_security_printer.cpp
     mvp_swagger.h
     mvp_test_runtime.cpp
     mvp_test_runtime.h

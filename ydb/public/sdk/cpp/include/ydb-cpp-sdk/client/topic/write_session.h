@@ -207,7 +207,7 @@ public:
     }
 
     //! Message body.
-    std::string_view Data;
+    std::string Data;
 
     //! Codec and original size for compressed message.
     //! Do not specify or change these options directly, use CompressedMessage()

@@ -827,12 +827,13 @@ void TKeyedWriteSession::TMessagesWorker::DoWork() {
         }
 
         RechoosePartitionIfNeeded(head);
-        auto msgToSave = head;
-        auto wrappedSession = sessionsWorker->GetWriteSession(msgToSave.Partition);
-        if (!SendMessage(wrappedSession, std::move(head))) {
+        auto msgToSend = head;
+        auto wrappedSession = sessionsWorker->GetWriteSession(msgToSend.Partition);
+        if (!SendMessage(wrappedSession, std::move(msgToSend))) {
             break;
         }
 
+        auto msgToSave = std::move(head);
         PendingMessages.pop_front();
         sessionsWorker->OnWriteToSession(wrappedSession);
         PushInFlightMessage(msgToSave.Partition, std::move(msgToSave));
@@ -915,8 +916,8 @@ bool TKeyedWriteSession::TMessagesWorker::IsMemoryUsageOK() const {
 }
 
 void TKeyedWriteSession::TMessagesWorker::AddMessage(const std::string& key, TWriteMessage&& message, std::uint64_t partition, TTransactionBase* tx) {
-    PendingMessages.push_back(TMessageInfo(key, std::move(message), partition, tx));
-    MemoryUsage += message.Data.size();
+    PendingMessages.push_back(TMessageInfo(key, std::move(message), partition, tx));    
+    MemoryUsage += PendingMessages.back().Message.Data.size();
 }
 
 std::optional<TContinuationToken> TKeyedWriteSession::TMessagesWorker::GetContinuationToken(std::uint64_t partition) {

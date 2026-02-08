@@ -414,9 +414,6 @@ private:
     // Use a small state machine to avoid re-entrancy and lost wakeups.
     std::atomic<std::uint8_t> MainWorkerState = 0;
 
-    // TConcurrentHashMap<ui64, TInstant> SendToSubSession;
-    // <ui64, TInstant> ReceivedAck;
-    // TConcurrentHashMap<ui64, TInstant> ReadyFutures;
     size_t Epoch = 0;
 
     static constexpr size_t MAX_EPOCH = 1'000'000'000;

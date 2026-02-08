@@ -27,6 +27,70 @@ namespace NKikimr::NDDisk {
         return XXH3_64bits_digest(&state);
     }
 
+    void TDDiskActor::StartRestorePersistentBuffer() {
+        Counters.Interface.RestorePersistentBuffer.Request(PersistentBufferSpaceAllocator.OwnedChunks.size() * ChunkSize);
+
+        PersistentBufferRestoreChunksInflight = PersistentBufferSpaceAllocator.OwnedChunks.size();
+        for(auto chunkIdx : PersistentBufferSpaceAllocator.OwnedChunks) {
+            const ui64 cookie = NextCookie++;
+            Send(BaseInfo.PDiskActorID, new NPDisk::TEvChunkReadRaw(
+                PDiskParams->Owner,
+                PDiskParams->OwnerRound,
+                chunkIdx,
+                0,
+                ChunkSize), 0, cookie);
+            ReadCallbacks.try_emplace(cookie, TPersistentBufferPendingRead{[this, chunkIdx](NPDisk::TEvChunkReadRawResult& ev) {
+                PersistentBufferRestoreChunksInflight--;
+                Y_ABORT_UNLESS(ev.Data.size() == ChunkSize);
+                for (ui32 sectorIdx = 0; sectorIdx < SectorInChunk; sectorIdx++) {
+                    auto pos = ev.Data.Position(sectorIdx * SectorSize);
+                    if (memcmp((*pos).first, TPersistentBufferHeader::PersistentBufferHeaderSignature, 16) == 0) {
+                        TPersistentBufferHeader* header = (TPersistentBufferHeader*)pos.ContiguousData();
+                        ui64 headerChecksum = header->HeaderChecksum;
+                        header->HeaderChecksum  = 0;
+                        ui32 sectorChecksum = CalculateChecksum(pos, SectorSize);
+                        if (headerChecksum != sectorChecksum) {
+                            continue;
+                        }
+                        auto& buffer = PersistentBuffers[{header->TabletId, header->VChunkIndex}];
+                        auto [it, inserted] = buffer.Records.try_emplace(header->Lsn);
+                        if (!inserted) {
+                            STLOG(PRI_ERROR, BS_DDISK, BSDD11, "TDDiskActor::StartRestorePersistentBuffer", (TabletId, header->TabletId), (VChunkIndex, header->VChunkIndex), (Lsn, header->Lsn));
+                        }
+                        TPersistentBuffer::TRecord& pr = it->second;
+                        pr = {
+                            .OffsetInBytes = header->OffsetInBytes,
+                            .Size = header->Size,
+                            .PartsCount = 0,
+                        };
+                        for (ui32 i = 0; i < header->Size / SectorSize; i++) {
+                            pr.Sectors.push_back(header->Locations[i]);
+                        }
+                    } else {
+                        PersistentBufferSectorsChecksum[chunkIdx][sectorIdx] = CalculateChecksum(pos, SectorSize);
+                    }
+                }
+                if (PersistentBufferRestoreChunksInflight == 0) {
+                    for (auto& [_, pb] : PersistentBuffers) {
+                        std::erase_if(pb.Records, [this](const auto& pair) {
+                            for (auto sector : pair.second.Sectors) {
+                                if (PersistentBufferSectorsChecksum[sector.ChunkIdx][sector.SectorIdx] != sector.Checksum) {
+                                    return true;
+                                }
+                            }
+                            return false;
+                        });
+                    }
+                    std::erase_if(PersistentBuffers, [](const auto& pb) { return pb.second.Records.empty(); });
+                    PersistentBufferSectorsChecksum.clear();
+                    Counters.Interface.RestorePersistentBuffer.Reply(true);
+                    PersistentBufferRestoreSpan.End();
+                    auto span = std::move(PersistentBufferRestoreSpan);
+                }
+            }});
+        }
+    }
+
     std::vector<std::tuple<ui32, ui32, TRope>> TDDiskActor::SlicePersistentBuffer(ui64 tabletId, ui64 vchunkIndex,
         ui64 lsn, ui32 offsetInBytes, ui32 sizeInBytes, TRope&& payload, const std::vector<TPersistentBufferSectorInfo>& sectors) {
         auto headerData = TRcBuf::Uninitialized(SectorSize);

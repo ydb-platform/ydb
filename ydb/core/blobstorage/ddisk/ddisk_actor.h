@@ -361,12 +361,11 @@ namespace NKikimr::NDDisk {
         static constexpr ui32 MaxSectorsPerBuffer = 128;
         static constexpr ui32 MaxPersistentBufferInMemoryCache = ChunkSize;
 
-
-
         struct TPersistentBufferHeader {
             static constexpr ui8 PersistentBufferHeaderSignature[16] = {249, 173, 163, 160, 196, 193, 69, 133, 83, 38, 34, 104, 170, 146, 237, 156};
             static constexpr ui32 HeaderChecksumOffset = 24;
             static constexpr ui32 HeaderChecksumSize = 8;
+
             ui8 Signature[16];
             ui64 HeaderChecksum;
             ui64 TabletId;
@@ -405,6 +404,8 @@ namespace NKikimr::NDDisk {
 
         ui64 PersistentBufferChunkMapSnapshotLsn = Max<ui64>();
         std::queue<TPendingEvent> PendingPersistentBufferEvents;
+
+        std::unordered_map<ui64, std::vector<ui64>> PersistentBufferSectorsChecksum;
 
         void IssuePersistentBufferChunkAllocation();
         void ProcessPersistentBufferQueue();

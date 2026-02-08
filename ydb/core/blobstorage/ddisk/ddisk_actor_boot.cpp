@@ -45,6 +45,11 @@ namespace NKikimr::NDDisk {
             Y_ABORT_UNLESS(success);
             for (auto idx : chunkMap.GetChunkIdxs()) {
                 PersistentBufferSpaceAllocator.AddNewChunk(idx);
+                auto [it, inserted] = PersistentBufferSectorsChecksum.insert({idx, {}});
+                it->second.resize(SectorInChunk);
+                if (!inserted) {
+                    STLOG(PRI_ERROR, BS_DDISK, BSDD10, "TDDiskActor::Handle(TEvYardInitResult)", (DDiskId, DDiskId), (PDiskActorId, BaseInfo.PDiskActorID), (ChunkIdx, idx));
+                }
                 ++*Counters.Chunks.ChunksOwned;
             }
         }
@@ -52,30 +57,6 @@ namespace NKikimr::NDDisk {
                 NWilson::EFlags::NONE, TActivationContext::ActorSystem()));
         StartRestorePersistentBuffer();
         Send(BaseInfo.PDiskActorID, new NPDisk::TEvReadLog(PDiskParams->Owner, PDiskParams->OwnerRound));
-    }
-
-    void TDDiskActor::StartRestorePersistentBuffer() {
-        Counters.Interface.RestorePersistentBuffer.Request(PersistentBufferSpaceAllocator.OwnedChunks.size() * ChunkSize);
-
-        PersistentBufferRestoreChunksInflight = PersistentBufferSpaceAllocator.OwnedChunks.size();
-        for(auto chunkIdx : PersistentBufferSpaceAllocator.OwnedChunks) {
-            const ui64 cookie = NextCookie++;
-            Send(BaseInfo.PDiskActorID, new NPDisk::TEvChunkReadRaw(
-                PDiskParams->Owner,
-                PDiskParams->OwnerRound,
-                chunkIdx,
-                0,
-                ChunkSize), 0, cookie);
-            ReadCallbacks.try_emplace(cookie, TPersistentBufferPendingRead{[this](NPDisk::TEvChunkReadRawResult& ev) {
-                PersistentBufferRestoreChunksInflight--;
-                Y_ABORT_UNLESS(ev.Data.size() == ChunkSize);
-            }});
-        }
-
-        Counters.Interface.RestorePersistentBuffer.Reply(true);
-        PersistentBufferRestoreSpan.End();
-        auto span = std::move(PersistentBufferRestoreSpan);
-
     }
 
     void TDDiskActor::Handle(NPDisk::TEvReadLogResult::TPtr ev) {

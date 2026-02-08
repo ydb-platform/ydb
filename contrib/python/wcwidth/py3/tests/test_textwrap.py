@@ -189,9 +189,10 @@ UNICODE_CASES = [
 
 
 @pytest.mark.parametrize('text,w,expected', UNICODE_CASES)
-def test_wrap_unicode(text, w, expected):
+def test_wrap_unicode(benchmark, text, w, expected):
     kwargs = {'break_on_hyphens': False} if '-' in text else {}
-    assert wrap(text, w, **kwargs) == expected
+    result = benchmark(wrap, text, w, **kwargs)
+    assert result == expected
 
 
 # Escape sequence preservation
@@ -216,8 +217,8 @@ SEQUENCE_CASES = [
 
 
 @pytest.mark.parametrize('text,w,expected', SEQUENCE_CASES)
-def test_wrap_sequences(text, w, expected):
-    result = wrap(text, w)
+def test_wrap_sequences(benchmark, text, w, expected):
+    result = benchmark(wrap, text, w)
     if any('\x1b' in e or '\x00' <= e[0] < '\x20' for e in expected if e):
         assert result == expected
     else:
@@ -233,8 +234,9 @@ MIXED_CASES = [
 
 
 @pytest.mark.parametrize('text,w,expected', MIXED_CASES)
-def test_wrap_mixed(text, w, expected):
-    assert wrap(text, w) == expected
+def test_wrap_mixed(benchmark, text, w, expected):
+    result = benchmark(wrap, text, w)
+    assert result == expected
 
 
 # Tabsize with wide characters - tests column alignment with different cell widths

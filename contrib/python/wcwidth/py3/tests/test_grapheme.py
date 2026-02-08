@@ -57,7 +57,8 @@ def parse_grapheme_break_test_line(line):
 
 def read_grapheme_break_test():
     """Read and parse GraphemeBreakTest.txt."""
-    test_file = os.path.join(os.path.dirname(__file__), 'GraphemeBreakTest.txt')
+    import yatest.common as yc
+    test_file = os.path.join(os.path.dirname(yc.source_path(__file__)), 'GraphemeBreakTest.txt')
     if not os.path.exists(test_file):
         return []
 

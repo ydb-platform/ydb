@@ -575,14 +575,15 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
         using TJoinTree = std::shared_ptr<NYql::IBaseOptimizerNode>;
         using TOrderingsPtr = TSimpleSharedPtr<NYql::NDq::TOrderingsStateMachine>;
 
-        BenchRunner(const TBenchmarkConfig& config, TUnbufferedFileOutput& output, const TTupleParser::TTable& args)
+        BenchRunner(TRNG& rng, const TBenchmarkConfig& config, TUnbufferedFileOutput& output, TTupleParser::TTable& args)
             : Config_(config)
             , Output_(output)
             , Args_(args)
             , TotalTasks_(args.size())
-            , TotalGraphs_(CountQueries(args))
             , Aligner_(1, "&") // Initialize aligner with & delimiter
+            , TotalGraphs_(CountQueries(args))
         {
+            SeedArgs(rng);
         }
 
         static ui32 CountQueries(const TParamsMap& params) {
@@ -640,107 +641,131 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
                 const TParamsMap& params = Args_[tableIdx];
                 ui64 queryIdx = NextQueryNum_.fetch_add(CountQueries(params));
 
-                ActiveThreads_.fetch_add(1);
-                ProcessRow(tableIdx, queryIdx);
-                ActiveThreads_.fetch_sub(1);
+                ++ ActiveThreads_;
+                ProcessRow(params, queryIdx);
+                -- ActiveThreads_;
 
-                CompletedTasks_.fetch_add(1);
+                ++ CompletedTasks_;
             }
         }
 
-        void ProcessRow(ui32 tableIdx, ui32 queryIdx) {
-            const TParamsMap& params = Args_[tableIdx];
+        std::string CreateRepro(const TParamsMap& params) {
+            return params.ToString("; ",
+                /*accessedOnly=*/true,
+                /*excludeKeys=*/{
+                    "mcmc-degree",
+                    "mcmc-edge",
+                    "run-base",
+                    "seed",
+                    "idx"
+                });
+        }
 
+        void ProcessRow(const TParamsMap& params, ui32 queryIdx) {
             std::string label = params.GetValue("label");
             ui64 n = params.GetValue<ui64>("N");
 
+            // Save additional information about MCMC
+            bool debug = params.GetValue<bool>("debug", false);
+
             if (IsKnownTimeout(label, n)) {
+                ++ SkippedGraphs_;
                 return;
             }
 
-            std::string savedSeed = params.GetValue<std::string>("seed", "");
-
-            TRNG rng(0);
-            if (!savedSeed.empty()) {
-                rng.RestoreFromHex(savedSeed);
-            } else {
-                // If no seed is provided, just create a random one
-                // TODO: makes it impossible to replicate streaks, but maybe it's unnecessary since they are out of order anyway
-                std::random_device randomDevice;
-                rng = TRNG(randomDevice() % UINT32_MAX);
-            }
+            std::string jobSeed = params.GetValue<std::string>("seed");
+            TRNG rng(jobSeed);
 
             try {
-                auto baseGraph = GenTopologyFromParams(rng, params);
+                rng.Mark(0); // <= Base graph generation state
+                auto baseTopology = GenTopologyFromParams(rng, params);
+                auto baseGraph = baseTopology.Graph;
+
                 ui32 degreePreservingVariants = params.GetValue<ui32>("mcmc-degree", 0);
                 ui32 edgePreservingVariants = params.GetValue<ui32>("mcmc-edge", 0);
+                bool runBase = params.GetValue<ui32>("run-base", true);
 
-                rng.Mark(0);
-
-                ProcessSingleGraph(rng, tableIdx, queryIdx, params, baseGraph, 0);
+                if (runBase) {
+                    ProcessSingleGraph(rng, queryIdx, params, baseGraph, "BASE", baseTopology.GenerationProcess);
+                }
 
                 auto pyConfig = GetPitmanYor(params);
                 TRelationGraph graphDP = baseGraph;
                 for (ui32 i = 1; i <= degreePreservingVariants; ++i) {
                     if (IsKnownTimeout(label, n)) {
+                        ++ SkippedGraphs_;
                         break;
                     }
 
-                    rng.Rewind(0);
-                    MCMCRandomizeDegreePreserving(rng, graphDP, pyConfig, TMCMCConfig::Perturbation());
+                    rng.Mark(1); // <= MCMC state
+                    auto explainMCMC = MCMCRandomizeDegreePreserving(rng, graphDP, pyConfig, TMCMCConfig::Perturbation(), debug);
 
+                    NJson::TJsonValue generation;
+                    generation.InsertValue("source-query-idx", NJson::TJsonValue(queryIdx + i - 1));
+                    generation.InsertValue("mcmc-explain", explainMCMC.Serialize());
+                    generation.InsertValue("type", "mcmc-edge-preserving");
+
+                    auto reproArgs = "run-base=false; mcmc-edge=1";
                     ui32 variant = i;
-                    ProcessSingleGraph(rng, tableIdx, queryIdx + variant, params, graphDP, i, "mcmc-d#");
+                    ProcessSingleGraph(rng, queryIdx + variant, params, graphDP, "dK#" + std::to_string(i), generation, reproArgs);
                 }
 
                 TRelationGraph graphEP = baseGraph;
                 for (ui32 i = 1; i <= edgePreservingVariants; ++i) {
                     if (IsKnownTimeout(label, n)) {
+                        ++ SkippedGraphs_;
                         break;
                     }
 
-                    rng.Rewind(0);
-                    MCMCRandomizeEdgePreserving(rng, graphEP, pyConfig, TMCMCConfig::Perturbation());
+                    rng.Mark(1); // <= MCMC state
+                    auto explainMCMC = MCMCRandomizeEdgePreserving(rng, graphEP, pyConfig, TMCMCConfig::Perturbation(), debug);
 
+                    NJson::TJsonValue generation;
+                    generation.InsertValue("source-query-idx", NJson::TJsonValue(queryIdx + i - 1));
+                    generation.InsertValue("mcmc-explain", explainMCMC.Serialize());
+                    generation.InsertValue("type", "mcmc-edge-preserving");
+
+                    auto reproArgs = "run-base=false; mcmc-edge=1";
                     ui32 variant = degreePreservingVariants + i;
-                    ProcessSingleGraph(rng, tableIdx, queryIdx + variant, params, graphEP, i, "mcmc-e#");
+                    ProcessSingleGraph(rng, queryIdx + variant, params, graphEP, "dE#" + std::to_string(i), generation, reproArgs);
                 }
 
             } catch (const std::exception& e) {
-                LogMessage(queryIdx, n, label, "[ERROR] " + std::string(e.what()));
+                ShowLog(queryIdx, params, "ALL", "[ERROR] " + std::string(e.what()));
             }
         }
 
-        // TODO: this is stupid
-        void LogMessage(ui64 taskIdx, ui64 n, const std::string& label, const std::string& msg) {
-            // TODO: duplication
+        void ShowLog(ui32 queryIdx, const TParamsMap& params, std::string variant, std::string msg) {
+            ui32 n = params.GetValue<ui32>("N");
+            std::string label = params.GetValue<std::string>("label");
+
             std::stringstream ss;
-            ss << "(" << (taskIdx + 1) << "/" << TotalGraphs_ << ")&"
+            ss << "(" << (queryIdx + 1) << "/" << TotalGraphs_ << ")&"
+               << variant
                << "&N = " << n
-               << "&Label = " << label << " &"
+               << "&Label = " << label
+               << "&"
                << msg;
 
             EnqueueLog(Aligner_.Align(ss.str()));
         }
 
-        void ProcessSingleGraph(TRNG& rng, ui64 taskIdx, ui64 queryIdx, const TParamsMap& params, const TRelationGraph& initialGraph, ui32 variantIdx, const char* variantMarker = "#") {
-            auto config = GetPitmanYor(params);
-            auto graph = initialGraph;
-            ForceReconnection(rng, graph, config);
+        // Arguments are taken by threads in arbitrary order, to ensure reproducibility we first generate
+        // seed for all the benches where they aren't already present
+        void SeedArgs(TRNG& rng) {
+            for (auto& params: Args_) {
+                if (!params.Has("seed")) {
+                    TRNG newRNG(rng());
+                    params.Set("seed", newRNG.SerializeToHex());
+                }
+            }
+        }
+
+        void ProcessSingleGraph(TRNG& rng, ui64 queryIdx, const TParamsMap& params, const TRelationGraph& graph,
+                                std::string variant, NJson::TJsonValue generation, std::string specialReproArgs = "") {
 
             std::string label = params.GetValue("label");
             ui64 n = params.GetValue<ui64>("N");
-
-            rng.Mark(1);
-            std::string seed = rng.SerializeToHex();
-
-            std::stringstream ss;
-            ss << "(" << (queryIdx + 1) << "/" << TotalGraphs_ << ")&";
-            if (variantIdx > 0) {
-                ss << variantMarker << variantIdx;
-            }
-            ss << "&N = " << n
-               << "&Label = " << label << " &";
 
             auto tree = GenerateJoinTree(rng, graph, params);
             RandomizeJoinTypes(rng, tree, params);
@@ -748,27 +773,41 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
             auto hypergraph = BuildHypergraph(tree);
             auto orderings = BuildOrderingsFSM(hypergraph);
 
-            auto stats = BenchOptimizer(tree, orderings);
-            if (stats) {
-                auto computed = stats->ComputeStatistics();
+            std::stringstream ss;
+            bool dryRun = params.GetValue<bool>("dry-run", false);
+            if (!dryRun) {
+                auto stats = BenchOptimizer(tree, orderings);
+                NJson::TJsonValue timeStats = "timeout";
 
-                WriteJsonResult(seed, params, computed, graph, tree, hypergraph, taskIdx, queryIdx, variantIdx);
-                ss << "Time = " << TimeFormatter::Format(computed.Median, computed.MAD, "&±");
+                if (stats) {
+                    auto computedStats = stats->ComputeStatistics();
+                    timeStats = computedStats.ToJson();
 
-                if (computed.Median > Config_.SingleRunTimeout) {
+                    ss << "Time = " << TimeFormatter::Format(computedStats.Median, computedStats.MAD);
+                    if (computedStats.Median > Config_.SingleRunTimeout) {
+                        RegisterTimeout(label, n);
+                    }
+                    ++ FineGraphs_;
+                } else {
+                    ss << "[TIMEOUT]";
                     RegisterTimeout(label, n);
+                    ++ TimeoutedGraphs_;
                 }
-            } else {
-                ss << "[TIMEOUT]";
-                RegisterTimeout(label, n);
+
+                std::string seed = rng.SerializeToHex();
+                auto repro = CreateRepro(params) + "; " + specialReproArgs + "; seed=" + seed;
+                WriteJsonResult(seed, params, timeStats, generation, repro, graph, tree, hypergraph, queryIdx, variant);
             }
 
-            EnqueueLog(Aligner_.Align(ss.str()));
+            ShowLog(queryIdx, params, variant, ss.str());
+            ++ CompletedGraphs_;
         }
 
         TPitmanYorConfig GetPitmanYor(const TParamsMap& params) {
             double alpha = params.GetValue<double>("alpha");
             double theta = params.GetValue<double>("theta");
+
+            // TODO: assort?
             double assortativity = params.GetValue<double>("assort");
             bool useGlobalStats = params.GetValue<bool>("global-stats");
             return TPitmanYorConfig{
@@ -779,9 +818,27 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
             };
         }
 
-        TRelationGraph GenTopology(TRNG &rng, std::string topologyName, const TParamsMap& params) {
+
+        struct TGeneratedRelationGraph {
+            TRelationGraph Graph;
+            NJson::TJsonValue GenerationProcess;
+        };
+
+        static NJson::TJsonValue SerializeDegrees(std::vector<int> degrees) {
+            NJson::TJsonValue entry(NJson::JSON_ARRAY);
+            for (double degree : degrees) {
+                entry.AppendValue(degree);
+            }
+
+            return entry;
+        }
+
+        TGeneratedRelationGraph GenTopology(TRNG &rng, std::string topologyName, const TParamsMap& params) {
             ui64 n = params.GetValue<ui64>("N");
             auto config = GetPitmanYor(params);
+
+            // Save additional information about MCMC
+            bool debug = params.GetValue<bool>("debug", false);
 
             // =====================================================================
             // ======== Fixed topologies ===========================================
@@ -799,14 +856,14 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
                 //     E
 
                 // Star has a main relation (fact table) and many relations that are joined to it
-                return GenerateStar(rng, n, config);
+                return { .Graph = GenerateStar(rng, n, config)  };
             }
 
             if (topologyName == "path") {
                 //
                 // A - B - C - D   is a path with N=4
                 //
-                return GeneratePath(rng, n, config);
+                return { .Graph = GeneratePath(rng, n, config) };
             }
 
             if (topologyName == "cycle") {
@@ -817,7 +874,7 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
                 //
 
                 // Cycle is the simplest cyclic topology
-                return GenerateRing(rng, n, config);
+                return { .Graph = GenerateRing(rng, n, config) };
             }
 
             if (topologyName == "clique") {
@@ -828,7 +885,7 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
                 //   - D -
 
                 // In clique all relations are connected to all relations
-                return GenerateClique(rng, n, config);
+                return { .Graph = GenerateClique(rng, n, config) };
             }
 
             if (topologyName == "galaxy") {
@@ -841,7 +898,7 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
                 // is a possible galaxy with N=13 as example
 
                 // Galaxy has two stars with some relations shared the two
-                return GenerateGalaxy(rng, n, config);
+                return { .Graph = GenerateGalaxy(rng, n, config) };
             }
 
             if (topologyName == "lollipop") {
@@ -854,7 +911,7 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
                 // is a possible lollipop with N=8
 
                 // Lollipop has a clique with a long tail
-                return GenerateLollipop(rng, n, config);
+                return { .Graph = GenerateLollipop(rng, n, config) };
             }
 
             if (topologyName == "grid") {
@@ -865,7 +922,7 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
                 // G - H - I
 
                 // Grid is a ... grid, it tries to be as tall as it is wide
-                return GenerateGrid(rng, n, config);
+                return { .Graph = GenerateGrid(rng, n, config) };
             }
 
             // =====================================================================
@@ -879,7 +936,7 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
                 // B   C           is a one possible random tree with N=4
                 //     |
                 //     D
-                return GenerateRandomTree(rng, n, config);
+                return { .Graph = GenerateRandomTree(rng, n, config) };
             }
 
 
@@ -904,19 +961,24 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
                 double sigma = params.GetValue<double>("sigma");
                 auto sampledDegrees = GenerateLogNormalDegrees(rng, n, mu, sigma);
 
+                NJson::TJsonValue generationProcess;
+                generationProcess.InsertValue("initial-degrees", SerializeDegrees(sampledDegrees));
+
                 // Distribution can still produce degrees which are either not
                 // graphic or can't be connected, this updates degree sequence
                 // which makes sequence graphic guaranteed (checks Erdos-Gallai theorem),
                 // and possibly connected (I'm not sure this particular property is
                 // guaranteed, check implementation for details)
                 auto graphicDegrees = MakeGraphicConnected(sampledDegrees);
+                generationProcess.InsertValue("graphic-degrees", SerializeDegrees(graphicDegrees));
+
                 auto graph = ConstructGraphHavelHakimi(rng, graphicDegrees, config);
 
                 // I'm almost certain this can't produce disconnected graphs, but
                 // just to be completely sure (because some parts of workflow fail
                 // on disconnected graphs):
                 ForceReconnection(rng, graph, config);
-                return graph;
+                return { .Graph = graph, .GenerationProcess = generationProcess };
             }
 
             // "Scale-free" topologies: random topologies with log-normal degree
@@ -942,16 +1004,14 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
                 // what it is.
 
                 // Start from Havel Hakimi and anneal it using degree preserving switches
-                auto initialGraph = GenTopology(rng, "log-normal-havel-hakimi", params);
-                auto graph = initialGraph;
-                MCMCRandomizeDegreePreserving(rng, graph, config, TMCMCConfig::Thorough());
-                ForceReconnection(rng, graph, config);
+                auto topology = GenTopology(rng, "log-normal-havel-hakimi", params);
+                NJson::TJsonValue generationProcess = topology.GenerationProcess;
 
-                // Simulated annealing already tries hard to maintain connectivity,
-                // this fallback is only meant for rare situations where topology
-                // yielded disconnected graphs despite its best efforts
-                ForceReconnection(rng, graph, config);
-                return graph;
+                auto graph = topology.Graph;
+                auto explanationMCMC = MCMCRandomizeDegreePreserving(rng, graph, config, TMCMCConfig::Thorough(), debug);
+                generationProcess.InsertValue("mcmc-explain", explanationMCMC.Serialize());
+
+                return { .Graph = graph, .GenerationProcess = generationProcess };
             }
 
             if (topologyName == "random-fixed-edges") {
@@ -970,35 +1030,20 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
                 auto initialGraph = GenerateRandomGraphFixedM(rng, n, numEdges, config);
 
                 auto graph = initialGraph;
-                MCMCRandomizeEdgePreserving(rng, graph, config, TMCMCConfig::Thorough());
+                auto explanationMCMC = MCMCRandomizeEdgePreserving(rng, graph, config, TMCMCConfig::Thorough(), debug);
 
-                return graph;
-            }
+                NJson::TJsonValue generationProcess;
+                generationProcess.InsertValue("mcmc-explain", explanationMCMC.Serialize());
 
-            // Essentially the same as "random-log-normal", but uses a little bit
-            // less strict Chung-Lu model, also more frequently has to rely on
-            // forceful reconnection since topology itself allows disconnected graphs
-            if (topologyName == "random-log-normal-chung-lu") {
-                double mu = params.GetValue<double>("mu");
-                double sigma = params.GetValue<double>("sigma");
-                auto sampledDegrees = GenerateLogNormalDegrees(rng, n, mu, sigma);
-                auto initialGraph = GenerateRandomChungLuGraph(rng, sampledDegrees, config);
-                auto graph = initialGraph;
-                ForceReconnection(rng, graph, config);
-                return graph;
+                return { .Graph = graph, .GenerationProcess = generationProcess };
             }
 
             throw std::runtime_error("Unknown topology: '" + topologyName + "'");
         }
 
-        TRelationGraph GenTopologyFromParams(TRNG &rng, const TParamsMap& params) {
+        TGeneratedRelationGraph GenTopologyFromParams(TRNG &rng, const TParamsMap& params) {
             std::string topologyName = params.GetValue("type");
-            auto graph = GenTopology(rng, topologyName, params);
-            // Graphs should already be connected, but purely as a defense,
-            // let's ensure they actually are:
-            auto config = GetPitmanYor(params); // TODO: rename PitmanYor?
-            ForceReconnection(rng, graph, config);
-            return graph;
+            return GenTopology(rng, topologyName, params);
         }
 
         void RandomizeJoinTypes(TRNG &rng, TJoinTree& tree, const TParamsMap& params) {
@@ -1017,7 +1062,7 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
 
             std::map<NYql::EJoinKind, double> probabilities;
             for(const auto& [name, kind] : joins) {
-                probabilities[kind] = params.GetValue<double>(name);
+                probabilities[kind] = params.GetValue<double>(name, 0.0);
             }
 
             NKikimr::NKqp::RandomizeJoinTypes(rng, tree, probabilities);
@@ -1061,31 +1106,37 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
             });
         }
 
-        // Templated stats to accept whatever ComputeStatistics returns (TStatistics or TRes)
-        template <typename TStats>
         void WriteJsonResult(const std::string& seed, const TParamsMap& params,
-                             const TStats& timeStats, const TRelationGraph& graph,
-                             const TJoinTree& query, TJoinHypergraph& hyper,
-                             ui32 tableIdx, ui32 queryIdx, ui32 variantIdx) {
+                             NJson::TJsonValue timeStats,
+                             NJson::TJsonValue generation,
+                             std::string reproduceArgs,
+                             const TRelationGraph& graph, const TJoinTree& query,
+                             TJoinHypergraph& hyper,
+                             ui32 queryIdx, std::string variant) {
 
-            ui64 n = params.GetValue<ui64>("N");
-            std::string label = params.GetValue("label");
+            // Lock mutex here so that we are cerain that idx corresponds
+            // to real line number inside json file
+            std::lock_guard<std::mutex> lock(MtxOutput_);
 
             NJson::TJsonValue entry(NJson::JSON_MAP);
+
             entry.InsertValue("idx", NJson::TJsonValue(EntryIdx_++));
-            entry.InsertValue("N", NJson::TJsonValue(n));
-            entry.InsertValue("label", NJson::TJsonValue(label));
-            entry.InsertValue("table-idx", NJson::TJsonValue(tableIdx));
+            entry.InsertValue("table-idx", NJson::TJsonValue(params.GetValue<ui32>("idx")));
             entry.InsertValue("query-idx", NJson::TJsonValue(queryIdx));
-            entry.InsertValue("variant-idx", NJson::TJsonValue(variantIdx)); // TODO: variant label?
-            entry.InsertValue("time", timeStats.ToJson());
+            entry.InsertValue("variant", NJson::TJsonValue(variant));
+
+            entry.InsertValue("params", params.Serialize(/*onlyAccessed=*/true));
+            entry.InsertValue("repro", reproduceArgs);
             entry.InsertValue("seed", NJson::TJsonValue(seed));
 
-            entry.InsertValue("query", TOptimizerNodeSerializer::Serialize(query));
+            entry.InsertValue("generation", generation);
             entry.InsertValue("relation-graph", TRelationGraphSerializer::Serialize(graph));
+
+            entry.InsertValue("query", TOptimizerNodeSerializer::Serialize(query));
             entry.InsertValue("hypergraph", TJoinHypergraphSerializer<THypergraphNodes>::Serialize(hyper));
 
-            std::lock_guard<std::mutex> lock(MtxOutput_);
+            entry.InsertValue("time", timeStats);
+
             NJsonWriter::TBuf writer(NJsonWriter::HEM_ESCAPE_HTML, &Output_);
             writer.SetIndentSpaces(0);
             writer.WriteJsonValue(&entry, false);
@@ -1117,11 +1168,22 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
         }
 
         void MonitorDashboard(int maxCores, std::atomic<bool>& stopSignal) {
-            while (!stopSignal || CompletedTasks_ < TotalTasks_) {
+            bool dashboardPrinted = false;
+            auto cleanUp = [&](bool leaveStats = false) {
+                if (dashboardPrinted) {
+                    std::cout << "\33[2K\r";
+                    if (!leaveStats) {
+                        std::cout << "\33[1A\33[2K\r";
+                    }
+                    dashboardPrinted = false;
+                }
+            };
+
+            while ((!stopSignal || CompletedTasks_ < TotalTasks_) || !MessageQueue_.empty()) {
                 {
                     std::lock_guard<std::mutex> lock(MtxConsole_);
                     if (!MessageQueue_.empty()) {
-                        std::cout << "\33[2K\r";
+                        cleanUp();
                         while (!MessageQueue_.empty()) {
                             std::cout << MessageQueue_.front() << "\n";
                             MessageQueue_.pop();
@@ -1129,43 +1191,61 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
                     }
                 }
 
-                ui64 done = CompletedTasks_.load();
-                int active = ActiveThreads_.load(); // Read Active Count
+                cleanUp();
 
-                float ratio = (TotalTasks_ > 0) ? (float)done / TotalTasks_ : 0.0f;
-                int width = 60; // Slightly smaller bar to fit Active info
+                ui64 doneGraphs = CompletedGraphs_.load();
+                ui64 fineGraphs = FineGraphs_.load();
+                ui64 timeoutedGraphs = TimeoutedGraphs_.load();
+                ui64 skippedGraphs = SkippedGraphs_.load();
+                std::cout << "Done (graphs): " << doneGraphs << "/" << TotalGraphs_ << " "
+                          << "("
+                          << "fine=" << fineGraphs << ", "
+                          << "timeout=" << timeoutedGraphs << ", "
+                          << "skipped=" << skippedGraphs
+                          << ")"
+                          << std::endl;
 
-                std::cout << "\33[2K\r[";
+                int activeThreads = ActiveThreads_.load();
+                ui64 doneTasks = CompletedTasks_.load();
+                float ratio = (TotalTasks_ > 0) ? static_cast<float>(doneTasks) / TotalTasks_ : 0.0f;
+
+                std::cout << "[";
+
+                int width = 80;
                 int pos = width * ratio;
                 for (int i = 0; i < width; ++i) {
                     if (i < pos) std::cout << "=";
                     else if (i == pos) std::cout << ">";
                     else std::cout << " ";
                 }
-                std::cout << "] " << int(ratio * 100.0) << "% "
-                        << "| Active: " << active << "/" << maxCores << " " // Show Active Jobs
-                        << "| Done: " << done << "/" << TotalTasks_
-                        << std::flush;
+                std::cout << "] ";
+                std::cout << doneTasks << "/" << TotalTasks_ << " "
+                          << int(ratio * 100.0) << "% "
+                          << "(threads = " << activeThreads << "/" << maxCores << ") " << std::flush;
 
-                if (done == TotalTasks_) break;
+                dashboardPrinted = true;
+
+                if (doneTasks == TotalTasks_ && MessageQueue_.empty()) {
+                    break;
+                }
                 std::this_thread::sleep_for(std::chrono::milliseconds(50));
             }
+
+            cleanUp(/*leaveStats=*/true);
             std::cout << "\n";
         }
 
 
         const TBenchmarkConfig& Config_;
         TUnbufferedFileOutput& Output_; // Reference is crucial
-        const TTupleParser::TTable& Args_;
+        TTupleParser::TTable& Args_;
         size_t TotalTasks_;
-        size_t TotalGraphs_;
 
         std::atomic<ui64> NextTaskIdx_{0};
         std::atomic<ui64> NextQueryNum_{0};
         std::atomic<ui64> CompletedTasks_{0};
         std::atomic<ui64> EntryIdx_{0};
 
-        std::atomic<int> ActiveThreads_{0};
         StreamAligner Aligner_;
 
         std::mutex MtxOutput_;
@@ -1174,6 +1254,15 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
 
         std::queue<std::string> MessageQueue_;
         std::map<std::string, ui64> TimeoutedNs_;
+
+        // Statistics
+        std::atomic<int> ActiveThreads_{0};
+
+        size_t TotalGraphs_;
+        std::atomic<int> TimeoutedGraphs_{0};
+        std::atomic<int> SkippedGraphs_{0};
+        std::atomic<int> CompletedGraphs_{0};
+        std::atomic<int> FineGraphs_{0};
     };
 
 
@@ -1220,7 +1309,16 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
         // Initialize file stream here so it persists for the lifetime of runner
         TUnbufferedFileOutput outFileStream(outputFile.c_str());
 
-        BenchRunner runner(config, outFileStream, parameters);
+        std::string seedStr = GetTestParam("SEED");
+        std::random_device randomDevice;
+        ui32 seed = randomDevice() % UINT32_MAX;
+        if (!seedStr.empty()) {
+            seed = std::atoi(seedStr.c_str());
+        }
+
+        TRNG rng(seed);
+
+        BenchRunner runner(rng, config, outFileStream, parameters);
         runner.Launch();
     }
 

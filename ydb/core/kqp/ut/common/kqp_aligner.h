@@ -41,10 +41,18 @@ public:
                 ColWidths_.resize(parts.size(), 0);
             }
 
-            for (size_t i = 0; i < parts.size(); ++i) {
-                size_t len = parts[i].length();
-                if (len > ColWidths_[i]) {
-                    ColWidths_[i] = len;
+            // Go through all parts except the last one to allow for such behaviour
+            // COLUMN COLUMN LAAAAAAAAAAAAAAAARGE
+            // COLUMN COLUMN COLUMN COLUMN
+            //                      ^ if there is no "&" in the previous row that's
+            //                        further than this column, then don't move it
+
+            for (size_t i = 1; i < parts.size(); ++i) {
+                size_t partIdx = i - 1;
+
+                size_t len = parts[partIdx].length();
+                if (len > ColWidths_[partIdx]) {
+                    ColWidths_[partIdx] = len;
                 }
             }
 

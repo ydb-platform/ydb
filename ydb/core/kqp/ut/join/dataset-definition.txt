@@ -299,7 +299,7 @@
     // I feel like changing edges randomly is the most useful thing to do, because
     // it shows what happens when scale-free properties of our distributin break,
     // so let's focus on exploring this in particular
-    (mcmc-e=2; mcmc-d=1)
+    (mcmc-edge=2; mcmc-degree=1)
   )
   +
   // Even though there are already a lot of random structures, most of them have

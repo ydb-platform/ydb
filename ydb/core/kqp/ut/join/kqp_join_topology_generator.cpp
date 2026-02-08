@@ -1011,8 +1011,19 @@ double CalculateTemperature(const TMCMCConfig& config, ui32 attempt, ui32 maxAtt
            std::pow(config.FinalTemperature / config.InitialTemperature, progress);
 }
 
-TMCMCResult MCMCRandomizeDegreePreserving(TRNG& rng, TRelationGraph& graph, TPitmanYorConfig pyConfig, TMCMCConfig mcmcConfig) {
+TMCMCResult MCMCRandomizeDegreePreserving(TRNG& rng, TRelationGraph& graph, TPitmanYorConfig pyConfig, TMCMCConfig mcmcConfig, bool saveProcess) {
     TMCMCResult result;
+    auto serializeStep = [&]() {
+        if (saveProcess) {
+            if (!result.Steps) {
+                result.Steps = NJson::TJsonValue(NJson::JSON_ARRAY);
+            }
+
+            result.Steps->AppendValue(TRelationGraphSerializer::Serialize(graph));
+        }
+    };
+
+    serializeStep();
 
     if (graph.GetN() < 4) {
         result.FinalComponents = graph.GetNumComponents();
@@ -1073,6 +1084,7 @@ TMCMCResult MCMCRandomizeDegreePreserving(TRNG& rng, TRelationGraph& graph, TPit
         bool accept = (deltaEnergy <= 0) || (uniform01(rng) < std::exp(-deltaEnergy / temperature));
 
         if (accept) {
+            serializeStep();
             ++result.SuccessfulSwaps;
         } else {
             // Undo: restore original edges with original keys
@@ -1086,6 +1098,8 @@ TMCMCResult MCMCRandomizeDegreePreserving(TRNG& rng, TRelationGraph& graph, TPit
 
     if (mcmcConfig.EnsureConnectivity && !graph.IsConnected()) {
         ForceReconnection(rng, graph, pyConfig);
+
+        serializeStep();
         result.ForcedReconnection = true;
     }
 
@@ -1096,8 +1110,19 @@ TMCMCResult MCMCRandomizeDegreePreserving(TRNG& rng, TRelationGraph& graph, TPit
 // Edge preserving MCMC is simpler than degree preserving one, because in space
 // of connected graphs edge preserving MCMC is ergodic without annealing,
 // which degree preserving MCMC is not (e.g. a tree)
-TMCMCResult MCMCRandomizeEdgePreserving(TRNG& rng, TRelationGraph& graph, TPitmanYorConfig pyConfig, TMCMCConfig mcmcConfig) {
+TMCMCResult MCMCRandomizeEdgePreserving(TRNG& rng, TRelationGraph& graph, TPitmanYorConfig pyConfig, TMCMCConfig mcmcConfig, bool saveProcess) {
     TMCMCResult result;
+    auto serializeStep = [&]() {
+        if (saveProcess) {
+            if (!result.Steps) {
+                result.Steps = NJson::TJsonValue(NJson::JSON_ARRAY);
+            }
+
+            result.Steps->AppendValue(TRelationGraphSerializer::Serialize(graph));
+        }
+    };
+
+    serializeStep();
 
     if (graph.GetN() < 2) {
         result.FinalComponents = graph.GetNumComponents();
@@ -1153,11 +1178,15 @@ TMCMCResult MCMCRandomizeEdgePreserving(TRNG& rng, TRelationGraph& graph, TPitma
         }
 
         graph.Connect(rng, newU, newV, pyConfig);
+
+        serializeStep();
         ++result.SuccessfulSwaps;
     }
 
     if (mcmcConfig.EnsureConnectivity && !graph.IsConnected()) {
         ForceReconnection(rng, graph, pyConfig);
+
+        serializeStep();
         result.ForcedReconnection = true;
     }
 

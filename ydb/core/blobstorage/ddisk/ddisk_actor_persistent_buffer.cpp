@@ -42,7 +42,7 @@ namespace NKikimr::NDDisk {
             auto& loc = header->Locations[i - 1];
             loc = sectors[i];
             auto it = payload.Position(SectorSize * (i - 1));
-            if (memcmp((*it).first, header->Signature, 16) != 0) {
+            if (memcmp((*it).first, header->Signature, 16) == 0) {
                 loc.HasSignatureCorrection = true;
                 *payload.Position(SectorSize * (i - 1)).ContiguousDataMut() = 0;
             }
@@ -54,7 +54,7 @@ namespace NKikimr::NDDisk {
         for (ui32 sectorIdx = 0, first = 0; sectorIdx <= sectors.size(); sectorIdx++) {
             if (sectorIdx == sectors.size()
                 || sectors[first].ChunkIdx != sectors[sectorIdx].ChunkIdx
-                || sectors[first].SectorIdx != sectors[sectorIdx].SectorIdx + sectorIdx - first) {
+                || sectors[first].SectorIdx + sectorIdx - first != sectors[sectorIdx].SectorIdx) {
                 TRope data;
                 ui32 partSize = (sectorIdx - (first == 0 ? 1 : first)) * SectorSize;
                 if (first == 0) {
@@ -79,13 +79,13 @@ namespace NKikimr::NDDisk {
         const TQueryCredentials creds(record.GetCredentials());
         const TBlockSelector selector(record.GetSelector());
         const ui64 lsn = record.GetLsn();
-        ui32 sectorsCnt = selector.Size / SectorSize;
+        ui32 sectorsCnt = selector.Size / SectorSize + 1;
         const auto sectors = PersistentBufferSpaceAllocator.Occupy(sectorsCnt);
         if (sectors.size() == 0) {
             IssuePersistentBufferChunkAllocation();
             return;
         }
-        Y_ABORT_UNLESS(sectors.size() == sectorsCnt && sectorsCnt <= MaxSectorsPerBuffer);
+        Y_ABORT_UNLESS(sectors.size() == sectorsCnt && sectorsCnt <= MaxSectorsPerBuffer && sectorsCnt > 1);
 
         const TWriteInstruction instr(record.GetInstruction());
         TRope payload;
@@ -248,20 +248,20 @@ namespace NKikimr::NDDisk {
             Y_ABORT_UNLESS(pr.DataParts.size() == pr.PartsCount);
             callback(pr.JoinData());
         } else {
-            Y_ABORT_UNLESS(pr.DataParts.empty() && pr.PartsCount == 0);
+            Y_ABORT_UNLESS(pr.DataParts.empty() && pr.PartsCount == 0 && pr.Sectors.size() > 1);
             // Zero sector contains persistent buffer header, we skip it
             for (ui32 sectorIdx = 1, first = 1; sectorIdx <= pr.Sectors.size(); sectorIdx++) {
                 if (sectorIdx == pr.Sectors.size()
                     || pr.Sectors[first].ChunkIdx != pr.Sectors[sectorIdx].ChunkIdx
-                    || pr.Sectors[first].SectorIdx != pr.Sectors[sectorIdx].SectorIdx + sectorIdx - first) {
+                    || pr.Sectors[first].SectorIdx + sectorIdx - first != pr.Sectors[sectorIdx].SectorIdx) {
                     const ui64 cookie = NextCookie++;
                     Send(BaseInfo.PDiskActorID, new NPDisk::TEvChunkReadRaw(
                         PDiskParams->Owner,
                         PDiskParams->OwnerRound,
                         pr.Sectors[first].ChunkIdx,
                         pr.Sectors[first].SectorIdx * SectorSize,
-                        (pr.Sectors[sectorIdx].SectorIdx - pr.Sectors[first].SectorIdx) * SectorSize), 0, cookie);
-                    ReadCallbacks.try_emplace(cookie, TPersistentBufferPendingRead{[&, partIdx = pr.PartsCount](NPDisk::TEvChunkReadRawResult& ev) {
+                        (pr.Sectors[sectorIdx - 1].SectorIdx - pr.Sectors[first].SectorIdx + 1) * SectorSize), 0, cookie);
+                    ReadCallbacks.try_emplace(cookie, TPersistentBufferPendingRead{[&pr, callback, partIdx = pr.PartsCount](NPDisk::TEvChunkReadRawResult& ev) {
                         pr.DataParts.emplace(partIdx, std::move(ev.Data));
                         if (pr.DataParts.size() == pr.PartsCount) {
                             callback(pr.JoinData());
@@ -283,6 +283,12 @@ namespace NKikimr::NDDisk {
             DataParts.erase(second);
         }
         PartsCount = 1;
+        auto& payload = DataParts.begin()->second;
+        for (ui32 i = 1; i < Sectors.size(); i++) {
+            if (Sectors[i].HasSignatureCorrection) {
+                *payload.Position(SectorSize * (i - 1)).ContiguousDataMut() = TPersistentBufferHeader::PersistentBufferHeaderSignature[0];
+            }
+        }
         return DataParts.begin()->second;
     }
 

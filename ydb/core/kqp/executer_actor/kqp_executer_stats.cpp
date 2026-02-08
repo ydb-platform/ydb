@@ -31,6 +31,15 @@ void TMinStats::SetNonZero(ui32 index, ui64 value) {
     }
 }
 
+void TMinStats::Set(ui32 index, ui64 value) {
+    AFL_ENSURE(index < Values.size());
+    auto maybeMin = Values[index] == MinValue;
+    Values[index] = value;
+    if (maybeMin) {
+        MinValue = ExportMinStats(Values);
+    }
+}
+
 void TMaxStats::Resize(ui32 count) {
     Values.resize(count);
 }
@@ -508,8 +517,8 @@ ui64 TStageExecutionStats::UpdateStats(const NYql::NDqProto::TDqTaskStats& taskS
     SetNonZero(DurationUs, index, durationUs);
     WaitInputTimeUs.SetNonZero(index, taskStats.GetWaitInputTimeUs());
     WaitOutputTimeUs.SetNonZero(index, taskStats.GetWaitOutputTimeUs());
-    CurrentWaitInputTimeUs.SetNonZero(index, taskStats.GetCurrentWaitInputTimeUs());
-    CurrentWaitOutputTimeUs.SetNonZero(index, taskStats.GetCurrentWaitOutputTimeUs());
+    CurrentWaitInputTimeUs.Set(index, taskStats.GetCurrentWaitInputTimeUs());
+    CurrentWaitOutputTimeUs.Set(index, taskStats.GetCurrentWaitOutputTimeUs());
 
     auto updateTimeMs = taskStats.GetUpdateTimeMs();
     UpdateTimeMs = std::max(UpdateTimeMs, updateTimeMs);
@@ -665,10 +674,8 @@ bool TStageExecutionStats::IsDeadlocked(ui64 deadline) const {
 
     for (auto stat : InputStages) {
         if (stat->IsFinished()) {
-            if (stat->MaxFinishTimeMs == 0) {
-                stat->MaxFinishTimeMs = ExportMaxStats(stat->FinishTimeMs);
-            }
-            if (stat->UpdateTimeMs < stat->MaxFinishTimeMs || stat->UpdateTimeMs - stat->MaxFinishTimeMs < deadline) {
+            auto nowMs = TInstant::Now().MilliSeconds();
+            if (nowMs < stat->UpdateTimeMs || (nowMs - stat->UpdateTimeMs) * 1000 < deadline) {
                 return false;
             }
         } else {

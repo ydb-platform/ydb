@@ -731,9 +731,12 @@ protected:
                         TABLER() {
                             TABLEH() {str << "TxId";}
                             TABLEH() {str << "StageId";}
-                            TABLEH() {str << "TaskCount";}
-                            TABLEH() {str << "FinishedCount";}
+                            TABLEH() {str << "Tasks";}
+                            TABLEH() {str << "Finished";}
                             TABLEH() {str << "Deadlocked (1 min)";}
+                            TABLEH() {str << "UpdateTimeMs (ago)";}
+                            TABLEH() {str << "WaitInputTimeUs";}
+                            TABLEH() {str << "WaitOutputTimeUs";}
                         }
                     }
                     TABLEBODY() {
@@ -744,6 +747,12 @@ protected:
                                 TABLED() {str << stageStat.Task2Index.size();}
                                 TABLED() {str << stageStat.FinishedCount;}
                                 TABLED() {str << stageStat.IsDeadlocked(60'000'000);}
+                                TABLED() {
+                                    auto nowMs = TInstant::Now().MilliSeconds();
+                                    str << (nowMs > stageStat.UpdateTimeMs ? nowMs - stageStat.UpdateTimeMs : 0);
+                                }
+                                TABLED() {str << stageStat.CurrentWaitInputTimeUs.MinValue;}
+                                TABLED() {str << stageStat.CurrentWaitOutputTimeUs.MinValue;}
                             }
                         }
                     }

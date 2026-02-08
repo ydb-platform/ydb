@@ -22,6 +22,7 @@ struct TMinStats {
     ui64 MinValue = 0;
 
     void Resize(ui32 count);
+    void Set(ui32 index, ui64 value);
     void SetNonZero(ui32 index, ui64 value);
 };
 
@@ -231,7 +232,6 @@ struct TStageExecutionStats {
     TMinStats CurrentWaitInputTimeUs;
     TMinStats CurrentWaitOutputTimeUs;
     ui64 UpdateTimeMs = 0;
-    ui64 MaxFinishTimeMs = 0;
 
     TTimeSeriesStats SpillingComputeBytes;
     TTimeSeriesStats SpillingChannelBytes;

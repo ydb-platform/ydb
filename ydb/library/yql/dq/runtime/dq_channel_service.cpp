@@ -507,7 +507,11 @@ bool TOutputDescriptor::IsTerminatedOrAborted() {
 
 void TOutputDescriptor::AbortChannel(const TString& message) {
     if (!Aborted.exchange(true)) {
-        ActorSystem->Send(Info.InputActorId, NYql::NDq::TEvDq::TEvAbortExecution::InternalError(message).Release());
+        ActorSystem->Send(Info.InputActorId, NYql::NDq::TEvDq::TEvAbortExecution::InternalError(
+            TStringBuilder() << "Channel: " << Info.ChannelId
+            << ", SrcStageId: " << Info.SrcStageId << ", DstStageId: " << Info.DstStageId
+            << ", " << message
+        ).Release());
     }
 }
 
@@ -956,13 +960,14 @@ void TNodeState::SendAck(THolder<TEvDqCompute::TEvChannelAckV2>& evAck, ui64 coo
     ActorSystem->Send(new NActors::IEventHandle(PeerActorId, NodeActorId, evAck.Release(), flags, cookie));
 }
 
-void TNodeState::SendAckWithError(ui64 cookie) {
+void TNodeState::SendAckWithError(ui64 cookie, const TString& message) {
     auto evAck = MakeHolder<TEvDqCompute::TEvChannelAckV2>();
 
     evAck->Record.SetGenMajor(PeerGenMajor);
     evAck->Record.SetGenMinor(PeerGenMinor);
     evAck->Record.SetStatus(NYql::NDqProto::TEvChannelAckV2::ERROR);
     evAck->Record.SetSeqNo(ConfirmedSeqNo);
+    evAck->Record.SetMessage(message);
 
     SendAck(evAck, cookie);
 }
@@ -978,7 +983,7 @@ void TNodeState::HandleChannelData(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
     auto descriptor = GetOrCreateInputDescriptor(info, false, record.GetLeading());
     if (!descriptor) {
         // do not auto create if not leading and fail sender
-        SendAckWithError(ev->Cookie);
+        SendAckWithError(ev->Cookie, "Can't find peer for not leading message");
         return;
     }
 
@@ -986,7 +991,10 @@ void TNodeState::HandleChannelData(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
         if (descriptor->PeerActorId != PeerActorId || descriptor->PeerGenMajor != PeerGenMajor) {
             descriptor->Terminate();
             InputDescriptors.erase(info);
-            SendAckWithError(ev->Cookie);
+            SendAckWithError(ev->Cookie,
+                TStringBuilder() << "Generation mismatch: " << descriptor->PeerActorId << " vs "
+                << PeerActorId << " (actual), " << descriptor->PeerGenMajor << " vs " << PeerGenMajor << " (actual)"
+            );
             return;
         }
     } else {
@@ -1333,7 +1341,7 @@ void TNodeState::HandleAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
                 if (!item->Descriptor->IsTerminatedOrAborted()) {
                     if (item->Descriptor->CheckGenMajor(GenMajor, "by Ack")) {
                         if (status == NYql::NDqProto::TEvChannelAckV2::ERROR) {
-                            item->Descriptor->AbortChannel("By Remote Side");
+                            item->Descriptor->AbortChannel("(Peer)" + record.GetMessage());
                         } else {
                             auto earlyFinished = record.GetEarlyFinished();
                             auto popBytes = record.GetPopBytes();
@@ -1661,7 +1669,7 @@ void TDebugNodeState::HandleNullMode(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
     auto descriptor = GetOrCreateInputDescriptor(info, false, record.GetLeading());
     if (!descriptor) {
         // do not auto create if not leading and fail sender
-        SendAckWithError(ev->Cookie);
+        SendAckWithError(ev->Cookie, "[TDebugNodeState] Can't find peer for not leading message");
         return;
     }
 

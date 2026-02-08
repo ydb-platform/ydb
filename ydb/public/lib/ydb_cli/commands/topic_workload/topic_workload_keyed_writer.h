@@ -49,6 +49,8 @@ private:
     size_t InflightMessagesSize();
     bool InflightMessagesEmpty();
 
+    TStringBuilder LogPrefix();
+
     TTopicWorkloadKeyedWriterParams Params;
     ui64 BytesWritten = 0;
     std::optional<TTransactionSupport> TxSupport;
@@ -61,6 +63,7 @@ private:
     std::shared_ptr<TTopicWorkloadStatsCollector> StatsCollector;
 
     bool WaitForCommitTx = false;
+    std::string SessionId;
 };
 
 } // namespace NYdb::NConsoleClient

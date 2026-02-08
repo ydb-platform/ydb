@@ -84,6 +84,10 @@ inline bool InflightMessagesEmpty(const std::vector<std::shared_ptr<TProducer>>&
     return true;
 }
 
+inline TStringBuilder LogPrefix(const std::string& sessionId) {
+    return TStringBuilder() << " SessionId: " << sessionId << " ";
+}
+
 template <
     class TProducer,
     class THasContinuationToken,
@@ -109,7 +113,9 @@ inline void ProcessWriterLoopCommon(
     TTryCommitTx tryCommitTx,
     TInflightSize inflightMessagesSize,
     TOnStart onStart,
-    TOnAfterSend onAfterSend
+    TOnAfterSend onAfterSend,
+    std::string sessionId,
+    TDuration idleTimeout = TDuration::Max()
 ) {
     Y_ABORT_UNLESS(!producers.empty());
 
@@ -120,6 +126,8 @@ inline void ProcessWriterLoopCommon(
     startTimestamp = Now();
     onStart(startTimestamp);
 
+    TInstant lastWaitTime = TInstant::Zero();
+    TInstant lastActivityTime = TInstant::Now();
     while (!*params.ErrorFlag) {
         const auto now = Now();
         if (now > endTime) {
@@ -137,6 +145,13 @@ inline void ProcessWriterLoopCommon(
         }
 
         bool writingAllowed = hasContinuationToken(producer);
+        if (!writingAllowed) {
+            lastWaitTime = TInstant::Now();
+            WRITE_LOG(params.Log, ELogPriority::TLOG_INFO, LogPrefix(sessionId) << "No continuation token found, will wait for 1ms");
+        } else if (lastWaitTime != TInstant::Zero()) {
+            WRITE_LOG(params.Log, ELogPriority::TLOG_INFO, LogPrefix(sessionId) << "Continuation token found, waited for " << (TInstant::Now() - lastWaitTime).MilliSeconds() << "ms");
+            lastWaitTime = TInstant::Zero();
+        }
 
         if (params.BytesPerSec != 0) {
             // How many bytes had to be written till this moment by this particular producer.
@@ -169,11 +184,13 @@ inline void ProcessWriterLoopCommon(
             onAfterSend(producer, createTimestamp, now);
 
             ++partitionToWriteId;
+            lastActivityTime = TInstant::Now();
         } else {
             if (txSupport) {
                 tryCommitTx(commitTime);
             }
             Sleep(TDuration::MilliSeconds(1));
+            Y_ABORT_UNLESS(TInstant::Now() - lastActivityTime < idleTimeout, "Idle timeout reached");
         }
     }
 }

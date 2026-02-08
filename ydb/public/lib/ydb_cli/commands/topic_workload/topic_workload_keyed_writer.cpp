@@ -16,9 +16,10 @@ TTopicWorkloadKeyedWriterWorker::TTopicWorkloadKeyedWriterWorker(const TTopicWor
     // so we create a single producer session per writer worker.
     Producers = std::vector<std::shared_ptr<TTopicWorkloadKeyedWriterProducer>>();
     Producers.reserve(1);
+    SessionId = TGUID::CreateTimebased().AsGuidString();
     Producers.push_back(CreateProducer());
 
-    WRITE_LOG(Params.Log, ELogPriority::TLOG_DEBUG, TStringBuilder()
+    WRITE_LOG(Params.Log, ELogPriority::TLOG_DEBUG, LogPrefix()
         << "WriterId " << Params.WriterIdx
         << ": Initialized " << Producers.size() << " keyed producers");
 }
@@ -26,6 +27,10 @@ TTopicWorkloadKeyedWriterWorker::TTopicWorkloadKeyedWriterWorker(const TTopicWor
 TTopicWorkloadKeyedWriterWorker::~TTopicWorkloadKeyedWriterWorker()
 {
     CloseProducers();
+}
+
+TStringBuilder TTopicWorkloadKeyedWriterWorker::LogPrefix() {
+    return TStringBuilder() << " SessionId: " << SessionId << " ";
 }
 
 void TTopicWorkloadKeyedWriterWorker::Close()
@@ -100,7 +105,7 @@ void TTopicWorkloadKeyedWriterWorker::Process(TInstant endTime)
             return InflightMessagesSize();
         },
         [this](const TInstant& startTimestamp) {
-            WRITE_LOG(Params.Log, ELogPriority::TLOG_DEBUG, TStringBuilder()
+            WRITE_LOG(Params.Log, ELogPriority::TLOG_DEBUG, LogPrefix()
                 << "WriterIdx: " << Params.WriterIdx
                 << ": StartTimestamp " << startTimestamp);
         },
@@ -108,7 +113,9 @@ void TTopicWorkloadKeyedWriterWorker::Process(TInstant endTime)
            const TInstant&,
            const TInstant&) {
             // No extra per-message logging for keyed writer.
-        }
+        },
+        SessionId,
+        TDuration::Seconds(60)
     );
 }
 
@@ -132,6 +139,7 @@ std::shared_ptr<TTopicWorkloadKeyedWriterProducer> TTopicWorkloadKeyedWriterWork
     NYdb::NTopic::TKeyedWriteSessionSettings settings;
     settings.Codec((NYdb::NTopic::ECodec)Params.Codec);
     settings.Path(Params.TopicName);
+    settings.SessionId(SessionId);
     settings.ProducerIdPrefix(producerId);
     settings.PartitionChooserStrategy(
         isAutoPartitioningEnabled ?
@@ -191,7 +199,7 @@ void TTopicWorkloadKeyedWriterWorker::WriterLoop(const TTopicWorkloadKeyedWriter
     (*writer.Params.StartedCount)++;
 
     WRITE_LOG(writer.Params.Log, ELogPriority::TLOG_INFO,
-              TStringBuilder() << "Keyed writer started " << Now().ToStringUpToSeconds());
+              writer.LogPrefix() << "Keyed writer started " << Now().ToStringUpToSeconds());
 
     try {
         writer.Process(endTime);

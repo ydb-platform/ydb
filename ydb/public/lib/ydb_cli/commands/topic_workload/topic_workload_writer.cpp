@@ -124,7 +124,8 @@ void TTopicWorkloadWriterWorker::Process(TInstant endTime) {
                 << " For partition " << producer->GetPartitionId()
                 << " message create ts " << createTimestamp
                 << " delta from now " << (Params.BytesPerSec == 0 ? TDuration() : now - createTimestamp));
-        }
+        },
+        ""
     );
 }
 

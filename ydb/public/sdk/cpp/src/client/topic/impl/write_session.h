@@ -1,5 +1,6 @@
 #pragma once
 
+#include <library/cpp/containers/concurrent_hash/concurrent_hash.h>
 #include <util/system/mutex.h>
 #include <util/system/thread.h>
 #include <ydb/public/sdk/cpp/src/client/topic/common/callback_context.h>
@@ -200,6 +201,7 @@ private:
         bool IsQueueEmpty() const;
         bool HasInFlightMessages() const;
         const TMessageInfo& GetFrontInFlightMessage() const;
+        bool HasMessagesToResend() const;
 
     private:
         void PushInFlightMessage(std::uint64_t partition, TMessageInfo&& message);
@@ -242,6 +244,7 @@ private:
         void DoWork();
         NThreading::TFuture<void> Wait();
         bool IsDone();
+        std::string GetStateName() const;
             
     private:
         TKeyedWriteSession* Session;
@@ -334,7 +337,7 @@ private:
 
     void HandleAutoPartitioning(std::uint64_t partition);
 
-    void RunSplittedPartitionWorkers();
+    bool RunSplittedPartitionWorkers();
 
     NThreading::TFuture<void> Next(bool isClosed);
 
@@ -345,6 +348,10 @@ private:
     void GetSessionClosedEventAndDie(WrappedWriteSessionPtr wrappedSession, std::optional<TSessionClosedEvent> sessionClosedEvent = std::nullopt);
 
     std::uint32_t GetPartitionId(std::uint64_t partitionIdx);
+
+    TStringBuilder LogPrefix();
+
+    void NextEpoch();
 
 public:
     TKeyedWriteSession(const TKeyedWriteSessionSettings& settings,
@@ -408,6 +415,13 @@ private:
     // Also, callbacks may arrive concurrently with the attempt to go idle.
     // Use a small state machine to avoid re-entrancy and lost wakeups.
     std::atomic<std::uint8_t> MainWorkerState = 0;
+
+    // TConcurrentHashMap<ui64, TInstant> SendToSubSession;
+    // <ui64, TInstant> ReceivedAck;
+    // TConcurrentHashMap<ui64, TInstant> ReadyFutures;
+    size_t Epoch = 0;
+
+    static constexpr size_t MAX_EPOCH = 1'000'000'000;
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

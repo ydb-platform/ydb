@@ -17,20 +17,14 @@ NO_CHECK_IMPORTS(
     asyncio.unix_events
     asyncio.windows_events
     asyncio.windows_utils
-    crypt
     ctypes.wintypes
     curses.*
     dbm.gnu
     dbm.ndbm
     dbm.sqlite3
-    distutils._msvccompiler
-    distutils.command.bdist_msi
-    distutils.msvc9compiler
-    encodings.cp65001
     encodings.mbcs
     encodings.oem
     lzma
-    msilib.*
     multiprocessing.popen_fork
     multiprocessing.popen_forkserver
     multiprocessing.popen_spawn_posix

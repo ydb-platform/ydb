@@ -1198,7 +1198,7 @@ struct TFullTextApplyParseResult {
     TExprNode::TPtr SearchQuery;
     TExprNode::TPtr BFactor;
     TExprNode::TPtr K1Factor;
-    TExprNode::TPtr QueryMode;
+    TExprNode::TPtr DefaultOperator;
     TExprNode::TPtr MinimumShouldMatch;
 
     bool IsScoreApply = false;
@@ -1224,12 +1224,12 @@ struct TFullTextApplyParseResult {
         return expr.Maybe<TCoString>() || expr.Maybe<TCoAtom>() || expr.Maybe<TCoParameter>();
     }
 
-    bool ValidateQueryMode() {
-        if (!QueryMode) {
+    bool ValidateDefaultOperator() {
+        if (!DefaultOperator) {
             return true;
         }
 
-        auto exprBase = TExprBase(QueryMode);
+        auto exprBase = TExprBase(DefaultOperator);
         auto unwrapped = exprBase.Maybe<TCoJust>() ? exprBase.Maybe<TCoJust>().Cast().Input() : exprBase;
         if (!StringOrAtomOrParameter(unwrapped)) {
             return false;
@@ -1293,12 +1293,12 @@ struct TFullTextApplyParseResult {
                 .Done());
         }
 
-        if (QueryMode) {
+        if (DefaultOperator) {
             settings.push_back(Build<TCoNameValueTuple>(ctx, pos)
                 .Name<TCoAtom>()
-                    .Value(TKqpReadTableFullTextIndexSettings::QueryModeSettingName)
+                    .Value(TKqpReadTableFullTextIndexSettings::DefaultOperatorSettingName)
                     .Build()
-                .Value(QueryMode)
+                .Value(DefaultOperator)
                 .Done());
         }
 
@@ -1365,8 +1365,8 @@ TFullTextApplyParseResult FindMatchingApply(const TExprBase& node, TExprContext&
                     result.K1Factor = nameValueTuple.Value().Cast().Ptr();
                 }
 
-                if (nameValueTuple.Name().StringValue() == "Mode") {
-                    result.QueryMode = nameValueTuple.Value().Cast().Ptr();
+                if (nameValueTuple.Name().StringValue() == "DefaultOperator") {
+                    result.DefaultOperator = nameValueTuple.Value().Cast().Ptr();
                 }
 
                 if (nameValueTuple.Name().StringValue() == "MinimumShouldMatch") {
@@ -1382,7 +1382,7 @@ TFullTextApplyParseResult FindMatchingApply(const TExprBase& node, TExprContext&
                 return false;
             }
 
-            if (!result.ValidateQueryMode()) {
+            if (!result.ValidateDefaultOperator()) {
                 return false;
             }
 

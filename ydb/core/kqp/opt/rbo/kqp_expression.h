@@ -20,6 +20,9 @@ class TExpression {
 
     // Constructs an expression from ExprNode, also save expression context and plan
     // properties. Plan properties are needed to access subplan IUs
+    // If an expression is not a lambda, we save its body separately and generate a new
+    // lambda. The body is needed to by in sych with the originial expression in terms of
+    // pointers, that might be needed in replace map.
     TExpression(TExprNode::TPtr node, TExprContext* ctx, TPlanProps* props = nullptr); 
 
     TExpression() = default;
@@ -60,7 +63,7 @@ class TExpression {
     TExpression ApplyRenames(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap) const;
 
     // Apply a generic replace map to the lambda of the expression
-    TExpression ApplyReplaceMap(TNodeOnNodeOwnedMap map, TRBOContext& ctx) const;
+    TExpression ApplyReplaceMap(const TNodeOnNodeOwnedMap& map, TRBOContext& ctx) const;
 
     // Remove a cast from the expression
     TExpression PruneCast() const;
@@ -69,6 +72,7 @@ class TExpression {
     TString ToString() const;
 
     TExprNode::TPtr Node;
+    TExprNode::TPtr Body;
     TExprContext* Ctx;
     TPlanProps* PlanProps;
 };
@@ -88,7 +92,7 @@ class TJoinCondition {
     TInfoUnit GetRightIU() const;
 
     // Find all non-column reference expression in this condition and insert them into a map
-    void ExtractExpressions(TNodeOnNodeOwnedMap& renameMap, TVector<std::pair<TInfoUnit, TExprNode::TPtr>>& exprMap);
+    void ExtractExpressions(TNodeOnNodeOwnedMap& map, TVector<std::pair<TInfoUnit, TExprNode::TPtr>>& exprMap);
 
     const TExpression& Expr;
     TVector<TInfoUnit> LeftIUs;
@@ -101,7 +105,7 @@ class TJoinCondition {
 TExpression MakeColumnAccess(TInfoUnit column, TPositionHandle pos, TExprContext* ctx, TPlanProps* props = nullptr);
 TExpression MakeConstant(TString type, TString value, TPositionHandle pos, TExprContext* ctx);
 TExpression MakeNothing(TPositionHandle pos, const TTypeAnnotationNode* type, TExprContext* ctx);
-TExpression MakeConjunct(const TVector<TExpression>& vec, bool pgSyntax = false);
+TExpression MakeConjunction(const TVector<TExpression>& vec, bool pgSyntax = false);
 TExpression MakeBinaryPredicate(TString callable, const TExpression& left, const TExpression& right);
 
 void GetAllMembers(TExprNode::TPtr node, TVector<TInfoUnit> &IUs);

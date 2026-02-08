@@ -99,7 +99,7 @@ std::shared_ptr<TOpFilter> FuseFilters(const std::shared_ptr<TOpFilter>& top, co
     TVector<TExpression> bottomConjuncts = bottom->FilterExpr.SplitConjunct();
     conjuncts.insert(conjuncts.begin(), bottomConjuncts.begin(), bottomConjuncts.end());
 
-    return make_shared<TOpFilter>(bottom->GetInput(), top->Pos, MakeConjunct(conjuncts, pgSyntax));
+    return make_shared<TOpFilter>(bottom->GetInput(), top->Pos, MakeConjunction(conjuncts, pgSyntax));
 }
 
 } // namespace
@@ -213,11 +213,11 @@ bool TPullUpCorrelatedFilterRule::MatchAndApply(std::shared_ptr<IOperator> &inpu
     if (!otherFilters.empty() || !remainderSubset.empty()) {
         auto newConjuncts = otherFilters;
         newConjuncts.insert(newConjuncts.end(), remainderSubset.begin(), remainderSubset.end());
-        auto expr = MakeConjunct(newConjuncts, props.PgSyntax);
+        auto expr = MakeConjunction(newConjuncts, props.PgSyntax);
         remainingFilter = std::make_shared<TOpFilter>(deps->GetInput(), remainingFilter->Pos, expr);
     }
 
-    auto newExpr = MakeConjunct(dependentSubset, props.PgSyntax);
+    auto newExpr = MakeConjunction(dependentSubset, props.PgSyntax);
 
     if (input->Kind == EOperator::Map) {
         auto map = CastOperator<TOpMap>(input);
@@ -312,19 +312,17 @@ bool TExtractJoinExpressionsRule::MatchAndApply(std::shared_ptr<IOperator> &inpu
         TNodeOnNodeOwnedMap replaceMap;
 
         for (auto & conj : matchedConjuncts) {
-            TNodeOnNodeOwnedMap localMap;
             TVector<std::pair<TInfoUnit, TExprNode::TPtr>> renameMap;
             TJoinCondition cond(conj);
-            cond.ExtractExpressions(localMap, renameMap);
-            for (auto const & [key, value] : localMap) {
-                replaceMap.insert({key, value});
-            }
+            cond.ExtractExpressions(replaceMap, renameMap);
             for (auto const & [iu, expr] : renameMap) {
                 mapElements.emplace_back(iu, TExpression(expr, &ctx.ExprCtx, &props));
             }
         }
 
-        filter->FilterExpr.ApplyReplaceMap(replaceMap, ctx);
+        auto newFilterExpr = filter->FilterExpr.ApplyReplaceMap(replaceMap, ctx);
+        YQL_CLOG(TRACE, CoreDq) << "Remapped expr " << newFilterExpr.ToString();
+        filter->FilterExpr = newFilterExpr;
         auto newMap = std::make_shared<TOpMap>(filter->GetInput(), input->Pos, mapElements, false);
         filter->SetInput(newMap);
         return true;
@@ -575,7 +573,7 @@ std::shared_ptr<IOperator> TInlineSimpleInExistsSubplanRule::SimpleMatchAndApply
     }
 
     // Otherwise, we need to pack the remaining conjuncts back into the filter
-    return std::make_shared<TOpFilter>(join, filter->Pos, MakeConjunct(conjuncts, props.PgSyntax));
+    return std::make_shared<TOpFilter>(join, filter->Pos, MakeConjunction(conjuncts, props.PgSyntax));
 }
 
 // We push the map operator only below join right now
@@ -715,11 +713,11 @@ std::shared_ptr<IOperator> TPushFilterUnderMapRule::SimpleMatchAndApply(const st
     }
 
     filter->SetInput(map->GetInput());
-    filter->FilterExpr = MakeConjunct(pushedFilters, props.PgSyntax);
+    filter->FilterExpr = MakeConjunction(pushedFilters, props.PgSyntax);
     map->SetInput(filter);
 
     if (remainingFilters.size()) {
-        auto pushedFilterExpr = MakeConjunct(remainingFilters, props.PgSyntax);
+        auto pushedFilterExpr = MakeConjunction(remainingFilters, props.PgSyntax);
         return std::make_shared<TOpFilter>(map, map->Pos, pushedFilterExpr);
     } else {
         return map;
@@ -807,7 +805,7 @@ std::shared_ptr<IOperator> TPushFilterIntoJoinRule::SimpleMatchAndApply(const st
     auto rightInput = join->GetRightInput();
 
     if (pushLeft.size()) {
-        auto leftExpr = MakeConjunct(pushLeft, props.PgSyntax);
+        auto leftExpr = MakeConjunction(pushLeft, props.PgSyntax);
         leftInput = std::make_shared<TOpFilter>(leftInput, input->Pos, leftExpr);
     }
 
@@ -822,14 +820,14 @@ std::shared_ptr<IOperator> TPushFilterIntoJoinRule::SimpleMatchAndApply(const st
                 }
             }
             if (predicatesForRightSide.size()) {
-                auto rightExpr = MakeConjunct(pushRight, props.PgSyntax);
+                auto rightExpr = MakeConjunction(pushRight, props.PgSyntax);
                 rightInput = std::make_shared<TOpFilter>(rightInput, input->Pos, rightExpr);
                 join->JoinKind = "Inner";
             } else if (!pushLeft.size()) {
                 return input;
             }
         } else {
-            auto rightExpr = MakeConjunct(pushRight, props.PgSyntax);
+            auto rightExpr = MakeConjunction(pushRight, props.PgSyntax);
             rightInput = std::make_shared<TOpFilter>(rightInput, input->Pos, rightExpr);
         }
     }
@@ -838,7 +836,7 @@ std::shared_ptr<IOperator> TPushFilterIntoJoinRule::SimpleMatchAndApply(const st
     join->SetRightInput(rightInput);
 
     if (topLevelPreds.size()) {
-        auto topFilterExpr = MakeConjunct(topLevelPreds, props.PgSyntax);
+        auto topFilterExpr = MakeConjunction(topLevelPreds, props.PgSyntax);
         output =  std::make_shared<TOpFilter>(join, input->Pos, topFilterExpr);
     } else {
         output = join;

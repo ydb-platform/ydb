@@ -541,7 +541,6 @@ void TOpMap::ApplyReplaceMap(const TNodeOnNodeOwnedMap& map, TRBOContext& ctx) {
     for (size_t i = 0; i < MapElements.size(); i++) {
         if (!MapElements[i].IsRename()) {
             auto expr = MapElements[i].GetExpression();
-            //RemapExpr(bodyLambda, bodyLambda, map, ctx.ExprCtx, settings);
             MapElements[i].SetExpression(expr.ApplyReplaceMap(map, ctx));
         }
     }

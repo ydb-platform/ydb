@@ -47,13 +47,13 @@ TExprNode::TPtr ReplaceArg(TExprNode::TPtr input, TExprNode::TPtr arg, TExprCont
 }
 
 bool TestAndExtractEqualityPredicate(TExprNode::TPtr pred, TExprNode::TPtr& leftArg, TExprNode::TPtr& rightArg) {
-    if (pred->IsCallable("PgResolvedOp") && pred->Child(0)->Content() == "=") {
-        leftArg = pred->Child(2);
-        rightArg = pred->Child(3);
+    if (pred->IsCallable("PgResolvedOp") && pred->ChildPtr(0)->Content() == "=") {
+        leftArg = pred->ChildPtr(2);
+        rightArg = pred->ChildPtr(3);
         return true;
     } else if (pred->IsCallable("==")) {
-        leftArg = pred->Child(0);
-        rightArg = pred->Child(1);
+        leftArg = pred->ChildPtr(0);
+        rightArg = pred->ChildPtr(1);
         return true;
     }
     return false;
@@ -110,12 +110,12 @@ TExprNode::TPtr FindMemberArg(TExprNode::TPtr input) {
         auto member = TCoMember(input);
         return member.Struct().Ptr();
     } else if (input->IsCallable()) {
-        for (auto c : input->Children()) {
+        for (auto c : input->ChildrenList()) {
             if (auto arg = FindMemberArg(c))
                 return arg;
         }
     } else if (input->IsList()) {
-        for (auto c : input->Children()) {
+        for (auto c : input->ChildrenList()) {
             if (auto arg = FindMemberArg(c)) {
                 return arg;
             }
@@ -134,12 +134,14 @@ TExpression::TExpression(TExprNode::TPtr node, TExprContext* ctx, TPlanProps* pr
 
     if (node->IsLambda()) {
         Node = node;
+        Body = node->ChildPtr(1);
     } else {
         auto arg = Build<TCoArgument>(*ctx, node->Pos()).Name("lambda_arg").Done().Ptr();
         Node = Build<TCoLambda>(*ctx, node->Pos())
             .Args({arg})
             .Body(ReplaceArg(node, arg, *ctx))
             .Done().Ptr();
+        Body = node;
     }
 }
 
@@ -153,7 +155,7 @@ TVector<TExpression> TExpression::SplitConjunct() const {
 
     TVector<TExpression> conjuncts;
     if (body->IsCallable("And")) {
-        for (auto conj : body->Children()) {
+        for (auto conj : body->ChildrenList()) {
             conjuncts.push_back(TExpression(conj, Ctx, PlanProps));
         }
     } else {
@@ -254,11 +256,13 @@ TExpression TExpression::ApplyRenames(const THashMap<TInfoUnit, TInfoUnit, TInfo
     return TExpression(RenameMembers(Node, renameMap, *Ctx), Ctx, PlanProps);
 }
 
-TExpression TExpression::ApplyReplaceMap(TNodeOnNodeOwnedMap map, TRBOContext& ctx) const {
+TExpression TExpression::ApplyReplaceMap(const TNodeOnNodeOwnedMap& map, TRBOContext& ctx) const {
     Y_ENSURE(Node->IsLambda(), "Expression node is not lambda");
     TOptimizeExprSettings settings(&ctx.TypeCtx);
     TExprNode::TPtr output;
     RemapExpr(Node, output, map, ctx.ExprCtx, settings);
+    YQL_CLOG(TRACE, CoreDq) << "After replace " << PrintRBOExpression(output, *Ctx);
+
     return TExpression(output, Ctx, PlanProps);
 }
 
@@ -342,7 +346,8 @@ void TJoinCondition::ExtractExpressions(TNodeOnNodeOwnedMap& renameMap, TVector<
     Y_ENSURE(IncludesExpressions, "Trying to extract expressions from a join condition that doesn't contain them");
     Y_ENSURE(Expr.PlanProps, "Plan properties null when extracting expressions from join condition");
 
-    auto body = Expr.Node->ChildPtr(1);
+    // Make sure to access the original body, otherwise the pointers won't match the original expressions
+    auto body = Expr.Body;
 
     if (body->IsCallable("FromPg")) {
         body = body->ChildPtr(0);
@@ -410,7 +415,7 @@ TExpression MakeNothing(TPositionHandle pos, const TTypeAnnotationNode* type, TE
     return TExpression(nullExpr, ctx);
 }
 
-TExpression MakeConjunct(const TVector<TExpression>& vec, bool pgSyntax) {
+TExpression MakeConjunction(const TVector<TExpression>& vec, bool pgSyntax) {
     Y_ENSURE(vec.size());
 
     // Fetch context and plan properties from one of the conjuncts
@@ -428,8 +433,11 @@ TExpression MakeConjunct(const TVector<TExpression>& vec, bool pgSyntax) {
 
     Y_ENSURE(ctx);
     Y_ENSURE(props);
-
     auto pos = vec[0].Node->Pos();
+
+    if (vec.size()==1) {
+        return TExpression(vec[0].Node, ctx, props);
+    }
 
     auto lambda_arg = Build<TCoArgument>(*ctx, pos).Name("arg").Done().Ptr();
     TVector<TExprNode::TPtr> conjuncts;
@@ -439,16 +447,18 @@ TExpression MakeConjunct(const TVector<TExpression>& vec, bool pgSyntax) {
         conjuncts.push_back(ReplaceArg(exprLambda, lambda_arg, *ctx));
     }
 
-    auto lambda = Build<TCoLambda>(*ctx, pos)
-        .Args({lambda_arg})
-        .Body<TCoAnd>()
-            .Add(conjuncts)
-        .Build()
+    auto conjunction = Build<TCoAnd>(*ctx, pos)
+        .Add(conjuncts)
         .Done().Ptr();
 
     if (pgSyntax) {
-        lambda = ctx->Builder(pos).Callable("FromPg").Add(0, lambda).Seal().Build();
+        conjunction = ctx->Builder(pos).Callable("ToPg").Add(0, conjunction).Seal().Build();
     }
+
+    auto lambda = Build<TCoLambda>(*ctx, pos)
+        .Args({lambda_arg})
+        .Body(conjunction)
+        .Done().Ptr();
 
     return TExpression(lambda, ctx, props);
 }

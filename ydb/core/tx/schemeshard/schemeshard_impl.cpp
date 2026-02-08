@@ -385,7 +385,6 @@ THolder<TEvDataShard::TEvProposeTransaction> TSchemeShard::MakeDataShardProposal
         NKikimrTxDataShard::TX_KIND_SCHEME, TabletID(), ctx.SelfID,
         ui64(opId.GetTxId()), body, SelectProcessingParams(pathId)
     );
-    // result->Record.SetUserSID(BUILTIN_ACL_CDC_WITHOUT_USER_SID  /* todo What DDL operation generate CDC? */);
     return result;
 }
 

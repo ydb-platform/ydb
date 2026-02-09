@@ -242,6 +242,7 @@
 #include <ydb/library/actors/interconnect/poller/poller_tcp.h>
 #include <ydb/library/actors/interconnect/rdma/cq_actor/cq_actor.h>
 #include <ydb/library/actors/interconnect/rdma/mem_pool.h>
+#include <ydb/library/actors/retro_tracing/retro_collector.h>
 #include <ydb/library/actors/util/affinity.h>
 #include <ydb/library/actors/wilson/wilson_uploader.h>
 #include <ydb/library/slide_limiter/service/service.h>
@@ -996,6 +997,13 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                 NWilson::MakeWilsonUploaderId(),
                 TActorSetupCmd(wilsonUploader.release(), TMailboxType::ReadAsFilled, appData->BatchPoolId));
         }
+    }
+
+    { // create retro collector
+        setup->LocalServices.emplace_back(
+                NRetroTracing::MakeRetroCollectorId(),
+                TActorSetupCmd(NRetroTracing::CreateRetroCollector(), TMailboxType::ReadAsFilled,
+                        appData->BatchPoolId));
     }
 }
 

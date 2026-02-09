@@ -126,7 +126,7 @@ class PrSyncCreator:
                     self.git_run("checkout", "--ours", ours_file)
                     self.git_run("add", ours_file)
                     should_commit = True
-            for theirs_file in self.their_on_conflicts:
+            for theirs_file in self.theirs_on_conflicts:
                 if theirs_file in conflict_files:
                     self.logger.warning(f"Conflicts while merging. Attempting to resolve only for {theirs_file} with --theirs")
                     self.git_run("checkout", "--theirs", theirs_file)

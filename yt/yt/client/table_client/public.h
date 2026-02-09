@@ -336,9 +336,9 @@ using TTableSchemaPtr = TIntrusivePtr<TTableSchema>;
 
 class TConstrainedTableSchema;
 
-// NB: Is used to store constraints on master side.
+// NB: Used to store constraints on master side.
 using TColumnStableNameToConstraintMap = THashMap<TColumnStableName, std::string>;
-// NB: Is used to handle constraints on user side.
+// NB: Used to handle constraints on user side.
 using TColumnNameToConstraintMap = THashMap<std::string, std::string>;
 
 class TLegacyLockMask;

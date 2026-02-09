@@ -35,6 +35,7 @@ public:
             {"folder_id"},
             {"resource_id"},
             {"source_id"},
+            {"database"},
         };
         auto& metricFields = srcMetric.metric_fields().fields();
 

@@ -1001,7 +1001,7 @@ std::pair<IDqComputeActorAsyncInput*, IActor*> CreateDqPqReadActor(
         CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token, addBearerToToken),
         computeActorId,
         counters,
-        bufferSize,
+        settings.GetReadSessionBufferBytes() ? settings.GetReadSessionBufferBytes() : bufferSize,
         pqGateway,
         topicPartitionsCount,
         enableStreamingQueriesCounters

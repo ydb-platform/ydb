@@ -1,8 +1,8 @@
 diff --git a/include/source_location b/include/source_location
-index d16e3c4..958c16f 100644
+index faa6b0e..e10da2e 100644
 --- a/include/source_location
 +++ b/include/source_location
-@@ -52,12 +52,23 @@ class source_location {
+@@ -54,12 +54,23 @@ class source_location {
    // in constant evaluation, so we don't want to use `void*` as the argument
    // type unless the builtin returned that, anyhow, and the invalid cast is
    // unavoidable.

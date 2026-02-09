@@ -154,6 +154,10 @@ void TAsyncLooper::StartLoop(const TGuard& guard)
                 MakeWeak(this),
                 EpochNumber_)
                     .AsyncVia(Invoker_));
+    } else {
+        YT_LOG_DEBUG("Looper received null future, stopping");
+        State_ = EState::NotRunning;
+        ++EpochNumber_;
     }
 }
 

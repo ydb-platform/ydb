@@ -5865,7 +5865,12 @@ namespace {
                     rowColumns.push_back(ctx.Expr.MakeType<TItemExprType>(child->Head().Content(), finishType));
                 }
             } else if (suffix == "Combine" || suffix == "CombineState" || suffix == "MergeState") {
-                auto stateType = isAggApply ? AggApplySerializedStateType(child->ChildPtr(1), ctx.Expr) : child->Child(1)->Child(3)->GetTypeAnn();
+                TCheckedDerefPtr<const TTypeAnnotationNode> stateType;
+                if (isAggApply) {
+                    stateType = AggApplySerializedStateType(child->ChildPtr(1), ctx.Expr);
+                } else {
+                    stateType = child->Child(1)->Child(3)->GetTypeAnn();
+                }
                 if (child->Head().IsList()) {
                     for (const auto& x : child->Head().Children()) {
                         rowColumns.push_back(ctx.Expr.MakeType<TItemExprType>(x->Content(), stateType));

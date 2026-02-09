@@ -355,6 +355,12 @@ struct TUdfCachedInfo {
     TLangVersion MaxLangVer = UnknownLangVersion;
 };
 
+struct TLineageStats {
+    TMaybe<bool> Correct;
+    TMaybe<bool> CorrectStandalone;
+    ui64 Size = 0;
+};
+
 const TString TypeAnnotationContextComponent = "TypeAnnotationContext";
 const TString NowKey = "Now";
 const TString RandomKey = "Random";
@@ -482,9 +488,9 @@ struct TTypeAnnotationContext: public TThrRefBase {
     bool DirectRowDependsOn = true;
     bool EnableLineage = false;
     bool EnableStandaloneLineage = false;
-    TMaybe<bool> CorrectLineage;
-    TMaybe<bool> CorrectStandaloneLineage;
-    TMaybe<ui32> LineageSize;
+    TLineageStats LineageStats;
+    ui64 LineageOutputLimit = 40 * 1024 * 1024; // 40 mb limit for lineage representation
+    ui64 LineageMemoryLimit = 150 * 1024 * 1024; // 150 mb limit for memory allocation in lineage calculation
 
     THashMap<TString, NLayers::IRemoteLayerProviderPtr> RemoteLayerProviderByName;
     NLayers::ILayersRegistryPtr LayersRegistry;

@@ -186,7 +186,6 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
         settings.push_back(setting);
 
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableConstantFolding(true);
         appConfig.MutableTableServiceConfig()->SetEnableOrderOptimizaionFSM(true);
         appConfig.MutableTableServiceConfig()->SetCompileTimeoutMs(compilationTimeout.MilliSeconds());
 

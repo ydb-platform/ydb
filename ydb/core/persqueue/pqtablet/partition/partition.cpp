@@ -1863,7 +1863,7 @@ void TPartition::CheckHeadConsistency() const
 }
 
 ui64 TPartition::GetSizeLag(i64 offset) {
-    return BlobEncoder.GetSizeLag(offset);
+    return BlobEncoder.GetSizeLag(offset) + CompactionBlobEncoder.GetSizeLag(offset);
 }
 
 
@@ -4576,7 +4576,7 @@ IActor* CreatePartitionActor(ui64 tabletId, const TPartitionId& partition, const
 }
 
 void TPartition::SetupDetailedMetrics() {
-    if (!DetailedMetricsAreEnabled(Config)) {
+    if (!DetailedMetricsAreEnabled(Config) || IsSupportive()) {
         return;
     }
     if (WriteTimeLagMsByLastWritePerPartition) {

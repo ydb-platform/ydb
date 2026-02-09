@@ -498,11 +498,17 @@ void RegisterYtMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler) {
                 return ctx.ProgramBuilder.NewEmptyList(itemType);
             }
 
-            auto origItemStructType = (
+            auto typeAnn =
                 tableContent.Input().Maybe<TYtOutput>()
                     ? tableContent.Input().Ref().GetTypeAnn()
-                    : tableContent.Input().Ref().GetTypeAnn()->Cast<TTupleExprType>()->GetItems().back()
-            )->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+                    : static_cast<TCheckedDerefPtr<const TTypeAnnotationNode>>(
+                          tableContent.Input()
+                              .Ref()
+                              .GetTypeAnn()
+                              ->Cast<TTupleExprType>()
+                              ->GetItems()
+                              .back());
+            auto origItemStructType = typeAnn->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
 
             TMaybe<ui64> itemsCount;
             TString name = ToString(TYtBlockTableContent::CallableName());

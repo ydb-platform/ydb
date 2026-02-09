@@ -13304,7 +13304,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
 
         // ON ERROR and ON EMPTY values must be castable to resultSlot or "Null"
         auto isValidCaseHandler = [&] (const TExprNode& node) {
-            const auto* typeAnn = node.GetTypeAnn();
+            const auto typeAnn = node.GetTypeAnn();
             if (!typeAnn) {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(node.Pos()), "Expected computable value, but got lambda"));
                 return false;
@@ -14210,6 +14210,38 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         return IGraphTransformer::TStatus::Ok;
     }
 
+    IGraphTransformer::TStatus LinearDestroyWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
+        if (!IsAvailableLangVersion(MakeLangVersion(2025, 5), ctx.Types.LangVer)) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "LinearDestroy is not available before version 2025.05"));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureMinArgsCount(*input, 1, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureComputable(input->Head(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        for (ui32 i = 1; i < input->ChildrenSize(); ++i) {
+            auto child = input->Child(i);
+            if (child->GetTypeAnn() && child->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+                input->SetTypeAnn(child->GetTypeAnn());
+                return IGraphTransformer::TStatus::Ok;
+            }
+
+            if (!EnsureLinearType(*child, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+        }
+
+        TExprNode::TListType children = input->ChildrenList();
+        std::swap(children.front(), children.back());
+        output = ctx.Expr.NewCallable(input->Pos(), "Seq", std::move(children));
+        return IGraphTransformer::TStatus::Repeat;
+    }
+
     IGraphTransformer::TStatus AssumeAllMembersNullableAtOnceWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         Y_UNUSED(output);
         if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
@@ -14374,7 +14406,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["WithWorld"] = &WithWorldWrapper;
         Functions["Concat"] = &ConcatWrapper;
         Functions["AggrConcat"] = &AggrConcatWrapper;
-        ExtFunctions["FulltextContains"] = &FullTextBuiltinWrapper<false>;
+        ExtFunctions["FulltextMatch"] = &FullTextBuiltinWrapper<false>;
         ExtFunctions["FulltextScore"] = &FullTextBuiltinWrapper<true>;
         ExtFunctions["SqlConcat"] = &SqlConcatWrapper;
         ExtFunctions["Substring"] = &SubstringWrapper;
@@ -14545,6 +14577,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         ExtFunctions["DynamicLinearType"] = &TypeWrapper<ETypeAnnotationKind::DynamicLinear>;
         ExtFunctions["ToDynamicLinear"] = &ToDynamicLinearWrapper;
         ExtFunctions["FromDynamicLinear"] = &FromDynamicLinearWrapper;
+        ExtFunctions["LinearDestroy"] = &LinearDestroyWrapper;
         ExtFunctions["MutDictCreate"] = &MutDictCreateWrapper;
         ExtFunctions["FromMutDict"] = &FromMutDictWrapper;
         ExtFunctions["ToMutDict"] = &ToMutDictWrapper;

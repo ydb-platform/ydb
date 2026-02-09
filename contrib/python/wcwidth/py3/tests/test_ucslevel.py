@@ -46,7 +46,11 @@ def test_exact_410_unicode():
 
 
 def test_nearest_505_str():
-    """wcwidth._wcmatch_version('5.0.5') returns nearest '5.0.0'. (str)"""
+    """
+    wcwidth._wcmatch_version('5.0.5') returns nearest '5.0.0'.
+
+    (str)
+    """
     # given
     given, expected = '5.0.5', '5.0.0'
 
@@ -58,7 +62,11 @@ def test_nearest_505_str():
 
 
 def test_nearest_505_unicode():
-    """wcwidth._wcmatch_version(u'5.0.5') returns nearest u'5.0.0'. (unicode)"""
+    """
+    wcwidth._wcmatch_version(u'5.0.5') returns nearest u'5.0.0'.
+
+    (unicode)
+    """
     # given
     given, expected = '5.0.5', '5.0.0'
 

@@ -3189,6 +3189,7 @@ void TPersQueue::Handle(TEvPersQueue::TEvProposeTransaction::TPtr& ev, const TAc
     auto span = GenerateSpan("Topic.Transaction", *SamplingControl, std::move(ev->TraceId));
     span.Attribute("TxId", static_cast<i64>(event.GetTxId()));
     span.Attribute("TabletId", static_cast<i64>(TabletID()));
+    span.Attribute("database", Config.GetYdbDatabasePath());
 
     ev->Get()->ExecuteSpan = std::move(span);
 

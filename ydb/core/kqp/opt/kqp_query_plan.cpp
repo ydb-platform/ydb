@@ -802,21 +802,21 @@ private:
             op.Properties["K1Factor"] = GetExprStr(TExprBase(settings.K1Factor), true);
         }
 
-        NTableIndex::NFulltext::EQueryMode queryMode = NTableIndex::NFulltext::EQueryMode::Invalid;
-        if (settings.QueryMode) {
-            op.Properties["QueryMode"] = GetExprStr(TExprBase(settings.QueryMode), true);
-            if (TExprBase(settings.QueryMode).Maybe<TCoDataCtor>()) {
+        NTableIndex::NFulltext::EDefaultOperator defaultOperator = NTableIndex::NFulltext::EDefaultOperator::Invalid;
+        if (settings.DefaultOperator) {
+            op.Properties["DefaultOperator"] = GetExprStr(TExprBase(settings.DefaultOperator), true);
+            if (TExprBase(settings.DefaultOperator).Maybe<TCoDataCtor>()) {
                 TString error;
-                queryMode = NTableIndex::NFulltext::QueryModeFromString(TString(TExprBase(settings.QueryMode).Cast<TCoDataCtor>().Literal()), error);
+                defaultOperator = NTableIndex::NFulltext::DefaultOperatorFromString(TString(TExprBase(settings.DefaultOperator).Cast<TCoDataCtor>().Literal()), error);
             }
         }
 
         if (settings.MinimumShouldMatch) {
             op.Properties["MinimumShouldMatch"] = GetExprStr(TExprBase(settings.MinimumShouldMatch), true);
             TString minimumShouldMatchError;
-            if (searchTerms.size() > 0 && queryMode != NTableIndex::NFulltext::EQueryMode::Invalid && TExprBase(settings.MinimumShouldMatch).Maybe<TCoDataCtor>()) {
+            if (searchTerms.size() > 0 && defaultOperator != NTableIndex::NFulltext::EDefaultOperator::Invalid && TExprBase(settings.MinimumShouldMatch).Maybe<TCoDataCtor>()) {
                 ui32 minimumShouldMatch = NTableIndex::NFulltext::MinimumShouldMatchFromString(
-                    searchTerms.size(), queryMode, TString(TExprBase(settings.MinimumShouldMatch).Cast<TCoDataCtor>().Literal()), minimumShouldMatchError);
+                    searchTerms.size(), defaultOperator, TString(TExprBase(settings.MinimumShouldMatch).Cast<TCoDataCtor>().Literal()), minimumShouldMatchError);
                 op.Properties["MinimumShouldMatchExplained"] = std::to_string(minimumShouldMatch);
             }
         }

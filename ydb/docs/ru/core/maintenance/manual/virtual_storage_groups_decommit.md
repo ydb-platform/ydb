@@ -92,7 +92,7 @@
 
 Инструкция по декомиссии групп работает при выполнении следующих условий:
 
-1. Развернутый [кластер](../../concepts/glossary.md#cluster) {{ ydb-short-name }}. Инструкции по развертыванию доступны в разделе [Первоначальное развёртывание](../../devops/deployment-options/manual/initial-deployment.md).
+1. Развернутый [кластер](../../concepts/glossary.md#cluster) {{ ydb-short-name }}. Инструкции по развертыванию доступны в разделе [Первоначальное развёртывание](../../devops/deployment-options/manual/initial-deployment/index.md).
 2. Установленная утилита `ydb-dstool`. Инструкции по установке доступны в [документации по установке {{ ydb-short-name }} DSTool](../../reference/ydb-dstool/install.md).
 3. Сгенерированный токен аутентификации для доступа к кластеру:
 

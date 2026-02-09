@@ -121,6 +121,15 @@ TActorId CreateMessageDeadlineChangerActor(NActors::TTestActorRuntime& runtime, 
     return readerId;
 }
 
+TActorId CreatePurgerActor(NActors::TTestActorRuntime& runtime, TPurgerSettings&& settings) {
+    auto edgeId = runtime.AllocateEdgeActor();
+    auto readerId = runtime.Register(CreatePurger(edgeId, std::move(settings)));
+    runtime.EnableScheduleForActor(readerId);
+    runtime.DispatchEvents();
+
+    return readerId;
+}
+
 TActorId CreateDescriberActor(NActors::TTestActorRuntime& runtime, const TString& databasePath, const TString& topicPath) {
     auto edgeId = runtime.AllocateEdgeActor();
     auto readerId = runtime.Register(NDescriber::CreateDescriberActor(edgeId, databasePath, {topicPath}));
@@ -138,6 +147,10 @@ THolder<TEvReadResponse> GetReadResponse(NActors::TTestActorRuntime& runtime, TD
     return runtime.GrabEdgeEvent<TEvReadResponse>(timeout);
 }
 
+THolder<TEvPurgeResponse> GetPurgeResponse(NActors::TTestActorRuntime& runtime, TDuration timeout) {
+    return runtime.GrabEdgeEvent<TEvPurgeResponse>(timeout);
+}
+
 THolder<TEvWriteResponse> GetWriteResponse(NActors::TTestActorRuntime& runtime, TDuration timeout) {
     return runtime.GrabEdgeEvent<TEvWriteResponse>(timeout);
 }
@@ -152,6 +165,17 @@ THolder<NDescriber::TEvDescribeTopicsResponse> GetDescriberResponse(NActors::TTe
 
 void AssertReadError(NActors::TTestActorRuntime& runtime, Ydb::StatusIds::StatusCode errorCode, const TString& message, TDuration timeout) {
     auto response = GetReadResponse(runtime, timeout);
+    if (!response) {
+        UNIT_FAIL("Timeout");
+    }
+
+    UNIT_ASSERT_VALUES_EQUAL_C(Ydb::StatusIds::StatusCode_Name(response->Status),
+        Ydb::StatusIds::StatusCode_Name(errorCode), response->ErrorDescription);
+    UNIT_ASSERT_VALUES_EQUAL(response->ErrorDescription, message);
+}
+
+void AssertPurgeError(NActors::TTestActorRuntime& runtime, Ydb::StatusIds::StatusCode errorCode, const TString& message, TDuration timeout) {
+    auto response = GetPurgeResponse(runtime, timeout);
     if (!response) {
         UNIT_FAIL("Timeout");
     }

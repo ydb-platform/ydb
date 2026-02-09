@@ -1,0 +1,23 @@
+#include <ydb/core/persqueue/public/mlp/ut/common/common.h>
+
+namespace NKikimr::NPQ::NMLP {
+
+Y_UNIT_TEST_SUITE(TMLPPurgerTests) {
+
+    Y_UNIT_TEST(TopicNotExists) {
+        auto setup = CreateSetup();
+
+        auto& runtime = setup->GetRuntime();
+        CreatePurgerActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic_not_exists",
+            .Consumer = "consumer_not_exists"
+        });
+
+        AssertPurgeError(runtime, Ydb::StatusIds::SCHEME_ERROR,
+            "You do not have access or the '/Root/topic_not_exists' does not exist");
+    }
+
+}
+
+}

@@ -108,11 +108,11 @@ namespace NKikimr::NSqsTopic::V1 {
                     break;
                 }
                 case Ydb::StatusIds::SCHEME_ERROR: {
-                    ReplyWithError(MakeError(NKikimr::NSQS::NErrors::NON_EXISTENT_QUEUE, std::format("Error reading from topic: {}", response.ErrorDescription.ConstRef())));
+                    ReplyWithError(MakeError(NKikimr::NSQS::NErrors::NON_EXISTENT_QUEUE, std::format("Error purge a topic: {}", response.ErrorDescription.ConstRef())));
                     return;
                 }
                 default: {
-                    ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE, std::format("Error reading from topic: {}", response.ErrorDescription.ConstRef())));
+                    ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE, std::format("Error purge a topic: {}", response.ErrorDescription.ConstRef())));
                     return;
                 }
             }

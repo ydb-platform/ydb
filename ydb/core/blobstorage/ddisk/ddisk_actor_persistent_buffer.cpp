@@ -63,7 +63,9 @@ namespace NKikimr::NDDisk {
                             .Size = header->Size,
                             .PartsCount = 0,
                         };
-                        for (ui32 i = 0; i < header->Size / SectorSize; i++) {
+                        ui32 sectorsCnt = header->Size / SectorSize;
+                        pr.Sectors.reserve(sectorsCnt);
+                        for (ui32 i = 0; i < sectorsCnt; i++) {
                             pr.Sectors.push_back(header->Locations[i]);
                         }
                     } else {
@@ -82,6 +84,11 @@ namespace NKikimr::NDDisk {
                         });
                     }
                     std::erase_if(PersistentBuffers, [](const auto& pb) { return pb.second.Records.empty(); });
+                    for (auto& [_, pb] : PersistentBuffers) {
+                        for (auto& [__, record] : pb.Records) {
+                            PersistentBufferSpaceAllocator.MarkOccupied(record.Sectors);
+                        }
+                    }
                     PersistentBufferSectorsChecksum.clear();
                     Counters.Interface.RestorePersistentBuffer.Reply(true);
                     PersistentBufferRestoreSpan.End();

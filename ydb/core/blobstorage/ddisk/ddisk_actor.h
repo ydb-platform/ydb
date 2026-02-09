@@ -343,6 +343,7 @@ namespace NKikimr::NDDisk {
                 std::vector<TPersistentBufferSectorInfo> Sectors;
                 std::map<ui32, TRope> DataParts;
                 ui32 PartsCount;
+                
                 TRope JoinData();
             };
 

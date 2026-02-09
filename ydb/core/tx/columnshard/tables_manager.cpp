@@ -155,9 +155,9 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db, const TTabletStorageInfo* i
 
         while (!rowset.EndOfSet()) {
             TTableInfo table = table.InitFromDBV1(rowset);
-            const auto& pathIds = table.GetPathIds();
+            const auto pathIds = table.GetPathIds();
             AFL_VERIFY(pathIds.size() == 1);
-            const auto& pathId = *pathIds.begin();
+            const auto pathId = *pathIds.begin();
             if (GenerateInternalPathId) {
                 AFL_VERIFY(pathId.InternalPathId <= MaxInternalPathId)("path_id", pathId)("max_internal_path_id", MaxInternalPathId);
             }
@@ -186,9 +186,9 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db, const TTabletStorageInfo* i
 
         while (!rowset.EndOfSet()) {
             TTableInfo table = table.InitFromDB(rowset);
-            const auto& pathIds = table.GetPathIds();
+            const auto pathIds = table.GetPathIds();
             AFL_VERIFY(pathIds.size() == 1);
-            const auto& pathId = *pathIds.begin();
+            const auto pathId = *pathIds.begin();
             if (GenerateInternalPathId) {
                 AFL_VERIFY(pathId.InternalPathId <= MaxInternalPathId)("path_id", pathId)("max_internal_path_id", MaxInternalPathId);
             }
@@ -409,7 +409,7 @@ void TTablesManager::DropPreset(const ui32 presetId, const NOlap::TSnapshot& ver
 
 void TTablesManager::RegisterTable(TTableInfo&& table, NIceDb::TNiceDb& db) {
     AFL_VERIFY(table.GetPathIds().size() == 1);
-    const auto& pathId = *table.GetPathIds().begin();
+    const auto pathId = *table.GetPathIds().begin();
     Y_ABORT_UNLESS(table.IsEmpty());
     NYDBTest::TControllers::GetColumnShardController()->OnAddPathId(TabletId, pathId);
 
@@ -490,7 +490,7 @@ void TTablesManager::AddTableVersion(const TInternalPathId pathId, const NOlap::
     const NKikimrTxColumnShard::TTableVersionInfo& versionInfo, const std::optional<NKikimrSchemeOp::TColumnTableSchema>& schema,
     NIceDb::TNiceDb& db) {
     auto it = Tables.find(pathId);
-    AFL_VERIFY(it != Tables.end());
+    AFL_VERIFY(it != Tables.end())("method", "AddTableVersion")("internal_path_id", pathId)("version", version);
     auto& table = it->second;
 
     bool isTtlModified = false;

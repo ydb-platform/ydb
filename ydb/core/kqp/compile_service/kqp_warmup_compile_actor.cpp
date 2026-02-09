@@ -57,11 +57,12 @@ struct TEvPrivate {
 
 class TFetchCacheActor : public TQueryBase {
 public:
-    TFetchCacheActor(const TString& database, ui32 maxQueriesToLoad, ui64 maxCompilationDurationMs, const TVector<ui32>& nodeIds)
+    TFetchCacheActor(const TString& database, ui32 maxQueriesToLoad, ui64 maxCompilationDurationMs, const TVector<ui32>& nodeIds, ui32 maxNodesToQuery)
         : TQueryBase(NKikimrServices::KQP_COMPILE_SERVICE, {}, database, true, true)
         , MaxQueriesToLoad(maxQueriesToLoad)
         , MaxCompilationDurationMs(maxCompilationDurationMs)
         , NodeIds(nodeIds)
+        , MaxNodesToQuery(maxNodesToQuery)
     {}
 
     void OnRunQuery() override {
@@ -74,9 +75,8 @@ public:
             << "  AND CompilationDuration < " << MaxCompilationDurationMs;
 
         if (!NodeIds.empty()) {
-            const size_t nodesToUse = std::min<size_t>(3, NodeIds.size());
             sql << "  AND NodeId IN (";
-            for (size_t i = 0; i < nodesToUse; ++i) {
+            for (size_t i = 0; i < MaxNodesToQuery; ++i) {
                 if (i > 0) sql << ", ";
                 sql << NodeIds[i];
             }
@@ -126,6 +126,7 @@ private:
     ui32 MaxQueriesToLoad;
     ui64 MaxCompilationDurationMs;
     TVector<ui32> NodeIds;
+    ui32 MaxNodesToQuery;
     std::unique_ptr<TEvPrivate::TEvFetchCacheResult> Result = std::make_unique<TEvPrivate::TEvFetchCacheResult>(false);
 };
 
@@ -293,15 +294,20 @@ private:
 
         LOG_I("Received TEvStartWarmup, discovered nodes: " << discoveredNodes
               << ", nodeIds count: " << NodeIds.size()
+              << ", maxNodesToQuery: " << Config.MaxNodesToQuery
               << ", scheduling soft deadline: " << Config.Deadline);
         Schedule(Config.Deadline, new TEvPrivate::TEvSoftDeadline());
         StartFetch();
     }
 
     void StartFetch() {
-        LOG_I("Spawning fetch cache actor, filtering by " << std::min<size_t>(3, NodeIds.size()) << " nodes");
+        ui32 maxNodesToQuery = Config.MaxNodesToQuery;
+        if (maxNodesToQuery == 0) {
+            maxNodesToQuery = NodeIds.size(); // 0 means query all nodes
+        }
+        LOG_I("Spawning fetch cache actor, filtering by " << std::min<size_t>(maxNodesToQuery, NodeIds.size()) << " nodes");
         const ui64 maxCompilationMs = Config.Deadline.MilliSeconds() / 2;
-        Register(new TFetchCacheActor(Database, Config.MaxQueriesToLoad, maxCompilationMs, NodeIds));
+        Register(new TFetchCacheActor(Database, Config.MaxQueriesToLoad, maxCompilationMs, NodeIds, maxNodesToQuery));
         Become(&TThis::StateFetching);
     }
 

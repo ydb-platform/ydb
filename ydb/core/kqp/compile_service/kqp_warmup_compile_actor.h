@@ -38,6 +38,7 @@ struct TKqpWarmupConfig {
     TDuration HardDeadline = TDuration::Seconds(20);    // Hard deadline: max time from actor start (must be >= Deadline)
     ui32 MaxConcurrentCompilations = 5;
     ui32 MaxQueriesToLoad = 1000;
+    ui32 MaxNodesToQuery = 5;                           // Max nodes to query for warmup (0 = all nodes)
 };
 
 inline TKqpWarmupConfig ImportWarmupConfigFromProto(const NKikimrConfig::TTableServiceConfig::TCompileCacheWarmupConfig& proto) {
@@ -47,6 +48,7 @@ inline TKqpWarmupConfig ImportWarmupConfigFromProto(const NKikimrConfig::TTableS
     config.HardDeadline = TDuration::Seconds(proto.GetHardDeadlineSeconds());
     config.MaxConcurrentCompilations = proto.GetMaxConcurrentCompilations();
     config.MaxQueriesToLoad = proto.GetMaxQueriesToLoad();
+    config.MaxNodesToQuery = proto.GetMaxNodesToQuery();
     return config;
 }
 

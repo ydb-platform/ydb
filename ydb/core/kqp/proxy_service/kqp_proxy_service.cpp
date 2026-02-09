@@ -1828,16 +1828,6 @@ private:
             result->ProxyNodes.push_back(SelfId().NodeId());
         }
 
-        // Pass MaxNodesToQuery only if request comes from warmup actor
-        // Check if sender is warmup actor by comparing with warmup actor ID pattern
-        bool isWarmupRequest = (ev->Sender == NKqp::MakeKqpWarmupActorId(SelfId().NodeId()));
-
-        if (isWarmupRequest &&
-            TableServiceConfig.HasCompileCacheWarmupConfig() &&
-            TableServiceConfig.GetCompileCacheWarmupConfig().GetMaxNodesToQuery() > 0) {
-            result->MaxNodesToQuery = TableServiceConfig.GetCompileCacheWarmupConfig().GetMaxNodesToQuery();
-        }
-
         Send(ev->Sender, result.release(), 0, ev->Cookie);
     }
 

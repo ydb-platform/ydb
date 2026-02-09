@@ -416,7 +416,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
             {"MessageId", "MessageId"},
         };
 
-        static void CompareCommonSendAndRecievedAttrubutes(const NJson::TJsonValue& jsonSend, const NJson::TJsonValue& jsonReceived, TStringBuf caseName = {}) {
+        static void CompareCommonSendAndReceivedAttrubutes(const NJson::TJsonValue& jsonSend, const NJson::TJsonValue& jsonReceived, TStringBuf caseName = {}) {
             for (const auto& [keyS, keyR] : CommonReceiveMessageAttributes) {
                 UNIT_ASSERT_VALUES_EQUAL_C(GetByPath<TString>(jsonSend, keyS), GetByPath<TString>(jsonReceived, keyR), LabeledOutput(keyS, caseName));
             }
@@ -470,7 +470,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
             auto jsonReceived = ReceiveMessage({{"QueueUrl", path.QueueUrl}, {"WaitTimeSeconds", 20}});
             UNIT_ASSERT_VALUES_EQUAL(jsonReceived["Messages"].GetArraySafe().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(jsonReceived["Messages"][0]["Body"], "MessageBody-0");
-            CompareCommonSendAndRecievedAttrubutes(jsonSend, jsonReceived["Messages"][0]);
+            CompareCommonSendAndReceivedAttrubutes(jsonSend, jsonReceived["Messages"][0]);
             // Second call during visibility timeout
             jsonReceived = ReceiveMessage({{"QueueUrl", path.QueueUrl}, {"WaitTimeSeconds", 1}});
             UNIT_ASSERT_VALUES_EQUAL(jsonReceived["Messages"].GetArray().size(), 0);
@@ -490,7 +490,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
             auto jsonReceived = ReceiveMessage({{"QueueUrl", path.QueueUrl}, {"WaitTimeSeconds", 20}, {"VisibilityTimeout", 1}});
             UNIT_ASSERT_VALUES_EQUAL(jsonReceived["Messages"].GetArraySafe().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(jsonReceived["Messages"][0]["Body"], "MessageBody-0");
-            CompareCommonSendAndRecievedAttrubutes(jsonSend, jsonReceived["Messages"][0]);
+            CompareCommonSendAndReceivedAttrubutes(jsonSend, jsonReceived["Messages"][0]);
 
             do {
                 Sleep(TDuration::MilliSeconds(350));
@@ -501,7 +501,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
 
             UNIT_ASSERT_VALUES_EQUAL(jsonReceived["Messages"].GetArraySafe().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(jsonReceived["Messages"][0]["Body"], "MessageBody-0");
-            CompareCommonSendAndRecievedAttrubutes(jsonSend, jsonReceived["Messages"][0]);
+            CompareCommonSendAndReceivedAttrubutes(jsonSend, jsonReceived["Messages"][0]);
         }
 
         Y_UNIT_TEST_F(TestReceiveMessageGroup, TFixture) {

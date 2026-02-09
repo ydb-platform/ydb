@@ -257,7 +257,7 @@ Y_UNIT_TEST_SUITE(TesTTestDecorator) {
 
     struct TCounters {
         ui64 SendedCount = 0;
-        ui64 RecievedCount = 0;
+        ui64 ReceivedCount = 0;
     };
 
     struct TCountingDecorator : TTestDecorator {
@@ -280,7 +280,7 @@ Y_UNIT_TEST_SUITE(TesTTestDecorator) {
 
         bool DoBeforeReceiving(TAutoPtr<IEventHandle> &/*ev*/, const TActorContext &/*ctx*/) override {
             Write("TCountingDecorator::DoBeforeReceiving");
-            Counters->RecievedCount++;
+            Counters->ReceivedCount++;
             return true;
         }
     };

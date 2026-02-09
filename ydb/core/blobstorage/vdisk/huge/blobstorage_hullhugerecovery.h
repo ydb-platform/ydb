@@ -71,6 +71,7 @@ namespace NKikimr {
         class THeap;
 
         struct THullHugeKeeperPersState {
+            typedef THashSet<NHuge::THugeSlot> TAllocatedSlots;
             static const ui32 Signature;
 
             TIntrusivePtr<TVDiskContext> VCtx;
@@ -78,8 +79,7 @@ namespace NKikimr {
             THullHugeRecoveryLogPos LogPos;
             std::unique_ptr<NHuge::THeap> Heap;
             // slots that are already allocated, but not written to log
-            THashSet<THugeSlot> SlotsInFlight;
-            THashMap<ui32, std::tuple<ui32, ui32>> ChunkToSlotSize;
+            TAllocatedSlots AllocatedSlots;
             // guard to avoid using structure before recovery has been completed
             bool Recovered = false;
             // guid for this instance of pers state
@@ -145,13 +145,6 @@ namespace NKikimr {
             void InitiateNewEntryPointCommit(ui64 lsn, ui64 minInFlightLsn);
             // finish commit
             void EntryPointCommitted(ui64 lsn);
-
-            void AddSlotInFlight(THugeSlot hugeSlot);
-            bool DeleteSlotInFlight(THugeSlot hugeSlot);
-
-            void AddChunkSize(THugeSlot hugeSlot);
-            void DeleteChunkSize(THugeSlot hugeSlot);
-            void RegisterBlob(TDiskPart diskPart);
 
             enum ESlotDelDbType {
                 LogoBlobsDb,

@@ -23,14 +23,12 @@ namespace NKikimr {
             ui32 ChunkId = 0;
             TMask Mask;
             ui32 MaskSize = 0;
-            bool InLockedChunks = false;
 
             TFreeRes() = default;
-            TFreeRes(ui32 chunkId, TMask mask, ui32 maskSize, bool inLockedChunks)
+            TFreeRes(ui32 chunkId, TMask mask, ui32 maskSize)
                 : ChunkId(chunkId)
                 , Mask(mask)
                 , MaskSize(maskSize)
-                , InLockedChunks(inLockedChunks)
             {}
 
             void Output(IOutputStream &str) const;

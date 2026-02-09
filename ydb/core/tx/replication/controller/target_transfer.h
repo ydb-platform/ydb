@@ -1,10 +1,12 @@
 #pragma once
 
 #include "target_with_stream.h"
-#include <library/cpp/sliding_window/sliding_window.h>
+
 #include <ydb/core/base/counters.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/tx/replication/service/worker.h>
+
+#include <library/cpp/sliding_window/sliding_window.h>
 
 namespace NKikimr::NReplication::NController {
 

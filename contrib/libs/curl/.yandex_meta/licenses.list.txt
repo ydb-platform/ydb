@@ -1,4 +1,8 @@
 ====================BSD-3-Clause====================
+  /* Define to use BSD-style lwIP TCP/IP stack. */
+
+
+====================BSD-3-Clause====================
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -17,7 +21,7 @@
  * THIS SOFTWARE IS PROVIDED BY THE INSTITUTE AND CONTRIBUTORS ``AS IS'' AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE INSTITUTE OR CONTRIBUTORS BE LIABLE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE INSTITUTE OR CONTRIBUTORS BE LIABLE
  * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
  * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
  * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
@@ -31,12 +35,12 @@
  * SPDX-License-Identifier: BSD-3-Clause
 
 
+====================BSD-3-Clause====================
+/*               BSD-style lwIP TCP/IP stack SPECIFIC               */
+
+
 ====================COPYRIGHT====================
  * Copyright (C) 1996-2022  Internet Software Consortium.
-
-
-====================COPYRIGHT====================
- * Copyright (C) Daniel Stenberg, <daniel.se>, et al.
 
 
 ====================COPYRIGHT====================
@@ -76,8 +80,7 @@
 
 
 ====================COPYRIGHT====================
- * Copyright (C) Daniel Stenberg, <daniel@haxx.se>, et al.
- * Copyright (C) Nick Zitzmann, <nickzman@gmail.com>.
+ * Copyright (C) Evgeny Grin (Karlson2k), <k2k@narod.ru>.
 
 
 ====================COPYRIGHT====================
@@ -88,15 +91,17 @@
 ====================COPYRIGHT====================
  * Copyright (C) Jacob Hoffman-Andrews,
  * <github@hoffman-andrews.com>
+ * Copyright (C) kpcyrd, <kpcyrd@archlinux.org>
+ * Copyright (C) Daniel McCarney, <daniel@binaryparadox.net>
+
+
+====================COPYRIGHT====================
+ * Copyright (C) Jan Venekamp, <jan@venekamp.net>
 
 
 ====================COPYRIGHT====================
  * Copyright (C) Linus Nielsen Feltzing, <linus@haxx.se>
  * Copyright (C) Daniel Stenberg, <daniel@haxx.se>, et al.
-
-
-====================COPYRIGHT====================
- * Copyright (C) Michael Forney, <mforney@mforney.org>
 
 
 ====================COPYRIGHT====================
@@ -123,16 +128,12 @@
 
 
 ====================COPYRIGHT====================
- * This software was written by Alexander Peslyak in 2001.  No copyright is
- * claimed, and the software is hereby placed in the public domain.  In case
+ * This software was written by Alexander Peslyak in 2001. No copyright is
+ * claimed, and the software is hereby placed in the public domain. In case
  * this attempt to disclaim copyright and place the software in the public
  * domain is deemed null and void, then the software is Copyright (c) 2001
  * Alexander Peslyak and it is hereby released to the general public under the
  * following terms:
-
-
-====================COPYRIGHT====================
-#define urlchar_needs_escaping(c) (!(ISCNTRL(c) || ISSPACE(c) || ISGRAPH(c)))
 
 
 ====================COPYRIGHT====================
@@ -144,14 +145,14 @@ Copyright (C) Daniel Stenberg, <daniel@haxx.se>, et al.
 
 
 ====================COPYRIGHT====================
-Copyright (c) 1996 - 2023, Daniel Stenberg, <daniel@haxx.se>, and many
+Copyright (c) 1996 - 2025, Daniel Stenberg, <daniel@haxx.se>, and many
 contributors, see the THANKS file.
 
 
 ====================File: COPYING====================
 COPYRIGHT AND PERMISSION NOTICE
 
-Copyright (c) 1996 - 2023, Daniel Stenberg, <daniel@haxx.se>, and many
+Copyright (c) 1996 - 2025, Daniel Stenberg, <daniel@haxx.se>, and many
 contributors, see the THANKS file.
 
 All rights reserved.
@@ -227,8 +228,8 @@ in this Software without prior written authorization of the copyright holder.
  * Author:
  * Alexander Peslyak, better known as Solar Designer <solar at openwall.com>
  *
- * This software was written by Alexander Peslyak in 2001.  No copyright is
- * claimed, and the software is hereby placed in the public domain.  In case
+ * This software was written by Alexander Peslyak in 2001. No copyright is
+ * claimed, and the software is hereby placed in the public domain. In case
  * this attempt to disclaim copyright and place the software in the public
  * domain is deemed null and void, then the software is Copyright (c) 2001
  * Alexander Peslyak and it is hereby released to the general public under the
@@ -237,7 +238,7 @@ in this Software without prior written authorization of the copyright holder.
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted.
  *
- * There's ABSOLUTELY NO WARRANTY, express or implied.
+ * There is ABSOLUTELY NO WARRANTY, express or implied.
  *
  * (This is a heavily cut-down "BSD license".)
 
@@ -248,7 +249,7 @@ in this Software without prior written authorization of the copyright holder.
  * Author:
  * Alexander Peslyak, better known as Solar Designer <solar at openwall.com>
  *
- * This software was written by Alexander Peslyak in 2001.  No copyright is
+ * This software was written by Alexander Peslyak in 2001. No copyright is
  * claimed, and the software is hereby placed in the public domain.
  * In case this attempt to disclaim copyright and place the software in the
  * public domain is deemed null and void, then the software is
@@ -258,7 +259,7 @@ in this Software without prior written authorization of the copyright holder.
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted.
  *
- * There's ABSOLUTELY NO WARRANTY, express or implied.
+ * There is ABSOLUTELY NO WARRANTY, express or implied.
  *
  * (This is a heavily cut-down "BSD license".)
 
@@ -270,19 +271,6 @@ in this Software without prior written authorization of the copyright holder.
 
 ====================curl====================
  * SPDX-License-Identifier: curl
-
-
-====================curl====================
- * This software is licensed as described in the file COPYING, which
- * you should have received as part of this distribution. The terms
- * are also available at https://curl.haxx.se/docs/copyright.html.
- *
- * You may opt to use, copy, modify, merge, publish, distribute and/or sell
- * copies of the Software, and permit persons to whom the Software is
- * furnished to do so, under the terms of the COPYING file.
- *
- * This software is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY
- * KIND, either express or implied.
 
 
 ====================curl====================
@@ -301,7 +289,7 @@ in this Software without prior written authorization of the copyright holder.
 ====================curl====================
 COPYRIGHT AND PERMISSION NOTICE
 
-Copyright (c) 1996 - 2023, Daniel Stenberg, <daniel@haxx.se>, and many
+Copyright (c) 1996 - 2025, Daniel Stenberg, <daniel@haxx.se>, and many
 contributors, see the THANKS file.
 
 All rights reserved.

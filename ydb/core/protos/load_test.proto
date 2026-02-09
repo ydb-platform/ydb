@@ -172,6 +172,13 @@ message TEvLoadTestRequest {
         optional uint32 ExpectedChunkSize = 9 [default = 134217728]; // 128 MB
 
         repeated TWriteArea Areas = 10;
+
+        // Use simulated PDisk: no real writes, copy to RAM buffer instead.
+        optional bool Simulate = 11;
+        // Number of simulated PDisk actors used in round-robin.
+        optional uint32 SimulateActorsCount = 12 [default = 1];
+
+        optional bool AlignSourceData = 13 [default = true];
     }
     message TVDiskLoad {
         optional uint64 Tag = 1;

@@ -47,9 +47,10 @@ enum class EFmrComponent {
 };
 
 enum class EFmrErrorReason {
-    ReasonUnknown,
-    UserError
-    // TODO - return FallbackQuery or FallbackOperation instead of UserError, pass info to gateway.
+    Unknown,
+    RestartOperation,
+    RestartQuery,
+    UdfTerminate
 };
 
 struct TFmrError {
@@ -62,9 +63,17 @@ struct TFmrError {
     TMaybe<TString> JobId;
 };
 
-struct TError {
-    TString ErrorMessage;
+static constexpr TStringBuf FmrNonRetryableJobExceptionMarker = "[FmrNonRetryableJobException] ";
+
+class TFmrNonRetryableJobException: public yexception {
+public:
+    TFmrNonRetryableJobException() : yexception()
+{
+    *this << ToString(FmrNonRetryableJobExceptionMarker);
+}
 };
+
+EFmrErrorReason ParseFmrReasonFromErrorMessage(const TString& errorMessage);
 
 struct TFmrUserJobSettings {
     ui64 ThreadPoolSize = 3;
@@ -144,6 +153,10 @@ struct TFmrTableInputRef {
     std::vector<TTableRange> TableRanges;
     std::vector<TString> Columns = {};
     TString SerializedColumnGroups = TString();
+
+    TMaybe<bool> IsFirstRowInclusive;
+    TMaybe<TString> FirstRowKeys; // Binary YSON MAP
+    TMaybe<TString> LastRowKeys;  // Binary YSON MAP
 
     void Save(IOutputStream* buffer) const;
     void Load(IInputStream* buffer);

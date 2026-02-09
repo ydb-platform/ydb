@@ -1,6 +1,7 @@
 #include "dq_hash_combine.h"
 #include "dq_hash_operator_common.h"
 #include "dq_hash_operator_serdes.h"
+#include "dq_rh_hash.h"
 #include "type_utils.h"
 #include "coro_tasks.h"
 
@@ -464,7 +465,7 @@ constexpr const size_t StorageArenaMinSize = 64_MB;
 class TBaseAggregationState: public TComputationValue<TBaseAggregationState>
 {
 protected:
-    using TMap = TRobinHoodHashSet<NUdf::TUnboxedValuePod*, TEqualsFunc, THashFunc, TMKQLAllocator<char, EMemorySubPool::Temporary>>;
+    using TMap = TDqRobinHoodHashSet<NUdf::TUnboxedValuePod*, TEqualsFunc, THashFunc, TMKQLAllocator<char, EMemorySubPool::Temporary>>;
 
     static size_t GetStaticMaxRowCount(size_t entryPayloadSizeBytes, size_t memoryLimit) {
         size_t memoryPerRow = entryPayloadSizeBytes + static_cast<size_t>(TMap::GetCellSize() * ExtraMapCapacity);
@@ -677,8 +678,6 @@ protected:
         MKQL_ENSURE(bucket < NumBuckets, "Trying to read past the last spilling bucket");
         Store->Format(1, sizeof(TUnboxedValuePod) * KeysAndStatesWidth);
 
-        CachedHash = 0;
-
         {
             // Read the state
             TWideUnboxedValuesSpillerAdapter& stateSpiller = *currentSpill.Spillage[bucket].SpilledState;
@@ -832,11 +831,9 @@ protected:
         }
 
         ui64 bucketId = 0;
-        if (EnableSpilling) {
-            CachedHash = 0;
-            ui64 hash = Hasher(tempKey);
+        ui64 hash = Hasher(tempKey);
+        if (EnableSpilling) {            
             bucketId = (hash * 11400714819323198485llu) & ((1ull << BucketBits) - 1);
-            CachedHash = hash;
         }
 
         if (!SpillingStack.empty()) {
@@ -863,7 +860,7 @@ protected:
 
         TUnboxedValuePod* keyBuffer = nullptr;
         bool isNew = false;
-        auto mapIt = Map->Insert(tempKey, isNew);
+        auto mapIt = Map->Insert(tempKey, hash, isNew);
         char* statePtr = nullptr;
         if (isNew) {
             // Copy the value to the specified arena page
@@ -875,8 +872,6 @@ protected:
             keyBuffer = Map->GetKeyValue(mapIt);
         }
         statePtr = reinterpret_cast<char *>(keyBuffer) + StatesOffset;
-
-        CachedHash = 0;
 
         // TODO: loop over Aggs, but for now we always have one and only GenericAggregation
         if (isNew) {
@@ -971,7 +966,7 @@ public:
         , Nodes(nodes)
         , WideFieldsIndex(wideFieldsIndex)
         , KeyTypes(keyTypes)
-        , Hasher(IsAggregation ? THashFunc(TWideUnboxedHasherWithExternalValue(KeyTypes, CachedHash)) : THashFunc(TWideUnboxedHasher(KeyTypes)))
+        , Hasher(THashFunc(TWideUnboxedHasher(KeyTypes)))
         , Equals(TWideUnboxedEqual(KeyTypes))
         , Draining(false)
         , SourceEmpty(false)
@@ -1258,7 +1253,6 @@ protected:
     std::vector<std::unique_ptr<IAggregation>> Aggs;
     TGenericAggregation* GenericAggregation = nullptr;
     const TKeyTypes& KeyTypes;
-    ui64 CachedHash = 0;
     TMultiType* InputUnpackedItemsType;
     ui32 KeysAndStatesWidth;
     TMultiType* KeysAndStatesType;

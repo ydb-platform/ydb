@@ -267,6 +267,11 @@ public:
         }
     }
 
+    bool IsBackwardCompatibleFeatureAvailable(NYql::TLangVersion featureVer) const {
+        return NYql::IsBackwardCompatibleFeatureAvailable(
+            Settings.LangVer, featureVer, Settings.BackportMode);
+    }
+
 private:
     IOutputStream& MakeIssue(
         NYql::ESeverity severity,

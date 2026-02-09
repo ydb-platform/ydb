@@ -18,11 +18,13 @@ namespace NKikimr {
         const TIntrusivePtr<TLsnMngr> LsnMngr;
         const TActorId LoggerId;
         const TActorId LogCutterId;
+        const TControlWrapper EnableDeepScrubbing;
 
         TScrubContext(TIntrusivePtr<TVDiskContext> vctx, TPDiskCtxPtr pdiskCtx,
                 TIntrusivePtr<TBlobStorageGroupInfo> info, TActorId skeletonId, TActorId logoBlobsLevelIndexActorId,
                 ui32 nodeId, ui32 pdiskId, ui32 vslotId, ui64 scrubCookie, ui64 incarnationGuid,
-                const TIntrusivePtr<TLsnMngr> lsnMngr, TActorId loggerId, TActorId logCutterId)
+                const TIntrusivePtr<TLsnMngr> lsnMngr, TActorId loggerId, TActorId logCutterId,
+                const TControlWrapper& enableDeepScrubbing)
             : VCtx(std::move(vctx))
             , PDiskCtx(std::move(pdiskCtx))
             , Info(std::move(info))
@@ -36,6 +38,7 @@ namespace NKikimr {
             , LsnMngr(std::move(lsnMngr))
             , LoggerId(loggerId)
             , LogCutterId(logCutterId)
+            , EnableDeepScrubbing(enableDeepScrubbing)
         {}
 
         using TPtr = TIntrusivePtr<TScrubContext>;

@@ -249,6 +249,9 @@ namespace NKikimr {
         bool UseCostTracker = true;
         TCostMetricsParametersByMedia CostMetricsParametersByMedia;
 
+        ///////////// DEEP SCRUBBING ////////////////////////
+        TControlWrapper EnableDeepScrubbing;
+
         ///////////// FEATURE FLAGS ////////////////////////
         NKikimrConfig::TFeatureFlags FeatureFlags;
 

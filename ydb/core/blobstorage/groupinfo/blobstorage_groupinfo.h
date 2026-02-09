@@ -146,9 +146,33 @@ public:
 
         virtual EBlobState GetBlobState(const TSubgroupPartLayout& parts, const TSubgroupVDisks& failedDisks) const = 0;
 
+        // check recoverability of the blob based only on presense of different parts without checking the layout
+        virtual EBlobState GetBlobStateWithoutLayoutCheck(const TSubgroupPartLayout& parts,
+                const TSubgroupVDisks& failedDisks) const = 0;
+
         // check if we need to resurrect something; returns bit mask of parts needed for specified disk in group,
         // nth bit represents nth part; all returned parts are suitable for this particular disk
         virtual ui32 GetPartsToResurrect(const TSubgroupPartLayout& parts, ui32 idxInSubgroup) const = 0;
+    };
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // BLOB PART DATA INTEGRITY CHECKER
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    struct IDataIntegrityChecker {
+        virtual ~IDataIntegrityChecker() = default;
+
+        using TPart = std::pair<ui32, TRope>;
+
+        struct TPartsData {
+            std::vector<std::vector<TPart>> Parts; // partId - 1 -> [ {diskIdx; data} ]
+        };
+
+        struct TPartsState {
+            bool IsOk = true;
+            TString DataInfo;
+        };
+
+        virtual TPartsState GetDataState(const TLogoBlobID& id, const TPartsData& partsData, char separator) const = 0;
     };
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -194,6 +218,8 @@ public:
         std::unique_ptr<IQuorumChecker> QuorumChecker;
         // map to quickly get (Short)VDisk id from its order number inside the group
         TVector<TVDiskIdShort> VDiskIdForOrderNumber;
+        // data integrity checker
+        std::unique_ptr<IDataIntegrityChecker> DataIntegrityChecker;
 
         TTopology(TBlobStorageGroupType gtype);
         TTopology(TBlobStorageGroupType gtype, ui32 numFailRealms, ui32 numFailDomainsPerFailRealm, ui32 numVDisksPerFailDomain,
@@ -232,6 +258,8 @@ public:
         ui32 GetNumFailDomainsPerFailRealm() const { return FailRealms[0].FailDomains.size(); }
         // get quorum checker
         const IQuorumChecker& GetQuorumChecker() const { return *QuorumChecker; }
+        // get data integrity checker
+        const IDataIntegrityChecker& GetDataIntegrityChecker() const { return *DataIntegrityChecker; }
 
         //////////////////////////////////////////////////////////////////////////////////////
         // IBlobToDiskMapper interface
@@ -273,6 +301,7 @@ public:
     private:
         static IBlobToDiskMapper *CreateMapper(TBlobStorageGroupType gtype, const TTopology *topology);
         static IQuorumChecker *CreateQuorumChecker(const TTopology *topology);
+        static IDataIntegrityChecker *CreateDataIntegrityChecker(const TTopology *topology);
     };
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

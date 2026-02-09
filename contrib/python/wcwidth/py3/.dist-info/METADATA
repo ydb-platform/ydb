@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: wcwidth
-Version: 0.3.3
+Version: 0.3.5
 Summary: Measures the displayed width of unicode strings in a terminal
 Project-URL: Homepage, https://github.com/jquast/wcwidth
 Author-email: Jeff Quast <contact@jeffquast.com>
@@ -139,7 +139,7 @@ See `Specification <Specification_from_pypi_>`_ of character measurements. Note 
 width()
 -------
 
-Measures width of a string, with improved handling of ``control_codes``
+Use function `width()`_ to measure a string with improved handling of ``control_codes``.
 
 .. code-block:: python
 
@@ -472,6 +472,13 @@ languages.
 History
 =======
 
+0.3.5 *2026-01-24*
+  * **Bugfix** packaging of 0.3.4 contains a failing test.
+
+0.3.4 *2026-01-24*
+  * **Bugfix** `center()`_ should match the eccentric `parity padding`_
+    of `str.center()`_. `PR #188`_.
+
 0.3.3 *2026-01-24*
   * **Performance** improvement in `width()`_. `PR #185`_.
   * **Bugfix** missing ``py.typed``, ``Typing :: Typed``. `PR #184`_.
@@ -483,6 +490,7 @@ History
   * **Performance** improvement up to 30% in `width()_`. `PR #181`_.
 
 0.3.0 *2026-01-21*
+  * **Drop Support** for Python 3.6 and 3.7. `PR #156`_.
   * **New** Function `iter_graphemes()`_. `PR #165`_.
   * **New** Functions `width()`_ and `iter_sequences()`_. `PR #166`_.
   * **New** Functions `ljust()`_, `rjust()`_, `center()`_. `PR #168`_.
@@ -625,6 +633,7 @@ https://www.cl.cam.ac.uk/~mgk25/ucs/wcwidth.c::
 .. _`PR #117`: https://github.com/jquast/wcwidth/pull/117
 .. _`PR #146`: https://github.com/jquast/wcwidth/pull/146
 .. _`PR #149`: https://github.com/jquast/wcwidth/pull/149
+.. _`PR #156`: https://github.com/jquast/wcwidth/pull/156
 .. _`PR #165`: https://github.com/jquast/wcwidth/pull/165
 .. _`PR #166`: https://github.com/jquast/wcwidth/pull/166
 .. _`PR #168`: https://github.com/jquast/wcwidth/pull/168
@@ -638,6 +647,7 @@ https://www.cl.cam.ac.uk/~mgk25/ucs/wcwidth.c::
 .. _`PR #183`: https://github.com/jquast/wcwidth/pull/183
 .. _`PR #184`: https://github.com/jquast/wcwidth/pull/184
 .. _`PR #185`: https://github.com/jquast/wcwidth/pull/185
+.. _`PR #188`: https://github.com/jquast/wcwidth/pull/188
 .. _`Issue #101`: https://github.com/jquast/wcwidth/issues/101
 .. _`jquast/blessed`: https://github.com/jquast/blessed
 .. _`selectel/pyte`: https://github.com/selectel/pyte
@@ -689,6 +699,7 @@ https://www.cl.cam.ac.uk/~mgk25/ucs/wcwidth.c::
 .. _`iter_sequences()`: https://wcwidth.readthedocs.io/en/latest/api.html#wcwidth.iter_sequences
 .. _`Unicode Standard Annex #29`: https://www.unicode.org/reports/tr29/
 .. _`Terminal.detect_ambiguous_width()`: https://blessed.readthedocs.io/en/latest/api/terminal.html#blessed.terminal.Terminal.detect_ambiguous_width
+.. _`parity padding`: https://jazcap53.github.io/pythons-eccentric-strcenter.html
 .. |pypi_downloads| image:: https://img.shields.io/pypi/dm/wcwidth.svg?logo=pypi
     :alt: Downloads
     :target: https://pypi.org/project/wcwidth/

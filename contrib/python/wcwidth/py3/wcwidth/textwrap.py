@@ -353,10 +353,10 @@ def wrap(text: str, width: int = 70, *,
     whitespace and collapsed. To preserve paragraph breaks, wrap each
     paragraph separately::
 
-        >>> text = 'First line.\\nSecond line.'
+        >>> text = 'First line.\nSecond line.'
         >>> wrap(text, 40)  # newline collapsed to space
         ['First line. Second line.']
-        >>> [line for para in text.split('\\n')
+        >>> [line for para in text.split('\n')
         ...  for line in (wrap(para, 40) if para else [''])]
         ['First line.', 'Second line.']
 

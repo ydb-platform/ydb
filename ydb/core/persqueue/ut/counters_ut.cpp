@@ -131,16 +131,17 @@ Y_UNIT_TEST(Partition) {
 }
 
 struct TPartitionLevelMetricsTestParameters {
-    bool EnableMetricsLevel;
-    bool FirstClassCitizen;
+    bool EnableMetricsLevel = false;
+    bool FirstClassCitizen = false;
     std::optional<TString> MonitoringProjectId;
 };
 
-
 void PartitionLevelMetrics(TPartitionLevelMetricsTestParameters p) {
-    Cerr << (TStringBuilder() << "Run PartitionLevelMetrics(EnableMetricsLevel=" << p.EnableMetricsLevel << ", "
-                                                           "FirstClassCitizen=" << p.FirstClassCitizen << ", "
-                                                           "MonitoringProjectId=" << p.MonitoringProjectId << ")\n");
+    const TString caseDescr = TStringBuilder()
+                              << "EnableMetricsLevel=" << p.EnableMetricsLevel << ", "
+                              << "FirstClassCitizen=" << p.FirstClassCitizen << ", "
+                              << "MonitoringProjectId=" << p.MonitoringProjectId;
+    Cerr << (TStringBuilder() << "Run PartitionLevelMetrics(" <<caseDescr << ")\n");
     TString referenceDir = p.FirstClassCitizen ? "first_class_citizen" : "federation";
     if (p.MonitoringProjectId.has_value() && !p.MonitoringProjectId->empty()) {
         referenceDir += "_with_monitoring_project_id";
@@ -193,7 +194,7 @@ void PartitionLevelMetrics(TPartitionLevelMetricsTestParameters p) {
     TString counters = getCountersHtml();
     Cerr << "XXXXX before write: " << counters << Endl;
     TString referenceCounters = NResource::Find(TStringBuilder() << referenceDir << "_turned_off.html");
-    UNIT_ASSERT(counters + "\n" == referenceCounters || counters == EMPTY_COUNTERS);
+    UNIT_ASSERT_C(counters + "\n" == referenceCounters || counters == EMPTY_COUNTERS, caseDescr);
 
     {
         // Turn on per partition counters, check counters.
@@ -216,7 +217,7 @@ void PartitionLevelMetrics(TPartitionLevelMetricsTestParameters p) {
         TString referenceCounters = NResource::Find(TStringBuilder() << referenceDir << "_after_write.html");
         Cerr << "referenceCounters: " << referenceCounters << "\n";
         counters = zeroUnreliableValues(counters) + (p.EnableMetricsLevel ? "\n" : "");
-        UNIT_ASSERT_VALUES_EQUAL(counters, p.EnableMetricsLevel ? referenceCounters : EMPTY_COUNTERS);
+        UNIT_ASSERT_VALUES_EQUAL_C(counters, p.EnableMetricsLevel ? referenceCounters : EMPTY_COUNTERS, caseDescr);
     }
 
     {
@@ -244,7 +245,7 @@ void PartitionLevelMetrics(TPartitionLevelMetricsTestParameters p) {
             BeginCmdRead(readSettings, tc);
             TAutoPtr<IEventHandle> handle;
             auto* result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(handle);
-            UNIT_ASSERT_C(result->Record.GetPartitionResponse().HasCmdReadResult(), result->Record.GetPartitionResponse().DebugString());
+            UNIT_ASSERT_C(result->Record.GetPartitionResponse().HasCmdReadResult(), LabeledOutput(caseDescr, result->Record.GetPartitionResponse().DebugString()));
         }
 
         {
@@ -258,14 +259,14 @@ void PartitionLevelMetrics(TPartitionLevelMetricsTestParameters p) {
             BeginCmdRead(readSettings, tc);
             TAutoPtr<IEventHandle> handle;
             auto* result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(handle);
-            UNIT_ASSERT_C(result->Record.GetPartitionResponse().HasCmdReadResult(), result->Record.GetPartitionResponse().DebugString());
+            UNIT_ASSERT_C(result->Record.GetPartitionResponse().HasCmdReadResult(), LabeledOutput(caseDescr, result->Record.GetPartitionResponse().DebugString()));
         }
 
         TString counters = getCountersHtml();
         TString referenceCounters = NResource::Find(TStringBuilder() << referenceDir << "_after_read.html");
         counters = zeroUnreliableValues(counters) + (p.EnableMetricsLevel ? "\n" : "");
         Cerr << "XXXXX after read: " << counters << "\n";
-        UNIT_ASSERT_VALUES_EQUAL(counters, p.EnableMetricsLevel ? referenceCounters : EMPTY_COUNTERS);
+        UNIT_ASSERT_VALUES_EQUAL_C(counters, p.EnableMetricsLevel ? referenceCounters : EMPTY_COUNTERS, caseDescr);
     }
 
     {
@@ -277,7 +278,7 @@ void PartitionLevelMetrics(TPartitionLevelMetricsTestParameters p) {
         TString referenceCounters = NResource::Find(TStringBuilder() << referenceDir << "_turned_off.html");
         counters = zeroUnreliableValues(counters) + (p.EnableMetricsLevel ? "\n" : "");
         Cerr << "XXXXX after read counters disabled: " << counters << "\n";
-        UNIT_ASSERT_VALUES_EQUAL(counters, p.EnableMetricsLevel ? referenceCounters : EMPTY_COUNTERS);
+        UNIT_ASSERT_VALUES_EQUAL_C(counters, p.EnableMetricsLevel ? referenceCounters : EMPTY_COUNTERS, caseDescr);
     }
 }
 
@@ -294,6 +295,235 @@ Y_UNIT_TEST(PartitionLevelMetrics) {
         }
     }
 }
+
+struct TConsumerDetailedPartitionLevelMetricsTestParameters {
+    bool EnableMetricsLevel = false;
+    bool FirstClassCitizen = false;
+    ui32 PartitionMetricsLevel = METRICS_LEVEL_OBJECT;
+    std::optional<TString> PartitionMonitoringProjectId;
+    std::optional<TString> ConsumersMonitoringProjectId;
+};
+
+void ConsumerDetailedMetrics(const TConsumerDetailedPartitionLevelMetricsTestParameters p) {
+    const TString caseDescr = TStringBuilder()
+                              << "EnableMetricsLevel=" << p.EnableMetricsLevel << ", "
+                              << "FirstClassCitizen=" << p.FirstClassCitizen << ", "
+                              << "PartitionMetricsLevel=" << p.PartitionMetricsLevel << ", "
+                              << "PartitionMonitoringProjectId=" << p.PartitionMonitoringProjectId << ", "
+                              << "ConsumersMonitoringProjectId=" << p.ConsumersMonitoringProjectId;
+    Cerr << (TStringBuilder() << "Run PartitionLevelMetrics(" <<caseDescr << ")\n");
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    bool activeZone{false};
+    tc.Prepare("", [](TTestActorRuntime&) {}, activeZone, p.FirstClassCitizen, true);
+    tc.Runtime->SetScheduledLimit(100);
+
+    tc.Runtime->GetAppData(0).FeatureFlags.SetEnableMetricsLevel(p.EnableMetricsLevel);
+
+    TTabletPreparationParameters parameters{
+        .metricsLevel = p.PartitionMetricsLevel,
+        .monitoringProjectId = p.PartitionMonitoringProjectId,
+    };
+
+    TVector<TConsumerPreparationParameters> consumers{
+        TConsumerPreparationParameters{
+            .Name = "user1",
+            .MetricsLevel = METRICS_LEVEL_OBJECT,
+            .MonitoringProjectId = p.ConsumersMonitoringProjectId,
+        },
+    };
+    PQTabletPrepare(parameters, consumers, *tc.Runtime, tc.TabletId, tc.Edge);
+    CmdWrite(0, "sourceid0", TestData(), tc, false, {}, true);
+    CmdWrite(0, "sourceid1", TestData(), tc, false);
+    CmdWrite(0, "sourceid2", TestData(), tc, false);
+    CmdWrite(1, "sourceid1", TestData(), tc, false);
+    CmdWrite(1, "sourceid2", TestData(), tc, false);
+    PQGetPartInfo(0, 30, tc);
+
+    auto zeroUnreliableValues = [](std::string counters) {
+        // Some counters end up with a different value each run.
+        // To simplify testing we set such values to 0.
+        auto names = TVector<std::string>{
+            "WriteTimeLagMsByLastWrite",
+            "WriteTimeLagMsByCommittedPerPartition",
+            "TimeSinceLastReadMsPerPartition",
+            "WriteTimeLagMsByLastReadPerPartition",
+            "milliseconds",  // For FirstClassCitizen
+        };
+        for (const auto& name : names) {
+            counters = std::regex_replace(counters, std::regex(name + ": \\d+"), name + ": 000");
+        }
+        return counters;
+    };
+
+    auto getCountersHtml = [&tc, &zeroUnreliableValues](const TStringBuf stage, const TString& group = "topics_per_partition", bool skipAddedLabels = true) {
+        auto counters = tc.Runtime->GetAppData(0).Counters;
+        auto dbGroup = GetServiceCounters(counters, group, skipAddedLabels);
+        TString rep;
+        TStringOutput countersStr{rep};
+        dbGroup->OutputPlainText(countersStr);
+        // Cerr << (TStringBuilder() << "XXXXX " << stage << ":\n" << rep << "\n");
+        rep = zeroUnreliableValues(rep);
+        Cerr << (TStringBuilder() << "XXXXX " << stage << " canonized:\n" << rep << "\n");
+        return rep;
+    };
+
+    TString counters = getCountersHtml("before write");
+
+    //TString referenceCounters = NResource::Find(TStringBuilder() << referenceDir << "_turned_off.html");
+
+    if (!p.EnableMetricsLevel) {
+        UNIT_ASSERT_VALUES_EQUAL_C(counters, "", caseDescr);
+    }
+
+    //UNIT_ASSERT_C(counters + "\n" == referenceCounters || counters == EMPTY_COUNTERS, caseDescr);
+
+    {
+        // Turn on per partition counters for consumer, check counters.
+        consumers.at(0).MetricsLevel = METRICS_LEVEL_DETAILED;
+        PQTabletPrepare(parameters, consumers, *tc.Runtime, tc.TabletId, tc.Edge);
+
+        // partition, sourceId, data, text
+        CmdWrite({ .Partition = 0, .SourceId = "sourceid3", .Data = TestData(), .TestContext = tc, .Error = false });
+        CmdWrite({ .Partition = 0, .SourceId = "sourceid4", .Data = TestData(), .TestContext = tc, .Error = false });
+        CmdWrite({ .Partition = 0, .SourceId = "sourceid5", .Data = TestData(), .TestContext = tc, .Error = false });
+        CmdWrite({ .Partition = 0, .SourceId = "sourceid3", .Data = TestData(), .TestContext = tc, .Error = false });
+        CmdWrite({ .Partition = 1, .SourceId = "sourceid4", .Data = TestData(), .TestContext = tc, .Error = false });
+        CmdWrite({ .Partition = 1, .SourceId = "sourceid5", .Data = TestData(), .TestContext = tc, .Error = false });
+        CmdWrite({ .Partition = 1, .SourceId = "sourceid4", .Data = TestData(), .TestContext = tc, .Error = false });
+
+        std::string counters = getCountersHtml("after write");
+        //TString referenceCounters = NResource::Find(TStringBuilder() << referenceDir << "_after_write.html");
+        //Cerr << "referenceCounters: " << referenceCounters << "\n";
+
+        if (!p.EnableMetricsLevel) {
+            UNIT_ASSERT_VALUES_EQUAL_C(counters, "", caseDescr);
+        }
+        // TODO fix
+        //UNIT_ASSERT_VALUES_EQUAL_C(counters, p.EnableMetricsLevel ? referenceCounters : EMPTY_COUNTERS, caseDescr);
+    }
+
+    {
+        // Read messages from different partitions.
+
+        TString sessionId = "session1";
+        TString user = "user1";
+        TPQCmdReadSettings readSettings{
+            /*session=*/ sessionId,
+            /*partition=*/ 0,
+            /*offset=*/ 0,
+            /*count=*/ 2,
+            /*size=*/ 16_MB,
+            /*resCount=*/ 1,
+        };
+        readSettings.PartitionSessionId = 1;
+        readSettings.User = user;
+
+        {
+            // Partition 0
+            TPQCmdSettings sessionSettings{0, user, sessionId};
+            sessionSettings.PartitionSessionId = 1;
+            sessionSettings.KeepPipe = true;
+            readSettings.Pipe = CmdCreateSession(sessionSettings, tc);
+            BeginCmdRead(readSettings, tc);
+            TAutoPtr<IEventHandle> handle;
+            auto* result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(handle);
+            UNIT_ASSERT_C(result->Record.GetPartitionResponse().HasCmdReadResult(), LabeledOutput(caseDescr, result->Record.GetPartitionResponse().DebugString()));
+        }
+
+        {
+            // Partition 1
+            TPQCmdSettings sessionSettings{1, user, sessionId};
+            sessionSettings.PartitionSessionId = 2;
+            sessionSettings.KeepPipe = true;
+            readSettings.Pipe = CmdCreateSession(sessionSettings, tc);
+            readSettings.Partition = 1;
+            readSettings.Count = 17;
+            BeginCmdRead(readSettings, tc);
+            TAutoPtr<IEventHandle> handle;
+            auto* result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(handle);
+            UNIT_ASSERT_C(result->Record.GetPartitionResponse().HasCmdReadResult(), LabeledOutput(caseDescr, result->Record.GetPartitionResponse().DebugString()));
+        }
+
+        TString counters = getCountersHtml("after read");
+
+
+
+    if (!p.EnableMetricsLevel) {
+        UNIT_ASSERT_VALUES_EQUAL_C(counters, "", caseDescr);
+    }
+
+
+        // TODO: fix
+        //UNIT_ASSERT_VALUES_EQUAL_C(counters, p.EnableMetricsLevel ? referenceCounters : EMPTY_COUNTERS, caseDescr);
+    }
+
+    {
+        // Disable per partition counters on consumer, the counters should be empty if partition's metrics disabled
+        consumers.at(0).MetricsLevel = METRICS_LEVEL_OBJECT;
+        PQTabletPrepare(parameters, consumers, *tc.Runtime, tc.TabletId, tc.Edge);
+        TString counters = getCountersHtml("after read disabled");
+        //TString referenceCounters = NResource::Find(TStringBuilder() << referenceDir << "_turned_off.html");
+        //TODO
+        //UNIT_ASSERT_VALUES_EQUAL_C(counters, p.EnableMetricsLevel ? referenceCounters : EMPTY_COUNTERS, caseDescr);
+
+        if (!p.EnableMetricsLevel) {
+            UNIT_ASSERT_VALUES_EQUAL_C(counters, "", caseDescr);
+        }
+    }
+}
+
+struct TConsumerDetailedMetricsTestRegistration {
+    TConsumerDetailedMetricsTestRegistration() {
+        for (bool enableMetricsLevel : {false, true}) { // global settings
+            for (bool firstClassCitizen : {false, true}) {
+                for (ui32 partitionMetricsLevel : {METRICS_LEVEL_OBJECT, METRICS_LEVEL_DETAILED}) {
+                    for (std::optional<TString> partitionMonitoringProjectId : TVector<std::optional<TString>>{std::nullopt, "", "foo"}) {
+                        for (std::optional<TString> consumerMonitoringProjectId : TVector<std::optional<TString>>{std::nullopt, "", "foo", "bar"}) {
+                            if (partitionMonitoringProjectId != "foo" && consumerMonitoringProjectId == "bar") {
+                                continue; // duplicated case
+                            }
+                            auto nameMPI = [](const std::optional<TString>& v) -> std::string {
+                                return !v.has_value()
+                                           ? "noset"
+                                       : v->empty()
+                                           ? "empty"
+                                           : ToString(TStringBuf{*v}.Before('-'));
+                            };
+                            auto nameLevel = [](const ui32 level) -> std::string {
+                                return level == METRICS_LEVEL_DETAILED
+                                           ? "detailed"
+                                           : level == METRICS_LEVEL_OBJECT
+                                               ? "object"
+                                               : ToString(level);
+                            };
+                            TString testName = std::format("ConsumerDetailedMetrics__{}__{}__partitionMetricsLevel={}__partitionMPI={}__consumerMPI={}",
+                                                           enableMetricsLevel ? "Enabled" : "Disabled",
+                                                           firstClassCitizen ? "firstClassCitizen" : "federation",
+                                                           nameLevel(partitionMetricsLevel),
+                                                           nameMPI(partitionMonitoringProjectId),
+                                                           nameMPI(consumerMonitoringProjectId));
+                            Names.push_back(testName);
+                            TCurrentTest::AddTest(Names.back().c_str(), [=](NUnitTest::TTestContext&) {
+                                ConsumerDetailedMetrics(TConsumerDetailedPartitionLevelMetricsTestParameters{
+                                    .EnableMetricsLevel = enableMetricsLevel,
+                                    .FirstClassCitizen = firstClassCitizen,
+                                    .PartitionMetricsLevel = partitionMetricsLevel,
+                                    .PartitionMonitoringProjectId = partitionMonitoringProjectId,
+                                    .ConsumersMonitoringProjectId = consumerMonitoringProjectId,
+                                });
+                            }, false);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    TDeque<TString> Names;
+};
+static const TConsumerDetailedMetricsTestRegistration TestRegistration;
+
 
 // Test that changing monitoring project ID updates counters for both consumers and write operations
 Y_UNIT_TEST(MonitoringProjectIdChange) {

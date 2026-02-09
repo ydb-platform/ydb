@@ -77,7 +77,7 @@ struct TEvService {
             Record.SetLagMilliSeconds(lag.MilliSeconds());
         }
 
-        explicit TEvWorkerStatus(const TWorkerId& id , TInstant startTime, TVector<std::pair<ui64, i64>>&& statsValues) {
+        explicit TEvWorkerStatus(const TWorkerId& id, TInstant startTime, TVector<std::pair<ui64, i64>>&& statsValues) {
             id.Serialize(*Record.MutableWorker());
             Record.SetStatus(NKikimrReplication::TEvWorkerStatus::STATUS_RUNNING);
             Record.SetReason(NKikimrReplication::TEvWorkerStatus::REASON_STATS);

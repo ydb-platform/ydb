@@ -1,6 +1,9 @@
 items:
 - name: Первоначальное развёртывание
-  href: initial-deployment.md
+  href: initial-deployment/index.md
+  include:
+    mode: link
+    path: initial-deployment/toc_p.yaml
 - name: Обновление конфигурации
   href: update-config.md
 - name: Обслуживание кластера

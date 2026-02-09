@@ -306,8 +306,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     Y_UNIT_TEST(ConstantIfPushDown) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        // Disable constant folding.
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableConstantFolding(false);
         settings.AppConfig.MutableColumnShardConfig()->SetAlterObjectEnabled(true);
         TKikimrRunner kikimr(settings);
 

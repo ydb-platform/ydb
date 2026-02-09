@@ -28,7 +28,7 @@ namespace NKqp {
  */
 class TExtractJoinExpressionsRule : public IRule {
   public:
-    TExtractJoinExpressionsRule() : IRule("Extract join expressions") {}
+    TExtractJoinExpressionsRule() : IRule("Extract join expressions", 0x0, true) {}
 
     virtual bool MatchAndApply(std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
 };

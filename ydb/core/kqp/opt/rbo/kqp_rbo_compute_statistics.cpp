@@ -198,7 +198,7 @@ void TOpFilter::ComputeStatistics(TRBOContext & ctx, TPlanProps & planProps) {
     Props.Cost = GetInput()->Props.Cost;
 
     auto inputStats = std::make_shared<TOptimizerStatistics>(BuildOptimizerStatistics(GetInput()->Props, true));
-    auto lambda = TCoLambda(FilterLambda);
+    auto lambda = TCoLambda(FilterExpr.Node);
     double selectivity = TPredicateSelectivityComputer(inputStats).Compute(lambda.Body());
 
     double filterSelectivity = selectivity * Props.Statistics->Selectivity;

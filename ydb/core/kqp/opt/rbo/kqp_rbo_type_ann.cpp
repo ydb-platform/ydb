@@ -129,7 +129,7 @@ TStatus ComputeTypes(std::shared_ptr<TOpFilter> filter, TRBOContext& ctx, TPlanP
     YQL_CLOG(TRACE, CoreDq) << "Type annotation for Filter, itemType after scalars: " << *(TTypeAnnotationNode*)itemType;
 
 
-    auto& lambda = filter->FilterLambda;
+    auto& lambda = filter->FilterExpr.Node;
 
     if (!UpdateLambdaAllArgumentsTypes(lambda, {itemType}, ctx.ExprCtx)) {
         YQL_CLOG(TRACE, CoreDq) << "Could not update lambda arg types";
@@ -189,40 +189,27 @@ TStatus ComputeTypes(std::shared_ptr<TOpMap> map, TRBOContext& ctx) {
     }
 
     for (auto& mapElement : map->MapElements) {
-        if (mapElement.IsRename()) {
-            const TInfoUnit from = mapElement.GetRename();
-            auto typeIt = std::find_if(typeItems.begin(), typeItems.end(), [&from](const TItemExprType* t) { return from.GetFullName() == t->GetName(); });
-            if (typeIt == typeItems.end()) {
-                YQL_CLOG(TRACE, CoreDq) << "Did not find column: " << from.GetFullName() << " in " << *inputType << " while processing map "
-                                        << map->ToString(ctx.ExprCtx);
-            }
-            Y_ENSURE(typeIt != typeItems.end());
-
-            auto renameType = ctx.ExprCtx.MakeType<TItemExprType>(mapElement.GetElementName().GetFullName(), (*typeIt)->GetItemType());
-            resStructItemTypes.push_back(renameType);
-        } else {
-            // This is type annotation update inplace, which is different comparing to yql type annotation.
-            auto& lambda = mapElement.GetExpression();
-            if (!UpdateLambdaAllArgumentsTypes(lambda, {structType}, ctx.ExprCtx)) {
-                return IGraphTransformer::TStatus::Error;
-            }
-
-            ctx.TypeAnnTransformer->Rewind();
-            IGraphTransformer::TStatus status(IGraphTransformer::TStatus::Ok);
-            do {
-                status = ctx.TypeAnnTransformer->Transform(lambda, lambda, ctx.ExprCtx);
-            // Could we have an infinity loop?
-            } while (status == IGraphTransformer::TStatus::Repeat);
-
-            if (status == IGraphTransformer::TStatus::Error) {
-                return status;
-            }
-
-            auto lambdaType = lambda->GetTypeAnn();
-            Y_ENSURE(lambdaType);
-            auto mapLambdaType = ctx.ExprCtx.MakeType<TItemExprType>(mapElement.GetElementName().GetFullName(), lambdaType);
-            resStructItemTypes.push_back(mapLambdaType);
+        // This is type annotation update inplace, which is different comparing to yql type annotation.
+        auto& lambda = mapElement.GetExpressionRef().Node;
+        if (!UpdateLambdaAllArgumentsTypes(lambda, {structType}, ctx.ExprCtx)) {
+            return IGraphTransformer::TStatus::Error;
         }
+
+        ctx.TypeAnnTransformer->Rewind();
+        IGraphTransformer::TStatus status(IGraphTransformer::TStatus::Ok);
+        do {
+            status = ctx.TypeAnnTransformer->Transform(lambda, lambda, ctx.ExprCtx);
+        // Could we have an infinity loop?
+        } while (status == IGraphTransformer::TStatus::Repeat);
+
+        if (status == IGraphTransformer::TStatus::Error) {
+            return status;
+        }
+
+        auto lambdaType = lambda->GetTypeAnn();
+        Y_ENSURE(lambdaType);
+        auto mapLambdaType = ctx.ExprCtx.MakeType<TItemExprType>(mapElement.GetElementName().GetFullName(), lambdaType);
+        resStructItemTypes.push_back(mapLambdaType);
     }
 
     auto resultItemType = ctx.ExprCtx.MakeType<TStructExprType>(resStructItemTypes);

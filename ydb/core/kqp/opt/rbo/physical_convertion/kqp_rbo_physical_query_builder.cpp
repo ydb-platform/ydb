@@ -446,6 +446,11 @@ void TPhysicalQueryBuilder::TypeAnnotate(TExprNode::TPtr& input) {
     do {
         status = RBOCtx.TypeAnnTransformer->Transform(input, output, RBOCtx.ExprCtx);
     } while (status == IGraphTransformer::TStatus::Repeat);
+
+    if (status != IGraphTransformer::TStatus::Ok) {
+        RBOCtx.ExprCtx.AddError(TIssue(RBOCtx.ExprCtx.GetPosition(input->Pos()), "Type inference failed for stage in NEW RBO"));
+    }
     Y_ENSURE(status == IGraphTransformer::TStatus::Ok);
+
     input = output;
 }

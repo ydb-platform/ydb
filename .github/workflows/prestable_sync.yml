@@ -15,7 +15,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - base_branch: prestable-26-1
+          - base_branch: dev-base-conflict-branch
             head_branch: main
             label: sync-prestable
     steps:

@@ -331,6 +331,7 @@ namespace NKikimr::NDDisk {
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
         void SendInternalWrite(
+            TChunkRef& chunkRef,
             const TQueryCredentials &creds,
             const TBlockSelector &selector,
             NWilson::TTraceId &&traceId,
@@ -345,16 +346,28 @@ namespace NKikimr::NDDisk {
         // Sync
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+        struct TSyncReadRequest {
+            NKikimrBlobStorage::NDDisk::TReplyStatus::E Status;
+            TBlockSelector Selector;
+            ui64 SegmentsInFlight = 0;
+            TStringBuilder ErrorReason = {};
+        };
+
         struct TSyncInFlight {
             TActorId Sender;
             ui64 Cookie;
             TActorId InterconnectionSessionId;
             NWilson::TSpan Span;
             TQueryCredentials Creds;
-            TBlockSelector Selector;
-
-            bool AddDroppedSegment(ui32 offset, ui32 size);
+            std::vector<TSyncReadRequest> Requests;
+            ui64 RequestsInFlight = 0;
+            ui64 VChunkIndex = 0;
+            ui64 FirstRequestId = Max<ui64>();
+            TStringBuilder ErrorReason;
         };
+
+        using TSyncIt = THashMap<ui64, TSyncInFlight>::iterator;
+
         ui64 NextSyncId = 1;
         THashMap<ui64, TSyncInFlight> SyncsInFlight; // syncId -> TSyncInFlight
         TSegmentManager SegmentManager;
@@ -362,6 +375,8 @@ namespace NKikimr::NDDisk {
         void Handle(TEvSync::TPtr ev);
         void Handle(TEvReadPersistentBufferResult::TPtr ev);
         void Handle(TEvReadResult::TPtr ev);
+
+        void ReplySync(TSyncIt it);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Persistent buffer services

@@ -77,10 +77,30 @@ namespace NKikimr::NDDisk {
                 return std::make_unique<TEvFlushPersistentBufferResult>(NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR,
                     "write undelivered");
             });
-        } else if (ev->Get()->SourceType == TEv::EvPullFromPersistentBuffer) {
-            if (auto it = PullingsInFlight.find(ev->Cookie); it != PullingsInFlight.end()) {
-                ReplyPullingResult(it, NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR, "write undelivered");
+        } else if (ev->Get()->SourceType == TEv::EvSync) {
+            std::vector<TSegmentManager::TSegment> segments;
+            ui64 syncId = 0;
+            SegmentManager.PopRequest(ev->Cookie, &segments, &syncId);
+
+            auto it = SyncsInFlight.find(syncId);
+            if (it == SyncsInFlight.end()) {
+                return;
             }
+            auto& sync = it->second;
+
+            if (ev->Cookie < sync.FirstRequestId || ev->Cookie >= sync.FirstRequestId + sync.Requests.size()) {
+                // TODO(kruall): log error
+                return;
+            }
+            auto& request = sync.Requests[ev->Cookie - sync.FirstRequestId];
+
+            request.Status = NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR;
+            request.ErrorReason << "[" << request.Selector.OffsetInBytes << ';' << request.Selector.OffsetInBytes + request.Selector.Size << "] failed to read; reason: read event undelivered";
+            sync.ErrorReason << "[request_idx=" << ev->Cookie - sync.FirstRequestId << "] failed to read; ";
+            if (--sync.RequestsInFlight == 0) {
+                ReplySync(it);
+            }
+            return;
         }
     }
 
@@ -95,8 +115,8 @@ namespace NKikimr::NDDisk {
             hFunc(TEvConnect, handleQuery)
             hFunc(TEvDisconnect, handleQuery)
             hFunc(TEvWrite, handleQuery)
-            hFunc(TEvRead, handleQuery
-            hFunc(TEvSync, handleQuery))
+            hFunc(TEvRead, handleQuery)
+            hFunc(TEvSync, handleQuery)
             hFunc(TEvWritePersistentBuffer, handleQuery)
             hFunc(TEvReadPersistentBuffer, handleQuery)
             hFunc(TEvFlushPersistentBuffer, handleQuery)

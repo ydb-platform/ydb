@@ -6,6 +6,7 @@
 namespace NKikimr::NDDisk {
 
     void TDDiskActor::SendInternalWrite(
+            TChunkRef& chunkRef,
             const TQueryCredentials &creds,
             const TBlockSelector &selector,
             NWilson::TTraceId &&traceId,
@@ -71,7 +72,7 @@ namespace NKikimr::NDDisk {
             TActivationContext::Send(h.release());
         };
 
-        SendInternalWrite(creds, selector, std::move(data), std::move(ev->TraceId), std::move(callback));
+        SendInternalWrite(chunkRef, creds, selector, std::move(ev->TraceId), std::move(data), std::move(callback));
     }
 
 	void TDDiskActor::Handle(NPDisk::TEvChunkWriteRawResult::TPtr ev) {

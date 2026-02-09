@@ -62,8 +62,8 @@ void TSegmentManager::DropSegment(ui64 vchunkIndex, TSegment dropSegment, std::v
             // newBegin = dropEnd
             Y_VERIFY(dropBegin <= begin && dropEnd < end);
          
-            auto tmpSegmentIt = SegmentsInFlight.emplace({vchunkIndex, dropEnd, end}, requestIt).second;
-            request.Segments.emplace_back(TSegment{dropEnd, end}, tmpSegmentIt);
+            auto tmpSegmentIt = SegmentsInFlight.emplace(TSegmentLocation{vchunkIndex, dropEnd, end}, requestIt).first;
+            request.Segments.emplace(TSegment{dropEnd, end}, tmpSegmentIt);
         } else {
             // [dropBegin;              dropEnd)
             //             [begin; end)
@@ -73,7 +73,7 @@ void TSegmentManager::DropSegment(ui64 vchunkIndex, TSegment dropSegment, std::v
 
             if (request.Segments.empty()) {
                 ui64 requestId = requestIt->first;
-                outdated->emplace_back({request->SyncId, requestId});
+                outdated->emplace_back(TOutdatedRequest{request.SyncId, requestId});
             }
         }
         segmentIt = SegmentsInFlight.erase(segmentIt);
@@ -84,7 +84,7 @@ void TSegmentManager::DropSegment(ui64 vchunkIndex, TSegment dropSegment, std::v
         --segmentIt;
         auto [segVChunkIndex, begin, end] = segmentIt->first;
         if (segVChunkIndex != vchunkIndex) {
-            break;
+            return;
         }
 
         if (end <= dropBegin) {
@@ -97,9 +97,9 @@ void TSegmentManager::DropSegment(ui64 vchunkIndex, TSegment dropSegment, std::v
         }
 
         TRequestIt requestIt = segmentIt->second;
-        TRequestInFlight &request = *requestIt;
+        TRequestInFlight &request = requestIt->second;
 
-        auto requestSegmentIt = request.Segments.find({begin, end});
+        auto requestSegmentIt = request.Segments.find(TSegment{begin, end});
         Y_VERIFY_S(requestSegmentIt != request.Segments.end(), 
             "Broken invariant; Can't find segment in request; Request# "
             << request.ToString() << " begin# " << begin << " end# " << end
@@ -115,8 +115,8 @@ void TSegmentManager::DropSegment(ui64 vchunkIndex, TSegment dropSegment, std::v
             // newEnd == dropBegin
             Y_VERIFY(begin < dropBegin && end <= dropEnd);
          
-            auto tmpSegmentIt = SegmentsInFlight.emplace({vchunkIndex, begin, dropBegin}, requestIt).second;
-            request.Segments.emplace_back(TSegment{begin, dropBegin}, tmpSegmentIt);
+            auto tmpSegmentIt = SegmentsInFlight.emplace(TSegmentLocation{vchunkIndex, begin, dropBegin}, requestIt).first;
+            request.Segments.emplace(TSegment{begin, dropBegin}, tmpSegmentIt);
         } else {
             //               [dropBegin;dropEnd)
             // [begin;                                    end)
@@ -126,37 +126,37 @@ void TSegmentManager::DropSegment(ui64 vchunkIndex, TSegment dropSegment, std::v
             // newEnd == dropBegin
             // newBegint == dropEnd
 
-            auto tmpSegmentIt = SegmentsInFlight.emplace({vchunkIndex, begin, dropBegin}, requestIt).second;
-            request.Segments.emplace_back(TSegment{begin, dropBegin}, tmpSegmentIt);
+            auto tmpSegmentIt = SegmentsInFlight.emplace(TSegmentLocation{vchunkIndex, begin, dropBegin}, requestIt).first;
+            request.Segments.emplace(TSegment{begin, dropBegin}, tmpSegmentIt);
 
-            tmpSegmentIt = SegmentsInFlight.emplace({vchunkIndex, dropEnd, end}, requestIt).second;
-            request.Segments.emplace_back(TSegment{dropEnd, end}, tmpSegmentIt);
+            tmpSegmentIt = SegmentsInFlight.emplace(TSegmentLocation{vchunkIndex, dropEnd, end}, requestIt).first;
+            request.Segments.emplace(TSegment{dropEnd, end}, tmpSegmentIt);
         }
         SegmentsInFlight.erase(segmentIt);
     }
 }
 
 
-void TSegmentManager::PopRequest(ui64 requestIdx, std::vector<TSegment> *segments) {
+void TSegmentManager::PopRequest(ui64 requestIdx, std::vector<TSegment> *segments, ui64 *syncId) {
     Y_VERIFY(segments != nullptr);
+    segments->clear();
 
     auto requestIt = RequestsInFlight.find(requestIdx);
     if (requestIt == RequestsInFlight.end()) {
-        return {};
+        *syncId = Max<ui64>();
+        return;
     }
+    auto &request = requestIt->second;
+    *syncId = request.SyncId;
 
-    ui64 vChunkIndex = requestIt->VChunkIndex;
-    segments->clear();
-    segments->reserve(requestIt->Segments.size());
-
-    for (auto [segment, segmentIt] : requestIt->Segments) {
-        auto &[begin, end] = segment;
+    segments->reserve(request.Segments.size());
+    for (auto [segment, segmentIt] : request.Segments) {
         SegmentsInFlight.erase(segmentIt);
         segments->emplace_back(segment);
     }
 
     RequestsInFlight.erase(requestIt);
-    return segments;
+    return;
 }
 
 void TSegmentManager::PushRequest(ui64 vchunkIndex, ui64 syncId, TSegment segment, ui64 *requestId, std::vector<TOutdatedRequest> *outdated) {
@@ -165,7 +165,7 @@ void TSegmentManager::PushRequest(ui64 vchunkIndex, ui64 syncId, TSegment segmen
     DropSegment(vchunkIndex, segment, outdated);
     *requestId = NextRequestId++;
     auto &[begin, end] = segment;
-    TRequestIt requestIt = RequestsInFlight.emplace(*requestId, {vchunkIndex, syncId, {}});
-    TSegmentIt segmentIt = SegmentsInFlight.emplace({vchunkIndex, begin, end}, requestIt);
+    TRequestIt requestIt = RequestsInFlight.emplace(*requestId, TRequestInFlight{vchunkIndex, syncId, {}}).first;
+    TSegmentIt segmentIt = SegmentsInFlight.emplace(TSegmentLocation{vchunkIndex, begin, end}, requestIt).first;
     requestIt->second.Segments.emplace(segment, segmentIt);
 }

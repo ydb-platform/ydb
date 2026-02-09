@@ -429,6 +429,19 @@ namespace NKikimr::NDDisk {
                 Record.SetDDiskInstanceGuid(*ddiskInstanceGuid);
             }
         }
+
+        void AddSegmentFromPersistentBuffer(const TBlockSelector& selector, ui64 lsn) {
+            auto *segment = Record.AddSegments();
+            auto *fromPB = segment->MutablePersistentBuffer();
+            selector.Serialize(fromPB->MutableSelector());
+            fromPB->SetLsn(lsn);
+        }
+
+        void AddSegmentFromDDisk(const TBlockSelector& selector) {
+            auto *segment = Record.AddSegments();
+            auto *fromDDisk = segment->MutableDDisk();
+            selector.Serialize(fromDDisk->MutableSelector());
+        }
     };
 
     DECLARE_DDISK_EVENT(SyncResult) {
@@ -439,6 +452,14 @@ namespace NKikimr::NDDisk {
             Record.SetStatus(status);
             if (errorReason) {
                 Record.SetErrorReason(*errorReason);
+            }
+        }
+
+        void AddSegmentResult(NKikimrBlobStorage::NDDisk::TReplyStatus::E status, TString errorReason) {
+            auto *result = Record.AddSegmentResults();
+            result->SetStatus(status);
+            if (errorReason) {
+                result->SetErrorReason(errorReason);
             }
         }
     };

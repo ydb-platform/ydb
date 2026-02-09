@@ -743,6 +743,12 @@ void LoadRange(
 
 //-----------------------------------------------------------------------------
 
+bool IsOperationStarted(TStatus operationStatus) {
+    return operationStatus.IsSuccess() || operationStatus.GetStatus() == EStatus::STATUS_UNDEFINED;
+}
+
+//-----------------------------------------------------------------------------
+
 TOperation::TOperationId CreateIndex(
     NTable::TTableClient& client,
     const TString& path,
@@ -764,14 +770,18 @@ TOperation::TOperationId CreateIndex(
     TOperation::TOperationId operationId;
     auto result = client.RetryOperationSync([&](NTable::TSession session) {
         auto opResult = session.AlterTableLong(tablePath, settings).GetValueSync();
-        if (opResult.Ready() && !opResult.Status().IsSuccess()) {
+        if (IsOperationStarted(opResult.Status())) {
+            operationId = opResult.Id();
+            LOG_I("Started index creation for " << indexName << ": " << operationId.ToString());
+            if (operationId.GetKind() == TOperation::TOperationId::BUILD_INDEX) {
+                return TStatus(EStatus::SUCCESS, NIssue::TIssues());
+            }
+            return opResult.Status();
+        } else {
             LOG_W("Failed to create index " << indexName << " for " << tablePath << ": "
                 << opResult.ToString() << ", retrying");
             return opResult.Status();
-        } else {
-            operationId = opResult.Id();
         }
-        return TStatus(EStatus::SUCCESS, NIssue::TIssues());
     });
 
     if (operationId.GetKind() == TOperation::TOperationId::UNUSED) {

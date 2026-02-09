@@ -221,8 +221,7 @@ public:
                 auto& transferSpecific = *Result->Record.MutableTransferSpecific();
                 transferSpecific.MutableTarget()->SetConsumerName(target->GetStreamConsumerName() ? target->GetStreamConsumerName() : specific.GetTarget().GetConsumerName());
 
-                auto* stats = target->GetStats();
-                if (stats) {
+                if (auto* stats = target->GetStats()) {
                     stats->Serialize(Result->Record, includeDetailedStats);
                 }
             }

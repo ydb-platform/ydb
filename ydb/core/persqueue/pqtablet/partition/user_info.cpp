@@ -4,6 +4,9 @@
 #include <ydb/core/persqueue/pqtablet/common/constants.h>
 #include <ydb/core/persqueue/public/config.h>
 
+#include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
+#include <library/cpp/containers/stack_vector/stack_vec.h>
+
 namespace NKikimr {
 namespace NPQ {
 
@@ -44,7 +47,7 @@ namespace NDeprecatedUserData {
 TUserInfo::TUserInfo(
     const TActorContext& ctx,
     NMonitoring::TDynamicCounterPtr streamCountersSubgroup,
-    NMonitoring::TDynamicCounterPtr partitionCountersSubgroup,
+    TConstArrayRef<NMonitoring::TDynamicCounterPtr> partitionCountersSubgroups,
     const TString& user,
     const ui64 readRuleGeneration, const bool important, const TDuration availabilityPeriod,
     const NPersQueue::TTopicConverterPtr& topicConverter,
@@ -78,9 +81,7 @@ TUserInfo::TUserInfo(
     , MeterRead(meterRead)
 {
     if (AppData(ctx)->Counters) {
-        if (partitionCountersSubgroup) {
-            SetupDetailedMetrics(ctx, partitionCountersSubgroup);
-        }
+        SetupDetailedMetrics(ctx, partitionCountersSubgroups);
 
         if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
             LabeledCounters = CreateProtobufTabletLabeledCounters<EClientLabeledCounters_descriptor>(
@@ -194,12 +195,14 @@ static TUserInfo::TPerPartitionCounters CreateDetailedMetricsForSubgroup(const T
     return counters;
 }
 
-void TUserInfo::SetupDetailedMetrics(const TActorContext& ctx, NMonitoring::TDynamicCounterPtr subgroup) {
-    /// TODO: implement
-    Y_UNUSED(ctx);
-    Y_UNUSED(subgroup);
+void TUserInfo::SetupDetailedMetrics(const TActorContext& ctx, TConstArrayRef<NMonitoring::TDynamicCounterPtr> subgroups) {
+    TVector<TPerPartitionCounters> counters;
+    counters.reserve(subgroups.size());
+    for (const auto& subgroup : subgroups) {
+        counters.push_back(CreateDetailedMetricsForSubgroup(ctx, User, subgroup));
+    }
+    PerPartitionCounters.swap(counters);
 }
-
 
 void TUserInfo::ResetDetailedMetrics() {
     PerPartitionCounters.clear();
@@ -432,22 +435,26 @@ TUserInfo& TUsersInfoStorage::GetOrCreate(const TString& user, const TActorConte
     return *it->second;
 }
 
-::NMonitoring::TDynamicCounterPtr TUsersInfoStorage::GetPartitionCounterSubgroup(const TActorContext& ctx) const {
+TUsersInfoStorage::TDetailedCounterSubgroup TUsersInfoStorage::GetPartitionCounterSubgroup(const TActorContext& ctx) const {
     if (!DetailedMetricsAreEnabled(Config)) {
-        return nullptr;
+        return {nullptr, Config.GetMonitoringProjectId()};
     }
-    auto counters = AppData(ctx)->Counters;
-    if (!counters) {
-        return nullptr;
+    return GetPartitionCounterSubgroupImpl(ctx, Config.GetMonitoringProjectId());
+}
+
+TUsersInfoStorage::TDetailedCounterSubgroup TUsersInfoStorage::GetPartitionCounterSubgroupImpl(const TActorContext& ctx, const TString& monitoringProjectId) const {
+    NMonitoring::TDynamicCounterPtr s = AppData(ctx)->Counters;
+    if (!s) {
+        return {nullptr, monitoringProjectId};
     }
     if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
-        auto s = counters
+        s = s
             ->GetSubgroup("counters", IsServerless ? "topics_per_partition_serverless" : "topics_per_partition")
             ->GetSubgroup("host", "");
-        if (const auto& id = Config.GetMonitoringProjectId(); !id.empty()) {
-            s = s->GetSubgroup("monitoring_project_id", id);
+        if (!monitoringProjectId.empty()) {
+            s = s->GetSubgroup("monitoring_project_id", monitoringProjectId);
         }
-        return s
+        s = s
             ->GetSubgroup("database", Config.GetYdbDatabasePath())
             ->GetSubgroup("cloud_id", CloudId)
             ->GetSubgroup("folder_id", FolderId)
@@ -455,28 +462,67 @@ TUserInfo& TUsersInfoStorage::GetOrCreate(const TString& user, const TActorConte
             ->GetSubgroup("topic", TopicConverter->GetClientsideName())
             ->GetSubgroup("partition_id", ToString(Partition));
     } else {
-        auto s = counters
+        s = s
             ->GetSubgroup("counters", "topics_per_partition")
             ->GetSubgroup("host", "cluster");
-        if (const auto& id = Config.GetMonitoringProjectId(); !id.empty()) {
-            s = s->GetSubgroup("monitoring_project_id", id);
+        if (!monitoringProjectId.empty()) {
+            s = s->GetSubgroup("monitoring_project_id", monitoringProjectId);
         }
-        return s
+        s = s
             ->GetSubgroup("Account", TopicConverter->GetAccount())
             ->GetSubgroup("TopicPath", TopicConverter->GetFederationPath())
             ->GetSubgroup("OriginDC", to_title(TopicConverter->GetCluster()))
             ->GetSubgroup("Partition", ToString(Partition));
     }
+    return {s, monitoringProjectId};
 }
 
+static bool DetailedMetricsAreEnabledForConsumer(const NKikimrPQ::TPQTabletConfig_TConsumer& consumerConfig) {
+    return consumerConfig.GetMetricsLevel() == METRICS_LEVEL_DETAILED
+        && !consumerConfig.GetMonitoringProjectId().empty()
+        && AppData()->FeatureFlags.GetEnableMetricsLevel();
+}
+
+TUsersInfoStorage::TDetailedCounterSubgroup TUsersInfoStorage::GetConsumerCounterSubgroup(const TActorContext& ctx, const NKikimrPQ::TPQTabletConfig_TConsumer& consumerConfig) const {
+    if (!DetailedMetricsAreEnabledForConsumer(consumerConfig)) {
+        return {nullptr, consumerConfig.GetMonitoringProjectId()};
+    }
+    return GetPartitionCounterSubgroupImpl(ctx, consumerConfig.GetMonitoringProjectId());
+}
+
+// returns non-null subgroups with unique keys
+static TStackOnlyVec<::NMonitoring::TDynamicCounterPtr, 2> FilterDetailedMetricsSubgroups(const TUsersInfoStorage::TDetailedCounterSubgroup& a, const TUsersInfoStorage::TDetailedCounterSubgroup& b) {
+    TStackOnlyVec<::NMonitoring::TDynamicCounterPtr, 2> result;
+    TStackOnlyVec<TStringBuf, 2> keys;
+    for (auto* g : {&a, &b}) {
+        if (g->Subgroup != nullptr && FindPtr(keys, g->Key) == nullptr) {
+            result.push_back(std::move(g->Subgroup));
+            keys.push_back(g->Key);
+        }
+    }
+    return result;
+}
 
 void TUsersInfoStorage::SetupDetailedMetrics(const TActorContext& ctx) {
-    auto subgroup = GetPartitionCounterSubgroup(ctx);
-    if (!subgroup) {
-        return;  // TODO(qyryq) Y_ABORT_UNLESS?
+    const TDetailedCounterSubgroup partitionSubgroup = GetPartitionCounterSubgroup(ctx);
+    const bool hasConsumerWithDetailedMetrics = FindIfPtr(Config.GetConsumers(), DetailedMetricsAreEnabledForConsumer) != nullptr;
+    if (!partitionSubgroup.Subgroup && !hasConsumerWithDetailedMetrics) {
+        // fast exit: neither partition, nor consumer requests detailed metrics
+        return;
     }
-    for (auto&& userInfo : GetAll()) {
-        userInfo.second.SetupDetailedMetrics(ctx, subgroup);
+    absl::flat_hash_map<std::string_view, const NKikimrPQ::TPQTabletConfig_TConsumer*> configMap;
+    if (hasConsumerWithDetailedMetrics) {
+        configMap.reserve(Config.ConsumersSize());
+        for (const auto& consumerConfig : Config.GetConsumers()) {
+            configMap.emplace(consumerConfig.GetName(), &consumerConfig);
+        }
+    }
+    for (auto&& [userName, userInfo] : GetAll()) {
+        TDetailedCounterSubgroup consumerSubgroup;
+        if (const auto* consumerConfig = MapFindPtr(configMap, userName)) {
+            consumerSubgroup = GetConsumerCounterSubgroup(ctx, **consumerConfig);
+        }
+        userInfo.SetupDetailedMetrics(ctx, FilterDetailedMetricsSubgroups(partitionSubgroup, consumerSubgroup));
     }
 }
 
@@ -508,18 +554,14 @@ TIntrusivePtr<TUserInfo> TUsersInfoStorage::CreateUserInfo(const TActorContext& 
                                             const std::optional<TString>& committedMetadata) const
 {
     TString defaultServiceType = AppData(ctx)->PQConfig.GetDefaultClientServiceType().GetName();
-    TString userServiceType = "";
-    for (auto& consumer : Config.GetConsumers()) {
-        if (consumer.GetName() == user) {
-            userServiceType = consumer.GetServiceType();
-            break;
-        }
-    }
-
+    const auto* consumerConfig = FindIfPtr(Config.GetConsumers(), [&user](const auto& consumer) { return consumer.GetName() == user; });
+    const TString userServiceType = consumerConfig ? consumerConfig->GetServiceType() : "";
     bool meterRead = userServiceType.empty() || userServiceType == defaultServiceType;
+    const TDetailedCounterSubgroup partitionSubgroup = GetPartitionCounterSubgroup(ctx);
+    const TDetailedCounterSubgroup consumerSubgroup = consumerConfig ? GetConsumerCounterSubgroup(ctx, *consumerConfig) : TDetailedCounterSubgroup{};
 
     return MakeIntrusive<TUserInfo>(
-        ctx, StreamCountersSubgroup, GetPartitionCounterSubgroup(ctx),
+        ctx, StreamCountersSubgroup, FilterDetailedMetricsSubgroups(partitionSubgroup, consumerSubgroup),
         user, readRuleGeneration, important, availabilityPeriod, TopicConverter, Partition,
         session, partitionSessionId, gen, step, offset, readOffsetRewindSum, DCId, readFromTimestamp, DbPath,
         meterRead, pipeClient, anyCommits, committedMetadata

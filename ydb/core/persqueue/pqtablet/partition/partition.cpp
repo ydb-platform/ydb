@@ -3441,13 +3441,17 @@ void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
         OffloadActor = {};
     }
 
-    if (MonitoringProjectId != Config.GetMonitoringProjectId() || !DetailedMetricsAreEnabled(Config)) {
+    if (MonitoringProjectId != Config.GetMonitoringProjectId()) {
+        UsersInfoStorage->ResetDetailedMetrics();
+        ResetDetailedMetrics();
+    } else if (!DetailedMetricsAreEnabled(Config)) {
         ResetDetailedMetrics();
     }
     MonitoringProjectId = Config.GetMonitoringProjectId();
     if (DetailedMetricsAreEnabled(Config)) {
         SetupDetailedMetrics();
     }
+    UsersInfoStorage->SetupDetailedMetrics(ActorContext());
 }
 
 
@@ -4583,8 +4587,6 @@ void TPartition::SetupDetailedMetrics() {
         // Don't recreate the counters if they already exist.
         return;
     }
-
-    UsersInfoStorage->SetupDetailedMetrics(ActorContext());
 
     auto subgroup = GetPerPartitionCounterSubgroup();
     if (!subgroup) {

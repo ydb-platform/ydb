@@ -20,7 +20,6 @@ SRCS(
     fair_share_invoker_pool_ut.cpp
     fair_share_thread_pool_ut.cpp
     fair_throttler_ut.cpp
-    fair_throttler_ipc_ut.cpp
     fls_ut.cpp
     invoker_alarm_ut.cpp
     invoker_pool_ut.cpp
@@ -42,6 +41,12 @@ SRCS(
     throughput_throttler_ut.cpp
     two_level_fair_share_thread_pool_ut.cpp
 )
+
+IF (OS_LINUX)
+    SRCS(
+        fair_throttler_ipc_ut.cpp
+    )
+ENDIF()
 
 INCLUDE(${ARCADIA_ROOT}/yt/opensource.inc)
 

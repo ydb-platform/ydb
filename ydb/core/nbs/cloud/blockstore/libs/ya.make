@@ -4,4 +4,5 @@ RECURSE(
     kikimr
     service
     storage
+    vhost
 )

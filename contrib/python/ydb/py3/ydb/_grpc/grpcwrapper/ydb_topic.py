@@ -52,7 +52,12 @@ class Codec(int, IToPublic, IFromPublic):
 
 
 @dataclass
-class SupportedCodecs(IToProto, IFromProto, IToPublic, IFromPublic):
+class SupportedCodecs(
+    IToProto,
+    IFromProto[Optional["ydb_topic_pb2.SupportedCodecs"], "SupportedCodecs"],
+    IToPublic,
+    IFromPublic,
+):
     codecs: List[Codec]
 
     def to_proto(self) -> ydb_topic_pb2.SupportedCodecs:
@@ -83,7 +88,7 @@ class SupportedCodecs(IToProto, IFromProto, IToPublic, IFromPublic):
 
 
 @dataclass(order=True)
-class OffsetsRange(IFromProto, IToProto):
+class OffsetsRange(IFromProto["ydb_topic_pb2.OffsetsRange", "OffsetsRange"], IToProto):
     """
     half-opened interval, include [start, end) offsets
     """
@@ -123,16 +128,18 @@ class OffsetsRange(IFromProto, IToProto):
 class UpdateTokenRequest(IToProto):
     token: str
 
-    def to_proto(self) -> Message:
+    def to_proto(self) -> ydb_topic_pb2.UpdateTokenRequest:
         res = ydb_topic_pb2.UpdateTokenRequest()
         res.token = self.token
         return res
 
 
 @dataclass
-class UpdateTokenResponse(IFromProto):
+class UpdateTokenResponse(IFromProto["ydb_topic_pb2.UpdateTokenResponse", "UpdateTokenResponse"]):
+    status: Optional[ServerStatus] = None
+
     @staticmethod
-    def from_proto(msg: ydb_topic_pb2.UpdateTokenResponse) -> typing.Any:
+    def from_proto(msg: ydb_topic_pb2.UpdateTokenResponse) -> "UpdateTokenResponse":
         return UpdateTokenResponse()
 
 
@@ -202,12 +209,12 @@ class StreamWriteMessage:
             return proto
 
     @dataclass
-    class InitResponse(IFromProto):
+    class InitResponse(IFromProto["ydb_topic_pb2.StreamWriteMessage.InitResponse", "StreamWriteMessage.InitResponse"]):
         last_seq_no: Union[int, None]
         session_id: str
         partition_id: int
         supported_codecs: typing.List[int]
-        status: ServerStatus = None
+        status: Optional[ServerStatus] = None
 
         @staticmethod
         def from_proto(
@@ -278,7 +285,9 @@ class StreamWriteMessage:
             return proto
 
     @dataclass
-    class WriteResponse(IFromProto):
+    class WriteResponse(
+        IFromProto["ydb_topic_pb2.StreamWriteMessage.WriteResponse", "StreamWriteMessage.WriteResponse"]
+    ):
         partition_id: int
         acks: typing.List["StreamWriteMessage.WriteResponse.WriteAck"]
         write_statistics: "StreamWriteMessage.WriteResponse.WriteStatistics"
@@ -307,16 +316,28 @@ class StreamWriteMessage:
             )
 
         @dataclass
-        class WriteAck(IFromProto):
+        class WriteAck(
+            IFromProto[
+                "ydb_topic_pb2.StreamWriteMessage.WriteResponse.WriteAck",
+                "StreamWriteMessage.WriteResponse.WriteAck",
+            ]
+        ):
             seq_no: int
             message_write_status: Union[
                 "StreamWriteMessage.WriteResponse.WriteAck.StatusWritten",
                 "StreamWriteMessage.WriteResponse.WriteAck.StatusSkipped",
+                "StreamWriteMessage.WriteResponse.WriteAck.StatusWrittenInTx",
                 int,
             ]
 
             @classmethod
             def from_proto(cls, proto_ack: ydb_topic_pb2.StreamWriteMessage.WriteResponse.WriteAck):
+                message_write_status: Union[
+                    StreamWriteMessage.WriteResponse.WriteAck.StatusWritten,
+                    StreamWriteMessage.WriteResponse.WriteAck.StatusSkipped,
+                    StreamWriteMessage.WriteResponse.WriteAck.StatusWrittenInTx,
+                    int,
+                ]
                 if proto_ack.HasField("written"):
                     message_write_status = StreamWriteMessage.WriteResponse.WriteAck.StatusWritten(
                         proto_ack.written.offset
@@ -350,7 +371,10 @@ class StreamWriteMessage:
 
             @dataclass
             class StatusSkipped:
-                reason: "StreamWriteMessage.WriteResponse.WriteAck.StatusSkipped.Reason"
+                reason: Union[
+                    "StreamWriteMessage.WriteResponse.WriteAck.StatusSkipped.Reason",
+                    int,
+                ]
 
                 class Reason(enum.Enum):
                     UNSPECIFIED = 0
@@ -403,10 +427,11 @@ class StreamWriteMessage:
                 raise Exception("Unknown outcoming grpc message: %s" % value)
             return res
 
-    class FromServer(IFromProto):
+    class FromServer(IFromProto["ydb_topic_pb2.StreamWriteMessage.FromServer", "WriterMessagesFromServerToClient"]):
         @staticmethod
-        def from_proto(msg: ydb_topic_pb2.StreamWriteMessage.FromServer) -> typing.Any:
+        def from_proto(msg: ydb_topic_pb2.StreamWriteMessage.FromServer) -> "WriterMessagesFromServerToClient":
             message_type = msg.WhichOneof("server_message")
+            res: WriterMessagesFromServerToClient
             if message_type == "write_response":
                 res = StreamWriteMessage.WriteResponse.from_proto(msg.write_response)
             elif message_type == "init_response":
@@ -438,7 +463,9 @@ WriterMessagesFromServerToClient = Union[
 
 class StreamReadMessage:
     @dataclass
-    class PartitionSession(IFromProto):
+    class PartitionSession(
+        IFromProto["ydb_topic_pb2.StreamReadMessage.PartitionSession", "StreamReadMessage.PartitionSession"]
+    ):
         partition_session_id: int
         path: str
         partition_id: int
@@ -486,7 +513,7 @@ class StreamReadMessage:
                 )
 
     @dataclass
-    class InitResponse(IFromProto):
+    class InitResponse(IFromProto["ydb_topic_pb2.StreamReadMessage.InitResponse", "StreamReadMessage.InitResponse"]):
         session_id: str
 
         @staticmethod
@@ -505,7 +532,7 @@ class StreamReadMessage:
             return res
 
     @dataclass
-    class ReadResponse(IFromProto):
+    class ReadResponse(IFromProto["ydb_topic_pb2.StreamReadMessage.ReadResponse", "StreamReadMessage.ReadResponse"]):
         partition_data: List["StreamReadMessage.ReadResponse.PartitionData"]
         bytes_size: int
 
@@ -522,7 +549,12 @@ class StreamReadMessage:
             )
 
         @dataclass
-        class MessageData(IFromProto):
+        class MessageData(
+            IFromProto[
+                "ydb_topic_pb2.StreamReadMessage.ReadResponse.MessageData",
+                "StreamReadMessage.ReadResponse.MessageData",
+            ]
+        ):
             offset: int
             seq_no: int
             created_at: datetime.datetime
@@ -547,7 +579,12 @@ class StreamReadMessage:
                 )
 
         @dataclass
-        class Batch(IFromProto):
+        class Batch(
+            IFromProto[
+                "ydb_topic_pb2.StreamReadMessage.ReadResponse.Batch",
+                "StreamReadMessage.ReadResponse.Batch",
+            ]
+        ):
             message_data: List["StreamReadMessage.ReadResponse.MessageData"]
             producer_id: str
             write_session_meta: Dict[str, str]
@@ -570,7 +607,12 @@ class StreamReadMessage:
                 )
 
         @dataclass
-        class PartitionData(IFromProto):
+        class PartitionData(
+            IFromProto[
+                "ydb_topic_pb2.StreamReadMessage.ReadResponse.PartitionData",
+                "StreamReadMessage.ReadResponse.PartitionData",
+            ]
+        ):
             partition_session_id: int
             batches: List["StreamReadMessage.ReadResponse.Batch"]
 
@@ -616,7 +658,12 @@ class StreamReadMessage:
                 return res
 
     @dataclass
-    class CommitOffsetResponse(IFromProto):
+    class CommitOffsetResponse(
+        IFromProto[
+            "ydb_topic_pb2.StreamReadMessage.CommitOffsetResponse",
+            "StreamReadMessage.CommitOffsetResponse",
+        ]
+    ):
         partitions_committed_offsets: List["StreamReadMessage.CommitOffsetResponse.PartitionCommittedOffset"]
 
         @staticmethod
@@ -633,7 +680,12 @@ class StreamReadMessage:
             )
 
         @dataclass
-        class PartitionCommittedOffset(IFromProto):
+        class PartitionCommittedOffset(
+            IFromProto[
+                "ydb_topic_pb2.StreamReadMessage.CommitOffsetResponse.PartitionCommittedOffset",
+                "StreamReadMessage.CommitOffsetResponse.PartitionCommittedOffset",
+            ]
+        ):
             partition_session_id: int
             committed_offset: int
 
@@ -656,11 +708,16 @@ class StreamReadMessage:
             )
 
     @dataclass
-    class PartitionSessionStatusResponse(IFromProto):
+    class PartitionSessionStatusResponse(
+        IFromProto[
+            "ydb_topic_pb2.StreamReadMessage.PartitionSessionStatusResponse",
+            "StreamReadMessage.PartitionSessionStatusResponse",
+        ]
+    ):
         partition_session_id: int
         partition_offsets: "OffsetsRange"
         committed_offset: int
-        write_time_high_watermark: float
+        write_time_high_watermark: Optional[datetime.datetime]
 
         @staticmethod
         def from_proto(
@@ -670,11 +727,16 @@ class StreamReadMessage:
                 partition_session_id=msg.partition_session_id,
                 partition_offsets=OffsetsRange.from_proto(msg.partition_offsets),
                 committed_offset=msg.committed_offset,
-                write_time_high_watermark=msg.write_time_high_watermark,
+                write_time_high_watermark=datetime_from_proto_timestamp(msg.write_time_high_watermark),
             )
 
     @dataclass
-    class StartPartitionSessionRequest(IFromProto):
+    class StartPartitionSessionRequest(
+        IFromProto[
+            "ydb_topic_pb2.StreamReadMessage.StartPartitionSessionRequest",
+            "StreamReadMessage.StartPartitionSessionRequest",
+        ]
+    ):
         partition_session: "StreamReadMessage.PartitionSession"
         committed_offset: int
         partition_offsets: "OffsetsRange"
@@ -707,7 +769,12 @@ class StreamReadMessage:
             return res
 
     @dataclass
-    class StopPartitionSessionRequest(IFromProto):
+    class StopPartitionSessionRequest(
+        IFromProto[
+            "ydb_topic_pb2.StreamReadMessage.StopPartitionSessionRequest",
+            "StreamReadMessage.StopPartitionSessionRequest",
+        ]
+    ):
         partition_session_id: int
         graceful: bool
         committed_offset: int
@@ -715,7 +782,7 @@ class StreamReadMessage:
         @staticmethod
         def from_proto(
             msg: ydb_topic_pb2.StreamReadMessage.StopPartitionSessionRequest,
-        ) -> StreamReadMessage.StopPartitionSessionRequest:
+        ) -> "StreamReadMessage.StopPartitionSessionRequest":
             return StreamReadMessage.StopPartitionSessionRequest(
                 partition_session_id=msg.partition_session_id,
                 graceful=msg.graceful,
@@ -732,13 +799,20 @@ class StreamReadMessage:
             )
 
     @dataclass
-    class EndPartitionSession(IFromProto):
+    class EndPartitionSession(
+        IFromProto[
+            "ydb_topic_pb2.StreamReadMessage.EndPartitionSession",
+            "StreamReadMessage.EndPartitionSession",
+        ]
+    ):
         partition_session_id: int
         adjacent_partition_ids: List[int]
         child_partition_ids: List[int]
 
         @staticmethod
-        def from_proto(msg: ydb_topic_pb2.StreamReadMessage.EndPartitionSession):
+        def from_proto(
+            msg: ydb_topic_pb2.StreamReadMessage.EndPartitionSession,
+        ) -> "StreamReadMessage.EndPartitionSession":
             return StreamReadMessage.EndPartitionSession(
                 partition_session_id=msg.partition_session_id,
                 adjacent_partition_ids=list(msg.adjacent_partition_ids),
@@ -767,13 +841,13 @@ class StreamReadMessage:
             elif isinstance(self.client_message, StreamReadMessage.StopPartitionSessionResponse):
                 res.stop_partition_session_response.CopyFrom(self.client_message.to_proto())
             elif isinstance(self.client_message, StreamReadMessage.PartitionSessionStatusRequest):
-                res.start_partition_session_response.CopyFrom(self.client_message.to_proto())
+                res.partition_session_status_request.CopyFrom(self.client_message.to_proto())
             else:
                 raise NotImplementedError("Unknown message type: %s" % type(self.client_message))
             return res
 
     @dataclass
-    class FromServer(IFromProto):
+    class FromServer(IFromProto["ydb_topic_pb2.StreamReadMessage.FromServer", "StreamReadMessage.FromServer"]):
         server_message: "ReaderMessagesFromServerToClient"
         server_status: ServerStatus
 
@@ -860,7 +934,10 @@ ReaderMessagesFromServerToClient = Union[
 
 
 @dataclass
-class MultipleWindowsStat(IFromProto, IToPublic):
+class MultipleWindowsStat(
+    IFromProto[Optional["ydb_topic_pb2.MultipleWindowsStat"], Optional["MultipleWindowsStat"]],
+    IToPublic,
+):
     per_minute: int
     per_hour: int
     per_day: int
@@ -886,7 +963,12 @@ class MultipleWindowsStat(IFromProto, IToPublic):
 
 
 @dataclass
-class Consumer(IToProto, IFromProto, IFromPublic, IToPublic):
+class Consumer(
+    IToProto,
+    IFromProto[Optional["ydb_topic_pb2.Consumer"], Optional["Consumer"]],
+    IFromPublic,
+    IToPublic,
+):
     name: str
     important: bool
     read_from: typing.Optional[datetime.datetime]
@@ -906,6 +988,8 @@ class Consumer(IToProto, IFromProto, IFromPublic, IToPublic):
 
     @staticmethod
     def from_proto(msg: Optional[ydb_topic_pb2.Consumer]) -> Optional["Consumer"]:
+        if msg is None:
+            return None
         return Consumer(
             name=msg.name,
             important=msg.important,
@@ -920,35 +1004,39 @@ class Consumer(IToProto, IFromProto, IFromPublic, IToPublic):
         if consumer is None:
             return None
 
-        supported_codecs = []
+        codecs: List[Codec] = []
         if consumer.supported_codecs is not None:
-            supported_codecs = consumer.supported_codecs
+            codecs = [Codec.from_public(c) for c in consumer.supported_codecs]
 
         return Consumer(
             name=consumer.name,
             important=consumer.important,
             read_from=consumer.read_from,
-            supported_codecs=SupportedCodecs(codecs=supported_codecs),
+            supported_codecs=SupportedCodecs(codecs=codecs),
             attributes=consumer.attributes,
             consumer_stats=None,
         )
 
     def to_public(self) -> ydb_topic_public_types.PublicConsumer:
+        consumer_stats = self.consumer_stats.to_public() if self.consumer_stats is not None else None
         return ydb_topic_public_types.PublicConsumer(
             name=self.name,
             important=self.important,
             read_from=self.read_from,
             supported_codecs=self.supported_codecs.to_public(),
             attributes=self.attributes,
-            consumer_stats=self.consumer_stats.to_public(),
+            consumer_stats=consumer_stats,
         )
 
     @dataclass
-    class ConsumerStats(IFromProto, IToPublic):
-        min_partitions_last_read_time: datetime.datetime
-        max_read_time_lag: datetime.timedelta
-        max_write_time_lag: datetime.timedelta
-        bytes_read: MultipleWindowsStat
+    class ConsumerStats(
+        IFromProto["ydb_topic_pb2.Consumer.ConsumerStats", "Consumer.ConsumerStats"],
+        IToPublic,
+    ):
+        min_partitions_last_read_time: Optional[datetime.datetime]
+        max_read_time_lag: Optional[datetime.timedelta]
+        max_write_time_lag: Optional[datetime.timedelta]
+        bytes_read: Optional[MultipleWindowsStat]
 
         @staticmethod
         def from_proto(
@@ -962,11 +1050,12 @@ class Consumer(IToProto, IFromProto, IFromPublic, IToPublic):
             )
 
         def to_public(self) -> ydb_topic_public_types.PublicConsumer.ConsumerStats:
+            bytes_read = self.bytes_read.to_public() if self.bytes_read is not None else None
             return ydb_topic_public_types.PublicConsumer.ConsumerStats(
                 min_partitions_last_read_time=self.min_partitions_last_read_time,
                 max_read_time_lag=self.max_read_time_lag,
                 max_write_time_lag=self.max_write_time_lag,
-                bytes_read=self.bytes_read,
+                bytes_read=bytes_read,
             )
 
 
@@ -983,16 +1072,18 @@ class AlterConsumer(IToProto, IFromPublic):
         if self.set_supported_codecs is not None:
             supported_codecs = self.set_supported_codecs.to_proto()
 
-        return ydb_topic_pb2.AlterConsumer(
+        proto = ydb_topic_pb2.AlterConsumer(
             name=self.name,
-            set_important=self.set_important,
             set_read_from=proto_timestamp_from_datetime(self.set_read_from),
             set_supported_codecs=supported_codecs,
             alter_attributes=self.alter_attributes,
         )
+        if self.set_important is not None:
+            proto.set_important = self.set_important
+        return proto
 
     @staticmethod
-    def from_public(alter_consumer: ydb_topic_public_types.PublicAlterConsumer) -> AlterConsumer:
+    def from_public(alter_consumer: ydb_topic_public_types.PublicAlterConsumer) -> Optional["AlterConsumer"]:
         if not alter_consumer:
             return None
 
@@ -1006,11 +1097,14 @@ class AlterConsumer(IToProto, IFromPublic):
 
 
 @dataclass
-class PartitioningSettings(IToProto, IFromProto):
-    min_active_partitions: int
-    partition_count_limit: int
-    max_active_partitions: int
-    auto_partitioning_settings: AutoPartitioningSettings
+class PartitioningSettings(
+    IToProto,
+    IFromProto["ydb_topic_pb2.PartitioningSettings", "PartitioningSettings"],
+):
+    min_active_partitions: Optional[int]
+    partition_count_limit: Optional[int]
+    max_active_partitions: Optional[int]
+    auto_partitioning_settings: Optional[AutoPartitioningSettings]
 
     @staticmethod
     def from_proto(msg: ydb_topic_pb2.PartitioningSettings) -> "PartitioningSettings":
@@ -1027,14 +1121,19 @@ class PartitioningSettings(IToProto, IFromProto):
             auto_partitioning_settings = self.auto_partitioning_settings.to_proto()
 
         return ydb_topic_pb2.PartitioningSettings(
-            min_active_partitions=self.min_active_partitions,
-            partition_count_limit=self.partition_count_limit,
-            max_active_partitions=self.max_active_partitions,
+            min_active_partitions=self.min_active_partitions or 0,
+            partition_count_limit=self.partition_count_limit or 0,
+            max_active_partitions=self.max_active_partitions or 0,
             auto_partitioning_settings=auto_partitioning_settings,
         )
 
 
-class AutoPartitioningStrategy(int, IFromProto, IFromPublic, IToPublic):
+class AutoPartitioningStrategy(
+    int,
+    IFromProto[Optional[int], Optional["AutoPartitioningStrategy"]],
+    IFromPublic,
+    IToPublic,
+):
     UNSPECIFIED = 0
     DISABLED = 1
     SCALE_UP = 2
@@ -1065,19 +1164,28 @@ class AutoPartitioningStrategy(int, IFromProto, IFromPublic, IToPublic):
 
 
 @dataclass
-class AutoPartitioningSettings(IToProto, IFromProto, IFromPublic, IToPublic):
-    strategy: AutoPartitioningStrategy
-    partition_write_speed: AutoPartitioningWriteSpeedStrategy
+class AutoPartitioningSettings(
+    IToProto,
+    IFromProto[
+        Optional["ydb_topic_pb2.AutoPartitioningSettings"],
+        Optional["AutoPartitioningSettings"],
+    ],
+    IFromPublic,
+    IToPublic,
+):
+    strategy: Optional[AutoPartitioningStrategy]
+    partition_write_speed: Optional[AutoPartitioningWriteSpeedStrategy]
 
     @staticmethod
     def from_public(
         settings: Optional[ydb_topic_public_types.PublicAutoPartitioningSettings],
-    ) -> Optional[AutoPartitioningSettings]:
+    ) -> Optional["AutoPartitioningSettings"]:
         if not settings:
             return None
 
+        strategy = AutoPartitioningStrategy.from_public(settings.strategy)
         return AutoPartitioningSettings(
-            strategy=settings.strategy,
+            strategy=strategy,
             partition_write_speed=AutoPartitioningWriteSpeedStrategy(
                 stabilization_window=settings.stabilization_window,
                 up_utilization_percent=settings.up_utilization_percent,
@@ -1086,7 +1194,9 @@ class AutoPartitioningSettings(IToProto, IFromProto, IFromPublic, IToPublic):
         )
 
     @staticmethod
-    def from_proto(msg: ydb_topic_pb2.AutoPartitioningSettings) -> AutoPartitioningSettings:
+    def from_proto(
+        msg: Optional[ydb_topic_pb2.AutoPartitioningSettings],
+    ) -> Optional["AutoPartitioningSettings"]:
         if msg is None:
             return None
 
@@ -1096,21 +1206,38 @@ class AutoPartitioningSettings(IToProto, IFromProto, IFromPublic, IToPublic):
         )
 
     def to_proto(self) -> ydb_topic_pb2.AutoPartitioningSettings:
+        partition_write_speed = self.partition_write_speed.to_proto() if self.partition_write_speed else None
+        strategy = self.strategy if self.strategy is not None else AutoPartitioningStrategy.UNSPECIFIED
         return ydb_topic_pb2.AutoPartitioningSettings(
-            strategy=self.strategy, partition_write_speed=self.partition_write_speed.to_proto()
+            strategy=strategy,  # type: ignore[arg-type]
+            partition_write_speed=partition_write_speed,
         )
 
     def to_public(self) -> ydb_topic_public_types.PublicAutoPartitioningSettings:
+        strategy = self.strategy.to_public() if self.strategy else None
+        stabilization_window = self.partition_write_speed.stabilization_window if self.partition_write_speed else None
+        up_utilization_percent = (
+            self.partition_write_speed.up_utilization_percent if self.partition_write_speed else None
+        )
+        down_utilization_percent = (
+            self.partition_write_speed.down_utilization_percent if self.partition_write_speed else None
+        )
         return ydb_topic_public_types.PublicAutoPartitioningSettings(
-            strategy=self.strategy.to_public(),
-            stabilization_window=self.partition_write_speed.stabilization_window,
-            up_utilization_percent=self.partition_write_speed.up_utilization_percent,
-            down_utilization_percent=self.partition_write_speed.down_utilization_percent,
+            strategy=strategy,
+            stabilization_window=stabilization_window,
+            up_utilization_percent=up_utilization_percent,
+            down_utilization_percent=down_utilization_percent,
         )
 
 
 @dataclass
-class AutoPartitioningWriteSpeedStrategy(IToProto, IFromProto):
+class AutoPartitioningWriteSpeedStrategy(
+    IToProto,
+    IFromProto[
+        Optional["ydb_topic_pb2.AutoPartitioningWriteSpeedStrategy"],
+        Optional["AutoPartitioningWriteSpeedStrategy"],
+    ],
+):
     stabilization_window: Optional[datetime.timedelta]
     up_utilization_percent: Optional[int]
     down_utilization_percent: Optional[int]
@@ -1125,7 +1252,7 @@ class AutoPartitioningWriteSpeedStrategy(IToProto, IFromProto):
     @staticmethod
     def from_proto(
         msg: Optional[ydb_topic_pb2.AutoPartitioningWriteSpeedStrategy],
-    ) -> Optional[AutoPartitioningWriteSpeedStrategy]:
+    ) -> Optional["AutoPartitioningWriteSpeedStrategy"]:
         if msg is None:
             return None
 
@@ -1168,8 +1295,9 @@ class AlterAutoPartitioningSettings(IToProto, IFromPublic):
         if not settings:
             return None
 
+        set_strategy = AutoPartitioningStrategy.from_public(settings.set_strategy)
         return AlterAutoPartitioningSettings(
-            set_strategy=settings.set_strategy,
+            set_strategy=set_strategy,
             set_partition_write_speed=AlterAutoPartitioningWriteSpeedStrategy(
                 set_stabilization_window=settings.set_stabilization_window,
                 set_up_utilization_percent=settings.set_up_utilization_percent,
@@ -1183,7 +1311,7 @@ class AlterAutoPartitioningSettings(IToProto, IFromPublic):
             set_partition_write_speed = self.set_partition_write_speed.to_proto()
 
         return ydb_topic_pb2.AlterAutoPartitioningSettings(
-            set_strategy=self.set_strategy,
+            set_strategy=self.set_strategy,  # type: ignore[arg-type]
             set_partition_write_speed=set_partition_write_speed,
         )
 
@@ -1202,7 +1330,12 @@ class AlterAutoPartitioningWriteSpeedStrategy(IToProto):
         )
 
 
-class MeteringMode(int, IFromProto, IFromPublic, IToPublic):
+class MeteringMode(
+    int,
+    IFromProto[Optional[int], Optional["MeteringMode"]],
+    IFromPublic,
+    IToPublic,
+):
     UNSPECIFIED = 0
     RESERVED_CAPACITY = 1
     REQUEST_UNITS = 2
@@ -1287,7 +1420,7 @@ class CreateTopicRequest(IToProto, IFromPublic):
     partition_write_burst_bytes: typing.Optional[int]
     attributes: Dict[str, str]
     consumers: List["Consumer"]
-    metering_mode: "MeteringMode"
+    metering_mode: Optional["MeteringMode"]
 
     def to_proto(self) -> ydb_topic_pb2.CreateTopicRequest:
         partitioning_settings = None
@@ -1302,28 +1435,31 @@ class CreateTopicRequest(IToProto, IFromPublic):
             supported_codecs=self.supported_codecs.to_proto(),
             partition_write_speed_bytes_per_second=self.partition_write_speed_bytes_per_second,
             partition_write_burst_bytes=self.partition_write_burst_bytes,
-            attributes=self.attributes,
+            attributes=self.attributes or {},
             consumers=[consumer.to_proto() for consumer in self.consumers],
-            metering_mode=self.metering_mode,
+            metering_mode=self.metering_mode,  # type: ignore[arg-type]
         )
 
     @staticmethod
     def from_public(req: ydb_topic_public_types.CreateTopicRequestParams):
-        supported_codecs = []
-
+        codecs: List[Codec] = []
         if req.supported_codecs is not None:
-            supported_codecs = req.supported_codecs
+            codecs = [Codec.from_public(c) for c in req.supported_codecs]
 
-        consumers = []
+        consumers: List[Consumer] = []
         if req.consumers is not None:
             for consumer in req.consumers:
                 if isinstance(consumer, str):
                     consumer = ydb_topic_public_types.PublicConsumer(name=consumer)
-                consumers.append(Consumer.from_public(consumer))
+                converted = Consumer.from_public(consumer)
+                if converted is not None:
+                    consumers.append(converted)
 
         auto_partitioning_settings = None
         if req.auto_partitioning_settings is not None:
             auto_partitioning_settings = AutoPartitioningSettings.from_public(req.auto_partitioning_settings)
+
+        metering_mode = MeteringMode.from_public(req.metering_mode)
 
         return CreateTopicRequest(
             path=req.path,
@@ -1335,14 +1471,12 @@ class CreateTopicRequest(IToProto, IFromPublic):
             ),
             retention_period=req.retention_period,
             retention_storage_mb=req.retention_storage_mb,
-            supported_codecs=SupportedCodecs(
-                codecs=supported_codecs,
-            ),
+            supported_codecs=SupportedCodecs(codecs=codecs),
             partition_write_speed_bytes_per_second=req.partition_write_speed_bytes_per_second,
             partition_write_burst_bytes=req.partition_write_burst_bytes,
-            attributes=req.attributes,
+            attributes=req.attributes or {},
             consumers=consumers,
-            metering_mode=MeteringMode.from_public(req.metering_mode),
+            metering_mode=metering_mode,
         )
 
 
@@ -1371,36 +1505,53 @@ class AlterTopicRequest(IToProto, IFromPublic):
         if self.set_supported_codecs is not None:
             supported_codecs = self.set_supported_codecs.to_proto()
 
+        add_consumers = [c.to_proto() for c in self.add_consumers] if self.add_consumers else []
+        alter_partitioning_settings = (
+            self.alter_partitioning_settings.to_proto() if self.alter_partitioning_settings else None
+        )
+        alter_consumers = [c.to_proto() for c in self.alter_consumers] if self.alter_consumers else []
+        drop_consumers = list(self.drop_consumers) if self.drop_consumers else []
+
         return ydb_topic_pb2.AlterTopicRequest(
             path=self.path,
-            add_consumers=[consumer.to_proto() for consumer in self.add_consumers],
-            alter_partitioning_settings=self.alter_partitioning_settings.to_proto(),
+            add_consumers=add_consumers,
+            alter_partitioning_settings=alter_partitioning_settings,
             set_retention_period=proto_duration_from_timedelta(self.set_retention_period),
             set_retention_storage_mb=self.set_retention_storage_mb,
             set_supported_codecs=supported_codecs,
             set_partition_write_burst_bytes=self.set_partition_write_burst_bytes,
             set_partition_write_speed_bytes_per_second=self.set_partition_write_speed_bytes_per_second,
             alter_attributes=self.alter_attributes,
-            alter_consumers=[consumer.to_proto() for consumer in self.alter_consumers],
-            drop_consumers=list(self.drop_consumers),
-            set_metering_mode=self.set_metering_mode,
+            alter_consumers=alter_consumers,
+            drop_consumers=drop_consumers,
+            set_metering_mode=self.set_metering_mode,  # type: ignore[arg-type]
         )
 
     @staticmethod
     def from_public(req: ydb_topic_public_types.AlterTopicRequestParams) -> AlterTopicRequest:
-        add_consumers = []
+        add_consumers: List[Consumer] = []
         if req.add_consumers:
-            for consumer in req.add_consumers:
-                if isinstance(consumer, str):
-                    consumer = ydb_topic_public_types.PublicConsumer(name=consumer)
-                add_consumers.append(Consumer.from_public(consumer))
+            for c in req.add_consumers:
+                pub_consumer: ydb_topic_public_types.PublicConsumer
+                if isinstance(c, str):
+                    pub_consumer = ydb_topic_public_types.PublicConsumer(name=c)
+                else:
+                    pub_consumer = c
+                converted = Consumer.from_public(pub_consumer)
+                if converted is not None:
+                    add_consumers.append(converted)
 
-        alter_consumers = []
+        alter_consumers: List[AlterConsumer] = []
         if req.alter_consumers:
-            for consumer in req.alter_consumers:
-                if isinstance(consumer, str):
-                    consumer = ydb_topic_public_types.PublicAlterConsumer(name=consumer)
-                alter_consumers.append(AlterConsumer.from_public(consumer))
+            for ac in req.alter_consumers:
+                pub_alter: ydb_topic_public_types.PublicAlterConsumer
+                if isinstance(ac, str):
+                    pub_alter = ydb_topic_public_types.PublicAlterConsumer(name=ac)
+                else:
+                    pub_alter = ac
+                converted_alter = AlterConsumer.from_public(pub_alter)
+                if converted_alter is not None:
+                    alter_consumers.append(converted_alter)
 
         alter_auto_partitioning_settings = None
         if req.alter_auto_partitioning_settings is not None:
@@ -1438,33 +1589,36 @@ class DescribeTopicRequest:
 
 
 @dataclass
-class DescribeTopicResult(IFromProtoWithProtoType, IToPublic):
+class DescribeTopicResult(
+    IFromProtoWithProtoType["ydb_topic_pb2.DescribeTopicResult", "DescribeTopicResult"],
+    IToPublic,
+):
     self_proto: ydb_scheme_pb2.Entry
     partitioning_settings: PartitioningSettings
-    partitions: List["DescribeTopicResult.PartitionInfo"]
-    retention_period: datetime.timedelta
+    partitions: List[Optional["DescribeTopicResult.PartitionInfo"]]
+    retention_period: Optional[datetime.timedelta]
     retention_storage_mb: int
     supported_codecs: SupportedCodecs
     partition_write_speed_bytes_per_second: int
     partition_write_burst_bytes: int
     attributes: Dict[str, str]
-    consumers: List["Consumer"]
-    metering_mode: MeteringMode
-    topic_stats: "DescribeTopicResult.TopicStats"
+    consumers: List[Optional["Consumer"]]
+    metering_mode: Optional[MeteringMode]
+    topic_stats: Optional["DescribeTopicResult.TopicStats"]
 
     @staticmethod
     def from_proto(msg: ydb_topic_pb2.DescribeTopicResult) -> "DescribeTopicResult":
         return DescribeTopicResult(
             self_proto=msg.self,
             partitioning_settings=PartitioningSettings.from_proto(msg.partitioning_settings),
-            partitions=list(map(DescribeTopicResult.PartitionInfo.from_proto, msg.partitions)),
-            retention_period=msg.retention_period,
+            partitions=[DescribeTopicResult.PartitionInfo.from_proto(p) for p in msg.partitions],
+            retention_period=timedelta_from_proto_duration(msg.retention_period),
             retention_storage_mb=msg.retention_storage_mb,
             supported_codecs=SupportedCodecs.from_proto(msg.supported_codecs),
             partition_write_speed_bytes_per_second=msg.partition_write_speed_bytes_per_second,
             partition_write_burst_bytes=msg.partition_write_burst_bytes,
             attributes=dict(msg.attributes),
-            consumers=list(map(Consumer.from_proto, msg.consumers)),
+            consumers=[Consumer.from_proto(c) for c in msg.consumers],
             metering_mode=MeteringMode.from_proto(msg.metering_mode),
             topic_stats=DescribeTopicResult.TopicStats.from_proto(msg.topic_stats),
         )
@@ -1474,31 +1628,47 @@ class DescribeTopicResult(IFromProtoWithProtoType, IToPublic):
         return ydb_topic_pb2.DescribeTopicResult()
 
     def to_public(self) -> ydb_topic_public_types.PublicDescribeTopicResult:
+        partitions = [p.to_public() for p in self.partitions if p is not None]
+        consumers = [c.to_public() for c in self.consumers if c is not None]
+        metering_mode = self.metering_mode.to_public() if self.metering_mode else None
+        topic_stats = self.topic_stats.to_public() if self.topic_stats else None
+        auto_partitioning_settings = (
+            self.partitioning_settings.auto_partitioning_settings.to_public()
+            if self.partitioning_settings.auto_partitioning_settings
+            else None
+        )
+
         return ydb_topic_public_types.PublicDescribeTopicResult(
             self=scheme._wrap_scheme_entry(self.self_proto),
             min_active_partitions=self.partitioning_settings.min_active_partitions,
             max_active_partitions=self.partitioning_settings.max_active_partitions,
-            auto_partitioning_settings=self.partitioning_settings.auto_partitioning_settings.to_public(),
+            auto_partitioning_settings=auto_partitioning_settings,
             partition_count_limit=self.partitioning_settings.partition_count_limit,
-            partitions=list(map(DescribeTopicResult.PartitionInfo.to_public, self.partitions)),
+            partitions=partitions,
             retention_period=self.retention_period,
             retention_storage_mb=self.retention_storage_mb,
             supported_codecs=self.supported_codecs.to_public(),
             partition_write_speed_bytes_per_second=self.partition_write_speed_bytes_per_second,
             partition_write_burst_bytes=self.partition_write_burst_bytes,
             attributes=self.attributes,
-            consumers=list(map(Consumer.to_public, self.consumers)),
-            metering_mode=self.metering_mode.to_public(),
-            topic_stats=self.topic_stats.to_public(),
+            consumers=consumers,
+            metering_mode=metering_mode,
+            topic_stats=topic_stats,
         )
 
     @dataclass
-    class PartitionInfo(IFromProto, IToPublic):
+    class PartitionInfo(
+        IFromProto[
+            Optional["ydb_topic_pb2.DescribeTopicResult.PartitionInfo"],
+            Optional["DescribeTopicResult.PartitionInfo"],
+        ],
+        IToPublic,
+    ):
         partition_id: int
         active: bool
         child_partition_ids: List[int]
         parent_partition_ids: List[int]
-        partition_stats: "PartitionStats"
+        partition_stats: Optional["PartitionStats"]
 
         @staticmethod
         def from_proto(
@@ -1530,11 +1700,17 @@ class DescribeTopicResult(IFromProtoWithProtoType, IToPublic):
             )
 
     @dataclass
-    class TopicStats(IFromProto, IToPublic):
+    class TopicStats(
+        IFromProto[
+            Optional["ydb_topic_pb2.DescribeTopicResult.TopicStats"],
+            Optional["DescribeTopicResult.TopicStats"],
+        ],
+        IToPublic,
+    ):
         store_size_bytes: int
-        min_last_write_time: datetime.datetime
-        max_write_time_lag: datetime.timedelta
-        bytes_written: "MultipleWindowsStat"
+        min_last_write_time: Optional[datetime.datetime]
+        max_write_time_lag: Optional[datetime.timedelta]
+        bytes_written: Optional["MultipleWindowsStat"]
 
         @staticmethod
         def from_proto(
@@ -1553,21 +1729,25 @@ class DescribeTopicResult(IFromProtoWithProtoType, IToPublic):
         def to_public(
             self,
         ) -> ydb_topic_public_types.PublicDescribeTopicResult.TopicStats:
+            bytes_written = self.bytes_written.to_public() if self.bytes_written else None
             return ydb_topic_public_types.PublicDescribeTopicResult.TopicStats(
                 store_size_bytes=self.store_size_bytes,
                 min_last_write_time=self.min_last_write_time,
                 max_write_time_lag=self.max_write_time_lag,
-                bytes_written=self.bytes_written.to_public(),
+                bytes_written=bytes_written,
             )
 
 
 @dataclass
-class PartitionStats(IFromProto, IToPublic):
+class PartitionStats(
+    IFromProto[Optional["ydb_topic_pb2.PartitionStats"], Optional["PartitionStats"]],
+    IToPublic,
+):
     partition_offsets: OffsetsRange
     store_size_bytes: int
-    last_write_time: datetime.datetime
-    max_write_time_lag: datetime.timedelta
-    bytes_written: "MultipleWindowsStat"
+    last_write_time: Optional[datetime.datetime]
+    max_write_time_lag: Optional[datetime.timedelta]
+    bytes_written: Optional["MultipleWindowsStat"]
     partition_node_id: int
 
     @staticmethod
@@ -1586,12 +1766,191 @@ class PartitionStats(IFromProto, IToPublic):
         )
 
     def to_public(self) -> ydb_topic_public_types.PublicPartitionStats:
+        bytes_written = self.bytes_written.to_public() if self.bytes_written else None
         return ydb_topic_public_types.PublicPartitionStats(
             partition_start=self.partition_offsets.start,
             partition_end=self.partition_offsets.end,
             store_size_bytes=self.store_size_bytes,
             last_write_time=self.last_write_time,
             max_write_time_lag=self.max_write_time_lag,
-            bytes_written=self.bytes_written.to_public(),
+            bytes_written=bytes_written,
             partition_node_id=self.partition_node_id,
         )
+
+
+@dataclass
+class PartitionLocation(IFromProto, IToPublic):
+    node_id: int
+    generation: int
+
+    @staticmethod
+    def from_proto(
+        msg: Optional[ydb_topic_pb2.PartitionLocation],
+    ) -> Optional["PartitionLocation"]:
+        if msg is None:
+            return None
+        return PartitionLocation(
+            node_id=msg.node_id,
+            generation=msg.generation,
+        )
+
+    def to_public(self) -> ydb_topic_public_types.PublicPartitionLocation:
+        return ydb_topic_public_types.PublicPartitionLocation(
+            node_id=self.node_id,
+            generation=self.generation,
+        )
+
+
+@dataclass
+class PartitionConsumerStats(IFromProto, IToPublic):
+    last_read_offset: int
+    committed_offset: int
+    read_session_id: str
+    partition_read_session_create_time: Optional[datetime.datetime]
+    last_read_time: Optional[datetime.datetime]
+    max_read_time_lag: Optional[datetime.timedelta]
+    max_write_time_lag: Optional[datetime.timedelta]
+    max_committed_time_lag: Optional[datetime.timedelta]
+    bytes_read: Optional["MultipleWindowsStat"]
+    reader_name: str
+    connection_node_id: int
+
+    @staticmethod
+    def from_proto(
+        msg: Optional[ydb_topic_pb2.DescribeConsumerResult.PartitionConsumerStats],
+    ) -> Optional["PartitionConsumerStats"]:
+        if msg is None:
+            return None
+        return PartitionConsumerStats(
+            last_read_offset=msg.last_read_offset,
+            committed_offset=msg.committed_offset,
+            read_session_id=msg.read_session_id,
+            partition_read_session_create_time=(
+                datetime_from_proto_timestamp(msg.partition_read_session_create_time)
+                if msg.HasField("partition_read_session_create_time")
+                else None
+            ),
+            last_read_time=(
+                datetime_from_proto_timestamp(msg.last_read_time) if msg.HasField("last_read_time") else None
+            ),
+            max_read_time_lag=(
+                timedelta_from_proto_duration(msg.max_read_time_lag) if msg.HasField("max_read_time_lag") else None
+            ),
+            max_write_time_lag=(
+                timedelta_from_proto_duration(msg.max_write_time_lag) if msg.HasField("max_write_time_lag") else None
+            ),
+            max_committed_time_lag=(
+                timedelta_from_proto_duration(msg.max_committed_time_lag)
+                if msg.HasField("max_committed_time_lag")
+                else None
+            ),
+            bytes_read=MultipleWindowsStat.from_proto(msg.bytes_read) if msg.HasField("bytes_read") else None,
+            reader_name=msg.reader_name,
+            connection_node_id=msg.connection_node_id,
+        )
+
+    def to_public(self) -> ydb_topic_public_types.PublicPartitionConsumerStats:
+        bytes_read = None
+        if self.bytes_read is not None:
+            bytes_read = self.bytes_read.to_public()
+        return ydb_topic_public_types.PublicPartitionConsumerStats(
+            last_read_offset=self.last_read_offset,
+            committed_offset=self.committed_offset,
+            read_session_id=self.read_session_id,
+            partition_read_session_create_time=self.partition_read_session_create_time,
+            last_read_time=self.last_read_time,
+            max_read_time_lag=self.max_read_time_lag,
+            max_write_time_lag=self.max_write_time_lag,
+            max_committed_time_lag=self.max_committed_time_lag,
+            bytes_read=bytes_read,
+            reader_name=self.reader_name,
+            connection_node_id=self.connection_node_id,
+        )
+
+
+@dataclass
+class DescribeConsumerResult(IFromProtoWithProtoType, IToPublic):
+    self_proto: ydb_scheme_pb2.Entry
+    consumer: Consumer
+    partitions: List["DescribeConsumerResult.PartitionInfo"]
+
+    @staticmethod
+    def from_proto(msg: ydb_topic_pb2.DescribeConsumerResult) -> "DescribeConsumerResult":
+        consumer = Consumer.from_proto(msg.consumer)
+        if consumer is None:
+            raise TypeError("DescribeConsumerResult.consumer must not be None")
+
+        partitions = [DescribeConsumerResult.PartitionInfo.from_proto(p) for p in msg.partitions if p is not None]
+        return DescribeConsumerResult(
+            self_proto=msg.self,
+            consumer=consumer,
+            partitions=[p for p in partitions if p is not None],
+        )
+
+    @staticmethod
+    def empty_proto_message() -> ydb_topic_pb2.DescribeConsumerResult:
+        return ydb_topic_pb2.DescribeConsumerResult()
+
+    def to_public(self) -> ydb_topic_public_types.PublicDescribeConsumerResult:
+        return ydb_topic_public_types.PublicDescribeConsumerResult(
+            self=scheme._wrap_scheme_entry(self.self_proto),
+            consumer=self.consumer.to_public(),
+            partitions=list(map(DescribeConsumerResult.PartitionInfo.to_public, self.partitions)),
+        )
+
+    @dataclass
+    class PartitionInfo(IFromProto, IToPublic):
+        partition_id: int
+        active: bool
+        child_partition_ids: List[int]
+        parent_partition_ids: List[int]
+        partition_stats: Optional["PartitionStats"]
+        partition_consumer_stats: Optional["PartitionConsumerStats"]
+        partition_location: Optional["PartitionLocation"]
+
+        @staticmethod
+        def from_proto(
+            msg: Optional[ydb_topic_pb2.DescribeConsumerResult.PartitionInfo],
+        ) -> Optional["DescribeConsumerResult.PartitionInfo"]:
+            if msg is None:
+                return None
+
+            return DescribeConsumerResult.PartitionInfo(
+                partition_id=msg.partition_id,
+                active=msg.active,
+                child_partition_ids=list(msg.child_partition_ids),
+                parent_partition_ids=list(msg.parent_partition_ids),
+                partition_stats=(
+                    PartitionStats.from_proto(msg.partition_stats) if msg.HasField("partition_stats") else None
+                ),
+                partition_consumer_stats=(
+                    PartitionConsumerStats.from_proto(msg.partition_consumer_stats)
+                    if msg.HasField("partition_consumer_stats")
+                    else None
+                ),
+                partition_location=(
+                    PartitionLocation.from_proto(msg.partition_location) if msg.HasField("partition_location") else None
+                ),
+            )
+
+        def to_public(
+            self,
+        ) -> ydb_topic_public_types.PublicDescribeConsumerResult.PartitionInfo:
+            partition_stats = None
+            if self.partition_stats is not None:
+                partition_stats = self.partition_stats.to_public()
+            partition_consumer_stats = None
+            if self.partition_consumer_stats is not None:
+                partition_consumer_stats = self.partition_consumer_stats.to_public()
+            partition_location = None
+            if self.partition_location is not None:
+                partition_location = self.partition_location.to_public()
+            return ydb_topic_public_types.PublicDescribeConsumerResult.PartitionInfo(
+                partition_id=self.partition_id,
+                active=self.active,
+                child_partition_ids=self.child_partition_ids,
+                parent_partition_ids=self.parent_partition_ids,
+                partition_stats=partition_stats,
+                partition_consumer_stats=partition_consumer_stats,
+                partition_location=partition_location,
+            )

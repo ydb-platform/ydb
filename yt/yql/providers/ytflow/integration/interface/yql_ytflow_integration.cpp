@@ -81,6 +81,14 @@ TExprNode::TPtr TEmptyYtflowIntegration::GetWriteContent(
     AbortUnimplemented(__FUNCTION__);
 }
 
+TExprNode::TPtr TEmptyYtflowIntegration::UpdateWriteContent(
+    const TExprNode::TPtr& /*write*/,
+    const TExprNode::TPtr& /*content*/,
+    TExprContext& /*ctx*/
+) {
+    AbortUnimplemented(__FUNCTION__);
+}
+
 void TEmptyYtflowIntegration::FillSourceSettings(
     const TExprNode& /*source*/,
     ::google::protobuf::Any& /*settings*/,

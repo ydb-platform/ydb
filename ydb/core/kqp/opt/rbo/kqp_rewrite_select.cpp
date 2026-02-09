@@ -653,12 +653,149 @@ bool IsForceOptionalNeeded(TExprNode::TPtr typeNode, const TString& aggFunc) {
     return typeNode && TMaybeNode<TCoOptionalType>(typeNode.Get()) && (aggFunc == "min" || aggFunc == "max" || aggFunc == "sum" || aggFunc == "avg");
 }
 
-TExprNode::TPtr BuildAggregationPipeline(TExprNode::TPtr resultExpr, const TVector<std::tuple<TInfoUnit, TExprNode::TPtr, bool>>& expressionsMapPreAgg,
-                                         const TVector<std::pair<TInfoUnit, TExprNode::TPtr>>& groupByKeysExpressionsMap,
-                                         const TAggregationTraits& distinctAggregationTraitsPreAggregate, const TAggregationTraits& aggTraits,
-                                         const TAggregationTraits& distinctAggregationTraitsPostAggregate, TExprNode::TPtr& havingFilterLambda,
-                                         const TVector<std::tuple<TInfoUnit, TExprNode::TPtr, bool>>& expressionsMapPostAgg, TExprContext& ctx,
+bool IsSuitableToEliminateColumn(const TString& colName, const THashMap<TString, std::pair<TString, TString>>& candidateForElimation,
+                                 const THashMap<TString, std::pair<TString, TString>>& candidateForHolders) {
+    const auto itElimination = candidateForElimation.find(colName);
+    if (itElimination == candidateForElimation.cend()) {
+        return false;
+    }
+    const auto itHolder = candidateForHolders.find(colName);
+    if (itHolder == candidateForHolders.cend()) {
+        return false;
+    }
+    // Aggregation functions are the same.
+    return itElimination->second.second == itHolder->second.second;
+}
+
+void EliminateDuplicateAggregations(TVector<std::tuple<TInfoUnit, TExprNode::TPtr, bool>>& expressionsMapPreAgg, TAggregationTraits& aggTraits,
+                                    const TVector<std::tuple<TInfoUnit, TExprNode::TPtr, bool>>& expressionsMapPostAgg, TExprNode::TPtr& havingFilterLambda,
+                                    TExprContext& ctx, TPositionHandle pos) {
+    if (!havingFilterLambda) {
+        return;
+    }
+
+    auto membersToReplaces = FindNodes(TCoLambda(havingFilterLambda).Body().Ptr(), [](const TExprNode::TPtr& node) { return node->IsCallable("Member"); });
+    if (membersToReplaces.size() == 0 || membersToReplaces.size() > 1) {
+        return;
+    }
+
+    // Collect all columns which are needed after aggregations.
+    THashSet<TString> aggregationResults;
+    for (const auto& expression : expressionsMapPostAgg) {
+        auto lambda = TCoLambda(get<1>(expression));
+        const auto members = FindNodes(lambda.Body().Ptr(), [](const TExprNode::TPtr& node) { return node->IsCallable("Member"); });
+        for (const auto& member : members) {
+            aggregationResults.emplace(TCoMember(member).Name().StringValue());
+        }
+    }
+
+    // Make a map: aggregation input col name -> aggregation output col name.
+    THashMap<TString, std::pair<TString, TString>> inputToOutputAggregation;
+    for (const auto& aggTraits : aggTraits.AggTraitsList) {
+        const auto kqpAggTraits = TKqpOpAggregationTraits(aggTraits);
+        const TString originalColName = kqpAggTraits.OriginalColName().StringValue();
+        const TString resultColName = kqpAggTraits.ResultColName().StringValue();
+        const TString aggFunc = kqpAggTraits.AggregationFunction().StringValue();
+        inputToOutputAggregation.emplace(originalColName, std::make_pair(resultColName, aggFunc));
+    }
+
+    // Collect candidates for elimination.
+    THashMap<TString, std::pair<TString, TString>> candidatesForElimination;
+    THashMap<TString, std::pair<TString, TString>> candidatesForHolders;
+    for (const auto& expression : expressionsMapPreAgg) {
+        const TString originalColName = get<0>(expression).GetFullName();
+        auto lambda = TCoLambda(get<1>(expression));
+        if (auto maybeMember = lambda.Body().Maybe<TCoMember>()) {
+            const auto it = inputToOutputAggregation.find(originalColName);
+            Y_ENSURE(it != inputToOutputAggregation.cend());
+            const auto& resultColName = it->second.first;
+            const TString& aggFunc = it->second.second;
+            const TString memberName = maybeMember.Cast().Name().StringValue();
+
+            if (!aggregationResults.contains(resultColName)) {
+                candidatesForElimination.emplace(memberName, std::make_pair(originalColName, aggFunc));
+            } else {
+                candidatesForHolders.emplace(memberName, std::make_pair(originalColName, aggFunc));
+            }
+        }
+    }
+
+    // Eliminate expr in pre aggregation map.
+    THashMap<TString, TString> aggregationsToEliminate;
+    TVector<std::tuple<TInfoUnit, TExprNode::TPtr, bool>> newExpressionsMapPreAgg;
+    THashSet<TString> taken;
+    for (const auto& expression : expressionsMapPreAgg) {
+        auto lambda = TCoLambda(get<1>(expression));
+        const TString colName = get<0>(expression).GetFullName();
+        if (auto maybeMember = lambda.Body().Maybe<TCoMember>()) {
+            const auto colName = maybeMember.Cast().Name().StringValue();
+            if (!taken.contains(colName) && IsSuitableToEliminateColumn(colName, candidatesForElimination, candidatesForHolders)) {
+                const auto& originalColName = candidatesForHolders[colName].first;
+                Y_ENSURE(inputToOutputAggregation.contains(originalColName));
+                aggregationsToEliminate.emplace(candidatesForElimination[colName].first, inputToOutputAggregation[originalColName].first);
+                taken.insert(colName);
+                continue;
+            }
+        }
+        newExpressionsMapPreAgg.push_back(expression);
+    }
+
+    // This better to implement in rbo.
+    if (aggregationsToEliminate.empty() || aggregationsToEliminate.size() > 1) {
+        return;
+    }
+
+    // Eliminate agg traits.
+    TVector<TExprNode::TPtr> newAggTraitsList;
+    TString newHavingColName;
+    for (const auto& aggTraits : aggTraits.AggTraitsList) {
+        const auto kqpAggTraits = TKqpOpAggregationTraits(aggTraits);
+        const TString originalColName = kqpAggTraits.OriginalColName().StringValue();
+        if (!aggregationsToEliminate.contains(originalColName)) {
+            newAggTraitsList.push_back(kqpAggTraits.Ptr());
+        } else {
+            newHavingColName = aggregationsToEliminate[originalColName];
+        }
+    }
+
+    aggTraits.AggTraitsList.swap(newAggTraitsList);
+    expressionsMapPreAgg.swap(newExpressionsMapPreAgg);
+
+    // Replace name in filter.
+    // clang-format off
+    auto newArg = ctx.NewArgument(pos, "new_arg");
+    auto newMember = Build<TCoMember>(ctx, pos)
+        .Struct(newArg)
+        .Name<TCoAtom>()
+            .Value(newHavingColName)
+        .Build()
+    .Done().Ptr();
+    // clang-format on
+
+    TNodeOnNodeOwnedMap nodeReplacementMap;
+    nodeReplacementMap[membersToReplaces.front().Get()] = newMember;
+
+    // clang-format off
+    havingFilterLambda = Build<TCoLambda>(ctx, pos)
+        .Args({newArg})
+        .Body(ctx.ReplaceNodes(TCoLambda(havingFilterLambda).Body().Ptr(), nodeReplacementMap))
+    .Done().Ptr();
+    // clang-format on
+}
+
+TExprNode::TPtr BuildAggregationPipeline(TExprNode::TPtr resultExpr, TVector<std::tuple<TInfoUnit, TExprNode::TPtr, bool>>&& expressionsMapPreAgg,
+                                         TVector<std::pair<TInfoUnit, TExprNode::TPtr>>&& groupByKeysExpressionsMap,
+                                         TAggregationTraits&& distinctAggregationTraitsPreAggregate, TAggregationTraits&& aggTraits,
+                                         TAggregationTraits&& distinctAggregationTraitsPostAggregate, TExprNode::TPtr& havingFilterLambda,
+                                         TVector<std::tuple<TInfoUnit, TExprNode::TPtr, bool>>&& expressionsMapPostAgg, TExprContext& ctx,
                                          TPositionHandle pos) {
+    // While processing aggregations and having we could have the same aggregations functions on the same column, here we want to eliminate them.
+    // TODO: Make a special rule in optimizer for that and support more cases, currently we support only simple one aka:
+    // select f(a) ... having f(a) > val ...;
+    if (distinctAggregationTraitsPreAggregate.AggTraitsList.empty() && distinctAggregationTraitsPostAggregate.AggTraitsList.empty()) {
+        EliminateDuplicateAggregations(expressionsMapPreAgg, aggTraits, expressionsMapPostAgg, havingFilterLambda, ctx, pos);
+    }
+
     // In case we have an expression for aggregation - f(a + b ...) or group by.
     if (!expressionsMapPreAgg.empty() || !groupByKeysExpressionsMap.empty()) {
         resultExpr = BuildAggregateExpressionMap(resultExpr, expressionsMapPreAgg, groupByKeysExpressionsMap, ctx, pos);
@@ -864,9 +1001,8 @@ void ProcessAggregationsInHaving(TExprNode::TPtr having, const TStructExprType* 
                                  TVector<std::tuple<TInfoUnit, TExprNode::TPtr, bool>>& expressionsMapPreAgg,
                                  TVector<std::pair<TInfoUnit, TExprNode::TPtr>>& groupByKeysExpressionsMap,
                                  TAggregationTraits& distinctAggregationTraitsPreAggregate, TAggregationTraits& aggTraits,
-                                 TAggregationTraits& distinctAggregationTraitsPostAggregate, TExprNode::TPtr& havingFilterLambda,
-                                 TVector<std::tuple<TInfoUnit, TExprNode::TPtr, bool>>& expressionsMapPostAgg, ui64& uniqueAggColumnId, const bool distinctAll,
-                                 const bool isEmptyGroupByKeys, const bool pgSyntax, TExprContext& ctx, TPositionHandle pos) {
+                                 TAggregationTraits& distinctAggregationTraitsPostAggregate, TExprNode::TPtr& havingFilterLambda, ui64& uniqueAggColumnId,
+                                 const bool distinctAll, const bool isEmptyGroupByKeys, const bool pgSyntax, TExprContext& ctx, TPositionHandle pos) {
     Y_ENSURE(!pgSyntax, "Having is not supported for PG syntax.");
     Y_ENSURE(!distinctAll, "Distinct all is not supported for HAVING.");
     bool distinctPreAggregate = false;
@@ -876,7 +1012,6 @@ void ProcessAggregationsInHaving(TExprNode::TPtr having, const TStructExprType* 
     // Using to collect a lambda for having filter.
     TVector<std::tuple<TInfoUnit, TExprNode::TPtr, bool>> havingFilterHolder;
     const TString resultColName = GenerateUniqueColumnName(uniqueAggColumnId, "having", "col");
-    (void) expressionsMapPostAgg;
 
     ProcessAggregations(yqlWhere->ChildPtr(1), resultColName, finalType, aggregationUniqueColNames, expressionsMapPreAgg, groupByKeysExpressionsMap,
                         distinctAggregationTraitsPreAggregate, aggTraits, distinctAggregationTraitsPostAggregate, havingFilterHolder, uniqueAggColumnId,
@@ -1275,7 +1410,7 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& node, TExprContext& ctx, co
         if (having) {
             ProcessAggregationsInHaving(having, finalType, aggregationUniqueColNames, expressionsMapPreAgg, groupByKeysExpressionsMap,
                                         distinctAggregationTraitsPreAggregate, aggTraits, distinctAggregationTraitsPostAggregate, havingFilterLambda,
-                                        expressionsMapPostAgg, uniqueAggColumnId, distinctAll, isEmptyGroupByKeys, pgSyntax, ctx, node->Pos());
+                                        uniqueAggColumnId, distinctAll, isEmptyGroupByKeys, pgSyntax, ctx, node->Pos());
         }
 
         auto result = GetSetting(setItem->Tail(), "result");
@@ -1284,8 +1419,9 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& node, TExprContext& ctx, co
                                          distinctAggregationTraitsPreAggregate, aggTraits, distinctAggregationTraitsPostAggregate, expressionsMapPostAgg,
                                          uniqueAggColumnId, distinctAll, isEmptyGroupByKeys, pgSyntax, ctx, node->Pos());
         // Build an aggregation pipeline.
-        resultExpr = BuildAggregationPipeline(resultExpr, expressionsMapPreAgg, groupByKeysExpressionsMap, distinctAggregationTraitsPreAggregate, aggTraits,
-                                              distinctAggregationTraitsPostAggregate, havingFilterLambda, expressionsMapPostAgg, ctx, node->Pos());
+        resultExpr = BuildAggregationPipeline(
+            resultExpr, std::move(expressionsMapPreAgg), std::move(groupByKeysExpressionsMap), std::move(distinctAggregationTraitsPreAggregate),
+            std::move(aggTraits), std::move(distinctAggregationTraitsPostAggregate), havingFilterLambda, std::move(expressionsMapPostAgg), ctx, node->Pos());
 
         finalColumnOrder.clear();
         TVector<TString> finalProjection;
@@ -1448,7 +1584,7 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& node, TExprContext& ctx, co
                         .Done().Ptr();
 
                     if (!columnType) {
-                        YQL_CLOG(TRACE, CoreDq) << "didn't find " << inputColumn->Content() << " in: " << *(TTypeAnnotationNode*)itemType;
+                        YQL_CLOG(TRACE, CoreDq) << "didn't find " << inputColumn->Content() << " in: " << *(const TTypeAnnotationNode*)itemType;
                     }
                     Y_ENSURE(columnType);
 

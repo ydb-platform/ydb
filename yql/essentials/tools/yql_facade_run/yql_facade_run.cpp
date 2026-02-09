@@ -848,7 +848,7 @@ int TFacadeRunner::DoRun(TProgramFactory& factory) {
                 return -1;
             }
         }
-        if (!fail && RunOptions_.TestLexers && 1 == RunOptions_.SyntaxVersion) {
+        if (!fail && RunOptions_.TestLexers && 1 == RunOptions_.SyntaxVersion && !settings.PgParser) {
             TIssues issues;
             if (!NSQLTranslationV1::CheckLexers({}, program->GetSourceCode(), issues)) {
                 *RunOptions_.ErrStream << "Lexers mismatched" << Endl;

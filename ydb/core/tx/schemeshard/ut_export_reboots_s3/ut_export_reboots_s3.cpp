@@ -520,7 +520,7 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
 
         static const TTypedScheme& IndexedTable() {
             return IndexedTableScheme;
-        } 
+        }
 
         static const TTypedScheme& Changefeed() {
             return ChangefeedScheme;
@@ -689,7 +689,7 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
                 Name: "ByValue"
                 KeyColumnNames: ["value"]
                 Type: EIndexTypeGlobalUnique
-            }  
+            }
         )", TableScheme.Scheme.c_str())
     };
 
@@ -992,5 +992,178 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
             TTestData::ExternalDataSource(),
             TTestData::ExternalTable(),
         }, TTestData::Request(EPathTypeExternalTable));
+    }
+
+    // System view
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnSystemViewPermissions, 2, 1, false) {
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        t.GetTestEnvOptions().EnablePermissionsExport(true);
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
+            {
+                TInactiveZone inactive(activeZone);
+                runtime.GetAppData().FeatureFlags.SetEnableSysViewPermissionsExport(true);
+
+                // Set permissions on the system view
+                NACLib::TDiffACL diffACL;
+                diffACL.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user0@builtin");
+                TestModifyACL(runtime, ++t.TxId, "/MyRoot/.sys", "partition_stats", diffACL.SerializeAsString(), "user0@builtin");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+            }
+
+            TestExport(runtime, ++t.TxId, "/MyRoot",
+                Sprintf(R"(
+                    ExportToS3Settings {
+                        endpoint: "localhost:%d"
+                        scheme: HTTP
+                        items {
+                            source_path: "/MyRoot/.sys/partition_stats"
+                            destination_prefix: "/partition_stats"
+                        }
+                    }
+                )", port)
+            );
+
+            const ui64 exportId = t.TxId;
+            t.TestEnv->TestWaitNotification(runtime, exportId);
+
+            {
+                TInactiveZone inactive(activeZone);
+
+                auto response = TestGetExport(runtime, exportId, "/MyRoot", {
+                    Ydb::StatusIds::SUCCESS,
+                    Ydb::StatusIds::NOT_FOUND
+                });
+
+                if (response.GetResponse().GetEntry().GetStatus() == Ydb::StatusIds::NOT_FOUND) {
+                    return;
+                }
+
+                auto* sysviewPermissions = s3Mock.GetData().FindPtr("/partition_stats/permissions.pb");
+                UNIT_ASSERT(sysviewPermissions);
+
+                TestForgetExport(runtime, ++t.TxId, "/MyRoot", exportId);
+                t.TestEnv->TestWaitNotification(runtime, exportId);
+
+                TestGetExport(runtime, exportId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+            }
+        });
+    }
+
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CancelShouldSucceedOnSystemViewPermissions, 2, 1, false) {
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        t.GetTestEnvOptions().EnablePermissionsExport(true);
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
+            {
+                TInactiveZone inactive(activeZone);
+                runtime.GetAppData().FeatureFlags.SetEnableSysViewPermissionsExport(true);
+
+                // Set permissions on the system view
+                NACLib::TDiffACL diffACL;
+                diffACL.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user0@builtin");
+                TestModifyACL(runtime, ++t.TxId, "/MyRoot/.sys", "partition_stats", diffACL.SerializeAsString(), "user0@builtin");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+            }
+
+            TestExport(runtime, ++t.TxId, "/MyRoot",
+                Sprintf(R"(
+                    ExportToS3Settings {
+                        endpoint: "localhost:%d"
+                        scheme: HTTP
+                        items {
+                            source_path: "/MyRoot/.sys/partition_stats"
+                            destination_prefix: "/partition_stats"
+                        }
+                    }
+                )", port)
+            );
+
+            const ui64 exportId = t.TxId;
+
+            t.TestEnv->ReliablePropose(runtime, CancelExportRequest(++t.TxId, "/MyRoot", exportId), {
+                Ydb::StatusIds::SUCCESS,
+                Ydb::StatusIds::NOT_FOUND
+            });
+            t.TestEnv->TestWaitNotification(runtime, exportId);
+
+            {
+                TInactiveZone inactive(activeZone);
+
+                auto response = TestGetExport(runtime, exportId, "/MyRoot", {
+                    Ydb::StatusIds::SUCCESS,
+                    Ydb::StatusIds::CANCELLED,
+                    Ydb::StatusIds::NOT_FOUND
+                });
+
+                if (response.GetResponse().GetEntry().GetStatus() == Ydb::StatusIds::NOT_FOUND) {
+                    return;
+                }
+
+                TestForgetExport(runtime, ++t.TxId, "/MyRoot", exportId);
+                t.TestEnv->TestWaitNotification(runtime, exportId);
+
+                TestGetExport(runtime, exportId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+            }
+        });
+    }
+
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ForgetShouldSucceedOnSystemViewPermissions, 2, 1, false) {
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        t.GetTestEnvOptions().EnablePermissionsExport(true);
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
+            {
+                TInactiveZone inactive(activeZone);
+                runtime.GetAppData().FeatureFlags.SetEnableSysViewPermissionsExport(true);
+
+                // Set permissions on the system view
+                NACLib::TDiffACL diffACL;
+                diffACL.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user0@builtin");
+                TestModifyACL(runtime, ++t.TxId, "/MyRoot/.sys", "partition_stats", diffACL.SerializeAsString(), "user0@builtin");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                TestExport(runtime, ++t.TxId, "/MyRoot",
+                    Sprintf(R"(
+                        ExportToS3Settings {
+                            endpoint: "localhost:%d"
+                            scheme: HTTP
+                            items {
+                                source_path: "/MyRoot/.sys/partition_stats"
+                                destination_prefix: "/partition_stats"
+                            }
+                        }
+                    )", port)
+                );
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+            }
+
+            const ui64 exportId = t.TxId;
+
+            t.TestEnv->ReliablePropose(runtime, ForgetExportRequest(++t.TxId, "/MyRoot", exportId), {
+                Ydb::StatusIds::SUCCESS,
+            });
+            t.TestEnv->TestWaitNotification(runtime, exportId);
+
+            {
+                TInactiveZone inactive(activeZone);
+                TestGetExport(runtime, exportId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+            }
+        });
     }
 }

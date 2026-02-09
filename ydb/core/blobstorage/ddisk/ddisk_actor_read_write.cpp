@@ -1,5 +1,6 @@
 #include "ddisk_actor.h"
 
+#include <util/generic/overloaded.h>
 #include <ydb/core/util/stlog.h>
 
 namespace NKikimr::NDDisk {
@@ -47,7 +48,7 @@ namespace NKikimr::NDDisk {
             selector.OffsetInBytes,
             std::move(data)), 0, cookie);
 
-        WriteCallbacks.try_emplace(cookie, std::move(span), [this, sender = ev->Sender, cookie = ev->Cookie,
+        WriteCallbacks.try_emplace(cookie, TPendingWrite{std::move(span), [this, sender = ev->Sender, cookie = ev->Cookie,
                 session = ev->InterconnectSession](NPDisk::TEvChunkWriteRawResult& /*ev*/, NWilson::TSpan&& span) {
             auto reply = std::make_unique<TEvWriteResult>(NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
             auto h = std::make_unique<IEventHandle>(sender, SelfId(), reply.release(), 0, cookie, nullptr, span.GetTraceId());
@@ -57,21 +58,27 @@ namespace NKikimr::NDDisk {
             Counters.Interface.Write.Reply(true);
             span.End();
             TActivationContext::Send(h.release());
-        });
+        }});
     }
 
 	void TDDiskActor::Handle(NPDisk::TEvChunkWriteRawResult::TPtr ev) {
         auto& msg = *ev->Get();
         STLOG(PRI_DEBUG, BS_DDISK, BSDD07, "TDDiskActor::Handle(TEvChunkWriteRawResult)", (DDiskId, DDiskId), (Msg, msg.ToString()));
-        
+
         if (msg.Status != NKikimrProto::OK) {
             Y_ABORT();
         }
 
         const auto it = WriteCallbacks.find(ev->Cookie);
         Y_ABORT_UNLESS(it != WriteCallbacks.end());
-        auto& [span, callback] = it->second;
-        callback(msg, std::move(span));
+        std::visit(TOverloaded{
+            [&](TPendingWrite& w) {
+                w.Callback(msg, std::move(w.Span));
+            },
+            [&](const TPersistentBufferPendingWrite& callback) {
+                callback(msg);
+            }
+        }, it->second);
         WriteCallbacks.erase(it);
     }
 

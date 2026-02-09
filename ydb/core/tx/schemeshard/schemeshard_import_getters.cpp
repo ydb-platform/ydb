@@ -353,6 +353,10 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         return schemeKey.EndsWith(NYdb::NDump::NFiles::CreateExternalTable().FileName);
     }
 
+    static bool IsSysView(TStringBuf schemeKey) {
+        return schemeKey.EndsWith(NYdb::NDump::NFiles::SystemView().FileName);
+    }
+
     static bool IsCreatedByQuery(TStringBuf schemeKey) {
         return IsView(schemeKey)
             || IsReplication(schemeKey)
@@ -393,6 +397,8 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
                 return AppData()->Icb->BackupControls.S3Controls.EnableExternalDataSourceImport.AtomicLoad()->Get();
             case NKikimrSchemeOp::EPathTypeExternalTable:
                 return AppData()->Icb->BackupControls.S3Controls.EnableExternalTableImport.AtomicLoad()->Get();
+            case NKikimrSchemeOp::EPathTypeSysView:
+                return AppData()->FeatureFlags.GetEnableSysViewPermissionsExport();
             case NKikimrSchemeOp::EPathTypePersQueueGroup:
             case NKikimrSchemeOp::EPathTypeTable:
                 return true;
@@ -595,6 +601,12 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
                 return Reply(Ydb::StatusIds::BAD_REQUEST, "Cannot parse topic scheme");
             }
             item.Topic = request;
+        } else if (IsSysView(SchemeKey)) {
+            Ydb::Table::DescribeSystemViewResult sysView;
+            if (!google::protobuf::TextFormat::ParseFromString(content, &sysView)) {
+                return Reply(Ydb::StatusIds::BAD_REQUEST, "Cannot parse system view description");
+            }
+            item.SysView = sysView;
         } else if (IsTable(SchemeKey)) {
             Ydb::Table::CreateTableRequest request;
             if (!google::protobuf::TextFormat::ParseFromString(content, &request)) {

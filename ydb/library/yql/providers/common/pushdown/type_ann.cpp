@@ -19,7 +19,7 @@ IGraphTransformer::TStatus AnnotateFilterPredicate(const TExprNode::TPtr& input,
         return IGraphTransformer::TStatus::Error;
     }
 
-    if (const auto* filterLambdaType = filterLambda->GetTypeAnn()) {
+    if (const auto filterLambdaType = filterLambda->GetTypeAnn()) {
         if (filterLambdaType->GetKind() != ETypeAnnotationKind::Data) {
             return IGraphTransformer::TStatus::Error;
         }

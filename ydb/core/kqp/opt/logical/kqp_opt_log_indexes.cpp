@@ -1358,6 +1358,18 @@ TFullTextApplyParseResult FindMatchingApply(const TExprBase& node, TExprContext&
     TFullTextApplyParseResult result;
 
     VisitExpr(node.Ptr(), [&] (const TExprNode::TPtr& expr) {
+        if (expr->Content() == "Apply") {
+            Cerr << NCommon::ExprToPrettyString(ctx, *expr) << "Apply found" << Endl;
+        }
+
+        if (expr->Content() == "StartsWith") {
+            Cerr << NCommon::ExprToPrettyString(ctx, *expr) << "StartsWith found" << Endl;
+        }
+
+        if (expr->Content() == "EndsWith") {
+            Cerr << NCommon::ExprToPrettyString(ctx, *expr) << "EndsWith found" << Endl;
+        }
+
         if (expr->Content() == "FulltextScore" || expr->Content() == "FulltextMatch") {
             if (!EnsureArgsCount(*expr, 2, ctx)) {
                 return false;

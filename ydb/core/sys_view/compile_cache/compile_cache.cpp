@@ -191,6 +191,12 @@ private:
             return;
         }
 
+        // If no pending nodes left after initialization/filtering, return empty result
+        if (PendingNodesInitialized && PendingNodes.empty()) {
+            ReplyEmptyAndDie();
+            return;
+        }
+
         if (!PendingNodes.empty() && !PendingRequest)  {
             const auto& nodeId = PendingNodes.front();
             auto kqpProxyId = NKqp::MakeKqpCompileServiceID(nodeId);
@@ -227,28 +233,17 @@ private:
             auto& proxies = ev->Get()->ProxyNodes;
             std::sort(proxies.begin(), proxies.end());
             
-            // Filter nodes by NodeId range if specified
-            std::vector<ui32> filteredProxies;
             for (ui32 nodeId : proxies) {
                 bool matchFrom = !HasNodeIdFrom || 
                     (NodeIdFromInclusive ? nodeId >= NodeIdFrom : nodeId > NodeIdFrom);
                 bool matchTo = !HasNodeIdTo || 
                     (NodeIdToInclusive ? nodeId <= NodeIdTo : nodeId < NodeIdTo);
                 if (matchFrom && matchTo) {
-                    filteredProxies.push_back(nodeId);
+                    PendingNodes.push_back(nodeId);
                 }
             }
-            
-            // limit nodes for fast warmup response
-            ui32 maxNodesToQuery = ev->Get()->MaxNodesToQuery;
-
-            if (maxNodesToQuery > 0 && filteredProxies.size() > maxNodesToQuery) {
-                PendingNodes = std::deque<ui32>(filteredProxies.begin(), filteredProxies.begin() + maxNodesToQuery);
-            } else {
-                PendingNodes = std::deque<ui32>(filteredProxies.begin(), filteredProxies.end());
-            }
-            PendingNodesInitialized = true;
         }
+        PendingNodesInitialized = true;
         StartScan();
     }
 
@@ -298,11 +293,13 @@ private:
             cells.clear();
         }
 
+        bool shouldContinue = true;
         if (LastResponse.GetFinished()) {
             PendingNodes.pop_front();
             ContinuationToken = TString();
             if (PendingNodes.empty()) {
                 batch->Finished = true;
+                shouldContinue = false;
             }
 
         } else {
@@ -311,7 +308,7 @@ private:
 
         PendingRequest = false;
         SendBatch(std::move(batch));
-        if (AppData()->FeatureFlags.GetEnableCompileCacheView()) {
+        if (AppData()->FeatureFlags.GetEnableCompileCacheView() && shouldContinue) {
             StartScan();
         }
     }

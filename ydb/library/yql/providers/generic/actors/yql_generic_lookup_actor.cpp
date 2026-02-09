@@ -425,7 +425,6 @@ namespace NYql::NDq {
             }
             Request.reset();
             TActivationContext::ActorSystem()->Send(new NActors::IEventHandle(ParentId, SelfId(), ev));
-            LookupResult = {};
             ReadSplitsIterator = {};
         }
 
@@ -542,7 +541,6 @@ namespace NYql::NDq {
         const bool IsMultiMatches;
         std::shared_ptr<IDqAsyncLookupSource::TUnboxedValueMap> Request;
         NConnector::IReadSplitsStreamIterator::TPtr ReadSplitsIterator; // TODO move me to TEvReadSplitsPart
-        NKikimr::NMiniKQL::TKeyPayloadPairVector LookupResult;
         ILookupRetryPolicy::TPtr RetryPolicy;
         std::shared_ptr<ILookupRetryState> RetryState;
         ::NMonitoring::TDynamicCounters::TCounterPtr Count;

@@ -265,9 +265,17 @@ struct TTabletPreparationParameters {
     std::optional<uint32_t> metricsLevel;
     std::optional<TString> monitoringProjectId;
 };
+
+struct TConsumerPreparationParameters {
+    TString Name;
+    bool Important = false;
+    std::optional<uint32_t> MetricsLevel;
+    std::optional<TString> MonitoringProjectId;
+};
+
 void PQTabletPrepare(
     const TTabletPreparationParameters& parameters,
-    const TVector<std::pair<TString, bool>>& users,
+    const TConstArrayRef<TConsumerPreparationParameters> users,
     TTestActorRuntime& runtime,
     ui64 tabletId,
     TActorId edge);

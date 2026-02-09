@@ -44,8 +44,35 @@ ALTER TABLE episodes ADD COLUMN rate Double (DEFAULT 5.0, NOT NULL); -- альт
 ## ALTER COLUMN
 
 ```yql
-ALTER TABLE table_name ALTER COLUMN column_name SET [FAMILY <family_name>] [NULL | NOT NULL] [DEFAULT <default_value>] [COMPRESSION(<compression_params>)];
+ALTER TABLE table_name ALTER COLUMN column_name {SET | DROP} [FAMILY <family_name>] [NULL | NOT NULL] [DEFAULT <default_value>] [COMPRESSION(<compression_params>)];
 ```
+
+### Параметры запроса
+
+#### table_name
+
+Путь к таблице, в которой требуется изменить колонку.
+
+#### column_name
+
+Имя колонки, которая будет изменена в указанной таблице.
+
+#### SET
+
+Установить параметр колонки
+
+#### DROP
+
+Удалить параметр колонки
+
+### Пример
+
+Приведенный ниже запретит пустые значения в колонке `title` из таблицы `episodes` .
+
+```yql
+ALTER TABLE episodes ALTER COLUMN title SET NOT NULL;
+```
+
 
 ## DROP COLUMN
 

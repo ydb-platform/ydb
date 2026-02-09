@@ -199,6 +199,7 @@ struct TTransferStats {
         Process = 3,
         Write = 4,
     };
+
     EWorkOperation Operation;
     ui64 MinWorkerUptime;
 };
@@ -267,7 +268,7 @@ public:
     TAsyncDescribeReplicationResult DescribeReplication(const std::string& path,
         const TDescribeReplicationSettings& settings = TDescribeReplicationSettings());
 
-    TAsyncDescribeTransferResult DescribeTransfer(const std::string& path, bool includeStats = false);
+    TAsyncDescribeTransferResult DescribeTransfer(const std::string& path, const TDescribeTranferSettings& settings = TDescribeTranferSettings());
 
 private:
     std::shared_ptr<TImpl> Impl_;

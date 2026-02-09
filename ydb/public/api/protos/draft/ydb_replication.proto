@@ -102,7 +102,7 @@ message DescribeTransferRequest {
     Ydb.Operations.OperationParams operation_params = 1;
     // Replication path.
     string path = 2 [(required) = true];
-    // include detailed statistics for each worker
+    // Include detailed statistics for each worker.
     optional bool include_stats = 3;
 }
 
@@ -111,11 +111,11 @@ message DescribeTransferResponse {
     Ydb.Operations.Operation operation = 1;
 }
 
-// message representing sliding window statistics by several windows
+// Message representing sliding window statistics by several windows.
 message MultipleWindowsStat {
-    // average per minute
+    // Average per minute.
     google.protobuf.Duration per_minute = 1;
-    // average per hour
+    // Average per hour.
     google.protobuf.Duration per_hour = 2;
 }
 
@@ -135,15 +135,15 @@ message DescribeTransferResult {
 
     message Stats {
         enum WorkState {
-            // no reported state
+            // No reported state.
             STATE_UNSPECIFIED = 0;
-            // reading data from topic
+            // Reading data from topic.
             STATE_READ = 1;
-            // decompressing read data
+            // Decompressing read data.
             STATE_DECOMPRESS = 2;
-            // processing data with lambda
+            // Rrocessing data with lambda.
             STATE_PROCESS = 3;
-            // writing data to table
+            // Writing data to table.
             STATE_WRITE = 4;
         }
 

@@ -61,7 +61,8 @@ public:
 class TTargetTransfer: public TTargetWithStream {
     using TBase = TTargetWithStream;
 
-public: struct TTransferConfig: public TConfigBase {
+public:
+    struct TTransferConfig: public TConfigBase {
         using TPtr = std::shared_ptr<TTransferConfig>;
 
         TTransferConfig(const TString& srcPath, const TString& dstPath, const TString& transformLambda, const TString& runAsUser, const TString& directoryPath);
@@ -109,12 +110,16 @@ private:
         NMonitoring::TDynamicCounters::TCounterPtr Restarts;
 
         TCounters(NMonitoring::TDynamicCounterPtr counters, const NKikimrReplication::TReplicationLocationConfig& location)
-            : AggeregatedCounters(counters->GetSubgroup("counters", "transfer")->GetSubgroup("host", "")
-                                  ->GetSubgroup("transfer_id", location.GetPath())
-                                  ->GetSubgroup("database_id", location.GetYdbDatabaseId())
-                                  ->GetSubgroup("folder_id", location.GetYcFolderId())
-                                  ->GetSubgroup("cloud_id", location.GetYcCloudId())
-                                  ->GetSubgroup("monitoring_project_id", location.GetMonitoringProjectId()))
+            : AggeregatedCounters(
+                counters
+                    ->GetSubgroup("counters", "transfer")
+                    ->GetSubgroup("host", "")
+                    ->GetSubgroup("transfer_id", location.GetPath())
+                    ->GetSubgroup("database_id", location.GetYdbDatabaseId())
+                    ->GetSubgroup("folder_id", location.GetYcFolderId())
+                    ->GetSubgroup("cloud_id", location.GetYcCloudId())
+                    ->GetSubgroup("monitoring_project_id", location.GetMonitoringProjectId())
+                )
             , ReadTime(AggeregatedCounters->GetExpiringNamedCounter("name", "transfer.read.duration_milliseconds", true))
             , ProcessingTime(AggeregatedCounters->GetExpiringNamedCounter("name", "transfer.process.duration_milliseconds", true))
             , WriteTime(AggeregatedCounters->GetExpiringNamedCounter("name", "transfer.write.duration_milliseconds", true))

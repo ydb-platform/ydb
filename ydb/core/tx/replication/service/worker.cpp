@@ -306,7 +306,8 @@ class TWorker: public TActorBootstrapped<TWorker> {
     void Handle(TEvWorker::TEvStatus::TPtr& ev) {
         LOG_D("Handle " << ev->Get()->ToString());
         if (!ev->Get()->DetailedStats) {
-            LOG_W("Unexpected TEvWorker::TEvStatus with no stats, ignored. Sender# " << ev->Sender);
+            LOG_W("Unexpected TEvWorker::TEvStatus with no stats, ignored"
+                << ": sender# " << ev->Sender);
             return;
         }
         ev->Sender = SelfId();

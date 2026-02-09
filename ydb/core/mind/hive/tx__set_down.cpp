@@ -22,6 +22,7 @@ public:
 
     TTxType GetTxType() const override { return NHive::TXTYPE_MON_SET_DOWN; }
 
+<<<<<<< HEAD
     bool SetDown(NIceDb::TNiceDb& db) {
         TNodeInfo* node = Self->FindNode(NodeId);
         if (node != nullptr) {
@@ -36,6 +37,21 @@ public:
                 } else {
                     SideEffects.Send(Source, new TEvHive::TEvSetDownReply(), 0, Cookie);
                 }
+=======
+bool TTxSetDown::SetDown(NIceDb::TNiceDb& db) {
+    TNodeInfo* node = Self->FindNode(NodeId);
+    if (node != nullptr) {
+        node->SetDown(Down);
+        db.Table<Schema::Node>().Key(NodeId).Update<Schema::Node::Down, Schema::Node::BecomeUpOnRestart>(Down, false);
+        if (Forward) {
+            auto tenantHive = Self->GetPipeToTenantHive(node);
+            if (tenantHive) {
+                SideEffects.Callback([source = Source, tablet = *tenantHive, node = NodeId] {
+                    NTabletPipe::SendData(source, tablet, new TEvHive::TEvSetDown(node));
+                });
+            } else {
+                SideEffects.Send(Source, new TEvHive::TEvSetDownReply(), 0, Cookie);
+>>>>>>> cb629c775bf (fix set down issues (#33554))
             }
             return true;
         }

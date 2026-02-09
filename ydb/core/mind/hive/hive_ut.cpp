@@ -44,6 +44,8 @@
 #include <google/protobuf/text_format.h>
 #include <library/cpp/testing/unittest/registar.h>
 
+#include "ut_common.h"
+
 #ifdef NDEBUG
 #define Ctest Cnull
 #else
@@ -51,11 +53,6 @@
 #endif
 
 const bool STRAND_PDISK = true;
-#ifndef NDEBUG
-static constexpr bool ENABLE_DETAILED_HIVE_LOG = true;
-#else
-static constexpr bool ENABLE_DETAILED_HIVE_LOG = false;
-#endif
 const char *DOMAIN_NAME = "dc-1";
 
 namespace NKikimr {
@@ -864,24 +861,6 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         TDispatchOptions options;
         options.FinalEvents.emplace_back(&NTestSuiteTHiveTest::TabletActiveEvent, count);
         runtime.DispatchEvents(options);
-    }
-
-    NKikimrTabletBase::TEvGetCountersResponse GetCounters(TTestBasicRuntime& runtime, ui64 tabletId) {
-        const auto sender = runtime.AllocateEdgeActor();
-        runtime.SendToPipe(tabletId, sender, new TEvTablet::TEvGetCounters);
-        auto ev = runtime.GrabEdgeEvent<TEvTablet::TEvGetCountersResponse>(sender);
-
-        UNIT_ASSERT(ev);
-        return ev->Get()->Record;
-    }
-
-    ui64 GetSimpleCounter(TTestBasicRuntime& runtime, ui64 tabletId,
-                          NHive::ESimpleCounters counter) {
-      return GetCounters(runtime, tabletId)
-          .GetTabletCounters()
-          .GetAppCounters()
-          .GetSimpleCounters(counter)
-          .GetValue();
     }
 
     void WaitForBootQueue(TTestBasicRuntime& runtime, ui64 hiveTabletId) {

@@ -30,6 +30,7 @@ SRCS(
     resetable_setting.h
     retry.cpp
     retry.h
+    checked_deref_ptr.h
     runnable.h
     sort.cpp
     sort.h

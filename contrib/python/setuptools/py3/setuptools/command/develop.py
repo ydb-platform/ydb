@@ -1,6 +1,7 @@
 import site
 import subprocess
 import sys
+from typing import cast
 
 from setuptools import Command
 from setuptools.warnings import SetuptoolsDeprecationWarning
@@ -27,18 +28,20 @@ class develop(Command):
     prefix = None
     index_url = None
 
-    def run(self):
-        cmd = (
+    def run(self) -> None:
+        # Casting because mypy doesn't understand bool mult conditionals
+        cmd = cast(
+            list[str],
             [sys.executable, '-m', 'pip', 'install', '-e', '.', '--use-pep517']
             + ['--target', self.install_dir] * bool(self.install_dir)
             + ['--no-deps'] * self.no_deps
             + ['--user'] * self.user
             + ['--prefix', self.prefix] * bool(self.prefix)
-            + ['--index-url', self.index_url] * bool(self.index_url)
+            + ['--index-url', self.index_url] * bool(self.index_url),
         )
         subprocess.check_call(cmd)
 
-    def initialize_options(self):
+    def initialize_options(self) -> None:
         DevelopDeprecationWarning.emit()
 
     def finalize_options(self) -> None:

@@ -28,8 +28,8 @@ std::string FindAuditLine(const std::vector<std::string>& auditLines, const std:
     for (auto i : auditLines) {
         Cerr << "    " << i << Endl;
     }
-    auto found = std::find_if(auditLines.begin(), auditLines.end(), [&](auto i) { return i.contains(substr); });
-    UNIT_ASSERT_C(found != auditLines.end(), "No audit record with substring: '" + substr + "'");
+    auto found = std::find_if(auditLines.rbegin(), auditLines.rend(), [&](auto i) { return i.contains(substr); });
+    UNIT_ASSERT_C(found != auditLines.rend(), "No audit record with substring: '" + substr + "'");
     auto line = *found;
     Cerr << "AUDIT LOG checked line:" << Endl << "    " << line << Endl;
     return line;

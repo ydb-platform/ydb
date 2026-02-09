@@ -3,6 +3,7 @@ LIBRARY()
 SRCS(
     kqp_rbo_transformer.cpp
     kqp_operator.cpp
+    kqp_expression.cpp
     kqp_rbo.cpp
     kqp_rbo_rules.cpp
     kqp_plan_conversion_utils.cpp

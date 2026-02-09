@@ -13,7 +13,7 @@ public:
 
     // Table data service key should consist of group (prefix) and chunkId.
 
-    virtual NThreading::TFuture<void> Put(const TString& group, const TString& chunkId, const TString& value) = 0;
+    virtual NThreading::TFuture<bool> Put(const TString& group, const TString& chunkId, const TString& value) = 0;
 
     virtual NThreading::TFuture<TMaybe<TString>> Get(const TString& group, const TString& chunkId) const = 0;
 

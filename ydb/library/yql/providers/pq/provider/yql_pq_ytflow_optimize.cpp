@@ -80,7 +80,7 @@ public:
             return write;
         }
 
-        auto* listType = maybeWriteTopic.Cast().Input().Ref().GetTypeAnn();
+        auto listType = maybeWriteTopic.Cast().Input().Ref().GetTypeAnn();
         auto* itemType = listType->Cast<TListExprType>()->GetItemType();
 
         return Build<TPqWriteTopic>(ctx, write->Pos())

@@ -17,7 +17,7 @@ namespace NYql {
 
 Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
-static TExprNode::TPtr ParseAndAnnotate(const TStringBuf program, TExprContext& exprCtx) {
+TExprNode::TPtr ParseAndAnnotate(const TStringBuf program, TExprContext& exprCtx) {
     TAstParseResult astRes = ParseAst(program);
     UNIT_ASSERT(astRes.IsOk());
     TExprNode::TPtr exprRoot;
@@ -52,7 +52,7 @@ static TExprNode::TPtr ParseAndAnnotate(const TStringBuf program, TExprContext& 
 }
 
 template <class TConstraint>
-static void CheckConstraint(const TExprNode::TPtr& exprRoot, const TStringBuf nodeName, const TStringBuf constrStr) {
+void CheckConstraint(const TExprNode::TPtr& exprRoot, const TStringBuf nodeName, const TStringBuf constrStr) {
     TExprNode* nodeToCheck = nullptr;
     VisitExpr(exprRoot, [nodeName, &nodeToCheck](const TExprNode::TPtr& node) {
         if (node->IsCallable(nodeName)) {

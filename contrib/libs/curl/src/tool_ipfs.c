@@ -23,15 +23,11 @@
  ***************************************************************************/
 #include "tool_setup.h"
 
-#define ENABLE_CURLX_PRINTF
-/* use our own printf() functions */
-#include "curlx.h"
-#include "dynbuf.h"
+#ifndef CURL_DISABLE_IPFS
 
 #include "tool_cfgable.h"
 #include "tool_msgs.h"
 #include "tool_ipfs.h"
-
 #include "memdebug.h" /* keep this as LAST include */
 
 /* ensure input ends in slash */
@@ -40,15 +36,15 @@ static CURLcode ensure_trailing_slash(char **input)
   if(*input && **input) {
     size_t len = strlen(*input);
     if(((*input)[len - 1] != '/')) {
-      struct curlx_dynbuf dyn;
+      struct dynbuf dyn;
       curlx_dyn_init(&dyn, len + 2);
 
       if(curlx_dyn_addn(&dyn, *input, len)) {
-        Curl_safefree(*input);
+        tool_safefree(*input);
         return CURLE_OUT_OF_MEMORY;
       }
 
-      Curl_safefree(*input);
+      tool_safefree(*input);
 
       if(curlx_dyn_addn(&dyn, "/", 1))
         return CURLE_OUT_OF_MEMORY;
@@ -65,7 +61,7 @@ static char *ipfs_gateway(void)
   char *ipfs_path = NULL;
   char *gateway_composed_file_path = NULL;
   FILE *gateway_file = NULL;
-  char *gateway = curlx_getenv("IPFS_GATEWAY");
+  char *gateway = curl_getenv("IPFS_GATEWAY");
 
   /* Gateway is found from environment variable. */
   if(gateway) {
@@ -75,15 +71,13 @@ static char *ipfs_gateway(void)
   }
 
   /* Try to find the gateway in the IPFS data folder. */
-  ipfs_path = curlx_getenv("IPFS_PATH");
+  ipfs_path = curl_getenv("IPFS_PATH");
 
   if(!ipfs_path) {
-    char *home = curlx_getenv("HOME");
+    char *home = getenv("HOME");
     if(home && *home)
       ipfs_path = aprintf("%s/.ipfs/", home);
-    /* fallback to "~/.ipfs", as that's the default location. */
-
-    Curl_safefree(home);
+    /* fallback to "~/.ipfs", as that is the default location. */
   }
 
   if(!ipfs_path || ensure_trailing_slash(&ipfs_path))
@@ -95,11 +89,11 @@ static char *ipfs_gateway(void)
     goto fail;
 
   gateway_file = fopen(gateway_composed_file_path, FOPEN_READTEXT);
-  Curl_safefree(gateway_composed_file_path);
+  tool_safefree(gateway_composed_file_path);
 
   if(gateway_file) {
     int c;
-    struct curlx_dynbuf dyn;
+    struct dynbuf dyn;
     curlx_dyn_init(&dyn, MAX_GATEWAY_URL_LEN);
 
     /* get the first line of the gateway file, ignore the rest */
@@ -121,20 +115,20 @@ static char *ipfs_gateway(void)
     if(!gateway)
       goto fail;
 
-    Curl_safefree(ipfs_path);
+    tool_safefree(ipfs_path);
 
     return gateway;
   }
 fail:
   if(gateway_file)
     fclose(gateway_file);
-  Curl_safefree(gateway);
-  Curl_safefree(ipfs_path);
+  tool_safefree(gateway);
+  tool_safefree(ipfs_path);
   return NULL;
 }
 
 /*
- * Rewrite ipfs://<cid> and ipns://<cid> to a HTTP(S)
+ * Rewrite ipfs://<cid> and ipns://<cid> to an HTTP(S)
  * URL that can be handled by an IPFS gateway.
  */
 CURLcode ipfs_url_rewrite(CURLU *uh, const char *protocol, char **url,
@@ -164,7 +158,7 @@ CURLcode ipfs_url_rewrite(CURLU *uh, const char *protocol, char **url,
     goto clean;
 
   /* We might have a --ipfs-gateway argument. Check it first and use it. Error
-   * if we do have something but if it's an invalid url.
+   * if we do have something but if it is an invalid url.
    */
   if(config->ipfs_gateway) {
     /* ensure the gateway ends in a trailing / */
@@ -250,7 +244,7 @@ CURLcode ipfs_url_rewrite(CURLU *uh, const char *protocol, char **url,
   }
 
   /* Free whatever it has now, rewriting is next */
-  Curl_safefree(*url);
+  tool_safefree(*url);
 
   if(curl_url_get(uh, CURLUPART_URL, &cloneurl, CURLU_URLENCODE)) {
     goto clean;
@@ -275,22 +269,20 @@ clean:
   curl_free(pathbuffer);
   curl_url_cleanup(gatewayurl);
   {
-    const char *msg = NULL;
     switch(result) {
     case CURLE_URL_MALFORMAT:
-      msg = "malformed target URL";
+      helpf("malformed target URL");
       break;
     case CURLE_FILE_COULDNT_READ_FILE:
-      msg = "IPFS automatic gateway detection failed";
+      helpf("IPFS automatic gateway detection failed");
       break;
     case CURLE_BAD_FUNCTION_ARGUMENT:
-      msg = "--ipfs-gateway was given a malformed URL";
+      helpf("--ipfs-gateway was given a malformed URL");
       break;
     default:
       break;
     }
-    if(msg)
-      helpf(tool_stderr, msg);
   }
   return result;
 }
+#endif /* !CURL_DISABLE_IPFS */

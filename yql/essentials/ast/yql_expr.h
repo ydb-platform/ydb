@@ -11,6 +11,15 @@
 #include <yql/essentials/core/url_lister/interface/url_lister_manager.h>
 #include <yql/essentials/core/sql_types/normalize_name.h>
 #include <yql/essentials/utils/yql_panic.h>
+#include <yql/essentials/utils/checked_deref_ptr.h>
+
+// #define YQL_USE_CHECKED_DEREF_PTR_FOR_TYPE_ANN
+#ifdef YQL_USE_CHECKED_DEREF_PTR_FOR_TYPE_ANN
+    #define YQL_TYPE_ANN_PTR NYql::TCheckedDerefPtr<const TTypeAnnotationNode>
+#else
+    #define YQL_TYPE_ANN_PTR const TTypeAnnotationNode*
+#endif
+
 #include <yql/essentials/public/issue/yql_issue_manager.h>
 #include <yql/essentials/public/udf/udf_data_type.h>
 
@@ -2287,8 +2296,8 @@ public:
         State_ = TypeAnnotation_ ? EState::TypeComplete : EState::Initial;
     }
 
-    const TTypeAnnotationNode* GetTypeAnn() const {
-        return TypeAnnotation_;
+    YQL_TYPE_ANN_PTR GetTypeAnn() const {
+        return static_cast<YQL_TYPE_ANN_PTR>(TypeAnnotation_);
     }
 
     EState GetState() const {

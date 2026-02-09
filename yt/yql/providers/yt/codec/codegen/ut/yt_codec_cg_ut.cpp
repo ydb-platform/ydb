@@ -8,6 +8,7 @@
 
 #include <yt/yql/providers/yt/codec/yt_codec_io.h>
 #include <yql/essentials/minikql/codegen/codegen.h>
+#include <yql/essentials/utils/swap_bytes.h>
 
 #include <llvm/IR/Module.h> // Y_IGNORE
 
@@ -839,10 +840,34 @@ Y_UNIT_TEST_SUITE(TYtCodegenCodec) {
         UNIT_ASSERT_VALUES_EQUAL(val.GetTimezoneId(), 1);
     }
 
+    Y_UNIT_TEST(TestReadTzDateNative) {
+        // full size = 2 + 2 = 4
+        TStringBuf buf = "\2\1\1\0"sv;
+        TReadSetup setup("ReadTzDateNative", buf);
+        typedef void(*TFunc)(TInputBuf&, void*);
+        auto funcPtr = (TFunc)setup.Codegen_->GetPointerToFunction(setup.Func_);
+        NUdf::TUnboxedValue val;
+        funcPtr(setup.Buf_, &val);
+        UNIT_ASSERT_VALUES_EQUAL(val.Get<ui16>(), 258);
+        UNIT_ASSERT_VALUES_EQUAL(val.GetTimezoneId(), 1);
+    }
+
     Y_UNIT_TEST(TestReadTzDatetime) {
         // full size = 4 + 2 = 6
         TStringBuf buf = "\x06\0\0\0\0\0\1\3\0\1"sv;
         TReadSetup setup("ReadTzDatetime", buf);
+        typedef void(*TFunc)(TInputBuf&, void*);
+        auto funcPtr = (TFunc)setup.Codegen_->GetPointerToFunction(setup.Func_);
+        NUdf::TUnboxedValue val;
+        funcPtr(setup.Buf_, &val);
+        UNIT_ASSERT_VALUES_EQUAL(val.Get<ui32>(), 259);
+        UNIT_ASSERT_VALUES_EQUAL(val.GetTimezoneId(), 1);
+    }
+
+    Y_UNIT_TEST(TestReadTzDatetimeNative) {
+        // full size = 4 + 2 = 6
+        TStringBuf buf = "\3\1\0\0\1\0"sv;
+        TReadSetup setup("ReadTzDatetimeNative", buf);
         typedef void(*TFunc)(TInputBuf&, void*);
         auto funcPtr = (TFunc)setup.Codegen_->GetPointerToFunction(setup.Func_);
         NUdf::TUnboxedValue val;
@@ -863,10 +888,34 @@ Y_UNIT_TEST_SUITE(TYtCodegenCodec) {
         UNIT_ASSERT_VALUES_EQUAL(val.GetTimezoneId(), 1);
     }
 
+    Y_UNIT_TEST(TestReadTzTimestampNative) {
+        // full size = 8 + 2 = 10
+        TStringBuf buf = "\4\1\0\0\0\0\0\0\1\0"sv;
+        TReadSetup setup("ReadTzTimestampNative", buf);
+        typedef void(*TFunc)(TInputBuf&, void*);
+        auto funcPtr = (TFunc)setup.Codegen_->GetPointerToFunction(setup.Func_);
+        NUdf::TUnboxedValue val;
+        funcPtr(setup.Buf_, &val);
+        UNIT_ASSERT_VALUES_EQUAL(val.Get<ui64>(), 260);
+        UNIT_ASSERT_VALUES_EQUAL(val.GetTimezoneId(), 1);
+    }
+
     Y_UNIT_TEST(TestReadTzDate32) {
         // full size = 4 + 2 = 6
         TStringBuf buf = "\6\0\0\0\x7F\xFF\xFE\xFE\0\1"sv;
         TReadSetup setup("ReadTzDate32", buf);
+        typedef void(*TFunc)(TInputBuf&, void*);
+        auto funcPtr = (TFunc)setup.Codegen_->GetPointerToFunction(setup.Func_);
+        NUdf::TUnboxedValue val;
+        funcPtr(setup.Buf_, &val);
+        UNIT_ASSERT_VALUES_EQUAL(val.Get<i32>(), -258);
+        UNIT_ASSERT_VALUES_EQUAL(val.GetTimezoneId(), 1);
+    }
+
+    Y_UNIT_TEST(TestReadTzDate32Native) {
+        // full size = 4 + 2 = 6
+        TStringBuf buf = "\xFE\xFE\xFF\xFF\1\0"sv;
+        TReadSetup setup("ReadTzDate32Native", buf);
         typedef void(*TFunc)(TInputBuf&, void*);
         auto funcPtr = (TFunc)setup.Codegen_->GetPointerToFunction(setup.Func_);
         NUdf::TUnboxedValue val;
@@ -887,6 +936,18 @@ Y_UNIT_TEST_SUITE(TYtCodegenCodec) {
         UNIT_ASSERT_VALUES_EQUAL(val.GetTimezoneId(), 1);
     }
 
+    Y_UNIT_TEST(TestReadTzDatetime64Native) {
+        // full size = 8 + 2 = 10
+        TStringBuf buf = "\xFD\xFE\xFF\xFF\xFF\xFF\xFF\xFF\1\0"sv;
+        TReadSetup setup("ReadTzDatetime64Native", buf);
+        typedef void(*TFunc)(TInputBuf&, void*);
+        auto funcPtr = (TFunc)setup.Codegen_->GetPointerToFunction(setup.Func_);
+        NUdf::TUnboxedValue val;
+        funcPtr(setup.Buf_, &val);
+        UNIT_ASSERT_VALUES_EQUAL(val.Get<i64>(), -259);
+        UNIT_ASSERT_VALUES_EQUAL(val.GetTimezoneId(), 1);
+    }
+
     Y_UNIT_TEST(TestReadTzTimestamp64) {
         // full size = 8 + 2 = 10
         TStringBuf buf = "\n\0\0\0\x7F\xFF\xFF\xFF\xFF\xFF\xFE\xFC\0\1"sv;
@@ -899,6 +960,18 @@ Y_UNIT_TEST_SUITE(TYtCodegenCodec) {
         UNIT_ASSERT_VALUES_EQUAL(val.GetTimezoneId(), 1);
     }
 
+    Y_UNIT_TEST(TestReadTzTimestamp64Native) {
+        // full size = 8 + 2 = 10
+        TStringBuf buf = "\4\1\0\0\0\0\0\0\1\0"sv;
+        TReadSetup setup("ReadTzTimestamp64Native", buf);
+        typedef void(*TFunc)(TInputBuf&, void*);
+        auto funcPtr = (TFunc)setup.Codegen_->GetPointerToFunction(setup.Func_);
+        NUdf::TUnboxedValue val;
+        funcPtr(setup.Buf_, &val);
+        UNIT_ASSERT_VALUES_EQUAL(val.Get<i64>(), 260);
+        UNIT_ASSERT_VALUES_EQUAL(val.GetTimezoneId(), 1);
+    }
+
     Y_UNIT_TEST(TestWriteTzDate) {
         TWriteSetup setup("WriteTzDate");
         typedef void(*TFunc)(TOutputBuf&, ui16, ui16);
@@ -906,6 +979,15 @@ Y_UNIT_TEST_SUITE(TYtCodegenCodec) {
         funcPtr(setup.Buf_, 258, 1);
         setup.Buf_.Finish();
         UNIT_ASSERT_STRINGS_EQUAL(setup.TestWriter_.Str().Quote(), TString("\x04\0\0\0\1\2\0\1"sv).Quote());
+    }
+
+    Y_UNIT_TEST(TestWriteTzDateNative) {
+        TWriteSetup setup("WriteTzDateNative");
+        typedef void(*TFunc)(TOutputBuf&, ui16, ui16);
+        auto funcPtr = (TFunc)setup.Codegen_->GetPointerToFunction(setup.Func_);
+        funcPtr(setup.Buf_, 258, 1);
+        setup.Buf_.Finish();
+        UNIT_ASSERT_STRINGS_EQUAL(setup.TestWriter_.Str().Quote(), TString("\2\1\1\0"sv).Quote());
     }
 
     Y_UNIT_TEST(TestWriteTzDatetime) {
@@ -917,6 +999,15 @@ Y_UNIT_TEST_SUITE(TYtCodegenCodec) {
         UNIT_ASSERT_STRINGS_EQUAL(setup.TestWriter_.Str().Quote(), TString("\x06\0\0\0\0\0\1\3\0\1"sv).Quote());
     }
 
+    Y_UNIT_TEST(TestWriteTzDatetimeNative) {
+        TWriteSetup setup("WriteTzDatetimeNative");
+        typedef void(*TFunc)(TOutputBuf&, ui32, ui16);
+        auto funcPtr = (TFunc)setup.Codegen_->GetPointerToFunction(setup.Func_);
+        funcPtr(setup.Buf_, 259, 1);
+        setup.Buf_.Finish();
+        UNIT_ASSERT_STRINGS_EQUAL(setup.TestWriter_.Str().Quote(), TString("\3\1\0\0\1\0"sv).Quote());
+    }
+
     Y_UNIT_TEST(TestWriteTzTimestamp) {
         TWriteSetup setup("WriteTzTimestamp");
         typedef void(*TFunc)(TOutputBuf&, ui64, ui16);
@@ -924,6 +1015,15 @@ Y_UNIT_TEST_SUITE(TYtCodegenCodec) {
         funcPtr(setup.Buf_, 260, 1);
         setup.Buf_.Finish();
         UNIT_ASSERT_STRINGS_EQUAL(setup.TestWriter_.Str().Quote(), TString("\x0a\0\0\0\0\0\0\0\0\0\1\4\0\1"sv).Quote());
+    }
+
+    Y_UNIT_TEST(TestWriteTzTimestampNative) {
+        TWriteSetup setup("WriteTzTimestampNative");
+        typedef void(*TFunc)(TOutputBuf&, ui64, ui16);
+        auto funcPtr = (TFunc)setup.Codegen_->GetPointerToFunction(setup.Func_);
+        funcPtr(setup.Buf_, 260, 1);
+        setup.Buf_.Finish();
+        UNIT_ASSERT_STRINGS_EQUAL(setup.TestWriter_.Str().Quote(), TString("\4\1\0\0\0\0\0\0\1\0"sv).Quote());
     }
 
     Y_UNIT_TEST(TestWriteTzDate32) {
@@ -935,6 +1035,15 @@ Y_UNIT_TEST_SUITE(TYtCodegenCodec) {
         UNIT_ASSERT_STRINGS_EQUAL(setup.TestWriter_.Str().Quote(), TString("\6\0\0\0\x7F\xFF\xFE\xFE\0\1"sv).Quote());
     }
 
+    Y_UNIT_TEST(TestWriteTzDate32Native) {
+        TWriteSetup setup("WriteTzDate32Native");
+        typedef void(*TFunc)(TOutputBuf&, i32, ui16);
+        auto funcPtr = (TFunc)setup.Codegen_->GetPointerToFunction(setup.Func_);
+        funcPtr(setup.Buf_, -258, 1);
+        setup.Buf_.Finish();
+        UNIT_ASSERT_STRINGS_EQUAL(setup.TestWriter_.Str().Quote(), TString("\xFE\xFE\xFF\xFF\1\0"sv).Quote());
+    }
+
     Y_UNIT_TEST(TestWriteTzDatetime64) {
         TWriteSetup setup("WriteTzDatetime64");
         typedef void(*TFunc)(TOutputBuf&, i64, ui16);
@@ -942,6 +1051,15 @@ Y_UNIT_TEST_SUITE(TYtCodegenCodec) {
         funcPtr(setup.Buf_, -259, 1);
         setup.Buf_.Finish();
         UNIT_ASSERT_STRINGS_EQUAL(setup.TestWriter_.Str().Quote(), TString("\n\0\0\0\x7F\xFF\xFF\xFF\xFF\xFF\xFE\xFD\0\1"sv).Quote());
+    }
+
+    Y_UNIT_TEST(TestWriteTzDatetime64Native) {
+        TWriteSetup setup("WriteTzDatetime64Native");
+        typedef void(*TFunc)(TOutputBuf&, i64, ui16);
+        auto funcPtr = (TFunc)setup.Codegen_->GetPointerToFunction(setup.Func_);
+        funcPtr(setup.Buf_, -259, 1);
+        setup.Buf_.Finish();
+        UNIT_ASSERT_STRINGS_EQUAL(setup.TestWriter_.Str().Quote(), TString("\xFD\xFE\xFF\xFF\xFF\xFF\xFF\xFF\1\0"sv).Quote());
     }
 
     Y_UNIT_TEST(TestWriteTzTimestamp64) {
@@ -952,6 +1070,73 @@ Y_UNIT_TEST_SUITE(TYtCodegenCodec) {
         setup.Buf_.Finish();
         UNIT_ASSERT_STRINGS_EQUAL(setup.TestWriter_.Str().Quote(), TString("\n\0\0\0\x7F\xFF\xFF\xFF\xFF\xFF\xFE\xFC\0\1"sv).Quote());
     }
+
+    Y_UNIT_TEST(TestWriteTzTimestamp64Native) {
+        TWriteSetup setup("WriteTzTimestamp64Native");
+        typedef void(*TFunc)(TOutputBuf&, i64, ui16);
+        auto funcPtr = (TFunc)setup.Codegen_->GetPointerToFunction(setup.Func_);
+        funcPtr(setup.Buf_, 260, 1);
+        setup.Buf_.Finish();
+        UNIT_ASSERT_STRINGS_EQUAL(setup.TestWriter_.Str().Quote(), TString("\4\1\0\0\0\0\0\0\1\0"sv).Quote());
+    }
+
+    Y_UNIT_TEST(TestReadTzInvalidLen) {
+        // full size = 8 + 2 = 10
+        TStringBuf buf = "\x08\0\0\0\x7F\xFF\xFF\xFF\xFF\xFF\xFE\xFC\0\1"sv;
+        TReadSetup setup("ReadTzTimestamp64", buf);
+        typedef void(*TFunc)(TInputBuf&, void*);
+        auto funcPtr = (TFunc)setup.Codegen_->GetPointerToFunction(setup.Func_);
+        NUdf::TUnboxedValue val;
+        UNIT_ASSERT_EXCEPTION_CONTAINS(funcPtr(setup.Buf_, &val), yexception, "Invalid TzTimestamp64 data");
+    }
+
+    Y_UNIT_TEST(TestReadTzInvalidTime) {
+        // full size = 8 + 2 = 10
+        char buf[8 + 2];
+        i64 inv = NUdf::MAX_TIMESTAMP64 + 1;
+        std::memcpy(buf, &inv, sizeof(inv));
+        buf[8] = '\0';
+        buf[9] = '\1';
+        TReadSetup setup("ReadTzTimestamp64Native", TStringBuf(buf, sizeof(buf)));
+        typedef void(*TFunc)(TInputBuf&, void*);
+        auto funcPtr = (TFunc)setup.Codegen_->GetPointerToFunction(setup.Func_);
+        NUdf::TUnboxedValue val;
+        UNIT_ASSERT_EXCEPTION_CONTAINS(funcPtr(setup.Buf_, &val), yexception, "Invalid TzTimestamp64 data");
+    }
+
+    Y_UNIT_TEST(TestReadTzInvalidTz) {
+        // full size = 4 + 8 + 2 = 14
+        char buf[4 + 8 + 2];
+        ui32 len = 10;
+        std::memcpy(buf, &len, sizeof(len));
+        // valid timestamp
+        ui64 ts = SwapBytes(NUdf::MAX_TIMESTAMP - 1);
+        std::memcpy(buf + 4, &ts, sizeof(ts));
+        NUdf::TUnboxedValue val;
+        {
+            // invalid tzId
+            ui16 tzId = 586;
+            tzId = SwapBytes(tzId);
+            std::memcpy(buf + 12, &tzId, sizeof(tzId));
+            TReadSetup setup("ReadTzTimestamp", TStringBuf(buf, sizeof(buf)));
+            typedef void(*TFunc)(TInputBuf&, void*);
+            auto funcPtr = (TFunc)setup.Codegen_->GetPointerToFunction(setup.Func_);
+            UNIT_ASSERT_EXCEPTION_CONTAINS(funcPtr(setup.Buf_, &val), yexception, "Invalid TzTimestamp data");
+        }
+        {
+            const ui16 validTzId = 587;
+            ui16 tzId = validTzId;
+            tzId = SwapBytes(tzId);
+            std::memcpy(buf + 12, &tzId, sizeof(tzId));
+            TReadSetup setup("ReadTzTimestamp", TStringBuf(buf, sizeof(buf)));
+            typedef void(*TFunc)(TInputBuf&, void*);
+            auto funcPtr = (TFunc)setup.Codegen_->GetPointerToFunction(setup.Func_);
+            funcPtr(setup.Buf_, &val);
+            UNIT_ASSERT_VALUES_EQUAL(val.Get<ui64>(), NUdf::MAX_TIMESTAMP - 1);
+            UNIT_ASSERT_VALUES_EQUAL(val.GetTimezoneId(), validTzId);
+        }
+    }
+
 #endif
 }
 #endif

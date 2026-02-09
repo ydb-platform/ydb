@@ -2,6 +2,9 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <library/cpp/json/json_reader.h>
 
+#include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/core/tx/datashard/datashard.h>
+
 namespace NKikimr::NKqp {
 
 using namespace NYdb;
@@ -2693,7 +2696,7 @@ Y_UNIT_TEST(Utf8) {
     }
 }
 
-Y_UNIT_TEST_TWIN(SelectWithFulltextContains, UTF8) {
+Y_UNIT_TEST_TWIN(SelectWithFulltextMatch, UTF8) {
     auto kikimr = Kikimr();
     auto db = kikimr.GetQueryClient();
 
@@ -2741,10 +2744,10 @@ Y_UNIT_TEST_TWIN(SelectWithFulltextContains, UTF8) {
         {"тигры", {}},
     };
 
-    for(const auto& [term, expectedKeys] : searchingTerms) { // Query with WHERE clause using FulltextContains UDF
+    for(const auto& [term, expectedKeys] : searchingTerms) { // Query with WHERE clause using FulltextMatch UDF
         TString query = Sprintf(R"sql(
             SELECT Key, Text FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextContains(Text, "%s")
+            WHERE FulltextMatch(Text, "%s")
             ORDER BY Key
         )sql", term.c_str());
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
@@ -2767,10 +2770,10 @@ Y_UNIT_TEST_TWIN(SelectWithFulltextContains, UTF8) {
         }
     }
 
-    for(const auto& [term, expectedKeys] : searchingTerms) { // Query with WHERE clause using FulltextContains UDF
+    for(const auto& [term, expectedKeys] : searchingTerms) { // Query with WHERE clause using FulltextMatch UDF
         TString query = Sprintf(R"sql(
             SELECT Key FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextContains(Text, "%s")
+            WHERE FulltextMatch(Text, "%s")
             ORDER BY Key
         )sql", term.c_str());
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
@@ -2794,7 +2797,7 @@ Y_UNIT_TEST_TWIN(SelectWithFulltextContains, UTF8) {
     {
         TString query = Sprintf(R"sql(
             SELECT Key, Text FROM `/Root/Texts`
-            WHERE FulltextContains(Text, "машинное обучение")
+            WHERE FulltextMatch(Text, "машинное обучение")
         )sql");
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
         Cerr << "Result: " << result.GetIssues().ToString() << Endl;
@@ -2802,7 +2805,7 @@ Y_UNIT_TEST_TWIN(SelectWithFulltextContains, UTF8) {
     }
 }
 
-Y_UNIT_TEST(SelectWithFulltextContainsEmpty) {
+Y_UNIT_TEST(SelectWithFulltextMatchEmpty) {
     auto kikimr = Kikimr();
     auto db = kikimr.GetQueryClient();
 
@@ -2815,7 +2818,7 @@ Y_UNIT_TEST(SelectWithFulltextContainsEmpty) {
         TString query = R"sql(
             SELECT `Key`, `Text`
             FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextContains(`Text`, "404 not found")
+            WHERE FulltextMatch(`Text`, "404 not found")
             ORDER BY `Key`;
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
@@ -2829,7 +2832,7 @@ Y_UNIT_TEST(SelectWithFulltextContainsEmpty) {
         TString query = R"sql(
             SELECT `Key`, `Text`
             FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextContains(`Text`, "404 not found")
+            WHERE FulltextMatch(`Text`, "404 not found")
             ORDER BY `Key`;
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
@@ -2838,7 +2841,7 @@ Y_UNIT_TEST(SelectWithFulltextContainsEmpty) {
     }
 }
 
-Y_UNIT_TEST(SelectWithFulltextContainsWithoutTextField) {
+Y_UNIT_TEST(SelectWithFulltextMatchWithoutTextField) {
     auto kikimr = Kikimr();
     auto db = kikimr.GetQueryClient();
 
@@ -2849,7 +2852,7 @@ Y_UNIT_TEST(SelectWithFulltextContainsWithoutTextField) {
     TString query = R"sql(
         SELECT `Key`
         FROM `/Root/Texts` VIEW `fulltext_idx`
-        WHERE FulltextContains(`Text`, "dogs")
+        WHERE FulltextMatch(`Text`, "dogs")
         ORDER BY `Key`;
     )sql";
     auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
@@ -3015,7 +3018,7 @@ Y_UNIT_TEST_TWIN(SelectWithFulltextRelevance, UTF8) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
-    for(const auto& [term, expectedKeys] : searchingTerms) { // Query with WHERE clause using FulltextContains UDF
+    for(const auto& [term, expectedKeys] : searchingTerms) { // Query with WHERE clause using FulltextMatch UDF
         TString query = Sprintf(R"sql(
             SELECT Key, %s FROM `/Root/Texts` VIEW `fulltext_idx`
             ORDER BY FulltextScore(%s, "%s") DESC
@@ -3044,7 +3047,7 @@ Y_UNIT_TEST_TWIN(SelectWithFulltextRelevance, UTF8) {
         }
     }
 
-    for(const auto& [term, expectedKeys] : searchingTerms) { // Query with WHERE clause using FulltextContains UDF
+    for(const auto& [term, expectedKeys] : searchingTerms) { // Query with WHERE clause using FulltextMatch UDF
         TString query = Sprintf(R"sql(
             SELECT Key, %s, FulltextScore(%s, "%s") as Relevance FROM `/Root/Texts` VIEW `fulltext_idx`
             ORDER BY Relevance DESC
@@ -3322,7 +3325,7 @@ Y_UNIT_TEST(LuceneRelevanceComparison) {
     }
 }
 
-Y_UNIT_TEST(SelectWithFulltextContainsAndSnowball) {
+Y_UNIT_TEST(SelectWithFulltextMatchAndSnowball) {
     auto kikimr = Kikimr();
     auto db = kikimr.GetQueryClient();
 
@@ -3347,7 +3350,7 @@ Y_UNIT_TEST(SelectWithFulltextContainsAndSnowball) {
         TString query = R"sql(
             SELECT `Key`, `Text`
             FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextContains(`Text`, "hallucination")
+            WHERE FulltextMatch(`Text`, "hallucination")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text`
@@ -3369,7 +3372,7 @@ Y_UNIT_TEST(SelectWithFulltextContainsAndSnowball) {
         TString query = R"sql(
             SELECT `Key`, `Text`
             FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextContains(`Text`, "erasure coding")
+            WHERE FulltextMatch(`Text`, "erasure coding")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text`
@@ -3390,7 +3393,7 @@ Y_UNIT_TEST(SelectWithFulltextContainsAndSnowball) {
         TString query = R"sql(
             SELECT `Key`, `Text`
             FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextContains(`Text`, "float")
+            WHERE FulltextMatch(`Text`, "float")
             ORDER BY `Key`;
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
@@ -3418,7 +3421,7 @@ Y_UNIT_TEST(SelectWithFulltextContainsAndSnowball) {
         TString query = R"sql(
             SELECT `Key`, `Text`
             FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextContains(`Text`, "поляризация")
+            WHERE FulltextMatch(`Text`, "поляризация")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text`
@@ -3436,7 +3439,7 @@ Y_UNIT_TEST(SelectWithFulltextContainsAndSnowball) {
     }
 }
 
-Y_UNIT_TEST(SelectWithFulltextContainsAndNgramWildcardSingleStar) {
+Y_UNIT_TEST(SelectWithFulltextMatchAndNgramWildcardSingleStar) {
     auto kikimr = Kikimr();
     auto db = kikimr.GetQueryClient();
 
@@ -3450,7 +3453,7 @@ Y_UNIT_TEST(SelectWithFulltextContainsAndNgramWildcardSingleStar) {
     {
         TString query = R"sql(
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextContains(`Text`, "*")
+            WHERE FulltextMatch(`Text`, "*")
             ORDER BY `Key`;
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
@@ -3459,7 +3462,7 @@ Y_UNIT_TEST(SelectWithFulltextContainsAndNgramWildcardSingleStar) {
     }
 }
 
-Y_UNIT_TEST_QUAD(SelectWithFulltextContainsAndNgram, Edge, Covered) {
+Y_UNIT_TEST_QUAD(SelectWithFulltextMatchAndNgram, Edge, Covered) {
     auto kikimr = Kikimr();
     auto db = kikimr.GetQueryClient();
 
@@ -3489,11 +3492,11 @@ Y_UNIT_TEST_QUAD(SelectWithFulltextContainsAndNgram, Edge, Covered) {
     {
         TString query = R"sql(
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextContains(`Text`, "renaissance")
+            WHERE FulltextMatch(`Text`, "renaissance")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextContains(`Text`, "Heisenberg Werner")
+            WHERE FulltextMatch(`Text`, "Heisenberg Werner")
             ORDER BY `Key`;
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
@@ -3510,11 +3513,11 @@ Y_UNIT_TEST_QUAD(SelectWithFulltextContainsAndNgram, Edge, Covered) {
     {
         TString query = R"sql(
             SELECT `Key`, FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextContains(`Text`, "renaissance")
+            WHERE FulltextMatch(`Text`, "renaissance")
             ORDER BY `Key`;
 
             SELECT `Key` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextContains(`Text`, "Heisenberg Werner")
+            WHERE FulltextMatch(`Text`, "Heisenberg Werner")
             ORDER BY `Key`;
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
@@ -3532,12 +3535,12 @@ Y_UNIT_TEST_QUAD(SelectWithFulltextContainsAndNgram, Edge, Covered) {
         TString query = R"sql(
             -- {are, ren, ena} can be found separately in "Area Renaissance" but it's not correct result
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextContains(`Text`, "arena")
+            WHERE FulltextMatch(`Text`, "arena")
             ORDER BY `Key`;
 
             -- {ber, ern} can be found separately in "Werner Heisenberg" but it's not correct result
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextContains(`Text`, "bern")
+            WHERE FulltextMatch(`Text`, "bern")
             ORDER BY `Key`;
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
@@ -3554,11 +3557,11 @@ Y_UNIT_TEST_QUAD(SelectWithFulltextContainsAndNgram, Edge, Covered) {
     { // N-gram sets are the same: {lus, use, sed, eda, dae, aed}. Wont work without postfilter
         TString query = R"sql(
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextContains(`Text`, "lusedaedae")
+            WHERE FulltextMatch(`Text`, "lusedaedae")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextContains(`Text`, "lusedaeda")
+            WHERE FulltextMatch(`Text`, "lusedaeda")
             ORDER BY `Key`;
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
@@ -3573,7 +3576,7 @@ Y_UNIT_TEST_QUAD(SelectWithFulltextContainsAndNgram, Edge, Covered) {
     }
 }
 
-void DoSelectWithFulltextContainsAndNgramWildcard(bool relevance, bool edge, bool covered) {
+void DoSelectWithFulltextMatchAndNgramWildcard(bool relevance, bool edge, bool covered) {
     auto kikimr = Kikimr();
     auto db = kikimr.GetQueryClient();
 
@@ -3607,23 +3610,23 @@ void DoSelectWithFulltextContainsAndNgramWildcard(bool relevance, bool edge, boo
     {
         TString query = R"sql(
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextContains(`Text`, "aren*")
+            WHERE FulltextMatch(`Text`, "aren*")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextContains(`Text`, "wer*ner *berg")
+            WHERE FulltextMatch(`Text`, "wer*ner *berg")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextContains(`Text`, "edaeda*")
+            WHERE FulltextMatch(`Text`, "edaeda*")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextContains(`Text`, "маш* обу*ние")
+            WHERE FulltextMatch(`Text`, "маш* обу*ние")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextContains(`Text`, "мор*кот")
+            WHERE FulltextMatch(`Text`, "мор*кот")
             ORDER BY `Key`;
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
@@ -3647,15 +3650,15 @@ void DoSelectWithFulltextContainsAndNgramWildcard(bool relevance, bool edge, boo
     }
 }
 
-Y_UNIT_TEST_QUAD(SelectWithFulltextContainsAndNgramWildcard, Edge, Covered) {
-    DoSelectWithFulltextContainsAndNgramWildcard(false, Edge, Covered);
+Y_UNIT_TEST_QUAD(SelectWithFulltextMatchAndNgramWildcard, Edge, Covered) {
+    DoSelectWithFulltextMatchAndNgramWildcard(false, Edge, Covered);
 }
 
 Y_UNIT_TEST_QUAD(SelectWithRelevanceContainsAndNgramWildcard, Edge, Covered) {
-    DoSelectWithFulltextContainsAndNgramWildcard(true, Edge, Covered);
+    DoSelectWithFulltextMatchAndNgramWildcard(true, Edge, Covered);
 }
 
-Y_UNIT_TEST(SelectWithFulltextContainsAndNgramWildcardSpecialCharacters) {
+Y_UNIT_TEST(SelectWithFulltextMatchAndNgramWildcardSpecialCharacters) {
     auto kikimr = Kikimr();
     auto db = kikimr.GetQueryClient();
 
@@ -3696,27 +3699,27 @@ Y_UNIT_TEST(SelectWithFulltextContainsAndNgramWildcardSpecialCharacters) {
     {
         TString query = R"sql(
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextContains(`Text`, "*[a-*")
+            WHERE FulltextMatch(`Text`, "*[a-*")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextContains(`Text`, "*[^2-5]*})$")
+            WHERE FulltextMatch(`Text`, "*[^2-5]*})$")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextContains(`Text`, "*[i]*")
+            WHERE FulltextMatch(`Text`, "*[i]*")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextContains(`Text`, "{}n$3*")
+            WHERE FulltextMatch(`Text`, "{}n$3*")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextContains(`Text`, "([^2-5]+|.{3})$")
+            WHERE FulltextMatch(`Text`, "([^2-5]+|.{3})$")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextContains(`Text`, "^...*")
+            WHERE FulltextMatch(`Text`, "^...*")
             ORDER BY `Key`;
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
@@ -3795,7 +3798,7 @@ Y_UNIT_TEST(ImbalanceNgrams) {
         // Check that imbalanced ngram filtering doesn't break the result
         TString query = R"sql(
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextContains(`Text`, "*Users/Br*")
+            WHERE FulltextMatch(`Text`, "*Users/Br*")
             ORDER BY `Key`;
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
@@ -3807,7 +3810,7 @@ Y_UNIT_TEST(ImbalanceNgrams) {
     }
 }
 
-Y_UNIT_TEST(SelectWithFulltextContainsAndNgramWildcardBoundaries) {
+Y_UNIT_TEST(SelectWithFulltextMatchAndNgramWildcardBoundaries) {
     auto kikimr = Kikimr();
     auto db = kikimr.GetQueryClient();
 
@@ -3835,23 +3838,23 @@ Y_UNIT_TEST(SelectWithFulltextContainsAndNgramWildcardBoundaries) {
     {
         TString query = R"sql(
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextContains(`Text`, "are*")
+            WHERE FulltextMatch(`Text`, "are*")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextContains(`Text`, "aren*")
+            WHERE FulltextMatch(`Text`, "aren*")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextContains(`Text`, "*rea")
+            WHERE FulltextMatch(`Text`, "*rea")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextContains(`Text`, "werner*")
+            WHERE FulltextMatch(`Text`, "werner*")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextContains(`Text`, "b")
+            WHERE FulltextMatch(`Text`, "b")
             ORDER BY `Key`;
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
@@ -3869,7 +3872,7 @@ Y_UNIT_TEST(SelectWithFulltextContainsAndNgramWildcardBoundaries) {
     }
 }
 
-Y_UNIT_TEST(SelectWithFulltextContainsAndNgramWildcardUtf8Size) {
+Y_UNIT_TEST(SelectWithFulltextMatchAndNgramWildcardUtf8Size) {
     auto kikimr = Kikimr();
     auto db = kikimr.GetQueryClient();
 
@@ -3923,27 +3926,27 @@ Y_UNIT_TEST(SelectWithFulltextContainsAndNgramWildcardUtf8Size) {
     {
         const TString query = R"sql(
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextContains(`Text`, "🙈")
+            WHERE FulltextMatch(`Text`, "🙈")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextContains(`Text`, "🎶")
+            WHERE FulltextMatch(`Text`, "🎶")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextContains(`Text`, "4")
+            WHERE FulltextMatch(`Text`, "4")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextContains(`Text`, "꫞")
+            WHERE FulltextMatch(`Text`, "꫞")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextContains(`Text`, "﷽")
+            WHERE FulltextMatch(`Text`, "﷽")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextContains(`Text`, "4️⃣") -- that's grapheme cluster that consists of three utf8 runes
+            WHERE FulltextMatch(`Text`, "4️⃣") -- that's grapheme cluster that consists of three utf8 runes
             ORDER BY `Key`;
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
@@ -3980,31 +3983,31 @@ Y_UNIT_TEST(SelectWithFulltextContainsAndNgramWildcardUtf8Size) {
     {
         const TString query = R"sql(
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextContains(`Text`, "*🧪* *②፳")
+            WHERE FulltextMatch(`Text`, "*🧪* *②፳")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextContains(`Text`, "🙈 🎶 4️⃣")
+            WHERE FulltextMatch(`Text`, "🙈 🎶 4️⃣")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextContains(`Text`, "*4*") -- 4️⃣ is grapheme cluster with first rune "4"
+            WHERE FulltextMatch(`Text`, "*4*") -- 4️⃣ is grapheme cluster with first rune "4"
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextContains(`Text`, "*Ár!")
+            WHERE FulltextMatch(`Text`, "*Ár!")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextContains(`Text`, "*年*！")
+            WHERE FulltextMatch(`Text`, "*年*！")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextContains(`Text`, "꫞")
+            WHERE FulltextMatch(`Text`, "꫞")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextContains(`Text`, "﷽*")
+            WHERE FulltextMatch(`Text`, "﷽*")
             ORDER BY `Key`;
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
@@ -4035,7 +4038,7 @@ Y_UNIT_TEST(SelectWithFulltextContainsAndNgramWildcardUtf8Size) {
     }
 }
 
-Y_UNIT_TEST_QUAD(SelectWithFulltextContainsAndNgramWildcardUnicode, RELEVANCE, UTF8) {
+Y_UNIT_TEST_QUAD(SelectWithFulltextMatchAndNgramWildcardUnicode, RELEVANCE, UTF8) {
     auto kikimr = Kikimr();
     auto db = kikimr.GetQueryClient();
 
@@ -4081,39 +4084,39 @@ Y_UNIT_TEST_QUAD(SelectWithFulltextContainsAndNgramWildcardUnicode, RELEVANCE, U
     {
         const TString query = R"sql(
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextContains(`Text`, "*bc0*")
+            WHERE FulltextMatch(`Text`, "*bc0*")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextContains(`Text`, "*◌̇*")
+            WHERE FulltextMatch(`Text`, "*◌̇*")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextContains(`Text`, "*؈ۻ")
+            WHERE FulltextMatch(`Text`, "*؈ۻ")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextContains(`Text`, "*字異體*")
+            WHERE FulltextMatch(`Text`, "*字異體*")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextContains(`Text`, "ä̸̱*")
+            WHERE FulltextMatch(`Text`, "ä̸̱*")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextContains(`Text`, "*🐶🐕*")
+            WHERE FulltextMatch(`Text`, "*🐶🐕*")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextContains(`Text`, "*🐶*")  -- should return empty response: query shorter than ngrams
+            WHERE FulltextMatch(`Text`, "*🐶*")  -- should return empty response: query shorter than ngrams
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextContains(`Text`, "*🐕‍🦺*")  -- despite it looks like single character it is not: it's 🐕 with modifiers
+            WHERE FulltextMatch(`Text`, "*🐕‍🦺*")  -- despite it looks like single character it is not: it's 🐕 with modifiers
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextContains(`Text`, "👨\u200D👩*")  -- 👨‍👩‍👧‍👦 is combination of 👨, 👩, 👧 and 👦
+            WHERE FulltextMatch(`Text`, "👨\u200D👩*")  -- 👨‍👩‍👧‍👦 is combination of 👨, 👩, 👧 and 👦
             ORDER BY `Key`;
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
@@ -4147,7 +4150,7 @@ Y_UNIT_TEST_QUAD(SelectWithFulltextContainsAndNgramWildcardUnicode, RELEVANCE, U
     }
 }
 
-Y_UNIT_TEST(SelectWithFulltextContainsAndEdgeNgramWildcard) {
+Y_UNIT_TEST(SelectWithFulltextMatchAndEdgeNgramWildcard) {
         auto kikimr = Kikimr();
     auto db = kikimr.GetQueryClient();
 
@@ -4171,39 +4174,39 @@ Y_UNIT_TEST(SelectWithFulltextContainsAndEdgeNgramWildcard) {
     {
         const TString query = R"sql(
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextContains(`Text`, "aaaaabbcd efg")
+            WHERE FulltextMatch(`Text`, "aaaaabbcd efg")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextContains(`Text`, "aaaaab*")
+            WHERE FulltextMatch(`Text`, "aaaaab*")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextContains(`Text`, "aa*bc*")
+            WHERE FulltextMatch(`Text`, "aa*bc*")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextContains(`Text`, "*ef*")
+            WHERE FulltextMatch(`Text`, "*ef*")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextContains(`Text`, "ef")
+            WHERE FulltextMatch(`Text`, "ef")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextContains(`Text`, "12*6+7*9=")
+            WHERE FulltextMatch(`Text`, "12*6+7*9=")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextContains(`Text`, "123450+789=")
+            WHERE FulltextMatch(`Text`, "123450+789=")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextContains(`Text`, "123*")
+            WHERE FulltextMatch(`Text`, "123*")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextContains(`Text`, "1")
+            WHERE FulltextMatch(`Text`, "1")
             ORDER BY `Key`;
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
@@ -4233,7 +4236,7 @@ Y_UNIT_TEST(SelectWithFulltextContainsAndEdgeNgramWildcard) {
     }
 }
 
-Y_UNIT_TEST(SelectWithFulltextContainsAndNgramWildcardVariableSize) {
+Y_UNIT_TEST(SelectWithFulltextMatchAndNgramWildcardVariableSize) {
     auto kikimr = Kikimr();
     auto db = kikimr.GetQueryClient();
 
@@ -4263,15 +4266,15 @@ Y_UNIT_TEST(SelectWithFulltextContainsAndNgramWildcardVariableSize) {
     {
         const TString query = R"sql(
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextContains(`Text`, "are* *ena*")
+            WHERE FulltextMatch(`Text`, "are* *ena*")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextContains(`Text`, "ber*")
+            WHERE FulltextMatch(`Text`, "ber*")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextContains(`Text`, "lu*aed*")
+            WHERE FulltextMatch(`Text`, "lu*aed*")
             ORDER BY `Key`;
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
@@ -4307,15 +4310,15 @@ Y_UNIT_TEST(SelectWithFulltextContainsAndNgramWildcardVariableSize) {
     {
         const TString query = R"sql(
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextContains(`Text`, "area *rena*")
+            WHERE FulltextMatch(`Text`, "area *rena*")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextContains(`Text`, "ber*")
+            WHERE FulltextMatch(`Text`, "ber*")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextContains(`Text`, "lu*aed*")
+            WHERE FulltextMatch(`Text`, "lu*aed*")
             ORDER BY `Key`;
         )sql";
 
@@ -4335,15 +4338,15 @@ Y_UNIT_TEST(SelectWithFulltextContainsAndNgramWildcardVariableSize) {
     {
         const TString query = R"sql(
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextContains(`Text`, "are* *ena*")
+            WHERE FulltextMatch(`Text`, "are* *ena*")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextContains(`Text`, "ber*")
+            WHERE FulltextMatch(`Text`, "ber*")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextContains(`Text`, "lu*aed*")
+            WHERE FulltextMatch(`Text`, "lu*aed*")
             ORDER BY `Key`;
         )sql";
         auto result = singleRetryQuery(db, query);
@@ -4368,19 +4371,19 @@ Y_UNIT_TEST(SelectWithFulltextContainsAndNgramWildcardVariableSize) {
     {
         const TString query = R"sql(
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextContains(`Text`, "are* *ena*")
+            WHERE FulltextMatch(`Text`, "are* *ena*")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextContains(`Text`, "ber*")
+            WHERE FulltextMatch(`Text`, "ber*")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextContains(`Text`, "lu* aed*")
+            WHERE FulltextMatch(`Text`, "lu* aed*")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextContains(`Text`, "lu*aed*")
+            WHERE FulltextMatch(`Text`, "lu*aed*")
             ORDER BY `Key`;
         )sql";
         auto result = singleRetryQuery(db, query);
@@ -4401,7 +4404,7 @@ Y_UNIT_TEST(SelectWithFulltextContainsAndNgramWildcardVariableSize) {
     }
 }
 
-Y_UNIT_TEST_QUAD(SelectWithFulltextContainsShorterThanMinNgram, RELEVANCE, UTF8) {
+Y_UNIT_TEST_QUAD(SelectWithFulltextMatchShorterThanMinNgram, RELEVANCE, UTF8) {
     auto kikimr = Kikimr();
     auto db = kikimr.GetQueryClient();
 
@@ -4432,11 +4435,11 @@ Y_UNIT_TEST_QUAD(SelectWithFulltextContainsShorterThanMinNgram, RELEVANCE, UTF8)
         const TString query = std::format(R"sql(
             SELECT *
             FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextContains(`Text`, "at");
+            WHERE FulltextMatch(`Text`, "at");
 
             SELECT *
             FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextContains(`Text`, "*at*");
+            WHERE FulltextMatch(`Text`, "*at*");
         )sql");
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -4448,12 +4451,12 @@ Y_UNIT_TEST_QUAD(SelectWithFulltextContainsShorterThanMinNgram, RELEVANCE, UTF8)
         const TString query = std::format(R"sql(
             SELECT *
             FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextContains(`Text`, "at")
+            WHERE FulltextMatch(`Text`, "at")
             LIMIT 100;
 
             SELECT *
             FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextContains(`Text`, "*at*")
+            WHERE FulltextMatch(`Text`, "*at*")
             LIMIT 100;
         )sql");
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
@@ -4476,7 +4479,7 @@ Y_UNIT_TEST(ExplainFulltextIndexContains) {
     TString query = R"sql(
         SELECT Key, Text
         FROM `/Root/Texts` VIEW `fulltext_idx`
-        WHERE FulltextContains(Text, "cats")
+        WHERE FulltextMatch(Text, "cats")
     )sql";
     auto result = session.ExplainDataQuery(query).ExtractValueSync();
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -4549,7 +4552,7 @@ Y_UNIT_TEST(ExplainFulltextIndexScanQuery) {
     TString query = R"sql(
         SELECT Key, Text
         FROM `/Root/Texts` VIEW `fulltext_idx`
-        WHERE FulltextContains(Text, "cats")
+        WHERE FulltextMatch(Text, "cats")
     )sql";
     auto it = tableClient.StreamExecuteScanQuery(query, querySettings).GetValueSync();
     auto res = CollectStreamResult(it);
@@ -4699,10 +4702,10 @@ Y_UNIT_TEST(FulltextIndexWithUtf8Key) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
-    { // Query using FulltextContains
+    { // Query using FulltextMatch
         TString query = R"sql(
             SELECT Key, Text FROM `/Root/TextsUtf8Key` VIEW `fulltext_idx`
-            WHERE FulltextContains(Text, "cats")
+            WHERE FulltextMatch(Text, "cats")
             ORDER BY Key
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
@@ -4752,10 +4755,10 @@ Y_UNIT_TEST(FulltextIndexWithStringKey) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
-    { // Query using FulltextContains
+    { // Query using FulltextMatch
         TString query = R"sql(
             SELECT Key, Text FROM `/Root/TextsStringKey` VIEW `fulltext_idx`
-            WHERE FulltextContains(Text, "dogs")
+            WHERE FulltextMatch(Text, "dogs")
             ORDER BY Key
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
@@ -4806,10 +4809,10 @@ Y_UNIT_TEST(FulltextIndexWithInt64Key) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
-    { // Query using FulltextContains
+    { // Query using FulltextMatch
         TString query = R"sql(
             SELECT Key, Text FROM `/Root/TextsInt64Key` VIEW `fulltext_idx`
-            WHERE FulltextContains(Text, "cats")
+            WHERE FulltextMatch(Text, "cats")
             ORDER BY Key
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
@@ -4818,10 +4821,10 @@ Y_UNIT_TEST(FulltextIndexWithInt64Key) {
         UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 3);
     }
 
-    { // Query using FulltextContains - verify correct keys returned
+    { // Query using FulltextMatch - verify correct keys returned
         TString query = R"sql(
             SELECT Key FROM `/Root/TextsInt64Key` VIEW `fulltext_idx`
-            WHERE FulltextContains(Text, "love")
+            WHERE FulltextMatch(Text, "love")
             ORDER BY Key
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
@@ -4877,10 +4880,10 @@ Y_UNIT_TEST(FulltextIndexWithCompositeKeyTwoColumns) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
-    { // Query using FulltextContains
+    { // Query using FulltextMatch
         TString query = R"sql(
             SELECT Category, Id, Text FROM `/Root/TextsCompositeKey2` VIEW `fulltext_idx`
-            WHERE FulltextContains(Text, "cats")
+            WHERE FulltextMatch(Text, "cats")
             ORDER BY Category, Id
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
@@ -4892,7 +4895,7 @@ Y_UNIT_TEST(FulltextIndexWithCompositeKeyTwoColumns) {
     { // Query with specific composite key result
         TString query = R"sql(
             SELECT Category, Id FROM `/Root/TextsCompositeKey2` VIEW `fulltext_idx`
-            WHERE FulltextContains(Text, "birds fly")
+            WHERE FulltextMatch(Text, "birds fly")
             ORDER BY Category, Id
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
@@ -4947,10 +4950,10 @@ Y_UNIT_TEST(FulltextIndexWithCompositeKeyThreeColumns) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
-    { // Query using FulltextContains
+    { // Query using FulltextMatch
         TString query = R"sql(
             SELECT Tenant, Category, Id, Text FROM `/Root/TextsCompositeKey3` VIEW `fulltext_idx`
-            WHERE FulltextContains(Text, "cats")
+            WHERE FulltextMatch(Text, "cats")
             ORDER BY Tenant, Category, Id
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
@@ -4962,7 +4965,7 @@ Y_UNIT_TEST(FulltextIndexWithCompositeKeyThreeColumns) {
     { // Query with specific composite key result
         TString query = R"sql(
             SELECT Tenant, Category, Id FROM `/Root/TextsCompositeKey3` VIEW `fulltext_idx`
-            WHERE FulltextContains(Text, "eagles soar")
+            WHERE FulltextMatch(Text, "eagles soar")
             ORDER BY Tenant, Category, Id
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
@@ -4975,7 +4978,7 @@ Y_UNIT_TEST(FulltextIndexWithCompositeKeyThreeColumns) {
     { // Query multiple words across tenants
         TString query = R"sql(
             SELECT Tenant, Category, Id FROM `/Root/TextsCompositeKey3` VIEW `fulltext_idx`
-            WHERE FulltextContains(Text, "love")
+            WHERE FulltextMatch(Text, "love")
             ORDER BY Tenant, Category, Id
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
@@ -5030,10 +5033,10 @@ Y_UNIT_TEST(FulltextIndexWithCompositeKeyMixedTypes) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
-    { // Query using FulltextContains - find machine learning projects
+    { // Query using FulltextMatch - find machine learning projects
         TString query = R"sql(
             SELECT Year, Region, Name FROM `/Root/TextsCompositeKeyMixed` VIEW `fulltext_idx`
-            WHERE FulltextContains(Description, "machine learning")
+            WHERE FulltextMatch(Description, "machine learning")
             ORDER BY Year, Region, Name
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
@@ -5044,10 +5047,10 @@ Y_UNIT_TEST(FulltextIndexWithCompositeKeyMixedTypes) {
         ])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    { // Query using FulltextContains - find data related projects
+    { // Query using FulltextMatch - find data related projects
         TString query = R"sql(
             SELECT Year, Region, Name FROM `/Root/TextsCompositeKeyMixed` VIEW `fulltext_idx`
-            WHERE FulltextContains(Description, "data")
+            WHERE FulltextMatch(Description, "data")
             ORDER BY Year, Region, Name
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
@@ -5068,7 +5071,7 @@ Y_UNIT_TEST(FulltextIndexWithCompositeKeyMixedTypes) {
     { // Query the newly inserted row
         TString query = R"sql(
             SELECT Year, Region, Name FROM `/Root/TextsCompositeKeyMixed` VIEW `fulltext_idx`
-            WHERE FulltextContains(Description, "quantum")
+            WHERE FulltextMatch(Description, "quantum")
             ORDER BY Year, Region, Name
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
@@ -5091,7 +5094,7 @@ Y_UNIT_TEST(FulltextIndexWithCompositeKeyMixedTypes) {
     { // Query should now find the updated row
         TString query = R"sql(
             SELECT Year, Region, Name FROM `/Root/TextsCompositeKeyMixed` VIEW `fulltext_idx`
-            WHERE FulltextContains(Description, "updated")
+            WHERE FulltextMatch(Description, "updated")
             ORDER BY Year, Region, Name
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
@@ -5113,7 +5116,7 @@ Y_UNIT_TEST(FulltextIndexWithCompositeKeyMixedTypes) {
     { // Query should not find the deleted row
         TString query = R"sql(
             SELECT Year, Region, Name FROM `/Root/TextsCompositeKeyMixed` VIEW `fulltext_idx`
-            WHERE FulltextContains(Description, "streaming")
+            WHERE FulltextMatch(Description, "streaming")
             ORDER BY Year, Region, Name
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
@@ -5183,6 +5186,115 @@ Y_UNIT_TEST(FulltextRelevanceIndexWithCompositeKey) {
         UNIT_ASSERT_VALUES_EQUAL(*category, "docs");
         UNIT_ASSERT_VALUES_EQUAL(*id, 1);
     }
+}
+
+// Test that fulltext queries handle delivery problems gracefully
+// This uses the observer pattern to inject delivery problems
+Y_UNIT_TEST(FullTextDeliveryProblem) {
+    // Test that fulltext query succeeds even if delivery problem happens
+    NKikimrConfig::TFeatureFlags featureFlags;
+    featureFlags.SetEnableFulltextIndex(true);
+
+    auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+    settings.SetDomainRoot(KikimrDefaultUtDomainRoot);
+    settings.SetUseRealThreads(false);
+    settings.AppConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+
+    TKikimrRunner kikimr(settings);
+    auto& runtime = *kikimr.GetTestServer().GetRuntime();
+    auto db = kikimr.GetQueryClient();
+
+    // Create table with fulltext index using RunCall to properly handle fake threads
+    kikimr.RunCall([&]() { CreateTexts(db); return true; });
+    kikimr.RunCall([&]() { UpsertTexts(db); return true; });
+    kikimr.RunCall([&]() { AddIndex(db, "fulltext_relevance"); return true; });
+
+    auto sender = runtime.AllocateEdgeActor();
+
+    using namespace NTableIndex;
+    using namespace NTableIndex::NFulltext;
+
+    // Get shards for the index posting table
+    auto docsShards = GetTableShards(&kikimr.GetTestServer(), sender, JoinSeq('/', TVector<TString>{"/Root/Texts/fulltext_idx", DocsTable}));
+    auto implShards = GetTableShards(&kikimr.GetTestServer(), sender, JoinSeq('/', TVector<TString>{"/Root/Texts/fulltext_idx", ImplTable}));
+    auto dictShards = GetTableShards(&kikimr.GetTestServer(), sender, JoinSeq('/', TVector<TString>{"/Root/Texts/fulltext_idx", DictTable}));
+    auto statsShards = GetTableShards(&kikimr.GetTestServer(), sender, JoinSeq('/', TVector<TString>{"/Root/Texts/fulltext_idx", StatsTable}));
+    auto mainShards = GetTableShards(&kikimr.GetTestServer(), sender, "/Root/Texts");
+
+
+    THashMap<ui64, int> shardSet;
+    UNIT_ASSERT(!docsShards.empty());
+    UNIT_ASSERT(!implShards.empty());
+    UNIT_ASSERT(!dictShards.empty());
+    UNIT_ASSERT(!statsShards.empty());
+    UNIT_ASSERT(!mainShards.empty());
+
+    for (auto shard : implShards) {
+        shardSet[shard] = 0;
+    }
+    for (auto shard : dictShards) {
+        shardSet[shard] = 0;
+    }
+    for (auto shard : statsShards) {
+        shardSet[shard] = 0;
+    }
+    for (auto shard : mainShards) {
+        shardSet[shard] = 0;
+    }
+
+    for (auto shard : docsShards) {
+        shardSet[shard] = 0;
+    }
+
+    int readCount = 0;
+    int deliveryProblemSent = 0;
+
+    // Set up observer to inject delivery problem on first TEvForward with TEvRead to our shards
+    auto observer = [&](TAutoPtr<NActors::IEventHandle>& ev) -> TTestActorRuntimeBase::EEventAction {
+        if (ev->GetTypeRewrite() == NKikimr::TEvPipeCache::TEvForward::EventType) {
+            auto* forward = ev->Get<NKikimr::TEvPipeCache::TEvForward>();
+            // Check if this is a TEvRead going to one of our shards
+            if (forward->Ev->Type() == NKikimr::TEvDataShard::TEvRead::EventType &&
+                shardSet.contains(forward->TabletId)) {
+                int& cnt = shardSet[forward->TabletId];
+
+                Cerr << "Observed TEvRead #" << readCount << " to shard " << forward->TabletId
+                     << ", sender: " << ev->Sender << Endl;
+
+                readCount++;
+                if ((cnt & 1) == 0) {
+                    Cerr << "Injecting delivery problem for shard " << forward->TabletId
+                         << " to actor " << ev->Sender << Endl;
+                    auto undelivery = MakeHolder<NKikimr::TEvPipeCache::TEvDeliveryProblem>(forward->TabletId, true);
+                    runtime.Send(new NActors::IEventHandle(ev->Sender, sender, undelivery.Release()));
+                    deliveryProblemSent++;
+                }
+                cnt++;
+            }
+        }
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    };
+    runtime.SetObserverFunc(observer);
+
+    // Execute fulltext query using RunCall pattern
+    auto result = kikimr.RunCall([&]() {
+        TString query = R"sql(
+            SELECT Key, Text FROM `/Root/Texts` VIEW `fulltext_idx`
+            ORDER BY FulltextScore(Text, "cats") DESC
+            LIMIT 10
+        )sql";
+        return db.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+    });
+
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+    // Verify we got results
+    auto resultSet = result.GetResultSet(0);
+    UNIT_ASSERT(resultSet.RowsCount() == 3);
+
+    // Verify the delivery problem was actually sent
+    UNIT_ASSERT(deliveryProblemSent > 0);
+    Cerr << "Test completed successfully, total reads observed: " << readCount << Endl;
 }
 
 }

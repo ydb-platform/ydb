@@ -410,8 +410,36 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
         DoTestOrderByCosine(4, 0);
     }
 
-    Y_UNIT_TEST_TWIN(PrefixedVectorIndexOrderByCosineDistanceWithCover, Nullable) {
+    Y_UNIT_TEST_TWIN(OrderByCosineDistanceWithCover, Nullable) {
         DoTestOrderByCosine(2, (Nullable ? F_NULLABLE : 0) | F_COVERING);
+    }
+
+    Y_UNIT_TEST_QUAD(OrderByCosineOnlyVectorCovered, Nullable, Overlap) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetFeatureFlags(featureFlags)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+
+        auto db = kikimr.GetTableClient();
+        auto session = DoCreateTableForPrefixedVectorIndex(db, (Nullable ? F_NULLABLE : 0));
+        DoCreatePrefixedVectorIndex(session, 2, F_COVERING | F_SUFFIX_PK | (Overlap ? F_OVERLAP : 0));
+        {
+            auto result = session.DescribeTable("/Root/TestTable").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
+            const auto& indexes = result.GetTableDescription().GetIndexDescriptions();
+            UNIT_ASSERT_EQUAL(indexes.size(), 1);
+            UNIT_ASSERT_EQUAL(indexes[0].GetIndexName(), "index");
+            UNIT_ASSERT_EQUAL(indexes[0].GetIndexColumns(), (std::vector<std::string>{"user", "emb"}));
+            UNIT_ASSERT_EQUAL(indexes[0].GetDataColumns(), (std::vector<std::string>{"emb", "data"}));
+        }
+
+        // Check without F_COVERING here because user column is not covered and query still accesses the main table
+        DoPositiveQueriesPrefixedVectorIndexOrderByCosine(session, 0);
     }
 
     Y_UNIT_TEST_QUAD(CosineDistanceWithPkSuffix, Nullable, Covered) {

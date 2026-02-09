@@ -20,7 +20,7 @@ class PrSyncCreator:
         self.base_branch = base_branch
         self.head_branch = head_branch
         self.ours_on_conflict = ours_on_conflict
-        self.their_on_conflict = theirs_on_conflict
+        self.theirs_on_conflict = theirs_on_conflict
         self.token = token
         self.pr_label = pr_label
         self.pr_label_fail = pr_label_failed
@@ -85,6 +85,17 @@ class PrSyncCreator:
             self.logger.info("output:\n%s", result.stdout.decode())
         return result
 
+    def git_get_conflict_files(self):
+        conflicting_files = set()
+
+        for line in self.git_run("ls-files", "-u").stdout.decode().strip().splitlines():
+            parts = line.split('\t')
+            if len(parts) > 1:
+                filename = parts[-1]
+                conflicting_files.add(filename)
+
+        return conflicting_files
+
     def git_revparse_head(self):
         return self.git_run("rev-parse", "HEAD").stdout.decode().strip()
 
@@ -105,6 +116,7 @@ class PrSyncCreator:
         merge_result = self.git_run("merge", self.head_branch, "-m", commit_msg, fail=False)
         merge_output = merge_result.stdout.decode()
         merge_failed = merge_result.returncode != 0
+        conflict_files = ''
         if merge_failed and "Automatic merge failed; fix conflicts and then commit the result." in merge_output:
             conflict_files = self.git_run("ls-files", "-u").stdout.decode()
             should_commit = False
@@ -114,17 +126,19 @@ class PrSyncCreator:
                     self.git_run("checkout", "--ours", ours_file)
                     self.git_run("add", ours_file)
                     should_commit = True
-            for theirs_file in self.their_on_conflict:
+            for theirs_file in self.their_on_conflicts:
                 if theirs_file in conflict_files:
                     self.logger.warning(f"Conflicts while merging. Attempting to resolve only for {theirs_file} with --theirs")
                     self.git_run("checkout", "--theirs", theirs_file)
                     self.git_run("add", theirs_file)
                     should_commit = True
+            conflict_files = self.git_get_conflict_files()
+            if len(conflict_files) > 0:
+                self.logger.info(f"Resolved conflicts while merging. Other conflicts should be fixed manually: {conflict_files}")
+                self.git_run("add", *list(conflict_files))
+                should_commit = True
             if should_commit:
                 self.git_run("commit", "-m", commit_msg)
-            conflict_files = self.git_run("ls-files", "-u").stdout.decode()
-            if len(conflict_files) > 0:
-                raise Exception(f"Resolved for all known files, but more files were in conflict {conflict_files}")
         elif merge_failed:
             raise Exception(f"Unexpected error during merge {merge_output}")
         self.git_run("push", "--set-upstream", "origin", dev_branch_name)
@@ -134,11 +148,21 @@ class PrSyncCreator:
         else:
             pr_body = "PR was created by rightlib sync script"
 
+        if merge_failed and len(conflict_files) > 0:
+            pr_body += f"""\n\n### Merge failed
+Full message: ```{merge_output}```
+
+Found some unresolved conflicts:\n"""
+            for conflict_file in conflict_files:
+                pr_body += f"[{conflict_file}](https://github.com/ydb-platform/ydb/blob/{self.rightlib_latest_repo_sha()}/{conflict_file})"
+
         pr = self.repo.create_pull(
             self.base_branch, dev_branch_name, title=pr_title, body=pr_body, maintainer_can_modify=True
         )
         pr.add_to_labels(self.pr_label)
         pr.add_to_labels(automerge.automerge_pr_label)
+        if merge_failed and len(conflict_files) > 0:
+            pr.add_to_labels(self.pr_label_fail)
 
     def cmd_create_pr(self):
         pr = self.get_latest_open_pr()
@@ -148,7 +172,7 @@ class PrSyncCreator:
             self.logger.info("cur_sha=%s", cur_sha)
 
             if self.is_commit_present_on_branch(cur_sha, self.base_branch) is False:
-                self.create_new_pr()
+                self.create_new_pr(cur_sha)
             else:
                 self.logger.info("Skipping create-pr because base branch is up-to-date")
         else:

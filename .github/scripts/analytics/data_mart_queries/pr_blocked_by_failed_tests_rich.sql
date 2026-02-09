@@ -1,6 +1,24 @@
--- PR-check: только последний 1 день. Regression/nightly/postcommit: 15 дней назад от времени запуска PR-check (включительно).
+-- Тесты, которые упали в PR-check и "должны проходить" (стабильны в regression/nightly).
+--
+-- Логика:
+--   1. Берём все падения тестов в PR-check за последние $pr_check_lookback_days дней.
+--   2. Для каждого упавшего теста смотрим regression/nightly/postcommit прогоны
+--      за $regression_window_days дней ДО момента падения в PR-check.
+--   3. Оставляем только тесты, которые в этом окне:
+--      - имеют хотя бы один passed в regression/nightly
+--      - НЕ имеют failed или mute
+--   4. Это фильтрует "флакающие" тесты — остаются только те, что стабильно проходят
+--      в основной ветке, но упали в PR (вероятно, из-за изменений в PR).
+--
+-- Параметры:
+--   $pr_check_lookback_days — окно выборки PR-check failures (дни). По умолчанию 7.
+--   $regression_window_days — окно для поиска passed regression/nightly тестов
+--      относительно времени падения в PR-check. По умолчанию 15.
 
 PRAGMA AnsiInForEmptyOrNullableItemsCollections;
+
+$pr_check_lookback_days = 7;
+$regression_window_days = 15;
 
 -- PR-check failures за последний 1 день (branch, full_name, run_timestamp)
 $pr_check_failures_1d = (
@@ -14,7 +32,7 @@ $pr_check_failures_1d = (
         build_type = 'relwithdebinfo'
         AND job_name = 'PR-check'
         AND status = 'failure'
-        AND run_timestamp > CurrentUtcDate() - 1 * Interval("P1D")
+        AND run_timestamp > CurrentUtcDate() - $pr_check_lookback_days * Interval("P1D")
         AND pull IS NOT NULL
         AND pull != ''
         AND String::Contains(pull, 'PR_')
@@ -53,7 +71,7 @@ $pr_check_with_regression_ok = (
             'Postcommit_relwithdebinfo',
             'Postcommit_asan'
         )
-        AND r.run_timestamp >= p.run_timestamp - 15 * Interval("P1D")
+        AND r.run_timestamp >= p.run_timestamp - $regression_window_days * Interval("P1D")
         AND r.run_timestamp <= p.run_timestamp
     GROUP BY
         p.branch,
@@ -119,7 +137,7 @@ $all_failures_with_pr_base = (
         AND base.status != 'skipped'
         AND base.job_name = 'PR-check'
         AND base.status = 'failure'
-        AND base.run_timestamp > CurrentUtcDate() - 1 * Interval("P1D")
+        AND base.run_timestamp > CurrentUtcDate() - $pr_check_lookback_days * Interval("P1D")
         AND base.pull IS NOT NULL
         AND base.pull != ''
         AND String::Contains(base.pull, 'PR_')

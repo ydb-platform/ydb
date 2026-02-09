@@ -1,9 +1,26 @@
--- PR с информацией о тестах, упавших в PR-check за последний день.
--- Таблица содержит все PR (из github_data/pull_requests) с LEFT JOIN к упавшим тестам.
--- is_pr_blocked_by_tests_in_last_run_and_try = 1, если в последнем запуске PR (attempt 3) были падения.
--- Источник: test_results/test_runs_column (PR-check, failure, run_timestamp за 1 день).
+-- Все PR с информацией об упавших тестах в PR-check.
+--
+-- Логика:
+--   1. Берём все PR из github_data/pull_requests (дедуплицируем по последнему exported_at).
+--   2. Для каждого PR ищем последний запуск PR-check за $test_lookback_days дней.
+--   3. Определяем, заблокирован ли PR тестами:
+--      - is_pr_blocked_by_tests_in_last_run_and_try = 1, если в последнем запуске
+--        на третьей попытке (attempt = 3) есть падения.
+--      - Третья попытка — финальная; если тест упал и там, значит PR заблокирован.
+--   4. LEFT JOIN к детальной информации о каждом упавшем тесте:
+--      full_name, job_id, branch, logs, owners и т.д.
+--
+-- Результат: одна строка на каждую пару (PR, упавший тест). PR без падений тоже включены
+-- (с пустыми полями теста).
+--
+-- Параметры:
+--   $test_lookback_days — окно выборки тестов (дни). Ограничивает сканирование таблицы
+--     test_runs_column. PR с тестами старше этого периода не попадут в выборку.
+--     По умолчанию 65 ≈ 2 месяца (запас для долгоживущих PR).
 
 PRAGMA AnsiInForEmptyOrNullableItemsCollections;
+
+$test_lookback_days = 65;
 
 SELECT 
     pr.pr_number AS pr_number,
@@ -224,7 +241,7 @@ LEFT JOIN
                     WHERE 
                         build_type = 'relwithdebinfo'
                         AND job_name = 'PR-check'
-                        AND run_timestamp > CurrentUtcDate() - 65 * Interval("P1D")
+                        AND run_timestamp > CurrentUtcDate() - $test_lookback_days * Interval("P1D")
                         AND pull IS NOT NULL
                         AND pull != ''
                         AND String::Contains(pull, 'PR_')
@@ -269,7 +286,7 @@ LEFT JOIN
                         WHERE 
                             build_type = 'relwithdebinfo'
                             AND job_name = 'PR-check'
-                            AND run_timestamp > CurrentUtcDate() - 65 * Interval("P1D")
+                            AND run_timestamp > CurrentUtcDate() - $test_lookback_days * Interval("P1D")
                             AND pull IS NOT NULL
                             AND pull != ''
                             AND String::Contains(pull, 'PR_')
@@ -361,7 +378,7 @@ LEFT JOIN
                 build_type = 'relwithdebinfo'
                 AND job_name = 'PR-check'
                 AND status = 'failure'
-                AND run_timestamp > CurrentUtcDate() - 65 * Interval("P1D")
+                AND run_timestamp > CurrentUtcDate() - $test_lookback_days * Interval("P1D")
                 AND pull IS NOT NULL
                 AND pull != ''
                 AND String::Contains(pull, 'PR_')
@@ -409,7 +426,7 @@ LEFT JOIN
                 WHERE 
                     build_type = 'relwithdebinfo'
                     AND job_name = 'PR-check'
-                    AND run_timestamp > CurrentUtcDate() - 65 * Interval("P1D")
+                    AND run_timestamp > CurrentUtcDate() - $test_lookback_days * Interval("P1D")
                     AND pull IS NOT NULL
                     AND pull != ''
                     AND String::Contains(pull, 'PR_')

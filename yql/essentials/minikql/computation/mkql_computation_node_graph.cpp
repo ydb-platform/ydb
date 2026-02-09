@@ -482,7 +482,8 @@ private:
             name == "KqpWideReadTableRanges" ||
             name == "KqpBlockReadTableRanges" ||
             name == "KqpLookupTable" ||
-            name == "KqpReadTable"
+            name == "KqpReadTable" ||
+            name == "MultiHoppingCore"
         ) {
             PatternNodes->SuitableForCache = false;
         }

@@ -12,6 +12,9 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#define CS_UNIT_ASSERT_LESS_INTS(A, B) UNIT_ASSERT_LT_C(A, B, Sprintf("Values: %i < %i", A, B))
+
+
 namespace NKikimr::NKqp {
 // class TSkipIndexTestFixture : public NUnitTest::TBaseFixture {
 // public:
@@ -62,17 +65,117 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         )");
 
     }
-    Y_UNIT_TEST(MinMaxIndexSanityCheck) {
-        auto settings = TKikimrSettings()
-            .SetColumnShardAlterObjectEnabled(true)
-            .SetWithSampleTables(false);
+    Y_UNIT_TEST(MinMaxIndexTestCopiedFromIndexActualization) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         TKikimrRunner kikimr(settings);
-        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
-        csController->SetCompactionControl(NYDBTest::EOptimizerCompactionWeightControl::Disable);
+
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
+        csController->SetOverrideMemoryLimitForPortionReading(1e+10);
         csController->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings());
 
-        TLocalHelper(kikimr).CreateTestOlapStandaloneTable();
+        auto helper = TLocalHelper(kikimr);
+        helper.CreateTestOlapTable();
+        helper.SetForcedCompaction();
         auto tableClient = kikimr.GetTableClient();
+
+        Tests::NCommon::TLoggerInit(kikimr)
+            .SetComponents({ NKikimrServices::TX_COLUMNSHARD }, "CS")
+            .SetPriority(NActors::NLog::PRI_DEBUG)
+            .Initialize();
+
+        {
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 1000000, 300000000, 10000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 1100000, 300100000, 10000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 1200000, 300200000, 10000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 1300000, 300300000, 10000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 1400000, 300400000, 10000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 2000000, 200000000, 70000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 3000000, 100000000, 110000);
+        }
+        csController->WaitCompactions(TDuration::Seconds(5));
+
+        {
+            auto alterQuery = TStringBuilder() <<
+                              R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`))";
+            auto session = tableClient.CreateSession().GetValueSync().GetSession();
+            auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
+
+
+        }
+        {
+            auto alterQuery = TStringBuilder() <<
+                R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_level, TYPE=MINMAX,
+                    FEATURES=`{"column_name" : "level"}`);
+                )";
+            auto session = tableClient.CreateSession().GetValueSync().GetSession();
+            auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
+        }
+        {
+            auto alterQuery = TStringBuilder() <<
+                R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_resource_id, TYPE=MINMAX,
+                    FEATURES=`{"column_name" : "resource_id"}`);
+                )";
+            auto session = tableClient.CreateSession().GetValueSync().GetSession();
+            auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
+        }
+
+        {
+            auto alterQuery =
+                TStringBuilder()
+                << "ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`);";
+            auto session = tableClient.CreateSession().GetValueSync().GetSession();
+            auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
+        }
+        csController->WaitActualization(TDuration::Seconds(10));
+        {
+            auto it = tableClient
+                          .StreamExecuteScanQuery(R"(
+                --!syntax_v1
+
+                SELECT
+                    COUNT(*)
+                FROM `/Root/olapStore/olapTable`
+                WHERE level = -1
+            )")
+                          .GetValueSync();
+            //                WHERE ((resource_id = '2' AND level = 222222) OR (resource_id = '1' AND level = 111111) OR (resource_id LIKE '%11dd%')) AND uid = '222'
+
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            TString result = StreamResultToYson(it);
+            CompareYson(result, R"([[0u;]])");
+            AFL_VERIFY(csController->GetIndexesSkippedNoData().Val() == 0);
+            AFL_VERIFY(csController->GetIndexesApprovedOnSelect().Val() == 0);
+            AFL_VERIFY(csController->GetIndexesApprovedOnSelect().Val() < csController->GetIndexesSkippingOnSelect().Val())
+            ("approve", csController->GetIndexesApprovedOnSelect().Val())("skip", csController->GetIndexesSkippingOnSelect().Val());
+        }
+
+    }
+    Y_UNIT_TEST(MinMaxIndexSanityCheck) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
+        TKikimrRunner kikimr(settings);
+
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
+        csController->SetOverrideMemoryLimitForPortionReading(1e+10);
+        csController->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings());
+
+        auto helper = TLocalHelper(kikimr);
+        helper.CreateTestOlapTable();
+        helper.SetForcedCompaction();
+        auto tableClient = kikimr.GetTableClient();
+
+        Tests::NCommon::TLoggerInit(kikimr)
+            .SetComponents({ NKikimrServices::TX_COLUMNSHARD }, "CS")
+            .SetPriority(NActors::NLog::PRI_DEBUG)
+            .Initialize();
+
 
         auto runSql = [&](TString query) {
             auto session = tableClient.CreateSession().GetValueSync().GetSession();
@@ -83,17 +186,6 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             auto res = runSql(query);
             UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), NYdb::EStatus::SUCCESS, res.GetIssues().ToString());
         };
-        
-
-        assertSqlOk(R"(ALTER OBJECT `/Root/olapTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=index_minmax_level, TYPE=MINMAX,
-            FEATURES=`{"column_name" : "level"}`);
-        )");
-
-        WriteTestData(kikimr, "/Root/olapTable", 123, 213, 3);
-
-        // csController->SetCompactionControl(NYDBTest::EOptimizerCompactionWeightControl::Force);
-        // UNIT_ASSERT(csController->WaitCompactions(TDuration::Seconds(30), 1));
-
         auto mismatchErrorMessage = [](TString key, TString actual) {
             return Sprintf("actual %s: %s", key.data(), actual.data());
         };
@@ -114,25 +206,47 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                        .AsInt64();
         };
 
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 123, 213, 10000);
+        UNIT_ASSERT(csController->WaitCompactions(TDuration::Seconds(5)));
 
-        i64 level = selectInt64("select cast(sum(level) as Int64) from `/Root/olapTable`;");
+        assertSqlOk(R"(
+            ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET 
+                (ACTION=UPSERT_INDEX, NAME=index_minmax_level, TYPE=MINMAX, FEATURES=`{"column_name" : "level"}`);
+        )");
+        assertSqlOk(R"(
+            ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) 
+                SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`));
+        )");
+        assertSqlOk(R"(
+            ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET 
+                SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`);";
+        )");
+        
+        
+
+
+        // csController->SetCompactionControl(NYDBTest::EOptimizerCompactionWeightControl::Force);
+        csController->WaitActualization(TDuration::Seconds(30));
+
+
+
+        i64 level = selectInt64("select cast(sum(level) as Int64) from `/Root/olapStore/olapTable`;");
 
         UNIT_ASSERT_VALUES_EQUAL_C(level, 0+1+2, mismatchErrorMessage("level", ToString(level)));
-
-
-
-        i64 countFiltered = selectInt64("select cast(count(level) as Int64) from `/Root/olapTable` where level = 5;");
 
 
         i64 indexMissingBefore = csController->GetIndexesSkippedNoData().Val();
         i64 skippedRowsBefore = csController->GetIndexesSkippingOnSelect().Val();
         i64 notSkippedRowsBefore = csController->GetIndexesApprovedOnSelect().Val();
 
-        UNIT_ASSERT_VALUES_EQUAL_C(countFiltered, -1, mismatchErrorMessage("level", ToString(countFiltered)));
+        i64 countFiltered = selectInt64("select cast(count(level) as Int64) from `/Root/olapStore/olapTable` where level = -1;");
 
-        UNIT_ASSERT(indexMissingBefore == csController->GetIndexesSkippedNoData().Val());
-        UNIT_ASSERT(skippedRowsBefore < csController->GetIndexesSkippingOnSelect().Val());
-        UNIT_ASSERT(notSkippedRowsBefore == csController->GetIndexesApprovedOnSelect().Val());
+
+
+        UNIT_ASSERT_VALUES_EQUAL_C(countFiltered, 0, mismatchErrorMessage("level", ToString(countFiltered)));
+        UNIT_ASSERT_VALUES_EQUAL(indexMissingBefore, csController->GetIndexesSkippedNoData().Val());
+        UNIT_ASSERT_VALUES_EQUAL(notSkippedRowsBefore, csController->GetIndexesApprovedOnSelect().Val());
+        CS_UNIT_ASSERT_LESS_INTS(skippedRowsBefore,csController->GetIndexesSkippingOnSelect().Val());
 
         Cerr << ToString(csController->GetIndexesSkippingOnSelect().Val() - skippedRowsBefore) << Endl;
 

@@ -64,7 +64,11 @@ namespace NKikimr::NDDisk {
                             .PartsCount = 0,
                         };
                         ui32 sectorsCnt = header->Size / SectorSize;
-                        pr.Sectors.reserve(sectorsCnt);
+                        pr.Sectors.reserve(sectorsCnt + 1);
+                        pr.Sectors.push_back({
+                            .ChunkIdx = chunkIdx,
+                            .SectorIdx = sectorIdx,
+                        });
                         for (ui32 i = 0; i < sectorsCnt; i++) {
                             pr.Sectors.push_back(header->Locations[i]);
                         }

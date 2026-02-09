@@ -28,7 +28,7 @@ enum class EBalancingMode {
 };
 
 struct TReadSession {
-    EBalancingMode BalancingMode = EBalancingMode::Native;
+    EBalancingMode BalancingMode = EBalancingMode::Server;
     std::optional<EBalancingMode> PendingBalancingMode;
     NActors::TActorId ProxyActorId;
 };

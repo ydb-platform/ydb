@@ -33,16 +33,16 @@
               FROM series
               WHERE series_id = 1;
           )";
-          
+
           auto result = session.ExecuteQuery(
               query,
               NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx()
           ).GetValueSync();
-          
+
           if (!result.IsSuccess()) {
               return result;
           }
-          
+
           // Обработка результата запроса
           auto resultSet = result.GetResultSet(0);
           NYdb::TResultSetParser parser(resultSet);
@@ -52,10 +52,10 @@
                   << ", Title: " << parser.ColumnParser("title").GetOptionalUtf8().value()
                   << std::endl;
           }
-          
+
           return result;
       });
-      
+
       if (!result.IsSuccess()) {
           // Обработка ошибки после всех попыток
           std::cerr << "Query failed: " << result.GetIssues().ToString() << std::endl;
@@ -82,7 +82,7 @@
               FROM series
               WHERE series_id = 1;
           )";
-          
+
           return session.ExecuteQuery(
               query,
               NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx()
@@ -91,7 +91,7 @@
               if (!result.IsSuccess()) {
                   return result;
               }
-              
+
               // Обработка результата запроса
               auto resultSet = result.GetResultSet(0);
               NYdb::TResultSetParser parser(resultSet);
@@ -101,11 +101,11 @@
                       << ", Title: " << parser.ColumnParser("title").GetOptionalUtf8().value()
                       << std::endl;
               }
-              
+
               return result;
           });
       });
-      
+
       // Ожидание завершения
       auto status = future.GetValueSync();
       if (!status.IsSuccess()) {
@@ -133,7 +133,7 @@
               FROM series
               WHERE series_id > 0;
           )";
-          
+
           auto resultStreamQuery = session.StreamExecuteQuery(
               query,
               NYdb::NQuery::TTxControl::NoTx()
@@ -147,7 +147,7 @@
           bool eos = false;
           while (!eos) {
               auto streamPart = resultStreamQuery.ReadNext().ExtractValueSync();
-              
+
               if (!streamPart.IsSuccess()) {
                   eos = true;
                   if (!streamPart.EOS()) {
@@ -170,7 +170,7 @@
 
           return resultStreamQuery;
       });
-      
+
       if (!result.IsSuccess()) {
           std::cerr << "Stream query failed: " << result.GetIssues().ToString() << std::endl;
       }
@@ -201,27 +201,27 @@
           .Idempotent(true)
           .MaxRetries(20)
           .MaxTimeout(TDuration::Seconds(30));
-      
+
       auto result = client.RetryQuerySync([](NYdb::NQuery::TSession session) -> NYdb::TStatus {
           auto query = R"(
               UPSERT INTO series (series_id, title)
               VALUES (10, "New Series");
           )";
-          
+
           auto result = session.ExecuteQuery(
               query,
               NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx()
           ).GetValueSync();
-          
+
           if (!result.IsSuccess()) {
               return result;
           }
-          
+
           // Обработка результата запроса
           std::cout << "Query executed successfully" << std::endl;
           return result;
       }, retrySettings);
-      
+
       if (!result.IsSuccess()) {
           std::cerr << "Operation failed: " << result.GetIssues().ToString() << std::endl;
       }
@@ -547,5 +547,94 @@
       ```
 
     {% endcut %}
+
+- Python
+
+  {% cut "sqlalchemy" %}
+
+  При использовании {{ ydb-short-name }} через SQLAlchemy выполнение повторных попыток происходит под капотом и не регулируется снаружи.
+
+  {% endcut %}
+
+  В {{ ydb-short-name }} Python SDK выполнение повторных попыток реализовано в `QuerySessionPool` с использованием класса `RetrySettings` для настройки параметров повторов. Класс `RetrySettings` поддерживает следующие опции:
+
+  * `max_retries` - максимальное количество повторных попыток (по умолчанию 10)
+  * `idempotent` - признак идемпотентности операции. Идемпотентные операции повторяются для более широкого списка ошибок (по умолчанию False)
+  * `backoff_ceiling`, `backoff_slot_duration` - параметры алгоритма экспоненциальной задержки
+  * `fast_backoff_settings`, `slow_backoff_settings` - настройки быстрых и медленных повторов
+
+  Для выполнения запросов с повторными попытками `QuerySessionPool` предоставляет методы `retry_operation_sync` и `execute_with_retries`. Метод `execute_with_retries` предназначен для разовых запросов с неявным режимом транзакции (implicit). Для остальных случаев (явные транзакции, несколько операций в одной транзакции) используйте `retry_operation_sync`.
+
+  {% cut "Пример кода, использующего execute_with_retries:" %}
+
+  {% cut "asyncio" %}
+
+  ```python
+  import ydb
+
+  async def execute_query(pool: ydb.aio.QuerySessionPool):
+      result_sets = await pool.execute_with_retries(
+          "SELECT series_id, title FROM series WHERE series_id = 1;",
+          retry_settings=ydb.RetrySettings(idempotent=True),
+      )
+      # ...
+  ```
+
+  {% endcut %}
+
+  ```python
+  import ydb
+
+  def execute_query(pool: ydb.QuerySessionPool):
+      result_sets = pool.execute_with_retries(
+          "SELECT series_id, title FROM series WHERE series_id = 1;",
+          retry_settings=ydb.RetrySettings(idempotent=True),
+      )
+      # ...
+  ```
+
+  {% endcut %}
+
+  {% cut "Пример кода, использующего retry_operation_sync:" %}
+
+  {% cut "asyncio" %}
+
+  ```python
+  import ydb
+
+  async def execute_query(pool: ydb.aio.QuerySessionPool):
+      async def callee(session):
+          async with session.transaction(tx_mode=ydb.QuerySerializableReadWrite()) as tx:
+              async with await tx.execute("SELECT 1", commit_tx=True) as result_sets:
+                  pass
+
+      await pool.retry_operation_async(
+          callee,
+          retry_settings=ydb.RetrySettings(max_retries=20, idempotent=True),
+      )
+      # ...
+  ```
+
+  {% endcut %}
+
+  ```python
+  import ydb
+
+  def execute_query(pool: ydb.QuerySessionPool):
+      def callee(session: ydb.QuerySession):
+            with session.transaction().execute(
+                "SELECT 1",
+                commit_tx=True,
+            ) as result_sets:
+                pass
+
+      result = pool.retry_operation_sync(
+          callee,
+          retry_settings=ydb.RetrySettings(max_retries=20, idempotent=True),
+      )
+      # ...
+  ```
+
+  {% endcut %}
 
 {% endlist %}

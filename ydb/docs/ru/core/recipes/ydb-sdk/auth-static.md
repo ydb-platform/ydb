@@ -85,11 +85,34 @@
 
 - Python
 
-  {% include [auth-static](../../_includes/python/auth-static.md) %}
+  {% cut "sqlalchemy" %}
 
-- Python (asyncio)
+  ```python
+  import os
+  import sqlalchemy as sa
+
+  engine = sa.create_engine(
+      "yql+ydb://localhost:2136/local",
+      connect_args={
+          "credentials": {
+              "username": os.environ["YDB_USER"],
+              "password": os.environ["YDB_PASSWORD"]
+          }
+      }
+  )
+  with engine.connect() as connection:
+      result = connection.execute(sa.text("SELECT 1"))
+  ```
+
+  {% endcut %}
+
+  {% cut "asyncio" %}
 
   {% include [auth-static](../../_includes/python/async/auth-static.md) %}
+
+  {% endcut %}
+
+  {% include [auth-static](../../_includes/python/auth-static.md) %}
 
 - C# (.NET)
 

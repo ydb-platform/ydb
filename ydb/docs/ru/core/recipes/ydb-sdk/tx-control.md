@@ -117,13 +117,26 @@
 
 - Python
 
-  {% cut "dbapi" %}
+  {% cut "sqlalchemy" %}
 
   ```python
-  import ydb_dbapi as dbapi
+  import sqlalchemy as sa
+  from ydb_sqlalchemy import IsolationLevel
 
-  with dbapi.connect(host="localhost", port="2136", database="/local") as connection:
-      connection.set_isolation_level(dbapi.IsolationLevel.AUTOCOMMIT)
+  engine = sa.create_engine("yql+ydb://localhost:2136/local")
+  with engine.connect().execution_options(isolation_level=IsolationLevel.AUTOCOMMIT) as connection:
+      result = connection.execute(sa.text("SELECT 1"))
+  ```
+
+  {% endcut %}
+
+  {% cut "asyncio" %}
+
+  ```python
+  import ydb
+
+  async def execute_query(pool: ydb.aio.QuerySessionPool):
+      await pool.execute_with_retries("SELECT 1")
   ```
 
   {% endcut %}
@@ -352,13 +365,31 @@
 
 - Python
 
-  {% cut "dbapi" %}
+  {% cut "sqlalchemy" %}
 
   ```python
-  import ydb_dbapi as dbapi
+  import sqlalchemy as sa
+  from ydb_sqlalchemy import IsolationLevel
 
-  with dbapi.connect(host="localhost", port="2136", database="/local") as connection:
-      connection.set_isolation_level(dbapi.IsolationLevel.SERIALIZABLE)
+  engine = sa.create_engine("yql+ydb://localhost:2136/local")
+  with engine.connect().execution_options(isolation_level=IsolationLevel.SERIALIZABLE) as connection:
+      result = connection.execute(sa.text("SELECT 1"))
+  ```
+
+  {% endcut %}
+
+  {% cut "asyncio" %}
+
+  ```python
+  import ydb
+
+  async def execute_query(pool: ydb.aio.QuerySessionPool):
+      async def callee(session):
+          async with session.transaction(tx_mode=ydb.QuerySerializableReadWrite()) as tx:
+              async with await tx.execute("SELECT 1", commit_tx=True) as result_sets:
+                  pass
+
+      await pool.retry_operation_async(callee)
   ```
 
   {% endcut %}
@@ -662,13 +693,31 @@
 
 - Python
 
-  {% cut "dbapi" %}
+  {% cut "sqlalchemy" %}
 
   ```python
-  import ydb_dbapi as dbapi
+  import sqlalchemy as sa
+  from ydb_sqlalchemy import IsolationLevel
 
-  with dbapi.connect(host="localhost", port="2136", database="/local") as connection:
-      connection.set_isolation_level(dbapi.IsolationLevel.ONLINE_READONLY)
+  engine = sa.create_engine("yql+ydb://localhost:2136/local")
+  with engine.connect().execution_options(isolation_level=IsolationLevel.ONLINE_READONLY) as connection:
+      result = connection.execute(sa.text("SELECT 1"))
+  ```
+
+  {% endcut %}
+
+  {% cut "asyncio" %}
+
+  ```python
+  import ydb
+
+  async def execute_query(pool: ydb.aio.QuerySessionPool):
+      async def callee(session):
+          async with session.transaction(tx_mode=ydb.QueryOnlineReadOnly()) as tx:
+              async with await tx.execute("SELECT 1", commit_tx=True) as result_sets:
+                  pass
+
+      await pool.retry_operation_async(callee)
   ```
 
   {% endcut %}
@@ -901,13 +950,31 @@
 
 - Python
 
-  {% cut "dbapi" %}
+  {% cut "sqlalchemy" %}
 
   ```python
-  import ydb_dbapi as dbapi
+  import sqlalchemy as sa
+  from ydb_sqlalchemy import IsolationLevel
 
-  with dbapi.connect(host="localhost", port="2136", database="/local") as connection:
-      connection.set_isolation_level(dbapi.IsolationLevel.STALE_READONLY)
+  engine = sa.create_engine("yql+ydb://localhost:2136/local")
+  with engine.connect().execution_options(isolation_level=IsolationLevel.STALE_READONLY) as connection:
+      result = connection.execute(sa.text("SELECT 1"))
+  ```
+
+  {% endcut %}
+
+  {% cut "asyncio" %}
+
+  ```python
+  import ydb
+
+  async def execute_query(pool: ydb.aio.QuerySessionPool):
+      async def callee(session):
+          async with session.transaction(tx_mode=ydb.QueryStaleReadOnly()) as tx:
+              async with await tx.execute("SELECT 1", commit_tx=True) as result_sets:
+                  pass
+
+      await pool.retry_operation_async(callee)
   ```
 
   {% endcut %}
@@ -1130,13 +1197,31 @@
 
 - Python
 
-  {% cut "dbapi" %}
+  {% cut "sqlalchemy" %}
 
   ```python
-  import ydb_dbapi as dbapi
+  import sqlalchemy as sa
+  from ydb_sqlalchemy import IsolationLevel
 
-  with dbapi.connect(host="localhost", port="2136", database="/local") as connection:
-      connection.set_isolation_level(dbapi.IsolationLevel.SNAPSHOT_READONLY)
+  engine = sa.create_engine("yql+ydb://localhost:2136/local")
+  with engine.connect().execution_options(isolation_level=IsolationLevel.SNAPSHOT_READONLY) as connection:
+      result = connection.execute(sa.text("SELECT 1"))
+  ```
+
+  {% endcut %}
+
+  {% cut "asyncio" %}
+
+  ```python
+  import ydb
+
+  async def execute_query(pool: ydb.aio.QuerySessionPool):
+      async def callee(session):
+          async with session.transaction(tx_mode=ydb.QuerySnapshotReadOnly()) as tx:
+              async with await tx.execute("SELECT 1", commit_tx=True) as result_sets:
+                  pass
+
+      await pool.retry_operation_async(callee)
   ```
 
   {% endcut %}
@@ -1362,13 +1447,31 @@
 
 - Python
 
-  {% cut "dbapi" %}
+  {% cut "sqlalchemy" %}
 
   ```python
-  import ydb_dbapi as dbapi
+  import sqlalchemy as sa
+  from ydb_sqlalchemy import IsolationLevel
 
-  with dbapi.connect(host="localhost", port="2136", database="/local") as connection:
-      connection.set_isolation_level(dbapi.IsolationLevel.SNAPSHOT_READWRITE)
+  engine = sa.create_engine("yql+ydb://localhost:2136/local")
+  with engine.connect().execution_options(isolation_level=IsolationLevel.SNAPSHOT_READWRITE) as connection:
+      result = connection.execute(sa.text("SELECT 1"))
+  ```
+
+  {% endcut %}
+
+  {% cut "asyncio" %}
+
+  ```python
+  import ydb
+
+  async def execute_query(pool: ydb.aio.QuerySessionPool):
+      async def callee(session):
+          async with session.transaction(tx_mode=ydb.QuerySnapshotReadWrite()) as tx:
+              async with await tx.execute("SELECT 1", commit_tx=True) as result_sets:
+                  pass
+
+      await pool.retry_operation_async(callee)
   ```
 
   {% endcut %}

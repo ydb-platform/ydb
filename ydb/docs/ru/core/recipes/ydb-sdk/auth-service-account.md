@@ -123,11 +123,34 @@
 
 - Python
 
-  {% include [auth-sa-data](../../_includes/python/auth-service-account.md) %}
+  {% cut "sqlalchemy" %}
 
-- Python (asyncio)
+  ```python
+  import os
+  import sqlalchemy as sa
+  import ydb.iam
+
+  engine = sa.create_engine(
+      "yql+ydb://localhost:2136/local",
+      connect_args={
+          "credentials": ydb.iam.ServiceAccountCredentials.from_file(
+              os.environ["YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"]
+          )
+      }
+  )
+  with engine.connect() as connection:
+      result = connection.execute(sa.text("SELECT 1"))
+  ```
+
+  {% endcut %}
+
+  {% cut "asyncio" %}
 
   {% include [auth-sa-data](../../_includes/python/async/auth-service-account.md) %}
+
+  {% endcut %}
+
+  {% include [auth-sa-data](../../_includes/python/auth-service-account.md) %}
 
 - C# (.NET)
 

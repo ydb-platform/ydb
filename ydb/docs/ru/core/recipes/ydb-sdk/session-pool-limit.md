@@ -90,5 +90,46 @@
     spring.datasource.hikari.maximum-pool-size=100 # maximum size of JDBC connections
   ```
 
+- Python
+
+  {% cut "sqlalchemy" %}
+
+  Установка размера пула на данный момент не поддержана.
+
+  {% endcut %}
+
+  {% cut "asyncio" %}
+
+  ```python
+  import os
+  import ydb
+  import asyncio
+
+  async def ydb_init():
+      async with ydb.aio.Driver(
+          connection_string=os.environ["YDB_CONNECTION_STRING"],
+          credentials=ydb.credentials_from_env_variables(),
+      ) as driver:
+          await driver.wait()
+          async with ydb.aio.QuerySessionPool(driver, size=500) as pool:
+              # ...
+
+  asyncio.run(ydb_init())
+  ```
+
+  {% endcut %}
+
+  ```python
+  import os
+  import ydb
+
+  with ydb.Driver(
+      connection_string=os.environ["YDB_CONNECTION_STRING"],
+      credentials=ydb.credentials_from_env_variables(),
+  ) as driver:
+      driver.wait(timeout=5)
+      with ydb.QuerySessionPool(driver, size=500) as pool:
+          # ...
+  ```
 
 {% endlist %}

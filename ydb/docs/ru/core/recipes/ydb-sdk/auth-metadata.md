@@ -113,11 +113,31 @@
 
 - Python
 
-  {% include [auth-metadata](../../_includes/python/auth-metadata.md) %}
+  {% cut "sqlalchemy" %}
 
-- Python (asyncio)
+  ```python
+  import sqlalchemy as sa
+  import ydb.iam
+
+  engine = sa.create_engine(
+      "yql+ydb://localhost:2136/local",
+      connect_args={
+          "credentials": ydb.iam.MetadataUrlCredentials()
+      }
+  )
+  with engine.connect() as connection:
+      result = connection.execute(sa.text("SELECT 1"))
+  ```
+
+  {% endcut %}
+
+  {% cut "asyncio" %}
 
   {% include [auth-metadata](../../_includes/python/async/auth-metadata.md) %}
+
+  {% endcut %}
+
+  {% include [auth-metadata](../../_includes/python/auth-metadata.md) %}
 
 - C# (.NET)
 

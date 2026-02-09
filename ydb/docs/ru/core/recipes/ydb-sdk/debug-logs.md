@@ -374,4 +374,14 @@
   $ydb = new \YdbPlatform\Ydb\Ydb($config);
   ```
 
+- Python
+
+  Python SDK использует стандартную библиотеку для логирования - `logging`. Для включения определенного режима логирования:
+
+  ```python
+  import logging
+
+  logging.getLogger('ydb').setLevel(logging.DEBUG)
+  ```
+
 {% endlist %}

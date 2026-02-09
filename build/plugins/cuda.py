@@ -20,6 +20,13 @@ def oncuda_srcs(unit, *args):
     architecture_names = (unit.get("CUDA_ARCHITECTURES") or DEFAULT_CUDA_ARCHITECTURES).split(":")
     architectures = [name.split('_')[1] for name in architecture_names]
 
+    cflags = [
+        "-D__NV_LEGACY_LAUNCH",
+        "-Wno-unused-function",
+        "-Wno-unused-parameter",
+        "-Wno-deprecated-literal-operator",
+    ]
+
     for cu in args:
         name, _ = os.path.splitext(cu)
         images = []
@@ -35,4 +42,4 @@ def oncuda_srcs(unit, *args):
 
         unit.on_cuda_compile_host([cu, architectures[-1]])
 
-        unit.onsrc([f"{name}.cudafe1.cpp", "-D__NV_LEGACY_LAUNCH"])
+        unit.onsrc([f"{name}.cudafe1.cpp", *cflags])

@@ -400,6 +400,7 @@ IF (OS_LINUX OR OS_DARWIN)
 ENDIF()
 
 SUPPRESSIONS(
+    lsan.supp
     tsan.supp
 )
 

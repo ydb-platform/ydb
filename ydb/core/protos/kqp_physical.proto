@@ -422,7 +422,7 @@ message TKqpFullTextSource {
 
     TKqpPhyValue K1Factor = 10;
     TKqpPhyValue BFactor = 11;
-    TKqpPhyValue QueryMode = 12;
+    TKqpPhyValue DefaultOperator = 12;
     TKqpPhyValue MinimumShouldMatch = 13;
 }
 

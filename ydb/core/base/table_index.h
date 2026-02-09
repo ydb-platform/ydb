@@ -126,14 +126,14 @@ namespace NFulltext {
 
     inline constexpr const char* FullTextRelevanceColumn = "__ydb_full_text_relevance";
 
-    enum class EQueryMode {
+    enum class EDefaultOperator {
         Invalid,
         And,
         Or
     };
 
-    EQueryMode QueryModeFromString(const TString& mode, TString& explain);
-    ui32 MinimumShouldMatchFromString(i32 wordsCount, EQueryMode queryMode, const TString& minimumShouldMatch, TString& explain);
+    EDefaultOperator DefaultOperatorFromString(const TString& mode, TString& explain);
+    ui32 MinimumShouldMatchFromString(i32 wordsCount, EDefaultOperator defaultOperator, const TString& minimumShouldMatch, TString& explain);
 }
 
 TString ToShortDebugString(const NKikimrTxDataShard::TEvReshuffleKMeansRequest& record);

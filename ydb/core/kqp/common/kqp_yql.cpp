@@ -223,9 +223,9 @@ TKqpReadTableFullTextIndexSettings TKqpReadTableFullTextIndexSettings::Parse(con
         } else if (name == TKqpReadTableFullTextIndexSettings::K1FactorSettingName) {
             YQL_ENSURE(tuple.Value().IsValid());
             settings.K1Factor = tuple.Value().Cast().Ptr();
-        } else if (name == TKqpReadTableFullTextIndexSettings::QueryModeSettingName) {
+        } else if (name == TKqpReadTableFullTextIndexSettings::DefaultOperatorSettingName) {
             YQL_ENSURE(tuple.Value().IsValid());
-            settings.QueryMode = tuple.Value().Cast().Ptr();
+            settings.DefaultOperator = tuple.Value().Cast().Ptr();
         } else if (name == TKqpReadTableFullTextIndexSettings::MinimumShouldMatchSettingName) {
             YQL_ENSURE(tuple.Value().IsValid());
             settings.MinimumShouldMatch = tuple.Value().Cast().Ptr();
@@ -269,10 +269,10 @@ NNodes::TCoNameValueTupleList TKqpReadTableFullTextIndexSettings::BuildNode(TExp
             .Done());
     }
 
-    if (QueryMode) {
+    if (DefaultOperator) {
         settings.emplace_back(Build<TCoNameValueTuple>(ctx, pos)
-            .Name().Build(QueryModeSettingName)
-            .Value(QueryMode)
+            .Name().Build(DefaultOperatorSettingName)
+            .Value(DefaultOperator)
             .Done());
     }
 

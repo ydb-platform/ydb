@@ -2470,12 +2470,12 @@ void TKqpTasksGraph::BuildFullTextScanTasksFromSource(TStageInfo& stageInfo, TQu
         }
     }
 
-    if (fullTextSource.HasQueryMode()) {
+    if (fullTextSource.HasDefaultOperator()) {
         auto value = ExtractPhyValue(
-            stageInfo, fullTextSource.GetQueryMode(),
+            stageInfo, fullTextSource.GetDefaultOperator(),
             TxAlloc->HolderFactory, TxAlloc->TypeEnv, NUdf::TUnboxedValuePod());
         if (value.HasValue()) {
-            settings->SetQueryMode(TString(value.AsStringRef()));
+            settings->SetDefaultOperator(TString(value.AsStringRef()));
         }
     }
 

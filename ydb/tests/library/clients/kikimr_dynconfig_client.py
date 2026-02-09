@@ -65,6 +65,11 @@ class DynConfigClient(object):
         request = dynamic_config_api.GetConfigRequest()
         return self.invoke(request, 'GetConfig')
 
+    def replace_config(self, config):
+        request = dynamic_config_api.ReplaceConfigRequest()
+        request.config = config
+        return self.invoke(request, 'ReplaceConfig')
+
     def get_configuration_version(self, list_nodes=False):
         request = dynamic_config_api.GetConfigurationVersionRequest(
             list_nodes=list_nodes

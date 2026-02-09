@@ -1,11 +1,10 @@
 #pragma once
 
-#include <ydb/library/actors/core/actor.h>
-#include <ydb/library/actors/wilson/wilson_span.h>
+#include <ydb/library/actors/util/rope.h>
+
+#include <ydb/core/nbs/cloud/blockstore/libs/service/request.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
-
-using namespace NActors;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -13,28 +12,22 @@ constexpr size_t BlockSize = 4096;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class IRequest {
+class IRequestHandler {
 public:
-    ui64 StartIndex;
-    NWilson::TSpan Span;
-    std::unordered_map<ui64, NWilson::TSpan> ChildSpanByRequestId;
+    IRequestHandler() = default;
 
-    IRequest(ui64 startIndex, NWilson::TSpan span);
+    virtual ~IRequestHandler() = default;
 
-    virtual ~IRequest() = default;
+    [[nodiscard]] virtual ui64 GetStartIndex() const = 0;
 
-    [[nodiscard]] virtual ui64 GetDataSize() const = 0;
+    [[nodiscard]] virtual ui64 GetStartOffset() const = 0;
 
-    [[nodiscard]] virtual bool IsCompleted(ui64 requestId) = 0;
+    [[nodiscard]] virtual ui64 GetSize() const = 0;
 
-    [[nodiscard]] ui64 GetStartOffset() const;
-
-    void ChildSpanEndOk(ui64 childRequestId);
-
-    void ChildSpanEndError(ui64 childRequestId, const TString& errorMessage);
+    virtual bool IsCompleted(ui64 requestId) = 0;
 };
 
-class TWriteRequest : public IRequest {
+class TWriteRequestHandler : public IRequestHandler {
 public:
     struct TPersistentBufferWriteMeta {
         ui8 Index;
@@ -46,94 +39,107 @@ public:
         {}
     };
 
-    TWriteRequest(
-        TActorId sender,
-        ui64 cookie,
-        ui64 startIndex,
-        TString data,
-        NWilson::TSpan span);
+    explicit TWriteRequestHandler(std::shared_ptr<TWriteBlocksLocalRequest> request);
 
-    ~TWriteRequest() override = default;
+    ~TWriteRequestHandler() override = default;
 
-    [[nodiscard]] TActorId GetSender() const;
+    [[nodiscard]] ui64 GetStartIndex() const override;
 
-    [[nodiscard]] ui64 GetCookie() const;
+    [[nodiscard]] ui64 GetStartOffset() const override;
 
-    [[nodiscard]] const TString& GetData() const;
-
-    ui64 GetDataSize() const override;
-
-    void OnWriteRequested(
-        ui64 requestId, ui8 persistentBufferIndex, ui64 lsn, NWilson::TSpan span);
+    [[nodiscard]] ui64 GetSize() const override;
 
     bool IsCompleted(ui64 requestId) override;
 
+    void OnWriteRequested(
+        ui64 requestId, ui8 persistentBufferIndex, ui64 lsn);
+
     [[nodiscard]] TVector<TPersistentBufferWriteMeta> GetWritesMeta() const;
 
+    [[nodiscard]] NThreading::TFuture<TWriteBlocksLocalResponse> GetFuture() const;
+
+    [[nodiscard]] TGuardedSgList GetData();
+
 private:
-    TActorId Sender;
-    ui64 Cookie;
-    const TString Data;
+    std::shared_ptr<TWriteBlocksLocalRequest> Request;
+    NThreading::TPromise<TWriteBlocksLocalResponse> Future;
     const ui8 RequiredAckCount = 3;
     ui8 AckCount = 0;
     ui8 AcksMask = 0;
     std::unordered_map<ui64, TPersistentBufferWriteMeta> WriteMetaByRequestId;
 };
 
-class TFlushRequest : public IRequest {
+class TFlushRequestHandler : public IRequestHandler {
 public:
-    TFlushRequest(
-        ui64 startIndex,
-        bool isErase,
-        ui8 persistentBufferIndex,
-        ui64 lsn,
-        NWilson::TSpan span);
+    TFlushRequestHandler(ui64 startIndex, ui8 persistentBufferIndex, ui64 lsn);
 
-    ~TFlushRequest() override = default;
+    ~TFlushRequestHandler() override = default;
 
-    ui64 GetDataSize() const override;
+    [[nodiscard]] ui64 GetStartIndex() const override;
 
-    bool IsCompleted(ui64 requestId) override;
+    [[nodiscard]] ui64 GetStartOffset() const override;
 
-    [[nodiscard]] bool GetIsErase() const;
+    [[nodiscard]] ui64 GetSize() const override;
 
-    [[nodiscard]] ui8 GetPersistentBufferIndex() const;
+    [[nodiscard]] bool IsCompleted(ui64 requestId) override;
 
     [[nodiscard]] ui64 GetLsn() const;
 
-    void OnFlushRequested(ui64 requestId, NWilson::TSpan span);
+    [[nodiscard]] ui8 GetPersistentBufferIndex() const;
 
 private:
-    bool IsErase;
+    ui64 StartIndex;
     ui8 PersistentBufferIndex;
     ui64 Lsn;
 };
 
-class TReadRequest : public IRequest {
+class TEraseRequestHandler : public IRequestHandler {
 public:
-    TReadRequest(
-        TActorId sender,
-        ui64 cookie,
-        ui64 startIndex,
-        ui64 blocksCount,
-        NWilson::TSpan span);
+    TEraseRequestHandler(ui64 startIndex, ui8 persistentBufferIndex, ui64 lsn);
 
-    ~TReadRequest() override = default;
+    ~TEraseRequestHandler() override = default;
 
-    [[nodiscard]] TActorId GetSender() const;
+    [[nodiscard]] ui64 GetStartIndex() const override;
 
-    [[nodiscard]] ui64 GetCookie() const;
+    [[nodiscard]] ui64 GetStartOffset() const override;
 
-    ui64 GetDataSize() const override;
+    [[nodiscard]] ui64 GetSize() const override;
+
+    [[nodiscard]] bool IsCompleted(ui64 requestId) override;
+
+    [[nodiscard]] ui64 GetLsn() const;
+
+    [[nodiscard]] ui8 GetPersistentBufferIndex() const;
+
+private:
+    ui64 StartIndex;
+    ui8 PersistentBufferIndex;
+    ui64 Lsn;
+};
+
+
+class TReadRequestHandler : public IRequestHandler {
+public:
+    explicit TReadRequestHandler(std::shared_ptr<TReadBlocksLocalRequest> request);
+
+    ~TReadRequestHandler() override = default;
+
+    [[nodiscard]] ui64 GetStartIndex() const override;
+
+    [[nodiscard]] ui64 GetStartOffset() const override;
+
+    [[nodiscard]] ui64 GetSize() const override;
 
     bool IsCompleted(ui64 requestId) override;
 
-    void OnReadRequested(ui64 requestId, NWilson::TSpan span);
+    [[nodiscard]] NThreading::TFuture<TReadBlocksLocalResponse> GetFuture() const;
+
+    [[nodiscard]] TGuardedSgList GetData();
+
 
 private:
-    TActorId Sender;
-    ui64 Cookie;
-    ui64 BlocksCount;
+    std::shared_ptr<TReadBlocksLocalRequest> Request;
+    NThreading::TPromise<TReadBlocksLocalResponse> Future;
 };
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

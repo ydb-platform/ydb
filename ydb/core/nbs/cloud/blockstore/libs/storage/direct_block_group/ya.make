@@ -7,8 +7,8 @@ SRCS(
 
 PEERDIR(
     ydb/core/mind/bscontroller
-    ydb/core/nbs/cloud/blockstore/libs/storage/api
-    ydb/library/actors/core
+
+    ydb/core/nbs/cloud/blockstore/libs/service/fast_path_service/storage_transport
 )
 
 END()

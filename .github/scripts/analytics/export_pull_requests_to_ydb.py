@@ -21,7 +21,6 @@ from ydb_wrapper import YDBWrapper
 # Configuration
 ORG_NAME = 'ydb-platform'
 REPO_NAME = 'ydb'
-PROJECT_ID = None  # Optional: set to project number to fetch project V2 fields for PRs
 
 
 def run_query(query: str, variables: Optional[Dict] = None) -> Dict[str, Any]:
@@ -83,9 +82,13 @@ def fetch_repository_pull_requests(
     org_name: str,
     repo_name: str,
     updated_since: Optional[datetime] = None,
+    updated_until: Optional[datetime] = None,
 ) -> List[Dict[str, Any]]:
-    """Fetch pull requests from repository. If updated_since is set, stop when all remaining PRs are older."""
-    if updated_since:
+    """Fetch pull requests from repository. If updated_since is set, stop when all remaining PRs are older.
+    If updated_until is set, include only PRs with updated_at < updated_until."""
+    if updated_since and updated_until:
+        print(f"Fetching PRs updated in [{updated_since.date().isoformat()}, {updated_until.date().isoformat()}) from {org_name}/{repo_name}...")
+    elif updated_since:
         print(f"Fetching PRs updated since {updated_since.isoformat()} from {org_name}/{repo_name}...")
     else:
         print(f"Fetching all PRs from {org_name}/{repo_name}...")
@@ -129,6 +132,35 @@ def fetch_repository_pull_requests(
               headRefName
               baseRefName
               repository { name url }
+              projectItems(first: 10) {
+                nodes {
+                  project { title number }
+                  fieldValues(first: 20) {
+                    nodes {
+                      ... on ProjectV2ItemFieldSingleSelectValue {
+                        field { ... on ProjectV2SingleSelectField { name } }
+                        name
+                      }
+                      ... on ProjectV2ItemFieldTextValue {
+                        field { ... on ProjectV2Field { name } }
+                        text
+                      }
+                      ... on ProjectV2ItemFieldNumberValue {
+                        field { ... on ProjectV2Field { name } }
+                        number
+                      }
+                      ... on ProjectV2ItemFieldDateValue {
+                        field { ... on ProjectV2Field { name } }
+                        date
+                      }
+                      ... on ProjectV2ItemFieldIterationValue {
+                        field { ... on ProjectV2IterationField { name } }
+                        title
+                      }
+                    }
+                  }
+                }
+              }
             }
             pageInfo { hasNextPage endCursor }
           }
@@ -148,17 +180,31 @@ def fetch_repository_pull_requests(
         page_info = conn.get('pageInfo') or {}
 
         for node in nodes:
-            if updated_since:
+            if updated_since is not None:
                 updated_at = parse_datetime(node.get('updatedAt'))
                 if updated_at is None or updated_at < updated_since:
-                    # Rest of page and all next pages are older; include only PRs we already have
+                    # Rest of page and all next pages are older; stop
                     has_next_page = False
                     break
+                if updated_until is not None and updated_at >= updated_until:
+                    # Skip PRs newer than window (e.g. next month)
+                    continue
             prs.append(node)
         else:
             # No break: full page was within range
             total = len(prs)
-            print(f"Fetched {len(nodes)} PRs (total: {total})")
+            # Вычисляем диапазон дат для собранных PR
+            if prs:
+                dates = [parse_datetime(pr.get('updatedAt')) for pr in prs if pr.get('updatedAt')]
+                dates = [d for d in dates if d is not None]
+                if dates:
+                    min_date = min(dates).date().isoformat()
+                    max_date = max(dates).date().isoformat()
+                    print(f"Fetched {len(nodes)} PRs (total: {total}, date range: {min_date} to {max_date})")
+                else:
+                    print(f"Fetched {len(nodes)} PRs (total: {total})")
+            else:
+                print(f"Fetched {len(nodes)} PRs (total: {total})")
             has_next_page = page_info.get('hasNextPage', False)
             end_cursor = f'"{page_info["endCursor"]}"' if page_info.get('endCursor') else "null"
             if has_next_page:
@@ -171,110 +217,59 @@ def fetch_repository_pull_requests(
     return prs
 
 
-def get_project_fields_for_pull_requests(
-    org_name: str,
-    project_id: str,
-    pr_numbers: List[int],
-) -> Dict[int, Dict[str, Any]]:
-    """Get project V2 field values for given PR numbers (content type PullRequest)."""
-    if not project_id:
-        return {}
-    print(f"Fetching project fields for {len(pr_numbers)} PRs from project {project_id}...")
-    start_time = time.time()
-    project_fields: Dict[int, Dict[str, Any]] = {}
-    pr_set = set(pr_numbers)
-    has_next_page = True
-    end_cursor = "null"
-
-    query_template = """
-    {
-      organization(login: "%s") {
-        projectV2(number: %s) {
-          items(first: 1000, after: %s) {
-            nodes {
-              id
-              content {
-                ... on PullRequest { number }
-              }
-              fieldValues(first: 20) {
-                nodes {
-                  ... on ProjectV2ItemFieldSingleSelectValue {
-                    field { ... on ProjectV2SingleSelectField { name } }
-                    name
-                  }
-                  ... on ProjectV2ItemFieldTextValue {
-                    field { ... on ProjectV2Field { name } }
-                    text
-                  }
-                  ... on ProjectV2ItemFieldNumberValue {
-                    field { ... on ProjectV2Field { name } }
-                    number
-                  }
-                  ... on ProjectV2ItemFieldDateValue {
-                    field { ... on ProjectV2Field { name } }
-                    date
-                  }
-                }
-              }
-            }
-            pageInfo { hasNextPage endCursor }
-          }
-        }
-      }
-    }
+def _extract_project_fields(pr_node: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+    """Extract project fields from PR's projectItems.
+    
+    Returns dict: {project_title: {field_name: value, ...}, ...}
     """
-
-    while has_next_page:
-        q = query_template % (org_name, project_id, end_cursor)
-        result = run_query(q)
-        if not result or 'data' not in result:
-            break
-        items = result['data']['organization']['projectV2']['items']
-        nodes = items.get('nodes') or []
-        page_info = items.get('pageInfo') or {}
-        for item in nodes:
-            content = item.get('content')
-            if not content or content.get('number') not in pr_set:
+    project_items = pr_node.get("projectItems", {}).get("nodes") or []
+    result: Dict[str, Dict[str, Any]] = {}
+    
+    for item in project_items:
+        project = item.get("project") or {}
+        project_title = project.get("title")
+        if not project_title:
+            continue
+        
+        fields: Dict[str, Any] = {}
+        for fv in (item.get("fieldValues") or {}).get("nodes") or []:
+            field_info = fv.get("field") or {}
+            field_name = field_info.get("name")
+            if not field_name:
                 continue
-            pr_num = content['number']
-            fields: Dict[str, Any] = {}
-            for fv in item.get('fieldValues', {}).get('nodes', []):
-                f = (fv.get('field') or {}).get('name')
-                if not f:
-                    continue
-                key = f.lower()
-                if 'name' in fv:
-                    fields[key] = fv.get('name')
-                elif 'text' in fv:
-                    fields[key] = fv.get('text')
-                elif 'number' in fv:
-                    fields[key] = fv.get('number')
-                elif 'date' in fv:
-                    fields[key] = fv.get('date')
-            project_fields[pr_num] = fields
-        has_next_page = page_info.get('hasNextPage', False)
-        end_cursor = f'"{page_info["endCursor"]}"' if page_info.get('endCursor') else "null"
-
-    elapsed = time.time() - start_time
-    print(f"Fetched project fields for {len(project_fields)} PRs (took {elapsed:.2f}s)")
-    return project_fields
+            
+            # Extract value based on field type
+            if "name" in fv:  # SingleSelectValue
+                fields[field_name] = fv["name"]
+            elif "text" in fv:  # TextValue
+                fields[field_name] = fv["text"]
+            elif "number" in fv:  # NumberValue
+                fields[field_name] = fv["number"]
+            elif "date" in fv:  # DateValue
+                fields[field_name] = fv["date"]
+            elif "title" in fv:  # IterationValue
+                fields[field_name] = fv["title"]
+        
+        if fields:
+            result[project_title] = fields
+    
+    return result
 
 
 def transform_pull_requests_for_ydb(
     pr_nodes: List[Dict[str, Any]],
-    project_fields: Optional[Dict[int, Dict[str, Any]]] = None,
+    project_fields: Optional[Dict[int, Dict[str, Any]]] = None,  # deprecated, kept for compatibility
 ) -> List[Dict[str, Any]]:
     """Transform GraphQL PR nodes into YDB row dicts."""
     print("Transforming PRs for YDB...")
     start_time = time.time()
-    if project_fields is None:
-        project_fields = {}
     rows: List[Dict[str, Any]] = []
     now = datetime.now(timezone.utc)
 
     for pr in pr_nodes:
         pr_number = pr.get('number')
-        pr_project = project_fields.get(pr_number, {}) if pr_number else {}
+        # Extract project fields from projectItems in the PR itself
+        pr_project = _extract_project_fields(pr)
         author = pr.get('author') or {}
         merged_by = pr.get('mergedBy') or {}
         assignees = [
@@ -433,6 +428,16 @@ def main() -> int:
         default=None,
         help="Export PRs updated in the last N days (e.g. --days 60). Default: 1 (last 24 hours).",
     )
+    parser.add_argument(
+        "--since-date",
+        metavar="YYYY-MM-DD",
+        help="Export PRs updated on or after this date (UTC). Use with --until-date for a range.",
+    )
+    parser.add_argument(
+        "--until-date",
+        metavar="YYYY-MM-DD",
+        help="Export PRs updated before this date (UTC). Use with --since-date for a range.",
+    )
     args = parser.parse_args()
 
     print("Starting GitHub pull requests export to YDB")
@@ -454,8 +459,24 @@ def main() -> int:
 
             if args.full:
                 updated_since = None
+                updated_until = None
                 print("Mode: full export (all PRs)")
+            elif args.since_date or args.until_date:
+                if not args.since_date or not args.until_date:
+                    print("Error: --since-date and --until-date must be used together")
+                    return 1
+                try:
+                    updated_since = datetime.fromisoformat(args.since_date + "T00:00:00+00:00")
+                    updated_until = datetime.fromisoformat(args.until_date + "T00:00:00+00:00")
+                except ValueError as e:
+                    print(f"Error: invalid date format (use YYYY-MM-DD): {e}")
+                    return 1
+                if updated_since >= updated_until:
+                    print("Error: --since-date must be before --until-date")
+                    return 1
+                print(f"Mode: export PRs updated in [{args.since_date}, {args.until_date})")
             else:
+                updated_until = None
                 days = args.days if args.days is not None else 1
                 updated_since = datetime.now(timezone.utc) - timedelta(days=days)
                 if days == 1:
@@ -463,18 +484,17 @@ def main() -> int:
                 else:
                     print(f"Mode: export PRs updated in the last {days} days")
 
-            pr_nodes = fetch_repository_pull_requests(ORG_NAME, REPO_NAME, updated_since=updated_since)
+            pr_nodes = fetch_repository_pull_requests(
+                ORG_NAME, REPO_NAME,
+                updated_since=updated_since,
+                updated_until=updated_until,
+            )
             if not pr_nodes:
                 print("No PRs to export")
                 return 0
 
-            project_fields = {}
-            if PROJECT_ID:
-                pr_numbers = [p.get("number") for p in pr_nodes if p.get("number") is not None]
-                if pr_numbers:
-                    project_fields = get_project_fields_for_pull_requests(ORG_NAME, PROJECT_ID, pr_numbers)
-
-            rows = transform_pull_requests_for_ydb(pr_nodes, project_fields)
+            # Project fields are now fetched inline via projectItems in the PR query
+            rows = transform_pull_requests_for_ydb(pr_nodes)
             print(f"Uploading {len(rows)} PRs in batches of {batch_size}")
 
             column_types = (

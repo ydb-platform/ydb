@@ -1,3 +1,5 @@
+/* custom error: Unable to GROUP BY constant expression */
+
 $input = SELECT * FROM AS_TABLE([
     <|k: 1, v: 1|>, <|k: 2, v: 1|>,
     <|k: 1, v: 2|>, <|k: 2, v: 2|>,

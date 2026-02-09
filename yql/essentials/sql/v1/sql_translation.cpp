@@ -5198,6 +5198,15 @@ bool TSqlTranslation::DefineActionOrSubqueryStatement(const TRule_define_action_
 
 TNodePtr TSqlTranslation::IfStatement(const TRule_if_stmt& stmt) {
     bool isEvaluate = stmt.HasBlock1();
+
+    if (auto v = NYql::GetMaxLangVersion();
+        !isEvaluate && !IsBackwardCompatibleFeatureAvailable(v)) {
+        Ctx_.Error(GetPos(stmt.GetToken2()))
+            << "IF without EVALUATE "
+            << "is not available before version " << NYql::FormatLangVersion(v);
+        return {};
+    }
+
     TSqlExpression expr(Ctx_, Mode_);
     auto exprNode = Unwrap(expr.Build(stmt.GetRule_expr3()));
     if (!exprNode) {
@@ -5223,6 +5232,23 @@ TNodePtr TSqlTranslation::IfStatement(const TRule_if_stmt& stmt) {
 TNodePtr TSqlTranslation::ForStatement(const TRule_for_stmt& stmt) {
     bool isEvaluate = stmt.HasBlock1();
     bool isParallel = stmt.HasBlock2();
+
+    if (auto v = NYql::GetMaxLangVersion();
+        isParallel && !IsBackwardCompatibleFeatureAvailable(v)) {
+        Ctx_.Error(GetPos(stmt.GetBlock2().GetToken1()))
+            << "PARALLEL FOR "
+            << "is not available before version " << NYql::FormatLangVersion(v);
+        return {};
+    }
+
+    if (auto v = NYql::GetMaxLangVersion();
+        !isEvaluate && !IsBackwardCompatibleFeatureAvailable(v)) {
+        Ctx_.Error(GetPos(stmt.GetToken3()))
+            << "FOR without EVALUATE "
+            << "is not available before version " << NYql::FormatLangVersion(v);
+        return {};
+    }
+
     TSqlExpression expr(Ctx_, Mode_);
     TString itemArgName;
     if (!NamedNodeImpl(stmt.GetRule_bind_parameter4(), itemArgName, *this)) {

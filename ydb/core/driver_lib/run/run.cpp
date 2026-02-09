@@ -503,7 +503,7 @@ void TKikimrRunner::InitializeMonitoringLogin(const TKikimrRunConfig&)
         Monitoring->RegisterActorHandler({
             .Path = "/login",
             .Handler = MakeWebLoginServiceId(),
-            .UseAuth = false, // we don't require token for the login page - it's the page to get the token
+            .AuthMode = TMon::EAuthMode::Disabled, // we don't require token for the login page - it's the page to get the token
         });
         Monitoring->RegisterActorHandler({
             .Path = "/logout",

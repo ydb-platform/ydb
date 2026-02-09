@@ -125,6 +125,9 @@ def create_ydb_configurator(
     config_generator.yaml_config['grpc_config']['cert'] = certificates['server_cert']
     config_generator.yaml_config['grpc_config']['key'] = certificates['server_key']
 
+    config_generator.monitoring_tls_cert_path = certificates['server_cert']
+    config_generator.monitoring_tls_key_path = certificates['server_key']
+
     config_generator.yaml_config['domains_config']['security_config']['database_allowed_sids'] = ['database@builtin']
     config_generator.yaml_config['domains_config']['security_config']['viewer_allowed_sids'] = ['viewer@builtin']
     config_generator.yaml_config['domains_config']['security_config']['monitoring_allowed_sids'] = [
@@ -195,9 +198,9 @@ EXPECTED_RESULTS_WITH_ENFORCE_USER_TOKEN = {
         'user@builtin': 403,
         'database@builtin': 403,
         'viewer@builtin': 403,
-        'monitoring@builtin': 403,
-        'root@builtin': 403,
-    },  # TODO(yurikiselev): Fix 403 for admins (issue #33400)
+        'monitoring@builtin': 200,
+        'root@builtin': 200,
+    },
     '/ping': {
         None: 200,
         'user@builtin': 200,
@@ -215,10 +218,10 @@ EXPECTED_RESULTS_WITH_ENFORCE_USER_TOKEN = {
         'root@builtin': 200,
     },
     '/ver': {
-        None: 200,
-        'user@builtin': 200,
-        'database@builtin': 200,
-        'viewer@builtin': 200,
+        None: 401,
+        'user@builtin': 403,
+        'database@builtin': 403,
+        'viewer@builtin': 403,
         'monitoring@builtin': 200,
         'root@builtin': 200,
     },
@@ -239,10 +242,10 @@ EXPECTED_RESULTS_WITH_ENFORCE_USER_TOKEN = {
         'root@builtin': 200,
     },
     '/static/css/bootstrap.min.css': {
-        None: 200,
-        'user@builtin': 200,
-        'database@builtin': 200,
-        'viewer@builtin': 200,
+        None: 401,
+        'user@builtin': 403,
+        'database@builtin': 403,
+        'viewer@builtin': 403,
         'monitoring@builtin': 200,
         'root@builtin': 200,
     },
@@ -255,18 +258,18 @@ EXPECTED_RESULTS_WITH_ENFORCE_USER_TOKEN = {
         'root@builtin': 200,
     },
     '/internal': {
-        None: 200,
-        'user@builtin': 200,
-        'database@builtin': 200,
-        'viewer@builtin': 200,
+        None: 401,
+        'user@builtin': 403,
+        'database@builtin': 403,
+        'viewer@builtin': 403,
         'monitoring@builtin': 200,
         'root@builtin': 200,
     },
     '/actors/': {
-        None: 200,
-        'user@builtin': 200,
-        'database@builtin': 200,
-        'viewer@builtin': 200,
+        None: 401,
+        'user@builtin': 403,
+        'database@builtin': 403,
+        'viewer@builtin': 403,
         'monitoring@builtin': 200,
         'root@builtin': 200,
     },
@@ -323,9 +326,9 @@ EXPECTED_RESULTS_WITHOUT_ENFORCE_USER_TOKEN = {
     },
     '/ver': {
         None: 200,
-        'user@builtin': 200,
-        'database@builtin': 200,
-        'viewer@builtin': 200,
+        'user@builtin': 403,
+        'database@builtin': 403,
+        'viewer@builtin': 403,
         'monitoring@builtin': 200,
         'root@builtin': 200,
     },  # TODO(yurikiselev): Fix 403 here and in other endpoints for non-enforced token (issue #33354)
@@ -347,9 +350,9 @@ EXPECTED_RESULTS_WITHOUT_ENFORCE_USER_TOKEN = {
     },
     '/static/css/bootstrap.min.css': {
         None: 200,
-        'user@builtin': 200,
-        'database@builtin': 200,
-        'viewer@builtin': 200,
+        'user@builtin': 403,
+        'database@builtin': 403,
+        'viewer@builtin': 403,
         'monitoring@builtin': 200,
         'root@builtin': 200,
     },
@@ -363,17 +366,17 @@ EXPECTED_RESULTS_WITHOUT_ENFORCE_USER_TOKEN = {
     },
     '/internal': {
         None: 200,
-        'user@builtin': 200,
-        'database@builtin': 200,
-        'viewer@builtin': 200,
+        'user@builtin': 403,
+        'database@builtin': 403,
+        'viewer@builtin': 403,
         'monitoring@builtin': 200,
         'root@builtin': 200,
     },
     '/actors/': {
         None: 200,
-        'user@builtin': 200,
-        'database@builtin': 200,
-        'viewer@builtin': 200,
+        'user@builtin': 403,
+        'database@builtin': 403,
+        'viewer@builtin': 403,
         'monitoring@builtin': 200,
         'root@builtin': 200,
     },

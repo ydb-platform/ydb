@@ -206,7 +206,7 @@ IMonPage* TMon::RegisterActorPage(TIndexMonPage* index, const TString& relPath,
         .Index = index,
         .PreTag = preTag,
         .ActorId = actorId,
-        .UseAuth = useAuth,
+        .AuthMode = useAuth ? TMon::EAuthMode::Enforce : TMon::EAuthMode::Disabled,
         .SortPages = sortPages,
     });
 }
@@ -549,6 +549,11 @@ public:
 
     void Handle(NKikimr::NGRpcService::TEvRequestAuthAndCheckResult::TPtr& ev) {
         const NKikimr::NGRpcService::TEvRequestAuthAndCheckResult& result(*ev->Get());
+        if (ActorMonPage->AuthMode == TMon::EAuthMode::ExtractOnly) {
+            // Extract token but don't enforce authorization - let the handler decide
+            SendRequest(&result);
+            return;
+        }
         if (result.Status != Ydb::StatusIds::SUCCESS) {
             return ReplyErrorAndPassAway(result);
         }
@@ -1002,12 +1007,14 @@ public:
     TActorId TargetActorId;
     TMon::TRequestAuthorizer Authorizer;
     TVector<TString> AllowedSIDs;
+    TMon::EAuthMode AuthMode;
 
-    THttpMonAuthorizedActorRequest(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event, TActorId targetActorId, TMon::TRequestAuthorizer authorizer, const TVector<TString>& allowedSIDs)
+    THttpMonAuthorizedActorRequest(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event, TActorId targetActorId, TMon::TRequestAuthorizer authorizer, const TVector<TString>& allowedSIDs, TMon::EAuthMode authMode = TMon::EAuthMode::Enforce)
         : Event(std::move(event))
         , TargetActorId(targetActorId)
         , Authorizer(std::move(authorizer))
         , AllowedSIDs(allowedSIDs)
+        , AuthMode(authMode)
     {}
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -1015,7 +1022,7 @@ public:
     }
 
     void Bootstrap() {
-        if (Authorizer) {
+        if (AuthMode != TMon::EAuthMode::Disabled && Authorizer) {
             NActors::IEventHandle* handle = Authorizer(SelfId(), Event->Get()->Request.Get());
             if (handle) {
                 Send(handle);
@@ -1144,6 +1151,14 @@ public:
 
     void Handle(NKikimr::NGRpcService::TEvRequestAuthAndCheckResult::TPtr& ev) {
         const NKikimr::NGRpcService::TEvRequestAuthAndCheckResult& result(*ev->Get());
+        if (result.UserToken) {
+            Event->Get()->UserToken = result.UserToken->GetSerializedToken();
+        }
+        if (AuthMode == TMon::EAuthMode::ExtractOnly) {
+            // Extract token but don't enforce authorization - let the handler decide
+            SendRequest(result);
+            return;
+        }
         if (result.Status != Ydb::StatusIds::SUCCESS) {
             return ReplyErrorAndPassAway(result);
         }
@@ -1168,12 +1183,15 @@ public:
     THttpMonRequestContainer Container;
     TVector<TString> AllowedSIDs;
     TMon::TRequestAuthorizer Authorizer;
+    TMon::EAuthMode AuthMode;
 
-    THttpMonAuthorizedPageRequest(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event, NMonitoring::IMonPage* page, TVector<TString> allowedSIDs, TMon::TRequestAuthorizer authorizer)
+    THttpMonAuthorizedPageRequest(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event, NMonitoring::IMonPage* page,
+        TVector<TString> allowedSIDs, TMon::TRequestAuthorizer authorizer, TMon::EAuthMode authMode = TMon::EAuthMode::Enforce)
         : Event(std::move(event))
         , Container(Event->Get()->Request, page)
         , AllowedSIDs(std::move(allowedSIDs))
         , Authorizer(std::move(authorizer))
+        , AuthMode(authMode)
     {}
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -1292,6 +1310,11 @@ public:
         if (result.UserToken) {
             Event->Get()->UserToken = result.UserToken->GetSerializedToken();
         }
+        if (AuthMode == TMon::EAuthMode::ExtractOnly) {
+            // Extract token but don't enforce authorization - let the handler decide
+            ProcessRequest();
+            return;
+        }
         if (result.Status != Ydb::StatusIds::SUCCESS) {
             return ReplyErrorAndPassAway(result);
         }
@@ -1316,14 +1339,17 @@ class THttpMonPageService : public TActor<THttpMonPageService> {
     TIntrusivePtr<NMonitoring::IMonPage> Page;
     TMon::TRequestAuthorizer Authorizer;
     TVector<TString> AllowedSIDs;
+    TMon::EAuthMode AuthMode;
 
 public:
-    THttpMonPageService(const TActorId& httpProxyActorId, TIntrusivePtr<NMonitoring::IMonPage> page, TMon::TRequestAuthorizer authorizer = {}, TVector<TString> allowedSIDs = {})
+    THttpMonPageService(const TActorId& httpProxyActorId, TIntrusivePtr<NMonitoring::IMonPage> page,
+        TMon::TRequestAuthorizer authorizer = {}, TVector<TString> allowedSIDs = {}, TMon::EAuthMode authMode = TMon::EAuthMode::Enforce)
         : TActor(&THttpMonPageService::StateWork)
         , HttpProxyActorId(httpProxyActorId)
         , Page(std::move(page))
         , Authorizer(std::move(authorizer))
         , AllowedSIDs(std::move(allowedSIDs))
+        , AuthMode(authMode)
     {
     }
 
@@ -1358,7 +1384,7 @@ public:
         if (ev->Get()->Request->Method == "OPTIONS") {
             return ReplyWithOptions(ev);
         }
-        Register(new THttpMonAuthorizedPageRequest(std::move(ev), Page.Get(), AllowedSIDs, Authorizer));
+        Register(new THttpMonAuthorizedPageRequest(std::move(ev), Page.Get(), AllowedSIDs, Authorizer, AuthMode));
     }
 
     STATEFN(StateWork) {
@@ -1457,8 +1483,8 @@ public:
         while (!url.empty()) {
             auto it = Handlers.find(TString(url));
             if (it != Handlers.end()) {
-                if (it->second.UseAuth) {
-                    Register(new THttpMonAuthorizedActorRequest(std::move(ev), it->second.Handler, Authorizer, it->second.AllowedSIDs));
+                if (it->second.AuthMode != TMon::EAuthMode::Disabled) {
+                    Register(new THttpMonAuthorizedActorRequest(std::move(ev), it->second.Handler, Authorizer, it->second.AllowedSIDs, it->second.AuthMode));
                 } else {
                     Forward(ev, it->second.Handler);
                 }
@@ -1670,7 +1696,8 @@ NMonitoring::IMonPage* TMon::RegisterActorPage(TRegisterActorPageFields fields) 
         fields.ActorSystem,
         fields.ActorId,
         fields.AllowedSIDs ? fields.AllowedSIDs : Config.AllowedSIDs,
-        fields.UseAuth ? Config.Authorizer : TRequestAuthorizer(),
+        fields.AuthMode != TMon::EAuthMode::Disabled ? Config.Authorizer : TRequestAuthorizer(),
+        fields.AuthMode,
         fields.MonServiceName);
     if (fields.Index) {
         fields.Index->Register(page);

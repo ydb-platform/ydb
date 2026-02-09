@@ -109,3 +109,5 @@ class TestWatermarksInYdb(StreamingTestBase):
         # predictable failures
         self.test_watermarks(kikimr, entity_name, shared_reading, tasks, local_topics, 'reuse1')
         self.test_watermarks(kikimr, entity_name, shared_reading, tasks, local_topics, 'reuse2')
+        self.test_watermarks(kikimr, entity_name, shared_reading, tasks, local_topics, 'reuse3')
+        self.test_watermarks(kikimr, entity_name, shared_reading, tasks, local_topics, 'reuse4')

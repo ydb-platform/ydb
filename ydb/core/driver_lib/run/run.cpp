@@ -2142,6 +2142,12 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new TOverloadManagerInitializer(runConfig));
     }
 
+#if defined(OS_LINUX)
+    if (serviceMask.EnableNBSService) {
+        sil->AddServiceInitializer(new TNbsServiceInitializer(runConfig));
+    }
+#endif
+
     return sil;
 }
 

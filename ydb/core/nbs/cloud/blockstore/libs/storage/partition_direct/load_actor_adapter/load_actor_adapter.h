@@ -15,11 +15,11 @@ class TLoadActorAdapter
     : public TActorBootstrapped<TLoadActorAdapter>
 {
 private:
-    std::unique_ptr<TFastPathService> FastPathService;
+    std::shared_ptr<TFastPathService> FastPathService;
 
 public:
-    TLoadActorAdapter(
-        std::unique_ptr<TFastPathService> fastPathService);
+    explicit TLoadActorAdapter(
+        std::shared_ptr<TFastPathService> fastPathService);
 
     void Bootstrap(const TActorContext& ctx);
 
@@ -37,6 +37,6 @@ private:
 
 TActorId CreateLoadActorAdapter(
     const NActors::TActorId& owner,
-    std::unique_ptr<TFastPathService> fastPathService);
+    std::shared_ptr<TFastPathService> fastPathService);
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

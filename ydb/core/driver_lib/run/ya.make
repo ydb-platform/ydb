@@ -189,6 +189,8 @@ PEERDIR(
 
 IF (OS_LINUX)
     PEERDIR(
+        ydb/core/nbs/cloud/blockstore/bootstrap
+
         ydb/services/nbs
     )
 ENDIF()

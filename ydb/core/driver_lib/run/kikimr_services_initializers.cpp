@@ -104,6 +104,10 @@
 #include <ydb/core/mind/tenant_pool.h>
 #include <ydb/core/mind/tenant_slot_broker.h>
 
+#if defined(OS_LINUX)
+#include <ydb/core/nbs/cloud/blockstore/bootstrap/bootstrap.h>
+#endif
+
 #include <ydb/core/mon/mon.h>
 #include <ydb/core/mon_alloc/monitor.h>
 #include <ydb/core/mon_alloc/profiler.h>
@@ -3156,5 +3160,20 @@ void TOverloadManagerInitializer::InitializeServices(NActors::TActorSystemSetup*
     setup->LocalServices.push_back(std::make_pair(NColumnShard::NOverload::TOverloadManagerServiceOperator::MakeServiceId(),
         TActorSetupCmd(NColumnShard::NOverload::TOverloadManagerServiceOperator::CreateService(countersGroup), TMailboxType::HTSwap, appData->UserPoolId)));
 }
+
+#if defined(OS_LINUX)
+
+TNbsServiceInitializer::TNbsServiceInitializer(const TKikimrRunConfig &runConfig)
+     : IKikimrServicesInitializer(runConfig) {
+}
+
+void TNbsServiceInitializer::InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) {
+    Y_UNUSED(setup);
+    Y_UNUSED(appData);
+
+    NYdb::NBS::NBlockStore::CreateNbsService();
+}
+
+#endif
 
 } // namespace NKikimr::NKikimrServicesInitializers

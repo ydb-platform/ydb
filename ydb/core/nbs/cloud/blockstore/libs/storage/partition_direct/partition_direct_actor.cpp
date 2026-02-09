@@ -1,11 +1,13 @@
 #include "partition_direct_actor.h"
 
+#include <ydb/core/nbs/cloud/blockstore/bootstrap/bootstrap.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/service/fast_path_service/fast_path_service.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/load_actor_adapter/load_actor_adapter.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/vhost/server.h>
+
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/base/tabletid.h>
 #include <ydb/core/mind/bscontroller/types.h>
-
-#include <ydb/core/nbs/cloud/blockstore/libs/service/fast_path_service/fast_path_service.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/load_actor_adapter/load_actor_adapter.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
@@ -86,15 +88,44 @@ void TPartitionActor::HandleControllerAllocateDDiskBlockGroupResult(
             persistentBufferDDiskIds.emplace_back(node.GetPersistentBufferDDiskId());
         }
 
-        auto fastPathService = std::make_unique<NYdb::NBS::NBlockStore::TFastPathService>(
-            1, // tabletId
-            1, // generation
-            std::move(ddiskIds),
-            std::move(persistentBufferDDiskIds),
-            VolumeConfig.GetBlockSize(),
-            VolumeConfig.GetPartitions(0).GetBlockCount());
+        auto fastPathService =
+            std::make_shared<NYdb::NBS::NBlockStore::TFastPathService>(
+                1,   // tabletId
+                1,   // generation
+                std::move(ddiskIds),
+                std::move(persistentBufferDDiskIds),
+                VolumeConfig.GetBlockSize(),
+                VolumeConfig.GetPartitions(0).GetBlockCount());
 
-        LoadActorAdapter = CreateLoadActorAdapter(ctx.SelfID, std::move(fastPathService));
+        LoadActorAdapter = CreateLoadActorAdapter(ctx.SelfID, fastPathService);
+
+        {
+            auto service = GetNbsService();
+
+            TString diskId = VolumeConfig.GetDiskId();
+            ui32 blockSize = VolumeConfig.GetBlockSize();
+            ui64 blockCount = 0;
+            for (const auto& p: VolumeConfig.GetPartitions()) {
+                blockCount += p.GetBlockCount();
+            }
+
+            // Fix me
+            diskId = "nbs-1";
+            blockSize = 4096;
+            blockCount = 1000;
+
+            TString socketPath = "/tmp/" + diskId + ".sock";
+            NVhost::TStorageOptions options{
+                .DiskId = diskId,
+                .ClientId = "client-1",
+                .BlockSize = blockSize,
+                .BlocksCount = blockCount,
+                .VhostQueuesCount = 1};
+            service->VhostServer->StartEndpoint(
+                std::move(socketPath),
+                fastPathService,
+                options);
+        }
 
         LOG_INFO(
             NActors::TActivationContext::AsActorContext(),

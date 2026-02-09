@@ -122,7 +122,7 @@ private:
     TReplication::ITarget* FindTarget(const TWorkerId& id) const;
     void UpdateLag(const TWorkerId& id, TDuration lag);
     void UpdateStats(const TWorkerId& id, const NKikimrReplication::TWorkerStats& stats);
-    void UpdateStats(const TWorkerId& id, NKikimrReplication::TEvWorkerStatus::EStatus  status);
+    void UpdateStats(const TWorkerId& id, NKikimrReplication::TEvWorkerStatus::EStatus status);
     void ProcessCreateStreamQueue(const TActorContext& ctx);
     void ProcessDropStreamQueue(const TActorContext& ctx);
 

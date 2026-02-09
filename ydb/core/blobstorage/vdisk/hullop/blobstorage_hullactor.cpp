@@ -378,6 +378,7 @@ namespace NKikimr {
                              VDISKP(HullDs->HullCtx->VCtx, "%s: requesting compaction token",
                                 PDiskSignatureForHullDbKey<TKey>().ToString().data()));
                         TryStartCompaction(ctx, CompactionTask->MaxRatio);
+                        CompactionTask->Clear();
                         ScheduleCompactionWakeup(ctx);
                         UpdateStorageRatio(RTCtx->LevelIndex->CurSlice);
                     }

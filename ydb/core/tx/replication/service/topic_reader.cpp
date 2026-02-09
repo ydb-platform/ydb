@@ -210,7 +210,7 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
                 ProcessData();
                 break;
             default:
-                LOG_W("Handle Wakeup with unexpected tag" << ev->Get()->Tag);
+                LOG_W("Handle Wakeup with unexpected tag " << ev->Get()->Tag);
         }
     }
 

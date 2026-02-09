@@ -950,6 +950,8 @@ class TestJoinStreaming(TestYdsBase):
         fq_client: FederatedQueryClient,
         yq_version,
     ):
+        if ca == "sync":
+            pytest.skip("sync CA is not backported to q-stable-2025-05-15")
         self.init_topics(
             f"slj_{partitions_count}{streamlookup}{testcase}{ca}_{yq_version}",
             partitions_count=partitions_count,
@@ -1047,6 +1049,8 @@ class TestJoinStreaming(TestYdsBase):
         fq_client: FederatedQueryClient,
         yq_version,
     ):
+        if ca == "sync":
+            pytest.skip("sync CA is not backported to q-stable-2025-05-15")
         self.init_topics(
             f"slj_wm_{partitions_count}{streamlookup}{limit}{ca}{tasks}_{yq_version}",
             partitions_count=partitions_count,

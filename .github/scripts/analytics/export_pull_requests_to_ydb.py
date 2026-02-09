@@ -418,7 +418,7 @@ def transform_pull_requests_for_ydb(pr_nodes: List[Dict[str, Any]]) -> List[Dict
             "closed_at": closed_at,
             "merged_at": merged_at,
             "created_date": created_at.date() if created_at else None,
-            "updated_date": updated_at.date() if updated_at else None,
+            "updated_date": (updated_at or created_at).date() if (updated_at or created_at) else None,
             "days_since_created": days_since_created,
             "days_since_updated": days_since_updated,
             "time_to_close_hours": time_to_close_hours,

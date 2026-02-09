@@ -762,6 +762,9 @@ protected:
     }
 
     void OnFinish(Ydb::StatusIds::StatusCode status) final {
+        if (SchemePipeActorId) {
+            NTabletPipe::CloseClient(SelfId(), SchemePipeActorId);
+        }
         Send(Owner, new TEvPrivate::TEvExecuteSchemeTransactionResult(status, std::move(Issues)));
     }
 

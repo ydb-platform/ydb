@@ -45,6 +45,7 @@ public:
             auto pdiskSerial = db.Table<Schema::DriveSerial>().Select();
             auto blobDepotDeleteQueue = db.Table<Schema::BlobDepotDeleteQueue>().Select();
             auto bridgeSyncState = db.Table<Schema::BridgeSyncState>().Select();
+            auto groupStatuses = db.Table<Schema::BlobCheckerGroupStatus>().Select();
             if (!state.IsReady()
                     || !nodes.IsReady()
                     || !disk.IsReady()
@@ -65,7 +66,8 @@ public:
                     || !scrubState.IsReady()
                     || !pdiskSerial.IsReady()
                     || !blobDepotDeleteQueue.IsReady()
-                    || !bridgeSyncState.IsReady()) {
+                    || !bridgeSyncState.IsReady()
+                    || !groupStatuses.IsReady()) {
                 return false;
             }
         }
@@ -115,6 +117,7 @@ public:
                     Self->ShredState.OnLoad(state.GetValue<T::ShredState>());
                 }
                 Self->EnableConfigV2 = state.GetValue<T::EnableConfigV2>();
+                Self->BlobCheckerPeriodicity = state.GetValue<T::BlobCheckerPeriodicity>();
             }
         }
 
@@ -545,6 +548,23 @@ public:
             }
         }
 
+        // BlobChecker group statuses
+        Self->BlobCheckerGroupRecords.clear();
+        {
+            using Table = Schema::BlobCheckerGroupStatus;
+            auto groupStatuses = db.Table<Table>().Select();
+            if (!groupStatuses.IsReady()) {
+                return false;
+            }
+            while (groupStatuses.IsValid()) {
+                TGroupId groupId = TGroupId::FromValue(groupStatuses.GetKey());
+                Self->BlobCheckerGroupRecords[groupId] = groupStatuses.GetValue<Table::SerializedStatus>();
+                if (!groupStatuses.Next()) {
+                    return false;
+                }
+            }
+        }
+
         THashMap<TBoxStoragePoolId, TGroupGeometryInfo> cache;
 
         // fill in correct relations between bridged groups
@@ -702,6 +722,32 @@ public:
             }
             const auto& selfId = Self->SelfId();
             selfId.Send(MakeBlobStorageNodeWardenID(selfId.NodeId()), new NStorage::TEvNodeWardenUpdateCache(std::move(m)));
+        }
+
+        // BlobChecker
+        {
+            Self->BlobCheckerPlanner.reset(new TBlobCheckerPlanner(Self->BlobCheckerPeriodicity,
+                    Self->TotalGroupCount()));
+
+            // Create initial empty BlobChecker status for all groups without this status
+            auto createInitial = [&](TGroupId groupId) {
+                if (!Self->BlobCheckerGroupRecords.contains(groupId)) {
+                    TString serialized = TBlobCheckerGroupStatus::CreateInitialSerialized(TMonotonic::Zero());
+                    Self->BlobCheckerGroupRecords[groupId] = serialized;
+                }
+            };
+
+            for (const auto& [groupId, _] : Self->GroupMap) {
+                createInitial(groupId);
+            }
+
+            for (const auto& [groupId, _] : Self->StaticGroups) {
+                createInitial(groupId);
+            }
+
+            if (Self->IsBlobCheckerEnabled()) {
+                Self->InitializeBlobCheckerOrchestratorActor();
+            }
         }
 
         return true;

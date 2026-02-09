@@ -915,6 +915,16 @@ struct TEvBlobStorage {
         EvControllerScrubStartQuantum               = 0x1003180e,
         EvControllerUpdateSystemViews               = 0x10031815,
 
+        // BlobCheckerOrchestrator <-> BSC interface
+        EvBlobCheckerUpdateSettings                 = 0x10031820,
+        EvBlobCheckerUpdateGroupStatus              = 0x10031821,
+        EvBlobCheckerPlanCheck                      = 0x10031822,
+        EvBlobCheckerDecision                       = 0x10031823,
+        EvBlobCheckerUpdateGroupSet                 = 0x10031824,
+
+        // BlobCheckerWorker <-> BlobCheckerOrchestrator interface
+        EvBlobCheckerFinishQuantum                  = 0x10031825,
+
         // proxy - node controller interface
         EvConfigureProxy = EvPut + 13 * 512,
         EvProxyConfigurationRequest, // DEPRECATED

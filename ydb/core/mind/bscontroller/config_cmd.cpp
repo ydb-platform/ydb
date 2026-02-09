@@ -1,6 +1,7 @@
 #include "impl.h"
 #include "config.h"
 #include "select_groups.h"
+#include "blob_checker_events.h"
 
 namespace NKikimr::NBsController {
 
@@ -176,6 +177,11 @@ namespace NKikimr::NBsController {
                         for (bool value : settings.GetTryToRelocateBrokenDisksLocallyFirst()) {
                             Self->TryToRelocateBrokenDisksLocallyFirst = value;
                             db.Table<T>().Key(true).Update<T::TryToRelocateBrokenDisksLocallyFirst>(Self->TryToRelocateBrokenDisksLocallyFirst);
+                        }
+                        for (ui64 value : settings.GetBlobCheckerPeriodicitySeconds()) {
+                            TDuration duration = TDuration::Seconds(value);
+                            db.Table<T>().Key(true).Update<T::BlobCheckerPeriodicity>(duration);
+                            Self->UpdateBlobCheckerSettings(duration);
                         }
                         return;
                     }

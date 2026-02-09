@@ -1,4 +1,4 @@
-#-----------------------------------------------------------------
+# -----------------------------------------------------------------
 # pycparser: __init__.py
 #
 # This package file exports some convenience functions for
@@ -6,33 +6,36 @@
 #
 # Eli Bendersky [https://eli.thegreenplace.net/]
 # License: BSD
-#-----------------------------------------------------------------
-__all__ = ['c_lexer', 'c_parser', 'c_ast']
-__version__ = '2.23'
+# -----------------------------------------------------------------
+__all__ = ["c_lexer", "c_parser", "c_ast"]
+__version__ = "3.00"
 
 import io
 from subprocess import check_output
-from .c_parser import CParser
+
+from . import c_parser
+
+CParser = c_parser.CParser
 
 
-def preprocess_file(filename, cpp_path='cpp', cpp_args=''):
-    """ Preprocess a file using cpp.
+def preprocess_file(filename, cpp_path="cpp", cpp_args=""):
+    """Preprocess a file using cpp.
 
-        filename:
-            Name of the file you want to preprocess.
+    filename:
+        Name of the file you want to preprocess.
 
-        cpp_path:
-        cpp_args:
-            Refer to the documentation of parse_file for the meaning of these
-            arguments.
+    cpp_path:
+    cpp_args:
+        Refer to the documentation of parse_file for the meaning of these
+        arguments.
 
-        When successful, returns the preprocessed file's contents.
-        Errors from cpp will be printed out.
+    When successful, returns the preprocessed file's contents.
+    Errors from cpp will be printed out.
     """
     path_list = [cpp_path]
     if isinstance(cpp_args, list):
         path_list += cpp_args
-    elif cpp_args != '':
+    elif cpp_args != "":
         path_list += [cpp_args]
     path_list += [filename]
 
@@ -41,46 +44,49 @@ def preprocess_file(filename, cpp_path='cpp', cpp_args=''):
         # as \n for Python's purpose
         text = check_output(path_list, universal_newlines=True)
     except OSError as e:
-        raise RuntimeError("Unable to invoke 'cpp'.  " +
-            'Make sure its path was passed correctly\n' +
-            ('Original error: %s' % e))
+        raise RuntimeError(
+            "Unable to invoke 'cpp'.  "
+            + "Make sure its path was passed correctly\n"
+            + f"Original error: {e}"
+        )
 
     return text
 
 
-def parse_file(filename, use_cpp=False, cpp_path='cpp', cpp_args='',
-               parser=None, encoding=None):
-    """ Parse a C file using pycparser.
+def parse_file(
+    filename, use_cpp=False, cpp_path="cpp", cpp_args="", parser=None, encoding=None
+):
+    """Parse a C file using pycparser.
 
-        filename:
-            Name of the file you want to parse.
+    filename:
+        Name of the file you want to parse.
 
-        use_cpp:
-            Set to True if you want to execute the C pre-processor
-            on the file prior to parsing it.
+    use_cpp:
+        Set to True if you want to execute the C pre-processor
+        on the file prior to parsing it.
 
-        cpp_path:
-            If use_cpp is True, this is the path to 'cpp' on your
-            system. If no path is provided, it attempts to just
-            execute 'cpp', so it must be in your PATH.
+    cpp_path:
+        If use_cpp is True, this is the path to 'cpp' on your
+        system. If no path is provided, it attempts to just
+        execute 'cpp', so it must be in your PATH.
 
-        cpp_args:
-            If use_cpp is True, set this to the command line arguments strings
-            to cpp. Be careful with quotes - it's best to pass a raw string
-            (r'') here. For example:
-            r'-I../utils/fake_libc_include'
-            If several arguments are required, pass a list of strings.
+    cpp_args:
+        If use_cpp is True, set this to the command line arguments strings
+        to cpp. Be careful with quotes - it's best to pass a raw string
+        (r'') here. For example:
+        r'-I../utils/fake_libc_include'
+        If several arguments are required, pass a list of strings.
 
-        encoding:
-            Encoding to use for the file to parse
+    encoding:
+        Encoding to use for the file to parse
 
-        parser:
-            Optional parser object to be used instead of the default CParser
+    parser:
+        Optional parser object to be used instead of the default CParser
 
-        When successful, an AST is returned. ParseError can be
-        thrown if the file doesn't parse successfully.
+    When successful, an AST is returned. ParseError can be
+    thrown if the file doesn't parse successfully.
 
-        Errors from cpp will be printed out.
+    Errors from cpp will be printed out.
     """
     if use_cpp:
         text = preprocess_file(filename, cpp_path, cpp_args)

@@ -17,10 +17,10 @@ index c6ef6fd..f41bce7 100644
  #  define _LIBCPP_ABI_REGEX_CONSTANTS_NONZERO
  // Re-worked external template instantiations for std::string with a focus on
 diff --git a/include/typeinfo b/include/typeinfo
-index 2871307..888faec 100644
+index 8d3ebea..295b292 100644
 --- a/include/typeinfo
 +++ b/include/typeinfo
-@@ -98,7 +98,13 @@ public:
+@@ -100,7 +100,13 @@ public:
  
    size_t hash_code() const _NOEXCEPT;
  

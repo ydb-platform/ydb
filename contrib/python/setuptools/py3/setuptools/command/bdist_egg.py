@@ -9,19 +9,21 @@ import os
 import re
 import sys
 import textwrap
+from collections.abc import Iterator
 from sysconfig import get_path, get_platform, get_python_version
 from types import CodeType
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, AnyStr, Literal
 
 from setuptools import Command
 from setuptools.extension import Library
 
-from .._path import StrPathT, ensure_directory
+from .._path import StrPath, StrPathT, ensure_directory
 
 from distutils import log
 from distutils.dir_util import mkpath, remove_tree
 
 if TYPE_CHECKING:
+    from _typeshed import GenericPath
     from typing_extensions import TypeAlias
 
 # Same as zipfile._ZipFileMode from typeshed
@@ -35,12 +37,13 @@ def _get_purelib():
 def strip_module(filename):
     if '.' in filename:
         filename = os.path.splitext(filename)[0]
-    if filename.endswith('module'):
-        filename = filename[:-6]
+    filename = filename.removesuffix('module')
     return filename
 
 
-def sorted_walk(dir):
+def sorted_walk(
+    dir: GenericPath[AnyStr],
+) -> Iterator[tuple[AnyStr, list[AnyStr], list[AnyStr]]]:
     """Do os.walk in a reproducible way,
     independent of indeterministic filesystem readdir order
     """
@@ -161,7 +164,7 @@ class bdist_egg(Command):
         self.run_command(cmdname)
         return cmd
 
-    def run(self):  # noqa: C901  # is too complex (14)  # FIXME
+    def run(self) -> None:  # noqa: C901  # is too complex (14)  # FIXME
         # Generate metadata first
         self.run_command("egg_info")
         # We run install_lib before install_data, because some data hacks
@@ -232,7 +235,7 @@ class bdist_egg(Command):
             self.egg_output,
             archive_root,
             verbose=self.verbose,
-            dry_run=self.dry_run,
+            dry_run=self.dry_run,  # type: ignore[arg-type] # Is an actual boolean in vendored _distutils
             mode=self.gen_header(),
         )
         if not self.keep_temp:
@@ -245,7 +248,7 @@ class bdist_egg(Command):
             self.egg_output,
         ))
 
-    def zap_pyfiles(self):
+    def zap_pyfiles(self) -> None:
         log.info("Removing .py files from temporary directory")
         for base, dirs, files in walk_egg(self.bdist_dir):
             for name in files:
@@ -260,6 +263,8 @@ class bdist_egg(Command):
 
                     pattern = r'(?P<name>.+)\.(?P<magic>[^.]+)\.pyc'
                     m = re.match(pattern, name)
+                    # We shouldn't find any non-pyc files in __pycache__
+                    assert m is not None
                     path_new = os.path.join(base, os.pardir, m.group('name') + '.pyc')
                     log.info(f"Renaming file from [{path_old}] to [{path_new}]")
                     try:
@@ -323,7 +328,7 @@ class bdist_egg(Command):
 NATIVE_EXTENSIONS: dict[str, None] = dict.fromkeys('.dll .so .dylib .pyd'.split())
 
 
-def walk_egg(egg_dir):
+def walk_egg(egg_dir: StrPath) -> Iterator[tuple[str, list[str], list[str]]]:
     """Walk an unpacked egg's contents, skipping the metadata directory"""
     walker = sorted_walk(egg_dir)
     base, dirs, files = next(walker)
@@ -343,9 +348,9 @@ def analyze_egg(egg_dir, stubs):
     safe = True
     for base, dirs, files in walk_egg(egg_dir):
         for name in files:
-            if name.endswith('.py') or name.endswith('.pyw'):
+            if name.endswith(('.py', '.pyw')):
                 continue
-            elif name.endswith('.pyc') or name.endswith('.pyo'):
+            elif name.endswith(('.pyc', '.pyo')):
                 # always scan, even if we already know we're not safe
                 safe = scan_module(egg_dir, base, name, stubs) and safe
     return safe
@@ -409,7 +414,7 @@ def scan_module(egg_dir, base, name, stubs):
     return safe
 
 
-def iter_symbols(code):
+def iter_symbols(code: CodeType) -> Iterator[str]:
     """Yield names and strings used by `code` and its nested code objects"""
     yield from code.co_names
     for const in code.co_consts:

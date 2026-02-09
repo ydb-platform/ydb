@@ -326,7 +326,7 @@ public:
         }
 
         NMiniKQL::TEngineHostCounters engineHostCounters;
-        const ui64 txId = writeTx->GetTxId();
+        const ui64 txId = op->GetTxId();
         const auto mvccVersion = DataShard.GetMvccVersion(writeOp);
 
         TDataShardUserDb userDb(DataShard, txc.DB, op->GetGlobalTxId(), mvccVersion, engineHostCounters, TAppData::TimeProvider->Now());

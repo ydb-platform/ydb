@@ -159,7 +159,7 @@ def post_install(self):
         SRCS=src_srcs,
         NO_COMPILER_WARNINGS=True,
         NO_UTIL=True,
-        SUPPRESSIONS=["tsan.supp"],
+        SUPPRESSIONS=["lsan.supp", "tsan.supp"],
     )
 
     self.yamakes["."].after(
@@ -236,6 +236,7 @@ python3 = NixSourceProject(
         "Lib/_sysconfigdata_arcadia.py",
         "Modules/config.c",
         "Python/frozen_modules",
+        "lsan.supp",
         "tsan.supp",
     ],
     disable_includes=[

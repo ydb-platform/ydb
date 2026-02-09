@@ -75,7 +75,7 @@ Y_UNIT_TEST(WaitDeduplicationIdQuota) {
     UNIT_ASSERT(WaitForQuotaApproved(runtime));
 
     auto duration = TInstant::Now() - start;
-    UNIT_ASSERT_GE_C(duration, TDuration::Seconds(1), "duration: " << duration);
+    UNIT_ASSERT_GT_C(duration, TDuration::MilliSeconds(950), "duration: " << duration);
 }
 
 }

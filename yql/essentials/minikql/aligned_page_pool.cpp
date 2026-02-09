@@ -32,13 +32,19 @@ void UseDefaultAllocator() {
     IsDefaultAllocator = true;
 }
 #endif
-static bool IsDefaultArrowAllocator = false;
+
+namespace {
+
+bool IsDefaultArrowAllocator = false;
+
+ui64 SYS_PAGE_SIZE = NSystemInfo::GetPageSize();
+
+} // namespace
+
 void UseDefaultArrowAllocator() {
     // TODO: check that we didn't already used the MKQL allocator
     IsDefaultArrowAllocator = true;
 }
-
-static ui64 SYS_PAGE_SIZE = NSystemInfo::GetPageSize();
 
 constexpr ui32 MidLevels = 10;
 constexpr ui32 MaxMidSize = (1u << MidLevels) * TAlignedPagePool::POOL_PAGE_SIZE;

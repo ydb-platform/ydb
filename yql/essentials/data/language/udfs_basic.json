@@ -1227,6 +1227,45 @@
       "name": "LookupUint64"
     },
     {
+      "name": "MutCreate"
+    },
+    {
+      "name": "MutDown"
+    },
+    {
+      "name": "MutDownOrCreate"
+    },
+    {
+      "name": "MutExists"
+    },
+    {
+      "name": "MutFreeze"
+    },
+    {
+      "name": "MutInsert"
+    },
+    {
+      "name": "MutRemove"
+    },
+    {
+      "name": "MutRewind"
+    },
+    {
+      "name": "MutTryDown"
+    },
+    {
+      "name": "MutUp"
+    },
+    {
+      "name": "MutUpdate"
+    },
+    {
+      "name": "MutUpsert"
+    },
+    {
+      "name": "MutView"
+    },
+    {
       "name": "Options"
     },
     {

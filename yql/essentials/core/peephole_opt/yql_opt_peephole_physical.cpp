@@ -8769,7 +8769,7 @@ TExprNode::TPtr CompareTagged(const TExprNode& node, TExprContext& ctx) {
 template<bool IsScore>
 TExprNode::TPtr ExpandFulltextBuiltin(const TExprNode::TPtr& node, TExprContext& ctx) {
     TString type = IsScore ? "Double" : "Bool";
-    TString error = TStringBuilder() << "Fulltext " << (IsScore ? "score" : "contains") << " is not implemented yet";
+    TString error = TStringBuilder() << "Fulltext " << (IsScore ? "score" : "match") << " is not implemented yet";
     auto nullNode = ctx.NewCallable(node->Pos(), "Nothing", {
         ctx.NewCallable(node->Pos(), "OptionalType", {
             ctx.NewCallable(node->Pos(), "DataType", {ctx.NewAtom(node->Pos(), type, TNodeFlags::Default) }) }) });
@@ -9288,7 +9288,7 @@ struct TPeepHoleRules {
         {"RangeToPg", &ExpandRangeToPg},
         {"ToFlow", &DropToFlowDeps},
         {"FulltextScore", &ExpandFulltextBuiltin<true>},
-        {"FulltextContains", &ExpandFulltextBuiltin<false>},
+        {"FulltextMatch", &ExpandFulltextBuiltin<false>},
         {"CheckedAdd", &ExpandCheckedAdd},
         {"CheckedSub", &ExpandCheckedSub},
         {"CheckedMul", &ExpandCheckedMul},

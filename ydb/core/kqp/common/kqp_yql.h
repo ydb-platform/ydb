@@ -87,8 +87,8 @@ struct TKqpStreamLookupSettings {
     static TKqpStreamLookupSettings Parse(const NNodes::TKqlStreamLookupIndex& node);
     static TKqpStreamLookupSettings Parse(const NNodes::TKqpCnStreamLookup& node);
     static TKqpStreamLookupSettings Parse(const NNodes::TCoNameValueTupleList& node);
-    static bool HasVectorTopDistinct(const NNodes::TKqlStreamLookupTable& node);
-    static bool HasVectorTopDistinct(const NNodes::TCoNameValueTupleList& node);
+    static bool HasVectorTopColumn(const NNodes::TKqlStreamLookupTable& node);
+    static bool HasVectorTopColumn(const NNodes::TCoNameValueTupleList& node);
 };
 
 struct TKqpDeleteRowsIndexSettings {
@@ -132,20 +132,20 @@ public:
     static constexpr TStringBuf SkipLimitSettingName = "SkipLimit";
     static constexpr TStringBuf BFactorSettingName = "BFactor";
     static constexpr TStringBuf K1FactorSettingName = "K1Factor";
-    static constexpr TStringBuf QueryModeSettingName = "QueryMode";
+    static constexpr TStringBuf DefaultOperatorSettingName = "DefaultOperator";
     static constexpr TStringBuf MinimumShouldMatchSettingName = "MinimumShouldMatch";
     TExprNode::TPtr ItemsLimit;
     TExprNode::TPtr SkipLimit;
     TExprNode::TPtr BFactor;
     TExprNode::TPtr K1Factor;
-    TExprNode::TPtr QueryMode;
+    TExprNode::TPtr DefaultOperator;
     TExprNode::TPtr MinimumShouldMatch;
 
     void SetItemsLimit(const TExprNode::TPtr& expr) { ItemsLimit = expr; }
     void SetSkipLimit(const TExprNode::TPtr& expr) { SkipLimit = expr; }
     void SetBFactor(const TExprNode::TPtr& expr) { BFactor = expr; }
     void SetK1Factor(const TExprNode::TPtr& expr) { K1Factor = expr; }
-    void SetQueryMode(const TExprNode::TPtr& expr) { QueryMode = expr; }
+    void SetDefaultOperator(const TExprNode::TPtr& expr) { DefaultOperator = expr; }
     void SetMinimumShouldMatch(const TExprNode::TPtr& expr) { MinimumShouldMatch = expr; }
 
     static TKqpReadTableFullTextIndexSettings Parse(const NNodes::TCoNameValueTupleList& node);

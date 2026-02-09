@@ -18,6 +18,7 @@ bool TSyncPointLimitControl::DrainToLimit() {
         nextInHeap = TSourceIterator(Collection->GetNextSource());
     }
 
+<<<<<<< HEAD
     while (Iterators.size() && (!nextInHeap || !(Iterators.front() < *nextInHeap))) {
         if (!Iterators.front().IsFilled()) {
             return false;
@@ -27,14 +28,31 @@ bool TSyncPointLimitControl::DrainToLimit() {
             "fetched", FetchedCount)("limit", Limit)("iterators", Iterators.size());
         if (!Iterators.back().Next()) {
             Iterators.pop_back();
+=======
+    while (FilledIterators.size() &&
+        (!nextInHeap || FilledIterators.front().ComparePrefix(*nextInHeap, *PKPrefixSize) == std::partial_ordering::less) &&
+        (!UnfilledIterators.size() || FilledIterators.front().ComparePrefix(UnfilledIterators.front(), *PKPrefixSize) == std::partial_ordering::less)) {
+
+        std::pop_heap(FilledIterators.begin(), FilledIterators.end());
+
+        if (!FilledIterators.back().Next()) {
+            FilledIterators.pop_back();
+>>>>>>> 48e2293186d (Order by pk with limit final fix (#33610))
         } else {
-            std::push_heap(Iterators.begin(), Iterators.end());
-            if (++FetchedCount >= Limit) {
-                return true;
-            }
+            std::push_heap(FilledIterators.begin(), FilledIterators.end());
+        }
+        if (++FetchedCount >= Limit) {
+            return true;
         }
     }
     return false;
+}
+
+std::shared_ptr<NCommon::IDataSource> TSyncPointLimitControl::OnAddSource(const std::shared_ptr<NCommon::IDataSource>& source) {
+    AFL_VERIFY(FetchedCount < Limit)("fetched", FetchedCount)("limit", Limit);
+    UnfilledIterators.emplace_back(TSourceIterator(source));
+
+    return TBase::OnAddSource(source);
 }
 
 ISyncPoint::ESourceAction TSyncPointLimitControl::OnSourceReady(
@@ -42,19 +60,29 @@ ISyncPoint::ESourceAction TSyncPointLimitControl::OnSourceReady(
     if (FetchedCount >= Limit) {
         return ESourceAction::Finish;
     }
+<<<<<<< HEAD
     const auto& rk = *source->GetSourceSchema()->GetIndexInfo().GetReplaceKey();
     const auto& g = source->GetStageResult().GetBatch();
     AFL_VERIFY(Iterators.size());
     if (Iterators.front().GetSourceId() != source->GetSourceId()) {
         for (auto it : Iterators) {
             AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("Iterator", it.DebugString());
+=======
+
+    AFL_VERIFY(UnfilledIterators.size());
+
+    if (UnfilledIterators.front().GetSourceIdx() != source->GetSourceIdx()) {
+        for (auto it : UnfilledIterators) {
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("UnfilledIterators", it.DebugString());
+>>>>>>> 48e2293186d (Order by pk with limit final fix (#33610))
         }
-        for (auto it : DebugOrder) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("DebugOrder", it.DebugString());
+        for (auto it : FilledIterators) {
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("FilledIterators", it.DebugString());
         }
         for (auto it : SourcesSequentially) {
             AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("SourcesSequentially", it->GetSourceId());
         }
+<<<<<<< HEAD
         if (FindIf(Iterators, [&](const auto& item) { return item.GetSourceId() == source->GetSourceId(); }) != Iterators.end()) {
             AFL_VERIFY(Iterators.front().GetSourceId() == source->GetSourceId())("issue #28037", "portion is in heap")
                 ("front", Iterators.front().DebugString())
@@ -75,12 +103,30 @@ ISyncPoint::ESourceAction TSyncPointLimitControl::OnSourceReady(
                 ("back", Iterators.back().DebugString())
                 ("source", source->GetAs<TPortionDataSource>()->GetStart().DebugString())
                 ("source_id", source->GetSourceId());
+=======
+        if (FindIf(UnfilledIterators, [&](const auto& item) {
+                return item.GetSourceIdx() == source->GetSourceIdx();
+            }) != UnfilledIterators.end()) {
+            AFL_VERIFY(UnfilledIterators.front().GetSourceIdx() == source->GetSourceIdx())("issue #28037", "portion is in UnfilledIterators")("front", UnfilledIterators.front().DebugString())
+                ("back", UnfilledIterators.back().DebugString())("source", source->GetAs<TPortionDataSource>()->GetStart().DebugString())("source_idx", source->GetSourceIdx());
+        } else if (FindIf(FilledIterators, [&](const auto& item) {
+                return item.GetSourceIdx() == source->GetSourceIdx();
+            }) != FilledIterators.end()) {
+            AFL_VERIFY(UnfilledIterators.front().GetSourceIdx() == source->GetSourceIdx())("issue #28037", "portion is in FilledIterators")("front", UnfilledIterators.front().DebugString())
+                ("back", UnfilledIterators.back().DebugString())("source", source->GetAs<TPortionDataSource>()->GetStart().DebugString())("source_idx", source->GetSourceIdx());
+        } else {
+            AFL_VERIFY(UnfilledIterators.front().GetSourceIdx() == source->GetSourceIdx())("issue #28037", "unknown portion")("front", UnfilledIterators.front().DebugString())
+                ("back", UnfilledIterators.back().DebugString())("source", source->GetAs<TPortionDataSource>()->GetStart().DebugString())("source_idx", source->GetSourceIdx());
+>>>>>>> 48e2293186d (Order by pk with limit final fix (#33610))
         }
     }
-    std::pop_heap(Iterators.begin(), Iterators.end());
-    if (!g || !g->GetRecordsCount()) {
-        Iterators.pop_back();
-    } else {
+
+    UnfilledIterators.pop_front();
+
+    const auto& rk = *source->GetSourceSchema()->GetIndexInfo().GetReplaceKey();
+    const auto& g = source->GetStageResult().GetBatch();
+
+    if (g && g->GetRecordsCount()) {
         std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> arrs;
         for (auto&& i : rk.fields()) {
             auto acc = g->GetAccessorByNameOptional(i->name());
@@ -97,9 +143,9 @@ ISyncPoint::ESourceAction TSyncPointLimitControl::OnSourceReady(
         }
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "DoOnSourceCheckLimitFillIterator")("source_id", source->GetSourceId())(
             "fetched", FetchedCount)("limit", Limit);
-        Iterators.back() = TSourceIterator(arrs, source->GetStageResult().GetNotAppliedFilter(), source);
-        AFL_VERIFY(Iterators.back().IsFilled());
-        std::push_heap(Iterators.begin(), Iterators.end());
+        FilledIterators.emplace_back(arrs, source->GetStageResult().GetNotAppliedFilter(), source);
+        AFL_VERIFY(FilledIterators.back().IsFilled());
+        std::push_heap(FilledIterators.begin(), FilledIterators.end());
     }
     if (DrainToLimit()) {
         Collection->Clear();

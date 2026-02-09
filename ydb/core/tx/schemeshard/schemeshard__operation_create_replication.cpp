@@ -162,21 +162,21 @@ public:
                 ev->Record.MutableOperationId()->SetPartId(ui32(OperationId.GetSubTxId()));
                 ev->Record.MutableConfig()->CopyFrom(alterData->Description.GetConfig());
                 ev->Record.SetDatabase(TPath::Init(context.SS->RootPathId(), context.SS).PathString());
-                auto* location = ev->Record.MutableLocation();
-                location->SetPath(TPath::Init(pathId, context.SS).PathString());
-                const auto& attrs = context.SS->PathsById.at(context.SS->RootPathId())->UserAttrs->Attrs;
+                auto& location = *ev->Record.MutableLocation();
+                location.SetPath(TPath::Init(pathId, context.SS).PathString());
 
+                const auto& attrs = context.SS->PathsById.at(context.SS->RootPathId())->UserAttrs->Attrs;
                 if (auto it = attrs.find("cloud_id"); it != attrs.end()) {
-                    location->SetYcCloudId(it->second);
+                    location.SetYcCloudId(it->second);
                 }
                 if (auto it = attrs.find("folder_id"); it != attrs.end()) {
-                    location->SetYcFolderId(it->second);
+                    location.SetYcFolderId(it->second);
                 }
                 if (auto it = attrs.find("database_id"); it != attrs.end()) {
-                    location->SetYdbDatabaseId(it->second);
+                    location.SetYdbDatabaseId(it->second);
                 }
                 if (auto it = attrs.find("monitoring_project_id"); it != attrs.end()) {
-                    location->SetMonitoringProjectId(it->second);
+                    location.SetMonitoringProjectId(it->second);
                 }
 
                 LOG_D(DebugHint() << "Send TEvCreateReplication to controller"

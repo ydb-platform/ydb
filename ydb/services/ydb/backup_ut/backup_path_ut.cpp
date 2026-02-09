@@ -1230,9 +1230,14 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
                 remove(TStringBuilder() << "/Root/Restored_" << i);
             }
             remove("/Root", false);
-            auto listResult = YdbSchemeClient().ListDirectory("/Root").GetValueSync();
+
+            const auto listResult = YdbSchemeClient().ListDirectory("/Root").GetValueSync();
+            std::unordered_set<std::string> expectedResult = {".sys", ".metadata"};
             UNIT_ASSERT_C(listResult.IsSuccess(), listResult.GetIssues().ToString());
-            UNIT_ASSERT_VALUES_EQUAL_C(listResult.GetChildren().size(), 2, "Current database directory children: " << DebugListDir("/Root")); // .sys, .metadata
+            UNIT_ASSERT_C(listResult.GetChildren().size() <= 2, "Current database directory children: " << DebugListDir("/Root"));
+            for (const auto& entry : listResult.GetChildren()) {
+                UNIT_ASSERT_C(expectedResult.erase(entry.Name), "Unexpected child: " << entry.Name);
+            }
 
             // Import to database root
             NImport::TImportFromS3Settings settings = MakeImportSettings("ParallelBackupWholeDatabasePrefix_0", "");

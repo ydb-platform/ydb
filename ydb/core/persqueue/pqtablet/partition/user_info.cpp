@@ -122,11 +122,9 @@ void TUserInfo::UpdateReadingTimeAndState(i64 endOffset, TInstant now) {
 void TUserInfo::ReadDone(const TActorContext& ctx, const TInstant& now, ui64 readSize, ui32 readCount,
                 const TString& clientDC, const TActorId& tablet, bool isExternalRead, i64 endOffset) {
     Y_UNUSED(tablet);
-    if (BytesReadPerPartition) {
-        BytesReadPerPartition->Add(readSize);
-    }
-    if (MessagesReadPerPartition) {
-        MessagesReadPerPartition->Add(readCount);
+    for (auto& counters : PerPartitionCounters) {
+        counters.BytesReadPerPartition->Add(readSize);
+        counters.MessagesReadPerPartition->Add(readCount);
     }
     if (BytesRead && !clientDC.empty()) {
         BytesRead.Inc(readSize);
@@ -169,19 +167,14 @@ void TUserInfo::ReadDone(const TActorContext& ctx, const TInstant& now, ui64 rea
     ReadTimestamp = now;
 }
 
-void TUserInfo::SetupDetailedMetrics(const TActorContext& ctx, NMonitoring::TDynamicCounterPtr subgroup) {
+static TUserInfo::TPerPartitionCounters CreateDetailedMetricsForSubgroup(const TActorContext& ctx, const TString& user, NMonitoring::TDynamicCounterPtr subgroup) {
     Y_ABORT_UNLESS(subgroup);
-
-    if (BytesReadPerPartition) {
-        // Don't recreate the counters if they already exist.
-        return;
-    }
 
     bool fcc = AppData()->PQConfig.GetTopicsAreFirstClassCitizen();
 
     auto consumerSubgroup = fcc
-        ? subgroup->GetSubgroup("consumer", User)
-        : subgroup->GetSubgroup("ConsumerPath", NPersQueue::ConvertOldConsumerName(User, ctx));
+        ? subgroup->GetSubgroup("consumer", user)
+        : subgroup->GetSubgroup("ConsumerPath", NPersQueue::ConvertOldConsumerName(user, ctx));
 
     auto getCounter = [&](const TString& forFCC, const TString& forFederation, bool deriv) {
         return consumerSubgroup->GetExpiringNamedCounter(
@@ -189,26 +182,27 @@ void TUserInfo::SetupDetailedMetrics(const TActorContext& ctx, NMonitoring::TDyn
             fcc ? "topic.partition." + forFCC : forFederation + "PerPartition",
             deriv);
     };
-
-    BytesReadPerPartition = getCounter("read.bytes", "BytesRead", true);
-    MessagesReadPerPartition = getCounter("read.messages", "MessagesRead", true);
-    MessageLagByLastReadPerPartition = getCounter("read.lag_messages", "MessageLagByLastRead", false);
-    MessageLagByCommittedPerPartition = getCounter("committed_lag_messages", "MessageLagByCommitted", false);
-    WriteTimeLagMsByLastReadPerPartition = getCounter("write.lag_milliseconds", "WriteTimeLagMsByLastRead", false);
-    WriteTimeLagMsByCommittedPerPartition = getCounter("committed_read_lag_milliseconds", "WriteTimeLagMsByCommitted", false);
-    TimeSinceLastReadMsPerPartition = getCounter("read.idle_milliseconds", "TimeSinceLastReadMs", false);
-    ReadTimeLagMsPerPartition = getCounter("read.lag_milliseconds", "ReadTimeLagMs", false);
+    TUserInfo::TPerPartitionCounters counters;
+    counters.BytesReadPerPartition = getCounter("read.bytes", "BytesRead", true);
+    counters.MessagesReadPerPartition = getCounter("read.messages", "MessagesRead", true);
+    counters.MessageLagByLastReadPerPartition = getCounter("read.lag_messages", "MessageLagByLastRead", false);
+    counters.MessageLagByCommittedPerPartition = getCounter("committed_lag_messages", "MessageLagByCommitted", false);
+    counters.WriteTimeLagMsByLastReadPerPartition = getCounter("write.lag_milliseconds", "WriteTimeLagMsByLastRead", false);
+    counters.WriteTimeLagMsByCommittedPerPartition = getCounter("committed_read_lag_milliseconds", "WriteTimeLagMsByCommitted", false);
+    counters.TimeSinceLastReadMsPerPartition = getCounter("read.idle_milliseconds", "TimeSinceLastReadMs", false);
+    counters.ReadTimeLagMsPerPartition = getCounter("read.lag_milliseconds", "ReadTimeLagMs", false);
+    return counters;
 }
 
+void TUserInfo::SetupDetailedMetrics(const TActorContext& ctx, NMonitoring::TDynamicCounterPtr subgroup) {
+    /// TODO: implement
+    Y_UNUSED(ctx);
+    Y_UNUSED(subgroup);
+}
+
+
 void TUserInfo::ResetDetailedMetrics() {
-    BytesReadPerPartition.Reset();
-    MessagesReadPerPartition.Reset();
-    MessageLagByLastReadPerPartition.Reset();
-    MessageLagByCommittedPerPartition.Reset();
-    WriteTimeLagMsByLastReadPerPartition.Reset();
-    WriteTimeLagMsByCommittedPerPartition.Reset();
-    TimeSinceLastReadMsPerPartition.Reset();
-    ReadTimeLagMsPerPartition.Reset();
+    PerPartitionCounters.clear();
 }
 
 void TUserInfo::SetupStreamCounters(NMonitoring::TDynamicCounterPtr subgroup) {

@@ -152,14 +152,17 @@ public:
     TMap<TString, NKikimr::NPQ::TMultiCounter> BytesReadFromDC;
 
     // Per partition counters
-    NMonitoring::TDynamicCounters::TCounterPtr BytesReadPerPartition;
-    NMonitoring::TDynamicCounters::TCounterPtr MessagesReadPerPartition;
-    NMonitoring::TDynamicCounters::TCounterPtr MessageLagByLastReadPerPartition;
-    NMonitoring::TDynamicCounters::TCounterPtr MessageLagByCommittedPerPartition;
-    NMonitoring::TDynamicCounters::TCounterPtr WriteTimeLagMsByLastReadPerPartition;
-    NMonitoring::TDynamicCounters::TCounterPtr WriteTimeLagMsByCommittedPerPartition;
-    NMonitoring::TDynamicCounters::TCounterPtr TimeSinceLastReadMsPerPartition;
-    NMonitoring::TDynamicCounters::TCounterPtr ReadTimeLagMsPerPartition;
+    struct TPerPartitionCounters {
+        NMonitoring::TDynamicCounters::TCounterPtr BytesReadPerPartition;
+        NMonitoring::TDynamicCounters::TCounterPtr MessagesReadPerPartition;
+        NMonitoring::TDynamicCounters::TCounterPtr MessageLagByLastReadPerPartition;
+        NMonitoring::TDynamicCounters::TCounterPtr MessageLagByCommittedPerPartition;
+        NMonitoring::TDynamicCounters::TCounterPtr WriteTimeLagMsByLastReadPerPartition;
+        NMonitoring::TDynamicCounters::TCounterPtr WriteTimeLagMsByCommittedPerPartition;
+        NMonitoring::TDynamicCounters::TCounterPtr TimeSinceLastReadMsPerPartition;
+        NMonitoring::TDynamicCounters::TCounterPtr ReadTimeLagMsPerPartition;
+    };
+    TVector<TPerPartitionCounters> PerPartitionCounters;
 
     ui32 ActiveReads;
     ui32 ReadsInQuotaQueue;

@@ -2,6 +2,8 @@
 
 #include "visitor.h"
 
+#include <ydb/library/aclib/aclib.h>
+
 #include <util/generic/ptr.h>
 #include <util/generic/string.h>
 #include <util/stream/output.h>
@@ -34,7 +36,7 @@ public:
     virtual const TString& GetBody() const = 0;
     virtual ESource GetSource() const = 0;
     virtual const TString& GetSourceId() const = 0;
-    virtual const TString& GetUserSID() const = 0;
+    virtual NACLib::TUserContext::TPtr GetUserCtx() const = 0;
     virtual bool IsBroadcast() const = 0;
 
     virtual void Accept(IVisitor& visitor) const = 0;
@@ -58,7 +60,7 @@ public:
     const TString& GetBody() const override { return Body; }
     ESource GetSource() const override { return Source; }
     const TString& GetSourceId() const override { return SourceId; }
-    const TString& GetUserSID() const override { return UserSID; };
+    NACLib::TUserContext::TPtr GetUserCtx() const override { return UserCtx; };
     bool IsBroadcast() const override { return false; }
 
     void RewriteTxId(ui64) override { Y_ABORT("not implemented"); }
@@ -71,7 +73,7 @@ protected:
     TString Body;
     ESource Source = ESource::Unspecified;
     TString SourceId;
-    TString UserSID;
+    NACLib::TUserContext::TPtr UserCtx;
 
 }; // TChangeRecordBase
 
@@ -116,13 +118,8 @@ public:
         return static_cast<TSelf&>(*this);
     }
 
-    TSelf& WithUserSID(const TString& userSID) {
-        GetRecord()->UserSID = userSID;
-        return static_cast<TSelf&>(*this);
-    }
-
-    TSelf& WithUserSID(TString&& userSID) {
-        GetRecord()->UserSID = std::move(userSID);
+    TSelf& WithUserCtx(NACLib::TUserContext::TPtr userCtx) {
+        GetRecord()->UserCtx = userCtx;
         return static_cast<TSelf&>(*this);
     }
 

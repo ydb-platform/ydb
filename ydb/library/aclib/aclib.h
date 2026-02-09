@@ -184,9 +184,16 @@ protected:
     bool IsContainer;
 };
 
+class TUserContext : public TThrRefBase
+{
+public:
+    using TPtr = TIntrusivePtr<TUserContext>;
+    
+    const TString UserSID;
+    const TString UserTraceId;
 
-
-
-
+    TUserContext(const TString& userSID, const TString& userTraceId):
+        UserSID(userSID), UserTraceId(userTraceId) {}
+};
 
 }

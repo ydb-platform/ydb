@@ -894,11 +894,17 @@ void TDataShard::PersistChangeRecord(NIceDb::TNiceDb& db, const TChangeRecord& r
             NIceDb::TUpdate<Schema::ChangeRecords::SchemaVersion>(record.GetSchemaVersion()),
             NIceDb::TUpdate<Schema::ChangeRecords::TableOwnerId>(record.GetTableId().OwnerId),
             NIceDb::TUpdate<Schema::ChangeRecords::TablePathId>(record.GetTableId().LocalPathId));
+        
+        TMaybe<TString> userSID;
+        TMaybe<TString> userTraceCtx;
+        
+        auto userCtx = record.GetUserCtx();
         db.Table<Schema::ChangeRecordDetails>().Key(record.GetOrder()).Update(
             NIceDb::TUpdate<Schema::ChangeRecordDetails::Kind>(record.GetKind()),
             NIceDb::TUpdate<Schema::ChangeRecordDetails::Body>(record.GetBody()),
             NIceDb::TUpdate<Schema::ChangeRecordDetails::Source>(record.GetSource()),
-            NIceDb::TUpdate<Schema::ChangeRecordDetails::UserSID>(record.GetUserSID()));
+            NIceDb::TUpdate<Schema::ChangeRecordDetails::UserSID>(userCtx!=nullptr?userCtx->UserSID:BUILTIN_ACL_CDC_WITHOUT_USER_SID),
+            NIceDb::TUpdate<Schema::ChangeRecordDetails::UserTraceId>(userCtx!=nullptr?userCtx->UserTraceId:""));
 
         auto res = ChangesQueue.emplace(record.GetOrder(), record);
         Y_ENSURE(res.second, "Duplicate change record: " << record.GetOrder());
@@ -970,6 +976,7 @@ void TDataShard::PersistChangeRecord(NIceDb::TNiceDb& db, const TChangeRecord& r
             .LockOffset = record.GetLockOffset(),
         });
 
+        auto userCtx = record.GetUserCtx();
         db.Table<Schema::LockChangeRecords>().Key(record.GetLockId(), record.GetLockOffset()).Update(
             NIceDb::TUpdate<Schema::LockChangeRecords::PathOwnerId>(record.GetPathId().OwnerId),
             NIceDb::TUpdate<Schema::LockChangeRecords::LocalPathId>(record.GetPathId().LocalPathId),
@@ -981,8 +988,8 @@ void TDataShard::PersistChangeRecord(NIceDb::TNiceDb& db, const TChangeRecord& r
             NIceDb::TUpdate<Schema::LockChangeRecordDetails::Kind>(record.GetKind()),
             NIceDb::TUpdate<Schema::LockChangeRecordDetails::Body>(record.GetBody()),
             NIceDb::TUpdate<Schema::LockChangeRecordDetails::Source>(record.GetSource()),
-            NIceDb::TUpdate<Schema::LockChangeRecordDetails::UserSID>(record.GetUserSID())
-        );
+            NIceDb::TUpdate<Schema::LockChangeRecordDetails::UserSID>(userCtx!=nullptr?userCtx->UserSID:BUILTIN_ACL_CDC_WITHOUT_USER_SID),
+            NIceDb::TUpdate<Schema::LockChangeRecordDetails::UserTraceId>(userCtx!=nullptr?userCtx->UserTraceId:""));
     }
 }
 

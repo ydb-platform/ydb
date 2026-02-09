@@ -1,3 +1,5 @@
+#include <ydb/library/aclib/aclib.h>
+
 #include "datashard_impl.h"
 #include "datashard_locks_db.h"
 #include "datashard_pipeline.h"
@@ -184,7 +186,7 @@ EExecutionStatus TAlterTableUnit::Execute(TOperation::TPtr op,
                 .WithPathId(streamPathId)
                 .WithTableId(tableId)
                 .WithSchemaVersion(newInfo->GetTableSchemaVersion())
-                .WithUserSID(BUILTIN_ACL_CDC_WITHOUT_USER_SID)
+                .WithUserCtx(new NACLib::TUserContext(BUILTIN_ACL_CDC_WITHOUT_USER_SID,""))
                 .Build();
 
             const auto& record = *recordPtr;

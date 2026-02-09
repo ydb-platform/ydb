@@ -840,12 +840,12 @@ void TEngineHost::UpdateRow(const TTableId& tableId, const TArrayRef<const TCell
     const ui64 writeTxId = GetWriteTxId(tableId);
     if (writeTxId == 0) {
         auto writeVersion = GetWriteVersion(tableId);
-        if (collector && !collector->OnUpdate(tableId, localTid, NTable::ERowOp::Upsert, key, ops, writeVersion, userSID)) {
+        if (collector && !collector->OnUpdate(tableId, localTid, NTable::ERowOp::Upsert, key, ops, writeVersion, new NACLib::TUserContext(userSID, ""))) {
             throw TNotReadyTabletException();
         }
         Db.Update(localTid, NTable::ERowOp::Upsert, key, ops, writeVersion);
     } else {
-        if (collector && !collector->OnUpdateTx(tableId, localTid, NTable::ERowOp::Upsert, key, ops, writeTxId, userSID)) {
+        if (collector && !collector->OnUpdateTx(tableId, localTid, NTable::ERowOp::Upsert, key, ops, writeTxId, new NACLib::TUserContext(userSID, ""))) {
             throw TNotReadyTabletException();
         }
         Db.UpdateTx(localTid, NTable::ERowOp::Upsert, key, ops, writeTxId);
@@ -870,12 +870,12 @@ void TEngineHost::EraseRow(const TTableId& tableId, const TArrayRef<const TCell>
     const ui64 writeTxId = GetWriteTxId(tableId);
     if (writeTxId == 0) {
         auto writeVersion = GetWriteVersion(tableId);
-        if (collector && !collector->OnUpdate(tableId, localTid, NTable::ERowOp::Erase, key, { }, writeVersion, userSID)) {
+        if (collector && !collector->OnUpdate(tableId, localTid, NTable::ERowOp::Erase, key, { }, writeVersion, new NACLib::TUserContext(userSID, ""))) {
             throw TNotReadyTabletException();
         }
         Db.Update(localTid, NTable::ERowOp::Erase, key, { }, writeVersion);
     } else {
-        if (collector && !collector->OnUpdateTx(tableId, localTid, NTable::ERowOp::Erase, key, { }, writeTxId, userSID)) {
+        if (collector && !collector->OnUpdateTx(tableId, localTid, NTable::ERowOp::Erase, key, { }, writeTxId, new NACLib::TUserContext(userSID, ""))) {
             throw TNotReadyTabletException();
         }
         Db.UpdateTx(localTid, NTable::ERowOp::Erase, key, { }, writeTxId);

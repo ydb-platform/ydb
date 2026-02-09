@@ -377,13 +377,14 @@ void TDataShardUserDb::UpsertRowInt(
     auto* collector = GetChangeCollector(tableId);
 
     const ui64 writeTxId = GetWriteTxId(tableId);
+    auto userCtx = new NACLib::TUserContext(userSID, "");
     if (writeTxId == 0) {
-        if (collector && !collector->OnUpdate(tableId, localTableId, rowOp, key, ops, MvccVersion, userSID))
+        if (collector && !collector->OnUpdate(tableId, localTableId, rowOp, key, ops, MvccVersion, userCtx))
             throw TNotReadyTabletException();
 
         Db.Update(localTableId, rowOp, key, ops, MvccVersion);
     } else {
-        if (collector && !collector->OnUpdateTx(tableId, localTableId, rowOp, key, ops, writeTxId, userSID))
+        if (collector && !collector->OnUpdateTx(tableId, localTableId, rowOp, key, ops, writeTxId, userCtx))
             throw TNotReadyTabletException();
 
         Db.UpdateTx(localTableId, rowOp, key, ops, writeTxId);

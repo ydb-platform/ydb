@@ -114,9 +114,19 @@ class TDataShard::TTxRequestChangeRecords: public TTransactionBase<TDataShard> {
             .WithBody(details.template GetValue<typename TDetailsTable::Body>())
             .WithSource(source);
 
+        TMaybe<TString> userSID;
+        TMaybe<TString> userTraceId;
         if (details.template HaveValue<typename TDetailsTable::UserSID>()) {
-            const TString userSID = details.template GetValue<typename TDetailsTable::UserSID>();
-            builder.WithUserSID(userSID);
+            userSID = details.template GetValue<typename TDetailsTable::UserSID>();
+        }
+        if (details.template HaveValue<typename TDetailsTable::UserTraceId>()) {
+            userTraceId = details.template GetValue<typename TDetailsTable::UserTraceId>();
+        }
+
+        if (userSID.Defined() || userTraceId.Defined()) {
+            auto userCtx = new NACLib::TUserContext(
+                userSID.GetOrEmplace(BUILTIN_ACL_CDC_WITHOUT_USER_SID), userTraceId.GetOrEmplace());
+            builder.WithUserCtx(userCtx);
         }
 
         if constexpr (HaveLock) {
@@ -191,7 +201,7 @@ class TDataShard::TTxRequestChangeRecords: public TTransactionBase<TDataShard> {
                         TChangeRecordBuilder(result.Record)
                             .WithLockId(itQueue->second.LockId)
                             .WithLockOffset(itQueue->second.LockOffset)
-                            .WithUserSID(result.Record->GetUserSID())
+                            .WithUserCtx(result.Record->GetUserCtx())
                             .Build()
                     );
                 } else {

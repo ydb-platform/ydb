@@ -327,8 +327,14 @@ protected:
             SerializeJsonValue(record.GetSchema(), json["newImage"], body.GetNewImage());
         }
 
-        if (!record.GetUserSID().empty()) {
-            json["user"] = record.GetUserSID();
+        auto userCtx = record.GetUserCtx();
+        if (userCtx != nullptr) {
+            if (!userCtx->UserSID.empty()) {
+                json["user"] = userCtx->UserSID;
+            }
+            if (!userCtx->UserTraceId.empty()) {
+                json["trace_id"] = userCtx->UserTraceId;
+            }
         }
 
         const auto hasAnyImage = body.HasOldImage() || body.HasNewImage();
@@ -534,14 +540,20 @@ protected:
             Y_ENSURE(false, "Unexpected row operation: " << static_cast<int>(body.GetRowOperationCase()));
         }
 
-        if (!record.GetUserSID().empty()) {
-            auto& userIdentityJson = json["userIdentity"];
-            if (record.GetUserSID() == BUILTIN_ACL_CDC_TTL) {
-                userIdentityJson["type"] = "Service";   
-                userIdentityJson["principalId"] = "dynamodb.amazonaws.com";
-            } else {
-                userIdentityJson["type"] = "User";
-                userIdentityJson["principalId"] = record.GetUserSID();
+        auto userCtx = record.GetUserCtx();
+        if (userCtx!=nullptr) {
+            if (!userCtx->UserSID.empty()) {
+                auto& userIdentityJson = json["userIdentity"];
+                if (userCtx->UserSID == BUILTIN_ACL_CDC_TTL) {
+                    userIdentityJson["type"] = "Service";   
+                    userIdentityJson["principalId"] = "dynamodb.amazonaws.com";
+                } else {
+                    userIdentityJson["type"] = "User";
+                    userIdentityJson["principalId"] = userCtx->UserSID;
+                }
+            }
+            if (!userCtx->UserTraceId.empty()) {
+                json["trace_id"] = userCtx->UserTraceId;
             }
         }
     }
@@ -607,8 +619,14 @@ protected:
             // TODO: db & table
         });
 
-        if (!record.GetUserSID().empty()) {
-            payloadJson["user"] = record.GetUserSID();
+        auto userCtx = record.GetUserCtx();
+        if (userCtx!=nullptr) {
+            if (!userCtx->UserSID.empty()) {
+                payloadJson["user"] = userCtx->UserSID;
+            }
+            if (!userCtx->UserTraceId.empty()) {
+                payloadJson["trace_id"] = userCtx->UserTraceId;
+            }
         }
     }
 

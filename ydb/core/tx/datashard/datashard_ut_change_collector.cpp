@@ -101,7 +101,7 @@ auto GetChangeRecordsWithDetails(TTestActorRuntime& runtime, const TActorId& sen
                 .WithPathId(std::get<4>(record))
                 .WithSchemaVersion(std::get<5>(record))
                 .WithBody(std::get<2>(detail))
-                .WithUserSID(std::get<3>(detail))
+                .WithUserCtx(new NACLib::TUserContext(std::get<3>(detail),""))
                 .Build()
         );
     }
@@ -270,7 +270,8 @@ struct TStructRecordBase {
         NKikimrChangeExchange::TDataChange proto;
         Y_PROTOBUF_SUPPRESS_NODISCARD proto.ParseFromArray(serializedProto.data(), serializedProto.size());
         auto result = Parse(record.GetKind(), proto, tagToName);
-        result.UserSID = record.GetUserSID();
+        auto userCtx = record.GetUserCtx();
+        result.UserSID = (userCtx != nullptr) ? userCtx->UserSID : BUILTIN_ACL_CDC_WITHOUT_USER_SID;
         return result;
     }
 

@@ -542,11 +542,16 @@ private:
     }
 
     void CreateExecuterWithBuffer(TPartitionIndex partitionIndex, bool isRetry) {
-        if (isRetry && StartedPartitions.find(partitionIndex) == StartedPartitions.end()) {
-            return;
+        TBatchPartitionInfo::TPtr partInfo;
+        if (isRetry) {
+            auto it = StartedPartitions.find(partitionIndex);
+            if (it == StartedPartitions.end()) {
+                return;
+            }
+            partInfo = it->second;
+        } else {
+            partInfo = CreatePartition(partitionIndex);
         }
-
-        auto partInfo = (isRetry) ? StartedPartitions[partitionIndex] : CreatePartition(partitionIndex);
         auto txAlloc = std::make_shared<TTxAllocatorState>(FuncRegistry, TimeProvider, RandomProvider);
 
         IKqpGateway::TExecPhysicalRequest newRequest(txAlloc);

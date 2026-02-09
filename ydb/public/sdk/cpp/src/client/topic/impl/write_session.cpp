@@ -200,13 +200,23 @@ std::string TKeyedWriteSession::TSplittedPartitionWorker::GetStateName() const {
 
 void TKeyedWriteSession::TSplittedPartitionWorker::DoWork() {
     std::unique_lock lock(Lock);
+    std::weak_ptr<TKeyedWriteSession> session = Session->shared_from_this();
     switch (State) {
         case EState::Init:
             DescribeTopicFuture = Session->Client->DescribeTopic(Session->Settings.Path_, TDescribeTopicSettings());
             lock.unlock();
-            DescribeTopicFuture.Subscribe([this](const NThreading::TFuture<TDescribeTopicResult>&) {
-                std::lock_guard lock(Lock);
-                MoveTo(EState::GotDescribe);
+            DescribeTopicFuture.Subscribe([this, session](const NThreading::TFuture<TDescribeTopicResult>&) {
+                auto sessionPtr = session.lock();
+                if (!sessionPtr) {
+                    return;
+                }
+
+                {
+                    std::lock_guard lock(Lock);
+                    MoveTo(EState::GotDescribe);
+                }
+
+                sessionPtr->RunMainWorker();
             });
             lock.lock();
             if (State == EState::Init) {
@@ -321,27 +331,40 @@ void TKeyedWriteSession::TSplittedPartitionWorker::LaunchGetMaxSeqNoFutures(std:
 
         auto now = TInstant::Now();
         auto future = wrappedSession->Session->GetInitSeqNo();
-        auto self = shared_from_this();
+        std::weak_ptr<TKeyedWriteSession> session = Session->shared_from_this();
         lock.unlock();
-        future.Subscribe([self, wrappedSession, ancestor, now](const NThreading::TFuture<uint64_t>& result) {
-            if (self->IsDone()) {
+        future.Subscribe([this, session, wrappedSession, ancestor, now](const NThreading::TFuture<uint64_t>& result) {
+            auto sessionPtr = session.lock();
+            if (!sessionPtr) {
+                return;
+            }
+
+            if (IsDone()) {
                 return;
             }
             
-            std::lock_guard lock(self->Lock);
-            if (result.HasException()) {
-                LOG_LAZY(self->Session->DbDriverState->Log, TLOG_ERR, self->Session->LogPrefix() << "Failed to get max seq no for partition " << ancestor << " for splitted partition " << self->PartitionId);
-                TSessionClosedEvent sessionClosedEvent(EStatus::INTERNAL_ERROR, {});
-                self->Session->GetSessionClosedEventAndDie(wrappedSession, std::move(sessionClosedEvent));
-                self->MoveTo(EState::Done);
-                return;
+            bool gotMaxSeqNo = false;
+            {
+                std::lock_guard lock(Lock);
+                if (result.HasException()) {
+                    LOG_LAZY(sessionPtr->DbDriverState->Log, TLOG_ERR, sessionPtr->LogPrefix() << "Failed to get max seq no for partition " << ancestor << " for splitted partition " << PartitionId);
+                    TSessionClosedEvent sessionClosedEvent(EStatus::INTERNAL_ERROR, {});
+                    sessionPtr->GetSessionClosedEventAndDie(wrappedSession, std::move(sessionClosedEvent));
+                    MoveTo(EState::Done);
+                    return;
+                }
+
+                LOG_LAZY(sessionPtr->DbDriverState->Log, TLOG_INFO, sessionPtr->LogPrefix() << "Got max seq no for partition " << ancestor << " = " << result.GetValue() << " in " << TInstant::Now() - now << " splitted partition " << PartitionId);
+
+                UpdateMaxSeqNo(result.GetValue());
+                if (--NotReadyFutures == 0) {
+                    MoveTo(EState::GotMaxSeqNo);   
+                    gotMaxSeqNo = true;
+                }
             }
 
-            LOG_LAZY(self->Session->DbDriverState->Log, TLOG_INFO, self->Session->LogPrefix() << "Got max seq no for partition " << ancestor << " = " << result.GetValue() << " in " << TInstant::Now() - now << " splitted partition " << self->PartitionId);
-
-            self->UpdateMaxSeqNo(result.GetValue());
-            if (--self->NotReadyFutures == 0) {
-                self->MoveTo(EState::GotMaxSeqNo);   
+            if (gotMaxSeqNo) {
+                sessionPtr->RunMainWorker();
             }
         });
         lock.lock();
@@ -383,14 +406,12 @@ NThreading::TFuture<void> TKeyedWriteSession::TSplittedPartitionWorker::Wait() {
 TKeyedWriteSession::TEventsWorker::TEventsWorker(TKeyedWriteSession* session)
     : Session(session)
 {
-    NotReadyPromise = NThreading::NewPromise();
-    NotReadyFuture = NotReadyPromise.GetFuture();
     EventsPromise = NThreading::NewPromise();
     EventsFuture = EventsPromise.GetFuture();
 
     // Initialize per-partition futures to a valid, non-ready future to avoid TFutures being uninitialized
     // (NThreading::WaitAny throws on uninitialized futures).
-    Futures.resize(Session->Partitions.size(), NotReadyFuture);
+    Futures.resize(Session->Partitions.size(), NThreading::MakeFuture());
 
     AddReadyToAcceptEvent();
 }
@@ -474,18 +495,27 @@ void TKeyedWriteSession::TEventsWorker::DoWork() {
 
 void TKeyedWriteSession::TEventsWorker::SubscribeToPartition(std::uint64_t partition) {
     if (auto it = Session->SplittedPartitionWorkers.find(partition); it != Session->SplittedPartitionWorkers.end()) {
-        Futures[partition] = NotReadyFuture;
+        Futures[partition] = NThreading::MakeFuture();
         return;
     }
 
     auto wrappedSession = Session->SessionsWorker->GetWriteSession(partition);
     auto newFuture = wrappedSession->Session->WaitEvent();
     while (partition >= Futures.size()) {
-        Futures.push_back(NotReadyFuture);
+        Futures.push_back(NThreading::MakeFuture());
     }
-    newFuture.Subscribe([this, partition](const NThreading::TFuture<void>&) {
-        std::lock_guard lock(Lock);
-        this->ReadyFutures.insert(partition);
+    std::weak_ptr<TKeyedWriteSession> session = Session->shared_from_this();
+    newFuture.Subscribe([this, session, partition](const NThreading::TFuture<void>&) {
+        auto sessionPtr = session.lock();
+        if (!sessionPtr) {
+            return;
+        }
+
+        {
+            std::lock_guard lock(Lock);
+            ReadyFutures.insert(partition);
+        }
+        sessionPtr->RunMainWorker();
     });
     Futures[partition] = newFuture;
 }
@@ -687,7 +717,7 @@ NThreading::TFuture<void> TKeyedWriteSession::TEventsWorker::WaitEvent() {
 void TKeyedWriteSession::TEventsWorker::UnsubscribeFromPartition(std::uint64_t partition) {
     ReadyFutures.erase(partition);
     if (partition < Futures.size()) {
-        Futures[partition] = NotReadyFuture;
+        Futures[partition] = NThreading::MakeFuture();
     }
 }
 
@@ -864,6 +894,13 @@ void TKeyedWriteSession::TMessagesWorker::DoWork() {
     if (Session->MessagesNotEmptyFuture.IsReady()) {
         Session->MessagesNotEmptyPromise = NThreading::NewPromise();
         Session->MessagesNotEmptyFuture = Session->MessagesNotEmptyPromise.GetFuture();
+
+        std::weak_ptr<TKeyedWriteSession> session = Session->shared_from_this();
+        Session->MessagesNotEmptyFuture.Subscribe([session](const NThreading::TFuture<void>&) {
+            if (auto sessionPtr = session.lock()) {
+                sessionPtr->RunMainWorker();
+            }
+        });
     }
 }
 
@@ -1158,6 +1195,13 @@ TKeyedWriteSession::TKeyedWriteSession(
     // Start handlers executor for user callbacks (Acks/ReadyToAccept/SessionClosed/Common).
     Settings.EventHandlers_.HandlersExecutor_->Start();
 
+    CloseFuture.Subscribe([this](const NThreading::TFuture<void>&) {
+        RunMainWorker();
+    });
+    MessagesNotEmptyFuture.Subscribe([this](const NThreading::TFuture<void>&) {
+        RunMainWorker();
+    });
+
     // Start main worker loop (it will arm NextFuture subscription itself).
     RunMainWorker();
 
@@ -1187,6 +1231,7 @@ void TKeyedWriteSession::Write(TContinuationToken&&, const std::string& key, TWr
         auto partition = PartitionChooser->ChoosePartition(key);
         MessagesWorker->AddMessage(key, std::move(message), partition, tx);
         EventsWorker->HandleNewMessage();
+        RunUserEventLoop();
     }
 
     MessagesNotEmptyPromise.TrySetValue();
@@ -1251,7 +1296,7 @@ bool TKeyedWriteSession::RunSplittedPartitionWorkers() {
         return false;
     }
 
-    bool needRerunMainWorker = false;
+    bool becameDone = false;
 
     for (const auto& [partition, splittedPartitionWorker] : SplittedPartitionWorkers) {
         if (splittedPartitionWorker->IsDone()) {
@@ -1260,29 +1305,10 @@ bool TKeyedWriteSession::RunSplittedPartitionWorkers() {
 
         LOG_LAZY(DbDriverState->Log, TLOG_INFO, LogPrefix() << " Running splitted partition worker for partition " << partition << " in state " << splittedPartitionWorker->GetStateName());
         splittedPartitionWorker->DoWork();
-        needRerunMainWorker |= splittedPartitionWorker->IsDone();
+        becameDone |= splittedPartitionWorker->IsDone();
     }
 
-    return needRerunMainWorker;
-}
-
-NThreading::TFuture<void> TKeyedWriteSession::Next(bool isClosed) {
-    std::vector<NThreading::TFuture<void>> futures{
-        EventsWorker->Wait(),
-        MessagesWorker->Wait()
-    };
-
-    for (const auto& [partition, splittedPartitionWorker] : SplittedPartitionWorkers) {
-        if (!splittedPartitionWorker->IsDone()) {
-            futures.push_back(splittedPartitionWorker->Wait());
-        }
-    }
-
-    if (!isClosed) {
-        futures.push_back(CloseFuture);
-    }
-
-    return NThreading::NWait::WaitAny(futures);
+    return becameDone;
 }
 
 void TKeyedWriteSession::RunUserEventLoop() {
@@ -1373,15 +1399,17 @@ void TKeyedWriteSession::GetSessionClosedEventAndDie(WrappedWriteSessionPtr wrap
 }
 
 TStringBuilder TKeyedWriteSession::LogPrefix() {
-    return TStringBuilder() << " SessionId: " << Settings.SessionId_ << " Epoch: " << Epoch << " ";
+    return TStringBuilder() << " SessionId: " << Settings.SessionId_ << " Epoch: " << Epoch.load() << " ";
 }
 
 void TKeyedWriteSession::NextEpoch() {
-    Epoch++;
-    if (Epoch >= MAX_EPOCH) {
-        LOG_LAZY(DbDriverState->Log, TLOG_ERR, LogPrefix() << "Epoch overflow, resetting to 0");
-        Epoch = 0;
+    auto maxEpoch = MAX_EPOCH - 1;
+    if (Epoch.compare_exchange_weak(maxEpoch, 0)) {
+        LOG_LAZY(DbDriverState->Log, TLOG_INFO, LogPrefix() << "Epoch overflow, resetting to 0");
+        return;
     }
+
+    Epoch.fetch_add(1);
 }
 
 void TKeyedWriteSession::RunMainWorker() {
@@ -1415,6 +1443,7 @@ void TKeyedWriteSession::RunMainWorker() {
     }
 
     NextEpoch();
+    // size_t iterations = 0;
 
     // Runner loop: process, arm subscription, then either go idle or loop again.
     for (;;) {
@@ -1424,19 +1453,14 @@ void TKeyedWriteSession::RunMainWorker() {
 
         {
             std::unique_lock lock(GlobalLock);
-            LOG_LAZY(DbDriverState->Log, TLOG_INFO, LogPrefix() << " Running main worker, active partitions: " << Partitions.size() << " splitted partitions: " << SplittedPartitionWorkers.size() << " index size: " << PartitionsIndex.size());
-            needRerun = RunSplittedPartitionWorkers();
-            LOG_LAZY(DbDriverState->Log, TLOG_INFO, LogPrefix() << " Running events worker");
             EventsWorker->DoWork();
+            RunUserEventLoop();
+            needRerun = RunSplittedPartitionWorkers();
             if (!Done.load()) {
-                LOG_LAZY(DbDriverState->Log, TLOG_INFO, LogPrefix() << " Running sessions worker");
                 SessionsWorker->DoWork();
-                LOG_LAZY(DbDriverState->Log, TLOG_INFO, LogPrefix() << " Running messages worker");
                 MessagesWorker->DoWork();
             }
         }
-        LOG_LAZY(DbDriverState->Log, TLOG_INFO, LogPrefix() << " Running user event loop");
-        RunUserEventLoop();
 
         const auto isClosed = Closed.load();
         const auto closeTimeout = GetCloseTimeout();
@@ -1453,10 +1477,10 @@ void TKeyedWriteSession::RunMainWorker() {
             continue;
         }
 
-        NextFuture = Next(isClosed);
-        NextFuture.Subscribe([this](const NThreading::TFuture<void>&) {
-            RunMainWorker();
-        });
+        // NextFuture = Next(isClosed, ++iterations >= MAX_ITERATIONS && MessagesWorker->HasInFlightMessages());
+        // NextFuture.Subscribe([this](const NThreading::TFuture<void>&) {
+        //     RunMainWorker();
+        // });
 
         // Try to go idle. If someone requested rerun concurrently, keep running.
         std::uint8_t cur = MainWorkerState.load(std::memory_order_acquire);

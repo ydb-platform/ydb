@@ -289,8 +289,6 @@ private:
         std::list<TWriteSessionEvent::TEvent> EventsOutputQueue;
         std::mutex Lock;
     
-        NThreading::TFuture<void> NotReadyFuture;
-        NThreading::TPromise<void> NotReadyPromise;
         NThreading::TPromise<void> EventsPromise;
         NThreading::TFuture<void> EventsFuture;
 
@@ -336,8 +334,6 @@ private:
     void HandleAutoPartitioning(std::uint64_t partition);
 
     bool RunSplittedPartitionWorkers();
-
-    NThreading::TFuture<void> Next(bool isClosed);
 
     void RunUserEventLoop();
 
@@ -388,7 +384,6 @@ private:
 
     NThreading::TPromise<void> ClosePromise;
     NThreading::TFuture<void> CloseFuture;
-    NThreading::TFuture<void> NextFuture;
     NThreading::TPromise<void> ShutdownPromise;
     NThreading::TFuture<void> ShutdownFuture;
     NThreading::TPromise<void> MessagesNotEmptyPromise;
@@ -414,7 +409,7 @@ private:
     // Use a small state machine to avoid re-entrancy and lost wakeups.
     std::atomic<std::uint8_t> MainWorkerState = 0;
 
-    size_t Epoch = 0;
+    std::atomic<size_t> Epoch = 0;
 
     static constexpr size_t MAX_EPOCH = 1'000'000'000;
 };

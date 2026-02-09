@@ -42,10 +42,14 @@ struct TPyDynamicLinear {
     static PyObject* Extract(PyObject* self, PyObject* /* arg */);
 };
 
-static PyMethodDef TPyDynamicLinearMethods[] = {
+namespace {
+
+PyMethodDef TPyDynamicLinearMethods[] = {
     {"extract", TPyDynamicLinear::Extract, METH_NOARGS, nullptr},
     {nullptr, nullptr, 0, nullptr} /* sentinel */
 };
+
+} // namespace
 
 #if PY_MAJOR_VERSION >= 3
     #define Py_TPFLAGS_HAVE_ITER 0 // NOLINT(readability-identifier-naming)

@@ -124,7 +124,6 @@ constexpr int MaxSchemaTotalTypeComplexity = MaxColumnId;
 constexpr int MaxSchemaDepth = 32;
 
 extern const std::string PrimaryLockName;
-
 extern const std::string SystemColumnNamePrefix;
 extern const std::string NonexistentColumnName;
 extern const std::string TableIndexColumnName;

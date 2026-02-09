@@ -1147,6 +1147,24 @@ private:
                 return false;
             }
             Types_.EnableStandaloneLineage = ("EnableStandaloneLineage" == name);
+        } else if (name == "LineageOutputLimit") {
+            if (args.size() != 1) {
+                ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 1 argument, but got " << args.size()));
+                return false;
+            }
+            if (!TryFromString(args[0], Types_.LineageOutputLimit)) {
+                ctx.AddError(TIssue(pos, TStringBuilder() << "Expected integer, but got: " << args[0]));
+                return false;
+            }
+        } else if (name == "LineageMemoryLimit") {
+            if (args.size() != 1) {
+                ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 1 argument, but got " << args.size()));
+                return false;
+            }
+            if (!TryFromString(args[0], Types_.LineageMemoryLimit)) {
+                ctx.AddError(TIssue(pos, TStringBuilder() << "Expected integer, but got: " << args[0]));
+                return false;
+            }
         } else if (name == "Layer") {
             if (args.size() != 1) {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Expected exatly 1 argument, but got " << args.size()));

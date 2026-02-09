@@ -1845,7 +1845,8 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         ), EStatus::SCHEME_ERROR, "Cannot find table '/Root/unknown-datasource.[unknown-topic]' because it does not exist or you do not have access permissions");
     }
 
-    Y_UNIT_TEST_F(ReplicatedFederativeWriting, TStreamingTestFixture) {
+
+    Y_UNIT_TEST_TWIN_F(ReplicatedFederativeWriting, UseColumnTable, TStreamingTestFixture) {
         auto& config = SetupAppConfig();
         config.MutableTableServiceConfig()->SetEnableDataShardCreateTableAs(true);
         config.MutableTableServiceConfig()->SetEnableHtapTx(true);
@@ -1866,7 +1867,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             CREATE TABLE `{source_table}` (
                 Data String NOT NULL,
                 PRIMARY KEY (Data)
-            );
+            ) {source_settings};
             CREATE TABLE `{row_table}` (
                 B Utf8 NOT NULL,
                 PRIMARY KEY (B)
@@ -1878,6 +1879,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                 STORE = COLUMN
             );)",
             "source_table"_a = sourceTable,
+            "source_settings"_a = UseColumnTable ? "WITH (STORE = COLUMN)" : "",
             "row_table"_a = rowSinkTable,
             "column_table"_a = columnSinkTable
         ));

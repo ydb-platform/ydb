@@ -361,7 +361,7 @@ class pyparsing_test:
 
         lineno_width = len(str(end_line))
         max_line_len = max(len(line) for line in s_lines)
-        lead = indent + " " * (lineno_width + 1)
+        lead = f"{indent}{' ' * (lineno_width + 1)}"
 
         if max_line_len >= 99:
             header0 = (

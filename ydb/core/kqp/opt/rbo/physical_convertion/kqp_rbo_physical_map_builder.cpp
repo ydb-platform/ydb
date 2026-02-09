@@ -38,8 +38,14 @@ TExprNode::TPtr TPhysicalMapBuilder::BuildPhysicalOp(TExprNode::TPtr input) {
     }
 
     for (const auto& mapElement : Map->MapElements) {
-        if (mapElement.IsExpression()) {
-            auto lambda = TCoLambda(mapElement.GetExpression());
+        if (mapElement.IsRename()){
+            const auto colName = mapElement.GetRename().GetFullName();
+            auto it = colNamesToIndices.find(colName);
+            Y_ENSURE(it != colNamesToIndices.end(), colName + " column not found.");
+            lambdaResults.push_back(lambdaArgs[it->second]);
+        }
+        else {
+            auto lambda = TCoLambda(mapElement.GetExpression().Node);
             auto lambdaBody = lambda.Body().Ptr();
 
             auto isMember = [&](const TExprNode::TPtr& node) -> bool {
@@ -59,11 +65,6 @@ TExprNode::TPtr TPhysicalMapBuilder::BuildPhysicalOp(TExprNode::TPtr input) {
                 replaces[member.Get()] = lambdaArgs[it->second];
             }
             lambdaResults.push_back(Ctx.ReplaceNodes(std::move(lambdaBody), replaces));
-        } else {
-            const auto colName = mapElement.GetRename().GetFullName();
-            auto it = colNamesToIndices.find(colName);
-            Y_ENSURE(it != colNamesToIndices.end(), colName + " column not found.");
-            lambdaResults.push_back(lambdaArgs[it->second]);
         }
 
         const auto outColName = mapElement.GetElementName().GetFullName();

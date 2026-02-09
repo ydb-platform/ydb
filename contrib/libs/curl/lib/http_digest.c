@@ -30,6 +30,7 @@
 #include "strcase.h"
 #include "vauth/vauth.h"
 #include "http_digest.h"
+#include "curlx/strparse.h"
 
 /* The last 3 #include files should be in this order */
 #include "curl_printf.h"
@@ -62,8 +63,7 @@ CURLcode Curl_input_digest(struct Curl_easy *data,
     return CURLE_BAD_CONTENT_ENCODING;
 
   header += strlen("Digest");
-  while(*header && ISBLANK(*header))
-    header++;
+  curlx_str_passblanks(&header);
 
   return Curl_auth_decode_digest_http_message(header, digest);
 }
@@ -120,10 +120,10 @@ CURLcode Curl_output_digest(struct Curl_easy *data,
   if(!passwdp)
     passwdp = "";
 
-#if defined(USE_WINDOWS_SSPI)
-  have_chlg = digest->input_token ? TRUE : FALSE;
+#ifdef USE_WINDOWS_SSPI
+  have_chlg = !!digest->input_token;
 #else
-  have_chlg = digest->nonce ? TRUE : FALSE;
+  have_chlg = !!digest->nonce;
 #endif
 
   if(!have_chlg) {
@@ -141,19 +141,19 @@ CURLcode Curl_output_digest(struct Curl_easy *data,
      https://httpd.apache.org/docs/2.2/mod/mod_auth_digest.html#msie
 
      Further details on Digest implementation differences:
-     http://www.fngtps.com/2006/09/http-authentication
+     https://web.archive.org/web/2009/fngtps.com/2006/09/http-authentication
   */
 
   if(authp->iestyle) {
-    tmp = strchr((char *)uripath, '?');
+    tmp = strchr((const char *)uripath, '?');
     if(tmp) {
-      size_t urilen = tmp - (char *)uripath;
+      size_t urilen = tmp - (const char *)uripath;
       /* typecast is fine here since the value is always less than 32 bits */
       path = (unsigned char *) aprintf("%.*s", (int)urilen, uripath);
     }
   }
   if(!tmp)
-    path = (unsigned char *) strdup((char *) uripath);
+    path = (unsigned char *) strdup((const char *) uripath);
 
   if(!path)
     return CURLE_OUT_OF_MEMORY;

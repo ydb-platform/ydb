@@ -140,7 +140,9 @@ TNodePtr BuildTopicKey(TPosition pos, const TDeferredAtom& cluster, const TDefer
     return new TTopicKey(pos, cluster, name);
 }
 
-static INode::TPtr CreateIndexType(TIndexDescription::EType type, const INode& node) {
+namespace {
+
+INode::TPtr CreateIndexType(TIndexDescription::EType type, const INode& node) {
     switch (type) {
         case TIndexDescription::EType::GlobalSync:
             return node.Q("syncGlobal");
@@ -157,12 +159,16 @@ static INode::TPtr CreateIndexType(TIndexDescription::EType type, const INode& n
     }
 }
 
+} // namespace
+
 enum class ETableSettingsParsingMode {
     Create,
     Alter
 };
 
-static INode::TPtr CreateTableSettings(const TTableSettings& tableSettings, ETableSettingsParsingMode parsingMode, const INode& node) {
+namespace {
+
+INode::TPtr CreateTableSettings(const TTableSettings& tableSettings, ETableSettingsParsingMode parsingMode, const INode& node) {
     // short aliases for member function calls
     auto Y = [&node](auto&&... args) { return node.Y(std::forward<decltype(args)>(args)...); };
     auto Q = [&node](auto&&... args) { return node.Q(std::forward<decltype(args)>(args)...); };
@@ -291,7 +297,7 @@ static INode::TPtr CreateTableSettings(const TTableSettings& tableSettings, ETab
     return settings;
 }
 
-static INode::TPtr CreateIndexSettings(const TIndexDescription::TIndexSettings& indexSettings, const INode& node) {
+INode::TPtr CreateIndexSettings(const TIndexDescription::TIndexSettings& indexSettings, const INode& node) {
     // short aliases for member function calls
     auto Y = [&node](auto&&... args) { return node.Y(std::forward<decltype(args)>(args)...); };
     auto Q = [&node](auto&&... args) { return node.Q(std::forward<decltype(args)>(args)...); };
@@ -308,7 +314,7 @@ static INode::TPtr CreateIndexSettings(const TIndexDescription::TIndexSettings& 
     return settings;
 }
 
-static INode::TPtr CreateIndexDesc(const TIndexDescription& index, ETableSettingsParsingMode parsingMode, const INode& node) {
+INode::TPtr CreateIndexDesc(const TIndexDescription& index, ETableSettingsParsingMode parsingMode, const INode& node) {
     auto indexColumns = node.Y();
     for (const auto& col : index.IndexColumns) {
         indexColumns = node.L(indexColumns, BuildQuotedAtom(col.Pos, col.Name));
@@ -339,7 +345,7 @@ static INode::TPtr CreateIndexDesc(const TIndexDescription& index, ETableSetting
     return indexNode;
 }
 
-static INode::TPtr CreateAlterIndex(const TIndexDescription& index, const INode& node) {
+INode::TPtr CreateAlterIndex(const TIndexDescription& index, const INode& node) {
     const auto& indexName = node.Y(node.Q("indexName"), BuildQuotedAtom(index.Name.Pos, index.Name.Name));
     const auto& tableSettings = node.Y(
         node.Q("tableSettings"),
@@ -349,7 +355,7 @@ static INode::TPtr CreateAlterIndex(const TIndexDescription& index, const INode&
         node.Q(tableSettings));
 }
 
-static INode::TPtr CreateChangefeedDesc(const TChangefeedDescription& desc, const INode& node) {
+INode::TPtr CreateChangefeedDesc(const TChangefeedDescription& desc, const INode& node) {
     auto settings = node.Y();
     if (desc.Settings.Mode) {
         settings = node.L(settings, node.Q(node.Y(node.Q("mode"), desc.Settings.Mode)));
@@ -404,6 +410,8 @@ static INode::TPtr CreateChangefeedDesc(const TChangefeedDescription& desc, cons
         node.Q(node.Y(node.Q("settings"), node.Q(settings))),
         node.Q(node.Y(node.Q("state"), node.Q(state))));
 }
+
+} // namespace
 
 class TPrepTableKeys: public ITableKeys {
 public:
@@ -1886,7 +1894,9 @@ TNodePtr BuildDropTable(TPosition pos, const TTableRef& tr, bool missingOk, ETab
     return new TDropTableNode(pos, tr, missingOk, tableType, scoped);
 }
 
-static TNullable<TNodePtr> CreateConsumerDesc(TContext& ctx, const TTopicConsumerDescription& desc, const INode& node, bool alter) {
+namespace {
+
+TNullable<TNodePtr> CreateConsumerDesc(TContext& ctx, const TTopicConsumerDescription& desc, const INode& node, bool alter) {
     auto setValue = [&](const TNodePtr& settings, const TNodePtr& value, const auto& setter) {
         if (value) {
             return node.L(settings, node.Q(node.Y(node.Q(setter), value)));
@@ -1933,6 +1943,8 @@ static TNullable<TNodePtr> CreateConsumerDesc(TContext& ctx, const TTopicConsume
         node.Q(node.Y(node.Q("name"), BuildQuotedAtom(desc.Name.Pos, desc.Name.Name))),
         node.Q(node.Y(node.Q("settings"), node.Q(settings))));
 }
+
+} // namespace
 
 class TCreateTopicNode final: public TAstListNode {
 public:

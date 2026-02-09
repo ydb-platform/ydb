@@ -1188,7 +1188,7 @@ IGraphTransformer::TStatus PgReplaceUnknownWrapper(const TExprNode::TPtr& input,
         return IGraphTransformer::TStatus::Error;
     }
 
-    const auto* typeAnn = input->Head().GetTypeAnn();
+    const auto typeAnn = input->Head().GetTypeAnn();
 
     if (typeAnn->GetKind() == ETypeAnnotationKind::Pg) {
         if (typeAnn->Cast<TPgExprType>()->GetId() == NPg::UnknownOid) {

@@ -102,6 +102,30 @@ static TString ConvertYtDataType(const TString& ytType, ui64& nativeYtTypeFlags)
         nativeYtTypeFlags |= NTCF_BIGDATE;
         yqlType = "Interval64";
     }
+    else if (ytType == "tz_date") {
+        nativeYtTypeFlags |= NTCF_TZDATE;
+        yqlType = "TzDate";
+    }
+    else if (ytType == "tz_datetime") {
+        nativeYtTypeFlags |= NTCF_TZDATE;
+        yqlType = "TzDatetime";
+    }
+    else if (ytType == "tz_timestamp") {
+        nativeYtTypeFlags |= NTCF_TZDATE;
+        yqlType = "TzTimestamp";
+    }
+    else if (ytType == "tz_date32") {
+        nativeYtTypeFlags |= NTCF_BIGTZDATE;
+        yqlType = "TzDate32";
+    }
+    else if (ytType == "tz_datetime64") {
+        nativeYtTypeFlags |= NTCF_BIGTZDATE;
+        yqlType = "TzDatetime64";
+    }
+    else if (ytType == "tz_timestamp64") {
+        nativeYtTypeFlags |= NTCF_BIGTZDATE;
+        yqlType = "TzTimestamp64";
+    }
     else if (ytType == "yson") { // V3
         yqlType = "Yson";
     }
@@ -721,6 +745,18 @@ std::pair<NYT::EValueType, bool> RowSpecYqlTypeToYtType(const NYT::TNode& rowSpe
         ytType = (nativeYtTypeFlags & NTCF_BIGDATE) ? NYT::VT_TIMESTAMP64 : NYT::VT_INT64;
     } else if (yqlType == TStringBuf("Interval64")) {
         ytType = (nativeYtTypeFlags & NTCF_BIGDATE) ? NYT::VT_INTERVAL64 : NYT::VT_INT64;
+    } else if (yqlType == TStringBuf("TzDate")) {
+        ytType = (nativeYtTypeFlags & NTCF_TZDATE) ? NYT::VT_TZ_DATE : NYT::VT_STRING;
+    } else if (yqlType == TStringBuf("TzDatetime")) {
+        ytType = (nativeYtTypeFlags & NTCF_TZDATE) ? NYT::VT_TZ_DATETIME : NYT::VT_STRING;
+    } else if (yqlType == TStringBuf("TzTimestamp")) {
+        ytType = (nativeYtTypeFlags & NTCF_TZDATE) ? NYT::VT_TZ_TIMESTAMP : NYT::VT_STRING;
+    } else if (yqlType == TStringBuf("TzDate32")) {
+        ytType = (nativeYtTypeFlags & NTCF_BIGTZDATE) ? NYT::VT_TZ_DATE32 : NYT::VT_STRING;
+    } else if (yqlType == TStringBuf("TzDatetime64")) {
+        ytType = (nativeYtTypeFlags & NTCF_BIGTZDATE) ? NYT::VT_TZ_DATETIME64 : NYT::VT_STRING;
+    } else if (yqlType == TStringBuf("TzTimestamp64")) {
+        ytType = (nativeYtTypeFlags & NTCF_BIGTZDATE) ? NYT::VT_TZ_TIMESTAMP64 : NYT::VT_STRING;
     } else if (yqlType == TStringBuf("Uint8")) {
         ytType = NYT::VT_UINT8;
     } else if (yqlType == TStringBuf("Float")) {
@@ -732,9 +768,6 @@ std::pair<NYT::EValueType, bool> RowSpecYqlTypeToYtType(const NYT::TNode& rowSpe
     } else if (yqlType == TStringBuf("Yson")) {
         ytType = NYT::VT_ANY;
         required = false;
-    } else if (yqlType == TStringBuf("TzDate") || yqlType == TStringBuf("TzDatetime") || yqlType == TStringBuf("TzTimestamp") ||
-        yqlType == TStringBuf("TzDate32") || yqlType == TStringBuf("TzDatetime64") || yqlType == TStringBuf("TzTimestamp64")) {
-        ytType = NYT::VT_STRING;
     } else {
         YQL_LOG_CTX_THROW yexception() << "Unknown type " << yqlType.Quote() << " in row spec";
     }
@@ -780,9 +813,6 @@ NYT::TNode RowSpecYqlTypeToYtNativeType(const NYT::TNode& rowSpecType, ui64 nati
             ytType = "bool";
         } else if (yqlType == TStringBuf("Yson")) {
             ytType = "yson";
-        } else if (yqlType == TStringBuf("TzDate") || yqlType == TStringBuf("TzDatetime") || yqlType == TStringBuf("TzTimestamp") ||
-            yqlType == TStringBuf("TzDate32") || yqlType == TStringBuf("TzDatetime64") || yqlType == TStringBuf("TzTimestamp64")) {
-            ytType = "string";
         } else if (yqlType == TStringBuf("Date")) {
             ytType = (nativeYtTypeFlags & NTCF_DATE) ? "date" : "uint16";
         } else if (yqlType == TStringBuf("Datetime")) {
@@ -799,6 +829,18 @@ NYT::TNode RowSpecYqlTypeToYtNativeType(const NYT::TNode& rowSpecType, ui64 nati
             ytType = (nativeYtTypeFlags & NTCF_BIGDATE) ? "timestamp64" : "int64";
         } else if (yqlType == TStringBuf("Interval64")) {
             ytType = (nativeYtTypeFlags & NTCF_BIGDATE) ? "interval64" : "int64";
+        } else if (yqlType == TStringBuf("TzDate")) {
+            ytType = (nativeYtTypeFlags & NTCF_TZDATE) ? "tz_date" : "string";
+        } else if (yqlType == TStringBuf("TzDatetime")) {
+            ytType = (nativeYtTypeFlags & NTCF_TZDATE) ? "tz_datetime" : "string";
+        } else if (yqlType == TStringBuf("TzTimestamp")) {
+            ytType = (nativeYtTypeFlags & NTCF_TZDATE) ? "tz_timestamp" : "string";
+        } else if (yqlType == TStringBuf("TzDate32")) {
+            ytType = (nativeYtTypeFlags & NTCF_BIGTZDATE) ? "tz_date32" : "string";
+        } else if (yqlType == TStringBuf("TzDatetime64")) {
+            ytType = (nativeYtTypeFlags & NTCF_BIGTZDATE) ? "tz_datetime64" : "string";
+        } else if (yqlType == TStringBuf("TzTimestamp64")) {
+            ytType = (nativeYtTypeFlags & NTCF_BIGTZDATE) ? "tz_timestamp64" : "string";
         } else if (yqlType == TStringBuf("Decimal")) {
             if (nativeYtTypeFlags & NTCF_DECIMAL) {
                 try {

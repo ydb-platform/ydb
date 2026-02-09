@@ -5,7 +5,8 @@
 #include <util/generic/ylimits.h>
 
 Y_UNIT_TEST_SUITE(TPackNumTest) {
-static ui32 TEST_DATA_UI32[] = {
+
+ui32 TEST_DATA_UI32[] = {
     0,
     0x80,
     0x4000,
@@ -14,7 +15,8 @@ static ui32 TEST_DATA_UI32[] = {
     0x800000,
     0x80000000,
     Max<ui32>()};
-static ui64 TEST_DATA_UI64[] = {
+
+ui64 TEST_DATA_UI64[] = {
     0ull,
     0x80ull,
     0x4000ull,
@@ -32,7 +34,7 @@ static ui64 TEST_DATA_UI64[] = {
     0x8000000000000000ull,
     Max<ui64>()};
 
-static size_t DELTA = 10;
+size_t DELTA = 10;
 
 Y_UNIT_TEST(PackUnpack32) {
     char buf[10];

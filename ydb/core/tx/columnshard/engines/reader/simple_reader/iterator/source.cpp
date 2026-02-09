@@ -243,6 +243,7 @@ TConclusion<std::vector<std::shared_ptr<NArrow::NSSA::IFetchLogic>>> TPortionDat
 
 TConclusion<NArrow::TColumnFilter> TPortionDataSource::DoCheckIndex(
     const NArrow::NSSA::TProcessorContext& context, const TCheckIndexContext& fetchContext, const std::shared_ptr<arrow::Scalar>& value) {
+    // AFL_VERIFY(false);
     auto meta = MutableStageData().GetRemapDataToIndex(fetchContext);
     if (!meta) {
         NYDBTest::TControllers::GetColumnShardController()->OnIndexSelectProcessed({});
@@ -262,6 +263,7 @@ TConclusion<NArrow::TColumnFilter> TPortionDataSource::DoCheckIndex(
     const std::optional<ui64> cat = meta->CalcCategory(fetchContext.GetSubColumnName());
     const NIndexes::TIndexColumnChunked* infoPointer = GetStageData().GetIndexes()->GetIndexDataOptional(meta->GetIndexId());
     if (!infoPointer) {
+        // NYDBTest::TControllers::GetColumnShardController()->OnIndexSelectProcessed({});
         GetContext()->GetCommonContext()->GetCounters().OnNoIndexBlobs(GetRecordsCount());
         return filter;
     }

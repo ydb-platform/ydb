@@ -2,7 +2,7 @@
 #include "meta.h"
 
 #include <ydb/core/tx/schemeshard/olap/schema/schema.h>
-
+#include <ydb/core/tx/columnshard/common/print_debug.h>
 namespace NKikimr::NOlap::NIndexes::NMinMax {
 
 std::shared_ptr<NKikimr::NOlap::NIndexes::IIndexMeta> TIndexConstructor::DoCreateIndexMeta(
@@ -28,6 +28,7 @@ NKikimr::TConclusionStatus TIndexConstructor::DoDeserializeFromJson(const NJson:
     if (auto conc = DataExtractor.DeserializeFromJson(jsonInfo["data_extractor"]); conc.IsFail()) {
         return conc;
     }
+    AFL_VERIFY(DataExtractor);
     if (!jsonInfo.Has("column_name")) {
         return TConclusionStatus::Fail("column_name have to be in minmax index features");
     }
@@ -48,7 +49,8 @@ NKikimr::TConclusionStatus TIndexConstructor::DoDeserializeFromProto(const NKiki
     if (!DataExtractor.DeserializeFromProto(bIndex.GetDataExtractor())) {
         return TConclusionStatus::Fail("cannot parse data extractor: " + bIndex.GetDataExtractor().DebugString());
     }
-    AFL_VERIFY(DataExtractor.HasObject());
+    AFL_VERIFY(DataExtractor.HasObject());  
+    Errs("proto TRequestedMinMaxIndex from TOlapIndexRequested::GetMinMaxIndex: %s, object: %p\n", bIndex.GetDataExtractor().DebugString(), this);
     return TConclusionStatus::Success();
 }
 

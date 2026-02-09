@@ -1036,7 +1036,11 @@ all:
 ansible-playbook ydb_platform.ydb.initial_setup
 ```
 
+<<<<<<< HEAD:ydb/docs/ru/core/devops/deployment-options/ansible/initial-deployment.md
 Вскоре после начала вас попросят подтвердить полную очистку настроенных дисков. Затем завершение развёртывания может занять десятки минут в зависимости от окружения и настроек. Этот плейбук выполняет примерно те же шаги, что описаны в инструкциях для [ручного развёртывания кластера {{ ydb-short-name }}](../manual/initial-deployment.md).
+=======
+Вскоре после начала будет необходимо подтвердить полную очистку настроенных дисков. Затем завершение развёртывания может занять десятки минут в зависимости от окружения и настроек. Этот плейбук выполняет примерно те же шаги, которые описаны в инструкциях для [ручного развёртывания кластера {{ ydb-short-name }}](../../manual/initial-deployment/index.md).
+>>>>>>> 9cec0eee85d (conflict YDBDOCS-1782 (#33364)):ydb/docs/ru/core/devops/deployment-options/ansible/initial-deployment/deployment-configuration-v1.md
 
 ### Проверка состояния кластера {#cluster-state}
 

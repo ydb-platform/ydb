@@ -29,7 +29,30 @@
 
 #|
 || **Версия** | **Дата выпуска** | **Скачать** | **Контрольные суммы** | **Список изменений** ||
+|| **v25.2** |  |  |  |  ||
+|| v.25.2.1.ent.2 | 09.02.2026 |
+
+- [Дистрибутив](http://binaries.ydb.enterprise.website.yandexcloud.net/builds/25.2.1.ent.2/ydbd-enterpise-25.2.1.ent.2-stable-linux-amd64.tar.xz)
+- [Отладочные символы](http://binaries.ydb.enterprise.website.yandexcloud.net/builds/25.2.1.ent.2/ydbd-enterpise-25.2.1.ent.2-stable-linux-amd64-debug.tar.xz)
+
+|
+
+- [К дистрибутиву](http://binaries.ydb.enterprise.website.yandexcloud.net/builds/25.2.1.ent.2/checksums.txt)
+- [К отладочным символам](http://binaries.ydb.enterprise.website.yandexcloud.net/builds/25.2.1.ent.2/checksums.debug.txt)
+
+| [См. список](../changelog-enterprise.md#25-2-1-ent-2) ||
 || **v25.1** |  |  |  |  ||
+|| v.25.1.4.ent.7 | 13.01.2026 |
+
+- [Дистрибутив](http://binaries.ydb.enterprise.website.yandexcloud.net/builds/25.1.4.ent.7/ydbd-enterpise-25.1.4.ent.7-stable-linux-amd64.tar.xz)
+- [Отладочные символы](http://binaries.ydb.enterprise.website.yandexcloud.net/builds/25.1.4.ent.7/ydbd-enterpise-25.1.4.ent.7-stable-linux-amd64-debug.tar.xz)
+
+|
+
+- [К дистрибутиву](http://binaries.ydb.enterprise.website.yandexcloud.net/builds/25.1.4.ent.7/checksums.txt)
+- [К отладочным символам](http://binaries.ydb.enterprise.website.yandexcloud.net/builds/25.1.4.ent.7/checksums.debug.txt)
+
+| [См. список](../changelog-enterprise.md#25-1-4-ent-7) ||
 || v.25.1.4.ent.3 | 25.11.2025 |
 
 - [Дистрибутив](http://binaries.ydb.enterprise.website.yandexcloud.net/builds/25.1.4.ent.3/ydbd-enterpise-25.1.4.ent.3-stable-linux-amd64.tar.xz)

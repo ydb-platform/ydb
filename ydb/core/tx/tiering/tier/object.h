@@ -36,6 +36,8 @@ public:
 
     TConclusion<NKikimrSchemeOp::TS3Settings> GetPatchedConfig(const std::shared_ptr<NMetadata::NSecret::ISecretAccessor>& secrets) const;
 
+    TVector<TString> GetShemaSecretPaths() const;
+
     bool IsSame(const TTierConfig& item) const;
     NJson::TJsonValue GetDebugJson() const;
 };

@@ -33,6 +33,18 @@ TConclusion<NKikimrSchemeOp::TS3Settings> TTierConfig::GetPatchedConfig(
     return config;
 }
 
+TVector<TString> TTierConfig::GetShemaSecretPaths() const {
+    TVector<TString> result;
+    for (auto&& key: {&ProtoConfig.GetAccessKey(), &ProtoConfig.GetSecretKey()}) {
+        auto idOrValue = NMetadata::NSecret::TSecretIdOrValue::DeserializeFromString(*key);
+        if (idOrValue && std::holds_alternative<NMetadata::NSecret::TSecretName>(idOrValue->GetState())) {
+            result.push_back(std::get<NMetadata::NSecret::TSecretName>(idOrValue->GetState()).GetSecretId());
+        }
+    }
+
+    return result;
+}
+
 TConclusionStatus TTierConfig::DeserializeFromProto(const NKikimrSchemeOp::TExternalDataSourceDescription& proto) {
     if (!proto.GetAuth().HasAws()) {
         return TConclusionStatus::Fail("AWS auth is not defined for storage tier");

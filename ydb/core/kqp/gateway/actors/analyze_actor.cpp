@@ -230,6 +230,26 @@ void TAnalyzeActor::SendStatisticsAggregatorAnalyze(const TNavigate::TEntry& ent
     );
 }
 
+void TAnalyzeActor::Handle(TEvKqp::TEvAbortExecution::TPtr& ev, const TActorContext& ctx) {
+    ALOG_NOTICE(
+        NKikimrServices::KQP_GATEWAY,
+        "got TEvAbortExecution, issues: " << ev->Get()->GetIssues().ToOneLineString();
+    );
+
+    if (StatisticsAggregatorId) {
+        // We already sent the request to StatisticsAggregator, make a best-effort attempt to cancel it.
+        auto cancelRequest = std::make_unique<NStat::TEvStatistics::TEvAnalyzeCancel>();
+        cancelRequest->Record.SetOperationId(OperationId);
+        Send(
+            MakePipePerNodeCacheID(false),
+            new TEvPipeCache::TEvForward(cancelRequest.release(), StatisticsAggregatorId.value(), false));
+    }
+
+    Promise.SetValue(
+        NYql::NCommon::ResultFromError<NYql::IKikimrGateway::TGenericResult>(ev->Get()->GetIssues()));
+    this->Die(ctx);
+}
+
 void TAnalyzeActor::HandleUnexpectedEvent(ui32 typeRewrite) {
     ALOG_CRIT(
         NKikimrServices::KQP_GATEWAY,

@@ -152,6 +152,7 @@ private:
     void Handle(TEvPrivate::TEvSendAnalyze::TPtr& ev);
     void Handle(TEvPrivate::TEvAnalyzeDeliveryProblem::TPtr& ev);
     void Handle(TEvPrivate::TEvAnalyzeDeadline::TPtr& ev);
+    void Handle(TEvStatistics::TEvAnalyzeCancel::TPtr& ev);
 
     void InitializeStatisticsTable();
     void Navigate();
@@ -220,6 +221,7 @@ private:
             hFunc(TEvPrivate::TEvSendAnalyze, Handle);
             hFunc(TEvPrivate::TEvAnalyzeDeliveryProblem, Handle);
             hFunc(TEvPrivate::TEvAnalyzeDeadline, Handle);
+            hFunc(TEvStatistics::TEvAnalyzeCancel, Handle);
 
             default:
                 if (!HandleDefaultEvents(ev, SelfId())) {
@@ -361,6 +363,7 @@ private: // stored in local db
     bool TraversalIsColumnTable = false;
     TSerializedCellVec TraversalStartKey;
     TInstant TraversalStartTime;
+    TActorId AnalyzeActorId;
 
     size_t GlobalTraversalRound = 1;
 

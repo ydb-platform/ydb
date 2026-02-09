@@ -236,6 +236,40 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
         UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrStat::TEvAnalyzeResponse::STATUS_ERROR);
         UNIT_ASSERT(!record.GetIssues().empty());
     }    
+
+    Y_UNIT_TEST(AnalyzeCancel) {
+        TTestEnv env(1, 1);
+        auto& runtime = *env.GetServer().GetRuntime();
+        const auto tableInfo = PrepareDatabaseAndTable(env);
+        auto sender = runtime.AllocateEdgeActor();
+
+        TBlockEvents<TEvDataShard::TEvKqpScan> block(runtime);
+
+        auto analyzeRequest = MakeAnalyzeRequest({tableInfo.PathId});
+        auto operationId = analyzeRequest->Record.GetOperationId();
+        runtime.SendToPipe(tableInfo.SaTabletId, sender, analyzeRequest.release());
+
+        runtime.WaitFor("TEvKqpScan", [&]{ return !block.empty(); });
+
+        auto cancelRequest = MakeHolder<TEvStatistics::TEvAnalyzeCancel>();
+        cancelRequest->Record.SetOperationId(operationId);
+        runtime.SendToPipe(tableInfo.SaTabletId, sender, cancelRequest.Release());
+
+        auto analyzeResponse = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(sender);
+        const auto& record = analyzeResponse->Get()->Record;
+        UNIT_ASSERT_VALUES_EQUAL(record.GetOperationId(), "operationId");
+        UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrStat::TEvAnalyzeResponse::STATUS_CANCELLED);
+        block.Unblock();
+        block.Stop();
+
+        // Do another ANALYZE
+        auto analyzeRequest2 = MakeAnalyzeRequest({tableInfo.PathId}, "operationId2");
+        runtime.SendToPipe(tableInfo.SaTabletId, sender, analyzeRequest2.release());
+        runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(sender);
+
+        // Make sure that only 1 AnalyzeActor successfully finished.
+        UNIT_ASSERT_VALUES_EQUAL(runtime.GetCounter(TEvStatistics::EvFinishTraversal), 1);
+    }
 }
 
 } // NStat

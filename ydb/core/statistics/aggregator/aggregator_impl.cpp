@@ -677,9 +677,14 @@ void TStatisticsAggregator::ScheduleNextAnalyze(NIceDb::TNiceDb& db, const TActo
 
                 // operation.Types field is not used, TAnalyzeActor will determine suitable
                 // statistic types itself.
-                ctx.RegisterWithSameMailbox(new TAnalyzeActor(
+                AnalyzeActorId = ctx.Register(new TAnalyzeActor(
                     SelfId(), operation.OperationId, operation.DatabaseName, operationTable.PathId,
                     operationTable.ColumnTags));
+                SA_LOG_D("[" << TabletID() << "] ScheduleNextAnalyze. "
+                    << "operationId: " << operation.OperationId.Quote()
+                    << ", started analyzing table: " << operationTable.PathId
+                    << ", AnalyzeActorId: " << AnalyzeActorId);
+
                 return;
             }
         }
@@ -894,6 +899,7 @@ void TStatisticsAggregator::ResetTraversalState(NIceDb::TNiceDb& db) {
     TraversalDatabase = "";
     TraversalPathId = {};
     TraversalStartTime = TInstant::MicroSeconds(0);
+    AnalyzeActorId = {};
     PersistTraversal(db);
 
     TraversalStartKey = TSerializedCellVec();
@@ -1053,6 +1059,7 @@ bool TStatisticsAggregator::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev
                     str << "        ColumnTags: " << JoinVectorIntoString(table.ColumnTags, ",") << Endl;
                 }
             }
+            str << "AnalyzeActorId: " << AnalyzeActorId << Endl;
 
             str << Endl;
             str << "TraversalStartTime: " << TraversalStartTime.ToStringUpToSeconds() << Endl;

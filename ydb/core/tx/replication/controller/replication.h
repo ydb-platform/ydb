@@ -60,7 +60,7 @@ public:
 
     class ITargetStats {
     public:
-        virtual void FillToProto(NKikimrReplication::TEvDescribeReplicationResult& destination, bool includeDetailed) const = 0;
+        virtual void Serialize(NKikimrReplication::TEvDescribeReplicationResult& destination, bool detailed) const = 0;
         virtual ~ITargetStats() = default;
     };
 

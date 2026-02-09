@@ -7,80 +7,14 @@
 
 namespace NKikimr::NDDisk {
 
-    bool TDDiskActor::TPullingInFlight::AddDroppedSegment(ui32 offset, ui32 end) {
-        auto it = DroppedSegments.lower_bound(std::make_tuple(offset, 0));
-
-        // check forward segment
-        while (it != DroppedSegments.end()) {
-            auto [forwardOffset, forwardEnd] = *it;
-            if (end >= forwardOffset) {
-                end = std::max(end, forwardEnd);
-                it = DroppedSegments.erase(it);
-            } else {
-                break;
-            }
-        }
-
-        // check backward segment
-        while (it != DroppedSegments.begin()) {
-            --it;
-            auto [backwardOffset, backwardEnd] = *it;
-            if (backwardEnd >= offset) {
-                end = std::max(end, backwardEnd);
-                offset = backwardOffset;
-                DroppedSegments.erase(it);
-            } else {
-                break;
-            }
-        }
-
-        DroppedSegments.insert(std::make_tuple(offset, end));
-        return offset == Offset && end == End;
-    }
-
-    void TDDiskActor::DropSegmentFromPulling(const TBlockSelector &selector) {
-        ui32 offset = selector.OffsetInBytes;
-        ui32 end = offset + selector.Size;
-        auto it = PullingOffsetsInFlight.lower_bound(std::make_tuple(selector.VChunkIndex, offset));
-
-        // check forward segment
-        while (it != PullingOffsetsInFlight.end()) {
-            auto &pulling = it->second->second;
-            if (end > pulling.Offset) {
-                ui32 dropEnd = std::min(end, pulling.End);
-                if (pulling.AddDroppedSegment(pulling.Offset, dropEnd)) {
-                    ReplyPullingResult(it->second, NKikimrBlobStorage::NDDisk::TReplyStatus::OUTDATED); // erase from PullingsInFlight
-                    PullingOffsetsInFlight.erase(it);
-                }
-            } else {
-                break;
-            }
-        }
-
-        // check backward segment
-        while (it != PullingOffsetsInFlight.begin()) {
-            --it;
-            auto &pulling = it->second->second;
-            if (pulling.End > offset) {
-                ui32 dropEnd = std::min(end, pulling.End);
-                if (pulling.AddDroppedSegment(offset, dropEnd)) {
-                    ReplyPullingResult(it->second, NKikimrBlobStorage::NDDisk::TReplyStatus::OUTDATED); // erase from PullingsInFlight
-                    PullingOffsetsInFlight.erase(it);
-                }
-            } else {
-                break;
-            }
-        }
-    }
-
-    void TDDiskActor::Handle(TEvPullFromPersistentBuffer::TPtr ev) {
-        if (!CheckQuery(*ev, &Counters.Interface.PullFromPersistentBuffer)) {
+    void TDDiskActor::Handle(TEvSync::TPtr ev) {
+        if (!CheckQuery(*ev, &Counters.Interface.Sync)) {
             return;
         }
 
         const auto& record = ev->Get()->Record;
-        const TQueryCredentials creds(record.GetCredentials());
-        const TBlockSelector selector(record.GetSelector());
+        TQueryCredentials creds(record.GetCredentials());
+        TBlockSelector selector(record.GetSelector());
         const ui64 lsn = record.GetLsn();
 
         Counters.Interface.PullFromPersistentBuffer.Request();
@@ -104,7 +38,7 @@ namespace NKikimr::NDDisk {
         DropSegmentFromPulling(selector);
 
         PullingsInFlight.emplace(cookie, TPullingInFlight{ev->Sender, ev->Cookie, ev->InterconnectSession,
-            std::move(span), selector.OffsetInBytes, selector.OffsetInBytes + selector.Size, {}});
+            std::move(span), selector.OffsetInBytes, selector.OffsetInBytes + selector.Size, {}, std::move(creds), std::move(selector)});
     }
 
     void TDDiskActor::Handle(TEvReadPersistentBufferResult::TPtr ev) {
@@ -134,7 +68,8 @@ namespace NKikimr::NDDisk {
                 ReplyPullingResult(it, NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
             }
         };
-        InternalWrite(ev, instr, std::move(callback));
+        auto &pulling = it->second;
+        InternalWrite(ev, pulling.Creds, pulling.Selector, instr, std::move(callback));
     }
 
     void TDDiskActor::ReplyPullingResult(TPullingInFlightIterator it, NKikimrBlobStorage::NDDisk::TReplyStatus::E status, TString errorReason) {

@@ -5,38 +5,19 @@
 
 namespace NKikimr::NDDisk {
 
-    template <typename TEventPtr>
-    void TDDiskActor::InternalWrite(
-            TEventPtr ev,
-            const TWriteInstruction &instr,
+    void TDDiskActor::SendInternalWrite(
+            const TQueryCredentials &creds,
+            const TBlockSelector &selector,
+            NWilson::TTraceId &&traceId,
+            TRope &&data,
             std::function<void(NPDisk::TEvChunkWriteRawResult&, NWilson::TSpan&&)> callback
     ) {
-        const auto& record = ev->Get()->Record;
-        const TQueryCredentials creds(record.GetCredentials());
-        const TBlockSelector selector(record.GetSelector());
-
-        TChunkRef& chunkRef = ChunkRefs[creds.TabletId][selector.VChunkIndex];
-        if (!chunkRef.PendingEventsForChunk.empty() || !chunkRef.ChunkIdx) {
-            if (chunkRef.PendingEventsForChunk.empty() && !chunkRef.ChunkIdx) {
-                IssueChunkAllocation(creds.TabletId, selector.VChunkIndex);
-            }
-            chunkRef.PendingEventsForChunk.emplace(ev, "WaitChunkAllocation");
-            return;
-        }
-
-        Counters.Interface.Write.Request(selector.Size);
-
-        auto span = std::move(NWilson::TSpan(TWilson::DDiskTopLevel, std::move(ev->TraceId), "DDisk.Write",
+        auto span = std::move(NWilson::TSpan(TWilson::DDiskTopLevel, std::move(traceId), "DDisk.Write",
                 NWilson::EFlags::NONE, TActivationContext::ActorSystem())
             .Attribute("tablet_id", static_cast<long>(creds.TabletId))
             .Attribute("vchunk_index", static_cast<long>(selector.VChunkIndex))
             .Attribute("offset_in_bytes", selector.OffsetInBytes)
             .Attribute("size", selector.Size));
-
-        TRope data;
-        if (instr.PayloadId) {
-            data = ev->Get()->GetPayload(*instr.PayloadId);
-        }
 
         Y_ABORT_UNLESS(chunkRef.ChunkIdx);
 
@@ -56,7 +37,28 @@ namespace NKikimr::NDDisk {
             return;
         }
 
-        const TWriteInstruction instr(ev->Get()->Record.GetInstruction());
+        const auto& record = ev->Get()->Record;
+        const TQueryCredentials creds(record.GetCredentials());
+        const TBlockSelector selector(record.GetSelector());
+
+        TChunkRef& chunkRef = ChunkRefs[creds.TabletId][selector.VChunkIndex];
+        if (!chunkRef.PendingEventsForChunk.empty() || !chunkRef.ChunkIdx) {
+            if (chunkRef.PendingEventsForChunk.empty() && !chunkRef.ChunkIdx) {
+                IssueChunkAllocation(creds.TabletId, selector.VChunkIndex);
+            }
+            chunkRef.PendingEventsForChunk.emplace(ev, "WaitChunkAllocation");
+            return;
+        }
+
+        const TWriteInstruction instr(record.GetInstruction());
+
+        TRope data;
+        if (instr.PayloadId) {
+            data = ev->Get()->GetPayload(*instr.PayloadId);
+        }
+
+        Counters.Interface.Write.Request(selector.Size);
+
         auto callback = [this, sender = ev->Sender, cookie = ev->Cookie,
                 session = ev->InterconnectSession](NPDisk::TEvChunkWriteRawResult& /*ev*/, NWilson::TSpan&& span) {
             auto reply = std::make_unique<TEvWriteResult>(NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
@@ -68,7 +70,8 @@ namespace NKikimr::NDDisk {
             span.End();
             TActivationContext::Send(h.release());
         };
-        InternalWrite(ev, instr, std::move(callback));
+
+        SendInternalWrite(creds, selector, std::move(data), std::move(ev->TraceId), std::move(callback));
     }
 
 	void TDDiskActor::Handle(NPDisk::TEvChunkWriteRawResult::TPtr ev) {

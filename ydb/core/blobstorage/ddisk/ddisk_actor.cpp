@@ -95,16 +95,18 @@ namespace NKikimr::NDDisk {
             hFunc(TEvConnect, handleQuery)
             hFunc(TEvDisconnect, handleQuery)
             hFunc(TEvWrite, handleQuery)
-            hFunc(TEvRead, handleQuery)
+            hFunc(TEvRead, handleQuery
+            hFunc(TEvSync, handleQuery))
             hFunc(TEvWritePersistentBuffer, handleQuery)
             hFunc(TEvReadPersistentBuffer, handleQuery)
             hFunc(TEvFlushPersistentBuffer, handleQuery)
             hFunc(TEvErasePersistentBuffer, handleQuery)
             hFunc(TEvListPersistentBuffer, handleQuery)
-            hFunc(TEvPullFromPersistentBuffer, handleQuery)
 
             hFunc(TEvWriteResult, Handle)
             hFunc(TEvents::TEvUndelivered, Handle)
+
+            hFunc(TEvReadResult, Handle)
             hFunc(TEvReadPersistentBufferResult, Handle)
 
             hFunc(NPDisk::TEvYardInitResult, Handle)

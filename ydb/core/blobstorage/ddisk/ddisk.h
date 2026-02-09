@@ -30,8 +30,8 @@ namespace NKikimr::NDDisk {
             EvErasePersistentBufferResult,
             EvListPersistentBuffer,
             EvListPersistentBufferResult,
-            EvPullFromPersistentBuffer,
-            EvPullFromPersistentBufferResult,
+            EvSync,
+            EvSyncResult,
         };
     };
 
@@ -166,6 +166,8 @@ namespace NKikimr::NDDisk {
     struct TEvWriteResult;
     struct TEvRead;
     struct TEvReadResult;
+    struct TEvSync;
+    struct TEvSyncResult;
     struct TEvWritePersistentBuffer;
     struct TEvWritePersistentBufferResult;
     struct TEvReadPersistentBuffer;
@@ -176,8 +178,6 @@ namespace NKikimr::NDDisk {
     struct TEvErasePersistentBufferResult;
     struct TEvListPersistentBuffer;
     struct TEvListPersistentBufferResult;
-    struct TEvPullFromPersistentBuffer;
-    struct TEvPullFromPersistentBufferResult;
 
     DECLARE_DDISK_EVENT(Connect) {
         using TResult = TEvConnectResult;
@@ -410,20 +410,31 @@ namespace NKikimr::NDDisk {
         }
     };
 
-    DECLARE_DDISK_EVENT(PullFromPersistentBuffer) {
-        using TResult = TEvPullFromPersistentBufferResult;
+    DECLARE_DDISK_EVENT(Sync) {
+        using TResult = TEvSyncResult;
 
-        TEvPullFromPersistentBuffer() = default;
+        TEvSync() = default;
 
-        TEvPullFromPersistentBuffer(const TQueryCredentials& creds) {
+        TEvSync(const TQueryCredentials& creds, std::optional<std::tuple<ui32, ui32, ui32>> ddiskId,
+                std::optional<ui64> ddiskInstanceGuid) {
             creds.Serialize(Record.MutableCredentials());
+            if (ddiskId) {
+                const auto& [nodeId, pdiskId, ddiskSlotId] = *ddiskId;
+                auto *m = Record.MutableDDiskId();
+                m->SetNodeId(nodeId);
+                m->SetPDiskId(pdiskId);
+                m->SetDDiskSlotId(ddiskSlotId);
+            }
+            if (ddiskInstanceGuid) {
+                Record.SetDDiskInstanceGuid(*ddiskInstanceGuid);
+            }
         }
     };
 
-    DECLARE_DDISK_EVENT(PullFromPersistentBufferResult) {
-        TEvPullFromPersistentBufferResult() = default;
+    DECLARE_DDISK_EVENT(SyncResult) {
+        TEvSyncResult() = default;
 
-        TEvPullFromPersistentBufferResult(NKikimrBlobStorage::NDDisk::TReplyStatus::E status,
+        TEvSyncResult(NKikimrBlobStorage::NDDisk::TReplyStatus::E status,
                 const std::optional<TString>& errorReason = std::nullopt) {
             Record.SetStatus(status);
             if (errorReason) {

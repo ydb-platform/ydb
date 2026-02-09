@@ -4,6 +4,7 @@
 
 #include "ddisk.h"
 #include "persistent_buffer_space_allocator.h"
+#include "segment_manager.h"
 
 #include <ydb/core/blobstorage/vdisk/common/vdisk_config.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
@@ -21,12 +22,12 @@ namespace NKikimrBlobStorage::NDDisk::NInternal {
 #define LIST_COUNTERS_INTERFACE_OPS(XX) \
     XX(Write) \
     XX(Read) \
+    XX(Sync) \
     XX(WritePersistentBuffer) \
     XX(ReadPersistentBuffer) \
     XX(FlushPersistentBuffer) \
     XX(ErasePersistentBuffer) \
     XX(ListPersistentBuffer) \
-    XX(PullFromPersistentBuffer) \
     /**/
 
 namespace NKikimr::NDDisk {
@@ -329,8 +330,38 @@ namespace NKikimr::NDDisk {
         // Read/write
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+        void SendInternalWrite(
+            const TQueryCredentials &creds,
+            const TBlockSelector &selector,
+            NWilson::TTraceId &&traceId,
+            TRope &&data,
+            std::function<void(NPDisk::TEvChunkWriteRawResult&, NWilson::TSpan&&)> callback
+        );
+
         void Handle(TEvWrite::TPtr ev);
         void Handle(TEvRead::TPtr ev);
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // Sync
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+        struct TSyncInFlight {
+            TActorId Sender;
+            ui64 Cookie;
+            TActorId InterconnectionSessionId;
+            NWilson::TSpan Span;
+            TQueryCredentials Creds;
+            TBlockSelector Selector;
+
+            bool AddDroppedSegment(ui32 offset, ui32 size);
+        };
+        ui64 NextSyncId = 1;
+        THashMap<ui64, TSyncInFlight> SyncsInFlight; // syncId -> TSyncInFlight
+        TSegmentManager SegmentManager;
+
+        void Handle(TEvSync::TPtr ev);
+        void Handle(TEvReadPersistentBufferResult::TPtr ev);
+        void Handle(TEvReadResult::TPtr ev);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Persistent buffer services
@@ -430,30 +461,6 @@ namespace NKikimr::NDDisk {
         ui64 NextWriteCookie = 1;
         THashMap<ui64, TWriteInFlight> WritesInFlight;
 
-        struct TPullingInFlight {
-            TActorId Sender;
-            ui64 Cookie;
-            TActorId InterconnectionSessionId;
-            NWilson::TSpan Span;
-            ui32 Offset;
-            ui32 End;
-            std::set<std::tuple<ui32, ui32>> DroppedSegments; // (offset, segment_end);
-
-            bool AddDroppedSegment(ui32 offset, ui32 size);
-        };
-        ui64 NextPullingCookie = 1;
-        THashMap<ui64, TPullingInFlight> PullingsInFlight; // cookie -> TPullingInFlight
-        TMap<std::tuple<ui64, ui64>, THashMap<ui64, TPullingInFlight>::iterator> PullingOffsetsInFlight; // (vchunk_id, offset) -> iterator TPullingInFlight
-        using TPullingInFlightIterator = THashMap<ui64, TPullingInFlight>::iterator;
-
-        void DropSegmentFromPulling(const TBlockSelector &selector);
-        template <typename TEventPtr>
-        void InternalWrite(
-            TEventPtr ev,
-            const TWriteInstruction &instr,
-            std::function<void(NPDisk::TEvChunkWriteRawResult&, NWilson::TSpan&&)> callback
-        );
-
         void Handle(TEvWritePersistentBuffer::TPtr ev);
         void Handle(TEvReadPersistentBuffer::TPtr ev);
         void Handle(TEvFlushPersistentBuffer::TPtr ev);
@@ -462,11 +469,7 @@ namespace NKikimr::NDDisk {
         void Handle(TEvents::TEvUndelivered::TPtr ev);
         void Handle(TEvListPersistentBuffer::TPtr ev);
 
-        void Handle(TEvPullFromPersistentBuffer::TPtr ev);
-        void Handle(TEvReadPersistentBufferResult::TPtr ev);
-
         void HandleWriteInFlight(ui64 cookie, const std::function<std::unique_ptr<IEventBase>()>& factory);
-        void ReplyPullingResult(TPullingInFlightIterator it, NKikimrBlobStorage::NDDisk::TReplyStatus::E status, TString errorReason = "");
     };
 
 } // NKikimr::NDDisk

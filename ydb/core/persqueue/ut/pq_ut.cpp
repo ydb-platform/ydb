@@ -3081,5 +3081,93 @@ Y_UNIT_TEST(The_Keys_Are_Loaded_In_Several_Iterations) {
     });
 }
 
+Y_UNIT_TEST(TestSizeLag) {
+    TTestContext tc;
+    tc.EnableDetailedPQLog = true;
+    RunTestWithReboots(tc.TabletIds, [&]() {
+        return tc.InitialEventsFilter.Prepare();
+    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
+        activeZone = false;
+        TFinalizer finalizer(tc);
+        tc.Prepare(dispatchName, setup, activeZone);
+        activeZone = false;
+        tc.Runtime->SetScheduledLimit(1000);
+
+        ui32 sourceIdx = 0;
+        auto cmdWrite = [&](size_t count, size_t size) {
+            TVector<std::pair<ui64, TString>> data;
+            for (size_t k = 1; k <= count; ++k) {
+                data.emplace_back(k, TString(size, 'x'));
+            }
+            TString sourceId = "sourceid_" + ToString(sourceIdx++);
+            CmdWrite(0, sourceId, data, tc, false, {}, false, "", -1, -1, false, false, true);
+        };
+        auto cmdCompaction = [&]() {
+            CmdRunCompaction(0, tc);
+        };
+
+        PQTabletPrepare({.partitions = 1, .writeSpeed = 50_MB}, {{"user1", true}}, tc);
+
+        // CompactZone.Body
+        cmdWrite(27, 300_KB);
+        cmdWrite(27, 300_KB);
+
+        // CompactZone.Head
+        cmdWrite(10, 300_KB);
+
+        cmdCompaction();
+
+        // FastWriteZone.Body
+        cmdWrite(10, 10_KB);
+        cmdWrite(1, 10_KB);
+        cmdWrite(1, 10_KB);
+        cmdWrite(1, 10_KB);
+        cmdWrite(1, 10_KB);
+
+        PQTabletRestart(tc);
+
+        const ui64 endOffset = 78;
+
+        PQGetPartInfo(0, endOffset, tc);
+
+        // SYNC INIT DATA KEY: d0000000000_00000000000000000000_00000_0000000027_00000 size 8295737
+        // SYNC INIT DATA KEY: d0000000000_00000000000000000027_00000_0000000027_00000 size 8295737
+        // SYNC INIT HEAD KEY: d0000000000_00000000000000000054_00000_0000000010_00000| size 3072490
+        // SYNC INIT DATA KEY: d0000000000_00000000000000000064_00000_0000000010_00000? size 102562
+        // SYNC INIT DATA KEY: d0000000000_00000000000000000074_00000_0000000001_00000? size 10301
+        // SYNC INIT DATA KEY: d0000000000_00000000000000000075_00000_0000000001_00000? size 10301
+        // SYNC INIT DATA KEY: d0000000000_00000000000000000076_00000_0000000001_00000? size 10301
+        // SYNC INIT DATA KEY: d0000000000_00000000000000000077_00000_0000000001_00000? size 10301
+
+        TVector<ui64> sizeLags;
+        for (ui64 offset = 0; offset < endOffset; ++offset) {
+            sizeLags.push_back(GetSizeLag(0, offset, false, tc));
+        }
+
+        sizeLags.push_back(GetSizeLag(0, endOffset, true, tc));
+
+        for (size_t i = 0; i < endOffset; ++i) {
+            // лаг не должен увеличиваться
+            UNIT_ASSERT_GE(sizeLags[i], sizeLags[i + 1]);
+        }
+
+        // перепады на границах блобов
+        UNIT_ASSERT_VALUES_EQUAL(sizeLags[0], sizeLags[26]);
+        UNIT_ASSERT_GT(sizeLags[26], sizeLags[27]);
+        UNIT_ASSERT_VALUES_EQUAL(sizeLags[27], sizeLags[53]);
+        UNIT_ASSERT_GT(sizeLags[53], sizeLags[54]);
+        UNIT_ASSERT_VALUES_EQUAL(sizeLags[54], sizeLags[63]);
+        UNIT_ASSERT_GT(sizeLags[63], sizeLags[64]);
+        UNIT_ASSERT_VALUES_EQUAL(sizeLags[64], sizeLags[73]);
+        UNIT_ASSERT_GT(sizeLags[73], sizeLags[74]);
+        UNIT_ASSERT_GT(sizeLags[74], sizeLags[75]);
+        UNIT_ASSERT_GT(sizeLags[75], sizeLags[76]);
+        UNIT_ASSERT_GT(sizeLags[76], sizeLags[77]);
+        UNIT_ASSERT_GT(sizeLags[77], sizeLags[endOffset]);
+
+        UNIT_ASSERT_VALUES_EQUAL(sizeLags[endOffset], 0);
+    });
+}
+
 } // Y_UNIT_TEST_SUITE(TPQTest)
 } // namespace NKikimr::NPQ

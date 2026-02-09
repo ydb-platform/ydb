@@ -1823,7 +1823,7 @@ std::optional<TNestedColumn> TryParseNestedAggregate(TStringBuf description)
         throwError("expected \")\" or \",\" ");
     }
 
-    THROW_ERROR_EXCEPTION("Error while parsing nested aggregate description. Expected nested_key or nested_value");
+    THROW_ERROR_EXCEPTION("Error while parsing nested aggregate description: expected \"nested_key\" or \"nested_value\"");
 }
 
 EValueType GetNestedColumnElementType(const TLogicalType* logicalType)

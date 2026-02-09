@@ -69,6 +69,15 @@ TOpRoot PlanConverter::ConvertRoot(TExprNode::TPtr node) {
     res.Node = node;
     res.PlanProps = PlanProps;
     res.PlanProps.PgSyntax = std::stoi(opRoot.PgSyntax().StringValue());
+
+    // We need to propagate plan properties reference into expressions in the plan
+    for (auto it : res) {
+        auto exprRefs = it.Current->GetExpressions();
+        for (auto r : exprRefs) {
+            r.get().PlanProps = &res.PlanProps;
+        }
+    }
+    
     return res;
 }
 
@@ -154,7 +163,7 @@ std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpMap(TExprNode::TPtr node)
         if (mapElement.Maybe<TKqpOpMapElementRename>()) {
             auto element = mapElement.Cast<TKqpOpMapElementRename>();
             auto fromIU = TInfoUnit(element.From().StringValue());
-            mapElements.emplace_back(iu, fromIU);
+            mapElements.emplace_back(iu, fromIU, node->Pos(), &Ctx);
         } else {
             auto element = mapElement.Cast<TKqpOpMapElementLambda>();
             const auto forceOptional = GetForceOptional(element);
@@ -164,9 +173,10 @@ std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpMap(TExprNode::TPtr node)
                 auto member = maybeMember.Cast();
                 auto name = member.Name().Cast<TCoAtom>();
                 auto fromIU = TInfoUnit(name.StringValue());
-                mapElements.emplace_back(iu, fromIU);
+                mapElements.emplace_back(iu, fromIU, node->Pos(), &Ctx);
             } else {
-                mapElements.emplace_back(iu, GetMapElementLambda(element.Lambda().Ptr(), forceOptional, Ctx));
+                TExpression exprLambda(GetMapElementLambda(element.Lambda().Ptr(), forceOptional, Ctx), &Ctx);
+                mapElements.emplace_back(iu, exprLambda);
             }
         }
     }
@@ -197,7 +207,7 @@ std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpFilter(TExprNode::TPtr no
     auto input = ExprNodeToOperator(opFilter.Input().Ptr());
     auto lambda = opFilter.Lambda().Ptr();
     auto newLambda = RemoveSubplans(lambda);
-    return std::make_shared<TOpFilter>(input, node->Pos(), newLambda);
+    return std::make_shared<TOpFilter>(input, node->Pos(), TExpression(newLambda, &Ctx));
 }
 
 std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpJoin(TExprNode::TPtr node) {
@@ -228,7 +238,8 @@ std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpUnionAll(TExprNode::TPtr 
 std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpLimit(TExprNode::TPtr node) {
     auto opLimit = TKqpOpLimit(node);
     auto input = ExprNodeToOperator(opLimit.Input().Ptr());
-    return std::make_shared<TOpLimit>(input, node->Pos(), opLimit.Count().Ptr());
+    TExpression count(opLimit.Count().Ptr(), &Ctx);
+    return std::make_shared<TOpLimit>(input, node->Pos(), count);
 }
 
 std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpProject(TExprNode::TPtr node) {
@@ -258,7 +269,7 @@ std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpSort(TExprNode::TPtr node
         } else {
             TString newName = "_rbo_arg_" + std::to_string(PlanProps.InternalVarIdx++);
             column = TInfoUnit(newName);
-            mapElements.emplace_back(column, el.Lambda().Ptr());
+            mapElements.emplace_back(column, TExpression(el.Lambda().Ptr(), &Ctx));
         }
         sortElements.push_back(TSortElement(column, el.Direction().StringValue() == "asc", el.NullsFirst().StringValue() == "first"));
     }

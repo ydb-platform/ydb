@@ -38,7 +38,9 @@ enum EFmrComponent {
 
 enum EFmrReason {
     REASON_UNKNOWN = 0;
-    USER_ERROR = 1;
+    REASON_RESTART_OPERATION = 1;
+    REASON_RESTART_QUERY = 2;
+    REASON_UDF_TERMINATE = 3;
 }
 
 message TFmrError {
@@ -82,6 +84,9 @@ message TFmrTableInputRef {
     repeated TTableRange TableRanges = 2;
     repeated string Columns = 3;
     optional string ColumnGroups = 4;
+    optional bool   IsFirstRowInclusive = 5;
+    optional string FirstRowKeys = 6;
+    optional string LastRowKeys = 7;
 }
 
 message TFmrTableOutputRef {

@@ -14,18 +14,18 @@ namespace {
     TCurrentTest::AddTest(#N ":BlockEngineMode=" #MODE, \
                           static_cast<void (*)(NUnitTest::TTestContext&)>(&N<NYql::EBlockEngineMode::MODE>), false);
 
-#define Y_UNIT_TEST_BLOCKS(N)                         \
-    template <NYql::EBlockEngineMode BlockEngineMode> \
-    void N(NUnitTest::TTestContext&);                 \
-    struct TTestRegistration##N {                     \
-        TTestRegistration##N() {                      \
-            Y_UNIT_TEST_ADD_BLOCK_TEST(N, Disable)    \
-            Y_UNIT_TEST_ADD_BLOCK_TEST(N, Auto)       \
-            Y_UNIT_TEST_ADD_BLOCK_TEST(N, Force)      \
-        }                                             \
-    };                                                \
-    static TTestRegistration##N testRegistration##N;  \
-    template <NYql::EBlockEngineMode BlockEngineMode> \
+#define Y_UNIT_TEST_BLOCKS(N)                                                                  \
+    template <NYql::EBlockEngineMode BlockEngineMode>                                          \
+    void N(NUnitTest::TTestContext&);                                                          \
+    struct TTestRegistration##N {                                                              \
+        TTestRegistration##N() {                                                               \
+            Y_UNIT_TEST_ADD_BLOCK_TEST(N, Disable)                                             \
+            Y_UNIT_TEST_ADD_BLOCK_TEST(N, Auto)                                                \
+            Y_UNIT_TEST_ADD_BLOCK_TEST(N, Force)                                               \
+        }                                                                                      \
+    };                                                                                         \
+    static TTestRegistration##N testRegistration##N; /* NOLINT(misc-use-anonymous-namespace)*/ \
+    template <NYql::EBlockEngineMode BlockEngineMode>                                          \
     void N(NUnitTest::TTestContext&)
 
 NYql::NPureCalc::TProgramFactoryOptions TestOptions(NYql::EBlockEngineMode mode) {

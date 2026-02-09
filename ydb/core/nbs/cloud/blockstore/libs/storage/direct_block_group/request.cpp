@@ -4,77 +4,28 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-IRequest::IRequest(ui64 startIndex, NWilson::TSpan span)
-    : StartIndex(startIndex)
-    , Span(std::move(span))
-{}
-
-ui64 IRequest::GetStartOffset() const
+TWriteRequestHandler::TWriteRequestHandler(std::shared_ptr<TWriteBlocksLocalRequest> request)
+    : Request(std::move(request))
 {
-    return StartIndex * BlockSize;
+    Future = NThreading::NewPromise<TWriteBlocksLocalResponse>();
 }
 
-void IRequest::ChildSpanEndOk(ui64 requestId)
+ui64 TWriteRequestHandler::GetStartIndex() const
 {
-    auto it = ChildSpanByRequestId.find(requestId);
-    if (it != ChildSpanByRequestId.end()) {
-        it->second.EndOk();
-        ChildSpanByRequestId.erase(it);
-    }
+    return Request->Range.Start;
 }
 
-void IRequest::ChildSpanEndError(ui64 requestId, const TString& errorMessage)
+ui64 TWriteRequestHandler::GetStartOffset() const
 {
-    auto it = ChildSpanByRequestId.find(requestId);
-    if (it != ChildSpanByRequestId.end()) {
-        it->second.EndError(errorMessage);
-        ChildSpanByRequestId.erase(it);
-    }
+    return Request->Range.Start * BlockSize;
 }
 
-////////////////////////////////////////////////////////////////////////////////
-
-TWriteRequest::TWriteRequest(
-    TActorId sender,
-    ui64 cookie,
-    ui64 startIndex,
-    TString data,
-    NWilson::TSpan span)
-    : IRequest(startIndex, std::move(span))
-    , Sender(sender)
-    , Cookie(cookie)
-    , Data(std::move(data))
-{}
-
-TActorId TWriteRequest::GetSender() const
+ui64 TWriteRequestHandler::GetSize() const
 {
-    return Sender;
+    return Request->Range.Size() * BlockSize;
 }
 
-ui64 TWriteRequest::GetCookie() const
-{
-    return Cookie;
-}
-
-const TString& TWriteRequest::GetData() const
-{
-    return Data;
-}
-
-ui64 TWriteRequest::GetDataSize() const
-{
-    return Data.size();
-}
-
-void TWriteRequest::OnWriteRequested(
-    ui64 requestId, ui8 persistentBufferIndex, ui64 lsn, NWilson::TSpan span)
-{
-    WriteMetaByRequestId.emplace(requestId,
-        TPersistentBufferWriteMeta(persistentBufferIndex, lsn));
-    ChildSpanByRequestId.emplace(requestId, std::move(span));
-}
-
-bool TWriteRequest::IsCompleted(ui64 requestId)
+bool TWriteRequestHandler::IsCompleted(ui64 requestId)
 {
     auto processedPersistentBufferIndex = WriteMetaByRequestId.at(requestId).Index;
     if (!(AcksMask & (1 << processedPersistentBufferIndex))) {
@@ -82,10 +33,22 @@ bool TWriteRequest::IsCompleted(ui64 requestId)
         AckCount++;
     }
 
-    return AckCount >= RequiredAckCount;
+    if (AckCount >= RequiredAckCount) {
+        Future.SetValue(TWriteBlocksLocalResponse());
+        return true;
+    }
+
+    return false;
 }
 
-TVector<TWriteRequest::TPersistentBufferWriteMeta> TWriteRequest::GetWritesMeta() const
+void TWriteRequestHandler::OnWriteRequested(
+    ui64 requestId, ui8 persistentBufferIndex, ui64 lsn)
+{
+    WriteMetaByRequestId.emplace(requestId,
+        TPersistentBufferWriteMeta(persistentBufferIndex, lsn));
+}
+
+TVector<TWriteRequestHandler::TPersistentBufferWriteMeta> TWriteRequestHandler::GetWritesMeta() const
 {
     TVector<TPersistentBufferWriteMeta> result;
     for (const auto& [_, writeMeta] : WriteMetaByRequestId) {
@@ -95,80 +58,137 @@ TVector<TWriteRequest::TPersistentBufferWriteMeta> TWriteRequest::GetWritesMeta(
     return result;
 }
 
+NThreading::TFuture<TWriteBlocksLocalResponse> TWriteRequestHandler::GetFuture() const
+{
+    return Future.GetFuture();
+}
+
+TGuardedSgList TWriteRequestHandler::GetData()
+{
+    return Request->Sglist;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
-TFlushRequest::TFlushRequest(ui64 startIndex, bool isErase, ui8 persistentBufferIndex, ui64 lsn, NWilson::TSpan span)
-    : IRequest(startIndex, std::move(span))
-    , IsErase(isErase)
+
+TFlushRequestHandler::TFlushRequestHandler(ui64 startIndex, ui8 persistentBufferIndex, ui64 lsn)
+    : StartIndex(startIndex)
     , PersistentBufferIndex(persistentBufferIndex)
     , Lsn(lsn)
 {}
 
-ui64 TFlushRequest::GetDataSize() const
+ui64 TFlushRequestHandler::GetStartIndex() const
+{
+    return StartIndex;
+}
+
+ui64 TFlushRequestHandler::GetStartOffset() const
+{
+    return StartIndex * BlockSize;
+}
+
+ui64 TFlushRequestHandler::GetSize() const
 {
     return BlockSize;
 }
 
-bool TFlushRequest::IsCompleted(ui64 requestId)
+bool TFlushRequestHandler::IsCompleted(ui64 requestId)
 {
     Y_UNUSED(requestId);
+
     return true;
 }
 
-bool TFlushRequest::GetIsErase() const
-{
-    return IsErase;
-}
-
-ui8 TFlushRequest::GetPersistentBufferIndex() const
-{
-    return PersistentBufferIndex;
-}
-
-ui64 TFlushRequest::GetLsn() const
+ui64 TFlushRequestHandler::GetLsn() const
 {
     return Lsn;
 }
 
-void TFlushRequest::OnFlushRequested(ui64 requestId, NWilson::TSpan span)
+ui8 TFlushRequestHandler::GetPersistentBufferIndex() const
 {
-    ChildSpanByRequestId.emplace(requestId, std::move(span));
+    return PersistentBufferIndex;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TReadRequest::TReadRequest(TActorId sender, ui64 cookie, ui64 startIndex, ui64 blocksCount, NWilson::TSpan span)
-    : IRequest(startIndex, std::move(span))
-    , Sender(sender)
-    , Cookie(cookie)
-    , BlocksCount(blocksCount)
+TEraseRequestHandler::TEraseRequestHandler(ui64 startIndex, ui8 persistentBufferIndex, ui64 lsn)
+    : StartIndex(startIndex)
+    , PersistentBufferIndex(persistentBufferIndex)
+    , Lsn(lsn)
 {}
 
-TActorId TReadRequest::GetSender() const
+ui64 TEraseRequestHandler::GetStartIndex() const
 {
-    return Sender;
+    return StartIndex;
 }
 
-ui64 TReadRequest::GetCookie() const
+ui64 TEraseRequestHandler::GetStartOffset() const
 {
-    return Cookie;
+    return StartIndex * BlockSize;
 }
 
-ui64 TReadRequest::GetDataSize() const
+ui64 TEraseRequestHandler::GetSize() const
 {
-    return BlocksCount * BlockSize;
+    return BlockSize;
 }
 
-bool TReadRequest::IsCompleted(ui64 requestId)
+bool TEraseRequestHandler::IsCompleted(ui64 requestId)
 {
     Y_UNUSED(requestId);
+
     return true;
-
 }
 
-void TReadRequest::OnReadRequested(ui64 requestId, NWilson::TSpan span)
+ui64 TEraseRequestHandler::GetLsn() const
 {
-    ChildSpanByRequestId.emplace(requestId, std::move(span));
+    return Lsn;
 }
 
-}   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect
+ui8 TEraseRequestHandler::GetPersistentBufferIndex() const
+{
+    return PersistentBufferIndex;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TReadRequestHandler::TReadRequestHandler(std::shared_ptr<TReadBlocksLocalRequest> request)
+    : Request(std::move(request))
+{
+    Future = NThreading::NewPromise<TReadBlocksLocalResponse>();
+}
+
+ui64 TReadRequestHandler::GetStartIndex() const
+{
+    return Request->Range.Start;
+}
+
+ui64 TReadRequestHandler::GetStartOffset() const
+{
+    return Request->Range.Start * BlockSize;
+}
+
+ui64 TReadRequestHandler::GetSize() const
+{
+    return Request->Range.Size() * BlockSize;
+}
+
+
+bool TReadRequestHandler::IsCompleted(ui64 requestId)
+{
+    Y_UNUSED(requestId);
+
+    Future.SetValue(TReadBlocksLocalResponse());
+    return true;
+}
+
+NThreading::TFuture<TReadBlocksLocalResponse> TReadRequestHandler::GetFuture() const
+{
+    return Future.GetFuture();
+}
+
+TGuardedSgList TReadRequestHandler::GetData()
+{
+    return Request->Sglist;
+}
+
+}// namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

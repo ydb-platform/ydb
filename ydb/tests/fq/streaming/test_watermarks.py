@@ -12,13 +12,14 @@ class TestWatermarksInYdb(StreamingTestBase):
     @pytest.mark.parametrize("kikimr", [{"enable_watermarks": True}], indirect=["kikimr"])
     @pytest.mark.parametrize("shared_reading", [False], ids=["no_shared"])
     @pytest.mark.parametrize("tasks", [1])
-    def test_watermarks(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], shared_reading: bool, tasks: int) -> None:
-        query_name = f"test_watermarks_{shared_reading}_{tasks}"
+    def test_watermarks(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], shared_reading: bool, tasks: int, name: str = 'watermarks') -> None:
+        query_name = f"test_{name}{shared_reading}{tasks}"
         source_name = entity_name(query_name)
         self.init_topics(source_name, partitions_count=tasks)
         self.create_source(kikimr, source_name, shared_reading)
 
         ts = "CAST(ts AS Timestamp)" if shared_reading else "SystemMetadata('write_time')"
+
         sql = f'''
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
@@ -88,3 +89,14 @@ class TestWatermarksInYdb(StreamingTestBase):
 
         sql = f'''DROP STREAMING QUERY `{query_name}`;'''
         kikimr.ydb_client.query(sql)
+
+    @pytest.mark.parametrize("kikimr", [{"enable_watermarks": True}], indirect=["kikimr"])
+    @pytest.mark.parametrize("shared_reading", [False], ids=["no_shared"])
+    @pytest.mark.parametrize("tasks", [1])
+    def test_watermarks_reuse_pattern(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], shared_reading: bool, tasks: int) -> None:
+        # tries to trigger reuse MultiHoppingCore; with YQ-5082 this results in
+        # predictable failures
+        self.test_watermarks(kikimr, entity_name, shared_reading, tasks, 'reuse1')
+        self.test_watermarks(kikimr, entity_name, shared_reading, tasks, 'reuse2')
+        self.test_watermarks(kikimr, entity_name, shared_reading, tasks, 'reuse3')
+        self.test_watermarks(kikimr, entity_name, shared_reading, tasks, 'reuse4')

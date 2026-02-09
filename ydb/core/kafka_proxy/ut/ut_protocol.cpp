@@ -1165,6 +1165,8 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             //generationId1 = msg->GenerationId;
         }
 
+        Sleep(TDuration::MilliSeconds(100));
+
         {
             // Check FETCH
             std::vector<std::pair<TString, std::vector<i32>>> topics {{topicName, {0}}};

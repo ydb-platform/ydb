@@ -693,8 +693,8 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             NHuge::THugeSlot hugeSlot;
             ui32 slotSize;
             if (State.Pers->Heap->Allocate(msg.Data.GetSize(), &hugeSlot, &slotSize)) {
-                State.Pers->AddSlotInFlight(hugeSlot);
-                State.Pers->AddChunkSize(hugeSlot);
+                const bool inserted = State.Pers->AllocatedSlots.insert(hugeSlot).second;
+                Y_ABORT_UNLESS(inserted);
                 const ui64 lsnInfimum = HugeKeeperCtx->LsnMngr->GetLsn();
                 CheckLsn(lsnInfimum, "WriteHugeBlob");
                 const ui64 wId = State.LsnFifo.Push(lsnInfimum);
@@ -889,7 +889,6 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             for (const auto &x : msg->HugeBlobs) {
                 slotSizes.insert(State.Pers->Heap->SlotSizeOfThisSize(x.Size));
                 NHuge::TFreeRes freeRes = State.Pers->Heap->Free(x);
-                State.Pers->DeleteChunkSize(State.Pers->Heap->ConvertDiskPartToHugeSlot(x));
                 LOG_DEBUG(ctx, BS_HULLHUGE,
                           VDISKP(HugeKeeperCtx->VCtx->VDiskLogPrefix,
                                 "THullHugeKeeper: TEvHullFreeHugeSlots: one slot: addr# %s",
@@ -962,8 +961,8 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             // manage allocated slots
             const TDiskPart &hugeBlob = msg->HugeBlob;
             NHuge::THugeSlot hugeSlot(State.Pers->Heap->ConvertDiskPartToHugeSlot(hugeBlob));
-            const bool deleted = State.Pers->DeleteSlotInFlight(hugeSlot);
-            Y_ABORT_UNLESS(deleted);
+            auto nErased = State.Pers->AllocatedSlots.erase(hugeSlot);
+            Y_ABORT_UNLESS(nErased == 1);
             // depending on SlotIsUsed...
             if (msg->SlotIsUsed) {
                 Y_VERIFY_S(State.Pers->LogPos.HugeBlobLoggedLsn < msg->RecLsn,
@@ -973,8 +972,6 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             } else {
                 // ...free slot
                 State.Pers->Heap->Free(hugeBlob);
-                // and remove chunk size record
-                State.Pers->DeleteChunkSize(hugeSlot);
             }
         }
 
@@ -1093,7 +1090,8 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             : HugeKeeperCtx(std::move(hugeKeeperCtx))
             , State(std::move(persState))
         {
-            Y_ABORT_UNLESS(State.Pers->Recovered && State.Pers->SlotsInFlight.empty());
+            Y_ABORT_UNLESS(State.Pers->Recovered &&
+                     State.Pers->AllocatedSlots.empty());
         }
 
         void Bootstrap(const TActorContext &ctx) {

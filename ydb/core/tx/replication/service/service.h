@@ -81,14 +81,14 @@ struct TEvService {
             id.Serialize(*Record.MutableWorker());
             Record.SetStatus(NKikimrReplication::TEvWorkerStatus::STATUS_RUNNING);
             Record.SetReason(NKikimrReplication::TEvWorkerStatus::REASON_STATS);
-            auto* stats = Record.MutableStats();
+            auto& stats = *Record.MutableStats();
             if (startTime) {
-                stats->MutableStartTime()->set_seconds(startTime.Seconds());
+                stats.MutableStartTime()->set_seconds(startTime.Seconds());
             }
             for (auto [k, v] : statsValues) {
-                auto* val = stats->AddValues();
-                val->SetKey(k);
-                val->SetValue(v);
+                auto& val = *stats.AddValues();
+                val.SetKey(k);
+                val.SetValue(v);
             }
         }
     };

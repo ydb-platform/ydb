@@ -14,6 +14,7 @@ TConstructor::TConstructor(const NColumnShard::TUnifiedOptionalPathId& unifiedPa
         if (unifiedPathId.HasInternalPathId() && unifiedPathId.GetInternalPathIdVerified() != i.first) {
             continue;
         }
+        AFL_VERIFY(unifiedPathId.HasInternalPathId());
         AFL_VERIFY(unifiedPathId.HasSchemeShardLocalPathId());
         constructors.emplace_back(unifiedPathId.GetSchemeShardLocalPathIdVerified(), TabletId, i.second);
         if (!pkFilter->IsUsed(constructors.back().GetStart().GetValue().BuildSortablePosition(),

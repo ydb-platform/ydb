@@ -294,6 +294,7 @@ void TSchemaTransactionOperator::DoOnTabletInit(TColumnShard& owner) {
                 WaitOnPropose = std::make_shared<TWaitTxs>(GetTxId(), std::move(txIdsToWait));
             }
         }
+        break;
         case NKikimrTxColumnShard::TSchemaTxBody::kCopyTable:
         {
             const auto srcSchemeShardLocalPathId = TSchemeShardLocalPathId::FromRawValue(SchemaTxBody.GetCopyTable().GetSrcPathId());
@@ -307,6 +308,7 @@ void TSchemaTransactionOperator::DoOnTabletInit(TColumnShard& owner) {
                 WaitOnPropose = std::make_shared<TWaitTxs>(GetTxId(), std::move(txIdsToWait));
             }
         }
+        break;
         case NKikimrTxColumnShard::TSchemaTxBody::TXBODY_NOT_SET:
             break;
     }

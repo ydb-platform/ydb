@@ -15,6 +15,7 @@ TConstructor::TConstructor(const NColumnShard::TUnifiedOptionalPathId& unifiedPa
         if (unifiedPathId.HasInternalPathId() && unifiedPathId.GetInternalPathIdVerified() != i.first) {
             continue;
         }
+        AFL_VERIFY(unifiedPathId.HasInternalPathId());
         AFL_VERIFY(unifiedPathId.HasSchemeShardLocalPathId());
         std::vector<TPortionInfo::TConstPtr> portionsAll;
         for (auto&& [_, p] : i.second->GetPortions()) {

@@ -34,6 +34,8 @@ TConstructor::TConstructor(const NColumnShard::TUnifiedOptionalPathId& unifiedPa
         if (unifiedPathId.HasInternalPathId() && unifiedPathId.GetInternalPathIdVerified() != i.first) {
             continue;
         }
+        AFL_VERIFY(unifiedPathId.HasInternalPathId());
+        AFL_VERIFY(unifiedPathId.HasSchemeShardLocalPathId());
         for (auto&& [_, p] : i.second->GetPortions()) {
             if (reqSnapshot < p->RecordSnapshotMin()) {
                 continue;

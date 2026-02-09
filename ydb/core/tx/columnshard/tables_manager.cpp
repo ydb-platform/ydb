@@ -154,7 +154,7 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db, const TTabletStorageInfo* i
         }
 
         while (!rowset.EndOfSet()) {
-            TTableInfo table = table.InitFromDBV1(rowset);
+            TTableInfo table = TTableInfo::InitFromDBV1(rowset);
             const auto pathIds = table.GetPathIds();
             AFL_VERIFY(pathIds.size() == 1);
             const auto pathId = *pathIds.begin();
@@ -185,7 +185,7 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db, const TTabletStorageInfo* i
         }
 
         while (!rowset.EndOfSet()) {
-            TTableInfo table = table.InitFromDB(rowset);
+            TTableInfo table = TTableInfo::InitFromDB(rowset);
             const auto pathIds = table.GetPathIds();
             AFL_VERIFY(pathIds.size() == 1);
             const auto pathId = *pathIds.begin();

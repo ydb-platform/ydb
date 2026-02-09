@@ -163,11 +163,11 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db, const TTabletStorageInfo* i
             }
             auto it = Tables.find(pathId.InternalPathId);
             if (it == Tables.end()) {
-                Tables.emplace(pathId.InternalPathId, table);
+                Tables.emplace(pathId.InternalPathId, std::move(table));
             } else {
-                it->second.Merge(table);
+                it->second.Merge(std::move(table));
             }
-            AFL_VERIFY(SchemeShardLocalToInternal.emplace(pathId.SchemeShardLocalPathId, pathId.InternalPathId).first->first.IsValid());
+            AFL_VERIFY(SchemeShardLocalToInternal.emplace(pathId.SchemeShardLocalPathId, pathId.InternalPathId).second);
 
             if (!rowset.Next()) {
                 timer.AddLoadingFail();
@@ -194,9 +194,9 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db, const TTabletStorageInfo* i
             }
             auto it = Tables.find(pathId.InternalPathId);
             if (it == Tables.end()) {
-                Tables.emplace(pathId.InternalPathId, table);
+                Tables.emplace(pathId.InternalPathId, std::move(table));
             } else {
-                it->second.Merge(table);
+                it->second.Merge(std::move(table));
             }
             SchemeShardLocalToInternal[pathId.SchemeShardLocalPathId] = pathId.InternalPathId;
 
@@ -420,10 +420,10 @@ void TTablesManager::RegisterTable(TTableInfo&& table, NIceDb::TNiceDb& db) {
     bool needRegisterTable = PrimaryIndex != nullptr;
     auto it = Tables.find(pathId.InternalPathId);
     if (it == Tables.end()) {
-        Tables.emplace(pathId.InternalPathId, table);
+        Tables.emplace(pathId.InternalPathId, std::move(table));
     } else {
         needRegisterTable = false;
-        it->second.Merge(table);
+        it->second.Merge(std::move(table));
     }
     AFL_VERIFY(pathId.SchemeShardLocalPathId.IsValid());
     AFL_VERIFY(SchemeShardLocalToInternal.emplace(pathId.GetSchemeShardLocalPathId(), pathId.GetInternalPathId()).second);

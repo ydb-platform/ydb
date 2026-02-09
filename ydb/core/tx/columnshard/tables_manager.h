@@ -141,11 +141,11 @@ public:
         return *dropVersion;
     }
 
-    void Merge(const TTableInfo& other) {
+    void Merge(TTableInfo&& other) {
         AFL_VERIFY(InternalPathId == other.InternalPathId);
         Versions.insert(other.Versions.begin(), other.Versions.end());
-        for (const auto& [schemeShardLocalPathId, pathInfo]: other.SchemeShardLocalPathIds) {
-            SchemeShardLocalPathIds[schemeShardLocalPathId] = pathInfo; // override
+        for (auto&& [schemeShardLocalPathId, pathInfo]: other.SchemeShardLocalPathIds) {
+            SchemeShardLocalPathIds[schemeShardLocalPathId] = std::move(pathInfo); // override
         }
     }
 

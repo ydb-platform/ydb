@@ -387,7 +387,7 @@ protected:
 
     bool ProcessRequest(const TActorContext& ctx) {
         if (IsSslActive) {
-            std::shared_ptr<X509> cert = Socket->GetSslClientCert();
+            TSslHelpers::TSslHolder<X509> cert = Socket->GetSslClientCert();
             Cout << "Recieved cert? :" << (cert != nullptr) << Endl;
         }
 

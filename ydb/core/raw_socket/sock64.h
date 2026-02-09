@@ -2,7 +2,10 @@
 
 #include <optional>
 #include <util/network/sock.h>
+#include <util/stream/file.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/library/actors/interconnect/poller/poller_actor.h>
+#include <ydb/core/base/appdata.h>
 #include "sock_settings.h"
 #include "sock_ssl.h"
 
@@ -156,12 +159,54 @@ public:
     {}
 
     void InitServerSsl(SSL_CTX* ctx) {
+        Cout << "HasAppData() " << NKikimr::HasAppData() << Endl;
+        TString kafkaServerCertPath = NKikimr::AppData()->KafkaProxyConfig.GetCert();
+        TString kafkaServerPrivateKeyPath = NKikimr::AppData()->KafkaProxyConfig.GetKey();
         Bio.reset(BIO_new(TSslLayer<TStreamSocket>::IoMethod()));
         BIO_set_data(Bio.get(), static_cast<TStreamSocket*>(this));
         BIO_set_nbio(Bio.get(), 1);
         Ssl = TSslHelpers::ConstructSsl(ctx, Bio.get());
         // тут по флагу надо
-        SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, &Verify);
+        SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, &TInet64SecureStreamSocket::Verify);
+
+
+        auto readFile = [](std::optional<TString> value, std::optional<TString> path, const char *name) {
+        if (value) {
+            return *value;
+        } else if (path) {
+            try {
+                return TFileInput(*path).ReadAll();
+            } catch (const std::exception& ex) {
+                ythrow yexception()
+                    << "failed to read " << name << " file '" << *path << "': " << ex.what();
+            }
+        }
+        return TString();
+        };
+        TString certificate = readFile(std::nullopt, kafkaServerCertPath,"certificate");
+        {
+            TSslHolder<BIO> bio(BIO_new_mem_buf(certificate.data(), certificate.size()));
+            Y_ABORT_UNLESS(bio);
+
+            TSslHolder<X509> cert(PEM_read_bio_X509(bio.get(), nullptr, nullptr, nullptr));
+            Y_ABORT_UNLESS(cert, "failed to parse certificate");
+            int ret = SSL_CTX_use_certificate(ctx, cert.get());
+            Y_ABORT_UNLESS(ret == 1);
+        }
+        TString privateKey = readFile(std::nullopt, kafkaServerPrivateKeyPath,"key");
+        {
+            TSslHolder<BIO> bio(BIO_new_mem_buf(privateKey.data(), privateKey.size()));
+            Y_ABORT_UNLESS(bio);
+            TSslHolder<EVP_PKEY> pkey(PEM_read_bio_PrivateKey(bio.get(), nullptr, nullptr, nullptr));
+            Y_ABORT_UNLESS(pkey);
+            int ret = SSL_CTX_use_PrivateKey(ctx, pkey.get());
+            Y_ABORT_UNLESS(ret == 1);
+        }
+        {
+            int ret = SSL_CTX_load_verify_locations(ctx, "", nullptr);
+
+            Y_ABORT_UNLESS(ret == 1);
+        }
         SSL_set_accept_state(Ssl.get());
     }
 
@@ -190,28 +235,57 @@ public:
         return ProcessResult(res);
     }
 
-    static int Verify(int preverify, X509_STORE_CTX *) {
-        // X509* const current = X509_STORE_CTX_get_current_cert(ctx);
+    static char* ConvertX509ToPEMString(X509* cert) {
+        BIO* bio = BIO_new(BIO_s_mem());
+        char* buffer = NULL;
+        long length;
+
+        if (PEM_write_bio_X509(bio, cert)) {
+            length = BIO_get_mem_data(bio, &buffer);
+            char* result = (char*)malloc(length + 1);
+            memcpy(result, buffer, length);
+            result[length] = '\0';
+            BIO_free(bio);
+            return result;
+        }
+
+        BIO_free(bio);
+        return NULL;
+    }
+
+    static int Verify(int preverify, X509_STORE_CTX *ctx) {
+        X509* const current = X509_STORE_CTX_get_current_cert(ctx);
         // auto* const ssl = static_cast<SSL*>(X509_STORE_CTX_get_ex_data(ctx, SSL_get_ex_data_X509_STORE_CTX_idx()));
         // auto* const errp = static_cast<TString*>(SSL_get_ex_data(ssl, GetExIndex()));
         // auto* const secureSocketContext = static_cast<TSecureSocketContext*>(SSL_get_ex_data(ssl, GetContextIndex()));
 
-        // if (!preverify) {
-        //     int err = X509_STORE_CTX_get_error(ctx);
-        //     int depth = X509_STORE_CTX_get_error_depth(ctx);
-        //     char buffer[1024];
-        //     X509_NAME_oneline(X509_get_subject_name(current), buffer, sizeof(buffer));
-        //     TStringBuilder s;
-        //     s << "Error during certificate validation"
-        //         << " error# " << X509_verify_cert_error_string(err)
-        //         << " depth# " << depth
-        //         << " cert# " << buffer;
-        //     if (err == X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT) {
-        //         X509_NAME_oneline(X509_get_issuer_name(current), buffer, sizeof(buffer));
-        //         s << " issuer# " << buffer;
-        //     }
-        //     *errp = s;
-        // } else if (auto& forbidden = secureSocketContext->Impl->Common->Settings.ForbiddenSignatureAlgorithms) {
+        if (!preverify) {
+            int err = X509_STORE_CTX_get_error(ctx);
+            int depth = X509_STORE_CTX_get_error_depth(ctx);
+            char buffer[1024];
+            X509_NAME_oneline(X509_get_subject_name(current), buffer, sizeof(buffer));
+            if (err == X509_V_ERR_DEPTH_ZERO_SELF_SIGNED_CERT) {
+            // Разрешаем self-signed сертификаты
+                Cerr << "Self-signed certs are allowed" << Endl;
+                TString certificate = ConvertX509ToPEMString(current);
+                Cout << "Cert=" << certificate << Endl;
+                preverify = 1;
+            }
+
+            // SSL_get_peer_certificate(ctx);
+            TStringBuilder s;
+            s << "Error during certificate validation"
+                << " error# " << X509_verify_cert_error_string(err)
+                << " depth# " << depth
+                << " cert# " << buffer;
+            if (err == X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT) {
+                X509_NAME_oneline(X509_get_issuer_name(current), buffer, sizeof(buffer));
+                s << " issuer# " << buffer;
+            }
+            Cerr << s << Endl;
+            // *errp = s;
+        }
+        // else if (auto& forbidden = secureSocketContext->Impl->Common->Settings.ForbiddenSignatureAlgorithms) {
         //     do {
         //         int pknid;
         //         if (X509_get_signature_info(current, nullptr, &pknid, nullptr, nullptr) != 1) {
@@ -227,17 +301,18 @@ public:
         //         return 0;
         //     } while (false);
         // }
-        Cout << "Verifying client cert" << Endl;
+        // X509* const current = X509_STORE_CTX_get_current_cert(ctx);
+        Cout << "Verifying client cert" << (current != nullptr) << Endl;
         return preverify;
     }
 
-    std::shared_ptr<X509> GetSslClientCert() {
+    TSslHolder<X509> GetSslClientCert() {
         if (!Ssl) {
             return nullptr;
         }
         int ret = SSL_do_handshake(Ssl.get());
         Cout << "SSL handshake result: " << ret << Endl;
-        return std::shared_ptr<X509>(SSL_get_peer_certificate(Ssl.get()), &X509_free);
+        return TSslHolder<X509>(SSL_get_peer_certificate(Ssl.get()));
     }
 
     ssize_t Send(const void* msg, size_t len, int flags = 0) override {

@@ -15,7 +15,7 @@ class TSocketDescriptor : public NActors::TSharedDescriptor, public TNetworkConf
     std::unique_ptr<TNetworkConfig::TSocketType> Socket;
     std::shared_ptr<TEndpointInfo> Endpoint;
     TSpinLock Lock;
-    std::shared_ptr<X509> SecureConnectionClientCert;
+    TSslHelpers::TSslHolder<X509> SecureConnectionClientCert;
 
 public:
     TSocketDescriptor(TSocketType&& s, std::shared_ptr<TEndpointInfo> endpoint)
@@ -88,11 +88,9 @@ public:
         return *Socket;
     }
 
-    std::shared_ptr<X509> GetSslClientCert() {
+    TSslHelpers::TSslHolder<X509> GetSslClientCert() {
         auto *socket = dynamic_cast<TNetworkConfig::TSecureSocketType*>(Socket.get());
-
-        SecureConnectionClientCert = socket->GetSslClientCert();
-        return SecureConnectionClientCert;
+        return socket->GetSslClientCert();;
     }
 
     int GetDescriptor() override {

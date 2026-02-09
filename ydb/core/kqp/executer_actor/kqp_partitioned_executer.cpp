@@ -259,7 +259,7 @@ public:
 
         auto it = StartedPartitions.find(ev->Get()->PartitionIdx);
         if (it != StartedPartitions.end()) {
-            RetryPartExecution(*it);
+            RetryPartExecution(it->second);
         }
     }
 

@@ -131,7 +131,6 @@ TExprNode::TPtr FindMemberArg(TExprNode::TPtr input) {
     }
     return TExprNode::TPtr();
 }
-
 }
 
 namespace NKikimr {
@@ -142,14 +141,12 @@ TExpression::TExpression(TExprNode::TPtr node, TExprContext* ctx, TPlanProps* pr
 
     if (node->IsLambda()) {
         Node = node;
-        Body = node->ChildPtr(1);
     } else {
         auto arg = Build<TCoArgument>(*ctx, node->Pos()).Name("lambda_arg").Done().Ptr();
         Node = Build<TCoLambda>(*ctx, node->Pos())
             .Args({arg})
             .Body(ReplaceArg(node, arg, *ctx))
             .Done().Ptr();
-        Body = node;
     }
 }
 
@@ -350,12 +347,14 @@ TInfoUnit TJoinCondition::GetRightIU() const {
     return RightIUs[0];
 }
 
-void TJoinCondition::ExtractExpressions(TNodeOnNodeOwnedMap& renameMap, TVector<std::pair<TInfoUnit, TExprNode::TPtr>>& exprMap) {
-    Y_ENSURE(IncludesExpressions, "Trying to extract expressions from a join condition that doesn't contain them");
+bool TJoinCondition::ExtractExpressions(TNodeOnNodeOwnedMap& renameMap, TVector<std::pair<TInfoUnit, TExprNode::TPtr>>& exprMap) {
     Y_ENSURE(Expr.PlanProps, "Plan properties null when extracting expressions from join condition");
 
-    // Make sure to access the original body, otherwise the pointers won't match the original expressions
-    auto body = Expr.Body;
+    if (!IncludesExpressions) {
+        return false;
+    }
+
+    auto body = Expr.Node->ChildPtr(1);
 
     if (body->IsCallable("FromPg")) {
         body = body->ChildPtr(0);
@@ -364,6 +363,7 @@ void TJoinCondition::ExtractExpressions(TNodeOnNodeOwnedMap& renameMap, TVector<
     TExprNode::TPtr leftArg;
     TExprNode::TPtr rightArg;
     TestAndExtractEqualityPredicate(body, leftArg, rightArg);
+    bool expressionExtracted = false;
 
     if (!leftArg->IsCallable("Member")) {
         auto memberArg = FindMemberArg(leftArg);
@@ -378,6 +378,7 @@ void TJoinCondition::ExtractExpressions(TNodeOnNodeOwnedMap& renameMap, TVector<
 
         renameMap[leftArg.Get()] = newLeftArg;
         exprMap.emplace_back(TInfoUnit(newName), leftArg);
+        expressionExtracted = true;
     }
 
     if (!rightArg->IsCallable("Member")) {
@@ -393,7 +394,10 @@ void TJoinCondition::ExtractExpressions(TNodeOnNodeOwnedMap& renameMap, TVector<
 
         renameMap[rightArg.Get()] = newRightArg;
         exprMap.emplace_back(TInfoUnit(newName), rightArg);
+        expressionExtracted = true;
     }
+    
+    return expressionExtracted;
 }
 
 TExpression MakeColumnAccess(TInfoUnit column, TPositionHandle pos, TExprContext* ctx, TPlanProps* props) {

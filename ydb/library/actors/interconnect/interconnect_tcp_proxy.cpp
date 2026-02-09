@@ -396,7 +396,7 @@ namespace NActors {
         ProcessPendingSessionEvents();
 
         if (runDelayedRdmaHandshakeTimer && !DelayedRdmaHandshakeTimeout) {
-            LOG_INFO_IC("ICP29", "run pending rdma handshake for session: %s", SessionID.ToString().data());
+            LOG_NOTICE_IC("ICP29", "run delayed rdma handshake for session: %s", SessionID.ToString().data());
             DelayedRdmaHandshakeTimeout = TDuration::Seconds(5);
             TActivationContext::Schedule(DelayedRdmaHandshakeTimeout, new IEventHandle(EvRdmaPendingHandshake, 0, SelfId(),
                         {}, nullptr, 0));
@@ -636,10 +636,15 @@ namespace NActors {
         if (CurrentStateFunc() == &TThis::StateWork) {
             // There is a chance that session was promouted to use RDMA without us.
             if (!InvokeOtherActor(*Session, &TInterconnectSessionTCP::IsRdmaInUse)) {
-                HandleClosePeerSocket("closed connection by rdma pending handshake");
+                InvokeOtherActor(*Session, &TInterconnectSessionTCP::Terminate, TDisconnectReason::NewSession());
             }
+            DelayedRdmaHandshakeTimeout = TDuration();
+        } else {
+            LOG_WARN_IC("ICP36", "restart delayed rdma handshake for session: %s", SessionID.ToString().data());
+            DelayedRdmaHandshakeTimeout = TDuration::Seconds(15);
+                TActivationContext::Schedule(DelayedRdmaHandshakeTimeout, new IEventHandle(EvRdmaPendingHandshake, 0, SelfId(),
+                    {}, nullptr, 0));
         }
-        DelayedRdmaHandshakeTimeout = TDuration();
     }
 
     void TInterconnectProxyTCP::GenerateHttpInfo(NMon::TEvHttpInfo::TPtr& ev) {

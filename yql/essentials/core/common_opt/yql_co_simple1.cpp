@@ -6697,7 +6697,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
             });
 
             EDataSlot payloadSlot;
-            const auto* payloadType = payload->GetTypeAnn();
+            const auto payloadType = payload->GetTypeAnn();
             if (payloadType->GetKind() == ETypeAnnotationKind::Null) {
                 // we treat NULL as Nothing(Utf8?)
                 payloadSlot = EDataSlot::Utf8;

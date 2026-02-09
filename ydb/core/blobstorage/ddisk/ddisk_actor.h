@@ -3,6 +3,7 @@
 #include "defs.h"
 
 #include "ddisk.h"
+#include "persistent_buffer_space_allocator.h"
 
 #include <ydb/core/blobstorage/vdisk/common/vdisk_config.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
@@ -115,6 +116,7 @@ namespace NKikimr::NDDisk {
             enum {
                 EvHandleSingleQuery = EventSpaceBegin(TEvents::ES_PRIVATE),
                 EvHandleEventForChunk,
+                EvHandlePersistentBufferEventForChunk,
             };
 
             struct TEvHandleEventForChunk : TEventLocal<TEvHandleEventForChunk, EvHandleEventForChunk> {
@@ -124,6 +126,14 @@ namespace NKikimr::NDDisk {
                 TEvHandleEventForChunk(ui64 tabletId, ui64 vChunkIndex)
                     : TabletId(tabletId)
                     , VChunkIndex(vChunkIndex)
+                {}
+            };
+
+            struct TEvHandlePersistentBufferEventForChunk : TEventLocal<TEvHandlePersistentBufferEventForChunk, EvHandlePersistentBufferEventForChunk> {
+                ui32 ChunkIndex;
+
+                TEvHandlePersistentBufferEventForChunk(ui32 chunkIndex)
+                    : ChunkIndex(chunkIndex)
                 {}
             };
         };
@@ -200,7 +210,15 @@ namespace NKikimr::NDDisk {
         std::queue<std::variant<TChunkForData, TChunkForPersistentBuffer>> ChunkAllocateQueue;
         THashMap<ui64, std::function<void()>> LogCallbacks;
         ui64 NextCookie = 1;
-        THashMap<ui64, std::tuple<NWilson::TSpan, std::function<void(NPDisk::TEvChunkWriteRawResult&, NWilson::TSpan&&)>>> WriteCallbacks;
+
+        struct TPendingWrite {
+            NWilson::TSpan Span;
+            std::function<void(NPDisk::TEvChunkWriteRawResult&, NWilson::TSpan&&)> Callback;
+        };
+
+        using TPersistentBufferPendingWrite = std::function<void(NPDisk::TEvChunkWriteRawResult&)>;
+
+        THashMap<ui64, std::variant<TPendingWrite, TPersistentBufferPendingWrite>> WriteCallbacks;
         THashMap<ui64, std::tuple<NWilson::TSpan, std::function<void(NPDisk::TEvChunkReadRawResult&, NWilson::TSpan&&)>>> ReadCallbacks;
 
         void IssueChunkAllocation(ui64 tabletId, ui64 vChunkIndex);
@@ -208,6 +226,7 @@ namespace NKikimr::NDDisk {
         void HandleChunkReserved();
         void Handle(NPDisk::TEvLogResult::TPtr ev);
         void Handle(TEvPrivate::TEvHandleEventForChunk::TPtr ev);
+        void Handle(TEvPrivate::TEvHandlePersistentBufferEventForChunk::TPtr ev);
 
         void Handle(NPDisk::TEvCutLog::TPtr ev);
 
@@ -312,6 +331,7 @@ namespace NKikimr::NDDisk {
             struct TRecord {
                 ui32 OffsetInBytes;
                 ui32 Size;
+                std::vector<TPersistentBufferSectorInfo> Sectors;
                 TRope Data;
             };
 
@@ -320,10 +340,50 @@ namespace NKikimr::NDDisk {
 
         std::map<std::tuple<ui64, ui64>, TPersistentBuffer> PersistentBuffers;
 
-        std::set<TChunkIdx> PersistentBufferOwnedChunks;
+        static constexpr ui32 SectorSize = 4096;
+        static constexpr ui32 SectorInChunk = 32768;
+        static constexpr ui32 ChunkSize = SectorSize * SectorInChunk;
+        static constexpr ui32 MaxChunks = 128;
+        static constexpr ui32 MaxSectorsPerBuffer = 128;
+
+
+        struct TPersistentBufferHeader {
+            static constexpr ui8 PersistentBufferHeaderSignature[16] = {249, 173, 163, 160, 196, 193, 69, 133, 83, 38, 34, 104, 170, 146, 237, 156};
+            static constexpr ui32 HeaderChecksumOffset = 24;
+            static constexpr ui32 HeaderChecksumSize = 8;
+            ui8 Signature[16];
+            ui64 HeaderChecksum;
+            ui64 TabletId;
+            ui64 VChunkIndex;
+            ui32 OffsetInBytes;
+            ui32 Size;
+            ui64 Lsn;
+            TPersistentBufferSectorInfo Locations[MaxSectorsPerBuffer];
+        };
+        static_assert(sizeof(TPersistentBufferHeader) <= ChunkSize);
+
+        bool IssuePersistentBufferChunkAllocationInflight = false;
+        struct TPersistentBufferToDiskWriteInFlight {
+            TActorId Sender;
+            ui64 Cookie;
+            TActorId Session;
+            ui32 OffsetInBytes;
+            ui32 Size;
+            std::set<ui64> WriteCookies;
+            std::vector<TPersistentBufferSectorInfo> Sectors;
+            TRope Data;
+            NWilson::TSpan Span;
+        };
+        std::map<std::tuple<ui64, ui64, ui64>, TPersistentBufferToDiskWriteInFlight> PersistentBufferWriteInflight;
+
+        TPersistentBufferSpaceAllocator PersistentBufferSpaceAllocator;
+
         ui64 PersistentBufferChunkMapSnapshotLsn = Max<ui64>();
+        std::queue<TPendingEvent> PendingPersistentBufferEvents;
 
         void IssuePersistentBufferChunkAllocation();
+        void ProcessPersistentBufferQueue();
+        std::vector<std::tuple<ui32, ui32, TRope>> SlicePersistentBuffer(ui64 tabletId, ui64 vchunkIndex, ui64 lsn, ui32 offsetInBytes, ui32 size, TRope&& data, const std::vector<TPersistentBufferSectorInfo>& sectors);
 
         struct TWriteInFlight {
             TActorId Sender;

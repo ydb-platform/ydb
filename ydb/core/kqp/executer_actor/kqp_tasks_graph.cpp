@@ -2470,12 +2470,12 @@ void TKqpTasksGraph::BuildFullTextScanTasksFromSource(TStageInfo& stageInfo, TQu
         }
     }
 
-    if (fullTextSource.HasQueryMode()) {
+    if (fullTextSource.HasDefaultOperator()) {
         auto value = ExtractPhyValue(
-            stageInfo, fullTextSource.GetQueryMode(),
+            stageInfo, fullTextSource.GetDefaultOperator(),
             TxAlloc->HolderFactory, TxAlloc->TypeEnv, NUdf::TUnboxedValuePod());
         if (value.HasValue()) {
-            settings->SetQueryMode(TString(value.AsStringRef()));
+            settings->SetDefaultOperator(TString(value.AsStringRef()));
         }
     }
 
@@ -2914,13 +2914,15 @@ size_t TKqpTasksGraph::BuildAllTasks(std::optional<TLlvmSettings> llvmSettings,
             //     stageInfo.Introspections.push_back("Using tasks count limit because of enabled reads merge");
             // }
 
+            const bool maybeOlapRead = (GetMeta().AllowOlapDataQuery || GetMeta().StreamResult) && stageInfo.Meta.IsOlap();
+
             // build task conditions
             const bool buildFromSourceTasks = stage.SourcesSize() > 0;
             const bool buildSysViewTasks = stageInfo.Meta.IsSysView();
-            const bool buildComputeTasks = stageInfo.Meta.ShardOperations.empty() || (!GetMeta().IsScan && stage.SinksSize() > 0);
+            const bool buildComputeTasks = stageInfo.Meta.ShardOperations.empty() || (!GetMeta().IsScan && stage.SinksSize() > 0 && !(maybeOlapRead && stageInfo.Meta.HasReads()));
             const bool buildScanTasks = GetMeta().IsScan
                 ? stageInfo.Meta.IsOlap() || stageInfo.Meta.IsDatashard()
-                : (GetMeta().AllowOlapDataQuery || GetMeta().StreamResult) && stageInfo.Meta.IsOlap() && stage.SinksSize() == 0
+                : maybeOlapRead && (stage.SinksSize() == 0 || stageInfo.Meta.HasReads())
                 ;
 
             // TODO: doesn't work right now - multiple conditions are possible in tests

@@ -184,6 +184,51 @@
             "uri": "file://test.test_MapKeyEscape_/results.txt"
         }
     ],
+    "test.test[MutCreateFreezeFail]": [
+        {
+            "uri": "file://test.test_MutCreateFreezeFail_/extracted"
+        }
+    ],
+    "test.test[MutDownUpDict]": [
+        {
+            "uri": "file://test.test_MutDownUpDict_/results.txt"
+        }
+    ],
+    "test.test[MutDownUpList]": [
+        {
+            "uri": "file://test.test_MutDownUpList_/results.txt"
+        }
+    ],
+    "test.test[MutExists]": [
+        {
+            "uri": "file://test.test_MutExists_/results.txt"
+        }
+    ],
+    "test.test[MutInsert]": [
+        {
+            "uri": "file://test.test_MutInsert_/results.txt"
+        }
+    ],
+    "test.test[MutTryDown]": [
+        {
+            "uri": "file://test.test_MutTryDown_/results.txt"
+        }
+    ],
+    "test.test[MutUpdate]": [
+        {
+            "uri": "file://test.test_MutUpdate_/results.txt"
+        }
+    ],
+    "test.test[MutUpsert]": [
+        {
+            "uri": "file://test.test_MutUpsert_/results.txt"
+        }
+    ],
+    "test.test[MutView]": [
+        {
+            "uri": "file://test.test_MutView_/results.txt"
+        }
+    ],
     "test.test[NegativeArrayIndex]": [
         {
             "uri": "file://test.test_NegativeArrayIndex_/results.txt"

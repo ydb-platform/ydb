@@ -1,6 +1,9 @@
+from typing import Any, Optional
+
 from . import connection as conn_impl
 
 from ydb import _apis, settings as settings_impl
+from ydb.driver import DriverConfig
 from ydb.resolver import (
     DiscoveryResult,
     DiscoveryEndpointsResolver as _DiscoveryEndpointsResolver,
@@ -9,22 +12,24 @@ from ydb.resolver import (
 
 
 class _FakeLock:
-    def __init__(self):
+    """No-op lock for async context where threading locks aren't needed."""
+
+    def __init__(self) -> None:
         pass
 
-    def __enter__(self):
+    def __enter__(self) -> "_FakeLock":
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         pass
 
 
 class DiscoveryEndpointsResolver(_DiscoveryEndpointsResolver):
-    def __init__(self, driver_config):
+    def __init__(self, driver_config: DriverConfig) -> None:
         super().__init__(driver_config)
         self._lock = _FakeLock()
 
-    async def resolve(self):
+    async def resolve(self) -> Optional[DiscoveryResult]:  # type: ignore[override]  # async override of sync method
         self.logger.debug("Preparing initial endpoint to resolve endpoints")
         endpoint = next(self._endpoints_iter)
         connection = conn_impl.Connection(endpoint, self._driver_config)

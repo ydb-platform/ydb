@@ -93,7 +93,8 @@ protected:
         if (TaskRunner) {
             str << Endl << "TaskRunner" << Endl
                 << "  LastFetchTime: " << TaskRunner->LastFetchTime << Endl
-                << "  LastFetchStatus: " << TaskRunner->LastFetchStatus << Endl;
+                << "  LastFetchStatus: " << TaskRunner->LastFetchStatus << Endl
+                << "  OutputDebugString: " << TaskRunner->GetOutputDebugString() << Endl;
         }
     }
 

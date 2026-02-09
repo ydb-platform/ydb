@@ -167,4 +167,8 @@ bool FillSequenceDescription(
     NKikimrSchemeOp::TSequenceDescription& out, const Ydb::Table::SequenceDescription& in,
     Ydb::StatusIds::StatusCode& status, TString& error);
 
+// out
+bool FillSysViewDescription(Ydb::Table::DescribeSystemViewResult& out, const NKikimrSchemeOp::TPathDescription& in,
+    Ydb::StatusIds_StatusCode& status, TString& error);
+
 } // namespace NKikimr

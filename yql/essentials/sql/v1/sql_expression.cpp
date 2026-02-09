@@ -549,6 +549,7 @@ TNodePtr TSqlExpression::JsonPathSpecification(const TRule_jsonpath_spec& node) 
     if (!parsed) {
         return nullptr;
     }
+
     return new TCallNodeImpl(pos, "Utf8", {BuildQuotedAtom(pos, parsed->Content, parsed->Flags)});
 }
 
@@ -660,6 +661,9 @@ TSQLStatus TSqlExpression::AddJsonCommonArgs(const TRule_json_common_args& node,
 
     if (!IsUnwrappable(jsonExpr)) {
         return std::unexpected(jsonExpr.error());
+    }
+    if (!jsonPath) {
+        return std::unexpected(ESQLError::Basic);
     }
     if (!IsUnwrappable(variables)) {
         return std::unexpected(variables.error());
@@ -2308,6 +2312,9 @@ TNodeResult TSqlExpression::BinOper(const TString& opName, const TNode& node, TG
     if (begin == end) {
         return SubExpr(node, tail);
     }
+
+    IsSourceAllowed_ = false;
+
     // can't have top level smart_parenthesis node if any binary operation is present
     MaybeUnnamedSmartParenOnTop_ = false;
     Ctx_.IncrementMonCounter("sql_binary_operations", opName);
@@ -2339,6 +2346,8 @@ TNodeResult TSqlExpression::BinOpList(const TNode& node, TGetNode getNode, TIter
     MaybeUnnamedSmartParenOnTop_ = MaybeUnnamedSmartParenOnTop_ && (begin == end);
     TNodeResult partialResult = SubExpr(node, (begin == end) ? tail : TTrailingQuestions{});
     while (begin != end) {
+        IsSourceAllowed_ = false;
+
         Ctx_.IncrementMonCounter("sql_features", "BinaryOperation");
         Token(begin->GetToken1());
         TPosition pos(Ctx_.Pos());
@@ -2611,42 +2620,18 @@ bool TSqlExpression::IsTopLevelGroupBy() const {
            SmartParenthesisMode_ == ESmartParenthesis::GroupBy;
 }
 
-bool TSqlExpression::EnsureSubSelectAvailable(const ISource& source) {
-    if (!IsBackwardCompatibleFeatureAvailable(MakeLangVersion(2025, 04))) {
-        Ctx_.Error(source.GetPos()) << "Inline subquery is not available before 2025.04";
-        return false;
-    }
-
-    return true;
-}
-
-TSourcePtr TSqlExpression::LangVersionedSubSelect(TSourcePtr source) {
-    if (!source) {
-        return nullptr;
-    }
-
-    if (IsSourceAllowed_) {
-        return source;
-    }
-
-    if (!EnsureSubSelectAvailable(*source)) {
-        return nullptr;
-    }
-
-    return source;
-}
-
 TNodePtr TSqlExpression::ToSubSelectNode(TSourcePtr source) {
     if (IsSubqueryRef(source)) {
         return TNonNull(TNodePtr(std::move(source)));
     }
 
-    if (!EnsureSubSelectAvailable(*source)) {
-        return nullptr;
-    }
-
     source->UseAsInner();
-    return BuildSourceNode(source->GetPos(), source);
+    return BuildSourceNode(
+        source->GetPos(),
+        source,
+        /*checkExist=*/false,
+        /*withTables=*/false,
+        /*isInlineScalar=*/true);
 }
 
 TNodeResult TSqlExpression::SelectSubExpr(const TRule_select_subexpr& node) {
@@ -2659,7 +2644,7 @@ TNodeResult TSqlExpression::SelectSubExpr(const TRule_select_subexpr& node) {
         result = SelectOrExpr(node.GetRule_select_subexpr_intersect1()
                                   .GetRule_select_or_expr1());
     } else {
-        result = Wrap(LangVersionedSubSelect(TSqlSelect(Ctx_, Mode_).BuildSubSelect(node)));
+        result = Wrap(TSqlSelect(Ctx_, Mode_).BuildSubSelect(node));
     }
 
     if (!result) {
@@ -2682,7 +2667,7 @@ TNodeResult TSqlExpression::SelectOrExpr(const TRule_select_or_expr& node) {
         case NSQLv1Generated::TRule_select_or_expr::kAltSelectOrExpr1: {
             const auto& select_kind = node.GetAlt_select_or_expr1().GetRule_select_kind_partial1();
             TSourcePtr source = TSqlSelect(Ctx_, Mode_).BuildSubSelect(select_kind);
-            return Wrap(LangVersionedSubSelect(std::move(source)));
+            return Wrap(std::move(source));
         }
         case NSQLv1Generated::TRule_select_or_expr::kAltSelectOrExpr2:
             return TupleOrExpr(node.GetAlt_select_or_expr2().GetRule_tuple_or_expr1());

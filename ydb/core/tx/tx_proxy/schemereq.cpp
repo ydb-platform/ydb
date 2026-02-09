@@ -1747,6 +1747,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::TAlterLogin::kCreateUser:
         {
             auto& targetUser = *alterLogin.MutableCreateUser();
+            targetUser.SetUser(std::move(computedHashes->PreparedUsername));
             targetUser.SetPassword(std::move(computedHashes->ArgonHash));
             targetUser.SetIsHashedPassword(true);
             targetUser.SetHashedPassword(std::move(computedHashes->Hashes));
@@ -1755,6 +1756,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::TAlterLogin::kModifyUser:
         {
             auto& targetUser = *alterLogin.MutableModifyUser();
+            targetUser.SetUser(std::move(computedHashes->PreparedUsername));
             targetUser.SetPassword(std::move(computedHashes->ArgonHash));
             targetUser.SetIsHashedPassword(true);
             targetUser.SetHashedPassword(std::move(computedHashes->Hashes));

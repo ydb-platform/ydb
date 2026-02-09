@@ -220,26 +220,65 @@ struct IDqAsyncLookupSource {
             NKikimr::NMiniKQL::TMKQLAllocator<std::pair<const NUdf::TUnboxedValue, NUdf::TUnboxedValue>>
     >;
     struct TEvLookupRequest: NActors::TEventLocal<TEvLookupRequest, TDqComputeEvents::EvLookupRequest> {
-        TEvLookupRequest(std::weak_ptr<TUnboxedValueMap> request)
+        // For fullscan request, non-zero fullscanLimit must be specified
+        // and *request must be empty;
+        // Since fullscanLimit must not exceed GetMaxSupportedFullscanRequest(),
+        // if GetMaxSupportedFullscanRequest() is zero, fullscan requests must
+        // not be issued.
+        // For keyed request, fullscanLimit must be 0 (or omitted)
+        // and *request must be non-empty;
+        explicit TEvLookupRequest(std::weak_ptr<TUnboxedValueMap> request, size_t fullscanLimit = 0)
             : Request(std::move(request))
+            , FullscanLimit(fullscanLimit)
         {
+            Y_DEBUG_ABORT_UNLESS(([request, fullscanLimit]() {
+                auto locked = request.lock();
+                if (!locked) {
+                    return true;
+                }
+                return locked->empty() == (fullscanLimit > 0);
+            }()));
         }
         std::weak_ptr<TUnboxedValueMap> Request;
+        size_t FullscanLimit;
     };
 
+    // Result event for fullscan request must contain same non-zero fullscanLimit
+    // as requested, 
     struct TEvLookupResult: NActors::TEventLocal<TEvLookupResult, TDqComputeEvents::EvLookupResult> {
-        TEvLookupResult(std::weak_ptr<TUnboxedValueMap> result)
+        explicit TEvLookupResult(std::weak_ptr<TUnboxedValueMap> result, size_t resultRows = 0, size_t fullscanLimit = 0)
             : Result(std::move(result))
+            , ResultRows(resultRows)
+            , FullscanLimit(fullscanLimit)
         {
+            if (fullscanLimit > 0) {
+                Y_DEBUG_ABORT_UNLESS(resultRows <= fullscanLimit);
+                Y_DEBUG_ABORT_UNLESS(([result, resultRows]() {
+                    auto locked = result.lock();
+                    if (!locked) {
+                        return true;
+                    }
+                    return locked->size() <= resultRows;
+                }()));
+            }
         }
         std::weak_ptr<TUnboxedValueMap> Result;
+        size_t ResultRows;
+        size_t FullscanLimit;
     };
 
     virtual size_t GetMaxSupportedKeysInRequest() const = 0;
+
     //Initiate lookup for requested keys
     //Only one request at a time is allowed. Request must contain no more than GetMaxSupportedKeysInRequest() keys
     //Upon completion, TEvLookupResult event is sent to the preconfigured actor
     virtual void AsyncLookup(std::weak_ptr<TUnboxedValueMap> request) = 0;
+
+    // Maximum supported fullscan request; fullscan request is not supported
+    // and request must not be issued if 0 was returned
+    virtual size_t GetMaxSupportedFullscanRequest() const {
+        return 0;
+    }
 protected:
     ~IDqAsyncLookupSource() {}
 };

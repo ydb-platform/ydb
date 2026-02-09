@@ -22,6 +22,82 @@ from ydb_wrapper import YDBWrapper
 ORG_NAME = 'ydb-platform'
 REPO_NAME = 'ydb'
 
+# Column schema: (name, ydb_type, sql_type, nullable)
+# Single source of truth for CREATE TABLE and BulkUpsertColumns
+COLUMNS_SCHEMA = [
+    ("project_item_id", ydb.PrimitiveType.Utf8, "Utf8", False),
+    ("pr_id", ydb.PrimitiveType.Utf8, "Utf8", False),
+    ("pr_number", ydb.PrimitiveType.Uint64, "Uint64", False),
+    ("title", ydb.PrimitiveType.Utf8, "Utf8", True),
+    ("url", ydb.PrimitiveType.Utf8, "Utf8", True),
+    ("state", ydb.PrimitiveType.Utf8, "Utf8", True),
+    ("body", ydb.PrimitiveType.Utf8, "Utf8", True),
+    ("body_text", ydb.PrimitiveType.Utf8, "Utf8", True),
+    ("is_draft", ydb.PrimitiveType.Int32, "Int", False),
+    ("additions", ydb.PrimitiveType.Uint64, "Uint64", True),
+    ("deletions", ydb.PrimitiveType.Uint64, "Uint64", True),
+    ("changed_files", ydb.PrimitiveType.Uint64, "Uint64", True),
+    ("mergeable", ydb.PrimitiveType.Utf8, "Utf8", True),
+    ("merged", ydb.PrimitiveType.Int32, "Int", False),
+    ("created_at", ydb.PrimitiveType.Timestamp, "Timestamp", False),
+    ("updated_at", ydb.PrimitiveType.Timestamp, "Timestamp", True),
+    ("closed_at", ydb.PrimitiveType.Timestamp, "Timestamp", True),
+    ("merged_at", ydb.PrimitiveType.Timestamp, "Timestamp", True),
+    ("created_date", ydb.PrimitiveType.Date, "Date", False),
+    ("updated_date", ydb.PrimitiveType.Date, "Date", False),
+    ("days_since_created", ydb.PrimitiveType.Uint64, "Uint64", True),
+    ("days_since_updated", ydb.PrimitiveType.Uint64, "Uint64", True),
+    ("time_to_close_hours", ydb.PrimitiveType.Uint64, "Uint64", True),
+    ("time_to_merge_hours", ydb.PrimitiveType.Uint64, "Uint64", True),
+    ("author_login", ydb.PrimitiveType.Utf8, "Utf8", True),
+    ("author_url", ydb.PrimitiveType.Utf8, "Utf8", True),
+    ("repository_name", ydb.PrimitiveType.Utf8, "Utf8", True),
+    ("repository_url", ydb.PrimitiveType.Utf8, "Utf8", True),
+    ("head_ref_name", ydb.PrimitiveType.Utf8, "Utf8", True),
+    ("base_ref_name", ydb.PrimitiveType.Utf8, "Utf8", True),
+    ("assignees", ydb.PrimitiveType.Json, "Json", True),
+    ("labels", ydb.PrimitiveType.Json, "Json", True),
+    ("milestone", ydb.PrimitiveType.Json, "Json", True),
+    ("project_fields", ydb.PrimitiveType.Json, "Json", True),
+    ("review_decision", ydb.PrimitiveType.Utf8, "Utf8", True),
+    ("total_reviews_count", ydb.PrimitiveType.Uint64, "Uint64", True),
+    ("total_comments_count", ydb.PrimitiveType.Uint64, "Uint64", True),
+    ("merged_by_login", ydb.PrimitiveType.Utf8, "Utf8", True),
+    ("merged_by_url", ydb.PrimitiveType.Utf8, "Utf8", True),
+    ("info", ydb.PrimitiveType.Json, "Json", True),
+    ("exported_at", ydb.PrimitiveType.Timestamp, "Timestamp", False),
+]
+
+
+def _build_column_types() -> ydb.BulkUpsertColumns:
+    """Build BulkUpsertColumns from COLUMNS_SCHEMA."""
+    columns = ydb.BulkUpsertColumns()
+    for name, ydb_type, _, _ in COLUMNS_SCHEMA:
+        columns.add_column(name, ydb.OptionalType(ydb_type))
+    return columns
+
+
+def _build_create_table_sql(table_path: str) -> str:
+    """Build CREATE TABLE SQL from COLUMNS_SCHEMA."""
+    col_defs = []
+    for name, _, sql_type, nullable in COLUMNS_SCHEMA:
+        null_str = "" if nullable else " NOT NULL"
+        col_defs.append(f"            `{name}` {sql_type}{null_str}")
+    columns_sql = ",\n".join(col_defs)
+    return f"""
+        CREATE TABLE IF NOT EXISTS `{table_path}` (
+{columns_sql},
+            PRIMARY KEY (`created_date`, `pr_number`, `project_item_id`)
+        )
+        PARTITION BY HASH(`created_date`)
+        WITH (
+            STORE = COLUMN,
+            AUTO_PARTITIONING_BY_SIZE = ENABLED,
+            AUTO_PARTITIONING_PARTITION_SIZE_MB = 2048,
+            AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 4
+        )
+    """
+
 
 def run_query(query: str, variables: Optional[Dict] = None) -> Dict[str, Any]:
     """Execute GraphQL query against GitHub API. Retries on 502/503/504/429."""
@@ -132,6 +208,7 @@ def fetch_repository_pull_requests(
               headRefName
               baseRefName
               repository { name url }
+              headRepository { name url owner { login } }
               projectItems(first: 10) {
                 nodes {
                   project { title number }
@@ -217,6 +294,27 @@ def fetch_repository_pull_requests(
     return prs
 
 
+def _str(v: Any) -> str:
+    """Return v if truthy, else empty string. Handles None from API."""
+    return v if v else ""
+
+
+def _build_info(pr: Dict[str, Any]) -> Optional[str]:
+    """Build info JSON with head repository data (for fork PRs)."""
+    head_repo = pr.get("headRepository")
+    if not head_repo:
+        return None
+    
+    info = {
+        "head_repository": {
+            "name": head_repo.get("name"),
+            "url": head_repo.get("url"),
+            "owner": (head_repo.get("owner") or {}).get("login"),
+        }
+    }
+    return json.dumps(info)
+
+
 def _extract_project_fields(pr_node: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
     """Extract project fields from PR's projectItems.
     
@@ -256,10 +354,7 @@ def _extract_project_fields(pr_node: Dict[str, Any]) -> Dict[str, Dict[str, Any]
     return result
 
 
-def transform_pull_requests_for_ydb(
-    pr_nodes: List[Dict[str, Any]],
-    project_fields: Optional[Dict[int, Dict[str, Any]]] = None,  # deprecated, kept for compatibility
-) -> List[Dict[str, Any]]:
+def transform_pull_requests_for_ydb(pr_nodes: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Transform GraphQL PR nodes into YDB row dicts."""
     print("Transforming PRs for YDB...")
     start_time = time.time()
@@ -305,13 +400,13 @@ def transform_pull_requests_for_ydb(
 
         row = {
             "project_item_id": f"repo-{pr_number}",
-            "pr_id": pr.get("id", ""),
+            "pr_id": _str(pr.get("id")),
             "pr_number": pr_number,
-            "title": pr.get("title", ""),
-            "url": pr.get("url", ""),
-            "state": pr.get("state", ""),
-            "body": pr.get("body", ""),
-            "body_text": pr.get("bodyText", ""),
+            "title": _str(pr.get("title")),
+            "url": _str(pr.get("url")),
+            "state": _str(pr.get("state")),
+            "body": _str(pr.get("body")),
+            "body_text": _str(pr.get("bodyText")),
             "is_draft": 1 if pr.get("isDraft") else 0,
             "additions": pr.get("additions"),
             "deletions": pr.get("deletions"),
@@ -328,10 +423,10 @@ def transform_pull_requests_for_ydb(
             "days_since_updated": days_since_updated,
             "time_to_close_hours": time_to_close_hours,
             "time_to_merge_hours": time_to_merge_hours,
-            "author_login": author.get("login") or "",
-            "author_url": author.get("url") or "",
-            "repository_name": (pr.get("repository") or {}).get("name", ""),
-            "repository_url": (pr.get("repository") or {}).get("url", ""),
+            "author_login": _str(author.get("login")),
+            "author_url": _str(author.get("url")),
+            "repository_name": _str((pr.get("repository") or {}).get("name")),
+            "repository_url": _str((pr.get("repository") or {}).get("url")),
             "head_ref_name": pr.get("headRefName"),
             "base_ref_name": pr.get("baseRefName"),
             "assignees": json.dumps(assignees) if assignees else None,
@@ -343,7 +438,7 @@ def transform_pull_requests_for_ydb(
             "total_comments_count": comments,
             "merged_by_login": merged_by.get("login"),
             "merged_by_url": merged_by.get("url"),
-            "info": None,
+            "info": _build_info(pr),
             "exported_at": now,
         }
         rows.append(row)
@@ -356,60 +451,7 @@ def transform_pull_requests_for_ydb(
 def create_pull_requests_table(ydb_wrapper: YDBWrapper, table_path: str) -> None:
     """Create pull_requests table in YDB if it does not exist."""
     print(f"Creating table: {table_path}")
-    create_sql = f"""
-        CREATE TABLE IF NOT EXISTS `{table_path}` (
-            `project_item_id` Utf8 NOT NULL,
-            `pr_id` Utf8 NOT NULL,
-            `pr_number` Uint64 NOT NULL,
-            `title` Utf8,
-            `url` Utf8,
-            `state` Utf8,
-            `body` Utf8,
-            `body_text` Utf8,
-            `is_draft` Int NOT NULL,
-            `additions` Uint64,
-            `deletions` Uint64,
-            `changed_files` Uint64,
-            `mergeable` Utf8,
-            `merged` Int NOT NULL,
-            `created_at` Timestamp NOT NULL,
-            `updated_at` Timestamp,
-            `closed_at` Timestamp,
-            `merged_at` Timestamp,
-            `created_date` Date NOT NULL,
-            `updated_date` Date NOT NULL,
-            `days_since_created` Uint64,
-            `days_since_updated` Uint64,
-            `time_to_close_hours` Uint64,
-            `time_to_merge_hours` Uint64,
-            `author_login` Utf8,
-            `author_url` Utf8,
-            `repository_name` Utf8,
-            `repository_url` Utf8,
-            `head_ref_name` Utf8,
-            `base_ref_name` Utf8,
-            `assignees` Json,
-            `labels` Json,
-            `milestone` Json,
-            `project_fields` Json,
-            `review_decision` Utf8,
-            `total_reviews_count` Uint64,
-            `total_comments_count` Uint64,
-            `merged_by_login` Utf8,
-            `merged_by_url` Utf8,
-            `info` Json,
-            `exported_at` Timestamp NOT NULL,
-            PRIMARY KEY (`created_date`, `pr_number`, `project_item_id`)
-        )
-        PARTITION BY HASH(`created_date`)
-        WITH (
-            STORE = COLUMN,
-            AUTO_PARTITIONING_BY_SIZE = ENABLED,
-            AUTO_PARTITIONING_PARTITION_SIZE_MB = 2048,
-            AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 4
-        )
-    """
-    ydb_wrapper.create_table(table_path, create_sql)
+    ydb_wrapper.create_table(table_path, _build_create_table_sql(table_path))
 
 
 def main() -> int:
@@ -493,55 +535,10 @@ def main() -> int:
                 print("No PRs to export")
                 return 0
 
-            # Project fields are now fetched inline via projectItems in the PR query
             rows = transform_pull_requests_for_ydb(pr_nodes)
             print(f"Uploading {len(rows)} PRs in batches of {batch_size}")
 
-            column_types = (
-                ydb.BulkUpsertColumns()
-                .add_column("project_item_id", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-                .add_column("pr_id", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-                .add_column("pr_number", ydb.OptionalType(ydb.PrimitiveType.Uint64))
-                .add_column("title", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-                .add_column("url", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-                .add_column("state", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-                .add_column("body", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-                .add_column("body_text", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-                .add_column("is_draft", ydb.OptionalType(ydb.PrimitiveType.Int32))
-                .add_column("additions", ydb.OptionalType(ydb.PrimitiveType.Uint64))
-                .add_column("deletions", ydb.OptionalType(ydb.PrimitiveType.Uint64))
-                .add_column("changed_files", ydb.OptionalType(ydb.PrimitiveType.Uint64))
-                .add_column("mergeable", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-                .add_column("merged", ydb.OptionalType(ydb.PrimitiveType.Int32))
-                .add_column("created_at", ydb.OptionalType(ydb.PrimitiveType.Timestamp))
-                .add_column("updated_at", ydb.OptionalType(ydb.PrimitiveType.Timestamp))
-                .add_column("closed_at", ydb.OptionalType(ydb.PrimitiveType.Timestamp))
-                .add_column("merged_at", ydb.OptionalType(ydb.PrimitiveType.Timestamp))
-                .add_column("created_date", ydb.OptionalType(ydb.PrimitiveType.Date))
-                .add_column("updated_date", ydb.OptionalType(ydb.PrimitiveType.Date))
-                .add_column("days_since_created", ydb.OptionalType(ydb.PrimitiveType.Uint64))
-                .add_column("days_since_updated", ydb.OptionalType(ydb.PrimitiveType.Uint64))
-                .add_column("time_to_close_hours", ydb.OptionalType(ydb.PrimitiveType.Uint64))
-                .add_column("time_to_merge_hours", ydb.OptionalType(ydb.PrimitiveType.Uint64))
-                .add_column("author_login", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-                .add_column("author_url", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-                .add_column("repository_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-                .add_column("repository_url", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-                .add_column("head_ref_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-                .add_column("base_ref_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-                .add_column("assignees", ydb.OptionalType(ydb.PrimitiveType.Json))
-                .add_column("labels", ydb.OptionalType(ydb.PrimitiveType.Json))
-                .add_column("milestone", ydb.OptionalType(ydb.PrimitiveType.Json))
-                .add_column("project_fields", ydb.OptionalType(ydb.PrimitiveType.Json))
-                .add_column("review_decision", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-                .add_column("total_reviews_count", ydb.OptionalType(ydb.PrimitiveType.Uint64))
-                .add_column("total_comments_count", ydb.OptionalType(ydb.PrimitiveType.Uint64))
-                .add_column("merged_by_login", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-                .add_column("merged_by_url", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-                .add_column("info", ydb.OptionalType(ydb.PrimitiveType.Json))
-                .add_column("exported_at", ydb.OptionalType(ydb.PrimitiveType.Timestamp))
-            )
-            ydb_wrapper.bulk_upsert_batches(table_path, rows, column_types, batch_size)
+            ydb_wrapper.bulk_upsert_batches(table_path, rows, _build_column_types(), batch_size)
             print(f"Script completed successfully (total time: {time.time() - script_start:.2f}s)")
             return 0
         except Exception as e:

@@ -20,24 +20,33 @@ class TFmrTableDataServiceClient: public ITableDataService {
 public:
     TFmrTableDataServiceClient(ITableDataServiceDiscovery::TPtr discovery): TableDataServiceDiscovery_(discovery) {}
 
-    NThreading::TFuture<void> Put(const TString& group, const TString& chunkId, const TString& value) override {
+    NThreading::TFuture<bool> Put(const TString& group, const TString& chunkId, const TString& value) override {
         TString putRequestUrl = "/put_data?group=" + group + "&chunkId=" + chunkId;
         ui64 workersNum = TableDataServiceDiscovery_->GetHostCount();
         auto tableDataServiceWorkerNum = std::hash<TString>()(group + chunkId) % workersNum;
         auto workerConnection = TableDataServiceDiscovery_->GetHosts()[tableDataServiceWorkerNum];
         auto httpClient = TKeepAliveHttpClient(workerConnection.Host, workerConnection.Port);
+        TStringStream outputStream;
         YQL_CLOG(TRACE, FastMapReduce) << "Sending put request with url: " << putRequestUrl <<
             " To table data service worker with host: " << workerConnection.Host << " and port: " << ToString(workerConnection.Port);
 
         auto putTableDataServiceFunc = [&]() {
             try {
-                httpClient.DoPost(putRequestUrl, value, nullptr, GetHeadersWithLogContext(Headers_));
-                return NThreading::MakeFuture();
+                httpClient.DoPost(putRequestUrl, value, &outputStream, GetHeadersWithLogContext(Headers_));
+                TString serializedResponse = outputStream.ReadAll();
+                NProto::TTableDataServicePutResponse protoPutResponse;
+                YQL_ENSURE(protoPutResponse.ParseFromString(serializedResponse));
+                bool putSuccess = TableDataServicePutResponseFromProto(protoPutResponse);
+                if (!putSuccess) {
+                    throw yexception() << "Failed to put chunkId " << chunkId << " to table data service - memory limit exceeded";
+                    // Throw basic retryable exception in case other keys in table service are cleared soon.
+                }
+                return NThreading::MakeFuture<bool>(true);
             } catch (...) {
-                return NThreading::MakeErrorFuture<void>(std::current_exception());
+                return NThreading::MakeErrorFuture<bool>(std::current_exception());
             }
         };
-        return *DoWithRetry<NThreading::TFuture<void>, yexception>(putTableDataServiceFunc, RetryPolicy_, true, OnFail_);
+        return *DoWithRetry<NThreading::TFuture<bool>, yexception>(putTableDataServiceFunc, RetryPolicy_, true, OnFail_);
     }
 
     NThreading::TFuture<TMaybe<TString>> Get(const TString& group, const TString& chunkId) const override {
@@ -53,12 +62,14 @@ public:
         auto getTableDataServiceFunc = [&]() {
             try {
                 httpClient.DoGet(getRequestUrl,&outputStream, GetHeadersWithLogContext(Headers_));
-                TString value = outputStream.ReadAll();
-                TMaybe<TString> result;
-                if (value) {
-                    result = value;
+                TString serializedResponse = outputStream.ReadAll();
+                NProto::TTableDataServiceGetResponse protoGetResponse;
+                YQL_ENSURE(protoGetResponse.ParseFromString(serializedResponse));
+                TMaybe<TString> getResponse = TableDataServiceGetResponseFromProto(protoGetResponse);
+                if (!getResponse.Defined()) {
+                    throw TFmrNonRetryableJobException() << "Failed to get group " << group << " and chunkId " << chunkId << " from table data service";
                 }
-                return NThreading::MakeFuture(result);
+                return NThreading::MakeFuture(getResponse);
             } catch (...) {
                 return NThreading::MakeErrorFuture<TMaybe<TString>>(std::current_exception());
             }
@@ -88,7 +99,7 @@ public:
     }
 
     NThreading::TFuture<void> RegisterDeletion(const std::vector<TString>& groups) override {
-        NProto::TTableDataServiceGroupDeletionRequest protoDeletionRequest = TTableDataServiceGroupDeletionRequestToProto(groups);
+        NProto::TTableDataServiceGroupDeletionRequest protoDeletionRequest = TableDataServiceGroupDeletionRequestToProto(groups);
         TString serializedProtoDeletionRequest = protoDeletionRequest.SerializeAsStringOrThrow();
 
         TString deleteGroupsRequestUrl = "/delete_groups";

@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(3.25.0)
+VERSION(3.26.3)
 
 LICENSE(Apache-2.0)
 
@@ -52,6 +52,7 @@ PY_SRCS(
     ydb/_topic_writer/topic_writer_asyncio.py
     ydb/_topic_writer/topic_writer_sync.py
     ydb/_tx_ctx_impl.py
+    ydb/_typing.py
     ydb/_utilities.py
     ydb/aio/__init__.py
     ydb/aio/_utilities.py

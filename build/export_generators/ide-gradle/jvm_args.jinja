@@ -30,7 +30,7 @@
 {%-         endif -%}
 {%-         if other_jvm_args|length -%}
 {%-             for jvm_arg in other_jvm_args %}
-        "{{ jvm_arg|replace("$", "\\$") }}",
+        {{ PatchRoots(jvm_arg|replace("$", "\\$"), true) }},
 {%-             endfor -%}
 {%-         endif %}
     )

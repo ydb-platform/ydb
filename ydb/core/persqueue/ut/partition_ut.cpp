@@ -1530,7 +1530,7 @@ private:
     TDeque<ui64> BatchSizes;
     bool HadKvRequest = false;
     THashMap<TActorId, bool> ExpectedWriteInfoRequests;
-    TQueue<std::pair<TActorId, TActorId>> RecievedWriteInfoRequests;
+    TQueue<std::pair<TActorId, TActorId>> ReceivedWriteInfoRequests;
     TAdaptiveLock Lock;
     THashMap<TActorId, THolder<TEvPQ::TEvGetWriteInfoResponse>> WriteInfoData;
 
@@ -1546,7 +1546,7 @@ public:
         Ctx->Runtime->SetObserverFunc([this](TAutoPtr<IEventHandle>& ev) {
             if (ev->CastAsLocal<TEvPQ::TEvGetWriteInfoRequest>()) {
                 with_lock(this->Lock) {
-                    RecievedWriteInfoRequests.emplace(ev->Recipient, ev->Sender);
+                    ReceivedWriteInfoRequests.emplace(ev->Recipient, ev->Sender);
                 }
             } else if (auto* msg = ev->CastAsLocal<TEvPQ::TEvTxBatchComplete>()) {
                 Cerr << "Got batch complete: " << msg->BatchSize << Endl;
@@ -1670,12 +1670,12 @@ void TPartitionTxTestHelper::WaitWriteInfoRequest(ui64 userActId, bool autoRespo
     auto iter = UserActs.find(userActId);
     Y_ABORT_UNLESS(!iter.IsEnd());
     const auto& act = iter->second;
-    auto checkIfRecieved = [&]() {
+    auto checkIfReceived = [&]() {
         TActorId parentPartitionId, supportiveId;
         with_lock(Lock) {
-            if (RecievedWriteInfoRequests.size()) {
-                std::tie(supportiveId, parentPartitionId) = RecievedWriteInfoRequests.front();
-                RecievedWriteInfoRequests.pop();
+            if (ReceivedWriteInfoRequests.size()) {
+                std::tie(supportiveId, parentPartitionId) = ReceivedWriteInfoRequests.front();
+                ReceivedWriteInfoRequests.pop();
             }
         }
         if (!parentPartitionId) {
@@ -1687,11 +1687,11 @@ void TPartitionTxTestHelper::WaitWriteInfoRequest(ui64 userActId, bool autoRespo
         }
         return true;
     };
-    if (checkIfRecieved()) {
+    if (checkIfReceived()) {
         return;
     }
     Ctx->Runtime->DispatchEvents();
-    auto res = checkIfRecieved();
+    auto res = checkIfReceived();
     UNIT_ASSERT(res);
 }
 

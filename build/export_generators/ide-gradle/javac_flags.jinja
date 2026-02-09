@@ -21,7 +21,7 @@ tasks.{{ task }}.configure {
     options.isFork = true
     options.forkOptions.jvmArgs = listOf(
 {%-             for compiler_jvm_flag in compiler_jvm_flags|unique %}
-        "{{ compiler_jvm_flag|replace("-J", "") }}",
+        {{ PatchRoots(compiler_jvm_flag|replace("-J", ""), true) }},
 {%-             endfor %}
     )
 {%          endif -%}

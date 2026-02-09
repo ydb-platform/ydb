@@ -597,12 +597,14 @@ class TCreateMaintenanceTask
 
     static void ConvertAction(const Ydb::Maintenance::DrainAction& action, NKikimrCms::TAction& cmsAction) {
         cmsAction.SetType(NKikimrCms::TAction::DRAIN_NODE);
+        cmsAction.SetDuration(TDuration::Max().GetValue());
 
         ConvertScope(action.scope(), cmsAction);
     }
 
     static void ConvertAction(const Ydb::Maintenance::CordonAction& action, NKikimrCms::TAction& cmsAction) {
         cmsAction.SetType(NKikimrCms::TAction::CORDON_NODE);
+        cmsAction.SetDuration(TDuration::Max().GetValue());
 
         ConvertScope(action.scope(), cmsAction);
     }

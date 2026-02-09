@@ -11,7 +11,11 @@
 
 namespace NKikimr::NMiniKQL {
 
-static ui8 ZeroSizeObject alignas(ArrowAlignment)[0];
+namespace {
+
+ui8 ZeroSizeObject alignas(ArrowAlignment)[0];
+
+} // namespace
 
 constexpr ui64 ArrowSizeForArena = (TAllocState::POOL_PAGE_SIZE >> 2);
 

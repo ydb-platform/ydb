@@ -281,6 +281,75 @@ TMaybe<TCastResultOptions> GetCastResult(EDataSlot source, EDataSlot target);
 
 bool IsComparable(EDataSlot left, EDataSlot right);
 
+template <typename T>
+bool IsValidLayoutValue(typename TDataType<T>::TLayout value);
+
+template <>
+inline bool IsValidLayoutValue<NUdf::TDate>(typename TDataType<TDate>::TLayout value) {
+    return value < MAX_DATE;
+}
+
+template <>
+inline bool IsValidLayoutValue<TDatetime>(typename TDataType<TDatetime>::TLayout value) {
+    return value < MAX_DATETIME;
+}
+
+template <>
+inline bool IsValidLayoutValue<TTimestamp>(typename TDataType<TTimestamp>::TLayout value) {
+    return value < MAX_TIMESTAMP;
+}
+
+template <>
+inline bool IsValidLayoutValue<TTzDate>(typename TDataType<TTzDate>::TLayout value) {
+    return value < MAX_DATE;
+}
+
+template <>
+inline bool IsValidLayoutValue<TTzDatetime>(typename TDataType<TTzDatetime>::TLayout value) {
+    return value < NUdf::MAX_DATETIME;
+}
+
+template <>
+inline bool IsValidLayoutValue<TTzTimestamp>(typename TDataType<TTzTimestamp>::TLayout value) {
+    return value < NUdf::MAX_TIMESTAMP;
+}
+
+template <>
+inline bool IsValidLayoutValue<TInterval>(typename TDataType<TInterval>::TLayout value) {
+    using TLayout = TDataType<TInterval>::TLayout;
+    return value > -TLayout{MAX_TIMESTAMP} && value < TLayout{MAX_TIMESTAMP};
+}
+
+template <>
+inline bool IsValidLayoutValue<TDate32>(typename TDataType<TDate32>::TLayout value) {
+    return value >= MIN_DATE32 && value <= MAX_DATE32;
+}
+
+template <>
+inline bool IsValidLayoutValue<TDatetime64>(typename TDataType<TDatetime64>::TLayout value) {
+    return value >= MIN_DATETIME64 && value <= MAX_DATETIME64;
+}
+
+template <>
+inline bool IsValidLayoutValue<TTimestamp64>(typename TDataType<TTimestamp64>::TLayout value) {
+    return value >= MIN_TIMESTAMP64 && value <= MAX_TIMESTAMP64;
+}
+
+template <>
+inline bool IsValidLayoutValue<TTzDate32>(typename TDataType<TTzDate32>::TLayout value) {
+    return value >= MIN_DATE32 && value <= MAX_DATE32;
+}
+
+template <>
+inline bool IsValidLayoutValue<TTzDatetime64>(typename TDataType<TTzDatetime64>::TLayout value) {
+    return value >= MIN_DATETIME64 && value <= MAX_DATETIME64;
+}
+
+template <>
+inline bool IsValidLayoutValue<TTzTimestamp64>(typename TDataType<TTzTimestamp64>::TLayout value) {
+    return value >= MIN_TIMESTAMP64 && value <= MAX_TIMESTAMP64;
+}
+
 inline IOutputStream& operator<<(IOutputStream& os, EDataSlot slot) {
     os << GetDataTypeInfo(slot).Name;
     return os;

@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(2.23)
+VERSION(3.0)
 
 LICENSE(BSD-3-Clause)
 
@@ -17,21 +17,11 @@ PY_SRCS(
     TOP_LEVEL
     pycparser/__init__.py
     pycparser/_ast_gen.py
-    pycparser/_build_tables.py
     pycparser/ast_transforms.py
     pycparser/c_ast.py
     pycparser/c_generator.py
     pycparser/c_lexer.py
     pycparser/c_parser.py
-    pycparser/lextab.py
-    pycparser/ply/__init__.py
-    pycparser/ply/cpp.py
-    pycparser/ply/ctokens.py
-    pycparser/ply/lex.py
-    pycparser/ply/yacc.py
-    pycparser/ply/ygen.py
-    pycparser/plyparser.py
-    pycparser/yacctab.py
 )
 
 RESOURCE_FILES(

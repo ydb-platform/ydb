@@ -354,9 +354,6 @@ bool TPhysicalQueryBuilder::IsSuitableToPropagateWideBlocksThroughHashShuffleCon
     for (size_t i = 0; i < stage.Inputs().Size(); ++i) {
         auto connection = stage.Inputs().Item(i).Maybe<TDqCnHashShuffle>();
         if (connection) {
-            // FIXME: Invalid invariant in dq_output_consumer.cpp: YQL_ENSURE(OutputWidth_ > KeyColumns_.size());
-            // We could have a type (a, b) -> hash_shuffle(a, a, b)
-            return false;
             auto hashFuncType = RBOCtx.KqpCtx.Config->GetDqDefaultHashShuffleFuncType();
             if (connection.Cast().HashFunc().IsValid()) {
                 hashFuncType = FromString<NDq::EHashShuffleFuncType>(connection.Cast().HashFunc().Cast().StringValue());
@@ -449,6 +446,11 @@ void TPhysicalQueryBuilder::TypeAnnotate(TExprNode::TPtr& input) {
     do {
         status = RBOCtx.TypeAnnTransformer->Transform(input, output, RBOCtx.ExprCtx);
     } while (status == IGraphTransformer::TStatus::Repeat);
+
+    if (status != IGraphTransformer::TStatus::Ok) {
+        RBOCtx.ExprCtx.AddError(TIssue(RBOCtx.ExprCtx.GetPosition(input->Pos()), "Type inference failed for stage in NEW RBO"));
+    }
     Y_ENSURE(status == IGraphTransformer::TStatus::Ok);
+
     input = output;
 }

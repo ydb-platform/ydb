@@ -39,7 +39,7 @@ namespace NKikimr::NDDisk {
         }
         while (pos < PersistentBufferSpaceAllocator.OwnedChunks.size() && PersistentBufferRestoreChunksInflight < MaxPersistentBufferChunkRestoreInflight) {
             auto chunkIdx = PersistentBufferSpaceAllocator.OwnedChunks[pos];
-            STLOG(PRI_DEBUG, BS_DDISK, BSDD12, "TDDiskActor::StartRestorePersistentBuffer restoring chunk from DDisk", (ChunkIdx, chunkIdx));
+            STLOG(PRI_DEBUG, BS_DDISK, BSDD13, "TDDiskActor::StartRestorePersistentBuffer restoring chunk from DDisk", (ChunkIdx, chunkIdx));
             if (PersistentBufferAllocatedChunks.count(chunkIdx) > 0) {
                 continue;
             }
@@ -110,6 +110,7 @@ namespace NKikimr::NDDisk {
                         }
                     }
                     PersistentBufferSectorsChecksum.clear();
+                    STLOG(PRI_DEBUG, BS_DDISK, BSDD16, "TDDiskActor::StartRestorePersistentBuffer ready");
                     PersistentBufferReady = true;
                     ProcessPersistentBufferQueue();
                 }
@@ -185,11 +186,11 @@ namespace NKikimr::NDDisk {
         const auto sectors = PersistentBufferSpaceAllocator.Occupy(sectorsCnt);
         if (sectors.size() == 0) {
             if (PersistentBufferSpaceAllocator.OwnedChunks.size() < MaxChunks) {
-                STLOG(PRI_DEBUG, BS_DDISK, BSDD12, "TDDiskActor::ProcessPersistentBufferWrite empty space, request new chunk");
+                STLOG(PRI_DEBUG, BS_DDISK, BSDD14, "TDDiskActor::ProcessPersistentBufferWrite empty space, request new chunk");
                 PendingPersistentBufferEvents.emplace(ev, "WaitingPersistentBufferWrite");
                 IssuePersistentBufferChunkAllocation();
             } else {
-                STLOG(PRI_DEBUG, BS_DDISK, BSDD12, "TDDiskActor::ProcessPersistentBufferWrite not enough space", (FreeSpace, PersistentBufferSpaceAllocator.GetFreeSpace() * SectorSize), (NeedSpace, sectorsCnt * SectorSize));
+                STLOG(PRI_DEBUG, BS_DDISK, BSDD15, "TDDiskActor::ProcessPersistentBufferWrite not enough space", (FreeSpace, PersistentBufferSpaceAllocator.GetFreeSpace() * SectorSize), (NeedSpace, sectorsCnt * SectorSize));
                 SendReply(*ev, std::make_unique<TEvWritePersistentBufferResult>(
                     NKikimrBlobStorage::NDDisk::TReplyStatus::BLOCKED,
                     TStringBuilder() << "persistent buffer overfill "

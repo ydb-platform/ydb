@@ -386,7 +386,7 @@ protected:
     }
 
     bool ProcessRequest(const TActorContext& ctx) {
-        if (IsSslActive) {
+        if (IsSslActive && NKikimr::AppData()->KafkaProxyConfig.GetMtlsEnable()) {
             TSslHelpers::TSslHolder<X509> cert = Socket->GetSslClientCert();
             Cout << "Recieved cert? :" << (cert != nullptr) << Endl;
         }

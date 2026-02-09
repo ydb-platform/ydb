@@ -159,9 +159,6 @@ public:
     {}
 
     void InitServerSsl(SSL_CTX* ctx) {
-        Cout << "HasAppData() " << NKikimr::HasAppData() << Endl;
-        TString kafkaServerCertPath = NKikimr::AppData()->KafkaProxyConfig.GetCert();
-        TString kafkaServerPrivateKeyPath = NKikimr::AppData()->KafkaProxyConfig.GetKey();
         Bio.reset(BIO_new(TSslLayer<TStreamSocket>::IoMethod()));
         BIO_set_data(Bio.get(), static_cast<TStreamSocket*>(this));
         BIO_set_nbio(Bio.get(), 1);
@@ -171,20 +168,24 @@ public:
 
 
         auto readFile = [](std::optional<TString> value, std::optional<TString> path, const char *name) {
-        if (value) {
-            return *value;
-        } else if (path) {
-            try {
-                return TFileInput(*path).ReadAll();
-            } catch (const std::exception& ex) {
-                ythrow yexception()
-                    << "failed to read " << name << " file '" << *path << "': " << ex.what();
+            if (value) {
+                return *value;
+            } else if (path) {
+                try {
+                    return TFileInput(*path).ReadAll();
+                } catch (const std::exception& ex) {
+                    ythrow yexception()
+                        << "failed to read " << name << " file '" << *path << "': " << ex.what();
+                }
             }
-        }
-        return TString();
+            return TString();
         };
-        TString certificate = readFile(std::nullopt, kafkaServerCertPath,"certificate");
+
+        TString kafkaServerCertPath = NKikimr::AppData()->KafkaProxyConfig.GetCert();
+        TString kafkaServerPrivateKeyPath = NKikimr::AppData()->KafkaProxyConfig.GetKey();
+
         {
+            TString certificate = readFile(std::nullopt, kafkaServerCertPath,"certificate");
             TSslHolder<BIO> bio(BIO_new_mem_buf(certificate.data(), certificate.size()));
             Y_ABORT_UNLESS(bio);
 
@@ -193,8 +194,9 @@ public:
             int ret = SSL_CTX_use_certificate(ctx, cert.get());
             Y_ABORT_UNLESS(ret == 1);
         }
-        TString privateKey = readFile(std::nullopt, kafkaServerPrivateKeyPath,"key");
+
         {
+            TString privateKey = readFile(std::nullopt, kafkaServerPrivateKeyPath,"key");
             TSslHolder<BIO> bio(BIO_new_mem_buf(privateKey.data(), privateKey.size()));
             Y_ABORT_UNLESS(bio);
             TSslHolder<EVP_PKEY> pkey(PEM_read_bio_PrivateKey(bio.get(), nullptr, nullptr, nullptr));

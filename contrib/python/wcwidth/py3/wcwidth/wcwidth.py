@@ -398,10 +398,10 @@ def iter_sequences(text: str) -> Iterator[tuple[str, bool]]:
 
         >>> list(iter_sequences('hello'))
         [('hello', False)]
-        >>> list(iter_sequences('\\x1b[31mred'))
-        [('\\x1b[31m', True), ('red', False)]
-        >>> list(iter_sequences('\\x1b[1m\\x1b[31m'))
-        [('\\x1b[1m', True), ('\\x1b[31m', True)]
+        >>> list(iter_sequences('\x1b[31mred'))
+        [('\x1b[31m', True), ('red', False)]
+        >>> list(iter_sequences('\x1b[1m\x1b[31m'))
+        [('\x1b[1m', True), ('\x1b[31m', True)]
     """
     idx = 0
     text_len = len(text)
@@ -461,16 +461,16 @@ def width(
     :param text: String to measure.
     :param control_codes: How to handle control characters and sequences:
 
-        - ``'parse'`` (default): Track horizontal cursor movement from BS ``\\b``, CR ``\\r``, TAB
-          ``\\t``, and cursor left and right movement sequences.  Vertical movement (LF, VT, FF) and
+        - ``'parse'`` (default): Track horizontal cursor movement from BS ``\b``, CR ``\r``, TAB
+          ``\t``, and cursor left and right movement sequences.  Vertical movement (LF, VT, FF) and
           indeterminate sequences are zero-width. Never raises.
         - ``'strict'``: Like parse, but raises :exc:`ValueError` on control characters with
           indeterminate results of the screen or cursor, like clear or vertical movement. Generally,
           these should be handled with a virtual terminal emulator (like 'pyte').
         - ``'ignore'``: All C0 and C1 control characters and escape sequences are measured as
           width 0. This is the fastest measurement for text already filtered or known not to contain
-          any kinds of control codes or sequences. TAB ``\\t`` is zero-width; for tab expansion,
-          pre-process: ``text.replace('\\t', ' ' * 8)``.
+          any kinds of control codes or sequences. TAB ``\t`` is zero-width; for tab expansion,
+          pre-process: ``text.replace('\t', ' ' * 8)``.
 
     :param tabsize: Tab stop width for ``'parse'`` and ``'strict'`` modes. Default is 8.
         Must be positive. Has no effect when ``control_codes='ignore'``.
@@ -492,17 +492,17 @@ def width(
         5
         >>> width('コンニチハ')
         10
-        >>> width('\\x1b[31mred\\x1b[0m')
+        >>> width('\x1b[31mred\x1b[0m')
         3
-        >>> width('\\x1b[31mred\\x1b[0m', control_codes='ignore')  # same result (ignored)
+        >>> width('\x1b[31mred\x1b[0m', control_codes='ignore')  # same result (ignored)
         3
-        >>> width('123\\b4')     # backspace overwrites previous cell (outputs '124')
+        >>> width('123\b4')     # backspace overwrites previous cell (outputs '124')
         3
-        >>> width('abc\\t')      # tab caused cursor to move to column 8
+        >>> width('abc\t')      # tab caused cursor to move to column 8
         8
-        >>> width('1\\x1b[10C')  # '1' + cursor right 10, cursor ends on column 11
+        >>> width('1\x1b[10C')  # '1' + cursor right 10, cursor ends on column 11
         11
-        >>> width('1\\x1b[10C', control_codes='ignore')   # faster but wrong in this case
+        >>> width('1\x1b[10C', control_codes='ignore')   # faster but wrong in this case
         1
     """
     # pylint: disable=too-complex,too-many-branches,too-many-statements,too-many-locals
@@ -647,9 +647,9 @@ def ljust(
 
         >>> wcwidth.ljust('hi', 5)
         'hi   '
-        >>> wcwidth.ljust('\\x1b[31mhi\\x1b[0m', 5)
-        '\\x1b[31mhi\\x1b[0m   '
-        >>> wcwidth.ljust('\\U0001F468\\u200D\\U0001F469\\u200D\\U0001F467', 6)
+        >>> wcwidth.ljust('\x1b[31mhi\x1b[0m', 5)
+        '\x1b[31mhi\x1b[0m   '
+        >>> wcwidth.ljust('\U0001F468\u200D\U0001F469\u200D\U0001F467', 6)
         '👨‍👩‍👧    '
     """
     if text.isascii() and text.isprintable():
@@ -688,9 +688,9 @@ def rjust(
 
         >>> wcwidth.rjust('hi', 5)
         '   hi'
-        >>> wcwidth.rjust('\\x1b[31mhi\\x1b[0m', 5)
-        '   \\x1b[31mhi\\x1b[0m'
-        >>> wcwidth.rjust('\\U0001F468\\u200D\\U0001F469\\u200D\\U0001F467', 6)
+        >>> wcwidth.rjust('\x1b[31mhi\x1b[0m', 5)
+        '   \x1b[31mhi\x1b[0m'
+        >>> wcwidth.rjust('\U0001F468\u200D\U0001F469\u200D\U0001F467', 6)
         '    👨‍👩‍👧'
     """
     if text.isascii() and text.isprintable():
@@ -732,9 +732,9 @@ def center(
 
         >>> wcwidth.center('hi', 6)
         '  hi  '
-        >>> wcwidth.center('\\x1b[31mhi\\x1b[0m', 6)
-        '  \\x1b[31mhi\\x1b[0m  '
-        >>> wcwidth.center('\\U0001F468\\u200D\\U0001F469\\u200D\\U0001F467', 6)
+        >>> wcwidth.center('\x1b[31mhi\x1b[0m', 6)
+        '  \x1b[31mhi\x1b[0m  '
+        >>> wcwidth.center('\U0001F468\u200D\U0001F469\u200D\U0001F467', 6)
         '  👨‍👩‍👧  '
     """
     if text.isascii() and text.isprintable():
@@ -742,7 +742,8 @@ def center(
     else:
         text_width = width(text, control_codes=control_codes, ambiguous_width=ambiguous_width)
     total_padding = max(0, dest_width - text_width)
-    left_pad = total_padding // 2
+    # matching https://jazcap53.github.io/pythons-eccentric-strcenter.html
+    left_pad = total_padding // 2 + (total_padding & dest_width & 1)
     right_pad = total_padding - left_pad
     return fillchar * left_pad + text + fillchar * right_pad
 
@@ -760,11 +761,11 @@ def strip_sequences(text: str) -> str:
 
     Example::
 
-        >>> strip_sequences('\\x1b[31mred\\x1b[0m')
+        >>> strip_sequences('\x1b[31mred\x1b[0m')
         'red'
         >>> strip_sequences('hello')
         'hello'
-        >>> strip_sequences('\\x1b[1m\\x1b[31mbold red\\x1b[0m text')
+        >>> strip_sequences('\x1b[1m\x1b[31mbold red\x1b[0m text')
         'bold red text'
     """
     return ZERO_WIDTH_PATTERN.sub('', text)
@@ -787,7 +788,7 @@ def clip(
     they have zero display width. If a wide character (width 2) would be split at
     either boundary, it is replaced with ``fillchar``.
 
-    TAB characters (``\\t``) are expanded to spaces up to the next tab stop,
+    TAB characters (``\t``) are expanded to spaces up to the next tab stop,
     controlled by the ``tabsize`` parameter.
 
     Other cursor movement characters (backspace, carriage return) and cursor
@@ -814,7 +815,7 @@ def clip(
         'hello'
         >>> clip('中文字', 0, 3)  # Wide char split at column 3
         '中 '
-        >>> clip('a\\tb', 0, 10)  # Tab expanded to spaces
+        >>> clip('a\tb', 0, 10)  # Tab expanded to spaces
         'a       b'
     """
     # pylint: disable=too-complex,too-many-locals,too-many-branches

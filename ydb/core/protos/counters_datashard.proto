@@ -120,12 +120,12 @@ enum ECumulativeCounters {
     COUNTER_TX_NOT_ENOUGH_MEMORY_3 = 78                   [(CounterOpts) = {Name: "TxNotEnoughMemory3"}];
     COUNTER_TX_NOT_ENOUGH_MEMORY_4 = 79                   [(CounterOpts) = {Name: "TxNotEnoughMemory4"}];
     COUNTER_TX_TABLET_NOT_READY = 80                      [(CounterOpts) = {Name: "TxTabletNotReady"}];
-    COUNTER_TX_BACKGROUND_COMPACTION = 81                 [(CounterOpts) = {Name: "TxCompactTable"}];
-    COUNTER_TX_BACKGROUND_COMPACTION_NOT_NEEDED = 82      [(CounterOpts) = {Name: "TxCompactTableNotNeeded"}];
-    COUNTER_TX_BACKGROUND_COMPACTION_FAILED_BORROWED = 83 [(CounterOpts) = {Name: "TxCompactTableFailedBorrowed"}];
-    COUNTER_TX_BACKGROUND_COMPACTION_FAILED_START = 84    [(CounterOpts) = {Name: "TxCompactTableFailedStart"}];
+    COUNTER_TX_COMPACTION = 81                            [(CounterOpts) = {Name: "TxCompactTable"}];
+    COUNTER_TX_COMPACTION_NOT_NEEDED = 82                 [(CounterOpts) = {Name: "TxCompactTableNotNeeded"}];
+    COUNTER_TX_COMPACTION_FAILED_BORROWED = 83            [(CounterOpts) = {Name: "TxCompactTableFailedBorrowed"}];
+    COUNTER_TX_COMPACTION_FAILED_START = 84               [(CounterOpts) = {Name: "TxCompactTableFailedStart"}];
     COUNTER_FULL_COMPACTION_DONE = 85                     [(CounterOpts) = {Name: "FullCompactionCount"}];
-    COUNTER_TX_BACKGROUND_COMPACTION_FAILED_LOANED = 86   [(CounterOpts) = {Name: "TxCompactTableFailedLoaned"}];
+    COUNTER_TX_COMPACTION_FAILED_LOANED = 86              [(CounterOpts) = {Name: "TxCompactTableFailedLoaned"}];
     COUNTER_TX_COMPACT_BORROWED = 87                      [(CounterOpts) = {Name: "TxCompactBorrowed"}];
     COUNTER_CHANGE_RECORDS_ENQUEUED = 88                  [(CounterOpts) = {Name: "ChangeRecordsEnqueued"}];
     COUNTER_CHANGE_RECORDS_REMOVED = 89                   [(CounterOpts) = {Name: "ChangeRecordsRemoved"}];

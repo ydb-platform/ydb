@@ -30,21 +30,21 @@ TConstructor::TConstructor(const NColumnShard::TUnifiedOptionalPathId& unifiedPa
     const TColumnEngineForLogs* engineImpl = dynamic_cast<const TColumnEngineForLogs*>(&engine);
     const TVersionedIndex& originalSchemaInfo = engineImpl->GetVersionedIndex();
     std::deque<TPortionDataConstructor> constructors;
-    for (auto&& i : engineImpl->GetTables()) {
-        if (unifiedPathId.HasInternalPathId() && unifiedPathId.GetInternalPathIdVerified() != i.first) {
+    for (auto&& [internalPathId, granuleMeta] : engineImpl->GetTables()) {
+        if (unifiedPathId.HasInternalPathId() && unifiedPathId.GetInternalPathIdVerified() != internalPathId) {
             continue;
         }
         AFL_VERIFY(unifiedPathId.HasInternalPathId());
         AFL_VERIFY(unifiedPathId.HasSchemeShardLocalPathId());
-        for (auto&& [_, p] : i.second->GetPortions()) {
-            if (reqSnapshot < p->RecordSnapshotMin()) {
+        for (auto&& [_, portionInfo] : granuleMeta->GetPortions()) {
+            if (reqSnapshot < portionInfo->RecordSnapshotMin()) {
                 continue;
             }
-            if (p->IsRemovedFor(reqSnapshot)) {
+            if (portionInfo->IsRemovedFor(reqSnapshot)) {
                 continue;
             }
             AFL_VERIFY(unifiedPathId.HasSchemeShardLocalPathId());
-            constructors.emplace_back(NColumnShard::TUnifiedPathId::BuildValid(unifiedPathId.GetInternalPathIdVerified(), unifiedPathId.GetSchemeShardLocalPathIdVerified()), tabletId, p, p->GetSchema(originalSchemaInfo));
+            constructors.emplace_back(NColumnShard::TUnifiedPathId::BuildValid(unifiedPathId.GetInternalPathIdVerified(), unifiedPathId.GetSchemeShardLocalPathIdVerified()), tabletId, portionInfo, portionInfo->GetSchema(originalSchemaInfo));
             if (!pkFilter->IsUsed(
                     constructors.back().GetStart().GetValue().BuildSortablePosition(), constructors.back().GetFinish().GetValue().BuildSortablePosition())) {
                 constructors.pop_back();

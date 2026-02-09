@@ -11,22 +11,22 @@ TConstructor::TConstructor(const NColumnShard::TUnifiedOptionalPathId& unifiedPa
     const TColumnEngineForLogs* engineImpl = dynamic_cast<const TColumnEngineForLogs*>(&engine);
 
     std::deque<TDataSourceConstructor> constructors;
-    for (auto&& i : engineImpl->GetTables()) {
-        if (unifiedPathId.HasInternalPathId() && unifiedPathId.GetInternalPathIdVerified() != i.first) {
+    for (auto&& [internalPathId, granuleMeta] : engineImpl->GetTables()) {
+        if (unifiedPathId.HasInternalPathId() && unifiedPathId.GetInternalPathIdVerified() != internalPathId) {
             continue;
         }
         AFL_VERIFY(unifiedPathId.HasInternalPathId());
         AFL_VERIFY(unifiedPathId.HasSchemeShardLocalPathId());
         std::vector<TPortionInfo::TConstPtr> portionsAll;
-        for (auto&& [_, p] : i.second->GetPortions()) {
-            AFL_VERIFY(i.first == p->GetPathId());
-            if (reqSnapshot < p->RecordSnapshotMin()) {
+        for (auto&& [_, portionInfo] : granuleMeta->GetPortions()) {
+            AFL_VERIFY(internalPathId == portionInfo->GetPathId());
+            if (reqSnapshot < portionInfo->RecordSnapshotMin()) {
                 continue;
             }
-            if (p->IsRemovedFor(reqSnapshot)) {
+            if (portionInfo->IsRemovedFor(reqSnapshot)) {
                 continue;
             }
-            portionsAll.emplace_back(p);
+            portionsAll.emplace_back(portionInfo);
         }
         std::sort(portionsAll.begin(), portionsAll.end(), TPortionInfo::TPortionAddressComparator());
 

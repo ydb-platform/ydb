@@ -12,13 +12,13 @@ TConstructor::TConstructor(const NColumnShard::TUnifiedOptionalPathId& unifiedPa
     : TBase(sorting, tabletId) {
     const TColumnEngineForLogs* engineImpl = dynamic_cast<const TColumnEngineForLogs*>(&engine);
     std::deque<TDataSourceConstructor> constructors;
-    for (auto&& i : engineImpl->GetTables()) {
-        if (unifiedPathId.HasInternalPathId() && unifiedPathId.GetInternalPathIdVerified() != i.first) {
+    for (auto&& [internalPathId, granuleMeta] : engineImpl->GetTables()) {
+        if (unifiedPathId.HasInternalPathId() && unifiedPathId.GetInternalPathIdVerified() != internalPathId) {
             continue;
         }
         AFL_VERIFY(unifiedPathId.HasInternalPathId());
         AFL_VERIFY(unifiedPathId.HasSchemeShardLocalPathId());
-        constructors.emplace_back(unifiedPathId.GetSchemeShardLocalPathIdVerified(), TabletId, i.second);
+        constructors.emplace_back(unifiedPathId.GetSchemeShardLocalPathIdVerified(), TabletId, granuleMeta);
         if (!pkFilter->IsUsed(constructors.back().GetStart().GetValue().BuildSortablePosition(),
                 constructors.back().GetFinish().GetValue().BuildSortablePosition())) {
             constructors.pop_back();

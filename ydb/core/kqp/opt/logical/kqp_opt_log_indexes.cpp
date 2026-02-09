@@ -654,6 +654,60 @@ void VectorReadLevel(
     }
 }
 
+void VectorReadWithPushdown(
+    TExprContext& ctx, TPositionHandle pos,
+    const TKqpTable& targetTable,
+    const TIntrusivePtr<TKikimrTableMetadata> & mainTableMeta,
+    const TCoAtomList& mainColumns,
+    const TKqpStreamLookupSettings& pushdownSettings,
+    TExprNodePtr& read)
+{
+    THashSet<TStringBuf> cols;
+    for (const auto& col: mainColumns) {
+        cols.insert(col.Value());
+    }
+    TVector<TCoAtom> columnsWithKey;
+    if (pushdownSettings.VectorTopDistinct) {
+        // stream lookup columns must contain primary key columns for DistinctColumns pushdown
+        for (const auto& col: mainTableMeta->KeyColumnNames) {
+            if (!cols.contains(col)) {
+                columnsWithKey.push_back(Build<TCoAtom>(ctx, pos)
+                    .Value(col)
+                    .Done());
+            }
+        }
+    }
+    if (!cols.contains(pushdownSettings.VectorTopColumn)) {
+        // stream lookup columns must contain vector column for VectorTop pushdown
+        columnsWithKey.push_back(Build<TCoAtom>(ctx, pos)
+            .Value(pushdownSettings.VectorTopColumn)
+            .Done());
+    }
+    const auto settingsNode = pushdownSettings.BuildNode(ctx, pos);
+    if (columnsWithKey.size()) {
+        for (const auto& col: mainColumns) {
+            columnsWithKey.push_back(col);
+        }
+        read = Build<TKqlStreamLookupTable>(ctx, pos)
+            .Table(targetTable)
+            .LookupKeys(read)
+            .Columns<TCoAtomList>().Add(columnsWithKey).Build()
+            .Settings(settingsNode)
+            .Done().Ptr();
+        read = Build<TCoExtractMembers>(ctx, pos)
+            .Input(read)
+            .Members(mainColumns)
+            .Done().Ptr();
+    } else {
+        read = Build<TKqlStreamLookupTable>(ctx, pos)
+            .Table(targetTable)
+            .LookupKeys(read)
+            .Columns(mainColumns)
+            .Settings(settingsNode)
+            .Done().Ptr();
+    }
+}
+
 void VectorReadMain(
     TExprContext& ctx, TPositionHandle pos,
     const TKqpTable& postingTable,
@@ -662,67 +716,44 @@ void VectorReadMain(
     const TIntrusivePtr<TKikimrTableMetadata> & mainTableMeta,
     const TCoAtomList& mainColumns,
     const TKqpStreamLookupSettings& pushdownSettings,
-    bool withOverlap,
     TExprNodePtr& read)
 {
+    // vector is not covered => lookup posting + lookup main with pushdown
+    // vector is covered but main columns are not => lookup posting with pushdown + lookup main
+    // vector and main columns are covered => lookup posting with pushdown
+
+    const bool isVectorCovered = postingTableMeta->Columns.contains(pushdownSettings.VectorTopColumn);
     const bool isCovered = CheckIndexCovering(mainColumns, postingTableMeta);
-    const auto settingsNode = pushdownSettings.BuildNode(ctx, pos);
 
-    if (!isCovered) {
-        TKqpStreamLookupSettings settings;
-        settings.Strategy = EStreamLookupStrategyType::LookupRows;
+    if (isVectorCovered && isCovered) {
+        VectorReadWithPushdown(ctx, pos, postingTable, mainTableMeta, mainColumns, pushdownSettings, read);
+        return;
+    }
 
-        const bool isVectorCovered = postingTableMeta->Columns.contains(pushdownSettings.VectorTopColumn);
-        const auto postingColumns = BuildKeyColumnsList(pos, ctx, mainTableMeta->KeyColumnNames);
+    TKqpStreamLookupSettings settings;
+    settings.Strategy = EStreamLookupStrategyType::LookupRows;
 
+    const auto postingColumns = BuildKeyColumnsList(pos, ctx, mainTableMeta->KeyColumnNames);
+
+    if (!isVectorCovered) {
         read = Build<TKqlStreamLookupTable>(ctx, pos)
             .Table(postingTable)
             .LookupKeys(read)
             .Columns(postingColumns)
-            .Settings(isVectorCovered ? settingsNode : settings.BuildNode(ctx, pos))
+            .Settings(settings.BuildNode(ctx, pos))
+        .Done().Ptr();
+
+        VectorReadWithPushdown(ctx, pos, mainTable, mainTableMeta, mainColumns, pushdownSettings, read);
+    } else {
+        VectorReadWithPushdown(ctx, pos, postingTable, mainTableMeta, postingColumns, pushdownSettings, read);
+
+        read = Build<TKqlStreamLookupTable>(ctx, pos)
+            .Table(mainTable)
+            .LookupKeys(read)
+            .Columns(mainColumns)
+            .Settings(settings.BuildNode(ctx, pos))
         .Done().Ptr();
     }
-
-    const auto& targetTable = isCovered ? postingTable : mainTable;
-
-    if (withOverlap) {
-        // mainColumns must contain primary key columns for DistinctColumns pushdown
-        THashSet<TStringBuf> cols;
-        for (const auto& col: mainColumns) {
-            cols.insert(col.Value());
-        }
-        TVector<TCoAtom> columnsWithKey;
-        for (const auto& col: mainTableMeta->KeyColumnNames) {
-            if (!cols.contains(col)) {
-                columnsWithKey.push_back(Build<TCoAtom>(ctx, pos)
-                    .Value(col)
-                    .Done());
-            }
-        }
-        if (columnsWithKey.size()) {
-            for (const auto& col: mainColumns) {
-                columnsWithKey.push_back(col);
-            }
-            read = Build<TKqlStreamLookupTable>(ctx, pos)
-                .Table(targetTable)
-                .LookupKeys(read)
-                .Columns<TCoAtomList>().Add(columnsWithKey).Build()
-                .Settings(settingsNode)
-                .Done().Ptr();
-            read = Build<TCoExtractMembers>(ctx, pos)
-                .Input(read)
-                .Members(mainColumns)
-                .Done().Ptr();
-            return;
-        }
-    }
-
-    read = Build<TKqlStreamLookupTable>(ctx, pos)
-        .Table(targetTable)
-        .LookupKeys(read)
-        .Columns(mainColumns)
-        .Settings(settingsNode)
-        .Done().Ptr();
 }
 
 void VectorTopMain(TExprContext& ctx, const TCoTopBase& top, TExprNodePtr& read) {
@@ -826,7 +857,7 @@ TExprBase DoRewriteTopSortOverKMeansTree(
     settings.VectorTopColumn = indexDesc.KeyColumns.back();
     settings.VectorTopLimit = top.Count().Ptr();
     settings.VectorTopDistinct = withOverlap;
-    VectorReadMain(ctx, pos, postingTable, postingTableDesc->Metadata, mainTable, tableDesc.Metadata, mainColumns, settings, withOverlap, read);
+    VectorReadMain(ctx, pos, postingTable, postingTableDesc->Metadata, mainTable, tableDesc.Metadata, mainColumns, settings, read);
 
     if (flatMap) {
         read = Build<TCoFlatMap>(ctx, flatMap.Cast().Pos())
@@ -963,7 +994,7 @@ TExprBase DoRewriteTopSortOverPrefixedKMeansTree(
     settings.VectorTopColumn = indexDesc.KeyColumns.back();
     settings.VectorTopLimit = top.Count().Ptr();
     settings.VectorTopDistinct = withOverlap;
-    VectorReadMain(ctx, pos, postingTable, postingTableDesc->Metadata, mainTable, tableDesc.Metadata, mainColumns, settings, withOverlap, read);
+    VectorReadMain(ctx, pos, postingTable, postingTableDesc->Metadata, mainTable, tableDesc.Metadata, mainColumns, settings, read);
 
     if (mainLambda) {
         read = Build<TCoMap>(ctx, flatMap.Pos())

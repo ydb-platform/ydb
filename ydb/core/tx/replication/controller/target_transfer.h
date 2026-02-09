@@ -40,7 +40,7 @@ class TTransferStats : public TReplication::ITargetStats {
     };
 
 public:
-    void FillToProto(NKikimrReplication::TEvDescribeReplicationResult& destination, bool includeDetailed) const override;
+    void Serialize(NKikimrReplication::TEvDescribeReplicationResult& destination, bool detailed) const override;
 
     THashMap<ui64, TWorkerStats> WorkersStats;
     TMultiSlidingWindow ReadBytes;

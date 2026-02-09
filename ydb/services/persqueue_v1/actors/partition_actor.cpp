@@ -653,7 +653,7 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
 
     if (!InitDone) {
         AFL_ENSURE(DirectReadRestoreStage == EDirectReadRestoreStage::None);
-        if (result.GetCookie() != INIT_COOKIE) {
+        if (result.GetCookie() != InitCookie) {
             LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Partition
                             << " unwaited response in init with cookie " << result.GetCookie());
             return;
@@ -703,7 +703,11 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
         case EDirectReadRestoreStage::None:
             break;
         case EDirectReadRestoreStage::Session:
-            AFL_ENSURE(result.HasCmdRestoreDirectReadResult());
+            if (result.GetCookie() != InitCookie || !result.HasCmdRestoreDirectReadResult()) {
+                LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " Direct read - session restarted for partition "
+                    << Partition << " with unwaited cookie " << result.GetCookie());
+                return;
+            }
             LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " Direct read - session restarted for partition " << Partition);
             if (!SendNextRestorePrepareOrForget()) {
                 OnDirectReadsRestored();
@@ -711,11 +715,12 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
             return;
         case EDirectReadRestoreStage::Prepare:
             AFL_ENSURE(RestoredDirectReadId != 0);
-            if (!result.HasCmdPrepareReadResult()) {
-                LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " Invalid response on direct read restore for " << Partition << ": expect PrepareReadResult");
+            if (!result.HasCmdPrepareReadResult() || DirectReadsToRestore.empty() || DirectReadsToRestore.begin()->first != result.GetCmdPrepareReadResult().GetDirectReadId()) {
+                LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " Invalid response on direct read restore for "
+                    << Partition << ": expect PrepareReadResult, got " << result.GetCookie());
+                return;
             }
-            AFL_ENSURE(result.HasCmdPrepareReadResult());
-            AFL_ENSURE(DirectReadsToRestore.begin()->first == result.GetCmdPrepareReadResult().GetDirectReadId());
+
             DirectReadsToRestore.erase(DirectReadsToRestore.begin());
             {
                 auto sent = SendNextRestorePublishRequest();
@@ -1095,12 +1100,12 @@ void TPartitionActor::InitStartReading(const TActorContext& ctx) {
 }
 
 //TODO: add here reaction on client release request
-NKikimrClient::TPersQueueRequest TPartitionActor::MakeCreateSessionRequest(bool initial) const {
+NKikimrClient::TPersQueueRequest TPartitionActor::MakeCreateSessionRequest(bool initial, ui64 cookie) const {
     NKikimrClient::TPersQueueRequest request;
 
     request.MutablePartitionRequest()->SetTopic(Topic->GetPrimaryPath());
     request.MutablePartitionRequest()->SetPartition(Partition.Partition);
-    request.MutablePartitionRequest()->SetCookie(INIT_COOKIE);
+    request.MutablePartitionRequest()->SetCookie(cookie);
 
     ActorIdToProto(PipeClient, request.MutablePartitionRequest()->MutablePipeClient());
 
@@ -1142,7 +1147,7 @@ void TPartitionActor::InitLockPartition(const TActorContext& ctx) {
             .DoFirstRetryInstantly = true
         };
         PipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, TabletID, clientConfig));
-        auto request = MakeCreateSessionRequest(true);
+        auto request = MakeCreateSessionRequest(true, ++InitCookie);
 
         LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " INITING " << Partition);
 
@@ -1163,7 +1168,7 @@ void TPartitionActor::InitLockPartition(const TActorContext& ctx) {
 void TPartitionActor::RestartDirectReadSession() {
     const auto& ctx = ActorContext();
     DirectReadRestoreStage = EDirectReadRestoreStage::Session;
-    auto request = MakeCreateSessionRequest(false);
+    auto request = MakeCreateSessionRequest(false, ++InitCookie);
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " Re-init direct read session for " << Partition);
     TAutoPtr<TEvPersQueue::TEvRequest> req(new TEvPersQueue::TEvRequest);
     req->Record.Swap(&request);

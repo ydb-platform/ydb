@@ -56,7 +56,7 @@ namespace NWilson {
 
     TSpan::TSpan(ui8 verbosity, TTraceId parentId, std::variant<std::optional<TString>, const char*> name,
             TFlags flags, NActors::TActorSystem* actorSystem)
-        : Data(parentId
+        : Data(parentId && parentId.IsWilsonTrace()
                 ? std::make_unique<TData>(TInstant::Now(), GetCycleCount(), parentId.Span(verbosity), flags, actorSystem)
                 : nullptr)
     {
@@ -148,7 +148,7 @@ namespace NWilson {
     }
 
     TSpan TSpan::ConstructTerminated(const NWilson::TTraceId& parentId, const NWilson::TTraceId& spanId,
-            TInstant startTs, TInstant endTs, const TString& name) {
+            TInstant startTs, TInstant endTs, NTraceProto::Status::StatusCode statusCode, const TString& name) {
         TSpan res;
         res.Data = std::make_unique<TData>(TInstant::Zero(), 0, NWilson::TTraceId(spanId), EFlags::NONE,
                 nullptr);
@@ -157,7 +157,7 @@ namespace NWilson {
         res.Data->Span.set_span_id(spanId.GetSpanIdPtr(), spanId.GetSpanIdSize());
         res.Data->Span.set_start_time_unix_nano(startTs.NanoSeconds());
         res.Data->Span.set_end_time_unix_nano(endTs.NanoSeconds());
-        res.Data->Span.mutable_status()->set_code(NTraceProto::Status::STATUS_CODE_OK);
+        res.Data->Span.mutable_status()->set_code(statusCode);
         res.Name(name);
         res.Data->EndAsIs = true;
         return res;

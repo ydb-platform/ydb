@@ -81,7 +81,8 @@ namespace NWilson {
         TSpan& operator=(TSpan&& other);
 
         static TSpan ConstructTerminated(const TTraceId& parentId, const TTraceId& spanId,
-                TInstant startTs, TInstant endTs, const TString& name);
+                TInstant startTs, TInstant endTs, NTraceProto::Status::StatusCode statusCode,
+                const TString& name);
 
         explicit operator bool() const {
             return Data && !Data->Sent && !Data->Ignored;

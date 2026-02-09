@@ -152,10 +152,22 @@ namespace NWilson {
     }
 
     bool TTraceId::IsRetroTrace() const {
-        return RetroTrace;
+        return *this && RetroTrace;
+    }
+
+    bool TTraceId::IsWilsonTrace() const {
+        return *this && !RetroTrace;
     }
 
     bool TTraceId::IsSameTrace(const NWilson::TTraceId& other) const {
         return std::memcmp(GetTraceIdPtr(), other.GetTraceIdPtr(), GetTraceIdSize()) == 0;
+    }
+
+    TTraceId TTraceId::MakeRetroIfEmpty(ui8 verbosity, ui32 ttl) {
+        if (*this) {
+            return TTraceId(*this);
+        } else {
+            return NewTraceId(verbosity, ttl, true);
+        }
     }
 }

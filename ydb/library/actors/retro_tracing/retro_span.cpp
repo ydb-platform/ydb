@@ -1,6 +1,7 @@
 #include "retro_span.h"
 #include "span_buffer.h"
 
+#include <contrib/libs/opentelemetry-proto/opentelemetry/proto/trace/v1/trace.pb.h>
 #include <util/stream/str.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
@@ -15,7 +16,7 @@ TRetroSpan::TRetroSpan(ui32 type, ui32 size)
 
 TRetroSpan::~TRetroSpan() {
     if (!IsEnded() && (Flags & NWilson::EFlags::AUTO_END)) {
-        End();
+        EndOk();
     }
 }
 
@@ -25,6 +26,10 @@ ui32 TRetroSpan::GetType() const {
 
 ui32 TRetroSpan::GetSize() const {
     return Size;
+}
+
+TRetroSpan::TStatusCode TRetroSpan::GetStatusCode() const {
+    return StatusCode;
 }
 
 const void* TRetroSpan::GetData() const {
@@ -64,13 +69,23 @@ void TRetroSpan::Serialize(void* destination) const {
 std::unique_ptr<NWilson::TSpan> TRetroSpan::MakeWilsonSpan() {
     std::unique_ptr<NWilson::TSpan> res = std::make_unique<NWilson::TSpan>(
             NWilson::TSpan::ConstructTerminated(GetParentId(), GetTraceId(),
-                    GetStartTs(), GetEndTs(), GetName()));
+                    GetStartTs(), GetEndTs(), GetStatusCode(), GetName()));
     return res;
 }
 
 void TRetroSpan::End() {
     EndTs = TInstant::Now();
     WriteSpan(this);
+}
+
+void TRetroSpan::EndError() {
+    StatusCode = EStatusCode::STATUS_CODE_OK;
+    End();
+}
+
+void TRetroSpan::EndOk() {
+    StatusCode = EStatusCode::STATUS_CODE_ERROR;
+    End();
 }
 
 bool TRetroSpan::IsEnded() const {
@@ -89,11 +104,16 @@ TString TRetroSpan::GetName() const {
     return "Unnamed retro span";
 }
 
+void TRetroSpan::EnableAutoEnd() {
+    Flags |= NWilson::EFlags::AUTO_END;
+}
+
 TString TRetroSpan::ToString() const {
     TStringStream str;
     str << "TRetroSpan {";
     str << " Type# " << GetType();
     str << " Size# " << GetSize();
+    str << " StatusCode# " << NWilson::NTraceProto::Status::StatusCode_Name(StatusCode);
     str << " Flags# " << Flags;
     str << " ParentId# " << ParentId.GetHexFullTraceId();
     str << " SpanId# " << SpanId.GetHexFullTraceId();

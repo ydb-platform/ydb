@@ -10,7 +10,7 @@
 
 #include <variant>
 
-namespace NKikimr {
+namespace NRetroTracing {
 
 enum class EUniversalSpanType : ui8 {
     Empty,
@@ -107,7 +107,43 @@ public:
         return res;
     }
 
-private:
+    TString GetName() const {
+        TString res;
+        std::visit(TOverloaded{
+            [&](const NWilson::TSpan& span) -> void { res = span.GetName(); },
+            [&](const TRetroSpanType& span) -> void { res = span.GetName(); },
+            [&](const std::monostate&) -> void {},
+        }, Span);
+        return res;
+    }
+
+    TUniversalSpan& EnableAutoEnd() {
+        std::visit(TOverloaded{
+            [&](NWilson::TSpan& span) -> void { span.EnableAutoEnd(); },
+            [&](TRetroSpanType& span) -> void { span.EnableAutoEnd(); },
+            [&](const std::monostate&) -> void {},
+        }, Span);
+        return *this;
+    }
+
+    void EndOk() {
+        std::visit(TOverloaded{
+            [&](NWilson::TSpan& span) -> void { span.EndOk(); },
+            [&](TRetroSpanType& span) -> void { span.EndOk(); },
+            [&](const std::monostate&) -> void {},
+        }, Span);
+    }
+
+    template<typename T>
+    void EndError(T&& error) {
+        std::visit(TOverloaded{
+            [&](NWilson::TSpan& span) -> void { span.EndError(std::move(error)); },
+            [&](TRetroSpanType& span) -> void { span.EndError(); },
+            [&](const std::monostate&) -> void {},
+        }, Span);
+    }
+
+protected:
     std::variant<std::monostate, NWilson::TSpan, TRetroSpanType> Span;
 };
 

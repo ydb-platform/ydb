@@ -7,6 +7,7 @@ SRCS(
 )
 
 PEERDIR(
+    contrib/libs/opentelemetry-proto
     ydb/library/actors/wilson
 )
 

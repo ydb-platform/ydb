@@ -7,12 +7,12 @@ enum ETestRetroSpanType : ui32 {
     Test2
 };
 
-class TTestSpan1 : public NRetroTracing::TTypedRetroSpan<Test1, TTestSpan1> {
+class TTestSpan1 : public NRetroTracing::TTypedRetroSpan<TTestSpan1, Test1> {
 public:
     ui64 Var = 0;
 };
 
-class TTestSpan2 : public NRetroTracing::TTypedRetroSpan<Test2, TTestSpan2> {
+class TTestSpan2 : public NRetroTracing::TTypedRetroSpan<TTestSpan2, Test2> {
 public:
     ui32 Var1 = 0;
     ui64 Var2 = 0;

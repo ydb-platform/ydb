@@ -1,10 +1,11 @@
+#include "named_span.h"
+
+#include <cstring>
+
 #include <ydb/library/actors/retro_tracing/retro_span.h>
-#include "test_spans.h"
 
-namespace NRetroTracing {
-
-TRetroSpan* TRetroSpan::DeserializeImpl(ui32 type, ui32 size, const void* data) {
-
+NRetroTracing::TRetroSpan* NRetroTracing::TRetroSpan::DeserializeImpl(
+        ui32 type, ui32 size, const void* data) {
     switch (type) {
 #define SPAN_TYPE(TSpanType, typeId)                                \
         case typeId: {                                              \
@@ -13,13 +14,10 @@ TRetroSpan* TRetroSpan::DeserializeImpl(ui32 type, ui32 size, const void* data) 
             return new TSpanType(res);                              \
         }
 
-        SPAN_TYPE(TTestSpan1, Test1);
-        SPAN_TYPE(TTestSpan2, Test2);
+        SPAN_TYPE(NKikimr::TNamedSpan, NKikimr::NamedSpan);
 
 #undef SPAN_TYPE
         default:
             return nullptr;
     }
-}
-
 }

@@ -183,9 +183,12 @@ namespace NWilson {
             return TimeToLive;
         }
 
+        bool IsWilsonTrace() const;
         bool IsRetroTrace() const;
 
-        bool IsSameTrace(const NWilson::TTraceId& other) const;
+        TTraceId MakeRetroIfEmpty(ui8 verbosity, ui32 ttl);
+
+        bool IsSameTrace(const TTraceId& other) const;
 
         const void *GetTraceIdPtr() const { return TraceId.data(); }
         static constexpr size_t GetTraceIdSize() { return sizeof(TTrace); }

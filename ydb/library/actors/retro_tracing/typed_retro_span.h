@@ -7,7 +7,7 @@
 
 namespace NRetroTracing {
 
-template <ui32 Id, typename T>
+template <typename T, ui32 Id>
 class TTypedRetroSpan : public TRetroSpan {
 protected:
     static constexpr ui32 TypeId = Id;

@@ -16,7 +16,7 @@
 
 #define Ctest Cnull
 
-namespace NKikimr {
+namespace NRetroTracing {
 
 Y_UNIT_TEST_SUITE(UniversalSpan) {
     Y_UNIT_TEST(RetroSpan) {
@@ -58,8 +58,7 @@ Y_UNIT_TEST_SUITE(UniversalSpan) {
             UNIT_ASSERT(end - start > TDuration::Seconds(2));
             span.GetRetroSpanPtr()->Serialize(buffer);
 
-            std::unique_ptr<NRetroTracing::TRetroSpan> deserialized =
-                    NRetroTracing::TRetroSpan::DeserializeToUnique(buffer);
+            std::unique_ptr<TRetroSpan> deserialized = TRetroSpan::DeserializeToUnique(buffer);
             const TTestSpan1* deserializedPtr = deserialized->Cast<TTestSpan1>();
             UNIT_ASSERT(deserializedPtr);
             UNIT_ASSERT_VALUES_EQUAL(deserializedPtr->GetStartTs(), start);
@@ -88,8 +87,8 @@ Y_UNIT_TEST_SUITE(UniversalSpan) {
 
             span.GetRetroSpanPtr()->Serialize(buffer);
 
-            std::unique_ptr<NRetroTracing::TRetroSpan> deserialized =
-                    NRetroTracing::TRetroSpan::DeserializeToUnique(buffer);
+            std::unique_ptr<TRetroSpan> deserialized =
+                    TRetroSpan::DeserializeToUnique(buffer);
             const TTestSpan2* deserializedPtr = deserialized->Cast<TTestSpan2>();
             UNIT_ASSERT(deserializedPtr);
             UNIT_ASSERT_VALUES_EQUAL(deserializedPtr->GetStartTs(), start);
@@ -128,7 +127,7 @@ Y_UNIT_TEST_SUITE(SpanBuffer) {
         }
 
         for (ui32 i = 0; i < 10; ++i) {
-            std::vector<std::unique_ptr<NRetroTracing::TRetroSpan>> spans = NRetroTracing::GetSpansOfTrace(parentId);
+            std::vector<std::unique_ptr<TRetroSpan>> spans = GetSpansOfTrace(parentId);
             UNIT_ASSERT_VALUES_EQUAL(spans.size(), 1);
             const TTestSpan1* ptr = spans[0]->Cast<TTestSpan1>();
             UNIT_ASSERT(ptr);
@@ -137,7 +136,7 @@ Y_UNIT_TEST_SUITE(SpanBuffer) {
             UNIT_ASSERT_VALUES_UNEQUAL(ptr->GetEndTs(), TInstant::Zero());
 
         }
-        NRetroTracing::DropThreadLocalBuffer();
+        DropThreadLocalBuffer();
     }
 
     Y_UNIT_TEST(AutoEnd) {
@@ -176,8 +175,8 @@ Y_UNIT_TEST_SUITE(SpanBuffer) {
 
     void SpanReader(TInstant end) {
         while (TInstant::Now() < end) {
-            auto spans = NRetroTracing::GetSpansOfTrace(TraceId);
-            for (const std::unique_ptr<NRetroTracing::TRetroSpan>& span : spans) {
+            auto spans = GetSpansOfTrace(TraceId);
+            for (const std::unique_ptr<TRetroSpan>& span : spans) {
                 const TTestSpan2* ptr = span->Cast<TTestSpan2>();
                 UNIT_ASSERT(ptr);
                 UNIT_ASSERT_VALUES_EQUAL(ptr->Var2, GetValue(ptr->Var1));
@@ -224,7 +223,7 @@ Y_UNIT_TEST_SUITE(RetroCollector) {
 
         void Bootstrap() {
             Foo(NWilson::TTraceId(TraceId));
-            NRetroTracing::DemandTrace(TraceId);
+            DemandTrace(TraceId);
             Sleep(TDuration::Seconds(1));
             Send(EdgeActorId, new NActors::TEvents::TEvGone);
             PassAway();
@@ -261,8 +260,8 @@ Y_UNIT_TEST_SUITE(RetroCollector) {
         actorSystem.Initialize();
 
         { // register retro collector
-            NActors::TActorId actorId = actorSystem.Register(NRetroTracing::CreateRetroCollector());
-            actorSystem.RegisterService(NRetroTracing::MakeRetroCollectorId(), actorId);
+            NActors::TActorId actorId = actorSystem.Register(CreateRetroCollector());
+            actorSystem.RegisterService(MakeRetroCollectorId(), actorId);
         }
 
         TFakeWilsonUploader* wilson = dynamic_cast<TFakeWilsonUploader*>(CreateFakeWilsonUploader());

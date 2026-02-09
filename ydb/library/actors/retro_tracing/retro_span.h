@@ -13,6 +13,10 @@
 namespace NRetroTracing {
 
 class TRetroSpan {
+protected:
+    using TStatusCode = NWilson::NTraceProto::Status::StatusCode;
+    using EStatusCode = NWilson::NTraceProto::Status;
+
 private:
     // User of the library must provide the definition of this method
     // See UT for implementation example
@@ -28,6 +32,8 @@ public:
 
     ui32 GetType() const;
     ui32 GetSize() const;
+
+    TStatusCode GetStatusCode() const;
 
     const void* GetData() const;
     void* GetDataMut();
@@ -55,10 +61,14 @@ public:
     virtual TString ToString() const;
 
     void End();
+    void EndError();
+    void EndOk();
     bool IsEnded() const;
 
     TInstant GetStartTs() const;
     TInstant GetEndTs() const;
+
+    void EnableAutoEnd();
 
 public:
     static constexpr ui8 DefaultVerbosity = 1;
@@ -68,6 +78,7 @@ private:
     ui32 Size = 0;
 
 protected:
+    TStatusCode StatusCode = EStatusCode::STATUS_CODE_UNSET;
     NWilson::TFlags Flags = NWilson::EFlags::NONE;
 
     NWilson::TTraceId ParentId = NWilson::TTraceId{};

@@ -209,27 +209,31 @@ namespace NYdb::NConsoleClient {
         output << "]" << Endl;
     }
 
+    TString TTopicReader::GetFieldWithEscaping(const TString& body, char delimiter) const {
+        if (body.Contains(delimiter) || body.Contains('"') || body.Contains('\n')) {
+            TString escaped;
+            escaped.reserve(body.size() + 2);
+            escaped += '"';
+            for (char c : body) {
+                if (c == '"') {
+                    escaped += "\"\"";
+                } else {
+                    escaped += c;
+                }
+            }
+            escaped += '"';
+            return escaped;
+        } else {
+            return body;
+        }
+    }
+
     void TTopicReader::PrintCsvFieldValue(const ETopicMetadataField& f, TReceivedMessage const& message, IOutputStream& output, char delimiter) const {
         switch (f) {
             case ETopicMetadataField::Body:
                 {
                     TString body(FormatBody(message.GetData(), ReaderParams_.Transform()));
-                    if (body.Contains(delimiter) || body.Contains('"') || body.Contains('\n')) {
-                        TString escaped;
-                        escaped.reserve(body.size() + 2);
-                        escaped += '"';
-                        for (char c : body) {
-                            if (c == '"') {
-                                escaped += "\"\"";
-                            } else {
-                                escaped += c;
-                            }
-                        }
-                        escaped += '"';
-                        output << escaped;
-                    } else {
-                        output << body;
-                    }
+                    output << GetFieldWithEscaping(body, delimiter);
                 }
                 break;
             case ETopicMetadataField::CreateTime:
@@ -253,7 +257,7 @@ namespace NYdb::NConsoleClient {
                     for (const auto& [k, v] : message.GetMessageMeta()->Fields) {
                         json[k] = v;
                     }
-                    output << json;
+                    output << GetFieldWithEscaping(json.GetStringRobust(), delimiter);;
                 }
                 break;
             case ETopicMetadataField::SessionMeta:
@@ -262,7 +266,7 @@ namespace NYdb::NConsoleClient {
                     for (const auto& [k, v] : message.GetMeta()->Fields) {
                         json[k] = v;
                     }
-                    output << json;
+                    output << GetFieldWithEscaping(json.GetStringRobust(), delimiter);
                 }
                 break;
             default:

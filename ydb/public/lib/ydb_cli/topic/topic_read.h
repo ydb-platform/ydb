@@ -89,6 +89,7 @@ namespace NYdb::NConsoleClient {
         void PrintCsvHeader(IOutputStream& output, char delimiter);
         void PrintMessageAsCsvRow(const TReceivedMessage& message, IOutputStream& output, char delimiter) const;
         void PrintCsvFieldValue(const ETopicMetadataField& f, TReceivedMessage const& message, IOutputStream& output, char delimiter) const;
+        TString GetFieldWithEscaping(const TString& body, char delimiter) const;
 
         enum EReadingStatus {
             NoPartitionTaken = 0,

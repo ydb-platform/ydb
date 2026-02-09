@@ -7,5 +7,16 @@ NKikimrConfig::TCurrentCompatibilityInfo NKikimr::TCompatibilityInfo::MakeCurren
 
     return TCurrentConstructor{
         .Application = "ydb",
+        .Version = TVersionConstructor{
+            .Year = 26,
+            .Major = 2,
+        },
+        .CanConnectTo = {
+            TCompatibilityRuleConstructor{
+                .Application = "nbs",
+                .LowerLimit = TVersionConstructor{ .Year = 25, .Major = 1 },
+                .UpperLimit = TVersionConstructor{ .Year = 26, .Major = 2 },
+            },
+        }
     }.ToPB();
 }

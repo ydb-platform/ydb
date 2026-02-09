@@ -15,7 +15,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - base_branch: dev-base-conflict-branch
+          - base_branch: prestable-26-1
             head_branch: main
             label: sync-prestable
     steps:
@@ -32,4 +32,5 @@ jobs:
           head_branch: ${{ matrix.head_branch }}
           label: ${{ matrix.label }}
           repository: ${{ github.repository }}
+          merge_ours: ".github/CODEOWNERS yql/essentials/minikql/mkql_runtime_version.h"
           gh_personal_access_token: ${{ env.GH_TOKEN }}

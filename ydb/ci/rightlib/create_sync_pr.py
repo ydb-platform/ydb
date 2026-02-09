@@ -165,13 +165,7 @@ class PrSyncCreator:
             pr_body = "PR was created by rightlib sync script"
 
         if merge_failed and len(conflict_files) > 0:
-            pr_body += f"""\n\n### Merge failed
-Full message:
-```
-{merge_output}
-```
-
-Found some unresolved conflicts:\n"""
+            pr_body += "\n\n### Merge failed\n\nFound some unresolved conflicts:\n"
             for conflict_file in conflict_files:
                 lines = self.find_conflict_lines(conflict_file)
                 pr_body += f"- [{conflict_file}](https://github.com/ydb-platform/ydb/blob/{self.git_revparse_head()}/{conflict_file}#L{lines[0]}-L{lines[1]})\n"

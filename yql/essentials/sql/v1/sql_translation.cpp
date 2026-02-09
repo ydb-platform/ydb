@@ -2587,7 +2587,9 @@ bool TSqlTranslation::CreateTableSettings(const TRule_with_table_settings& setti
     return true;
 }
 
-static bool StoreConsumerSettingsEntry(
+namespace {
+
+bool StoreConsumerSettingsEntry(
     const TIdentifier& id, const TRule_topic_consumer_setting_value* value, TSqlExpression& ctx,
     TTopicConsumerSettings& settings,
     bool reset, bool alter) {
@@ -2763,6 +2765,8 @@ static bool StoreConsumerSettingsEntry(
     return true;
 }
 
+} // namespace
+
 TIdentifier TSqlTranslation::GetTopicConsumerId(const TRule_topic_consumer_ref& node) {
     return IdEx(node.GetRule_an_id_pure1(), *this);
 }
@@ -2865,7 +2869,9 @@ bool TSqlTranslation::CreateTopicEntry(const TRule_create_topic_entry& node, TCr
     return true;
 }
 
-static bool StoreTopicSettingsEntry(
+namespace {
+
+bool StoreTopicSettingsEntry(
     const TIdentifier& id, const TRule_topic_setting_value* value, TSqlExpression& ctx,
     TTopicSettings& settings, bool reset) {
     YQL_ENSURE(value || reset);
@@ -3014,6 +3020,8 @@ static bool StoreTopicSettingsEntry(
     }
     return true;
 }
+
+} // namespace
 
 bool TSqlTranslation::AlterTopicAction(const TRule_alter_topic_action& node, TAlterTopicParameters& params) {
     // alter_topic_action:

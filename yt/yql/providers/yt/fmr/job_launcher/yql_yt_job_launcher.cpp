@@ -46,7 +46,7 @@ void TFmrUserJobLauncher::InitializeJobEnvironment(
     }
 }
 
-std::variant<TError, TStatistics> TFmrUserJobLauncher::LaunchJob(
+std::variant<TFmrError, TStatistics> TFmrUserJobLauncher::LaunchJob(
     TFmrUserJob& job,
     const TMaybe<TString>& jobEnvironmentDir,
     const std::vector<TFileInfo>& jobFiles,
@@ -93,13 +93,10 @@ std::variant<TError, TStatistics> TFmrUserJobLauncher::LaunchJob(
     auto code = command.GetExitCode();
     if (code != 0) {
         TString errorStr = fmrJobErrorStream.Str();
-        TStringBuf errorMessage = errorStr;
-        TryParseTerminationMessage(errorMessage);
+        EFmrErrorReason errorReason = ParseFmrReasonFromErrorMessage(errorStr);
 
-        if (errorMessage.size() < errorStr.size()) {
-            ythrow yexception() << "Process terminated with error: " << errorMessage;
-        }
-        return TError{
+        return TFmrError{
+            .Reason = errorReason,
             .ErrorMessage = TStringBuilder() << "Process terminated with exit code " << code << " and error message " << fmrJobErrorStream.Str()
         };
     }

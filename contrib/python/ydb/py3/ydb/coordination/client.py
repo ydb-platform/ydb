@@ -1,5 +1,5 @@
 import logging
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 
 from .._grpc.grpcwrapper.ydb_coordination import (
     CreateNodeRequest,
@@ -11,10 +11,13 @@ from .._grpc.grpcwrapper.ydb_coordination_public_types import NodeConfig
 from .base import BaseCoordinationClient
 from .session import CoordinationSession
 
+if TYPE_CHECKING:
+    from ..driver import Driver as SyncDriver  # noqa: F401
+
 logger = logging.getLogger(__name__)
 
 
-class CoordinationClient(BaseCoordinationClient):
+class CoordinationClient(BaseCoordinationClient["SyncDriver"]):
     def create_node(self, path: str, config: Optional[NodeConfig] = None, settings=None):
         self._log_experimental_api()
 

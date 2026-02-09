@@ -57,7 +57,6 @@ SRCS(
     pool_allocator_ut.cpp
     proc_ut.cpp
     random_ut.cpp
-    range_helpers_ut.cpp
     ref_counted_tracker_ut.cpp
     relaxed_mpsc_queue_ut.cpp
     ring_queue_ut.cpp

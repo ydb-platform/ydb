@@ -179,7 +179,7 @@ Y_UNIT_TEST_SUITE(FmrCoordinatorTests) {
         auto func = [&] (TTask::TPtr /*task*/, std::shared_ptr<std::atomic<bool>> cancelFlag) {
             while (! cancelFlag->load()) {
                 Sleep(TDuration::Seconds(2));
-                throw std::runtime_error{"Function crashed"};
+                throw TFmrNonRetryableJobException() << " Function crashed";
             }
             return TJobResult{.TaskStatus = ETaskStatus::Failed, .Stats = TStatistics()};
         };

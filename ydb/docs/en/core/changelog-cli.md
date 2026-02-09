@@ -26,7 +26,7 @@ Released on February 11, 2026. To update to version **2.29.0**, select the [Down
 
 ### Bug fixes
 
-* Fixed an Out Of Memory issue in the `{{ ydb-cli }} workload query run` [command](./reference/ydb-cli/commands/workload/index.md) for queries with large result sets.
+* Fixed an out-of-memory issue in the `{{ ydb-cli }} workload query run` [command](./reference/ydb-cli/commands/workload/index.md) for queries with large result sets.
 * Fixed static credentials parsing to avoid using a [profile](./reference/ydb-cli/profile/index.md) password when the username comes from another source.
 
 ## Version 2.28.0 {#2-28-0}

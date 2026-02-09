@@ -376,7 +376,7 @@ public:
         auto msg = ev->Get();
 
         LOG_INFO_S(ctx, NKikimrServices::BS_LOAD_TEST, "Tag# " << Tag
-                << " TEvRegisterPDiskLoadActorResult recieved, ownerRound# " << (ui32)msg->OwnerRound);
+                << " TEvRegisterPDiskLoadActorResult received, ownerRound# " << (ui32)msg->OwnerRound);
         for (auto& worker : Workers) {
             worker->OwnerRound = msg->OwnerRound + 1;
             SendRequest(ctx, worker->GetYardInit(PDiskGuid));
@@ -482,7 +482,7 @@ public:
         auto msg = ev->Get();
 
         LOG_INFO_S(ctx, NKikimrServices::BS_LOAD_TEST, "Tag# " << Tag
-                << " TEvRegisterPDiskLoadActorResult recieved, ownerRound# " << msg->OwnerRound);
+                << " TEvRegisterPDiskLoadActorResult received, ownerRound# " << msg->OwnerRound);
         for (auto& worker : Workers) {
             worker->OwnerRound = msg->OwnerRound + 1;
             worker->PoisonPill();

@@ -223,7 +223,7 @@ public:
 
                 auto* stats = target->GetStats();
                 if (stats) {
-                    stats->FillToProto(Result->Record, includeDetailedStats);
+                    stats->Serialize(Result->Record, includeDetailedStats);
                 }
             }
 

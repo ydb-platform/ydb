@@ -525,6 +525,7 @@ void TController::UpdateStats(const TWorkerId& id, NKikimrReplication::TEvWorker
     if (!target) {
         return;
     }
+
     target->WorkerStatusChanged(id.WorkerId(), status, AppData()->Counters);
 }
 

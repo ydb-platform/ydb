@@ -376,6 +376,9 @@ namespace NKikimr::NDDisk {
         void Handle(TEvReadPersistentBufferResult::TPtr ev);
         void Handle(TEvReadResult::TPtr ev);
 
+        template <typename TEventPtr>
+        void InternalSyncReadResult(TEventPtr ev);
+
         void ReplySync(TSyncIt it);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////

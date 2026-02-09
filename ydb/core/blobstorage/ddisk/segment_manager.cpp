@@ -74,6 +74,7 @@ void TSegmentManager::DropSegment(ui64 vchunkIndex, TSegment dropSegment, std::v
             if (request.Segments.empty()) {
                 ui64 requestId = requestIt->first;
                 outdated->emplace_back(TOutdatedRequest{request.SyncId, requestId});
+                RequestsInFlight.erase(requestIt);
             }
         }
         segmentIt = SegmentsInFlight.erase(segmentIt);

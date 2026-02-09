@@ -90,6 +90,7 @@ namespace NKikimr::NDDisk {
             } else if (*vChunkIndex != selector.VChunkIndex) {
                 // TODO(kruall): clean
                 reject(NKikimrBlobStorage::NDDisk::TReplyStatus::INCORRECT_REQUEST, "Segments must be in one VChunk");
+                return;
             }
 
             if (selector.OffsetInBytes % BlockSize || selector.Size % BlockSize || !selector.Size) {
@@ -103,9 +104,13 @@ namespace NKikimr::NDDisk {
             TSegmentManager::TSegment segmentRange{selector.OffsetInBytes, selector.OffsetInBytes + selector.Size};
             ui64 requestId = 0;
             SegmentManager.PushRequest(*vChunkIndex, syncId, segmentRange, &requestId, &outdated);
-            if (sync.FirstRequestId != Max<ui64>()) {
+
+            if (sync.FirstRequestId == Max<ui64>()) {
                 sync.FirstRequestId = requestId;
+            } else {
+                Y_ABORT_UNLESS(requestId == sync.FirstRequestId + sync.Requests.size());
             }
+
             sync.Requests.emplace_back(TSyncReadRequest{
                 .Status=NKikimrBlobStorage::NDDisk::TReplyStatus::UNKNOWN,
                 .Selector=selector});
@@ -133,12 +138,16 @@ namespace NKikimr::NDDisk {
                 auto query = std::make_unique<TEvRead>(sourceCreds, selector, TReadInstruction(true));
                 Send(sourceDDiskId, query.release(), IEventHandle::FlagTrackDelivery, syncId, span.GetTraceId());
             }
+            sync.RequestsInFlight++;
         }
 
+        sync.Span = std::move(span);
         sync.VChunkIndex = *vChunkIndex;
     }
 
-    void TDDiskActor::Handle(TEvReadPersistentBufferResult::TPtr ev) {
+
+    template <typename TEventPtr>
+    void TDDiskActor::InternalSyncReadResult(TEventPtr ev) {
         std::vector<TSegmentManager::TSegment> segments;
         ui64 syncId = 0;
         SegmentManager.PopRequest(ev->Cookie, &segments, &syncId);
@@ -231,6 +240,14 @@ namespace NKikimr::NDDisk {
             TBlockSelector segmentSelector(sync.VChunkIndex, begin, end - begin);
             SendInternalWrite(chunkRef, sync.Creds, segmentSelector, NWilson::TTraceId{ev->TraceId}, std::move(segmentData), std::move(callback));
         }
+    }
+
+    void TDDiskActor::Handle(TEvReadPersistentBufferResult::TPtr ev) {
+        InternalSyncReadResult(ev);
+    }
+
+    void TDDiskActor::Handle(TEvReadResult::TPtr ev) {
+        InternalSyncReadResult(ev);
     }
 
     void TDDiskActor::ReplySync(TSyncIt it) {

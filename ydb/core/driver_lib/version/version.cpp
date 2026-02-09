@@ -74,13 +74,13 @@ const TStored* TCompatibilityInfo::GetDefault(TComponentId componentId) const {
 // obsolete version control
 TMaybe<NActors::TInterconnectProxyCommon::TVersionInfo> VERSION = NActors::TInterconnectProxyCommon::TVersionInfo{
     // version of this binary
-    "26-1",
+    "26-2",
 
     // compatible versions; must include all compatible old ones, including this one; version verification occurs on both
     // peers and connection is accepted if at least one of peers accepts the version of the other peer
     {
         "26-1",
-        "25-4"
+        "26-2",
     }
 };
 

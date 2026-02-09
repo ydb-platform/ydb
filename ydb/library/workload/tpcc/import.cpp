@@ -597,7 +597,7 @@ void ExecuteWithRetry(const TString& operationName, LoadFunc loadFunc, google::p
             || status == EStatus::UNAUTHORIZED || status == EStatus::SCHEME_ERROR;
         if (shouldFail) {
             LOG_E(operationName << " failed: " << result.GetIssues().ToOneLineString());
-            RequestStop();
+            RequestStopWithError();
             return;
         }
 
@@ -609,7 +609,7 @@ void ExecuteWithRetry(const TString& operationName, LoadFunc loadFunc, google::p
         } else {
             LOG_E(operationName << " failed after " << UPSERT_MAX_RETRIES << " retries: "
                     << result.GetIssues().ToOneLineString());
-            RequestStop();
+            RequestStopWithError();
             return;
         }
     }
@@ -1051,7 +1051,7 @@ public:
                     auto progress = GetIndexProgress(operationClient, indexState.Id, Log.get());
                     if (!progress) {
                         LOG_E("Failed to build index " << indexState.Name <<  ": " << progress.error());
-                        RequestStop();
+                        RequestStopWithError();
                         break;
                     }
                     indexState.Progress = *progress;
@@ -1139,6 +1139,8 @@ public:
 
             LOG_I("TPC-C data import completed successfully in " << duration.ToString()
                   << " (avg: " << avgSpeedMiBsStr << " MiB/s)");
+        } else {
+            ythrow yexception() << "either there was a critical error or user cancelled the import. See the logs.";
         }
     }
 

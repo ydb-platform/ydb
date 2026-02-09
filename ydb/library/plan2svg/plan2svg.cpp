@@ -870,7 +870,7 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                     }
                     builder << ParseColumns(subNode.GetValueByPath("ReadColumns"));
 
-                    if (name == "TableRangeScan") {
+                    if (name == "TablePointLookup" || name == "TableRangeScan") {
                         builder << ": ";
                         auto* readRangesNode = subNode.GetValueByPath("ReadRanges");
                         if (!readRangesNode) {
@@ -1019,7 +1019,7 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                         }
                     }
 
-                    if (name == "TableFullScan" || name == "TableRangeScan") {
+                    if (name == "TableFullScan" || name == "TablePointLookup" || name == "TableRangeScan") {
                         Y_ENSURE(externalOperator);
                         if (stage->IngressName) {
                             ythrow yexception() << "Plan stage already has Ingress [" << stage->IngressName << "]";
@@ -1421,7 +1421,7 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                         }
                     }
                     LoadSource(plan, stage->Operators, ingressRowsNode);
-                } else if (subNodeType == "TableFullScan" || subNodeType == "TableRangeScan") {
+                } else if (subNodeType == "TableFullScan" || subNodeType == "TablePointLookup" || subNodeType == "TableRangeScan") {
                     NodeToSource.insert(connectionPlanNodeId);
                     LoadStage(stage, plan, outputConnection);
                 } else {

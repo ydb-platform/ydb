@@ -56,29 +56,28 @@ TExprNode::TPtr PlanConverter::RemoveSubplans(TExprNode::TPtr node) {
     }
 }
 
-TOpRoot PlanConverter::ConvertRoot(TExprNode::TPtr node) {
-    auto opRoot = TKqpOpRoot(node);
-    auto rootInput = ExprNodeToOperator(opRoot.Input().Ptr());
+std::shared_ptr<TOpRoot> PlanConverter::ConvertRoot(TExprNode::TPtr node) {
+    auto kqpOpRoot = TKqpOpRoot(node);
+    auto rootInput = ExprNodeToOperator(kqpOpRoot.Input().Ptr());
     TVector<TString> columnOrder;
 
-    for (const auto& c : opRoot.ColumnOrder()) {
-        columnOrder.push_back(c.StringValue());
+    for (const auto& column : kqpOpRoot.ColumnOrder()) {
+        columnOrder.push_back(column.StringValue());
     }
 
-    auto res = TOpRoot(rootInput, node->Pos(), columnOrder);
-    res.Node = node;
-    res.PlanProps = PlanProps;
-    res.PlanProps.PgSyntax = std::stoi(opRoot.PgSyntax().StringValue());
-
+    auto opRoot = std::make_shared<TOpRoot>(rootInput, node->Pos(), columnOrder);
+    opRoot->Node = node;
+    opRoot->PlanProps = PlanProps;
+    opRoot->PlanProps.PgSyntax = std::stoi(kqpOpRoot.PgSyntax().StringValue());
+ 
     // We need to propagate plan properties reference into expressions in the plan
-    for (auto it : res) {
-        auto exprRefs = it.Current->GetExpressions();
-        for (auto r : exprRefs) {
-            r.get().PlanProps = &res.PlanProps;
+    for (auto it : *opRoot) {
+        for (auto exprRef : it.Current->GetExpressions()) {
+            exprRef.get().PlanProps = &(opRoot->PlanProps);
         }
     }
-    
-    return res;
+
+   return opRoot;
 }
 
 std::shared_ptr<IOperator> PlanConverter::ExprNodeToOperator(TExprNode::TPtr node) {

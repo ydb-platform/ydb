@@ -35,18 +35,24 @@ class TKqpRewriteSelectTransformer : public TSyncTransformerBase {
 TAutoPtr<IGraphTransformer> CreateKqpRewriteSelectTransformer(const TIntrusivePtr<TKqpOptimizeContext> &kqpCtx,
                                                              TTypeAnnotationContext &typeCtx);
 
-class TKqpNewRBOTransformer: public TSyncTransformerBase {
+class TKqpNewRBOTransformer: public TGraphTransformerBase {
 public:
     TKqpNewRBOTransformer(TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, TTypeAnnotationContext& typeCtx, TAutoPtr<IGraphTransformer>&& rboTypeAnnTransformer,
                           TAutoPtr<IGraphTransformer>&& peepholeTypeAnnTransformer, const NMiniKQL::IFunctionRegistry& funcRegistry);
     // Main method of the transformer
     IGraphTransformer::TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final;
+    NThreading::TFuture<void> DoGetAsyncFuture(const TExprNode& input) final;
+    TStatus DoApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final;
+    TStatus RequestColumnStatistics();
+
     void Rewind() override;
 
 private:
     TTypeAnnotationContext& TypeCtx;
     TKqpOptimizeContext& KqpCtx;
     TRuleBasedOptimizer RBO;
+    std::shared_ptr<TOpRoot> OpRoot;
+    NThreading::TPromise<void> ColumnStatisticsReadiness;
 };
 
 TAutoPtr<IGraphTransformer> CreateKqpNewRBOTransformer(TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, TTypeAnnotationContext& typeCtx,
@@ -54,21 +60,24 @@ TAutoPtr<IGraphTransformer> CreateKqpNewRBOTransformer(TIntrusivePtr<TKqpOptimiz
                                                        TAutoPtr<IGraphTransformer>&& peepholeTypeAnnTransformer,
                                                        const NMiniKQL::IFunctionRegistry& funcRegistry);
 
-class TKqpRBOCleanupTransformer : public TSyncTransformerBase {
-  public:
-    TKqpRBOCleanupTransformer(TTypeAnnotationContext &typeCtx) : TypeCtx(typeCtx) {}
+class TKqpRBOCleanupTransformer: public TSyncTransformerBase {
+public:
+    TKqpRBOCleanupTransformer(TTypeAnnotationContext& typeCtx)
+        : TypeCtx(typeCtx) {
+    }
 
     // Main method of the transformer
-    IGraphTransformer::TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr &output, TExprContext &ctx) final;
+    IGraphTransformer::TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final;
     void Rewind() override;
 
-  private:
-    TTypeAnnotationContext &TypeCtx;
+private:
+    TTypeAnnotationContext& TypeCtx;
 };
 
-TAutoPtr<IGraphTransformer> CreateKqpRBOCleanupTransformer(TTypeAnnotationContext &typeCtx);
+TAutoPtr<IGraphTransformer> CreateKqpRBOCleanupTransformer(TTypeAnnotationContext& typeCtx);
 
-TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, const TTypeAnnotationContext &typeCtx, const TKqpOptimizeContext& kqpCtx, ui64& uniqueSourceIdCounter, bool pgSyntax=false);
+TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& node, TExprContext& ctx, const TTypeAnnotationContext& typeCtx, const TKqpOptimizeContext& kqpCtx,
+                              ui64& uniqueSourceIdCounter, bool pgSyntax = false);
 
 } // namespace NKqp
 } // namespace NKikimr

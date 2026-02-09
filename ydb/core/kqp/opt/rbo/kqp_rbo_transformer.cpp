@@ -144,32 +144,70 @@ IGraphTransformer::TStatus TKqpRewriteSelectTransformer::DoTransform(TExprNode::
 
 void TKqpRewriteSelectTransformer::Rewind() {}
 
-IGraphTransformer::TStatus TKqpNewRBOTransformer::DoTransform(TExprNode::TPtr input, TExprNode::TPtr &output, TExprContext &ctx) {
+IGraphTransformer::TStatus TKqpNewRBOTransformer::DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) {
     output = input;
     TOptimizeExprSettings settings(&TypeCtx);
 
+    // At first step convert KqpOps to RBO Ops.
     auto status = OptimizeExpr(
         output, output,
-        [this](const TExprNode::TPtr &node, TExprContext &ctx) -> TExprNode::TPtr {
+        [this](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
             Y_UNUSED(ctx);
             if (TKqpOpRoot::Match(node.Get())) {
-                auto root = PlanConverter(TypeCtx, ctx).ConvertRoot(node);
-                root.ComputeParents();
-                return RBO.Optimize(root, ctx);
+                OpRoot = PlanConverter(TypeCtx, ctx).ConvertRoot(node);
+                OpRoot->ComputeParents();
+                return node;
             } else {
                 return node;
             }
         },
         ctx, settings);
 
-    if (status != IGraphTransformer::TStatus::Ok) {
+    if (status != TStatus::Ok) {
         return status;
     }
 
-    return IGraphTransformer::TStatus::Ok;
+    // Async request for statistics.
+    return RequestColumnStatistics();
 }
 
-void TKqpNewRBOTransformer::Rewind() {}
+NThreading::TFuture<void> TKqpNewRBOTransformer::DoGetAsyncFuture(const TExprNode& input) {
+    Y_UNUSED(input);
+    return ColumnStatisticsReadiness.GetFuture();
+}
+
+IGraphTransformer::TStatus TKqpNewRBOTransformer::RequestColumnStatistics() {
+    // TODO: Request a real statistics.
+    ColumnStatisticsReadiness = NThreading::NewPromise<void>();
+    ColumnStatisticsReadiness.SetValue();
+    return TStatus::Async;
+}
+
+IGraphTransformer::TStatus TKqpNewRBOTransformer::DoApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) {
+    // Make sure statistics is ready.
+    Y_ENSURE(ColumnStatisticsReadiness.IsReady());
+    output = input;
+    TOptimizeExprSettings settings(&TypeCtx);
+
+    // Apply optimizations.
+    auto status = OptimizeExpr(
+        output, output,
+        [this](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
+            Y_UNUSED(ctx);
+            if (TKqpOpRoot::Match(node.Get())) {
+                Y_ENSURE(OpRoot, "NEW RBO OpRoot is not initialized.");
+                return RBO.Optimize(OpRoot, ctx);
+            } else {
+                return node;
+            }
+        },
+        ctx, settings);
+
+    return status;
+}
+
+void TKqpNewRBOTransformer::Rewind() {
+}
 
 IGraphTransformer::TStatus TKqpRBOCleanupTransformer::DoTransform(TExprNode::TPtr input, TExprNode::TPtr &output, TExprContext &ctx) {
     output = input;

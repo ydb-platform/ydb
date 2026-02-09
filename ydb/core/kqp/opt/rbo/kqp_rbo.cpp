@@ -98,8 +98,10 @@ void TRuleBasedStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
     Y_ENSURE(numMatches < maxNumOfMatches);
 }
 
-TExprNode::TPtr TRuleBasedOptimizer::Optimize(TOpRoot &root, TExprContext &ctx) {
+TExprNode::TPtr TRuleBasedOptimizer::Optimize(std::shared_ptr<TOpRoot> opRoot, TExprContext &ctx) {
     bool needToLog = NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE);
+    Y_ENSURE(opRoot);
+    auto& root = *opRoot;
 
     if (needToLog) {
         YQL_CLOG(TRACE, CoreDq) << "Original plan:\n" << root.PlanToString(ctx);

@@ -56,8 +56,14 @@ public:
 THolder<IYtCodecCgReader> MakeYtCodecCgReader(const std::unique_ptr<NCodegen::ICodegen>& codegen,
     const NKikimr::NMiniKQL::THolderFactory& holderFactory, const void* cookie = nullptr);
 
-extern "C" void ThrowBadDecimal();
-// argument should be NYql::NUdf::EDataSlot casted to int
-extern "C" void ThrowBadTz(int slot);
+extern "C" [[noreturn]] void ThrowBadDecimal();
+
+enum EBadTzReason {
+    BAD_TZ_LENGTH,
+    BAD_TZ_TIME,
+    BAD_TZ_TIMEZONE,
+};
+// first argument should be NYql::NUdf::EDataSlot casted to int
+extern "C" [[noreturn]] void ThrowBadTz(int slot, EBadTzReason reason);
 
 }

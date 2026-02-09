@@ -44,6 +44,8 @@ def test(suite, case, cfg, tmpdir, fq_run):
     with open(program_sql, encoding="utf-8") as f:
         sql_query = f.read()
 
+    if sql_query.find('-- TAG: pq-no-shared\n') >= 0:
+        fq_run.replace_config(lambda config: config.replace('SharedReading: true', 'SharedReading: false'))
     fq_run.add_query(sql_query)
     result = fq_run.yql_exec(check_error=False, action="explain")
 

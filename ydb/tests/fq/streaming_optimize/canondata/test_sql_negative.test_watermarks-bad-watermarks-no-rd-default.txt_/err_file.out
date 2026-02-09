@@ -1,0 +1,6 @@
+Failed to execute query, invalid final status FAILED, issues:
+<main>: Error: Query failed with code ABORTED at ISOTIME
+    <main>: Error: Run query failed: Error
+        <main>: Error: Optimization, code: 1070
+            <main>:7:6: Error: Unrecognized watermark expression, flexible watermark expressions are only implemented in shared reading mode, please use WATERMARK = (SystemMetadata('write_time') - Interval('PT5S'))
+

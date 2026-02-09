@@ -13,12 +13,12 @@ class TestWatermarksInYdb(StreamingTestBase):
     @pytest.mark.parametrize("shared_reading", [False, True], ids=["no_shared", "shared"])
     @pytest.mark.parametrize("tasks", [1, 2])
     @pytest.mark.parametrize("local_topics", [True, False])
-    def test_watermarks(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], shared_reading: bool, tasks: int, local_topics: bool) -> None:
+    def test_watermarks(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], shared_reading: bool, tasks: int, local_topics: bool, name: str = 'watermarks') -> None:
         if local_topics and shared_reading:
             pytest.skip("Shared reading is not supported for local topics: YQ-5036")
 
         endpoint = self.get_endpoint(kikimr, local_topics)
-        query_name = f"test_watermarks_{shared_reading}{tasks}{local_topics}"
+        query_name = f"test_{name}_{shared_reading}{tasks}{local_topics}"
         source_name = entity_name(query_name)
         self.init_topics(source_name, partitions_count=tasks, endpoint=endpoint)
         self.create_source(kikimr, source_name, shared_reading)
@@ -99,3 +99,13 @@ class TestWatermarksInYdb(StreamingTestBase):
 
         sql = f'''DROP STREAMING QUERY `{query_name}`;'''
         kikimr.ydb_client.query(sql)
+
+    @pytest.mark.parametrize("kikimr", [{"enable_watermarks": True}], indirect=["kikimr"])
+    @pytest.mark.parametrize("shared_reading", [False], ids=["no_shared"])
+    @pytest.mark.parametrize("tasks", [1])
+    @pytest.mark.parametrize("local_topics", [False])
+    def test_watermarks_reuse_pattern(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], shared_reading: bool, tasks: int, local_topics: bool) -> None:
+        # tries to trigger reuse MultiHoppingCore; with YQ-5082 this results in
+        # predictable failures
+        self.test_watermarks(kikimr, entity_name, shared_reading, tasks, local_topics, 'reuse1')
+        self.test_watermarks(kikimr, entity_name, shared_reading, tasks, local_topics, 'reuse2')

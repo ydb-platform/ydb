@@ -172,7 +172,7 @@ Found some unresolved conflicts:\n"""
             self.logger.info("cur_sha=%s", cur_sha)
 
             if self.is_commit_present_on_branch(cur_sha, self.base_branch) is False:
-                self.create_new_pr(cur_sha)
+                self.create_new_pr()
             else:
                 self.logger.info("Skipping create-pr because base branch is up-to-date")
         else:

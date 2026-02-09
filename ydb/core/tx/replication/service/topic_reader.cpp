@@ -128,8 +128,8 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
                     nullptr);
             event->Stats->ReaderStats->ReadTime = response.ReadDuration;
             event->Stats->ReaderStats->DecompressCpu = response.DecompressionDone
-                        ? TDuration::Seconds(GetElapsedTicksAsSeconds() - response.StartCpuUsageSec)
-                        : TDuration::Zero();
+                ? TDuration::Seconds(GetElapsedTicksAsSeconds() - response.StartCpuUsageSec)
+                : TDuration::Zero();
             event->Stats->ReaderStats->Partition = result.PartitionId;
             event->Stats->ReaderStats->Offset = maxOffset;
             event->Stats->ReaderStats->Messages = msgCount;

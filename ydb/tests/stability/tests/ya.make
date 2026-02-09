@@ -23,7 +23,6 @@ PY3TEST()
     IF(NOT NOT_INCLUDE_CLI)
         DEPENDS (
             ydb/apps/ydb
-            ydb/tests/stress/backup
             ydb/tests/stress/simple_queue
             ydb/tests/stress/topic
             ydb/tests/stress/log
@@ -38,13 +37,9 @@ PY3TEST()
             ydb/tests/stress/transfer
             ydb/tests/stress/reconfig_state_storage_workload
             ydb/tests/stress/show_create/view
-            ydb/tests/stress/show_create/table
             ydb/tests/stress/cdc
             ydb/tests/stress/statistics_workload
-            ydb/tests/stress/viewer
             ydb/tests/stress/testshard_workload
-            ydb/tests/stress/streaming
-            ydb/tests/stress/kv_volume
             ydb/tests/tools/nemesis/driver
         )
     ENDIF()

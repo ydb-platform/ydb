@@ -186,6 +186,16 @@ void AssertPurgeError(NActors::TTestActorRuntime& runtime, Ydb::StatusIds::Statu
     UNIT_ASSERT_VALUES_EQUAL(response->ErrorDescription, message);
 }
 
+void AssertPurgeOK(NActors::TTestActorRuntime& runtime, TDuration timeout) {
+    auto response = GetPurgeResponse(runtime, timeout);
+    if (!response) {
+        UNIT_FAIL("Timeout");
+    }
+
+    UNIT_ASSERT_VALUES_EQUAL_C(Ydb::StatusIds::StatusCode_Name(response->Status),
+        Ydb::StatusIds::StatusCode_Name(Ydb::StatusIds::SUCCESS), response->ErrorDescription);
+}
+
 void WriteMany(std::shared_ptr<TTopicSdkTestSetup> setup, const std::string& topic, ui32 partitionId, size_t messageSize, size_t messageCount) {
     TTopicClient client(setup->MakeDriver());
 

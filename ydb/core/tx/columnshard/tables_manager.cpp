@@ -111,6 +111,16 @@ void TTablesManager::Init(NIceDb::TNiceDb& db, const TSchemeShardLocalPathId tab
     }
 }
 
+void TTablesManager::AddTableInfo(const TUnifiedPathId unifiedPathId, TTableInfo&& tableInfo) {
+    auto it = Tables.find(unifiedPathId.InternalPathId);
+    if (it == Tables.end()) {
+        Tables.emplace(unifiedPathId.InternalPathId, std::move(tableInfo));
+    } else {
+        it->second.Merge(std::move(tableInfo));
+    }
+    AFL_VERIFY(SchemeShardLocalToInternal.emplace(unifiedPathId.SchemeShardLocalPathId, unifiedPathId.InternalPathId).second);
+}
+
 bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db, const TTabletStorageInfo* info) {
     {
         std::optional<ui64> tabletSchemeShardLocalPathIdValue;
@@ -161,13 +171,7 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db, const TTabletStorageInfo* i
             if (GenerateInternalPathId) {
                 AFL_VERIFY(pathId.InternalPathId <= MaxInternalPathId)("path_id", pathId)("max_internal_path_id", MaxInternalPathId);
             }
-            auto it = Tables.find(pathId.InternalPathId);
-            if (it == Tables.end()) {
-                Tables.emplace(pathId.InternalPathId, std::move(table));
-            } else {
-                it->second.Merge(std::move(table));
-            }
-            AFL_VERIFY(SchemeShardLocalToInternal.emplace(pathId.SchemeShardLocalPathId, pathId.InternalPathId).second);
+            AddTableInfo(pathId, std::move(table));
 
             if (!rowset.Next()) {
                 timer.AddLoadingFail();
@@ -192,13 +196,7 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db, const TTabletStorageInfo* i
             if (GenerateInternalPathId) {
                 AFL_VERIFY(pathId.InternalPathId <= MaxInternalPathId)("path_id", pathId)("max_internal_path_id", MaxInternalPathId);
             }
-            auto it = Tables.find(pathId.InternalPathId);
-            if (it == Tables.end()) {
-                Tables.emplace(pathId.InternalPathId, std::move(table));
-            } else {
-                it->second.Merge(std::move(table));
-            }
-            SchemeShardLocalToInternal[pathId.SchemeShardLocalPathId] = pathId.InternalPathId;
+            AddTableInfo(pathId, std::move(table));
 
             if (!rowset.Next()) {
                 timer.AddLoadingFail();
@@ -418,15 +416,8 @@ void TTablesManager::RegisterTable(TTableInfo&& table, NIceDb::TNiceDb& db) {
 
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("method", "RegisterTable")("path_id", pathId);
     bool needRegisterTable = PrimaryIndex != nullptr;
-    auto it = Tables.find(pathId.InternalPathId);
-    if (it == Tables.end()) {
-        Tables.emplace(pathId.InternalPathId, std::move(table));
-    } else {
-        needRegisterTable = false;
-        it->second.Merge(std::move(table));
-    }
     AFL_VERIFY(pathId.SchemeShardLocalPathId.IsValid());
-    AFL_VERIFY(SchemeShardLocalToInternal.emplace(pathId.GetSchemeShardLocalPathId(), pathId.GetInternalPathId()).second);
+    AddTableInfo(pathId, std::move(table));
     Schema::SaveTableSchemeShardLocalPathId(db, pathId.InternalPathId, pathId.SchemeShardLocalPathId); // v0
     if (GenerateInternalPathId) {
         Schema::SaveSpecialValue(db, Schema::EValueIds::MaxInternalPathId, MaxInternalPathId.GetRawValue());
@@ -611,10 +602,7 @@ void TTablesManager::MoveTableProgress(
     AFL_VERIFY(HasTable(internalPathId));
     auto* table = Tables.FindPtr(internalPathId);
     AFL_VERIFY(table);
-    if (!table->IsReadOnly(oldSchemeShardLocalPathId)) { // v0 can't be read-only
-        table->UpdateLocalPathId(db, oldSchemeShardLocalPathId, newSchemeShardLocalPathId);
-    }
-    table->RenameTableSchemeShardLocalPathIdV1(db, oldSchemeShardLocalPathId, newSchemeShardLocalPathId);
+    table->RenameTableSchemeShardLocalPathId(db, oldSchemeShardLocalPathId, newSchemeShardLocalPathId);
     AFL_VERIFY(RenamingLocalToInternal.erase(oldSchemeShardLocalPathId));
     AFL_VERIFY(SchemeShardLocalToInternal.emplace(newSchemeShardLocalPathId, internalPathId).second);
     if (internalPathId == TabletPathId->InternalPathId) {
@@ -637,7 +625,7 @@ void TTablesManager::CopyTableProgress(
     AFL_VERIFY(HasTable(internalPathId));
     auto* table = Tables.FindPtr(internalPathId);
     AFL_VERIFY(table);
-    table->CopySchemeShardLocalPathIdV1(db, srcSchemeShardLocalPathId, dstSchemeShardLocalPathId, version);
+    table->CopySchemeShardLocalPathId(db, srcSchemeShardLocalPathId, dstSchemeShardLocalPathId, version);
     AFL_VERIFY(CopyingLocalToInternal.erase(srcSchemeShardLocalPathId));
     AFL_VERIFY(SchemeShardLocalToInternal.emplace(dstSchemeShardLocalPathId, internalPathId).second);
     NYDBTest::TControllers::GetColumnShardController()->OnAddPathId(TabletId, TUnifiedPathId::BuildValid(internalPathId, dstSchemeShardLocalPathId));

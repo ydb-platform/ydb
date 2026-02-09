@@ -188,25 +188,20 @@ public:
     void AddVersion(const NOlap::TSnapshot& snapshot) {
         Versions.insert(snapshot);
     }
-
-    void UpdateLocalPathId(NIceDb::TNiceDb& db, const TSchemeShardLocalPathId oldPathId, const TSchemeShardLocalPathId newPathId) {
+    
+    void RenameTableSchemeShardLocalPathId(NIceDb::TNiceDb& db, const TSchemeShardLocalPathId oldPathId, const TSchemeShardLocalPathId newPathId) {
         auto it = SchemeShardLocalPathIds.find(oldPathId);
         AFL_VERIFY(it != SchemeShardLocalPathIds.end());
-        Schema::SaveTableSchemeShardLocalPathId(db, InternalPathId, newPathId);
-        SchemeShardLocalPathIds.insert({newPathId, TPathInfo{it->second.DropVersion, it->second.CopyVersion, it->second.IsReadOnly}});
-        SchemeShardLocalPathIds.erase(oldPathId);
-
-    }
-
-    void RenameTableSchemeShardLocalPathIdV1(NIceDb::TNiceDb& db, const TSchemeShardLocalPathId oldPathId, const TSchemeShardLocalPathId newPathId) {
-        auto it = SchemeShardLocalPathIds.find(oldPathId);
-        AFL_VERIFY(it != SchemeShardLocalPathIds.end());
-        Schema::RenameTableSchemeShardLocalPathIdV1(db, InternalPathId, oldPathId, newPathId, it->second.DropVersion, it->second.CopyVersion, it->second.IsReadOnly);
-        SchemeShardLocalPathIds.insert({newPathId, TPathInfo{it->second.DropVersion, it->second.CopyVersion, it->second.IsReadOnly}});
+        const auto& pathInfo = it->second;
+        if (!pathInfo.IsReadOnly) { // v0 can't be read-only. backward compatibility
+            Schema::SaveTableSchemeShardLocalPathId(db, InternalPathId, newPathId);
+        }
+        Schema::RenameTableSchemeShardLocalPathIdV1(db, InternalPathId, oldPathId, newPathId, pathInfo.DropVersion, pathInfo.CopyVersion, pathInfo.IsReadOnly);
+        AFL_VERIFY(SchemeShardLocalPathIds.insert({newPathId, TPathInfo{pathInfo.DropVersion, pathInfo.CopyVersion, pathInfo.IsReadOnly}}).second);
         SchemeShardLocalPathIds.erase(oldPathId);
     }
 
-    void CopySchemeShardLocalPathIdV1(NIceDb::TNiceDb& db,
+    void CopySchemeShardLocalPathId(NIceDb::TNiceDb& db,
                                        const TSchemeShardLocalPathId srcSchemeShardLocalPathId,
                                        const TSchemeShardLocalPathId dstSchemeShardLocalPathId,
                                        const NOlap::TSnapshot& copyVersion) {
@@ -477,6 +472,8 @@ public:
     void CopyTablePropose(const TSchemeShardLocalPathId srcSchemeShardLocalPathId);
     void CopyTableProgress(
         NIceDb::TNiceDb& db, const NOlap::TSnapshot& version, const TSchemeShardLocalPathId srcSchemeShardLocalPathId, const TSchemeShardLocalPathId dstSchemeShardLocalPathId);
+        
+    void AddTableInfo(const NKikimr::NColumnShard::TUnifiedPathId unifiedPathId, TTableInfo&& tableInfo);
 
     NOlap::IColumnEngine& MutablePrimaryIndex() const {
         Y_ABORT_UNLESS(!!PrimaryIndex);

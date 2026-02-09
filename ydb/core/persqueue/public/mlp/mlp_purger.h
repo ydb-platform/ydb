@@ -33,7 +33,7 @@ private:
         EPartitionStatus Status = EPartitionStatus::NotStarted;
         ui64 Cookie = 0;
         bool WaitRetry = false;
-        TBackoff Backoff = TBackoff(5);
+        TBackoff Backoff = TBackoff(3);
     };
 
     void DoDescribe();
@@ -51,7 +51,7 @@ private:
     void RetryIfPossible(ui32 partitionId, TPartitionStatus& status);
     void ReplyIfPossible();
 
-    void SendToTablet(ui64 tabletId, IEventBase *ev);
+    void SendToTablet(ui64 tabletId, IEventBase *ev, ui64 cookie);
     void ReplyErrorAndDie(Ydb::StatusIds::StatusCode errorCode, TString&& errorMessage);
 
     bool OnUnhandledException(const std::exception&) override;

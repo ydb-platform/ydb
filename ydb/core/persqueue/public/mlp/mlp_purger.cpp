@@ -69,7 +69,7 @@ void TPurgerActor::DoPurge() {
 
 void TPurgerActor::Handle(TEvPQ::TEvMLPPurgeResponse::TPtr& ev)
 {
-    LOG_D("Handle TEvPQ::TEvMLPPurgeResponse");
+    LOG_D("Handle TEvPQ::TEvMLPPurgeResponse " << ev->Get()->Record.ShortDebugString());
 
     auto partitionId = ev->Get()->GetPartitionId();
     auto& partitionStatus = Partitions[partitionId];
@@ -96,11 +96,16 @@ void TPurgerActor::RetryIfPossible(ui32 partitionId, TPartitionStatus& partition
 
 void TPurgerActor::Handle(TEvPQ::TEvMLPErrorResponse::TPtr& ev)
 {
-    LOG_D("Handle TEvPQ::TEvMLPErrorResponse");
+    LOG_D("Handle TEvPQ::TEvMLPErrorResponse " << ev->Get()->Record.ShortDebugString());
 
     auto partitionId = ev->Get()->GetPartitionId();
     auto& partitionStatus = Partitions[partitionId];
     if (partitionStatus.Cookie == ev->Cookie) {
+        if (ev->Get()->GetStatus() == Ydb::StatusIds::SCHEME_ERROR) {
+            ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR, std::move(ev->Get()->GetErrorMessage()));
+            return;
+        }
+
         RetryIfPossible(partitionId, partitionStatus);
     }
 
@@ -123,8 +128,7 @@ void TPurgerActor::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev)
     ReplyIfPossible();
 }
 
-void TPurgerActor::Handle(TEvents::TEvWakeup::TPtr& ev)
-{
+void TPurgerActor::Handle(TEvents::TEvWakeup::TPtr& ev) {
     LOG_D("Handle TEvents::TEvWakeup");
 
     auto partitionId = ev->Get()->Tag;
@@ -140,6 +144,7 @@ void TPurgerActor::Handle(TEvents::TEvWakeup::TPtr& ev)
 STFUNC(TPurgerActor::PurgeState) {
     switch (ev->GetTypeRewrite()) {
         hFunc(TEvPQ::TEvMLPPurgeResponse, Handle);
+        hFunc(TEvPQ::TEvMLPErrorResponse, Handle);
         hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
         hFunc(TEvents::TEvWakeup, Handle);
         sFunc(TEvents::TEvPoison, PassAway);
@@ -155,10 +160,11 @@ void TPurgerActor::RequestPartitionIfNeeded(ui32 partitionId,TPartitionStatus& s
     status.Status = EPartitionStatus::InProgress;
     status.Cookie = ++NextCookie;
     status.WaitRetry = false;
-    SendToTablet(status.TabletId, new TEvPQ::TEvMLPPurgeRequest(Settings.TopicName, Settings.Consumer, partitionId));
+    SendToTablet(status.TabletId, new TEvPQ::TEvMLPPurgeRequest(Settings.TopicName, Settings.Consumer, partitionId), status.Cookie);
 }
 
 void TPurgerActor::ReplyIfPossible() {
+    LOG_D("ReplyIfPossible: PendingPartitions " << PendingPartitions << " PendingRetries " << PendingRetries);
     if (PendingPartitions > 0 || PendingRetries > 0) {
         return;
     }
@@ -174,9 +180,9 @@ void TPurgerActor::ReplyIfPossible() {
     PassAway();
 }
 
-void TPurgerActor::SendToTablet(ui64 tabletId, IEventBase *ev) {
+void TPurgerActor::SendToTablet(ui64 tabletId, IEventBase *ev, ui64 cookie) {
     auto forward = std::make_unique<TEvPipeCache::TEvForward>(ev, tabletId, true, TabletCookies[tabletId]);
-    Send(MakePipePerNodeCacheID(false), forward.release(), IEventHandle::FlagTrackDelivery);
+    Send(MakePipePerNodeCacheID(false), forward.release(), IEventHandle::FlagTrackDelivery, cookie);
 }
 
 void TPurgerActor::ReplyErrorAndDie(Ydb::StatusIds::StatusCode errorCode, TString&& errorMessage) {

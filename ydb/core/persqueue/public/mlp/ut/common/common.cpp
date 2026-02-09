@@ -11,6 +11,7 @@ std::shared_ptr<TTopicSdkTestSetup> CreateSetup() {
             NKikimrServices::PQ_MLP_COMMITTER,
             NKikimrServices::PQ_MLP_UNLOCKER,
             NKikimrServices::PQ_MLP_DEADLINER,
+            NKikimrServices::PQ_MLP_PURGER,
             NKikimrServices::PQ_MLP_CONSUMER,
             NKikimrServices::PQ_MLP_ENRICHER,
             NKikimrServices::PQ_MLP_DLQ_MOVER,

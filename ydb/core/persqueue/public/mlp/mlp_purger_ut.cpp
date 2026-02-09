@@ -18,6 +18,21 @@ Y_UNIT_TEST_SUITE(TMLPPurgerTests) {
             "You do not have access or the '/Root/topic_not_exists' does not exist");
     }
 
+    Y_UNIT_TEST(TopicWithoutConsumer) {
+        auto setup = CreateSetup();
+
+        ExecuteDDL(*setup, "CREATE TOPIC topic1");
+
+        auto& runtime = setup->GetRuntime();
+        CreatePurgerActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Consumer = "consumer_not_exists"
+        });
+
+        AssertPurgeError(runtime, Ydb::StatusIds::SCHEME_ERROR,
+            "Consumer 'consumer_not_exists' does not exist");
+    }
 }
 
 }

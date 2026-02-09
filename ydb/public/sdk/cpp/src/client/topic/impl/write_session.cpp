@@ -1418,6 +1418,7 @@ void TKeyedWriteSession::RunMainWorker() {
     // - TFuture::Subscribe may call back synchronously when future is already ready.
     // - A callback may race with the runner trying to go idle (avoid lost wakeups).
     enum : std::uint8_t {
+        Idle = 0,
         Running = 1,
         Rerun = 2,
     };
@@ -1468,7 +1469,7 @@ void TKeyedWriteSession::RunMainWorker() {
             ShutdownPromise.TrySetValue();
             EventsWorker->EventsPromise.TrySetValue();
             ClosePromise.TrySetValue();
-            MainWorkerState.store(0, std::memory_order_release);
+            MainWorkerState.store(Idle, std::memory_order_release);
             return;
         }
 
@@ -1488,7 +1489,7 @@ void TKeyedWriteSession::RunMainWorker() {
             if (cur & Rerun) {
                 break; // continue outer loop
             }
-            if (MainWorkerState.compare_exchange_weak(cur, std::uint8_t(0),
+            if (MainWorkerState.compare_exchange_weak(cur, Idle,
                                                      std::memory_order_acq_rel,
                                                      std::memory_order_acquire)) {
                 return; // successfully went idle

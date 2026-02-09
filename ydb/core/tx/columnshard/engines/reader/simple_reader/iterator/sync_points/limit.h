@@ -108,29 +108,44 @@ private:
         }
 
         bool operator<(const TSourceIterator& item) const {
-            const auto cmp = SortableRecord->ComparePartial(*item.SortableRecord);
+            const auto cmp = SortableRecord->Compare(*item.SortableRecord);
             if (cmp == std::partial_ordering::equivalent) {
                 return item.Source->GetSourceId() < Source->GetSourceId();
             }
             return cmp == std::partial_ordering::greater;
         }
+
+        std::partial_ordering ComparePrefix(const TSourceIterator& item, const ui32 prefixSize) const {
+            return SortableRecord->ComparePrefix(*item.SortableRecord, prefixSize);
+        }
+
     };
 
+<<<<<<< HEAD
     std::vector<TSourceIterator> Iterators;
+=======
+    std::vector<TSourceIterator> FilledIterators;
+    std::deque<TSourceIterator> UnfilledIterators;
+>>>>>>> e8c978d1427 (BACKPORT-CONFLICT: manual resolution required for commit 48e2293)
 
     virtual bool IsFinished() const override {
         return FetchedCount >= Limit || TBase::IsFinished();
     }
 
+<<<<<<< HEAD
     virtual std::shared_ptr<NCommon::IDataSource> OnAddSource(const std::shared_ptr<NCommon::IDataSource>& source) override {
         AFL_VERIFY(FetchedCount < Limit);
         Iterators.emplace_back(TSourceIterator(source));
         std::push_heap(Iterators.begin(), Iterators.end());
         return TBase::OnAddSource(source);
     }
+=======
+    virtual std::shared_ptr<NCommon::IDataSource> OnAddSource(const std::shared_ptr<NCommon::IDataSource>& source) override;
+>>>>>>> 48e2293186d (Order by pk with limit final fix (#33610))
 
     virtual void DoAbort() override {
-        Iterators.clear();
+        FilledIterators.clear();
+        UnfilledIterators.clear();
     }
 
     virtual ESourceAction OnSourceReady(const std::shared_ptr<NCommon::IDataSource>& source, TPlainReadData& reader) override;

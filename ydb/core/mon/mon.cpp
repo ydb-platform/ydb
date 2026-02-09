@@ -167,8 +167,8 @@ TVector<TString> TMon::GetCountersAllowedSIDs(TActorSystem* actorSystem) {
         return countersAllowedSIDs;
     }
     const auto& securityConfig = appData->DomainsConfig.GetSecurityConfig();
-    auto addSIDs = [&countersAllowedSIDs](const auto& protoAllowedSIDs) {
-        for (const auto& sid : protoAllowedSIDs) {
+    const auto addSIDs = [&countersAllowedSIDs](const auto& allowedSIDs) {
+        for (const auto& sid : allowedSIDs) {
             countersAllowedSIDs.emplace_back(sid);
         }
     };
@@ -1680,12 +1680,11 @@ std::future<void> TMon::Start(TActorSystem* actorSystem) {
     ActorSystem->RegisterLocalService(NodeProxyServiceActorId, nodeProxyActorId);
     IActor* countersMonPageServiceActor;
     if (Config.RequireCountersAuthentication) {
-        const auto countersAllowedSIDs = GetCountersAllowedSIDs(ActorSystem);
         countersMonPageServiceActor = new THttpMonPageService(
             HttpProxyActorId,
             CountersMonPage,
             Config.Authorizer,
-            countersAllowedSIDs);
+            GetCountersAllowedSIDs(ActorSystem));
     } else {
         countersMonPageServiceActor = new THttpMonPageService(
             HttpProxyActorId,

@@ -89,7 +89,7 @@ public:
         if (Database.empty()) {
             Database = Params.Get("tenant");
         }
-        if (!IsDatabaseRequest() && Format != HealthCheckResponseFormat::PROMETHEUS && !Viewer->CheckAccessMonitoring(GetRequest())) {
+        if (!IsDatabaseRequest() && !CheckAccess()) {
             return TBase::ReplyAndPassAway(GetHTTPFORBIDDEN("text/plain", "Access denied"));
         }
         Cache = FromStringWithDefault<bool>(Params.Get("cache"), Cache);
@@ -105,6 +105,21 @@ public:
         }
         Timeout += TDuration::MilliSeconds(Timeout.MilliSeconds() * 20 / 100); // we prefer to wait for more (+20%) verbose timeout status from HC
         Become(&TThis::StateRequestedInfo, Timeout, new TEvents::TEvWakeup());
+    }
+
+    bool CheckAccess() const {
+        if (Format == HealthCheckResponseFormat::PROMETHEUS) {
+            // This format was left without any authentication checks for a long time,
+            // so we check access for it only when it's required with a separate flag.
+            const auto& config = Viewer->GetKikimrRunConfig();
+            const auto requireHealthcheckAuth = config.AppConfig.GetMonitoringConfig().GetRequireHealthcheckAuthentication();
+            // We want metrics collection systems to have minimal permissions, so we check for viewer access
+            return !requireHealthcheckAuth || Viewer->CheckAccessViewer(GetRequest());
+        }
+
+        // But the general healthcheck info should not be accessible for those
+        // who have only viewer grants so we check for the monitoring grants.
+        return Viewer->CheckAccessMonitoring(GetRequest());
     }
 
     STFUNC(StateRequestedInfo) {

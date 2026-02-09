@@ -140,7 +140,7 @@ public:
                 .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
                 .AuthMode = enforceUserToken ? TMon::EAuthMode::ExtractOnly : TMon::EAuthMode::Disabled,
-                .AllowedSIDs = enforceUserToken ? databaseAllowedSIDs : TVector<TString>(),
+                .AllowedSIDs = enforceUserToken ? viewerAllowedSIDs : TVector<TString>(),
             });
             mon->RegisterActorPage({
                 .RelPath = "vdisk",

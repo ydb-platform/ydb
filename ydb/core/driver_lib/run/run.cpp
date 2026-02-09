@@ -621,11 +621,15 @@ void TKikimrRunner::InitializeMonitoring(const TKikimrRunConfig& runConfig, bool
         monConfig.PrivateKeyFile = appConfig.GetMonitoringConfig().GetMonitoringPrivateKeyFile();
         monConfig.RedirectMainPageTo = appConfig.GetMonitoringConfig().GetRedirectMainPageTo();
         monConfig.RequireCountersAuthentication = appConfig.GetMonitoringConfig().GetRequireCountersAuthentication();
+        monConfig.RequireHealthcheckAuthentication = appConfig.GetMonitoringConfig().GetRequireHealthcheckAuthentication();
 
-        // custom monitoring authentication may be enabled only if enforce_user_token_requirement is enabled
+        // Custom monitoring authentication may be enabled only if user authentication is mandatory
         const auto& securityConfig(runConfig.AppConfig.GetDomainsConfig().GetSecurityConfig());
         const bool enforceUserToken = securityConfig.GetEnforceUserTokenRequirement();
-        Y_ABORT_UNLESS(enforceUserToken || !monConfig.RequireCountersAuthentication, "Setting EnforceUserTokenRequirement is disabled, but RequireCountersAuthentication is enabled");
+        Y_ABORT_UNLESS(enforceUserToken || !monConfig.RequireCountersAuthentication,
+            "Setting EnforceUserTokenRequirement is disabled, but RequireCountersAuthentication is enabled");
+        Y_ABORT_UNLESS(enforceUserToken || !monConfig.RequireHealthcheckAuthentication,
+            "Setting EnforceUserTokenRequirement is disabled, but RequireHealthcheckAuthentication is enabled");
 
         if (includeHostName) {
             if (appConfig.HasNameserviceConfig() && appConfig.GetNameserviceConfig().NodeSize() > 0) {

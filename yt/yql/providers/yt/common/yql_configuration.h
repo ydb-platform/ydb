@@ -126,7 +126,7 @@ constexpr bool DEFAULT_USE_QL_FILTER = false;
 
 constexpr bool DEFAULT_DROP_UNUSED_KEYS_FROM_KEY_FILTER = false;
 
-constexpr bool DEFAULT_REPORT_EQUIJOIN_STATS = false;
+constexpr bool DEFAULT_REPORT_EQUIJOIN_STATS = true;
 
 constexpr ERuntimeClusterSelectionMode DEFAULT_RUNTIME_CLUSTER_SELECTION = NYql::ERuntimeClusterSelectionMode::Disable;
 

@@ -14,7 +14,6 @@
 
   ```yaml
   static_erasure: mirror-3-dc
-  
   host_configs:
     - drive:
         - path: /dev/disk/by-partlabel/ydb_disk_ssd_01
@@ -24,8 +23,7 @@
         - path: /dev/disk/by-partlabel/ydb_disk_ssd_03
           type: SSD
       host_config_id: 1
-  
-  hosts:
+    hosts:
     - host: static-node-1.ydb-cluster.com
       host_config_id: 1
       walle_location:
@@ -44,8 +42,7 @@
         body: 3
         data_center: "zone-d"
         rack: "3"
-  
-  domains_config:
+    domains_config:
     security_config:
     enforce_user_token_requirement: true
     default_users:
@@ -53,14 +50,11 @@
         password: ""
     default_access:
       - "+(F):root"
-  
-  domain:
+    domain:
     - name: Root
-  
-  storage_pool_types:
+    storage_pool_types:
     - kind: ssd
-  
-  pool_config:
+    pool_config:
     box_id: 1
     erasure_species: mirror-3-dc
     kind: ssd
@@ -73,17 +67,14 @@
       - property:
           - type: SSD
     vdisk_kind: Default
-  
-  state_storage:
+   state_storage:
     - ring:
         node: [1, 2, 3]
         nto_select: 3
         ssid: 1
-  
-  table_service_config:
+    table_service_config:
     sql_version: 1
-  
-  actor_system_config:
+    actor_system_config:
     executor:
       - name: System
         threads: 2
@@ -107,8 +98,7 @@
       progress_threshold: 10000
       resolution: 256
       spin_threshold: 0
-  
-  blob_storage_config:
+   blob_storage_config:
     service_set:
       groups:
         - erasure_species: mirror-3-dc
@@ -144,8 +134,7 @@
                     - node_id: static-node-3.ydb-cluster.com
                       pdisk_category: SSD
                       path: /dev/disk/by-partlabel/ydb_disk_ssd_03
-  
-  channel_profile_config:
+    channel_profile_config:
     profile:
       - channel:
           - erasure_species: mirror-3-dc
@@ -158,15 +147,13 @@
             pdisk_category: 1
             storage_pool_kind: ssd
         profile_id: 0
-  
-  interconnect_config:
+    interconnect_config:
     start_tcp: true
     encryption_mode: OPTIONAL
     path_to_certificate_file: "/opt/ydb/certs/node.crt"
     path_to_private_key_file: "/opt/ydb/certs/node.key"
     path_to_ca_file: "/opt/ydb/certs/ca.crt"
-  
-  grpc_config:
+   grpc_config:
     cert: "/opt/ydb/certs/node.crt"
     key: "/opt/ydb/certs/node.key"
     ca: "/opt/ydb/certs/ca.crt"
@@ -184,7 +171,7 @@
 - mirror-3-dc-9nodes
 
   ```yaml
-     static_erasure: mirror-3-dc
+  static_erasure: mirror-3-dc
   host_configs:
     - drive:
         - path: /dev/disk/by-partlabel/ydb_disk_ssd_01
@@ -377,7 +364,7 @@
 - block-4-2
 
   ```yaml
-      static_erasure: block-4-2
+  static_erasure: block-4-2
   host_configs:
     - drive:
         - path: /dev/disk/by-partlabel/ydb_disk_ssd_01

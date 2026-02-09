@@ -3167,7 +3167,7 @@ Y_UNIT_TEST(LuceneRelevanceComparison) {
 
     DoValidateRelevanceQuery(db,
         R"sql(
-            SELECT Key, FulltextScore(Text, "%s", "or" as Mode, "1" as MinimumShouldMatch) as Relevance
+            SELECT Key, FulltextScore(Text, "%s", "or" as DefaultOperator, "1" as MinimumShouldMatch) as Relevance
             FROM `/Root/Texts` VIEW `fulltext_idx`
             ORDER BY Relevance DESC
         )sql",
@@ -3175,7 +3175,7 @@ Y_UNIT_TEST(LuceneRelevanceComparison) {
 
     DoValidateRelevanceQuery(db,
         R"sql(
-            SELECT Key, FulltextScore(Text, "%s", "or" as Mode, "50%" as MinimumShouldMatch) as Relevance
+            SELECT Key, FulltextScore(Text, "%s", "or" as DefaultOperator, "50%" as MinimumShouldMatch) as Relevance
             FROM `/Root/Texts` VIEW `fulltext_idx`
             ORDER BY Relevance DESC
         )sql",
@@ -3183,7 +3183,7 @@ Y_UNIT_TEST(LuceneRelevanceComparison) {
 
     DoValidateRelevanceQuery(db,
         R"sql(
-            SELECT Key, FulltextScore(Text, "%s", "or" as Mode, "-1" as MinimumShouldMatch) as Relevance
+            SELECT Key, FulltextScore(Text, "%s", "or" as DefaultOperator, "-1" as MinimumShouldMatch) as Relevance
             FROM `/Root/Texts` VIEW `fulltext_idx`
             ORDER BY Relevance DESC
         )sql",
@@ -3191,7 +3191,7 @@ Y_UNIT_TEST(LuceneRelevanceComparison) {
 
     DoValidateRelevanceQuery(db,
         R"sql(
-            SELECT Key, FulltextScore(Text, "%s", "or" as Mode, "-100" as MinimumShouldMatch) as Relevance
+            SELECT Key, FulltextScore(Text, "%s", "or" as DefaultOperator, "-100" as MinimumShouldMatch) as Relevance
             FROM `/Root/Texts` VIEW `fulltext_idx`
             ORDER BY Relevance DESC
         )sql",
@@ -3219,7 +3219,7 @@ Y_UNIT_TEST(LuceneRelevanceComparison) {
 
     DoValidateRelevanceQuery(db,
         R"sql(
-            SELECT Key, FulltextScore(Text, "%s", "and" as Mode) as Relevance
+            SELECT Key, FulltextScore(Text, "%s", "and" as DefaultOperator) as Relevance
             FROM `/Root/Texts` VIEW `fulltext_idx`
             ORDER BY Relevance DESC
         )sql",
@@ -3227,7 +3227,7 @@ Y_UNIT_TEST(LuceneRelevanceComparison) {
 
     DoValidateRelevanceQuery(db,
         R"sql(
-            SELECT Key, FulltextScore(Text, "%s", "or" as Mode, "100" as MinimumShouldMatch) as Relevance
+            SELECT Key, FulltextScore(Text, "%s", "or" as DefaultOperator, "100" as MinimumShouldMatch) as Relevance
             FROM `/Root/Texts` VIEW `fulltext_idx`
             ORDER BY Relevance DESC
         )sql",
@@ -3235,7 +3235,7 @@ Y_UNIT_TEST(LuceneRelevanceComparison) {
 
     {
         TString query = Sprintf(R"sql(
-            SELECT Key, FulltextScore(Text, "quick fox", "and" as Mode, "1" as MinimumShouldMatch) as Relevance
+            SELECT Key, FulltextScore(Text, "quick fox", "and" as DefaultOperator, "1" as MinimumShouldMatch) as Relevance
             FROM `/Root/Texts` VIEW `fulltext_idx`
             ORDER BY Relevance DESC
         )sql");
@@ -3243,12 +3243,12 @@ Y_UNIT_TEST(LuceneRelevanceComparison) {
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
         Cerr << "Result: " << result.GetIssues().ToString() << Endl;
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "MinimumShouldMatch is not supported for AND query mode");
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "MinimumShouldMatch is not supported for AND default operator");
     }
 
     {
         TString query = Sprintf(R"sql(
-            SELECT Key, FulltextScore(Text, "quick fox", "some" as Mode, "1" as MinimumShouldMatch) as Relevance
+            SELECT Key, FulltextScore(Text, "quick fox", "some" as DefaultOperator, "1" as MinimumShouldMatch) as Relevance
             FROM `/Root/Texts` VIEW `fulltext_idx`
             ORDER BY Relevance DESC
         )sql");
@@ -3256,12 +3256,12 @@ Y_UNIT_TEST(LuceneRelevanceComparison) {
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
         Cerr << "Result: " << result.GetIssues().ToString() << Endl;
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Unsupported query mode: `some`. Should be `and` or `or`");
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Unsupported default operator: `some`. Should be `and` or `or`");
     }
 
     {
         TString query = Sprintf(R"sql(
-            SELECT Key, FulltextScore(Text, "quick fox", "or" as Mode, "101%" as MinimumShouldMatch) as Relevance
+            SELECT Key, FulltextScore(Text, "quick fox", "or" as DefaultOperator, "101%" as MinimumShouldMatch) as Relevance
             FROM `/Root/Texts` VIEW `fulltext_idx`
             ORDER BY Relevance DESC
         )sql");
@@ -3274,7 +3274,7 @@ Y_UNIT_TEST(LuceneRelevanceComparison) {
 
     {
         TString query = Sprintf(R"sql(
-            SELECT Key, FulltextScore(Text, "quick fox", "or" as Mode, "-1%" as MinimumShouldMatch) as Relevance
+            SELECT Key, FulltextScore(Text, "quick fox", "or" as DefaultOperator, "-1%" as MinimumShouldMatch) as Relevance
             FROM `/Root/Texts` VIEW `fulltext_idx`
             ORDER BY Relevance DESC
         )sql");
@@ -3287,7 +3287,7 @@ Y_UNIT_TEST(LuceneRelevanceComparison) {
 
     {
         TString query = Sprintf(R"sql(
-            SELECT Key, FulltextScore(Text, "quick fox", "or" as Mode, "0%" as MinimumShouldMatch) as Relevance
+            SELECT Key, FulltextScore(Text, "quick fox", "or" as DefaultOperator, "0%" as MinimumShouldMatch) as Relevance
             FROM `/Root/Texts` VIEW `fulltext_idx`
             ORDER BY Relevance DESC
         )sql");
@@ -3300,7 +3300,7 @@ Y_UNIT_TEST(LuceneRelevanceComparison) {
 
     {
         TString query = Sprintf(R"sql(
-            SELECT Key, FulltextScore(Text, "quick fox", "or" as Mode, "non_numeric%" as MinimumShouldMatch) as Relevance
+            SELECT Key, FulltextScore(Text, "quick fox", "or" as DefaultOperator, "non_numeric%" as MinimumShouldMatch) as Relevance
             FROM `/Root/Texts` VIEW `fulltext_idx`
             ORDER BY Relevance DESC
         )sql");
@@ -3313,7 +3313,7 @@ Y_UNIT_TEST(LuceneRelevanceComparison) {
 
     {
         TString query = Sprintf(R"sql(
-            SELECT Key, FulltextScore(Text, "quick fox", "or" as Mode, "non_numeric" as MinimumShouldMatch) as Relevance
+            SELECT Key, FulltextScore(Text, "quick fox", "or" as DefaultOperator, "non_numeric" as MinimumShouldMatch) as Relevance
             FROM `/Root/Texts` VIEW `fulltext_idx`
             ORDER BY Relevance DESC
         )sql");

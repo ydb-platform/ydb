@@ -414,7 +414,7 @@ TVector<TInfoUnit> TOpFilter::GetOutputIUs() { return GetInput()->GetOutputIUs()
 void TOpFilter::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap, TExprContext &ctx, const THashSet<TInfoUnit, TInfoUnit::THashFunction> &stopList) {
     Y_UNUSED(ctx);
     Y_UNUSED(stopList);
-    FilterExpr.ApplyRenames(renameMap);
+    FilterExpr = FilterExpr.ApplyRenames(renameMap);
 }
 
 TVector<std::reference_wrapper<TExpression>> TOpFilter::GetExpressions() {

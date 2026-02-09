@@ -16,7 +16,7 @@ public:
     using THideField = bool (*)(const google::protobuf::Descriptor*, const google::protobuf::FieldDescriptor*);
 
     static bool IsSensitive(const google::protobuf::Descriptor*, const google::protobuf::FieldDescriptor* field) {
-        const auto options = field->options();
+        const auto& options = field->options();
         return options.GetExtension(Ydb::sensitive);
     }
 
@@ -31,7 +31,7 @@ public:
         }
         visited.insert({desc->full_name(), desc->index()});
         for (int i = 0; i < desc->field_count(); i++) {
-            const auto field = desc->field(i);
+            const auto& field = desc->field(i);
             if (hideField && hideField(desc, field)) {
                 RegisterFieldValuePrinter(field, new THideFieldValuePrinter());
             }

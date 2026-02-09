@@ -37,11 +37,13 @@ private:
     void Queue(TEvPQ::TEvMLPCommitRequest::TPtr&);
     void Queue(TEvPQ::TEvMLPUnlockRequest::TPtr&);
     void Queue(TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr&);
+    void Queue(TEvPQ::TEvMLPPurgeRequest::TPtr&);
 
     void Handle(TEvPQ::TEvMLPReadRequest::TPtr&);
     void Handle(TEvPQ::TEvMLPCommitRequest::TPtr&);
     void Handle(TEvPQ::TEvMLPUnlockRequest::TPtr&);
     void Handle(TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr&);
+    void Handle(TEvPQ::TEvMLPPurgeRequest::TPtr&);
 
     void Handle(TEvPQ::TEvMLPConsumerUpdateConfig::TPtr&);
     void HandleInit(TEvPQ::TEvEndOffsetChanged::TPtr&);
@@ -108,11 +110,13 @@ private:
     std::deque<TEvPQ::TEvMLPCommitRequest::TPtr> CommitRequestsQueue;
     std::deque<TEvPQ::TEvMLPUnlockRequest::TPtr> UnlockRequestsQueue;
     std::deque<TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr> ChangeMessageDeadlineRequestsQueue;
+    TEvPQ::TEvMLPPurgeRequest::TPtr PurgeRequest;
 
     std::deque<TReadResult> PendingReadQueue;
     std::deque<TResult> PendingCommitQueue;
     std::deque<TResult> PendingUnlockQueue;
     std::deque<TResult> PendingChangeMessageDeadlineQueue;
+    std::optional<TResult> PendingPurgeQueue;
 
     ui64 LastWALIndex = 0;
     bool HasSnapshot = false;

@@ -1328,6 +1328,7 @@ message TEvMLPGetPartitionResponse {
 message TEvMLPErrorResponse {
     optional Ydb.StatusIds.StatusCode Status = 1;
     optional string ErrorMessage = 2;
+    optional uint32 PartitionId = 3;
 }
 
 // To PQTablet
@@ -1389,6 +1390,20 @@ message TEvMLPChangeMessageDeadlineRequest {
 message TEvMLPChangeMessageDeadlineResponse {
 }
 
+// To PQTablet
+message TEvMLPPurgeRequest {
+    optional string Topic = 1; // PathId? Нужен для возможности в одной таблетке хранить несколько топиков
+    optional string Consumer = 2;
+    optional uint32 PartitionId = 3;
+    optional uint64 EndOffset = 4;
+}
+
+// From PQTablet
+message TEvMLPPurgeResponse {
+    optional uint32 PartitionId = 1;
+}
+
+
 message TMLPMetrics {
     optional uint64 TotalCommittedMessageCount = 2;
     optional uint64 TotalMovedToDLQMessageCount = 3;
@@ -1423,6 +1438,7 @@ message TMLPStorageSnapshot {
     optional bytes Messages = 6;
     optional bytes SlowMessages = 7;
     optional bytes DLQMessages = 8;
+    optional uint64 PurgeToOffset = 9;
 }
 
 message TMLPStorageWAL {

@@ -19,22 +19,22 @@ enum class EKvCookie {
     BackgroundWrite = 4
 };
 
-void ReplyError(const TActorIdentity selfActorId, const TActorId& sender, ui64 cookie, TString&& error) {
-    selfActorId.Send(sender, new TEvPQ::TEvMLPErrorResponse(Ydb::StatusIds::UNAVAILABLE, std::move(error)), 0, cookie);
+void ReplyError(const TActorIdentity selfActorId, ui32 partitionId, const TActorId& sender, ui64 cookie, TString&& error) {
+    selfActorId.Send(sender, new TEvPQ::TEvMLPErrorResponse(partitionId, Ydb::StatusIds::UNAVAILABLE, std::move(error)), 0, cookie);
 }
 
 template<typename T>
-void ReplyErrorAll(const TActorIdentity selfActorId, std::deque<T>& queue) {
+void ReplyErrorAll(const TActorIdentity selfActorId, ui32 partitionId, std::deque<T>& queue) {
     for (auto& ev : queue) {
-        ReplyError(selfActorId, ev->Sender, ev->Cookie, "Actor destroyed");
+        ReplyError(selfActorId, partitionId, ev->Sender, ev->Cookie, "Actor destroyed");
     }
     queue.clear();
 }
 
 template<typename T>
-void RollbackAll(const TActorIdentity selfActorId, std::deque<T>& queue) {
+void RollbackAll(const TActorIdentity selfActorId, ui32 partitionId, std::deque<T>& queue) {
     for (auto& ev : queue) {
-        ReplyError(selfActorId, ev.Sender, ev.Cookie, "Rollback");
+        ReplyError(selfActorId, partitionId, ev.Sender, ev.Cookie, "Rollback");
     }
     queue.clear();
 }
@@ -121,15 +121,24 @@ void TConsumerActor::Bootstrap() {
 void TConsumerActor::PassAway() {
     LOG_D("PassAway");
 
-    RollbackAll(SelfId(), PendingReadQueue);
-    RollbackAll(SelfId(), PendingCommitQueue);
-    RollbackAll(SelfId(), PendingUnlockQueue);
-    RollbackAll(SelfId(), PendingChangeMessageDeadlineQueue);
+    RollbackAll(SelfId(), PartitionId,PendingReadQueue);
+    RollbackAll(SelfId(), PartitionId, PendingCommitQueue);
+    RollbackAll(SelfId(), PartitionId, PendingUnlockQueue);
+    RollbackAll(SelfId(), PartitionId, PendingChangeMessageDeadlineQueue);
 
-    ReplyErrorAll(SelfId(), ReadRequestsQueue);
-    ReplyErrorAll(SelfId(), CommitRequestsQueue);
-    ReplyErrorAll(SelfId(), UnlockRequestsQueue);
-    ReplyErrorAll(SelfId(), ChangeMessageDeadlineRequestsQueue);
+    ReplyErrorAll(SelfId(), PartitionId, ReadRequestsQueue);
+    ReplyErrorAll(SelfId(), PartitionId, CommitRequestsQueue);
+    ReplyErrorAll(SelfId(), PartitionId, UnlockRequestsQueue);
+    ReplyErrorAll(SelfId(), PartitionId, ChangeMessageDeadlineRequestsQueue);
+
+    if (PendingPurgeQueue) {
+        ReplyError(SelfId(), PartitionId, PendingPurgeQueue->Sender, PendingPurgeQueue->Cookie, "Actor destroyed");
+        PendingPurgeQueue = std::nullopt;
+    }
+    if (PurgeRequest) {
+        ReplyError(SelfId(), PartitionId, PurgeRequest->Sender, PurgeRequest->Cookie, "Actor destroyed");
+        PurgeRequest = nullptr;
+    }
 
     if (DLQMoverActorId) {
         Send(DLQMoverActorId, new TEvents::TEvPoison());
@@ -162,6 +171,11 @@ void TConsumerActor::Queue(TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr& ev) 
     ChangeMessageDeadlineRequestsQueue.push_back(std::move(ev));
 }
 
+void TConsumerActor::Queue(TEvPQ::TEvMLPPurgeRequest::TPtr& ev) {
+    LOG_D("Queue TEvPQ::TEvMLPPurgeRequest " << ev->Get()->Record.ShortDebugString());
+    PurgeRequest = std::move(ev);
+}
+
 void TConsumerActor::Handle(TEvPQ::TEvMLPReadRequest::TPtr& ev) {
     Queue(ev);
     ProcessEventQueue();
@@ -178,6 +192,11 @@ void TConsumerActor::Handle(TEvPQ::TEvMLPUnlockRequest::TPtr& ev) {
 }
 
 void TConsumerActor::Handle(TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr& ev) {
+    Queue(ev);
+    ProcessEventQueue();
+}
+
+void TConsumerActor::Handle(TEvPQ::TEvMLPPurgeRequest::TPtr& ev) {
     Queue(ev);
     ProcessEventQueue();
 }
@@ -337,6 +356,10 @@ void TConsumerActor::Handle(TEvKeyValue::TEvResponse::TPtr& ev) {
     ReplyOk<TEvPQ::TEvMLPCommitResponse>(SelfId(), PendingCommitQueue);
     ReplyOk<TEvPQ::TEvMLPUnlockResponse>(SelfId(), PendingUnlockQueue);
     ReplyOk<TEvPQ::TEvMLPChangeMessageDeadlineResponse>(SelfId(), PendingChangeMessageDeadlineQueue);
+    if (PendingPurgeQueue) {
+        Send(PendingPurgeQueue->Sender, new TEvPQ::TEvMLPPurgeResponse(), 0, PendingPurgeQueue->Cookie);
+        PendingPurgeQueue = std::nullopt;
+    }
 
     MoveToDLQIfPossible();
     ProcessEventQueue();
@@ -432,6 +455,7 @@ STFUNC(TConsumerActor::StateInit) {
         hFunc(TEvPQ::TEvMLPCommitRequest, Queue);
         hFunc(TEvPQ::TEvMLPUnlockRequest, Queue);
         hFunc(TEvPQ::TEvMLPChangeMessageDeadlineRequest, Queue);
+        hFunc(TEvPQ::TEvMLPPurgeRequest, Queue);
         hFunc(TEvPQ::TEvMLPConsumerUpdateConfig, Handle);
         hFunc(TEvPQ::TEvEndOffsetChanged, HandleInit);
         hFunc(TEvPQ::TEvGetMLPConsumerStateRequest, Handle);
@@ -455,6 +479,7 @@ STFUNC(TConsumerActor::StateWork) {
         hFunc(TEvPQ::TEvMLPCommitRequest, Handle);
         hFunc(TEvPQ::TEvMLPUnlockRequest, Handle);
         hFunc(TEvPQ::TEvMLPChangeMessageDeadlineRequest, Handle);
+        hFunc(TEvPQ::TEvMLPPurgeRequest, Handle);
         hFunc(TEvPQ::TEvMLPConsumerUpdateConfig, Handle);
         hFunc(TEvPQ::TEvEndOffsetChanged, Handle);
         hFunc(TEvPQ::TEvGetMLPConsumerStateRequest, Handle);
@@ -481,6 +506,7 @@ STFUNC(TConsumerActor::StateWrite) {
         hFunc(TEvPQ::TEvMLPCommitRequest, Queue);
         hFunc(TEvPQ::TEvMLPUnlockRequest, Queue);
         hFunc(TEvPQ::TEvMLPChangeMessageDeadlineRequest, Queue);
+        hFunc(TEvPQ::TEvMLPPurgeRequest, Queue);
         hFunc(TEvPQ::TEvMLPConsumerUpdateConfig, Handle);
         hFunc(TEvPQ::TEvEndOffsetChanged, Handle);
         hFunc(TEvPQ::TEvGetMLPConsumerStateRequest, Handle);
@@ -536,6 +562,12 @@ void TConsumerActor::ProcessEventQueue() {
         PendingChangeMessageDeadlineQueue.emplace_back(ev->Sender, ev->Cookie);
     }
     ChangeMessageDeadlineRequestsQueue.clear();
+
+    if (PurgeRequest) {
+        Storage->Purge(PurgeRequest->Get()->Record.GetEndOffset());
+        PendingPurgeQueue = TResult(PurgeRequest->Sender, PurgeRequest->Cookie);
+        PurgeRequest = nullptr;
+    }
 
     if (!ReadRequestsQueue.empty()) {
         Storage->ProccessDeadlines();
@@ -603,7 +635,7 @@ void TConsumerActor::Persist() {
         }
     };
 
-    auto withWAL = HasSnapshot && Storage->GetMessageCount() > 32;
+    auto withWAL = HasSnapshot && Storage->GetMessageCount() > 32 && !batch.GetPurged();
     if (withWAL) {
         auto key = MakeWALKey(PartitionId, Config.GetName(), ++LastWALIndex);
 

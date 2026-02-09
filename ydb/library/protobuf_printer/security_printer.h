@@ -20,28 +20,24 @@ public:
         return options.GetExtension(Ydb::sensitive);
     }
 
-    TSecurityTextFormatPrinterBase(const google::protobuf::Descriptor* desc, THideField hideField = &TSecurityTextFormatPrinterBase::IsSensitive)
-        : HideField(hideField) {
+    TSecurityTextFormatPrinterBase(const google::protobuf::Descriptor* desc, THideField hideField = &TSecurityTextFormatPrinterBase::IsSensitive) {
         TSet<std::pair<TString, int>> visited;
-        Walk(desc, visited);
+        Walk(desc, visited, hideField);
     }
 
-    void Walk(const google::protobuf::Descriptor* desc, TSet<std::pair<TString, int>>& visited) {
+    void Walk(const google::protobuf::Descriptor* desc, TSet<std::pair<TString, int>>& visited, THideField hideField) {
         if (!desc || visited.contains(std::pair<TString, int>{desc->full_name(), desc->index()})) {
             return;
         }
         visited.insert({desc->full_name(), desc->index()});
         for (int i = 0; i < desc->field_count(); i++) {
             const auto field = desc->field(i);
-            if (HideField && HideField(desc, field)) {
+            if (hideField && hideField(desc, field)) {
                 RegisterFieldValuePrinter(field, new THideFieldValuePrinter());
             }
-            Walk(field->message_type(), visited);
+            Walk(field->message_type(), visited, hideField);
         }
     }
-
-private:
-    THideField HideField;
 };
 
 template<typename TMsg>

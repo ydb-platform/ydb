@@ -96,6 +96,22 @@ class PrSyncCreator:
 
         return conflicting_files
 
+    def find_conflict_lines(self, file):
+        start_line_number = 1
+        end_line_number = 1
+        if os.path.exists(file):
+            try:
+                with open(file, 'r', encoding='utf-8', errors='ignore') as f:
+                    for i, line in enumerate(f, 1):
+                        if line.startswith('<<<<<<<'):
+                            start_line_number = i
+                        if line.startswith('>>>>>>>'):
+                            end_line_number = i
+                            break
+            except Exception:
+                pass
+        return (start_line_number, end_line_number)
+
     def git_revparse_head(self):
         return self.git_run("rev-parse", "HEAD").stdout.decode().strip()
 
@@ -150,11 +166,15 @@ class PrSyncCreator:
 
         if merge_failed and len(conflict_files) > 0:
             pr_body += f"""\n\n### Merge failed
-Full message: ```{merge_output}```
+Full message:
+```
+{merge_output}
+```
 
 Found some unresolved conflicts:\n"""
             for conflict_file in conflict_files:
-                pr_body += f"[{conflict_file}](https://github.com/ydb-platform/ydb/blob/{self.rightlib_latest_repo_sha()}/{conflict_file})"
+                lines = self.find_conflict_lines(conflict_file)
+                pr_body += f"- [{conflict_file}](https://github.com/ydb-platform/ydb/blob/{self.git_revparse_head()}/{conflict_file}#L{lines[0]}-L{lines[1]})\n"
 
         pr = self.repo.create_pull(
             self.base_branch, dev_branch_name, title=pr_title, body=pr_body, maintainer_can_modify=True
@@ -162,7 +182,7 @@ Found some unresolved conflicts:\n"""
         pr.add_to_labels(self.pr_label)
         pr.add_to_labels(automerge.automerge_pr_label)
         if merge_failed and len(conflict_files) > 0:
-            pr.add_to_labels(self.pr_label_fail)
+            pr.add_to_labels(automerge.pr_label_fail)
 
     def cmd_create_pr(self):
         pr = self.get_latest_open_pr()

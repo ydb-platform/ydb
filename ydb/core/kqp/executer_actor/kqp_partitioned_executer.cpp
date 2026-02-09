@@ -254,12 +254,13 @@ public:
     void HandleExecute(TEvKqpExecuter::TEvTxDelayedExecution::TPtr& ev) {
         RequestCounters->Counters->BatchOperationRetries->Inc();
 
-        auto& partInfo = StartedPartitions[ev->Get()->PartitionIdx];
-
         PE_STLOG_D("Delayed execution timer fired",
             (PartitionIndex, ev->Get()->PartitionIdx));
 
-        RetryPartExecution(partInfo);
+        auto it = StartedPartitions.find(ev->Get()->PartitionIdx);
+        if (it != StartedPartitions.end()) {
+            RetryPartExecution(*it);
+        }
     }
 
     void HandleExecute(TEvKqpBuffer::TEvError::TPtr& ev) {
@@ -541,6 +542,10 @@ private:
     }
 
     void CreateExecuterWithBuffer(TPartitionIndex partitionIndex, bool isRetry) {
+        if (isRetry && StartedPartitions.find(partitionIndex) == StartedPartitions.end()) {
+            return;
+        }
+
         auto partInfo = (isRetry) ? StartedPartitions[partitionIndex] : CreatePartition(partitionIndex);
         auto txAlloc = std::make_shared<TTxAllocatorState>(FuncRegistry, TimeProvider, RandomProvider);
 

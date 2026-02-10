@@ -1962,7 +1962,7 @@ const std::set<NPQ::TPartitionGraph::Node*>& TPartitionActor::GetParents(std::sh
 void TPartitionActor::SendCommit(const ui64 readId, const ui64 offset, const TActorContext& ctx) {
     // extend the lifetime for PartitionGraph
     std::shared_ptr<NPQ::TPartitionGraph> partitionGraph;
-    with_lock(TopicHolder->PartitionGraphMutex) {
+    with_lock (TopicHolder->PartitionGraphMutex) {
         partitionGraph = TopicHolder->PartitionGraph;
     }
     const auto& parents = GetParents(partitionGraph);

@@ -343,7 +343,64 @@ namespace {
         std::optional<ui64> VictimSessionVictimQueryTraceId;
         std::optional<ui64> VictimShardVictimQueryTraceId;
         std::optional<std::vector<ui64>> VictimSessionVictimQueryTraceIdOccurrences;
+
+        bool FoundBreakerRecordInDatashard = false;
+        std::optional<std::vector<ui64>> MatchingDsBreakerVictimQueryTraceIds;
+        bool FoundVictimRecordInDatashard = false;
     };
+
+    std::pair<bool, std::optional<std::vector<ui64>>> ExtractMatchingFromBreakerDatashard(
+        const TString& logs,
+        const TString& messagePattern,
+        std::optional<ui64> breakerQueryTraceIdFromKQP)
+    {
+        if (!breakerQueryTraceIdFromKQP) {
+            return {false, std::nullopt};
+        }
+
+        for (const auto& record : ExtractTliRecords(logs)) {
+            if (!record.Contains("Component: DataShard") || !MatchesMessage(record, messagePattern)) {
+                continue;
+            }
+            auto breakerQueryTraceId = ExtractNumericField(record, "BreakerQueryTraceId");
+            if (breakerQueryTraceId && *breakerQueryTraceId == *breakerQueryTraceIdFromKQP) {
+                std::optional<std::vector<ui64>> matchingVictimIds;
+                const size_t idsPos = record.find("VictimQueryTraceIds: [");
+                if (idsPos != TString::npos) {
+                    const size_t listStart = idsPos + 22;
+                    const size_t listEnd = record.find(']', listStart);
+                    if (listEnd != TString::npos) {
+                        matchingVictimIds.emplace();
+                        for (const auto& part : StringSplitter(record.substr(listStart, listEnd - listStart)).Split(' ').SkipEmpty()) {
+                            matchingVictimIds->emplace_back(FromString<ui64>(part));
+                        }
+                    }
+                }
+                return {true, matchingVictimIds};
+            }
+        }
+        return {false, std::nullopt};
+    }
+
+    bool CheckMatchingInVictimDatashard(
+        const TString& logs,
+        const TString& messagePattern,
+        std::optional<ui64> victimQueryTraceIdFromKQP)
+    {
+        if (!victimQueryTraceIdFromKQP) {
+            return false;
+        }
+        for (const auto& record : ExtractTliRecords(logs)) {
+            if (!record.Contains("Component: DataShard") || !MatchesMessage(record, messagePattern)) {
+                continue;
+            }
+            auto victimQueryTraceId = ExtractNumericField(record, "VictimQueryTraceId");
+            if (victimQueryTraceId && *victimQueryTraceId == *victimQueryTraceIdFromKQP) {
+                return true;
+            }
+        }
+        return false;
+    }
 
     TExtractedTliData ExtractAllTliData(const TString& logs, const TTliLogPatterns& patterns,
         const std::optional<TString>& expectedBreakerQueryText = std::nullopt,
@@ -364,12 +421,16 @@ namespace {
         data.VictimSessionVictimQueryTraceIdOccurrences = ExtractVictimQueryTraceIdOccurrences(
             logs, "SessionActor", patterns.VictimSessionActorMessagePattern);
 
+        auto [foundBreaker, matchingVictimIds] = ExtractMatchingFromBreakerDatashard(logs, patterns.BreakerDatashardMessage, data.BreakerSessionBreakerQueryTraceId);
+        data.FoundBreakerRecordInDatashard = foundBreaker;
+        data.MatchingDsBreakerVictimQueryTraceIds = matchingVictimIds;
+
+        data.FoundVictimRecordInDatashard = CheckMatchingInVictimDatashard(logs, patterns.VictimDatashardMessage, data.VictimSessionVictimQueryTraceId);
+
         return data;
     }
 
     void AssertCommonTliAsserts(
-        const TString& logs,
-        const TTliLogPatterns& patterns,
         const TExtractedTliData& data,
         const TString& breakerQueryText,
         const TString& victimQueryText,
@@ -381,52 +442,17 @@ namespace {
         UNIT_ASSERT_C(data.VictimSessionVictimQueryTraceId, "victim SessionActor VictimQueryTraceId should be present");
 
         // 1. DS Breaker ↔ KQP Breaker: Find the DataShard breaker record matching the SessionActor's BreakerQueryTraceId
-        bool foundMatchingDsBreakerRecord = false;
-        std::optional<std::vector<ui64>> matchingVictimIds;
-        for (const auto& record : ExtractTliRecords(logs)) {
-            if (!record.Contains("Component: DataShard") || !MatchesMessage(record, patterns.BreakerDatashardMessage)) {
-                continue;
-            }
-            auto dsId = ExtractNumericField(record, "BreakerQueryTraceId");
-            if (dsId && *dsId == *data.BreakerSessionBreakerQueryTraceId) {
-                foundMatchingDsBreakerRecord = true;
-                // Extract VictimQueryTraceIds from this specific record
-                const size_t idsPos = record.find("VictimQueryTraceIds: [");
-                if (idsPos != TString::npos) {
-                    const size_t listStart = idsPos + 22;
-                    const size_t listEnd = record.find(']', listStart);
-                    if (listEnd != TString::npos) {
-                        matchingVictimIds.emplace();
-                        for (const auto& part : StringSplitter(record.substr(listStart, listEnd - listStart)).Split(' ').SkipEmpty()) {
-                            matchingVictimIds->emplace_back(FromString<ui64>(part));
-                        }
-                    }
-                }
-                break;
-            }
-        }
-        UNIT_ASSERT_C(foundMatchingDsBreakerRecord,
+        UNIT_ASSERT_C(data.FoundBreakerRecordInDatashard,
             "SessionActor BreakerQueryTraceId should exist in some DataShard breaker record");
 
         // 2. DS Victim ↔ KQP Victim: Find the DataShard victim record matching the SessionActor's VictimQueryTraceId
-        bool foundMatchingDsVictimRecord = false;
-        for (const auto& record : ExtractTliRecords(logs)) {
-            if (!record.Contains("Component: DataShard") || !MatchesMessage(record, patterns.VictimDatashardMessage)) {
-                continue;
-            }
-            auto dsId = ExtractNumericField(record, "VictimQueryTraceId");
-            if (dsId && *dsId == *data.VictimSessionVictimQueryTraceId) {
-                foundMatchingDsVictimRecord = true;
-                break;
-            }
-        }
-        UNIT_ASSERT_C(foundMatchingDsVictimRecord,
+        UNIT_ASSERT_C(data.FoundVictimRecordInDatashard,
             "SessionActor VictimQueryTraceId should exist in some DataShard victim record");
 
         // 3. DS Breaker ↔ DS Victim: The matching DataShard breaker record should contain the VictimQueryTraceId
-        UNIT_ASSERT_C(matchingVictimIds.has_value(), "matching DataShard breaker record should have VictimQueryTraceIds");
-        bool victimInBreaker = std::find(matchingVictimIds->begin(), matchingVictimIds->end(),
-            *data.VictimSessionVictimQueryTraceId) != matchingVictimIds->end();
+        UNIT_ASSERT_C(data.MatchingDsBreakerVictimQueryTraceIds.has_value(), "matching DataShard breaker record should have VictimQueryTraceIds");
+        bool victimInBreaker = std::find(data.MatchingDsBreakerVictimQueryTraceIds->begin(), data.MatchingDsBreakerVictimQueryTraceIds->end(),
+            *data.VictimSessionVictimQueryTraceId) != data.MatchingDsBreakerVictimQueryTraceIds->end();
         UNIT_ASSERT_C(victimInBreaker,
             "victim VictimQueryTraceId should be in matching DataShard breaker's VictimQueryTraceIds");
 
@@ -443,11 +469,6 @@ namespace {
             UNIT_ASSERT_C(data.VictimQueryTexts->Contains(*victimExtraQueryText),
                 "VictimQueryTexts should contain victim extra query");
         }
-    }
-
-    void AssertNoTliLogsWhenDisabled(const TString& logs) {
-        UNIT_ASSERT_C(logs.find("TLI INFO") == TString::npos,
-            "no TLI INFO logs expected when LogEnabled=false");
     }
 
     // ==================== Test context and table helpers ====================
@@ -600,16 +621,8 @@ namespace {
         return FromString<ui64>(issues.substr(pos, endPos - pos));
     }
 
-    void VerifyTliIssueAndLogsWithEnabled(
-        const TString& issues,
-        TStringStream& ss,
-        const TString& breakerQueryText,
-        const TString& victimQueryText,
-        const std::optional<TString>& victimExtraQueryText = std::nullopt,
-        size_t expectedBreakerSessionActorCount = 1)
-    {
-        DumpTliRecords(ss.Str());
-
+    // Verify TLI issue content
+    void VerifyTliIssueContent(const TString& issues) {
         UNIT_ASSERT_C(issues.Contains("Transaction locks invalidated"),
             "Issue should contain 'Transaction locks invalidated': " << issues);
         UNIT_ASSERT_C(!issues.Contains("BreakerQueryTraceId:"),
@@ -620,11 +633,25 @@ namespace {
             "Issue should contain 'VictimQueryTraceId:': " << issues);
         UNIT_ASSERT_C(*victimQueryTraceId != 0,
             "VictimQueryTraceId should not be 0: " << issues);
+    }
+
+    void VerifyTliIssueAndLogs(
+        const TString& issues,
+        TStringStream& ss,
+        const TString& breakerQueryText,
+        const TString& victimQueryText,
+        const std::optional<TString>& victimExtraQueryText = std::nullopt,
+        size_t expectedBreakerSessionActorCount = 1)
+    {
+        DumpTliRecords(ss.Str());
+
+        VerifyTliIssueContent(issues);
 
         const auto patterns = MakeTliLogPatterns();
         const auto data = ExtractAllTliData(ss.Str(), patterns, breakerQueryText, victimQueryText);
-        AssertCommonTliAsserts(ss.Str(), patterns, data, breakerQueryText, victimQueryText, victimExtraQueryText);
+        AssertCommonTliAsserts(data, breakerQueryText, victimQueryText, victimExtraQueryText);
 
+        auto victimQueryTraceId = ExtractVictimQueryTraceIdFromIssue(issues);
         UNIT_ASSERT_C(data.VictimSessionVictimQueryTraceIdOccurrences.has_value(),
             "victim SessionActor VictimQueryTraceId should be present");
         const auto& occurrences = *data.VictimSessionVictimQueryTraceIdOccurrences;
@@ -636,7 +663,7 @@ namespace {
             "breaker SessionActor TLI record count mismatch");
     }
 
-    void VerifyTliIssueAndLogsWithDisabled(
+    void VerifyTliIssueAndLogsWhenDisabled(
         const TString& issues,
         TStringStream& ss)
     {
@@ -652,16 +679,17 @@ namespace {
         UNIT_ASSERT_C(!victimQueryTraceId.has_value(),
             "Issue should not contain 'VictimQueryTraceId:' when TLI logs are disabled: " << issues);
 
-        AssertNoTliLogsWhenDisabled(ss.Str());
+        UNIT_ASSERT_C(ss.Str().find("TLI INFO") == TString::npos,
+            "no TLI INFO logs expected when TLI logs are disabled");
     }
 
 } // namespace
 
 Y_UNIT_TEST_SUITE(KqpTli) {
 
-    Y_UNIT_TEST_TWIN(Basic, LogEnabled) {
+    Y_UNIT_TEST(LogDisabled) {
         TStringStream ss;
-        TTliTestContext ctx(ss, LogEnabled);
+        TTliTestContext ctx(ss, false);
         ctx.CreateTable("/Root/Tenant1/TableLocks");
         ctx.SeedTable("/Root/Tenant1/TableLocks", {{1, "Initial"}});
 
@@ -674,11 +702,25 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         auto [status, issues] = ExecuteVictimCommitWithIssues(ctx.VictimSession, victimTx, victimCommitText);
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
 
-        if (LogEnabled) {
-            VerifyTliIssueAndLogsWithEnabled(issues, ss, breakerQueryText, victimQueryText, victimCommitText);
-        } else {
-            VerifyTliIssueAndLogsWithDisabled(issues, ss);
-        }
+        VerifyTliIssueAndLogsWhenDisabled(issues, ss);
+    }
+
+    Y_UNIT_TEST(Basic) {
+        TStringStream ss;
+        TTliTestContext ctx(ss);
+        ctx.CreateTable("/Root/Tenant1/TableLocks");
+        ctx.SeedTable("/Root/Tenant1/TableLocks", {{1, "Initial"}});
+
+        const TString breakerQueryText = "UPSERT INTO `/Root/Tenant1/TableLocks` (Key, Value) VALUES (1u, \"BreakerValue\")";
+        const TString victimQueryText = "SELECT * FROM `/Root/Tenant1/TableLocks` WHERE Key = 1u";
+        const TString victimCommitText = "UPSERT INTO `/Root/Tenant1/TableLocks` (Key, Value) VALUES (1u, \"VictimValue\")";
+
+        auto victimTx = BeginReadTx(ctx.VictimSession, victimQueryText);
+        ctx.ExecuteQuery(breakerQueryText);
+        auto [status, issues] = ExecuteVictimCommitWithIssues(ctx.VictimSession, victimTx, victimCommitText);
+        UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
+
+        VerifyTliIssueAndLogs(issues, ss, breakerQueryText, victimQueryText, victimCommitText);
     }
 
     Y_UNIT_TEST(SeparateCommit) {
@@ -703,7 +745,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         auto [status, issues] = ExecuteVictimCommitWithIssues(ctx.VictimSession, victimTx, victimCommitText);
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
 
-        VerifyTliIssueAndLogsWithEnabled(issues, ss, breakerQueryText, victimQueryText, victimCommitText);
+        VerifyTliIssueAndLogs(issues, ss, breakerQueryText, victimQueryText, victimCommitText);
     }
 
     // Test: Many upserts in a single transaction, the breaker is the middle upsert
@@ -737,7 +779,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         auto [status, issues] = CommitTxWithIssues(victimTx);
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
 
-        VerifyTliIssueAndLogsWithEnabled(issues, ss, breakerUpdateTable2, victimSelectTable2);
+        VerifyTliIssueAndLogs(issues, ss, breakerUpdateTable2, victimSelectTable2);
     }
 
     // Test: Many upserts in a single transaction, the breaker is the middle upsert, separate commit
@@ -771,7 +813,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         auto [status, issues] = CommitTxWithIssues(victimTx);
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
 
-        VerifyTliIssueAndLogsWithEnabled(issues, ss, breakerUpdateTable2, victimSelectTable2);
+        VerifyTliIssueAndLogs(issues, ss, breakerUpdateTable2, victimSelectTable2);
     }
 
     // Test: Victim reads key 1, breaker writes key 1, victim writes key 2
@@ -790,7 +832,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         auto [status, issues] = ExecuteVictimCommitWithIssues(ctx.VictimSession, victimTx, victimCommitText);
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
 
-        VerifyTliIssueAndLogsWithEnabled(issues, ss, breakerQueryText, victimQueryText);
+        VerifyTliIssueAndLogs(issues, ss, breakerQueryText, victimQueryText);
     }
 
     // Test: Victim reads multiple keys, breaker writes them all
@@ -809,7 +851,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         auto [status, issues] = ExecuteVictimCommitWithIssues(ctx.VictimSession, victimTx, victimCommitText);
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
 
-        VerifyTliIssueAndLogsWithEnabled(issues, ss, breakerQueryText, victimQueryText);
+        VerifyTliIssueAndLogs(issues, ss, breakerQueryText, victimQueryText);
     }
 
     // Test: Cross-table lock breakage - victim reads TableA, breaker writes TableA, victim writes TableB
@@ -829,7 +871,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         auto [status, issues] = ExecuteVictimCommitWithIssues(ctx.VictimSession, victimTx, victimCommitText);
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
 
-        VerifyTliIssueAndLogsWithEnabled(issues, ss, breakerQueryText, victimQueryText);
+        VerifyTliIssueAndLogs(issues, ss, breakerQueryText, victimQueryText);
     }
 
     // Test: Two victims and one breaker scenario
@@ -859,11 +901,11 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         // Both victims try to commit - both should be aborted
         auto [status1, issues1] = ExecuteVictimCommitWithIssues(victim1Session, victim1Tx, victimCommitText);
         UNIT_ASSERT_VALUES_EQUAL(status1, EStatus::ABORTED);
-        VerifyTliIssueAndLogsWithEnabled(issues1, ss, breakerQueryText, victimQueryText, victimCommitText);
+        VerifyTliIssueAndLogs(issues1, ss, breakerQueryText, victimQueryText, victimCommitText);
 
         auto [status2, issues2] = ExecuteVictimCommitWithIssues(victim2Session, victim2Tx, victimCommitText);
         UNIT_ASSERT_VALUES_EQUAL(status2, EStatus::ABORTED);
-        VerifyTliIssueAndLogsWithEnabled(issues2, ss, breakerQueryText, victimQueryText, victimCommitText);
+        VerifyTliIssueAndLogs(issues2, ss, breakerQueryText, victimQueryText, victimCommitText);
     }
 
     // Test: Two victims on two different tables, one breaker writes to both tables.
@@ -906,9 +948,9 @@ Y_UNIT_TEST_SUITE(KqpTli) {
 
         // Verify each victim independently using the common helper.
         // The breaker emits 2 SessionActor TLI entries (one per table), so expectedBreakerSessionActorCount = 2.
-        VerifyTliIssueAndLogsWithEnabled(issues1, ss, breakerUpdate1, victim1QueryText, victim1CommitText,
+        VerifyTliIssueAndLogs(issues1, ss, breakerUpdate1, victim1QueryText, victim1CommitText,
             /* expectedBreakerSessionActorCount */ 2);
-        VerifyTliIssueAndLogsWithEnabled(issues2, ss, breakerUpdate2, victim2QueryText, victim2CommitText,
+        VerifyTliIssueAndLogs(issues2, ss, breakerUpdate2, victim2QueryText, victim2CommitText,
             /* expectedBreakerSessionActorCount */ 2);
     }
 
@@ -943,7 +985,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
 
         // The breaker immediately breaks victim's lock (1 immediate entry)
         // AND the victim re-read detects InvisibleRowSkips (1 deferred entry) = 2 total
-        VerifyTliIssueAndLogsWithEnabled(issues, ss, breakerQueryText, victimRead1Text,
+        VerifyTliIssueAndLogs(issues, ss, breakerQueryText, victimRead1Text,
             /* victimExtraQueryText */ std::nullopt,
             /* expectedBreakerSessionActorCount */ 2);
     }
@@ -977,7 +1019,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         auto [status, issues] = ExecuteVictimCommitWithIssues(ctx.VictimSession, victimTx, victimWriteText);
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
 
-        VerifyTliIssueAndLogsWithEnabled(issues, ss, breakerQueryText, victimReadText, victimSnapshotText);
+        VerifyTliIssueAndLogs(issues, ss, breakerQueryText, victimReadText, victimSnapshotText);
     }
 
     // Test: Deferred lock detection with many queries in both breaker and victim transactions.
@@ -1025,7 +1067,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         auto [status, issues] = ExecuteVictimCommitWithIssues(ctx.VictimSession, victimTx, victimWriteTable3);
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
 
-        VerifyTliIssueAndLogsWithEnabled(issues, ss, breakerUpdateTable3, victimSelectTable3, victimSnapshotTable1);
+        VerifyTliIssueAndLogs(issues, ss, breakerUpdateTable3, victimSelectTable3, victimSnapshotTable1);
     }
 
     // Test: Concurrent UPSERT...SELECT transactions - replicates user's production scenario
@@ -1063,7 +1105,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
 
         // Verify issue and TLI logs using common verification function
-        VerifyTliIssueAndLogsWithEnabled(issues, ss, breakerUpsert, victimUpsertSelect);
+        VerifyTliIssueAndLogs(issues, ss, breakerUpsert, victimUpsertSelect);
     }
 
     // ==================== 2-Node Tests ====================
@@ -1104,7 +1146,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         auto [status, issues] = CommitTxWithIssues(victimTx);
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
 
-        VerifyTliIssueAndLogsWithEnabled(issues, ss, breakerUpdateTable2, victimSelectTable2);
+        VerifyTliIssueAndLogs(issues, ss, breakerUpdateTable2, victimSelectTable2);
     }
 
     // Test: 2-node version of ConcurrentUpsertSelect
@@ -1138,9 +1180,10 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
 
         // Verify issue and TLI logs
-        VerifyTliIssueAndLogsWithEnabled(issues, ss, breakerUpsert, victimUpsertSelect);
+        VerifyTliIssueAndLogs(issues, ss, breakerUpsert, victimUpsertSelect);
     }
 }
 
 } // namespace NKqp
 } // namespace NKikimr
+

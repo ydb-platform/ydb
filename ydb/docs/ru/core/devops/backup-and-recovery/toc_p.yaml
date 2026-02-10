@@ -3,3 +3,5 @@ items:
   href: index.md
 - name: Полное и инкрементальное резервное копирование
   href: full-and-incremental-backups.md
+- name: Резервное копирование системных таблеток
+  href: system-tablet-backup.md

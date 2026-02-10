@@ -135,7 +135,7 @@ class TestAlterColumnCompression(TestCompressionBase):
         )
 
         # check one portion left
-        assert(len(result[0].rows) == 1)
+        assert len(result[0].rows) == 1
 
         table = ColumnTableHelper(self.ydb_client, self.table_path)
 

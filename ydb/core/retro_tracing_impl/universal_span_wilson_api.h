@@ -17,7 +17,9 @@ public:
                 name, flags, actorSystem)
     {
         if constexpr (std::is_same_v<TRetroSpanType, TNamedSpan>) {
-            std::get<TRetroSpanType>(this->Span).SetName(name);
+            if (TNamedSpan* span = this->GetRetroSpanPtr()) {
+                span->SetName(name);
+            }
         }
     }
 
@@ -87,7 +89,9 @@ public:
                 [&](NWilson::TSpan& span) -> void {
                     span.Name(std::forward<T>(name));
                 },
-                [&](const TRetroSpanType&) -> void {},
+                [&](TRetroSpanType& span) -> void {
+                    span.SetName(std::forward<T>(name));
+                },
                 [&](const std::monostate&) -> void {},
             }, this->Span);
         } else {
@@ -95,9 +99,7 @@ public:
                 [&](NWilson::TSpan& span) -> void {
                     span.Name(std::forward<T>(name));
                 },
-                [&](TRetroSpanType& span) -> void {
-                    span.SetName(std::forward<T>(name));
-                },
+                [&](const TRetroSpanType&) -> void {},
                 [&](const std::monostate&) -> void {},
             }, this->Span);
         }

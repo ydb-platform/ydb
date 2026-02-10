@@ -4,7 +4,6 @@ import time
 import os
 
 import grpc
-import grpc.aio
 import six
 import logging
 

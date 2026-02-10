@@ -33,6 +33,9 @@ namespace NKikimr::NDDisk {
     }
 
     void TDDiskActor::StartRestorePersistentBuffer(ui32 pos) {
+        if (PersistentBufferReady) {
+            return;
+        }
         if (PersistentBufferSpaceAllocator.OwnedChunks.size() == PersistentBufferAllocatedChunks.size()) {
             STLOG(PRI_DEBUG, BS_DDISK, BSDD12, "TDDiskActor::StartRestorePersistentBuffer ready");
             PersistentBufferReady = true;
@@ -40,7 +43,7 @@ namespace NKikimr::NDDisk {
         while (pos < PersistentBufferSpaceAllocator.OwnedChunks.size() && PersistentBufferRestoreChunksInflight < MaxPersistentBufferChunkRestoreInflight) {
             auto chunkIdx = PersistentBufferSpaceAllocator.OwnedChunks[pos];
             STLOG(PRI_DEBUG, BS_DDISK, BSDD13, "TDDiskActor::StartRestorePersistentBuffer restoring chunk from DDisk", (ChunkIdx, chunkIdx));
-            if (PersistentBufferAllocatedChunks.count(chunkIdx) > 0) {
+            if (PersistentBufferAllocatedChunks.count(chunkIdx) > 0 || PersistentBufferRestoredChunks.count(chunkIdx) > 0) {
                 continue;
             }
             const ui64 cookie = NextCookie++;
@@ -52,7 +55,6 @@ namespace NKikimr::NDDisk {
                 0,
                 ChunkSize), 0, cookie);
             ReadCallbacks.try_emplace(cookie, TPersistentBufferPendingRead{[this, chunkIdx, pos](NPDisk::TEvChunkReadRawResult& ev) {
-                StartRestorePersistentBuffer(pos + 1);
                 PersistentBufferRestoreChunksInflight--;
                 Y_ABORT_UNLESS(ev.Data.size() == ChunkSize);
                 for (ui32 sectorIdx = 0; sectorIdx < SectorInChunk; sectorIdx++) {
@@ -65,6 +67,7 @@ namespace NKikimr::NDDisk {
                         ui64 headerChecksum = header->HeaderChecksum;
                         header->HeaderChecksum  = 0;
                         ui32 sectorChecksum = CalculateChecksum(pos, SectorSize);
+
                         if (headerChecksum != sectorChecksum) {
                             continue;
                         }
@@ -92,6 +95,8 @@ namespace NKikimr::NDDisk {
                         PersistentBufferSectorsChecksum[chunkIdx][sectorIdx] = CalculateChecksum(pos, SectorSize);
                     }
                 }
+                PersistentBufferRestoredChunks.insert(chunkIdx);
+                StartRestorePersistentBuffer(pos + 1);
                 if (PersistentBufferRestoreChunksInflight == 0) {
                     for (auto& [_, pb] : PersistentBuffers) {
                         std::erase_if(pb.Records, [this](const auto& pair) {

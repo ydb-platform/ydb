@@ -29,6 +29,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: main
+          path: config-repo
           sparse-checkout: |
             ${{ env.BRANCHES_CONFIG_PATH }}
           sparse-checkout-cone-mode: false
@@ -39,7 +40,7 @@ jobs:
           if [ "${{ github.event_name }}" == "workflow_dispatch" ] && [ -n "$BRANCHES_INPUT" ]; then
             echo "branches=$(echo "$BRANCHES_INPUT" | jq -R -s -c 'split(",") | map(gsub("^ +"; "") | gsub(" +$"; ""))')" >> $GITHUB_OUTPUT
           else
-            echo "branches=$(jq -c '.' "$BRANCHES_CONFIG_PATH")" >> $GITHUB_OUTPUT
+            echo "branches=$(jq -c '.' "config-repo/$BRANCHES_CONFIG_PATH")" >> $GITHUB_OUTPUT
           fi
 
       - name: Log branches to process
@@ -58,14 +59,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: main
-          fetch-depth: 0
-
-      - name: Verify actions present
-        run: |
-          echo "Contents of .github/actions:"
-          ls -la .github/actions/
-          echo "Contents of setup_ci_ydb action:"
-          ls -la .github/actions/setup_ci_ydb_service_account_key_file_credentials/ || true
 
       - name: Install dependencies
         run: |

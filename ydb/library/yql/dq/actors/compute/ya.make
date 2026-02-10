@@ -16,6 +16,7 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/protobuf/interop
     ydb/library/actors/core
     ydb/library/actors/wilson/protos
     ydb/library/services
@@ -26,6 +27,7 @@ PEERDIR(
     ydb/library/yql/dq/proto
     ydb/library/yql/dq/runtime
     ydb/library/yql/dq/tasks
+    ydb/library/yverify_stream
     yql/essentials/minikql
     yql/essentials/minikql/comp_nodes
     yql/essentials/public/issue

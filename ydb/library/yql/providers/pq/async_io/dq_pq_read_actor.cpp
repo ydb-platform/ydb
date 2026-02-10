@@ -6,7 +6,6 @@
 
 #include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/base/feature_flags.h>
-
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/event_local.h>
@@ -22,6 +21,7 @@
 #include <ydb/library/yql/providers/pq/common/pq_events_processor.h>
 #include <ydb/library/yql/providers/pq/common/pq_meta_fields.h>
 #include <ydb/library/yql/providers/pq/common/pq_partition_key.h>
+#include <ydb/library/yql/providers/pq/gateway/clients/composite/yql_pq_composite_read_session.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io_state.pb.h>
 #include <ydb/public/sdk/cpp/adapters/issue/issue.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/federated_topic/federated_topic.h>
@@ -35,6 +35,7 @@
 #include <yql/essentials/utils/yql_panic.h>
 
 #include <library/cpp/lwtrace/mon/mon_lwtrace.h>
+#include <library/cpp/protobuf/interop/cast.h>
 
 #include <util/generic/algorithm.h>
 #include <util/generic/hash.h>
@@ -226,13 +227,15 @@ public:
         i64 bufferSize,
         const IPqGateway::TPtr& pqGateway,
         ui32 topicPartitionsCount,
-        bool enableStreamingQueriesCounters)
+        bool enableStreamingQueriesCounters,
+        TActorId infoAggregator)
         : TActor<TDqPqReadActor>(&TDqPqReadActor::StateFunc)
         , TDqPqReadActorBase(inputIndex, taskId, this->SelfId(), txId, std::move(sourceParams), std::move(readParams), computeActorId)
         , Metrics(txId, taskId, counters, SourceParams, enableStreamingQueriesCounters)
         , BufferSize(bufferSize)
         , HolderFactory(holderFactory)
         , Alloc(std::move(alloc))
+        , InfoAggregator(infoAggregator)
         , Driver(std::move(driver))
         , CredentialsProviderFactory(std::move(credentialsProviderFactory))
         , PqGateway(pqGateway)
@@ -332,7 +335,19 @@ public:
 
     NYdb::NTopic::IReadSession& GetReadSession(TClusterState& clusterState) {
         if (!clusterState.ReadSession) {
-            clusterState.ReadSession = GetTopicClient(clusterState).CreateReadSession(GetReadSessionSettings(clusterState));
+            if (const auto maxPartitionReadSkew = NProtoInterop::CastFromProto(SourceParams.GetMaxPartitionReadSkew())) {
+                YQL_ENSURE(InfoAggregator, "Missing DQ info aggregator for distributed read session");
+
+                std::tie(clusterState.ReadSession, ReadSessionControl) = CreateCompositeTopicReadSession(ActorContext(), GetTopicClient(clusterState), {
+                    .BaseSettings = GetReadSessionSettings(clusterState),
+                    .IdleTimeout = TDuration::MicroSeconds(SourceParams.GetWatermarks().GetIdleTimeoutUs()),
+                    .MaxPartitionReadSkew = maxPartitionReadSkew,
+                    .AggregatorActor = InfoAggregator,
+                });
+            } else {
+                clusterState.ReadSession = GetTopicClient(clusterState).CreateReadSession(GetReadSessionSettings(clusterState));
+            }
+
             SRC_LOG_I("SessionId: " << GetSessionId(clusterState.Index) << " CreateReadSession");
             if (WatermarkTracker) {
                 TPartitionKey partitionKey { .Cluster = TString(clusterState.Info.Name) };
@@ -798,6 +813,10 @@ private:
                 LWPROBE(PqReadDataReceived, TString(TStringBuilder() << Self.TxId), Self.SourceParams.GetTopicPath(), TString{data});
                 SRC_LOG_T("SessionId: " << Self.GetSessionId(Index) << " Key: " << partitionKey << " Data received: " << message.DebugString(true));
 
+                if (Self.ReadSessionControl) {
+                    Self.ReadSessionControl->AdvancePartitionTime(message.GetPartitionSession()->GetPartitionId(), message.GetWriteTime());
+                }
+
                 if (message.GetWriteTime() < Self.StartingMessageTimestamp) {
                     SRC_LOG_D("SessionId: " << Self.GetSessionId(Index) << " Key: " << partitionKey << " Skip data. StartingMessageTimestamp: " << Self.StartingMessageTimestamp << ". Write time: " << message.GetWriteTime());
                     continue;
@@ -923,6 +942,7 @@ private:
     const i64 BufferSize;
     const THolderFactory& HolderFactory;
     const std::shared_ptr<TScopedAlloc> Alloc;
+    const TActorId InfoAggregator;
     NYdb::TDriver Driver;
     std::shared_ptr<NYdb::ICredentialsProviderFactory> CredentialsProviderFactory;
     IFederatedTopicClient::TPtr FederatedTopicClient;
@@ -935,6 +955,7 @@ private:
     NThreading::TFuture<std::vector<NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo>> AsyncInit;
     ui32 TopicPartitionsCount = 0;
     bool WithoutConsumer = false;
+    ICompositeTopicReadSessionControl::TPtr ReadSessionControl;
 };
 
 ui32 ExtractPartitionsFromParams(
@@ -982,7 +1003,8 @@ std::pair<IDqComputeActorAsyncInput*, IActor*> CreateDqPqReadActor(
     IPqGateway::TPtr pqGateway,
     ui32 topicPartitionsCount,
     bool enableStreamingQueriesCounters,
-    i64 bufferSize
+    i64 bufferSize,
+    TActorId infoAggregator
 ) {
     const TString& tokenName = settings.GetToken().GetName();
     const TString token = secureParams.Value(tokenName, TString());
@@ -1004,7 +1026,8 @@ std::pair<IDqComputeActorAsyncInput*, IActor*> CreateDqPqReadActor(
         settings.GetReadSessionBufferBytes() ? settings.GetReadSessionBufferBytes() : bufferSize,
         pqGateway,
         topicPartitionsCount,
-        enableStreamingQueriesCounters
+        enableStreamingQueriesCounters,
+        infoAggregator
     );
 
     return {actor, actor};
@@ -1030,6 +1053,14 @@ void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driv
         if (taskParamsIt != args.TaskParams.end()) {
             txId = taskParamsIt->second;
         }
+
+        TActorId infoAggregator;
+        if (const auto it = args.TaskParams.find("info_aggregator"); it != args.TaskParams.end()) {
+            NActorsProto::TActorId actorIdProto;
+            YQL_ENSURE(actorIdProto.ParseFromString(it->second), "Failed to parse info_aggregator");
+            infoAggregator = ActorIdFromProto(actorIdProto);
+        }
+
         if (!settings.GetSharedReading()) {
             return CreateDqPqReadActor(
                 std::move(settings),
@@ -1048,7 +1079,8 @@ void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driv
                 pqGateway,
                 topicPartitionsCount,
                 enableStreamingQueriesCounters,
-                PQReadDefaultFreeSpace);
+                PQReadDefaultFreeSpace,
+                infoAggregator);
         }
 
         return CreateDqPqRdReadActor(
@@ -1070,7 +1102,6 @@ void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driv
             pqGateway,
             enableStreamingQueriesCounters);
     });
-
 }
 
 } // namespace NYql::NDq

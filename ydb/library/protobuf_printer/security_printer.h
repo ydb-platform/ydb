@@ -31,7 +31,7 @@ public:
         }
         visited.insert({desc->full_name(), desc->index()});
         for (int i = 0; i < desc->field_count(); i++) {
-            const auto& field = desc->field(i);
+            const auto field = desc->field(i);
             if (hideField && hideField(desc, field)) {
                 RegisterFieldValuePrinter(field, new THideFieldValuePrinter());
             }

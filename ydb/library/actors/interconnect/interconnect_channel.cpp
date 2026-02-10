@@ -55,8 +55,9 @@ namespace NActors {
             {},
             event.Descr.Checksum,
 #if IC_FORCE_HARDENED_PACKET_CHECKS
-            event.EventSerializedSize
+            event.EventSerializedSize,
 #endif
+            event.Descr.InterconnectSequenceId
         };
         traceId.Serialize(&descr.TraceId);
         NSan::Unpoison(&descr.TraceId, sizeof(descr.TraceId));

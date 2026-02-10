@@ -121,6 +121,7 @@ namespace NActors {
         , LoggerSettings0(loggerSettings)
     {
         ServiceMap.Reset(new TServiceMap());
+        Tracer = NTracing::CreateActorTracer(!!loggerSettings ? loggerSettings->TracerSettings : NTracing::TSettings{});
     }
 
     TActorSystem::~TActorSystem() {
@@ -490,6 +491,10 @@ namespace NActors {
 
     void TActorSystem::GetExecutorPoolStates(std::vector<TExecutorPoolState> &states) const {
         CpuManager->GetExecutorPoolStates(states);
+    }
+
+    NTracing::IActorTracer* TActorSystem::GetActorTracer() const {
+        return Tracer.Get();
     }
 
 }

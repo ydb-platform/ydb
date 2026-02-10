@@ -272,7 +272,7 @@ TEST_F(XdcRdmaTest, SerializeToRope) {
 
     TInstant t = TInstant::Zero();
 
-    channel.Push(*evHandle, pool, t);
+    channel.Push(*evHandle, pool, t, Nothing());
 
     NInterconnect::TOutgoingStream main, xdc;
     TTcpPacketOutTask task(p, main, xdc);

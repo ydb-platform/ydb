@@ -443,14 +443,14 @@ private:
                 .AddTypeAnnotationTransformer(CreateKqpTypeAnnotationTransformer(Cluster, sessionCtx->TablesPtr(), *typesCtx, Config))
                 .Build(false);
 
-            auto newRBOPhysicalBuildQueryTransformer = TTransformationPipeline(typesCtx)
-                .AddServiceTransformers()
-                .Add(Log("PhysicalBuildQuery"), "LogPhysicalBuildQuery")
-                .AddTypeAnnotationTransformer(CreateKqpTypeAnnotationTransformer(Cluster, sessionCtx->TablesPtr(), *typesCtx, Config))
-                .AddPostTypeAnnotation()
-                .Add(CreateKqpBuildPhysicalQueryTransformer(OptimizeCtx, BuildQueryCtx), "BuildPhysicalQuery")
-                .Add(CreateKqpStatisticsTransformer(OptimizeCtx, *typesCtx, Config, Pctx), "Statistics")
-                .Build(false);
+            // auto newRBOPhysicalBuildQueryTransformer = TTransformationPipeline(typesCtx)
+            //    .AddServiceTransformers()
+            //    .Add(Log("PhysicalBuildQuery"), "LogPhysicalBuildQuery")
+            //    .AddTypeAnnotationTransformer(CreateKqpTypeAnnotationTransformer(Cluster, sessionCtx->TablesPtr(), *typesCtx, Config))
+            //    .AddPostTypeAnnotation()
+            //    .Add(CreateKqpBuildPhysicalQueryTransformer(OptimizeCtx, BuildQueryCtx), "BuildPhysicalQuery")
+            //    .Add(CreateKqpStatisticsTransformer(OptimizeCtx, *typesCtx, Config, Pctx), "Statistics")
+            //    .Build(false);
 
             auto newRBOPhysicalOptimizeTransformer = TTransformationPipeline(typesCtx)
                 .AddServiceTransformers()
@@ -467,7 +467,8 @@ private:
                 .Add(CreateKqpRewriteSelectTransformer(OptimizeCtx, *typesCtx), "RewriteSelect")
                 .Add(CreateKqpNewRBOTransformer(OptimizeCtx, *typesCtx, std::move(rboKqpTypeAnnTransformer),
                         CreateTypeAnnotationTransformer(
-                            CreateKqpTypeAnnotationTransformer(Cluster, sessionCtx->TablesPtr(), *typesCtx, Config), *typesCtx), funcRegistry), "NewRBOTransformer")
+                            CreateKqpTypeAnnotationTransformer(Cluster, sessionCtx->TablesPtr(), *typesCtx, Config), *typesCtx), SessionCtx->Tables(), Cluster,
+                                                               sessionCtx->GetDatabase(), ActorSystem, funcRegistry), "NewRBOTransformer")
                 .Add(CreateKqpRBOCleanupTransformer(*typesCtx), "RBOCleanupTransformer")
 
                 //.Add(CreatePhysicalDataProposalsInspector(*typesCtx), "ProvidersPhysicalOptimize")
@@ -489,17 +490,13 @@ private:
                 {
                     TTransformStage{newRBOPhysicalOptimizeTransformer, "NewRBOPhysicalOptimize", TIssuesIds::DEFAULT_ERROR},
                     LogStage("NewRBOPhysicalOptimize"),
-                    /*
-                    TTransformStage{ newRBOPhysicalBuildTxsTransformer, "NewRBOPhysicalBuildTxs", TIssuesIds::DEFAULT_ERROR },
-                    LogStage("NewRBOPhysicalBuildTxs"),
-                    TTransformStage{ newRBOPhysicalBuildQueryTransformer, "NewRBOPhysicalBuildQuery", TIssuesIds::DEFAULT_ERROR },
-                    LogStage("NewRBOPhysicalBuildQuery"),
-                    */
+                    // TTransformStage{ newRBOPhysicalBuildTxsTransformer, "NewRBOPhysicalBuildTxs", TIssuesIds::DEFAULT_ERROR },
+                    // LogStage("NewRBOPhysicalBuildTxs"),
+                    // TTransformStage{ newRBOPhysicalBuildQueryTransformer, "NewRBOPhysicalBuildQuery", TIssuesIds::DEFAULT_ERROR },
+                    // LogStage("NewRBOPhysicalBuildQuery"),
                     TTransformStage{CreateSaveExplainTransformerInput(*TransformCtx), "NewRBOSaveExplainTransformerInput", TIssuesIds::DEFAULT_ERROR},
-                    /*
-                    TTransformStage{ newRBOPhysicalPeepholeTransformer, "NewRBOPhysicalPeephole", TIssuesIds::DEFAULT_ERROR },
-                    LogStage("NewRBOPhysicalPeephole"),
-                    */
+                    // TTransformStage{ newRBOPhysicalPeepholeTransformer, "NewRBOPhysicalPeephole", TIssuesIds::DEFAULT_ERROR },
+                    // LogStage("NewRBOPhysicalPeephole"),
                     TTransformStage{newRBOCompilePhysicalQuery, "CompilePhysicalQuery", TIssuesIds::DEFAULT_ERROR},
                     // TTransformStage{ newRBOPreparedExplainTransformer, "NewRBOExplainQuery", TIssuesIds::DEFAULT_ERROR }, // TODO(sk): only on stats mode or
                     // if explain-only

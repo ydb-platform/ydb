@@ -201,8 +201,10 @@ SRCS(
 
     complex_types/check_yson_token.cpp
     complex_types/check_type_compatibility.cpp
+    complex_types/common_yson_converters.cpp
     complex_types/infinite_entity.cpp
     complex_types/merge_complex_types.cpp
+    complex_types/positional_yson_translation.cpp
     complex_types/time_text.cpp
     complex_types/uuid_text.cpp
     complex_types/yson_format_conversion.cpp

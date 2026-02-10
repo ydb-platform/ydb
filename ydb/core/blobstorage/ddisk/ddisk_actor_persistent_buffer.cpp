@@ -567,15 +567,6 @@ namespace NKikimr::NDDisk {
         });
     }
 
-    void TDDiskActor::Handle(TEvents::TEvUndelivered::TPtr ev) {
-        if (ev->Get()->SourceType == TEv::EvWrite) {
-            HandleWriteInFlight(ev->Cookie, [&] {
-                return std::make_unique<TEvFlushPersistentBufferResult>(NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR,
-                    "write undelivered");
-            });
-        }
-    }
-
     void TDDiskActor::HandleWriteInFlight(ui64 cookie, const std::function<std::unique_ptr<IEventBase>()>& factory) {
         if (const auto it = WritesInFlight.find(cookie); it != WritesInFlight.end()) {
             TWriteInFlight& wif = it->second;

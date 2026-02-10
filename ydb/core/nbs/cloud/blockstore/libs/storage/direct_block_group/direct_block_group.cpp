@@ -6,7 +6,63 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 using namespace NKikimr;
 
+namespace {
+
+struct TBlockMeta {
+    TVector<ui64> LsnByPersistentBufferIndex;
+    TVector<bool> IsFlushedToDDiskByPersistentBufferIndex;
+
+    explicit TBlockMeta(size_t persistentBufferCount)
+        : LsnByPersistentBufferIndex(persistentBufferCount, 0)
+        , IsFlushedToDDiskByPersistentBufferIndex(persistentBufferCount, false)
+    {}
+
+    void OnWriteCompleted(const TWriteRequestHandler::TPersistentBufferWriteMeta& writeMeta)
+    {
+        LsnByPersistentBufferIndex[writeMeta.Index] = writeMeta.Lsn;
+        IsFlushedToDDiskByPersistentBufferIndex[writeMeta.Index] = false;
+    }
+
+    void OnFlushCompleted(size_t persistentBufferIndex, ui64 lsn)
+    {
+        if (LsnByPersistentBufferIndex[persistentBufferIndex] == lsn) {
+            LsnByPersistentBufferIndex[persistentBufferIndex] = 0;
+            IsFlushedToDDiskByPersistentBufferIndex[persistentBufferIndex] = true;
+        }
+    }
+
+    [[nodiscard]] bool IsWritten() const
+    {
+        return IsFlushedToDDisk() || LsnByPersistentBufferIndex[0] != 0;
+    }
+
+    [[nodiscard]] bool IsFlushedToDDisk() const
+    {
+        return IsFlushedToDDiskByPersistentBufferIndex[0];
+    }
+};
+
+} // namespace
+
 ////////////////////////////////////////////////////////////////////////////////
+
+class TDirectBlockGroup::TDirtyMap
+{
+private:
+    // TODO позже удалить данные при flush'е
+    TVector<TBlockMeta> BlocksMeta;
+
+public:
+    TDirtyMap(ui64 blocksCount, size_t numberOfPersistentBuffers)
+        : BlocksMeta(blocksCount, TBlockMeta(numberOfPersistentBuffers))
+    {}
+
+    TBlockMeta& GetMetaByBlockIndex(ui64 blockIndex)
+    {
+        Y_ASSERT(blockIndex < BlocksMeta.size());
+        return BlocksMeta[blockIndex];
+    }
+};
 
 TDirectBlockGroup::TDirectBlockGroup(
     ui64 tabletId,
@@ -19,7 +75,6 @@ TDirectBlockGroup::TDirectBlockGroup(
     , BlocksCount(blocksCount)
     , TabletId(tabletId)
     , Generation(generation)
-    , BlocksMeta(BlocksCount, TBlockMeta(persistentBufferDDiskIds.size()))
     , StorageTransport(std::make_unique<TICStorageTransport>())
 {
     Y_UNUSED(TabletId);
@@ -27,6 +82,8 @@ TDirectBlockGroup::TDirectBlockGroup(
     Y_UNUSED(BlockSize);
     Y_UNUSED(BlocksCount);
     Y_UNUSED(StorageRequestId);
+
+    DirtyMap = std::make_unique<TDirtyMap>(TDirtyMap(BlocksCount, persistentBufferDDiskIds.size()));
 
     auto addDDiskConnections = [&](TVector<NBsController::TDDiskId> ddisksIds,
                                    TVector<TDDiskConnection>& ddiskConnections,
@@ -50,6 +107,8 @@ TDirectBlockGroup::TDirectBlockGroup(
     addDDiskConnections(std::move(ddisksIds), DDiskConnections, false);
     addDDiskConnections(std::move(persistentBufferDDiskIds), PersistentBufferConnections, true);
 }
+
+TDirectBlockGroup::~TDirectBlockGroup() = default;
 
 void TDirectBlockGroup::EstablishConnections()
 {
@@ -111,10 +170,8 @@ void TDirectBlockGroup::HandleConnectResult(
 // TODO заблокировать IO до полного восстановления (где-то раньше)
 void TDirectBlockGroup::RestorePersistentBuffer()
 {
-    // TODO пройти по всем PB
-
-    size_t numberOfRequests = 3;
-    auto counters = std::make_shared<std::pair<size_t, size_t>>(0, numberOfRequests);
+    size_t numberOfRequests = PersistentBufferConnections.size();
+    auto requestsCounter = std::make_shared<std::pair<size_t, size_t>>(0, numberOfRequests);
     for (size_t i = 0; i < numberOfRequests; i++) {
         const auto& ddiskConnection = PersistentBufferConnections[i];
         ++StorageRequestId;
@@ -126,11 +183,11 @@ void TDirectBlockGroup::RestorePersistentBuffer()
 
         future.Subscribe(
             [this, requestId = StorageRequestId,
-             counters = counters](const auto& f)
+             requestsCounter = requestsCounter, persistentBufferIndex = i](const auto& f)
             {
                 const auto& result = f.GetValue();
                 HandleListPersistentBufferResultOnRestore(requestId, result,
-                                                          counters);
+                                                          persistentBufferIndex, requestsCounter);
             });
     }
 }
@@ -138,18 +195,36 @@ void TDirectBlockGroup::RestorePersistentBuffer()
 void TDirectBlockGroup::HandleListPersistentBufferResultOnRestore(
     ui64 storageRequestId,
     const NKikimrBlobStorage::NDDisk::TEvListPersistentBufferResult& result,
-    std::shared_ptr<std::pair<size_t, size_t>> requestsCounters)
+    size_t persistentBufferIndex,
+    std::shared_ptr<std::pair<size_t, size_t>> requestsCounter)
 {
     Y_UNUSED(storageRequestId);
-    ++requestsCounters->first;
+    ++requestsCounter->first;
 
     Y_ABORT_UNLESS(result.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
 
     // TODO Handle this response with mutex. There is multithreading access from future's threads
 
-    if (requestsCounters->first == requestsCounters->second) {
+    const auto& records = result.GetRecords();
+    for (const auto& record: records) {
+        const NKikimrBlobStorage::NDDisk::TBlockSelector& selector = record.GetSelector();
+        const size_t startIndex = selector.GetOffsetInBytes() / BlockSize;
+        const size_t blocksNumber = selector.GetSize() / BlockSize;
+
+        for (size_t i = startIndex; i < startIndex + blocksNumber; ++i) {
+            TBlockMeta& blockMeta = DirtyMap->GetMetaByBlockIndex(i);
+            blockMeta.LsnByPersistentBufferIndex[persistentBufferIndex] = record.GetLsn();
+        }
+    }
+
+    if (requestsCounter->first == requestsCounter->second) {
         RestorePersistentBufferFinised(); // finish actor bootstrap
     }
+}
+
+void TDirectBlockGroup::RestorePersistentBufferFinised()
+{
+
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -206,7 +281,8 @@ void TDirectBlockGroup::HandleWritePersistentBufferResult(
     auto& requestHandler = static_cast<TWriteRequestHandler&>(*RequestHandlersByStorageRequestId[storageRequestId]);
     if (result.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK) {
         if (requestHandler.IsCompleted(storageRequestId)) {
-            auto& blockMeta = BlocksMeta[requestHandler.GetStartIndex()];
+            // TODO fix bug. blockMeta is different for each meta in writesMeta
+            auto& blockMeta = DirtyMap->GetMetaByBlockIndex(requestHandler.GetStartIndex());
             const auto& writesMeta = requestHandler.GetWritesMeta();
             for (const auto& meta : writesMeta) {
                 blockMeta.OnWriteCompleted(meta);
@@ -224,7 +300,9 @@ void TDirectBlockGroup::HandleWritePersistentBufferResult(
 void TDirectBlockGroup::RequestBlockFlush(
     TWriteRequestHandler& requestHandler)
 {
-    const auto& blockMeta = BlocksMeta[requestHandler.GetStartIndex()];
+    const auto& blockMeta =
+        DirtyMap->GetMetaByBlockIndex(requestHandler.GetStartIndex());
+
     for (size_t i = 0; i < 3; i++) {
         auto flushRequestHandler = std::make_shared<TFlushRequestHandler>(
             requestHandler.GetStartIndex(),
@@ -281,7 +359,9 @@ void TDirectBlockGroup::HandleFlushPersistentBufferResult(
 
     auto& requestHandler = static_cast<TFlushRequestHandler&>(*RequestHandlersByStorageRequestId[storageRequestId]);
     if (result.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK) {
-        BlocksMeta[requestHandler.GetStartIndex()].OnFlushCompleted(
+        auto& blockMeta =
+            DirtyMap->GetMetaByBlockIndex(requestHandler.GetStartIndex());
+        blockMeta.OnFlushCompleted(
             requestHandler.GetPersistentBufferIndex(),
             requestHandler.GetLsn());
 
@@ -353,7 +433,7 @@ NThreading::TFuture<TReadBlocksLocalResponse> TDirectBlockGroup::ReadBlocksLocal
     auto startIndex = requestHandler->GetStartIndex();
 
     // Block is not writed
-    if (!BlocksMeta[startIndex].IsWritten())
+    if (!DirtyMap->GetMetaByBlockIndex(startIndex).IsWritten())
     {
         auto promise = NThreading::NewPromise<TReadBlocksLocalResponse>();
 
@@ -364,7 +444,7 @@ NThreading::TFuture<TReadBlocksLocalResponse> TDirectBlockGroup::ReadBlocksLocal
 
     ++StorageRequestId;
 
-    if (!BlocksMeta[startIndex].IsFlushedToDDisk()) {
+    if (!DirtyMap->GetMetaByBlockIndex(startIndex).IsFlushedToDDisk()) {
         const auto& ddiskConnection = PersistentBufferConnections[0];
 
         auto future = StorageTransport->ReadPersistentBuffer(
@@ -372,11 +452,10 @@ NThreading::TFuture<TReadBlocksLocalResponse> TDirectBlockGroup::ReadBlocksLocal
             ddiskConnection.Credentials,
             NKikimr::NDDisk::TBlockSelector(
                 0,   // vChunkIndex
-                requestHandler->GetStartOffset(),
-                requestHandler->GetSize()),
-            BlocksMeta[startIndex].LsnByPersistentBufferIndex[0],
-            NKikimr::NDDisk::TReadInstruction(true),
-            requestHandler->GetData(),
+                requestHandler->GetStartOffset(), requestHandler->GetSize()),
+            DirtyMap->GetMetaByBlockIndex(startIndex)
+                .LsnByPersistentBufferIndex[0],
+            NKikimr::NDDisk::TReadInstruction(true), requestHandler->GetData(),
             StorageRequestId);
 
         future.Subscribe([this, requestId = StorageRequestId](const auto& f) {

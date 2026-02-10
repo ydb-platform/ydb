@@ -38,15 +38,9 @@
 
 - В рамках первоначального развёртывания кластера {{ ydb-short-name }}:
 
-<<<<<<< HEAD
     - [Ansible](../../devops/deployment-options/ansible/initial-deployment.md)
     - [Kubernetes](../../devops/deployment-options/kubernetes/initial-deployment.md)
     - [Вручную](../../devops/deployment-options/manual/initial-deployment.md)
-=======
-- [Ansible](../../devops/deployment-options/ansible/initial-deployment/index.md)
-- [Kubernetes](../../devops/deployment-options/kubernetes/initial-deployment.md)
-- [Вручную](../../devops/deployment-options/manual/initial-deployment/index.md)
->>>>>>> 9cec0eee85d (conflict YDBDOCS-1782 (#33364))
 
 - В рамках [поиска и устранения неисправностей](../../troubleshooting/index.md)
 - В рамках [усиления безопасности](../../security/index.md)

@@ -959,6 +959,7 @@ table_hint:
     | (SCHEMA | COLUMNS) EQUALS? type_name_or_bind
     | SCHEMA EQUALS? LPAREN (struct_arg_positional (COMMA struct_arg_positional)*)? COMMA? RPAREN
     | WATERMARK AS LPAREN expr RPAREN
+    | WATERMARK LBRACE_CURLY expr RBRACE_CURLY
 ;
 
 object_ref: (cluster_expr DOT)? id_or_at;

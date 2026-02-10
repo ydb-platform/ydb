@@ -1019,9 +1019,7 @@ void TReadSessionActor::Handle(V1::TEvPQProxy::TEvAuthResultOk::TPtr& ev, const 
                              NPersQueue::NErrorCode::BAD_REQUEST, ctx);
                 return;
             }
-            with_lock (it->second->PartitionGraphMutex) {
-                it->second->PartitionGraph = t.PartitionGraph;
-            }
+            it->second->SetPartitionGraph(t.PartitionGraph);
         }
     }
 
@@ -1961,10 +1959,7 @@ const std::set<NPQ::TPartitionGraph::Node*>& TPartitionActor::GetParents(std::sh
 
 void TPartitionActor::SendCommit(const ui64 readId, const ui64 offset, const TActorContext& ctx) {
     // extend the lifetime for PartitionGraph
-    std::shared_ptr<NPQ::TPartitionGraph> partitionGraph;
-    with_lock (TopicHolder->PartitionGraphMutex) {
-        partitionGraph = TopicHolder->PartitionGraph;
-    }
+    auto partitionGraph = TopicHolder->GetPartitionGraph();
     const auto& parents = GetParents(partitionGraph);
     if (!ClientHasAnyCommits && parents.size() != 0) {
         std::vector<NKikimr::NGRpcProxy::V1::TDistributedCommitHelper::TCommitInfo> commits;

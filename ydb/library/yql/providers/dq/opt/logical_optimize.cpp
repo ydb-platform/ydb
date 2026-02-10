@@ -3,6 +3,7 @@
 
 #include <yql/essentials/core/yql_aggregate_expander.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
+#include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <yql/essentials/providers/common/transform/yql_optimize.h>
 #include <ydb/library/yql/dq/opt/dq_opt_join.h>
 #include <yql/essentials/core/dq_integration/yql_dq_optimization.h>
@@ -228,7 +229,9 @@ protected:
 
         switch (TypesCtx.CostBasedOptimizer) {
         case ECostBasedOptimizerType::Native:
-            opt = factory->MakeJoinCostBasedOptimizerNative(pctx, ctx, {.MaxDPhypDPTableSize = 100000});
+            opt = factory->MakeJoinCostBasedOptimizerNative(pctx, ctx, {
+                .CBOTimeout = TDqSettings::TDefault::CBOTimeout
+            });
             break;
         case ECostBasedOptimizerType::PG:
             opt = factory->MakeJoinCostBasedOptimizerPG(pctx, ctx, {.Logger = log});

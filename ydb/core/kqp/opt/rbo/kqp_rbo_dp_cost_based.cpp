@@ -184,7 +184,7 @@ std::shared_ptr<IOperator> TOptimizeCBOTreeRule::SimpleMatchAndApply(const std::
     }
 
     TCBOSettings settings{
-        .MaxDPhypDPTableSize = Config->MaxDPHypDPTableSize.Get().GetOrElse(TDqSettings::TDefault::MaxDPHypDPTableSize),
+        .CBOTimeout = Config->CBOTimeout.Get().GetOrElse(TDqSettings::TDefault::CBOTimeout),
         .ShuffleEliminationJoinNumCutoff = Config->ShuffleEliminationJoinNumCutoff.Get().GetOrElse(TDqSettings::TDefault::ShuffleEliminationJoinNumCutoff)
     };
 

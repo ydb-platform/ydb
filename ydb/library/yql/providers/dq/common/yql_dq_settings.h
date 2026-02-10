@@ -64,7 +64,7 @@ struct TDqSettings {
         static constexpr ETaskRunnerStats TaskRunnerStats = ETaskRunnerStats::Basic;
         static constexpr ESpillingEngine SpillingEngine = ESpillingEngine::Disable;
         static constexpr ui32 CostBasedOptimizationLevel = 4;
-        static constexpr ui32 MaxDPHypDPTableSize = 95'000U;
+        static constexpr ui32 CBOTimeout = 1'000ULL; // 1s
         static constexpr ui32 ShuffleEliminationJoinNumCutoff = 20;
         static constexpr ui64 MaxAttachmentsSize = 2_GB;
         static constexpr bool SplitStageOnDqReplicate = true;

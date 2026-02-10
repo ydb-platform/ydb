@@ -1,6 +1,7 @@
 #include "dq_opt_join_cost_based.h"
 #include "dq_opt_dphyp_solver.h"
 #include "dq_opt_make_join_hypergraph.h"
+#include "dq_opt_cbo_latency_predictor.h"
 
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/core/yql_join.h>
@@ -382,13 +383,35 @@ private:
         TJoinHypergraph<TNodeSet> hypergraph = MakeJoinHypergraph<TNodeSet>(joinTree, hints);
         TDPHypImpl solver = GetDPHypImpl<TNodeSet, TDPHypImpl>(hypergraph);
         YQL_CLOG(TRACE, CoreDq) << "Enumeration algorithm chosen: " << solver.Type();
-        if (solver.CountCC(OptimizerSettings_.MaxDPhypDPTableSize) >= OptimizerSettings_.MaxDPhypDPTableSize) {
-            YQL_CLOG(TRACE, CoreDq) << "Maximum DPhyp threshold exceeded";
+
+        // Use fast ML model to predict approximately how long it would take to run full CBO
+        // on this query and find the optimal plan
+        ui64 approxNanosToOptimize = PredictCBOTime(hypergraph);
+        ui64 approxMillisToOptimize = static_cast<ui64>(std::ceil(approxNanosToOptimize / 1'000'000.0));
+        ui64 timeBudgetNanos = OptimizerSettings_.CBOTimeout /* Millis */ * 1'000'000ULL;
+
+        std::string timeBudgetStr = FormatTime(timeBudgetNanos);
+        std::string predictedCBOTimeStr = FormatTime(approxNanosToOptimize);
+
+        YQL_CLOG(TRACE, CoreDq) << "CBO is predicted to take " << predictedCBOTimeStr
+                                << " (" << approxNanosToOptimize << ")";
+
+        if (approxNanosToOptimize > timeBudgetNanos) {
+            YQL_CLOG(TRACE, CoreDq) << "CBO time budget exceeded: "
+                                    << predictedCBOTimeStr << " > " << timeBudgetStr
+                                    << " - CBO disabled for this query";
+
+            TStringBuilder message;
+            message << "Cost based optimizer was disabled for this query because predicted "
+                    << "optimization time (it will take approximately " << predictedCBOTimeStr << ") "
+                    << "exceeds given time budget (" << timeBudgetStr << "). "
+                    << "Use PRAGMA ydb.CBOTimeout='" << approxMillisToOptimize << "' "
+                    << "or higher to run CBO for this query anyway.";
+
             ExprCtx.AddWarning(
                 YqlIssue(
                     {}, TIssuesIds::CBO_ENUM_LIMIT_REACHED,
-                    "Cost Based Optimizer could not be applied to this query: "
-                    "Enumeration is too large, use PRAGMA ydb.MaxDPHypDPTableSize='4294967295' to disable the limitation"
+                    message
                 )
             );
             ComputeStatistics(joinTree, this->Pctx);

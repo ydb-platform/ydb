@@ -1425,13 +1425,13 @@ private:
                 }
             }
 
-            if (settingsObj.QueryMode) {
-                auto queryMode = TExprBase(settingsObj.QueryMode);
-                auto just = queryMode.Maybe<TCoJust>() ? queryMode.Maybe<TCoJust>().Cast().Input() : queryMode;
+            if (settingsObj.DefaultOperator) {
+                auto defaultOperator = TExprBase(settingsObj.DefaultOperator);
+                auto just = defaultOperator.Maybe<TCoJust>() ? defaultOperator.Maybe<TCoJust>().Cast().Input() : defaultOperator;
                 if (just.Maybe<TCoParameter>()) {
-                    fullTextProto.MutableQueryMode()->MutableParamValue()->SetParamName(just.Cast<TCoParameter>().Name().StringValue());
+                    fullTextProto.MutableDefaultOperator()->MutableParamValue()->SetParamName(just.Cast<TCoParameter>().Name().StringValue());
                 } else {
-                    FillLiteralProto(just.Cast<TCoDataCtor>(), *fullTextProto.MutableQueryMode()->MutableLiteralValue());
+                    FillLiteralProto(just.Cast<TCoDataCtor>(), *fullTextProto.MutableDefaultOperator()->MutableLiteralValue());
                 }
             }
 
@@ -1674,7 +1674,7 @@ private:
                             localDefaultColumns.insert(columnName);
                         }
                     }
-                
+
                     AFL_ENSURE(tableMeta->Indexes.size() == tableMeta->ImplTables.size());
 
                     std::vector<size_t> affectedIndexes;

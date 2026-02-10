@@ -20,9 +20,9 @@ class TExpression {
 
     // Constructs an expression from ExprNode, also save expression context and plan
     // properties. Plan properties are needed to access subplan IUs
-    // If an expression is not a lambda, we save its body separately and generate a new
-    // lambda. The body is needed to by in sych with the originial expression in terms of
-    // pointers, that might be needed in replace map.
+    // The expression can be constructed from a full lambda as well as any yql expression.
+    // In the former case a new lambda is built automatically
+
     TExpression(TExprNode::TPtr node, TExprContext* ctx, TPlanProps* props = nullptr); 
 
     TExpression() = default;
@@ -72,7 +72,6 @@ class TExpression {
     TString ToString() const;
 
     TExprNode::TPtr Node;
-    TExprNode::TPtr Body;
     TExprContext* Ctx;
     TPlanProps* PlanProps;
 };
@@ -92,7 +91,7 @@ class TJoinCondition {
     TInfoUnit GetRightIU() const;
 
     // Find all non-column reference expression in this condition and insert them into a map
-    void ExtractExpressions(TNodeOnNodeOwnedMap& map, TVector<std::pair<TInfoUnit, TExprNode::TPtr>>& exprMap);
+    bool ExtractExpressions(TNodeOnNodeOwnedMap& map, TVector<std::pair<TInfoUnit, TExprNode::TPtr>>& exprMap);
 
     const TExpression& Expr;
     TVector<TInfoUnit> LeftIUs;
@@ -102,14 +101,29 @@ class TJoinCondition {
     bool EquiJoin = false;
 };
 
+// Create an expression that accesses a single column
 TExpression MakeColumnAccess(TInfoUnit column, TPositionHandle pos, TExprContext* ctx, TPlanProps* props = nullptr);
+
+// Create a constant expression. Constant expressions don't need plan properties
 TExpression MakeConstant(TString type, TString value, TPositionHandle pos, TExprContext* ctx);
+
+// Create. a null expression of a specific type, also doesn't need plan properties
 TExpression MakeNothing(TPositionHandle pos, const TTypeAnnotationNode* type, TExprContext* ctx);
+
+// Make a conjunction from a list of conjuncts. Expression context and plan properies will be extracted
+// from one of the conjuncts.
 TExpression MakeConjunction(const TVector<TExpression>& vec, bool pgSyntax = false);
+
+// Make a binary predicate with an arbitrary callable, extract context and properties from one of the arguments
 TExpression MakeBinaryPredicate(TString callable, const TExpression& left, const TExpression& right);
 
+// Get all members from a expression node
 void GetAllMembers(TExprNode::TPtr node, TVector<TInfoUnit> &IUs);
+
+// Get all members from an expression node, but also mark subplan context separately and optionally include 
+// dependencies in correlated subqueries
 void GetAllMembers(TExprNode::TPtr node, TVector<TInfoUnit> &IUs, const TPlanProps& props, bool withSubplanContext, bool withDependencies);
+
 TString PrintRBOExpression(TExprNode::TPtr expr, TExprContext & ctx);
 
 }

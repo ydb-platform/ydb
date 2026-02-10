@@ -330,30 +330,30 @@ ui32 NormalizeMinimumShouldMatch(i32 wordsCount, i32 minimumShouldMatch) {
 
 }
 
-EQueryMode QueryModeFromString(const TString& mode, TString& explain) {
+EDefaultOperator DefaultOperatorFromString(const TString& mode, TString& explain) {
     if (mode.empty()) {
-        return EQueryMode::And;
+        return EDefaultOperator::And;
     } else if (to_lower(mode) == "and") {
-        return EQueryMode::And;
+        return EDefaultOperator::And;
     } else if (to_lower(mode) == "or") {
-        return EQueryMode::Or;
+        return EDefaultOperator::Or;
     } else {
-        explain = TStringBuilder() << "Unsupported query mode: `" << EscapeC(mode) << "`. Should be `and` or `or`";
-        return EQueryMode::Invalid;
+        explain = TStringBuilder() << "Unsupported default operator: `" << EscapeC(mode) << "`. Should be `and` or `or`";
+        return EDefaultOperator::Invalid;
     }
 }
 
-ui32 MinimumShouldMatchFromString(i32 wordsCount, EQueryMode queryMode, const TString& minimumShouldMatch, TString& explain) {
+ui32 MinimumShouldMatchFromString(i32 wordsCount, EDefaultOperator defaultOperator, const TString& minimumShouldMatch, TString& explain) {
     if (minimumShouldMatch.empty()) {
-        if (queryMode == EQueryMode::And) {
+        if (defaultOperator == EDefaultOperator::And) {
             return wordsCount;
         } else {
             // at least one word should be matched
             return 1;
         }
     } else {
-        if (queryMode != EQueryMode::Or) {
-            explain = TStringBuilder() << "MinimumShouldMatch is not supported for AND query mode";
+        if (defaultOperator != EDefaultOperator::Or) {
+            explain = TStringBuilder() << "MinimumShouldMatch is not supported for AND default operator";
             return 0;
         }
 

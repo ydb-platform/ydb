@@ -76,6 +76,10 @@ void TPurgerActor::Handle(TEvPQ::TEvMLPPurgeResponse::TPtr& ev)
     if (partitionStatus.Status == EPartitionStatus::InProgress) {
         --PendingPartitions;
     }
+    if (partitionStatus.WaitRetry) {
+        partitionStatus.WaitRetry = false;
+        --PendingRetries;
+    }
     partitionStatus.Status = EPartitionStatus::Success;
 
     ReplyIfPossible();
@@ -133,8 +137,8 @@ void TPurgerActor::Handle(TEvents::TEvWakeup::TPtr& ev) {
 
     auto partitionId = ev->Get()->Tag;
     auto& partitionStatus = Partitions[partitionId];
-    --PendingRetries;
     if (partitionStatus.Status == EPartitionStatus::InProgress) {
+        --PendingRetries;
         RequestPartitionIfNeeded(partitionId, partitionStatus);
     }
 

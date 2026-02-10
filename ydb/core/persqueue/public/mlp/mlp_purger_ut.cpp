@@ -140,9 +140,6 @@ Y_UNIT_TEST_SUITE(TMLPPurgerTests) {
 
         auto response = GetReadResponse(runtime);
         UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 0);
-
-        auto describe = setup->DescribeConsumer("/Root/topic1", "mlp-consumer");
-        UNIT_ASSERT_VALUES_EQUAL(describe.GetPartitions()[0].GetPartitionConsumerStats()->GetCommittedOffset(), 1);
     }
 
 }

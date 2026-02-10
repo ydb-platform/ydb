@@ -135,9 +135,28 @@ namespace NKikimr::NDDisk {
         return result;
     }
 
+
+    void TPersistentBufferSpaceAllocator::TChunkSpaceOccupation::MarkOccupied(ui32 fromSectorIdx, ui32 toSectorIdx) {
+        OwnerChunksQueue.erase(GetRank());
+        Y_ABORT_UNLESS(FreeSpace >= toSectorIdx - fromSectorIdx + 1);
+        FreeSpace -= toSectorIdx - fromSectorIdx + 1;
+        TSpaceRange searchSpace{fromSectorIdx, toSectorIdx};
+        auto it = FreeSectors.lower_bound(searchSpace);
+        Y_ABORT_UNLESS(it != FreeSectors.end() && it->First <= fromSectorIdx && it->Last >= toSectorIdx);
+        ui32 iFirst = it->First;
+        ui32 iLast = it->Last;
+        FreeSectors.erase(it);
+        if (iFirst != fromSectorIdx) {
+            FreeSectors.insert({iFirst, fromSectorIdx - 1});
+        }
+        if (iLast != toSectorIdx) {
+            FreeSectors.insert({toSectorIdx + 1, iLast});
+        }
+        OwnerChunksQueue.insert(GetRank());
+    }
+
     void TPersistentBufferSpaceAllocator::Free(const std::vector<TPersistentBufferSectorInfo>& locations) {
-        ui32 startLoc = 0;
-        for (ui32 i = 1; i <= locations.size(); i++) {
+        for (ui32 i = 1, startLoc = 0; i <= locations.size(); i++) {
             if (i == locations.size()
                 || locations[i].ChunkIdx != locations[startLoc].ChunkIdx
                 || locations[i].SectorIdx != locations[startLoc].SectorIdx + i - startLoc) {
@@ -156,5 +175,20 @@ namespace NKikimr::NDDisk {
         OwnedChunks.push_back(chunkIdx);
         FreeSpace += SectorsInChunk;
     }
+
+    void TPersistentBufferSpaceAllocator::MarkOccupied(const std::vector<TPersistentBufferSectorInfo>& locations) {
+        for (ui32 i = 1, startLoc = 0; i <= locations.size(); i++) {
+            if (i == locations.size()
+                || locations[i].ChunkIdx != locations[startLoc].ChunkIdx
+                || locations[i].SectorIdx != locations[startLoc].SectorIdx + i - startLoc) {
+                const auto& it = FreeSpaceMap.find(locations[startLoc].ChunkIdx);
+                Y_ABORT_UNLESS(it != FreeSpaceMap.end());
+                it->second.MarkOccupied(locations[startLoc].SectorIdx, locations[i - 1].SectorIdx);
+                FreeSpace -= locations[i - 1].SectorIdx - locations[startLoc].SectorIdx + 1;
+                startLoc = i;
+            }
+        }
+    }
+
 
 } // NKikimr::NDDisk

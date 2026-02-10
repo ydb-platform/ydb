@@ -47,7 +47,8 @@ void TRequestBase::AbortDelete(TRequestBase* request, TActorSystem* actorSystem)
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 TChunkWrite::TChunkWrite(const NPDisk::TEvChunkWrite &ev, const TActorId &sender, TReqId reqId, NWilson::TSpan span)
 
-    : TRequestBase(sender, reqId, ev.Owner, ev.OwnerRound, ev.PriorityClass, std::move(span))
+    : TRequestBase(sender, reqId, ev.Owner, ev.OwnerRound, ev.PriorityClass,
+        ERequestType::RequestChunkWrite, std::move(span))
     , ChunkIdx(ev.ChunkIdx)
     , Offset(ev.Offset)
     , PartsPtr(ev.PartsPtr)
@@ -93,7 +94,8 @@ void TChunkRead::Abort(TActorSystem* actorSystem) {
 
 TChunkReadPiece::TChunkReadPiece(TIntrusivePtr<TChunkRead> &read, ui64 pieceCurrentSector, ui64 pieceSizeLimit,
         bool isTheLastPiece)
-        : TRequestBase(read->Sender, read->ReqId, read->Owner, read->OwnerRound, read->PriorityClass)
+        : TRequestBase(read->Sender, read->ReqId, read->Owner, read->OwnerRound, read->PriorityClass,
+            ERequestType::RequestChunkReadPiece)
         , ChunkRead(read)
         , PieceCurrentSector(pieceCurrentSector)
         , PieceSizeLimit(pieceSizeLimit)

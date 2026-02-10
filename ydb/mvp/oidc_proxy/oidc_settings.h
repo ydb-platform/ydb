@@ -29,6 +29,7 @@ struct TOpenIdConnectSettings {
     TString SessionServiceEndpoint;
     TString SessionServiceTokenName;
     TString AuthorizationServerAddress;
+    TString SecretName;
     TString ClientSecret;
     std::vector<TString> AllowedProxyHosts;
     TString WhoamiExtendedInfoEndpoint;

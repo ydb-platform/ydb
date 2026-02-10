@@ -1,16 +1,12 @@
-#include <util/datetime/base.h>
-#include <util/generic/yexception.h>
-#include <library/cpp/deprecated/atomic/atomic.h>
-#include <util/stream/file.h>
-#include <util/system/hostname.h>
-#include <util/system/mlock.h>
-#include <library/cpp/getopt/last_getopt.h>
+#include "mvp.h"
+#include "oidc_client.h"
+#include "openid_connect.h"
+
 #include <ydb/library/actors/core/executor_pool_basic.h>
 #include <ydb/library/actors/core/scheduler_basic.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/interconnect/poller/poller_actor.h>
 #include <ydb/library/actors/protos/services_common.pb.h>
-#include <google/protobuf/text_format.h>
 #include <ydb/library/actors/core/process_stats.h>
 #include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/library/actors/http/http_cache.h>
@@ -24,8 +20,16 @@
 #include <ydb/mvp/core/http_sensors.h>
 #include <ydb/mvp/core/cache_policy.h>
 
-#include "mvp.h"
-#include "oidc_client.h"
+#include <library/cpp/deprecated/atomic/atomic.h>
+#include <library/cpp/getopt/last_getopt.h>
+#include <google/protobuf/text_format.h>
+
+#include <util/datetime/base.h>
+#include <util/generic/yexception.h>
+#include <util/stream/file.h>
+#include <util/string/strip.h>
+#include <util/system/hostname.h>
+#include <util/system/mlock.h>
 
 NActors::IActor* CreateMemProfiler();
 
@@ -218,11 +222,10 @@ TIntrusivePtr<NActors::NLog::TSettings> TMVP::BuildLoggerSettings() {
 
 void TMVP::TryGetOidcOptionsFromConfig(const YAML::Node& config) {
     auto oidc = config["oidc"];
-   if (!oidc) {
+    if (!oidc) {
         ythrow yexception() << "Check that `oidc` section exists and is on the same indentation as `generic` section";
     }
-
-    SecretName = oidc["secret_name"].as<std::string>("");
+    OpenIdConnectSettings.SecretName = oidc["secret_name"].as<std::string>("");
     OpenIdConnectSettings.ClientId = oidc["client_id"].as<std::string>(OpenIdConnectSettings.DEFAULT_CLIENT_ID);
     OpenIdConnectSettings.SessionServiceEndpoint = oidc["session_service_endpoint"].as<std::string>("");
     OpenIdConnectSettings.SessionServiceTokenName = oidc["session_service_token_name"].as<std::string>("");
@@ -242,12 +245,8 @@ void TMVP::TryGetOidcOptionsFromConfig(const YAML::Node& config) {
 
 void TMVP::TryGetGenericOptionsFromConfig(
     const YAML::Node& config,
-    const NLastGetopt::TOptsParseResult& opts,
-    TString& ydbTokenFile,
-    TString& caCertificateFile,
-    TString& sslCertificateFile,
-    bool& useStderr,
-    bool& mlock
+    const NLastGetopt::TOptsParseResult& parseRes,
+    TGenericOptions& opts
 ) {
     if (!config["generic"]) {
         return;
@@ -255,32 +254,30 @@ void TMVP::TryGetGenericOptionsFromConfig(
     auto generic = config["generic"];
 
     if (generic["logging"] && generic["logging"]["stderr"]) {
-        if (opts.FindLongOptParseResult("stderr") == nullptr) {
-            useStderr = generic["logging"]["stderr"].as<bool>(false);
+        if (parseRes.FindLongOptParseResult("stderr") == nullptr) {
+            opts.UseStderr = generic["logging"]["stderr"].as<bool>(false);
         }
     }
 
     if (generic["mlock"]) {
-        if (opts.FindLongOptParseResult("mlock") == nullptr) {
-            mlock = generic["mlock"].as<bool>(false);
+        if (parseRes.FindLongOptParseResult("mlock") == nullptr) {
+            opts.Mlock = generic["mlock"].as<bool>(false);
         }
     }
 
     if (generic["auth"]) {
         auto auth = generic["auth"];
-        ydbTokenFile = auth["token_file"].as<std::string>("");
+        opts.YdbTokenFile = auth["token_file"].as<std::string>("");
     }
 
     if (generic["server"]) {
         auto server = generic["server"];
-        caCertificateFile = server["ca_cert_file"].as<std::string>("");
-        sslCertificateFile = server["ssl_cert_file"].as<std::string>("");
-
-        if (opts.FindLongOptParseResult("http-port") == nullptr) {
+        opts.CaCertificateFile = server["ca_cert_file"].as<std::string>("");
+        opts.SslCertificateFile = server["ssl_cert_file"].as<std::string>("");
+        if (parseRes.FindLongOptParseResult("http-port") == nullptr) {
             HttpPort = server["http_port"].as<ui16>(0);
         }
-
-        if (opts.FindLongOptParseResult("https-port") == nullptr) {
+        if (parseRes.FindLongOptParseResult("https-port") == nullptr) {
             HttpsPort = server["https_port"].as<ui16>(0);
         }
     }
@@ -296,15 +293,12 @@ void TMVP::TryGetGenericOptionsFromConfig(
 
 THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup(int argc, char** argv) {
     NLastGetopt::TOpts opts = NLastGetopt::TOpts::Default();
-    bool useStderr = false;
-    bool mlock = false;
+    TGenericOptions genericOpts;
     TString yamlConfigPath;
-    TString ydbTokenFile;
-    TString caCertificateFile;
-    TString sslCertificateFile;
 
-    opts.AddLongOption("stderr", "Redirect log to stderr").NoArgument().SetFlag(&useStderr);
-    opts.AddLongOption("mlock", "Lock resident memory").NoArgument().SetFlag(&mlock);
+
+    opts.AddLongOption("stderr", "Redirect log to stderr").NoArgument().SetFlag(&genericOpts.UseStderr);
+    opts.AddLongOption("mlock", "Lock resident memory").NoArgument().SetFlag(&genericOpts.Mlock);
     opts.AddLongOption("config", "Path to configuration YAML file").RequiredArgument("PATH").StoreResult(&yamlConfigPath);
     opts.AddLongOption("http-port", "HTTP port. Default " + ToString(DefaultHttpPort)).StoreResult(&HttpPort);
     opts.AddLongOption("https-port", "HTTPS port. Default " + ToString(DefaultHttpsPort)).StoreResult(&HttpsPort);
@@ -314,36 +308,26 @@ THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup(int argc, char**
     if (!yamlConfigPath.empty()) {
         try {
             YAML::Node config = YAML::LoadFile(yamlConfigPath);
-
             TryGetOidcOptionsFromConfig(config);
-            TryGetGenericOptionsFromConfig(
-                config,
-                res,
-                ydbTokenFile,
-                caCertificateFile,
-                sslCertificateFile,
-                useStderr,
-                mlock
-            );
+            TryGetGenericOptionsFromConfig(config, res, genericOpts);
         } catch (const YAML::Exception& e) {
             std::cerr << "Error parsing YAML configuration file: " << e.what() << std::endl;
             std::exit(EXIT_FAILURE);
         }
     }
 
-    if (mlock) {
+    if (genericOpts.Mlock) {
         LockAllMemory(LockCurrentMemory);
     }
     if (HttpPort > 0) {
         Http = true;
     }
-    if (HttpsPort > 0 || !sslCertificateFile.empty()) {
+    if (HttpsPort > 0 || !genericOpts.SslCertificateFile.empty()) {
         Https = true;
     }
     if (!Http && !Https) {
         Http = true;
     }
-    // set default values
     if (HttpPort == 0) {
         HttpPort = DefaultHttpPort;
     }
@@ -351,9 +335,9 @@ THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup(int argc, char**
         HttpsPort = DefaultHttpsPort;
     }
 
-    if (!ydbTokenFile.empty()) {
-        NMvp::TTokensConfig tokens;
-        if (google::protobuf::TextFormat::ParseFromString(TUnbufferedFileInput(ydbTokenFile).ReadAll(), &tokens)) {
+    NMvp::TTokensConfig tokens;
+    if (!genericOpts.YdbTokenFile.empty()) {
+        if (google::protobuf::TextFormat::ParseFromString(TUnbufferedFileInput(genericOpts.YdbTokenFile).ReadAll(), &tokens)) {
             if (tokens.HasStaffApiUserTokenInfo()) {
                 TYdbLocation::UserToken = tokens.GetStaffApiUserTokenInfo().GetToken();
             } else if (tokens.HasStaffApiUserToken()) {
@@ -362,31 +346,31 @@ THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup(int argc, char**
             if (!tokens.HasAccessServiceType()) {
                 tokens.SetAccessServiceType(OpenIdConnectSettings.AccessServiceType);
             }
-            TokensConfig = tokens;
         } else {
             ythrow yexception() << "Invalid ydb token file format";
         }
     }
+    TokensConfig = tokens;
     if (TYdbLocation::UserToken) {
         TYdbLocation::UserToken = AddSchemeToUserToken(TYdbLocation::UserToken, "OAuth");
     }
 
     for (auto secret : TokensConfig.GetSecretInfo()) {
-        if (SecretName == secret.GetName()) {
+        if (OpenIdConnectSettings.SecretName == secret.GetName()) {
             OpenIdConnectSettings.ClientSecret = secret.GetSecret();
         }
     }
 
-    if (!caCertificateFile.empty()) {
-        TString caCertificate = TUnbufferedFileInput(caCertificateFile).ReadAll();
+    if (!genericOpts.CaCertificateFile.empty()) {
+        TString caCertificate = TUnbufferedFileInput(genericOpts.CaCertificateFile).ReadAll();
         if (!caCertificate.empty()) {
             TYdbLocation::CaCertificate = caCertificate;
         } else {
             ythrow yexception() << "Invalid CA certificate file";
         }
     }
-    if (!sslCertificateFile.empty()) {
-        TString sslCertificate = TUnbufferedFileInput(sslCertificateFile).ReadAll();
+    if (!genericOpts.SslCertificateFile.empty()) {
+        TString sslCertificate = TUnbufferedFileInput(genericOpts.SslCertificateFile).ReadAll();
         if (!sslCertificate.empty()) {
             TYdbLocation::SslCertificate = sslCertificate;
         } else {
@@ -396,7 +380,7 @@ THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup(int argc, char**
 
     NActors::TLoggerActor* loggerActor = new NActors::TLoggerActor(
                 LoggerSettings,
-                useStderr ? NActors::CreateStderrBackend() : NActors::CreateSysLogBackend("mvp", false, true),
+                genericOpts.UseStderr ? NActors::CreateStderrBackend() : NActors::CreateSysLogBackend("mvp", false, true),
                 new NMonitoring::TDynamicCounters());
     THolder<NActors::TActorSystemSetup> setup = MakeHolder<NActors::TActorSystemSetup>();
     setup->NodeId = 1;

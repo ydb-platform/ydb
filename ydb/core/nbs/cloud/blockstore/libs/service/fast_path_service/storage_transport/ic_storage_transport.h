@@ -30,6 +30,7 @@ public:
         const ui64 lsn,
         const NKikimr::NDDisk::TWriteInstruction instruction,
         TGuardedSgList data,
+        NWilson::TTraceId traceId,
         const ui64 requestId) override;
 
     NThreading::TFuture<NKikimrBlobStorage::NDDisk::TEvFlushPersistentBufferResult> FlushPersistentBuffer(
@@ -39,6 +40,7 @@ public:
         const ui64 lsn,
         const std::tuple<ui32, ui32, ui32> ddiskId,
         const ui64 ddiskInstanceGuid,
+        NWilson::TTraceId traceId,
         const ui64 requestId) override;
 
     NThreading::TFuture<NKikimrBlobStorage::NDDisk::TEvErasePersistentBufferResult> ErasePersistentBuffer(
@@ -46,6 +48,7 @@ public:
         const NKikimr::NDDisk::TQueryCredentials credentials,
         const NKikimr::NDDisk::TBlockSelector selector,
         const ui64 lsn,
+        NWilson::TTraceId traceId,
         const ui64 requestId) override;
 
     NThreading::TFuture<NKikimrBlobStorage::NDDisk::TEvReadPersistentBufferResult> ReadPersistentBuffer(
@@ -55,6 +58,7 @@ public:
         const ui64 lsn,
         const NKikimr::NDDisk::TReadInstruction instruction,
         TGuardedSgList data,
+        NWilson::TTraceId traceId,
         const ui64 requestId) override;
 
     NThreading::TFuture<NKikimrBlobStorage::NDDisk::TEvReadResult> Read(
@@ -63,6 +67,7 @@ public:
         const NKikimr::NDDisk::TBlockSelector selector,
         const NKikimr::NDDisk::TReadInstruction instruction,
         TGuardedSgList data,
+        NWilson::TTraceId traceId,
         const ui64 requestId) override;
 };
 
@@ -72,16 +77,12 @@ class TICStorageTransportActor
     : public NActors::TActorBootstrapped<TICStorageTransportActor>
 {
 private:
-    using TPrivateEvents = std::variant<
-        TEvICStorageTransportPrivate::TEvConnect,
-        TEvICStorageTransportPrivate::TEvWritePersistentBuffer,
-        TEvICStorageTransportPrivate::TEvFlushPersistentBuffer,
-        TEvICStorageTransportPrivate::TEvErasePersistentBuffer,
-        TEvICStorageTransportPrivate::TEvReadPersistentBuffer,
-        TEvICStorageTransportPrivate::TEvRead
-    >;
-
-    std::unordered_map<ui64, TPrivateEvents> PrivateEventsByRequestId;
+    std::unordered_map<ui64, TEvICStorageTransportPrivate::TEvConnect> ConnectEventsByRequestId;
+    std::unordered_map<ui64, TEvICStorageTransportPrivate::TEvWritePersistentBuffer> WritePersistentBufferEventsByRequestId;
+    std::unordered_map<ui64, TEvICStorageTransportPrivate::TEvFlushPersistentBuffer> FlushPersistentBufferEventsByRequestId;
+    std::unordered_map<ui64, TEvICStorageTransportPrivate::TEvErasePersistentBuffer> ErasePersistentBufferEventsByRequestId;
+    std::unordered_map<ui64, TEvICStorageTransportPrivate::TEvReadPersistentBuffer> ReadPersistentBufferEventsByRequestId;
+    std::unordered_map<ui64, TEvICStorageTransportPrivate::TEvRead> ReadEventsByRequestId;
 public:
     TICStorageTransportActor() = default;
 

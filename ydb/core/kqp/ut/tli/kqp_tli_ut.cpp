@@ -79,46 +79,77 @@ namespace {
         return std::regex_search(message.cbegin(), message.cend(), match, messageRegex);
     }
 
-    std::optional<TString> ExtractQueryText(const TString& logs, const TString& messagePattern) {
+    // Extract BreakerQueryText from a single TLI record
+    std::optional<TString> ExtractBreakerQueryTextFromRecord(const TString& record) {
+        const size_t allPos = record.find("BreakerQueryText: ");
+        if (allPos == TString::npos) {
+            return std::nullopt;
+        }
+        TString result = record.substr(allPos + 18);
+        size_t nextFieldPos = result.find(", BreakerQueryTexts:");
+        if (nextFieldPos != TString::npos) {
+            result = result.substr(0, nextFieldPos);
+        }
+        return UnescapeC(result);
+    }
+
+    std::optional<TString> ExtractQueryText(const TString& logs, const TString& messagePattern,
+        const std::optional<TString>& expectedText = std::nullopt)
+    {
         for (const auto& record : ExtractTliRecords(logs)) {
             if (!record.Contains("Component: SessionActor") || !MatchesMessage(record, messagePattern)) {
                 continue;
             }
-            const size_t allPos = record.find("BreakerQueryText: ");
-            if (allPos == TString::npos) {
+            auto text = ExtractBreakerQueryTextFromRecord(record);
+            if (!text) {
                 continue;
             }
-            TString result = record.substr(allPos + 18);
-            size_t nextFieldPos = result.find(", BreakerQueryTexts:");
-            if (nextFieldPos != TString::npos) {
-                result = result.substr(0, nextFieldPos);
+            if (expectedText && *text != *expectedText) {
+                continue;
             }
-            return UnescapeC(result);
+            return text;
         }
         return std::nullopt;
     }
 
-    std::optional<TString> ExtractVictimQueryText(const TString& logs, const TString& messagePattern) {
+    // Extract VictimQueryText from a single TLI record
+    std::optional<TString> ExtractVictimQueryTextFromRecord(const TString& record) {
+        const size_t victimPos = record.find("VictimQueryText: ");
+        if (victimPos == TString::npos) {
+            return std::nullopt;
+        }
+        TString result = record.substr(victimPos + 17);
+        const size_t nextFieldPos = result.find(", VictimQueryTexts:");
+        if (nextFieldPos != TString::npos) {
+            result = result.substr(0, nextFieldPos);
+        }
+        return UnescapeC(result);
+    }
+
+    std::optional<TString> ExtractVictimQueryText(const TString& logs, const TString& messagePattern,
+        const std::optional<TString>& expectedText = std::nullopt)
+    {
         for (const auto& record : ExtractTliRecords(logs)) {
             if (!record.Contains("Component: SessionActor") || !MatchesMessage(record, messagePattern)) {
                 continue;
             }
-            const size_t victimPos = record.find("VictimQueryText: ");
-            if (victimPos == TString::npos) {
+            auto text = ExtractVictimQueryTextFromRecord(record);
+            if (!text) {
                 continue;
             }
-            TString result = record.substr(victimPos + 17);
-            const size_t nextFieldPos = result.find(", VictimQueryTexts:");
-            if (nextFieldPos != TString::npos) {
-                result = result.substr(0, nextFieldPos);
+            if (expectedText && *text != *expectedText) {
+                continue;
             }
-            return UnescapeC(result);
+            return text;
         }
         return std::nullopt;
     }
 
     // Extract query texts field (BreakerQueryTexts or VictimQueryTexts based on context)
-    std::optional<TString> ExtractQueryTextsField(const TString& logs, const TString& messagePattern, const TString& fieldName) {
+    // When expectedContainedText is provided, only returns from records containing that text.
+    std::optional<TString> ExtractQueryTextsField(const TString& logs, const TString& messagePattern,
+        const TString& fieldName, const std::optional<TString>& expectedContainedText = std::nullopt)
+    {
         for (const auto& record : ExtractTliRecords(logs)) {
             if (!record.Contains("Component: SessionActor") || !MatchesMessage(record, messagePattern)) {
                 continue;
@@ -132,17 +163,25 @@ namespace {
             if (result.EndsWith(",")) {
                 result.pop_back();
             }
-            return UnescapeC(result);
+            TString unescaped = UnescapeC(result);
+            if (expectedContainedText && !unescaped.Contains(*expectedContainedText)) {
+                continue;
+            }
+            return unescaped;
         }
         return std::nullopt;
     }
 
-    std::optional<TString> ExtractBreakerQueryTexts(const TString& logs, const TString& messagePattern) {
-        return ExtractQueryTextsField(logs, messagePattern, "BreakerQueryTexts");
+    std::optional<TString> ExtractBreakerQueryTexts(const TString& logs, const TString& messagePattern,
+        const std::optional<TString>& expectedContainedText = std::nullopt)
+    {
+        return ExtractQueryTextsField(logs, messagePattern, "BreakerQueryTexts", expectedContainedText);
     }
 
-    std::optional<TString> ExtractVictimQueryTexts(const TString& logs, const TString& messagePattern) {
-        return ExtractQueryTextsField(logs, messagePattern, "VictimQueryTexts");
+    std::optional<TString> ExtractVictimQueryTexts(const TString& logs, const TString& messagePattern,
+        const std::optional<TString>& expectedContainedText = std::nullopt)
+    {
+        return ExtractQueryTextsField(logs, messagePattern, "VictimQueryTexts", expectedContainedText);
     }
 
     std::optional<ui64> ExtractNumericField(const TString& record, const TString& fieldName) {
@@ -171,20 +210,38 @@ namespace {
     }
 
 
-    std::optional<ui64> ExtractBreakerQueryTraceId(const TString& logs, const TString& component, const TString& messagePattern) {
+    std::optional<ui64> ExtractBreakerQueryTraceId(const TString& logs, const TString& component, const TString& messagePattern,
+        const std::optional<TString>& expectedBreakerQueryText = std::nullopt)
+    {
         for (const auto& record : ExtractTliRecords(logs)) {
             if (!record.Contains("Component: " + component) || !MatchesMessage(record, messagePattern)) {
                 continue;
+            }
+            if (expectedBreakerQueryText && component == "SessionActor") {
+                auto text = ExtractBreakerQueryTextFromRecord(record);
+                if (!text || *text != *expectedBreakerQueryText) {
+                    continue;
+                }
             }
             return ExtractNumericField(record, "BreakerQueryTraceId");
         }
         return std::nullopt;
     }
 
-    std::optional<ui64> ExtractVictimQueryTraceId(const TString& logs, const TString& component, const TString& messagePattern) {
+
+
+    std::optional<ui64> ExtractVictimQueryTraceId(const TString& logs, const TString& component, const TString& messagePattern,
+        const std::optional<TString>& expectedVictimQueryText = std::nullopt)
+    {
         for (const auto& record : ExtractTliRecords(logs)) {
             if (!record.Contains("Component: " + component) || !MatchesMessage(record, messagePattern)) {
                 continue;
+            }
+            if (expectedVictimQueryText && component == "SessionActor") {
+                auto text = ExtractVictimQueryTextFromRecord(record);
+                if (!text || *text != *expectedVictimQueryText) {
+                    continue;
+                }
             }
             return ExtractNumericField(record, "VictimQueryTraceId");
         }
@@ -242,6 +299,16 @@ namespace {
         }
     }
 
+    size_t CountTliRecords(const TString& logs, const TString& component, const TString& messagePattern) {
+        size_t count = 0;
+        for (const auto& record : ExtractTliRecords(logs)) {
+            if (record.Contains("Component: " + component) && MatchesMessage(record, messagePattern)) {
+                ++count;
+            }
+        }
+        return count;
+    }
+
     // ==================== TLI log patterns ====================
 
     struct TTliLogPatterns {
@@ -278,18 +345,21 @@ namespace {
         std::optional<std::vector<ui64>> VictimSessionVictimQueryTraceIdOccurrences;
     };
 
-    TExtractedTliData ExtractAllTliData(const TString& logs, const TTliLogPatterns& patterns) {
+    TExtractedTliData ExtractAllTliData(const TString& logs, const TTliLogPatterns& patterns,
+        const std::optional<TString>& expectedBreakerQueryText = std::nullopt,
+        const std::optional<TString>& expectedVictimQueryText = std::nullopt)
+    {
         TExtractedTliData data;
-        data.BreakerQueryTexts = ExtractBreakerQueryTexts(logs, patterns.BreakerSessionActorMessagePattern);
-        data.VictimQueryTexts = ExtractVictimQueryTexts(logs, patterns.VictimSessionActorMessagePattern);
-        data.BreakerQueryText = ExtractQueryText(logs, patterns.BreakerSessionActorMessagePattern);
-        data.VictimQueryText = ExtractVictimQueryText(logs, patterns.VictimSessionActorMessagePattern);
-        data.BreakerSessionBreakerQueryTraceId = ExtractBreakerQueryTraceId(logs, "SessionActor", patterns.BreakerSessionActorMessagePattern);
+        data.BreakerQueryTexts = ExtractBreakerQueryTexts(logs, patterns.BreakerSessionActorMessagePattern, expectedBreakerQueryText);
+        data.VictimQueryTexts = ExtractVictimQueryTexts(logs, patterns.VictimSessionActorMessagePattern, expectedVictimQueryText);
+        data.BreakerQueryText = ExtractQueryText(logs, patterns.BreakerSessionActorMessagePattern, expectedBreakerQueryText);
+        data.VictimQueryText = ExtractVictimQueryText(logs, patterns.VictimSessionActorMessagePattern, expectedVictimQueryText);
+        data.BreakerSessionBreakerQueryTraceId = ExtractBreakerQueryTraceId(logs, "SessionActor", patterns.BreakerSessionActorMessagePattern, expectedBreakerQueryText);
         data.BreakerShardBreakerQueryTraceId = ExtractBreakerQueryTraceId(logs, "DataShard", patterns.BreakerDatashardMessage);
         data.BreakerShardVictimQueryTraceIds = ExtractVictimQueryTraceIds(logs, "DataShard", patterns.BreakerDatashardMessage);
         data.VictimSessionCurrentQueryTraceId = ExtractCurrentQueryTraceId(logs, "SessionActor", patterns.VictimSessionActorMessagePattern);
         data.VictimShardCurrentQueryTraceId = ExtractCurrentQueryTraceId(logs, "DataShard", patterns.VictimDatashardMessage);
-        data.VictimSessionVictimQueryTraceId = ExtractVictimQueryTraceId(logs, "SessionActor", patterns.VictimSessionActorMessagePattern);
+        data.VictimSessionVictimQueryTraceId = ExtractVictimQueryTraceId(logs, "SessionActor", patterns.VictimSessionActorMessagePattern, expectedVictimQueryText);
         data.VictimShardVictimQueryTraceId = ExtractVictimQueryTraceId(logs, "DataShard", patterns.VictimDatashardMessage);
         data.VictimSessionVictimQueryTraceIdOccurrences = ExtractVictimQueryTraceIdOccurrences(
             logs, "SessionActor", patterns.VictimSessionActorMessagePattern);
@@ -298,6 +368,8 @@ namespace {
     }
 
     void AssertCommonTliAsserts(
+        const TString& logs,
+        const TTliLogPatterns& patterns,
         const TExtractedTliData& data,
         const TString& breakerQueryText,
         const TString& victimQueryText,
@@ -305,23 +377,58 @@ namespace {
     {
         // ==================== QueryTraceId Linkage Assertions ====================
 
-        // 1. DS Breaker ↔ KQP Breaker: Match BreakerQueryTraceId
         UNIT_ASSERT_C(data.BreakerSessionBreakerQueryTraceId, "breaker SessionActor BreakerQueryTraceId should be present");
-        UNIT_ASSERT_C(data.BreakerShardBreakerQueryTraceId, "breaker DataShard BreakerQueryTraceId should be present");
-        UNIT_ASSERT_VALUES_EQUAL_C(*data.BreakerSessionBreakerQueryTraceId, *data.BreakerShardBreakerQueryTraceId,
-            "DS Breaker ↔ KQP Breaker: BreakerQueryTraceId should match");
-
-        // 2. DS Victim ↔ KQP Victim: Match VictimQueryTraceId
         UNIT_ASSERT_C(data.VictimSessionVictimQueryTraceId, "victim SessionActor VictimQueryTraceId should be present");
-        UNIT_ASSERT_C(data.VictimShardVictimQueryTraceId, "victim DataShard VictimQueryTraceId should be present");
-        UNIT_ASSERT_VALUES_EQUAL_C(*data.VictimSessionVictimQueryTraceId, *data.VictimShardVictimQueryTraceId,
-            "DS Victim ↔ KQP Victim: VictimQueryTraceId should match");
 
-        // 3. DS Breaker ↔ DS Victim: Match VictimQueryTraceId in VictimQueryTraceIds array
-        bool foundVictimQueryTraceId = std::find(data.BreakerShardVictimQueryTraceIds->begin(),
-            data.BreakerShardVictimQueryTraceIds->end(), *data.VictimShardVictimQueryTraceId)
-            != data.BreakerShardVictimQueryTraceIds->end();
-        UNIT_ASSERT_C(foundVictimQueryTraceId, "DS Breaker ↔ DS Victim: victim VictimQueryTraceId should be in breaker VictimQueryTraceIds");
+        // 1. DS Breaker ↔ KQP Breaker: Find the DataShard breaker record matching the SessionActor's BreakerQueryTraceId
+        bool foundMatchingDsBreakerRecord = false;
+        std::optional<std::vector<ui64>> matchingVictimIds;
+        for (const auto& record : ExtractTliRecords(logs)) {
+            if (!record.Contains("Component: DataShard") || !MatchesMessage(record, patterns.BreakerDatashardMessage)) {
+                continue;
+            }
+            auto dsId = ExtractNumericField(record, "BreakerQueryTraceId");
+            if (dsId && *dsId == *data.BreakerSessionBreakerQueryTraceId) {
+                foundMatchingDsBreakerRecord = true;
+                // Extract VictimQueryTraceIds from this specific record
+                const size_t idsPos = record.find("VictimQueryTraceIds: [");
+                if (idsPos != TString::npos) {
+                    const size_t listStart = idsPos + 22;
+                    const size_t listEnd = record.find(']', listStart);
+                    if (listEnd != TString::npos) {
+                        matchingVictimIds.emplace();
+                        for (const auto& part : StringSplitter(record.substr(listStart, listEnd - listStart)).Split(' ').SkipEmpty()) {
+                            matchingVictimIds->emplace_back(FromString<ui64>(part));
+                        }
+                    }
+                }
+                break;
+            }
+        }
+        UNIT_ASSERT_C(foundMatchingDsBreakerRecord,
+            "SessionActor BreakerQueryTraceId should exist in some DataShard breaker record");
+
+        // 2. DS Victim ↔ KQP Victim: Find the DataShard victim record matching the SessionActor's VictimQueryTraceId
+        bool foundMatchingDsVictimRecord = false;
+        for (const auto& record : ExtractTliRecords(logs)) {
+            if (!record.Contains("Component: DataShard") || !MatchesMessage(record, patterns.VictimDatashardMessage)) {
+                continue;
+            }
+            auto dsId = ExtractNumericField(record, "VictimQueryTraceId");
+            if (dsId && *dsId == *data.VictimSessionVictimQueryTraceId) {
+                foundMatchingDsVictimRecord = true;
+                break;
+            }
+        }
+        UNIT_ASSERT_C(foundMatchingDsVictimRecord,
+            "SessionActor VictimQueryTraceId should exist in some DataShard victim record");
+
+        // 3. DS Breaker ↔ DS Victim: The matching DataShard breaker record should contain the VictimQueryTraceId
+        UNIT_ASSERT_C(matchingVictimIds.has_value(), "matching DataShard breaker record should have VictimQueryTraceIds");
+        bool victimInBreaker = std::find(matchingVictimIds->begin(), matchingVictimIds->end(),
+            *data.VictimSessionVictimQueryTraceId) != matchingVictimIds->end();
+        UNIT_ASSERT_C(victimInBreaker,
+            "victim VictimQueryTraceId should be in matching DataShard breaker's VictimQueryTraceIds");
 
         // Query text assertions
         UNIT_ASSERT_C(data.BreakerQueryTexts && data.BreakerQueryTexts->Contains(breakerQueryText),
@@ -460,6 +567,12 @@ namespace {
         }
     }
 
+    std::optional<TTransaction> BeginTx(TSession& session, const TString& query) {
+        auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx()).ExtractValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == EStatus::SUCCESS, result.GetIssues().ToString());
+        return result.GetTransaction();
+    }
+
     // Execute victim commit and return both status and issues for verification
     std::pair<EStatus, TString> ExecuteVictimCommitWithIssues(TSession& session, TTransaction& tx, const TString& query) {
         auto result = session.ExecuteDataQuery(query, TTxControl::Tx(tx).CommitTx()).ExtractValueSync();
@@ -487,56 +600,40 @@ namespace {
         return FromString<ui64>(issues.substr(pos, endPos - pos));
     }
 
-    void VerifyTliLogsAndAssert(
-        TStringStream& ss,
-        const TString& breakerQueryText,
-        const TString& victimQueryText,
-        const std::optional<TString>& victimExtraQueryText = std::nullopt,
-        ui64 expectedVictimQueryTraceId = 0)
-    {
-        DumpTliRecords(ss.Str());
-
-        // Common case: LogEnabled is true
-        const auto patterns = MakeTliLogPatterns();
-        const auto data = ExtractAllTliData(ss.Str(), patterns);
-        AssertCommonTliAsserts(data, breakerQueryText, victimQueryText, victimExtraQueryText);
-        UNIT_ASSERT_C(expectedVictimQueryTraceId != 0,
-            "expectedVictimQueryTraceId should not be 0 when TLI logs are enabled");
-        UNIT_ASSERT_C(data.VictimSessionVictimQueryTraceIdOccurrences.has_value(),
-            "victim SessionActor VictimQueryTraceId should be present");
-        const auto& occurrences = *data.VictimSessionVictimQueryTraceIdOccurrences;
-        UNIT_ASSERT_C(std::find(occurrences.begin(), occurrences.end(), expectedVictimQueryTraceId) != occurrences.end(),
-            "VictimQueryTraceId should match between issue and victim SessionActor log");
-    }
-
     void VerifyTliIssueAndLogsWithEnabled(
         const TString& issues,
         TStringStream& ss,
         const TString& breakerQueryText,
         const TString& victimQueryText,
-        const std::optional<TString>& victimExtraQueryText = std::nullopt)
+        const std::optional<TString>& victimExtraQueryText = std::nullopt,
+        size_t expectedBreakerSessionActorCount = 1)
     {
+        DumpTliRecords(ss.Str());
+
         UNIT_ASSERT_C(issues.Contains("Transaction locks invalidated"),
             "Issue should contain 'Transaction locks invalidated': " << issues);
-
-        // BreakerQueryTraceId should NOT be present in the issue
         UNIT_ASSERT_C(!issues.Contains("BreakerQueryTraceId:"),
             "Issue should NOT contain 'BreakerQueryTraceId:': " << issues);
 
         auto victimQueryTraceId = ExtractVictimQueryTraceIdFromIssue(issues);
-
-        // Common case: LogEnabled is true
         UNIT_ASSERT_C(victimQueryTraceId.has_value(),
             "Issue should contain 'VictimQueryTraceId:': " << issues);
         UNIT_ASSERT_C(*victimQueryTraceId != 0,
             "VictimQueryTraceId should not be 0: " << issues);
 
-        VerifyTliLogsAndAssert(
-            ss,
-            breakerQueryText,
-            victimQueryText,
-            victimExtraQueryText,
-            victimQueryTraceId.value_or(0));
+        const auto patterns = MakeTliLogPatterns();
+        const auto data = ExtractAllTliData(ss.Str(), patterns, breakerQueryText, victimQueryText);
+        AssertCommonTliAsserts(ss.Str(), patterns, data, breakerQueryText, victimQueryText, victimExtraQueryText);
+
+        UNIT_ASSERT_C(data.VictimSessionVictimQueryTraceIdOccurrences.has_value(),
+            "victim SessionActor VictimQueryTraceId should be present");
+        const auto& occurrences = *data.VictimSessionVictimQueryTraceIdOccurrences;
+        UNIT_ASSERT_C(std::find(occurrences.begin(), occurrences.end(), *victimQueryTraceId) != occurrences.end(),
+            "VictimQueryTraceId should match between issue and victim SessionActor log");
+
+        size_t actualBreakerCount = CountTliRecords(ss.Str(), "SessionActor", patterns.BreakerSessionActorMessagePattern);
+        UNIT_ASSERT_VALUES_EQUAL_C(actualBreakerCount, expectedBreakerSessionActorCount,
+            "breaker SessionActor TLI record count mismatch");
     }
 
     void VerifyTliIssueAndLogsWithDisabled(
@@ -597,12 +694,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         auto victimTx = BeginReadTx(ctx.VictimSession, victimQueryText);
 
         // Breaker: begin tx, write key 1, write key 2, then separate commit
-        std::optional<TTransaction> breakerTx;
-        {
-            auto result = ctx.Session.ExecuteDataQuery(breakerQueryText, TTxControl::BeginTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.GetStatus() == EStatus::SUCCESS, result.GetIssues().ToString());
-            breakerTx = result.GetTransaction();
-        }
+        auto breakerTx = BeginTx(ctx.Session, breakerQueryText);
         NKqp::AssertSuccessResult(ctx.Session.ExecuteDataQuery(
             "UPSERT INTO `/Root/Tenant1/TableLocks` (Key, Value) VALUES (2u, \"UsualValue\")",
             TTxControl::Tx(*breakerTx)).GetValueSync());
@@ -638,12 +730,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         NKqp::AssertSuccessResult(ctx.VictimSession.ExecuteDataQuery(victimUpdateTable4, TTxControl::Tx(victimTx)).GetValueSync());
 
         // Breaker: update tables 5,2,6, then commit (breaks victim's lock on table 2)
-        std::optional<TTransaction> breakerTx;
-        {
-            auto result = ctx.Session.ExecuteDataQuery(breakerUpdateTable5, TTxControl::BeginTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.GetStatus() == EStatus::SUCCESS, result.GetIssues().ToString());
-            breakerTx = result.GetTransaction();
-        }
+        auto breakerTx = BeginTx(ctx.Session, breakerUpdateTable5);
         NKqp::AssertSuccessResult(ctx.Session.ExecuteDataQuery(breakerUpdateTable2, TTxControl::Tx(*breakerTx)).GetValueSync());
         NKqp::AssertSuccessResult(ctx.Session.ExecuteDataQuery(breakerUpdateTable6, TTxControl::Tx(*breakerTx).CommitTx()).GetValueSync());
 
@@ -677,12 +764,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         NKqp::AssertSuccessResult(ctx.VictimSession.ExecuteDataQuery(victimUpdateTable4, TTxControl::Tx(victimTx)).GetValueSync());
 
         // Breaker: update tables 5,2,6, then commit separately (breaks victim's lock on table 2)
-        std::optional<TTransaction> breakerTx;
-        {
-            auto result = ctx.Session.ExecuteDataQuery(breakerUpdateTable5, TTxControl::BeginTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.GetStatus() == EStatus::SUCCESS, result.GetIssues().ToString());
-            breakerTx = result.GetTransaction();
-        }
+        auto breakerTx = BeginTx(ctx.Session, breakerUpdateTable5);
         NKqp::AssertSuccessResult(ctx.Session.ExecuteDataQuery(breakerUpdateTable2, TTxControl::Tx(*breakerTx)).GetValueSync());
         NKqp::AssertSuccessResult(ctx.Session.ExecuteDataQuery(breakerUpdateTable6, TTxControl::Tx(*breakerTx).CommitTx()).GetValueSync());
 
@@ -784,6 +866,52 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         VerifyTliIssueAndLogsWithEnabled(issues2, ss, breakerQueryText, victimQueryText, victimCommitText);
     }
 
+    // Test: Two victims on two different tables, one breaker writes to both tables.
+    // The breaker's SessionActor should emit two TLI log entries with different BreakerQueryTraceIds,
+    // each matching the corresponding DataShard's BreakerQueryTraceId.
+    Y_UNIT_TEST(TwoVictimsOneBreakerTwoTables) {
+        TStringStream ss;
+        TTliTestContext ctx(ss);
+
+        // Create two victim sessions
+        TSession victim1Session = ctx.Client.CreateSession().GetValueSync().GetSession();
+        TSession victim2Session = ctx.Client.CreateSession().GetValueSync().GetSession();
+
+        ctx.CreateTable("/Root/Tenant1/TableA");
+        ctx.CreateTable("/Root/Tenant1/TableB");
+        ctx.SeedTable("/Root/Tenant1/TableA", {{1, "InitA"}});
+        ctx.SeedTable("/Root/Tenant1/TableB", {{1, "InitB"}});
+
+        const TString victim1QueryText = "SELECT * FROM `/Root/Tenant1/TableA` WHERE Key = 1u";
+        const TString victim2QueryText = "SELECT * FROM `/Root/Tenant1/TableB` WHERE Key = 1u";
+        const TString breakerUpdate1 = "UPDATE `/Root/Tenant1/TableA` SET Value = \"BreakerA\" WHERE Key = 1u";
+        const TString breakerUpdate2 = "UPDATE `/Root/Tenant1/TableB` SET Value = \"BreakerB\" WHERE Key = 1u";
+        const TString victim1CommitText = "UPSERT INTO `/Root/Tenant1/TableA` (Key, Value) VALUES (1u, \"VictimA\")";
+        const TString victim2CommitText = "UPSERT INTO `/Root/Tenant1/TableB` (Key, Value) VALUES (1u, \"VictimB\")";
+
+        // Both victims read their respective tables
+        auto victim1Tx = BeginReadTx(victim1Session, victim1QueryText);
+        auto victim2Tx = BeginReadTx(victim2Session, victim2QueryText);
+
+        // Breaker: write to both tables in a single transaction
+        auto breakerTx = BeginTx(ctx.Session, breakerUpdate1);
+        NKqp::AssertSuccessResult(ctx.Session.ExecuteDataQuery(breakerUpdate2, TTxControl::Tx(*breakerTx).CommitTx()).GetValueSync());
+
+        // Both victims try to commit - both should be aborted
+        auto [status1, issues1] = ExecuteVictimCommitWithIssues(victim1Session, victim1Tx, victim1CommitText);
+        UNIT_ASSERT_VALUES_EQUAL(status1, EStatus::ABORTED);
+
+        auto [status2, issues2] = ExecuteVictimCommitWithIssues(victim2Session, victim2Tx, victim2CommitText);
+        UNIT_ASSERT_VALUES_EQUAL(status2, EStatus::ABORTED);
+
+        // Verify each victim independently using the common helper.
+        // The breaker emits 2 SessionActor TLI entries (one per table), so expectedBreakerSessionActorCount = 2.
+        VerifyTliIssueAndLogsWithEnabled(issues1, ss, breakerUpdate1, victim1QueryText, victim1CommitText,
+            /* expectedBreakerSessionActorCount */ 2);
+        VerifyTliIssueAndLogsWithEnabled(issues2, ss, breakerUpdate2, victim2QueryText, victim2CommitText,
+            /* expectedBreakerSessionActorCount */ 2);
+    }
+
     // Test: InvisibleRowSkips - victim reads at snapshot V1, breaker commits at V2, victim reads again
     Y_UNIT_TEST(InvisibleRowSkips) {
         TStringStream ss;
@@ -813,7 +941,11 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         auto [status, issues] = ExecuteVictimCommitWithIssues(ctx.VictimSession, victimTx, victimCommitText);
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
 
-        VerifyTliIssueAndLogsWithEnabled(issues, ss, breakerQueryText, victimRead1Text);
+        // The breaker immediately breaks victim's lock (1 immediate entry)
+        // AND the victim re-read detects InvisibleRowSkips (1 deferred entry) = 2 total
+        VerifyTliIssueAndLogsWithEnabled(issues, ss, breakerQueryText, victimRead1Text,
+            /* victimExtraQueryText */ std::nullopt,
+            /* expectedBreakerSessionActorCount */ 2);
     }
 
     // Test: Victim snapshots on one key, breaker commits, victim reads and writes another key
@@ -875,12 +1007,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         auto victimTx = BeginReadTx(ctx.VictimSession, victimSnapshotTable1);
 
         // Step 2: Breaker writes to tables 5, 3, 6 and commits (only Table3 key 1 conflicts)
-        std::optional<TTransaction> breakerTx;
-        {
-            auto result = ctx.Session.ExecuteDataQuery(breakerUpdateTable5, TTxControl::BeginTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.GetStatus() == EStatus::SUCCESS, result.GetIssues().ToString());
-            breakerTx = result.GetTransaction();
-        }
+        auto breakerTx = BeginTx(ctx.Session, breakerUpdateTable5);
         NKqp::AssertSuccessResult(ctx.Session.ExecuteDataQuery(breakerUpdateTable3, TTxControl::Tx(*breakerTx)).GetValueSync());
         NKqp::AssertSuccessResult(ctx.Session.ExecuteDataQuery(breakerUpdateTable6, TTxControl::Tx(*breakerTx).CommitTx()).GetValueSync());
 
@@ -924,12 +1051,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
 
         // Victim: start transaction with UPSERT...SELECT (reads keys 1-5, then writes them)
         // Note: with OLTP sink, the lock is NOT created immediately here (deferred lock creation)
-        std::optional<TTransaction> victimTx;
-        {
-            auto result = ctx.VictimSession.ExecuteDataQuery(victimUpsertSelect, TTxControl::BeginTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.GetStatus() == EStatus::SUCCESS, result.GetIssues().ToString());
-            victimTx = result.GetTransaction();
-        }
+        auto victimTx = BeginTx(ctx.VictimSession, victimUpsertSelect);
 
         // Breaker: write to key 3
         // At this point, victim's lock doesn't exist yet (deferred lock creation)
@@ -975,12 +1097,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         NKqp::AssertSuccessResult(ctx.VictimSession->ExecuteDataQuery(victimUpdateTable4, TTxControl::Tx(victimTx)).GetValueSync());
 
         // Breaker: update tables 5,2,6, then commit separately (breaks victim's lock on table 2)
-        std::optional<TTransaction> breakerTx;
-        {
-            auto result = ctx.BreakerSession->ExecuteDataQuery(breakerUpdateTable5, TTxControl::BeginTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.GetStatus() == EStatus::SUCCESS, result.GetIssues().ToString());
-            breakerTx = result.GetTransaction();
-        }
+        auto breakerTx = BeginTx(*ctx.BreakerSession, breakerUpdateTable5);
         NKqp::AssertSuccessResult(ctx.BreakerSession->ExecuteDataQuery(breakerUpdateTable2, TTxControl::Tx(*breakerTx)).GetValueSync());
         NKqp::AssertSuccessResult(ctx.BreakerSession->ExecuteDataQuery(breakerUpdateTable6, TTxControl::Tx(*breakerTx).CommitTx()).GetValueSync());
 
@@ -1010,12 +1127,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         const TString breakerUpsert = "UPSERT INTO `/Root/Tenant1/ConcurrentTable` (Key, Value) VALUES (3u, \"BreakerValue\")";
 
         // Victim: start transaction with UPSERT...SELECT
-        std::optional<TTransaction> victimTx;
-        {
-            auto result = ctx.VictimSession->ExecuteDataQuery(victimUpsertSelect, TTxControl::BeginTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.GetStatus() == EStatus::SUCCESS, result.GetIssues().ToString());
-            victimTx = result.GetTransaction();
-        }
+        auto victimTx = BeginTx(*ctx.VictimSession, victimUpsertSelect);
 
         // Breaker: write to key 3
         NKqp::AssertSuccessResult(ctx.BreakerSession->ExecuteDataQuery(

@@ -45,15 +45,25 @@ public:
         NEvents::TDataEvents::TEvWriteResult& writeResult = *writeOp->GetWriteResult();
 
         auto [locks, locksBrokenByTx] = DataShard.SysLocksTable().ApplyLocks();
-        writeResult.Record.MutableTxStats()->SetLocksBrokenAsBreaker(locksBrokenByTx.size());
-        if (!locksBrokenByTx.empty()) {
-            auto victimQueryTraceIds = DataShard.SysLocksTable().ExtractVictimQueryTraceIds(locksBrokenByTx);
+        // Filter out self-breaks: when a transaction commits, its own write intent locks
+        // are "broken" (erased/converted). We only count locks broken by OTHER transactions.
+        const ui64 selfLockTxId = writeOp->GetTxId();
+        TVector<ui64> otherLocksBroken;
+        otherLocksBroken.reserve(locksBrokenByTx.size());
+        for (const auto& lockId : locksBrokenByTx) {
+            if (lockId != selfLockTxId) {
+                otherLocksBroken.push_back(lockId);
+            }
+        }
+        writeResult.Record.MutableTxStats()->SetLocksBrokenAsBreaker(otherLocksBroken.size());
+        if (!otherLocksBroken.empty()) {
+            auto victimQueryTraceIds = DataShard.SysLocksTable().ExtractVictimQueryTraceIds(otherLocksBroken);
             // Use BreakerQueryTraceId from the conflict if available, otherwise use the current operation's QueryTraceId
             auto breakerQueryTraceId = DataShard.SysLocksTable().GetCurrentBreakerQueryTraceId();
             ui64 effectiveBreakerQueryTraceId = breakerQueryTraceId ? *breakerQueryTraceId : writeOp->QueryTraceId();
             // Set the BreakerQueryTraceId in TxStats so SessionActor can use the same value
             writeResult.Record.MutableTxStats()->SetBreakerQueryTraceId(effectiveBreakerQueryTraceId);
-            NDataIntegrity::LogLocksBroken(ctx, DataShard.TabletID(), "Write transaction broke other locks", locksBrokenByTx,
+            NDataIntegrity::LogLocksBroken(ctx, DataShard.TabletID(), "Write transaction broke other locks", otherLocksBroken,
                 effectiveBreakerQueryTraceId, victimQueryTraceIds);
         }
         LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "add locks to result: " << locks.size());
@@ -470,16 +480,23 @@ public:
                 }
 
                 KqpEraseLocks(tabletId, kqpLocks, sysLocks);
-                auto [_, locksBrokenByTx] = sysLocks.ApplyLocks();
-                writeOp->GetWriteResult()->Record.MutableTxStats()->SetLocksBrokenAsBreaker(locksBrokenByTx.size());
-                auto victimQueryTraceIds = sysLocks.ExtractVictimQueryTraceIds(locksBrokenByTx);
+                auto [_, locksBrokenByTxCleanup] = sysLocks.ApplyLocks();
+                // Filter out self-breaks
+                TVector<ui64> otherLocksBrokenCleanup;
+                for (const auto& lockId : locksBrokenByTxCleanup) {
+                    if (lockId != writeOp->GetTxId()) {
+                        otherLocksBrokenCleanup.push_back(lockId);
+                    }
+                }
+                writeOp->GetWriteResult()->Record.MutableTxStats()->SetLocksBrokenAsBreaker(otherLocksBrokenCleanup.size());
+                auto victimQueryTraceIds = sysLocks.ExtractVictimQueryTraceIds(otherLocksBrokenCleanup);
                 // Use BreakerQueryTraceId from the conflict if available
                 auto breakerQueryTraceIdCleanup = sysLocks.GetCurrentBreakerQueryTraceId();
                 ui64 effectiveBreakerQueryTraceId = breakerQueryTraceIdCleanup ? *breakerQueryTraceIdCleanup : writeOp->QueryTraceId();
-                if (!locksBrokenByTx.empty()) {
+                if (!otherLocksBrokenCleanup.empty()) {
                     writeOp->GetWriteResult()->Record.MutableTxStats()->SetBreakerQueryTraceId(effectiveBreakerQueryTraceId);
                 }
-                NDataIntegrity::LogLocksBroken(ctx, tabletId, "Write transaction aborted, broke other transaction locks during cleanup", locksBrokenByTx,
+                NDataIntegrity::LogLocksBroken(ctx, tabletId, "Write transaction aborted, broke other transaction locks during cleanup", otherLocksBrokenCleanup,
                                                effectiveBreakerQueryTraceId, victimQueryTraceIds);
                 DataShard.SubscribeNewLocks(ctx);
 

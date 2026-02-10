@@ -226,7 +226,6 @@ ydb/tests/olap py3test.[*/*] chunk
 ydb/tests/olap/column_compression/fast py3test.sole chunk
 ydb/tests/olap/s3_import py3test.sole chunk
 ydb/tests/olap/s3_import test_tpch_import.py.TestS3TpchImport.test_import_and_export
-ydb/tests/olap/column_compression/fast py3test.sole chunk
 ydb/tests/olap/scenario test_alter_tiering.py.TestAlterTiering.test[many_tables]
 ydb/tests/olap/scenario test_insert.py.TestInsert.test_multi[read_data_during_bulk_upsert]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[Test64BitErrorChecking]

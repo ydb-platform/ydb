@@ -1,6 +1,6 @@
 #include "partition_direct_actor.h"
 
-#include <ydb/core/nbs/cloud/blockstore/bootstrap/bootstrap.h>
+#include <ydb/core/nbs/cloud/blockstore/bootstrap/nbs_service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/fast_path_service/fast_path_service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/load_actor_adapter/load_actor_adapter.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/vhost/server.h>

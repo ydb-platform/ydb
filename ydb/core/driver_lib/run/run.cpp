@@ -70,6 +70,10 @@
 #include <ydb/core/protos/workload_manager_config.pb.h>
 #include <ydb/core/protos/data_integrity_trails.pb.h>
 
+#if defined(OS_LINUX)
+#include <ydb/core/nbs/cloud/blockstore/bootstrap/bootstrap.h>
+#endif
+
 #include <ydb/core/mind/local.h>
 #include <ydb/core/mind/tenant_pool.h>
 #include <ydb/core/mind/node_broker.h>
@@ -2180,6 +2184,10 @@ void TKikimrRunner::KikimrStart() {
         SqsHttp->Start();
     }
 
+#if defined(OS_LINUX)
+    NYdb::NBS::NBlockStore::StartNbsService();
+#endif
+
     EnableActorCallstack();
     ThreadSigmask(SIG_UNBLOCK);
 }
@@ -2225,6 +2233,10 @@ void TKikimrRunner::KikimrStop(bool graceful) {
     }
 
     DisableActorCallstack();
+
+#if defined(OS_LINUX)
+    NYdb::NBS::NBlockStore::StopNbsService();
+#endif
 
     if (drainProgress) {
         ui32 maxTicks = DrainTimeout.MilliSeconds() / 100;

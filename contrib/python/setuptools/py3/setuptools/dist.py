@@ -512,7 +512,7 @@ class Distribution(_Distribution):
                 of the Python package (normally marked by `pyproject.toml`).
                 """,
                 see_url=f"https://packaging.python.org/en/latest/{pypa_guides}",
-                due_date=(2026, 3, 20),  # Introduced in 2025-03-20
+                due_date=(2027, 2, 18),  # Introduced in 2025-03-20
                 # Replace with InvalidConfigError after deprecation
             )
         if pattern.startswith((os.sep, "/")) or ":\\" in pattern:
@@ -525,7 +525,7 @@ class Distribution(_Distribution):
                 "Pattern {pattern!r} contains invalid characters.",
                 pattern=pattern,
                 see_url=f"https://packaging.python.org/en/latest/{pypa_guides}",
-                due_date=(2026, 3, 20),  # Introduced in 2025-02-20
+                due_date=(2027, 2, 18),  # Introduced in 2025-02-20
             )
 
         found = glob(pattern, recursive=True)
@@ -535,7 +535,7 @@ class Distribution(_Distribution):
                 "Cannot find any files for the given pattern.",
                 "Pattern {pattern!r} did not match any files.",
                 pattern=pattern,
-                due_date=(2026, 3, 20),  # Introduced in 2025-02-20
+                due_date=(2027, 2, 18),  # Introduced in 2025-02-20
                 # PEP 639 requires us to error, but as a transition period
                 # we will only issue a warning to give people time to prepare.
                 # After the transition, this should raise an InvalidConfigError.

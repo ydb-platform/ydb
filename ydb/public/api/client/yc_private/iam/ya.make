@@ -2,6 +2,7 @@ PROTO_LIBRARY()
 PROTOC_FATAL_WARNINGS()
 
 PEERDIR(
+    ydb/public/api/client/yc_private/accessservice
     ydb/public/api/client/yc_private/operation
 )
 

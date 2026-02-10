@@ -497,6 +497,8 @@ public:
 
         auto responseEv = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationResponse>(event);
         Send(ev->Sender, responseEv.Release(), IEventHandle::FlagTrackDelivery, ev->Cookie);
+        InitSharedReading();
+        InitCheckpointStorage();
     }
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev) {
@@ -1822,7 +1824,7 @@ private:
 
     void InitSharedReading() {
         const auto& streamingQueries = QueryServiceConfig.GetStreamingQueries();
-        if (!streamingQueries.HasExternalStorage() || !FederatedQuerySetup) {
+        if (!streamingQueries.HasExternalStorage() || !FederatedQuerySetup || RowDispatcherService) {
             return;
         }
 
@@ -1838,7 +1840,7 @@ private:
             AppData()->Mon,
             Counters->GetKqpCounters(),
             {},
-            AppData()->FeatureFlags.GetEnableStreamingQueriesCounters());
+            FeatureFlags.GetEnableStreamingQueriesCounters());
 
         RowDispatcherService = TActivationContext::Register(rowDispatcher.release());
         TActivationContext::ActorSystem()->RegisterLocalService(
@@ -1846,7 +1848,7 @@ private:
     }
 
     void InitCheckpointStorage() {
-        if (!FederatedQuerySetup || !AppData()->FeatureFlags.GetEnableStreamingQueries()) {
+        if (!FederatedQuerySetup || !FeatureFlags.GetEnableStreamingQueries() || CheckpointStorageService) {
             return;
         }
 

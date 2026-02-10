@@ -81,10 +81,11 @@ private:
         FLUENT_SETTING(std::uint32_t, PartitionId);
         FLUENT_SETTING(std::vector<std::uint32_t>, Children);
         FLUENT_SETTING_DEFAULT(bool, Locked, false);
+        FLUENT_SETTING_DEFAULT(NThreading::TFuture<void>, Future, NThreading::MakeFuture());
     };
 
     struct TMessageInfo {
-        TMessageInfo(const std::string& key, TWriteMessage&& message, std::uint64_t partition, TTransactionBase* tx)
+        TMessageInfo(const std::string& key, TWriteMessage&& message, std::uint32_t partition, TTransactionBase* tx)
             : Key(key)
             , Message(std::move(message))
             , Partition(partition)
@@ -106,7 +107,7 @@ private:
         std::uint64_t QueueSize = 0;
         std::shared_ptr<TIdleSession> IdleSession = nullptr;
 
-        TWriteSessionWrapper(WriteSessionPtr session, std::uint64_t partition);
+        TWriteSessionWrapper(WriteSessionPtr session, std::uint32_t partition);
 
         bool IsQueueEmpty() const;
         bool AddToQueue(std::uint64_t delta);
@@ -164,26 +165,26 @@ private:
 
     struct TSessionsWorker {
         TSessionsWorker(TKeyedWriteSession* session);
-        WrappedWriteSessionPtr GetWriteSession(std::uint64_t partition, bool directToPartition = true);
+        WrappedWriteSessionPtr GetWriteSession(std::uint32_t partition, bool directToPartition = true);
         void OnReadFromSession(WrappedWriteSessionPtr wrappedSession);
         void OnWriteToSession(WrappedWriteSessionPtr wrappedSession);
         void DoWork();
     
     private:
         void AddIdleSession(WrappedWriteSessionPtr wrappedSession, TInstant emptySince, TDuration idleTimeout);
-        void RemoveIdleSession(std::uint64_t partition);
-        WrappedWriteSessionPtr CreateWriteSession(std::uint64_t partition, bool directToPartition = true);
+        void RemoveIdleSession(std::uint32_t partition);
+        WrappedWriteSessionPtr CreateWriteSession(std::uint32_t partition, bool directToPartition = true);
         
-        using TSessionsIndexIterator = std::unordered_map<std::uint64_t, WrappedWriteSessionPtr>::iterator;
+        using TSessionsIndexIterator = std::unordered_map<std::uint32_t, WrappedWriteSessionPtr>::iterator;
         void DestroyWriteSession(TSessionsIndexIterator& it, TDuration closeTimeout, bool mustBeEmpty = true);
 
-        std::string GetProducerId(std::uint64_t partitionId);
+        std::string GetProducerId(std::uint32_t partitionId);
 
         TKeyedWriteSession* Session;
         std::set<IdleSessionPtr, TIdleSession::Comparator> IdlerSessions;
         using IdlerSessionsIterator = std::set<IdleSessionPtr, TIdleSession::Comparator>::iterator;
-        std::unordered_map<std::uint64_t, IdlerSessionsIterator> IdlerSessionsIndex;
-        std::unordered_map<std::uint64_t, WrappedWriteSessionPtr> SessionsIndex;
+        std::unordered_map<std::uint32_t, IdlerSessionsIterator> IdlerSessionsIndex;
+        std::unordered_map<std::uint32_t, WrappedWriteSessionPtr> SessionsIndex;
     };
 
     struct TMessagesWorker {
@@ -191,21 +192,20 @@ private:
         
         void DoWork();
 
-        void AddMessage(const std::string& key, TWriteMessage&& message, std::uint64_t partition, TTransactionBase* tx);
-        void ScheduleResendMessages(std::uint64_t partition, std::uint64_t afterSeqNo);
+        void AddMessage(const std::string& key, TWriteMessage&& message, std::uint32_t partition, TTransactionBase* tx);
+        void ScheduleResendMessages(std::uint32_t partition, std::uint64_t afterSeqNo);
         void HandleAck();
-        void HandleContinuationToken(std::uint64_t partition, TContinuationToken&& continuationToken);
+        void HandleContinuationToken(std::uint32_t partition, TContinuationToken&& continuationToken);
         bool IsMemoryUsageOK() const;
-        NThreading::TFuture<void> Wait();
         bool IsQueueEmpty() const;
         bool HasInFlightMessages() const;
         const TMessageInfo& GetFrontInFlightMessage() const;
 
     private:
-        void PushInFlightMessage(std::uint64_t partition, TMessageInfo&& message);
+        void PushInFlightMessage(std::uint32_t partition, TMessageInfo&& message);
         void PopInFlightMessage();
         bool SendMessage(WrappedWriteSessionPtr wrappedSession, TMessageInfo&& message);
-        std::optional<TContinuationToken> GetContinuationToken(std::uint64_t partition);
+        std::optional<TContinuationToken> GetContinuationToken(std::uint32_t partition);
         void RechoosePartitionIfNeeded(TMessageInfo& message);
 
         TKeyedWriteSession* Session;
@@ -213,10 +213,10 @@ private:
         std::list<TMessageInfo> PendingMessages;
         std::list<TMessageInfo> InFlightMessages;
         using MessageIter = std::list<TMessageInfo>::iterator;
-        std::unordered_map<std::uint64_t, std::list<MessageIter>> InFlightMessagesIndex;
+        std::unordered_map<std::uint32_t, std::list<MessageIter>> InFlightMessagesIndex;
 
-        std::unordered_map<std::uint64_t, std::list<MessageIter>> MessagesToResendIndex;
-        std::unordered_map<std::uint64_t, std::deque<TContinuationToken>> ContinuationTokens;
+        std::unordered_map<std::uint32_t, std::list<MessageIter>> MessagesToResendIndex;
+        std::unordered_map<std::uint32_t, std::deque<TContinuationToken>> ContinuationTokens;
         
         std::uint64_t MemoryUsage = 0;
     };
@@ -238,10 +238,10 @@ private:
         void HandleDescribeResult();
 
     public:
-        TSplittedPartitionWorker(TKeyedWriteSession* session, std::uint32_t partitionId, std::uint64_t partitionIdx);
+        TSplittedPartitionWorker(TKeyedWriteSession* session, std::uint32_t partitionId);
         void DoWork();
-        NThreading::TFuture<void> Wait();
         bool IsDone();
+        bool IsInit();
         std::string GetStateName() const;
             
     private:
@@ -249,19 +249,18 @@ private:
         NThreading::TFuture<TDescribeTopicResult> DescribeTopicFuture;
         EState State = EState::Init;
         std::uint32_t PartitionId;
-        std::uint64_t PartitionIdx;
         std::uint64_t MaxSeqNo = 0;
         std::vector<WrappedWriteSessionPtr> WriteSessions;
         std::vector<NThreading::TFuture<uint64_t>> GetMaxSeqNoFutures;
         std::mutex Lock;
         std::uint64_t NotReadyFutures = 0;
+        size_t Retries = 0;
     };
 
-    struct TEventsWorker {
+    struct TEventsWorker : public std::enable_shared_from_this<TEventsWorker> {
         TEventsWorker(TKeyedWriteSession* session);
         
         void DoWork();
-        NThreading::TFuture<void> Wait();
         NThreading::TFuture<void> WaitEvent();
         void UnsubscribeFromPartition(std::uint64_t partition);
         void SubscribeToPartition(std::uint64_t partition);
@@ -283,9 +282,8 @@ private:
 
         TKeyedWriteSession* Session;
 
-        std::vector<NThreading::TFuture<void>> Futures;
-        std::unordered_set<size_t> ReadyFutures;
-        std::unordered_map<std::uint64_t, std::list<TWriteSessionEvent::TEvent>> PartitionsEventQueues;
+        std::unordered_set<std::uint32_t> ReadyFutures;
+        std::unordered_map<std::uint32_t, std::list<TWriteSessionEvent::TEvent>> PartitionsEventQueues;
         std::list<TWriteSessionEvent::TEvent> EventsOutputQueue;
         std::mutex Lock;
     
@@ -313,10 +311,10 @@ private:
     };
 
     struct THashPartitionChooser : IPartitionChooser {
-        THashPartitionChooser(TKeyedWriteSession* session);
+        THashPartitionChooser(std::vector<std::uint32_t>&& partitions);
         std::uint32_t ChoosePartition(const std::string_view key) override;
     private:
-        TKeyedWriteSession* Session;
+        std::vector<std::uint32_t> Partitions;
     };
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -329,9 +327,9 @@ private:
 
     TDuration GetCloseTimeout();
 
-    std::string GetProducerId(std::uint64_t partition);
+    std::string GetProducerId(std::uint32_t partition);
 
-    void HandleAutoPartitioning(std::uint64_t partition);
+    void HandleAutoPartitioning(std::uint32_t partition);
 
     bool RunSplittedPartitionWorkers();
 
@@ -340,8 +338,6 @@ private:
     TInstant GetCloseDeadline();
 
     void GetSessionClosedEventAndDie(WrappedWriteSessionPtr wrappedSession, std::optional<TSessionClosedEvent> sessionClosedEvent = std::nullopt);
-
-    std::uint32_t GetPartitionId(std::uint64_t partitionIdx);
 
     TStringBuilder LogPrefix();
 
@@ -366,7 +362,7 @@ public:
 
     TWriterCounters::TPtr GetCounters() override;
 
-    const std::vector<TPartitionInfo>& GetPartitions() const;
+    std::vector<TPartitionInfo> GetPartitions() const;
 
     ~TKeyedWriteSession();
 
@@ -375,8 +371,7 @@ private:
     std::shared_ptr<TTopicClient::TImpl> Client;
     TDbDriverStatePtr DbDriverState;
 
-    std::vector<TPartitionInfo> Partitions;
-    std::unordered_map<std::uint32_t, std::uint32_t> PartitionIdsMapping;
+    std::unordered_map<std::uint32_t, TPartitionInfo> Partitions;
     std::map<std::string, std::uint64_t> PartitionsIndex;
 
     TKeyedWriteSessionSettings Settings;
@@ -408,9 +403,7 @@ private:
     // Also, callbacks may arrive concurrently with the attempt to go idle.
     // Use a small state machine to avoid re-entrancy and lost wakeups.
     std::atomic<std::uint8_t> MainWorkerState = 0;
-
     std::atomic<size_t> Epoch = 0;
-
     static constexpr size_t MAX_EPOCH = 1'000'000'000;
 };
 

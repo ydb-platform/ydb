@@ -149,7 +149,7 @@ class BaseTenant(abc.ABC):
         gateways['dq']['default_settings'].extend([
             {'name': "AnalyzeQuery", 'value': "true"},
             {'name': "EnableInsert", 'value': "true"},
-            {'name': "ComputeActorType", 'value': "async"},
+            {'name': "ComputeActorType", 'value': "sync"},
         ])
         gateways['yql_core'] = {}
         gateways['yql_core']['flags'] = []

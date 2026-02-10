@@ -25,10 +25,7 @@ protected:
     NSignals::TSignalIgnore<SIGPIPE> SignalSIGPIPE;
 
 public:
-    ui16 HttpPort = {};
-    ui16 HttpsPort = {};
-    bool Http = false;
-    bool Https = false;
+    TMvpStartupOptions startupOptions;
     TString GetAppropriateEndpoint(const NHttp::THttpIncomingRequestPtr&);
 
     TString MetaApiEndpoint;
@@ -50,10 +47,10 @@ public:
     NYdb::NTable::TClientSettings static GetMetaDatabaseClientSettings(const TRequest& request, const TYdbLocation& location);
 
     void TryGetMetaOptionsFromConfig(const YAML::Node& config);
-    void TryGetGenericOptionsFromConfig(
+    void TryGetStartupOptionsFromConfig(
         const YAML::Node& config,
-        const NLastGetopt::TOptsParseResult& parsedArgs,
-        TMvpStartupOptions& startupOptions);
+        const NLastGetopt::TOptsParseResult& parsedArgs
+    );
 
     TMVPAppData AppData;
     TIntrusivePtr<NActors::NLog::TSettings> LoggerSettings;

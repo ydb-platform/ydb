@@ -83,8 +83,8 @@ int TMVP::Init() {
 
     HttpProxyId = ActorSystem.Register(NHttp::CreateHttpCache(BaseHttpProxyId, GetCachePolicy));
 
-    if (Http) {
-        auto ev = new NHttp::TEvHttpProxy::TEvAddListeningPort(HttpPort, FQDNHostName());
+    if (startupOptions.Http) {
+        auto ev = new NHttp::TEvHttpProxy::TEvAddListeningPort(startupOptions.HttpPort, FQDNHostName());
         ev->CompressContentTypes = {
             "text/plain",
             "text/html",
@@ -94,8 +94,8 @@ int TMVP::Init() {
         };
         ActorSystem.Send(HttpProxyId, ev);
     }
-    if (Https) {
-        auto ev = new NHttp::TEvHttpProxy::TEvAddListeningPort(HttpsPort, FQDNHostName());
+    if (startupOptions.Https) {
+        auto ev = new NHttp::TEvHttpProxy::TEvAddListeningPort(startupOptions.HttpsPort, FQDNHostName());
         ev->Secure = true;
         ev->SslCertificatePem = TYdbLocation::SslCertificate;
         ev->CompressContentTypes = {
@@ -180,13 +180,9 @@ int TMVP::Shutdown() {
     return 0;
 }
 
-ui16 TMVP::HttpPort;
-ui16 TMVP::HttpsPort;
-bool TMVP::Http;
-bool TMVP::Https;
 TString TMVP::GetAppropriateEndpoint(const NHttp::THttpIncomingRequestPtr& req) {
-    static TString httpEndpoint = "http://[::1]:" + ToString(HttpPort);
-    static TString httpsEndpoint = "https://[::1]:" + ToString(HttpsPort);
+    static TString httpEndpoint = "http://[::1]:" + ToString(startupOptions.HttpPort);
+    static TString httpsEndpoint = "https://[::1]:" + ToString(startupOptions.HttpsPort);
     return req->Endpoint->Secure ? httpsEndpoint : httpEndpoint;
 }
 
@@ -243,10 +239,9 @@ void TMVP::TryGetOidcOptionsFromConfig(const YAML::Node& config) {
     Cout << "Finished processing allowed_proxy_hosts." << Endl;
 }
 
-void TMVP::TryGetGenericOptionsFromConfig(
+void TMVP::TryGetStartupOptionsFromConfig(
     const YAML::Node& config,
-    const NLastGetopt::TOptsParseResult& parsedArgs,
-    TMvpStartupOptions& startupOptions
+    const NLastGetopt::TOptsParseResult& parsedArgs
 ) {
     if (!config["generic"]) {
         return;
@@ -275,11 +270,27 @@ void TMVP::TryGetGenericOptionsFromConfig(
         startupOptions.CaCertificateFile = server["ca_cert_file"].as<std::string>("");
         startupOptions.SslCertificateFile = server["ssl_cert_file"].as<std::string>("");
         if (parsedArgs.FindLongOptParseResult("http-port") == nullptr) {
-            HttpPort = server["http_port"].as<ui16>(0);
+            startupOptions.HttpPort = server["http_port"].as<ui16>(0);
         }
         if (parsedArgs.FindLongOptParseResult("https-port") == nullptr) {
-            HttpsPort = server["https_port"].as<ui16>(0);
+            startupOptions.HttpsPort = server["https_port"].as<ui16>(0);
         }
+    }
+
+    if (startupOptions.HttpPort > 0) {
+        startupOptions.Http = true;
+    }
+    if (startupOptions.HttpsPort > 0 || !startupOptions.SslCertificateFile.empty()) {
+        startupOptions.Https = true;
+    }
+    if (!startupOptions.Http && !startupOptions.Https) {
+        startupOptions.Http = true;
+    }
+    if (startupOptions.HttpPort == 0) {
+        startupOptions.HttpPort = DefaultHttpPort;
+    }
+    if (startupOptions.HttpsPort == 0) {
+        startupOptions.HttpsPort = DefaultHttpsPort;
     }
 
     if (generic["access_service_type"]) {
@@ -288,20 +299,20 @@ void TMVP::TryGetGenericOptionsFromConfig(
             ythrow yexception() << "Unknown access_service_type value: " << accessServiceTypeStr;
         }
     }
+
     OpenIdConnectSettings.InitRequestTimeoutsByPath();
 }
 
 THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup(int argc, char** argv) {
     NLastGetopt::TOpts opts = NLastGetopt::TOpts::Default();
-    TMvpStartupOptions startupOptions;
     TString yamlConfigPath;
 
 
     opts.AddLongOption("stderr", "Redirect log to stderr").NoArgument().SetFlag(&startupOptions.UseStderr);
     opts.AddLongOption("mlock", "Lock resident memory").NoArgument().SetFlag(&startupOptions.Mlock);
     opts.AddLongOption("config", "Path to configuration YAML file").RequiredArgument("PATH").StoreResult(&yamlConfigPath);
-    opts.AddLongOption("http-port", "HTTP port. Default " + ToString(DefaultHttpPort)).StoreResult(&HttpPort);
-    opts.AddLongOption("https-port", "HTTPS port. Default " + ToString(DefaultHttpsPort)).StoreResult(&HttpsPort);
+    opts.AddLongOption("http-port", "HTTP port. Default " + ToString(DefaultHttpPort)).StoreResult(&startupOptions.HttpPort);
+    opts.AddLongOption("https-port", "HTTPS port. Default " + ToString(DefaultHttpsPort)).StoreResult(&startupOptions.HttpsPort);
 
     NLastGetopt::TOptsParseResult parsedArgs(&opts, argc, argv);
 
@@ -309,7 +320,7 @@ THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup(int argc, char**
         try {
             YAML::Node config = YAML::LoadFile(yamlConfigPath);
             TryGetOidcOptionsFromConfig(config);
-            TryGetGenericOptionsFromConfig(config, parsedArgs, startupOptions);
+            TryGetStartupOptionsFromConfig(config, parsedArgs);
         } catch (const YAML::Exception& e) {
             std::cerr << "Error parsing YAML configuration file: " << e.what() << std::endl;
             std::exit(EXIT_FAILURE);
@@ -318,21 +329,6 @@ THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup(int argc, char**
 
     if (startupOptions.Mlock) {
         LockAllMemory(LockCurrentMemory);
-    }
-    if (HttpPort > 0) {
-        Http = true;
-    }
-    if (HttpsPort > 0 || !startupOptions.SslCertificateFile.empty()) {
-        Https = true;
-    }
-    if (!Http && !Https) {
-        Http = true;
-    }
-    if (HttpPort == 0) {
-        HttpPort = DefaultHttpPort;
-    }
-    if (HttpsPort == 0) {
-        HttpsPort = DefaultHttpsPort;
     }
 
     NMvp::TTokensConfig tokens;

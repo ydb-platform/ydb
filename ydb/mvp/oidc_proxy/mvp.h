@@ -33,7 +33,7 @@ protected:
     TIntrusivePtr<NActors::NLog::TSettings> BuildLoggerSettings();
 
     void TryGetOidcOptionsFromConfig(const YAML::Node& config);
-    void TryGetGenericOptionsFromConfig(const YAML::Node& config, const NLastGetopt::TOptsParseResult& parsedArgs, TMvpStartupOptions& startupOptions);
+    void TryGetStartupOptionsFromConfig(const YAML::Node& config, const NLastGetopt::TOptsParseResult& parsedArgs);
 
     TMVPAppData AppData;
     TIntrusivePtr<NActors::NLog::TSettings> LoggerSettings;
@@ -48,11 +48,8 @@ protected:
     static TOpenIdConnectSettings OpenIdConnectSettings;
 
 public:
-    static ui16 HttpPort;
-    static ui16 HttpsPort;
-    static bool Http;
-    static bool Https;
-    static TString GetAppropriateEndpoint(const NHttp::THttpIncomingRequestPtr&);
+    TMvpStartupOptions startupOptions;
+    TString GetAppropriateEndpoint(const NHttp::THttpIncomingRequestPtr&);
 
     TMVP(int argc, char** argv);
     int Init();

@@ -65,8 +65,8 @@ int TMVP::Init() {
     HttpProxyId = ActorSystem.Register(NHttp::CreateHttpProxy(AppData.MetricRegistry));
     ActorSystem.Register(AppData.Tokenator = TMvpTokenator::CreateTokenator(TokensConfig, HttpProxyId));
 
-    if (Http) {
-        auto ev = new NHttp::TEvHttpProxy::TEvAddListeningPort(HttpPort, TStringBuilder() << FQDNHostName() << ':' << HttpPort);
+    if (startupOptions.Http) {
+        auto ev = new NHttp::TEvHttpProxy::TEvAddListeningPort(startupOptions.HttpPort, TStringBuilder() << FQDNHostName() << ':' << startupOptions.HttpPort);
         ev->CompressContentTypes = {
             "text/plain",
             "text/html",
@@ -76,8 +76,8 @@ int TMVP::Init() {
         };
         ActorSystem.Send(HttpProxyId, ev);
     }
-    if (Https) {
-        auto ev = new NHttp::TEvHttpProxy::TEvAddListeningPort(HttpsPort, TStringBuilder() << FQDNHostName() << ':' << HttpsPort);
+    if (startupOptions.Https) {
+        auto ev = new NHttp::TEvHttpProxy::TEvAddListeningPort(startupOptions.HttpsPort, TStringBuilder() << FQDNHostName() << ':' << startupOptions.HttpsPort);
         ev->Secure = true;
         ev->SslCertificatePem = TYdbLocation::SslCertificate;
         ev->CompressContentTypes = {
@@ -127,8 +127,8 @@ int TMVP::Shutdown() {
 }
 
 TString TMVP::GetAppropriateEndpoint(const NHttp::THttpIncomingRequestPtr& req) {
-    static TString httpEndpoint = "http://[::1]:" + ToString(HttpPort);
-    static TString httpsEndpoint = "https://[::1]:" + ToString(HttpsPort);
+    static TString httpEndpoint = "http://[::1]:" + ToString(startupOptions.HttpPort);
+    static TString httpsEndpoint = "https://[::1]:" + ToString(startupOptions.HttpsPort);
     return req->Endpoint->Secure ? httpsEndpoint : httpEndpoint;
 }
 
@@ -179,10 +179,9 @@ void TMVP::TryGetMetaOptionsFromConfig(const YAML::Node& config) {
     DbUserTokenSource = meta["db_user_token_access"].as<bool>(false);
 }
 
-void TMVP::TryGetGenericOptionsFromConfig(
+void TMVP::TryGetStartupOptionsFromConfig(
     const YAML::Node& config,
-    const NLastGetopt::TOptsParseResult& parsedArgs,
-    TMvpStartupOptions& startupOptions
+    const NLastGetopt::TOptsParseResult& parsedArgs
 ) {
     if (!config["generic"]) {
         return;
@@ -196,7 +195,7 @@ void TMVP::TryGetGenericOptionsFromConfig(
     }
 
     if (generic["mlock"]) {
-            if (parsedArgs.FindLongOptParseResult("mlock") == nullptr) {
+        if (parsedArgs.FindLongOptParseResult("mlock") == nullptr) {
             startupOptions.Mlock = generic["mlock"].as<bool>(false);
         }
     }
@@ -212,18 +211,34 @@ void TMVP::TryGetGenericOptionsFromConfig(
         startupOptions.SslCertificateFile = server["ssl_cert_file"].as<std::string>("");
 
         if (parsedArgs.FindLongOptParseResult("http-port") == nullptr) {
-            HttpPort = server["http_port"].as<ui16>(0);
+            startupOptions.HttpPort = server["http_port"].as<ui16>(0);
         }
 
         if (parsedArgs.FindLongOptParseResult("https-port") == nullptr) {
-            HttpsPort = server["https_port"].as<ui16>(0);
+            startupOptions.HttpsPort = server["https_port"].as<ui16>(0);
         }
+    }
+
+    if (startupOptions.HttpPort > 0) {
+        startupOptions.Http = true;
+    }
+    if (startupOptions.HttpsPort > 0 || !startupOptions.SslCertificateFile.empty()) {
+        startupOptions.Https = true;
+    }
+    if (!startupOptions.Http && !startupOptions.Https) {
+        startupOptions.Http = true;
+    }
+
+    if (startupOptions.HttpPort == 0) {
+        startupOptions.HttpPort = 8788;
+    }
+    if (startupOptions.HttpsPort == 0) {
+        startupOptions.HttpsPort = 8789;
     }
 }
 
 THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup(int argc, char** argv) {
     NLastGetopt::TOpts opts = NLastGetopt::TOpts::Default();
-    TMvpStartupOptions startupOptions;
     TString yamlConfigPath;
 
     TString defaultMetaDatabase = "/Root";
@@ -234,8 +249,8 @@ THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup(int argc, char**
 
     opts.AddLongOption("config", "Path to configuration YAML file").RequiredArgument("PATH").StoreResult(&yamlConfigPath);
 
-    opts.AddLongOption("http-port", "HTTP port. Default 8788").StoreResult(&HttpPort);
-    opts.AddLongOption("https-port", "HTTPS port. Default 8789").StoreResult(&HttpsPort);
+    opts.AddLongOption("http-port", "HTTP port. Default 8788").StoreResult(&startupOptions.HttpPort);
+    opts.AddLongOption("https-port", "HTTPS port. Default 8789").StoreResult(&startupOptions.HttpsPort);
 
     NLastGetopt::TOptsParseResult parsedArgs(&opts, argc, argv);
 
@@ -244,7 +259,7 @@ THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup(int argc, char**
             YAML::Node config = YAML::LoadFile(yamlConfigPath);
 
             TryGetMetaOptionsFromConfig(config);
-            TryGetGenericOptionsFromConfig(config, parsedArgs, startupOptions);
+            TryGetStartupOptionsFromConfig(config, parsedArgs);
         } catch (const YAML::Exception& e) {
             std::cerr << "Error parsing YAML configuration file: " << e.what() << std::endl;
             std::exit(EXIT_FAILURE);
@@ -261,22 +276,6 @@ THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup(int argc, char**
 
     if (startupOptions.Mlock) {
         LockAllMemory(LockCurrentMemory);
-    }
-    if (HttpPort > 0) {
-        Http = true;
-    }
-    if (HttpsPort > 0 || !startupOptions.SslCertificateFile.empty()) {
-        Https = true;
-    }
-    if (!Http && !Https) {
-        Http = true;
-    }
-
-    if (HttpPort == 0) {
-        HttpPort = 8788;
-    }
-    if (HttpsPort == 0) {
-        HttpsPort = 8789;
     }
 
     if (!startupOptions.YdbTokenFile.empty()) {

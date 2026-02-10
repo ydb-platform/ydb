@@ -80,7 +80,7 @@ struct TTopicHolder : TTopicHolderBase {
         return std::make_shared<TTopicHolder>(info);
     }
 
-    std::shared_ptr<const NPQ::TPartitionGraph> GetPartitionGraph() {
+    std::shared_ptr<const NPQ::TPartitionGraph> GetPartitionGraph() const {
         std::shared_lock lock(PartitionGraphMutex);
         return PartitionGraph;
     }
@@ -92,7 +92,7 @@ struct TTopicHolder : TTopicHolderBase {
 
 private:
     std::shared_ptr<const NPQ::TPartitionGraph> PartitionGraph;
-    std::shared_mutex PartitionGraphMutex;
+    mutable std::shared_mutex PartitionGraphMutex;
 };
 
 } // namespace NKikimr::NGRpcProxy

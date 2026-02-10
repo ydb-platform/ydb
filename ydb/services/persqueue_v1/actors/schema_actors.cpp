@@ -800,6 +800,11 @@ void TDescribeTopicActorImpl::CheckCloseBalancerPipe(const TActorContext& ctx) {
     if (BalancerPipe) {
         NTabletPipe::CloseClient(ctx, BalancerPipe);
         BalancerPipe = {};
+
+        auto it = Tablets.find(BalancerTabletId);
+        if (it != Tablets.end()) {
+            it->second.Pipe = {};
+        }
     }
     BalancerTabletId = 0;
 }

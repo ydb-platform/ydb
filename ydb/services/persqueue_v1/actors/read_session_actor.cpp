@@ -1143,7 +1143,9 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvAuthResultOk
                 return CloseSession(PersQueue::ErrorCode::OVERLOAD, TStringBuilder()
                     << "metering mode of topic: " << name << " has been changed", ctx);
             }
-            it->second->PartitionGraph = t.PartitionGraph;
+            with_lock (it->second->PartitionGraphMutex) {
+                it->second->PartitionGraph = t.PartitionGraph;
+            }
         }
     }
 

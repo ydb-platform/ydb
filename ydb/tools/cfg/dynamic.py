@@ -192,12 +192,6 @@ class DynamicConfigGenerator(object):
             if drive.expected_slot_count is not None:
                 pc = pdisk_config.TPDiskConfig(ExpectedSlotCount=drive.expected_slot_count)
                 kwargs.update(PDiskConfig=pc)
-
-            if self._cluster_details.infer_pdisk_slot_count is not None:
-                infer_settings = self._cluster_details.infer_pdisk_slot_count.get(str(drive.type).lower())
-                if infer_settings is not None:
-                    kwargs.update(InferPDiskSlotCountFromUnitSize=infer_settings['unit_size'])
-                    kwargs.update(InferPDiskSlotCountMax=infer_settings['max_slots'])
             array.add(**kwargs)
 
         for host_config in self._cluster_details.host_configs:

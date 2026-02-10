@@ -76,6 +76,61 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 25538:added basic monitoring tests and separate events file [#25538](https://github.com/ydb-platform/ydb/pull/25538) ([Andrei Rykov](https://github.com/StekPerepolnen))
 * 25458:Сейчас при автопартициронировании топиков учитывается скорость записи различными producer-ами: партиция делится не пополам, а стараемся разделить партицию таким образом, что бы producer-ы распределились по новым партициям равномерно с учетом скорости записи. [#25458](https://github.com/ydb-platform/ydb/pull/25458) ([Nikolay Shestakov](https://github.com/nshestakov))
 * 25387:Change the audit logging logic from AllowedList checking to DenyList checking [#25387](https://github.com/ydb-platform/ydb/pull/25387) ([Andrei Rykov](https://github.com/StekPerepolnen))
+* 32907:Added extended whoami output about [access level lists](https://ydb.tech/docs/en/reference/configuration/security_config?version=v25.2#security-access-levels).
+
+New params:
+`-l`, `--access-list`: show access lists
+`-a`, `--all`: show all additional info (groups + access lists)
+
+```
+User SID: user@domain
+
+Group SIDs:
+group1@domain
+group2@domain
+
+Access levels:
+Database
+Viewer
+```
+
+Only access levels that are granted to the user are listed.
+
+* **Database** (presence in `database_allowed_sids`):
+Grants the right to access the web UI only as "database users": they can open the UI and see database-scoped data, but not cluster-wide data or cluster-level operations.
+
+* **Viewer** (presence in `viewer_allowed_sids`):
+Grants the right to access the web UI, without the ability to make changes.
+
+* **Monitoring** (presence in `monitoring_allowed_sids`):
+Grants the right to perform actions in the web UI that change the system state.
+
+* **Administration** (presence in `administration_allowed_sids`):
+Grants the right to perform administrative actions on databases or the cluster.
+
+* **Register node** (presence in `register_dynamic_node_allowed_sids`):
+Grants the right to register dynamic nodes with the cluster.
+
+* **Bootstrap** (presence in `bootstrap_allowed_sids`):
+Grants the right to perform bootstrap operations.
+
+SIDs (user or group identifiers) are configured in the [cluster security config](https://ydb.tech/docs/en/reference/configuration/security_config?version=v25.2) (`TSecurityConfig` in `config.proto`). [#32907](https://github.com/ydb-platform/ydb/pull/32907) ([azevaykin](https://github.com/azevaykin))
+* 32794:Topics: Add TSimpleBlockingFederatedWriteSession [#32794](https://github.com/ydb-platform/ydb/pull/32794) ([qyryq](https://github.com/qyryq))
+* 32764:Supported multi sink DQ replicate for PQ and Solomon inserts. Also placed all external effects into single transaction. [#32764](https://github.com/ydb-platform/ydb/pull/32764) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
+* 32643:Supported construction:
+
+```sql
+INSERT INTO my_topic WITH (
+    FORMAT = json_each_row
+)
+SELECT * FROM topics_or_table
+```
+
+Syntax for local and external topics is same. [#32643](https://github.com/ydb-platform/ydb/pull/32643) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
+* 32622:If the ammount of payloads for events become huge
+the metadata size will be grather than size of one IC packet. In this case we can split rdma credentioals in to multiple IC packets.
+
+The current implementation requires to set inflight limit grater that max expected rdma event size, otherwise we can stuck due to no ACK from receiver for non completed rdma event. This well be solved in a future. [#32622](https://github.com/ydb-platform/ydb/pull/32622) ([Daniil Cherednik](https://github.com/dcherednik))
 
 ### Bug fixes
 
@@ -146,12 +201,16 @@ https://github.com/ydb-platform/ydb/issues/25454 [#25536](https://github.com/ydb
 * 25515:Fixed fault for checkpoint on not drained channels [#25515](https://github.com/ydb-platform/ydb/pull/25515) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
 * 25412:https://github.com/ydb-platform/ydb/issues/23180 [#25412](https://github.com/ydb-platform/ydb/pull/25412) ([Vasily Gerasimov](https://github.com/UgnineSirdis))
 * 25408:Fixed tests:
+* None:CreateStreamingQueryMatchRecognize
+* 33014:Fixes #32959.
 
-* TestRetryLimiter 
-* RestoreScriptPhysicalGraphOnRetry 
-* CreateStreamingQueryMatchRecognize 
+This change makes ydbd binary to more gracefully handle runtime exceptions coming from standard C++ library and all libraries using its facilities for error reporting. [#33014](https://github.com/ydb-platform/ydb/pull/33014) ([Maksim Zinal](https://github.com/zinal))
+* 32833:Fix latency spikes that could happen when the shared cache limit got lowered by a lot. [#32833](https://github.com/ydb-platform/ydb/pull/32833) ([Alexey Zatelepin](https://github.com/ztlpn))
+* 32779:Fix a rare serializable isolation issue during graceful shard migration. Fixes #31961. [#32779](https://github.com/ydb-platform/ydb/pull/32779) ([Aleksei Borzenkov](https://github.com/snaury))
+* 32658:Issue #32589
 
-Also increased default test logs level [#25408](https://github.com/ydb-platform/ydb/pull/25408) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
+A large message on the border of CompatedZone and FastWriteZone. At the same time, the beginning of the message is in CZ.Body and ending in FWZ.Body, and CZ.Head is empty. The program expects that if a message starts in CZ.Body, then it continues in CZ.Head. [#32658](https://github.com/ydb-platform/ydb/pull/32658) ([Alek5andr-Kotov](https://github.com/Alek5andr-Kotov))
+* 32616:Fix #32615 DELETE/UPDATE with RETURNING returns missing rows [#32616](https://github.com/ydb-platform/ydb/pull/32616) ([Nikita Vasilev](https://github.com/nikvas0))
 
 ### YDB UI
 
@@ -178,4 +237,10 @@ Also increased default test logs level [#25408](https://github.com/ydb-platform/
 * 20428:Improved parallel execution of queries to column-oriented tables. [#20428](https://github.com/ydb-platform/ydb/pull/20428) ([Oleg Doronin](https://github.com/dorooleg))
 * 21705:Introduced a new priority system for PDisks, addressing performance slowdowns caused by shared queue usage for realtime and compaction writes. [#21705](https://github.com/ydb-platform/ydb/pull/21705) ([Vlad Kuznetsov](https://github.com/va-kuznecov))
 * 25668:Used AS threads in topic sdk IO operations [#25668](https://github.com/ydb-platform/ydb/pull/25668) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
+
+### Uncategorized
+
+* 32995:NBS2 Load actor has been added with part of nbs2 load test library.
+Load_actor currrently support read requests only.
+... [#32995](https://github.com/ydb-platform/ydb/pull/32995) ([Yudov Maksim](https://github.com/yudov-maksim))
 

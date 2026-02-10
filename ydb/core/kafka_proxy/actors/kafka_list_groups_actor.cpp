@@ -128,7 +128,7 @@ TString TKafkaListGroupsActor::GetYqlWithTableNames(const TString& templateStr) 
 }
 
 TMaybe<TString> TKafkaListGroupsActor::GetErrorFromYdbResponse(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev) {
-    TStringBuilder builder = TStringBuilder() << "Recieved error on request to KQP. Last sent request: " << "SELECT" << ". Reason: ";
+    TStringBuilder builder = TStringBuilder() << "Received error on request to KQP. Last sent request: " << "SELECT" << ". Reason: ";
     if (ev->Cookie != KqpCookie) {
         return builder << "Unexpected cookie in TEvQueryResponse. Expected KQP Cookie: " << KqpCookie << ", Actual: " << ev->Cookie << ".";
     } else if (ev->Get()->Record.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {

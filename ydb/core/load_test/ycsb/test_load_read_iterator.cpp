@@ -218,7 +218,7 @@ private:
 
     void HandlePoison(const TActorContext& ctx) {
         LOG_INFO_S(ctx, NKikimrServices::DS_LOAD_TEST, "TReadIteratorPoints# " << Id
-            << " tablet recieved PoisonPill, going to die");
+            << " tablet received PoisonPill, going to die");
 
         // TODO: cancel iterator
         return Die(ctx);
@@ -631,7 +631,7 @@ private:
 
     void HandlePoison(const TActorContext& ctx) {
         LOG_INFO_S(ctx, NKikimrServices::DS_LOAD_TEST, "ReadIteratorLoadScenario# " << Id
-            << " tablet recieved PoisonPill, going to die");
+            << " tablet received PoisonPill, going to die");
         Stop(ctx);
     }
 

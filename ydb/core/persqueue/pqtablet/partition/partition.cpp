@@ -2802,7 +2802,7 @@ TPartition::EProcessResult TPartition::PreProcessUserActionOrTransaction(TSimple
         PQ_LOG_TX_D("The TxId " << t->GetTxId() << " is waiting for TEvGetWriteInfoResponse");
         return EProcessResult::NotReady;
     }
-    if (t->WriteInfo && !t->WriteInfoApplied) { //Recieved write info but not applied
+    if (t->WriteInfo && !t->WriteInfoApplied) { //Received write info but not applied
         result = ApplyWriteInfoResponse(*t, affectedSourceIdsAndConsumers);
         if (!t->WriteInfoApplied) { // Tried to apply write info but couldn't - TX must be blocked.
             PQ_LOG_TX_D("The TxId " << t->GetTxId() << " must be blocked");
@@ -4576,7 +4576,7 @@ IActor* CreatePartitionActor(ui64 tabletId, const TPartitionId& partition, const
 }
 
 void TPartition::SetupDetailedMetrics() {
-    if (!DetailedMetricsAreEnabled(Config)) {
+    if (!DetailedMetricsAreEnabled(Config) || IsSupportive()) {
         return;
     }
     if (WriteTimeLagMsByLastWritePerPartition) {

@@ -318,14 +318,7 @@ public:
     }
 
     TString GetOutputDebugString() override {
-        if (AllocatedHolder->Output) {
-            switch (AllocatedHolder->Output->GetFillLevel()) {
-                case NoLimit:   return "";
-                case SoftLimit: return TStringBuilder() << "Output.FillLimit == SoftLimit " << AllocatedHolder->Output->DebugString();
-                case HardLimit: return TStringBuilder() << "Output.FillLimit == HardLimit " << AllocatedHolder->Output->DebugString();
-            }
-        }
-        return "";
+        return AllocatedHolder->Output ? AllocatedHolder->Output->DebugString() : "";
     }
 
     bool UseSeparatePatternAlloc(const TDqTaskSettings& taskSettings) const {

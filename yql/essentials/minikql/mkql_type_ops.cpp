@@ -2831,11 +2831,6 @@ ui16 GetTimezoneId(TStringBuf ianaName) {
     return it->second;
 }
 
-bool IsValidTimezoneId(ui16 id) {
-    const auto zones = NTi::GetTimezones();
-    return id < zones.size() && !zones[id].empty();
-}
-
 TMaybe<TStringBuf> FindTimezoneIANAName(ui16 id) {
     const auto zones = NTi::GetTimezones();
     if (id >= zones.size() || zones[id].empty()) {

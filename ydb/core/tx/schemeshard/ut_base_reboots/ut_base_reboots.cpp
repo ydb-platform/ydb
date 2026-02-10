@@ -234,8 +234,7 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
         });
     }
 
-    Y_UNIT_TEST(DropTableWithReboots) { //+
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(DropTableWithReboots, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -350,8 +349,7 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
     }
 
 
-    Y_UNIT_TEST(AlterTableSchemaWithReboots) { //+
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(AlterTableSchemaWithReboots, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             // Prepare the table
 
@@ -783,8 +781,7 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
         });
     }
 
-    Y_UNIT_TEST(CopyTableAndDropWithReboots) { //+
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CopyTableAndDropWithReboots, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);

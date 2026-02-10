@@ -144,6 +144,15 @@ NProto::TFmrTableInputRef FmrTableInputRefToProto(const TFmrTableInputRef& fmrTa
         protoFmrTableInputRef.AddColumns(column);
     }
     protoFmrTableInputRef.SetColumnGroups(fmrTableInputRef.SerializedColumnGroups);
+    if (fmrTableInputRef.IsFirstRowInclusive) {
+        protoFmrTableInputRef.SetIsFirstRowInclusive(*fmrTableInputRef.IsFirstRowInclusive);
+    }
+    if (fmrTableInputRef.FirstRowKeys) {
+        protoFmrTableInputRef.SetFirstRowKeys(*fmrTableInputRef.FirstRowKeys);
+    }
+    if (fmrTableInputRef.LastRowKeys) {
+        protoFmrTableInputRef.SetLastRowKeys(*fmrTableInputRef.LastRowKeys);
+    }
     return protoFmrTableInputRef;
 }
 
@@ -160,6 +169,8 @@ TFmrTableInputRef FmrTableInputRefFromProto(const NProto::TFmrTableInputRef& pro
         fmrTableInputRef.Columns.emplace_back(column);
     }
     fmrTableInputRef.SerializedColumnGroups = protoFmrTableInputRef.GetColumnGroups();
+    fmrTableInputRef.FirstRowKeys = protoFmrTableInputRef.HasFirstRowKeys() ? TMaybe<TString>(protoFmrTableInputRef.GetFirstRowKeys()) : Nothing();
+    fmrTableInputRef.LastRowKeys = protoFmrTableInputRef.HasLastRowKeys() ? TMaybe<TString>(protoFmrTableInputRef.GetLastRowKeys()) : Nothing();
     return fmrTableInputRef;
 }
 

@@ -2,7 +2,7 @@ YQL_UDF_CONTRIB(yson2_udf)
     
     YQL_ABI_VERSION(
         2
-        43
+        44
         0
     )
 

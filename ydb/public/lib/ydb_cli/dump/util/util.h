@@ -82,4 +82,8 @@ TStatus CreateDatabase(
     const std::string& path,
     const NCms::TCreateDatabaseSettings& settings = {});
 
+TStatus CheckSysViewCompatibility(
+    const Ydb::Table::DescribeSystemViewResult& dumpedProto,
+    const Ydb::Table::DescribeSystemViewResult& actualProto);
+
 } // NYdb::NDump

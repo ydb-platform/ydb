@@ -2835,6 +2835,42 @@ Y_UNIT_TEST(DuplicateSemicolonsAreAllowedBetweenLambdaStatements) {
     UNIT_ASSERT(SqlToYql(req).IsOk());
 }
 
+Y_UNIT_TEST(ForStatementLangVerFailure) {
+    NYql::TAstParseResult res = SqlToYql(R"sql(
+        FOR $i IN AsList(1,2,3) DO BEGIN
+            SELECT $i;
+        END DO;
+    )sql");
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(
+        res.Issues.ToString(),
+        "FOR without EVALUATE is not available before version 2025.05");
+}
+
+Y_UNIT_TEST(ForStatementLangVerSuccess) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::MakeLangVersion(2025, 5);
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        FOR $i IN AsList(1,2,3) DO BEGIN
+            SELECT $i;
+        END DO;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
+Y_UNIT_TEST(ParallelForStatementLangVer) {
+    NYql::TAstParseResult res = SqlToYql(R"sql(
+        PARALLEL FOR $i IN AsList(1,2,3) DO BEGIN
+            SELECT $i;
+        END DO;
+    )sql");
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(
+        res.Issues.ToString(),
+        "PARALLEL FOR is not available before version 2025.05");
+}
+
 Y_UNIT_TEST(StringLiteralWithEscapedBackslash) {
     NYql::TAstParseResult res1 = SqlToYql(R"foo(SELECT 'a\\';)foo");
     NYql::TAstParseResult res2 = SqlToYql(R"foo(SELECT "a\\";)foo");
@@ -2975,7 +3011,7 @@ Y_UNIT_TEST(UdfSyntaxSugarOnlyCallable) {
     auto res = SqlToYql(req);
     UNIT_ASSERT(res.Root);
     const auto programm = GetPrettyPrint(res);
-    auto expected = "(SqlCall '\"DateTime.FromString\" '((PositionalArgs (String '\"2022-01-01\")) (AsStruct)) (TupleType))";
+    auto expected = "(SqlCall '\"DateTime2.FromString\" '((PositionalArgs (String '\"2022-01-01\")) (AsStruct)) (TupleType))";
     UNIT_ASSERT(programm.find(expected) != TString::npos);
 }
 
@@ -2984,7 +3020,7 @@ Y_UNIT_TEST(UdfSyntaxSugarTypeNoRun) {
     auto res = SqlToYql(req);
     UNIT_ASSERT(res.Root);
     const auto programm = GetPrettyPrint(res);
-    auto expected = "(SqlCall '\"DateTime.FromString\" '((PositionalArgs (String '\"2022-01-01\")) (AsStruct)) (TupleType (DataType 'String) (TupleType (DataType 'Int32) (DataType 'Float))) '\"foo\")";
+    auto expected = "(SqlCall '\"DateTime2.FromString\" '((PositionalArgs (String '\"2022-01-01\")) (AsStruct)) (TupleType (DataType 'String) (TupleType (DataType 'Int32) (DataType 'Float))) '\"foo\")";
     UNIT_ASSERT(programm.find(expected) != TString::npos);
 }
 
@@ -2993,7 +3029,7 @@ Y_UNIT_TEST(UdfSyntaxSugarRunNoType) {
     auto res = SqlToYql(req);
     UNIT_ASSERT(res.Root);
     const auto programm = GetPrettyPrint(res);
-    auto expected = "(SqlCall '\"DateTime.FromString\" '((PositionalArgs (String '\"2022-01-01\")) (AsStruct)) (TupleType (DataType 'String) (TupleType (DataType 'Int32) (DataType 'Float))) '\"\" (Void))";
+    auto expected = "(SqlCall '\"DateTime2.FromString\" '((PositionalArgs (String '\"2022-01-01\")) (AsStruct)) (TupleType (DataType 'String) (TupleType (DataType 'Int32) (DataType 'Float))) '\"\" (Void))";
     UNIT_ASSERT(programm.find(expected) != TString::npos);
 }
 
@@ -3002,7 +3038,7 @@ Y_UNIT_TEST(UdfSyntaxSugarFullTest) {
     auto res = SqlToYql(req);
     UNIT_ASSERT(res.Root);
     const auto programm = GetPrettyPrint(res);
-    auto expected = "(SqlCall '\"DateTime.FromString\" '((PositionalArgs (String '\"2022-01-01\")) (AsStruct)) (TupleType (DataType 'String) (TupleType (DataType 'Int32) (DataType 'Float))) '\"foo\" (Void))";
+    auto expected = "(SqlCall '\"DateTime2.FromString\" '((PositionalArgs (String '\"2022-01-01\")) (AsStruct)) (TupleType (DataType 'String) (TupleType (DataType 'Int32) (DataType 'Float))) '\"foo\" (Void))";
     UNIT_ASSERT(programm.find(expected) != TString::npos);
 }
 
@@ -3011,7 +3047,7 @@ Y_UNIT_TEST(UdfSyntaxSugarOtherRunConfigs) {
     auto res = SqlToYql(req);
     UNIT_ASSERT(res.Root);
     const auto programm = GetPrettyPrint(res);
-    auto expected = "(SqlCall '\"DateTime.FromString\" '((PositionalArgs (String '\"2022-01-01\")) (AsStruct)) (TupleType (DataType 'String) (TupleType (DataType 'Int32) (DataType 'Float))) '\"foo\" (String '\"55\"))";
+    auto expected = "(SqlCall '\"DateTime2.FromString\" '((PositionalArgs (String '\"2022-01-01\")) (AsStruct)) (TupleType (DataType 'String) (TupleType (DataType 'Int32) (DataType 'Float))) '\"foo\" (String '\"55\"))";
     UNIT_ASSERT(programm.find(expected) != TString::npos);
 }
 
@@ -3020,7 +3056,7 @@ Y_UNIT_TEST(UdfSyntaxSugarOtherRunConfigs2) {
     auto res = SqlToYql(req);
     UNIT_ASSERT(res.Root);
     const auto programm = GetPrettyPrint(res);
-    auto expected = "(SqlCall '\"DateTime.FromString\" '((PositionalArgs (String '\"2022-01-01\")) (AsStruct)) (TupleType (DataType 'String) (TupleType (DataType 'Int32) (DataType 'Float))) '\"foo\" '((Int32 '\"32\") (String '\"no\") (AsStruct '('\"SomeFloat\" (Double '\"1e-9\")))))";
+    auto expected = "(SqlCall '\"DateTime2.FromString\" '((PositionalArgs (String '\"2022-01-01\")) (AsStruct)) (TupleType (DataType 'String) (TupleType (DataType 'Int32) (DataType 'Float))) '\"foo\" '((Int32 '\"32\") (String '\"no\") (AsStruct '('\"SomeFloat\" (Double '\"1e-9\")))))";
     UNIT_ASSERT(programm.find(expected) != TString::npos);
 }
 
@@ -3029,7 +3065,7 @@ Y_UNIT_TEST(UdfSyntaxSugarOptional) {
     auto res = SqlToYql(req);
     UNIT_ASSERT(res.Root);
     const auto programm = GetPrettyPrint(res);
-    auto expected = "(SqlCall '\"DateTime.FromString\" '((PositionalArgs (String '\"2022-01-01\")) (AsStruct)) (TupleType (OptionalType (DataType 'String)) (OptionalType (OptionalType (DataType 'Int32))) (TupleType (DataType 'Int32) (DataType 'Float))) '\"foo\" (Void))";
+    auto expected = "(SqlCall '\"DateTime2.FromString\" '((PositionalArgs (String '\"2022-01-01\")) (AsStruct)) (TupleType (OptionalType (DataType 'String)) (OptionalType (OptionalType (DataType 'Int32))) (TupleType (DataType 'Int32) (DataType 'Float))) '\"foo\" (Void))";
     UNIT_ASSERT(programm.find(expected) != TString::npos);
 }
 
@@ -7036,9 +7072,9 @@ Y_UNIT_TEST(For) {
                   "  select 1;\n"
                   "end define;\n"
                   "\n"
-                  "for $i in ListFromRange(1, 10)\n"
+                  "evaluate for $i in ListFromRange(1, 10)\n"
                   "do $a();";
-    CheckUnused(req, "$i", 5, 5);
+    CheckUnused(req, "$i", 5, 14);
 }
 
 Y_UNIT_TEST(LambdaParams) {

@@ -258,19 +258,19 @@ class TQueryCtx : public TAtomicRefCount<TQueryCtx> {
     double K1Factor = K1_FACTOR_DEFAULT;
     double BFactor = B_FACTOR_DEFAULT;
     const TVector<std::pair<i32, NScheme::TTypeInfo>> ResultCellIndices;
-    const EQueryMode QueryMode;
+    const EDefaultOperator DefaultOperator;
     ui32 MinimumShouldMatch;
 
 public:
     TQueryCtx(size_t wordCount, ui64 totalDocLength, ui64 docCount,
-        EQueryMode queryMode,
+        EDefaultOperator defaultOperator,
         ui32 minimumShouldMatch,
         const TVector<std::pair<i32, NScheme::TTypeInfo>> resultCellIndices)
         : DocCount(docCount)
         , AvgDL(docCount > 0 ? static_cast<double>(totalDocLength) / docCount : 1.0)
         , IDFValues(wordCount, 0.0)
         , ResultCellIndices(resultCellIndices)
-        , QueryMode(queryMode)
+        , DefaultOperator(defaultOperator)
         , MinimumShouldMatch(minimumShouldMatch)
     {
     }
@@ -309,8 +309,8 @@ public:
         return BFactor;
     }
 
-    EQueryMode GetQueryMode() const {
-        return QueryMode;
+    EDefaultOperator GetDefaultOperator() const {
+        return DefaultOperator;
     }
 
     ui32 GetMinimumShouldMatch() const {
@@ -1650,7 +1650,7 @@ public:
     }
 };
 
-class TFullTextContainsSource : public TActorBootstrapped<TFullTextContainsSource>, public NYql::NDq::IDqComputeActorAsyncInput, public NActors::IActorExceptionHandler {
+class TFullTextMatchSource : public TActorBootstrapped<TFullTextMatchSource>, public NYql::NDq::IDqComputeActorAsyncInput, public NActors::IActorExceptionHandler {
 private:
 
     struct TEvPrivate {
@@ -1881,20 +1881,20 @@ private:
         }
 
         TString explain;
-        EQueryMode queryMode = QueryModeFromString(Settings->GetQueryMode(), explain);
+        EDefaultOperator defaultOperator = DefaultOperatorFromString(Settings->GetDefaultOperator(), explain);
         if (!explain.empty()) {
             RuntimeError(explain, NYql::NDqProto::StatusIds::BAD_REQUEST);
             return;
         }
 
-        ui32 minimumShouldMatch = MinimumShouldMatchFromString(Words.size(), queryMode, Settings->GetMinimumShouldMatch(), explain);
+        ui32 minimumShouldMatch = MinimumShouldMatchFromString(Words.size(), defaultOperator, Settings->GetMinimumShouldMatch(), explain);
         if (!explain.empty()) {
             RuntimeError(explain, NYql::NDqProto::StatusIds::BAD_REQUEST);
             return;
         }
 
         QueryCtx = MakeIntrusive<TQueryCtx>(
-            Words.size(), SumDocLength, DocCount, queryMode, minimumShouldMatch, ResultCellIndices);
+            Words.size(), SumDocLength, DocCount, defaultOperator, minimumShouldMatch, ResultCellIndices);
 
         if (DictTableReader) {
             for (auto& word: Words) {
@@ -1912,7 +1912,7 @@ private:
             }
         }
 
-        if (queryMode == EQueryMode::And) {
+        if (defaultOperator == EDefaultOperator::And) {
             MergeAlgo = std::make_unique<TAndOptimizedMergeAlgorithm>(
                 std::move(streams),
                 minimumShouldMatch,
@@ -1971,7 +1971,7 @@ private:
 
 
 public:
-    TFullTextContainsSource(const NKikimrKqp::TKqpFullTextSourceSettings* settings,
+    TFullTextMatchSource(const NKikimrKqp::TKqpFullTextSourceSettings* settings,
         TIntrusivePtr<NActors::TProtoArenaHolder> arena,
         const NActors::TActorId& computeActorId,
         ui64 inputIndex,
@@ -2023,7 +2023,7 @@ public:
     void Bootstrap() {
         ReadsState.SetSelfId(this->SelfId());
         LogPrefix = TStringBuilder() << "SelfId: " << this->SelfId() << ", " << LogPrefix;
-        Become(&TFullTextContainsSource::StateWork);
+        Become(&TFullTextMatchSource::StateWork);
         PrepareTableReaders();
     }
 
@@ -2513,7 +2513,7 @@ public:
     }
 
 private:
-    using TBase = TActorBootstrapped<TFullTextContainsSource>;
+    using TBase = TActorBootstrapped<TFullTextMatchSource>;
 };
 
 std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateKqpFullTextSource(const NKikimrKqp::TKqpFullTextSourceSettings* settings,
@@ -2529,7 +2529,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateKqpFullTextSourc
     const NWilson::TTraceId& traceId,
     TIntrusivePtr<TKqpCounters> counters)
 {
-    auto* actor = new TFullTextContainsSource(settings, arena, computeActorId, inputIndex, statsLevel, txId, taskId, typeEnv, holderFactory, alloc, traceId, counters);
+    auto* actor = new TFullTextMatchSource(settings, arena, computeActorId, inputIndex, statsLevel, txId, taskId, typeEnv, holderFactory, alloc, traceId, counters);
     return std::make_pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*>(actor, actor);
 }
 

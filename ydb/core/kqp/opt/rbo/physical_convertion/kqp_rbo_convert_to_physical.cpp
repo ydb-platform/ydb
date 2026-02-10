@@ -110,7 +110,7 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot& root, TRBOContext& rboCtx) {
             // clang-format off
             currentStageBody = Build<TCoTake>(ctx, op->Pos)
                 .Input(TExprBase(currentStageBody))
-                .Count(limit->LimitCond)
+                .Count(limit->LimitCond.GetExpressionBody())
             .Done().Ptr();
             // clang-format on
 

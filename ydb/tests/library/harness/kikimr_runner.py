@@ -1233,11 +1233,11 @@ mon={mon}""".format(
 
     def cleanup_disk(self, path):
         self.ssh_command(
-            'sudo dd if=/dev/zero of={} bs=1M count=1 status=none;'.format(path),
+            'sudo /Berkanavt/kikimr/bin/kikimr admin bs disk obliterate {};'.format(path),
             raise_on_error=True)
 
     def cleanup_disks(self):
         self.ssh_command(
             "for X in /dev/disk/by-partlabel/kikimr_*; "
-            "do sudo dd if=/dev/zero of=$X bs=1M count=1 status=none; done",
+            "do sudo /Berkanavt/kikimr/bin/kikimr admin bs disk obliterate $X; done",
             raise_on_error=True)

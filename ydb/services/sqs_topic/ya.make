@@ -9,6 +9,7 @@ SRCS(
     error.cpp
     get_queue_attributes.cpp
     list_queues.cpp
+    purge_queue.cpp
     receipt.cpp
     receive_message.cpp
     send_message.cpp

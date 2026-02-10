@@ -223,6 +223,8 @@ struct TEvPQ {
         EvMLPConsumerState,
         EvTxDone,
         EvMLPConsumerMonRequest,
+        EvMLPPurgeRequest,
+        EvMLPPurgeResponse,
         EvEnd
     };
 
@@ -1386,6 +1388,16 @@ struct TEvPQ {
             Record.SetErrorMessage(errorMessage);
         }
 
+        TEvMLPErrorResponse(ui32 partitionId, Ydb::StatusIds::StatusCode errorCode, TString&& errorMessage) {
+            Record.SetPartitionId(partitionId);
+            Record.SetStatus(errorCode);
+            Record.SetErrorMessage(errorMessage);
+        }
+
+        ui32 GetPartitionId() const {
+            return Record.GetPartitionId();
+        }
+
         Ydb::StatusIds::StatusCode GetStatus() const {
             return Record.GetStatus();
         }
@@ -1653,6 +1665,41 @@ struct TEvPQ {
         TActorId ReplyTo;
         ui32 PartitionId;
         TString Consumer;
+    };
+
+    struct TEvMLPPurgeRequest : TEventPB<TEvMLPPurgeRequest, NKikimrPQ::TEvMLPPurgeRequest, EvMLPPurgeRequest> {
+        TEvMLPPurgeRequest() = default;
+
+        TEvMLPPurgeRequest(const TString& topic, const TString& consumer, ui32 partitionId)
+        {
+            Record.SetTopic(topic);
+            Record.SetConsumer(consumer);
+            Record.SetPartitionId(partitionId);
+        }
+
+        const TString& GetTopic() const {
+            return Record.GetTopic();
+        }
+
+        const TString& GetConsumer() const {
+            return Record.GetConsumer();
+        }
+
+        ui32 GetPartitionId() const {
+            return Record.GetPartitionId();
+        }
+    };
+
+    struct TEvMLPPurgeResponse : TEventPB<TEvMLPPurgeResponse, NKikimrPQ::TEvMLPPurgeResponse, EvMLPPurgeResponse> {
+        TEvMLPPurgeResponse() = default;
+
+        TEvMLPPurgeResponse(ui32 partitionId) {
+            Record.SetPartitionId(partitionId);
+        }
+
+        ui32 GetPartitionId() const {
+            return Record.GetPartitionId();
+        }
     };
 };
 

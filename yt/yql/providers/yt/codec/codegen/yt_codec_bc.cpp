@@ -234,8 +234,11 @@ namespace {
 
 template<typename T>
 void ValidateTzData(typename NUdf::TDataType<T>::TLayout value, ui16 tzId) {
-    if (!NUdf::IsValidLayoutValue<T>(value) || !NKikimr::NMiniKQL::IsValidTimezoneId(tzId)) {
-        ThrowBadTz((int)NUdf::TDataType<T>::Slot);
+    if (!NUdf::IsValidLayoutValue<T>(value)) {
+        ThrowBadTz(static_cast<int>(NUdf::TDataType<T>::Slot), EBadTzReason::BAD_TZ_TIME);
+    }
+    if (!NKikimr::NMiniKQL::IsValidTimezoneId(tzId)) {
+        ThrowBadTz(static_cast<int>(NUdf::TDataType<T>::Slot), EBadTzReason::BAD_TZ_TIMEZONE);
     }
 }
 
@@ -246,7 +249,7 @@ void ReadTzYql(void* vbuf, void* vpod) {
     ui16 tzId;
     auto& buf = *(NCommon::TInputBuf*)vbuf;
     if (!NYql::ReadTzYql<T>(buf, value, tzId)) {
-        ThrowBadTz((int)NUdf::TDataType<T>::Slot);
+        ThrowBadTz(static_cast<int>(NUdf::TDataType<T>::Slot), EBadTzReason::BAD_TZ_LENGTH);
     }
     ValidateTzData<T>(value, tzId);
     (new (vpod) NUdf::TUnboxedValuePod(value))->SetTimezoneId(tzId);

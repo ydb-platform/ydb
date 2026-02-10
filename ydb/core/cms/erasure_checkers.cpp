@@ -58,14 +58,6 @@ bool TErasureCounterBase::IsLocked(const TVDiskInfo &vdisk, TClusterInfoPtr info
         || vdisk.IsLockedByRequest(requestId);
 }
 
-bool TErasureCounterBase::GroupAlreadyHasTempLockedDisks() const {
-    return HasAlreadyTempLockedDisks;
-}
-
-bool TErasureCounterBase::GroupHasMoreThanOneDiskPerNode() const {
-    return HasMoreThanOneDiskPerNode;
-}
-
 static TString DumpVDisksInfo(const THashMap<TVDiskID, TString>& vdisks, TClusterInfoPtr info) {
     if (vdisks.empty()) {
         return "<empty>";

@@ -20,8 +20,6 @@ protected:
 public:
     virtual ~IErasureCounter() = default;
 
-    virtual bool GroupAlreadyHasTempLockedDisks() const = 0;
-    virtual bool GroupHasMoreThanOneDiskPerNode() const = 0;
     virtual bool CheckForMaxAvailability(TClusterInfoPtr info, TErrorInfo& error, TInstant& defaultDeadline, bool allowPartial) const = 0;
     virtual bool CheckForKeepAvailability(TClusterInfoPtr info, TErrorInfo& error, TInstant& defaultDeadline, bool allowPartial) const = 0;
     virtual bool CheckForSmartAvailability(TClusterInfoPtr info, TErrorInfo& error, TInstant& defaultDeadline, bool allowPartial) const = 0;
@@ -59,8 +57,6 @@ public:
     {
     }
 
-    bool GroupAlreadyHasTempLockedDisks() const final;
-    bool GroupHasMoreThanOneDiskPerNode() const final;
     bool CheckForMaxAvailability(TClusterInfoPtr info, TErrorInfo& error, TInstant& defaultDeadline, bool allowPartial) const final;
     bool CheckForSmartAvailability(TClusterInfoPtr info, TErrorInfo& error, TInstant& defaultDeadline, bool allowPartial) const final;
     void CountGroupState(TClusterInfoPtr info, TDuration retryTime, TDuration duration, TErrorInfo &error, const TString &requestId) override;

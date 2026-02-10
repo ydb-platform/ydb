@@ -4129,7 +4129,7 @@ Y_UNIT_TEST_QUAD(SelectWithFulltextMatchAndNgramWildcardUnicode, RELEVANCE, UTF8
     {
         const TString query = R"sql(
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "*🐶*")  -- should return empty response: query shorter than ngrams
+            WHERE FulltextMatch(`Text`, "*🐶*")  -- should fail with BAD_REQUEST: query shorter than ngrams, no search terms extracted
             ORDER BY `Key`;
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();

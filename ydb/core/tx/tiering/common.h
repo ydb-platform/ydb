@@ -17,6 +17,7 @@ enum EEvents {
     EvNotifySchemeObjectUpdated,
     EvNotifySchemeObjectDeleted,
     EvSchemeObjectResulutionFailed,
+    EvResolveTierSecrets,
     EvListTieredStoragesResult,
     EvEnd
 };

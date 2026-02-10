@@ -291,44 +291,38 @@ bool TExtractJoinExpressionsRule::MatchAndApply(std::shared_ptr<IOperator> &inpu
     auto filter = CastOperator<TOpFilter>(input);
     auto conjuncts = filter->FilterExpr.SplitConjunct();
 
-    TVector<TExpression> matchedConjuncts;
-
-    YQL_CLOG(TRACE, CoreDq) << "Testing expr extraction";
+    TVector<TExpression> newConjuncts;
+    TVector<TMapElement> mapElements;
 
     for (auto & c : conjuncts) {
         if (c.MaybeJoinCondition(false)) {
-            continue;
+            newConjuncts.push_back(c);
         }
-
-        YQL_CLOG(TRACE, CoreDq) << "IUs in filter " << c.GetInputIUs().size();
-
-        if (c.MaybeJoinCondition(true)) {
-            matchedConjuncts.push_back(c);
-        }
-    }
-
-    if (matchedConjuncts.size()) {
-        TVector<TMapElement> mapElements;
-        TNodeOnNodeOwnedMap replaceMap;
-
-        for (auto & conj : matchedConjuncts) {
+        else if (c.MaybeJoinCondition(true)) {
+            TJoinCondition cond(c);
             TVector<std::pair<TInfoUnit, TExprNode::TPtr>> renameMap;
-            TJoinCondition cond(conj);
-            cond.ExtractExpressions(replaceMap, renameMap);
-            for (auto const & [iu, expr] : renameMap) {
-                mapElements.emplace_back(iu, TExpression(expr, &ctx.ExprCtx, &props));
+            TNodeOnNodeOwnedMap replaceMap;
+            if (cond.ExtractExpressions(replaceMap, renameMap)) {
+                for (auto const & [iu, expr] : renameMap) {
+                    mapElements.emplace_back(iu, TExpression(expr, &ctx.ExprCtx, &props));
+                }
+                newConjuncts.push_back(c.ApplyReplaceMap(replaceMap, ctx));
+            } else {
+                newConjuncts.push_back(c);
             }
+        } else {
+            newConjuncts.push_back(c);
         }
-
-        auto newFilterExpr = filter->FilterExpr.ApplyReplaceMap(replaceMap, ctx);
-        YQL_CLOG(TRACE, CoreDq) << "Remapped expr " << newFilterExpr.ToString();
-        filter->FilterExpr = newFilterExpr;
-        auto newMap = std::make_shared<TOpMap>(filter->GetInput(), input->Pos, mapElements, false);
-        filter->SetInput(newMap);
-        return true;
     }
 
-    return false;
+    if (mapElements.empty()) {
+        return false;
+    }
+
+    filter->FilterExpr = MakeConjunction(newConjuncts, props.PgSyntax);
+    auto newMap = std::make_shared<TOpMap>(filter->GetInput(), input->Pos, mapElements, false);
+    filter->SetInput(newMap);
+    return true;
 }
 
 // Rewrite a single scalar subplan into a cross-join for uncorrelated queries

@@ -630,6 +630,7 @@ private:
             hFuncTraced(TEvPQ::TEvMLPCommitRequest, Handle);
             hFuncTraced(TEvPQ::TEvMLPUnlockRequest, Handle);
             hFuncTraced(TEvPQ::TEvMLPChangeMessageDeadlineRequest, Handle);
+            hFuncTraced(TEvPQ::TEvMLPPurgeRequest, Handle);
             hFuncTraced(TEvPQ::TEvGetMLPConsumerStateRequest, Handle);
             hFuncTraced(TEvPQ::TEvMLPConsumerState, Handle);
             hFuncTraced(TEvPQ::TEvMLPConsumerMonRequest, Handle);
@@ -706,6 +707,7 @@ private:
             hFuncTraced(TEvPQ::TEvMLPCommitRequest, Handle);
             hFuncTraced(TEvPQ::TEvMLPUnlockRequest, Handle);
             hFuncTraced(TEvPQ::TEvMLPChangeMessageDeadlineRequest, Handle);
+            hFuncTraced(TEvPQ::TEvMLPPurgeRequest, Handle);
             hFuncTraced(TEvPQ::TEvGetMLPConsumerStateRequest, Handle);
             hFuncTraced(TEvPQ::TEvMLPConsumerState, Handle);
             hFuncTraced(TEvPQ::TEvMLPConsumerMonRequest, Handle);
@@ -1234,11 +1236,13 @@ private:
     void HandleOnInit(TEvPQ::TEvMLPCommitRequest::TPtr&);
     void HandleOnInit(TEvPQ::TEvMLPUnlockRequest::TPtr&);
     void HandleOnInit(TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr&);
+    void HandleOnInit(TEvPQ::TEvMLPPurgeRequest::TPtr&);
     void HandleOnInit(TEvPQ::TEvGetMLPConsumerStateRequest::TPtr&);
     void Handle(TEvPQ::TEvMLPReadRequest::TPtr&);
     void Handle(TEvPQ::TEvMLPCommitRequest::TPtr&);
     void Handle(TEvPQ::TEvMLPUnlockRequest::TPtr&);
     void Handle(TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr&);
+    void Handle(TEvPQ::TEvMLPPurgeRequest::TPtr&);
     void Handle(TEvPQ::TEvGetMLPConsumerStateRequest::TPtr&);
     void Handle(TEvPQ::TEvMLPConsumerState::TPtr&);
 
@@ -1261,6 +1265,7 @@ private:
         TEvPQ::TEvMLPCommitRequest::TPtr,
         TEvPQ::TEvMLPUnlockRequest::TPtr,
         TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr,
+        TEvPQ::TEvMLPPurgeRequest::TPtr,
         TEvPQ::TEvGetMLPConsumerStateRequest::TPtr
     >;
     std::deque<TMLPPendingEvent> MLPPendingEvents;

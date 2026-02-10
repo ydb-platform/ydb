@@ -5,38 +5,20 @@
 
 namespace NKikimr::NDDisk {
 
-    void TDDiskActor::Handle(TEvWrite::TPtr ev) {
-        if (!CheckQuery(*ev, &Counters.Interface.Write)) {
-            return;
-        }
-
-        const auto& record = ev->Get()->Record;
-        const TQueryCredentials creds(record.GetCredentials());
-        const TBlockSelector selector(record.GetSelector());
-        const TWriteInstruction instr(record.GetInstruction());
-
-        TChunkRef& chunkRef = ChunkRefs[creds.TabletId][selector.VChunkIndex];
-        if (!chunkRef.PendingEventsForChunk.empty() || !chunkRef.ChunkIdx) {
-            if (chunkRef.PendingEventsForChunk.empty() && !chunkRef.ChunkIdx) {
-                IssueChunkAllocation(creds.TabletId, selector.VChunkIndex);
-            }
-            chunkRef.PendingEventsForChunk.emplace(ev, "WaitChunkAllocation");
-            return;
-        }
-
-        Counters.Interface.Write.Request(selector.Size);
-
-        auto span = std::move(NWilson::TSpan(TWilson::DDiskTopLevel, std::move(ev->TraceId), "DDisk.Write",
+    void TDDiskActor::SendInternalWrite(
+            TChunkRef& chunkRef,
+            const TQueryCredentials &creds,
+            const TBlockSelector &selector,
+            NWilson::TTraceId &&traceId,
+            TRope &&data,
+            std::function<void(NPDisk::TEvChunkWriteRawResult&, NWilson::TSpan&&)> callback
+    ) {
+        auto span = std::move(NWilson::TSpan(TWilson::DDiskTopLevel, std::move(traceId), "DDisk.Write",
                 NWilson::EFlags::NONE, TActivationContext::ActorSystem())
             .Attribute("tablet_id", static_cast<long>(creds.TabletId))
             .Attribute("vchunk_index", static_cast<long>(selector.VChunkIndex))
             .Attribute("offset_in_bytes", selector.OffsetInBytes)
             .Attribute("size", selector.Size));
-
-        TRope data;
-        if (instr.PayloadId) {
-            data = ev->Get()->GetPayload(*instr.PayloadId);
-        }
 
         Y_ABORT_UNLESS(chunkRef.ChunkIdx);
 
@@ -48,7 +30,37 @@ namespace NKikimr::NDDisk {
             selector.OffsetInBytes,
             std::move(data)), 0, cookie);
 
-        WriteCallbacks.try_emplace(cookie, TPendingWrite{std::move(span), [this, sender = ev->Sender, cookie = ev->Cookie,
+        WriteCallbacks.try_emplace(cookie, TPendingWrite{std::move(span), callback});
+    }
+
+    void TDDiskActor::Handle(TEvWrite::TPtr ev) {
+        if (!CheckQuery(*ev, &Counters.Interface.Write)) {
+            return;
+        }
+
+        const auto& record = ev->Get()->Record;
+        const TQueryCredentials creds(record.GetCredentials());
+        const TBlockSelector selector(record.GetSelector());
+
+        TChunkRef& chunkRef = ChunkRefs[creds.TabletId][selector.VChunkIndex];
+        if (!chunkRef.PendingEventsForChunk.empty() || !chunkRef.ChunkIdx) {
+            if (chunkRef.PendingEventsForChunk.empty() && !chunkRef.ChunkIdx) {
+                IssueChunkAllocation(creds.TabletId, selector.VChunkIndex);
+            }
+            chunkRef.PendingEventsForChunk.emplace(ev, "WaitChunkAllocation");
+            return;
+        }
+
+        const TWriteInstruction instr(record.GetInstruction());
+
+        TRope data;
+        if (instr.PayloadId) {
+            data = ev->Get()->GetPayload(*instr.PayloadId);
+        }
+
+        Counters.Interface.Write.Request(selector.Size);
+
+        auto callback = [this, sender = ev->Sender, cookie = ev->Cookie,
                 session = ev->InterconnectSession](NPDisk::TEvChunkWriteRawResult& /*ev*/, NWilson::TSpan&& span) {
             auto reply = std::make_unique<TEvWriteResult>(NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
             auto h = std::make_unique<IEventHandle>(sender, SelfId(), reply.release(), 0, cookie, nullptr, span.GetTraceId());
@@ -58,7 +70,9 @@ namespace NKikimr::NDDisk {
             Counters.Interface.Write.Reply(true);
             span.End();
             TActivationContext::Send(h.release());
-        }});
+        };
+
+        SendInternalWrite(chunkRef, creds, selector, std::move(ev->TraceId), std::move(data), std::move(callback));
     }
 
 	void TDDiskActor::Handle(NPDisk::TEvChunkWriteRawResult::TPtr ev) {
@@ -125,7 +139,7 @@ namespace NKikimr::NDDisk {
                 selector.OffsetInBytes,
                 selector.Size), 0, cookie);
 
-            ReadCallbacks.try_emplace(cookie, std::move(span), [this, sender = ev->Sender, cookie = ev->Cookie,
+            ReadCallbacks.try_emplace(cookie, TPendingRead{std::move(span), [this, sender = ev->Sender, cookie = ev->Cookie,
                     session = ev->InterconnectSession, size = selector.Size](NPDisk::TEvChunkReadRawResult& ev,
                     NWilson::TSpan&& span) {
                 auto reply = std::make_unique<TEvReadResult>(NKikimrBlobStorage::NDDisk::TReplyStatus::OK, std::nullopt,
@@ -138,7 +152,7 @@ namespace NKikimr::NDDisk {
                 Counters.Interface.Read.Reply(true, size);
                 span.End();
                 TActivationContext::Send(h.release());
-            });
+            }});
         }
     }
 
@@ -152,8 +166,14 @@ namespace NKikimr::NDDisk {
 
         const auto it = ReadCallbacks.find(ev->Cookie);
         Y_ABORT_UNLESS(it != ReadCallbacks.end());
-        auto& [span, callback] = it->second;
-        callback(msg, std::move(span));
+        std::visit(TOverloaded{
+            [&](TPendingRead& w) {
+                w.Callback(msg, std::move(w.Span));
+            },
+            [&](const TPersistentBufferPendingRead& callback) {
+                callback(msg);
+            }
+        }, it->second);
         ReadCallbacks.erase(it);
     }
 

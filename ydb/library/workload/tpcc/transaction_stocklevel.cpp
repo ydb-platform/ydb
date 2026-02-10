@@ -126,7 +126,7 @@ NThreading::TFuture<TStatus> GetStockLevelTask(
         if (ShouldExit(districtResult)) {
             LOG_E("Terminal " << context.TerminalID << " district query (stocklevel) failed: "
                 << districtResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
-            RequestStop();
+            RequestStopWithError();
             co_return TStatus(EStatus::CLIENT_INTERNAL_ERROR, NIssue::TIssues());
         }
         LOG_T("Terminal " << context.TerminalID << " district query (stocklevel) failed: "
@@ -141,7 +141,7 @@ NThreading::TFuture<TStatus> GetStockLevelTask(
     if (!districtParser.TryNextRow()) {
         LOG_E("Terminal " << context.TerminalID
             << ", warehouseId " << warehouseID << ", districtId " << districtID << " not found");
-        RequestStop();
+        RequestStopWithError();
         co_return TStatus(EStatus::CLIENT_INTERNAL_ERROR, NIssue::TIssues());
     }
 
@@ -154,7 +154,7 @@ NThreading::TFuture<TStatus> GetStockLevelTask(
         if (ShouldExit(stockCountResult)) {
             LOG_E("Terminal " << context.TerminalID << " stock count query failed: "
                 << stockCountResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
-            RequestStop();
+            RequestStopWithError();
             co_return TStatus(EStatus::CLIENT_INTERNAL_ERROR, NIssue::TIssues());
         }
         LOG_T("Terminal " << context.TerminalID << " stock count query failed: "

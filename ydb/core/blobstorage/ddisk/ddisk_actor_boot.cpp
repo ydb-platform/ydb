@@ -45,10 +45,14 @@ namespace NKikimr::NDDisk {
             Y_ABORT_UNLESS(success);
             for (auto idx : chunkMap.GetChunkIdxs()) {
                 PersistentBufferSpaceAllocator.AddNewChunk(idx);
+                auto [it, inserted] = PersistentBufferSectorsChecksum.insert({idx, {}});
+                it->second.resize(SectorInChunk);
+                if (!inserted) {
+                    STLOG(PRI_ERROR, BS_DDISK, BSDD10, "TDDiskActor::Handle(TEvYardInitResult) persistent buffer has duplicated chunk index in log", (DDiskId, DDiskId), (PDiskActorId, BaseInfo.PDiskActorID), (ChunkIdx, idx));
+                }
                 ++*Counters.Chunks.ChunksOwned;
             }
         }
-
         Send(BaseInfo.PDiskActorID, new NPDisk::TEvReadLog(PDiskParams->Owner, PDiskParams->OwnerRound));
     }
 
@@ -90,6 +94,7 @@ namespace NKikimr::NDDisk {
 
         if (msg.IsEndOfLog) {
             StartHandlingQueries();
+            StartRestorePersistentBuffer();
         } else {
             Send(BaseInfo.PDiskActorID, new NPDisk::TEvReadLog(PDiskParams->Owner, PDiskParams->OwnerRound,
                 msg.NextPosition));

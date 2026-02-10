@@ -1,10 +1,11 @@
 import os
 import pytest
 import yatest.common
-from yql_utils import get_supported_providers, get_param, is_xsqlfail
+from yql_utils import get_supported_providers, get_param, is_xsqlfail, get_langver
 
 from test_utils import pytest_generate_tests_for_run, get_config, SQLRUN_PATH, SQL_FLAGS, get_case_file
 
+DEFAULT_LANG_VER = '2025.01'
 DATA_PATH = yatest.common.source_path('yql/essentials/tests/sql/suites')
 
 
@@ -12,15 +13,39 @@ def pytest_generate_tests(metafunc):
     pytest_generate_tests_for_run(metafunc, template=['.sql', '.yql', '.sqlx'], data_path=DATA_PATH)
 
 
-def run_sql2yql(program_sql, out_dir, err_file_path):
+def _get_cfg_path(suite, case, data_path):
+    cfg_path = os.path.join(data_path, suite, case)
+    if os.path.exists(cfg_path + '.cfg'):
+        return ""
+    else:
+        return "default.txt"
+
+
+def _get_langver(suite, case, data_path):
+    cfg_path = _get_cfg_path(suite, case, data_path)
+    config = get_config(suite, case, cfg_path, data_path=DATA_PATH)
+
+    langver = get_langver(config)
+    if langver is None:
+        langver = DEFAULT_LANG_VER
+
+    return langver
+
+
+def run_sql2yql(program_sql, out_dir, err_file_path, langver):
     def out_file(name):
         return os.path.join(out_dir, name)
 
     # translate sql to yql
     program_yql = out_file('program.yql')
 
+    flags = []
+    if langver is not None:
+        flags.append('--langver=' + langver)
+
     cmd_sql = [
         SQLRUN_PATH,
+        *flags,
         '--yql',
         '--output=' + program_yql,
         '--syntax-version=1',
@@ -61,7 +86,8 @@ def test(suite, case, cfg, tmpdir):
     files = []
 
     err_file_path = os.path.join(out_dir, 'err_file.out')
-    res = run_sql2yql(program_sql, out_dir, err_file_path)
+    langver = _get_langver(suite, case, data_path=DATA_PATH)
+    res = run_sql2yql(program_sql, out_dir, err_file_path, langver)
 
     with open(program_sql) as f:
         program_sql_content = f.read()

@@ -14409,7 +14409,6 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
     }
 
     Y_UNIT_TEST(UnsupportedColumnTypes) {
-        TestUnsupportedColumnTypeError(NScheme::NTypeIds::Bool);
         TestUnsupportedColumnTypeError(NScheme::NTypeIds::Uuid);
         TestUnsupportedColumnTypeError(NScheme::NTypeIds::DyNumber);
         TestUnsupportedColumnTypeError(NScheme::NTypeIds::Interval);

@@ -21,6 +21,7 @@ private:
 
     NActors::TActorId LoadActorAdapter;
 
+
 public:
     TPartitionActor(
         NYdb::NBS::NProto::TStorageConfig storageConfig,

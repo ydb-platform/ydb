@@ -235,7 +235,7 @@ message TFeatureFlags {
     optional bool EnableMetricsLevel = 208 [default = true];
     optional bool EnableCompileCacheView = 209 [default = false];
     optional bool EnableSecureScriptExecutions = 210 [default = false];
-    optional bool EnableColumnshardBool = 211 [default = false];
+    optional bool EnableColumnshardBool = 211 [default = true];
     optional bool EnableTopicMessageLevelParallelism = 212 [default = false];
     optional bool EnableOlapRejectProbability = 213 [default = true];
     optional bool EnablePDiskLogForSmallDisks = 214 [default = false];
@@ -252,5 +252,6 @@ message TFeatureFlags {
     optional bool EnableTruncateTable = 225 [default = false];
     optional bool EnableTopicsSqlIoOperations = 226 [default = false];
     optional bool EnableSysViewPermissionsExport = 227 [default = false];
-    optional bool TransferInternalDataDecompression = 228 [default = false];
+    optional bool EnableCmsSmartAvailabilityMode = 228 [default = false];
+    optional bool TransferInternalDataDecompression = 229 [default = false];
 }

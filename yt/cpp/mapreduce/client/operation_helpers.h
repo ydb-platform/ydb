@@ -1,5 +1,7 @@
 #pragma once
 
+#include "fwd.h"
+
 #include <yt/cpp/mapreduce/common/fwd.h>
 #include <yt/cpp/mapreduce/interface/fwd.h>
 
@@ -16,7 +18,7 @@ bool UseLocalModeOptimization(
     const TClientContext& context,
     const IClientRetryPolicyPtr& clientRetryPolicy);
 
-TString GetOperationWebInterfaceUrl(TStringBuf serverName, TOperationId operationId);
+TString GetOperationWebInterfaceUrl(TStringBuf serverName, TOperationId operationId, const TClientPtr& client);
 
 ////////////////////////////////////////////////////////////////////////////////
 

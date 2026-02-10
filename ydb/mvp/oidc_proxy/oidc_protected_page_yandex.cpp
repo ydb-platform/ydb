@@ -83,20 +83,6 @@ bool THandlerSessionServiceCheckYandex::NeedSendSecureHttpRequest(const NHttp::T
     return false;
 }
 
-}  // NOIDC
+} // NOIDC
 
-template<>
-TString SecureShortDebugString(const yandex::cloud::priv::oauth::v1::CheckSessionRequest& request) {
-    yandex::cloud::priv::oauth::v1::CheckSessionRequest copy = request;
-    copy.clear_cookie_header();
-    return copy.ShortDebugString();
-}
-
-template<>
-TString SecureShortDebugString(const yandex::cloud::priv::oauth::v1::CheckSessionResponse& request) {
-    yandex::cloud::priv::oauth::v1::CheckSessionResponse copy = request;
-    copy.mutable_iam_token()->set_iam_token(NKikimr::MaskTicket(copy.iam_token().iam_token()));
-    return copy.ShortDebugString();
-}
-
-}  // NMVP
+} // NMVP

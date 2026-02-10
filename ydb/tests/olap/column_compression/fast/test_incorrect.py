@@ -2,6 +2,7 @@ import logging
 import os
 import pytest
 import yatest.common
+import ydb
 
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
@@ -60,7 +61,7 @@ class TestIncorrectCompression(object):
                 """
             )
             assert False, 'Should Fail'
-        except Exception as ex:
+        except ydb.issues.Error as ex:
             assert error_text in ex.message
 
     @pytest.mark.parametrize("suffix, compression_settings, error_text", COMPRESSION_CASES)
@@ -88,7 +89,7 @@ class TestIncorrectCompression(object):
                 """
             )
             assert False, 'Should Fail'
-        except Exception as ex:
+        except ydb.issues.Error as ex:
             assert error_text in ex.message
 
     def test_create_row_based_table_with_compression(self):
@@ -105,7 +106,7 @@ class TestIncorrectCompression(object):
                 """
             )
             assert False, 'Should Fail'
-        except Exception as ex:
+        except ydb.issues.Error as ex:
             assert "Column Compression is not supported in row tables" in ex.message
 
     def test_tablestore(self):
@@ -128,5 +129,5 @@ class TestIncorrectCompression(object):
                 """
             )
             assert False, "Should Fail"
-        except Exception as ex:
+        except ydb.issues.Error as ex:
             assert "TableStore does not support column families" in ex.message

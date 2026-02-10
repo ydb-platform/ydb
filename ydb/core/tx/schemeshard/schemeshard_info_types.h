@@ -1690,6 +1690,12 @@ struct IQuotaCounters {
     virtual void SetShardsQuota(ui64 value) = 0;
 };
 
+enum class EPathCategory : ui8 {
+    Regular = 0,
+    Backup,
+    System,
+};
+
 struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
     using TPtr = TIntrusivePtr<TSubDomainInfo>;
     using TConstPtr = TIntrusiveConstPtr<TSubDomainInfo>;
@@ -1904,27 +1910,51 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         return BackupPathsCount;
     }
 
-    void IncPathsInside(IQuotaCounters* counters, ui64 delta = 1, bool isBackup = false) {
+    ui64 GetSystemPaths() const {
+        return SystemPathsCount;
+    }
+
+    void IncPathsInside(IQuotaCounters* counters, ui64 delta = 1, EPathCategory category = EPathCategory::Regular) {
         Y_ENSURE(Max<ui64>() - PathsInsideCount >= delta);
         PathsInsideCount += delta;
 
-        if (isBackup) {
+        switch (category) {
+        case EPathCategory::Backup: {
             Y_ENSURE(Max<ui64>() - BackupPathsCount >= delta);
             BackupPathsCount += delta;
-        } else {
+            break;
+        }
+        case EPathCategory::System: {
+            Y_ENSURE(Max<ui64>() - SystemPathsCount >= delta);
+            SystemPathsCount += delta;
+            break;
+        }
+        case EPathCategory::Regular: {
             counters->ChangePathCount(delta);
+            break;
+        }
         }
     }
 
-    void DecPathsInside(IQuotaCounters* counters, ui64 delta = 1, bool isBackup = false) {
+    void DecPathsInside(IQuotaCounters* counters, ui64 delta = 1, EPathCategory category = EPathCategory::Regular) {
         Y_ENSURE(PathsInsideCount >= delta, "PathsInsideCount: " << PathsInsideCount << " delta: " << delta);
         PathsInsideCount -= delta;
 
-        if (isBackup) {
+        switch (category) {
+        case EPathCategory::Backup: {
             Y_ENSURE(BackupPathsCount >= delta, "BackupPathsCount: " << BackupPathsCount << " delta: " << delta);
             BackupPathsCount -= delta;
-        } else {
+            break;
+        }
+        case EPathCategory::System: {
+            Y_ENSURE(SystemPathsCount >= delta, "SystemPathsCount: " << SystemPathsCount << " delta: " << delta);
+            SystemPathsCount -= delta;
+            break;
+        }
+        case EPathCategory::Regular: {
             counters->ChangePathCount(-delta);
+            break;
+        }
         }
     }
 
@@ -2413,6 +2443,7 @@ private:
 
     ui64 PathsInsideCount = 0;
     ui64 BackupPathsCount = 0;
+    ui64 SystemPathsCount = 0;
     TDiskSpaceUsage DiskSpaceUsage;
 
     THashSet<TShardIdx> InternalShards;

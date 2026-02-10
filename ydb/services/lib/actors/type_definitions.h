@@ -87,7 +87,7 @@ struct TTopicHolder : TTopicHolderBase {
 
     void SetPartitionGraph(std::shared_ptr<const NPQ::TPartitionGraph> graph) {
         std::unique_lock lock(PartitionGraphMutex);
-        PartitionGraph = std::move(graph);
+        PartitionGraph.swap(graph);
     }
 
 private:

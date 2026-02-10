@@ -1466,7 +1466,15 @@ protected:
 
         ResponseEv->LocksBrokenAsBreaker = Stats->LocksBrokenAsBreaker;
         ResponseEv->LocksBrokenAsVictim = Stats->LocksBrokenAsVictim;
-        ResponseEv->BreakerQueryTraceId = Stats->BreakerQueryTraceId;
+        // Deduplicate BreakerQueryTraceIds: the same ID may appear from both prepare and commit phases
+        {
+            THashSet<ui64> seen;
+            for (ui64 id : Stats->BreakerQueryTraceIds) {
+                if (seen.insert(id).second) {
+                    ResponseEv->BreakerQueryTraceIds.push_back(id);
+                }
+            }
+        }
 
         Request.Transactions.crop(0);
         this->Send(Target, ResponseEv.release());

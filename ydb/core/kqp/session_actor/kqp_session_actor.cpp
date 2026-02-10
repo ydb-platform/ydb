@@ -2386,38 +2386,43 @@ public:
             const bool isCommitAction = QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_COMMIT_TX ||
                                        QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_EXECUTE_PREPARED;
 
-            // Use BreakerQueryTraceId from DataShard response if available (this is the authoritative source)
-            ui64 breakerQueryTraceId = ev->BreakerQueryTraceId;
-            TString breakerQueryText;
+            // Log one TLI entry per BreakerQueryTraceId (each represents a different shard/table where locks were broken)
+            if (!ev->BreakerQueryTraceIds.empty()) {
+                TString combinedQueryTexts = QueryState->TxCtx ? QueryState->TxCtx->QueryTextCollector.CombineQueryTexts() : TString();
+                for (ui64 breakerQueryTraceId : ev->BreakerQueryTraceIds) {
+                    TString breakerQueryText;
+                    if (QueryState->TxCtx) {
+                        breakerQueryText = QueryState->TxCtx->QueryTextCollector.GetQueryTextByTraceId(breakerQueryTraceId);
+                    }
+                    if (breakerQueryText.empty()) {
+                        breakerQueryText = QueryState->ExtractQueryText();
+                    }
 
-            // If DataShard provided a BreakerQueryTraceId, look up the query text
-            if (breakerQueryTraceId != 0 && QueryState->TxCtx) {
-                breakerQueryText = QueryState->TxCtx->QueryTextCollector.GetQueryTextByTraceId(breakerQueryTraceId);
-            }
-
-            // Fallback: if DataShard didn't provide BreakerQueryTraceId, use current query
-            if (breakerQueryTraceId == 0) {
-                breakerQueryTraceId = QueryState->QueryTraceId;
-                breakerQueryText = QueryState->ExtractQueryText();
-            }
-
-            // If we still don't have query text, try to find it
-            if (breakerQueryText.empty() && QueryState->TxCtx) {
-                breakerQueryText = QueryState->TxCtx->QueryTextCollector.GetQueryTextByTraceId(breakerQueryTraceId);
-                if (breakerQueryText.empty()) {
-                    breakerQueryText = QueryState->ExtractQueryText();
+                    NDataIntegrity::LogTli(NDataIntegrity::TTliLogParams{
+                        .Component = "SessionActor",
+                        .Message = isCommitAction ? "Commit had broken other locks" : "Query had broken other locks",
+                        .QueryText = breakerQueryText,
+                        .QueryTexts = combinedQueryTexts,
+                        .TraceId = TraceId(),
+                        .BreakerQueryTraceId = breakerQueryTraceId,
+                        .IsCommitAction = isCommitAction,
+                    }, TlsActivationContext->AsActorContext());
                 }
-            }
+            } else {
+                // Fallback: no BreakerQueryTraceIds from DataShard, use current query
+                ui64 breakerQueryTraceId = QueryState->QueryTraceId;
+                TString breakerQueryText = QueryState->ExtractQueryText();
 
-            NDataIntegrity::LogTli(NDataIntegrity::TTliLogParams{
-                .Component = "SessionActor",
-                .Message = isCommitAction ? "Commit had broken other locks" : "Query had broken other locks",
-                .QueryText = breakerQueryText,
-                .QueryTexts = QueryState->TxCtx->QueryTextCollector.CombineQueryTexts(),
-                .TraceId = TraceId(),
-                .BreakerQueryTraceId = breakerQueryTraceId,
-                .IsCommitAction = isCommitAction,
-            }, TlsActivationContext->AsActorContext());
+                NDataIntegrity::LogTli(NDataIntegrity::TTliLogParams{
+                    .Component = "SessionActor",
+                    .Message = isCommitAction ? "Commit had broken other locks" : "Query had broken other locks",
+                    .QueryText = breakerQueryText,
+                    .QueryTexts = QueryState->TxCtx ? QueryState->TxCtx->QueryTextCollector.CombineQueryTexts() : TString(),
+                    .TraceId = TraceId(),
+                    .BreakerQueryTraceId = breakerQueryTraceId,
+                    .IsCommitAction = isCommitAction,
+                }, TlsActivationContext->AsActorContext());
+            }
         }
 
         // Emit TLI logs for deferred breakers (transactions that broke locks in deferred lock creation scenarios)

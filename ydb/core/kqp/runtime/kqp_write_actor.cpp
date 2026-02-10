@@ -252,7 +252,7 @@ struct TKqpTableWriterStatistics {
     ui64 EraseBytes = 0;
     ui64 LocksBrokenAsBreaker = 0;
     ui64 LocksBrokenAsVictim = 0;
-    ui64 BreakerQueryTraceId = 0;
+    TVector<ui64> BreakerQueryTraceIds;
 
     THashSet<ui64> AffectedPartitions;
 
@@ -276,13 +276,12 @@ struct TKqpTableWriterStatistics {
 
         LocksBrokenAsBreaker += txStats.GetLocksBrokenAsBreaker();
         LocksBrokenAsVictim += txStats.GetLocksBrokenAsVictim();
-        // Capture BreakerQueryTraceId - only update if we don't have one yet
-        if (BreakerQueryTraceId == 0 && txStats.HasBreakerQueryTraceId()) {
-            BreakerQueryTraceId = txStats.GetBreakerQueryTraceId();
+        if (txStats.GetLocksBrokenAsBreaker() > 0 && txStats.HasBreakerQueryTraceId() && txStats.GetBreakerQueryTraceId() != 0) {
+            BreakerQueryTraceIds.push_back(txStats.GetBreakerQueryTraceId());
         }
     }
 
-    static void AddLockStats(NYql::NDqProto::TDqTaskStats* stats, ui64 brokenAsBreaker, ui64 brokenAsVictim, ui64 breakerQueryTraceId = 0) {
+    static void AddLockStats(NYql::NDqProto::TDqTaskStats* stats, ui64 brokenAsBreaker, ui64 brokenAsVictim, const TVector<ui64>& breakerQueryTraceIds = {}) {
         NKqpProto::TKqpTaskExtraStats extraStats;
         if (stats->HasExtra()) {
             stats->GetExtra().UnpackTo(&extraStats);
@@ -291,18 +290,17 @@ struct TKqpTableWriterStatistics {
             extraStats.GetLockStats().GetBrokenAsBreaker() + brokenAsBreaker);
         extraStats.MutableLockStats()->SetBrokenAsVictim(
             extraStats.GetLockStats().GetBrokenAsVictim() + brokenAsVictim);
-        // Set BreakerQueryTraceId if we have a non-zero value and it's not already set
-        if (breakerQueryTraceId != 0 && extraStats.GetLockStats().GetBreakerQueryTraceId() == 0) {
-            extraStats.MutableLockStats()->SetBreakerQueryTraceId(breakerQueryTraceId);
+        for (ui64 id : breakerQueryTraceIds) {
+            extraStats.MutableLockStats()->AddBreakerQueryTraceIds(id);
         }
         stats->MutableExtra()->PackFrom(extraStats);
     }
 
     void FillStats(NYql::NDqProto::TDqTaskStats* stats, const TString& tablePath) {
-        AddLockStats(stats, LocksBrokenAsBreaker, LocksBrokenAsVictim, BreakerQueryTraceId);
+        AddLockStats(stats, LocksBrokenAsBreaker, LocksBrokenAsVictim, BreakerQueryTraceIds);
         LocksBrokenAsBreaker = 0;
         LocksBrokenAsVictim = 0;
-        BreakerQueryTraceId = 0;
+        BreakerQueryTraceIds.clear();
 
         if (ReadRows + WriteRows + EraseRows == 0) {
             // Avoid empty table_access stats

@@ -27,7 +27,7 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 SRCS(
-    datashard_ut_background_compaction.cpp
+    datashard_ut_borrowed_compaction.cpp
 )
 
 END()

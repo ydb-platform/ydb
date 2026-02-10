@@ -198,9 +198,9 @@ EXPECTED_RESULTS_WITH_ENFORCE_USER_TOKEN = {
         'user@builtin': 403,
         'database@builtin': 403,
         'viewer@builtin': 403,
-        'monitoring@builtin': 403,
-        'root@builtin': 403,
-    },  # TODO(yurikiselev): Fix 403 for admins (issue #33400)
+        'monitoring@builtin': 200,
+        'root@builtin': 200,
+    },
     '/ping': {
         None: 200,
         'user@builtin': 200,

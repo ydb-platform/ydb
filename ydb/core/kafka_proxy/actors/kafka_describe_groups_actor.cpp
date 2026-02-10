@@ -255,7 +255,7 @@ void TKafkaDescribeGroupsActor::SendFailResponse(EKafkaErrors errorCode, const s
 }
 
 TMaybe<TString> TKafkaDescribeGroupsActor::GetErrorFromYdbResponse(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev) {
-    TStringBuilder builder = TStringBuilder() << "Recieved error on request to KQP. ErrorCode: " << ev->Get()->Record.GetYdbStatus();
+    TStringBuilder builder = TStringBuilder() << "Received error on request to KQP. ErrorCode: " << ev->Get()->Record.GetYdbStatus();
     if (ev->Get()->Record.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
         return builder << "Unexpected YDB status in TEvQueryResponse. Expected YDB SUCCESS status, Actual: " << ev->Get()->Record.GetYdbStatus();
     } else {

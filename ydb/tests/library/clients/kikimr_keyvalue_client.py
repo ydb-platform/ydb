@@ -2,8 +2,6 @@
 # -*- coding: utf-8 -*-
 import time
 import os
-import asyncio
-
 
 import grpc
 import grpc.aio

@@ -257,7 +257,7 @@ namespace NYdb::NConsoleClient {
                     for (const auto& [k, v] : message.GetMessageMeta()->Fields) {
                         json[k] = v;
                     }
-                    output << GetFieldWithEscaping(json.GetStringRobust(), delimiter);;
+                    output << GetFieldWithEscaping(json.GetStringRobust(), delimiter);
                 }
                 break;
             case ETopicMetadataField::SessionMeta:

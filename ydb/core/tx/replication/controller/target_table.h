@@ -10,11 +10,6 @@ public:
         ui64 id, const IConfig::TPtr& config);
 
     TString GetStreamPath() const override;
-    void WorkerStatusChanged(ui64 workerId, ui64 status, NMonitoring::TDynamicCounterPtr counters) override;
-    void UpdateStats(ui64, const NKikimrReplication::TWorkerStats&, NMonitoring::TDynamicCounterPtr) override;
-
-    const TReplication::ITargetStats* GetStats() const override;
-
 protected:
     virtual TString BuildStreamPath() const = 0;
 };

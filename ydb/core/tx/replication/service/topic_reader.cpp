@@ -74,7 +74,7 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
         TResponseDataTrancker req{GetElapsedTicksAsSeconds(), Now() - ReadQueue.front().ReadStartTime, ev};
         if (AppData()->FeatureFlags.GetTransferInternalDataDecompression()) {
             DecompressQueue.emplace_back(std::move(req));
-            Schedule(TDuration::Zero(), new TEvents::TEvWakeup(DecompressWakeupTag));
+            Send(SelfId(), new TEvents::TEvWakeup(DecompressWakeupTag));
         } else {
             ResponseQueue.emplace_back(std::move(req));
             ProcessData();
@@ -99,7 +99,7 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
         }
         ResponseQueue.emplace_back(std::move(requestData));
         DecompressQueue.pop_front();
-        Schedule(TDuration::Zero(), new TEvents::TEvWakeup(DecompressionDoneWakeupTag));
+        Send(SelfId(), new TEvents::TEvWakeup(DecompressionDoneWakeupTag));
     }
 
     void DecompressMessage(TTopicMessage& message) {

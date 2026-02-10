@@ -1,9 +1,12 @@
 import "ydb/core/scheme/protos/pathid.proto";
 import "ydb/core/protos/base.proto";
+import "ydb/core/protos/metrics_config.proto";
 import "google/protobuf/timestamp.proto";
 import "ydb/public/api/protos/annotations/sensitive.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
 import "ydb/public/api/protos/draft/ydb_replication.proto";
+
+import "google/protobuf/duration.proto";
 
 package NKikimrReplication;
 option java_package = "ru.yandex.kikimr.proto";
@@ -119,19 +122,9 @@ message TReplicationConfig {
         optional string RunAsUser = 3;
     }
 
-    message TMetricsConfig {
-        enum EMetricsLevel {
-            LEVEL_NONE = 0;
-            LEVEL_DATABASE = 1;
-            LEVEL_OBJECT = 2;
-            LEVEL_DETAILED = 3;
-        }
-        optional EMetricsLevel Level = 1;
-    }
-
     optional TConnectionParams SrcConnectionParams = 1;
     optional TConsistencySettings ConsistencySettings = 7;
-    optional TMetricsConfig MetricsConfig = 9;
+    optional NKikimrProto.NMetricsConfig.TMetricsConfig MetricsConfig = 9;
     optional TReplicationLocationConfig Location = 10;
 
     // targets to be replicated
@@ -180,8 +173,23 @@ message TReplicationState {
 }
 
 message TReplicationStats {
-    oneof Stats {
-        Ydb.Replication.DescribeTransferResult.Stats Transfer = 1;
+
+    message TTransferSpecific {
+        repeated Ydb.Replication.DescribeTransferResult.Stats.WorkerStats WorkersStats = 1;
+        optional google.protobuf.Duration MinWorkerUptime = 2;
+        optional Ydb.Replication.MultipleWindowsStat ProcessingCpuTime = 3;
+    };
+
+    optional Ydb.Replication.MultipleWindowsStat ReadBytes = 1;
+    optional Ydb.Replication.MultipleWindowsStat ReadMessages = 2;
+    optional Ydb.Replication.MultipleWindowsStat WriteBytes = 3;
+    optional Ydb.Replication.MultipleWindowsStat WriteRows = 4;
+    optional Ydb.Replication.MultipleWindowsStat DecompressionCpuTime = 5;
+
+    optional google.protobuf.Timestamp StatsCollectionStart = 6;
+
+    oneof SpecificStats {
+        TTransferSpecific Transfer = 7;
     }
 }
 
@@ -326,7 +334,7 @@ message TRunWorkerCommand {
 
     optional TConsistencySettings ConsistencySettings = 3;
     optional string Database = 5;
-    optional TReplicationConfig.TMetricsConfig.EMetricsLevel MetricsLevel = 6;
+    optional NKikimrProto.NMetricsConfig.TMetricsConfig.EMetricsLevel MetricsLevel = 6;
     optional TReplicationLocationConfig ReplicationLocation = 7;
 }
 

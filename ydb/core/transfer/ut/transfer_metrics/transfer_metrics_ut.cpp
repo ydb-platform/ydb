@@ -312,13 +312,13 @@ Y_UNIT_TEST(TestDescribeTransfer) {
         testCase.MakeCleanup();
 
         auto MultiValueWindowNonZero = [&](const auto& window) {
-            UNIT_ASSERT(window.per_minute().seconds());
-            UNIT_ASSERT(window.per_hour().seconds());
+            UNIT_ASSERT(window.avg_per_minute().seconds());
+            UNIT_ASSERT(window.avg_per_hour().seconds());
         };
 
         auto AddAggregate = [&](const auto& src, auto& dst) {
-            dst.mutable_per_minute()->set_seconds(src.per_minute().seconds() + dst.per_minute().seconds());
-            dst.mutable_per_hour()->set_seconds(src.per_hour().seconds() + dst.per_hour().seconds());
+            dst.mutable_avg_per_minute()->set_seconds(src.avg_per_minute().seconds() + dst.avg_per_minute().seconds());
+            dst.mutable_avg_per_hour()->set_seconds(src.avg_per_hour().seconds() + dst.avg_per_hour().seconds());
         };
 
         UNIT_ASSERT_VALUES_EQUAL(stats.workers_stats_size(), 10);
@@ -346,7 +346,6 @@ Y_UNIT_TEST(TestDescribeTransfer) {
             UNIT_ASSERT(workerStats.last_state_change().seconds());
             totalStateVal += static_cast<ui64>(workerStats.state());
             totalOffset += static_cast<ui64>(workerStats.read_offset());
-            Cerr << "For worker: " << workerStats.worker_id() << " got partition: " << workerStats.partition_id() << "\n";
             UNIT_ASSERT(workerStats.partition_id() >= 0 && workerStats.partition_id() < 10);
             partitions.insert(workerStats.partition_id());
 

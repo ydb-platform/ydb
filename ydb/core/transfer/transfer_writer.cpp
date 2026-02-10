@@ -549,45 +549,51 @@ private:
     struct TStatsHolder {
         EWorkerOperation Operation;
         TInstant StartTime;
-        ui64 StartCpuSec;
+        double StartCpuSec;
         ui64 BytesWritten = 0;
         ui64 RowsWritten = 0;
         ui64 WriteErrors = 0;
         ui64 ProcessingErrors = 0;
+
+        void ResetStats(double currentElapsedCpu, EWorkerOperation newState) {
+            StartCpuSec = currentElapsedCpu;
+            StartTime = Now();
+            Operation = newState;
+        }
+
+        void DumpStats(double currentElapsedCpu, EWorkerOperation newState, TTransferWriteStats* dumpTo) {
+            if (Operation == EWorkerOperation::PROCESS) {
+                dumpTo->ProcessingCpu = TDuration::Seconds(currentElapsedCpu - StartCpuSec);
+                dumpTo->ProcessingTime = Now() - StartTime;
+            } else if (Operation == EWorkerOperation::WRITE) {
+                dumpTo->WriteDuration = Now() - StartTime;
+            }
+
+            dumpTo->ProcessingErrors = ProcessingErrors;
+            dumpTo->WriteErrors = WriteErrors;
+            dumpTo->WriteBytes = BytesWritten;
+            dumpTo->WriteRows = RowsWritten;
+            BytesWritten = 0;
+            RowsWritten = 0;
+            WriteErrors = 0;
+            ProcessingErrors = 0;
+
+            ResetStats(currentElapsedCpu, newState);
+        }
     };
+
     TStatsHolder Stats;
 
 private:
-    void ResetStats(EWorkerOperation newState, TTransferWriteStats* dumpTo) {
-        if (dumpTo != nullptr) {
-            if (Stats.Operation == EWorkerOperation::PROCESS) {
-                dumpTo->ProcessingCpu = TDuration::Seconds(GetElapsedTicksAsSeconds() - Stats.StartCpuSec);
-                dumpTo->ProcessingTime = Now() - Stats.StartTime;
-            } else if (Stats.Operation == EWorkerOperation::WRITE){
-                dumpTo->WriteDuration = Now() - Stats.StartTime;
-            }
-            dumpTo->ProcessingErrors = Stats.ProcessingErrors;
-            dumpTo->WriteErrors = Stats.WriteErrors;
-            dumpTo->WriteBytes = Stats.BytesWritten;
-            dumpTo->WriteRows = Stats.RowsWritten;
-            Stats.BytesWritten = 0;
-            Stats.RowsWritten = 0;
-            Stats.WriteErrors = 0;
-        }
-        Stats.StartCpuSec = GetElapsedTicksAsSeconds();
-        Stats.StartTime = Now();
-        Stats.Operation = newState;
-    }
-
     void SendStats(EWorkerOperation newCurrentOperation) {
         auto* event = TEvWorker::TEvStatus::FromOperation(Stats.Operation);
         event->DetailedStats->WriterStats = std::make_unique<TTransferWriteStats>();
-        ResetStats(newCurrentOperation, event->DetailedStats->WriterStats.get());
+        Stats.DumpStats(GetElapsedTicksAsSeconds(),newCurrentOperation, event->DetailedStats->WriterStats.get());
         Send(Worker, event);
     }
 
     void SendOperationChange(EWorkerOperation currentOperation) {
-        ResetStats(currentOperation, nullptr);
+        Stats.ResetStats(GetElapsedTicksAsSeconds(), currentOperation);
         auto* event = TEvWorker::TEvStatus::FromOperation(currentOperation);
         Send(Worker, event);
     }

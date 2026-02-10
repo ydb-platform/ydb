@@ -30,6 +30,9 @@ struct TDescribeReplicationSettings: public TOperationRequestSettings<TDescribeR
     FLUENT_SETTING_DEFAULT(bool, IncludeStats, false);
 };
 
+struct TDescribeTransferSettings: public TDescribeReplicationSettings {
+};
+
 struct TStaticCredentials {
     std::string User;
     std::string PasswordSecretName;
@@ -183,8 +186,6 @@ private:
 };
 
 
-class TDescribeTransferResult;
-using TAsyncDescribeTransferResult = NThreading::TFuture<TDescribeTransferResult>;
 
 struct TBatchingSettings {
     TDuration FlushInterval;
@@ -259,6 +260,8 @@ private:
     std::unique_ptr<Ydb::Replication::DescribeTransferResult> Proto_;
 };
 
+using TAsyncDescribeTransferResult = NThreading::TFuture<TDescribeTransferResult>;
+
 class TReplicationClient {
     class TImpl;
 
@@ -268,7 +271,7 @@ public:
     TAsyncDescribeReplicationResult DescribeReplication(const std::string& path,
         const TDescribeReplicationSettings& settings = TDescribeReplicationSettings());
 
-    TAsyncDescribeTransferResult DescribeTransfer(const std::string& path, const TDescribeTranferSettings& settings = TDescribeTranferSettings());
+    TAsyncDescribeTransferResult DescribeTransfer(const std::string& path, const TDescribeTransferSettings& settings = TDescribeTransferSettings());
 
 private:
     std::shared_ptr<TImpl> Impl_;

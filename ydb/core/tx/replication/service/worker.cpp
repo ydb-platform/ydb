@@ -310,15 +310,14 @@ class TWorker: public TActorBootstrapped<TWorker> {
                 << ": sender# " << ev->Sender);
             return;
         }
-        ev->Sender = SelfId();
-        Send(ev->Forward(Parent));
+        Forward(ev);
     }
 
-    TEvWorker::TEvStatus* MakeEvStatusFromReaderStats(std::unique_ptr<TWorkerDetailedStats>&& stats) const {
+    std::unique_ptr<TEvWorker::TEvStatus> MakeEvStatusFromReaderStats(std::unique_ptr<TWorkerDetailedStats>&& stats) const {
         Y_ENSURE(stats->ReaderStats);
-        auto* ev = TEvWorker::TEvStatus::FromOperation(EWorkerOperation::NONE);
+        std::unique_ptr<TEvWorker::TEvStatus> ev{TEvWorker::TEvStatus::FromOperation(EWorkerOperation::NONE)};
         ev->DetailedStats->ReaderStats = std::move(stats->ReaderStats);
-        return ev;
+        return std::move(ev);
     }
 
     void MaybeRecreateActor(TEvWorker::TEvGone::TPtr& ev, TActorInfo& info) {

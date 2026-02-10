@@ -164,11 +164,8 @@ private:
         FillTransferDescription(result, record);
     }
 
-    static void BuildRequest(const Replication::DescribeReplicationRequest* from, NKikimrReplication::TEvDescribeReplication& to) {
-        to.SetIncludeStats(from->include_stats());
-    }
-
-    static void BuildRequest(const Replication::DescribeTransferRequest* from, NKikimrReplication::TEvDescribeReplication& to) {
+    template<class TRequest>
+    static void BuildRequest(const TRequest* from, NKikimrReplication::TEvDescribeReplication& to) {
         to.SetIncludeStats(from->include_stats());
     }
 

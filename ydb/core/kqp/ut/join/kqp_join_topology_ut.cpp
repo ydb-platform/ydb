@@ -1091,7 +1091,7 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
         }
 
         std::optional<TStatistics> BenchOptimizer(TJoinTree tree, TOrderingsPtr orderingsFSM) {
-            NYql::TCBOSettings settings{ .MaxDPhypDPTableSize = UINT32_MAX };
+            NYql::TCBOSettings settings{ .CBOTimeout = UINT32_MAX };
             NYql::TBaseProviderContext ctx;
             NYql::TExprContext ectx;
 

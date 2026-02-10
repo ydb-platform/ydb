@@ -104,6 +104,8 @@ IGraphTransformer::TStatus TKqpColumnStatisticsRequester::DoTransform(TExprNode:
                     continue;
                 }
 
+                YQL_CLOG(TRACE, DqCore) << "Requesting statistics for table: " << table << ", column: " << column;
+
                 NKikimr::NStat::TRequest req;
                 req.ColumnTag = columnsMeta[column].Id;
                 req.PathId = pathId;

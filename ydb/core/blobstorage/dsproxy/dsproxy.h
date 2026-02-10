@@ -15,6 +15,7 @@
 #include <ydb/core/blobstorage/base/transparent.h>
 #include <ydb/core/blobstorage/backpressure/queue_backpressure_client.h>
 #include <ydb/core/blobstorage/common/immediate_control_defaults.h>
+#include <ydb/core/retro_tracing_impl/lazy_retro_span.h>
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
 #include <ydb/core/base/appdata_fwd.h>
@@ -238,7 +239,10 @@ public:
             Span.Attribute("RestartCounter", RestartCounter);
             Span.Attribute("database", AppData()->TenantName);
             Span.Attribute("storagePool", Info->GetStoragePoolName());
-            params.Common.Event->ToSpan(Span);
+            params.Common.Event->ToSpan(*Span.GetWilsonSpanPtr());
+        } else {
+            Span = TLazyRetroSpan(TWilson::BlobStorage, NWilson::TTraceId::NewTraceId(TWilson::BlobStorage, Max<ui32>(), true),
+                    "DSProxy.RTX");
         }
 
         Y_ABORT_UNLESS(CostModel);
@@ -307,7 +311,7 @@ protected:
     TIntrusivePtr<TStoragePoolCounters> PoolCounters;
     TLogContext LogCtx;
     NWilson::TSpan ParentSpan;
-    NWilson::TSpan Span;
+    TLazyRetroSpan Span;
     TStackVec<std::pair<TDiskResponsivenessTracker::TDiskId, TDuration>, 16> Responsiveness;
     TString ErrorReason;
     TMaybe<TStoragePoolCounters::EHandleClass> RequestHandleClass;

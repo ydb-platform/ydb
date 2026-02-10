@@ -4,6 +4,7 @@
 #include "dsproxy_put_impl.h"
 #include <ydb/core/blobstorage/dsproxy/dsproxy_request_reporting.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
+#include <ydb/library/actors/retro_tracing/retro_collector.h>
 
 #include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
 #include <ydb/core/util/stlog.h>
@@ -532,6 +533,11 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
             SendResponse(std::move(putResult), TimeStatsEnabled ? &TimeStats : nullptr,
                 PutImpl.Blobs[blobIdx].Recipient, PutImpl.Blobs[blobIdx].Cookie, false);
             PutImpl.Blobs[blobIdx].Replied = true;
+        }
+        if (const TNamedSpan* span = Span.GetRetroSpanPtr()) {
+            if (!RandomNumber<ui32>(100)) {
+                NRetroTracing::DemandTrace(span->GetTraceId());
+            }
         }
     }
 

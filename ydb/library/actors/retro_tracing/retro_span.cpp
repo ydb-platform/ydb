@@ -41,11 +41,19 @@ void* TRetroSpan::GetDataMut() {
 }
 
 NWilson::TTraceId TRetroSpan::GetParentId() const {
-    return NWilson::TTraceId(ParentId);
+    if (!ParentId) {
+        return NWilson::TTraceId{};
+    } else {
+        return NWilson::TTraceId(ParentId);
+    }
 }
 
 NWilson::TTraceId TRetroSpan::GetTraceId() const {
-    return NWilson::TTraceId(SpanId);
+    if (!SpanId) {
+        return NWilson::TTraceId{};
+    } else {
+        return NWilson::TTraceId(SpanId);
+    }
 }
 
 void TRetroSpan::AttachToTrace(const NWilson::TTraceId& parentId) {
@@ -101,7 +109,7 @@ TInstant TRetroSpan::GetEndTs() const {
 }
 
 TString TRetroSpan::GetName() const {
-    return "Unnamed retro span";
+    return "UnnamedRetroSpan";
 }
 
 void TRetroSpan::EnableAutoEnd() {

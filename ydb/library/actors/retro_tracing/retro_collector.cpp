@@ -37,6 +37,7 @@ private:
         for (const std::unique_ptr<TRetroSpan>& span : spans) {
             std::unique_ptr<NWilson::TSpan> wilson = span->MakeWilsonSpan();
             wilson->Attribute("type", "RETRO");
+            wilson->EndOk();
             wilson.reset();
         }
     }

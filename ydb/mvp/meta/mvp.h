@@ -7,7 +7,7 @@
 #include <ydb/mvp/core/signals.h>
 #include <ydb/mvp/core/appdata.h>
 #include <ydb/mvp/core/mvp_tokens.h>
-#include <ydb/mvp/core/generic_options.h>
+#include <ydb/mvp/core/mvp_startup_options.h>
 #include <library/cpp/deprecated/atomic/atomic.h>
 #include <contrib/libs/yaml-cpp/include/yaml-cpp/yaml.h>
 
@@ -53,7 +53,7 @@ public:
     void TryGetGenericOptionsFromConfig(
         const YAML::Node& config,
         const NLastGetopt::TOptsParseResult& parsedArgs,
-        TGenericOptions& genericOptions);
+        TMvpStartupOptions& startupOptions);
 
     TMVPAppData AppData;
     TIntrusivePtr<NActors::NLog::TSettings> LoggerSettings;

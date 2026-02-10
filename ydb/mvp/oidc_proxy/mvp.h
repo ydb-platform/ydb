@@ -6,7 +6,7 @@
 #include <ydb/mvp/core/mvp_log.h>
 #include <ydb/mvp/core/signals.h>
 #include <ydb/mvp/core/appdata.h>
-#include <ydb/mvp/core/generic_options.h>
+#include <ydb/mvp/core/mvp_startup_options.h>
 #include <ydb/mvp/core/mvp_tokens.h>
 #include <library/cpp/deprecated/atomic/atomic.h>
 #include <contrib/libs/yaml-cpp/include/yaml-cpp/yaml.h>
@@ -33,7 +33,7 @@ protected:
     TIntrusivePtr<NActors::NLog::TSettings> BuildLoggerSettings();
 
     void TryGetOidcOptionsFromConfig(const YAML::Node& config);
-    void TryGetGenericOptionsFromConfig(const YAML::Node& config, const NLastGetopt::TOptsParseResult& parsedArgs, TGenericOptions& genericOptions);
+    void TryGetGenericOptionsFromConfig(const YAML::Node& config, const NLastGetopt::TOptsParseResult& parsedArgs, TMvpStartupOptions& startupOptions);
 
     TMVPAppData AppData;
     TIntrusivePtr<NActors::NLog::TSettings> LoggerSettings;

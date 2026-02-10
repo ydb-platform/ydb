@@ -9,7 +9,6 @@ SRCS(
     appdata.h
     filter.cpp
     filter.h
-    generic_options.h
     grpc_log.h
     http_check.h
     http_sensors.h
@@ -21,6 +20,7 @@ SRCS(
     mvp_log.h
     mvp_mem_profiler.cpp
     mvp_security_printer.cpp
+    mvp_startup_options.h
     mvp_swagger.h
     mvp_test_runtime.cpp
     mvp_test_runtime.h

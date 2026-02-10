@@ -190,8 +190,8 @@
   // essentially saying keep trying until it timeouts
   (
     // Start from 2, since you can't have a join with only 1 table
-    (label=+tp-path; type=path; N=2..128) +
-    (label=+tp-cycle; type=cycle; N=3..128) +
+    (label=+tp-path; type=path; N=2..64) +
+    (label=+tp-cycle; type=cycle; N=3..64) +
 
     // N=4 is a first star that differs from ring and path
     (label=+tp-star; type=star; N=4..64) +

@@ -42,7 +42,6 @@ TConstructor::TConstructor(const IPathIdTranslator& translator, const NColumnSha
             if (portionInfo->IsRemovedFor(reqSnapshot)) {
                 continue;
             }
-            AFL_VERIFY(unifiedPathId.HasSchemeShardLocalPathId());
             if (unifiedPathId.HasInternalPathId()) {
                 constructors.emplace_back(NColumnShard::TUnifiedPathId::BuildValid(unifiedPathId.GetInternalPathIdVerified(), unifiedPathId.GetSchemeShardLocalPathIdVerified()), tabletId, portionInfo, portionInfo->GetSchema(originalSchemaInfo));
                 if (!pkFilter->IsUsed(

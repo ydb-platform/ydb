@@ -169,6 +169,19 @@ bool TStorage::ChangeMessageDeadline(ui64 messageId, TInstant deadline) {
 }
 
 bool TStorage::Purge(ui64 endOffset) {
+    Metrics.TotalPurgedMessageCount += Metrics.UnprocessedMessageCount + Metrics.LockedMessageCount
+        + Metrics.DelayedMessageCount + Metrics.DLQMessageCount
+        + (endOffset - GetLastOffset());
+
+    Metrics.InflightMessageCount = 0;
+    Metrics.UnprocessedMessageCount = 0;
+    Metrics.LockedMessageCount = 0;
+    Metrics.LockedMessageGroupCount = 0;
+    Metrics.DelayedMessageCount = 0;
+    Metrics.CommittedMessageCount = 0;
+    Metrics.DeadlineExpiredMessageCount = 0;
+    Metrics.DLQMessageCount = 0;
+
     SlowMessages.clear();
     Messages.clear();
     DLQQueue.clear();
@@ -185,17 +198,6 @@ bool TStorage::Purge(ui64 endOffset) {
     NextVacuumRun = TrimToSeconds(TimeProvider->Now(), false) + VACUUM_INTERVAL;
 
     Batch.SetPurged();
-
-    Metrics.TotalPurgedMessageCount += Metrics.UnprocessedMessageCount + Metrics.LockedMessageCount + Metrics.DelayedMessageCount + Metrics.DLQMessageCount;
-
-    Metrics.InflightMessageCount = 0;
-    Metrics.UnprocessedMessageCount = 0;
-    Metrics.LockedMessageCount = 0;
-    Metrics.LockedMessageGroupCount = 0;
-    Metrics.DelayedMessageCount = 0;
-    Metrics.CommittedMessageCount = 0;
-    Metrics.DeadlineExpiredMessageCount = 0;
-    Metrics.DLQMessageCount = 0;
 
     return true;
 }

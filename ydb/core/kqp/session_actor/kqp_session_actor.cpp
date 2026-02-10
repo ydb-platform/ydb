@@ -2926,6 +2926,7 @@ public:
             return;
         } else {
             CleanupCtx.reset();
+            ExecuterId = TActorId{};
             bool doNotKeepSession = QueryState && !QueryState->KeepSession;
             QueryState.reset();
             if (doNotKeepSession) {
@@ -2935,7 +2936,6 @@ public:
                 Become(&TKqpSessionActor::ReadyState);
             }
         }
-        ExecuterId = TActorId{};
     }
 
     template<class T>

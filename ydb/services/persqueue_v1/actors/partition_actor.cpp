@@ -649,9 +649,18 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
 
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Partition
                         << " initDone " << InitDone << " event " << MaskResult(result));
+    
+    auto doLogUnexpectedResult = [&](const auto marker) {
+        LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Partition
+                            << " " << marker << " unexpected response: " << result.ShortDebugString());
+    };
 
 
     if (!InitDone) {
+        if (!result.HasCmdGetClientOffsetResult()) {
+            doLogUnexpectedResult("#init");
+            return;
+        }
         AFL_ENSURE(DirectReadRestoreStage == EDirectReadRestoreStage::None);
         if (result.GetCookie() != INIT_COOKIE) {
             LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Partition
@@ -662,7 +671,6 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
         CurrentRequest.Clear();
         RequestInfly = false;
 
-        AFL_ENSURE(result.HasCmdGetClientOffsetResult());
         const auto& resp = result.GetCmdGetClientOffsetResult();
         AFL_ENSURE(resp.HasEndOffset());
         EndOffset = resp.GetEndOffset();
@@ -690,11 +698,12 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
         return;
     }
 
-    if (!(
-            result.HasCmdReadResult() || result.HasCmdPrepareReadResult() || result.HasCmdPublishReadResult()
-            || result.HasCmdForgetReadResult() || result.HasCmdRestoreDirectReadResult()
-    )) {
-        // this is commit response
+    if (!result.HasCmdReadResult() &&
+        !result.HasCmdPrepareReadResult() &&
+        !result.HasCmdPublishReadResult() &&
+        !result.HasCmdForgetReadResult() &&
+        !result.HasCmdRestoreDirectReadResult()) {
+        // this is commit response (response contains only cookie)
         CommitDone(result.GetCookie(), ctx);
         return;
     }
@@ -703,7 +712,10 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
         case EDirectReadRestoreStage::None:
             break;
         case EDirectReadRestoreStage::Session:
-            AFL_ENSURE(result.HasCmdRestoreDirectReadResult());
+            if (!result.HasCmdRestoreDirectReadResult()) {
+                doLogUnexpectedResult("#session");
+                return;
+            }
             LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " Direct read - session restarted for partition " << Partition);
             if (!SendNextRestorePrepareOrForget()) {
                 OnDirectReadsRestored();
@@ -712,9 +724,9 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
         case EDirectReadRestoreStage::Prepare:
             AFL_ENSURE(RestoredDirectReadId != 0);
             if (!result.HasCmdPrepareReadResult()) {
-                LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " Invalid response on direct read restore for " << Partition << ": expect PrepareReadResult");
+                doLogUnexpectedResult("#prepare");
+                return;
             }
-            AFL_ENSURE(result.HasCmdPrepareReadResult());
             AFL_ENSURE(DirectReadsToRestore.begin()->first == result.GetCmdPrepareReadResult().GetDirectReadId());
             DirectReadsToRestore.erase(DirectReadsToRestore.begin());
             {
@@ -730,8 +742,11 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
             return;
         case EDirectReadRestoreStage::Publish:
             AFL_ENSURE(RestoredDirectReadId != 0);
+            if (!result.HasCmdPublishReadResult()) {
+                doLogUnexpectedResult("#publish");
+                return;
+            }
 
-            AFL_ENSURE(result.HasCmdPublishReadResult());
             AFL_ENSURE(*DirectReadsToPublish.begin() == result.GetCmdPublishReadResult().GetDirectReadId());
             DirectReadsToPublish.erase(DirectReadsToPublish.begin());
             if (!SendNextRestorePrepareOrForget()) {
@@ -740,7 +755,10 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
             return;
         case EDirectReadRestoreStage::Forget:
             AFL_ENSURE(RestoredDirectReadId != 0);
-            AFL_ENSURE(result.HasCmdForgetReadResult());
+            if (!result.HasCmdForgetReadResult()) {
+                doLogUnexpectedResult("#forget");
+                return;
+            }
             AFL_ENSURE(*DirectReadsToForget.begin() == result.GetCmdForgetReadResult().GetDirectReadId());
             DirectReadsToForget.erase(DirectReadsToForget.begin());
             if (!SendNextRestorePrepareOrForget()) {
@@ -761,7 +779,12 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
     }
 
     //This is read
-    AFL_ENSURE(result.HasCmdReadResult() || result.HasCmdPrepareReadResult() || result.HasCmdPublishReadResult());
+
+    if (!result.HasCmdReadResult() && !result.HasCmdPrepareReadResult() && !result.HasCmdPublishReadResult()) {
+        doLogUnexpectedResult("#read");
+        return;
+    }
+
     if (result.HasCmdPrepareReadResult()) {
         AFL_ENSURE(DirectReadRestoreStage == EDirectReadRestoreStage::None);
         const auto& res = result.GetCmdPrepareReadResult();

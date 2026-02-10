@@ -39,10 +39,21 @@ void RollbackAll(const TActorIdentity selfActorId, ui32 partitionId, std::deque<
     queue.clear();
 }
 
+template<typename R>
+R* MakeOkResponse(ui32 partitionId) {
+    Y_UNUSED(partitionId);
+    return new R();
+}
+
+template<>
+TEvPQ::TEvMLPPurgeResponse* MakeOkResponse<TEvPQ::TEvMLPPurgeResponse>(ui32 partitionId) {
+    return new TEvPQ::TEvMLPPurgeResponse(partitionId);
+}
+
 template<typename R, typename T>
-void ReplyOk(const TActorIdentity selfActorId, std::deque<T>& queue) {
+void ReplyOk(const TActorIdentity selfActorId, ui32 partitionId, std::deque<T>& queue) {
     for (auto& ev : queue) {
-        selfActorId.Send(ev.Sender, new R(), 0, ev.Cookie);
+        selfActorId.Send(ev.Sender, MakeOkResponse<R>(partitionId), 0, ev.Cookie);
     }
     queue.clear();
 }
@@ -125,20 +136,13 @@ void TConsumerActor::PassAway() {
     RollbackAll(SelfId(), PartitionId, PendingCommitQueue);
     RollbackAll(SelfId(), PartitionId, PendingUnlockQueue);
     RollbackAll(SelfId(), PartitionId, PendingChangeMessageDeadlineQueue);
+    RollbackAll(SelfId(), PartitionId, PendingPurgeQueue);
 
     ReplyErrorAll(SelfId(), PartitionId, ReadRequestsQueue);
     ReplyErrorAll(SelfId(), PartitionId, CommitRequestsQueue);
     ReplyErrorAll(SelfId(), PartitionId, UnlockRequestsQueue);
     ReplyErrorAll(SelfId(), PartitionId, ChangeMessageDeadlineRequestsQueue);
-
-    if (PendingPurgeQueue) {
-        ReplyError(SelfId(), PartitionId, PendingPurgeQueue->Sender, PendingPurgeQueue->Cookie, "Actor destroyed");
-        PendingPurgeQueue = std::nullopt;
-    }
-    if (PurgeRequest) {
-        ReplyError(SelfId(), PartitionId, PurgeRequest->Sender, PurgeRequest->Cookie, "Actor destroyed");
-        PurgeRequest = nullptr;
-    }
+    ReplyErrorAll(SelfId(), PartitionId, PurgeRequestsQueue);
 
     if (DLQMoverActorId) {
         Send(DLQMoverActorId, new TEvents::TEvPoison());
@@ -173,7 +177,7 @@ void TConsumerActor::Queue(TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr& ev) 
 
 void TConsumerActor::Queue(TEvPQ::TEvMLPPurgeRequest::TPtr& ev) {
     LOG_D("Queue TEvPQ::TEvMLPPurgeRequest " << ev->Get()->Record.ShortDebugString());
-    PurgeRequest = std::move(ev);
+    PurgeRequestsQueue.push_back(std::move(ev));
 }
 
 void TConsumerActor::Handle(TEvPQ::TEvMLPReadRequest::TPtr& ev) {
@@ -353,13 +357,10 @@ void TConsumerActor::Handle(TEvKeyValue::TEvResponse::TPtr& ev) {
         auto msgs = std::exchange(PendingReadQueue, {});
         RegisterWithSameMailbox(CreateMessageEnricher(TabletId, PartitionId, Config.GetName(), std::move(msgs)));
     }
-    ReplyOk<TEvPQ::TEvMLPCommitResponse>(SelfId(), PendingCommitQueue);
-    ReplyOk<TEvPQ::TEvMLPUnlockResponse>(SelfId(), PendingUnlockQueue);
-    ReplyOk<TEvPQ::TEvMLPChangeMessageDeadlineResponse>(SelfId(), PendingChangeMessageDeadlineQueue);
-    if (PendingPurgeQueue) {
-        Send(PendingPurgeQueue->Sender, new TEvPQ::TEvMLPPurgeResponse(PartitionId), 0, PendingPurgeQueue->Cookie);
-        PendingPurgeQueue = std::nullopt;
-    }
+    ReplyOk<TEvPQ::TEvMLPCommitResponse>(SelfId(), PartitionId, PendingCommitQueue);
+    ReplyOk<TEvPQ::TEvMLPUnlockResponse>(SelfId(), PartitionId, PendingUnlockQueue);
+    ReplyOk<TEvPQ::TEvMLPChangeMessageDeadlineResponse>(SelfId(), PartitionId, PendingChangeMessageDeadlineQueue);
+    ReplyOk<TEvPQ::TEvMLPPurgeResponse>(SelfId(), PartitionId, PendingPurgeQueue);
 
     MoveToDLQIfPossible();
     ProcessEventQueue();
@@ -563,11 +564,11 @@ void TConsumerActor::ProcessEventQueue() {
     }
     ChangeMessageDeadlineRequestsQueue.clear();
 
-    if (PurgeRequest) {
-        Storage->Purge(std::max(PurgeRequest->Get()->Record.GetEndOffset(), PartitionEndOffset));
-        PendingPurgeQueue = TResult(PurgeRequest->Sender, PurgeRequest->Cookie);
-        PurgeRequest = nullptr;
+    for (auto& ev : PurgeRequestsQueue) {
+        Storage->Purge(PartitionEndOffset);
+        PendingPurgeQueue.emplace_back(ev->Sender, ev->Cookie);
     }
+    PurgeRequestsQueue.clear();
 
     if (!ReadRequestsQueue.empty()) {
         Storage->ProccessDeadlines();

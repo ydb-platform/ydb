@@ -69,7 +69,6 @@ void TPartition::Handle(TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr& ev) {
 
 void TPartition::Handle(TEvPQ::TEvMLPPurgeRequest::TPtr& ev) {
     LOG_D("Handle TEvPQ::TEvMLPPurgeRequest " << ev->Get()->Record.ShortDebugString());
-    ev->Get()->Record.SetEndOffset(GetEndOffset());
     ForwardToMLPConsumer(ev->Get()->GetConsumer(), ev);
 }
 

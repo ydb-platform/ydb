@@ -33,7 +33,7 @@ private:
         EPartitionStatus Status = EPartitionStatus::NotStarted;
         ui64 Cookie = 0;
         bool WaitRetry = false;
-        TBackoff Backoff = TBackoff(3);
+        TBackoff Backoff = TBackoff(5, TDuration::MilliSeconds(25));
     };
 
     void DoDescribe();

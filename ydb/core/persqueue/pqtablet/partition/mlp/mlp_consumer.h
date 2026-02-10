@@ -110,13 +110,13 @@ private:
     std::deque<TEvPQ::TEvMLPCommitRequest::TPtr> CommitRequestsQueue;
     std::deque<TEvPQ::TEvMLPUnlockRequest::TPtr> UnlockRequestsQueue;
     std::deque<TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr> ChangeMessageDeadlineRequestsQueue;
-    TEvPQ::TEvMLPPurgeRequest::TPtr PurgeRequest;
+    std::deque<TEvPQ::TEvMLPPurgeRequest::TPtr> PurgeRequestsQueue;
 
     std::deque<TReadResult> PendingReadQueue;
     std::deque<TResult> PendingCommitQueue;
     std::deque<TResult> PendingUnlockQueue;
     std::deque<TResult> PendingChangeMessageDeadlineQueue;
-    std::optional<TResult> PendingPurgeQueue;
+    std::deque<TResult> PendingPurgeQueue;
 
     ui64 LastWALIndex = 0;
     bool HasSnapshot = false;

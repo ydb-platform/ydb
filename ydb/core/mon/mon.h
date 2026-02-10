@@ -16,6 +16,10 @@
 #include <yql/essentials/public/issue/yql_issue.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
 
+namespace NKikimr {
+    struct TAppData;
+}
+
 namespace NActors {
 
 void MakeJsonErrorReply(NJson::TJsonValue& jsonResponse, TString& message, const NYdb::TStatus& status);
@@ -81,8 +85,6 @@ public:
     NMonitoring::IMonPage* RegisterCountersPage(const TString& path, const TString& title, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters);
     NMonitoring::IMonPage* FindPage(const TString& relPath);
 
-    static TVector<TString> GetCountersAllowedSIDs(TActorSystem* actorSystem);
-
     struct TRegisterHandlerFields {
         TString Path;
         TActorId Handler;
@@ -127,6 +129,8 @@ protected:
     std::shared_ptr<NMonitoring::IMetricFactory> Metrics;
 
     void RegisterActorMonPage(const TActorMonPageInfo& pageInfo);
+
+    static TVector<TString> GetCountersAllowedSIDs(const NKikimr::TAppData* appData);
 };
 
 } // namespace NActors

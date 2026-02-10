@@ -160,9 +160,8 @@ void MakeJsonErrorReply(NJson::TJsonValue& jsonResponse, TString& message, const
     }
 }
 
-TVector<TString> TMon::GetCountersAllowedSIDs(TActorSystem* actorSystem) {
+TVector<TString> TMon::GetCountersAllowedSIDs(const NKikimr::TAppData* appData) {
     TVector<TString> countersAllowedSIDs;
-    NKikimr::TAppData* appData = actorSystem->AppData<NKikimr::TAppData>();
     if (!appData) {
         return countersAllowedSIDs;
     }
@@ -1684,7 +1683,7 @@ std::future<void> TMon::Start(TActorSystem* actorSystem) {
             HttpProxyActorId,
             CountersMonPage,
             Config.Authorizer,
-            GetCountersAllowedSIDs(ActorSystem));
+            GetCountersAllowedSIDs(ActorSystem->AppData<NKikimr::TAppData>()));
     } else {
         countersMonPageServiceActor = new THttpMonPageService(
             HttpProxyActorId,

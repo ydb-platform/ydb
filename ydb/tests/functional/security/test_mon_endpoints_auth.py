@@ -136,7 +136,8 @@ def create_ydb_configurator(
         'monitoring@builtin'
     ]
     assert (
-        len(config_generator.yaml_config['domains_config']['security_config']['administration_allowed_sids']) > 0
+        'administration_allowed_sids' in config_generator.yaml_config['domains_config']['security_config']
+        and len(config_generator.yaml_config['domains_config']['security_config']['administration_allowed_sids']) > 0
     ), "administration_allowed_sids was supposed to be set due to default_clusteradmin"
 
     if require_counters_authentication is not None or require_healthcheck_authentication is not None:

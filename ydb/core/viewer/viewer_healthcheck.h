@@ -118,7 +118,7 @@ public:
         }
 
         // But the general healthcheck info should not be accessible for those
-        // who have only viewer grants so we check for the monitoring grants.
+        // who have only viewer access level so we check for the monitoring access level.
         return Viewer->CheckAccessMonitoring(GetRequest());
     }
 

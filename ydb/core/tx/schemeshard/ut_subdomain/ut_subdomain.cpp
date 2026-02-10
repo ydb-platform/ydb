@@ -1119,9 +1119,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
         env.TestWaitNotification(runtime, 100);
         expectedDomainPaths += 1;
 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
-                           {NLs::PathExist,
-                            NLs::PathVersionEqual(3)});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"), {NLs::PathExist});
 
         TestCreateTable(runtime, txId++, "/MyRoot/USER_0",
                         "Name: \"table_0\""

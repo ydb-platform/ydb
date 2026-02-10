@@ -154,6 +154,7 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db, const TTabletStorageInfo* i
             AFL_VERIFY(MaxInternalPathId >= GetInitialMaxInternalPathId(TabletId));
         }
     }
+    TMap<TSchemeShardLocalPathId, TInternalPathId> mutableTables;
     {
         TLoadTimeSignals::TLoadTimer timer = LoadTimeCounters->TableLoadTimeCounters.StartGuard();
         TMemoryProfileGuard g("TTablesManager/InitFromDB::TablesV1");
@@ -170,6 +171,9 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db, const TTabletStorageInfo* i
             const auto pathId = *pathIds.begin();
             if (GenerateInternalPathId) {
                 AFL_VERIFY(pathId.InternalPathId <= MaxInternalPathId)("path_id", pathId)("max_internal_path_id", MaxInternalPathId);
+            }
+            if (!table.IsReadOnly(pathId.GetSchemeShardLocalPathId())) {
+                mutableTables[pathId.GetSchemeShardLocalPathId()] = pathId.InternalPathId;
             }
             AddTableInfo(pathId, std::move(table));
 
@@ -196,12 +200,24 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db, const TTabletStorageInfo* i
             if (GenerateInternalPathId) {
                 AFL_VERIFY(pathId.InternalPathId <= MaxInternalPathId)("path_id", pathId)("max_internal_path_id", MaxInternalPathId);
             }
+            mutableTables.erase(pathId.GetSchemeShardLocalPathId());
             AddTableInfo(pathId, std::move(table));
 
             if (!rowset.Next()) {
                 timer.AddLoadingFail();
                 return false;
             }
+        }
+    }
+
+    for (const auto& [schemeShardLocalPathId, internalPathId] : mutableTables) { // backward compatibility
+        auto it = Tables.find(internalPathId);
+        if (it == Tables.end()) {
+            continue;
+        }
+        it->second.Remove(schemeShardLocalPathId);
+        if (it->second.GetPathIds().empty()) {
+            Tables.erase(it);
         }
     }
 

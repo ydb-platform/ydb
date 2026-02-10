@@ -148,6 +148,10 @@ public:
             SchemeShardLocalPathIds[schemeShardLocalPathId] = std::move(pathInfo); // override
         }
     }
+    
+    void Remove(const TSchemeShardLocalPathId schemeShardLocalPathId) {
+        SchemeShardLocalPathIds.erase(schemeShardLocalPathId);
+    }
 
     const NOlap::TSnapshot GetDropVersionVerified() const {
         auto dropVersion = GetDropVersionOptional();

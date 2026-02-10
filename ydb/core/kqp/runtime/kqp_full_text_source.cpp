@@ -1795,10 +1795,11 @@ private:
         }
 
         if (Words.empty()) {
-            NotifyCA();
+            RuntimeError("No search terms were extracted from the query", NYql::NDqProto::StatusIds::BAD_REQUEST);
+            return false;
         }
 
-        return !Words.empty();
+        return true;
     }
 
     void FetchDocumentDetails(std::vector<TDocumentInfo::TPtr>& docInfos) {

@@ -63,6 +63,27 @@ ui32 TCountMinSketch::Probe(const char* data, size_t size) const {
     return minValue;
 }
 
+// Returns cardinality of overlapping keys based on PK domain bucket counts.
+// NOTE: this method works given the same column domain, hashing method and seeds, as well as equal width and depth.
+TMaybe<ui32> TCountMinSketch::GetOverlappingCardinality(const TCountMinSketch& rhs) const {
+    if (Width_ != rhs.Width_ || Depth_ != rhs.Depth_) {
+        return Nothing();
+    }
+
+    ui32 minCardinality = std::numeric_limits<ui32>::max();
+
+    for (ui64 d = 0; d < Depth_; ++d) {
+        ui32 cardinality = 0;
+        for (ui64 w = 0; w < Width_; ++w) {
+            ui64 idx = d * Width_ + w;
+            cardinality += std::min(Buckets()[idx], rhs.Buckets()[idx]);
+        }
+        minCardinality = std::min(minCardinality, cardinality);
+    }
+
+    return minCardinality;
+}
+
 TCountMinSketch& TCountMinSketch::operator+=(const TCountMinSketch& rhs) {
     if (Width_ != rhs.Width_ || Depth_ != rhs.Depth_) {
         return *this;

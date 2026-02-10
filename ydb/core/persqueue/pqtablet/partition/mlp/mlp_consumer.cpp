@@ -357,7 +357,7 @@ void TConsumerActor::Handle(TEvKeyValue::TEvResponse::TPtr& ev) {
     ReplyOk<TEvPQ::TEvMLPUnlockResponse>(SelfId(), PendingUnlockQueue);
     ReplyOk<TEvPQ::TEvMLPChangeMessageDeadlineResponse>(SelfId(), PendingChangeMessageDeadlineQueue);
     if (PendingPurgeQueue) {
-        Send(PendingPurgeQueue->Sender, new TEvPQ::TEvMLPPurgeResponse(), 0, PendingPurgeQueue->Cookie);
+        Send(PendingPurgeQueue->Sender, new TEvPQ::TEvMLPPurgeResponse(PartitionId), 0, PendingPurgeQueue->Cookie);
         PendingPurgeQueue = std::nullopt;
     }
 

@@ -96,6 +96,55 @@ Y_UNIT_TEST_SUITE(TMLPPurgerTests) {
         UNIT_ASSERT_VALUES_EQUAL(describe.GetPartitions()[0].GetPartitionConsumerStats()->GetCommittedOffset(), 1);
     }
 
+    Y_UNIT_TEST(TopicWithManyPartitionAndData) {
+        auto setup = CreateSetup();
+
+        CreateTopic(setup, "/Root/topic1", "mlp-consumer", 10);
+
+        auto& runtime = setup->GetRuntime();
+
+        for (size_t i = 0; i < 10; ++i) {
+            CreateWriterActor(runtime, {
+                .DatabasePath = "/Root",
+                .TopicName = "/Root/topic1",
+                .Messages = {
+                    {
+                        .Index = 3,
+                        .MessageBody = "message_body",
+                    }
+                }
+            });
+
+            {
+                auto response = GetWriteResponse(runtime);
+                UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
+            }
+        }
+
+        CreatePurgerActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Consumer = "mlp-consumer"
+        });
+        AssertPurgeOK(runtime);
+
+        CreateReaderActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Consumer = "mlp-consumer",
+            .WaitTime = TDuration::Seconds(0),
+            .VisibilityTimeout = TDuration::Seconds(30),
+            .MaxNumberOfMessage = 1,
+            .UncompressMessages = true
+        });
+
+        auto response = GetReadResponse(runtime);
+        UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 0);
+
+        auto describe = setup->DescribeConsumer("/Root/topic1", "mlp-consumer");
+        UNIT_ASSERT_VALUES_EQUAL(describe.GetPartitions()[0].GetPartitionConsumerStats()->GetCommittedOffset(), 1);
+    }
+
 }
 
 }

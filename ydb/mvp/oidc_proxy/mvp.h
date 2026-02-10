@@ -33,7 +33,7 @@ protected:
     TIntrusivePtr<NActors::NLog::TSettings> BuildLoggerSettings();
 
     void TryGetOidcOptionsFromConfig(const YAML::Node& config);
-    void TryGetGenericOptionsFromConfig(const YAML::Node& config, const NLastGetopt::TOptsParseResult& parseRes, TGenericOptions& opts);
+    void TryGetGenericOptionsFromConfig(const YAML::Node& config, const NLastGetopt::TOptsParseResult& parsedArgs, TGenericOptions& genericOptions);
 
     TMVPAppData AppData;
     TIntrusivePtr<NActors::NLog::TSettings> LoggerSettings;

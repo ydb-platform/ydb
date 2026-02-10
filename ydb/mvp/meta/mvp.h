@@ -7,6 +7,7 @@
 #include <ydb/mvp/core/signals.h>
 #include <ydb/mvp/core/appdata.h>
 #include <ydb/mvp/core/mvp_tokens.h>
+#include <ydb/mvp/core/generic_options.h>
 #include <library/cpp/deprecated/atomic/atomic.h>
 #include <contrib/libs/yaml-cpp/include/yaml-cpp/yaml.h>
 
@@ -51,12 +52,8 @@ public:
     void TryGetMetaOptionsFromConfig(const YAML::Node& config);
     void TryGetGenericOptionsFromConfig(
         const YAML::Node& config,
-        const NLastGetopt::TOptsParseResult& opts,
-        TString& ydbTokenFile,
-        TString& caCertificateFile,
-        TString& sslCertificateFile,
-        bool& useStderr,
-        bool& mlock);
+        const NLastGetopt::TOptsParseResult& parsedArgs,
+        TGenericOptions& genericOptions);
 
     TMVPAppData AppData;
     TIntrusivePtr<NActors::NLog::TSettings> LoggerSettings;

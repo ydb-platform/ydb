@@ -180,12 +180,6 @@ int TMVP::Shutdown() {
     return 0;
 }
 
-TString TMVP::GetAppropriateEndpoint(const NHttp::THttpIncomingRequestPtr& req) {
-    static TString httpEndpoint = "http://[::1]:" + ToString(startupOptions.HttpPort);
-    static TString httpsEndpoint = "https://[::1]:" + ToString(startupOptions.HttpsPort);
-    return req->Endpoint->Secure ? httpsEndpoint : httpEndpoint;
-}
-
 NMvp::TTokensConfig TMVP::TokensConfig;
 TOpenIdConnectSettings TMVP::OpenIdConnectSettings;
 

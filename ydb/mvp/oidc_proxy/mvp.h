@@ -49,7 +49,6 @@ protected:
 
 public:
     TMvpStartupOptions startupOptions;
-    TString GetAppropriateEndpoint(const NHttp::THttpIncomingRequestPtr&);
 
     TMVP(int argc, char** argv);
     int Init();

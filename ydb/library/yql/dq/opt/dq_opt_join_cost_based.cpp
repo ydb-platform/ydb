@@ -425,10 +425,6 @@ private:
         }
 
         auto bestJoinOrder = solver.Solve(hints);
-        if (solver.HasTimeouted()) {
-            return nullptr;
-        }
-
         if (postEnumerationShuffleElimination) {
             Y_ENSURE(OrderingsFSM != nullptr);
 

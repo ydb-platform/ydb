@@ -48,7 +48,7 @@ Y_UNIT_TEST_SUITE(CopyTable) {
         PlanSchemaTx(runtime, sender, {planStep, txId});
     }
 
-    Y_UNIT_TEST(WithUncomittedData) {
+    Y_UNIT_TEST(WithUncommittedData) {
         TTestBasicRuntime runtime;
         TTester::Setup(runtime);
         auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
@@ -220,7 +220,7 @@ Y_UNIT_TEST_SUITE(CopyTable) {
 
     }
 
-    Y_UNIT_TEST(RenameAbsentTable_Negative) {
+    Y_UNIT_TEST(CopyAbsentTable_Negative) {
         TTestBasicRuntime runtime;
         TTester::Setup(runtime);
         auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
@@ -237,7 +237,7 @@ Y_UNIT_TEST_SUITE(CopyTable) {
         ProposeSchemaTxFail(runtime, sender, TTestSchema::CopyTableTxBody(absentPathId, dstPathId, 1), ++txId);
     }
 
-    Y_UNIT_TEST(RenameToItself_Negative) {
+    Y_UNIT_TEST(CopyToItself_Negative) {
         TTestBasicRuntime runtime;
         TTester::Setup(runtime);
         auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();

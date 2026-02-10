@@ -555,8 +555,8 @@ bool TTablesManager::TryFinalizeDropPathOnExecute(NTable::TDatabase& dbTable, co
 
     AFL_VERIFY(!GetPrimaryIndexSafe().HasDataInPathId(pathId));
     NIceDb::TNiceDb db(dbTable);
+    NColumnShard::Schema::EraseTableInfo(db, pathId); // v0
     for (const auto& unifiedPathId : itTable->second.GetPathIds()) {
-        NColumnShard::Schema::EraseTableInfo(db, pathId);
         NColumnShard::Schema::EraseTableInfoV1(db, pathId, unifiedPathId.GetSchemeShardLocalPathId());
     }
     for (auto&& tableVersion : itTable->second.GetVersions()) {

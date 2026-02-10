@@ -275,6 +275,12 @@ THttpOutgoingResponsePtr THttpIncomingRequest::CreateResponseString(TStringBuf d
         if (parser.ExpectedBody() && !headers.IsChunkedEncoding() && !response->ContentLength) {
             response->Set<&THttpResponse::ContentLength>("0"); // workaround for buggy responses
         }
+        if (parser.ContentType && !Endpoint->CompressContentTypes.empty()) {
+            TStringBuf contentType = Trim(parser.ContentType.Before(';'), ' ');
+            if (Count(Endpoint->CompressContentTypes, contentType) != 0) {
+                response->EnableCompression();
+            }
+        }
         if (parser.HasCompletedHeaders()) {
             response->FinishHeader(); // for partial responses (data follows later)
         }
@@ -564,14 +570,13 @@ THttpIncomingResponsePtr THttpOutgoingResponse::Reverse(THttpOutgoingRequestPtr 
 THttpOutgoingDataChunk::THttpOutgoingDataChunk(THttpOutgoingResponsePtr response, TStringBuf data)
     : Response(std::move(response))
 {
-    if (data) {
-        if (Response->ContentEncoding == "deflate") {
-            SetData(CompressDeflate(data));
-        } else {
-            SetData(data);
+    if (Response->CompressContext) {
+        SetData(Response->CompressContext.Compress(data, data.empty()));
+        if (data.empty() && !IsEndOfData()) {
+            SetEndOfData(); // because we have compressed empty chunk (end of compressed stream), we need to mark it as end of data
         }
     } else {
-        SetEndOfData();
+        SetData(data);
     }
 }
 

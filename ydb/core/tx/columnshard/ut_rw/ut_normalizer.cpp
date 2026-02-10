@@ -166,7 +166,7 @@ public:
         for (auto&& key : tables) {
             db.Table<Schema::TableInfo>().Key(key.GetRawValue()).Delete();
         }
-        
+
         std::vector<std::pair<TInternalPathId, TSchemeShardLocalPathId>> tablesV1;
         {
             auto rowset = db.Table<Schema::TableInfoV1>().Select();

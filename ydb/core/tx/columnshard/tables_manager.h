@@ -116,12 +116,10 @@ public:
     }
 
     std::set<TUnifiedPathId> GetPathIds() const {
-        AFL_VERIFY(SchemeShardLocalPathIds.size());
         std::set<NColumnShard::TUnifiedPathId> paths;
         for (const auto& [schemeShardLocalPathId, _]: SchemeShardLocalPathIds) {
             paths.insert(NColumnShard::TUnifiedPathId::BuildValid(InternalPathId, schemeShardLocalPathId));
         }
-        AFL_VERIFY(paths.size());
         return paths;
     }
 

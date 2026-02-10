@@ -17,8 +17,7 @@ private:
     ui32 PortionsCount;
     
 public:
-    TDataSourceConstructor(
-        const NColumnShard::TSchemeShardLocalPathId& externalPathId, const ui64 tabletId, const std::shared_ptr<const TGranuleMeta>& granule)
+    TDataSourceConstructor(const NColumnShard::TSchemeShardLocalPathId& externalPathId, const ui64 tabletId, const std::shared_ptr<const TGranuleMeta>& granule)
         : TBase(tabletId, TSchemaAdapter::GetPKSimpleRow(externalPathId, tabletId), TSchemaAdapter::GetPKSimpleRow(externalPathId, tabletId))
         , Granule(granule)
         , ExternalPathId(externalPathId)
@@ -44,7 +43,8 @@ class TConstructor: public NAbstract::TConstructor<TDataSourceConstructor> {
 private:
     using TBase = NAbstract::TConstructor<TDataSourceConstructor>;
 public:
-    TConstructor(const NColumnShard::TUnifiedOptionalPathId& unifiedPathId,
+    TConstructor(const IPathIdTranslator& translator,
+        const NColumnShard::TUnifiedOptionalPathId& unifiedPathId,
         const IColumnEngine& engine,
         const ui64 tabletId,
         const std::shared_ptr<NOlap::TPKRangesFilter>& pkFilter,

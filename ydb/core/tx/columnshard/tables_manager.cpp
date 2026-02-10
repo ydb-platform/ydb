@@ -118,7 +118,7 @@ void TTablesManager::AddTableInfo(const TUnifiedPathId unifiedPathId, TTableInfo
     } else {
         it->second.Merge(std::move(tableInfo));
     }
-    AFL_VERIFY(SchemeShardLocalToInternal.emplace(unifiedPathId.SchemeShardLocalPathId, unifiedPathId.InternalPathId).second);
+    SchemeShardLocalToInternal.emplace(unifiedPathId.SchemeShardLocalPathId, unifiedPathId.InternalPathId);
 }
 
 bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db, const TTabletStorageInfo* info) {
@@ -540,11 +540,8 @@ bool TTablesManager::TryFinalizeDropPathOnExecute(NTable::TDatabase& dbTable, co
     AFL_VERIFY(!GetPrimaryIndexSafe().HasDataInPathId(pathId));
     NIceDb::TNiceDb db(dbTable);
     for (const auto& unifiedPathId : itTable->second.GetPathIds()) {
-        if (itTable->second.IsReadOnly(unifiedPathId.GetSchemeShardLocalPathId())) { // v0 can't be read-only
-            NColumnShard::Schema::EraseTableInfo(db, pathId);
-        } else {
-            NColumnShard::Schema::EraseTableInfoV1(db, pathId, unifiedPathId.GetSchemeShardLocalPathId());
-        }
+        NColumnShard::Schema::EraseTableInfo(db, pathId);
+        NColumnShard::Schema::EraseTableInfoV1(db, pathId, unifiedPathId.GetSchemeShardLocalPathId());
     }
     for (auto&& tableVersion : itTable->second.GetVersions()) {
         NColumnShard::Schema::EraseTableVersionInfo(db, pathId, tableVersion);

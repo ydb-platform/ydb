@@ -44,7 +44,7 @@ private:
     using TBase = NAbstract::TConstructor<TDataSourceConstructor>;
 
 public:
-    TConstructor(const NColumnShard::TUnifiedOptionalPathId& unifiedPathId, const IColumnEngine& engine, const ui64 tabletId,
+    TConstructor(const IPathIdTranslator& translator, const NColumnShard::TUnifiedOptionalPathId& unifiedPathId, const IColumnEngine& engine, const ui64 tabletId,
         const std::shared_ptr<NOlap::TPKRangesFilter>& pkFilter,
         const ERequestSorting sorting);
 };

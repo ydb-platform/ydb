@@ -66,7 +66,9 @@ private:
         void DeletePathId(const TUnifiedPathId& pathId) {
             SchemeShardLocalToInternal.erase(pathId.SchemeShardLocalPathId);
             auto it = InternalToSchemeShardLocal.find(pathId.InternalPathId);
-            AFL_VERIFY(it != InternalToSchemeShardLocal.end());
+            if (it == InternalToSchemeShardLocal.end()) {
+                return;
+            }
             it->second.erase(pathId.SchemeShardLocalPathId);
             if (it->second.empty()) {
                 InternalToSchemeShardLocal.erase(it);

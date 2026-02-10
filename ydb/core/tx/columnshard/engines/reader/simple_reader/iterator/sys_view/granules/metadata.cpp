@@ -15,7 +15,7 @@ std::unique_ptr<NReader::NCommon::ISourcesConstructor> TAccessor::SelectMetadata
     AFL_VERIFY(!isPlain);
     auto pathId = GetPathId();
     AFL_VERIFY(!!pathId);
-    return std::make_unique<TConstructor>(*pathId, context.GetEngine(), readDescription.GetTabletId(),
+    return std::make_unique<TConstructor>(context.GetPathIdTranslator(), *pathId, context.GetEngine(), readDescription.GetTabletId(),
         readDescription.PKRangesFilter, readDescription.GetSorting());
 }
 

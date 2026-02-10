@@ -22,8 +22,7 @@ using namespace NActors;
 
 const TString ALLOWED_PROXY_HOST {"ydb.viewer.page"};
 
-static TOpenIdConnectSettings BuildBaseSettings(NMvp::EAccessServiceType accessServiceType = NMvp::yandex_v2) {
-    TPortManager tp;
+static TOpenIdConnectSettings BuildBaseSettings(TPortManager& tp, NMvp::EAccessServiceType accessServiceType = NMvp::yandex_v2) {
     ui16 sessionServicePort = tp.GetPort(8655);
     ui16 profilePort = tp.GetPort(8766);
 
@@ -40,11 +39,11 @@ static TOpenIdConnectSettings BuildBaseSettings(NMvp::EAccessServiceType accessS
 
 Y_UNIT_TEST_SUITE(Mvp) {
     void OpenIdConnectRequestWithIamTokenTest(NMvp::EAccessServiceType profile) {
-
+        TPortManager tp;
         TMvpTestRuntime runtime;
         runtime.Initialize();
 
-        TOpenIdConnectSettings settings = BuildBaseSettings(profile);
+        auto settings = BuildBaseSettings(tp, profile);
 
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
         const NActors::TActorId target = runtime.Register(new TProtectedPageHandler(edge, settings));
@@ -79,10 +78,11 @@ Y_UNIT_TEST_SUITE(Mvp) {
     }
 
     void OpenIdConnectNonAuthorizeRequestWithOptionMethodTest(NMvp::EAccessServiceType profile) {
+        TPortManager tp;
         TMvpTestRuntime runtime;
         runtime.Initialize();
 
-        TOpenIdConnectSettings settings = BuildBaseSettings(profile);
+        auto settings = BuildBaseSettings(tp, profile);
 
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
         const NActors::TActorId target = runtime.Register(new TProtectedPageHandler(edge, settings));
@@ -124,10 +124,11 @@ Y_UNIT_TEST_SUITE(Mvp) {
     }
 
     void OpenIdConnectSessionServiceCheckValidCookieTest(NMvp::EAccessServiceType profile) {
+        TPortManager tp;
         TMvpTestRuntime runtime;
         runtime.Initialize();
 
-        TOpenIdConnectSettings settings = BuildBaseSettings(profile);
+        auto settings = BuildBaseSettings(tp, profile);
 
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
         const NActors::TActorId target = runtime.Register(new TProtectedPageHandler(edge, settings));
@@ -167,10 +168,12 @@ Y_UNIT_TEST_SUITE(Mvp) {
     }
 
     Y_UNIT_TEST(OpenIdConnectProxyOnHttpsHost) {
+        TPortManager tp;
         TMvpTestRuntime runtime;
         runtime.Initialize();
 
-        TOpenIdConnectSettings settings = BuildBaseSettings(NMvp::yandex_v2);
+        auto settings = BuildBaseSettings(tp, NMvp::yandex_v2);
+        settings.AllowedProxyHosts = {ALLOWED_PROXY_HOST, ALLOWED_PROXY_HOST + ":1234"};
 
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
         const NActors::TActorId target = runtime.Register(new TProtectedPageHandler(edge, settings));
@@ -239,10 +242,11 @@ Y_UNIT_TEST_SUITE(Mvp) {
 
 
     Y_UNIT_TEST(OpenIdConnectFixLocationHeader) {
+        TPortManager tp;
         TMvpTestRuntime runtime;
         runtime.Initialize();
 
-        TOpenIdConnectSettings settings = BuildBaseSettings(NMvp::yandex_v2);
+        auto settings = BuildBaseSettings(tp, NMvp::yandex_v2);
 
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
         const NActors::TActorId target = runtime.Register(new TProtectedPageHandler(edge, settings));
@@ -341,10 +345,11 @@ Y_UNIT_TEST_SUITE(Mvp) {
 
 
     Y_UNIT_TEST(OpenIdConnectExchangeNebius) {
+        TPortManager tp;
         TMvpTestRuntime runtime;
         runtime.Initialize();
 
-        TOpenIdConnectSettings settings = BuildBaseSettings(NMvp::nebius_v1);
+        auto settings = BuildBaseSettings(tp, NMvp::nebius_v1);
 
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
         const NActors::TActorId target = runtime.Register(new TProtectedPageHandler(edge, settings));
@@ -394,11 +399,11 @@ Y_UNIT_TEST_SUITE(Mvp) {
     }
 
     Y_UNIT_TEST(OpenIdConnectSessionServiceCheckAuthorizationFail) {
-
+        TPortManager tp;
         TMvpTestRuntime runtime;
         runtime.Initialize();
 
-        TOpenIdConnectSettings settings = BuildBaseSettings();
+        auto settings = BuildBaseSettings(tp);
 
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
         const NActors::TActorId target = runtime.Register(new TProtectedPageHandler(edge, settings));
@@ -530,10 +535,11 @@ Y_UNIT_TEST_SUITE(Mvp) {
     };
 
     void OidcFullAuthorizationFlow(TRedirectStrategyBase& redirectStrategy) {
+        TPortManager tp;
         TMvpTestRuntime runtime;
         runtime.Initialize();
 
-        TOpenIdConnectSettings settings = BuildBaseSettings();
+        auto settings = BuildBaseSettings(tp);
 
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
         const NActors::TActorId target = runtime.Register(new TProtectedPageHandler(edge, settings));
@@ -640,10 +646,11 @@ Y_UNIT_TEST_SUITE(Mvp) {
     }
 
     void OidcWrongStateAuthorizationFlow(TRedirectStrategyBase& redirectStrategy) {
+        TPortManager tp;
         TMvpTestRuntime runtime;
         runtime.Initialize();
 
-        TOpenIdConnectSettings settings = BuildBaseSettings();
+        auto settings = BuildBaseSettings(tp);
 
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
 
@@ -695,10 +702,11 @@ Y_UNIT_TEST_SUITE(Mvp) {
     }
 
     Y_UNIT_TEST(OpenIdConnectSessionServiceCreateAuthorizationFail) {
+        TPortManager tp;
         TMvpTestRuntime runtime;
         runtime.Initialize();
 
-        TOpenIdConnectSettings settings = BuildBaseSettings();
+        auto settings = BuildBaseSettings(tp);
 
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
         const NActors::TActorId sessionCreator = runtime.Register(new TSessionCreateHandler(edge, settings));
@@ -742,10 +750,11 @@ Y_UNIT_TEST_SUITE(Mvp) {
     }
 
     void SessionServiceCreateAccessTokenInvalid(TRedirectStrategyBase& redirectStrategy) {
+        TPortManager tp;
         TMvpTestRuntime runtime;
         runtime.Initialize();
 
-        TOpenIdConnectSettings settings = BuildBaseSettings();
+        auto settings = BuildBaseSettings(tp);
 
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
 
@@ -803,10 +812,11 @@ Y_UNIT_TEST_SUITE(Mvp) {
     }
 
     Y_UNIT_TEST(OpenIdConnectSessionServiceCreateOpenIdScopeMissed) {
+        TPortManager tp;
         TMvpTestRuntime runtime;
         runtime.Initialize();
 
-        TOpenIdConnectSettings settings = BuildBaseSettings();
+        auto settings = BuildBaseSettings(tp);
 
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
         const NActors::TActorId sessionCreator = runtime.Register(new TSessionCreateHandler(edge, settings));
@@ -851,6 +861,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
     }
 
     Y_UNIT_TEST(OpenIdConnectAllowedHostsList) {
+        TPortManager tp;
         TMvpTestRuntime runtime;
         runtime.Initialize();
 
@@ -865,7 +876,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
             "second.ydb.viewer.forbidden.page"
         };
 
-        TOpenIdConnectSettings settings = BuildBaseSettings();
+        auto settings = BuildBaseSettings(tp);
         settings.AllowedProxyHosts = {
             "*.viewer.page",
             "some.monitoring.page"
@@ -915,11 +926,11 @@ Y_UNIT_TEST_SUITE(Mvp) {
     }
 
     Y_UNIT_TEST(OpenIdConnectHandleNullResponseFromProtectedResource) {
+        TPortManager tp;
         TMvpTestRuntime runtime;
         runtime.Initialize();
 
-
-        TOpenIdConnectSettings settings = BuildBaseSettings();
+        auto settings = BuildBaseSettings(tp);
 
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
         const NActors::TActorId target = runtime.Register(new TProtectedPageHandler(edge, settings));
@@ -949,7 +960,8 @@ Y_UNIT_TEST_SUITE(Mvp) {
         TMvpTestRuntime runtime;
         runtime.Initialize();
 
-        TOpenIdConnectSettings settings = BuildBaseSettings();
+        TPortManager tp;
+        auto settings = BuildBaseSettings(tp);
 
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
 
@@ -980,7 +992,8 @@ Y_UNIT_TEST_SUITE(Mvp) {
         TMvpTestRuntime runtime;
         runtime.Initialize();
 
-        TOpenIdConnectSettings settings = BuildBaseSettings();
+        TPortManager tp;
+        auto settings = BuildBaseSettings(tp);
 
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
 
@@ -1028,7 +1041,8 @@ Y_UNIT_TEST_SUITE(Mvp) {
         TMvpTestRuntime runtime;
         runtime.Initialize();
 
-        TOpenIdConnectSettings settings = BuildBaseSettings(NMvp::nebius_v1);
+        TPortManager tp;
+        auto settings = BuildBaseSettings(tp, NMvp::nebius_v1);
 
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
 
@@ -1076,7 +1090,8 @@ Y_UNIT_TEST_SUITE(Mvp) {
         TMvpTestRuntime runtime;
         runtime.Initialize();
 
-        TOpenIdConnectSettings settings = BuildBaseSettings(NMvp::nebius_v1);
+        TPortManager tp;
+        auto settings = BuildBaseSettings(tp, NMvp::nebius_v1);
 
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
 
@@ -1109,7 +1124,8 @@ Y_UNIT_TEST_SUITE(Mvp) {
         TMvpTestRuntime runtime;
         runtime.Initialize();
 
-        TOpenIdConnectSettings settings = BuildBaseSettings(NMvp::nebius_v1);
+        TPortManager tp;
+        auto settings = BuildBaseSettings(tp, NMvp::nebius_v1);
 
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
 
@@ -1145,7 +1161,8 @@ Y_UNIT_TEST_SUITE(Mvp) {
         TMvpTestRuntime runtime;
         runtime.Initialize();
 
-        TOpenIdConnectSettings settings = BuildBaseSettings(NMvp::nebius_v1);
+        TPortManager tp;
+        auto settings = BuildBaseSettings(tp, NMvp::nebius_v1);
 
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
         TSessionServiceMock sessionServiceMock;
@@ -1204,7 +1221,8 @@ Y_UNIT_TEST_SUITE(Mvp) {
         TMvpTestRuntime runtime;
         runtime.Initialize();
 
-        TOpenIdConnectSettings settings = BuildBaseSettings(NMvp::nebius_v1);
+        TPortManager tp;
+        auto settings = BuildBaseSettings(tp, NMvp::nebius_v1);
 
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
         TSessionServiceMock sessionServiceMock;
@@ -1257,7 +1275,8 @@ Y_UNIT_TEST_SUITE(Mvp) {
 
         const TString iamToken = "streaming_iam_token";
 
-        TOpenIdConnectSettings settings = BuildBaseSettings(profile);
+        TPortManager tp;
+        auto settings = BuildBaseSettings(tp, profile);
 
         const NActors::TActorId edge = runtime.AllocateEdgeActor();
         TSessionServiceMock sessionServiceMock;
@@ -1411,7 +1430,8 @@ Y_UNIT_TEST_SUITE(Mvp) {
         TMvpTestRuntime runtime;
         runtime.Initialize();
 
-        TOpenIdConnectSettings settings = BuildBaseSettings(context.AccessServiceType);
+        TPortManager tp;
+        auto settings = BuildBaseSettings(tp, context.AccessServiceType);
 
         auto profileMock = std::make_unique<TProfileServiceMock>();
         auto grpcServer = CreateProfileServiceMock(profileMock.get(), settings.WhoamiExtendedInfoEndpoint);
@@ -1570,4 +1590,4 @@ Y_UNIT_TEST_SUITE(Mvp) {
         UNIT_ASSERT_VALUES_EQUAL(GetAddressWithoutPort("some.domain.name:1234"), "some.domain.name");
         UNIT_ASSERT_VALUES_EQUAL(GetAddressWithoutPort("some.domain.name"), "some.domain.name");
     }
-} // Y_UNIT_TEST_SUITE(MVP)
+} // Y_UNIT_TEST_SUITE(Mvp)

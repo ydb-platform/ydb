@@ -391,6 +391,7 @@ void TRunCommandConfigParser::ApplyParsedOptions() {
     Config.AppConfig.MutableMonitoringConfig()->SetInactivityTimeout(ToString(RunOpts.MonitoringInactivityTimeout.Seconds()));
     Config.AppConfig.MutableMonitoringConfig()->SetMonitoringCertificateFile(RunOpts.MonitoringCertificateFile);
     Config.AppConfig.MutableMonitoringConfig()->SetMonitoringPrivateKeyFile(RunOpts.MonitoringPrivateKeyFile);
+    Config.AppConfig.MutableMonitoringConfig()->SetMonitoringCaFile(RunOpts.MonitoringCaFile);
     Config.AppConfig.MutableRestartsCountConfig()->SetRestartsCountFile(RunOpts.RestartsCountFile);
 }
 

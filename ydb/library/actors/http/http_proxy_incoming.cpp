@@ -5,6 +5,8 @@
 #include <openssl/x509.h>
 #include <openssl/pem.h>
 
+#include <type_traits>
+
 namespace NHttp {
 
 using namespace NActors;

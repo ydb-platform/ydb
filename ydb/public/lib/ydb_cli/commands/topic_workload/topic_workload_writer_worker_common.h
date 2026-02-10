@@ -147,9 +147,9 @@ inline void ProcessWriterLoopCommon(
         bool writingAllowed = hasContinuationToken(producer);
         if (!writingAllowed) {
             lastWaitTime = TInstant::Now();
-            WRITE_LOG(params.Log, ELogPriority::TLOG_INFO, LogPrefix(sessionId) << "No continuation token found, will wait for 1ms");
+            WRITE_LOG(params.Log, ELogPriority::TLOG_ERR, LogPrefix(sessionId) << "No continuation token found, will wait for 1ms");
         } else if (lastWaitTime != TInstant::Zero()) {
-            WRITE_LOG(params.Log, ELogPriority::TLOG_INFO, LogPrefix(sessionId) << "Continuation token found, waited for " << (TInstant::Now() - lastWaitTime).MilliSeconds() << "ms");
+            WRITE_LOG(params.Log, ELogPriority::TLOG_ERR, LogPrefix(sessionId) << "Continuation token found, waited for " << (TInstant::Now() - lastWaitTime).MilliSeconds() << "ms");
             lastWaitTime = TInstant::Zero();
         }
 

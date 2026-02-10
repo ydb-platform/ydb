@@ -115,7 +115,7 @@ void TTopicWorkloadKeyedWriterWorker::Process(TInstant endTime)
             // No extra per-message logging for keyed writer.
         },
         SessionId,
-        TDuration::Seconds(60)
+        TDuration::Seconds(20)
     );
 }
 

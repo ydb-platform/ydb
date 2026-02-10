@@ -421,7 +421,7 @@ public:
             // Store the broken lock's QueryTraceId for TLI logging
             for (const auto& brokenLock : record.GetBrokenTxLocks()) {
                 if (brokenLock.HasQueryTraceId() && brokenLock.GetQueryTraceId() != 0) {
-                    Settings.TxManager->SetBrokenLockQueryTraceId(brokenLock.GetQueryTraceId());
+                    Settings.TxManager->SetVictimQueryTraceId(brokenLock.GetQueryTraceId());
                     break;
                 }
             }
@@ -444,7 +444,7 @@ public:
                 YQL_ENSURE(Settings.TxManager->BrokenLocks());
                 // Store the broken lock's QueryTraceId for TLI logging
                 if (lock.HasQueryTraceId() && lock.GetQueryTraceId() != 0) {
-                    Settings.TxManager->SetBrokenLockQueryTraceId(lock.GetQueryTraceId());
+                    Settings.TxManager->SetVictimQueryTraceId(lock.GetQueryTraceId());
                 }
                 TString message;
                 if (auto lockIssue = Settings.TxManager->GetLockIssue()) {

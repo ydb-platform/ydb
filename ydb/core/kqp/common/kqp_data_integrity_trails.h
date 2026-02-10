@@ -120,7 +120,7 @@ public:
         return QueryTexts.size();
     }
 
-    // Get the first QueryTraceId (typically from the query that acquired locks)
+    // Get the first QueryTraceId
     TMaybe<ui64> GetFirstQueryTraceId() const {
         if (QueryTexts.empty() || QueryTexts.front().first == 0) {
             return Nothing();
@@ -128,7 +128,7 @@ public:
         return QueryTexts.front().first;
     }
 
-    // Get the first query text (typically the victim query that acquired locks)
+    // Get the first query text
     TString GetFirstQueryText() const {
         if (QueryTexts.empty()) {
             return "";
@@ -149,11 +149,6 @@ public:
     // Clear all query texts and QueryTraceIds
     void Clear() {
         QueryTexts.clear();
-    }
-
-    // Get all queries for direct access
-    const std::deque<std::pair<ui64, TString>>& GetAllQueries() const {
-        return QueryTexts;
     }
 
 private:
@@ -220,7 +215,6 @@ inline void LogIntegrityTrails(const NKqp::TEvKqp::TEvQueryRequest::TPtr& reques
         LogKeyValue("Component", "SessionActor", ss);
         LogKeyValue("SessionId", request->Get()->GetSessionId(), ss);
 
-        // Only log TraceId if it's not empty
         if (!request->Get()->GetTraceId().empty()) {
             LogKeyValue("TraceId", request->Get()->GetTraceId(), ss);
         }
@@ -253,7 +247,6 @@ inline void LogIntegrityTrails(const TString& traceId, NKikimrKqp::EQueryAction 
         LogKeyValue("Component", "SessionActor", ss);
         LogKeyValue("SessionId", record.GetResponse().GetSessionId(), ss);
 
-        // Only log TraceId if it's not empty
         if (!traceId.empty()) {
             LogKeyValue("TraceId", traceId, ss);
         }
@@ -292,7 +285,6 @@ inline void LogTli(const TTliLogParams& params, const TActorContext& ctx) {
     LogKeyValue("Component", params.Component, ss);
     LogKeyValue("Message", params.Message, ss);
 
-    // Only log TraceId if it's not empty
     if (!params.TraceId.empty()) {
         LogKeyValue("TraceId", params.TraceId, ss);
     }
@@ -329,7 +321,6 @@ inline void LogIntegrityTrails(const TString& txType, const TString& txLocksDebu
         LogKeyValue("Component", "Executer", ss);
         LogKeyValue("Type", "Request", ss);
 
-        // Only log TraceId if it's not empty
         if (!traceId.empty()) {
             LogKeyValue("TraceId", traceId, ss);
         }
@@ -358,7 +349,6 @@ inline void LogIntegrityTrails(const TString& state, const TString& traceId, con
         LogKeyValue("Type", "Response", ss);
         LogKeyValue("State", state, ss);
 
-        // Only log TraceId if it's not empty
         if (!traceId.empty()) {
             LogKeyValue("TraceId", traceId, ss);
         }
@@ -395,7 +385,6 @@ inline void LogIntegrityTrails(const TString& state, const TString& traceId, con
         LogKeyValue("Type", "Response", ss);
         LogKeyValue("State", state, ss);
 
-        // Only log TraceId if it's not empty
         if (!traceId.empty()) {
             LogKeyValue("TraceId", traceId, ss);
         }
@@ -427,7 +416,6 @@ inline void LogIntegrityTrails(const TString& type, const TString& traceId, ui64
         LogKeyValue("Component", "Executer", ss);
         LogKeyValue("Type", type, ss);
 
-        // Only log TraceId if it's not empty
         if (!traceId.empty()) {
             LogKeyValue("TraceId", traceId, ss);
         }

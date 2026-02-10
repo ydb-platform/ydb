@@ -95,8 +95,8 @@ public:
     virtual bool BrokenLocks() const = 0;
     virtual ui64 GetBrokenLocksCount() const = 0;
     virtual const std::optional<NYql::TIssue>& GetLockIssue() const = 0;
-    virtual void SetBrokenLockQueryTraceId(ui64 queryTraceId) = 0;
-    virtual std::optional<ui64> GetBrokenLockQueryTraceId() const = 0;
+    virtual void SetVictimQueryTraceId(ui64 queryTraceId) = 0;
+    virtual std::optional<ui64> GetVictimQueryTraceId() const = 0;
     virtual void SetShardBreakerQueryTraceId(ui64 shardId, ui64 queryTraceId) = 0;
     virtual std::optional<ui64> GetShardBreakerQueryTraceId(ui64 shardId) const = 0;
 

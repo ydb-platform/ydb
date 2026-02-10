@@ -1514,7 +1514,7 @@ public:
 
             // Get victim info from TxManager or QueryTextCollector
             if (txCtx.TxManager) {
-                auto brokenLockQueryTraceId = txCtx.TxManager->GetBrokenLockQueryTraceId();
+                auto brokenLockQueryTraceId = txCtx.TxManager->GetVictimQueryTraceId();
                 if (brokenLockQueryTraceId) {
                     victimQueryTraceId = *brokenLockQueryTraceId;
                     victimQueryText = txCtx.QueryTextCollector.GetQueryTextByTraceId(*brokenLockQueryTraceId);
@@ -2564,7 +2564,7 @@ public:
                 case Ydb::StatusIds::ABORTED: {
                     if (QueryState->TxCtx->TxManager && QueryState->TxCtx->TxManager->BrokenLocks()) {
                         YQL_ENSURE(!issues.Empty());
-                        auto brokenLockQueryTraceId = QueryState->TxCtx->TxManager->GetBrokenLockQueryTraceId();
+                        auto brokenLockQueryTraceId = QueryState->TxCtx->TxManager->GetVictimQueryTraceId();
                         logVictimTli(brokenLockQueryTraceId);
                         collectVictimStats(brokenLockQueryTraceId);
                     } else if (ev->BrokenLockPathId || ev->BrokenLockShardId) {

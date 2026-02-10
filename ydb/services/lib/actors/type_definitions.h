@@ -29,7 +29,7 @@ struct TTopicInitInfo {
     TString FolderId;
     NKikimrPQ::TPQTabletConfig::EMeteringMode MeteringMode;
     THashMap<ui32, TPartitionInfo> Partitions;
-    std::shared_ptr<NPQ::TPartitionGraph> PartitionGraph;
+    std::shared_ptr<const NPQ::TPartitionGraph> PartitionGraph;
 };
 
 using TTopicInitInfoMap = THashMap<TString, TTopicInitInfo>;
@@ -76,22 +76,23 @@ struct TTopicHolder : TTopicHolderBase {
         PartitionGraph = info.PartitionGraph;
     }
 
-    std::shared_ptr<NPQ::TPartitionGraph> PartitionGraph;
-    std::shared_mutex PartitionGraphMutex;
-
     inline static TTopicHolder::TPtr FromTopicInfo(const TTopicInitInfo& info) {
         return std::make_shared<TTopicHolder>(info);
     }
 
-    std::shared_ptr<NPQ::TPartitionGraph> GetPartitionGraph() {
+    std::shared_ptr<const NPQ::TPartitionGraph> GetPartitionGraph() {
         std::shared_lock lock(PartitionGraphMutex);
         return PartitionGraph;
     }
 
-    void SetPartitionGraph(std::shared_ptr<NPQ::TPartitionGraph> graph) {
+    void SetPartitionGraph(std::shared_ptr<const NPQ::TPartitionGraph> graph) {
         std::unique_lock lock(PartitionGraphMutex);
         PartitionGraph = std::move(graph);
     }
+
+private:
+    std::shared_ptr<const NPQ::TPartitionGraph> PartitionGraph;
+    std::shared_mutex PartitionGraphMutex;
 };
 
 } // namespace NKikimr::NGRpcProxy

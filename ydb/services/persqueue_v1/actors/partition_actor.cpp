@@ -162,7 +162,7 @@ void TPartitionActor::Bootstrap(const TActorContext& ctx) {
     ctx.Schedule(PREWAIT_DATA, new TEvents::TEvWakeup());
 }
 
-const std::set<NPQ::TPartitionGraph::Node*>& TPartitionActor::GetParents(std::shared_ptr<NPQ::TPartitionGraph> partitionGraph) const {
+const std::set<NPQ::TPartitionGraph::Node*>& TPartitionActor::GetParents(std::shared_ptr<const NPQ::TPartitionGraph> partitionGraph) const {
     const auto* partition = partitionGraph->GetPartition(Partition.Partition);
     if (partition) {
         return partition->AllParents;

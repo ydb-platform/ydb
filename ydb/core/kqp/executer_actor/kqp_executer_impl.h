@@ -1501,6 +1501,10 @@ protected:
             this->Send(KqpTableResolverId, new TEvents::TEvPoison);
         }
 
+        if (const auto& infoAggregator = TasksGraph.GetMeta().DqInfoAggregator) {
+            this->Send(infoAggregator, new TEvents::TEvPoison());
+        }
+
         this->Send(this->SelfId(), new TEvents::TEvPoison);
         KQP_STLOG_T(KQPEX, "Terminate, become ZombieState",
             (trace_id, TraceId()));

@@ -1055,7 +1055,7 @@ void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driv
         }
 
         TActorId infoAggregator;
-        if (const auto it = args.TaskParams.find("info_aggregator"); it != args.TaskParams.end()) {
+        if (const auto it = args.TaskParams.find("dq_info_aggregator"); it != args.TaskParams.end()) {
             NActorsProto::TActorId actorIdProto;
             YQL_ENSURE(actorIdProto.ParseFromString(it->second), "Failed to parse info_aggregator");
             infoAggregator = ActorIdFromProto(actorIdProto);

@@ -81,7 +81,7 @@ http://<ендпоинт>:8765/monitoring/cluster/tenants
 
 На вкладке отображается список [групп хранения](../../concepts/glossary.md#storage-group) и их текущее состояние.
 
-![Storage-list](link)
+![Storage-list](./_assets/storage_list.png)
 
 В верхней части доступны:
 
@@ -266,7 +266,7 @@ http://<ендпоинт>:8765/monitoring/node/<node-id>/
 
 Ниже показан пример верхней части страницы группы хранения.
 
-![Storage-page-top](link)
+![Storage-page-top](./_assets/storage_page_top.png)
 
 В верхней части отображается контекст выбранной группы:
 
@@ -281,7 +281,7 @@ http://<ендпоинт>:8765/monitoring/node/<node-id>/
 
 Ниже показан пример нижней части страницы группы хранения.
 
-![Storage-page-bottom](link)
+![Storage-page-bottom](./_assets/storage_page_bottom.png)
 
 В нижней области представлены ключевые атрибуты группы:
 

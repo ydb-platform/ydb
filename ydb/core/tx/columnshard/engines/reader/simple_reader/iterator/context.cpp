@@ -128,13 +128,13 @@ void TSpecialReadContext::RegisterActors(const NCommon::ISourcesConstructor& sou
         AFL_VERIFY(casted_sources);
         // we do not pass conflicting portions of concurrent txs to the duplicate filter because they are invisible for the given tx
         std::deque<std::shared_ptr<TPortionInfo>> portionsToDuplicateFilter;
-        for (auto&& constructor : casted_sources->GetConstructors()) {
+        casted_sources->ForEachConstructor([&](const TSourceConstructor& constructor) {
             const auto info = constructor.GetPortion();
             auto state = GetPortionStateAtScanStart(*info);
             if (!state.Conflicting) {
                 portionsToDuplicateFilter.emplace_back(std::move(info));
             }
-        }
+        });
         DuplicatesManager = NActors::TActivationContext::Register(new NDuplicateFiltering::TDuplicateManager(*this, portionsToDuplicateFilter));
     }
 }

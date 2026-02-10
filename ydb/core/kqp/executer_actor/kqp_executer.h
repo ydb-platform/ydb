@@ -40,8 +40,12 @@ struct TEvKqpExecuter {
         ui64 LocksBrokenAsBreaker = 0;
         ui64 LocksBrokenAsVictim = 0;
         TVector<ui64> BreakerQueryTraceIds;  // QueryTraceIds of all queries that broke locks (from DataShard, one per shard/table)
-        TVector<ui64> DeferredBreakerQueryTraceIds;  // QueryTraceIds of transactions that broke locks in deferred scenarios
-        TVector<ui32> DeferredBreakerNodeIds;  // Node IDs where breaker query texts are cached (parallel to DeferredBreakerQueryTraceIds)
+
+        struct TDeferredBreakerInfo {
+            ui64 QueryTraceId = 0;  // Breaker's QueryTraceId
+            ui32 NodeId = 0;        // Node where breaker's query text is cached
+        };
+        TVector<TDeferredBreakerInfo> DeferredBreakers;  // Breaker info for deferred lock scenarios
 
         THashSet<ui32> ParticipantNodes;
 

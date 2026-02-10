@@ -32,7 +32,11 @@ struct TSetupSysLocks
         LockTxId = lockTxId;
         LockNodeId = lockNodeId;
         VictimQueryTraceId = victimQueryTraceId;
-        BreakerQueryTraceId = victimQueryTraceId;  // When creating locks, the query is both victim and potential breaker
+        // At lock creation time the same query plays two roles:
+        // - Victim: if another transaction later breaks this lock, this QueryTraceId identifies the victim.
+        // - Breaker: if this transaction's commit breaks someone else's lock (ApplyLocks), this QueryTraceId
+        //   is used as BreakerQueryTraceId in the TLI log via GetCurrentBreakerQueryTraceId().
+        BreakerQueryTraceId = victimQueryTraceId;
 
         SysLocksTable.SetupUpdate(this, db);
     }
@@ -45,7 +49,8 @@ struct TSetupSysLocks
         LockTxId = op->LockTxId();
         LockNodeId = op->LockNodeId();
         VictimQueryTraceId = op->QueryTraceId();
-        BreakerQueryTraceId = op->QueryTraceId();  // When creating locks, the query is both victim and potential breaker
+        // Same dual role as above: victim if our lock is broken, breaker if we break others on commit
+        BreakerQueryTraceId = op->QueryTraceId();
 
         auto mvccVersion = self.GetMvccVersion(op.Get());
 

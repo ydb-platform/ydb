@@ -49,7 +49,9 @@ NYql::TIssue GetLocksInvalidatedIssue(const TKqpTransactionContext& txCtx, const
 }
 
 TIssue GetLocksInvalidatedIssue(const TKqpTransactionContext& txCtx, const TKqpTxLock& invalidatedLock) {
-    // Get VictimQueryTraceId from the first query in the transaction
+    // In the old lock path (non-TxManager), locks don't carry per-lock QueryTraceIds.
+    // Use the first query's TraceId as the victim, since it established the MVCC snapshot
+    // and is typically the SELECT whose read locks were broken.
     TMaybe<ui64> victimQueryTraceId = txCtx.QueryTextCollector.GetFirstQueryTraceId();
     return GetLocksInvalidatedIssue(
         txCtx,

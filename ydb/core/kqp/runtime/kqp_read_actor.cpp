@@ -1066,12 +1066,13 @@ public:
             BrokenLocks.push_back(lock);
         }
 
-        // Collect deferred breaker QueryTraceIds and node IDs for TLI logging
-        for (auto breakerQueryTraceId : record.GetDeferredBreakerQueryTraceIds()) {
-            DeferredBreakerQueryTraceIds.push_back(breakerQueryTraceId);
-        }
-        for (auto breakerNodeId : record.GetDeferredBreakerNodeIds()) {
-            DeferredBreakerNodeIds.push_back(breakerNodeId);
+        // Collect deferred breaker info for TLI logging
+        {
+            const auto& traceIds = record.GetDeferredBreakerQueryTraceIds();
+            const auto& nodeIds = record.GetDeferredBreakerNodeIds();
+            for (int i = 0; i < traceIds.size(); ++i) {
+                DeferredBreakers.push_back({traceIds[i], i < nodeIds.size() ? nodeIds[i] : 0u});
+            }
         }
 
         if (UseFollowers) {
@@ -1525,12 +1526,10 @@ public:
         for (auto& lock : BrokenLocks) {
             resultInfo.AddLocks()->CopyFrom(lock);
         }
-        // Add deferred breaker QueryTraceIds and node IDs for TLI logging
-        for (auto breakerQueryTraceId : DeferredBreakerQueryTraceIds) {
-            resultInfo.AddDeferredBreakerQueryTraceIds(breakerQueryTraceId);
-        }
-        for (auto breakerNodeId : DeferredBreakerNodeIds) {
-            resultInfo.AddDeferredBreakerNodeIds(breakerNodeId);
+        // Add deferred breaker info for TLI logging
+        for (const auto& breaker : DeferredBreakers) {
+            resultInfo.AddDeferredBreakerQueryTraceIds(breaker.QueryTraceId);
+            resultInfo.AddDeferredBreakerNodeIds(breaker.NodeId);
         }
         if (Settings->GetIsBatch() && !BatchOperationMaxRow.GetCells().empty()) {
             std::vector<TCell> keyRow;
@@ -1604,8 +1603,11 @@ private:
 
     TVector<NKikimrDataEvents::TLock> Locks;
     TVector<NKikimrDataEvents::TLock> BrokenLocks;
-    TVector<ui64> DeferredBreakerQueryTraceIds;
-    TVector<ui32> DeferredBreakerNodeIds;
+    struct TDeferredBreakerInfo {
+        ui64 QueryTraceId = 0;
+        ui32 NodeId = 0;
+    };
+    TVector<TDeferredBreakerInfo> DeferredBreakers;
 
     IKqpGateway::TKqpSnapshot Snapshot;
 

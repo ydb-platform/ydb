@@ -168,8 +168,11 @@ public:
         NLWTrace::TOrbit Orbit;
         NWilson::TTraceId TraceId;
         TString UserTraceId;
-        ui64 QueryTraceId = 0;
-        ui64 FirstQueryTraceId = 0;  // First query's QueryTraceId for lock-breaking attribution
+        ui64 QueryTraceId = 0;  // QueryTraceId of the current query being executed
+        // QueryTraceId of the first query in this transaction. Passed to DataShard during commit
+        // so it can attribute lock breaks to the original victim query in deferred lock scenarios,
+        // where the conflicting write happened between the first SELECT and the commit.
+        ui64 FirstQueryTraceId = 0;
 
         NTopic::TTopicOperations TopicOperations;
 

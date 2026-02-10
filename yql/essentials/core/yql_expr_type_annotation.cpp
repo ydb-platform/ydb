@@ -1474,15 +1474,8 @@ const TDataExprType* CommonType(TPositionHandle pos, const TDataExprType* one, c
     if (IsDataTypeDecimal(slot1) && IsDataTypeDecimal(slot2)) {
         const auto parts1 = GetDecimalParts(*one);
         const auto parts2 = GetDecimalParts(*two);
-        const auto whole = std::max<ui8>(parts1.first, parts2.first);
-        const auto scale = std::max<ui8>(parts1.second, parts2.second);
-        if (whole + scale > NDecimal::MaxPrecision) {
-            if constexpr (!Silent)
-                ctx.AddError(TIssue(ctx.GetPosition(pos),
-                    TStringBuilder() << "Cannot infer common type for " << GetDataTypeInfo(slot1).Name << " and " << GetDataTypeInfo(slot2).Name << ": common precision is " << whole + scale << ", that is greater than " << NDecimal::MaxPrecision
-                ));
-            return nullptr;
-        }
+        const auto whole = std::min<ui8>(NDecimal::MaxPrecision, std::max<ui8>(parts1.first - parts1.second, parts2.first - parts2.second));
+        const auto scale = std::min<ui8>(NDecimal::MaxPrecision - whole, std::max<ui8>(parts1.second, parts2.second));
         return ctx.MakeType<TDataExprParamsType>(EDataSlot::Decimal, ToString(whole + scale), ToString(scale));
     } else if (!(IsDataTypeDecimal(slot1) || IsDataTypeDecimal(slot2))) {
         if (const auto super = GetSuperType(slot1, slot2, warn, &ctx, &pos))

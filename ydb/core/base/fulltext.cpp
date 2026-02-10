@@ -95,14 +95,14 @@ namespace {
         TVector<TString> tokens;
         switch (tokenizer) {
             case Ydb::Table::FulltextIndexSettings::WHITESPACE:
-                Tokenize(text, tokens, [ignoredDelimiter](const wchar32 c) {
+                Tokenize(text, tokens, [&ignoredDelimiter](const wchar32 c) {
                     return !ignoredDelimiter.empty() && ignoredDelimiter.contains(c)
                         ? false
                         : IsWhitespace(c);
                 });
                 break;
             case Ydb::Table::FulltextIndexSettings::STANDARD:
-                Tokenize(text, tokens, [ignoredDelimiter](const wchar32 c) {
+                Tokenize(text, tokens, [&ignoredDelimiter](const wchar32 c) {
                     return !ignoredDelimiter.empty() && ignoredDelimiter.contains(c)
                         ? false
                         : IsNonStandard(c);
@@ -350,7 +350,7 @@ TVector<TString> BuildSearchTerms(const TString& query, const Ydb::Table::Fullte
 
     TVector<TString> searchTerms;
     for (const TString& pattern : Analyze(query, analyzersForQuery, std::unordered_set<wchar32>{'%', '_'})) {
-        for (const auto& term : StringSplitter(pattern).Split('%')) {
+        for (const auto& term : StringSplitter(pattern).SplitBySet("%_")) {
             const TString token(term.Token());
             const i64 tokenLength = GetLengthUTF8(token);
             if (tokenLength == 0 || analyzersForQuery.filter_ngram_min_length() > tokenLength) {

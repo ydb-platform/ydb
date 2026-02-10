@@ -63,7 +63,7 @@ TString WildcardToRegex(const TStringBuf wildcardPattern) {
             builder << ".*";
             continue;
         } else if (c == '_') {
-            builder << "*";
+            builder << ".";
             continue;
         } else if (special.find(c) != TStringBuf::npos) {
             builder << '\\';

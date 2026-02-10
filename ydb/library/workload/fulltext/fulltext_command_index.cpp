@@ -51,6 +51,51 @@ void TFulltextWorkloadCommandBuildIndex::DoConfig(TConfig& config) {
         .DefaultValue(Params.IndexName).StoreResult(&Params.IndexName);
     config.Opts->AddLongOption("index-type", "Fulltext index type (fulltext_plain, fulltext_relevance)")
         .DefaultValue(Params.IndexType).StoreResult(&Params.IndexType);
+    config.Opts->AddLongOption("analyzer", "Fulltext index `analyzer` param (standard, snowball, keyword)")
+        .DefaultValue(Params.IndexAnalyzer).StoreResult(&Params.IndexAnalyzer);
+    config.Opts->AddLongOption("param", "Override params from analyzer(preset). Format: name=value")
+        .Optional().InsertTo(&Params.IndexParamOverrides);
+}
+
+TString TFulltextWorkloadCommandBuildIndex::ExtractIndexParams() const {
+    THashMap<TString, TString> params;
+
+    if (Params.IndexAnalyzer == "standard") {
+        params = {
+            {"tokenizer", "standard"},
+            {"use_filter_lowercase", "true"}
+        };
+    } else if (Params.IndexAnalyzer == "snowball") {
+        params = {
+            {"tokenizer", "standard"},
+            {"use_filter_lowercase", "true"},
+            {"use_filter_snowball", "true"},
+            {"language", "english"}
+        };
+    } else if (Params.IndexAnalyzer == "keyword") {
+        params = {
+            {"tokenizer", "keyword"}
+        };
+    } else {
+        ythrow yexception() << "Invalid analyzer name: " << Params.IndexAnalyzer;
+    }
+
+    for (const auto& param : Params.IndexParamOverrides) {
+        const size_t pos = param.find('=');
+        if (pos == TString::npos) {
+            continue;
+        }
+
+        const TString name = param.substr(0, pos);
+        const TString value = param.substr(pos + 1);
+        params[name] = value;
+    }
+
+    TStringBuilder builder;
+    for (const auto& [name, value] : params) {
+        builder << name << "=" << value << ",";
+    }
+    return builder;
 }
 
 int TFulltextWorkloadCommandBuildIndex::DoRun() {
@@ -59,14 +104,14 @@ int TFulltextWorkloadCommandBuildIndex::DoRun() {
             ADD INDEX `{2}`
             GLOBAL SYNC USING {3}
             ON (text) WITH (
-                use_filter_lowercase=true,
-                tokenizer=standard
+                {4}
             );
         )sql",
         Params.DbPath.c_str(),
         Params.TableName.c_str(),
         Params.IndexName.c_str(),
-        Params.IndexType.c_str()
+        Params.IndexType.c_str(),
+        ExtractIndexParams().c_str()
     );
 
     if (!ddlQuery.empty()) {

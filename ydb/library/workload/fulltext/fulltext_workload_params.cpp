@@ -1,5 +1,6 @@
 #include "fulltext_workload_params.h"
 #include "fulltext_workload_generator.h"
+#include "fulltext_data_generator.h"
 
 #include <util/string/builder.h>
 
@@ -34,7 +35,9 @@ THolder<IWorkloadQueryGenerator> TFulltextWorkloadParams::CreateGenerator() cons
 }
 
 TWorkloadDataInitializer::TList TFulltextWorkloadParams::CreateDataInitializers() const {
-    return {};
+    return {
+        std::make_shared<TFulltextWorkloadDataInitializer>(*this),
+    };
 }
 
 TString TFulltextWorkloadParams::GetWorkloadName() const {

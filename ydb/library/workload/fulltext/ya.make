@@ -3,6 +3,7 @@ LIBRARY()
 SRCS(
     fulltext.cpp
     fulltext_command_index.cpp
+    fulltext_data_generator.cpp
     fulltext_workload_generator.cpp
     fulltext_workload_params.cpp
 )

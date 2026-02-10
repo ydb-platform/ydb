@@ -33,6 +33,9 @@ public:
 
     virtual void DoConfig(TConfig& config) override;
     virtual int DoRun() override;
+
+private:
+    TString ExtractIndexParams() const;
 };
 
 class TFulltextWorkloadCommandDropIndex final : public TFulltextWorkloadCommandIndexBase {

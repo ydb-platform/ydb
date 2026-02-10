@@ -70,6 +70,7 @@ namespace NKikimr::NDDisk {
                     ChunkMapIncrementsInFlight.emplace(tabletId, vChunkIndex, chunkIdx);
                 },
                 [this, chunkIdx](const TChunkForPersistentBuffer&) {
+                    PersistentBufferSpaceAllocator.AddNewChunk(chunkIdx);
                     IssuePDiskLogRecord(TLogSignature::SignaturePersistentBufferChunkMap, chunkIdx
                         , CreatePersistentBufferChunkMapSnapshot(), &PersistentBufferChunkMapSnapshotLsn, [this, chunkIdx] {
                         IssuePersistentBufferChunkAllocationInflight = false;

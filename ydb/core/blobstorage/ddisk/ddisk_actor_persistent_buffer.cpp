@@ -11,7 +11,6 @@ namespace NKikimr::NDDisk {
     void TDDiskActor::Handle(TEvPrivate::TEvHandlePersistentBufferEventForChunk::TPtr ev) {
         auto chunkIdx = ev->Get()->ChunkIndex;
         Y_ABORT_UNLESS(chunkIdx);
-        PersistentBufferSpaceAllocator.AddNewChunk(chunkIdx);
         PersistentBufferAllocatedChunks.insert(chunkIdx);
         if (!PersistentBufferReady) {
             StartRestorePersistentBuffer();
@@ -30,6 +29,13 @@ namespace NKikimr::NDDisk {
             numBytes -= n;
         }
 
+        return XXH3_64bits_digest(&state);
+    }
+
+    ui64 CalculateChecksum(const char* begin, size_t numBytes) {
+        XXH3_state_t state;
+        XXH3_64bits_reset(&state);
+        XXH3_64bits_update(&state, begin, numBytes);
         return XXH3_64bits_digest(&state);
     }
 
@@ -73,10 +79,10 @@ namespace NKikimr::NDDisk {
                     if (memcmp(&sector, TPersistentBufferHeader::PersistentBufferHeaderSignature, 16) == 0) {
                         TPersistentBufferHeader* header = (TPersistentBufferHeader*)&sector;
                         ui64 headerChecksum = header->HeaderChecksum;
-                        header->HeaderChecksum  = 0;
-                        ui32 sectorChecksum = CalculateChecksum(dataPos, SectorSize);
-
+                        header->HeaderChecksum = 0;
+                        ui64 sectorChecksum = CalculateChecksum((char*)&sector, SectorSize);
                         if (headerChecksum != sectorChecksum) {
+                            STLOG(PRI_ERROR, BS_DDISK, BSDD11, "TDDiskActor::StartRestorePersistentBuffer header checksum failed", (TabletId, header->TabletId), (VChunkIndex, header->VChunkIndex), (Lsn, header->Lsn));
                             continue;
                         }
                         auto& buffer = PersistentBuffers[{header->TabletId, header->VChunkIndex}];
@@ -106,7 +112,7 @@ namespace NKikimr::NDDisk {
                 PersistentBufferRestoredChunks.insert(chunkIdx);
                 StartRestorePersistentBuffer(pos + 1);
                 if (PersistentBufferRestoreChunksInflight == 0) {
-                    for (auto& [_, pb] : PersistentBuffers) {
+                    for (auto& [key, pb] : PersistentBuffers) {
                         std::erase_if(pb.Records, [this](const auto& pair) {
                             for (auto sector : pair.second.Sectors) {
                                 if (PersistentBufferSectorsChecksum[sector.ChunkIdx][sector.SectorIdx] != sector.Checksum) {
@@ -165,10 +171,7 @@ namespace NKikimr::NDDisk {
                 ui32 partSize = (sectorIdx - (first == 0 ? 1 : first)) * SectorSize;
                 if (first == 0) {
                     data = headerData;
-                    auto cs = CalculateChecksum(data.Position(TPersistentBufferHeader::HeaderChecksumOffset + TPersistentBufferHeader::HeaderChecksumSize)
-                        , SectorSize - TPersistentBufferHeader::HeaderChecksumOffset - TPersistentBufferHeader::HeaderChecksumSize);
-                    memcpy(data.Position(TPersistentBufferHeader::HeaderChecksumOffset).ContiguousDataMut(), &cs, TPersistentBufferHeader::HeaderChecksumSize);
-
+                    header->HeaderChecksum = CalculateChecksum(data.Begin(), SectorSize);
                 }
                 payload.ExtractFront(partSize, &data);
                 parts.emplace_back(sectors[first].ChunkIdx, sectors[first].SectorIdx * SectorSize, std::move(data));

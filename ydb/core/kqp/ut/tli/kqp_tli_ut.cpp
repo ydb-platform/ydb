@@ -299,15 +299,7 @@ namespace {
         }
     }
 
-    size_t CountTliRecords(const TString& logs, const TString& component, const TString& messagePattern) {
-        size_t count = 0;
-        for (const auto& record : ExtractTliRecords(logs)) {
-            if (record.Contains("Component: " + component) && MatchesMessage(record, messagePattern)) {
-                ++count;
-            }
-        }
-        return count;
-    }
+
 
     // ==================== TLI log patterns ====================
 
@@ -621,6 +613,39 @@ namespace {
         return FromString<ui64>(issues.substr(pos, endPos - pos));
     }
 
+    size_t CountTliRecords(const TString& logs, const TString& component, const TString& messagePattern) {
+        size_t count = 0;
+        for (const auto& record : ExtractTliRecords(logs)) {
+            if (record.Contains("Component: " + component) && MatchesMessage(record, messagePattern)) {
+                ++count;
+            }
+        }
+        return count;
+    }
+
+    void AssertTliRecordCounts(
+        const TString& logs,
+        const TTliLogPatterns& patterns,
+        size_t expectedBreakerCount,
+        size_t expectedVictimCount)
+    {
+        size_t actualBreakerSessionActorCount = CountTliRecords(logs, "SessionActor", patterns.BreakerSessionActorMessagePattern);
+        UNIT_ASSERT_VALUES_EQUAL_C(actualBreakerSessionActorCount, expectedBreakerCount,
+            "breaker SessionActor TLI record count mismatch");
+
+        size_t actualVictimSessionActorCount = CountTliRecords(logs, "SessionActor", patterns.VictimSessionActorMessagePattern);
+        UNIT_ASSERT_VALUES_EQUAL_C(actualVictimSessionActorCount, expectedVictimCount,
+            "victim SessionActor TLI record count mismatch");
+
+        size_t actualBreakerDatashardCount = CountTliRecords(logs, "DataShard", patterns.BreakerDatashardMessage);
+        UNIT_ASSERT_VALUES_EQUAL_C(actualBreakerDatashardCount, expectedBreakerCount,
+            "breaker DataShard TLI record count mismatch");
+
+        size_t actualVictimDatashardCount = CountTliRecords(logs, "DataShard", patterns.VictimDatashardMessage);
+        UNIT_ASSERT_VALUES_EQUAL_C(actualVictimDatashardCount, expectedVictimCount,
+            "victim DataShard TLI record count mismatch");
+    }
+
     // Verify TLI issue content
     void VerifyTliIssueContent(const TString& issues) {
         UNIT_ASSERT_C(issues.Contains("Transaction locks invalidated"),
@@ -641,7 +666,9 @@ namespace {
         const TString& breakerQueryText,
         const TString& victimQueryText,
         const std::optional<TString>& victimExtraQueryText = std::nullopt,
-        size_t expectedBreakerSessionActorCount = 1)
+        size_t expectedBreakerCount = 1,
+        size_t expectedVictimCount = 1
+    )
     {
         DumpTliRecords(ss.Str());
 
@@ -658,9 +685,7 @@ namespace {
         UNIT_ASSERT_C(std::find(occurrences.begin(), occurrences.end(), *victimQueryTraceId) != occurrences.end(),
             "VictimQueryTraceId should match between issue and victim SessionActor log");
 
-        size_t actualBreakerCount = CountTliRecords(ss.Str(), "SessionActor", patterns.BreakerSessionActorMessagePattern);
-        UNIT_ASSERT_VALUES_EQUAL_C(actualBreakerCount, expectedBreakerSessionActorCount,
-            "breaker SessionActor TLI record count mismatch");
+        AssertTliRecordCounts(ss.Str(), patterns, expectedBreakerCount, expectedVictimCount);
     }
 
     void VerifyTliIssueAndLogsWhenDisabled(
@@ -874,44 +899,10 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         VerifyTliIssueAndLogs(issues, ss, breakerQueryText, victimQueryText);
     }
 
-    // Test: Two victims and one breaker scenario
-    Y_UNIT_TEST(TwoVictimsOneBreaker) {
-        TStringStream ss;
-        TTliTestContext ctx(ss);
-        ctx.CreateTable("/Root/Tenant1/TableLocks");
-        ctx.SeedTable("/Root/Tenant1/TableLocks", {{1, "Initial"}});
-
-        const TString breakerQueryText = "UPSERT INTO `/Root/Tenant1/TableLocks` (Key, Value) VALUES (1u, \"BreakerValue\")";
-        const TString victimQueryText = "SELECT * FROM `/Root/Tenant1/TableLocks` WHERE Key = 1u";
-        const TString victimCommitText = "UPSERT INTO `/Root/Tenant1/TableLocks` (Key, Value) VALUES (1u, \"VictimValue\")";
-
-        // Create two victim sessions
-        TSession victim1Session = ctx.Client.CreateSession().GetValueSync().GetSession();
-        TSession victim2Session = ctx.Client.CreateSession().GetValueSync().GetSession();
-
-        // Victim1: read key 1 and prepare commit
-        auto victim1Tx = BeginReadTx(victim1Session, victimQueryText);
-
-        // Victim2: read key 1 and prepare commit
-        auto victim2Tx = BeginReadTx(victim2Session, victimQueryText);
-
-        // Breaker: write key 1 (breaks both victims' locks)
-        ctx.ExecuteQuery(breakerQueryText);
-
-        // Both victims try to commit - both should be aborted
-        auto [status1, issues1] = ExecuteVictimCommitWithIssues(victim1Session, victim1Tx, victimCommitText);
-        UNIT_ASSERT_VALUES_EQUAL(status1, EStatus::ABORTED);
-        VerifyTliIssueAndLogs(issues1, ss, breakerQueryText, victimQueryText, victimCommitText);
-
-        auto [status2, issues2] = ExecuteVictimCommitWithIssues(victim2Session, victim2Tx, victimCommitText);
-        UNIT_ASSERT_VALUES_EQUAL(status2, EStatus::ABORTED);
-        VerifyTliIssueAndLogs(issues2, ss, breakerQueryText, victimQueryText, victimCommitText);
-    }
-
     // Test: Two victims on two different tables, one breaker writes to both tables.
     // The breaker's SessionActor should emit two TLI log entries with different BreakerQueryTraceIds,
     // each matching the corresponding DataShard's BreakerQueryTraceId.
-    Y_UNIT_TEST(TwoVictimsOneBreakerTwoTables) {
+    Y_UNIT_TEST(TwoVictimsOneBreaker) {
         TStringStream ss;
         TTliTestContext ctx(ss);
 
@@ -946,12 +937,11 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         auto [status2, issues2] = ExecuteVictimCommitWithIssues(victim2Session, victim2Tx, victim2CommitText);
         UNIT_ASSERT_VALUES_EQUAL(status2, EStatus::ABORTED);
 
-        // Verify each victim independently using the common helper.
-        // The breaker emits 2 SessionActor TLI entries (one per table), so expectedBreakerSessionActorCount = 2.
+        // Verify each victim independently
         VerifyTliIssueAndLogs(issues1, ss, breakerUpdate1, victim1QueryText, victim1CommitText,
-            /* expectedBreakerSessionActorCount */ 2);
+            /* expectedBreakerCount */ 2, /* expectedVictimCount */ 2);
         VerifyTliIssueAndLogs(issues2, ss, breakerUpdate2, victim2QueryText, victim2CommitText,
-            /* expectedBreakerSessionActorCount */ 2);
+            /* expectedBreakerCount */ 2, /* expectedVictimCount */ 2);
     }
 
     // Test: InvisibleRowSkips - victim reads at snapshot V1, breaker commits at V2, victim reads again

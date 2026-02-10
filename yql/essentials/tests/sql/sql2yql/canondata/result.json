@@ -12270,11 +12270,6 @@
             "uri": "file://test_sql_format.test_expr-cast_decimal_/formatted.sql"
         }
     ],
-    "test_sql_format.test[expr-cast_decimal_fail]": [
-        {
-            "uri": "file://test_sql_format.test_expr-cast_decimal_fail_/formatted.sql"
-        }
-    ],
     "test_sql_format.test[expr-cast_decimal_implicit_fail_1]": [
         {
             "uri": "file://test_sql_format.test_expr-cast_decimal_implicit_fail_1_/formatted.sql"

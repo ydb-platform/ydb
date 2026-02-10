@@ -26,7 +26,7 @@ class StressUtilDeployer:
         self.cluster_path = cluster_path
         self.yaml_config = yaml_config
         self.nodes = YdbCluster.get_cluster_nodes()
-        YdbCluster.execute_single_result_query('ALTER DATABASE `/Root/db1` SET (MAX_PATHS = 200000)')
+        # YdbCluster.execute_single_result_query('ALTER DATABASE `/Root/db1` SET (MAX_PATHS = 200000)')
         patch_max_suffix(1000000)
 
         # Collect unique hosts and their corresponding nodes

@@ -42,6 +42,15 @@ jobs:
             echo "branches=$(jq -c '.' "$BRANCHES_CONFIG_PATH")" >> $GITHUB_OUTPUT
           fi
 
+      - name: Log branches to process
+        run: |
+          BRANCHES='${{ steps.set-matrix.outputs.branches }}'
+          echo "### Branches to process" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "$BRANCHES" | jq -r '.[]' >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "Branches to process: $(echo "$BRANCHES" | jq -r '.[]' | tr '\n' ' ')"
+
   collect-testowners:
     runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]
     steps:
@@ -49,6 +58,14 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: main
+          fetch-depth: 0
+
+      - name: Verify actions present
+        run: |
+          echo "Contents of .github/actions:"
+          ls -la .github/actions/
+          echo "Contents of setup_ci_ydb action:"
+          ls -la .github/actions/setup_ci_ydb_service_account_key_file_credentials/ || true
 
       - name: Install dependencies
         run: |

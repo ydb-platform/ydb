@@ -19,7 +19,7 @@ using NBlockStore::TCallContext;
 ////////////////////////////////////////////////////////////////////////////////
 
 TLoadActorAdapter::TLoadActorAdapter(
-    std::unique_ptr<TFastPathService> fastPathService)
+    std::shared_ptr<TFastPathService> fastPathService)
     : FastPathService(std::move(fastPathService))
 {}
 
@@ -173,7 +173,7 @@ STFUNC(TLoadActorAdapter::StateWork)
 
 TActorId CreateLoadActorAdapter(
     const NActors::TActorId& owner,
-    std::unique_ptr<TFastPathService> fastPathService)
+    std::shared_ptr<TFastPathService> fastPathService)
 {
     auto actor = std::make_unique<TLoadActorAdapter>(
         std::move(fastPathService));

@@ -670,5 +670,13 @@ public:
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };
 
+#if defined(OS_LINUX)
+class TNbsServiceInitializer: public IKikimrServicesInitializer {
+public:
+    TNbsServiceInitializer(const TKikimrRunConfig &runConfig);
+    void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
+};
+#endif
+
 } // namespace NKikimrServicesInitializers
 } // namespace NKikimr

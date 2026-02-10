@@ -20,6 +20,12 @@ PEERDIR(
     yt/yt/library/profiling/solomon
 )
 
+IF (OS_LINUX)
+    PEERDIR(
+        library/cpp/yt/backtrace/symbolizers/dwarf
+    )
+ENDIF()
+
 EXPLICIT_DATA()
 
 SET(TEST_DATA_DIR ${ARCADIA_ROOT}/yt/yt/core/test_framework/testdata)

@@ -47,12 +47,6 @@ namespace NKikimr::NDDisk {
             .Requests={},
             .ErrorReason={}
         }).first->second;
-            //.Attribute("offset_in_bytes", selector.OffsetInBytes)
-            //.Attribute("size", selector.Size)
-            //.Attribute("source", lsn ? "persistent_buffer" : "ddisk");
-        //if (lsn) {
-        //    span.Attribute("lsn", static_cast<long>(*lsn));
-        //}
 
         const auto& ddiskId = record.GetDDiskId();
         const TQueryCredentials sourceCreds(creds.TabletId, creds.Generation, record.GetDDiskInstanceGuid(), true);

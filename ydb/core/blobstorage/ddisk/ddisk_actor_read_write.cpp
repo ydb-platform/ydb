@@ -30,7 +30,7 @@ namespace NKikimr::NDDisk {
             selector.OffsetInBytes,
             std::move(data)), 0, cookie);
 
-        WriteCallbacks.try_emplace(cookie, TPendingWrite{std::move(span)}, callback);
+        WriteCallbacks.try_emplace(cookie, TPendingWrite{std::move(span), callback});
     }
 
     void TDDiskActor::Handle(TEvWrite::TPtr ev) {

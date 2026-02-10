@@ -430,8 +430,14 @@ public:
                 if (auto lockIssue = Settings.TxManager->GetLockIssue()) {
                     message = lockIssue->GetMessage();
                 } else {
-                    message = TStringBuilder() << "Transaction locks invalidated. Table: `"
+                    TStringBuilder builder;
+                    builder << "Transaction locks invalidated. Table: `"
                         << lookupState.Worker->GetTablePath() << "`.";
+                    auto victimId = Settings.TxManager->GetVictimQueryTraceId();
+                    if (victimId && *victimId != 0) {
+                        builder << " VictimQueryTraceId: " << *victimId << ".";
+                    }
+                    message = builder;
                 }
                 RuntimeError(NYql::NDqProto::StatusIds::ABORTED,
                     NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message);

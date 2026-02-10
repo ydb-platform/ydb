@@ -3123,12 +3123,16 @@ private:
 
                     ResponseEv->BatchOperationMaxKeys.emplace_back(info.GetBatchOperationMaxKey());
                 }
-                // Collect deferred breaker QueryTraceIds and node IDs for TLI logging at SessionActor level
-                for (auto breakerQueryTraceId : info.GetDeferredBreakerQueryTraceIds()) {
-                    ResponseEv->DeferredBreakerQueryTraceIds.push_back(breakerQueryTraceId);
-                }
-                for (auto breakerNodeId : info.GetDeferredBreakerNodeIds()) {
-                    ResponseEv->DeferredBreakerNodeIds.push_back(breakerNodeId);
+                // Collect deferred breaker info for TLI logging at SessionActor level
+                {
+                    const auto& traceIds = info.GetDeferredBreakerQueryTraceIds();
+                    const auto& nodeIds = info.GetDeferredBreakerNodeIds();
+                    for (int i = 0; i < traceIds.size(); ++i) {
+                        ResponseEv->DeferredBreakers.push_back({
+                            traceIds[i],
+                            i < nodeIds.size() ? nodeIds[i] : 0u
+                        });
+                    }
                 }
             } else if (data.GetData().template Is<NKikimrKqp::TEvKqpOutputActorResultInfo>()) {
                 NKikimrKqp::TEvKqpOutputActorResultInfo info;

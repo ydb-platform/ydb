@@ -46,8 +46,12 @@ message TTxStats {
     repeated TPerShardStats PerShardStats = 4;
     optional uint64 LocksBrokenAsBreaker = 5; // locks broken by this transaction
     optional uint64 LocksBrokenAsVictim = 6;  // this transaction's locks were broken by others
-    optional uint64 BreakerQueryTraceId = 7;  // QueryTraceId of the query that broke other locks
-    repeated uint64 DeferredBreakerQueryTraceIds = 8; // QueryTraceIds of transactions that broke locks in deferred scenarios
+    // Per-shard BreakerQueryTraceId: the specific query that wrote to this shard and broke other locks.
+    // At the KQP level, these are aggregated into a vector (one per shard) for multi-shard transactions.
+    optional uint64 BreakerQueryTraceId = 7;
+    // Deferred breaker scenario (InvisibleRowSkips): QueryTraceIds of breaker transactions detected
+    // during read, where lock was broken between snapshot and re-read. Multiple breakers possible.
+    repeated uint64 DeferredBreakerQueryTraceIds = 8;
 
     // TODO:
     // optional uint64 CommitLatencyUsec = 3;

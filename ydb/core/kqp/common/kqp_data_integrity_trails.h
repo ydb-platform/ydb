@@ -34,6 +34,12 @@ public:
             return;
         }
         with_lock(Lock) {
+            // Only add if (queryTraceId, queryText) pair is different from the previous entry
+            if (!Cache.empty() &&
+                Cache.back().first == queryTraceId &&
+                Cache.back().second == queryText) {
+                return;
+            }
             // Remove oldest entry if cache is full
             while (Cache.size() >= MaxCacheSize) {
                 Cache.pop_front();

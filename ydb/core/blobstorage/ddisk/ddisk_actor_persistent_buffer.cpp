@@ -11,6 +11,7 @@ namespace NKikimr::NDDisk {
     void TDDiskActor::Handle(TEvPrivate::TEvHandlePersistentBufferEventForChunk::TPtr ev) {
         auto chunkIdx = ev->Get()->ChunkIndex;
         Y_ABORT_UNLESS(chunkIdx);
+        PersistentBufferSpaceAllocator.AddNewChunk(chunkIdx);
         PersistentBufferAllocatedChunks.insert(chunkIdx);
         if (!PersistentBufferReady) {
             StartRestorePersistentBuffer();
@@ -36,14 +37,21 @@ namespace NKikimr::NDDisk {
         if (PersistentBufferReady) {
             return;
         }
+        if (PersistentBufferSpaceAllocator.OwnedChunks.size() < PersistentBufferInitChunks) {
+            IssuePersistentBufferChunkAllocation();
+            return;
+        }
+
         if (PersistentBufferSpaceAllocator.OwnedChunks.size() == PersistentBufferAllocatedChunks.size()) {
             STLOG(PRI_DEBUG, BS_DDISK, BSDD12, "TDDiskActor::StartRestorePersistentBuffer ready");
             PersistentBufferReady = true;
+            return;
         }
         while (pos < PersistentBufferSpaceAllocator.OwnedChunks.size() && PersistentBufferRestoreChunksInflight < MaxPersistentBufferChunkRestoreInflight) {
             auto chunkIdx = PersistentBufferSpaceAllocator.OwnedChunks[pos];
             STLOG(PRI_DEBUG, BS_DDISK, BSDD13, "TDDiskActor::StartRestorePersistentBuffer restoring chunk from DDisk", (ChunkIdx, chunkIdx));
             if (PersistentBufferAllocatedChunks.count(chunkIdx) > 0 || PersistentBufferRestoredChunks.count(chunkIdx) > 0) {
+                pos++;
                 continue;
             }
             const ui64 cookie = NextCookie++;
@@ -58,15 +66,15 @@ namespace NKikimr::NDDisk {
                 PersistentBufferRestoreChunksInflight--;
                 Y_ABORT_UNLESS(ev.Data.size() == ChunkSize);
                 for (ui32 sectorIdx = 0; sectorIdx < SectorInChunk; sectorIdx++) {
-                    auto pos = ev.Data.Position(sectorIdx * SectorSize);
+                    auto dataPos = ev.Data.Position(sectorIdx * SectorSize);
                     ui8 sector[SectorSize];
-                    auto sigPos = pos;
+                    auto sigPos = dataPos;
                     sigPos.ExtractPlainDataAndAdvance(&sector, SectorSize);
                     if (memcmp(&sector, TPersistentBufferHeader::PersistentBufferHeaderSignature, 16) == 0) {
                         TPersistentBufferHeader* header = (TPersistentBufferHeader*)&sector;
                         ui64 headerChecksum = header->HeaderChecksum;
                         header->HeaderChecksum  = 0;
-                        ui32 sectorChecksum = CalculateChecksum(pos, SectorSize);
+                        ui32 sectorChecksum = CalculateChecksum(dataPos, SectorSize);
 
                         if (headerChecksum != sectorChecksum) {
                             continue;
@@ -92,7 +100,7 @@ namespace NKikimr::NDDisk {
                             pr.Sectors.push_back(header->Locations[i]);
                         }
                     } else {
-                        PersistentBufferSectorsChecksum[chunkIdx][sectorIdx] = CalculateChecksum(pos, SectorSize);
+                        PersistentBufferSectorsChecksum[chunkIdx][sectorIdx] = CalculateChecksum(dataPos, SectorSize);
                     }
                 }
                 PersistentBufferRestoredChunks.insert(chunkIdx);
@@ -513,8 +521,7 @@ namespace NKikimr::NDDisk {
             .Attribute("vchunk_index", static_cast<long>(selector.VChunkIndex))
             .Attribute("offset_in_bytes", selector.OffsetInBytes)
             .Attribute("size", selector.Size)
-            .Attribute("lsn", static_cast<long>(lsn))
-            .Attribute("erase", true));
+            .Attribute("lsn", static_cast<long>(lsn)));
 
         const auto it = PersistentBuffers.find({creds.TabletId, selector.VChunkIndex});
         if (it == PersistentBuffers.end()) {

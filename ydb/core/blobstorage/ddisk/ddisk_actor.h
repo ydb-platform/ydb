@@ -358,6 +358,7 @@ namespace NKikimr::NDDisk {
         static constexpr ui32 SectorInChunk = 32768;
         static constexpr ui32 ChunkSize = SectorSize * SectorInChunk;
         static constexpr ui32 MaxChunks = 128;
+        static constexpr ui32 PersistentBufferInitChunks = 1;
         static constexpr ui32 MaxSectorsPerBufferRecord = 128;
         static constexpr ui32 MaxPersistentBufferInMemoryCache = ChunkSize;
         static constexpr ui32 MaxPersistentBufferChunkRestoreInflight = 8;

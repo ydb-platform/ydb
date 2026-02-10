@@ -379,13 +379,6 @@ private:
         }
     }
 
-public:
-    ui64 CountCC(const std::shared_ptr<TJoinOptimizerNode>& joinTree, const TOptimizerHints& hints = {}) override {
-        auto hypergraph = MakeJoinHypergraph<TNodeSet64>(joinTree, hints);
-        auto solver = GetDPHypImpl<TNodeSet64, TDPHypSolverShuffleElimination<TNodeSet64>>(hypergraph);
-        return solver.CountCC(UINT32_MAX);
-    }
-
 private:
     template <typename TNodeSet, typename TDPHypImpl>
     std::shared_ptr<TJoinOptimizerNode> JoinSearchImpl(

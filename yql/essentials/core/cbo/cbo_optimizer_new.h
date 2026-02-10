@@ -384,9 +384,6 @@ public:
         : Pctx(ctx)
     {
     }
-
-    virtual ui64 CountCC([[maybe_unused]] const std::shared_ptr<TJoinOptimizerNode>& joinTree, [[maybe_unused]] const TOptimizerHints& hints = {}) {  return 0; }
-
     virtual ~IOptimizerNew() = default;
     virtual std::shared_ptr<TJoinOptimizerNode> JoinSearch(
         const std::shared_ptr<TJoinOptimizerNode>& joinTree,

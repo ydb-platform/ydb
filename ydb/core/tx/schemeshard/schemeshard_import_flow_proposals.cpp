@@ -459,6 +459,40 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateConsumersPropose(
         if (consumer.important()) {
             addedConsumer.SetImportant(true);
         }
+
+        addedConsumer.SetAvailabilityPeriodMs(consumer.availability_period().seconds() * 1000);
+        if (consumer.has_shared_consumer_type()) {
+            const auto& sharedConsumerType = consumer.shared_consumer_type();
+            addedConsumer.SetType(::NKikimrPQ::TPQTabletConfig_EConsumerType::TPQTabletConfig_EConsumerType_CONSUMER_TYPE_MLP);
+            addedConsumer.SetKeepMessageOrder(sharedConsumerType.keep_messages_order());
+            addedConsumer.SetDefaultProcessingTimeoutSeconds(sharedConsumerType.default_processing_timeout().seconds());
+            // TODO: uncomment when these fields are in protobuf
+            // addedConsumer.SetContentBasedDeduplication(sharedConsumerType.contentbaseddeduplication());
+            // addedConsumer.SetDefaultDelayMessageTimeMs(sharedConsumerType.defaultdelaymessagetimems().seconds() * 1000);
+            // addedConsumer.SetDefaultReceiveMessageWaitTimeMs(sharedConsumerType.defaultreceivemessagewaittimems().seconds() * 1000);
+            const auto& deadLetterPolicy = sharedConsumerType.dead_letter_policy();
+
+            if (sharedConsumerType.has_dead_letter_policy() && deadLetterPolicy.enabled()) {
+                const auto& deadLetterPolicy = sharedConsumerType.dead_letter_policy();
+                addedConsumer.SetDeadLetterPolicyEnabled(true);
+                if (deadLetterPolicy.has_condition()) {
+                    addedConsumer.SetMaxProcessingAttempts(deadLetterPolicy.condition().max_processing_attempts());
+                }
+
+                if (deadLetterPolicy.has_move_action()) {
+                    addedConsumer.SetDeadLetterPolicy(::NKikimrPQ::TPQTabletConfig_EDeadLetterPolicy::TPQTabletConfig_EDeadLetterPolicy_DEAD_LETTER_POLICY_MOVE);
+                    addedConsumer.SetDeadLetterQueue(deadLetterPolicy.move_action().dead_letter_queue());
+                } else if (deadLetterPolicy.has_delete_action()) {
+                    addedConsumer.SetDeadLetterPolicy(::NKikimrPQ::TPQTabletConfig_EDeadLetterPolicy::TPQTabletConfig_EDeadLetterPolicy_DEAD_LETTER_POLICY_DELETE);
+                } else {
+                    addedConsumer.SetDeadLetterPolicy(::NKikimrPQ::TPQTabletConfig_EDeadLetterPolicy::TPQTabletConfig_EDeadLetterPolicy_DEAD_LETTER_POLICY_UNSPECIFIED);
+                }
+            } else {
+                addedConsumer.SetDeadLetterPolicyEnabled(false);
+            }
+        } else {
+            addedConsumer.SetType(::NKikimrPQ::TPQTabletConfig_EConsumerType::TPQTabletConfig_EConsumerType_CONSUMER_TYPE_STREAMING);
+        }
     }
 
     return propose;

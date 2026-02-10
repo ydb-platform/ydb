@@ -1481,5 +1481,30 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         UNIT_ASSERT_VALUES_EQUAL(attrJson["Attributes"]["MessageRetentionPeriod"], "7200");
     }
 
+    Y_UNIT_TEST_F(TestPurgeQueue, TFixture) {
+        auto json = PurgeQueue({{"QueueUrl", "unknown-queue-url"}}, 400);
+        //UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(json, "__type"), "ValidationException");
+        //UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(json, "message"), "Invalid queue url");
+
+        json = CreateQueue({{"QueueName", "ExampleQueueName"}});
+        auto queueUrl = GetByPath<TString>(json, "QueueUrl");
+
+        SendMessage({{"QueueUrl", queueUrl}, {"MessageBody", "MessageBody-0"}});
+        SendMessage({{"QueueUrl", queueUrl}, {"MessageBody", "MessageBody-1"}});
+
+        // All available messages in a queue (including in-flight messages) should be deleted.
+        // Set VisibilityTimeout to large value to be sure the message is in-flight during the test.
+        ReceiveMessage({{"QueueUrl", queueUrl}, {"WaitTimeSeconds", 1}, {"VisibilityTimeout", 43000}});  // ~12 hours
+
+        //WaitQueueAttributes(queueUrl, 10, [](NJson::TJsonMap json) {
+        //    return json["Attributes"]["ApproximateNumberOfMessages"] == "2" && json["Attributes"]["ApproximateNumberOfMessagesNotVisible"] == "1";
+        //});
+
+        PurgeQueue({{"QueueUrl", queueUrl}});
+
+        //WaitQueueAttributes(queueUrl, 10, [](NJson::TJsonMap json) {
+        //    return json["Attributes"]["ApproximateNumberOfMessages"] == "0" && json["Attributes"]["ApproximateNumberOfMessagesNotVisible"] == "0";
+        //});
+    }
 
 } // Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy)

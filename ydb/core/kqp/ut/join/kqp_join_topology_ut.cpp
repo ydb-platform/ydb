@@ -21,6 +21,7 @@
 
 #include <ydb/library/yql/dq/opt/dq_opt_make_join_hypergraph.h>
 #include <ydb/library/yql/dq/opt/dq_opt_join_cost_based.h>
+#include <ydb/library/yql/dq/opt/dq_opt_cbo_latency_predictor.h>
 
 #include <cstdint>
 #include <exception>
@@ -580,7 +581,7 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
             , Output_(output)
             , Args_(args)
             , TotalTasks_(args.size())
-            , Aligner_(1, "&") // Initialize aligner with & delimiter
+            , Aligner_(2, "&") // Initialize aligner with & delimiter
             , TotalGraphs_(CountQueries(args))
         {
             SeedArgs(rng);
@@ -705,9 +706,9 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
                     generation.InsertValue("mcmc-explain", explainMCMC.Serialize());
                     generation.InsertValue("type", "mcmc-edge-preserving");
 
-                    auto reproArgs = "run-base=false; mcmc-edge=1";
+                    auto reproArgs = "run-base=false; mcmc-degree=1; ";
                     ui32 variant = i;
-                    ProcessSingleGraph(rng, queryIdx + variant, params, graphDP, "dK#" + std::to_string(i), generation, reproArgs);
+                    ProcessSingleGraph(rng, queryIdx + variant, params, graphDP, "IK#" + std::to_string(i), generation, reproArgs);
                 }
 
                 TRelationGraph graphEP = baseGraph;
@@ -725,9 +726,9 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
                     generation.InsertValue("mcmc-explain", explainMCMC.Serialize());
                     generation.InsertValue("type", "mcmc-edge-preserving");
 
-                    auto reproArgs = "run-base=false; mcmc-edge=1";
+                    auto reproArgs = "run-base=false; mcmc-edge=1; ";
                     ui32 variant = degreePreservingVariants + i;
-                    ProcessSingleGraph(rng, queryIdx + variant, params, graphEP, "dE#" + std::to_string(i), generation, reproArgs);
+                    ProcessSingleGraph(rng, queryIdx + variant, params, graphEP, "IE#" + std::to_string(i), generation, reproArgs);
                 }
 
             } catch (const std::exception& e) {
@@ -763,51 +764,57 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
 
         void ProcessSingleGraph(TRNG& rng, ui64 queryIdx, const TParamsMap& params, const TRelationGraph& graph,
                                 std::string variant, NJson::TJsonValue generation, std::string specialReproArgs = "") {
+            try {
+                std::string label = params.GetValue("label");
+                ui64 n = params.GetValue<ui64>("N");
 
-            std::string label = params.GetValue("label");
-            ui64 n = params.GetValue<ui64>("N");
+                auto tree = GenerateJoinTree(rng, graph, params);
+                RandomizeJoinTypes(rng, tree, params);
 
-            auto tree = GenerateJoinTree(rng, graph, params);
-            RandomizeJoinTypes(rng, tree, params);
+                auto hypergraph = BuildHypergraph(tree);
+                auto orderings = BuildOrderingsFSM(hypergraph);
 
-            auto hypergraph = BuildHypergraph(tree);
-            auto orderings = BuildOrderingsFSM(hypergraph);
+                std::stringstream ss;
 
-            std::stringstream ss;
-            bool dryRun = params.GetValue<bool>("dry-run", false);
-            if (!dryRun) {
-                auto stats = BenchOptimizer(tree, orderings);
-                NJson::TJsonValue timeStats = "timeout";
+                ui64 predictedLatency = NYql::NDq::PredictCBOTime(hypergraph);
+                ss << "Time(pred) = " << TimeFormatter::Format(predictedLatency) << "&";
 
-                if (stats) {
-                    auto computedStats = stats->ComputeStatistics();
-                    timeStats = computedStats.ToJson();
+                bool dryRun = params.GetValue<bool>("dry-run", false);
+                if (!dryRun) {
+                    auto stats = BenchOptimizer(tree, orderings);
+                    NJson::TJsonValue timeStats = "timeout";
 
-                    ss << "Time = " << TimeFormatter::Format(computedStats.Median, computedStats.MAD);
-                    if (computedStats.Median > Config_.SingleRunTimeout) {
+                    if (stats) {
+                        auto computedStats = stats->ComputeStatistics();
+                        timeStats = computedStats.ToJson();
+
+                        ss << "Time = " << TimeFormatter::Format(computedStats.Median, computedStats.MAD);
+                        if (computedStats.Median > Config_.SingleRunTimeout) {
+                            RegisterTimeout(label, n);
+                        }
+                        ++ FineGraphs_;
+                    } else {
+                        ss << "[TIMEOUT]";
                         RegisterTimeout(label, n);
+                        ++ TimeoutedGraphs_;
                     }
-                    ++ FineGraphs_;
-                } else {
-                    ss << "[TIMEOUT]";
-                    RegisterTimeout(label, n);
-                    ++ TimeoutedGraphs_;
+
+                    std::string seed = rng.SerializeToHex();
+                    auto repro = CreateRepro(params) + "; " + specialReproArgs + "seed=" + seed;
+                    WriteJsonResult(seed, params, timeStats, generation, repro, graph, tree, hypergraph, queryIdx, variant);
                 }
 
-                std::string seed = rng.SerializeToHex();
-                auto repro = CreateRepro(params) + "; " + specialReproArgs + "; seed=" + seed;
-                WriteJsonResult(seed, params, timeStats, generation, repro, graph, tree, hypergraph, queryIdx, variant);
+                ShowLog(queryIdx, params, variant, ss.str());
+                ++ CompletedGraphs_;
+            } catch (const std::exception& e) {
+                ShowLog(queryIdx, params, variant, "[ERROR] " + std::string(e.what()));
             }
-
-            ShowLog(queryIdx, params, variant, ss.str());
-            ++ CompletedGraphs_;
         }
 
         TPitmanYorConfig GetPitmanYor(const TParamsMap& params) {
             double alpha = params.GetValue<double>("alpha");
             double theta = params.GetValue<double>("theta");
 
-            // TODO: assort?
             double assortativity = params.GetValue<double>("assort");
             bool useGlobalStats = params.GetValue<bool>("global-stats");
             return TPitmanYorConfig{

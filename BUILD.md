@@ -1,6 +1,6 @@
 # Building YDB from sources
 
-From this repository you can build YDB Server and YDB CLI (Command Line Interface utility) executables. 
+From this repository you can build YDB Server and YDB CLI (Command Line Interface utility) executables.
 
 [Yatool](https://github.com/yandex/yatool) is the multilanguage build/test system being used to [build and test YDB](https://ydb.tech/docs/en/development/build-ya). You need to use Yatool and follow the [YDB development process](https://ydb.tech/docs/en/development/suggest-change) to make contributions to the YDB project.
 
@@ -27,7 +27,7 @@ cd ydb
 
 The `main` branch is the primary development branch for YDB.
 
-Build from the development mainline branches may sometimes be broken for short periods of time, and also some tests may fail. So, you may prefer to build the latest stable versions of YDB Server and CLI. As stable versions of the YDB Server and CLI belong to different commits, it is not possible to get both server and CLI stable executables with a single checkout/build. Checkout and build server first, then CLI, or vice versa.
+Build from the development mainline branch may sometimes be broken for short periods of time, and also some tests may fail. So, you may prefer to build the latest stable versions of YDB Server and CLI. As stable versions of the YDB Server and CLI belong to different commits, it is not possible to get both server and CLI stable executables with a single checkout/build. Checkout and build server first, then CLI, or vice versa.
 
 
 ### Checkout the latest development version
@@ -75,4 +75,4 @@ To build YDB CLI run:
 
 Upon completion, you will have the `ydbd`/`ydb` executables in the `ydb/apps/ydbd`/`ydb/apps/ydb` directories, respectively.
 
-You can read more about Yatool options in the [YDB documentation](https://ydb.tech/docs/development/build-ya).
+You can read more about Yatool options in the [YDB documentation](https://ydb.tech/docs/en/development/build-ya).

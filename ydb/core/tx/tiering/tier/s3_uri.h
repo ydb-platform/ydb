@@ -21,8 +21,6 @@ private:
         VIRTUAL_HOSTED_STYLE = 2,
     };
 
-    TUriStyle UriStyle_ = PATH_STYLE;
-
     inline static const std::vector<TString> BucketHostSeparators = { ".s3.", ".s3-" };
 
 private:
@@ -60,7 +58,6 @@ private:
 
     static TConclusion<TS3Uri> ParsePathStyleUri(const NUri::TUri& input) {
         TS3Uri result;
-        result.UriStyle_ = PATH_STYLE;
 
         TStringBuf path = StripPath(input.GetField(NUri::TField::FieldPath));
 
@@ -87,7 +84,6 @@ private:
 
     static TConclusion<TS3Uri> ParseVirtualHostedStyleUri(const NUri::TUri& input) {
         TS3Uri result;
-        result.UriStyle_ = VIRTUAL_HOSTED_STYLE;
 
         for (const TString& sep : BucketHostSeparators) {
             if (const ui64 findSep = input.GetHost().find(sep); findSep != TStringBuf::npos) {
@@ -177,9 +173,6 @@ public:
         if (Scheme) {
             settings.SetScheme(*Scheme);
         }
-        // Path-style URIs (e.g. http://localhost:9000/datalake/) require UseVirtualAddressing = false
-        // so the SDK builds URLs as endpoint/bucket/key; otherwise MinIO may return MalformedXML.
-        settings.SetUseVirtualAddressing(UriStyle_ == VIRTUAL_HOSTED_STYLE);
     }
 };
 

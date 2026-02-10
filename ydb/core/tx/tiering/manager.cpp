@@ -211,6 +211,7 @@ private:
             Owner->OnTierSecretsResolved(tierId, config, accessor);
             return;
         }
+
         const ui64 requestId = NextResolveRequestId++;
         TPendingTierSecrets pending;
         pending.TierId = tierId;
@@ -239,12 +240,14 @@ private:
         if (it == PendingTierSecrets.end()) {
             return;
         }
+
         const auto& rec = ev->Get()->GetRecord();
         if (rec.GetStatus() != NKikimrScheme::EStatus::StatusSuccess) {
             AFL_WARN(NKikimrServices::TX_TIERING)("event", "schema_secret_resolution_failed")("path", rec.GetPath())("status", (ui64)rec.GetStatus());
             PendingTierSecrets.erase(it);
             return;
         }
+
         const TString& secretPath = pathIndex < it->second.PathsOrder.size() ? it->second.PathsOrder[pathIndex] : rec.GetPath();
         const TString secretValue = rec.GetPathDescription().GetSecretDescription().GetValue();
         it->second.PathToValue[secretPath] = secretValue;
@@ -278,6 +281,7 @@ public:
         if (NMetadata::NProvider::TServiceOperator::IsEnabled()) {
             Send(GetExternalDataActorId(), new NMetadata::NProvider::TEvSubscribeExternal(SecretsFetcher));
         }
+
         Become(&TThis::StateMain);
     }
 
@@ -332,7 +336,7 @@ NArrow::NSerialization::TSerializerContainer ConvertCompression(const NKikimrSch
 }
 
 void TTiersManager::OnConfigsUpdated(bool notifyShard) {
-    for (auto& [tierId, manager] : Managers) {
+    for (auto&& [tierId, manager] : Managers) {
         auto* findTier = Tiers.FindPtr(tierId);
         AFL_VERIFY(findTier)("id", tierId);
         if (findTier->HasConfig()) {
@@ -344,6 +348,7 @@ void TTiersManager::OnConfigsUpdated(bool notifyShard) {
                     started = manager.Start(findTier->GetConfigVerified(), Secrets);
                 }
             }
+
             if (!started && Actor && TlsActivationContext) {
                 TActivationContext::AsActorContext().Send(Actor->SelfId(), new NTiers::TEvResolveTierSecrets(tierId, findTier->GetConfigVerified()));
             } else if (!started) {
@@ -371,6 +376,7 @@ void TTiersManager::RegisterTierManager(const NTiers::TExternalStorageId& tierId
         if (Secrets) {
             started = emplaced.first->second.Start(*config, Secrets);
         }
+
         if (!started && Actor && TlsActivationContext) {
             TActivationContext::AsActorContext().Send(Actor->SelfId(), new NTiers::TEvResolveTierSecrets(tierId, *config));
         } else if (!started) {
@@ -449,11 +455,13 @@ void TTiersManager::OnTierSecretsResolved(const NTiers::TExternalStorageId& tier
     if (it == Managers.end()) {
         return;
     }
+
     if (it->second.IsReady()) {
         it->second.Restart(config, accessor);
     } else {
         it->second.Start(config, accessor);
     }
+
     if (ShardCallback && TlsActivationContext) {
         ShardCallback(TActivationContext::AsActorContext());
     }
@@ -484,11 +492,12 @@ ui64 TTiersManager::GetAwaitedConfigsCount() const {
 
 TVector<TString> TTiersManager::GetRequestedTierConfigPaths() const {
     TVector<TString> paths;
-    for (const auto& [id, tier] : Tiers) {
+    for (auto&& [id, tier] : Tiers) {
         if (tier.GetState() == ETierState::REQUESTED) {
             paths.push_back(id.GetConfigPath());
         }
     }
+
     return paths;
 }
 
@@ -509,6 +518,7 @@ TString TTiersManager::DebugString() {
         sb << "has_config=" << tier.HasConfig();
         sb << "}";
     }
+
     sb << ";SECRETS=" << (Secrets ? "set" : "null");
     return sb;
 }

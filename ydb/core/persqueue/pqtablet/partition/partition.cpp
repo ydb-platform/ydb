@@ -3448,9 +3448,7 @@ void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
         ResetDetailedMetrics();
     }
     MonitoringProjectId = Config.GetMonitoringProjectId();
-    if (DetailedMetricsAreEnabled(Config)) {
-        SetupDetailedMetrics();
-    }
+    SetupDetailedMetrics();
     UsersInfoStorage->SetupDetailedMetrics(ActorContext());
 }
 

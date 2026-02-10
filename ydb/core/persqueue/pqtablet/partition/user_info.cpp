@@ -506,10 +506,6 @@ static TStackOnlyVec<::NMonitoring::TDynamicCounterPtr, 2> FilterDetailedMetrics
 void TUsersInfoStorage::SetupDetailedMetrics(const TActorContext& ctx) {
     const TDetailedCounterSubgroup partitionSubgroup = GetPartitionCounterSubgroup(ctx);
     const bool hasConsumerWithDetailedMetrics = FindIfPtr(Config.GetConsumers(), DetailedMetricsAreEnabledForConsumer) != nullptr;
-    if (!partitionSubgroup.Subgroup && !hasConsumerWithDetailedMetrics) {
-        // fast exit: neither partition, nor consumer requests detailed metrics
-        return;
-    }
     absl::flat_hash_map<std::string_view, const NKikimrPQ::TPQTabletConfig_TConsumer*> configMap;
     if (hasConsumerWithDetailedMetrics) {
         configMap.reserve(Config.ConsumersSize());
@@ -519,8 +515,10 @@ void TUsersInfoStorage::SetupDetailedMetrics(const TActorContext& ctx) {
     }
     for (auto&& [userName, userInfo] : GetAll()) {
         TDetailedCounterSubgroup consumerSubgroup;
-        if (const auto* consumerConfig = MapFindPtr(configMap, userName)) {
-            consumerSubgroup = GetConsumerCounterSubgroup(ctx, **consumerConfig);
+        if (hasConsumerWithDetailedMetrics) {
+            if (const auto* consumerConfig = MapFindPtr(configMap, userName)) {
+                consumerSubgroup = GetConsumerCounterSubgroup(ctx, **consumerConfig);
+            }
         }
         userInfo.SetupDetailedMetrics(ctx, FilterDetailedMetricsSubgroups(partitionSubgroup, consumerSubgroup));
     }

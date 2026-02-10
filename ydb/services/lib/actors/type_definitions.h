@@ -10,6 +10,9 @@
 #include <util/generic/maybe.h>
 #include <util/generic/vector.h>
 
+#include <mutex>
+#include <shared_mutex>
+
 namespace NKikimr::NGRpcProxy {
 
 struct TPartitionInfo {
@@ -74,24 +77,20 @@ struct TTopicHolder : TTopicHolderBase {
     }
 
     std::shared_ptr<NPQ::TPartitionGraph> PartitionGraph;
-    TMutex PartitionGraphMutex;
+    std::shared_mutex PartitionGraphMutex;
 
     inline static TTopicHolder::TPtr FromTopicInfo(const TTopicInitInfo& info) {
         return std::make_shared<TTopicHolder>(info);
     }
 
     std::shared_ptr<NPQ::TPartitionGraph> GetPartitionGraph() {
-        std::shared_ptr<NPQ::TPartitionGraph> graph;
-        with_lock (PartitionGraphMutex) {
-            graph = PartitionGraph;
-        }
-        return graph;
+        std::shared_lock lock(PartitionGraphMutex);
+        return PartitionGraph;
     }
 
     void SetPartitionGraph(std::shared_ptr<NPQ::TPartitionGraph> graph) {
-        with_lock (PartitionGraphMutex) {
-            PartitionGraph = std::move(graph);
-        }
+        std::unique_lock lock(PartitionGraphMutex);
+        PartitionGraph = std::move(graph);
     }
 };
 

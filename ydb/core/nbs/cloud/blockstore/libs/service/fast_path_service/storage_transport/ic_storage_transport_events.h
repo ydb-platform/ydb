@@ -38,6 +38,7 @@ struct TEvICStorageTransportPrivate
         const ui64 Lsn;
         const NKikimr::NDDisk::TWriteInstruction Instruction;
         TGuardedSgList Data;
+        NWilson::TTraceId TraceId;
         const ui64 RequestId;
         NThreading::TPromise<NKikimrBlobStorage::NDDisk::TEvWritePersistentBufferResult> Promise;
 
@@ -48,6 +49,7 @@ struct TEvICStorageTransportPrivate
             const ui64 lsn,
             const NKikimr::NDDisk::TWriteInstruction instruction,
             TGuardedSgList data,
+            NWilson::TTraceId traceId,
             const ui64 requestId,
             NThreading::TPromise<NKikimrBlobStorage::NDDisk::TEvWritePersistentBufferResult> promise)
             : ServiceId(serviceId)
@@ -56,6 +58,7 @@ struct TEvICStorageTransportPrivate
             , Lsn(lsn)
             , Instruction(instruction)
             , Data(std::move(data))
+            , TraceId(std::move(traceId))
             , RequestId(requestId)
             , Promise(std::move(promise))
         {}
@@ -69,6 +72,7 @@ struct TEvICStorageTransportPrivate
         const ui64 Lsn;
         const std::tuple<ui32, ui32, ui32> DDiskId;
         const ui64 DDiskInstanceGuid;
+        NWilson::TTraceId TraceId;
         const ui64 RequestId;
         NThreading::TPromise<NKikimrBlobStorage::NDDisk::TEvFlushPersistentBufferResult> Promise;
 
@@ -79,6 +83,7 @@ struct TEvICStorageTransportPrivate
             const ui64 lsn,
             const std::tuple<ui32, ui32, ui32> ddiskId,
             const ui64 ddiskInstanceGuid,
+            NWilson::TTraceId traceId,
             const ui64 requestId,
             NThreading::TPromise<NKikimrBlobStorage::NDDisk::TEvFlushPersistentBufferResult> promise)
             : ServiceId(serviceId)
@@ -87,6 +92,7 @@ struct TEvICStorageTransportPrivate
             , Lsn(lsn)
             , DDiskId(ddiskId)
             , DDiskInstanceGuid(ddiskInstanceGuid)
+            , TraceId(std::move(traceId))
             , RequestId(requestId)
             , Promise(std::move(promise))
         {}
@@ -98,6 +104,7 @@ struct TEvICStorageTransportPrivate
         const NKikimr::NDDisk::TQueryCredentials Credentials;
         const NKikimr::NDDisk::TBlockSelector Selector;
         const ui64 Lsn;
+        NWilson::TTraceId TraceId;
         const ui64 RequestId;
         NThreading::TPromise<NKikimrBlobStorage::NDDisk::TEvErasePersistentBufferResult> Promise;
 
@@ -106,12 +113,14 @@ struct TEvICStorageTransportPrivate
             const NKikimr::NDDisk::TQueryCredentials credentials,
             const NKikimr::NDDisk::TBlockSelector selector,
             const ui64 lsn,
+            NWilson::TTraceId traceId,
             const ui64 requestId,
             NThreading::TPromise<NKikimrBlobStorage::NDDisk::TEvErasePersistentBufferResult> promise)
             : ServiceId(serviceId)
             , Credentials(credentials)
             , Selector(selector)
             , Lsn(lsn)
+            , TraceId(std::move(traceId))
             , RequestId(requestId)
             , Promise(std::move(promise))
         {}
@@ -126,6 +135,7 @@ struct TEvICStorageTransportPrivate
         const ui64 Lsn;
         const NKikimr::NDDisk::TReadInstruction Instruction;
         TGuardedSgList Data;
+        NWilson::TTraceId TraceId;
         const ui64 RequestId;
         NThreading::TPromise<NKikimrBlobStorage::NDDisk::TEvReadPersistentBufferResult> Promise;
 
@@ -136,6 +146,7 @@ struct TEvICStorageTransportPrivate
             const ui64 lsn,
             const NKikimr::NDDisk::TReadInstruction instruction,
             TGuardedSgList data,
+            NWilson::TTraceId traceId,
             const ui64 requestId,
             NThreading::TPromise<NKikimrBlobStorage::NDDisk::TEvReadPersistentBufferResult> promise)
             : ServiceId(serviceId)
@@ -144,6 +155,7 @@ struct TEvICStorageTransportPrivate
             , Lsn(lsn)
             , Instruction(instruction)
             , Data(std::move(data))
+            , TraceId(std::move(traceId))
             , RequestId(requestId)
             , Promise(std::move(promise))
         {}
@@ -156,6 +168,7 @@ struct TEvICStorageTransportPrivate
         const NKikimr::NDDisk::TBlockSelector Selector;
         const NKikimr::NDDisk::TReadInstruction Instruction;
         TGuardedSgList Data;
+        NWilson::TTraceId TraceId;
         const ui64 RequestId;
         NThreading::TPromise<NKikimrBlobStorage::NDDisk::TEvReadResult> Promise;
 
@@ -165,6 +178,7 @@ struct TEvICStorageTransportPrivate
             const NKikimr::NDDisk::TBlockSelector selector,
             const NKikimr::NDDisk::TReadInstruction instruction,
             TGuardedSgList data,
+            NWilson::TTraceId traceId,
             const ui64 requestId,
             NThreading::TPromise<NKikimrBlobStorage::NDDisk::TEvReadResult> promise)
             : ServiceId(serviceId)
@@ -172,6 +186,7 @@ struct TEvICStorageTransportPrivate
             , Selector(selector)
             , Instruction(instruction)
             , Data(std::move(data))
+            , TraceId(std::move(traceId))
             , RequestId(requestId)
             , Promise(std::move(promise))
         {}

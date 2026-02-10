@@ -90,12 +90,14 @@ void TPartitionActor::HandleControllerAllocateDDiskBlockGroupResult(
 
         auto fastPathService =
             std::make_shared<NYdb::NBS::NBlockStore::TFastPathService>(
-                1,   // tabletId
-                1,   // generation
+                SelfId().Hash(),   // tabletId
+                1,                 // generation
                 std::move(ddiskIds),
                 std::move(persistentBufferDDiskIds),
                 VolumeConfig.GetBlockSize(),
-                VolumeConfig.GetPartitions(0).GetBlockCount());
+                VolumeConfig.GetPartitions(0).GetBlockCount(),
+                StorageConfig,
+                AppData()->Counters);
 
         LoadActorAdapter = CreateLoadActorAdapter(ctx.SelfID, fastPathService);
 

@@ -79,8 +79,8 @@ namespace NKikimr::NDDisk {
             });
         } else if (ev->Get()->SourceType == TEv::EvSync) {
             std::vector<TSegmentManager::TSegment> segments;
-            ui64 syncId = 0;
-            SegmentManager.PopRequest(ev->Cookie, &segments, &syncId);
+            ui64 syncId = SegmentManager.GetSync(ev->Cookie);
+            SegmentManager.PopRequest(ev->Cookie, &segments);
 
             auto it = SyncsInFlight.find(syncId);
             if (it == SyncsInFlight.end()) {

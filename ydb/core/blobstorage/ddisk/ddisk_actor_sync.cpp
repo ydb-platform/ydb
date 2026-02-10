@@ -133,10 +133,10 @@ namespace NKikimr::NDDisk {
 
             if (lsn) {
                 auto query = std::make_unique<TEvReadPersistentBuffer>(sourceCreds, selector, *lsn, TReadInstruction(true));
-                Send(sourceDDiskId, query.release(), IEventHandle::FlagTrackDelivery, syncId, span.GetTraceId());
+                Send(sourceDDiskId, query.release(), IEventHandle::FlagTrackDelivery, requestId, span.GetTraceId());
             } else {
                 auto query = std::make_unique<TEvRead>(sourceCreds, selector, TReadInstruction(true));
-                Send(sourceDDiskId, query.release(), IEventHandle::FlagTrackDelivery, syncId, span.GetTraceId());
+                Send(sourceDDiskId, query.release(), IEventHandle::FlagTrackDelivery, requestId, span.GetTraceId());
             }
             sync.RequestsInFlight++;
         }
@@ -148,11 +148,9 @@ namespace NKikimr::NDDisk {
 
     template <typename TEventPtr>
     void TDDiskActor::InternalSyncReadResult(TEventPtr ev) {
-        std::vector<TSegmentManager::TSegment> segments;
-        ui64 syncId = 0;
-        SegmentManager.PopRequest(ev->Cookie, &segments, &syncId);
+        ui64 syncId = SegmentManager.GetSync(ev->Cookie);
 
-        if (syncId == Max<ui64>() || segments.empty()) {
+        if (syncId == Max<ui64>()) {
             return;
         }
 
@@ -192,17 +190,23 @@ namespace NKikimr::NDDisk {
             return;
         }
 
+        std::vector<TSegmentManager::TSegment> segments;
+        SegmentManager.PopRequest(ev->Cookie, &segments);
+        Y_VERIFY(segments.size());
+
         TRope data = ev->Get()->GetPayload(0);
 
         std::sort(segments.begin(), segments.end());
-        ui64 cuttedFromData = 0;
+        ui64 cuttedFromData = request.Selector.OffsetInBytes;
         request.SegmentsInFlight = segments.size();
 
         for (auto& [begin, end] : segments) {
-            TRope::TIterator ropeBegin = data.Position(begin - cuttedFromData);
-            TRope::TIterator ropeEnd = data.Position(end - cuttedFromData);
-            TRope segmentData = data.Extract(ropeBegin, ropeEnd);
-            cuttedFromData += end - begin;
+            if (cuttedFromData < begin) {
+                data.EraseFront(begin - cuttedFromData);
+            }
+            TRope segmentData;
+            data.ExtractFront(end - begin, &segmentData);
+            cuttedFromData = end;
 
             auto callback = [
                 this,
@@ -226,6 +230,7 @@ namespace NKikimr::NDDisk {
                         if (--sync.RequestsInFlight == 0) {
                             ReplySync(it);
                         }
+                        return;
                     }
 
                     if (--request.SegmentsInFlight == 0) {

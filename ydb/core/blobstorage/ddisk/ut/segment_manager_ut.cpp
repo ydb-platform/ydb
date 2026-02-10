@@ -56,8 +56,8 @@ void AssertOutdatedEqual(const std::vector<TOutdatedRequest>& actual,
 
 void AssertPop(TSegmentManager& manager, ui64 requestId, ui64 expectedSyncId, std::vector<TSegment> expectedSegments) {
     std::vector<TSegment> actualSegments;
-    ui64 actualSyncId = 0;
-    manager.PopRequest(requestId, &actualSegments, &actualSyncId);
+    ui64 actualSyncId = manager.GetSync(requestId);
+    manager.PopRequest(requestId, &actualSegments);
 
     UNIT_ASSERT_VALUES_EQUAL(actualSyncId, expectedSyncId);
     AssertSegmentsEqual(std::move(actualSegments), std::move(expectedSegments));
@@ -69,9 +69,9 @@ Y_UNIT_TEST_SUITE(TSegmentManagerTest) {
     Y_UNIT_TEST(PopUnknownRequestReturnsMaxSyncId) {
         TSegmentManager manager;
         std::vector<TSegment> segments;
-        ui64 syncId = 0;
+        ui64 syncId = manager.GetSync(42);
 
-        manager.PopRequest(42, &segments, &syncId);
+        manager.PopRequest(42, &segments);
 
         UNIT_ASSERT(segments.empty());
         UNIT_ASSERT_VALUES_EQUAL(syncId, Max<ui64>());

@@ -138,17 +138,15 @@ void TSegmentManager::DropSegment(ui64 vchunkIndex, TSegment dropSegment, std::v
 }
 
 
-void TSegmentManager::PopRequest(ui64 requestIdx, std::vector<TSegment> *segments, ui64 *syncId) {
+void TSegmentManager::PopRequest(ui64 requestIdx, std::vector<TSegment> *segments) {
     Y_VERIFY(segments != nullptr);
     segments->clear();
 
     auto requestIt = RequestsInFlight.find(requestIdx);
     if (requestIt == RequestsInFlight.end()) {
-        *syncId = Max<ui64>();
         return;
     }
     auto &request = requestIt->second;
-    *syncId = request.SyncId;
 
     segments->reserve(request.Segments.size());
     for (auto [segment, segmentIt] : request.Segments) {
@@ -158,6 +156,15 @@ void TSegmentManager::PopRequest(ui64 requestIdx, std::vector<TSegment> *segment
 
     RequestsInFlight.erase(requestIt);
     return;
+}
+
+ui64 TSegmentManager::GetSync(ui64 requestIdx) {
+    auto requestIt = RequestsInFlight.find(requestIdx);
+    if (requestIt == RequestsInFlight.end()) {
+        return Max<ui64>();
+    }
+    auto &request = requestIt->second;
+    return request.SyncId;
 }
 
 void TSegmentManager::PushRequest(ui64 vchunkIndex, ui64 syncId, TSegment segment, ui64 *requestId, std::vector<TOutdatedRequest> *outdated) {

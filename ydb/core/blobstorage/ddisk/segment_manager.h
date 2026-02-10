@@ -39,7 +39,8 @@ namespace NKikimr::NDDisk {
         void DropSegment(ui64 vchunkIndex, TSegment dropSegment, std::vector<TOutdatedRequest> *outdated);
 
     public:
-        void PopRequest(ui64 requestId, std::vector<TSegment> *segments, ui64 *syncId); // return set of actual subsegments
+        ui64 GetSync(ui64 requestId); // return set of actual subsegments
+        void PopRequest(ui64 requestId, std::vector<TSegment> *segments); // return set of actual subsegments
         void PushRequest(ui64 vchunkIndex, ui64 syncId, TSegment segment, ui64 *requestId, std::vector<TOutdatedRequest> *outdated);
 
     };

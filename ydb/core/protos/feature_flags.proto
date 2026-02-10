@@ -252,4 +252,5 @@ message TFeatureFlags {
     optional bool EnableTruncateTable = 225 [default = false];
     optional bool EnableTopicsSqlIoOperations = 226 [default = false];
     optional bool EnableSysViewPermissionsExport = 227 [default = false];
+    optional bool EnableCmsSmartAvailabilityMode = 228 [default = false];
 }

@@ -125,7 +125,7 @@ namespace NKikimr::NDDisk {
                 selector.OffsetInBytes,
                 selector.Size), 0, cookie);
 
-            ReadCallbacks.try_emplace(cookie, std::move(span), [this, sender = ev->Sender, cookie = ev->Cookie,
+            ReadCallbacks.try_emplace(cookie, TPendingRead{std::move(span), [this, sender = ev->Sender, cookie = ev->Cookie,
                     session = ev->InterconnectSession, size = selector.Size](NPDisk::TEvChunkReadRawResult& ev,
                     NWilson::TSpan&& span) {
                 auto reply = std::make_unique<TEvReadResult>(NKikimrBlobStorage::NDDisk::TReplyStatus::OK, std::nullopt,
@@ -138,7 +138,7 @@ namespace NKikimr::NDDisk {
                 Counters.Interface.Read.Reply(true, size);
                 span.End();
                 TActivationContext::Send(h.release());
-            });
+            }});
         }
     }
 
@@ -152,8 +152,14 @@ namespace NKikimr::NDDisk {
 
         const auto it = ReadCallbacks.find(ev->Cookie);
         Y_ABORT_UNLESS(it != ReadCallbacks.end());
-        auto& [span, callback] = it->second;
-        callback(msg, std::move(span));
+        std::visit(TOverloaded{
+            [&](TPendingRead& w) {
+                w.Callback(msg, std::move(w.Span));
+            },
+            [&](const TPersistentBufferPendingRead& callback) {
+                callback(msg);
+            }
+        }, it->second);
         ReadCallbacks.erase(it);
     }
 

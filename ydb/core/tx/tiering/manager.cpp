@@ -3,17 +3,80 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/protos/config.pb.h>
+#include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/tiering/fetcher.h>
 #include <ydb/core/tx/tiering/tier/identifier.h>
+#include <ydb/core/tx/tiering/tier/object.h>
+#include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/core/tx/schemeshard/schemeshard.h>
 
 #include <ydb/library/table_creator/table_creator.h>
+#include <ydb/library/aclib/aclib.h>
+#include <ydb/services/metadata/secret/accessor/secret_id.h>
+#include <ydb/services/metadata/secret/accessor/snapshot.h>
 #include <ydb/services/metadata/secret/fetcher.h>
+#include <ydb/services/metadata/service.h>
 
 #include <library/cpp/retry/retry_policy.h>
+#include <util/generic/overloaded.h>
 #include <util/string/vector.h>
 
 namespace NKikimr::NColumnShard {
+
+class TCompositeSecretAccessor : public NMetadata::NSecret::ISecretAccessor {
+    std::shared_ptr<NMetadata::NSecret::TSnapshot> Base;
+    const THashMap<TString, TString>* Overlay;
+
+public:
+    TCompositeSecretAccessor(std::shared_ptr<NMetadata::NSecret::TSnapshot> base, const THashMap<TString, TString>* overlay)
+        : Base(std::move(base))
+        , Overlay(overlay) {
+    }
+
+    virtual ~TCompositeSecretAccessor() = default;
+
+    bool CheckSecretAccess(const NMetadata::NSecret::TSecretIdOrValue& sIdOrValue, const NACLib::TUserToken& userToken) const override {
+        if (Overlay && std::holds_alternative<NMetadata::NSecret::TSecretName>(sIdOrValue.GetState())) {
+            const auto& name = std::get<NMetadata::NSecret::TSecretName>(sIdOrValue.GetState());
+            if (Overlay->contains(name.GetSecretId())) {
+                return true;
+            }
+        }
+        return Base ? Base->CheckSecretAccess(sIdOrValue, userToken) : false;
+    }
+
+    bool PatchString(TString& stringForPath) const override {
+        if (Overlay) {
+            auto sId = NMetadata::NSecret::TSecretIdOrValue::DeserializeFromString(stringForPath);
+            if (sId && std::holds_alternative<NMetadata::NSecret::TSecretName>(sId->GetState())) {
+                const auto& name = std::get<NMetadata::NSecret::TSecretName>(sId->GetState());
+                if (auto it = Overlay->find(name.GetSecretId()); it != Overlay->end()) {
+                    stringForPath = it->second;
+                    return true;
+                }
+            }
+        }
+        return Base ? Base->PatchString(stringForPath) : false;
+    }
+
+    TConclusion<TString> GetSecretValue(const NMetadata::NSecret::TSecretIdOrValue& secretId) const override {
+        if (Overlay && std::holds_alternative<NMetadata::NSecret::TSecretName>(secretId.GetState())) {
+            const auto& name = std::get<NMetadata::NSecret::TSecretName>(secretId.GetState());
+            if (auto it = Overlay->find(name.GetSecretId()); it != Overlay->end()) {
+                return it->second;
+            }
+        }
+        if (Base) {
+            return Base->GetSecretValue(secretId);
+        }
+        return TConclusion<TString>(TConclusionStatus::Fail("No secrets snapshot"));
+    }
+
+    std::vector<NMetadata::NSecret::TSecretId> GetSecretIds(const std::optional<NACLib::TUserToken>& userToken, const TString& secretId) const override {
+        return Base ? Base->GetSecretIds(userToken, secretId) : std::vector<NMetadata::NSecret::TSecretId>{};
+    }
+};
 
 class TTiersManager::TActor: public TActorBootstrapped<TTiersManager::TActor> {
 private:
@@ -63,6 +126,12 @@ private:
         if (auto secrets = std::dynamic_pointer_cast<NMetadata::NSecret::TSnapshot>(snapshot)) {
             AFL_DEBUG(NKikimrServices::TX_TIERING)("event", "TEvRefreshSubscriberData")("snapshot", "secrets");
             Owner->UpdateSecretsSnapshot(secrets);
+            TVector<TString> requestedPaths = Owner->GetRequestedTierConfigPaths();
+            TVector<TString> secretPaths = Owner->GetRequestedSecretPaths();
+            requestedPaths.insert(requestedPaths.end(), secretPaths.begin(), secretPaths.end());
+            if (!requestedPaths.empty()) {
+                Send(TiersFetcher, new NTiers::TEvWatchSchemeObject(std::move(requestedPaths)));
+            }
         } else {
             AFL_VERIFY(false);
         }
@@ -74,11 +143,18 @@ private:
     }
 
     void Handle(NTiers::TEvNotifySchemeObjectUpdated::TPtr& ev) {
-        AFL_DEBUG(NKikimrServices::TX_TIERING)("component", "tiering_manager")("event", "object_updated")("path", ev->Get()->GetObjectPath());
-        const NTiers::TExternalStorageId tierId(ev->Get()->GetObjectPath());
+        const TString objectPath = ev->Get()->GetObjectPath();
         const auto& description = ev->Get()->GetDescription();
-        ResetRetryState(tierId);
-        if (description.GetSelf().GetPathType() == NKikimrSchemeOp::EPathTypeExternalDataSource) {
+        AFL_DEBUG(NKikimrServices::TX_TIERING)("component", "tiering_manager")("event", "object_updated")("path", objectPath);
+
+        if (description.GetSelf().GetPathType() == NKikimrSchemeOp::EPathTypeSecret) {
+            if (description.HasSecretDescription() && description.GetSecretDescription().HasValue()) {
+                Owner->UpdateSchemeSecret(objectPath, description.GetSecretDescription().GetValue());
+                Owner->OnConfigsUpdated();
+            }
+        } else if (description.GetSelf().GetPathType() == NKikimrSchemeOp::EPathTypeExternalDataSource) {
+            const NTiers::TExternalStorageId tierId(objectPath);
+            ResetRetryState(tierId);
             NTiers::TTierConfig tier;
             if (HasAppData() && AppDataVerified().ColumnShardConfig.HasS3Client()) {
                 tier = NTiers::TTierConfig(AppDataVerified().ColumnShardConfig.GetS3Client());
@@ -87,12 +163,17 @@ private:
             if (const auto status = tier.DeserializeFromProto(description.GetExternalDataSourceDescription()); status.IsFail()) {
                 AFL_WARN(NKikimrServices::TX_TIERING)("event", "fetched_invalid_tier_settings")("error", status.GetErrorMessage());
                 Owner->UpdateTierConfig(std::nullopt, tierId);
-                return;
+            } else {
+                Owner->UpdateTierConfig(tier, tierId);
             }
 
-            Owner->UpdateTierConfig(tier, tierId);
+            TVector<TString> secretPaths = Owner->GetRequestedSecretPaths();
+            if (!secretPaths.empty()) {
+                Send(TiersFetcher, new NTiers::TEvWatchSchemeObject(std::move(secretPaths)));
+            }
         } else {
-            AFL_WARN(NKikimrServices::TX_TIERING)("error", "invalid_object_type")("type", static_cast<ui64>(description.GetSelf().GetPathType()))("path", tierId.GetConfigPath());
+            AFL_WARN(NKikimrServices::TX_TIERING)("error", "invalid_object_type")("type", static_cast<ui64>(description.GetSelf().GetPathType()))("path", objectPath);
+            const NTiers::TExternalStorageId tierId(objectPath);
             Owner->UpdateTierConfig(std::nullopt, tierId);
         }
     }
@@ -130,6 +211,8 @@ public:
                           return ERetryErrorClass::LongRetry;
                       case NTiers::TEvSchemeObjectResolutionFailed::LOOKUP_ERROR:
                           return ERetryErrorClass::ShortRetry;
+                      default:
+                          return ERetryErrorClass::ShortRetry;
                   }
               }, TDuration::MilliSeconds(10), TDuration::Seconds(29), TDuration::Seconds(30), 10000))
         , SecretsFetcher(std::make_shared<NMetadata::NSecret::TSnapshotsFetcher>())
@@ -150,11 +233,10 @@ public:
 
 namespace NTiers {
 
-TManager& TManager::Restart(const TTierConfig& config, std::shared_ptr<NMetadata::NSecret::TSnapshot> secrets) {
+bool TManager::Restart(const TTierConfig& config, std::shared_ptr<NMetadata::NSecret::ISecretAccessor> secrets) {
     ALS_DEBUG(NKikimrServices::TX_TIERING) << "Restarting tier '" << TierId << "' at tablet " << TabletId;
     Stop();
-    Start(config, secrets);
-    return *this;
+    return Start(config, secrets);
 }
 
 bool TManager::Stop() {
@@ -163,7 +245,7 @@ bool TManager::Stop() {
     return true;
 }
 
-bool TManager::Start(const TTierConfig& config, std::shared_ptr<NMetadata::NSecret::TSnapshot> secrets) {
+bool TManager::Start(const TTierConfig& config, std::shared_ptr<NMetadata::NSecret::ISecretAccessor> secrets) {
     AFL_VERIFY(!S3Settings)("tier", TierId)("event", "already started");
     auto patchedConfig = config.GetPatchedConfig(secrets);
     if (patchedConfig.IsFail()) {
@@ -195,14 +277,21 @@ NArrow::NSerialization::TSerializerContainer ConvertCompression(const NKikimrSch
 }
 
 void TTiersManager::OnConfigsUpdated(bool notifyShard) {
+    auto accessor = std::make_shared<TCompositeSecretAccessor>(Secrets, &SchemeOverlay);
     for (auto& [tierId, manager] : Managers) {
         auto* findTier = Tiers.FindPtr(tierId);
         AFL_VERIFY(findTier)("id", tierId);
-        if (Secrets && findTier->HasConfig()) {
-            if (manager.IsReady()) {
-                manager.Restart(findTier->GetConfigVerified(), Secrets);
-            } else {
-                manager.Start(findTier->GetConfigVerified(), Secrets);
+        if (findTier->HasConfig()) {
+            bool started = false;
+            if (Secrets || !SchemeOverlay.empty()) {
+                if (manager.IsReady()) {
+                    started = manager.Restart(findTier->GetConfigVerified(), accessor);
+                } else {
+                    started = manager.Start(findTier->GetConfigVerified(), accessor);
+                }
+            }
+            if (!started) {
+                AFL_DEBUG(NKikimrServices::TX_TIERING)("event", "skip_tier_manager_start")("tier", tierId)("has_secrets", !!Secrets)("overlay_size", SchemeOverlay.size());
             }
         } else {
             AFL_DEBUG(NKikimrServices::TX_TIERING)("event", "skip_tier_manager_reloading")("tier", tierId)("has_secrets", !!Secrets)(
@@ -221,8 +310,16 @@ void TTiersManager::RegisterTierManager(const NTiers::TExternalStorageId& tierId
     auto emplaced = Managers.emplace(tierId, NTiers::TManager(TabletId, TabletActorId, tierId));
     AFL_VERIFY(emplaced.second);
 
-    if (Secrets && config) {
-        emplaced.first->second.Start(*config, Secrets);
+    if (config) {
+        bool started = false;
+        if (Secrets || !SchemeOverlay.empty()) {
+            auto accessor = std::make_shared<TCompositeSecretAccessor>(Secrets, &SchemeOverlay);
+            started = emplaced.first->second.Start(*config, accessor);
+        }
+        if (!started) {
+            AFL_DEBUG(NKikimrServices::TX_TIERING)("event", "skip_tier_manager_start")("tier", tierId)("has_secrets", !!Secrets)("overlay_size", SchemeOverlay.size())(
+                "tier_config", !!config);
+        }
     } else {
         AFL_DEBUG(NKikimrServices::TX_TIERING)("event", "skip_tier_manager_start")("tier", tierId)("has_secrets", !!Secrets)(
             "tier_config", !!config);
@@ -290,6 +387,33 @@ void TTiersManager::UpdateSecretsSnapshot(std::shared_ptr<NMetadata::NSecret::TS
     OnConfigsUpdated();
 }
 
+void TTiersManager::UpdateSchemeSecret(const TString& path, const TString& value) {
+    AFL_DEBUG(NKikimrServices::TX_TIERING)("event", "update_scheme_secret")("path", path)("tablet", TabletId);
+    SchemeOverlay[path] = value;
+}
+
+TVector<TString> TTiersManager::GetRequestedSecretPaths() const {
+    THashSet<TString> needed;
+    for (const auto& [tierId, tier] : Tiers) {
+        if (!tier.HasConfig()) {
+            continue;
+        }
+        for (const TString& path : tier.GetConfigVerified().GetSchemaSecretPaths()) {
+            if (SchemeOverlay.contains(path)) {
+                continue;
+            }
+            if (Secrets) {
+                auto sId = NMetadata::NSecret::TSecretIdOrValue::DeserializeFromString(NMetadata::NSecret::TSecretName(path).SerializeToString());
+                if (sId && Secrets->GetSecretValue(*sId).IsSuccess()) {
+                    continue;
+                }
+            }
+            needed.insert(path);
+        }
+    }
+    return TVector<TString>(needed.begin(), needed.end());
+}
+
 void TTiersManager::UpdateTierConfig(
     std::optional<NTiers::TTierConfig> config, const NTiers::TExternalStorageId& tierId, const bool notifyShard) {
     AFL_INFO(NKikimrServices::TX_TIERING)("event", "update_tier_config")("name", tierId.ToString())("tablet", TabletId)("has_config", !!config);
@@ -311,6 +435,16 @@ ui64 TTiersManager::GetAwaitedConfigsCount() const {
         }
     }
     return count;
+}
+
+TVector<TString> TTiersManager::GetRequestedTierConfigPaths() const {
+    TVector<TString> paths;
+    for (auto&& [id, tier] : Tiers) {
+        if (tier.GetState() == ETierState::REQUESTED) {
+            paths.push_back(id.GetConfigPath());
+        }
+    }
+    return paths;
 }
 
 TActorId TTiersManager::GetActorId() const {

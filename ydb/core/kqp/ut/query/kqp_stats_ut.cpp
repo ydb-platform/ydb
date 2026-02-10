@@ -159,6 +159,8 @@ void MultiTxStatsFull(
     auto app = NKikimrConfig::TAppConfig();
     app.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
     app.MutableTableServiceConfig()->SetEnableSimpleProgramsSinglePartitionOptimization(true);
+    app.MutableTableServiceConfig()->SetExtractPredicateParameterListSizeLimit(10000);
+    app.MutableTableServiceConfig()->SetEnableSimpleProgramsSinglePartitionOptimizationBroadPrograms(true);
     TKikimrRunner kikimr(app);
     auto it = getResult(kikimr, ECollectQueryStatsMode::Full, R"(
         SELECT * FROM `/Root/EightShard` WHERE Key BETWEEN 150 AND 266 ORDER BY Data LIMIT 4;

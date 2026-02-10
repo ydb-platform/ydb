@@ -72,6 +72,7 @@ public:
         , StartedAt(startedAt)
         , FormatsSettings(ev->Get()->GetResultSetFormat(), ev->Get()->GetSchemaInclusionMode(), ev->Get()->GetArrowFormatSettings())
         , RuntimeParameterSizeLimit(runtimeParameterSizeLimit)
+        , RuntimeParameterSizeLimitSatisfied(runtimeParameterSizeLimit > 0)
     {
         RequestEv.reset(ev->Release().Release());
 
@@ -199,7 +200,7 @@ public:
     NFormats::TFormatsSettings FormatsSettings;
 
     i32 RuntimeParameterSizeLimit = 0;
-    bool RuntimeParameterSizeLimitSatisfied = true;
+    bool RuntimeParameterSizeLimitSatisfied = false;
 
 
     bool IsLocalExecution(ui32 nodeId) const {

@@ -6,11 +6,12 @@ on:
   workflow_dispatch:
     inputs:
       branches:
-        description: 'Comma-separated list of branches to process'
+        description: 'Comma-separated list of branches to process (empty = use branches from config file)'
         required: false
-        default: 'main,stable-25-2,stable-25-2-1,stable-25-3,stable-25-3-1,stable-25-4,stable-25-4-1,stream-nb-25-1'
+        default: ''
 
 env:
+  BRANCHES_CONFIG_PATH: .github/config/stable_tests_branches.json
   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   PR_BRANCH_PREFIX: update-muted-ya
   TITLE: "Update muted_ya.txt"
@@ -24,12 +25,21 @@ jobs:
     outputs:
       matrix_branches: ${{ steps.set-matrix.outputs.branches }}
     steps:
+      - name: Checkout branches config
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          sparse-checkout: |
+            ${{ env.BRANCHES_CONFIG_PATH }}
+          sparse-checkout-cone-mode: false
+
       - id: set-matrix
         run: |
-          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
-            echo "branches=$(echo '${{ github.event.inputs.branches }}' | jq -R -s -c 'split(",")')" >> $GITHUB_OUTPUT
+          BRANCHES_INPUT='${{ github.event.inputs.branches }}'
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ] && [ -n "$BRANCHES_INPUT" ]; then
+            echo "branches=$(echo "$BRANCHES_INPUT" | jq -R -s -c 'split(",") | map(gsub("^ +"; "") | gsub(" +$"; ""))')" >> $GITHUB_OUTPUT
           else
-            echo "branches=$(echo '["main","stable-25-2","stable-25-2-1","stable-25-3","stable-25-3-1","stable-25-4","stable-25-4-1","stream-nb-25-1"]' | jq -c .)" >> $GITHUB_OUTPUT
+            echo "branches=$(jq -c '.' "$BRANCHES_CONFIG_PATH")" >> $GITHUB_OUTPUT
           fi
 
   collect-testowners:

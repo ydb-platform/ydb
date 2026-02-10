@@ -29,6 +29,8 @@
 #include <random>
 #include <stdexcept>
 #include <string>
+#include <thread>
+#include <chrono>
 
 namespace NKikimr::NKqp {
 
@@ -1096,7 +1098,7 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
             NYql::TExprContext ectx;
 
             auto optimizer = std::unique_ptr<NYql::IOptimizerNew>(
-                NYql::NDq::MakeNativeOptimizerNew(ctx, settings, ectx, /*enableShuffleElimination=*/true, orderingsFSM)
+                NYql::NDq::MakeNativeOptimizerNew(ctx, settings, ectx, /*enableShuffleElimination=*/true, orderingsFSM, nullptr, std::chrono::milliseconds(60000))
             );
 
             return Benchmark(Config_, [&]() -> bool {

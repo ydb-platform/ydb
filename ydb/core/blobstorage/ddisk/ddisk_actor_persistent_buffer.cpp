@@ -120,6 +120,7 @@ namespace NKikimr::NDDisk {
                     ProcessPersistentBufferQueue();
                 }
             }});
+            pos++;
         }
 
     }

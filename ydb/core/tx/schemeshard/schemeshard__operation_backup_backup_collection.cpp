@@ -84,13 +84,17 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
         desc.SetDstPath(JoinPath({tx.GetWorkingDir(), tx.GetBackupBackupCollection().GetName(), tx.GetBackupBackupCollection().GetTargetDir(), relativeItemPath}));
         
         desc.SetOmitIndexes(omitIndexes);
-        
+        desc.SetIsBackup(true);
         desc.SetOmitFollowers(true);
         desc.SetAllowUnderSameOperation(true);
 
         if (incrBackupEnabled) {
             NKikimrSchemeOp::TCreateCdcStream createCdcStreamOp;
             const auto sPath = TPath::Resolve(item.GetPath(), context.SS);
+
+            if (sPath.Base()->IsReplication()) {
+                continue;
+            }
             
             {
                 auto checks = sPath.Check();
@@ -231,6 +235,10 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
             streamDescription.SetFormat(NKikimrSchemeOp::ECdcStreamFormatProto);
 
             const auto sPath = TPath::Resolve(item.GetPath(), context.SS);
+
+            if (sPath.Base()->IsReplication()) {
+                continue;
+            }
             
             {
                 auto checks = sPath.Check();

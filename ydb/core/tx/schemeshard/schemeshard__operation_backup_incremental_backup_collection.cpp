@@ -186,6 +186,41 @@ TVector<ISubOperation::TPtr> CreateBackupIncrementalBackupCollection(TOperationI
     TVector<TPathId> streams;
     for (const auto& item : bc->Description.GetExplicitEntryList().GetEntries()) {
         const auto tablePath = TPath::Resolve(item.GetPath(), context.SS);
+        
+        if (tablePath.Base()->IsReplication()) {
+            Y_ABORT_UNLESS(context.SS->Replications.contains(tablePath.Base()->PathId));
+            auto replicationInfo = context.SS->Replications.at(tablePath.Base()->PathId);
+
+            std::pair<TString, TString> paths;
+            TString err;
+            if (!TrySplitPathByDb(item.GetPath(), bcPath.GetDomainPathString(), paths, err)) {
+                result = {CreateReject(opId, NKikimrScheme::StatusInvalidParameter, err)};
+                return {};
+            }
+            auto& relativeItemPath = paths.second;
+            
+            TString dstPathStr = JoinPath({
+                tx.GetWorkingDir(), 
+                tx.GetBackupIncrementalBackupCollection().GetName(), 
+                tx.GetBackupIncrementalBackupCollection().GetTargetDir(), 
+                relativeItemPath
+            });
+            
+            TPath dstPath = TPath::Resolve(dstPathStr, context.SS);
+
+            auto scheme = TransactionTemplate(dstPath.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreateReplication);
+            scheme.SetFailOnExist(true);
+            
+            auto* createOp = scheme.MutableReplication();
+            createOp->SetName(dstPath.LeafName());
+            createOp->CopyFrom(replicationInfo->Description);
+            createOp->ClearState();
+
+            result.push_back(CreateNewReplication(NextPartId(opId, result), scheme, true));
+
+            continue;
+        }
+
         {
             auto checks = tablePath.Check();
             checks
@@ -228,6 +263,9 @@ TVector<ISubOperation::TPtr> CreateBackupIncrementalBackupCollection(TOperationI
     if (!omitIndexes) {
         for (const auto& item : bc->Description.GetExplicitEntryList().GetEntries()) {
             const auto tablePath = TPath::Resolve(item.GetPath(), context.SS);
+            if (!tablePath.Base()->IsTable()) {
+                continue;
+            }
             auto table = context.SS->Tables.at(tablePath.Base()->PathId);
 
             std::pair<TString, TString> paths;

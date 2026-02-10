@@ -29,10 +29,11 @@ struct TDropPlan {
     THashMap<TPathId, TTableCdcStreams> CdcStreamsByTable;  // Grouped by table
     TVector<TPath> BackupTables;
     TVector<TPath> BackupTopics;
+    TVector<TPath> BackupReplications; 
     TPathId BackupCollectionId;
     
     bool HasExternalObjects() const {
-        return !CdcStreamsByTable.empty() || !BackupTables.empty() || !BackupTopics.empty();
+        return !CdcStreamsByTable.empty() || !BackupTables.empty() || !BackupTopics.empty() || !BackupReplications.empty();
     }
 };
 
@@ -92,6 +93,8 @@ THolder<TDropPlan> CollectExternalObjects(TOperationContext& context, const TPat
                 plan->BackupTables.push_back(childPath);
             } else if (childPath.Base()->IsPQGroup()) {
                 plan->BackupTopics.push_back(childPath);
+            } else if (childPath.Base()->IsReplication()) {
+                plan->BackupReplications.push_back(childPath);
             } else if (childPath.Base()->IsDirectory()) {
                 toVisit.push_back(childPath);
             }
@@ -592,7 +595,7 @@ TVector<ISubOperation::TPtr> CreateDropBackupCollectionCascade(TOperationId next
 
     TVector<ISubOperation::TPtr> result;
 
-    auto cleanupOp = MakeSubOperation<TDropBackupCollection>(nextId, tx);
+    auto cleanupOp = MakeSubOperation<TDropBackupCollection>(NextPartId(nextId, result), tx);
     result.push_back(cleanupOp);
 
     auto dropPlan = CollectExternalObjects(context, dstPath);
@@ -614,10 +617,21 @@ TVector<ISubOperation::TPtr> CreateDropBackupCollectionCascade(TOperationId next
         // Create suboperations for backup tables
         for (const auto& tablePath : dropPlan->BackupTables) {
             TTxTransaction tableDropTx = CreateTableDropTransaction(tablePath);
-            if (!CreateDropTable(nextId, tableDropTx, context, result)) {
+            if (!CreateDropTable(NextPartId(nextId, result), tableDropTx, context, result)) {
                 return result;
             }
         }
+    }
+
+    for (const auto& replPath : dropPlan->BackupReplications) {
+        TTxTransaction replDropTx;
+        replDropTx.SetWorkingDir(replPath.Parent().PathString());
+        replDropTx.SetOperationType(NKikimrSchemeOp::ESchemeOpDropReplication);
+        
+        auto* drop = replDropTx.MutableDrop();
+        drop->SetName(replPath.LeafName());
+        
+        result.push_back(CreateDropReplication(NextPartId(nextId, result), replDropTx, false));
     }
     
     return result;

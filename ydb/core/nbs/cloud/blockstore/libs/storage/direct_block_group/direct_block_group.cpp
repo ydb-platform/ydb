@@ -203,7 +203,8 @@ void TDirectBlockGroup::HandleListPersistentBufferResultOnRestore(
 
     Y_ABORT_UNLESS(result.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
 
-    // TODO Handle this response with mutex. There is multithreading access from future's threads
+    // Despite the fact, that this method can be invoked from different threads, we don't need locks.
+    // The reason is each thread accesses strictly its data and doesn't modify common memory.
 
     const auto& records = result.GetRecords();
     for (const auto& record: records) {

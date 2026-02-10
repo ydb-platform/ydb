@@ -3108,7 +3108,7 @@ private:
                         if (!TxManager->AddLock(lock.GetDataShard(), lock)) {
                             // Store the broken lock's QueryTraceId for TLI logging
                             if (lock.HasQueryTraceId() && lock.GetQueryTraceId() != 0) {
-                                TxManager->SetBrokenLockQueryTraceId(lock.GetQueryTraceId());
+                                TxManager->SetVictimQueryTraceId(lock.GetQueryTraceId());
                             }
                         }
                     }
@@ -3156,7 +3156,7 @@ private:
                         if (!TxManager->AddLock(lock.GetDataShard(), lock)) {
                             // Store the broken lock's QueryTraceId for TLI logging
                             if (lock.HasQueryTraceId() && lock.GetQueryTraceId() != 0) {
-                                TxManager->SetBrokenLockQueryTraceId(lock.GetQueryTraceId());
+                                TxManager->SetVictimQueryTraceId(lock.GetQueryTraceId());
                             }
                         }
                     }

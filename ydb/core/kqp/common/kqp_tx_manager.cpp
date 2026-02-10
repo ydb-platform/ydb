@@ -329,13 +329,13 @@ public:
         return LocksIssue;
     }
 
-    void SetBrokenLockQueryTraceId(ui64 queryTraceId) override {
+    void SetVictimQueryTraceId(ui64 queryTraceId) override {
         if (queryTraceId == 0) {
             return;
         }
 
-        if (!BrokenLockQueryTraceId_) {
-            BrokenLockQueryTraceId_ = queryTraceId;
+        if (!VictimQueryTraceId_) {
+            VictimQueryTraceId_ = queryTraceId;
 
             // If we already have a LocksIssue, update its message to include the victim query trace id
             if (LocksIssue) {
@@ -343,15 +343,15 @@ public:
                 if (!currentMessage.Contains("VictimQueryTraceId:")) {
                     TStringBuilder message;
                     message << currentMessage;
-                    message << " VictimQueryTraceId: " << *BrokenLockQueryTraceId_ << ".";
+                    message << " VictimQueryTraceId: " << *VictimQueryTraceId_ << ".";
                     LocksIssue = YqlIssue(NYql::TPosition(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message);
                 }
             }
         }
     }
 
-    std::optional<ui64> GetBrokenLockQueryTraceId() const override {
-        return BrokenLockQueryTraceId_;
+    std::optional<ui64> GetVictimQueryTraceId() const override {
+        return VictimQueryTraceId_;
     }
 
     void SetShardBreakerQueryTraceId(ui64 shardId, ui64 queryTraceId) override {
@@ -625,8 +625,8 @@ private:
             message << "`" << path << "`";
         }
         message << ".";
-        if (BrokenLockQueryTraceId_ && *BrokenLockQueryTraceId_ != 0) {
-            message << " VictimQueryTraceId: " << *BrokenLockQueryTraceId_ << ".";
+        if (VictimQueryTraceId_ && *VictimQueryTraceId_ != 0) {
+            message << " VictimQueryTraceId: " << *VictimQueryTraceId_ << ".";
         }
         LocksIssue = YqlIssue(NYql::TPosition(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message);
     }
@@ -645,7 +645,7 @@ private:
     bool ValidSnapshot = false;
     bool HasOlapTableShard = false;
     std::optional<NYql::TIssue> LocksIssue;
-    std::optional<ui64> BrokenLockQueryTraceId_;
+    std::optional<ui64> VictimQueryTraceId_;
     ui64 FirstQueryTraceId_ = 0;
 
     THashSet<ui64> SendingShards;

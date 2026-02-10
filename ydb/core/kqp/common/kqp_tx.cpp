@@ -56,7 +56,7 @@ TIssue GetLocksInvalidatedIssue(const TKqpTransactionContext& txCtx, const TKqpT
         TKikimrPathId(
             invalidatedLock.GetSchemeShard(),
             invalidatedLock.GetPathId()),
-        victimQueryTraceId);
+            victimQueryTraceId);
 }
 
 NYql::TIssue GetLocksInvalidatedIssue(const TShardIdToTableInfo& shardIdToTableInfo, const ui64& shardId,

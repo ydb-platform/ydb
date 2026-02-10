@@ -65,9 +65,11 @@ namespace {
         }
     }
 
-    // actorQueryTraceId is the QueryTraceId of the actor that wrote to this shard.
-    // It's passed directly to ensure accurate lock-breaking attribution in OLTP sink scenarios.
-    void FillEvWritePrepare(NKikimr::NEvents::TDataEvents::TEvWrite* evWrite, ui64 shardId, ui64 txId, const NKikimr::NKqp::IKqpTransactionManagerPtr& txManager, ui64 actorQueryTraceId = 0) {
+    //
+    void FillEvWritePrepare(NKikimr::NEvents::TDataEvents::TEvWrite* evWrite,
+        ui64 shardId, ui64 txId, const NKikimr::NKqp::IKqpTransactionManagerPtr& txManager,
+        ui64 actorQueryTraceId = 0) // QueryTraceId of the actor that wrote to this shard
+    {
         evWrite->Record.SetTxId(txId);
         auto* protoLocks = evWrite->Record.MutableLocks();
         protoLocks->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
@@ -998,7 +1000,7 @@ public:
             if (!ev->Get()->Record.GetTxLocks().empty()) {
                 const auto& brokenLock = ev->Get()->Record.GetTxLocks(0);
                 if (brokenLock.HasQueryTraceId() && brokenLock.GetQueryTraceId() != 0) {
-                    TxManager->SetBrokenLockQueryTraceId(brokenLock.GetQueryTraceId());
+                    TxManager->SetVictimQueryTraceId(brokenLock.GetQueryTraceId());
                 }
             }
 
@@ -1085,7 +1087,7 @@ public:
                     YQL_ENSURE(TxManager->BrokenLocks());
                     // Store the broken lock's QueryTraceId for TLI logging
                     if (lock.HasQueryTraceId() && lock.GetQueryTraceId() != 0) {
-                        TxManager->SetBrokenLockQueryTraceId(lock.GetQueryTraceId());
+                        TxManager->SetVictimQueryTraceId(lock.GetQueryTraceId());
                     }
                     NYql::TIssues issues;
                     issues.AddIssue(*TxManager->GetLockIssue());
@@ -1586,7 +1588,7 @@ private:
     // QueryTraceId tracks the first (minimum) query that wrote to this table.
     // It may be updated when the buffer actor receives a smaller QueryTraceId
     // due to out-of-order message delivery.
-    ui64 QueryTraceId;
+    ui64 QueryTraceId = 0;
 };
 
 
@@ -4524,7 +4526,7 @@ public:
             if (!ev->Get()->Record.GetTxLocks().empty()) {
                 const auto& brokenLock = ev->Get()->Record.GetTxLocks(0);
                 if (brokenLock.HasQueryTraceId() && brokenLock.GetQueryTraceId() != 0) {
-                    TxManager->SetBrokenLockQueryTraceId(brokenLock.GetQueryTraceId());
+                    TxManager->SetVictimQueryTraceId(brokenLock.GetQueryTraceId());
                 }
             }
 

@@ -898,10 +898,128 @@ TExprBase FilterLeafRows(const TExprBase& read, TExprContext& ctx, TPositionHand
         .Done();
 }
 
-TExprBase DoRewriteTopSortOverPrefixedKMeansTree(
-    const TReadMatch& match, const TCoFlatMap& flatMap, const TExprBase& lambdaArgs, const TExprBase& lambdaBody, const TCoTopBase& top,
+struct TPrefixedKMeansPredicateInfo {
+    TCoAtomList MainColumns;
+    TCoLambda MainLambda;
+    TCoLambda PrefixLambda;
+};
+
+std::optional<TPrefixedKMeansPredicateInfo> ExtractPrefixPredicate(const TReadMatch& match, const TIndexDescription& indexDesc,
+    const TCoFlatMap& flatMap, TExprContext& ctx, TPositionHandle pos) {
+    THashSet<TStringBuf> prefixColumnSet;
+    for (size_t i = 0; i < indexDesc.KeyColumns.size()-1; i++) {
+        prefixColumnSet.insert(indexDesc.KeyColumns[i]);
+    }
+
+    bool prefixInResult = false;
+
+    const auto optionalIf = flatMap.Lambda().Body().Cast<TCoOptionalIf>();
+    const auto arg0 = flatMap.Lambda().Args().Ptr()->Children().at(0).Get();
+
+    VisitExpr(optionalIf.Value().Ptr(), [&](const TExprNode::TPtr& node) {
+        if (const auto maybeMember = TMaybeNode<TCoMember>(node)) {
+            const auto member = maybeMember.Cast();
+            if (member.Struct().Raw() == arg0 &&
+                prefixColumnSet.contains(member.Name().Value())) {
+                prefixInResult = true;
+                return false;
+            }
+        }
+        return true;
+    });
+
+    // Split conditions into two lists - prefix table conditions and main table conditions
+    TExprNode::TListType prefixCond;
+    TExprNode::TListType mainCond;
+    const auto addCond = [&](TExprNode::TPtr cond) {
+        bool containsMain = false;
+        bool containsPrefix = false;
+        VisitExpr(cond, [&](const TExprNode::TPtr& node) {
+            if (const auto maybeMember = TMaybeNode<TCoMember>(node)) {
+                const auto member = maybeMember.Cast();
+                if (member.Struct().Raw() == arg0) {
+                    if (!prefixColumnSet.contains(member.Name().Value())) {
+                        containsMain = true;
+                    } else {
+                        containsPrefix = true;
+                    }
+                }
+            }
+            return true;
+        });
+        if (containsPrefix && !containsMain) {
+            prefixCond.push_back(cond);
+        } else {
+            mainCond.push_back(cond);
+            if (containsPrefix) {
+                prefixInResult = true;
+            }
+        }
+    };
+
+    if (optionalIf.Predicate().Maybe<TCoAnd>()) {
+        for (const auto& arg: optionalIf.Predicate().Ptr()->Children()) {
+            addCond(arg);
+        }
+    } else {
+        addCond(optionalIf.Predicate().Ptr());
+    }
+    if (prefixCond.empty()) {
+        return std::nullopt;
+    }
+
+    TExprNode::TPtr mainBody;
+    if (mainCond.size()) {
+        mainBody = Build<TCoOptionalIf>(ctx, pos)
+            .Predicate(mainCond.size() > 1
+                ? Build<TCoAnd>(ctx, pos).Add(mainCond).Done().Ptr()
+                : mainCond[0])
+            .Value(optionalIf.Value())
+            .Done().Ptr();
+    } else {
+        mainBody = optionalIf.Value().Ptr();
+    }
+    TCoLambda mainLambda = Build<TCoLambda>(ctx, pos)
+        .Args(flatMap.Lambda().Args())
+        .Body(mainBody)
+        .Done();
+
+    auto rowArg = Build<TCoArgument>(ctx, pos).Name("row").Done();
+    TNodeOnNodeOwnedMap replaces;
+    replaces.emplace(arg0, rowArg.Ptr());
+    prefixCond = ctx.ReplaceNodes(std::move(prefixCond), replaces);
+
+    TCoLambda prefixLambda = Build<TCoLambda>(ctx, pos)
+        .Args(rowArg)
+        .Body<TCoOptionalIf>()
+            .Predicate(prefixCond.size() > 1
+                ? Build<TCoAnd>(ctx, pos).Add(prefixCond).Done().Ptr()
+                : prefixCond[0])
+            .Value(rowArg)
+            .Build()
+        .Done();
+
+    TCoAtomList mainColumns = match.Columns();
+    if (!prefixInResult) {
+        // Remove prefix columns from main table read if we don't need them
+        TVector<TCoAtom> filteredColumns;
+        for (const auto& col: mainColumns) {
+            if (!prefixColumnSet.contains(col.Value())) {
+                filteredColumns.push_back(col);
+            }
+        }
+        mainColumns = Build<TCoAtomList>(ctx, pos)
+            .Add(filteredColumns)
+            .Done();
+    }
+
+    return TPrefixedKMeansPredicateInfo{mainColumns, mainLambda, prefixLambda};
+}
+
+TExprNode::TPtr DoRewriteTopSortOverPrefixedKMeansTree(
+    const TReadMatch& match, const TCoFlatMap& flatMap, const TCoTopBase& top,
     TExprContext& ctx, const TKqpOptimizeContext& kqpCtx,
-    const TKikimrTableDescription& tableDesc, const TIndexDescription& indexDesc, const TKikimrTableMetadata& implTable)
+    const TKikimrTableDescription& tableDesc, const TIndexDescription& indexDesc, const TKikimrTableMetadata& implTable, TString& error)
 {
     Y_ASSERT(indexDesc.Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree);
     Y_ASSERT(indexDesc.KeyColumns.size() > 1);
@@ -927,62 +1045,23 @@ TExprBase DoRewriteTopSortOverPrefixedKMeansTree(
         columns.back().assign(NTableIndex::NKMeans::IdColumn);
         return BuildKeyColumnsList(pos, ctx, columns);
     }();
-    auto mainColumns = match.Columns();
 
-    THashSet<TStringBuf> prefixColumnSet;
-    for (size_t i = 0; i < indexDesc.KeyColumns.size()-1; i++) {
-        prefixColumnSet.insert(indexDesc.KeyColumns[i]);
+    auto predicate = ExtractPrefixPredicate(match, indexDesc, flatMap, ctx, pos);
+    if (!predicate) {
+        error = "query should contain prefix column conditions";
+        return nullptr;
     }
-    bool prefixInResult = false;
+
     TNodeOnNodeOwnedMap replaces;
-    TMaybeNode<TCoLambda> mainLambda;
-    const auto prefixLambda = [&] {
-        auto newLambda = NewLambdaFrom(ctx, pos, replaces, flatMap.Lambda().Args().Ref(), flatMap.Lambda().Body());
-        auto optionalIf = newLambda.Body().Cast<TCoOptionalIf>();
-        auto oldValue = optionalIf.Value().Maybe<TCoAsStruct>();
-        if (!oldValue) {
-            return newLambda.Ptr();
-        }
-        auto args = newLambda.Args();
-        mainLambda = NewLambdaFrom(ctx, pos, replaces, args.Ref(), oldValue.Cast());
-        VisitExpr(mainLambda.Cast().Ptr(), [&](const TExprNode::TPtr& node) {
-            if (const auto maybeMember = TMaybeNode<TCoMember>(node)) {
-                const auto member = maybeMember.Cast();
-                if (member.Struct().Raw() == args.Arg(0).Raw() &&
-                    prefixColumnSet.contains(member.Name().Value())) {
-                    prefixInResult = true;
-                    return false;
-                }
-            }
-            return true;
-        });
-
-        replaces.clear();
-        replaces.emplace(oldValue.Raw(), args.Arg(0).Ptr());
-        return ctx.NewLambda(pos,
-            args.Ptr(),
-            ctx.ReplaceNodes(TExprNode::TListType{optionalIf.Ptr()}, replaces));
-    }();
     TExprNode::TPtr targetVector;
-    const auto levelLambda = LevelLambdaFrom(indexDesc, ctx, pos, replaces, lambdaArgs, lambdaBody, targetVector);
-    if (!prefixInResult) {
-        // Remove prefix columns from main table read if we don't need them
-        TVector<TCoAtom> filteredColumns;
-        for (const auto& col: mainColumns) {
-            if (!prefixColumnSet.contains(col.Value())) {
-                filteredColumns.push_back(col);
-            }
-        }
-        mainColumns = Build<TCoAtomList>(ctx, pos)
-            .Add(filteredColumns)
-            .Done();
-    }
+    const auto levelLambda = LevelLambdaFrom(indexDesc, ctx, pos, replaces,
+        top.KeySelectorLambda().Args(), top.KeySelectorLambda().Body(), targetVector);
 
     auto read = match.BuildRead(ctx, prefixTable, prefixColumns).Ptr();
 
     read = Build<TCoFlatMap>(ctx, pos)
         .Input(read)
-        .Lambda(prefixLambda)
+        .Lambda(predicate->PrefixLambda)
     .Done().Ptr();
 
     read = Build<TDqPrecompute>(ctx, pos)
@@ -1022,17 +1101,22 @@ TExprBase DoRewriteTopSortOverPrefixedKMeansTree(
     settings.VectorTopColumn = indexDesc.KeyColumns.back();
     settings.VectorTopLimit = top.Count().Ptr();
     settings.VectorTopDistinct = withOverlap;
-    VectorReadMain(ctx, pos, postingTable, postingTableDesc->Metadata, mainTable, tableDesc.Metadata, mainColumns, settings, read);
+    VectorReadMain(ctx, pos, postingTable, postingTableDesc->Metadata, mainTable, tableDesc.Metadata, predicate->MainColumns, settings, read);
 
-    if (mainLambda) {
+    if (predicate->MainLambda.Body().Maybe<TCoOptionalIf>()) {
+        read = Build<TCoFlatMap>(ctx, flatMap.Pos())
+            .Input(read)
+            .Lambda(predicate->MainLambda)
+            .Done().Ptr();
+    } else {
         read = Build<TCoMap>(ctx, flatMap.Pos())
             .Input(read)
-            .Lambda(mainLambda.Cast())
-        .Done().Ptr();
+            .Lambda(predicate->MainLambda)
+            .Done().Ptr();
     }
 
     VectorTopMain(ctx, top, read);
-    return TExprBase{read};
+    return read;
 }
 
 } // namespace
@@ -1755,8 +1839,13 @@ TExprBase KqpRewriteTopSortOverIndexRead(const TExprBase& node, TExprContext& ct
             if (!maybeFlatMap.Lambda().Body().Maybe<TCoOptionalIf>()) {
                 return reject("only simple conditions supported for now");
             }
-            return DoRewriteTopSortOverPrefixedKMeansTree(readTableIndex, maybeFlatMap.Cast(), lambdaArgs, lambdaBody, topBase,
-                                                          ctx, kqpCtx, tableDesc, *indexDesc, *implTable);
+            TString error;
+            TExprNode::TPtr read = DoRewriteTopSortOverPrefixedKMeansTree(readTableIndex, maybeFlatMap.Cast(),
+                topBase, ctx, kqpCtx, tableDesc, *indexDesc, *implTable, error);
+            if (!read) {
+                return reject(error);
+            }
+            return TExprBase(read);
         }
         if (!canUseVectorIndex) {
             auto argument = lambdaBody.Maybe<TCoMember>().Struct().Maybe<TCoArgument>();

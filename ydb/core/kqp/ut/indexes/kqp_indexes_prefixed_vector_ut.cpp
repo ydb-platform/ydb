@@ -34,6 +34,9 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
     constexpr int F_SUFFIX_PK  = 1 << 4;
     constexpr int F_WITH_INDEX = 1 << 5;
     constexpr int F_OVERLAP    = 1 << 6;
+    constexpr int F_COVER_ALL  = 1 << 7;
+    constexpr int F_COVER_EMB  = 1 << 8;
+    constexpr int F_COVER_DATA = 1 << 9;
 
     std::vector<i64> DoPositiveQueryVectorIndex(TSession& session, const TString& query, int flags = 0) {
         {
@@ -336,8 +339,14 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
 
     void DoCreatePrefixedVectorIndex(TSession & session, int levels, int flags = 0) {
         const char* cover = "";
-        if (flags & F_COVERING) {
+        if (flags & F_COVER_ALL) {
+            cover = " COVER (user, emb, data)";
+        } else if (flags & F_COVERING) {
             cover = " COVER (emb, data)";
+        } else if (flags & F_COVER_DATA) {
+            cover = " COVER (data)";
+        } else if (flags & F_COVER_EMB) {
+            cover = " COVER (emb)";
         }
 
         const TString createIndex(Q_(Sprintf(R"(
@@ -463,7 +472,7 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
 
         auto db = kikimr.GetTableClient();
         auto session = DoCreateTableForPrefixedVectorIndex(db, (Nullable ? F_NULLABLE : 0));
-        DoCreatePrefixedVectorIndex(session, 2, F_COVERING | F_SUFFIX_PK | (Overlap ? F_OVERLAP : 0));
+        DoCreatePrefixedVectorIndex(session, 2, F_COVER_EMB | (Overlap ? F_OVERLAP : 0));
         {
             auto result = session.DescribeTable("/Root/TestTable").ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
@@ -471,11 +480,76 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
             UNIT_ASSERT_EQUAL(indexes.size(), 1);
             UNIT_ASSERT_EQUAL(indexes[0].GetIndexName(), "index");
             UNIT_ASSERT_EQUAL(indexes[0].GetIndexColumns(), (std::vector<std::string>{"user", "emb"}));
-            UNIT_ASSERT_EQUAL(indexes[0].GetDataColumns(), (std::vector<std::string>{"emb", "data"}));
+            UNIT_ASSERT_EQUAL(indexes[0].GetDataColumns(), (std::vector<std::string>{"emb"}));
         }
 
         // Check without F_COVERING here because user column is not covered and query still accesses the main table
         DoPositiveQueriesPrefixedVectorIndexOrderByCosine(session, 0);
+    }
+
+    Y_UNIT_TEST_TWIN(OrderByCosineOnlyDataCovered, Overlap) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetFeatureFlags(featureFlags)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+
+        auto db = kikimr.GetTableClient();
+        auto session = DoCreateTableForPrefixedVectorIndex(db, 0);
+        DoCreatePrefixedVectorIndex(session, 2, F_COVER_DATA | (Overlap ? F_OVERLAP : 0));
+        {
+            auto result = session.DescribeTable("/Root/TestTable").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
+            const auto& indexes = result.GetTableDescription().GetIndexDescriptions();
+            UNIT_ASSERT_EQUAL(indexes.size(), 1);
+            UNIT_ASSERT_EQUAL(indexes[0].GetIndexName(), "index");
+            UNIT_ASSERT_EQUAL(indexes[0].GetIndexColumns(), (std::vector<std::string>{"user", "emb"}));
+            UNIT_ASSERT_EQUAL(indexes[0].GetDataColumns(), (std::vector<std::string>{"data"}));
+        }
+
+        // Check without F_COVERING here because user column is not covered and query still accesses the main table
+        DoPositiveQueriesPrefixedVectorIndexOrderByCosine(session, 0);
+    }
+
+    Y_UNIT_TEST_TWIN(ComplexPrefixCondition, Covered) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetFeatureFlags(featureFlags)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+
+        auto db = kikimr.GetTableClient();
+        auto session = DoCreateTableForPrefixedVectorIndex(db, 0);
+        DoCreatePrefixedVectorIndex(session, 2, (Covered ? F_COVER_ALL : 0));
+
+        {
+            const TString plainQuery(Q1_(R"(
+                pragma ydb.KMeansTreeSearchTopSize = "3";
+                $target = "\x67\x68\x02";
+                SELECT pk, emb, data FROM `/Root/TestTable`
+                WHERE user IN ("user_b", "user_d") AND pk*10 < 100000 AND LENGTH(user) + pk < 100000
+                ORDER BY Knn::CosineDistance(emb, $target)
+                LIMIT 3;
+            )"));
+            const TString indexQuery(Q1_(R"(
+                pragma ydb.KMeansTreeSearchTopSize = "3";
+                $target = "\x67\x68\x02";
+                SELECT pk, emb, data FROM `/Root/TestTable`
+                VIEW index
+                WHERE user IN ("user_b", "user_d") AND pk*10 < 100000 AND LENGTH(user) + pk < 100000
+                ORDER BY Knn::CosineDistance(emb, $target)
+                LIMIT 3;
+            )"));
+            DoPositiveQueriesVectorIndex(session, plainQuery, indexQuery, 0, 3);
+        }
     }
 
     Y_UNIT_TEST_QUAD(CosineDistanceWithPkSuffix, Nullable, Covered) {

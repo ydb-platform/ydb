@@ -127,6 +127,10 @@ public:
     virtual bool IsEarlyFinished() const = 0;
 
     virtual NKikimr::NMiniKQL::TType* GetOutputType() const = 0;
+
+    // Return sizes of fill-buffer in bytes.
+    virtual size_t GetTotalSize() const = 0;
+    virtual size_t GetOverLimitSize() const = 0;
 };
 
 } // namespace NDq

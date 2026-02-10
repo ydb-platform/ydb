@@ -86,8 +86,19 @@ public:
                 Aggregator->UpdateCount(FillLevel, result);
             }
             FillLevel = result;
+            if (FillLevel == HardLimit) {
+                OverLimitSize = EstimatedStoredBytes - MaxStoredBytes;
+            }
         }
         return result;
+    }
+
+    size_t GetTotalSize() const override {
+        return EstimatedStoredBytes;
+    }
+
+    size_t GetOverLimitSize() const override {
+        return OverLimitSize;
     }
 
     void SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggregator) override {
@@ -340,6 +351,7 @@ private:
     NKikimr::NMiniKQL::TType* const OutputType;
     const bool IsBlock = false;
     ui64 EstimatedStoredBytes = 0;
+    ui64 OverLimitSize = 0;
     ui64 ValuesPushed = 0;
     bool Finished = false;
     std::deque<TValueDesc> Values;

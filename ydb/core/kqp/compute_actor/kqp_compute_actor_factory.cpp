@@ -225,7 +225,8 @@ public:
             IActor* computeActor = CreateKqpScanComputeActor(
                 args.ExecuterId, args.TxId, args.Task, AsyncIoFactory, runtimeSettings, memoryLimits,
                 std::move(args.TraceId), std::move(args.Arena),
-                std::move(schedulableOptions), args.BlockTrackingMode);
+                std::move(schedulableOptions), args.BlockTrackingMode,
+                ResourceManager_->GetCounters());
             TActorId result = TlsActivationContext->Register(computeActor);
             info.MutableActorIds().emplace_back(result);
             return result;
@@ -238,7 +239,8 @@ public:
                 args.ExecuterId, args.TxId, args.Task, AsyncIoFactory, runtimeSettings, memoryLimits,
                 std::move(args.TraceId), std::move(args.Arena),
                 FederatedQuerySetup, GUCSettings,
-                std::move(schedulableOptions), args.BlockTrackingMode, std::move(args.UserToken), args.Database);
+                std::move(schedulableOptions), args.BlockTrackingMode, std::move(args.UserToken), args.Database,
+                ResourceManager_->GetCounters());
             return args.ShareMailbox ? TlsActivationContext->AsActorContext().RegisterWithSameMailbox(computeActor) :
                 TlsActivationContext->AsActorContext().Register(computeActor);
         }

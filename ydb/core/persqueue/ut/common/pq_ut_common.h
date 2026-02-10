@@ -264,6 +264,7 @@ struct TTabletPreparationParameters {
     bool enableCompactificationByKey{false};
     std::optional<uint32_t> metricsLevel;
     std::optional<TString> monitoringProjectId;
+    bool AddDefaultConsumer{true};
 };
 
 struct TConsumerPreparationParameters {

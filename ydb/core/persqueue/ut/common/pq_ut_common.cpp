@@ -65,9 +65,11 @@ void PQTabletPrepare(const TTabletPreparationParameters& parameters,
             tabletConfig->SetTopic("topic");
             tabletConfig->SetVersion(version);
             tabletConfig->SetLocalDC(parameters.localDC);
-            auto* consumer = tabletConfig->AddConsumers();
-            consumer->SetName("user");
-            consumer->SetReadFromTimestampsMs(parameters.readFromTimestampsMs);
+            if (parameters.AddDefaultConsumer) {
+                auto* consumer = tabletConfig->AddConsumers();
+                consumer->SetName("user");
+                consumer->SetReadFromTimestampsMs(parameters.readFromTimestampsMs);
+            }
             tabletConfig->SetMeteringMode(parameters.meteringMode);
             auto partitionConfig = tabletConfig->MutablePartitionConfig();
             if (parameters.writeSpeed > 0) {

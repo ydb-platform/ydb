@@ -2,7 +2,6 @@
 #include "mvp_tokens.h"
 #include "mvp_test_runtime.h"
 #include "reducer.h"
-#include "proto_masking.h"
 #include <ydb/mvp/core/protos/mvp.pb.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/testlib/actors/test_runtime.h>

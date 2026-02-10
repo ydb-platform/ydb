@@ -36,7 +36,7 @@ THolder<TEvService::TEvRunWorker> MakeRunWorkerEv(
         const TPathId& dstPathId,
         const NKikimrReplication::TBatchingSettings& batchingSettings,
         const TString& database,
-        NKikimrReplication::TReplicationConfig::TMetricsConfig::EMetricsLevel metricsLevel,
+        NKikimrProto::NMetricsConfig::TMetricsConfig::EMetricsLevel metricsLevel,
         const NKikimrReplication::TReplicationLocationConfig& replicationLocation)
 {
     auto ev = MakeHolder<TEvService::TEvRunWorker>();

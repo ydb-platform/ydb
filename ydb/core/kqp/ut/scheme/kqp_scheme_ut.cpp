@@ -10192,7 +10192,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 WITH (
                     ENDPOINT = "%s",
                     DATABASE = "/Root",
-                    TOKEN = "root@builtin"
+                    TOKEN = "root@builtin",
+                    METRICS_LEVEL = 1
                 );
             )", kikimr.GetEndpoint().c_str());
 
@@ -10206,8 +10207,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 --!syntax_v1
                 ALTER TRANSFER `/Root/transfer`
                 SET (
-                    STATE = "DONE",
-                    FAILOVER_MODE = "FORCE"
+                    STATE = "PAUSED"
                 );
             )";
 
@@ -10219,18 +10219,12 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 --!syntax_v1
                 ALTER TRANSFER `/Root/transfer`
                 SET (
-                    METRICS_LEVEL = "detailed"
+                    METRICS_LEVEL = 3
                 );
             )";
 
             const auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
-            for (size_t i = 10; i--;) {
-                const auto result = repl.DescribeTransfer("/Root/transfer").ExtractValueSync();
-                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-                Sleep(TDuration::Seconds(1));
-            }
         }
     }
 

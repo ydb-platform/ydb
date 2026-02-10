@@ -114,9 +114,9 @@ message DescribeTransferResponse {
 // Message representing sliding window statistics by several windows.
 message MultipleWindowsStat {
     // Average per minute.
-    google.protobuf.Duration per_minute = 1;
+    google.protobuf.Duration avg_per_minute = 1;
     // Average per hour.
-    google.protobuf.Duration per_hour = 2;
+    google.protobuf.Duration avg_per_hour = 2;
 }
 
 message DescribeTransferResult {

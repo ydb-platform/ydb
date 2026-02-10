@@ -5,6 +5,14 @@
 
 namespace NKikimr::NReplication::NController {
 
+
+class TTargetBaseStats: public TReplication::ITargetStats {
+protected:
+    virtual bool UpdateWithSingleStatsItem(ui64 workerId, ui64 key, i64 value) = 0;
+    virtual void RemoveWorker(ui64 workerId) = 0;
+};
+
+
 class TTargetBase
     : public TReplication::ITarget
     , public TLagProvider
@@ -22,6 +30,7 @@ protected:
     bool HasWorkers() const;
     bool HasWorker(ui64 id) const;
     void RemoveWorkers(const TActorContext& ctx);
+    const NKikimrReplication::TReplicationLocationConfig& GetLocation() const;
 
 public:
     struct TConfigBase : public IConfig {

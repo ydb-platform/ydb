@@ -11,6 +11,8 @@
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
 
+#include <ydb/public/api/protos/draft/ydb_replication.pb.h>
+
 namespace NKikimr::NReplication::NController {
 
 const TString ReplicationConsumerName = "replicationConsumer";
@@ -70,7 +72,7 @@ public:
             const TReplication::ITarget::IConfig::TPtr& config,
             const NKikimrReplication::TBatchingSettings& batchingSettings,
             const TString& database,
-            const NKikimrReplication::TReplicationConfig::TMetricsConfig& metricsConfig,
+            const TMetricsConfig& metricsConfig,
             const NKikimrReplication::TReplicationLocationConfig& location
     )
         : Parent(parent)
@@ -118,12 +120,102 @@ private:
     const TReplication::ITarget::IConfig::TPtr Config;
     const NKikimrReplication::TBatchingSettings BatchingSettings;
     const TString Database;
-    NKikimrReplication::TReplicationConfig::TMetricsConfig::EMetricsLevel MetricsLevel;
+    TMetricsConfig::EMetricsLevel MetricsLevel;
     NKikimrReplication::TReplicationLocationConfig Location;
 
 }; // TWorkerRegistar
 
 } // namespace
+
+TTargetWithStreamStats::TTargetWithStreamStats(TInstant startTime)
+    : CollectionStartTime(startTime)
+{
+}
+
+void TTargetWithStreamStats::RemoveWorker(ui64 workerId) {
+    Y_UNUSED(workerId);
+    // nop
+}
+
+bool TTargetWithStreamStats::UpdateWithSingleStatsItem(ui64 workerId, ui64 key, i64 value) {
+    Y_UNUSED(workerId);
+
+    const auto eKey = static_cast<NKikimrReplication::TWorkerStats::EStatsKeys>(key);
+    switch (eKey) {
+        case NKikimrReplication::TWorkerStats::READ_BYTES:
+            ReadBytes.Add(value);
+            break;
+
+        case NKikimrReplication::TWorkerStats::READ_MESSAGES:
+            ReadMessages.Add(value);
+            break;
+
+        case NKikimrReplication::TWorkerStats::WRITE_BYTES:
+            WriteBytes.Add(value);
+            break;
+
+        case NKikimrReplication::TWorkerStats::WRITE_ROWS:
+            WriteRows.Add(value);
+            break;
+
+        case NKikimrReplication::TWorkerStats::DECOMPRESS_ELAPSED_CPU:
+            DecompressionCpuTime.Add(value);
+            break;
+        default:
+            return false;
+    };
+    return true;
+}
+
+void TTargetWithStreamStats::Serialize(NKikimrReplication::TEvDescribeReplicationResult& destination, bool detailed) const {
+    auto& dstStats = *destination.MutableStats();
+    Y_UNUSED(detailed);
+    ReadBytes.ToProto(*dstStats.MutableReadBytes(), 1);
+    ReadMessages.ToProto(*dstStats.MutableReadMessages(), 1);
+    WriteBytes.ToProto(*dstStats.MutableWriteBytes(), 1);
+    WriteRows.ToProto(*dstStats.MutableWriteRows(), 1);
+    DecompressionCpuTime.ToProto(*dstStats.MutableDecompressionCpuTime(), 1'000'000);
+    dstStats.MutableStatsCollectionStart()->CopyFrom(NProtoInterop::CastToProto(CollectionStartTime));
+}
+
+
+bool TTragetWithStreamCounters::UpdateWithSingleStatsItem(ui64 workerId, ui64 key, i64 value) {
+    if (!CountersGroup)
+        return false;
+
+    Y_UNUSED(workerId);
+
+    const auto eKey = static_cast<NKikimrReplication::TWorkerStats::EStatsKeys>(key);
+    switch (eKey) {
+        case NKikimrReplication::TWorkerStats::READ_TIME:
+            ReadTime->Add(value);
+            break;
+
+        case NKikimrReplication::TWorkerStats::WRITE_TIME:
+            WriteTime->Add(value);
+            break;
+
+        case NKikimrReplication::TWorkerStats::DECOMPRESS_ELAPSED_CPU:
+            DecompressionCpuTime->Add(value);
+            break;
+
+        case NKikimrReplication::TWorkerStats::WRITE_BYTES:
+            WriteBytes->Add(value);
+            break;
+
+        case NKikimrReplication::TWorkerStats::WRITE_ROWS:
+            WriteRows->Add(value);
+            break;
+
+        case NKikimrReplication::TWorkerStats::WRITE_ERRORS:
+            WriteErrors->Add(value);
+            break;
+
+        default:
+            return false;
+    }
+    return true;
+}
 
 void TTargetWithStream::Progress(const TActorContext& ctx) {
     auto replication = GetReplication();
@@ -161,6 +253,35 @@ void TTargetWithStream::Shutdown(const TActorContext& ctx) {
     }
 
     TTargetBase::Shutdown(ctx);
+}
+
+void TTargetWithStream::WorkerStatusChanged(ui64, ui64) {
+    // nop
+}
+
+void TTargetWithStream::UpdateStats(ui64 workerId, const NKikimrReplication::TWorkerStats& newStats) {
+    if (!Stats && !Counters)
+        return;
+
+    if (!HasWorker(workerId)) {
+        if (Stats) {
+            Stats->RemoveWorker(workerId);
+        }
+        return;
+    }
+
+    for (const auto& item : newStats.GetValues()) {
+        if (Stats) {
+            Stats->UpdateWithSingleStatsItem(workerId, item.GetKey(), item.GetValue());
+        }
+        if (Counters) {
+            Counters->UpdateWithSingleStatsItem(workerId, item.GetKey(), item.GetValue());
+        }
+    }
+}
+
+const TReplication::ITargetStats* TTargetWithStream::GetStats() const {
+    return Stats.get();
 }
 
 IActor* TTargetWithStream::CreateWorkerRegistar(const TActorContext& ctx) const {

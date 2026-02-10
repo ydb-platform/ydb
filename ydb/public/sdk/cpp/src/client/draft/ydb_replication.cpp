@@ -360,17 +360,12 @@ public:
         return promise.GetFuture();
     }
 
-    TAsyncDescribeTransferResult DescribeTransfer(const std::string& path, bool includeStats) {
+    TAsyncDescribeTransferResult DescribeTransfer(const std::string& path, const TDescribeTransferSettings& settings) {
         using namespace Ydb::Replication;
-
-        TDescribeReplicationSettings settings{};
-        if (includeStats) {
-            settings.IncludeStats(includeStats);
-        }
 
         auto request = MakeOperationRequest<DescribeTransferRequest>(settings);
         request.set_path(TStringType{path});
-        request.set_include_stats(includeStats);
+        request.set_include_stats(settings.IncludeStats_);
 
         auto promise = NThreading::NewPromise<TDescribeTransferResult>();
 
@@ -407,8 +402,8 @@ TAsyncDescribeReplicationResult TReplicationClient::DescribeReplication(const st
     return Impl_->DescribeReplication(path, settings);
 }
 
-TAsyncDescribeTransferResult TReplicationClient::DescribeTransfer(const std::string& path, bool includeStats) {
-    return Impl_->DescribeTransfer(path, includeStats);
+TAsyncDescribeTransferResult TReplicationClient::DescribeTransfer(const std::string& path, const TDescribeTransferSettings& settings) {
+    return Impl_->DescribeTransfer(path, settings);
 }
 
 } // NReplication

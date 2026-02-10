@@ -520,22 +520,22 @@ void TController::UpdateLag(const TWorkerId& id, TDuration lag) {
     }
 }
 
-void TController::UpdateStats(const TWorkerId& id, NKikimrReplication::TEvWorkerStatus::EStatus status) {
-    auto* target = FindTarget(id);
-    if (!target) {
-        return;
-    }
-
-    target->WorkerStatusChanged(id.WorkerId(), status, AppData()->Counters);
-}
-
 void TController::UpdateStats(const TWorkerId& id, const NKikimrReplication::TWorkerStats& stats) {
     auto* target = FindTarget(id);
     if (!target) {
         return;
     }
 
-    target->UpdateStats(id.WorkerId(), stats, AppData()->Counters);
+    target->UpdateStats(id.WorkerId(), stats);
+}
+
+void TController::UpdateStats(const TWorkerId& id, NKikimrReplication::TEvWorkerStatus::EStatus status) {
+    auto* target = FindTarget(id);
+    if (!target) {
+        return;
+    }
+
+    target->WorkerStatusChanged(id.WorkerId(), status);
 }
 
 void TController::Handle(TEvService::TEvRunWorker::TPtr& ev, const TActorContext& ctx) {

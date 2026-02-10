@@ -27,7 +27,7 @@
 namespace NKikimr::NReplication::NService {
 
 class TSessionInfo {
-    using TMetricsConfig = NKikimrReplication::TReplicationConfig::TMetricsConfig;
+    using TMetricsConfig = NKikimrProto::NMetricsConfig::TMetricsConfig;
     class TWorkerInfo {
         friend class TSessionInfo;
     public:

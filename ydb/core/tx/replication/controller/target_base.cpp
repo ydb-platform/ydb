@@ -5,6 +5,7 @@
 #include "target_base.h"
 #include "util.h"
 
+#include <ydb/core/protos/replication.pb.h>
 #include <ydb/library/actors/core/events.h>
 
 namespace NKikimr::NReplication::NController {
@@ -142,6 +143,10 @@ void TTargetBase::AddWorker(ui64 id) {
 
 void TTargetBase::RemoveWorker(ui64 id) {
     Workers.erase(id);
+}
+
+const NKikimrReplication::TReplicationLocationConfig& TTargetBase::GetLocation() const {
+    return Replication->GetLocation();
 }
 
 TVector<ui64> TTargetBase::GetWorkers() const {

@@ -272,8 +272,8 @@ void TLocalTopicPartitionReaderActor::HandleOnWaitData(TEvPersQueue::TEvResponse
         }
 
         if (isCompressed) {
-            NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TCompressedMessage cMsg{static_cast<NYdb::NTopic::ECodec>(proto.codec() + 1), std::move(data), information, nullptr};
-            messages.emplace_back(std::move(cMsg));
+            messages.emplace_back(NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TCompressedMessage{
+                static_cast<NYdb::NTopic::ECodec>(proto.codec() + 1), std::move(data), information, nullptr});
         } else {
             messages.emplace_back(std::move(information), std::move(data));
         }

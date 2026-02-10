@@ -253,27 +253,14 @@ public:
 
 private:
     TVector<TValidator> Validators;
-    const TVector<TString> MustHaveLabels = {"transfer_id", "database_id", "folder_id", "cloud_id", "monitoring_project_id"};
+    const TVector<TString> MustHaveLabels = {"transfer_id", "database_id", "folder_id", "cloud_id"};
 
-    auto GetMetricInfo(const TTransferMetrics& metrics, bool fromDetailed, const TString& name) const {
-        TMaybe<TVector<TMetricInfo>> result;
-        if (fromDetailed) {
-            auto iter = metrics.DetailedMetrics.find(name);
-            if (iter != metrics.DetailedMetrics.end()) {
-                result = iter->second;
-            }
-        }
-        else {
-            auto iter = metrics.AggregatedMetrics.find(name);
-            if (iter != metrics.AggregatedMetrics.end()) {
-                result = {iter->second};
-            }
-        }
-        if (!result) {
-            return result;
-        }
-        for (const auto& metricInfo : *result) {
-            for (const auto& label : MustHaveLabels) {
+
+    void CheckMetricInfo(const TVector<TMetricInfo>& metrics, const TString& name, const TVector<TString>& extraLabels = {}) const {
+        auto expectedLabels = MustHaveLabels;
+        expectedLabels.insert(expectedLabels.end(), extraLabels.begin(), extraLabels.end());
+        for (const auto& metricInfo : metrics) {
+            for (const auto& label : expectedLabels) {
                 auto labelIter = metricInfo.Labels.find(label);
                 UNIT_ASSERT_C(!labelIter.IsEnd(), TStringBuilder() << "Metric " << name << " must have label " << label);
                 if (label == "transfer_id") {
@@ -281,7 +268,6 @@ private:
                 }
             }
         }
-        return result;
     }
 
 public:
@@ -311,9 +297,10 @@ public:
                                          TValueValidator valueValidator = [](const auto&) -> TString { return {}; }) {
         Validators.emplace_back(
             [=](const TTransferMetrics& metrics) -> void {
-                auto metric = GetMetricInfo(metrics, false, name);
-                UNIT_ASSERT_C(metric, TStringBuilder() << "Transfer sensor " << name << " not found");
-                auto error = valueValidator(*metric);
+                auto iter = metrics.AggregatedMetrics.find(name);
+                UNIT_ASSERT_C(iter != metrics.AggregatedMetrics.end(), TStringBuilder() << "Transfer sensor " << name << " not found");
+                CheckMetricInfo({iter->second}, name);
+                auto error = valueValidator({iter->second});
                 UNIT_ASSERT_C(error.empty(), TStringBuilder() << "Error checking sensor: " << name << ": " << error);
             });
         return *this;
@@ -324,9 +311,10 @@ public:
     {
         Validators.emplace_back(
             [=](const TTransferMetrics& metrics) -> void {
-                auto metricsList = GetMetricInfo(metrics, true, name);
-                UNIT_ASSERT_C(metricsList, TStringBuilder() << "Detailed sensor " << name << " not found");
-                auto error = valueValidator(*metricsList);
+                auto iter = metrics.DetailedMetrics.find(name);
+                UNIT_ASSERT_C(iter != metrics.DetailedMetrics.end(), TStringBuilder() << "Transfer detailed sensor " << name << " not found");
+                CheckMetricInfo(iter->second, name, {"monitoring_project_id"});
+                auto error = valueValidator(iter->second);
                 UNIT_ASSERT_C(error.empty(), TStringBuilder() << "Error checking sensor: " << name << ": " << error);
             });
         return *this;
@@ -759,8 +747,9 @@ struct MainTestCase {
 
     auto DescribeTransfer(bool includeStats = false) {
         TReplicationClient client(Driver);
-
-        return client.DescribeTransfer(TString("/") + GetEnv("YDB_DATABASE") + "/" + TransferName, includeStats).ExtractValueSync();
+        TDescribeTransferSettings settings;
+        settings.IncludeStats(includeStats);
+        return client.DescribeTransfer(TString("/") + GetEnv("YDB_DATABASE") + "/" + TransferName, settings).ExtractValueSync();
     }
 
     auto DescribeConsumer(const std::string& consumerName) {

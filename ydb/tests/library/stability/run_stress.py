@@ -221,7 +221,9 @@ class StressRunExecutor:
                                 logging.info(
                                     f"Run {current_iteration} on {node_host} completed successfully"
                                 )
-                                time_module.sleep(min(sleep_between_runs, planned_end_time - time_module.time()))
+                                planned_duration = planned_end_time - time_module.time()
+                                if planned_duration > 0:
+                                    time_module.sleep(min(sleep_between_runs, planned_duration))
                             else:
                                 logging.warning(
                                     f"Run {current_iteration} on {node_host} failed. Continuing after {sleep_between_runs}s delay")

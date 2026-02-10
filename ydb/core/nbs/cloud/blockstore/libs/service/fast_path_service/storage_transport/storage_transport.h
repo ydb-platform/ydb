@@ -62,6 +62,11 @@ public:
         const NKikimr::NDDisk::TReadInstruction instruction,
         TGuardedSgList data,
         ui64 requestId) = 0;
+
+    virtual NThreading::TFuture<NKikimrBlobStorage::NDDisk::TEvListPersistentBufferResult> ListPersistentBuffer(
+        const NActors::TActorId serviceId,
+        const NKikimr::NDDisk::TQueryCredentials credentials,
+        const ui64 requestId) = 0;
 };
 
 }   // namespace NYdb::NBS::NBlockStore

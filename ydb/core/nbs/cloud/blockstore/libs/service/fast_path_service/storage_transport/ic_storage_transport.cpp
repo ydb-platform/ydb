@@ -166,6 +166,25 @@ TFuture<NKikimrBlobStorage::NDDisk::TEvReadResult> TICStorageTransport::Read(
     return future;
 }
 
+TFuture<NKikimrBlobStorage::NDDisk::TEvListPersistentBufferResult> TICStorageTransport::ListPersistentBuffer(
+    const NActors::TActorId serviceId,
+    const NKikimr::NDDisk::TQueryCredentials credentials,
+    const ui64 requestId)
+{
+    auto promise = NewPromise<NKikimrBlobStorage::NDDisk::TEvListPersistentBufferResult>();
+    auto future = promise.GetFuture();
+
+    NActors::TActivationContext::AsActorContext().Send(
+        ICStorageTransportActorId,
+        new TEvICStorageTransportPrivate::TEvListPersistentBuffer(
+            serviceId,
+            credentials,
+            requestId,
+            std::move(promise)));
+
+    return future;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 void TICStorageTransportActor::Bootstrap(const NActors::TActorContext& ctx)
@@ -411,6 +430,39 @@ void TICStorageTransportActor::HandleReadResult(
     PrivateEventsByRequestId.erase(requestId);
 }
 
+void TICStorageTransportActor::HandleListPersistentBuffer(
+    const TEvICStorageTransportPrivate::TEvListPersistentBuffer::TPtr& ev,
+    const NActors::TActorContext& ctx)
+{
+    auto* msg = ev->Get();
+
+    auto request = std::make_unique<NKikimr::NDDisk::TEvListPersistentBuffer>(
+        msg->Credentials);
+
+    ctx.Send(
+        msg->ServiceId,
+        request.release(),
+        0, // flags
+        msg->RequestId
+    );
+
+    PrivateEventsByRequestId.emplace(msg->RequestId, std::move(*msg));
+}
+
+void TICStorageTransportActor::HandleListPersistentBufferResult(
+    const NKikimr::NDDisk::TEvListPersistentBufferResult::TPtr& ev,
+    const NActors::TActorContext& ctx)
+{
+    Y_UNUSED(ctx);
+
+    auto requestId = ev->Cookie;
+
+    auto& promise = std::get<6>(PrivateEventsByRequestId.at(requestId)).Promise;
+
+    promise.SetValue(std::move(ev->Get()->Record));
+    PrivateEventsByRequestId.erase(requestId);
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 
 STFUNC(TICStorageTransportActor::StateWork)
@@ -440,6 +492,9 @@ STFUNC(TICStorageTransportActor::StateWork)
 
         HFunc(TEvICStorageTransportPrivate::TEvRead, HandleRead);
         HFunc(NKikimr::NDDisk::TEvReadResult, HandleReadResult);
+
+        HFunc(TEvICStorageTransportPrivate::TEvListPersistentBuffer, HandleListPersistentBuffer);
+        HFunc(NKikimr::NDDisk::TEvListPersistentBufferResult, HandleListPersistentBufferResult);
 
         default:
             LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::NBS_PARTITION,

@@ -96,7 +96,7 @@ void TPartitionActor::HandleControllerAllocateDDiskBlockGroupResult(
 
         LoadActorAdapter = CreateLoadActorAdapter(ctx.SelfID, std::move(fastPathService));
 
-        LOG_INFO(
+        LOG_ERROR(
             NActors::TActivationContext::AsActorContext(),
             NKikimrServices::NBS_PARTITION,
             "Started NBS partition LoadActorAdapter: actor id %s",

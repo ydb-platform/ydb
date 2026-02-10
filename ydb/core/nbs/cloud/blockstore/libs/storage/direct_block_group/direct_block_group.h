@@ -108,7 +108,8 @@ public:
 private:
     void HandleConnectResult(
         ui64 storageRequestId,
-        const NKikimrBlobStorage::NDDisk::TEvConnectResult& result);
+        const NKikimrBlobStorage::NDDisk::TEvConnectResult& result,
+        std::shared_ptr<ui32> numberConnectionsEstablised);
 
     void HandleWritePersistentBufferResult(
         ui64 storageRequestId,
@@ -132,6 +133,13 @@ private:
     void HandleReadResult(
         ui64 storageRequestId,
         const TEvent& result);
+
+    void RestorePersistentBuffer();
+    void HandleListPersistentBufferResultOnRestore(
+        ui64 storageRequestId,
+        const NKikimrBlobStorage::NDDisk::TEvListPersistentBufferResult& result,
+        std::shared_ptr<std::pair<size_t, size_t>> requestsCounters);
+    void RestorePersistentBufferFinised();
 };
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

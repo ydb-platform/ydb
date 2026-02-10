@@ -53,16 +53,26 @@ TDirectBlockGroup::TDirectBlockGroup(
 
 void TDirectBlockGroup::EstablishConnections()
 {
-    auto sendConnectRequests = [&](const TVector<TDDiskConnection>& connections, ui64 startRequestId = 0) {
+    auto numberConnectionsEstablised = std::make_shared<ui32>(0);
+    auto sendConnectRequests =
+        [&, numberConnectionsEstablised = numberConnectionsEstablised](
+            const TVector<TDDiskConnection>& connections,
+            ui64 startRequestId = 0)
+    {
         for (size_t i = 0; i < connections.size(); i++) {
             auto future = StorageTransport->Connect(
                 connections[i].GetServiceId(),
                 connections[i].Credentials,
                 startRequestId + i);
 
-            future.Subscribe([this, requestId = startRequestId + i](const auto& f) {
-                HandleConnectResult(requestId, f.GetValue());
-            });
+            future.Subscribe(
+                [this, requestId = startRequestId + i,
+                 numberConnectionsEstablised = numberConnectionsEstablised](
+                    const auto& f)
+                {
+                    HandleConnectResult(requestId, f.GetValue(),
+                                        numberConnectionsEstablised);
+                });
         }
     };
 
@@ -73,7 +83,8 @@ void TDirectBlockGroup::EstablishConnections()
 
 void TDirectBlockGroup::HandleConnectResult(
     ui64 storageRequestId,
-    const NKikimrBlobStorage::NDDisk::TEvConnectResult& result)
+    const NKikimrBlobStorage::NDDisk::TEvConnectResult& result,
+    std::shared_ptr<ui32> numberConnectionsEstablised)
 {
     TDDiskConnection* ddiskConnection = nullptr;
     if (storageRequestId < PersistentBufferConnections.size()) {
@@ -85,6 +96,59 @@ void TDirectBlockGroup::HandleConnectResult(
     if (result.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK) {
         ddiskConnection->Credentials.DDiskInstanceGuid =
             result.GetDDiskInstanceGuid();
+        *numberConnectionsEstablised += 1;
+    } else {
+        Y_ABORT("TDirectBlockGroup::HandleConnectResult: connection failed - unhandled error");
+    }
+
+    // TODO сделать более красивую проверку
+    bool allConnectionsEstablised = *numberConnectionsEstablised == DDiskConnections.size() + PersistentBufferConnections.size();
+    if (allConnectionsEstablised) {
+        RestorePersistentBuffer();
+    }
+}
+
+// TODO заблокировать IO до полного восстановления (где-то раньше)
+void TDirectBlockGroup::RestorePersistentBuffer()
+{
+    // TODO пройти по всем PB
+
+    size_t numberOfRequests = 3;
+    auto counters = std::make_shared<std::pair<size_t, size_t>>(0, numberOfRequests);
+    for (size_t i = 0; i < numberOfRequests; i++) {
+        const auto& ddiskConnection = PersistentBufferConnections[i];
+        ++StorageRequestId;
+
+        auto future = StorageTransport->ListPersistentBuffer(
+            ddiskConnection.GetServiceId(),
+            ddiskConnection.Credentials,
+            StorageRequestId);
+
+        future.Subscribe(
+            [this, requestId = StorageRequestId,
+             counters = counters](const auto& f)
+            {
+                const auto& result = f.GetValue();
+                HandleListPersistentBufferResultOnRestore(requestId, result,
+                                                          counters);
+            });
+    }
+}
+
+void TDirectBlockGroup::HandleListPersistentBufferResultOnRestore(
+    ui64 storageRequestId,
+    const NKikimrBlobStorage::NDDisk::TEvListPersistentBufferResult& result,
+    std::shared_ptr<std::pair<size_t, size_t>> requestsCounters)
+{
+    Y_UNUSED(storageRequestId);
+    ++requestsCounters->first;
+
+    Y_ABORT_UNLESS(result.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
+
+    // TODO Handle this response with mutex. There is multithreading access from future's threads
+
+    if (requestsCounters->first == requestsCounters->second) {
+        RestorePersistentBufferFinised(); // finish actor bootstrap
     }
 }
 

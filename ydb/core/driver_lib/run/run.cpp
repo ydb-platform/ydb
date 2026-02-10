@@ -623,13 +623,6 @@ void TKikimrRunner::InitializeMonitoring(const TKikimrRunConfig& runConfig, bool
         monConfig.RequireCountersAuthentication = appConfig.GetMonitoringConfig().GetRequireCountersAuthentication();
         monConfig.RequireHealthcheckAuthentication = appConfig.GetMonitoringConfig().GetRequireHealthcheckAuthentication();
 
-        // Custom monitoring authentication may be enabled only if user authentication is mandatory
-        const auto& securityConfig(runConfig.AppConfig.GetDomainsConfig().GetSecurityConfig());
-        const bool enforceUserToken = securityConfig.GetEnforceUserTokenRequirement();
-        Y_ABORT_UNLESS(enforceUserToken || !monConfig.RequireCountersAuthentication,
-            "Setting EnforceUserTokenRequirement is disabled, but RequireCountersAuthentication is enabled");
-        Y_ABORT_UNLESS(enforceUserToken || !monConfig.RequireHealthcheckAuthentication,
-            "Setting EnforceUserTokenRequirement is disabled, but RequireHealthcheckAuthentication is enabled");
 
         if (includeHostName) {
             if (appConfig.HasNameserviceConfig() && appConfig.GetNameserviceConfig().NodeSize() > 0) {
@@ -647,6 +640,7 @@ void TKikimrRunner::InitializeMonitoring(const TKikimrRunConfig& runConfig, bool
             }
         }
 
+        const auto& securityConfig(runConfig.AppConfig.GetDomainsConfig().GetSecurityConfig());
         if (securityConfig.MonitoringAllowedSIDsSize() > 0) {
             monConfig.AllowedSIDs.assign(securityConfig.GetMonitoringAllowedSIDs().begin(), securityConfig.GetMonitoringAllowedSIDs().end());
         }

@@ -170,7 +170,7 @@ private:
     EReadSessionSteps ReadStep = EReadSessionSteps::WAIT_JOIN_GROUP;
     TNextRequestError NextRequestError;
 
-    THashMap<TString, NGRpcProxy::TTopicHolder> TopicsInfo; // topic -> info
+    THashMap<TString, NGRpcProxy::TTopicHolderBase> TopicsInfo; // topic -> info
     NPersQueue::TTopicsToConverter TopicsToConverter;
     THashSet<TString> TopicsToReadNames;
     THashMap<TString, TString> OriginalTopicNames;

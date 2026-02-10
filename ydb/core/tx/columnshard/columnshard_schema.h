@@ -113,7 +113,8 @@ struct Schema : NIceDb::Schema {
         InFlightSnapshots = 15,
         TxDependencies = 16,
         TxStates = 17,
-        TxEvents = 18
+        TxEvents = 18,
+        TableInfoV1 = 19
     };
 
     // Tablet tables
@@ -190,6 +191,19 @@ struct Schema : NIceDb::Schema {
 
         using TKey = TableKey<PathId>;
         using TColumns = TableColumns<PathId, DropStep, DropTxId, TieringUsage, SchemeShardLocalPathId>;
+    };
+
+    struct TableInfoV1 : Table<(ui32)ECommonTables::TableInfoV1> {
+        struct PathId : Column<1, NScheme::NTypeIds::Uint64> {};
+        struct SchemeShardLocalPathId : Column<2, NScheme::NTypeIds::Uint64> {};
+        struct DropStep : Column<3, NScheme::NTypeIds::Uint64> {};
+        struct DropTxId : Column<4, NScheme::NTypeIds::Uint64> {};
+        struct CopyStep : Column<5, NScheme::NTypeIds::Uint64> {};
+        struct CopyTxId : Column<6, NScheme::NTypeIds::Uint64> {};
+        struct IsReadOnly : Column<7, NScheme::NTypeIds::Bool> {};
+
+        using TKey = TableKey<PathId, SchemeShardLocalPathId>;
+        using TColumns = TableColumns<PathId, SchemeShardLocalPathId, DropStep, DropTxId, CopyStep, CopyTxId, IsReadOnly>;
     };
 
     struct TableVersionInfo : Table<(ui32)ECommonTables::TableVersionInfo> {
@@ -514,7 +528,7 @@ struct Schema : NIceDb::Schema {
         struct InsertWriteId: Column<12, NScheme::NTypeIds::Uint64> {};
 
         using TKey = TableKey<PathId, PortionId>;
-        using TColumns = TableColumns<PathId, PortionId, SchemaVersion, XPlanStep, XTxId, Metadata, ShardingVersion, 
+        using TColumns = TableColumns<PathId, PortionId, SchemaVersion, XPlanStep, XTxId, Metadata, ShardingVersion,
             MinSnapshotPlanStep, MinSnapshotTxId, CommitPlanStep, CommitTxId, InsertWriteId>;
     };
 
@@ -625,7 +639,8 @@ struct Schema : NIceDb::Schema {
         TxStates,
         TxEvents,
         IndexColumnsV1,
-        IndexColumnsV2
+        IndexColumnsV2,
+        TableInfoV1
         >;
 
     //
@@ -792,9 +807,47 @@ struct Schema : NIceDb::Schema {
         db.Table<TableInfo>().Key(pathId.GetRawValue()).Update();
     }
 
+    static void SaveTableInfoV1(NIceDb::TNiceDb& db, const TInternalPathId pathId, const TSchemeShardLocalPathId schemeShardLocalPathId) {
+        db.Table<TableInfoV1>().Key(pathId.GetRawValue(), schemeShardLocalPathId.GetRawValue()).Update();
+    }
+
     static void SaveTableSchemeShardLocalPathId(NIceDb::TNiceDb& db, const TInternalPathId pathId, const TSchemeShardLocalPathId schemeShardLocalPathId) {
         db.Table<TableInfo>().Key(pathId.GetRawValue()).Update(
             NIceDb::TUpdate<TableInfo::SchemeShardLocalPathId>(schemeShardLocalPathId.GetRawValue())
+        );
+    }
+
+    static void RenameTableSchemeShardLocalPathIdV1(NIceDb::TNiceDb& db,
+                                                    const TInternalPathId pathId,
+                                                    const TSchemeShardLocalPathId srcSchemeShardLocalPathId,
+                                                    const TSchemeShardLocalPathId dstSchemeShardLocalPathId,
+                                                    const std::optional<NOlap::TSnapshot>& dropVersion,
+                                                    const std::optional<NOlap::TSnapshot>& copyVersion,
+                                                    const bool isReadOnly) {
+        EraseTableInfoV1(db, pathId, srcSchemeShardLocalPathId);
+        CopySchemeShardLocalPathIdV1(db, pathId, dstSchemeShardLocalPathId, dropVersion, copyVersion, isReadOnly);
+    }
+
+    static void CopySchemeShardLocalPathIdV1(NIceDb::TNiceDb& db,
+                                            const TInternalPathId pathId,
+                                            const TSchemeShardLocalPathId dstSchemeShardLocalPathId,
+                                            const std::optional<NOlap::TSnapshot>& dropVersion,
+                                            const std::optional<NOlap::TSnapshot>& copyVersion,
+                                            const bool isReadOnly) {
+        if (dropVersion) {
+            db.Table<TableInfoV1>().Key(pathId.GetRawValue(), dstSchemeShardLocalPathId.GetRawValue()).Update(
+                NIceDb::TUpdate<TableInfoV1::DropStep>(dropVersion->GetPlanStep()),
+                NIceDb::TUpdate<TableInfoV1::DropTxId>(dropVersion->GetTxId())
+            );
+        }
+        if (copyVersion) {
+            db.Table<TableInfoV1>().Key(pathId.GetRawValue(), dstSchemeShardLocalPathId.GetRawValue()).Update(
+                NIceDb::TUpdate<TableInfoV1::CopyStep>(copyVersion->GetPlanStep()),
+                NIceDb::TUpdate<TableInfoV1::CopyTxId>(copyVersion->GetTxId())
+            );
+        }
+        db.Table<TableInfoV1>().Key(pathId.GetRawValue(), dstSchemeShardLocalPathId.GetRawValue()).Update(
+            NIceDb::TUpdate<TableInfoV1::IsReadOnly>(isReadOnly)
         );
     }
 
@@ -817,6 +870,14 @@ struct Schema : NIceDb::Schema {
             NIceDb::TUpdate<TableInfo::DropTxId>(dropTxId));
     }
 
+    static void SaveTableDropVersionV1(
+            NIceDb::TNiceDb& db, const TSchemeShardLocalPathId schemeShardLocalPathId, TInternalPathId pathId, ui64 dropStep, ui64 dropTxId)
+    {
+        db.Table<TableInfoV1>().Key(pathId.GetRawValue(), schemeShardLocalPathId.GetRawValue()).Update(
+            NIceDb::TUpdate<TableInfoV1::DropStep>(dropStep),
+            NIceDb::TUpdate<TableInfoV1::DropTxId>(dropTxId));
+    }
+
     static void EraseTableVersionInfo(NIceDb::TNiceDb& db, TInternalPathId pathId, const NOlap::TSnapshot& version) {
         db.Table<TableVersionInfo>().Key(pathId.GetRawValue(), version.GetPlanStep(), version.GetTxId()).Delete();
     }
@@ -825,14 +886,18 @@ struct Schema : NIceDb::Schema {
         db.Table<TableInfo>().Key(pathId.GetRawValue()).Delete();
     }
 
+    static void EraseTableInfoV1(NIceDb::TNiceDb& db, TInternalPathId pathId, const TSchemeShardLocalPathId schemeShardLocalPathId) {
+        db.Table<TableInfoV1>().Key(pathId.GetRawValue(), schemeShardLocalPathId.GetRawValue()).Delete();
+    }
+
     static void SaveLongTxWrite(NIceDb::TNiceDb& db, const TInsertWriteId writeId, const ui32 writePartId, const NLongTxService::TLongTxId& longTxId, const std::optional<ui32> granuleShardingVersion) {
         NKikimrLongTxService::TLongTxId proto;
         longTxId.ToProto(&proto);
         TString serialized;
         Y_ABORT_UNLESS(proto.SerializeToString(&serialized));
         db.Table<LongTxWrites>().Key((ui64)writeId).Update(
-            NIceDb::TUpdate<LongTxWrites::LongTxId>(serialized), 
-            NIceDb::TUpdate<LongTxWrites::WritePartId>(writePartId), 
+            NIceDb::TUpdate<LongTxWrites::LongTxId>(serialized),
+            NIceDb::TUpdate<LongTxWrites::WritePartId>(writePartId),
             NIceDb::TUpdate<LongTxWrites::GranuleShardingVersion>(granuleShardingVersion.value_or(0))
             );
     }

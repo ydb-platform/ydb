@@ -95,7 +95,7 @@ Y_UNIT_TEST_SUITE(DDisk) {
                     Cerr << "next iteration\n";
 
                     for (ui32 iter = 0; iter < 1000; ++iter) {
-                        switch (RandomNumber(6u)) {
+                        switch (RandomNumber(7u)) {
                             case 0: {
                                 const ui32 offset = RandomNumber(surfaceBlocks) * blockSize;
                                 const ui32 numBlocks = 1 + RandomNumber(Min<ui32>(3, surfaceBlocks - offset / blockSize));
@@ -277,6 +277,108 @@ Y_UNIT_TEST_SUITE(DDisk) {
                                     testErase(NKikimrBlobStorage::NDDisk::TReplyStatus::MISSING_RECORD);
                                 }
                                 persistentBuffers.erase(lsn);
+
+                                break;
+                            }
+
+                            case 6: {
+                                std::vector<ui64> lsns;
+                                lsns.reserve(persistentBuffers.size());
+                                for (ui64 lsn : persistentBuffers | std::views::keys) {
+                                    lsns.push_back(lsn);
+                                }
+                                if (lsns.empty()) {
+                                    break;
+                                }
+
+                                std::vector<ui64> selectedLsns;
+                                selectedLsns.reserve(3);
+
+                                while (!lsns.empty() && selectedLsns.size() < 3) {
+                                    const size_t index = RandomNumber(lsns.size());
+                                    const ui64 lsn = lsns[index];
+                                    lsns[index] = lsns.back();
+                                    lsns.pop_back();
+
+                                    const auto& record = persistentBuffers.at(lsn);
+                                    const ui32 offsetInBytes = std::get<0>(record);
+                                    const ui32 size = std::get<1>(record);
+                                    const ui32 end = offsetInBytes + size;
+
+                                    bool overlap = false;
+                                    for (ui64 selectedLsn : selectedLsns) {
+                                        const auto& selectedRecord = persistentBuffers.at(selectedLsn);
+                                        const ui32 selectedOffsetInBytes = std::get<0>(selectedRecord);
+                                        const ui32 selectedSize = std::get<1>(selectedRecord);
+                                        const ui32 selectedEnd = selectedOffsetInBytes + selectedSize;
+                                        if (!(end <= selectedOffsetInBytes || selectedEnd <= offsetInBytes)) {
+                                            overlap = true;
+                                            break;
+                                        }
+                                    }
+                                    if (!overlap) {
+                                        selectedLsns.push_back(lsn);
+                                    }
+                                }
+
+                                if (selectedLsns.empty()) {
+                                    break;
+                                }
+
+                                std::tuple<ui32, ui32, ui32> sourceDDiskId(persId.GetNodeId(), persId.GetPDiskId(), persId.GetDDiskSlotId());
+                                ui64 sourceDDiskInstanceGuid = *pbCreds.DDiskInstanceGuid;
+                                auto sync = std::make_unique<NDDisk::TEvSync>(creds, sourceDDiskId, sourceDDiskInstanceGuid);
+
+                                for (ui64 lsn : selectedLsns) {
+                                    const auto& record = persistentBuffers.at(lsn);
+                                    const ui32 offsetInBytes = std::get<0>(record);
+                                    const ui32 size = std::get<1>(record);
+                                    Cerr << "sync persistent buffer offset# " << offsetInBytes << " size# " << size
+                                        << " lsn# " << lsn << "\n";
+                                    sync->AddSegmentFromPersistentBuffer({vChunkIndex, offsetInBytes, size}, lsn);
+                                }
+
+                                runtime->Send(new IEventHandle(serviceId, edge, sync.release()), edge.NodeId());
+                                auto syncRes = env.WaitForEdgeActorEvent<NDDisk::TEvSyncResult>(edge, false);
+                                const auto& syncRecord = syncRes->Get()->Record;
+                                UNIT_ASSERT(syncRecord.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
+                                UNIT_ASSERT_VALUES_EQUAL(syncRecord.SegmentResultsSize(), selectedLsns.size());
+                                for (const auto& segmentResult : syncRecord.GetSegmentResults()) {
+                                    UNIT_ASSERT(segmentResult.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
+                                }
+
+                                for (ui64 lsn : selectedLsns) {
+                                    const auto& record = persistentBuffers.at(lsn);
+                                    const ui32 offsetInBytes = std::get<0>(record);
+                                    const ui32 size = std::get<1>(record);
+                                    const TString& buffer = std::get<2>(record);
+                                    runtime->Send(new IEventHandle(serviceId, edge, new NDDisk::TEvRead(creds,
+                                        {vChunkIndex, offsetInBytes, size}, {true})), edge.NodeId());
+                                    auto readRes = env.WaitForEdgeActorEvent<NDDisk::TEvReadResult>(edge, false);
+                                    const auto& readRecord = readRes->Get()->Record;
+                                    UNIT_ASSERT(readRecord.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
+                                    UNIT_ASSERT(readRecord.HasReadResult());
+                                    const auto& readResult = readRecord.GetReadResult();
+                                    UNIT_ASSERT(readResult.HasPayloadId());
+                                    UNIT_ASSERT_VALUES_EQUAL(readResult.GetPayloadId(), 0);
+                                    TRope rope = readRes->Get()->GetPayload(0);
+                                    UNIT_ASSERT_VALUES_EQUAL(rope.size(), size);
+                                    UNIT_ASSERT_VALUES_EQUAL(rope.ConvertToString(), buffer);
+
+                                    memcpy(surface.Detach() + offsetInBytes, buffer.data(), size);
+                                }
+
+                                for (ui64 lsn : selectedLsns) {
+                                    const auto& record = persistentBuffers.at(lsn);
+                                    const ui32 offsetInBytes = std::get<0>(record);
+                                    const ui32 size = std::get<1>(record);
+                                    runtime->Send(new IEventHandle(pbServiceId, edge, new NDDisk::TEvErasePersistentBuffer(
+                                        pbCreds, {vChunkIndex, offsetInBytes, size}, lsn)),
+                                        edge.NodeId());
+                                    auto eraseRes = env.WaitForEdgeActorEvent<NDDisk::TEvErasePersistentBufferResult>(edge, false);
+                                    UNIT_ASSERT(eraseRes->Get()->Record.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
+                                    persistentBuffers.erase(lsn);
+                                }
 
                                 break;
                             }

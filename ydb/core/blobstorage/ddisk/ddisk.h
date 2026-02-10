@@ -30,6 +30,8 @@ namespace NKikimr::NDDisk {
             EvErasePersistentBufferResult,
             EvListPersistentBuffer,
             EvListPersistentBufferResult,
+            EvSync,
+            EvSyncResult,
         };
     };
 
@@ -164,6 +166,8 @@ namespace NKikimr::NDDisk {
     struct TEvWriteResult;
     struct TEvRead;
     struct TEvReadResult;
+    struct TEvSync;
+    struct TEvSyncResult;
     struct TEvWritePersistentBuffer;
     struct TEvWritePersistentBufferResult;
     struct TEvReadPersistentBuffer;
@@ -402,6 +406,60 @@ namespace NKikimr::NDDisk {
             Record.SetStatus(status);
             if (errorReason) {
                 Record.SetErrorReason(*errorReason);
+            }
+        }
+    };
+
+    DECLARE_DDISK_EVENT(Sync) {
+        using TResult = TEvSyncResult;
+
+        TEvSync() = default;
+
+        TEvSync(const TQueryCredentials& creds, std::optional<std::tuple<ui32, ui32, ui32>> ddiskId,
+                std::optional<ui64> ddiskInstanceGuid) {
+            creds.Serialize(Record.MutableCredentials());
+            if (ddiskId) {
+                const auto& [nodeId, pdiskId, ddiskSlotId] = *ddiskId;
+                auto *m = Record.MutableDDiskId();
+                m->SetNodeId(nodeId);
+                m->SetPDiskId(pdiskId);
+                m->SetDDiskSlotId(ddiskSlotId);
+            }
+            if (ddiskInstanceGuid) {
+                Record.SetDDiskInstanceGuid(*ddiskInstanceGuid);
+            }
+        }
+
+        void AddSegmentFromPersistentBuffer(const TBlockSelector& selector, ui64 lsn) {
+            auto *segment = Record.AddSegments();
+            auto *fromPB = segment->MutablePersistentBuffer();
+            selector.Serialize(fromPB->MutableSelector());
+            fromPB->SetLsn(lsn);
+        }
+
+        void AddSegmentFromDDisk(const TBlockSelector& selector) {
+            auto *segment = Record.AddSegments();
+            auto *fromDDisk = segment->MutableDDisk();
+            selector.Serialize(fromDDisk->MutableSelector());
+        }
+    };
+
+    DECLARE_DDISK_EVENT(SyncResult) {
+        TEvSyncResult() = default;
+
+        TEvSyncResult(NKikimrBlobStorage::NDDisk::TReplyStatus::E status,
+                const std::optional<TString>& errorReason = std::nullopt) {
+            Record.SetStatus(status);
+            if (errorReason) {
+                Record.SetErrorReason(*errorReason);
+            }
+        }
+
+        void AddSegmentResult(NKikimrBlobStorage::NDDisk::TReplyStatus::E status, TString errorReason) {
+            auto *result = Record.AddSegmentResults();
+            result->SetStatus(status);
+            if (errorReason) {
+                result->SetErrorReason(errorReason);
             }
         }
     };

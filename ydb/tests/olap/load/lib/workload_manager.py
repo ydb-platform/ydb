@@ -543,7 +543,7 @@ class TestWorkloadManagerOltp100(WorkloadManagerOltp):
     @classmethod
     def before_workload(cls, result: YdbCliHelper.WorkloadRunResult):
         super().before_workload(result)
-        cls.run_tpcc(cls.timeout, user=f'testuser{cls.tpcc_pool_perc}')
+        cls.run_tpcc(cls.timeout, user='')
 
     @classmethod
     def after_workload(cls, result: YdbCliHelper.WorkloadRunResult):

@@ -9,13 +9,12 @@ TConstructor::TConstructor(const IPathIdTranslator& translator, const NColumnSha
     const ERequestSorting sorting)
     : TBase(sorting, tabletId) {
     const TColumnEngineForLogs* engineImpl = dynamic_cast<const TColumnEngineForLogs*>(&engine);
-
+    AFL_VERIFY(unifiedPathId.HasSchemeShardLocalPathId());
     std::deque<TDataSourceConstructor> constructors;
     for (auto&& [internalPathId, granuleMeta] : engineImpl->GetTables()) {
         if (unifiedPathId.HasInternalPathId() && unifiedPathId.GetInternalPathIdVerified() != internalPathId) {
             continue;
         }
-        AFL_VERIFY(unifiedPathId.HasSchemeShardLocalPathId());
         std::vector<TPortionInfo::TConstPtr> portionsAll;
         for (auto&& [_, portionInfo] : granuleMeta->GetPortions()) {
             AFL_VERIFY(internalPathId == portionInfo->GetPathId());
@@ -34,7 +33,7 @@ TConstructor::TConstructor(const IPathIdTranslator& translator, const NColumnSha
             portions.emplace_back(p);
             if (portions.size() == 10) {
                 if (unifiedPathId.HasInternalPathId()) {
-                    constructors.emplace_back(NColumnShard::TUnifiedPathId::BuildValid(unifiedPathId.GetInternalPathIdVerified(), unifiedPathId.GetSchemeShardLocalPathIdVerified()), TabletId, std::move(portions));
+                    constructors.emplace_back(NColumnShard::TUnifiedPathId::BuildValid(unifiedPathId.GetInternalPathIdVerified(), unifiedPathId.GetSchemeShardLocalPathIdVerified()), TabletId, portions);
                     if (!pkFilter->IsUsed(constructors.back().GetStart().GetValue().BuildSortablePosition(),
                             constructors.back().GetFinish().GetValue().BuildSortablePosition())) {
                         constructors.pop_back();

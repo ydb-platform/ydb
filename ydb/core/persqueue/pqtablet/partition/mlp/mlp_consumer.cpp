@@ -564,7 +564,7 @@ void TConsumerActor::ProcessEventQueue() {
     ChangeMessageDeadlineRequestsQueue.clear();
 
     if (PurgeRequest) {
-        Storage->Purge(PurgeRequest->Get()->Record.GetEndOffset());
+        Storage->Purge(std::max(PurgeRequest->Get()->Record.GetEndOffset(), PartitionEndOffset));
         PendingPurgeQueue = TResult(PurgeRequest->Sender, PurgeRequest->Cookie);
         PurgeRequest = nullptr;
     }

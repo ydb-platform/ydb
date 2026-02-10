@@ -35,9 +35,11 @@ jobs:
           sparse-checkout-cone-mode: false
 
       - id: set-matrix
+        env:
+          BRANCHES_INPUT: ${{ github.event.inputs.branches }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
-          BRANCHES_INPUT='${{ github.event.inputs.branches }}'
-          if [ "${{ github.event_name }}" == "workflow_dispatch" ] && [ -n "$BRANCHES_INPUT" ]; then
+          if [ "$EVENT_NAME" == "workflow_dispatch" ] && [ -n "$BRANCHES_INPUT" ]; then
             echo "branches=$(echo "$BRANCHES_INPUT" | jq -R -s -c 'split(",") | map(gsub("^\\s+"; "") | gsub("\\s+$"; "")) | map(select(length > 0))')" >> $GITHUB_OUTPUT
           else
             echo "branches=$(jq -c '.' config-repo/$BRANCHES_CONFIG_PATH)" >> $GITHUB_OUTPUT

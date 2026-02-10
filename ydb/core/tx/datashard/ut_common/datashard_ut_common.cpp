@@ -1112,7 +1112,7 @@ THolder<NKqp::TEvKqp::TEvQueryRequest> MakeSQLRequest(const TString &sql,
                                                       bool dml,
                                                       const TString& userSID /*= TString()*/)
 {
-    auto request = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>(userSID);
+    auto request = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>(new NACLib::TUserContext(userSID, ""));
     if (dml) {
         request->Record.MutableRequest()->MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
         request->Record.MutableRequest()->MutableTxControl()->set_commit_tx(true);

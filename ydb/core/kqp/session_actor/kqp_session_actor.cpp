@@ -188,7 +188,7 @@ public:
             const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
             const TActorId& kqpTempTablesAgentActor,
             std::shared_ptr<NYql::NDq::IDqChannelService> channelService,
-            const TString& userSID)
+            NACLib::TUserContext::TPtr userCtx)
         : Owner(owner)
         , QueryCache(std::move(queryCache))
         , SessionId(sessionId)
@@ -206,7 +206,7 @@ public:
         , KqpTempTablesAgentActor(kqpTempTablesAgentActor)
         , GUCSettings(std::make_shared<TGUCSettings>())
         , ChannelService(channelService)
-        , UserSID(userSID)
+        , UserCtx(userCtx)
     {
         RequestCounters = MakeIntrusive<TKqpRequestCounters>();
         RequestCounters->Counters = Counters;
@@ -1940,7 +1940,7 @@ public:
                 .Counters = Counters,
                 .TxProxyMon = RequestCounters->TxProxyMon,
                 .Alloc = std::move(alloc),
-                .UserSID = UserSID
+                .UserCtx = UserCtx
             };
 
             auto* actor = CreateKqpBufferWriterActor(std::move(settings));
@@ -3611,7 +3611,7 @@ private:
 
     TGUCSettings::TPtr GUCSettings;
     std::shared_ptr<NYql::NDq::IDqChannelService> ChannelService;
-    const TString UserSID;
+    NACLib::TUserContext::TPtr UserCtx;
 };
 
 } // namespace
@@ -3627,13 +3627,13 @@ IActor* CreateKqpSessionActor(const TActorId& owner,
     const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
     const TActorId& kqpTempTablesAgentActor,
     std::shared_ptr<NYql::NDq::IDqChannelService> channelService,
-    const TString& userSID)
+    NACLib::TUserContext::TPtr userCtx)
 {
     return new TKqpSessionActor(
         owner, std::move(queryCache),
         std::move(resourceManager), std::move(caFactory), sessionId, kqpSettings, workerSettings, federatedQuerySetup,
                                 std::move(asyncIoFactory),  std::move(moduleResolverState), counters,
-                                queryServiceConfig, kqpTempTablesAgentActor, channelService, userSID);
+                                queryServiceConfig, kqpTempTablesAgentActor, channelService, userCtx);
 }
 
 }

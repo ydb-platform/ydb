@@ -23,7 +23,7 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
                                    bool isPropose)
     : StepTxId_(stepTxId)
     , TxBody(txBody)
-    , EngineBay(self, txc, ctx, stepTxId, userSID)
+    , EngineBay(self, txc, ctx, stepTxId, new NACLib::TUserContext(userSID, "") )
     , ErrCode(NKikimrTxDataShard::TError::OK)
     , TxSize(0)
     , IsReleased(false)

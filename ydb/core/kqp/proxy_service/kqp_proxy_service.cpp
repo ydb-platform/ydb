@@ -648,8 +648,9 @@ public:
         bool explicitSession = true;
         if (ev->Get()->GetSessionId().empty()) {
             TProcessResult<TKqpSessionInfo*> result;
+            auto userCtx = ev->Get()->GetUserCtx();
             if (!CreateNewSessionWorker(requestInfo, TString(DefaultKikimrPublicClusterName), false,
-                database, false, false, "", ev->Get()->GetUserSID(), "", "", "", "", Nothing(), result))
+                database, false, false, "", userCtx != nullptr ? userCtx->UserSID : BUILTIN_ACL_CDC_WITHOUT_USER_SID, "", "", "", "", Nothing(), result))
             {
                 ReplyProcessError(result.YdbStatus, result.Error, requestId);
                 return;
@@ -1420,7 +1421,8 @@ private:
 
         IActor* sessionActor = CreateKqpSessionActor(SelfId(), QueryCache, ResourceManager_, CaFactory_, sessionId, KqpSettings, workerSettings,
             FederatedQuerySetup, AsyncIoFactory, ModuleResolverState, Counters,
-            QueryServiceConfig, KqpTempTablesAgentActor, ChannelService, clientSid);
+            QueryServiceConfig, KqpTempTablesAgentActor, ChannelService, 
+            new NACLib::TUserContext(clientSid,"") );
         auto workerId = TActivationContext::Register(sessionActor, SelfId(), TMailboxType::HTSwap, AppData()->UserPoolId);
         TKqpSessionInfo* sessionInfo = LocalSessions->Create(
             sessionId, workerId, database, dbCounters, supportsBalancing, GetSessionIdleDuration(), pgWire);

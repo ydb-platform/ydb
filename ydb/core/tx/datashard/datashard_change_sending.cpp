@@ -125,7 +125,7 @@ class TDataShard::TTxRequestChangeRecords: public TTransactionBase<TDataShard> {
 
         if (userSID.Defined() || userTraceId.Defined()) {
             auto userCtx = new NACLib::TUserContext(
-                userSID.GetOrEmplace(BUILTIN_ACL_CDC_WITHOUT_USER_SID), userTraceId.GetOrEmplace());
+                userSID.GetOrEmplace(BUILTIN_ACL_CDC_WITHOUT_USER_SID), userTraceId.GetOrEmplace(""));
             builder.WithUserCtx(userCtx);
         }
 

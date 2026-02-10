@@ -1191,6 +1191,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
                     .ConsumerName("user")).ExtractValueSync();
                 UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
             }
+
         }
 
         static void Write(const TShardedTableOptions& tableDesc, const TCdcStream& streamDesc) {

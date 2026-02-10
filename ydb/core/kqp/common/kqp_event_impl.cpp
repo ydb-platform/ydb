@@ -46,8 +46,12 @@ TEvKqp::TEvQueryRequest::TEvQueryRequest(
         }
     }
 
-    if (RequestCtx!=nullptr && RequestCtx->GetInternalToken()!=nullptr)
-        UserSID = RequestCtx->GetInternalToken()->GetUserSID();
+    if (RequestCtx!=nullptr && RequestCtx->GetInternalToken()!=nullptr) {
+        UserCtx = new NACLib::TUserContext(RequestCtx->GetInternalToken()->GetUserSID(), "");
+    }
+    else {
+        UserCtx = new NACLib::TUserContext(BUILTIN_ACL_CDC_WITHOUT_USER_SID, "");
+    }
 }
 
 void TEvKqp::TEvQueryRequest::PrepareRemote() const {

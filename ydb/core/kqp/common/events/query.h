@@ -89,7 +89,7 @@ public:
         Record.MutableRequest()->SetUsePublicResponseDataFormat(true);
     }
 
-    TEvQueryRequest(const TString& userSID) : UserSID(userSID) {
+    TEvQueryRequest(NACLib::TUserContext::TPtr userCtx) : UserCtx(userCtx) {
         Record.MutableRequest()->SetUsePublicResponseDataFormat(true);
     }
 
@@ -103,8 +103,8 @@ public:
         return RequestCtx ? Database : Record.GetRequest().GetDatabase();
     }
 
-    const TString& GetUserSID() const {
-        return UserSID;
+    NACLib::TUserContext::TPtr GetUserCtx() const {
+        return UserCtx;
     }
 
     const std::shared_ptr<NGRpcService::IRequestCtxMtSafe>& GetRequestCtx() const {
@@ -458,7 +458,7 @@ private:
     TString Database;
     TString DatabaseId;
     TString SessionId;
-    TString UserSID;
+    NACLib::TUserContext::TPtr UserCtx;
     TString YqlText;
     TString QueryId;
     TString PoolId;

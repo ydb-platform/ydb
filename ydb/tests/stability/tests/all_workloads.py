@@ -61,11 +61,6 @@ def _init_stress_utils():
                      "--path-prefix", "workload_show_create_{node_host}_iter_{iteration_num}_{uuid}"],
             'local_path': 'ydb/tests/stress/show_create/view/show_create_view'
         },
-        'ShowCreateTable': {
-            'args': ["--endpoint", "grpc://{node_host}:2135",
-                     "--path-prefix", "workload_show_create_{node_host}_iter_{iteration_num}_{uuid}"],
-            'local_path': 'ydb/tests/stress/show_create/table/show_create_table'
-        },
         'Statistics': {
             'args': ["--host", "{node_host}",
                      "--port", "2135",
@@ -94,33 +89,12 @@ def _init_stress_utils():
             ],
             'local_path': 'ydb/tests/stress/topic/workload_topic'
         },
-        'Viewer': {
-            'args': [
-                "--mon_endpoint", "http://{node_host}:8765",
-            ],
-            'local_path': 'ydb/tests/stress/viewer/viewer'
-        },
         'TestShard': {
             'args': [
                 "--endpoint", "grpc://{node_host}:2135",
                 "--owner-idx", "{global_run_id}"
             ],
             'local_path': 'ydb/tests/stress/testshard_workload/workload_testshard'
-        },
-        'IncrementalBackup': {
-            'args': [
-                "--endpoint", "grpc://{node_host}:2135",
-                "--backup-interval", "20"
-            ],
-            'local_path': 'ydb/tests/stress/backup/backup_stress'
-        },
-        'Streaming': {
-            'args': [
-                "--endpoint", "{node_host}:2135",
-                "--partitions-count", "10",
-                "--prefix", "streaming_stress/run_{global_run_id}"
-            ],
-            'local_path': 'ydb/tests/stress/streaming/streaming'
         },
     }
 
@@ -156,12 +130,6 @@ def _init_stress_utils():
                 ],
                 'local_path': 'ydb/tests/stress/transfer/transfer'
             }
-
-    for config_preset in ['common_channel_read', 'inline_channel_read', 'write_read_delete']:
-        _all_stress_utils[f'KVVolume_{config_preset}'] = {
-            'args': ["--endpoint", "grpc://{node_host}:2135", '--in-flight', '3', '--config-name', config_preset],
-            'local_path': 'ydb/tests/stress/kv_volume/workload_keyvalue_volume'
-        }
 
     filtered_stress_utils_arg: str = yatest.common.get_param('stress-utils-to-run', None)
 

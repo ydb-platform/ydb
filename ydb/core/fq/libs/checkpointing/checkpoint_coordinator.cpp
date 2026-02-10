@@ -660,6 +660,7 @@ void TCheckpointCoordinator::PassAway() {
     for (const auto& [actorId, transport] : AllActors) {
         transport->EventsQueue.Unsubscribe();
     }
+    Metrics.SkippedDueToInFlightLimit->Sub(SkippedDueToInFlightLimitCounter);
     NActors::TActor<TCheckpointCoordinator>::PassAway();
 }
 

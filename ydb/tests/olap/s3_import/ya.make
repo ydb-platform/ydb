@@ -10,9 +10,6 @@ TEST_SRCS(
     test_types_and_formats.py
 )
 
-FORK_SUBTESTS()
-SPLIT_FACTOR(100)
-
 PY_SRCS(
     base.py
 )

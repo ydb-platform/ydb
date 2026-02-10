@@ -1,3 +1,8 @@
+tracing_config:
+  backend:
+    opentelemetry:
+      collector_url: grpc://localhost:4316
+      service_name: barkovbg
 channel_profile_config:
   profile:
   - profile_id: 0

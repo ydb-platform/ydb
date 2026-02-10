@@ -7,7 +7,22 @@
 
 #include <util/string/cast.h>
 
+#include <cstdlib>
+#include <mutex>
+
 namespace NHttp::NTest {
+
+namespace {
+
+void EnsureSslInitialized() {
+    static std::once_flag once;
+    std::call_once(once, [] {
+        Poco::Net::initializeSSL();
+        std::atexit([] { Poco::Net::uninitializeSSL(); });
+    });
+}
+
+} // namespace
 
 void SendTlsRequest(
     const TIpPort port,
@@ -16,7 +31,7 @@ void SendTlsRequest(
     const TString& caCertFile,
     const TString& httpRequest
 ) {
-    Poco::Net::initializeSSL();
+    EnsureSslInitialized();
 
     // Create SSL context for client with mTLS
     Poco::Net::Context::Params params;
@@ -36,8 +51,6 @@ void SendTlsRequest(
     // Close connection (server will process the request asynchronously)
     socket.shutdownSend();
     socket.close();
-
-    Poco::Net::uninitializeSSL();
 }
 
 } // namespace NHttp::NTest

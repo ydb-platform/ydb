@@ -1468,7 +1468,7 @@ Y_UNIT_TEST_SUITE(THttpProxyWithMTls) {
             }
             Sleep(TDuration::MilliSeconds(50));
         }
-        UNIT_ASSERT_C(errorFound, "No connection error happend for untrusted client");
+        UNIT_ASSERT_C(errorFound, "No connection error happened for untrusted client");
 
         clientThread.join();
     }

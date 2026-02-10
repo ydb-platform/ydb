@@ -2,7 +2,6 @@
 import copy
 import os
 import subprocess
-import tempfile
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.ssl_ import create_urllib3_context
@@ -198,9 +197,9 @@ def ydb_cluster_configuration():
 
 
 @pytest.fixture(scope='module')
-def certificates():
-    certs_tmp_dir = tempfile.mkdtemp(prefix='monitoring_certs_')
-    return generate_certificates(certs_tmp_dir)
+def certificates(tmp_path_factory):
+    certs_tmp_dir = tmp_path_factory.mktemp('monitoring_certs_')
+    return generate_certificates(str(certs_tmp_dir))
 
 
 @pytest.fixture(scope='module')
@@ -283,7 +282,7 @@ def _test_endpoint_with_token(trace_endpoint, token, expected_status):
     ), f"Expected /trace with token {token} to return {expected_status}, got {response.status_code}"
 
 
-def test_mlts_auth(ydb_cluster, client_certificates):
+def test_mtls_auth(ydb_cluster, client_certificates):
     host = ydb_cluster.nodes[1].host
     mon_port = ydb_cluster.nodes[1].mon_port
     base_url = f'https://{host}:{mon_port}'

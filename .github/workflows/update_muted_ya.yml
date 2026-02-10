@@ -6,11 +6,12 @@ on:
   workflow_dispatch:
     inputs:
       branches:
-        description: 'Comma-separated list of branches to process'
+        description: 'Comma-separated list of branches to process (empty = use branches from config file)'
         required: false
-        default: 'main,stable-25-2,stable-25-2-1,stable-25-3,stable-25-3-1,stable-25-4,stable-25-4-1,stream-nb-25-1'
+        default: ''
 
 env:
+  BRANCHES_CONFIG_PATH: .github/config/stable_tests_branches.json
   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   PR_BRANCH_PREFIX: update-muted-ya
   TITLE: "Update muted_ya.txt"
@@ -24,13 +25,34 @@ jobs:
     outputs:
       matrix_branches: ${{ steps.set-matrix.outputs.branches }}
     steps:
+      - name: Checkout branches config
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: config-repo
+          sparse-checkout: |
+            ${{ env.BRANCHES_CONFIG_PATH }}
+          sparse-checkout-cone-mode: false
+
       - id: set-matrix
+        env:
+          BRANCHES_INPUT: ${{ github.event.inputs.branches }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
-          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
-            echo "branches=$(echo '${{ github.event.inputs.branches }}' | jq -R -s -c 'split(",")')" >> $GITHUB_OUTPUT
+          if [ "$EVENT_NAME" == "workflow_dispatch" ] && [ -n "$BRANCHES_INPUT" ]; then
+            echo "branches=$(echo "$BRANCHES_INPUT" | jq -R -s -c 'split(",") | map(gsub("^\\s+"; "") | gsub("\\s+$"; "")) | map(select(length > 0))')" >> $GITHUB_OUTPUT
           else
-            echo "branches=$(echo '["main","stable-25-2","stable-25-2-1","stable-25-3","stable-25-3-1","stable-25-4","stable-25-4-1","stream-nb-25-1"]' | jq -c .)" >> $GITHUB_OUTPUT
+            echo "branches=$(jq -c '.' config-repo/$BRANCHES_CONFIG_PATH)" >> $GITHUB_OUTPUT
           fi
+
+      - name: Log branches to process
+        run: |
+          BRANCHES='${{ steps.set-matrix.outputs.branches }}'
+          echo "### Branches to process" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "$BRANCHES" | jq -r '.[]' >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "Branches to process: $(echo "$BRANCHES" | jq -r '.[]' | tr '\n' ' ')"
 
   collect-testowners:
     runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]

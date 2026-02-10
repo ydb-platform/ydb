@@ -299,7 +299,6 @@ void TMVP::TryGetStartupOptionsFromConfig(
             ythrow yexception() << "Unknown access_service_type value: " << accessServiceTypeStr;
         }
     }
-
     OpenIdConnectSettings.InitRequestTimeoutsByPath();
 }
 
@@ -342,11 +341,11 @@ THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup(int argc, char**
             if (!tokens.HasAccessServiceType()) {
                 tokens.SetAccessServiceType(OpenIdConnectSettings.AccessServiceType);
             }
+            TokensConfig = tokens;
         } else {
             ythrow yexception() << "Invalid ydb token file format";
         }
     }
-    TokensConfig = tokens;
     if (TYdbLocation::UserToken) {
         TYdbLocation::UserToken = AddSchemeToUserToken(TYdbLocation::UserToken, "OAuth");
     }

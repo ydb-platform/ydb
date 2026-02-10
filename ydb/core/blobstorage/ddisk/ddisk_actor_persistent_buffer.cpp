@@ -398,8 +398,8 @@ namespace NKikimr::NDDisk {
                     ReadCallbacks.try_emplace(cookie, TPersistentBufferPendingRead{[this, &pr, callback, partIdx = pr.PartsCount](NPDisk::TEvChunkReadRawResult& ev) {
                         pr.DataParts.emplace(partIdx, std::move(ev.Data));
                         if (pr.DataParts.size() == pr.PartsCount) {
-                            callback(pr.JoinData());
                             PersistentBufferInMemoryCacheSize += pr.Size;
+                            callback(pr.JoinData());
                             SanitizePersistentBufferInMemoryCache(pr);
                         }
                     }});
@@ -552,6 +552,21 @@ namespace NKikimr::NDDisk {
 
         PersistentBufferSpaceAllocator.Free(pr.Sectors);
 
+        const ui64 cookie = NextCookie++;
+        auto zeroingData = TRcBuf::Uninitialized(SectorSize);
+        *zeroingData.GetDataMut() = 0;
+
+        Send(BaseInfo.PDiskActorID, new NPDisk::TEvChunkWriteRaw(
+            PDiskParams->Owner,
+            PDiskParams->OwnerRound,
+            pr.Sectors[0].ChunkIdx,
+            pr.Sectors[0].SectorIdx * SectorSize,
+            std::move(zeroingData)), 0, cookie);
+
+        WriteCallbacks.try_emplace(cookie, [](NPDisk::TEvChunkWriteRawResult& /*ev*/) {
+            // Do nothing
+        });
+
         buffer.Records.erase(jt);
         if (buffer.Records.empty()) {
             PersistentBuffers.erase(it);
@@ -638,4 +653,19 @@ namespace NKikimr::NDDisk {
         SendReply(*ev, std::move(reply));
     }
 
+    TString TDDiskActor::PersistentBufferToString() {
+        TStringBuilder sb;
+        sb << "PersistentBuffer size:" << PersistentBuffers.size() << "\n";
+        for (auto [k,v] : PersistentBuffers) {
+            sb << "  TabletId:" << std::get<0>(k) << " VChunk:" << std::get<1>(k) << "\n";
+            for (auto [lsn, pr] : v.Records) {
+                sb << "    Lsn:" << lsn << " Offset:" << pr.OffsetInBytes << " Size:" << pr.Size << " Sectors: ";
+                for (auto sector : pr.Sectors) {
+                    sb << " " << sector.ChunkIdx << ":" << sector.SectorIdx << " ";
+                }
+                sb  << "\n";
+            }
+        }
+        return sb;
+    }
 } // NKikimr::NDDisk

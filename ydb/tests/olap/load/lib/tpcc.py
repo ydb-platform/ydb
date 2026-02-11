@@ -23,7 +23,7 @@ class TpccSuiteBase(LoadSuiteBase):
         YdbCliHelper.deploy_remote_cli()
         wh_count = 0
         try:
-            wh_count = ScenarioTestHelper(None).get_table_rows_count()
+            wh_count = ScenarioTestHelper(None).get_table_rows_count(f'{cls.get_tpcc_path()}/warehouse')
         except BaseException:
             pass
         if wh_count < cls.warehouses:

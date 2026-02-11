@@ -3372,6 +3372,7 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
                 const ui64 diskOffset = Format.Offset(ev.ChunkIdx, 0, ev.Offset);
                 void *buffer = completion->GetBuffer();
                 BlockDevice->PreadAsync(buffer, ev.Size, diskOffset, completion.release(), ev.ReqId, &traceId);
+                delete request;
                 return false;
             }
 
@@ -3421,6 +3422,7 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
 
                 auto completion = std::make_unique<TCompletionChunkWriteRaw>(std::move(buffer), ev.Sender, ev.Cookie, std::move(ev.Span));
                 BlockDevice->PwriteAsync(span.data(), span.size(), diskOffset, completion.release(), ev.ReqId, &traceId);
+                delete request;
                 return false;
             }
 

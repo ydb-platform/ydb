@@ -128,17 +128,7 @@ private:
         return FetchedCount >= Limit || TBase::IsFinished();
     }
 
-<<<<<<< HEAD
-    virtual std::shared_ptr<NCommon::IDataSource> OnAddSource(const std::shared_ptr<NCommon::IDataSource>& source) override {
-        AFL_VERIFY(FetchedCount < Limit);
-        Iterators.emplace_back(TSourceIterator(source));
-        DebugOrder.emplace_back(TSourceIterator(source));
-        std::push_heap(Iterators.begin(), Iterators.end());
-        return TBase::OnAddSource(source);
-    }
-=======
     virtual std::shared_ptr<NCommon::IDataSource> OnAddSource(const std::shared_ptr<NCommon::IDataSource>& source) override;
->>>>>>> 48e2293186d (Order by pk with limit final fix (#33610))
 
     virtual void DoAbort() override {
         FilledIterators.clear();

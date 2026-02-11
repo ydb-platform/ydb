@@ -916,6 +916,9 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
     if (DirectReadRestoreStage != EDirectReadRestoreStage::None) {
         HandleDirectReadRestoreSession(result, ctx);
         return;
+    } else if (result.HasCmdRestoreDirectReadResult()) {
+        // ignore it
+        return;
     }
 
     if (result.HasCmdForgetReadResult()) {

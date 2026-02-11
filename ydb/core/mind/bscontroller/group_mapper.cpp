@@ -142,10 +142,8 @@ namespace NKikimr::NBsController {
                                 throw TExError{TStringBuilder() << "group contains duplicate PDiskId# " << pdiskId};
                             }
 
-                            if (!pdisk.Decommitted) {
-                                AddUsedDisk(pdisk);
-                                GroupLayout.AddDisk(pdisk.Position, orderNumber);
-                            }
+                            AddUsedDisk(pdisk);
+                            GroupLayout.AddDisk(pdisk.Position, orderNumber);
                         }
                     });
                 } catch (const TExError& e) {

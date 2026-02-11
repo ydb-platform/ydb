@@ -22,14 +22,18 @@ namespace peer
 /**
   The <a href="/docs/resource/README.md#service">@code service.name @endcode</a> of the remote
   service. SHOULD be equal to the actual @code service.name @endcode resource attribute of the
-  remote service if any. <p> Examples of @code peer.service @endcode that users may specify: <ul>
+  remote service if any.
+
+  @deprecated
+  {"note": "Replaced by @code service.peer.name @endcode.", "reason": "renamed", "renamed_to":
+  "service.peer.name"} <p> Examples of @code peer.service @endcode that users may specify: <ul>
     <li>A Redis cache of auth tokens as @code peer.service="AuthTokenCache" @endcode.</li>
     <li>A gRPC service @code rpc.service="io.opentelemetry.AuthService" @endcode may be hosted in
   both a gateway, @code peer.service="ExternalApiService" @endcode and a backend, @code
   peer.service="AuthService" @endcode.</li>
   </ul>
  */
-static constexpr const char *kPeerService = "peer.service";
+OPENTELEMETRY_DEPRECATED static constexpr const char *kPeerService = "peer.service";
 
 }  // namespace peer
 }  // namespace semconv

@@ -3,8 +3,7 @@
 
 #pragma once
 
-#include <memory>
-#include <string>
+#include <cstdint>
 
 #include "opentelemetry/version.h"
 
@@ -14,14 +13,13 @@ namespace sdk
 namespace configuration
 {
 
-// YAML-SCHEMA: schema/common.yaml
-// YAML-NODE: HttpTls
-class HttpTlsConfiguration
+// YAML-SCHEMA: schema/meter_provider.yaml
+// YAML-NODE: ExemplarFilter
+enum class ExemplarFilter : std::uint8_t
 {
-public:
-  std::string ca_file;
-  std::string key_file;
-  std::string cert_file;
+  always_on,
+  always_off,
+  trace_based
 };
 
 }  // namespace configuration

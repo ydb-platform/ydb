@@ -1042,54 +1042,86 @@ public:
         return stats.DataSize >= params.ForceShardSplitDataSize;
     }
 
-    bool ShouldSplitBySize(ui64 dataSize, const TForceShardSplitSettings& params, TString& reason) const {
+    bool ShouldSplitBySize(
+        ui64 dataSize,
+        const TForceShardSplitSettings& params,
+        TString& reason,
+        bool* isShardOversized = nullptr
+    ) const {
+        // Fast path (used from periodic stats processing):
+        // when caller asks for oversized flag, skip reason formatting entirely.
+        const bool needReason = (isShardOversized == nullptr);
+        if (isShardOversized) {
+            *isShardOversized = false;
+        }
+
         // Don't split/merge backup tables
         if (IsBackup) {
-            reason = "table is a backup";
+            if (needReason) {
+                reason = "table is a backup";
+            }
             return false;
         }
 
         if (!IsSplitBySizeEnabled(params)) {
-            if (IsExternalBlobsEnabled) {
-                reason = "external blobs are enabled";
-            } else if (params.DisableForceShardSplit && PartitionConfig().GetPartitioningPolicy().GetSizeToSplit() == 0) {
-                reason = "force shard split is disabled and SizeToSplit is not configured";
-            } else {
-                reason = "split by size is disabled";
+            if (needReason) {
+                if (IsExternalBlobsEnabled) {
+                    reason = "external blobs are enabled";
+                } else if (params.DisableForceShardSplit && PartitionConfig().GetPartitioningPolicy().GetSizeToSplit() == 0) {
+                    reason = "force shard split is disabled and SizeToSplit is not configured";
+                } else {
+                    reason = "split by size is disabled";
+                }
             }
             return false;
         }
+
+        const ui64 maxPartitionsCount = GetMaxPartitionsCount();
+        const ui64 shardCount = Partitions.size();
+        const ui64 shardSizeToSplit = GetShardSizeToSplit(params);
+        const bool shardIsOversized = dataSize >= shardSizeToSplit;
+
+        if (isShardOversized) {
+            *isShardOversized = shardIsOversized;
+        }
+
         // When shard is over the maximum size we split even when over max partitions
         if (dataSize >= params.ForceShardSplitDataSize && !params.DisableForceShardSplit) {
-            reason = TStringBuilder() << "force split by size ("
-                << "shardSize: " << dataSize << ", "
-                << "maxShardSize: " << params.ForceShardSplitDataSize << ")";
+            if (needReason) {
+                reason = TStringBuilder() << "force split by size ("
+                    << "shardSize: " << dataSize << ", "
+                    << "maxShardSize: " << params.ForceShardSplitDataSize << ")";
+            }
 
             return true;
         }
         // Otherwise we split when we may add one more partition
-        if (Partitions.size() < GetMaxPartitionsCount() && dataSize >= GetShardSizeToSplit(params)) {
-            reason = TStringBuilder() << "split by size ("
-                << "shardCount: " << Partitions.size() << ", "
-                << "maxShardCount: " << GetMaxPartitionsCount() << ", "
-                << "shardSize: " << dataSize << ", "
-                << "maxShardSize: " << GetShardSizeToSplit(params) << ")";
+        if (shardCount < maxPartitionsCount && shardIsOversized) {
+            if (needReason) {
+                reason = TStringBuilder() << "split by size ("
+                    << "shardCount: " << shardCount << ", "
+                    << "maxShardCount: " << maxPartitionsCount << ", "
+                    << "shardSize: " << dataSize << ", "
+                    << "maxShardSize: " << shardSizeToSplit << ")";
+            }
 
             return true;
         }
 
-        if (Partitions.size() >= GetMaxPartitionsCount()) {
-            if (params.DisableForceShardSplit) {
-                reason = TStringBuilder() << "reached max partitions count (" << GetMaxPartitionsCount()
-                    << ") and force shard split is disabled";
+        if (needReason) {
+            if (shardCount >= maxPartitionsCount) {
+                if (params.DisableForceShardSplit) {
+                    reason = TStringBuilder() << "reached max partitions count (" << maxPartitionsCount
+                        << ") and force shard split is disabled";
+                } else {
+                    reason = TStringBuilder() << "reached max partitions count (" << maxPartitionsCount
+                        << ") and shard size " << dataSize
+                        << " is below force split threshold " << params.ForceShardSplitDataSize;
+                }
             } else {
-                reason = TStringBuilder() << "reached max partitions count (" << GetMaxPartitionsCount()
-                    << ") and shard size " << dataSize
-                    << " is below force split threshold " << params.ForceShardSplitDataSize;
+                reason = TStringBuilder() << "shard size " << dataSize
+                    << " is below split threshold " << shardSizeToSplit;
             }
-        } else {
-            reason = TStringBuilder() << "shard size " << dataSize
-                << " is below split threshold " << GetShardSizeToSplit(params);
         }
 
         return false;

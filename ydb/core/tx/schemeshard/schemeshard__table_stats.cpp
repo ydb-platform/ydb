@@ -593,14 +593,17 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
 
     bool collectKeySample = false;
     TString reason;
-    if (table->ShouldSplitBySize(dataSize, forceShardSplitSettings, reason)) {
+    bool shardIsOversized = false;
+    if (table->ShouldSplitBySize(dataSize, forceShardSplitSettings, reason, &shardIsOversized)) {
+        table->ShouldSplitBySize(dataSize, forceShardSplitSettings, reason);
         // We would like to split by size and do this no matter how many partitions there are
         LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
             "Want to split tablet " << datashardId << " by size: " << reason);
     } else if (table->GetPartitions().size() >= table->GetMaxPartitionsCount()) {
         // We cannot split as there are max partitions already
-        const ui64 sizeToSplit = table->GetShardSizeToSplit(forceShardSplitSettings);
-        if (dataSize >= sizeToSplit) {
+        if (shardIsOversized) {
+            table->ShouldSplitBySize(dataSize, forceShardSplitSettings, reason);
+            const ui64 sizeToSplit = table->GetShardSizeToSplit(forceShardSplitSettings);
             LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 "Tablet " << datashardId << " size " << dataSize
                     << " exceeds split threshold " << sizeToSplit
@@ -617,8 +620,8 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
             "Want to split tablet " << datashardId << " by load: " << reason);
         collectKeySample = true;
     } else {
-        const ui64 sizeToSplit = table->GetShardSizeToSplit(forceShardSplitSettings);
-        if (dataSize >= sizeToSplit) {
+        if (shardIsOversized) {
+            const ui64 sizeToSplit = table->GetShardSizeToSplit(forceShardSplitSettings);
             // Shard is oversized but won't split due to configuration
             LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 "Tablet " << datashardId << " size " << dataSize

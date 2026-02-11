@@ -4,6 +4,7 @@ SRCS(
     actors_factory.cpp
     coordinator.cpp
     leader_election.cpp
+    local_leader_election.cpp
     probes.cpp
     row_dispatcher.cpp
     row_dispatcher_service.cpp

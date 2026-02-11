@@ -580,7 +580,7 @@ bool TKeyedWriteSession::TEventsWorker::AddSessionClosedIfNeeded() {
 bool TKeyedWriteSession::TEventsWorker::TransferEventsToOutputQueue() {
     bool eventsTransferred = false;
     bool shouldAddReadyToAcceptEvent = false;
-    std::unordered_map<std::uint64_t, std::deque<TWriteSessionEvent::TWriteAck>> acks;
+    std::unordered_map<std::uint32_t, std::deque<TWriteSessionEvent::TWriteAck>> acks;
 
     auto messagesWorker = Session->MessagesWorker;
     auto buildOutputAckEvent = [&](std::deque<TWriteSessionEvent::TWriteAck>& acksQueue, std::uint64_t partition, std::optional<std::uint64_t> expectedSeqNo) -> TWriteSessionEvent::TAcksEvent {

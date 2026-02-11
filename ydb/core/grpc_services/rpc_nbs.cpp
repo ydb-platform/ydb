@@ -5,6 +5,7 @@
 #include <ydb/core/base/auth.h>
 #include <ydb/core/driver_lib/run/grpc_servers_manager.h>
 
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_direct.h>
 #include <ydb/core/nbs/cloud/blockstore/config/storage.pb.h>
 #include <ydb/core/protos/blockstore_config.pb.h>
@@ -20,6 +21,9 @@ using TEvDeletePartitionRequest =
 using TEvListPartitionsRequest =
     TGrpcRequestOperationCall<Ydb::Nbs::ListPartitionsRequest,
         Ydb::Nbs::ListPartitionsResponse>;
+using TEvGetLoadActorAdapterActorIdRequest =
+    TGrpcRequestOperationCall<Ydb::Nbs::GetLoadActorAdapterActorIdRequest,
+        Ydb::Nbs::GetLoadActorAdapterActorIdResponse>;
 
 using namespace NActors;
 using namespace Ydb;
@@ -134,6 +138,42 @@ private:
     }
 };
 
+class TGetLoadActorAdapterActorIdRequest
+    : public TRpcOperationRequestActor<TGetLoadActorAdapterActorIdRequest, TEvGetLoadActorAdapterActorIdRequest> {
+
+public:
+    TGetLoadActorAdapterActorIdRequest(IRequestOpCtx* request)
+        : TRpcOperationRequestActor(request) {}
+
+    void Bootstrap() {
+        const auto& ctx = TActivationContext::AsActorContext();
+
+        Become(&TThis::StateWork);
+
+        auto tabletIdStr = GetProtoRequest()->GetTabletId();
+
+        NActors::TActorId tabletId;
+        tabletId.Parse(tabletIdStr.data(), tabletIdStr.size());
+
+        ctx.Send(tabletId, new NYdb::NBS::NBlockStore::TEvService::TEvGetLoadActorAdapterActorIdRequest());
+    }
+
+private:
+    STFUNC(StateWork) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(NYdb::NBS::NBlockStore::TEvService::TEvGetLoadActorAdapterActorIdResponse, Handle);
+            default:
+                break;
+        }
+    }
+
+    void Handle(NYdb::NBS::NBlockStore::TEvService::TEvGetLoadActorAdapterActorIdResponse::TPtr& ev) {
+        Ydb::Nbs::GetLoadActorAdapterActorIdResult result;
+        result.SetActorId(ev->Get()->ActorId);
+        ReplyWithResult(Ydb::StatusIds::SUCCESS, result, ActorContext());
+    }
+};
+
 void DoCreatePartition(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
     TActivationContext::AsActorContext().Register(new TCreatePartitionRequest(p.release()));
 }
@@ -144,6 +184,10 @@ void DoDeletePartition(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider
 
 void DoListPartitions(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
     TActivationContext::AsActorContext().Register(new TListPartitionsRequest(p.release()));
+}
+
+void DoGetLoadActorAdapterActorId(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TGetLoadActorAdapterActorIdRequest(p.release()));
 }
 
 } // namespace NKikimr::NGRpcService

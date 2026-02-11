@@ -2,6 +2,7 @@
 
 #include <ydb/core/nbs/cloud/blockstore/bootstrap/nbs_service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/fast_path_service/fast_path_service.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/load_actor_adapter/load_actor_adapter.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/vhost/server.h>
 
@@ -144,6 +145,15 @@ void TPartitionActor::HandleControllerAllocateDDiskBlockGroupResult(
     NTabletPipe::CloseClient(ctx, BSControllerPipeClient);
 }
 
+void TPartitionActor::HandleGetLoadActorAdapterActorId(
+    const NYdb::NBS::NBlockStore::TEvService::TEvGetLoadActorAdapterActorIdRequest::TPtr& ev,
+    const NActors::TActorContext& ctx)
+{
+    auto response = std::make_unique<NYdb::NBS::NBlockStore::TEvService::TEvGetLoadActorAdapterActorIdResponse>();
+    response->ActorId = LoadActorAdapter.ToString();
+    ctx.Send(ev->Sender, response.release(), 0, ev->Cookie);
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 
 STFUNC(TPartitionActor::StateWork)
@@ -156,6 +166,7 @@ STFUNC(TPartitionActor::StateWork)
     switch (ev->GetTypeRewrite()) {
         cFunc(TEvents::TEvPoison::EventType, PassAway);
         HFunc(TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult, HandleControllerAllocateDDiskBlockGroupResult);
+        HFunc(NYdb::NBS::NBlockStore::TEvService::TEvGetLoadActorAdapterActorIdRequest, HandleGetLoadActorAdapterActorId);
 
         default:
             LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::NBS_PARTITION,

@@ -4,19 +4,19 @@
 
 Alerting is a mechanism for automatic notifications that informs administrators or DevOps engineers about events that require their attention or intervention.
 
-It lets you monitor critical database parameters in real time (such as overall system health, CPU utilization, authentication errors, and disk space usage) and respond quickly to failures, errors, or load above acceptable thresholds.
+Use it to monitor critical database parameters in real time (such as overall system health, CPU utilization, authentication errors, and disk space usage) and to respond quickly to failures, errors, or load above acceptable thresholds.
 
-The following sections describe configurable alerting rules and how they are implemented in {{ ydb-short-name }}.
+This page describes configurable alerting rules and how they work in {{ ydb-short-name }}.
 
-## Alerting in {{ ydb-short-name }} with Prometheus Alerting Rules
+## Alerting in {{ ydb-short-name }} with Prometheus Alerting Rules {#prometheus-rules}
 
-[Prometheus Alerting Rules](https://prometheus.io/docs/prometheus/latest/configuration/alerting_rules/) are a set of rules written in YAML that define conditions for generating alerts. These rules use the PromQL (Prometheus Query Language) and let you automatically detect issues based on collected metrics. For example, you can configure a rule that fires when CPU load exceeds 70% or when disk usage is above 60%.
+[Prometheus Alerting Rules](https://prometheus.io/docs/prometheus/latest/configuration/alerting_rules/) are a set of rules written in YAML that define conditions for generating alerts. The rules use PromQL (Prometheus Query Language) and let you detect issues automatically from collected metrics. For example, you can configure a rule that fires when CPU load exceeds 70% or when disk usage is above 60%.
 
-## Before you begin
+## Before You Begin {#before-begin}
 
-- You need a Prometheus server set up. For installation details, see the [Prometheus documentation](https://prometheus.io/docs/prometheus/latest/installation/).
-- You should have a basic understanding of [recording rules](https://prometheus.io/docs/prometheus/latest/configuration/recording_rules/#rule).
-- Notifications must be configured so that alerts are delivered to your preferred channels. For configuration details, see the [Alertmanager documentation](https://prometheus.io/docs/alerting/latest/alertmanager/).
+- Set up a Prometheus server. For installation, see the [Prometheus documentation](https://prometheus.io/docs/prometheus/latest/installation/).
+- Get familiar with [recording rules](https://prometheus.io/docs/prometheus/latest/configuration/recording_rules/#rule).
+- Configure notifications so that alerts are delivered to your preferred channels. For configuration, see the [Alertmanager documentation](https://prometheus.io/docs/alerting/latest/alertmanager/).
 
 **Key rule parameters:**
 
@@ -27,7 +27,7 @@ The following sections describe configurable alerting rules and how they are imp
   ...
 ```
 
-- **Where are they stored?** Rules are typically defined in separate files (for example, `rules.yml`) and loaded into the Prometheus configuration.
+- **Where are they stored?** Rules are usually defined in separate files (for example, `rules.yml`) and loaded into the Prometheus configuration.
 - **How are they evaluated?** The Prometheus server periodically (by default every 1–2 minutes) evaluates the `expr` expressions in the rules. If the condition is true for the duration specified in `for`, an alert is generated.
 
 **Alert states:**
@@ -36,14 +36,14 @@ The following sections describe configurable alerting rules and how they are imp
   - **Firing:** The condition has remained true for the full `for` duration; the alert is active.
   - **Resolved:** The condition no longer holds; the alert is closed.
 
-For more details on the system and rule structure, see the [official Prometheus documentation](https://prometheus.io/docs/prometheus/latest/configuration/alerting_rules/).
+For details on the system and rule structure, see the [official Prometheus documentation](https://prometheus.io/docs/prometheus/latest/configuration/alerting_rules/).
 
-## Recommended alerting rules for every cluster
+## Recommended Alerting Rules for Every Cluster {#recommended-rules}
 
 ### {{ ydb-short-name }} ExecPool High Utilization
 
 **Description:** This rule monitors [resource pool](../../concepts/glossary.md#resource-pool) utilization in {{ ydb-short-name }}. It fires when utilization exceeds 90%, which can lead to performance degradation and higher query latency.
-**What to do:** Analyze the load. The alert message includes the name of the pool where the threshold is exceeded. For more on diagnosing CPU-related issues, see [CPU bottleneck](../../troubleshooting/performance/hardware/cpu-bottleneck.md).
+**What to do:** Analyze the load. The alert message includes the name of the pool where the threshold is exceeded. For diagnosing CPU-related issues, see [{#T}](../../troubleshooting/performance/hardware/cpu-bottleneck.md).
 
 {% note info %}
 
@@ -88,7 +88,7 @@ If you change the alert configuration, update the `for` parameter together with 
 ### {{ ydb-short-name }} Authentication Errors
 
 **Description:** This rule tracks authentication errors in {{ ydb-short-name }}. It fires when more than 2 errors occur within the `for` period. This may indicate incorrect credentials, security misconfiguration, or a system configuration issue.
-**What to do:** Search [logs](./logging.md) for authentication errors and identify the cause.
+**What to do:** Search [{#T}](./logging.md) for authentication errors and identify the cause.
 
 ```yaml
 - alert: YDBAuthTicketErrors
@@ -115,8 +115,8 @@ If you change the alert configuration, update the `for` parameter together with 
 
 ### {{ ydb-short-name }} Storage Usage
 
-**Description:** This rule monitors disk space usage. It fires when storage utilization reaches critical levels. We recommend configuring two thresholds: a warning at 80% usage and a critical alert at 90%.
-**What to do:** Determine why the database has grown beyond the expected size. Remove unneeded data (for example, old logs) or increase the database size limit if appropriate. For more on diagnosing disk space issues, see [Disk space](../../troubleshooting/performance/hardware/disk-space.md).
+**Description:** This rule monitors disk space usage. It fires when storage utilization reaches critical levels. Configure two thresholds: a warning at 80% usage and a critical alert at 90%.
+**What to do:** Determine why the database has grown beyond the expected size. Remove unneeded data (for example, old logs) or increase the database size limit if appropriate. For diagnosing disk space issues, see [{#T}](../../troubleshooting/performance/hardware/disk-space.md).
 
 #### Warning Storage Usage (80%)
 
@@ -170,11 +170,11 @@ If you change the alert configuration, update the `for` parameter together with 
 
 ![](../_assets/prometheus_storage_usage_health_check.png)
 
-## Full configuration file
+## Full Configuration File {#full-config}
 
-A full configuration file with all of the rules above is available at this [link](https://github.com/ydb-platform/ydb/blob/main/ydb/deploy/helm/ydb-prometheus/examples/ydb_prometheus_example.yaml).
+A full configuration file with all of the rules above is available [on GitHub](https://github.com/ydb-platform/ydb/blob/main/ydb/deploy/helm/ydb-prometheus/examples/ydb_prometheus_example.yaml).
 
-## Configuration recommendations
+## Configuration Recommendations {#recommendations}
 
 - **Thresholds:** Adjust the thresholds in the `expr` parameter to match your SLAs and load profile.
 - **Pending duration:** Increase the `for` parameter for less critical alerts to reduce false positives.

@@ -6,6 +6,7 @@
 #include <memory>
 #include <string>
 
+#include "opentelemetry/sdk/configuration/document_node.h"
 #include "opentelemetry/version.h"
 
 OPENTELEMETRY_BEGIN_NAMESPACE
@@ -14,14 +15,11 @@ namespace sdk
 namespace configuration
 {
 
-// YAML-SCHEMA: schema/common.yaml
-// YAML-NODE: HttpTls
-class HttpTlsConfiguration
+class DistributionEntryConfiguration
 {
 public:
-  std::string ca_file;
-  std::string key_file;
-  std::string cert_file;
+  std::string name;
+  std::unique_ptr<DocumentNode> node;
 };
 
 }  // namespace configuration

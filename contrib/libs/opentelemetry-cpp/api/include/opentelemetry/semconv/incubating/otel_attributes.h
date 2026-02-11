@@ -47,6 +47,16 @@ static constexpr const char *kOtelComponentName = "otel.component.name";
 static constexpr const char *kOtelComponentType = "otel.component.type";
 
 /**
+  Identifies the class / type of event.
+  <p>
+  This attribute SHOULD be used by non-OTLP exporters when destination does not support @code
+  EventName @endcode or equivalent field. This attribute MAY be used by applications using existing
+  logging libraries so that it can be used to set the @code EventName @endcode field by Collector or
+  SDK components.
+ */
+static constexpr const char *kOtelEventName = "otel.event.name";
+
+/**
   Deprecated. Use the @code otel.scope.name @endcode attribute
 
   @deprecated

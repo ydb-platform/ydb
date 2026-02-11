@@ -5,7 +5,9 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
+#include "opentelemetry/sdk/configuration/distribution_entry_configuration.h"
 #include "opentelemetry/version.h"
 
 OPENTELEMETRY_BEGIN_NAMESPACE
@@ -14,14 +16,10 @@ namespace sdk
 namespace configuration
 {
 
-// YAML-SCHEMA: schema/common.yaml
-// YAML-NODE: HttpTls
-class HttpTlsConfiguration
+class DistributionConfiguration
 {
 public:
-  std::string ca_file;
-  std::string key_file;
-  std::string cert_file;
+  std::vector<std::unique_ptr<DistributionEntryConfiguration>> entries;
 };
 
 }  // namespace configuration

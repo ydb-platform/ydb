@@ -29,7 +29,7 @@ public:
         , Ctx(ctx)
     {}
 
-    void MarkupPredicates(const TExprBase& predicate, TPredicateNode& predicateTree) {
+    void MarkupPredicates(const TExprBase& predicate, TPredicateNode& predicateTree, bool nested = false) {
         if (auto coalesce = predicate.Maybe<TCoCoalesce>()) {
             if (Settings.IsEnabled(EFlag::JustPassthroughOperators)) {
                 CollectChildrenPredicates(predicate, predicateTree);
@@ -66,7 +66,7 @@ public:
             predicateTree.CanBePushed = IsDistinctCanBePushed(predicate);
         } else if (auto apply = predicate.Maybe<TCoApply>()) {
             predicateTree.CanBePushed = ApplyCanBePushed(apply.Cast());
-        } else if (Settings.IsEnabled(EFlag::ExpressionAsPredicate)) {
+        } else if (Settings.IsEnabled(EFlag::ExpressionAsPredicate) && !nested) {
             predicateTree.CanBePushed = CheckExpressionNodeForPushdown(predicate);
         } else {
             predicateTree.CanBePushed = false;
@@ -400,7 +400,15 @@ public:
         if (auto maybeNonDeterministic = node.Maybe<TCoNonDeterministicBase>()) {
             return NonDeterministicCanBePushed(maybeNonDeterministic.Cast());
         }
-        return IsLambdaArgument(node);
+        if (IsLambdaArgument(node)) {
+            return true;
+        }
+        if (Settings.IsEnabled(EFlag::PredicateAsExpression)) {
+            TPredicateNode predicate;
+            MarkupPredicates(node, predicate, true);
+            return predicate.CanBePushed;
+        }
+        return false;
     }
 
 private:
@@ -535,7 +543,7 @@ private:
             if (!CheckExpressionNodeForPushdown(leftList[i]) || !CheckExpressionNodeForPushdown(rightList[i])) {
                 return false;
             }
-            if (!IsComparableArguments(leftList[i], rightList[i], compare.Maybe<TCoCmpEqual>() || compare.Maybe<TCoCmpNotEqual>())) {
+            if (!IsComparableArguments(leftList[i], rightList[i], compare.Maybe<TCoCmpEqual>() || compare.Maybe<TCoCmpNotEqual>() || compare.Maybe<TCoAggrEqual>() || compare.Maybe<TCoAggrNotEqual>())) {
                 return false;
             }
         }

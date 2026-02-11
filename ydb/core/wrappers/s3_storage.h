@@ -42,6 +42,7 @@ private:
         ev->Get()->MutableRequest().WithBucket(Bucket);
 
         auto ctx = std::make_shared<TCtx>(TlsActivationContext->ActorSystem(), ev->Sender, ev->Get()->GetRequestContext(), StorageClass, ReplyAdapter);
+        ctx->InitCounters(Counters.Get(), ev->Get()->GetRequest());
         auto callback = [this](
             const Aws::S3::S3Client*,
             const typename TEvRequest::TRequest& request,

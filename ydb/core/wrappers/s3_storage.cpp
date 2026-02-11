@@ -8,6 +8,9 @@
 
 #include <ydb/library/actors/core/actorsystem.h>
 
+#include <library/cpp/monlib/dynamic_counters/counters.h>
+
+#include <util/generic/typetraits.h>
 #include <util/string/cast.h>
 
 #ifndef KIKIMR_DISABLE_S3_OPS
@@ -22,9 +25,15 @@ using namespace Aws::Utils::Stream;
 
 namespace {
 
+static const TString OkCode = "OK";
+
+Y_HAS_MEMBER(GetBucket, Bucket); // Generates a helper class THasBucket
+
 template <typename TEvRequest, typename TEvResponse>
 class TContextBase: public AsyncCallerContext {
 public:
+    static constexpr bool RequestHasBucket = THasBucket<typename TEvRequest::TRequest>::value;
+
     explicit TContextBase(
             const TActorSystem* sys,
             const TActorId& sender,
@@ -48,6 +57,16 @@ public:
         return ev->Get()->GetRequest();
     }
 
+    void InitCounters(NMonitoring::TDynamicCounters* serviceCounters, const typename TEvRequest::TRequest& req) {
+        if (!serviceCounters) {
+            return;
+        }
+        Counters = serviceCounters->GetSubgroup("request", TString(TEvRequest::RequestName));
+        if constexpr (RequestHasBucket) {
+            Counters = Counters->GetSubgroup("bucket", TString(req.GetBucket()));
+        }
+    }
+
 protected:
     void Send(const TActorId& recipient, std::unique_ptr<IEventBase>&& ev) const {
         ActorSystem->Send(ReplyAdapter.GetRecipient(recipient), ev.release());
@@ -57,9 +76,23 @@ protected:
         Send(Sender, std::move(ev));
     }
 
+    void IncrementCounters(const typename TEvResponse::TOutcome& outcome) const {
+        if (!Counters) {
+            return;
+        }
+        TString errCode;
+        if (outcome.IsSuccess()) {
+            errCode = OkCode;
+        } else {
+            errCode = TString(outcome.GetError().GetExceptionName());
+        }
+        ++*Counters->GetCounter(errCode, true);
+    }
+
 private:
     const TActorSystem* ActorSystem;
     const TActorId Sender;
+    NMonitoring::TDynamicCounterPtr Counters;
 
 protected:
     mutable bool Replied = false;
@@ -76,6 +109,7 @@ public:
 
     void Reply(const typename TEvRequest::TRequest&, const typename TEvResponse::TOutcome& outcome) const {
         Y_ABORT_UNLESS(!std::exchange(this->Replied, true), "Double-reply");
+        this->IncrementCounters(outcome);
         this->Send(std::make_unique<TEvResponse>(outcome, this->RequestContext));
     }
 };
@@ -93,6 +127,7 @@ public:
             key = request.GetKey();
         }
 
+        this->IncrementCounters(outcome);
         this->Send(MakeResponse(key, outcome));
     }
 

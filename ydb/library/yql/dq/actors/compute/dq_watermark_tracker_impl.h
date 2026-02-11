@@ -140,11 +140,12 @@ public:
     }
 
     [[nodiscard]] TMaybe<TInstant> HandleIdleness(TInstant systemTime) {
-        if (ExpiresQueue_.empty()) {
+        if (WatermarksQueue_.size() <= 1 || ExpiresQueue_.empty()) {
+            // ^^ there is no point in expiration of single input
             return Nothing();
         }
 
-        for (auto it = ExpiresQueue_.begin(); it != ExpiresQueue_.end() && it->Time <= systemTime; ) {
+        for (auto it = ExpiresQueue_.begin(); it != ExpiresQueue_.end() && it->Time <= systemTime && WatermarksQueue_.size() > 1; ) {
            auto& [key, data] = *it->Iterator;
            Y_DEBUG_ABORT_UNLESS (data.IdleTimeout != TDuration::Max());
            WATERMARK_LOG_T("Mark " << key << " idle: " << it->Time <<  " >= " << systemTime);
@@ -162,7 +163,7 @@ public:
     }
 
     [[nodiscard]] TMaybe<TInstant> GetNextIdlenessCheckAt() const {
-        if (ExpiresQueue_.empty()) {
+        if (WatermarksQueue_.size() <= 1 || ExpiresQueue_.empty()) {
             return Nothing();
         }
         return ExpiresQueue_.cbegin()->Time;

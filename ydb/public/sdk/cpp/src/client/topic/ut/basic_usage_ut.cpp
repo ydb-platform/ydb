@@ -1389,6 +1389,9 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             NKikimr::NPQ::NTest::SplitPartition(setup, ++txId, 0, "a");
         });
 
+        writer.join();
+        splitter.join();
+
         UNIT_ASSERT(eventLoop.WaitForAcks(messages, TDuration::Seconds(60)));
         eventLoop.CheckAcksOrder();
         UNIT_ASSERT(session->Close(TDuration::Seconds(30)));

@@ -202,25 +202,28 @@ private:
         bool IsQueueEmpty() const;
         bool HasInFlightMessages() const;
         const TMessageInfo& GetFrontInFlightMessage() const;
+        bool HasPendingMessages() const;
 
     private:
+        using MessageIter = std::list<TMessageInfo>::iterator;
+
         void PushInFlightMessage(std::uint32_t partition, TMessageInfo&& message);
         void PopInFlightMessage();
         bool SendMessage(WrappedWriteSessionPtr wrappedSession, const TMessageInfo& message);
         std::optional<TContinuationToken> GetContinuationToken(std::uint32_t partition);
-        void RechoosePartitionIfNeeded(TMessageInfo& message);
+        void RechoosePartitionIfNeeded(MessageIter message);
 
         TKeyedWriteSession* Session;
 
-        std::list<TMessageInfo> PendingMessages;
         std::list<TMessageInfo> InFlightMessages;
-        using MessageIter = std::list<TMessageInfo>::iterator;
         std::unordered_map<std::uint32_t, std::list<MessageIter>> InFlightMessagesIndex;
-
+        std::unordered_map<std::uint32_t, std::list<MessageIter>> PendingMessagesIndex;
         std::unordered_map<std::uint32_t, std::list<MessageIter>> MessagesToResendIndex;
         std::unordered_map<std::uint32_t, std::deque<TContinuationToken>> ContinuationTokens;
         
         std::uint64_t MemoryUsage = 0;
+
+        friend class TKeyedWriteSession;
     };
 
     struct TSplittedPartitionWorker : public std::enable_shared_from_this<TSplittedPartitionWorker> {
@@ -262,7 +265,7 @@ private:
     struct TEventsWorker : public std::enable_shared_from_this<TEventsWorker> {
         TEventsWorker(TKeyedWriteSession* session);
         
-        void DoWork();
+        std::optional<NThreading::TPromise<void>> DoWork();
         NThreading::TFuture<void> WaitEvent();
         void UnsubscribeFromPartition(std::uint32_t partition);
         void SubscribeToPartition(std::uint32_t partition);
@@ -277,7 +280,7 @@ private:
         void HandleSessionClosedEvent(TSessionClosedEvent&& event, std::uint32_t partition);
         void HandleReadyToAcceptEvent(std::uint32_t partition, TWriteSessionEvent::TReadyToAcceptEvent&& event);
         bool RunEventLoop(WrappedWriteSessionPtr wrappedSession, std::uint32_t partition);
-        void TransferEventsToOutputQueue();
+        bool TransferEventsToOutputQueue();
         void AddReadyToAcceptEvent();
         bool AddSessionClosedEvent();
         std::optional<TWriteSessionEvent::TEvent> GetEventImpl(bool block);
@@ -431,6 +434,8 @@ private:
     std::atomic<std::uint8_t> MainWorkerState = 0;
     std::atomic<size_t> Epoch = 0;
     static constexpr size_t MAX_EPOCH = 1'000'000'000;
+
+    std::jthread StatsCollector;
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

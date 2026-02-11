@@ -248,4 +248,9 @@ void TAnalyzeActor::HandleUnexpectedEvent(ui32 typeRewrite) {
     this->PassAway();
 }
 
+void TAnalyzeActor::PassAway() {
+    Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvUnlink(0));
+    TActorBootstrapped::PassAway();
+}
+
 }// end of NKikimr::NKqp

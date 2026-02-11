@@ -48,6 +48,8 @@ private:
 
     void HandleUnexpectedEvent(ui32 typeRewrite);
 
+    void PassAway() final;
+
 private:
     void SendStatisticsAggregatorAnalyze(const NSchemeCache::TSchemeCacheNavigate::TEntry&, const TActorContext&);
 

@@ -5338,6 +5338,78 @@ Y_UNIT_TEST(FullTextDeliveryProblem) {
     Cerr << "Test completed successfully, total reads observed: " << readCount << Endl;
 }
 
+Y_UNIT_TEST(FulltextQueryWithResultColumnsCovered) {
+    auto kikimr = Kikimr();
+    auto db = kikimr.GetQueryClient();
+
+    {
+        const TString query = R"sql(
+            CREATE TABLE `/Root/Texts` (
+                `Name` Utf8,
+                `Text` Utf8,
+                PRIMARY KEY (`Name`)
+            );
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    {
+        const TString query = R"sql(
+            UPSERT INTO `/Root/Texts` (`Name`, `Text`) VALUES
+                ("high cat frequency", "Cats love cats and more cats."),
+                ("medium frequency", "Dogs chase cats."),
+                ("no cats", "Animals in the wild."),
+                ("single cat mention", "Cats are domestic animals.")
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    {
+        const TString query = R"sql(
+            ALTER TABLE `/Root/Texts` ADD INDEX `fulltext_idx`
+                GLOBAL USING fulltext_plain
+                ON (`Name`)
+                WITH (
+                    tokenizer=standard,
+                    use_filter_lowercase=true,
+                    use_filter_ngram=true,
+                    filter_ngram_min_length=3,
+                    filter_ngram_max_length=3
+                )
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    {
+        const TString query = R"sql(
+            SELECT count(*)
+            FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextMatch(`Name`, "*cat*");
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([[3u]])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    {
+        const TString query = R"sql(
+            SELECT `Name`
+            FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextMatch(`Name`, "*cat*");
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([
+            [["high cat frequency"]];
+            [["no cats"]];
+            [["single cat mention"]]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+    }
 }
 
 }
+
+} // namespace NKikimr::NKqp

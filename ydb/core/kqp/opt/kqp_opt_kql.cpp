@@ -1004,6 +1004,19 @@ bool CheckDisabledWriteToUniqIndex(const TExprBase& write, const NYql::TKikimrTa
     return true;
 }
 
+bool CheckIndexesForBatchOperation(const NYql::TKikimrTableDescription& tableData, bool enabledIndexStreamWrite,
+    TExprContext& ctx, const TExprBase& expr)
+{
+    for (const auto& index : tableData.Metadata->Indexes) {
+        if (!NBatchOperations::IsIndexSupported(index.Type, enabledIndexStreamWrite)) {
+            const TString err = "BATCH operations are not supported for tables with " + IndexTypeToName(index.Type) + " indexes (index: `" + index.Name + "`).";
+            ctx.AddError(YqlIssue(ctx.GetPosition(expr.Pos()), NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED, err));
+            return false;
+        }
+    }
+    return true;
+}
+
 TExprNode::TPtr HandleWriteTable(const TKiWriteTable& write, TExprContext& ctx, TKqpOptimizeContext& kqpCtx, const TKikimrTablesData& tablesData)
 {
     if (GetTableOp(write) == TYdbOperation::FillTable) {
@@ -1055,15 +1068,8 @@ TExprNode::TPtr HandleUpdateTable(const TKiUpdateTable& update, TExprContext& ct
         return nullptr;
     }
 
-    if (update.IsBatch() == "true") {
-        const bool enabledIndexStreamWrite = kqpCtx.Config->GetEnableIndexStreamWrite();
-        for (const auto& index : tableData.Metadata->Indexes) {
-            if (!NBatchOperations::IsIndexSupported(index.Type, enabledIndexStreamWrite)) {
-                const TString err = "BATCH operations are not supported for tables with " + IndexTypeToName(index.Type) + " indexes (index: `" + index.Name + "`)." ;
-                ctx.AddError(YqlIssue(ctx.GetPosition(update.Pos()), NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED, err));
-                return nullptr;
-            }
-        }
+    if (update.IsBatch() == "true" && !CheckIndexesForBatchOperation(tableData, kqpCtx.Config->GetEnableIndexStreamWrite(), ctx, update)) {
+        return nullptr;
     }
 
     if (HasIndexesToWrite(tableData)) {
@@ -1088,15 +1094,8 @@ TExprNode::TPtr HandleDeleteTable(const TKiDeleteTable& del, TExprContext& ctx, 
         return nullptr;
     }
 
-    if (del.IsBatch() == "true") {
-        const bool enabledIndexStreamWrite = kqpCtx.Config->GetEnableIndexStreamWrite();
-        for (const auto& index : tableData.Metadata->Indexes) {
-            if (!NBatchOperations::IsIndexSupported(index.Type, enabledIndexStreamWrite)) {
-                const TString err = "BATCH operations are not supported for tables with " + IndexTypeToName(index.Type) + " indexes (index: `" + index.Name + "`)." ;
-                ctx.AddError(YqlIssue(ctx.GetPosition(del.Pos()), NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED, err));
-                return nullptr;
-            }
-        }
+    if (del.IsBatch() == "true" && !CheckIndexesForBatchOperation(tableData, kqpCtx.Config->GetEnableIndexStreamWrite(), ctx, del)) {
+        return nullptr;
     }
 
     if (HasIndexesToWrite(tableData)) {

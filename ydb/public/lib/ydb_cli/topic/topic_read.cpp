@@ -240,7 +240,7 @@ namespace NYdb::NConsoleClient {
                 output << message.GetCreateTime();
                 break;
             case ETopicMetadataField::MessageGroupID:
-                output << message.GetMessageGroupId();
+                output << GetFieldWithEscaping(TString(message.GetMessageGroupId()), delimiter);
                 break;
             case ETopicMetadataField::Offset:
                 output << message.GetOffset();

@@ -86,10 +86,10 @@ namespace NKikimr::NDDisk {
         Y_ABORT_UNLESS(inserted && inserted2);
         FreeSpace += toSectorIdx - fromSectorIdx + 1;
         auto replace = [this](TSpaceRange newRange, auto it1, auto it2) {
-            FreeSectors.erase(it1);
-            FreeSectors.erase(it2);
             FreeSectorsPriorityQueue.erase(*it1);
             FreeSectorsPriorityQueue.erase(*it2);
+            FreeSectors.erase(it1);
+            FreeSectors.erase(it2);
             auto [newIt, inserted] = FreeSectors.insert(newRange);
             auto [_, inserted2] = FreeSectorsPriorityQueue.insert(newRange);
             Y_ABORT_UNLESS(inserted && inserted2);
@@ -142,15 +142,25 @@ namespace NKikimr::NDDisk {
         FreeSpace -= toSectorIdx - fromSectorIdx + 1;
         TSpaceRange searchSpace{fromSectorIdx, toSectorIdx};
         auto it = FreeSectors.lower_bound(searchSpace);
+        if (it == FreeSectors.end() || it->First > fromSectorIdx) {
+            it--;
+        }
         Y_ABORT_UNLESS(it != FreeSectors.end() && it->First <= fromSectorIdx && it->Last >= toSectorIdx);
         ui32 iFirst = it->First;
         ui32 iLast = it->Last;
         FreeSectors.erase(it);
+        FreeSectorsPriorityQueue.erase(*it);
         if (iFirst != fromSectorIdx) {
-            FreeSectors.insert({iFirst, fromSectorIdx - 1});
+            auto [it2, inserted] = FreeSectors.insert({iFirst, fromSectorIdx - 1});
+            Y_ABORT_UNLESS(inserted);
+            auto [_, inserted2] = FreeSectorsPriorityQueue.insert(*it2);
+            Y_ABORT_UNLESS(inserted2);
         }
         if (iLast != toSectorIdx) {
-            FreeSectors.insert({toSectorIdx + 1, iLast});
+            auto [it2, inserted] = FreeSectors.insert({toSectorIdx + 1, iLast});
+            Y_ABORT_UNLESS(inserted);
+            auto [_, inserted2] = FreeSectorsPriorityQueue.insert(*it2);
+            Y_ABORT_UNLESS(inserted2);
         }
         OwnerChunksQueue.insert(GetRank());
     }

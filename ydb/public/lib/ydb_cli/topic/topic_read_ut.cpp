@@ -191,7 +191,7 @@ namespace NYdb::NConsoleClient {
         void TestRun_ReadMessages_CsvFormat_Unlimited() {
             // Test that CSV format reads all messages without a limit (unlimited mode)
             // This tests the fix that removes the 500 line limit for streaming formats
-            constexpr size_t numMessages = 10;  // In production, this would be more than 500
+            constexpr size_t numMessages = 501;
             TVector<TString> messages;
             TVector<TString> expected;
             expected.push_back("body");  // header

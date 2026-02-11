@@ -188,8 +188,8 @@ def test_recommended_variation_16_sequences(benchmark):
     assert len(sequences) >= 742
 
 
-def test_unicode_9_vs16():
-    """Verify effect of VS-16 on unicode_version 9.0 and later."""
+def test_vs16_effect():
+    """Verify effect of VS-16 (always active with latest Unicode version)."""
     phrase = ("\u2640"        # FEMALE SIGN
               "\uFE0F")       # VARIATION SELECTOR-16
 
@@ -197,25 +197,8 @@ def test_unicode_9_vs16():
     expect_length_phrase = 2
 
     # exercise,
-    length_each = tuple(wcwidth.wcwidth(w_char, unicode_version='9.0') for w_char in phrase)
-    length_phrase = wcwidth.wcswidth(phrase, unicode_version='9.0')
-
-    # verify.
-    assert length_each == expect_length_each
-    assert length_phrase == expect_length_phrase
-
-
-def test_unicode_8_vs16():
-    """Verify that VS-16 has no effect on unicode_version 8.0 and earlier."""
-    phrase = ("\u2640"        # FEMALE SIGN
-              "\uFE0F")       # VARIATION SELECTOR-16
-
-    expect_length_each = (1, 0)
-    expect_length_phrase = 1
-
-    # exercise,
-    length_each = tuple(wcwidth.wcwidth(w_char, unicode_version='8.0') for w_char in phrase)
-    length_phrase = wcwidth.wcswidth(phrase, unicode_version='8.0')
+    length_each = tuple(wcwidth.wcwidth(w_char) for w_char in phrase)
+    length_phrase = wcwidth.wcswidth(phrase)
 
     # verify.
     assert length_each == expect_length_each

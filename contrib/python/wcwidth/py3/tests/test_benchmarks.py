@@ -198,6 +198,41 @@ def test_wrap_with_ansi(benchmark):
     benchmark(wcwidth.wrap, text, 20)
 
 
+def test_wrap_with_ansi_no_propagate(benchmark):
+    """Benchmark wrap() with ANSI but SGR propagation disabled."""
+    text = '\x1b[31mThe quick brown fox\x1b[0m jumps over the lazy dog'
+    benchmark(wcwidth.wrap, text, 20, propagate_sgr=False)
+
+
+def test_wrap_complex_sgr(benchmark):
+    """Benchmark wrap() with complex SGR (256-color, multiple attributes)."""
+    text = '\x1b[1;3;38;5;208mBold italic orange text that wraps\x1b[0m'
+    benchmark(wcwidth.wrap, text, 10)
+
+
+def test_wrap_hyperlink_no_id(benchmark):
+    """Benchmark wrap() with OSC 8 hyperlinks without id (requires id generation)."""
+    link = '\x1b]8;;https://example.com/path\x1b\\click here for details\x1b]8;;\x1b\\'
+    text = f'See {link} and also {link} for more. Read {link} now. ' * 10
+    benchmark(wcwidth.wrap, text, 40)
+
+
+def test_wrap_hyperlink_with_id(benchmark):
+    """Benchmark wrap() with OSC 8 hyperlinks with existing ids."""
+    link1 = '\x1b]8;id=a;https://example.com\x1b\\click here for details\x1b]8;;\x1b\\'
+    link2 = '\x1b]8;id=b;https://other.org\x1b\\visit this page now\x1b]8;;\x1b\\'
+    text = f'See {link1} and also {link2} for more. Read {link1} now. ' * 10
+    benchmark(wcwidth.wrap, text, 40)
+
+
+def test_wrap_hyperlink_mixed(benchmark):
+    """Benchmark wrap() with mixed OSC 8 hyperlinks (with and without ids)."""
+    no_id = '\x1b]8;;https://example.com\x1b\\link without id here\x1b]8;;\x1b\\'
+    with_id = '\x1b]8;id=x;https://other.org\x1b\\link with id here\x1b]8;;\x1b\\'
+    text = f'First {no_id} then {with_id} and {no_id} again {with_id} end. ' * 10
+    benchmark(wcwidth.wrap, text, 40)
+
+
 def test_clip_ascii(benchmark):
     """Benchmark clip() with ASCII string."""
     benchmark(wcwidth.clip, 'hello world', 0, 5)
@@ -212,6 +247,30 @@ def test_clip_with_ansi(benchmark):
     """Benchmark clip() with ANSI sequences."""
     text = '\x1b[31m中文字\x1b[0m'
     benchmark(wcwidth.clip, text, 0, 3)
+
+
+def test_clip_with_ansi_no_propagate(benchmark):
+    """Benchmark clip() with ANSI but SGR propagation disabled."""
+    text = '\x1b[31m中文字\x1b[0m'
+    benchmark(wcwidth.clip, text, 0, 3, propagate_sgr=False)
+
+
+def test_clip_complex_sgr(benchmark):
+    """Benchmark clip() with complex SGR clipping from middle."""
+    text = '\x1b[1;38;5;208mHello world text\x1b[0m'
+    benchmark(wcwidth.clip, text, 6, 11)
+
+
+def test_propagate_sgr_multiline(benchmark):
+    """Benchmark propagate_sgr() with multiple lines."""
+    lines = ['\x1b[1;31mline one', 'line two', 'line three\x1b[0m']
+    benchmark(wcwidth.propagate_sgr, lines)
+
+
+def test_propagate_sgr_no_sequences(benchmark):
+    """Benchmark propagate_sgr() fast path (no sequences)."""
+    lines = ['line one', 'line two', 'line three']
+    benchmark(wcwidth.propagate_sgr, lines)
 
 
 def test_strip_sequences_simple(benchmark):

@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: wcwidth
-Version: 0.4.0
+Version: 0.5.0
 Summary: Measures the displayed width of unicode strings in a terminal
 Project-URL: Homepage, https://github.com/jquast/wcwidth
 Author-email: Jeff Quast <contact@jeffquast.com>
@@ -266,9 +266,10 @@ clusters, and wide characters to a given display width.
     >>> wrap('コンニチハ', 4)
     ['コン', 'ニチ', 'ハ']
 
-    >>> # Text with ANSI color sequences
-    >>> wrap('\x1b[31mhello world\x1b[0m', 5)
-    ['\x1b[31mhello', 'world\x1b[0m']
+    >>> # Text with ANSI color sequences - SGR codes are propagated by default
+    >>> # Each line ends with reset, next line starts with restored style
+    >>> wrap('\x1b[1;31mhello world\x1b[0m', 5)
+    ['\x1b[1;31mhello\x1b[0m', '\x1b[1;31mworld\x1b[0m']
 
 clip()
 ------
@@ -284,8 +285,13 @@ Use `clip()`_ to extract a substring by column positions, preserving terminal se
     >>> clip('中文字', 1, 5, fillchar='.')
     '.文.'
 
-    >>> # *ALL* Terminal sequences are preserved
-    >>> clip('\x1b[31m中文\x1b[0m', 0, 3)
+    >>> # SGR codes are propagated by default - result begins with active style
+    >>> # and ends with reset if styles are active
+    >>> clip('\x1b[1;31mHello world\x1b[0m', 6, 11)
+    '\x1b[1;31mworld\x1b[0m'
+
+    >>> # Disable SGR propagation to preserve original sequences as-is
+    >>> clip('\x1b[31m中文\x1b[0m', 0, 3, propagate_sgr=False)
     '\x1b[31m中 \x1b[0m'
 
 strip_sequences()
@@ -359,6 +365,10 @@ Execute all code generation, autoformatters, linters and unit tests using tox::
 Or execute individual tasks, see ``tox -lv`` for all available targets::
 
    tox -e pylint,py36,py314
+
+To run tests with detailed coverage reporting showing missing lines::
+
+   tox -epy314 -- --cov-report=term-missing
 
 Updating Unicode Version
 ------------------------
@@ -474,15 +484,28 @@ languages.
 History
 =======
 
+0.5.0 *2026-01-26*
+  * **Drop Support** of many historical versions of wide and zero unicode tables.  Only the latest
+    Unicode version (17.0.0) is now shipped. The related ``unicode_version='auto'`` keyword of the
+    `wcwidth()`_ family of functions are ignored. `list_versions()`_ always returns a tuple of only
+    a single element of the only unicode version supported. `PR #195`_.
+  * **Performance** improvement of most common call without version or ambiguous_width specified by
+    20%. `PR #195`_.
+  * **New** Function `propagate_sgr()`_ for applying SGR state propagation to a list of lines.
+    `PR #194`_.
+  * **Improved** `wrap()`_ and `clip()`_ with ``propagate_sgr=True``. `PR #194`_.
+  * **Bugfix** `clip()`_ zero-width characters at clipping boundaries. `PR #194`_.
+  * **Bugfix** OSC Hyperlinks when broken mid-text by `wrap()`_. `PR #193`_.
+
 0.4.0 *2026-01-25*
-  * **New** Functions `iter_graphemes_reverse()`_, `grapheme_boundary_before()`_.
-  * **Bugfix** OSC Hyperlinks should not be broken by ``wrap()``
+  * **New** Functions `iter_graphemes_reverse()`_, `grapheme_boundary_before()`_. `PR #192`_.
+  * **Bugfix** OSC Hyperlinks should not be broken by `wrap()`_. `PR #191`_.
 
 0.3.5 *2026-01-24*
   * **Bugfix** packaging of 0.3.4 contains a failing test.
 
 0.3.4 *2026-01-24*
-  * **Bugfix** `center()`_ should match the eccentric `parity padding`_
+  * **Bugfix** `center()`_ should match the eccentric `parity padding`_.
     of `str.center()`_. `PR #188`_.
 
 0.3.3 *2026-01-24*
@@ -654,7 +677,13 @@ https://www.cl.cam.ac.uk/~mgk25/ucs/wcwidth.c::
 .. _`PR #184`: https://github.com/jquast/wcwidth/pull/184
 .. _`PR #185`: https://github.com/jquast/wcwidth/pull/185
 .. _`PR #188`: https://github.com/jquast/wcwidth/pull/188
+.. _`PR #191`: https://github.com/jquast/wcwidth/pull/191
+.. _`PR #192`: https://github.com/jquast/wcwidth/pull/192
+.. _`PR #193`: https://github.com/jquast/wcwidth/pull/193
+.. _`PR #194`: https://github.com/jquast/wcwidth/pull/194
+.. _`PR #195`: https://github.com/jquast/wcwidth/pull/195
 .. _`Issue #101`: https://github.com/jquast/wcwidth/issues/101
+.. _`Issue #190`: https://github.com/jquast/wcwidth/issues/190
 .. _`jquast/blessed`: https://github.com/jquast/blessed
 .. _`selectel/pyte`: https://github.com/selectel/pyte
 .. _`thomasballinger/curtsies`: https://github.com/thomasballinger/curtsies
@@ -704,7 +733,9 @@ https://www.cl.cam.ac.uk/~mgk25/ucs/wcwidth.c::
 .. _`wrap()`: https://wcwidth.readthedocs.io/en/latest/api.html#wcwidth.wrap
 .. _`clip()`: https://wcwidth.readthedocs.io/en/latest/api.html#wcwidth.clip
 .. _`strip_sequences()`: https://wcwidth.readthedocs.io/en/latest/api.html#wcwidth.strip_sequences
+.. _`propagate_sgr()`: https://wcwidth.readthedocs.io/en/latest/api.html#wcwidth.propagate_sgr
 .. _`iter_sequences()`: https://wcwidth.readthedocs.io/en/latest/api.html#wcwidth.iter_sequences
+.. _`list_versions()`: https://wcwidth.readthedocs.io/en/latest/api.html#wcwidth.list_versions
 .. _`Unicode Standard Annex #29`: https://www.unicode.org/reports/tr29/
 .. _`Terminal.detect_ambiguous_width()`: https://blessed.readthedocs.io/en/latest/api/terminal.html#blessed.terminal.Terminal.detect_ambiguous_width
 .. _`parity padding`: https://jazcap53.github.io/pythons-eccentric-strcenter.html

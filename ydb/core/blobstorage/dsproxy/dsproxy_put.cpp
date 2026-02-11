@@ -4,7 +4,6 @@
 #include "dsproxy_put_impl.h"
 #include <ydb/core/blobstorage/dsproxy/dsproxy_request_reporting.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
-#include <ydb/library/actors/retro_tracing/retro_collector.h>
 
 #include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
 #include <ydb/core/util/stlog.h>

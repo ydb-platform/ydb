@@ -241,8 +241,8 @@ public:
             Span.Attribute("storagePool", Info->GetStoragePoolName());
             params.Common.Event->ToSpan(*Span.GetWilsonSpanPtr());
         } else {
-            Span = TLazyRetroSpan(TWilson::BlobStorage, NWilson::TTraceId::NewTraceId(TWilson::BlobStorage, Max<ui32>(), true),
-                    "DSProxy.RTX");
+            // Span = TLazyRetroSpan(TWilson::BlobStorage, NWilson::TTraceId::NewTraceId(TWilson::BlobStorage, Max<ui32>(), true),
+            //         "DSProxy.RTX");
         }
 
         Y_ABORT_UNLESS(CostModel);

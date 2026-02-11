@@ -62,7 +62,7 @@ class TestCompressionRestart(RestartToAnotherVersionFixture):
         column_types.add_column("id", ydb.PrimitiveType.Uint64)
         column_types.add_column("val", ydb.PrimitiveType.Int64)
 
-        self.driver.table_client.bulk_upsert(self.database_path + "/" + name, data, column_types)
+        self.driver.table_client.bulk_upsert(f"{self.database_path}/{name}", data, column_types)
 
     def test_compress_table(self):
         logger.info(f"Testing versions {self.versions[0]} -> {self.versions[1]}")
@@ -77,7 +77,7 @@ class TestCompressionRestart(RestartToAnotherVersionFixture):
         self.change_cluster_version()
 
         columns = self.cluster.client.send(
-            SchemeDescribeRequest("table1").protobuf,
+            SchemeDescribeRequest(f"{self.database_path}/table1").protobuf,
             'SchemeDescribe').PathDescription.ColumnTableDescription.Schema.Columns
 
         for column in columns:

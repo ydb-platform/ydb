@@ -38,6 +38,16 @@ private:
         }
     };
 
+    struct TRequestsStalking
+    {
+        explicit TRequestsStalking(ui32 responsesExpected)
+            : ResponsesExpected(responsesExpected)
+        {}
+
+        ui32 ResponsesHandled = 0;
+        const ui32 ResponsesExpected;
+    };
+
     TVector<TDDiskConnection> DDiskConnections;
     TVector<TDDiskConnection> PersistentBufferConnections;
 
@@ -77,7 +87,7 @@ private:
     void HandleConnectResult(
         ui64 storageRequestId,
         const NKikimrBlobStorage::NDDisk::TEvConnectResult& result,
-        std::shared_ptr<ui32> numberConnectionsEstablised);
+        std::shared_ptr<TRequestsStalking> connectionsStalking);
 
     void HandleWritePersistentBufferResult(
         ui64 storageRequestId,
@@ -107,7 +117,7 @@ private:
         ui64 storageRequestId,
         const NKikimrBlobStorage::NDDisk::TEvListPersistentBufferResult& result,
         size_t persistentBufferIndex,
-        std::shared_ptr<std::pair<size_t, size_t>> requestsCounters);
+        std::shared_ptr<TRequestsStalking> requestsStalking);
     void RestorePersistentBufferFinised();
 };
 

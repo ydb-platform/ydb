@@ -191,10 +191,11 @@ private:
 
     struct TPositionTableEntry
     {
+        bool IsNullable = true; // All newly added fields must be nullable.
+
+        bool IsPresent = false;
         ssize_t Offset = 0;
         ssize_t Size = 0;
-        bool IsPresent = false;
-        bool IsNullable = true; // All newly added fields must be nullable.
     };
     std::vector<TPositionTableEntry> PositionTable_;
 
@@ -322,6 +323,7 @@ TYsonCursorConverter GetCursorConverter(TTranslationSpec translationSpec)
         });
 }
 
+// Overload for statically-sized tuple of translation specs (used for optional, list, dict).
 template <class TConvertersWrapper, std::same_as<TTranslationSpec>... TSpec>
 TTranslationSpec WrapTranslationSpecs(
     TConvertersWrapper&& convertersWrapper,
@@ -349,6 +351,7 @@ TTranslationSpec WrapTranslationSpecs(
         std::move(translationSpecs)...);
 }
 
+// Overload for dynamically-sized list of translation specs (as seen in tuple, struct, etc).
 template <CInvocable<TYsonCursorConverter(std::vector<TYsonCursorConverter>)> TConvertersWrapper>
 TTranslationSpec WrapTranslationSpecs(
     TConvertersWrapper&& convertersWrapper,
@@ -437,7 +440,7 @@ TTranslationSpec BuildTranslationSpecForStruct(
     auto buildStableNameToPosition = [&] (const TLogicalTypePtr& type) {
         THashMap<std::string_view, int> result;
         const auto& fields = type->GetFields();
-        for (int fieldIndex = 0; fieldIndex < std::ssize(fields); ++fieldIndex) {
+        for (auto fieldIndex : std::views::iota(0, std::ssize(fields))) {
             EmplaceOrCrash(result, fields[fieldIndex].StableName, fieldIndex);
         }
         return result;

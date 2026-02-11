@@ -213,7 +213,8 @@
             {"Index": 8, "Name": "TTL", "Type": "TCoAtom"},
             {"Index": 9, "Name": "MaxDelayedRows", "Type": "TCoAtom"},
             {"Index": 10, "Name": "MaxCachedRows", "Type": "TCoAtom"},
-            {"Index": 11, "Name": "IsMultiget", "Type": "TCoAtom", "Optional": true}
+            {"Index": 11, "Name": "IsMultiget", "Type": "TCoAtom", "Optional": true},
+            {"Index": 12, "Name": "IsMultiMatches", "Type": "TCoAtom", "Optional": true}
         ]
     },
     {

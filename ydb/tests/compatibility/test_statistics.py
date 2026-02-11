@@ -24,20 +24,21 @@ class TestStatisticsTLI(RestartToAnotherVersionFixture):
 
     def write_data(self):
         driver = self.create_driver()
-        with ydb.QuerySessionPool(driver) as session_pool:
-            for _ in range(10):
-                random_key = random.randint(1, 1000)
+        try:
+            with ydb.QuerySessionPool(driver) as session_pool:
+                for _ in range(10):
+                    random_key = random.randint(1, 1000)
 
-                def operation(session, key=random_key):
-                    session.transaction().execute(
-                        f"""
-                        UPSERT INTO {TABLE_NAME} (key, value) VALUES ({key}, 'Hello, YDB {key}!')
-                        """,
-                        commit_tx=True
-                    )
-                session_pool.retry_operation_sync(operation)
-
-        driver.stop()
+                    def operation(session, key=random_key):
+                        session.transaction().execute(
+                            f"""
+                            UPSERT INTO {TABLE_NAME} (key, value) VALUES ({key}, 'Hello, YDB {key}!')
+                            """,
+                            commit_tx=True
+                        )
+                    session_pool.retry_operation_sync(operation)
+        finally:
+            driver.stop()
 
     def read_data(self):
         queries = [
@@ -57,20 +58,29 @@ class TestStatisticsTLI(RestartToAnotherVersionFixture):
         ]
 
         driver = self.create_driver()
-        with ydb.QuerySessionPool(driver) as session_pool:
-            for _ in range(10):
-                for query in queries:
-                    def operation(session, q=query):
-                        session.transaction().execute(q, commit_tx=True)
-                    session_pool.retry_operation_sync(operation)
-
-        driver.stop()
+        try:
+            with ydb.QuerySessionPool(driver) as session_pool:
+                for _ in range(10):
+                    for query in queries:
+                        def operation(session, q=query):
+                            session.transaction().execute(q, commit_tx=True)
+                        session_pool.retry_operation_sync(operation)
+        finally:
+            driver.stop()
 
     def generate_tli(self):
+        errors = []
+
+        def run_with_error_capture(target):
+            try:
+                target()
+            except Exception as exc:
+                errors.append((threading.current_thread().name, exc))
+
         # Create threads for write and read operations
         threads = [
-            threading.Thread(target=self.write_data),
-            threading.Thread(target=self.read_data)
+            threading.Thread(target=run_with_error_capture, args=(self.write_data,), name="write_data"),
+            threading.Thread(target=run_with_error_capture, args=(self.read_data,), name="read_data"),
         ]
 
         # Start threads
@@ -80,7 +90,11 @@ class TestStatisticsTLI(RestartToAnotherVersionFixture):
         # Wait for all threads to complete with a timeout
         for thread in threads:
             thread.join(timeout=600)
-            assert not thread.is_alive(), "generate_tli thread timed out after 600s"
+            assert not thread.is_alive(), f"{thread.name} thread timed out after 600s"
+
+        if errors:
+            name, error = errors[0]
+            raise AssertionError(f"{name} worker thread failed") from error
 
     def check_partition_stats(self):
         with ydb.QuerySessionPool(self.driver) as session_pool:

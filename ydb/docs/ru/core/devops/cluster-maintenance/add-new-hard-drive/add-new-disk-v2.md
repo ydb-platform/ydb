@@ -1,5 +1,7 @@
 # Добавление нового диска в кластер {{ ydb-short-name }} (конфигурация V2)
 
+Перед началом работы ознакомьтесь с документом [{#T}](disk-addition-preparation.md).
+
 ## Порядок действий
 
 ### Обновите inventory/group_vars/ydb/all.yaml

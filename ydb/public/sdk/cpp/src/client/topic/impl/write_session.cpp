@@ -376,11 +376,10 @@ void TKeyedWriteSession::TSplittedPartitionWorker::LaunchGetMaxSeqNoFutures(std:
         Y_ABORT_UNLESS(wrappedSession, "Write session not found");
         WriteSessions.push_back(wrappedSession);
 
-        auto now = TInstant::Now();
         auto future = wrappedSession->Session->GetInitSeqNo();
         std::weak_ptr<TKeyedWriteSession> session = Session->shared_from_this();
         lock.unlock();
-        future.Subscribe([this, session, wrappedSession, ancestor, now](const NThreading::TFuture<uint64_t>& result) {
+        future.Subscribe([this, session, wrappedSession, ancestor](const NThreading::TFuture<uint64_t>& result) {
             auto sessionPtr = session.lock();
             if (!sessionPtr) {
                 return;
@@ -400,8 +399,6 @@ void TKeyedWriteSession::TSplittedPartitionWorker::LaunchGetMaxSeqNoFutures(std:
                     MoveTo(EState::Done);
                     return;
                 }
-
-                LOG_LAZY(sessionPtr->DbDriverState->Log, TLOG_INFO, sessionPtr->LogPrefix() << "Got max seq no for partition " << ancestor << " = " << result.GetValue() << " in " << TInstant::Now() - now << " splitted partition " << PartitionId);
 
                 UpdateMaxSeqNo(result.GetValue());
                 if (--NotReadyFutures == 0) {

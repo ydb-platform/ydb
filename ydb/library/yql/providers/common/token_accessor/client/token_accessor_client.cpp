@@ -136,7 +136,7 @@ private:
         const TDuration RefreshPeriod;
         const TDuration RequestTimeout;
         TAdaptiveLock Lock;
-        mutable std::atomic<bool> RequestInflight;
+        mutable std::atomic<bool> RequestInflight = false;
         mutable TString LastRequestError;
         std::atomic<bool> NeedStop = false;
         mutable TDuration BackoffTimeout = BACKOFF_START;

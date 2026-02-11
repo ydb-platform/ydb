@@ -33,6 +33,7 @@ import "ydb/core/protos/replication.proto";
 import "ydb/core/protos/resource_broker.proto";
 import "ydb/core/protos/shared_cache.proto";
 import "ydb/core/protos/stream.proto";
+import "ydb/core/protos/subdomains.proto";
 import "ydb/core/protos/table_service_config.proto";
 import "ydb/core/protos/tablet.proto";
 import "ydb/core/protos/tenant_pool.proto";
@@ -2577,6 +2578,9 @@ message TSchemeShardConfig {
     // database level default for TTL mechanics
     // 0 means no limit
     optional uint32 MaxTTLShardsInFlight = 7 [default = 0];
+    
+    // Database schema limits
+    optional NKikimrSubDomains.TSchemeLimits SchemeLimits = 8;
 }
 
 message TCompactionConfig {

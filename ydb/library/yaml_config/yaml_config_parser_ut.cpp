@@ -3,6 +3,7 @@
 #include "yaml_config_helpers.h"
 
 #include <ydb/core/protos/key.pb.h>
+#include <ydb/core/protos/subdomains.pb.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -120,5 +121,42 @@ pdisk_key_config:
             "host_configs: [{nvme: [disk1, disk2]}, {host_config_id: 2}], hosts: [{host: fqdn1, host_config_id: 2}, "
             "{host: fqdn2, host_config_id: 2}]}";
         UNIT_CHECK_GENERATED_EXCEPTION(Parse(config, false), yexception);
+    }
+
+    Y_UNIT_TEST(DomainSchemeLimits) {
+        TString config = R"(
+scheme_shard_config:
+  scheme_limits:
+    max_paths: 50000
+    max_table_columns: 500
+    max_table_indices: 50
+    max_shards: 300000
+    max_depth: 64
+    max_children_in_dir: 200000
+    max_table_key_columns: 30
+    max_shards_in_path: 40000
+)";
+        NKikimrConfig::TAppConfig cfg = Parse(config, false);
+        UNIT_ASSERT(cfg.HasSchemeShardConfig());
+        auto& schemeShardConfig = cfg.GetSchemeShardConfig();
+        UNIT_ASSERT(schemeShardConfig.HasSchemeLimits());
+        
+        auto& limits = schemeShardConfig.GetSchemeLimits();
+        UNIT_ASSERT(limits.HasMaxPaths());
+        UNIT_ASSERT_VALUES_EQUAL(limits.GetMaxPaths(), 50000);
+        UNIT_ASSERT(limits.HasMaxTableColumns());
+        UNIT_ASSERT_VALUES_EQUAL(limits.GetMaxTableColumns(), 500);
+        UNIT_ASSERT(limits.HasMaxTableIndices());
+        UNIT_ASSERT_VALUES_EQUAL(limits.GetMaxTableIndices(), 50);
+        UNIT_ASSERT(limits.HasMaxShards());
+        UNIT_ASSERT_VALUES_EQUAL(limits.GetMaxShards(), 300000);
+        UNIT_ASSERT(limits.HasMaxDepth());
+        UNIT_ASSERT_VALUES_EQUAL(limits.GetMaxDepth(), 64);
+        UNIT_ASSERT(limits.HasMaxChildrenInDir());
+        UNIT_ASSERT_VALUES_EQUAL(limits.GetMaxChildrenInDir(), 200000);
+        UNIT_ASSERT(limits.HasMaxTableKeyColumns());
+        UNIT_ASSERT_VALUES_EQUAL(limits.GetMaxTableKeyColumns(), 30);
+        UNIT_ASSERT(limits.HasMaxShardsInPath());
+        UNIT_ASSERT_VALUES_EQUAL(limits.GetMaxShardsInPath(), 40000);
     }
 }

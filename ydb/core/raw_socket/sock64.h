@@ -317,6 +317,10 @@ public:
         }
         int ret = SSL_do_handshake(Ssl.get());
         Cout << "SSL handshake result: " << ret << Endl;
+        if (ret != 1) {
+            int ssl_err = SSL_get_error(Ssl.get(), ret);
+            Cout << "Error: " << ssl_err << Endl;
+        }
         return TSslHolder<X509>(SSL_get_peer_certificate(Ssl.get()));
     }
 

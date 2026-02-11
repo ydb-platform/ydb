@@ -847,6 +847,19 @@ protected:
                 EApiKey::SASL_AUTHENTICATE == apiKey);
     }
 
+    void HandleAuthorizeTicketResult(const TEvTicketParser::TEvAuthorizeTicketResult::TPtr& ev, const TActorContext& ctx) {
+        const TEvTicketParser::TEvAuthorizeTicketResult& result = *ev->Get();
+        if (result.Error) {
+            KAFKA_LOG_D("Authentication unsuccessful:" << result.Error.Message);
+        }
+        if (result.Token == nullptr) {
+            KAFKA_LOG_D("Empty token");
+        }
+        KAFKA_LOG_D("Authorization successful");
+        if (!DoRead(ctx)) {
+            return;
+        }
+    }
 
     void HandleConnected(TEvPollerReady::TPtr event, const TActorContext& ctx) {
         if (event->Get()->Read) {
@@ -860,6 +873,7 @@ protected:
                         Send(NKikimr::MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket(clientCert));
                     }
                 }
+
 
                 if (!DoRead(ctx)) {
                     return;
@@ -926,6 +940,7 @@ protected:
             HFunc(TEvKafka::TEvAuthResult, Handle);
             HFunc(TEvKafka::TEvReadSessionInfo, Handle);
             HFunc(TEvKafka::TEvHandshakeResult, Handle);
+            HFunc(NKikimr::TEvTicketParser::TEvAuthorizeTicketResult, HandleAuthorizeTicketResult);
             sFunc(TEvKafka::TEvKillReadSession, HandleKillReadSession);
             sFunc(NActors::TEvents::TEvPoison, PassAway);
             default:

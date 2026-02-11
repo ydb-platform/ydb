@@ -218,23 +218,6 @@ void TMVP::TryGetStartupOptionsFromConfig(
             startupOptions.HttpsPort = server["https_port"].as<ui16>(0);
         }
     }
-
-    if (startupOptions.HttpPort > 0) {
-        startupOptions.Http = true;
-    }
-    if (startupOptions.HttpsPort > 0 || !startupOptions.SslCertificateFile.empty()) {
-        startupOptions.Https = true;
-    }
-    if (!startupOptions.Http && !startupOptions.Https) {
-        startupOptions.Http = true;
-    }
-
-    if (startupOptions.HttpPort == 0) {
-        startupOptions.HttpPort = 8788;
-    }
-    if (startupOptions.HttpsPort == 0) {
-        startupOptions.HttpsPort = 8789;
-    }
 }
 
 THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup(int argc, char** argv) {
@@ -276,6 +259,23 @@ THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup(int argc, char**
 
     if (startupOptions.Mlock) {
         LockAllMemory(LockCurrentMemory);
+    }
+
+    if (startupOptions.HttpPort > 0) {
+        startupOptions.Http = true;
+    }
+    if (startupOptions.HttpsPort > 0 || !startupOptions.SslCertificateFile.empty()) {
+        startupOptions.Https = true;
+    }
+    if (!startupOptions.Http && !startupOptions.Https) {
+        startupOptions.Http = true;
+    }
+
+    if (startupOptions.HttpPort == 0) {
+        startupOptions.HttpPort = 8788;
+    }
+    if (startupOptions.HttpsPort == 0) {
+        startupOptions.HttpsPort = 8789;
     }
 
     if (!startupOptions.YdbTokenFile.empty()) {

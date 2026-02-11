@@ -1,6 +1,10 @@
 #pragma once
 
 #include <ydb/library/actors/testlib/test_runtime.h>
+#include <util/generic/string.h>
+
+#include <algorithm>
+#include <cstring>
 
 template <typename HttpType>
 void EatWholeString(TIntrusivePtr<HttpType>& request, const TString& data) {

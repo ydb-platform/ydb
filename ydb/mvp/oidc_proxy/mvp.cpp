@@ -271,22 +271,6 @@ void TMVP::TryGetStartupOptionsFromConfig(
         }
     }
 
-    if (startupOptions.HttpPort > 0) {
-        startupOptions.Http = true;
-    }
-    if (startupOptions.HttpsPort > 0 || !startupOptions.SslCertificateFile.empty()) {
-        startupOptions.Https = true;
-    }
-    if (!startupOptions.Http && !startupOptions.Https) {
-        startupOptions.Http = true;
-    }
-    if (startupOptions.HttpPort == 0) {
-        startupOptions.HttpPort = DefaultHttpPort;
-    }
-    if (startupOptions.HttpsPort == 0) {
-        startupOptions.HttpsPort = DefaultHttpsPort;
-    }
-
     if (generic["access_service_type"]) {
         auto accessServiceTypeStr = TString(generic["access_service_type"].as<std::string>(""));
         if (!NMvp::EAccessServiceType_Parse(to_lower(accessServiceTypeStr), &OpenIdConnectSettings.AccessServiceType)) {
@@ -322,6 +306,22 @@ THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup(int argc, char**
 
     if (startupOptions.Mlock) {
         LockAllMemory(LockCurrentMemory);
+    }
+
+    if (startupOptions.HttpPort > 0) {
+        startupOptions.Http = true;
+    }
+    if (startupOptions.HttpsPort > 0 || !startupOptions.SslCertificateFile.empty()) {
+        startupOptions.Https = true;
+    }
+    if (!startupOptions.Http && !startupOptions.Https) {
+        startupOptions.Http = true;
+    }
+    if (startupOptions.HttpPort == 0) {
+        startupOptions.HttpPort = DefaultHttpPort;
+    }
+    if (startupOptions.HttpsPort == 0) {
+        startupOptions.HttpsPort = DefaultHttpsPort;
     }
 
     NMvp::TTokensConfig tokens;

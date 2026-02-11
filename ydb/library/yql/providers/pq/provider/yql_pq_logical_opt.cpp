@@ -210,17 +210,6 @@ public:
             GetUsedWatermarkColumnNames(watermark, usedColumnNames);
         }
 
-        TStringBuilder log;
-        log << TInstant::Now() << " [TODO] PQ COLUMN NAMES: {";
-        for (bool isFirst = true; const auto& name : usedColumnNames) {
-            if (!std::exchange(isFirst, false)) {
-                log << ", ";
-            }
-            log << name;
-        }
-        log << "}\n";
-        Cerr << log;
-
         const TStructExprType* inputRowType = pqTopic.RowSpec().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
         const TStructExprType* outputRowType = node.Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
         if (outputRowType->GetSize() == 0 && inputRowType->GetSize() > 0) {

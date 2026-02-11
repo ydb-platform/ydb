@@ -4704,19 +4704,17 @@ Y_UNIT_TEST(AddFullTextFlatIndexWithTruncate2) {
         }
     };
 
-    auto verifyIndexWorksCorrectly = [&](int count){
-        Cerr << "========================================================= begin verifyIndexWorksCorrectly " << count << Endl;
+    auto verifyIndexWorksCorrectly = [&](){
         retryableSelect();
         UpsertSomeTexts(db);
         retryableSelect();
-        Cerr << "========================================================= end verifyIndexWorksCorrectly " << count << Endl;
     };
 
-    verifyIndexWorksCorrectly(-1);
+    verifyIndexWorksCorrectly();
 
     for (size_t tryIndex = 0; tryIndex < 5; ++tryIndex) {
         TruncateTable(db);
-        verifyIndexWorksCorrectly(tryIndex);
+        verifyIndexWorksCorrectly();
     }
 }
 

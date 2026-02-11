@@ -1,11 +1,10 @@
 import logging
+import itertools
 
 from hamcrest import assert_that, equal_to
 
 from ydb.tests.oss.ydb_sdk_import import ydb
 from ydb.tests.library.harness.util import LogLevels
-
-logger = logging.getLogger(__name__)
 
 CLUSTER_CONFIG = dict(
     additional_log_configs={
@@ -16,17 +15,14 @@ CLUSTER_CONFIG = dict(
 )
 
 
-def test_truncate_table_with_fulltext_index(ydb_cluster, ydb_database, ydb_client):
-    logger.info("Starting AddFullTextFlatIndexWithTruncate2 Python version")
-
+def test_truncate_table_with_fulltext_index_table_service(ydb_cluster, ydb_database, ydb_client):
     driver = ydb_client(ydb_database)
     driver.wait(timeout=10)
 
     with ydb.SessionPool(driver) as session_pool:
         with session_pool.checkout() as session:
-            logger.info("Creating table")
             session.execute_scheme('''
-                CREATE TABLE `/Root/test_truncate_table_with_fulltext_index/Texts` (
+                CREATE TABLE `Texts` (
                     Key Uint64,
                     Text String,
                     Data String,
@@ -34,66 +30,52 @@ def test_truncate_table_with_fulltext_index(ydb_cluster, ydb_database, ydb_clien
                 );
             ''')
 
-            logger.info("Adding fulltext index")
             session.execute_scheme('''
-                ALTER TABLE `/Root/test_truncate_table_with_fulltext_index/Texts` ADD INDEX fulltext_idx
+                ALTER TABLE `Texts` ADD INDEX fulltext_idx
                     GLOBAL USING fulltext_plain
                     ON (Text)
                     WITH (tokenizer=standard, use_filter_lowercase=true)
             ''')
 
             def upsert_some_texts():
-                logger.info("Upserting some texts")
                 session.transaction().execute('''
-                    UPSERT INTO `/Root/test_truncate_table_with_fulltext_index/Texts` (Key, Text, Data) VALUES
+                    UPSERT INTO `Texts` (Key, Text, Data) VALUES
                         (100, "Cats love cats.", "cats data"),
                         (200, "Dogs love foxes.", "dogs data")
                 ''', commit_tx=True)
 
             def select_empty_results():
-                logger.info("Selecting empty results")
                 result = session.transaction().execute('''
                     SELECT `Key`, `Text`
-                    FROM `/Root/test_truncate_table_with_fulltext_index/Texts` VIEW `fulltext_idx`
+                    FROM `Texts` VIEW `fulltext_idx`
                     WHERE FulltextMatch(`Text`, "404 not found")
                     ORDER BY `Key`;
                 ''', commit_tx=True)
                 assert_that(len(result[0].rows), equal_to(0))
 
             def truncate_table():
-                logger.info("Truncating table")
                 session.execute_scheme('''
-                    TRUNCATE TABLE `/Root/test_truncate_table_with_fulltext_index/Texts`;
+                    TRUNCATE TABLE `Texts`;
                 ''')
 
-            def verify_index_works_correctly(count):
-                logger.info(f"========== begin verifyIndexWorksCorrectly {count} ==========")
+            def verify_index_works_correctly():
                 select_empty_results()
                 upsert_some_texts()
                 select_empty_results()
-                logger.info(f"========== end verifyIndexWorksCorrectly {count} ==========")
 
-            # Initial verification
-            verify_index_works_correctly(-1)
+            verify_index_works_correctly()
 
-            # Test cycle: truncate and verify 5 times
-            for try_index in range(5):
-                logger.info(f"========== TRUNCATE cycle {try_index} ==========")
+            for _ in range(5):
                 truncate_table()
-                verify_index_works_correctly(try_index)
-
-    logger.info("Test completed successfully")
+                verify_index_works_correctly()
 
 def test_truncate_table_with_fulltext_index_with_query_service(ydb_cluster, ydb_database, ydb_client):
-    logger.info("Starting AddFullTextFlatIndexWithTruncate2 Python version")
-
     driver = ydb_client(ydb_database)
     driver.wait(timeout=10)
 
     with ydb.QuerySessionPool(driver) as session_pool:
-        logger.info("Creating table")
         session_pool.execute_with_retries('''
-            CREATE TABLE `/Root/test_truncate_table_with_fulltext_index_with_query_service/Texts` (
+            CREATE TABLE `Texts` (
                 Key Uint64,
                 Text String,
                 Data String,
@@ -101,53 +83,98 @@ def test_truncate_table_with_fulltext_index_with_query_service(ydb_cluster, ydb_
             );
         ''')
 
-        logger.info("Adding fulltext index")
         session_pool.execute_with_retries('''
-            ALTER TABLE `/Root/test_truncate_table_with_fulltext_index_with_query_service/Texts` ADD INDEX fulltext_idx
+            ALTER TABLE `Texts` ADD INDEX fulltext_idx
                 GLOBAL USING fulltext_plain
                 ON (Text)
                 WITH (tokenizer=standard, use_filter_lowercase=true)
         ''')
 
         def upsert_some_texts():
-            logger.info("Upserting some texts")
             session_pool.execute_with_retries('''
-                UPSERT INTO `/Root/test_truncate_table_with_fulltext_index_with_query_service/Texts` (Key, Text, Data) VALUES
+                UPSERT INTO `Texts` (Key, Text, Data) VALUES
                     (100, "Cats love cats.", "cats data"),
                     (200, "Dogs love foxes.", "dogs data")
             ''')
 
         def select_empty_results():
-            logger.info("Selecting empty results")
             result = session_pool.execute_with_retries('''
                 SELECT `Key`, `Text`
-                FROM `/Root/test_truncate_table_with_fulltext_index_with_query_service/Texts` VIEW `fulltext_idx`
+                FROM `Texts` VIEW `fulltext_idx`
                 WHERE FulltextMatch(`Text`, "404 not found")
                 ORDER BY `Key`;
             ''')
             assert_that(len(result[0].rows), equal_to(0))
 
         def truncate_table():
-            logger.info("Truncating table")
             session_pool.execute_with_retries('''
-                TRUNCATE TABLE `/Root/test_truncate_table_with_fulltext_index_with_query_service/Texts`;
+                TRUNCATE TABLE `Texts`;
             ''')
 
-        def verify_index_works_correctly(count):
-            logger.info(f"========== begin verifyIndexWorksCorrectly {count} ==========")
+        def verify_index_works_correctly():
             select_empty_results()
             upsert_some_texts()
             select_empty_results()
-            logger.info(f"========== end verifyIndexWorksCorrectly {count} ==========")
 
-        # Initial verification
+        verify_index_works_correctly()
+
+        for _ in range(5):
+            truncate_table()
+            verify_index_works_correctly()
+
+def test_truncate_table_with_fulltext_index_with_query_service_many_sessions(ydb_cluster, ydb_database, ydb_client):
+    driver = ydb_client(ydb_database)
+    driver.wait(timeout=10)
+
+    with ydb.QuerySessionPool(driver) as session_pool:
+        session_pool.execute_with_retries('''
+            CREATE TABLE `Texts` (
+                Key Uint64,
+                Text String,
+                Data String,
+                PRIMARY KEY (Key)
+            );
+        ''')
+
+    with ydb.QuerySessionPool(driver) as session_pool:
+        session_pool.execute_with_retries('''
+            ALTER TABLE `Texts` ADD INDEX fulltext_idx
+                GLOBAL USING fulltext_plain
+                ON (Text)
+                WITH (tokenizer=standard, use_filter_lowercase=true)
+        ''')
+
+        def upsert_some_texts():
+            with ydb.QuerySessionPool(driver) as session_pool:
+                session_pool.execute_with_retries('''
+                    UPSERT INTO `Texts` (Key, Text, Data) VALUES
+                        (100, "Cats love cats.", "cats data"),
+                        (200, "Dogs love foxes.", "dogs data")
+                ''')
+
+        def select_empty_results():
+            with ydb.QuerySessionPool(driver) as session_pool:
+                result = session_pool.execute_with_retries('''
+                    SELECT `Key`, `Text`
+                    FROM `Texts` VIEW `fulltext_idx`
+                    WHERE FulltextMatch(`Text`, "404 not found")
+                    ORDER BY `Key`;
+                ''')
+                assert_that(len(result[0].rows), equal_to(0))
+
+        def truncate_table():
+            with ydb.QuerySessionPool(driver) as session_pool:
+                session_pool.execute_with_retries('''
+                    TRUNCATE TABLE `Texts`;
+                ''')
+
+        def verify_index_works_correctly():
+            select_empty_results()
+            upsert_some_texts()
+            select_empty_results()
+
         verify_index_works_correctly(-1)
 
-        # Test cycle: truncate and verify 5 times
-        for try_index in range(5):
-            logger.info(f"========== TRUNCATE cycle {try_index} ==========")
+        for _ in range(5):
             truncate_table()
-            verify_index_works_correctly(try_index)
-
-    logger.info("Test completed successfully")
-
+            verify_index_works_correctly()

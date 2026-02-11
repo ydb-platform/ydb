@@ -2154,7 +2154,16 @@ protected:
     void HandleCheckIdleness(const TEvPrivate::TEvCheckIdleness::TPtr& ev) {
         auto checkTime = Max(ev->Get()->CheckTime, TInstant::Now());
         if (WatermarksTracker.ProcessIdlenessCheck(checkTime)) {
-            auto idleWatermark = WatermarksTracker.HandleIdleness(checkTime);
+            TMaybe<TInstant> idleWatermark;
+            if constexpr (!std::is_same_v<TDerived, TDqAsyncComputeActor>) {
+                for (const auto& [id, _]: InputTransformsMap) {
+                    auto transformWatermarksTracker = GetInputTransformWatermarksTracker(id);
+                    if (transformWatermarksTracker) {
+                        idleWatermark = Max(idleWatermark, transformWatermarksTracker->HandleIdleness(checkTime));
+                    }
+                }
+            }
+            idleWatermark = Max(idleWatermark, WatermarksTracker.HandleIdleness(checkTime));
             if (idleWatermark) {
                 CA_LOG_T("Idleness watermark " << idleWatermark);
                 ResumeExecution(EResumeSource::CAWatermarkIdleness);
@@ -2164,7 +2173,23 @@ protected:
     }
 
     void ScheduleIdlenessCheck() {
-        if (auto checkTime = WatermarksTracker.PrepareIdlenessCheck()) {
+        TMaybe<TInstant> checkTime = WatermarksTracker.GetNextIdlenessCheckAt();
+        if constexpr (!std::is_same_v<TDerived, TDqAsyncComputeActor>) {
+            for (const auto& [id, _]: InputTransformsMap) {
+                auto transformWatermarksTracker = GetInputTransformWatermarksTracker(id);
+                if (transformWatermarksTracker) {
+                    auto transformCheckTime = transformWatermarksTracker->GetNextIdlenessCheckAt();
+                    if (transformCheckTime) {
+                        if (checkTime) {
+                            checkTime = Min(*checkTime, *transformCheckTime);
+                        } else {
+                            checkTime = *transformCheckTime;
+                        }
+                    }
+                }
+            }
+        }
+        if (checkTime && WatermarksTracker.AddScheduledIdlenessCheck(*checkTime)) {
             CA_LOG_T("Schedule next idleness check at " << checkTime);
             this->Schedule(*checkTime, new TEvPrivate::TEvCheckIdleness(*checkTime));
         }

@@ -19,6 +19,7 @@ PEERDIR(
 )
 
 SRCS(
+    blobstorage_hullcompaction_state_ut.cpp
     blobstorage_hullcompactdeferredqueue_ut.cpp
     blobstorage_readbatch_ut.cpp
     hullop_delayedresp_ut.cpp

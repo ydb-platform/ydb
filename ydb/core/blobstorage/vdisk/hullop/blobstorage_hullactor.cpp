@@ -1,6 +1,7 @@
 #include "blobstorage_hullactor.h"
 #include "blobstorage_hullcommit.h"
 #include "blobstorage_hullcompact.h"
+#include "blobstorage_hullcompaction_state.h"
 #include "blobstorage_buildslice.h"
 #include "hullop_compactfreshappendix.h"
 #include <ydb/core/blobstorage/vdisk/hulldb/compstrat/hulldb_compstrat_selector.h>
@@ -9,83 +10,6 @@
 #include <ydb/core/blobstorage/vdisk/hulldb/bulksst_add/hulldb_fullsyncsst_add.h>
 
 namespace NKikimr {
-
-    ////////////////////////////////////////////////////////////////////////////
-    // TFullCompactionState
-    ////////////////////////////////////////////////////////////////////////////
-    struct TFullCompactionState {
-        class TRateLimitter {
-        public:
-            TRateLimitter(TIntrusivePtr<TVDiskConfig> config)
-                : Config(config)
-            {}
-
-            bool IsEnable() const {
-                if (!(ui32) Config->HullCompFullCompPeriodSec) {
-                    return true;
-                }
-                return (TActivationContext::Now() - LastUpdateTime).Seconds() > (ui32) Config->HullCompFullCompPeriodSec;
-            }
-
-            void Update() {
-                LastUpdateTime = TActivationContext::Now();
-            }
-
-        private:
-            TInstant LastUpdateTime = TInstant::Zero();
-            TIntrusivePtr<TVDiskConfig> Config;
-        };
-
-        TRateLimitter RateLimitter;
-        bool Force = false;
-
-        struct TCompactionRequest {
-            EHullDbType Type = EHullDbType::Max;
-            ui64 RequestId = 0;
-            TActorId Recipient;
-        };
-        std::deque<TCompactionRequest> Requests;
-        std::optional<NHullComp::TFullCompactionAttrs> FullCompactionAttrs;
-
-        TFullCompactionState(TIntrusivePtr<TVDiskConfig> config) : RateLimitter(config) {}
-
-        bool Enabled() const {
-            return bool(FullCompactionAttrs) && (Force || RateLimitter.IsEnable());
-        }
-
-        void FullCompactionTask(ui64 fullCompactionLsn, TInstant now, EHullDbType type, ui64 requestId,
-                const TActorId &recipient, THashSet<ui64> tablesToCompact, bool force)
-        {
-            FullCompactionAttrs.emplace(fullCompactionLsn, now, std::move(tablesToCompact));
-            Requests.push_back({type, requestId, recipient});
-            if (force) {
-                Force = true;
-            }
-        }
-
-        void Compacted(const TActorContext& ctx, const std::pair<std::optional<NHullComp::TFullCompactionAttrs>, bool>& info) {
-            if (Enabled() && FullCompactionAttrs == info.first && info.second) {
-                // full compaction finished
-                for (const auto &x : Requests) {
-                    ctx.Send(x.Recipient, new TEvHullCompactResult(x.Type, x.RequestId));
-                }
-                Requests.clear();
-                FullCompactionAttrs.reset();
-                RateLimitter.Update();
-                Force = false;
-            }
-        }
-
-        // returns FullCompactionAttrs for Level Compaction Selector
-        // if Fresh segment before FullCompactionAttrs->FullCompationLsn has not been written to sst yet,
-        // there is no profit in starting LevelCompaction, so we return nullopt
-        template <class TRTCtx>
-        std::optional<NHullComp::TFullCompactionAttrs> GetFullCompactionAttrsForLevelCompactionSelector(const TRTCtx &rtCtx) {
-            return Enabled() && rtCtx->LevelIndex->IsWrittenToSstBeforeLsn(FullCompactionAttrs->FullCompactionLsn)
-                ? FullCompactionAttrs
-                : std::nullopt;
-        }
-    };
 
     ////////////////////////////////////////////////////////////////////////////
     // FRESH compaction
@@ -300,7 +224,10 @@ namespace NKikimr {
             switch (action) {
                 case NHullComp::ActNothing: {
                     // notify compaction completed
-                    FullCompactionState.Compacted(ctx, CompactionTask->FullCompactionInfo);
+                    const auto completed = FullCompactionState.Compacted(CompactionTask->FullCompactionInfo, ctx.Now());
+                    for (const auto &x : completed) {
+                        ctx.Send(x.Recipient, new TEvHullCompactResult(x.Type, x.RequestId));
+                    }
                     // nothing to merge, try later
                     ScheduleCompactionWakeup(ctx);
                     // for now, update storage ratio as it may have changed
@@ -618,7 +545,10 @@ namespace NKikimr {
                         HullDs->HullCtx->VCtx->VDiskLogPrefix);
                     RTCtx->LevelIndex->SetCompState(TLevelIndexBase::StateNoComp);
                     RTCtx->LevelIndex->PrevEntryPointLsn = ui64(-1);
-                    FullCompactionState.Compacted(ctx, CompactionTask->FullCompactionInfo);
+                    const auto completed = FullCompactionState.Compacted(CompactionTask->FullCompactionInfo, ctx.Now());
+                    for (const auto &x : completed) {
+                        ctx.Send(x.Recipient, new TEvHullCompactResult(x.Type, x.RequestId));
+                    }
                     CompactionTask->Clear();
                     ScheduleCompaction(ctx);
                     break;

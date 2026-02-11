@@ -879,7 +879,7 @@ TStatus AnnotateUpdateRows(const TExprNode::TPtr& node, TExprContext& ctx, const
         return TStatus::Error;
     }
 
-    if (!EnsureMaxArgsCount(*node, 5, ctx)) {
+    if (!EnsureMaxArgsCount(*node, 6, ctx)) {
         return TStatus::Error;
     }
 

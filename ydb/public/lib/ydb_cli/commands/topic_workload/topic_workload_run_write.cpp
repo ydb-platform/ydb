@@ -117,6 +117,14 @@ void TCommandWorkloadTopicRunWrite::Config(TConfig& config)
         .DefaultValue(0)
         .Hidden()
         .StoreResult(&Scenario.ProducerKeysCount);
+    config.Opts->AddLongOption("configure-consumers", "The number of consumers to change the topic configuration. "
+                                                      "If the value is greater than 0, the program will continuously "
+                                                      "change the topic configuration.")
+        .Optional()
+        .Hidden()
+        .DefaultValue(0)
+        .StoreResult(&Scenario.ConfigConsumerCount);
+
     config.IsNetworkIntensive = true;
 }
 

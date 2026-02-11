@@ -534,11 +534,6 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
                 PutImpl.Blobs[blobIdx].Recipient, PutImpl.Blobs[blobIdx].Cookie, false);
             PutImpl.Blobs[blobIdx].Replied = true;
         }
-        if (const TNamedSpan* span = Span.GetRetroSpanPtr()) {
-            if (!RandomNumber<ui32>(100)) {
-                NRetroTracing::DemandTrace(span->GetTraceId());
-            }
-        }
     }
 
     TString BlobIdSequenceToString() const {

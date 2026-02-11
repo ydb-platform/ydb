@@ -1,6 +1,6 @@
 #include "logging.h"
 #include "service.h"
-#include "transfer_reader_stats.h"
+#include "topic_reader_stats.h"
 #include "worker.h"
 
 #include <ydb/core/base/appdata.h>

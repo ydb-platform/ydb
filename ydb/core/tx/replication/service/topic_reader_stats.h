@@ -2,7 +2,7 @@
 
 namespace NKikimr::NReplication {
 
-struct TTransferReadStats {
+struct ReplicationTopicReadStats {
     TDuration ReadTime = TDuration::Zero();
     TDuration DecompressCpu = TDuration::Zero();
     i64 Partition = -1;

@@ -1,6 +1,6 @@
 #include "logging.h"
 #include "topic_reader.h"
-#include "transfer_reader_stats.h"
+#include "topic_reader_stats.h"
 #include "worker.h"
 
 #include <ydb/core/base/appdata.h>
@@ -89,7 +89,7 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
         auto& readResult = requestData.DataEv->Get()->Result;
         for (auto& msg : readResult.Messages) {
             bool compressed = (msg.GetCodec() != NYdb::NTopic::ECodec::RAW);
-            if (compressed && AppData()->FeatureFlags.GetTransferInternalDataDecompression()) {
+            if (compressed) {
                 if (!requestData.DecompressionDone && Settings.ReportStats_) {
                     SendOperationChange(EWorkerOperation::DECOMPRESS);
                 }
@@ -124,7 +124,7 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
         auto* event = new TEvWorker::TEvData(result.PartitionId, ToString(result.PartitionId), std::move(result.Messages));
 
         if (Settings.ReportStats_) {
-            event->Stats = std::make_unique<TWorkerDetailedStats>(EWorkerOperation::NONE, std::make_unique<TTransferReadStats>(),
+            event->Stats = std::make_unique<TWorkerDetailedStats>(EWorkerOperation::NONE, std::make_unique<ReplicationTopicReadStats>(),
                     nullptr);
             event->Stats->ReaderStats->ReadTime = response.ReadDuration;
             event->Stats->ReaderStats->DecompressCpu = response.DecompressionDone
@@ -241,7 +241,7 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
 
     void SendError() {
         auto* ev = TEvWorker::TEvStatus::FromOperation(EWorkerOperation::NONE);
-        ev->DetailedStats->ReaderStats = std::make_unique<TTransferReadStats>();
+        ev->DetailedStats->ReaderStats = std::make_unique<ReplicationTopicReadStats>();
         ev->DetailedStats->ReaderStats->Errors = 1;
         Send(Worker, ev);
     }

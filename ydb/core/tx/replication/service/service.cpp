@@ -2,7 +2,7 @@
 #include "service.h"
 #include "table_writer.h"
 #include "topic_reader.h"
-#include "transfer_reader_stats.h"
+#include "topic_reader_stats.h"
 #include "transfer_writer_factory.h"
 #include "worker.h"
 
@@ -300,7 +300,9 @@ public:
     void SendWorkersStats(IActorOps* ops) {
         for (auto& [id, values] : PendingStatsValues) {
             auto workerIter = Workers.find(id);
-            Y_ABORT_UNLESS(!workerIter.IsEnd());
+            if (workerIter.IsEnd()) {
+                continue;
+            }
             workerIter->second.ApplyStats({}); // Update timestamps;
             TVector<std::pair<ui64, i64>> valuePairs;
 
@@ -855,14 +857,14 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
             Schedule(StatsWakeupInterval, new TEvWorker::TEvStatsWakeup());
             StatsWakeupScheduled = true;
         }
-        if (!LastStatsUpdate || LastStatsUpdate + StatsWakeupInterval <= Now()) {
+        if (!NextStatsUpdate || NextStatsUpdate <= Now()) {
             for (auto sessionId : SessionsToWake) {
                 auto sessionIter = Sessions.find(sessionId);
                 if (sessionIter != Sessions.end()) {
                     sessionIter->second.SendWorkersStats(this);
                 }
             }
-            LastStatsUpdate = Now();
+            NextStatsUpdate = Now() + StatsWakeupInterval;
         }
     }
 
@@ -1000,7 +1002,7 @@ private:
     mutable TMaybe<TActorId> CompilationService;
 
     bool StatsWakeupScheduled = false;
-    TInstant LastStatsUpdate = TInstant::Zero();
+    TInstant NextStatsUpdate = TInstant::Zero();
     constexpr const static TDuration StatsWakeupInterval = TDuration::Seconds(1);
     THashSet<ui64> SessionsToWake;
 

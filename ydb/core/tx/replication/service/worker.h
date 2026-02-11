@@ -11,7 +11,7 @@
 namespace NKikimr::NReplication {
 
 class TTopicMessage;
-struct TTransferReadStats;
+struct ReplicationTopicReadStats;
 struct TTransferWriteStats;
 
 enum class EWorkerOperation {
@@ -24,7 +24,7 @@ enum class EWorkerOperation {
 
 struct TWorkerDetailedStats {
     std::optional<EWorkerOperation> CurrentOperation;
-    std::unique_ptr<TTransferReadStats> ReaderStats;
+    std::unique_ptr<ReplicationTopicReadStats> ReaderStats;
     std::unique_ptr<TTransferWriteStats> WriterStats;
 };
 

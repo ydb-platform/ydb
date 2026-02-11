@@ -1,7 +1,6 @@
 #pragma once
 
 #include <ydb/core/transfer/ut/common/utils.h>
-#include <library/cpp/json/json_value.h>
 
 using namespace NReplicationTest;
 

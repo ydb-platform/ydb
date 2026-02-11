@@ -273,7 +273,7 @@ namespace NMiniKQL {
                 const IFunctionRegistry* functionRegistry,
                 IRandomProvider& randomProvider,
                 ITimeProvider& timeProvider,
-                const NACLib::TUserContext::TPtr userCtx = new NACLib::TUserContext(BUILTIN_ACL_CDC_WITHOUT_USER_SID, ""),
+                const NACLib::TUserContext::TPtr& userCtx = new NACLib::TUserContext(BUILTIN_ACL_CDC_WITHOUT_USER_SID, ""),
                 IEngineFlatHost* host = nullptr,
                 const TAlignedPagePoolCounters& allocCounters = TAlignedPagePoolCounters()
                 )

@@ -368,7 +368,7 @@ public:
         const IKqpTransactionManagerPtr& txManager,
         const TActorId sessionActorId,
         TIntrusivePtr<TKqpCounters> counters,
-        NACLib::TUserContext::TPtr userCtx)
+        const NACLib::TUserContext::TPtr& userCtx)
         : MessageSettings(GetWriteActorSettings())
         , Alloc(alloc)
         , MvccSnapshot(mvccSnapshot)
@@ -2295,7 +2295,7 @@ public:
         NKikimrKqp::TKqpTableSinkSettings&& settings,
         NYql::NDq::TDqAsyncIoFactory::TSinkArguments&& args,
         TIntrusivePtr<TKqpCounters> counters,
-        NACLib::TUserContext::TPtr userCtx)
+        const NACLib::TUserContext::TPtr& userCtx)
         : LogPrefix(TStringBuilder() << "TxId: " << args.TxId << ", task: " << args.TaskId << ". ")
         , Settings(std::move(settings))
         , MessageSettings(GetWriteActorSettings())
@@ -4875,7 +4875,7 @@ public:
         NKikimrKqp::TKqpTableSinkSettings&& settings,
         NYql::NDq::TDqAsyncIoFactory::TSinkArguments&& args,
         TIntrusivePtr<TKqpCounters> counters,
-        NACLib::TUserContext::TPtr userCtx)
+        const NACLib::TUserContext::TPtr& userCtx)
         : LogPrefix(TStringBuilder() << "TxId: " << args.TxId << ", task: " << args.TaskId << ". ")
         , Settings(std::move(settings))
         , MessageSettings(GetWriteActorSettings())
@@ -4891,8 +4891,9 @@ public:
             Settings.GetTable().GetVersion())
         , ForwardWriteActorSpan(TWilsonKqp::ForwardWriteActor, NWilson::TTraceId(args.TraceId), "ForwardWriteActor",
                 NWilson::EFlags::AUTO_END)
-        , UserCtx(userCtx)
+        // , UserCtx(userCtx)
     {
+        Y_UNUSED(userCtx);
         EgressStats.Level = args.StatsLevel;
 
         TVector<NKikimrKqp::TKqpColumnMetadataProto> columnsMetadata(
@@ -5126,7 +5127,7 @@ private:
 
     TWriteToken WriteToken;
     NWilson::TSpan ForwardWriteActorSpan;
-    NACLib::TUserContext::TPtr UserCtx;
+    // NACLib::TUserContext::TPtr UserCtx;
 };
 
 NActors::IActor* CreateKqpBufferWriterActor(TKqpBufferWriterSettings&& settings) {

@@ -56,9 +56,10 @@ public:
 
     bool OnUpdate(const TTableId& tableId, ui32 localTid, NTable::ERowOp rop,
         TArrayRef<const TRawTypeValue> key, TArrayRef<const NTable::TUpdateOp> updates,
-        const TRowVersion& writeVersion, NACLib::TUserContext::TPtr userCtx) override
+        const TRowVersion& writeVersion, const NACLib::TUserContext::TPtr& userCtx) override
     {
         Y_UNUSED(localTid);
+
         WriteVersion = writeVersion;
         WriteTxId = 0;
         for (auto& collector : Underlying) {
@@ -72,7 +73,7 @@ public:
 
     bool OnUpdateTx(const TTableId& tableId, ui32 localTid, NTable::ERowOp rop,
         TArrayRef<const TRawTypeValue> key, TArrayRef<const NTable::TUpdateOp> updates,
-        ui64 writeTxId, NACLib::TUserContext::TPtr userCtx) override
+        ui64 writeTxId, const NACLib::TUserContext::TPtr& userCtx) override
     {
         Y_UNUSED(localTid);
         WriteTxId = writeTxId;
@@ -116,7 +117,7 @@ public:
         const TPathId& pathId,
         TChangeRecord::EKind kind,
         const TDataChange& body,
-        NACLib::TUserContext::TPtr userCtx) override {
+        const NACLib::TUserContext::TPtr& userCtx) override {
         NIceDb::TNiceDb db(Db);
 
         Y_ENSURE(Self->IsUserTable(tableId), "Unknown table: " << tableId);
@@ -138,6 +139,7 @@ public:
                 .WithLockOffset(lockOffset);
         }
 
+        Y_UNUSED(userCtx);
         auto recordPtr = builder
             .WithPathId(pathId)
             .WithTableId(tableId.PathId)

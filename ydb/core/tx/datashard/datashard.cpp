@@ -895,16 +895,23 @@ void TDataShard::PersistChangeRecord(NIceDb::TNiceDb& db, const TChangeRecord& r
             NIceDb::TUpdate<Schema::ChangeRecords::TableOwnerId>(record.GetTableId().OwnerId),
             NIceDb::TUpdate<Schema::ChangeRecords::TablePathId>(record.GetTableId().LocalPathId));
         
-        TMaybe<TString> userSID;
-        TMaybe<TString> userTraceCtx;
+        TString userSID;
+        TString userTraceId;
         
         auto userCtx = record.GetUserCtx();
+        if (userCtx!=nullptr) {
+            userSID = userCtx->UserSID;
+            userTraceId = userCtx->UserTraceId;
+        } else {
+            userSID = BUILTIN_ACL_CDC_WITHOUT_USER_SID;
+        }
+
         db.Table<Schema::ChangeRecordDetails>().Key(record.GetOrder()).Update(
             NIceDb::TUpdate<Schema::ChangeRecordDetails::Kind>(record.GetKind()),
             NIceDb::TUpdate<Schema::ChangeRecordDetails::Body>(record.GetBody()),
             NIceDb::TUpdate<Schema::ChangeRecordDetails::Source>(record.GetSource()),
-            NIceDb::TUpdate<Schema::ChangeRecordDetails::UserSID>(userCtx!=nullptr?userCtx->UserSID:BUILTIN_ACL_CDC_WITHOUT_USER_SID),
-            NIceDb::TUpdate<Schema::ChangeRecordDetails::UserTraceId>(userCtx!=nullptr?userCtx->UserTraceId:""));
+            NIceDb::TUpdate<Schema::ChangeRecordDetails::UserSID>(userSID),
+            NIceDb::TUpdate<Schema::ChangeRecordDetails::UserTraceId>(userTraceId));
 
         auto res = ChangesQueue.emplace(record.GetOrder(), record);
         Y_ENSURE(res.second, "Duplicate change record: " << record.GetOrder());

@@ -4,6 +4,25 @@
 
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 
+#if 0
+#include <filesystem>
+#include <fstream>
+
+namespace {
+std::mutex OutFileMutex;
+
+void WriteMyLog(const std::string& message)
+{
+    std::lock_guard lock(OutFileMutex);
+
+    const std::string filename{"/home/kseleznyov/dump.log"};
+    std::ofstream OutFile;
+    OutFile.open(filename, std::filesystem::exists(filename) ? std::ios_base::app : std::ios_base::out );
+    OutFile << message << std::endl;
+}
+}
+#endif
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -149,7 +168,7 @@ bool TCdcStreamChangeCollector::NeedToReadKeys() const {
 }
 
 bool TCdcStreamChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
-        TArrayRef<const TRawTypeValue> key, TArrayRef<const TUpdateOp> updates, NACLib::TUserContext::TPtr userCtx)
+        TArrayRef<const TRawTypeValue> key, TArrayRef<const TUpdateOp> updates, const NACLib::TUserContext::TPtr& userCtx)
 {
     Y_ENSURE(Self->IsUserTable(tableId), "Unknown table: " << tableId);
 
@@ -334,7 +353,7 @@ TRowState TCdcStreamChangeCollector::PatchState(const TRowState& oldState, ERowO
 
 void TCdcStreamChangeCollector::Persist(const TTableId& tableId, const TPathId& pathId, ERowOp rop,
         TArrayRef<const TRawTypeValue> key, TArrayRef<const TTag> keyTags, TArrayRef<const TUpdateOp> updates,
-        NACLib::TUserContext::TPtr userCtx)
+        const NACLib::TUserContext::TPtr& userCtx)
 {
     NKikimrChangeExchange::TDataChange body;
     Serialize(body, rop, key, keyTags, updates);
@@ -344,11 +363,46 @@ void TCdcStreamChangeCollector::Persist(const TTableId& tableId, const TPathId& 
 void TCdcStreamChangeCollector::Persist(const TTableId& tableId, const TPathId& pathId, ERowOp rop,
         TArrayRef<const TRawTypeValue> key, TArrayRef<const TTag> keyTags,
         const TRowState* oldState, const TRowState* newState, TArrayRef<const TTag> valueTags,
-        NACLib::TUserContext::TPtr userCtx)
+        const NACLib::TUserContext::TPtr& userCtx)
 {
+#if 0
+    // WriteMyLog("Start");
+    {
+        // WriteMyLog("userCtx1=" + std::to_string(reinterpret_cast<const NProtoBuf::uint64>(userCtx.Get())));
+        TString x = userCtx->UserSID;
+        TString y = userCtx->UserTraceId;
+        Y_UNUSED(x);
+        Y_UNUSED(y);
+    }
+
+    NKikimrChangeExchange::TDataChange body;
+    {
+        // WriteMyLog("userCtx2=" + std::to_string(reinterpret_cast<const NProtoBuf::uint64>(userCtx.Get())));
+        TString x = userCtx->UserSID;
+        TString y = userCtx->UserTraceId;
+        Y_UNUSED(x);
+        Y_UNUSED(y);
+    }
+    Serialize(body, rop, key, keyTags, oldState, newState, valueTags);
+
+    {
+        // WriteMyLog("userCtx3=" + std::to_string(reinterpret_cast<const NProtoBuf::uint64>(userCtx.Get())));
+        TString x = userCtx->UserSID;
+        TString y = userCtx->UserTraceId;
+        Y_UNUSED(x);
+        Y_UNUSED(y);
+    }
+    Sink.AddChange(tableId, pathId, TChangeRecord::EKind::CdcDataChange, body, userCtx);
+#else
+    TString userSID = userCtx->UserSID;
+    TString userTraceId = userCtx->UserTraceId;
+
     NKikimrChangeExchange::TDataChange body;
     Serialize(body, rop, key, keyTags, oldState, newState, valueTags);
-    Sink.AddChange(tableId, pathId, TChangeRecord::EKind::CdcDataChange, body, userCtx);
+    Sink.AddChange(tableId, pathId, TChangeRecord::EKind::CdcDataChange, body, 
+        new NACLib::TUserContext(userSID, userTraceId));
+
+#endif
 }
 
 } // NDataShard

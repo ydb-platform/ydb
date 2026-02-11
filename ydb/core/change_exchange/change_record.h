@@ -118,7 +118,7 @@ public:
         return static_cast<TSelf&>(*this);
     }
 
-    TSelf& WithUserCtx(NACLib::TUserContext::TPtr userCtx) {
+    TSelf& WithUserCtx(const NACLib::TUserContext::TPtr& userCtx) {
         GetRecord()->UserCtx = userCtx;
         return static_cast<TSelf&>(*this);
     }

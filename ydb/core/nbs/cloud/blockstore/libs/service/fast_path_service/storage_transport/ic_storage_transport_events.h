@@ -192,6 +192,40 @@ struct TEvICStorageTransportPrivate
         {}
     };
 
+    struct TSync
+    {
+        const NActors::TActorId ServiceId;
+        const NKikimr::NDDisk::TQueryCredentials Credentials;
+        const NKikimr::NDDisk::TBlockSelector Selector;
+        const ui64 Lsn;
+        const std::tuple<ui32, ui32, ui32> DDiskId;
+        const ui64 DDiskInstanceGuid;
+        NWilson::TTraceId TraceId;
+        const ui64 RequestId;
+        NThreading::TPromise<NKikimrBlobStorage::NDDisk::TEvSyncResult> Promise;
+
+        TSync(
+            const NActors::TActorId serviceId,
+            const NKikimr::NDDisk::TQueryCredentials credentials,
+            const NKikimr::NDDisk::TBlockSelector selector,
+            const ui64 lsn,
+            const std::tuple<ui32, ui32, ui32> ddiskId,
+            const ui64 ddiskInstanceGuid,
+            NWilson::TTraceId traceId,
+            const ui64 requestId,
+            NThreading::TPromise<NKikimrBlobStorage::NDDisk::TEvSyncResult> promise)
+            : ServiceId(serviceId)
+            , Credentials(credentials)
+            , Selector(selector)
+            , Lsn(lsn)
+            , DDiskId(ddiskId)
+            , DDiskInstanceGuid(ddiskInstanceGuid)
+            , TraceId(std::move(traceId))
+            , RequestId(requestId)
+            , Promise(std::move(promise))
+        {}
+    };
+
     enum EEvents
     {
         EvConnect,
@@ -200,6 +234,7 @@ struct TEvICStorageTransportPrivate
         EvErasePersistentBuffer,
         EvReadPersistentBuffer,
         EvRead,
+        EvSync,
     };
 
     using TEvConnect = TRequestEvent<
@@ -225,6 +260,10 @@ struct TEvICStorageTransportPrivate
     using TEvRead = TRequestEvent<
         TRead,
         EEvents::EvRead>;
+
+    using TEvSync = TRequestEvent<
+        TSync,
+        EEvents::EvSync>;
 };
 
 }   // namespace NYdb::NBS::NBlockStore

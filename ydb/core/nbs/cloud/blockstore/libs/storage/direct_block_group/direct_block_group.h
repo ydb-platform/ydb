@@ -147,6 +147,10 @@ private:
     void HandleReadResult(
         ui64 storageRequestId,
         const TEvent& result);
+
+    void HandleSyncResult(
+        ui64 storageRequestId,
+        const NKikimrBlobStorage::NDDisk::TEvSyncResult& result);
 };
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

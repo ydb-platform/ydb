@@ -216,30 +216,31 @@ void TDirectBlockGroup::ProcessFlushQueue()
         const auto& flushRequestHandler = FlushQueue.front();
         auto persistentBufferIndex = flushRequestHandler->GetPersistentBufferIndex();
         const auto& ddiskConnection = DDiskConnections[persistentBufferIndex];
+        const auto& persistentBufferConnection = PersistentBufferConnections[persistentBufferIndex];
 
         ++StorageRequestId;
 
         LOG_INFO_S(TActivationContext::AsActorContext(), NKikimrServices::NBS_PARTITION, "ProcessFlushQueue" << " requestId# " << StorageRequestId);
 
-        auto future = StorageTransport->FlushPersistentBuffer(
-            PersistentBufferConnections[persistentBufferIndex].GetServiceId(),
-            PersistentBufferConnections[persistentBufferIndex].Credentials,
+        auto future = StorageTransport->Sync(
+            ddiskConnection.GetServiceId(),
+            ddiskConnection.Credentials,
             NKikimr::NDDisk::TBlockSelector(
                 0,   // vChunkIndex
                 flushRequestHandler->GetStartOffset(),
                 flushRequestHandler->GetSize()),
             flushRequestHandler->GetLsn(),
             std::make_tuple(
-                ddiskConnection.DDiskId.NodeId,
-                ddiskConnection.DDiskId.PDiskId,
-                ddiskConnection.DDiskId.DDiskSlotId),
-            ddiskConnection.Credentials.DDiskInstanceGuid.value(),
+                persistentBufferConnection.DDiskId.NodeId,
+                persistentBufferConnection.DDiskId.PDiskId,
+                persistentBufferConnection.DDiskId.DDiskSlotId),
+            persistentBufferConnection.Credentials.DDiskInstanceGuid.value(),
             flushRequestHandler->Span.GetTraceId(),
             StorageRequestId);
 
         future.Subscribe([this, requestId = StorageRequestId](const auto& f) {
             const auto& result = f.GetValue();
-            HandleFlushPersistentBufferResult(requestId, result);
+            HandleSyncResult(requestId, result);
         });
 
         RequestHandlersByStorageRequestId[StorageRequestId] = flushRequestHandler;
@@ -250,6 +251,35 @@ void TDirectBlockGroup::ProcessFlushQueue()
 void TDirectBlockGroup::HandleFlushPersistentBufferResult(
     ui64 storageRequestId,
     const NKikimrBlobStorage::NDDisk::TEvFlushPersistentBufferResult& result)
+{
+    auto guard = Guard(Lock);
+
+    if (!RequestHandlersByStorageRequestId.contains(storageRequestId)) {
+        return;
+    }
+
+    auto& requestHandler = static_cast<TFlushRequestHandler&>(*RequestHandlersByStorageRequestId[storageRequestId]);
+    if (result.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK) {
+        BlocksMeta[requestHandler.GetStartIndex()].OnFlushCompleted(
+            requestHandler.GetPersistentBufferIndex(),
+            requestHandler.GetLsn());
+
+        requestHandler.Span.EndOk();
+
+        ProcessFlushQueue();
+
+        RequestBlockErase(requestHandler);
+
+        RequestHandlersByStorageRequestId.erase(storageRequestId);
+    } else {
+        // TODO: add error handling
+        requestHandler.Span.EndError("HandleFlushPersistentBufferResult failed");
+    }
+}
+
+void TDirectBlockGroup::HandleSyncResult(
+    ui64 storageRequestId,
+    const NKikimrBlobStorage::NDDisk::TEvSyncResult& result)
 {
     auto guard = Guard(Lock);
 

@@ -177,6 +177,35 @@ TFuture<NKikimrBlobStorage::NDDisk::TEvReadResult> TICStorageTransport::Read(
     return future;
 }
 
+TFuture<NKikimrBlobStorage::NDDisk::TEvSyncResult> TICStorageTransport::Sync(
+    const NActors::TActorId serviceId,
+    const NKikimr::NDDisk::TQueryCredentials credentials,
+    const NKikimr::NDDisk::TBlockSelector selector,
+    const ui64 lsn,
+    const std::tuple<ui32, ui32, ui32> ddiskId,
+    const ui64 ddiskInstanceGuid,
+    NWilson::TTraceId traceId,
+    const ui64 requestId)
+{
+    auto promise = NewPromise<NKikimrBlobStorage::NDDisk::TEvSyncResult>();
+    auto future = promise.GetFuture();
+
+    NActors::TActivationContext::AsActorContext().Send(
+        ICStorageTransportActorId,
+        new TEvICStorageTransportPrivate::TEvSync(
+            serviceId,
+            credentials,
+            selector,
+            lsn,
+            ddiskId,
+            ddiskInstanceGuid,
+            std::move(traceId),
+            requestId,
+            std::move(promise)));
+
+    return future;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 void TICStorageTransportActor::Bootstrap(const NActors::TActorContext& ctx)
@@ -571,6 +600,70 @@ void TICStorageTransportActor::HandleReadResult(
     ReadEventsByRequestId.erase(requestId);
 }
 
+void TICStorageTransportActor::HandleSync(
+    const TEvICStorageTransportPrivate::TEvSync::TPtr& ev,
+    const NActors::TActorContext& ctx)
+{
+    auto* msg = ev->Get();
+
+    auto [it, inserted] = SyncEventsByRequestId.emplace(msg->RequestId, std::move(*msg));
+    Y_ABORT_UNLESS(inserted);
+
+    LOG_DEBUG(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "Sended TEvSync with requestId# %lu",
+        it->second.RequestId);
+
+    auto request = std::make_unique<TEvSync>(
+        it->second.Credentials,
+        it->second.DDiskId,
+        it->second.DDiskInstanceGuid);
+
+    request->AddSegmentFromPersistentBuffer(
+        it->second.Selector,
+        it->second.Lsn);
+
+    ctx.Send(MakeHolder<IEventHandle>(
+        it->second.ServiceId,
+        ctx.SelfID,
+        request.release(),
+        0, // flags
+        it->second.RequestId,
+        nullptr,
+        std::move(it->second.TraceId)));
+}
+
+void TICStorageTransportActor::HandleSyncResult(
+    const NKikimr::NDDisk::TEvSyncResult::TPtr& ev,
+    const NActors::TActorContext& ctx)
+{
+    Y_UNUSED(ctx);
+
+    auto requestId = ev->Cookie;
+
+    LOG_DEBUG(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "Received TEvSyncResult with requestId# %lu",
+        requestId);
+
+    // That means that request is already completed
+    if (!SyncEventsByRequestId.contains(requestId)) {
+        LOG_DEBUG(
+            ctx,
+            NKikimrServices::NBS_PARTITION,
+            "SyncEvent with requestId# %lu not found",
+            requestId);
+        return;
+    }
+
+    auto& promise = SyncEventsByRequestId.at(requestId).Promise;
+
+    promise.SetValue(std::move(ev->Get()->Record));
+    SyncEventsByRequestId.erase(requestId);
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 
 STFUNC(TICStorageTransportActor::StateWork)
@@ -600,6 +693,9 @@ STFUNC(TICStorageTransportActor::StateWork)
 
         HFunc(TEvICStorageTransportPrivate::TEvRead, HandleRead);
         HFunc(TEvReadResult, HandleReadResult);
+
+        HFunc(TEvICStorageTransportPrivate::TEvSync, HandleSync);
+        HFunc(NKikimr::NDDisk::TEvSyncResult, HandleSyncResult);
 
         default:
             LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::NBS_PARTITION,

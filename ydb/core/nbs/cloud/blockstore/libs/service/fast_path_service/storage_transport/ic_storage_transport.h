@@ -69,6 +69,16 @@ public:
         TGuardedSgList data,
         NWilson::TTraceId traceId,
         const ui64 requestId) override;
+
+    NThreading::TFuture<NKikimrBlobStorage::NDDisk::TEvSyncResult> Sync(
+        const NActors::TActorId serviceId,
+        const NKikimr::NDDisk::TQueryCredentials credentials,
+        const NKikimr::NDDisk::TBlockSelector selector,
+        const ui64 lsn,
+        const std::tuple<ui32, ui32, ui32> ddiskId,
+        const ui64 ddiskInstanceGuid,
+        NWilson::TTraceId traceId,
+        const ui64 requestId) override;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -83,6 +93,7 @@ private:
     std::unordered_map<ui64, TEvICStorageTransportPrivate::TEvErasePersistentBuffer> ErasePersistentBufferEventsByRequestId;
     std::unordered_map<ui64, TEvICStorageTransportPrivate::TEvReadPersistentBuffer> ReadPersistentBufferEventsByRequestId;
     std::unordered_map<ui64, TEvICStorageTransportPrivate::TEvRead> ReadEventsByRequestId;
+    std::unordered_map<ui64, TEvICStorageTransportPrivate::TEvSync> SyncEventsByRequestId;
 public:
     TICStorageTransportActor() = default;
 
@@ -136,6 +147,14 @@ private:
 
     void HandleReadResult(
         const NKikimr::NDDisk::TEvReadResult::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    void HandleSync(
+        const TEvICStorageTransportPrivate::TEvSync::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    void HandleSyncResult(
+        const NKikimr::NDDisk::TEvSyncResult::TPtr& ev,
         const NActors::TActorContext& ctx);
 };
 

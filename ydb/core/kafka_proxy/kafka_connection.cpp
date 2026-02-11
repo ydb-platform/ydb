@@ -1,5 +1,6 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/ticket_parser.h>
 #include <ydb/core/raw_socket/sock_config.h>
 #include <ydb/core/util/address_classifier.h>
 #include <ydb/core/kafka_proxy/kafka_transactions_coordinator.h>
@@ -386,11 +387,6 @@ protected:
     }
 
     bool ProcessRequest(const TActorContext& ctx) {
-        if (IsSslActive && NKikimr::AppData()->KafkaProxyConfig.GetMtlsEnable()) {
-            TSslHelpers::TSslHolder<X509> cert = Socket->GetSslClientCert();
-            Cout << "Recieved cert? :" << (cert != nullptr) << Endl;
-        }
-
         KAFKA_LOG_D("process message: ApiKey=" << Request->Header.RequestApiKey << ", ExpectedSize=" << Request->ExpectedSize
                                                << ", Size=" << Request->Size);
 
@@ -855,6 +851,16 @@ protected:
     void HandleConnected(TEvPollerReady::TPtr event, const TActorContext& ctx) {
         if (event->Get()->Read) {
             if (!CloseConnection) {
+                if (IsSslActive && NKikimr::AppData()->KafkaProxyConfig.GetMtlsEnable()) {
+                    TSslHelpers::TSslHolder<X509> cert = Socket->GetSslClientCert();
+                    Cout << "Recieved cert? :" << (cert != nullptr) << Endl;
+                    if (cert != nullptr) {
+                        TString clientCert = Socket->GetStringClientCert(cert.get());
+                        Cout << "Client cert:" << clientCert << Endl;
+                        Send(NKikimr::MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket(clientCert));
+                    }
+                }
+
                 if (!DoRead(ctx)) {
                     return;
                 }

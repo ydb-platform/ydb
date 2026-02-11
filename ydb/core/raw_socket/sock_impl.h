@@ -93,6 +93,11 @@ public:
         return socket->GetSslClientCert();;
     }
 
+    TString GetStringClientCert(X509* cert) {
+        auto *socket = dynamic_cast<TNetworkConfig::TSecureSocketType*>(Socket.get());
+        return socket->ConvertX509ToPEMString(cert);
+    }
+
     int GetDescriptor() override {
         return GetRawSocket();
     }

@@ -453,6 +453,7 @@ struct TShardedTableOptions {
         TMaybe<TString> AwsRegion;
         bool TopicAutoPartitioning = false;
         bool SchemaChanges = false;
+        bool UserSIDs = true;
     };
 
     struct TFamily {

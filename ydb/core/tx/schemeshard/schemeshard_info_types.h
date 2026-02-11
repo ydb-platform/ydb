@@ -2839,6 +2839,7 @@ struct TCdcStreamSettings {
     OPTION(bool, SchemaChanges);
     OPTION(TString, AwsRegion);
     OPTION(EState, State);
+    OPTION(bool, UserSIDs);
 
     #undef OPTION
 };
@@ -2885,7 +2886,9 @@ struct TCdcStreamInfo
             .WithVirtualTimestamps(desc.GetVirtualTimestamps())
             .WithResolvedTimestamps(TDuration::MilliSeconds(desc.GetResolvedTimestampsIntervalMs()))
             .WithSchemaChanges(desc.GetSchemaChanges())
-            .WithAwsRegion(desc.GetAwsRegion()));
+            .WithAwsRegion(desc.GetAwsRegion())
+            .WithUserSIDs(desc.GetUserSIDs())
+        );
         TPtr alterData = result->CreateNextVersion();
         alterData->State = EState::ECdcStreamStateReady;
         if (desc.HasState()) {
@@ -2909,6 +2912,7 @@ struct TCdcStreamInfo
             scanProgress.SetShardsTotal(ScanShards.size());
             scanProgress.SetShardsCompleted(DoneShards.size());
         }
+        desc.SetUserSIDs(UserSIDs);
     }
 
     void FinishAlter() {

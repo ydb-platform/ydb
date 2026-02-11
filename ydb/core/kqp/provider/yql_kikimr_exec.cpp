@@ -2382,6 +2382,12 @@ public:
                                     );
 
                                     add_changefeed->set_initial_scan(FromString<bool>(to_lower(value)));
+                                } else if (name == "user_sids") {
+                                    auto value = TString(
+                                        setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
+                                    );
+
+                                    add_changefeed->set_user_sids(FromString<bool>(to_lower(value)));
                                 } else if (name == "virtual_timestamps") {
                                     auto value = TString(
                                         setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()

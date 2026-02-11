@@ -930,11 +930,12 @@ Y_UNIT_TEST_SUITE(Cdc) {
             });
     }
 
-    TCdcStream KeysOnly(NKikimrSchemeOp::ECdcStreamFormat format, const TString& name = "Stream") {
+    TCdcStream KeysOnly(NKikimrSchemeOp::ECdcStreamFormat format, const TString& name = "Stream", bool userSIDs = true) {
         return TCdcStream{
             .Name = name,
             .Mode = NKikimrSchemeOp::ECdcStreamModeKeysOnly,
             .Format = format,
+            .UserSIDs = userSIDs
         };
     }
 
@@ -946,11 +947,12 @@ Y_UNIT_TEST_SUITE(Cdc) {
         };
     }
 
-    TCdcStream NewAndOldImages(NKikimrSchemeOp::ECdcStreamFormat format, const TString& name = "Stream") {
+    TCdcStream NewAndOldImages(NKikimrSchemeOp::ECdcStreamFormat format, const TString& name = "Stream", bool userSIDs = true) {
         return TCdcStream{
             .Name = name,
             .Mode = NKikimrSchemeOp::ECdcStreamModeNewAndOldImages,
             .Format = format,
+            .UserSIDs = userSIDs,
         };
     }
 
@@ -1618,6 +1620,30 @@ Y_UNIT_TEST_SUITE(Cdc) {
         }, true, "user@test");
     }
 
+     Y_UNIT_TEST_TRIPLET(NewAndOldImagesLogUserDisabled, PqRunner, YdsRunner, TopicRunner) {
+        TRunner::Read(SimpleTable(), NewAndOldImages(NKikimrSchemeOp::ECdcStreamFormatJson, "Stream", false), {R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+            (1, 10),
+            (2, 20),
+            (3, 30);
+        )", R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+            (1, 100),
+            (2, 200),
+            (3, 300);
+        )", R"(
+            DELETE FROM `/Root/Table` WHERE key = 1;
+        )"}, {
+            R"({"update":{},"newImage":{"value":10},"key":[1]})",
+            R"({"update":{},"newImage":{"value":20},"key":[2]})",
+            R"({"update":{},"newImage":{"value":30},"key":[3]})",
+            R"({"update":{},"newImage":{"value":100},"key":[1],"oldImage":{"value":10}})",
+            R"({"update":{},"newImage":{"value":200},"key":[2],"oldImage":{"value":20}})",
+            R"({"update":{},"newImage":{"value":300},"key":[3],"oldImage":{"value":30}})",
+            R"({"erase":{},"key":[1],"oldImage":{"value":100}})",
+        }, true, "user@test");
+    }
+
     Y_UNIT_TEST(NewAndOldImagesLogDebezium) {
         TopicRunner::Read(SimpleTable(), NewAndOldImages(NKikimrSchemeOp::ECdcStreamFormatDebeziumJson), {R"(
             UPSERT INTO `/Root/Table` (key, value) VALUES
@@ -1664,6 +1690,31 @@ Y_UNIT_TEST_SUITE(Cdc) {
             {DebeziumBody("u", R"({"key":2,"value":20})", R"({"key":2,"value":200})", false, userSID), {{"__key", R"({"payload":{"key":2}})"}}},
             {DebeziumBody("u", R"({"key":3,"value":30})", R"({"key":3,"value":300})", false, userSID), {{"__key", R"({"payload":{"key":3}})"}}},
             {DebeziumBody("d", R"({"key":1,"value":100})", nullptr, false, userSID), {{"__key", R"({"payload":{"key":1}})"}}},
+        }, userSID);
+    }
+
+    Y_UNIT_TEST(NewAndOldImagesLogDebeziumUserDisabled) {
+        const TString userSID{"user@test"};
+        TopicRunner::Read(SimpleTable(), NewAndOldImages(NKikimrSchemeOp::ECdcStreamFormatDebeziumJson, "Stream", false), {R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+            (1, 10),
+            (2, 20),
+            (3, 30);
+        )", R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+            (1, 100),
+            (2, 200),
+            (3, 300);
+        )", R"(
+            DELETE FROM `/Root/Table` WHERE key = 1;
+        )"}, {
+            {DebeziumBody("c", nullptr, R"({"key":1,"value":10})", false), {{"__key", R"({"payload":{"key":1}})"}}},
+            {DebeziumBody("c", nullptr, R"({"key":2,"value":20})", false), {{"__key", R"({"payload":{"key":2}})"}}},
+            {DebeziumBody("c", nullptr, R"({"key":3,"value":30})", false), {{"__key", R"({"payload":{"key":3}})"}}},
+            {DebeziumBody("u", R"({"key":1,"value":10})", R"({"key":1,"value":100})", false), {{"__key", R"({"payload":{"key":1}})"}}},
+            {DebeziumBody("u", R"({"key":2,"value":20})", R"({"key":2,"value":200})", false), {{"__key", R"({"payload":{"key":2}})"}}},
+            {DebeziumBody("u", R"({"key":3,"value":30})", R"({"key":3,"value":300})", false), {{"__key", R"({"payload":{"key":3}})"}}},
+            {DebeziumBody("d", R"({"key":1,"value":100})", nullptr, false), {{"__key", R"({"payload":{"key":1}})"}}},
         }, userSID);
     }
 
@@ -1882,6 +1933,32 @@ Y_UNIT_TEST_SUITE(Cdc) {
                     {"type", "User"},
                     {"principalId", userSID}})
                 },
+            }), false),
+        }, false /* do not check key */, userSID);
+    }
+
+    Y_UNIT_TEST_TRIPLET(DocApiUserDisabled, PqRunner, YdsRunner, TopicRunner) {
+        const TString userSID{"user@test"};
+        TRunner::Read(DocApiTable(), KeysOnly(NKikimrSchemeOp::ECdcStreamFormatDynamoDBStreamsJson, "Stream", false), {R"(
+            UPSERT INTO `/Root/Table` (__Hash, id_shard, id_sort, __RowData) VALUES (
+                1, "10", "100", JsonDocument('{"M":{"color":{"S":"pink"},"weight":{"N":"4.5"}}}')
+            );
+        )"}, {
+            WriteJson(NJson::TJsonMap({
+                {"awsRegion", ""},
+                {"dynamodb", NJson::TJsonMap({
+                    {"ApproximateCreationDateTime", "***"},
+                    {"Keys", NJson::TJsonMap({
+                        {"id_shard", NJson::TJsonMap({{"S", "10"}})},
+                        {"id_sort", NJson::TJsonMap({{"S", "100"}})},
+                    })},
+                    {"SequenceNumber", "000000000000000000001"},
+                    {"StreamViewType", "KEYS_ONLY"},
+                })},
+                {"eventID", "***"},
+                {"eventName", "MODIFY"},
+                {"eventSource", "ydb:document-table"},
+                {"eventVersion", "1.0"},
             }), false),
         }, false /* do not check key */, userSID);
     }

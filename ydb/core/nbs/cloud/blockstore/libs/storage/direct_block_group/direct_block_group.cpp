@@ -278,8 +278,6 @@ void TDirectBlockGroup::HandleSyncResult(
 void TDirectBlockGroup::RequestBlockErase(
     TSyncRequestHandler& requestHandler)
 {
-    auto guard = Guard(Lock);
-
     auto eraseRequestHandler = std::make_shared<TEraseRequestHandler>(
         requestHandler.GetStartIndex(),
         requestHandler.GetPersistentBufferIndex(),

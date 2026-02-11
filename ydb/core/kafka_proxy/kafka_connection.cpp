@@ -101,6 +101,7 @@ public:
     {
         SetNonBlock();
         IsSslRequired = Socket->IsSslSupported();
+        KAFKA_LOG_D("IsSslRequired=" << IsSslRequired);
     }
 
     void Bootstrap() {
@@ -385,6 +386,11 @@ protected:
     }
 
     bool ProcessRequest(const TActorContext& ctx) {
+        if (IsSslActive) {
+            std::shared_ptr<X509> cert = Socket->GetSslClientCert();
+            Cout << (cert != nullptr) << Endl;
+        }
+
         KAFKA_LOG_D("process message: ApiKey=" << Request->Header.RequestApiKey << ", ExpectedSize=" << Request->ExpectedSize
                                                << ", Size=" << Request->Size);
 
@@ -675,6 +681,7 @@ protected:
     }
 
     bool UpgradeToSecure() {
+        KAFKA_LOG_D("Updating to secure. IsSslRequired=" << IsSslRequired << ", IsSslActive=" << IsSslActive);
         if (IsSslRequired && !IsSslActive) {
             int res = Socket->TryUpgradeToSecure();
             if (res < 0) {

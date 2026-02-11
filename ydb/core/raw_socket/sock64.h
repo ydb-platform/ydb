@@ -188,6 +188,15 @@ public:
         return ProcessResult(res);
     }
 
+    std::shared_ptr<X509> GetSslClientCert() {
+        if (!Ssl) {
+            return nullptr;
+        }
+        int ret = SSL_do_handshake(Ssl.get());
+        Cout << "SSL handshake result: " << ret << Endl;
+        return std::shared_ptr<X509>(SSL_get_peer_certificate(Ssl.get()), &X509_free);
+    }
+
     ssize_t Send(const void* msg, size_t len, int flags = 0) override {
         Y_UNUSED(flags);
         int res = SSL_write(Ssl.get(), msg, len);

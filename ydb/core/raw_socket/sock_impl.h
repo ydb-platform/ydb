@@ -15,6 +15,7 @@ class TSocketDescriptor : public NActors::TSharedDescriptor, public TNetworkConf
     std::unique_ptr<TNetworkConfig::TSocketType> Socket;
     std::shared_ptr<TEndpointInfo> Endpoint;
     TSpinLock Lock;
+    std::shared_ptr<X509> SecureConnectionClientCert;
 
 public:
     TSocketDescriptor(TSocketType&& s, std::shared_ptr<TEndpointInfo> endpoint)
@@ -85,6 +86,13 @@ public:
     SOCKET GetRawSocket() const {
         TGuard lock(Lock);
         return *Socket;
+    }
+
+    std::shared_ptr<X509> GetSslClientCert() {
+        auto *socket = dynamic_cast<TNetworkConfig::TSecureSocketType*>(Socket.get());
+
+        SecureConnectionClientCert = socket->GetSslClientCert();
+        return SecureConnectionClientCert;
     }
 
     int GetDescriptor() override {
@@ -190,7 +198,7 @@ private:
 
     ssize_t Send(const char* data, size_t length) {
         ssize_t res = Socket->Send(data, length);
-        
+
         return res;
     }
 
@@ -203,4 +211,3 @@ private:
 };
 
 } // namespace NKikimr::NRawSocket
-

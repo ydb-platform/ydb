@@ -58,6 +58,8 @@ public:
             } else if (Settings.CertificateFile && Settings.PrivateKeyFile) {
                 endpoint->SecureContext = TSslHelpers::CreateServerContext(Settings.CertificateFile, Settings.PrivateKeyFile);
             }
+            Cout << "Bootstrap. Creating SocketListener. SslCertificatePem=" << Settings.SslCertificatePem << ", PrivateKeyFile=" << Settings.PrivateKeyFile << ", CertificateFile=" << Settings.CertificateFile << Endl;
+            Cout << "endpoint->SecureContext=" << (endpoint->SecureContext != nullptr) << Endl;
             Socket = new TSocketDescriptor(std::move(socket), endpoint);
 
             err = Socket->Listen(LISTEN_QUEUE);
@@ -81,7 +83,7 @@ public:
                                 << " errno# " << -err << " (" << strerror(-err) << ")" << Endl;
                 abort();
                 break;
-            
+
             case EErrorAction::Ignore:
                 PassAway();
                 break;

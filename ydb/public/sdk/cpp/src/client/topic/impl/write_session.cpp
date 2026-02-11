@@ -1550,15 +1550,6 @@ void TKeyedWriteSession::RunMainWorker() {
     NextEpoch();
 
     auto startWorkerTime = TInstant::Now();
-    size_t pendingMessagesCount = 0;
-    {
-        std::unique_lock lock(GlobalLock);
-        for (const auto& [partition, messages] : MessagesWorker->PendingMessagesIndex) {
-            pendingMessagesCount += messages.size();
-        }
-    }
-    
-    LOG_LAZY(DbDriverState->Log, TLOG_ERR, LogPrefix() << "Pending messages count on start: " << pendingMessagesCount);
     // Runner loop: process, arm subscription, then either go idle or loop again.
     for (;;) {
         auto startIter = TInstant::Now();
@@ -1611,15 +1602,6 @@ void TKeyedWriteSession::RunMainWorker() {
                 auto workerFinished = TInstant::Now();
                 Metrics.AddCycleTime((workerFinished - startIter).MilliSeconds());
                 Metrics.AddMainWorkerTime((workerFinished - startWorkerTime).MilliSeconds());
-
-                size_t pendingMessagesCount = 0;
-                {
-                    std::unique_lock lock(GlobalLock);
-                    for (const auto& [partition, messages] : MessagesWorker->PendingMessagesIndex) {
-                        pendingMessagesCount += messages.size();
-                    }
-                }
-                LOG_LAZY(DbDriverState->Log, TLOG_ERR, LogPrefix() << "Pending messages count on end: " << pendingMessagesCount);
                 return; // successfully went idle
             }
         }

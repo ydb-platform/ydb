@@ -67,7 +67,7 @@ class TestCreateWithColumnCompression(TestCompressionBase):
         cls.test_dir = f"{cls.ydb_client.database}/{cls.class_name}/{cls.test_name}"
 
     COMPRESSION_CASES = [
-        ("default",          '',                                   1),
+        ("default",          '',                                   0),
         ("lz4_compression",  'algorithm=lz4',                      1),
         ("zstd_compression", 'algorithm=zstd',                     2),
     ] + [
@@ -136,7 +136,10 @@ class TestCreateWithColumnCompression(TestCompressionBase):
             'SchemeDescribe').PathDescription.ColumnTableDescription.Schema.Columns
 
         for column in columns:
-            assert column.Serializer.ArrowCompression.Codec == codec_id
+            if codec_id == 0:
+                assert column.HasField("Serializer") is False
+            else:
+                assert column.Serializer.ArrowCompression.Codec == codec_id
 
         table = ColumnTableHelper(self.ydb_client, compressed_table_path)
         self.upsert_and_wait_portions(table, self.single_upsert_rows_count, self.upsert_count)
@@ -148,8 +151,6 @@ class TestCreateWithColumnCompression(TestCompressionBase):
                 f"compression in `{table.path}` {self.volumes_without_compression[col]} / {volumes[1]}: {koef}"
             )
             assert koef > 1, col
-
-
 
     @pytest.mark.parametrize("suffix, compression_settings, codec_id", COMPRESSION_CASES)
     def test_add_with_compression(self, suffix, compression_settings, codec_id):

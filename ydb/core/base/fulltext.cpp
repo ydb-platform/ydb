@@ -91,19 +91,19 @@ namespace {
         }
     }
 
-    TVector<TString> Tokenize(const TString& text, const Ydb::Table::FulltextIndexSettings::Tokenizer& tokenizer, const std::optional<wchar32> ignoredDelimiter) {
+    TVector<TString> Tokenize(const TString& text, const Ydb::Table::FulltextIndexSettings::Tokenizer& tokenizer, const std::unordered_set<wchar32> ignoredDelimiter) {
         TVector<TString> tokens;
         switch (tokenizer) {
             case Ydb::Table::FulltextIndexSettings::WHITESPACE:
-                Tokenize(text, tokens, [ignoredDelimiter](const wchar32 c) {
-                    return ignoredDelimiter.has_value() && ignoredDelimiter.value() == c
+                Tokenize(text, tokens, [&ignoredDelimiter](const wchar32 c) {
+                    return !ignoredDelimiter.empty() && ignoredDelimiter.contains(c)
                         ? false
                         : IsWhitespace(c);
                 });
                 break;
             case Ydb::Table::FulltextIndexSettings::STANDARD:
-                Tokenize(text, tokens, [ignoredDelimiter](const wchar32 c) {
-                    return ignoredDelimiter.has_value() && ignoredDelimiter.value() == c
+                Tokenize(text, tokens, [&ignoredDelimiter](const wchar32 c) {
+                    return !ignoredDelimiter.empty() && ignoredDelimiter.contains(c)
                         ? false
                         : IsNonStandard(c);
                 });
@@ -283,8 +283,8 @@ Ydb::Table::FulltextIndexSettings::Analyzers GetAnalyzersForQuery(Ydb::Table::Fu
     return analyzers;
 }
 
-TVector<TString> Analyze(const TString& text, const Ydb::Table::FulltextIndexSettings::Analyzers& settings, const std::optional<wchar32> ignoredDelimiter) {
-    TVector<TString> tokens = Tokenize(text, settings.tokenizer(), ignoredDelimiter);
+TVector<TString> Analyze(const TString& text, const Ydb::Table::FulltextIndexSettings::Analyzers& settings, const std::unordered_set<wchar32>& ignoredDelimiters) {
+    TVector<TString> tokens = Tokenize(text, settings.tokenizer(), ignoredDelimiters);
 
     if (settings.use_filter_lowercase()) {
         for (auto i : xrange(tokens.size())) {
@@ -349,8 +349,8 @@ TVector<TString> BuildSearchTerms(const TString& query, const Ydb::Table::Fullte
     const Ydb::Table::FulltextIndexSettings::Analyzers analyzersForQuery = GetAnalyzersForQuery(settings);
 
     TVector<TString> searchTerms;
-    for (const TString& pattern : Analyze(query, analyzersForQuery, '*')) {
-        for (const auto& term : StringSplitter(pattern).Split('*')) {
+    for (const TString& pattern : Analyze(query, analyzersForQuery, std::unordered_set<wchar32>{'%', '_'})) {
+        for (const auto& term : StringSplitter(pattern).SplitBySet("%_")) {
             const TString token(term.Token());
             const i64 tokenLength = GetLengthUTF8(token);
             if (tokenLength == 0 || analyzersForQuery.filter_ngram_min_length() > tokenLength) {

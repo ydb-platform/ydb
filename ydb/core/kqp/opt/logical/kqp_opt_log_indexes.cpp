@@ -921,14 +921,19 @@ TExprBase DoRewriteTopSortOverPrefixedKMeansTree(
     const auto mainTable = BuildTableMeta(*tableDesc.Metadata, pos, ctx);
 
     const auto levelColumns = BuildKeyColumnsList(pos, ctx,
-            std::initializer_list<std::string_view>{NTableIndex::NKMeans::IdColumn, NTableIndex::NKMeans::CentroidColumn});
+        std::initializer_list<std::string_view>{NTableIndex::NKMeans::IdColumn, NTableIndex::NKMeans::CentroidColumn});
     const auto prefixColumns = [&] {
         auto columns = indexDesc.KeyColumns;
         columns.back().assign(NTableIndex::NKMeans::IdColumn);
         return BuildKeyColumnsList(pos, ctx, columns);
     }();
-    const auto& mainColumns = match.Columns();
+    auto mainColumns = match.Columns();
 
+    THashSet<TStringBuf> prefixColumnSet;
+    for (size_t i = 0; i < indexDesc.KeyColumns.size()-1; i++) {
+        prefixColumnSet.insert(indexDesc.KeyColumns[i]);
+    }
+    bool prefixInResult = false;
     TNodeOnNodeOwnedMap replaces;
     TMaybeNode<TCoLambda> mainLambda;
     const auto prefixLambda = [&] {
@@ -940,6 +945,17 @@ TExprBase DoRewriteTopSortOverPrefixedKMeansTree(
         }
         auto args = newLambda.Args();
         mainLambda = NewLambdaFrom(ctx, pos, replaces, args.Ref(), oldValue.Cast());
+        VisitExpr(mainLambda.Cast().Ptr(), [&](const TExprNode::TPtr& node) {
+            if (const auto maybeMember = TMaybeNode<TCoMember>(node)) {
+                const auto member = maybeMember.Cast();
+                if (member.Struct().Raw() == args.Arg(0).Raw() &&
+                    prefixColumnSet.contains(member.Name().Value())) {
+                    prefixInResult = true;
+                    return false;
+                }
+            }
+            return true;
+        });
 
         replaces.clear();
         replaces.emplace(oldValue.Raw(), args.Arg(0).Ptr());
@@ -949,6 +965,18 @@ TExprBase DoRewriteTopSortOverPrefixedKMeansTree(
     }();
     TExprNode::TPtr targetVector;
     const auto levelLambda = LevelLambdaFrom(indexDesc, ctx, pos, replaces, lambdaArgs, lambdaBody, targetVector);
+    if (!prefixInResult) {
+        // Remove prefix columns from main table read if we don't need them
+        TVector<TCoAtom> filteredColumns;
+        for (const auto& col: mainColumns) {
+            if (!prefixColumnSet.contains(col.Value())) {
+                filteredColumns.push_back(col);
+            }
+        }
+        mainColumns = Build<TCoAtomList>(ctx, pos)
+            .Add(filteredColumns)
+            .Done();
+    }
 
     auto read = match.BuildRead(ctx, prefixTable, prefixColumns).Ptr();
 

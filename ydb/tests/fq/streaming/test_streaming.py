@@ -242,7 +242,13 @@ class TestStreamingInYdb(StreamingTestBase):
         node.start()
 
         data = ['{"dt": 1696849943000001, "str": "C" }']
+<<<<<<< HEAD
         self.write_stream(data)
+=======
+        self.write_stream(data, endpoint=endpoint)
+        self.wait_completed_checkpoints(kikimr, path)
+
+>>>>>>> 907366fe6f4 (YQ-4648 Shared reading: local kesus (#32487))
         expected_data = ['{"a_time":null,"b_time":1696849942500001,"c_time":1696849943000001}']
         assert self.read_stream(len(expected_data), topic_path=self.output_topic) == expected_data
 

@@ -88,7 +88,8 @@ namespace NKikimr::NGRpcProxy::V1 {
         NKikimrPQ::TPQTabletConfig* config,
         const Ydb::PersQueue::V1::TopicSettings::ReadRule& rr,
         const TClientServiceTypes& supportedClientServiceTypes,
-        const NKikimrPQ::TPQConfig& pqConfig
+        const NKikimrPQ::TPQConfig& pqConfig,
+        const TConsumersAdvancedMonitoringSettings* consumersAdvancedMonitoringSettings
     ) {
 
         auto consumerName = NPersQueue::ConvertNewConsumerName(rr.consumer_name(), pqConfig);
@@ -186,6 +187,11 @@ namespace NKikimr::NGRpcProxy::V1 {
             const auto& defaultCientServiceType = pqConfig.GetDefaultClientServiceType().GetName();
             consumer->SetServiceType(defaultCientServiceType);
         }
+
+        if (consumersAdvancedMonitoringSettings) {
+            consumersAdvancedMonitoringSettings->UpdateConsumerConfig(rr.consumer_name(), *consumer);
+        }
+
         return TMsgPqCodes("", Ydb::PersQueue::ErrorCode::OK);
     }
 
@@ -269,7 +275,8 @@ namespace NKikimr::NGRpcProxy::V1 {
         const bool checkServiceType,
         const NKikimrPQ::TPQConfig& pqConfig,
         bool enableTopicDiskSubDomainQuota,
-        const TAppData* appData
+        const TAppData* appData,
+        TConsumersAdvancedMonitoringSettings* consumersAdvancedMonitoringSettings
     ) {
         auto consumerName = NPersQueue::ConvertNewConsumerName(rr.name(), pqConfig);
         if (consumerName.find("/") != TString::npos || consumerName.find("|") != TString::npos) {
@@ -279,7 +286,7 @@ namespace NKikimr::NGRpcProxy::V1 {
             return TMsgPqCodes(TStringBuilder() << "consumer with empty name is forbidden", Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);
         }
 
-        auto* consumer = config->AddConsumers();
+        ::NKikimrPQ::TPQTabletConfig_TConsumer* consumer = config->AddConsumers();
 
         consumer->SetName(consumerName);
 
@@ -403,6 +410,10 @@ namespace NKikimr::NGRpcProxy::V1 {
             }
         } else {
             return period.error();
+        }
+
+        if (consumersAdvancedMonitoringSettings) {
+            consumersAdvancedMonitoringSettings->UpdateConsumerConfig(rr.name(), *consumer);
         }
 
         return TMsgPqCodes("", Ydb::PersQueue::ErrorCode::OK);
@@ -577,8 +588,7 @@ namespace NKikimr::NGRpcProxy::V1 {
         return res;
     }
 
-
-    Ydb::StatusIds::StatusCode ProcessAttributes(const ::google::protobuf::Map<TProtoStringType, TProtoStringType>& attributes, NKikimrSchemeOp::TPersQueueGroupDescription* pqDescr, TString& error, bool alter) {
+    Ydb::StatusIds::StatusCode ProcessAttributes(const ::google::protobuf::Map<TProtoStringType, TProtoStringType>& attributes, NKikimrSchemeOp::TPersQueueGroupDescription* pqDescr, TConsumersAdvancedMonitoringSettings& consumersAdvancedMonitoringSettings, TString& error, bool alter) {
 
         auto config = pqDescr->MutablePQTabletConfig();
         auto partConfig = config->MutablePartitionConfig();
@@ -701,6 +711,13 @@ namespace NKikimr::NGRpcProxy::V1 {
                     config->SetTimestampType(attrValue ? attrValue :  NKafka::MESSAGE_TIMESTAMP_CREATE_TIME);
                 } else {
                     error = TStringBuilder() << "Attribute " << attrName << " is " << attrValue << ", which is an incorrect value.";
+                    return Ydb::StatusIds::BAD_REQUEST;
+                }
+            } else if (attrName == "_advanced_monitoring") {
+                if (std::expected m = TConsumersAdvancedMonitoringSettings::FromJson(attrValue); m.has_value()) {
+                    consumersAdvancedMonitoringSettings = std::move(m).value();
+                } else {
+                    error = std::move(m).error();
                     return Ydb::StatusIds::BAD_REQUEST;
                 }
             } else {
@@ -846,7 +863,8 @@ namespace NKikimr::NGRpcProxy::V1 {
         if (!alter)
             pqDescr->SetPartitionPerTablet(1);
 
-        auto res = ProcessAttributes(settings.attributes(), pqDescr, error, alter);
+        TConsumersAdvancedMonitoringSettings consumersAdvancedMonitoringSettings;
+        auto res = ProcessAttributes(settings.attributes(), pqDescr, consumersAdvancedMonitoringSettings, error, alter);
         if (res != Ydb::StatusIds::SUCCESS) {
             return res;
         }
@@ -974,11 +992,14 @@ namespace NKikimr::NGRpcProxy::V1 {
 
         const auto& supportedClientServiceTypes = GetSupportedClientServiceTypes(pqConfig);
         for (const auto& rr : settings.read_rules()) {
-            auto messageAndCode = AddReadRuleToConfig(pqTabletConfig, rr, supportedClientServiceTypes, pqConfig);
+            auto messageAndCode = AddReadRuleToConfig(pqTabletConfig, rr, supportedClientServiceTypes, pqConfig, &consumersAdvancedMonitoringSettings);
             if (messageAndCode.PQCode != Ydb::PersQueue::ErrorCode::OK) {
                 error = messageAndCode.Message;
                 return Ydb::StatusIds::BAD_REQUEST;
             }
+        }
+        if (auto errorCode = consumersAdvancedMonitoringSettings.CheckForUnknownConsumers(error); errorCode != Ydb::StatusIds::SUCCESS) {
+            return errorCode;
         }
 
         if (settings.has_remote_mirror_rule()) {
@@ -1177,7 +1198,8 @@ namespace NKikimr::NGRpcProxy::V1 {
         partConfig->SetSourceIdLifetimeSeconds(NKikimrPQ::TPartitionConfig().GetSourceIdLifetimeSeconds());
         partConfig->SetSourceIdMaxCounts(NKikimrPQ::TPartitionConfig().GetSourceIdMaxCounts());
 
-        auto res = ProcessAttributes(request.attributes(), pqDescr, error, false);
+        TConsumersAdvancedMonitoringSettings consumersAdvancedMonitoringSettings;
+        auto res = ProcessAttributes(request.attributes(), pqDescr, consumersAdvancedMonitoringSettings, error, false);
         if (res != Ydb::StatusIds::SUCCESS) {
             return TYdbPqCodes(res, Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);
         }
@@ -1255,8 +1277,7 @@ namespace NKikimr::NGRpcProxy::V1 {
             return TYdbPqCodes(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);
         }
 
-        Ydb::StatusIds::StatusCode code;
-        if (!FillMeteringMode(request.metering_mode(), *pqTabletConfig, pqConfig.GetBillingMeteringConfig().GetEnabled(), false, code, error)) {
+        if (Ydb::StatusIds::StatusCode code; !FillMeteringMode(request.metering_mode(), *pqTabletConfig, pqConfig.GetBillingMeteringConfig().GetEnabled(), false, code, error)) {
             return TYdbPqCodes(code, Ydb::PersQueue::ErrorCode::INVALID_ARGUMENT);
         }
 
@@ -1265,11 +1286,16 @@ namespace NKikimr::NGRpcProxy::V1 {
 
         for (const auto& consumer : request.consumers()) {
             auto messageAndCode = AddReadRuleToConfig(pqTabletConfig, consumer, supportedClientServiceTypes, true, pqConfig,
-                                                      appData->FeatureFlags.GetEnableTopicDiskSubDomainQuota(), appData);
+                                                      appData->FeatureFlags.GetEnableTopicDiskSubDomainQuota(),
+                                                      appData,
+                                                      &consumersAdvancedMonitoringSettings);
             if (messageAndCode.PQCode != Ydb::PersQueue::ErrorCode::OK) {
                 error = messageAndCode.Message;
                 return TYdbPqCodes(Ydb::StatusIds::BAD_REQUEST, messageAndCode.PQCode);
             }
+        }
+        if (auto errorCode = consumersAdvancedMonitoringSettings.CheckForUnknownConsumers(error); errorCode != Ydb::StatusIds::SUCCESS) {
+            return TYdbPqCodes(errorCode, Ydb::PersQueue::ErrorCode::INVALID_ARGUMENT);
         }
 
         if (request.has_metrics_level()) {
@@ -1387,7 +1413,8 @@ namespace NKikimr::NGRpcProxy::V1 {
             CHECK_CDC;
         }
 
-        auto res = ProcessAttributes(request.alter_attributes(), &pqDescr, error, true);
+        TConsumersAdvancedMonitoringSettings consumersAdvancedMonitoringSettings;
+        auto res = ProcessAttributes(request.alter_attributes(), &pqDescr, consumersAdvancedMonitoringSettings, error, true);
         if (res != Ydb::StatusIds::SUCCESS) {
             return res;
         }
@@ -1514,11 +1541,16 @@ namespace NKikimr::NGRpcProxy::V1 {
 
         for (const auto& rr : consumers) {
             auto messageAndCode = AddReadRuleToConfig(pqTabletConfig, rr.second, supportedClientServiceTypes, rr.first,
-                                                      pqConfig, appData->FeatureFlags.GetEnableTopicDiskSubDomainQuota(), appData);
+                                                      pqConfig, appData->FeatureFlags.GetEnableTopicDiskSubDomainQuota(),
+                                                      appData,
+                                                      &consumersAdvancedMonitoringSettings);
             if (messageAndCode.PQCode != Ydb::PersQueue::ErrorCode::OK) {
                 error = messageAndCode.Message;
                 return Ydb::StatusIds::BAD_REQUEST;
             }
+        }
+        if (auto errorCode = consumersAdvancedMonitoringSettings.CheckForUnknownConsumers(error); errorCode != Ydb::StatusIds::SUCCESS) {
+            return errorCode;
         }
 
         if (request.has_set_metrics_level()) {

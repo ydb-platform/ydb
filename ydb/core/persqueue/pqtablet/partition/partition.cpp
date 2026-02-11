@@ -1915,8 +1915,8 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
         if (ts < MIN_TIMESTAMP_MS) {
             ts = Max<i64>();
         }
-        if (userInfo.WriteTimeLagMsByCommittedPerPartition) {
-            userInfo.WriteTimeLagMsByCommittedPerPartition->Set(nowMs < ts ? 0 : nowMs - ts);
+        for (auto& perPartitionCounters : userInfo.PerPartitionCounters) {
+            perPartitionCounters.WriteTimeLagMsByCommittedPerPartition->Set(nowMs < ts ? 0 : nowMs - ts);
         }
         SET_METRIC(userInfo.LabeledCounters, METRIC_COMMIT_WRITE_TIME, ts);
 
@@ -1931,31 +1931,31 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
         SET_METRIC(userInfo.LabeledCounters, METRIC_READ_TOTAL_TIME, snapshot.TotalLag.MilliSeconds());
 
         ts = snapshot.LastReadTimestamp.MilliSeconds();
-        if (userInfo.TimeSinceLastReadMsPerPartition) {
-            userInfo.TimeSinceLastReadMsPerPartition->Set(nowMs < ts ? 0 : nowMs - ts);
+        for (auto& perPartitionCounters : userInfo.PerPartitionCounters) {
+            perPartitionCounters.TimeSinceLastReadMsPerPartition->Set(nowMs < ts ? 0 : nowMs - ts);
         }
         SET_METRIC(userInfo.LabeledCounters, METRIC_LAST_READ_TIME, ts);
 
         {
             ui64 timeLag = userInfo.GetWriteLagMs();
-            if (userInfo.WriteTimeLagMsByLastReadPerPartition) {
-                userInfo.WriteTimeLagMsByLastReadPerPartition->Set(timeLag);
+            for (auto& perPartitionCounters : userInfo.PerPartitionCounters) {
+                perPartitionCounters.WriteTimeLagMsByLastReadPerPartition->Set(timeLag);
             }
             SET_METRIC(userInfo.LabeledCounters, METRIC_WRITE_TIME_LAG, timeLag);
         }
 
         {
             auto lag = snapshot.ReadLag.MilliSeconds();
-            if (userInfo.ReadTimeLagMsPerPartition) {
-                userInfo.ReadTimeLagMsPerPartition->Set(lag);
+            for (auto& perPartitionCounters : userInfo.PerPartitionCounters) {
+                perPartitionCounters.ReadTimeLagMsPerPartition->Set(lag);
             }
             SET_METRIC(userInfo.LabeledCounters, METRIC_READ_TIME_LAG, lag);
         }
 
         {
             ui64 lag = GetEndOffset() - userInfo.Offset;
-            if (userInfo.MessageLagByCommittedPerPartition) {
-                userInfo.MessageLagByCommittedPerPartition->Set(lag);
+            for (auto& perPartitionCounters : userInfo.PerPartitionCounters) {
+                perPartitionCounters.MessageLagByCommittedPerPartition->Set(lag);
             }
 
             SET_METRIC(userInfo.LabeledCounters, METRIC_COMMIT_MESSAGE_LAG, lag);
@@ -1963,8 +1963,8 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
         }
 
         ui64 readMessageLag = GetEndOffset() - snapshot.ReadOffset;
-        if (userInfo.MessageLagByLastReadPerPartition) {
-            userInfo.MessageLagByLastReadPerPartition->Set(readMessageLag);
+        for (auto& perPartitionCounters : userInfo.PerPartitionCounters) {
+            perPartitionCounters.MessageLagByLastReadPerPartition->Set(readMessageLag);
         }
 
         SET_METRICS_COUPLE(userInfo.LabeledCounters, METRIC_READ_MESSAGE_LAG, readMessageLag, METRIC_READ_TOTAL_MESSAGE_LAG);
@@ -3441,13 +3441,15 @@ void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
         OffloadActor = {};
     }
 
-    if (MonitoringProjectId != Config.GetMonitoringProjectId() || !DetailedMetricsAreEnabled(Config)) {
+    if (MonitoringProjectId != Config.GetMonitoringProjectId()) {
+        UsersInfoStorage->ResetDetailedMetrics();
+        ResetDetailedMetrics();
+    } else if (!DetailedMetricsAreEnabled(Config)) {
         ResetDetailedMetrics();
     }
     MonitoringProjectId = Config.GetMonitoringProjectId();
-    if (DetailedMetricsAreEnabled(Config)) {
-        SetupDetailedMetrics();
-    }
+    SetupDetailedMetrics();
+    UsersInfoStorage->SetupDetailedMetrics(ActorContext());
 }
 
 
@@ -4583,8 +4585,6 @@ void TPartition::SetupDetailedMetrics() {
         // Don't recreate the counters if they already exist.
         return;
     }
-
-    UsersInfoStorage->SetupDetailedMetrics(ActorContext());
 
     auto subgroup = GetPerPartitionCounterSubgroup();
     if (!subgroup) {

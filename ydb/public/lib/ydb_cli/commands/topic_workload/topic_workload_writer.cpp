@@ -99,9 +99,6 @@ void TTopicWorkloadWriterWorker::Process(TInstant endTime) {
             return producer->ContinuationTokenDefined();
         },
         [this]() {
-            return GetExpectedCurrMessageCreationTimestamp();
-        },
-        [this]() {
             return GetCreateTimestampForNextMessage();
         },
         [this](TInstant& commitTime) {

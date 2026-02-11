@@ -91,7 +91,6 @@ inline TStringBuilder LogPrefix(const std::string& sessionId) {
 template <
     class TProducer,
     class THasContinuationToken,
-    class TGetExpectedTs,
     class TGetCreateTs,
     class TTryCommitTx,
     class TInflightSize,
@@ -108,7 +107,6 @@ inline void ProcessWriterLoopCommon(
     bool& waitForCommitTx,
     TInstant endTime,
     THasContinuationToken hasContinuationToken,
-    TGetExpectedTs,
     TGetCreateTs getCreateTs,
     TTryCommitTx tryCommitTx,
     TInflightSize inflightMessagesSize,

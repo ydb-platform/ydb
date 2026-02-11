@@ -160,6 +160,7 @@ public:
 #define DEFINE_REQUEST(name, base) \
     struct TEv##name##Request: public base<TEv##name##Request, Ev##name##Request, Aws::S3::Model::name##Request> { \
         using TBase::TBase; \
+        static constexpr TStringBuf RequestName = Y_STRINGIZE(name); \
     }
 
 #define DEFINE_GENERIC_REQUEST(name) \

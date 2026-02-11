@@ -169,9 +169,7 @@ void CollectQueryStats(const TActorContext& ctx, const TKqpQueryStats* queryStat
         parametersSize, database, type, requestUnits);
 }
 
-// Send stats update for a victim query (only LocksBrokenAsVictim counter)
-// This is used to attribute victim stats to the query that acquired the locks (SELECT)
-// rather than the query that was aborted (WRITE)
+// Attribute LocksBrokenAsVictim to the original query that acquired the locks
 void SendVictimStats(const TActorContext& ctx, ui64 locksBrokenAsVictim,
     const TString& victimQueryText, const TString& database)
 {

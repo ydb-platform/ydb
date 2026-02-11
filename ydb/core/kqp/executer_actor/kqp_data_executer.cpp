@@ -613,13 +613,7 @@ private:
                 ResponseEv->BrokenLockShardId = shardId;
 
                 if (!res->Record.GetTxLocks().empty()) {
-                    const auto& brokenLock = res->Record.GetTxLocks(0);
-                    ResponseEv->BrokenLockPathId = NYql::TKikimrPathId(
-                        brokenLock.GetSchemeShard(),
-                        brokenLock.GetPathId());
-                    if (brokenLock.HasQueryTraceId()) {
-                        ResponseEv->BrokenLockQueryTraceId = brokenLock.GetQueryTraceId();
-                    }
+                    FillBrokenLockInfo(res->Record.GetTxLocks(0));
                 }
                 FillLocksFromExtraData();
                 ReplyErrorAndDie(Ydb::StatusIds::ABORTED, {});
@@ -1384,13 +1378,7 @@ private:
                 ResponseEv->BrokenLockShardId = shardId;
 
                 if (!res->Record.GetTxLocks().empty()) {
-                    const auto& brokenLock = res->Record.GetTxLocks(0);
-                    ResponseEv->BrokenLockPathId = NYql::TKikimrPathId(
-                        brokenLock.GetSchemeShard(),
-                        brokenLock.GetPathId());
-                    if (brokenLock.HasQueryTraceId()) {
-                        ResponseEv->BrokenLockQueryTraceId = brokenLock.GetQueryTraceId();
-                    }
+                    FillBrokenLockInfo(res->Record.GetTxLocks(0));
                     FillLocksFromExtraData();
                     ReplyErrorAndDie(Ydb::StatusIds::ABORTED, {});
                     return;
@@ -1464,13 +1452,7 @@ private:
                 ResponseEv->BrokenLockShardId = shardId; // todo: without responseEv
 
                 if (!res->Record.GetTxLocks().empty()) {
-                    const auto& brokenLock = res->Record.GetTxLocks(0);
-                    ResponseEv->BrokenLockPathId = NYql::TKikimrPathId(
-                        brokenLock.GetSchemeShard(),
-                        brokenLock.GetPathId());
-                    if (brokenLock.HasQueryTraceId()) {
-                        ResponseEv->BrokenLockQueryTraceId = brokenLock.GetQueryTraceId();
-                    }
+                    FillBrokenLockInfo(res->Record.GetTxLocks(0));
                     FillLocksFromExtraData();
                     return ReplyErrorAndDie(Ydb::StatusIds::ABORTED, {});
                 }
@@ -2420,7 +2402,6 @@ private:
             switch (Request.LocksOp) {
                 case ELocksOp::Commit:
                     locks->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
-                    // Set FirstQueryTraceId for accurate lock-breaking attribution
                     if (Request.FirstQueryTraceId != 0) {
                         locks->SetFirstQueryTraceId(Request.FirstQueryTraceId);
                     }
@@ -2616,7 +2597,6 @@ private:
 
                 for (auto& [shardId, shardTx] : datashardTxs) {
                     shardTx->MutableLocks()->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
-                    // Set FirstQueryTraceId for accurate lock-breaking attribution
                     if (Request.FirstQueryTraceId != 0) {
                         shardTx->MutableLocks()->SetFirstQueryTraceId(Request.FirstQueryTraceId);
                     }
@@ -2647,7 +2627,6 @@ private:
 
                 for (auto& [shardId, tx] : evWriteTxs) {
                     tx->MutableLocks()->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
-                    // Set FirstQueryTraceId for accurate lock-breaking attribution
                     if (Request.FirstQueryTraceId != 0) {
                         tx->MutableLocks()->SetFirstQueryTraceId(Request.FirstQueryTraceId);
                     }
@@ -3087,6 +3066,16 @@ private:
         }
     }
 
+    // Extract broken lock info from the first TxLock in a DataShard response.
+    void FillBrokenLockInfo(const NKikimrDataEvents::TLock& brokenLock) {
+        ResponseEv->BrokenLockPathId = NYql::TKikimrPathId(
+            brokenLock.GetSchemeShard(),
+            brokenLock.GetPathId());
+        if (brokenLock.HasQueryTraceId()) {
+            ResponseEv->BrokenLockQueryTraceId = brokenLock.GetQueryTraceId();
+        }
+    }
+
     void FillLocksFromExtraData() {
         auto addLocks = [this](const ui64 taskId, const auto& data) {
             if (data.GetData().template Is<NKikimrTxDataShard::TEvKqpInputActorResultInfo>()) {
@@ -3106,7 +3095,6 @@ private:
                         TxManager->AddShard(lock.GetDataShard(), stageInfo.Meta.TableKind == ETableKind::Olap, stageInfo.Meta.TablePath);
                         TxManager->AddAction(lock.GetDataShard(), IKqpTransactionManager::EAction::READ);
                         if (!TxManager->AddLock(lock.GetDataShard(), lock)) {
-                            // Store the broken lock's QueryTraceId for TLI logging
                             if (lock.HasQueryTraceId() && lock.GetQueryTraceId() != 0) {
                                 TxManager->SetVictimQueryTraceId(lock.GetQueryTraceId());
                             }
@@ -3158,7 +3146,6 @@ private:
                         ui64 queryTraceId = lock.HasQueryTraceId() ? lock.GetQueryTraceId() : 0;
                         TxManager->AddAction(lock.GetDataShard(), flags, queryTraceId);
                         if (!TxManager->AddLock(lock.GetDataShard(), lock)) {
-                            // Store the broken lock's QueryTraceId for TLI logging
                             if (lock.HasQueryTraceId() && lock.GetQueryTraceId() != 0) {
                                 TxManager->SetVictimQueryTraceId(lock.GetQueryTraceId());
                             }

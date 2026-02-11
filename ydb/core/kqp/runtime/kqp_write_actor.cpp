@@ -65,10 +65,50 @@ namespace {
         }
     }
 
-    //
+    // Set FirstQueryTraceId on lock proto for lock-breaking attribution.
+    // Prefers actorQueryTraceId, falls back to TxManager's per-shard or global trace ID.
+    void SetFirstQueryTraceIdOnLocks(NKikimrDataEvents::TKqpLocks* protoLocks,
+        ui64 actorQueryTraceId, ui64 shardId, const NKikimr::NKqp::IKqpTransactionManagerPtr& txManager)
+    {
+        ui64 id = actorQueryTraceId;
+        if (id == 0) {
+            auto perShard = txManager->GetShardBreakerQueryTraceId(shardId);
+            id = perShard.value_or(txManager->GetFirstQueryTraceId());
+        }
+        if (id != 0) {
+            protoLocks->SetFirstQueryTraceId(id);
+        }
+    }
+
+    // Extract VictimQueryTraceId from the first broken lock in a WriteResult record.
+    void SetVictimQueryTraceIdFromBrokenLocks(const NKikimrDataEvents::TEvWriteResult& record,
+        const NKikimr::NKqp::IKqpTransactionManagerPtr& txManager)
+    {
+        if (!record.GetTxLocks().empty()) {
+            const auto& lock = record.GetTxLocks(0);
+            if (lock.HasQueryTraceId() && lock.GetQueryTraceId() != 0) {
+                txManager->SetVictimQueryTraceId(lock.GetQueryTraceId());
+            }
+        }
+    }
+
+    // Build error issues from TxManager lock issue combined with additional issues.
+    NYql::TIssues MakeLockIssues(const NKikimr::NKqp::IKqpTransactionManagerPtr& txManager,
+        const NYql::TIssues& extraIssues)
+    {
+        NYql::TIssues result;
+        if (auto lockIssue = txManager->GetLockIssue()) {
+            result.AddIssue(*lockIssue);
+        }
+        for (const auto& issue : extraIssues) {
+            result.AddIssue(issue);
+        }
+        return result;
+    }
+
     void FillEvWritePrepare(NKikimr::NEvents::TDataEvents::TEvWrite* evWrite,
         ui64 shardId, ui64 txId, const NKikimr::NKqp::IKqpTransactionManagerPtr& txManager,
-        ui64 actorQueryTraceId = 0) // QueryTraceId of the actor that wrote to this shard
+        ui64 actorQueryTraceId = 0)
     {
         evWrite->Record.SetTxId(txId);
         auto* protoLocks = evWrite->Record.MutableLocks();
@@ -119,18 +159,7 @@ namespace {
             *protoLocks->AddLocks() = lock;
         }
 
-        // Set FirstQueryTraceId for accurate lock-breaking attribution in separate commit scenarios
-        // Use actor's QueryTraceId if provided - it was set when the actor was created
-        // for the first query that wrote to this table
-        ui64 firstQueryTraceId = actorQueryTraceId;
-        if (firstQueryTraceId == 0) {
-            // Fallback: try TxManager sources
-            auto shardBreakerQueryTraceId = txManager->GetShardBreakerQueryTraceId(shardId);
-            firstQueryTraceId = shardBreakerQueryTraceId.value_or(txManager->GetFirstQueryTraceId());
-        }
-        if (firstQueryTraceId != 0) {
-            protoLocks->SetFirstQueryTraceId(firstQueryTraceId);
-        }
+        SetFirstQueryTraceIdOnLocks(protoLocks, actorQueryTraceId, shardId, txManager);
     }
 
     void FillEvWriteRollback(NKikimr::NEvents::TDataEvents::TEvWrite* evWrite, ui64 shardId, const NKikimr::NKqp::IKqpTransactionManagerPtr& txManager) {
@@ -427,7 +456,6 @@ public:
     }
 
     // Update QueryTraceId if a smaller (earlier) one is found.
-    // This handles the case where TEvBufferWrite messages arrive out of order.
     void MaybeUpdateQueryTraceId(ui64 queryTraceId) {
         if (queryTraceId != 0 && (QueryTraceId == 0 || queryTraceId < QueryTraceId)) {
             QueryTraceId = queryTraceId;
@@ -996,24 +1024,8 @@ public:
             YQL_ENSURE(TxManager->BrokenLocks());
             TxManager->SetError(ev->Get()->Record.GetOrigin());
 
-            // Store the broken lock's QueryTraceId for TLI logging
-            if (!ev->Get()->Record.GetTxLocks().empty()) {
-                const auto& brokenLock = ev->Get()->Record.GetTxLocks(0);
-                if (brokenLock.HasQueryTraceId() && brokenLock.GetQueryTraceId() != 0) {
-                    TxManager->SetVictimQueryTraceId(brokenLock.GetQueryTraceId());
-                }
-            }
-
-            {
-                NYql::TIssues lockIssues;
-                if (auto lockIssue = TxManager->GetLockIssue()) {
-                    lockIssues.AddIssue(*lockIssue);
-                }
-                for (const auto& issue : getIssues()) {
-                    lockIssues.AddIssue(issue);
-                }
-                RuntimeError(NYql::NDqProto::StatusIds::ABORTED, std::move(lockIssues));
-            }
+            SetVictimQueryTraceIdFromBrokenLocks(ev->Get()->Record, TxManager);
+            RuntimeError(NYql::NDqProto::StatusIds::ABORTED, MakeLockIssues(TxManager, getIssues()));
             return;
         }
         case NKikimrDataEvents::TEvWriteResult::STATUS_CONSTRAINT_VIOLATION: {
@@ -1075,25 +1087,16 @@ public:
                 return builder;
             }());
 
-        // Store locks from DataShard response in TxManager
-        // Only do this for WRITE mode - locks need to be collected during the write phase
-        // For IMMEDIATE_COMMIT, we skip AddLock because the transaction is already in EXECUTING state
-        // and AddLock requires COLLECTING state. Broken locks in IMMEDIATE_COMMIT are handled
-        // by the shard returning an error status.
+        // Only collect locks in WRITE mode (COLLECTING state required by AddLock)
         if (Mode == EMode::WRITE) {
             for (const auto& lock : ev->Get()->Record.GetTxLocks()) {
                 if (!TxManager->AddLock(ev->Get()->Record.GetOrigin(), lock)) {
                     UpdateStats(ev->Get()->Record.GetTxStats());
                     YQL_ENSURE(TxManager->BrokenLocks());
-                    // Store the broken lock's QueryTraceId for TLI logging
                     if (lock.HasQueryTraceId() && lock.GetQueryTraceId() != 0) {
                         TxManager->SetVictimQueryTraceId(lock.GetQueryTraceId());
                     }
-                    NYql::TIssues issues;
-                    issues.AddIssue(*TxManager->GetLockIssue());
-                    RuntimeError(
-                        NYql::NDqProto::StatusIds::ABORTED,
-                        std::move(issues));
+                    RuntimeError(NYql::NDqProto::StatusIds::ABORTED, MakeLockIssues(TxManager, {}));
                     return;
                 }
             }
@@ -1197,10 +1200,7 @@ public:
             return false;
         }
 
-        // Note: We do NOT set ShardBreakerQueryTraceId here because SendDataToShard may be called
-        // during commit with the commit query's QueryTraceId, not the original write's QueryTraceId.
-        // The correct BreakerQueryTraceId is already set in AddAction (called from UpdateShards)
-        // during the write phase when the data is actually buffered.
+        // BreakerQueryTraceId is set in AddAction during write phase, not here
 
         const bool isPrepare = metadata->IsFinal && Mode == EMode::PREPARE;
         const bool isImmediateCommit = metadata->IsFinal && Mode == EMode::IMMEDIATE_COMMIT;
@@ -1223,19 +1223,7 @@ public:
                 for (const auto& lock : locks) {
                     *protoLocks->AddLocks() = lock;
                 }
-                // Set FirstQueryTraceId for accurate lock-breaking attribution
-                // Use actor's QueryTraceId directly - it was set when the actor was created
-                // for the first query that wrote to this table, which is the most accurate
-                // source for identifying which query is the "breaker"
-                ui64 firstQueryTraceId = QueryTraceId;
-                if (firstQueryTraceId == 0) {
-                    // Fallback: try TxManager sources
-                    auto shardBreakerQueryTraceId = TxManager->GetShardBreakerQueryTraceId(shardId);
-                    firstQueryTraceId = shardBreakerQueryTraceId.value_or(TxManager->GetFirstQueryTraceId());
-                }
-                if (firstQueryTraceId != 0) {
-                    protoLocks->SetFirstQueryTraceId(firstQueryTraceId);
-                }
+                SetFirstQueryTraceIdOnLocks(protoLocks, QueryTraceId, shardId, TxManager);
             }
         } else if (isPrepare) {
             YQL_ENSURE(TxId);
@@ -1585,9 +1573,7 @@ private:
 
     NWilson::TTraceId ParentTraceId;
     NWilson::TSpan TableWriteActorSpan;
-    // QueryTraceId tracks the first (minimum) query that wrote to this table.
-    // It may be updated when the buffer actor receives a smaller QueryTraceId
-    // due to out-of-order message delivery.
+    // First (minimum) QueryTraceId that wrote to this table; may update on out-of-order delivery
     ui64 QueryTraceId = 0;
 };
 
@@ -3013,8 +2999,6 @@ public:
                         column.HasTypeInfo() ? &column.GetTypeInfo() : nullptr);
                     keyColumnTypes.push_back(typeInfoMod.TypeInfo);
                 }
-                // Use firstQueryTraceId for breaker attribution - it tracks the earliest query
-                // that wrote to this table, regardless of message delivery order
                 TKqpTableWriteActor* ptr = new TKqpTableWriteActor(
                     this,
                     settings.Database,
@@ -3719,8 +3703,7 @@ public:
             FillEvWriteRollback(evWrite.get(), shardId, TxManager);
         } else {
             YQL_ENSURE(TxId);
-            // Don't pass this actor's QueryTraceId - it's the commit query's ID, not the original write's ID.
-            // Rely on TxManager->GetShardBreakerQueryTraceId which was set by the per-table TKqpTableWriteActor.
+            // BreakerQueryTraceId comes from TxManager (set by per-table write actors), not this actor
             FillEvWritePrepare(evWrite.get(), shardId, *TxId, TxManager);
             evWrite->Record.SetOverloadSubscribe(++ExternalShardIdToOverloadSeqNo[shardId]);
         }
@@ -4522,22 +4505,8 @@ public:
             YQL_ENSURE(TxManager->BrokenLocks());
             TxManager->SetError(ev->Get()->Record.GetOrigin());
 
-            // Store the broken lock's QueryTraceId for TLI logging
-            if (!ev->Get()->Record.GetTxLocks().empty()) {
-                const auto& brokenLock = ev->Get()->Record.GetTxLocks(0);
-                if (brokenLock.HasQueryTraceId() && brokenLock.GetQueryTraceId() != 0) {
-                    TxManager->SetVictimQueryTraceId(brokenLock.GetQueryTraceId());
-                }
-            }
-
-            NYql::TIssues lockIssues;
-            if (auto lockIssue = TxManager->GetLockIssue()) {
-                lockIssues.AddIssue(*lockIssue);
-            }
-            for (const auto& issue : getIssues()) {
-                lockIssues.AddIssue(issue);
-            }
-            ReplyError(NYql::NDqProto::StatusIds::ABORTED, std::move(lockIssues));
+            SetVictimQueryTraceIdFromBrokenLocks(ev->Get()->Record, TxManager);
+            ReplyError(NYql::NDqProto::StatusIds::ABORTED, MakeLockIssues(TxManager, getIssues()));
             return;
         }
         case NKikimrDataEvents::TEvWriteResult::STATUS_CONSTRAINT_VIOLATION: {

@@ -1192,15 +1192,12 @@ std::pair<TVector<TSysLocks::TLock>, TVector<ui64>> TSysLocks::ApplyLocks() {
                 }
             }
             for (auto& readConflictLock : Update->ReadConflictLocks) {
-                // Use the Update's BreakerQueryTraceId when adding read conflicts
-                // The read lock will break the write lock when the read commits (serialization failure)
                 if (readConflictLock.AddConflict(lock.Get(), Db, Update->BreakerQueryTraceId)) {
                     waitPersistent = true;
                     waitPersistentMore.emplace_back(&readConflictLock);
                 }
             }
             for (auto& writeConflictLock : Update->WriteConflictLocks) {
-                // Use the Update's BreakerQueryTraceId when adding write conflicts
                 if (lock->AddConflict(&writeConflictLock, Db, Update->BreakerQueryTraceId)) {
                     waitPersistent = true;
                     waitPersistentMore.emplace_back(&writeConflictLock);
@@ -1364,17 +1361,13 @@ void TSysLocks::CommitLock(const TArrayRef<const TCell>& key) {
         for (auto& pr : lock->ConflictLocks) {
             if (!!(pr.second.Flags & ELockConflictFlags::BreakThemOnOurCommit) && !pr.first->IsRemoved()) {
                 Update->AddBreakLock(pr.first);
-                // Use the stored BreakerQueryTraceId from the conflict if available.
-                // This takes precedence over the explicitly set value (from FirstQueryTraceId)
-                // because the stored value is the actual query that created the conflict.
+                // Prefer the conflict-stored ID (actual query) over the default (FirstQueryTraceId)
                 if (pr.second.BreakerQueryTraceId != 0 && !foundStoredBreakerQueryTraceId) {
                     Update->BreakerQueryTraceId = pr.second.BreakerQueryTraceId;
                     foundStoredBreakerQueryTraceId = true;
                 }
             }
         }
-        // If no stored BreakerQueryTraceId was found, keep the one that was explicitly set
-        // (e.g., from TSetupSysLocks via the current operation's QueryTraceId)
         Update->AddEraseLock(lock);
     }
 }

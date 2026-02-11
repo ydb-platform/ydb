@@ -2605,6 +2605,22 @@ private:
         ValidationInfo.SetLoaded();
     }
 
+    // Set QueryTraceId on a lock proto: VictimQueryTraceId for broken locks, current QueryTraceId for normal locks.
+    static void SetLockQueryTraceId(NKikimrDataEvents::TLock* addLock, const TSysTables::TLocksTable::TLock& lock,
+                                    TSysLocks& sysLocks, ui64 currentQueryTraceId)
+    {
+        if (lock.IsError()) {
+            if (auto rawLock = sysLocks.GetRawLock(lock.LockId)) {
+                ui64 id = rawLock->GetVictimQueryTraceId();
+                if (id != 0) {
+                    addLock->SetQueryTraceId(id);
+                }
+            }
+        } else if (currentQueryTraceId != 0) {
+            addLock->SetQueryTraceId(currentQueryTraceId);
+        }
+    }
+
     // Handle deferred lock break detection: determine victim, log TLI events, and
     // pass breaker info to SessionActor via the result proto.
     void HandleDeferredLockBreak(TReadIteratorState& state, TSysLocks& sysLocks, const TActorContext& ctx) {
@@ -2722,21 +2738,7 @@ private:
                 addLock->SetHasWrites(true);
             }
 
-            // Add QueryTraceId for locks (needed for TLI logging)
-            // For broken locks, use VictimQueryTraceId; for normal locks, use current QueryTraceId
-            if (lock.IsError()) {
-                if (auto rawLock = sysLocks.GetRawLock(lock.LockId)) {
-                    ui64 queryTraceId = rawLock->GetVictimQueryTraceId();
-                    if (queryTraceId != 0) {
-                        addLock->SetQueryTraceId(queryTraceId);
-                    }
-                }
-            } else {
-                // Set QueryTraceId for normal locks to track which query created the lock
-                if (state.QueryTraceId != 0) {
-                    addLock->SetQueryTraceId(state.QueryTraceId);
-                }
-            }
+            SetLockQueryTraceId(addLock, lock, sysLocks, state.QueryTraceId);
 
             LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID()
                 << " Acquired lock# " << lock.LockId << ", counter# " << lock.Counter

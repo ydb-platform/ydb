@@ -251,7 +251,6 @@ inline ELockConflictFlags& operator&=(ELockConflictFlags& a, ELockConflictFlags 
 inline ELockConflictFlags operator~(ELockConflictFlags c) { return ELockConflictFlags(~ELockConflictFlagsRaw(c)); }
 inline bool operator!(ELockConflictFlags c) { return ELockConflictFlagsRaw(c) == 0; }
 
-// Struct to hold conflict lock info including both flags and the BreakerQueryTraceId
 struct TConflictLockInfo {
     ELockConflictFlags Flags = ELockConflictFlags::None;
     ui64 BreakerQueryTraceId = 0;
@@ -402,7 +401,6 @@ public:
         }
     }
 
-    // Get the BreakerQueryTraceId for a conflict with the given lock
     ui64 GetConflictBreakerQueryTraceId(TLockInfo* otherLock) const {
         auto it = ConflictLocks.find(otherLock);
         if (it != ConflictLocks.end()) {
@@ -465,8 +463,7 @@ private:
 
     std::optional<TRowVersion> BreakVersion;
 
-    // A set of locks we must break on commit (maps lock -> conflict info with flags and BreakerQueryTraceId)
-    THashMap<TLockInfo*, TConflictLockInfo> ConflictLocks;
+    THashMap<TLockInfo*, TConflictLockInfo> ConflictLocks;  // Locks to break on commit
     absl::flat_hash_set<ui64> VolatileDependencies;
     TVector<TPersistentRange> PersistentRanges;
 
@@ -758,9 +755,9 @@ private:
 struct TLocksUpdate {
     ui64 LockTxId = 0;
     ui32 LockNodeId = 0;
-    ui64 VictimQueryTraceId = 0;
-    ui64 BreakerQueryTraceId = 0;  // QueryTraceId of the query that creates conflicts (used when adding conflicts)
-    bool BreakerQueryTraceIdExplicitlySet = false;  // Flag to indicate explicit override (e.g., from TKqpLocks.FirstQueryTraceId)
+    ui64 VictimQueryTraceId = 0;       // Stored on the lock; identifies the victim if this lock is broken
+    ui64 BreakerQueryTraceId = 0;       // Stored on conflicts; identifies the breaker when CommitLock breaks others
+    bool BreakerQueryTraceIdExplicitlySet = false;  // Set when overridden by FirstQueryTraceId from KQP commit
     TLockInfo::TPtr Lock;
 
     TStackVec<TPointKey, 4> PointLocks;
@@ -1027,8 +1024,6 @@ public:
         return Locker.GetRemovedLocks();
     }
 
-    // Get the BreakerQueryTraceId from the current Update (if set)
-    // This returns the QueryTraceId of the query that created the conflicts being broken
     TMaybe<ui64> GetCurrentBreakerQueryTraceId() const {
         if (Update && Update->BreakerQueryTraceId != 0) {
             return Update->BreakerQueryTraceId;
@@ -1036,8 +1031,7 @@ public:
         return Nothing();
     }
 
-    // Set the BreakerQueryTraceId in the current Update
-    // This is used to override the default (commit operation's) trace ID with the actual query trace ID
+    // Override BreakerQueryTraceId (e.g., from FirstQueryTraceId in KQP commit)
     void SetBreakerQueryTraceId(ui64 queryTraceId) {
         if (Update && queryTraceId != 0) {
             Update->BreakerQueryTraceId = queryTraceId;

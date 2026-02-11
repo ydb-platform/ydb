@@ -859,12 +859,16 @@ ui64 TQueryExecutionStats::EstimateFinishMem() {
     return Result->ByteSizeLong();
 }
 
-void TQueryExecutionStats::AddDatashardPrepareStats(NKikimrQueryStats::TTxStats&& txStats) {
+void TQueryExecutionStats::CollectLockStats(const NKikimrQueryStats::TTxStats& txStats) {
     LocksBrokenAsBreaker += txStats.GetLocksBrokenAsBreaker();
     LocksBrokenAsVictim += txStats.GetLocksBrokenAsVictim();
     if (txStats.GetLocksBrokenAsBreaker() > 0 && txStats.HasBreakerQueryTraceId() && txStats.GetBreakerQueryTraceId() != 0) {
         BreakerQueryTraceIds.push_back(txStats.GetBreakerQueryTraceId());
     }
+}
+
+void TQueryExecutionStats::AddDatashardPrepareStats(NKikimrQueryStats::TTxStats&& txStats) {
+    CollectLockStats(txStats);
 
     ui64 cpuUs = txStats.GetComputeCpuTimeUsec();
     for (const auto& perShard : txStats.GetPerShardStats()) {
@@ -878,21 +882,13 @@ void TQueryExecutionStats::AddDatashardPrepareStats(NKikimrQueryStats::TTxStats&
 void TQueryExecutionStats::AddDatashardStats(NYql::NDqProto::TDqComputeActorStats&& stats,
     NKikimrQueryStats::TTxStats&& txStats, TDuration collectLongTaskStatsTimeout)
 {
-    LocksBrokenAsBreaker += txStats.GetLocksBrokenAsBreaker();
-    LocksBrokenAsVictim += txStats.GetLocksBrokenAsVictim();
-    if (txStats.GetLocksBrokenAsBreaker() > 0 && txStats.HasBreakerQueryTraceId() && txStats.GetBreakerQueryTraceId() != 0) {
-        BreakerQueryTraceIds.push_back(txStats.GetBreakerQueryTraceId());
-    }
+    CollectLockStats(txStats);
 
     UpdateTaskStats(0, stats, &txStats, NYql::NDqProto::COMPUTE_STATE_FINISHED, collectLongTaskStatsTimeout);
 }
 
 void TQueryExecutionStats::AddDatashardStats(NKikimrQueryStats::TTxStats&& txStats) {
-    LocksBrokenAsBreaker += txStats.GetLocksBrokenAsBreaker();
-    LocksBrokenAsVictim += txStats.GetLocksBrokenAsVictim();
-    if (txStats.GetLocksBrokenAsBreaker() > 0 && txStats.HasBreakerQueryTraceId() && txStats.GetBreakerQueryTraceId() != 0) {
-        BreakerQueryTraceIds.push_back(txStats.GetBreakerQueryTraceId());
-    }
+    CollectLockStats(txStats);
 
     ui64 datashardCpuTimeUs = 0;
     for (const auto& perShard : txStats.GetPerShardStats()) {
@@ -912,7 +908,7 @@ void TQueryExecutionStats::AddBufferStats(NYql::NDqProto::TDqTaskStats&& taskSta
         LocksBrokenAsVictim += extraStats.GetLockStats().GetBrokenAsVictim();
         for (auto id : extraStats.GetLockStats().GetBreakerQueryTraceIds()) {
             if (id != 0) {
-                        BreakerQueryTraceIds.push_back(id);
+                BreakerQueryTraceIds.push_back(id);
             }
         }
     }

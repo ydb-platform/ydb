@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(0.4.0)
+VERSION(0.5.0)
 
 LICENSE(MIT)
 
@@ -15,6 +15,7 @@ PY_SRCS(
     wcwidth/control_codes.py
     wcwidth/escape_sequences.py
     wcwidth/grapheme.py
+    wcwidth/sgr_state.py
     wcwidth/table_ambiguous.py
     wcwidth/table_grapheme.py
     wcwidth/table_vs16.py

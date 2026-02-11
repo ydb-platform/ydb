@@ -64,8 +64,6 @@ Latest version: http://www.cl.cam.ac.uk/~mgk25/ucs/wcwidth.c
 from __future__ import annotations
 
 # std imports
-import os
-import warnings
 from functools import lru_cache
 
 from typing import TYPE_CHECKING
@@ -73,6 +71,11 @@ from typing import TYPE_CHECKING
 # local
 from .bisearch import bisearch as _bisearch
 from .grapheme import iter_graphemes
+from .sgr_state import (_SGR_PATTERN,
+                        _SGR_STATE_DEFAULT,
+                        _sgr_state_update,
+                        _sgr_state_is_active,
+                        _sgr_state_to_sequence)
 from .table_vs16 import VS16_NARROW_TO_WIDE
 from .table_wide import WIDE_EASTASIAN
 from .table_zero import ZERO_WIDTH
@@ -90,6 +93,11 @@ if TYPE_CHECKING:  # pragma: no cover
 
     from typing import Literal
 
+# Pre-compute table references for the latest (and only) Unicode version.
+# This avoids dictionary lookups in the hot path.
+_LATEST_VERSION = list_versions()[-1]
+_ZERO_WIDTH_TABLE = ZERO_WIDTH[_LATEST_VERSION]
+_WIDE_EASTASIAN_TABLE = WIDE_EASTASIAN[_LATEST_VERSION]
 _AMBIGUOUS_TABLE = AMBIGUOUS_EASTASIAN[next(iter(AMBIGUOUS_EASTASIAN))]
 
 # Translation table to strip C0/C1 control characters for fast 'ignore' mode.
@@ -123,27 +131,15 @@ __all__ = (
 
 
 @lru_cache(maxsize=2000)
-def wcwidth(wc: str, unicode_version: str = 'auto', ambiguous_width: int = 1) -> int:
+def wcwidth(wc: str, unicode_version: str = 'auto', ambiguous_width: int = 1) -> int:  # pylint: disable=unused-argument
     r"""
     Given one Unicode codepoint, return its printable length on a terminal.
 
     :param wc: A single Unicode character.
-    :param unicode_version: A Unicode version number, such as
-        ``'6.0.0'``. A list of version levels supported by wcwidth
-        is returned by :func:`list_versions`.
-
-        Any version string may be specified without error -- the nearest
-        matching version is selected.  When ``'auto'`` (default), the
-        ``UNICODE_VERSION`` environment variable is used if set, otherwise
-        the highest Unicode version level is used.
+    :param unicode_version: Ignored. Retained for backwards compatibility.
 
         .. deprecated:: 0.3.0
-
-            This parameter is deprecated. Empirical data shows that Unicode
-            support in terminals varies not only by unicode version, but
-            by capabilities, Emojis, and specific language support.
-
-            The default ``'auto'`` behavior is recommended for all use cases.
+           Only the latest Unicode version is now shipped.
 
     :param ambiguous_width: Width to use for East Asian Ambiguous (A)
         characters. Default is ``1`` (narrow). Set to ``2`` for CJK contexts
@@ -170,14 +166,12 @@ def wcwidth(wc: str, unicode_version: str = 'auto', ambiguous_width: int = 1) ->
     if ucs and ucs < 32 or 0x07F <= ucs < 0x0A0:
         return -1
 
-    _unicode_version = _wcmatch_version(unicode_version)
-
     # Zero width
-    if _bisearch(ucs, ZERO_WIDTH[_unicode_version]):
+    if _bisearch(ucs, _ZERO_WIDTH_TABLE):
         return 0
 
     # Wide (F/W categories)
-    if _bisearch(ucs, WIDE_EASTASIAN[_unicode_version]):
+    if _bisearch(ucs, _WIDE_EASTASIAN_TABLE):
         return 2
 
     # Ambiguous width (A category) - only when ambiguous_width=2
@@ -187,7 +181,7 @@ def wcwidth(wc: str, unicode_version: str = 'auto', ambiguous_width: int = 1) ->
     return 1
 
 
-def wcswidth(
+def wcswidth(  # pylint: disable=unused-argument
     pwcs: str,
     n: int | None = None,
     unicode_version: str = 'auto',
@@ -202,18 +196,10 @@ def wcswidth(
         argument exists only for compatibility with the C POSIX function
         signature. It is suggested instead to use python's string slicing
         capability, ``wcswidth(pwcs[:n])``
-    :param unicode_version: A Unicode version number, such as
-        ``'6.0.0'``, or ``'auto'`` (default) which uses the
-        ``UNICODE_VERSION`` environment variable if defined, or the latest
-        available unicode version otherwise.
+    :param unicode_version: Ignored. Retained for backwards compatibility.
 
         .. deprecated:: 0.3.0
-
-            This parameter is deprecated. Empirical data shows that Unicode
-            support in terminals varies not only by unicode version, but
-            by capabilities, Emojis, and specific language support.
-
-            The default ``'auto'`` behavior is recommended for all use cases.
+           Only the latest Unicode version is now shipped.
 
     :param ambiguous_width: Width to use for East Asian Ambiguous (A)
         characters. Default is ``1`` (narrow). Set to ``2`` for CJK contexts.
@@ -229,7 +215,11 @@ def wcswidth(
     if n is None and pwcs.isascii() and pwcs.isprintable():
         return len(pwcs)
 
-    _unicode_version = None
+    # Select wcwidth call pattern for best lru_cache performance:
+    # - ambiguous_width=1 (default): single-arg calls share cache with direct wcwidth() calls
+    # - ambiguous_width=2: full positional args needed (results differ, separate cache is correct)
+    _wcwidth = wcwidth if ambiguous_width == 1 else lambda c: wcwidth(c, 'auto', ambiguous_width)
+
     end = len(pwcs) if n is None else n
     total_width = 0
     idx = 0
@@ -243,16 +233,14 @@ def wcswidth(
         if char == '\uFE0F' and last_measured_idx >= 0:
             # VS16 following a measured character: add 1 if that character is
             # known to be converted from narrow to wide by VS16.
-            if _unicode_version is None:
-                _unicode_version = _wcversion_value(_wcmatch_version(unicode_version))
-            if _unicode_version >= (9, 0, 0):
-                total_width += _bisearch(ord(pwcs[last_measured_idx]),
-                                         VS16_NARROW_TO_WIDE["9.0.0"])
+            # Note: VS16 support requires Unicode 9.0+, which is always true
+            # since only the latest version is shipped.
+            total_width += _bisearch(ord(pwcs[last_measured_idx]),
+                                     VS16_NARROW_TO_WIDE["9.0.0"])
             last_measured_idx = -2  # Prevent double application
             idx += 1
             continue
-        # measure character at current index
-        wcw = wcwidth(char, unicode_version, ambiguous_width)
+        wcw = _wcwidth(char)
         if wcw < 0:
             # early return -1 on C0 and C1 control characters
             return wcw
@@ -263,10 +251,20 @@ def wcswidth(
     return total_width
 
 
+# NOTE: _wcversion_value and _wcmatch_version are no longer used internally
+# by wcwidth since version 0.5.0 (only the latest Unicode version is shipped).
+# They are retained for API compatibility with external tools like ucs-detect
+# that may use these private functions.
+
+
 @lru_cache(maxsize=128)
-def _wcversion_value(ver_string: str) -> tuple[int, ...]:
+def _wcversion_value(ver_string: str) -> tuple[int, ...]:  # pragma: no cover
     """
     Integer-mapped value of given dotted version string.
+
+    .. note::
+        This function is no longer used internally by wcwidth but is retained
+        for API compatibility with external tools.
 
     :param ver_string: Unicode version string, of form ``n.n.n``.
     :returns: tuple of digit tuples, ``tuple(int, [...])``.
@@ -276,109 +274,23 @@ def _wcversion_value(ver_string: str) -> tuple[int, ...]:
 
 
 @lru_cache(maxsize=8)
-def _wcmatch_version(given_version: str) -> str:
+def _wcmatch_version(given_version: str) -> str:  # pylint: disable=unused-argument
     """
-    Return nearest matching supported Unicode version level.
+    Return the supported Unicode version level.
 
-    If an exact match is not determined, the nearest lowest version level is
-    returned after a warning is emitted.  For example, given supported levels
-    ``4.1.0`` and ``5.0.0``, and a version string of ``4.9.9``, then ``4.1.0``
-    is selected and returned:
+    .. note::
+        This function is no longer used internally by wcwidth but is retained
+        for API compatibility with external tools.
 
-    >>> _wcmatch_version('4.9.9')
-    '4.1.0'
-    >>> _wcmatch_version('8.0')
-    '8.0.0'
-    >>> _wcmatch_version('1')
-    '4.1.0'
+    .. deprecated:: 0.3.0
+        This function now always returns the latest version.
+        The ``unicode_version`` parameter and ``UNICODE_VERSION`` environment
+        variable are ignored.
 
-    :param given_version: given version for compare, may be ``auto``
-        (default), to select Unicode Version from Environment Variable,
-        ``UNICODE_VERSION``. If the environment variable is not set, then the
-        latest is used.
-    :returns: unicode string.
+    :param given_version: Ignored. Any value is accepted for compatibility.
+    :returns: The latest unicode version string.
     """
-    # Design note: the choice to return the same type that is given certainly
-    # complicates it for python 2 str-type, but allows us to define an api that
-    # uses 'string-type' for unicode version level definitions, so all of our
-    # example code works with all versions of python.
-    #
-    # That, along with the string-to-numeric and comparisons of earliest,
-    # latest, matching, or nearest, greatly complicates this function.
-    # Performance is somewhat curbed by memoization.
-
-    unicode_versions = list_versions()
-    latest_version = unicode_versions[-1]
-
-    if given_version == 'auto':
-        given_version = os.environ.get(
-            'UNICODE_VERSION',
-            'latest')
-
-    if given_version == 'latest':
-        # default match, when given as 'latest', use the most latest unicode
-        # version specification level supported.
-        return latest_version
-
-    if given_version in unicode_versions:
-        # exact match, downstream has specified an explicit matching version
-        # matching any value of list_versions().
-        return given_version
-
-    # The user's version is not supported by ours. We return the newest unicode
-    # version level that we support below their given value.
-    try:
-        cmp_given = _wcversion_value(given_version)
-
-    except ValueError:
-        # submitted value raises ValueError in int(), warn and use latest.
-        warnings.warn(f"UNICODE_VERSION value, {given_version!r}, is invalid. "
-                      "Value should be in form of `integer[.]+', the latest "
-                      f"supported unicode version {latest_version!r} has been "
-                      "inferred.")
-        return latest_version
-
-    # given version is less than any available version, return earliest
-    # version.
-    earliest_version = unicode_versions[0]
-    cmp_earliest_version = _wcversion_value(earliest_version)
-
-    if cmp_given <= cmp_earliest_version:
-        # this probably isn't what you wanted, the oldest wcwidth.c you will
-        # find in the wild is likely version 5 or 6, which we both support,
-        # but it's better than not saying anything at all.
-        warnings.warn(f"UNICODE_VERSION value, {given_version!r}, is lower "
-                      "than any available unicode version. Returning lowest "
-                      f"version level, {earliest_version!r}")
-        return earliest_version
-
-    # create list of versions which are less than our equal to given version,
-    # and return the tail value, which is the highest level we may support,
-    # or the latest value we support, when completely unmatched or higher
-    # than any supported version.
-    #
-    # function will never complete, always returns.
-    for idx, unicode_version in enumerate(unicode_versions):
-        # look ahead to next value
-        try:
-            cmp_next_version = _wcversion_value(unicode_versions[idx + 1])
-        except IndexError:
-            # at end of list, return latest version
-            return latest_version
-
-        # Maybe our given version has less parts, as in tuple(8, 0), than the
-        # next compare version tuple(8, 0, 0). Test for an exact match by
-        # comparison of only the leading dotted piece(s): (8, 0) == (8, 0).
-        if cmp_given == cmp_next_version[:len(cmp_given)]:
-            return unicode_versions[idx + 1]
-
-        # Or, if any next value is greater than our given support level
-        # version, return the current value in index.  Even though it must
-        # be less than the given value, it's our closest possible match. That
-        # is, 4.1 is returned for given 4.9.9, where 4.1 and 5.0 are available.
-        if cmp_next_version > cmp_given:
-            return unicode_version
-    assert False, ("Code path unreachable", given_version, unicode_versions)  # pragma: no cover
+    return _LATEST_VERSION
 
 
 def iter_sequences(text: str) -> Iterator[tuple[str, bool]]:
@@ -539,6 +451,11 @@ def width(
     last_measured_idx = -2  # Track index of last measured char for VS16; -2 can never match idx-1
     text_len = len(text)
 
+    # Select wcwidth call pattern for best lru_cache performance:
+    # - ambiguous_width=1 (default): single-arg calls share cache with direct wcwidth() calls
+    # - ambiguous_width=2: full positional args needed (results differ, separate cache is correct)
+    _wcwidth = wcwidth if ambiguous_width == 1 else lambda c: wcwidth(c, 'auto', ambiguous_width)
+
     while idx < text_len:
         char = text[idx]
 
@@ -609,7 +526,7 @@ def width(
             continue
 
         # 7. Normal characters: measure with wcwidth
-        w = wcwidth(char, 'auto', ambiguous_width)
+        w = _wcwidth(char)
         if w > 0:
             current_col += w
             max_extent = max(max_extent, current_col)
@@ -779,6 +696,7 @@ def clip(
     fillchar: str = ' ',
     tabsize: int = 8,
     ambiguous_width: int = 1,
+    propagate_sgr: bool = True,
 ) -> str:
     r"""
     Clip text to display columns ``(start, end)`` while preserving all terminal sequences.
@@ -803,11 +721,25 @@ def clip(
         as zero-width (preserved in output but don't advance column position).
     :param ambiguous_width: Width to use for East Asian Ambiguous (A)
         characters. Default is ``1`` (narrow). Set to ``2`` for CJK contexts.
+    :param propagate_sgr: If True (default), SGR (terminal styling) sequences
+        are propagated. The result begins with any active style at the start
+        position and ends with a reset sequence if styles are active.
     :returns: Substring of ``text`` spanning display columns ``(start, end)``,
         with all terminal sequences preserved and wide characters at boundaries
         replaced with ``fillchar``.
 
+    SGR (terminal styling) sequences are propagated by default. The result
+    begins with any active style and ends with a reset::
+
+        >>> clip('\x1b[1;34mHello world\x1b[0m', 6, 11)
+        '\x1b[1;34mworld\x1b[0m'
+
+    Set ``propagate_sgr=False`` to disable this behavior.
+
     .. versionadded:: 0.3.0
+
+    .. versionchanged:: 0.5.0
+       Added ``propagate_sgr`` parameter (default True).
 
     Example::
 
@@ -818,64 +750,101 @@ def clip(
         >>> clip('a\tb', 0, 10)  # Tab expanded to spaces
         'a       b'
     """
-    # pylint: disable=too-complex,too-many-locals,too-many-branches
+    # pylint: disable=too-complex,too-many-locals,too-many-branches,too-many-statements,too-many-nested-blocks
+    # Again, for 'hot path', we avoid additional delegate functions and accept the cost
+    # of complexity for improved python performance.
     start = max(start, 0)
     if end <= start:
         return ''
 
-    # Fast path: printable ASCII only (no tabs, escapes, or wide chars)
+    # Fast path: printable ASCII only (no tabs, escape sequences, or wide or zero-width chars)
     if text.isascii() and text.isprintable():
         return text[start:end]
 
-    output = []
+    # Fast path: no escape sequences means no SGR tracking needed
+    if propagate_sgr and '\x1b' not in text:
+        propagate_sgr = False
+
+    # SGR tracking state (only when propagate_sgr=True)
+    sgr_at_clip_start = None  # state when first visible char emitted (None = not yet)
+    if propagate_sgr:
+        sgr = _SGR_STATE_DEFAULT  # current SGR state, updated by all sequences
+
+    output: list[str] = []
     col = 0
     idx = 0
-    text_len = len(text)
 
-    while idx < text_len:
+    while idx < len(text):
         char = text[idx]
 
-        # Escape sequences: always include (zero-width)
-        if char == '\x1b':
-            match = ZERO_WIDTH_PATTERN.match(text, idx)
-            if match:
-                output.append(match.group())
-                idx = match.end()
+        # Early exit: past visible region, SGR captured, no escape ahead
+        if col >= end and sgr_at_clip_start is not None and char != '\x1b':
+            break
+
+        # Handle escape sequences
+        if char == '\x1b' and (match := ZERO_WIDTH_PATTERN.match(text, idx)):
+            seq = match.group()
+            if propagate_sgr and _SGR_PATTERN.match(seq):
+                # Update SGR state; will be applied as prefix when visible content starts
+                sgr = _sgr_state_update(sgr, seq)
             else:
-                output.append(char)
-                idx += 1
+                # Non-SGR sequences always preserved
+                output.append(seq)
+            idx = match.end()
             continue
 
-        # TAB: expand to spaces (or pass through if tabsize=0)
+        # Handle bare ESC (not a valid sequence)
+        if char == '\x1b':
+            output.append(char)
+            idx += 1
+            continue
+
+        # TAB expansion
         if char == '\t':
             if tabsize > 0:
                 next_tab = col + (tabsize - (col % tabsize))
                 while col < next_tab:
                     if start <= col < end:
                         output.append(' ')
+                        if propagate_sgr and sgr_at_clip_start is None:
+                            sgr_at_clip_start = sgr
                     col += 1
             else:
                 output.append(char)
             idx += 1
             continue
 
-        # Grapheme clustering handles everything else (including control chars)
-        grapheme = next(iter_graphemes(text[idx:]))
+        # Grapheme clustering for everything else
+        grapheme = next(iter_graphemes(text, start=idx))
         w = width(grapheme, ambiguous_width=ambiguous_width)
 
         if w == 0:
-            # Zero-width (combining marks, etc): always include, doesn't advance column
-            output.append(grapheme)
-        else:
-            if col >= start and col + w <= end:
-                # Fully visible: include the grapheme
+            if start <= col < end:
                 output.append(grapheme)
-            elif col < end and col + w > start:
-                # Partially visible: wide char spans boundary, replace with fillchar
-                output.append(fillchar * (min(end, col + w) - max(start, col)))
-            # Else: fully outside (start, end), omit entirely
+        elif col >= start and col + w <= end:
+            # Fully visible
+            output.append(grapheme)
+            if propagate_sgr and sgr_at_clip_start is None:
+                sgr_at_clip_start = sgr
+            col += w
+        elif col < end and col + w > start:
+            # Partially visible (wide char at boundary)
+            output.append(fillchar * (min(end, col + w) - max(start, col)))
+            if propagate_sgr and sgr_at_clip_start is None:
+                sgr_at_clip_start = sgr
+            col += w
+        else:
             col += w
 
         idx += len(grapheme)
 
-    return ''.join(output)
+    result = ''.join(output)
+
+    # Apply SGR prefix/suffix
+    if sgr_at_clip_start is not None:
+        if prefix := _sgr_state_to_sequence(sgr_at_clip_start):
+            result = prefix + result
+        if _sgr_state_is_active(sgr_at_clip_start):
+            result += '\x1b[0m'
+
+    return result

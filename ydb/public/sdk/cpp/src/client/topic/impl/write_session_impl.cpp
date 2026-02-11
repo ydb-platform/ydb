@@ -956,6 +956,7 @@ void TWriteSessionImpl::OnReadDone(NYdbGrpc::TGrpcStatus&& grpcStatus, size_t co
     bool doRead = false;
     {
         std::lock_guard guard(Lock);
+        LOG_LAZY(DbDriverState->Log, TLOG_DEBUG, LogPrefixImpl() << "Write session: OnReadDone " << grpcStatus.ToDebugString());
         UpdateTimedCountersImpl();
         if (connectionGeneration != ConnectionGeneration) {
             return; // Message from previous connection. Ignore.

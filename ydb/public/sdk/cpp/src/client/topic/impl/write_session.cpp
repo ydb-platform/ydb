@@ -1224,7 +1224,6 @@ TKeyedWriteSession::TKeyedWriteSession(
     });
 
     auto partitionChooserStrategy = settings.PartitionChooserStrategy_;
-
     auto strategy = topicConfig.GetTopicDescription().GetPartitioningSettings().GetAutoPartitioningSettings().GetStrategy();
     auto autoPartitioningEnabled = (strategy != EAutoPartitioningStrategy::Disabled &&
                                 strategy != EAutoPartitioningStrategy::Unspecified);
@@ -1244,6 +1243,7 @@ TKeyedWriteSession::TKeyedWriteSession(
         auto children = partition.GetChildPartitionIds();
 
         std::vector<std::uint32_t> childrenIndices;
+        childrenIndices.reserve(children.size());
         for (auto child : children) {
             childrenIndices.push_back(child);
         }
@@ -1305,6 +1305,7 @@ TKeyedWriteSession::TKeyedWriteSession(
 
 std::vector<TKeyedWriteSession::TPartitionInfo> TKeyedWriteSession::GetPartitions() const {
     std::vector<TPartitionInfo> partitions;
+    partitions.reserve(Partitions.size());
     for (const auto& [partitionId, partitionInfo] : Partitions) {
         partitions.push_back(partitionInfo);
     }
@@ -1335,7 +1336,6 @@ void TKeyedWriteSession::Write(TContinuationToken&&, const std::string& key, TWr
     }
 
     RunMainWorker();
-
     if (eventsPromise) {
         eventsPromise->TrySetValue();
     }
@@ -1401,7 +1401,6 @@ bool TKeyedWriteSession::RunSplittedPartitionWorkers() {
     }
 
     bool needRerun = false;
-
     for (const auto& [partition, splittedPartitionWorker] : SplittedPartitionWorkers) {
         if (splittedPartitionWorker->IsDone()) {
             continue;
@@ -1648,7 +1647,7 @@ TKeyedWriteSession::THashPartitionChooser::THashPartitionChooser(std::vector<std
 {}
 
 std::uint32_t TKeyedWriteSession::THashPartitionChooser::ChoosePartition(const std::string_view key) {
-    std::uint64_t hash = MurmurHash<std::uint64_t>(key.data(), key.size());
+    auto hash = MurmurHash<std::uint64_t>(key.data(), key.size());
     return Partitions[hash % Partitions.size()];
 }
 

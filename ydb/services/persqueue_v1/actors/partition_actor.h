@@ -165,6 +165,12 @@ private:
 
     const std::set<NPQ::TPartitionGraph::Node*>& GetParents(std::shared_ptr<NPQ::TPartitionGraph> partitionGraph) const;
 
+    void HandleInit(const NKikimrClient::TPersQueuePartitionResponse& response, const TActorContext& ctx);
+    void HandleDirectReadRestoreSession(const NKikimrClient::TPersQueuePartitionResponse& response, const TActorContext& ctx);
+    void Handle(const NKikimrClient::TPersQueuePartitionResponse::TCmdPrepareDirectReadResult& response, const TActorContext& ctx);
+    void Handle(const NKikimrClient::TPersQueuePartitionResponse::TCmdPublishDirectReadResult& response, const TActorContext& ctx);
+    void Handle(const NKikimrClient::TCmdReadResult& response, const TActorContext& ctx);
+
 private:
     const TActorId ParentId;
     const TString ClientId;
@@ -216,7 +222,7 @@ private:
 
     TString ReadGuid; // empty if not reading
 
-    ui64 InitCookie;
+    ui64 InitCookie = 1;
 
     std::set<ui64> WaitDataInfly;
     ui64 WaitDataCookie;

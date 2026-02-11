@@ -244,6 +244,14 @@ EXPECTED_RESULTS_WITH_ENFORCE_USER_TOKEN = {
         'monitoring@builtin': 200,
         'root@builtin': 200,
     },
+    '/healthcheck?database=%2FRoot': {
+        None: 200,
+        'user@builtin': 403,
+        'database@builtin': 403,
+        'viewer@builtin': 403,
+        'monitoring@builtin': 200,
+        'root@builtin': 200,
+    },
     '/ping': {
         None: 200,
         'user@builtin': 200,
@@ -344,6 +352,14 @@ EXPECTED_RESULTS_WITHOUT_ENFORCE_USER_TOKEN = {
         'root@builtin': 200,
     },
     '/healthcheck': {
+        None: 200,
+        'user@builtin': 200,
+        'database@builtin': 200,
+        'viewer@builtin': 200,
+        'monitoring@builtin': 200,
+        'root@builtin': 200,
+    },
+    '/healthcheck?database=%2FRoot': {
         None: 200,
         'user@builtin': 200,
         'database@builtin': 200,
@@ -503,6 +519,14 @@ def test_with_require_healthcheck_authentication(ydb_cluster_with_require_health
         },
         '/healthcheck': {
             None: 403,
+            'user@builtin': 403,
+            'database@builtin': 403,
+            'viewer@builtin': 403,
+            'monitoring@builtin': 200,
+            'root@builtin': 200,
+        },
+        '/healthcheck?database=%2FRoot': {
+            None: 200,
             'user@builtin': 403,
             'database@builtin': 403,
             'viewer@builtin': 403,

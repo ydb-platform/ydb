@@ -1,6 +1,7 @@
 """Performance benchmarks for wcwidth module."""
 # std imports
 import os
+import unicodedata
 
 # local
 import wcwidth
@@ -54,6 +55,31 @@ def test_wcswidth_emoji_sequence(benchmark):
     benchmark(wcwidth.wcswidth, text)
 
 
+# NFC vs NFD comparison - text with combining marks
+DIACRITICS_COMPOSED = 'café résumé naïve ' * 100
+DIACRITICS_DECOMPOSED = unicodedata.normalize('NFD', DIACRITICS_COMPOSED)
+
+
+def test_wcswidth_composed(benchmark):
+    """Benchmark wcswidth() with NFC-composed text."""
+    benchmark(wcwidth.wcswidth, DIACRITICS_COMPOSED)
+
+
+def test_wcswidth_decomposed(benchmark):
+    """Benchmark wcswidth() with NFD-decomposed text."""
+    benchmark(wcwidth.wcswidth, DIACRITICS_DECOMPOSED)
+
+
+def test_width_composed(benchmark):
+    """Benchmark width() with NFC-composed text."""
+    benchmark(wcwidth.width, DIACRITICS_COMPOSED)
+
+
+def test_width_decomposed(benchmark):
+    """Benchmark width() with NFD-decomposed text."""
+    benchmark(wcwidth.width, DIACRITICS_DECOMPOSED)
+
+
 def test_width_ascii(benchmark):
     """Benchmark width() with ASCII string."""
     benchmark(wcwidth.width, 'hello world')
@@ -86,6 +112,36 @@ def test_iter_graphemes_combining(benchmark):
     """Benchmark iter_graphemes() with combining characters."""
     text = 'café\u0301' * 10
     benchmark(lambda: list(wcwidth.iter_graphemes(text)))
+
+
+def test_grapheme_boundary_before_short(benchmark):
+    """Benchmark grapheme_boundary_before() near start of short string."""
+    text = 'Hello 👋🏻!'
+    benchmark(wcwidth.grapheme_boundary_before, text, 8)
+
+
+def test_grapheme_boundary_before_long_end(benchmark):
+    """Benchmark grapheme_boundary_before() near end of long line."""
+    text = 'x' * 95 + '👨\u200d👩\u200d👧!'
+    benchmark(wcwidth.grapheme_boundary_before, text, 100)
+
+
+def test_grapheme_boundary_before_long_mid(benchmark):
+    """Benchmark grapheme_boundary_before() in middle of long line."""
+    text = 'x' * 50 + '👨\u200d👩\u200d👧' + 'y' * 50
+    benchmark(wcwidth.grapheme_boundary_before, text, 55)
+
+
+def test_iter_graphemes_reverse_short(benchmark):
+    """Benchmark iter_graphemes_reverse() with short string."""
+    text = 'café\u0301 🇫🇷!'
+    benchmark(lambda: list(wcwidth.iter_graphemes_reverse(text)))
+
+
+def test_iter_graphemes_reverse_long(benchmark):
+    """Benchmark iter_graphemes_reverse() with long string."""
+    text = 'The quick brown 🦊 jumps over the lazy 🐕. ' * 5
+    benchmark(lambda: list(wcwidth.iter_graphemes_reverse(text)))
 
 
 def test_ljust_ascii(benchmark):

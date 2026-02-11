@@ -137,11 +137,11 @@ private:
 class TCompositeTopicReadSession final : public IReadSession, public ICompositeTopicReadSessionControlImpl {
     struct TTopicEventSizeVisitor {
         template <typename TEv>
-        void operator()(TEv& ev) {
+        void operator()(const TEv& ev) {
             Size = sizeof(ev);
         }
 
-        void operator()(TReadSessionEvent::TDataReceivedEvent& ev) {
+        void operator()(const TReadSessionEvent::TDataReceivedEvent& ev) {
             Size = sizeof(ev);
 
             auto messagesCount = ev.GetMessagesCount();

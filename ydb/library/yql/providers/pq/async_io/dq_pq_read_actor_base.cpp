@@ -178,7 +178,7 @@ void TDqPqReadActorBase::MaybeSchedulePartitionIdlenessCheck(TInstant systemTime
 TString TDqPqReadActorBase::LogPartitionToOffset() const {
     TStringBuilder str;
     for (const auto& [clusterAndPartition, offset] : PartitionToOffset) {
-        str << "{" << clusterAndPartition.PartitionId << "," << offset << "},";
+        str << "{" << clusterAndPartition.Cluster << ":" << clusterAndPartition.PartitionId << "," << offset << "},";
     }
     return str;
 }

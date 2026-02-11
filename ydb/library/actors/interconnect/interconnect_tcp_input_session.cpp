@@ -77,7 +77,7 @@ namespace NActors {
             const auto& region = NInterconnect::NRdma::TryExtractFromRcBuf(chunk);
             if (NeedReallocateRdma(region)) {
                 auto newChunk = TRcBuf::Uninitialized(chunk.Size(), chunk.Headroom(), chunk.Tailroom());
-                y_absl::crc_internal::non_temporal_store_memcpy(newChunk.GetContiguousSpanMut().data(), chunk.GetContiguousSpan().data(), chunk.Size());
+                y_absl::crc_internal::non_temporal_store_memcpy_avx(newChunk.GetContiguousSpanMut().data(), chunk.GetContiguousSpan().data(), chunk.Size());
                 chunk = newChunk;
             }
         }

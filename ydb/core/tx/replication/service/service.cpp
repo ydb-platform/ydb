@@ -304,13 +304,7 @@ public:
                 continue;
             }
             workerIter->second.ApplyStats({}); // Update timestamps;
-            TVector<std::pair<ui64, i64>> valuePairs;
-
-            for (const auto& [key, value] : values) {
-                valuePairs.emplace_back(key, value);
-            }
-
-            auto* ev = new TEvService::TEvWorkerStatus(id, workerIter->second.StartTime, std::move(valuePairs));
+            auto* ev = new TEvService::TEvWorkerStatus(id, workerIter->second.StartTime, std::move(values));
             ops->Send(ActorId, ev);
             values.clear();
         }

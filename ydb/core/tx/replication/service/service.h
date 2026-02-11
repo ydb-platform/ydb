@@ -80,7 +80,8 @@ struct TEvService {
             Record.SetLagMilliSeconds(lag.MilliSeconds());
         }
 
-        explicit TEvWorkerStatus(const TWorkerId& id, TInstant startTime, TVector<std::pair<ui64, i64>>&& statsValues) {
+        template<class TContainer>
+        explicit TEvWorkerStatus(const TWorkerId& id, TInstant startTime, TContainer&& statsValues) {
             id.Serialize(*Record.MutableWorker());
             Record.SetStatus(NKikimrReplication::TEvWorkerStatus::STATUS_RUNNING);
             Record.SetReason(NKikimrReplication::TEvWorkerStatus::REASON_STATS);
@@ -88,7 +89,7 @@ struct TEvService {
             if (startTime) {
                 stats.MutableStartTime()->CopyFrom(NProtoInterop::CastToProto(startTime));
             }
-            for (auto [k, v] : statsValues) {
+            for (auto& [k, v] : statsValues) {
                 auto& val = *stats.AddValues();
                 val.SetKey(k);
                 val.SetValue(v);

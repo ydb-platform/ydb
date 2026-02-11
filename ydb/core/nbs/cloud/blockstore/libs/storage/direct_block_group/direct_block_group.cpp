@@ -210,8 +210,6 @@ void TDirectBlockGroup::RequestBlockFlush(
 
 void TDirectBlockGroup::ProcessSyncQueue()
 {
-    auto guard = Guard(Lock);
-
     if (!SyncQueue.empty()) {
         const auto& flushRequestHandler = SyncQueue.front();
         auto persistentBufferIndex = flushRequestHandler->GetPersistentBufferIndex();

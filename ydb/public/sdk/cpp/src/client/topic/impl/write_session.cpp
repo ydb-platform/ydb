@@ -995,7 +995,7 @@ void TKeyedWriteSession::TMessagesWorker::HandleContinuationToken(std::uint32_t 
 }
 
 bool TKeyedWriteSession::TMessagesWorker::IsQueueEmpty() const {
-    return PendingMessagesIndex.empty() && InFlightMessages.empty() && MessagesToResendIndex.empty();
+    return InFlightMessages.empty();
 }
 
 const TKeyedWriteSession::TMessageInfo& TKeyedWriteSession::TMessagesWorker::GetFrontInFlightMessage() const {

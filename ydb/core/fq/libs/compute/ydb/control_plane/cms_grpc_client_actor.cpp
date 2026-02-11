@@ -85,7 +85,9 @@ public:
         auto forwardRequest = std::make_unique<TEvPrivate::TEvCreateDatabaseRequest>();
         forwardRequest->Request.mutable_operation_params()->set_operation_mode(Ydb::Operations::OperationParams::SYNC);
         forwardRequest->Request.mutable_serverless_resources()->set_shared_database_path(request.BasePath);
-        forwardRequest->Request.mutable_attributes()->emplace("folder_id", folderId);
+        if (!folderId.empty()) {
+            forwardRequest->Request.mutable_attributes()->emplace("folder_id", folderId);
+        }
         forwardRequest->Request.set_path(request.Path);
         SetYdbRequestToken(*forwardRequest, CredentialsProvider->GetAuthInfo());
         TEvPrivate::TEvCreateDatabaseRequest::TPtr forwardEvent = (NActors::TEventHandle<TEvPrivate::TEvCreateDatabaseRequest>*)new IEventHandle(SelfId(), SelfId(), forwardRequest.release(), 0, Cookie);

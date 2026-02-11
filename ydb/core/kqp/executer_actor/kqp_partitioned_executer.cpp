@@ -414,6 +414,8 @@ private:
 
         switch (settings->GetType()) {
             case NKikimrKqp::TKqpTableSinkSettings::MODE_UPSERT:
+            case NKikimrKqp::TKqpTableSinkSettings::MODE_UPSERT_INCREMENT:
+            case NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE_CONDITIONAL:
                 OperationType = TKeyDesc::ERowOperation::Update;
                 break;
             case NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE:

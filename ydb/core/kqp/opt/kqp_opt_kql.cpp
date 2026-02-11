@@ -1,5 +1,6 @@
 #include "kqp_opt_impl.h"
 
+#include <ydb/core/kqp/common/kqp_batch_operations.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
 
 #include <yql/essentials/core/yql_opt_utils.h>
@@ -132,6 +133,19 @@ bool HasIndexesToWrite(const TKikimrTableDescription& tableData) {
     }
 
     return hasIndexesToWrite;
+}
+
+TString IndexTypeToName(NYql::TIndexDescription::EType type) {
+    switch (type) {
+        case NYql::TIndexDescription::EType::GlobalSync:
+            return "global sync secondary";
+        case NYql::TIndexDescription::EType::GlobalAsync:
+            return "global async secondary";
+        case NYql::TIndexDescription::EType::GlobalSyncUnique:
+            return "global sync unique secondary";
+        case NYql::TIndexDescription::EType::GlobalSyncVectorKMeansTree:
+            return "global sync vector_kmeans_tree";
+    }
 }
 
 TExprBase BuildReadTable(const TCoAtomList& columns, TPositionHandle pos, const TKikimrTableDescription& tableData, bool forcePrimary, TMaybe<ui64> tabletId,
@@ -375,6 +389,7 @@ TExprBase BuildUpsertTableWithIndex(const TKiWriteTable& write, const TCoAtomLis
         .Columns(columns.Ptr())
         .ReturningColumns(write.ReturningColumns())
         .GenerateColumnsIfInsert(generateColumnsIfInsert)
+        .IsBatch(ctx.NewAtom(write.Pos(), "false"))
         .Settings(settings)
         .Done();
 
@@ -413,6 +428,7 @@ TExprBase BuildReplaceTableWithIndex(const TKiWriteTable& write, const TCoAtomLi
         .Columns(columns.Ptr())
         .ReturningColumns(write.ReturningColumns())
         .GenerateColumnsIfInsert<TCoAtomList>().Build()
+        .IsBatch(ctx.NewAtom(write.Pos(), "false"))
         .Settings(settings)
         .Done();
 
@@ -520,6 +536,7 @@ TExprBase BuildUpdateOnTableWithIndex(const TKiWriteTable& write, const TCoAtomL
         .Build()
         .Columns(inputColumns)
         .ReturningColumns(write.ReturningColumns())
+        .IsBatch(ctx.NewAtom(write.Pos(), "false"))
         .Settings(IsUpdateSetting(ctx, write.Pos()))
         .Done();
 }
@@ -542,6 +559,7 @@ TExprBase BuildDeleteTableWithIndex(const TKiWriteTable& write, const TKikimrTab
         .Table(BuildTableMeta(tableData, write.Pos(), ctx))
         .Input(keysToDelete)
         .ReturningColumns(write.ReturningColumns())
+        .IsBatch(ctx.NewAtom(write.Pos(), "false"))
         .Done();
 }
 
@@ -584,6 +602,7 @@ TExprBase BuildDeleteTableWithIndex(const TKiDeleteTable& del, const TKikimrTabl
         .Table(BuildTableMeta(tableData, del.Pos(), ctx))
         .Input(rowsToDelete)
         .ReturningColumns(del.ReturningColumns())
+        .IsBatch(del.IsBatch())
         .Settings(settings.BuildNode(ctx, del.Pos()))
         .Done();
 }
@@ -724,6 +743,7 @@ TExprBase BuildUpdateTableWithIndex(const TKiUpdateTable& update, const TKikimrT
             .Columns<TCoAtomList>()
                 .Add(updateColumnsList)
                 .Build()
+            .IsBatch(update.IsBatch())
             .Settings(IsConditionalUpdateSetting(ctx, update.Pos()))
             .Done();
     }
@@ -774,7 +794,7 @@ TExprBase BuildUpdateTableWithIndex(const TKiUpdateTable& update, const TKikimrT
                 .Table(indexMeta)
                 .Input(ProjectColumns(rowsToUpdate, indexTableColumns, ctx))
                 .ReturningColumns<TCoAtomList>().Build()
-                .IsBatch(update.IsBatch())
+                .IsBatch(ctx.NewAtom(update.Pos(), "false"))
                 .Done();
 
             effects.push_back(indexDelete);
@@ -810,7 +830,7 @@ TExprBase BuildUpdateTableWithIndex(const TKiUpdateTable& update, const TKikimrT
                 .Columns()
                     .Add(indexColumnsList)
                     .Build()
-                .IsBatch(update.IsBatch())
+                .IsBatch(ctx.NewAtom(update.Pos(), "false"))
                 .Settings().Build()
                 .Done();
 
@@ -926,6 +946,25 @@ bool CheckDisabledWriteToUniqIndex(const TExprBase& write, const NYql::TKikimrTa
     return true;
 }
 
+bool ValidateBatchOperation(const NYql::TKikimrTableDescription& tableData, const TExprBase& expr, TExprContext& ctx, TKqpOptimizeContext& kqpCtx)
+{
+    const bool allowBatchUpdates = kqpCtx.Config->EnableBatchUpdates && kqpCtx.Config->EnableOltpSink;
+    if (!allowBatchUpdates) {
+        const TString err = "BATCH operations are not supported at the current time.";
+        ctx.AddError(YqlIssue(ctx.GetPosition(expr.Pos()), TIssuesIds::KIKIMR_PRECONDITION_FAILED, err));
+        return false;
+    }
+
+    for (const auto& index : tableData.Metadata->Indexes) {
+        if (!NBatchOperations::IsIndexSupported(index.Type)) {
+            const TString err = "BATCH operations are not supported for tables with " + IndexTypeToName(index.Type) + " indexes (index: `" + index.Name + "`).";
+            ctx.AddError(YqlIssue(ctx.GetPosition(expr.Pos()), NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED, err));
+            return false;
+        }
+    }
+    return true;
+}
+
 TExprNode::TPtr HandleWriteTable(const TKiWriteTable& write, TExprContext& ctx, TKqpOptimizeContext& kqpCtx, const TKikimrTablesData& tablesData)
 {
     if (GetTableOp(write) == TYdbOperation::FillTable) {
@@ -969,10 +1008,7 @@ TExprNode::TPtr HandleUpdateTable(const TKiUpdateTable& update, TExprContext& ct
         return nullptr;
     }
 
-    const bool allowBatchUpdates = kqpCtx.Config->EnableBatchUpdates && kqpCtx.Config->EnableOltpSink;
-    if (!allowBatchUpdates && update.IsBatch() == "true") {
-        const TString err = "BATCH operations are not supported at the current time.";
-        ctx.AddError(YqlIssue(ctx.GetPosition(update.Pos()), TIssuesIds::KIKIMR_PRECONDITION_FAILED, err));
+    if (update.IsBatch() == "true" && !ValidateBatchOperation(tableData, update, ctx, kqpCtx)) {
         return nullptr;
     }
 
@@ -991,10 +1027,7 @@ TExprNode::TPtr HandleDeleteTable(const TKiDeleteTable& del, TExprContext& ctx, 
         return nullptr;
     }
 
-    const bool allowBatchUpdates = kqpCtx.Config->EnableBatchUpdates && kqpCtx.Config->EnableOltpSink;
-    if (!allowBatchUpdates && del.IsBatch() == "true") {
-        const TString err = "BATCH operations are not supported at the current time.";
-        ctx.AddError(YqlIssue(ctx.GetPosition(del.Pos()), TIssuesIds::KIKIMR_PRECONDITION_FAILED, err));
+    if (del.IsBatch() == "true" && !ValidateBatchOperation(tableData, del, ctx, kqpCtx)) {
         return nullptr;
     }
 

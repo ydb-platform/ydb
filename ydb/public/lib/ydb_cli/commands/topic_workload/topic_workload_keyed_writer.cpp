@@ -128,6 +128,7 @@ std::shared_ptr<TTopicWorkloadKeyedWriterProducer> TTopicWorkloadKeyedWriterWork
         Params,
         StatsCollector,
         producerId,
+        SessionId,
         std::move(clock)
     );
 

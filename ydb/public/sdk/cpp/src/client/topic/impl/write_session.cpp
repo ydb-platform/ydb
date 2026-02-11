@@ -269,6 +269,7 @@ void TKeyedWriteSession::TSplittedPartitionWorker::DoWork() {
         case EState::Done:
             break;
         case EState::GotMaxSeqNo:
+            Session->MessagesWorker->RebuildPendingMessagesIndex(PartitionId);
             Session->MessagesWorker->ScheduleResendMessages(PartitionId, MaxSeqNo);
             for (const auto& child : Session->Partitions[PartitionId].Children_) {
                 Session->Partitions[child].Locked(false);
@@ -545,11 +546,14 @@ void TKeyedWriteSession::TEventsWorker::SubscribeToPartition(std::uint32_t parti
     Session->Partitions[partition].Future(newFuture);
 }
 
-void TKeyedWriteSession::TEventsWorker::HandleNewMessage() {
+std::optional<NThreading::TPromise<void>> TKeyedWriteSession::TEventsWorker::HandleNewMessage() {
     std::lock_guard lock(Lock);
     if (Session->MessagesWorker->IsMemoryUsageOK()) {
         AddReadyToAcceptEvent();
+        return EventsPromise;
     }
+
+    return std::nullopt;
 }
 
 void TKeyedWriteSession::TEventsWorker::AddReadyToAcceptEvent() {
@@ -584,7 +588,7 @@ bool TKeyedWriteSession::TEventsWorker::TransferEventsToOutputQueue() {
 
         if (expectedSeqNo.has_value()) {
             if (acksQueue.front().SeqNo != expectedSeqNo.value()) {
-                LOG_LAZY(Session->DbDriverState->Log, TLOG_ERR, Session->LogPrefix() << "Expected seqNo=" << expectedSeqNo.value() << " but got " << acksQueue.front().SeqNo << " for partition " << Session->Partitions[partition].PartitionId_ << " partitionIdx " << partition);
+                LOG_LAZY(Session->DbDriverState->Log, TLOG_ERR, Session->LogPrefix() << "Expected seqNo=" << expectedSeqNo.value() << " but got " << acksQueue.front().SeqNo << " for partition " << partition);
             }
             Y_ENSURE(acksQueue.front().SeqNo == expectedSeqNo.value(), TStringBuilder() << "Expected seqNo=" << expectedSeqNo.value() << " but got " << acksQueue.front().SeqNo << " for partition " << Session->Partitions[partition].PartitionId_);
         }
@@ -868,12 +872,11 @@ void TKeyedWriteSession::TMessagesWorker::RechoosePartitionIfNeeded(MessageIter 
 void TKeyedWriteSession::TMessagesWorker::DoWork() {
     auto sessionsWorker = Session->SessionsWorker;
 
-    auto iterateMessagesIndex = [&](std::unordered_map<std::uint32_t, std::list<MessageIter>>& messagesIndex, auto preprocessMessage, auto stopCondition) {
+    auto iterateMessagesIndex = [&](std::unordered_map<std::uint32_t, std::list<MessageIter>>& messagesIndex, auto stopCondition) {
         std::vector<std::uint32_t> partitionsProcessed;
         for (auto& [partition, messages] : messagesIndex) {
             while (!messages.empty()) {
                 auto head = messages.front();
-                preprocessMessage(head);
                 if (stopCondition(head)) {
                     break;
                 }
@@ -883,6 +886,8 @@ void TKeyedWriteSession::TMessagesWorker::DoWork() {
                     break;
                 }
 
+                Session->Metrics.AddWriteLag((TInstant::Now() - head->CreateTimestamp.value_or(TInstant::Now())).MilliSeconds());
+                head->Sent = true;
                 sessionsWorker->OnWriteToSession(wrappedSession);
                 messages.pop_front();
             }
@@ -899,7 +904,6 @@ void TKeyedWriteSession::TMessagesWorker::DoWork() {
 
     iterateMessagesIndex(
         MessagesToResendIndex,
-        [](MessageIter) {},
         [](MessageIter) {
             return false;
         }
@@ -907,9 +911,6 @@ void TKeyedWriteSession::TMessagesWorker::DoWork() {
 
     iterateMessagesIndex(
         PendingMessagesIndex,
-        [this](MessageIter head) {
-            RechoosePartitionIfNeeded(head);
-        },
         [this](MessageIter head) {
         return Session->Partitions[head->Partition].Locked_ ||
             MessagesToResendIndex.contains(head->Partition);
@@ -931,14 +932,13 @@ bool TKeyedWriteSession::TMessagesWorker::SendMessage(WrappedWriteSessionPtr wra
     return true;
 }
 
-bool TKeyedWriteSession::TMessagesWorker::HasPendingMessages() const {
-    return !PendingMessagesIndex.empty();
-}
-
 void TKeyedWriteSession::TMessagesWorker::PushInFlightMessage(std::uint32_t partition, TMessageInfo&& message) {
-    InFlightMessages.push_back(std::move(message));
-    auto [listIt, _] = InFlightMessagesIndex.try_emplace(partition, std::list<std::list<TMessageInfo>::iterator>());
-    listIt->second.push_back(std::prev(InFlightMessages.end()));
+    auto iter = InFlightMessages.insert(InFlightMessages.end(), std::move(message));
+    auto [inFlightMessagesIndexIt, _] = InFlightMessagesIndex.try_emplace(partition, std::list<MessageIter>());
+    inFlightMessagesIndexIt->second.push_back(iter);
+
+    auto [pendingMessagesIndexIt, __] = PendingMessagesIndex.try_emplace(partition, std::list<MessageIter>());
+    pendingMessagesIndexIt->second.push_back(iter);
 }
 
 void TKeyedWriteSession::TMessagesWorker::HandleAck() {
@@ -974,12 +974,8 @@ bool TKeyedWriteSession::TMessagesWorker::IsMemoryUsageOK() const {
 }
 
 void TKeyedWriteSession::TMessagesWorker::AddMessage(const std::string& key, TWriteMessage&& message, std::uint32_t partition, TTransactionBase* tx) {
+    MemoryUsage += message.Data.size();
     PushInFlightMessage(partition, TMessageInfo(key, std::move(message), partition, tx));
-    auto iter = std::prev(InFlightMessages.end());
-
-    auto [listIt, _] = PendingMessagesIndex.try_emplace(partition, std::list<MessageIter>());
-    listIt->second.push_back(iter);
-    MemoryUsage += iter->Data.size();
 }
 
 std::optional<TContinuationToken> TKeyedWriteSession::TMessagesWorker::GetContinuationToken(std::uint32_t partition) {
@@ -1065,22 +1061,52 @@ void TKeyedWriteSession::TMessagesWorker::ScheduleResendMessages(std::uint32_t p
 
     // IMPORTANT: do not mutate InFlightMessagesIndex while holding references/iterators to its elements.
     // try_emplace()/rehash may invalidate 'it' and 'list' -> use-after-free and segfaults.
-    std::vector<std::pair<std::uint64_t, MessageIter>> toResend;
-    toResend.reserve(std::distance(resendIt, list.end()));
+    std::vector<std::pair<std::uint64_t, MessageIter>> messagesFromOldPartition;
+    messagesFromOldPartition.reserve(std::distance(resendIt, list.end()));
+    auto currentSeqNo = resendIt != list.end() ? (*resendIt)->SeqNo.value_or(0) : 0;
     for (auto iter = resendIt; iter != list.end(); ++iter) {
+        if (iter != resendIt && currentSeqNo != 0) {
+            Y_ABORT_UNLESS((*iter)->SeqNo.value_or(0) > currentSeqNo, "SeqNo is not increasing for partition %d", partition);
+        }
+
         auto newPartition = Session->PartitionChooser->ChoosePartition((*iter)->Key);
         (*iter)->Partition = newPartition;
-        toResend.emplace_back(newPartition, *iter);
+        messagesFromOldPartition.emplace_back(newPartition, *iter);
+
+        currentSeqNo = (*iter)->SeqNo.value_or(0);
     }
     
     list.erase(resendIt, list.end());
-    for (const auto& [newPartition, msgIt] : toResend) {
+    for (const auto& [newPartition, msgIt] : messagesFromOldPartition) {
         auto [inFlightMessagesIndexChainIt, _] = InFlightMessagesIndex.try_emplace(newPartition, std::list<MessageIter>());
         inFlightMessagesIndexChainIt->second.push_back(msgIt);
 
-        auto [messagesToResendChainIt, __] = MessagesToResendIndex.try_emplace(newPartition, std::list<MessageIter>());
-        messagesToResendChainIt->second.push_back(msgIt);
+        if (msgIt->Sent) {
+            auto [messagesToResendChainIt, __] = MessagesToResendIndex.try_emplace(newPartition, std::list<MessageIter>());
+            messagesToResendChainIt->second.push_back(msgIt);
+        }
     }
+
+    InFlightMessagesIndex.erase(partition);
+}
+
+void TKeyedWriteSession::TMessagesWorker::RebuildPendingMessagesIndex(std::uint32_t partition) {
+    auto [oldPendingMessagesIndexChainIt, __] = PendingMessagesIndex.try_emplace(partition, std::list<MessageIter>());
+    std::unordered_map<std::uint32_t, std::list<MessageIter>> pendingMessagesForNewPartitions;
+    for (auto it = oldPendingMessagesIndexChainIt->second.begin(); it != oldPendingMessagesIndexChainIt->second.end(); ++it) {
+        auto newPartition = Session->PartitionChooser->ChoosePartition((*it)->Key);
+        auto [pendingMessagesForNewPartitionsIt, __] = pendingMessagesForNewPartitions.try_emplace(newPartition, std::list<MessageIter>());
+        pendingMessagesForNewPartitionsIt->second.push_back(*it);
+    }
+
+    for (const auto& [newPartition, pendingMessagesForNewPartition] : pendingMessagesForNewPartitions) {
+        auto [pendingMessagesIndexChainIt, __] = PendingMessagesIndex.try_emplace(newPartition, std::list<MessageIter>());
+        for (auto reverseIt = pendingMessagesForNewPartition.rbegin(); reverseIt != pendingMessagesForNewPartition.rend(); ++reverseIt) {
+            pendingMessagesIndexChainIt->second.push_front(*reverseIt);
+        }
+    }
+
+    PendingMessagesIndex.erase(partition);
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1150,11 +1176,17 @@ void TKeyedWriteSession::Metrics::AddCycleTime(std::uint64_t ms) {
     CycleTimeMs.Add(ms);
 }
 
+void TKeyedWriteSession::Metrics::AddWriteLag(std::uint64_t lagMs) {
+    std::lock_guard lock(Lock);
+    WriteLagMs.Add(lagMs);
+}
+
 void TKeyedWriteSession::Metrics::PrintMetrics() {
     std::lock_guard lock(Lock);
-    LOG_LAZY(Session->DbDriverState->Log, TLOG_ERR, Session->LogPrefix() << "METRICS: MainWorkerTimeMs: " << MainWorkerTimeMs.Average() << " ms, CycleTimeMs: " << CycleTimeMs.Average() << " ms");
+    LOG_LAZY(Session->DbDriverState->Log, TLOG_ERR, Session->LogPrefix() << "METRICS: MainWorkerTimeMs: " << MainWorkerTimeMs.Average() << " ms, CycleTimeMs: " << CycleTimeMs.Average() << " ms, WriteLagMs: " << WriteLagMs.Average() << " ms");
     MainWorkerTimeMs.Clear();
     CycleTimeMs.Clear();
+    WriteLagMs.Clear();
 }
 
 
@@ -1170,18 +1202,27 @@ TKeyedWriteSession::TKeyedWriteSession(
     Client(client),
     DbDriverState(dbDriverState),
     Metrics(this),
-    Settings(settings)
-    // StatsCollector([this]() {
-    //     while (true) {
-    //         std::this_thread::sleep_for(std::chrono::seconds(1));
-    //         Metrics.PrintMetrics();
-    //         if (MessagesWorker) {
-    //             std::lock_guard lock(GlobalLock);
-    //             LOG_LAZY(DbDriverState->Log, TLOG_ERR, LogPrefix() << "PendingMessages: " << MessagesWorker->PendingMessages.size() << " InFlightMessages: " << MessagesWorker->InFlightMessages.size() << " MessagesToResend: " << MessagesWorker->MessagesToResendIndex.size() << " MemoryUsage: " << MessagesWorker->MemoryUsage);
-    //         }
+    Settings(settings),
+    StatsCollector([this]() {
+        while (true) {
+            std::this_thread::sleep_for(std::chrono::seconds(1));
+            Metrics.PrintMetrics();
+            if (MessagesWorker) {
+                std::lock_guard lock(GlobalLock);
+                size_t pendingMessagesCount = 0;
+                for (const auto& [partition, messages] : MessagesWorker->PendingMessagesIndex) {
+                    pendingMessagesCount += messages.size();
+                }
+                size_t inFlightMessagesCount = MessagesWorker->InFlightMessages.size();
+                size_t messagesToResendCount = 0;
+                for (const auto& [partition, messages] : MessagesWorker->MessagesToResendIndex) {
+                    messagesToResendCount += messages.size();
+                }
+                LOG_LAZY(DbDriverState->Log, TLOG_ERR, LogPrefix() << "PendingMessages: " << pendingMessagesCount << " InFlightMessages: " << inFlightMessagesCount << " MessagesToResend: " << messagesToResendCount << " MemoryUsage: " << MessagesWorker->MemoryUsage);
+            }
             
-    //     }
-    // })
+        }
+    })
 {
     if (settings.ProducerIdPrefix_.empty()) {
         ythrow TContractViolation("ProducerIdPrefix is required for KeyedWriteSession");
@@ -1291,6 +1332,7 @@ std::vector<TKeyedWriteSession::TPartitionInfo> TKeyedWriteSession::GetPartition
 }
 
 void TKeyedWriteSession::Write(TContinuationToken&&, const std::string& key, TWriteMessage&& message, TTransactionBase* tx) {
+    std::optional<NThreading::TPromise<void>> eventsPromise;
     {
         std::lock_guard lock(GlobalLock);
         if (Closed.load()) {
@@ -1308,11 +1350,15 @@ void TKeyedWriteSession::Write(TContinuationToken&&, const std::string& key, TWr
 
         auto partition = PartitionChooser->ChoosePartition(key);
         MessagesWorker->AddMessage(key, std::move(message), partition, tx);
-        EventsWorker->HandleNewMessage();
+        eventsPromise = EventsWorker->HandleNewMessage();
         RunUserEventLoop();
     }
 
     RunMainWorker();
+
+    if (eventsPromise) {
+        eventsPromise->TrySetValue();
+    }
 }
 
 bool TKeyedWriteSession::Close(TDuration closeTimeout) {
@@ -1524,7 +1570,15 @@ void TKeyedWriteSession::RunMainWorker() {
     NextEpoch();
 
     auto startWorkerTime = TInstant::Now();
-
+    size_t pendingMessagesCount = 0;
+    {
+        std::unique_lock lock(GlobalLock);
+        for (const auto& [partition, messages] : MessagesWorker->PendingMessagesIndex) {
+            pendingMessagesCount += messages.size();
+        }
+    }
+    
+    LOG_LAZY(DbDriverState->Log, TLOG_ERR, LogPrefix() << "Pending messages count on start: " << pendingMessagesCount);
     // Runner loop: process, arm subscription, then either go idle or loop again.
     for (;;) {
         auto startIter = TInstant::Now();
@@ -1577,6 +1631,15 @@ void TKeyedWriteSession::RunMainWorker() {
                 auto workerFinished = TInstant::Now();
                 Metrics.AddCycleTime((workerFinished - startIter).MilliSeconds());
                 Metrics.AddMainWorkerTime((workerFinished - startWorkerTime).MilliSeconds());
+
+                size_t pendingMessagesCount = 0;
+                {
+                    std::unique_lock lock(GlobalLock);
+                    for (const auto& [partition, messages] : MessagesWorker->PendingMessagesIndex) {
+                        pendingMessagesCount += messages.size();
+                    }
+                }
+                LOG_LAZY(DbDriverState->Log, TLOG_ERR, LogPrefix() << "Pending messages count on end: " << pendingMessagesCount);
                 return; // successfully went idle
             }
         }

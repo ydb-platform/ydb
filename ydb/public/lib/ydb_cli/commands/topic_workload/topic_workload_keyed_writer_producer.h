@@ -17,6 +17,7 @@ public:
         const TTopicWorkloadKeyedWriterParams& params,
         std::shared_ptr<TTopicWorkloadStatsCollector> statsCollector,
         const TString& producerId,
+        const std::string& sessionId,
         const NUnifiedAgent::TClock& clock
     );
 
@@ -48,6 +49,7 @@ private:
     ui64 MessageId_ = 0;
     ui64 AckedMessageId_ = 0;
     const TString ProducerId_;
+    const std::string SessionId_;
     std::mutex Lock_;
     std::queue<NYdb::NTopic::TContinuationToken> ContinuationTokens_;
     TConcurrentHashMap<ui64, TInstant> InflightMessagesCreateTs_;

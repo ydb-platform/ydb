@@ -108,7 +108,7 @@ inline void ProcessWriterLoopCommon(
     bool& waitForCommitTx,
     TInstant endTime,
     THasContinuationToken hasContinuationToken,
-    TGetExpectedTs getExpectedTs,
+    TGetExpectedTs,
     TGetCreateTs getCreateTs,
     TTryCommitTx tryCommitTx,
     TInflightSize inflightMessagesSize,
@@ -126,6 +126,18 @@ inline void ProcessWriterLoopCommon(
     startTimestamp = Now();
     onStart(startTimestamp);
 
+    // Локальное «окно» для лимитирования скорости. Глобальные bytesWritten/startTimestamp
+    // используются только для генерации expectedTs/логов, а именно здесь мы ограничиваем
+    // текущую скорость. Это позволяет не тянуть за собой «долг» по скорости на весь
+    // ран ворклоада и избежать долговременного проседания MB/s после разовых всплесков.
+    TInstant rateWindowStart = startTimestamp;
+    ui64 bytesWrittenInWindow = 0;
+
+    // Диагностические счётчики по текущему окну, чтобы понимать,
+    // чем именно ограничивается скорость записи.
+    ui64 windowTokenLimitedIterations = 0;   // сколько раз не было continuation token
+    ui64 windowRateLimitedIterations = 0;    // сколько раз упёрлись в BytesPerSec
+
     TInstant lastWaitTime = TInstant::Zero();
     TInstant lastActivityTime = TInstant::Now();
     while (!*params.ErrorFlag) {
@@ -136,11 +148,19 @@ inline void ProcessWriterLoopCommon(
 
         auto producer = producers[partitionToWriteId % producers.size()];
 
-        const TDuration timeToNextMessage = params.BytesPerSec == 0
-            ? TDuration::Zero()
-            : (getExpectedTs() - now);
+        TDuration timeToNextMessage = TDuration::Zero();
+        if (params.BytesPerSec != 0) {
+            // Локальное ожидаемое время следующего сообщения в рамках текущего окна.
+            const auto expectedTsInWindow = rateWindowStart + TDuration::Seconds(
+                (double)bytesWrittenInWindow / params.BytesPerSec * params.ProducerThreadCount);
+            timeToNextMessage = expectedTsInWindow - now;
+        }
 
-        if (timeToNextMessage > TDuration::Zero() || !hasContinuationToken(producer)) {
+        const bool hasTokenBeforeWait = hasContinuationToken(producer);
+        if (timeToNextMessage > TDuration::Zero() || !hasTokenBeforeWait) {
+            if (!hasTokenBeforeWait) {
+                ++windowTokenLimitedIterations;
+            }
             producer->WaitForContinuationToken(timeToNextMessage);
         }
 
@@ -153,18 +173,36 @@ inline void ProcessWriterLoopCommon(
             lastWaitTime = TInstant::Zero();
         }
 
+        TDuration toWait = TDuration::Zero();
+
         if (params.BytesPerSec != 0) {
-            // How many bytes had to be written till this moment by this particular producer.
-            const ui64 bytesMustBeWritten = (now - startTimestamp).SecondsFloat()
+            // How many bytes had to be written in the current window by this particular producer.
+            const ui64 bytesMustBeWritten = (now - rateWindowStart).SecondsFloat()
                 * params.BytesPerSec / params.ProducerThreadCount;
-            writingAllowed &= bytesWritten < bytesMustBeWritten;
+            const bool rateLimitedNow = !(bytesWrittenInWindow < bytesMustBeWritten);
+            if (rateLimitedNow) {
+                ++windowRateLimitedIterations;
+            }
+            writingAllowed &= !rateLimitedNow;
+            if (bytesWrittenInWindow > bytesMustBeWritten) {
+                toWait = TDuration::Seconds(
+                    (double)(bytesWrittenInWindow - bytesMustBeWritten)
+                    / params.BytesPerSec * params.ProducerThreadCount);
+                // Cap so we don't sleep past idle timeout (lastActivityTime is not updated in this branch).
+                if (toWait >= idleTimeout) {
+                    toWait = idleTimeout - TDuration::MilliSeconds(100);
+                }
+            }
         } else {
             writingAllowed &= inflightMessagesSize() <= 1_MB / params.MessageSize;
         }
 
         if (writingAllowed && !waitForCommitTx) {
             const TInstant createTimestamp = getCreateTs();
+            // Глобальный счётчик для expectedTs/логов.
             bytesWritten += params.MessageSize;
+            // Локальный счётчик в рамках текущего окна лимита скорости.
+            bytesWrittenInWindow += params.MessageSize;
 
             std::optional<NYdb::NTable::TTransaction> transaction;
             if (txSupport && !txSupport->Transaction) {
@@ -189,8 +227,32 @@ inline void ProcessWriterLoopCommon(
             if (txSupport) {
                 tryCommitTx(commitTime);
             }
-            Sleep(TDuration::MilliSeconds(1));
+            // When toWait is 0 (e.g. waiting for token), sleep briefly to avoid busy loop.
+            Sleep(toWait > TDuration::Zero() ? toWait : TDuration::MilliSeconds(1));
             Y_ABORT_UNLESS(TInstant::Now() - lastActivityTime < idleTimeout, "Idle timeout reached");
+        }
+
+        // Переодически «перезапускаем» окно лимита скорости, чтобы не накапливать
+        // историю overshoot/undershoot на весь срок работы ворклоада.
+        if (now - rateWindowStart >= TDuration::Seconds(1)) {
+            // Для диагностики выводим статистику по оконному лимиту и токенам.
+            if (params.BytesPerSec != 0) {
+                const double windowSeconds = (now - rateWindowStart).SecondsFloat();
+                const ui64 bytesMustBeWrittenWindow = windowSeconds > 0
+                    ? static_cast<ui64>(windowSeconds * params.BytesPerSec / params.ProducerThreadCount)
+                    : 0;
+                WRITE_LOG(params.Log, ELogPriority::TLOG_ERR,
+                    LogPrefix(sessionId)
+                        << "Rate window stats: bytesWrittenInWindow=" << bytesWrittenInWindow
+                        << " bytesMustBeWrittenWindow=" << bytesMustBeWrittenWindow
+                        << " tokenLimitedIters=" << windowTokenLimitedIterations
+                        << " rateLimitedIters=" << windowRateLimitedIterations);
+            }
+
+            rateWindowStart = now;
+            bytesWrittenInWindow = 0;
+            windowTokenLimitedIterations = 0;
+            windowRateLimitedIterations = 0;
         }
     }
 }

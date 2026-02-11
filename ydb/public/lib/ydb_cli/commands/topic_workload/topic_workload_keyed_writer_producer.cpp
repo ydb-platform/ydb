@@ -9,10 +9,12 @@ TTopicWorkloadKeyedWriterProducer::TTopicWorkloadKeyedWriterProducer(
     const TTopicWorkloadKeyedWriterParams& params,
     std::shared_ptr<TTopicWorkloadStatsCollector> statsCollector,
     const TString& producerId,
+    const std::string& sessionId,
     const NUnifiedAgent::TClock& clock
 )
     : MessageId_(1)
     , ProducerId_(producerId)
+    , SessionId_(sessionId)
     , Params_(params)
     , StatsCollector_(std::move(statsCollector))
     , Clock_(clock)
@@ -38,7 +40,7 @@ std::string TTopicWorkloadKeyedWriterProducer::GetKey() const
     return TGUID::CreateTimebased().AsGuidString();
 }
 
-void TTopicWorkloadKeyedWriterProducer::Send(const TInstant& createTimestamp,
+void TTopicWorkloadKeyedWriterProducer::Send(const TInstant&,
                                              std::optional<NYdb::NTable::TTransaction> transaction)
 {
     Y_ASSERT(WriteSession_);
@@ -46,12 +48,17 @@ void TTopicWorkloadKeyedWriterProducer::Send(const TInstant& createTimestamp,
     const TString data = NYdb::NConsoleClient::NTopicWorkloadWriterInternal::GetGeneratedMessage(Params_, MessageId_);
     const std::string key = GetKey();
 
-    InflightMessagesCreateTs_.Insert(MessageId_, createTimestamp);
+    // Для внутренних метрик задержки записи нам важно измерять время от фактической
+    // постановки сообщения в клиенскую очередь до прихода ack, а не "идеальное"
+    // время генерации нагрузки. Поэтому для CreateTimestamp и внутренних метрик
+    // используем текущее время, а не ожидаемое время генерации из workload-а.
+    const TInstant enqueueTimestamp = Clock_.Now();
+    InflightMessagesCreateTs_.Insert(MessageId_, enqueueTimestamp);
     InflightMessagesCount_.fetch_add(1, std::memory_order_relaxed);
 
     NYdb::NTopic::TWriteMessage writeMessage(data);
     writeMessage.SeqNo(MessageId_);
-    writeMessage.CreateTimestamp(createTimestamp);
+    writeMessage.CreateTimestamp(enqueueTimestamp);
     writeMessage.MessageMeta(NYdb::NConsoleClient::NTopicWorkloadWriterInternal::MakeKeyMeta(key));
 
     if (transaction.has_value()) {
@@ -122,10 +129,10 @@ void TTopicWorkloadKeyedWriterProducer::HandleAckEvent(NYdb::NTopic::TWriteSessi
         StatsCollector_->AddWriterEvent(Params_.WriterIdx,
                                         {Params_.MessageSize, inflightTime.MilliSeconds(), InflightMessagesCnt()});
 
-        WRITE_LOG(Params_.Log, ELogPriority::TLOG_DEBUG,
+        WRITE_LOG(Params_.Log, ELogPriority::TLOG_ERR,
                   TStringBuilder() << "Ack PartitionId " << ack.Details->PartitionId << " Offset "
                                    << ack.Details->Offset << " InflightTime " << inflightTime << " WriteTime "
-                                   << ack.Stat->WriteTime);
+                                   << ack.Stat->WriteTime << " SessionId " << SessionId_ << " ack SeqNo " << ack.SeqNo);
     }
 }
 

@@ -97,6 +97,7 @@ private:
         std::optional<std::reference_wrapper<TTransactionBase>> TxInMessage;
         TTransactionBase* Tx;
         std::uint32_t Partition;
+        bool Sent = false;
 
         TWriteMessage BuildMessage() const;
     };
@@ -196,13 +197,13 @@ private:
 
         void AddMessage(const std::string& key, TWriteMessage&& message, std::uint32_t partition, TTransactionBase* tx);
         void ScheduleResendMessages(std::uint32_t partition, std::uint64_t afterSeqNo);
+        void RebuildPendingMessagesIndex(std::uint32_t partition);
         void HandleAck();
         void HandleContinuationToken(std::uint32_t partition, TContinuationToken&& continuationToken);
         bool IsMemoryUsageOK() const;
         bool IsQueueEmpty() const;
         bool HasInFlightMessages() const;
         const TMessageInfo& GetFrontInFlightMessage() const;
-        bool HasPendingMessages() const;
 
     private:
         using MessageIter = std::list<TMessageInfo>::iterator;
@@ -269,7 +270,7 @@ private:
         NThreading::TFuture<void> WaitEvent();
         void UnsubscribeFromPartition(std::uint32_t partition);
         void SubscribeToPartition(std::uint32_t partition);
-        void HandleNewMessage();
+        std::optional<NThreading::TPromise<void>> HandleNewMessage();
         void HandleAcksEvent(std::uint64_t partition, TWriteSessionEvent::TAcksEvent&& event);
         std::optional<TWriteSessionEvent::TEvent> GetEvent(bool block);
         std::vector<TWriteSessionEvent::TEvent> GetEvents(bool block, std::optional<size_t> maxEventsCount = std::nullopt);
@@ -338,11 +339,13 @@ private:
 
         MetricGauge MainWorkerTimeMs;
         MetricGauge CycleTimeMs;
+        MetricGauge WriteLagMs;
         std::mutex Lock;
         TKeyedWriteSession* Session;
 
         void AddMainWorkerTime(std::uint64_t ms);
         void AddCycleTime(std::uint64_t ms);
+        void AddWriteLag(std::uint64_t lagMs);
         void PrintMetrics();
     };
 

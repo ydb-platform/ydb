@@ -3,6 +3,7 @@ from os import getenv
 from .conftest import LoadSuiteBase
 from ydb.tests.olap.lib.utils import get_external_param
 from ydb.tests.olap.lib.ydb_cli import YdbCliHelper, TxMode
+from ydb.tests.olap.scenario.helpers.scenario_tests_helper import ScenarioTestHelper
 
 
 class TpccSuiteBase(LoadSuiteBase):
@@ -19,15 +20,27 @@ class TpccSuiteBase(LoadSuiteBase):
     def do_setup_class(cls):
         if not cls.verify_data or getenv('NO_VERIFY_DATA', '0') == '1' or getenv('NO_VERIFY_DATA_TPCC', '0') == '1':
             return
-        cls.check_tables_size(folder=cls.get_tpcc_path(), tables={})
-
-    @classmethod
-    def do_teardown_class(cls):
-        YdbCliHelper.terminate_tpcc(cls.get_users())
+        YdbCliHelper.deploy_remote_cli()
+        wh_count = 0
+        try:
+            wh_count = ScenarioTestHelper(None).get_table_rows_count()
+        except BaseException:
+            pass
+        if wh_count < cls.warehouses:
+            YdbCliHelper.clear_tpcc(cls.get_tpcc_path())
+            YdbCliHelper.init_tpcc(cls.get_tpcc_path(), cls.warehouses)
+            YdbCliHelper.import_data_tpcc(cls.get_tpcc_path(), cls.warehouses)
+        # cls.check_tables_size(folder=cls.get_tpcc_path(), tables={})
 
     @classmethod
     def get_key_measurements(cls) -> tuple[list[LoadSuiteBase.KeyMeasurement], str]:
         return [
+            LoadSuiteBase.KeyMeasurement('tpcc_time_seconds', 'TPC-C Time', [
+                LoadSuiteBase.KeyMeasurement.Interval('#ccffcc'),
+            ], 'Time to run (seconds)'),
+            LoadSuiteBase.KeyMeasurement('tpcc_warehouses', 'TPC-C Warehouses', [
+                LoadSuiteBase.KeyMeasurement.Interval('#ccffcc'),
+            ], 'Warehouses count'),
             LoadSuiteBase.KeyMeasurement('tpcc_efficiency', 'TPC-C Efficiency', [
                 LoadSuiteBase.KeyMeasurement.Interval('#ccffcc'),
             ], 'Efficiency of TPC-C'),
@@ -56,7 +69,7 @@ class TpccSuiteBase(LoadSuiteBase):
         result = YdbCliHelper.run_tpcc(
             users=self.get_users(),
             path=self.get_tpcc_path(),
-            time=self.time_s,
+            bench_time=self.time_s,
             warehouses=self.warehouses,
             threads=self.threads,
             tx_mode=self.tx_mode

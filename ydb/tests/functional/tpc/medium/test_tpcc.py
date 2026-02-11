@@ -10,6 +10,4 @@ class TestTpccW10T4(tpcc.TpccSuiteBase, FunctionalTestBase):
     @classmethod
     def setup_class(cls) -> None:
         cls.setup_cluster()
-        cls.run_cli(['workload', 'tpcc', '-p', f'olap_yatests/{cls.get_tpcc_path()}', 'init', '--warehouses', str(cls.warehouses)])
-        cls.run_cli(['workload', 'tpcc', '-p', f'olap_yatests/{cls.get_tpcc_path()}', 'import', '--warehouses', str(cls.warehouses), '--no-tui'])
         super().setup_class()

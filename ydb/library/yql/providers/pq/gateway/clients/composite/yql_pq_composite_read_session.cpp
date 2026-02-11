@@ -40,6 +40,7 @@ public:
 
 class TDqPqReadBalancerActor final : public TActorBootstrapped<TDqPqReadBalancerActor>, public IActorExceptionHandler {
     static constexpr TDuration WAKEUP_PERIOD = TDuration::Seconds(1);
+    static constexpr TDuration REPORT_MIN_DELTA = TDuration::Seconds(1);
 
 public:
     TDqPqReadBalancerActor(TActorId aggregatorActor, ICompositeTopicReadSessionControlImpl::TPtr controller)
@@ -52,7 +53,7 @@ public:
         Value.SetCounterId("distributed_topic_read_session");
 
         auto& settings = *Value.MutableSettings();
-        settings.SetScalarAggDeltaThreshold(WAKEUP_PERIOD.MilliSeconds());
+        settings.SetScalarAggDeltaThreshold(REPORT_MIN_DELTA.MilliSeconds());
         *settings.MutableReportPeriod() = NProtoInterop::CastToProto(WAKEUP_PERIOD);
     }
 
@@ -116,7 +117,7 @@ private:
 
             const i64 newValue = readTime ? readTime.MilliSeconds() : std::numeric_limits<i64>::max();
             const auto now = TInstant::Now();
-            if (now - LastSendAt < WAKEUP_PERIOD && std::abs(newValue - Value.GetAggMin()) < static_cast<i64>(WAKEUP_PERIOD.MilliSeconds())) {
+            if (now - LastSendAt < WAKEUP_PERIOD && std::abs(newValue - Value.GetAggMin()) < static_cast<i64>(REPORT_MIN_DELTA.MilliSeconds())) {
                 return;
             }
 
@@ -290,10 +291,6 @@ public:
             }
 
             futures.emplace_back(readSession.WaitEvent());
-            if (futures.back().IsReady()) {
-                ReadyReadSessionIdx = i;
-                return NThreading::MakeFuture();
-            }
         }
 
         if (!AdvanceTimePromise) {
@@ -405,7 +402,8 @@ public:
             PartitionsReadTimeSet.emplace(lastEventTime, idx);
             PartitionsReadTime[idx] = lastEventTime;
 
-            if (lastReadTime != GetReadTime()) {
+            const auto newTime = GetReadTime();
+            if (lastReadTime != newTime) {
                 ActorSystem->Send(BalancerActor, new TEvents::TEvWakeup());
             }
         }

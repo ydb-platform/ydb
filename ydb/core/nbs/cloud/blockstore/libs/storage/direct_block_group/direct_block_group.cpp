@@ -195,14 +195,14 @@ void TDirectBlockGroup::RequestBlockFlush(
     const auto& blockMeta = BlocksMeta[requestHandler.GetStartIndex()];
 
     for (size_t i = 0; i < 3; i++) {
-        auto flushRequestHandler = std::make_shared<TSyncRequestHandler>(
+        auto syncRequestHandler = std::make_shared<TSyncRequestHandler>(
             requestHandler.GetStartIndex(),
             i, // persistentBufferIndex
             blockMeta.LsnByPersistentBufferIndex[i],
             requestHandler.Span.GetTraceId(),
             TabletId);
 
-        SyncQueue.push(flushRequestHandler);
+        SyncQueue.push(syncRequestHandler);
     }
 
     ProcessSyncQueue();
@@ -211,8 +211,8 @@ void TDirectBlockGroup::RequestBlockFlush(
 void TDirectBlockGroup::ProcessSyncQueue()
 {
     if (!SyncQueue.empty()) {
-        const auto& flushRequestHandler = SyncQueue.front();
-        auto persistentBufferIndex = flushRequestHandler->GetPersistentBufferIndex();
+        const auto& syncRequestHandler = SyncQueue.front();
+        auto persistentBufferIndex = syncRequestHandler->GetPersistentBufferIndex();
         const auto& ddiskConnection = DDiskConnections[persistentBufferIndex];
         const auto& persistentBufferConnection = PersistentBufferConnections[persistentBufferIndex];
 
@@ -225,15 +225,15 @@ void TDirectBlockGroup::ProcessSyncQueue()
             ddiskConnection.Credentials,
             NKikimr::NDDisk::TBlockSelector(
                 0,   // vChunkIndex
-                flushRequestHandler->GetStartOffset(),
-                flushRequestHandler->GetSize()),
-            flushRequestHandler->GetLsn(),
+                syncRequestHandler->GetStartOffset(),
+                syncRequestHandler->GetSize()),
+            syncRequestHandler->GetLsn(),
             std::make_tuple(
                 persistentBufferConnection.DDiskId.NodeId,
                 persistentBufferConnection.DDiskId.PDiskId,
                 persistentBufferConnection.DDiskId.DDiskSlotId),
             persistentBufferConnection.Credentials.DDiskInstanceGuid.value(),
-            flushRequestHandler->Span.GetTraceId(),
+            syncRequestHandler->Span.GetTraceId(),
             StorageRequestId);
 
         future.Subscribe([this, requestId = StorageRequestId](const auto& f) {
@@ -241,7 +241,7 @@ void TDirectBlockGroup::ProcessSyncQueue()
             HandleSyncResult(requestId, result);
         });
 
-        RequestHandlersByStorageRequestId[StorageRequestId] = flushRequestHandler;
+        RequestHandlersByStorageRequestId[StorageRequestId] = syncRequestHandler;
         SyncQueue.pop();
     }
 }

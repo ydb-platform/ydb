@@ -312,7 +312,7 @@ message TEvUpdateCounterValue {
         optional int64 ScalarAggDeltaThreshold = 2;
     }
 
-    // Each pair (CounterId, Action case) creates own aggregated value
+    // Each CounterId creates own aggregated value (all events for one CounterId should have same settings and same Action case)
     optional string CounterId = 1;
     optional TSettings Settings = 2;
 

@@ -29,28 +29,4 @@ std::pair<std::shared_ptr<NYdb::NTopic::IReadSession>, ICompositeTopicReadSessio
     const TCompositeTopicReadSessionSettings& settings
 );
 
-/*
-static TInstant GetEventWriteTime(const TReadSessionEvent::TDataReceivedEvent& event) {
-    TInstant result;
-
-    auto messagesCount = event.GetMessagesCount();
-    if (event.HasCompressedMessages()) {
-        const auto& compressedMessages = event.GetCompressedMessages();
-        messagesCount -= compressedMessages.size();
-
-        for (const auto& compressedMessage : compressedMessages) {
-            result = std::max(result, compressedMessage.GetWriteTime());
-        }
-    }
-
-    if (messagesCount) {
-        for (const auto& message : event.GetMessages()) {
-            result = std::max(result, message.GetWriteTime());
-        }
-    }
-
-    return result;
-}
-*/
-
 } // namespace NYql

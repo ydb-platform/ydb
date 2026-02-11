@@ -1169,6 +1169,14 @@ protected:
         return PCtx->PDiskId;
     }
 
+    TFileHandle DuplicateFd() override {
+        TFileHandle *handle = IoContext->GetFileHandle();
+        if (!handle) {
+            return {};
+        }
+        return TFileHandle(handle->Duplicate());
+    }
+
     virtual ~TRealBlockDevice() {
         Stop();
         while (Trash.size() > 0) {

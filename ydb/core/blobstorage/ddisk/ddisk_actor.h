@@ -174,6 +174,7 @@ namespace NKikimr::NDDisk {
 
         THashMap<ui64, THashMap<ui64, TChunkRef>> ChunkRefs; // TabletId -> (VChunkIndex -> ChunkIdx)
         TIntrusivePtr<TPDiskParams> PDiskParams;
+        TFileHandle DiskFd;
         std::vector<TChunkIdx> OwnedChunksOnBoot;
         ui64 ChunkMapSnapshotLsn = Max<ui64>();
         std::queue<TPendingEvent> PendingQueries;

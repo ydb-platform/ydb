@@ -1624,7 +1624,6 @@ std::string TKeyedWriteSession::GetProducerId(std::uint32_t partition) {
 }
 
 TWriterCounters::TPtr TKeyedWriteSession::GetCounters() {
-    // what should we return here?
     return nullptr;
 }
 

@@ -1970,7 +1970,7 @@ bool TPDisk::YardInitForKnownVDisk(TYardInit &evYardInit, TOwner owner) {
 
     GetStartingPoints(owner, result->StartingPoints);
     if (evYardInit.GetDiskFd) {
-        result->DiskFd = BlockDevice->DuplicateFd(evYardInit.VDiskIdWOGeneration());
+        result->DiskFd = BlockDevice->DuplicateFd();
     }
     ownerData.VDiskId = vDiskId;
     ownerData.CutLogId = evYardInit.CutLogId;
@@ -2138,7 +2138,7 @@ void TPDisk::YardInitFinish(TYardInit &evYardInit) {
 
     GetStartingPoints(result->PDiskParams->Owner, result->StartingPoints);
     if (evYardInit.GetDiskFd) {
-        result->DiskFd = BlockDevice->DuplicateFd(evYardInit.VDiskIdWOGeneration());
+        result->DiskFd = BlockDevice->DuplicateFd();
     }
     WriteSysLogRestorePoint(new TCompletionEventSender(
         this, evYardInit.Sender, result.Release(), Mon.YardInit.Results), evYardInit.ReqId, {});

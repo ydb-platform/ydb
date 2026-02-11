@@ -64,10 +64,8 @@ public:
 
     // Returns a duplicated file descriptor for the underlying block device.
     // The caller owns the returned TFileHandle and is responsible for closing it.
-    // The block device also keeps a raw copy in its map for tracking/re-duplication purposes. Also,
-    // block device closes all duplicated fds when it is stopped.
     // Returns an invalid (not open) TFileHandle if the device does not support fd duplication (e.g. SectorMap).
-    virtual TFileHandle DuplicateFd(const TVDiskID& owner) = 0;
+    virtual TFileHandle DuplicateFd() = 0;
 };
 
 class TPDisk;

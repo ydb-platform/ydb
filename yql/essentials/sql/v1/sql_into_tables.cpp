@@ -245,9 +245,9 @@ bool TSqlIntoTable::ValidateServiceName(const TRule_into_table_stmt& node, const
 
     if (isMapReduce) {
         if (mode == ESQLWriteColumnMode::ReplaceInto) {
-            auto requiredLangVer = MakeLangVersion(2025, 4);
-            if (!IsBackwardCompatibleFeatureAvailable(requiredLangVer)) {
-                Ctx_.Error(pos) << "REPLACE is not available before language version " << FormatLangVersion(requiredLangVer);
+            if (!Ctx_.EnsureBackwardCompatibleFeatureAvailable(
+                    pos, "REPLACE", MakeLangVersion(2025, 4)))
+            {
                 return false;
             }
         }

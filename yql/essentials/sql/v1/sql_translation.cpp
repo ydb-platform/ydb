@@ -5241,11 +5241,12 @@ bool TSqlTranslation::DefineActionOrSubqueryStatement(const TRule_define_action_
 TNodePtr TSqlTranslation::IfStatement(const TRule_if_stmt& stmt) {
     bool isEvaluate = stmt.HasBlock1();
 
-    if (auto v = NYql::GetMaxLangVersion();
-        !isEvaluate && !IsBackwardCompatibleFeatureAvailable(v)) {
-        Ctx_.Error(GetPos(stmt.GetToken2()))
-            << "IF without EVALUATE "
-            << "is not available before version " << NYql::FormatLangVersion(v);
+    if (!isEvaluate &&
+        !Ctx_.EnsureBackwardCompatibleFeatureAvailable(
+            GetPos(stmt.GetToken2()),
+            "IF without EVALUATE",
+            GetMaxLangVersion()))
+    {
         return {};
     }
 
@@ -5275,19 +5276,21 @@ TNodePtr TSqlTranslation::ForStatement(const TRule_for_stmt& stmt) {
     bool isEvaluate = stmt.HasBlock1();
     bool isParallel = stmt.HasBlock2();
 
-    if (auto v = NYql::GetMaxLangVersion();
-        isParallel && !IsBackwardCompatibleFeatureAvailable(v)) {
-        Ctx_.Error(GetPos(stmt.GetBlock2().GetToken1()))
-            << "PARALLEL FOR "
-            << "is not available before version " << NYql::FormatLangVersion(v);
+    if (isParallel &&
+        !Ctx_.EnsureBackwardCompatibleFeatureAvailable(
+            GetPos(stmt.GetBlock2().GetToken1()),
+            "PARALLEL FOR",
+            GetMaxLangVersion()))
+    {
         return {};
     }
 
-    if (auto v = NYql::GetMaxLangVersion();
-        !isEvaluate && !IsBackwardCompatibleFeatureAvailable(v)) {
-        Ctx_.Error(GetPos(stmt.GetToken3()))
-            << "FOR without EVALUATE "
-            << "is not available before version " << NYql::FormatLangVersion(v);
+    if (!isEvaluate &&
+        !Ctx_.EnsureBackwardCompatibleFeatureAvailable(
+            GetPos(stmt.GetToken3()),
+            "FOR without EVALUATE",
+            GetMaxLangVersion()))
+    {
         return {};
     }
 
@@ -6268,10 +6271,9 @@ TNodePtr TSqlTranslation::YqlSelectOrLegacy(
         return legacy();
     }
 
-    const NYql::TLangVersion langVer = YqlSelectLangVersion();
-    if (!IsBackwardCompatibleFeatureAvailable(langVer)) {
-        Error() << "YqlSelect is not available before "
-                << FormatLangVersion(langVer);
+    if (!Ctx_.EnsureBackwardCompatibleFeatureAvailable(
+            Ctx_.Pos(), "YqlSelect", YqlSelectLangVersion()))
+    {
         return nullptr;
     }
 

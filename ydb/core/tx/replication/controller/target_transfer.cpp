@@ -208,7 +208,9 @@ TTargetTransfer::TTargetTransfer(TReplication* replication, ui64 id, const IConf
     : TTargetWithStream(replication, ETargetKind::Transfer, id, config)
 {
     Stats.reset(new TTransferStats(Now()));
-    MetricsLevel = replication->GetConfig().HasMetricsConfig() ? replication->GetConfig().GetMetricsConfig().GetLevel() : 0;
+    MetricsLevel = replication->GetConfig().HasMetricsConfig()
+                       ? replication->GetConfig().GetMetricsConfig().GetLevel()
+                       : NKikimrProto::NMetricsConfig::TMetricsConfig::LEVEL_DEFAULT;
 }
 
 void TTargetTransfer::UpdateConfig(const NKikimrReplication::TReplicationConfig& cfg) {
@@ -220,7 +222,7 @@ void TTargetTransfer::UpdateConfig(const NKikimrReplication::TReplicationConfig&
         cfg.GetTransferSpecific().GetRunAsUser(),
         t.GetDirectoryPath());
 
-    MetricsLevel = cfg.HasMetricsConfig() ? cfg.GetMetricsConfig().GetLevel() : 0;
+    MetricsLevel = cfg.HasMetricsConfig() ? cfg.GetMetricsConfig().GetLevel() : NKikimrProto::NMetricsConfig::TMetricsConfig::LEVEL_DEFAULT;
     Location.CopyFrom(cfg.GetLocation());
 }
 

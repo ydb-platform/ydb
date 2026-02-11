@@ -46,6 +46,6 @@ public:
 
 private:
     TActorId StreamConsumerRemover;
-    ui64 MetricsLevel = 0;
+    NKikimrProto::NMetricsConfig::TMetricsConfig::EMetricsLevel MetricsLevel = NKikimrProto::NMetricsConfig::TMetricsConfig::LEVEL_DEFAULT;
 };
 }

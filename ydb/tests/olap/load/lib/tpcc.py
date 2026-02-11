@@ -9,7 +9,7 @@ from ydb.tests.olap.scenario.helpers.scenario_tests_helper import ScenarioTestHe
 class TpccSuiteBase(LoadSuiteBase):
     warehouses: int = 4500
     threads: int = 4
-    time_s: float = float(getenv('TPCC_TIME', 30 * 60))
+    time_s: float = 60 * float(getenv('TPCC_TIME_MINUTES', 30))
     tx_mode: TxMode = TxMode.SerializableRW
 
     @classmethod

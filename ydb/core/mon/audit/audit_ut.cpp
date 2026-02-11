@@ -27,32 +27,29 @@ Y_UNIT_TEST_SUITE(TAuditTest) {
     }
 
     Y_UNIT_TEST(ModifyingMethodsAlwaysAuditable) {
-        TAuditCtx ctx;
-        UNIT_ASSERT(ctx.AuditableRequest(MakeRequest("POST", "/path")));
-        UNIT_ASSERT(ctx.AuditableRequest(MakeRequest("PUT", "/path")));
-        UNIT_ASSERT(ctx.AuditableRequest(MakeRequest("DELETE", "/path")));
+        UNIT_ASSERT(TAuditCtx::AuditableRequest(MakeRequest("POST", "/path")));
+        UNIT_ASSERT(TAuditCtx::AuditableRequest(MakeRequest("PUT", "/path")));
+        UNIT_ASSERT(TAuditCtx::AuditableRequest(MakeRequest("DELETE", "/path")));
 
-        UNIT_ASSERT(ctx.AuditableRequest(MakeRequest("POST", "/counters")));
-        UNIT_ASSERT(ctx.AuditableRequest(MakeRequest("PUT", "/counters")));
-        UNIT_ASSERT(ctx.AuditableRequest(MakeRequest("DELETE", "/counters")));
+        UNIT_ASSERT(TAuditCtx::AuditableRequest(MakeRequest("POST", "/counters")));
+        UNIT_ASSERT(TAuditCtx::AuditableRequest(MakeRequest("PUT", "/counters")));
+        UNIT_ASSERT(TAuditCtx::AuditableRequest(MakeRequest("DELETE", "/counters")));
     }
 
     Y_UNIT_TEST(OptionsRequestsAreNotAudited) {
         TAuditCtx ctx;
-        UNIT_ASSERT(!ctx.AuditableRequest(MakeRequest("OPTIONS", "/path")));
+        UNIT_ASSERT(!TAuditCtx::AuditableRequest(MakeRequest("OPTIONS", "/path")));
     }
 
     Y_UNIT_TEST(DeniedPathsAreNotAudited) {
-        TAuditCtx ctx;
-        UNIT_ASSERT(!ctx.AuditableRequest(MakeRequest("GET", "/counters")));
-        UNIT_ASSERT(!ctx.AuditableRequest(MakeRequest("GET", "/viewer/subpage")));
-        UNIT_ASSERT(!ctx.AuditableRequest(MakeRequest("GET", "/viewer?mode=overview")));
-        UNIT_ASSERT(!ctx.AuditableRequest(MakeRequest("GET", "/monitoring/cluster/static/js/24615.12b53f26.chunk.js")));
+        UNIT_ASSERT(!TAuditCtx::AuditableRequest(MakeRequest("GET", "/counters")));
+        UNIT_ASSERT(!TAuditCtx::AuditableRequest(MakeRequest("GET", "/viewer/subpage")));
+        UNIT_ASSERT(!TAuditCtx::AuditableRequest(MakeRequest("GET", "/viewer?mode=overview")));
+        UNIT_ASSERT(!TAuditCtx::AuditableRequest(MakeRequest("GET", "/monitoring/cluster/static/js/24615.12b53f26.chunk.js")));
     }
 
     Y_UNIT_TEST(OtherGetRequestsAreAudited) {
-        TAuditCtx ctx;
-        UNIT_ASSERT(ctx.AuditableRequest(MakeRequest("GET", "/other")));
-        UNIT_ASSERT(ctx.AuditableRequest(MakeRequest("GET", "/viewerstats?mode=overview")));
+        UNIT_ASSERT(TAuditCtx::AuditableRequest(MakeRequest("GET", "/other")));
+        UNIT_ASSERT(TAuditCtx::AuditableRequest(MakeRequest("GET", "/viewerstats?mode=overview")));
     }
 }

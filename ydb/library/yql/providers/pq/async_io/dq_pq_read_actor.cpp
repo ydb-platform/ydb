@@ -201,6 +201,7 @@ class TDqPqReadActor : public TActor<TDqPqReadActor>, public NYql::NDq::NInterna
         NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo Info;
         ITopicClient::TPtr TopicClient;
         std::shared_ptr<NYdb::NTopic::IReadSession> ReadSession;
+        ICompositeTopicReadSessionControl::TPtr ReadSessionControl;
         ui32 PartitionsCount = 0;
         NThreading::TFuture<void> EventFuture;
         bool SubscribedOnEvent = false;
@@ -338,7 +339,7 @@ public:
             if (const auto maxPartitionReadSkew = NProtoInterop::CastFromProto(SourceParams.GetMaxPartitionReadSkew())) {
                 YQL_ENSURE(InfoAggregator, "Missing DQ info aggregator for distributed read session");
 
-                std::tie(clusterState.ReadSession, ReadSessionControl) = CreateCompositeTopicReadSession(ActorContext(), GetTopicClient(clusterState), {
+                std::tie(clusterState.ReadSession, clusterState.ReadSessionControl) = CreateCompositeTopicReadSession(ActorContext(), GetTopicClient(clusterState), {
                     .BaseSettings = GetReadSessionSettings(clusterState),
                     .IdleTimeout = TDuration::MicroSeconds(SourceParams.GetWatermarks().GetIdleTimeoutUs()),
                     .MaxPartitionReadSkew = maxPartitionReadSkew,
@@ -625,7 +626,7 @@ private:
                     }
                 }
 
-                TTopicEventProcessor topicEventProcessor {*this, batchItemsEstimatedCount, LogPrefix, TString(clusterState.Info.Name), clusterState.Index };
+                TTopicEventProcessor topicEventProcessor {*this, clusterState, batchItemsEstimatedCount, LogPrefix, TString(clusterState.Info.Name), clusterState.Index };
                 for (auto& event : events) {
                     std::visit(topicEventProcessor, event);
                 }
@@ -813,8 +814,8 @@ private:
                 LWPROBE(PqReadDataReceived, TString(TStringBuilder() << Self.TxId), Self.SourceParams.GetTopicPath(), TString{data});
                 SRC_LOG_T("SessionId: " << Self.GetSessionId(Index) << " Key: " << partitionKey << " Data received: " << message.DebugString(true));
 
-                if (Self.ReadSessionControl) {
-                    Self.ReadSessionControl->AdvancePartitionTime(message.GetPartitionSession()->GetPartitionId(), message.GetWriteTime());
+                if (ClusterState.ReadSessionControl) {
+                    ClusterState.ReadSessionControl->AdvancePartitionTime(message.GetPartitionSession()->GetPartitionId(), message.GetWriteTime());
                 }
 
                 if (message.GetWriteTime() < Self.StartingMessageTimestamp) {
@@ -928,6 +929,7 @@ private:
         }
 
         TDqPqReadActor& Self;
+        TClusterState& ClusterState;
         ui32 BatchCapacity;
         const TString& LogPrefix;
         const TString& Cluster;
@@ -955,7 +957,6 @@ private:
     NThreading::TFuture<std::vector<NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo>> AsyncInit;
     ui32 TopicPartitionsCount = 0;
     bool WithoutConsumer = false;
-    ICompositeTopicReadSessionControl::TPtr ReadSessionControl;
 };
 
 ui32 ExtractPartitionsFromParams(

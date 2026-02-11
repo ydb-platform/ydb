@@ -11,6 +11,7 @@ SRCS(
     dq_compute_actor_watermarks.cpp
     dq_compute_actor.cpp
     dq_compute_issues_buffer.cpp
+    dq_info_aggregation_actor.cpp
     dq_request_context.h
     dq_request_context.cpp
 )

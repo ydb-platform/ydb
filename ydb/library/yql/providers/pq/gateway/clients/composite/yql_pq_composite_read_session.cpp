@@ -8,6 +8,7 @@
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
 #include <library/cpp/protobuf/interop/cast.h>
+#include <library/cpp/threading/future/core/future.h>
 
 #include <util/generic/guid.h>
 
@@ -28,25 +29,17 @@ using namespace NYdb::NTopic;
 
 class ICompositeTopicReadSessionControlImpl : public ICompositeTopicReadSessionControl {
 public:
-    using TPtr = std::shared_ptr<ICompositeTopicReadSessionControlImpl>;
+    using TPtr = std::weak_ptr<ICompositeTopicReadSessionControlImpl>;
 
     // Minimal time for external partitions
     virtual void AdvanceTime(TInstant readTime) = 0;
 
     // Minimal time for local partition, should be called periodically to update partitions idleness
     virtual TInstant GetReadTime() = 0;
-
-    // Subscribe on read time update
-    virtual NThreading::TFuture<void> SubscribeOnUpdate() = 0;
 };
 
 class TDqPqReadBalancerActor final : public TActorBootstrapped<TDqPqReadBalancerActor>, public IActorExceptionHandler {
     static constexpr TDuration WAKEUP_PERIOD = TDuration::Seconds(1);
-
-    enum class EWakeup {
-        Subscribe,
-        Periodic,
-    };
 
 public:
     TDqPqReadBalancerActor(TActorId aggregatorActor, ICompositeTopicReadSessionControlImpl::TPtr controller)
@@ -54,7 +47,7 @@ public:
         , Controller(std::move(controller))
     {
         Y_VALIDATE(AggregatorActor, "Missing aggregator actor");
-        Y_VALIDATE(Controller, "Missing controller");
+        Y_VALIDATE(Controller.lock(), "Missing controller");
 
         Value.SetCounterId("distributed_topic_read_session");
 
@@ -69,7 +62,6 @@ public:
         LogPrefix = TStringBuilder() << "[TDqPqReadBalancerActor] SelfId: " << SelfId() << ", AggregatorActor: " << AggregatorActor << ". ";
         SRC_LOG_D("Start");
 
-        SubscribeOnUpdate();
         ScheduleWakeup();
         SendReadTime();
     }
@@ -87,11 +79,13 @@ public:
 
 private:
     void Handle(NDq::TInfoAggregationActorEvents::TEvOnAggregateUpdated::TPtr& ev) {
-        if (const auto value = ev->Get()->Record.GetScalar(); value != std::numeric_limits<i64>::max()) {
-            SRC_LOG_T("Received TEvOnAggregateUpdated, from " << ev->Sender << ", value: " << TInstant::MilliSeconds(value));
-            Controller->AdvanceTime(TInstant::MilliSeconds(value));
-        } else {
-            SRC_LOG_T("Received TEvOnAggregateUpdated, from " << ev->Sender << ", max-value");
+        if (const auto sharedController = Controller.lock()) {
+            if (const auto value = ev->Get()->Record.GetScalar(); value != std::numeric_limits<i64>::max()) {
+                SRC_LOG_T("Received TEvOnAggregateUpdated, from " << ev->Sender << ", value: " << TInstant::MilliSeconds(value));
+                sharedController->AdvanceTime(TInstant::MilliSeconds(value));
+            } else {
+                SRC_LOG_T("Received TEvOnAggregateUpdated, from " << ev->Sender << ", max-value");
+            }
         }
     }
 
@@ -104,41 +98,32 @@ private:
         const auto tag = ev->Get()->Tag;
         SRC_LOG_T("Received TEvWakeup, tag: " << tag);
 
-        switch (static_cast<EWakeup>(tag)) {
-            case EWakeup::Subscribe:
-                SubscribeOnUpdate();
-                break;
-            case EWakeup::Periodic:
-                ScheduleWakeup();
-                break;
+        if (tag) {
+            ScheduleWakeup();
         }
 
         SendReadTime();
     }
 
     void ScheduleWakeup() const {
-        Schedule(WAKEUP_PERIOD, new TEvents::TEvWakeup(static_cast<ui32>(EWakeup::Periodic)));
-    }
-
-    void SubscribeOnUpdate() const {
-        Controller->SubscribeOnUpdate().Subscribe([self = SelfId(), actorSystem = ActorContext().ActorSystem()](const NThreading::TFuture<void>&) mutable {
-            actorSystem->Send(self, new TEvents::TEvWakeup());
-        });
+        Schedule(WAKEUP_PERIOD, new TEvents::TEvWakeup(1));
     }
 
     void SendReadTime() {
-        const auto readTime = Controller->GetReadTime();
-        SRC_LOG_D("SendReadTime: " << readTime);
+        if (const auto sharedController = Controller.lock()) {
+            const auto readTime = sharedController->GetReadTime();
+            SRC_LOG_D("SendReadTime: " << readTime);
 
-        const i64 newValue = readTime ? readTime.MilliSeconds() : std::numeric_limits<i64>::max();
-        const auto now = TInstant::Now();
-        if (now - LastSendAt < WAKEUP_PERIOD && std::abs(newValue - Value.GetAggMin()) < static_cast<i64>(WAKEUP_PERIOD.MilliSeconds())) {
-            return;
+            const i64 newValue = readTime ? readTime.MilliSeconds() : std::numeric_limits<i64>::max();
+            const auto now = TInstant::Now();
+            if (now - LastSendAt < WAKEUP_PERIOD && std::abs(newValue - Value.GetAggMin()) < static_cast<i64>(WAKEUP_PERIOD.MilliSeconds())) {
+                return;
+            }
+
+            LastSendAt = now;
+            Value.SetAggMin(newValue);
+            Send(AggregatorActor, new NDq::TInfoAggregationActorEvents::TEvUpdateCounter(Value));
         }
-
-        LastSendAt = now;
-        Value.SetAggMin(newValue);
-        Send(AggregatorActor, new NDq::TInfoAggregationActorEvents::TEvUpdateCounter(Value));
     }
 
     const TActorId AggregatorActor;
@@ -148,7 +133,8 @@ private:
     NDqProto::TEvUpdateCounterValue Value;
 };
 
-class TCompositeTopicReadSession final : public IReadSession, public ICompositeTopicReadSessionControlImpl, std::enable_shared_from_this<TCompositeTopicReadSession> {
+// All blocking methods are not supported (supposed to be used from actor system)
+class TCompositeTopicReadSession final : public IReadSession, public ICompositeTopicReadSessionControlImpl {
     struct TTopicEventSizeVisitor {
         template <typename TEv>
         void operator()(TEv& ev) {
@@ -251,12 +237,11 @@ class TCompositeTopicReadSession final : public IReadSession, public ICompositeT
     };
 
 public:
-    TCompositeTopicReadSession(const TActorContext& ctx, ITopicClient& topicClient, const TCompositeTopicReadSessionSettings& settings)
+    TCompositeTopicReadSession(const TActorSystem* actorSystem, ITopicClient& topicClient, const TCompositeTopicReadSessionSettings& settings)
         : SessionId(CreateGuidAsString())
         , MaxPartitionReadSkew(settings.MaxPartitionReadSkew)
         , IdleTimeout(settings.IdleTimeout)
-        , ActorSystem(ctx.ActorSystem())
-        , UpdatePromise(NThreading::NewPromise<void>())
+        , ActorSystem(actorSystem)
     {
         Y_VALIDATE(MaxPartitionReadSkew, "MaxPartitionReadSkew must be positive");
         Y_VALIDATE(settings.AggregatorActor, "AggregatorActor must be set");
@@ -277,8 +262,6 @@ public:
             sessionSettings.Topics_[0].AppendPartitionIds(partitionId);
             ReadSessions.emplace_back(this, i, topicClient.CreateReadSession(sessionSettings));
         }
-
-        BalancerActor = ctx.RegisterWithSameMailbox(new TDqPqReadBalancerActor(settings.AggregatorActor, shared_from_this()));
     }
 
     ~TCompositeTopicReadSession() {
@@ -287,11 +270,15 @@ public:
         }
     }
 
+    void SetBalancerActor(const TActorId& balancerActor) {
+        BalancerActor = balancerActor;
+    }
+
     // IReadSession
 
     NThreading::TFuture<void> WaitEvent() final {
         if (ReadyReadSessionIdx) {
-            return NThreading::MakeFuture<void>();
+            return NThreading::MakeFuture();
         }
 
         std::vector<NThreading::TFuture<void>> futures;
@@ -305,7 +292,7 @@ public:
             futures.emplace_back(readSession.WaitEvent());
             if (futures.back().IsReady()) {
                 ReadyReadSessionIdx = i;
-                return NThreading::MakeFuture<void>();
+                return NThreading::MakeFuture();
             }
         }
 
@@ -318,14 +305,15 @@ public:
     }
 
     std::vector<TReadSessionEvent::TEvent> GetEvents(bool block, std::optional<size_t> maxEventsCount, size_t maxByteSize) final {
+        Y_VALIDATE(!block, "Block methods are not supported");
         return GetEvents(TReadSessionGetEventSettings()
-            .Block(block)
             .MaxByteSize(maxByteSize)
             .MaxEventsCount(maxEventsCount)
         );
     }
 
     std::vector<TReadSessionEvent::TEvent> GetEvents(const TReadSessionGetEventSettings& settings) final {
+        Y_VALIDATE(!settings.Block_, "Block methods are not supported");
         auto getEventSettings = TReadSessionGetEventSettings(settings)
             .MaxEventsCount(1);
 
@@ -339,23 +327,23 @@ public:
                 break;
             }
 
-            getEventSettings.Block(false);
+            getEventSettings.MaxByteSize(settings.MaxByteSize_ - usedSize);
         }
 
         return result;
     }
 
     std::optional<TReadSessionEvent::TEvent> GetEvent(bool block, size_t maxByteSize) final {
+        Y_VALIDATE(!block, "Block methods are not supported");
         return GetEvent(TReadSessionGetEventSettings()
-            .Block(block)
             .MaxByteSize(maxByteSize)
             .MaxEventsCount(1)
         );
     }
 
     std::optional<TReadSessionEvent::TEvent> GetEvent(const TReadSessionGetEventSettings& settings) final {
-        auto readSettings = settings;
-        RefreshReadyReadSessionsIdx(readSettings);
+        Y_VALIDATE(!settings.Block_, "Block methods are not supported");
+        RefreshReadyReadSessionsIdx(settings);
 
         if (!ReadyReadSessionIdx) {
             return std::nullopt;
@@ -367,7 +355,7 @@ public:
         auto& readSession = ReadSessions[i];
         auto event = readSession.ExtractEvent();
 
-        if (readSession.ReadEvent(readSettings.Block(false))) {
+        if (readSession.ReadEvent(settings)) {
             ReadyReadSessionIdx = i;
             SequentialEventsRead++;
         } else {
@@ -417,8 +405,8 @@ public:
             PartitionsReadTimeSet.emplace(lastEventTime, idx);
             PartitionsReadTime[idx] = lastEventTime;
 
-            if (!UpdatePromise.IsReady() && lastReadTime != GetReadTime()) {
-                UpdatePromise.SetValue();
+            if (lastReadTime != GetReadTime()) {
+                ActorSystem->Send(BalancerActor, new TEvents::TEvWakeup());
             }
         }
     }
@@ -462,16 +450,8 @@ public:
         return PartitionsReadTimeSet.begin()->first;
     }
 
-    NThreading::TFuture<void> SubscribeOnUpdate() final {
-        if (UpdatePromise.IsReady()) {
-            UpdatePromise = NThreading::NewPromise<void>();
-        }
-
-        return UpdatePromise.GetFuture();
-    }
-
 private:
-    void RefreshReadyReadSessionsIdx(TReadSessionGetEventSettings& settings) {
+    void RefreshReadyReadSessionsIdx(const TReadSessionGetEventSettings& settings) {
         if (SequentialEventsRead >= ReadSessions.size()) {
             // Switch to another partition
             SequentialEventsRead = 0;
@@ -489,7 +469,6 @@ private:
 
             if (ReadSessions[LastReadyReadSessionIdx].ReadEvent(settings)) {
                 ReadyReadSessionIdx = LastReadyReadSessionIdx;
-                settings.Block(false);
                 break;
             }
         }
@@ -507,7 +486,6 @@ private:
     const TDuration IdleTimeout;
     const TActorSystem* const ActorSystem = nullptr;
     TActorId BalancerActor;
-    NThreading::TPromise<void> UpdatePromise;
     std::optional<NThreading::TPromise<void>> AdvanceTimePromise;
 
     TInstant ExternalReadTime; // Minimal read time from external partitions
@@ -528,7 +506,8 @@ std::pair<std::shared_ptr<NYdb::NTopic::IReadSession>, ICompositeTopicReadSessio
     ITopicClient& topicClient,
     const TCompositeTopicReadSessionSettings& settings
 ) {
-    auto compositeReadSession = std::make_shared<TCompositeTopicReadSession>(ctx, topicClient, settings);
+    const auto compositeReadSession = std::make_shared<TCompositeTopicReadSession>(ctx.ActorSystem(), topicClient, settings);
+    compositeReadSession->SetBalancerActor(ctx.RegisterWithSameMailbox(new TDqPqReadBalancerActor(settings.AggregatorActor, compositeReadSession)));
     return {compositeReadSession, compositeReadSession};
 }
 

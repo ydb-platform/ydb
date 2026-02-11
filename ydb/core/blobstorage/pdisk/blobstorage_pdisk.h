@@ -190,10 +190,7 @@ struct TEvYardInitResult : TEventLocal<TEvYardInitResult, TEvBlobStorage::EvYard
     TIntrusivePtr<TPDiskParams> PDiskParams;
     TVector<TChunkIdx> OwnedChunks;  // Sorted vector of owned chunk identifiers.
     TString ErrorReason;
-
-    // A duplicated fd for direct disk access, caller is responsible for closing.
-    // However, if pdisk is stopped it closes all duplicated descriptors for safety.
-    TFileHandle DiskFd;
+    TFileHandle DiskFd; // A duplicated fd for direct disk access
 
     TEvYardInitResult(const NKikimrProto::EReplyStatus status, TString errorReason)
         : Status(status)

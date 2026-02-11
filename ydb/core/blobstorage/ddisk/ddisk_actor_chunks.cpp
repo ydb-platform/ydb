@@ -130,7 +130,7 @@ namespace NKikimr::NDDisk {
         }
         for (const auto& chunkIdx : newChunkIdxs) {
             Y_DEBUG_ABORT_UNLESS(std::find(PersistentBufferSpaceAllocator.OwnedChunks.begin(),
-                PersistentBufferSpaceAllocator.OwnedChunks.end(), chunkIdx) != PersistentBufferSpaceAllocator.OwnedChunks.end());
+                PersistentBufferSpaceAllocator.OwnedChunks.end(), chunkIdx) == PersistentBufferSpaceAllocator.OwnedChunks.end());
             record.AddChunkIdxs(chunkIdx);
         }
         return record;

@@ -31,16 +31,6 @@ public:
         NWilson::TTraceId traceId,
         const ui64 requestId) = 0;
 
-    virtual NThreading::TFuture<NKikimrBlobStorage::NDDisk::TEvFlushPersistentBufferResult> FlushPersistentBuffer(
-        const NActors::TActorId serviceId,
-        const NKikimr::NDDisk::TQueryCredentials credentials,
-        const NKikimr::NDDisk::TBlockSelector selector,
-        const ui64 lsn,
-        const std::tuple<ui32, ui32, ui32> ddiskId,
-        const ui64 ddiskInstanceGuid,
-        NWilson::TTraceId traceId,
-        const ui64 requestId) = 0;
-
     virtual NThreading::TFuture<NKikimrBlobStorage::NDDisk::TEvErasePersistentBufferResult> ErasePersistentBuffer(
         const NActors::TActorId serviceId,
         const NKikimr::NDDisk::TQueryCredentials credentials,

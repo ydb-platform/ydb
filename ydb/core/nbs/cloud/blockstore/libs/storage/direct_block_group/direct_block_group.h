@@ -84,7 +84,7 @@ private:
     ui64 StorageRequestId = 0;
     std::unordered_map<ui64, std::shared_ptr<IRequestHandler>> RequestHandlersByStorageRequestId;
     TVector<TBlockMeta> BlocksMeta;
-    TQueue<std::shared_ptr<TFlushRequestHandler>> FlushQueue;
+    TQueue<std::shared_ptr<TSyncRequestHandler>> SyncQueue;
 
     std::function<void(bool)> WriteBlocksReplyCallback;
     std::function<void(bool)> ReadBlocksReplyCallback;
@@ -131,13 +131,13 @@ private:
 
     void RequestBlockFlush(TWriteRequestHandler& requestHandler);
 
-    void ProcessFlushQueue();
+    void ProcessSyncQueue();
 
     void HandleFlushPersistentBufferResult(
         ui64 storageRequestId,
         const NKikimrBlobStorage::NDDisk::TEvFlushPersistentBufferResult& result);
 
-    void RequestBlockErase(TFlushRequestHandler& requestHandler);
+    void RequestBlockErase(TSyncRequestHandler& requestHandler);
 
     void HandleErasePersistentBufferResult(
         ui64 storageRequestId,

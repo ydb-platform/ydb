@@ -33,16 +33,6 @@ public:
         NWilson::TTraceId traceId,
         const ui64 requestId) override;
 
-    NThreading::TFuture<NKikimrBlobStorage::NDDisk::TEvFlushPersistentBufferResult> FlushPersistentBuffer(
-        const NActors::TActorId serviceId,
-        const NKikimr::NDDisk::TQueryCredentials credentials,
-        const NKikimr::NDDisk::TBlockSelector selector,
-        const ui64 lsn,
-        const std::tuple<ui32, ui32, ui32> ddiskId,
-        const ui64 ddiskInstanceGuid,
-        NWilson::TTraceId traceId,
-        const ui64 requestId) override;
-
     NThreading::TFuture<NKikimrBlobStorage::NDDisk::TEvErasePersistentBufferResult> ErasePersistentBuffer(
         const NActors::TActorId serviceId,
         const NKikimr::NDDisk::TQueryCredentials credentials,
@@ -89,7 +79,6 @@ class TICStorageTransportActor
 private:
     std::unordered_map<ui64, TEvICStorageTransportPrivate::TEvConnect> ConnectEventsByRequestId;
     std::unordered_map<ui64, TEvICStorageTransportPrivate::TEvWritePersistentBuffer> WritePersistentBufferEventsByRequestId;
-    std::unordered_map<ui64, TEvICStorageTransportPrivate::TEvFlushPersistentBuffer> FlushPersistentBufferEventsByRequestId;
     std::unordered_map<ui64, TEvICStorageTransportPrivate::TEvErasePersistentBuffer> ErasePersistentBufferEventsByRequestId;
     std::unordered_map<ui64, TEvICStorageTransportPrivate::TEvReadPersistentBuffer> ReadPersistentBufferEventsByRequestId;
     std::unordered_map<ui64, TEvICStorageTransportPrivate::TEvRead> ReadEventsByRequestId;
@@ -115,14 +104,6 @@ private:
 
     void HandleWritePersistentBufferResult(
         const NKikimr::NDDisk::TEvWritePersistentBufferResult::TPtr& ev,
-        const NActors::TActorContext& ctx);
-
-    void HandleFlushPersistentBuffer(
-        const TEvICStorageTransportPrivate::TEvFlushPersistentBuffer::TPtr& ev,
-        const NActors::TActorContext& ctx);
-
-    void HandleFlushPersistentBufferResult(
-        const NKikimr::NDDisk::TEvFlushPersistentBufferResult::TPtr& ev,
         const NActors::TActorContext& ctx);
 
     void HandleErasePersistentBuffer(

@@ -337,68 +337,6 @@ void TICStorageTransportActor::HandleWritePersistentBufferResult(
     WritePersistentBufferEventsByRequestId.erase(requestId);
 }
 
-void TICStorageTransportActor::HandleFlushPersistentBuffer(
-    const TEvICStorageTransportPrivate::TEvFlushPersistentBuffer::TPtr& ev,
-    const NActors::TActorContext& ctx)
-{
-    auto* msg = ev->Get();
-
-    auto [it, inserted] = FlushPersistentBufferEventsByRequestId.emplace(msg->RequestId, std::move(*msg));
-    Y_ABORT_UNLESS(inserted);
-
-    LOG_DEBUG(
-        ctx,
-        NKikimrServices::NBS_PARTITION,
-        "Sended TEvFlushPersistentBuffer with requestId# %lu",
-        it->second.RequestId);
-
-    auto request = std::make_unique<TEvFlushPersistentBuffer>(
-        it->second.Credentials,
-        it->second.Selector,
-        it->second.Lsn,
-        it->second.DDiskId,
-        it->second.DDiskInstanceGuid);
-
-    ctx.Send(MakeHolder<IEventHandle>(
-        it->second.ServiceId,
-        ctx.SelfID,
-        request.release(),
-        0, // flags
-        it->second.RequestId,
-        nullptr,
-        std::move(it->second.TraceId)));
-}
-
-void TICStorageTransportActor::HandleFlushPersistentBufferResult(
-    const TEvFlushPersistentBufferResult::TPtr& ev,
-    const NActors::TActorContext& ctx)
-{
-    Y_UNUSED(ctx);
-
-    auto requestId = ev->Cookie;
-
-    LOG_DEBUG(
-        ctx,
-        NKikimrServices::NBS_PARTITION,
-        "Received TEvFlushPersistentBufferResult with requestId# %lu",
-        requestId);
-
-    // That means that request is already completed
-    if (!FlushPersistentBufferEventsByRequestId.contains(requestId)) {
-        LOG_DEBUG(
-            ctx,
-            NKikimrServices::NBS_PARTITION,
-            "FlushPersistentBufferEvent with requestId# %lu not found",
-            requestId);
-        return;
-    }
-
-    auto& promise = FlushPersistentBufferEventsByRequestId.at(requestId).Promise;
-
-    promise.SetValue(std::move(ev->Get()->Record));
-    FlushPersistentBufferEventsByRequestId.erase(requestId);
-}
-
 void TICStorageTransportActor::HandleErasePersistentBuffer(
     const TEvICStorageTransportPrivate::TEvErasePersistentBuffer::TPtr& ev,
     const NActors::TActorContext& ctx)
@@ -681,9 +619,6 @@ STFUNC(TICStorageTransportActor::StateWork)
 
         HFunc(TEvICStorageTransportPrivate::TEvWritePersistentBuffer, HandleWritePersistentBuffer);
         HFunc(TEvWritePersistentBufferResult, HandleWritePersistentBufferResult);
-
-        HFunc(TEvICStorageTransportPrivate::TEvFlushPersistentBuffer, HandleFlushPersistentBuffer);
-        HFunc(TEvFlushPersistentBufferResult, HandleFlushPersistentBufferResult);
 
         HFunc(TEvICStorageTransportPrivate::TEvErasePersistentBuffer, HandleErasePersistentBuffer);
         HFunc(TEvErasePersistentBufferResult, HandleErasePersistentBufferResult);

@@ -585,8 +585,8 @@ RewriteInputForConstraint(const TExprBase& inputRows, const THashSet<TStringBuf>
 } // namespace
 
 TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, const TExprBase& inputRows,
-    const TCoAtomList& inputColumns, const TCoAtomList& returningColumns, const TCoAtomList& columnsWithDefaults, const TKikimrTableDescription& table,
-    const TMaybeNode<NYql::NNodes::TCoNameValueTupleList>& settings, const bool isBatch, TPositionHandle pos, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx)
+    const TCoAtomList& inputColumns, const TCoAtomList& returningColumns, const TCoAtomList& columnsWithDefaults, const TKikimrTableDescription& table, const bool isBatch,
+    const TMaybeNode<NYql::NNodes::TCoNameValueTupleList>& settings, TPositionHandle pos, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx)
 {
     switch (mode) {
         case TKqpPhyUpsertIndexMode::Upsert:

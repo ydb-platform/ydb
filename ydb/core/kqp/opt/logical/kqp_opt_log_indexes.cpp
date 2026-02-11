@@ -1232,6 +1232,7 @@ struct TFullTextApplyParseResult {
     TExprNode::TPtr DefaultOperator;
     TExprNode::TPtr MinimumShouldMatch;
 
+    ui64 FulltextExprCount = 0;
     bool IsScoreApply = false;
 
     TFullTextApplyParseResult()
@@ -1358,7 +1359,21 @@ TFullTextApplyParseResult FindMatchingApply(const TExprBase& node, TExprContext&
     TFullTextApplyParseResult result;
 
     VisitExpr(node.Ptr(), [&] (const TExprNode::TPtr& expr) {
+        if (TExprBase(expr).Maybe<TCoAnd>()) {
+            return true;
+        }
+
+        if (TExprBase(expr).Maybe<TCoOr>()) {
+            return false;
+        }
+
+        if (TExprBase(expr).Maybe<TCoNot>()) {
+            return false;
+        }
+
         if (expr->Content() == "FulltextScore" || expr->Content() == "FulltextMatch") {
+            result.FulltextExprCount++;
+
             if (!EnsureArgsCount(*expr, 2, ctx)) {
                 return false;
             }
@@ -1458,7 +1473,7 @@ TExprBase KqpRewriteFlatMapOverFullTextRelevance(const NYql::NNodes::TExprBase& 
     }
 
     auto result = FindMatchingApply(topSort.KeySelectorLambda().Body(), ctx);
-    if (!result.Apply) {
+    if (!result.Apply || result.FulltextExprCount > 1) {
         return node;
     }
 
@@ -1568,7 +1583,7 @@ TExprBase KqpRewriteFlatMapOverFullTextMatch(const NYql::NNodes::TExprBase& node
     };
 
     auto result = FindMatchingApply(flatMap.Lambda().Body(), ctx);
-    if (!result.Apply) {
+    if (!result.Apply || result.FulltextExprCount > 1) {
         reject(read);
         return node;
     }

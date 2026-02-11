@@ -56,7 +56,7 @@ class TDocId;
 namespace {
 
 TString WildcardToRegex(const TStringBuf wildcardPattern) {
-    static const TStringBuf special = R"(^$.\+?()|{}[])";
+    static const TStringBuf special = R"(^$.\+*?()|{}[])";
     TStringBuilder builder;
     for (char c : wildcardPattern) {
         if (c == '%') {

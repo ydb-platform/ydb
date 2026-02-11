@@ -1,40 +1,37 @@
 #include "mvp_startup_options.h"
 
-#include <library/cpp/getopt/last_getopt.h>
-
 #include <util/stream/file.h>
 #include <util/generic/yexception.h>
 #include <util/string/strip.h>
 
 #include <google/protobuf/text_format.h>
-#include <yaml-cpp/yaml.h>
 
 #include <iostream>
 
 namespace NMVP {
 
 TMvpStartupOptions TMvpStartupOptions::Build(int argc, char** argv) {
-    TMvpStartupOptions opts;
+    TMvpStartupOptions startupOptions;
 
-    NLastGetopt::TOptsParseResult parsedArgs = opts.ParseArgs(argc, argv);
-    opts.LoadConfig(parsedArgs);
-    opts.SetPorts();
-    opts.LoadTokens();
-    opts.LoadCertificates();
+    NLastGetopt::TOptsParseResult parsedArgs = startupOptions.ParseArgs(argc, argv);
+    startupOptions.LoadConfig(parsedArgs);
+    startupOptions.SetPorts();
+    startupOptions.LoadTokens();
+    startupOptions.LoadCertificates();
 
-    return opts;
+    return startupOptions;
 }
 
 NLastGetopt::TOptsParseResult TMvpStartupOptions::ParseArgs(int argc, char** argv) {
-    NLastGetopt::TOpts opts = NLastGetopt::TOpts::Default();
+    Opts = NLastGetopt::TOpts::Default();
 
-    opts.AddLongOption("stderr", "Redirect log to stderr").NoArgument().SetFlag(&LogToStderr);
-    opts.AddLongOption("mlock", "Lock resident memory").NoArgument().SetFlag(&Mlock);
-    opts.AddLongOption("config", "Path to configuration YAML file").RequiredArgument("PATH").StoreResult(&YamlConfigPath);
-    opts.AddLongOption("http-port", "HTTP port. Default " + ToString(DEFAULT_HTTP_PORT)).StoreResult(&HttpPort);
-    opts.AddLongOption("https-port", "HTTPS port. Default " + ToString(DEFAULT_HTTPS_PORT)).StoreResult(&HttpsPort);
+    Opts.AddLongOption("stderr", "Redirect log to stderr").NoArgument().SetFlag(&LogToStderr);
+    Opts.AddLongOption("mlock", "Lock resident memory").NoArgument().SetFlag(&Mlock);
+    Opts.AddLongOption("config", "Path to configuration YAML file").RequiredArgument("PATH").StoreResult(&YamlConfigPath);
+    Opts.AddLongOption("http-port", "HTTP port. Default " + ToString(DEFAULT_HTTP_PORT)).StoreResult(&HttpPort);
+    Opts.AddLongOption("https-port", "HTTPS port. Default " + ToString(DEFAULT_HTTPS_PORT)).StoreResult(&HttpsPort);
 
-    return NLastGetopt::TOptsParseResult(&opts, argc, argv);
+    return NLastGetopt::TOptsParseResult(&Opts, argc, argv);
 }
 
 void TMvpStartupOptions::LoadConfig(const NLastGetopt::TOptsParseResult& parsedArgs) {

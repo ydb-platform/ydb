@@ -2,6 +2,8 @@
 
 #include <ydb/mvp/core/protos/mvp.pb.h>
 
+#include <library/cpp/getopt/last_getopt.h>
+
 #include <util/generic/string.h>
 #include <util/system/types.h>
 
@@ -17,6 +19,7 @@ private:
     static constexpr ui16 DEFAULT_HTTPS_PORT = 8789;
 
 public:
+    NLastGetopt::TOpts Opts;
     TString YamlConfigPath;
     YAML::Node Config;
 

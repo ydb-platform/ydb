@@ -4,6 +4,7 @@
 #include <ydb/core/util/lz4_data_generator.h>
 #include <ydb/core/blobstorage/vdisk/defrag/defrag_quantum.h>
 #include <ydb/core/blobstorage/vdisk/defrag/defrag_search.h>
+#include <ydb/core/blobstorage/vdisk/common/vdisk_private_events.h>
 
 #include <library/cpp/protobuf/util/pb_io.h>
 
@@ -591,6 +592,114 @@ Y_UNIT_TEST_SUITE(CompDefrag) {
         UNIT_ASSERT_VALUES_EQUAL(metrics.HugeChunksCanBeFreed, 0);
         UNIT_ASSERT_LT(env.GetMetrics().HugeUsedChunks, totalHugeChunks);
 
+    }
+
+    Y_UNIT_TEST(FullCompactionLsnStableDuringCompaction) {
+        TTestEnvCompDefragIndependent env(0.01);
+
+        const ui32 initialN = 20000;
+        const ui32 initialBatch = 1000;
+        env.WriteData(initialN, initialBatch);
+        env.RunFullCompaction();
+
+        {
+            const auto metrics = env.GetMetrics();
+            UNIT_ASSERT_VALUES_EQUAL(metrics.Level0, 0);
+        }
+
+        TVector<std::unique_ptr<IEventHandle>> blockedCommitFinished;
+        TVector<std::unique_ptr<IEventHandle>> blockedCompSelected;
+        bool pauseCommitFinished = true;
+        bool blockSelector = false;
+
+        auto oldCommitFilter = env.SetFilterFunction(TEvBlobStorage::EvHullCommitFinished,
+            [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+                if (!pauseCommitFinished) {
+                    return true;
+                }
+                if (auto *msg = ev->Get<THullCommitFinished>()) {
+                    if (msg->Type == THullCommitFinished::CommitLevel) {
+                        blockedCommitFinished.push_back(std::move(ev));
+                        return false;
+                    }
+                }
+                return true;
+            });
+
+        auto oldSelectorFilter = env.SetFilterFunction(TEvBlobStorage::EvHullCompSelected,
+            [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+                if (!blockSelector) {
+                    return true;
+                }
+                blockedCompSelected.push_back(std::move(ev));
+                return false;
+            });
+
+        auto sendFullCompactionNoWait = [&](const TActorId& vdiskId, TVector<TActorId>& edges) {
+            const TActorId& edge = env.Env.Runtime->AllocateEdgeActor(vdiskId.NodeId());
+            env.Env.Runtime->Send(new IEventHandle(vdiskId, edge, TEvCompactVDisk::Create(EHullDbType::LogoBlobs,
+                TEvCompactVDisk::EMode::FULL)), vdiskId.NodeId());
+            edges.push_back(edge);
+        };
+
+        TVector<TActorId> compactionEdges;
+        for (ui32 i = 0; i < env.GroupInfo->GetTotalVDisksNum(); ++i) {
+            sendFullCompactionNoWait(env.GroupInfo->GetActorId(i), compactionEdges);
+        }
+
+        for (ui32 i = 0; i < 60 && blockedCommitFinished.empty(); ++i) {
+            env.Env.Sim(TDuration::Seconds(1));
+        }
+        UNIT_ASSERT(!blockedCommitFinished.empty());
+
+        const ui32 extraN = 2000;
+        const ui32 extraBatch = 200;
+        env.WriteData(extraN, extraBatch);
+
+        bool level0HasData = false;
+        for (ui32 i = 0; i < 60; ++i) {
+            env.Env.Sim(TDuration::Seconds(2));
+            if (env.GetMetrics().Level0 > 0) {
+                level0HasData = true;
+                break;
+            }
+        }
+        UNIT_ASSERT(level0HasData);
+        const ui64 level0BeforeResume = env.GetMetrics().Level0;
+
+        for (ui32 i = 0; i < env.GroupInfo->GetTotalVDisksNum(); ++i) {
+            sendFullCompactionNoWait(env.GroupInfo->GetActorId(i), compactionEdges);
+        }
+
+        blockSelector = true;
+        pauseCommitFinished = false;
+        for (auto& ev : blockedCommitFinished) {
+            env.Env.Runtime->WrapInActorContext(env.Sender, [&] {
+                TlsActivationContext->Send(ev.release());
+            });
+        }
+        blockedCommitFinished.clear();
+
+        env.Env.Sim(TDuration::Seconds(10));
+
+        const auto metricsAfter = env.GetMetrics();
+        UNIT_ASSERT_GE(metricsAfter.Level0, level0BeforeResume);
+        UNIT_ASSERT_GT(metricsAfter.Level0, 0);
+
+        blockSelector = false;
+        env.SetFilterFunction(TEvBlobStorage::EvHullCommitFinished, std::move(oldCommitFilter));
+        env.SetFilterFunction(TEvBlobStorage::EvHullCompSelected, std::move(oldSelectorFilter));
+
+        for (auto& ev : blockedCompSelected) {
+            env.Env.Runtime->WrapInActorContext(env.Sender, [&] {
+                TlsActivationContext->Send(ev.release());
+            });
+        }
+        blockedCompSelected.clear();
+
+        for (const auto& edge : compactionEdges) {
+            env.Env.Runtime->DestroyActor(edge);
+        }
     }
 
     Y_UNIT_TEST(ZeroThresholdDefragWithCompaction) {

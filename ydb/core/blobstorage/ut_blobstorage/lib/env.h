@@ -32,6 +32,8 @@ struct TEnvironmentSetup {
     static const std::initializer_list<ui32> DebugLogComponents;
     std::unordered_map<TIcbControlKey, TControlWrapper> IcbControls;
 
+    std::unordered_map<ui32, >
+
     struct TSettings {
         const ui32 NodeCount = 9;
         const bool VDiskReplPausedAtStart = false;
@@ -70,6 +72,7 @@ struct TEnvironmentSetup {
         const ui64 PhantomFlagStorageLimitPerVDiskBytes = 10'000'000; // 10_MB
         const bool TinySyncLog = false;
         const TDuration MaxPutTimeoutDSProxy = TDuration::Seconds(60);
+        const bool StartFakeWilsonCollectors = false;
     };
 
     const TSettings Settings;

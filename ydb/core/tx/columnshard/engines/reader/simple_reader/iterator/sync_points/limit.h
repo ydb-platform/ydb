@@ -133,6 +133,7 @@ private:
     }
 
 <<<<<<< HEAD
+<<<<<<< HEAD
     virtual std::shared_ptr<NCommon::IDataSource> OnAddSource(const std::shared_ptr<NCommon::IDataSource>& source) override {
         AFL_VERIFY(FetchedCount < Limit);
         Iterators.emplace_back(TSourceIterator(source));
@@ -140,8 +141,9 @@ private:
         return TBase::OnAddSource(source);
     }
 =======
+=======
+>>>>>>> 6a7726e710d (Resolved merge conflicts)
     virtual std::shared_ptr<NCommon::IDataSource> OnAddSource(const std::shared_ptr<NCommon::IDataSource>& source) override;
->>>>>>> 48e2293186d (Order by pk with limit final fix (#33610))
 
     virtual void DoAbort() override {
         FilledIterators.clear();

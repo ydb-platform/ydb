@@ -3383,6 +3383,7 @@ void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
                                           const TActorContext& ctx)
 {
     bool autopartitioningChanged = SplitMergeEnabled(Config) != SplitMergeEnabled(config);
+    bool mlpOrderedConsumerChanged = HasMLPOrderedConsumer(Config) != HasMLPOrderedConsumer(config);
 
     Config = std::move(config);
     PartitionConfig = GetPartitionConfig(Config);
@@ -3401,7 +3402,7 @@ void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
 
     PQ_ENSURE(Config.GetPartitionConfig().GetTotalPartitions() > 0);
 
-    if (autopartitioningChanged) {
+    if (autopartitioningChanged || mlpOrderedConsumerChanged) {
         AutopartitioningManager.reset(CreateAutopartitioningManager(Config, Partition));
     } else {
         AutopartitioningManager->UpdateConfig(Config);

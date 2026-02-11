@@ -24,6 +24,8 @@ namespace NPQ {
 bool IsQuotingEnabled(const NKikimrPQ::TPQConfig& config, bool isLocalDC);
 bool DetailedMetricsAreEnabled(const NKikimrPQ::TPQTabletConfig& config);
 
+bool HasMLPOrderedConsumer(const NKikimrPQ::TPQTabletConfig& config);
+
 }
 
 } // NKikimr

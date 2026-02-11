@@ -276,7 +276,7 @@ private:
 
 
 IAutopartitioningManager* CreateAutopartitioningManager(const NKikimrPQ::TPQTabletConfig& config, const TPartitionId& partitionId) {
-    auto withAutopartitioning = SplitMergeEnabled(config) && !MirroringEnabled(config);
+    auto withAutopartitioning = SplitMergeEnabled(config) && !MirroringEnabled(config) && !HasMLPOrderedConsumer(config);
     if (!withAutopartitioning) {
         return new TNoneAutopartitioningManager(config);
     }

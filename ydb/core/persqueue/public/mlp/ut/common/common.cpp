@@ -52,9 +52,18 @@ TStatus CreateTopic(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& t
     return client.CreateTopic(topicName, settings).GetValueSync();
 }
 
-TStatus CreateTopic(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& topicName, const TString& consumerName, size_t partitionCount, bool keepMessagesOrder) {
+TStatus CreateTopic(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& topicName, const TString& consumerName, size_t partitionCount,
+        bool keepMessagesOrder, bool autopartitioning) {
     return CreateTopic(setup, topicName, NYdb::NTopic::TCreateTopicSettings()
-            .PartitioningSettings(partitionCount, partitionCount)
+            .PartitioningSettings(partitionCount, autopartitioning ? partitionCount * 128 : partitionCount)
+            .BeginConfigurePartitioningSettings()
+                .BeginConfigureAutoPartitioningSettings()
+                    .Strategy(autopartitioning ? EAutoPartitioningStrategy::ScaleUp : EAutoPartitioningStrategy::Disabled)
+                    .StabilizationWindow(TDuration::Seconds(1))
+                    .UpUtilizationPercent(2)
+                    .DownUtilizationPercent(1)
+                .EndConfigureAutoPartitioningSettings()
+            .EndConfigurePartitioningSettings()
             .BeginAddSharedConsumer(consumerName)
                 .KeepMessagesOrder(keepMessagesOrder)
                 .BeginDeadLetterPolicy()

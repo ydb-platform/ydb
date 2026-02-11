@@ -668,43 +668,53 @@ public:
     }
 
 private:
-    TComplexTypeFieldDescriptor Descriptor_;
-    TYsonCursorConverter ValueConverter_;
+    const TComplexTypeFieldDescriptor Descriptor_;
+    const TYsonCursorConverter ValueConverter_;
 };
 
 class TNamedToPositionalStructConverter
 {
 public:
     TNamedToPositionalStructConverter(TComplexTypeFieldDescriptor descriptor, std::vector<TStructFieldInfo> fields)
-        : BufferOutput_(Buffer_)
-        , YsonWriter_(&BufferOutput_, EYsonType::ListFragment)
-        , Descriptor_(std::move(descriptor))
-    {
-        PositionTable_.reserve(fields.size());
-        for (auto fieldPosition : std::views::iota(0, std::ssize(fields))) {
-            auto& field = fields[fieldPosition];
-            FieldMap_.emplace(
-                field.FieldName,
-                TFieldMapEntry{
-                    .Converter = std::move(field.Converter),
-                    .Position = fieldPosition,
+        : Descriptor_(std::move(descriptor))
+        , FieldMap_(std::invoke([&] {
+            THashMap<TString, TFieldMapEntry> result;
+            result.reserve(fields.size());
+            for (auto fieldPosition : std::views::iota(0, std::ssize(fields))) {
+                auto& field = fields[fieldPosition];
+                EmplaceOrCrash(
+                    result,
+                    field.FieldName,
+                    TFieldMapEntry{
+                        .Converter = std::move(field.Converter),
+                        .Position = fieldPosition,
+                    });
+            }
+            return result;
+        }))
+        , PositionTable_(std::invoke([&] {
+            std::vector<TPositionTableEntry> result;
+            result.reserve(fields.size());
+            for (auto& field : fields) {
+                PositionTable_.push_back({
+                    .FieldName = std::move(field.FieldName),
+                    .IsNullable = field.IsNullable,
                 });
-
-            PositionTable_.push_back({
-                .IsNullable = field.IsNullable,
-                .FieldName = std::move(field.FieldName),
-            });
-        }
-    }
+            }
+            return result;
+        }))
+        , BufferOutput_(Buffer_)
+        , YsonWriter_(&BufferOutput_, EYsonType::ListFragment)
+    { }
 
     // NB: To wrap this object into std::function we must be able to copy it.
     TNamedToPositionalStructConverter(const TNamedToPositionalStructConverter& other)
-        : FieldMap_(other.FieldMap_)
+        : Descriptor_(other.Descriptor_)
+        , FieldMap_(other.FieldMap_)
         , PositionTable_(other.PositionTable_)
         , Buffer_(other.Buffer_)
         , BufferOutput_(Buffer_)
         , YsonWriter_(&BufferOutput_, EYsonType::ListFragment)
-        , Descriptor_(other.Descriptor_)
     { }
 
     void operator()(TYsonPullParserCursor* cursor, IYsonConsumer* consumer)
@@ -773,19 +783,21 @@ private:
 
     struct TPositionTableEntry
     {
-        size_t Offset = 0;
-        size_t Size : 62 = 0;
-        bool IsPresent : 1 = false;
-        bool IsNullable : 1 = false;
         TString FieldName;
+        bool IsNullable = false;
+
+        bool IsPresent = false;
+        ssize_t Offset = 0;
+        ssize_t Size = 0;
     };
 
-    THashMap<TString, TFieldMapEntry> FieldMap_;
+    const TComplexTypeFieldDescriptor Descriptor_;
+    const THashMap<TString, TFieldMapEntry> FieldMap_;
+
     std::vector<TPositionTableEntry> PositionTable_;
     TBuffer Buffer_;
     TBufferOutput BufferOutput_;
     TBufferedBinaryYsonWriter YsonWriter_;
-    TComplexTypeFieldDescriptor Descriptor_;
 
     void ResetPositionEntryPresence()
     {
@@ -963,11 +975,12 @@ TYsonCursorConverter CreateYsonConverterImpl(
         case ELogicalMetatype::Struct: {
             const auto& fields = type->GetFields();
             std::vector<TStructFieldInfo> fieldInfos;
-            for (size_t i = 0; i != fields.size(); ++i) {
+            for (auto index : std::views::iota(0, std::ssize(fields))) {
+                auto fieldDescriptor = descriptor.StructField(index);
                 fieldInfos.push_back({
-                    .Converter = (CreateYsonConverterImpl(descriptor.StructField(i), cache, config)),
-                    .FieldName = TString(fields[i].Name),
-                    .IsNullable = fields[i].Type->IsNullable(),
+                    .Converter = CreateYsonConverterImpl(std::move(fieldDescriptor), cache, config),
+                    .FieldName = TString(fields[index].Name),
+                    .IsNullable = fields[index].Type->IsNullable(),
                 });
             }
             if (config.Config.ComplexTypeMode == EComplexTypeMode::Positional) {
@@ -990,9 +1003,11 @@ TYsonCursorConverter CreateYsonConverterImpl(
         }
         case ELogicalMetatype::VariantTuple: {
             std::vector<std::pair<int, TYsonCursorConverter>> elementConverters;
-            const auto size = type->GetElements().size();
-            for (size_t i = 0; i != size; ++i) {
-                elementConverters.emplace_back(i, CreateYsonConverterImpl(descriptor.VariantTupleElement(i), cache, config));
+            int size = type->GetElements().size();
+            for (auto index : std::views::iota(0, size)) {
+                elementConverters.emplace_back(
+                    index,
+                    CreateYsonConverterImpl(descriptor.VariantTupleElement(index), cache, config));
             }
             return CreateVariantScanner(
                 descriptor, TVariantTupleApplier(), std::move(elementConverters));
@@ -1000,10 +1015,10 @@ TYsonCursorConverter CreateYsonConverterImpl(
         case ELogicalMetatype::VariantStruct: {
             std::vector<std::pair<TString, TYsonCursorConverter>> elementConverters;
             const auto& fields = type->GetFields();
-            for (size_t i = 0; i != fields.size(); ++i) {
+            for (auto index : std::views::iota(0, std::ssize(fields))) {
                 elementConverters.emplace_back(
-                    fields[i].Name,
-                    CreateYsonConverterImpl(descriptor.VariantStructField(i), cache, config));
+                    fields[index].Name,
+                    CreateYsonConverterImpl(descriptor.VariantStructField(index), cache, config));
             }
             if (config.Config.ComplexTypeMode == EComplexTypeMode::Positional) {
                 return CreateVariantStructFieldsConverter(descriptor, std::move(elementConverters), config);

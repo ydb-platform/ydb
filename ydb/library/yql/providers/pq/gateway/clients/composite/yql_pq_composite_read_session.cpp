@@ -141,11 +141,11 @@ private:
         const auto value = record.GetScalar();
         SRC_LOG_D("Received TEvOnAggregateUpdated, from " << ev->Sender << ", counter id: " << counterId << ", value: " << value);
 
-        if (counterId == PARTITION_COUNTER) {
+        if (counterId == PartitionsCountValue.GetCounterId()) {
             AllPartitionsStarted = static_cast<ui64>(value) == AmountPartitionsCount;
             Metrics.UpdatePendingPartitionsCount(value);
             SRC_LOG_D("All partitions started: " << AllPartitionsStarted << ", AmountPartitionsCount: " << AmountPartitionsCount);
-        } else if (counterId == READ_TIME_COUNTER) {
+        } else if (counterId == ReadTimeValue.GetCounterId()) {
             ExternalReadTime = TInstant::MilliSeconds(value);
             SRC_LOG_D("ExternalReadTime: " << *ExternalReadTime);
 

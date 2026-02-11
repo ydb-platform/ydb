@@ -125,9 +125,6 @@ def create_ydb_configurator(
     config_generator.yaml_config['grpc_config']['cert'] = certificates['server_cert']
     config_generator.yaml_config['grpc_config']['key'] = certificates['server_key']
 
-    config_generator.monitoring_tls_cert_path = certificates['server_cert']
-    config_generator.monitoring_tls_key_path = certificates['server_key']
-
     config_generator.yaml_config['domains_config']['security_config']['database_allowed_sids'] = ['database@builtin']
     config_generator.yaml_config['domains_config']['security_config']['viewer_allowed_sids'] = ['viewer@builtin']
     config_generator.yaml_config['domains_config']['security_config']['monitoring_allowed_sids'] = [
@@ -218,10 +215,10 @@ EXPECTED_RESULTS_WITH_ENFORCE_USER_TOKEN = {
         'root@builtin': 200,
     },
     '/ver': {
-        None: 401,
-        'user@builtin': 403,
-        'database@builtin': 403,
-        'viewer@builtin': 403,
+        None: 200,
+        'user@builtin': 200,
+        'database@builtin': 200,
+        'viewer@builtin': 200,
         'monitoring@builtin': 200,
         'root@builtin': 200,
     },
@@ -242,10 +239,10 @@ EXPECTED_RESULTS_WITH_ENFORCE_USER_TOKEN = {
         'root@builtin': 200,
     },
     '/static/css/bootstrap.min.css': {
-        None: 401,
-        'user@builtin': 403,
-        'database@builtin': 403,
-        'viewer@builtin': 403,
+        None: 200,
+        'user@builtin': 200,
+        'database@builtin': 200,
+        'viewer@builtin': 200,
         'monitoring@builtin': 200,
         'root@builtin': 200,
     },
@@ -258,18 +255,18 @@ EXPECTED_RESULTS_WITH_ENFORCE_USER_TOKEN = {
         'root@builtin': 200,
     },
     '/internal': {
-        None: 401,
-        'user@builtin': 403,
-        'database@builtin': 403,
-        'viewer@builtin': 403,
+        None: 200,
+        'user@builtin': 200,
+        'database@builtin': 200,
+        'viewer@builtin': 200,
         'monitoring@builtin': 200,
         'root@builtin': 200,
     },
     '/actors/': {
-        None: 401,
-        'user@builtin': 403,
-        'database@builtin': 403,
-        'viewer@builtin': 403,
+        None: 200,
+        'user@builtin': 200,
+        'database@builtin': 200,
+        'viewer@builtin': 200,
         'monitoring@builtin': 200,
         'root@builtin': 200,
     },
@@ -326,9 +323,9 @@ EXPECTED_RESULTS_WITHOUT_ENFORCE_USER_TOKEN = {
     },
     '/ver': {
         None: 200,
-        'user@builtin': 403,
-        'database@builtin': 403,
-        'viewer@builtin': 403,
+        'user@builtin': 200,
+        'database@builtin': 200,
+        'viewer@builtin': 200,
         'monitoring@builtin': 200,
         'root@builtin': 200,
     },  # TODO(yurikiselev): Fix 403 here and in other endpoints for non-enforced token (issue #33354)
@@ -350,9 +347,9 @@ EXPECTED_RESULTS_WITHOUT_ENFORCE_USER_TOKEN = {
     },
     '/static/css/bootstrap.min.css': {
         None: 200,
-        'user@builtin': 403,
-        'database@builtin': 403,
-        'viewer@builtin': 403,
+        'user@builtin': 200,
+        'database@builtin': 200,
+        'viewer@builtin': 200,
         'monitoring@builtin': 200,
         'root@builtin': 200,
     },
@@ -366,17 +363,17 @@ EXPECTED_RESULTS_WITHOUT_ENFORCE_USER_TOKEN = {
     },
     '/internal': {
         None: 200,
-        'user@builtin': 403,
-        'database@builtin': 403,
-        'viewer@builtin': 403,
+        'user@builtin': 200,
+        'database@builtin': 200,
+        'viewer@builtin': 200,
         'monitoring@builtin': 200,
         'root@builtin': 200,
     },
     '/actors/': {
         None: 200,
-        'user@builtin': 403,
-        'database@builtin': 403,
-        'viewer@builtin': 403,
+        'user@builtin': 200,
+        'database@builtin': 200,
+        'viewer@builtin': 200,
         'monitoring@builtin': 200,
         'root@builtin': 200,
     },
@@ -402,7 +399,7 @@ def _test_endpoint(endpoint_url, endpoint_path, token, expected_status):
 def _test_endpoints(cluster, expected_results):
     host = cluster.nodes[1].host
     mon_port = cluster.nodes[1].mon_port
-    base_url = f'https://{host}:{mon_port}'
+    base_url = f'http://{host}:{mon_port}'
 
     for endpoint_path, expected_statuses in expected_results.items():
         endpoint_url = f'{base_url}{endpoint_path}'

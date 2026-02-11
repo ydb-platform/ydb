@@ -2509,7 +2509,7 @@ message TColumnShardConfig {
     optional uint64 InFlightLocksRangesBytesLimit = 53 [default = 1073741824];
     optional bool CombineChunksInResult = 54 [default = true];
     optional bool EnableDiagnostics = 55 [default = true];
-    optional bool EnableParallelCompaction = 56 [default = true];
+    optional bool EnableParallelCompaction = 56 [default = false];
 
     message TStatistics {
         optional uint32 ReportBaseStatisticsPeriodMs = 1 [default = 60000];

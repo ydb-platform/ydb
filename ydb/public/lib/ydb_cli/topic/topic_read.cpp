@@ -12,7 +12,7 @@
 namespace NYdb::NConsoleClient {
     namespace {
         constexpr i64 MessagesLimitUnlimited = -1;
-        constexpr i64 MessagesLimitDefaultPrettyFormat = 10;
+        constexpr i64 MessagesLimitNonStreamingFormatDefault = 10;
 
         bool IsStreamingFormat(EMessagingFormat format) {
             return format == EMessagingFormat::NewlineDelimited ||
@@ -62,10 +62,10 @@ namespace NYdb::NConsoleClient {
         OutputTable_ = std::make_unique<TPrettyTable>(table);
 
         if (!ReaderParams_.Limit().Defined()) {
-            if (ReaderParams_.MessagingFormat() == EMessagingFormat::Pretty) {
-                MessagesLeft_ = MessagesLimitDefaultPrettyFormat;
-            } else if (IsStreamingFormat(ReaderParams_.MessagingFormat()) || ReaderParams_.MessagingFormat() == EMessagingFormat::JsonArray) {
+            if (IsStreamingFormat(ReaderParams_.MessagingFormat())) {
                 MessagesLeft_ = MessagesLimitUnlimited;
+            } else {
+                MessagesLeft_ = MessagesLimitNonStreamingFormatDefault;
             }
             return;
         }

@@ -1054,6 +1054,10 @@ namespace NYdb::NConsoleClient {
             throw TMisuseException() << "Limit must be a non-negative number, but " << *Limit_ << " was given";
         }
 
+        if (Limit_.Defined() && *Limit_ == 0 && (MessagingFormat == EMessagingFormat::Pretty || MessagingFormat == EMessagingFormat::JsonArray)) {
+            throw TMisuseException() << "--limit 0 is not allowed for " << MessagingFormat << " format. Please provide a non-negative --limit.";
+        }
+
         // validate partitions ids are specified, if no consumer is provided. no-consumer mode will be used.
         if (!Consumer_ && !PartitionIds_) {
             throw TMisuseException() << "Please specify either --consumer or --partitions to read without consumer";

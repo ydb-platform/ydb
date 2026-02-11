@@ -283,7 +283,7 @@ private:
         bool RunEventLoop(WrappedWriteSessionPtr wrappedSession, std::uint32_t partition);
         bool TransferEventsToOutputQueue();
         void AddReadyToAcceptEvent();
-        bool AddSessionClosedEvent();
+        bool AddSessionClosedIfNeeded();
         std::optional<TWriteSessionEvent::TEvent> GetEventImpl(bool block);
 
         TKeyedWriteSession* Session;

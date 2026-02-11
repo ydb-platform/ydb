@@ -560,7 +560,7 @@ void TKeyedWriteSession::TEventsWorker::AddReadyToAcceptEvent() {
     EventsOutputQueue.push_back(TWriteSessionEvent::TReadyToAcceptEvent(IssueContinuationToken()));
 }
 
-bool TKeyedWriteSession::TEventsWorker::AddSessionClosedEvent() {
+bool TKeyedWriteSession::TEventsWorker::AddSessionClosedIfNeeded() {
     if (!Session->Closed.load()) {
         return false;
     }
@@ -690,7 +690,7 @@ std::optional<TWriteSessionEvent::TEvent> TKeyedWriteSession::TEventsWorker::Get
 std::optional<TWriteSessionEvent::TEvent> TKeyedWriteSession::TEventsWorker::GetEvent(bool block) {
     {
         std::unique_lock lock(Lock);
-        AddSessionClosedEvent();
+        AddSessionClosedIfNeeded();
     }
     auto event = GetEventImpl(block);
 
@@ -704,7 +704,7 @@ std::vector<TWriteSessionEvent::TEvent> TKeyedWriteSession::TEventsWorker::GetEv
 
     {
         std::unique_lock lock(Lock);
-        AddSessionClosedEvent();
+        AddSessionClosedIfNeeded();
     }
 
     std::vector<TWriteSessionEvent::TEvent> events;
@@ -726,7 +726,7 @@ std::vector<TWriteSessionEvent::TEvent> TKeyedWriteSession::TEventsWorker::GetEv
 NThreading::TFuture<void> TKeyedWriteSession::TEventsWorker::WaitEvent() {
     std::unique_lock lock(Lock);
 
-    AddSessionClosedEvent();
+    AddSessionClosedIfNeeded();
     if (!EventsOutputQueue.empty()) {
         return NThreading::MakeFuture();
     }

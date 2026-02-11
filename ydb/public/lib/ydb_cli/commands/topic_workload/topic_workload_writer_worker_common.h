@@ -139,7 +139,6 @@ inline void ProcessWriterLoopCommon(
     ui64 windowRateLimitedIterations = 0;    // сколько раз упёрлись в BytesPerSec
 
     TInstant lastWaitTime = TInstant::Zero();
-    TInstant lastActivityTime = TInstant::Now();
     while (!*params.ErrorFlag) {
         const auto now = Now();
         if (now > endTime) {
@@ -222,14 +221,12 @@ inline void ProcessWriterLoopCommon(
             onAfterSend(producer, createTimestamp, now);
 
             ++partitionToWriteId;
-            lastActivityTime = TInstant::Now();
         } else {
             if (txSupport) {
                 tryCommitTx(commitTime);
             }
             // When toWait is 0 (e.g. waiting for token), sleep briefly to avoid busy loop.
             Sleep(toWait > TDuration::Zero() ? toWait : TDuration::MilliSeconds(1));
-            Y_ABORT_UNLESS(TInstant::Now() - lastActivityTime < idleTimeout, "Idle timeout reached");
         }
 
         // Переодически «перезапускаем» окно лимита скорости, чтобы не накапливать

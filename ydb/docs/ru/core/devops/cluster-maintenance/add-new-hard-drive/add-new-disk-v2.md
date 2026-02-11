@@ -4,13 +4,13 @@
 
 ### Обновите inventory/group_vars/ydb/all.yaml
 
-Откройте файл `inventory/group_vars/ydb/all.yaml` и добавьте новый диск в переменную `ydb_disks` с новым `label`.
+Откройте файл `inventory/group_vars/ydb/all.yaml` (ссылка) и добавьте новый диск в переменную `ydb_disks` с новым `label`.
 
 Этот `label` потребуется для выполнения следующих шагов.
 
 ### Обновите files/config.yaml
 
-Откройте `files/config.yaml` и добавьте `label` нового диска в секцию `config.host_configs`.
+Откройте `files/config.yaml` (ссылка) и добавьте `label` нового диска в секцию `config.host_configs`.
 
 Убедитесь, что `label` совпадает со значением, указанным в `ydb_disks` в `inventory/group_vars/ydb/all.yaml`.
 
@@ -34,7 +34,7 @@ ydb_disk_1 ydb_disk_2 ydb_disk_3 ydb_disk_4
 
 ### Обновите конфигурацию на узлах
 
-Примените обновленную конфигурацию для всех узлов кластера:
+Примените изменения конфигурации на всех узлах и при необходимости перезапустите кластер:
 
 ```bash
 ansible-playbook ydb_platform.ydb.update_config

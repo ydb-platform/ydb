@@ -4,13 +4,13 @@
 
 ### Обновите inventory/50-inventory.yaml
 
-Откройте `inventory/50-inventory.yaml` и добавьте новый диск в переменную `ydb_disks`, указав для него новый `label`.
+Откройте `inventory/50-inventory.yaml` (ссылка) и добавьте новый диск в переменную `ydb_disks`, указав для него новый `label`.
 
 Этот `label` потребуется для выполнения следующих шагов.
 
 ### Обновите files/config.yaml
 
-Откройте `files/config.yaml` и добавьте `label` нового диска в секцию `host_configs`.
+Откройте `files/config.yaml` (ссылка) и добавьте `label` нового диска в секцию `host_configs`.
 
 `Label` должен совпадать с тем, который вы указали в `inventory/50-inventory.yaml`.
 
@@ -25,6 +25,13 @@ ansible-playbook ydb_platform.ydb.prepare_drives \
 
 Значение `ydb_disk_prepare` должно содержать `label` нового диска.
 
+После выполнения команды вы должны увидеть новый `label` среди разделов дисков:
+
+```bash
+root@static-node-1:/opt/ydb# ls /dev/disk/by-partlabel/
+ydb_disk_1 ydb_disk_2 ydb_disk_3 ydb_disk_4
+```
+
 ### Обновите конфигурацию и перезапустите кластер
 
 Примените изменения конфигурации на всех узлах и при необходимости перезапустите кластер:
@@ -33,13 +40,17 @@ ansible-playbook ydb_platform.ydb.prepare_drives \
 ansible-playbook ydb_platform.ydb.update_config
 ```
 
+![_](_assets/step4-v2.png)
+
 ### Проверьте состояние кластера
 
-Убедитесь, что кластер работает корректно:
+Убедитесь, что кластер работает корректно после внесенных изменений:
 
 ```bash
 ansible-playbook ydb_platform.ydb.healthcheck
 ```
+
+![_](_assets/step6-v2.png)
 
 ### Разрешите использование новых дисков
 

@@ -18,6 +18,10 @@
 
 #include "mon.h"
 
+namespace NKikimr {
+    struct TAppData;
+}
+
 namespace NActors {
 
 void MakeJsonErrorReply(NJson::TJsonValue& jsonResponse, TString& message, const NYdb::TStatus& status);
@@ -123,6 +127,8 @@ protected:
     std::shared_ptr<NMonitoring::IMetricFactory> Metrics;
 
     void RegisterActorMonPage(const TActorMonPageInfo& pageInfo);
+
+    static TVector<TString> GetCountersAllowedSIDs(const NKikimr::TAppData* appData);
 };
 
 } // namespace NActors

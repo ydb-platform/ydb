@@ -560,6 +560,7 @@ message TMonitoringConfig {
     optional uint32 MaxRequestsPerSecond = 17 [default = 0];
     optional string InactivityTimeout = 18 [default = "2m"];
     optional bool RequireCountersAuthentication = 21 [default = false];
+    optional bool RequireHealthcheckAuthentication = 22 [default = false];
 }
 
 message TRestartsCountConfig {

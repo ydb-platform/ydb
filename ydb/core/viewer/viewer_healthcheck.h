@@ -89,7 +89,7 @@ public:
         if (Database.empty()) {
             Database = Params.Get("tenant");
         }
-        if (!IsDatabaseRequest() && Format != HealthCheckResponseFormat::PROMETHEUS && !Viewer->CheckAccessMonitoring(GetRequest())) {
+        if (!CheckAccess()) {
             return TBase::ReplyAndPassAway(GetHTTPFORBIDDEN("text/plain", "Access denied"));
         }
         Cache = FromStringWithDefault<bool>(Params.Get("cache"), Cache);
@@ -105,6 +105,42 @@ public:
         }
         Timeout += TDuration::MilliSeconds(Timeout.MilliSeconds() * 20 / 100); // we prefer to wait for more (+20%) verbose timeout status from HC
         Become(&TThis::StateRequestedInfo, Timeout, new TEvents::TEvWakeup());
+    }
+
+    bool CheckAccess() const {
+        const auto& config = Viewer->GetKikimrRunConfig();
+        const auto requireHealthcheckAuth = config.AppConfig.GetMonitoringConfig().GetRequireHealthcheckAuthentication();
+        if (Format == HealthCheckResponseFormat::PROMETHEUS) {
+            // This format was left without any authentication checks for a long time,
+            // so we check access for it only when it's required with a separate flag.
+            // We want metrics collection systems to have minimal permissions, so we check for viewer access
+            return !requireHealthcheckAuth || Viewer->CheckAccessViewer(GetRequest());
+        }
+
+        // But the general healthcheck info should not be accessible for those
+        // who have only viewer access level so we check for the monitoring access level.
+        const bool checkAccessMonitoring = Viewer->CheckAccessMonitoring(GetRequest());
+        if (requireHealthcheckAuth) {
+            return checkAccessMonitoring;
+        }
+
+        { // TODO(yurikiselev): DEAL WITH IT!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+            // When enforce_user_token is on and a token is present, require monitoring access for JSON
+            // (do not use the legacy IsDatabaseRequest bypass that incorrectly allows e.g. user@builtin).
+            const auto enforceUserToken = config.AppConfig.GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenRequirement();
+            const TString tokenSerialized = GetRequest().GetUserTokenObject();
+            if (enforceUserToken && !tokenSerialized.empty()) {
+                return checkAccessMonitoring;
+            }
+            // Legacy: database-prefixed URL without token was historically allowed.
+            if (enforceUserToken && tokenSerialized.empty() && !Database.empty()) {
+                return true;
+            }
+        }
+
+        // The database requests were left without any authentication checks for a long time,
+        // so we ignore access check for it by default.
+        return IsDatabaseRequest() || checkAccessMonitoring;
     }
 
     STFUNC(StateRequestedInfo) {

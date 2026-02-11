@@ -19,8 +19,8 @@ private:
     ui32 RestartCount;
 
 public:
-    TTxObjectStorageListing(TDataShard* ds, TEvDataShard::TEvObjectStorageListingRequest::TPtr ev)
-        : TBase(ds)
+    TTxObjectStorageListing(TDataShard* ds, TEvDataShard::TEvObjectStorageListingRequest::TPtr ev, NWilson::TTraceId &&traceId)
+        : TBase(ds, std::move(traceId))
         , Ev(ev)
         , RestartCount(0)
     {}
@@ -30,6 +30,42 @@ public:
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         ++RestartCount;
 
+        NWilson::TSpan execSpan;
+        if (txc.TransactionExecutionSpan) {
+            execSpan = NWilson::TSpan(
+                TWilsonTablet::TabletDetailed,
+                txc.TransactionExecutionSpan.GetTraceId(),
+                "Datashard.ObjectStorageListing.Execute",
+                NWilson::EFlags::AUTO_END);
+            if (execSpan && RestartCount > 1) {
+                execSpan.Attribute("Restart", std::to_string(RestartCount));
+            }
+        }
+
+        ui64 scannedRows = 0;
+        ui64 leafRows = 0;
+        ui64 erasedRows = 0;
+        ui64 filteredOutRows = 0;
+        ui64 skipToCount = 0;
+        bool skipToFailed = false;
+
+        auto fillSpan = [&](const TString& errorReason = "") {
+            if (!execSpan) {
+                return;
+            }
+            execSpan.Attribute("ScannedRows", std::to_string(scannedRows));
+            execSpan.Attribute("LeafRows", std::to_string(leafRows));
+            execSpan.Attribute("ErasedRows", std::to_string(erasedRows));
+            execSpan.Attribute("FilteredOutRows", std::to_string(filteredOutRows));
+            execSpan.Attribute("SkipToCount", std::to_string(skipToCount));
+            execSpan.Attribute("SkipToFailed", std::to_string(skipToFailed));
+            if (errorReason) {
+                execSpan.EndError(errorReason);
+            } else {
+                execSpan.EndOk();
+            }
+        };
+
         if (!Result) {
             Result = new TEvDataShard::TEvObjectStorageListingResponse(Self->TabletID());
         }
@@ -38,8 +74,9 @@ public:
             Self->State != TShardState::Readonly &&
             Self->State != TShardState::SplitSrcWaitForNoTxInFlight &&
             Self->State != TShardState::Frozen) {
-            SetError(NKikimrTxDataShard::TError::WRONG_SHARD_STATE,
-                        Sprintf("Wrong shard state: %" PRIu32 " tablet id: %" PRIu64, Self->State, Self->TabletID()));
+            TString errorReason = Sprintf("Wrong shard state: %" PRIu32 " tablet id: %" PRIu64, Self->State, Self->TabletID());
+            SetError(NKikimrTxDataShard::TError::WRONG_SHARD_STATE, errorReason);
+            fillSpan(errorReason);
             return true;
         }
 
@@ -47,13 +84,16 @@ public:
         const ui64 maxKeys = Ev->Get()->Record.GetMaxKeys();
 
         if (!Self->TableInfos.contains(tableId)) {
-            SetError(NKikimrTxDataShard::TError::SCHEME_ERROR, Sprintf("Unknown table id %" PRIu64, tableId));
+            TString errorReason = Sprintf("Unknown table id %" PRIu64, tableId);
+            SetError(NKikimrTxDataShard::TError::SCHEME_ERROR, errorReason);
+            fillSpan(errorReason);
             return true;
         }
 
         const TUserTable& tableInfo = *Self->TableInfos[tableId];
         if (tableInfo.IsBackup) {
             SetError(NKikimrTxDataShard::TError::SCHEME_ERROR, "Cannot read from a backup table");
+            fillSpan("Cannot read from a backup table");
             return true;
         }
 
@@ -155,6 +195,7 @@ public:
 
         if (!maxKeys) {
             // Nothing to return, don't bother searching
+            fillSpan();
             return true;
         }
 
@@ -187,7 +228,9 @@ public:
             
             for (const auto& matchType : filter.matchtypes()) {
                 if (!NKikimrTxDataShard::TObjectStorageListingFilter_EMatchType_IsValid(matchType)) {
-                    SetError(NKikimrTxDataShard::TError::BAD_ARGUMENT, Sprintf("Unknown match type %" PRIu32, matchType));
+                    TString errorReason = Sprintf("Unknown match type %" PRIu32, matchType);
+                    SetError(NKikimrTxDataShard::TError::BAD_ARGUMENT, errorReason);
+                    fillSpan(errorReason);
                     return true;
                 }
                 matchTypes.push_back(static_cast<NKikimrTxDataShard::TObjectStorageListingFilter_EMatchType>(matchType));
@@ -198,6 +241,7 @@ public:
 
         ui64 foundKeys = Result->Record.ContentsRowsSize() + Result->Record.CommonPrefixesRowsSize();
         while (iter->Next(NTable::ENext::All) == NTable::EReady::Data) {
+            ++scannedRows;
             TDbTupleRef currentKey = iter->GetKey();
 
             // Check all columns that prefix columns are in the current key are equal to the specified values
@@ -219,6 +263,7 @@ public:
             // Explicitly skip erased rows after saving LastPath. This allows to continue exactly from
             // this key in case of restart
             if (iter->Row().GetRowState() == NTable::ERowOp::Erase) {
+                ++erasedRows;
                 continue;
             }
 
@@ -240,6 +285,7 @@ public:
                 "\"" << path << "\"" << (isLeafPath ? " -> " + DbgPrintTuple(value, *AppData(ctx)->TypeRegistry) : TString()));
 
             if (isLeafPath) {
+                ++leafRows;
                 Y_ENSURE(value.Cells()[0].Size() >= 1);
                 Y_ENSURE(path == TStringBuf((const char*)value.Cells()[0].Data(), value.Cells()[0].Size()),
                     "Path column must be requested at pos 0");
@@ -282,6 +328,7 @@ public:
                         }
 
                         if (!matches) {
+                            ++filteredOutRows;
                             continue;
                         }
                     }
@@ -332,6 +379,7 @@ public:
                     }
 
                     if (!matches) {
+                        ++filteredOutRows;
                         continue;
                     }
                 }
@@ -357,12 +405,16 @@ public:
                 key.emplace_back(lookup.data(), lookup.size(), NScheme::NTypeIds::Utf8);
                 key.resize(columnCount);
 
+                ++skipToCount;
                 if (!iter->SkipTo(key, /* inclusive = */ true)) {
+                    skipToFailed = true;
+                    fillSpan();
                     return false;
                 }
             }
         }
 
+        fillSpan();
         return iter->Last() != NTable::EReady::Page;
     }
 
@@ -373,6 +425,12 @@ public:
                     << " contents: " << Result->Record.ContentsRowsSize()
                     << " common prefixes: " << Result->Record.CommonPrefixesRowsSize());
         ctx.Send(Ev->Sender, Result.Release());
+
+        NWilson::TSpan& listingSpan = Ev->Get()->ListingSpan;
+        if (listingSpan) {
+            // If there was an error, it was already reported in SetError.
+            Ev->Get()->ListingSpan.EndOk();
+        }
     }
 
 private:
@@ -381,6 +439,11 @@ private:
 
         Result->Record.SetStatus(status);
         Result->Record.SetErrorDescription(descr);
+
+        NWilson::TSpan& listingSpan = Ev->Get()->ListingSpan;
+        if (listingSpan) {
+            Ev->Get()->ListingSpan.EndError(descr);
+        }
     }
 
     static bool IsKeyInRange(TArrayRef<const TRawTypeValue> key, const TUserTable& tableInfo) {
@@ -420,7 +483,18 @@ private:
 };
 
 void TDataShard::Handle(TEvDataShard::TEvObjectStorageListingRequest::TPtr& ev, const TActorContext& ctx) {
-    Executor()->Execute(new TTxObjectStorageListing(this, ev), ctx);
+    auto* request = ev->Get();
+    
+    if (ev->TraceId && !request->ListingSpan) {
+        request->ListingSpan = NWilson::TSpan(TWilsonTablet::TabletTopLevel, std::move(ev->TraceId), "Datashard.ObjectStorageListing", NWilson::EFlags::AUTO_END);
+        if (request->ListingSpan) {
+            request->ListingSpan.Attribute("Shard", std::to_string(TabletID()));
+        }
+        // Reparent other event-based spans to the read span
+        ev->TraceId = request->ListingSpan.GetTraceId();
+    }
+
+    Executor()->Execute(new TTxObjectStorageListing(this, ev, request->ListingSpan.GetTraceId()), ctx);
 }
 
 } // namespace NDataShard

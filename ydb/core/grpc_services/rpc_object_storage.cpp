@@ -1,8 +1,10 @@
 #include "grpc_request_proxy.h"
 #include "rpc_calls.h"
 
-#include "util/string/vector.h"
-#include "yql/essentials/minikql/mkql_type_ops.h"
+#include <util/string/vector.h>
+#include <util/system/unaligned_mem.h>
+
+#include <yql/essentials/minikql/mkql_type_ops.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/base/tablet_pipecache.h>
@@ -13,7 +15,8 @@
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/core/kqp/common/kqp_types.h>
 #include <ydb/core/scheme/scheme_type_info.h>
-#include <util/system/unaligned_mem.h>
+
+#include <ydb/library/wilson_ids/wilson.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
@@ -62,6 +65,8 @@ private:
     TVector<TString> CommonPrefixesRows;
     TVector<TSerializedCellVec> ContentsRows;
 
+    NWilson::TSpan Span;
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::GRPC_REQ;
@@ -78,6 +83,7 @@ public:
         , WaitingResolveReply(false)
         , Finished(false)
         , CurrentShardIdx(0)
+        , Span(TWilsonGrpc::RequestActor, GrpcRequest->GetWilsonTraceId(), "ObjectStorageListingRpc")
     {
     }
 
@@ -115,6 +121,7 @@ public:
         if (TimeoutTimerActorId) {
             ctx.Send(TimeoutTimerActorId, new TEvents::TEvPoisonPill());
         }
+        Span.EndOk();
         TBase::Die(ctx);
     }
 
@@ -142,7 +149,7 @@ private:
         }
         entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpTable;
         request->ResultSet.emplace_back(entry);
-        ctx.Send(SchemeCache, new TEvTxProxySchemeCache::TEvNavigateKeySet(request));
+        ctx.Send(SchemeCache, new TEvTxProxySchemeCache::TEvNavigateKeySet(request), 0, 0, Span.GetTraceId());
 
         TimeoutTimerActorId = CreateLongTimer(ctx, Timeout,
             new IEventHandle(ctx.SelfID, ctx.SelfID, new TEvents::TEvWakeup()));
@@ -448,7 +455,7 @@ private:
         request->ResultSet.emplace_back(std::move(KeyRange));
 
         TAutoPtr<TEvTxProxySchemeCache::TEvResolveKeySet> resolveReq(new TEvTxProxySchemeCache::TEvResolveKeySet(request));
-        ctx.Send(SchemeCache, resolveReq.Release());
+        ctx.Send(SchemeCache, resolveReq.Release(), 0, 0, Span.GetTraceId());
 
         TBase::Become(&TThis::StateWaitResolveShards);
         WaitingResolveReply = true;
@@ -580,7 +587,7 @@ private:
 
         LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, "Sending request to shards " << shardId);
 
-        ctx.Send(LeaderPipeCache, new TEvPipeCache::TEvForward(ev.Release(), shardId, true), IEventHandle::FlagTrackDelivery);
+        ctx.Send(LeaderPipeCache, new TEvPipeCache::TEvForward(ev.Release(), shardId, true), IEventHandle::FlagTrackDelivery, 0, Span.GetTraceId());
 
         TBase::Become(&TThis::StateWaitResults);
     }

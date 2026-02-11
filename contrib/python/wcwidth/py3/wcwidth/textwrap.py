@@ -34,6 +34,9 @@ class SequenceTextWrapper(textwrap.TextWrapper):
     The key difference from the blessed implementation is the addition of grapheme cluster support
     via :func:`~.iter_graphemes`, providing width calculation for ZWJ emoji sequences, VS-16 emojis
     and variations, regional indicator flags, and combining characters.
+
+    OSC hyperlink sequences are treated as word boundaries, ensuring that text adjacent to
+    hyperlinks wraps correctly without breaking the hyperlink structure.
     """
 
     def __init__(self, width: int = 70, *,
@@ -77,17 +80,25 @@ class SequenceTextWrapper(textwrap.TextWrapper):
         return ''.join(result)
 
     def _split(self, text: str) -> list[str]:  # pylint: disable=too-many-locals
-        """
+        r"""
         Sequence-aware variant of :meth:`textwrap.TextWrapper._split`.
 
         This method ensures that terminal escape sequences don't interfere with the text splitting
         logic, particularly for hyphen-based word breaking. It builds a position mapping from
         stripped text to original text, calls the parent's _split on stripped text, then maps chunks
         back.
+
+        OSC hyperlink sequences are treated as word boundaries::
+
+            >>> wrap('foo \x1b]8;;https://example.com\x07link\x1b]8;;\x07 bar', 6)
+            ['foo', '\x1b]8;;https://example.com\x07link\x1b]8;;\x07', 'bar']
+
+        Both BEL (``\x07``) and ST (``\x1b\\``) terminators are supported.
         """
         # pylint: disable=too-many-locals,too-many-branches
         # Build a mapping from stripped text positions to original text positions.
-        # We track where each character ENDS so that sequences between characters
+        #
+        # Track where each character ENDS so that sequences between characters
         # attach to the following text (not preceding text). This ensures sequences
         # aren't lost when whitespace is dropped.
         #
@@ -95,16 +106,32 @@ class SequenceTextWrapper(textwrap.TextWrapper):
         char_end: list[int] = []
         stripped_text = ''
         original_pos = 0
+        prev_was_hyperlink_close = False
 
         for segment, is_seq in iter_sequences(text):
             if not is_seq:
+                # Conditionally insert space after hyperlink close to force word boundary
+                if prev_was_hyperlink_close and segment and not segment[0].isspace():
+                    stripped_text += ' '
+                    char_end.append(original_pos)
                 for char in segment:
                     original_pos += 1
                     char_end.append(original_pos)
                     stripped_text += char
+                prev_was_hyperlink_close = False
             else:
+                # Conditionally insert space before OSC sequences to artificially create word
+                # boundary, but *not* before hyperlink close sequences, to ensure hyperlink is
+                # terminated on the same line.
+                is_hyperlink_close = segment.startswith(('\x1b]8;;\x1b\\', '\x1b]8;;\x07'))
+                if (segment.startswith('\x1b]') and stripped_text and not
+                        stripped_text[-1].isspace()):
+                    if not is_hyperlink_close:
+                        stripped_text += ' '
+                        char_end.append(original_pos)
                 # Escape sequences advance position but don't add to stripped text
                 original_pos += len(segment)
+                prev_was_hyperlink_close = is_hyperlink_close
 
         # Add sentinel for final position
         char_end.append(original_pos)
@@ -137,7 +164,9 @@ class SequenceTextWrapper(textwrap.TextWrapper):
                 end_orig = char_end[stripped_pos + chunk_len - 1]
 
             # Extract the corresponding portion from the original text
-            result.append(text[start_orig:end_orig])
+            # Skip empty chunks (from virtual spaces inserted at OSC boundaries)
+            if start_orig != end_orig:
+                result.append(text[start_orig:end_orig])
             stripped_pos += chunk_len
 
         return result
@@ -303,8 +332,8 @@ class SequenceTextWrapper(textwrap.TextWrapper):
                     idx = match.end()
                     continue
 
-            # Get grapheme
-            grapheme = next(iter_graphemes(text[idx:]))
+            # Get grapheme (use start= to avoid slice allocation)
+            grapheme = next(iter_graphemes(text, start=idx))
 
             grapheme_width = self._width(grapheme)
             if width_so_far + grapheme_width > max_width:

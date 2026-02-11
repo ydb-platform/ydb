@@ -12,6 +12,7 @@ from wcwidth import iter_sequences
 from wcwidth.textwrap import SequenceTextWrapper, wrap
 
 SGR_RED = '\x1b[31m'
+SGR_BLUE = '\x1b[34m'
 SGR_BOLD = '\x1b[1m'
 SGR_RESET = '\x1b[0m'
 ATTRS = ('\x1b[31m', '\x1b[34m', '\x1b[4m', '\x1b[7m', '\x1b[41m', '\x1b[37m', '\x1b[107m')
@@ -203,7 +204,7 @@ SEQUENCE_CASES = [
     # Empty/adjacent sequences
     (f'{SGR_RED}{SGR_RESET}', 10, [f'{SGR_RED}{SGR_RESET}']),
     (f'hello {SGR_RED}{SGR_RESET}world', 6, ['hello', f'{SGR_RED}{SGR_RESET}world']),
-    # OSC hyperlinks
+    # OSC hyperlinks (with space separator)
     (f'{OSC_HYPERLINK} text', 5, [OSC_HYPERLINK, 'text']),
     # CSI cursor sequences
     (f'{CSI_CURSOR}text here', 10, [f'{CSI_CURSOR}text', 'here']),
@@ -262,3 +263,69 @@ TABSIZE_WIDE_CASES = [
 def test_wrap_tabsize_wide_chars(text, w, tabsize, expected):
     """Verify tabsize respects wide character column positions."""
     assert wrap(text, w, tabsize=tabsize) == expected
+
+
+OSC_START_ST = '\x1b]8;;http://example.com\x1b\\'
+OSC_END_ST = '\x1b]8;;\x1b\\'
+OSC_START_BEL = '\x1b]8;;http://example.com\x07'
+OSC_END_BEL = '\x1b]8;;\x07'
+
+HYPERLINK_WORD_BOUNDARY_CASES = [
+    (   # standard, ST-variant,
+        f'{OSC_START_ST}link{OSC_END_ST}more',
+        5,
+        [f'{OSC_START_ST}link{OSC_END_ST}', 'more'],
+    ),
+    (   # BEL-variant,
+        f'{OSC_START_BEL}link{OSC_END_BEL}more',
+        5,
+        [f'{OSC_START_BEL}link{OSC_END_BEL}', 'more'],
+    ),
+    (   # hyperlink breaks after word, 'prefix',
+        f'prefix{OSC_START_ST}link{OSC_END_ST}',
+        6,
+        ['prefix', f'{OSC_START_ST}link{OSC_END_ST}'],
+    ),
+    (
+        f'prefix{OSC_START_BEL}link{OSC_END_BEL}',
+        6,
+        ['prefix', f'{OSC_START_BEL}link{OSC_END_BEL}'],
+    ),
+    (   # hyperlink breaks before following, 'suffix',
+        f'prefix{OSC_START_ST}link{OSC_END_ST}suffix',
+        6,
+        ['prefix', f'{OSC_START_ST}link{OSC_END_ST}', 'suffix'],
+    ),
+    (
+        f'prefix{OSC_START_BEL}link{OSC_END_BEL}suffix',
+        6,
+        ['prefix', f'{OSC_START_BEL}link{OSC_END_BEL}', 'suffix'],
+    ),
+    (   # hyperlink *surrounded* by SGR attributes
+        f'foo {SGR_RED}{OSC_START_ST}link{OSC_END_ST}{SGR_RESET} bar',
+        6,
+        ['foo', f'{SGR_RED}{OSC_START_ST}link{OSC_END_ST}{SGR_RESET}', 'bar'],
+    ),
+    (
+        f'foo {SGR_RED}{OSC_START_BEL}link{OSC_END_BEL}{SGR_RESET} bar',
+        6,
+        ['foo', f'{SGR_RED}{OSC_START_BEL}link{OSC_END_BEL}{SGR_RESET}', 'bar'],
+    ),
+    (   # hyperlink *containing* SGR attributes
+        f'foo {OSC_START_ST}{SGR_RED}link{SGR_RESET}{OSC_END_ST} bar',
+        6,
+        ['foo', f'{OSC_START_ST}{SGR_RED}link{SGR_RESET}{OSC_END_ST}', 'bar'],
+    ),
+    (
+        f'foo {OSC_START_BEL}{SGR_RED}link{SGR_RESET}{OSC_END_BEL} bar',
+        6,
+        ['foo', f'{OSC_START_BEL}{SGR_RED}link{SGR_RESET}{OSC_END_BEL}', 'bar'],
+    ),
+]
+
+
+@pytest.mark.parametrize('text,w,expected', HYPERLINK_WORD_BOUNDARY_CASES)
+def test_wrap_hyperlink_word_boundary(text, w, expected):
+    """OSC hyperlink sequences should act as word boundaries."""
+    result = wrap(text, w)
+    assert result == expected

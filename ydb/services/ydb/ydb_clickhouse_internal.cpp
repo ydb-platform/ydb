@@ -49,7 +49,8 @@ void TGRpcYdbClickhouseInternalService::SetupIncomingRequests(NYdbGrpc::TLoggerP
         GRpcRequestProxyId_,                                                        \
         CQ_,                                                                        \
         GET_LIMITER_BY_PATH(GRpcControls.RequestConfigs.ClickhouseInternal_##methodName.MaxInFlight), \
-        nullptr)
+        nullptr,                                                                   \
+        isRlAllowed = IsRlAllowed())
 
     SETUP_CH_METHOD(Scan, DoReadColumnsRequest, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::NonModifying());
     SETUP_CH_METHOD(GetShardLocations, DoGetShardLocationsRequest, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::NonModifying());

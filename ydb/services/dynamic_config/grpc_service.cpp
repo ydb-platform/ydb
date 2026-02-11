@@ -17,7 +17,7 @@ void TGRpcDynamicConfigService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logge
 #endif
 
 #define SETUP_CFG_METHOD(methodName, methodCallback, rlMode, requestType, auditMode) \
-    SETUP_METHOD(methodName, methodCallback, rlMode, requestType, console, auditMode)
+    SETUP_METHOD(methodName, methodCallback, rlMode, requestType, console, auditMode, isRlAllowed = IsRlAllowed())
 
     SETUP_CFG_METHOD(SetConfig, DoSetConfigRequest, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
     SETUP_CFG_METHOD(ReplaceConfig, DoReplaceConfigRequest, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));

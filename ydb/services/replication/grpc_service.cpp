@@ -18,7 +18,7 @@ void TGRpcReplicationService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger)
 #endif
 
 #define SETUP_REPLICATION_METHOD(methodName, methodCallback, rlMode, requestType, auditMode) \
-    SETUP_METHOD(methodName, methodCallback, rlMode, requestType, replication, auditMode)
+    SETUP_METHOD(methodName, methodCallback, rlMode, requestType, replication, auditMode, isRlAllowed = IsRlAllowed())
 
     SETUP_REPLICATION_METHOD(DescribeReplication, DoDescribeReplication, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::NonModifying());
     SETUP_REPLICATION_METHOD(DescribeTransfer, DoDescribeTransfer, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::NonModifying());

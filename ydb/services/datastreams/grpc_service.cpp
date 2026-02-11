@@ -58,7 +58,9 @@ void TGRpcDataStreamsService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger)
         GRpcRequestProxyId_,                                     \
         CQ_,                                                     \
         nullptr,                                                 \
-        customAttributeProcessorCallback)
+        customAttributeProcessorCallback,                        \
+        isRlAllowed = IsRlAllowed()                              \
+    )
 
     SETUP_DS_METHOD(DescribeStream, DoDataStreamsDescribeStreamRequest, RLMODE(Off), UNSPECIFIED, TAuditMode::NonModifying(), nullptr);
     SETUP_DS_METHOD(CreateStream, DoDataStreamsCreateStreamRequest, RLMODE(Off), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl), nullptr);

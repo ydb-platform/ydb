@@ -22,7 +22,7 @@ void TGRpcYdbSchemeService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
 #endif
 
 #define SETUP_SCHEME_METHOD(methodName, methodCallback, rlMode, requestType, auditMode) \
-    SETUP_METHOD(methodName, methodCallback, rlMode, requestType, scheme, auditMode)
+    SETUP_METHOD(methodName, methodCallback, rlMode, requestType, scheme, auditMode, isRlAllowed = IsRlAllowed())
 
     SETUP_SCHEME_METHOD(MakeDirectory, DoMakeDirectoryRequest, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl));
     SETUP_SCHEME_METHOD(RemoveDirectory, DoRemoveDirectoryRequest, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl));

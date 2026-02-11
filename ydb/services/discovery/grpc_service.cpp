@@ -19,7 +19,7 @@ void TGRpcDiscoveryService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
 #endif
 
 #define SETUP_DISCOVERY_METHOD(methodName, methodCallback, rlMode, requestType, auditMode) \
-    SETUP_METHOD(methodName, methodCallback, rlMode, requestType, discovery, auditMode)
+    SETUP_METHOD(methodName, methodCallback, rlMode, requestType, discovery, auditMode, isRlAllowed = IsRlAllowed())
 
     SETUP_DISCOVERY_METHOD(WhoAmI, DoWhoAmIRequest, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::NonModifying());
     SETUP_DISCOVERY_METHOD(NodeRegistration, DoNodeRegistrationRequest, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::NodeRegistration));

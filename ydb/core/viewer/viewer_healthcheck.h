@@ -89,7 +89,7 @@ public:
         if (Database.empty()) {
             Database = Params.Get("tenant");
         }
-        if (!IsDatabaseRequest() && !CheckAccess()) {
+        if (!CheckAccess()) {
             return TBase::ReplyAndPassAway(GetHTTPFORBIDDEN("text/plain", "Access denied"));
         }
         Cache = FromStringWithDefault<bool>(Params.Get("cache"), Cache);
@@ -108,18 +108,25 @@ public:
     }
 
     bool CheckAccess() const {
+        const auto& config = Viewer->GetKikimrRunConfig();
+        const auto requireHealthcheckAuth = config.AppConfig.GetMonitoringConfig().GetRequireHealthcheckAuthentication();
         if (Format == HealthCheckResponseFormat::PROMETHEUS) {
             // This format was left without any authentication checks for a long time,
             // so we check access for it only when it's required with a separate flag.
-            const auto& config = Viewer->GetKikimrRunConfig();
-            const auto requireHealthcheckAuth = config.AppConfig.GetMonitoringConfig().GetRequireHealthcheckAuthentication();
             // We want metrics collection systems to have minimal permissions, so we check for viewer access
             return !requireHealthcheckAuth || Viewer->CheckAccessViewer(GetRequest());
         }
 
         // But the general healthcheck info should not be accessible for those
         // who have only viewer access level so we check for the monitoring access level.
-        return Viewer->CheckAccessMonitoring(GetRequest());
+        const bool checkAccessMonitoring = Viewer->CheckAccessMonitoring(GetRequest());
+        if (requireHealthcheckAuth) {
+            return checkAccessMonitoring;
+        }
+
+        // The database requests were left without any authentication checks for a long time,
+        // so we ignore access check for it by default.
+        return IsDatabaseRequest() || checkAccessMonitoring;
     }
 
     STFUNC(StateRequestedInfo) {

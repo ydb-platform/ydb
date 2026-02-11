@@ -42,7 +42,7 @@ index 05e070a..7907c1f 100644
  _LIBCPP_END_NAMESPACE_STD
  
 diff --git a/include/__type_traits/is_same.h b/include/__type_traits/is_same.h
-index 9561b7b..5013724 100644
+index 400f870..8308b31 100644
 --- a/include/__type_traits/is_same.h
 +++ b/include/__type_traits/is_same.h
 @@ -18,14 +18,29 @@
@@ -81,8 +81,8 @@ index 9561b7b..5013724 100644
  // (such as in a dependent return type).
  
  template <class _Tp, class _Up>
--using _IsSame = _BoolConstant<__is_same(_Tp, _Up)>;
-+using _IsSame = _BoolConstant<
+-using _IsSame _LIBCPP_NODEBUG = _BoolConstant<__is_same(_Tp, _Up)>;
++using _IsSame _LIBCPP_NODEBUG = _BoolConstant<
 +#if defined(__clang__) && !defined(__CUDACC__)
 +    __is_same(_Tp, _Up)
 +#else
@@ -91,8 +91,8 @@ index 9561b7b..5013724 100644
 +    >;
  
  template <class _Tp, class _Up>
--using _IsNotSame = _BoolConstant<!__is_same(_Tp, _Up)>;
-+using _IsNotSame = _BoolConstant<
+-using _IsNotSame _LIBCPP_NODEBUG = _BoolConstant<!__is_same(_Tp, _Up)>;
++using _IsNotSame _LIBCPP_NODEBUG = _BoolConstant<
 +#if defined(__clang__) && !defined(__CUDACC__)
 +    !__is_same(_Tp, _Up)
 +#else
@@ -103,7 +103,7 @@ index 9561b7b..5013724 100644
  _LIBCPP_END_NAMESPACE_STD
  
 diff --git a/include/__type_traits/remove_cv.h b/include/__type_traits/remove_cv.h
-index 50e9f3e..e09cfd7 100644
+index 16848e6..2ed1a25 100644
 --- a/include/__type_traits/remove_cv.h
 +++ b/include/__type_traits/remove_cv.h
 @@ -10,6 +10,8 @@
@@ -129,10 +129,10 @@ index 50e9f3e..e09cfd7 100644
 -#if defined(_LIBCPP_COMPILER_GCC)
 +#if defined(_LIBCPP_COMPILER_GCC) || !__has_builtin(__remove_cv)
  template <class _Tp>
- using __remove_cv_t = typename remove_cv<_Tp>::type;
+ using __remove_cv_t _LIBCPP_NODEBUG = typename remove_cv<_Tp>::type;
  #else
 diff --git a/include/__type_traits/remove_cvref.h b/include/__type_traits/remove_cvref.h
-index 55f894d..0334771 100644
+index e3c6594..c7acfad 100644
 --- a/include/__type_traits/remove_cvref.h
 +++ b/include/__type_traits/remove_cvref.h
 @@ -28,6 +28,10 @@ struct __remove_cvref_gcc {
@@ -146,7 +146,7 @@ index 55f894d..0334771 100644
  #else
  template <class _Tp>
  using __remove_cvref_t _LIBCPP_NODEBUG = __remove_cvref(_Tp);
-@@ -39,7 +43,11 @@ using __is_same_uncvref = _IsSame<__remove_cvref_t<_Tp>, __remove_cvref_t<_Up> >
+@@ -39,7 +43,11 @@ using __is_same_uncvref _LIBCPP_NODEBUG = _IsSame<__remove_cvref_t<_Tp>, __remov
  #if _LIBCPP_STD_VER >= 20
  template <class _Tp>
  struct remove_cvref {

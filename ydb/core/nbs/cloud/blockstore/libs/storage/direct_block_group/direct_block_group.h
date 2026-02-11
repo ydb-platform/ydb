@@ -133,10 +133,6 @@ private:
 
     void ProcessSyncQueue();
 
-    void HandleFlushPersistentBufferResult(
-        ui64 storageRequestId,
-        const NKikimrBlobStorage::NDDisk::TEvFlushPersistentBufferResult& result);
-
     void RequestBlockErase(TSyncRequestHandler& requestHandler);
 
     void HandleErasePersistentBufferResult(

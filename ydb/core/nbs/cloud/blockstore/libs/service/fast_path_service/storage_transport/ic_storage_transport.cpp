@@ -67,35 +67,6 @@ TFuture<NKikimrBlobStorage::NDDisk::TEvWritePersistentBufferResult> TICStorageTr
     return future;
 }
 
-TFuture<NKikimrBlobStorage::NDDisk::TEvFlushPersistentBufferResult> TICStorageTransport::FlushPersistentBuffer(
-    const NActors::TActorId serviceId,
-    const TQueryCredentials credentials,
-    const TBlockSelector selector,
-    const ui64 lsn,
-    const std::tuple<ui32, ui32, ui32> ddiskId,
-    const ui64 ddiskInstanceGuid,
-    NWilson::TTraceId traceId,
-    const ui64 requestId)
-{
-    auto promise = NewPromise<NKikimrBlobStorage::NDDisk::TEvFlushPersistentBufferResult>();
-    auto future = promise.GetFuture();
-
-    NActors::TActivationContext::AsActorContext().Send(
-        ICStorageTransportActorId,
-        new TEvICStorageTransportPrivate::TEvFlushPersistentBuffer(
-            serviceId,
-            credentials,
-            selector,
-            lsn,
-            ddiskId,
-            ddiskInstanceGuid,
-            std::move(traceId),
-            requestId,
-            std::move(promise)));
-
-    return future;
-}
-
 TFuture<NKikimrBlobStorage::NDDisk::TEvErasePersistentBufferResult> TICStorageTransport::ErasePersistentBuffer(
     const NActors::TActorId serviceId,
     const TQueryCredentials credentials,

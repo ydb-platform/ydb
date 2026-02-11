@@ -133,7 +133,7 @@ TSyncRequestHandler::TSyncRequestHandler(
     , Lsn(lsn)
 {
     Span = NWilson::TSpan(TWilsonNbs::NbsBasic,
-        std::move(traceId), "NbsPartition.PBFlush.FlushRequest",
+        std::move(traceId), "NbsPartition.PBFlush.SyncRequest",
         NWilson::EFlags::NONE, NActors::TActivationContext::ActorSystem());
     Span.Attribute("tablet_id", static_cast<i64>(tabletId));
     Span.Attribute("vChunkIndex", static_cast<i64>(0));

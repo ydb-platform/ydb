@@ -220,7 +220,7 @@ void TDirectBlockGroup::ProcessSyncQueue()
 
         ++StorageRequestId;
 
-        LOG_INFO_S(TActivationContext::AsActorContext(), NKikimrServices::NBS_PARTITION, "ProcessFlushQueue" << " requestId# " << StorageRequestId);
+        LOG_INFO_S(TActivationContext::AsActorContext(), NKikimrServices::NBS_PARTITION, "ProcessSyncQueue" << " requestId# " << StorageRequestId);
 
         auto future = StorageTransport->Sync(
             ddiskConnection.GetServiceId(),

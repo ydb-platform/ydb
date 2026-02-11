@@ -149,7 +149,7 @@ public:
 private:
     TNodePtr Source_;
     TString Alias_;
-    bool IsUsed_;
+    bool IsUsed_ = false;
 
     TNodePtr Node_;
 };

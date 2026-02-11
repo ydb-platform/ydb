@@ -277,7 +277,7 @@ bool TIndexInfo::DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema&
             AFL_VERIFY(meta.DeserializeFromProto(idx));
             AFL_VERIFY(false);
             
-            Cerr << "emplace index: " << idx.DebugString() << Indexes.size();
+            // Cerr << "emplace index: " << idx.DebugString() << Indexes.size();
             Indexes.emplace(meta->GetIndexId(), meta);
         }
     }
@@ -552,7 +552,7 @@ TIndexInfo::TIndexInfo(const TIndexInfo& original, const TSchemaDiffView& diff, 
     const std::shared_ptr<TSchemaObjectsCache>& cache)
     : PresetId(original.PresetId)
 {
-    Cerr << Sprintf("TIndexInfo ctor, obj: %i, Indexes.size(): %i, original.Indexes.size(): %i\n", this, Indexes.size(), original.Indexes.size());
+    // Cerr << Sprintf("TIndexInfo ctor, obj: %i, Indexes.size(): %i, original.Indexes.size(): %i\n", this, Indexes.size(), original.Indexes.size());
     {
         std::vector<std::shared_ptr<arrow::Field>> fields;
         const auto addFromOriginal = [&](const ui32 index) {
@@ -604,7 +604,7 @@ TIndexInfo::TIndexInfo(const TIndexInfo& original, const TSchemaDiffView& diff, 
                 auto it = Indexes.find(i.first);
                 NIndexes::TIndexMetaContainer meta;
                 AFL_VERIFY(meta.DeserializeFromProto(*i.second));
-                Cerr << MySprintf("adding index through modification(Indexes.size(): %i). proto debug string: %s, index name: %s\n",Indexes.size(), i.second->DebugString(), meta->GetClassName());
+                // Cerr << MySprintf("adding index through modification(Indexes.size(): %i). proto debug string: %s, index name: %s\n",Indexes.size(), i.second->DebugString(), meta->GetClassName());
                 if (it != Indexes.end()) {
                     it->second = std::move(meta);
                 } else {
@@ -706,33 +706,33 @@ ui32 TIndexInfo::GetColumnIndexVerified(const ui32 id) const {
 std::vector<std::shared_ptr<NIndexes::TSkipIndex>> TIndexInfo::FindSkipIndexes(
     const NIndexes::NRequest::TOriginalDataAddress& originalDataAddress, const NArrow::NSSA::TIndexCheckOperation& op) const {
     std::vector<std::shared_ptr<NIndexes::TSkipIndex>> result;
-    Cerr << MySprintf("FindSkipIndexes. this: %p, &result: %p, thread id: %i, Indexes.size(): %i", this, &result, TThread::CurrentThreadId(), Indexes.size());
+    // Cerr << MySprintf("FindSkipIndexes. this: %p, &result: %p, thread id: %i, Indexes.size(): %i", this, &result, TThread::CurrentThreadId(), Indexes.size());
     for (auto&& [_, i] : Indexes) {
-        Cerr << MySprintf("FindSkipIndexes 1,&result: %p,\n", &result);
+        // Cerr << MySprintf("FindSkipIndexes 1,&result: %p,\n", &result);
         if (!i->IsSkipIndex()) {
-            Cerr << MySprintf("FindSkipIndexes 2\n");
+            // Cerr << MySprintf("FindSkipIndexes 2\n");
             continue;
         }
-        Cerr << MySprintf("FindSkipIndexes 3,&result: %p,\n", &result);
+        // Cerr << MySprintf("FindSkipIndexes 3,&result: %p,\n", &result);
         auto skipIndex = std::dynamic_pointer_cast<NIndexes::TSkipIndex>(i.GetObjectPtrVerified());
-        Cerr << MySprintf("FindSkipIndexes 4,&result: %p,\n", &result);
+        // Cerr << MySprintf("FindSkipIndexes 4,&result: %p,\n", &result);
 
         AFL_VERIFY(skipIndex != nullptr);
-        Cerr << MySprintf("FindSkipIndexes 5,&result: %p,\n", &result);
-        Cerr << Sprintf("skipIndex type: %s, or this way: %s", typeid(skipIndex.get()).name(), skipIndex->GetClassName().c_str()) << Endl;
+        // Cerr << MySprintf("FindSkipIndexes 5,&result: %p,\n", &result);
+        // Cerr << Sprintf("skipIndex type: %s, or this way: %s", typeid(skipIndex.get()).name(), skipIndex->GetClassName().c_str()) << Endl;
         if (skipIndex->IsAppropriateFor(originalDataAddress, op)) {
-            Cerr << MySprintf("FindSkipIndexes 6,branch: true, &result: %p,\n", &result);
+            // Cerr << MySprintf("FindSkipIndexes 6,branch: true, &result: %p,\n", &result);
             result.emplace_back(skipIndex);
-            Cerr << MySprintf("FindSkipIndexes 7,branch: true, &result: %p,\n", &result);
+            // Cerr << MySprintf("FindSkipIndexes 7,branch: true, &result: %p,\n", &result);
         } else {
-            Cerr << MySprintf("FindSkipIndexes 6,branch: false, &result: %p,\n", &result);
-            Cerr << MySprintf("FindSkipIndexes 7,branch: false, &result: %p,\n", &result);
+            // Cerr << MySprintf("FindSkipIndexes 6,branch: false, &result: %p,\n", &result);
+            // Cerr << MySprintf("FindSkipIndexes 7,branch: false, &result: %p,\n", &result);
 
         }
     }
-    Cerr << MySprintf("FindSkipIndexes 8,&result: %p,\n", &result);
+    // Cerr << MySprintf("FindSkipIndexes 8,&result: %p,\n", &result);
 
-    Cerr << MySprintf("FindSkipIndexes end. obj: %i, Indexes.size(): %i", this, Indexes.size());
+    // Cerr << MySprintf("FindSkipIndexes end. obj: %i, Indexes.size(): %i", this, Indexes.size());
 
 
     return result;

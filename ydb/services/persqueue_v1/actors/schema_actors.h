@@ -177,8 +177,6 @@ private:
     bool GotLocation = false;
     bool GotReadSessions = false;
 
-    TActorId BalancerPipe;
-
 protected:
     ui64 BalancerTabletId = 0;
     ui32 TotalPartitions = 0;

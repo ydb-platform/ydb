@@ -569,7 +569,7 @@ void TDescribeTopicActorImpl::RestartTablet(ui64 tabletId, const TActorContext& 
         if (GotLocation && GotReadSessions) {
             return;
         }
-        BalancerPipe = {};
+        Tablets[BalancerTabletId].Pipe = {};
     }
 
     NTabletPipe::CloseClient(ctx, tabletInfo.Pipe);
@@ -627,7 +627,6 @@ void TDescribeTopicActorImpl::RequestTablet(TTabletInfo& tablet, const TActorCon
         tablet.Pipe = CreatePipe(tablet.TabletId, ctx);
 
     if (tablet.TabletId == BalancerTabletId) {
-        BalancerPipe = tablet.Pipe;
         RequestBalancer(ctx);
     } else {
         RequestPartitionStatus(tablet, ctx);
@@ -688,7 +687,7 @@ void TDescribeTopicActorImpl::RequestPartitionsLocation(const TActorContext& ctx
         }
     }
     NTabletPipe::SendData(
-        ctx, BalancerPipe,
+        ctx, Tablets[BalancerTabletId].Pipe,
         new TEvPersQueue::TEvGetPartitionsLocation(partsVector)
     );
     ++RequestsInfly;
@@ -697,7 +696,7 @@ void TDescribeTopicActorImpl::RequestPartitionsLocation(const TActorContext& ctx
 void TDescribeTopicActorImpl::RequestReadSessionsInfo(const TActorContext& ctx) {
     AFL_ENSURE(Settings.Mode == TDescribeTopicActorSettings::EMode::DescribeConsumer);
     NTabletPipe::SendData(
-            ctx, BalancerPipe,
+            ctx, Tablets[BalancerTabletId].Pipe,
                     new TEvPersQueue::TEvGetReadSessionsInfo(NPersQueue::ConvertNewConsumerName(Settings.Consumer, ctx))
             );
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "DescribeTopicImpl " << ctx.SelfID.ToString() << ": Request sessions");
@@ -795,16 +794,13 @@ void TDescribeTopicActorImpl::Handle(TEvPersQueue::TEvGetPartitionsLocationRespo
 }
 
 void TDescribeTopicActorImpl::CheckCloseBalancerPipe(const TActorContext& ctx) {
-    if (!GotLocation || !GotReadSessions)
+    if (!GotLocation || !GotReadSessions) {
         return;
-    if (BalancerPipe) {
-        NTabletPipe::CloseClient(ctx, BalancerPipe);
-        BalancerPipe = {};
-
-        auto it = Tablets.find(BalancerTabletId);
-        if (it != Tablets.end()) {
-            it->second.Pipe = {};
-        }
+    }
+    auto& balancerPipe = Tablets[BalancerTabletId].Pipe;
+    if (balancerPipe) {
+        NTabletPipe::CloseClient(ctx, balancerPipe);
+        balancerPipe = {};
     }
     BalancerTabletId = 0;
 }

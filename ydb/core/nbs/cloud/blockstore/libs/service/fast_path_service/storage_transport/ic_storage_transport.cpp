@@ -197,7 +197,7 @@ void TICStorageTransportActor::HandleConnect(
     LOG_DEBUG(
         ctx,
         NKikimrServices::NBS_PARTITION,
-        "Sended TEvConnect with requestId# %lu",
+        "Sent TEvConnect with requestId# %lu",
         it->second.RequestId);
 
     auto request = std::make_unique<TEvConnect>(msg->Credentials);
@@ -251,7 +251,7 @@ void TICStorageTransportActor::HandleWritePersistentBuffer(
     LOG_DEBUG(
         ctx,
         NKikimrServices::NBS_PARTITION,
-        "Sended TEvWritePersistentBuffer with requestId# %lu",
+        "Sent TEvWritePersistentBuffer with requestId# %lu",
         it->second.RequestId);
 
     auto request = std::make_unique<TEvWritePersistentBuffer>(
@@ -320,7 +320,7 @@ void TICStorageTransportActor::HandleErasePersistentBuffer(
     LOG_DEBUG(
         ctx,
         NKikimrServices::NBS_PARTITION,
-        "Sended TEvErasePersistentBuffer with requestId# %lu",
+        "Sent TEvErasePersistentBuffer with requestId# %lu",
         it->second.RequestId);
 
     auto request = std::make_unique<TEvErasePersistentBuffer>(
@@ -380,7 +380,7 @@ void TICStorageTransportActor::HandleReadPersistentBuffer(
     LOG_DEBUG(
         ctx,
         NKikimrServices::NBS_PARTITION,
-        "Sended TEvReadPersistentBuffer with requestId# %lu",
+        "Sent TEvReadPersistentBuffer with requestId# %lu",
         it->second.RequestId);
 
     auto request = std::make_unique<TEvReadPersistentBuffer>(
@@ -451,7 +451,7 @@ void TICStorageTransportActor::HandleRead(
     LOG_DEBUG(
         ctx,
         NKikimrServices::NBS_PARTITION,
-        "Sended TEvRead with requestId# %lu",
+        "Sent TEvRead with requestId# %lu",
         it->second.RequestId);
 
     auto request = std::make_unique<TEvRead>(
@@ -521,7 +521,7 @@ void TICStorageTransportActor::HandleSync(
     LOG_DEBUG(
         ctx,
         NKikimrServices::NBS_PARTITION,
-        "Sended TEvSync with requestId# %lu",
+        "Sent TEvSync with requestId# %lu",
         it->second.RequestId);
 
     auto request = std::make_unique<TEvSync>(

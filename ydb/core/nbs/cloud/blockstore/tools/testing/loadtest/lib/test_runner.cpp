@@ -78,7 +78,7 @@ private:
 
 
     static constexpr ui64 BlockSize = 4_KB;
-    static constexpr ui32 BlocksNum = 1024;
+    static constexpr ui32 BlocksNumberForPreGeneratedWriteData = 1024;
     TVector<TVector<ui8>> DataForWriteRequests;
     std::unordered_set<ui64> AvailableWriteBlocks;
 public:
@@ -264,8 +264,6 @@ void TTestRunner::AddAvailableWriteBlockIndex(ui64 index)
     AvailableWriteBlocks.insert(index);
 }
 
-// TODO this method must be deleted after ydb restriction's fixing
-// about non-intersected write requests
 ui64 TTestRunner::GetNextWriteBlockIndex()
 {
     ui64 index = RandomNumber<ui64>(AvailableWriteBlocks.size());
@@ -403,10 +401,10 @@ void TTestRunner::ReportProgress()
 
 void TTestRunner::GenerateWriteData()
 {
-    DataForWriteRequests.resize(BlocksNum);
-    ui64 i = 0;
-    for (auto &block: DataForWriteRequests) {
-        AddAvailableWriteBlockIndex(i++);
+    DataForWriteRequests.resize(BlocksNumberForPreGeneratedWriteData);
+    for (ui64 i = 0; i < DataForWriteRequests.size(); ++i) {
+        auto &block = DataForWriteRequests[i];
+        AddAvailableWriteBlockIndex(i);
         block.resize(BlockSize);
         auto random = []() -> ui8 {
             return 1 + RandomNumber<ui8>(Max<ui8>());

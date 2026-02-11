@@ -1202,27 +1202,7 @@ TKeyedWriteSession::TKeyedWriteSession(
     Client(client),
     DbDriverState(dbDriverState),
     Metrics(this),
-    Settings(settings),
-    StatsCollector([this]() {
-        while (true) {
-            std::this_thread::sleep_for(std::chrono::seconds(1));
-            Metrics.PrintMetrics();
-            if (MessagesWorker) {
-                std::lock_guard lock(GlobalLock);
-                size_t pendingMessagesCount = 0;
-                for (const auto& [partition, messages] : MessagesWorker->PendingMessagesIndex) {
-                    pendingMessagesCount += messages.size();
-                }
-                size_t inFlightMessagesCount = MessagesWorker->InFlightMessages.size();
-                size_t messagesToResendCount = 0;
-                for (const auto& [partition, messages] : MessagesWorker->MessagesToResendIndex) {
-                    messagesToResendCount += messages.size();
-                }
-                LOG_LAZY(DbDriverState->Log, TLOG_ERR, LogPrefix() << "PendingMessages: " << pendingMessagesCount << " InFlightMessages: " << inFlightMessagesCount << " MessagesToResend: " << messagesToResendCount << " MemoryUsage: " << MessagesWorker->MemoryUsage);
-            }
-            
-        }
-    })
+    Settings(settings)
 {
     if (settings.ProducerIdPrefix_.empty()) {
         ythrow TContractViolation("ProducerIdPrefix is required for KeyedWriteSession");

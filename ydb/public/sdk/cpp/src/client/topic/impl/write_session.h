@@ -437,8 +437,6 @@ private:
     std::atomic<std::uint8_t> MainWorkerState = 0;
     std::atomic<size_t> Epoch = 0;
     static constexpr size_t MAX_EPOCH = 1'000'000'000;
-
-    std::jthread StatsCollector;
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

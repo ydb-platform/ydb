@@ -85,16 +85,16 @@ private:
     std::unordered_map<ui64, TPersistentBufferWriteMeta> WriteMetaByRequestId;
 };
 
-class TFlushRequestHandler : public IRequestHandler {
+class TSyncRequestHandler : public IRequestHandler {
 public:
-    TFlushRequestHandler(
+    TSyncRequestHandler(
         ui64 startIndex,
         ui8 persistentBufferIndex,
         ui64 lsn,
         NWilson::TTraceId traceId,
         ui64 tabletId);
 
-    ~TFlushRequestHandler() override = default;
+    ~TSyncRequestHandler() override = default;
 
     [[nodiscard]] ui64 GetStartIndex() const override;
 

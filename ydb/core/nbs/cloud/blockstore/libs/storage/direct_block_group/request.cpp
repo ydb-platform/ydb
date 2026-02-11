@@ -122,7 +122,7 @@ void TWriteRequestHandler::SetResponse()
 ////////////////////////////////////////////////////////////////////////////////
 
 
-TFlushRequestHandler::TFlushRequestHandler(
+TSyncRequestHandler::TSyncRequestHandler(
     ui64 startIndex,
     ui8 persistentBufferIndex,
     ui64 lsn,
@@ -133,7 +133,7 @@ TFlushRequestHandler::TFlushRequestHandler(
     , Lsn(lsn)
 {
     Span = NWilson::TSpan(TWilsonNbs::NbsBasic,
-        std::move(traceId), "NbsPartition.PBFlush.FlushRequest",
+        std::move(traceId), "NbsPartition.PBFlush.SyncRequest",
         NWilson::EFlags::NONE, NActors::TActivationContext::ActorSystem());
     Span.Attribute("tablet_id", static_cast<i64>(tabletId));
     Span.Attribute("vChunkIndex", static_cast<i64>(0));
@@ -142,34 +142,34 @@ TFlushRequestHandler::TFlushRequestHandler(
     Span.Attribute("lsn", static_cast<i64>(lsn));
 }
 
-ui64 TFlushRequestHandler::GetStartIndex() const
+ui64 TSyncRequestHandler::GetStartIndex() const
 {
     return StartIndex;
 }
 
-ui64 TFlushRequestHandler::GetStartOffset() const
+ui64 TSyncRequestHandler::GetStartOffset() const
 {
     return StartIndex * BlockSize;
 }
 
-ui64 TFlushRequestHandler::GetSize() const
+ui64 TSyncRequestHandler::GetSize() const
 {
     return BlockSize;
 }
 
-bool TFlushRequestHandler::IsCompleted(ui64 requestId)
+bool TSyncRequestHandler::IsCompleted(ui64 requestId)
 {
     Y_UNUSED(requestId);
 
     return true;
 }
 
-ui64 TFlushRequestHandler::GetLsn() const
+ui64 TSyncRequestHandler::GetLsn() const
 {
     return Lsn;
 }
 
-ui8 TFlushRequestHandler::GetPersistentBufferIndex() const
+ui8 TSyncRequestHandler::GetPersistentBufferIndex() const
 {
     return PersistentBufferIndex;
 }

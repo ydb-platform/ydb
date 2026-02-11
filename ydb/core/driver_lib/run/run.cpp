@@ -66,6 +66,7 @@
 #include <ydb/core/protos/node_broker.pb.h>
 #include <ydb/core/protos/recoveryshard_config.pb.h>
 #include <ydb/core/protos/replication.pb.h>
+#include <ydb/core/protos/schemeshard_config.pb.h>
 #include <ydb/core/protos/stream.pb.h>
 #include <ydb/core/protos/workload_manager_config.pb.h>
 #include <ydb/core/protos/data_integrity_trails.pb.h>

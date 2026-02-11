@@ -253,6 +253,12 @@ public:
 
     THashMap<TPathId, TTableInfo::TPtr> Tables;
     THashMap<TPathId, TTableInfo::TPtr> TTLEnabledTables;
+
+    // Batch processing for conditional erase responses
+    TVector<TEvDataShard::TEvConditionalEraseRowsResponse::TPtr> PendingCondEraseResponses;
+    TInstant PendingCondEraseResponsesStartTime;
+    ui32 CondEraseResponseBatchSize = 100;
+    TDuration CondEraseResponseBatchMaxTime = TDuration::MilliSeconds(100);
     ui32 MaxTTLShardsInFlight = 0;
 
     THashMap<TPathId, TTableIndexInfo::TPtr> Indexes;
@@ -553,6 +559,8 @@ public:
     void ConfigureExternalSources(
         const NKikimrConfig::TQueryServiceConfig& config,
         const TActorContext& ctx);
+
+    void ConfigureCondErase(const NKikimrConfig::TSchemeShardConfig& config, const TActorContext &ctx);
 
     void StartStopCompactionQueues();
 
@@ -1074,7 +1082,7 @@ public:
     NTabletFlatExecutor::ITransaction* CreateTxRunConditionalErase(TEvPrivate::TEvRunConditionalErase::TPtr& ev);
 
     struct TTxScheduleConditionalErase;
-    NTabletFlatExecutor::ITransaction* CreateTxScheduleConditionalErase(TEvDataShard::TEvConditionalEraseRowsResponse::TPtr& ev);
+    NTabletFlatExecutor::ITransaction* CreateTxScheduleConditionalErase(TVector<TEvDataShard::TEvConditionalEraseRowsResponse::TPtr>&& responses, const TInstant batchStartTime);
 
     struct TTxSyncTenant;
     NTabletFlatExecutor::ITransaction* CreateTxSyncTenant(TPathId tabletId);
@@ -1324,8 +1332,11 @@ public:
 
     void Handle(TEvSchemeShard::TEvFindTabletSubDomainPathId::TPtr& ev, const TActorContext& ctx);
 
+    bool ProcessPendingConditionalEraseResponseBatch(const TInstant& now, const TActorContext& ctx);
     void ScheduleConditionalEraseRun(const TActorContext& ctx);
     void Handle(TEvPrivate::TEvRunConditionalErase::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvFlushConditionalEraseBatch::TPtr& ev, const TActorContext& ctx);
+
     void Handle(TEvDataShard::TEvConditionalEraseRowsResponse::TPtr& ev, const TActorContext& ctx);
     void ConditionalEraseHandleDisconnect(TTabletId tabletId, const TActorId& clientId, const TActorContext& ctx);
 

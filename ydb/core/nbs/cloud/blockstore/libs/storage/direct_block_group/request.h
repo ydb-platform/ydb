@@ -1,6 +1,8 @@
 #pragma once
 
 #include <ydb/library/actors/util/rope.h>
+#include <ydb/library/actors/wilson/wilson_span.h>
+#include <ydb/library/actors/wilson/wilson_trace.h>
 
 #include <ydb/core/nbs/cloud/blockstore/libs/service/request.h>
 
@@ -25,6 +27,13 @@ public:
     [[nodiscard]] virtual ui64 GetSize() const = 0;
 
     virtual bool IsCompleted(ui64 requestId) = 0;
+
+    void ChildSpanEndOk(ui64 childRequestId);
+
+    void ChildSpanEndError(ui64 childRequestId, const TString& errorMessage);
+
+    NWilson::TSpan Span;
+    std::unordered_map<ui64, NWilson::TSpan> ChildSpanByRequestId;
 };
 
 class TWriteRequestHandler : public IRequestHandler {
@@ -39,9 +48,14 @@ public:
         {}
     };
 
-    explicit TWriteRequestHandler(std::shared_ptr<TWriteBlocksLocalRequest> request);
+    TWriteRequestHandler(
+        std::shared_ptr<TWriteBlocksLocalRequest> request,
+        NWilson::TTraceId traceId,
+        ui64 tabletId);
 
     ~TWriteRequestHandler() override = default;
+
+    NWilson::TTraceId GetChildSpan(ui64 requestId, ui8 persistentBufferIndex);
 
     [[nodiscard]] ui64 GetStartIndex() const override;
 
@@ -60,6 +74,8 @@ public:
 
     [[nodiscard]] TGuardedSgList GetData();
 
+    void SetResponse();
+
 private:
     std::shared_ptr<TWriteBlocksLocalRequest> Request;
     NThreading::TPromise<TWriteBlocksLocalResponse> Future;
@@ -69,11 +85,16 @@ private:
     std::unordered_map<ui64, TPersistentBufferWriteMeta> WriteMetaByRequestId;
 };
 
-class TFlushRequestHandler : public IRequestHandler {
+class TSyncRequestHandler : public IRequestHandler {
 public:
-    TFlushRequestHandler(ui64 startIndex, ui8 persistentBufferIndex, ui64 lsn);
+    TSyncRequestHandler(
+        ui64 startIndex,
+        ui8 persistentBufferIndex,
+        ui64 lsn,
+        NWilson::TTraceId traceId,
+        ui64 tabletId);
 
-    ~TFlushRequestHandler() override = default;
+    ~TSyncRequestHandler() override = default;
 
     [[nodiscard]] ui64 GetStartIndex() const override;
 
@@ -95,7 +116,12 @@ private:
 
 class TEraseRequestHandler : public IRequestHandler {
 public:
-    TEraseRequestHandler(ui64 startIndex, ui8 persistentBufferIndex, ui64 lsn);
+    TEraseRequestHandler(
+        ui64 startIndex,
+        ui8 persistentBufferIndex,
+        ui64 lsn,
+        NWilson::TTraceId traceId,
+        ui64 tabletId);
 
     ~TEraseRequestHandler() override = default;
 
@@ -120,9 +146,14 @@ private:
 
 class TReadRequestHandler : public IRequestHandler {
 public:
-    explicit TReadRequestHandler(std::shared_ptr<TReadBlocksLocalRequest> request);
+    TReadRequestHandler(
+        std::shared_ptr<TReadBlocksLocalRequest> request,
+        NWilson::TTraceId traceId,
+        ui64 tabletId);
 
     ~TReadRequestHandler() override = default;
+
+    NWilson::TTraceId GetChildSpan(ui64 requestId, bool isReadPersistentBuffer);
 
     [[nodiscard]] ui64 GetStartIndex() const override;
 
@@ -136,6 +167,7 @@ public:
 
     [[nodiscard]] TGuardedSgList GetData();
 
+    void SetResponse();
 
 private:
     std::shared_ptr<TReadBlocksLocalRequest> Request;

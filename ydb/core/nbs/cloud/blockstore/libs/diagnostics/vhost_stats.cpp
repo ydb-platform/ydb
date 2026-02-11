@@ -32,9 +32,15 @@ TMetricRequest::TMetricRequest(
     : RequestType(requestType)
     , ClientId(clientId)
     , DiskId(diskId)
+    , BlockSize(blockSize)
     , Range(GetBlockRange(start, size, blockSize))
     , Unaligned(IsUnaligned(start, size, blockSize))
 {}
+
+ui32 TMetricRequest::GetRequestBytes() const
+{
+    return Range.Size() * BlockSize;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 

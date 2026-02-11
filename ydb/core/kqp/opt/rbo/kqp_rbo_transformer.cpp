@@ -144,32 +144,122 @@ IGraphTransformer::TStatus TKqpRewriteSelectTransformer::DoTransform(TExprNode::
 
 void TKqpRewriteSelectTransformer::Rewind() {}
 
-IGraphTransformer::TStatus TKqpNewRBOTransformer::DoTransform(TExprNode::TPtr input, TExprNode::TPtr &output, TExprContext &ctx) {
+IGraphTransformer::TStatus TKqpNewRBOTransformer::DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) {
     output = input;
     TOptimizeExprSettings settings(&TypeCtx);
 
+    // At first step convert KqpOps to RBO Ops.
     auto status = OptimizeExpr(
         output, output,
-        [this](const TExprNode::TPtr &node, TExprContext &ctx) -> TExprNode::TPtr {
+        [this](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
             Y_UNUSED(ctx);
             if (TKqpOpRoot::Match(node.Get())) {
-                auto root = PlanConverter(TypeCtx, ctx).ConvertRoot(node);
-                root.ComputeParents();
-                return RBO.Optimize(root, ctx);
+                OpRoot = PlanConverter(TypeCtx, ctx).ConvertRoot(node);
+                OpRoot->ComputeParents();
+                return node;
             } else {
                 return node;
             }
         },
         ctx, settings);
 
-    if (status != IGraphTransformer::TStatus::Ok) {
+    if (status != TStatus::Ok) {
         return status;
     }
 
-    return IGraphTransformer::TStatus::Ok;
+    if (IsSuitableToRequestStatistics()) {
+        // Async request for statistics.
+        auto status = RequestColumnStatistics();
+        if (status == TStatus::Async || status == TStatus::Error) {
+            return status;
+        }
+    }
+
+    // Continue optimizations without statistics.
+    return ContinueOptimizations(input, output, ctx);
 }
 
-void TKqpNewRBOTransformer::Rewind() {}
+NThreading::TFuture<void> TKqpNewRBOTransformer::DoGetAsyncFuture(const TExprNode& input) {
+    Y_UNUSED(input);
+    return ColumnStatisticsReadiness;
+}
+
+IGraphTransformer::TStatus TKqpNewRBOTransformer::RequestColumnStatistics() {
+    TVector<NThreading::TFuture<TColumnStatisticsResponse>> futures;
+    AddStatRequest(ActorSystem, futures, Tables, Cluster, Database, TypeCtx, NStat::EStatType::COUNT_MIN_SKETCH, CMColumnsByTableName,
+                   [](const TColumnStatistics& stats) { return !!stats.CountMinSketch; });
+    AddStatRequest(ActorSystem, futures, Tables, Cluster, Database, TypeCtx, NStat::EStatType::EQ_WIDTH_HISTOGRAM, HistColumnsByTableName,
+                   [](const TColumnStatistics& stats) { return !!stats.EqWidthHistogramEstimator; });
+
+    if (futures.empty()) {
+        return TStatus::Ok;
+    }
+
+    ColumnStatisticsReadiness = NThreading::WaitAll(futures).Apply([this, futures = std::move(futures)](const NThreading::TFuture<void>&) mutable {
+        for (auto& fut : futures) {
+            if (fut.HasException()) {
+                fut.TryRethrow();
+            }
+
+            auto newStats = fut.ExtractValue();
+            if (!ColumnStatisticsResponse) {
+                ColumnStatisticsResponse = std::move(newStats);
+            } else {
+                // merge statistics
+                for (const auto& [table, column2Stat] : newStats.ColumnStatisticsByTableName) {
+                    auto& oldColumn2Stat = ColumnStatisticsResponse->ColumnStatisticsByTableName[table];
+                    for (const auto& [column, newStat] : column2Stat.Data) {
+                        auto& oldStat = oldColumn2Stat.Data[column];
+                        if (newStat.CountMinSketch) {
+                            oldStat.CountMinSketch = newStat.CountMinSketch;
+                        }
+                        if (newStat.EqWidthHistogramEstimator) {
+                            oldStat.EqWidthHistogramEstimator = newStat.EqWidthHistogramEstimator;
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    return TStatus::Async;
+}
+
+bool TKqpNewRBOTransformer::IsSuitableToRequestStatistics() {
+    // Currently just checking for a flag.
+    // return KqpCtx.Config->FeatureFlags.GetEnableColumnStatistics();
+    return true;
+}
+
+IGraphTransformer::TStatus TKqpNewRBOTransformer::ContinueOptimizations(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) {
+    output = input;
+    TOptimizeExprSettings settings(&TypeCtx);
+
+    // Apply optimizations.
+    auto status = OptimizeExpr(
+        output, output,
+        [this](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
+            Y_UNUSED(ctx);
+            if (TKqpOpRoot::Match(node.Get())) {
+                Y_ENSURE(OpRoot, "NEW RBO OpRoot is not initialized.");
+                return RBO.Optimize(OpRoot, ctx);
+            } else {
+                return node;
+            }
+        },
+        ctx, settings);
+
+    return status;
+}
+
+IGraphTransformer::TStatus TKqpNewRBOTransformer::DoApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) {
+    // Make sure statistics is ready.
+    Y_ENSURE(ColumnStatisticsReadiness.IsReady());
+    return ContinueOptimizations(input, output, ctx);
+}
+
+void TKqpNewRBOTransformer::Rewind() {
+}
 
 IGraphTransformer::TStatus TKqpRBOCleanupTransformer::DoTransform(TExprNode::TPtr input, TExprNode::TPtr &output, TExprContext &ctx) {
     output = input;
@@ -209,10 +299,16 @@ IGraphTransformer::TStatus TKqpRBOCleanupTransformer::DoTransform(TExprNode::TPt
 
 TKqpNewRBOTransformer::TKqpNewRBOTransformer(TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, TTypeAnnotationContext& typeCtx,
                                              TAutoPtr<IGraphTransformer>&& rboTypeAnnTransformer, TAutoPtr<IGraphTransformer>&& peepholeTypeAnnTransformer,
+                                             TKikimrTablesData& tables, const TString& cluster, const TString& database, TActorSystem* actorSystem,
                                              const NMiniKQL::IFunctionRegistry& funcRegistry)
     : TypeCtx(typeCtx)
     , KqpCtx(*kqpCtx)
-    , RBO(kqpCtx, typeCtx, std::move(rboTypeAnnTransformer), std::move(peepholeTypeAnnTransformer), funcRegistry) {
+    , RBO(kqpCtx, typeCtx, std::move(rboTypeAnnTransformer), std::move(peepholeTypeAnnTransformer), funcRegistry)
+    , Tables(tables)
+    , Cluster(cluster)
+    , Database(database)
+    , ActorSystem(actorSystem) {
+
     // Predicate pull-up stage
     TVector<std::shared_ptr<IRule>> filterPullUpRules{std::make_shared<TPullUpCorrelatedFilterRule>()};
     RBO.AddStage(std::make_shared<TRuleBasedStage>("Correlated predicte pullup", std::move(filterPullUpRules)));
@@ -253,9 +349,11 @@ TAutoPtr<IGraphTransformer> CreateKqpRewriteSelectTransformer(const TIntrusivePt
 
 TAutoPtr<IGraphTransformer> CreateKqpNewRBOTransformer(TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, TTypeAnnotationContext& typeCtx,
                                                        TAutoPtr<IGraphTransformer>&& rboTypeAnnTransformer,
-                                                       TAutoPtr<IGraphTransformer>&& peepholeTypeAnnTransformer,
+                                                       TAutoPtr<IGraphTransformer>&& peepholeTypeAnnTransformer, TKikimrTablesData& tables,
+                                                       const TString& cluster, const TString& database, TActorSystem* actorSystem,
                                                        const NMiniKQL::IFunctionRegistry& funcRegistry) {
-    return new TKqpNewRBOTransformer(kqpCtx, typeCtx, std::move(rboTypeAnnTransformer), std::move(peepholeTypeAnnTransformer), funcRegistry);
+    return new TKqpNewRBOTransformer(kqpCtx, typeCtx, std::move(rboTypeAnnTransformer), std::move(peepholeTypeAnnTransformer), tables, cluster, database,
+                                     actorSystem, funcRegistry);
 }
 
 TAutoPtr<IGraphTransformer> CreateKqpRBOCleanupTransformer(TTypeAnnotationContext &typeCtx) {

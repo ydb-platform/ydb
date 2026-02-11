@@ -2,8 +2,9 @@
 
 namespace NYdb::NBS::NBlockStore {
 
-using namespace NThreading;
 using namespace NActors;
+using namespace NKikimr::NDDisk;
+using namespace NThreading;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -20,7 +21,7 @@ TICStorageTransport::TICStorageTransport()
 
 TFuture<NKikimrBlobStorage::NDDisk::TEvConnectResult> TICStorageTransport::Connect(
     const NActors::TActorId serviceId,
-    const NKikimr::NDDisk::TQueryCredentials credentials,
+    const TQueryCredentials credentials,
     const ui64 requestId)
 {
     auto promise = NewPromise<NKikimrBlobStorage::NDDisk::TEvConnectResult>();
@@ -39,11 +40,12 @@ TFuture<NKikimrBlobStorage::NDDisk::TEvConnectResult> TICStorageTransport::Conne
 
 TFuture<NKikimrBlobStorage::NDDisk::TEvWritePersistentBufferResult> TICStorageTransport::WritePersistentBuffer(
     const NActors::TActorId serviceId,
-    const NKikimr::NDDisk::TQueryCredentials credentials,
-    const NKikimr::NDDisk::TBlockSelector selector,
+    const TQueryCredentials credentials,
+    const TBlockSelector selector,
     const ui64 lsn,
-    const NKikimr::NDDisk::TWriteInstruction instruction,
+    const TWriteInstruction instruction,
     TGuardedSgList data,
+    NWilson::TTraceId traceId,
     const ui64 requestId)
 {
     auto promise = NewPromise<NKikimrBlobStorage::NDDisk::TEvWritePersistentBufferResult>();
@@ -58,33 +60,7 @@ TFuture<NKikimrBlobStorage::NDDisk::TEvWritePersistentBufferResult> TICStorageTr
             lsn,
             instruction,
             std::move(data),
-            requestId,
-            std::move(promise)));
-
-    return future;
-}
-
-TFuture<NKikimrBlobStorage::NDDisk::TEvFlushPersistentBufferResult> TICStorageTransport::FlushPersistentBuffer(
-    const NActors::TActorId serviceId,
-    const NKikimr::NDDisk::TQueryCredentials credentials,
-    const NKikimr::NDDisk::TBlockSelector selector,
-    const ui64 lsn,
-    const std::tuple<ui32, ui32, ui32> ddiskId,
-    const ui64 ddiskInstanceGuid,
-    const ui64 requestId)
-{
-    auto promise = NewPromise<NKikimrBlobStorage::NDDisk::TEvFlushPersistentBufferResult>();
-    auto future = promise.GetFuture();
-
-    NActors::TActivationContext::AsActorContext().Send(
-        ICStorageTransportActorId,
-        new TEvICStorageTransportPrivate::TEvFlushPersistentBuffer(
-            serviceId,
-            credentials,
-            selector,
-            lsn,
-            ddiskId,
-            ddiskInstanceGuid,
+            std::move(traceId),
             requestId,
             std::move(promise)));
 
@@ -93,9 +69,10 @@ TFuture<NKikimrBlobStorage::NDDisk::TEvFlushPersistentBufferResult> TICStorageTr
 
 TFuture<NKikimrBlobStorage::NDDisk::TEvErasePersistentBufferResult> TICStorageTransport::ErasePersistentBuffer(
     const NActors::TActorId serviceId,
-    const NKikimr::NDDisk::TQueryCredentials credentials,
-    const NKikimr::NDDisk::TBlockSelector selector,
+    const TQueryCredentials credentials,
+    const TBlockSelector selector,
     const ui64 lsn,
+    NWilson::TTraceId traceId,
     const ui64 requestId)
 {
     auto promise = NewPromise<NKikimrBlobStorage::NDDisk::TEvErasePersistentBufferResult>();
@@ -108,6 +85,7 @@ TFuture<NKikimrBlobStorage::NDDisk::TEvErasePersistentBufferResult> TICStorageTr
             credentials,
             selector,
             lsn,
+            std::move(traceId),
             requestId,
             std::move(promise)));
 
@@ -116,11 +94,12 @@ TFuture<NKikimrBlobStorage::NDDisk::TEvErasePersistentBufferResult> TICStorageTr
 
 TFuture<NKikimrBlobStorage::NDDisk::TEvReadPersistentBufferResult> TICStorageTransport::ReadPersistentBuffer(
     const NActors::TActorId serviceId,
-    const NKikimr::NDDisk::TQueryCredentials credentials,
-    const NKikimr::NDDisk::TBlockSelector selector,
+    const TQueryCredentials credentials,
+    const TBlockSelector selector,
     const ui64 lsn,
-    const NKikimr::NDDisk::TReadInstruction instruction,
+    const TReadInstruction instruction,
     TGuardedSgList data,
+    NWilson::TTraceId traceId,
     const ui64 requestId)
 {
     auto promise = NewPromise<NKikimrBlobStorage::NDDisk::TEvReadPersistentBufferResult>();
@@ -135,6 +114,7 @@ TFuture<NKikimrBlobStorage::NDDisk::TEvReadPersistentBufferResult> TICStorageTra
             lsn,
             instruction,
             std::move(data),
+            std::move(traceId),
             requestId,
             std::move(promise)));
 
@@ -143,10 +123,11 @@ TFuture<NKikimrBlobStorage::NDDisk::TEvReadPersistentBufferResult> TICStorageTra
 
 TFuture<NKikimrBlobStorage::NDDisk::TEvReadResult> TICStorageTransport::Read(
     const NActors::TActorId serviceId,
-    const NKikimr::NDDisk::TQueryCredentials credentials,
-    const NKikimr::NDDisk::TBlockSelector selector,
-    const NKikimr::NDDisk::TReadInstruction instruction,
+    const TQueryCredentials credentials,
+    const TBlockSelector selector,
+    const TReadInstruction instruction,
     TGuardedSgList data,
+    NWilson::TTraceId traceId,
     const ui64 requestId)
 {
     auto promise = NewPromise<NKikimrBlobStorage::NDDisk::TEvReadResult>();
@@ -160,6 +141,36 @@ TFuture<NKikimrBlobStorage::NDDisk::TEvReadResult> TICStorageTransport::Read(
             selector,
             instruction,
             std::move(data),
+            std::move(traceId),
+            requestId,
+            std::move(promise)));
+
+    return future;
+}
+
+TFuture<NKikimrBlobStorage::NDDisk::TEvSyncResult> TICStorageTransport::Sync(
+    const NActors::TActorId serviceId,
+    const NKikimr::NDDisk::TQueryCredentials credentials,
+    const NKikimr::NDDisk::TBlockSelector selector,
+    const ui64 lsn,
+    const std::tuple<ui32, ui32, ui32> ddiskId,
+    const ui64 ddiskInstanceGuid,
+    NWilson::TTraceId traceId,
+    const ui64 requestId)
+{
+    auto promise = NewPromise<NKikimrBlobStorage::NDDisk::TEvSyncResult>();
+    auto future = promise.GetFuture();
+
+    NActors::TActivationContext::AsActorContext().Send(
+        ICStorageTransportActorId,
+        new TEvICStorageTransportPrivate::TEvSync(
+            serviceId,
+            credentials,
+            selector,
+            lsn,
+            ddiskId,
+            ddiskInstanceGuid,
+            std::move(traceId),
             requestId,
             std::move(promise)));
 
@@ -199,29 +210,52 @@ void TICStorageTransportActor::HandleConnect(
 {
     auto* msg = ev->Get();
 
-    auto request = std::make_unique<NKikimr::NDDisk::TEvConnect>(msg->Credentials);
+    auto [it, inserted] = ConnectEventsByRequestId.emplace(msg->RequestId, std::move(*msg));
+    Y_ABORT_UNLESS(inserted);
+
+    LOG_DEBUG(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "Sent TEvConnect with requestId# %lu",
+        it->second.RequestId);
+
+    auto request = std::make_unique<TEvConnect>(msg->Credentials);
+
     ctx.Send(
-        msg->ServiceId,
+        it->second.ServiceId,
         request.release(),
         0, // flags
-        msg->RequestId
-    );
-
-    PrivateEventsByRequestId.emplace(msg->RequestId, std::move(*msg));
+        it->second.RequestId);
 }
 
 void TICStorageTransportActor::HandleConnectResult(
-    const NKikimr::NDDisk::TEvConnectResult::TPtr& ev,
+    const TEvConnectResult::TPtr& ev,
     const NActors::TActorContext& ctx)
 {
     Y_UNUSED(ctx);
 
     auto requestId = ev->Cookie;
 
-    auto& promise = std::get<0>(PrivateEventsByRequestId.at(requestId)).Promise;
+    LOG_DEBUG(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "Received TEvConnectResult with requestId# %lu",
+        requestId
+    );
 
+    // That means that request is already completed
+    if (!ConnectEventsByRequestId.contains(requestId)) {
+        LOG_DEBUG(
+            ctx,
+            NKikimrServices::NBS_PARTITION,
+            "ConnectEvent with requestId# %lu not found",
+            requestId);
+        return;
+    }
+
+    auto& promise = ConnectEventsByRequestId.at(requestId).Promise;
     promise.SetValue(std::move(ev->Get()->Record));
-    PrivateEventsByRequestId.erase(requestId);
+    ConnectEventsByRequestId.erase(requestId);
 }
 
 void TICStorageTransportActor::HandleWritePersistentBuffer(
@@ -230,78 +264,67 @@ void TICStorageTransportActor::HandleWritePersistentBuffer(
 {
     auto* msg = ev->Get();
 
-    auto request = std::make_unique<NKikimr::NDDisk::TEvWritePersistentBuffer>(
-        msg->Credentials,
-        msg->Selector,
-        msg->Lsn,
-        msg->Instruction);
+    auto [it, inserted] = WritePersistentBufferEventsByRequestId.emplace(msg->RequestId, std::move(*msg));
+    Y_ABORT_UNLESS(inserted);
 
-    if (auto guard = msg->Data.Acquire()) {
+    LOG_DEBUG(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "Sent TEvWritePersistentBuffer with requestId# %lu",
+        it->second.RequestId);
+
+    auto request = std::make_unique<TEvWritePersistentBuffer>(
+        it->second.Credentials,
+        it->second.Selector,
+        it->second.Lsn,
+        it->second.Instruction);
+
+    if (auto guard = it->second.Data.Acquire()) {
         const auto& sglist = guard.Get();
         request->AddPayload(TRope(TString(sglist[0].Data(), sglist[0].Size())));
     } else {
         Y_ABORT_UNLESS(false);
     }
 
-    ctx.Send(
-        msg->ServiceId,
+    ctx.Send(MakeHolder<IEventHandle>(
+        it->second.ServiceId,
+        ctx.SelfID,
         request.release(),
         0, // flags
-        msg->RequestId
-    );
-
-    PrivateEventsByRequestId.emplace(msg->RequestId, std::move(*msg));
+        it->second.RequestId,
+        nullptr,
+        std::move(it->second.TraceId)));
 }
 
 void TICStorageTransportActor::HandleWritePersistentBufferResult(
-    const NKikimr::NDDisk::TEvWritePersistentBufferResult::TPtr& ev,
+    const TEvWritePersistentBufferResult::TPtr& ev,
     const NActors::TActorContext& ctx)
 {
     Y_UNUSED(ctx);
 
     auto requestId = ev->Cookie;
 
-    auto& promise = std::get<1>(PrivateEventsByRequestId.at(requestId)).Promise;
+    LOG_DEBUG(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "Received TEvWritePersistentBufferResult with requestId# %lu",
+        requestId);
+
+    // That means that request is already completed
+    if (!WritePersistentBufferEventsByRequestId.contains(requestId)) {
+        LOG_DEBUG(
+            ctx,
+            NKikimrServices::NBS_PARTITION,
+            "WritePersistentBufferEvent with requestId# %lu not found",
+            requestId);
+
+        return;
+    }
+
+    auto& promise = WritePersistentBufferEventsByRequestId.at(requestId).Promise;
 
     promise.SetValue(std::move(ev->Get()->Record));
-    PrivateEventsByRequestId.erase(requestId);
-}
-
-void TICStorageTransportActor::HandleFlushPersistentBuffer(
-    const TEvICStorageTransportPrivate::TEvFlushPersistentBuffer::TPtr& ev,
-    const NActors::TActorContext& ctx)
-{
-    auto* msg = ev->Get();
-
-    auto request = std::make_unique<NKikimr::NDDisk::TEvFlushPersistentBuffer>(
-        msg->Credentials,
-        msg->Selector,
-        msg->Lsn,
-        msg->DDiskId,
-        msg->DDiskInstanceGuid);
-
-    ctx.Send(
-        msg->ServiceId,
-        request.release(),
-        0, // flags
-        msg->RequestId
-    );
-
-    PrivateEventsByRequestId.emplace(msg->RequestId, std::move(*msg));
-}
-
-void TICStorageTransportActor::HandleFlushPersistentBufferResult(
-    const NKikimr::NDDisk::TEvFlushPersistentBufferResult::TPtr& ev,
-    const NActors::TActorContext& ctx)
-{
-    Y_UNUSED(ctx);
-
-    auto requestId = ev->Cookie;
-
-    auto& promise = std::get<2>(PrivateEventsByRequestId.at(requestId)).Promise;
-
-    promise.SetValue(std::move(ev->Get()->Record));
-    PrivateEventsByRequestId.erase(requestId);
+    WritePersistentBufferEventsByRequestId.erase(requestId);
 }
 
 void TICStorageTransportActor::HandleErasePersistentBuffer(
@@ -310,33 +333,58 @@ void TICStorageTransportActor::HandleErasePersistentBuffer(
 {
     auto* msg = ev->Get();
 
-    auto request = std::make_unique<NKikimr::NDDisk::TEvErasePersistentBuffer>(
-        msg->Credentials,
-        msg->Selector,
-        msg->Lsn);
+    auto [it, inserted] = ErasePersistentBufferEventsByRequestId.emplace(msg->RequestId, std::move(*msg));
+    Y_ABORT_UNLESS(inserted);
 
-    ctx.Send(
-        msg->ServiceId,
+    LOG_DEBUG(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "Sent TEvErasePersistentBuffer with requestId# %lu",
+        it->second.RequestId);
+
+    auto request = std::make_unique<TEvErasePersistentBuffer>(
+        it->second.Credentials,
+        it->second.Selector,
+        it->second.Lsn);
+
+    ctx.Send(MakeHolder<IEventHandle>(
+        it->second.ServiceId,
+        ctx.SelfID,
         request.release(),
         0, // flags
-        msg->RequestId
-    );
-
-    PrivateEventsByRequestId.emplace(msg->RequestId, std::move(*msg));
+        it->second.RequestId,
+        nullptr,
+        std::move(it->second.TraceId)));
 }
 
 void TICStorageTransportActor::HandleErasePersistentBufferResult(
-    const NKikimr::NDDisk::TEvErasePersistentBufferResult::TPtr& ev,
+    const TEvErasePersistentBufferResult::TPtr& ev,
     const NActors::TActorContext& ctx)
 {
     Y_UNUSED(ctx);
 
     auto requestId = ev->Cookie;
 
-    auto& promise = std::get<3>(PrivateEventsByRequestId.at(requestId)).Promise;
+    LOG_DEBUG(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "Received TEvErasePersistentBufferResult with requestId# %lu",
+        requestId);
+
+    // That means that request is already completed
+    if (!ErasePersistentBufferEventsByRequestId.contains(requestId)) {
+        LOG_DEBUG(
+            ctx,
+            NKikimrServices::NBS_PARTITION,
+            "ErasePersistentBufferEvent with requestId# %lu not found",
+            requestId);
+        return;
+    }
+
+    auto& promise = ErasePersistentBufferEventsByRequestId.at(requestId).Promise;
 
     promise.SetValue(std::move(ev->Get()->Record));
-    PrivateEventsByRequestId.erase(requestId);
+    ErasePersistentBufferEventsByRequestId.erase(requestId);
 }
 
 void TICStorageTransportActor::HandleReadPersistentBuffer(
@@ -345,32 +393,57 @@ void TICStorageTransportActor::HandleReadPersistentBuffer(
 {
     auto* msg = ev->Get();
 
-    auto request = std::make_unique<NKikimr::NDDisk::TEvReadPersistentBuffer>(
-        msg->Credentials,
-        msg->Selector,
-        msg->Lsn,
-        msg->Instruction);
+    auto [it, inserted] = ReadPersistentBufferEventsByRequestId.emplace(msg->RequestId, std::move(*msg));
+    Y_ABORT_UNLESS(inserted);
 
-    ctx.Send(
-        msg->ServiceId,
+    LOG_DEBUG(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "Sent TEvReadPersistentBuffer with requestId# %lu",
+        it->second.RequestId);
+
+    auto request = std::make_unique<TEvReadPersistentBuffer>(
+        it->second.Credentials,
+        it->second.Selector,
+        it->second.Lsn,
+        it->second.Instruction);
+
+    ctx.Send(MakeHolder<IEventHandle>(
+        it->second.ServiceId,
+        ctx.SelfID,
         request.release(),
         0, // flags
-        msg->RequestId
-    );
-
-    PrivateEventsByRequestId.emplace(msg->RequestId, std::move(*msg));
+        it->second.RequestId,
+        nullptr,
+        std::move(it->second.TraceId)));
 }
 
 void TICStorageTransportActor::HandleReadPersistentBufferResult(
-    const NKikimr::NDDisk::TEvReadPersistentBufferResult::TPtr& ev,
+    const TEvReadPersistentBufferResult::TPtr& ev,
     const NActors::TActorContext& ctx)
 {
     Y_UNUSED(ctx);
 
     auto requestId = ev->Cookie;
 
-    auto& promise = std::get<4>(PrivateEventsByRequestId.at(requestId)).Promise;
-    auto& data = std::get<4>(PrivateEventsByRequestId.at(requestId)).Data;
+    LOG_DEBUG(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "Received TEvReadPersistentBufferResult with requestId# %lu",
+        requestId);
+
+    // That means that request is already completed
+    if (!ReadPersistentBufferEventsByRequestId.contains(requestId)) {
+        LOG_DEBUG(
+            ctx,
+            NKikimrServices::NBS_PARTITION,
+            "ReadPersistentBufferEvent with requestId# %lu not found",
+            requestId);
+        return;
+    }
+
+    auto& promise = ReadPersistentBufferEventsByRequestId.at(requestId).Promise;
+    auto& data = ReadPersistentBufferEventsByRequestId.at(requestId).Data;
     if (auto guard = data.Acquire()) {
         const auto& sglist = guard.Get();
         const auto& block = sglist[0];
@@ -382,7 +455,7 @@ void TICStorageTransportActor::HandleReadPersistentBufferResult(
     }
 
     promise.SetValue(std::move(ev->Get()->Record));
-    PrivateEventsByRequestId.erase(requestId);
+    ReadPersistentBufferEventsByRequestId.erase(requestId);
 }
 
 void TICStorageTransportActor::HandleRead(
@@ -391,31 +464,56 @@ void TICStorageTransportActor::HandleRead(
 {
     auto* msg = ev->Get();
 
-    auto request = std::make_unique<NKikimr::NDDisk::TEvRead>(
-        msg->Credentials,
-        msg->Selector,
-        msg->Instruction);
+    auto [it, inserted] = ReadEventsByRequestId.emplace(msg->RequestId, std::move(*msg));
+    Y_ABORT_UNLESS(inserted);
 
-    ctx.Send(
-        msg->ServiceId,
+    LOG_DEBUG(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "Sent TEvRead with requestId# %lu",
+        it->second.RequestId);
+
+    auto request = std::make_unique<TEvRead>(
+        it->second.Credentials,
+        it->second.Selector,
+        it->second.Instruction);
+
+    ctx.Send(MakeHolder<IEventHandle>(
+        it->second.ServiceId,
+        ctx.SelfID,
         request.release(),
         0, // flags
-        msg->RequestId
-    );
-
-    PrivateEventsByRequestId.emplace(msg->RequestId, std::move(*msg));
+        it->second.RequestId,
+        nullptr,
+        std::move(it->second.TraceId)));
 }
 
 void TICStorageTransportActor::HandleReadResult(
-    const NKikimr::NDDisk::TEvReadResult::TPtr& ev,
+    const TEvReadResult::TPtr& ev,
     const NActors::TActorContext& ctx)
 {
     Y_UNUSED(ctx);
 
     auto requestId = ev->Cookie;
 
-    auto& promise = std::get<5>(PrivateEventsByRequestId.at(requestId)).Promise;
-    auto& data = std::get<5>(PrivateEventsByRequestId.at(requestId)).Data;
+    LOG_DEBUG(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "Received TEvReadResult with requestId# %lu",
+        requestId);
+
+    // That means that request is already completed
+    if (!ReadEventsByRequestId.contains(requestId)) {
+        LOG_DEBUG(
+            ctx,
+            NKikimrServices::NBS_PARTITION,
+            "ReadEvent with requestId# %lu not found",
+            requestId);
+        return;
+    }
+
+    auto& promise = ReadEventsByRequestId.at(requestId).Promise;
+    auto& data = ReadEventsByRequestId.at(requestId).Data;
     if (auto guard = data.Acquire()) {
         const auto& sglist = guard.Get();
         const auto& block = sglist[0];
@@ -427,7 +525,71 @@ void TICStorageTransportActor::HandleReadResult(
     }
 
     promise.SetValue(std::move(ev->Get()->Record));
-    PrivateEventsByRequestId.erase(requestId);
+    ReadEventsByRequestId.erase(requestId);
+}
+
+void TICStorageTransportActor::HandleSync(
+    const TEvICStorageTransportPrivate::TEvSync::TPtr& ev,
+    const NActors::TActorContext& ctx)
+{
+    auto* msg = ev->Get();
+
+    auto [it, inserted] = SyncEventsByRequestId.emplace(msg->RequestId, std::move(*msg));
+    Y_ABORT_UNLESS(inserted);
+
+    LOG_DEBUG(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "Sent TEvSync with requestId# %lu",
+        it->second.RequestId);
+
+    auto request = std::make_unique<TEvSync>(
+        it->second.Credentials,
+        it->second.DDiskId,
+        it->second.DDiskInstanceGuid);
+
+    request->AddSegmentFromPersistentBuffer(
+        it->second.Selector,
+        it->second.Lsn);
+
+    ctx.Send(MakeHolder<IEventHandle>(
+        it->second.ServiceId,
+        ctx.SelfID,
+        request.release(),
+        0, // flags
+        it->second.RequestId,
+        nullptr,
+        std::move(it->second.TraceId)));
+}
+
+void TICStorageTransportActor::HandleSyncResult(
+    const NKikimr::NDDisk::TEvSyncResult::TPtr& ev,
+    const NActors::TActorContext& ctx)
+{
+    Y_UNUSED(ctx);
+
+    auto requestId = ev->Cookie;
+
+    LOG_DEBUG(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "Received TEvSyncResult with requestId# %lu",
+        requestId);
+
+    // That means that request is already completed
+    if (!SyncEventsByRequestId.contains(requestId)) {
+        LOG_DEBUG(
+            ctx,
+            NKikimrServices::NBS_PARTITION,
+            "SyncEvent with requestId# %lu not found",
+            requestId);
+        return;
+    }
+
+    auto& promise = SyncEventsByRequestId.at(requestId).Promise;
+
+    promise.SetValue(std::move(ev->Get()->Record));
+    SyncEventsByRequestId.erase(requestId);
 }
 
 void TICStorageTransportActor::HandleListPersistentBuffer(
@@ -446,7 +608,7 @@ void TICStorageTransportActor::HandleListPersistentBuffer(
         msg->RequestId
     );
 
-    PrivateEventsByRequestId.emplace(msg->RequestId, std::move(*msg));
+    ListPersistentBufferEventsByRequestId.emplace(msg->RequestId, std::move(*msg));
 }
 
 void TICStorageTransportActor::HandleListPersistentBufferResult(
@@ -457,10 +619,10 @@ void TICStorageTransportActor::HandleListPersistentBufferResult(
 
     auto requestId = ev->Cookie;
 
-    auto& promise = std::get<6>(PrivateEventsByRequestId.at(requestId)).Promise;
+    auto& promise = ListPersistentBufferEventsByRequestId.at(requestId).Promise;
 
     promise.SetValue(std::move(ev->Get()->Record));
-    PrivateEventsByRequestId.erase(requestId);
+    ListPersistentBufferEventsByRequestId.erase(requestId);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -476,22 +638,22 @@ STFUNC(TICStorageTransportActor::StateWork)
         cFunc(TEvents::TEvPoison::EventType, PassAway);
 
         HFunc(TEvICStorageTransportPrivate::TEvConnect, HandleConnect);
-        HFunc(NKikimr::NDDisk::TEvConnectResult, HandleConnectResult);
+        HFunc(TEvConnectResult, HandleConnectResult);
 
         HFunc(TEvICStorageTransportPrivate::TEvWritePersistentBuffer, HandleWritePersistentBuffer);
-        HFunc(NKikimr::NDDisk::TEvWritePersistentBufferResult, HandleWritePersistentBufferResult);
-
-        HFunc(TEvICStorageTransportPrivate::TEvFlushPersistentBuffer, HandleFlushPersistentBuffer);
-        HFunc(NKikimr::NDDisk::TEvFlushPersistentBufferResult, HandleFlushPersistentBufferResult);
+        HFunc(TEvWritePersistentBufferResult, HandleWritePersistentBufferResult);
 
         HFunc(TEvICStorageTransportPrivate::TEvErasePersistentBuffer, HandleErasePersistentBuffer);
-        HFunc(NKikimr::NDDisk::TEvErasePersistentBufferResult, HandleErasePersistentBufferResult);
+        HFunc(TEvErasePersistentBufferResult, HandleErasePersistentBufferResult);
 
         HFunc(TEvICStorageTransportPrivate::TEvReadPersistentBuffer, HandleReadPersistentBuffer);
-        HFunc(NKikimr::NDDisk::TEvReadPersistentBufferResult, HandleReadPersistentBufferResult);
+        HFunc(TEvReadPersistentBufferResult, HandleReadPersistentBufferResult);
 
         HFunc(TEvICStorageTransportPrivate::TEvRead, HandleRead);
-        HFunc(NKikimr::NDDisk::TEvReadResult, HandleReadResult);
+        HFunc(TEvReadResult, HandleReadResult);
+
+        HFunc(TEvICStorageTransportPrivate::TEvSync, HandleSync);
+        HFunc(NKikimr::NDDisk::TEvSyncResult, HandleSyncResult);
 
         HFunc(TEvICStorageTransportPrivate::TEvListPersistentBuffer, HandleListPersistentBuffer);
         HFunc(NKikimr::NDDisk::TEvListPersistentBufferResult, HandleListPersistentBufferResult);

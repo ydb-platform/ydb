@@ -1,5 +1,6 @@
 #pragma once
 
+#include <util/system/type_name.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
 #include "retro_span.h"
@@ -29,7 +30,7 @@ public:
     }
 
     virtual TString GetName() const override {
-        return typeid(T).name();
+        return TypeName<T>();
     }
 };
 

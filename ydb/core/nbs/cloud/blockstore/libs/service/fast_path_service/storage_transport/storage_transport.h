@@ -28,15 +28,7 @@ public:
         const ui64 lsn,
         const NKikimr::NDDisk::TWriteInstruction instruction,
         TGuardedSgList data,
-        const ui64 requestId) = 0;
-
-    virtual NThreading::TFuture<NKikimrBlobStorage::NDDisk::TEvFlushPersistentBufferResult> FlushPersistentBuffer(
-        const NActors::TActorId serviceId,
-        const NKikimr::NDDisk::TQueryCredentials credentials,
-        const NKikimr::NDDisk::TBlockSelector selector,
-        const ui64 lsn,
-        const std::tuple<ui32, ui32, ui32> ddiskId,
-        const ui64 ddiskInstanceGuid,
+        NWilson::TTraceId traceId,
         const ui64 requestId) = 0;
 
     virtual NThreading::TFuture<NKikimrBlobStorage::NDDisk::TEvErasePersistentBufferResult> ErasePersistentBuffer(
@@ -44,6 +36,7 @@ public:
         const NKikimr::NDDisk::TQueryCredentials credentials,
         const NKikimr::NDDisk::TBlockSelector selector,
         const ui64 lsn,
+        NWilson::TTraceId traceId,
         const ui64 requestId) = 0;
 
     virtual NThreading::TFuture<NKikimrBlobStorage::NDDisk::TEvReadPersistentBufferResult> ReadPersistentBuffer(
@@ -53,6 +46,7 @@ public:
         const ui64 lsn,
         const NKikimr::NDDisk::TReadInstruction instruction,
         TGuardedSgList data,
+        NWilson::TTraceId traceId,
         const ui64 requestId) = 0;
 
     virtual NThreading::TFuture<NKikimrBlobStorage::NDDisk::TEvReadResult> Read(
@@ -61,12 +55,24 @@ public:
         const NKikimr::NDDisk::TBlockSelector selector,
         const NKikimr::NDDisk::TReadInstruction instruction,
         TGuardedSgList data,
+        NWilson::TTraceId traceId,
         ui64 requestId) = 0;
 
-    virtual NThreading::TFuture<NKikimrBlobStorage::NDDisk::TEvListPersistentBufferResult> ListPersistentBuffer(
+    virtual NThreading::TFuture<NKikimrBlobStorage::NDDisk::TEvSyncResult> Sync(
         const NActors::TActorId serviceId,
         const NKikimr::NDDisk::TQueryCredentials credentials,
+        const NKikimr::NDDisk::TBlockSelector selector,
+        const ui64 lsn,
+        const std::tuple<ui32, ui32, ui32> ddiskId,
+        const ui64 ddiskInstanceGuid,
+        NWilson::TTraceId traceId,
         const ui64 requestId) = 0;
+
+    virtual NThreading::TFuture<
+        NKikimrBlobStorage::NDDisk::TEvListPersistentBufferResult>
+    ListPersistentBuffer(const NActors::TActorId serviceId,
+                         const NKikimr::NDDisk::TQueryCredentials credentials,
+                         const ui64 requestId) = 0;
 };
 
 }   // namespace NYdb::NBS::NBlockStore

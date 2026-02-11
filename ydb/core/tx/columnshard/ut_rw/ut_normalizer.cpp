@@ -167,6 +167,23 @@ public:
             db.Table<Schema::TableInfo>().Key(key.GetRawValue()).Delete();
         }
 
+        std::vector<std::pair<TInternalPathId, TSchemeShardLocalPathId>> tablesV1;
+        {
+            auto rowset = db.Table<Schema::TableInfoV1>().Select();
+            UNIT_ASSERT(rowset.IsReady());
+
+            while (!rowset.EndOfSet()) {
+                const auto internalPathId = TInternalPathId::FromRawValue(rowset.GetValue<Schema::TableInfoV1::PathId>());
+                const auto schemeShardLocalPathId = TSchemeShardLocalPathId::FromRawValue(rowset.GetValue<Schema::TableInfoV1::SchemeShardLocalPathId>());
+                tablesV1.emplace_back(internalPathId, schemeShardLocalPathId);
+                UNIT_ASSERT(rowset.Next());
+            }
+        }
+
+        for (auto&& [internalPathId, schemeShardLocalPathId] : tablesV1) {
+            db.Table<Schema::TableInfoV1>().Key(internalPathId.GetRawValue(), schemeShardLocalPathId.GetRawValue()).Delete();
+        }
+
         struct TKey {
             TInternalPathId PathId;
             ui64 Step;

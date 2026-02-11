@@ -850,9 +850,8 @@ TDataQueryResult ExecQueryAndTestResult(TSession& session, const TString& query,
     return result;
 }
 
-NYdb::NQuery::TExecuteQueryResult ExecQueryAndTestEmpty(NYdb::NQuery::TSession& session, const TString& query) {
-    auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx())
-        .ExtractValueSync();
+NYdb::NQuery::TExecuteQueryResult ExecQueryAndTestEmpty(NYdb::NQuery::TSession& session, const TString& query, NYdb::NQuery::TTxControl txControl) {
+    auto result = session.ExecuteQuery(query, txControl).ExtractValueSync();
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
     CompareYson("[[0u]]", FormatResultSetYson(result.GetResultSet(0)));
     return result;

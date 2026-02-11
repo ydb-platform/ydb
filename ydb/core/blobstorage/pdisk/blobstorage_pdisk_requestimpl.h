@@ -137,6 +137,7 @@ public:
     TActorId WhiteboardProxyId;
     ui32 SlotId;
     ui32 GroupSizeInUnits;
+    bool GetDiskFd;
 
     TYardInit(const NPDisk::TEvYardInit &ev, const TActorId &sender, TAtomicBase reqIdx)
         : TRequestBase(sender, TReqId(TReqId::YardInit, reqIdx), 0, ev.OwnerRound, NPriInternal::Other)
@@ -146,6 +147,7 @@ public:
         , WhiteboardProxyId(ev.WhiteboardProxyId)
         , SlotId(ev.SlotId)
         , GroupSizeInUnits(ev.GroupSizeInUnits)
+        , GetDiskFd(ev.GetDiskFd)
     {}
 
     ERequestType GetType() const override {
@@ -165,6 +167,7 @@ public:
         str << " PDiskGuid# " << PDiskGuid;
         str << " SlotId# " << SlotId;
         str << " GroupSizeInUnits# " << GroupSizeInUnits;
+        str << " GetDiskFd# " << GetDiskFd;
         str << "}";
         return str.Str();
     }

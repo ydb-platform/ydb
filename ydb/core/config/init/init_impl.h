@@ -1162,7 +1162,7 @@ public:
             ParseSeedNodes(CommonAppOptions);
         }
 
-        if (CommonAppOptions.IsStaticNode() && !mainYamlConfigString) {
+        if (CommonAppOptions.IsStaticNode() && !mainYamlConfigString && CommonAppOptions.NodeKind != NODE_KIND_YQ) {
             if (CommonAppOptions.SeedNodesFile) {
                 InitConfigFromSeedNodes(mainYamlConfigString.emplace(), storageYamlConfigString);
                 Y_ABORT_UNLESS(mainYamlConfigString);

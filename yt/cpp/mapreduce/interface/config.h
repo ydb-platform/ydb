@@ -2,6 +2,7 @@
 
 #include "fwd.h"
 #include "common.h"
+#include "patchable_field.h"
 
 #include <library/cpp/yt/misc/enum.h>
 
@@ -274,6 +275,9 @@ struct TConfig
 
     /// Path to document node with cluster config for |IClient::GetDynamicConfiguration|.
     TString ConfigRemotePatchPath = "//sys/client_config";
+
+    /// Pattern for generating operation web link in |GetOperationWebInterfaceUrl|.
+    TPatchableField<TString> OperationLinkPattern = TPatchableField<TString>("operation_link_pattern", "https://yt.yandex-team.ru/{cluster_ui_host}/operations/{operation_id}");
 
     static bool GetBool(const char* var, bool defaultValue = false);
     static int GetInt(const char* var, int defaultValue);

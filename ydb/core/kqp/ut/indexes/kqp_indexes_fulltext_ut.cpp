@@ -3457,8 +3457,8 @@ Y_UNIT_TEST(SelectWithFulltextMatchAndNgramWildcardSingleStar) {
             ORDER BY `Key`;
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        CompareYson(R"([])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        UNIT_ASSERT(result.GetIssues().ToString().contains("No search terms were extracted from the query"));
     }
 }
 
@@ -3610,23 +3610,23 @@ void DoSelectWithFulltextMatchAndNgramWildcard(bool relevance, bool edge, bool c
     {
         TString query = R"sql(
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "aren*")
+            WHERE FulltextMatch(`Text`, "aren%")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "wer*ner *berg")
+            WHERE FulltextMatch(`Text`, "wer%ner %berg")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "edaeda*")
+            WHERE FulltextMatch(`Text`, "edaeda%")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "маш* обу*ние")
+            WHERE FulltextMatch(`Text`, "маш% обу%ние")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "мор*кот")
+            WHERE FulltextMatch(`Text`, "мор%кот")
             ORDER BY `Key`;
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
@@ -3699,19 +3699,19 @@ Y_UNIT_TEST(SelectWithFulltextMatchAndNgramWildcardSpecialCharacters) {
     {
         TString query = R"sql(
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "*[a-*")
+            WHERE FulltextMatch(`Text`, "%[a-%")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "*[^2-5]*})$")
+            WHERE FulltextMatch(`Text`, "%[^2-5]%})$")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "*[i]*")
+            WHERE FulltextMatch(`Text`, "%[i]%")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "{}n$3*")
+            WHERE FulltextMatch(`Text`, "{}n$3%")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
@@ -3719,7 +3719,7 @@ Y_UNIT_TEST(SelectWithFulltextMatchAndNgramWildcardSpecialCharacters) {
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "^...*")
+            WHERE FulltextMatch(`Text`, "^...%")
             ORDER BY `Key`;
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
@@ -3798,7 +3798,7 @@ Y_UNIT_TEST(ImbalanceNgrams) {
         // Check that imbalanced ngram filtering doesn't break the result
         TString query = R"sql(
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "*Users/Br*")
+            WHERE FulltextMatch(`Text`, "%Users/Br%")
             ORDER BY `Key`;
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
@@ -3838,37 +3838,33 @@ Y_UNIT_TEST(SelectWithFulltextMatchAndNgramWildcardBoundaries) {
     {
         TString query = R"sql(
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "are*")
+            WHERE FulltextMatch(`Text`, "aren%")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "aren*")
-            ORDER BY `Key`;
-
-            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "*rea")
-            ORDER BY `Key`;
-
-            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "werner*")
-            ORDER BY `Key`;
-
-            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "b")
+            WHERE FulltextMatch(`Text`, "werner%")
             ORDER BY `Key`;
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
-        CompareYson(R"([])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
         CompareYson(R"([
             [[0u];["Arena"]]
-        ])", NYdb::FormatResultSetYson(result.GetResultSet(1)));
-        CompareYson(R"([])", NYdb::FormatResultSetYson(result.GetResultSet(2)));
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
         CompareYson(R"([
             [[2u];["Werner"]]
-        ])", NYdb::FormatResultSetYson(result.GetResultSet(3)));
-        CompareYson(R"([])", NYdb::FormatResultSetYson(result.GetResultSet(4)));
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(1)));
+    }
+
+    for (const TString& q : {"are*", "*rea", "b"}) {
+        const TString query = std::format(R"sql(
+            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextMatch(`Text`, "{}")
+            ORDER BY `Key`;
+        )sql", q.c_str());
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        UNIT_ASSERT(result.GetIssues().ToString().contains("No search terms were extracted from the query"));
     }
 }
 
@@ -3923,43 +3919,29 @@ Y_UNIT_TEST(SelectWithFulltextMatchAndNgramWildcardUtf8Size) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
+    for (const TString& q : {"🙈", "🎶", "4", "꫞", "﷽"}) {
+        const TString query = std::format(R"sql(
+            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextMatch(`Text`, "{}")
+            ORDER BY `Key`;
+        )sql", q.c_str());
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        UNIT_ASSERT(result.GetIssues().ToString().contains("No search terms were extracted from the query"));
+    }
+
     {
         const TString query = R"sql(
-            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "🙈")
-            ORDER BY `Key`;
-
-            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "🎶")
-            ORDER BY `Key`;
-
-            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "4")
-            ORDER BY `Key`;
-
-            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "꫞")
-            ORDER BY `Key`;
-
-            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "﷽")
-            ORDER BY `Key`;
-
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
             WHERE FulltextMatch(`Text`, "4️⃣") -- that's grapheme cluster that consists of three utf8 runes
             ORDER BY `Key`;
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
-        for (const auto i : xrange(5)) {
-            CompareYson("[]", NYdb::FormatResultSetYson(result.GetResultSet(i)));
-        }
         CompareYson(R"([
             [[1u];["🙈 🎶 4️⃣"]]
-        ])", NYdb::FormatResultSetYson(result.GetResultSet(5)));
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
     }
-
 
     DropIndex(db);
 
@@ -3983,7 +3965,7 @@ Y_UNIT_TEST(SelectWithFulltextMatchAndNgramWildcardUtf8Size) {
     {
         const TString query = R"sql(
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "*🧪* *②፳")
+            WHERE FulltextMatch(`Text`, "%🧪% %②፳")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
@@ -3991,15 +3973,15 @@ Y_UNIT_TEST(SelectWithFulltextMatchAndNgramWildcardUtf8Size) {
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "*4*") -- 4️⃣ is grapheme cluster with first rune "4"
+            WHERE FulltextMatch(`Text`, "%4%") -- 4️⃣ is grapheme cluster with first rune "4"
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "*Ár!")
+            WHERE FulltextMatch(`Text`, "%Ár!")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "*年*！")
+            WHERE FulltextMatch(`Text`, "%年%！")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
@@ -4007,7 +3989,7 @@ Y_UNIT_TEST(SelectWithFulltextMatchAndNgramWildcardUtf8Size) {
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "﷽*")
+            WHERE FulltextMatch(`Text`, "﷽%")
             ORDER BY `Key`;
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
@@ -4084,39 +4066,35 @@ Y_UNIT_TEST_QUAD(SelectWithFulltextMatchAndNgramWildcardUnicode, RELEVANCE, UTF8
     {
         const TString query = R"sql(
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "*bc0*")
+            WHERE FulltextMatch(`Text`, "%bc0%")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "*◌̇*")
+            WHERE FulltextMatch(`Text`, "%◌̇%")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "*؈ۻ")
+            WHERE FulltextMatch(`Text`, "%؈ۻ")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "*字異體*")
+            WHERE FulltextMatch(`Text`, "%字異體%")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "ä̸̱*")
+            WHERE FulltextMatch(`Text`, "ä̸̱%")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "*🐶🐕*")
+            WHERE FulltextMatch(`Text`, "%🐶🐕%")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "*🐶*")  -- should return empty response: query shorter than ngrams
+            WHERE FulltextMatch(`Text`, "%🐕‍🦺%")  -- despite it looks like single character it is not: it's 🐕 with modifiers
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "*🐕‍🦺*")  -- despite it looks like single character it is not: it's 🐕 with modifiers
-            ORDER BY `Key`;
-
-            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "👨\u200D👩*")  -- 👨‍👩‍👧‍👦 is combination of 👨, 👩, 👧 and 👦
+            WHERE FulltextMatch(`Text`, "👨\u200D👩%")  -- 👨‍👩‍👧‍👦 is combination of 👨, 👩, 👧 and 👦
             ORDER BY `Key`;
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
@@ -4140,13 +4118,23 @@ Y_UNIT_TEST_QUAD(SelectWithFulltextMatchAndNgramWildcardUnicode, RELEVANCE, UTF8
         CompareYson(R"([
             [[5u];["😢🐶🐕🐈"]]
         ])", NYdb::FormatResultSetYson(result.GetResultSet(5)));
-        CompareYson(R"([])", NYdb::FormatResultSetYson(result.GetResultSet(6)));
         CompareYson(R"([
             [[6u];["4️⃣🐕‍🦺🐈‍⬛"]]
-        ])", NYdb::FormatResultSetYson(result.GetResultSet(7)));
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(6)));
         CompareYson(R"([
             [[7u];["👨‍👩‍👧‍👦🇦🇨"]]
-        ])", NYdb::FormatResultSetYson(result.GetResultSet(8)));
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(7)));
+    }
+
+    {
+        const TString query = R"sql(
+            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextMatch(`Text`, "%🐶%")  -- should fail with BAD_REQUEST: query shorter than ngrams, no search terms extracted
+            ORDER BY `Key`;
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        UNIT_ASSERT(result.GetIssues().ToString().contains("No search terms were extracted from the query"));
     }
 }
 
@@ -4178,15 +4166,15 @@ Y_UNIT_TEST(SelectWithFulltextMatchAndEdgeNgramWildcard) {
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "aaaaab*")
+            WHERE FulltextMatch(`Text`, "aaaaab%")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "aa*bc*")
+            WHERE FulltextMatch(`Text`, "aa%bc%")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "*ef*")
+            WHERE FulltextMatch(`Text`, "%ef%")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
@@ -4194,7 +4182,7 @@ Y_UNIT_TEST(SelectWithFulltextMatchAndEdgeNgramWildcard) {
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "12*6+7*9=")
+            WHERE FulltextMatch(`Text`, "12%6+7%9=")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
@@ -4202,7 +4190,7 @@ Y_UNIT_TEST(SelectWithFulltextMatchAndEdgeNgramWildcard) {
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "123*")
+            WHERE FulltextMatch(`Text`, "123%")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
@@ -4266,15 +4254,15 @@ Y_UNIT_TEST(SelectWithFulltextMatchAndNgramWildcardVariableSize) {
     {
         const TString query = R"sql(
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "are* *ena*")
+            WHERE FulltextMatch(`Text`, "are% %ena%")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "ber*")
+            WHERE FulltextMatch(`Text`, "ber%")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "lu*aed*")
+            WHERE FulltextMatch(`Text`, "lu%aed%")
             ORDER BY `Key`;
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
@@ -4296,11 +4284,11 @@ Y_UNIT_TEST(SelectWithFulltextMatchAndNgramWildcardVariableSize) {
     DropIndex(db);
     AddIndexNGram(db, 4, 4);
 
-    auto singleRetryQuery = [&](auto& db, const TString& query) {
+    auto singleRetryQuery = [&](auto& db, const TString& query, const EStatus expected = EStatus::SUCCESS) {
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
-        if (result.GetStatus() != EStatus::SUCCESS) {
+        if (result.GetStatus() != expected) {
             result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), expected, result.GetIssues().ToString());
             return result;
         }
 
@@ -4310,26 +4298,30 @@ Y_UNIT_TEST(SelectWithFulltextMatchAndNgramWildcardVariableSize) {
     {
         const TString query = R"sql(
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "area *rena*")
-            ORDER BY `Key`;
-
-            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "ber*")
-            ORDER BY `Key`;
-
-            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "lu*aed*")
+            WHERE FulltextMatch(`Text`, "area %rena%")
             ORDER BY `Key`;
         )sql";
 
         auto result = singleRetryQuery(db, query);
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
         CompareYson(R"([
             [[1u];["Area Renaissance"]]
         ])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
-        CompareYson(R"([])", NYdb::FormatResultSetYson(result.GetResultSet(1)));
-        CompareYson(R"([])", NYdb::FormatResultSetYson(result.GetResultSet(2)));
+    }
+
+    {
+        const TString query = R"sql(
+            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextMatch(`Text`, "ber%")
+            ORDER BY `Key`;
+
+            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextMatch(`Text`, "lu%aed%")
+            ORDER BY `Key`;
+        )sql";
+        auto result = singleRetryQuery(db, query, EStatus::BAD_REQUEST);
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        UNIT_ASSERT(result.GetIssues().ToString().contains("No search terms were extracted from the query"));
     }
 
     DropIndex(db);
@@ -4338,15 +4330,15 @@ Y_UNIT_TEST(SelectWithFulltextMatchAndNgramWildcardVariableSize) {
     {
         const TString query = R"sql(
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "are* *ena*")
+            WHERE FulltextMatch(`Text`, "are% %ena%")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "ber*")
+            WHERE FulltextMatch(`Text`, "ber%")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "lu*aed*")
+            WHERE FulltextMatch(`Text`, "lu%aed%")
             ORDER BY `Key`;
         )sql";
         auto result = singleRetryQuery(db, query);
@@ -4371,19 +4363,19 @@ Y_UNIT_TEST(SelectWithFulltextMatchAndNgramWildcardVariableSize) {
     {
         const TString query = R"sql(
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "are* *ena*")
+            WHERE FulltextMatch(`Text`, "are% %ena%")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "ber*")
+            WHERE FulltextMatch(`Text`, "ber%")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "lu* aed*")
+            WHERE FulltextMatch(`Text`, "lu% aed%")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "lu*aed*")
+            WHERE FulltextMatch(`Text`, "lu%aed%")
             ORDER BY `Key`;
         )sql";
         auto result = singleRetryQuery(db, query);
@@ -4439,30 +4431,23 @@ Y_UNIT_TEST_QUAD(SelectWithFulltextMatchShorterThanMinNgram, RELEVANCE, UTF8) {
 
             SELECT *
             FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "*at*");
+            WHERE FulltextMatch(`Text`, "%at%");
         )sql");
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        CompareYson(R"([])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
-        CompareYson(R"([])", NYdb::FormatResultSetYson(result.GetResultSet(1)));
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        UNIT_ASSERT(result.GetIssues().ToString().contains("No search terms were extracted from the query"));
     }
 
-    {
+    for (const TString& q : {"at", "*at*"}) {
         const TString query = std::format(R"sql(
             SELECT *
             FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "at")
+            WHERE FulltextMatch(`Text`, "{}")
             LIMIT 100;
-
-            SELECT *
-            FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "*at*")
-            LIMIT 100;
-        )sql");
+        )sql", q.c_str());
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        CompareYson(R"([])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
-        CompareYson(R"([])", NYdb::FormatResultSetYson(result.GetResultSet(1)));
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        UNIT_ASSERT(result.GetIssues().ToString().contains("No search terms were extracted from the query"));
     }
 }
 

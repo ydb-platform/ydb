@@ -11,7 +11,7 @@
 #define VALIDATE_PRODUCER_IN_REQUEST(ErrorResponseType) \
 if (!ProducerInRequestIsValid(ev->Get()->Request)) { \
     auto& kafkaRequest = ev->Get()->Request; \
-    TString message = TStringBuilder() << "Recieved invalid request. Got: " \
+    TString message = TStringBuilder() << "Received invalid request. Got: " \
             << "transactionalId=" << *kafkaRequest->TransactionalId \
             << ", producerId=" << kafkaRequest->ProducerId \
             << ", producerEpoch=" << kafkaRequest->ProducerEpoch; \
@@ -349,7 +349,7 @@ namespace NKafka {
     }
 
     TMaybe<TString> TTransactionActor::GetErrorFromYdbResponse(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev) {
-        TStringBuilder builder = TStringBuilder() << "Recieved error on request to KQP. Last sent request: " << GetAsStr(LastSentToKqpRequest) << ". Reason: ";
+        TStringBuilder builder = TStringBuilder() << "Received error on request to KQP. Last sent request: " << GetAsStr(LastSentToKqpRequest) << ". Reason: ";
         if (ev->Cookie != KqpCookie) {
             return builder << "Unexpected cookie in TEvQueryResponse. Expected KQP Cookie: " << KqpCookie << ", Actual: " << ev->Cookie << ".";
         } else if (ev->Get()->Record.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {

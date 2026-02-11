@@ -486,13 +486,9 @@ private:
             name == "KqpWideReadTableRanges" ||
             name == "KqpBlockReadTableRanges" ||
             name == "KqpLookupTable" ||
-<<<<<<< HEAD
-            name == "KqpReadTable"
-        ) {
-=======
             name == "KqpReadTable" ||
-            name == "MultiHoppingCore") {
->>>>>>> c5f9d4423c0 (mkql_computation_node_graph: disallow MultiHoppingCore caching)
+            name == "MultiHoppingCore"
+        ) {
             PatternNodes->SuitableForCache = false;
         }
 

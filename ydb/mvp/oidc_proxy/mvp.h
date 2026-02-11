@@ -17,10 +17,6 @@ namespace NMVP::NOIDC {
 const TString& GetEServiceName(NActors::NLog::EComponent component);
 
 class TMVP {
-private:
-    const static ui16 DefaultHttpPort;
-    const static ui16 DefaultHttpsPort;
-
 protected:
     static TAtomic Quit;
     static void OnTerminate(int);
@@ -29,13 +25,13 @@ protected:
     NSignals::TSignalHandler<SIGTERM, &TMVP::OnTerminate> SignalSIGTERM;
     NSignals::TSignalIgnore<SIGPIPE> SignalSIGPIPE;
 
-    THolder<NActors::TActorSystemSetup> BuildActorSystemSetup(int argc, char** argv);
+    THolder<NActors::TActorSystemSetup> BuildActorSystemSetup();
     TIntrusivePtr<NActors::NLog::TSettings> BuildLoggerSettings();
 
     void TryGetOidcOptionsFromConfig(const YAML::Node& config);
-    void TryGetStartupOptionsFromConfig(const YAML::Node& config, const NLastGetopt::TOptsParseResult& parsedArgs);
 
     TMVPAppData AppData;
+    const TMvpStartupOptions StartupOptions;
     TIntrusivePtr<NActors::NLog::TSettings> LoggerSettings;
     THolder<NActors::TActorSystemSetup> ActorSystemSetup;
     NActors::TActorSystem ActorSystem;
@@ -48,8 +44,6 @@ protected:
     static TOpenIdConnectSettings OpenIdConnectSettings;
 
 public:
-    TMvpStartupOptions startupOptions;
-
     TMVP(int argc, char** argv);
     int Init();
     int Run();

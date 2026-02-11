@@ -25,7 +25,6 @@ protected:
     NSignals::TSignalIgnore<SIGPIPE> SignalSIGPIPE;
 
 public:
-    TMvpStartupOptions startupOptions;
     TString GetAppropriateEndpoint(const NHttp::THttpIncomingRequestPtr&);
 
     TString MetaApiEndpoint;
@@ -39,7 +38,7 @@ public:
     int Run();
     int Shutdown();
 
-    THolder<NActors::TActorSystemSetup> BuildActorSystemSetup(int argc, char** argv);
+    THolder<NActors::TActorSystemSetup> BuildActorSystemSetup();
     TIntrusivePtr<NActors::NLog::TSettings> BuildLoggerSettings();
     void InitMeta();
 
@@ -47,12 +46,9 @@ public:
     NYdb::NTable::TClientSettings static GetMetaDatabaseClientSettings(const TRequest& request, const TYdbLocation& location);
 
     void TryGetMetaOptionsFromConfig(const YAML::Node& config);
-    void TryGetStartupOptionsFromConfig(
-        const YAML::Node& config,
-        const NLastGetopt::TOptsParseResult& parsedArgs
-    );
 
     TMVPAppData AppData;
+    TMvpStartupOptions StartupOptions;
     TIntrusivePtr<NActors::NLog::TSettings> LoggerSettings;
     THolder<NActors::TActorSystemSetup> ActorSystemSetup;
     NActors::TActorSystem ActorSystem;

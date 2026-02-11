@@ -1,20 +1,50 @@
 #pragma once
 
+#include <ydb/mvp/core/protos/mvp.pb.h>
+
 #include <util/generic/string.h>
 #include <util/system/types.h>
+
+#include <yaml-cpp/yaml.h>
+
+namespace NLastGetopt { class TOptsParseResult; }
 
 namespace NMVP {
 
 struct TMvpStartupOptions {
+private:
+    static constexpr ui16 DEFAULT_HTTP_PORT = 8788;
+    static constexpr ui16 DEFAULT_HTTPS_PORT = 8789;
+
+public:
+    TString YamlConfigPath;
+    YAML::Node Config;
+
     TString YdbTokenFile;
     TString CaCertificateFile;
     TString SslCertificateFile;
-    bool UseStderr = false;
+    bool LogToStderr = false;
     bool Mlock = false;
-    ui16 HttpPort = {};
-    ui16 HttpsPort = {};
+    ui16 HttpPort = 0;
+    ui16 HttpsPort = 0;
     bool Http = false;
     bool Https = false;
+
+    TString UserToken;
+    NMvp::TTokensConfig Tokens;
+    TString CaCertificate;
+    TString SslCertificate;
+    NMvp::EAccessServiceType AccessServiceType = NMvp::yandex_v2;
+
+    static TMvpStartupOptions Build(int argc, char** argv);
+
+private:
+    NLastGetopt::TOptsParseResult ParseArgs(int argc, char** argv);
+    void LoadConfig(const NLastGetopt::TOptsParseResult& parsedArgs);
+    void TryGetStartupOptionsFromConfig(const NLastGetopt::TOptsParseResult& parsedArgs);
+    void SetPorts();
+    void LoadTokens();
+    void LoadCertificates();
 };
 
 } // namespace NMVP

@@ -65,8 +65,8 @@ int TMVP::Init() {
     HttpProxyId = ActorSystem.Register(NHttp::CreateHttpProxy(AppData.MetricRegistry));
     ActorSystem.Register(AppData.Tokenator = TMvpTokenator::CreateTokenator(TokensConfig, HttpProxyId));
 
-    if (startupOptions.Http) {
-        auto ev = new NHttp::TEvHttpProxy::TEvAddListeningPort(startupOptions.HttpPort, TStringBuilder() << FQDNHostName() << ':' << startupOptions.HttpPort);
+    if (StartupOptions.Http) {
+        auto ev = new NHttp::TEvHttpProxy::TEvAddListeningPort(StartupOptions.HttpPort, TStringBuilder() << FQDNHostName() << ':' << StartupOptions.HttpPort);
         ev->CompressContentTypes = {
             "text/plain",
             "text/html",
@@ -76,8 +76,8 @@ int TMVP::Init() {
         };
         ActorSystem.Send(HttpProxyId, ev);
     }
-    if (startupOptions.Https) {
-        auto ev = new NHttp::TEvHttpProxy::TEvAddListeningPort(startupOptions.HttpsPort, TStringBuilder() << FQDNHostName() << ':' << startupOptions.HttpsPort);
+    if (StartupOptions.Https) {
+        auto ev = new NHttp::TEvHttpProxy::TEvAddListeningPort(StartupOptions.HttpsPort, TStringBuilder() << FQDNHostName() << ':' << StartupOptions.HttpsPort);
         ev->Secure = true;
         ev->SslCertificatePem = TYdbLocation::SslCertificate;
         ev->CompressContentTypes = {
@@ -127,8 +127,8 @@ int TMVP::Shutdown() {
 }
 
 TString TMVP::GetAppropriateEndpoint(const NHttp::THttpIncomingRequestPtr& req) {
-    TString httpEndpoint = "http://[::1]:" + ToString(startupOptions.HttpPort);
-    TString httpsEndpoint = "https://[::1]:" + ToString(startupOptions.HttpsPort);
+    TString httpEndpoint = "http://[::1]:" + ToString(StartupOptions.HttpPort);
+    TString httpsEndpoint = "https://[::1]:" + ToString(StartupOptions.HttpsPort);
     return req->Endpoint->Secure ? httpsEndpoint : httpEndpoint;
 }
 
@@ -138,8 +138,9 @@ TString TMVP::MetaDatabaseTokenName;
 bool TMVP::DbUserTokenSource = false;
 
 TMVP::TMVP(int argc, char** argv)
-    : LoggerSettings(BuildLoggerSettings())
-    , ActorSystemSetup(BuildActorSystemSetup(argc, argv))
+    : StartupOptions(TMvpStartupOptions::Build(argc, argv))
+    , LoggerSettings(BuildLoggerSettings())
+    , ActorSystemSetup(BuildActorSystemSetup())
     , ActorSystem(ActorSystemSetup, &AppData, LoggerSettings)
 {
     InstanceMVP = this;
@@ -179,70 +180,14 @@ void TMVP::TryGetMetaOptionsFromConfig(const YAML::Node& config) {
     DbUserTokenSource = meta["db_user_token_access"].as<bool>(false);
 }
 
-void TMVP::TryGetStartupOptionsFromConfig(
-    const YAML::Node& config,
-    const NLastGetopt::TOptsParseResult& parsedArgs
-) {
-    if (!config["generic"]) {
-        return;
-    }
-    auto generic = config["generic"];
 
-    if (generic["logging"] && generic["logging"]["stderr"]) {
-        if (parsedArgs.FindLongOptParseResult("stderr") == nullptr) {
-            startupOptions.UseStderr = generic["logging"]["stderr"].as<bool>(false);
-        }
-    }
-
-    if (generic["mlock"]) {
-        if (parsedArgs.FindLongOptParseResult("mlock") == nullptr) {
-            startupOptions.Mlock = generic["mlock"].as<bool>(false);
-        }
-    }
-
-    if (generic["auth"]) {
-        auto auth = generic["auth"];
-        startupOptions.YdbTokenFile = auth["token_file"].as<std::string>("");
-    }
-
-    if (generic["server"]) {
-        auto server = generic["server"];
-        startupOptions.CaCertificateFile = server["ca_cert_file"].as<std::string>("");
-        startupOptions.SslCertificateFile = server["ssl_cert_file"].as<std::string>("");
-
-        if (parsedArgs.FindLongOptParseResult("http-port") == nullptr) {
-            startupOptions.HttpPort = server["http_port"].as<ui16>(0);
-        }
-
-        if (parsedArgs.FindLongOptParseResult("https-port") == nullptr) {
-            startupOptions.HttpsPort = server["https_port"].as<ui16>(0);
-        }
-    }
-}
-
-THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup(int argc, char** argv) {
-    NLastGetopt::TOpts opts = NLastGetopt::TOpts::Default();
-    TString yamlConfigPath;
-
+THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup() {
     TString defaultMetaDatabase = "/Root";
     TString defaultMetaApiEndpoint = "grpc://meta.ydb.yandex.net:2135";
 
-    opts.AddLongOption("stderr", "Redirect log to stderr").NoArgument().SetFlag(&startupOptions.UseStderr);
-    opts.AddLongOption("mlock", "Lock resident memory").NoArgument().SetFlag(&startupOptions.Mlock);
-
-    opts.AddLongOption("config", "Path to configuration YAML file").RequiredArgument("PATH").StoreResult(&yamlConfigPath);
-
-    opts.AddLongOption("http-port", "HTTP port. Default 8788").StoreResult(&startupOptions.HttpPort);
-    opts.AddLongOption("https-port", "HTTPS port. Default 8789").StoreResult(&startupOptions.HttpsPort);
-
-    NLastGetopt::TOptsParseResult parsedArgs(&opts, argc, argv);
-
-    if (!yamlConfigPath.empty()) {
+    if (!StartupOptions.YamlConfigPath.empty()) {
         try {
-            YAML::Node config = YAML::LoadFile(yamlConfigPath);
-
-            TryGetMetaOptionsFromConfig(config);
-            TryGetStartupOptionsFromConfig(config, parsedArgs);
+            TryGetMetaOptionsFromConfig(StartupOptions.Config);
         } catch (const YAML::Exception& e) {
             std::cerr << "Error parsing YAML configuration file: " << e.what() << std::endl;
             std::exit(EXIT_FAILURE);
@@ -257,65 +202,23 @@ THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup(int argc, char**
         MetaDatabase = defaultMetaDatabase;
     }
 
-    if (startupOptions.Mlock) {
+    if (StartupOptions.Mlock) {
         LockAllMemory(LockCurrentMemory);
     }
 
-    if (startupOptions.HttpPort > 0) {
-        startupOptions.Http = true;
-    }
-    if (startupOptions.HttpsPort > 0 || !startupOptions.SslCertificateFile.empty()) {
-        startupOptions.Https = true;
-    }
-    if (!startupOptions.Http && !startupOptions.Https) {
-        startupOptions.Http = true;
-    }
-
-    if (startupOptions.HttpPort == 0) {
-        startupOptions.HttpPort = 8788;
-    }
-    if (startupOptions.HttpsPort == 0) {
-        startupOptions.HttpsPort = 8789;
-    }
-
-    if (!startupOptions.YdbTokenFile.empty()) {
-        NMvp::TTokensConfig tokens;
-        if (google::protobuf::TextFormat::ParseFromString(TUnbufferedFileInput(startupOptions.YdbTokenFile).ReadAll(), &tokens)) {
-            if (tokens.HasStaffApiUserTokenInfo()) {
-                TYdbLocation::UserToken = tokens.GetStaffApiUserTokenInfo().GetToken();
-            } else if (tokens.HasStaffApiUserToken()) {
-                TYdbLocation::UserToken = tokens.GetStaffApiUserToken();
-            }
-            TokensConfig = tokens;
-        } else {
-            ythrow yexception() << "Invalid ydb token file format";
-        }
-    }
+    TYdbLocation::UserToken = StartupOptions.UserToken;
+    TYdbLocation::CaCertificate = StartupOptions.CaCertificate;
+    TYdbLocation::SslCertificate = StartupOptions.SslCertificate;
 
     if (TYdbLocation::UserToken) {
         TYdbLocation::UserToken = AddSchemeToUserToken(TYdbLocation::UserToken, "OAuth");
     }
 
-    if (!startupOptions.CaCertificateFile.empty()) {
-        TString caCertificate = TUnbufferedFileInput(startupOptions.CaCertificateFile).ReadAll();
-        if (!caCertificate.empty()) {
-            TYdbLocation::CaCertificate = caCertificate;
-        } else {
-            ythrow yexception() << "Invalid CA certificate file";
-        }
-    }
-    if (!startupOptions.SslCertificateFile.empty()) {
-        TString sslCertificate = TUnbufferedFileInput(startupOptions.SslCertificateFile).ReadAll();
-        if (!sslCertificate.empty()) {
-            TYdbLocation::SslCertificate = sslCertificate;
-        } else {
-            ythrow yexception() << "Invalid SSL certificate file";
-        }
-    }
+    TokensConfig = StartupOptions.Tokens;
 
     NActors::TLoggerActor* loggerActor = new NActors::TLoggerActor(
                 LoggerSettings,
-                startupOptions.UseStderr ? NActors::CreateStderrBackend() : NActors::CreateSysLogBackend("mvp", false, true),
+                StartupOptions.LogToStderr ? NActors::CreateStderrBackend() : NActors::CreateSysLogBackend("mvp", false, true),
                 new NMonitoring::TDynamicCounters());
     THolder<NActors::TActorSystemSetup> setup = MakeHolder<NActors::TActorSystemSetup>();
     setup->NodeId = 1;

@@ -1004,9 +1004,17 @@ bool CheckDisabledWriteToUniqIndex(const TExprBase& write, const NYql::TKikimrTa
     return true;
 }
 
-bool CheckIndexesForBatchOperation(const NYql::TKikimrTableDescription& tableData, bool enabledIndexStreamWrite,
-    TExprContext& ctx, const TExprBase& expr)
+bool ValidateBatchOperation(const NYql::TKikimrTableDescription& tableData, const TExprBase& expr, TExprContext& ctx, TKqpOptimizeContext& kqpCtx)
 {
+    const bool allowBatchUpdates = kqpCtx.Config->GetEnableBatchUpdates() && kqpCtx.Config->GetEnableOltpSink();
+    const bool enabledIndexStreamWrite = kqpCtx.Config->GetEnableIndexStreamWrite();
+
+    if (!allowBatchUpdates) {
+        const TString err = "BATCH operations are not supported at the current time.";
+        ctx.AddError(YqlIssue(ctx.GetPosition(expr.Pos()), TIssuesIds::KIKIMR_PRECONDITION_FAILED, err));
+        return false;
+    }
+
     for (const auto& index : tableData.Metadata->Indexes) {
         if (!NBatchOperations::IsIndexSupported(index.Type, enabledIndexStreamWrite)) {
             const TString err = "BATCH operations are not supported for tables with " + IndexTypeToName(index.Type) + " indexes (index: `" + index.Name + "`).";
@@ -1061,14 +1069,7 @@ TExprNode::TPtr HandleUpdateTable(const TKiUpdateTable& update, TExprContext& ct
         return nullptr;
     }
 
-    const bool allowBatchUpdates = kqpCtx.Config->GetEnableBatchUpdates() && kqpCtx.Config->GetEnableOltpSink();
-    if (!allowBatchUpdates && update.IsBatch() == "true") {
-        const TString err = "BATCH operations are not supported at the current time.";
-        ctx.AddError(YqlIssue(ctx.GetPosition(update.Pos()), TIssuesIds::KIKIMR_PRECONDITION_FAILED, err));
-        return nullptr;
-    }
-
-    if (update.IsBatch() == "true" && !CheckIndexesForBatchOperation(tableData, kqpCtx.Config->GetEnableIndexStreamWrite(), ctx, update)) {
+    if (update.IsBatch() == "true" && !ValidateBatchOperation(tableData, update, ctx, kqpCtx)) {
         return nullptr;
     }
 
@@ -1087,14 +1088,7 @@ TExprNode::TPtr HandleDeleteTable(const TKiDeleteTable& del, TExprContext& ctx, 
         return nullptr;
     }
 
-    const bool allowBatchUpdates = kqpCtx.Config->GetEnableBatchUpdates() && kqpCtx.Config->GetEnableOltpSink();
-    if (!allowBatchUpdates && del.IsBatch() == "true") {
-        const TString err = "BATCH operations are not supported at the current time.";
-        ctx.AddError(YqlIssue(ctx.GetPosition(del.Pos()), TIssuesIds::KIKIMR_PRECONDITION_FAILED, err));
-        return nullptr;
-    }
-
-    if (del.IsBatch() == "true" && !CheckIndexesForBatchOperation(tableData, kqpCtx.Config->GetEnableIndexStreamWrite(), ctx, del)) {
+    if (del.IsBatch() == "true" && !ValidateBatchOperation(tableData, del, ctx, kqpCtx)) {
         return nullptr;
     }
 

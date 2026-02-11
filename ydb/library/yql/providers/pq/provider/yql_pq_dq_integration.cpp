@@ -504,9 +504,9 @@ public:
         }
         for (const auto& setting : settings.Raw()->Children()) {
             const auto settingName = setting->Child(0)->Content();
-            if ("skip.json.errors" == settingName) {
+            if ("skip.json.errors" == settingName || "skipjsonerrors" == settingName) {
                 if (setting->ChildrenSize() != 2) {
-                    ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Expected `skip.json.errors` = value"));
+                    ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Expected skip json errors value"));
                     return {};
                 }
                 const auto settingValue = setting->Child(1);

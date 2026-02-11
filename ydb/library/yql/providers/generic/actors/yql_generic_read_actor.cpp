@@ -47,6 +47,7 @@ namespace NYql::NDq {
             TGenericCredentialsProvider::TPtr tokenProvider,
             Generic::TSource&& source,
             const NActors::TActorId& computeActorId,
+            ui64 taskId,
             const NKikimr::NMiniKQL::THolderFactory& holderFactory,
             std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
             TVector<Generic::TPartition>&& partitions)
@@ -60,6 +61,16 @@ namespace NYql::NDq {
             , Source_(std::move(source))
         {
             IngressStats_.Level = statsLevel;
+
+            LogPrefix = TStringBuilder() << "ComputeActorId=" << ComputeActorId_ << " TaskId=" << taskId << " ";
+            const auto& dsi = Source_.select().data_source_instance();
+            GENERIC_LOG_I("Creating read actor with params:"
+                    << " kind=" << NYql::EGenericDataSourceKind_Name(dsi.kind())
+                    << ", endpoint=" << dsi.endpoint().ShortDebugString()
+                    << ", database=" << dsi.database()
+                    << ", use_tls=" << ToString(dsi.use_tls())
+                    << ", protocol=" << NYql::EGenericProtocol_Name(dsi.protocol())
+                    << ", partitions_count=" << Partitions_.size());
         }
 
         ~TGenericReadActor() {
@@ -79,6 +90,7 @@ namespace NYql::NDq {
                     InputIndex_,
                     std::move(*issue));
             };
+            LogPrefix += TStringBuilder() << " ActorId=" << SelfId();
         }
 
         static constexpr char ActorName[] = "GENERIC_READ_ACTOR";
@@ -94,10 +106,10 @@ namespace NYql::NDq {
 
         // ReadSplits
         TMaybe<TIssue> InitSplitsReading() {
-            YQL_CLOG(DEBUG, ProviderGeneric) << "Start splits reading";
+            GENERIC_LOG_D("Start splits reading");
 
             if (Partitions_.empty()) {
-                YQL_CLOG(WARN, ProviderGeneric) << "Got empty list of partitions";
+                GENERIC_LOG_W("Got empty list of partitions");
                 ReadSplitsFinished_ = true;
                 NotifyComputeActorWithData();
                 return Nothing();
@@ -156,8 +168,8 @@ namespace NYql::NDq {
 
         void Handle(TEvReadSplitsPart::TPtr& ev) {
             auto& response = ev->Get()->Response;
-            YQL_CLOG(TRACE, ProviderGeneric) << "Handle :: EvReadSplitsPart :: event handling started"
-                                             << ": part_size=" << response.arrow_ipc_streaming().size();
+            GENERIC_LOG_T("Handle :: EvReadSplitsPart :: event handling started"
+                    << ": part_size=" << response.arrow_ipc_streaming().size());
 
             if (!NConnector::IsSuccess(response)) {
                 return NotifyComputeActorWithError(
@@ -174,25 +186,24 @@ namespace NYql::NDq {
             UpdateIngressStats();
             NotifyComputeActorWithData();
 
-            YQL_CLOG(TRACE, ProviderGeneric) << "Handle :: EvReadSplitsPart :: event handling finished";
+            GENERIC_LOG_T("Handle :: EvReadSplitsPart :: event handling finished");
         }
 
         void Handle(TEvReadSplitsFinished::TPtr& ev) {
             const auto& status = ev->Get()->Status;
 
-            YQL_CLOG(TRACE, ProviderGeneric) << "Handle :: EvReadSplitsFinished :: event handling started: " << status.ToDebugString();
+            GENERIC_LOG_T("Handle :: EvReadSplitsFinished :: event handling started: " << status.ToDebugString());
 
             // Server sent EOF, no more data is expected, so ask compute actor to come for the last time
             if (NConnector::GrpcStatusEndOfStream(status)) {
-                YQL_CLOG(DEBUG, ProviderGeneric) << "Handle :: EvReadSplitsFinished :: last message was reached, finish data reading";
+                GENERIC_LOG_D("Handle :: EvReadSplitsFinished :: last message was reached, finish data reading");
                 ReadSplitsFinished_ = true;
                 return NotifyComputeActorWithData();
             }
 
             // Server temporary failure
             if (NConnector::GrpcStatusNeedsRetry(status)) {
-                YQL_CLOG(WARN, ProviderGeneric) << "Handle :: EvReadSplitsFinished :: you should retry your operation due to '"
-                                                << status.ToDebugString() << "' error";
+                GENERIC_LOG_W("Handle :: EvReadSplitsFinished :: you should retry your operation due to '" << status.ToDebugString() << "' error");
                 // TODO: retry
             }
 
@@ -285,14 +296,14 @@ namespace NYql::NDq {
                               i64 /*freeSpace*/) final {
             YQL_ENSURE(!buffer.IsWide(), "Wide stream is not supported");
 
-            YQL_CLOG(TRACE, ProviderGeneric) << "GetAsyncInputData :: start";
+            GENERIC_LOG_T("GetAsyncInputData :: start");
 
             // Stream is finished
             if (!LastReadSplitsResponse_) {
                 finished = ReadSplitsFinished_;
 
                 if (finished) {
-                    YQL_CLOG(INFO, ProviderGeneric) << "GetAsyncInputData :: data reading finished";
+                    GENERIC_LOG_I("GetAsyncInputData :: data reading finished");
                 }
 
                 IngressStats_.TryPause();
@@ -346,17 +357,17 @@ namespace NYql::NDq {
                                 TEvReadSplitsFinished>(ReadSplitsIterator_);
             finished = false;
 
-            YQL_CLOG(TRACE, ProviderGeneric) << "GetAsyncInputData :: bytes obtained = " << total;
+            GENERIC_LOG_T("GetAsyncInputData :: bytes obtained = " << total);
 
             return total;
         }
 
         // IActor & IDqComputeActorAsyncInput
         void PassAway() override { // Is called from Compute Actor
-            YQL_CLOG(INFO, ProviderGeneric) << "PassAway :: final ingress stats"
-                                            << ": bytes " << IngressStats_.Bytes
-                                            << ", rows " << IngressStats_.Rows
-                                            << ", chunks " << IngressStats_.Chunks;
+            GENERIC_LOG_I("PassAway :: final ingress stats"
+                    << ": bytes " << IngressStats_.Bytes
+                    << ", rows " << IngressStats_.Rows
+                    << ", chunks " << IngressStats_.Chunks);
             ClearMkqlData();
             TActorBootstrapped<TGenericReadActor>::PassAway();
         }
@@ -450,16 +461,6 @@ namespace NYql::NDq {
         TVector<Generic::TPartition> partitions;
         ExtractPartitionsFromParams(partitions, taskParams, readRanges);
 
-        const auto dsi = source.select().data_source_instance();
-        YQL_CLOG(INFO, ProviderGeneric) << "Creating read actor with params:"
-                                        << " kind=" << NYql::EGenericDataSourceKind_Name(dsi.kind())
-                                        << ", endpoint=" << dsi.endpoint().ShortDebugString()
-                                        << ", database=" << dsi.database()
-                                        << ", use_tls=" << ToString(dsi.use_tls())
-                                        << ", protocol=" << NYql::EGenericProtocol_Name(dsi.protocol())
-                                        << ", task_id=" << taskId
-                                        << ", partitions_count=" << partitions.size();
-
         auto tokenProvider = CreateGenericCredentialsProvider(
             secureParams.Value(source.GetTokenName(), ""),
             credentialsFactory);
@@ -471,6 +472,7 @@ namespace NYql::NDq {
             std::move(tokenProvider),
             std::move(source),
             computeActorId,
+            taskId,
             holderFactory,
             std::move(alloc),
             std::move(partitions));

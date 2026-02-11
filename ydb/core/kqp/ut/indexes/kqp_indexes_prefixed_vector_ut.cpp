@@ -532,19 +532,19 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
 
         {
             const TString plainQuery(Q1_(R"(
-                pragma ydb.KMeansTreeSearchTopSize = "3";
+                PRAGMA ydb.KMeansTreeSearchTopSize = "3";
                 $target = "\x67\x68\x02";
                 SELECT pk, emb, data FROM `/Root/TestTable`
-                WHERE user IN ("user_b", "user_d") AND pk*10 < 100000 AND LENGTH(user) + pk < 100000
+                WHERE user IN ("user_b", "user_d") AND pk/10 < 5 AND LENGTH(user) + pk < 100000
                 ORDER BY Knn::CosineDistance(emb, $target)
                 LIMIT 3;
             )"));
             const TString indexQuery(Q1_(R"(
-                pragma ydb.KMeansTreeSearchTopSize = "3";
+                PRAGMA ydb.KMeansTreeSearchTopSize = "3";
                 $target = "\x67\x68\x02";
                 SELECT pk, emb, data FROM `/Root/TestTable`
                 VIEW index
-                WHERE user IN ("user_b", "user_d") AND pk*10 < 100000 AND LENGTH(user) + pk < 100000
+                WHERE user IN ("user_b", "user_d") AND pk/10 < 5 AND LENGTH(user) + pk < 100000
                 ORDER BY Knn::CosineDistance(emb, $target)
                 LIMIT 3;
             )"));

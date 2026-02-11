@@ -677,7 +677,8 @@ void VectorReadWithPushdown(
             }
         }
     }
-    if (!cols.contains(pushdownSettings.VectorTopColumn)) {
+    if (pushdownSettings.VectorTopColumn != "" &&
+        !cols.contains(pushdownSettings.VectorTopColumn)) {
         // stream lookup columns must contain vector column for VectorTop pushdown
         columnsWithKey.push_back(Build<TCoAtom>(ctx, pos)
             .Value(pushdownSettings.VectorTopColumn)
@@ -1098,8 +1099,15 @@ TExprNode::TPtr DoRewriteTopSortOverPrefixedKMeansTree(
         .Add(prefixLeafRows)
         .Done().Ptr();
 
-    settings.VectorTopColumn = indexDesc.KeyColumns.back();
-    settings.VectorTopLimit = top.Count().Ptr();
+    if (predicate->MainLambda.Body().Maybe<TCoOptionalIf>()) {
+        settings.VectorTopColumn = "";
+        settings.VectorTopIndex = "";
+        settings.VectorTopLimit = nullptr;
+        settings.VectorTopTarget = nullptr;
+    } else {
+        settings.VectorTopColumn = indexDesc.KeyColumns.back();
+        settings.VectorTopLimit = top.Count().Ptr();
+    }
     settings.VectorTopDistinct = withOverlap;
     VectorReadMain(ctx, pos, postingTable, postingTableDesc->Metadata, mainTable, tableDesc.Metadata, predicate->MainColumns, settings, read);
 

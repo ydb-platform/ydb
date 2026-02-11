@@ -9,10 +9,10 @@ on:
         type: string
         default: ydb/
       test_type:
-        description: 'Test type (unittest,py3test,py2test,pytest)'
+        description: 'Test type (empty = all types: unittest,py3test,py2test,pytest,gtest)'
         required: false
         type: string
-        default: unittest,py3test,py2test,pytest
+        default: ''
       test_size:
         description: 'Test size (small,medium,large)'
         required: false
@@ -49,9 +49,9 @@ on:
         required: true
         default: ydb/
       test_type:
-        description: 'Test type (unittest,py3test,py2test,pytest)'
+        description: 'Test type (empty = all types: unittest,py3test,py2test,pytest,gtest)'
         required: false
-        default: unittest,py3test,py2test,pytest
+        default: ''
       test_size:
         description: 'Test size (small,medium,large)'
         required: false

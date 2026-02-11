@@ -398,7 +398,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardTestExtSubdomainReboots) {
         TTestWithReboots t;
         t.GetTestEnvOptions()
             .EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst)
-            .EnableRealSystemViewPaths(false)
         ;
 
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
@@ -450,7 +449,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTestExtSubdomainReboots) {
                                     NLs::DomainLimitsIs(limits.MaxPaths, limits.MaxShards)});
 
                 TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                                   {NLs::ChildrenCount(2),
+                                   {NLs::ChildrenCount(3),
                                     NLs::DomainLimitsIs(limits.MaxPaths, limits.MaxShards)});
 
                 TestCreateTable(runtime, subdomainSchemeshard, ++t.TxId, "/MyRoot/USER_0", R"(
@@ -468,7 +467,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardTestExtSubdomainReboots) {
 
     Y_UNIT_TEST(AlterSchemeLimits) {
         TTestWithReboots t;
-        t.GetTestEnvOptions().EnableRealSystemViewPaths(false);
         //INFO: Temporarily this test will not run when EnableAlterDatabase is not set
         t.GetTestEnvOptions().EnableAlterDatabase(true);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
@@ -476,7 +474,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTestExtSubdomainReboots) {
             limits.MaxShards = 7;
             limits.MaxShardsInPath = 3;
             limits.MaxPaths = 5;
-            limits.MaxChildrenInDir = 3;
+            limits.MaxChildrenInDir = 4;
 
             {
                 TInactiveZone inactive(activeZone);
@@ -542,13 +540,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardTestExtSubdomainReboots) {
                 TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/Alice"), {
                     NLs::PathExist,
                     NLs::SchemeLimits(limits.AsProto()),
-                    NLs::ShardsInsideDomain(3),
-                    NLs::PathsInsideDomain(0)
+                    NLs::ShardsInsideDomain(3)
                 });
 
                 const auto defaultLimits = TSchemeLimits().AsProto();
                 TestDescribeResult(DescribePath(runtime, "/MyRoot"), {
-                    NLs::ChildrenCount(2),
+                    NLs::ChildrenCount(3),
                     NLs::SchemeLimits(defaultLimits)
                 });
 

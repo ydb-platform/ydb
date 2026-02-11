@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: setuptools
-Version: 80.10.1
+Version: 80.10.2
 Summary: Easily download, build, install, upgrade, and uninstall Python packages
 Author-email: Python Packaging Authority <distutils-sig@python.org>
 License-Expression: MIT
@@ -34,7 +34,6 @@ Requires-Dist: ini2toml[lite]>=0.14; extra == "test"
 Requires-Dist: tomli-w>=1.0.0; extra == "test"
 Requires-Dist: pytest-timeout; extra == "test"
 Requires-Dist: pytest-perf; sys_platform != "cygwin" and extra == "test"
-Requires-Dist: pyobjc<12; (sys_platform == "darwin" and python_version <= "3.9") and extra == "test"
 Requires-Dist: jaraco.develop>=7.21; (python_version >= "3.9" and sys_platform != "cygwin") and extra == "test"
 Requires-Dist: pytest-home>=0.5; extra == "test"
 Requires-Dist: pytest-subprocess; extra == "test"

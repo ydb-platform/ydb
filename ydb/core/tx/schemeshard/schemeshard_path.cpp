@@ -581,12 +581,12 @@ const TPath::TChecker& TPath::TChecker::IsDirectory(EStatus status) const {
         << " (" << BasicPathInfo(Path.Base()) << ")");
 }
 
-const TPath::TChecker& TPath::TChecker::IsSysViewDirectory(EStatus status) const {
+const TPath::TChecker& TPath::TChecker::IsSystemDirectory(EStatus status) const {
     if (Failed) {
         return *this;
     }
 
-    if (Path.Base()->IsDirectory() && Path.Base()->Name == NSysView::SysPathName) {
+    if (Path.Base()->IsSystemDirectory()) {
         return *this;
     }
 
@@ -725,19 +725,21 @@ const TPath::TChecker& TPath::TChecker::PathsLimit(ui64 delta, EStatus status) c
     TSubDomainInfo::TPtr domainInfo = Path.DomainInfo();
     const auto pathsTotal = domainInfo->GetPathsInside();
     const auto backupPaths = domainInfo->GetBackupPaths();
+    const auto systemPaths = domainInfo->GetSystemPaths();
 
-    Y_VERIFY_S(pathsTotal >= backupPaths, "Constraint violation"
+    Y_VERIFY_S(pathsTotal >= backupPaths + systemPaths, "Constraint violation"
         << ": path: " << Path.PathString()
         << ", paths total: " << pathsTotal
-        << ", backup paths: " << backupPaths);
+        << ", backup paths: " << backupPaths
+        << ", system paths: " << systemPaths);
 
-    if (!delta || (pathsTotal - backupPaths) + delta <= domainInfo->GetSchemeLimits().MaxPaths) {
+    if (!delta || (pathsTotal - backupPaths - systemPaths) + delta <= domainInfo->GetSchemeLimits().MaxPaths) {
         return *this;
     }
 
     return Fail(status, TStringBuilder() << "paths count limit exceeded"
         << ", limit: " << domainInfo->GetSchemeLimits().MaxPaths
-        << ", paths: " << (pathsTotal - backupPaths)
+        << ", paths: " << (pathsTotal - backupPaths - systemPaths)
         << ", delta: " << delta);
 }
 

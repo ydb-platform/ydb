@@ -44,9 +44,9 @@ class Workload:
                 writer = self.driver.topic_client.tx_writer(tx, self.topic_name, partition_id=partition_id)
                 for message in messages:
                     writer.write(ydb.TopicWriterMessage(message))
-                    self.message_count += 1
 
             session_pool.retry_tx_sync(callee)
+            self.message_count += len(messages)
 
         return messages
 

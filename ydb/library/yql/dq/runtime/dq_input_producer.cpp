@@ -72,6 +72,8 @@ private:
 
         // wait for drain only if watermarks enabled
         if (WatermarksEnabled() && WatermarksTracker->HasPendingWatermark()) {
+            Y_DEBUG_ABORT_UNLESS(WatermarkStorage->WatermarkIn <= *WatermarksTracker->GetPendingWatermark());
+            WatermarkStorage->WatermarkIn = WatermarksTracker->GetPendingWatermark();
             return NUdf::EFetchStatus::Yield;
         }
 
@@ -113,6 +115,8 @@ private:
 
         // wait for drain only if watermarks enabled
         if (WatermarksEnabled() && WatermarksTracker->HasPendingWatermark()) {
+            Y_DEBUG_ABORT_UNLESS(WatermarkStorage->WatermarkIn <= *WatermarksTracker->GetPendingWatermark());
+            WatermarkStorage->WatermarkIn = WatermarksTracker->GetPendingWatermark();
             return NUdf::EFetchStatus::Yield;
         }
 
@@ -192,8 +196,11 @@ private:
         auto hasPendingWatermark = WatermarksTracker->NotifyInputWatermarkReceived(InputKey.InputId, InputKey.IsChannel, *Watermark) && WatermarksTracker->HasPendingWatermark();
         Watermark.Clear();
         if (hasPendingWatermark) {
+            Y_DEBUG_ABORT_UNLESS(WatermarkStorage->WatermarkIn <= *WatermarksTracker->GetPendingWatermark());
             WatermarkStorage->WatermarkIn = WatermarksTracker->GetPendingWatermark();
             return true;
+        } else {
+            Y_DEBUG_ABORT_UNLESS(!WatermarksTracker->HasPendingWatermark());
         }
         return false;
     }

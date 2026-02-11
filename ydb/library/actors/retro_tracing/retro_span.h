@@ -28,6 +28,12 @@ public:
     TRetroSpan(ui32 type, ui32 size);
     virtual ~TRetroSpan();
 
+    TRetroSpan(TRetroSpan&&) = default;
+    TRetroSpan(const TRetroSpan&) = default;
+
+    TRetroSpan& operator=(TRetroSpan&&) = default;
+    TRetroSpan& operator=(const TRetroSpan&) = default;
+
     static std::unique_ptr<TRetroSpan> DeserializeToUnique(const void* data);
 
     ui32 GetType() const;

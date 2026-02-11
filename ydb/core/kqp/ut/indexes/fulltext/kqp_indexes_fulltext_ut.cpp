@@ -4685,7 +4685,7 @@ Y_UNIT_TEST(AddFullTextFlatIndexWithTruncate2) {
             TString query = R"sql(
                 SELECT `Key`, `Text`
                 FROM `/Root/Texts` VIEW `fulltext_idx`
-                WHERE FulltextContains(`Text`, "404 not found")
+                WHERE FulltextMatch(`Text`, "404 not found")
                 ORDER BY `Key`;
             )sql";
             auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
@@ -4704,17 +4704,19 @@ Y_UNIT_TEST(AddFullTextFlatIndexWithTruncate2) {
         }
     };
 
-    auto verifyIndexWorksCorrectly = [&](){
+    auto verifyIndexWorksCorrectly = [&](int count){
+        Cerr << "========================================================= begin verifyIndexWorksCorrectly " << count << Endl;
         retryableSelect();
         UpsertSomeTexts(db);
         retryableSelect();
+        Cerr << "========================================================= end verifyIndexWorksCorrectly " << count << Endl;
     };
 
-    verifyIndexWorksCorrectly();
+    verifyIndexWorksCorrectly(-1);
 
     for (size_t tryIndex = 0; tryIndex < 5; ++tryIndex) {
         TruncateTable(db);
-        verifyIndexWorksCorrectly();
+        verifyIndexWorksCorrectly(tryIndex);
     }
 }
 

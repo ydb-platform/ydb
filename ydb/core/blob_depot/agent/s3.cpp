@@ -10,7 +10,7 @@ namespace NKikimr::NBlobDepot {
     void TBlobDepotAgent::InitS3(const TString& name) {
         if (S3BackendSettings) {
             auto& settings = S3BackendSettings->GetSettings();
-            auto externalStorageConfig = NWrappers::IExternalStorageConfig::Construct(AppData()->AwsClientConfig, settings);
+            auto externalStorageConfig = NWrappers::IExternalStorageConfig::Construct(AppData()->AwsClientConfig, settings, AppData()->Counters);
             S3WrapperId = Register(NWrappers::CreateStorageWrapper(externalStorageConfig->ConstructStorageOperator()));
             S3BasePath = TStringBuilder() << settings.GetObjectKeyPattern() << '/' << name;
         }

@@ -1080,7 +1080,7 @@ public:
     }
 
     explicit TS3Downloader(const TActorId& dataShard, ui64 txId, const NKikimrSchemeOp::TRestoreTask& task, const TTableInfo& tableInfo)
-        : ExternalStorageConfig(NWrappers::IExternalStorageConfig::Construct(AppData()->AwsClientConfig, GetSettings(task)))
+        : ExternalStorageConfig(NWrappers::IExternalStorageConfig::Construct(AppData()->AwsClientConfig, GetSettings(task), AppData()->Counters))
         , DataShard(dataShard)
         , TxId(txId)
         , Settings(TStorageSettings::FromRestoreTask<TSettings>(task))

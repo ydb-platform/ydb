@@ -5,7 +5,7 @@ description = 'Set vdisk read-only mode (experimental mode that might help resto
 
 
 def add_options(p):
-    p.add_argument('--vdisk-id', type=str, required=True, help='Vdisk id in format [GroupId:_:FailRealm:FailDomain:VDiskIdx]')
+    p.add_argument('--vdisk-id', type=str, required=True, help='Vdisk id in format [GroupId:_:FailRealm:FailDomain:VDiskIdx] or (GroupId-GroupGen-FailRealm-FailDomain-VDiskIdx)')
     p.add_argument('value', type=str, choices=('true', 'false'), help='Use one of the values to set or unset read-only mode')
     common.add_ignore_degraded_group_check_option(p)
     common.add_ignore_disintegrated_group_check_option(p)

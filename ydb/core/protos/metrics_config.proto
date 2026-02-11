@@ -4,7 +4,7 @@ option java_package = "ru.yandex.kikimr.proto";
 
 message TMetricsConfig {
     enum EMetricsLevel {
-        LEVEL_NONE = 0;
+        LEVEL_DEFAULT = 0;
         LEVEL_DATABASE = 1;
         LEVEL_OBJECT = 2;
         LEVEL_DETAILED = 3;

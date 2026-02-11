@@ -817,6 +817,15 @@ TNodePtr ParseDatabaseSettingValue(TContext& ctx, const TRule_database_setting_v
     }
 }
 
+TNodePtr ParseLiteral(const TRule_compact_setting_value& value, TContext& ctx, NSQLTranslation::ESqlMode mode, const TString& expectedType) {
+    TSqlExpression sqlExpr(ctx, mode);
+    auto exprOrId = sqlExpr.LiteralExpr(value.GetRule_literal_value1());
+    if (!exprOrId || !exprOrId->Expr || !exprOrId->Expr->IsLiteral() || exprOrId->Expr->GetLiteralType() != expectedType) {
+        return nullptr;
+    }
+    return exprOrId->Expr;
+}
+
 } // namespace
 
 bool TSqlTranslation::ParseDatabaseSetting(const TRule_database_setting& in, THashMap<TString, TNodePtr>& out) {
@@ -886,6 +895,39 @@ bool TSqlTranslation::AddIndexSetting(const TIdentifier& id,
         return false;
     }
 
+    return true;
+}
+
+bool TSqlTranslation::AddCompactSetting(const TIdentifier& id, const TRule_compact_setting_value& value, TCompactEntry& compactEntry) {
+    if (to_lower(id.Name) == "cascade") {
+        if (compactEntry.Cascade) {
+            Ctx_.Error() << "Duplicated " << to_upper(id.Name);
+            return false;
+        }
+        compactEntry.Cascade = ParseLiteral(value, Ctx_, Mode_, "Bool");
+        if (!compactEntry.Cascade) {
+            Ctx_.Error() << to_upper(id.Name) << " value should be a boolean";
+            return false;
+        }
+    } else if (to_lower(id.Name) == "max_shards_in_flight") {
+        if (compactEntry.MaxShardsInFlight) {
+            Ctx_.Error() << "Duplicated " << to_upper(id.Name);
+            return false;
+        }
+        compactEntry.MaxShardsInFlight = ParseLiteral(value, Ctx_, Mode_, "Int32");
+        if (!compactEntry.MaxShardsInFlight) {
+            Ctx_.Error() << to_upper(id.Name) << " value should be a Int32";
+            return false;
+        }
+        i32 value = FromString<i32>(compactEntry.MaxShardsInFlight->GetLiteralValue());
+        if (value <= 0) {
+            Ctx_.Error() << to_upper(id.Name) << " value should be positive" << value;
+            return false;
+        }
+    } else {
+        Ctx_.Error() << to_upper(id.Name) << ": unknown setting for compact";
+        return false;
+    }
     return true;
 }
 

@@ -1797,6 +1797,17 @@ public:
             actions = L(actions, Q(Y(Q("dropChangefeed"), name)));
         }
 
+        if (Params_.Compact) {
+            auto settings = Y();
+            if (Params_.Compact->Cascade) {
+                settings = L(settings, Q(Y(Q("cascade"), Params_.Compact->Cascade)));
+            }
+            if (Params_.Compact->MaxShardsInFlight) {
+                settings = L(settings, Q(Y(Q("maxShardsInFlight"), Params_.Compact->MaxShardsInFlight)));
+            }
+            actions = L(actions, Q(Y(Q("compact"), Q(Y(Q(Y(Q("settings"), Q(settings))))))));
+        }
+
         auto opts = Y();
 
         opts = L(opts, Q(Y(Q("mode"), Q("alter"))));

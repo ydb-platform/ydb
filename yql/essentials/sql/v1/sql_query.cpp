@@ -2648,6 +2648,16 @@ bool TSqlQuery::AlterTableAction(const TRule_alter_table_action& node, TAlterTab
 
             break;
         }
+        case TRule_alter_table_action::kAltAlterTableAction20: {
+            // COMPACT WITH (...)
+            const auto& alterRule = node.GetAlt_alter_table_action20().GetRule_alter_table_compact1();
+
+            if (!AlterTableCompact(alterRule, params)) {
+                return false;
+            }
+
+            break;
+        }
         case TRule_alter_table_action::ALT_NOT_SET:
             Y_UNREACHABLE();
     }
@@ -3056,6 +3066,27 @@ bool TSqlQuery::AlterTableAlterChangefeed(const TRule_alter_table_alter_changefe
 
 void TSqlQuery::AlterTableDropChangefeed(const TRule_alter_table_drop_changefeed& node, TAlterTableParameters& params) {
     params.DropChangefeeds.emplace_back(IdEx(node.GetRule_an_id3(), *this));
+}
+
+bool TSqlQuery::AlterTableCompact(const TRule_alter_table_compact& node, TAlterTableParameters& params) {
+    auto& compactEntry = params.Compact.Emplace();
+    if (!node.HasBlock2()) {
+        return true;
+    }
+
+    const auto& settingsNode = node.GetBlock2().GetRule_with_compact_settings1();
+    const auto& firstEntry = settingsNode.GetRule_compact_setting_entry3();
+    if (!AddCompactSetting(IdEx(firstEntry.GetRule_an_id1(), *this), firstEntry.GetRule_compact_setting_value3(), compactEntry)) {
+        return false;
+    }
+    for (const auto& block : settingsNode.GetBlock4()) {
+        const auto& entry = block.GetRule_compact_setting_entry2();
+        if (!AddCompactSetting(IdEx(entry.GetRule_an_id1(), *this), entry.GetRule_compact_setting_value3(), compactEntry)) {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 namespace {

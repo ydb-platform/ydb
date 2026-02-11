@@ -156,19 +156,19 @@ class TDqPqReadActor : public TActor<TDqPqReadActor>, public NYql::NDq::NInterna
             }
 
             Source = SubGroup;
-            auto task = SubGroup;
+            Task = SubGroup;
             if (enableStreamingQueriesCounters) {
                 for (const auto& sensor : sourceParams.GetTaskSensorLabel()) {
                     SubGroup = SubGroup->GetSubgroup(sensor.GetLabel(), sensor.GetValue());
                 }
                 Source = SubGroup->GetSubgroup("tx_id", TxId);
-                task = Source->GetSubgroup("task_id", ToString(taskId));
+                Task = Source->GetSubgroup("task_id", ToString(taskId));
             }
-            InFlyAsyncInputData = task->GetCounter("InFlyAsyncInputData");
-            InFlySubscribe = task->GetCounter("InFlySubscribe");
-            AsyncInputDataRate = task->GetCounter("AsyncInputDataRate", true);
-            ReconnectRate = task->GetCounter("ReconnectRate", true);
-            DataRate = task->GetCounter("DataRate", true);
+            InFlyAsyncInputData = Task->GetCounter("InFlyAsyncInputData");
+            InFlySubscribe = Task->GetCounter("InFlySubscribe");
+            AsyncInputDataRate = Task->GetCounter("AsyncInputDataRate", true);
+            ReconnectRate = Task->GetCounter("ReconnectRate", true);
+            DataRate = Task->GetCounter("DataRate", true);
             WaitEventTimeMs = Source->GetHistogram("WaitEventTimeMs", NMonitoring::ExplicitHistogram({5, 20, 100, 500, 2000}));
         }
 
@@ -181,6 +181,7 @@ class TDqPqReadActor : public TActor<TDqPqReadActor>, public NYql::NDq::NInterna
         TString TxId;
         ::NMonitoring::TDynamicCounterPtr Counters;
         ::NMonitoring::TDynamicCounterPtr SubGroup;
+        ::NMonitoring::TDynamicCounterPtr Task;
         ::NMonitoring::TDynamicCounterPtr Source;
         ::NMonitoring::TDynamicCounters::TCounterPtr InFlyAsyncInputData;
         ::NMonitoring::TDynamicCounters::TCounterPtr InFlySubscribe;
@@ -340,6 +341,10 @@ public:
                 YQL_ENSURE(InfoAggregator, "Missing DQ info aggregator for distributed read session");
 
                 std::tie(clusterState.ReadSession, clusterState.ReadSessionControl) = CreateCompositeTopicReadSession(ActorContext(), GetTopicClient(clusterState), {
+                    .TxId = TxId,
+                    .TaskId = TaskId,
+                    .AmountPartitionsCount = TopicPartitionsCount,
+                    .Counters = Metrics.Task,
                     .BaseSettings = GetReadSessionSettings(clusterState),
                     .IdleTimeout = TDuration::MicroSeconds(SourceParams.GetWatermarks().GetIdleTimeoutUs()),
                     .MaxPartitionReadSkew = maxPartitionReadSkew,

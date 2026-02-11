@@ -2,12 +2,17 @@
 
 #include <ydb/library/actors/core/actorid.h>
 #include <ydb/library/actors/core/actorsystem_fwd.h>
+#include <ydb/library/yql/dq/common/dq_common.h>
 #include <ydb/library/yql/providers/pq/gateway/abstract/yql_pq_topic_client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/read_session.h>
 
 namespace NYql {
 
 struct TCompositeTopicReadSessionSettings {
+    NDq::TTxId TxId;
+    ui64 TaskId = 0;
+    ui64 AmountPartitionsCount = 0;
+    ::NMonitoring::TDynamicCounterPtr Counters;
     NYdb::NTopic::TReadSessionSettings BaseSettings;
     TDuration IdleTimeout;
     TDuration MaxPartitionReadSkew;

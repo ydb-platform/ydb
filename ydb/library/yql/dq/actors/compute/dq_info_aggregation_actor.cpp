@@ -45,83 +45,140 @@ class TDqInfoAggregationActor : public TActor<TDqInfoAggregationActor>, public I
     public:
         using TPtr = std::shared_ptr<TAggregatorBase>;
 
-        TAggregatorBase(TDqInfoAggregationActor* self, const TString& counterId, TDuration sendPeriod)
+        TAggregatorBase(const TString& name, TDqInfoAggregationActor* self, const TString& counterId, const NDqProto::TEvUpdateCounterValue::TSettings& settings)
             : Self(self)
+            , Name(name)
             , CounterId(counterId)
-            , SendPeriod(sendPeriod)
+            , SendPeriod(NProtoInterop::CastFromProto(settings.GetReportPeriod()))
+            , DeltaThreshold(settings.GetScalarAggDeltaThreshold())
         {
             Y_VALIDATE(Self, "Self is null");
             Y_VALIDATE(SendPeriod, "SendPeriod should be non zero");
+
+            LastSentValue.SetCounterId(CounterId);
             ScheduleSend();
+
+            LOG_D("Created new counter, SendPeriod: " << SendPeriod);
         }
 
         virtual ~TAggregatorBase() = default;
 
-        virtual void Update(const NDqProto::TEvUpdateCounterValue& value, const TActorId& sender) = 0;
+        void Update(const NDqProto::TEvUpdateCounterValue& value, const TActorId& sender) {
+            const auto newValue = GetUpdateValue(value);
+            const auto [it, inserted] = SenderValues.emplace(sender, newValue);
+            LOG_D("Update counter, sender: " << sender << ", new value: " << newValue << ", old value: " << it->second << ", is new: " << inserted);
 
-        virtual void Send() = 0;
+            std::optional<i64> oldValue;
+            if (!inserted) {
+                oldValue = it->second;
+                it->second = newValue;
+            }
+
+            DoUpdate(newValue, oldValue, sender);
+
+            if (const auto aggValue = GetAggValue()) {
+                LOG_D("Agg value: " << *aggValue);
+
+                if (!LastSentValue.HasScalar() || std::abs(*aggValue - LastSentValue.GetScalar()) > DeltaThreshold) {
+                    Send();
+                }
+            }
+        }
+
+        void Send() {
+            if (const auto aggValue = GetAggValue()) {
+                LastSentValue.SetScalar(*aggValue);
+                LOG_D("Send value: " << LastSentValue.GetScalar());
+
+                for (const auto& [sender, _] : SenderValues) {
+                    Self->Send(sender, new TInfoAggregationActorEvents::TEvOnAggregateUpdated(LastSentValue));
+                }
+            }
+        }
 
         void ScheduleSend() {
             Self->Schedule(SendPeriod, new TPrivateEvents::TEvSendStatistics(CounterId));
         }
 
     protected:
+        virtual i64 GetUpdateValue(const NDqProto::TEvUpdateCounterValue& value) const = 0;
+
+        virtual void DoUpdate(i64 newValue, std::optional<i64> oldValue, const TActorId& sender) = 0;
+
+        virtual std::optional<i64> GetAggValue() const = 0;
+
+        TString GetLogPrefix() const {
+            return TStringBuilder() << Self->GetLogPrefix() << " [" << Name << "] CounterId: " << CounterId << ". ";
+        }
+
+    private:
         TDqInfoAggregationActor* const Self;
+        const TString Name;
         const TString CounterId;
-
-    private:
         const TDuration SendPeriod;
-    };
-
-    class TMinAggregator final : public TAggregatorBase {
-        using TBase = TAggregatorBase;
-
-    public:
-        TMinAggregator(TDqInfoAggregationActor* self, const TString& counterId, const NDqProto::TEvUpdateCounterValue::TSettings& settings)
-            : TBase(self, counterId, NProtoInterop::CastFromProto(settings.GetReportPeriod()))
-            , DeltaThreshold(settings.GetScalarAggDeltaThreshold())
-        {
-            LastSentValue.SetCounterId(CounterId);
-        }
-
-        void Update(const NDqProto::TEvUpdateCounterValue& value, const TActorId& sender) final {
-            Y_VALIDATE(value.GetActionCase() == NDqProto::TEvUpdateCounterValue::kAggMin, "Unexpected action case");
-            const auto newValue = value.GetAggMin();
-   
-            if (const auto [it, inserted] = SenderValues.emplace(sender, newValue); !inserted) {
-                OrderedValues.erase({it->second, sender});
-                it->second = newValue;
-            }
-
-            OrderedValues.emplace(newValue, sender);
-
-            if (!LastSentValue.HasScalar() || std::abs(OrderedValues.begin()->first - LastSentValue.GetScalar()) > DeltaThreshold) {
-                Send();
-            }
-        }
-
-        void Send() final {
-            if (OrderedValues.empty()) {
-                return;
-            }
-
-            LastSentValue.SetScalar(OrderedValues.begin()->first);
-
-            for (const auto& [sender, _] : SenderValues) {
-                Self->Send(sender, new TInfoAggregationActorEvents::TEvOnAggregateUpdated(LastSentValue));
-            }
-        }
-
-    private:
         const i64 DeltaThreshold = 0;
         NDqProto::TEvOnAggregatedValueUpdated LastSentValue;
         std::unordered_map<TActorId, i64> SenderValues;
+    };
+
+    class TMinAggregator final : public TAggregatorBase {
+    public:
+        TMinAggregator(TDqInfoAggregationActor* self, const TString& counterId, const NDqProto::TEvUpdateCounterValue::TSettings& settings)
+            : TAggregatorBase(__func__, self, counterId, settings)
+        {}
+
+    protected:
+        i64 GetUpdateValue(const NDqProto::TEvUpdateCounterValue& value) const final {
+            Y_VALIDATE(value.GetActionCase() == NDqProto::TEvUpdateCounterValue::kAggMin, "Unexpected action case");
+            return value.GetAggMin();
+        }
+
+        void DoUpdate(i64 newValue, std::optional<i64> oldValue, const TActorId& sender) final {
+            if (oldValue) {
+                OrderedValues.erase({*oldValue, sender});
+            }
+            OrderedValues.emplace(newValue, sender);
+        }
+
+        std::optional<i64> GetAggValue() const {
+            if (OrderedValues.empty()) {
+                return std::nullopt;
+            }
+            return OrderedValues.begin()->first;
+        }
+
+    private:
         std::set<std::pair<i64, TActorId>> OrderedValues;
     };
 
+    class TSumAggregator final : public TAggregatorBase {
+    public:
+        TSumAggregator(TDqInfoAggregationActor* self, const TString& counterId, const NDqProto::TEvUpdateCounterValue::TSettings& settings)
+            : TAggregatorBase(__func__, self, counterId, settings)
+        {}
+
+        i64 GetUpdateValue(const NDqProto::TEvUpdateCounterValue& value) const final {
+            Y_VALIDATE(value.GetActionCase() == NDqProto::TEvUpdateCounterValue::kAggSum, "Unexpected action case");
+            return value.GetAggSum();
+        }
+
+        void DoUpdate(i64 newValue, std::optional<i64> oldValue, const TActorId& sender) final {
+            Y_UNUSED(sender);
+            Sum += newValue - oldValue.value_or(0);
+        }
+
+        std::optional<i64> GetAggValue() const {
+            return Sum;
+        }
+
+    private:
+        i64 Sum = 0;
+    };
+
 public:
-    TDqInfoAggregationActor()
+    explicit TDqInfoAggregationActor(const TTxId& txId)
         : TBase(&TThis::StateFunc)
+        , TxId(txId)
     {}
 
     STRICT_STFUNC(StateFunc,
@@ -149,6 +206,9 @@ private:
             switch (record.GetActionCase()) {
                 case NDqProto::TEvUpdateCounterValue::kAggMin:
                     aggregator = std::make_shared<TMinAggregator>(this, counterId, record.GetSettings());
+                    break;
+                case NDqProto::TEvUpdateCounterValue::kAggSum:
+                    aggregator = std::make_shared<TSumAggregator>(this, counterId, record.GetSettings());
                     break;
                 case NDqProto::TEvUpdateCounterValue::ACTION_NOT_SET:
                     LOG_E("Action not set");
@@ -181,16 +241,17 @@ private:
     }
 
     TString GetLogPrefix() const {
-        return TStringBuilder() << "[TDqInfoAggregationActor] SelfId: " << SelfId() << ". ";
+        return TStringBuilder() << "[TDqInfoAggregationActor] TxId: " << TxId << ", SelfId: " << SelfId() << ". ";
     }
 
+    const TTxId TxId;
     std::unordered_map<TString, TAggregatorBase::TPtr> AggregateValues;
 };
 
 } // anonymous namespace
 
-IActor* CreateDqInfoAggregationActor() {
-    return new TDqInfoAggregationActor();
+IActor* CreateDqInfoAggregationActor(const TTxId& txId) {
+    return new TDqInfoAggregationActor(txId);
 }
 
 } // namespace NYql::NDq

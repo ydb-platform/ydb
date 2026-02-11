@@ -1931,7 +1931,11 @@ private:
         scriptExternalEffect->Description.SecretNames = SecretNames;
 
         if (HasExternalSources) {
-            TasksGraph.GetMeta().DqInfoAggregator = Register(CreateDqInfoAggregationActor());
+            NDq::TTxId txId = TxId;
+            if (GetUserRequestContext() && GetUserRequestContext()->StreamingQueryPath) {
+                txId = GetUserRequestContext()->StreamingQueryPath;
+            }
+            TasksGraph.GetMeta().DqInfoAggregator = Register(CreateDqInfoAggregationActor(txId));
         }
 
         if (!WaitRequired()) {

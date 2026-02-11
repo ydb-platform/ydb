@@ -24,6 +24,6 @@ struct TInfoAggregationActorEvents {
 
 // Single actor where will be calculated final aggregate.
 // Expected usage: one actor on DQ graph life time, so all registered clients are not removed
-NActors::IActor* CreateDqInfoAggregationActor();
+NActors::IActor* CreateDqInfoAggregationActor(const TTxId& txId);
 
 } // namespace NYql::NDq

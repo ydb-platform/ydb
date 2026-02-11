@@ -318,6 +318,7 @@ message TEvUpdateCounterValue {
 
     oneof Action {
         int64 AggMin = 3;
+        int64 AggSum = 4;
     }
 }
 

@@ -41,30 +41,86 @@ public:
 class TDqPqReadBalancerActor final : public TActorBootstrapped<TDqPqReadBalancerActor>, public IActorExceptionHandler {
     static constexpr TDuration WAKEUP_PERIOD = TDuration::Seconds(1);
     static constexpr TDuration REPORT_MIN_DELTA = TDuration::Seconds(1);
+    static constexpr char READ_TIME_COUNTER[] = "read_time";
+    static constexpr char PARTITION_COUNTER[] = "partition_counter";
+
+    struct TMetrics {
+        TMetrics(const TCompositeTopicReadSessionSettings& settings)
+            : Counters(settings.Counters)
+            , PendingPartitionsCount(Counters->GetCounter("distributed_read_session/pending_partitions_count"))
+            , AmountPartitionsCount(settings.AmountPartitionsCount)
+            , PendingPartitionsCountValue(AmountPartitionsCount)
+            , ReadTimeDelta(Counters->GetCounter("distributed_read_session/read_time_delta_ms"))
+        {
+            PendingPartitionsCount->Add(PendingPartitionsCountValue);
+        }
+
+        void UpdatePendingPartitionsCount(ui64 value) {
+            value = AmountPartitionsCount - value;
+            PendingPartitionsCount->Sub( PendingPartitionsCountValue);
+            PendingPartitionsCount->Add(value);
+            PendingPartitionsCountValue = value;
+        }
+
+        ~TMetrics() {
+            if (PendingPartitionsCount) {
+                PendingPartitionsCount->Sub(PendingPartitionsCountValue);
+            }
+        }
+
+    private:
+        ::NMonitoring::TDynamicCounterPtr Counters;
+        ::NMonitoring::TDynamicCounters::TCounterPtr PendingPartitionsCount;
+        const ui64 AmountPartitionsCount = 0;
+        ui64 PendingPartitionsCountValue = 0;
+
+    public:
+        ::NMonitoring::TDynamicCounters::TCounterPtr ReadTimeDelta;
+    };
 
 public:
-    TDqPqReadBalancerActor(TActorId aggregatorActor, ICompositeTopicReadSessionControlImpl::TPtr controller)
-        : AggregatorActor(aggregatorActor)
+    TDqPqReadBalancerActor(ICompositeTopicReadSessionControlImpl::TPtr controller, const TCompositeTopicReadSessionSettings& settings)
+        : TxId(settings.TxId)
+        , TaskId(settings.TaskId)
+        , AggregatorActor(settings.AggregatorActor)
         , Controller(std::move(controller))
+        , AmountPartitionsCount(settings.AmountPartitionsCount)
+        , Metrics(settings)
     {
         Y_VALIDATE(AggregatorActor, "Missing aggregator actor");
         Y_VALIDATE(Controller.lock(), "Missing controller");
+        Y_VALIDATE(settings.BaseSettings.Topics_.size() == 1, "Expected exactly one topic");
 
-        Value.SetCounterId("distributed_topic_read_session");
+        const auto& topic = settings.BaseSettings.Topics_[0];
+        const auto partitionsCount = topic.PartitionIds_.size();
+        Y_VALIDATE(settings.AmountPartitionsCount >= partitionsCount, "Invalid amount of partitions");
 
-        auto& settings = *Value.MutableSettings();
-        settings.SetScalarAggDeltaThreshold(REPORT_MIN_DELTA.MilliSeconds());
-        *settings.MutableReportPeriod() = NProtoInterop::CastToProto(WAKEUP_PERIOD);
+        TopicPath = topic.Path_;
+
+        {
+            ReadTimeValue.SetCounterId(BuildCounterName(READ_TIME_COUNTER));
+            auto& aggSettings = *ReadTimeValue.MutableSettings();
+            aggSettings.SetScalarAggDeltaThreshold(REPORT_MIN_DELTA.MilliSeconds());
+            *aggSettings.MutableReportPeriod() = NProtoInterop::CastToProto(WAKEUP_PERIOD);
+        }
+
+        {
+            PartitionsCountValue.SetCounterId(BuildCounterName(PARTITION_COUNTER));
+            PartitionsCountValue.SetAggSum(partitionsCount);
+            auto& aggSettings = *PartitionsCountValue.MutableSettings();
+            aggSettings.SetScalarAggDeltaThreshold(0);
+            *aggSettings.MutableReportPeriod() = NProtoInterop::CastToProto(WAKEUP_PERIOD);
+        }
     }
 
     void Bootstrap() {
         Become(&TThis::StateFunc);
 
-        LogPrefix = TStringBuilder() << "[TDqPqReadBalancerActor] SelfId: " << SelfId() << ", AggregatorActor: " << AggregatorActor << ". ";
-        SRC_LOG_D("Start");
+        LogPrefix = TStringBuilder() << "[TDqPqReadBalancerActor] TxId: " << TxId << ", AggregatorActor: " << AggregatorActor << ", TopicPath: " << TopicPath << ", TaskId: " << TaskId << ", SelfId: " << SelfId() << ". ";
+        SRC_LOG_D("Start, AmountPartitionsCount: " << AmountPartitionsCount);
 
         ScheduleWakeup();
-        SendReadTime();
+        SendValues();
     }
 
     STRICT_STFUNC(StateFunc,
@@ -80,18 +136,35 @@ public:
 
 private:
     void Handle(NDq::TInfoAggregationActorEvents::TEvOnAggregateUpdated::TPtr& ev) {
-        if (const auto sharedController = Controller.lock()) {
-            if (const auto value = ev->Get()->Record.GetScalar(); value != std::numeric_limits<i64>::max()) {
-                SRC_LOG_T("Received TEvOnAggregateUpdated, from " << ev->Sender << ", value: " << TInstant::MilliSeconds(value));
-                sharedController->AdvanceTime(TInstant::MilliSeconds(value));
-            } else {
-                SRC_LOG_T("Received TEvOnAggregateUpdated, from " << ev->Sender << ", max-value");
+        const auto& record = ev->Get()->Record;
+        const auto& counterId = record.GetCounterId();
+        const auto value = record.GetScalar();
+        SRC_LOG_D("Received TEvOnAggregateUpdated, from " << ev->Sender << ", counter id: " << counterId << ", value: " << value);
+
+        if (counterId == PARTITION_COUNTER) {
+            AllPartitionsStarted = static_cast<ui64>(value) == AmountPartitionsCount;
+            Metrics.UpdatePendingPartitionsCount(value);
+            SRC_LOG_D("All partitions started: " << AllPartitionsStarted << ", AmountPartitionsCount: " << AmountPartitionsCount);
+        } else if (counterId == READ_TIME_COUNTER) {
+            ExternalReadTime = TInstant::MilliSeconds(value);
+            SRC_LOG_D("ExternalReadTime: " << *ExternalReadTime);
+
+            if (!PartitionCountReported) {
+                PartitionCountReported = true;
+                Send(AggregatorActor, new NDq::TInfoAggregationActorEvents::TEvUpdateCounter(PartitionsCountValue));
             }
+        } else {
+            Y_VALIDATE(false, "Unknown counter id: " << counterId);
+        }
+
+        if (const auto sharedController = Controller.lock(); sharedController && AllPartitionsStarted) {
+            Y_VALIDATE(ExternalReadTime, "ExternalReadTime is not set after all partitions started");
+            sharedController->AdvanceTime(*ExternalReadTime);
         }
     }
 
     void Handle(TEvents::TEvPoison::TPtr&) {
-        SRC_LOG_T("Received TEvPoison");
+        SRC_LOG_I("Received TEvPoison");
         PassAway();
     }
 
@@ -103,35 +176,66 @@ private:
             ScheduleWakeup();
         }
 
-        SendReadTime();
+        SendValues();
+    }
+
+    TString BuildCounterName(const TString& counter) const {
+        return TStringBuilder() << "groupp=distributed_topic_read_session;topic=" << TopicPath << ";counter=" << counter;
     }
 
     void ScheduleWakeup() const {
         Schedule(WAKEUP_PERIOD, new TEvents::TEvWakeup(1));
     }
 
-    void SendReadTime() {
-        if (const auto sharedController = Controller.lock()) {
-            const auto readTime = sharedController->GetReadTime();
-            SRC_LOG_D("SendReadTime: " << readTime);
-
-            const i64 newValue = readTime ? readTime.MilliSeconds() : std::numeric_limits<i64>::max();
-            const auto now = TInstant::Now();
-            if (now - LastSendAt < WAKEUP_PERIOD && std::abs(newValue - Value.GetAggMin()) < static_cast<i64>(REPORT_MIN_DELTA.MilliSeconds())) {
-                return;
-            }
-
-            LastSendAt = now;
-            Value.SetAggMin(newValue);
-            Send(AggregatorActor, new NDq::TInfoAggregationActorEvents::TEvUpdateCounter(Value));
+    void SendValues() {
+        const auto sharedController = Controller.lock();
+        if (!sharedController) {
+            return;
         }
+
+        const auto readTime = sharedController->GetReadTime();
+        SRC_LOG_D("Send values"
+            << ", LastSendAt: " << LastSendAt
+            << ", SendReadTime: " << readTime
+            << ", PartitionCountReported: " << PartitionCountReported
+            << ", AllPartitionsStarted: " << AllPartitionsStarted
+            << ", ExternalReadTime: " << ExternalReadTime.value_or(TInstant::Zero()));
+
+        const i64 newValue = readTime.MilliSeconds();
+        const auto now = TInstant::Now();
+        if (now - LastSendAt < WAKEUP_PERIOD && std::abs(newValue - ReadTimeValue.GetAggMin()) < static_cast<i64>(REPORT_MIN_DELTA.MilliSeconds())) {
+            return;
+        }
+
+        if (ExternalReadTime) {
+            Metrics.ReadTimeDelta->Set(newValue - ExternalReadTime->MilliSeconds());
+
+            if (now - LastSendAt >= WAKEUP_PERIOD) {
+                // Send partitions count only after report current time
+                Send(AggregatorActor, new NDq::TInfoAggregationActorEvents::TEvUpdateCounter(PartitionsCountValue));
+            }
+        }
+
+        LastSendAt = now;
+        ReadTimeValue.SetAggMin(newValue);
+        Send(AggregatorActor, new NDq::TInfoAggregationActorEvents::TEvUpdateCounter(ReadTimeValue));
     }
 
+    const NDq::TTxId TxId;
+    const ui64 TaskId = 0;
     const TActorId AggregatorActor;
     const ICompositeTopicReadSessionControlImpl::TPtr Controller;
+    const ui64 AmountPartitionsCount = 0;
+    TMetrics Metrics;
+    TString TopicPath;
     TString LogPrefix;
+
+    bool PartitionCountReported = false;
+    bool AllPartitionsStarted = false;
+    std::optional<TInstant> ExternalReadTime;
+    NDqProto::TEvUpdateCounterValue PartitionsCountValue;
+    NDqProto::TEvUpdateCounterValue ReadTimeValue;
     TInstant LastSendAt;
-    NDqProto::TEvUpdateCounterValue Value;
 };
 
 // All blocking methods are not supported (supposed to be used from actor system)
@@ -258,6 +362,7 @@ public:
         for (ui64 i = 0; i < partitions.size(); ++i) {
             const auto partitionId = partitions[i];
             Y_VALIDATE(PartitionIdToSessionIdx.emplace(partitionId, i).second, "Duplicate partition id: " << partitionId);
+            Y_VALIDATE(PartitionsReadTimeSet.emplace(TInstant::Zero(), i).second, "Unexpected PartitionsReadTimeSet");
 
             sessionSettings.Topics_[0].PartitionIds_.clear();
             sessionSettings.Topics_[0].AppendPartitionIds(partitionId);
@@ -442,7 +547,8 @@ public:
         }
 
         if (PartitionsReadTimeSet.empty()) {
-            return TInstant::Zero();
+            // All partitions are idle
+            return TInstant::Max();
         }
 
         return PartitionsReadTimeSet.begin()->first;
@@ -456,18 +562,13 @@ private:
             ReadyReadSessionIdx.reset();
         }
 
-        if (ReadyReadSessionIdx) {
-            return;
-        }
-
-        for (ui64 i = 0; i < ReadSessions.size(); ++i) {
+        for (ui64 i = 0; !ReadyReadSessionIdx && i < ReadSessions.size(); ++i) {
             if (++LastReadyReadSessionIdx >= ReadSessions.size()) {
                 LastReadyReadSessionIdx = 0;
             }
 
             if (ReadSessions[LastReadyReadSessionIdx].ReadEvent(settings)) {
                 ReadyReadSessionIdx = LastReadyReadSessionIdx;
-                break;
             }
         }
     }
@@ -486,11 +587,13 @@ private:
     TActorId BalancerActor;
     std::optional<NThreading::TPromise<void>> AdvanceTimePromise;
 
+    // Sessions time state
     TInstant ExternalReadTime; // Minimal read time from external partitions
     std::vector<TInstant> PartitionsReadTime;
     std::set<std::pair<TInstant, ui64>> PartitionsReadTimeSet;
     std::unordered_map<ui64, ui64> PartitionIdToSessionIdx;
 
+    // Sessions reading state
     std::vector<TReadSessionWrapper> ReadSessions;
     std::optional<ui64> ReadyReadSessionIdx; // Session with at least one ready event
     ui64 LastReadyReadSessionIdx = 0;
@@ -505,7 +608,7 @@ std::pair<std::shared_ptr<NYdb::NTopic::IReadSession>, ICompositeTopicReadSessio
     const TCompositeTopicReadSessionSettings& settings
 ) {
     const auto compositeReadSession = std::make_shared<TCompositeTopicReadSession>(ctx.ActorSystem(), topicClient, settings);
-    compositeReadSession->SetBalancerActor(ctx.RegisterWithSameMailbox(new TDqPqReadBalancerActor(settings.AggregatorActor, compositeReadSession)));
+    compositeReadSession->SetBalancerActor(ctx.RegisterWithSameMailbox(new TDqPqReadBalancerActor(compositeReadSession, settings)));
     return {compositeReadSession, compositeReadSession};
 }
 

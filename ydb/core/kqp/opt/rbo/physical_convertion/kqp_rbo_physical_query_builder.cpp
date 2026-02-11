@@ -429,8 +429,8 @@ TExprNode::TPtr TPhysicalQueryBuilder::PeepHoleOptimize(TExprNode::TPtr input, c
 
     // auto &ctx = RBOCtx.ExprCtx;
     TExprNode::TPtr newProgram;
-    auto status = ::PeepHoleOptimize(program, newProgram, ctx, RBOCtx.PeepholeTypeAnnTransformer.GetRef(), RBOCtx.TypeCtx, RBOCtx.KqpCtx.Config, false,
-                                     withFinalStageRules, {});
+    auto status =
+        ::PeepHoleOptimize(program, newProgram, ctx, RBOCtx.PeepholeTypeAnnTransformer, RBOCtx.TypeCtx, RBOCtx.KqpCtx.Config, false, withFinalStageRules, {});
     if (status != IGraphTransformer::TStatus::Ok) {
         ctx.AddError(TIssue(ctx.GetPosition(program.Pos()), "Peephole optimization failed for stage in NEW RBO"));
         return nullptr;
@@ -440,11 +440,11 @@ TExprNode::TPtr TPhysicalQueryBuilder::PeepHoleOptimize(TExprNode::TPtr input, c
 }
 
 void TPhysicalQueryBuilder::TypeAnnotate(TExprNode::TPtr& input) {
-    RBOCtx.TypeAnnTransformer->Rewind();
+    RBOCtx.TypeAnnTransformer.Rewind();
     TExprNode::TPtr output;
     IGraphTransformer::TStatus status(IGraphTransformer::TStatus::Ok);
     do {
-        status = RBOCtx.TypeAnnTransformer->Transform(input, output, RBOCtx.ExprCtx);
+        status = RBOCtx.TypeAnnTransformer.Transform(input, output, RBOCtx.ExprCtx);
     } while (status == IGraphTransformer::TStatus::Repeat);
 
     if (status != IGraphTransformer::TStatus::Ok) {

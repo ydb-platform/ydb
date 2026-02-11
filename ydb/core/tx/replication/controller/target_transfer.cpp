@@ -291,6 +291,7 @@ void TTargetTransfer::RemoveWorker(ui64 id) {
 void TTargetTransfer::EnsureCounters() {
     auto metricsValEnumVal = static_cast<TMetricsConfig::EMetricsLevel>(MetricsLevel);
     switch (metricsValEnumVal) {
+        case TMetricsConfig::LEVEL_DEFAULT:
         case TMetricsConfig::LEVEL_OBJECT:
         case TMetricsConfig::LEVEL_DETAILED:
             if (!Counters) {

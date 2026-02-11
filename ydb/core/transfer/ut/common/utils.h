@@ -628,15 +628,9 @@ struct MainTestCase {
         if (settings.Directory) {
             options.push_back(TStringBuilder() <<  "DIRECTORY = '" << *settings.Directory << "'");
         }
-        switch (settings.MetricsLevel) {
-            case 2:
-                options.push_back("METRICS_LEVEL = 'OBJECT'");
-                break;
-            case 3:
-                options.push_back("METRICS_LEVEL = 'DETAILED'");
-                break;
-            default:
-                break;
+
+        if (settings.MetricsLevel) {
+            options.push_back(TStringBuilder() << "METRICS_LEVEL = " << settings.MetricsLevel);
         }
 
         std::string topicName = settings.TopicName.value_or(TopicName);

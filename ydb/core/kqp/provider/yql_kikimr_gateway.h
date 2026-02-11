@@ -971,7 +971,7 @@ struct TReplicationSettingsBase {
 
     struct TMetricsSettings {
         enum class EMetricsLevel {
-            None = 0,
+            Default = 0,
             Database = 1,
             Object = 2,
             Detailed = 3,

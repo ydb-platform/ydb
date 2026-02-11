@@ -509,7 +509,7 @@ namespace {
         std::optional<ui64> maxProcessingAttempts;
         std::optional<TString> dlq;
 
-        
+
         protoConsumer->set_name(consumer.Name().StringValue());
         auto settings = consumer.Settings().Cast<TCoNameValueTupleList>();
         for (const auto& setting : settings) {
@@ -1151,7 +1151,10 @@ namespace {
                     return false;
                 }
                 auto& levelSetting = dstSettings.MetricsSettings.ConstructInPlace().Level;
-                if (value == "database") {
+                ui64 numericVal = 0;
+                if (TryFromString<ui64>(value, numericVal)) {
+                    levelSetting = static_cast < TReplicationSettingsBase::TMetricsSettings::EMetricsLevel>(numericVal);
+                } else if (value == "database") {
                     levelSetting = TReplicationSettingsBase::TMetricsSettings::EMetricsLevel::Database;
                 } else if (value == "object") {
                     levelSetting = TReplicationSettingsBase::TMetricsSettings::EMetricsLevel::Object;

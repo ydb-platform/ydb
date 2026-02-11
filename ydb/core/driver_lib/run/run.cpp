@@ -254,13 +254,13 @@ public:
 
     void Handle(TEvNodeWardenStorageConfig::TPtr ev) {
         if (const auto& bridgeInfo = ev->Get()->BridgeInfo) {
-                if (NBridge::PileStateTraits(bridgeInfo->SelfNodePile->State).RequiresConfigQuorum) {
-                    Start();
-                } else if (!StopScheduled) {
-                    StopScheduled = true;
-                    CheckAndExecuteStop();
-                }
+            if (NBridge::PileStateTraits(bridgeInfo->SelfNodePile->State).RequiresConfigQuorum) {
+                Start();
+            } else if (!StopScheduled) {
+                StopScheduled = true;
+                CheckAndExecuteStop();
             }
+        }
     }
 
     void HandleDisconnectRequestStarted() {
@@ -281,6 +281,7 @@ public:
 
     void HandleWarmupTimeout() {
         if (!WarmupReceived) {
+            WarmupReceived = true;
             Start();
         }
     }
@@ -611,25 +612,6 @@ public:
     }
 };
 
-class TWarmupConfigInitializer : public IAppDataInitializer {
-    const NKikimrConfig::TAppConfig& Config;
-
-public:
-    TWarmupConfigInitializer(const TKikimrRunConfig& runConfig)
-        : Config(runConfig.AppConfig)
-    {
-    }
-
-    virtual void Initialize(NKikimr::TAppData* appData) override
-    {
-        if (Config.GetTableServiceConfig().HasCompileCacheWarmupConfig() &&
-            Config.GetTableServiceConfig().GetCompileCacheWarmupConfig().GetEnabled()) {
-            auto warmupConfig = NKqp::ImportWarmupConfigFromProto(Config.GetTableServiceConfig().GetCompileCacheWarmupConfig());
-            appData->WarmupTimeout = warmupConfig.Deadline;
-        }
-    }
-};
-
 TKikimrRunner::TKikimrRunner(std::shared_ptr<TModuleFactories> factories)
     : ModuleFactories(std::move(factories))
     , Counters(MakeIntrusive<::NMonitoring::TDynamicCounters>())
@@ -759,6 +741,14 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
     if (!GRpcServersWrapper) {
         GRpcServersWrapper = std::make_shared<TGRpcServersWrapper>();
     }
+
+    if (runConfig.AppConfig.GetTableServiceConfig().HasCompileCacheWarmupConfig() &&
+        runConfig.AppConfig.GetTableServiceConfig().GetCompileCacheWarmupConfig().GetEnabled()) {
+        auto warmupConfig = NKqp::ImportWarmupConfigFromProto(
+            runConfig.AppConfig.GetTableServiceConfig().GetCompileCacheWarmupConfig());
+        GRpcServersWrapper->WarmupTimeout = warmupConfig.Deadline;
+    }
+
     GRpcServersWrapper->GrpcServersFactory = [runConfig, this] { return CreateGRpcServers(runConfig); };
 }
 
@@ -1652,8 +1642,6 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
     appDataInitializers.AddAppDataInitializer(new TClusterNameInitializer(runConfig));
     // setup yaml config info
     appDataInitializers.AddAppDataInitializer(new TYamlConfigInitializer(runConfig));
-    // setup warmup config
-    appDataInitializers.AddAppDataInitializer(new TWarmupConfigInitializer(runConfig));
 
     appDataInitializers.Initialize(AppData.Get());
 
@@ -2211,7 +2199,7 @@ void TKikimrRunner::KikimrStart() {
     if (GRpcServersWrapper) {
         GRpcServersWrapper->Servers = GRpcServersWrapper->GrpcServersFactory();
         GRpcServersManager = ActorSystem->Register(new TGRpcServersManager(
-            GRpcServersWrapper, ProcessMemoryInfoProvider, AppData->WarmupTimeout));
+            GRpcServersWrapper, ProcessMemoryInfoProvider, GRpcServersWrapper->WarmupTimeout));
         ActorSystem->RegisterLocalService(NKikimr::MakeGRpcServersManagerId(ActorSystem->NodeId), GRpcServersManager);
     }
 

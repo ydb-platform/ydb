@@ -55,6 +55,9 @@ struct TEvPrivate {
     struct TEvSoftDeadline : public NActors::TEventLocal<TEvSoftDeadline, EvSoftDeadline> {};
 };
 
+/*
+    The actor-helper to fetch and parse data from /.sys/compile_cache_queries
+*/
 class TFetchCacheActor : public TQueryBase {
 public:
     TFetchCacheActor(const TString& database, ui32 maxQueriesToLoad, ui64 maxCompilationDurationMs, const TVector<ui32>& nodeIds, ui32 maxNodesToQuery)
@@ -180,6 +183,13 @@ void FillYdbParametersFromMetadata(
 } // anonymous namespace
 
 
+/* 
+    Compile warmup actor runs before node is registered and is ready to serve queries.
+    The main goal is to compile popular queries before start to avoid execution time drops 
+    during the first moments of node works
+    Has hard deadline on the end of execution, soft deadline from fetching start.
+    Both is set in WarmupConfig
+*/
 class TKqpCompileCacheWarmupActor : public NActors::TActorBootstrapped<TKqpCompileCacheWarmupActor> {
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {

@@ -43,7 +43,7 @@ public:
         Head += CellSize;
     }
 
-    std::vector<std::unique_ptr<TRetroSpan>> GetSpansOfTrace(const NWilson::TTraceId& traceId) {
+    std::vector<std::unique_ptr<TRetroSpan>> GetSpans(const NWilson::TTraceId& traceId, bool getAll) {
         {
             std::lock_guard guard(Lock);
             std::memcpy(static_cast<void*>(TmpBuffer), static_cast<const void*>(Buffer), BufferSize);
@@ -53,7 +53,7 @@ public:
         for (ui32 pos = 0; pos < BufferSize; pos += CellSize) {
             const void* ptr = TmpBuffer + pos;
             std::memcpy(reinterpret_cast<void*>(&spanHeader), ptr, sizeof(TRetroSpan));
-            if (spanHeader.GetTraceId() && spanHeader.GetTraceId().IsSameTrace(traceId)) {
+            if (spanHeader.GetTraceId() && (getAll || spanHeader.GetTraceId().IsSameTrace(traceId))) {
                 res.push_back(TRetroSpan::DeserializeToUnique(ptr));
             }
         }
@@ -87,16 +87,24 @@ void WriteSpan(const TRetroSpan* span) {
     SpanBuffer->WriteSpan(span);
 }
 
-std::vector<std::unique_ptr<TRetroSpan>> GetSpansOfTrace(const NWilson::TTraceId& traceId) {
+static std::vector<std::unique_ptr<TRetroSpan>> GetSpans(const NWilson::TTraceId& traceId, bool getAll) {
     std::vector<std::unique_ptr<TRetroSpan>> res;
     std::lock_guard guard(Mutex);
     for (const auto& [id, buffer] : SpanBuffers) {
-        if (std::shared_ptr<TSpanCircleBuffer> lock = buffer.lock()) {
-            std::vector<std::unique_ptr<TRetroSpan>> spans = lock->GetSpansOfTrace(traceId);
+        if (std::shared_ptr<TSpanCircleBuffer> locked = buffer.lock()) {
+            std::vector<std::unique_ptr<TRetroSpan>> spans = locked->GetSpans(traceId, getAll);
             std::move(spans.begin(), spans.end(), std::back_inserter(res));
         }
     }
     return res;
+}
+
+std::vector<std::unique_ptr<TRetroSpan>> GetSpansOfTrace(const NWilson::TTraceId& traceId) {
+    return GetSpans(traceId, false);
+}
+
+std::vector<std::unique_ptr<TRetroSpan>> GetAllSpans() {
+    return GetSpans({}, true);
 }
 
 void DropThreadLocalBuffer() {

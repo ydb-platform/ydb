@@ -842,6 +842,8 @@ private:
 
     std::optional<TDriveData> DriveData;
 
+    THashMap<TVDiskID, FHANDLE> DuplicatedFds;
+
 public:
     TRealBlockDevice(const TString &path, TPDiskMon &mon, ui64 reorderingCycles,
             ui64 seekCostNs, ui64 deviceInFlight, TDeviceMode::TFlags flags, ui32 maxQueuedCompletionActions,
@@ -1169,6 +1171,23 @@ protected:
         return PCtx->PDiskId;
     }
 
+    TFileHandle DuplicateFd(const TVDiskID& owner) override {
+        TFileHandle *handle = IoContext->GetFileHandle();
+        if (!handle) {
+            return {};
+        }
+        if (auto it = DuplicatedFds.find(owner); it != DuplicatedFds.end()) {
+            // Close the previous fd for this owner; intentionally ignore close() result
+            (void)close(it->second);
+            DuplicatedFds.erase(it);
+        }
+        FHANDLE fd = handle->Duplicate();
+        if (fd != INVALID_FHANDLE) {
+            DuplicatedFds[owner] = fd;
+        }
+        return TFileHandle(fd);
+    }
+
     virtual ~TRealBlockDevice() {
         Stop();
         while (Trash.size() > 0) {
@@ -1220,6 +1239,15 @@ protected:
                 Y_VERIFY_S(GetEventsThread.Get() == nullptr, PCtx->PDiskLogPrefix);
                 Y_VERIFY_S(TrimThread.Get() == nullptr, PCtx->PDiskLogPrefix);
                 Y_VERIFY_S(CompletionThreads.Get() == nullptr, PCtx->PDiskLogPrefix);
+            }
+            {
+                for (auto& [_, fd] : DuplicatedFds) {
+                    if (fd != INVALID_FHANDLE) {
+                        // Intentionally ignore close() result
+                        (void)close(fd);
+                    }
+                }
+                DuplicatedFds.clear();
             }
             if (IsFileOpened) {
                 EIoResult ret = IoContext->Destroy();

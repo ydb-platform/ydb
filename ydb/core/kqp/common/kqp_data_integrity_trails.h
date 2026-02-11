@@ -16,11 +16,9 @@
 namespace NKikimr {
 namespace NDataIntegrity {
 
-// Node-level cache for QueryTraceId -> QueryText mapping
-// Used to lookup breaker query text in deferred lock scenarios where the breaker's session has completed
-// but victim's session needs to log the breaker's query text.
-// In production multi-node deployments, the victim's SessionActor performs a targeted cross-node
-// lookup to the breaker's node via TKqpQueryTextCacheService when the local cache misses.
+// Node-level cache: QueryTraceId -> QueryText.
+// Used for breaker query text lookup in deferred lock TLI scenarios.
+// Cross-node lookups use TKqpQueryTextCacheService when local cache misses.
 class TNodeQueryTextCache {
 public:
     static constexpr size_t MaxCacheSize = 10000;
@@ -64,26 +62,18 @@ private:
     std::deque<std::pair<ui64, TString>> Cache;
 };
 
-// Class for collecting and managing query texts and QueryTraceIds for TLI logging
-// and victim stats attribution (LocksBrokenAsVictim)
+// Collects query texts and QueryTraceIds for TLI logging and victim stats attribution
 class TQueryTextCollector {
 public:
-    // Add query text and QueryTraceId to the collection while avoiding duplicates and limiting size
-    // The first query text is always stored for victim stats attribution
-    // Subsequent query texts are only stored when TLI logging is enabled (for detailed logging)
+    // First query always stored (for victim stats); subsequent only if TLI enabled
     void AddQueryText(ui64 queryTraceId, const TString& queryText) {
         if (queryText.empty()) {
             return;
         }
-        // Also add to node-level cache for deferred lock scenario lookups
         TNodeQueryTextCache::Instance().Add(queryTraceId, queryText);
 
-        // Always store the first query (needed for victim stats attribution)
-        // For subsequent queries, only store if TLI logging is enabled
         if (QueryTexts.empty() || IS_INFO_LOG_ENABLED(NKikimrServices::TLI)) {
-            // Only add if (queryTraceId, queryText) pair is different from the previous entry
-            // This ensures we can resolve QueryTraceId → QueryText even when same text is executed
-            // multiple times with different trace IDs
+            // Deduplicate consecutive identical entries
             if (QueryTexts.empty() ||
                 QueryTexts.back().first != queryTraceId ||
                 QueryTexts.back().second != queryText) {

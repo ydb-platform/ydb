@@ -149,10 +149,8 @@ struct TKqpCleanupCtx {
     }
 };
 
-// Helper actor that performs a cross-node query text lookup for TLI deferred lock logging.
-// Spawned by the SessionActor when the local TNodeQueryTextCache misses and the breaker's
-// query text is on a different node. Sends TEvLookupQueryText to the breaker's node,
-// emits the TLI log upon response, and self-destructs.
+// Performs cross-node query text lookup for TLI deferred lock logging.
+// Sends TEvLookupQueryText to the breaker's node, emits the TLI log, and self-destructs.
 class TDeferredTliLogActor : public TActorBootstrapped<TDeferredTliLogActor> {
 public:
     TDeferredTliLogActor(
@@ -1982,16 +1980,7 @@ public:
         request.MaxShardCount = RequestControls.MaxShardCount;
         request.TraceId = QueryState ? QueryState->KqpSessionSpan.GetTraceId() : NWilson::TTraceId();
         request.QueryTraceId = QueryState ? QueryState->QueryTraceId : 0;
-        // Set FirstQueryTraceId for lock-breaking attribution in separate commit scenarios
-        // Try TxManager first, then fall back to QueryTextCollector
-        if (txCtx->TxManager && txCtx->TxManager->GetFirstQueryTraceId() != 0) {
-            request.FirstQueryTraceId = txCtx->TxManager->GetFirstQueryTraceId();
-        } else if (txCtx->QueryTextCollector.GetQueryCount() > 0) {
-            auto maybeFirstId = txCtx->QueryTextCollector.GetFirstQueryTraceId();
-            if (maybeFirstId) {
-                request.FirstQueryTraceId = *maybeFirstId;
-            }
-        }
+        request.FirstQueryTraceId = ResolveFirstQueryTraceId(*txCtx);
         request.CaFactory_ = CaFactory_;
         request.ResourceManager_ = ResourceManager_;
         request.SaveQueryPhysicalGraph = allowSaveState && QueryState->SaveQueryPhysicalGraph;
@@ -2003,13 +1992,8 @@ public:
         if (txCtx->EnableOltpSink.value_or(false) && !txCtx->TxManager) {
             txCtx->TxManager = CreateKqpTransactionManager();
             txCtx->TxManager->SetAllowVolatile(AppData()->FeatureFlags.GetEnableDataShardVolatileTransactions());
-            // Initialize FirstQueryTraceId from QueryTextCollector since OnBeginQuery was called before TxManager was created
-            if (txCtx->QueryTextCollector.GetQueryCount() > 0) {
-                auto maybeFirstId = txCtx->QueryTextCollector.GetFirstQueryTraceId();
-                if (maybeFirstId && *maybeFirstId != 0) {
-                    txCtx->TxManager->SetFirstQueryTraceId(*maybeFirstId);
-                }
-            }
+            // OnBeginQuery was called before TxManager was created, propagate FirstQueryTraceId
+            txCtx->TxManager->SetFirstQueryTraceId(ResolveFirstQueryTraceId(*txCtx));
         }
 
         if (txCtx->EnableOltpSink.value_or(false)
@@ -2300,6 +2284,24 @@ public:
         QueryState->Issues.AddIssues(issues);
     }
 
+    // Resolve FirstQueryTraceId from TxManager or QueryTextCollector.
+    // Used for lock-breaking attribution in separate commit scenarios.
+    static ui64 ResolveFirstQueryTraceId(const TKqpTransactionContext& txCtx) {
+        if (txCtx.TxManager) {
+            ui64 id = txCtx.TxManager->GetFirstQueryTraceId();
+            if (id != 0) {
+                return id;
+            }
+        }
+        if (txCtx.QueryTextCollector.GetQueryCount() > 0) {
+            auto maybeId = txCtx.QueryTextCollector.GetFirstQueryTraceId();
+            if (maybeId) {
+                return *maybeId;
+            }
+        }
+        return 0;
+    }
+
     // Emit TLI breaker logs for direct lock breaks (one log per shard that broke locks).
     void EmitBreakerTliLogs(TEvKqpExecuter::TEvTxResponse* ev) {
         if (ev->LocksBrokenAsBreaker == 0 || !IS_INFO_LOG_ENABLED(NKikimrServices::TLI)) {
@@ -2466,6 +2468,7 @@ public:
         }
 
         QueryState->QueryStats.LocksBrokenAsBreaker += ev->LocksBrokenAsBreaker;
+        QueryState->QueryStats.LocksBrokenAsVictim += ev->LocksBrokenAsVictim;
 
         EmitBreakerTliLogs(ev);
         EmitDeferredBreakerTliLogs(ev);

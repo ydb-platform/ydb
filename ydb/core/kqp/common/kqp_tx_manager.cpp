@@ -646,10 +646,8 @@ private:
     bool HasOlapTableShard = false;
     std::optional<NYql::TIssue> LocksIssue;
     std::optional<ui64> VictimQueryTraceId_;
-    // QueryTraceId of the first query in the transaction. Used in deferred lock scenarios
-    // where the MVCC snapshot is established by the first query (typically a SELECT), and
-    // the breaker's write is detected later during commit. The first query's text is needed
-    // for TLI victim attribution since the commit-time QueryTraceId differs from the original.
+    // First query's QueryTraceId. Used for TLI victim attribution in deferred lock scenarios
+    // where the commit-time QueryTraceId differs from the snapshot-establishing query.
     ui64 FirstQueryTraceId_ = 0;
 
     THashSet<ui64> SendingShards;

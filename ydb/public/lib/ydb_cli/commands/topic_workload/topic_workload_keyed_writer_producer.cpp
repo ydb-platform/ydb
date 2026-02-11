@@ -18,7 +18,7 @@ TTopicWorkloadKeyedWriterProducer::TTopicWorkloadKeyedWriterProducer(
     , Params_(params)
     , StatsCollector_(std::move(statsCollector))
     , Clock_(clock)
-    , KeyPrefix_(TGUID::CreateTimebased().AsGuidString())
+    , KeyPrefix_("message_key")
     , KeyId_(0)
 {
     WRITE_LOG(Params_.Log, ELogPriority::TLOG_INFO,

@@ -116,7 +116,8 @@ public:
         const TPathId& pathId,
         TChangeRecord::EKind kind,
         const TDataChange& body,
-        const TString& userSID) override {
+        const TString& userSID) override 
+    {
         NIceDb::TNiceDb db(Db);
 
         Y_ENSURE(Self->IsUserTable(tableId), "Unknown table: " << tableId);

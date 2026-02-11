@@ -41,7 +41,7 @@ public:
         try {
             TabletId = req->tablet_id();
             TabletReq = std::make_unique<TEvTablet::TEvLocalMKQL>();
-            if ((Request!=nullptr) && (Request->GetInternalToken()!=nullptr)) {
+            if (Request != nullptr && Request->GetInternalToken() != nullptr) {
                 TabletReq->Record.SetUserSID(Request->GetInternalToken()->GetUserSID());
             }
 

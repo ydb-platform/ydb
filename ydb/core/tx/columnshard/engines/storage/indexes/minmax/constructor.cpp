@@ -50,7 +50,7 @@ NKikimr::TConclusionStatus TIndexConstructor::DoDeserializeFromProto(const NKiki
         return TConclusionStatus::Fail("cannot parse data extractor: " + bIndex.GetDataExtractor().DebugString());
     }
     AFL_VERIFY(DataExtractor.HasObject());  
-    Errs("proto TRequestedMinMaxIndex from TOlapIndexRequested::GetMinMaxIndex: %s, object: %p\n", bIndex.GetDataExtractor().DebugString(), this);
+    // Errs("proto TRequestedMinMaxIndex from TOlapIndexRequested::GetMinMaxIndex: %s, object: %p\n", bIndex.GetDataExtractor().DebugString(), this);
     return TConclusionStatus::Success();
 }
 

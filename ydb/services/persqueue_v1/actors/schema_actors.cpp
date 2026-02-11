@@ -565,11 +565,8 @@ void TDescribeTopicActorImpl::RestartTablet(ui64 tabletId, const TActorContext& 
     if (pipe && pipe != tabletInfo.Pipe) return;
     if (tabletInfo.ResultRecived) return;
 
-    if (tabletId == BalancerTabletId) {
-        if (GotLocation && GotReadSessions) {
-            return;
-        }
-        Tablets[BalancerTabletId].Pipe = {};
+    if (tabletId == BalancerTabletId && GotLocation && GotReadSessions) {
+        return;
     }
 
     NTabletPipe::CloseClient(ctx, tabletInfo.Pipe);

@@ -830,13 +830,14 @@ public:
             result = L(result, Q(settings));
             return result;
         } else if (func == "partitionlist" || func == "partitionliststrict") {
-            auto requiredLangVer = MakeLangVersion(2025, 4);
-            if (!IsBackwardCompatibleFeatureAvailable(ctx.Settings.LangVer, requiredLangVer, ctx.Settings.BackportMode)) {
-                auto str = FormatLangVersion(requiredLangVer);
-                YQL_ENSURE(str);
-                ctx.Error(Pos_) << "PARTITION_LIST table function is not available before language version " << *str;
+            if (!ctx.EnsureBackwardCompatibleFeatureAvailable(
+                    Pos_,
+                    "PARTITION_LIST table function",
+                    MakeLangVersion(2025, 4)))
+            {
                 return nullptr;
             }
+
             if (Args_.size() != 1) {
                 ctx.Error(Pos_) << "Single argument required, but got " << Args_.size() << " arguments";
                 return nullptr;
@@ -868,11 +869,11 @@ public:
             }
             return partitionList;
         } else if (func == "partitions" || func == "partitionsstrict") {
-            auto requiredLangVer = MakeLangVersion(2025, 4);
-            if (!IsBackwardCompatibleFeatureAvailable(ctx.Settings.LangVer, requiredLangVer, ctx.Settings.BackportMode)) {
-                auto str = FormatLangVersion(requiredLangVer);
-                YQL_ENSURE(str);
-                ctx.Error(Pos_) << "PARTITIONS table function is not available before language version " << *str;
+            if (!ctx.EnsureBackwardCompatibleFeatureAvailable(
+                    Pos_,
+                    "PARTITIONS table function",
+                    MakeLangVersion(2025, 4)))
+            {
                 return nullptr;
             }
 

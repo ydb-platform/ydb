@@ -1488,9 +1488,8 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             }
 
             if (context.ServiceId == YtProviderName) {
-                auto requiredLangVer = MakeLangVersion(2025, 5);
-                if (!IsBackwardCompatibleFeatureAvailable(requiredLangVer)) {
-                    Error() << "CREATE VIEW is not available before language version " << FormatLangVersion(requiredLangVer);
+                if (!Ctx_.EnsureBackwardCompatibleFeatureAvailable(
+                        Ctx_.Pos(), "CREATE VIEW", MakeLangVersion(2025, 5))) {
                     return false;
                 }
             }
@@ -1560,9 +1559,8 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             }
 
             if (context.ServiceId == YtProviderName) {
-                auto requiredLangVer = MakeLangVersion(2025, 5);
-                if (!IsBackwardCompatibleFeatureAvailable(requiredLangVer)) {
-                    Error() << "DROP VIEW is not available before language version " << FormatLangVersion(requiredLangVer);
+                if (!Ctx_.EnsureBackwardCompatibleFeatureAvailable(
+                        Ctx_.Pos(), "DROP VIEW", MakeLangVersion(2025, 5))) {
                     return false;
                 }
             }
@@ -3732,14 +3730,8 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
     TableElemExt("YqlSelect", [](CB_SIG) -> TMaybe<TNodePtr> {
         auto& ctx = query.Context();
 
-        const NYql::TLangVersion langVer = YqlSelectLangVersion();
-        if (!IsBackwardCompatibleFeatureAvailable(
-                ctx.Settings.LangVer,
-                langVer,
-                ctx.Settings.BackportMode))
-        {
-            query.Error() << "YqlSelect is not available before "
-                          << FormatLangVersion(langVer);
+        if (!ctx.EnsureBackwardCompatibleFeatureAvailable(
+                ctx.Pos(), "YqlSelect", YqlSelectLangVersion())) {
             return Nothing();
         }
 

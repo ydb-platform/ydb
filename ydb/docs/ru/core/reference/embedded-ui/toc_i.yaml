@@ -7,6 +7,15 @@ items:
   when: false
 - name: YDB Monitoring
   href: ydb-monitoring.md
+  items:
+  - name: Страница Databases
+    href: database.md
+  - name: Страница Nodes
+    href: nodes.md
+  - name: Страница Storage
+    href: storage.md
+  - name: Страница Tablets
+    href: tablets.md
 - name: Hive web-viewer
   href: hive.md
 - name: Обзор соединений

@@ -248,7 +248,7 @@ namespace NKikimr::NDDisk {
         void IssuePDiskLogRecord(TLogSignature signature, TChunkIdx chunkIdxToCommit, const NProtoBuf::Message& data,
             ui64 *startingPointLsnPtr, std::function<void()> callback);
 
-        NKikimrBlobStorage::NDDisk::NInternal::TPersistentBufferChunkMapLogRecord CreatePersistentBufferChunkMapSnapshot();
+        NKikimrBlobStorage::NDDisk::NInternal::TPersistentBufferChunkMapLogRecord CreatePersistentBufferChunkMapSnapshot(const std::vector<ui64>& newChunkIdxs = {});
         NKikimrBlobStorage::NDDisk::NInternal::TChunkMapLogRecord CreateChunkMapSnapshot();
         NKikimrBlobStorage::NDDisk::NInternal::TChunkMapLogRecord CreateChunkMapIncrement(ui64 tabletId, ui64 vChunkIndex,
             TChunkIdx chunkIdx);
@@ -402,12 +402,15 @@ namespace NKikimr::NDDisk {
         std::map<std::tuple<ui64, ui64>, TPersistentBuffer> PersistentBuffers;
         ui64 PersistentBufferInMemoryCacheSize = 0;
 
+        TString PersistentBufferToString();
+
         void SanitizePersistentBufferInMemoryCache(TPersistentBuffer::TRecord& record, bool force = false);
 
         static constexpr ui32 SectorSize = 4096;
         static constexpr ui32 SectorInChunk = 32768;
         static constexpr ui32 ChunkSize = SectorSize * SectorInChunk;
         static constexpr ui32 MaxChunks = 128;
+        static constexpr ui32 PersistentBufferInitChunks = 4;
         static constexpr ui32 MaxSectorsPerBufferRecord = 128;
         static constexpr ui32 MaxPersistentBufferInMemoryCache = ChunkSize;
         static constexpr ui32 MaxPersistentBufferChunkRestoreInflight = 8;

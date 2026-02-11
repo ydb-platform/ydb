@@ -24,6 +24,7 @@ private:
     const TString Bucket;
     const Aws::S3::Model::StorageClass StorageClass = Aws::S3::Model::StorageClass::STANDARD;
     bool Verbose = true;
+    NMonitoring::TDynamicCounterPtr Counters;
 
     mutable std::mutex RunningQueriesMutex;
     mutable std::condition_variable RunningQueriesNotifier;
@@ -88,7 +89,9 @@ public:
     TS3ExternalStorage(
             const Aws::Client::ClientConfiguration& config,
             const Aws::Auth::AWSCredentials& credentials,
-            const TString& bucket, const Aws::S3::Model::StorageClass storageClass,
+            const TString& bucket,
+            NMonitoring::TDynamicCounterPtr counters,
+            const Aws::S3::Model::StorageClass storageClass,
             bool verbose = true,
             bool useVirtualAdressing = true)
         : Client(new Aws::S3::S3Client(
@@ -101,6 +104,7 @@ public:
         , Bucket(bucket)
         , StorageClass(storageClass)
         , Verbose(verbose)
+        , Counters(std::move(counters))
     {
     }
 

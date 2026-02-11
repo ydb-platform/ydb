@@ -11,6 +11,8 @@
 #include <ydb/core/wrappers/events/get_object.h>
 #include <ydb/core/wrappers/events/object_exists.h>
 
+#include <library/cpp/monlib/dynamic_counters/counters.h>
+
 #include <memory>
 
 namespace NKikimrConfig {
@@ -203,7 +205,7 @@ public:
     virtual ~IExternalStorageConfig() = default;
     IExternalStorageOperator::TPtr ConstructStorageOperator(bool verbose = true) const;
     template <typename TSettings>
-    static IExternalStorageConfig::TPtr Construct(const NKikimrConfig::TAwsClientConfig& defaultAwsClientSettings, const TSettings& settings);
+    static IExternalStorageConfig::TPtr Construct(const NKikimrConfig::TAwsClientConfig& defaultAwsClientSettings, const TSettings& settings, NMonitoring::TDynamicCounterPtr rootCounters);
 };
 } // NExternalStorage
 

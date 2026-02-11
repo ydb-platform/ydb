@@ -31,8 +31,6 @@
 #include <util/string/ascii.h>
 #include <util/string/join.h>
 
-#include <ydb/library/security/util.h>
-
 namespace NKikimr::NSQS {
 
 template <typename TDerived>
@@ -575,7 +573,7 @@ private:
         UserName_ = request.GetAuth().GetUserName();
         FolderId_ = request.GetAuth().GetFolderId();
         UserSID_ = request.GetAuth().GetUserSID();
-        MaskedToken_ = NKikimr::MaskIAMTicket(SecurityToken_);
+        MaskedToken_ = request.GetAuth().GetMaskedToken();
         AuthType_ = request.GetAuth().GetAuthType();
 
         if (IsCloud() && !FolderId_) {

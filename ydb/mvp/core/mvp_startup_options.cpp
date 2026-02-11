@@ -134,9 +134,15 @@ void TMvpStartupOptions::LoadTokens() {
 void TMvpStartupOptions::LoadCertificates() {
     if (!CaCertificateFile.empty()) {
         CaCertificate = TUnbufferedFileInput(CaCertificateFile).ReadAll();
+        if (CaCertificate.empty()) {
+            ythrow yexception() << "Invalid CA certificate file";
+        }
     }
     if (!SslCertificateFile.empty()) {
         SslCertificate = TUnbufferedFileInput(SslCertificateFile).ReadAll();
+        if (SslCertificate.empty()) {
+            ythrow yexception() << "Invalid SSL certificate file";
+        }
     }
 }
 

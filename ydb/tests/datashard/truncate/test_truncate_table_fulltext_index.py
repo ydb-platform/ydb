@@ -1,6 +1,3 @@
-import logging
-import itertools
-
 from hamcrest import assert_that, equal_to
 
 from ydb.tests.oss.ydb_sdk_import import ydb
@@ -69,6 +66,7 @@ def test_truncate_table_with_fulltext_index_table_service(ydb_cluster, ydb_datab
                 truncate_table()
                 verify_index_works_correctly()
 
+
 def test_truncate_table_with_fulltext_index_with_query_service(ydb_cluster, ydb_database, ydb_client):
     driver = ydb_client(ydb_database)
     driver.wait(timeout=10)
@@ -121,6 +119,7 @@ def test_truncate_table_with_fulltext_index_with_query_service(ydb_cluster, ydb_
         for _ in range(5):
             truncate_table()
             verify_index_works_correctly()
+
 
 def test_truncate_table_with_fulltext_index_with_query_service_many_sessions(ydb_cluster, ydb_database, ydb_client):
     driver = ydb_client(ydb_database)

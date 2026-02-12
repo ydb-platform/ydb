@@ -246,9 +246,9 @@ EXPECTED_RESULTS_WITH_ENFORCE_USER_TOKEN = {
     },
     '/healthcheck?database=%2FRoot': {
         None: 200,
-        'user@builtin': 403,
-        'database@builtin': 403,
-        'viewer@builtin': 403,
+        'user@builtin': 200,
+        'database@builtin': 200,
+        'viewer@builtin': 200,
         'monitoring@builtin': 200,
         'root@builtin': 200,
     },

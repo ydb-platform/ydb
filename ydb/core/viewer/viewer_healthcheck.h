@@ -124,20 +124,6 @@ public:
             return checkAccessMonitoring;
         }
 
-        { // TODO(yurikiselev): DEAL WITH IT!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-            // When enforce_user_token is on and a token is present, require monitoring access for JSON
-            // (do not use the legacy IsDatabaseRequest bypass that incorrectly allows e.g. user@builtin).
-            const auto enforceUserToken = config.AppConfig.GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenRequirement();
-            const TString tokenSerialized = GetRequest().GetUserTokenObject();
-            if (enforceUserToken && !tokenSerialized.empty()) {
-                return checkAccessMonitoring;
-            }
-            // Legacy: database-prefixed URL without token was historically allowed.
-            if (enforceUserToken && tokenSerialized.empty() && !Database.empty()) {
-                return true;
-            }
-        }
-
         // The database requests were left without any authentication checks for a long time,
         // so we ignore access check for it by default.
         return IsDatabaseRequest() || checkAccessMonitoring;

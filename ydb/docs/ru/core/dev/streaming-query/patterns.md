@@ -8,7 +8,10 @@
 
 {% note info %}
 
-Работа с топиками выполняется через [external data source](../../concepts/datamodel/external_data_source.md). В примерах:
+Работа с топиками выполняется через [external data source](../../concepts/datamodel/external_data_source.md).
+
+В примерах:
+
 - `ydb_source` — заранее созданный `external data source`;
 - `input_topic` - топик, откуда производится чтение данных;
 - `output_topic` - топик, куда производится запись результатов;

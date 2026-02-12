@@ -407,7 +407,7 @@ namespace {
 
             ui32 const nodeId = 0;
             auto warmupEdge = runtime.AllocateEdgeActor(nodeId);
-            auto* warmupActor = CreateKqpWarmupActor(warmupActorConfig, "/Root", "", warmupEdge);
+            auto* warmupActor = CreateKqpWarmupActor(warmupActorConfig, "/Root", "", {warmupEdge});
             auto warmupActorId = runtime.Register(warmupActor, nodeId);
 
             TDispatchOptions opts;

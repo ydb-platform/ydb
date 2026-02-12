@@ -18,6 +18,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <unordered_set>
 
 namespace NYdb::NBS::NBlockStore::NLoadTest {
 
@@ -77,8 +78,9 @@ private:
 
 
     static constexpr ui64 BlockSize = 4_KB;
-    static constexpr ui32 BlocksNum = 256;
+    static constexpr ui32 BlocksNumberForPreGeneratedWriteData = 1024;
     TVector<TVector<ui8>> DataForWriteRequests;
+    std::unordered_set<ui64> AvailableWriteBlocks;
 public:
     TTestRunner(
             ILoggingServicePtr loggingService,
@@ -130,6 +132,8 @@ private:
     bool CheckSendRequestCondition() const;
     bool CheckExitCondition() const;
 
+    void AddAvailableWriteBlockIndex(ui64 index);
+    ui64 GetNextWriteBlockIndex();
     void ProcessCompletedRequests(std::unique_ptr<TCompletedRequest> request);
 
     void ReportProgress();
@@ -255,6 +259,21 @@ std::make_unique<TCompletedRequest>(
     }
 }
 
+void TTestRunner::AddAvailableWriteBlockIndex(ui64 index)
+{
+    AvailableWriteBlocks.insert(index);
+}
+
+ui64 TTestRunner::GetNextWriteBlockIndex()
+{
+    ui64 index = RandomNumber<ui64>(AvailableWriteBlocks.size());
+    auto it = std::next(AvailableWriteBlocks.begin(), static_cast<int>(index));
+    ui64 result = *it;
+    AvailableWriteBlocks.erase(it);
+
+    return result;
+}
+
 void TTestRunner::SendWriteRequest(const TBlockRange64& range)
 {
     if (range.Size() != 1) {
@@ -266,8 +285,10 @@ void TTestRunner::SendWriteRequest(const TBlockRange64& range)
 
     auto started = TInstant::Now();
 
+    ui64 randomBlockIndex = GetNextWriteBlockIndex();
+
     auto cb =
-        [started, range, this, p=shared_from_this()]
+        [started, range, this, p=shared_from_this(), randomBlockIndex]
         (const NYdb::NBS::NProto::TError& result, const void* udata) mutable {
         STORAGE_DEBUG(LoggingTag
                 << "TTestRunner::SendWriteRequest cb for range: " << range
@@ -283,9 +304,10 @@ void TTestRunner::SendWriteRequest(const TBlockRange64& range)
             range,
             result,
             TInstant::Now() - started);
+        p->AddAvailableWriteBlockIndex(randomBlockIndex);
     };
 
-    ui64 randomBlockIndex = RandomNumber<ui64>(DataForWriteRequests.size());
+
     auto& block = DataForWriteRequests[randomBlockIndex];
     RequestCallbacks.Write(range.Start, block.data(), block.size(), cb, Udata);
 }
@@ -379,8 +401,10 @@ void TTestRunner::ReportProgress()
 
 void TTestRunner::GenerateWriteData()
 {
-    DataForWriteRequests.resize(BlocksNum);
-    for (auto &block: DataForWriteRequests) {
+    DataForWriteRequests.resize(BlocksNumberForPreGeneratedWriteData);
+    for (ui64 i = 0; i < DataForWriteRequests.size(); ++i) {
+        auto &block = DataForWriteRequests[i];
+        AddAvailableWriteBlockIndex(i);
         block.resize(BlockSize);
         auto random = []() -> ui8 {
             return 1 + RandomNumber<ui8>(Max<ui8>());

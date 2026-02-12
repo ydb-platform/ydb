@@ -63,7 +63,7 @@ public:
                 return TCell::Make<ui64>(info.GetLastAccessedAt());
             }});
 
-            insert({TSchema::CompilationDuration::ColumnId, [] (const TCompileCacheQuery& info, ui32) {  // 8
+            insert({TSchema::CompilationDurationMs::ColumnId, [] (const TCompileCacheQuery& info, ui32) {  // 8
                 return TCell::Make<ui64>(NProtoInterop::CastFromProto(info.GetCompilationDuration()).MilliSeconds());
             }});
 

@@ -385,7 +385,7 @@ public:
     // Warmup
     ::NMonitoring::TDynamicCounters::TCounterPtr WarmupQueriesFetched;
     ::NMonitoring::TDynamicCounters::TCounterPtr WarmupQueriesCompiled;
-    ::NMonitoring::TDynamicCounters::TCounterPtr WarmupFinished;
+    ::NMonitoring::TDynamicCounters::TCounterPtr WarmupQueriesTruncated;
 
     // Compile computation pattern service
     ::NMonitoring::TDynamicCounters::TCounterPtr CompiledComputationPatterns;

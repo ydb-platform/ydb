@@ -746,7 +746,7 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         runConfig.AppConfig.GetTableServiceConfig().GetCompileCacheWarmupConfig().GetEnabled()) {
         auto warmupConfig = NKqp::ImportWarmupConfigFromProto(
             runConfig.AppConfig.GetTableServiceConfig().GetCompileCacheWarmupConfig());
-        GRpcServersWrapper->WarmupTimeout = warmupConfig.Deadline;
+        GRpcServersWrapper->WarmupTimeout = warmupConfig.HardDeadline;
     }
 
     GRpcServersWrapper->GrpcServersFactory = [runConfig, this] { return CreateGRpcServers(runConfig); };

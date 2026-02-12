@@ -3,10 +3,7 @@
 #include "yql_pq_mkql_compiler.h"
 #include "yql_pq_topic_key_parser.h"
 
-#include <yql/essentials/ast/yql_expr.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
-#include <yql/essentials/providers/common/dq/yql_dq_integration_impl.h>
-#include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/providers/generic/connector/api/service/protos/connector.pb.h>
@@ -16,7 +13,13 @@
 #include <ydb/library/yql/providers/pq/expr_nodes/yql_pq_expr_nodes.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 #include <ydb/library/yql/providers/pq/proto/dq_task_params.pb.h>
+
+#include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/providers/common/dq/yql_dq_integration_impl.h>
+#include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
 #include <yql/essentials/utils/log/log.h>
+
+#include <library/cpp/protobuf/interop/cast.h>
 
 #include <util/string/builder.h>
 
@@ -215,6 +218,14 @@ public:
                     if (const auto& optLLVM = types->OptLLVM) {
                         srcDesc.SetEnabledLLVM(!optLLVM->empty() && *optLLVM != "OFF");
                     }
+                }
+
+                if (const auto& bufferSize = State_->Configuration->ReadSessionBufferBytes.Get()) {
+                    srcDesc.SetReadSessionBufferBytes(*bufferSize);
+                }
+
+                if (const auto maxPartitionReadSkew = State_->Configuration->MaxPartitionReadSkew.Get()) {
+                    *srcDesc.MutableMaxPartitionReadSkew() = NProtoInterop::CastToProto(*maxPartitionReadSkew);
                 }
 
                 bool sharedReading = false;

@@ -153,6 +153,8 @@ struct TKqpCleanupCtx {
 // Sends TEvLookupQueryText to the breaker's node, emits the TLI log, and self-destructs.
 class TDeferredTliLogActor : public TActorBootstrapped<TDeferredTliLogActor> {
 public:
+    static constexpr TDuration LookupTimeout = TDuration::Seconds(5);
+
     TDeferredTliLogActor(
         ui64 breakerQueryTraceId,
         ui32 breakerNodeId,
@@ -167,18 +169,19 @@ public:
     void Bootstrap() {
         auto request = MakeHolder<TEvLookupQueryText>();
         request->Record.SetQueryTraceId(BreakerQueryTraceId);
-        Send(MakeKqpQueryTextCacheServiceId(BreakerNodeId), request.Release());
+        Send(MakeKqpQueryTextCacheServiceId(BreakerNodeId), request.Release(), IEventHandle::FlagTrackDelivery);
+        Schedule(LookupTimeout, new TEvents::TEvWakeup());
         Become(&TDeferredTliLogActor::StateFunc);
     }
 
     STRICT_STFUNC(StateFunc,
         hFunc(TEvLookupQueryTextResponse, HandleResponse)
+        hFunc(TEvents::TEvUndelivered, HandleUndelivered)
+        cFunc(TEvents::TSystem::Wakeup, HandleTimeout)
     )
 
 private:
-    void HandleResponse(TEvLookupQueryTextResponse::TPtr& ev) {
-        auto& record = ev->Get()->Record;
-        TString breakerQueryText = record.GetQueryText();
+    void EmitLog(const TString& breakerQueryText) {
         TString breakerQueryTexts;
         if (!breakerQueryText.empty()) {
             breakerQueryTexts = TStringBuilder() << "[QueryTraceId=" << BreakerQueryTraceId
@@ -194,7 +197,22 @@ private:
             .BreakerQueryTraceId = BreakerQueryTraceId,
             .IsCommitAction = IsCommitAction,
         }, TlsActivationContext->AsActorContext());
+    }
 
+    void HandleResponse(TEvLookupQueryTextResponse::TPtr& ev) {
+        EmitLog(ev->Get()->Record.GetQueryText());
+        PassAway();
+    }
+
+    void HandleUndelivered(TEvents::TEvUndelivered::TPtr&) {
+        // Target node unreachable, emit log with empty query text
+        EmitLog("");
+        PassAway();
+    }
+
+    void HandleTimeout() {
+        // Lookup timed out, emit log with empty query text to avoid leaking actors
+        EmitLog("");
         PassAway();
     }
 

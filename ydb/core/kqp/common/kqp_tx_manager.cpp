@@ -620,8 +620,8 @@ private:
         for (const auto& path : shardInfo.Pathes) {
             if (!first) {
                 message << ", ";
-                first = false;
             }
+            first = false;
             message << "`" << path << "`";
         }
         message << ".";

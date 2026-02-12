@@ -280,9 +280,10 @@ namespace NKikimr {
             // huge blobs to free
             LOG_LOG(ctx, IsAborting ? NLog::PRI_ERROR : NLog::PRI_INFO, NKikimrServices::BS_HULLCOMP,
                        VDISKP(HullCtx->VCtx->VDiskLogPrefix,
-                            "%s: Compaction job (%" PRIu64 ") finished (freedHugeBlobs): fresh# %s freedHugeBlobs# %s",
+                            "%s: Compaction job (%" PRIu64 ") finished (freedHugeBlobs): fresh# %s freedHugeBlobs# %" PRIu64,
                             PDiskSignatureForHullDbKey<TKey>().ToString().data(), CompactionID,
-                            (FreshSegment ? "true" : "false"), Worker.GetFreedHugeBlobs().ToString().data()));
+                            (FreshSegment ? "true" : "false"),
+                            ui64(Worker.GetFreedHugeBlobs().Size())));
             msg->FreedHugeBlobs = IsAborting ? TDiskPartVec() : Worker.GetFreedHugeBlobs();
             msg->AllocatedHugeBlobs = IsAborting ? TDiskPartVec() : Worker.GetAllocatedHugeBlobs();
 

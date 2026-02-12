@@ -278,8 +278,7 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::RequestColumnStatistics(TExprC
 
 bool TKqpNewRBOTransformer::IsSuitableToRequestStatistics() {
     // Currently just checking for a flag.
-    // return KqpCtx.Config->FeatureFlags.GetEnableColumnStatistics();
-    return true;
+    return KqpCtx.Config->FeatureFlags.GetEnableColumnStatistics();
 }
 
 IGraphTransformer::TStatus TKqpNewRBOTransformer::ContinueOptimizations(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) {

@@ -1,10 +1,13 @@
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
-
+#include <ydb/core/statistics/ut_common/ut_common.h>
+#include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/library/actors/testlib/test_runtime.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
-
 #include <yql/essentials/parser/pg_catalog/catalog.h>
 #include <yql/essentials/parser/pg_wrapper/interface/codec.h>
 #include <yql/essentials/utils/log/log.h>
@@ -19,6 +22,9 @@ namespace {
 
 using namespace NKikimr;
 using namespace NKikimr::NKqp;
+using namespace NYdb;
+using namespace NYdb::NTable;
+using namespace NStat;
 
 double TimeQuery(NKikimr::NKqp::TKikimrRunner& kikimr, TString query, int nIterations) {
     auto db = kikimr.GetTableClient();
@@ -1349,6 +1355,69 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             //Cout << FormatResultSetYson(result.GetResultSet(0)) << Endl;
             UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), results[i]);
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(ColumnStatistics, ColumnStore) {
+        auto enableNewRbo = [](Tests::TServerSettings& settings) {
+            settings.AppConfig->MutableTableServiceConfig()->SetEnableNewRBO(true);
+            // Fallback is enabled, becayse analyze uses UDAF which are not supported in NEW RBO.
+            settings.AppConfig->MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(true);
+            settings.AppConfig->MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+            settings.AppConfig->MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+            settings.AppConfig->MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+        };
+
+        TTestEnv env(1, 1, true, enableNewRbo);
+        CreateDatabase(env, "Database");
+        TTableClient client(env.GetDriver());
+        auto session = client.CreateSession().GetValueSync().GetSession();
+
+        TString schemaQ = R"(
+            CREATE TABLE `/Root/Database/t1` (
+                a Int64 NOT NULL,
+                b Int64,
+                primary key(a)
+            )
+        )";
+
+        if (ColumnStore) {
+            schemaQ += R"(WITH (STORE = column))";
+        }
+        schemaQ += ";";
+
+        auto result = session.ExecuteSchemeQuery(schemaQ).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        NYdb::TValueBuilder rowsTable;
+        rowsTable.BeginList();
+        for (size_t i = 0, e = (1 << 4); i < e; ++i) {
+            rowsTable.AddListItem()
+                .BeginStruct()
+                .AddMember("a").Int64(i)
+                .AddMember("b").Int64(i + 1)
+                .EndStruct();
+        }
+        rowsTable.EndList();
+
+        auto resultUpsert = client.BulkUpsert("/Root/Database/t1", rowsTable.Build()).GetValueSync();
+        UNIT_ASSERT_C(resultUpsert.IsSuccess(), resultUpsert.GetIssues().ToString());
+
+        result = session.ExecuteSchemeQuery(Sprintf(R"(ANALYZE `Root/%s/%s`)", "Database", "t1")).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        std::vector<std::string> queries = {
+            R"(
+                PRAGMA YqlSelect = 'force';
+                select t1.a, t1.b from `/Root/Database/t1` as t1 where t1.a > 10;
+            )",
+        };
+
+        auto session2 = client.GetSession().GetValueSync().GetSession();
+        for (ui32 i = 0; i < queries.size(); ++i) {
+            const auto& query = queries[i];
+            auto result = session2.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
     }
 

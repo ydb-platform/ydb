@@ -77,31 +77,31 @@ class TpccSuiteBase(LoadSuiteBase):
         self.process_query_result(result, 'test', True)
 
 
-class TestTpccW3000T0Serializble(TpccSuiteBase):
+class TestTpccW3000T0Serializable(TpccSuiteBase):
     warehouses: int = 3000
     threads: int = 0
     tx_mode = TxMode.SerializableRW
 
 
-class TestTpccW5000T0Serializble(TpccSuiteBase):
+class TestTpccW5000T0Serializable(TpccSuiteBase):
     warehouses: int = 5000
     threads: int = 0
     tx_mode = TxMode.SerializableRW
 
 
-class TestTpccW12000T0Serializble(TpccSuiteBase):
+class TestTpccW12000T0Serializable(TpccSuiteBase):
     warehouses: int = 12000
     threads: int = 0
     tx_mode = TxMode.SerializableRW
 
 
-class TestTpccW16000T0Serializble(TpccSuiteBase):
+class TestTpccW16000T0Serializable(TpccSuiteBase):
     warehouses: int = 16000
     threads: int = 0
     tx_mode = TxMode.SerializableRW
 
 
-class TestTpccW18000T0Serializble(TpccSuiteBase):
+class TestTpccW18000T0Serializable(TpccSuiteBase):
     warehouses: int = 18000
     threads: int = 0
     tx_mode = TxMode.SerializableRW

@@ -437,7 +437,7 @@ class YdbCliHelper:
     def deploy_remote_cli(cls, host: str = ''):
         if not host:
             host = YdbCluster.get_client_host()
-        result = remote_execution.deploy_binary(cls.get_cli_path(), YdbCluster.get_client_host(), os.path.dirname(cls.get_remote_cli_path()))
+        result = remote_execution.deploy_binary(host, YdbCluster.get_client_host(), os.path.dirname(cls.get_remote_cli_path()))
         assert result.get('success', False), f"host: {host}, bin: {cls.get_cli_path()}, path: {result.get('path')}, error: {result.get('error')}"
 
     @classmethod
@@ -490,17 +490,18 @@ class YdbCliHelper:
             res.start_time = start_time
             try:
                 res.stdout = exec.stdout
-                res.stderr = exec.stdout
+                res.stderr = exec.stderr
                 if exec.return_code != 0:
                     res.add_error(f'ydb cli failed with code {exec.return_code}.')
                     ans = {}
                 else:
                     ans = json.loads(res.stdout)
-                sum = ans.get('summary', {})
-                res.add_stat('test', 'tpcc_tpmc', sum.get('tpmc', 0))
-                res.add_stat('test', 'tpcc_warehouses', sum.get('warehouses', 0))
-                res.add_stat('test', 'tpcc_efficiency', sum.get('efficiency', 0))
-                res.add_stat('test', 'tpcc_time_seconds', sum.get('time_seconds', 0))
+                summary = ans.get('summary', {})
+                res.add_stat('test', 'tpcc_json', ans)
+                res.add_stat('test', 'tpcc_tpmc', summary.get('tpmc', 0))
+                res.add_stat('test', 'tpcc_warehouses', summary.get('warehouses', 0))
+                res.add_stat('test', 'tpcc_efficiency', summary.get('efficiency', 0))
+                res.add_stat('test', 'tpcc_time_seconds', summary.get('time_seconds', 0))
                 for tr, stats in ans.get('transactions', {}).items():
                     res.add_stat('test', f'tpcc_{tr}_ok_count', stats.get('ok_count', 0))
                     res.add_stat('test', f'tpcc_{tr}_failed_count', stats.get('failed_count', 0))

@@ -614,7 +614,7 @@ def fix_binaries_directory_permissions(hosts: List[str], target_dir: str = '/tmp
     return results
 
 
-def get_remote_tmp_path(host: str, *localpath: list[str]) -> str:
+def get_remote_tmp_path(host: str, *localpath: str) -> str:
     tmpdir = '/tmp'
     if is_localhost(host):
         tmpdir = os.getenv('TMP') or os.getenv('TMPDIR') or yatest.common.work_path()
@@ -624,7 +624,7 @@ def get_remote_tmp_path(host: str, *localpath: list[str]) -> str:
 
 
 class LongRemoteExecution(AbstractContextManager):
-    def __init__(self, host: str, *cmd: list[str]):
+    def __init__(self, host: str, *cmd: str):
         self.host = host
         self.cmd = subprocess.list2cmdline(cmd)
         self_hash = f're_{abs(hash((self.host, self.cmd)))}_{random.randint(0, 1000000)}'
@@ -672,13 +672,13 @@ class LongRemoteExecution(AbstractContextManager):
     def stdout(self) -> str:
         if self._out is None:
             self._out = self._get_content(self._out_path)
-        return self._out
+        return self._out or ''
 
     @property
     def stderr(self) -> str:
         if self._err is None:
             self._err = self._get_content(self._err_path)
-        return self._err
+        return self._err or ''
 
     @property
     def return_code(self) -> int:
@@ -697,4 +697,7 @@ class LongRemoteExecution(AbstractContextManager):
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.terminate()
+        allure.attach(self.return_code, 'return code', allure.attachment_type.TEXT)
+        allure.attach(self.stdout, 'remote stdout', allure.attachment_type.TEXT)
+        allure.attach(self.stderr, 'remote stderr', allure.attachment_type.TEXT)
         self.allure.__exit__(exc_type, exc_val, exc_tb)

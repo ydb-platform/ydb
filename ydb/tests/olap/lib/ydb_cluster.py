@@ -76,9 +76,12 @@ class YdbCluster:
     @classmethod
     def get_client_host(cls) -> str:
         if not cls._client_host:
-            cls._client_host = get_external_param('client-host', 'localhost')
-            if cls._client_host == 'static':
-                cls._client_host = cls.get_cluster_nodes(role=YdbCluster.Node.Role.STORAGE, db_only=False)[0].host
+            nodes = cls.get_cluster_nodes(role=YdbCluster.Node.Role.STORAGE, db_only=False)
+            if not nodes:
+                raise RuntimeError(
+                    "client-host is set to 'static', but no STORAGE nodes are available from get_cluster_nodes()"
+                )
+            cls._client_host = nodes[0].host
         return cls._client_host
 
     @classmethod
@@ -246,6 +249,7 @@ class YdbCluster:
         cls.ydb_mon_port = ydb_mon_port
         cls._dyn_nodes_count = dyn_nodes_count
         cls._ydb_driver = None
+        cls._client_host = None
 
     @classmethod
     def get_ydb_driver(cls):

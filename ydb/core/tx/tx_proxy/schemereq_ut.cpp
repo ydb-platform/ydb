@@ -245,23 +245,15 @@ NYdb::NDiscovery::TDiscoveryClient CreateDiscoveryClient(const TTestEnv& env, co
     return NYdb::NDiscovery::TDiscoveryClient(env.GetDriver(), settings);
 }
 
-auto RetryableGetQueryClientSession(NYdb::NQuery::TQueryClient&& client) {
-    size_t retriesCount = 0;
-    while (retriesCount++ < 10) {
-        auto settings = NYdb::NQuery::TCreateSessionSettings()
-            .ClientTimeout(TDuration::Seconds(30));
-        auto sessionResult = client.GetSession(settings).ExtractValueSync();
+auto RetryableExecuteQuery(NYdb::NQuery::TQueryClient&& client, const TString& sql) {
+    auto retrySettings = NYdb::NQuery::TRetryOperationSettings()
+        .MaxRetries(3)
+        .GetSessionClientTimeout(TDuration::Seconds(30))
+        .RetryUndefined(true);
 
-        if (!sessionResult.IsSuccess()) {
-            Sleep(TDuration::Seconds(3));
-            continue;
-        } else {
-            return sessionResult.GetSession();
-        }
-    }
-
-    UNIT_ASSERT_C(false, "Too many retries for creating session");
-    Y_UNREACHABLE();
+    return client.RetryQuery([sql](NYdb::NQuery::TSession session) {
+        return session.ExecuteQuery(sql, NYdb::NQuery::TTxControl::NoTx());
+    }, retrySettings).ExtractValueSync();
 }
 
 void CreateLocalUser(const TTestEnv& env, const TString& database, const TString& name, const TString& token) {
@@ -272,13 +264,14 @@ void CreateLocalUser(const TTestEnv& env, const TString& database, const TString
         name.c_str()
     );
 
-    auto session = RetryableGetQueryClientSession(CreateQueryClient(env, token, database));
-    auto result = session.ExecuteQuery(query,  NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    auto result = RetryableExecuteQuery(CreateQueryClient(env, token, database), query);
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 }
+
 void CreateLocalUser(const TTestEnv& env, const TString& database, const TString& user) {
     CreateLocalUser(env, database, user, env.RootToken);
 }
+
 void CreateLocalGroup(const TTestEnv& env, const TString& database, const TString& name, const TString& token) {
     auto query = Sprintf(
         R"(
@@ -287,13 +280,14 @@ void CreateLocalGroup(const TTestEnv& env, const TString& database, const TStrin
         name.c_str()
     );
 
-    auto session = RetryableGetQueryClientSession(CreateQueryClient(env, token, database));
-    auto result = session.ExecuteQuery(query,  NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    auto result = RetryableExecuteQuery(CreateQueryClient(env, token, database), query);
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 }
+
 void CreateLocalGroup(const TTestEnv& env, const TString& database, const TString& name) {
     CreateLocalGroup(env, database, name, env.RootToken);
 }
+
 void CreateLocalUser2(TTestEnv& env, const TString& database, const TString& name, const TString& token) {
     auto runtime = env.GetTestServer().GetRuntime();
     const auto edge = runtime->AllocateEdgeActor(0);
@@ -341,6 +335,7 @@ void CreateLocalUser2(TTestEnv& env, const TString& database, const TString& nam
         UNIT_ASSERT_VALUES_EQUAL(NKikimrScheme::EStatus(event->Record.GetSchemeShardStatus()), NKikimrScheme::EStatus::StatusSuccess);
     }
 }
+
 void CreateLocalGroup2(TTestEnv& env, const TString& database, const TString& name, const TString& token) {
     auto runtime = env.GetTestServer().GetRuntime();
     const auto edge = runtime->AllocateEdgeActor(0);
@@ -403,6 +398,7 @@ void ChangeOwner(const TTestEnv& env, const TString& path, const TString& target
         .ExtractValueSync();
     UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
 }
+
 void ChangeOwner(const TTestEnv& env, const TString& path, const TString& targetSid) {
     ChangeOwner(env, path, targetSid, env.RootToken);
 }
@@ -578,10 +574,9 @@ Y_UNIT_TEST_SUITE(SchemeReqAccess) {
 
         // Test body
         {
-            auto session = RetryableGetQueryClientSession(CreateQueryClient(env, subjectToken, env.RootPath));
+            auto result = RetryableExecuteQuery(CreateQueryClient(env, subjectToken, env.RootPath), params.SqlStatement);
 
             // test body
-            auto result = session.ExecuteQuery(params.SqlStatement, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.IsSuccess(), params.ExpectedResult,
                 "query '" << params.SqlStatement << "'"
                 << ", subject " << subjectSid
@@ -1138,3 +1133,4 @@ Y_UNIT_TEST_SUITE(SchemeReqAdminAccessInTenant) {
 }
 
 }  // namespace NKikimr::NTxProxyUT
+

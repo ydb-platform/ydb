@@ -103,7 +103,7 @@ static int zlib_compress(grpc_slice_buffer* input, grpc_slice_buffer* output,
   memset(&zs, 0, sizeof(zs));
   zs.zalloc = zalloc_gpr;
   zs.zfree = zfree_gpr;
-  r = deflateInit2(&zs, Z_DEFAULT_COMPRESSION, Z_DEFLATED, 15 | (gzip ? 16 : 0),
+  r = deflateInit2(&zs, getenv("GRPC_ZLEVEL") ? atoi(getenv("GRPC_ZLEVEL")) : Z_DEFAULT_COMPRESSION, Z_DEFLATED, 15 | (gzip ? 16 : 0),
                    8, Z_DEFAULT_STRATEGY);
   GPR_ASSERT(r == Z_OK);
   r = zlib_body(&zs, input, output, deflate) && output->length < input->length;

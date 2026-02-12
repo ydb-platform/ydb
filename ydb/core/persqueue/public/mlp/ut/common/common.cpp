@@ -55,10 +55,11 @@ TStatus CreateTopic(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& t
 TStatus CreateTopic(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& topicName, const TString& consumerName, size_t partitionCount,
         bool keepMessagesOrder, bool autopartitioning) {
     return CreateTopic(setup, topicName, NYdb::NTopic::TCreateTopicSettings()
-            .PartitioningSettings(partitionCount, autopartitioning ? partitionCount * 128 : partitionCount)
             .BeginConfigurePartitioningSettings()
                 .BeginConfigureAutoPartitioningSettings()
                     .Strategy(autopartitioning ? EAutoPartitioningStrategy::ScaleUp : EAutoPartitioningStrategy::Disabled)
+                    .SetMinActivePartitions(partitionCount)
+                    .SetMaxActivePartitions(128)
                     .StabilizationWindow(TDuration::Seconds(1))
                     .UpUtilizationPercent(2)
                     .DownUtilizationPercent(1)

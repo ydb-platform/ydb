@@ -21,8 +21,6 @@
 #include <ydb/mvp/core/cache_policy.h>
 
 #include <library/cpp/deprecated/atomic/atomic.h>
-#include <library/cpp/getopt/last_getopt.h>
-#include <google/protobuf/text_format.h>
 
 #include <util/datetime/base.h>
 #include <util/generic/yexception.h>

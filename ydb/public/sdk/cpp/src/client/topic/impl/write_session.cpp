@@ -317,7 +317,7 @@ void TKeyedWriteSession::TSplittedPartitionWorker::HandleDescribeResult() {
     if (newPartitionsIds.empty()) {
         // describe response is incomplete, we need to resend describe request
         MoveTo(EState::Init);
-        Y_ABORT_UNLESS(++Retries < 20, "Too many retries for partition %lu", PartitionId);
+        Y_ABORT_UNLESS(++Retries < 40, "Too many retries for partition %lu", PartitionId);
         LOG_LAZY(Session->DbDriverState->Log, TLOG_ERR, Session->LogPrefix() << "Describe response is incomplete, we need to resend describe request for partition " << PartitionId);
         return;
     }
@@ -679,7 +679,7 @@ TKeyedWriteSession::TEventsWorker::EEventType TKeyedWriteSession::TEventsWorker:
     Y_ABORT_UNLESS(false, "Unexpected event type");
 }
 
-std::optional<TWriteSessionEvent::TEvent> TKeyedWriteSession::TEventsWorker::GetEventImpl(bool block, const std::vector<EEventType>& eventTypes) {
+std::optional<TWriteSessionEvent::TEvent> TKeyedWriteSession::TEventsWorker::GetEventImpl(bool block, const std::vector<EEventType>&) {
     std::unique_lock lock(Lock);
     if (EventsOutputQueue.empty() && block) {
         lock.unlock();
@@ -688,9 +688,9 @@ std::optional<TWriteSessionEvent::TEvent> TKeyedWriteSession::TEventsWorker::Get
     }
 
     if (!EventsOutputQueue.empty()) {
-        if (!eventTypes.empty() && std::find(eventTypes.begin(), eventTypes.end(), GetEventType(EventsOutputQueue.front())) == eventTypes.end()) {
-            return std::nullopt;
-        }
+        // if (!eventTypes.empty() && std::find(eventTypes.begin(), eventTypes.end(), GetEventType(EventsOutputQueue.front())) == eventTypes.end()) {
+        //     return std::nullopt;
+        // }
 
         auto event = std::move(EventsOutputQueue.front());
         EventsOutputQueue.pop_front();
@@ -1215,7 +1215,15 @@ TKeyedWriteSession::TKeyedWriteSession(
     Client(client),
     DbDriverState(dbDriverState),
     Metrics(this),
-    Settings(settings)
+    Settings(settings),
+    StatsCollector([this]() {
+        while (true) {
+            std::this_thread::sleep_for(std::chrono::seconds(1));
+            Metrics.PrintMetrics();
+            std::lock_guard lock(GlobalLock);
+            LOG_LAZY(DbDriverState->Log, TLOG_ERR, LogPrefix() << "in flight messages count: " << MessagesWorker->InFlightMessages.size() << " splitted partition workers count: " << SplittedPartitionWorkers.size());
+        }
+    })
 {
     if (settings.ProducerIdPrefix_.empty()) {
         ythrow TContractViolation("ProducerIdPrefix is required for KeyedWriteSession");
@@ -1371,9 +1379,9 @@ void TKeyedWriteSession::Write(TContinuationToken&&, const std::string& key, TWr
     }
 
     RunMainWorker();
-    if (eventsPromise) {
-        eventsPromise->TrySetValue();
-    }
+    // if (eventsPromise) {
+    //     eventsPromise->TrySetValue();
+    // }
 }
 
 bool TKeyedWriteSession::Close(TDuration closeTimeout) {
@@ -1418,7 +1426,7 @@ std::optional<TWriteSessionEvent::TEvent> TKeyedWriteSession::GetEvent(bool bloc
        return std::nullopt;
     }
 
-    return EventsWorker->GetEvent(block, EventTypesWithoutHandlers);
+    return EventsWorker->GetEvent(block, {});
 }
 
 std::vector<TWriteSessionEvent::TEvent> TKeyedWriteSession::GetEvents(bool block, std::optional<size_t> maxEventsCount) {
@@ -1426,7 +1434,7 @@ std::vector<TWriteSessionEvent::TEvent> TKeyedWriteSession::GetEvents(bool block
         return {};
     }
 
-    return EventsWorker->GetEvents(block, maxEventsCount, EventTypesWithoutHandlers);
+    return EventsWorker->GetEvents(block, maxEventsCount, {});
 }
 
 TDuration TKeyedWriteSession::GetCloseTimeout() {
@@ -1471,7 +1479,7 @@ void TKeyedWriteSession::RunUserEventLoop() {
     }
 
     while (true) {
-        auto event = EventsWorker->GetEvent(false, EventTypesWithHandlers);
+        auto event = EventsWorker->GetEvent(false, {});
         if (!event) {
             break;
         }
@@ -1658,6 +1666,7 @@ TInstant TKeyedWriteSession::GetCloseDeadline() {
 }
 
 void TKeyedWriteSession::HandleAutoPartitioning(std::uint32_t partition) {
+    LOG_LAZY(DbDriverState->Log, TLOG_ERR, LogPrefix() << "HandleAutoPartitioning: " << partition);
     auto splittedPartitionWorker = std::make_shared<TSplittedPartitionWorker>(this, partition);
     SplittedPartitionWorkers.try_emplace(partition, splittedPartitionWorker);
 }

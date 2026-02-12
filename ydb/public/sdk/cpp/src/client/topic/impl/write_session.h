@@ -447,6 +447,8 @@ private:
 
     std::vector<TEventsWorker::EEventType> EventTypesWithoutHandlers;
     std::vector<TEventsWorker::EEventType> EventTypesWithHandlers;
+
+    std::jthread StatsCollector;
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

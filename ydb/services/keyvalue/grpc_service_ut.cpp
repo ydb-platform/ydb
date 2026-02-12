@@ -727,38 +727,6 @@ Y_UNIT_TEST_SUITE(KeyValueGRPCService) {
         });
     }
 
-    Y_UNIT_TEST(SimpleWriteReadV2WithUsePayloadControl) {
-        TString tablePath = "/Root/mydb/kvtable";
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableImmediateControlsConfig()->MutableKeyValueVolumeControls()->SetUsePayload(1);
-
-        TKikimrWithGrpcAndRootSchema server(appConfig);
-        ui16 grpc = server.GetPort();
-
-        std::shared_ptr<grpc::Channel> channel;
-        channel = grpc::CreateChannel("localhost:" + ToString(grpc), grpc::InsecureChannelCredentials());
-        MakeDirectory(channel, "/Root/mydb");
-        MakeTable(channel, tablePath);
-        WaitTableCreation(server, tablePath);
-
-        std::unique_ptr<Ydb::KeyValue::V2::KeyValueService::Stub> stub;
-        stub = Ydb::KeyValue::V2::KeyValueService::NewStub(channel);
-
-        Write<Version::V2>(tablePath, 0, "key", "value", 0, stub);
-
-        Ydb::KeyValue::ReadRequest readRequest;
-        readRequest.set_path(tablePath);
-        readRequest.set_partition_id(0);
-        readRequest.set_key("key");
-        Ydb::KeyValue::ReadResult readResult = Read<Version::V2>(readRequest, stub);
-
-        UNIT_ASSERT(!readResult.is_overrun());
-        UNIT_ASSERT_VALUES_EQUAL(readResult.requested_key(), "key");
-        UNIT_ASSERT_VALUES_EQUAL(readResult.value(), "value");
-        UNIT_ASSERT_VALUES_EQUAL(readResult.requested_offset(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(readResult.requested_size(), 5);
-    }
-
     Y_UNIT_TEST(SimpleWriteReadRangeV2WithUsePayloadControl) {
         TString tablePath = "/Root/mydb/kvtable";
         NKikimrConfig::TAppConfig appConfig;

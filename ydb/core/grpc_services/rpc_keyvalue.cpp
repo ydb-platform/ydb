@@ -2,7 +2,6 @@
 
 #include <ydb/public/api/protos/ydb_keyvalue.pb.h>
 
-#include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/grpc_services/rpc_scheme_base.h>
 #include <ydb/core/grpc_services/rpc_common/rpc_common.h>
@@ -91,6 +90,8 @@ using namespace Ydb;
 // COPY_PRIMITIVE_FIELD
 
 namespace {
+
+constexpr bool UsePayloadForExecuteTransactionWrite = false;
 
 void CopyProtobuf(const Ydb::KeyValue::AcquireLockRequest &/*from*/,
         NKikimrKeyValue::AcquireLockRequest */*to*/)
@@ -333,16 +334,6 @@ void CopyReadRangeResultFromEvent(const TEvKeyValue::TEvReadRangeResponse& from,
             to->mutable_pair(idx)->set_value(span.data(), span.size());
         }
     }
-}
-
-bool IsUsePayloadEnabledForKeyValueRequests() {
-    const TActorContext& ctx = TActivationContext::AsActorContext();
-    auto *appData = AppData(ctx);
-    if (!appData || !appData->Icb) {
-        return false;
-    }
-    auto control = appData->Icb->KeyValueVolumeControls.UsePayload.AtomicLoad();
-    return control && control->Get();
 }
 
 void CopyProtobuf(const Ydb::KeyValue::ReadRangeRequest &from, NKikimrKeyValue::ReadRangeRequest *to) {
@@ -1022,7 +1013,7 @@ protected:
         std::unique_ptr<TKVRequest> req = std::make_unique<TKVRequest>();
         auto &rec = *this->GetProtoRequest();
         if constexpr (std::is_same_v<TKVRequest, TEvKeyValue::TEvExecuteTransaction>) {
-            CopyProtobuf(rec, req.get(), IsUsePayloadEnabledForKeyValueRequests());
+            CopyProtobuf(rec, req.get(), UsePayloadForExecuteTransactionWrite);
         } else {
             CopyProtobuf(rec, &req->Record);
         }

@@ -25,7 +25,7 @@ private:
     std::vector<ui32> PartitionsForBalancing;
 
     struct TPartitionStatus {
-        ui64 Messages = 0; 
+        ui64 Messages = 0;
         ui64 Cookie = 0;
         ui32 Generation = 0;
         bool UseForReading = true;

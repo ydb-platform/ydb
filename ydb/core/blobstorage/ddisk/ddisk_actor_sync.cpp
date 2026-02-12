@@ -8,7 +8,7 @@
 namespace NKikimr::NDDisk {
 
     void TDDiskActor::Handle(TEvSyncWithPersistentBuffer::TPtr ev) {
-        if (!CheckQuery(*ev, &Counters.Interface.Sync)) {
+        if (!CheckQuery(*ev, &Counters.Interface.SyncWithPersistentBuffer)) {
             return;
         }
 
@@ -16,9 +16,9 @@ namespace NKikimr::NDDisk {
         const TQueryCredentials creds(record.GetCredentials());
 
         auto reject = [&](NKikimrBlobStorage::NDDisk::TReplyStatus::E status, TString errorReason) {
-            Counters.Interface.Sync.Request();
-            Counters.Interface.Sync.Reply(false);
-            SendReply(*ev, std::make_unique<TEvSyncResult>(status, std::move(errorReason)));
+            Counters.Interface.SyncWithPersistentBuffer.Request();
+            Counters.Interface.SyncWithPersistentBuffer.Reply(false);
+            SendReply(*ev, std::make_unique<TEvSyncWithPersistentBufferResult>(status, std::move(errorReason)));
         };
 
         if (!record.SegmentsSize()) {
@@ -32,7 +32,7 @@ namespace NKikimr::NDDisk {
         }
 
         const ui64 syncId = NextSyncId++;
-        Counters.Interface.Sync.Request();
+        Counters.Interface.SyncWithPersistentBuffer.Request();
         auto span = std::move(NWilson::TSpan(TWilson::DDiskTopLevel, std::move(ev->TraceId), "DDisk.Sync",
                 NWilson::EFlags::NONE, TActivationContext::ActorSystem())
             .Attribute("tablet_id", static_cast<long>(creds.TabletId))
@@ -56,7 +56,7 @@ namespace NKikimr::NDDisk {
         sync.Requests.reserve(record.SegmentsSize());
 
         for (auto &segment : record.GetSegments()) {
-            TBlockSelector selector = TBlockSelector(src.GetSelector());
+            TBlockSelector selector = TBlockSelector(segment.GetSelector());
             ui64 lsn = segment.GetLsn();
             const NKikimrBlobStorage::NDDisk::TDDiskId ddiskId;
             
@@ -117,7 +117,7 @@ namespace NKikimr::NDDisk {
 
 
     void TDDiskActor::Handle(TEvSyncWithDDisk::TPtr ev) {
-        if (!CheckQuery(*ev, &Counters.Interface.Sync)) {
+        if (!CheckQuery(*ev, &Counters.Interface.SyncWithDDisk)) {
             return;
         }
 
@@ -125,9 +125,9 @@ namespace NKikimr::NDDisk {
         const TQueryCredentials creds(record.GetCredentials());
 
         auto reject = [&](NKikimrBlobStorage::NDDisk::TReplyStatus::E status, TString errorReason) {
-            Counters.Interface.Sync.Request();
-            Counters.Interface.Sync.Reply(false);
-            SendReply(*ev, std::make_unique<TEvSyncResult>(status, std::move(errorReason)));
+            Counters.Interface.SyncWithDDisk.Request();
+            Counters.Interface.SyncWithDDisk.Reply(false);
+            SendReply(*ev, std::make_unique<TEvSyncWithDDiskResult>(status, std::move(errorReason)));
         };
 
         if (!record.SegmentsSize()) {
@@ -141,7 +141,7 @@ namespace NKikimr::NDDisk {
         }
 
         const ui64 syncId = NextSyncId++;
-        Counters.Interface.Sync.Request();
+        Counters.Interface.SyncWithDDisk.Request();
         auto span = std::move(NWilson::TSpan(TWilson::DDiskTopLevel, std::move(ev->TraceId), "DDisk.Sync",
                 NWilson::EFlags::NONE, TActivationContext::ActorSystem())
             .Attribute("tablet_id", static_cast<long>(creds.TabletId))
@@ -165,7 +165,7 @@ namespace NKikimr::NDDisk {
         sync.Requests.reserve(record.SegmentsSize());
 
         for (auto &segment : record.GetSegments()) {
-            TBlockSelector selector = TBlockSelector(src.GetSelector());;
+            TBlockSelector selector = TBlockSelector(segment.GetSelector());;
             const NKikimrBlobStorage::NDDisk::TDDiskId ddiskId;
 
             if (!vChunkIndex) {
@@ -337,19 +337,36 @@ namespace NKikimr::NDDisk {
     void TDDiskActor::ReplySync(TSyncIt it) {
         Y_VERIFY(it != SyncsInFlight.end());
         auto &sync = it->second;
-        std::unique_ptr<TEvSyncResult> ev;
-        if (sync.ErrorReason) {
-            ev = std::make_unique<TEvSyncResult>(NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR, sync.ErrorReason);
-            Counters.Interface.Sync.Reply(false);
-        } else {
-            ev = std::make_unique<TEvSyncResult>(NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
-            Counters.Interface.Sync.Reply(true);
-        }
+        std::unique_ptr<IEventHandle> h;
+        if (sync.SourceKind == TSyncInFlight::ESK_PERSISTENT_BUFFER) {
+            std::unique_ptr<TEvSyncWithPersistentBufferResult> ev;
+            if (sync.ErrorReason) {
+                ev = std::make_unique<TEvSyncWithPersistentBufferResult>(NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR, sync.ErrorReason);
+                Counters.Interface.SyncWithPersistentBuffer.Reply(false);
+            } else {
+                ev = std::make_unique<TEvSyncWithPersistentBufferResult>(NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
+                Counters.Interface.SyncWithPersistentBuffer.Reply(true);
+            }
 
-        for (auto &request : sync.Requests) {
-            ev->AddSegmentResult(request.Status, request.ErrorReason);
+            for (auto &request : sync.Requests) {
+                ev->AddSegmentResult(request.Status, request.ErrorReason);
+            }
+            h = std::make_unique<IEventHandle>(sync.Sender, SelfId(), ev.release(), 0, sync.Cookie);
+        } else {
+            std::unique_ptr<TEvSyncWithDDiskResult> ev;
+            if (sync.ErrorReason) {
+                ev = std::make_unique<TEvSyncWithDDiskResult>(NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR, sync.ErrorReason);
+                Counters.Interface.SyncWithDDisk.Reply(false);
+            } else {
+                ev = std::make_unique<TEvSyncWithDDiskResult>(NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
+                Counters.Interface.SyncWithDDisk.Reply(true);
+            }
+
+            for (auto &request : sync.Requests) {
+                ev->AddSegmentResult(request.Status, request.ErrorReason);
+            }
+            h = std::make_unique<IEventHandle>(sync.Sender, SelfId(), ev.release(), 0, sync.Cookie);
         }
-        auto h = std::make_unique<IEventHandle>(sync.Sender, SelfId(), ev.release(), 0, sync.Cookie);
         if (sync.InterconnectionSessionId) {
             h->Rewrite(TEvInterconnect::EvForward, sync.InterconnectionSessionId);
         }

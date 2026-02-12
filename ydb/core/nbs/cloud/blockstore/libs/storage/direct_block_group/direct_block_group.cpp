@@ -220,7 +220,7 @@ void TDirectBlockGroup::ProcessSyncQueue()
 
         LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::NBS_PARTITION, "ProcessSyncQueue" << " requestId# " << StorageRequestId);
 
-        auto future = StorageTransport->Sync(
+        auto future = StorageTransport->SyncWithPersistentBuffer(
             ddiskConnection.GetServiceId(),
             ddiskConnection.Credentials,
             NKikimr::NDDisk::TBlockSelector(
@@ -246,9 +246,9 @@ void TDirectBlockGroup::ProcessSyncQueue()
     }
 }
 
-void TDirectBlockGroup::HandleSyncResult(
+void TDirectBlockGroup::HandleSyncWithPersistentBufferResult(
     ui64 storageRequestId,
-    const NKikimrBlobStorage::NDDisk::TEvSyncResult& result)
+    const NKikimrBlobStorage::NDDisk::TEvSyncWithPersistentBufferResult& result)
 {
     auto guard = Guard(Lock);
 

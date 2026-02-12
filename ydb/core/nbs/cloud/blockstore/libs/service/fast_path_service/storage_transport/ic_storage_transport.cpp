@@ -148,7 +148,7 @@ TFuture<NKikimrBlobStorage::NDDisk::TEvReadResult> TICStorageTransport::Read(
     return future;
 }
 
-TFuture<NKikimrBlobStorage::NDDisk::TEvSyncResult> TICStorageTransport::Sync(
+TFuture<NKikimrBlobStorage::NDDisk::TEvSyncWithPersistentBufferResult> TICStorageTransport::SyncWithP(
     const NActors::TActorId serviceId,
     const NKikimr::NDDisk::TQueryCredentials credentials,
     const NKikimr::NDDisk::TBlockSelector selector,
@@ -158,12 +158,12 @@ TFuture<NKikimrBlobStorage::NDDisk::TEvSyncResult> TICStorageTransport::Sync(
     NWilson::TTraceId traceId,
     const ui64 requestId)
 {
-    auto promise = NewPromise<NKikimrBlobStorage::NDDisk::TEvSyncResult>();
+    auto promise = NewPromise<NKikimrBlobStorage::NDDisk::TEvSyncWithPersistentBufferResult>();
     auto future = promise.GetFuture();
 
     NActors::TActivationContext::AsActorContext().Send(
         ICStorageTransportActorId,
-        new TEvICStorageTransportPrivate::TEvSync(
+        new TEvICStorageTransportPrivate::TEvSyncWithPersistentBuffer(
             serviceId,
             credentials,
             selector,

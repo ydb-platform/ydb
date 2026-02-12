@@ -245,6 +245,21 @@ NYdb::NDiscovery::TDiscoveryClient CreateDiscoveryClient(const TTestEnv& env, co
     return NYdb::NDiscovery::TDiscoveryClient(env.GetDriver(), settings);
 }
 
+auto RetryableGetQueryClientSession(NYdb::NQuery::TQueryClient&& client) {
+    while (true) {
+        auto settings = NYdb::NQuery::TCreateSessionSettings()
+            .ClientTimeout(TDuration::Seconds(30));
+        auto sessionResult = client.GetSession(settings).ExtractValueSync();
+
+        if (!sessionResult.IsSuccess()) {
+            Sleep(TDuration::Seconds(3));
+            continue;
+        } else {
+            return sessionResult.GetSession();
+        }
+    }
+}
+
 void CreateLocalUser(const TTestEnv& env, const TString& database, const TString& name, const TString& token) {
     auto query = Sprintf(
         R"(
@@ -252,9 +267,9 @@ void CreateLocalUser(const TTestEnv& env, const TString& database, const TString
         )",
         name.c_str()
     );
-    auto sessionResult = CreateQueryClient(env, token, database).GetSession().ExtractValueSync();
-    UNIT_ASSERT_C(sessionResult.IsSuccess(), sessionResult.GetIssues().ToString());
-    auto result = sessionResult.GetSession().ExecuteQuery(query,  NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+
+    auto session = RetryableGetQueryClientSession(CreateQueryClient(env, token, database));
+    auto result = session.ExecuteQuery(query,  NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 }
 void CreateLocalUser(const TTestEnv& env, const TString& database, const TString& user) {
@@ -267,9 +282,9 @@ void CreateLocalGroup(const TTestEnv& env, const TString& database, const TStrin
         )",
         name.c_str()
     );
-    auto sessionResult = CreateQueryClient(env, token, database).GetSession().ExtractValueSync();
-    UNIT_ASSERT_C(sessionResult.IsSuccess(), sessionResult.GetIssues().ToString());
-    auto result = sessionResult.GetSession().ExecuteQuery(query,  NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+
+    auto session = RetryableGetQueryClientSession(CreateQueryClient(env, token, database));
+    auto result = session.ExecuteQuery(query,  NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 }
 void CreateLocalGroup(const TTestEnv& env, const TString& database, const TString& name) {
@@ -559,10 +574,7 @@ Y_UNIT_TEST_SUITE(SchemeReqAccess) {
 
         // Test body
         {
-            auto client = CreateQueryClient(env, subjectToken, env.RootPath);
-            auto sessionResult = client.GetSession().ExtractValueSync();
-            UNIT_ASSERT_C(sessionResult.IsSuccess(), sessionResult.GetIssues().ToString());
-            auto session = sessionResult.GetSession();
+            auto session = RetryableGetQueryClientSession(CreateQueryClient(env, subjectToken, env.RootPath));
 
             // test body
             auto result = session.ExecuteQuery(params.SqlStatement, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();

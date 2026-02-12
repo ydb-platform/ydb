@@ -1,6 +1,7 @@
 UNITTEST_FOR(ydb/core/tx/tx_proxy)
 
 FORK_SUBTESTS()
+SPLIT_FACTOR(300)
 
 IF (WITH_VALGRIND)
     SIZE(LARGE)

@@ -419,6 +419,7 @@ END DO
 ```
 
 Подробнее о функциях:
+
 - [Yson::ConvertTo](../../yql/reference/udf/list/yson#ysonconvertto)
 - [FLATTEN COLUMNS](../../yql/reference/syntax/select/flatten.md#flatten-columns).
 
@@ -457,6 +458,7 @@ END DO
 ```
 
 Подробнее о функциях:
+
 - [String::SplitToList](../../yql/reference/udf/list/string.md#splittolist)
 - [DictLookup](../../yql/reference/builtins/dict.md#dictlookup)
 - [FLATTEN LIST BY](../../yql/reference/syntax/select/flatten.md#flatten-by).

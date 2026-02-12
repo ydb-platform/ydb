@@ -91,6 +91,7 @@ END DO
 ```
 
 Подробнее о функциях:
+
 - [TableRow](../../yql/reference/builtins/basic#tablerow)
 - [Yson::From](../../yql/reference/udf/list/yson#ysonfrom)
 - [Yson::SerializeJson](../../yql/reference/udf/list/yson#ysonserializejson)

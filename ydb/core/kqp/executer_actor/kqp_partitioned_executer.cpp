@@ -102,7 +102,6 @@ public:
         PE_LOG_I("Start resolving table partitions");
         Stats.StartTs = TInstant::Now();
 
-        FillTableMetaInfo();
         ResolvePartitioning();
     }
 

@@ -34,7 +34,7 @@ class StressUtilDeployer:
     def prepare_stress_execution(
         self,
         workload_params: dict,
-        nodes_percentage: int = 100,
+        nodes_percentage: int = None,
     ):
         """
         PHASE 1: Prepare for workload execution
@@ -122,7 +122,7 @@ class StressUtilDeployer:
                     processed_binaries[workload_info['local_path']].append(workload_name)
                     deploy_futures.append(
                         (
-                            tpe.submit(self._deploy_workload_binary, workload_name, workload_info['local_path'], nodes_percentage),
+                            tpe.submit(self._deploy_workload_binary, workload_name, workload_info['local_path'], nodes_percentage or workload_info['nodes_percentage']),
                             workload_name,
                             workload_info['local_path'],
                         )

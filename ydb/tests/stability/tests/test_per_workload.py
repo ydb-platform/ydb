@@ -33,5 +33,4 @@ class TestPerWorkload(ParallelWorkloadTestBase):
             workload_params=stress_dict,
             duration_value=self.timeout,
             nemesis_enabled=nemesis_enabled,
-            nodes_percentage=100
         )

@@ -65,7 +65,7 @@ class ParallelWorkloadTestBase:
         workload_params: dict[str, dict],
         duration_value: float = None,
         nemesis_enabled: bool = False,
-        nodes_percentage: int = 100,
+        nodes_percentage: int = None,
     ) -> None:
         """
         Executes full workload test cycle with three phases:

@@ -65,7 +65,8 @@ bool IsBlockJoin(ETestedJoinAlgo kind) {
     return kind == ETestedJoinAlgo::kBlockHash || kind == ETestedJoinAlgo::kBlockMap;
 }
 
-THolder<IComputationGraph> ConstructJoinGraphStream(EJoinKind joinKind, ETestedJoinAlgo algo, TJoinDescription descr) {
+THolder<IComputationGraph> ConstructJoinGraphStream(EJoinKind joinKind, ETestedJoinAlgo algo, TJoinDescription descr,
+                                                    bool withSpiller) {
 
     const bool scalar = !IsBlockJoin(algo);
     TDqProgramBuilder& dqPb = descr.Setup->GetDqProgramBuilder();
@@ -242,7 +243,9 @@ THolder<IComputationGraph> ConstructJoinGraphStream(EJoinKind joinKind, ETestedJ
         }
     }();
     auto graph = graphFrom(wideStream);
-    graph->GetContext().SpillerFactory = std::make_shared<TMockSpillerFactory>();
+    if (withSpiller) {
+        graph->GetContext().SpillerFactory = std::make_shared<TMockSpillerFactory>();
+    }
 
     graph->GetContext().LogProvider = testLogProvider.Get();
     return graph;

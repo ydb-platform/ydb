@@ -525,7 +525,7 @@ TJoinTestData BigStringsTestData() {
     return td;
 }
 
-void Test(TJoinTestData testData, bool blockJoin) {
+void Test(TJoinTestData testData, bool blockJoin, bool withSpiller = true) {
     FilterRenamesForSemiAndOnlyJoins(testData);
     TJoinDescription descr;
     descr.CustomRenames = testData.Renames;
@@ -544,7 +544,7 @@ void Test(TJoinTestData testData, bool blockJoin) {
         descr.Setup->Alloc.Ref().ForcefullySetMemoryYellowZone(false);
     }
     THolder<IComputationGraph> got = ConstructJoinGraphStream(
-        testData.Kind, blockJoin ? ETestedJoinAlgo::kBlockHash : ETestedJoinAlgo::kScalarHash, descr);
+        testData.Kind, blockJoin ? ETestedJoinAlgo::kBlockHash : ETestedJoinAlgo::kScalarHash, descr, withSpiller);
     if (testData.JoinMemoryConstraint) {
         testData.SetHardLimitIncreaseMemCallback(*testData.JoinMemoryConstraint + 3000_MB +
                                                  testData.Setup->Alloc.GetUsed());
@@ -629,6 +629,10 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
 
     Y_UNIT_TEST(TestBlockSpilling) { 
         Test(SpillingTestData(), true);
+    }
+
+    Y_UNIT_TEST(TestBlockJoinWithoutSpilling) {
+        Test(BasicInnerJoinTestData(), true, false);
     }
     Y_UNIT_TEST(TestBigStrings) { 
         Test(BigStringsTestData(), true);

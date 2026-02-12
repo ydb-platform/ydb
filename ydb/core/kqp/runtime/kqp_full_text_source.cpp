@@ -383,6 +383,10 @@ public:
         RowCells = TOwnedCellVec(row);
     }
 
+    TCell GetKeyCell(const size_t idx) const {
+        return KeyCells.at(idx);
+    }
+
     TCell GetResultCell(const size_t idx) const {
         return RowCells.at(idx);
     }
@@ -1824,9 +1828,11 @@ private:
         }
 
         if (MainTableCovered) {
-            YQL_ENSURE(PostfilterMatchers.empty());
+            const bool skipPostfilter = PostfilterMatchers.empty();
             for(auto& doc: docInfos) {
-                ResultQueue.emplace_back(std::move(doc));
+                if (skipPostfilter || Postfilter(doc->GetKeyCell(SearchColumnIdx).AsBuf())) {
+                    ResultQueue.emplace_back(std::move(doc));
+                }
             }
             NotifyCA();
             return;
@@ -2279,15 +2285,14 @@ public:
         ReadsState.SendEvRead(shardId, request, TReadInfo{.ReadKind = EReadKind_TotalStats, .Cookie = readId, .ShardId = shardId});
     }
 
-    bool Postfilter(const TDocumentInfo& documentInfo) const {
+    bool Postfilter(const TStringBuf value) const {
         auto analyzers = IndexDescription.GetSettings().columns(0).analyzers();
         // Prevent splitting tokens into ngrams
         analyzers.set_use_filter_ngram(false);
         analyzers.set_use_filter_edge_ngram(false);
 
         for (const auto& matcher : PostfilterMatchers) {
-            YQL_ENSURE(SearchColumnIdx != -1);
-            const TString searchColumnValue(documentInfo.GetResultCell(SearchColumnIdx).AsBuf()); // TODO: don't copy
+            const TString searchColumnValue(value); // TODO: don't copy
 
             bool found = false;
             for (const auto& valueToken : NFulltext::Analyze(searchColumnValue, analyzers)) {
@@ -2318,7 +2323,7 @@ public:
             auto& doc = readItems.GetItem();
             YQL_ENSURE(NKikimr::TCellVectorsEquals{}(doc->GetDocumentId(), GetDocumentId(row)), "detected out of order document reading");
             doc->AddRow(row);
-            if (PostfilterMatchers.empty() || Postfilter(doc.GetRef())) {
+            if (PostfilterMatchers.empty() || Postfilter(doc->GetResultCell(SearchColumnIdx).AsBuf())) {
                 ResultQueue.push_back(std::move(doc));
             }
 

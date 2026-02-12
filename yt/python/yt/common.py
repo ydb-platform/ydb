@@ -342,6 +342,10 @@ class YtError(Exception):
         """Tablet is not mounted."""
         return self.contains_code(1702)
 
+    def is_all_writes_disabled(self):
+        """All writes are disabled."""
+        return self.contains_code(1703)
+
     def is_no_such_cell(self):
         """No such cell."""
         return self.contains_code(1721)

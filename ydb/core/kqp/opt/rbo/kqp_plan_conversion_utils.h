@@ -19,7 +19,7 @@ class PlanConverter {
     PlanConverter(TTypeAnnotationContext &typeCtx, TExprContext &ctx) : TypeCtx(typeCtx), Ctx(ctx) {}
 
     // Convert KqpOpRoot to OpRoot.
-    std::shared_ptr<TOpRoot> ConvertRoot(TExprNode::TPtr node);
+    std::unique_ptr<TOpRoot> ConvertRoot(TExprNode::TPtr node);
     std::shared_ptr<IOperator> ExprNodeToOperator(TExprNode::TPtr node);
 
     std::shared_ptr<IOperator> ConvertTKqpOpMap(TExprNode::TPtr node);

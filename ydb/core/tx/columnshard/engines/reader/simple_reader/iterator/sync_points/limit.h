@@ -121,28 +121,13 @@ private:
 
     };
 
-<<<<<<< HEAD
-    std::vector<TSourceIterator> Iterators;
-=======
     std::vector<TSourceIterator> FilledIterators;
     std::deque<TSourceIterator> UnfilledIterators;
->>>>>>> e8c978d1427 (BACKPORT-CONFLICT: manual resolution required for commit 48e2293)
 
     virtual bool IsFinished() const override {
         return FetchedCount >= Limit || TBase::IsFinished();
     }
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-    virtual std::shared_ptr<NCommon::IDataSource> OnAddSource(const std::shared_ptr<NCommon::IDataSource>& source) override {
-        AFL_VERIFY(FetchedCount < Limit);
-        Iterators.emplace_back(TSourceIterator(source));
-        std::push_heap(Iterators.begin(), Iterators.end());
-        return TBase::OnAddSource(source);
-    }
-=======
-=======
->>>>>>> 6a7726e710d (Resolved merge conflicts)
     virtual std::shared_ptr<NCommon::IDataSource> OnAddSource(const std::shared_ptr<NCommon::IDataSource>& source) override;
 
     virtual void DoAbort() override {

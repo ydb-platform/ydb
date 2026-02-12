@@ -550,7 +550,7 @@ namespace {
                 protoConsumer->mutable_shared_consumer_type()->set_keep_messages_order(keepMessagesOrder.value());
             } else if (name == "default_processing_timeout"sv) {
                 defaultProcessingTimeout = GetIntervalValue(setting);
-                auto* value = protoConsumer->mutable_shared_consumer_type()->mutable_default_processing_timeout();
+                auto* value = protoConsumer->mutable_shared_consumer_type()->mutable_processing_timeout();
                 value->set_seconds(defaultProcessingTimeout->Seconds());
                 value->set_nanos(defaultProcessingTimeout->NanoSecondsOfSecond());
             } else if (name == "max_processing_attempts"sv) {
@@ -651,7 +651,7 @@ namespace {
                 }
             } else if (name == "default_processing_timeout"sv) {
                 auto period = GetIntervalValue(setting);
-                auto* value = protoConsumer->mutable_alter_shared_consumer_type()->mutable_set_default_processing_timeout();
+                auto* value = protoConsumer->mutable_alter_shared_consumer_type()->mutable_set_processing_timeout();
                 value->set_seconds(period.Seconds());
                 value->set_nanos(period.NanoSecondsOfSecond());
             } else if (name == "max_processing_attempts"sv) {

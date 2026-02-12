@@ -234,47 +234,15 @@ void TKqpTasksGraph::FillKqpTasksGraphStages() {
                 }
             }
 
-            for (auto& sink : stage.GetSinks()) {
-                if (sink.GetTypeCase() == NKqpProto::TKqpSink::kInternalSink && sink.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>()) {
-                    NKikimrKqp::TKqpTableSinkSettings settings;
-                    YQL_ENSURE(sink.GetInternalSink().GetSettings().UnpackTo(&settings), "Failed to unpack settings");
-                    YQL_ENSURE(sink.GetOutputIndex() == 0);
-                    YQL_ENSURE(stage.SinksSize() + stage.OutputTransformsSize() == 1);
-                    meta.TablePath = settings.GetTable().GetPath();
-                    if (settings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE) {
-                        meta.ShardOperations.insert(TKeyDesc::ERowOperation::Erase);
-                    } else {
-                        meta.ShardOperations.insert(TKeyDesc::ERowOperation::Update);
-                    }
-
-                    if (settings.GetType() != NKikimrKqp::TKqpTableSinkSettings::MODE_FILL) {
-                        meta.TableId = MakeTableId(settings.GetTable());
-                        meta.TableConstInfo = tx.Body->GetTableConstInfoById()->Map.at(meta.TableId);
-
-                        for (const auto& indexSettings : settings.GetIndexes()) {
-                            meta.IndexMetas.emplace_back();
-                            meta.IndexMetas.back().TableId = MakeTableId(indexSettings.GetTable());
-                            meta.IndexMetas.back().TablePath = indexSettings.GetTable().GetPath();
-                            meta.IndexMetas.back().TableConstInfo = tx.Body->GetTableConstInfoById()->Map.at(meta.IndexMetas.back().TableId);
-                        }
-                    }
+            auto fillMetaFromSinkSettings = [&tx, &meta](NKikimrKqp::TKqpTableSinkSettings& settings) {
+                meta.TablePath = settings.GetTable().GetPath();
+                if (settings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE) {
+                    meta.ShardOperations.insert(TKeyDesc::ERowOperation::Erase);
+                } else {
+                    meta.ShardOperations.insert(TKeyDesc::ERowOperation::Update);
                 }
-            }
 
-            for (auto& transform : stage.GetOutputTransforms()) {
-                if (transform.GetTypeCase() == NKqpProto::TKqpOutputTransform::kInternalSink && transform.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>()) {
-                    NKikimrKqp::TKqpTableSinkSettings settings;
-                    YQL_ENSURE(transform.GetInternalSink().GetSettings().UnpackTo(&settings), "Failed to unpack settings");
-                    YQL_ENSURE(transform.GetOutputIndex() == 0);
-                    YQL_ENSURE(stage.SinksSize() + stage.OutputTransformsSize() == 1);
-                    meta.TablePath = settings.GetTable().GetPath();
-                    if (settings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE) {
-                        meta.ShardOperations.insert(TKeyDesc::ERowOperation::Erase);
-                    } else {
-                        meta.ShardOperations.insert(TKeyDesc::ERowOperation::Update);
-                    }
-
-                    AFL_ENSURE(settings.GetType() != NKikimrKqp::TKqpTableSinkSettings::MODE_FILL);
+                if (settings.GetType() != NKikimrKqp::TKqpTableSinkSettings::MODE_FILL) {
                     meta.TableId = MakeTableId(settings.GetTable());
                     meta.TableConstInfo = tx.Body->GetTableConstInfoById()->Map.at(meta.TableId);
 
@@ -284,6 +252,26 @@ void TKqpTasksGraph::FillKqpTasksGraphStages() {
                         meta.IndexMetas.back().TablePath = indexSettings.GetTable().GetPath();
                         meta.IndexMetas.back().TableConstInfo = tx.Body->GetTableConstInfoById()->Map.at(meta.IndexMetas.back().TableId);
                     }
+                }
+            };
+
+            for (auto& sink : stage.GetSinks()) {
+                if (sink.GetTypeCase() == NKqpProto::TKqpSink::kInternalSink && sink.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>()) {
+                    NKikimrKqp::TKqpTableSinkSettings settings;
+                    YQL_ENSURE(sink.GetInternalSink().GetSettings().UnpackTo(&settings), "Failed to unpack settings");
+                    YQL_ENSURE(sink.GetOutputIndex() == 0);
+                    YQL_ENSURE(stage.SinksSize() + stage.OutputTransformsSize() == 1);
+                    fillMetaFromSinkSettings(settings);
+                }
+            }
+
+            for (auto& transform : stage.GetOutputTransforms()) {
+                if (transform.GetTypeCase() == NKqpProto::TKqpOutputTransform::kInternalSink && transform.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>()) {
+                    NKikimrKqp::TKqpTableSinkSettings settings;
+                    YQL_ENSURE(transform.GetInternalSink().GetSettings().UnpackTo(&settings), "Failed to unpack settings");
+                    YQL_ENSURE(transform.GetOutputIndex() == 0);
+                    YQL_ENSURE(stage.SinksSize() + stage.OutputTransformsSize() == 1);
+                    fillMetaFromSinkSettings(settings);
                 }
             }
 
@@ -2017,7 +2005,6 @@ bool TKqpTasksGraph::BuildComputeTasks(TStageInfo& stageInfo, const ui32 nodesCo
                 case NKqpProto::TKqpPhyConnection::kParallelUnionAll:
                 case NKqpProto::TKqpPhyConnection::kVectorResolve:
                 case NKqpProto::TKqpPhyConnection::kDqSourceStreamLookup:
-                case NKqpProto::TKqpPhyConnection::kReturningSink:
                     break;
                 default:
                     YQL_ENSURE(false, "Unexpected connection type: " << (ui32)input.GetTypeCase() << Endl);

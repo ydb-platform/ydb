@@ -125,6 +125,8 @@ NActors::IEventHandle* SelectAuthorizationScheme(const NActors::TActorId& owner,
         return GetRequestAuthAndCheckHandle(owner, GetDatabase(request), TString(authorization));
     } else if (!ydbSessionId.empty()) {
         return GetRequestAuthAndCheckHandle(owner, GetDatabase(request), TString("Login ") + TString(ydbSessionId));
+    } else if (!request->MTlsClientCertificate.empty()) {
+        return GetRequestAuthAndCheckHandle(owner, GetDatabase(request), request->MTlsClientCertificate);
     } else {
         return nullptr;
     }
@@ -153,6 +155,15 @@ NActors::IEventHandle* GetAuthorizeTicketResult(const NActors::TActorId& owner) 
     } else {
         return nullptr;
     }
+}
+
+static bool IsTokenAllowedForMonitoring(const NACLib::TUserToken* userToken, const TVector<TString>& allowedSIDs) {
+    if (NKikimr::AppData() && !NKikimr::AppData()->EnforceUserTokenRequirement) {
+        if (!NKikimr::AppData()->EnforceUserTokenCheckRequirement) {
+            return true;
+        }
+    }
+    return NKikimr::IsTokenAllowed(userToken, allowedSIDs);
 }
 
 void MakeJsonErrorReply(NJson::TJsonValue& jsonResponse, TString& message, const NYdb::TStatus& status) {
@@ -197,6 +208,23 @@ void MakeJsonErrorReply(NJson::TJsonValue& jsonResponse, TString& message, const
     }
 }
 
+TVector<TString> TMon::GetCountersAllowedSIDs(const NKikimr::TAppData* appData) {
+    TVector<TString> countersAllowedSIDs;
+    if (!appData) {
+        return countersAllowedSIDs;
+    }
+    const auto& securityConfig = appData->DomainsConfig.GetSecurityConfig();
+    const auto addSIDs = [&countersAllowedSIDs](const auto& allowedSIDs) {
+        for (const auto& sid : allowedSIDs) {
+            countersAllowedSIDs.emplace_back(sid);
+        }
+    };
+    addSIDs(securityConfig.GetViewerAllowedSIDs());
+    addSIDs(securityConfig.GetMonitoringAllowedSIDs());
+    addSIDs(securityConfig.GetAdministrationAllowedSIDs());
+    return countersAllowedSIDs;
+}
+
 IMonPage* TMon::RegisterActorPage(TIndexMonPage* index, const TString& relPath,
     const TString& title, bool preTag, TActorSystem* actorSystem, const TActorId& actorId, bool useAuth, bool sortPages) {
     return RegisterActorPage({
@@ -206,7 +234,7 @@ IMonPage* TMon::RegisterActorPage(TIndexMonPage* index, const TString& relPath,
         .Index = index,
         .PreTag = preTag,
         .ActorId = actorId,
-        .UseAuth = useAuth,
+        .AuthMode = useAuth ? TMon::EAuthMode::Enforce : TMon::EAuthMode::Disabled,
         .SortPages = sortPages,
     });
 }
@@ -434,7 +462,9 @@ public:
     }
 
     bool CredentialsProvided() {
-        return Container.GetCookie("ydb_session_id") || Container.GetHeader("Authorization");
+        return Container.GetCookie("ydb_session_id") ||
+            Container.GetHeader("Authorization") ||
+            !Event->Get()->Request->MTlsClientCertificate.empty();
     }
 
     TString YdbToHttpError(Ydb::StatusIds::StatusCode status) {
@@ -549,10 +579,16 @@ public:
 
     void Handle(NKikimr::NGRpcService::TEvRequestAuthAndCheckResult::TPtr& ev) {
         const NKikimr::NGRpcService::TEvRequestAuthAndCheckResult& result(*ev->Get());
+        if (ActorMonPage->AuthMode == TMon::EAuthMode::ExtractOnly) {
+            // Extract token but don't enforce authorization - let the handler decide
+            SendRequest(&result);
+            return;
+        }
         if (result.Status != Ydb::StatusIds::SUCCESS) {
             return ReplyErrorAndPassAway(result);
         }
-        if (IsTokenAllowed(result.UserToken.Get(), ActorMonPage->AllowedSIDs)) {
+        const bool isTokenAllowed = IsTokenAllowedForMonitoring(result.UserToken.Get(), ActorMonPage->AllowedSIDs);
+        if (isTokenAllowed) {
             SendRequest(&result);
         } else {
             return ReplyForbiddenAndPassAway("SID is not allowed");
@@ -565,33 +601,6 @@ public:
             hFunc(NMon::IEvHttpInfoRes, HandleResponse);
             hFunc(NKikimr::NGRpcService::TEvRequestAuthAndCheckResult, Handle);
         }
-    }
-};
-
-// handles all indexes and static data in synchronous way
-class THttpMonLegacyIndexRequest : public TActorBootstrapped<THttpMonLegacyIndexRequest> {
-public:
-    NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr Event;
-    THttpMonRequestContainer Container;
-
-    THttpMonLegacyIndexRequest(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event, NMonitoring::IMonPage* index)
-        : Event(std::move(event))
-        , Container(Event->Get()->Request, index)
-    {}
-
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::HTTP_MON_LEGACY_INDEX_REQUEST;
-    }
-
-    void Bootstrap() {
-        ProcessRequest();
-    }
-
-    void ProcessRequest() {
-        Container.Page->Output(Container);
-        NHttp::THttpOutgoingResponsePtr response = Event->Get()->Request->CreateResponseString(Container.Str());
-        Send(Event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response));
-        PassAway();
     }
 };
 
@@ -1029,12 +1038,14 @@ public:
     TActorId TargetActorId;
     TMon::TRequestAuthorizer Authorizer;
     TVector<TString> AllowedSIDs;
+    TMon::EAuthMode AuthMode;
 
-    THttpMonAuthorizedActorRequest(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event, TActorId targetActorId, TMon::TRequestAuthorizer authorizer, const TVector<TString>& allowedSIDs)
+    THttpMonAuthorizedActorRequest(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event, TActorId targetActorId, TMon::TRequestAuthorizer authorizer, const TVector<TString>& allowedSIDs, TMon::EAuthMode authMode = TMon::EAuthMode::Enforce)
         : Event(std::move(event))
         , TargetActorId(targetActorId)
         , Authorizer(std::move(authorizer))
         , AllowedSIDs(allowedSIDs)
+        , AuthMode(authMode)
     {}
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -1042,7 +1053,7 @@ public:
     }
 
     void Bootstrap() {
-        if (Authorizer) {
+        if (AuthMode != TMon::EAuthMode::Disabled && Authorizer) {
             NActors::IEventHandle* handle = Authorizer(SelfId(), Event->Get()->Request.Get());
             if (handle) {
                 Send(handle);
@@ -1062,6 +1073,9 @@ public:
         }
         NHttp::TCookies cookies(headers["Cookie"]);
         if (cookies.Has("ydb_session_id")) {
+            return true;
+        }
+        if (!request->MTlsClientCertificate.empty()) {
             return true;
         }
         return false;
@@ -1171,10 +1185,19 @@ public:
 
     void Handle(NKikimr::NGRpcService::TEvRequestAuthAndCheckResult::TPtr& ev) {
         const NKikimr::NGRpcService::TEvRequestAuthAndCheckResult& result(*ev->Get());
+        if (result.UserToken) {
+            Event->Get()->UserToken = result.UserToken->GetSerializedToken();
+        }
+        if (AuthMode == TMon::EAuthMode::ExtractOnly) {
+            // Extract token but don't enforce authorization - let the handler decide
+            SendRequest(result);
+            return;
+        }
         if (result.Status != Ydb::StatusIds::SUCCESS) {
             return ReplyErrorAndPassAway(result);
         }
-        if (IsTokenAllowed(result.UserToken.Get(), AllowedSIDs)) {
+        const bool isTokenAllowed = IsTokenAllowedForMonitoring(result.UserToken.Get(), AllowedSIDs);
+        if (isTokenAllowed) {
             SendRequest(result);
         } else {
             return ReplyForbiddenAndPassAway("SID is not allowed");
@@ -1189,13 +1212,236 @@ public:
     }
 };
 
+class THttpMonAuthorizedPageRequest : public TActorBootstrapped<THttpMonAuthorizedPageRequest> {
+public:
+    NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr Event;
+    THttpMonRequestContainer Container;
+    TVector<TString> AllowedSIDs;
+    TMon::TRequestAuthorizer Authorizer;
+    TMon::EAuthMode AuthMode;
+
+    THttpMonAuthorizedPageRequest(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event, NMonitoring::IMonPage* page,
+        TVector<TString> allowedSIDs, TMon::TRequestAuthorizer authorizer, TMon::EAuthMode authMode = TMon::EAuthMode::Enforce)
+        : Event(std::move(event))
+        , Container(Event->Get()->Request, page)
+        , AllowedSIDs(std::move(allowedSIDs))
+        , Authorizer(std::move(authorizer))
+        , AuthMode(authMode)
+    {}
+
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::HTTP_MON_LEGACY_INDEX_REQUEST;
+    }
+
+    void Bootstrap() {
+        if (AuthMode != TMon::EAuthMode::Disabled && Authorizer) {
+            NActors::IEventHandle* handle = Authorizer(SelfId(), Event->Get()->Request.Get());
+            if (handle) {
+                Send(handle);
+                Become(&THttpMonAuthorizedPageRequest::StateWork);
+                return;
+            }
+        }
+        ProcessRequest();
+    }
+
+    void ReplyWith(NHttp::THttpOutgoingResponsePtr response) {
+        Send(Event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response));
+    }
+
+    bool CredentialsProvided() {
+        NHttp::THttpIncomingRequestPtr request = Event->Get()->Request;
+        NHttp::THeaders headers(request->Headers);
+        if (headers.Has("Authorization")) {
+            return true;
+        }
+        NHttp::TCookies cookies(headers["Cookie"]);
+        if (cookies.Has("ydb_session_id")) {
+            return true;
+        }
+        if (!request->MTlsClientCertificate.empty()) {
+            return true;
+        }
+        return false;
+    }
+
+    TString YdbToHttpError(Ydb::StatusIds::StatusCode status) {
+        switch (status) {
+        case Ydb::StatusIds::UNAUTHORIZED:
+            // YDB status UNAUTHORIZED is used for both access denied case and if no credentials were provided.
+            return CredentialsProvided() ? "403 Forbidden" : "401 Unauthorized";
+        case Ydb::StatusIds::INTERNAL_ERROR:
+            return "500 Internal Server Error";
+        case Ydb::StatusIds::UNAVAILABLE:
+            return "503 Service Unavailable";
+        case Ydb::StatusIds::OVERLOADED:
+            return "429 Too Many Requests";
+        case Ydb::StatusIds::TIMEOUT:
+            return "408 Request Timeout";
+        case Ydb::StatusIds::PRECONDITION_FAILED:
+            return "412 Precondition Failed";
+        default:
+            return "400 Bad Request";
+        }
+    }
+
+    void ReplyErrorAndPassAway(const NKikimr::NGRpcService::TEvRequestAuthAndCheckResult& result) {
+        ReplyErrorAndPassAway(result.Status, result.Issues, true);
+    }
+
+    void ReplyErrorAndPassAway(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues, bool addAccessControlHeaders) {
+        NHttp::THttpIncomingRequestPtr request = Event->Get()->Request;
+        TStringBuilder response;
+        TStringBuilder body;
+        TStringBuf contentType;
+        const TString httpError = YdbToHttpError(status);
+
+        contentType = "text/html";
+        body << "<html><body><h1>" << httpError << "</h1>";
+        if (issues) {
+            body << "<p>" << issues.ToString() << "</p>";
+        }
+        body << "</body></html>";
+
+        response << "HTTP/1.1 " << httpError << "\r\n";
+        if (addAccessControlHeaders) {
+            NHttp::THeaders headers(request->Headers);
+            TString origin = TString(headers["Origin"]);
+            if (origin.empty()) {
+                origin = "*";
+            }
+            response << "Access-Control-Allow-Origin: " << origin << "\r\n";
+            response << "Access-Control-Allow-Credentials: true\r\n";
+            response << "Access-Control-Allow-Headers: Content-Type,Authorization,Origin,Accept\r\n";
+            response << "Access-Control-Allow-Methods: OPTIONS, GET, POST, PUT, DELETE\r\n";
+        }
+
+        response << "Content-Type: " << contentType << "\r\n";
+        response << "Content-Length: " << body.size() << "\r\n";
+        response << "\r\n";
+        response << body;
+        ReplyWith(request->CreateResponseString(response));
+        PassAway();
+    }
+
+    void ReplyForbiddenAndPassAway(const TString& error = {}) {
+        NYql::TIssues issues;
+        issues.AddIssue(error);
+        ReplyErrorAndPassAway(Ydb::StatusIds::UNAUTHORIZED, issues, true);
+    }
+
+    void ProcessRequest() {
+        Container.Page->Output(Container);
+        NHttp::THttpOutgoingResponsePtr response = Event->Get()->Request->CreateResponseString(Container.Str());
+        Send(Event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response));
+        PassAway();
+    }
+
+    void HandleUndelivered(TEvents::TEvUndelivered::TPtr&) {
+        NHttp::THttpIncomingRequestPtr request = Event->Get()->Request;
+        ReplyWith(request->CreateResponseServiceUnavailable("Actor is not available"));
+        PassAway();
+    }
+
+    void Handle(NKikimr::NGRpcService::TEvRequestAuthAndCheckResult::TPtr& ev) {
+        const NKikimr::NGRpcService::TEvRequestAuthAndCheckResult& result(*ev->Get());
+        if (result.UserToken) {
+            Event->Get()->UserToken = result.UserToken->GetSerializedToken();
+        }
+        if (AuthMode == TMon::EAuthMode::ExtractOnly) {
+            // Extract token but don't enforce authorization - let the handler decide
+            ProcessRequest();
+            return;
+        }
+        if (result.Status != Ydb::StatusIds::SUCCESS) {
+            return ReplyErrorAndPassAway(result);
+        }
+        const bool isTokenAllowed = IsTokenAllowedForMonitoring(result.UserToken.Get(), AllowedSIDs);
+        if (isTokenAllowed) {
+            ProcessRequest();
+        } else {
+            return ReplyForbiddenAndPassAway("SID is not allowed");
+        }
+    }
+
+    STATEFN(StateWork) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvents::TEvUndelivered, HandleUndelivered);
+            hFunc(NKikimr::NGRpcService::TEvRequestAuthAndCheckResult, Handle);
+        }
+    }
+};
+
+// receives everyhing not related to actor communcation, converts them to request-actors
+class THttpMonPageService : public TActor<THttpMonPageService> {
+    TActorId HttpProxyActorId;
+    TIntrusivePtr<NMonitoring::IMonPage> Page;
+    TMon::TRequestAuthorizer Authorizer;
+    TVector<TString> AllowedSIDs;
+    TMon::EAuthMode AuthMode;
+
+public:
+    THttpMonPageService(const TActorId& httpProxyActorId, TIntrusivePtr<NMonitoring::IMonPage> page,
+        TMon::TRequestAuthorizer authorizer = {}, TVector<TString> allowedSIDs = {}, TMon::EAuthMode authMode = TMon::EAuthMode::Enforce)
+        : TActor(&THttpMonPageService::StateWork)
+        , HttpProxyActorId(httpProxyActorId)
+        , Page(std::move(page))
+        , Authorizer(std::move(authorizer))
+        , AllowedSIDs(std::move(allowedSIDs))
+        , AuthMode(authMode)
+    {
+    }
+
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::HTTP_MON_INDEX_SERVICE;
+    }
+
+    void ReplyWithOptions(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev) {
+        NHttp::THttpIncomingRequestPtr request = ev->Get()->Request;
+        TString url(request->URL.Before('?'));
+        TString type = mimetypeByExt(url.data());
+        if (type.empty()) {
+            type = "application/json";
+        }
+        TString origin = TString(NHttp::THeaders(request->Headers)["Origin"]);
+        if (origin.empty()) {
+            origin = "*";
+        }
+        TStringBuilder response;
+        response << "HTTP/1.1 204 No Content\r\n"
+                    "Access-Control-Allow-Origin: " << origin << "\r\n"
+                    "Access-Control-Allow-Credentials: true\r\n"
+                    "Access-Control-Allow-Headers: Content-Type,Authorization,Origin,Accept,X-Trace-Verbosity,X-Want-Trace,traceparent\r\n"
+                    "Access-Control-Expose-Headers: traceresponse,X-Worker-Name\r\n"
+                    "Access-Control-Allow-Methods: OPTIONS,GET,POST,PUT,DELETE\r\n"
+                    "Content-Type: " << type << "\r\n"
+                    "Connection: keep-alive\r\n\r\n";
+        Send(ev->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(request->CreateResponseString(response)));
+    }
+
+    void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev) {
+        if (ev->Get()->Request->Method == "OPTIONS") {
+            return ReplyWithOptions(ev);
+        }
+        Register(new THttpMonAuthorizedPageRequest(std::move(ev), Page.Get(), AllowedSIDs, Authorizer, AuthMode));
+    }
+
+    STATEFN(StateWork) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(NHttp::TEvHttpProxy::TEvHttpIncomingRequest, Handle);
+            cFunc(TEvents::TSystem::Poison, PassAway);
+        }
+    }
+};
+
 // receives everyhing not related to actor communcation, converts them to request-actors
 class THttpMonIndexService : public TActor<THttpMonIndexService> {
 public:
-    THttpMonIndexService(const TActorId& httpProxyActorId, TIntrusivePtr<NMonitoring::TIndexMonPage> indexMonPage, TMon::TRequestAuthorizer authorizer, const TString& redirectRoot = {})
+    THttpMonIndexService(const TActorId& httpProxyActorId, TIntrusivePtr<NMonitoring::TIndexMonPage> indexMonPage, TVector<TString> allowedSIDs, TMon::TRequestAuthorizer authorizer, const TString& redirectRoot = {})
         : TActor(&THttpMonIndexService::StateWork)
         , HttpProxyActorId(httpProxyActorId)
         , IndexMonPage(std::move(indexMonPage))
+        , AllowedSIDs(std::move(allowedSIDs))
         , Authorizer(std::move(authorizer))
         , RedirectRoot(redirectRoot)
     {
@@ -1276,8 +1522,8 @@ public:
         while (!url.empty()) {
             auto it = Handlers.find(TString(url));
             if (it != Handlers.end()) {
-                if (it->second.UseAuth) {
-                    Register(new THttpMonAuthorizedActorRequest(std::move(ev), it->second.Handler, Authorizer, it->second.AllowedSIDs));
+                if (it->second.AuthMode != TMon::EAuthMode::Disabled) {
+                    Register(new THttpMonAuthorizedActorRequest(std::move(ev), it->second.Handler, Authorizer, it->second.AllowedSIDs, it->second.AuthMode));
                 } else {
                     Forward(ev, it->second.Handler);
                 }
@@ -1296,7 +1542,7 @@ public:
             }
         }
 
-        Register(new THttpMonLegacyIndexRequest(std::move(ev), IndexMonPage.Get()));
+        Register(new THttpMonAuthorizedPageRequest(std::move(ev), IndexMonPage.Get(), AllowedSIDs, Authorizer));
     }
 
     void Handle(TEvMon::TEvRegisterHandler::TPtr& ev) {
@@ -1316,10 +1562,29 @@ public:
     TIntrusivePtr<NMonitoring::TIndexMonPage> IndexMonPage;
     std::unordered_map<TString, bool> IndexPages;
     std::unordered_map<TString, TMon::TRegisterHandlerFields> Handlers;
+    TVector<TString> AllowedSIDs;
     TMon::TRequestAuthorizer Authorizer;
     TString RedirectRoot;
 };
 
+class THttpMonPingService : public TActor<THttpMonPingService> {
+public:
+    THttpMonPingService()
+        : TActor(&THttpMonPingService::StateWork)
+    {
+    }
+
+    void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev) {
+        Send(ev->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(ev->Get()->Request->CreateResponseOK("ok /ping", "text/plain")));
+    }
+
+    STATEFN(StateWork) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(NHttp::TEvHttpProxy::TEvHttpIncomingRequest, Handle);
+            cFunc(TEvents::TSystem::Poison, PassAway);
+        }
+    }
+};
 
 TMon::TMon(TConfig config)
     : Config(std::move(config))
@@ -1357,7 +1622,7 @@ std::future<void> TMon::Start(TActorSystem* actorSystem) {
         TMailboxType::ReadAsFilled,
         executorPool);
     HttpMonServiceActorId = ActorSystem->Register(
-        new THttpMonIndexService(HttpProxyActorId, IndexMonPage, Config.Authorizer, Config.RedirectMainPageTo),
+        new THttpMonIndexService(HttpProxyActorId, IndexMonPage, Config.AllowedSIDs, Config.Authorizer, Config.RedirectMainPageTo),
         TMailboxType::ReadAsFilled,
         executorPool);
     auto nodeProxyActorId = ActorSystem->Register(
@@ -1366,6 +1631,21 @@ std::future<void> TMon::Start(TActorSystem* actorSystem) {
         executorPool);
     NodeProxyServiceActorId = MakeNodeProxyId(ActorSystem->NodeId);
     ActorSystem->RegisterLocalService(NodeProxyServiceActorId, nodeProxyActorId);
+    IActor* countersMonPageServiceActor;
+    if (Config.RequireCountersAuthentication) {
+        countersMonPageServiceActor = new THttpMonPageService(
+            HttpProxyActorId,
+            CountersMonPage,
+            Config.Authorizer,
+            GetCountersAllowedSIDs(ActorSystem->AppData<NKikimr::TAppData>()));
+    } else {
+        countersMonPageServiceActor = new THttpMonPageService(
+            HttpProxyActorId,
+            CountersMonPage);
+    }
+    CountersServiceActorId = ActorSystem->Register(countersMonPageServiceActor, TMailboxType::ReadAsFilled, executorPool);
+    ActorSystem->RegisterLocalService(CountersServiceActorId, CountersServiceActorId);
+    PingServiceActorId = ActorSystem->Register(new THttpMonPingService(), TMailboxType::ReadAsFilled, executorPool);
 
     TStringBuilder workerName;
     workerName << FQDNHostName() << ":" << Config.Port;
@@ -1383,6 +1663,7 @@ std::future<void> TMon::Start(TActorSystem* actorSystem) {
         "application/yaml",
     };
     addPort->SslCertificatePem = Config.Certificate;
+    addPort->CaFile = Config.CaFile;
     addPort->Secure = !Config.Certificate.empty();
     addPort->MaxRequestsPerSecond = Config.MaxRequestsPerSecond;
 
@@ -1391,6 +1672,8 @@ std::future<void> TMon::Start(TActorSystem* actorSystem) {
     ActorSystem->Register(new THttpMonInitializator(HttpProxyActorId, std::move(addPort), std::move(promise)));
     ActorSystem->Send(HttpProxyActorId, new NHttp::TEvHttpProxy::TEvRegisterHandler("/", HttpMonServiceActorId));
     ActorSystem->Send(HttpProxyActorId, new NHttp::TEvHttpProxy::TEvRegisterHandler("/node", NodeProxyServiceActorId));
+    ActorSystem->Send(HttpProxyActorId, new NHttp::TEvHttpProxy::TEvRegisterHandler(TStringBuilder() << "/" << CountersMonPage->GetPath(), CountersServiceActorId));
+    ActorSystem->Send(HttpProxyActorId, new NHttp::TEvHttpProxy::TEvRegisterHandler("/ping", PingServiceActorId));
     for (auto& pageInfo : ActorMonPages) {
         if (pageInfo.Page) {
             RegisterActorMonPage(pageInfo);
@@ -1409,9 +1692,11 @@ void TMon::Stop() {
         for (const auto& [path, actorId] : ActorServices) {
             ActorSystem->Send(actorId, new TEvents::TEvPoisonPill);
         }
+        ActorSystem->Send(CountersServiceActorId, new TEvents::TEvPoisonPill);
         ActorSystem->Send(NodeProxyServiceActorId, new TEvents::TEvPoisonPill);
         ActorSystem->Send(HttpMonServiceActorId, new TEvents::TEvPoisonPill);
         ActorSystem->Send(HttpProxyActorId, new TEvents::TEvPoisonPill);
+        ActorSystem->Send(PingServiceActorId, new TEvents::TEvPoisonPill);
         ActorSystem = nullptr;
     }
 }
@@ -1451,7 +1736,8 @@ NMonitoring::IMonPage* TMon::RegisterActorPage(TRegisterActorPageFields fields) 
         fields.ActorSystem,
         fields.ActorId,
         fields.AllowedSIDs ? fields.AllowedSIDs : Config.AllowedSIDs,
-        fields.UseAuth ? Config.Authorizer : TRequestAuthorizer(),
+        fields.AuthMode != TMon::EAuthMode::Disabled ? Config.Authorizer : TRequestAuthorizer(),
+        fields.AuthMode,
         fields.MonServiceName);
     if (fields.Index) {
         fields.Index->Register(page);
@@ -1477,10 +1763,10 @@ NMonitoring::IMonPage* TMon::RegisterActorPage(TRegisterActorPageFields fields) 
 }
 
 NMonitoring::IMonPage* TMon::RegisterCountersPage(const TString& path, const TString& title, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters) {
-    TDynamicCountersPage* page = new TDynamicCountersPage(path, title, counters);
-        page->SetUnknownGroupPolicy(EUnknownGroupPolicy::Ignore);
-        Register(page);
-        return page;
+    CountersMonPage = new TDynamicCountersPage(path, title, counters);
+    CountersMonPage->SetUnknownGroupPolicy(EUnknownGroupPolicy::Ignore);
+    Register(CountersMonPage.Get());
+    return CountersMonPage.Get();
 }
 
 void TMon::RegisterActorHandler(const TRegisterHandlerFields& fields) {

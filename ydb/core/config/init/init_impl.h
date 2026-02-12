@@ -297,6 +297,7 @@ struct TCommonAppOptions {
     ui32 MonitoringThreads = 10;
     ui32 MonitoringMaxRequestsPerSecond = 0;
     TString MonitoringCertificateFile;
+    TString MonitoringCaFile;
     TString RestartsCountFile = "";
     size_t CompileInflightLimit = 100000; // MiniKQLCompileService
     TString UDFsDir;
@@ -391,6 +392,7 @@ struct TCommonAppOptions {
         opts.AddLongOption("mon-port", "Monitoring port").OptionalArgument("NUM").StoreResult(&MonitoringPort);
         opts.AddLongOption("mon-address", "Monitoring address").OptionalArgument("ADDR").StoreResult(&MonitoringAddress);
         opts.AddLongOption("mon-cert", "Monitoring certificate (https)").OptionalArgument("PATH").StoreResult(&MonitoringCertificateFile);
+        opts.AddLongOption("mon-ca", "Path to CA certificate file for verifying client certificates (mTLS)").OptionalArgument("PATH").StoreResult(&MonitoringCaFile);
         opts.AddLongOption("mon-threads", "Monitoring http server threads").RequiredArgument("NUM").StoreResult(&MonitoringThreads);
         opts.AddLongOption("suppress-version-check", "Suppress version compatibility checking via IC").NoArgument().SetFlag(&SuppressVersionCheck);
 
@@ -572,6 +574,10 @@ struct TCommonAppOptions {
             } else {
                 ythrow yexception() << "invalid ssl certificate file";
             }
+        }
+        if (MonitoringCaFile) {
+            appConfig.MutableMonitoringConfig()->SetMonitoringCaFile(MonitoringCaFile);
+            ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::MonitoringConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
         if (SqsHttpPort) {
             appConfig.MutableSqsConfig()->MutableHttpServerConfig()->SetPort(SqsHttpPort);

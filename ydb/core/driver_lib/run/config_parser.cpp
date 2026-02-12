@@ -266,6 +266,7 @@ void TRunCommandConfigParser::ParseRunOpts(int argc, char **argv) {
     opts.AddLongOption("mon-port", "Monitoring port").OptionalArgument("NUM").StoreResult(&RunOpts.MonitoringPort);
     opts.AddLongOption("mon-address", "Monitoring address").OptionalArgument("ADDR").StoreResult(&RunOpts.MonitoringAddress);
     opts.AddLongOption("mon-cert", "Monitoring certificate (https)").OptionalArgument("PATH").StoreResult(&RunOpts.MonitoringCertificateFile);
+    opts.AddLongOption("mon-ca", "Path to CA certificate file for verifying client certificates (mTLS)").OptionalArgument("PATH").StoreResult(&RunOpts.MonitoringCaFile);
     opts.AddLongOption("mon-threads", "Monitoring http server threads").RequiredArgument("NUM").StoreResult(&RunOpts.MonitoringThreads);
 
     SetupLastGetOptForConfigFiles(opts);
@@ -372,6 +373,7 @@ void TRunCommandConfigParser::ApplyParsedOptions() {
     Config.AppConfig.MutableMonitoringConfig()->SetMaxRequestsPerSecond(RunOpts.MonitoringMaxRequestsPerSecond);
     Config.AppConfig.MutableMonitoringConfig()->SetInactivityTimeout(ToString(RunOpts.MonitoringInactivityTimeout.Seconds()));
     Config.AppConfig.MutableMonitoringConfig()->SetMonitoringCertificate(TUnbufferedFileInput(RunOpts.MonitoringCertificateFile).ReadAll());
+    Config.AppConfig.MutableMonitoringConfig()->SetMonitoringCaFile(RunOpts.MonitoringCaFile);
     Config.AppConfig.MutableRestartsCountConfig()->SetRestartsCountFile(RunOpts.RestartsCountFile);
 }
 

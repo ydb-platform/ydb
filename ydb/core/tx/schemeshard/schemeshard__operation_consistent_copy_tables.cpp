@@ -22,25 +22,32 @@ static bool ShouldOmitAutomaticIndexProcessing(const NKikimrSchemeOp::TCopyTable
 static NKikimrSchemeOp::TModifyScheme CopyTableTask(NKikimr::NSchemeShard::TPath& src, NKikimr::NSchemeShard::TPath& dst, const NKikimrSchemeOp::TCopyTableConfig& descr) {
     using namespace NKikimr::NSchemeShard;
 
-    auto scheme = TransactionTemplate(dst.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable);
+    auto scheme = TransactionTemplate(dst.Parent().PathString(), src->IsTable() ? NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable : NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnTable);
     scheme.SetFailOnExist(true);
 
-    auto operation = scheme.MutableCreateTable();
-    operation->SetName(dst.LeafName());
-    operation->SetCopyFromTable(src.PathString());
-    operation->SetOmitFollowers(descr.GetOmitFollowers());
-    operation->SetIsBackup(descr.GetIsBackup());
-    operation->SetAllowUnderSameOperation(descr.GetAllowUnderSameOperation());
-    operation->SetOmitIndexes(ShouldOmitAutomaticIndexProcessing(descr));
-    if (descr.HasCreateSrcCdcStream()) {
-        auto* coOp = scheme.MutableCreateCdcStream();
-        coOp->CopyFrom(descr.GetCreateSrcCdcStream());
-    }
-    if (descr.HasDropSrcCdcStream()) {
-        operation->MutableDropSrcCdcStream()->CopyFrom(descr.GetDropSrcCdcStream());
-    }
-    if (descr.HasTargetPathTargetState()) {
-        operation->SetPathState(descr.GetTargetPathTargetState());
+    if (src->IsTable()) {
+        auto operation = scheme.MutableCreateTable();
+        operation->SetName(dst.LeafName());
+        operation->SetCopyFromTable(src.PathString());
+        operation->SetOmitFollowers(descr.GetOmitFollowers());
+        operation->SetIsBackup(descr.GetIsBackup());
+        operation->SetAllowUnderSameOperation(descr.GetAllowUnderSameOperation());
+        operation->SetOmitIndexes(ShouldOmitAutomaticIndexProcessing(descr));
+        if (descr.HasCreateSrcCdcStream()) {
+            auto* coOp = scheme.MutableCreateCdcStream();
+            coOp->CopyFrom(descr.GetCreateSrcCdcStream());
+        }
+        if (descr.HasDropSrcCdcStream()) {
+            operation->MutableDropSrcCdcStream()->CopyFrom(descr.GetDropSrcCdcStream());
+        }
+        if (descr.HasTargetPathTargetState()) {
+            operation->SetPathState(descr.GetTargetPathTargetState());
+        }
+    } else {
+        auto operation = scheme.MutableCreateColumnTable();
+        operation->SetName(dst.LeafName());
+        operation->SetCopyFromTable(src.PathString());
+        operation->SetIsBackup(descr.GetIsBackup());
     }
 
     return scheme;
@@ -154,7 +161,7 @@ bool CreateConsistentCopyTables(
             TPath::TChecker checks = srcPath.Check();
             checks.IsResolved()
                   .NotDeleted()
-                  .IsTable();
+                  .Or(&TPath::TChecker::IsColumnTable, &TPath::TChecker::IsTable);
 
             // Allow copying index impl tables when feature flag is enabled
             if (!srcPath.ShouldSkipCommonPathCheckForIndexImplTable()) {

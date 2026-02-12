@@ -1377,6 +1377,9 @@ TVector<ISubOperation::TPtr> TDefaultOperationFactory::MakeOperationParts(
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropColumnStore:
         return {CreateDropOlapStore(op.NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnTable:
+        if (tx.GetCreateColumnTable().HasCopyFromTable()) {
+            return CreateCopyTable(op.NextPartId(), tx, context);
+        }
         return {CreateNewColumnTable(op.NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterColumnTable:
         return {CreateAlterColumnTable(op.NextPartId(), tx)};

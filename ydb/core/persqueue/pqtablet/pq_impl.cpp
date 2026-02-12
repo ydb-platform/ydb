@@ -5399,7 +5399,7 @@ void TPersQueue::Handle(TEvPQ::TEvGetMLPConsumerStateRequest::TPtr& ev) {
 
 void TPersQueue::Handle(TEvPQ::TEvMLPConsumerStatus::TPtr& ev) {
     auto& record = ev->Get()->Record;
-    record.SetGeneration(GetGeneration());
+    PQ_LOG_D("Handle TEvPQ::TEvMLPConsumerStatus " << record.ShortDebugString());
     Forward(ev, ReadBalancerActorId);
 }
 
@@ -5490,6 +5490,7 @@ bool TPersQueue::HandleHook(STFUNC_SIG)
         hFuncTraced(TEvPQ::TEvMLPChangeMessageDeadlineRequest, Handle);
         hFuncTraced(TEvPQ::TEvMLPPurgeRequest, Handle);
         hFuncTraced(TEvPQ::TEvGetMLPConsumerStateRequest, Handle);
+        hFuncTraced(TEvPQ::TEvMLPConsumerStatus, Handle);
         default:
             return false;
     }

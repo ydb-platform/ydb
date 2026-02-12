@@ -825,7 +825,9 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvGetReadSessionsInfo::TPtr& 
     Balancer->Handle(ev, ctx);
 }
 
-void TPersQueueReadBalancer::Handle(TEvPQ::TEvMLPConsumerStatus::TPtr& ev) {
+void TPersQueueReadBalancer::Handle(TEvPQ::TEvMLPConsumerStatus::TPtr& ev)
+{
+    PQ_LOG_D("Handle TEvPQ::TEvMLPConsumerStatus " << ev->Get()->Record.ShortDebugString());
     MLPBalancer->Handle(ev);
 }
 

@@ -20,7 +20,7 @@ using namespace NActors;
 class TConsumerActor : public TBaseTabletActor<TConsumerActor>
                      , public TConstantLogPrefix {
     static constexpr TDuration WakeupInterval = TDuration::Seconds(1);
-    static constexpr TDuration NoMessagesTimeout = TDuration::MilliSeconds(50);
+    static constexpr TDuration NoMessagesTimeout = TDuration::Seconds(1);
 
 public:
     TConsumerActor(const TString& database, ui64 tabletId, const TActorId& tabletActorId, ui32 partitionId,

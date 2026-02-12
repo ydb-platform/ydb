@@ -57,6 +57,8 @@ void TMLPConsumer::Rebuild() {
             PartitionsForBalancing.push_back(partitionId);
         }
     }
+
+    PQ_LOG_D("Rebuild " << JoinSeq(",", PartitionsForBalancing) << " partitions for balancing");
 }
 
 TMLPBalancer::TMLPBalancer(TPersQueueReadBalancer& topicActor)
@@ -182,10 +184,12 @@ void TMLPBalancer::UpdateConfig(const std::vector<ui32>& addedPartitions) {
 void TMLPBalancer::SetUseForReading(const TString& consumerName, ui32 partitionId, ui64 messages, bool useForReading, ui32 generation, ui64 cookie) {
     auto* consumerConfig = NPQ::GetConsumer(GetConfig(), consumerName);
     if (!consumerConfig) {
+        PQ_LOG_D("Consumer '" << consumerName << "' does not exist");
         return;
     }
 
     if (consumerConfig->GetType() != NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP) {
+        PQ_LOG_D("Consumer '" << consumerName << "' is not MLP consumer");
         return;
     }
 

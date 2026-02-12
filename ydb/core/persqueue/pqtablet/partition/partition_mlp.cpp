@@ -95,6 +95,7 @@ void TPartition::Handle(TEvPQ::TEvMLPConsumerState::TPtr& ev) {
 
 void TPartition::Handle(TEvPQ::TEvMLPConsumerStatus::TPtr& ev) {
     auto& record = ev->Get()->Record;
+    LOG_D("Handle TEvPQ::TEvMLPConsumerStatus " << record.ShortDebugString());
 
     const auto* userInfo = UsersInfoStorage->GetIfExists(record.GetConsumer());
     if (userInfo && LastOffsetHasBeenCommited(*userInfo)) {

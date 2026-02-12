@@ -152,8 +152,6 @@ std::shared_ptr<TTopicWorkloadKeyedWriterProducer> TTopicWorkloadKeyedWriterWork
         std::bind(&TTopicWorkloadKeyedWriterProducer::HandleAckEvent, producer, std::placeholders::_1));
     eventHandlers.SessionClosedHandler(
         std::bind(&TTopicWorkloadKeyedWriterProducer::HandleSessionClosed, producer, std::placeholders::_1));
-    eventHandlers.ReadyToAcceptHandler(
-        std::bind(&TTopicWorkloadKeyedWriterProducer::HandleReadyToAcceptEvent, producer, std::placeholders::_1));
     settings.EventHandlers(eventHandlers);
 
     settings.DirectWriteToPartition(Params.Direct);

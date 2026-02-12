@@ -37,7 +37,7 @@ void TTopicWorkloadWriterProducer::Send(const TInstant& createTimestamp,
 
     NTopic::TWriteMessage writeMessage(data);
     writeMessage.SeqNo(MessageId_);
-    writeMessage.CreateTimestamp(createTimestamp);
+    writeMessage.CreateTimestamp(TInstant::Now());
     writeMessage.MessageMeta(std::move(meta));
 
     if (transaction.has_value()) {

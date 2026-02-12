@@ -264,6 +264,12 @@ private:
     };
 
     struct TEventsWorker : public std::enable_shared_from_this<TEventsWorker> {
+        enum class EEventType {
+            SessionClosed = 0,
+            ReadyToAccept = 1,
+            Ack = 2,
+        };
+
         TEventsWorker(TKeyedWriteSession* session);
         
         std::optional<NThreading::TPromise<void>> DoWork();
@@ -272,8 +278,8 @@ private:
         void SubscribeToPartition(std::uint32_t partition);
         std::optional<NThreading::TPromise<void>> HandleNewMessage();
         void HandleAcksEvent(std::uint64_t partition, TWriteSessionEvent::TAcksEvent&& event);
-        std::optional<TWriteSessionEvent::TEvent> GetEvent(bool block);
-        std::vector<TWriteSessionEvent::TEvent> GetEvents(bool block, std::optional<size_t> maxEventsCount = std::nullopt);
+        std::optional<TWriteSessionEvent::TEvent> GetEvent(bool block, std::vector<EEventType> eventTypes = {});
+        std::vector<TWriteSessionEvent::TEvent> GetEvents(bool block, std::optional<size_t> maxEventsCount = std::nullopt, std::vector<EEventType> eventTypes = {});
         std::list<TWriteSessionEvent::TEvent>::iterator AckQueueBegin(std::uint32_t partition);
         std::list<TWriteSessionEvent::TEvent>::iterator AckQueueEnd(std::uint32_t partition);
 
@@ -284,7 +290,8 @@ private:
         bool TransferEventsToOutputQueue();
         void AddReadyToAcceptEvent();
         bool AddSessionClosedIfNeeded();
-        std::optional<TWriteSessionEvent::TEvent> GetEventImpl(bool block);
+        std::optional<TWriteSessionEvent::TEvent> GetEventImpl(bool block, std::vector<EEventType> eventTypes = {});
+        EEventType GetEventType(const TWriteSessionEvent::TEvent& event);
 
         TKeyedWriteSession* Session;
 

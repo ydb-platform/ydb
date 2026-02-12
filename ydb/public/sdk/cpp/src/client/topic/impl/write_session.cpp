@@ -667,7 +667,19 @@ std::list<TWriteSessionEvent::TEvent>::iterator TKeyedWriteSession::TEventsWorke
     return queueIt->second.end();
 }
 
-std::optional<TWriteSessionEvent::TEvent> TKeyedWriteSession::TEventsWorker::GetEventImpl(bool block) {
+TKeyedWriteSession::TEventsWorker::EEventType TKeyedWriteSession::TEventsWorker::GetEventType(const TWriteSessionEvent::TEvent& event) {
+    if (std::holds_alternative<TSessionClosedEvent>(event)) {
+        return EEventType::SessionClosed;
+    } else if (std::holds_alternative<TWriteSessionEvent::TReadyToAcceptEvent>(event)) {
+        return EEventType::ReadyToAccept;
+    } else if (std::holds_alternative<TWriteSessionEvent::TAcksEvent>(event)) {
+        return EEventType::Ack;
+    }
+
+    Y_ABORT_UNLESS(false, "Unexpected event type");
+}
+
+std::optional<TWriteSessionEvent::TEvent> TKeyedWriteSession::TEventsWorker::GetEventImpl(bool block, std::vector<EEventType> eventTypes) {
     std::unique_lock lock(Lock);
     if (EventsOutputQueue.empty() && block) {
         lock.unlock();
@@ -676,6 +688,10 @@ std::optional<TWriteSessionEvent::TEvent> TKeyedWriteSession::TEventsWorker::Get
     }
 
     if (!EventsOutputQueue.empty()) {
+        if (!eventTypes.empty() && std::find(eventTypes.begin(), eventTypes.end(), GetEventType(EventsOutputQueue.front())) == eventTypes.end()) {
+            return std::nullopt;
+        }
+
         auto event = std::move(EventsOutputQueue.front());
         EventsOutputQueue.pop_front();
         return event;
@@ -684,17 +700,17 @@ std::optional<TWriteSessionEvent::TEvent> TKeyedWriteSession::TEventsWorker::Get
     return std::nullopt;
 }
 
-std::optional<TWriteSessionEvent::TEvent> TKeyedWriteSession::TEventsWorker::GetEvent(bool block) {
+std::optional<TWriteSessionEvent::TEvent> TKeyedWriteSession::TEventsWorker::GetEvent(bool block, std::vector<EEventType> eventTypes) {
     {
         std::unique_lock lock(Lock);
         AddSessionClosedIfNeeded();
     }
-    auto event = GetEventImpl(block);
+    auto event = GetEventImpl(block, eventTypes);
 
     return event;
 }
 
-std::vector<TWriteSessionEvent::TEvent> TKeyedWriteSession::TEventsWorker::GetEvents(bool block, std::optional<size_t> maxEventsCount) {
+std::vector<TWriteSessionEvent::TEvent> TKeyedWriteSession::TEventsWorker::GetEvents(bool block, std::optional<size_t> maxEventsCount, std::vector<EEventType> eventTypes) {
     if (maxEventsCount.has_value() && maxEventsCount.value() == 0) {
         return {};
     }
@@ -706,7 +722,7 @@ std::vector<TWriteSessionEvent::TEvent> TKeyedWriteSession::TEventsWorker::GetEv
 
     std::vector<TWriteSessionEvent::TEvent> events;
     while (true) {
-        auto event = GetEventImpl(block);
+        auto event = GetEventImpl(block, eventTypes);
         if (!event) {
             break;
         }
@@ -1414,7 +1430,8 @@ bool TKeyedWriteSession::RunSplittedPartitionWorkers() {
 void TKeyedWriteSession::RunUserEventLoop() {
     if (!Settings.EventHandlers_.AcksHandler_ &&
         !Settings.EventHandlers_.ReadyToAcceptHandler_ &&
-        !Settings.EventHandlers_.SessionClosedHandler_) {
+        !Settings.EventHandlers_.SessionClosedHandler_ &&
+        !Settings.EventHandlers_.CommonHandler_) {
         return;
     }
 
@@ -1423,8 +1440,24 @@ void TKeyedWriteSession::RunUserEventLoop() {
         return;
     }
 
+    std::vector<TEventsWorker::EEventType> eventTypes;
+    if (Settings.EventHandlers_.ReadyToAcceptHandler_) {
+        eventTypes.push_back(TEventsWorker::EEventType::ReadyToAccept);
+    }
+    if (Settings.EventHandlers_.AcksHandler_) {
+        eventTypes.push_back(TEventsWorker::EEventType::Ack);
+    }
+    if (Settings.EventHandlers_.SessionClosedHandler_) {
+        eventTypes.push_back(TEventsWorker::EEventType::SessionClosed);
+    }
+    if (Settings.EventHandlers_.CommonHandler_) {
+        eventTypes.push_back(TEventsWorker::EEventType::SessionClosed);
+        eventTypes.push_back(TEventsWorker::EEventType::ReadyToAccept);
+        eventTypes.push_back(TEventsWorker::EEventType::Ack);
+    }
+
     while (true) {
-        auto event = GetEvent(false);
+        auto event = EventsWorker->GetEvent(false, eventTypes);
         if (!event) {
             break;
         }
@@ -1435,7 +1468,7 @@ void TKeyedWriteSession::RunUserEventLoop() {
                     [this, ev = std::move(*readyToAcceptEvent)]() mutable {
                         Settings.EventHandlers_.ReadyToAcceptHandler_(ev);
                     });
-            } else {
+            } else if (Settings.EventHandlers_.CommonHandler_) {
                 handlersExecutor->Post(
                     [this, ev = std::move(*event)]() mutable {
                         Settings.EventHandlers_.CommonHandler_(ev);
@@ -1450,7 +1483,7 @@ void TKeyedWriteSession::RunUserEventLoop() {
                     [this, ev = std::move(*acksEvent)]() mutable {
                         Settings.EventHandlers_.AcksHandler_(ev);
                     });
-            } else {
+            } else if (Settings.EventHandlers_.CommonHandler_) {
                 handlersExecutor->Post(
                     [this, ev = std::move(*event)]() mutable {
                         Settings.EventHandlers_.CommonHandler_(ev);

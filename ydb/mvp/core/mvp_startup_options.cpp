@@ -10,7 +10,7 @@
 
 namespace NMVP {
 
-TMvpStartupOptions TMvpStartupOptions::Build(int argc, char** argv) {
+TMvpStartupOptions TMvpStartupOptions::Build(int argc, const char* argv[]) {
     TMvpStartupOptions startupOptions;
 
     NLastGetopt::TOptsParseResult parsedArgs = startupOptions.ParseArgs(argc, argv);
@@ -22,14 +22,14 @@ TMvpStartupOptions TMvpStartupOptions::Build(int argc, char** argv) {
     return startupOptions;
 }
 
-NLastGetopt::TOptsParseResult TMvpStartupOptions::ParseArgs(int argc, char** argv) {
+NLastGetopt::TOptsParseResult TMvpStartupOptions::ParseArgs(int argc, const char* argv[]) {
     Opts = NLastGetopt::TOpts::Default();
 
     Opts.AddLongOption("stderr", "Redirect log to stderr").NoArgument().SetFlag(&LogToStderr);
     Opts.AddLongOption("mlock", "Lock resident memory").NoArgument().SetFlag(&Mlock);
     Opts.AddLongOption("config", "Path to configuration YAML file").RequiredArgument("PATH").StoreResult(&YamlConfigPath);
     Opts.AddLongOption("http-port", "HTTP port. Default " + ToString(DEFAULT_HTTP_PORT)).StoreResult(&HttpPort);
-    Opts.AddLongOption("https-port", "HTTPS port. Default " + ToString(DEFAULT_HTTPS_PORT)).StoreResult(&HttpsPort);
+    Opts.AddLongOption("https-port", "HTTPS port").StoreResult(&HttpsPort);
 
     return NLastGetopt::TOptsParseResult(&Opts, argc, argv);
 }
@@ -92,20 +92,13 @@ void TMvpStartupOptions::TryGetStartupOptionsFromConfig(const NLastGetopt::TOpts
 }
 
 void TMvpStartupOptions::SetPorts() {
-    if (HttpPort > 0) {
-        Http = true;
+    if (HttpsPort) {
+        if (SslCertificateFile.empty()) {
+            ythrow yexception() << "SSL certificate file must be provided for HTTPS";
+        }
     }
-    if (HttpsPort > 0 || !SslCertificateFile.empty()) {
-        Https = true;
-    }
-    if (!Http && !Https) {
-        Http = true;
-    }
-    if (HttpPort == 0) {
+    if (!HttpPort && !HttpsPort) {
         HttpPort = DEFAULT_HTTP_PORT;
-    }
-    if (HttpsPort == 0) {
-        HttpsPort = DEFAULT_HTTPS_PORT;
     }
 }
 

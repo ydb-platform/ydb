@@ -44,7 +44,7 @@ protected:
     static TOpenIdConnectSettings OpenIdConnectSettings;
 
 public:
-    TMVP(int argc, char** argv);
+    TMVP(int argc, const char* argv[]);
     int Init();
     int Run();
     int Shutdown();

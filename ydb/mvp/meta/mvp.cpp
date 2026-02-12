@@ -65,7 +65,7 @@ int TMVP::Init() {
     HttpProxyId = ActorSystem.Register(NHttp::CreateHttpProxy(AppData.MetricRegistry));
     ActorSystem.Register(AppData.Tokenator = TMvpTokenator::CreateTokenator(TokensConfig, HttpProxyId));
 
-    if (StartupOptions.Http) {
+    if (StartupOptions.HttpPort) {
         auto ev = new NHttp::TEvHttpProxy::TEvAddListeningPort(StartupOptions.HttpPort, TStringBuilder() << FQDNHostName() << ':' << StartupOptions.HttpPort);
         ev->CompressContentTypes = {
             "text/plain",
@@ -76,7 +76,7 @@ int TMVP::Init() {
         };
         ActorSystem.Send(HttpProxyId, ev);
     }
-    if (StartupOptions.Https) {
+    if (StartupOptions.HttpsPort) {
         auto ev = new NHttp::TEvHttpProxy::TEvAddListeningPort(StartupOptions.HttpsPort, TStringBuilder() << FQDNHostName() << ':' << StartupOptions.HttpsPort);
         ev->Secure = true;
         ev->SslCertificatePem = TYdbLocation::SslCertificate;
@@ -137,7 +137,7 @@ TString TMVP::MetaDatabaseTokenName;
 
 bool TMVP::DbUserTokenSource = false;
 
-TMVP::TMVP(int argc, char** argv)
+TMVP::TMVP(int argc, const char* argv[])
     : StartupOptions(TMvpStartupOptions::Build(argc, argv))
     , LoggerSettings(BuildLoggerSettings())
     , ActorSystemSetup(BuildActorSystemSetup())
@@ -185,7 +185,7 @@ THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup() {
     TString defaultMetaDatabase = "/Root";
     TString defaultMetaApiEndpoint = "grpc://meta.ydb.yandex.net:2135";
 
-    if (!StartupOptions.YamlConfigPath.empty()) {
+    if (StartupOptions.Config) {
         try {
             TryGetMetaOptionsFromConfig(StartupOptions.Config);
         } catch (const YAML::Exception& e) {

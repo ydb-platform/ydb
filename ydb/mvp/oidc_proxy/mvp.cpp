@@ -80,7 +80,7 @@ int TMVP::Init() {
 
     HttpProxyId = ActorSystem.Register(NHttp::CreateHttpCache(BaseHttpProxyId, GetCachePolicy));
 
-    if (StartupOptions.Http) {
+    if (StartupOptions.HttpPort) {
         auto ev = new NHttp::TEvHttpProxy::TEvAddListeningPort(StartupOptions.HttpPort, FQDNHostName());
         ev->CompressContentTypes = {
             "text/plain",
@@ -91,7 +91,7 @@ int TMVP::Init() {
         };
         ActorSystem.Send(HttpProxyId, ev);
     }
-    if (StartupOptions.Https) {
+    if (StartupOptions.HttpsPort) {
         auto ev = new NHttp::TEvHttpProxy::TEvAddListeningPort(StartupOptions.HttpsPort, FQDNHostName());
         ev->Secure = true;
         ev->SslCertificatePem = TYdbLocation::SslCertificate;
@@ -180,7 +180,7 @@ int TMVP::Shutdown() {
 NMvp::TTokensConfig TMVP::TokensConfig;
 TOpenIdConnectSettings TMVP::OpenIdConnectSettings;
 
-TMVP::TMVP(int argc, char** argv)
+TMVP::TMVP(int argc, const char* argv[])
     : StartupOptions(TMvpStartupOptions::Build(argc, argv))
     , LoggerSettings(BuildLoggerSettings())
     , ActorSystemSetup(BuildActorSystemSetup())
@@ -232,7 +232,7 @@ void TMVP::TryGetOidcOptionsFromConfig(const YAML::Node& config) {
 }
 
 THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup() {
-    if (!StartupOptions.YamlConfigPath.empty()) {
+    if (StartupOptions.Config) {
         try {
             TryGetOidcOptionsFromConfig(StartupOptions.Config);
         } catch (const YAML::Exception& e) {

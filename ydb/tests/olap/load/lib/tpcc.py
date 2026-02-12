@@ -18,8 +18,9 @@ class TpccSuiteBase(LoadSuiteBase):
 
     @classmethod
     def do_setup_class(cls):
-        if not cls.verify_data or getenv('NO_VERIFY_DATA', '0') == '1' or getenv('NO_VERIFY_DATA_TPCC', '0') == '1':
-            return
+        if cls.verify_data and getenv('NO_VERIFY_DATA', '0') != '1' and getenv('NO_VERIFY_DATA_TPCC', '0') != '1':
+            # cls.check_tables_size(folder=cls.get_tpcc_path(), tables={})
+            pass
         YdbCliHelper.deploy_remote_cli()
         wh_count = 0
         try:
@@ -30,7 +31,6 @@ class TpccSuiteBase(LoadSuiteBase):
             YdbCliHelper.clear_tpcc(cls.get_tpcc_path())
             YdbCliHelper.init_tpcc(cls.get_tpcc_path(), cls.warehouses)
             YdbCliHelper.import_data_tpcc(cls.get_tpcc_path(), cls.warehouses)
-        # cls.check_tables_size(folder=cls.get_tpcc_path(), tables={})
 
     @classmethod
     def get_key_measurements(cls) -> tuple[list[LoadSuiteBase.KeyMeasurement], str]:

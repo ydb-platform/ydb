@@ -155,6 +155,15 @@ NActors::IEventHandle* GetAuthorizeTicketResult(const NActors::TActorId& owner) 
     }
 }
 
+static bool IsTokenAllowedForMonitoring(const NACLib::TUserToken* userToken, const TVector<TString>& allowedSIDs) {
+    if (NKikimr::AppData() && !NKikimr::AppData()->EnforceUserTokenRequirement) {
+        if (!NKikimr::AppData()->EnforceUserTokenCheckRequirement) {
+            return true;
+        }
+    }
+    return NKikimr::IsTokenAllowed(userToken, allowedSIDs);
+}
+
 void MakeJsonErrorReply(NJson::TJsonValue& jsonResponse, TString& message, const NYdb::TStatus& status) {
     MakeJsonErrorReply(jsonResponse, message, NYdb::NAdapters::ToYqlIssues(status.GetIssues()), status.GetStatus());
 }
@@ -574,7 +583,8 @@ public:
         if (result.Status != Ydb::StatusIds::SUCCESS) {
             return ReplyErrorAndPassAway(result);
         }
-        if (IsTokenAllowed(result.UserToken.Get(), ActorMonPage->AllowedSIDs)) {
+        const bool isTokenAllowed = IsTokenAllowedForMonitoring(result.UserToken.Get(), ActorMonPage->AllowedSIDs);
+        if (isTokenAllowed) {
             SendRequest(&result);
         } else {
             return ReplyForbiddenAndPassAway("SID is not allowed");
@@ -1179,7 +1189,8 @@ public:
         if (result.Status != Ydb::StatusIds::SUCCESS) {
             return ReplyErrorAndPassAway(result);
         }
-        if (IsTokenAllowed(result.UserToken.Get(), AllowedSIDs)) {
+        const bool isTokenAllowed = IsTokenAllowedForMonitoring(result.UserToken.Get(), AllowedSIDs);
+        if (isTokenAllowed) {
             SendRequest(result);
         } else {
             return ReplyForbiddenAndPassAway("SID is not allowed");
@@ -1335,7 +1346,8 @@ public:
         if (result.Status != Ydb::StatusIds::SUCCESS) {
             return ReplyErrorAndPassAway(result);
         }
-        if (IsTokenAllowed(result.UserToken.Get(), AllowedSIDs)) {
+        const bool isTokenAllowed = IsTokenAllowedForMonitoring(result.UserToken.Get(), AllowedSIDs);
+        if (isTokenAllowed) {
             ProcessRequest();
         } else {
             return ReplyForbiddenAndPassAway("SID is not allowed");

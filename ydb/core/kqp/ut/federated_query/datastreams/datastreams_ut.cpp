@@ -2989,8 +2989,14 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         }, /* sort  */ true);
     }
 
-    Y_UNIT_TEST_F(StreamingQueryWithStreamLookupJoin, TStreamingTestFixture) {
-        SetupAppConfig().MutableQueryServiceConfig()->SetProgressStatsPeriodMs(0);
+    Y_UNIT_TEST_TWIN_F(StreamingQueryWithStreamLookupJoin, WithFeatureFlag, TStreamingTestFixture) {
+        {
+            auto& setupAppConfig = SetupAppConfig();
+            setupAppConfig.MutableQueryServiceConfig()->SetProgressStatsPeriodMs(0);
+            if (WithFeatureFlag) {
+                setupAppConfig.MutableTableServiceConfig()->SetEnableDqSourceStreamLookupJoin(true);
+            }
+        }
 
         const auto connectorClient = SetupMockConnectorClient();
         const auto pqGateway = SetupMockPqGateway();
@@ -3015,7 +3021,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             "table"_a = ydbTable
         ));
 
-        {   // Prepare connector mock
+        if (WithFeatureFlag) {   // Prepare connector mock
             const std::vector<TColumn> columns = {
                 {"fqdn", Ydb::Type::STRING},
                 {"payload", Ydb::Type::STRING}
@@ -3079,7 +3085,12 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             "ydb_table"_a = ydbTable,
             "input_topic"_a = inputTopicName,
             "output_topic"_a = outputTopicName
-        ));
+        ),
+        WithFeatureFlag ? EStatus::SUCCESS : EStatus::GENERIC_ERROR,
+        WithFeatureFlag ? "" : "Unsupported join strategy: streamlookup");
+        if (!WithFeatureFlag) {
+            return;
+        }
 
         CheckScriptExecutionsCount(1, 1);
 

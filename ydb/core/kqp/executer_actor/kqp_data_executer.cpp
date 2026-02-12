@@ -26,6 +26,7 @@
 #include <ydb/core/persqueue/events/global.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_checkpoints.h>
+#include <ydb/library/yql/dq/actors/compute/dq_info_aggregation_actor.h>
 #include <ydb/library/yql/dq/runtime/dq_columns_resolve.h>
 #include <ydb/library/yql/dq/tasks/dq_connection_builder.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
@@ -1929,6 +1930,14 @@ private:
         }
         scriptExternalEffect->Description.SecretNames = SecretNames;
 
+        if (HasExternalSources) {
+            NDq::TTxId txId = TxId;
+            if (GetUserRequestContext() && GetUserRequestContext()->StreamingQueryPath) {
+                txId = GetUserRequestContext()->StreamingQueryPath;
+            }
+            TasksGraph.GetMeta().DqInfoAggregator = Register(CreateDqInfoAggregationActor(txId));
+        }
+
         if (!WaitRequired()) {
             return Execute();
         }
@@ -2012,8 +2021,6 @@ private:
         if (!graphRestored) {
             sourceScanPartitionsCount = TasksGraph.BuildAllTasks({}, ResourcesSnapshot, Stats.get(), &ShardsWithEffects);
         }
-
-        OnEmptyResult();
 
         TIssue validateIssue;
         if (!ValidateTasks(TasksGraph, EExecType::Data, TasksGraph.GetMeta().AllowWithSpilling, validateIssue)) {
@@ -2330,6 +2337,8 @@ private:
     using TTopicTabletTxs = NTopic::TTopicOperationTransactions;
 
     void ContinueExecute() {
+        OnEmptyResult();
+
         StartCheckpointCoordinator();
         ExecuteTasks();
 

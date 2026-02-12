@@ -117,6 +117,8 @@ class Platform(object):
         self.is_rv32imc_zicsr_zifencei = self.arch in ('riscv32_imc_zicsr_zifencei',)
 
         self.is_riscv32 = self.is_rv32imc or self.is_rv32imc_zicsr or self.is_rv32imc_zicsr_zifencei
+        self.is_riscv64 = self.arch == 'riscv64_aw'
+        self.is_riscv64_aw = self.arch == 'riscv64_aw'
 
         self.is_nds32 = self.arch in ('nds32le_elf_mculib_v5f',)
         self.is_tc32 = self.arch in ('tc32_elf',)
@@ -157,7 +159,7 @@ class Platform(object):
             self.is_armv5te or self.is_armv6 or self.is_armv7 or self.is_armv7em or self.is_armv8m or
             self.is_riscv32 or self.is_nds32 or self.is_xtensa or self.is_tc32 or self.is_wasm32
         )
-        self.is_64_bit = self.is_x86_64 or self.is_armv8 or self.is_powerpc or self.is_wasm64
+        self.is_64_bit = self.is_x86_64 or self.is_armv8 or self.is_powerpc or self.is_wasm64 or self.is_riscv64
 
         assert self.is_32_bit or self.is_64_bit
         assert not (self.is_32_bit and self.is_64_bit)
@@ -244,6 +246,8 @@ class Platform(object):
             (self.is_power8le, 'ARCH_POWER8LE'),
             (self.is_power9le, 'ARCH_POWER9LE'),
             (self.is_riscv32, 'ARCH_RISCV32'),
+            (self.is_riscv64, 'ARCH_RISCV64'),
+            (self.is_riscv64_aw, 'ARCH_RISCV64_AW'),
             (self.is_xtensa_hifi4, 'ARCH_XTENSA_HIFI4'),
             (self.is_xtensa_hifi5, 'ARCH_XTENSA_HIFI5'),
             (self.is_xtensa_esp32s3, 'ARCH_XTENSA_ESP32S3'),
@@ -1306,6 +1310,10 @@ class GnuToolchain(Toolchain):
         if target.is_rv32imc_zicsr_zifencei:
             self.c_flags_platform.append('-march=rv32imc_zicsr_zifencei')
 
+        if target.is_riscv64_aw:
+            self.c_flags_platform.append('-march=rv64gcxthead -mcmodel=medany -mabi=lp64d')
+            self.setup_allwinner_rtos_sdk()
+
         if self.tc.is_clang or self.tc.is_gcc and self.tc.version_at_least(8, 2):
             target_flags = select(default=[], selectors=[
                 (target.is_linux and target.is_power8le, ['-mcpu=power8', '-mtune=power8', '-maltivec']),
@@ -1353,6 +1361,11 @@ class GnuToolchain(Toolchain):
         self.platform_projects.append(project)
         self.c_flags_platform.append('--sysroot')
         self.c_flags_platform.append(var)
+
+    def setup_allwinner_rtos_sdk(self):
+        self.platform_projects.insert(0, 'build/internal/platform/allwinner_rtos')
+        self.c_flags_platform.append('-isysroot')
+        self.c_flags_platform.append('${ALLWINNER_RTOS_SDK_RESOURCE_GLOBAL}/rtos/include')
 
     def setup_apple_sdk(self, target):
         if not self.tc.os_sdk_local:
@@ -1598,7 +1611,7 @@ class GnuCompiler(Compiler):
                 '-Wno-undefined-var-template',
             ]
 
-        elif self.tc.is_gcc:
+        elif self.tc.is_gcc and self.host.is_riscv64_aw is None:
             self.c_foptions.append('-fno-delete-null-pointer-checks')
             self.c_foptions.append('-fabi-version=8')
 

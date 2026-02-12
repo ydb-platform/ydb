@@ -210,6 +210,9 @@ public:
     }
 
     ~TPDiskActor() {
+        if (FormattingThread) {
+            FormattingThread->Join();
+        }
         SecureWipeBuffer((ui8*)MainKey.Keys.data(), sizeof(NPDisk::TKey) * MainKey.Keys.size());
     }
 
@@ -421,14 +424,12 @@ public:
         P_LOG(PRI_WARN, BSP01, PDisk->ErrorStr);
 
         // Is used to pass parameters into formatting thread, because TThread can pass only void*
-        using TCookieType = std::tuple<TPDiskActor*, TActorSystem*, TActorId, std::optional<TRcBuf>>;
+        using TCookieType = std::tuple<TIntrusivePtr<TPDiskConfig>, NPDisk::TKey, TActorSystem*, TActorId, std::optional<TRcBuf>>;
         FormattingThread.Reset(new TThread(
                 [] (void *cookie) -> void* {
                     auto params = static_cast<TCookieType*>(cookie);
-                    auto [actor, actorSystem, pDiskActor, metadata] = *params;
+                    auto [cfg, mainKey, actorSystem, pDiskActor, metadata] = std::move(*params);
                     delete params;
-
-                    TPDiskConfig *cfg = actor->Cfg.Get();
 
                     if (cfg->ReadOnly) {
                         TString readOnlyError = "PDisk is in read-only mode";
@@ -456,11 +457,11 @@ public:
 
                         try {
                             FormatPDisk(cfg->GetDevicePath(), 0, cfg->SectorSize, cfg->ChunkSize,
-                                cfg->PDiskGuid, chunkKey, logKey, sysLogKey, actor->MainKey.Keys.back(), TString(),
+                                cfg->PDiskGuid, chunkKey, logKey, sysLogKey, mainKey, TString(),
                                 options);
                         } catch (NPDisk::TPDiskFormatBigChunkException) {
                             FormatPDisk(cfg->GetDevicePath(), 0, cfg->SectorSize, NPDisk::SmallDiskMaximumChunkSize,
-                                cfg->PDiskGuid, chunkKey, logKey, sysLogKey, actor->MainKey.Keys.back(), TString(),
+                                cfg->PDiskGuid, chunkKey, logKey, sysLogKey, mainKey, TString(),
                                 options);
                         }
                         actorSystem->Send(pDiskActor, new TEvPDiskFormattingFinished(true, ""));
@@ -470,7 +471,7 @@ public:
                     }
                     return nullptr;
                 },
-                new TCookieType(this, TlsActivationContext->ActorSystem(), SelfId(), std::move(ev->Get()->Metadata))));
+                new TCookieType(Cfg, MainKey.Keys.back(), TlsActivationContext->ActorSystem(), SelfId(), std::move(ev->Get()->Metadata))));
 
         FormattingThread->Start();
     }

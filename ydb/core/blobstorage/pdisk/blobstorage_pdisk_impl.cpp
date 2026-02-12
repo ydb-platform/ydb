@@ -138,6 +138,13 @@ TCheckDiskFormatResult TPDisk::ReadChunk0Format(ui8* formatSectors, const NPDisk
     Format.SectorSize = FormatSectorSize;
     ui32 mainKeySize = mainKey.Keys.size();
 
+    const bool allowObsoleteKey =
+#ifdef DISABLE_PDISK_ENCRYPTION
+        false;
+#else
+        true;
+#endif
+
     for (ui32 k = 0; k < mainKeySize; ++k) {
         TPDiskStreamCypher cypher(Cfg->EnableFormatEncryption);
         cypher.SetKey(mainKey.Keys[k]);
@@ -183,7 +190,10 @@ TCheckDiskFormatResult TPDisk::ReadChunk0Format(ui8* formatSectors, const NPDisk
             ui64 sectorOffset = lastGoodIdx * FormatSectorSize;
             ui8* formatSector = formatSectors + sectorOffset;
             if (k < mainKeySize - 1) { // obsolete key is used
-                return TCheckDiskFormatResult(true, true);
+                if (allowObsoleteKey) {
+                    return TCheckDiskFormatResult(true, true);
+                }
+                continue;
             } else if (isBadPresent) {
                 for (ui32 i = 0; i < ReplicationFactor; ++i) {
                     if (isBad[i]) {
@@ -1959,6 +1969,9 @@ bool TPDisk::YardInitForKnownVDisk(TYardInit &evYardInit, TOwner owner) {
                 Cfg->RetrieveDeviceType(), isTinyDisk, Format.SectorSize, ""));
 
     GetStartingPoints(owner, result->StartingPoints);
+    if (evYardInit.GetDiskFd) {
+        result->DiskFd = BlockDevice->DuplicateFd();
+    }
     ownerData.VDiskId = vDiskId;
     ownerData.CutLogId = evYardInit.CutLogId;
     ownerData.WhiteboardProxyId = evYardInit.WhiteboardProxyId;
@@ -2124,6 +2137,9 @@ void TPDisk::YardInitFinish(TYardInit &evYardInit) {
         Cfg->RetrieveDeviceType(), isTinyDisk, Format.SectorSize, ""));
 
     GetStartingPoints(result->PDiskParams->Owner, result->StartingPoints);
+    if (evYardInit.GetDiskFd) {
+        result->DiskFd = BlockDevice->DuplicateFd();
+    }
     WriteSysLogRestorePoint(new TCompletionEventSender(
         this, evYardInit.Sender, result.Release(), Mon.YardInit.Results), evYardInit.ReqId, {});
 
@@ -2184,10 +2200,8 @@ void TPDisk::ConfigureCbs(ui32 ownerId, EGate gate, ui64 weight) {
     }
 }
 
-void TPDisk::SchedulerConfigure(const TConfigureScheduler &reqCfg) {
+void TPDisk::SchedulerConfigure(const TPDiskSchedulerConfig& cfg, ui32 ownerId) {
     // TODO(cthulhu): Check OwnerRound here
-    const TPDiskSchedulerConfig& cfg = reqCfg.SchedulerCfg;
-    ui32 ownerId = reqCfg.OwnerId;
     ui64 bytesTotalWeight = cfg.LogWeight + cfg.FreshWeight + cfg.CompWeight;
     ConfigureCbs(ownerId, GateLog, cfg.LogWeight * cfg.BytesSchedulerWeight);
     ConfigureCbs(ownerId, GateFresh, cfg.FreshWeight * cfg.BytesSchedulerWeight);
@@ -2773,9 +2787,11 @@ void TPDisk::ProcessFastOperationsQueue() {
             case ERequestType::RequestAskForCutLog:
                 SendCutLog(static_cast<TAskForCutLog&>(*req));
                 break;
-            case ERequestType::RequestConfigureScheduler:
-                SchedulerConfigure(static_cast<TConfigureScheduler&>(*req));
+            case ERequestType::RequestConfigureScheduler: {
+                const auto& cfgReq = static_cast<TConfigureScheduler&>(*req);
+                SchedulerConfigure(cfgReq.SchedulerCfg, cfgReq.OwnerId);
                 break;
+            }
             case ERequestType::RequestWhiteboartReport:
                 WhiteboardReport(static_cast<TWhiteboardReport&>(*req));
                 break;
@@ -3362,6 +3378,7 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
                 const ui64 diskOffset = Format.Offset(ev.ChunkIdx, 0, ev.Offset);
                 void *buffer = completion->GetBuffer();
                 BlockDevice->PreadAsync(buffer, ev.Size, diskOffset, completion.release(), ev.ReqId, &traceId);
+                delete request;
                 return false;
             }
 
@@ -3411,6 +3428,7 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
 
                 auto completion = std::make_unique<TCompletionChunkWriteRaw>(std::move(buffer), ev.Sender, ev.Cookie, std::move(ev.Span));
                 BlockDevice->PwriteAsync(span.data(), span.size(), diskOffset, completion.release(), ev.ReqId, &traceId);
+                delete request;
                 return false;
             }
 
@@ -4302,8 +4320,7 @@ void TPDisk::AddCbsSet(ui32 ownerId) {
     AddCbs(ownerId, GateSyncLog, "SyncLog", 0ull);
     AddCbs(ownerId, GateLow, "LowRead", 0ull);
 
-    TConfigureScheduler conf(ownerId, 0);
-    SchedulerConfigure(conf);
+    SchedulerConfigure(Cfg->SchedulerCfg, ownerId);
 }
 
 TChunkIdx TPDisk::GetUnshreddedFreeChunk() {

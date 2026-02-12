@@ -27,7 +27,6 @@
 #include "opentelemetry/sdk/configuration/otlp_http_span_exporter_builder.h"
 #include "opentelemetry/sdk/configuration/prometheus_pull_metric_exporter_builder.h"
 #include "opentelemetry/sdk/configuration/text_map_propagator_builder.h"
-#include "opentelemetry/sdk/configuration/zipkin_span_exporter_builder.h"
 #include "opentelemetry/version.h"
 
 OPENTELEMETRY_BEGIN_NAMESPACE
@@ -87,16 +86,6 @@ public:
   void SetConsoleSpanBuilder(std::unique_ptr<ConsoleSpanExporterBuilder> &&builder)
   {
     console_span_builder_ = std::move(builder);
-  }
-
-  const ZipkinSpanExporterBuilder *GetZipkinSpanBuilder() const
-  {
-    return zipkin_span_builder_.get();
-  }
-
-  void SetZipkinSpanBuilder(std::unique_ptr<ZipkinSpanExporterBuilder> &&builder)
-  {
-    zipkin_span_builder_ = std::move(builder);
   }
 
   const OtlpHttpPushMetricExporterBuilder *GetOtlpHttpPushMetricExporterBuilder() const
@@ -251,7 +240,6 @@ private:
   std::unique_ptr<OtlpGrpcSpanExporterBuilder> otlp_grpc_span_builder_;
   std::unique_ptr<OtlpFileSpanExporterBuilder> otlp_file_span_builder_;
   std::unique_ptr<ConsoleSpanExporterBuilder> console_span_builder_;
-  std::unique_ptr<ZipkinSpanExporterBuilder> zipkin_span_builder_;
 
   std::unique_ptr<OtlpHttpPushMetricExporterBuilder> otlp_http_push_metric_builder_;
   std::unique_ptr<OtlpGrpcPushMetricExporterBuilder> otlp_grpc_push_metric_builder_;

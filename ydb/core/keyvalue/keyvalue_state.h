@@ -295,6 +295,8 @@ protected:
 
     TControlWrapper ReadRequestsInFlightLimit_Base;
     TMemorizableControlWrapper ReadRequestsInFlightLimit;
+    TControlWrapper UsePayload_Base;
+    TMemorizableControlWrapper UsePayload;
 
 public:
     TKeyValueState();
@@ -564,13 +566,14 @@ public:
     TPrepareResult PrepareOneCmd(const TCommand::Concat &request, THolder<TIntermediate> &intermediate);
     TPrepareResult PrepareOneCmd(const TCommand::CopyRange &request, THolder<TIntermediate> &intermediate);
     TPrepareResult PrepareOneCmd(const TCommand::Write &request, THolder<TIntermediate> &intermediate,
-        const TTabletStorageInfo *info);
+        const TTabletStorageInfo *info, const TEvKeyValue::TEvExecuteTransaction& ev);
     TPrepareResult PrepareOneCmd(const TCommand::DeleteRange &request, THolder<TIntermediate> &intermediate,
         const TActorContext &ctx);
     TPrepareResult PrepareOneCmd(const TCommand &request, THolder<TIntermediate> &intermediate,
-        const TTabletStorageInfo *info, const TActorContext &ctx);
+        const TTabletStorageInfo *info, const TActorContext &ctx, const TEvKeyValue::TEvExecuteTransaction& ev);
     TPrepareResult PrepareCommands(NKikimrKeyValue::ExecuteTransactionRequest &kvRequest,
-        THolder<TIntermediate> &intermediate, const TTabletStorageInfo *info, const TActorContext &ctx);
+        THolder<TIntermediate> &intermediate, const TTabletStorageInfo *info, const TActorContext &ctx,
+        const TEvKeyValue::TEvExecuteTransaction& ev);
     TPrepareResult InitGetStatusCommand(TIntermediate::TGetStatus &cmd,
         NKikimrClient::TKeyValueRequest::EStorageChannel storageChannel, const TTabletStorageInfo *info);
     void ReplyError(const TActorContext &ctx, TString errorDescription,

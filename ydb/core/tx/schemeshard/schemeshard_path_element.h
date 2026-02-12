@@ -111,6 +111,7 @@ public:
     void DecShardsInside(ui64 delta = 1);
     bool IsRoot() const;
     bool IsDirectory() const;
+    bool IsSystemDirectory() const;
     bool IsTableIndex() const;
     bool IsCdcStream() const;
     bool IsTable() const;

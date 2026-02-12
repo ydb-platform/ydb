@@ -1,17 +1,18 @@
-#include "dq_pq_read_actor.h"
+#include "dq_pq_read_actor_base.h"
 
-#include <library/cpp/protobuf/interop/cast.h>
-#include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
-#include <yql/essentials/utils/log/log.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/yql/dq/actors/compute/dq_checkpoints_states.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
 #include <ydb/library/yql/dq/common/dq_common.h>
-#include <ydb/library/yql/providers/pq/async_io/dq_pq_read_actor_base.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io_state.pb.h>
+
+#include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
+#include <yql/essentials/utils/log/log.h>
+
+#include <library/cpp/protobuf/interop/cast.h>
 
 #define SRC_LOG_T(s) \
     LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, LogPrefix << s)
@@ -46,12 +47,9 @@ TInstant InitStartingMessageTimestamp(const NPq::NProto::StreamingDisposition& d
     }());
 }
 
+constexpr ui32 STATE_VERSION = 1;
+
 } // anonymous namespace
-
-constexpr ui32 StateVersion = 1;
-
-#define SRC_LOG_D(s) \
-    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, LogPrefix << s)
 
 TDqPqReadActorBase::TDqPqReadActorBase(
     ui64 inputIndex,
@@ -68,8 +66,8 @@ TDqPqReadActorBase::TDqPqReadActorBase(
     , LogPrefix(TStringBuilder() << "SelfId: " << selfId << ", TxId: " << txId << ", task: " << taskId << ". PQ source. ")
     , ReadParams(std::move(readParams))
     , ComputeActorId(computeActorId)
-    , TaskId(taskId) {
-    }
+    , TaskId(taskId)
+{}
 
 void TDqPqReadActorBase::SaveState(const NDqProto::TCheckpoint& /*checkpoint*/, TSourceState& state) {
     NPq::NProto::TDqPqTopicSourceState stateProto;
@@ -80,8 +78,6 @@ void TDqPqReadActorBase::SaveState(const NDqProto::TCheckpoint& /*checkpoint*/, 
     topic->SetDatabase(SourceParams.GetDatabase());
     topic->SetTopicPath(SourceParams.GetTopicPath());
 
-    TStringStream str;
-    str << "SessionId: " << GetSessionId() << " SaveState, offsets: ";
     for (const auto& [clusterAndPartition, offset] : PartitionToOffset) {
         const auto& [cluster, partition] = clusterAndPartition;
         NPq::NProto::TDqPqTopicSourceState::TPartitionReadState* partitionState = stateProto.AddPartitions();
@@ -89,9 +85,9 @@ void TDqPqReadActorBase::SaveState(const NDqProto::TCheckpoint& /*checkpoint*/, 
         partitionState->SetCluster(cluster);
         partitionState->SetPartition(partition);
         partitionState->SetOffset(offset);
-        str << "{" << partition << "," << offset << "},";
     }
-    SRC_LOG_D(str.Str());
+
+    SRC_LOG_D("SessionId: " << GetSessionId() << " SaveState, offsets: " << LogPartitionToOffset());
 
     stateProto.SetStartingMessageTimestampMs(StartingMessageTimestamp.MilliSeconds());
     stateProto.SetIngressBytes(IngressStats.Bytes);
@@ -99,22 +95,25 @@ void TDqPqReadActorBase::SaveState(const NDqProto::TCheckpoint& /*checkpoint*/, 
     TString stateBlob;
     YQL_ENSURE(stateProto.SerializeToString(&stateBlob));
 
-    state.Data.emplace_back(stateBlob, StateVersion);
+    state.Data.emplace_back(stateBlob, STATE_VERSION);
 }
 
 void TDqPqReadActorBase::LoadState(const TSourceState& state) {
     InitWatermarkTracker();
+
     TInstant minStartingMessageTs = state.DataSize() ? TInstant::Max() : StartingMessageTimestamp;
     ui64 ingressBytes = 0;
     for (const auto& data : state.Data) {
-        if (data.Version != StateVersion) {
-            ythrow yexception() << "Invalid state version, expected " << StateVersion << ", actual " << data.Version;
+        if (data.Version != STATE_VERSION) {
+            ythrow yexception() << "Invalid state version, expected " << STATE_VERSION << ", actual " << data.Version;
         }
+
         NPq::NProto::TDqPqTopicSourceState stateProto;
         YQL_ENSURE(stateProto.ParseFromString(data.Blob), "Serialized state is corrupted");
         YQL_ENSURE(stateProto.TopicsSize() == 1, "One topic per source is expected");
+
         PartitionToOffset.reserve(PartitionToOffset.size() + stateProto.PartitionsSize());
-        for (const NPq::NProto::TDqPqTopicSourceState::TPartitionReadState& partitionProto : stateProto.GetPartitions()) {
+        for (const auto& partitionProto : stateProto.GetPartitions()) {
             ui64& offset = PartitionToOffset[TPartitionKey{partitionProto.GetCluster(), partitionProto.GetPartition()}];
             if (offset) {
                 offset = Min(offset, partitionProto.GetOffset());
@@ -122,15 +121,13 @@ void TDqPqReadActorBase::LoadState(const TSourceState& state) {
                 offset = partitionProto.GetOffset();
             }
         }
+
         minStartingMessageTs = Min(minStartingMessageTs, TInstant::MilliSeconds(stateProto.GetStartingMessageTimestampMs()));
         ingressBytes += stateProto.GetIngressBytes();
     }
-    TStringStream str;
-    str << "SessionId: " << GetSessionId() << " StartingMessageTs " << minStartingMessageTs << " Restoring offset: ";
-    for (const auto& [key, value] : PartitionToOffset) {
-        str << "{" << key << "," << value << "},";
-    }
-    SRC_LOG_D(str.Str());
+
+    SRC_LOG_D("SessionId: " << GetSessionId() << " StartingMessageTs " << minStartingMessageTs << " Restoring offset: " << LogPartitionToOffset());
+
     StartingMessageTimestamp = minStartingMessageTs;
     IngressStats.Bytes += ingressBytes;
     IngressStats.Chunks++;
@@ -144,13 +141,17 @@ const NYql::NDq::TDqAsyncStats& TDqPqReadActorBase::GetIngressStats() const {
     return IngressStats;
 }
 
+TString TDqPqReadActorBase::GetSessionId() const {
+    return "empty";
+}
+
 void TDqPqReadActorBase::InitWatermarkTracker(TDuration lateArrivalDelay, TDuration idleTimeout, const ::NMonitoring::TDynamicCounterPtr& counters) {
     const auto granularity = TDuration::MicroSeconds(SourceParams.GetWatermarks().GetGranularityUs());
     SRC_LOG_D("SessionId: " << GetSessionId() << " Watermarks enabled: " << SourceParams.GetWatermarks().GetEnabled() << " granularity: " << granularity
         << " late arrival delay: " << lateArrivalDelay
         << " idle: " << SourceParams.GetWatermarks().GetIdlePartitionsEnabled()
         << " idle timeout: " << idleTimeout
-        );
+    );
 
     if (!SourceParams.GetWatermarks().GetEnabled()) {
         return;
@@ -172,6 +173,14 @@ void TDqPqReadActorBase::MaybeSchedulePartitionIdlenessCheck(TInstant systemTime
         SRC_LOG_T("Next idleness check scheduled at " << *nextIdleCheckAt);
         SchedulePartitionIdlenessCheck(*nextIdleCheckAt);
     }
+}
+
+TString TDqPqReadActorBase::LogPartitionToOffset() const {
+    TStringBuilder str;
+    for (const auto& [clusterAndPartition, offset] : PartitionToOffset) {
+        str << "{" << clusterAndPartition.Cluster << ":" << clusterAndPartition.PartitionId << "," << offset << "},";
+    }
+    return str;
 }
 
 } // namespace NYql::NDq::NInternal

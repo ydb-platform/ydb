@@ -168,6 +168,40 @@ bool TStorage::ChangeMessageDeadline(ui64 messageId, TInstant deadline) {
     }
 }
 
+bool TStorage::Purge(ui64 endOffset) {
+    Metrics.TotalPurgedMessageCount += Metrics.UnprocessedMessageCount + Metrics.LockedMessageCount
+        + Metrics.DelayedMessageCount + Metrics.DLQMessageCount
+        + (endOffset - GetLastOffset());
+
+    Metrics.InflightMessageCount = 0;
+    Metrics.UnprocessedMessageCount = 0;
+    Metrics.LockedMessageCount = 0;
+    Metrics.LockedMessageGroupCount = 0;
+    Metrics.DelayedMessageCount = 0;
+    Metrics.CommittedMessageCount = 0;
+    Metrics.DeadlineExpiredMessageCount = 0;
+    Metrics.DLQMessageCount = 0;
+
+    SlowMessages.clear();
+    Messages.clear();
+    DLQQueue.clear();
+    DLQMessages.clear();
+    LockedMessageGroupsId.clear();
+
+    FirstOffset = endOffset;
+    FirstUncommittedOffset = endOffset;
+    FirstUnlockedOffset = endOffset;
+
+    BaseDeadline = TrimToSeconds(TimeProvider->Now(), false);
+    BaseWriteTimestamp = TrimToSeconds(TimeProvider->Now(), false);
+
+    NextVacuumRun = TrimToSeconds(TimeProvider->Now(), false) + VACUUM_INTERVAL;
+
+    Batch.SetPurged();
+
+    return true;
+}
+
 TInstant TStorage::GetMessageDeadline(ui64 messageId) {
     auto [message, _] = GetMessageInt(messageId);
     if (!message) {
@@ -982,6 +1016,10 @@ void TStorage::TBatch::DeleteFromSlow(ui64 offset) {
     DeletedFromSlowZone.push_back(offset);
 }
 
+void TStorage::TBatch::SetPurged() {
+    Purged = true;
+}
+
 void TStorage::TBatch::Compacted(size_t count) {
     CompactedMessages += count;
 }
@@ -999,7 +1037,8 @@ bool TStorage::TBatch::Empty() const {
         && !BaseWriteTimestamp.has_value()
         && MovedToSlowZone.empty()
         && DeletedFromSlowZone.empty()
-        && CompactedMessages == 0;
+        && CompactedMessages == 0
+        && !Purged;
 }
 
 size_t TStorage::TBatch::AddedMessageCount() const {
@@ -1012,6 +1051,10 @@ size_t TStorage::TBatch::ChangedMessageCount() const {
 
 size_t TStorage::TBatch::DLQMessageCount() const {
     return AddedToDLQ.size();
+}
+
+bool TStorage::TBatch::GetPurged() const {
+    return Purged;
 }
 
 TStorage::TMessageIterator::TMessageIterator(const TStorage& storage, std::map<ui64, TMessage>::const_iterator it, ui64 offset)

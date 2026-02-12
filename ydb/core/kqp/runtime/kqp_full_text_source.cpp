@@ -34,8 +34,7 @@
 
 #include <cmath>
 
-namespace NKikimr {
-namespace NKqp {
+namespace NKikimr::NKqp {
 
 using namespace NYql;
 using namespace NYql::NDq;
@@ -50,17 +49,22 @@ constexpr double K1_FACTOR_DEFAULT = 1.2;
 constexpr double B_FACTOR_DEFAULT = 0.75;
 constexpr double EPSILON = 1e-6;
 constexpr i32 RELEVANCE_COLUMN_MARKER = -1;
+constexpr double NGRAM_IMBALANCE_FACTOR = 10;
 
 class TDocId;
 
 namespace {
 
 TString WildcardToRegex(const TStringBuf wildcardPattern) {
-    static const TStringBuf special = R"(^$.\+?()|{}[])";
+    static const TStringBuf special = R"(^$.\+*?()|{}[])";
     TStringBuilder builder;
     for (char c : wildcardPattern) {
-        if (c == '*') {
-            builder << '.';
+        if (c == '%') {
+            builder << ".*";
+            continue;
+        } else if (c == '_') {
+            builder << ".";
+            continue;
         } else if (special.find(c) != TStringBuf::npos) {
             builder << '\\';
         }
@@ -83,7 +87,6 @@ class TTableReader : public TAtomicRefCount<T> {
     TVector<NScheme::TTypeInfo> ResultColumnTypes;
     TVector<i32> ResultColumnIds;
     std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>> PartitionInfo;
-    absl::flat_hash_map<ui64, std::deque<TOwnedTableRange>> RangesToRead;
 
 public:
 
@@ -128,14 +131,13 @@ public:
         return ResultColumnTypes;
     }
 
-
     template <typename TableRange>
-    std::unique_ptr<TEvDataShard::TEvRead> GetReadRequest(ui64 readId, ui64 shardId, const TableRange& range) {
-        return GetReadRequest(readId, shardId, std::deque<TableRange>{range});
+    std::unique_ptr<TEvDataShard::TEvRead> GetReadRequest(ui64 readId, const TableRange& range) {
+        return GetReadRequest(readId, std::deque<TableRange>{range});
     }
 
     template <typename TableRange>
-    std::unique_ptr<TEvDataShard::TEvRead> GetReadRequest(ui64 readId, ui64 shardId, const std::deque<TableRange>& ranges) {
+    std::unique_ptr<TEvDataShard::TEvRead> GetReadRequest(ui64 readId, const std::deque<TableRange>& ranges) {
         auto request = std::make_unique<TEvDataShard::TEvRead>();
         auto& record = request->Record;
 
@@ -177,13 +179,6 @@ public:
         record.SetMaxRows(MaxRowsDefaultQuota);
         record.SetMaxBytes(MaxBytesDefaultQuota);
         record.SetResultFormat(UseArrowFormat ? NKikimrDataEvents::FORMAT_ARROW : NKikimrDataEvents::FORMAT_CELLVEC);
-
-        CA_LOG_E(TStringBuilder() << "Send EvRead (full text source) to shardId=" << shardId
-            << ", readId = " << record.GetReadId()
-            << ", snapshot=(txid=" << record.GetSnapshot().GetTxId() << ", step=" << record.GetSnapshot().GetStep() << ")"
-            << ", lockTxId=" << record.GetLockTxId()
-            << ", lockNodeId=" << record.GetLockNodeId());
-
         return request;
     }
 
@@ -199,24 +194,6 @@ public:
             keyColumnTypes, TVector<TKeyDesc::TColumnOp>{}));
 
         Counters->IteratorsShardResolve->Inc();
-    }
-
-    void StageRangeToRead(const TTableRange& range) {
-        auto requests = GetRangePartitioning(range);
-        for(const auto& [shardId, range] : requests) {
-            RangesToRead[shardId].emplace_back(std::move(range));
-        }
-    }
-
-    std::pair<ui64, std::unique_ptr<TEvDataShard::TEvRead>> GetNextReadRequest(ui64 nextReadId) {
-        if (RangesToRead.empty()) {
-            return {0, nullptr};
-        }
-
-        auto [shardId, ranges] = *RangesToRead.begin();
-        auto request = GetReadRequest(nextReadId, shardId, ranges);
-        RangesToRead.erase(shardId);
-        return {shardId, std::move(request)};
     }
 
     std::vector<std::pair<ui64, TTableRange>> GetRangePartitioning(const TTableRange& range) {
@@ -278,7 +255,6 @@ public:
     }
 };
 
-
 class TQueryCtx : public TAtomicRefCount<TQueryCtx> {
     const ui64 DocCount = 0;
     const double AvgDL = 1.0;
@@ -286,19 +262,19 @@ class TQueryCtx : public TAtomicRefCount<TQueryCtx> {
     double K1Factor = K1_FACTOR_DEFAULT;
     double BFactor = B_FACTOR_DEFAULT;
     const TVector<std::pair<i32, NScheme::TTypeInfo>> ResultCellIndices;
-    const EQueryMode QueryMode;
-    const ui32 MinimumShouldMatch;
+    const EDefaultOperator DefaultOperator;
+    ui32 MinimumShouldMatch;
 
 public:
     TQueryCtx(size_t wordCount, ui64 totalDocLength, ui64 docCount,
-        EQueryMode queryMode,
+        EDefaultOperator defaultOperator,
         ui32 minimumShouldMatch,
         const TVector<std::pair<i32, NScheme::TTypeInfo>> resultCellIndices)
         : DocCount(docCount)
         , AvgDL(docCount > 0 ? static_cast<double>(totalDocLength) / docCount : 1.0)
         , IDFValues(wordCount, 0.0)
         , ResultCellIndices(resultCellIndices)
-        , QueryMode(queryMode)
+        , DefaultOperator(defaultOperator)
         , MinimumShouldMatch(minimumShouldMatch)
     {
     }
@@ -337,12 +313,18 @@ public:
         return BFactor;
     }
 
-    EQueryMode GetQueryMode() const {
-        return QueryMode;
+    EDefaultOperator GetDefaultOperator() const {
+        return DefaultOperator;
     }
 
     ui32 GetMinimumShouldMatch() const {
         return MinimumShouldMatch;
+    }
+
+    void ReduceMinimumShouldMatch(ui32 minShouldMatch) {
+        if (MinimumShouldMatch > minShouldMatch) {
+            MinimumShouldMatch = minShouldMatch;
+        }
     }
 
     double GetAvgDL() const {
@@ -361,19 +343,18 @@ TTableId FromProto(const ::NKqpProto::TKqpPhyTableId & proto) {
     );
 }
 
-class TDocumentInfo : public TAtomicRefCount<TDocumentInfo> {
+class TDocumentInfo : public TSimpleRefCount<TDocumentInfo> {
     TOwnedCellVec KeyCells;
     TOwnedCellVec RowCells;
-    std::vector<ui32> WordFrequencies;
     ui64 DocumentLength = std::numeric_limits<ui64>::max();
 public:
+    using TPtr = TIntrusivePtr<TDocumentInfo>;
+
+    std::vector<ui32> TokenFrequencies;
+
     TDocumentInfo(TOwnedCellVec&& keyCells)
         : KeyCells(std::move(keyCells))
     {}
-
-    void SetWordFrequencies(std::vector<ui32>&& wordFrequencies) {
-        WordFrequencies = std::move(wordFrequencies);
-    }
 
     void SetDocumentLength(ui64 documentLength) {
         DocumentLength = documentLength;
@@ -389,8 +370,8 @@ public:
         const double k1Factor = queryCtx.GetK1Factor();
         const double bFactor = queryCtx.GetBFactor();
         const double documentFactor = k1Factor * (1 - bFactor + bFactor * static_cast<double>(DocumentLength) / avgDocLength);
-        for(size_t i = 0; i < WordFrequencies.size(); ++i) {
-            double docFreq = static_cast<double>(WordFrequencies[i]);
+        for(size_t i = 0; i < TokenFrequencies.size(); ++i) {
+            double docFreq = static_cast<double>(TokenFrequencies[i]);
             double idf = queryCtx.GetIDFValue(i);
             double tf = docFreq / (docFreq + documentFactor);
             score += idf * tf;
@@ -400,6 +381,10 @@ public:
 
     void AddRow(const TConstArrayRef<TCell>& row) {
         RowCells = TOwnedCellVec(row);
+    }
+
+    TCell GetKeyCell(const size_t idx) const {
+        return KeyCells.at(idx);
     }
 
     TCell GetResultCell(const size_t idx) const {
@@ -443,6 +428,10 @@ public:
 
     const TOwnedCellVec& GetDocumentId() const {
         return KeyCells;
+    }
+
+    TTableRange GetPoint() const {
+        return TTableRange(KeyCells);
     }
 };
 
@@ -532,7 +521,7 @@ public:
 
 
 class TIndexTableImplReader : public TTableReader<TIndexTableImplReader> {
-    ui32 FrequencyColumnIndex = 0;
+    i32 FrequencyColumnIndex = 0;
 
 public:
     TIndexTableImplReader(const TIntrusivePtr<TKqpCounters>& counters,
@@ -542,7 +531,7 @@ public:
         const TVector<NScheme::TTypeInfo>& keyColumnTypes,
         const TVector<NScheme::TTypeInfo>& resultColumnTypes,
         const TVector<i32>& resultColumnIds,
-        ui32 frequencyColumnIndex)
+        i32 frequencyColumnIndex)
         : TTableReader(counters, tableId, snapshot, logPrefix, keyColumnTypes, resultColumnTypes, resultColumnIds)
         , FrequencyColumnIndex(frequencyColumnIndex)
     {}
@@ -551,24 +540,14 @@ public:
         const TIntrusivePtr<TKqpCounters>& counters,
         const IKqpGateway::TKqpSnapshot& snapshot,
         const TString& logPrefix,
-        const NKikimrKqp::TKqpFullTextSourceSettings* settings)
+        const NKikimrKqp::TKqpFullTextSourceSettings* settings,
+        bool withRelevance)
     {
-        const auto& indexDescription = settings->GetIndexDescription();
         YQL_ENSURE(settings->GetIndexTables().size() >= 1);
         auto& info = settings->GetIndexTables(settings->GetIndexTables().size() - 1);
         YQL_ENSURE(info.GetTable().GetPath().EndsWith(NTableIndex::ImplTable));
         auto& columns = info.GetColumns();
         auto& keyColumns = info.GetKeyColumns();
-
-        i32 freqColumnIndex = -1;
-        NScheme::TTypeInfo freqColumnType;
-        for (const auto& column: columns) {
-            if (column.GetName() == FreqColumn) {
-                freqColumnIndex = column.GetId();
-                freqColumnType = NScheme::TypeInfoFromProto(
-                    column.GetTypeId(), column.GetTypeInfo());
-            }
-        }
 
         TVector<NScheme::TTypeInfo> keyColumnTypes;
         TVector<NScheme::TTypeInfo> resultColumnTypes;
@@ -587,25 +566,33 @@ public:
             resultColumnIds.push_back(keyColumn.GetId());
         }
 
-        ui32 frequencyColumnIndex = std::numeric_limits<ui32>::max();
-        if (indexDescription.GetSettings().layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE) {
-            YQL_ENSURE(freqColumnIndex != -1);
-            frequencyColumnIndex = resultColumnTypes.size();
-            resultColumnTypes.push_back(freqColumnType);
-            resultColumnIds.push_back(freqColumnIndex);
-        }
-
         bool useArrowFormat = false;
 
-        // arrow format is supported only key consist of the single column of type Uint64
+        // arrow format is only supported when key is a single Uint64 column
         // doc_id (Uint64), [freq (Uint32)]
-        if (resultColumnTypes.size() == 1 + (freqColumnIndex != -1) && (resultColumnTypes[0].GetTypeId() == NScheme::NTypeIds::Uint64)) {
+        if (resultColumnTypes.size() == 1 && resultColumnTypes[0].GetTypeId() == NScheme::NTypeIds::Uint64) {
             useArrowFormat = true;
+        }
+
+        i32 freqColumnIndex = -1;
+        if (withRelevance) {
+            NScheme::TTypeInfo freqColumnType;
+            for (const auto& column: columns) {
+                if (column.GetName() == FreqColumn) {
+                    freqColumnIndex = column.GetId();
+                    freqColumnType = NScheme::TypeInfoFromProto(
+                        column.GetTypeId(), column.GetTypeInfo());
+                }
+            }
+            YQL_ENSURE(freqColumnIndex != -1);
+            resultColumnTypes.push_back(freqColumnType);
+            resultColumnIds.push_back(freqColumnIndex);
+            freqColumnIndex = resultColumnTypes.size()-1;
         }
 
         TIntrusivePtr<TIndexTableImplReader> reader = MakeIntrusive<TIndexTableImplReader>(
             counters, FromProto(info.GetTable()), snapshot, logPrefix,
-            keyColumnTypes, resultColumnTypes, resultColumnIds, frequencyColumnIndex);
+            keyColumnTypes, resultColumnTypes, resultColumnIds, freqColumnIndex);
         reader->SetUseArrowFormat(useArrowFormat);
         return reader;
     }
@@ -745,7 +732,7 @@ public:
 };
 
 
-class TWordReadState {
+class TWordReadState : public TSimpleRefCount<TWordReadState> {
 public:
     ui64 WordIndex;
     TString Word;
@@ -754,25 +741,34 @@ public:
     std::deque<std::pair<ui64, TOwnedTableRange>> RangesToRead;
     ui32 Frequency = 0;
 
+    TCell TokenCell;
+    TOwnedTableRange WordKeyCells;
+
+    using TPtr = TIntrusivePtr<TWordReadState>;
+
     explicit TWordReadState(ui64 wordIndex, const TString& word, const TIntrusivePtr<TIndexTableImplReader>& reader)
         : WordIndex(wordIndex)
         , Word(word)
         , Reader(reader)
+        , TokenCell(Word.data(), Word.size())
+        , WordKeyCells(TOwnedTableRange(TVector<TCell>{TokenCell}))
     {
         BuildRangesToRead();
     }
 
     TOwnedTableRange GetWordKeyCells() const {
-        TCell tokenCell(Word.data(), Word.size());
-        TVector <TCell> fromCells{tokenCell};
-        return TOwnedTableRange(fromCells);
+        return WordKeyCells;
+    }
+
+    TTableRange GetPoint() const {
+        return TTableRange(WordKeyCells);
     }
 
     std::pair<ui64, std::unique_ptr<TEvDataShard::TEvRead>> BuildNextRangeToRead(ui64 readId) {
         YQL_ENSURE(!RangesToRead.empty());
         auto [shardId, range] = RangesToRead.front();
         RangesToRead.pop_front();
-        return std::make_pair(shardId, Reader->GetReadRequest(readId, shardId, range));
+        return std::make_pair(shardId, Reader->GetReadRequest(readId, range));
     }
 
     std::pair<ui64, std::unique_ptr<TEvDataShard::TEvRead>> ScheduleNextRead(ui64 readId) {
@@ -811,15 +807,6 @@ protected:
     std::vector<ui32> MatchedTokens;
 
 public:
-    struct TMatch {
-        TDocId DocId;
-        std::vector<ui32> Frequencies;
-
-        explicit TMatch(TDocId&& docId)
-            : DocId(std::move(docId))
-        {
-        }
-    };
 
     IMergeAlgorithm(std::vector<std::unique_ptr<ITokenStream>>&& streams, ui64 minShouldMatch, bool withFrequencies, const TConstArrayRef<NScheme::TTypeInfo>& keyColumnTypes)
         : Streams(std::move(streams))
@@ -843,7 +830,7 @@ public:
         }
     }
 
-    virtual std::vector<TMatch> FindMatches() = 0;
+    virtual std::vector<TDocumentInfo::TPtr> FindMatches() = 0;
     virtual ~IMergeAlgorithm() = default;
 };
 
@@ -917,11 +904,11 @@ public:
         } while (true);
     }
 
-    std::vector<TMatch> FindMatches() override {
+    std::vector<TDocumentInfo::TPtr> FindMatches() override {
         if (FinishedTokens > 0)
-            return std::vector<TMatch>();
+            return std::vector<TDocumentInfo::TPtr>();
 
-        std::vector<TMatch> matches;
+        std::vector<TDocumentInfo::TPtr> matches;
         while (MatchedTokens.size() + ReadyStreams.size() == TokenCount) {
             YQL_ENSURE(ReadyStreams.size() > 0, "ReadyStreams must be non-empty");
             if (MatchedTokens.empty()) {
@@ -945,12 +932,12 @@ public:
                 break;
             }
 
-            auto match = TMatch(std::move(candidate));
+            auto match = MakeIntrusive<TDocumentInfo>(std::move(KeyGetter(candidate)));
             if (WithFrequencies) {
-                match.Frequencies.resize(TokenCount, 0);
+                match->TokenFrequencies.resize(TokenCount, 0);
                 for (ui32 tokenIndex : MatchedTokens) {
                     YQL_ENSURE(tokenIndex < Streams.size(), "Token index out of bounds");
-                    match.Frequencies[tokenIndex] = Streams[tokenIndex]->GetLeastDocFrequency();
+                    match->TokenFrequencies[tokenIndex] = Streams[tokenIndex]->GetLeastDocFrequency();
                 }
             }
 
@@ -987,8 +974,8 @@ public:
         }
     }
 
-    std::vector<TMatch> FindMatches() override {
-        std::vector<TMatch> matches;
+    std::vector<TDocumentInfo::TPtr> FindMatches() override {
+        std::vector<TDocumentInfo::TPtr> matches;
         std::vector<size_t> matchedTokens;
         while(!MergeQueue.empty() && MergeQueue.size() + FinishedTokens == TokenCount) {
             if (MergeQueue.size() < MinShouldMatch) {
@@ -1006,12 +993,12 @@ public:
             }
 
             if (matchedTokens.size() >= MinShouldMatch) {
-                auto match = TMatch(std::move(doc));
+                auto match = MakeIntrusive<TDocumentInfo>(std::move(KeyGetter(doc)));
                 if (WithFrequencies) {
-                    match.Frequencies.resize(TokenCount, 0);
+                    match->TokenFrequencies.resize(TokenCount, 0);
                     for (ui32 tokenIndex : matchedTokens) {
                         YQL_ENSURE(tokenIndex < Streams.size(), "Token index out of bounds");
-                        match.Frequencies[tokenIndex] = Streams[tokenIndex]->GetLeastDocFrequency();
+                        match->TokenFrequencies[tokenIndex] = Streams[tokenIndex]->GetLeastDocFrequency();
                     }
                 }
                 matches.push_back(std::move(match));
@@ -1053,10 +1040,11 @@ public:
         const TIntrusivePtr<TKqpCounters>& counters,
         const IKqpGateway::TKqpSnapshot& snapshot,
         const TString& logPrefix,
-        const NKikimrKqp::TKqpFullTextSourceSettings* settings)
+        const NKikimrKqp::TKqpFullTextSourceSettings* settings,
+        bool withRelevance)
     {
         const auto& indexDescription = settings->GetIndexDescription();
-        if (indexDescription.GetSettings().layout() != Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE) {
+        if (!withRelevance) {
             return nullptr;
         }
 
@@ -1125,10 +1113,11 @@ public:
         const TIntrusivePtr<TKqpCounters>& counters,
         const IKqpGateway::TKqpSnapshot& snapshot,
         const TString& logPrefix,
-        const NKikimrKqp::TKqpFullTextSourceSettings* settings)
+        const NKikimrKqp::TKqpFullTextSourceSettings* settings,
+        bool withRelevance)
     {
         const auto& indexDescription = settings->GetIndexDescription();
-        if (indexDescription.GetSettings().layout() != Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE) {
+        if (!withRelevance) {
             return nullptr;
         }
 
@@ -1207,7 +1196,7 @@ public:
         auto partitioning = GetRangePartitioning(tcellVector);
         YQL_ENSURE(partitioning.size() == 1);
         auto [shardId, range] = partitioning[0];
-        return std::make_pair(shardId, GetReadRequest(readId, shardId, range));
+        return std::make_pair(shardId, GetReadRequest(readId, range));
     }
 
     ui64 GetSumDocLength(const TConstArrayRef<TCell>& row) const {
@@ -1221,10 +1210,8 @@ public:
 };
 
 class TDictTableReader : public TTableReader<TDictTableReader> {
-    Ydb::Table::FulltextIndexSettings::Layout Layout;
 public:
-    TDictTableReader(const Ydb::Table::FulltextIndexSettings::Layout& layout,
-        const TIntrusivePtr<TKqpCounters>& counters,
+    TDictTableReader(const TIntrusivePtr<TKqpCounters>& counters,
         const TTableId& tableId,
         const IKqpGateway::TKqpSnapshot& snapshot,
         const TString& logPrefix,
@@ -1232,7 +1219,6 @@ public:
         const TVector<NScheme::TTypeInfo>& resultColumnTypes,
         const TVector<i32>& resultColumnIds)
         : TTableReader(counters, tableId, snapshot, logPrefix, keyColumnTypes, resultColumnTypes, resultColumnIds)
-        , Layout(layout)
     {}
 
     static TIntrusivePtr<TDictTableReader> FromSettings(
@@ -1277,18 +1263,16 @@ public:
         resultKeyColumnTypes.push_back(freqColumnType);
         resultKeyColumnIds.push_back(freqColumnIndex);
 
-        return MakeIntrusive<TDictTableReader>(
-            indexDescription.GetSettings().layout(), counters,
-            FromProto(info.GetTable()), snapshot, logPrefix, keyColumnTypes, resultKeyColumnTypes, resultKeyColumnIds);
+        return MakeIntrusive<TDictTableReader>(counters, FromProto(info.GetTable()), snapshot, logPrefix,
+            keyColumnTypes, resultKeyColumnTypes, resultKeyColumnIds);
+    }
+
+    TStringBuf GetWord(const TConstArrayRef<TCell>& row) const {
+        return row[0].AsBuf();
     }
 
     ui64 GetWordFrequency(const TConstArrayRef<TCell>& row) const {
-        switch (Layout) {
-            case Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE:
-                return row[GetResultColumnTypes().size() - 1].AsValue<ui64>();
-            default:
-                return 0;
-        }
+        return row[GetResultColumnTypes().size() - 1].AsValue<ui64>();
     }
 };
 
@@ -1308,6 +1292,7 @@ struct TReadInfo {
 };
 
 class TMainTableReader : public TTableReader<TMainTableReader> {
+    bool WithRelevance;
 public:
     TVector<std::pair<i32, NScheme::TTypeInfo>> ResultCellIndices;
     bool MainTableCovered;
@@ -1323,8 +1308,10 @@ public:
         const TVector<i32>& resultColumnIds,
         const TVector<std::pair<i32, NScheme::TTypeInfo>>& resultCellIndices,
         bool mainTableCovered,
+        bool withRelevance,
         i32 searchColumnIdx)
         : TTableReader(counters, tableId, snapshot, logPrefix, keyColumnTypes, resultColumnTypes, resultColumnIds)
+        , WithRelevance(withRelevance)
         , ResultCellIndices(resultCellIndices)
         , MainTableCovered(mainTableCovered)
         , SearchColumnIdx(searchColumnIdx)
@@ -1340,6 +1327,7 @@ public:
         TVector<NScheme::TTypeInfo> resultColumnTypes;
         TVector<i32> resultColumnIds;
         i32 searchColumnIdx = -1;
+        bool withRelevance = false;
 
         YQL_ENSURE(settings->GetQuerySettings().ColumnsSize() == 1);
         const TStringBuf searchColumnName = settings->GetQuerySettings().GetColumns(0).GetName();
@@ -1364,6 +1352,7 @@ public:
             const auto& column = settings->GetColumns(i);
             if (column.GetName() == FullTextRelevanceColumn) {
                 resultCellIndices.emplace_back(RELEVANCE_COLUMN_MARKER, NScheme::TTypeInfo());
+                withRelevance = true;
                 continue;
             }
 
@@ -1407,20 +1396,286 @@ public:
             }
         }
 
+        withRelevance = withRelevance && settings->GetIndexDescription().GetSettings().layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE;
+
         return MakeIntrusive<TMainTableReader>(counters, FromProto(settings->GetTable()),
-            snapshot, logPrefix, keyColumnTypes, resultColumnTypes, resultColumnIds, resultCellIndices, mainTableCovered, searchColumnIdx);
+            snapshot, logPrefix, keyColumnTypes, resultColumnTypes, resultColumnIds, resultCellIndices,
+            mainTableCovered, withRelevance, searchColumnIdx);
+    }
+
+    bool GetWithRelevance() {
+        return WithRelevance;
     }
 };
 
-class TFullTextContainsSource : public TActorBootstrapped<TFullTextContainsSource>, public NYql::NDq::IDqComputeActorAsyncInput, public NActors::IActorExceptionHandler {
+
+
+class TReadsState {
+    struct TShardInfo {
+        absl::flat_hash_set<ui64> ReadIds;
+        ui64 Retries = 0;
+        bool IsScheduledRetry = false;
+    };
+
+    absl::flat_hash_map<ui64, TReadInfo> Reads;
+    absl::flat_hash_map<ui64, TShardInfo> ReadsByShardId;
+    absl::flat_hash_set<ui64> PipesCreated;
+    const TIntrusivePtr<TKqpCounters> Counters;
+    TActorId SelfId;
+    const TString LogPrefix;
+    ui64 NextReadId = 1;
+
+
+    void AddRead(ui64 readId, TReadInfo readInfo) {
+        Reads[readId] = readInfo;
+        ReadsByShardId[readInfo.ShardId].ReadIds.insert(readId);
+    }
+
+public:
+
+    explicit TReadsState(const TIntrusivePtr<TKqpCounters>& counters, const TString& logPrefix)
+        : Counters(counters)
+        , LogPrefix(logPrefix)
+    {}
+
+    ui64 GetNextReadId() {
+        return NextReadId++;
+    }
+
+    void SetSelfId(const TActorId& selfId) {
+        SelfId = selfId;
+    }
+
+    const absl::flat_hash_map<ui64, TReadInfo>& GetReads() const {
+        return Reads;
+    }
+
+    void AckRead(ui64 readId) {
+        auto readIt = FindPtr(readId);
+        if (readIt == nullptr) {
+            return;
+        }
+        auto& readInfo = *readIt;
+        ui64 shardId = readInfo.ShardId;
+        auto request = GetDefaultReadAckSettings();
+        request->Record.SetReadId(readId);
+        request->Record.SetSeqNo(readInfo.LastSeqNo);
+        Counters->SentIteratorAcks->Inc();
+
+        CA_LOG_D("Sending ack for read #" << readId << " seqno = " << readInfo.LastSeqNo);
+
+        bool newPipe = PipesCreated.insert(shardId).second;
+        TlsActivationContext->Send(new NActors::IEventHandle(
+            NKikimr::MakePipePerNodeCacheID(false),
+            SelfId,
+            new TEvPipeCache::TEvForward(request.Release(), shardId, TEvPipeCache::TEvForwardOptions{
+                .AutoConnect = newPipe,
+                .Subscribe = newPipe}),
+            IEventHandle::FlagTrackDelivery));
+    }
+
+    void SendEvRead(ui64 shardId, std::unique_ptr<TEvDataShard::TEvRead>& request, TReadInfo readInfo) {
+        auto& record = request->Record;
+        auto readId = request->Record.GetReadId();
+        const bool needToCreatePipe = PipesCreated.insert(shardId).second;
+
+        CA_LOG_D(TStringBuilder() << "Send EvRead (full text source) to shardId=" << shardId
+            << ", readId = " << record.GetReadId()
+            << ", snapshot=(txid=" << record.GetSnapshot().GetTxId() << ", step=" << record.GetSnapshot().GetStep() << ")"
+            << ", lockTxId=" << record.GetLockTxId()
+            << ", lockNodeId=" << record.GetLockNodeId());
+
+        TlsActivationContext->Send(new NActors::IEventHandle(
+            NKikimr::MakePipePerNodeCacheID(false),
+            SelfId,
+            new TEvPipeCache::TEvForward(
+                request.release(),
+                shardId,
+                TEvPipeCache::TEvForwardOptions{
+                    .AutoConnect = needToCreatePipe,
+                    .Subscribe = needToCreatePipe,
+                }),
+            IEventHandle::FlagTrackDelivery,
+            readId));
+
+        AddRead(readId, readInfo);
+    }
+
+    TDuration GetDelay(ui64 shardId, bool allowInstantRetry) {
+        auto it = ReadsByShardId.find(shardId);
+        if (it == ReadsByShardId.end()) {
+            return TDuration::Zero();
+        }
+
+        auto& shardInfo = it->second;
+        ++shardInfo.Retries;
+        return CalcDelay(shardInfo.Retries, allowInstantRetry);
+    }
+
+    bool CheckShardRetriesExeeded(ui64 shardId, ui64 maxRetries) {
+        auto it = ReadsByShardId.find(shardId);
+        if (it == ReadsByShardId.end()) {
+            return false;
+        }
+        return it->second.Retries > maxRetries;
+    }
+
+    bool Empty() const {
+        return Reads.empty();
+    }
+
+    TReadInfo* FindPtr(ui64 readId) {
+        auto it = Reads.find(readId);
+        if (it == Reads.end()) {
+            return nullptr;
+        }
+        return &it->second;
+    }
+
+    void UntrackPipe(ui64 shardId) {
+        PipesCreated.erase(shardId);
+    }
+
+    TShardInfo* FindShardPtr(ui64 shardId) {
+        auto it = ReadsByShardId.find(shardId);
+        if (it == ReadsByShardId.end()) {
+            return nullptr;
+        }
+        return &it->second;
+    }
+
+    void RemoveRead(ui64 readId) {
+        auto it = Reads.find(readId);
+        if (it != Reads.end()) {
+            ui64 shardId = it->second.ShardId;
+            Reads.erase(it);
+
+            auto& shardReads = ReadsByShardId[shardId];
+            shardReads.ReadIds.erase(readId);
+            if (shardReads.ReadIds.empty()) {
+                ReadsByShardId.erase(shardId);
+            }
+        }
+    }
+};
+
+template <typename TItem>
+class TReadItemsQueue {
+    struct TSentReadItems {
+        std::deque<TItem> Items;
+        std::deque<TOwnedTableRange> Points;
+        ui64 ShardId = 0;
+        ui64 ReadId = 0;
+
+        TItem& GetItem() {
+            YQL_ENSURE(!Items.empty());
+            return Items.front();
+        }
+
+        void PopItem() {
+            Items.pop_front();
+            Points.pop_front();
+        }
+
+        bool Empty() const {
+            return Items.empty() && Points.empty();
+        }
+    };
+
+    void Enqueue(ui64 readId, TSentReadItems&& items) {
+        auto [it, inserted] = Queue.emplace(readId, std::move(items));
+        YQL_ENSURE(inserted);
+        YQL_ENSURE(it->second.ReadId == readId);
+    }
+
+public:
+    absl::flat_hash_map<ui64, TSentReadItems> Queue;
+    const TActorId SelfId;
+    TReadsState& ReadsState;
+
+    explicit TReadItemsQueue(const TActorId& selfId, TReadsState& readsState)
+        : SelfId(selfId)
+        , ReadsState(readsState)
+    {}
+
+    void ClearReadItems(TSentReadItems& items) {
+        items.Items.clear();
+        items.Points.clear();
+    }
+
+    void UpdateReadStatus(ui64 readId, TSentReadItems& items, bool finished) {
+        YQL_ENSURE(items.ReadId == readId);
+        if (finished) {
+            YQL_ENSURE(items.Empty(), "Read items are not empty while read is finished");
+        }
+
+        if (finished) {
+            Queue.erase(readId);
+            ReadsState.RemoveRead(readId);
+        }
+    }
+
+    template <typename TReader, typename TCollection>
+    void Enqueue(TReader* reader, EReadKind readKind, const TCollection& infos) {
+        absl::flat_hash_map<ui64, TReadItemsQueue<TItem>::TSentReadItems> inflightItems;
+        for (auto& info : infos) {
+            auto ranges = reader->GetRangePartitioning(info->GetPoint());
+            YQL_ENSURE(ranges.size() == 1);
+            auto& shardItems = inflightItems[ranges[0].first];
+            if (shardItems.ShardId == 0) {
+                shardItems.ShardId = ranges[0].first;
+            }
+            YQL_ENSURE(shardItems.ShardId == ranges[0].first);
+            if (shardItems.ReadId == 0) {
+                shardItems.ReadId = ReadsState.GetNextReadId();
+            }
+
+            shardItems.Points.emplace_back(ranges[0].second);
+            shardItems.Items.emplace_back(info);
+        }
+
+        for(auto& [shardId, inflightItem] : inflightItems) {
+            auto evRead = reader->GetReadRequest(inflightItem.ReadId, inflightItem.Points);
+            YQL_ENSURE(evRead);
+            ReadsState.SendEvRead(shardId, evRead, TReadInfo{.ReadKind = readKind, .Cookie = inflightItem.ReadId, .ShardId = shardId});
+            Enqueue(inflightItem.ReadId, std::move(inflightItem));
+        }
+    }
+
+    template <typename TReader>
+    void Retry(TReader* reader, EReadKind readKind, ui64 readId) {
+        auto& readItems = GetReadItems(readId).Items;
+        Enqueue(reader, readKind, readItems);
+
+        ReadsState.RemoveRead(readId);
+        Queue.erase(readId);
+    }
+
+    TSentReadItems& GetReadItems(ui64 readId) {
+        auto it = Queue.find(readId);
+        YQL_ENSURE(it != Queue.end());
+        return it->second;
+    }
+};
+
+class TFullTextMatchSource : public TActorBootstrapped<TFullTextMatchSource>, public NYql::NDq::IDqComputeActorAsyncInput, public NActors::IActorExceptionHandler {
 private:
 
     struct TEvPrivate {
         enum EEv {
-            EvSchemeCacheRequestTimeout
+            EvSchemeCacheRequestTimeout,
+            EvRetryRead
         };
 
         struct TEvSchemeCacheRequestTimeout : public TEventLocal<TEvSchemeCacheRequestTimeout, EvSchemeCacheRequestTimeout> {
+        };
+
+        struct TEvRetryRead : public TEventLocal<TEvRetryRead, EvRetryRead> {
+            explicit TEvRetryRead(ui64 shardId)
+                : ShardId(shardId) {
+            }
+
+            const ui64 ShardId;
         };
     };
 
@@ -1433,7 +1688,6 @@ private:
     const NKikimr::NMiniKQL::THolderFactory& HolderFactory;
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
     TIntrusivePtr<TKqpCounters> Counters;
-    absl::flat_hash_set<ui64> PipesCreated;
 
     const NKikimrSchemeOp::TFulltextIndexDescription& IndexDescription;
 
@@ -1446,24 +1700,18 @@ private:
     TString LogPrefix;
     TDqAsyncStats IngressStats;
 
-    ui64 NextReadId = 0;
-
     IKqpGateway::TKqpSnapshot Snapshot;
 
     TActorId SchemeCacheRequestTimeoutTimer;
     TDuration SchemeCacheRequestTimeout;
 
-    TVector<TWordReadState> Words; // Tokenized words from expression
-    absl::flat_hash_map<ui64, TReadInfo> Reads;
-
-    absl::flat_hash_map<TConstArrayRef<TCell>, TIntrusivePtr<TDocumentInfo>, NKikimr::TCellVectorsHash, NKikimr::TCellVectorsEquals> DocumentInfos;
 
     TVector<std::pair<i32, NScheme::TTypeInfo>> ResultCellIndices;
     i64 Limit = -1;
 
     struct TTopKDocumentInfo {
         double Score;
-        TIntrusivePtr<TDocumentInfo> DocumentInfo;
+        TDocumentInfo::TPtr DocumentInfo;
 
         bool operator<(const TTopKDocumentInfo& other) const {
             return Score > other.Score;
@@ -1472,10 +1720,7 @@ private:
 
     TIntrusivePtr<TQueryCtx> QueryCtx;
 
-    std::priority_queue<
-        TTopKDocumentInfo,
-        TVector<TTopKDocumentInfo>
-    > TopKQueue;
+    std::vector<TTopKDocumentInfo> TopKQueue;
 
     bool ResolveInProgress = true;
     bool PendingNotify = false;
@@ -1483,21 +1728,24 @@ private:
     i32 SearchColumnIdx = -1;
     TVector<std::function<bool(TStringBuf)>> PostfilterMatchers;
     ui64 ProducedItemsCount = 0;
-    std::deque<TIntrusivePtr<TDocumentInfo>> ResultQueue;
+    std::deque<TDocumentInfo::TPtr> ResultQueue;
+    bool IsNgram = false;
 
     TActorId PipeCacheId;
 
     ui64 DocCount = 0;
     ui64 SumDocLength = 0;
 
-    TIntrusivePtr<TIndexTableImplReader> IndexTableReader;
     TIntrusivePtr<TMainTableReader> MainTableReader;
+    TIntrusivePtr<TIndexTableImplReader> IndexTableReader;
     TIntrusivePtr<TDocsTableReader> DocsTableReader;
     TIntrusivePtr<TDictTableReader> DictTableReader;
     TIntrusivePtr<TStatsTableReader> StatsTableReader;
-    TDocId::TCompare DocumentKeyCompare;
-    TDocId::TEquals DocumentIdPointerEquals;
-    TDocId::TKeyGetter KeyGetter;
+
+    TReadsState ReadsState;
+    TReadItemsQueue<TDocumentInfo::TPtr> DocsReadingQueue;
+    TReadItemsQueue<TWordReadState::TPtr> WordsReadingQueue;
+    TVector<TWordReadState::TPtr> Words; // Tokenized words from expression
 
     std::unique_ptr<IMergeAlgorithm> MergeAlgo;
     // Helper to bind allocator
@@ -1509,10 +1757,11 @@ private:
         if (!analyzers.use_filter_ngram() && !analyzers.use_filter_edge_ngram()) {
             return;
         }
+        IsNgram = true;
 
         const auto analyzersForQuery = NFulltext::GetAnalyzersForQuery(analyzers);
 
-        for (const TString& queryToken : NFulltext::Analyze(TString(query), analyzersForQuery, '*')) {
+        for (const TString& queryToken : NFulltext::Analyze(TString(query), analyzersForQuery, {'%', '_'})) {
             const TString pattern = WildcardToRegex(queryToken);
             TVector<wchar32> ucs4Pattern;
             NPire::NEncodings::Utf8().FromLocal(
@@ -1545,7 +1794,7 @@ private:
                     size_t wordIndex = 0;
                     for (const TString& query: NFulltext::BuildSearchTerms(expr, analyzer.analyzers())) {
                         YQL_ENSURE(IndexTableReader);
-                        Words.emplace_back(TWordReadState(wordIndex++, query, IndexTableReader));
+                        Words.emplace_back(MakeIntrusive<TWordReadState>(wordIndex++, query, IndexTableReader));
                     }
 
                     GeneratePostfilterMatchers(analyzer.analyzers(), expr);
@@ -1554,101 +1803,138 @@ private:
         }
 
         if (Words.empty()) {
-            NotifyCA();
+            RuntimeError("No search terms were extracted from the query", NYql::NDqProto::StatusIds::BAD_REQUEST);
+            return false;
         }
 
-        return !Words.empty();
+        return true;
     }
 
-    template <typename T>
-    void InvokeReads(TTableReader<T>* reader, EReadKind readKind, ui64 cookie) {
-        while (true) {
-            ui64 readId = NextReadId++;
-            auto [shardId, request] = reader->GetNextReadRequest(readId);
-            if (!request) {
-                break;
-            }
-            SendEvRead(shardId, request);
-            Reads[readId] = TReadInfo{.ReadKind = readKind, .Cookie = cookie, .ShardId = shardId};
-        }
-    }
-
-    void FetchDocumentDetails(TIntrusivePtr<TDocumentInfo> docInfo) {
+    void FetchDocumentDetails(std::vector<TDocumentInfo::TPtr>& docInfos) {
         if (Limit > 0 && ProducedItemsCount + ResultQueue.size() >= static_cast<ui64>(Limit)) {
             return;
         }
 
-        if (DocsTableReader && !docInfo->HasDocumentLength()) {
-            DocsTableReader->StageRangeToRead(TTableRange(docInfo->GetDocumentId()));
-            return;
-        }
-
-        if (MainTableCovered) {
-            YQL_ENSURE(PostfilterMatchers.empty());
-            ResultQueue.push_back(docInfo);
+        if (docInfos.empty()) {
             NotifyCA();
             return;
         }
 
-        MainTableReader->StageRangeToRead(TTableRange(docInfo->GetDocumentId()));
+        if (MainTableReader->GetWithRelevance()) {
+            if (!docInfos[0]->HasDocumentLength()) {
+                DocsReadingQueue.Enqueue(DocsTableReader.Get(), EReadKind_DocumentStats, docInfos);
+                return;
+            }
+        }
+
+        if (MainTableCovered) {
+            const bool skipPostfilter = PostfilterMatchers.empty();
+            for(auto& doc: docInfos) {
+                if (skipPostfilter || Postfilter(doc->GetKeyCell(SearchColumnIdx).AsBuf())) {
+                    ResultQueue.emplace_back(std::move(doc));
+                }
+            }
+            NotifyCA();
+            return;
+        }
+
+        DocsReadingQueue.Enqueue(MainTableReader.Get(), EReadKind_Document, docInfos);
     }
 
-    bool ContinueWordRead(TWordReadState& word) {
-        ui64 readId = NextReadId++;
-        auto [shardId, ev] = word.ScheduleNextRead(readId);
+    bool ContinueWordRead(TWordReadState::TPtr word) {
+        ui64 readId = ReadsState.GetNextReadId();
+        auto [shardId, ev] = word->ScheduleNextRead(readId);
         if (ev) {
-            SendEvRead(shardId, ev);
-            Reads[readId] = TReadInfo{EReadKind_Word, word.WordIndex, shardId};
+            ReadsState.SendEvRead(shardId, ev, TReadInfo{EReadKind_Word, word->WordIndex, shardId});
             return true;
         }
 
         return false;
     }
 
-    void EnrichWordInfo(TWordReadState& word) {
-        DictTableReader->StageRangeToRead(word.GetWordKeyCells());
-        InvokeReads<TDictTableReader>(DictTableReader.Get(), EReadKind_WordStats, word.WordIndex);
+    void EnrichWordInfo() {
+        WordsReadingQueue.Enqueue(DictTableReader.Get(), EReadKind_WordStats, Words);
     }
 
     void StartWordReads() {
+        if (IsNgram) {
+            // Queries often contain 'imbalanced' ngrams. I.e. some ngrams
+            // are really frequent and others aren't, like one with 5.5 million
+            // documents and other with 400 documents. In such cases we can
+            // only leave the second one because we anyway postfilter documents.
+            // The only concern is to not make ourselves postfilter too many
+            // documents... So it's just a heuristic which we can control with
+            // the NGRAM_IMBALANCE_FACTOR parameter.
+            TVector<size_t> byFreq;
+            for (size_t i = 0; i < Words.size(); i++) {
+                byFreq.push_back(i);
+            }
+            std::sort(byFreq.begin(), byFreq.end(), [&](const size_t a, const size_t b) {
+                return Words[a]->Frequency < Words[b]->Frequency;
+            });
+            size_t ngramLimit = byFreq.size();
+            for (size_t i = 1; i < byFreq.size(); i++) {
+                if (Words[byFreq[i]]->Frequency > NGRAM_IMBALANCE_FACTOR * Words[byFreq[0]]->Frequency) {
+                    ngramLimit = i;
+                    break;
+                }
+            }
+            if (ngramLimit < Words.size()) {
+                CA_LOG_I("Selecting " << ngramLimit << " balanced ngrams out of " << Words.size()
+                    << " (imbalance: " << Words[byFreq[0]]->Frequency << " vs " << Words[byFreq[ngramLimit]]->Frequency << ")");
+                TVector<TWordReadState::TPtr> newWords;
+                for (size_t i = 0; i < ngramLimit; i++) {
+                    newWords.emplace_back(std::move(Words[byFreq[i]]));
+                    newWords[i]->WordIndex = i;
+                }
+                std::swap(Words, newWords);
+            }
+        }
+
         TString explain;
-        EQueryMode queryMode = QueryModeFromString(Settings->GetQueryMode(), explain);
+        EDefaultOperator defaultOperator = DefaultOperatorFromString(Settings->GetDefaultOperator(), explain);
         if (!explain.empty()) {
             RuntimeError(explain, NYql::NDqProto::StatusIds::BAD_REQUEST);
             return;
         }
 
-        ui32 minimumShouldMatch = MinimumShouldMatchFromString(Words.size(), queryMode, Settings->GetMinimumShouldMatch(), explain);
+        ui32 minimumShouldMatch = MinimumShouldMatchFromString(Words.size(), defaultOperator, Settings->GetMinimumShouldMatch(), explain);
         if (!explain.empty()) {
             RuntimeError(explain, NYql::NDqProto::StatusIds::BAD_REQUEST);
             return;
         }
 
         QueryCtx = MakeIntrusive<TQueryCtx>(
-            Words.size(), SumDocLength, DocCount, queryMode, minimumShouldMatch, ResultCellIndices);
+            Words.size(), SumDocLength, DocCount, defaultOperator, minimumShouldMatch, ResultCellIndices);
+
+        if (DictTableReader) {
+            for (auto& word: Words) {
+                QueryCtx->AddIDFValue(word->WordIndex, word->Frequency);
+            }
+        }
 
         bool useArrowFormat = IndexTableReader->GetUseArrowFormat();
         std::vector<std::unique_ptr<ITokenStream>> streams;
         for (size_t i = 0; i < Words.size(); ++i) {
             if (useArrowFormat) {
-                streams.emplace_back(std::move(std::make_unique<TArrowTokenStream>(i)));
+                streams.emplace_back(std::make_unique<TArrowTokenStream>(i));
             } else {
-                streams.emplace_back(std::move(std::make_unique<TCellVecTokenStream>(i, IndexTableReader->GetFrequencyColumnIndex())));
+                streams.emplace_back(std::make_unique<TCellVecTokenStream>(i, IndexTableReader->GetFrequencyColumnIndex()));
             }
         }
 
-        if (queryMode == EQueryMode::And) {
+        if (defaultOperator == EDefaultOperator::And) {
             MergeAlgo = std::make_unique<TAndOptimizedMergeAlgorithm>(
                 std::move(streams),
                 minimumShouldMatch,
-                IndexDescription.GetSettings().layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE,
+                MainTableReader->GetWithRelevance(),
                 MainTableReader->GetKeyColumnTypes()
             );
         } else {
             MergeAlgo = std::make_unique<TDefaultMergeAlgorithm>(
                 std::move(streams),
                 minimumShouldMatch,
-                IndexDescription.GetSettings().layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE,
+                MainTableReader->GetWithRelevance(),
                 MainTableReader->GetKeyColumnTypes()
             );
         }
@@ -1662,11 +1948,7 @@ private:
         }
 
         for (auto& word : Words) {
-            if (IndexDescription.GetSettings().layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE) {
-                EnrichWordInfo(word);
-            } else {
-                ContinueWordRead(word);
-            }
+            ContinueWordRead(word);
         }
     }
 
@@ -1681,8 +1963,12 @@ private:
         IndexTableReader->AddResolvePartitioningRequest(request);
         if (IndexDescription.GetSettings().layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE) {
             DictTableReader->AddResolvePartitioningRequest(request);
-            DocsTableReader->AddResolvePartitioningRequest(request);
-            StatsTableReader->AddResolvePartitioningRequest(request);
+            if (DocsTableReader) {
+                DocsTableReader->AddResolvePartitioningRequest(request);
+            }
+            if (StatsTableReader) {
+                StatsTableReader->AddResolvePartitioningRequest(request);
+            }
         }
 
         YQL_ENSURE(request->ResultSet.size() >= 1, "Expected at least one table to resolve partitioning");
@@ -1694,44 +1980,9 @@ private:
         Send(MakeSchemeCacheID(), resolveRequest.release());
     }
 
-    void AckRead(ui64 readId) {
-        auto readIt = Reads.find(readId);
-        if (readIt == Reads.end()) {
-            return;
-        }
-        auto& readInfo = readIt->second;
-        ui64 shardId = readInfo.ShardId;
-        auto request = GetDefaultReadAckSettings();
-        request->Record.SetReadId(readId);
-        request->Record.SetSeqNo(readInfo.LastSeqNo);
-        Counters->SentIteratorAcks->Inc();
-
-        CA_LOG_D("sending ack for read #" << readId << " seqno = " << readInfo.LastSeqNo);
-
-        bool newPipe = PipesCreated.insert(shardId).second;
-        Send(PipeCacheId, new TEvPipeCache::TEvForward(request.Release(), shardId, TEvPipeCache::TEvForwardOptions{
-                .AutoConnect = newPipe,
-                .Subscribe = newPipe}),
-            IEventHandle::FlagTrackDelivery);
-    }
-
-    void SendEvRead(ui64 shardId, std::unique_ptr<TEvDataShard::TEvRead>& request) {
-        auto readId = request->Record.GetReadId();
-        const bool needToCreatePipe = PipesCreated.insert(shardId).second;
-        Send(NKikimr::MakePipePerNodeCacheID(false),
-            new TEvPipeCache::TEvForward(
-                request.release(),
-                shardId,
-                TEvPipeCache::TEvForwardOptions{
-                    .AutoConnect = needToCreatePipe,
-                    .Subscribe = needToCreatePipe,
-                }),
-            IEventHandle::FlagTrackDelivery,
-            readId);
-    }
 
 public:
-    TFullTextContainsSource(const NKikimrKqp::TKqpFullTextSourceSettings* settings,
+    TFullTextMatchSource(const NKikimrKqp::TKqpFullTextSourceSettings* settings,
         TIntrusivePtr<NActors::TProtoArenaHolder> arena,
         const NActors::TActorId& computeActorId,
         ui64 inputIndex,
@@ -1755,14 +2006,14 @@ public:
         , LogPrefix(TStringBuilder() << "TxId: " << txId << ", task: " << taskId << ", CA Id " << computeActorId << ". ")
         , SchemeCacheRequestTimeout(SCHEME_CACHE_REQUEST_TIMEOUT)
         , PipeCacheId(NKikimr::MakePipePerNodeCacheID(false))
-        , IndexTableReader(TIndexTableImplReader::FromSettings(Counters, Snapshot, LogPrefix, Settings))
         , MainTableReader(TMainTableReader::FromSettings(Counters, Snapshot, LogPrefix, Settings))
-        , DocsTableReader(TDocsTableReader::FromSettings(Counters, Snapshot, LogPrefix, Settings))
+        , IndexTableReader(TIndexTableImplReader::FromSettings(Counters, Snapshot, LogPrefix, Settings, MainTableReader->GetWithRelevance()))
+        , DocsTableReader(TDocsTableReader::FromSettings(Counters, Snapshot, LogPrefix, Settings, MainTableReader->GetWithRelevance()))
         , DictTableReader(TDictTableReader::FromSettings(Counters, Snapshot, LogPrefix, Settings))
-        , StatsTableReader(TStatsTableReader::FromSettings(Counters, Snapshot, LogPrefix, Settings))
-        , DocumentKeyCompare(MainTableReader->GetKeyColumnTypes())
-        , DocumentIdPointerEquals(MainTableReader->GetKeyColumnTypes())
-        , KeyGetter(MainTableReader->GetKeyColumnTypes())
+        , StatsTableReader(TStatsTableReader::FromSettings(Counters, Snapshot, LogPrefix, Settings, MainTableReader->GetWithRelevance()))
+        , ReadsState(Counters, LogPrefix)
+        , DocsReadingQueue(SelfId(), ReadsState)
+        , WordsReadingQueue(SelfId(), ReadsState)
     {
         Y_ABORT_UNLESS(Arena);
         Y_ABORT_UNLESS(Settings->GetArena() == Arena->Get());
@@ -1781,8 +2032,9 @@ public:
     }
 
     void Bootstrap() {
+        ReadsState.SetSelfId(this->SelfId());
         LogPrefix = TStringBuilder() << "SelfId: " << this->SelfId() << ", " << LogPrefix;
-        Become(&TFullTextContainsSource::StateWork);
+        Become(&TFullTextMatchSource::StateWork);
         PrepareTableReaders();
     }
 
@@ -1807,17 +2059,16 @@ public:
         i64 computeBytes = 0;
 
         while(!ResultQueue.empty()) {
-            TIntrusivePtr<TDocumentInfo> documentInfo = ResultQueue.front();
-            ResultQueue.pop_front();
+            TDocumentInfo& documentInfo = ResultQueue.front().GetRef();
             ProducedItemsCount++;
 
-            auto row = documentInfo->GetRow(QueryCtx.GetRef(), HolderFactory, computeBytes);
+            auto row = documentInfo.GetRow(QueryCtx.GetRef(), HolderFactory, computeBytes);
             resultBatch.emplace_back(std::move(row));
-            ReadBytes += documentInfo->GetRowStorageSize();
+            ReadBytes += documentInfo.GetRowStorageSize();
             ReadRows++;
 
+            ResultQueue.pop_front();
             if (Limit > 0 && ProducedItemsCount >= static_cast<ui64>(Limit)) {
-                finished = true;
                 break;
             }
 
@@ -1830,7 +2081,7 @@ public:
             NotifyCA();
         }
 
-        finished = Reads.empty() && !ResolveInProgress && ResultQueue.empty();
+        finished = IsFinished();
         return computeBytes;
     }
 
@@ -1840,7 +2091,7 @@ public:
 
     void PassAway() override {
         {
-            for (auto& [id, state] : Reads) {
+            for (auto& [id, state] : ReadsState.GetReads()) {
                 auto cancel = MakeHolder<TEvDataShard::TEvReadCancel>();
                 cancel->Record.SetReadId(id);
                 Send(PipeCacheId, new TEvPipeCache::TEvForward(cancel.Release(), state.ShardId, false));
@@ -1857,9 +2108,13 @@ public:
         Send(ComputeActorId, new TEvAsyncInputError(InputIndex, std::move(issues), statusCode));
     }
 
+    bool IsFinished() {
+        return ReadsState.Empty() && !ResolveInProgress && ResultQueue.empty() ||
+            ProducedItemsCount >= static_cast<ui64>(Limit);
+    }
+
     void NotifyCA() {
-        bool finished = Reads.empty() && !ResolveInProgress && ResultQueue.empty();
-        if (!PendingNotify && (finished || !ResultQueue.empty())) {
+        if (!PendingNotify && (!ResultQueue.empty() || IsFinished())) {
             Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
             PendingNotify = true;
         }
@@ -1870,6 +2125,7 @@ public:
             hFunc(TEvDataShard::TEvReadResult, HandleReadResult);
             hFunc(TEvTxProxySchemeCache::TEvResolveKeySetResult, HandleResolve);
             hFunc(TEvPipeCache::TEvDeliveryProblem, HandleError);
+            hFunc(TEvPrivate::TEvRetryRead, HandleRetryRead);
             IgnoreFunc(TEvInterconnect::TEvNodeConnected);
             IgnoreFunc(TEvTxProxySchemeCache::TEvInvalidateTableResult);
         }
@@ -1895,10 +2151,89 @@ public:
         return false;
     }
 
-    void HandleError(TEvPipeCache::TEvDeliveryProblem::TPtr&) {
-        // implement retry logic a bit later
-        CA_LOG_D("TEvDeliveryProblem was received");
-        RuntimeError("Read result status is not success", NYql::NDqProto::StatusIds::UNAVAILABLE);
+    void HandleRetryRead(TEvPrivate::TEvRetryRead::TPtr& ev) {
+        DoRetryRead(ev->Get()->ShardId);
+    }
+
+    void RetryWordRead(ui64 wordIndex, ui64 readId) {
+        YQL_ENSURE(wordIndex < Words.size(), "Word index out of bounds");
+        auto& word = Words[wordIndex];
+        word->BuildRangesToRead();
+        ContinueWordRead(word);
+        ReadsState.RemoveRead(readId);
+    }
+
+    void RetryTotalStatsRead(ui64 readId) {
+        ReadsState.RemoveRead(readId);
+        ReadTotalStats();
+    }
+
+    void DoRetryRead(ui64 shardId) {
+        auto shardIt = ReadsState.FindShardPtr(shardId);
+        YQL_ENSURE(shardIt != nullptr);
+
+        shardIt->IsScheduledRetry = false;
+
+        std::vector<ui64> readsToRetry(shardIt->ReadIds.begin(), shardIt->ReadIds.end());
+
+        for (ui64 readId : readsToRetry) {
+            auto readIt = ReadsState.FindPtr(readId);
+            if (readIt == nullptr) {
+                continue;
+            }
+
+            auto readInfo = *readIt;
+
+            switch (readInfo.ReadKind) {
+                case EReadKind_DocumentStats:
+                    DocsReadingQueue.Retry(DocsTableReader.Get(), EReadKind_DocumentStats, readId);
+                    break;
+                case EReadKind_Document:
+                    DocsReadingQueue.Retry(MainTableReader.Get(), EReadKind_Document, readId);
+                    break;
+                case EReadKind_Word:
+                    RetryWordRead(readInfo.Cookie, readId);
+                    break;
+                case EReadKind_WordStats:
+                    WordsReadingQueue.Retry(DictTableReader.Get(), EReadKind_WordStats, readId);
+                    break;
+                case EReadKind_TotalStats:
+                    RetryTotalStatsRead(readId);
+                    break;
+            }
+        }
+    }
+
+    void HandleError(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
+        CA_LOG_E("TEvDeliveryProblem was received from tablet: " << ev->Get()->TabletId);
+
+        ui64 shardId = ev->Get()->TabletId;
+        ReadsState.UntrackPipe(shardId);
+        auto shardIt = ReadsState.FindShardPtr(shardId);
+        if (shardIt == nullptr) {
+            // No reads for this shard, ignore
+            return;
+        }
+
+        if (shardIt->IsScheduledRetry) {
+            return;
+        }
+
+        Counters->IteratorDeliveryProblems->Inc();
+        auto delay = ReadsState.GetDelay(shardId, true);
+
+        auto maxRetries = MaxShardRetries();
+        if (ReadsState.CheckShardRetriesExeeded(shardId, maxRetries)) {
+            RuntimeError(TStringBuilder() << "Max shard retries ("<< maxRetries << ") exeeded for shard " << shardId, NYql::NDqProto::StatusIds::INTERNAL_ERROR);
+            return;
+        }
+
+        if (delay > TDuration::Zero() ) {
+            shardIt->IsScheduledRetry = true;
+            TlsActivationContext->Schedule(delay, new IEventHandle(SelfId(), SelfId(), new TEvPrivate::TEvRetryRead(shardId)));
+        } else {
+            DoRetryRead(shardId);
+        }
     }
 
     void HandleResolve(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& ev) {
@@ -1919,36 +2254,45 @@ public:
         MainTableReader->SetPartitionInfo(resultSet[0].KeyDescription);
         IndexTableReader->SetPartitionInfo(resultSet[1].KeyDescription);
         if (IndexDescription.GetSettings().layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE) {
-            YQL_ENSURE(resultSet.size() == 5, "Expected 5 tables for flat relevance index");
+            size_t count = 3 + (DocsTableReader ? 1 : 0) + (StatsTableReader ? 1 : 0);
+            YQL_ENSURE(resultSet.size() == count, "Expected " << count << " tables for flat relevance index");
             DictTableReader->SetPartitionInfo(resultSet[2].KeyDescription);
-            DocsTableReader->SetPartitionInfo(resultSet[3].KeyDescription);
-            StatsTableReader->SetPartitionInfo(resultSet[4].KeyDescription);
-            if (ExtractAndTokenizeExpression()) {
-                ReadTotalStats();
+            if (DocsTableReader) {
+                DocsTableReader->SetPartitionInfo(resultSet[3].KeyDescription);
             }
-        } else {
-            if (ExtractAndTokenizeExpression()) {
+            if (StatsTableReader) {
+                StatsTableReader->SetPartitionInfo(resultSet[3 + (DocsTableReader ? 1 : 0)].KeyDescription);
+            }
+        }
+
+        if (ExtractAndTokenizeExpression()) {
+            if (StatsTableReader || DictTableReader) {
+                if (StatsTableReader) {
+                    ReadTotalStats();
+                }
+                if (DictTableReader) {
+                    EnrichWordInfo();
+                }
+            } else {
                 StartWordReads();
             }
         }
     }
 
     void ReadTotalStats() {
-        ui64 readId = NextReadId++;
+        ui64 readId = ReadsState.GetNextReadId();
         auto [shardId, request] = StatsTableReader->GetTotalStatsRequest(readId);
-        Reads[readId] = TReadInfo{.ReadKind = EReadKind_TotalStats, .Cookie = readId, .ShardId = shardId};
-        SendEvRead(shardId, request);
+        ReadsState.SendEvRead(shardId, request, TReadInfo{.ReadKind = EReadKind_TotalStats, .Cookie = readId, .ShardId = shardId});
     }
 
-    bool Postfilter(const TDocumentInfo& documentInfo) const {
+    bool Postfilter(const TStringBuf value) const {
         auto analyzers = IndexDescription.GetSettings().columns(0).analyzers();
         // Prevent splitting tokens into ngrams
         analyzers.set_use_filter_ngram(false);
         analyzers.set_use_filter_edge_ngram(false);
 
         for (const auto& matcher : PostfilterMatchers) {
-            YQL_ENSURE(SearchColumnIdx != -1);
-            const TString searchColumnValue(documentInfo.GetResultCell(SearchColumnIdx).AsBuf()); // TODO: don't copy
+            const TString searchColumnValue(value); // TODO: don't copy
 
             bool found = false;
             for (const auto& valueToken : NFulltext::Analyze(searchColumnValue, analyzers)) {
@@ -1966,78 +2310,124 @@ public:
         return true;
     }
 
-    void DocumentDetailsResult(NKikimr::TEvDataShard::TEvReadResult &msg, ui64) {
+    void DocumentDetailsResult(NKikimr::TEvDataShard::TEvReadResult &msg, ui64 readId, bool finished) {
+        auto& readItems = DocsReadingQueue.GetReadItems(readId);
+
         for(size_t i = 0; i < msg.GetRowsCount(); ++i) {
-            const auto& row = msg.GetCells(i);
-            const auto& doc = DocumentInfos.at(GetDocumentId(row));
-            doc->AddRow(row);
-            if (PostfilterMatchers.empty() || Postfilter(*doc)) {
-                ResultQueue.push_back(doc);
+            if (Limit > 0 && ProducedItemsCount + ResultQueue.size() >= static_cast<ui64>(Limit)) {
+                DocsReadingQueue.ClearReadItems(readItems);
+                break;
             }
 
-            if (Limit > 0 && ProducedItemsCount + ResultQueue.size() >= static_cast<ui64>(Limit)) {
-                NotifyCA();
-                return;
+            const auto& row = msg.GetCells(i);
+            auto& doc = readItems.GetItem();
+            YQL_ENSURE(NKikimr::TCellVectorsEquals{}(doc->GetDocumentId(), GetDocumentId(row)), "detected out of order document reading");
+            doc->AddRow(row);
+            if (PostfilterMatchers.empty() || Postfilter(doc->GetResultCell(SearchColumnIdx).AsBuf())) {
+                ResultQueue.push_back(std::move(doc));
             }
+
+            readItems.PopItem();
         }
+
+        DocsReadingQueue.UpdateReadStatus(readId, readItems, finished);
 
         // Notify about possibly empty result
         NotifyCA();
     }
 
     void ProcessTopKQueue() {
+        std::vector<TDocumentInfo::TPtr> documentInfos;
+        documentInfos.reserve(TopKQueue.size());
+
         while (!TopKQueue.empty()) {
-            auto [score, documentInfo] = TopKQueue.top();
-            TopKQueue.pop();
-            FetchDocumentDetails(documentInfo);
+            auto&[score, documentInfo] = TopKQueue.back();
+            documentInfos.emplace_back(std::move(documentInfo));
+            TopKQueue.pop_back();
         }
+
+        FetchDocumentDetails(documentInfos);
     }
 
     TConstArrayRef<TCell> GetDocumentId(const TConstArrayRef<TCell>& row) const {
-        return row.subspan(0, DocumentKeyCompare.DocumentKeyColumnTypes.size());
+        return row.subspan(0, MainTableReader->GetKeyColumnTypes().size());
     }
 
-    void DocumentStatsResult(NKikimr::TEvDataShard::TEvReadResult &msg) {
+    void DocumentStatsResult(NKikimr::TEvDataShard::TEvReadResult &msg, ui64 readId, bool finished) {
+
+        auto& readItems = DocsReadingQueue.GetReadItems(readId);
+        std::vector<TDocumentInfo::TPtr> documentInfos;
+
         for(size_t i = 0; i < msg.GetRowsCount(); ++i) {
             const auto& row = msg.GetCells(i);
-            auto& doc = DocumentInfos.at(GetDocumentId(row));
+            TDocumentInfo::TPtr doc = readItems.GetItem();
+            YQL_ENSURE(NKikimr::TCellVectorsEquals{}(doc->GetDocumentId(), GetDocumentId(row)), "detected out of order document reading");
             doc->SetDocumentLength(DocsTableReader->GetDocumentLength(row));
 
             if (Limit > 0) {
-                TopKQueue.push({doc->GetBM25Score(QueryCtx.GetRef()), doc});
+                TopKQueue.emplace_back(doc->GetBM25Score(QueryCtx.GetRef()), std::move(doc));
+                std::push_heap(TopKQueue.begin(), TopKQueue.end());
                 if (TopKQueue.size() > (size_t)Limit) {
-                    TopKQueue.pop();
+                    std::pop_heap(TopKQueue.begin(), TopKQueue.end());
+                    TopKQueue.pop_back();
                 }
 
             } else {
-                FetchDocumentDetails(doc);
+                documentInfos.emplace_back(std::move(doc));
             }
+
+            readItems.PopItem();
         }
 
-        if (Reads.empty()) {
+        DocsReadingQueue.UpdateReadStatus(readId, readItems, finished);
+
+        FetchDocumentDetails(documentInfos);
+
+        if (ReadsState.Empty()) {
             ProcessTopKQueue();
         }
-
-        InvokeReads<TMainTableReader>(MainTableReader.Get(), EReadKind_Document, 0);
     }
 
     void HandleTotalStatsResult(TEvDataShard::TEvReadResult& msg) {
-        for(size_t i = 0; i < msg.GetRowsCount(); ++i) {
+        for (size_t i = 0; i < msg.GetRowsCount(); ++i) {
             const auto& row = msg.GetCells(i);
             DocCount = StatsTableReader->GetDocCount(row);
             SumDocLength = StatsTableReader->GetSumDocLength(row);
         }
-
-        StartWordReads();
+        if (ReadsState.Empty()) {
+            StartWordReads();
+        }
     }
 
-    void WordStatsResult(NKikimr::TEvDataShard::TEvReadResult &msg, ui64 wordIndex) {
-        for(size_t i = 0; i < msg.GetRowsCount(); ++i) {
+    void WordStatsResult(NKikimr::TEvDataShard::TEvReadResult &msg, ui64 readId, bool finished) {
+        auto& readItems = WordsReadingQueue.GetReadItems(readId);
+
+        for (size_t i = 0; i < msg.GetRowsCount(); i++) {
             const auto& row = msg.GetCells(i);
-            auto& word = Words[wordIndex];
-            word.Frequency = DictTableReader->GetWordFrequency(row);
-            QueryCtx->AddIDFValue(wordIndex, word.Frequency);
-            ContinueWordRead(word);
+            const auto& wordBuf = DictTableReader->GetWord(row);
+
+            while (!readItems.Empty() && readItems.GetItem()->Word != wordBuf) {
+                readItems.GetItem()->Frequency = 0;
+                readItems.PopItem();
+            }
+
+            YQL_ENSURE(!readItems.Empty(), "Word not found in read items");
+            auto& word = readItems.GetItem();
+            word->Frequency = DictTableReader->GetWordFrequency(row);
+            readItems.PopItem();
+        }
+
+        if (finished) {
+            while (!readItems.Empty()) {
+                readItems.GetItem()->Frequency = 0;
+                readItems.PopItem();
+            }
+        }
+
+        WordsReadingQueue.UpdateReadStatus(readId, readItems, finished);
+
+        if (ReadsState.Empty()) {
+            StartWordReads();
         }
     }
 
@@ -2053,24 +2443,9 @@ public:
             }
         }
 
-        std::vector<IMergeAlgorithm::TMatch> matches = MergeAlgo->FindMatches();
+        std::vector<TDocumentInfo::TPtr> matches = MergeAlgo->FindMatches();
 
-        for(auto& match : matches) {
-            auto doc = MakeIntrusive<TDocumentInfo>(std::move(KeyGetter(match.DocId)));
-            if (!match.Frequencies.empty()) {
-                doc->SetWordFrequencies(std::move(match.Frequencies));
-            }
-
-            DocumentInfos.emplace(doc->GetDocumentId(), doc);
-
-            FetchDocumentDetails(doc);
-        }
-
-        InvokeReads<TMainTableReader>(MainTableReader.Get(), EReadKind_Document, 0);
-        if (DocsTableReader) {
-            InvokeReads<TDocsTableReader>(DocsTableReader.Get(), EReadKind_DocumentStats, 0);
-        }
-
+        FetchDocumentDetails(matches);
         NotifyCA();
     }
 
@@ -2078,15 +2453,17 @@ public:
         ui64 readId = ev->Get()->Record.GetReadId();
         auto& record = ev->Get()->Record;
 
-        auto it = Reads.find(readId);
-        if (it == Reads.end()) {
+        auto it = ReadsState.FindPtr(readId);
+        if (it == nullptr) {
             return;
         }
 
-        CA_LOG_E("Recv TEvReadResult (full text source)"
-            << ", Cookie=" << it->second.Cookie
-            << ", ReadKind=" << (ui32)it->second.ReadKind
-            << ", ShardId=" << it->second.ShardId
+        auto& readInfo = *it;
+
+        CA_LOG_D("Recv TEvReadResult (full text source)"
+            << ", Cookie=" << readInfo.Cookie
+            << ", ReadKind=" << (ui32)readInfo.ReadKind
+            << ", ShardId=" << readInfo.ShardId
             << ", ReadId=" << record.GetReadId()
             << ", SeqNo=" << record.GetSeqNo()
             << ", Status=" << Ydb::StatusIds::StatusCode_Name(record.GetStatus().GetCode())
@@ -2115,26 +2492,26 @@ public:
         }
 
         auto& msg = *ev->Get();
-        ui64 cookie = it->second.Cookie;
-        auto readKind = it->second.ReadKind;
-        YQL_ENSURE(it->second.LastSeqNo < record.GetSeqNo());
-        it->second.LastSeqNo = record.GetSeqNo();
+        ui64 cookie = readInfo.Cookie;
+        auto readKind = readInfo.ReadKind;
+        YQL_ENSURE(readInfo.LastSeqNo < record.GetSeqNo());
+        readInfo.LastSeqNo = record.GetSeqNo();
 
         if (record.GetFinished()) {
-            Reads.erase(readId);
+            ReadsState.RemoveRead(readId);
         } else {
-            AckRead(readId);
+            ReadsState.AckRead(readId);
         }
 
         switch (readKind) {
             case EReadKind_Document:
-                DocumentDetailsResult(msg, cookie);
+                DocumentDetailsResult(msg, cookie, record.GetFinished());
                 break;
             case EReadKind_DocumentStats:
-                DocumentStatsResult(msg);
+                DocumentStatsResult(msg, cookie, record.GetFinished());
                 break;
             case EReadKind_WordStats:
-                WordStatsResult(msg, cookie);
+                WordStatsResult(msg, cookie, record.GetFinished());
                 break;
             case EReadKind_Word:
                 WordResult(std::unique_ptr<NKikimr::TEvDataShard::TEvReadResult>(ev->Release().Release()), cookie, record.GetFinished());
@@ -2146,7 +2523,7 @@ public:
     }
 
 private:
-    using TBase = TActorBootstrapped<TFullTextContainsSource>;
+    using TBase = TActorBootstrapped<TFullTextMatchSource>;
 };
 
 std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateKqpFullTextSource(const NKikimrKqp::TKqpFullTextSourceSettings* settings,
@@ -2162,7 +2539,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateKqpFullTextSourc
     const NWilson::TTraceId& traceId,
     TIntrusivePtr<TKqpCounters> counters)
 {
-    auto* actor = new TFullTextContainsSource(settings, arena, computeActorId, inputIndex, statsLevel, txId, taskId, typeEnv, holderFactory, alloc, traceId, counters);
+    auto* actor = new TFullTextMatchSource(settings, arena, computeActorId, inputIndex, statsLevel, txId, taskId, typeEnv, holderFactory, alloc, traceId, counters);
     return std::make_pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*>(actor, actor);
 }
 
@@ -2176,4 +2553,4 @@ void RegisterKqpFullTextSource(NYql::NDq::TDqAsyncIoFactory& factory, TIntrusive
 }
 
 }
-}
+

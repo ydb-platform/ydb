@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import logging
 from concurrent import futures
 from typing import (
@@ -7,6 +9,7 @@ from typing import (
     Dict,
     Any,
     Union,
+    TYPE_CHECKING,
 )
 import time
 import threading
@@ -24,9 +27,10 @@ from ..retries import (
 from .. import issues
 from .. import convert
 from ..settings import BaseRequestSettings
-from .._grpc.grpcwrapper import common_utils
 from .._grpc.grpcwrapper import ydb_query_public_types as _ydb_query_public
 
+if TYPE_CHECKING:
+    from ..driver import Driver as SyncDriver
 
 logger = logging.getLogger(__name__)
 
@@ -34,9 +38,11 @@ logger = logging.getLogger(__name__)
 class QuerySessionPool:
     """QuerySessionPool is an object to simplify operations with sessions of Query Service."""
 
+    _driver: "SyncDriver"
+
     def __init__(
         self,
-        driver: common_utils.SupportedDriverType,
+        driver: "SyncDriver",
         size: int = 100,
         *,
         query_client_settings: Optional[QueryClientSettings] = None,
@@ -51,7 +57,7 @@ class QuerySessionPool:
 
         self._driver = driver
         self._tp = futures.ThreadPoolExecutor(workers_threads_count)
-        self._queue = queue.Queue()
+        self._queue: queue.Queue[QuerySession] = queue.Queue()
         self._current_size = 0
         self._size = size
         self._should_stop = threading.Event()
@@ -323,6 +329,8 @@ class QuerySessionPool:
 
 
 class SimpleQuerySessionCheckout:
+    _session: Optional[QuerySession]
+
     def __init__(self, pool: QuerySessionPool, timeout: Optional[float]):
         self._pool = pool
         self._timeout = timeout
@@ -332,5 +340,6 @@ class SimpleQuerySessionCheckout:
         self._session = self._pool.acquire(self._timeout)
         return self._session
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self._pool.release(self._session)
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        if self._session is not None:
+            self._pool.release(self._session)

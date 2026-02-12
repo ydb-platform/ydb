@@ -49,7 +49,7 @@ TExprNode::TPtr PushSortedColumnInsideStream(const TExprNode::TPtr& partitionsBy
     YQL_ENSURE(partitionsByKeys->ChildrenSize() == 5);
 
     auto pos = partitionsByKeys->Pos();
-    auto list = partitionsByKeys->ChildPtr(0);
+    auto stream = partitionsByKeys->ChildPtr(0);
     auto keySelector = partitionsByKeys->ChildPtr(1);
     auto sortDirection = partitionsByKeys->ChildPtr(2);
     auto sortKeySelector = partitionsByKeys->ChildPtr(3);
@@ -74,9 +74,9 @@ TExprNode::TPtr PushSortedColumnInsideStream(const TExprNode::TPtr& partitionsBy
 
     auto addMemberLambda = ctx.NewLambda(pos, ctx.NewArguments(pos, {rowArg}), std::move(addMemberBody));
 
-    auto listWithSortedColumn = ctx.Builder(pos)
-        .Callable("Map")
-            .Add(0, list)
+    auto streamWithSortedColumn = ctx.Builder(pos)
+        .Callable("OrderedMap")
+            .Add(0, stream)
             .Add(1, addMemberLambda)
         .Seal()
         .Build();
@@ -99,7 +99,7 @@ TExprNode::TPtr PushSortedColumnInsideStream(const TExprNode::TPtr& partitionsBy
     // Build new PartitionsByKeys with modified arguments.
     return ctx.Builder(pos)
         .Callable("PartitionsByKeys")
-            .Add(0, listWithSortedColumn)
+            .Add(0, streamWithSortedColumn)
             .Add(1, keySelector)
             .Add(2, sortDirection)
             .Add(3, newSortKeySelector)

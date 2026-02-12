@@ -1057,6 +1057,15 @@ protected:
     void HandleAbortExecution(TEvKqp::TEvAbortExecution::TPtr& ev) {
         auto& msg = ev->Get()->Record;
         NYql::TIssues issues = ev->Get()->GetIssues();
+
+        // If Target is not yet initialized (TEvTxRequest from TxProxy hasn't
+        // arrived yet), use the abort sender as the target. Otherwise
+        // TEvTxResponse from PassAway() would be sent to a null TActorId and
+        // the session actor would stay stuck in ExecuteState forever.
+        if (!Target) {
+            Target = ev->Sender;
+        }
+
         HandleAbortExecution(msg.GetStatusCode(), ev->Get()->GetIssues(), ev->Sender == Target);
     }
 
@@ -1499,6 +1508,10 @@ protected:
 
         if (KqpTableResolverId) {
             this->Send(KqpTableResolverId, new TEvents::TEvPoison);
+        }
+
+        if (const auto& infoAggregator = TasksGraph.GetMeta().DqInfoAggregator) {
+            this->Send(infoAggregator, new TEvents::TEvPoison());
         }
 
         this->Send(this->SelfId(), new TEvents::TEvPoison);

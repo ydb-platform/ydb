@@ -1,5 +1,6 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/export_reboots_common.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/test_with_reboots.h>
 #include <ydb/core/util/aws.h>
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
 
@@ -27,13 +28,12 @@ Y_TEST_HOOK_AFTER_RUN(ShutdownAwsAPI) {
 Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
     using TUnderlying = std::function<void(const TVector<TTypedScheme>&, const TString&, TTestWithReboots&)>;
 
-    void Decorate(const TVector<TTypedScheme>& schemeObjects, const TString& request,
+    void Decorate(TTestWithReboots& t, const TVector<TTypedScheme>& schemeObjects, const TString& request,
         TUnderlying func, const TTestEnvOptions& opts)
     {
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
 
-        TTestWithReboots t;
         t.GetTestEnvOptions() = opts;
         TS3Mock s3Mock({}, TS3Mock::TSettings(port));
         UNIT_ASSERT(s3Mock.Start());
@@ -41,26 +41,26 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         func(schemeObjects, Sprintf(request.c_str(), port), t);
     }
 
-    void RunS3(const TVector<TTypedScheme>& schemeObjects, const TString& request,
+    void RunS3(TTestWithReboots& t, const TVector<TTypedScheme>& schemeObjects, const TString& request,
         const TTestEnvOptions& opts = TTestWithReboots::GetDefaultTestEnvOptions())
     {
-        Decorate(schemeObjects, request, &Run, opts);
+        Decorate(t, schemeObjects, request, &Run, opts);
     }
 
-    void CancelS3(const TVector<TTypedScheme>& schemeObjects, const TString& request,
+    void CancelS3(TTestWithReboots& t, const TVector<TTypedScheme>& schemeObjects, const TString& request,
         const TTestEnvOptions& opts = TTestWithReboots::GetDefaultTestEnvOptions())
     {
-        Decorate(schemeObjects, request, &Cancel, opts);
+        Decorate(t, schemeObjects, request, &Cancel, opts);
     }
 
-    void ForgetS3(const TVector<TTypedScheme>& schemeObjects, const TString& request,
+    void ForgetS3(TTestWithReboots& t, const TVector<TTypedScheme>& schemeObjects, const TString& request,
         const TTestEnvOptions& opts = TTestWithReboots::GetDefaultTestEnvOptions())
     {
-        Decorate(schemeObjects, request, &Forget, opts);
+        Decorate(t, schemeObjects, request, &Forget, opts);
     }
 
-    Y_UNIT_TEST(ShouldSucceedOnSingleShardTable) {
-        RunS3({
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnSingleShardTable, 2, 1, false) {
+        RunS3(t, {
             R"(
                 Name: "Table"
                 Columns { Name: "key" Type: "Utf8" }
@@ -79,8 +79,8 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         )");
     }
 
-    Y_UNIT_TEST(ShouldSucceedOnMultiShardTable) {
-        RunS3({
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnMultiShardTable, 2, 1, false) {
+        RunS3(t, {
             R"(
                 Name: "Table"
                 Columns { Name: "key" Type: "Uint32" }
@@ -100,12 +100,13 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         )");
     }
 
-    Y_UNIT_TEST(ShouldSucceedOnSingleTable) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnSingleTable, 2, 1, false) {
         // same as ShouldSucceedOnSingleShardTable
+        Y_UNUSED(t);
     }
 
-    Y_UNIT_TEST(ShouldSucceedOnManyTables) {
-        RunS3({
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnManyTables, 2, 1, false) {
+        RunS3(t, {
             R"(
                 Name: "Table1"
                 Columns { Name: "key" Type: "Utf8" }
@@ -134,8 +135,8 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         )");
     }
 
-    Y_UNIT_TEST(ShouldSucceedOnSingleView) {
-        RunS3({
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnSingleView, 2, 1, false) {
+        RunS3(t, {
             {
                 EPathTypeView,
                 R"(
@@ -155,8 +156,8 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         )");
     }
 
-    Y_UNIT_TEST(ShouldSucceedOnViewsAndTables) {
-        RunS3({
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnViewsAndTables, 2, 1, false) {
+        RunS3(t, {
             {
                 EPathTypeView,
                 R"(
@@ -188,11 +189,10 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         )");
     }
 
-    Y_UNIT_TEST(ShouldSucceedOnViewsAndTablesPermissions) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnViewsAndTablesPermissions, 2, 1, false) {
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
 
-        TTestWithReboots t;
         t.GetTestEnvOptions() = TTestEnvOptions().EnablePermissionsExport(true);
         TS3Mock s3Mock({}, TS3Mock::TSettings(port));
         UNIT_ASSERT(s3Mock.Start());
@@ -252,8 +252,8 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         UNIT_ASSERT(viewPermissions);
     }
 
-    Y_UNIT_TEST(CancelShouldSucceedOnSingleShardTable) {
-        CancelS3({
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CancelShouldSucceedOnSingleShardTable, 2, 1, false) {
+        CancelS3(t, {
             R"(
                 Name: "Table"
                 Columns { Name: "key" Type: "Utf8" }
@@ -272,8 +272,8 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         )");
     }
 
-    Y_UNIT_TEST(CancelShouldSucceedOnMultiShardTable) {
-        CancelS3({
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CancelShouldSucceedOnMultiShardTable, 2, 1, false) {
+        CancelS3(t, {
             R"(
                 Name: "Table"
                 Columns { Name: "key" Type: "Uint32" }
@@ -293,12 +293,13 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         )");
     }
 
-    Y_UNIT_TEST(CancelShouldSucceedOnSingleTable) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CancelShouldSucceedOnSingleTable, 2, 1, false) {
         // same as CancelShouldSucceedOnSingleShardTable
+        Y_UNUSED(t);
     }
 
-    Y_UNIT_TEST(CancelShouldSucceedOnManyTables) {
-        CancelS3({
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CancelShouldSucceedOnManyTables, 2, 1, false) {
+        CancelS3(t, {
             R"(
                 Name: "Table1"
                 Columns { Name: "key" Type: "Utf8" }
@@ -327,8 +328,8 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         )");
     }
 
-    Y_UNIT_TEST(CancelShouldSucceedOnSingleView) {
-        CancelS3({
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CancelShouldSucceedOnSingleView, 2, 1, false) {
+        CancelS3(t, {
             {
                 EPathTypeView,
                 R"(
@@ -348,8 +349,8 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         )");
     }
 
-    Y_UNIT_TEST(CancelShouldSucceedOnViewsAndTables) {
-        CancelS3({
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CancelShouldSucceedOnViewsAndTables, 2, 1, false) {
+        CancelS3(t, {
             {
                 EPathTypeView,
                 R"(
@@ -381,8 +382,8 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         )");
     }
 
-    Y_UNIT_TEST(ForgetShouldSucceedOnSingleShardTable) {
-        ForgetS3({
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ForgetShouldSucceedOnSingleShardTable, 2, 1, false) {
+        ForgetS3(t, {
             R"(
                 Name: "Table"
                 Columns { Name: "key" Type: "Utf8" }
@@ -401,8 +402,8 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         )");
     }
 
-    Y_UNIT_TEST(ForgetShouldSucceedOnMultiShardTable) {
-        ForgetS3({
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ForgetShouldSucceedOnMultiShardTable, 2, 1, false) {
+        ForgetS3(t, {
             R"(
                 Name: "Table"
                 Columns { Name: "key" Type: "Uint32" }
@@ -422,12 +423,13 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         )");
     }
 
-    Y_UNIT_TEST(ForgetShouldSucceedOnSingleTable) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ForgetShouldSucceedOnSingleTable, 2, 1, false) {
         // same as ForgetShouldSucceedOnSingleShardTable
+        Y_UNUSED(t);
     }
 
-    Y_UNIT_TEST(ForgetShouldSucceedOnManyTables) {
-        ForgetS3({
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ForgetShouldSucceedOnManyTables, 2, 1, false) {
+        ForgetS3(t, {
             R"(
                 Name: "Table1"
                 Columns { Name: "key" Type: "Utf8" }
@@ -456,8 +458,8 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         )");
     }
 
-    Y_UNIT_TEST(ForgetShouldSucceedOnSingleView) {
-        ForgetS3({
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ForgetShouldSucceedOnSingleView, 2, 1, false) {
+        ForgetS3(t, {
             {
                 EPathTypeView,
                 R"(
@@ -477,8 +479,8 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         )");
     }
 
-    Y_UNIT_TEST(ForgetShouldSucceedOnViewsAndTables) {
-        ForgetS3({
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ForgetShouldSucceedOnViewsAndTables, 2, 1, false) {
+        ForgetS3(t, {
             {
                 EPathTypeView,
                 R"(
@@ -518,7 +520,7 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
 
         static const TTypedScheme& IndexedTable() {
             return IndexedTableScheme;
-        } 
+        }
 
         static const TTypedScheme& Changefeed() {
             return ChangefeedScheme;
@@ -687,7 +689,7 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
                 Name: "ByValue"
                 KeyColumnNames: ["value"]
                 Type: EIndexTypeGlobalUnique
-            }  
+            }
         )", TableScheme.Scheme.c_str())
     };
 
@@ -746,51 +748,49 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         }
     )";
 
-    Y_UNIT_TEST(ShouldSucceedOnSingleShardTableWithChangefeed) {
-        RunS3({
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnSingleShardTableWithChangefeed, 2, 1, false) {
+        RunS3(t, {
             TTestData::Table(),
             TTestData::Changefeed()
         }, TTestData::Request());
     }
 
-    Y_UNIT_TEST(CancelOnSingleShardTableWithChangefeed) {
-        CancelS3({
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CancelOnSingleShardTableWithChangefeed, 2, 1, false) {
+        CancelS3(t, {
             TTestData::Table(),
             TTestData::Changefeed()
         }, TTestData::Request());
     }
 
-    Y_UNIT_TEST(ForgetShouldSucceedOnSingleShardTableWithChangefeed) {
-        ForgetS3({
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ForgetShouldSucceedOnSingleShardTableWithChangefeed, 2, 1, false) {
+        ForgetS3(t, {
             TTestData::Table(),
             TTestData::Changefeed()
         }, TTestData::Request());
     }
 
-    Y_UNIT_TEST(ShouldSucceedOnSingleShardTableWithUniqueIndex) {
-        RunS3({
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnSingleShardTableWithUniqueIndex, 2, 1, false) {
+        RunS3(t, {
             TTestData::IndexedTable()
         }, TTestData::Request());
     }
 
-    Y_UNIT_TEST(ForgetShouldSucceedOnSingleShardTableWithUniqueIndex) {
-        ForgetS3({
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ForgetShouldSucceedOnSingleShardTableWithUniqueIndex, 2, 1, false) {
+        ForgetS3(t, {
             TTestData::IndexedTable()
         }, TTestData::Request());
     }
 
-    Y_UNIT_TEST(CancelShouldSucceedOnSingleShardTableWithUniqueIndex) {
-        CancelS3({
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CancelShouldSucceedOnSingleShardTableWithUniqueIndex, 2, 1, false) {
+        CancelS3(t, {
             TTestData::IndexedTable()
         }, TTestData::Request());
     }
 
-    Y_UNIT_TEST(ShouldSucceedAutoDropping) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedAutoDropping, 2, 1, false) {
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
 
-        TTestWithReboots t;
-        t.GetTestEnvOptions().EnableRealSystemViewPaths(false);
         TS3Mock s3Mock({}, TS3Mock::TSettings(port));
         UNIT_ASSERT(s3Mock.Start());
 
@@ -814,18 +814,16 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
                 TestGetExport(runtime, exportId, "/MyRoot");
                 TestRmDir(runtime, ++t.TxId, "/MyRoot", "DirA");
                 auto desc = DescribePath(runtime, "/MyRoot");
-                UNIT_ASSERT_EQUAL(desc.GetPathDescription().ChildrenSize(), 1);
-                UNIT_ASSERT_EQUAL(desc.GetPathDescription().GetChildren(0).GetName(), "Table");
+                UNIT_ASSERT_EQUAL(desc.GetPathDescription().ChildrenSize(), 2);
+                UNIT_ASSERT_EQUAL(desc.GetPathDescription().GetChildren(1).GetName(), "Table");
             }
         });
     }
 
-    Y_UNIT_TEST(ShouldDisableAutoDropping) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldDisableAutoDropping, 2, 1, false) {
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
 
-        TTestWithReboots t;
-        t.GetTestEnvOptions().EnableRealSystemViewPaths(false);
         TS3Mock s3Mock({}, TS3Mock::TSettings(port));
         UNIT_ASSERT(s3Mock.Start());
 
@@ -849,20 +847,20 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
                 TestGetExport(runtime, exportId, "/MyRoot");
                 TestRmDir(runtime, ++t.TxId, "/MyRoot", "DirA");
                 auto desc = DescribePath(runtime, "/MyRoot");
-                UNIT_ASSERT_EQUAL(desc.GetPathDescription().ChildrenSize(), 2);
-                const auto namesVector = {desc.GetPathDescription().GetChildren(0).GetName(),
-                                          desc.GetPathDescription().GetChildren(1).GetName()};
+                UNIT_ASSERT_EQUAL(desc.GetPathDescription().ChildrenSize(), 3);
+                const auto namesVector = {desc.GetPathDescription().GetChildren(1).GetName(),
+                                          desc.GetPathDescription().GetChildren(2).GetName()};
                 UNIT_ASSERT(IsIn(namesVector, "Table"));
                 UNIT_ASSERT(IsIn(namesVector, "export-1003"));
             }
         });
     }
 
-    using S3Func = void (*)(const TVector<TTypedScheme>&, const TString&, const TTestEnvOptions&);
+    using S3Func = void (*)(TTestWithReboots&, const TVector<TTypedScheme>&, const TString&, const TTestEnvOptions&);
 
-    void TestSingleTopic(S3Func func) {
+    void TestSingleTopic(TTestWithReboots& t, S3Func func) {
         auto topic = NDescUT::TSimpleTopic(0, 2);
-        func(
+        func(t,
             {
                 {
                     EPathTypePersQueueGroup,
@@ -873,20 +871,20 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
             , TTestWithReboots::GetDefaultTestEnvOptions());
     }
 
-    Y_UNIT_TEST(ShouldSucceedOnSingleTopic) {
-        TestSingleTopic(&RunS3);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnSingleTopic, 2, 1, false) {
+        TestSingleTopic(t, &RunS3);
     }
 
-    Y_UNIT_TEST(CancelOnSingleTopic) {
-        TestSingleTopic(&CancelS3);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CancelOnSingleTopic, 2, 1, false) {
+        TestSingleTopic(t, &CancelS3);
     }
 
-    Y_UNIT_TEST(ForgetShouldSucceedOnSingleTopic) {
-        TestSingleTopic(&ForgetS3);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ForgetShouldSucceedOnSingleTopic, 2, 1, false) {
+        TestSingleTopic(t, &ForgetS3);
     }
 
-    Y_UNIT_TEST(IndexMaterialization) {
-        RunS3({
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(IndexMaterialization, 2, 1, false) {
+        RunS3(t, {
             {
                 EPathTypeTableIndex,
                 R"(
@@ -916,84 +914,254 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
     }
 
     // Async Replication
-    Y_UNIT_TEST(ShouldSucceedOnSingleReplication) {
-        RunS3({
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnSingleReplication, 2, 1, false) {
+        RunS3(t, {
             TTestData::Replication()
         }, TTestData::Request(EPathTypeReplication));
     }
 
-    Y_UNIT_TEST(CancelShouldSucceedOnSingleReplication) {
-        CancelS3({
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CancelShouldSucceedOnSingleReplication, 2, 1, false) {
+        CancelS3(t, {
             TTestData::Replication()
         }, TTestData::Request(EPathTypeReplication));
     }
 
-    Y_UNIT_TEST(ForgetShouldSucceedOnSingleReplication) {
-        ForgetS3({
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ForgetShouldSucceedOnSingleReplication, 2, 1, false) {
+        ForgetS3(t, {
             TTestData::Replication()
         }, TTestData::Request(EPathTypeReplication));
     }
 
-    // Transfer
-    Y_UNIT_TEST(ShouldSucceedOnSingleTransfer) {
-        RunS3({
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnSingleTransfer, 2, 1, false) {
+        RunS3(t, {
             TTestData::Table(),
             TTestData::Transfer(),
         }, TTestData::Request(EPathTypeTransfer));
     }
 
-    Y_UNIT_TEST(CancelShouldSucceedOnSingleTransfer) {
-        CancelS3({
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CancelShouldSucceedOnSingleTransfer, 2, 1, false) {
+        CancelS3(t, {
             TTestData::Table(),
             TTestData::Transfer(),
         }, TTestData::Request(EPathTypeTransfer));
     }
 
-    Y_UNIT_TEST(ForgetShouldSucceedOnSingleTransfer) {
-        ForgetS3({
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ForgetShouldSucceedOnSingleTransfer, 2, 1, false) {
+        ForgetS3(t, {
             TTestData::Table(),
             TTestData::Transfer(),
         }, TTestData::Request(EPathTypeTransfer));
     }
 
-    // External Data Source
-    Y_UNIT_TEST(ShouldSucceedOnSingleExternalDataSource) {
-        RunS3({
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnSingleExternalDataSource, 2, 1, false) {
+        RunS3(t, {
             TTestData::ExternalDataSource(),
         }, TTestData::Request(EPathTypeExternalDataSource));
     }
 
-    Y_UNIT_TEST(CancelShouldSucceedOnSingleExternalDataSource) {
-        CancelS3({
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CancelShouldSucceedOnSingleExternalDataSource, 2, 1, false) {
+        CancelS3(t, {
             TTestData::ExternalDataSource(),
         }, TTestData::Request(EPathTypeExternalDataSource));
     }
 
-    Y_UNIT_TEST(ForgetShouldSucceedOnSingleExternalDataSource) {
-        ForgetS3({
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ForgetShouldSucceedOnSingleExternalDataSource, 2, 1, false) {
+        ForgetS3(t, {
             TTestData::ExternalDataSource(),
         }, TTestData::Request(EPathTypeExternalDataSource));
     }
 
-    // External Table
-    Y_UNIT_TEST(ShouldSucceedOnSingleExternalTable) {
-        RunS3({
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnSingleExternalTable, 2, 1, false) {
+        RunS3(t, {
             TTestData::ExternalDataSource(),
             TTestData::ExternalTable(),
         }, TTestData::Request(EPathTypeExternalTable));
     }
 
-    Y_UNIT_TEST(CancelShouldSucceedOnSingleExternalTable) {
-        CancelS3({
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CancelShouldSucceedOnSingleExternalTable, 2, 1, false) {
+        CancelS3(t, {
             TTestData::ExternalDataSource(),
             TTestData::ExternalTable(),
         }, TTestData::Request(EPathTypeExternalTable));
     }
 
-    Y_UNIT_TEST(ForgetShouldSucceedOnSingleExternalTable) {
-        ForgetS3({
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ForgetShouldSucceedOnSingleExternalTable, 2, 1, false) {
+        ForgetS3(t, {
             TTestData::ExternalDataSource(),
             TTestData::ExternalTable(),
         }, TTestData::Request(EPathTypeExternalTable));
+    }
+
+    // System view
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnSystemViewPermissions, 2, 1, false) {
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        t.GetTestEnvOptions().EnablePermissionsExport(true);
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
+            {
+                TInactiveZone inactive(activeZone);
+                runtime.GetAppData().FeatureFlags.SetEnableSysViewPermissionsExport(true);
+
+                // Set permissions on the system view
+                NACLib::TDiffACL diffACL;
+                diffACL.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user0@builtin");
+                TestModifyACL(runtime, ++t.TxId, "/MyRoot/.sys", "partition_stats", diffACL.SerializeAsString(), "user0@builtin");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+            }
+
+            TestExport(runtime, ++t.TxId, "/MyRoot",
+                Sprintf(R"(
+                    ExportToS3Settings {
+                        endpoint: "localhost:%d"
+                        scheme: HTTP
+                        items {
+                            source_path: "/MyRoot/.sys/partition_stats"
+                            destination_prefix: "/partition_stats"
+                        }
+                    }
+                )", port)
+            );
+
+            const ui64 exportId = t.TxId;
+            t.TestEnv->TestWaitNotification(runtime, exportId);
+
+            {
+                TInactiveZone inactive(activeZone);
+
+                auto response = TestGetExport(runtime, exportId, "/MyRoot", {
+                    Ydb::StatusIds::SUCCESS,
+                    Ydb::StatusIds::NOT_FOUND
+                });
+
+                if (response.GetResponse().GetEntry().GetStatus() == Ydb::StatusIds::NOT_FOUND) {
+                    return;
+                }
+
+                auto* sysviewPermissions = s3Mock.GetData().FindPtr("/partition_stats/permissions.pb");
+                UNIT_ASSERT(sysviewPermissions);
+
+                TestForgetExport(runtime, ++t.TxId, "/MyRoot", exportId);
+                t.TestEnv->TestWaitNotification(runtime, exportId);
+
+                TestGetExport(runtime, exportId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+            }
+        });
+    }
+
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CancelShouldSucceedOnSystemViewPermissions, 2, 1, false) {
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        t.GetTestEnvOptions().EnablePermissionsExport(true);
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
+            {
+                TInactiveZone inactive(activeZone);
+                runtime.GetAppData().FeatureFlags.SetEnableSysViewPermissionsExport(true);
+
+                // Set permissions on the system view
+                NACLib::TDiffACL diffACL;
+                diffACL.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user0@builtin");
+                TestModifyACL(runtime, ++t.TxId, "/MyRoot/.sys", "partition_stats", diffACL.SerializeAsString(), "user0@builtin");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+            }
+
+            TestExport(runtime, ++t.TxId, "/MyRoot",
+                Sprintf(R"(
+                    ExportToS3Settings {
+                        endpoint: "localhost:%d"
+                        scheme: HTTP
+                        items {
+                            source_path: "/MyRoot/.sys/partition_stats"
+                            destination_prefix: "/partition_stats"
+                        }
+                    }
+                )", port)
+            );
+
+            const ui64 exportId = t.TxId;
+
+            t.TestEnv->ReliablePropose(runtime, CancelExportRequest(++t.TxId, "/MyRoot", exportId), {
+                Ydb::StatusIds::SUCCESS,
+                Ydb::StatusIds::NOT_FOUND
+            });
+            t.TestEnv->TestWaitNotification(runtime, exportId);
+
+            {
+                TInactiveZone inactive(activeZone);
+
+                auto response = TestGetExport(runtime, exportId, "/MyRoot", {
+                    Ydb::StatusIds::SUCCESS,
+                    Ydb::StatusIds::CANCELLED,
+                    Ydb::StatusIds::NOT_FOUND
+                });
+
+                if (response.GetResponse().GetEntry().GetStatus() == Ydb::StatusIds::NOT_FOUND) {
+                    return;
+                }
+
+                TestForgetExport(runtime, ++t.TxId, "/MyRoot", exportId);
+                t.TestEnv->TestWaitNotification(runtime, exportId);
+
+                TestGetExport(runtime, exportId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+            }
+        });
+    }
+
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ForgetShouldSucceedOnSystemViewPermissions, 2, 1, false) {
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        t.GetTestEnvOptions().EnablePermissionsExport(true);
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
+            {
+                TInactiveZone inactive(activeZone);
+                runtime.GetAppData().FeatureFlags.SetEnableSysViewPermissionsExport(true);
+
+                // Set permissions on the system view
+                NACLib::TDiffACL diffACL;
+                diffACL.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user0@builtin");
+                TestModifyACL(runtime, ++t.TxId, "/MyRoot/.sys", "partition_stats", diffACL.SerializeAsString(), "user0@builtin");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                TestExport(runtime, ++t.TxId, "/MyRoot",
+                    Sprintf(R"(
+                        ExportToS3Settings {
+                            endpoint: "localhost:%d"
+                            scheme: HTTP
+                            items {
+                                source_path: "/MyRoot/.sys/partition_stats"
+                                destination_prefix: "/partition_stats"
+                            }
+                        }
+                    )", port)
+                );
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+            }
+
+            const ui64 exportId = t.TxId;
+
+            t.TestEnv->ReliablePropose(runtime, ForgetExportRequest(++t.TxId, "/MyRoot", exportId), {
+                Ydb::StatusIds::SUCCESS,
+            });
+            t.TestEnv->TestWaitNotification(runtime, exportId);
+
+            {
+                TInactiveZone inactive(activeZone);
+                TestGetExport(runtime, exportId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+            }
+        });
     }
 }

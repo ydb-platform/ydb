@@ -20,7 +20,7 @@ void TMessageEnricherActor::Bootstrap() {
 void TMessageEnricherActor::PassAway() {
     LOG_D("PassAway");
     for (auto& reply : Queue) {
-        Send(reply.Sender, new TEvPQ::TEvMLPErrorResponse(Ydb::StatusIds::SCHEME_ERROR, "Shutdown"), 0, reply.Cookie);
+        Send(reply.Sender, new TEvPQ::TEvMLPErrorResponse(PartitionId, Ydb::StatusIds::SCHEME_ERROR, "Shutdown"), 0, reply.Cookie);
     }
 
     Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvUnlink(0));
@@ -63,7 +63,7 @@ void TMessageEnricherActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
                     if (PendingResponse->Record.MessageSize() > 0) {
                         Send(reply.Sender, PendingResponse.release(), 0, reply.Cookie);
                     } else {
-                        auto r = std::make_unique<TEvPQ::TEvMLPErrorResponse>(Ydb::StatusIds::INTERNAL_ERROR, "Messages was not found");
+                        auto r = std::make_unique<TEvPQ::TEvMLPErrorResponse>(PartitionId, Ydb::StatusIds::INTERNAL_ERROR, "Messages was not found");
                         Send(reply.Sender, std::move(r), 0, reply.Cookie);
                     }
                     PendingResponse = std::make_unique<TEvPQ::TEvMLPReadResponse>();

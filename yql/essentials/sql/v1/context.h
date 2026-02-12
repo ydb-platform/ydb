@@ -267,7 +267,14 @@ public:
         }
     }
 
+    bool EnsureBackwardCompatibleFeatureAvailable(
+        TPosition position,
+        TStringBuf feature,
+        NYql::TLangVersion version);
+
 private:
+    bool IsBackwardCompatibleFeatureAvailable(NYql::TLangVersion featureVer) const;
+
     IOutputStream& MakeIssue(
         NYql::ESeverity severity,
         NYql::TIssueCode code,
@@ -506,8 +513,6 @@ public:
 protected:
     void AltNotImplemented(const TString& ruleName, ui32 altCase, const google::protobuf::Message& node, const google::protobuf::Descriptor* descr);
     TString AltDescription(const google::protobuf::Message& node, ui32 altCase, const google::protobuf::Descriptor* descr) const;
-
-    bool IsBackwardCompatibleFeatureAvailable(NYql::TLangVersion langVer) const;
 
 protected:
     TContext& Ctx_;

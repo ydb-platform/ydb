@@ -72,12 +72,11 @@ public:
         , StartedAt(startedAt)
         , FormatsSettings(ev->Get()->GetResultSetFormat(), ev->Get()->GetSchemaInclusionMode(), ev->Get()->GetArrowFormatSettings())
         , RuntimeParameterSizeLimit(runtimeParameterSizeLimit)
+        , RuntimeParameterSizeLimitSatisfied(runtimeParameterSizeLimit > 0)
     {
         RequestEv.reset(ev->Release().Release());
-        bool enableImplicitQueryParameterTypes = tableServiceConfig.GetEnableImplicitQueryParameterTypes() ||
-            AppData()->FeatureFlags.GetEnableImplicitQueryParameterTypes();
 
-        if (enableImplicitQueryParameterTypes && !RequestEv->GetYdbParameters().empty()) {
+        if (!RequestEv->GetYdbParameters().empty()) {
             QueryParameterTypes = std::make_shared<std::map<TString, Ydb::Type>>();
 
             for (const auto& [name, typedValue] : RequestEv->GetYdbParameters()) {
@@ -201,7 +200,7 @@ public:
     NFormats::TFormatsSettings FormatsSettings;
 
     i32 RuntimeParameterSizeLimit = 0;
-    bool RuntimeParameterSizeLimitSatisfied = true;
+    bool RuntimeParameterSizeLimitSatisfied = false;
 
 
     bool IsLocalExecution(ui32 nodeId) const {

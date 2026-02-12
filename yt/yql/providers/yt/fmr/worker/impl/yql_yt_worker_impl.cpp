@@ -136,7 +136,7 @@ public:
                         availableSlots
                     );
 
-                    YQL_CLOG(TRACE, FastMapReduce) << "Sending heartbeat request to coordiantor";
+                    YQL_CLOG(TRACE, FastMapReduce) << "Sending heartbeat request to coordinator";
                     auto heartbeatResponseFuture = Coordinator_->SendHeartbeatResponse(heartbeatRequest);
                     auto heartbeatResponse = heartbeatResponseFuture.GetValueSync();
 
@@ -190,7 +190,7 @@ public:
                             allDownloadResourceFutures.emplace_back(resource.DownloadFuture.IgnoreResult());
                         }
 
-                        NThreading::WaitExceptionOrAll(allDownloadResourceFutures).Subscribe([weakState = std::weak_ptr(WorkerState_), taskId, downloadResourcesQueue = std::move(downloadResourcesQueue)] (const auto& f) {
+                        NThreading::WaitExceptionOrAll(allDownloadResourceFutures).Subscribe([weakState = std::weak_ptr(WorkerState_), taskId, downloadResourcesQueue] (const auto& f) {
                             std::shared_ptr<TFmrWorkerState> state = weakState.lock();
                             if (state) {
                                 try {

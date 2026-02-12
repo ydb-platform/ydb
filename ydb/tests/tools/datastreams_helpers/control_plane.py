@@ -84,14 +84,14 @@ def delete_stream(path, default_endpoint=None):
     _get_and_check_result(response, datastreams_pb2.DeleteStreamResult)
 
 
-def update_stream(path, partitions_count=1):
-    stub = _new_datastreams_service()
+def update_stream(path, partitions_count=1, default_endpoint=None):
+    stub = _new_datastreams_service(default_endpoint)
 
     request = datastreams_pb2.UpdateStreamRequest()
-    request.stream_name = _build_stream_path(path)
+    request.stream_name = _build_stream_path(path, default_endpoint)
     request.target_shard_count = partitions_count
-    logging.debug("Requesting UpdateStreamRequest.\nDatabase: \"{}\".\nRequest:\n{}".format(_get_database(), request))
-    response = stub.UpdateStream(request, metadata=_build_request_metadata())
+    logging.debug("Requesting UpdateStreamRequest.\nDatabase: \"{}\".\nRequest:\n{}".format(_get_database(default_endpoint), request))
+    response = stub.UpdateStream(request, metadata=_build_request_metadata(default_endpoint))
     _get_and_check_result(response, datastreams_pb2.UpdateStreamResult)
 
 

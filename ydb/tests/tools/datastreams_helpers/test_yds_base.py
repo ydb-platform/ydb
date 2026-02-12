@@ -37,8 +37,8 @@ class TestYdsBase(object):
         topic = topic_path if topic_path else self.output_topic
         return read_stream(topic, messages_count, commit_after_processing, self.consumer_name, database=database, endpoint=fqdn, timeout=timeout)
 
-    def update_stream(self, path, partitions_count=1):
-        update_stream(path, partitions_count=partitions_count)
+    def update_stream(self, path, partitions_count=1, endpoint=None):
+        update_stream(path, partitions_count=partitions_count, default_endpoint=endpoint)
 
     def wait_until(self, predicate, wait_time=plain_or_under_sanitizer(10, 50)):
         deadline = time.time() + wait_time

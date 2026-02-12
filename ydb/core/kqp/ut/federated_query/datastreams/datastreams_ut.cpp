@@ -4639,8 +4639,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     }
 
     Y_UNIT_TEST_F(ReadSystemMetadataFields, TStreamingTestFixture) {
-        constexpr char inputTopicName[] = "createStreamingQuerySystemMetadata";
-        constexpr char outputTopicName[] = "createStreamingQuerySystemMetadata";
+        constexpr char inputTopicName[] = "inReadSystemMetadataFields";
+        constexpr char outputTopicName[] = "outReadSystemMetadataFields";
         CreateTopic(inputTopicName);
         CreateTopic(outputTopicName);
 
